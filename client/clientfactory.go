@@ -5,6 +5,7 @@ package client
 import (
 	"time"
 
+	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -13,6 +14,7 @@ import (
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/client/matching"
+	"go.temporal.io/server/client/operator"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -33,6 +35,8 @@ type (
 		NewLocalFrontendClientWithTimeout(timeout time.Duration, longPollTimeout time.Duration) (grpc.ClientConnInterface, workflowservice.WorkflowServiceClient, error)
 		NewRemoteAdminClientWithTimeout(rpcAddress string, timeout time.Duration, largeTimeout time.Duration) adminservice.AdminServiceClient
 		NewLocalAdminClientWithTimeout(timeout time.Duration, largeTimeout time.Duration) (adminservice.AdminServiceClient, error)
+		NewRemoteOperatorClientWithTimeout(rpcAddress string, timeout time.Duration) operatorservice.OperatorServiceClient
+		NewLocalOperatorClientWithTimeout(timeout time.Duration) (operatorservice.OperatorServiceClient, error)
 	}
 
 	// FactoryProvider can be used to provide a customized client Factory implementation.
@@ -129,18 +133,20 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 	}
 
 	keyResolver := newServiceKeyResolver(resolver)
-	clientProvider := func(clientKey string) (any, error) {
+	clientProvider := func(clientKey string) (any, func() error, error) {
 		connection := cf.rpcFactory.CreateMatchingGRPCConnection(clientKey)
-		return matchingservice.NewMatchingServiceClient(connection), nil
+		return matchingservice.NewMatchingServiceClient(connection), connection.Close, nil
 	}
 	client := matching.NewClient(
 		timeout,
 		longPollTimeout,
-		common.NewClientCache(keyResolver, clientProvider),
+		common.NewClientCache(keyResolver, clientProvider, cf.logger),
 		cf.metricsHandler,
 		cf.logger,
 		matching.NewLoadBalancer(namespaceIDToName, cf.dynConfig, cf.testHooks),
 		dynamicconfig.MatchingSpreadRoutingBatchSize.Get(cf.dynConfig),
+		resolver,
+		dynamicconfig.MatchingConnectionCloseDelay.Get(cf.dynConfig),
 	)
 
 	if cf.metricsHandler != nil {
@@ -208,6 +214,34 @@ func (cf *rpcClientFactory) newFrontendClient(
 	client = frontend.NewClient(timeout, longPollTimeout, client)
 	if cf.metricsHandler != nil {
 		client = frontend.NewMetricClient(client, cf.metricsHandler, cf.throttledLogger)
+	}
+	return client
+}
+
+func (cf *rpcClientFactory) NewRemoteOperatorClientWithTimeout(
+	rpcAddress string,
+	timeout time.Duration,
+) operatorservice.OperatorServiceClient {
+	connection := cf.rpcFactory.CreateRemoteFrontendGRPCConnection(rpcAddress)
+	client := operatorservice.NewOperatorServiceClient(connection)
+	return cf.newOperatorClient(client, timeout)
+}
+
+func (cf *rpcClientFactory) NewLocalOperatorClientWithTimeout(
+	timeout time.Duration,
+) (operatorservice.OperatorServiceClient, error) {
+	connection := cf.rpcFactory.CreateLocalFrontendGRPCConnection()
+	client := operatorservice.NewOperatorServiceClient(connection)
+	return cf.newOperatorClient(client, timeout), nil
+}
+
+func (cf *rpcClientFactory) newOperatorClient(
+	client operatorservice.OperatorServiceClient,
+	timeout time.Duration,
+) operatorservice.OperatorServiceClient {
+	client = operator.NewClient(timeout, client)
+	if cf.metricsHandler != nil {
+		client = operator.NewMetricClient(client, cf.metricsHandler, cf.throttledLogger)
 	}
 	return client
 }

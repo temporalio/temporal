@@ -44,6 +44,39 @@ func TestNormalizeTestName(t *testing.T) {
 	}
 }
 
+func TestSplitTestRunnerTimeoutFailures(t *testing.T) {
+	failures := []TestFailure{
+		{Name: "TestFoo"},
+		{Name: "testrunner.TotalTimeout (retry 2) (final)"},
+	}
+	testFailures, timeouts := splitTestRunnerTimeoutFailures(failures)
+
+	require.Equal(t, []TestFailure{{Name: "TestFoo"}}, testFailures)
+	require.Equal(t, []TestFailure{{Name: "testrunner.TotalTimeout (retry 2) (final)"}}, timeouts)
+	require.Equal(t, "timeout", classifyFailure(timeouts[0].Name))
+
+	runs := filterTestRunnerTimeoutRuns([]TestRun{
+		{Name: "TestFoo"},
+		{Name: "testrunner.TotalTimeout (retry 2) (final)"},
+	})
+	require.Equal(t, []TestRun{{Name: "TestFoo"}}, runs)
+}
+
+func TestConvertEventReportsCountsArtifacts(t *testing.T) {
+	until := time.Now()
+	window := newReportWindow(until.AddDate(0, 0, -7), until)
+	reports := convertEventReports(map[string][]TestFailure{
+		testRunnerTotalTimeout: {
+			{ArtifactID: "artifact-1"},
+			{ArtifactID: "artifact-1"},
+			{ArtifactID: "artifact-2"},
+		},
+	}, "temporalio/temporal", 3, window)
+
+	require.Len(t, reports, 1)
+	require.Equal(t, 2, reports[0].FailureCount)
+}
+
 func TestParseArtifactName(t *testing.T) {
 	tests := []struct {
 		name               string
@@ -212,7 +245,7 @@ func TestFilterParentTests(t *testing.T) {
 }
 
 func TestGenerateSuiteReports(t *testing.T) {
-	now := time.Now()
+	now := time.Date(2026, 6, 3, 12, 0, 0, 0, time.UTC)
 	twoDaysAgo := now.Add(-48 * time.Hour)
 	oneDayAgo := now.Add(-24 * time.Hour)
 
@@ -277,6 +310,31 @@ func TestGenerateSuiteReports(t *testing.T) {
 	require.Equal(t, 2, reports[1].TotalRuns)
 	require.InDelta(t, 50.0, reports[1].FlakeRate, 0.1)
 	require.Equal(t, twoDaysAgo, reports[1].LastFailure)
+}
+
+func TestGenerateSuiteReportsSortsByName(t *testing.T) {
+	failures := []TestFailure{
+		{Name: "TestB", SuiteName: "TestFunctionalSuiteB", RunID: 1, MatrixName: "db"},
+		{Name: "TestA", SuiteName: "TestFunctionalSuiteA", RunID: 1, MatrixName: "db"},
+		{Name: "TestC", SuiteName: "TestFunctionalSuiteC", RunID: 1, MatrixName: "db"},
+	}
+	allRuns := []TestRun{
+		{SuiteName: "TestFunctionalSuiteB", RunID: 1, MatrixName: "db"},
+		{SuiteName: "TestFunctionalSuiteA", RunID: 1, MatrixName: "db"},
+		{SuiteName: "TestFunctionalSuiteA", RunID: 2, MatrixName: "db"},
+		{SuiteName: "TestFunctionalSuiteC", RunID: 1, MatrixName: "db"},
+		{SuiteName: "TestFunctionalSuiteC", RunID: 2, MatrixName: "db"},
+		{SuiteName: "TestFunctionalSuiteC", RunID: 3, MatrixName: "db"},
+	}
+
+	reports := generateSuiteReports(failures, allRuns)
+
+	require.Len(t, reports, 3)
+	require.Equal(t, []string{
+		"TestFunctionalSuiteA",
+		"TestFunctionalSuiteB",
+		"TestFunctionalSuiteC",
+	}, []string{reports[0].SuiteName, reports[1].SuiteName, reports[2].SuiteName})
 }
 
 func TestNormalizeTestNameFinal(t *testing.T) {

@@ -100,6 +100,28 @@ func TestDedupPollers_Empty(t *testing.T) {
 	require.Empty(t, result)
 }
 
+func TestMergeStats_RateLimitingActive(t *testing.T) {
+	tests := []struct {
+		name     string
+		into     bool
+		from     bool
+		expected bool
+	}{
+		{"false OR false", false, false, false},
+		{"true OR false", true, false, true},
+		{"false OR true", false, true, true},
+		{"true OR true", true, true, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			into := &taskqueuepb.TaskQueueStats{RateLimitingActive: tt.into}
+			from := &taskqueuepb.TaskQueueStats{RateLimitingActive: tt.from}
+			MergeStats(into, from)
+			require.Equal(t, tt.expected, into.RateLimitingActive)
+		})
+	}
+}
+
 func TestDedupPollers_NoDuplicates(t *testing.T) {
 	pollers := []*taskqueuepb.PollerInfo{
 		{Identity: "worker-1"},

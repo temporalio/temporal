@@ -1,6 +1,8 @@
 // Package await provides polling-based test assertions as a replacement
 // for testify's Eventually, EventuallyWithT, and their formatted variants.
 //
+// By default, it enforces a 10s timeout for each await attempt.
+//
 // Improvements over testify's eventually functions:
 //
 //   - Misuse detection: accidentally using the real *testing.T (e.g. s.T() or

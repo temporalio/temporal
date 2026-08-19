@@ -50,6 +50,11 @@ func TestMySQLExecutionMutableStateStoreSuite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
+	db, err := sql.NewSQLDB(sqlplugin.DbKindMain, testData.Cfg, resolver.NewNoopResolver(), testData.Logger, metrics.NoopMetricsHandler)
+	if err != nil {
+		t.Fatalf("unable to create MySQL DB: %v", err)
+	}
+	defer func() { _ = db.Close() }()
 
 	s := NewExecutionMutableStateSuite(
 		t,
@@ -58,6 +63,7 @@ func TestMySQLExecutionMutableStateStoreSuite(t *testing.T) {
 		serialization.NewSerializer(),
 		testData.Logger,
 	)
+	s.MutableStateTableCounts = sqlMutableStateTableCounts(db)
 	suite.Run(t, s)
 }
 
@@ -191,7 +197,7 @@ func TestMySQLHistoryV2PersistenceSuite(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.HistoryV2PersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetMySQLTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
@@ -199,7 +205,7 @@ func TestMySQLMetadataPersistenceSuiteV2(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.MetadataPersistenceSuiteV2)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetMySQLTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
@@ -207,7 +213,7 @@ func TestMySQLQueuePersistence(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.QueuePersistenceSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetMySQLTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 
@@ -215,7 +221,7 @@ func TestMySQLClusterMetadataPersistence(t *testing.T) {
 	t.Parallel()
 	s := new(persistencetests.ClusterMetadataManagerSuite)
 	s.TestBase = persistencetests.NewTestBaseWithSQL(persistencetests.GetMySQLTestClusterOption())
-	s.TestBase.Setup(nil)
+	s.Setup(nil)
 	suite.Run(t, s)
 }
 

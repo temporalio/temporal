@@ -27,11 +27,13 @@ type MockNodeBackend struct {
 	HandleGetCurrentVersion           func() int64
 	HandleNextTransitionCount         func() int64
 	HandleGetApproximatePersistedSize func() int
+	HandleChasmSkipPersistenceEnabled func() bool
 	HandleCurrentVersionedTransition  func() *persistencespb.VersionedTransition
 	HandleGetWorkflowKey              func() definition.WorkflowKey
 	HandleUpdateWorkflowStateStatus   func(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) (bool, error)
 	HandleIsWorkflow                  func() bool
 	HandleGetNexusCompletion          func(ctx context.Context, requestID string) (nexusrpc.CompleteOperationOptions, error)
+	HandleGetNexusUpdateCompletion    func(ctx context.Context, updateID string, requestID string) (nexusrpc.CompleteOperationOptions, error)
 	HandleAddHistoryEvent             func(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
 	HandleLoadHistoryEvent            func(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
 	HandleGenerateEventLoadToken      func(event *historypb.HistoryEvent) ([]byte, error)
@@ -68,6 +70,13 @@ func (m *MockNodeBackend) GetApproximatePersistedSize() int {
 		return m.HandleGetApproximatePersistedSize()
 	}
 	return 0
+}
+
+func (m *MockNodeBackend) ChasmSkipPersistenceEnabled() bool {
+	if m.HandleChasmSkipPersistenceEnabled != nil {
+		return m.HandleChasmSkipPersistenceEnabled()
+	}
+	return false
 }
 
 func (m *MockNodeBackend) GetCurrentVersion() int64 {
@@ -229,6 +238,17 @@ func (m *MockNodeBackend) EndpointRegistry() EndpointRegistry {
 		return m.HandleEndpointRegistry()
 	}
 	return nil
+}
+
+func (m *MockNodeBackend) GetNexusUpdateCompletion(
+	ctx context.Context,
+	updateID string,
+	requestID string,
+) (nexusrpc.CompleteOperationOptions, error) {
+	if m.HandleGetNexusUpdateCompletion != nil {
+		return m.HandleGetNexusUpdateCompletion(ctx, updateID, requestID)
+	}
+	return nexusrpc.CompleteOperationOptions{}, nil
 }
 
 func (m *MockNodeBackend) NumTasksAdded() int {

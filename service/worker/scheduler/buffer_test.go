@@ -51,6 +51,10 @@ func (s *processBufferSuite) TestProcessSkipRunning() {
 	s.Empty(action.NewBuffer)
 	s.False(action.NeedCancel)
 	s.False(action.NeedTerminate)
+	s.Equal(int64(3), action.OverlapSkipped)
+	s.Equal(map[enumspb.ScheduleOverlapPolicy]int64{
+		enumspb.SCHEDULE_OVERLAP_POLICY_SKIP: 3,
+	}, action.OverlapSkippedByPolicy)
 }
 
 func (s *processBufferSuite) TestProcessSkipNotRunning() {
@@ -71,6 +75,10 @@ func (s *processBufferSuite) TestProcessBufferOneRunning() {
 	s.Equal([]int{3}, jobIds(action.NewBuffer))
 	s.False(action.NeedCancel)
 	s.False(action.NeedTerminate)
+	s.Equal(int64(2), action.OverlapSkipped)
+	s.Equal(map[enumspb.ScheduleOverlapPolicy]int64{
+		enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE: 2,
+	}, action.OverlapSkippedByPolicy)
 }
 
 func (s *processBufferSuite) TestProcessBufferOneNotRunning() {
@@ -168,4 +176,28 @@ func (s *processBufferSuite) TestProcessWithResolve() {
 	s.False(action.NeedTerminate)
 }
 
-// TODO: add test cases for mixed policies
+func (s *processBufferSuite) TestProcessMixedPoliciesTracksSkippedByResolvedPolicy() {
+	buffer := []*job{
+		{3, enumspb.SCHEDULE_OVERLAP_POLICY_SKIP},
+		{5, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE},
+		{7, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED},
+		{9, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED},
+	}
+	resolve := func(policy enumspb.ScheduleOverlapPolicy) enumspb.ScheduleOverlapPolicy {
+		if policy == enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED {
+			return enumspb.SCHEDULE_OVERLAP_POLICY_SKIP
+		}
+		return policy
+	}
+
+	action := ProcessBuffer(buffer, true, resolve)
+	s.Empty(action.OverlappingStarts)
+	s.Nil(action.NonOverlappingStart)
+	s.Equal([]int{5}, jobIds(action.NewBuffer))
+	s.False(action.NeedCancel)
+	s.False(action.NeedTerminate)
+	s.Equal(int64(3), action.OverlapSkipped)
+	s.Equal(map[enumspb.ScheduleOverlapPolicy]int64{
+		enumspb.SCHEDULE_OVERLAP_POLICY_SKIP: 3,
+	}, action.OverlapSkippedByPolicy)
+}

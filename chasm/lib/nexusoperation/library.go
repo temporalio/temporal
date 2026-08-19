@@ -7,6 +7,16 @@ import (
 	"google.golang.org/grpc"
 )
 
+const (
+	libraryName   = "nexusoperation"
+	componentName = "operation"
+)
+
+var (
+	Archetype   = chasm.FullyQualifiedName(libraryName, componentName)
+	ArchetypeID = chasm.GenerateTypeID(Archetype)
+)
+
 type operationContextKeyType struct{}
 
 // OperationContextKey is the context key for OperationContext, registered as a CHASM component
@@ -32,13 +42,13 @@ func newComponentOnlyLibrary(dc *dynamicconfig.Collection) *componentOnlyLibrary
 }
 
 func (l *componentOnlyLibrary) Name() string {
-	return "nexusoperation"
+	return libraryName
 }
 
 func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*Operation](
-			"operation",
+			componentName,
 			chasm.WithSearchAttributes(
 				EndpointSearchAttribute,
 				ServiceSearchAttribute,

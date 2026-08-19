@@ -88,7 +88,7 @@ func newCancellationInvocationTaskHandler(opts cancellationInvocationTaskHandler
 func (h *cancellationInvocationTaskHandler) Validate(
 	_ chasm.Context,
 	cancellation *Cancellation,
-	_ chasm.TaskAttributes,
+	_ chasm.TaskInvocation,
 	task *nexusoperationpb.CancellationTask,
 ) (bool, error) {
 	return cancellation.Status == nexusoperationpb.CANCELLATION_STATUS_SCHEDULED &&
@@ -139,20 +139,22 @@ func (h *cancellationInvocationTaskHandler) Execute(
 	callCtx, cancel := h.setupCallContext(ctx, callTimeout)
 	defer cancel()
 
+	traceCtx := invocationTraceContext{
+		operationTag:      "CancelOperation",
+		namespaceName:     ns.Name().String(),
+		targetNamespaceID: endpoint.GetEndpoint().GetSpec().GetTarget().GetWorker().GetNamespaceId(),
+		requestID:         args.requestID,
+		operation:         args.operation,
+		endpointName:      args.endpointName,
+		workflowID:        cancelRef.BusinessID,
+		runID:             cancelRef.RunID,
+		attemptStart:      args.currentTime.UTC(),
+		attempt:           task.GetAttempt(),
+	}
+
 	inv, err := h.newInvocation(
 		callCtx, ns, endpoint, args.endpointName, args.service,
-		callTimeout, timeoutType,
-		invocationTraceContext{
-			operationTag:  "CancelOperation",
-			namespaceName: ns.Name().String(),
-			requestID:     args.requestID,
-			operation:     args.operation,
-			endpointName:  args.endpointName,
-			workflowID:    cancelRef.BusinessID,
-			runID:         cancelRef.RunID,
-			attemptStart:  args.currentTime.UTC(),
-			attempt:       task.GetAttempt(),
-		},
+		callTimeout, timeoutType, traceCtx,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to construct invocation: %w", err)
@@ -161,7 +163,7 @@ func (h *cancellationInvocationTaskHandler) Execute(
 	callErr := inv.Cancel(callCtx, args, nexus.CancelOperationOptions{Header: nexus.Header(args.headers)})
 	failureSource := failureSourceFromContext(callCtx)
 
-	h.recordCallOutcome(ns, endpoint, args.endpointName, "CancelOperation", cancelCallOutcomeTag(callCtx, callErr), callErr, time.Since(startTime), failureSource)
+	h.recordCallOutcome(endpoint, cancelCallOutcomeTag(callCtx, callErr), callErr, time.Since(startTime), failureSource, traceCtx)
 
 	saveErr := h.saveCancellationResult(ctx, cancelRef, callErr)
 
@@ -213,7 +215,7 @@ func newCancellationBackoffTaskHandler(opts commonTaskHandlerOptions) *cancellat
 func (h *cancellationBackoffTaskHandler) Validate(
 	_ chasm.Context,
 	cancellation *Cancellation,
-	_ chasm.TaskAttributes,
+	_ chasm.TaskInvocation,
 	task *nexusoperationpb.CancellationBackoffTask,
 ) (bool, error) {
 	isValid := cancellation.Status == nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF && cancellation.GetAttempt() == task.GetAttempt()

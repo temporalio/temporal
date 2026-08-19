@@ -50,7 +50,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecutionCompletedWorkf
 	var wes []*commonpb.WorkflowExecution
 	// Start numExecutions workflow executions.
 	for i := range numExecutions {
-		we, err := env.FrontendClient().StartWorkflowExecution(env.Context(), &workflowservice.StartWorkflowExecutionRequest{
+		we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.NewString(),
 			Namespace:    env.Namespace().String(),
 			WorkflowId:   tv.WithWorkflowIDNumber(i).WorkflowID(),
@@ -93,7 +93,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecutionCompletedWorkf
 		s.Eventually(
 			func() bool {
 				visibilityResponse, err := env.FrontendClient().ListWorkflowExecutions(
-					env.Context(),
+					s.Context(),
 					&workflowservice.ListWorkflowExecutionsRequest{
 						Namespace:     env.Namespace().String(),
 						PageSize:      1,
@@ -115,7 +115,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecutionCompletedWorkf
 
 	// Delete workflow executions.
 	for _, we := range wes {
-		_, err := env.FrontendClient().DeleteWorkflowExecution(env.Context(), &workflowservice.DeleteWorkflowExecutionRequest{
+		_, err := env.FrontendClient().DeleteWorkflowExecution(s.Context(), &workflowservice.DeleteWorkflowExecutionRequest{
 			Namespace: env.Namespace().String(),
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: we.WorkflowId,
@@ -130,7 +130,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecutionCompletedWorkf
 			func() bool {
 				// Check execution is deleted.
 				describeResponse, err := env.FrontendClient().DescribeWorkflowExecution(
-					env.Context(),
+					s.Context(),
 					&workflowservice.DescribeWorkflowExecutionRequest{
 						Namespace: env.Namespace().String(),
 						Execution: we,
@@ -151,7 +151,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecutionCompletedWorkf
 
 		// Check history is deleted.
 		historyResponse, err := env.FrontendClient().GetWorkflowExecutionHistory(
-			env.Context(),
+			s.Context(),
 			&workflowservice.GetWorkflowExecutionHistoryRequest{
 				Namespace: env.Namespace().String(),
 				Execution: we,
@@ -165,7 +165,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecutionCompletedWorkf
 			func() bool {
 				// Check visibility is updated.
 				visibilityResponse, err := env.FrontendClient().ListWorkflowExecutions(
-					env.Context(),
+					s.Context(),
 					&workflowservice.ListWorkflowExecutionsRequest{
 						Namespace:     env.Namespace().String(),
 						PageSize:      1,
@@ -199,7 +199,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecutionRunningWorkflo
 	var wes []*commonpb.WorkflowExecution
 	// Start numExecutions workflow executions.
 	for i := range numExecutions {
-		we, err := env.FrontendClient().StartWorkflowExecution(env.Context(), &workflowservice.StartWorkflowExecutionRequest{
+		we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.NewString(),
 			Namespace:    env.Namespace().String(),
 			WorkflowId:   tv.WithWorkflowIDNumber(i).WorkflowID(),
@@ -219,7 +219,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecutionRunningWorkflo
 		s.Eventually(
 			func() bool {
 				visibilityResponse, err := env.FrontendClient().ListWorkflowExecutions(
-					env.Context(),
+					s.Context(),
 					&workflowservice.ListWorkflowExecutionsRequest{
 						Namespace:     env.Namespace().String(),
 						PageSize:      1,
@@ -238,7 +238,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecutionRunningWorkflo
 
 	// Delete workflow executions.
 	for _, we := range wes {
-		_, err := env.FrontendClient().DeleteWorkflowExecution(env.Context(), &workflowservice.DeleteWorkflowExecutionRequest{
+		_, err := env.FrontendClient().DeleteWorkflowExecution(s.Context(), &workflowservice.DeleteWorkflowExecutionRequest{
 			Namespace:         env.Namespace().String(),
 			WorkflowExecution: we,
 		})
@@ -250,7 +250,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecutionRunningWorkflo
 			func() bool {
 				// Check execution is deleted.
 				describeResponse, err := env.FrontendClient().DescribeWorkflowExecution(
-					env.Context(),
+					s.Context(),
 					&workflowservice.DescribeWorkflowExecutionRequest{
 						Namespace: env.Namespace().String(),
 						Execution: we,
@@ -271,7 +271,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecutionRunningWorkflo
 
 		// Check history is deleted.
 		historyResponse, err := env.FrontendClient().GetWorkflowExecutionHistory(
-			env.Context(),
+			s.Context(),
 			&workflowservice.GetWorkflowExecutionHistoryRequest{
 				Namespace: env.Namespace().String(),
 				Execution: we,
@@ -285,7 +285,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecutionRunningWorkflo
 			func() bool {
 				// Check visibility is updated.
 				visibilityResponse, err := env.FrontendClient().ListWorkflowExecutions(
-					env.Context(),
+					s.Context(),
 					&workflowservice.ListWorkflowExecutionsRequest{
 						Namespace:     env.Namespace().String(),
 						PageSize:      1,
@@ -319,7 +319,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecutionJustTerminated
 	var wes []*commonpb.WorkflowExecution
 	// Start numExecutions workflow executions.
 	for i := range numExecutions {
-		we, err := env.FrontendClient().StartWorkflowExecution(env.Context(), &workflowservice.StartWorkflowExecutionRequest{
+		we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:    uuid.NewString(),
 			Namespace:    env.Namespace().String(),
 			WorkflowId:   tv.WithWorkflowIDNumber(i).WorkflowID(),
@@ -339,7 +339,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecutionJustTerminated
 		s.Eventually(
 			func() bool {
 				visibilityResponse, err := env.FrontendClient().ListWorkflowExecutions(
-					env.Context(),
+					s.Context(),
 					&workflowservice.ListWorkflowExecutionsRequest{
 						Namespace:     env.Namespace().String(),
 						PageSize:      1,
@@ -365,13 +365,13 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecutionJustTerminated
 	// two types of tasks and make sure that they are executed in correct order.
 
 	for i, we := range wes {
-		_, err := env.FrontendClient().TerminateWorkflowExecution(env.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
+		_, err := env.FrontendClient().TerminateWorkflowExecution(s.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
 			Namespace:         env.Namespace().String(),
 			WorkflowExecution: we,
 		})
 		s.NoError(err)
 		env.Logger.Warn("Execution is terminated", tag.Int("number", i), tag.WorkflowID(we.WorkflowId), tag.WorkflowRunID(we.RunId))
-		_, err = env.FrontendClient().DeleteWorkflowExecution(env.Context(), &workflowservice.DeleteWorkflowExecutionRequest{
+		_, err = env.FrontendClient().DeleteWorkflowExecution(s.Context(), &workflowservice.DeleteWorkflowExecutionRequest{
 			Namespace:         env.Namespace().String(),
 			WorkflowExecution: we,
 		})
@@ -384,7 +384,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecutionJustTerminated
 			func() bool {
 				// Check execution is deleted.
 				describeResponse, err := env.FrontendClient().DescribeWorkflowExecution(
-					env.Context(),
+					s.Context(),
 					&workflowservice.DescribeWorkflowExecutionRequest{
 						Namespace: env.Namespace().String(),
 						Execution: we,
@@ -405,7 +405,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecutionJustTerminated
 
 		// Check history is deleted.
 		historyResponse, err := env.FrontendClient().GetWorkflowExecutionHistory(
-			env.Context(),
+			s.Context(),
 			&workflowservice.GetWorkflowExecutionHistoryRequest{
 				Namespace: env.Namespace().String(),
 				Execution: we,
@@ -419,7 +419,7 @@ func (s *WorkflowDeleteExecutionSuite) TestDeleteWorkflowExecutionJustTerminated
 			func() bool {
 				// Check visibility is updated.
 				visibilityResponse, err := env.FrontendClient().ListWorkflowExecutions(
-					env.Context(),
+					s.Context(),
 					&workflowservice.ListWorkflowExecutionsRequest{
 						Namespace:     env.Namespace().String(),
 						PageSize:      1,

@@ -151,13 +151,25 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedulespb.Watc
 		return nil, errWrongChain
 	}
 
+	// A paused workflow is still open and still occupies the schedule's overlap
+	// slot, so treat it as running for watch purposes (mirroring the CHASM
+	// scheduler, which considers PAUSED "still progressing"). Otherwise we would
+	// fall through and look for a close event that never arrives, stalling the
+	// schedule. Treating it as running lets the scheduler apply the overlap
+	// policy against it - e.g. TERMINATE_OTHER terminates it and starts the next
+	// run.
+	workflowStatus := pollRes.WorkflowStatus
+	if workflowStatus == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
+		workflowStatus = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	}
+
 	rb := newResponseBuilder(
 		req,
-		pollRes.WorkflowStatus,
+		workflowStatus,
 		a.Logger,
 		a.maxBlobSize()-recordOverheadSize,
 	)
-	if pollRes.WorkflowStatus == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+	if workflowStatus == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		return rb.Build(nil)
 	}
 

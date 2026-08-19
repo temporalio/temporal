@@ -83,7 +83,7 @@ func (m *sqlExecutionStore) AppendHistoryNodes(
 		if err != nil {
 			return err
 		}
-		if !(rowsAffected == 1 || rowsAffected == 2) {
+		if rowsAffected != 1 && rowsAffected != 2 {
 			return fmt.Errorf("expected 1 or 2 row to be affected for node table, got %v", rowsAffected)
 		}
 
@@ -94,7 +94,7 @@ func (m *sqlExecutionStore) AppendHistoryNodes(
 			if err != nil {
 				return err
 			}
-			if !(rowsAffected == 1 || rowsAffected == 2) {
+			if rowsAffected != 1 && rowsAffected != 2 {
 				return fmt.Errorf("expected 1 or 2 rows to be affected for tree table as we allow upserts, got %v", rowsAffected)
 			}
 			return nil
@@ -324,7 +324,7 @@ func (m *sqlExecutionStore) ForkHistoryBranch(
 	if err != nil {
 		return err
 	}
-	if !(rowsAffected == 1 || rowsAffected == 2) {
+	if rowsAffected != 1 && rowsAffected != 2 {
 		return fmt.Errorf("expected 1 or 2 row to be affected for tree table, got %v", rowsAffected)
 	}
 	return nil

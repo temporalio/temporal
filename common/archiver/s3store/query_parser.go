@@ -9,7 +9,6 @@ import (
 
 	"github.com/temporalio/sqlparser"
 	"go.temporal.io/server/common/sqlquery"
-	"go.temporal.io/server/common/util"
 )
 
 type (
@@ -21,17 +20,19 @@ type (
 	queryParser struct{}
 
 	parsedQuery struct {
-		workflowTypeName *string
-		workflowID       *string
-		startTime        *time.Time
-		closeTime        *time.Time
-		searchPrecision  *string
+		workflowType    *string
+		workflowID      *string
+		startTime       *time.Time
+		closeTime       *time.Time
+		searchPrecision *string
 	}
 )
 
 // All allowed fields for filtering
 const (
+	// Deprecated: use WorkflowType instead. This filter name is kept for backward compatibility.
 	WorkflowTypeName = "WorkflowTypeName"
+	WorkflowType     = "WorkflowType"
 	WorkflowID       = "WorkflowId"
 	StartTime        = "StartTime"
 	CloseTime        = "CloseTime"
@@ -61,11 +62,11 @@ func (p *queryParser) Parse(query string) (*parsedQuery, error) {
 	if err := p.convertWhereExpr(whereExpr, parsedQuery); err != nil {
 		return nil, err
 	}
-	if parsedQuery.workflowID == nil && parsedQuery.workflowTypeName == nil {
-		return nil, errors.New("WorkflowId or WorkflowTypeName is required in query")
+	if parsedQuery.workflowID == nil && parsedQuery.workflowType == nil {
+		return nil, errors.New("WorkflowId or WorkflowType is required in query")
 	}
-	if parsedQuery.workflowID != nil && parsedQuery.workflowTypeName != nil {
-		return nil, errors.New("only one of WorkflowId or WorkflowTypeName can be specified in a query")
+	if parsedQuery.workflowID != nil && parsedQuery.workflowType != nil {
+		return nil, errors.New("only one of WorkflowId or WorkflowType can be specified in a query")
 	}
 	if parsedQuery.closeTime != nil && parsedQuery.startTime != nil {
 		return nil, errors.New("only one of StartTime or CloseTime can be specified in a query")
@@ -122,18 +123,18 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 	valStr := sqlparser.String(valExpr)
 
 	switch colNameStr {
-	case WorkflowTypeName:
+	case WorkflowTypeName, WorkflowType:
 		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
 			return err
 		}
 		if op != "=" {
-			return fmt.Errorf("only operation = is support for %s", WorkflowTypeName)
+			return fmt.Errorf("only operation = is support for %s", colNameStr)
 		}
-		if parsedQuery.workflowTypeName != nil {
-			return fmt.Errorf("can not query %s multiple times", WorkflowTypeName)
+		if parsedQuery.workflowType != nil {
+			return fmt.Errorf("can not query %s multiple times", colNameStr)
 		}
-		parsedQuery.workflowTypeName = util.Ptr(val)
+		parsedQuery.workflowType = new(val)
 	case WorkflowID:
 		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
@@ -145,7 +146,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		if parsedQuery.workflowID != nil {
 			return fmt.Errorf("can not query %s multiple times", WorkflowID)
 		}
-		parsedQuery.workflowID = util.Ptr(val)
+		parsedQuery.workflowID = new(val)
 	case CloseTime:
 		timestamp, err := sqlquery.ConvertToTime(valStr)
 		if err != nil {
@@ -161,7 +162,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 			return err
 		}
 		if op != "=" {
-			return fmt.Errorf("only operation = is support for %s", CloseTime)
+			return fmt.Errorf("only operation = is support for %s", StartTime)
 		}
 		parsedQuery.startTime = &timestamp
 	case SearchPrecision:
@@ -183,7 +184,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 		default:
 			return fmt.Errorf("invalid value for %s: %s", SearchPrecision, val)
 		}
-		parsedQuery.searchPrecision = util.Ptr(val)
+		parsedQuery.searchPrecision = new(val)
 
 	default:
 		return fmt.Errorf("unknown filter name: %s", colNameStr)

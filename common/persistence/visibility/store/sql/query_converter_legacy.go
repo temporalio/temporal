@@ -3,6 +3,7 @@ package sql
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -182,7 +183,7 @@ func (c *QueryConverterLegacy) convertWhereString(queryString string) (*queryPar
 	}
 
 	res := &queryParamsLegacy{}
-	if selectStmt.Where != nil {
+	if selectStmt.Where != nil && selectStmt.Where.Expr != nil {
 		res.queryString = sqlparser.String(selectStmt.Where.Expr)
 	}
 	for _, groupByExpr := range selectStmt.GroupBy {
@@ -228,6 +229,31 @@ func (c *QueryConverterLegacy) convertSelectStmt(sel *sqlparser.Select) error {
 		}
 	}
 
+	// Convert the GROUP BY clause before applying the default namespace division
+	// filter below. convertColName sets c.seenNamespaceDivision when the group-by
+	// field is TemporalNamespaceDivision, which suppresses the default filter so
+	// that grouping spans all divisions (grouping by it is only meaningful across
+	// all divisions).
+	if len(sel.GroupBy) > 1 {
+		return query.NewConverterError(
+			"%s: 'GROUP BY' clause supports only a single field",
+			query.NotSupportedErrMessage,
+		)
+	}
+	for k := range sel.GroupBy {
+		colName, err := c.convertColName(&sel.GroupBy[k])
+		if err != nil {
+			return err
+		}
+		if !query.IsGroupByFieldAllowed(colName.fieldName) {
+			return query.NewConverterError(
+				"%s: 'GROUP BY' clause is not supported for search attribute %s",
+				query.NotSupportedErrMessage,
+				colName.alias,
+			)
+		}
+	}
+
 	// This logic comes from elasticsearch/visibility_store.go#convertQuery function.
 	// If the query did not explicitly filter on TemporalNamespaceDivision,
 	// try setting the namespace division filter based on the archetype ID,
@@ -255,25 +281,6 @@ func (c *QueryConverterLegacy) convertSelectStmt(sel *sqlparser.Select) error {
 				Left:  sel.Where.Expr,
 				Right: namespaceDivisionExpr,
 			}
-		}
-	}
-
-	if len(sel.GroupBy) > 1 {
-		return query.NewConverterError(
-			"%s: 'GROUP BY' clause supports only a single field",
-			query.NotSupportedErrMessage,
-		)
-	}
-	for k := range sel.GroupBy {
-		colName, err := c.convertColName(&sel.GroupBy[k])
-		if err != nil {
-			return err
-		}
-		if !query.IsGroupByFieldAllowed(colName.fieldName) {
-			return query.NewConverterError(
-				"%s: 'GROUP BY' clause is only supported for ExecutionStatus",
-				query.NotSupportedErrMessage,
-			)
 		}
 	}
 
@@ -656,12 +663,7 @@ func (c *QueryConverterLegacy) convertIsExpr(exprRef *sqlparser.Expr) error {
 }
 
 func isSupportedOperator(supportedOperators []string, operator string) bool {
-	for _, op := range supportedOperators {
-		if operator == op {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(supportedOperators, operator)
 }
 
 func isSupportedComparisonOperator(operator string) bool {
@@ -677,10 +679,5 @@ func isSupportedTextOperator(operator string) bool {
 }
 
 func isSupportedTypeRangeCond(saType enumspb.IndexedValueType) bool {
-	for _, tp := range supportedTypesRangeCond {
-		if saType == tp {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(supportedTypesRangeCond, saType)
 }

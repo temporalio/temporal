@@ -191,10 +191,7 @@ func (d *taskQueueStore) UpdateTaskQueue(
 		if request.ExpiryTime == nil {
 			return nil, serviceerror.NewInternal("ExpiryTime cannot be nil for sticky task queue")
 		}
-		expiryTTL := convert.Int64Ceil(time.Until(timestamp.TimeValue(request.ExpiryTime)).Seconds())
-		if expiryTTL >= maxCassandraTTL {
-			expiryTTL = maxCassandraTTL
-		}
+		expiryTTL := min(convert.Int64Ceil(time.Until(timestamp.TimeValue(request.ExpiryTime)).Seconds()), maxCassandraTTL)
 		batch := d.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
 
 		batch.Query(switchTasksTable(templateUpdateTaskQueueQueryWithTTLPart1, d.version),

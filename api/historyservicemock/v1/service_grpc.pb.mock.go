@@ -183,6 +183,26 @@ func (mr *MockHistoryServiceClientMockRecorder) DeleteDLQTasks(ctx, in any, opts
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteDLQTasks", reflect.TypeOf((*MockHistoryServiceClient)(nil).DeleteDLQTasks), varargs...)
 }
 
+// DeleteExecution mocks base method.
+func (m *MockHistoryServiceClient) DeleteExecution(ctx context.Context, in *historyservice.DeleteExecutionRequest, opts ...grpc.CallOption) (*historyservice.DeleteExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DeleteExecution", varargs...)
+	ret0, _ := ret[0].(*historyservice.DeleteExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteExecution indicates an expected call of DeleteExecution.
+func (mr *MockHistoryServiceClientMockRecorder) DeleteExecution(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).DeleteExecution), varargs...)
+}
+
 // DeleteWorkflowExecution mocks base method.
 func (m *MockHistoryServiceClient) DeleteWorkflowExecution(ctx context.Context, in *historyservice.DeleteWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.DeleteWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
@@ -761,6 +781,26 @@ func (mr *MockHistoryServiceClientMockRecorder) PollMutableState(ctx, in any, op
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollMutableState", reflect.TypeOf((*MockHistoryServiceClient)(nil).PollMutableState), varargs...)
+}
+
+// PollWorkflowExecutionTimeSkipping mocks base method.
+func (m *MockHistoryServiceClient) PollWorkflowExecutionTimeSkipping(ctx context.Context, in *historyservice.PollWorkflowExecutionTimeSkippingRequest, opts ...grpc.CallOption) (*historyservice.PollWorkflowExecutionTimeSkippingResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "PollWorkflowExecutionTimeSkipping", varargs...)
+	ret0, _ := ret[0].(*historyservice.PollWorkflowExecutionTimeSkippingResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PollWorkflowExecutionTimeSkipping indicates an expected call of PollWorkflowExecutionTimeSkipping.
+func (mr *MockHistoryServiceClientMockRecorder) PollWorkflowExecutionTimeSkipping(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollWorkflowExecutionTimeSkipping", reflect.TypeOf((*MockHistoryServiceClient)(nil).PollWorkflowExecutionTimeSkipping), varargs...)
 }
 
 // PollWorkflowExecutionUpdate mocks base method.
@@ -1830,6 +1870,21 @@ func (mr *MockHistoryServiceServerMockRecorder) DeleteDLQTasks(arg0, arg1 any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteDLQTasks", reflect.TypeOf((*MockHistoryServiceServer)(nil).DeleteDLQTasks), arg0, arg1)
 }
 
+// DeleteExecution mocks base method.
+func (m *MockHistoryServiceServer) DeleteExecution(arg0 context.Context, arg1 *historyservice.DeleteExecutionRequest) (*historyservice.DeleteExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteExecution", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.DeleteExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteExecution indicates an expected call of DeleteExecution.
+func (mr *MockHistoryServiceServerMockRecorder) DeleteExecution(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).DeleteExecution), arg0, arg1)
+}
+
 // DeleteWorkflowExecution mocks base method.
 func (m *MockHistoryServiceServer) DeleteWorkflowExecution(arg0 context.Context, arg1 *historyservice.DeleteWorkflowExecutionRequest) (*historyservice.DeleteWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
@@ -2263,6 +2318,21 @@ func (m *MockHistoryServiceServer) PollMutableState(arg0 context.Context, arg1 *
 func (mr *MockHistoryServiceServerMockRecorder) PollMutableState(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollMutableState", reflect.TypeOf((*MockHistoryServiceServer)(nil).PollMutableState), arg0, arg1)
+}
+
+// PollWorkflowExecutionTimeSkipping mocks base method.
+func (m *MockHistoryServiceServer) PollWorkflowExecutionTimeSkipping(arg0 context.Context, arg1 *historyservice.PollWorkflowExecutionTimeSkippingRequest) (*historyservice.PollWorkflowExecutionTimeSkippingResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PollWorkflowExecutionTimeSkipping", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.PollWorkflowExecutionTimeSkippingResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PollWorkflowExecutionTimeSkipping indicates an expected call of PollWorkflowExecutionTimeSkipping.
+func (mr *MockHistoryServiceServerMockRecorder) PollWorkflowExecutionTimeSkipping(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollWorkflowExecutionTimeSkipping", reflect.TypeOf((*MockHistoryServiceServer)(nil).PollWorkflowExecutionTimeSkipping), arg0, arg1)
 }
 
 // PollWorkflowExecutionUpdate mocks base method.

@@ -194,6 +194,7 @@ func (f *archivalQueueFactory) newScheduledQueue(shard historyi.ShardContext, ex
 			MonitorOptions: queues.MonitorOptions{
 				PendingTasksCriticalCount:   f.Config.QueuePendingTaskCriticalCount,
 				ReaderStuckCriticalAttempts: f.Config.QueueReaderStuckCriticalAttempts,
+				ReaderStuckShadowMode:       f.Config.QueueReaderStuckShadowMode,
 				SliceCountCriticalThreshold: f.Config.QueueCriticalSlicesCount,
 			},
 			MaxPollRPS:                          f.Config.ArchivalProcessorMaxPollRPS,
@@ -204,6 +205,7 @@ func (f *archivalQueueFactory) newScheduledQueue(shard historyi.ShardContext, ex
 			MaxReaderCount:                      f.Config.ArchivalQueueMaxReaderCount,
 			MoveGroupTaskCountBase:              f.Config.QueueMoveGroupTaskCountBase,
 			MoveGroupTaskCountMultiplier:        f.Config.QueueMoveGroupTaskCountMultiplier,
+			ShrinkPredicateMaxPendingKeys:       f.Config.QueueShrinkPredicateMaxPendingKeys,
 		},
 		f.HostReaderRateLimiter,
 		logger,

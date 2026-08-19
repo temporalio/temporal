@@ -36,11 +36,12 @@ var (
 	// they both block until a background WFT is complete.
 	ExecutionAPICountLimitOverride = map[string]int{
 		// These methods here are long-running because they block until there is a task available.
-		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":       1,
-		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":       1,
-		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionUpdate": 1,
-		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":          1,
-		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusOperationExecution": 1,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":             1,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue":             1,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionUpdate":       1,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue":                1,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollNexusOperationExecution":       1,
+		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionTimeSkipping": 1,
 
 		// Long-running if activity outcome is not already available
 		"/temporal.api.workflowservice.v1.WorkflowService/PollActivityExecution": 1,
@@ -169,6 +170,9 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorkerDeployment":                     3,
 		"/temporal.api.workflowservice.v1.WorkflowService/DescribeNexusOperationExecution":              3,
 		"/temporal.api.workflowservice.v1.WorkflowService/ValidateWorkerDeploymentVersionComputeConfig": 3,
+		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkers":                                  3,
+		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorker":                               3,
+		"/temporal.api.workflowservice.v1.WorkflowService/CountWorkers":                                 3,
 
 		// P3: Progress APIs for reporting cancellations and failures.
 		// They are relatively low priority as the tasks need to be retried anyway.
@@ -199,6 +203,8 @@ var (
 		// Treat these as long-poll but lower priority (5) so spikes don’t block Poll* APIs.
 		PollWorkflowHistoryAPIName:   5,
 		PollActivityExecutionAPIName: 5,
+		// Test-support long-poll; not required for the service to function, so it yields to production traffic.
+		"/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowExecutionTimeSkipping": 5,
 		// Informational API that aren't required for the temporal service to function
 		OpenAPIV3APIName: 5,
 		OpenAPIV2APIName: 5,
@@ -213,8 +219,6 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ListClosedWorkflowExecutions":   1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkflowExecutions":         1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListArchivedWorkflowExecutions": 1,
-		"/temporal.api.workflowservice.v1.WorkflowService/ListWorkers":                    1,
-		"/temporal.api.workflowservice.v1.WorkflowService/DescribeWorker":                 1,
 		"/temporal.api.workflowservice.v1.WorkflowService/CountActivityExecutions":        1,
 		"/temporal.api.workflowservice.v1.WorkflowService/ListActivityExecutions":         1,
 		"/temporal.api.workflowservice.v1.WorkflowService/CountNexusOperationExecutions":  1,
@@ -357,6 +361,7 @@ func NewNamespaceReplicationInducingAPIPriorityRateLimiter(
 func NewGlobalNamespaceRateLimiter(
 	memberCounter calculator.MemberCounter,
 	globalQuota dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	globalQuotaBurstRatio dynamicconfig.FloatPropertyFnWithNamespaceFilter,
 	logger log.Logger,
 ) quotas.RequestRateLimiter {
 	rateFn := calculator.NewLoggedNamespaceCalculator(
@@ -372,7 +377,10 @@ func NewGlobalNamespaceRateLimiter(
 		func(req quotas.Request) quotas.RequestRateLimiter {
 			return quotas.NewRequestRateLimiterAdapter(
 				quotas.NewDynamicRateLimiter(
-					quotas.NewDefaultIncomingRateBurst(func() float64 { return rateFn(req.Caller) }),
+					quotas.NewDefaultRateBurst(
+						func() float64 { return rateFn(req.Caller) },
+						func() float64 { return globalQuotaBurstRatio(req.Caller) },
+					),
 					time.Minute,
 				),
 			)

@@ -214,7 +214,6 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
 			caller := func(req *http.Request) (*http.Response, error) {
 				req.Header.Set(testAuthHeader, "stripped")
@@ -340,7 +339,6 @@ func (s *NexusRequestForwardingSuite) TestCancelOperationForwardedFromStandbyToA
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
 			caller := func(req *http.Request) (*http.Response, error) {
 				req.Header.Set(testAuthHeader, "stripped")
@@ -467,7 +465,6 @@ func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandb
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		s.T().Run(tc.name, func(t *testing.T) {
 			// Override templates to always return passive cluster in callback URL
 			s.clusters[0].OverrideDynamicConfig(

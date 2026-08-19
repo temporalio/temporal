@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jstemmer/go-junit-report/v2/junit"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/tools/common/junit"
 )
 
 func TestReadJUnitReport(t *testing.T) {
@@ -29,8 +29,7 @@ func TestGenerateJUnitReportForTimedoutTests(t *testing.T) {
 		"TestCallbacksSuite/TestWorkflowCallbacks_2",
 	}
 	j := generateReport(testNames, "timeout", failureTypeTimeout)
-	j.path = out.Name()
-	require.NoError(t, j.write())
+	require.NoError(t, junit.Write(out.Name(), &j.Testsuites))
 	requireReportEquals(t, "testdata/junit-timeout-output.xml", out.Name())
 }
 
@@ -73,8 +72,7 @@ func TestAppendAlertsSuite(t *testing.T) {
 		require.NoError(t, os.Remove(out.Name()))
 	}()
 
-	j.path = out.Name()
-	require.NoError(t, j.write())
+	require.NoError(t, junit.Write(out.Name(), &j.Testsuites))
 
 	// Compare against the expected output file
 	requireReportEquals(t, "testdata/junit-alerts-output.xml", out.Name())
@@ -105,9 +103,9 @@ func TestMergeReports_SingleReport(t *testing.T) {
 	report, err := mergeReports([]*junitReport{j1})
 	require.NoError(t, err)
 
-	suites := report.Testsuites.Suites
+	suites := report.Suites
 	require.Len(t, suites, 1)
-	require.Equal(t, 2, report.Testsuites.Failures)
+	require.Equal(t, 2, report.Failures)
 
 	testNames := collectTestNames(suites)
 	require.Len(t, testNames, 5)
@@ -125,7 +123,7 @@ func TestMergeReports_SingleReport(t *testing.T) {
 	require.Contains(t, failureData, "Error Trace:")
 	require.Contains(t, failureData, "expected: 1")
 	require.NotContains(t, failureData, "=== RUN")
-	require.NotContains(t, failureData, "--- FAIL:")
+	require.Contains(t, failureData, "--- FAIL: TestCallbacksSuite/TestWorkflowCallbacks_InvalidArgument")
 	for _, tc := range suites[0].Testcases {
 		if tc.Failure != nil {
 			require.Equal(t, string(failureTypeFailed), tc.Failure.Type)
@@ -141,9 +139,9 @@ func TestMergeReports_MultipleReports(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, report.reportingErrs)
 
-	suites := report.Testsuites.Suites
+	suites := report.Suites
 	require.Len(t, suites, 2)
-	require.Equal(t, 4, report.Testsuites.Failures)
+	require.Equal(t, 4, report.Failures)
 	require.Equal(t, "go.temporal.io/server/tests", suites[0].Name)
 	require.Equal(t, "go.temporal.io/server/tests (retry 1) (final)", suites[1].Name)
 
@@ -300,10 +298,8 @@ func TestJUnitXMLWellFormed(t *testing.T) {
 
 			// Setup the report
 			j := tt.setup()
-			j.path = out.Name()
-
 			// Write the report
-			require.NoError(t, j.write())
+			require.NoError(t, junit.Write(out.Name(), &j.Testsuites))
 
 			// Read the written file
 			content, err := os.ReadFile(out.Name())
@@ -315,18 +311,18 @@ func TestJUnitXMLWellFormed(t *testing.T) {
 			require.NoError(t, err, "Written XML should be well-formed and parseable")
 
 			// Additional validation: ensure we can re-parse it using our own read method
-			j2 := &junitReport{path: out.Name()}
-			require.NoError(t, j2.read(), "Should be able to re-read the written XML")
+			_, err = junit.Read(out.Name())
+			require.NoError(t, err, "Should be able to re-read the written XML")
 
 			// Validate that the structure is reasonable
-			require.Greater(t, len(parsed.Suites), 0, "Should have at least one test suite")
+			require.NotEmpty(t, parsed.Suites, "Should have at least one test suite")
 		})
 	}
 }
 
 func mustReadReportFixture(t *testing.T, path string) *junitReport {
 	t.Helper()
-	report := &junitReport{path: path}
-	require.NoError(t, report.read())
+	report, err := readReport(path)
+	require.NoError(t, err)
 	return report
 }

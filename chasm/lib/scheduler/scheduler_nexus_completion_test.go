@@ -9,10 +9,12 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -195,6 +197,64 @@ func TestHandleNexusCompletion_PauseOnFailure(t *testing.T) {
 	executeNexusCompletion(t, tc)
 }
 
+func TestPauseOnFailureInvalidatesConflictToken(t *testing.T) {
+	sched, ctx, node := setupSchedulerForTest(t)
+	sched.Schedule.Policies.PauseOnFailure = true
+	sched.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{
+		{
+			RequestId:  "req-1",
+			WorkflowId: "wf-1",
+			RunId:      "run-1",
+			Attempt:    1,
+		},
+	}
+	_, err := node.CloseTransaction()
+	require.NoError(t, err)
+
+	describeResponse, err := sched.Describe(
+		chasm.NewContext(context.Background(), node),
+		&schedulerpb.DescribeScheduleRequest{
+			NamespaceId: namespaceID,
+			FrontendRequest: &workflowservice.DescribeScheduleRequest{
+				Namespace:  namespace,
+				ScheduleId: scheduleID,
+			},
+		},
+		newLegacySpecBuilder(0, 0),
+	)
+	require.NoError(t, err)
+	staleDescription := describeResponse.GetFrontendResponse()
+	require.False(t, staleDescription.GetSchedule().GetState().GetPaused())
+
+	ctx = chasm.NewMutableContext(context.Background(), node)
+	err = sched.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+		RequestId: "req-1",
+		Outcome: &persistencespb.ChasmNexusCompletion_Failure{
+			Failure: &failurepb.Failure{Message: "workflow failed"},
+		},
+		CloseTime: timestamppb.Now(),
+	})
+	require.NoError(t, err)
+	_, err = node.CloseTransaction()
+	require.NoError(t, err)
+	require.True(t, sched.Schedule.GetState().GetPaused())
+	require.NotEmpty(t, sched.Schedule.GetState().GetNotes())
+
+	ctx = chasm.NewMutableContext(context.Background(), node)
+	_, err = sched.Update(ctx, &schedulerpb.UpdateScheduleRequest{
+		NamespaceId: namespaceID,
+		FrontendRequest: &workflowservice.UpdateScheduleRequest{
+			Namespace:     namespace,
+			ScheduleId:    scheduleID,
+			Schedule:      staleDescription.GetSchedule(),
+			ConflictToken: staleDescription.GetConflictToken(),
+		},
+	})
+	require.ErrorIs(t, err, scheduler.ErrConflictTokenMismatch)
+	require.True(t, sched.Schedule.GetState().GetPaused())
+	require.NotEmpty(t, sched.Schedule.GetState().GetNotes())
+}
+
 // TestHandleNexusCompletion_Idempotent verifies that handling a completion for an
 // already-processed request ID (not in BufferedStarts) is a no-op.
 func TestHandleNexusCompletion_Idempotent(t *testing.T) {
@@ -248,6 +308,59 @@ func TestHandleNexusCompletion_Canceled(t *testing.T) {
 		},
 		expectPaused: false,
 		expectStatus: enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+	}
+
+	executeNexusCompletion(t, tc)
+}
+
+// Deferred starts (Attempt==-1, set by ProcessBuffer when overlap policy
+// holds them back) must be re-enabled when a running workflow completes.
+// recordCompletedAction flips -1 to 0; the immediate ProcessBufferTask
+// addTasks emits fires inline during CloseTransaction and promotes 0 to 1.
+// End state Attempt=1 demonstrates the full defer -> re-enable -> promote
+// cascade.
+func TestHandleNexusCompletion_ReenablesDeferredStarts(t *testing.T) {
+	tc := nexusCompletionTestCase{
+		name: "completion re-enables deferred starts",
+		setupInvoker: func(invoker *scheduler.Invoker) {
+			invoker.BufferedStarts = []*schedulespb.BufferedStart{
+				{
+					RequestId:  "req-1",
+					WorkflowId: "wf-1",
+					RunId:      "run-1",
+					Attempt:    1,
+					ActualTime: timestamppb.New(time.Now().Add(-1 * time.Minute)),
+					StartTime:  timestamppb.New(time.Now().Add(-30 * time.Second)),
+				},
+				{
+					RequestId:  "req-2",
+					WorkflowId: "wf-2",
+					Attempt:    -1,
+					ActualTime: timestamppb.New(time.Now()),
+				},
+			}
+		},
+		completion: &persistencespb.ChasmNexusCompletion{
+			RequestId: "req-1",
+			Outcome: &persistencespb.ChasmNexusCompletion_Success{
+				Success: &commonpb.Payload{Data: []byte("ok")},
+			},
+			CloseTime: timestamppb.New(time.Now()),
+		},
+		expectPaused: false,
+		expectStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		validateInvoker: func(t *testing.T, invoker *scheduler.Invoker) {
+			var deferred *schedulespb.BufferedStart
+			for _, start := range invoker.BufferedStarts {
+				if start.RequestId == "req-2" {
+					deferred = start
+					break
+				}
+			}
+			require.NotNil(t, deferred, "previously-deferred start must remain in the buffer")
+			require.Equal(t, int64(1), deferred.Attempt,
+				"deferred start must be re-enabled past 0 (recordCompletedAction) and promoted to exactly 1 (inline ProcessBufferTask)")
+		},
 	}
 
 	executeNexusCompletion(t, tc)

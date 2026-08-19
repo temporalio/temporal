@@ -89,10 +89,14 @@ func endpointRegistryLifetimeHooks(lc fx.Lifecycle, registry commonnexus.Endpoin
 // NexusTransportProvider allows customization of the HTTP transport used for Nexus requests.
 type NexusTransportProvider func(namespaceID, serviceName string) http.RoundTripper
 
-func defaultNexusTransportProvider() NexusTransportProvider {
-	return func(namespaceID, serviceName string) http.RoundTripper {
-		return http.DefaultTransport
+func defaultNexusTransportProvider() (NexusTransportProvider, error) {
+	transport, err := common.NewHTTPTransport(nil)
+	if err != nil {
+		return nil, err
 	}
+	return func(namespaceID, serviceName string) http.RoundTripper {
+		return transport
+	}, nil
 }
 
 // responseSizeLimiter wraps an http.RoundTripper to limit response body size.

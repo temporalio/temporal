@@ -94,7 +94,7 @@ func (m *taskQueueStore) UpdateTaskQueue(
 
 	tqId, tqHash := taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType, persistence.SubqueueZero)
 	var resp *persistence.UpdateTaskQueueResponse
-	err = m.SqlStore.txExecute(ctx, "UpdateTaskQueue", func(tx sqlplugin.Tx) error {
+	err = m.txExecute(ctx, "UpdateTaskQueue", func(tx sqlplugin.Tx) error {
 		if err := lockTaskQueue(ctx,
 			tx,
 			tqHash,

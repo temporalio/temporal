@@ -627,6 +627,20 @@ func (h *OperatorHandlerImpl) AddOrUpdateRemoteCluster(
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgumentf(errInvalidRemoteClusterInfo, err)
 	}
+	// Validate the same invariants the in-memory cluster metadata enforces,
+	// against the values we are about to persist. Without this, a bad row
+	// would crash the metadata refresher on every host on the next tick.
+	if err := clustermetadata.ValidateClusterInformation(
+		resp.GetClusterName(),
+		clustermetadata.ClusterInformation{
+			Enabled:                request.GetEnableRemoteClusterConnection(),
+			InitialFailoverVersion: resp.GetInitialFailoverVersion(),
+			RPCAddress:             request.GetFrontendAddress(),
+		},
+		h.clusterMetadata.GetFailoverVersionIncrement(),
+	); err != nil {
+		return nil, serviceerror.NewInvalidArgumentf(errInvalidRemoteClusterInfo, err)
+	}
 
 	var updateRequestVersion int64 = 0
 	clusterData, err := h.clusterMetadataManager.GetClusterMetadata(
@@ -682,6 +696,10 @@ func (h *OperatorHandlerImpl) RemoveRemoteCluster(
 	}
 	if !isClusterNameExist {
 		return nil, serviceerror.NewNotFound("The cluster to be deleted cannot be found in clusters cache.")
+	}
+
+	if err := validateClusterNotInUseByNamespaces(h.namespaceRegistry, h.clusterMetadata.GetCurrentClusterName(), request.GetClusterName()); err != nil {
+		return nil, err
 	}
 
 	if err := h.clusterMetadataManager.DeleteClusterMetadata(
@@ -742,6 +760,10 @@ func (h *OperatorHandlerImpl) validateRemoteClusterMetadata(metadata *adminservi
 	if metadata.GetFailoverVersionIncrement() != currentClusterInfo.GetFailoverVersionIncrement() {
 		// failover version increment is mismatch with current cluster config
 		return serviceerror.NewInvalidArgument("Cannot add remote cluster due to failover version increment mismatch")
+	}
+	if metadata.GetHistoryShardCount() <= 0 {
+		// Guards the modulo below against divide-by-zero and rejects nonsense shard counts.
+		return serviceerror.NewInvalidArgument("Remote cluster HistoryShardCount must be positive")
 	}
 	if metadata.GetHistoryShardCount() != h.config.NumHistoryShards {
 		remoteShardCount := metadata.GetHistoryShardCount()

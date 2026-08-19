@@ -12,6 +12,8 @@ import (
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	otellog "go.opentelemetry.io/otel/log"
+	lognoop "go.opentelemetry.io/otel/log/noop"
 	"go.opentelemetry.io/otel/propagation"
 	otelresource "go.opentelemetry.io/otel/sdk/resource"
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -21,8 +23,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
-	chasmcallback "go.temporal.io/server/chasm/lib/callback"
-	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -47,10 +47,13 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/history/replication"
@@ -111,20 +114,25 @@ type (
 		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
 		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
 
-		SearchAttributesMapper     searchattribute.Mapper
-		CustomFrontendInterceptors []grpc.UnaryServerInterceptor
-		Authorizer                 authorization.Authorizer
-		ClaimMapper                authorization.ClaimMapper
-		AudienceGetter             authorization.JWTAudienceMapper
-		ServiceHosts               map[primitives.ServiceName]static.Hosts
+		SearchAttributesMapper       searchattribute.Mapper
+		CustomFrontendInterceptors   []grpc.UnaryServerInterceptor
+		AdditionalStreamInterceptors []grpc.StreamServerInterceptor
+		Authorizer                   authorization.Authorizer
+		ClaimMapper                  authorization.ClaimMapper
+		AudienceGetter               authorization.JWTAudienceMapper
+		TokenProvider                auth.TokenProvider
+		ServiceHosts                 map[primitives.ServiceName]static.Hosts
 
 		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
-		Logger                log.Logger
-		ClientFactoryProvider client.FactoryProvider
-		DynamicConfigClient   dynamicconfig.Client
-		TLSConfigProvider     encryption.TLSConfigProvider
-		EsClient              esclient.Client
-		MetricsHandler        metrics.Handler
+		Logger                     log.Logger
+		ClientFactoryProvider      client.FactoryProvider
+		PersistenceFactoryProvider persistenceClient.FactoryProviderFn
+		DynamicConfigClient        dynamicconfig.Client
+		TLSConfigProvider          encryption.TLSConfigProvider
+		EsClient                   esclient.Client
+		MetricsHandler             metrics.Handler
+		TestHooks                  testhooks.TestHooks
+		EventLoggerProvider        otellog.LoggerProvider
 	}
 )
 
@@ -135,7 +143,6 @@ var (
 			ServerOptionsProvider,
 			resource.ArchivalMetadataProvider,
 			TaskCategoryRegistryProvider,
-			PersistenceFactoryProvider,
 			HistoryServiceProvider,
 			MatchingServiceProvider,
 			FrontendServiceProvider,
@@ -150,12 +157,6 @@ var (
 		serialization.Module,
 		FxLogAdapter,
 		fx.Invoke(ServerLifetimeHooks),
-	)
-
-	ChasmLibraryOptions = fx.Options(
-		chasm.Module,
-		chasmscheduler.Module,
-		chasmcallback.Module,
 	)
 )
 
@@ -201,6 +202,11 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		clientFactoryProvider = client.NewFactoryProvider()
 	}
 
+	persistenceFactoryProvider := so.persistenceFactoryProvider
+	if persistenceFactoryProvider == nil {
+		persistenceFactoryProvider = PersistenceFactoryProvider()
+	}
+
 	// MetricsHandler
 	metricHandler := so.metricHandler
 	if metricHandler == nil {
@@ -208,6 +214,14 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		if err != nil {
 			return serverOptionsProvider{}, fmt.Errorf("unable to create metrics handler: %w", err)
 		}
+	}
+
+	// EventLoggerProvider backs structured ("wide") events. Select the custom OTEL LoggerProvider
+	// if injected, else a no-op provider that discards events. A deployment opts in by injecting a
+	// provider via WithCustomEventLoggerProvider.
+	eventLoggerProvider := so.eventLoggerProvider
+	if eventLoggerProvider == nil {
+		eventLoggerProvider = lognoop.NewLoggerProvider()
 	}
 
 	// DynamicConfigClient
@@ -224,6 +238,11 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 			logger.Info("Dynamic config client is not configured. Using default values.")
 			dcClient = dynamicconfig.NewNoopClient()
 		}
+	}
+
+	testHooks := testhooks.NewTestHooks()
+	if so.testHooks != nil {
+		testHooks = *so.testHooks
 	}
 
 	// TLSConfigProvider
@@ -277,6 +296,17 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		}
 	}
 
+	if so.config.Global.Authorization.RemoteClusterAuth.Require && so.tokenProvider == nil {
+		return serverOptionsProvider{}, errors.New("global.authorization.remoteClusterAuth.require is true but no TokenProvider is configured: use WithTokenProvider")
+	}
+	// TokenCredentials require TLS (RFC 9700); without a remote-cluster TLS source the first
+	// cross-cluster dial would fatal-log, with no clear "you forgot TLS" diagnostic.
+	// Coarse check: any remote-cluster TLS entry passes; per-hostname config is still validated
+	// lazily on first dial.
+	if so.tokenProvider != nil && so.tlsConfigProvider == nil && len(so.config.Global.TLS.RemoteClusters) == 0 {
+		return serverOptionsProvider{}, errors.New("WithTokenProvider is set but no remote-cluster TLS is configured: supply global.tls.remoteClusters in config, or pass a provider via WithTLSConfigProvider")
+	}
+
 	return serverOptionsProvider{
 		ServerOptions:              so,
 		StopChan:                   stopChan,
@@ -296,18 +326,23 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		CustomHistoryArchiverFactory:    so.customHistoryArchiverFactory,
 		CustomVisibilityArchiverFactory: so.customVisibilityArchiverFactory,
 
-		SearchAttributesMapper:     so.searchAttributesMapper,
-		CustomFrontendInterceptors: so.customFrontendInterceptors,
-		Authorizer:                 so.authorizer,
-		ClaimMapper:                so.claimMapper,
-		AudienceGetter:             so.audienceGetter,
+		SearchAttributesMapper:       so.searchAttributesMapper,
+		CustomFrontendInterceptors:   so.customFrontendInterceptors,
+		AdditionalStreamInterceptors: so.additionalStreamInterceptors,
+		Authorizer:                   so.authorizer,
+		ClaimMapper:                  so.claimMapper,
+		AudienceGetter:               so.audienceGetter,
+		TokenProvider:                so.tokenProvider,
 
-		Logger:                logger,
-		ClientFactoryProvider: clientFactoryProvider,
-		DynamicConfigClient:   dcClient,
-		TLSConfigProvider:     tlsConfigProvider,
-		EsClient:              esClient,
-		MetricsHandler:        metricHandler,
+		Logger:                     logger,
+		ClientFactoryProvider:      clientFactoryProvider,
+		PersistenceFactoryProvider: persistenceFactoryProvider,
+		DynamicConfigClient:        dcClient,
+		TLSConfigProvider:          tlsConfigProvider,
+		EsClient:                   esClient,
+		MetricsHandler:             metricHandler,
+		TestHooks:                  testHooks,
+		EventLoggerProvider:        eventLoggerProvider,
 	}, nil
 }
 
@@ -353,6 +388,7 @@ type (
 		NamespaceLogger                 resource.NamespaceLogger
 		DynamicConfigClient             dynamicconfig.Client
 		MetricsHandler                  metrics.Handler
+		EventLoggerProvider             otellog.LoggerProvider
 		EsClient                        esclient.Client
 		TlsConfigProvider               encryption.TLSConfigProvider //nolint:staticcheck // should be TLSConfigProvider
 		PersistenceConfig               config.Persistence
@@ -363,8 +399,10 @@ type (
 		PersistenceFactoryProvider      persistenceClient.FactoryProviderFn
 		SearchAttributesMapper          searchattribute.Mapper
 		CustomFrontendInterceptors      []grpc.UnaryServerInterceptor
+		AdditionalStreamInterceptors    []grpc.StreamServerInterceptor
 		Authorizer                      authorization.Authorizer
 		ClaimMapper                     authorization.ClaimMapper
+		TokenProvider                   auth.TokenProvider
 		DataStoreFactory                persistenceClient.AbstractDataStoreFactory
 		VisibilityStoreFactory          visibility.VisibilityStoreFactory
 		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
@@ -373,6 +411,7 @@ type (
 		InstanceID                      resource.InstanceID                     `optional:"true"`
 		StaticServiceHosts              map[primitives.ServiceName]static.Hosts `optional:"true"`
 		TaskCategoryRegistry            tasks.TaskCategoryRegistry
+		TestHooks                       testhooks.TestHooks
 	}
 )
 
@@ -430,6 +469,9 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			func() authorization.ClaimMapper {
 				return params.ClaimMapper
 			},
+			func() auth.TokenProvider {
+				return params.TokenProvider
+			},
 			func() encryption.TLSConfigProvider {
 				return params.TlsConfigProvider
 			},
@@ -442,6 +484,9 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 			func() metrics.Handler {
 				return params.MetricsHandler.WithTags(metrics.ServiceNameTag(serviceName))
 			},
+			func() otellog.Logger {
+				return wideevents.NewLogger(params.EventLoggerProvider, string(serviceName))
+			},
 			func() esclient.Client {
 				return params.EsClient
 			},
@@ -452,11 +497,15 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 				return params.TaskCategoryRegistry
 			},
 		),
+		fx.Decorate(func() testhooks.TestHooks {
+			return params.TestHooks
+		}),
 		ServiceTracingModule,
 		resource.DefaultOptions,
 		membershipModule,
 		FxLogAdapter,
-		ChasmLibraryOptions,
+		chasm.Module,
+		fx.Supply(params.AdditionalStreamInterceptors),
 	)
 }
 
@@ -547,7 +596,6 @@ func genericFrontendServiceProvider(
 	app := fx.New(
 		params.GetCommonServiceOptions(serviceName),
 		fx.Supply(params.CustomFrontendInterceptors),
-		fx.Supply([]grpc.StreamServerInterceptor{}),
 		fx.Decorate(func() authorization.ClaimMapper {
 			switch serviceName {
 			case primitives.FrontendService:
@@ -1102,105 +1150,86 @@ type fxLogAdapter struct {
 
 func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 	switch e := e.(type) {
-	case *fxevent.OnStartExecuting:
-		l.logger.Debug("OnStart hook executing",
-			tag.ComponentFX,
-			tag.String("callee", e.FunctionName),
-			tag.String("caller", e.CallerName),
-		)
+	case *fxevent.OnStartExecuting,
+		*fxevent.OnStopExecuting,
+		*fxevent.Invoking,
+		*fxevent.BeforeRun:
+		// These events only signal that work is about to start. The
+		// corresponding completion events are logged if they fail.
 	case *fxevent.OnStartExecuted:
 		if e.Err != nil {
-			l.logger.Error("OnStart hook failed",
+			l.logger.Error(
+				"OnStart hook failed",
 				tag.ComponentFX,
 				tag.String("callee", e.FunctionName),
 				tag.String("caller", e.CallerName),
-				tag.Error(e.Err),
-			)
-		} else {
-			l.logger.Debug("OnStart hook executed",
-				tag.ComponentFX,
-				tag.String("callee", e.FunctionName),
-				tag.String("caller", e.CallerName),
-				tag.Stringer("runtime", e.Runtime),
-			)
+				tag.Error(e.Err))
 		}
-	case *fxevent.OnStopExecuting:
-		l.logger.Debug("OnStop hook executing",
-			tag.ComponentFX,
-			tag.String("callee", e.FunctionName),
-			tag.String("caller", e.CallerName),
-		)
 	case *fxevent.OnStopExecuted:
 		if e.Err != nil {
-			l.logger.Error("OnStop hook failed",
+			l.logger.Error(
+				"OnStop hook failed",
 				tag.ComponentFX,
 				tag.String("callee", e.FunctionName),
 				tag.String("caller", e.CallerName),
-				tag.Error(e.Err),
-			)
-		} else {
-			l.logger.Debug("OnStop hook executed",
-				tag.ComponentFX,
-				tag.String("callee", e.FunctionName),
-				tag.String("caller", e.CallerName),
-				tag.Stringer("runtime", e.Runtime),
-			)
+				tag.Error(e.Err))
 		}
 	case *fxevent.Supplied:
 		if e.Err != nil {
-			l.logger.Error("supplied",
+			l.logger.Error(
+				"supplied",
 				tag.ComponentFX,
 				tag.String("type", e.TypeName),
 				tag.String("module", e.ModuleName),
-				tag.Error(e.Err))
+				tag.Error(e.Err),
+			)
 		}
 	case *fxevent.Provided:
 		if e.Err != nil {
-			l.logger.Error("error encountered while applying options",
+			l.logger.Error(
+				"error encountered while applying options",
 				tag.ComponentFX,
 				tag.String("module", e.ModuleName),
-				tag.Error(e.Err))
+				tag.Error(e.Err),
+			)
 		}
 	case *fxevent.Replaced:
 		if e.Err != nil {
-			l.logger.Error("error encountered while replacing",
+			l.logger.Error(
+				"error encountered while replacing",
 				tag.ComponentFX,
 				tag.String("module", e.ModuleName),
-				tag.Error(e.Err))
+				tag.Error(e.Err),
+			)
 		}
 	case *fxevent.Decorated:
 		if e.Err != nil {
-			l.logger.Error("error encountered while applying options",
+			l.logger.Error(
+				"error encountered while applying options",
 				tag.ComponentFX,
 				tag.String("module", e.ModuleName),
-				tag.Error(e.Err))
+				tag.Error(e.Err),
+			)
 		}
 	case *fxevent.Run:
 		if e.Err != nil {
-			l.logger.Error("error returned",
+			l.logger.Error(
+				"error returned",
 				tag.ComponentFX,
 				tag.String("name", e.Name),
 				tag.String("kind", e.Kind),
 				tag.String("module", e.ModuleName),
-				tag.Error(e.Err),
-			)
+				tag.Error(e.Err))
 		}
-	case *fxevent.Invoking:
-		// Do not log stack as it will make logs hard to read.
-		l.logger.Debug("invoking",
-			tag.ComponentFX,
-			tag.String("function", e.FunctionName),
-			tag.String("module", e.ModuleName),
-		)
 	case *fxevent.Invoked:
 		if e.Err != nil {
-			l.logger.Error("invoke failed",
+			l.logger.Error(
+				"invoke failed",
 				tag.ComponentFX,
 				tag.Error(e.Err),
 				tag.String("stack", e.Trace),
 				tag.String("function", e.FunctionName),
-				tag.String("module", e.ModuleName),
-			)
+				tag.String("module", e.ModuleName))
 		}
 	case *fxevent.Stopping:
 		l.logger.Info("received signal",
@@ -1208,35 +1237,42 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 			tag.Stringer("signal", e.Signal))
 	case *fxevent.Stopped:
 		if e.Err != nil {
-			l.logger.Error("stop failed", tag.ComponentFX, tag.Error(e.Err))
+			l.logger.Error(
+				"stop failed",
+				tag.ComponentFX,
+				tag.Error(e.Err),
+			)
 		}
 	case *fxevent.RollingBack:
-		l.logger.Error("start failed, rolling back", tag.ComponentFX, tag.Error(e.StartErr))
+		l.logger.Error(
+			"start failed, rolling back",
+			tag.ComponentFX,
+			tag.Error(e.StartErr),
+		)
 	case *fxevent.RolledBack:
 		if e.Err != nil {
-			l.logger.Error("rollback failed", tag.ComponentFX, tag.Error(e.Err))
+			l.logger.Error(
+				"rollback failed",
+				tag.ComponentFX,
+				tag.Error(e.Err),
+			)
 		}
 	case *fxevent.Started:
 		if e.Err != nil {
-			l.logger.Error("start failed", tag.ComponentFX, tag.Error(e.Err))
-		} else {
-			l.logger.Debug("started", tag.ComponentFX)
+			l.logger.Error(
+				"start failed",
+				tag.ComponentFX,
+				tag.Error(e.Err),
+			)
 		}
 	case *fxevent.LoggerInitialized:
 		if e.Err != nil {
-			l.logger.Error("custom logger initialization failed", tag.ComponentFX, tag.Error(e.Err))
-		} else {
-			l.logger.Debug("initialized custom fxevent.Logger",
+			l.logger.Error(
+				"custom logger initialization failed",
 				tag.ComponentFX,
-				tag.String("function", e.ConstructorName))
+				tag.Error(e.Err),
+			)
 		}
-	case *fxevent.BeforeRun:
-		l.logger.Debug("before run",
-			tag.ComponentFX,
-			tag.String("name", e.Name),
-			tag.String("kind", e.Kind),
-			tag.String("module", e.ModuleName),
-		)
 	default:
 		l.logger.Warn("unknown fx log type, update fxLogAdapter",
 			tag.ComponentFX,

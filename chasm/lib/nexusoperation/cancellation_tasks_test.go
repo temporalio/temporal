@@ -186,7 +186,7 @@ func TestCancellationInvocationTaskHandler_Validate(t *testing.T) {
 				Attempt: tc.cancelAttempt,
 			})
 
-			valid, err := handler.Validate(ctx, c, chasm.TaskAttributes{}, &nexusoperationpb.CancellationTask{Attempt: tc.taskAttempt})
+			valid, err := handler.Validate(ctx, c, chasm.TaskInvocation{}, &nexusoperationpb.CancellationTask{Attempt: tc.taskAttempt})
 			require.NoError(t, err)
 			require.Equal(t, tc.valid, valid)
 		})
@@ -234,7 +234,7 @@ func TestCancellationBackoffTaskHandler_Validate(t *testing.T) {
 				Attempt: tc.attempt,
 			})
 
-			valid, err := handler.Validate(ctx, c, chasm.TaskAttributes{}, tc.task)
+			valid, err := handler.Validate(ctx, c, chasm.TaskInvocation{}, tc.task)
 			require.NoError(t, err)
 			require.Equal(t, tc.valid, valid)
 		})
@@ -299,7 +299,8 @@ func TestCancellationLoadArgs_StandaloneFallsBackToRequestData(t *testing.T) {
 	}, nil)
 	require.NoError(t, err)
 	protorequire.ProtoEqual(t, input, args.payload)
-	require.Equal(t, headers, args.headers)
+	require.NotSame(t, &headers, &args.headers) // Confirm we make a copy.
+	require.Equal(t, headers, args.headers)     // But they are structually equivalent.
 }
 
 func TestCancellationInvocationTaskHandler_HTTP(t *testing.T) {

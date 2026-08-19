@@ -134,6 +134,24 @@ func isVisibilityValueEqual(v1, v2 VisibilityValue) bool {
 	return v1.Equal(v2)
 }
 
+type VisibilityValueText string
+
+func (v VisibilityValueText) MustEncode() *commonpb.Payload {
+	return sadefs.MustEncodeValue(string(v), enumspb.INDEXED_VALUE_TYPE_TEXT)
+}
+
+func (v VisibilityValueText) Equal(other VisibilityValue) bool {
+	ov, ok := other.(VisibilityValueText)
+	if !ok {
+		return false
+	}
+	return v == ov
+}
+
+func (v VisibilityValueText) Value() any {
+	return string(v)
+}
+
 // visibilityValueFromPayload decoded payload based on type set in its metadata.
 func visibilityValueFromPayload(payload *commonpb.Payload) (VisibilityValue, error) {
 	value, err := sadefs.DecodeValue(payload, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, false)
@@ -141,25 +159,23 @@ func visibilityValueFromPayload(payload *commonpb.Payload) (VisibilityValue, err
 		return nil, err
 	}
 
-	switch val := value.(type) {
-	case int64:
-		return VisibilityValueInt64(val), nil
-	case float64:
-		return VisibilityValueFloat64(val), nil
-	case bool:
-		return VisibilityValueBool(val), nil
-	case time.Time:
-		return VisibilityValueTime(val), nil
-	case string:
-		// Try to parse as datetime first
-		if parsedTime, err := time.Parse(time.RFC3339, val); err == nil {
-			return VisibilityValueTime(parsedTime), nil
-		}
-		return VisibilityValueKeyword(val), nil
-	case []string:
-		return VisibilityValueStringSlice(val), nil
+	switch t := sadefs.GetMetadataType(payload); t {
+	case enumspb.INDEXED_VALUE_TYPE_BOOL:
+		return VisibilityValueBool(value.(bool)), nil
+	case enumspb.INDEXED_VALUE_TYPE_DATETIME:
+		return VisibilityValueTime(value.(time.Time)), nil
+	case enumspb.INDEXED_VALUE_TYPE_DOUBLE:
+		return VisibilityValueFloat64(value.(float64)), nil
+	case enumspb.INDEXED_VALUE_TYPE_INT:
+		return VisibilityValueInt64(value.(int64)), nil
+	case enumspb.INDEXED_VALUE_TYPE_KEYWORD:
+		return VisibilityValueKeyword(value.(string)), nil
+	case enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST:
+		return VisibilityValueStringSlice(value.([]string)), nil
+	case enumspb.INDEXED_VALUE_TYPE_TEXT:
+		return VisibilityValueText(value.(string)), nil
 	default:
 		// this should never happen given that DecodeValue did not return an error
-		return nil, fmt.Errorf("unexpected search attribute value type %T", value)
+		return nil, fmt.Errorf("unexpected metadata type %s", t)
 	}
 }

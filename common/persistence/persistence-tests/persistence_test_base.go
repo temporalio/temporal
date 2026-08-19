@@ -4,11 +4,11 @@ import (
 	"cmp"
 	"context"
 	"fmt"
-	"math/rand"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
 	"go.opentelemetry.io/otel/trace"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -129,9 +129,18 @@ func NewTestBaseWithCassandra(options *TestBaseOptions) *TestBase {
 
 func NewTestClusterForCassandra(options *TestBaseOptions, logger log.Logger) *cassandra.TestCluster {
 	if options.DBName == "" {
-		options.DBName = "test_" + GenerateRandomDBName(3)
+		options.DBName = GenerateRandomDBName()
 	}
-	testCluster := cassandra.NewTestCluster(options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir, options.FaultInjection, logger)
+	testCluster := cassandra.NewTestCluster(
+		options.DBName,
+		options.DBUsername,
+		options.DBPassword,
+		options.DBHost,
+		options.DBPort,
+		options.SchemaDir,
+		options.FaultInjection,
+		logger,
+	)
 	return testCluster
 }
 
@@ -166,7 +175,42 @@ func NewTestBaseWithSQL(options *TestBaseOptions) *TestBase {
 			panic(fmt.Sprintf("unknown sql store driver: %v", options.SQLDBPluginName))
 		}
 	}
-	testCluster := sql.NewTestCluster(options.SQLDBPluginName, options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.ConnectAttributes, options.SchemaDir, options.FaultInjection, logger)
+	testCluster := sql.NewTestCluster(
+		options.SQLDBPluginName,
+		options.DBName,
+		options.DBUsername,
+		options.DBPassword,
+		options.DBHost,
+		options.DBPort,
+		options.ConnectAttributes,
+		options.SchemaDir,
+		options.FaultInjection,
+		logger,
+	)
+	return NewTestBaseForCluster(testCluster, logger)
+}
+
+func NewTestBaseWithEs(options *TestBaseOptions) *TestBase {
+	logger := options.Logger
+	if logger == nil {
+		logger = log.NewTestLogger()
+	}
+
+	if options.DBHost == "" {
+		options.DBHost = environment.GetESAddress()
+	}
+	if options.DBPort == 0 {
+		options.DBPort = environment.GetESPort()
+	}
+
+	testCluster := newEsTestCluster(
+		options.DBHost,
+		options.DBPort,
+		options.DBUsername,
+		options.DBPassword,
+		options.DBName,
+		logger,
+	)
 	return NewTestBaseForCluster(testCluster, logger)
 }
 
@@ -436,23 +480,10 @@ func (s *TestBase) RangeDeleteMessagesFromNamespaceDLQ(
 	return s.NamespaceReplicationQueue.RangeDeleteMessagesFromDLQ(ctx, firstMessageID, lastMessageID)
 }
 
-func randString(length int) string {
-	const lowercaseSet = "abcdefghijklmnopqrstuvwxyz"
-	b := make([]byte, length)
-	for i := range b {
-		b[i] = lowercaseSet[rand.Int63()%int64(len(lowercaseSet))]
-	}
-	return string(b)
-}
-
-// GenerateRandomDBName helper
-// Format: MMDDHHMMSS_abc
-func GenerateRandomDBName(n int) string {
-	var prefix strings.Builder
-	prefix.WriteString(time.Now().UTC().Format("0102150405"))
-	prefix.WriteRune('_')
-	prefix.WriteString(randString(n))
-	return prefix.String()
+func GenerateRandomDBName() string {
+	uuidPart := strings.ReplaceAll(uuid.NewString(), "-", "")
+	// Keep generated DB names short enough for Cassandra keyspaces after XDC tests append cluster suffixes.
+	return "test_" + uuidPart[:24]
 }
 
 func timeComparator(t1, t2 time.Time, timeTolerance time.Duration) bool {

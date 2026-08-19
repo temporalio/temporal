@@ -107,6 +107,7 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 	case *tasks.DeleteExecutionTask:
 		err = t.processDeleteExecutionTask(ctx, task, false)
 	case *tasks.ChasmTask:
+		task.Attempt = executable.Attempt()
 		err = t.executeChasmSideEffectTransferTask(ctx, task)
 	default:
 		err = errUnknownTransferTask
@@ -129,10 +130,18 @@ func (t *transferQueueStandbyTaskExecutor) executeChasmSideEffectTransferTask(
 		ms historyi.MutableState,
 		_ historyi.ReleaseWorkflowContextFunc,
 	) (any, error) {
-		valid, err := validateChasmSideEffectTask(ctx, ms, task)
-		if err != nil || !valid {
+		isTaskInTree, isValid, err := validateChasmSideEffectTask(ctx, ms, task)
+		if err != nil {
 			return nil, err
 		}
+		if !isTaskInTree || !isValid {
+			// Replication has removed the logical task, or the component reports it
+			// invalid — drop the physical task.
+			return nil, nil
+		}
+
+		// Task still exists in the tree; retry until the active cluster executes
+		// and replicates the resulting state change.
 		return ms.ChasmTree(), nil
 	}
 
@@ -485,7 +494,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		// no need for mutable state anymore, release workflow lock
 		release(nil)
 
-		if workflowClosed && !(childStarted && childAbandon) {
+		if workflowClosed && (!childStarted || !childAbandon) {
 			// NOTE: ideally for workflowClosed, child not started, parent close policy is abandon case,
 			// we should continue to start the child workflow in active cluster, so standby logic also need to
 			// perform the verification. However, we can't do that due to some technial reasons.

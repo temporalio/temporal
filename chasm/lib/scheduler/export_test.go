@@ -13,8 +13,14 @@ import (
 
 // Export unexported methods for testing.
 
+// ExecutionStatus search-attribute values, exported for tests.
+var (
+	ExecutionStatusRunning   = executionStatusRunning
+	ExecutionStatusCompleted = executionStatusCompleted
+)
+
 func NewTestHandler(logger log.Logger) *handler {
-	return newHandler(logger, legacyscheduler.NewSpecBuilder())
+	return newHandler(logger, legacyscheduler.NewSpecBuilder(func() int { return 0 }, func() int { return 0 }))
 }
 
 func (h *handler) TestCreateFromMigrationState(ctx context.Context, req *schedulerpb.CreateFromMigrationStateRequest) (*schedulerpb.CreateFromMigrationStateResponse, error) {
@@ -36,4 +42,49 @@ func (s *Scheduler) RecordCompletedAction(
 
 func (i *Invoker) RunningWorkflowID(requestID string) string {
 	return i.runningWorkflowID(requestID)
+}
+
+func ContextWithTweakables(ctx chasm.Context, tweakables Tweakables) chasm.Context {
+	config := Config{
+		Tweakables: func(string) Tweakables { return tweakables },
+	}
+	return chasm.ContextWithValue(ctx, tweakablesCtxKey, config.Tweakables)
+}
+
+// RecentActionCount exposes the completed-retention limit for tests.
+const RecentActionCount = recentActionCount
+
+// ApplyCompletedRetention exposes applyCompletedRetention for tests.
+func (i *Invoker) ApplyCompletedRetention() {
+	i.applyCompletedRetention()
+}
+
+// RecordExecuteResult exposes recordExecuteResult so tests can pin the
+// per-RequestId idempotency guard against concurrent ExecuteTasks.
+func (i *Invoker) RecordExecuteResult(
+	ctx chasm.MutableContext,
+	completed []*schedulespb.BufferedStart,
+	retryable []*schedulespb.BufferedStart,
+) (newlyStarted, droppedDuplicates int) {
+	return i.recordExecuteResult(ctx, &executeResult{
+		CompletedStarts: completed,
+		RetryableStarts: retryable,
+	})
+}
+
+func (b *BackfillerTaskHandler) ProcessBackfill(
+	scheduler *Scheduler,
+	backfiller *Backfiller,
+	limit int,
+) (backfillProgressResult, error) {
+	return b.processBackfill(nil, scheduler, backfiller, limit)
+}
+
+func (b *BackfillerTaskHandler) AllowedBufferedStarts(
+	ctx chasm.Context,
+	scheduler *Scheduler,
+	invoker *Invoker,
+	tweakables Tweakables,
+) (int, error) {
+	return b.allowedBufferedStarts(ctx, scheduler, invoker, tweakables)
 }

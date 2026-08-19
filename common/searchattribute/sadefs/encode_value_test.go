@@ -2,351 +2,394 @@ package sadefs
 
 import (
 	"errors"
+	"fmt"
+	"math"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/server/common/payload"
 )
 
-func Test_DecodeValue_AllowList_FromMetadata_Success(t *testing.T) {
-	s := assert.New(t)
-	allowList := true
+func Test_DecodeValue_Success(t *testing.T) {
+	testCases := []struct {
+		name      string
+		value     any
+		valueType enumspb.IndexedValueType
+	}{
+		{
+			name:      "nil",
+			value:     nil,
+			valueType: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		},
+		{
+			name:      "bool",
+			value:     true,
+			valueType: enumspb.INDEXED_VALUE_TYPE_BOOL,
+		},
+		{
+			name:      "datetime",
+			value:     time.Date(2026, 1, 2, 3, 4, 5, 6, time.UTC),
+			valueType: enumspb.INDEXED_VALUE_TYPE_DATETIME,
+		},
+		{
+			name:      "double",
+			value:     1.23,
+			valueType: enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+		},
+		{
+			name:      "int",
+			value:     int64(123),
+			valueType: enumspb.INDEXED_VALUE_TYPE_INT,
+		},
+		{
+			name:      "keyword",
+			value:     "foo",
+			valueType: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		},
+		{
+			name:      "keyword list",
+			value:     []string{"foo", "bar"},
+			valueType: enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		},
+		{
+			name:      "text",
+			value:     "foo bar",
+			valueType: enumspb.INDEXED_VALUE_TYPE_TEXT,
+		},
+	}
 
-	payloadStr := payload.EncodeString("qwe")
-	payloadStr.Metadata["type"] = []byte("Text")
-	decodedStr, err := DecodeValue(payloadStr, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList) // MetadataType is used.
-	s.NoError(err)
-	s.Equal("qwe", decodedStr)
+	for _, tc := range testCases {
+		for _, setMetadata := range []bool{false, true} {
+			for _, allowList := range []bool{false, true} {
+				tcName := fmt.Sprintf("%s/setMetadata=%v/allowList=%v", tc.name, setMetadata, allowList)
+				t.Run(tcName, func(t *testing.T) {
+					encodedValue, err := payload.Encode(tc.value)
+					require.NoError(t, err)
+					valueType := tc.valueType
+					if setMetadata {
+						encodedValue.Metadata[MetadataType] = []byte(tc.valueType.String())
+						valueType = enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED
+					}
+					decodedValue, err := DecodeValue(encodedValue, valueType, allowList)
+					require.NoError(t, err)
+					require.Equal(t, tc.value, decodedValue)
+				})
+			}
+		}
+	}
 
-	payloadBool, err := payload.Encode(true)
-	s.NoError(err)
-	payloadBool.Metadata["type"] = []byte("Bool")
-	decodedBool, err := DecodeValue(payloadBool, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList) // MetadataType is used.
-	s.NoError(err)
-	s.Equal(true, decodedBool)
-
-	payloadNil, err := payload.Encode(nil)
-	s.NoError(err)
-	payloadNil.Metadata["type"] = []byte("Double")
-	decodedNil, err := DecodeValue(payloadNil, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
-	s.NoError(err)
-	s.Nil(decodedNil)
-
-	payloadSlice, err := payload.Encode([]string{"val1", "val2"})
-	s.NoError(err)
-	payloadSlice.Metadata["type"] = []byte("Keyword")
-	decodedSlice, err := DecodeValue(payloadSlice, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
-	s.NoError(err)
-	s.Equal([]string{"val1", "val2"}, decodedSlice)
-
-	payloadEmptySlice, err := payload.Encode([]string{})
-	s.NoError(err)
-	payloadEmptySlice.Metadata["type"] = []byte("Keyword")
-	decodedNil, err = DecodeValue(payloadEmptySlice, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
-	s.NoError(err)
-	s.Nil(decodedNil)
-
-	var expectedEncodedRepresentation = "2022-03-07T21:27:35.986848-05:00"
-	timeValue, err := time.Parse(time.RFC3339, expectedEncodedRepresentation)
-	s.NoError(err)
-	payloadDatetime, err := payload.Encode(timeValue)
-	s.NoError(err)
-	payloadDatetime.Metadata["type"] = []byte("Datetime")
-	decodedDatetime, err := DecodeValue(payloadDatetime, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
-	s.NoError(err)
-	s.Equal(timeValue, decodedDatetime)
+	t.Run("from parameter ignore metadata", func(t *testing.T) {
+		value := int64(123)
+		encodedValue, err := payload.Encode(value)
+		require.NoError(t, err)
+		encodedValue.Metadata[MetadataType] = []byte("UnknownType") // MetadataType is not used.
+		decodedValue, err := DecodeValue(encodedValue, enumspb.INDEXED_VALUE_TYPE_INT, false)
+		require.NoError(t, err)
+		require.Equal(t, value, decodedValue)
+	})
 }
 
-func Test_DecodeValue_AllowList_FromParameter_Success(t *testing.T) {
-	s := assert.New(t)
-	allowList := true
+func Test_DecodeValue_AllowList_BackwardsCompatibility(t *testing.T) {
+	t.Run("list of int", func(t *testing.T) {
+		value := []int64{123, 456}
+		encodedValue, err := payload.Encode(value)
+		require.NoError(t, err)
+		decodedValue, err := DecodeValue(encodedValue, enumspb.INDEXED_VALUE_TYPE_INT, true)
+		require.NoError(t, err)
+		require.Equal(t, value, decodedValue)
+	})
 
-	payloadStr := payload.EncodeString("qwe")
-	decodedStr, err := DecodeValue(payloadStr, enumspb.INDEXED_VALUE_TYPE_TEXT, allowList)
-	s.NoError(err)
-	s.Equal("qwe", decodedStr)
+	t.Run("list of keyword", func(t *testing.T) {
+		value := []string{"foo", "bar"}
+		encodedValue, err := payload.Encode(value)
+		require.NoError(t, err)
+		decodedValue, err := DecodeValue(encodedValue, enumspb.INDEXED_VALUE_TYPE_KEYWORD, true)
+		require.NoError(t, err)
+		require.Equal(t, value, decodedValue)
+	})
 
-	payloadInt, err := payload.Encode(123)
-	s.NoError(err)
-	decodedInt, err := DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_INT, allowList)
-	s.NoError(err)
-	s.Equal(int64(123), decodedInt)
+	t.Run("empty list", func(t *testing.T) {
+		value := []string{}
+		encodedValue, err := payload.Encode(value)
+		require.NoError(t, err)
+		decodedValue, err := DecodeValue(encodedValue, enumspb.INDEXED_VALUE_TYPE_KEYWORD, true)
+		require.NoError(t, err)
+		require.Nil(t, decodedValue)
+	})
 
-	payloadNil, err := payload.Encode(nil)
-	s.NoError(err)
-	decodedNil, err := DecodeValue(payloadNil, enumspb.INDEXED_VALUE_TYPE_DOUBLE, allowList)
-	s.NoError(err)
-	s.Nil(decodedNil)
+	t.Run("list with single value allowing list", func(t *testing.T) {
+		value := []string{"foo"}
+		encodedValue, err := payload.Encode(value)
+		require.NoError(t, err)
+		decodedValue, err := DecodeValue(encodedValue, enumspb.INDEXED_VALUE_TYPE_KEYWORD, true)
+		require.NoError(t, err)
+		require.Equal(t, value, decodedValue)
+	})
 
-	payloadSlice, err := payload.Encode([]string{"val1", "val2"})
-	s.NoError(err)
-	decodedSlice, err := DecodeValue(payloadSlice, enumspb.INDEXED_VALUE_TYPE_KEYWORD, allowList)
-	s.NoError(err)
-	s.Equal([]string{"val1", "val2"}, decodedSlice)
-
-	payloadEmptySlice, err := payload.Encode([]string{})
-	s.NoError(err)
-	decodedNil, err = DecodeValue(payloadEmptySlice, enumspb.INDEXED_VALUE_TYPE_KEYWORD, allowList)
-	s.NoError(err)
-	s.Nil(decodedNil)
-
-	var expectedEncodedRepresentation = "2022-03-07T21:27:35.986848-05:00"
-	timeValue, err := time.Parse(time.RFC3339, expectedEncodedRepresentation)
-	s.NoError(err)
-	payloadDatetime, err := payload.Encode(timeValue)
-	s.NoError(err)
-	decodedDatetime, err := DecodeValue(payloadDatetime, enumspb.INDEXED_VALUE_TYPE_DATETIME, allowList)
-	s.NoError(err)
-	s.Equal(timeValue, decodedDatetime)
-
-	payloadInt, err = payload.Encode(123)
-	s.NoError(err)
-	payloadInt.Metadata["type"] = []byte("String") // MetadataType is not used.
-	decodedInt, err = DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_INT, allowList)
-	s.NoError(err)
-	s.Equal(int64(123), decodedInt)
-
-	payloadInt, err = payload.Encode(123)
-	s.NoError(err)
-	payloadInt.Metadata["type"] = []byte("UnknownType") // MetadataType is not used.
-	decodedInt, err = DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_INT, allowList)
-	s.NoError(err)
-	s.Equal(int64(123), decodedInt)
-
-	payloadBool, err := payload.Encode(true)
-	s.NoError(err)
-	decodedBool, err := DecodeValue(payloadBool, enumspb.INDEXED_VALUE_TYPE_BOOL, allowList)
-	s.NoError(err)
-	s.Equal(true, decodedBool)
+	t.Run("list with single value not allowing list", func(t *testing.T) {
+		value := []string{"foo"}
+		encodedValue, err := payload.Encode(value)
+		require.NoError(t, err)
+		decodedValue, err := DecodeValue(encodedValue, enumspb.INDEXED_VALUE_TYPE_KEYWORD, false)
+		require.NoError(t, err)
+		require.Equal(t, "foo", decodedValue)
+	})
 }
 
-func Test_DecodeValue_AllowList_Error(t *testing.T) {
-	s := assert.New(t)
-	allowList := true
+func Test_DecodeValue_Error(t *testing.T) {
+	t.Run("no value type set", func(t *testing.T) {
+		value := int64(123)
+		encodedValue, err := payload.Encode(value)
+		require.NoError(t, err)
+		_, err = DecodeValue(encodedValue, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, false)
+		require.ErrorIs(t, err, ErrInvalidType)
+	})
 
-	payloadStr := payload.EncodeString("qwe")
-	decodedStr, err := DecodeValue(payloadStr, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
-	s.Error(err)
-	s.ErrorIs(err, ErrInvalidType)
-	s.Nil(decodedStr)
+	t.Run("invalid metadata type", func(t *testing.T) {
+		value := int64(123)
+		encodedValue, err := payload.Encode(value)
+		encodedValue.Metadata[MetadataType] = []byte("UnknownType")
+		require.NoError(t, err)
+		_, err = DecodeValue(encodedValue, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, false)
+		require.ErrorIs(t, err, ErrInvalidType)
+	})
 
-	payloadInt, err := payload.Encode(123)
-	s.NoError(err)
-	payloadInt.Metadata["type"] = []byte("UnknownType")
-	decodedInt, err := DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
-	s.Error(err)
-	s.ErrorIs(err, ErrInvalidType)
-	s.Nil(decodedInt)
+	t.Run("unknown value type", func(t *testing.T) {
+		value := int64(123)
+		encodedValue, err := payload.Encode(value)
+		require.NoError(t, err)
+		_, err = DecodeValue(encodedValue, enumspb.IndexedValueType(999), false)
+		require.ErrorIs(t, err, ErrInvalidType)
+	})
 
-	payloadInt, err = payload.Encode(123)
-	s.NoError(err)
-	payloadInt.Metadata["type"] = []byte("Text")
-	decodedInt, err = DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
-	s.Error(err)
-	s.ErrorIs(err, converter.ErrUnableToDecode, err.Error())
-	s.Nil(decodedInt)
+	t.Run("incorrect metadata type", func(t *testing.T) {
+		value := int64(123)
+		encodedValue, err := payload.Encode(value)
+		encodedValue.Metadata[MetadataType] = []byte("Keyword")
+		require.NoError(t, err)
+		_, err = DecodeValue(encodedValue, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, false)
+		require.ErrorIs(t, err, converter.ErrUnableToDecode)
+	})
+
+	t.Run("incorrect input type", func(t *testing.T) {
+		value := int64(123)
+		encodedValue, err := payload.Encode(value)
+		require.NoError(t, err)
+		_, err = DecodeValue(encodedValue, enumspb.INDEXED_VALUE_TYPE_KEYWORD, false)
+		require.ErrorIs(t, err, converter.ErrUnableToDecode)
+	})
+
+	t.Run("incorrect input type with correct metadata type", func(t *testing.T) {
+		value := int64(123)
+		encodedValue, err := payload.Encode(value)
+		encodedValue.Metadata[MetadataType] = []byte("Int")
+		require.NoError(t, err)
+		_, err = DecodeValue(encodedValue, enumspb.INDEXED_VALUE_TYPE_KEYWORD, false)
+		require.ErrorIs(t, err, converter.ErrUnableToDecode)
+	})
+
+	t.Run("list not allowed", func(t *testing.T) {
+		value := []int64{123, 456}
+		encodedValue, err := payload.Encode(value)
+		require.NoError(t, err)
+		_, err = DecodeValue(encodedValue, enumspb.INDEXED_VALUE_TYPE_INT, false)
+		require.ErrorIs(t, err, converter.ErrUnableToDecode)
+	})
+
+	t.Run("single value invalid for KeywordList", func(t *testing.T) {
+		value := "foo"
+		encodedValue, err := payload.Encode(value)
+		require.NoError(t, err)
+		_, err = DecodeValue(encodedValue, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+		require.ErrorIs(t, err, converter.ErrUnableToDecode)
+	})
+
+	t.Run("list of KeywordList never allowed", func(t *testing.T) {
+		value := [][]string{{"foo", "bar"}, {"asdf", "qwer"}}
+		encodedValue, err := payload.Encode(value)
+		require.NoError(t, err)
+		_, err = DecodeValue(encodedValue, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+		require.ErrorIs(t, err, converter.ErrUnableToDecode)
+	})
+
+	// TODO(rodrigozhou): test disabled as it an existing bug
+	// t.Run("nil value not allowed in KeywordList", func(t *testing.T) {
+	// 	value := []any{nil}
+	// 	encodedValue, err := payload.Encode(value)
+	// 	require.NoError(t, err)
+	// 	_, err = DecodeValue(encodedValue, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
+	// 	require.ErrorIs(t, err, converter.ErrUnableToDecode)
+	// })
 }
 
-func Test_DecodeValue_NotAllowList_FromMetadata_Success(t *testing.T) {
-	s := assert.New(t)
-	allowList := false
+func Test_DecodeKeywordList(t *testing.T) {
+	t.Run("nil payload", func(t *testing.T) {
+		encodedValue, err := payload.Encode(nil)
+		require.NoError(t, err)
+		decodedValue, err := DecodeKeywordList(encodedValue)
+		require.NoError(t, err)
+		require.Nil(t, decodedValue)
+	})
 
-	payloadStr := payload.EncodeString("qwe")
-	payloadStr.Metadata["type"] = []byte("Text")
-	decodedStr, err := DecodeValue(payloadStr, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
-	s.NoError(err)
-	s.Equal("qwe", decodedStr)
+	t.Run("list of strings", func(t *testing.T) {
+		value := []string{"foo", "bar"}
+		encodedValue, err := payload.Encode(value)
+		require.NoError(t, err)
+		decodedValue, err := DecodeKeywordList(encodedValue)
+		require.NoError(t, err)
+		require.Equal(t, value, decodedValue)
+	})
 
-	payloadBool, err := payload.Encode(true)
-	s.NoError(err)
-	payloadBool.Metadata["type"] = []byte("Bool")
-	decodedBool, err := DecodeValue(payloadBool, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
-	s.NoError(err)
-	s.Equal(true, decodedBool)
+	t.Run("list with single value", func(t *testing.T) {
+		value := []string{"foo"}
+		encodedValue, err := payload.Encode(value)
+		require.NoError(t, err)
+		decodedValue, err := DecodeKeywordList(encodedValue)
+		require.NoError(t, err)
+		require.Equal(t, value, decodedValue)
+	})
 
-	payloadNil, err := payload.Encode(nil)
-	s.NoError(err)
-	payloadNil.Metadata["type"] = []byte("Double")
-	decodedNil, err := DecodeValue(payloadNil, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
-	s.NoError(err)
-	s.Nil(decodedNil)
+	t.Run("empty list", func(t *testing.T) {
+		value := []string{}
+		encodedValue, err := payload.Encode(value)
+		require.NoError(t, err)
+		decodedValue, err := DecodeKeywordList(encodedValue)
+		require.NoError(t, err)
+		require.Equal(t, value, decodedValue)
+	})
 
-	payloadKeyword, err := payload.Encode([]string{"Keyword"})
-	s.NoError(err)
-	payloadKeyword.Metadata["type"] = []byte("Keyword")
-	decodedKeyword, err := DecodeValue(payloadKeyword, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
-	s.NoError(err)
-	s.Equal("Keyword", decodedKeyword)
+	t.Run("error: nil value in list", func(t *testing.T) {
+		value := []any{"foo", nil}
+		encodedValue, err := payload.Encode(value)
+		require.NoError(t, err)
+		_, err = DecodeKeywordList(encodedValue)
+		require.ErrorIs(t, err, converter.ErrUnableToDecode)
+	})
 
-	payloadSlice, err := payload.Encode([]string{"val1", "val2"})
-	s.NoError(err)
-	payloadSlice.Metadata["type"] = []byte("KeywordList")
-	decodedSlice, err := DecodeValue(payloadSlice, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
-	s.NoError(err)
-	s.Equal([]string{"val1", "val2"}, decodedSlice)
+	t.Run("error: non-string value in list", func(t *testing.T) {
+		value := []any{"foo", 123}
+		encodedValue, err := payload.Encode(value)
+		require.NoError(t, err)
+		_, err = DecodeKeywordList(encodedValue)
+		require.ErrorIs(t, err, converter.ErrUnableToDecode)
+	})
 
-	payloadEmptySlice, err := payload.Encode([]string{})
-	s.NoError(err)
-	payloadEmptySlice.Metadata["type"] = []byte("Keyword")
-	decodedNil, err = DecodeValue(payloadEmptySlice, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
-	s.NoError(err)
-	s.Nil(decodedNil)
+	t.Run("error: not a list", func(t *testing.T) {
+		value := "foo"
+		encodedValue, err := payload.Encode(value)
+		require.NoError(t, err)
+		_, err = DecodeKeywordList(encodedValue)
+		require.ErrorIs(t, err, converter.ErrUnableToDecode)
+	})
 
-	var expectedEncodedRepresentation = "2022-03-07T21:27:35.986848-05:00"
-	timeValue, err := time.Parse(time.RFC3339, expectedEncodedRepresentation)
-	s.NoError(err)
-	payloadDatetime, err := payload.Encode(timeValue)
-	s.NoError(err)
-	payloadDatetime.Metadata["type"] = []byte("Datetime")
-	decodedDatetime, err := DecodeValue(payloadDatetime, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
-	s.NoError(err)
-	s.Equal(timeValue, decodedDatetime)
-}
-
-func Test_DecodeValue_NotAllowList_FromParameter_Success(t *testing.T) {
-	s := assert.New(t)
-	allowList := false
-
-	payloadStr := payload.EncodeString("qwe")
-	decodedStr, err := DecodeValue(payloadStr, enumspb.INDEXED_VALUE_TYPE_TEXT, allowList)
-	s.NoError(err)
-	s.Equal("qwe", decodedStr)
-
-	payloadInt, err := payload.Encode(123)
-	s.NoError(err)
-	decodedInt, err := DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_INT, allowList)
-	s.NoError(err)
-	s.Equal(int64(123), decodedInt)
-
-	payloadNil, err := payload.Encode(nil)
-	s.NoError(err)
-	decodedNil, err := DecodeValue(payloadNil, enumspb.INDEXED_VALUE_TYPE_DOUBLE, allowList)
-	s.NoError(err)
-	s.Nil(decodedNil)
-
-	payloadKeyword, err := payload.Encode([]string{"Keyword"})
-	s.NoError(err)
-	decodedKeyword, err := DecodeValue(payloadKeyword, enumspb.INDEXED_VALUE_TYPE_KEYWORD, allowList)
-	s.NoError(err)
-	s.Equal("Keyword", decodedKeyword)
-
-	payloadSlice, err := payload.Encode([]string{"val1", "val2"})
-	s.NoError(err)
-	decodedSlice, err := DecodeValue(payloadSlice, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, allowList)
-	s.NoError(err)
-	s.Equal([]string{"val1", "val2"}, decodedSlice)
-
-	payloadEmptySlice, err := payload.Encode([]string{})
-	s.NoError(err)
-	decodedNil, err = DecodeValue(payloadEmptySlice, enumspb.INDEXED_VALUE_TYPE_KEYWORD, allowList)
-	s.NoError(err)
-	s.Nil(decodedNil)
-
-	var expectedEncodedRepresentation = "2022-03-07T21:27:35.986848-05:00"
-	timeValue, err := time.Parse(time.RFC3339, expectedEncodedRepresentation)
-	s.NoError(err)
-	payloadDatetime, err := payload.Encode(timeValue)
-	s.NoError(err)
-	decodedDatetime, err := DecodeValue(payloadDatetime, enumspb.INDEXED_VALUE_TYPE_DATETIME, allowList)
-	s.NoError(err)
-	s.Equal(timeValue, decodedDatetime)
-
-	payloadInt, err = payload.Encode(123)
-	s.NoError(err)
-	payloadInt.Metadata["type"] = []byte("String") // MetadataType is not used.
-	decodedInt, err = DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_INT, allowList)
-	s.NoError(err)
-	s.Equal(int64(123), decodedInt)
-
-	payloadInt, err = payload.Encode(123)
-	s.NoError(err)
-	payloadInt.Metadata["type"] = []byte("UnknownType") // MetadataType is not used.
-	decodedInt, err = DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_INT, allowList)
-	s.NoError(err)
-	s.Equal(int64(123), decodedInt)
-
-	payloadBool, err := payload.Encode(true)
-	s.NoError(err)
-	decodedBool, err := DecodeValue(payloadBool, enumspb.INDEXED_VALUE_TYPE_BOOL, allowList)
-	s.NoError(err)
-	s.Equal(true, decodedBool)
-}
-
-func Test_DecodeValue_NotAllowList_Error(t *testing.T) {
-	s := assert.New(t)
-	allowList := false
-
-	payloadStr := payload.EncodeString("qwe")
-	decodedStr, err := DecodeValue(payloadStr, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
-	s.Error(err)
-	s.ErrorIs(err, ErrInvalidType)
-	s.Nil(decodedStr)
-
-	payloadInt, err := payload.Encode(123)
-	s.NoError(err)
-	payloadInt.Metadata["type"] = []byte("UnknownType")
-	decodedInt, err := DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
-	s.Error(err)
-	s.ErrorIs(err, ErrInvalidType)
-	s.Nil(decodedInt)
-
-	payloadInt, err = payload.Encode(123)
-	s.NoError(err)
-	payloadInt.Metadata["type"] = []byte("Text")
-	decodedInt, err = DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, allowList)
-	s.Error(err)
-	s.ErrorIs(err, converter.ErrUnableToDecode, err.Error())
-	s.Nil(decodedInt)
-
-	payloadSlice, err := payload.Encode([]string{"val1", "val2"})
-	s.NoError(err)
-	decodedSlice, err := DecodeValue(payloadSlice, enumspb.INDEXED_VALUE_TYPE_KEYWORD, allowList)
-	s.Error(err)
-	s.Nil(decodedSlice)
+	t.Run("error: list of lists", func(t *testing.T) {
+		value := [][]string{{"foo", "bar"}, {"asdf", "qwer"}}
+		encodedValue, err := payload.Encode(value)
+		require.NoError(t, err)
+		_, err = DecodeKeywordList(encodedValue)
+		require.ErrorIs(t, err, converter.ErrUnableToDecode)
+	})
 }
 
 func Test_EncodeValue(t *testing.T) {
-	s := assert.New(t)
+	testCases := []struct {
+		name             string
+		value            any
+		valueType        enumspb.IndexedValueType
+		expectedData     []byte
+		expectedEncoding string
+	}{
+		{
+			name:             "nil",
+			value:            nil,
+			valueType:        enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			expectedData:     nil,
+			expectedEncoding: "binary/null",
+		},
+		{
+			name:             "bool",
+			value:            true,
+			valueType:        enumspb.INDEXED_VALUE_TYPE_BOOL,
+			expectedData:     []byte("true"),
+			expectedEncoding: "json/plain",
+		},
+		{
+			name:             "datetime",
+			value:            time.Date(2026, 1, 2, 3, 4, 5, 6, time.UTC),
+			valueType:        enumspb.INDEXED_VALUE_TYPE_DATETIME,
+			expectedData:     []byte(`"2026-01-02T03:04:05.000000006Z"`),
+			expectedEncoding: "json/plain",
+		},
+		{
+			name:             "double",
+			value:            1.23,
+			valueType:        enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+			expectedData:     []byte("1.23"),
+			expectedEncoding: "json/plain",
+		},
+		{
+			name:             "int",
+			value:            int64(123),
+			valueType:        enumspb.INDEXED_VALUE_TYPE_INT,
+			expectedData:     []byte("123"),
+			expectedEncoding: "json/plain",
+		},
+		{
+			name:             "keyword",
+			value:            "foo",
+			valueType:        enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			expectedData:     []byte(`"foo"`),
+			expectedEncoding: "json/plain",
+		},
+		{
+			name:             "keyword list",
+			value:            []string{"foo", "bar"},
+			valueType:        enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+			expectedData:     []byte(`["foo","bar"]`),
+			expectedEncoding: "json/plain",
+		},
+		{
+			name:             "text",
+			value:            "foo bar",
+			valueType:        enumspb.INDEXED_VALUE_TYPE_TEXT,
+			expectedData:     []byte(`"foo bar"`),
+			expectedEncoding: "json/plain",
+		},
+	}
 
-	encodedPayload, err := EncodeValue(123, enumspb.INDEXED_VALUE_TYPE_INT)
-	s.NoError(err)
-	s.Equal("123", string(encodedPayload.GetData()))
-	s.Equal("Int", string(encodedPayload.Metadata["type"]))
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			encodedValue, err := EncodeValue(tc.value, tc.valueType)
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedData, encodedValue.Data)
+			require.Equal(t, tc.expectedEncoding, string(encodedValue.Metadata[converter.MetadataEncoding]))
+			require.Equal(t, tc.valueType.String(), string(encodedValue.Metadata[MetadataType]))
+		})
+	}
 
-	encodedPayload, err = EncodeValue("qwe", enumspb.INDEXED_VALUE_TYPE_TEXT)
-	s.NoError(err)
-	s.Equal(`"qwe"`, string(encodedPayload.GetData()))
-	s.Equal("Text", string(encodedPayload.Metadata["type"]))
+	t.Run("error", func(t *testing.T) {
+		_, err := EncodeValue(math.Inf(1), enumspb.INDEXED_VALUE_TYPE_DOUBLE)
+		require.Error(t, err)
+	})
+}
 
-	encodedPayload, err = EncodeValue(nil, enumspb.INDEXED_VALUE_TYPE_DOUBLE)
-	s.NoError(err)
-	s.Equal("", string(encodedPayload.GetData()))
-	s.Equal("Double", string(encodedPayload.Metadata["type"]))
-	s.Equal("binary/null", string(encodedPayload.Metadata["encoding"]))
+func Test_MustEncodeValue(t *testing.T) {
+	t.Run("success", func(t *testing.T) {
+		_ = MustEncodeValue("foo", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+	})
 
-	encodedPayload, err = EncodeValue([]string{"val1", "val2"}, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
-	s.NoError(err)
-	s.Equal(`["val1","val2"]`, string(encodedPayload.GetData()))
-	s.Equal("Keyword", string(encodedPayload.Metadata["type"]))
-	s.Equal("json/plain", string(encodedPayload.Metadata["encoding"]))
-
-	encodedPayload, err = EncodeValue([]string{}, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
-	s.NoError(err)
-	s.Equal("[]", string(encodedPayload.GetData()))
-	s.Equal("Keyword", string(encodedPayload.Metadata["type"]))
-	s.Equal("json/plain", string(encodedPayload.Metadata["encoding"]))
-
-	var expectedEncodedRepresentation = "2022-03-07T21:27:35.986848-05:00"
-	timeValue, err := time.Parse(time.RFC3339, expectedEncodedRepresentation)
-	s.NoError(err)
-	encodedPayload, err = EncodeValue(timeValue, enumspb.INDEXED_VALUE_TYPE_DATETIME)
-	s.NoError(err)
-	s.Equal(`"`+expectedEncodedRepresentation+`"`, string(encodedPayload.GetData()),
-		"Datetime Search Attribute is expected to be encoded in RFC 3339 format")
-	s.Equal("Datetime", string(encodedPayload.Metadata["type"]))
+	t.Run("panic", func(t *testing.T) {
+		defer func() {
+			err := recover()
+			require.NotNil(t, err)
+		}()
+		_ = MustEncodeValue(math.Inf(1), enumspb.INDEXED_VALUE_TYPE_DOUBLE)
+		require.Fail(t, "MustEncodeValue did not panic with invalid value")
+	})
 }
 
 func Test_ValidateStrings(t *testing.T) {

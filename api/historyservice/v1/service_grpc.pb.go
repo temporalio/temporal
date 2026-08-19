@@ -78,6 +78,7 @@ const (
 	HistoryService_GetWorkflowExecutionRawHistoryV2_FullMethodName       = "/temporal.server.api.historyservice.v1.HistoryService/GetWorkflowExecutionRawHistoryV2"
 	HistoryService_GetWorkflowExecutionRawHistory_FullMethodName         = "/temporal.server.api.historyservice.v1.HistoryService/GetWorkflowExecutionRawHistory"
 	HistoryService_ForceDeleteWorkflowExecution_FullMethodName           = "/temporal.server.api.historyservice.v1.HistoryService/ForceDeleteWorkflowExecution"
+	HistoryService_DeleteExecution_FullMethodName                        = "/temporal.server.api.historyservice.v1.HistoryService/DeleteExecution"
 	HistoryService_GetDLQTasks_FullMethodName                            = "/temporal.server.api.historyservice.v1.HistoryService/GetDLQTasks"
 	HistoryService_DeleteDLQTasks_FullMethodName                         = "/temporal.server.api.historyservice.v1.HistoryService/DeleteDLQTasks"
 	HistoryService_ListQueues_FullMethodName                             = "/temporal.server.api.historyservice.v1.HistoryService/ListQueues"
@@ -96,6 +97,7 @@ const (
 	HistoryService_UnpauseWorkflowExecution_FullMethodName               = "/temporal.server.api.historyservice.v1.HistoryService/UnpauseWorkflowExecution"
 	HistoryService_StartNexusOperation_FullMethodName                    = "/temporal.server.api.historyservice.v1.HistoryService/StartNexusOperation"
 	HistoryService_CancelNexusOperation_FullMethodName                   = "/temporal.server.api.historyservice.v1.HistoryService/CancelNexusOperation"
+	HistoryService_PollWorkflowExecutionTimeSkipping_FullMethodName      = "/temporal.server.api.historyservice.v1.HistoryService/PollWorkflowExecutionTimeSkipping"
 )
 
 // HistoryServiceClient is the client API for HistoryService service.
@@ -295,6 +297,7 @@ type HistoryServiceClient interface {
 	GetWorkflowExecutionRawHistoryV2(ctx context.Context, in *GetWorkflowExecutionRawHistoryV2Request, opts ...grpc.CallOption) (*GetWorkflowExecutionRawHistoryV2Response, error)
 	GetWorkflowExecutionRawHistory(ctx context.Context, in *GetWorkflowExecutionRawHistoryRequest, opts ...grpc.CallOption) (*GetWorkflowExecutionRawHistoryResponse, error)
 	ForceDeleteWorkflowExecution(ctx context.Context, in *ForceDeleteWorkflowExecutionRequest, opts ...grpc.CallOption) (*ForceDeleteWorkflowExecutionResponse, error)
+	DeleteExecution(ctx context.Context, in *DeleteExecutionRequest, opts ...grpc.CallOption) (*DeleteExecutionResponse, error)
 	GetDLQTasks(ctx context.Context, in *GetDLQTasksRequest, opts ...grpc.CallOption) (*GetDLQTasksResponse, error)
 	DeleteDLQTasks(ctx context.Context, in *DeleteDLQTasksRequest, opts ...grpc.CallOption) (*DeleteDLQTasksResponse, error)
 	ListQueues(ctx context.Context, in *ListQueuesRequest, opts ...grpc.CallOption) (*ListQueuesResponse, error)
@@ -387,6 +390,7 @@ type HistoryServiceClient interface {
 	StartNexusOperation(ctx context.Context, in *StartNexusOperationRequest, opts ...grpc.CallOption) (*StartNexusOperationResponse, error)
 	// CancelNexusOperation cancels a Nexus operation on the __temporal_system endpoint.
 	CancelNexusOperation(ctx context.Context, in *CancelNexusOperationRequest, opts ...grpc.CallOption) (*CancelNexusOperationResponse, error)
+	PollWorkflowExecutionTimeSkipping(ctx context.Context, in *PollWorkflowExecutionTimeSkippingRequest, opts ...grpc.CallOption) (*PollWorkflowExecutionTimeSkippingResponse, error)
 }
 
 type historyServiceClient struct {
@@ -941,6 +945,15 @@ func (c *historyServiceClient) ForceDeleteWorkflowExecution(ctx context.Context,
 	return out, nil
 }
 
+func (c *historyServiceClient) DeleteExecution(ctx context.Context, in *DeleteExecutionRequest, opts ...grpc.CallOption) (*DeleteExecutionResponse, error) {
+	out := new(DeleteExecutionResponse)
+	err := c.cc.Invoke(ctx, HistoryService_DeleteExecution_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *historyServiceClient) GetDLQTasks(ctx context.Context, in *GetDLQTasksRequest, opts ...grpc.CallOption) (*GetDLQTasksResponse, error) {
 	out := new(GetDLQTasksResponse)
 	err := c.cc.Invoke(ctx, HistoryService_GetDLQTasks_FullMethodName, in, out, opts...)
@@ -1097,6 +1110,15 @@ func (c *historyServiceClient) StartNexusOperation(ctx context.Context, in *Star
 func (c *historyServiceClient) CancelNexusOperation(ctx context.Context, in *CancelNexusOperationRequest, opts ...grpc.CallOption) (*CancelNexusOperationResponse, error) {
 	out := new(CancelNexusOperationResponse)
 	err := c.cc.Invoke(ctx, HistoryService_CancelNexusOperation_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *historyServiceClient) PollWorkflowExecutionTimeSkipping(ctx context.Context, in *PollWorkflowExecutionTimeSkippingRequest, opts ...grpc.CallOption) (*PollWorkflowExecutionTimeSkippingResponse, error) {
+	out := new(PollWorkflowExecutionTimeSkippingResponse)
+	err := c.cc.Invoke(ctx, HistoryService_PollWorkflowExecutionTimeSkipping_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1300,6 +1322,7 @@ type HistoryServiceServer interface {
 	GetWorkflowExecutionRawHistoryV2(context.Context, *GetWorkflowExecutionRawHistoryV2Request) (*GetWorkflowExecutionRawHistoryV2Response, error)
 	GetWorkflowExecutionRawHistory(context.Context, *GetWorkflowExecutionRawHistoryRequest) (*GetWorkflowExecutionRawHistoryResponse, error)
 	ForceDeleteWorkflowExecution(context.Context, *ForceDeleteWorkflowExecutionRequest) (*ForceDeleteWorkflowExecutionResponse, error)
+	DeleteExecution(context.Context, *DeleteExecutionRequest) (*DeleteExecutionResponse, error)
 	GetDLQTasks(context.Context, *GetDLQTasksRequest) (*GetDLQTasksResponse, error)
 	DeleteDLQTasks(context.Context, *DeleteDLQTasksRequest) (*DeleteDLQTasksResponse, error)
 	ListQueues(context.Context, *ListQueuesRequest) (*ListQueuesResponse, error)
@@ -1392,6 +1415,7 @@ type HistoryServiceServer interface {
 	StartNexusOperation(context.Context, *StartNexusOperationRequest) (*StartNexusOperationResponse, error)
 	// CancelNexusOperation cancels a Nexus operation on the __temporal_system endpoint.
 	CancelNexusOperation(context.Context, *CancelNexusOperationRequest) (*CancelNexusOperationResponse, error)
+	PollWorkflowExecutionTimeSkipping(context.Context, *PollWorkflowExecutionTimeSkippingRequest) (*PollWorkflowExecutionTimeSkippingResponse, error)
 	mustEmbedUnimplementedHistoryServiceServer()
 }
 
@@ -1573,6 +1597,9 @@ func (UnimplementedHistoryServiceServer) GetWorkflowExecutionRawHistory(context.
 func (UnimplementedHistoryServiceServer) ForceDeleteWorkflowExecution(context.Context, *ForceDeleteWorkflowExecutionRequest) (*ForceDeleteWorkflowExecutionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ForceDeleteWorkflowExecution not implemented")
 }
+func (UnimplementedHistoryServiceServer) DeleteExecution(context.Context, *DeleteExecutionRequest) (*DeleteExecutionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteExecution not implemented")
+}
 func (UnimplementedHistoryServiceServer) GetDLQTasks(context.Context, *GetDLQTasksRequest) (*GetDLQTasksResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetDLQTasks not implemented")
 }
@@ -1626,6 +1653,9 @@ func (UnimplementedHistoryServiceServer) StartNexusOperation(context.Context, *S
 }
 func (UnimplementedHistoryServiceServer) CancelNexusOperation(context.Context, *CancelNexusOperationRequest) (*CancelNexusOperationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CancelNexusOperation not implemented")
+}
+func (UnimplementedHistoryServiceServer) PollWorkflowExecutionTimeSkipping(context.Context, *PollWorkflowExecutionTimeSkippingRequest) (*PollWorkflowExecutionTimeSkippingResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PollWorkflowExecutionTimeSkipping not implemented")
 }
 func (UnimplementedHistoryServiceServer) mustEmbedUnimplementedHistoryServiceServer() {}
 
@@ -2692,6 +2722,24 @@ func _HistoryService_ForceDeleteWorkflowExecution_Handler(srv interface{}, ctx c
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HistoryService_DeleteExecution_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteExecutionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).DeleteExecution(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_DeleteExecution_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).DeleteExecution(ctx, req.(*DeleteExecutionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _HistoryService_GetDLQTasks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetDLQTasksRequest)
 	if err := dec(in); err != nil {
@@ -3016,6 +3064,24 @@ func _HistoryService_CancelNexusOperation_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
+func _HistoryService_PollWorkflowExecutionTimeSkipping_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PollWorkflowExecutionTimeSkippingRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(HistoryServiceServer).PollWorkflowExecutionTimeSkipping(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: HistoryService_PollWorkflowExecutionTimeSkipping_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(HistoryServiceServer).PollWorkflowExecutionTimeSkipping(ctx, req.(*PollWorkflowExecutionTimeSkippingRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // HistoryService_ServiceDesc is the grpc.ServiceDesc for HistoryService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -3252,6 +3318,10 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _HistoryService_ForceDeleteWorkflowExecution_Handler,
 		},
 		{
+			MethodName: "DeleteExecution",
+			Handler:    _HistoryService_DeleteExecution_Handler,
+		},
+		{
 			MethodName: "GetDLQTasks",
 			Handler:    _HistoryService_GetDLQTasks_Handler,
 		},
@@ -3322,6 +3392,10 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CancelNexusOperation",
 			Handler:    _HistoryService_CancelNexusOperation_Handler,
+		},
+		{
+			MethodName: "PollWorkflowExecutionTimeSkipping",
+			Handler:    _HistoryService_PollWorkflowExecutionTimeSkipping_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

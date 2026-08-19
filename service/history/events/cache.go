@@ -117,7 +117,7 @@ func (e *CacheImpl) GetEvent(ctx context.Context, shardID int32, key EventKey, f
 
 	// Test hook for disabling cache
 	if !e.disabled {
-		eventItem, cacheHit := e.Cache.Get(key).(*historyEventCacheItemImpl)
+		eventItem, cacheHit := e.Get(key).(*historyEventCacheItemImpl)
 		if cacheHit {
 			return eventItem.event, nil
 		}

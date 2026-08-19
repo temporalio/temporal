@@ -23,6 +23,7 @@ func TestFieldNameAggInterceptor(t *testing.T) {
 		testNamespace,
 		searchattribute.TestEsNameTypeMap(),
 		searchattribute.NewTestMapperProvider(nil),
+		nil,
 	)
 
 	_, err := fnInterceptor.Name("CustomIntField", query.FieldNameFilter)
@@ -168,6 +169,7 @@ func TestGetQueryFieldsLegacy(t *testing.T) {
 					testNamespace,
 					searchattribute.TestEsNameTypeMap(),
 					searchattribute.NewTestMapperProvider(nil),
+					nil,
 					tc.input,
 				)
 				if tc.expectedErrMsg == "" {
@@ -258,11 +260,12 @@ func TestGetQueryFields(t *testing.T) {
 					testNamespace,
 					searchattribute.TestNameTypeMap(),
 					searchattribute.NewTestMapperProvider(&searchattribute.TestMapper{}),
+					nil,
 					tc.input,
 				)
 				if tc.expectedErrMsg == "" {
 					s.NoError(err)
-					s.Equal(len(tc.expectedFields), len(fields))
+					s.Len(fields, len(tc.expectedFields))
 					for _, f := range fields {
 						s.Contains(tc.expectedFields, f)
 					}
@@ -338,6 +341,7 @@ func TestValidateVisibilityQuery(t *testing.T) {
 					testNamespace,
 					searchattribute.TestNameTypeMap(),
 					searchattribute.NewTestMapperProvider(&searchattribute.TestMapper{}),
+					nil,
 					dynamicconfig.GetBoolPropertyFn(true),
 					tc.input,
 				)

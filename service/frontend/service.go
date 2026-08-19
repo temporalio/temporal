@@ -3,6 +3,7 @@ package frontend
 import (
 	"net"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -24,6 +25,11 @@ import (
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
+)
+
+const (
+	scheduleValidationVersioningOverride = "versioning-override"
+	scheduleValidationScheduleDuration   = "scheduler-duration"
 )
 
 // Config represents configuration for frontend service
@@ -65,6 +71,7 @@ type Config struct {
 	MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance dynamicconfig.FloatPropertyFnWithNamespaceFilter
 	GlobalWorkerDeploymentReadRPS                                     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	GlobalWorkerDeploymentReadBurstRatio                              dynamicconfig.FloatPropertyFnWithNamespaceFilter
 	GlobalNamespaceRPS                                                dynamicconfig.IntPropertyFnWithNamespaceFilter
 	InternalFEGlobalNamespaceRPS                                      dynamicconfig.IntPropertyFnWithNamespaceFilter
 	GlobalNamespaceVisibilityRPS                                      dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -169,11 +176,15 @@ type Config struct {
 	EnableChasm dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// Enable creation of new schedules on CHASM (V2) engine
 	EnableCHASMSchedulerCreation dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	// Per-namespace percentage [0-100] of new schedules routed to CHASM when
+	// EnableCHASMSchedulerCreation is true. Default 0.
+	CHASMSchedulerCreationRolloutPercent dynamicconfig.IntPropertyFnWithNamespaceFilter
 	// Enable CHASM-first routing for schedule RPCs other than CreateSchedule
 	EnableCHASMSchedulerRouting dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// Enables ID-space collision sentinels, and must be enabled and propagated in
 	// advance of EnableCHASMSchedulerCreation.
 	EnableCHASMSchedulerSentinels dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	DisabledScheduleValidations   dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
 
 	// Enable deployment RPCs
 	EnableDeployments dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -187,10 +198,12 @@ type Config struct {
 	MaxConcurrentBatchOperation     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxExecutionCountBatchOperation dynamicconfig.IntPropertyFnWithNamespaceFilter
 	// Admin Batch operation dynamic config
-	MaxConcurrentAdminBatchOperation dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxConcurrentAdminBatchOperation             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	EnableBatchOperationsForStandaloneActivities dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	EnableUpdateWorkflowExecution                              dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableUpdateWorkflowExecutionAsyncAccepted                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableWorkflowUpdateCallbacks                              dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	EnableWorkerVersioningData     dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -225,13 +238,18 @@ type Config struct {
 	WorkflowRulesAPIsEnabled     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	MaxWorkflowRulesPerNamespace dynamicconfig.IntPropertyFnWithNamespaceFilter
 
-	WorkerHeartbeatsEnabled           dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableCancelWorkerPollsOnShutdown dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	NumTaskQueueReadPartitions        dynamicconfig.IntPropertyFnWithTaskQueueFilter
-	WorkerCommandsEnabled             dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	WorkflowPauseEnabled              dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	TimeSkippingEnabled               dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	StandaloneNexusOperationsEnabled  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	WorkerHeartbeatsEnabled                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableCancelWorkerPollsOnShutdown       dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableMatchingFanOutForPollCancellation dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	NumTaskQueueReadPartitions              dynamicconfig.IntPropertyFnWithTaskQueueFilter
+	WorkerCommandsEnabled                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	PollerAutoscalingAutoEnroll             dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	WorkflowPauseEnabled                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	WorkflowTimeSkippingEnabled             dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	WorkflowTimeSkippingMaxSkipPerSession   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	StandaloneNexusOperationsEnabled        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableWorkflowTaskCompletionPagination  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	WorkflowTaskCompletionBufferSizeLimit   dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	HTTPAllowedHosts   dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 	AllowedExperiments dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
@@ -247,6 +265,15 @@ func (c *Config) IsExperimentAllowed(experiment string, namespace string) bool {
 	allowedExperiments := c.AllowedExperiments(namespace)
 	for _, allowed := range allowedExperiments {
 		if allowed == "*" || allowed == experiment {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Config) IsScheduleValidationDisabled(validation string, namespace string) bool {
+	for _, disabled := range c.DisabledScheduleValidations(namespace) {
+		if strings.EqualFold(disabled, validation) {
 			return true
 		}
 	}
@@ -296,6 +323,7 @@ func NewConfig(
 		MaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance:        dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsRPSPerInstance.Get(dc),
 		MaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance: dynamicconfig.FrontendMaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance.Get(dc),
 		GlobalWorkerDeploymentReadRPS:                                     dynamicconfig.FrontendGlobalWorkerDeploymentReadRPS.Get(dc),
+		GlobalWorkerDeploymentReadBurstRatio:                              dynamicconfig.FrontendGlobalWorkerDeploymentReadBurstRatio.Get(dc),
 
 		GlobalNamespaceRPS:                     dynamicconfig.FrontendGlobalNamespaceRPS.Get(dc),
 		InternalFEGlobalNamespaceRPS:           dynamicconfig.InternalFrontendGlobalNamespaceRPS.Get(dc),
@@ -350,23 +378,27 @@ func NewConfig(
 
 		MaxFairnessWeightOverrideConfigLimit: dynamicconfig.MatchingMaxFairnessKeyWeightOverrides.Get(dc),
 
-		EnableSchedules:               dynamicconfig.FrontendEnableSchedules.Get(dc),
-		EnableChasm:                   dynamicconfig.EnableChasm.Get(dc),
-		EnableCHASMSchedulerCreation:  dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
-		EnableCHASMSchedulerRouting:   dynamicconfig.EnableCHASMSchedulerRouting.Get(dc),
-		EnableCHASMSchedulerSentinels: dynamicconfig.EnableCHASMSchedulerSentinels.Get(dc),
+		EnableSchedules:                      dynamicconfig.FrontendEnableSchedules.Get(dc),
+		EnableChasm:                          dynamicconfig.EnableChasm.Get(dc),
+		EnableCHASMSchedulerCreation:         dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
+		CHASMSchedulerCreationRolloutPercent: dynamicconfig.CHASMSchedulerCreationRolloutPercent.Get(dc),
+		EnableCHASMSchedulerRouting:          dynamicconfig.EnableCHASMSchedulerRouting.Get(dc),
+		EnableCHASMSchedulerSentinels:        dynamicconfig.EnableCHASMSchedulerSentinels.Get(dc),
+		DisabledScheduleValidations:          dynamicconfig.FrontendDisabledScheduleValidations.Get(dc),
 
 		// [cleanup-wv-pre-release]
 		EnableDeployments:        dynamicconfig.EnableDeployments.Get(dc),
 		EnableDeploymentVersions: dynamicconfig.EnableDeploymentVersions.Get(dc),
 
-		EnableBatcher:                    dynamicconfig.FrontendEnableBatcher.Get(dc),
-		MaxConcurrentBatchOperation:      dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Get(dc),
-		MaxExecutionCountBatchOperation:  dynamicconfig.FrontendMaxExecutionCountBatchOperationPerNamespace.Get(dc),
-		MaxConcurrentAdminBatchOperation: dynamicconfig.FrontendMaxConcurrentAdminBatchOperationPerNamespace.Get(dc),
+		EnableBatcher:                                dynamicconfig.FrontendEnableBatcher.Get(dc),
+		MaxConcurrentBatchOperation:                  dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Get(dc),
+		MaxExecutionCountBatchOperation:              dynamicconfig.FrontendMaxExecutionCountBatchOperationPerNamespace.Get(dc),
+		MaxConcurrentAdminBatchOperation:             dynamicconfig.FrontendMaxConcurrentAdminBatchOperationPerNamespace.Get(dc),
+		EnableBatchOperationsForStandaloneActivities: dynamicconfig.FrontendEnableBatchOperationsForStandaloneActivities.Get(dc),
 
 		EnableUpdateWorkflowExecution:                              dynamicconfig.FrontendEnableUpdateWorkflowExecution.Get(dc),
 		EnableUpdateWorkflowExecutionAsyncAccepted:                 dynamicconfig.FrontendEnableUpdateWorkflowExecutionAsyncAccepted.Get(dc),
+		EnableWorkflowUpdateCallbacks:                              dynamicconfig.EnableWorkflowUpdateCallbacks.Get(dc),
 		NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute: dynamicconfig.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute.Get(dc),
 
 		EnableWorkerVersioningData:     dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Get(dc),
@@ -389,19 +421,24 @@ func NewConfig(
 
 		MaskInternalErrorDetails: dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc),
 
-		HistoryHostErrorPercentage:        dynamicconfig.HistoryHostErrorPercentage.Get(dc),
-		HistoryHostSelfErrorProportion:    dynamicconfig.HistoryHostSelfErrorProportion.Get(dc),
-		LogAllReqErrors:                   dynamicconfig.LogAllReqErrors.Get(dc),
-		EnableEagerWorkflowStart:          dynamicconfig.EnableEagerWorkflowStart.Get(dc),
-		WorkflowRulesAPIsEnabled:          dynamicconfig.WorkflowRulesAPIsEnabled.Get(dc),
-		MaxWorkflowRulesPerNamespace:      dynamicconfig.MaxWorkflowRulesPerNamespace.Get(dc),
-		WorkerHeartbeatsEnabled:           dynamicconfig.WorkerHeartbeatsEnabled.Get(dc),
-		EnableCancelWorkerPollsOnShutdown: dynamicconfig.EnableCancelWorkerPollsOnShutdown.Get(dc),
-		NumTaskQueueReadPartitions:        dynamicconfig.MatchingNumTaskqueueReadPartitions.Get(dc),
-		WorkerCommandsEnabled:             dynamicconfig.WorkerCommandsEnabled.Get(dc),
-		WorkflowPauseEnabled:              dynamicconfig.WorkflowPauseEnabled.Get(dc),
-		TimeSkippingEnabled:               dynamicconfig.TimeSkippingEnabled.Get(dc),
-		StandaloneNexusOperationsEnabled:  chasmnexus.Enabled.Get(dc),
+		HistoryHostErrorPercentage:              dynamicconfig.HistoryHostErrorPercentage.Get(dc),
+		HistoryHostSelfErrorProportion:          dynamicconfig.HistoryHostSelfErrorProportion.Get(dc),
+		LogAllReqErrors:                         dynamicconfig.LogAllReqErrors.Get(dc),
+		EnableEagerWorkflowStart:                dynamicconfig.EnableEagerWorkflowStart.Get(dc),
+		WorkflowRulesAPIsEnabled:                dynamicconfig.WorkflowRulesAPIsEnabled.Get(dc),
+		MaxWorkflowRulesPerNamespace:            dynamicconfig.MaxWorkflowRulesPerNamespace.Get(dc),
+		WorkerHeartbeatsEnabled:                 dynamicconfig.WorkerHeartbeatsEnabled.Get(dc),
+		EnableCancelWorkerPollsOnShutdown:       dynamicconfig.EnableCancelWorkerPollsOnShutdown.Get(dc),
+		EnableMatchingFanOutForPollCancellation: dynamicconfig.EnableMatchingFanOutForPollCancellation.Get(dc),
+		NumTaskQueueReadPartitions:              dynamicconfig.MatchingNumTaskqueueReadPartitions.Get(dc),
+		WorkerCommandsEnabled:                   dynamicconfig.WorkerCommandsEnabled.Get(dc),
+		PollerAutoscalingAutoEnroll:             dynamicconfig.PollerAutoscalingAutoEnroll.Get(dc),
+		WorkflowPauseEnabled:                    dynamicconfig.WorkflowPauseEnabled.Get(dc),
+		WorkflowTimeSkippingEnabled:             dynamicconfig.WorkflowTimeSkippingEnabled.Get(dc),
+		WorkflowTimeSkippingMaxSkipPerSession:   dynamicconfig.WorkflowTimeSkippingMaxSkipPerSession.Get(dc),
+		StandaloneNexusOperationsEnabled:        chasmnexus.Enabled.Get(dc),
+		EnableWorkflowTaskCompletionPagination:  dynamicconfig.EnableWorkflowTaskCompletionPagination.Get(dc),
+		WorkflowTaskCompletionBufferSizeLimit:   dynamicconfig.WorkflowTaskCompletionBufferSizeLimit.Get(dc),
 
 		HTTPAllowedHosts:   dynamicconfig.FrontendHTTPAllowedHosts.Get(dc),
 		AllowedExperiments: dynamicconfig.FrontendAllowedExperiments.Get(dc),
@@ -529,22 +566,18 @@ func (s *Service) Stop() {
 	s.logger.Info("ShutdownHandler: Draining traffic")
 	// Gracefully stop gRPC server and HTTP API server concurrently
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		t := time.AfterFunc(requestDrainTime, func() {
 			s.logger.Info("ShutdownHandler: Drain time expired, stopping all traffic")
 			s.server.Stop()
 		})
 		s.server.GracefulStop()
 		t.Stop()
-	}()
+	})
 	if s.httpAPIServer != nil {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			s.httpAPIServer.GracefulStop(requestDrainTime)
-		}()
+		})
 	}
 	wg.Wait()
 

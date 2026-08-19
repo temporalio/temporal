@@ -4,17 +4,17 @@ import (
 	"encoding/binary"
 	"time"
 
+	schedulerinternal "go.temporal.io/server/chasm/lib/scheduler/internal"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	schedulescommon "go.temporal.io/server/common/schedules"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func generateRequestID(scheduler *Scheduler, backfillID string, nominal, actual time.Time) string {
-	return schedulescommon.GenerateRequestID(
+	return schedulerinternal.GenerateRequestID(
 		scheduler.NamespaceId,
 		scheduler.ScheduleId,
 		scheduler.ConflictToken,
@@ -47,6 +47,21 @@ func newTaggedMetricsHandler(baseHandler metrics.Handler, scheduler *Scheduler) 
 		metrics.StringTag(metrics.ScheduleBackendTag, metrics.ScheduleBackendChasm),
 	)
 }
+
+// Outcomes for task-lifecycle counters (e.g. ScheduleIdleTask). Mutually
+// exclusive: a given task run either fires (Validate=true, Execute ran) or is
+// invalidated (Validate=false; reason tag explains why).
+const (
+	outcomeFired       = "fired"
+	outcomeInvalidated = "invalidated"
+)
+
+// reasonNone is the ReasonTag value emitted on the "fired" outcome. Prometheus
+// binds a fixed label set to a metric name, so the fired and invalidated paths
+// of a counter must carry the same labels; the invalidated path always sets a
+// ReasonTag, so the fired path sets this sentinel to keep the label set
+// identical.
+const reasonNone metrics.ReasonString = "none"
 
 // validateTaskHighWaterMark validates a component's lastProcessedTime against a
 // task timestamp. A task is valid if its scheduled time is after the high water mark.

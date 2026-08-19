@@ -13,9 +13,9 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
-	workflowpb "go.temporal.io/api/workflow/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -55,6 +55,7 @@ func (s *nDCEventReapplicationSuite) SetupTest() {
 	metricsHandler := metrics.NoopMetricsHandler
 	s.nDCReapplication = NewEventsReapplier(
 		hsm.NewRegistry(),
+		chasmworkflow.NewRegistry(),
 		metricsHandler,
 		logger,
 	)
@@ -115,6 +116,8 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_WorkflowExec
 		attr.GetIdentity(),
 		attr.GetPriority(),
 		attr.GetTimeSkippingConfig(),
+		attr.GetTimeSkippingConfigUpdated(),
+		attr.GetWorkflowUpdateOptions(),
 	).Return(event, nil)
 	msCurrent.EXPECT().HSM().Return(s.hsmNode).AnyTimes()
 	msCurrent.EXPECT().IsWorkflowPendingOnWorkflowTaskBackoff().Return(true)
@@ -135,7 +138,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_WorkflowExec
 	execution := &persistencespb.WorkflowExecutionInfo{
 		NamespaceId: uuid.NewString(),
 	}
-	timeSkippingConfig := &workflowpb.TimeSkippingConfig{Enabled: true}
+	timeSkippingConfig := &commonpb.TimeSkippingConfig{Enabled: true}
 	event := &historypb.HistoryEvent{
 		EventId:   1,
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
@@ -163,6 +166,8 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_WorkflowExec
 		attr.GetIdentity(),
 		attr.GetPriority(),
 		timeSkippingConfig,
+		attr.GetTimeSkippingConfigUpdated(),
+		attr.GetWorkflowUpdateOptions(),
 	).Return(event, nil)
 	msCurrent.EXPECT().HSM().Return(s.hsmNode).AnyTimes()
 	msCurrent.EXPECT().IsWorkflowPendingOnWorkflowTaskBackoff().Return(true)
@@ -175,7 +180,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_WorkflowExec
 	}
 	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, runID)
 	s.NoError(err)
-	s.Equal(1, len(appliedEvent))
+	s.Len(appliedEvent, 1)
 }
 
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Signal() {
@@ -231,7 +236,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Signal() {
 	}
 	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, runID)
 	s.NoError(err)
-	s.Equal(1, len(appliedEvent))
+	s.Len(appliedEvent, 1)
 }
 
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Update() {
@@ -291,7 +296,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Update() {
 		}
 		appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, runID)
 		s.NoError(err)
-		s.Equal(1, len(appliedEvent))
+		s.Len(appliedEvent, 1)
 	}
 }
 
@@ -321,7 +326,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Noop() {
 	}
 	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, runID)
 	s.NoError(err)
-	s.Equal(0, len(appliedEvent))
+	s.Empty(appliedEvent)
 }
 
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
@@ -379,7 +384,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 	}
 	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, runID)
 	s.NoError(err)
-	s.Equal(1, len(appliedEvent))
+	s.Len(appliedEvent, 1)
 }
 
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_Error() {
@@ -422,7 +427,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Error() {
 	}
 	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, runID)
 	s.Error(err)
-	s.Equal(0, len(appliedEvent))
+	s.Empty(appliedEvent)
 }
 
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Termination() {
@@ -452,10 +457,8 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Termination(
 	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 	msCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(false)
 	msCurrent.EXPECT().UpdateDuplicatedResource(dedupResource)
-	msCurrent.EXPECT().GetNextEventID().Return(int64(2))
 	msCurrent.EXPECT().GetStartedWorkflowTask().Return(nil)
 	msCurrent.EXPECT().AddWorkflowExecutionTerminatedEvent(
-		int64(2),
 		event.GetWorkflowExecutionTerminatedEventAttributes().GetReason(),
 		event.GetWorkflowExecutionTerminatedEventAttributes().GetDetails(),
 		event.GetWorkflowExecutionTerminatedEventAttributes().GetIdentity(),
@@ -468,7 +471,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_Termination(
 	}
 	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, runID)
 	s.NoError(err)
-	s.Equal(1, len(appliedEvent))
+	s.Len(appliedEvent, 1)
 }
 
 func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_NoPendingWorkflowTask() {
@@ -530,7 +533,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent_NoPendingWor
 	}
 	appliedEvent, err := s.nDCReapplication.ReapplyEvents(context.Background(), msCurrent, updateRegistry, events, runID)
 	s.NoError(err)
-	s.Equal(1, len(appliedEvent))
+	s.Len(appliedEvent, 1)
 }
 
 // Reapplies a signal event to a paused workflow

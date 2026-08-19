@@ -593,6 +593,7 @@ message DescribeTaskQueuePartitionRequest {
 message DescribeTaskQueuePartitionResponse {
   // contains k-v pairs of the type: buildID -> TaskQueueVersionInfoInternal
   map<string, temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal> versions_info_internal = 1;
+  temporal.server.api.taskqueue.v1.PartitionScaleInfo scale_info = 2;
 }
 
 message ForceUnloadTaskQueuePartitionRequest {

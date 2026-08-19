@@ -50,6 +50,8 @@ var Module = fx.Options(
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(ServerProvider),
 	fx.Provide(NewService),
+	fx.Provide(simplePartitionScalerFactoryProvider),
+	fx.Provide(taskQueueRateLimitFractionProviderProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 )
 
@@ -60,8 +62,11 @@ func ServerProvider(grpcServerOptions []grpc.ServerOption) *grpc.Server {
 func ConfigProvider(
 	dc *dynamicconfig.Collection,
 	persistenceConfig config.Persistence,
+	rateLimitFractionProvider TaskQueueRateLimitFractionProvider,
 ) *Config {
-	return NewConfig(dc)
+	cfg := NewConfig(dc)
+	cfg.RateLimitFractionProvider = rateLimitFractionProvider
+	return cfg
 }
 
 func ServiceErrorInterceptorProvider(
@@ -254,4 +259,10 @@ func WorkersRegistryProvider(
 			ExternalPayloadsEnabled:        serviceConfig.ExternalPayloadsEnabled,
 		},
 	})
+}
+
+func simplePartitionScalerFactoryProvider(dc *dynamicconfig.Collection) PartitionScalerFactory {
+	return newSimplePartitionScalerFactory(
+		dynamicconfig.MatchingPartitionScaler.Get(dc),
+	)
 }

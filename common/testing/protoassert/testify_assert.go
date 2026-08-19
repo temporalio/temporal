@@ -81,7 +81,7 @@ func isEmpty(object any) bool {
 	case reflect.Chan, reflect.Map, reflect.Slice:
 		return objValue.Len() == 0
 	// pointers are empty if nil or if the value they point to is empty
-	case reflect.Ptr:
+	case reflect.Pointer:
 		if objValue.IsNil() {
 			return true
 		}

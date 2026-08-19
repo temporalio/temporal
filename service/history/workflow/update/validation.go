@@ -44,6 +44,15 @@ func validateRequestMsg(updateID string, msg *updatepb.Request) error {
 	return validateRequestMsgPrefix(updateID, "", msg)
 }
 
+func callbacksRequireRequestID(msg *updatepb.Request) func() error {
+	return func() error {
+		if len(msg.GetCompletionCallbacks()) > 0 && msg.GetRequestId() == "" {
+			return serviceerror.NewInvalidArgumentf("invalid %T: request_id is required when completion_callbacks are set", msg)
+		}
+		return nil
+	}
+}
+
 func validateRequestMsgPrefix(
 	updateID string,
 	prefix string,
@@ -56,6 +65,7 @@ func validateRequestMsgPrefix(
 		eq(msg.GetMeta().GetUpdateId(), prefix+"meta.update_id", updateID, updateID, msg),
 		notZero(msg.GetInput(), prefix+"input", msg),
 		notZero(msg.GetInput().GetName(), prefix+"input.name", msg),
+		callbacksRequireRequestID(msg),
 	)
 }
 

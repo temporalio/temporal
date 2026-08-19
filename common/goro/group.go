@@ -28,11 +28,9 @@ type Group struct {
 // NOTE: Errors returned by the supplied function are ignored.
 func (g *Group) Go(f func(ctx context.Context) error) {
 	g.initOnce.Do(g.init)
-	g.wg.Add(1)
-	go func() {
-		defer g.wg.Done()
+	g.wg.Go(func() {
 		_ = f(g.ctx)
-	}()
+	})
 }
 
 // Cancel cancels the `context.Context` that was passed to all goroutines

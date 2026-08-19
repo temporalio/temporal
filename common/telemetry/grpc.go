@@ -8,7 +8,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
-	otelnoop "go.opentelemetry.io/otel/trace/noop"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc/interceptor/logtags"
@@ -175,7 +174,7 @@ func (c *customServerStatsHandler) annotateTags(
 		case tag.WorkflowIDKey:
 			k = WorkflowIDKey
 		case tag.WorkflowRunIDKey:
-			k = WorkflowRunIDKey
+			k = RunIDKey
 		default:
 			continue
 		}
@@ -189,9 +188,4 @@ func (c *customServerStatsHandler) TagConn(ctx context.Context, info *stats.Conn
 
 func (c *customServerStatsHandler) HandleConn(ctx context.Context, stat stats.ConnStats) {
 	c.wrapped.HandleConn(ctx, stat)
-}
-
-func isEnabled(tp trace.TracerProvider) bool {
-	_, isNoop := tp.(otelnoop.TracerProvider)
-	return !isNoop
 }

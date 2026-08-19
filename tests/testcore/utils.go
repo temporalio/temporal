@@ -3,6 +3,7 @@ package testcore
 import (
 	"fmt"
 	"regexp"
+	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -13,10 +14,36 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"google.golang.org/protobuf/proto"
 )
+
+// PickRolloutSplit returns two distinct business IDs in the given namespace
+// such that the first is accepted by RolloutAccepts at percent and the second
+// is rejected. Fails the test if no split is found.
+func PickRolloutSplit(t *testing.T, namespace string, percent int) (accepted, rejected string) {
+	t.Helper()
+	base := RandomizeStr("rollout")
+	for i := range 1000 {
+		if accepted != "" && rejected != "" {
+			break
+		}
+		id := fmt.Sprintf("%s-%d", base, i)
+		key := fmt.Appendf(nil, "%s\x00%s", namespace, id)
+		if dynamicconfig.RolloutAccepts(key, percent) {
+			if accepted == "" {
+				accepted = id
+			}
+		} else if rejected == "" {
+			rejected = id
+		}
+	}
+	require.NotEmpty(t, accepted, "could not find an ID accepted by rollout at %d%%", percent)
+	require.NotEmpty(t, rejected, "could not find an ID rejected by rollout at %d%%", percent)
+	return accepted, rejected
+}
 
 // TODO (alex): move this to functional_test_base.go as methods.
 

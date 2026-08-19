@@ -37,6 +37,12 @@ func NewMetricClient(
 	}
 }
 
+func (c *metricClient) Stop() {
+	if s, ok := c.client.(interface{ Stop() }); ok {
+		s.Stop()
+	}
+}
+
 func (c *metricClient) StreamWorkflowReplicationMessages(
 	ctx context.Context,
 	opts ...grpc.CallOption,

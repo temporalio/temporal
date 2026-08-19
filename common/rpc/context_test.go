@@ -59,8 +59,8 @@ func (s *contextSuite) TestCopyContextValue_DeadlineSeparated() {
 	newContext = CopyContextValues(newContext, ctx)
 
 	cancel()
-	s.NotNil(ctx.Err())
-	s.Nil(newContext.Err())
+	s.Error(ctx.Err())
+	s.NoError(newContext.Err())
 }
 
 func (s *contextSuite) TestCopyContextValue_ValueNotOverWritten() {

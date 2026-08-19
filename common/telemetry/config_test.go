@@ -58,7 +58,7 @@ func TestEmptyConfig(t *testing.T) {
 	cfg := telemetry.ExportConfig{}
 	exporters, err := cfg.SpanExporters()
 	require.NoError(t, err)
-	require.Len(t, exporters, 0)
+	require.Empty(t, exporters)
 }
 
 func TestExportersWithSharedConn(t *testing.T) {
@@ -85,18 +85,18 @@ func TestSharedConn(t *testing.T) {
 	require.Len(t, cfg.Exporters, 2)
 
 	exp := cfg.Exporters[0]
-	require.Equal(t, exp.Kind.Signal, "traces")
-	require.Equal(t, exp.Kind.Model, "otlp")
-	require.Equal(t, exp.Kind.Protocol, "grpc")
+	require.Equal(t, "traces", exp.Kind.Signal)
+	require.Equal(t, "otlp", exp.Kind.Model)
+	require.Equal(t, "grpc", exp.Kind.Protocol)
 	require.NotNil(t, exp.Spec)
 	sspec, ok := exp.Spec.(*telemetry.OTLPGRPCSpanExporter)
 	require.True(t, ok)
 	require.Equal(t, "conn1", sspec.ConnectionName)
 
 	exp = cfg.Exporters[1]
-	require.Equal(t, exp.Kind.Signal, "metrics")
-	require.Equal(t, exp.Kind.Model, "otlp")
-	require.Equal(t, exp.Kind.Protocol, "grpc")
+	require.Equal(t, "metrics", exp.Kind.Signal)
+	require.Equal(t, "otlp", exp.Kind.Model)
+	require.Equal(t, "grpc", exp.Kind.Protocol)
 	require.NotNil(t, exp.Spec)
 	mspec, ok := exp.Spec.(*telemetry.OTLPGRPCMetricExporter)
 	require.True(t, ok)
@@ -107,13 +107,13 @@ func TestOTLPTraceGRPC(t *testing.T) {
 	cfg := telemetry.PrivateExportConfig{}
 	err := yaml.Unmarshal([]byte(basicOTLPTraceOnlyConfig), &cfg)
 	require.NoError(t, err)
-	require.Len(t, cfg.Connections, 0)
+	require.Empty(t, cfg.Connections)
 	require.Len(t, cfg.Exporters, 1)
 
 	exp := cfg.Exporters[0]
-	require.Equal(t, exp.Kind.Signal, "traces")
-	require.Equal(t, exp.Kind.Model, "otlp")
-	require.Equal(t, exp.Kind.Protocol, "grpc")
+	require.Equal(t, "traces", exp.Kind.Signal)
+	require.Equal(t, "otlp", exp.Kind.Model)
+	require.Equal(t, "grpc", exp.Kind.Protocol)
 	require.NotNil(t, exp.Spec)
 
 	spec, ok := exp.Spec.(*telemetry.OTLPGRPCSpanExporter)

@@ -136,7 +136,7 @@ func (s *VisibilityStore) RecordWorkflowExecutionClosed(
 	row.CloseTime = &request.CloseTime
 	row.HistoryLength = &request.HistoryLength
 	row.HistorySizeBytes = &request.HistorySizeBytes
-	row.ExecutionDuration = &request.ExecutionDuration
+	row.ExecutionDuration = new(request.ExecutionDuration.Nanoseconds())
 	row.StateTransitionCount = &request.StateTransitionCount
 
 	result, err := s.sqlStore.DB.ReplaceIntoVisibility(ctx, row)
@@ -852,7 +852,7 @@ func (s *VisibilityStore) rowToInfo(
 		info.CloseTime = *row.CloseTime
 	}
 	if row.ExecutionDuration != nil {
-		info.ExecutionDuration = *row.ExecutionDuration
+		info.ExecutionDuration = time.Duration(*row.ExecutionDuration)
 	}
 	if row.HistoryLength != nil {
 		info.HistoryLength = *row.HistoryLength

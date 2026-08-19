@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/common/util"
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
@@ -115,7 +114,7 @@ func (r *resetterImpl) resetWorkflow(
 		),
 		baseBranchToken,
 		baseLastEventID,
-		util.Ptr(baseLastEventVersion),
+		new(baseLastEventVersion),
 		definition.NewWorkflowKey(
 			r.namespaceID.String(),
 			r.workflowID,

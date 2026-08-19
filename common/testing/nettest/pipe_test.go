@@ -15,10 +15,8 @@ func TestPipe_Accept(t *testing.T) {
 
 	var wg sync.WaitGroup
 	defer wg.Wait()
-	wg.Add(1)
 
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 
 		c, err := pipe.Accept(nil)
 		assert.NoError(t, err)
@@ -26,7 +24,7 @@ func TestPipe_Accept(t *testing.T) {
 		defer func() {
 			assert.NoError(t, c.Close())
 		}()
-	}()
+	})
 
 	c, err := pipe.Connect(nil)
 	assert.NoError(t, err)

@@ -72,7 +72,7 @@ func TestParseAlerts_DataRaceAndPanic(t *testing.T) {
 
 	alerts := parseAlerts(string(input))
 	require.NotEmpty(t, alerts)
-	require.Equal(t, 2, len(alerts))
+	require.Len(t, alerts, 2)
 
 	require.Contains(t, alerts[0].Details, "WARNING: DATA RACE")
 	require.Contains(t, alerts[0].Tests[0], "test.TestDataRaceExample")
@@ -83,7 +83,7 @@ func TestParseAlerts_DataRaceAndPanic(t *testing.T) {
 
 	// Ensure dedupe works
 	deduped := dedupeAlerts(append(alerts, alerts...))
-	require.Equal(t, len(deduped), len(alerts))
+	require.Len(t, alerts, len(deduped))
 }
 
 func TestParseFailureDetails(t *testing.T) {
@@ -169,6 +169,34 @@ FAIL`,
 			data:        "    foo_test.go:1:\n\tError Trace:\tfoo_test.go:1\n\tError:\toops\n\n\nFAIL\n",
 			contains:    []string{"Error Trace:"},
 			notContains: []string{"FAIL"},
+		},
+		{
+			name: "keeps last await attempt without trailing logs",
+			data: `    report.go:54: attempt errors:
+  --- attempt 1 ---
+    
+    Error Trace:	suite_test.go:10
+    Error:      	first failure
+
+  --- attempt 2 ---
+    
+    Error Trace:	suite_test.go:10
+    Error:      	penultimate failure
+
+  --- attempt 3 ---
+    
+    Error Trace:	suite_test.go:10
+    Error:      	last failure
+
+logger.go:146: network dial error connection refused
+--- FAIL: TestSuite/TestCase (92.93s)
+FAIL`,
+			contains: []string{
+				"--- attempt 3 ---",
+				"Error:      \tlast failure",
+				"--- FAIL: TestSuite/TestCase (92.93s)",
+			},
+			notContains: []string{"attempts omitted", "--- attempt 1 ---", "first failure", "--- attempt 2 ---", "penultimate failure", "logger.go", "connection refused"},
 		},
 	}
 

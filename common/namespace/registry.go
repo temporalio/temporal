@@ -26,6 +26,10 @@ type (
 		GetNamespaceByIDWithOptions(id ID, opts GetNamespaceOptions) (*Namespace, error)
 		GetNamespaceID(name Name) (ID, error)
 		GetNamespaceName(id ID) (Name, error)
+		// GetAllNamespaces returns a snapshot of every namespace currently in the
+		// in-memory cache. May lag persistence by up to the configured refresh
+		// interval; not suitable for strongly-consistent reads.
+		GetAllNamespaces() []*Namespace
 		GetRegistrySize() (sizeOfCacheByName int64, sizeOfCacheByID int64)
 		// Registers callback for namespace state changes.
 		// StateChangeCallbackFn will be invoked for a new/deleted namespace or namespace that has

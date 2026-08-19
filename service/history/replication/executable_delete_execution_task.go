@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/softassert"
 	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/common/wideevents"
 )
 
 type ExecutableDeleteExecutionTask struct {
@@ -82,6 +83,12 @@ func (e *ExecutableDeleteExecutionTask) Execute() error {
 	}
 	e.MarkExecutionStart()
 
+	if e.Config.EmitReplicationLifecycleEvents() {
+		emitReplicationExecuting(e.ProcessToolBox, e.ReplicationTask(),
+			definition.NewWorkflowKey(e.NamespaceID, e.BusinessID, e.RunID),
+			wideevents.ReplTaskDeleteExecution, int32(e.Attempt()), e.SourceClusterName(), e.SourceShardKey().ShardID)
+	}
+
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
 	namespaceName, apply, err := e.GetNamespaceInfo(headers.SetCallerInfo(
 		context.Background(),
@@ -95,6 +102,26 @@ func (e *ExecutableDeleteExecutionTask) Execute() error {
 			tag.WorkflowID(e.BusinessID),
 			tag.WorkflowRunID(e.RunID),
 			tag.TaskID(e.TaskID()),
+		)
+		metrics.ReplicationTasksSkipped.With(e.MetricsHandler).Record(
+			1,
+			metrics.OperationTag(metrics.DeleteExecutionReplicationTaskScope),
+			metrics.NamespaceTag(namespaceName),
+		)
+		return nil
+	}
+	namespaceEntry, err := e.NamespaceCache.GetNamespaceByID(namespace.ID(e.NamespaceID))
+	if err != nil {
+		return err
+	}
+	currentCluster := e.ClusterMetadata.GetCurrentClusterName()
+	if namespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: e.BusinessID}) == currentCluster {
+		e.Logger.Warn("Skipping delete execution replication task on active cluster",
+			tag.WorkflowNamespaceID(e.NamespaceID),
+			tag.WorkflowID(e.BusinessID),
+			tag.WorkflowRunID(e.RunID),
+			tag.TaskID(e.TaskID()),
+			tag.ClusterName(currentCluster),
 		)
 		metrics.ReplicationTasksSkipped.With(e.MetricsHandler).Record(
 			1,

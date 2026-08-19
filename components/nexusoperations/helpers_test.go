@@ -55,7 +55,7 @@ func newRoot(t *testing.T, backend *hsmtest.NodeBackend) *hsm.Node {
 
 func newOperationNode(t *testing.T, backend *hsmtest.NodeBackend, event *historypb.HistoryEvent) *hsm.Node {
 	root := newRoot(t, backend)
-	token, err := hsm.GenerateEventLoadToken(event)
+	token, err := root.GenerateEventLoadToken(event)
 	require.NoError(t, err)
 	node, err := nexusoperations.AddChild(root, fmt.Sprintf("%d", event.EventId), event, token)
 	require.NoError(t, err)

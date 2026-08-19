@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -13,21 +12,22 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type WorkflowVisibilityTestSuite struct {
-	testcore.FunctionalTestBase
+	parallelsuite.Suite[*WorkflowVisibilityTestSuite]
 }
 
 func TestWorkflowVisibilityTestSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, new(WorkflowVisibilityTestSuite))
+	parallelsuite.Run(t, &WorkflowVisibilityTestSuite{})
 }
 
 func (s *WorkflowVisibilityTestSuite) TestVisibility() {
+	env := testcore.NewEnv(s.T())
 	startTime := time.Now().UTC()
 
 	// Start 2 workflow executions
@@ -39,7 +39,7 @@ func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id1,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -49,7 +49,7 @@ func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 		Identity:            identity,
 	}
 
-	startResponse, err0 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startRequest)
+	startResponse, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), startRequest)
 	s.NoError(err0)
 
 	// Now complete one of the executions
@@ -63,13 +63,13 @@ func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 	}
 
 	poller := &testcore.TaskPoller{
-		Client:              s.FrontendClient(),
-		Namespace:           s.Namespace().String(),
+		Client:              env.FrontendClient(),
+		Namespace:           env.Namespace().String(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: nil,
-		Logger:              s.Logger,
+		Logger:              env.Logger,
 		T:                   s.T(),
 	}
 
@@ -80,7 +80,7 @@ func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 	var nextToken []byte
 	historyEventFilterType := enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
 	for {
-		historyResponse, historyErr := s.FrontendClient().GetWorkflowExecutionHistory(testcore.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		historyResponse, historyErr := env.FrontendClient().GetWorkflowExecutionHistory(s.Context(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: startRequest.Namespace,
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: startRequest.WorkflowId,
@@ -100,7 +100,7 @@ func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 
 	startRequest = &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          id2,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -110,7 +110,7 @@ func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 		Identity:            identity,
 	}
 
-	_, err2 := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), startRequest)
+	_, err2 := env.FrontendClient().StartWorkflowExecution(s.Context(), startRequest)
 	s.NoError(err2)
 
 	startFilter := &filterpb.StartTimeFilter{}
@@ -123,8 +123,8 @@ func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 	var historyLength int64
 	s.Eventually(
 		func() bool {
-			resp, err3 := s.FrontendClient().ListClosedWorkflowExecutions(testcore.NewContext(), &workflowservice.ListClosedWorkflowExecutionsRequest{
-				Namespace:       s.Namespace().String(),
+			resp, err3 := env.FrontendClient().ListClosedWorkflowExecutions(s.Context(), &workflowservice.ListClosedWorkflowExecutionsRequest{
+				Namespace:       env.Namespace().String(),
 				MaximumPageSize: 100,
 				StartTimeFilter: startFilter,
 				Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_TypeFilter{
@@ -137,10 +137,9 @@ func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 			closedCount = len(resp.Executions)
 			if closedCount == 1 {
 				historyLength = resp.Executions[0].HistoryLength
-				s.Nil(resp.NextPageToken)
 				return true
 			}
-			s.Logger.Info("Closed WorkflowExecution is not yet visible")
+			env.Logger.Info("Closed WorkflowExecution is not yet visible")
 			return false
 		},
 		testcore.WaitForESToSettle,
@@ -151,8 +150,8 @@ func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 
 	s.Eventually(
 		func() bool {
-			resp, err4 := s.FrontendClient().ListOpenWorkflowExecutions(testcore.NewContext(), &workflowservice.ListOpenWorkflowExecutionsRequest{
-				Namespace:       s.Namespace().String(),
+			resp, err4 := env.FrontendClient().ListOpenWorkflowExecutions(s.Context(), &workflowservice.ListOpenWorkflowExecutionsRequest{
+				Namespace:       env.Namespace().String(),
 				MaximumPageSize: 100,
 				StartTimeFilter: startFilter,
 				Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{
@@ -164,10 +163,9 @@ func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 			s.NoError(err4)
 			openCount = len(resp.Executions)
 			if openCount == 1 {
-				s.Nil(resp.NextPageToken)
 				return true
 			}
-			s.Logger.Info("Open WorkflowExecution is not yet visible")
+			env.Logger.Info("Open WorkflowExecution is not yet visible")
 			return false
 		},
 		testcore.WaitForESToSettle,

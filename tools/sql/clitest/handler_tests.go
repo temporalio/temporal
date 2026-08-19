@@ -44,14 +44,14 @@ func (s *HandlerTestSuite) SetupTest() {
 func (s *HandlerTestSuite) TestValidateConnectConfig() {
 	cfg := new(config.SQL)
 
-	s.NotNil(sql.ValidateConnectConfig(cfg))
+	s.Error(sql.ValidateConnectConfig(cfg))
 
 	cfg.ConnectAddr = net.JoinHostPort(
 		environment.GetMySQLAddress(),
 		strconv.Itoa(environment.GetMySQLPort()),
 	)
-	s.NotNil(sql.ValidateConnectConfig(cfg))
+	s.Error(sql.ValidateConnectConfig(cfg))
 
 	cfg.DatabaseName = "foobar"
-	s.Nil(sql.ValidateConnectConfig(cfg))
+	s.NoError(sql.ValidateConnectConfig(cfg))
 }

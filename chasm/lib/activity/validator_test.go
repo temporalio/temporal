@@ -5,13 +5,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -46,6 +49,18 @@ var (
 	defaultBlobSizeLimitWarn = func(ns string) int {
 		return 32
 	}
+	defaultMaxUserMetadataSummarySize = func(ns string) int {
+		return 400
+	}
+	defaultMaxUserMetadataDetailsSize = func(ns string) int {
+		return 20000
+	}
+	defaultMaxLinksPerRequest = func(ns string) int {
+		return 10
+	}
+	defaultLinkMaxSize = func(ns string) int {
+		return 4000
+	}
 )
 
 func TestValidateSuccess(t *testing.T) {
@@ -55,10 +70,9 @@ func TestValidateSuccess(t *testing.T) {
 			defaultActivityType,
 			getDefaultRetrySettings,
 			defaultMaxIDLengthLimit,
-			defaultNamespaceID,
+			namespace.Name(defaultNamespaceID),
 			&defaultActivityOptions,
-			&defaultPriority,
-			durationpb.New(0))
+			&defaultPriority)
 		require.NoError(t, err)
 	})
 
@@ -68,7 +82,7 @@ func TestValidateSuccess(t *testing.T) {
 			defaultActivityType,
 			getDefaultRetrySettings,
 			defaultMaxIDLengthLimit,
-			defaultNamespaceID,
+			namespace.Name(defaultNamespaceID),
 			&defaultActivityOptions,
 			&defaultPriority,
 			durationpb.New(0),
@@ -221,7 +235,7 @@ func TestValidateAllActivityFailures(t *testing.T) {
 				tc.activityType,
 				tc.getDefaultActivityRetrySettings,
 				tc.maxIDLengthLimit,
-				tc.namespaceID,
+				namespace.Name(tc.namespaceID.String()),
 				tc.options,
 				tc.priority,
 				durationpb.New(0))
@@ -301,10 +315,9 @@ func TestStandaloneActivityTaskQueueValidations(t *testing.T) {
 				tc.activityType,
 				tc.getDefaultActivityRetrySettings,
 				tc.maxIDLengthLimit,
-				tc.namespaceID,
+				namespace.Name(tc.namespaceID.String()),
 				tc.options,
-				tc.priority,
-				durationpb.New(0))
+				tc.priority)
 			var invalidArgErr *serviceerror.InvalidArgument
 			require.ErrorAs(t, err, &invalidArgErr)
 			require.Contains(t, invalidArgErr.Error(), tc.expectedErrMessage)
@@ -313,7 +326,7 @@ func TestStandaloneActivityTaskQueueValidations(t *testing.T) {
 }
 
 func TestEmbeddedActivityTaskQueueValidations(t *testing.T) {
-	t.Run("Allow PerNSWorkerTaskQueue TaskQueue", func(t *testing.T) {
+	t.Run("Allow PerNSWorkerTaskQueue TaskQueue on the same TaskQueue", func(t *testing.T) {
 		options := &activitypb.ActivityOptions{
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 			ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
@@ -324,7 +337,7 @@ func TestEmbeddedActivityTaskQueueValidations(t *testing.T) {
 			defaultActivityType,
 			getDefaultRetrySettings,
 			defaultMaxIDLengthLimit,
-			defaultNamespaceID,
+			namespace.Name(defaultNamespaceID),
 			options,
 			&defaultPriority,
 			durationpb.New(0),
@@ -332,7 +345,7 @@ func TestEmbeddedActivityTaskQueueValidations(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("Disallow PerNSWorkerTaskQueue TaskQueue", func(t *testing.T) {
+	t.Run("Disallow PerNSWorkerTaskQueue TaskQueue from non-internal TaskQueue", func(t *testing.T) {
 		options := &activitypb.ActivityOptions{
 			TaskQueue:              &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 			ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
@@ -343,7 +356,7 @@ func TestEmbeddedActivityTaskQueueValidations(t *testing.T) {
 			defaultActivityType,
 			getDefaultRetrySettings,
 			defaultMaxIDLengthLimit,
-			defaultNamespaceID,
+			namespace.Name(defaultNamespaceID),
 			options,
 			&defaultPriority,
 			durationpb.New(0),
@@ -365,7 +378,7 @@ func TestEmbeddedActivityTaskQueueValidations(t *testing.T) {
 			defaultActivityType,
 			getDefaultRetrySettings,
 			defaultMaxIDLengthLimit,
-			defaultNamespaceID,
+			namespace.Name(defaultNamespaceID),
 			options,
 			&defaultPriority,
 			durationpb.New(0),
@@ -387,7 +400,7 @@ func TestEmbeddedActivityTaskQueueValidations(t *testing.T) {
 			defaultActivityType,
 			getDefaultRetrySettings,
 			defaultMaxIDLengthLimit,
-			defaultNamespaceID,
+			namespace.Name(defaultNamespaceID),
 			options,
 			&defaultPriority,
 			durationpb.New(0),
@@ -406,12 +419,278 @@ func newTestFrontendHandler(
 ) *frontendHandler {
 	return &frontendHandler{
 		config: &Config{
-			BlobSizeLimitError: blobSizeLimitError,
-			BlobSizeLimitWarn:  blobSizeLimitWarn,
-			MaxIDLengthLimit:   func() int { return maxIDLengthLimit },
+			BlobSizeLimitError:         blobSizeLimitError,
+			BlobSizeLimitWarn:          blobSizeLimitWarn,
+			MaxIDLengthLimit:           func() int { return maxIDLengthLimit },
+			MaxUserMetadataDetailsSize: defaultMaxUserMetadataDetailsSize,
+			MaxUserMetadataSummarySize: defaultMaxUserMetadataSummarySize,
 		},
 		logger: log.NewNoopLogger(),
 	}
+}
+
+// TestRequestIDGeneratedWhenMissing verifies that the server generates a non-empty UUID request ID
+// for every standalone activity API that carries a request_id field, when the client omits it.
+// This prevents "" == "" false-positive idempotency matches in the state machine.
+func TestRequestIDGeneratedWhenMissing(t *testing.T) {
+	maxIDLengthLimit := defaultMaxIDLengthLimit
+	blobLimit := defaultBlobSizeLimitError
+	logger := log.NewNoopLogger()
+
+	t.Run("StartActivityExecution", func(t *testing.T) {
+		h := &frontendHandler{
+			config: &Config{
+				BlobSizeLimitError:         blobLimit,
+				BlobSizeLimitWarn:          defaultBlobSizeLimitWarn,
+				MaxIDLengthLimit:           func() int { return maxIDLengthLimit },
+				DefaultActivityRetryPolicy: dynamicconfig.GetTypedPropertyFnFilteredByNamespace(getDefaultRetrySettings("")),
+				MaxUserMetadataDetailsSize: defaultMaxUserMetadataDetailsSize,
+				MaxUserMetadataSummarySize: defaultMaxUserMetadataSummarySize,
+			},
+			linkValidator: newLinkValidator(
+				defaultMaxLinksPerRequest,
+				func(string) int { return 2000 },
+				defaultLinkMaxSize,
+			),
+			logger: logger,
+		}
+		req := &workflowservice.StartActivityExecutionRequest{
+			ActivityId:          defaultActivityID,
+			ActivityType:        &commonpb.ActivityType{Name: defaultActivityType},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+			StartToCloseTimeout: durationpb.New(10 * time.Second),
+			RetryPolicy:         &commonpb.RetryPolicy{},
+		}
+		_, err := h.validateAndPopulateStartRequest(t.Context(), req, namespace.ID(defaultNamespaceID))
+		require.NoError(t, err)
+		require.NotEmpty(t, req.GetRequestId(), "server must generate a request ID when client omits it")
+		require.NoError(t, validateUUID(req.GetRequestId()), "generated request ID must be a valid UUID")
+	})
+
+	t.Run("RequestCancelActivityExecution", func(t *testing.T) {
+		req := &workflowservice.RequestCancelActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+		}
+		err := validateAndNormalizeRequestCancelActivityExecutionRequest(req, maxIDLengthLimit, blobLimit, blobLimit, logger)
+		require.NoError(t, err)
+		require.NotEmpty(t, req.GetRequestId(), "server must generate a request ID when client omits it")
+		require.NoError(t, validateUUID(req.GetRequestId()), "generated request ID must be a valid UUID")
+	})
+
+	t.Run("TerminateActivityExecution", func(t *testing.T) {
+		req := &workflowservice.TerminateActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+		}
+		err := validateAndNormalizeTerminateActivityExecutionRequest(req, maxIDLengthLimit, blobLimit, blobLimit, logger)
+		require.NoError(t, err)
+		require.NotEmpty(t, req.GetRequestId(), "server must generate a request ID when client omits it")
+		require.NoError(t, validateUUID(req.GetRequestId()), "generated request ID must be a valid UUID")
+	})
+
+	t.Run("PauseActivityExecution", func(t *testing.T) {
+		req := &workflowservice.PauseActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+		}
+		err := validateAndNormalizePauseActivityExecutionRequest(req, maxIDLengthLimit, blobLimit, blobLimit, logger)
+		require.NoError(t, err)
+		require.NotEmpty(t, req.GetRequestId(), "server must generate a request ID when client omits it")
+		require.NoError(t, validateUUID(req.GetRequestId()), "generated request ID must be a valid UUID")
+	})
+
+	t.Run("UnpauseActivityExecution", func(t *testing.T) {
+		req := &workflowservice.UnpauseActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+		}
+		err := validateAndNormalizeUnpauseActivityExecutionRequest(req, maxIDLengthLimit)
+		require.NoError(t, err)
+		require.NotEmpty(t, req.GetRequestId(), "server must generate a request ID when client omits it")
+		require.NoError(t, validateUUID(req.GetRequestId()), "generated request ID must be a valid UUID")
+	})
+
+	t.Run("ResetActivityExecution", func(t *testing.T) {
+		req := &workflowservice.ResetActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+		}
+		err := validateAndNormalizeResetActivityExecutionRequest(req, maxIDLengthLimit)
+		require.NoError(t, err)
+		require.NotEmpty(t, req.GetRequestId(), "server must generate a request ID when client omits it")
+		require.NoError(t, validateUUID(req.GetRequestId()), "generated request ID must be a valid UUID")
+	})
+
+	t.Run("UpdateActivityExecutionOptions", func(t *testing.T) {
+		req := &workflowservice.UpdateActivityExecutionOptionsRequest{
+			ActivityId:      defaultActivityID,
+			RestoreOriginal: true,
+		}
+		err := validateAndNormalizeUpdateActivityExecutionOptionsRequest(req, getDefaultRetrySettings, maxIDLengthLimit)
+		require.NoError(t, err)
+		require.NotEmpty(t, req.GetRequestId(), "server must generate a request ID when client omits it")
+		require.NoError(t, validateUUID(req.GetRequestId()), "generated request ID must be a valid UUID")
+	})
+}
+
+func TestValidateAndPopulateStartRequest_ValidatesCompletionCallbackLinks(t *testing.T) {
+	h := &frontendHandler{
+		config: &Config{
+			BlobSizeLimitError:         defaultBlobSizeLimitError,
+			BlobSizeLimitWarn:          defaultBlobSizeLimitWarn,
+			DefaultActivityRetryPolicy: getDefaultRetrySettings,
+			EnableCallbacks:            func(string) bool { return true },
+			MaxIDLengthLimit:           func() int { return defaultMaxIDLengthLimit },
+			MaxUserMetadataDetailsSize: defaultMaxUserMetadataDetailsSize,
+			MaxUserMetadataSummarySize: defaultMaxUserMetadataSummarySize,
+		},
+		callbackValidator: callback.NewValidator(
+			func(string) int { return 10 },
+			func(string) int { return 1000 },
+			func(string) int { return 4096 },
+			func(string) callback.AddressMatchRules { return callback.AddressMatchRules{} },
+		),
+		linkValidator: newLinkValidator(
+			func(string) int { return 1 },
+			func(string) int { return 2000 },
+			defaultLinkMaxSize,
+		),
+		logger: log.NewNoopLogger(),
+	}
+	newRequest := func(callbackLinks []*commonpb.Link) *workflowservice.StartActivityExecutionRequest {
+		return &workflowservice.StartActivityExecutionRequest{
+			Namespace:           defaultNamespaceID,
+			ActivityId:          defaultActivityID,
+			ActivityType:        &commonpb.ActivityType{Name: defaultActivityType},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+			StartToCloseTimeout: durationpb.New(10 * time.Second),
+			CompletionCallbacks: []*commonpb.Callback{{
+				Variant: &commonpb.Callback_Internal_{
+					Internal: &commonpb.Callback_Internal{},
+				},
+				Links: callbackLinks,
+			}},
+		}
+	}
+
+	t.Run("invalid callback link", func(t *testing.T) {
+		req := newRequest([]*commonpb.Link{{
+			Variant: &commonpb.Link_BatchJob_{
+				BatchJob: &commonpb.Link_BatchJob{},
+			},
+		}})
+
+		_, err := h.validateAndPopulateStartRequest(t.Context(), req, namespace.ID(defaultNamespaceID))
+
+		var invalidArgument *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgument)
+		require.ErrorContains(t, err, "batch job link must not have an empty job ID")
+	})
+
+	t.Run("too many combined links", func(t *testing.T) {
+		req := newRequest([]*commonpb.Link{{
+			Variant: &commonpb.Link_BatchJob_{
+				BatchJob: &commonpb.Link_BatchJob{JobId: "callback-job"},
+			},
+		}})
+		req.Links = []*commonpb.Link{{
+			Variant: &commonpb.Link_BatchJob_{
+				BatchJob: &commonpb.Link_BatchJob{JobId: "request-job"},
+			},
+		}}
+
+		_, err := h.validateAndPopulateStartRequest(t.Context(), req, namespace.ID(defaultNamespaceID))
+
+		var invalidArgument *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgument)
+		require.ErrorContains(t, err, "cannot attach more than 1 links per request, got 2")
+	})
+}
+
+func validateUUID(s string) error {
+	_, err := uuid.Parse(s)
+	return err
+}
+
+// TestRequestIDTooLong verifies that every standalone activity API enforces the request ID
+// length limit when the client supplies a value that exceeds it.
+func TestRequestIDTooLong(t *testing.T) {
+	maxIDLengthLimit := defaultMaxIDLengthLimit
+	blobLimit := defaultBlobSizeLimitError
+	logger := log.NewNoopLogger()
+	tooLong := string(make([]byte, maxIDLengthLimit+1))
+
+	t.Run("StartActivityExecution", func(t *testing.T) {
+		h := newTestFrontendHandler(blobLimit, defaultBlobSizeLimitWarn, maxIDLengthLimit)
+		req := &workflowservice.StartActivityExecutionRequest{
+			ActivityId:          defaultActivityID,
+			ActivityType:        &commonpb.ActivityType{Name: defaultActivityType},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+			StartToCloseTimeout: durationpb.New(10 * time.Second),
+			RetryPolicy:         &commonpb.RetryPolicy{},
+			RequestId:           tooLong,
+		}
+		err := validateAndNormalizeStartRequest(req, h.config, h.logger, h.saMapperProvider, h.saValidator)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+	})
+
+	t.Run("RequestCancelActivityExecution", func(t *testing.T) {
+		req := &workflowservice.RequestCancelActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			RequestId:  tooLong,
+		}
+		err := validateAndNormalizeRequestCancelActivityExecutionRequest(req, maxIDLengthLimit, blobLimit, blobLimit, logger)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+	})
+
+	t.Run("TerminateActivityExecution", func(t *testing.T) {
+		req := &workflowservice.TerminateActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			RequestId:  tooLong,
+		}
+		err := validateAndNormalizeTerminateActivityExecutionRequest(req, maxIDLengthLimit, blobLimit, blobLimit, logger)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+	})
+
+	t.Run("PauseActivityExecution", func(t *testing.T) {
+		req := &workflowservice.PauseActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			RequestId:  tooLong,
+		}
+		err := validateAndNormalizePauseActivityExecutionRequest(req, maxIDLengthLimit, blobLimit, blobLimit, logger)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+	})
+
+	t.Run("UnpauseActivityExecution", func(t *testing.T) {
+		req := &workflowservice.UnpauseActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			RequestId:  tooLong,
+		}
+		err := validateAndNormalizeUnpauseActivityExecutionRequest(req, maxIDLengthLimit)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+	})
+
+	t.Run("ResetActivityExecution", func(t *testing.T) {
+		req := &workflowservice.ResetActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			RequestId:  tooLong,
+		}
+		err := validateAndNormalizeResetActivityExecutionRequest(req, maxIDLengthLimit)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+	})
+
+	t.Run("UpdateActivityExecutionOptions", func(t *testing.T) {
+		req := &workflowservice.UpdateActivityExecutionOptionsRequest{
+			ActivityId:      defaultActivityID,
+			RestoreOriginal: true,
+			RequestId:       tooLong,
+		}
+		err := validateAndNormalizeUpdateActivityExecutionOptionsRequest(req, getDefaultRetrySettings, maxIDLengthLimit)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+	})
 }
 
 func TestValidateStandAloneRequestIDTooLong(t *testing.T) {
@@ -429,7 +708,7 @@ func TestValidateStandAloneRequestIDTooLong(t *testing.T) {
 	}
 
 	h := newTestFrontendHandler(defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, defaultMaxIDLengthLimit)
-	err := validateAndNormalizeStartRequest(req, h.config.MaxIDLengthLimit(), h.config.BlobSizeLimitError, h.config.BlobSizeLimitWarn, h.logger, h.saMapperProvider, h.saValidator)
+	err := validateAndNormalizeStartRequest(req, h.config, h.logger, h.saMapperProvider, h.saValidator)
 	var invalidArgErr *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArgErr)
 }
@@ -449,7 +728,7 @@ func TestValidateStandAloneInputTooLarge(t *testing.T) {
 	}
 
 	h := newTestFrontendHandler(defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, defaultMaxIDLengthLimit)
-	err := validateAndNormalizeStartRequest(req, h.config.MaxIDLengthLimit(), h.config.BlobSizeLimitError, h.config.BlobSizeLimitWarn, h.logger, h.saMapperProvider, h.saValidator)
+	err := validateAndNormalizeStartRequest(req, h.config, h.logger, h.saMapperProvider, h.saValidator)
 	var invalidArgErr *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArgErr)
 }
@@ -476,8 +755,79 @@ func TestValidateStandAloneInputWarningSizeShouldSucceed(t *testing.T) {
 		func(ns string) int { return payloadSize },
 		defaultMaxIDLengthLimit,
 	)
-	err := validateAndNormalizeStartRequest(req, h.config.MaxIDLengthLimit(), h.config.BlobSizeLimitError, h.config.BlobSizeLimitWarn, h.logger, h.saMapperProvider, h.saValidator)
+	err := validateAndNormalizeStartRequest(req, h.config, h.logger, h.saMapperProvider, h.saValidator)
 	require.NoError(t, err)
+}
+
+func TestValidateStandaloneUserMetadata(t *testing.T) {
+	summary := &commonpb.Payload{Data: []byte("summary")}
+	details := &commonpb.Payload{Data: []byte("details")}
+
+	tests := []struct {
+		name         string
+		metadata     *sdkpb.UserMetadata
+		summaryLimit int
+		detailsLimit int
+		errContains  string
+	}{
+		{
+			name:         "summary exceeds size limit",
+			metadata:     &sdkpb.UserMetadata{Summary: summary},
+			summaryLimit: summary.Size() - 1,
+			detailsLimit: details.Size() + 1000,
+			errContains:  "user_metadata.summary exceeds size limit",
+		},
+		{
+			name:         "details exceeds size limit",
+			metadata:     &sdkpb.UserMetadata{Details: details},
+			summaryLimit: summary.Size() + 1000,
+			detailsLimit: details.Size() - 1,
+			errContains:  "user_metadata.details exceeds size limit",
+		},
+		{
+			name:         "payloads at size limits",
+			metadata:     &sdkpb.UserMetadata{Summary: summary, Details: details},
+			summaryLimit: summary.Size(),
+			detailsLimit: details.Size(),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			h := &frontendHandler{
+				config: &Config{
+					BlobSizeLimitError:         defaultBlobSizeLimitError,
+					BlobSizeLimitWarn:          defaultBlobSizeLimitWarn,
+					DefaultActivityRetryPolicy: getDefaultRetrySettings,
+					MaxIDLengthLimit:           func() int { return defaultMaxIDLengthLimit },
+					MaxUserMetadataSummarySize: func(string) int { return test.summaryLimit },
+					MaxUserMetadataDetailsSize: func(string) int { return test.detailsLimit },
+				},
+				linkValidator: newLinkValidator(
+					defaultMaxLinksPerRequest,
+					func(string) int { return 2000 },
+					defaultLinkMaxSize,
+				),
+				logger: log.NewNoopLogger(),
+			}
+			req := &workflowservice.StartActivityExecutionRequest{
+				Namespace:           defaultNamespaceID,
+				ActivityId:          defaultActivityID,
+				ActivityType:        &commonpb.ActivityType{Name: defaultActivityType},
+				TaskQueue:           &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+				StartToCloseTimeout: durationpb.New(10 * time.Second),
+				UserMetadata:        test.metadata,
+			}
+			_, err := h.validateAndPopulateStartRequest(t.Context(), req, namespace.ID(defaultNamespaceID))
+			if test.errContains == "" {
+				require.NoError(t, err)
+				return
+			}
+			var invalidArgument *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgument)
+			require.ErrorContains(t, err, test.errContains)
+		})
+	}
 }
 
 func TestValidateStandAlone_IDPolicyShouldDefault(t *testing.T) {
@@ -494,7 +844,7 @@ func TestValidateStandAlone_IDPolicyShouldDefault(t *testing.T) {
 	}
 
 	h := newTestFrontendHandler(defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, defaultMaxIDLengthLimit)
-	err := validateAndNormalizeStartRequest(req, h.config.MaxIDLengthLimit(), h.config.BlobSizeLimitError, h.config.BlobSizeLimitWarn, h.logger, h.saMapperProvider, h.saValidator)
+	err := validateAndNormalizeStartRequest(req, h.config, h.logger, h.saMapperProvider, h.saValidator)
 
 	require.NoError(t, err)
 	require.Equal(t, enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE, req.IdReusePolicy)
@@ -624,7 +974,7 @@ func TestModifiedActivityTimeouts(t *testing.T) {
 				defaultActivityType,
 				getDefaultRetrySettings,
 				defaultMaxIDLengthLimit,
-				defaultNamespaceID,
+				namespace.Name(defaultNamespaceID),
 				tc.options,
 				&defaultPriority,
 				tc.runTimeout)
@@ -646,7 +996,7 @@ func TestValidateDeleteActivityExecutionRequest(t *testing.T) {
 		req := &workflowservice.DeleteActivityExecutionRequest{
 			ActivityId: defaultActivityID,
 		}
-		err := validateAndNormalizeDeleteRequest(req, defaultMaxIDLengthLimit)
+		err := validateAndNormalizeDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
 		require.NoError(t, err)
 	})
 
@@ -655,7 +1005,7 @@ func TestValidateDeleteActivityExecutionRequest(t *testing.T) {
 			ActivityId: defaultActivityID,
 			RunId:      "f47ac10b-58cc-4372-a567-0e02b2c3d479",
 		}
-		err := validateAndNormalizeDeleteRequest(req, defaultMaxIDLengthLimit)
+		err := validateAndNormalizeDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
 		require.NoError(t, err)
 	})
 
@@ -663,7 +1013,7 @@ func TestValidateDeleteActivityExecutionRequest(t *testing.T) {
 		req := &workflowservice.DeleteActivityExecutionRequest{
 			ActivityId: "",
 		}
-		err := validateAndNormalizeDeleteRequest(req, defaultMaxIDLengthLimit)
+		err := validateAndNormalizeDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 	})
@@ -672,7 +1022,7 @@ func TestValidateDeleteActivityExecutionRequest(t *testing.T) {
 		req := &workflowservice.DeleteActivityExecutionRequest{
 			ActivityId: string(make([]byte, defaultMaxIDLengthLimit+1)),
 		}
-		err := validateAndNormalizeDeleteRequest(req, defaultMaxIDLengthLimit)
+		err := validateAndNormalizeDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 	})
@@ -682,7 +1032,7 @@ func TestValidateDeleteActivityExecutionRequest(t *testing.T) {
 			ActivityId: defaultActivityID,
 			RunId:      "not-a-valid-uuid",
 		}
-		err := validateAndNormalizeDeleteRequest(req, defaultMaxIDLengthLimit)
+		err := validateAndNormalizeDeleteActivityExecutionRequest(req, defaultMaxIDLengthLimit)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 	})
@@ -709,6 +1059,316 @@ func TestValidateStartDelay(t *testing.T) {
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Contains(t, invalidArgErr.Message, "invalid StartDelay")
+	})
+}
+
+func TestValidateOnConflictOptions(t *testing.T) {
+	t.Run("NilOptions", func(t *testing.T) {
+		require.NoError(t, validateOnConflictOptions(&workflowservice.StartActivityExecutionRequest{}))
+	})
+
+	t.Run("AttachRequestIdAndCallbacksWithCallback", func(t *testing.T) {
+		req := &workflowservice.StartActivityExecutionRequest{
+			CompletionCallbacks: []*commonpb.Callback{{}},
+			OnConflictOptions: &commonpb.OnConflictOptions{
+				AttachRequestId:           true,
+				AttachCompletionCallbacks: true,
+			},
+		}
+		require.NoError(t, validateOnConflictOptions(req))
+	})
+
+	t.Run("AttachLinksOnly", func(t *testing.T) {
+		// Links do not require a request ID; this combination must remain valid.
+		req := &workflowservice.StartActivityExecutionRequest{
+			OnConflictOptions: &commonpb.OnConflictOptions{AttachLinks: true},
+		}
+		require.NoError(t, validateOnConflictOptions(req))
+	})
+
+	t.Run("AttachRequestIdWithLink", func(t *testing.T) {
+		// A request ID alongside a link is valid (request ID has something to attach to).
+		req := &workflowservice.StartActivityExecutionRequest{
+			Links: []*commonpb.Link{{}},
+			OnConflictOptions: &commonpb.OnConflictOptions{
+				AttachRequestId: true,
+				AttachLinks:     true,
+			},
+		}
+		require.NoError(t, validateOnConflictOptions(req))
+	})
+
+	t.Run("AttachCallbacksWithoutRequestId", func(t *testing.T) {
+		req := &workflowservice.StartActivityExecutionRequest{
+			CompletionCallbacks: []*commonpb.Callback{{}},
+			OnConflictOptions:   &commonpb.OnConflictOptions{AttachCompletionCallbacks: true},
+		}
+		err := validateOnConflictOptions(req)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Contains(t, invalidArgErr.Message, "attach_completion_callbacks requires attach_request_id")
+	})
+
+	t.Run("AttachRequestIdWithoutCallbackOrLink", func(t *testing.T) {
+		req := &workflowservice.StartActivityExecutionRequest{
+			OnConflictOptions: &commonpb.OnConflictOptions{AttachRequestId: true},
+		}
+		err := validateOnConflictOptions(req)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Contains(t, invalidArgErr.Message, "attach_request_id requires at least one completion callback or link")
+	})
+
+	t.Run("AttachRequestIdAndCallbacksWithoutCallbackProvided", func(t *testing.T) {
+		req := &workflowservice.StartActivityExecutionRequest{
+			OnConflictOptions: &commonpb.OnConflictOptions{
+				AttachRequestId:           true,
+				AttachCompletionCallbacks: true,
+			},
+		}
+		err := validateOnConflictOptions(req)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Contains(t, invalidArgErr.Message, "attach_request_id requires at least one completion callback or link")
+	})
+}
+
+func TestValidatePauseActivityExecutionRequest(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		req := &workflowservice.PauseActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			Identity:   "test-identity",
+			Reason:     "test-reason",
+		}
+		err := validateAndNormalizePauseActivityExecutionRequest(req, defaultMaxIDLengthLimit, defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, log.NewNoopLogger())
+		require.NoError(t, err)
+	})
+
+	t.Run("SuccessWithRunID", func(t *testing.T) {
+		req := &workflowservice.PauseActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			RunId:      "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+			Identity:   "test-identity",
+		}
+		err := validateAndNormalizePauseActivityExecutionRequest(req, defaultMaxIDLengthLimit, defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, log.NewNoopLogger())
+		require.NoError(t, err)
+	})
+
+	t.Run("EmptyActivityID", func(t *testing.T) {
+		req := &workflowservice.PauseActivityExecutionRequest{
+			ActivityId: "",
+			Identity:   "test-identity",
+		}
+		err := validateAndNormalizePauseActivityExecutionRequest(req, defaultMaxIDLengthLimit, defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, log.NewNoopLogger())
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, "activity ID is required", invalidArgErr.Message)
+	})
+
+	t.Run("ActivityIDTooLong", func(t *testing.T) {
+		req := &workflowservice.PauseActivityExecutionRequest{
+			ActivityId: string(make([]byte, defaultMaxIDLengthLimit+1)),
+			Identity:   "test-identity",
+		}
+		err := validateAndNormalizePauseActivityExecutionRequest(req, defaultMaxIDLengthLimit, defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, log.NewNoopLogger())
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, fmt.Sprintf("activity ID exceeds length limit. Length=%d Limit=%d",
+			defaultMaxIDLengthLimit+1, defaultMaxIDLengthLimit), invalidArgErr.Message)
+	})
+
+	t.Run("IdentityTooLong", func(t *testing.T) {
+		req := &workflowservice.PauseActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			Identity:   string(make([]byte, defaultMaxIDLengthLimit+1)),
+		}
+		err := validateAndNormalizePauseActivityExecutionRequest(req, defaultMaxIDLengthLimit, defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, log.NewNoopLogger())
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, fmt.Sprintf("identity exceeds length limit. Length=%d Limit=%d",
+			defaultMaxIDLengthLimit+1, defaultMaxIDLengthLimit), invalidArgErr.Message)
+	})
+
+	t.Run("ReasonTooLong", func(t *testing.T) {
+		req := &workflowservice.PauseActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			Identity:   "test-identity",
+			Reason:     string(make([]byte, defaultBlobSizeLimitError("default")+1)),
+		}
+		err := validateAndNormalizePauseActivityExecutionRequest(req, defaultMaxIDLengthLimit, defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, log.NewNoopLogger())
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, "reason exceeds length limit", invalidArgErr.Message)
+	})
+
+	t.Run("InvalidRunID", func(t *testing.T) {
+		req := &workflowservice.PauseActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			RunId:      "not-a-valid-uuid",
+			Identity:   "test-identity",
+		}
+		err := validateAndNormalizePauseActivityExecutionRequest(req, defaultMaxIDLengthLimit, defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, log.NewNoopLogger())
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, "invalid run id: must be a valid UUID", invalidArgErr.Message)
+	})
+}
+
+func TestValidateUnpauseActivityExecutionRequest(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		req := &workflowservice.UnpauseActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			Identity:   "test-identity",
+		}
+		err := validateAndNormalizeUnpauseActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		require.NoError(t, err)
+	})
+
+	t.Run("SuccessWithRunID", func(t *testing.T) {
+		req := &workflowservice.UnpauseActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			RunId:      "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+			Identity:   "test-identity",
+		}
+		err := validateAndNormalizeUnpauseActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		require.NoError(t, err)
+	})
+
+	t.Run("EmptyActivityID", func(t *testing.T) {
+		req := &workflowservice.UnpauseActivityExecutionRequest{
+			ActivityId: "",
+			Identity:   "test-identity",
+		}
+		err := validateAndNormalizeUnpauseActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, "activity ID is required", invalidArgErr.Message)
+	})
+
+	t.Run("ActivityIDTooLong", func(t *testing.T) {
+		req := &workflowservice.UnpauseActivityExecutionRequest{
+			ActivityId: string(make([]byte, defaultMaxIDLengthLimit+1)),
+			Identity:   "test-identity",
+		}
+		err := validateAndNormalizeUnpauseActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, fmt.Sprintf("activity ID exceeds length limit. Length=%d Limit=%d",
+			defaultMaxIDLengthLimit+1, defaultMaxIDLengthLimit), invalidArgErr.Message)
+	})
+
+	t.Run("IdentityTooLong", func(t *testing.T) {
+		req := &workflowservice.UnpauseActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			Identity:   string(make([]byte, defaultMaxIDLengthLimit+1)),
+		}
+		err := validateAndNormalizeUnpauseActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, fmt.Sprintf("identity exceeds length limit. Length=%d Limit=%d",
+			defaultMaxIDLengthLimit+1, defaultMaxIDLengthLimit), invalidArgErr.Message)
+	})
+
+	t.Run("InvalidRunID", func(t *testing.T) {
+		req := &workflowservice.UnpauseActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			RunId:      "not-a-valid-uuid",
+			Identity:   "test-identity",
+		}
+		err := validateAndNormalizeUnpauseActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, "invalid run id: must be a valid UUID", invalidArgErr.Message)
+	})
+
+	t.Run("NegativeJitter", func(t *testing.T) {
+		req := &workflowservice.UnpauseActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			Jitter:     durationpb.New(-time.Second),
+		}
+		err := validateAndNormalizeUnpauseActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, "invalid jitter: negative duration", invalidArgErr.Message)
+	})
+}
+
+func TestValidateResetActivityExecutionRequest(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		req := &workflowservice.ResetActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			Identity:   "test-identity",
+		}
+		err := validateAndNormalizeResetActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		require.NoError(t, err)
+	})
+
+	t.Run("SuccessWithRunID", func(t *testing.T) {
+		req := &workflowservice.ResetActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			RunId:      "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+			Identity:   "test-identity",
+		}
+		err := validateAndNormalizeResetActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		require.NoError(t, err)
+	})
+
+	t.Run("EmptyActivityID", func(t *testing.T) {
+		req := &workflowservice.ResetActivityExecutionRequest{
+			ActivityId: "",
+			Identity:   "test-identity",
+		}
+		err := validateAndNormalizeResetActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, "activity ID is required", invalidArgErr.Message)
+	})
+
+	t.Run("ActivityIDTooLong", func(t *testing.T) {
+		req := &workflowservice.ResetActivityExecutionRequest{
+			ActivityId: string(make([]byte, defaultMaxIDLengthLimit+1)),
+			Identity:   "test-identity",
+		}
+		err := validateAndNormalizeResetActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, fmt.Sprintf("activity ID exceeds length limit. Length=%d Limit=%d",
+			defaultMaxIDLengthLimit+1, defaultMaxIDLengthLimit), invalidArgErr.Message)
+	})
+
+	t.Run("IdentityTooLong", func(t *testing.T) {
+		req := &workflowservice.ResetActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			Identity:   string(make([]byte, defaultMaxIDLengthLimit+1)),
+		}
+		err := validateAndNormalizeResetActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, fmt.Sprintf("identity exceeds length limit. Length=%d Limit=%d",
+			defaultMaxIDLengthLimit+1, defaultMaxIDLengthLimit), invalidArgErr.Message)
+	})
+
+	t.Run("InvalidRunID", func(t *testing.T) {
+		req := &workflowservice.ResetActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			RunId:      "not-a-valid-uuid",
+			Identity:   "test-identity",
+		}
+		err := validateAndNormalizeResetActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, "invalid run id: must be a valid UUID", invalidArgErr.Message)
+	})
+
+	t.Run("NegativeJitter", func(t *testing.T) {
+		req := &workflowservice.ResetActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			Jitter:     durationpb.New(-time.Second),
+		}
+		err := validateAndNormalizeResetActivityExecutionRequest(req, defaultMaxIDLengthLimit)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Equal(t, "invalid jitter: negative duration", invalidArgErr.Message)
 	})
 }
 

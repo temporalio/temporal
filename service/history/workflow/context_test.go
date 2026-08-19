@@ -8,8 +8,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -17,6 +20,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/limiter"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -77,6 +81,7 @@ func (s *contextSuite) SetupTest() {
 		log.NewNoopLogger(),
 		log.NewNoopLogger(),
 		metrics.NoopMetricsHandler,
+		limiter.NewKeyedBytesLimiter(),
 	)
 }
 
@@ -578,4 +583,195 @@ func (s *contextSuite) TestRefreshTask() {
 			s.NoError(err)
 		})
 	}
+}
+func intermediatePage(pageNumber int32, markerName string) *workflowservice.RespondWorkflowTaskCompletedRequest {
+	return &workflowservice.RespondWorkflowTaskCompletedRequest{
+		IntermediatePage: true,
+		PageNumber:       pageNumber,
+		Commands: []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
+			Attributes: &commandpb.Command_RecordMarkerCommandAttributes{
+				RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{MarkerName: markerName},
+			},
+		}},
+	}
+}
+
+func finalPage(pageNumber int32, commands []*commandpb.Command) *workflowservice.RespondWorkflowTaskCompletedRequest {
+	return &workflowservice.RespondWorkflowTaskCompletedRequest{
+		PageNumber: pageNumber,
+		Commands:   commands,
+	}
+}
+
+func (s *contextSuite) setTaskCompletionBufferSizeLimit(limit int) {
+	s.workflowContext.config.WorkflowTaskCompletionBufferSizeLimit = func(string) int { return limit }
+	mockMutableState := historyi.NewMockMutableState(gomock.NewController(s.T()))
+	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
+	mockMutableState.EXPECT().GetStartedWorkflowTask().Return(&historyi.WorkflowTaskInfo{}).AnyTimes()
+	mockMutableState.EXPECT().GetQueryRegistry().Return(NewQueryRegistry()).AnyTimes()
+	mockMutableState.EXPECT().RemoveSpeculativeWorkflowTaskTimeoutTask().AnyTimes()
+	s.workflowContext.MutableState = mockMutableState
+}
+
+// TestTaskCompletionBuffer_AttemptIsolation verifies that a buffer left behind by a
+// different (schedID, attempt) is treated as stale: a page for a new attempt drops
+// the old buffer, and a final page for the old attempt no longer sees its pages.
+func (s *contextSuite) TestTaskCompletionBuffer_AttemptIsolation() {
+	const schedID = int64(10)
+	s.setTaskCompletionBufferSizeLimit(0)
+
+	// Attempt 1 buffers page 0.
+	s.NoError(s.workflowContext.AppendTaskCompletionPage(schedID, 1, intermediatePage(0, "attempt1")))
+
+	// A page for attempt 2 arrives on the same context (timeout -> retry path, which
+	// does not Clear()). It must drop attempt 1's buffer and start fresh.
+	s.NoError(s.workflowContext.AppendTaskCompletionPage(schedID, 2, intermediatePage(0, "attempt2")))
+
+	// Attempt 1's final page can no longer find its buffer.
+	_, err := s.workflowContext.GetMergedTaskCompletionPages(schedID, 1, finalPage(1, nil))
+	var bufferLost *serviceerror.WorkflowTaskCompletionBufferLost
+	s.ErrorAs(err, &bufferLost)
+}
+
+// TestTaskCompletionBuffer_GapDetection verifies that a missing intermediate page in
+// the expected range surfaces buffer-lost rather than silently dropping commands.
+func (s *contextSuite) TestTaskCompletionBuffer_GapDetection() {
+	const schedID = int64(11)
+	s.setTaskCompletionBufferSizeLimit(0)
+
+	s.NoError(s.workflowContext.AppendTaskCompletionPage(schedID, 1, intermediatePage(0, "p0")))
+	// Page 1 never buffered; final page claims pages 0 and 1 preceded it.
+	_, err := s.workflowContext.GetMergedTaskCompletionPages(schedID, 1, finalPage(2, nil))
+	var bufferLost *serviceerror.WorkflowTaskCompletionBufferLost
+	s.ErrorAs(err, &bufferLost)
+}
+
+// TestTaskCompletionBuffer_Idempotency verifies that a resent page does not overwrite
+// the first write and the merge still yields the original commands in order.
+func (s *contextSuite) TestTaskCompletionBuffer_Idempotency() {
+	const schedID = int64(12)
+	s.setTaskCompletionBufferSizeLimit(0)
+
+	s.NoError(s.workflowContext.AppendTaskCompletionPage(schedID, 1, intermediatePage(0, "first")))
+	// Resend page 0 with different content; first write must win.
+	s.NoError(s.workflowContext.AppendTaskCompletionPage(schedID, 1, intermediatePage(0, "second")))
+
+	merged, err := s.workflowContext.GetMergedTaskCompletionPages(schedID, 1, finalPage(1, intermediatePage(1, "final").Commands))
+	s.NoError(err)
+	s.Len(merged, 1)
+	s.Equal("first", merged[0].GetRecordMarkerCommandAttributes().GetMarkerName())
+}
+
+func (s *contextSuite) TestTaskCompletionBuffer_PageCountLimit() {
+	const schedID = int64(13)
+	s.setTaskCompletionBufferSizeLimit(0)
+
+	err := s.workflowContext.AppendTaskCompletionPage(schedID, 1, intermediatePage(maxWorkflowTaskCompletionPages, "too-many"))
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
+
+	s.NoError(s.workflowContext.AppendTaskCompletionPage(schedID, 1, intermediatePage(0, "p0")))
+	_, err = s.workflowContext.GetMergedTaskCompletionPages(schedID, 1, finalPage(maxWorkflowTaskCompletionPages, nil))
+	s.ErrorAs(err, &invalidArgument)
+}
+
+// TestTaskCompletionBuffer_PerWorkflowCapTerminates verifies that a page pushing the
+// cumulative buffer past the per-workflow limit returns the terminate sentinel and
+// releases the process budget.
+func (s *contextSuite) TestTaskCompletionBuffer_PerWorkflowCapTerminates() {
+	s.setTaskCompletionBufferSizeLimit(1)
+	s.workflowContext.paginationLimiter = limiter.NewKeyedBytesLimiter()
+
+	// 1-byte per-workflow limit: any non-empty page exceeds it.
+	err := s.workflowContext.AppendTaskCompletionPage(10, 1, intermediatePage(0, "big"))
+	s.ErrorIs(err, ErrTaskCompletionBufferSizeExceeded)
+	s.Nil(s.workflowContext.taskCompletionBuffer)
+	s.Equal(int64(0), s.workflowContext.paginationLimiter.Used())
+}
+
+// TestTaskCompletionBuffer_ProcessLimitRejects verifies that a page which would push the
+// process total over the limit is rejected with buffer-lost without storing anything.
+func (s *contextSuite) TestTaskCompletionBuffer_ProcessLimitRejects() {
+	budget := limiter.NewKeyedBytesLimiter()
+	s.workflowContext.paginationLimiter = budget
+
+	s.setTaskCompletionBufferSizeLimit(0)
+
+	processLimit := int64(s.workflowContext.config.WorkflowTaskCompletionBufferTotalSizeLimit())
+	ok, _ := budget.TryReserve("filler", processLimit, 0, 0)
+	s.True(ok)
+
+	err := s.workflowContext.AppendTaskCompletionPage(10, 1, intermediatePage(0, "p0"))
+	var bufferLost *serviceerror.WorkflowTaskCompletionBufferLost
+	s.ErrorAs(err, &bufferLost)
+	s.Nil(s.workflowContext.taskCompletionBuffer)
+}
+
+// TestTaskCompletionBuffer_NamespaceRatioRejects verifies that a page which would
+// push a namespace over its share (ratio * process limit) is rejected with
+// buffer-lost even though the process itself has plenty of room.
+func (s *contextSuite) TestTaskCompletionBuffer_NamespaceRatioRejects() {
+	budget := limiter.NewKeyedBytesLimiter()
+	s.workflowContext.paginationLimiter = budget
+
+	s.setTaskCompletionBufferSizeLimit(0)
+	// Process budget is effectively unbounded; the namespace share is ~1 byte, so any
+	// real page trips the per-namespace cap and not the process cap.
+	s.workflowContext.config.WorkflowTaskCompletionBufferTotalSizeLimit = func() int { return 1 << 30 }
+	s.workflowContext.config.WorkflowTaskCompletionBufferNamespaceRatio = func(string) float64 { return 1e-9 }
+
+	err := s.workflowContext.AppendTaskCompletionPage(10, 1, intermediatePage(0, "p0"))
+	var bufferLost *serviceerror.WorkflowTaskCompletionBufferLost
+	s.ErrorAs(err, &bufferLost)
+	s.Nil(s.workflowContext.taskCompletionBuffer)
+	s.Equal(int64(0), budget.Used())
+}
+
+// TestTaskCompletionBuffer_ProcessLimitDropsPartialBuffer verifies that a process limit
+// rejection of a later page drops the whole partial buffer and releases its
+// already-reserved bytes
+func (s *contextSuite) TestTaskCompletionBuffer_ProcessLimitDropsPartialBuffer() {
+	budget := limiter.NewKeyedBytesLimiter()
+	s.workflowContext.paginationLimiter = budget
+
+	s.setTaskCompletionBufferSizeLimit(0)
+	processLimit := int64(s.workflowContext.config.WorkflowTaskCompletionBufferTotalSizeLimit())
+
+	s.NoError(s.workflowContext.AppendTaskCompletionPage(10, 1, intermediatePage(0, "p0")))
+	page0Size := s.workflowContext.taskCompletionBuffer.totalSize
+	s.Positive(page0Size)
+
+	ok, _ := budget.TryReserve("filler", processLimit-page0Size, 0, 0)
+	s.True(ok)
+
+	err := s.workflowContext.AppendTaskCompletionPage(10, 1, intermediatePage(1, "p1"))
+	var bufferLost *serviceerror.WorkflowTaskCompletionBufferLost
+	s.ErrorAs(err, &bufferLost)
+	s.Nil(s.workflowContext.taskCompletionBuffer)
+	s.Equal(processLimit-page0Size, budget.Used())
+}
+
+// TestTaskCompletionBuffer_BudgetReleasedOnMergeAndClear verifies the process counter
+// goes back to zero after a successful merge
+func (s *contextSuite) TestTaskCompletionBuffer_BudgetReleasedOnMergeAndClear() {
+	budget := limiter.NewKeyedBytesLimiter()
+	s.workflowContext.paginationLimiter = budget
+
+	// Disable the per-workflow cap so it never interferes with the process-counter assertions.
+	s.setTaskCompletionBufferSizeLimit(0)
+
+	s.NoError(s.workflowContext.AppendTaskCompletionPage(10, 1, intermediatePage(0, "p0")))
+	s.NoError(s.workflowContext.AppendTaskCompletionPage(10, 1, intermediatePage(1, "p1")))
+	s.Positive(budget.Used())
+
+	_, err := s.workflowContext.GetMergedTaskCompletionPages(10, 1, finalPage(2, nil))
+	s.NoError(err)
+	s.Equal(int64(0), budget.Used())
+
+	// And after Clear() of a fresh buffer.
+	s.NoError(s.workflowContext.AppendTaskCompletionPage(10, 1, intermediatePage(0, "p0")))
+	s.Positive(budget.Used())
+	s.workflowContext.Clear()
+	s.Equal(int64(0), budget.Used())
 }

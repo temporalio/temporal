@@ -20,20 +20,20 @@ jobs:
     steps:
       - name: Generate GitHub token
         id: generate-token
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
         with:
           app-id: ${{ secrets.TEMPORAL_CICD_APP_ID }}
           private-key: ${{ secrets.TEMPORAL_CICD_PRIVATE_KEY }}
           owner: temporalio
 
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           ref: main
           token: ${{ steps.generate-token.outputs.token }}
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: go.mod
           cache: true
@@ -42,7 +42,7 @@ jobs:
         run: |
           # NOTE: shard count must match shards in run-tests.yml
           go run ./cmd/tools/optimize-test-sharding \
-            -shards 3 \
+            -shards 5 \
             -workflow run-tests.yml \
             -artifact-pattern 'junit-xml--*shard*--functional-test' \
             -file "${{ env.SALT_FILE }}" \

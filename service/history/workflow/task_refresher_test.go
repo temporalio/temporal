@@ -1434,6 +1434,86 @@ func (s *taskRefresherSuite) TestRefreshSubStateMachineTasks() {
 	s.False(hsmRoot.Dirty())
 }
 
+// TestRefreshTasksForTimeSkipping gates the standby's time-skipping timer re-stamp on
+// TimeSkippingInfo.LastUpdateVersionedTransition. It covers both invariants in one place:
+// regen runs iff a skip happened at/after the watermark (don't miss), and is bounded —
+// it does NOT run when the skip predates the delta or there's no TimeSkippingInfo (don't
+// re-stamp on every unrelated replication delta).
+func (s *taskRefresherSuite) TestRefreshTasksForTimeSkipping() {
+	tsiAt := func(tc int64) *persistencespb.TimeSkippingInfo {
+		return &persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+			LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: common.EmptyVersion,
+				TransitionCount:          tc,
+			},
+		}
+	}
+
+	for _, tc := range []struct {
+		name                   string
+		tsi                    *persistencespb.TimeSkippingInfo
+		minVersionedTransition *persistencespb.VersionedTransition
+		wantRegen              bool
+	}{
+		{
+			// Skip at transition 5, watermark 3 → new to this peer → re-stamp.
+			name:                   "SkipWithinDelta/Regenerates",
+			tsi:                    tsiAt(5),
+			minVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: common.EmptyVersion, TransitionCount: 3},
+			wantRegen:              true,
+		},
+		{
+			// Skip at transition 2, watermark 4 → predates the delta → bounded, no re-stamp.
+			name:                   "SkipBeforeDelta/DoesNotRegenerate",
+			tsi:                    tsiAt(2),
+			minVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: common.EmptyVersion, TransitionCount: 4},
+			wantRegen:              false,
+		},
+		{
+			// Workflow never enabled time-skipping → never re-stamp.
+			name:                   "NoTimeSkippingInfo/DoesNotRegenerate",
+			tsi:                    nil,
+			minVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: common.EmptyVersion, TransitionCount: 4},
+			wantRegen:              false,
+		},
+	} {
+		s.Run(tc.name, func() {
+			mutableState, err := NewMutableStateFromDB(
+				s.mockShard,
+				s.mockShard.GetEventsCache(),
+				log.NewTestLogger(),
+				tests.LocalNamespaceEntry,
+				&persistencespb.WorkflowMutableState{
+					ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+						NamespaceId:      tests.NamespaceID.String(),
+						WorkflowId:       tests.WorkflowID,
+						TimeSkippingInfo: tc.tsi,
+					},
+					ExecutionState: &persistencespb.WorkflowExecutionState{
+						RunId:  tests.RunID,
+						State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+						Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+					},
+					NextEventId: int64(20),
+				},
+				10,
+			)
+			s.NoError(err)
+
+			// Times asserts the bound directly: 0 means the mock fails if regen is called.
+			times := 0
+			if tc.wantRegen {
+				times = 1
+			}
+			s.mockTaskGenerator.EXPECT().RegenerateTimerTasksForTimeSkipping().Return(nil).Times(times)
+
+			err = s.taskRefresher.refreshTasksForTimeSkipping(mutableState, s.mockTaskGenerator, tc.minVersionedTransition)
+			s.NoError(err)
+		})
+	}
+}
+
 type mockTaskGeneratorProvider struct {
 	mockTaskGenerator *MockTaskGenerator
 }

@@ -170,7 +170,7 @@ func dialTestServiceAndGetTLSInfo(
 
 	if err == nil {
 		s.NotNil(reply)
-		s.True(strings.Contains(reply.Message, request.Name))
+		s.Contains(reply.Message, request.Name)
 	}
 
 	_ = clientConn.Close()

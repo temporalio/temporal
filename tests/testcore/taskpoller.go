@@ -545,7 +545,7 @@ func newApplicationFailure(err error, nonRetryable bool, details *commonpb.Paylo
 
 func getErrorType(err error) string {
 	var t reflect.Type
-	for t = reflect.TypeOf(err); t.Kind() == reflect.Ptr; t = t.Elem() {
+	for t = reflect.TypeOf(err); t.Kind() == reflect.Pointer; t = t.Elem() {
 	}
 
 	return t.Name()

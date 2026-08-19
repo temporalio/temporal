@@ -191,12 +191,12 @@ func (s *historyPaginatedFetcherSuite) TestGetSingleWorkflowHistoryIterator() {
 	)
 	s.True(fetcher.HasNext())
 	batch, err := fetcher.Next()
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(blob, batch.RawEventBatch)
 
 	s.True(fetcher.HasNext())
 	batch, err = fetcher.Next()
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(blob, batch.RawEventBatch)
 
 	s.False(fetcher.HasNext())
@@ -248,14 +248,14 @@ func (s *historyPaginatedFetcherSuite) TestGetHistory() {
 		pageSize,
 		false,
 	)
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(token, nextTokenOut)
 	s.Equal(out[0].RawEventBatch.Data, blob)
 }
 
 func (s *historyPaginatedFetcherSuite) serializeEvents(events []*historypb.HistoryEvent) *commonpb.DataBlob {
 	blob, err := s.serializer.SerializeEvents(events)
-	s.Nil(err)
+	s.NoError(err)
 	return &commonpb.DataBlob{
 		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		Data:         blob.Data,

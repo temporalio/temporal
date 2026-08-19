@@ -350,7 +350,11 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 					return nil, chasmErr
 				}
 				err = chasmHandler(chasmCtx, chasmWorkflow, validator, command, handlerOpts)
-				handledByCHASM = !errors.Is(err, chasmworkflow.ErrCommandNotSupported)
+				// Fall back to the HSM handler either when the command type is not supported by CHASM (disabled
+				// feature flag) or when the targeted entity is not owned by the CHASM tree (e.g. an operation
+				// scheduled in HSM before the flag was flipped on).
+				handledByCHASM = !errors.Is(err, chasmworkflow.ErrCommandNotSupported) &&
+					!errors.Is(err, chasmworkflow.ErrCommandTargetNotFound)
 			}
 		}
 		if !handledByCHASM {
@@ -377,6 +381,9 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 
 	if historyEvent != nil && command.UserMetadata != nil {
 		historyEvent.UserMetadata = command.UserMetadata
+	}
+	if historyEvent != nil && len(command.EventGroupMarkers) > 0 {
+		historyEvent.EventGroupMarkers = command.EventGroupMarkers
 	}
 	return response, nil
 }
@@ -467,11 +474,11 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 	// TODO(fairness): remove this again once the SDK allows setting the fairness key
 	const fairnessKeyPrefix = "x-temporal-internal-fairness-key["
 	if after, ok := strings.CutPrefix(attr.GetActivityId(), fairnessKeyPrefix); ok {
-		if endIndex := strings.Index(after, "]"); endIndex != -1 {
-			keyAndWeight := after[:endIndex]
-			if colonIndex := strings.Index(keyAndWeight, ":"); colonIndex != -1 {
-				key := keyAndWeight[:colonIndex]
-				if weight, err := strconv.ParseFloat(keyAndWeight[colonIndex+1:], 32); err == nil {
+		if before, _, ok0 := strings.Cut(after, "]"); ok0 {
+			keyAndWeight := before
+			if before, after0, ok0 := strings.Cut(keyAndWeight, ":"); ok0 {
+				key := before
+				if weight, err := strconv.ParseFloat(after0, 32); err == nil {
 					attr.Priority = cmp.Or(attr.Priority, &commonpb.Priority{})
 					attr.Priority.FairnessKey = key
 					attr.Priority.FairnessWeight = float32(weight)
@@ -586,6 +593,11 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 	buildId := handler.mutableState.GetAssignedBuildId()
 	stamp = &commonpb.WorkerVersionStamp{UseVersioning: buildId != "", BuildId: buildId}
 
+	shardClock, err := handler.shard.NewVectorClock()
+	if err != nil {
+		return nil, err
+	}
+
 	if _, err := handler.mutableState.AddActivityTaskStartedEvent(
 		ai,
 		ai.GetScheduledEventId(),
@@ -595,6 +607,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		nil,
 		nil,
 		handler.workerControlTaskQueue, // Eager: activity runs on the same worker that completed the WFT.
+		shardClock,
 	); err != nil {
 		return nil, err
 	}
@@ -602,11 +615,6 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 	executionInfo := handler.mutableState.GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
 	runID := handler.mutableState.GetExecutionState().RunId
-
-	shardClock, err := handler.shard.NewVectorClock()
-	if err != nil {
-		return nil, err
-	}
 
 	taskToken := tasktoken.NewActivityTaskToken(
 		namespaceID.String(),
@@ -620,6 +628,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		ai.Version,
 		ai.StartVersion,
 		nil,
+		0,
 	)
 	serializedToken, err := handler.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -647,6 +656,13 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		WorkflowType:                handler.mutableState.GetWorkflowType(),
 		WorkflowNamespace:           handler.mutableState.GetNamespaceEntry().Name().String(),
 		Priority:                    ai.Priority,
+		RetryPolicy: &commonpb.RetryPolicy{
+			InitialInterval:        ai.RetryInitialInterval,
+			BackoffCoefficient:     ai.RetryBackoffCoefficient,
+			MaximumInterval:        ai.RetryMaximumInterval,
+			MaximumAttempts:        ai.RetryMaximumAttempts,
+			NonRetryableErrorTypes: ai.RetryNonRetryableErrorTypes,
+		},
 	}
 	metrics.ActivityEagerExecutionCounter.With(
 		workflow.GetPerTaskQueueFamilyScope(handler.metricsHandler, handler.mutableState.GetNamespaceEntry().Name(), ai.TaskQueue, handler.config),
@@ -721,6 +737,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
 					ai.Version,
 					ai.StartVersion,
 					nil,
+					0,
 				))
 				if err != nil {
 					return nil, err
@@ -1120,7 +1137,6 @@ func (handler *workflowTaskCompletedHandler) handleCommandContinueAsNewWorkflow(
 	event, newMutableState, err := handler.mutableState.AddContinueAsNewEvent(
 		ctx,
 		handler.workflowTaskCompletedID,
-		handler.workflowTaskCompletedID,
 		parentNamespace,
 		attr,
 		worker_versioning.GetIsWFTaskQueueInVersionDetector(handler.matchingClient, handler.versionCache),
@@ -1182,6 +1198,11 @@ func (handler *workflowTaskCompletedHandler) handleCommandStartChildWorkflow(
 		},
 	); err != nil || handler.stopProcessing {
 		return nil, err
+	}
+
+	// Structural validation for VersioningOverride present on Start Child Workflow
+	if err := worker_versioning.ValidateVersioningOverrideStructure(attr.GetVersioningOverride()); err != nil {
+		return nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES, err)
 	}
 
 	if handler.mutableState.GetAssignedBuildId() == "" {

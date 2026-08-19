@@ -12,6 +12,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -140,9 +141,84 @@ func TestLegacyToCreateFromMigrationStateRequest(t *testing.T) {
 	require.Equal(t, []byte("result"), migrationState.LastCompletionResult.Success.Data)
 	require.Equal(t, "last failure", migrationState.LastCompletionResult.Failure.Message)
 
-	// Search attributes and memo
+	// Search attributes and memo: user-defined SAs are preserved as-is.
 	require.Equal(t, searchAttrs.GetIndexedFields(), migrationState.SearchAttributes)
 	require.Equal(t, memo.GetFields(), migrationState.Memo)
+}
+
+func TestLegacyToCreateFromMigrationStateRequest_StripsSystemSearchAttributes(t *testing.T) {
+	// V1 scheduler workflows carry TemporalNamespaceDivision ('TemporalScheduler')
+	// and TemporalSchedulePaused in their search attributes. Both are system SAs
+	// that the CHASM framework manages independently, so they must not be stored in
+	// the CHASM entity's custom SA map. Storing them there causes a spurious
+	// warn-level log when the custom SA mapper finds no per-namespace mapping for them.
+	userSA := &commonpb.Payload{Data: []byte(`"my-value"`)}
+
+	tests := []struct {
+		name        string
+		searchAttrs *commonpb.SearchAttributes
+		wantKeys    []string
+		absentKeys  []string
+	}{
+		{
+			name:        "nil search attributes",
+			searchAttrs: nil,
+		},
+		{
+			name:        "empty IndexedFields",
+			searchAttrs: &commonpb.SearchAttributes{},
+		},
+		{
+			name: "only system SAs — all stripped",
+			searchAttrs: &commonpb.SearchAttributes{
+				IndexedFields: map[string]*commonpb.Payload{
+					sadefs.TemporalNamespaceDivision: {Data: []byte(`"TemporalScheduler"`)},
+					sadefs.TemporalSchedulePaused:    {Data: []byte(`false`)},
+				},
+			},
+			absentKeys: []string{sadefs.TemporalNamespaceDivision, sadefs.TemporalSchedulePaused},
+		},
+		{
+			name: "user SA preserved, system SAs stripped",
+			searchAttrs: &commonpb.SearchAttributes{
+				IndexedFields: map[string]*commonpb.Payload{
+					sadefs.TemporalNamespaceDivision: {Data: []byte(`"TemporalScheduler"`)},
+					sadefs.TemporalSchedulePaused:    {Data: []byte(`false`)},
+					"MyCustomAttr":                   userSA,
+				},
+			},
+			wantKeys:   []string{"MyCustomAttr"},
+			absentKeys: []string{sadefs.TemporalNamespaceDivision, sadefs.TemporalSchedulePaused},
+		},
+		{
+			name: "only user SAs — all preserved",
+			searchAttrs: &commonpb.SearchAttributes{
+				IndexedFields: map[string]*commonpb.Payload{"MyCustomAttr": userSA},
+			},
+			wantKeys: []string{"MyCustomAttr"},
+		},
+	}
+
+	now := time.Now().UTC()
+	state := &schedulespb.InternalState{
+		Namespace:   "test-ns",
+		NamespaceId: "test-ns-id",
+		ScheduleId:  "test-sched-id",
+	}
+	info := &schedulepb.ScheduleInfo{}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := LegacyToCreateFromMigrationStateRequest(newTestSchedule(), info, state, tc.searchAttrs, nil, now)
+			got := req.State.SearchAttributes
+			for _, k := range tc.wantKeys {
+				require.Contains(t, got, k)
+			}
+			for _, k := range tc.absentKeys {
+				require.NotContains(t, got, k)
+			}
+		})
+	}
 }
 
 func TestCHASMToLegacyStartScheduleArgs(t *testing.T) {
@@ -239,6 +315,86 @@ func TestCHASMToLegacyStartScheduleArgs(t *testing.T) {
 		}
 	}
 	require.True(t, triggerFound)
+}
+
+func TestCHASMToLegacyStartScheduleArgs_ExcludesAllowAllFromRunningWorkflows(t *testing.T) {
+	// Regression test: workflows started under ALLOW_ALL are tracked in V2 as
+	// BufferedStarts with a RunId (and no Completed) while they run. Modern V1
+	// (version >= DontTrackOverlapping) intentionally keeps ALLOW_ALL runs out
+	// of Info.RunningWorkflows, because they don't participate in overlap
+	// resolution (see recordAction in the V1 scheduler workflow). The V2->V1
+	// migration must therefore not export them into RunningWorkflows: doing so
+	// would make a rolled-back schedule treat itself as busy and mis-apply
+	// SKIP/BUFFER/CANCEL/TERMINATE to later, non-ALLOW_ALL starts. The ALLOW_ALL
+	// runs must still appear in RecentActions, matching V1.
+	now := time.Now().UTC()
+	scheduler := &schedulerpb.SchedulerState{
+		Namespace:     "test-ns",
+		NamespaceId:   "test-ns-id",
+		ScheduleId:    "test-sched-id",
+		ConflictToken: 1,
+		Schedule:      newTestSchedule(),
+		Info:          &schedulepb.ScheduleInfo{},
+	}
+	invoker := &schedulerpb.InvokerState{
+		BufferedStarts: []*schedulespb.BufferedStart{
+			{
+				// Running, started under ALLOW_ALL: excluded from RunningWorkflows,
+				// but present in RecentActions.
+				NominalTime:   timestamppb.New(now.Add(-5 * time.Minute)),
+				ActualTime:    timestamppb.New(now.Add(-5 * time.Minute)),
+				StartTime:     timestamppb.New(now.Add(-5 * time.Minute)),
+				WorkflowId:    "wf-allow-all",
+				RunId:         "run-allow-all",
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			},
+			{
+				// Running, non-ALLOW_ALL: tracked in RunningWorkflows, as in V1.
+				NominalTime:   timestamppb.New(now.Add(-3 * time.Minute)),
+				ActualTime:    timestamppb.New(now.Add(-3 * time.Minute)),
+				StartTime:     timestamppb.New(now.Add(-3 * time.Minute)),
+				WorkflowId:    "wf-skip",
+				RunId:         "run-skip",
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+			},
+			{
+				// Completed ALLOW_ALL: a recent action only, never running.
+				NominalTime:   timestamppb.New(now.Add(-20 * time.Minute)),
+				ActualTime:    timestamppb.New(now.Add(-20 * time.Minute)),
+				StartTime:     timestamppb.New(now.Add(-20 * time.Minute)),
+				WorkflowId:    "wf-allow-all-done",
+				RunId:         "run-allow-all-done",
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+				Completed: &schedulespb.CompletedResult{
+					Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+					CloseTime: timestamppb.New(now.Add(-15 * time.Minute)),
+				},
+			},
+		},
+	}
+
+	args := CHASMToLegacyStartScheduleArgs(scheduler, nil, invoker, nil, nil, nil, nil, now)
+
+	// Only the non-ALLOW_ALL running workflow is exported to RunningWorkflows.
+	require.Len(t, args.Info.RunningWorkflows, 1,
+		"ALLOW_ALL run must not be exported to RunningWorkflows")
+	require.Equal(t, "wf-skip", args.Info.RunningWorkflows[0].WorkflowId)
+	require.Equal(t, "run-skip", args.Info.RunningWorkflows[0].RunId)
+
+	// All three started executions still appear in RecentActions, matching V1,
+	// which records every action regardless of overlap policy.
+	recentStatusByRunID := make(map[string]enumspb.WorkflowExecutionStatus, len(args.Info.RecentActions))
+	for _, action := range args.Info.RecentActions {
+		recentStatusByRunID[action.GetStartWorkflowResult().GetRunId()] = action.GetStartWorkflowStatus()
+	}
+	require.Len(t, args.Info.RecentActions, 3)
+	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, recentStatusByRunID["run-allow-all"],
+		"running ALLOW_ALL execution should still be recorded in RecentActions as RUNNING")
+	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, recentStatusByRunID["run-skip"])
+	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, recentStatusByRunID["run-allow-all-done"])
+
+	// NeedRefresh mirrors the (correctly reduced) running set.
+	require.True(t, args.State.NeedRefresh)
 }
 
 func TestLegacyToCreateFromMigrationStateRequest_DeduplicatesRunningWorkflows(t *testing.T) {

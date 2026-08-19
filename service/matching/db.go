@@ -3,12 +3,14 @@ package matching
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"slices"
 	"sync"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
@@ -45,6 +47,7 @@ type (
 		rangeID       int64
 		subqueues     []*dbSubqueue
 		otherHasTasks bool
+		scaleState    *persistencespb.PartitionScaleState
 
 		// used to avoid unnecessary metadata writes:
 		lastChange time.Time // updated when metadata is changed in memory
@@ -62,6 +65,7 @@ type (
 		ackLevel      int64 // TODO(pri): old matcher cleanup, delete later
 		subqueues     []persistencespb.SubqueueInfo
 		otherHasTasks bool
+		scaleState    *persistencespb.PartitionScaleState
 	}
 
 	subqueueIndex int
@@ -165,6 +169,7 @@ func (db *taskQueueDB) RenewLease(
 		ackLevel:      db.subqueues[subqueueZero].AckLevel, // TODO(pri): cleanup, only used by old backlog manager
 		subqueues:     db.cloneSubqueues(),
 		otherHasTasks: !db.isDraining && db.otherHasTasks,
+		scaleState:    db.scaleState,
 	}, nil
 }
 
@@ -187,6 +192,7 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 			response.TaskQueueInfo.AckLevel,
 			response.TaskQueueInfo.ApproximateBacklogCount,
 		)
+		db.scaleState = response.TaskQueueInfo.PartitionScaleState
 		err := db.updateTaskQueueLocked(ctx, true)
 		if err != nil {
 			db.rangeID = 0
@@ -338,6 +344,10 @@ func (db *taskQueueDB) updateAckLevelAndBacklogStats(subqueue subqueueIndex, new
 			tag.Int("subqueue-id", int(subqueue)),
 			tag.Any("cur-ack-level", dbQueue.AckLevel),
 			tag.Any("new-ack-level", newAckLevel))
+		// This shouldn't happen, but if it does: keep the max so that we don't re-read tasks
+		// that we already acked. This also keeps the maxReadLevel comparison consistent with
+		// what is persisted (dbQueue.AckLevel).
+		newAckLevel = dbQueue.AckLevel
 	}
 	if dbQueue.AckLevel != newAckLevel {
 		db.lastChange = time.Now()
@@ -410,6 +420,7 @@ func (db *taskQueueDB) updateBacklogStatsLocked(subqueue subqueueIndex, countDel
 	count := &db.subqueues[subqueue].ApproximateBacklogCount
 	if *count+countDelta < 0 {
 		db.logger.Info("ApproximateBacklogCount could have under-counted.",
+			tag.Int("subqueue-id", int(subqueue)),
 			tag.WorkerVersion(db.queue.Version().MetricsTagValue()),
 			tag.WorkflowNamespaceID(db.queue.Partition().NamespaceId()))
 		*count = 0
@@ -492,6 +503,19 @@ func (db *taskQueueDB) SetOtherHasTasks(ctx context.Context, value bool) error {
 	return db.updateTaskQueueLocked(ctx, false)
 }
 
+// UpdateScaleState sets the partition scale state (in memory). If syncToDB is true, it also tries to persist it to the DB.
+// If syncToDB is false, ctx is not used.
+func (db *taskQueueDB) UpdateScaleState(ctx context.Context, scaleState *persistencespb.PartitionScaleState, syncToDB bool) error {
+	db.Lock()
+	defer db.Unlock()
+	db.scaleState = scaleState
+	db.lastChange = time.Now()
+	if syncToDB {
+		return db.updateTaskQueueLocked(ctx, false)
+	}
+	return nil
+}
+
 // CreateTasks creates a batch of given tasks for this task queue
 func (db *taskQueueDB) CreateTasks(
 	ctx context.Context,
@@ -563,7 +587,7 @@ func (db *taskQueueDB) CreateTasks(
 		} else {
 			db.lastChange = time.Now()
 		}
-	} else if _, ok := err.(*persistence.ConditionFailedError); ok {
+	} else if writeDefinitelyFailed(err) {
 		// tasks definitely were not created, restore the counter. For other errors tasks may or may not be created.
 		// In those cases we keep the count incremented, hence it may be an overestimate.
 		for i, update := range updates {
@@ -639,7 +663,7 @@ func (db *taskQueueDB) CreateFairTasks(
 		} else {
 			db.lastChange = time.Now()
 		}
-	} else if _, ok := err.(*persistence.ConditionFailedError); ok {
+	} else if writeDefinitelyFailed(err) {
 		// Tasks definitely were not created, restore the counter. For other errors tasks may or may not be created.
 		// In those cases we keep the count incremented, hence it may be an overestimate.
 		// Don't bother restoring MaxReadLevel, it's okay if that's too high.
@@ -648,6 +672,28 @@ func (db *taskQueueDB) CreateFairTasks(
 		}
 	}
 	return newTasks, err
+}
+
+// writeDefinitelyFailed returns whether an error from a CreateTasks call indicates the tasks
+// were definitely not persisted, so that we can safely un-increment ApproximateBacklogCount.
+// We have to be conservative: for most errors (e.g. Unavailable) the write may or may not have
+// reached the database, so we leave the count incremented and accept a possible overestimate.
+// Only errors that reject the write before it reaches the database qualify:
+//   - ConditionFailedError: the range ID LWT failed, so the batch was rejected.
+//   - ResourceExhausted with a persistence rate-limit or concurrent-limit cause: dropped by
+//     the persistence rate limiter (see persistence.ErrPersistence*LimitExceeded).
+func writeDefinitelyFailed(err error) bool {
+	if _, ok := err.(*persistence.ConditionFailedError); ok {
+		return true
+	}
+	if re, ok := errors.AsType[*serviceerror.ResourceExhausted](err); ok {
+		switch re.Cause { // nolint:exhaustive
+		case enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT,
+			enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT:
+			return true
+		}
+	}
+	return false
 }
 
 // GetTasks returns a batch of tasks between the given range
@@ -710,6 +756,7 @@ func (db *taskQueueDB) CompleteTasksLessThan(
 		db.logger.Error("Persistent store operation failure",
 			tag.StoreOperationCompleteTasksLessThan,
 			tag.Error(err),
+			tag.Int("subqueue-id", int(subqueue)),
 			tag.TaskID(exclusiveMaxTaskID),
 			tag.WorkflowTaskQueueType(db.queue.TaskType()),
 			tag.WorkflowTaskQueueName(db.queue.PersistenceName()),
@@ -740,6 +787,7 @@ func (db *taskQueueDB) CompleteFairTasksLessThan(
 		db.logger.Error("Persistent store operation failure",
 			tag.StoreOperationCompleteTasksLessThan,
 			tag.Error(err),
+			tag.Int("subqueue-id", int(subqueue)),
 			tag.AckLevel(exclusiveMaxLevel),
 			tag.WorkflowTaskQueueType(db.queue.TaskType()),
 			tag.WorkflowTaskQueueName(db.queue.PersistenceName()),
@@ -795,6 +843,7 @@ func (db *taskQueueDB) cachedQueueInfo() *persistencespb.TaskQueueInfo {
 		ApproximateBacklogCount: db.subqueues[subqueueZero].ApproximateBacklogCount, // backwards compatibility
 		Subqueues:               infos,
 		OtherHasTasks:           db.otherHasTasks,
+		PartitionScaleState:     db.scaleState,
 	}
 }
 

@@ -66,7 +66,7 @@ func (tb *UpdateSchemaTestBase) RunDryrunTest(app *cli.App, db DB, dbNameFlag st
 	}...)
 	tb.NoError(app.Run(command))
 	ver, err := db.ReadSchemaVersion()
-	tb.Nil(err)
+	tb.NoError(err)
 	// update the version to the latest
 	tb.Logger.Info(ver)
 	tb.Equal(endVersion, ver)
@@ -100,12 +100,12 @@ func (tb *UpdateSchemaTestBase) RunUpdateSchemaTest(app *cli.App, db DB, dbNameF
 	expected["namespaces"] = struct{}{}
 
 	ver, err := db.ReadSchemaVersion()
-	tb.Nil(err)
+	tb.NoError(err)
 	tb.Equal("2.0", ver)
 
 	tables, err := db.ListTables()
-	tb.Nil(err)
-	tb.Equal(len(expected), len(tables))
+	tb.NoError(err)
+	tb.Len(tables, len(expected))
 
 	for _, t := range tables {
 		_, ok := expected[t]
@@ -113,7 +113,7 @@ func (tb *UpdateSchemaTestBase) RunUpdateSchemaTest(app *cli.App, db DB, dbNameF
 		delete(expected, t)
 	}
 
-	tb.Equal(0, len(expected))
+	tb.Empty(expected)
 	tb.NoError(db.DropAllTables())
 }
 
@@ -128,9 +128,9 @@ func (tb *UpdateSchemaTestBase) makeSchemaVersionDirs(rootDir string, sqlFileCon
 	dir := rootDir + "/v1.0"
 	tb.NoError(os.Mkdir(rootDir+"/v1.0", os.FileMode(0700)))
 	err := os.WriteFile(dir+"/manifest.json", []byte(mData), os.FileMode(0600))
-	tb.Nil(err)
+	tb.NoError(err)
 	err = os.WriteFile(dir+"/base.sql", []byte(sqlFileContent), os.FileMode(0600))
-	tb.Nil(err)
+	tb.NoError(err)
 
 	mData = `{
 		"CurrVersion": "2.0",
@@ -147,9 +147,9 @@ func (tb *UpdateSchemaTestBase) makeSchemaVersionDirs(rootDir string, sqlFileCon
 	dir = rootDir + "/v2.0"
 	tb.NoError(os.Mkdir(rootDir+"/v2.0", os.FileMode(0700)))
 	err = os.WriteFile(dir+"/manifest.json", []byte(mData), os.FileMode(0600))
-	tb.Nil(err)
+	tb.NoError(err)
 	err = os.WriteFile(dir+"/namespace.cql", []byte(namespace), os.FileMode(0600))
-	tb.Nil(err)
+	tb.NoError(err)
 }
 
 func (tb *UpdateSchemaTestBase) getCommandBase() []string {

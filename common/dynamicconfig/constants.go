@@ -7,6 +7,7 @@ import (
 
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/common/debug"
+	"go.temporal.io/server/common/health"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/util"
@@ -130,11 +131,6 @@ for signal / start / signal with start API if namespace is not active`,
 		false,
 		`ForceNamespaceSelectedAPIAutoForwarding forces selective (whitelist) API forwarding for the namespace when true, overriding all-apis-forwarding policy for that namespace`,
 	)
-	EnableNamespaceHandoverWait = NewNamespaceBoolSetting(
-		"system.enableNamespaceHandoverWait",
-		false,
-		`EnableNamespaceHandoverWait whether waiting for namespace replication state update before serve the request`,
-	)
 	TransactionSizeLimit = NewGlobalIntSetting(
 		"system.transactionSizeLimit",
 		primitives.DefaultTransactionSizeLimit,
@@ -154,6 +150,15 @@ for signal / start / signal with start API if namespace is not active`,
 		"system.disableStreamingAuthorizer",
 		false,
 		`DisableStreamingAuthorizer is the key to disable the auth on streaming endpoint`,
+	)
+	RetryUnboundedOnSystemResourceExhausted = NewGlobalBoolSetting(
+		"system.retryUnboundedOnSystemResourceExhausted",
+		false,
+		`RetryUnboundedOnSystemResourceExhausted controls retry behavior of inter-service
+calls (frontend, CHASM, etc.) to history and matching on system-scoped ResourceExhausted
+errors. When false (the default), these calls follow the standard 2-attempt cap. When
+true, they ignore the attempt cap and keep retrying for up to the policy's expiration
+interval (1 minute) or until the caller's context is cancelled, whichever comes first.`,
 	)
 	ClusterMetadataRefreshInterval = NewGlobalDurationSetting(
 		"system.clusterMetadataRefreshInterval",
@@ -197,10 +202,10 @@ in the consistent hash ring used by ringpop. Changing it may cause service disru
 	)
 	EnableActivityEagerExecution = NewNamespaceBoolSetting(
 		"system.enableActivityEagerExecution",
-		false,
+		true,
 		`EnableActivityEagerExecution indicates if activity eager execution is enabled per namespace`,
 	)
-	EnableCancelActivityWorkerCommand = NewGlobalBoolSetting(
+	EnableCancelActivityWorkerCommand = NewNamespaceBoolSetting(
 		"system.enableCancelActivityWorkerCommand",
 		false,
 		`EnableCancelActivityWorkerCommand enables pushing activity cancellation to workers via Nexus worker commands`,
@@ -241,10 +246,56 @@ response to a StartWorkflowExecution request and skipping the trip through match
 		true,
 		`HistoryHealthSignalMetricsEnabled determines whether history service RPC metrics are emitted`,
 	)
+	HistoryHealthSignalLatencyWindowCount = NewGlobalIntSetting(
+		"system.historyHealthSignalLatencyWindowCount",
+		10,
+		`historyHealthSignalLatencyWindowCount is the number of signal windows to compute latencies over`,
+	)
+	HistoryHealthSignalLatencyWindowSize = NewGlobalDurationSetting(
+		"system.historyHealthSignalLatencyWindowSize",
+		5*time.Second,
+		`historyHealthSignalLatencyWindowSize is the time window size in seconds for aggregating latencies`,
+	)
+	HistoryHealthSignalPercentileLatencySettings = NewGlobalTypedSetting(
+		"system.historyHealthSignalPercentileLatencySettings",
+		LatencyHealthChecksPerPercentile{},
+		"historyHealthSignalPercentileLatencySettings controls what latency health checks are enabled and enforced for the history system",
+	)
+	HealthCheckHistoryGRPCSettings = NewGlobalTypedSetting(
+		"system.healthCheckHistoryGRPCSettings",
+		health.Settings{},
+		"controls history gRPC latency and error-ratio health check thresholds: an overall bucket across all endpoints plus optional named endpoint groups; empty disables the group checks",
+	)
+	// TODO: This should be removed once percentiles are the default.
+	HistoryHealthSignalUsePercentiles = NewGlobalBoolSetting(
+		"system.historyHealthSignalUsePercentiles",
+		false,
+		`historyHealthSignalUsePercentiles controls whether we use the p99 latency for health checking instead of the mean latency`,
+	)
 	PersistenceHealthSignalAggregationEnabled = NewGlobalBoolSetting(
 		"system.persistenceHealthSignalAggregationEnabled",
 		true,
 		`PersistenceHealthSignalAggregationEnabled determines whether persistence latency and error averages are tracked`,
+	)
+	PersistenceHealthSignalPercentilesEnabled = NewGlobalBoolSetting(
+		"system.persistenceHealthSignalPercentilesEnabled",
+		false,
+		`PersistenceHealthSignalPercentilesEnabled determines whether persistence latency is tracked using distribution objects`,
+	)
+	PersistenceHealthSignalLatencyWindowCount = NewGlobalIntSetting(
+		"system.persistenceHealthSignalLatencyWindowCount",
+		10,
+		`PersistenceHealthSignalLatencyWindowCount is the number of signal windows to compute latencies over`,
+	)
+	PersistenceHealthSignalLatencyWindowSize = NewGlobalDurationSetting(
+		"system.persistenceHealthSignalLatencyWindowSize",
+		5*time.Second,
+		`PersistenceHealthSignalLatencyWindowSize is the time window size in seconds for aggregating latencies`,
+	)
+	PersistenceHealthSignalPercentileLatencySettings = NewGlobalTypedSetting(
+		"system.persistenceHealthSignalPercentileLatencySettings",
+		LatencyHealthChecksPerPercentile{},
+		"persistenceHealthSignalPercentileLatencySettings controls what latency health checks are enabled and enforced for the persistence system",
 	)
 	PersistenceHealthSignalWindowSize = NewGlobalDurationSetting(
 		"system.persistenceHealthSignalWindowSize",
@@ -604,11 +655,26 @@ is currently processing a task.
 		`BuildIdScavengerVisibilityRPS is the rate limit for visibility calls from the build id scavenger`,
 	)
 
+	ScheduleInvariantsScannerOptions = NewGlobalTypedSetting(
+		"worker.scheduleInvariantsScannerOptions",
+		DefaultScheduleInvariantsScannerParams,
+		`ScheduleInvariantsScannerOptions configures the schedule-invariants scanners.
+Fields: OverdueNextActionTimeEnabled, StuckOpenEnabled, UnknownStateEnabled (per-invariant
+toggles, all default false), OverdueNextActionTimeTolerance, OverdueNextActionTimeMaxChecksPerNamespace,
+VisibilityRPS, ScanInterval, and StuckOpenIdleTimeBufferMultiplier. See
+ScheduleInvariantsScannerParams comments for details.`,
+	)
+
 	// keys for frontend
 	FrontendAllowedExperiments = NewNamespaceTypedSetting(
 		"frontend.allowedExperiments",
 		[]string(nil),
 		`FrontendAllowedExperiments is a list of experiment names that can be enabled via the temporal-experiment header for a specific namespace.`,
+	)
+	FrontendDisabledScheduleValidations = NewNamespaceTypedSetting(
+		"frontend.disabledScheduleValidations",
+		[]string(nil),
+		`FrontendDisabledScheduleValidations is a list of schedule validation names that should log and continue instead of rejecting the request for a specific namespace. Valid values: versioning-override, scheduler-duration.`,
 	)
 	FrontendHTTPAllowedHosts = NewGlobalTypedSettingWithConverter(
 		"frontend.httpAllowedHosts",
@@ -687,6 +753,11 @@ used here will be the effective RPS from global and per-instance limits. The val
 		"frontend.globalNamespaceWorkerDeploymentReadRPS",
 		50,
 		`FrontendGlobalWorkerDeploymentReadRPS is the global, per-namespace rate limit for Worker Deployment Read APIs (DescribeWorkerDeployment, DescribeWorkerDeploymentVersion). The limit is evenly distributed among available frontend service instances.`,
+	)
+	FrontendGlobalWorkerDeploymentReadBurstRatio = NewNamespaceFloatSetting(
+		"frontend.globalNamespaceWorkerDeploymentReadBurstRatio",
+		10,
+		`FrontendGlobalWorkerDeploymentReadBurstRatio is the burst limit for Worker Deployment Read APIs (DescribeWorkerDeployment, DescribeWorkerDeploymentVersion) as a ratio of FrontendGlobalWorkerDeploymentReadRPS. The RPS used here is the effective per-instance RPS after distributing the global limit among available frontend service instances. The value must be 1 or higher.`,
 	)
 	FrontendMaxConcurrentLongRunningRequestsPerInstance = NewNamespaceIntSetting(
 		"frontend.namespaceCount",
@@ -799,6 +870,11 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		"frontend.maskInternalErrorDetails",
 		true,
 		`MaskInternalOrUnknownErrors is whether to replace internal/unknown errors with default error`,
+	)
+	FrontendContextMetadataSetTrailer = NewGlobalBoolSetting(
+		"frontend.contextMetadataSetTrailer",
+		false,
+		`FrontendContextMetadataSetTrailer controls whether frontend gRPC handlers emit context metadata in response trailers. This is read when constructing the frontend ContextMetadataInterceptor.`,
 	)
 	HistoryHostErrorPercentage = NewGlobalFloatSetting(
 		"frontend.historyHostErrorPercentage",
@@ -1019,6 +1095,11 @@ so forwarding by endpoint ID will not work out of the box.`,
 		32,
 		`MaxCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow.`,
 	)
+	MaxCallbacksPerUpdateID = NewNamespaceIntSetting(
+		"system.maxCallbacksPerUpdateID",
+		32,
+		`MaxCallbacksPerUpdateID is the maximum number of callbacks that can be attached to a single update ID.`,
+	)
 	FrontendLinkMaxSize = NewNamespaceIntSetting(
 		"frontend.linkMaxSize",
 		4000, // Links may include a workflow ID and namespace name, both of which are limited to a length of 1000.
@@ -1028,6 +1109,11 @@ so forwarding by endpoint ID will not work out of the box.`,
 		"frontend.maxlinksPerRequest",
 		10,
 		`Maximum number of links allowed to be attached via a single API request.`,
+	)
+	MaxLinksPerComponent = NewNamespaceIntSetting(
+		"chasm.maxLinksPerComponent",
+		2000,
+		`MaxLinksPerComponent is the maximum number of links that can be attached to a single CHASM component (e.g. a standalone activity or standalone Nexus operation) across all start/attach calls.`,
 	)
 	FrontendMaxConcurrentBatchOperationPerNamespace = NewNamespaceIntSetting(
 		"frontend.MaxConcurrentBatchOperationPerNamespace",
@@ -1048,6 +1134,11 @@ so forwarding by endpoint ID will not work out of the box.`,
 		"frontend.MaxConcurrentAdminBatchOperationPerNamespace",
 		1,
 		`FrontendMaxConcurrentAdminBatchOperationPerNamespace is the max concurrent admin batch operation job count per namespace`,
+	)
+	FrontendEnableBatchOperationsForStandaloneActivities = NewNamespaceBoolSetting(
+		"frontend.enableBatchOperationsForStandaloneActivities",
+		false,
+		`FrontendEnableBatchOperationsForStandaloneActivities controls whether the frontend accepts the batch cancel, terminate, and delete standalone activity operation fields`,
 	)
 
 	FrontendEnableUpdateWorkflowExecution = NewNamespaceBoolSetting(
@@ -1077,6 +1168,15 @@ to allow waiting on the "Accepted" lifecycle stage.`,
 		"frontend.workerVersioningRuleAPIs",
 		false,
 		`FrontendEnableWorkerVersioningRuleAPIs enables worker versioning in workflow progress APIs.`,
+	)
+
+	DeleteNamespaceUseChasmDeleteExecution = NewGlobalBoolSetting(
+		"frontend.deleteNamespaceUseChasmDeleteExecution",
+		false,
+		`DeleteNamespaceUseChasmDeleteExecution controls whether the delete namespace workflow uses the
+DeleteExecution history service API (CHASM engine path) for non-workflow CHASM executions, instead
+of ForceDeleteWorkflowExecution. Only enable after all history and worker services have been upgraded
+to a version that supports the DeleteExecution API.`,
 	)
 
 	DeleteNamespaceDeleteActivityRPS = NewGlobalIntSetting(
@@ -1356,6 +1456,11 @@ duration since last poll exceeds this threshold.`,
 		20*time.Second,
 		`QueryPollerUnavailableWindow WF Queries are rejected after a while if no poller has been seen within the window`,
 	)
+	WorkerControllerNoPollerHookWindow = NewGlobalDurationSetting(
+		"matching.workerControllerNoPollerHookWindow",
+		5*time.Second,
+		`WorkerControllerNoPollerHookWindow controls how recently a worker must have polled before skipping the WCI scale-up signal on an incoming query or Nexus task dispatch`,
+	)
 	MatchingEmitTaskDispatchLatencyAtPoll = NewTaskQueueBoolSetting(
 		"matching.emitTaskDispatchLatencyAtPoll",
 		true,
@@ -1393,6 +1498,15 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		"matching.deploymentWorkflowVersion",
 		2,
 		`MatchingDeploymentWorkflowVersion controls what version of the logic should the manager workflows use.`,
+	)
+	// Enabling this without caution might leave old Deployment Versions in a bad state.
+	// Version workflows started before the demote-version signal handler was introduced do not register
+	// it until they Continue-As-New. A demotion signal sent before then is ignored, leaving the version
+	// stuck in Draining and requiring manual intervention to fix the workflow.
+	MatchingEnableWorkerDeploymentVersionDemotionSignal = NewGlobalBoolSetting(
+		"matching.enableWorkerDeploymentVersionDemotionSignal",
+		false,
+		`MatchingEnableWorkerDeploymentVersionDemotionSignal enables the new signal-based implementation for propagating Worker Deployment Version demotions. When disabled, the existing update-based implementation is used.`,
 	)
 	MatchingMaxTaskQueuesInDeployment = NewNamespaceIntSetting(
 		"matching.maxTaskQueuesInDeployment",
@@ -1438,6 +1552,19 @@ a decision to scale down the number of pollers will be issued`,
 		`MatchingPollerScalingDecisionsPerSecond is the maximum number of scaling decisions that will be issued per
 second per poller by one physical queue manager`,
 	)
+	MatchingPollerScalingTaskAddToDispatchRatio = NewTaskQueueFloatSetting(
+		"matching.pollerScalingTaskAddToDispatchRatio",
+		1.2,
+		`MatchingPollerScalingTaskAddToDispatchRatio is the ratio of task add rate to task
+dispatch rate above which a decision to scale up the number of pollers will be issued`,
+	)
+	MatchingEnablePollerScalingDecisionMetrics = NewTaskQueueBoolSetting(
+		"matching.enablePollerScalingDecisionMetrics",
+		false,
+		`MatchingEnablePollerScalingDecisionMetrics, when enabled, causes matching to emit the poller_scale_decision
+metric describing why pollers are scaled up, down, or held for a physical task queue. This is opt-in and can be
+scoped by namespace and/or task queue.`,
+	)
 	MatchingUseNewMatcher = NewTaskQueueTypedSettingWithConverter(
 		"matching.useNewMatcher",
 		ConvertGradualChange(true),
@@ -1449,11 +1576,6 @@ second per poller by one physical queue manager`,
 		ConvertGradualChange(false),
 		StaticGradualChange(false),
 		`Enable fairness for task dispatching. Implies matching.useNewMatcher.`,
-	)
-	MatchingEnableMigration = NewTaskQueueBoolSetting(
-		"matching.enableMigration",
-		true,
-		`Allows migration between v1 and v2 (fairness) task backlogs.`,
 	)
 	MatchingPriorityLevels = NewTaskQueueIntSetting(
 		"matching.priorityLevels",
@@ -1474,6 +1596,14 @@ second per poller by one physical queue manager`,
 		"matching.fairnessCounter",
 		counter.DefaultCounterParams,
 		`Configuration for counter used in matching fairness.`,
+	)
+	MatchingFairnessPassDither = NewTaskQueueBoolSetting(
+		"matching.fairnessPassDither",
+		false,
+		`When true, dither the starting pass of new/reset fairness keys over their initial
+stride instead of starting them all at the ack level. This spreads low-weight keys ahead
+in pass-space so they don't clump at the front after a counter reset (e.g. partition
+movement), at the cost of cross-key FIFO ordering for bursts of equal-weight new keys.`,
 	)
 	MatchingFairnessKeyRateLimitCacheSize = NewTaskQueueIntSetting(
 		"matching.fairnessKeyRateLimitCacheSize",
@@ -1503,6 +1633,33 @@ default as namespace cardinality can be high and this requires a metrics collect
 		"matching.autoEnableV2",
 		false,
 		`MatchingAutoEnableV2 automatically enables fairness when a fairness or priority key is seen`,
+	)
+	MatchingPartitionScaleAllowedDrift = NewTaskQueueTypedSetting(
+		"matching.partitionScaleAllowedDrift",
+		PartitionScaleAllowedDrift{
+			Delta: 1,
+			Ratio: 1.5,
+		},
+		`How far off client partition scale values have to be to reject RPCs.`,
+	)
+	MatchingPartitionScaleManager = NewTaskQueueTypedSetting(
+		"matching.partitionScaleManager",
+		PartitionScaleManagerSettings{
+			MaxRate:               0.33,
+			ShrinkRatio:           0.1,
+			ShrinkDelta:           8,
+			BatchSize:             100,
+			BackgroundInterval:    23 * time.Second,
+			DrainBufferTime:       15 * time.Second,
+			ShadowModeLogInterval: 0,
+		},
+		`Settings for partition scale manager.`,
+	)
+	MatchingPartitionScaler = NewTaskQueueTypedSettingWithConverter(
+		"matching.partitionScaler",
+		ConvertSimplePartitionScalerSettings,
+		SimplePartitionScalerSettings{},
+		`Settings for simple partition scaler.`,
 	)
 
 	// Worker registry settings
@@ -1546,6 +1703,12 @@ to remove expired entries. Should be shorter than EntryTTL for timely cleanup. L
 Don't change this on a live cluster without using the gradual change mechanism.
 `,
 	)
+	MatchingConnectionCloseDelay = NewGlobalDurationSetting(
+		"matching.connectionCloseDelay",
+		30*time.Second,
+		`MatchingConnectionCloseDelay delays closing a cached matching client connection after its host
+leaves the membership ring, giving in-flight long-polls time to drain before the connection is closed.`,
+	)
 
 	// keys for history
 
@@ -1553,6 +1716,11 @@ Don't change this on a live cluster without using the gradual change mechanism.
 		"history.enableReplicationStream",
 		true,
 		`EnableReplicationStream turn on replication stream`,
+	)
+	EmitReplicationLifecycleEvents = NewGlobalBoolSetting(
+		"history.emitReplicationLifecycleEvents",
+		false,
+		`EmitReplicationLifecycleEvents controls whether the history service emits ReplicationLifecycle wide events (sent/executing/applied phases). Cluster-level; default off.`,
 	)
 	EnableCloseInboundReplicationStreamOnShutdown = NewGlobalBoolSetting(
 		"history.enableCloseInboundReplicationStreamOnShutdown",
@@ -1571,13 +1739,6 @@ Don't change this on a live cluster without using the gradual change mechanism.
 [go.temporal.io/server/common/persistence.QueueV2]`,
 	)
 
-	EnableDeleteWorkflowExecutionReplication = NewGlobalBoolSetting(
-		"history.enableDeleteWorkflowExecutionReplication",
-		false,
-		`EnableDeleteWorkflowExecutionReplication controls whether a replication task is generated when a workflow
-execution is deleted. When enabled, workflow deletions on the active cluster will be replicated to passive clusters.`,
-	)
-
 	HistoryRPS = NewGlobalIntSetting(
 		"history.rps",
 		3000,
@@ -1586,21 +1747,8 @@ execution is deleted. When enabled, workflow deletions on the active cluster wil
 	HistoryNamespaceRPS = NewNamespaceIntSetting(
 		"history.namespaceRPS",
 		0,
-		`HistoryNamespaceRPS is namespace rate limit per second for each history host.
+		`HistoryNamespaceRPS is namespace rate limit per second for each history host. 
 If value less or equal to 0, will fall back to HistoryRPS`,
-	)
-	EnableHistoryNamespaceFairness = NewGlobalBoolSetting(
-		"history.enableNamespaceFairness",
-		false,
-		`EnableHistoryNamespaceFairness turns on per-namespace fair-share demotion in the history host RPS rate limiter.
-Requests from namespaces exceeding their fair share (computed from scaleFactor and the namespace's frontend cluster-wide
-RPS budget) are routed to a lower-priority bucket`,
-	)
-	HistoryNamespaceFairShareMultiplier = NewGlobalFloatSetting(
-		"history.namespaceFairShareMultiplier",
-		1.0,
-		`HistoryNamespaceFairShareMultiplier scales the per-namespace fair share used by the history host RPS rate limiter.
-share(ns) = scaleFactor * FrontendGlobalNamespaceRPS(ns) * HistoryNamespaceFairShareMultiplier`,
 	)
 	HistoryPersistenceMaxQPS = NewGlobalIntSetting(
 		"history.persistenceMaxQPS",
@@ -1640,6 +1788,32 @@ See DynamicRateLimitingParams comments for more details.`,
 		false,
 		`Enable deletion of requested history tasks (e.g., WFT timeout tasks) right after a successful UpdateWorkflowExecution.
 		WARNING: Turning on this config can create a large number of tombstones in cassandra and degrade performance, use with caution.`,
+	)
+	EnableWorkflowTaskCompletionPagination = NewNamespaceBoolSetting(
+		"history.enableWorkflowTaskCompletionPagination",
+		false,
+		`EnableWorkflowTaskCompletionPagination enables the pagination of RespondWorkflowTaskCompleted requests.
+		When false, paginated requests (the ones with intermediate_page set to true) are rejected.`,
+	)
+	WorkflowTaskCompletionBufferTotalSizeLimit = NewGlobalIntSetting(
+		"history.workflowTaskCompletionBufferTotalSizeLimit",
+		1024*1024*1024,
+		`WorkflowTaskCompletionBufferTotalSizeLimit is the process wide limit in bytes on the total
+		size of buffers allocated for in-flight pages of RespondWorkflowTaskCompleted requests. A page that would push
+		the total over this limit is rejected. Setting to 0 disables the limit.`,
+	)
+	WorkflowTaskCompletionBufferSizeLimit = NewNamespaceIntSetting(
+		"history.workflowTaskCompletionBufferSizeLimit",
+		40*1024*1024,
+		`WorkflowTaskCompletionBufferSizeLimit is the limit in bytes on the total
+		size of buffered pages in paginated RespondWorkflowTaskCompleted requests for a single workflow task.`,
+	)
+	WorkflowTaskCompletionBufferNamespaceRatio = NewNamespaceFloatSetting(
+		"history.workflowTaskCompletionBufferNamespaceRatio",
+		0.5,
+		`WorkflowTaskCompletionBufferNamespaceRatio is the fraction of the process-wide pagination buffer
+		limit (WorkflowTaskCompletionBufferTotalSizeLimit) that a single namespace may hold at once, so one
+		namespace cannot exhaust the whole process budget.`,
 	)
 	HistoryLongPollExpirationInterval = NewNamespaceDurationSetting(
 		"history.longPollExpirationInterval",
@@ -1738,7 +1912,7 @@ This can help reduce effects of shard movement.`,
 	)
 	EnableHostLevelEventsCache = NewGlobalBoolSetting(
 		"history.enableHostLevelEventsCache",
-		false,
+		true,
 		`EnableHostLevelEventsCache controls if the events cache is host level. Requires service restart to take effect.`,
 	)
 	AcquireShardInterval = NewGlobalDurationSetting(
@@ -1783,7 +1957,17 @@ to this require a restart to take effect.`,
 		"history.clientOwnershipCachingUnusedTTL",
 		30*time.Second,
 		`HistoryClientOwnershipCachingStaleTTL, if non-zero, configures the TTL
-for cached shard ownership entries after a membership update.`,
+for cached shard ownership entries after a membership update.
+Should be less than history.connectionCloseDelay so that connections are not
+closed while still cached.`,
+	)
+	HistoryConnectionCloseDelay = NewGlobalDurationSetting(
+		"history.connectionCloseDelay",
+		60*time.Second,
+		`HistoryConnectionCloseDelay delays closing a cached history connection after its host leaves
+the membership ring, giving in-flight RPCs time to drain before the connection is closed.
+Should be greater than history.clientOwnershipCachingUnusedTTL so that connections are not closed
+while still cached.`,
 	)
 	ShardIOConcurrency = NewGlobalIntSetting(
 		"history.shardIOConcurrency",
@@ -1834,6 +2018,11 @@ NOTE: The outbound queue has a separate configuration: outboundQueuePendingTaskC
 before that task range is split into a separate slice to unblock loading for later range.
 currently only work for scheduled queues and the task range is 1s.`,
 	)
+	QueueReaderStuckShadowMode = NewGlobalBoolSetting(
+		"history.queueReaderStuckShadowMode",
+		false,
+		`QueueReaderStuckShadowMode controls whether reader stuck alerts are suppressed and only logged.`,
+	)
 	QueueCriticalSlicesCount = NewGlobalIntSetting(
 		"history.queueCriticalSlicesCount",
 		50,
@@ -1858,6 +2047,12 @@ unlimited. When the predicate size is surpassed for a given scope, the predicate
 which causes all tasks in the scope's range to eventually be reprocessed without applying any filtering logic.
 NOTE: The outbound queue has a separate configuration: outboundQueueMaxPredicateSize.
 `,
+	)
+	QueueShrinkPredicateMaxPendingKeys = NewGlobalIntSetting(
+		"history.queueShrinkPredicateMaxPendingKeys",
+		10,
+		`Max number of pending task keys for which a multi-cursor slice shrinks its predicate back to exactly those
+keys.`,
 	)
 	QueueMoveGroupTaskCountBase = NewGlobalIntSetting(
 		"history.queueMoveGroupTaskCountBase",
@@ -2404,10 +2599,31 @@ archivalQueueProcessor`,
 		`MaximumBufferedEventsSizeInBytes is the maximum permissible size of all buffered events for any given mutable
 state. The total size is determined by the sum of the size, in bytes, of each HistoryEvent proto.`,
 	)
+	MaximumEventBatchSizeInBytes = NewGlobalIntSetting(
+		"history.maximumEventBatchSizeInBytes",
+		0,
+		`This is EXPERIMENTAL feature that is under development. Things can break if you use it.
+MaximumEventBatchSizeInBytes is the size threshold (in bytes) at which the EventStore rolls the
+current in-memory batch and starts a new one. A single oversized event may cause a batch to
+exceed this size. A value of 0 disables the check. This value should stay below
+system.transactionSizeLimit, since each batch is persisted within a single transaction.`,
+	)
 	MaximumSignalsPerExecution = NewNamespaceIntSetting(
 		"history.maximumSignalsPerExecution",
 		10000,
 		`MaximumSignalsPerExecution is max number of signals supported by single execution`,
+	)
+	MaximumRequestIDsPerExecution = NewNamespaceIntSetting(
+		"history.maximumRequestIDsPerExecution",
+		25,
+		`MaximumRequestIDsPerExecution is the hard cap on CHASM-attached request IDs retained per
+execution for UpdateComponent idempotency; the oldest are swept beyond this limit. Set to 0 to disable the count cap.`,
+	)
+	RequestIDMaxAge = NewNamespaceDurationSetting(
+		"history.requestIDMaxAge",
+		7*24*time.Hour,
+		`RequestIDMaxAge is the maximum age of a CHASM-attached request ID retained per execution for
+UpdateComponent idempotency. Set to 0 to disable age-based sweeping.`,
 	)
 	ShardUpdateMinInterval = NewGlobalDurationSetting(
 		"history.shardUpdateMinInterval",
@@ -2436,6 +2652,12 @@ When the this config is zero or lower we will only update shard info at most onc
 		"history.emitShardLagLog",
 		false,
 		`EmitShardLagLog whether emit the shard lag log`,
+	)
+	EmitImmediateQueueBacklogAge = NewGlobalBoolSetting(
+		"history.emitImmediateQueueBacklogAge",
+		true,
+		`EmitImmediateQueueBacklogAge whether to emit shardinfo_immediate_queue_backlog_age, which reads
+the oldest task of each immediate queue category that has a backlog`,
 	)
 	DefaultActivityRetryPolicy = NewNamespaceTypedSetting(
 		"history.defaultActivityRetryPolicy",
@@ -2554,7 +2776,22 @@ the number of children greater than or equal to this threshold`,
 	ReplicationTaskApplyTimeout = NewGlobalDurationSetting(
 		"history.ReplicationTaskApplyTimeout",
 		20*time.Second,
-		`ReplicationTaskApplyTimeout is the context timeout for replication task apply`,
+		`ReplicationTaskApplyTimeout is the context timeout for replication task apply, and for the
+standby CloseExecutionTask's child-to-parent completion verification`,
+	)
+	ParentWorkflowResendMaxInFlight = NewGlobalIntSetting(
+		"history.parentWorkflowResendMaxInFlight",
+		8,
+		`ParentWorkflowResendMaxInFlight caps how many parent workflow resends a shard may run
+concurrently when EnableAsyncParentWorkflowResend is on. Attempts beyond the cap are dropped; the
+verifying task retries. This bounds the goroutines this path can create per shard.`,
+	)
+	EnableAsyncParentWorkflowResend = NewGlobalBoolSetting(
+		"history.enableAsyncParentWorkflowResend",
+		false,
+		`EnableAsyncParentWorkflowResend controls whether the standby child-to-parent completion
+verification resends the parent workflow in the background rather than inline, so the verifying task
+is not held for the duration of the cross-cluster sync.`,
 	)
 	ReplicationTaskFetcherParallelism = NewGlobalIntSetting(
 		"history.ReplicationTaskFetcherParallelism",
@@ -2708,6 +2945,24 @@ that task will be sent to DLQ.`,
 		false,
 		`EnableReplicationTaskTieredProcessing is a feature flag for enabling tiered replication task processing stack`,
 	)
+	EnableReplicationReaderGroup = NewGlobalBoolSetting(
+		"history.EnableReplicationReaderGroup",
+		false,
+		`EnableReplicationReaderGroup routes replication stream reader-state handling through the
+replicationReaderGroup abstraction, a refactor of the per-priority cursor arithmetic in the
+stream sender. Behavior is unchanged; this flag exists to allow a safe rollout of the
+refactored path. Changing it restarts replication streams.`,
+	)
+	ReplicationStreamReadBufferSize = NewGlobalIntSetting(
+		"history.ReplicationStreamReadBufferSize",
+		0,
+		`ReplicationStreamReadBufferSize is the per-shard capacity, in tasks, of the read-through
+buffer over the replication task queue's tip. All replication stream senders on a shard (every
+remote cluster, every priority lane) scan the same queue; the buffer lets those overlapping
+scans share one persistence read, with only readers below the buffered range falling through
+to persistence. The buffer holds slim queue rows (task metadata, not event payloads).
+0 disables the buffer.`,
+	)
 	ReplicationStreamSenderHighPriorityQPS = NewGlobalIntSetting(
 		"history.ReplicationStreamSenderHighPriorityQPS",
 		100,
@@ -2773,6 +3028,22 @@ that task will be sent to DLQ.`,
 		10,
 		"ReplicationStreamSenderLivenessMultiplier is the multiplier of liveness check interval on stream sender",
 	)
+	ReplicationStreamMaxLifetime = NewGlobalDurationSetting(
+		"history.ReplicationStreamMaxLifetime",
+		0,
+		`ReplicationStreamMaxLifetime, if greater than 0, bounds how long a single replication
+stream may live before the stream receiver gracefully recycles it (stops it, after which the
+stream receiver monitor reopens a fresh stream). A jitter is applied to spread recycling across
+streams. This lets proxies (e.g. Envoy) gracefully drain connections that would otherwise be
+pinned open indefinitely by endless replication streams. 0 disables the max lifetime (default).`,
+	)
+	ReplicationStreamMaxLifetimeJitter = NewGlobalFloatSetting(
+		"history.ReplicationStreamMaxLifetimeJitter",
+		0.1,
+		`ReplicationStreamMaxLifetimeJitter is the +/- jitter coefficient applied to
+ReplicationStreamMaxLifetime so that streams sharing a connection do not all recycle at the same
+time (mirrors gRPC MaxConnectionAge's +/-10% jitter). Values outside [0, 1] are clamped.`,
+	)
 	EnableHistoryReplicationRateLimiter = NewNamespaceBoolSetting(
 		"history.EnableHistoryReplicationRateLimiter",
 		false,
@@ -2812,6 +3083,11 @@ that task will be sent to DLQ.`,
 		"history.ReplicationStreamSenderErrorRetryExpiration",
 		3*time.Minute,
 		`ReplicationStreamSenderErrorRetryExpiration is the max retry duration for sending replication tasks`,
+	)
+	ReplicationStreamSenderSkipStuckTask = NewGlobalBoolSetting(
+		"history.ReplicationStreamSenderSkipStuckTask",
+		false,
+		`ReplicationStreamSenderSkipStuckTask, when true, makes the replication stream sender log, emit a metric, and skip (advance the watermark past) a task that could not be built ("converted") after exhausting retries, instead of failing and wedging the whole stream. Only unbuildable tasks (corrupt/unusable source info) are skipped; transient send/rate-limit failures and infra/teardown errors (shard-ownership-lost, stream error, context canceled) are not, so they still tear the stream down. Deterministic non-retryable send failures such as an oversized gRPC message are not handled here (left to the transport-layer message-size fix).`,
 	)
 	ReplicationExecutableTaskErrorRetryWait = NewGlobalDurationSetting(
 		"history.ReplicationExecutableTaskErrorRetryWait",
@@ -2917,6 +3193,13 @@ Requires service restart to take effect.`,
 		true,
 		"Use real chasm tree implementation instead of the noop one",
 	)
+	EnableCHASMSkipPersistence = NewNamespaceBoolSetting(
+		"history.enableCHASMSkipPersistence",
+		false,
+		`EnableCHASMSkipPersistence controls whether CHASM CloseTransaction omits nodes whose serialized data is unchanged.
+This optimization should only be enabled after every cluster that may receive CHASM replication supports invalidating
+hydrated ancestor components when applying child-node mutations.`,
+	)
 
 	ChasmMaxInMemoryPureTasks = NewGlobalIntSetting(
 		"history.chasmMaxInMemoryPureTasks",
@@ -2929,6 +3212,14 @@ Requires service restart to take effect.`,
 		false,
 		`EnableCHASMSchedulerCreation controls whether new schedules are created using the CHASM (V2) implementation
 instead of the existing (V1) implementation.`,
+	)
+
+	CHASMSchedulerCreationRolloutPercent = NewNamespaceIntSetting(
+		"history.chasmSchedulerCreationRolloutPercent",
+		0,
+		`CHASMSchedulerCreationRolloutPercent is the per-namespace percentage of new schedules that will be
+created on the CHASM (V2) implementation. This setting is only consulted when EnableCHASMSchedulerCreation is true and
+is re-evaluated on every CreateSchedule RPC.`,
 	)
 
 	EnableCHASMSchedulerRouting = NewNamespaceBoolSetting(
@@ -2945,6 +3236,23 @@ first (with fallback to V1), excluding CreateSchedule.`,
 to the CHASM (V2) implementation on active scheduler workflows.`,
 	)
 
+	CHASMSchedulerMigrationRolloutPercent = NewNamespaceIntSetting(
+		"history.chasmSchedulerMigrationRolloutPercent",
+		0,
+		`CHASMSchedulerMigrationRolloutPercent is the per-namespace percentage of V1 schedules that will be
+migrated to the CHASM (V2) implementation This setting is only consulted when
+EnableCHASMSchedulerMigration is true. The decision is re-evaluated when a
+scheduler workflow starts or continues-as-new.`,
+	)
+
+	EnableCHASMSchedulerMigrationWithRunningWorkflows = NewNamespaceBoolSetting(
+		"history.enableCHASMSchedulerMigrationWithRunningWorkflows",
+		false,
+		`EnableCHASMSchedulerMigrationWithRunningWorkflows, when set to false, prevents schedules with
+running workflows from being migrated. This works around a known bug in 3P SDKs involving updating
+existing workflows to attach callbacks.`,
+	)
+
 	EnableCHASMSchedulerSentinels = NewNamespaceBoolSetting(
 		"history.enableCHASMSchedulerSentinels",
 		true,
@@ -2953,9 +3261,15 @@ to the CHASM (V2) implementation on active scheduler workflows.`,
 
 	EnableCHASMCallbacks = NewNamespaceBoolSetting(
 		"history.enableCHASMCallbacks",
-		false,
+		true,
 		`Controls whether new callbacks are created using the CHASM implementation
 instead of the previous HSM backed implementation.`,
+	)
+
+	EnableSignalWithStartFromWorkflow = NewNamespaceBoolSetting(
+		"history.enableSignalWithStartFromWorkflow",
+		false,
+		`Controls whether signal with start from workflow is enabled.`,
 	)
 
 	EnableCHASMSignalBacklinks = NewNamespaceBoolSetting(
@@ -2965,6 +3279,13 @@ instead of the previous HSM backed implementation.`,
 map to enable DescribeWorkflow to resolve RequestIDRef signal backlinks. Requires EnableChasm.
 Only enable once all servers in the fleet have been upgraded to a version that understands
 the IncomingSignals CHASM field.`,
+	)
+	EnableWorkflowUpdateCallbacks = NewNamespaceBoolSetting(
+		"history.enableUpdateCallbacks",
+		false,
+		`Controls whether completion callbacks are created for workflow updates using
+the CHASM implementation. When disabled, new update callbacks will not be registered,
+but existing callbacks will still be processed and fired.`,
 	)
 
 	VersionMembershipCacheTTL = NewGlobalDurationSetting(
@@ -2989,7 +3310,7 @@ the IncomingSignals CHASM field.`,
 
 	EnableVersionReactivationSignals = NewGlobalBoolSetting(
 		"history.enableVersionReactivationSignals",
-		false,
+		true,
 		`EnableVersionReactivationSignals controls whether reactivation signals are sent to version workflows
 		when workflows are pinned to a potentially DRAINED/INACTIVE version. Set to false to disable signals
 		globally if load becomes problematic.`,
@@ -3168,12 +3489,24 @@ When enabled, the scavenger will delete completed workflow execution data that a
 	BatcherRPS = NewNamespaceIntSetting(
 		"worker.batcherRPS",
 		50,
-		`BatcherRPS controls number the rps of batch operations`,
+		`BatcherRPS controls number the rps of one batch operation`,
 	)
 	BatcherConcurrency = NewNamespaceIntSetting(
 		"worker.batcherConcurrency",
 		5,
-		`BatcherConcurrency controls the concurrency of one batch operation`,
+		`BatcherConcurrency controls the concurrency of one batch or admin batch operation`,
+	)
+	AdminBatcherHostRPS = NewGlobalIntSetting(
+		"worker.adminBatcherHostRPS",
+		100,
+		`AdminBatcherHostRPS controls the rps of all admin batch operations per host`,
+	)
+	AdminBatcherGlobalRPS = NewGlobalIntSetting(
+		"worker.adminBatcherGlobalRPS",
+		0,
+		`AdminBatcherGlobalRPS controls the rps of all admin batch operations across all worker hosts.
+The configured value will be divided by the number of worker hosts to get the per host rps limit. 
+0 means no global limit and each host will use AdminBatcherHostRPS.`,
 	)
 	WorkerParentCloseMaxConcurrentActivityExecutionSize = NewGlobalIntSetting(
 		"worker.ParentCloseMaxConcurrentActivityExecutionSize",
@@ -3231,6 +3564,20 @@ When enabled, the scavenger will delete completed workflow execution data that a
 		5*time.Second,
 		`How long to sleep within a local activity before pushing to workflow level sleep (don't make this
 close to or more than the workflow task timeout)`,
+	)
+	SchedulerSpecMaxIterations = NewGlobalIntSetting(
+		"scheduler.specMaxIterations",
+		2*7*24*60*60,
+		`SchedulerSpecMaxIterations is the hard bound on how many excluded candidate times the
+scheduler evaluates while searching for a schedule's next action time before giving up with an
+error and stopping the schedule.`,
+	)
+	SchedulerSpecWarnIterations = NewGlobalIntSetting(
+		"scheduler.specWarnIterations",
+		24*60*60,
+		`SchedulerSpecWarnIterations is how many excluded candidate times the scheduler evaluates
+while searching for a schedule's next action time before emitting a warning (metric + log). It
+is non-fatal: the search continues past this threshold.`,
 	)
 	WorkerDeleteNamespaceActivityLimits = NewGlobalTypedSetting(
 		"worker.deleteNamespaceActivityLimitsConfig",
@@ -3306,6 +3653,15 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		preventing task orphaning that can occur if tasks are dispatched to a shutting-down worker.`,
 	)
 
+	EnableMatchingFanOutForPollCancellation = NewNamespaceBoolSetting(
+		"frontend.enableMatchingFanOutForPollCancellation",
+		false,
+		`EnableMatchingFanOutForPollCancellation controls where poll cancellation fan-out happens.
+		When enabled, frontend sends root partition only; matching fans out to all partitions.
+		When disabled, frontend iterates partitions; matching handles each partition locally.
+		Default is false for safe rollout: flip to true after both frontend and matching are deployed.`,
+	)
+
 	// Deprecated: ListWorkersEnabled is no longer honored. ListWorkers and DescribeWorker APIs are
 	// always enabled. The write path is gated by WorkerHeartbeatsEnabled.
 	ListWorkersEnabled = NewNamespaceBoolSetting(
@@ -3320,14 +3676,25 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		`WorkerCommandsEnabled is a "feature enable" flag. It allows clients to send commands to the workers.`,
 	)
 
+	PollerAutoscalingAutoEnroll = NewNamespaceBoolSetting(
+		"frontend.pollerAutoscalingAutoEnroll",
+		false,
+		`When true, workers should use poller autoscaling by default unless explicitly configured otherwise.`,
+	)
+
 	WorkflowPauseEnabled = NewNamespaceBoolSetting(
 		"frontend.WorkflowPauseEnabled",
 		false,
 		`WorkflowPauseEnabled is a "feature enable" flag. When enabled it allows clients to pause workflows.`,
 	)
-	TimeSkippingEnabled = NewNamespaceBoolSetting(
-		"frontend.TimeSkippingEnabled",
+	WorkflowTimeSkippingEnabled = NewNamespaceBoolSetting(
+		"frontend.WorkflowTimeSkippingEnabled",
 		false,
-		`TimeSkippingEnabled is a "feature enable" flag. When enabled it allows clients to skip time in executions.`,
+		`WorkflowTimeSkippingEnabled is a "feature enable" flag. When enabled it allows clients to skip time in executions.`,
+	)
+	WorkflowTimeSkippingMaxSkipPerSession = NewNamespaceIntSetting(
+		"frontend.WorkflowTimeSkippingMaxSkipPerSession",
+		200,
+		"WorkflowTimeSkippingMaxSkipPerSession is the default max-skip-per-session applied to requests that don't set one; callers may override it with a higher value.",
 	)
 )

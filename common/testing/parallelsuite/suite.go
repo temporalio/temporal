@@ -23,9 +23,32 @@ import (
 type testingSuite interface {
 	testifysuite.TestingSuite
 	//nolint:revive // ctx is last so callers can pass nil to mean "no override"; SA1012 forbids passing nil as the first ctx arg.
-	copySuite(t *testing.T, assertT require.TestingT, ctx context.Context) testingSuite
+	copySuite(t *testing.T, parallel bool, assertT require.TestingT, ctx context.Context) testingSuite
 	//nolint:revive // see copySuite above.
-	initSuite(t *testing.T, assertT require.TestingT, ctx context.Context)
+	initSuite(t *testing.T, parallel bool, assertT require.TestingT, ctx context.Context)
+}
+
+// Scope provides the context and test handles for a test or await attempt.
+// It is useful for test helpers.
+type Scope interface {
+	Context() context.Context
+	TB() testing.TB
+	Require() *require.Assertions
+	AssertionT() require.TestingT
+}
+
+type contextScope struct {
+	Scope
+	ctx context.Context
+}
+
+// WithContext returns a scope that uses ctx and delegates assertions to scope.
+func WithContext(ctx context.Context, scope Scope) Scope {
+	return contextScope{Scope: scope, ctx: ctx}
+}
+
+func (s contextScope) Context() context.Context {
+	return s.ctx
 }
 
 // Suite provides parallel test execution with require-style (fail-fast) assertions.
@@ -38,31 +61,40 @@ type Suite[T testingSuite] struct {
 	protorequire.ProtoAssertions
 	historyrequire.HistoryRequire
 
-	guardT  guardT
-	ctx     context.Context // override set in initSuite; lazy-filled by Context() under ctxOnce when nil
-	ctxOnce sync.Once
+	guardT      guardT
+	runParallel bool
+	assertT     require.TestingT
+	ctx         context.Context // override set in initSuite; lazy-filled by Context() under ctxOnce when nil
+	ctxOnce     sync.Once
 }
 
 // copySuite creates a fresh suite instance initialized for the given *testing.T.
 // assertT overrides which TestingT assertions are bound to; nil means use the copy's own guardT.
-// ctx overrides the suite's context; nil means use the default (lazy testcontext.New).
+// ctx overrides the suite's context; nil means use the default (lazy testcontext.For).
 //
 //nolint:revive // ctx is last so callers can pass nil to mean "no override"; SA1012 forbids passing nil as the first ctx arg.
-func (s *Suite[T]) copySuite(t *testing.T, assertT require.TestingT, ctx context.Context) testingSuite {
+func (s *Suite[T]) copySuite(t *testing.T, parallel bool, assertT require.TestingT, ctx context.Context) testingSuite {
 	cp := reflect.New(reflect.TypeFor[T]().Elem()).Interface().(T)
-	cp.initSuite(t, assertT, ctx)
+	cp.initSuite(t, parallel, assertT, ctx)
 	return cp
 }
 
 //nolint:revive // see copySuite above.
-func (s *Suite[T]) initSuite(t *testing.T, assertT require.TestingT, ctx context.Context) {
+func (s *Suite[T]) initSuite(t *testing.T, parallel bool, assertT require.TestingT, ctx context.Context) {
 	g := &s.guardT
 	g.name = t.Name()
 	g.T = t
+	g.hasSubtests.Store(false)
+	s.runParallel = parallel
 	s.ctx = ctx
+	s.ctxOnce = sync.Once{}
+	if s.runParallel {
+		t.Parallel() //nolint:testifylint // parallelsuite intentionally supports parallel tests
+	}
 	if assertT == nil {
 		assertT = g
 	}
+	s.assertT = assertT
 	s.Assertions = require.New(assertT)
 	s.ProtoAssertions = protorequire.New(assertT)
 	s.HistoryRequire = historyrequire.New(assertT)
@@ -76,12 +108,27 @@ func (s *Suite[T]) T() *testing.T {
 	return s.guardT.T
 }
 
+// TB returns the underlying test handle.
+func (s *Suite[T]) TB() testing.TB {
+	return s.T()
+}
+
+// Require returns assertions bound to the active test or await attempt.
+func (s *Suite[T]) Require() *require.Assertions {
+	return s.Assertions
+}
+
+// AssertionT returns the active assertion target.
+func (s *Suite[T]) AssertionT() require.TestingT {
+	return s.assertT
+}
+
 // Context returns the test-scoped context (created from [testcontext]).
 // Inside an [Await] callback, it returns the await-scoped context.
 func (s *Suite[T]) Context() context.Context {
 	s.ctxOnce.Do(func() {
 		if s.ctx == nil {
-			s.ctx = testcontext.New(s.T())
+			s.ctx = testcontext.For(s.T())
 		}
 	})
 	return s.ctx
@@ -93,8 +140,7 @@ func (s *Suite[T]) Run(name string, fn func(T)) bool {
 	pt := s.guardT.T // grab T before sealing
 	s.guardT.markHasSubtests()
 	return pt.Run(name, func(t *testing.T) {
-		t.Parallel() //nolint:testifylint // parallelsuite intentionally supports parallel subtests
-		fn(s.copySuite(t, nil, nil).(T))
+		fn(s.copySuite(t, s.runParallel, nil, nil).(T))
 	})
 }
 
@@ -107,7 +153,7 @@ func (s *Suite[T]) Await(fn func(T), timeout, interval time.Duration) {
 func (s *Suite[T]) Awaitf(fn func(T), timeout, interval time.Duration, msg string, args ...any) {
 	t := s.T()
 	await.Requiref(s.Context(), t, func(at *await.T) {
-		fn(s.copySuite(t, at, at.Context()).(T))
+		fn(s.copySuite(t, false, at, at.Context()).(T))
 	}, timeout, interval, msg, args...)
 }
 
@@ -131,6 +177,18 @@ func (s *Suite[T]) AwaitTruef(fn func() bool, timeout, interval time.Duration, m
 //
 // The suite must embed [Suite] and have no other fields.
 func Run[T testingSuite](t *testing.T, s T, args ...any) {
+	run(t, s, true, args...)
+}
+
+// RunLegacySequential behaves like [Run] but does not mark test methods as parallel.
+//
+// Deprecated: use [Run] for new tests. This only exists for backwards-compatibility
+// with legacy behavior to ease migration.
+func RunLegacySequential[T testingSuite](t *testing.T, s T, args ...any) {
+	run(t, s, false, args...)
+}
+
+func run[T testingSuite](t *testing.T, s T, methodsParallel bool, args ...any) {
 	t.Helper()
 
 	typ := reflect.TypeFor[T]()
@@ -156,13 +214,11 @@ func Run[T testingSuite](t *testing.T, s T, args ...any) {
 		argVals[i] = reflect.ValueOf(a)
 	}
 
-	t.Parallel()
+	s.initSuite(t, true, nil, nil)
 
 	for _, method := range methods {
 		t.Run(method.Name, func(t *testing.T) {
-			t.Parallel()
-
-			cpS := s.copySuite(t, nil, nil)
+			cpS := s.copySuite(t, methodsParallel, nil, nil)
 			callArgs := append([]reflect.Value{reflect.ValueOf(cpS)}, argVals...)
 			method.Func.Call(callArgs)
 		})
@@ -244,7 +300,6 @@ func discoverTestMethods(ptrType, structType reflect.Type, args []any) []reflect
 
 	var methods []reflect.Method
 	for method := range ptrType.Methods() {
-		method := method
 		if !strings.HasPrefix(method.Name, "Test") {
 			continue
 		}
