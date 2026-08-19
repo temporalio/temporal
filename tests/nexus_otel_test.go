@@ -48,7 +48,7 @@ type nexusHTTPSpan struct {
 	NexusAttrs   map[string]any
 }
 
-type nexusTaskGRPCSpan struct {
+type nexusTaskSpan struct {
 	TraceID int
 	Name    string
 	TaskID  int
@@ -342,7 +342,7 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 	s.Require().True(spanContext.IsValid())
 	s.Require().Equal(spanContext.TraceID(), httpSpans[0].SpanContext.TraceID())
 	s.Require().Equal(spanContext.SpanID(), httpSpans[0].SpanContext.SpanID())
-	s.requireNexusTaskGRPCSpans(exporter, []nexusTaskGRPCSpan{
+	s.requireNexusTaskGRPCSpans(exporter, []nexusTaskSpan{
 		{
 			TraceID: 1,
 			Name:    "temporal.server.api.matchingservice.v1.MatchingService/DispatchNexusTask",
@@ -411,7 +411,7 @@ func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 	}})
 	s.Require().Equal(traceID, httpSpans[0].SpanContext.TraceID().String())
 	s.Require().Equal(parentSpanID, httpSpans[0].Parent.SpanID().String())
-	s.requireNexusTaskGRPCSpans(exporter, []nexusTaskGRPCSpan{
+	s.requireNexusTaskGRPCSpans(exporter, []nexusTaskSpan{
 		{
 			TraceID: 1,
 			Name:    "temporal.server.api.matchingservice.v1.MatchingService/DispatchNexusTask",
@@ -433,7 +433,7 @@ func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 // requireNexusTaskGRPCSpans compares matching gRPC spans after assigning stable trace and task IDs.
 func (s *NexusOTELSuite) requireNexusTaskGRPCSpans(
 	exporter *tracetest.InMemoryExporter,
-	expected []nexusTaskGRPCSpan,
+	expected []nexusTaskSpan,
 ) {
 	s.T().Helper()
 	s.Await(func(s *NexusOTELSuite) {
@@ -443,7 +443,7 @@ func (s *NexusOTELSuite) requireNexusTaskGRPCSpans(
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
-func (s *NexusOTELSuite) nexusTaskGRPCSpans(spans tracetest.SpanStubs) []nexusTaskGRPCSpan {
+func (s *NexusOTELSuite) nexusTaskGRPCSpans(spans tracetest.SpanStubs) []nexusTaskSpan {
 	const matchingServicePrefix = "temporal.server.api.matchingservice.v1.MatchingService/"
 	spans = slices.DeleteFunc(spans, func(span tracetest.SpanStub) bool {
 		if !strings.HasPrefix(span.Name, matchingServicePrefix) {
@@ -462,7 +462,7 @@ func (s *NexusOTELSuite) nexusTaskGRPCSpans(spans tracetest.SpanStubs) []nexusTa
 
 	traceIDs := make(map[oteltrace.TraceID]int)
 	taskIDs := make(map[string]int)
-	result := make([]nexusTaskGRPCSpan, 0, len(spans))
+	result := make([]nexusTaskSpan, 0, len(spans))
 	for _, span := range spans {
 		traceID := span.SpanContext.TraceID()
 		if _, ok := traceIDs[traceID]; !ok {
@@ -480,7 +480,7 @@ func (s *NexusOTELSuite) nexusTaskGRPCSpans(spans tracetest.SpanStubs) []nexusTa
 				taskIDs[taskID] = len(taskIDs) + 1
 			}
 		}
-		result = append(result, nexusTaskGRPCSpan{
+		result = append(result, nexusTaskSpan{
 			TraceID: traceIDs[traceID],
 			Name:    span.Name,
 			TaskID:  taskIDs[taskID],
