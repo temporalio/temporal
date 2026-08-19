@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -58,6 +59,7 @@ import (
 	"go.temporal.io/server/common/stream_batcher"
 	"go.temporal.io/server/common/taskqueue"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
@@ -624,7 +626,12 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	}
 
 	if span := trace.SpanFromContext(ctx); span.IsRecording() {
-		annotateWorkerTask(span, workflowWorkerTaskID(taskInfo))
+		workerTaskID := tasktoken.WorkflowWorkerTaskID(
+			taskInfo.GetNamespaceId(),
+			taskInfo.GetRunId(),
+			taskInfo.GetScheduledEventId(),
+		)
+		span.SetAttributes(attribute.String(telemetry.WorkerTaskIDKey, workerTaskID))
 	}
 	return pm.AddTask(ctx, addTaskParams{
 		taskInfo:    taskInfo,
@@ -667,7 +674,12 @@ func (e *matchingEngineImpl) AddActivityTask(
 	}
 
 	if span := trace.SpanFromContext(ctx); span.IsRecording() {
-		annotateWorkerTask(span, activityWorkerTaskID(taskInfo))
+		workerTaskID := tasktoken.ActivityWorkerTaskID(
+			taskInfo.GetNamespaceId(),
+			taskInfo.GetRunId(),
+			taskInfo.GetScheduledEventId(),
+		)
+		span.SetAttributes(attribute.String(telemetry.WorkerTaskIDKey, workerTaskID))
 	}
 	return pm.AddTask(ctx, addTaskParams{
 		taskInfo:    taskInfo,
@@ -1154,7 +1166,8 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		return resp, err
 	}
 	if span := trace.SpanFromContext(ctx); span.IsRecording() {
-		annotateWorkerTask(span, queryWorkerTaskID(queryRequest.GetNamespaceId(), taskID))
+		workerTaskID := tasktoken.QueryWorkerTaskID(queryRequest.GetNamespaceId(), taskID)
+		span.SetAttributes(attribute.String(telemetry.WorkerTaskIDKey, workerTaskID))
 	}
 	// if we get here it means that dispatch of query task has occurred locally
 	// must wait on result channel to get query result
@@ -2696,7 +2709,8 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 		return resp, nil
 	}
 	if span := trace.SpanFromContext(ctx); span.IsRecording() {
-		annotateWorkerTask(span, nexusWorkerTaskID(request.GetNamespaceId(), taskID))
+		workerTaskID := tasktoken.NexusWorkerTaskID(request.GetNamespaceId(), taskID)
+		span.SetAttributes(attribute.String(telemetry.WorkerTaskIDKey, workerTaskID))
 	}
 	// If we get here it means that task dispatch has occurred locally.
 	// Must wait on result channel to get query result.
