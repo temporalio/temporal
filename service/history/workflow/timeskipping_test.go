@@ -653,38 +653,6 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 	})
 }
 
-// TestWrapExecutionTimes covers the three invariants of wrapExecutionTimes:
-// a nil/zero skipped duration is a no-op; a non-zero duration shifts every *set*
-// execution timestamp forward by exactly that duration; unset timestamps stay unset.
-func (s *mutableStateSuite) TestWrapExecutionTimes() {
-	base := time.Date(2026, 7, 1, 8, 0, 0, 0, time.UTC)
-
-	s.Run("NilOrZeroDurationIsNoOp", func() {
-		s.mutableState.executionInfo.StartTime = timestamppb.New(base)
-		s.mutableState.wrapExecutionTimes(nil)
-		s.Equal(base, s.mutableState.executionInfo.StartTime.AsTime())
-		s.mutableState.wrapExecutionTimes(durationpb.New(0))
-		s.Equal(base, s.mutableState.executionInfo.StartTime.AsTime())
-	})
-
-	s.Run("ShiftsSetTimestampsAndLeavesUnsetUntouched", func() {
-		accum := 2 * time.Hour
-		s.mutableState.executionState.StartTime = timestamppb.New(base)
-		s.mutableState.executionInfo.StartTime = timestamppb.New(base)
-		s.mutableState.executionInfo.ExecutionTime = timestamppb.New(base.Add(time.Minute))
-		s.mutableState.executionInfo.WorkflowRunExpirationTime = timestamppb.New(base.Add(time.Hour))
-		s.mutableState.executionInfo.WorkflowExecutionExpirationTime = nil // unset must stay unset
-
-		s.mutableState.wrapExecutionTimes(durationpb.New(accum))
-
-		s.Equal(base.Add(accum), s.mutableState.executionState.StartTime.AsTime())
-		s.Equal(base.Add(accum), s.mutableState.executionInfo.StartTime.AsTime())
-		s.Equal(base.Add(time.Minute).Add(accum), s.mutableState.executionInfo.ExecutionTime.AsTime())
-		s.Equal(base.Add(time.Hour).Add(accum), s.mutableState.executionInfo.WorkflowRunExpirationTime.AsTime())
-		s.Nil(s.mutableState.executionInfo.WorkflowExecutionExpirationTime, "unset timestamp must remain unset")
-	})
-}
-
 // TestApplyFastForward covers the full branch table of applyFastForward:
 // FastForward set / nil duration / nil config / Enabled=false.
 // The first-init virtual-time path is covered separately in TestInitTimeSkippingInfo.
@@ -1680,4 +1648,44 @@ func (s *mutableStateSuite) TestTimeSkippingInfoUtil() {
 		s.Equal(msNow, info.GetCurrentTime().AsTime())
 	})
 
+}
+
+func TestAdjustNowWithTimeSkipping(t *testing.T) {
+	now := time.Date(2026, 8, 19, 9, 0, 0, 0, time.UTC)
+
+	testCases := []struct {
+		name             string
+		statePropagation *commonpb.TimeSkippingStatePropagation
+		want             time.Time
+	}{
+		{
+			name: "nil propagation",
+			want: now,
+		},
+		{
+			name:             "nil initial skipped duration",
+			statePropagation: &commonpb.TimeSkippingStatePropagation{},
+			want:             now,
+		},
+		{
+			name: "zero initial skipped duration",
+			statePropagation: &commonpb.TimeSkippingStatePropagation{
+				InitialSkippedDuration: durationpb.New(0),
+			},
+			want: now,
+		},
+		{
+			name: "positive initial skipped duration",
+			statePropagation: &commonpb.TimeSkippingStatePropagation{
+				InitialSkippedDuration: durationpb.New(2 * time.Hour),
+			},
+			want: now.Add(2 * time.Hour),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, AdjustNowWithTimeSkipping(now, tc.statePropagation))
+		})
+	}
 }
