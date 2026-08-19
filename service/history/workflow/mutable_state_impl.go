@@ -648,8 +648,7 @@ func NewMutableStateInChain(
 	newMutableState.executionInfo.WorkflowExecutionTimerTaskStatus = currentMutableState.GetExecutionInfo().WorkflowExecutionTimerTaskStatus
 	newMutableState.executionInfo.ChildrenInitializedPostResetPoint = currentMutableState.GetExecutionInfo().ChildrenInitializedPostResetPoint
 
-	// Pause/unpause dedup ids follow the chain: a request naming no run id resolves to whichever run
-	// is current, so a successor must recognize a retry that already took effect on its predecessor.
+	// Pause/unpause dedup ids follow the chain to de-dupe the retry request with no run id.
 	lastPauseRequestID := currentMutableState.GetExecutionInfo().GetLastPauseRequestId()
 	lastUnpauseRequestID := currentMutableState.GetExecutionInfo().GetLastUnpauseRequestId()
 	newMutableState.executionInfo.LastPauseRequestId = lastPauseRequestID

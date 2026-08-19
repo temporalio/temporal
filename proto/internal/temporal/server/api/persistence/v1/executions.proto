@@ -320,12 +320,10 @@ message WorkflowExecutionInfo {
   // Time skipping info that contains the config and runtime history of the time skipping for the workflow.
   TimeSkippingInfo time_skipping_info = 115;
 
-  // Request ids of the most recently applied unpause and pause requests, used to de-dupe those
-  // requests. pause_info carries the pause request id as well, but only while the workflow stays
-  // paused; these outlive it, so a retry of a request that already took effect is recognized as a
-  // duplicate instead of being replayed against a workflow that a later transition moved on. Both
-  // are carried across continue-as-new, since a request naming no run id resolves to whichever run
-  // is current.
+  // Most recently applied unpause and pause request ids, needed to dedupuplicate these.
+  // Since pause_info is no longer available in unpaused, fallback to last_pause_request_id
+  // to de-dupe a pause. Both are carried across continue-as-new, to de-dupe a request
+  // with no run id.
   string last_unpause_request_id = 116;
   string last_pause_request_id = 117;
 }
