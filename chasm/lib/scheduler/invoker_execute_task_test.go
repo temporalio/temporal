@@ -274,8 +274,8 @@ func TestExecuteTask_AllowAllRemovedAcrossEngineTransaction(t *testing.T) {
 		func(sched *scheduler.Scheduler, ctx chasm.Context, _ struct{}) (struct{}, error) {
 			persistedInvoker := sched.Invoker.Get(ctx)
 			require.Empty(t, persistedInvoker.GetBufferedStarts())
-			require.Len(t, persistedInvoker.GetRecentActions(), 1)
-			require.Equal(t, "allow-all-run", persistedInvoker.GetRecentActions()[0].GetStartWorkflowResult().GetRunId())
+			require.Len(t, sched.Info.GetRecentActions(), 1)
+			require.Equal(t, "allow-all-run", sched.Info.GetRecentActions()[0].GetStartWorkflowResult().GetRunId())
 			describe, describeErr := sched.Describe(ctx, &schedulerpb.DescribeScheduleRequest{}, newLegacySpecBuilder(0, 0))
 			require.NoError(t, describeErr)
 			require.Empty(t, describe.GetFrontendResponse().GetInfo().GetRunningWorkflows())
@@ -312,9 +312,9 @@ func TestRecordExecuteResult_AllowAllRecentActionsBounded(t *testing.T) {
 	require.Equal(t, scheduler.RecentActionCount+2, newlyStarted)
 	require.Zero(t, droppedDuplicates)
 	require.Empty(t, invoker.GetBufferedStarts())
-	require.Len(t, invoker.GetRecentActions(), scheduler.RecentActionCount)
-	require.Equal(t, "run-2", invoker.GetRecentActions()[0].GetStartWorkflowResult().GetRunId())
-	require.Equal(t, "run-11", invoker.GetRecentActions()[scheduler.RecentActionCount-1].GetStartWorkflowResult().GetRunId())
+	require.Len(t, env.Scheduler.Info.GetRecentActions(), scheduler.RecentActionCount)
+	require.Equal(t, "run-2", env.Scheduler.Info.GetRecentActions()[0].GetStartWorkflowResult().GetRunId())
+	require.Equal(t, "run-11", env.Scheduler.Info.GetRecentActions()[scheduler.RecentActionCount-1].GetStartWorkflowResult().GetRunId())
 	require.Len(t, env.Scheduler.ListInfo(ctx).GetRecentActions(), 5)
 }
 

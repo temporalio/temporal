@@ -218,7 +218,7 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 		if completedStart, ok := completed[start.RequestId]; ok {
 			newlyStarted++
 			if completedStart.GetOverlapPolicy() == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL {
-				i.recordRecentAction(completedStart, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
+				i.Scheduler.Get(ctx).recordRecentAction(completedStart, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
 				startedAllowAll[start.RequestId] = struct{}{}
 				removedStarts++
 				continue
@@ -277,7 +277,7 @@ func (i *Invoker) recordCompletedAction(
 		if start.GetRequestId() == requestID {
 			scheduleTime = start.DesiredTime.AsTime()
 			if start.GetOverlapPolicy() == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL {
-				i.recordRecentAction(start, completed.GetStatus())
+				i.Scheduler.Get(ctx).recordRecentAction(start, completed.GetStatus())
 				completedAllowAll = requestID
 			} else {
 				start.Completed = completed
@@ -414,12 +414,11 @@ func (i *Invoker) runningWorkflowExecutions() []*commonpb.WorkflowExecution {
 	return running
 }
 
-// recentActions returns started/completed actions as ScheduleActionResults.
-// This includes both running workflows (with status RUNNING) and completed
-// workflows (with their final status).
-func (i *Invoker) recentActions() []*schedulepb.ScheduleActionResult {
-	results := make([]*schedulepb.ScheduleActionResult, 0, len(i.GetRecentActions())+len(i.GetBufferedStarts()))
-	for _, action := range i.GetRecentActions() {
+// recentActions combines stored start-only actions with completion-tracked actions
+// represented by BufferedStarts.
+func (i *Invoker) recentActions(storedActions []*schedulepb.ScheduleActionResult) []*schedulepb.ScheduleActionResult {
+	results := make([]*schedulepb.ScheduleActionResult, 0, len(storedActions)+len(i.GetBufferedStarts()))
+	for _, action := range storedActions {
 		results = append(results, common.CloneProto(action))
 	}
 	for _, start := range i.GetBufferedStarts() {
@@ -442,25 +441,6 @@ func (i *Invoker) recentActions() []*schedulepb.ScheduleActionResult {
 		})
 	}
 	return results
-}
-
-func (i *Invoker) recordRecentAction(
-	start *schedulespb.BufferedStart,
-	status enumspb.WorkflowExecutionStatus,
-) {
-	i.RecentActions = append(i.RecentActions, &schedulepb.ScheduleActionResult{
-		ScheduleTime: start.GetActualTime(),
-		ActualTime:   start.GetStartTime(),
-		StartWorkflowResult: &commonpb.WorkflowExecution{
-			WorkflowId: start.GetWorkflowId(),
-			RunId:      start.GetRunId(),
-		},
-		StartWorkflowStatus: status,
-	})
-	slices.SortFunc(i.RecentActions, func(a, b *schedulepb.ScheduleActionResult) int {
-		return a.GetActualTime().AsTime().Compare(b.GetActualTime().AsTime())
-	})
-	i.RecentActions = util.SliceTail(i.RecentActions, recentActionCount)
 }
 
 func (i *Invoker) bufferedStartsCount() int {

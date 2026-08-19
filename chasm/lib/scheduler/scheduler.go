@@ -520,7 +520,7 @@ func (s *Scheduler) getLastEventTime(ctx chasm.Context) time.Time {
 	)
 
 	// The recentActions list is unsorted.
-	for _, a := range s.Invoker.Get(ctx).recentActions() {
+	for _, a := range s.recentActions(ctx) {
 		latest = util.MaxTime(latest, a.GetActualTime().AsTime())
 	}
 
@@ -581,11 +581,35 @@ type schedulerActionResult struct {
 }
 
 // recordActionResult updates the Scheduler's customer-facing metrics.
-// RunningWorkflows and RecentActions are computed from BufferedStarts.
+// RunningWorkflows are computed from BufferedStarts. RecentActions also includes
+// start-only records for actions that are removed from active state after starting.
 func (s *Scheduler) recordActionResult(result *schedulerActionResult) {
 	s.Info.ActionCount += result.actionCount
 	s.Info.OverlapSkipped += result.overlapSkipped
 	s.Info.MissedCatchupWindow += result.missedCatchupWindow
+}
+
+func (s *Scheduler) recordRecentAction(
+	start *schedulespb.BufferedStart,
+	status enumspb.WorkflowExecutionStatus,
+) {
+	s.Info.RecentActions = append(s.Info.RecentActions, &schedulepb.ScheduleActionResult{
+		ScheduleTime: start.GetActualTime(),
+		ActualTime:   start.GetStartTime(),
+		StartWorkflowResult: &commonpb.WorkflowExecution{
+			WorkflowId: start.GetWorkflowId(),
+			RunId:      start.GetRunId(),
+		},
+		StartWorkflowStatus: status,
+	})
+	slices.SortFunc(s.Info.RecentActions, func(a, b *schedulepb.ScheduleActionResult) int {
+		return a.GetActualTime().AsTime().Compare(b.GetActualTime().AsTime())
+	})
+	s.Info.RecentActions = util.SliceTail(s.Info.RecentActions, recentActionCount)
+}
+
+func (s *Scheduler) recentActions(ctx chasm.Context) []*schedulepb.ScheduleActionResult {
+	return s.Invoker.Get(ctx).recentActions(s.Info.GetRecentActions())
 }
 
 var _ chasm.NexusCompletionHandler = &Scheduler{}
@@ -748,7 +772,7 @@ func (s *Scheduler) Describe(
 	invoker := s.Invoker.Get(ctx)
 	info := common.CloneProto(s.Info)
 	info.RunningWorkflows = invoker.runningWorkflowExecutions()
-	info.RecentActions = invoker.recentActions()
+	info.RecentActions = s.recentActions(ctx)
 	info.FutureActionTimes = futureActionTimes
 	// Only starts that have not reached StartWorkflowExecution count as buffered.
 	info.BufferSize = int64(invoker.bufferedStartsCount())
@@ -1066,11 +1090,10 @@ func (s *Scheduler) ListInfo(
 	spec.StructuredCalendar = util.SliceHead(spec.StructuredCalendar, listInfoSpecFieldLimit)
 
 	generator := s.Generator.Get(ctx)
-	invoker := s.Invoker.Get(ctx)
 
 	// Hard-cap the memo's recent-action list by length after sorting by actual time
 	// (ascending towards most recent).
-	recentActions := invoker.recentActions()
+	recentActions := s.recentActions(ctx)
 	slices.SortFunc(recentActions, func(a, b *schedulepb.ScheduleActionResult) int {
 		return a.GetActualTime().AsTime().Compare(b.GetActualTime().AsTime())
 	})

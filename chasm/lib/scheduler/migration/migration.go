@@ -41,8 +41,8 @@ const legacyRecentActionCount = 10
 //   - High water mark (becomes Generator.LastProcessedTime)
 //   - Search attributes and memo
 //
-// Note: In V2, RunningWorkflows and RecentActions are computed on-demand from
-// BufferedStarts by the Invoker, rather than being stored separately in ScheduleInfo.
+// Note: In V2, completion-tracked RunningWorkflows and RecentActions are computed
+// on-demand from BufferedStarts. Start-only recent actions remain in ScheduleInfo.
 func LegacyToCreateFromMigrationStateRequest(
 	schedule *schedulepb.Schedule,
 	info *schedulepb.ScheduleInfo,
@@ -51,7 +51,7 @@ func LegacyToCreateFromMigrationStateRequest(
 	memo *commonpb.Memo,
 	migrationTime time.Time,
 ) *schedulerpb.CreateFromMigrationStateRequest {
-	// V2 computes RunningWorkflows/RecentActions on-demand from BufferedStarts
+	// Imported recent actions are represented by BufferedStarts in V2.
 	infoClone := common.CloneProto(info)
 	infoClone.RunningWorkflows = nil
 	infoClone.RecentActions = nil
@@ -168,9 +168,9 @@ func CHASMToLegacyStartScheduleArgs(
 		invokerBuffered = invoker.GetBufferedStarts()
 	}
 	bufferedStarts, running, recent := splitBufferedStartsForLegacy(invokerBuffered)
-	if invoker != nil {
-		storedRecent := make([]*schedulepb.ScheduleActionResult, 0, len(invoker.GetRecentActions()))
-		for _, action := range invoker.GetRecentActions() {
+	if len(info.GetRecentActions()) > 0 {
+		storedRecent := make([]*schedulepb.ScheduleActionResult, 0, len(info.GetRecentActions()))
+		for _, action := range info.GetRecentActions() {
 			storedRecent = append(storedRecent, common.CloneProto(action))
 		}
 		recent = append(storedRecent, recent...)

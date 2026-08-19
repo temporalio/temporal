@@ -156,8 +156,8 @@ func TestHandleNexusCompletion_ExistingAllowAllDoesNotUpdateCompletionState(t *t
 	require.False(t, sched.Schedule.State.Paused)
 	invoker := sched.Invoker.Get(readCtx)
 	require.Empty(t, invoker.GetBufferedStarts())
-	require.Len(t, invoker.GetRecentActions(), 1)
-	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, invoker.GetRecentActions()[0].GetStartWorkflowStatus())
+	require.Len(t, sched.Info.GetRecentActions(), 1)
+	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, sched.Info.GetRecentActions()[0].GetStartWorkflowStatus())
 }
 
 // TestHandleNexusCompletion_Failure verifies that a failed workflow completion

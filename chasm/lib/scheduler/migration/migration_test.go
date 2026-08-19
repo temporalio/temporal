@@ -232,16 +232,16 @@ func TestCHASMToLegacyStartScheduleArgs(t *testing.T) {
 		Info:          &schedulepb.ScheduleInfo{ActionCount: 12},
 	}
 	generator := &schedulerpb.GeneratorState{LastProcessedTime: timestamppb.New(now.Add(-time.Minute))}
+	scheduler.Info.RecentActions = []*schedulepb.ScheduleActionResult{{
+		ScheduleTime: timestamppb.New(now.Add(-4 * time.Minute)),
+		ActualTime:   timestamppb.New(now.Add(-4 * time.Minute)),
+		StartWorkflowResult: &commonpb.WorkflowExecution{
+			WorkflowId: "wf-start-only",
+			RunId:      "run-start-only",
+		},
+		StartWorkflowStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	}}
 	invoker := &schedulerpb.InvokerState{
-		RecentActions: []*schedulepb.ScheduleActionResult{{
-			ScheduleTime: timestamppb.New(now.Add(-4 * time.Minute)),
-			ActualTime:   timestamppb.New(now.Add(-4 * time.Minute)),
-			StartWorkflowResult: &commonpb.WorkflowExecution{
-				WorkflowId: "wf-start-only",
-				RunId:      "run-start-only",
-			},
-			StartWorkflowStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		}},
 		BufferedStarts: []*schedulespb.BufferedStart{
 			{
 				NominalTime:   timestamppb.New(now.Add(-10 * time.Minute)),
