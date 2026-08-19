@@ -156,7 +156,7 @@ func TestNamespaceReplicationProcessedIncludesUpdatePersistenceRequest(t *testin
 	var got map[string]any
 	require.NoError(t, json.Unmarshal([]byte(record["persistence_request"].(string)), &got))
 	require.Equal(t, "UpdateNamespaceRequest", got["request_type"])
-	require.Equal(t, float64(19), got["notification_version"])
+	require.InDelta(t, float64(19), got["notification_version"].(float64), 0)
 	require.Equal(t, "8", got["namespace"].(map[string]any)["config_version"])
 }
 

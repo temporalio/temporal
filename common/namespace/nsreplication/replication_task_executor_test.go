@@ -570,7 +570,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	request := s.processedPersistenceRequest()
 	s.Equal("UpdateNamespaceRequest", request["request_type"])
 	s.Equal("1", request["namespace"].(map[string]any)["config_version"])
-	s.Equal(float64(updateFailoverVersion), request["notification_version"])
+	s.InDelta(float64(updateFailoverVersion), request["notification_version"].(float64), 0)
 }
 
 func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_UpdateConfig_NoUpdateActiveCluster() {
