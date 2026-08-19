@@ -48,6 +48,12 @@ type nexusHTTPSpan struct {
 	NexusAttrs   map[string]any
 }
 
+type nexusTaskGRPCSpan struct {
+	TraceID int
+	Name    string
+	TaskID  int
+}
+
 type NexusOTELSuite struct {
 	parallelsuite.Suite[*NexusOTELSuite]
 }
@@ -336,7 +342,23 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 	s.Require().True(spanContext.IsValid())
 	s.Require().Equal(spanContext.TraceID(), httpSpans[0].SpanContext.TraceID())
 	s.Require().Equal(spanContext.SpanID(), httpSpans[0].SpanContext.SpanID())
-	s.requireNexusTaskGRPCSpans(exporter)
+	s.requireNexusTaskGRPCSpans(exporter, []nexusTaskGRPCSpan{
+		{
+			TraceID: 1,
+			Name:    "temporal.server.api.matchingservice.v1.MatchingService/DispatchNexusTask",
+			TaskID:  1,
+		},
+		{
+			TraceID: 2,
+			Name:    "temporal.server.api.matchingservice.v1.MatchingService/PollNexusTaskQueue",
+			TaskID:  1,
+		},
+		{
+			TraceID: 3,
+			Name:    "temporal.server.api.matchingservice.v1.MatchingService/RespondNexusTaskCompleted",
+			TaskID:  1,
+		},
+	})
 }
 
 // Verifies the namespace and task queue route propagates tracing and records handler failures without forwarding.
@@ -389,43 +411,82 @@ func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 	}})
 	s.Require().Equal(traceID, httpSpans[0].SpanContext.TraceID().String())
 	s.Require().Equal(parentSpanID, httpSpans[0].Parent.SpanID().String())
-	s.requireNexusTaskGRPCSpans(exporter)
+	s.requireNexusTaskGRPCSpans(exporter, []nexusTaskGRPCSpan{
+		{
+			TraceID: 1,
+			Name:    "temporal.server.api.matchingservice.v1.MatchingService/DispatchNexusTask",
+			TaskID:  1,
+		},
+		{
+			TraceID: 2,
+			Name:    "temporal.server.api.matchingservice.v1.MatchingService/PollNexusTaskQueue",
+			TaskID:  1,
+		},
+		{
+			TraceID: 3,
+			Name:    "temporal.server.api.matchingservice.v1.MatchingService/RespondNexusTaskFailed",
+			TaskID:  1,
+		},
+	})
 }
 
-func (s *NexusOTELSuite) requireNexusTaskGRPCSpans(exporter *tracetest.InMemoryExporter) {
+// requireNexusTaskGRPCSpans compares matching gRPC spans after assigning stable trace and task IDs.
+func (s *NexusOTELSuite) requireNexusTaskGRPCSpans(
+	exporter *tracetest.InMemoryExporter,
+	expected []nexusTaskGRPCSpan,
+) {
 	s.T().Helper()
-	const matchingServicePrefix = "temporal.server.api.matchingservice.v1.MatchingService/"
-	respondSpanName := matchingServicePrefix + "RespondNexusTask"
-	spanNames := []string{
-		matchingServicePrefix + "DispatchNexusTask",
-		matchingServicePrefix + "PollNexusTaskQueue",
-		respondSpanName,
-	}
 	s.Await(func(s *NexusOTELSuite) {
-		taskIDs := make(map[string]string)
-		for _, span := range exporter.GetSpans() {
-			spanName := span.Name
-			if strings.HasPrefix(spanName, respondSpanName) {
-				spanName = respondSpanName
-			}
-			if !slices.Contains(spanNames, spanName) {
-				continue
-			}
-			for _, attr := range span.Attributes {
-				if string(attr.Key) == telemetry.WorkerTaskIDKey {
-					taskIDs[spanName] = attr.Value.AsString()
-				}
+		actual := s.nexusTaskGRPCSpans(exporter.GetSpans())
+		s.Require().Len(actual, len(expected))
+		s.Require().Equal(expected, actual)
+	}, 10*time.Second, 100*time.Millisecond)
+}
+
+func (s *NexusOTELSuite) nexusTaskGRPCSpans(spans tracetest.SpanStubs) []nexusTaskGRPCSpan {
+	const matchingServicePrefix = "temporal.server.api.matchingservice.v1.MatchingService/"
+	spans = slices.DeleteFunc(spans, func(span tracetest.SpanStub) bool {
+		if !strings.HasPrefix(span.Name, matchingServicePrefix) {
+			return true
+		}
+		for _, attr := range span.Attributes {
+			if string(attr.Key) == telemetry.WorkerTaskIDKey {
+				return false
 			}
 		}
-		s.Require().Len(taskIDs, len(spanNames))
-		taskID := taskIDs[spanNames[0]]
-		s.Require().NotEmpty(taskID)
-		s.Require().Equal(map[string]string{
-			spanNames[0]: taskID,
-			spanNames[1]: taskID,
-			spanNames[2]: taskID,
-		}, taskIDs)
-	}, 10*time.Second, 100*time.Millisecond)
+		return true
+	})
+	slices.SortFunc(spans, func(a, b tracetest.SpanStub) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+
+	traceIDs := make(map[oteltrace.TraceID]int)
+	taskIDs := make(map[string]int)
+	result := make([]nexusTaskGRPCSpan, 0, len(spans))
+	for _, span := range spans {
+		traceID := span.SpanContext.TraceID()
+		if _, ok := traceIDs[traceID]; !ok {
+			traceIDs[traceID] = len(traceIDs) + 1
+		}
+		var taskID string
+		for _, attr := range span.Attributes {
+			if string(attr.Key) == telemetry.WorkerTaskIDKey {
+				taskID = attr.Value.AsString()
+				break
+			}
+		}
+		if taskID != "" {
+			if _, ok := taskIDs[taskID]; !ok {
+				taskIDs[taskID] = len(taskIDs) + 1
+			}
+		}
+		result = append(result, nexusTaskGRPCSpan{
+			TraceID: traceIDs[traceID],
+			Name:    span.Name,
+			TaskID:  taskIDs[taskID],
+		})
+	}
+	return result
 }
 
 // requireNexusHTTPSpans compares all exported HTTP spans and their Nexus attributes after
