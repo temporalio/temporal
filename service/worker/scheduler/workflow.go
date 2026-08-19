@@ -66,6 +66,8 @@ const (
 	LimitMemoSpecSize = 11
 	// trigger immediately timestamp is added to the PatchRequest
 	TriggerImmediatelyTimestamp = 12
+	// update the desired time for a buffered start when refresh discovers the prior action completed
+	RefreshCompletionDesiredTime = 13
 )
 
 const (
@@ -216,7 +218,7 @@ var (
 		ReuseTimer:                        true,
 		NextTimeCacheV2Size:               14, // see note below
 		SpecFieldLengthLimit:              10,
-		Version:                           TriggerImmediatelyTimestamp,
+		Version:                           RefreshCompletionDesiredTime,
 	}
 
 	// Note on NextTimeCacheV2Size: This value must be > FutureActionCountForList. Each
@@ -992,7 +994,7 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future, long bool
 	// starting the next). The legacy path doesn't use deferred starts
 	// (Attempt == -1) like CHASM, so BufferedStarts[0] is always the next
 	// pending start.
-	if long && len(s.State.BufferedStarts) > 0 {
+	if (long || s.hasMinVersion(RefreshCompletionDesiredTime)) && len(s.State.BufferedStarts) > 0 {
 		s.State.BufferedStarts[0].DesiredTime = res.CloseTime
 	}
 
