@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"maps"
 
 	"go.opentelemetry.io/otel/log"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -133,9 +134,7 @@ func EmitNamespaceReplicationLifecycle(logger log.Logger, in NamespaceReplicatio
 	fingerprint := sha256.Sum256(taskBytes)
 
 	details := make(map[string]any, len(in.EventData.Details)+12)
-	for key, value := range in.EventData.Details {
-		details[key] = value
-	}
+	maps.Copy(details, in.EventData.Details)
 	details["task_type"] = in.EventData.TaskType
 	details["task_kind"] = in.EventData.TaskKind
 	details["operation"] = in.EventData.Operation
