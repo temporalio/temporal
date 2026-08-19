@@ -46,6 +46,17 @@ func Invoke(
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
 
+			// Deduplicate a retry of an unpause that already took effect. Checked ahead of the state
+			// checks below so a retry still succeeds once the workflow has moved on, including
+			// after it has closed.
+			if requestID := unpauseRequest.GetRequestId(); requestID != "" &&
+				requestID == mutableState.GetExecutionInfo().GetLastUnpauseRequestId() {
+				return &api.UpdateWorkflowAction{
+					Noop:               true,
+					CreateWorkflowTask: false,
+				}, nil
+			}
+
 			releaseFn := workflowLease.GetReleaseFn()
 			// Make sure the workflow is not closed.
 			if !mutableState.IsWorkflowExecutionRunning() {
