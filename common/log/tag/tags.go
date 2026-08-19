@@ -1023,6 +1023,12 @@ func NexusEndpointTargetNamespaceID(namespaceID string) ZapTag {
 	return NewStringTag("nexus-endpoint-target-namespace-id", namespaceID)
 }
 
+// NexusEndpointID returns a tag for the ID of a Nexus endpoint. Requests dispatched by endpoint
+// carry the ID rather than the name, and the name is unresolvable if the lookup itself failed.
+func NexusEndpointID(endpointID string) ZapTag {
+	return NewStringTag("nexus-endpoint-id", endpointID)
+}
+
 // WorkflowRuleID returns tag for WorkflowRuleID
 func WorkflowRuleID(ruleID string) ZapTag {
 	return NewStringTag("wf-rule-id", ruleID)
