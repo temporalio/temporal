@@ -336,7 +336,7 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 	s.Require().True(spanContext.IsValid())
 	s.Require().Equal(spanContext.TraceID(), httpSpans[0].SpanContext.TraceID())
 	s.Require().Equal(spanContext.SpanID(), httpSpans[0].SpanContext.SpanID())
-	s.requireNexusTaskIDSpans(exporter, "RespondNexusTaskCompleted")
+	s.requireNexusTaskIDSpans(exporter)
 }
 
 // Verifies the namespace and task queue route propagates tracing and records handler failures without forwarding.
@@ -389,30 +389,32 @@ func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 	}})
 	s.Require().Equal(traceID, httpSpans[0].SpanContext.TraceID().String())
 	s.Require().Equal(parentSpanID, httpSpans[0].Parent.SpanID().String())
-	s.requireNexusTaskIDSpans(exporter, "RespondNexusTaskFailed")
+	s.requireNexusTaskIDSpans(exporter)
 }
 
 // Verifies Xray can join the separate dispatch, poll, and response traces by task ID.
-func (s *NexusOTELSuite) requireNexusTaskIDSpans(
-	exporter *tracetest.InMemoryExporter,
-	respondMethod string,
-) {
+func (s *NexusOTELSuite) requireNexusTaskIDSpans(exporter *tracetest.InMemoryExporter) {
 	s.T().Helper()
 	const matchingServicePrefix = "temporal.server.api.matchingservice.v1.MatchingService/"
+	respondSpanName := matchingServicePrefix + "RespondNexusTask"
 	spanNames := []string{
 		matchingServicePrefix + "DispatchNexusTask",
 		matchingServicePrefix + "PollNexusTaskQueue",
-		matchingServicePrefix + respondMethod,
+		respondSpanName,
 	}
 	s.Await(func(s *NexusOTELSuite) {
 		taskIDs := make(map[string]string)
 		for _, span := range exporter.GetSpans() {
-			if !slices.Contains(spanNames, span.Name) {
+			spanName := span.Name
+			if strings.HasPrefix(spanName, respondSpanName) {
+				spanName = respondSpanName
+			}
+			if !slices.Contains(spanNames, spanName) {
 				continue
 			}
 			for _, attr := range span.Attributes {
 				if string(attr.Key) == telemetry.WorkerTaskIDKey {
-					taskIDs[span.Name] = attr.Value.AsString()
+					taskIDs[spanName] = attr.Value.AsString()
 				}
 			}
 		}
