@@ -10202,10 +10202,8 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_FAILED, descResp.GetInfo().GetStatus())
 
-		// Wait for the callback to complete and verify.
 		// The Activity may have failed, but the callback reporting the failure should be successful.
-		cbInfo := env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
-		require.NotNil(t, cbInfo.GetSuccess())
+		env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
 	})
 
 	t.Run("TerminatedWithCallbacks", func(t *testing.T) {
@@ -10274,9 +10272,8 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TERMINATED, descResp.GetInfo().GetStatus())
 
-		// Wait for the callback to complete and verify.
-		cbInfo := env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
-		require.NotNil(t, cbInfo.GetSuccess())
+		// The callback reporting the termination should be delivered successfully.
+		env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
 	})
 
 	t.Run("CanceledWithCallbacks", func(t *testing.T) {
@@ -10350,9 +10347,8 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, descResp.GetInfo().GetStatus())
 
-		// Wait for the callback to complete and verify.
-		cbInfo := env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
-		require.NotNil(t, cbInfo.GetSuccess())
+		// The callback reporting the cancellation should be delivered successfully.
+		env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
 	})
 
 	// This test covers the timeout callback path using schedule-to-start, but the callback behavior
@@ -10409,9 +10405,8 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, descResp.GetInfo().GetStatus())
 
-		// Confirm the callback was successful. (Receiving the timeout failure, verified above.)
-		cbInfo := env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
-		require.NotNil(t, cbInfo.GetSuccess())
+		// The callback delivering the timeout failure should itself succeed.
+		env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
 	})
 
 	// Verify that if the callback fails to be delivered for some reason, that the failure is

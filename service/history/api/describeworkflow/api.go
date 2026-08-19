@@ -618,8 +618,6 @@ func buildChasmCallbackInfo(
 		}
 	}
 
-	// TODO: workflowpb.CallbackInfo duplicates callbackpb.CallbackInfo's fields instead of
-	// embedding it (unlike activitypb.CallbackInfo), so it has no outcome field to populate.
 	return &workflowpb.CallbackInfo{
 		Callback:                cbSpec,
 		Trigger:                 trigger,

@@ -74,6 +74,7 @@ message Callback {
   }
 
   reserved 1; // For a generic callback mechanism to be added later.
+
   oneof variant {
     Nexus nexus = 2;
     Worker worker = 4;

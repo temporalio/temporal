@@ -177,22 +177,21 @@ func (c *Callback) ToAPICallback() (*commonpb.Callback, error) {
 	}
 }
 
-// setResult poulates the Result field of the supplied proto based on the Callback's state.
+// setResult populates the Result field of the supplied proto based on the Callback's state.
 // (Including nil if the Callback has not completed.)
-func (c *Callback) setResult(apiCb *callbackpb.CallbackInfo) {
+func (c *Callback) setResult(cbi *callbackpb.CallbackInfo) {
 	switch c.Status {
 	case callbackspb.CALLBACK_STATUS_SUCCEEDED:
-		apiCb.Result = &callbackpb.CallbackInfo_Success{
+		cbi.Result = &callbackpb.CallbackInfo_Success{
 			Success: &emptypb.Empty{},
 		}
 	case callbackspb.CALLBACK_STATUS_FAILED:
-		// Currently there is no way for a Callback to fail other than due to failed deliveries.
-		// So the last, non-retryable error encountered was LastAttemptFailure.
-		apiCb.Result = &callbackpb.CallbackInfo_Failure{
+		// A callback can only fail on a non-retryable delivery error, recorded in LastAttemptFailure.
+		cbi.Result = &callbackpb.CallbackInfo_Failure{
 			Failure: common.CloneProto(c.LastAttemptFailure),
 		}
 	default:
-		apiCb.Result = nil
+		cbi.Result = nil
 	}
 }
 
