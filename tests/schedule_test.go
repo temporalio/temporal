@@ -5230,6 +5230,40 @@ func TestScheduleNextActionTimeVisibility(t *testing.T) {
 		v2Sid, query)
 }
 
+func TestListSchedulesPreservesV2ScheduleIDWithV1Prefix(t *testing.T) {
+	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+	ctx := chasmContextFactory(s.Context())
+
+	suffix := testcore.RandomizeStr("sched-list-v2-prefix")
+	plainID := "foo-" + suffix
+	prefixedID := scheduler.WorkflowIDPrefix + plainID
+	for _, scheduleID := range []string{plainID, prefixedID} {
+		createSchedule(ctx, t, s, scheduleID, &schedulepb.Schedule{
+			Spec:   intervalSpec(noOpInterval),
+			State:  &schedulepb.ScheduleState{Paused: true},
+			Action: startWorkflowAction(s, "wf-"+scheduleID, "wt-"+scheduleID),
+		})
+	}
+
+	require.Eventually(t, func() bool {
+		response, err := s.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
+			Namespace:       s.Namespace().String(),
+			MaximumPageSize: 10,
+		})
+		if err != nil {
+			return false
+		}
+		ids := make(map[string]struct{}, len(response.Schedules))
+		for _, schedule := range response.Schedules {
+			ids[schedule.GetScheduleId()] = struct{}{}
+		}
+		_, foundPlainID := ids[plainID]
+		_, foundPrefixedID := ids[prefixedID]
+		return foundPlainID && foundPrefixedID
+	}, awaitTimeout, pollInterval,
+		"ListSchedules must preserve both V2 IDs %q and %q", plainID, prefixedID)
+}
+
 // TestMirroredIncludeExcludeSpec sets identical interval and exclusion
 // specifications that match every 1s, effectively cancelling each other out.
 func TestMirroredIncludeExcludeSpec(t *testing.T) {
