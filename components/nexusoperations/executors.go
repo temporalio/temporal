@@ -25,7 +25,6 @@ import (
 	"go.temporal.io/server/chasm"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -271,17 +270,18 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		Links: []nexus.Link{args.nexusLink},
 	}
 
-	callLogger := e.outboundCallLogger(
-		"StartOperation",
-		ns.Name().String(),
-		endpoint.GetEndpoint().GetSpec().GetTarget().GetWorker().GetNamespaceId(),
-		args.requestID,
-		args.operation,
-		args.endpointName,
-		ref.WorkflowKey,
-		time.Now().UTC(),
-		task.Attempt,
-	)
+	traceCtx := invocationTraceContext{
+		operationTag:      "StartOperation",
+		namespaceName:     ns.Name().String(),
+		targetNamespaceID: endpoint.GetEndpoint().GetSpec().GetTarget().GetWorker().GetNamespaceId(),
+		requestID:         args.requestID,
+		operation:         args.operation,
+		endpointName:      args.endpointName,
+		workflowID:        ref.WorkflowKey.WorkflowID,
+		runID:             ref.WorkflowKey.RunID,
+		attemptStart:      time.Now().UTC(),
+		attempt:           task.Attempt,
+	}
 
 	var result *nexusrpc.ClientStartOperationResponse[*commonpb.Payload]
 	var callErr error
@@ -304,7 +304,8 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		}
 
 		if e.HTTPTraceProvider != nil {
-			if trace := e.HTTPTraceProvider.NewTrace(task.Attempt, callLogger); trace != nil {
+			traceLogger := log.With(e.Logger, traceCtx.tags()...)
+			if trace := e.HTTPTraceProvider.NewTrace(traceCtx.attempt, traceLogger); trace != nil {
 				callCtx = httptrace.WithClientTrace(callCtx, trace)
 			}
 		}
@@ -335,7 +336,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	chasmnexus.OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
 	chasmnexus.OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
 
-	logOutboundCallFailure(callLogger, "StartOperation", callErr, failureSource)
+	e.logCallFailure(traceCtx, callErr, failureSource)
 
 	err = e.saveResult(ctx, env, ref, result, callErr)
 
@@ -730,17 +731,18 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	// Set this value on the parent context so that our custom HTTP caller can mutate it since we cannot access response headers directly.
 	callCtx = context.WithValue(callCtx, commonnexus.FailureSourceContextKey, &atomic.Value{})
 
-	callLogger := e.outboundCallLogger(
-		"CancelOperation",
-		ns.Name().String(),
-		endpoint.GetEndpoint().GetSpec().GetTarget().GetWorker().GetNamespaceId(),
-		args.requestID,
-		args.operation,
-		args.endpointName,
-		ref.WorkflowKey,
-		time.Now().UTC(),
-		task.Attempt,
-	)
+	traceCtx := invocationTraceContext{
+		operationTag:      "CancelOperation",
+		namespaceName:     ns.Name().String(),
+		targetNamespaceID: endpoint.GetEndpoint().GetSpec().GetTarget().GetWorker().GetNamespaceId(),
+		requestID:         args.requestID,
+		operation:         args.operation,
+		endpointName:      args.endpointName,
+		workflowID:        ref.WorkflowKey.WorkflowID,
+		runID:             ref.WorkflowKey.RunID,
+		attemptStart:      time.Now().UTC(),
+		attempt:           task.Attempt,
+	}
 
 	var callErr error
 	var startTime time.Time
@@ -766,7 +768,8 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 		}
 
 		if e.HTTPTraceProvider != nil {
-			if trace := e.HTTPTraceProvider.NewTrace(task.Attempt, callLogger); trace != nil {
+			traceLogger := log.With(e.Logger, traceCtx.tags()...)
+			if trace := e.HTTPTraceProvider.NewTrace(traceCtx.attempt, traceLogger); trace != nil {
 				callCtx = httptrace.WithClientTrace(callCtx, trace)
 			}
 		}
@@ -788,7 +791,7 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	chasmnexus.OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, statusCodeTag, failureSourceTag)
 	chasmnexus.OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, statusCodeTag, failureSourceTag)
 
-	logOutboundCallFailure(callLogger, "CancelOperation", callErr, failureSource)
+	e.logCallFailure(traceCtx, callErr, failureSource)
 
 	err = e.saveCancelationResult(ctx, env, ref, callErr, args.scheduledEventID)
 
@@ -955,39 +958,48 @@ func createNexusOperationFailure(operation Operation, scheduledEventID int64, ca
 	}
 }
 
-func (e taskExecutor) outboundCallLogger(
-	method string,
-	namespaceName, targetNamespaceID, requestID, operation, endpointName string,
-	workflowKey definition.WorkflowKey,
-	attemptStart time.Time,
-	attempt int32,
-) log.Logger {
-	return log.With(
-		e.Logger,
-		tag.Operation(method),
-		tag.WorkflowNamespace(namespaceName),
-		tag.NexusEndpointTargetNamespaceID(targetNamespaceID),
-		tag.RequestID(requestID),
-		tag.NexusOperation(operation),
-		tag.Endpoint(endpointName),
-		tag.WorkflowID(workflowKey.WorkflowID),
-		tag.WorkflowRunID(workflowKey.RunID),
-		tag.AttemptStart(attemptStart),
-		tag.Attempt(attempt),
-	)
+// invocationTraceContext captures per-call contextual information used for HTTP tracing and failure logging.
+type invocationTraceContext struct {
+	operationTag      string // "StartOperation" or "CancelOperation"
+	namespaceName     string // source (caller) namespace
+	targetNamespaceID string
+	requestID         string
+	operation         string
+	endpointName      string
+	workflowID        string
+	runID             string
+	attemptStart      time.Time
+	attempt           int32
 }
 
-// logOutboundCallFailure logs worker-sourced failures at debug: a Nexus operation failing is not a
-// server error.
-func logOutboundCallFailure(logger log.Logger, method string, callErr error, failureSource string) {
+// tags returns the structured log tags describing the call.
+func (c invocationTraceContext) tags() []tag.Tag {
+	return []tag.Tag{
+		tag.Operation(c.operationTag),
+		tag.WorkflowNamespace(c.namespaceName),
+		tag.NexusEndpointTargetNamespaceID(c.targetNamespaceID),
+		tag.RequestID(c.requestID),
+		tag.NexusOperation(c.operation),
+		tag.Endpoint(c.endpointName),
+		tag.WorkflowID(c.workflowID),
+		tag.WorkflowRunID(c.runID),
+		tag.AttemptStart(c.attemptStart),
+		tag.Attempt(c.attempt),
+	}
+}
+
+// logCallFailure logs a failed outbound Nexus call.
+func (e taskExecutor) logCallFailure(traceCtx invocationTraceContext, callErr error, failureSource string) {
 	if callErr == nil {
 		return
 	}
-	msg := fmt.Sprintf("Nexus %s request failed", method)
-	if failureSource == commonnexus.FailureSourceWorker || errors.As(callErr, new(*operationTimeoutBelowMinError)) {
-		logger.Debug(msg, tag.Error(callErr))
+	tags := append(traceCtx.tags(), tag.Error(callErr))
+	msg := fmt.Sprintf("Nexus %s request failed", traceCtx.operationTag)
+	_, isTimeoutBelowMin := errors.AsType[*operationTimeoutBelowMinError](callErr)
+	if failureSource == commonnexus.FailureSourceWorker || isTimeoutBelowMin {
+		e.Logger.Debug(msg, tags...)
 	} else {
-		logger.Error(msg, tag.Error(callErr))
+		e.Logger.Error(msg, tags...)
 	}
 }
 
