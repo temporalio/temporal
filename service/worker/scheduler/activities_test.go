@@ -34,7 +34,8 @@ func newTestActivities(client schedulerpb.SchedulerServiceClient, nsID namespace
 			SchedulerClient: client,
 			MetricsHandler:  metrics.NoopMetricsHandler,
 		},
-		namespaceID: nsID,
+		namespaceID:      nsID,
+		migrationEnabled: func() bool { return true },
 	}
 }
 
@@ -99,4 +100,21 @@ func TestMigrateScheduleToChasm_NamespaceMismatch(t *testing.T) {
 	require.Contains(t, err.Error(), "namespace_mismatch")
 	require.Contains(t, err.Error(), "different-namespace-id")
 	require.Contains(t, err.Error(), testNamespaceID)
+}
+
+// TestMigrateScheduleToChasm_MigrationDisabled verifies the activity performs
+// its own live check of EnableCHASMSchedulerMigration -- independent of
+// whatever the calling workflow last cached -- and refuses when it's off.
+// This is what stops a pending migration from completing after a rollback,
+// even if the workflow retrying it has been asleep since before the rollback.
+func TestMigrateScheduleToChasm_MigrationDisabled(t *testing.T) {
+	client := &mockSchedulerClient{}
+	a := newTestActivities(client, testNamespaceID)
+	a.migrationEnabled = func() bool { return false }
+
+	err := a.MigrateScheduleToChasm(context.Background(), &schedulerpb.CreateFromMigrationStateRequest{
+		NamespaceId: testNamespaceID,
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "migration is currently disabled")
 }
