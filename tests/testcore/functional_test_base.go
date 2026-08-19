@@ -102,6 +102,7 @@ type (
 		EnableHistoryTaskRecorder bool
 		EnableReplicationRecorder bool
 		EnableArchival            bool
+		SpanExporter              sdktrace.SpanExporter
 		AdditionalServerOptions   []temporal.ServerOption
 	}
 	TestClusterOption func(params *testClusterParams)
@@ -177,6 +178,12 @@ func WithClusterHistoryTaskRecorder() TestClusterOption {
 func WithReplicationStreamRecorder() TestClusterOption {
 	return func(params *testClusterParams) {
 		params.EnableReplicationRecorder = true
+	}
+}
+
+func withSpanExporter(exporter sdktrace.SpanExporter) TestClusterOption {
+	return func(params *testClusterParams) {
+		params.SpanExporter = exporter
 	}
 }
 
@@ -309,6 +316,9 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		AdditionalServerOptions:   params.AdditionalServerOptions,
 		WorkerConfig:              WorkerConfig{DisableWorker: !params.EnableWorkerService},
 	}
+	if params.SpanExporter != nil {
+		setSpanExporter(s.testClusterConfig, "test", params.SpanExporter)
+	}
 
 	// Apply configuration for shared clusters.
 	if params.SharedCluster {
@@ -323,9 +333,7 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		s.otelExporter = testtelemetry.NewFileExporter(otelOutputDir)
 
 		// Direct the OTEL exporter to the collector.
-		s.testClusterConfig.SpanExporters = map[telemetry.SpanExporterType]sdktrace.SpanExporter{
-			telemetry.OtelTracesOtlpExporterType: s.otelExporter,
-		}
+		setSpanExporter(s.testClusterConfig, telemetry.OtelTracesOtlpExporterType, s.otelExporter)
 	}
 
 	var err error
@@ -341,6 +349,13 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 	s.externalNamespace = namespace.Name(RandomizeStr("external-namespace"))
 	_, err = s.RegisterNamespace(s.ExternalNamespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
+}
+
+func setSpanExporter(clusterConfig *TestClusterConfig, exporterType telemetry.SpanExporterType, exporter sdktrace.SpanExporter) {
+	if clusterConfig.SpanExporters == nil {
+		clusterConfig.SpanExporters = make(map[telemetry.SpanExporterType]sdktrace.SpanExporter)
+	}
+	clusterConfig.SpanExporters[exporterType] = exporter
 }
 
 func sharedClusterPersistence(defaults persistencetests.TestBaseOptions) persistencetests.TestBaseOptions {

@@ -109,7 +109,7 @@ func routeRequest(
 	namespaceRegistry namespace.Registry,
 	httpClientCache *cluster.FrontendHTTPClientCache,
 	callbackTokenGenerator *commonnexus.CallbackTokenGenerator,
-	defaultClient *http.Client,
+	externalClient *http.Client,
 	localClient *common.FrontendHTTPClient,
 	logger log.Logger,
 ) (*http.Response, error) {
@@ -119,7 +119,7 @@ func routeRequest(
 	// This source header is populated in nexusoperations/tasks (via the ClientProvider) for worker targets
 	// if this header is not populated then we assume it's an external target.
 	if r.Header == nil || r.Header.Get(callbackSourceHeader) == "" {
-		return defaultClient.Do(r)
+		return externalClient.Do(r)
 	}
 	// If we got here, we assume that the endpoint in the original call was a worker target, and we should route
 	// internally, either to a local frontend, or one of the other connected clusters' frontends.

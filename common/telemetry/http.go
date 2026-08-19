@@ -14,6 +14,27 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
+// HTTPClientTransportInstrumenter instruments HTTP transports with the service's tracing configuration.
+type HTTPClientTransportInstrumenter func(http.RoundTripper) http.RoundTripper
+
+// NewHTTPClientTransportInstrumenter binds a tracer provider and propagator for reuse across HTTP transports.
+func NewHTTPClientTransportInstrumenter(
+	tracerProvider trace.TracerProvider,
+	propagator propagation.TextMapPropagator,
+) HTTPClientTransportInstrumenter {
+	return func(rt http.RoundTripper) http.RoundTripper {
+		return NewHTTPClientTransport(rt, tracerProvider, propagator)
+	}
+}
+
+// Instrument instruments rt, or returns it unchanged when the instrumenter is unset.
+func (i HTTPClientTransportInstrumenter) Instrument(rt http.RoundTripper) http.RoundTripper {
+	if i == nil {
+		return rt
+	}
+	return i(rt)
+}
+
 // NewHTTPClientTransport instruments outbound HTTP requests with OpenTelemetry client spans
 // and injects trace context using propagator. If propagator is nil, it defaults to W3C Trace Context.
 func NewHTTPClientTransport(
