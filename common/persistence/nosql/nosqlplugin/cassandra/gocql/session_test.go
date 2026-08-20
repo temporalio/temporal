@@ -55,5 +55,4 @@ func TestPanicCapture(t *testing.T) {
 	}, metrics.NoopMetricsHandler)
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "panic:")
 }

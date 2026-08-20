@@ -156,6 +156,8 @@ func newCQLClientConfig(cli *cli.Context) (*CQLClientConfig, error) {
 		Datacenter:               cli.String(schema.CLIOptDatacenter),
 		Consistency:              cli.String(schema.CLIOptConsistency),
 		DisableInitialHostLookup: cli.GlobalBool(schema.CLIFlagDisableInitialHostLookup),
+		IgnorePeerAddr:           cli.GlobalBool(schema.CLIFlagIgnorePeerAddr),
+		DisableShardAwarePort:    cli.GlobalBool(schema.CLIFlagDisableShardAwarePort),
 	}
 
 	if cli.GlobalBool(schema.CLIFlagEnableTLS) {
