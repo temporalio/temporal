@@ -795,8 +795,7 @@ func (wh *WorkflowHandler) ExecuteMultiOperation(
 
 	historyResp, err := wh.historyClient.ExecuteMultiOperation(ctx, historyReq)
 	if err != nil {
-		var multiErr *serviceerror.MultiOperationExecution
-		if errors.As(err, &multiErr) {
+		if multiErr, ok := errors.AsType[*serviceerror.MultiOperationExecution](err); ok {
 			// Tweak error message for end-users to match the feature name.
 			// The per-operation errors are embedded inside the error and unpacked by the SDK.
 			multiErr.Message = "Update-with-Start could not be executed."
@@ -3587,8 +3586,7 @@ func (wh *WorkflowHandler) createScheduleCHASM(
 	// concurrent V1 CreateSchedule from succeeding for the same schedule ID.
 	if wh.scheduleSentinelsEnabled(request.Namespace) {
 		if err := wh.writeSchedulerWorkflowSentinel(ctx, namespaceID.String(), request); err != nil {
-			var alreadyStartedErr *serviceerror.WorkflowExecutionAlreadyStarted
-			if !errors.As(err, &alreadyStartedErr) {
+			if _, ok := errors.AsType[*serviceerror.WorkflowExecutionAlreadyStarted](err); !ok {
 				return nil, err
 			}
 			// V1 key is occupied. Check if it's a sentinel (proceed) or real scheduler (fail).
@@ -3619,8 +3617,7 @@ func (wh *WorkflowHandler) createScheduleCHASM(
 			return nil, serviceerror.NewWorkflowExecutionAlreadyStarted(
 				fmt.Sprintf("schedule %q: concurrent creation detected", request.ScheduleId), "", "")
 		}
-		var alreadyExistsErr *serviceerror.AlreadyExists
-		if errors.As(err, &alreadyExistsErr) {
+		if alreadyExistsErr, ok := errors.AsType[*serviceerror.AlreadyExists](err); ok {
 			return nil, serviceerror.NewWorkflowExecutionAlreadyStarted(alreadyExistsErr.Message, "", "")
 		}
 		return nil, err
@@ -3646,16 +3643,14 @@ func (wh *WorkflowHandler) createScheduleWorkflow(
 		if err := wh.writeSchedulerCHASMSentinel(ctx, namespaceID.String(), namespaceName.String(), request.ScheduleId); err != nil {
 			// Translate AlreadyExists (from CHASM handler) to
 			// WorkflowExecutionAlreadyStarted for SDK compatibility.
-			var alreadyExistsErr *serviceerror.AlreadyExists
-			if errors.As(err, &alreadyExistsErr) {
+			if alreadyExistsErr, ok := errors.AsType[*serviceerror.AlreadyExists](err); ok {
 				return nil, serviceerror.NewWorkflowExecutionAlreadyStarted(alreadyExistsErr.Message, "", "")
 			}
 			// Ignore unimplemented to avoid issues with mixed brain testing.
 			//
 			// We wouldn't hit this condition in prod, as we wouldn't migrate with the fleet
 			// halfway deployed to the target version.
-			var unimplErr *serviceerror.Unimplemented
-			if !errors.As(err, &unimplErr) {
+			if _, ok := errors.AsType[*serviceerror.Unimplemented](err); !ok {
 				return nil, err
 			}
 		}
@@ -3732,8 +3727,7 @@ func (wh *WorkflowHandler) createScheduleWorkflow(
 	)
 
 	if err != nil {
-		var alreadyStartedErr *serviceerror.WorkflowExecutionAlreadyStarted
-		if errors.As(err, &alreadyStartedErr) {
+		if _, ok := errors.AsType[*serviceerror.WorkflowExecutionAlreadyStarted](err); ok {
 			// V1 key is occupied. Check if it's a sentinel (race) or real scheduler.
 			isReal, checkErr := wh.isRealSchedulerInV1KeySpace(ctx, namespaceID.String(), request.Namespace, request.ScheduleId)
 			if checkErr != nil {
@@ -3821,8 +3815,7 @@ func (wh *WorkflowHandler) isRealSchedulerInV1KeySpace(
 		},
 	})
 	if err != nil {
-		var notFoundErr *serviceerror.NotFound
-		if errors.As(err, &notFoundErr) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			return false, nil
 		}
 		return false, err
@@ -3939,12 +3932,10 @@ func (wh *WorkflowHandler) scheduleSentinelsEnabled(namespaceName string) bool {
 //   - ErrClosed: the CHASM schedule was migrated to V1 and marked closed; the
 //     request should be retried against the workflow-backed stack.
 func isSchedulerErrorLegacyRoutable(err error) bool {
-	var notFoundErr *serviceerror.NotFound
-	if errors.As(err, &notFoundErr) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 		return true
 	}
-	var failedPreconditionErr *serviceerror.FailedPrecondition
-	if errors.As(err, &failedPreconditionErr) {
+	if failedPreconditionErr, ok := errors.AsType[*serviceerror.FailedPrecondition](err); ok {
 		return failedPreconditionErr.Message == chasmscheduler.ErrClosed.(*serviceerror.FailedPrecondition).Message
 	}
 	return false
@@ -5757,8 +5748,7 @@ func (wh *WorkflowHandler) GetWorkerTaskReachability(ctx context.Context, reques
 
 	response, err := wh.getWorkerTaskReachabilityValidated(ctx, ns, request)
 	if err != nil {
-		var invalidArgument *serviceerror.InvalidArgument
-		if errors.As(err, &invalidArgument) {
+		if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
 			return nil, err
 		}
 		// Intentionally treat all errors as internal errors
