@@ -75,6 +75,12 @@ func getCommands(
 			Usage:       "Decode payload",
 			Subcommands: newDecodeCommands(taskBlobEncoder),
 		},
+		{
+			Name:        "dynamic-config",
+			Aliases:     []string{"dc"},
+			Usage:       "Inspect dynamic configuration",
+			Subcommands: newDynamicConfigCommands(clientFactory),
+		},
 	}
 }
 

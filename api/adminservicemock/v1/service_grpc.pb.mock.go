@@ -283,6 +283,26 @@ func (mr *MockAdminServiceClientMockRecorder) DescribeTaskQueuePartition(ctx, in
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueuePartition", reflect.TypeOf((*MockAdminServiceClient)(nil).DescribeTaskQueuePartition), varargs...)
 }
 
+// DumpDynamicConfigValues mocks base method.
+func (m *MockAdminServiceClient) DumpDynamicConfigValues(ctx context.Context, in *adminservice.DumpDynamicConfigValuesRequest, opts ...grpc.CallOption) (*adminservice.DumpDynamicConfigValuesResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DumpDynamicConfigValues", varargs...)
+	ret0, _ := ret[0].(*adminservice.DumpDynamicConfigValuesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DumpDynamicConfigValues indicates an expected call of DumpDynamicConfigValues.
+func (mr *MockAdminServiceClientMockRecorder) DumpDynamicConfigValues(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DumpDynamicConfigValues", reflect.TypeOf((*MockAdminServiceClient)(nil).DumpDynamicConfigValues), varargs...)
+}
+
 // ForceUnloadTaskQueuePartition mocks base method.
 func (m *MockAdminServiceClient) ForceUnloadTaskQueuePartition(ctx context.Context, in *adminservice.ForceUnloadTaskQueuePartitionRequest, opts ...grpc.CallOption) (*adminservice.ForceUnloadTaskQueuePartitionResponse, error) {
 	m.ctrl.T.Helper()
@@ -1303,6 +1323,21 @@ func (m *MockAdminServiceServer) DescribeTaskQueuePartition(arg0 context.Context
 func (mr *MockAdminServiceServerMockRecorder) DescribeTaskQueuePartition(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeTaskQueuePartition", reflect.TypeOf((*MockAdminServiceServer)(nil).DescribeTaskQueuePartition), arg0, arg1)
+}
+
+// DumpDynamicConfigValues mocks base method.
+func (m *MockAdminServiceServer) DumpDynamicConfigValues(arg0 context.Context, arg1 *adminservice.DumpDynamicConfigValuesRequest) (*adminservice.DumpDynamicConfigValuesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DumpDynamicConfigValues", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.DumpDynamicConfigValuesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DumpDynamicConfigValues indicates an expected call of DumpDynamicConfigValues.
+func (mr *MockAdminServiceServerMockRecorder) DumpDynamicConfigValues(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DumpDynamicConfigValues", reflect.TypeOf((*MockAdminServiceServer)(nil).DumpDynamicConfigValues), arg0, arg1)
 }
 
 // ForceUnloadTaskQueuePartition mocks base method.

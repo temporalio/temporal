@@ -19,6 +19,14 @@ func (s StaticClient) GetValue(key Key) []ConstrainedValue {
 	return nil
 }
 
+func (s StaticClient) GetAllValues() ConfigValueMap {
+	values := make(ConfigValueMap, len(s))
+	for key := range s {
+		values[key] = s.GetValue(key)
+	}
+	return values
+}
+
 // NewNoopClient returns a Client that has no keys (a Collection using it will always return
 // default values).
 func NewNoopClient() Client {

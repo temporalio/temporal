@@ -618,6 +618,13 @@ message GetTaskQueueUserDataResponse {
   int64 version = 2;
 }
 
+message DumpDynamicConfigValuesRequest {}
+
+message DumpDynamicConfigValuesResponse {
+  // JSON-encoded ConfigValueMap held by the dynamic config client.
+  bytes values = 1;
+}
+
 // StartAdminBatchOperationRequest starts an admin batch operation.
 // WARNING: Batch Operations are exposed to all users of the namespace. Admin Batch Operations should be exercised with caution.
 message StartAdminBatchOperationRequest {
