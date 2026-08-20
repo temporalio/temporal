@@ -30,6 +30,7 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/rpc/interceptor"
+	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -74,11 +75,8 @@ type operationContext struct {
 	metricsHandler                metrics.Handler
 	logger                        log.Logger
 	clientVersionChecker          headers.VersionChecker
-	auth                          *authorization.Interceptor
 	telemetryInterceptor          *interceptor.TelemetryInterceptor
 	requestErrorHandler           *interceptor.RequestErrorHandler
-	redirectionInterceptor        *interceptor.Redirection
-	forwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	headersBlacklist              dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 	metricTagConfig               dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
 }
@@ -94,9 +92,6 @@ func (c *operationContext) matchingRequest(req *nexuspb.Request) *matchingservic
 
 func (c *operationContext) augmentContext(ctx context.Context, header nexus.Header) context.Context {
 	ctx = interceptor.WithTelemetryContext(ctx, c)
-	ctx = interceptor.WithNexusAPIName(ctx, c.apiName)
-	ctx = interceptor.WithNexusEndpointName(ctx, c.endpointName)
-	ctx = interceptor.WithNexusNamespace(ctx, c.namespace)
 	if userAgent, ok := header[headerUserAgent]; ok {
 		// Use SplitN for efficiency but enforce exactly one delimiter to preserve the
 		// original (pre-SplitN) strictness where additional delimiters cause us to ignore
@@ -138,9 +133,6 @@ func (c *operationContext) SetFailureSource(source string) {
 	c.setFailureSource(source)
 }
 
-// replaces registerRequestErrorHandler and the cleanupFunctions
-// registry. Errors that a worker produced are already reported by the worker's own
-// cluster, so only other sources are handled here.
 func (c *operationContext) HandleRequestError(err error) {
 	if err == nil {
 		return
@@ -234,23 +226,18 @@ type nexusContextKey struct{}
 // Dispatches Nexus requests as Nexus tasks to workers via matching.
 type nexusHandler struct {
 	nexus.UnimplementedHandler
-	logger            log.Logger
-	metricsHandler    metrics.Handler
-	clusterMetadata   cluster.Metadata
-	namespaceRegistry namespace.Registry
-	matchingClient    matchingservice.MatchingServiceClient
-	auth              *authorization.Interceptor
-	// telemetryInterceptor          *interceptor.TelemetryInterceptor
-	// requestErrorHandler           *interceptor.RequestErrorHandler
-	// redirectionInterceptor        *interceptor.Redirection
-	forwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	forwardingClients             *cluster.FrontendHTTPClientCache
-	payloadSizeLimit              dynamicconfig.IntPropertyFnWithNamespaceFilter
-	headersBlacklist              dynamicconfig.TypedPropertyFn[*regexp.Regexp]
-	useForwardByEndpoint          dynamicconfig.BoolPropertyFn
-	metricTagConfig               dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
-	httpTraceProvider             commonnexus.HTTPClientTraceProvider
-	nexusInterceptors             []interceptor.NexusInterceptor
+	logger               log.Logger
+	metricsHandler       metrics.Handler
+	clusterMetadata      cluster.Metadata
+	namespaceRegistry    namespace.Registry
+	matchingClient       matchingservice.MatchingServiceClient
+	requestErrorHandler  *interceptor.RequestErrorHandler
+	payloadSizeLimit     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	headersBlacklist     dynamicconfig.TypedPropertyFn[*regexp.Regexp]
+	useForwardByEndpoint dynamicconfig.BoolPropertyFn
+	metricTagConfig      dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
+	httpTraceProvider    commonnexus.HTTPClientTraceProvider
+	nexusInterceptors    []interceptornexus.Interceptor
 }
 
 // Extracts a nexusContext from the given ctx and returns an operationContext with tagged metrics and logging.
@@ -265,13 +252,9 @@ func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (
 		method:               method,
 		clusterMetadata:      h.clusterMetadata,
 		clientVersionChecker: headers.NewDefaultVersionChecker(),
-		auth:                 h.auth,
-		// telemetryInterceptor:          h.telemetryInterceptor,
-		// requestErrorHandler:           h.requestErrorHandler,
-		// redirectionInterceptor:        h.redirectionInterceptor,
-		forwardingEnabledForNamespace: h.forwardingEnabledForNamespace,
-		headersBlacklist:              h.headersBlacklist,
-		metricTagConfig:               h.metricTagConfig,
+		requestErrorHandler:  h.requestErrorHandler,
+		headersBlacklist:     h.headersBlacklist,
+		metricTagConfig:      h.metricTagConfig,
 	}
 	oc.metricsHandlerForInterceptors = h.metricsHandler.WithTags(
 		metrics.OperationTag(method),
@@ -297,7 +280,6 @@ func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (
 		}
 		return nil, commonnexus.ConvertGRPCError(err, false)
 	}
-	oc.forwardingEnabledForNamespace = h.forwardingEnabledForNamespace
 	oc.logger = log.With(h.logger, tag.Operation(method), tag.WorkflowNamespace(nc.namespaceName))
 	return &oc, nil
 }
@@ -345,21 +327,26 @@ func (h *nexusHandler) StartOperation(
 		},
 	})
 
-	finalHandler := func(ctx context.Context, _ interceptor.NexusInterceptorInput) (any, error) {
+	finalHandler := func(ctx context.Context, _ interceptornexus.InterceptorInput) (any, error) {
 		return h.finalStartHandler(ctx, oc, operation, input, &startOperationRequest, request)
 	}
 
-	nexusOpInput := interceptor.NewStartNexusOpInput(service, operation, oc.namespaceName, options, input)
-	nexusOpInput.WithForwardingInfo(interceptor.NexusForwardingInfo{
+	nexusOpInput := interceptornexus.NewStartOpInput(service, operation, oc.namespaceName, options, input)
+	nexusOpInput.WithForwardingInfo(interceptornexus.ForwardingInfo{
 		OriginalRequestHeaders: oc.originalRequestHeaders,
 		TaskQueue:              oc.taskQueue,
 		EndpointID:             oc.endpointID,
 		EndpointName:           oc.endpointName,
 	})
-	chainedHandler := interceptor.ChainNexusInterceptors(finalHandler, h.nexusInterceptors)
+	nexusOpInput.WithRequestMetadata(interceptornexus.RequestMetadata{
+		APIName:        oc.apiName,
+		NamespaceEntry: oc.namespace,
+		EndpointName:   oc.endpointName,
+	})
+	chainedHandler := interceptornexus.ChainInterceptors(finalHandler, h.nexusInterceptors)
 	out, err := chainedHandler(ctx, nexusOpInput)
 	if err != nil {
-		if taggedErr, ok := errors.AsType[*interceptor.InterceptorError](err); ok {
+		if taggedErr, ok := errors.AsType[*interceptornexus.InterceptorError](err); ok {
 			return nil, taggedErr.Err
 		}
 		return nil, err
@@ -556,21 +543,26 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		},
 	})
 
-	finalHandler := func(ctx context.Context, _ interceptor.NexusInterceptorInput) (any, error) {
+	finalHandler := func(ctx context.Context, _ interceptornexus.InterceptorInput) (any, error) {
 		return nil, h.finalCancelHandler(ctx, oc, operation, request)
 	}
 
-	nexusInterceptorInput := interceptor.NewCancelNexusOpInput(service, operation, oc.namespaceName, options, token)
-	nexusInterceptorInput.WithForwardingInfo(interceptor.NexusForwardingInfo{
+	nexusInterceptorInput := interceptornexus.NewCancelOpInput(service, operation, oc.namespaceName, options, token)
+	nexusInterceptorInput.WithForwardingInfo(interceptornexus.ForwardingInfo{
 		OriginalRequestHeaders: oc.originalRequestHeaders,
 		TaskQueue:              oc.taskQueue,
 		EndpointID:             oc.endpointID,
 		EndpointName:           oc.endpointName,
 	})
-	chainedHandler := interceptor.ChainNexusInterceptors(finalHandler, h.nexusInterceptors)
+	nexusInterceptorInput.WithRequestMetadata(interceptornexus.RequestMetadata{
+		APIName:        oc.apiName,
+		NamespaceEntry: oc.namespace,
+		EndpointName:   oc.endpointName,
+	})
+	chainedHandler := interceptornexus.ChainInterceptors(finalHandler, h.nexusInterceptors)
 	_, err = chainedHandler(ctx, nexusInterceptorInput)
 	if err != nil {
-		if taggedErr, ok := errors.AsType[*interceptor.InterceptorError](err); ok {
+		if taggedErr, ok := errors.AsType[*interceptornexus.InterceptorError](err); ok {
 			return taggedErr.Err
 		}
 		return err

@@ -49,7 +49,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
-	rpcinterceptor "go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/telemetry"
@@ -124,7 +124,7 @@ type (
 		TokenProvider                auth.TokenProvider
 		ServiceHosts                 map[primitives.ServiceName]static.Hosts
 
-		CustomFrontendNexusInterceptors []rpcinterceptor.NexusInterceptor
+		CustomFrontendNexusInterceptors []nexus.Interceptor
 
 		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
 		Logger                     log.Logger
@@ -328,7 +328,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		CustomVisibilityStore:           so.customVisibilityStoreFactory,
 		CustomHistoryArchiverFactory:    so.customHistoryArchiverFactory,
 		CustomVisibilityArchiverFactory: so.customVisibilityArchiverFactory,
-		CustomFrontendNexusInterceptors: so.customFrontendNexusInterceptors,
+		CustomFrontendNexusInterceptors: so.customFrontendUnifiedInterceptors,
 
 		SearchAttributesMapper:       so.searchAttributesMapper,
 		CustomFrontendInterceptors:   so.customFrontendInterceptors,
@@ -403,7 +403,7 @@ type (
 		PersistenceFactoryProvider      persistenceClient.FactoryProviderFn
 		SearchAttributesMapper          searchattribute.Mapper
 		CustomFrontendInterceptors      []grpc.UnaryServerInterceptor
-		CustomFrontendNexusInterceptors []rpcinterceptor.NexusInterceptor
+		CustomFrontendNexusInterceptors []nexus.Interceptor
 		AdditionalStreamInterceptors    []grpc.StreamServerInterceptor
 		Authorizer                      authorization.Authorizer
 		ClaimMapper                     authorization.ClaimMapper

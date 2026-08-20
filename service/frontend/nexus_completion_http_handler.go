@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
+	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.temporal.io/server/nexusworkflowref"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -38,25 +39,17 @@ const nexusCompletionAPIName = configs.CompleteNexusOperation
 const nexusCompletionMethodName = "CompleteNexusOperation"
 
 type nexusCompletionHandler struct {
-	ClusterMetadata        cluster.Metadata
-	NamespaceRegistry      namespace.Registry
-	Logger                 log.Logger
-	MetricsHandler         metrics.Handler
-	Config                 *Config
-	CallbackTokenGenerator *commonnexus.CallbackTokenGenerator
-	HistoryClient          resource.HistoryClient
-	// TelemetryInterceptor                 *interceptor.TelemetryInterceptor
-	RequestErrorHandler *interceptor.RequestErrorHandler
-	// NamespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
-	// NamespaceRateLimitInterceptor        interceptor.NamespaceRateLimitInterceptor
-	// NamespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
-	// RateLimitInterceptor                 *interceptor.RateLimitInterceptor
-	AuthInterceptor *authorization.Interceptor
-	// RedirectionInterceptor               *interceptor.Redirection
-	ForwardingClients       *cluster.FrontendHTTPClientCache
+	ClusterMetadata         cluster.Metadata
+	NamespaceRegistry       namespace.Registry
+	Logger                  log.Logger
+	MetricsHandler          metrics.Handler
+	Config                  *Config
+	CallbackTokenGenerator  *commonnexus.CallbackTokenGenerator
+	HistoryClient           resource.HistoryClient
+	RequestErrorHandler     *interceptor.RequestErrorHandler
+	AuthInterceptor         *authorization.Interceptor // required for parsing auth info, not used as an interceptor
 	HTTPTraceProvider       commonnexus.HTTPClientTraceProvider
-	NexusForwarder          *nexusForwardingInterceptor
-	nexusInterceptors       []interceptor.NexusInterceptor
+	nexusInterceptors       []interceptornexus.Interceptor
 	clientVersionChecker    headers.VersionChecker
 	preProcessErrorsCounter metrics.CounterIface
 }
@@ -73,55 +66,25 @@ func newNexusCompletionHandler(
 	serviceConfig *Config,
 	callbackTokenGenerator *commonnexus.CallbackTokenGenerator,
 	historyClient resource.HistoryClient,
-	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	requestErrorHandler *interceptor.RequestErrorHandler,
-	namespaceValidationInterceptor *interceptor.NamespaceValidatorInterceptor,
-	nexusNamespaceRateLimitInterceptor *interceptor.NexusNamespaceRateLimitInterceptor,
-	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
-	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	authInterceptor *authorization.Interceptor,
-	redirectionInterceptor *interceptor.Redirection,
-	forwardingClients *cluster.FrontendHTTPClientCache,
 	httpTraceProvider commonnexus.HTTPClientTraceProvider,
-	nexusForwarder *nexusForwardingInterceptor,
-	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
-	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
-	customNexusInterceptors []interceptor.NexusInterceptor,
+	interceptorsProvider *InterceptorsProvider,
+	customNexusInterceptors []interceptornexus.Interceptor,
 ) *nexusCompletionHandler {
-	nexusInterceptors := []interceptor.NexusInterceptor{
-		telemetryInterceptor.InterceptNexus,
-		authInterceptor.InterceptNexus,
-		nexusForwarder.InterceptNexus,
-		namespaceValidationInterceptor.InterceptNexus,
-		namespaceConcurrencyLimitInterceptor.InterceptNexus,
-		nexusNamespaceRateLimitInterceptor.InterceptNexus,
-		rateLimitInterceptor.InterceptNexus,
-		sdkVersionInterceptor.InterceptNexus,
-		callerInfoInterceptor.InterceptNexus,
-	}
-	// draft-review: check if the customNexusInterceptors should be in the middle of
-	// the chain instead. Interleaved howver, is out of scope and will not be supported
-	nexusInterceptors = append(nexusInterceptors, customNexusInterceptors...)
+
 	return &nexusCompletionHandler{
-		ClusterMetadata:        clusterMetadata,
-		NamespaceRegistry:      namespaceRegistry,
-		Logger:                 logger,
-		MetricsHandler:         metricsHandler,
-		Config:                 serviceConfig,
-		CallbackTokenGenerator: callbackTokenGenerator,
-		HistoryClient:          historyClient,
-		// TelemetryInterceptor:                 telemetryInterceptor,
-		RequestErrorHandler: requestErrorHandler,
-		// NamespaceValidationInterceptor:       namespaceValidationInterceptor,
-		// NamespaceRateLimitInterceptor:        namespaceRateLimitInterceptor,
-		// NamespaceConcurrencyLimitInterceptor: namespaceConcurrencyLimitInterceptor,
-		// RateLimitInterceptor:                 rateLimitInterceptor,
-		AuthInterceptor: authInterceptor,
-		// RedirectionInterceptor:               redirectionInterceptor,
-		ForwardingClients:       forwardingClients,
+		ClusterMetadata:         clusterMetadata,
+		NamespaceRegistry:       namespaceRegistry,
+		Logger:                  logger,
+		MetricsHandler:          metricsHandler,
+		Config:                  serviceConfig,
+		CallbackTokenGenerator:  callbackTokenGenerator,
+		HistoryClient:           historyClient,
+		RequestErrorHandler:     requestErrorHandler,
+		AuthInterceptor:         authInterceptor,
 		HTTPTraceProvider:       httpTraceProvider,
-		NexusForwarder:          nexusForwarder,
-		nexusInterceptors:       nexusInterceptors,
+		nexusInterceptors:       interceptorsProvider.GetNexusInterceptors(),
 		clientVersionChecker:    headers.NewDefaultVersionChecker(),
 		preProcessErrorsCounter: metricsHandler.Counter(metrics.NexusCompletionRequestPreProcessErrors.Name()),
 	}
@@ -219,17 +182,21 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		return err
 	}
 
-	interceptorInput := interceptor.NewCompleteNexusOpInput(ns.Name().String(), r)
-	interceptorInput.WithForwardingInfo(interceptor.NexusForwardingInfo{
+	interceptorInput := interceptornexus.NewCompleteOpInput(ns.Name().String(), r)
+	interceptorInput.WithForwardingInfo(interceptornexus.ForwardingInfo{
 		OriginalRequestHeaders: rCtx.originalHeaders,
 		BusinessID:             rCtx.businessID,
 	})
-	finalHandler := func(ctx context.Context, _ interceptor.NexusInterceptorInput) (any, error) {
+	interceptorInput.WithRequestMetadata(interceptornexus.RequestMetadata{
+		APIName:        nexusCompletionAPIName,
+		NamespaceEntry: ns,
+	})
+	finalHandler := func(ctx context.Context, _ interceptornexus.InterceptorInput) (any, error) {
 		return nil, h.completeOperationRequest(ctx, logger, completion, r, rCtx)
 	}
-	_, err = interceptor.ChainNexusInterceptors(finalHandler, h.nexusInterceptors)(ctx, interceptorInput)
+	_, err = interceptornexus.ChainInterceptors(finalHandler, h.nexusInterceptors)(ctx, interceptorInput)
 	if err != nil {
-		if taggedErr, ok := errors.AsType[*interceptor.InterceptorError](err); ok {
+		if taggedErr, ok := errors.AsType[*interceptornexus.InterceptorError](err); ok {
 			return taggedErr.Err
 		}
 		return err
@@ -464,9 +431,6 @@ type requestContext struct {
 
 func (c *requestContext) augmentContext(ctx context.Context, header http.Header) context.Context {
 	ctx = interceptor.WithTelemetryContext(ctx, c)
-	ctx = interceptor.WithNexusAPIName(ctx, nexusCompletionAPIName)
-	ctx = interceptor.WithNexusNamespace(ctx, c.namespace)
-	ctx = interceptor.WithNexusEndpointName(ctx, "")
 	if userAgent := header.Get(headerUserAgent); userAgent != "" {
 		// Preserve original strict behavior: only process if exactly one delimiter present.
 		if strings.Count(userAgent, clientNameVersionDelim) == 1 {

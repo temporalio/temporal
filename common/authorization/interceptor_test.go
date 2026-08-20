@@ -23,7 +23,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/rpc/interceptor"
+	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -71,14 +71,18 @@ func TestAuthorizerInterceptorSuite(t *testing.T) {
 }
 
 func (s *authorizerInterceptorSuite) TestInterceptNexus() {
-	input := interceptor.NewStartNexusOpInput(
-		"service",
-		"operation",
+	input := interceptornexus.NewStartOpInput(
+		"s",
+		"o",
 		testNamespace,
 		nexus.StartOperationOptions{},
 		nil,
 	)
 	apiName, endpoint := "NexusAPI", "endpoint"
+	input.WithRequestMetadata(interceptornexus.RequestMetadata{
+		APIName:      apiName,
+		EndpointName: endpoint,
+	})
 	expectedTarget := &CallTarget{
 		APIName:           apiName,
 		NexusEndpointName: endpoint,
@@ -93,40 +97,18 @@ func (s *authorizerInterceptorSuite) TestInterceptNexus() {
 		expectedError       error
 	}{
 		{
-			name: "authorized",
-			ctx: interceptor.WithNexusEndpointName(
-				interceptor.WithNexusAPIName(context.Background(), apiName),
-				endpoint,
-			),
+			name:                "authorized",
+			ctx:                 context.Background(),
 			authorizationResult: &Result{Decision: DecisionAllow},
 			nextCalled:          true,
 		},
 		{
-			name: "unauthorized",
-			ctx: interceptor.WithNexusEndpointName(
-				interceptor.WithNexusAPIName(context.Background(), apiName),
-				endpoint,
-			),
+			name:                "unauthorized",
+			ctx:                 context.Background(),
 			authorizationResult: &Result{Decision: DecisionDeny},
-			expectedError: &interceptor.InterceptorError{
+			expectedError: &interceptornexus.InterceptorError{
 				Err:     nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnauthorized, "permission denied"),
 				Outcome: "unauthorized",
-			},
-		},
-		{
-			name: "missing API name",
-			ctx:  interceptor.WithNexusEndpointName(context.Background(), endpoint),
-			expectedError: &interceptor.InterceptorError{
-				Err:     errors.New("nexus API name not found in context"),
-				Outcome: "interceptor_failed",
-			},
-		},
-		{
-			name: "missing endpoint name",
-			ctx:  interceptor.WithNexusAPIName(context.Background(), apiName),
-			expectedError: &interceptor.InterceptorError{
-				Err:     errors.New("nexus endpoint name not found in context"),
-				Outcome: "interceptor_failed",
 			},
 		},
 	} {
@@ -145,7 +127,7 @@ func (s *authorizerInterceptorSuite) TestInterceptNexus() {
 			_, err := s.interceptor.InterceptNexus(
 				tc.ctx,
 				input,
-				func(context.Context, interceptor.NexusInterceptorInput) (any, error) {
+				func(context.Context, interceptornexus.InterceptorInput) (any, error) {
 					nextCalled = true
 					return nil, nil
 				})

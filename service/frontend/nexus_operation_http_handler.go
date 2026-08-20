@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/routing"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
+	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/frontend/configs"
 	"google.golang.org/grpc/codes"
@@ -64,35 +65,18 @@ func NewNexusOperationHTTPHandler(
 	redirectionInterceptor *interceptor.Redirection,
 	namespaceValidationInterceptor *interceptor.NamespaceValidatorInterceptor,
 	namespaceRateLimitInterceptor interceptor.NamespaceRateLimitInterceptor,
-	nexusNamespaceRateLimitInterceptor *interceptor.NexusNamespaceRateLimitInterceptor,
+	nexusNamespaceRateLimitInterceptor *interceptor.NamespaceRateLimitInterceptorWrapper,
 	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
 	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
 	nexusForwarder *nexusForwardingInterceptor,
-	customNexusInterceptors []interceptor.NexusInterceptor,
+	interceptorsProvider *InterceptorsProvider,
+	customNexusInterceptors []interceptornexus.Interceptor,
 	logger log.Logger,
 	httpTraceProvider commonnexus.HTTPClientTraceProvider,
 	httpServerHandlerInstrumenter telemetry.HTTPServerHandlerInstrumenter,
 ) *NexusOperationHTTPHandler {
-
-	// draft-review: should we also just make an interceptors provider fx
-	// so it can be shared/declared in a single place. Maybe not worth it as
-	// eventual goal is to remove the completion handler and move that into the
-	// http handler as well
-
-	nexusInterceptors := []interceptor.NexusInterceptor{
-		telemetryInterceptor.InterceptNexus,
-		authInterceptor.InterceptNexus,
-		nexusForwarder.InterceptNexus,
-		namespaceValidationInterceptor.InterceptNexus,
-		namespaceConcurrencyLimitInterceptor.InterceptNexus,
-		nexusNamespaceRateLimitInterceptor.InterceptNexus,
-		rateLimitInterceptor.InterceptNexus,
-		sdkVersionInterceptor.InterceptNexus,
-		callerInfoInterceptor.InterceptNexus,
-	}
-	nexusInterceptors = append(nexusInterceptors, customNexusInterceptors...)
 
 	return &NexusOperationHTTPHandler{
 		base: nexusrpc.BaseHTTPHandler{
@@ -111,23 +95,18 @@ func NewNexusOperationHTTPHandler(
 		httpServerHandlerInstrumenter:        httpServerHandlerInstrumenter,
 		nexusHandler: nexusrpc.NewHTTPHandler(nexusrpc.HandlerOptions{
 			Handler: &nexusHandler{
-				logger:            logger,
-				metricsHandler:    metricsHandler,
-				clusterMetadata:   clusterMetadata,
-				namespaceRegistry: namespaceRegistry,
-				matchingClient:    matchingservice.MatchingServiceClient(matchingClient),
-				auth:              authInterceptor,
-				// telemetryInterceptor:          telemetryInterceptor,
-				// requestErrorHandler:           requestErrorHandler,
-				// redirectionInterceptor:        redirectionInterceptor,
-				forwardingEnabledForNamespace: serviceConfig.EnableNamespaceNotActiveAutoForwarding,
-				forwardingClients:             clientCache,
-				payloadSizeLimit:              serviceConfig.BlobSizeLimitError,
-				headersBlacklist:              serviceConfig.NexusRequestHeadersBlacklist,
-				useForwardByEndpoint:          serviceConfig.NexusForwardRequestUseEndpoint,
-				metricTagConfig:               serviceConfig.NexusOperationsMetricTagConfig,
-				httpTraceProvider:             httpTraceProvider,
-				nexusInterceptors:             nexusInterceptors,
+				logger:               logger,
+				metricsHandler:       metricsHandler,
+				clusterMetadata:      clusterMetadata,
+				namespaceRegistry:    namespaceRegistry,
+				matchingClient:       matchingservice.MatchingServiceClient(matchingClient),
+				requestErrorHandler:  requestErrorHandler,
+				payloadSizeLimit:     serviceConfig.BlobSizeLimitError,
+				headersBlacklist:     serviceConfig.NexusRequestHeadersBlacklist,
+				useForwardByEndpoint: serviceConfig.NexusForwardRequestUseEndpoint,
+				metricTagConfig:      serviceConfig.NexusOperationsMetricTagConfig,
+				httpTraceProvider:    httpTraceProvider,
+				nexusInterceptors:    interceptorsProvider.GetNexusInterceptors(),
 			},
 			GetResultTimeout: serviceConfig.KeepAliveMaxConnectionIdle(),
 			Logger:           log.NewSlogLogger(logger),

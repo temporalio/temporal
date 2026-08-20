@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc/codes"
@@ -59,11 +60,11 @@ func (c *nexusTelemetryContext) HandleRequestError(err error) {
 }
 
 func TestTelemetryInterceptNexus(t *testing.T) {
-	input := NewStartNexusOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil)
+	input := interceptornexus.NewStartOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil)
 	for _, tc := range []struct {
 		name            string
 		setContext      bool
-		handler         NexusHandlerFunc
+		handler         interceptornexus.HandlerFunc
 		expectedOutcome string
 		expectedError   error
 		nextCalled      bool
@@ -72,7 +73,7 @@ func TestTelemetryInterceptNexus(t *testing.T) {
 		{
 			name:       "regular telemetry capture",
 			setContext: true,
-			handler: func(context.Context, NexusInterceptorInput) (any, error) {
+			handler: func(context.Context, interceptornexus.InterceptorInput) (any, error) {
 				return nil, nil
 			},
 			nextCalled:    true,
@@ -80,7 +81,7 @@ func TestTelemetryInterceptNexus(t *testing.T) {
 		},
 		{
 			name: "missing telemetry context",
-			handler: func(context.Context, NexusInterceptorInput) (any, error) {
+			handler: func(context.Context, interceptornexus.InterceptorInput) (any, error) {
 				return nil, nil
 			},
 			expectedError: errors.New("telemetry context not found"),
@@ -88,18 +89,18 @@ func TestTelemetryInterceptNexus(t *testing.T) {
 		{
 			name:       "tagged error",
 			setContext: true,
-			handler: func(context.Context, NexusInterceptorInput) (any, error) {
-				return nil, &InterceptorError{Err: errors.New("rejected"), Outcome: "rejected"}
+			handler: func(context.Context, interceptornexus.InterceptorInput) (any, error) {
+				return nil, &interceptornexus.InterceptorError{Err: errors.New("rejected"), Outcome: "rejected"}
 			},
 			expectedOutcome: "rejected",
-			expectedError:   &InterceptorError{Err: errors.New("rejected"), Outcome: "rejected"},
+			expectedError:   &interceptornexus.InterceptorError{Err: errors.New("rejected"), Outcome: "rejected"},
 			nextCalled:      true,
 			expectHandled:   true,
 		},
 		{
 			name:       "ensure metrics still captured on panics",
 			setContext: true,
-			handler: func(context.Context, NexusInterceptorInput) (any, error) {
+			handler: func(context.Context, interceptornexus.InterceptorInput) (any, error) {
 				panic("")
 			},
 			expectedError: errors.New("panic: "),
@@ -114,7 +115,7 @@ func TestTelemetryInterceptNexus(t *testing.T) {
 				ctx = WithTelemetryContext(ctx, telemetryContext)
 			}
 			nextCalled := false
-			_, err := (&TelemetryInterceptor{}).InterceptNexus(ctx, input, func(ctx context.Context, input NexusInterceptorInput) (any, error) {
+			_, err := (&TelemetryInterceptor{}).InterceptNexus(ctx, input, func(ctx context.Context, input interceptornexus.InterceptorInput) (any, error) {
 				nextCalled = true
 				return tc.handler(ctx, input)
 			})
