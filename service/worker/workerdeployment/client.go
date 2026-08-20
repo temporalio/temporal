@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -1999,6 +2000,14 @@ func (d *ClientImpl) checkForMissingTaskQueues(prevCurrentVersionInfo, newCurren
 
 	missingTaskQueues := []*deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo{}
 	for _, prevTaskQueue := range prevCurrentVersionTaskQueues {
+		// Defensive check: worker commands task queues (temporal-sys/worker-commands/...)
+		// don't support versioning but may have been incorrectly registered in a version
+		// due to an SDK bug that sent versioning metadata on worker commands nexus polls.
+		// These are always nexus type, so also check the type to avoid false positives.
+		if primitives.IsWorkerCommandsTaskQueue(prevTaskQueue.GetName()) &&
+			prevTaskQueue.GetType() == enumspb.TASK_QUEUE_TYPE_NEXUS {
+			continue
+		}
 		found := false
 		for _, newTaskQueue := range newCurrentVersionTaskQueues {
 			if prevTaskQueue.GetName() == newTaskQueue.GetName() && prevTaskQueue.GetType() == newTaskQueue.GetType() {
