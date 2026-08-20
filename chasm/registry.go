@@ -190,6 +190,17 @@ func (r *Registry) ArchetypeDisplayName(id ArchetypeID) (string, bool) {
 	return rc.componentType, true
 }
 
+// ArchetypeFqnByID returns the fully qualified name for a given archetype ID.
+// This method should only be used by CHASM framework internal code,
+// NOT CHASM library developers.
+func (r *Registry) ArchetypeFqnByID(id ArchetypeID) (string, bool) {
+	rc, ok := r.ComponentByID(id)
+	if !ok {
+		return "", false
+	}
+	return rc.fqn, true
+}
+
 // ArchetypeIDOf returns the ArchetypeID for the given component Go type.
 // This method should only be used by CHASM framework internal code,
 // NOT CHASM library developers.
