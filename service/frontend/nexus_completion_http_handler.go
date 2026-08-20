@@ -157,7 +157,9 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 	}
 	logger := log.With(
 		h.Logger,
+		tag.Operation(nexusCompletionMethodNameForMetrics),
 		tag.WorkflowNamespace(ns.Name().String()),
+		tag.WorkflowNamespaceID(targetNamespaceID),
 		tag.WorkflowID(targetBusinessID),
 		tag.WorkflowRunID(targetRunID),
 		tag.RequestID(completion.GetRequestId()),
@@ -191,7 +193,6 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		if nsName != ns.Name().String() {
 			logger.Error(
 				"namespace in callback URL doesn't match the completion token",
-				tag.WorkflowNamespaceID(targetNamespaceID),
 				tag.String("url-namespace", nsName),
 			)
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
@@ -223,7 +224,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid result content")
 		}
 		if result.Size() > h.Config.BlobSizeLimitError(ns.Name().String()) {
-			logger.Error("payload size exceeds error limit for Nexus CompleteOperation request", tag.WorkflowNamespace(ns.Name().String()))
+			logger.Error("payload size exceeds error limit for Nexus CompleteOperation request")
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "result exceeds size limit")
 		}
 		successPayload = result
@@ -405,20 +406,18 @@ func (h *nexusCompletionHandler) forwardCompleteOperation(ctx context.Context, r
 	targetCluster := rCtx.namespace.ActiveClusterName(namespace.RoutingKey{ID: rCtx.businessID})
 	client, err := h.ForwardingClients.Get(targetCluster)
 	if err != nil {
-		h.Logger.Error("unable to get HTTP client for forward request", tag.Operation(nexusCompletionAPIName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err), tag.SourceCluster(h.ClusterMetadata.GetCurrentClusterName()), tag.TargetCluster(targetCluster))
+		rCtx.logger.Error("unable to get HTTP client for forward request", tag.Error(err), tag.SourceCluster(h.ClusterMetadata.GetCurrentClusterName()), tag.TargetCluster(targetCluster))
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 	}
 
 	forwardURL, err := url.JoinPath(client.BaseURL(), commonnexus.RouteCompletionCallback.Path(rCtx.namespace.Name().String()))
 	if err != nil {
-		h.Logger.Error("failed to construct forwarding request URL", tag.Operation(nexusCompletionAPIName), tag.WorkflowNamespace(rCtx.namespace.Name().String()), tag.Error(err), tag.TargetCluster(targetCluster))
+		rCtx.logger.Error("failed to construct forwarding request URL", tag.Error(err), tag.TargetCluster(targetCluster))
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 	}
 
 	if h.HTTPTraceProvider != nil {
-		traceLogger := log.With(h.Logger,
-			tag.Operation(nexusCompletionAPIName),
-			tag.WorkflowNamespace(rCtx.namespace.Name().String()),
+		traceLogger := log.With(rCtx.logger,
 			tag.AttemptStart(time.Now().UTC()),
 			tag.SourceCluster(h.ClusterMetadata.GetCurrentClusterName()),
 			tag.TargetCluster(targetCluster),
