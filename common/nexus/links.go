@@ -20,7 +20,7 @@ func ConvertNexusLinksToProtoLinks(nexusLinks []nexus.Link, logger log.Logger) [
 				logger.Warn(
 					"failed to parse Nexus link",
 					tag.Error(err),
-					tag.NewStringTag("link-type", nexusLink.Type),
+					tag.NewStringTag("nexus-link-type", nexusLink.Type),
 					tag.URL(nexusLink.URL.String()),
 				)
 				continue
@@ -34,7 +34,7 @@ func ConvertNexusLinksToProtoLinks(nexusLinks []nexus.Link, logger log.Logger) [
 				logger.Warn(
 					"failed to parse Nexus link",
 					tag.Error(err),
-					tag.NewStringTag("link-type", nexusLink.Type),
+					tag.NewStringTag("nexus-link-type", nexusLink.Type),
 					tag.URL(nexusLink.URL.String()),
 				)
 				continue
