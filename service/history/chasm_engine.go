@@ -728,6 +728,11 @@ func (e *ChasmEngine) pollComponent(
 	monotonicPredicate func(chasm.Context, chasm.Component) (bool, error),
 ) (retRef []byte, retError error) {
 
+	shardContext, err := e.getShardContext(ctx, requestRef)
+	if err != nil {
+		return nil, err
+	}
+
 	var ch <-chan struct{}
 	var unsubscribe func()
 	defer func() {
@@ -771,6 +776,11 @@ func (e *ChasmEngine) pollComponent(
 			ref, err = checkPredicateOrSubscribe()
 			if err != nil || ref != nil {
 				return ref, err
+			}
+		case <-shardContext.GetLifecycleContext().Done():
+			return nil, &persistence.ShardOwnershipLostError{
+				ShardID: shardContext.GetShardID(),
+				Msg:     "shard closed",
 			}
 		case <-ctx.Done():
 			return nil, ctx.Err()
