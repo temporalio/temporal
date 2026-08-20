@@ -60,29 +60,7 @@ func (s *TestEnvSuite) TestStartNamespaceLogCapture() {
 		t:                  s.T(),
 	}
 
-	var capture *testlogger.Capture
-	// Register verification first so StartNamespaceLogCapture stops capture before this cleanup runs.
-	s.T().Cleanup(func() {
-		testLogger.Info("after cleanup", tag.WorkflowNamespace("primary"))
-		s.Require().ElementsMatch([]testlogger.CapturedLog{
-			{
-				Level:   testlogger.Info,
-				Message: "primary name",
-				Tags:    []tag.Tag{tag.WorkflowNamespace("primary")},
-			},
-			{
-				Level:   testlogger.Info,
-				Message: "primary ID",
-				Tags:    []tag.Tag{tag.WorkflowNamespaceID("primary-id")},
-			},
-			{
-				Level:   testlogger.Info,
-				Message: "external name",
-				Tags:    []tag.Tag{tag.WorkflowNamespace("external")},
-			},
-		}, capture.Snapshot())
-	})
-	capture = env.StartNamespaceLogCapture()
+	capture := env.StartNamespaceLogCapture()
 
 	// logs in namespace
 	testLogger.Info("primary name", tag.WorkflowNamespace("primary"))
@@ -94,4 +72,22 @@ func (s *TestEnvSuite) TestStartNamespaceLogCapture() {
 
 	testLogger.Info("target only", tag.NexusEndpointTargetNamespaceID("primary-id"))
 	testLogger.Info("unscoped")
+
+	s.ElementsMatch([]testlogger.CapturedLog{
+		{
+			Level:   testlogger.Info,
+			Message: "primary name",
+			Tags:    []tag.Tag{tag.WorkflowNamespace("primary")},
+		},
+		{
+			Level:   testlogger.Info,
+			Message: "primary ID",
+			Tags:    []tag.Tag{tag.WorkflowNamespaceID("primary-id")},
+		},
+		{
+			Level:   testlogger.Info,
+			Message: "external name",
+			Tags:    []tag.Tag{tag.WorkflowNamespace("external")},
+		},
+	}, capture.Snapshot())
 }
