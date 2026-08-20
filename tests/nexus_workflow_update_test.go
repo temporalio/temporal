@@ -225,11 +225,34 @@ func (s *NexusWorkflowUpdateTestSuite) awaitUpdateAccepted(ctx context.Context, 
 // startWorker creates a worker on the given task queue, registers wfs, starts it,
 // and schedules cleanup.
 func (s *NexusWorkflowUpdateTestSuite) startWorker(env *NexusTestEnv, taskQueue string, wfs ...any) {
-	w := worker.New(env.SdkClient(), taskQueue, worker.Options{})
-	for _, wf := range wfs {
-		w.RegisterWorkflow(wf)
-	}
-	s.NoError(w.Start())
+	s.startWorkerWithOptions(env, taskQueue, worker.Options{}, func(w worker.Worker) {
+		for _, wf := range wfs {
+			w.RegisterWorkflow(wf)
+		}
+	})
+}
+
+func (s *NexusWorkflowUpdateTestSuite) startWorkerWithWorkflowNames(
+	env *NexusTestEnv,
+	taskQueue string,
+	wfs map[string]any,
+) {
+	s.startWorkerWithOptions(env, taskQueue, worker.Options{DisableRegistrationAliasing: true}, func(w worker.Worker) {
+		for name, wf := range wfs {
+			w.RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: name})
+		}
+	})
+}
+
+func (s *NexusWorkflowUpdateTestSuite) startWorkerWithOptions(
+	env *NexusTestEnv,
+	taskQueue string,
+	options worker.Options,
+	register func(worker.Worker),
+) {
+	w := worker.New(env.SdkClient(), taskQueue, options)
+	register(w)
+	s.Require().NoError(w.Start())
 	s.T().Cleanup(w.Stop)
 }
 
@@ -274,6 +297,11 @@ func (s *NexusWorkflowUpdateTestSuite) assertReappliedUpdateInNewRun(ctx context
 }
 
 func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateAsyncNexusOperation() {
+	const (
+		callerWorkflowName = "nexus-workflow-update-caller"
+		childWorkflowName  = "nexus-workflow-update-child"
+	)
+
 	env := newNexusTestEnv(s.T(), true, enableUpdateCallbacksOpts()...)
 	ctx := s.Context()
 	cfg := newUpdateNexusTestConfig(s.T())
@@ -286,7 +314,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateAsyncNexusOperation() {
 	callerWF := func(ctx workflow.Context) (string, error) {
 		cwf := workflow.ExecuteChildWorkflow(
 			workflow.WithWorkflowID(ctx, cfg.childWfID),
-			childWF,
+			childWorkflowName,
 			"initial input",
 		)
 		var childWE workflow.Execution
@@ -300,12 +328,15 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateAsyncNexusOperation() {
 		return result, err
 	}
 
-	s.startWorker(env, cfg.taskQueue, callerWF, childWF)
+	s.startWorkerWithWorkflowNames(env, cfg.taskQueue, map[string]any{
+		callerWorkflowName: callerWF,
+		childWorkflowName:  childWF,
+	})
 
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue:                cfg.taskQueue,
 		WorkflowExecutionTimeout: 30 * time.Second,
-	}, callerWF)
+	}, callerWorkflowName)
 	s.NoError(err)
 	var result string
 	s.NoError(run.Get(ctx, &result))
@@ -330,6 +361,11 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateAsyncNexusOperation() {
 }
 
 func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateAsyncAttachedNexusOperation() {
+	const (
+		callerWorkflowName = "nexus-workflow-update-attached-caller"
+		childWorkflowName  = "nexus-workflow-update-attached-child"
+	)
+
 	env := newNexusTestEnv(s.T(), true, enableUpdateCallbacksOpts()...)
 	ctx := s.Context()
 	cfg := newUpdateNexusTestConfig(s.T())
@@ -342,7 +378,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateAsyncAttachedNexusOpera
 	callerWF := func(ctx workflow.Context) (string, error) {
 		cwf := workflow.ExecuteChildWorkflow(
 			workflow.WithWorkflowID(ctx, cfg.childWfID),
-			childWF,
+			childWorkflowName,
 			"initial input",
 		)
 		var childWE workflow.Execution
@@ -375,12 +411,15 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateAsyncAttachedNexusOpera
 		return result, err
 	}
 
-	s.startWorker(env, cfg.taskQueue, callerWF, childWF)
+	s.startWorkerWithWorkflowNames(env, cfg.taskQueue, map[string]any{
+		callerWorkflowName: callerWF,
+		childWorkflowName:  childWF,
+	})
 
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue:                cfg.taskQueue,
 		WorkflowExecutionTimeout: 10 * time.Second,
-	}, callerWF)
+	}, callerWorkflowName)
 	s.NoError(err)
 	var result string
 	s.NoError(run.Get(ctx, &result))
