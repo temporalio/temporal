@@ -85,8 +85,7 @@ func (a *wfaHandle) timeoutInfo(t require.TestingT) activityTimeoutInfo {
 			attempt: pa.GetAttempt(),
 		}
 	}
-	var timeoutErr *temporal.TimeoutError
-	if errors.As(a.run.Get(a.d.ctx, nil), &timeoutErr) {
+	if timeoutErr, ok := errors.AsType[*temporal.TimeoutError](a.run.Get(a.d.ctx, nil)); ok {
 		return activityTimeoutInfo{timeout: timeoutErr.TimeoutType(), terminal: true}
 	}
 	return activityTimeoutInfo{terminal: true}
