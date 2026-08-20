@@ -1268,6 +1268,10 @@ func (s *ContextImpl) updateShardInfo(
 			int64(queueState.Size()),
 			metrics.TaskCategoryTag(category.Name()),
 		)
+		metrics.QueueStateSizeTotal.With(s.metricsHandler).Record(
+			int64(queueState.Size()),
+			metrics.TaskCategoryTag(category.Name()),
+		)
 	}
 
 	request := &persistence.UpdateShardRequest{
