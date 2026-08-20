@@ -22,9 +22,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func newTestValidator(config *Config) *validator {
-	return newValidator(config, log.NewNoopLogger(), nil, nil)
-}
+const errInvalidRunID = "run_id is not a valid UUID"
 
 func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -346,8 +344,7 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(req)
 			}
-			err := newValidator(config, log.NewNoopLogger(), nil, saValidator).
-				validateAndNormalizeStartRequest(req)
+			err := newStartNexusOperationExecutionRequestValidator(config, log.NewNoopLogger(), nil, saValidator).ValidateAndNormalize(req)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -443,7 +440,7 @@ func TestValidateDescribeNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := newTestValidator(config).validateAndNormalizeDescribeRequest(validReq, "test-namespace-id")
+			err := newDescribeNexusOperationExecutionRequestValidator(config, "test-namespace-id").ValidateAndNormalize(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -530,7 +527,7 @@ func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := newTestValidator(config).validateAndNormalizeCancelRequest(validReq)
+			err := newRequestCancelNexusOperationExecutionRequestValidator(config).ValidateAndNormalize(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -594,7 +591,7 @@ func TestValidateDeleteNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := newTestValidator(config).validateAndNormalizeDeleteRequest(validReq)
+			err := newDeleteNexusOperationExecutionRequestValidator(config).ValidateAndNormalize(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -681,7 +678,7 @@ func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := newTestValidator(config).validateAndNormalizeTerminateRequest(validReq)
+			err := newTerminateNexusOperationExecutionRequestValidator(config).ValidateAndNormalize(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -774,7 +771,7 @@ func TestValidatePollNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := newTestValidator(config).validateAndNormalizePollRequest(validReq)
+			err := newPollNexusOperationExecutionRequestValidator(config).ValidateAndNormalize(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -785,6 +782,76 @@ func TestValidatePollNexusOperationExecutionRequest(t *testing.T) {
 			if tc.check != nil {
 				tc.check(t, validReq)
 			}
+		})
+	}
+}
+
+func TestValidateListNexusOperationExecutionsRequest(t *testing.T) {
+	config := &Config{
+		VisibilityMaxPageSize: func(string) int { return 100 },
+	}
+
+	for _, tc := range []struct {
+		name   string
+		mutate func(*workflowservice.ListNexusOperationExecutionsRequest)
+		check  func(*testing.T, *workflowservice.ListNexusOperationExecutionsRequest)
+	}{
+		{
+			name: "valid request - caps unset page_size to max",
+			check: func(t *testing.T, r *workflowservice.ListNexusOperationExecutionsRequest) {
+				require.Equal(t, int32(100), r.PageSize)
+			},
+		},
+		{
+			name: "valid request - caps page_size exceeding max",
+			mutate: func(r *workflowservice.ListNexusOperationExecutionsRequest) {
+				r.PageSize = 200
+			},
+			check: func(t *testing.T, r *workflowservice.ListNexusOperationExecutionsRequest) {
+				require.Equal(t, int32(100), r.PageSize)
+			},
+		},
+		{
+			name: "valid request - preserves page_size within max",
+			mutate: func(r *workflowservice.ListNexusOperationExecutionsRequest) {
+				r.PageSize = 50
+			},
+			check: func(t *testing.T, r *workflowservice.ListNexusOperationExecutionsRequest) {
+				require.Equal(t, int32(50), r.PageSize)
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := &workflowservice.ListNexusOperationExecutionsRequest{
+				Namespace: "default",
+			}
+			if tc.mutate != nil {
+				tc.mutate(req)
+			}
+			require.NoError(t, newListNexusOperationExecutionsRequestValidator(config).ValidateAndNormalize(req))
+			if tc.check != nil {
+				tc.check(t, req)
+			}
+		})
+	}
+}
+
+func TestValidateCountNexusOperationExecutionsRequest(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		mutate func(*workflowservice.CountNexusOperationExecutionsRequest)
+	}{
+		{name: "valid request"},
+		{name: "valid request - with query", mutate: func(r *workflowservice.CountNexusOperationExecutionsRequest) {
+			r.Query = "ExecutionStatus = 'Running'"
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := &workflowservice.CountNexusOperationExecutionsRequest{Namespace: "default"}
+			if tc.mutate != nil {
+				tc.mutate(req)
+			}
+			require.NoError(t, newCountNexusOperationExecutionsRequestValidator().ValidateAndNormalize(req))
 		})
 	}
 }

@@ -133,6 +133,7 @@ type (
 		MetricsHandler             metrics.Handler
 		TestHooks                  testhooks.TestHooks
 		EventLoggerProvider        otellog.LoggerProvider
+		PerServiceFxOptions        map[primitives.ServiceName][]fx.Option
 	}
 )
 
@@ -343,6 +344,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		MetricsHandler:             metricHandler,
 		TestHooks:                  testHooks,
 		EventLoggerProvider:        eventLoggerProvider,
+		PerServiceFxOptions:        so.perServiceFxOptions,
 	}, nil
 }
 
@@ -412,6 +414,7 @@ type (
 		StaticServiceHosts              map[primitives.ServiceName]static.Hosts `optional:"true"`
 		TaskCategoryRegistry            tasks.TaskCategoryRegistry
 		TestHooks                       testhooks.TestHooks
+		PerServiceFxOptions             map[primitives.ServiceName][]fx.Option `optional:"true"`
 	}
 )
 
@@ -546,6 +549,7 @@ func HistoryServiceProvider(
 
 	app := fx.New(
 		params.GetCommonServiceOptions(serviceName),
+		fx.Options(params.PerServiceFxOptions[serviceName]...),
 		history.QueueModule,
 		history.Module,
 		replication.Module,
@@ -566,6 +570,7 @@ func MatchingServiceProvider(
 
 	app := fx.New(
 		params.GetCommonServiceOptions(serviceName),
+		fx.Options(params.PerServiceFxOptions[serviceName]...),
 		matching.Module,
 	)
 
@@ -595,6 +600,7 @@ func genericFrontendServiceProvider(
 
 	app := fx.New(
 		params.GetCommonServiceOptions(serviceName),
+		fx.Options(params.PerServiceFxOptions[serviceName]...),
 		fx.Supply(params.CustomFrontendInterceptors),
 		fx.Decorate(func() authorization.ClaimMapper {
 			switch serviceName {
@@ -633,6 +639,7 @@ func WorkerServiceProvider(
 
 	app := fx.New(
 		params.GetCommonServiceOptions(serviceName),
+		fx.Options(params.PerServiceFxOptions[serviceName]...),
 		worker.Module,
 	)
 
