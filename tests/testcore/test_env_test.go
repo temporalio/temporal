@@ -50,7 +50,7 @@ func (s *TestEnvSuite) TestDedicatedClusterGuard_ConcurrentRecord() {
 	s.NoError(guard.validate())
 }
 
-func (s *TestEnvSuite) TestStartLogCapture() {
+func (s *TestEnvSuite) TestStartNamespaceLogCapture() {
 	testLogger := testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
 	env := &TestEnv{
 		FunctionalTestBase: &FunctionalTestBase{externalNamespace: namespace.Name("external")},
@@ -61,7 +61,7 @@ func (s *TestEnvSuite) TestStartLogCapture() {
 	}
 
 	var capture *testlogger.Capture
-	// Register verification first so StartLogCapture stops capture before this cleanup runs.
+	// Register verification first so StartNamespaceLogCapture stops capture before this cleanup runs.
 	s.T().Cleanup(func() {
 		testLogger.Info("after cleanup", tag.WorkflowNamespace("primary"))
 		s.Require().ElementsMatch([]testlogger.CapturedLog{
@@ -82,7 +82,7 @@ func (s *TestEnvSuite) TestStartLogCapture() {
 			},
 		}, capture.Snapshot())
 	})
-	capture = env.StartLogCapture()
+	capture = env.StartNamespaceLogCapture()
 
 	// logs in namespace
 	testLogger.Info("primary name", tag.WorkflowNamespace("primary"))

@@ -564,11 +564,11 @@ func (e *TestEnv) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, va
 	return e.cluster.host.overrideDynamicConfigForTest(e.t, setting.Key(), value)
 }
 
-// StartLogCapture starts a log capture scoped to the namespaces owned by this test environment.
-func (e *TestEnv) StartLogCapture() *testlogger.Capture {
+// StartNamespaceLogCapture starts a log capture scoped to the namespaces owned by this test environment.
+func (e *TestEnv) StartNamespaceLogCapture() *testlogger.Capture {
 	testLogger, ok := e.Logger.(*testlogger.TestLogger)
 	if !ok {
-		e.t.Fatalf("StartLogCapture requires a *testlogger.TestLogger logger, got %T", e.Logger)
+		e.t.Fatalf("StartNamespaceLogCapture requires a *testlogger.TestLogger logger, got %T", e.Logger)
 	}
 	capture := testLogger.StartCapture(
 		tag.WorkflowNamespace(e.Namespace().String()),

@@ -2669,7 +2669,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure(chasmEnabled
 	s.NoError(w.Start())
 	s.T().Cleanup(w.Stop)
 
-	logCapture := env.StartLogCapture()
+	logCapture := env.StartNamespaceLogCapture()
 	metricCapture := env.StartNamespaceMetricCapture()
 	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), client.StartWorkflowOptions{
 		TaskQueue: taskQueue,
