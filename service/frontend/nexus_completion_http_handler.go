@@ -191,9 +191,8 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		if nsName != ns.Name().String() {
 			logger.Error(
 				"namespace in callback URL doesn't match the completion token",
-				tag.WorkflowNamespaceID(ns.ID().String()),
+				tag.WorkflowNamespaceID(targetNamespaceID),
 				tag.String("url-namespace", nsName),
-				tag.String("completion-namespace-id", targetNamespaceID),
 			)
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
 		}
