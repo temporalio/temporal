@@ -1081,7 +1081,7 @@ func (a *Activity) unpause(
 	}
 	ctx.AddTask(
 		a,
-		chasm.TaskAttributes{ScheduledTime: dispatchTime},
+		a.activityDispatchTaskAttributes(ctx, dispatchTime),
 		a.newActivityDispatchTask(ctx))
 }
 
@@ -1139,7 +1139,7 @@ func (a *Activity) reset(ctx chasm.MutableContext, event resetEvent) {
 	}
 	ctx.AddTask(
 		a,
-		chasm.TaskAttributes{ScheduledTime: dispatchTime},
+		a.activityDispatchTaskAttributes(ctx, dispatchTime),
 		a.newActivityDispatchTask(ctx),
 	)
 	a.emitOnResetMetrics(event.metricsHandler)
@@ -1527,7 +1527,7 @@ func (a *Activity) reissueDispatchAndScheduleToStart(ctx chasm.MutableContext, a
 	attempt.DispatchTime = timestamppb.New(dispatchTime)
 	ctx.AddTask(
 		a,
-		chasm.TaskAttributes{ScheduledTime: dispatchTime},
+		a.activityDispatchTaskAttributes(ctx, dispatchTime),
 		a.newActivityDispatchTask(ctx),
 	)
 	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
@@ -1583,6 +1583,16 @@ func (a *Activity) dispatchTimeRespectingStartDelay(t time.Time) time.Time {
 		return dispatchTime
 	}
 	return t
+}
+
+// activityDispatchTaskAttributes routes a task that is already due through the immediate queue. A
+// timer task will not execute before now + TimerProcessorMaxTimeShift (~1s), so scheduling an
+// already-due task as a timer delays it for no reason.
+func (a *Activity) activityDispatchTaskAttributes(ctx chasm.MutableContext, scheduledTime time.Time) chasm.TaskAttributes {
+	if scheduledTime.After(ctx.Now(a)) {
+		return chasm.TaskAttributes{ScheduledTime: scheduledTime}
+	}
+	return chasm.TaskAttributes{}
 }
 
 // reissueScheduleToClose bumps the ScheduleToCloseStamp and re-emits the ScheduleToClose timeout task
