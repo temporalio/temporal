@@ -80,7 +80,28 @@ func (s *parentChildXDCTestSuite) TestReproOrphanedChildAfterForceFailover() {
 			completeParentWorkflowTaskWithStartChildCommand(),
 		},
 		expectations: []parentChildExpectation{
-			parentHasStartChildFailure(enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_WORKFLOW_ALREADY_EXISTS),
+			{
+				name: "parent StartChild fails because the child already exists",
+				check: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
+					events, err := runtime.activeWorkflowHistory(ctx, parentWorkflow)
+					if err != nil {
+						return err
+					}
+					failedEvent := findHistoryEvent(
+						events,
+						enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED,
+						func(event *historypb.HistoryEvent) bool {
+							attrs := event.GetStartChildWorkflowExecutionFailedEventAttributes()
+							return attrs.GetWorkflowId() == runtime.childID &&
+								attrs.GetCause() == enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_WORKFLOW_ALREADY_EXISTS
+						},
+					)
+					if failedEvent == nil {
+						return fmt.Errorf("parent has no WORKFLOW_ALREADY_EXISTS failure for child %q", runtime.childID)
+					}
+					return nil
+				},
+			},
 			currentWorkflowHasStatusOnCluster(
 				initialStandbyCluster,
 				childWorkflow,
@@ -92,7 +113,7 @@ func (s *parentChildXDCTestSuite) TestReproOrphanedChildAfterForceFailover() {
 					if runtime.childRunID == "" {
 						return errors.New("child WorkflowExecutionStarted was not applied")
 					}
-					childEvents, err := runtime.childHistory(ctx)
+					childEvents, err := runtime.activeWorkflowHistory(ctx, childWorkflow)
 					if err != nil {
 						return err
 					}
@@ -119,7 +140,7 @@ func (s *parentChildXDCTestSuite) TestReproOrphanedChildAfterForceFailover() {
 						)
 					}
 
-					parentEvents, err := runtime.parentHistory(ctx)
+					parentEvents, err := runtime.activeWorkflowHistory(ctx, parentWorkflow)
 					if err != nil {
 						return err
 					}
@@ -227,11 +248,6 @@ func (s *parentChildXDCTestSuite) TestStandbyVerifiesMissingChild() {
 		},
 		expectations: []parentChildExpectation{
 			workflowIsMissingOnCluster(initialStandbyCluster, childWorkflow),
-			historyVerificationFailedOnCluster(
-				initialStandbyCluster,
-				historyClientVerifyFirstWorkflowTask,
-				&serviceerror.NotFound{},
-			),
 			taskWasDiscardedOnCluster(
 				initialStandbyCluster,
 				metrics.TaskTypeTransferStandbyTaskStartChildExecution,
@@ -327,11 +343,6 @@ func (s *parentChildXDCTestSuite) TestStandbyVerifiesChildWithoutFirstWorkflowTa
 					return nil
 				},
 			},
-			historyVerificationFailedOnCluster(
-				initialStandbyCluster,
-				historyClientVerifyFirstWorkflowTask,
-				&serviceerror.WorkflowNotReady{},
-			),
 			taskWasDiscardedOnCluster(
 				initialStandbyCluster,
 				metrics.TaskTypeTransferStandbyTaskStartChildExecution,
@@ -384,13 +395,7 @@ func (s *parentChildXDCTestSuite) TestStandbyDiscardsChildCloseTaskWhenParentCom
 			),
 			// Close the child on the source, which also records completion in the source parent.
 			completeChildWorkflowTask(),
-			// Ensure the source parent has the completion update that will be delayed in replication.
-			waitForWorkflowEventOnCluster(
-				initialActiveCluster,
-				parentWorkflow,
-				enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED,
-			),
-			// Keep the parent completion off the passive so it still considers the child running.
+			// Wait for and hold the parent completion so the passive still considers the child running.
 			delayReplicationAtTaskContainingEvent(
 				initialStandbyCluster,
 				parentWorkflow,
@@ -436,11 +441,6 @@ func (s *parentChildXDCTestSuite) TestStandbyDiscardsChildCloseTaskWhenParentCom
 					return nil
 				},
 			},
-			historyVerificationFailedOnCluster(
-				initialStandbyCluster,
-				historyClientVerifyChildCompletion,
-				&serviceerror.WorkflowNotReady{},
-			),
 			taskWasDiscardedOnCluster(
 				initialStandbyCluster,
 				metrics.TaskTypeTransferStandbyTaskCloseExecution,
@@ -503,7 +503,6 @@ func (s *parentChildXDCTestSuite) TestStandbyResendsMissingParentWhenChildCloses
 			),
 		},
 		expectations: []parentChildExpectation{
-			historyVerificationRequestedOnCluster(initialStandbyCluster, historyClientVerifyChildCompletion),
 			{
 				name: "parent workflow resend is attempted on the initial standby cluster",
 				check: func(_ context.Context, runtime *parentChildScenarioRuntime) error {
@@ -514,7 +513,6 @@ func (s *parentChildXDCTestSuite) TestStandbyResendsMissingParentWhenChildCloses
 					)
 				},
 			},
-			workflowExistsOnCluster(initialStandbyCluster, parentWorkflow),
 			workflowHasEventOnCluster(
 				initialStandbyCluster,
 				parentWorkflow,

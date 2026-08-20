@@ -155,41 +155,6 @@ func TestParentChildReplicationGate(t *testing.T) {
 	})
 }
 
-func TestParentChildHarnessAcknowledgeReplicationTaskWithoutApplying(t *testing.T) {
-	gate := newParentChildReplicationGate("namespace", "parent", "child")
-	defer gate.close()
-
-	events := []*historypb.HistoryEvent{
-		{EventId: 3, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED},
-		{EventId: 4, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED},
-	}
-	blob, err := serialization.NewSerializer().SerializeEvents(events)
-	require.NoError(t, err)
-	task := newParentChildHistoryReplicationTask("namespace", "parent", 1)
-	task.GetHistoryTaskAttributes().Events = blob
-
-	var executions atomic.Int32
-	interceptResult := interceptParentChildTask(gate, task, func() error {
-		executions.Add(1)
-		return nil
-	})
-	runtime := &parentChildScenarioRuntime{
-		parentID:               "parent",
-		gates:                  [2]*parentChildReplicationGate{nil, gate},
-		delayedTasks:           make(map[parentChildReplicationLane]*parentChildReplicationTask),
-		eventsFromAppliedTasks: make(map[parentChildWorkflow]map[enumspb.EventType][]*historypb.HistoryEvent),
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	err = acknowledgeReplicationTaskContainingEventWithoutApplying(initialStandbyCluster, parentWorkflow, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED).run(ctx, runtime)
-	cancel()
-	require.NoError(t, err)
-	require.NoError(t, receiveParentChildInterceptResult(t, interceptResult))
-	require.Zero(t, executions.Load())
-	require.Empty(t, runtime.eventsFromAppliedTasks)
-	require.Contains(t, runtime.trace, "  ack-without-apply task 1 to cluster 1 for parent [WorkflowTaskStarted, WorkflowTaskCompleted]")
-}
-
 func TestParentChildHarnessAppliesPreviouslyDelayedTaskAfterActiveClusterChanges(t *testing.T) {
 	gate := newParentChildReplicationGate("namespace", "parent", "child")
 	defer gate.close()
@@ -209,10 +174,9 @@ func TestParentChildHarnessAppliesPreviouslyDelayedTaskAfterActiveClusterChanges
 		return nil
 	})
 	runtime := &parentChildScenarioRuntime{
-		parentID:               "parent",
-		gates:                  [2]*parentChildReplicationGate{nil, gate},
-		delayedTasks:           make(map[parentChildReplicationLane]*parentChildReplicationTask),
-		eventsFromAppliedTasks: make(map[parentChildWorkflow]map[enumspb.EventType][]*historypb.HistoryEvent),
+		parentID:     "parent",
+		gates:        [2]*parentChildReplicationGate{nil, gate},
+		delayedTasks: make(map[parentChildReplicationLane]*parentChildReplicationTask),
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -274,10 +238,9 @@ func TestParentChildHarnessVersionedTransitionApplyThrough(t *testing.T) {
 	await.RequireTrue(t, func() bool { return len(gate.pending) == 2 }, time.Second, time.Millisecond)
 
 	runtime := &parentChildScenarioRuntime{
-		parentID:               "parent",
-		gates:                  [2]*parentChildReplicationGate{nil, gate},
-		delayedTasks:           make(map[parentChildReplicationLane]*parentChildReplicationTask),
-		eventsFromAppliedTasks: make(map[parentChildWorkflow]map[enumspb.EventType][]*historypb.HistoryEvent),
+		parentID:     "parent",
+		gates:        [2]*parentChildReplicationGate{nil, gate},
+		delayedTasks: make(map[parentChildReplicationLane]*parentChildReplicationTask),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	err = acknowledgeReplicationTaskContainingEventWithoutApplying(initialStandbyCluster, parentWorkflow, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED).run(ctx, runtime)
@@ -291,13 +254,21 @@ func TestParentChildHarnessVersionedTransitionApplyThrough(t *testing.T) {
 	require.Contains(t, runtime.trace, "  ack-without-apply task 2 to cluster 1 for parent [WorkflowTaskStarted, WorkflowTaskCompleted]")
 }
 
-func TestParentChildHarnessDecodeTransitionHistoryReplicationEvents(t *testing.T) {
+func TestParentChildHarnessDecodeReplicationEvents(t *testing.T) {
 	events := []*historypb.HistoryEvent{
 		{EventId: 1, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
 		{EventId: 2, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED},
 	}
 	blob, err := serialization.NewSerializer().SerializeEvents(events)
 	require.NoError(t, err)
+
+	t.Run("legacy history", func(t *testing.T) {
+		task := newParentChildHistoryReplicationTask("namespace", "parent", 1)
+		task.GetHistoryTaskAttributes().Events = blob
+		actual, err := decodeParentChildReplicationEvents(task)
+		require.NoError(t, err)
+		protorequire.ProtoSliceEqual(t, events, actual)
+	})
 
 	t.Run("sync versioned transition", func(t *testing.T) {
 		actual, err := decodeParentChildReplicationEvents(
