@@ -87,6 +87,8 @@ type (
 		GenerateHistoryReplicationTasks(
 			eventBatches [][]*historypb.HistoryEvent,
 		) ([]tasks.Task, error)
+		// GenerateMigrationTasks generates low priority replication tasks and is
+		// for the force replication path only. Do not call it for live replication.
 		GenerateMigrationTasks(targetClusters []string) ([]tasks.Task, int64, error)
 
 		// Generate tasks for any updated state machines on mutable state.
@@ -767,6 +769,11 @@ func (r *TaskGeneratorImpl) GenerateHistoryReplicationTasks(
 	}, nil
 }
 
+// GenerateMigrationTasks must only be called from the force replication path
+// (i.e. GenerateLastHistoryReplicationTasks), never from live replication.
+// Every task it returns is marked TASK_PRIORITY_LOW so that bulk backfill does
+// not compete with live replication traffic; using it for live replication
+// would silently demote those tasks.
 func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]tasks.Task, int64, error) {
 	executionInfo := r.mutableState.GetExecutionInfo()
 	versionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.GetVersionHistories())
