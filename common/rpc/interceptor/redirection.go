@@ -308,6 +308,7 @@ func (i *Redirection) handleRedirectAPIInvocation(
 	var err error
 
 	scope, startTime := i.BeforeCall(dcRedirectionMetricsPrefix + methodName)
+	i.recordForwardedRequestOnPassiveCluster(ctx, methodName, namespaceName)
 	defer func() {
 		i.AfterCall(scope, startTime, targetClusterName, namespaceName.String(), retError)
 	}()
@@ -332,6 +333,46 @@ func (i *Redirection) handleRedirectAPIInvocation(
 		return err
 	})
 	return resp, err
+}
+
+func (i *Redirection) recordForwardedRequestOnPassiveCluster(
+	ctx context.Context,
+	methodName string,
+	namespaceName namespace.Name,
+) {
+	sourceClusterValues := metadata.ValueFromIncomingContext(ctx, DCRedirectionSourceCellHeaderName)
+	if len(sourceClusterValues) == 0 || sourceClusterValues[0] == "" || sourceClusterValues[0] == i.currentClusterName {
+		return
+	}
+	namespaceEntry, err := i.namespaceCache.GetNamespace(namespaceName)
+	if err != nil {
+		return
+	}
+	i.RecordForwardedRequestOnPassiveCluster(
+		sourceClusterValues[0],
+		dcRedirectionMetricsPrefix+methodName,
+		namespaceEntry,
+		GetRoutingKeyFromContext(ctx),
+	)
+}
+
+// RecordForwardedRequestOnPassiveCluster records requests sent by another cluster to a cluster
+// where the namespace is passive.
+func (i *Redirection) RecordForwardedRequestOnPassiveCluster(
+	sourceCluster string,
+	operation string,
+	namespaceEntry *namespace.Namespace,
+	routingKey namespace.RoutingKey,
+) {
+	if sourceCluster == "" || sourceCluster == i.currentClusterName ||
+		!namespaceEntry.IsGlobalNamespace() || namespaceEntry.ActiveClusterName(routingKey) == i.currentClusterName {
+		return
+	}
+	metricsHandler, _ := i.BeforeCall(operation)
+	metrics.ClientDuplicatedRedirects.With(metricsHandler).Record(1,
+		metrics.NamespaceTag(namespaceEntry.Name().String()),
+		metrics.SourceClusterTag(sourceCluster),
+	)
 }
 
 func (i *Redirection) BeforeCall(
