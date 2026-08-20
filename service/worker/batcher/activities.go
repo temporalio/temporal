@@ -73,7 +73,6 @@ type batchWorkerProcessor func(
 	taskCh chan task,
 	respCh chan taskResponse,
 	rateLimiter quotas.RequestRateLimiter,
-	sdkClient sdkclient.Client,
 	frontendClient workflowservice.WorkflowServiceClient,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -250,7 +249,7 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	defer heartbeatTicker.Stop()
 
 	for range concurrency {
-		go startWorkerProcessor(ctx, taskCh, respCh, rateLimiter, sdkClient, a.FrontendClient, metricsHandler, logger)
+		go startWorkerProcessor(ctx, taskCh, respCh, rateLimiter, a.FrontendClient, metricsHandler, logger)
 	}
 
 	// Initialize the first p from initial executions or fetch from query
@@ -507,12 +506,11 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		taskCh chan task,
 		respCh chan taskResponse,
 		rateLimiter quotas.RequestRateLimiter,
-		sdkClient sdkclient.Client,
 		frontendClient workflowservice.WorkflowServiceClient,
 		metricsHandler metrics.Handler,
 		logger log.Logger,
 	) {
-		a.startTaskProcessor(ctx, batchParams, ns, taskCh, respCh, rateLimiter, sdkClient, frontendClient, metricsHandler, logger)
+		a.startTaskProcessor(ctx, batchParams, ns, taskCh, respCh, rateLimiter, frontendClient, metricsHandler, logger)
 	}
 
 	return a.processWorkflowsWithProactiveFetching(ctx, config, workerProcessor, rateLimiter, sdkClient, metricsHandler, logger, hbd)
@@ -580,7 +578,6 @@ func (a *activities) startTaskProcessor(
 	taskCh chan task,
 	respCh chan taskResponse,
 	limiter quotas.RequestRateLimiter,
-	sdkClient sdkclient.Client,
 	frontendClient workflowservice.WorkflowServiceClient,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -598,7 +595,7 @@ func (a *activities) startTaskProcessor(
 				continue
 			}
 
-			a.processTaskWithRetries(ctx, batchOperation, namespace, task, respCh, limiter, sdkClient, frontendClient, metricsHandler, logger)
+			a.processTaskWithRetries(ctx, batchOperation, namespace, task, respCh, limiter, frontendClient, metricsHandler, logger)
 		}
 	}
 }
@@ -624,7 +621,6 @@ func (a *activities) processSingleTask(
 	namespace string,
 	task task,
 	limiter quotas.RequestRateLimiter,
-	sdkClient sdkclient.Client,
 	frontendClient workflowservice.WorkflowServiceClient,
 	logger log.Logger,
 ) error {
@@ -680,12 +676,28 @@ func (a *activities) processSingleTask(
 	case *workflowservice.StartBatchOperationRequest_TerminationOperation:
 		err = processTask(ctx, limiter, task,
 			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
-				return sdkClient.TerminateWorkflow(ctx, executionInfo.Execution.WorkflowId, executionInfo.Execution.RunId, batchOperation.Request.Reason)
+				_, err := frontendClient.TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+					Namespace:         namespace,
+					WorkflowExecution: executionInfo.Execution,
+					Reason:            batchOperation.Request.GetReason(),
+					Details:           operation.TerminationOperation.GetDetails(),
+					Identity:          operation.TerminationOperation.GetIdentity(),
+				})
+				return err
 			})
 	case *workflowservice.StartBatchOperationRequest_CancellationOperation:
 		err = processTask(ctx, limiter, task,
 			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
-				return sdkClient.CancelWorkflow(ctx, executionInfo.Execution.WorkflowId, executionInfo.Execution.RunId)
+				_, err := frontendClient.RequestCancelWorkflowExecution(ctx, &workflowservice.RequestCancelWorkflowExecutionRequest{
+					Namespace:         namespace,
+					WorkflowExecution: executionInfo.Execution,
+					Identity:          operation.CancellationOperation.GetIdentity(),
+					// Surfaced as the cancel-requested event's cause.
+					Reason: batchOperation.Request.GetReason(),
+					RequestId: deterministicRequestID(batchOperation.Request.GetJobId(), "cancel",
+						executionInfo.Execution.GetWorkflowId(), executionInfo.Execution.GetRunId()),
+				})
+				return err
 			})
 	case *workflowservice.StartBatchOperationRequest_SignalOperation:
 		err = processTask(ctx, limiter, task,
@@ -891,14 +903,13 @@ func (a *activities) processTaskWithRetries(
 	task task,
 	respCh chan taskResponse,
 	limiter quotas.RequestRateLimiter,
-	sdkClient sdkclient.Client,
 	frontendClient workflowservice.WorkflowServiceClient,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) {
 	var err error
 	for {
-		err = a.processSingleTask(ctx, batchOperation, ns, task, limiter, sdkClient, frontendClient, logger)
+		err = a.processSingleTask(ctx, batchOperation, ns, task, limiter, frontendClient, logger)
 		if err == nil {
 			metrics.BatcherProcessorSuccess.With(metricsHandler).Record(1)
 			break
