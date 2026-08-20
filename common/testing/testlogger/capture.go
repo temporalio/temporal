@@ -3,8 +3,10 @@ package testlogger
 import (
 	"fmt"
 	"slices"
+	"strings"
 	"sync"
 
+	"github.com/google/go-cmp/cmp"
 	"go.temporal.io/server/common/log/tag"
 )
 
@@ -61,6 +63,23 @@ func (p CapturedLogPattern) matches(record CapturedLog) bool {
 	return len(matchedTags) == len(p.Tags)
 }
 
+func (p CapturedLogPattern) formattedTags() map[string]string {
+	formatted := make(map[string]string, len(p.Tags))
+	for key, value := range p.Tags {
+		if _, anyValue := value.(*anyTagValue); anyValue {
+			formatted[key] = "<any>"
+		} else {
+			formatted[key] = fmt.Sprint(value)
+		}
+	}
+	return formatted
+}
+
+type requireTestingT interface {
+	Helper()
+	Fatalf(format string, args ...any)
+}
+
 // Capture is an opt-in recording of TestLogger calls.
 type Capture struct {
 	anyTags map[string]map[string]struct{}
@@ -102,6 +121,40 @@ func (c *Capture) Snapshot() []CapturedLog {
 // Contains reports whether the capture includes a log matching pattern.
 func (c *Capture) Contains(pattern CapturedLogPattern) bool {
 	return slices.ContainsFunc(c.Snapshot(), pattern.matches)
+}
+
+// RequireContains fails the test with tag diffs when the capture does not include a matching log.
+func (c *Capture) RequireContains(t requireTestingT, pattern CapturedLogPattern) {
+	t.Helper()
+	records := c.Snapshot()
+	if slices.ContainsFunc(records, pattern.matches) {
+		return
+	}
+
+	var failure strings.Builder
+	fmt.Fprintf(&failure, "captured log pattern not found: level=%s message=%q", pattern.Level, pattern.Message)
+	expectedTags := pattern.formattedTags()
+	candidateCount := 0
+	for _, record := range records {
+		if record.Level != pattern.Level || record.Message != pattern.Message {
+			continue
+		}
+		candidateCount++
+		actualTags := make(map[string]string, len(record.Tags))
+		for _, actual := range record.Tags {
+			key := actual.Key()
+			if _, anyValue := pattern.Tags[key].(*anyTagValue); anyValue {
+				actualTags[key] = "<any>"
+			} else {
+				actualTags[key] = formatValue(actual)
+			}
+		}
+		fmt.Fprintf(&failure, "\n\ncandidate %d tag mismatch (-want +got):\n%s", candidateCount, cmp.Diff(expectedTags, actualTags))
+	}
+	if candidateCount == 0 {
+		fmt.Fprintf(&failure, "\n\nno captured log had the expected level and message; captured logs: %+v", records)
+	}
+	t.Fatalf("%s", failure.String())
 }
 
 func (c *Capture) record(record CapturedLog) {

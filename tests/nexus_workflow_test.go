@@ -2702,7 +2702,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure(chasmEnabled
 	if chasmEnabled {
 		attempt = 1
 	}
-	s.True(logCapture.Contains(testlogger.CapturedLogPattern{
+	logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
 		Level:   testlogger.Error,
 		Message: "Nexus StartOperation request failed",
 		Tags: map[string]any{
@@ -2718,7 +2718,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure(chasmEnabled
 			"attempt":                            attempt,
 			"error":                              "handler error (BAD_REQUEST)",
 		},
-	}), "Nexus StartOperation failure log not found")
+	})
 
 	outboundRequests := metricCapture.Metric("nexus_outbound_requests")
 	s.Len(outboundRequests, 1)

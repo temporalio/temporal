@@ -2,6 +2,7 @@ package testlogger_test
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -11,6 +12,19 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/testlogger"
 )
+
+type fatalRecorder struct {
+	helperCalled bool
+	message      string
+}
+
+func (r *fatalRecorder) Helper() {
+	r.helperCalled = true
+}
+
+func (r *fatalRecorder) Fatalf(format string, args ...any) {
+	r.message = fmt.Sprintf(format, args...)
+}
 
 func TestCaptureLifecycle(t *testing.T) {
 	t.Parallel()
@@ -106,9 +120,16 @@ func TestCaptureContains(t *testing.T) {
 		},
 	}
 	require.True(t, capture.Contains(pattern))
+	capture.RequireContains(t, pattern)
 
 	pattern.Tags["operation"] = "CancelOperation"
 	require.False(t, capture.Contains(pattern))
+	recorder := &fatalRecorder{}
+	capture.RequireContains(recorder, pattern)
+	require.True(t, recorder.helperCalled)
+	require.Contains(t, recorder.message, "candidate 1 tag mismatch")
+	require.Contains(t, recorder.message, "CancelOperation")
+	require.Contains(t, recorder.message, "StartOperation")
 	pattern.Tags["operation"] = "StartOperation"
 	pattern.Tags["unexpected"] = "value"
 	require.False(t, capture.Contains(pattern))
