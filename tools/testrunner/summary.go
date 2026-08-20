@@ -6,6 +6,7 @@ import (
 	"html"
 	"slices"
 	"strings"
+	"unicode/utf8"
 )
 
 const summaryMaxDetailBytes = 4 * 1024
@@ -93,7 +94,14 @@ func newSummaryRow(kind failureType, name string, details string) summaryRow {
 	if len(details) > summaryMaxDetailBytes {
 		headBytes := (summaryMaxDetailBytes - len(summaryTruncatedMarker)) / 2
 		tailBytes := summaryMaxDetailBytes - len(summaryTruncatedMarker) - headBytes
-		details = details[:headBytes] + summaryTruncatedMarker + details[len(details)-tailBytes:]
+		for headBytes > 0 && !utf8.RuneStart(details[headBytes]) {
+			headBytes--
+		}
+		tailStart := len(details) - tailBytes
+		for tailStart < len(details) && !utf8.RuneStart(details[tailStart]) {
+			tailStart++
+		}
+		details = details[:headBytes] + summaryTruncatedMarker + details[tailStart:]
 	}
 	return summaryRow{
 		Kind:    kind,
