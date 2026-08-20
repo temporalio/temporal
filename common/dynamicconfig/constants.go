@@ -1920,6 +1920,11 @@ This can help reduce effects of shard movement.`,
 		true,
 		`EnableHostLevelEventsCache controls if the events cache is host level. Requires service restart to take effect.`,
 	)
+	EventsCacheBackgroundEvict = NewGlobalTypedSetting(
+		"history.eventsCacheBackgroundEvict",
+		DefaultHistoryCacheBackgroundEvictSettings,
+		`EventsCacheBackgroundEvict configures background processing to purge expired entries from the events cache.`,
+	)
 	AcquireShardInterval = NewGlobalDurationSetting(
 		"history.acquireShardInterval",
 		time.Minute,
