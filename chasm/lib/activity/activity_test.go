@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -511,6 +512,86 @@ func TestHandleCancellationRequestedDirectCancelMetrics(t *testing.T) {
 			require.Empty(t, snapshot[metrics.ActivityStartToCloseLatency.Name()],
 				"no attempt was running; StartToCloseLatency must not be recorded")
 		})
+	}
+}
+
+func TestCompletionMetricsWorkerDeploymentLabelKeyParity(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	nsRegistry := namespace.NewMockRegistry(ctrl)
+	nsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil).AnyTimes()
+
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleMetricsHandler: func() metrics.Handler { return metricsHandler },
+			GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
+				config: &Config{
+					BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
+				},
+				namespaceRegistry: nsRegistry,
+			}),
+		},
+	}
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			ActivityType: &commonpb.ActivityType{Name: "test-activity-type"},
+			ScheduleTime: timestamppb.New(defaultTime),
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+		},
+		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
+			StartedTime: timestamppb.New(defaultTime),
+		}),
+	}
+
+	completionHandler, err := activity.enrichCompletionMetricsHandler(
+		ctx,
+		metrics.HistoryRespondActivityTaskCompletedScope,
+	)
+	require.NoError(t, err)
+	activity.emitOnCompletedMetrics(ctx, completionHandler)
+	activity.emitOnFailedMetrics(ctx, completionHandler)
+	activity.emitOnCanceledMetrics(ctx, completionHandler, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED)
+	activity.emitOnTimedOutMetrics(
+		ctx,
+		completionHandler,
+		enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+	)
+
+	expectedTags := []metrics.Tag{
+		metrics.WorkerDeploymentNameTag("", false),
+		metrics.WorkerDeploymentBuildIDTag("", false),
+	}
+	for _, metricName := range []string{
+		metrics.ActivitySuccess.Name(),
+		metrics.ActivityFail.Name(),
+		metrics.ActivityTaskFail.Name(),
+		metrics.ActivityCancel.Name(),
+		metrics.ActivityTaskTimeout.Name(),
+		metrics.ActivityTimeout.Name(),
+		metrics.ActivityStartToCloseLatency.Name(),
+		metrics.ActivityScheduleToCloseLatency.Name(),
+	} {
+		recordings := capture.Snapshot()[metricName]
+		require.NotEmpty(t, recordings, "expected %s to be emitted", metricName)
+		for _, recording := range recordings {
+			for _, expectedTag := range expectedTags {
+				require.Contains(t, recording.Tags, expectedTag.Key, "%s is missing label %s", metricName, expectedTag.Key)
+				require.Equal(t, expectedTag.Value, recording.Tags[expectedTag.Key])
+			}
+		}
+	}
+
+	baseHandler, err := activity.enrichMetricsHandler(ctx, metrics.ActivityTerminatedScope)
+	require.NoError(t, err)
+	activity.emitOnTerminatedMetrics(baseHandler)
+	terminated := capture.Snapshot()[metrics.ActivityTerminate.Name()]
+	require.Len(t, terminated, 1)
+	for _, expectedTag := range expectedTags {
+		require.NotContains(t, terminated[0].Tags, expectedTag.Key)
 	}
 }
 

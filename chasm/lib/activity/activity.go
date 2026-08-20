@@ -568,7 +568,7 @@ func (a *Activity) HandleCompleted(
 		return nil, err
 	}
 
-	metricsHandler, err := a.enrichMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCompletedScope)
+	metricsHandler, err := a.enrichCompletionMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCompletedScope)
 	if err != nil {
 		return nil, err
 	}
@@ -593,7 +593,7 @@ func (a *Activity) HandleFailed(
 		return nil, err
 	}
 
-	metricsHandler, err := a.enrichMetricsHandler(ctx, metrics.HistoryRespondActivityTaskFailedScope)
+	metricsHandler, err := a.enrichCompletionMetricsHandler(ctx, metrics.HistoryRespondActivityTaskFailedScope)
 	if err != nil {
 		return nil, err
 	}
@@ -633,7 +633,7 @@ func (a *Activity) HandleCanceled(
 		return nil, err
 	}
 
-	metricsHandler, err := a.enrichMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCanceledScope)
+	metricsHandler, err := a.enrichCompletionMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCanceledScope)
 	if err != nil {
 		return nil, err
 	}
@@ -913,7 +913,7 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request
 
 	// Transition to Canceled if no attempt in progress; otherwise wait for worker response.
 	if !hasAttemptInProgress {
-		metricsHandler, err := a.enrichMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCanceledScope)
+		metricsHandler, err := a.enrichCompletionMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCanceledScope)
 		if err != nil {
 			return nil, err
 		}
@@ -1965,6 +1965,21 @@ func (a *Activity) enrichMetricsHandler(ctx chasm.Context, operationTag string) 
 		metrics.ActivityTypeTag(a.GetActivityType().GetName()),
 		metrics.VersioningBehaviorTag(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED),
 		metrics.WorkflowTypeTag(WorkflowTypeTag),
+	), nil
+}
+
+func (a *Activity) enrichCompletionMetricsHandler(ctx chasm.Context, operationTag string) (metrics.Handler, error) {
+	handler, err := a.enrichMetricsHandler(ctx, operationTag)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: Populate these labels when Standalone Activities support Worker Versioning.
+	// Until then, preserve label-key parity with Workflow Activity metrics so Prometheus does
+	// not reject samples emitted under the same metric names.
+	return handler.WithTags(
+		metrics.WorkerDeploymentNameTag("", false),
+		metrics.WorkerDeploymentBuildIDTag("", false),
 	), nil
 }
 
