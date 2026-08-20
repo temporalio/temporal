@@ -663,7 +663,12 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 
 	var lcr []*commonpb.Payload
 	var continuedFailure *failurepb.Failure
-	tracksCompletionResult := scheduler.resolveOverlapPolicy(start.GetOverlapPolicy()) != enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL
+	// Read the policy stamped on the start rather than resolving against the
+	// schedule's live policy, mirroring V1's startWorkflow, which compares
+	// start.OverlapPolicy directly. Native V2 starts are always stamped with a
+	// concrete policy when buffered; starts migrated from V1 carry none, and V1
+	// passed completion state to those.
+	tracksCompletionResult := start.GetOverlapPolicy() != enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL
 	if tracksCompletionResult && lastCompletionState.Success != nil {
 		lcr = append(lcr, lastCompletionState.Success)
 	}

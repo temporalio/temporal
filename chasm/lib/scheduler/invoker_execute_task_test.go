@@ -170,6 +170,8 @@ func TestExecuteTask_AllowAllDoesNotPropagateCompletionState(t *testing.T) {
 			invoker.BufferedStarts = []*schedulespb.BufferedStart{{
 				NominalTime: startTime, ActualTime: startTime, DesiredTime: startTime,
 				RequestId: "request-id", WorkflowId: "workflow-id", Attempt: 1,
+				// Stamped when the action was buffered, as production does.
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 			}}
 			var refErr error
 			invokerRef, refErr = ctx.Ref(invoker)

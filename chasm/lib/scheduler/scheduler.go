@@ -659,7 +659,15 @@ func (s *Scheduler) HandleNexusCompletion(
 	}
 
 	workflowID := start.GetWorkflowId()
-	tracksCompletionResult := s.resolveOverlapPolicy(start.GetOverlapPolicy()) != enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL
+	// Read the policy stamped on the start rather than resolving against the
+	// schedule's live policy, matching V1: V1 froze the tracking decision at
+	// start time (recordAction only added non-ALLOW_ALL starts to
+	// Info.RunningWorkflows, and processWatcherResult then acted on that list
+	// with no policy check of its own), so a policy change between start and
+	// completion can't retroactively change whether an in-flight action counts.
+	// This also keeps starts migrated from V1 tracked: those carry no stamped
+	// policy, and V1 tracked exactly the runs it recorded in RunningWorkflows.
+	tracksCompletionResult := start.GetOverlapPolicy() != enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL
 
 	// Record how long it took for the callback to arrive after the action completed.
 	// Use ctx.Now instead of time.Since to use a consistent time source across nodes,
