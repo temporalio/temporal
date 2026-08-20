@@ -10,6 +10,7 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	activitypb "go.temporal.io/api/activity/v1"
+	callbackpb "go.temporal.io/api/callback/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -9859,6 +9860,31 @@ func (env *standaloneActivityEnv) startActivityWithType(ctx context.Context, act
 	})
 }
 
+// awaitCallbackInfo polls DescribeActivityExecution until the activity's single completion
+// callback reaches wantState, and returns that CallbackInfo.
+func (env *standaloneActivityEnv) awaitCallbackInfo(
+	ctx context.Context,
+	t *testing.T,
+	activityID string,
+	wantState enumspb.CallbackState,
+) *callbackpb.CallbackInfo {
+	t.Helper()
+	var cbInfo *callbackpb.CallbackInfo
+	await.Require(ctx, t, func(c *await.T) {
+		descResp, err := env.FrontendClient().DescribeActivityExecution(c.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+		})
+		require.NoError(c, err)
+		require.Len(c, descResp.GetCallbacks(), 1)
+		cbInfo = descResp.GetCallbacks()[0].GetInfo()
+		require.NotNil(c, cbInfo)
+		require.Equal(c, wantState, cbInfo.GetState())
+	}, 10*time.Second, 100*time.Millisecond)
+	return cbInfo
+}
+
+// Tests verifying that completion callbacks attached to standalone Activities get triggered.
 func (s *standaloneActivityTestSuite) TestCallbacks() {
 	env := s.newTestEnv()
 	t := s.T()
@@ -10009,6 +10035,8 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		require.Equal(t, callbackURL, cbInfo.GetInfo().GetCallback().GetNexus().GetUrl())
 		require.Equal(t, enumspb.CALLBACK_STATE_STANDBY, cbInfo.GetInfo().GetState())
 		require.NotNil(t, cbInfo.GetInfo().GetRegistrationTime())
+		// Confirm there is no result, because the callback hasn't been triggered.
+		require.Nil(t, cbInfo.GetInfo().GetResult())
 	})
 
 	t.Run("ExceedsMaxCallbacksLimit", func(t *testing.T) {
@@ -10103,6 +10131,10 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, descResp.GetInfo().GetStatus())
+
+		// Wait for the callback to complete and confirm it has a Success result.
+		cbInfo := env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
+		require.NotNil(t, cbInfo.GetSuccess())
 	})
 
 	t.Run("FailsWithCallbacks", func(t *testing.T) {
@@ -10169,6 +10201,9 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_FAILED, descResp.GetInfo().GetStatus())
+
+		// The Activity may have failed, but the callback reporting the failure should be successful.
+		env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
 	})
 
 	t.Run("TerminatedWithCallbacks", func(t *testing.T) {
@@ -10236,6 +10271,9 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TERMINATED, descResp.GetInfo().GetStatus())
+
+		// The callback reporting the termination should be delivered successfully.
+		env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
 	})
 
 	t.Run("CanceledWithCallbacks", func(t *testing.T) {
@@ -10308,6 +10346,9 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED, descResp.GetInfo().GetStatus())
+
+		// The callback reporting the cancellation should be delivered successfully.
+		env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
 	})
 
 	// This test covers the timeout callback path using schedule-to-start, but the callback behavior
@@ -10363,6 +10404,104 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		})
 		require.NoError(t, err)
 		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, descResp.GetInfo().GetStatus())
+
+		// The callback delivering the timeout failure should itself succeed.
+		env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
+	})
+
+	// Verify that if the callback fails to be delivered for some reason, that the failure is
+	// persisted correctly and available from the Describe operation.
+	t.Run("CallbackDeliveryFailure", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		ch, callbackAddress := newNexusCompletionHandler(t)
+
+		// Start and successfully complete a standalone Activity.
+		_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:    env.Namespace().String(),
+			ActivityId:   activityID,
+			ActivityType: env.Tv().ActivityType(),
+			Identity:     env.Tv().WorkerIdentity(),
+			Input:        defaultInput,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+			},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           env.Tv().Any().String(),
+			CompletionCallbacks: []*commonpb.Callback{{
+				Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackAddress}},
+			}},
+		})
+		require.NoError(t, err)
+
+		pollResp, err := env.FrontendClient().PollActivityTaskQueue(s.Context(), &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  env.Tv().WorkerIdentity(),
+		})
+		require.NoError(t, err)
+
+		_, err = env.FrontendClient().RespondActivityTaskCompleted(s.Context(), &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Result:    defaultResult,
+			Identity:  defaultIdentity,
+		})
+		require.NoError(t, err)
+
+		// Simulate the completion handler returning a retryable error followed by
+		// an unretryable error. Confirm the SAA's CallbackInfo includes the terminal
+		// failure.
+		for deliveryAttempt := 1; deliveryAttempt <= 2; deliveryAttempt++ {
+			select {
+			case completion := <-ch.requestCh:
+				// Pull the completion request from the channel.
+				require.Equal(t, nexus.OperationStateSucceeded, completion.State)
+				if deliveryAttempt == 1 {
+					// The first attempt to deliver the Activity's completion callback reports a retryable error.
+					// Call Describe and confirm the Callback has just been scheduled.
+					cbInfo := env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SCHEDULED)
+					require.EqualValues(t, 0, cbInfo.GetAttempt()) // zero attempts so far.
+					require.Nil(t, cbInfo.GetLastAttemptFailure())
+					require.Nil(t, cbInfo.GetResult())
+
+					// Retryable error.
+					ch.requestCompleteCh <- nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "delivery #1")
+				} else {
+					// The second attempt to deliver the Activity's completion callback should report a
+					// non-retryable error.
+					// Call Describe and confirm the CallbackInfo describes the previous delivery attempt.
+					cbInfo := env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SCHEDULED)
+					require.EqualValues(t, 1, cbInfo.GetAttempt()) // 1 attempt so far, the 2nd is in-progress.
+					require.NotNil(t, cbInfo.GetLastAttemptFailure())
+					require.Contains(t, cbInfo.GetLastAttemptFailure().GetMessage(), "delivery #1")
+					require.Nil(t, cbInfo.GetResult())
+
+					// Unretryable error.
+					ch.requestCompleteCh <- nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "delivery #2")
+				}
+
+			case <-s.Context().Done():
+				require.Fail(t, "timed out waiting for completion callback")
+			}
+		}
+
+		// Verify the Activity is in completed state.
+		descResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, descResp.GetInfo().GetStatus())
+
+		// Verify the completion callback delivery has failed.
+		cbInfo := env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_FAILED)
+		// Both the last delivery failure and the terminal failure come from delivery #2.
+		const lastDeliveryFailureMessage = "handler error (BAD_REQUEST): delivery #2"
+		require.NotNil(t, cbInfo.GetFailure())
+		require.Equal(t, lastDeliveryFailureMessage, cbInfo.GetFailure().GetMessage())
+		require.Equal(t, lastDeliveryFailureMessage, cbInfo.GetLastAttemptFailure().GetMessage())
 	})
 }
 
