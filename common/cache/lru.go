@@ -58,6 +58,14 @@ type (
 		value      any
 		refCount   int
 		size       int
+		// pinnedSize records the entry's size at the moment its ref count
+		// transitioned from 0→1 in pin-mode. Release uses this snapshot when
+		// refCount hits 0 again so that the exact same number of bytes added
+		// to the cache's pinnedSize counter is removed. Without this snapshot
+		// the metric could go negative or stale because entry.size is mutated
+		// in place by Release/putInternal as the underlying value's reported
+		// CacheSize() changes (#9954).
+		pinnedSize int
 	}
 )
 
@@ -267,7 +275,12 @@ func (c *lru) Release(key any) {
 	entry := elt.Value.(*entryImpl)
 	entry.refCount--
 	if entry.refCount == 0 {
-		c.pinnedSize -= entry.Size()
+		// Subtract the size that was added when pin happened (the 0→1
+		// transition), not entry.Size(): the latter may have been mutated by
+		// earlier Release calls or external value mutations and would leave
+		// pinnedSize negative or stale (#9954).
+		c.pinnedSize -= entry.pinnedSize
+		entry.pinnedSize = 0
 		metrics.CachePinnedUsage.With(c.metricsHandler).Record(float64(c.pinnedSize))
 	}
 	// Entry size might have changed. Recalculate size and evict entries if necessary.
@@ -439,7 +452,12 @@ func (c *lru) updateEntryRefCount(entry *entryImpl) {
 	if c.pin {
 		entry.refCount++
 		if entry.refCount == 1 {
-			c.pinnedSize += entry.Size()
+			// Snapshot the size that we add to pinnedSize so Release subtracts
+			// exactly the same amount when refCount returns to 0. entry.size
+			// may be mutated later (Release recomputes currSize, putInternal
+			// may update value/size) but pinnedSize must be balanced (#9954).
+			entry.pinnedSize = entry.Size()
+			c.pinnedSize += entry.pinnedSize
 			metrics.CachePinnedUsage.With(c.metricsHandler).Record(float64(c.pinnedSize))
 		}
 	}
