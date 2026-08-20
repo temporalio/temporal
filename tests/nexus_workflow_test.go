@@ -2699,21 +2699,48 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure(chasmEnabled
 	}
 	s.Require().NotEmpty(handlerRequestID)
 
-	var failureLog *testlogger.CapturedLog
 	records := logCapture.Snapshot()
-	for i := range records {
-		requestID, ok := records[i].TagValue(tag.RequestID("").Key())
-		if records[i].Level == testlogger.Error &&
-			records[i].Message == "Nexus StartOperation request failed" &&
-			ok && requestID == handlerRequestID {
-			failureLog = &records[i]
-			break
-		}
+	failureLogIndex := slices.IndexFunc(records, func(record testlogger.CapturedLog) bool {
+		requestID, ok := record.TagValue(tag.RequestID("").Key())
+		return record.Level == testlogger.Error &&
+			record.Message == "Nexus StartOperation request failed" &&
+			ok && requestID == handlerRequestID
+	})
+	s.Require().NotEqual(-1, failureLogIndex, "Nexus StartOperation failure log not found")
+	failureLog := records[failureLogIndex]
+	requireTag := func(key string) tag.Tag {
+		i := slices.IndexFunc(failureLog.Tags, func(t tag.Tag) bool { return t.Key() == key })
+		s.Require().NotEqual(-1, i, "log tag %q not found", key)
+		return failureLog.Tags[i]
 	}
-	s.Require().NotNil(failureLog, "Nexus StartOperation failure log not found")
-	namespace, ok := failureLog.TagValue(tag.WorkflowNamespace("").Key())
+	attemptStartTag := requireTag(tag.AttemptStart(time.Time{}).Key())
+	_, ok := attemptStartTag.Value().(time.Time)
 	s.Require().True(ok)
-	s.Require().Equal(env.Namespace().String(), namespace)
+	errorTag := requireTag(tag.Error(errors.New("")).Key())
+	errorMessage, ok := failureLog.TagValue(tag.Error(errors.New("")).Key())
+	s.Require().True(ok)
+	s.Require().Equal("handler error (BAD_REQUEST)", errorMessage)
+	attempt := int32(0)
+	if chasmEnabled {
+		attempt = 1
+	}
+	s.Require().Contains(records, testlogger.CapturedLog{
+		Level:   testlogger.Error,
+		Message: "Nexus StartOperation request failed",
+		Tags: []tag.Tag{
+			tag.Operation("StartOperation"),
+			tag.WorkflowNamespace(env.Namespace().String()),
+			tag.NexusEndpointTargetNamespaceID(""),
+			tag.RequestID(handlerRequestID),
+			tag.NexusOperation("operation"),
+			tag.Endpoint(endpointName),
+			tag.WorkflowID(run.GetID()),
+			tag.WorkflowRunID(run.GetRunID()),
+			attemptStartTag,
+			tag.Attempt(attempt),
+			errorTag,
+		},
+	})
 
 	outboundRequests := metricCapture.Metric("nexus_outbound_requests")
 	s.Len(outboundRequests, 1)
