@@ -1257,6 +1257,19 @@ func (s *ContextImpl) updateShardInfo(
 	s.tasksCompletedSinceLastUpdate = 0
 
 	updatedShardInfo := trimShardInfo(s.config, s.clusterMetadata.GetAllClusterInfo(), s.copyShardInfo(s.shardInfo))
+
+	metrics.ShardInfoSize.With(s.metricsHandler).Record(int64(updatedShardInfo.Size()))
+	for categoryID, queueState := range updatedShardInfo.QueueStates {
+		category, ok := s.taskCategoryRegistry.GetCategoryByID(int(categoryID))
+		if !ok {
+			continue
+		}
+		metrics.QueueStateSize.With(s.metricsHandler).Record(
+			int64(queueState.Size()),
+			metrics.TaskCategoryTag(category.Name()),
+		)
+	}
+
 	request := &persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo,
 		PreviousRangeID: s.shardInfo.GetRangeId(),

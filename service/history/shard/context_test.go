@@ -994,6 +994,67 @@ func (s *contextSuite) TestUpdateShardInfo_FirstUpdate() {
 	s.Equal(0, s.mockShard.tasksCompletedSinceLastUpdate)
 }
 
+func (s *contextSuite) TestUpdateShardInfo_RecordsSizeMetrics() {
+	s.mockShard.state = contextStateAcquired
+	s.setImmediateAckLevels(map[int32]int64{
+		int32(tasks.CategoryIDTransfer): 100,
+		int32(tasks.CategoryIDTimer):    200,
+	})
+
+	expectedTransferSize := int64(s.mockShard.shardInfo.QueueStates[int32(tasks.CategoryIDTransfer)].Size())
+	expectedTimerSize := int64(s.mockShard.shardInfo.QueueStates[int32(tasks.CategoryIDTimer)].Size())
+
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
+	captureHandler := metricstest.NewCaptureHandler()
+	s.mockShard.SetMetricsHandler(captureHandler)
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	err := s.mockShard.updateShardInfo(0, func() {})
+	s.NoError(err)
+
+	snapshot := capture.Snapshot()
+
+	shardInfoSizeRecordings := snapshot[metrics.ShardInfoSize.Name()]
+	s.Require().Len(shardInfoSizeRecordings, 1)
+	s.GreaterOrEqual(shardInfoSizeRecordings[0].Value.(int64), expectedTransferSize)
+	s.GreaterOrEqual(shardInfoSizeRecordings[0].Value.(int64), expectedTimerSize)
+
+	queueStateSizeRecordings := snapshot[metrics.QueueStateSize.Name()]
+	s.Require().Len(queueStateSizeRecordings, 2)
+
+	sizeByCategory := make(map[string]int64, len(queueStateSizeRecordings))
+	for _, recording := range queueStateSizeRecordings {
+		sizeByCategory[recording.Tags["task_category"]] = recording.Value.(int64)
+	}
+	s.Equal(map[string]int64{
+		tasks.CategoryTransfer.Name(): expectedTransferSize,
+		tasks.CategoryTimer.Name():    expectedTimerSize,
+	}, sizeByCategory)
+}
+
+func (s *contextSuite) TestUpdateShardInfo_DoesNotRecordSizeMetrics_WhenThrottled() {
+	s.mockShard.state = contextStateAcquired
+
+	// First call always persists, establishing lastUpdated.
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	s.NoError(s.mockShard.updateShardInfo(0, func() {}))
+
+	captureHandler := metricstest.NewCaptureHandler()
+	s.mockShard.SetMetricsHandler(captureHandler)
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	// No time has passed and too few tasks completed: shouldn't persist, and shouldn't record size.
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Times(0)
+	s.NoError(s.mockShard.updateShardInfo(0, func() {}))
+
+	snapshot := capture.Snapshot()
+	s.Empty(snapshot[metrics.ShardInfoSize.Name()])
+	s.Empty(snapshot[metrics.QueueStateSize.Name()])
+}
+
 // setImmediateAckLevels replaces the shard's queue states so each given immediate category has its
 // ack level at the given task id, i.e. a backlog of everything above it.
 func (s *contextSuite) setImmediateAckLevels(ackLevelByCategoryID map[int32]int64) {

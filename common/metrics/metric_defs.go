@@ -724,6 +724,8 @@ var (
 	HistoryCount                     = NewDimensionlessHistogramDef("history_count")
 	TasksCompletedPerShardInfoUpdate = NewDimensionlessHistogramDef("tasks_per_shardinfo_update")
 	TimeBetweenShardInfoUpdates      = NewTimerDef("time_between_shardinfo_update")
+	ShardInfoSize                    = NewBytesHistogramDef("shard_info_size")
+	QueueStateSize                   = NewBytesHistogramDef("queue_state_size")
 	SearchAttributesSize             = NewBytesHistogramDef("search_attributes_size")
 	MemoSize                         = NewBytesHistogramDef("memo_size")
 	TooManyPendingChildWorkflows     = NewCounterDef(
