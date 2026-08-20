@@ -131,6 +131,7 @@ type (
 		namespaceReplicationQueue        persistence.NamespaceReplicationQueue
 		generateMigrationTaskViaFrontend dynamicconfig.BoolPropertyFn
 		enableHistoryRateLimiter         dynamicconfig.BoolPropertyFn
+		emitNamespaceLifecycleEvents     dynamicconfig.BoolPropertyFn
 		workflowVerifier                 WorkflowVerifier
 		chasmRegistry                    *chasm.Registry
 	}
@@ -389,15 +390,7 @@ func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverR
 	var snapshot wideevents.HandoverLagSnapshot
 	start := time.Now()
 	defer func() {
-		wideevents.EmitHandoverIncomplete(
-			a.EventLogger,
-			waitRequest.Namespace,
-			a.namespaceIDForEvent(waitRequest.Namespace),
-			waitRequest.RemoteCluster,
-			&snapshot,
-			time.Since(start),
-			retErr,
-		)
+		a.emitHandoverIncomplete(waitRequest, &snapshot, time.Since(start), retErr)
 	}()
 
 	for {
@@ -412,6 +405,26 @@ func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverR
 		time.Sleep(time.Second)
 		activity.RecordHeartbeat(ctx, nil)
 	}
+}
+
+func (a *activities) emitHandoverIncomplete(
+	waitRequest waitHandoverRequest,
+	snapshot *wideevents.HandoverLagSnapshot,
+	elapsed time.Duration,
+	exitErr error,
+) {
+	if a.emitNamespaceLifecycleEvents == nil || !a.emitNamespaceLifecycleEvents() {
+		return
+	}
+	wideevents.EmitHandoverIncomplete(
+		a.EventLogger,
+		waitRequest.Namespace,
+		a.namespaceIDForEvent(waitRequest.Namespace),
+		waitRequest.RemoteCluster,
+		snapshot,
+		elapsed,
+		exitErr,
+	)
 }
 
 // Check if remote cluster has caught up on all shards on replication tasks

@@ -423,7 +423,7 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		}
 	}
 
-	if err := h.linkValidator.ValidateRequest(req.GetNamespace(), req.GetLinks()); err != nil {
+	if err := h.linkValidator.ValidateStartRequest(req.GetNamespace(), req.GetLinks(), req.GetCompletionCallbacks()); err != nil {
 		return nil, err
 	}
 

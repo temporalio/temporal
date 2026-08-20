@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
@@ -591,7 +592,14 @@ Loop:
 				// Wrap as convertError so isSkippable can tell "the task could not be built"
 				// (its source info is corrupt/unusable) apart from transient send/rate-limit
 				// failures, which must not be skipped.
-				return s.recordRetry(item, attempt, &convertError{err: fmt.Errorf("convert: %w", err)})
+				return s.recordRetry(
+					item,
+					enumsspb.REPLICATION_TASK_TYPE_UNSPECIFIED,
+					priority,
+					attempt,
+					wideevents.ReplOperationTaskConversion,
+					&convertError{err: fmt.Errorf("convert: %w", err)},
+				)
 			}
 			if task == nil {
 				return nil
@@ -622,7 +630,7 @@ Loop:
 					0,
 					"",
 				)); err != nil {
-					return s.recordRetry(item, attempt, fmt.Errorf("rate_limit: %w", err))
+					return s.recordRetry(item, task.GetTaskType(), priority, attempt, wideevents.ReplOperationRateLimit, fmt.Errorf("rate_limit: %w", err))
 				}
 				metrics.ReplicationRateLimitLatency.With(s.metrics).Record(time.Since(rlStartTime), metrics.OperationTag(TaskOperationTag(task)))
 			}
@@ -639,7 +647,7 @@ Loop:
 					},
 				},
 			}); err != nil {
-				return s.recordRetry(item, attempt, fmt.Errorf("send: %w", err))
+				return s.recordRetry(item, task.GetTaskType(), priority, attempt, wideevents.ReplOperationStreamSend, fmt.Errorf("send: %w", err))
 			}
 			skipCount = 0
 			metrics.ReplicationTasksSend.With(s.metrics).Record(
@@ -792,7 +800,10 @@ func (s *StreamSenderImpl) getTaskTargetCluster(task tasks.Task) []string {
 
 func (s *StreamSenderImpl) recordRetry(
 	item tasks.Task,
+	replicationTaskType enumsspb.ReplicationTaskType,
+	priority enumsspb.TaskPriority,
 	attempt int64,
+	operation string,
 	err error,
 ) error {
 	s.shardContext.GetThrottledLogger().Warn("Replication task send retry",
@@ -802,6 +813,9 @@ func (s *StreamSenderImpl) recordRetry(
 		tag.Counter(int(attempt)),
 		tag.Error(err),
 	)
+	if s.config.EmitReplicationLifecycleEvents() {
+		s.emitReplicationSenderError(item, replicationTaskType, priority, attempt, operation, "Replication task send retry", err)
+	}
 	return err
 }
 
