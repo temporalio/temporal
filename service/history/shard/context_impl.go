@@ -1264,14 +1264,12 @@ func (s *ContextImpl) updateShardInfo(
 		if !ok {
 			continue
 		}
-		metrics.QueueStateSize.With(s.metricsHandler).Record(
-			int64(queueState.Size()),
-			metrics.TaskCategoryTag(category.Name()),
-		)
-		metrics.QueueStateSizeTotal.With(s.metricsHandler).Record(
-			int64(queueState.Size()),
-			metrics.TaskCategoryTag(category.Name()),
-		)
+		sizeBytes := int64(queueState.Size())
+		categoryTag := metrics.TaskCategoryTag(category.Name())
+		// The counter is a true accumulator; the histogram's _sum is not, since tally's Prometheus
+		// reporter replays each sample as its bucket's upper bound, not the recorded value.
+		metrics.QueueStateSize.With(s.metricsHandler).Record(sizeBytes, categoryTag)
+		metrics.QueueStateSizeTotal.With(s.metricsHandler).Record(sizeBytes, categoryTag)
 	}
 
 	request := &persistence.UpdateShardRequest{

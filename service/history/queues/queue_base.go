@@ -331,6 +331,8 @@ func (p *queueBase) checkpoint() {
 	metrics.QueueReaderCountHistogram.With(p.metricsHandler).Record(int64(len(readerScopes)))
 	sliceCount := int64(p.monitor.GetTotalSliceCount())
 	categoryTag := metrics.TaskCategoryTag(p.category.Name())
+	// The counter is a true accumulator; the histogram's _sum is not, since tally's Prometheus
+	// reporter replays each sample as its bucket's upper bound, not the recorded value.
 	metrics.QueueSliceCountHistogram.With(p.metricsHandler).Record(sliceCount, categoryTag)
 	metrics.QueueSliceCountTotal.With(p.metricsHandler).Record(sliceCount, categoryTag)
 	metrics.PendingTasksCounter.With(p.metricsHandler).Record(int64(p.monitor.GetTotalPendingTaskCount()))
