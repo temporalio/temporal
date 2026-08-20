@@ -175,7 +175,19 @@ func (a *Activities) DeleteWorkerDeploymentVersion(ctx context.Context, args *de
 	)
 	if err != nil {
 		var notFoundErr *serviceerror.NotFound
+		// History returns NotFound when the Version workflow is already closed without
+		// this update or when its history no longer exists. Allow the Deployment workflow
+		// to remove its stale reference.
 		if errors.As(err, &notFoundErr) {
+			activity.GetLogger(ctx).Warn(
+				"version workflow not found during deletion; allowing deployment workflow to remove stale reference",
+				"namespace", a.namespace.Name().String(),
+				"deploymentName", args.DeploymentName,
+				"version", args.Version,
+				"versionWorkflowID", workflowID,
+				"requestID", args.RequestId,
+				"error", err,
+			)
 			return nil
 		}
 		return err
