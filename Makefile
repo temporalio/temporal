@@ -172,7 +172,6 @@ $(STAMPDIR):
 $(LOCALBIN):
 	@mkdir -p $(LOCALBIN)
 
-# When updating the version, update the golangci-lint GHA workflow as well.
 .PHONY: golangci-lint
 GOLANGCI_LINT_BASE_REV ?= $(MAIN_BRANCH)
 GOLANGCI_LINT_FIX ?= true
