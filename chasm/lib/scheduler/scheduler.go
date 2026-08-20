@@ -619,6 +619,21 @@ func (s *Scheduler) HandleNexusCompletion(
 	ctx chasm.MutableContext,
 	info *persistencespb.ChasmNexusCompletion,
 ) error {
+	if s.Closed {
+		// The schedule can close (Delete, migration to V1, idle-task quiescence) while
+		// a start it made is still running; that start's completion then arrives here
+		// as a late straggler. Nothing upstream guards this for us: the CHASM engine
+		// only validates ancestor lifecycle on a ref, never the target's own, so a ref
+		// pointing at the root (as this one does) sails through unchecked.
+		msg := "handled Nexus completion for a late straggler after the schedule was closed"
+		s.getOrCreateEventLog(ctx).LogEvent(ctx,
+			fmt.Sprintf("%s: %s", msg, info.RequestId))
+		ctx.Logger().Warn(msg,
+			tag.RequestID(info.RequestId),
+			tag.ScheduleID(s.ScheduleId))
+		return ErrClosed
+	}
+
 	invoker := s.Invoker.Get(ctx)
 	metricsHandler := newTaggedMetricsHandler(ctx.MetricsHandler(), s)
 

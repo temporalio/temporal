@@ -186,6 +186,79 @@ func TestHandleNexusCompletion_AllowAllDoesNotUpdateCompletionState(t *testing.T
 	require.NoError(t, err)
 }
 
+// TestHandleNexusCompletion_ClosedScheduleReturnsError covers the late-straggler
+// case: a schedule can close (Delete, migration to V1, idle-task quiescence)
+// while a start it made is still running, and that start's completion arrives
+// afterward. The CHASM engine only validates ancestor lifecycle on a ref, never
+// the target's own, so a ref pointing at the root (as this one does) isn't
+// blocked upstream — HandleNexusCompletion must guard it itself, the same as
+// every other Scheduler method.
+func TestHandleNexusCompletion_ClosedScheduleReturnsError(t *testing.T) {
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+	_, engineCtx := newTestEngineContext(t, logger)
+
+	_, err := chasm.StartExecution(
+		engineCtx,
+		chasm.ExecutionKey{NamespaceID: namespaceID, BusinessID: scheduleID},
+		scheduler.CreateScheduler,
+		&schedulerpb.CreateScheduleRequest{
+			NamespaceId: namespaceID,
+			FrontendRequest: &workflowservice.CreateScheduleRequest{
+				Namespace:  namespace,
+				ScheduleId: scheduleID,
+				Schedule:   defaultSchedule(),
+				RequestId:  "req-create",
+			},
+		},
+	)
+	require.NoError(t, err)
+	rootRef := chasm.NewComponentRef[*scheduler.Scheduler](chasm.ExecutionKey{NamespaceID: namespaceID, BusinessID: scheduleID})
+
+	now := time.Now()
+	initial := &schedulerpb.LastCompletionResult{Success: &commonpb.Payload{Data: []byte("previous-result")}}
+
+	// First transaction: a still-running start, then the schedule closes out from
+	// under it (mirrors Delete/migration/idle-quiescence, none of which drain
+	// BufferedStarts before closing).
+	_, _, err = chasm.UpdateComponent(engineCtx, rootRef,
+		func(s *scheduler.Scheduler, ctx chasm.MutableContext, _ struct{}) (struct{}, error) {
+			s.LastCompletionResult = chasm.NewDataField(ctx, initial)
+			s.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{{
+				RequestId: "req-1", WorkflowId: "wf-1", RunId: "run-1", Attempt: 1,
+				ActualTime: timestamppb.New(now.Add(-time.Minute)),
+				StartTime:  timestamppb.New(now.Add(-30 * time.Second)),
+			}}
+			s.Closed = true
+			return struct{}{}, nil
+		}, struct{}{})
+	require.NoError(t, err)
+
+	// Second, separate transaction: the straggling start's completion arrives after
+	// the close committed. The ref still resolves (the engine only validates
+	// ancestor lifecycle, never the target's own), so the guard inside
+	// HandleNexusCompletion is the only thing standing between this and a state
+	// mutation on a closed schedule.
+	_, _, err = chasm.UpdateComponent(engineCtx, rootRef,
+		func(s *scheduler.Scheduler, ctx chasm.MutableContext, _ struct{}) (struct{}, error) {
+			return struct{}{}, s.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+				RequestId: "req-1",
+				Outcome: &persistencespb.ChasmNexusCompletion_Success{
+					Success: &commonpb.Payload{Data: []byte("late-straggler-result")},
+				},
+				CloseTime: timestamppb.New(now),
+			})
+		}, struct{}{})
+	require.ErrorIs(t, err, scheduler.ErrClosed)
+
+	_, err = chasm.ReadComponent(engineCtx, rootRef,
+		func(s *scheduler.Scheduler, ctx chasm.Context, _ struct{}) (struct{}, error) {
+			require.Equal(t, initial, s.LastCompletionResult.Get(ctx))
+			require.Nil(t, s.Invoker.Get(ctx).BufferedStarts[0].GetCompleted())
+			return struct{}{}, nil
+		}, struct{}{})
+	require.NoError(t, err)
+}
+
 // TestHandleNexusCompletion_Failure verifies that a failed workflow completion
 // is properly recorded with the failure payload and workflow status is updated.
 func TestHandleNexusCompletion_Failure(t *testing.T) {
