@@ -417,7 +417,14 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 	//
 	// The bug that led to this is fixed, but we'll leave this check defensively in case other
 	// bugs produce the same state.
-	if mode == mergeWrite && !tr.atEnd && tr.loadedTasks == 0 && !tr.readPending && tr.backoffTimer == nil {
+	//
+	// We exclude the case where the task queue is shutting down: unpinAckLevel resets atEnd on a
+	// write error, but its maybeReadTasksLocked repair is a no-op once tqCtx is cancelled (as it
+	// is when a fatal error such as a lost rangeID lease unloads the queue). That legitimately
+	// leaves us in this state, but the reader is being torn down and a fresh one will start
+	// clean, so it isn't actually stuck. Firing the assertion there is a false positive.
+	if mode == mergeWrite && !tr.atEnd && tr.loadedTasks == 0 && !tr.readPending &&
+		tr.backoffTimer == nil && tr.backlogMgr.tqCtx.Err() == nil {
 		softassert.Fail(tr.logger, "fair reader stuck")
 		metrics.FairReaderStuckDetected.With(tr.backlogMgr.metricsHandler).Record(1)
 		tr.maybeReadTasksLocked()
