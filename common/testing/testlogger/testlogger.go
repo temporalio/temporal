@@ -375,9 +375,7 @@ func (tl *TestLogger) StartCapture(anyTags ...tag.Tag) *Capture {
 // StopCapture stops recording log calls for capture.
 func (tl *TestLogger) StopCapture(capture *Capture) {
 	tl.state.mu.Lock()
-	if _, ok := tl.state.mu.captures[capture]; ok {
-		delete(tl.state.mu.captures, capture)
-	}
+	delete(tl.state.mu.captures, capture)
 	tl.state.mu.Unlock()
 }
 
