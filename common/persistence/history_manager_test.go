@@ -114,6 +114,7 @@ func TestHistoryManager_InvalidBranchToken_ReturnsInvalidArgument(t *testing.T) 
 				nil,
 				log.NewNoopLogger(),
 				dynamicconfig.GetIntPropertyFn(1024*1024),
+				dynamicconfig.GetIntPropertyFn(0),
 				dynamicconfig.GetBoolPropertyFn(false),
 			)
 
