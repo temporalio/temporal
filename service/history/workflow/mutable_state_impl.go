@@ -655,7 +655,7 @@ func NewMutableStateInChain(
 
 	// LastPauseRequestId follows the chain to de-dupe a retry with no run id.
 	// LastUnpauseRequestId does not carry over, not worth the added size, and just
-	// caused "not paused" error instead of success/no-op on stale retry of unpause.
+	// causes "not paused" error instead of success/no-op on stale retry of unpause.
 	lastPauseRequestID := currentMutableState.GetExecutionInfo().GetLastPauseRequestId()
 	newMutableState.executionInfo.LastPauseRequestId = lastPauseRequestID
 	newMutableState.approximateSize += len(lastPauseRequestID)

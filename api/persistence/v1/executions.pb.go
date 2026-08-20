@@ -377,10 +377,10 @@ type WorkflowExecutionInfo struct {
 	TimeSkippingInfo *TimeSkippingInfo `protobuf:"bytes,115,opt,name=time_skipping_info,json=timeSkippingInfo,proto3" json:"time_skipping_info,omitempty"`
 	// Most recently applied unpause and pause request ids, needed to dedupuplicate these.
 	// Since pause_info is no longer available in unpaused, fallback to last_pause_request_id
-	// to de-dupe a pause. last_pause_request_id is written on unpause, moved out of pause_info
-	// as that is cleared, so the id is never held in both at once. Only last_pause_request_id is
-	// carried across continue-as-new, to stop a retry with no run id from pausing the successor;
-	// a stale unpause retry there merely fails with "not paused", so it is not worth the size.
+	// to de-dupe a pause, which is written only on unpause, to avoid duplicate id storage.
+	// Only last_pause_request_id, not last_unpause_request_id, is carried across continue-as-new,
+	// to de-dupe retry of pause with no run id, whereas a stale retry of unpause is allowed to
+	// fail with "not paused" error, and is not worth the additional size.
 	LastUnpauseRequestId string `protobuf:"bytes,116,opt,name=last_unpause_request_id,json=lastUnpauseRequestId,proto3" json:"last_unpause_request_id,omitempty"`
 	LastPauseRequestId   string `protobuf:"bytes,117,opt,name=last_pause_request_id,json=lastPauseRequestId,proto3" json:"last_pause_request_id,omitempty"`
 	unknownFields        protoimpl.UnknownFields
