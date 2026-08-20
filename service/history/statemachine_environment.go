@@ -95,7 +95,7 @@ func getWorkflowExecutionContext(
 	)
 	if common.IsContextDeadlineExceededErr(err) {
 		// TODO: make sure this doesn't count against our SLA if this happens while handling an API request.
-		err = consts.ErrResourceExhaustedBusyWorkflow
+		err = consts.NewResourceExhaustedBusyWorkflow(key.WorkflowID)
 	}
 	return weContext, release, err
 }
