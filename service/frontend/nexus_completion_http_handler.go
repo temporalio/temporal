@@ -160,12 +160,13 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		tag.WorkflowNamespace(ns.Name().String()),
 		tag.WorkflowID(targetBusinessID),
 		tag.WorkflowRunID(targetRunID),
+		tag.RequestID(completion.GetRequestId()),
 	)
 	rCtx := &requestContext{
 		nexusCompletionHandler: h,
 		namespace:              ns,
 		businessID:             targetBusinessID,
-		logger:                 log.With(h.Logger, tag.WorkflowNamespace(ns.Name().String())),
+		logger:                 logger,
 		metricsHandler:         h.MetricsHandler.WithTags(metrics.NamespaceTag(ns.Name().String())),
 		metricsHandlerForInterceptors: h.MetricsHandler.WithTags(
 			metrics.OperationTag(nexusCompletionMethodNameForMetrics),
@@ -183,15 +184,15 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		nsNameEscaped := commonnexus.RouteCompletionCallback.Deserialize(mux.Vars(r.HTTPRequest))
 		nsName, err := url.PathUnescape(nsNameEscaped)
 		if err != nil {
-			h.Logger.Error("failed to extract namespace from request", tag.Error(err))
+			logger.Error("failed to extract namespace from request", tag.Error(err))
 			h.preProcessErrorsCounter.Record(1)
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid URL")
 		}
 		if nsName != ns.Name().String() {
 			logger.Error(
-				"namespace ID in token doesn't match the token",
+				"namespace in callback URL doesn't match the completion token",
 				tag.WorkflowNamespaceID(ns.ID().String()),
-				tag.Error(err),
+				tag.String("url-namespace", nsName),
 				tag.String("completion-namespace-id", targetNamespaceID),
 			)
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
