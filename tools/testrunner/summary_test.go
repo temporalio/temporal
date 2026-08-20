@@ -6,12 +6,13 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/tools/common/junit"
 )
 
 func TestNewSummaryFromReports_RendersAssertionFailureRow(t *testing.T) {
-	report := mustReadReportFixture(t, "testdata/junit-assertion-failure.xml")
+	report := mustReadTestsuitesFixture(t, "testdata/junit-assertion-failure.xml")
 
-	summary := mustNewMergedSummary(t, report)
+	summary := mustNewSummary(t, report)
 	require.Equal(t, []summaryRow{{
 		Kind:    failureTypeFailed,
 		Name:    "TestBar",
@@ -20,18 +21,20 @@ func TestNewSummaryFromReports_RendersAssertionFailureRow(t *testing.T) {
 }
 
 func TestNewSummaryFromReports_EmptyWhenNoFailures(t *testing.T) {
-	s := newSummaryFromReports([]*junitReport{mustReadReportFixture(t, "testdata/junit-empty.xml")})
+	report := mustReadTestsuitesFixture(t, "testdata/junit-empty.xml")
+	s := newSummaryFromReports(report)
 	require.Empty(t, s.Rows)
 }
 
 func TestNewSummaryFromReports_KeepsFailureAndAlertRows(t *testing.T) {
-	failureReport := mustReadReportFixture(t, "testdata/junit-single-failure.xml")
+	failureReport := mustReadTestsuitesFixture(t, "testdata/junit-single-failure.xml")
 	failureReport.Suites[0].Testcases[0].Name = "TestFoo"
 	failureReport.Suites[0].Testcases[0].Failure.Data = "FAIL\n"
 
-	alertReport := mustReadReportFixture(t, "testdata/junit-alert-panic.xml")
+	alertReport := mustReadTestsuitesFixture(t, "testdata/junit-alert-panic.xml")
+	alertReport.Suites[0].Testcases[0].Name += " (retry 1) (final)"
 
-	summary := mustNewMergedSummary(t, failureReport, alertReport)
+	summary := mustNewSummary(t, failureReport, alertReport)
 	require.Equal(t, []summaryRow{
 		{Kind: failureTypeFailed, Name: "TestFoo", Details: "FAIL\n"},
 		{Kind: failureTypePanic, Name: "panic test (retry 1) (final)", Details: "panic: boom", Final: true},
@@ -39,9 +42,9 @@ func TestNewSummaryFromReports_KeepsFailureAndAlertRows(t *testing.T) {
 }
 
 func TestNewSummaryFromReports_RendersTrimmedFailureBodyRow(t *testing.T) {
-	report := mustReadReportFixture(t, "testdata/junit-unexpected-call-failure.xml")
+	report := mustReadTestsuitesFixture(t, "testdata/junit-unexpected-call-failure.xml")
 
-	summary := mustNewMergedSummary(t, report)
+	summary := mustNewSummary(t, report)
 	require.Equal(t, []summaryRow{{
 		Kind:    failureTypeFailed,
 		Name:    "TestBaz",
@@ -50,9 +53,9 @@ func TestNewSummaryFromReports_RendersTrimmedFailureBodyRow(t *testing.T) {
 }
 
 func TestNewSummaryFromReports_RendersAlertRow(t *testing.T) {
-	report := mustReadReportFixture(t, "testdata/junit-alert-data-race.xml")
+	report := mustReadTestsuitesFixture(t, "testdata/junit-alert-data-race.xml")
 
-	s := newSummaryFromReports([]*junitReport{report})
+	s := newSummaryFromReports(report)
 	require.Equal(t, []summaryRow{{
 		Kind:    failureTypeDataRace,
 		Name:    "DATA RACE: Data race detected in TestFoo",
@@ -61,17 +64,17 @@ func TestNewSummaryFromReports_RendersAlertRow(t *testing.T) {
 }
 
 func TestNewSummaryFromReports_MergesMultipleReports(t *testing.T) {
-	reportOld := mustReadReportFixture(t, "testdata/junit-single-failure.xml")
+	reportOld := mustReadTestsuitesFixture(t, "testdata/junit-single-failure.xml")
 	reportOld.Suites[0].Name = "SuiteA"
 	reportOld.Suites[0].Testcases[0].Name = "TestOld"
 	reportOld.Suites[0].Testcases[0].Failure.Data = "old failure"
 
-	reportNew := mustReadReportFixture(t, "testdata/junit-single-failure.xml")
+	reportNew := mustReadTestsuitesFixture(t, "testdata/junit-single-failure.xml")
 	reportNew.Suites[0].Name = "SuiteB"
 	reportNew.Suites[0].Testcases[0].Name = "TestNew"
 	reportNew.Suites[0].Testcases[0].Failure.Data = "new failure"
 
-	summary := newSummaryFromReports([]*junitReport{reportOld, reportNew})
+	summary := newSummaryFromReports(reportOld, reportNew)
 	require.Equal(t, []summaryRow{
 		{Kind: failureTypeFailed, Name: "TestNew", Details: "new failure"},
 		{Kind: failureTypeFailed, Name: "TestOld", Details: "old failure"},
@@ -91,13 +94,14 @@ func TestNewSummaryRow_TruncatesOversizedDetail(t *testing.T) {
 }
 
 func TestRenderSummaryFromReports_Markdown_RendersFailureRows(t *testing.T) {
-	failureReport := mustReadReportFixture(t, "testdata/junit-single-failure.xml")
+	failureReport := mustReadTestsuitesFixture(t, "testdata/junit-single-failure.xml")
 	failureReport.Suites[0].Testcases[0].Name = "TestFoo"
 	failureReport.Suites[0].Testcases[0].Failure.Data = "FAIL\n"
 
-	alertReport := mustReadReportFixture(t, "testdata/junit-alert-panic.xml")
+	alertReport := mustReadTestsuitesFixture(t, "testdata/junit-alert-panic.xml")
+	alertReport.Suites[0].Testcases[0].Name += " (retry 1) (final)"
 
-	s := mustNewMergedSummary(t, failureReport, alertReport).Markdown()
+	s := mustNewSummary(t, failureReport, alertReport).Markdown()
 	require.Contains(t, s, "<table>")
 	require.NotContains(t, s, "<th>Details</th>")
 	require.Contains(t, s, "<details><summary>TestFoo</summary>")
@@ -108,24 +112,25 @@ func TestRenderSummaryFromReports_Markdown_RendersFailureRows(t *testing.T) {
 }
 
 func TestRenderSummaryFromReports_Markdown_RendersTrimmedFailureBody(t *testing.T) {
-	report := mustReadReportFixture(t, "testdata/junit-unexpected-call-failure.xml")
+	report := mustReadTestsuitesFixture(t, "testdata/junit-unexpected-call-failure.xml")
 
-	s := mustNewMergedSummary(t, report).Markdown()
+	s := mustNewSummary(t, report).Markdown()
 	require.Contains(t, s, "<details><summary>TestBaz</summary>")
 	require.Contains(t, s, "Unexpected call to SomeMethod")
 	require.NotContains(t, s, "some setup log")
 }
 
 func TestRenderSummaryFromReports_Markdown_RendersAlertRow(t *testing.T) {
-	report := mustReadReportFixture(t, "testdata/junit-alert-data-race.xml")
+	report := mustReadTestsuitesFixture(t, "testdata/junit-alert-data-race.xml")
 
-	rendered := newSummaryFromReports([]*junitReport{report}).Markdown()
+	rendered := newSummaryFromReports(report).Markdown()
 	require.Contains(t, rendered, failureTypeDataRace)
 	require.Contains(t, rendered, "Write at 0x00c000123456 by goroutine 7")
 }
 
 func TestRenderSummaryFromReports_Markdown_EmptyWhenNoFailures(t *testing.T) {
-	s := newSummaryFromReports([]*junitReport{mustReadReportFixture(t, "testdata/junit-empty.xml")})
+	report := mustReadTestsuitesFixture(t, "testdata/junit-empty.xml")
+	s := newSummaryFromReports(report)
 	require.Empty(t, s.Markdown())
 }
 
@@ -160,13 +165,14 @@ func TestRenderSummaryFromReports_Markdown_OmitsRowsWhenBudgetExceeded(t *testin
 }
 
 func TestRenderSummaryFromReports_JSON(t *testing.T) {
-	failureReport := mustReadReportFixture(t, "testdata/junit-single-failure.xml")
+	failureReport := mustReadTestsuitesFixture(t, "testdata/junit-single-failure.xml")
 	failureReport.Suites[0].Testcases[0].Name = "TestFoo"
 	failureReport.Suites[0].Testcases[0].Failure.Data = "FAIL\n"
 
-	alertReport := mustReadReportFixture(t, "testdata/junit-alert-panic.xml")
+	alertReport := mustReadTestsuitesFixture(t, "testdata/junit-alert-panic.xml")
+	alertReport.Suites[0].Testcases[0].Name += " (retry 1) (final)"
 
-	summary := mustNewMergedSummary(t, failureReport, alertReport)
+	summary := mustNewSummary(t, failureReport, alertReport)
 	content, err := summary.JSON()
 	require.NoError(t, err)
 
@@ -187,9 +193,7 @@ func TestRenderSummaryFromReports_JSON(t *testing.T) {
 	}`, string(content))
 }
 
-func mustNewMergedSummary(t *testing.T, reports ...*junitReport) summary {
+func mustNewSummary(t *testing.T, reports ...*junit.Testsuites) summary {
 	t.Helper()
-	merged, err := mergeReports(reports)
-	require.NoError(t, err)
-	return newSummaryFromReports([]*junitReport{merged})
+	return newSummaryFromReports(reports...)
 }

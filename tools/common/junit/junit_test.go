@@ -101,6 +101,11 @@ func TestReadErrors(t *testing.T) {
 			content: `<testsuite>`,
 			wantErr: "failed to read JUnit report file",
 		},
+		{
+			name:    "trailing data",
+			content: `<testsuites></testsuites><testsuite></testsuite>`,
+			wantErr: `unexpected trailing XML element "testsuite"`,
+		},
 	}
 
 	for _, tt := range tests {
@@ -110,6 +115,7 @@ func TestReadErrors(t *testing.T) {
 
 			_, err := Read(path)
 			require.ErrorContains(t, err, tt.wantErr)
+			require.ErrorContains(t, err, path)
 			require.ErrorIs(t, err, errRead)
 		})
 	}
@@ -140,5 +146,55 @@ func TestWrite(t *testing.T) {
     <testsuite name="suite" tests="1" failures="0" errors="0" id="0" time="">
         <testcase name="TestOne" classname="example.com/tests"></testcase>
     </testsuite>
-</testsuites>`, string(content))
+</testsuites>
+`, string(content))
+}
+
+func TestValidateCounters(t *testing.T) {
+	report := &Testsuites{
+		Tests:    4,
+		Failures: 1,
+		Errors:   1,
+		Skipped:  1,
+		Disabled: 2,
+		Suites: []Testsuite{{
+			Name:     "suite",
+			Tests:    4,
+			Failures: 1,
+			Errors:   1,
+			Skipped:  1,
+			Disabled: 2,
+			Testcases: []Testcase{
+				{Name: "pass"},
+				{Name: "fail", Failure: &Result{}},
+				{Name: "error", Error: &Result{}},
+				{Name: "skip", Skipped: &Result{}},
+			},
+		}},
+	}
+	require.NoError(t, ValidateCounters(report))
+
+	report.Suites[0].Failures = 0
+	require.ErrorContains(t, ValidateCounters(report), `suite "suite" failures counter is 0, want 1`)
+	report.Suites[0].Failures = 1
+	report.Tests = 3
+	require.ErrorContains(t, ValidateCounters(report), "root tests counter is 3, want 4")
+}
+
+func TestWriteAtomicallyReplacesExistingTarget(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "junit.xml")
+	require.NoError(t, os.WriteFile(path, []byte("previous report"), 0o600))
+	report := &Testsuites{}
+
+	require.NoError(t, Write(path, report))
+	content, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, "<testsuites></testsuites>\n", string(content))
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0o644), info.Mode().Perm())
+	temps, err := filepath.Glob(filepath.Join(dir, ".junit.xml-*"))
+	require.NoError(t, err)
+	require.Empty(t, temps)
 }

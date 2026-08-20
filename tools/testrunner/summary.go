@@ -6,6 +6,8 @@ import (
 	"html"
 	"slices"
 	"strings"
+
+	"go.temporal.io/server/tools/common/junit"
 )
 
 const summaryMaxDetailBytes = 4 * 1024
@@ -16,7 +18,7 @@ type summary struct {
 	Rows []summaryRow `json:"rows"`
 }
 
-func newSummaryFromReports(reports []*junitReport) summary {
+func newSummaryFromReports(reports ...*junit.Testsuites) summary {
 	return summary{
 		Rows: newSummaryRowsFromReports(reports),
 	}
@@ -65,7 +67,7 @@ type summaryRow struct {
 	Final   bool        `json:"final,omitempty"`
 }
 
-func newSummaryRowsFromReports(reports []*junitReport) []summaryRow {
+func newSummaryRowsFromReports(reports []*junit.Testsuites) []summaryRow {
 	var rows []summaryRow
 	for _, report := range reports {
 		for _, suite := range report.Suites {

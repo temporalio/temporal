@@ -5,8 +5,7 @@
         Error Trace:	__SOURCE__:2
         Error:      	Not equal:
                     	expected: 1
-                    	actual  : 2
-FAIL]]></failure>
+                    ]]>&#x9;<![CDATA[actual  : 2]]></failure>
         </testcase>
     </testsuite>
 </testsuites>

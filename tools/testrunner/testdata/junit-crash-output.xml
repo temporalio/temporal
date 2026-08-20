@@ -1,7 +1,0 @@
-<testsuites>
-    <testsuite name="suite" tests="0" failures="0" errors="0" id="0" time="">
-        <testcase name="my-test (crash)" classname="">
-            <failure message="CRASH" type="CRASH"></failure>
-        </testcase>
-    </testsuite>
-</testsuites>
