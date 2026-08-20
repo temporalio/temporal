@@ -406,13 +406,22 @@ func (h *nexusCompletionHandler) forwardCompleteOperation(ctx context.Context, r
 	targetCluster := rCtx.namespace.ActiveClusterName(namespace.RoutingKey{ID: rCtx.businessID})
 	client, err := h.ForwardingClients.Get(targetCluster)
 	if err != nil {
-		rCtx.logger.Error("unable to get HTTP client for forward request", tag.Error(err), tag.SourceCluster(h.ClusterMetadata.GetCurrentClusterName()), tag.TargetCluster(targetCluster))
+		rCtx.logger.Error(
+			"unable to get HTTP client for forward request",
+			tag.Error(err),
+			tag.SourceCluster(h.ClusterMetadata.GetCurrentClusterName()),
+			tag.TargetCluster(targetCluster),
+		)
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 	}
 
 	forwardURL, err := url.JoinPath(client.BaseURL(), commonnexus.RouteCompletionCallback.Path(rCtx.namespace.Name().String()))
 	if err != nil {
-		rCtx.logger.Error("failed to construct forwarding request URL", tag.Error(err), tag.TargetCluster(targetCluster))
+		rCtx.logger.Error(
+			"failed to construct forwarding request URL",
+			tag.Error(err),
+			tag.TargetCluster(targetCluster),
+		)
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 	}
 
