@@ -874,7 +874,9 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 		persistedBefore    *persistence.GetClusterMetadataResponse
 		persistenceRequest *persistence.SaveClusterMetadataRequest
 	)
-	// Register failure emission first so CapturePanic runs before it during unwinding.
+	// Bracket deferred emission with panic capture: the inner capture converts handler panics
+	// into retError for the event, while the outer capture recovers panics from emission itself.
+	defer log.CapturePanic(adh.logger, &retError)
 	defer func() {
 		lifecycleEvent.emitUpsertFailure(retError, remoteResponse, persistedBefore, persistenceRequest)
 	}()
@@ -980,7 +982,9 @@ func (adh *AdminHandler) RemoveRemoteCluster(
 		cachedBefore       cachedRemoteClusterLookup
 		persistenceRequest *persistence.DeleteClusterMetadataRequest
 	)
-	// Register failure emission first so CapturePanic runs before it during unwinding.
+	// Bracket deferred emission with panic capture: the inner capture converts handler panics
+	// into retError for the event, while the outer capture recovers panics from emission itself.
+	defer log.CapturePanic(adh.logger, &retError)
 	defer func() {
 		lifecycleEvent.emitRemoveFailure(retError, cachedBefore, persistenceRequest)
 	}()

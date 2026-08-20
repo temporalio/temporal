@@ -25,11 +25,23 @@ type captureRemoteClusterEventLogger struct {
 	records []otellog.Record
 }
 
+type panicRemoteClusterEventLogger struct {
+	embedded.Logger
+}
+
 func (l *captureRemoteClusterEventLogger) Emit(_ context.Context, record otellog.Record) {
 	l.records = append(l.records, record)
 }
 
 func (l *captureRemoteClusterEventLogger) Enabled(context.Context, otellog.EnabledParameters) bool {
+	return true
+}
+
+func (*panicRemoteClusterEventLogger) Emit(context.Context, otellog.Record) {
+	panic("event logger panic")
+}
+
+func (*panicRemoteClusterEventLogger) Enabled(context.Context, otellog.EnabledParameters) bool {
 	return true
 }
 
