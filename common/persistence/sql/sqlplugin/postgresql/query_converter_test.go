@@ -135,14 +135,24 @@ func TestQueryConverter_ConvertTextComparisonExpr(t *testing.T) {
 			operator: sqlparser.EqualStr,
 			col:      textCol,
 			value:    query.NewUnsafeSQLString("foo bar"),
-			out:      "Text01 @@ 'foo | bar'::tsquery",
+			out:      "Text01 @@ (plainto_tsquery('simple', 'foo') || plainto_tsquery('simple', 'bar'))",
 		},
 		{
 			name:     "valid not equal expression",
 			operator: sqlparser.NotEqualStr,
 			col:      textCol,
 			value:    query.NewUnsafeSQLString("foo bar"),
-			out:      "not Text01 @@ 'foo | bar'::tsquery",
+			out:      "not Text01 @@ (plainto_tsquery('simple', 'foo') || plainto_tsquery('simple', 'bar'))",
+		},
+		{
+			// A value with a ':' inside a token used to render as a raw
+			// ::tsquery cast (e.g. 'World:Jurassic') and fail with
+			// "syntax error in tsquery". plainto_tsquery normalizes it.
+			name:     "value with colon token",
+			operator: sqlparser.EqualStr,
+			col:      textCol,
+			value:    query.NewUnsafeSQLString("The Lost World:Jurassic Park"),
+			out:      "Text01 @@ (plainto_tsquery('simple', 'The') || plainto_tsquery('simple', 'Lost') || plainto_tsquery('simple', 'World:Jurassic') || plainto_tsquery('simple', 'Park'))",
 		},
 		{
 			name:     "invalid value type",
