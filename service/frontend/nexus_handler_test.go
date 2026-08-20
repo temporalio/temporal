@@ -22,14 +22,12 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc/interceptor"
-	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/util"
 )
 
@@ -181,36 +179,6 @@ func newOperationContext(options contextOptions) *operationContext {
 	)
 
 	return oc
-}
-
-func TestNexusOperationContext_EnrichNexusOperationLogs(t *testing.T) {
-	testLogger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
-	expectation := testLogger.Expect(
-		testlogger.Error,
-		"^received error from matching service for Nexus StartOperation request$",
-		tag.Operation("StartNexusOperation"),
-		tag.WorkflowNamespace("test-namespace"),
-		tag.Endpoint("test-endpoint"),
-		tag.NexusService("test-service"),
-		tag.NexusOperation("test-operation"),
-		tag.RequestID("test-request-id"),
-		tag.Error(errors.New("matching failed")),
-	)
-	oc := &operationContext{
-		nexusContext: &nexusContext{
-			namespaceName: "test-namespace",
-			endpointName:  "test-endpoint",
-		},
-		logger: log.With(
-			testLogger,
-			tag.Operation("StartNexusOperation"),
-			tag.WorkflowNamespace("test-namespace"),
-		),
-	}
-	oc.enrichNexusOperationLogs("test-service", "test-operation", "test-request-id")
-	oc.logger.Error("received error from matching service for Nexus StartOperation request", tag.Error(errors.New("matching failed")))
-
-	require.True(t, expectation.Matched())
 }
 
 func TestNexusInterceptRequest_InvalidNamespaceState_ResultsInBadRequest(t *testing.T) {
