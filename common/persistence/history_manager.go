@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -116,13 +117,14 @@ func (m *executionManagerImpl) ForkHistoryBranch(
 		ShardID:        request.ShardID,
 	}
 
-	err = m.persistence.ForkHistoryBranch(ctx, req)
+	resp, err := m.persistence.ForkHistoryBranch(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 
 	return &ForkHistoryBranchResponse{
-		NewBranchToken: newBranchToken,
+		NewBranchToken:      newBranchToken,
+		LastFirstEventTxnId: resp.LastFirstEventTxnId,
 	}, nil
 }
 

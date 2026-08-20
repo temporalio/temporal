@@ -241,27 +241,27 @@ func (h *HistoryStore) ReadHistoryBranch(
 func (h *HistoryStore) ForkHistoryBranch(
 	ctx context.Context,
 	request *p.InternalForkHistoryBranchRequest,
-) error {
+) (*p.InternalForkHistoryBranchResponse, error) {
 
 	forkB := request.ForkBranchInfo
 	datablob := request.TreeInfo
 
 	cqlTreeID, err := primitives.ValidateUUID(forkB.TreeId)
 	if err != nil {
-		return serviceerror.NewInternalf("ForkHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err)
+		return nil, serviceerror.NewInternalf("ForkHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err)
 	}
 
 	cqlNewBranchID, err := primitives.ValidateUUID(request.NewBranchID)
 	if err != nil {
-		return serviceerror.NewInternalf("ForkHistoryBranch - Gocql NewBranchID UUID cast failed. Error: %v", err)
+		return nil, serviceerror.NewInternalf("ForkHistoryBranch - Gocql NewBranchID UUID cast failed. Error: %v", err)
 	}
 	query := h.Session.Query(v2templateInsertTree, cqlTreeID, cqlNewBranchID, datablob.Data, datablob.EncodingType.String()).WithContext(ctx)
 	err = query.Exec()
 	if err != nil {
-		return gocql.ConvertError("ForkHistoryBranch", err)
+		return nil, gocql.ConvertError("ForkHistoryBranch", err)
 	}
 
-	return nil
+	return &p.InternalForkHistoryBranchResponse{}, nil
 }
 
 // DeleteHistoryBranch removes a branch

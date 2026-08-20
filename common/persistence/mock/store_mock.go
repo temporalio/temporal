@@ -1034,11 +1034,12 @@ func (mr *MockExecutionStoreMockRecorder) DeleteWorkflowExecution(ctx, request a
 }
 
 // ForkHistoryBranch mocks base method.
-func (m *MockExecutionStore) ForkHistoryBranch(ctx context.Context, request *persistence.InternalForkHistoryBranchRequest) error {
+func (m *MockExecutionStore) ForkHistoryBranch(ctx context.Context, request *persistence.InternalForkHistoryBranchRequest) (*persistence.InternalForkHistoryBranchResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ForkHistoryBranch", ctx, request)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*persistence.InternalForkHistoryBranchResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // ForkHistoryBranch indicates an expected call of ForkHistoryBranch.

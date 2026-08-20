@@ -155,7 +155,7 @@ type (
 		// ReadHistoryBranch returns history node data for a branch
 		ReadHistoryBranch(ctx context.Context, request *InternalReadHistoryBranchRequest) (*InternalReadHistoryBranchResponse, error)
 		// ForkHistoryBranch forks a new branch from a old branch
-		ForkHistoryBranch(ctx context.Context, request *InternalForkHistoryBranchRequest) error
+		ForkHistoryBranch(ctx context.Context, request *InternalForkHistoryBranchRequest) (*InternalForkHistoryBranchResponse, error)
 		// DeleteHistoryBranch removes a branch
 		DeleteHistoryBranch(ctx context.Context, request *InternalDeleteHistoryBranchRequest) error
 		// GetHistoryTreeContainingBranch returns all branch information of the tree containing the specified branch
@@ -589,6 +589,11 @@ type (
 		Info string
 		// Used in sharded data stores to identify which shard to use
 		ShardID int32
+	}
+
+	// InternalForkHistoryBranchResponse is the response to a fork request.
+	InternalForkHistoryBranchResponse struct {
+		LastFirstEventTxnId int64
 	}
 
 	// InternalDeleteHistoryNodesRequest is used to remove a history node

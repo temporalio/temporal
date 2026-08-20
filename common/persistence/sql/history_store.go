@@ -295,16 +295,16 @@ func (m *sqlExecutionStore) ReadHistoryBranch(
 func (m *sqlExecutionStore) ForkHistoryBranch(
 	ctx context.Context,
 	request *p.InternalForkHistoryBranchRequest,
-) error {
+) (*p.InternalForkHistoryBranchResponse, error) {
 	forkB := request.ForkBranchInfo
 	treeInfoBlob := request.TreeInfo
 	newBranchIdBytes, err := primitives.ParseUUID(request.NewBranchID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	treeIDBytes, err := primitives.ParseUUID(forkB.GetTreeId())
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	row := &sqlplugin.HistoryTreeRow{
@@ -317,17 +317,17 @@ func (m *sqlExecutionStore) ForkHistoryBranch(
 
 	result, err := m.DB.InsertIntoHistoryTree(ctx, row)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if rowsAffected != 1 && rowsAffected != 2 {
-		return fmt.Errorf("expected 1 or 2 row to be affected for tree table, got %v", rowsAffected)
+		return nil, fmt.Errorf("expected 1 or 2 row to be affected for tree table, got %v", rowsAffected)
 	}
-	return nil
+	return &p.InternalForkHistoryBranchResponse{}, nil
 }
 
 // DeleteHistoryBranch removes a branch

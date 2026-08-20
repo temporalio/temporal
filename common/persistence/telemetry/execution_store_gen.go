@@ -398,7 +398,7 @@ func (d telemetryExecutionStore) DeleteWorkflowExecution(ctx context.Context, re
 }
 
 // ForkHistoryBranch wraps ExecutionStore.ForkHistoryBranch.
-func (d telemetryExecutionStore) ForkHistoryBranch(ctx context.Context, request *_sourcePersistence.InternalForkHistoryBranchRequest) (err error) {
+func (d telemetryExecutionStore) ForkHistoryBranch(ctx context.Context, request *_sourcePersistence.InternalForkHistoryBranchRequest) (ip1 *_sourcePersistence.InternalForkHistoryBranchResponse, err error) {
 	ctx, span := d.tracer.Start(
 		ctx,
 		"persistence.ExecutionStore/ForkHistoryBranch",
@@ -413,7 +413,7 @@ func (d telemetryExecutionStore) ForkHistoryBranch(ctx context.Context, request 
 		span.SetAttributes(attribute.String("timeout", time.Until(deadline).String()))
 	}
 
-	err = d.ExecutionStore.ForkHistoryBranch(ctx, request)
+	ip1, err = d.ExecutionStore.ForkHistoryBranch(ctx, request)
 	if err != nil {
 		span.RecordError(err)
 	}
@@ -425,6 +425,13 @@ func (d telemetryExecutionStore) ForkHistoryBranch(ctx context.Context, request 
 			d.logger.Error("failed to serialize *_sourcePersistence.InternalForkHistoryBranchRequest for OTEL span", tag.Error(err))
 		} else {
 			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+		}
+
+		responsePayload, err := json.MarshalIndent(ip1, "", "    ")
+		if err != nil {
+			d.logger.Error("failed to serialize *_sourcePersistence.InternalForkHistoryBranchResponse for OTEL span", tag.Error(err))
+		} else {
+			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
 		}
 
 	}

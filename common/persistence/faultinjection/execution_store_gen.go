@@ -122,9 +122,9 @@ func (d faultInjectionExecutionStore) DeleteWorkflowExecution(ctx context.Contex
 }
 
 // ForkHistoryBranch wraps ExecutionStore.ForkHistoryBranch.
-func (d faultInjectionExecutionStore) ForkHistoryBranch(ctx context.Context, request *_sourcePersistence.InternalForkHistoryBranchRequest) (err error) {
+func (d faultInjectionExecutionStore) ForkHistoryBranch(ctx context.Context, request *_sourcePersistence.InternalForkHistoryBranchRequest) (ip1 *_sourcePersistence.InternalForkHistoryBranchResponse, err error) {
 	err = d.generator.generate("ForkHistoryBranch", request).inject(func() error {
-		err = d.ExecutionStore.ForkHistoryBranch(ctx, request)
+		ip1, err = d.ExecutionStore.ForkHistoryBranch(ctx, request)
 		return err
 	})
 	return
