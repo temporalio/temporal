@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common/testing/testlogger"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -128,33 +129,61 @@ func TestHandleNexusCompletion_Success(t *testing.T) {
 	executeNexusCompletion(t, tc)
 }
 
+// TestHandleNexusCompletion_AllowAllDoesNotUpdateCompletionState drives a real
+// CHASM engine end to end (create -> mutate+complete -> read) rather than a
+// hand-wired node, so the assertion exercises the same component-ref and
+// transaction boundaries a production nexus completion callback does.
 func TestHandleNexusCompletion_AllowAllDoesNotUpdateCompletionState(t *testing.T) {
-	sched, ctx, node := setupSchedulerForTest(t)
-	initial := &schedulerpb.LastCompletionResult{Success: &commonpb.Payload{Data: []byte("previous-result")}}
-	sched.LastCompletionResult = chasm.NewDataField(ctx, initial)
-	sched.Schedule.Policies.OverlapPolicy = enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL
-	sched.Schedule.Policies.PauseOnFailure = true
-	sched.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{{
-		RequestId: "req-1", WorkflowId: "wf-1", RunId: "run-1", Attempt: 1,
-		ActualTime: timestamppb.New(time.Now().Add(-time.Minute)),
-		StartTime:  timestamppb.New(time.Now().Add(-30 * time.Second)),
-	}}
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+	_, engineCtx := newTestEngineContext(t, logger)
 
-	err := sched.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
-		RequestId: "req-1",
-		Outcome: &persistencespb.ChasmNexusCompletion_Failure{
-			Failure: &failurepb.Failure{Message: "allow-all failure"},
+	_, err := chasm.StartExecution(
+		engineCtx,
+		chasm.ExecutionKey{NamespaceID: namespaceID, BusinessID: scheduleID},
+		scheduler.CreateScheduler,
+		&schedulerpb.CreateScheduleRequest{
+			NamespaceId: namespaceID,
+			FrontendRequest: &workflowservice.CreateScheduleRequest{
+				Namespace:  namespace,
+				ScheduleId: scheduleID,
+				Schedule:   defaultSchedule(),
+				RequestId:  "req-create",
+			},
 		},
-		CloseTime: timestamppb.New(time.Now()),
-	})
+	)
 	require.NoError(t, err)
-	_, err = node.CloseTransaction()
+	rootRef := chasm.NewComponentRef[*scheduler.Scheduler](chasm.ExecutionKey{NamespaceID: namespaceID, BusinessID: scheduleID})
+
+	now := time.Now()
+	initial := &schedulerpb.LastCompletionResult{Success: &commonpb.Payload{Data: []byte("previous-result")}}
+	_, _, err = chasm.UpdateComponent(engineCtx, rootRef,
+		func(s *scheduler.Scheduler, ctx chasm.MutableContext, _ struct{}) (struct{}, error) {
+			s.Schedule.Policies.OverlapPolicy = enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL
+			s.Schedule.Policies.PauseOnFailure = true
+			s.LastCompletionResult = chasm.NewDataField(ctx, initial)
+			s.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{{
+				RequestId: "req-1", WorkflowId: "wf-1", RunId: "run-1", Attempt: 1,
+				ActualTime: timestamppb.New(now.Add(-time.Minute)),
+				StartTime:  timestamppb.New(now.Add(-30 * time.Second)),
+			}}
+			return struct{}{}, s.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+				RequestId: "req-1",
+				Outcome: &persistencespb.ChasmNexusCompletion_Failure{
+					Failure: &failurepb.Failure{Message: "allow-all failure"},
+				},
+				CloseTime: timestamppb.New(now),
+			})
+		}, struct{}{})
 	require.NoError(t, err)
 
-	readCtx := chasm.NewContext(context.Background(), node)
-	require.Equal(t, initial, sched.LastCompletionResult.Get(readCtx))
-	require.False(t, sched.Schedule.State.Paused)
-	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, sched.Invoker.Get(readCtx).BufferedStarts[0].GetCompleted().GetStatus())
+	_, err = chasm.ReadComponent(engineCtx, rootRef,
+		func(s *scheduler.Scheduler, ctx chasm.Context, _ struct{}) (struct{}, error) {
+			require.Equal(t, initial, s.LastCompletionResult.Get(ctx))
+			require.False(t, s.Schedule.State.Paused)
+			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, s.Invoker.Get(ctx).BufferedStarts[0].GetCompleted().GetStatus())
+			return struct{}{}, nil
+		}, struct{}{})
+	require.NoError(t, err)
 }
 
 // TestHandleNexusCompletion_Failure verifies that a failed workflow completion

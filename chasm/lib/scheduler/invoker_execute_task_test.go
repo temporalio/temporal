@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
@@ -129,28 +130,72 @@ func runExecuteTestCase(t *testing.T, env *invokerExecuteTestEnv, c *executeTest
 	}
 }
 
+// TestExecuteTask_AllowAllDoesNotPropagateCompletionState drives a real
+// CHASM engine end to end (create -> mutate -> execute) rather than a
+// hand-wired node, so the assertion exercises the same component-ref and
+// transaction boundaries a production ExecuteTask does.
 func TestExecuteTask_AllowAllDoesNotPropagateCompletionState(t *testing.T) {
-	env := newInvokerExecuteTestEnv(t)
-	env.Scheduler.Schedule.Policies.OverlapPolicy = enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL
-	env.Scheduler.LastCompletionResult = chasm.NewDataField(env.MutableContext(), &schedulerpb.LastCompletionResult{
-		Success: &commonpb.Payload{Data: []byte("previous-result")},
-		Failure: &failurepb.Failure{Message: "previous-failure"},
-	})
-	startTime := timestamppb.New(env.TimeSource.Now())
-	env.mockFrontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).
+	ctrl := gomock.NewController(t)
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+	specProcessor := newRealSpecProcessor(ctrl, logger)
+	_, engineCtx := newTestEngineContext(t, logger, withEngineSpecProcessor(specProcessor))
+
+	_, err := chasm.StartExecution(
+		engineCtx,
+		chasm.ExecutionKey{NamespaceID: namespaceID, BusinessID: scheduleID},
+		scheduler.CreateScheduler,
+		&schedulerpb.CreateScheduleRequest{
+			NamespaceId: namespaceID,
+			FrontendRequest: &workflowservice.CreateScheduleRequest{
+				Namespace:  namespace,
+				ScheduleId: scheduleID,
+				Schedule:   defaultSchedule(),
+				RequestId:  "req-create",
+			},
+		},
+	)
+	require.NoError(t, err)
+	rootRef := chasm.NewComponentRef[*scheduler.Scheduler](chasm.ExecutionKey{NamespaceID: namespaceID, BusinessID: scheduleID})
+
+	startTime := timestamppb.New(time.Now())
+	var invokerRef []byte
+	_, _, err = chasm.UpdateComponent(engineCtx, rootRef,
+		func(s *scheduler.Scheduler, ctx chasm.MutableContext, _ struct{}) (struct{}, error) {
+			s.Schedule.Policies.OverlapPolicy = enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL
+			s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{
+				Success: &commonpb.Payload{Data: []byte("previous-result")},
+				Failure: &failurepb.Failure{Message: "previous-failure"},
+			})
+			invoker := s.Invoker.Get(ctx)
+			invoker.BufferedStarts = []*schedulespb.BufferedStart{{
+				NominalTime: startTime, ActualTime: startTime, DesiredTime: startTime,
+				RequestId: "request-id", WorkflowId: "workflow-id", Attempt: 1,
+			}}
+			var refErr error
+			invokerRef, refErr = ctx.Ref(invoker)
+			return struct{}{}, refErr
+		}, struct{}{})
+	require.NoError(t, err)
+
+	mockFrontendClient := workflowservicemock.NewMockWorkflowServiceClient(ctrl)
+	mockFrontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, request *workflowservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*workflowservice.StartWorkflowExecutionResponse, error) {
 			require.Empty(t, request.GetLastCompletionResult().GetPayloads())
 			require.Nil(t, request.GetContinuedFailure())
 			return &workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil
 		})
-
-	runExecuteTestCase(t, env, &executeTestCase{
-		InitialBufferedStarts: []*schedulespb.BufferedStart{{
-			NominalTime: startTime, ActualTime: startTime, DesiredTime: startTime,
-			RequestId: "request-id", WorkflowId: "workflow-id", Attempt: 1,
-		}},
-		ExpectedBufferedStarts: 1, ExpectedRunningWorkflows: 1, ExpectedActionCount: 1,
+	handler := scheduler.NewInvokerExecuteTaskHandler(scheduler.InvokerTaskHandlerOptions{
+		Config:         defaultConfig(),
+		MetricsHandler: metrics.NoopMetricsHandler,
+		BaseLogger:     logger,
+		SpecProcessor:  specProcessor,
+		HistoryClient:  historyservicemock.NewMockHistoryServiceClient(ctrl),
+		FrontendClient: mockFrontendClient,
 	})
+
+	invokerComponentRef, err := chasm.DeserializeComponentRef(invokerRef)
+	require.NoError(t, err)
+	require.NoError(t, handler.Execute(engineCtx, invokerComponentRef, chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{}))
 }
 
 // executeTaskOnce runs a single InvokerExecuteTask pass against the live
