@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -8,13 +9,16 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
@@ -23,6 +27,13 @@ import (
 // ErrUseCurrentExecution is a sentinel error to indicate to the caller to
 // use the current workflow execution instead of creating a new one
 var ErrUseCurrentExecution = errors.New("ErrUseCurrentExecution")
+
+const (
+	orphanedChildRaceClosed      = "rejected_race_closed"
+	orphanedChildLocalProgress   = "rejected_local_progress"
+	orphanedChildNotLosingBranch = "rejected_not_losing_branch"
+	terminateOrphanedChildReason = "Orphaned child workflow replaced by its parent"
+)
 
 // ResolveDuplicateWorkflowID determines how to resolve a workflow ID duplication upon workflow start according
 // to the WorkflowIdReusePolicy (for *completed* workflow) or WorkflowIdConflictPolicy (for *running* workflow).
@@ -83,6 +94,134 @@ func ResolveDuplicateWorkflowID(
 			fmt.Sprintf("Failed to process workflow, workflow has invalid state: %v.", currentState),
 		)
 	}
+}
+
+// ReplaceOrphanedChildAction verifies and terminates the conflicting child while holding its lock.
+func ReplaceOrphanedChildAction(
+	ctx context.Context,
+	parentExecutionInfo *workflowspb.ParentExecutionInfo,
+	orphanedChildReplacementInfo *historyservice.OrphanedChildReplacementInfo,
+	newRunID string,
+	metricsHandler metrics.Handler,
+) UpdateWorkflowActionFunc {
+	return func(workflowLease WorkflowLease) (*UpdateWorkflowAction, error) {
+		mutableState := workflowLease.GetMutableState()
+		if !mutableState.IsWorkflowExecutionRunning() {
+			recordOrphanedChildReplacementRejection(metricsHandler, orphanedChildRaceClosed)
+			return nil, consts.ErrWorkflowCompleted
+		}
+
+		executionState := mutableState.GetExecutionState()
+		reject := func(outcome string) (*UpdateWorkflowAction, error) {
+			recordOrphanedChildReplacementRejection(metricsHandler, outcome)
+			return nil, generateWorkflowAlreadyStartedError(
+				"Workflow execution is already running. WorkflowId: %v, RunId: %v.",
+				executionState.GetRequestIds(),
+				mutableState.GetWorkflowKey(),
+				executionState.GetFirstExecutionRunId(),
+			)
+		}
+
+		// The current-row snapshot only selects this path. Recheck under the child lock and accept only
+		// Started, optionally followed by the first WFT Scheduled. In either case no workflow task was
+		// delivered to a worker. Exact event IDs reject signals, updates, timeouts, and any other durable
+		// progress; UpdateRegistry catches an admitted in-memory Update not yet present in history.
+		if !isOrphanedChildWithoutProgress(mutableState) ||
+			workflowLease.GetContext().UpdateRegistry(ctx).Len() != 0 {
+			return reject(orphanedChildLocalProgress)
+		}
+		if !isOrphanedChildOnLosingBranch(
+			mutableState.GetExecutionInfo(),
+			parentExecutionInfo,
+			orphanedChildReplacementInfo,
+		) {
+			return reject(orphanedChildNotLosingBranch)
+		}
+
+		if err := workflow.TerminateWorkflow(
+			mutableState,
+			terminateOrphanedChildReason,
+			payloads.EncodeString(fmt.Sprintf("terminated by new runID: %s", newRunID)),
+			consts.IdentityHistoryService,
+			false,
+			nil, // No links necessary.
+		); err != nil {
+			return nil, err
+		}
+		return UpdateWorkflowTerminate, nil
+	}
+}
+
+func isOrphanedChildWithoutProgress(mutableState historyi.MutableState) bool {
+	executionState := mutableState.GetExecutionState()
+	if executionState.GetFirstExecutionRunId() != mutableState.GetWorkflowKey().RunID {
+		return false
+	}
+
+	switch executionState.GetState() {
+	case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:
+		return mutableState.GetNextEventID() == common.FirstEventID+1
+	case enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
+		if mutableState.GetNextEventID() != common.FirstEventID+2 || mutableState.HasCompletedAnyWorkflowTask() {
+			return false
+		}
+		workflowTask := mutableState.GetPendingWorkflowTask()
+		return workflowTask != nil &&
+			workflowTask.ScheduledEventID == common.FirstEventID+1 &&
+			workflowTask.StartedEventID == common.EmptyEventID
+	default:
+		return false
+	}
+}
+
+func isOrphanedChildOnLosingBranch(
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	parentExecutionInfo *workflowspb.ParentExecutionInfo,
+	orphanedChildReplacementInfo *historyservice.OrphanedChildReplacementInfo,
+) bool {
+	parentExecution := parentExecutionInfo.GetExecution()
+	if parentExecutionInfo.GetNamespaceId() == "" ||
+		parentExecution.GetWorkflowId() == "" ||
+		parentExecution.GetRunId() == "" ||
+		parentExecutionInfo.GetInitiatedId() < common.FirstEventID ||
+		executionInfo.GetParentInitiatedId() < common.FirstEventID {
+		return false
+	}
+	// Failover versions are required to distinguish branches; local namespaces use EmptyVersion.
+	if parentExecutionInfo.GetInitiatedVersion() <= common.EmptyVersion ||
+		executionInfo.GetParentInitiatedVersion() <= common.EmptyVersion {
+		return false
+	}
+	// Match the exact parent run. A shared workflow lineage is insufficient because a predecessor's
+	// ABANDON child may legitimately still be running.
+	if executionInfo.GetParentNamespaceId() != parentExecutionInfo.GetNamespaceId() ||
+		executionInfo.GetParentWorkflowId() != parentExecution.GetWorkflowId() ||
+		executionInfo.GetParentRunId() != parentExecution.GetRunId() {
+		return false
+	}
+
+	parentCurrentVersionHistory := &historyspb.VersionHistory{
+		Items: orphanedChildReplacementInfo.GetParentCurrentVersionHistoryItems(),
+	}
+	incomingInitiation := versionhistory.NewVersionHistoryItem(
+		parentExecutionInfo.GetInitiatedId(),
+		parentExecutionInfo.GetInitiatedVersion(),
+	)
+	existingInitiation := versionhistory.NewVersionHistoryItem(
+		executionInfo.GetParentInitiatedId(),
+		executionInfo.GetParentInitiatedVersion(),
+	)
+	// The new initiation must be on the parent's current branch while the conflicting child's
+	// initiation must not be; otherwise this is an ordinary duplicate or the evidence is ambiguous.
+	return versionhistory.ContainsVersionHistoryItem(parentCurrentVersionHistory, incomingInitiation) &&
+		!versionhistory.ContainsVersionHistoryItem(parentCurrentVersionHistory, existingInitiation)
+}
+
+func recordOrphanedChildReplacementRejection(metricsHandler metrics.Handler, outcome string) {
+	metrics.OrphanedChildWorkflowReplacement.With(metricsHandler).Record(
+		1,
+		metrics.OutcomeTag(outcome),
+	)
 }
 
 func ResolveWorkflowIDConflictPolicy(
@@ -235,99 +374,6 @@ func terminateWorkflowAction(
 			nil, // No links necessary.
 		)
 	}, nil
-}
-
-// ZombifyConflictingChildAction validates and marks the conflicting child as a zombie while holding
-// its lock. The replacement is then created in the same transaction.
-func ZombifyConflictingChildAction(
-	parentExecutionInfo *workflowspb.ParentExecutionInfo,
-	conflictPolicy enumspb.WorkflowIdConflictPolicy,
-	reusePolicy enumspb.WorkflowIdReusePolicy,
-	logger log.Logger,
-) UpdateWorkflowActionFunc {
-	return func(workflowLease WorkflowLease) (*UpdateWorkflowAction, error) {
-		mutableState := workflowLease.GetMutableState()
-		if err := validateOrphanedChild(mutableState, parentExecutionInfo, conflictPolicy, reusePolicy); err != nil {
-			if !errors.Is(err, consts.ErrWorkflowCompleted) {
-				logger.Warn(
-					"Unable to zombify conflicting child workflow.",
-					tag.WorkflowNamespaceID(mutableState.GetWorkflowKey().NamespaceID),
-					tag.WorkflowID(mutableState.GetWorkflowKey().WorkflowID),
-					tag.WorkflowRunID(mutableState.GetWorkflowKey().RunID),
-					tag.Error(err),
-				)
-			}
-			return nil, err
-		}
-
-		if _, err := mutableState.UpdateWorkflowStateStatus(
-			enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
-			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		); err != nil {
-			return nil, err
-		}
-
-		logger.Info(
-			"Zombified conflicting child workflow.",
-			tag.WorkflowNamespaceID(mutableState.GetWorkflowKey().NamespaceID),
-			tag.WorkflowID(mutableState.GetWorkflowKey().WorkflowID),
-			tag.WorkflowRunID(mutableState.GetWorkflowKey().RunID),
-		)
-		// Reuse same post-action as a termination: no workflow task, and in-flight Workflow Updates must be
-		// aborted because a zombie run will never make progress again.
-		return UpdateWorkflowTerminate, nil
-	}
-}
-
-// validateOrphanedChild rejects anything that is not an open child of exactly this parent descending
-// from an initiation other than the one being reissued. It reads live mutable state under the
-// conflicting run's lock, so no check can go stale before the zombify.
-//
-// The policy checks are assertions: startChildWorkflow always sends conflict policy FAIL and the
-// child command's own reuse policy. Rejecting on them matches normal duplicate resolution, which for
-// an open run also returns WorkflowExecutionAlreadyStarted.
-func validateOrphanedChild(
-	mutableState historyi.MutableState,
-	parentExecutionInfo *workflowspb.ParentExecutionInfo,
-	conflictPolicy enumspb.WorkflowIdConflictPolicy,
-	reusePolicy enumspb.WorkflowIdReusePolicy,
-) error {
-	if !mutableState.IsWorkflowExecutionRunning() {
-		return consts.ErrWorkflowCompleted
-	}
-
-	executionState := mutableState.GetExecutionState()
-	alreadyStartedErr := func() error {
-		return generateWorkflowAlreadyStartedError(
-			"Workflow execution is already running. WorkflowId: %v, RunId: %v.",
-			executionState.GetRequestIds(),
-			mutableState.GetWorkflowKey(),
-			executionState.GetFirstExecutionRunId(),
-		)
-	}
-	if conflictPolicy != enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL {
-		return alreadyStartedErr()
-	}
-	if reusePolicy != enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED &&
-		reusePolicy != enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE {
-		return alreadyStartedErr()
-	}
-	if parentExecutionInfo == nil {
-		return alreadyStartedErr()
-	}
-
-	executionInfo := mutableState.GetExecutionInfo()
-	if executionInfo.GetParentNamespaceId() != parentExecutionInfo.GetNamespaceId() ||
-		executionInfo.GetParentWorkflowId() != parentExecutionInfo.GetExecution().GetWorkflowId() ||
-		executionInfo.GetParentRunId() != parentExecutionInfo.GetExecution().GetRunId() {
-		return alreadyStartedErr()
-	}
-
-	if executionInfo.GetParentInitiatedId() == parentExecutionInfo.GetInitiatedId() &&
-		executionInfo.GetParentInitiatedVersion() == parentExecutionInfo.GetInitiatedVersion() {
-		return alreadyStartedErr()
-	}
-	return nil
 }
 
 func generateWorkflowAlreadyStartedError(

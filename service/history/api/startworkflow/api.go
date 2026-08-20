@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -36,9 +37,11 @@ type (
 )
 
 const (
-	eagerStartDeniedReasonDynamicConfigDisabled    metrics.ReasonString = "dynamic_config_disabled"
-	eagerStartDeniedReasonFirstWorkflowTaskBackoff metrics.ReasonString = "first_workflow_task_backoff"
-	eagerStartDeniedReasonTaskAlreadyDispatched    metrics.ReasonString = "task_already_dispatched"
+	eagerStartDeniedReasonDynamicConfigDisabled      metrics.ReasonString = "dynamic_config_disabled"
+	eagerStartDeniedReasonFirstWorkflowTaskBackoff   metrics.ReasonString = "first_workflow_task_backoff"
+	eagerStartDeniedReasonTaskAlreadyDispatched      metrics.ReasonString = "task_already_dispatched"
+	orphanedChildReplacementReplaced                                      = "replaced"
+	orphanedChildReplacementRejectedUnsupportedState                      = "rejected_unsupported_state"
 )
 
 const (
@@ -466,19 +469,26 @@ func (s *Starter) resolveDuplicateWorkflowID(
 
 	var currentExecutionUpdateAction api.UpdateWorkflowActionFunc
 	var err error
-	currentIsOpen := currentWorkflowConditionFailed.State == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
-		currentWorkflowConditionFailed.State == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING
-	if s.request.GetZombifyConflictingChild() && currentIsOpen {
-		// currentIsOpen is routing, not a duplicate of the action's own liveness check: a durably
-		// closed run is not a replaceable orphan and belongs on the reuse-policy path below. Drop it
-		// and a closed child retries the zombify path forever on ErrWorkflowCompleted, which is only
-		// a race signal when the snapshot said open.
-		// TODO: handle orphan closed child run
-		currentExecutionUpdateAction = api.ZombifyConflictingChildAction(
+	orphanedChildReplacementInfo := s.request.GetOrphanedChildReplacementInfo()
+	orphanedChildReplacementRequested := orphanedChildReplacementInfo != nil &&
+		s.request.StartRequest.GetWorkflowIdConflictPolicy() == enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL
+	replaceOrphanedChild := orphanedChildReplacementRequested &&
+		(currentWorkflowConditionFailed.State == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
+			currentWorkflowConditionFailed.State == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING)
+	if orphanedChildReplacementRequested && !replaceOrphanedChild {
+		metrics.OrphanedChildWorkflowReplacement.With(s.getMetricsHandler()).Record(
+			1,
+			metrics.OutcomeTag(orphanedChildReplacementRejectedUnsupportedState),
+			metrics.StringTag("workflow_state", currentWorkflowConditionFailed.State.String()),
+		)
+	}
+	if replaceOrphanedChild {
+		currentExecutionUpdateAction = api.ReplaceOrphanedChildAction(
+			ctx,
 			s.request.ParentExecutionInfo,
-			s.request.StartRequest.GetWorkflowIdConflictPolicy(),
-			s.request.StartRequest.GetWorkflowIdReusePolicy(),
-			s.shardContext.GetLogger(),
+			orphanedChildReplacementInfo,
+			newRunID,
+			s.getMetricsHandler(),
 		)
 	} else {
 		currentExecutionUpdateAction, err = api.ResolveDuplicateWorkflowID(
@@ -558,6 +568,25 @@ func (s *Starter) resolveDuplicateWorkflowID(
 
 	switch err {
 	case nil:
+		if replaceOrphanedChild {
+			metrics.OrphanedChildWorkflowReplacement.With(s.getMetricsHandler()).Record(
+				1,
+				metrics.OutcomeTag(orphanedChildReplacementReplaced),
+			)
+			parentExecutionInfo := s.request.GetParentExecutionInfo()
+			parentExecution := parentExecutionInfo.GetExecution()
+			s.shardContext.GetLogger().Info(
+				"Replaced orphaned child workflow",
+				tag.WorkflowNamespaceID(s.namespace.ID().String()),
+				tag.WorkflowID(workflowID),
+				tag.NewStringTag("orphaned-child-run-id", currentWorkflowConditionFailed.RunID),
+				tag.WorkflowNewRunID(newRunID),
+				tag.NewStringTag("parent-workflow-id", parentExecution.GetWorkflowId()),
+				tag.NewStringTag("parent-run-id", parentExecution.GetRunId()),
+				tag.NewInt64("parent-initiated-event-id", parentExecutionInfo.GetInitiatedId()),
+				tag.NewInt64("parent-initiated-event-version", parentExecutionInfo.GetInitiatedVersion()),
+			)
+		}
 		if !s.requestEagerStart() {
 			return &historyservice.StartWorkflowExecutionResponse{
 				RunId:               newRunID,

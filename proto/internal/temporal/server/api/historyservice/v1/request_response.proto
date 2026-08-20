@@ -106,9 +106,11 @@ message StartWorkflowExecutionRequest {
   temporal.api.history.v1.DeclinedTargetVersionUpgrade declined_target_version_upgrade = 17;
   reserved 18;
   temporal.api.common.v1.TimeSkippingStatePropagation time_skipping_state_propagation = 19;
-  // Set when the parent has established that a conflicting execution can only be its own child, orphaned by an
-  // initiation that lost conflict resolution after a force failover.
-  bool zombify_conflicting_child = 20;
+  // When present, StartWorkflowExecution may replace a conflicting child only after verifying under
+  // the child's lock that its parent initiation is absent from the supplied current branch and that
+  // its first run has only WorkflowExecutionStarted, possibly followed by an unstarted first
+  // WorkflowTaskScheduled event.
+  OrphanedChildReplacementInfo orphaned_child_replacement_info = 20;
 }
 
 message StartWorkflowExecutionResponse {
@@ -1453,4 +1455,12 @@ message PollWorkflowExecutionTimeSkippingRequest {
 
 message PollWorkflowExecutionTimeSkippingResponse {
   temporal.api.workflowservice.v1.PollWorkflowExecutionTimeSkippingResponse response = 1;
+}
+
+// Carries the parent branch evidence needed to distinguish an orphaned child from another
+// accepted initiation of the same child workflow ID. This is request-only replacement context and
+// is not persisted into the child workflow. Re-linking requires a separate recovery mechanism
+// because the existing parent coordinates are also immutable WorkflowExecutionStarted history.
+message OrphanedChildReplacementInfo {
+  repeated temporal.server.api.history.v1.VersionHistoryItem parent_current_version_history_items = 1;
 }
