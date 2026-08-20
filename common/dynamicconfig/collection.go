@@ -124,6 +124,15 @@ func NewCollection(client Client, logger log.Logger) *Collection {
 	}
 }
 
+// GetAllValues returns all values currently held by the Client.
+func (c *Collection) GetAllValues() (ConfigValueMap, error) {
+	client, ok := c.client.(ClientWithConfigValueMap)
+	if !ok {
+		return nil, errors.New("dynamic config client does not support getting all values")
+	}
+	return client.GetAllValues(), nil
+}
+
 func (c *Collection) Start() {
 	c.subscriptionLock.Lock()
 	defer c.subscriptionLock.Unlock()
