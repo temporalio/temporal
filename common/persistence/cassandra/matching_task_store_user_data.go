@@ -138,28 +138,15 @@ func (d *userDataStore) ListTaskQueueUserDataEntries(ctx context.Context, reques
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.InternalListTaskQueueUserDataEntriesResponse{}
-	row := make(map[string]any)
-	for iter.MapScan(row) {
-		taskQueue, err := getTypedFieldFromRow[string]("task_queue_name", row)
-		if err != nil {
-			return nil, err
-		}
-		data, err := getTypedFieldFromRow[[]byte]("data", row)
-		if err != nil {
-			return nil, err
-		}
-		dataEncoding, err := getTypedFieldFromRow[string]("data_encoding", row)
-		if err != nil {
-			return nil, err
-		}
-		version, err := getTypedFieldFromRow[int64]("version", row)
-		if err != nil {
-			return nil, err
-		}
-
-		response.Entries = append(response.Entries, p.InternalTaskQueueUserDataEntry{TaskQueue: taskQueue, Data: p.NewDataBlob(data, dataEncoding), Version: version})
-
-		row = make(map[string]any) // Reinitialize map as initialized fails on unmarshalling
+	var taskQueue string
+	var data []byte
+	var dataEncoding string
+	var version int64
+	// Column order must match templateListTaskQueueUserDataQuery SELECT clause.
+	for iter.Scan(&taskQueue, &data, &dataEncoding, &version) {
+		dataCopy := make([]byte, len(data))
+		copy(dataCopy, data)
+		response.Entries = append(response.Entries, p.InternalTaskQueueUserDataEntry{TaskQueue: taskQueue, Data: p.NewDataBlob(dataCopy, dataEncoding), Version: version})
 	}
 	if len(iter.PageState()) > 0 {
 		response.NextPageToken = iter.PageState()
@@ -176,23 +163,12 @@ func (d *userDataStore) GetTaskQueuesByBuildId(ctx context.Context, request *p.G
 	iter := query.PageSize(listTaskQueueNamesByBuildIdPageSize).Iter()
 
 	var taskQueues []string
-	row := make(map[string]any)
+	var taskQueue string
 
 	for {
-		for iter.MapScan(row) {
-			taskQueueRaw, ok := row["task_queue_name"]
-			if !ok {
-				return nil, newFieldNotFoundError("task_queue_name", row)
-			}
-			taskQueue, ok := taskQueueRaw.(string)
-			if !ok {
-				var stringType string
-				return nil, newPersistedTypeMismatchError("task_queue_name", stringType, taskQueueRaw, row)
-			}
-
+		// Column order must match templateListTaskQueueNamesByBuildIdQuery SELECT clause.
+		for iter.Scan(&taskQueue) {
 			taskQueues = append(taskQueues, taskQueue)
-
-			row = make(map[string]any) // Reinitialize map as initialized fails on unmarshalling
 		}
 		if len(iter.PageState()) == 0 {
 			break

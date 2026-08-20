@@ -1060,28 +1060,28 @@ func (d *MutableStateStore) ListConcreteExecutions(
 	iter := query.PageSize(request.PageSize).PageState(request.PageToken).Iter()
 
 	response := &p.InternalListConcreteExecutionsResponse{}
-	result := make(map[string]any)
-	for iter.MapScan(result) {
-		if execution, ok := result["execution"]; ok {
-			executionBytes, ok := execution.([]byte)
-			if !ok {
-				return nil, newPersistedTypeMismatchError("execution", "", executionBytes, result)
-			}
-
-			if len(executionBytes) == 0 {
-				// current record has no value in execution column.
-				result = make(map[string]any)
-				continue
-			}
-
-			state, err := mutableStateFromRow(result)
-			if err != nil {
-				return nil, err
-			}
-			response.States = append(response.States, state)
+	var runID []byte
+	var execution []byte
+	var executionEncoding string
+	var executionState []byte
+	var executionStateEncoding string
+	var nextEventID int64
+	// Column order must match templateListWorkflowExecutionQuery SELECT clause.
+	for iter.Scan(&runID, &execution, &executionEncoding, &executionState, &executionStateEncoding, &nextEventID) {
+		if len(execution) == 0 {
+			continue
 		}
 
-		result = make(map[string]any)
+		execCopy := make([]byte, len(execution))
+		copy(execCopy, execution)
+		stateCopy := make([]byte, len(executionState))
+		copy(stateCopy, executionState)
+		state := &p.InternalWorkflowMutableState{
+			ExecutionInfo:  p.NewDataBlob(execCopy, executionEncoding),
+			ExecutionState: p.NewDataBlob(stateCopy, executionStateEncoding),
+			NextEventID:    nextEventID,
+		}
+		response.States = append(response.States, state)
 	}
 	if len(iter.PageState()) > 0 {
 		response.NextPageToken = iter.PageState()
