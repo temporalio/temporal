@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -259,6 +260,73 @@ func useLegacyHistoryReplication() parentChildScenarioStep {
 					false,
 				))
 			}
+			return nil
+		},
+	}
+}
+
+func setLocalParentVerificationGrace(
+	cluster parentChildCluster,
+	duration time.Duration,
+) parentChildScenarioStep {
+	return parentChildScenarioStep{
+		name: fmt.Sprintf("set local parent verification grace on %s to %s", cluster, duration),
+		run: func(_ context.Context, runtime *parentChildScenarioRuntime) error {
+			clusterIndex := int(cluster)
+			if clusterIndex < 0 || clusterIndex >= len(runtime.suite.clusters) {
+				return fmt.Errorf("unknown parent-child cluster %d", cluster)
+			}
+			runtime.cleanups = append(runtime.cleanups, runtime.suite.clusters[clusterIndex].OverrideDynamicConfig(
+				runtime.suite.T(),
+				dynamicconfig.MaxLocalParentWorkflowVerificationDuration,
+				duration,
+			))
+			return nil
+		},
+	}
+}
+
+func setStandbyClusterDelay(
+	cluster parentChildCluster,
+	duration time.Duration,
+) parentChildScenarioStep {
+	return parentChildScenarioStep{
+		name: fmt.Sprintf("set standby cluster delay on %s to %s", cluster, duration),
+		run: func(_ context.Context, runtime *parentChildScenarioRuntime) error {
+			clusterIndex := int(cluster)
+			if clusterIndex < 0 || clusterIndex >= len(runtime.suite.clusters) {
+				return fmt.Errorf("unknown parent-child cluster %d", cluster)
+			}
+			runtime.cleanups = append(runtime.cleanups, runtime.suite.clusters[clusterIndex].OverrideDynamicConfig(
+				runtime.suite.T(),
+				dynamicconfig.StandbyClusterDelay,
+				duration,
+			))
+			return nil
+		},
+	}
+}
+
+func setStandbyTaskDiscardDelay(
+	cluster parentChildCluster,
+	taskType enumsspb.TaskType,
+	duration time.Duration,
+) parentChildScenarioStep {
+	return parentChildScenarioStep{
+		name: fmt.Sprintf("set standby %s discard delay on %s to %s", taskType, cluster, duration),
+		run: func(_ context.Context, runtime *parentChildScenarioRuntime) error {
+			clusterIndex := int(cluster)
+			if clusterIndex < 0 || clusterIndex >= len(runtime.suite.clusters) {
+				return fmt.Errorf("unknown parent-child cluster %d", cluster)
+			}
+			runtime.cleanups = append(runtime.cleanups, runtime.suite.clusters[clusterIndex].OverrideDynamicConfig(
+				runtime.suite.T(),
+				dynamicconfig.StandbyTaskMissingEventsDiscardDelay,
+				[]dynamicconfig.ConstrainedValue{{
+					Constraints: dynamicconfig.Constraints{TaskType: taskType},
+					Value:       duration,
+				}},
+			))
 			return nil
 		},
 	}
@@ -513,6 +581,37 @@ func historyVerificationFailedOnCluster(
 				metrics.ErrorTypeTagName: errorType,
 				namespaceTag.Key:         namespaceTag.Value,
 				serviceRoleTag.Key:       serviceRoleTag.Value,
+			})
+		},
+	}
+}
+
+func waitForHistoryVerificationFailureOnCluster(
+	cluster parentChildCluster,
+	operation string,
+	expectedError error,
+) parentChildScenarioStep {
+	expectation := historyVerificationFailedOnCluster(cluster, operation, expectedError)
+	return parentChildScenarioStep{
+		name: "wait until " + expectation.name,
+		run: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
+			return runtime.waitForExpectation(ctx, expectation)
+		},
+	}
+}
+
+func taskWasDiscardedOnCluster(
+	cluster parentChildCluster,
+	taskType string,
+) parentChildExpectation {
+	return parentChildExpectation{
+		name: fmt.Sprintf("%s is discarded on %s", taskType, cluster),
+		check: func(_ context.Context, runtime *parentChildScenarioRuntime) error {
+			namespaceTag := metrics.NamespaceTag(runtime.namespace)
+			return runtime.requireCapturedMetric(cluster, metrics.TaskDiscarded.Name(), map[string]string{
+				metrics.OperationTagName: taskType,
+				metrics.TaskTypeTagName:  taskType,
+				namespaceTag.Key:         namespaceTag.Value,
 			})
 		},
 	}
@@ -851,6 +950,25 @@ func (r *parentChildScenarioRuntime) requireCapturedMetric(
 		recordedTags = append(recordedTags, recording.Tags)
 	}
 	return fmt.Errorf("metric %q with tags %v was not captured on %s; recorded tags: %v", metricName, tags, cluster, recordedTags)
+}
+
+func (r *parentChildScenarioRuntime) waitForExpectation(
+	ctx context.Context,
+	expectation parentChildExpectation,
+) error {
+	ticker := time.NewTicker(replicationCheckInterval)
+	defer ticker.Stop()
+	for {
+		err := expectation.check(ctx, r)
+		if err == nil {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("waiting for %s: %w; last observation: %v", expectation.name, ctx.Err(), err)
+		case <-ticker.C:
+		}
+	}
 }
 
 func (r *parentChildScenarioRuntime) refreshParentWorkflowTasks(ctx context.Context) error {
