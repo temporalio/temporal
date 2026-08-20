@@ -15,10 +15,17 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/taskpoller"
@@ -33,9 +40,7 @@ var (
 	errParentChildTaskAlreadyResolved   = errors.New("parent-child replication task is already resolved")
 )
 
-type parentChildXDCTestSuite struct {
-	xdcBaseSuite
-}
+type parentChildXDCTestSuite struct{ xdcBaseSuite }
 
 type (
 	parentChildWorkflow int
@@ -74,9 +79,16 @@ type (
 		activeClusterIndex     int
 		gates                  [2]*parentChildReplicationGate
 		removeHooks            []func()
-		heldTasks              map[parentChildReplicationLane]*parentChildReplicationTask
+		cleanups               []func()
+		delayedTasks           map[parentChildReplicationLane]*parentChildReplicationTask
 		eventsFromAppliedTasks map[parentChildWorkflow]map[enumspb.EventType][]*historypb.HistoryEvent
+		metricCaptures         [2]parentChildMetricCapture
 		trace                  []string
+	}
+
+	parentChildMetricCapture struct {
+		handler *metricstest.CaptureHandler
+		capture *metricstest.Capture
 	}
 
 	parentChildReplicationLane struct {
@@ -122,8 +134,13 @@ const (
 
 const (
 	applyReplicationTask parentChildReplicationTaskAction = iota
-	holdReplicationTask
+	delayReplicationTaskApply
 	ackReplicationTaskWithoutApplying
+)
+
+const (
+	historyClientVerifyChildCompletion   = "HistoryClientVerifyChildExecutionCompletionRecorded"
+	historyClientVerifyFirstWorkflowTask = "HistoryClientVerifyFirstWorkflowTaskScheduled"
 )
 
 func (s *parentChildXDCTestSuite) runParentChildScenario(scenario parentChildScenario) {
@@ -134,7 +151,6 @@ func (s *parentChildXDCTestSuite) runParentChildScenario(scenario parentChildSce
 			s.T().Logf("parent-child scenario trace:\n%s", strings.Join(runtime.trace, "\n"))
 		}
 	}()
-
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	err := runtime.initialize(ctx)
 	cancel()
@@ -159,7 +175,7 @@ func (s *parentChildXDCTestSuite) runParentChildScenario(scenario parentChildSce
 func newParentChildScenarioRuntime(s *parentChildXDCTestSuite) *parentChildScenarioRuntime {
 	return &parentChildScenarioRuntime{
 		suite:                  s,
-		heldTasks:              make(map[parentChildReplicationLane]*parentChildReplicationTask),
+		delayedTasks:           make(map[parentChildReplicationLane]*parentChildReplicationTask),
 		eventsFromAppliedTasks: make(map[parentChildWorkflow]map[enumspb.EventType][]*historypb.HistoryEvent),
 	}
 }
@@ -197,6 +213,15 @@ func (r *parentChildScenarioRuntime) initialize(ctx context.Context) error {
 			testhooks.NewHook(testhooks.HistoryReplicationTaskInterceptor, gate.intercept),
 			testhooks.GlobalScope,
 		))
+
+		metricsHandler, ok := cluster.Host().GetMetricsHandler().(*metricstest.CaptureHandler)
+		if !ok {
+			return fmt.Errorf("cluster %d metrics handler does not support capture", clusterIndex)
+		}
+		r.metricCaptures[clusterIndex] = parentChildMetricCapture{
+			handler: metricsHandler,
+			capture: metricsHandler.StartCapture(),
+		}
 	}
 
 	r.parentTestVars = testvars.New(r.suite.T()).WithTaskQueue("parent-child-xdc-parent-task-queue")
@@ -212,6 +237,30 @@ func (r *parentChildScenarioRuntime) close() {
 	}
 	for index := len(r.removeHooks) - 1; index >= 0; index-- {
 		r.removeHooks[index]()
+	}
+	for _, capture := range r.metricCaptures {
+		if capture.handler != nil && capture.capture != nil {
+			capture.handler.StopCapture(capture.capture)
+		}
+	}
+	for index := len(r.cleanups) - 1; index >= 0; index-- {
+		r.cleanups[index]()
+	}
+}
+
+func useLegacyHistoryReplication() parentChildScenarioStep {
+	return parentChildScenarioStep{
+		name: "use legacy history replication for this scenario",
+		run: func(_ context.Context, runtime *parentChildScenarioRuntime) error {
+			for _, cluster := range runtime.suite.clusters {
+				runtime.cleanups = append(runtime.cleanups, cluster.OverrideDynamicConfig(
+					runtime.suite.T(),
+					dynamicconfig.EnableTransitionHistory,
+					false,
+				))
+			}
+			return nil
+		},
 	}
 }
 
@@ -233,12 +282,24 @@ func applyReplicationThroughTaskContainingEvent(
 	return replicationTaskStep(applyReplicationTask, targetCluster, workflow, eventType)
 }
 
-func holdReplicationAtTaskContainingEvent(
+func delayReplicationAtTaskContainingEvent(
 	targetCluster parentChildCluster,
 	workflow parentChildWorkflow,
 	eventType enumspb.EventType,
 ) parentChildScenarioStep {
-	return replicationTaskStep(holdReplicationTask, targetCluster, workflow, eventType)
+	return replicationTaskStep(delayReplicationTaskApply, targetCluster, workflow, eventType)
+}
+
+func applyDelayedReplication(
+	targetCluster parentChildCluster,
+	workflow parentChildWorkflow,
+) parentChildScenarioStep {
+	return parentChildScenarioStep{
+		name: fmt.Sprintf("apply delayed %s replication to %s", workflow, targetCluster),
+		run: func(_ context.Context, runtime *parentChildScenarioRuntime) error {
+			return runtime.applyDelayedReplication(targetCluster, workflow)
+		},
+	}
 }
 
 func acknowledgeReplicationTaskContainingEventWithoutApplying(
@@ -272,11 +333,45 @@ func completeParentWorkflowTaskWithStartChildCommand() parentChildScenarioStep {
 	}
 }
 
-func failoverNamespaceTo(targetCluster parentChildCluster) parentChildScenarioStep {
+func completeChildWorkflowTask() parentChildScenarioStep {
+	return parentChildScenarioStep{
+		name: "complete the child workflow task",
+		run: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
+			return runtime.completeChildWorkflowTask(ctx)
+		},
+	}
+}
+
+func waitForWorkflowEventOnCluster(
+	cluster parentChildCluster,
+	workflow parentChildWorkflow,
+	eventType enumspb.EventType,
+) parentChildScenarioStep {
+	return parentChildScenarioStep{
+		name: fmt.Sprintf("wait for %s to contain %s on %s", workflow, eventType, cluster),
+		run: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
+			return runtime.waitForWorkflowEvent(ctx, cluster, workflow, eventType)
+		},
+	}
+}
+
+func confirmWorkflowIsMissingOnCluster(
+	cluster parentChildCluster,
+	workflow parentChildWorkflow,
+) parentChildScenarioStep {
+	return parentChildScenarioStep{
+		name: fmt.Sprintf("confirm %s is missing on %s", workflow, cluster),
+		run: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
+			return runtime.confirmWorkflowMissing(ctx, cluster, workflow)
+		},
+	}
+}
+
+func forceFailoverNamespaceTo(targetCluster parentChildCluster) parentChildScenarioStep {
 	return parentChildScenarioStep{
 		name: fmt.Sprintf("force fail over the namespace to %s", targetCluster),
 		run: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
-			return runtime.failover(ctx, targetCluster)
+			return runtime.forceFailover(ctx, targetCluster)
 		},
 	}
 }
@@ -290,7 +385,7 @@ func refreshParentWorkflowTasks() parentChildScenarioStep {
 	}
 }
 
-func parentStartChildFailed(
+func parentHasStartChildFailure(
 	cause enumspb.StartChildWorkflowExecutionFailedCause,
 ) parentChildExpectation {
 	return parentChildExpectation{
@@ -319,103 +414,124 @@ func parentStartChildFailed(
 	}
 }
 
-func childIsOrphaned() parentChildExpectation {
+func currentWorkflowHasStatusOnCluster(
+	cluster parentChildCluster,
+	workflow parentChildWorkflow,
+	status enumspb.WorkflowExecutionStatus,
+) parentChildExpectation {
 	return parentChildExpectation{
-		name: "child belongs to the losing parent branch",
+		name: fmt.Sprintf("current %s has status %s on %s", workflow, status, cluster),
 		check: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
-			if runtime.childRunID == "" {
-				return errors.New("child WorkflowExecutionStarted was not applied")
+			clusterIndex := int(cluster)
+			if clusterIndex < 0 || clusterIndex >= len(runtime.suite.clusters) {
+				return fmt.Errorf("unknown parent-child cluster %d", cluster)
 			}
-			childEvents, err := runtime.childHistory(ctx)
+			workflowID, err := runtime.workflowID(workflow)
 			if err != nil {
 				return err
 			}
-			var childStartedEvent *historypb.HistoryEvent
-			for _, event := range childEvents {
-				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
-					childStartedEvent = event
-					break
-				}
-			}
-			if childStartedEvent == nil {
-				return fmt.Errorf("child run %q has no persisted WorkflowExecutionStarted event", runtime.childRunID)
-			}
-			childStartedAttrs := childStartedEvent.GetWorkflowExecutionStartedEventAttributes()
-			if childStartedAttrs == nil {
-				return errors.New("persisted child start event has no attributes")
-			}
-			parentExecution := childStartedAttrs.GetParentWorkflowExecution()
-			if parentExecution.GetWorkflowId() != runtime.parentID || parentExecution.GetRunId() != runtime.parentRunID {
-				return fmt.Errorf(
-					"child parent is %s/%s, want %s/%s",
-					parentExecution.GetWorkflowId(),
-					parentExecution.GetRunId(),
-					runtime.parentID,
-					runtime.parentRunID,
-				)
-			}
-
-			parentEvents, err := runtime.parentHistory(ctx)
-			if err != nil {
-				return err
-			}
-			var currentInitiatedEvent *historypb.HistoryEvent
-			for _, event := range parentEvents {
-				attrs := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
-				if attrs != nil && attrs.GetWorkflowId() == runtime.childID && event.GetEventId() == childStartedAttrs.GetParentInitiatedEventId() {
-					currentInitiatedEvent = event
-				}
-				startedAttrs := event.GetChildWorkflowExecutionStartedEventAttributes()
-				if startedAttrs != nil &&
-					startedAttrs.GetWorkflowExecution().GetWorkflowId() == runtime.childID &&
-					startedAttrs.GetWorkflowExecution().GetRunId() == runtime.childRunID {
-					return errors.New("current parent branch owns the applied child")
-				}
-			}
-			if currentInitiatedEvent == nil {
-				return fmt.Errorf(
-					"current parent branch has no StartChild event %d for child %q",
-					childStartedAttrs.GetParentInitiatedEventId(),
-					runtime.childID,
-				)
-			}
-			if currentInitiatedEvent.GetVersion() == childStartedAttrs.GetParentInitiatedEventVersion() {
-				return fmt.Errorf(
-					"child and current parent branch have the same initiation version %d",
-					currentInitiatedEvent.GetVersion(),
-				)
-			}
-			runtime.tracef(
-				"orphan confirmed: child parent pointer=(%d, v%d), current parent initiation=(%d, v%d)",
-				childStartedAttrs.GetParentInitiatedEventId(),
-				childStartedAttrs.GetParentInitiatedEventVersion(),
-				currentInitiatedEvent.GetEventId(),
-				currentInitiatedEvent.GetVersion(),
+			resp, err := runtime.suite.clusters[clusterIndex].FrontendClient().DescribeWorkflowExecution(
+				ctx,
+				&workflowservice.DescribeWorkflowExecutionRequest{
+					Namespace: runtime.namespace,
+					Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+				},
 			)
+			if err != nil {
+				return err
+			}
+			info := resp.GetWorkflowExecutionInfo()
+			if runID := info.GetExecution().GetRunId(); runID != runtime.workflowRunID(workflow) {
+				return fmt.Errorf("%s run is %q, want %q", workflow, runID, runtime.workflowRunID(workflow))
+			}
+			if actualStatus := info.GetStatus(); actualStatus != status {
+				return fmt.Errorf("%s status is %s, want %s", workflow, actualStatus, status)
+			}
 			return nil
 		},
 	}
 }
 
-func childHasStatus(status enumspb.WorkflowExecutionStatus) parentChildExpectation {
+func workflowIsMissingOnCluster(
+	cluster parentChildCluster,
+	workflow parentChildWorkflow,
+) parentChildExpectation {
 	return parentChildExpectation{
-		name: fmt.Sprintf("child has status %s", status),
+		name: fmt.Sprintf("%s is missing on %s", workflow, cluster),
 		check: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
-			resp, err := runtime.activeCluster().FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-				Namespace: runtime.namespace,
-				Execution: &commonpb.WorkflowExecution{WorkflowId: runtime.childID},
-			})
+			return runtime.confirmWorkflowMissing(ctx, cluster, workflow)
+		},
+	}
+}
+
+func workflowExistsOnCluster(
+	cluster parentChildCluster,
+	workflow parentChildWorkflow,
+) parentChildExpectation {
+	return parentChildExpectation{
+		name: fmt.Sprintf("%s exists on %s", workflow, cluster),
+		check: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
+			_, err := runtime.workflowMutableState(ctx, cluster, workflow)
+			return err
+		},
+	}
+}
+
+func workflowHasEventOnCluster(
+	cluster parentChildCluster,
+	workflow parentChildWorkflow,
+	eventType enumspb.EventType,
+) parentChildExpectation {
+	return parentChildExpectation{
+		name: fmt.Sprintf("%s contains %s on %s", workflow, eventType, cluster),
+		check: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
+			events, err := runtime.workflowHistoryOnCluster(ctx, cluster, workflow)
 			if err != nil {
 				return err
 			}
-			info := resp.GetWorkflowExecutionInfo()
-			if info.GetExecution().GetRunId() != runtime.childRunID {
-				return fmt.Errorf("current child run is %q, want %q", info.GetExecution().GetRunId(), runtime.childRunID)
-			}
-			if info.GetStatus() != status {
-				return fmt.Errorf("child status is %s, want %s", info.GetStatus(), status)
+			if !historyContainsEvent(events, eventType) {
+				return fmt.Errorf("%s has no %s on %s", workflow, eventType, cluster)
 			}
 			return nil
+		},
+	}
+}
+
+func historyVerificationFailedOnCluster(
+	cluster parentChildCluster,
+	operation string,
+	expectedError error,
+) parentChildExpectation {
+	errorType := metrics.ServiceErrorTypeTag(expectedError).Value
+	return parentChildExpectation{
+		name: fmt.Sprintf("%s fails with %s on %s", operation, errorType, cluster),
+		check: func(_ context.Context, runtime *parentChildScenarioRuntime) error {
+			namespaceTag := metrics.NamespaceTag(runtime.namespace)
+			serviceRoleTag := metrics.ServiceRoleTag(metrics.HistoryRoleTagValue)
+			return runtime.requireCapturedMetric(cluster, metrics.ClientFailures.Name(), map[string]string{
+				metrics.OperationTagName: operation,
+				metrics.ErrorTypeTagName: errorType,
+				namespaceTag.Key:         namespaceTag.Value,
+				serviceRoleTag.Key:       serviceRoleTag.Value,
+			})
+		},
+	}
+}
+
+func historyVerificationRequestedOnCluster(
+	cluster parentChildCluster,
+	operation string,
+) parentChildExpectation {
+	return parentChildExpectation{
+		name: fmt.Sprintf("%s is requested on %s", operation, cluster),
+		check: func(_ context.Context, runtime *parentChildScenarioRuntime) error {
+			namespaceTag := metrics.NamespaceTag(runtime.namespace)
+			serviceRoleTag := metrics.ServiceRoleTag(metrics.HistoryRoleTagValue)
+			return runtime.requireCapturedMetric(cluster, metrics.ClientRequests.Name(), map[string]string{
+				metrics.OperationTagName: operation,
+				namespaceTag.Key:         namespaceTag.Value,
+				serviceRoleTag.Key:       serviceRoleTag.Value,
+			})
 		},
 	}
 }
@@ -460,8 +576,8 @@ func (r *parentChildScenarioRuntime) processReplicationThroughTaskContainingEven
 	}
 
 	for {
-		task, held := r.heldTasks[lane]
-		if !held {
+		task, delayed := r.delayedTasks[lane]
+		if !delayed {
 			task, err = r.gates[targetClusterIndex].nextForWorkflow(ctx, workflowID)
 			if err != nil {
 				return err
@@ -488,15 +604,15 @@ func (r *parentChildScenarioRuntime) processReplicationThroughTaskContainingEven
 		)
 		switch action {
 		case applyReplicationTask:
-			delete(r.heldTasks, lane)
+			delete(r.delayedTasks, lane)
 			if err := task.apply(); err != nil {
 				return err
 			}
 			r.recordAppliedTaskEvents(workflow, task, events)
-		case holdReplicationTask:
-			r.heldTasks[lane] = task
+		case delayReplicationTaskApply:
+			r.delayedTasks[lane] = task
 		case ackReplicationTaskWithoutApplying:
-			delete(r.heldTasks, lane)
+			delete(r.delayedTasks, lane)
 			if err := task.acknowledgeWithoutApplying(); err != nil {
 				return err
 			}
@@ -508,6 +624,43 @@ func (r *parentChildScenarioRuntime) processReplicationThroughTaskContainingEven
 			return nil
 		}
 	}
+}
+
+func (r *parentChildScenarioRuntime) applyDelayedReplication(
+	targetCluster parentChildCluster,
+	workflow parentChildWorkflow,
+) error {
+	targetClusterIndex := int(targetCluster)
+	if targetClusterIndex < 0 || targetClusterIndex >= len(r.gates) {
+		return fmt.Errorf("unknown parent-child cluster %d", targetCluster)
+	}
+	if _, err := r.workflowID(workflow); err != nil {
+		return err
+	}
+
+	lane := parentChildReplicationLane{targetClusterIndex: targetClusterIndex, workflow: workflow}
+	task, delayed := r.delayedTasks[lane]
+	if !delayed {
+		return fmt.Errorf("no delayed %s replication task to %s", workflow, targetCluster)
+	}
+	events, err := decodeParentChildReplicationEvents(task.task)
+	if err != nil {
+		return err
+	}
+
+	r.tracef(
+		"  apply delayed task %d to cluster %d for %s [%s]",
+		task.task.GetSourceTaskId(),
+		targetClusterIndex,
+		workflow,
+		formatParentChildReplicationTask(task.task, events),
+	)
+	delete(r.delayedTasks, lane)
+	if err := task.apply(); err != nil {
+		return err
+	}
+	r.recordAppliedTaskEvents(workflow, task, events)
+	return nil
 }
 
 func (r *parentChildScenarioRuntime) completeParentWorkflowTaskWithStartChildCommand(ctx context.Context) error {
@@ -546,6 +699,160 @@ func (r *parentChildScenarioRuntime) completeParentWorkflowTaskWithStartChildCom
 	return err
 }
 
+func (r *parentChildScenarioRuntime) completeChildWorkflowTask(ctx context.Context) error {
+	poller := taskpoller.New(r.suite.T(), r.activeCluster().FrontendClient(), r.namespace)
+	_, err := poller.PollAndHandleWorkflowTask(r.childTestVars, func(
+		task *workflowservice.PollWorkflowTaskQueueResponse,
+	) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		execution := task.GetWorkflowExecution()
+		if execution.GetWorkflowId() != r.childID {
+			return nil, fmt.Errorf("polled workflow %s/%s, want child %s", execution.GetWorkflowId(), execution.GetRunId(), r.childID)
+		}
+		if r.childRunID == "" {
+			r.childRunID = execution.GetRunId()
+		}
+		if execution.GetRunId() != r.childRunID {
+			return nil, fmt.Errorf("polled child run %s, want %s", execution.GetRunId(), r.childRunID)
+		}
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{{
+				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
+				},
+			}},
+		}, nil
+	}, taskpoller.WithTimeout(testTimeout))
+	return err
+}
+
+func (r *parentChildScenarioRuntime) waitForWorkflowEvent(
+	ctx context.Context,
+	cluster parentChildCluster,
+	workflow parentChildWorkflow,
+	eventType enumspb.EventType,
+) error {
+	ticker := time.NewTicker(replicationCheckInterval)
+	defer ticker.Stop()
+	for {
+		events, err := r.workflowHistoryOnCluster(ctx, cluster, workflow)
+		if err == nil && historyContainsEvent(events, eventType) {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			if err != nil {
+				return fmt.Errorf("waiting for %s on %s: %w", eventType, cluster, err)
+			}
+			return fmt.Errorf("waiting for %s on %s: %w", eventType, cluster, ctx.Err())
+		case <-ticker.C:
+		}
+	}
+}
+
+func (r *parentChildScenarioRuntime) workflowHistoryOnCluster(
+	ctx context.Context,
+	cluster parentChildCluster,
+	workflow parentChildWorkflow,
+) ([]*historypb.HistoryEvent, error) {
+	clusterIndex := int(cluster)
+	if clusterIndex < 0 || clusterIndex >= len(r.suite.clusters) {
+		return nil, fmt.Errorf("unknown parent-child cluster %d", cluster)
+	}
+	workflowID, err := r.workflowID(workflow)
+	if err != nil {
+		return nil, err
+	}
+	runID := r.workflowRunID(workflow)
+	resp, err := r.suite.clusters[clusterIndex].FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: r.namespace,
+		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetHistory().GetEvents(), nil
+}
+
+func (r *parentChildScenarioRuntime) workflowMutableState(
+	ctx context.Context,
+	cluster parentChildCluster,
+	workflow parentChildWorkflow,
+) (*persistencespb.WorkflowMutableState, error) {
+	clusterIndex := int(cluster)
+	if clusterIndex < 0 || clusterIndex >= len(r.suite.clusters) {
+		return nil, fmt.Errorf("unknown parent-child cluster %d", cluster)
+	}
+	workflowID, err := r.workflowID(workflow)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := r.suite.clusters[clusterIndex].HistoryClient().DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
+		NamespaceId: r.namespaceID,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      r.workflowRunID(workflow),
+		},
+		ArchetypeId: chasm.WorkflowArchetypeID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if resp.GetDatabaseMutableState() == nil {
+		return nil, fmt.Errorf("%s database mutable state is nil on %s", workflow, cluster)
+	}
+	return resp.GetDatabaseMutableState(), nil
+}
+
+func (r *parentChildScenarioRuntime) confirmWorkflowMissing(
+	ctx context.Context,
+	cluster parentChildCluster,
+	workflow parentChildWorkflow,
+) error {
+	_, err := r.workflowMutableState(ctx, cluster, workflow)
+	var notFound *serviceerror.NotFound
+	if errors.As(err, &notFound) {
+		return nil
+	}
+	if err == nil {
+		return fmt.Errorf("%s unexpectedly exists on %s", workflow, cluster)
+	}
+	return err
+}
+
+func (r *parentChildScenarioRuntime) requireCapturedMetric(
+	cluster parentChildCluster,
+	metricName string,
+	tags map[string]string,
+) error {
+	clusterIndex := int(cluster)
+	if clusterIndex < 0 || clusterIndex >= len(r.metricCaptures) {
+		return fmt.Errorf("unknown parent-child cluster %d", cluster)
+	}
+	capture := r.metricCaptures[clusterIndex].capture
+	if capture == nil {
+		return fmt.Errorf("metrics capture is not initialized for %s", cluster)
+	}
+	recordings := capture.Snapshot()[metricName]
+	for _, recording := range recordings {
+		matches := true
+		for key, value := range tags {
+			if recording.Tags[key] != value {
+				matches = false
+				break
+			}
+		}
+		if matches {
+			return nil
+		}
+	}
+	recordedTags := make([]map[string]string, 0, len(recordings))
+	for _, recording := range recordings {
+		recordedTags = append(recordedTags, recording.Tags)
+	}
+	return fmt.Errorf("metric %q with tags %v was not captured on %s; recorded tags: %v", metricName, tags, cluster, recordedTags)
+}
+
 func (r *parentChildScenarioRuntime) refreshParentWorkflowTasks(ctx context.Context) error {
 	if r.parentRunID == "" {
 		return errors.New("parent workflow is not started")
@@ -560,7 +867,7 @@ func (r *parentChildScenarioRuntime) refreshParentWorkflowTasks(ctx context.Cont
 	return err
 }
 
-func (r *parentChildScenarioRuntime) failover(ctx context.Context, target parentChildCluster) error {
+func (r *parentChildScenarioRuntime) forceFailover(ctx context.Context, target parentChildCluster) error {
 	targetClusterIndex := int(target)
 	if targetClusterIndex < 0 || targetClusterIndex >= len(r.suite.clusters) {
 		return fmt.Errorf("unknown parent-child cluster %d", target)
@@ -634,6 +941,17 @@ func (r *parentChildScenarioRuntime) workflowID(workflow parentChildWorkflow) (s
 		return r.childID, nil
 	default:
 		return "", fmt.Errorf("unknown parent-child workflow %d", workflow)
+	}
+}
+
+func (r *parentChildScenarioRuntime) workflowRunID(workflow parentChildWorkflow) string {
+	switch workflow {
+	case parentWorkflow:
+		return r.parentRunID
+	case childWorkflow:
+		return r.childRunID
+	default:
+		return ""
 	}
 }
 
@@ -871,6 +1189,19 @@ func historyContainsEvent(events []*historypb.HistoryEvent, eventType enumspb.Ev
 	return false
 }
 
+func findHistoryEvent(
+	events []*historypb.HistoryEvent,
+	eventType enumspb.EventType,
+	matches func(*historypb.HistoryEvent) bool,
+) *historypb.HistoryEvent {
+	for _, event := range events {
+		if event.GetEventType() == eventType && (matches == nil || matches(event)) {
+			return event
+		}
+	}
+	return nil
+}
+
 func formatParentChildEventTypes(events []*historypb.HistoryEvent) string {
 	eventTypes := make([]string, 0, len(events))
 	for _, event := range events {
@@ -943,8 +1274,8 @@ func (action parentChildReplicationTaskAction) String() string {
 	switch action {
 	case applyReplicationTask:
 		return "apply"
-	case holdReplicationTask:
-		return "hold"
+	case delayReplicationTaskApply:
+		return "delay-apply"
 	case ackReplicationTaskWithoutApplying:
 		return "ack-without-apply"
 	default:

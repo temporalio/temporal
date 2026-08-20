@@ -124,9 +124,9 @@ func TestParentChildReplicationGate(t *testing.T) {
 		require.NoError(t, receiveParentChildInterceptResult(t, childResult))
 	})
 
-	t.Run("close releases held and queued tasks", func(t *testing.T) {
+	t.Run("close releases delayed and queued tasks", func(t *testing.T) {
 		gate := newParentChildReplicationGate("namespace", "parent", "child")
-		heldResult := interceptParentChildTask(
+		delayedResult := interceptParentChildTask(
 			gate,
 			newParentChildHistoryReplicationTask("namespace", "parent", 1),
 			func() error { return nil },
@@ -145,7 +145,7 @@ func TestParentChildReplicationGate(t *testing.T) {
 
 		gate.close()
 		gate.close()
-		require.NoError(t, receiveParentChildInterceptResult(t, heldResult))
+		require.NoError(t, receiveParentChildInterceptResult(t, delayedResult))
 		require.NoError(t, receiveParentChildInterceptResult(t, queuedResult))
 
 		ctx, cancel = context.WithTimeout(context.Background(), time.Second)
@@ -176,7 +176,7 @@ func TestParentChildHarnessAcknowledgeReplicationTaskWithoutApplying(t *testing.
 	runtime := &parentChildScenarioRuntime{
 		parentID:               "parent",
 		gates:                  [2]*parentChildReplicationGate{nil, gate},
-		heldTasks:              make(map[parentChildReplicationLane]*parentChildReplicationTask),
+		delayedTasks:           make(map[parentChildReplicationLane]*parentChildReplicationTask),
 		eventsFromAppliedTasks: make(map[parentChildWorkflow]map[enumspb.EventType][]*historypb.HistoryEvent),
 	}
 
@@ -190,7 +190,7 @@ func TestParentChildHarnessAcknowledgeReplicationTaskWithoutApplying(t *testing.
 	require.Contains(t, runtime.trace, "  ack-without-apply task 1 to cluster 1 for parent [WorkflowTaskStarted, WorkflowTaskCompleted]")
 }
 
-func TestParentChildHarnessAppliesPreviouslyHeldTaskAfterActiveClusterChanges(t *testing.T) {
+func TestParentChildHarnessAppliesPreviouslyDelayedTaskAfterActiveClusterChanges(t *testing.T) {
 	gate := newParentChildReplicationGate("namespace", "parent", "child")
 	defer gate.close()
 
@@ -211,23 +211,34 @@ func TestParentChildHarnessAppliesPreviouslyHeldTaskAfterActiveClusterChanges(t 
 	runtime := &parentChildScenarioRuntime{
 		parentID:               "parent",
 		gates:                  [2]*parentChildReplicationGate{nil, gate},
-		heldTasks:              make(map[parentChildReplicationLane]*parentChildReplicationTask),
+		delayedTasks:           make(map[parentChildReplicationLane]*parentChildReplicationTask),
 		eventsFromAppliedTasks: make(map[parentChildWorkflow]map[enumspb.EventType][]*historypb.HistoryEvent),
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	err = holdReplicationAtTaskContainingEvent(initialStandbyCluster, parentWorkflow, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED).run(ctx, runtime)
+	err = delayReplicationAtTaskContainingEvent(initialStandbyCluster, parentWorkflow, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED).run(ctx, runtime)
 	cancel()
 	require.NoError(t, err)
 	require.Zero(t, executions.Load())
 
 	runtime.activeClusterIndex = int(initialStandbyCluster)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
-	err = applyReplicationThroughTaskContainingEvent(initialStandbyCluster, parentWorkflow, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED).run(ctx, runtime)
+	err = applyDelayedReplication(initialStandbyCluster, parentWorkflow).run(ctx, runtime)
 	cancel()
 	require.NoError(t, err)
 	require.NoError(t, receiveParentChildInterceptResult(t, interceptResult))
 	require.Equal(t, int32(1), executions.Load())
+	require.Contains(t, runtime.trace, "  apply delayed task 1 to cluster 1 for parent [WorkflowTaskStarted]")
+}
+
+func TestParentChildHarnessApplyDelayedReplicationRequiresDelayedTask(t *testing.T) {
+	runtime := &parentChildScenarioRuntime{
+		parentID:     "parent",
+		delayedTasks: make(map[parentChildReplicationLane]*parentChildReplicationTask),
+	}
+
+	err := applyDelayedReplication(initialStandbyCluster, parentWorkflow).run(context.Background(), runtime)
+	require.ErrorContains(t, err, "no delayed parent replication task to initial standby cluster")
 }
 
 func TestParentChildHarnessVersionedTransitionApplyThrough(t *testing.T) {
@@ -265,7 +276,7 @@ func TestParentChildHarnessVersionedTransitionApplyThrough(t *testing.T) {
 	runtime := &parentChildScenarioRuntime{
 		parentID:               "parent",
 		gates:                  [2]*parentChildReplicationGate{nil, gate},
-		heldTasks:              make(map[parentChildReplicationLane]*parentChildReplicationTask),
+		delayedTasks:           make(map[parentChildReplicationLane]*parentChildReplicationTask),
 		eventsFromAppliedTasks: make(map[parentChildWorkflow]map[enumspb.EventType][]*historypb.HistoryEvent),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
