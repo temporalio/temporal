@@ -329,10 +329,10 @@ func (p *queueBase) checkpoint() {
 		}
 	}
 	metrics.QueueReaderCountHistogram.With(p.metricsHandler).Record(int64(len(readerScopes)))
-	metrics.QueueSliceCountHistogram.With(p.metricsHandler).Record(
-		int64(p.monitor.GetTotalSliceCount()),
-		metrics.TaskCategoryTag(p.category.Name()),
-	)
+	sliceCount := int64(p.monitor.GetTotalSliceCount())
+	categoryTag := metrics.TaskCategoryTag(p.category.Name())
+	metrics.QueueSliceCountHistogram.With(p.metricsHandler).Record(sliceCount, categoryTag)
+	metrics.QueueSliceCountTotal.With(p.metricsHandler).Record(sliceCount, categoryTag)
 	metrics.PendingTasksCounter.With(p.metricsHandler).Record(int64(p.monitor.GetTotalPendingTaskCount()))
 
 	// NOTE: Must range-complete task first.

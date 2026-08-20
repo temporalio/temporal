@@ -955,6 +955,7 @@ var (
 	QueueScheduleLatency         = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
 	QueueReaderCountHistogram    = NewDimensionlessHistogramDef("queue_reader_count")
 	QueueSliceCountHistogram     = NewDimensionlessHistogramDef("queue_slice_count")
+	QueueSliceCountTotal         = NewCounterDef("queue_slice_count_total")
 	QueueSlicePendingKeys        = NewDimensionlessHistogramDef("queue_slice_pending_keys")
 	QueueActionCounter           = NewCounterDef("queue_actions")
 	QueuePredicateResolutionLoss = NewCounterDef(
