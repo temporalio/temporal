@@ -51,11 +51,11 @@ func (s *TestEnvSuite) TestDedicatedClusterGuard_ConcurrentRecord() {
 	s.NoError(guard.validate())
 }
 
-func TestTestEnvStartLogCapture(t *testing.T) {
-	testLogger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+func (s *TestEnvSuite) TestStartLogCapture() {
+	testLogger := testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
 	var capture *testlogger.Capture
 
-	t.Run("capture", func(t *testing.T) {
+	s.T().Run("capture", func(t *testing.T) {
 		env := &TestEnv{
 			FunctionalTestBase: &FunctionalTestBase{externalNamespace: namespace.Name("external")},
 			Logger:             testLogger,
@@ -78,7 +78,7 @@ func TestTestEnvStartLogCapture(t *testing.T) {
 	})
 	testLogger.Info("after cleanup", tag.WorkflowNamespace("primary"))
 
-	require.ElementsMatch(t, []testlogger.CapturedLog{
+	require.ElementsMatch(s.T(), []testlogger.CapturedLog{
 		{
 			Level:   testlogger.Info,
 			Message: "primary name",

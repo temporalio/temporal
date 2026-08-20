@@ -11,6 +11,8 @@ import (
 )
 
 func TestCaptureLifecycle(t *testing.T) {
+	t.Parallel()
+
 	testLogger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
 	testLogger.Info("before")
 
@@ -31,6 +33,8 @@ func TestCaptureLifecycle(t *testing.T) {
 }
 
 func TestCaptureSharesStateWithDerivedLoggers(t *testing.T) {
+	t.Parallel()
+
 	testLogger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
 	capture := testLogger.StartCapture()
 
@@ -44,6 +48,8 @@ func TestCaptureSharesStateWithDerivedLoggers(t *testing.T) {
 }
 
 func TestCaptureFiltersIndependently(t *testing.T) {
+	t.Parallel()
+
 	testLogger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
 	all := testLogger.StartCapture()
 	matching := testLogger.StartCapture(tag.String("keep", "true"))
@@ -60,12 +66,16 @@ func TestCaptureFiltersIndependently(t *testing.T) {
 }
 
 func TestCaptureSnapshotIsDefensiveCopy(t *testing.T) {
+	t.Parallel()
+
 	testLogger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
 	capture := testLogger.StartCapture()
 	tags := []tag.Tag{tag.String("key", "original")}
 
 	testLogger.Info("message", tags...)
 	tags[0] = tag.String("key", "mutated input")
+
+	// mutate the snapshot
 	first := capture.Snapshot()
 	first[0].Message = "mutated snapshot"
 	first[0].Tags[0] = tag.String("key", "mutated snapshot")
@@ -78,6 +88,8 @@ func TestCaptureSnapshotIsDefensiveCopy(t *testing.T) {
 }
 
 func TestCaptureRecordsConcurrentDerivedLoggers(t *testing.T) {
+	t.Parallel()
+
 	testLogger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly,
 		testlogger.WrapLogger(log.NewNoopLogger()),
 	)
