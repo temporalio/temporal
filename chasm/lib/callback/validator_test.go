@@ -200,14 +200,14 @@ func TestValidateWorkerCallback(t *testing.T) {
 		errMsg string
 	}{
 		{
-			name:   "task_queue_name is required",
+			name:   "taskQueue is not set",
 			mutate: func(w *commonpb.Callback_Worker) { w.TaskQueueName = "" },
-			errMsg: "completion_callbacks[1]: task_queue_name is required",
+			errMsg: "completion_callbacks[1]: taskQueue is not set",
 		},
 		{
-			name:   "task_queue_name length",
+			name:   "taskQueue length exceeds limit",
 			mutate: func(w *commonpb.Callback_Worker) { w.TaskQueueName = strings.Repeat("x", 11) },
-			errMsg: "completion_callbacks[1]: task_queue_name exceeds length limit. Length=11 Limit=10",
+			errMsg: "completion_callbacks[1]: taskQueue length exceeds limit",
 		},
 		{
 			name:   "service is required",

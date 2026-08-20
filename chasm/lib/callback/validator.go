@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/tqid"
 	"google.golang.org/grpc/status"
 )
 
@@ -155,31 +156,31 @@ func (v *validator) Validate(
 	}
 
 	for i, cb := range cbs {
-		kind := KindOf(cb)
-
-		enableCheckThen := func(fn func() error) error {
-			if !slices.Contains(opts.EnabledKinds, kind) {
-				return serviceerror.NewInvalidArgumentf("%s callbacks are not enabled for this execution type", kind)
-			}
-			return fn()
-		}
-
-		var err error
-		switch kind {
-		case KindNexus:
-			err = enableCheckThen(func() error { return v.validateNexus(namespaceName, cb.GetNexus()) })
-		case KindWorker:
-			err = enableCheckThen(func() error { return v.validateWorker(namespaceName, cb.GetWorker()) })
-		case KindUnknown:
-			fallthrough
-		default:
-			err = serviceerror.NewUnimplementedf("unknown callback variant: %T", cb.GetVariant())
-		}
-		if err != nil {
+		if err := v.validateCallback(cb, namespaceName, opts); err != nil {
 			return fmt.Errorf("completion_callbacks[%d]: %w", i, err)
 		}
 	}
 	return nil
+}
+
+func (v *validator) validateCallback(cb *commonpb.Callback, namespaceName string, opts ValidateOptions) error {
+	kind := KindOf(cb)
+
+	// For unknown callbacks, prefer the "unknown callback variant" error below.
+	if kind != KindUnknown && !slices.Contains(opts.EnabledKinds, kind) {
+		return serviceerror.NewInvalidArgumentf("%s callbacks are not enabled for this execution type", kind)
+	}
+
+	switch kind {
+	case KindNexus:
+		return v.validateNexus(namespaceName, cb.GetNexus())
+	case KindWorker:
+		return v.validateWorker(namespaceName, cb.GetWorker())
+	case KindUnknown:
+		fallthrough
+	default:
+		return serviceerror.NewUnimplementedf("unknown callback variant: %T", cb.GetVariant())
+	}
 }
 
 func (v *validator) validateNexus(namespaceName string, cb *commonpb.Callback_Nexus) error {
@@ -216,12 +217,15 @@ func (v *validator) validateNexus(namespaceName string, cb *commonpb.Callback_Ne
 }
 
 func (v *validator) validateWorker(namespaceName string, cb *commonpb.Callback_Worker) error {
+	if err := tqid.Validate(cb.GetTaskQueueName(), v.config.MaxIDLengthLimit()); err != nil {
+		return err
+	}
+
 	for _, field := range []struct {
 		name      string
 		value     string
 		maxLength int
 	}{
-		{"task_queue_name", cb.GetTaskQueueName(), v.config.MaxIDLengthLimit()},
 		{"service", cb.GetService(), v.config.MaxServiceNameLength(namespaceName)},
 		{"operation", cb.GetOperation(), v.config.MaxOperationNameLength(namespaceName)},
 	} {
