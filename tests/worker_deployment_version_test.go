@@ -1023,6 +1023,67 @@ func (s *DeploymentVersionSuite) TestDeleteVersion_ConcurrentDeleteVersion() {
 	}, time.Second*10, time.Millisecond*200)
 }
 
+// TestDeleteVersion_VersionWorkflowAlreadyClosed verifies that a version whose version workflow
+// is no longer running can still be deleted: the delete converges and the version summary is
+// removed from the Worker Deployment.
+func (s *DeploymentVersionSuite) TestDeleteVersion_VersionWorkflowAlreadyClosed() {
+	env := s.newTestEnv()
+	tv := env.Tv().WithBuildIDNumber(1)
+
+	s.createDeploymentAndVersion(env, tv, tv.ClientIdentity(), nil)
+
+	// The Worker Deployment knows about the version.
+	resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
+		Namespace:      env.Namespace().String(),
+		DeploymentName: tv.DeploymentSeries(),
+	})
+	s.NoError(err)
+	var buildIDs []string
+	for _, vs := range resp.GetWorkerDeploymentInfo().GetVersionSummaries() {
+		buildIDs = append(buildIDs, vs.GetDeploymentVersion().GetBuildId())
+	}
+	s.Contains(buildIDs, tv.ExternalDeploymentVersion().GetBuildId())
+
+	// Close the version workflow without telling the Worker Deployment, leaving the version
+	// summary behind.
+	versionWorkflowID := workerdeployment.GenerateVersionWorkflowID(tv.DeploymentSeries(), tv.BuildID())
+	_, err = env.FrontendClient().TerminateWorkflowExecution(s.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: versionWorkflowID,
+		},
+		Reason:   "test",
+		Identity: tv.ClientIdentity(),
+	})
+	s.NoError(err)
+
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		descResp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: versionWorkflowID},
+		})
+		a.NoError(err)
+		a.NotEqual(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, descResp.GetWorkflowExecutionInfo().GetStatus())
+	}, time.Second*10, time.Millisecond*200)
+
+	// Deleting the version converges even though its version workflow is gone.
+	s.tryDeleteVersion(env, tv, "", false)
+
+	// The version summary is removed from the Worker Deployment.
+	s.EventuallyWithT(func(t *assert.CollectT) {
+		a := require.New(t)
+		resp, err := env.FrontendClient().DescribeWorkerDeployment(s.Context(), &workflowservice.DescribeWorkerDeploymentRequest{
+			Namespace:      env.Namespace().String(),
+			DeploymentName: tv.DeploymentSeries(),
+		})
+		a.NoError(err)
+		for _, vs := range resp.GetWorkerDeploymentInfo().GetVersionSummaries() {
+			a.NotEqual(tv.ExternalDeploymentVersion().GetBuildId(), vs.GetDeploymentVersion().GetBuildId())
+		}
+	}, time.Second*10, time.Millisecond*200)
+}
+
 // VersionMissingTaskQueues
 func (s *DeploymentVersionSuite) TestVersionMissingTaskQueues_InvalidSetCurrentVersion() {
 	// Override the dynamic config to verify we don't get any unexpected masked errors.
