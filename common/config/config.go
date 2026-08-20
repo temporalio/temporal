@@ -191,6 +191,13 @@ type (
 
 		// Requires clients to authenticate with a certificate when connecting, otherwise known as mutual TLS.
 		RequireClientAuth bool `yaml:"requireClientAuth"`
+
+		// Optional - Minimum TLS protocol version accepted by this listener: "1.2" or "1.3".
+		// Defaults to "1.2" when not set.
+		MinVersion string `yaml:"minVersion"`
+		// Optional - Maximum TLS protocol version accepted by this listener: "1.2" or "1.3".
+		// When not set, the highest version supported by the runtime is used.
+		MaxVersion string `yaml:"maxVersion"`
 	}
 
 	// ClientTLS contains TLS configuration for clients within the Temporal Cluster to connect to Temporal nodes.
@@ -216,6 +223,13 @@ type (
 		// Optional - Use TLS even is neither client certificate nor root CAs are configured
 		// This is for non-mTLS cases when client validates serve against a set of trusted CA certificates configured in the environment
 		ForceTLS bool `yaml:"forceTLS"`
+
+		// Optional - Minimum TLS protocol version offered by this client: "1.2" or "1.3".
+		// Defaults to "1.2" when not set.
+		MinVersion string `yaml:"minVersion"`
+		// Optional - Maximum TLS protocol version offered by this client: "1.2" or "1.3".
+		// When not set, the highest version supported by the runtime is used.
+		MaxVersion string `yaml:"maxVersion"`
 	}
 
 	// WorkerTLS contains TLS configuration for system workers within the Temporal Cluster to connect to Temporal frontend.
