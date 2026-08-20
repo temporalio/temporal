@@ -3420,7 +3420,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUnpausedEvent(event *historypb
 		return err
 	}
 
-	// Outlives the pause info cleared below, to de-dupe a retry.
+	// Both LastPauseRequestId and LastUnPauseRequestId are saved on unpause.
 	requestID := event.GetWorkflowExecutionUnpausedEventAttributes().GetRequestId()
 	ms.approximateSize += len(requestID) - len(ms.executionInfo.LastUnpauseRequestId)
 	ms.executionInfo.LastUnpauseRequestId = requestID
@@ -3429,8 +3429,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUnpausedEvent(event *historypb
 	pauseInfoSize := 0
 	if ms.executionInfo.PauseInfo != nil {
 		pauseInfoSize = ms.GetExecutionInfo().GetPauseInfo().Size()
-		// The pause request id moves out of the pause info as it is cleared, rather than being
-		// stored in both places while paused, so a retry of that pause is still de-duped.
 		pauseRequestID := ms.executionInfo.PauseInfo.GetRequestId()
 		ms.approximateSize += len(pauseRequestID) - len(ms.executionInfo.LastPauseRequestId)
 		ms.executionInfo.LastPauseRequestId = pauseRequestID
