@@ -1143,7 +1143,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidCallback
 		RequestId: uuid.NewString(),
 		CompletionCallbacks: []*commonpb.Callback{
 			{
-				Variant: nexusVariantCallback(),
+				Variant: nexusCallbackVariant(),
 				Links: []*commonpb.Link{
 					{
 						Variant: &commonpb.Link_WorkflowEvent_{
@@ -1187,7 +1187,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidAggregat
 		RequestId: uuid.NewString(),
 		CompletionCallbacks: []*commonpb.Callback{
 			{
-				Variant: nexusVariantCallback(),
+				Variant: nexusCallbackVariant(),
 				Links: []*commonpb.Link{
 					{
 						Variant: &commonpb.Link_WorkflowEvent_{
@@ -4461,38 +4461,59 @@ func TestDedupLinksFromCallbacks(t *testing.T) {
 			},
 		},
 	}
-	callbacks := []*commonpb.Callback{
-		{
-			Variant: nexusVariantCallback(),
-			Links: []*commonpb.Link{
-				common.CloneProto(links[0]),
-				common.CloneProto(links[1]),
+
+	// Returns a new pair of callbacks to be mutated in tests.
+	getCallbacks := func() []*commonpb.Callback {
+		return []*commonpb.Callback{
+			{
+				Variant: nexusCallbackVariant(),
+				Links: []*commonpb.Link{
+					common.CloneProto(links[0]),
+					common.CloneProto(links[1]),
+				},
 			},
-		},
-		{
-			Variant: nexusVariantCallback(),
-			Links: []*commonpb.Link{
-				common.CloneProto(links[2]),
+			{
+				Variant: &commonpb.Callback_Internal_{
+					Internal: &commonpb.Callback_Internal{},
+				},
+				Links: []*commonpb.Link{
+					common.CloneProto(links[2]),
+				},
 			},
-		},
+		}
 	}
 
-	// The two callbacks have all members of links attached to them.
-	// The result is an empty slice, because all links are duplicates.
-	dedupedLinks := dedupLinksFromCallbacks(links, callbacks)
-	assert.Len(t, dedupedLinks, 0)
+	// Because the second Callback is the Internal-variant, the link
+	// it carries will not be considered for deduping.
+	t.Run("IgnoreNonNexusCallbackLinks", func(t *testing.T) {
+		callbacks := getCallbacks()
+		dedupedLinks := dedupLinksFromCallbacks(links, callbacks)
+		require.Len(t, dedupedLinks, 1)
+		protoassert.ProtoEqual(t, dedupedLinks[0], links[2])
+	})
 
-	// Remove one of the links from a callback. Retry, confirm
-	// the link will not be deduped.
+	// Remove links[1] from callbacks[0].Links. links[1] should then not
+	// be deduped, and be in the resulting slice.
+	t.Run("UniqueNexusLink", func(t *testing.T) {
+		callbacks := getCallbacks()
+		callbacks[0].Links = callbacks[0].Links[:1]
 
-	// Remove links[1] from callbacks[0].Links.
-	protoassert.ProtoEqual(t, callbacks[0].Links[1], links[1])
-	callbacks[0].Links = callbacks[0].Links[:1]
+		dedupedLinks := dedupLinksFromCallbacks(links, callbacks)
+		require.Len(t, dedupedLinks, 2)
+		protoassert.ProtoEqual(t, dedupedLinks[0], links[1])
+		protoassert.ProtoEqual(t, dedupedLinks[1], links[2]) // Same as before.
+	})
 
-	// Confirm links[1] is no longer deduped.
-	dedupedLinks = dedupLinksFromCallbacks(links, callbacks)
-	assert.Len(t, dedupedLinks, 1)
-	protoassert.ProtoEqual(t, links[1], dedupedLinks[0])
+	// Change the type of the second callback to be a Nexus-variant.
+	// Now all callback links will be considered for deduping, filtering
+	// everything out.
+	t.Run("AllDupes", func(t *testing.T) {
+		callbacks := getCallbacks()
+		callbacks[1].Variant = nexusCallbackVariant()
+
+		dedupedLinks := dedupLinksFromCallbacks(links, callbacks)
+		require.Len(t, dedupedLinks, 0)
+	})
 }
 
 func (s *WorkflowHandlerSuite) Test_DeleteWorkflowExecution() {
@@ -5799,10 +5820,8 @@ func (s *WorkflowHandlerSuite) TestPrepareUpdateWorkflowRequest_ValidatesComplet
 			},
 		}
 		request := newRequest([]*commonpb.Callback{{
-			Variant: &commonpb.Callback_Nexus_{
-				Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/callback"},
-			},
-			Links: []*commonpb.Link{callbackLink},
+			Variant: nexusCallbackVariant(),
+			Links:   []*commonpb.Link{callbackLink},
 		}})
 		request.Request.Links = []*commonpb.Link{common.CloneProto(callbackLink)}
 
@@ -5817,7 +5836,7 @@ func (s *WorkflowHandlerSuite) TestPrepareUpdateWorkflowRequest_ValidatesComplet
 			context.Background(),
 			s.testNamespace,
 			newRequest([]*commonpb.Callback{{
-				Variant: nexusVariantCallback(),
+				Variant: nexusCallbackVariant(),
 				Links: []*commonpb.Link{{
 					Variant: &commonpb.Link_BatchJob_{
 						BatchJob: &commonpb.Link_BatchJob{},
@@ -5833,7 +5852,7 @@ func (s *WorkflowHandlerSuite) TestPrepareUpdateWorkflowRequest_ValidatesComplet
 
 	s.Run("rejects too many combined links", func() {
 		request := newRequest([]*commonpb.Callback{{
-			Variant: nexusVariantCallback(),
+			Variant: nexusCallbackVariant(),
 			Links: []*commonpb.Link{{
 				Variant: &commonpb.Link_BatchJob_{
 					BatchJob: &commonpb.Link_BatchJob{JobId: "callback-job"},
@@ -5891,7 +5910,7 @@ func (r *routingMatchingClient) Route(p tqid.Partition) (string, error) {
 	return r.routeFn(p)
 }
 
-func nexusVariantCallback() *commonpb.Callback_Nexus_ {
+func nexusCallbackVariant() *commonpb.Callback_Nexus_ {
 	return &commonpb.Callback_Nexus_{
 		Nexus: &commonpb.Callback_Nexus{
 			Url: "https://localhost/nexus-callback",
