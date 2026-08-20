@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -540,8 +541,8 @@ func (r *recordingTB) runCleanups() {
 	r.cleanups = nil
 	r.mu.Unlock()
 
-	for i := len(cleanups) - 1; i >= 0; i-- {
-		cleanups[i]()
+	for _, cleanup := range slices.Backward(cleanups) {
+		cleanup()
 	}
 }
 
