@@ -61,9 +61,10 @@ func (s *NexusObservabilitySuite) TestStartFailureEmitsCorrelatableSignals(chasm
 	env := s.newTestEnv(chasmEnabled, testLogger)
 
 	ctx := s.Context()
-	callerTaskQueue := testcore.RandomizeStr(s.T().Name() + "-caller")
-	serviceName := "test-service"
-	operationName := testcore.RandomizeStr("logging-operation")
+	tv := env.Tv()
+	callerTaskQueue := tv.TaskQueue().GetName()
+	serviceName := tv.Service()
+	operationName := tv.Operation()
 	handlerRequests := make(chan nexusHandlerRequest, 1)
 	handlerRelease := make(chan struct{}, 1)
 	s.T().Cleanup(func() {
@@ -96,14 +97,15 @@ func (s *NexusObservabilitySuite) TestStartFailureEmitsCorrelatableSignals(chasm
 	}
 
 	callerWorker := worker.New(env.SdkClient(), callerTaskQueue, worker.Options{})
-	callerWorker.RegisterWorkflow(callerWorkflow)
+	callerWorker.RegisterWorkflowWithOptions(callerWorkflow, workflow.RegisterOptions{Name: tv.WorkflowType().GetName()})
 	s.NoError(callerWorker.Start())
 	s.T().Cleanup(callerWorker.Stop)
 
 	metricCapture := env.StartNamespaceMetricCapture()
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:        tv.WorkflowID(),
 		TaskQueue: callerTaskQueue,
-	}, callerWorkflow)
+	}, tv.WorkflowType().GetName())
 	s.NoError(err)
 
 	var handlerRequest nexusHandlerRequest
