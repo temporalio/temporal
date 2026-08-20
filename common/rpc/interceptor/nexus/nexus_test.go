@@ -1,4 +1,4 @@
-package interceptor
+package nexus
 
 import (
 	"context"
@@ -9,14 +9,14 @@ import (
 
 func TestChainNexusInterceptors(t *testing.T) {
 	var calls []string
-	chain := []NexusInterceptor{
-		func(ctx context.Context, in NexusInterceptorInput, next NexusHandlerFunc) (any, error) {
+	chain := []Interceptor{
+		func(ctx context.Context, in InterceptorInput, next HandlerFunc) (any, error) {
 			calls = append(calls, "first-before")
 			result, err := next(ctx, in)
 			calls = append(calls, "first-after")
 			return result, err
 		},
-		func(ctx context.Context, in NexusInterceptorInput, next NexusHandlerFunc) (any, error) {
+		func(ctx context.Context, in InterceptorInput, next HandlerFunc) (any, error) {
 			calls = append(calls, "second-before")
 			result, err := next(ctx, in)
 			calls = append(calls, "second-after")
@@ -24,10 +24,10 @@ func TestChainNexusInterceptors(t *testing.T) {
 		},
 	}
 
-	result, err := ChainNexusInterceptors(func(context.Context, NexusInterceptorInput) (any, error) {
+	result, err := ChainInterceptors(func(context.Context, InterceptorInput) (any, error) {
 		calls = append(calls, "handler")
 		return "result", nil
-	}, chain)(context.Background(), StartNexusOpInput{})
+	}, chain)(context.Background(), StartOpInput{})
 
 	require.NoError(t, err)
 	require.Equal(t, "result", result)
@@ -42,18 +42,18 @@ func TestChainNexusInterceptors(t *testing.T) {
 
 func TestChainNexusInterceptorsShortCircuit(t *testing.T) {
 	var calls []string
-	chain := []NexusInterceptor{
-		func(context.Context, NexusInterceptorInput, NexusHandlerFunc) (any, error) {
+	chain := []Interceptor{
+		func(context.Context, InterceptorInput, HandlerFunc) (any, error) {
 			calls = append(calls, "interceptor")
 			// dont call next - just return
 			return "intercepted", nil
 		},
 	}
 
-	result, err := ChainNexusInterceptors(func(context.Context, NexusInterceptorInput) (any, error) {
+	result, err := ChainInterceptors(func(context.Context, InterceptorInput) (any, error) {
 		calls = append(calls, "handler")
 		return "handler", nil
-	}, chain)(context.Background(), StartNexusOpInput{})
+	}, chain)(context.Background(), StartOpInput{})
 
 	require.NoError(t, err)
 	require.Equal(t, "intercepted", result)

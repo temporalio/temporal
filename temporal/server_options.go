@@ -21,7 +21,7 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
-	rpcinterceptor "go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/testhooks"
 	"google.golang.org/grpc"
@@ -45,29 +45,29 @@ type (
 
 		startupSynchronizationMode synchronizationModeParams
 
-		logger                          log.Logger
-		namespaceLogger                 log.Logger
-		authorizer                      authorization.Authorizer
-		tlsConfigProvider               encryption.TLSConfigProvider
-		claimMapper                     authorization.ClaimMapper
-		audienceGetter                  authorization.JWTAudienceMapper
-		persistenceServiceResolver      resolver.ServiceResolver
-		elasticsearchHttpClient         *http.Client //nolint:staticcheck // should be elasticsearchHTTPClient
-		dynamicConfigClient             dynamicconfig.Client
-		customDataStoreFactory          persistenceClient.AbstractDataStoreFactory
-		customVisibilityStoreFactory    visibility.VisibilityStoreFactory
-		customHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
-		customVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
-		clientFactoryProvider           client.FactoryProvider
-		persistenceFactoryProvider      persistenceClient.FactoryProviderFn
-		searchAttributesMapper          searchattribute.Mapper
-		customFrontendInterceptors      []grpc.UnaryServerInterceptor
-		customFrontendNexusInterceptors []rpcinterceptor.NexusInterceptor
-		additionalStreamInterceptors    []grpc.StreamServerInterceptor
-		metricHandler                   metrics.Handler
-		eventLoggerProvider             otellog.LoggerProvider
-		tokenProvider                   auth.TokenProvider
-		testHooks                       *testhooks.TestHooks
+		logger                            log.Logger
+		namespaceLogger                   log.Logger
+		authorizer                        authorization.Authorizer
+		tlsConfigProvider                 encryption.TLSConfigProvider
+		claimMapper                       authorization.ClaimMapper
+		audienceGetter                    authorization.JWTAudienceMapper
+		persistenceServiceResolver        resolver.ServiceResolver
+		elasticsearchHttpClient           *http.Client //nolint:staticcheck // should be elasticsearchHTTPClient
+		dynamicConfigClient               dynamicconfig.Client
+		customDataStoreFactory            persistenceClient.AbstractDataStoreFactory
+		customVisibilityStoreFactory      visibility.VisibilityStoreFactory
+		customHistoryArchiverFactory      provider.CustomHistoryArchiverFactory
+		customVisibilityArchiverFactory   provider.CustomVisibilityArchiverFactory
+		clientFactoryProvider             client.FactoryProvider
+		persistenceFactoryProvider        persistenceClient.FactoryProviderFn
+		searchAttributesMapper            searchattribute.Mapper
+		customFrontendInterceptors        []grpc.UnaryServerInterceptor
+		customFrontendUnifiedInterceptors []nexus.Interceptor
+		additionalStreamInterceptors      []grpc.StreamServerInterceptor
+		metricHandler                     metrics.Handler
+		eventLoggerProvider               otellog.LoggerProvider
+		tokenProvider                     auth.TokenProvider
+		testHooks                         *testhooks.TestHooks
 	}
 )
 

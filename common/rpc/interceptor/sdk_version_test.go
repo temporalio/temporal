@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/headers"
+	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.temporal.io/server/common/versioninfo"
 )
 
@@ -101,14 +102,14 @@ func TestSDKVersionInterceptNexus(t *testing.T) {
 			nextCalled := false
 			_, err := interceptor.InterceptNexus(
 				tc.ctx,
-				NewStartNexusOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil),
-				func(context.Context, NexusInterceptorInput) (any, error) {
+				interceptornexus.NewStartOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil),
+				func(context.Context, interceptornexus.InterceptorInput) (any, error) {
 					nextCalled = true
 					return nil, nil
 				},
 			)
 			if tc.expectedOutcome != "" {
-				var interceptorErr *InterceptorError
+				var interceptorErr *interceptornexus.InterceptorError
 				require.ErrorAs(t, err, &interceptorErr)
 				require.Equal(t, tc.expectedOutcome, interceptorErr.Outcome)
 				require.False(t, nextCalled)

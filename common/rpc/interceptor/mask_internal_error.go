@@ -2,6 +2,7 @@ package interceptor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
@@ -12,6 +13,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/interceptor/logtags"
+	"go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.temporal.io/server/common/tasktoken"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -52,6 +54,26 @@ func (mi *MaskInternalErrorDetailsInterceptor) Intercept(
 
 	if err != nil && mi.shouldMaskErrors(req) {
 		err = mi.maskUnknownOrInternalErrors(req, info.FullMethod, err)
+	}
+	return resp, err
+}
+
+func (mi *MaskInternalErrorDetailsInterceptor) InterceptNexus(
+	ctx context.Context,
+	in nexus.InterceptorInput,
+	next nexus.HandlerFunc,
+) (any, error) {
+
+	resp, err := next(ctx, in)
+
+	if err == nil || !mi.shouldMaskErrors(in) {
+		return resp, err
+	}
+	if ie, ok := errors.AsType[*nexus.InterceptorError](err); ok {
+		ie.Err = mi.maskUnknownOrInternalErrors(in, in.APIName(), ie.Err)
+		err = ie
+	} else {
+		err = mi.maskUnknownOrInternalErrors(in, in.APIName(), err)
 	}
 	return resp, err
 }

@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc/interceptor/logtags"
+	"go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.temporal.io/server/common/tasktoken"
 	"google.golang.org/grpc"
 )
@@ -36,27 +37,45 @@ func (i *SlowRequestLoggerInterceptor) Intercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (any, error) {
-	// Long-polled methods aren't useful logged.
-	if api.GetMethodMetadata(info.FullMethod).Polling == api.PollingNone {
-		startTime := time.Now()
-
-		defer func() {
-			elapsed := time.Since(startTime)
-			if elapsed > i.slowRequestThreshold() {
-				i.logSlowRequest(request, info, elapsed)
-			}
-		}()
-	}
+	tracker := i.trackSlowRequestFn(info.FullMethod, request)
+	defer tracker()
 
 	return handler(ctx, request)
 }
 
+func (i *SlowRequestLoggerInterceptor) InterceptNexus(
+	ctx context.Context,
+	in nexus.InterceptorInput,
+	next nexus.HandlerFunc,
+) (any, error) {
+	tracker := i.trackSlowRequestFn(in.OperationName(), in)
+	defer tracker()
+	return next(ctx, in)
+}
+
+func (i *SlowRequestLoggerInterceptor) trackSlowRequestFn(operationName string, req any) func() {
+	// Long-polled methods aren't useful logged.
+	// If it's a polled method, return a no-op function to defer
+	if api.GetMethodMetadata(operationName).Polling != api.PollingNone {
+		return func() {}
+	}
+
+	startTime := time.Now()
+
+	// Return the cleanup closure for the parent to defer
+	return func() {
+		elapsed := time.Since(startTime)
+		if elapsed > i.slowRequestThreshold() {
+			i.logSlowRequest(req, operationName, elapsed)
+		}
+	}
+}
+
 func (i *SlowRequestLoggerInterceptor) logSlowRequest(
 	request any,
-	info *grpc.UnaryServerInfo,
+	method string,
 	elapsed time.Duration,
 ) {
-	method := info.FullMethod
 
 	tags := i.workflowTags.Extract(request, method)
 	tags = append(tags, tag.Duration("duration", elapsed))

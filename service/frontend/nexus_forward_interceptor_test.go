@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/interceptor"
+	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 )
 
 func TestNexusForwardingInterceptorInterceptNexus(t *testing.T) {
@@ -51,13 +52,13 @@ func TestNexusForwardingInterceptorInterceptNexus(t *testing.T) {
 			Scheme:  "http",
 		},
 	}}
-	input := interceptor.NewStartNexusOpInput("s", "o", testNamespace, nexus.StartOperationOptions{
+	input := interceptornexus.NewStartOpInput("s", "o", testNamespace, nexus.StartOperationOptions{
 		Header: nexus.Header{"X-Request": "request"},
 	}, nexus.NewLazyValue(nexus.DefaultSerializer(), &nexus.Reader{
 		ReadCloser: io.NopCloser(bytes.NewBufferString(`"input"`)),
 		Header:     nexus.Header{"type": "json"},
 	}))
-	input.WithForwardingInfo(interceptor.NexusForwardingInfo{
+	input.WithForwardingInfo(interceptornexus.ForwardingInfo{
 		OriginalRequestHeaders: http.Header{"X-Original": {"original"}},
 		TaskQueue:              "task-queue",
 	})
@@ -138,19 +139,21 @@ func TestNexusForwardingInterceptorInterceptNexus(t *testing.T) {
 					NexusForwardRequestUseEndpoint:         dynamicconfig.GetBoolPropertyFn(false),
 				},
 			}
-			ctx := interceptor.WithNexusNamespace(context.Background(), tc.namespace)
-			ctx = interceptor.WithTelemetryContext(ctx, &forwardingTelemetryContext{})
+			input.WithRequestMetadata(interceptornexus.RequestMetadata{
+				NamespaceEntry: tc.namespace,
+			})
+			ctx := interceptor.WithTelemetryContext(context.Background(), &forwardingTelemetryContext{})
 			nextCalled := false
 			result, err := forwarder.InterceptNexus(
 				ctx,
 				input,
-				func(context.Context, interceptor.NexusInterceptorInput) (any, error) {
+				func(context.Context, interceptornexus.InterceptorInput) (any, error) {
 					nextCalled = true
 					return requestHandledLocally, nil
 				},
 			)
 			if tc.expectedOutcome != "" {
-				var interceptorErr *interceptor.InterceptorError
+				var interceptorErr *interceptornexus.InterceptorError
 				require.ErrorAs(t, err, &interceptorErr)
 				require.Equal(t, tc.expectedOutcome, interceptorErr.Outcome)
 			} else {
