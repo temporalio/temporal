@@ -417,6 +417,34 @@ func (s *taskRefresherSuite) TestRefreshWorkflowTaskTasks() {
 			},
 		},
 		{
+			// Schedule->start transition case: a WT that started within the replicated delta
+			// bumps WorkflowTaskLastUpdateVersionedTransition (UpdateWorkflowTask sets
+			// workflowTaskUpdated), so a partial refresh must regenerate its start-to-close timer.
+			name: "PartialRefresh/Started",
+			msRecordProvider: func() *persistencespb.WorkflowMutableState {
+				record := common.CloneProto(baseMutableStateRecord)
+				record.ExecutionInfo.WorkflowTaskScheduledEventId = 2
+				record.ExecutionInfo.WorkflowTaskScheduledTime = timestamppb.Now()
+				record.ExecutionInfo.WorkflowTaskAttempt = 1
+				record.ExecutionInfo.WorkflowTaskStartedEventId = 3
+				record.ExecutionInfo.WorkflowTaskStartedTime = timestamppb.New(time.Now().Add(time.Second))
+				record.ExecutionInfo.WorkflowTaskRequestId = uuid.NewString()
+				record.ExecutionInfo.WorkflowTaskType = enumsspb.WORKFLOW_TASK_TYPE_NORMAL
+				record.ExecutionInfo.WorkflowTaskLastUpdateVersionedTransition = &persistencespb.VersionedTransition{
+					TransitionCount:          2,
+					NamespaceFailoverVersion: common.EmptyVersion,
+				}
+				return record
+			},
+			setupMock: func() {
+				s.mockTaskGenerator.EXPECT().GenerateStartWorkflowTaskTasks(int64(2)).Return(nil).Times(1)
+			},
+			minVersionedTransition: &persistencespb.VersionedTransition{
+				TransitionCount:          2,
+				NamespaceFailoverVersion: common.EmptyVersion,
+			},
+		},
+		{
 			name: "PartialRefresh/UnknownLastUpdateVersionedTransition",
 			msRecordProvider: func() *persistencespb.WorkflowMutableState {
 				record := common.CloneProto(baseMutableStateRecord)
@@ -1035,6 +1063,376 @@ func (s *taskRefresherSuite) TestRefreshUserTimer_RunExpiration_SkipsTask() {
 	// No task generated due to run-expiration guard
 	refreshedTasks := mutableState.PopTasks()
 	s.Empty(refreshedTasks[tasks.CategoryTimer])
+}
+
+// TestRefreshActivityTimer_Partial_NoUpdatedActivities_MaskNone_GeneratesEarliest is the
+// activity-timer analogue of TestRefreshUserTimer_Partial_NoUpdatedTimers_MaskNone_GeneratesEarliest.
+// It guards the passive-side promotion invariant: when the previously-earliest activity timer is
+// gone and a started activity (whose start-to-close timer was never the earliest, so has no timer
+// task and TimerTaskStatus==None) is promoted to earliest, CreateNextActivityTimer must generate
+// its task even though refreshTasksForActivity does NOT clear masks on a partial refresh and the
+// activity's lastUpdate predates minVersionedTransition.
+func (s *taskRefresherSuite) TestRefreshActivityTimer_Partial_NoUpdatedActivities_MaskNone_GeneratesEarliest() {
+	now := time.Now().UTC()
+	startedTime := now.Add(-time.Second)
+	mutableStateRecord := &persistencespb.WorkflowMutableState{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId: tests.NamespaceID.String(),
+			WorkflowId:  tests.WorkflowID,
+		},
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			RunId:  tests.RunID,
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		},
+		NextEventId: int64(20),
+		ActivityInfos: map[int64]*persistencespb.ActivityInfo{
+			// Started activity whose start-to-close timer has NEVER been generated on the
+			// passive (TimerTaskStatus None) and whose lastUpdate is older than minVersion.
+			5: {
+				ActivityId:          "5",
+				ScheduledEventId:    5,
+				Version:             common.EmptyVersion,
+				ScheduledTime:       timestamppb.New(startedTime),
+				StartedTime:         timestamppb.New(startedTime),
+				StartedEventId:      8,
+				RequestId:           uuid.NewString(),
+				Attempt:             1,
+				TimerTaskStatus:     TimerTaskStatusNone,
+				StartToCloseTimeout: durationpb.New(50 * time.Second),
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+					TransitionCount:          1,
+					NamespaceFailoverVersion: common.EmptyVersion,
+				},
+			},
+		},
+	}
+
+	mutableState, err := NewMutableStateFromDB(
+		s.mockShard,
+		s.mockShard.GetEventsCache(),
+		log.NewTestLogger(),
+		tests.LocalNamespaceEntry,
+		mutableStateRecord,
+		10,
+	)
+	s.NoError(err)
+
+	// minVersion is higher than the activity's lastUpdate; the refresh loop skips it (no mask
+	// clear, no GenerateActivityTasks), but CreateNextActivityTimer must still stamp the timer.
+	err = s.taskRefresher.refreshTasksForActivity(context.Background(), mutableState, s.mockTaskGenerator, &persistencespb.VersionedTransition{
+		TransitionCount:          2,
+		NamespaceFailoverVersion: common.EmptyVersion,
+	})
+	s.NoError(err)
+
+	pendingActivityInfos := mutableState.GetPendingActivityInfos()
+	s.Equal(int32(TimerTaskStatusCreatedStartToClose), pendingActivityInfos[5].TimerTaskStatus)
+
+	refreshedTasks := mutableState.PopTasks()
+	s.Len(refreshedTasks[tasks.CategoryTimer], 1)
+	activityTimeoutTask, ok := refreshedTasks[tasks.CategoryTimer][0].(*tasks.ActivityTimeoutTask)
+	s.True(ok)
+	s.Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, activityTimeoutTask.TimeoutType)
+	s.Equal(int64(5), activityTimeoutTask.EventID)
+	s.Equal(startedTime.Add(50*time.Second), activityTimeoutTask.VisibilityTimestamp)
+}
+
+// TestRefreshActivityTimer_Partial_NoUpdatedActivities_MaskCreated_NoTask is the activity-timer
+// analogue of TestRefreshUserTimer_Partial_NoUpdatedTimers_MaskCreated_NoTask: an already-created
+// earliest activity timer (TimerTaskStatus start-to-close bit set) whose lastUpdate predates
+// minVersion must NOT be regenerated on a partial refresh (the physical task already exists).
+func (s *taskRefresherSuite) TestRefreshActivityTimer_Partial_NoUpdatedActivities_MaskCreated_NoTask() {
+	now := time.Now().UTC()
+	startedTime := now.Add(-time.Second)
+	mutableStateRecord := &persistencespb.WorkflowMutableState{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId: tests.NamespaceID.String(),
+			WorkflowId:  tests.WorkflowID,
+		},
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			RunId:  tests.RunID,
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		},
+		NextEventId: int64(20),
+		ActivityInfos: map[int64]*persistencespb.ActivityInfo{
+			5: {
+				ActivityId:          "5",
+				ScheduledEventId:    5,
+				Version:             common.EmptyVersion,
+				ScheduledTime:       timestamppb.New(startedTime),
+				StartedTime:         timestamppb.New(startedTime),
+				StartedEventId:      8,
+				RequestId:           uuid.NewString(),
+				Attempt:             1,
+				TimerTaskStatus:     TimerTaskStatusCreatedStartToClose,
+				StartToCloseTimeout: durationpb.New(50 * time.Second),
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+					TransitionCount:          1,
+					NamespaceFailoverVersion: common.EmptyVersion,
+				},
+			},
+		},
+	}
+
+	mutableState, err := NewMutableStateFromDB(
+		s.mockShard,
+		s.mockShard.GetEventsCache(),
+		log.NewTestLogger(),
+		tests.LocalNamespaceEntry,
+		mutableStateRecord,
+		10,
+	)
+	s.NoError(err)
+
+	err = s.taskRefresher.refreshTasksForActivity(context.Background(), mutableState, s.mockTaskGenerator, &persistencespb.VersionedTransition{
+		TransitionCount:          2,
+		NamespaceFailoverVersion: common.EmptyVersion,
+	})
+	s.NoError(err)
+
+	// No new tasks since earliest activity timer is already Created.
+	refreshedTasks := mutableState.PopTasks()
+	s.Empty(refreshedTasks[tasks.CategoryTimer])
+}
+
+// TestRefreshActivityHeartbeatTimer_Partial_MaskCreated_NotReStamped documents the one timer
+// whose deadline mutates with no driving event: the activity heartbeat timer. On a PARTIAL
+// refresh, masks are not cleared, so an activity whose heartbeat timer mask bit is already set is
+// NOT re-stamped to the new (post-heartbeat) deadline. This is intentional: heartbeat re-stamping
+// on the passive is driven by the standby timer processor (executeActivityTimeoutTask), which
+// clears the heartbeat mask bit and calls CreateNextActivityTimer, not by task refresh.
+func (s *taskRefresherSuite) TestRefreshActivityHeartbeatTimer_Partial_MaskCreated_NotReStamped() {
+	now := time.Now().UTC()
+	startedTime := now.Add(-time.Second)
+	mutableStateRecord := &persistencespb.WorkflowMutableState{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId: tests.NamespaceID.String(),
+			WorkflowId:  tests.WorkflowID,
+		},
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			RunId:  tests.RunID,
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		},
+		NextEventId: int64(20),
+		ActivityInfos: map[int64]*persistencespb.ActivityInfo{
+			5: {
+				ActivityId:              "5",
+				ScheduledEventId:        5,
+				Version:                 common.EmptyVersion,
+				ScheduledTime:           timestamppb.New(startedTime),
+				StartedTime:             timestamppb.New(startedTime),
+				StartedEventId:          8,
+				RequestId:               uuid.NewString(),
+				Attempt:                 1,
+				LastHeartbeatUpdateTime: timestamppb.New(now),
+				// Heartbeat deadline (now+10s) is earlier than start-to-close (now-1s+100s).
+				HeartbeatTimeout:    durationpb.New(10 * time.Second),
+				StartToCloseTimeout: durationpb.New(100 * time.Second),
+				TimerTaskStatus:     TimerTaskStatusCreatedHeartbeat | TimerTaskStatusCreatedStartToClose,
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+					TransitionCount:          1,
+					NamespaceFailoverVersion: common.EmptyVersion,
+				},
+			},
+		},
+	}
+
+	mutableState, err := NewMutableStateFromDB(
+		s.mockShard,
+		s.mockShard.GetEventsCache(),
+		log.NewTestLogger(),
+		tests.LocalNamespaceEntry,
+		mutableStateRecord,
+		10,
+	)
+	s.NoError(err)
+
+	err = s.taskRefresher.refreshTasksForActivity(context.Background(), mutableState, s.mockTaskGenerator, &persistencespb.VersionedTransition{
+		TransitionCount:          2,
+		NamespaceFailoverVersion: common.EmptyVersion,
+	})
+	s.NoError(err)
+
+	// Heartbeat mask already set + partial refresh → no re-stamp (deferred to standby processor).
+	refreshedTasks := mutableState.PopTasks()
+	s.Empty(refreshedTasks[tasks.CategoryTimer])
+}
+
+// TestRefreshActivityHeartbeatTimer_FullRefresh_ReStampsAtNewDeadline is the failover counterpart:
+// a FULL refresh clears the mask and re-stamps the heartbeat timer at the current (post-heartbeat)
+// deadline, so the deadline that moved without an event is recovered on rebuild/conflict-resolution.
+func (s *taskRefresherSuite) TestRefreshActivityHeartbeatTimer_FullRefresh_ReStampsAtNewDeadline() {
+	now := time.Now().UTC()
+	startedTime := now.Add(-time.Second)
+	lastHeartbeat := now
+	mutableStateRecord := &persistencespb.WorkflowMutableState{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId: tests.NamespaceID.String(),
+			WorkflowId:  tests.WorkflowID,
+		},
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			RunId:  tests.RunID,
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		},
+		NextEventId: int64(20),
+		ActivityInfos: map[int64]*persistencespb.ActivityInfo{
+			5: {
+				ActivityId:              "5",
+				ScheduledEventId:        5,
+				Version:                 common.EmptyVersion,
+				ScheduledTime:           timestamppb.New(startedTime),
+				StartedTime:             timestamppb.New(startedTime),
+				StartedEventId:          8,
+				RequestId:               uuid.NewString(),
+				Attempt:                 1,
+				LastHeartbeatUpdateTime: timestamppb.New(lastHeartbeat),
+				HeartbeatTimeout:        durationpb.New(10 * time.Second),
+				StartToCloseTimeout:     durationpb.New(100 * time.Second),
+				TimerTaskStatus:         TimerTaskStatusCreatedHeartbeat | TimerTaskStatusCreatedStartToClose,
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+					TransitionCount:          1,
+					NamespaceFailoverVersion: common.EmptyVersion,
+				},
+			},
+		},
+	}
+
+	mutableState, err := NewMutableStateFromDB(
+		s.mockShard,
+		s.mockShard.GetEventsCache(),
+		log.NewTestLogger(),
+		tests.LocalNamespaceEntry,
+		mutableStateRecord,
+		10,
+	)
+	s.NoError(err)
+
+	err = s.taskRefresher.refreshTasksForActivity(context.Background(), mutableState, s.mockTaskGenerator, EmptyVersionedTransition)
+	s.NoError(err)
+
+	// Full refresh re-stamps the earliest (heartbeat) timer at lastHeartbeat + heartbeatTimeout.
+	refreshedTasks := mutableState.PopTasks()
+	s.Len(refreshedTasks[tasks.CategoryTimer], 1)
+	activityTimeoutTask, ok := refreshedTasks[tasks.CategoryTimer][0].(*tasks.ActivityTimeoutTask)
+	s.True(ok)
+	s.Equal(enumspb.TIMEOUT_TYPE_HEARTBEAT, activityTimeoutTask.TimeoutType)
+	s.Equal(lastHeartbeat.Add(10*time.Second), activityTimeoutTask.VisibilityTimestamp)
+}
+
+// TestRefresh_RunTimeoutShorterThanUserTimer_GeneratesRunTimeoutSkipsUserTimer exercises the
+// user's original scenario end-to-end through the REAL task generator: a running workflow whose
+// run-timeout fires before a pending user timer. The WorkflowRunTimeoutTask must be generated at
+// the run-expiration time, and the user timer must be skipped (CreateNextUserTimer's
+// run-expiration guard) so it is never stamped on the passive.
+func (s *taskRefresherSuite) TestRefresh_RunTimeoutShorterThanUserTimer_GeneratesRunTimeoutSkipsUserTimer() {
+	now := time.Now().UTC()
+	runExpiration := now.Add(30 * time.Second)
+	branchToken := []byte("branchToken")
+	mutableStateRecord := &persistencespb.WorkflowMutableState{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId:               tests.NamespaceID.String(),
+			WorkflowId:                tests.WorkflowID,
+			FirstExecutionRunId:       tests.RunID, // first run: only run-timeout timer expected
+			WorkflowRunExpirationTime: timestamppb.New(runExpiration),
+			VersionHistories: &historyspb.VersionHistories{
+				Histories: []*historyspb.VersionHistory{
+					{
+						BranchToken: branchToken,
+						Items: []*historyspb.VersionHistoryItem{
+							{EventId: 2, Version: common.EmptyVersion},
+						},
+					},
+				},
+			},
+		},
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			RunId:  tests.RunID,
+			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+				TransitionCount:          1,
+				NamespaceFailoverVersion: common.EmptyVersion,
+			},
+		},
+		NextEventId: int64(3),
+		TimerInfos: map[string]*persistencespb.TimerInfo{
+			// User timer expires AFTER run expiration; must be skipped.
+			"5": {
+				TimerId:        "5",
+				StartedEventId: 5,
+				Version:        common.EmptyVersion,
+				ExpiryTime:     timestamppb.New(now.Add(60 * time.Second)),
+				TaskStatus:     TimerTaskStatusNone,
+				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+					TransitionCount:          1,
+					NamespaceFailoverVersion: common.EmptyVersion,
+				},
+			},
+		},
+	}
+
+	mutableState, err := NewMutableStateFromDB(
+		s.mockShard,
+		s.mockShard.GetEventsCache(),
+		log.NewTestLogger(),
+		tests.LocalNamespaceEntry,
+		mutableStateRecord,
+		2,
+	)
+	s.NoError(err)
+
+	startEvent := &historypb.HistoryEvent{
+		EventId:   common.FirstEventID,
+		Version:   common.EmptyVersion,
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+			WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{},
+		},
+	}
+	s.mockShard.MockEventsCache.EXPECT().GetEvent(
+		gomock.Any(),
+		s.mockShard.GetShardID(),
+		events.EventKey{
+			NamespaceID: tests.NamespaceID,
+			WorkflowID:  tests.WorkflowID,
+			RunID:       tests.RunID,
+			EventID:     common.FirstEventID,
+			Version:     common.EmptyVersion,
+		},
+		common.FirstEventID,
+		branchToken,
+	).Return(startEvent, nil).Times(1)
+
+	// Use the real task generator (not the suite mock) so the WorkflowRunTimeoutTask is actually emitted.
+	realGen := NewTaskGenerator(
+		s.mockShard.GetNamespaceRegistry(),
+		mutableState,
+		s.mockShard.GetConfig(),
+		s.mockShard.GetArchivalMetadata(),
+		log.NewTestLogger(),
+	)
+
+	err = RefreshTasksForWorkflowStart(context.Background(), mutableState, realGen, EmptyVersionedTransition)
+	s.NoError(err)
+	err = s.taskRefresher.refreshTasksForTimer(mutableState, EmptyVersionedTransition)
+	s.NoError(err)
+
+	var runTimeouts, userTimers int
+	for _, tk := range mutableState.PopTasks()[tasks.CategoryTimer] {
+		switch concrete := tk.(type) {
+		case *tasks.WorkflowRunTimeoutTask:
+			runTimeouts++
+			s.Equal(runExpiration, concrete.VisibilityTimestamp)
+		case *tasks.UserTimerTask:
+			userTimers++
+		}
+	}
+	s.Equal(1, runTimeouts)
+	s.Equal(0, userTimers)
 }
 
 func (s *taskRefresherSuite) TestRefreshChildWorkflowTasks() {
