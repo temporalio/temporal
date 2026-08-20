@@ -332,6 +332,7 @@ func (s *workflowSuite) TestStart() {
 		s.Nil(req.Request.LastCompletionResult)
 		s.Nil(req.Request.ContinuedFailure)
 		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
+		s.NotEmpty(req.Request.RequestId)
 		s.Equal("mywf", req.Request.WorkflowType.Name)
 		s.Equal("mytq", req.Request.TaskQueue.Name)
 		s.Equal(`"value"`, payload.ToString(req.Request.Memo.Fields["mymemo"]))
@@ -354,6 +355,64 @@ func (s *workflowSuite) TestStart() {
 	// two iterations to start one workflow: first will sleep, second will start and then sleep again
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+func (s *workflowSuite) TestMigratedBufferedStartPreservesIdempotencyIDs() {
+	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
+		s.Equal("migrated-workflow-id", req.Request.WorkflowId)
+		s.Equal("migrated-request-id", req.Request.RequestId)
+		return nil, nil
+	})
+
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 1
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(SchedulerWorkflow, s.migratedStartScheduleArgs())
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+func (s *workflowSuite) TestMigratedBufferedStartUsesLegacyIDsAtOldVersion() {
+	previousTweakables := CurrentTweakablePolicies
+	defer func() { CurrentTweakablePolicies = previousTweakables }()
+	CurrentTweakablePolicies.Version = TriggerImmediatelyTimestamp
+
+	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
+		s.Equal("configured-workflow-id-2022-06-01T00:00:00Z", req.Request.WorkflowId)
+		s.NotEmpty(req.Request.RequestId)
+		s.NotEqual("migrated-request-id", req.Request.RequestId)
+		return nil, nil
+	})
+
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 1
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(SchedulerWorkflow, s.migratedStartScheduleArgs())
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+func (s *workflowSuite) migratedStartScheduleArgs() *schedulespb.StartScheduleArgs {
+	return &schedulespb.StartScheduleArgs{
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(time.Hour)}},
+			},
+			Action: s.defaultAction("configured-workflow-id"),
+		},
+		State: &schedulespb.InternalState{
+			Namespace:     "myns",
+			NamespaceId:   "mynsid",
+			ScheduleId:    "myschedule",
+			ConflictToken: InitialConflictToken,
+			BufferedStarts: []*schedulespb.BufferedStart{{
+				NominalTime:   timestamppb.New(baseStartTime),
+				ActualTime:    timestamppb.New(baseStartTime),
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+				Manual:        true,
+				RequestId:     "migrated-request-id",
+				WorkflowId:    "migrated-workflow-id",
+			}},
+		},
+	}
 }
 
 func (s *workflowSuite) TestInitialPatch() {
