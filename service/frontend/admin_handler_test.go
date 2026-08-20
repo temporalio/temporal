@@ -184,6 +184,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		s.mockProducer,
 		s.mockVisibilityMgr,
 		s.mockResource.GetLogger(),
+		nil,
 		s.mockResource.GetTaskManager(),
 		s.mockResource.GetTaskManager(),
 		s.mockResource.GetExecutionManager(),
@@ -231,6 +232,12 @@ func (s *adminHandlerSuite) TearDownTest() {
 
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Success() {
 	var clusterName = "cluster"
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		clusterName: {ClusterID: "cluster-id"},
+	})
 	s.mockNamespaceCache.EXPECT().GetAllNamespaces().Return(nil)
 	s.mockClusterMetadataManager.EXPECT().DeleteClusterMetadata(
 		gomock.Any(),
@@ -239,10 +246,20 @@ func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Success() {
 
 	_, err := s.handler.RemoveRemoteCluster(context.Background(), &adminservice.RemoveRemoteClusterRequest{ClusterName: clusterName})
 	s.NoError(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeSucceeded, details["outcome"])
+	s.Equal(remoteClusterMutationRemoved, details["mutation"])
+	s.Equal("cluster-id", details["remote_cluster_id"])
 }
 
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Error() {
 	var clusterName = "cluster"
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		clusterName: {},
+	})
 	s.mockNamespaceCache.EXPECT().GetAllNamespaces().Return(nil)
 	s.mockClusterMetadataManager.EXPECT().DeleteClusterMetadata(
 		gomock.Any(),
@@ -251,6 +268,29 @@ func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Error() {
 
 	_, err := s.handler.RemoveRemoteCluster(context.Background(), &adminservice.RemoveRemoteClusterRequest{ClusterName: clusterName})
 	s.Error(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeFailed, details["outcome"])
+	s.Equal(remoteClusterMutationUnknown, details["mutation"])
+	s.NotNil(details["persistence_request"])
+}
+
+func (s *adminHandlerSuite) Test_RemoveRemoteCluster_PanicEmitsFailure() {
+	clusterName := "cluster"
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockMetadata.EXPECT().GetAllClusterInfo().DoAndReturn(func() map[string]cluster.ClusterInformation {
+		panic("test panic")
+	})
+
+	_, err := s.handler.RemoveRemoteCluster(
+		context.Background(),
+		&adminservice.RemoveRemoteClusterRequest{ClusterName: clusterName},
+	)
+	s.Require().Error(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeFailed, details["outcome"])
+	s.Equal("Internal", details["error_code"])
 }
 
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_BlockedByGlobalNamespace() {
@@ -376,6 +416,9 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordFound_Success() 
 	var clusterName = uuid.NewString()
 	var clusterID = uuid.NewString()
 	var recordVersion int64 = 5
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 
 	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(10)).Times(2)
 	s.mockMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
@@ -413,6 +456,11 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordFound_Success() 
 		FrontendAddress: rpcAddress,
 	})
 	s.NoError(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeSucceeded, details["outcome"])
+	s.Equal(remoteClusterMutationUpdated, details["mutation"])
+	s.Equal(remoteClusterTransitionUnchanged, details["requested_connection_transition"])
+	s.Equal(remoteClusterTransitionUnchanged, details["requested_replication_transition"])
 }
 
 func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordNotFound_Success() {
@@ -672,6 +720,9 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_EmptyR
 
 func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_DescribeCluster_Error() {
 	var rpcAddress = uuid.NewString()
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 
 	s.mockClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
 		s.mockAdminClient,
@@ -682,6 +733,34 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_DescribeCluster_Error(
 	)
 	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &adminservice.AddOrUpdateRemoteClusterRequest{FrontendAddress: rpcAddress})
 	s.Error(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeFailed, details["outcome"])
+	s.Equal("Unknown", details["error_code"])
+}
+
+func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_PanicEmitsFailure() {
+	rpcAddress := uuid.NewString()
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
+		s.mockAdminClient,
+	)
+	s.mockAdminClient.EXPECT().DescribeCluster(
+		gomock.Any(),
+		&adminservice.DescribeClusterRequest{},
+	).DoAndReturn(func(context.Context, *adminservice.DescribeClusterRequest, ...grpc.CallOption) (*adminservice.DescribeClusterResponse, error) {
+		panic("test panic")
+	})
+
+	_, err := s.handler.AddOrUpdateRemoteCluster(
+		context.Background(),
+		&adminservice.AddOrUpdateRemoteClusterRequest{FrontendAddress: rpcAddress},
+	)
+	s.Require().Error(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeFailed, details["outcome"])
+	s.Equal("Internal", details["error_code"])
 }
 
 func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_GetClusterMetadata_Error() {
