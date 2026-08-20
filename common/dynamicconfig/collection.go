@@ -33,6 +33,11 @@ type (
 		logger   log.Logger
 		errCount int64
 
+		// evaluator is set when client also implements Evaluator, and is consulted only by
+		// the GetC accessors, which have caller-supplied constraints to give it. The ordinary
+		// Get accessors are unaffected. See evaluator.go.
+		evaluator Evaluator
+
 		cancelClientSubscription func()
 
 		subscriptionLock sync.Mutex          // protects subscriptions and subscriptionIdx
@@ -114,7 +119,7 @@ func NewCollection(client Client, logger log.Logger) *Collection {
 	// Do this at the first convenient place we have a logger:
 	logSharedStructureWarnings(logger)
 
-	return &Collection{
+	c := &Collection{
 		client:        client,
 		logger:        logger,
 		errCount:      -1,
@@ -122,6 +127,12 @@ func NewCollection(client Client, logger log.Logger) *Collection {
 		convertCache:  new(sync.Map),
 		indexCache:    new(sync.Map),
 	}
+	// A Client may also resolve values against caller-supplied constraints, in the same way it
+	// may also be a NotifyingClient. Only the GetC accessors consult it.
+	if evaluator, ok := client.(Evaluator); ok {
+		c.evaluator = evaluator
+	}
+	return c
 }
 
 func (c *Collection) Start() {

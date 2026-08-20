@@ -106,6 +106,33 @@ func buildCLI() *cli.App {
 			},
 		},
 		{
+			Name: "validate-expression-config",
+			Usage: "Validate a constraint-expression dynamic config file[s]: known keys, " +
+				"value types, and expression syntax (PROTOTYPE)",
+			ArgsUsage: "<file> ...",
+			Action: func(c *cli.Context) error {
+				// A throwaway client: LoadFile does all the validation, parsing every
+				// expression and checking every value against its setting's converter.
+				client := dynamicconfig.NewConfiguratorClient(
+					dynamicconfig.AmbientConstraints{}, nil, log.NewCLILogger())
+				var total int
+				for _, fileName := range c.Args().Slice() {
+					fmt.Println(fileName)
+					if err := client.LoadFileFrom(fileName); err != nil {
+						total++
+						fmt.Printf("  error: %v\n", err)
+					}
+				}
+				if total > 0 {
+					// cli.Exit so that this is usable in CI: main ignores the error that
+					// app.Run returns, so a plain error would still exit 0.
+					return cli.Exit(
+						fmt.Sprintf("%d of %d files failed to validate", total, c.NArg()), 1)
+				}
+				return nil
+			},
+		},
+		{
 			Name:      "render-config",
 			Usage:     "Render server config template",
 			ArgsUsage: " ",
