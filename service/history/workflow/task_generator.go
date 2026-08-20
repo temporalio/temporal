@@ -843,22 +843,27 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 			FirstEventID:   executionInfo.LastFirstEventId,
 			NextEventID:    nextEventID,
 			Version:        lastItem.GetVersion(),
+			Priority:       enumsspb.TASK_PRIORITY_LOW,
 			TargetClusters: targetClusters,
 		})
 		activityIDs := make(map[int64]struct{}, len(r.mutableState.GetPendingActivityInfos()))
 		for activityID := range r.mutableState.GetPendingActivityInfos() {
 			activityIDs[activityID] = struct{}{}
 		}
-		taskEquivalents = append(taskEquivalents, convertSyncActivityInfos(
+		for _, syncActivityTask := range convertSyncActivityInfos(
 			now,
 			workflowKey,
 			r.mutableState.GetPendingActivityInfos(),
 			activityIDs,
 			targetClusters,
-		)...)
+		) {
+			syncActivityTask.(*tasks.SyncActivityTask).Priority = enumsspb.TASK_PRIORITY_LOW
+			taskEquivalents = append(taskEquivalents, syncActivityTask)
+		}
 		taskEquivalents = append(taskEquivalents, &tasks.SyncHSMTask{
 			WorkflowKey: workflowKey,
 			// TaskID and VisibilityTimestamp are set by shard
+			Priority:       enumsspb.TASK_PRIORITY_LOW,
 			TargetClusters: targetClusters,
 		})
 	}
