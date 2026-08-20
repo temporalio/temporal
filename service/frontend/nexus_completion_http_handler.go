@@ -404,33 +404,26 @@ func (h *nexusCompletionHandler) completeChasmOperation(
 
 func (h *nexusCompletionHandler) forwardCompleteOperation(ctx context.Context, r *nexusrpc.CompletionRequest, rCtx *requestContext) error {
 	targetCluster := rCtx.namespace.ActiveClusterName(namespace.RoutingKey{ID: rCtx.businessID})
+	logger := log.With(
+		rCtx.logger,
+		tag.SourceCluster(h.ClusterMetadata.GetCurrentClusterName()),
+		tag.TargetCluster(targetCluster),
+	)
+
 	client, err := h.ForwardingClients.Get(targetCluster)
 	if err != nil {
-		rCtx.logger.Error(
-			"unable to get HTTP client for forward request",
-			tag.Error(err),
-			tag.SourceCluster(h.ClusterMetadata.GetCurrentClusterName()),
-			tag.TargetCluster(targetCluster),
-		)
+		logger.Error("unable to get HTTP client for forward request", tag.Error(err))
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 	}
 
 	forwardURL, err := url.JoinPath(client.BaseURL(), commonnexus.RouteCompletionCallback.Path(rCtx.namespace.Name().String()))
 	if err != nil {
-		rCtx.logger.Error(
-			"failed to construct forwarding request URL",
-			tag.Error(err),
-			tag.TargetCluster(targetCluster),
-		)
+		logger.Error("failed to construct forwarding request URL", tag.Error(err))
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 	}
 
 	if h.HTTPTraceProvider != nil {
-		traceLogger := log.With(rCtx.logger,
-			tag.AttemptStart(time.Now().UTC()),
-			tag.SourceCluster(h.ClusterMetadata.GetCurrentClusterName()),
-			tag.TargetCluster(targetCluster),
-		)
+		traceLogger := log.With(logger, tag.AttemptStart(time.Now().UTC()))
 		if trace := h.HTTPTraceProvider.NewForwardingTrace(traceLogger); trace != nil {
 			ctx = httptrace.WithClientTrace(ctx, trace)
 		}
