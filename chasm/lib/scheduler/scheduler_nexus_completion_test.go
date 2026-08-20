@@ -74,8 +74,20 @@ func executeNexusCompletion(t *testing.T, tc nexusCompletionTestCase) {
 		require.Contains(t, sched.Schedule.State.Notes, "wf-1")
 	}
 
-	// Check that workflow ID lookup now returns empty (request completed)
-	require.Empty(t, invoker.RunningWorkflowID(tc.completion.RequestId))
+	// Check that the BufferedStart HandleNexusCompletion actually matched (by
+	// RequestId, mirroring getBufferedStart) is now marked completed. This
+	// exercises the real completion path directly rather than runningWorkflowID,
+	// which HandleNexusCompletion no longer calls in production.
+	matched := false
+	for _, start := range invoker.BufferedStarts {
+		if start.GetRequestId() == tc.completion.RequestId {
+			matched = true
+			require.NotNil(t, start.GetCompleted(),
+				"expected BufferedStart for RequestId %s to be marked completed", tc.completion.RequestId)
+			break
+		}
+	}
+	require.True(t, matched, "expected to find a BufferedStart for RequestId %s", tc.completion.RequestId)
 
 	// If we expect a specific status, verify the BufferedStart has Completed set
 	if tc.expectStatus != enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED {
@@ -184,6 +196,54 @@ func TestHandleNexusCompletion_AllowAllDoesNotUpdateCompletionState(t *testing.T
 			return struct{}{}, nil
 		}, struct{}{})
 	require.NoError(t, err)
+}
+
+// TestHandleNexusCompletion_AllowAllReadsStartsOwnPolicy proves
+// HandleNexusCompletion resolves ALLOW_ALL from the BufferedStart's own
+// stamped OverlapPolicy, not the schedule's current live policy. Production
+// always stamps a concretely-resolved policy onto BufferedStart at buffer
+// time (spec_processor.go, backfiller_tasks.go), before the schedule's live
+// policy can drift out from under it; resolveOverlapPolicy only falls back to
+// the live policy when the stamped value is UNSPECIFIED. The schedule's own
+// policy here is left at its default (Skip) specifically to catch a
+// regression that reads the wrong source and would otherwise still pass by
+// coincidence.
+func TestHandleNexusCompletion_AllowAllReadsStartsOwnPolicy(t *testing.T) {
+	sched, ctx, node := setupSchedulerForTest(t)
+	sched.Schedule.Policies.PauseOnFailure = true // schedule.Policies.OverlapPolicy stays at its Skip default.
+
+	initial := &schedulerpb.LastCompletionResult{
+		Success: &commonpb.Payload{Data: []byte("previous-result")},
+		Failure: &failurepb.Failure{Message: "previous-failure"},
+	}
+	sched.LastCompletionResult = chasm.NewDataField(ctx, initial)
+	sched.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{{
+		RequestId:     "req-1",
+		WorkflowId:    "wf-1",
+		RunId:         "run-1",
+		Attempt:       1,
+		OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL, // stamped at buffer time, per production.
+		ActualTime:    timestamppb.New(time.Now().Add(-time.Minute)),
+		StartTime:     timestamppb.New(time.Now().Add(-30 * time.Second)),
+	}}
+
+	err := sched.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+		RequestId: "req-1",
+		Outcome: &persistencespb.ChasmNexusCompletion_Failure{
+			Failure: &failurepb.Failure{Message: "allow-all failure"},
+		},
+		CloseTime: timestamppb.New(time.Now()),
+	})
+	require.NoError(t, err)
+
+	_, err = node.CloseTransaction()
+	require.NoError(t, err)
+
+	readCtx := chasm.NewContext(context.Background(), node)
+	require.Equal(t, initial, sched.LastCompletionResult.Get(readCtx))
+	require.False(t, sched.Schedule.State.Paused)
+	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		sched.Invoker.Get(readCtx).BufferedStarts[0].GetCompleted().GetStatus())
 }
 
 // TestHandleNexusCompletion_LateStragglerAfterCloseIsNotBlocked documents a
