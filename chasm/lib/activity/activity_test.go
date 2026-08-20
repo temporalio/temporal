@@ -1,6 +1,7 @@
 package activity
 
 import (
+	"cmp"
 	"context"
 	"testing"
 	"time"
@@ -8,7 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -18,17 +21,82 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.uber.org/mock/gomock"
+	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+func TestTryRescheduleRetryStatePrecedence(t *testing.T) {
+	testCases := []struct {
+		name        string
+		status      activitypb.ActivityExecutionStatus
+		retryPolicy *commonpb.RetryPolicy
+		expected    enumspb.RetryState
+		finalStatus activitypb.ActivityExecutionStatus
+	}{
+		{
+			name:        "retry policy not set",
+			status:      activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+			expected:    enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
+			finalStatus: activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+		},
+		{
+			name:        "retry policy not set takes precedence over cancellation",
+			status:      activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+			expected:    enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
+			finalStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+		},
+		{
+			name:        "cancellation requested",
+			status:      activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+			retryPolicy: defaultRetryPolicy,
+			expected:    enumspb.RETRY_STATE_CANCEL_REQUESTED,
+			finalStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+		},
+		{
+			name:        "reset requested takes precedence over retry policy not set",
+			status:      activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
+			expected:    enumspb.RETRY_STATE_IN_PROGRESS,
+			finalStatus: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &chasm.MockMutableContext{
+				MockContext: chasm.MockContext{
+					HandleNow: func(chasm.Component) time.Time {
+						return defaultTime.Add(2 * time.Second)
+					},
+				},
+			}
+			injectActivityContext(t, ctx) // needed for last test case
+			activity := &Activity{
+				ActivityState: &activitypb.ActivityState{
+					Status:                 tc.status,
+					RetryPolicy:            tc.retryPolicy,
+					ScheduleTime:           timestamppb.New(defaultTime),
+					ScheduleToCloseTimeout: durationpb.New(time.Second),
+				},
+				LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 1}),
+			}
+
+			retryState, err := activity.tryReschedule(ctx, false, 0, &failurepb.Failure{})
+
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, retryState)
+			require.Equal(t, tc.finalStatus, activity.GetStatus())
+		})
+	}
+}
 
 func TestSearchAttributesIncludesExecutionTime(t *testing.T) {
 	testTime := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -168,6 +236,10 @@ func TestHandleStarted(t *testing.T) {
 		requestStamp   int32
 		startRequestID string
 		requestID      string
+		attemptCount   int32
+		dispatchTime   *timestamppb.Timestamp
+		metricSamples  int
+		metricLatency  time.Duration
 		checkOutcome   func(t *testing.T, response *historyservice.RecordActivityTaskStartedResponse, err error)
 	}{
 		{
@@ -176,8 +248,27 @@ func TestHandleStarted(t *testing.T) {
 			attemptStamp:   testStamp,
 			requestStamp:   testStamp,
 			requestID:      testRequestID,
+			metricSamples:  1,
+			metricLatency:  30 * time.Second,
 			checkOutcome: func(t *testing.T, response *historyservice.RecordActivityTaskStartedResponse, err error) {
 				require.Equal(t, int32(1), response.Attempt)
+				require.NoError(t, err)
+			},
+		},
+		{
+			// Latency is measured from the attempt's dispatch time, 10s ago, not from the schedule
+			// time 30s ago: a retry excludes the earlier attempts and the backoff between them.
+			name:           "successful transition from scheduled - retry attempt",
+			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			attemptStamp:   testStamp,
+			requestStamp:   testStamp,
+			requestID:      testRequestID,
+			attemptCount:   2,
+			dispatchTime:   timestamppb.New(testTime.Add(-10 * time.Second)),
+			metricSamples:  1,
+			metricLatency:  10 * time.Second,
+			checkOutcome: func(t *testing.T, response *historyservice.RecordActivityTaskStartedResponse, err error) {
+				require.Equal(t, int32(2), response.Attempt)
 				require.NoError(t, err)
 			},
 		},
@@ -278,24 +369,41 @@ func TestHandleStarted(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			metricsHandler := metricstest.NewCaptureHandler()
+			metricCapture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(metricCapture)
+			namespaceEntry := namespace.NewLocalNamespaceForTest(
+				&persistencespb.NamespaceInfo{Id: "test-namespace-id", Name: "test-namespace"},
+				&persistencespb.NamespaceConfig{},
+				"active-cluster",
+			)
 			// Setup mock context
 			ctx := &chasm.MockMutableContext{
 				MockContext: chasm.MockContext{
 					HandleNow: func(chasm.Component) time.Time { return testTime },
 					HandleExecutionKey: func() chasm.ExecutionKey {
 						return chasm.ExecutionKey{
-							BusinessID: "test-activity-id",
-							RunID:      "test-run-id",
+							NamespaceID: "test-namespace-id",
+							BusinessID:  "test-activity-id",
+							RunID:       "test-run-id",
 						}
 					},
+					HandleNamespaceEntry: func() *namespace.Namespace { return namespaceEntry },
+					HandleMetricsHandler: func() metrics.Handler { return metricsHandler },
+					GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
+						config: &Config{
+							BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
+						},
+					}),
 				},
 			}
 
 			// Setup activity state
 			attemptState := &activitypb.ActivityAttemptState{
-				Count:          1,
+				Count:          cmp.Or(tc.attemptCount, 1),
 				Stamp:          tc.attemptStamp,
 				StartRequestId: tc.startRequestID,
+				DispatchTime:   tc.dispatchTime,
 			}
 			// A recorded start request ID means this attempt was previously started.
 			if tc.startRequestID != "" {
@@ -343,6 +451,11 @@ func TestHandleStarted(t *testing.T) {
 			response, err := activity.HandleStarted(ctx, request)
 
 			tc.checkOutcome(t, response, err)
+			recordings := metricCapture.Snapshot()[metrics.TaskScheduleToStartLatency.Name()]
+			require.Len(t, recordings, tc.metricSamples)
+			if tc.metricSamples > 0 {
+				require.Equal(t, tc.metricLatency, recordings[0].Value)
+			}
 		})
 	}
 }
@@ -393,19 +506,14 @@ func TestActivityTerminate(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-			nsRegistry := namespace.NewMockRegistry(ctrl)
-			nsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil).AnyTimes()
-
 			ctx := &chasm.MockMutableContext{
 				MockContext: chasm.MockContext{
-					HandleNow: func(chasm.Component) time.Time { return defaultTime },
+					HandleNow:            func(chasm.Component) time.Time { return defaultTime },
+					HandleNamespaceEntry: testNamespaceEntry,
 					GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
 						config: &Config{
 							BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
 						},
-						namespaceRegistry: nsRegistry,
 					}),
 				},
 			}
@@ -438,6 +546,135 @@ func TestActivityTerminate(t *testing.T) {
 	}
 }
 
+func TestRequestDeduplicationAfterTerminalState(t *testing.T) {
+	t.Run("CancellationAfterCanceled", func(t *testing.T) {
+		const requestID = "cancel-request-id"
+
+		ctx := &chasm.MockMutableContext{}
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				Status: activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
+				CancelState: &activitypb.ActivityCancelState{
+					RequestId: requestID,
+				},
+			},
+		}
+
+		_, err := activity.handleCancellationRequested(ctx, &activitypb.RequestCancelActivityExecutionRequest{
+			FrontendRequest: &workflowservice.RequestCancelActivityExecutionRequest{
+				RequestId: requestID,
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED, activity.Status)
+	})
+
+	t.Run("NewCancellationAfterCanceled", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				Status: activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
+				CancelState: &activitypb.ActivityCancelState{
+					RequestId: "original-request-id",
+				},
+			},
+		}
+
+		_, err := activity.handleCancellationRequested(ctx, &activitypb.RequestCancelActivityExecutionRequest{
+			FrontendRequest: &workflowservice.RequestCancelActivityExecutionRequest{
+				RequestId: "new-request-id",
+			},
+		})
+		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
+		require.EqualError(t, err, "activity is in terminal state Canceled")
+		require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED, activity.Status)
+	})
+
+	t.Run("TerminationAfterTerminated", func(t *testing.T) {
+		const requestID = "terminate-request-id"
+
+		ctx := &chasm.MockMutableContext{}
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				Status: activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
+				TerminateState: &activitypb.ActivityTerminateState{
+					RequestId: requestID,
+				},
+			},
+		}
+
+		_, err := activity.Terminate(ctx, chasm.TerminateComponentRequest{
+			RequestID: requestID,
+		})
+		require.NoError(t, err)
+		require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, activity.Status)
+	})
+
+	t.Run("NewTerminationAfterTerminated", func(t *testing.T) {
+		const requestID = "terminate-request-id"
+
+		ctx := &chasm.MockMutableContext{}
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				Status: activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
+				TerminateState: &activitypb.ActivityTerminateState{
+					RequestId: requestID,
+				},
+			},
+		}
+
+		_, err := activity.Terminate(ctx, chasm.TerminateComponentRequest{
+			RequestID: "new-request-id",
+		})
+		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
+		require.EqualError(t, err, "already terminated with request ID "+requestID)
+		require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, activity.Status)
+	})
+
+	t.Run("PauseAfterTerminated", func(t *testing.T) {
+		const requestID = "pause-request-id"
+
+		ctx := &chasm.MockMutableContext{}
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				Status: activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
+				LastPauseState: &activitypb.ActivityPauseState{
+					RequestId: requestID,
+				},
+			},
+		}
+
+		_, err := activity.handlePauseRequested(ctx, &activitypb.PauseActivityExecutionRequest{
+			FrontendRequest: &workflowservice.PauseActivityExecutionRequest{
+				RequestId: requestID,
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, activity.Status)
+	})
+
+	t.Run("NewPauseAfterTerminated", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				Status: activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
+				LastPauseState: &activitypb.ActivityPauseState{
+					RequestId: "pause-request-id",
+				},
+			},
+		}
+
+		_, err := activity.handlePauseRequested(ctx, &activitypb.PauseActivityExecutionRequest{
+			FrontendRequest: &workflowservice.PauseActivityExecutionRequest{
+				RequestId: "new-request-id",
+			},
+		})
+		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
+		require.EqualError(t, err, "activity is in non-pausable state Terminated")
+		require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, activity.Status)
+	})
+}
+
 // Check that we do not emit a StartToCloseLatency metric when cancelling an activity that has no
 // attempt in progress. Cancelling a SCHEDULED or PAUSED activity transitions straight to Canceled,
 // and the status captured before the CancelRequested transition must be forwarded so that the
@@ -459,11 +696,6 @@ func TestHandleCancellationRequestedDirectCancelMetrics(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-			nsRegistry := namespace.NewMockRegistry(ctrl)
-			nsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil).AnyTimes()
-
 			metricsHandler := metricstest.NewCaptureHandler()
 			capture := metricsHandler.StartCapture()
 
@@ -471,11 +703,11 @@ func TestHandleCancellationRequestedDirectCancelMetrics(t *testing.T) {
 				MockContext: chasm.MockContext{
 					HandleNow:            func(chasm.Component) time.Time { return defaultTime },
 					HandleMetricsHandler: func() metrics.Handler { return metricsHandler },
+					HandleNamespaceEntry: testNamespaceEntry,
 					GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
 						config: &Config{
 							BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
 						},
-						namespaceRegistry: nsRegistry,
 					}),
 				},
 			}
@@ -516,10 +748,6 @@ func TestHandleCancellationRequestedDirectCancelMetrics(t *testing.T) {
 }
 
 func TestCompletionMetricsWorkerDeploymentLabelKeyParity(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	nsRegistry := namespace.NewMockRegistry(ctrl)
-	nsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil).AnyTimes()
-
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
 	defer metricsHandler.StopCapture(capture)
@@ -527,11 +755,11 @@ func TestCompletionMetricsWorkerDeploymentLabelKeyParity(t *testing.T) {
 	ctx := &chasm.MockMutableContext{
 		MockContext: chasm.MockContext{
 			HandleMetricsHandler: func() metrics.Handler { return metricsHandler },
+			HandleNamespaceEntry: testNamespaceEntry,
 			GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
 				config: &Config{
 					BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
 				},
-				namespaceRegistry: nsRegistry,
 			}),
 		},
 	}
@@ -546,19 +774,14 @@ func TestCompletionMetricsWorkerDeploymentLabelKeyParity(t *testing.T) {
 		}),
 	}
 
-	completionHandler, err := activity.enrichCompletionMetricsHandler(
-		ctx,
-		metrics.HistoryRespondActivityTaskCompletedScope,
-	)
-	require.NoError(t, err)
-	activity.emitOnCompletedMetrics(ctx, completionHandler)
-	activity.emitOnFailedMetrics(ctx, completionHandler)
+	baseHandler := activity.baseMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCompletedScope)
+	completionHandler := activity.completionMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCompletedScope)
+	activity.emitOnCompletedMetrics(ctx, baseHandler, completionHandler, nil, true)
+	activity.emitOnFailedMetrics(ctx, baseHandler, completionHandler, &failurepb.Failure{})
 	activity.emitOnCanceledMetrics(ctx, completionHandler, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED)
 	activity.emitOnTimedOutMetrics(
-		ctx,
 		completionHandler,
 		enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
-		activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
 	)
 
 	expectedTags := []metrics.Tag{
@@ -585,9 +808,7 @@ func TestCompletionMetricsWorkerDeploymentLabelKeyParity(t *testing.T) {
 		}
 	}
 
-	baseHandler, err := activity.enrichMetricsHandler(ctx, metrics.ActivityTerminatedScope)
-	require.NoError(t, err)
-	activity.emitOnTerminatedMetrics(baseHandler)
+	activity.emitOnTerminatedMetrics(activity.enrichedMetricsHandler(ctx, metrics.ActivityTerminatedScope))
 	terminated := capture.Snapshot()[metrics.ActivityTerminate.Name()]
 	require.Len(t, terminated, 1)
 	for _, expectedTag := range expectedTags {
@@ -612,12 +833,12 @@ func TestRecordHeartbeatPauseResetCancelFlags(t *testing.T) {
 	require.NoError(t, err)
 
 	testCases := []struct {
-		name            string
-		status          activitypb.ActivityExecutionStatus
-		resetKeepPaused bool
-		wantPaused      bool
-		wantReset       bool
-		wantCancel      bool
+		name             string
+		status           activitypb.ActivityExecutionStatus
+		resetShouldPause bool
+		wantPaused       bool
+		wantReset        bool
+		wantCancel       bool
 	}{
 		{
 			name:   "no pause or reset returns zero flags",
@@ -637,10 +858,10 @@ func TestRecordHeartbeatPauseResetCancelFlags(t *testing.T) {
 			wantPaused: true,
 		},
 		{
-			name:            "reset with keep-paused propagates only reset",
-			status:          activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
-			resetKeepPaused: true,
-			wantReset:       true,
+			name:             "reset with keep-paused propagates only reset",
+			status:           activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
+			resetShouldPause: true,
+			wantReset:        true,
 		},
 		{
 			name:       "cancel requested status propagates CancelRequested",
@@ -668,7 +889,7 @@ func TestRecordHeartbeatPauseResetCancelFlags(t *testing.T) {
 				ActivityState: &activitypb.ActivityState{
 					Status:           tc.status,
 					HeartbeatTimeout: durationpb.New(0),
-					ResetKeepPaused:  tc.resetKeepPaused,
+					ResetShouldPause: tc.resetShouldPause,
 				},
 				LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: attempt}),
 			}
@@ -692,6 +913,98 @@ func TestRecordHeartbeatPauseResetCancelFlags(t *testing.T) {
 			require.Equal(t, tc.wantPaused, resp.ActivityPaused, "ActivityPaused")
 			require.Equal(t, tc.wantReset, resp.ActivityReset, "ActivityReset")
 			require.Equal(t, tc.wantCancel, resp.CancelRequested, "CancelRequested")
+		})
+	}
+}
+
+func TestRecordHeartbeatMetrics(t *testing.T) {
+	const (
+		namespaceID   = "test-namespace-id"
+		namespaceName = "test-namespace"
+		activityID    = "test-activity-id"
+		runID         = "test-run-id"
+		attempt       = int32(1)
+	)
+	componentRef, err := (&persistencespb.ChasmComponentRef{
+		NamespaceId: namespaceID,
+		BusinessId:  activityID,
+		RunId:       runID,
+	}).Marshal()
+	require.NoError(t, err)
+
+	testCases := []struct {
+		name       string
+		details    *commonpb.Payloads
+		hasDetails string
+	}{
+		{name: "without details", hasDetails: "false"},
+		{
+			name: "with details",
+			details: &commonpb.Payloads{Payloads: []*commonpb.Payload{{
+				Data: []byte("heartbeat details"),
+			}}},
+			hasDetails: "true",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			captureHandler := metricstest.NewCaptureHandler()
+			capture := captureHandler.StartCapture()
+			ctx := &chasm.MockMutableContext{
+				MockContext: chasm.MockContext{
+					HandleNow: func(chasm.Component) time.Time { return defaultTime },
+					HandleExecutionKey: func() chasm.ExecutionKey {
+						return chasm.ExecutionKey{
+							NamespaceID: namespaceID,
+							BusinessID:  activityID,
+							RunID:       runID,
+						}
+					},
+					HandleMetricsHandler: func() metrics.Handler {
+						return captureHandler.WithTags(metrics.NamespaceTag(namespaceName))
+					},
+				},
+			}
+			act := &Activity{
+				ActivityState: &activitypb.ActivityState{
+					Status:           activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+					HeartbeatTimeout: durationpb.New(0),
+				},
+				LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: attempt}),
+			}
+			_, err := act.RecordHeartbeat(ctx, WithToken[*historyservice.RecordActivityTaskHeartbeatRequest]{
+				Token: &tokenspb.Task{
+					NamespaceId:  namespaceID,
+					Attempt:      attempt,
+					ComponentRef: componentRef,
+				},
+				Request: &historyservice.RecordActivityTaskHeartbeatRequest{
+					NamespaceId: namespaceID,
+					HeartbeatRequest: &workflowservice.RecordActivityTaskHeartbeatRequest{
+						Details: tc.details,
+					},
+				},
+			})
+			require.NoError(t, err)
+
+			snapshot := capture.Snapshot()
+			heartbeatCount := snapshot[metrics.ActivityHeartbeatCount.Name()]
+			require.Len(t, heartbeatCount, 1)
+			require.Equal(t, int64(1), heartbeatCount[0].Value)
+			require.Equal(t, namespaceName, heartbeatCount[0].Tags["namespace"])
+			require.Equal(t, metrics.HistoryRecordActivityTaskHeartbeatScope, heartbeatCount[0].Tags["operation"])
+			require.Equal(t, tc.hasDetails, heartbeatCount[0].Tags["has_details"])
+
+			payloadSize := snapshot[metrics.ActivityPayloadSize.Name()]
+			if tc.details == nil {
+				require.Empty(t, payloadSize)
+			} else {
+				require.Len(t, payloadSize, 1)
+				require.Equal(t, int64(tc.details.Size()), payloadSize[0].Value)
+				require.Equal(t, namespaceName, payloadSize[0].Tags["namespace"])
+				require.Equal(t, metrics.HistoryRecordActivityTaskHeartbeatScope, payloadSize[0].Tags["operation"])
+			}
 		})
 	}
 }
@@ -884,19 +1197,14 @@ func TestActivityTaskTokenLegacyStampCompatibility(t *testing.T) {
 
 func TestUpdateStartedActivityExecutionOptionsDoesNotBumpStartedStamp(t *testing.T) {
 	testTime := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-	nsRegistry := namespace.NewMockRegistry(ctrl)
-	nsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil).AnyTimes()
-
 	ctx := &chasm.MockMutableContext{
 		MockContext: chasm.MockContext{
-			HandleNow: func(chasm.Component) time.Time { return testTime },
+			HandleNow:            func(chasm.Component) time.Time { return testTime },
+			HandleNamespaceEntry: testNamespaceEntry,
 			GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
 				config: &Config{
 					BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
 				},
-				namespaceRegistry: nsRegistry,
 			}),
 		},
 	}
@@ -924,6 +1232,7 @@ func TestUpdateStartedActivityExecutionOptionsDoesNotBumpStartedStamp(t *testing
 	_, err := activity.UpdateActivityExecutionOptions(ctx, &activitypb.UpdateActivityExecutionOptionsRequest{
 		FrontendRequest: &workflowservice.UpdateActivityExecutionOptionsRequest{
 			ActivityId: "test-activity-id",
+			RequestId:  "update-request-id",
 			ActivityOptions: &apiactivitypb.ActivityOptions{
 				HeartbeatTimeout: durationpb.New(2 * time.Minute),
 			},
@@ -934,6 +1243,246 @@ func TestUpdateStartedActivityExecutionOptionsDoesNotBumpStartedStamp(t *testing
 
 	require.Equal(t, originalStamp+1, attempt.GetStamp())
 	require.Equal(t, originalStartedStamp, attempt.GetStartedStamp())
+}
+
+func TestHandlePauseRequestedDedupBeforeValidation(t *testing.T) {
+	for _, status := range []activitypb.ActivityExecutionStatus{
+		activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+	} {
+		t.Run(status.String(), func(t *testing.T) {
+			activity := &Activity{
+				ActivityState: &activitypb.ActivityState{
+					Status: status,
+					LastPauseState: &activitypb.ActivityPauseState{
+						RequestId: "pause-request-id",
+					},
+				},
+			}
+
+			_, err := activity.handlePauseRequested(
+				&chasm.MockMutableContext{},
+				&activitypb.PauseActivityExecutionRequest{
+					FrontendRequest: &workflowservice.PauseActivityExecutionRequest{
+						RequestId: "pause-request-id",
+					},
+				},
+			)
+			require.NoError(t, err)
+			require.Equal(t, status, activity.GetStatus())
+		})
+	}
+}
+
+func TestHandleUnpauseRequestedRequestID(t *testing.T) {
+	t.Run("deduplicates latest request ID", func(t *testing.T) {
+		ctx := newOperatorCommandTestContext(t)
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
+				Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
+				TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+				LastUnpauseRequestId:   "unpause-request-id",
+				ScheduleToStartTimeout: durationpb.New(time.Minute),
+			},
+			LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 3}),
+		}
+
+		_, err := activity.handleUnpauseRequested(ctx, &activitypb.UnpauseActivityExecutionRequest{
+			FrontendRequest: &workflowservice.UnpauseActivityExecutionRequest{
+				RequestId: "unpause-request-id",
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED, activity.GetStatus())
+		require.Equal(t, int32(3), activity.LastAttempt.Get(ctx).GetCount())
+	})
+
+	t.Run("does not persist request ID when unpause fails", func(t *testing.T) {
+		ctx := newOperatorCommandTestContext(t)
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				Status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			},
+		}
+
+		_, err := activity.handleUnpauseRequested(ctx, &activitypb.UnpauseActivityExecutionRequest{
+			FrontendRequest: &workflowservice.UnpauseActivityExecutionRequest{
+				RequestId: "unpause-request-id",
+			},
+		})
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPreconditionErr)
+		require.Empty(t, activity.GetLastUnpauseRequestId(), "a failed unpause must not be recorded for de-dup")
+	})
+
+	t.Run("does not record failed request ID", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				Status:               activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+				LastUnpauseRequestId: "previous-unpause-request-id",
+			},
+		}
+
+		_, err := activity.handleUnpauseRequested(ctx, &activitypb.UnpauseActivityExecutionRequest{
+			FrontendRequest: &workflowservice.UnpauseActivityExecutionRequest{
+				RequestId: "failed-unpause-request-id",
+			},
+		})
+		require.Error(t, err)
+		require.Equal(t, "previous-unpause-request-id", activity.GetLastUnpauseRequestId())
+	})
+}
+
+func TestHandleResetRequestID(t *testing.T) {
+	t.Run("deduplicates latest request ID", func(t *testing.T) {
+		ctx := newOperatorCommandTestContext(t)
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				ActivityType:       &commonpb.ActivityType{Name: "test-activity-type"},
+				Status:             activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+				TaskQueue:          &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+				LastResetRequestId: "reset-request-id",
+			},
+			LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 3}),
+		}
+
+		_, err := activity.handleReset(ctx, &activitypb.ResetActivityExecutionRequest{
+			FrontendRequest: &workflowservice.ResetActivityExecutionRequest{
+				RequestId: "reset-request-id",
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, int32(3), activity.LastAttempt.Get(ctx).GetCount())
+	})
+
+	t.Run("records successful request ID", func(t *testing.T) {
+		ctx := newOperatorCommandTestContext(t)
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				ActivityType: &commonpb.ActivityType{Name: "test-activity-type"},
+				Status:       activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+				TaskQueue:    &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+			},
+			LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 3}),
+		}
+
+		_, err := activity.handleReset(ctx, &activitypb.ResetActivityExecutionRequest{
+			FrontendRequest: &workflowservice.ResetActivityExecutionRequest{
+				RequestId: "reset-request-id",
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, "reset-request-id", activity.GetLastResetRequestId())
+	})
+
+	t.Run("does not record failed request ID", func(t *testing.T) {
+		ctx := newOperatorCommandTestContext(t)
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				ActivityType:       &commonpb.ActivityType{Name: "test-activity-type"},
+				Status:             activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+				TaskQueue:          &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+				LastResetRequestId: "previous-reset-request-id",
+			},
+		}
+
+		_, err := activity.handleReset(ctx, &activitypb.ResetActivityExecutionRequest{
+			FrontendRequest: &workflowservice.ResetActivityExecutionRequest{
+				RequestId: "failed-reset-request-id",
+			},
+		})
+		require.Error(t, err)
+		require.Equal(t, "previous-reset-request-id", activity.GetLastResetRequestId())
+	})
+}
+
+func TestUpdateActivityExecutionOptionsRequestID(t *testing.T) {
+	t.Run("deduplicates latest request ID", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				Status:                     activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+				TaskQueue:                  &taskqueuepb.TaskQueue{Name: "current-task-queue"},
+				LastUpdateOptionsRequestId: "update-request-id",
+			},
+		}
+
+		resp, err := activity.UpdateActivityExecutionOptions(ctx, &activitypb.UpdateActivityExecutionOptionsRequest{
+			FrontendRequest: &workflowservice.UpdateActivityExecutionOptionsRequest{
+				RequestId: "update-request-id",
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, "current-task-queue", resp.GetFrontendResponse().GetActivityOptions().GetTaskQueue().GetName())
+	})
+
+	t.Run("records successful request ID", func(t *testing.T) {
+		ctx := newOperatorCommandTestContext(t)
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
+				Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+				TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+				ScheduleToCloseTimeout: durationpb.New(10 * time.Minute),
+				ScheduleToStartTimeout: durationpb.New(2 * time.Minute),
+				StartToCloseTimeout:    durationpb.New(3 * time.Minute),
+				HeartbeatTimeout:       durationpb.New(time.Minute),
+			},
+			LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
+				Count:        1,
+				Stamp:        7,
+				StartedStamp: 7,
+			}),
+			Outcome: chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
+		}
+
+		_, err := activity.UpdateActivityExecutionOptions(ctx, &activitypb.UpdateActivityExecutionOptionsRequest{
+			FrontendRequest: &workflowservice.UpdateActivityExecutionOptionsRequest{
+				RequestId: "update-request-id",
+				ActivityOptions: &apiactivitypb.ActivityOptions{
+					HeartbeatTimeout: durationpb.New(2 * time.Minute),
+				},
+				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"heartbeat_timeout"}},
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, "update-request-id", activity.GetLastUpdateOptionsRequestId())
+	})
+
+	t.Run("does not record failed request ID", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				Status:                     activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+				LastUpdateOptionsRequestId: "previous-update-request-id",
+			},
+		}
+
+		_, err := activity.UpdateActivityExecutionOptions(ctx, &activitypb.UpdateActivityExecutionOptionsRequest{
+			FrontendRequest: &workflowservice.UpdateActivityExecutionOptionsRequest{
+				RequestId: "failed-update-request-id",
+			},
+		})
+		require.Error(t, err)
+		require.Equal(t, "previous-update-request-id", activity.GetLastUpdateOptionsRequestId())
+	})
+}
+
+func newOperatorCommandTestContext(t *testing.T) *chasm.MockMutableContext {
+	t.Helper()
+	return &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow:            func(chasm.Component) time.Time { return time.Unix(0, 0) },
+			HandleNamespaceEntry: testNamespaceEntry,
+			GoCtx: context.WithValue(context.Background(), ctxKeyActivityContext, &activityContext{
+				config: &Config{
+					BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
+				},
+			}),
+		},
+	}
 }
 
 func TestContextMetadata(t *testing.T) {
@@ -1423,10 +1972,12 @@ func TestUpdateActivityExecutionOptions_RestoreOriginal_RejectsMissingOriginalOp
 		FrontendRequest: &workflowservice.UpdateActivityExecutionOptionsRequest{
 			ActivityId:      "act",
 			RestoreOriginal: true,
+			RequestId:       "failed-update-request-id",
 		},
 	})
 
 	require.Error(t, err)
+	require.Empty(t, activity.GetLastUpdateOptionsRequestId())
 	require.Equal(t, "current-task-queue", activity.GetTaskQueue().GetName())
 	require.Equal(t, 30*time.Second, activity.GetScheduleToCloseTimeout().AsDuration())
 	require.Equal(t, 10*time.Second, activity.GetStartToCloseTimeout().AsDuration())
@@ -1458,9 +2009,149 @@ func TestHandleReset_RestoreOriginalOptions_RejectsMissingOriginalOptions(t *tes
 		FrontendRequest: &workflowservice.ResetActivityExecutionRequest{
 			ActivityId:             "act",
 			RestoreOriginalOptions: true,
+			RequestId:              "failed-reset-request-id",
 		},
 	})
 
 	require.Error(t, err)
+	require.Empty(t, activity.GetLastResetRequestId())
 	require.Equal(t, "current-task-queue", activity.GetTaskQueue().GetName())
+}
+
+func TestBuildActivityExecutionInfo_IncludeLastDeploymentVersion(t *testing.T) {
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(chasm.Component) time.Time { return time.Unix(0, 0) },
+		},
+	}
+
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			Status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+		},
+		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
+			LastDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+				DeploymentName: "test-deployment",
+				BuildId:        "test-build-1",
+			},
+		}),
+		RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{}),
+		Visibility:  chasm.NewComponentField(ctx, &chasm.Visibility{}),
+	}
+
+	resp, err := activity.buildDescribeActivityExecutionResponse(ctx, &activitypb.DescribeActivityExecutionRequest{
+		FrontendRequest: &workflowservice.DescribeActivityExecutionRequest{},
+	})
+
+	require.NoError(t, err)
+	protorequire.ProtoEqual(t, &deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: "test-deployment",
+		BuildId:        "test-build-1",
+	}, resp.FrontendResponse.GetInfo().GetLastDeploymentVersion())
+}
+
+// oversizedActivityFailure returns an application failure whose details push it past the retained
+// failure size limit, mirroring the failure used by the workflow activity truncation tests.
+func oversizedActivityFailure(t *testing.T) *failurepb.Failure {
+	activityFailure := &failurepb.Failure{
+		Message: "activity failure with large details",
+		Source:  "application",
+		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+			Type:         "application-failure-type",
+			NonRetryable: false,
+			Details: &commonpb.Payloads{
+				Payloads: []*commonpb.Payload{
+					{
+						Data: make([]byte, defaultFailureSizeLimit*2),
+					},
+				},
+			},
+		}},
+	}
+	require.Greater(t, activityFailure.Size(), defaultFailureSizeLimit)
+	return activityFailure
+}
+
+// withinLimitActivityFailure returns an application failure small enough to be retained whole.
+func withinLimitActivityFailure(t *testing.T) *failurepb.Failure {
+	activityFailure := &failurepb.Failure{
+		Message: "activity failure",
+		Source:  "application",
+		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+			Type: "application-failure-type",
+		}},
+	}
+	require.LessOrEqual(t, activityFailure.Size(), defaultFailureSizeLimit)
+	return activityFailure
+}
+
+// recordFailedAttempt truncates the retryable failure, and not the final failure.
+func TestRecordFailedAttempt_FailureTruncation(t *testing.T) {
+	requireTruncated := func(t *testing.T, sent, retained *failurepb.Failure) {
+		require.LessOrEqual(t, retained.Size(), defaultFailureSizeLimit)
+		require.Equal(t, common.FailureReasonFailureExceedsLimit, retained.GetMessage())
+		require.NotNil(t, retained.GetServerFailureInfo())
+		cause := retained.GetCause()
+		require.Equal(t, sent.GetMessage(), cause.GetMessage())
+		require.Equal(t, "application-failure-type", cause.GetApplicationFailureInfo().GetType())
+		require.Nil(t, cause.GetApplicationFailureInfo().GetDetails())
+	}
+	requireKeptWhole := func(t *testing.T, sent, retained *failurepb.Failure) {
+		protorequire.ProtoEqual(t, sent, retained)
+	}
+
+	testCases := []struct {
+		name          string
+		failure       func(*testing.T) *failurepb.Failure
+		noRetriesLeft bool
+		requireResult func(t *testing.T, sent, retained *failurepb.Failure)
+	}{
+		{
+			name:          "OversizedRetryableFailureIsTruncated",
+			failure:       oversizedActivityFailure,
+			requireResult: requireTruncated,
+		},
+		{
+			name:          "RetryableFailureWithinLimitIsKeptWhole",
+			failure:       withinLimitActivityFailure,
+			requireResult: requireKeptWhole,
+		},
+		{
+			name:          "OversizedTerminalFailureIsKeptWhole",
+			failure:       oversizedActivityFailure,
+			noRetriesLeft: true,
+			requireResult: requireKeptWhole,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &chasm.MockMutableContext{}
+			ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
+			injectActivityContext(t, ctx)
+
+			attemptState := &activitypb.ActivityAttemptState{Count: 1}
+			activity := &Activity{
+				LastAttempt: chasm.NewDataField(ctx, attemptState),
+			}
+			activityFailure := tc.failure(t)
+
+			retryInterval, retryIntervalSource := time.Second, activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY
+			if tc.noRetriesLeft {
+				retryInterval, retryIntervalSource = 0, activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED
+			}
+
+			err := activity.recordFailedAttempt(
+				ctx,
+				retryInterval,
+				retryIntervalSource,
+				activityFailure,
+				defaultTime,
+				tc.noRetriesLeft,
+			)
+			require.NoError(t, err)
+
+			tc.requireResult(t, activityFailure, attemptState.GetLastFailureDetails().GetFailure())
+		})
+	}
 }

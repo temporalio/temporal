@@ -7,6 +7,7 @@ import (
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common"
@@ -365,13 +366,12 @@ func validateAndNormalizePollActivityExecutionRequest(
 
 func validateAndNormalizeStartRequest(
 	req *workflowservice.StartActivityExecutionRequest,
-	maxIDLengthLimit int,
-	blobSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter,
-	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	config *Config,
 	logger log.Logger,
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
 ) error {
+	maxIDLengthLimit := config.MaxIDLengthLimit()
 	if len(req.GetRequestId()) > maxIDLengthLimit {
 		return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
 			len(req.GetRequestId()), maxIDLengthLimit)
@@ -389,12 +389,19 @@ func validateAndNormalizeStartRequest(
 	if err := validateBlobSize(
 		req.GetActivityId(),
 		"StartActivityExecution",
-		blobSizeLimitError,
-		blobSizeLimitWarn,
+		config.BlobSizeLimitError,
+		config.BlobSizeLimitWarn,
 		req.Input.Size(),
 		logger,
 		req.GetNamespace()); err != nil {
 		return serviceerror.NewInvalidArgument("input exceeds length limit")
+	}
+	if err := validateUserMetadata(
+		req.GetNamespace(),
+		req.GetUserMetadata(),
+		config,
+	); err != nil {
+		return err
 	}
 
 	if req.GetSearchAttributes() != nil {
@@ -406,6 +413,24 @@ func validateAndNormalizeStartRequest(
 	return nil
 }
 
+func validateUserMetadata(
+	namespaceName string,
+	metadata *sdkpb.UserMetadata,
+	config *Config,
+) error {
+	summarySize := metadata.GetSummary().Size()
+	if limit := config.MaxUserMetadataSummarySize(namespaceName); summarySize > limit {
+		return serviceerror.NewInvalidArgumentf(
+			"user_metadata.summary exceeds size limit. Length=%d Limit=%d", summarySize, limit)
+	}
+	detailsSize := metadata.GetDetails().Size()
+	if limit := config.MaxUserMetadataDetailsSize(namespaceName); detailsSize > limit {
+		return serviceerror.NewInvalidArgumentf(
+			"user_metadata.details exceeds size limit. Length=%d Limit=%d", detailsSize, limit)
+	}
+	return nil
+}
+
 func validateAndNormalizeRequestCancelActivityExecutionRequest(
 	req *workflowservice.RequestCancelActivityExecutionRequest,
 	maxIDLengthLimit int,
@@ -413,10 +438,6 @@ func validateAndNormalizeRequestCancelActivityExecutionRequest(
 	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	logger log.Logger,
 ) error {
-	if req.GetRequestId() == "" {
-		req.RequestId = uuid.NewString()
-	}
-
 	if req.GetActivityId() == "" {
 		return serviceerror.NewInvalidArgument("activity ID is required")
 	}
@@ -426,9 +447,8 @@ func validateAndNormalizeRequestCancelActivityExecutionRequest(
 			len(req.GetActivityId()), maxIDLengthLimit)
 	}
 
-	if len(req.GetRequestId()) > maxIDLengthLimit {
-		return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
-			len(req.GetRequestId()), maxIDLengthLimit)
+	if err := validateAndNormalizeRequestID(&req.RequestId, maxIDLengthLimit); err != nil {
+		return err
 	}
 
 	if len(req.GetIdentity()) > maxIDLengthLimit {
@@ -480,11 +500,15 @@ var supportedActivityOptionsUpdatePaths = map[string]struct{}{
 }
 
 //nolint:revive // cyclomatic: per-field validation of a field-mask update requires explicit handling of each field
-func validateUpdateActivityExecutionOptionsRequest(
+func validateAndNormalizeUpdateActivityExecutionOptionsRequest(
 	req *workflowservice.UpdateActivityExecutionOptionsRequest,
 	getDefaultActivityRetrySettings dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings],
 	maxIDLengthLimit int,
 ) error {
+	if err := validateAndNormalizeRequestID(&req.RequestId, maxIDLengthLimit); err != nil {
+		return err
+	}
+
 	if req.GetActivityId() == "" {
 		return serviceerror.NewInvalidArgument("activity ID is required")
 	}
@@ -649,10 +673,6 @@ func validateAndNormalizeTerminateActivityExecutionRequest(
 	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	logger log.Logger,
 ) error {
-	if req.GetRequestId() == "" {
-		req.RequestId = uuid.NewString()
-	}
-
 	if req.GetActivityId() == "" {
 		return serviceerror.NewInvalidArgument("activity ID is required")
 	}
@@ -662,9 +682,8 @@ func validateAndNormalizeTerminateActivityExecutionRequest(
 			len(req.GetActivityId()), maxIDLengthLimit)
 	}
 
-	if len(req.GetRequestId()) > maxIDLengthLimit {
-		return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
-			len(req.GetRequestId()), maxIDLengthLimit)
+	if err := validateAndNormalizeRequestID(&req.RequestId, maxIDLengthLimit); err != nil {
+		return err
 	}
 
 	if len(req.GetIdentity()) > maxIDLengthLimit {
@@ -701,12 +720,8 @@ func validateAndNormalizePauseActivityExecutionRequest(
 	blobSizeLimitWarn dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	logger log.Logger,
 ) error {
-	if req.GetRequestId() == "" {
-		req.RequestId = uuid.NewString()
-	}
-	if len(req.GetRequestId()) > maxIDLengthLimit {
-		return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
-			len(req.GetRequestId()), maxIDLengthLimit)
+	if err := validateAndNormalizeRequestID(&req.RequestId, maxIDLengthLimit); err != nil {
+		return err
 	}
 	if req.GetActivityId() == "" {
 		return serviceerror.NewInvalidArgument("activity ID is required")
@@ -742,6 +757,10 @@ func validateAndNormalizeResetActivityExecutionRequest(
 	req *workflowservice.ResetActivityExecutionRequest,
 	maxIDLengthLimit int,
 ) error {
+	if err := validateAndNormalizeRequestID(&req.RequestId, maxIDLengthLimit); err != nil {
+		return err
+	}
+
 	if req.GetActivityId() == "" {
 		return serviceerror.NewInvalidArgument("activity ID is required")
 	}
@@ -766,6 +785,10 @@ func validateAndNormalizeUnpauseActivityExecutionRequest(
 	req *workflowservice.UnpauseActivityExecutionRequest,
 	maxIDLengthLimit int,
 ) error {
+	if err := validateAndNormalizeRequestID(&req.RequestId, maxIDLengthLimit); err != nil {
+		return err
+	}
+
 	if req.GetActivityId() == "" {
 		return serviceerror.NewInvalidArgument("activity ID is required")
 	}
@@ -784,6 +807,17 @@ func validateAndNormalizeUnpauseActivityExecutionRequest(
 		}
 	}
 	return validateJitter(req.GetJitter())
+}
+
+func validateAndNormalizeRequestID(requestID *string, maxIDLengthLimit int) error {
+	if *requestID == "" {
+		*requestID = uuid.NewString()
+	}
+	if len(*requestID) > maxIDLengthLimit {
+		return serviceerror.NewInvalidArgumentf("request ID exceeds length limit. Length=%d Limit=%d",
+			len(*requestID), maxIDLengthLimit)
+	}
+	return nil
 }
 
 func validateJitter(jitter *durationpb.Duration) error {

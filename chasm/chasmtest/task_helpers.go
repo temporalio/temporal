@@ -3,6 +3,7 @@ package chasmtest
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"go.temporal.io/server/chasm"
 )
@@ -52,6 +53,33 @@ func ExecutePureTask[C chasm.Component, T any](
 		},
 	)
 	return taskDropped, err
+}
+
+// FirePureTasks executes persisted pure tasks due by referenceTime and commits.
+func (e *Engine) FirePureTasks(ref chasm.ComponentRef, referenceTime time.Time) (executed int, err error) {
+	exec, err := e.executionForRef(ref)
+	if err != nil {
+		return 0, err
+	}
+
+	engineCtx := chasm.NewEngineContext(context.Background(), e)
+	if err := exec.node.EachPureTask(
+		referenceTime,
+		func(handler chasm.NodePureTask, taskAttributes chasm.TaskAttributes, taskInstance any) (bool, error) {
+			ran, err := handler.ExecutePureTask(engineCtx, taskAttributes, taskInstance)
+			if err == nil && ran {
+				executed++
+			}
+			return ran, err
+		},
+	); err != nil {
+		return executed, err
+	}
+
+	if err := exec.closeTransaction(); err != nil {
+		return executed, err
+	}
+	return executed, nil
 }
 
 // ExecuteSideEffectTask validates and executes a side effect task.

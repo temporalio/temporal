@@ -10,9 +10,11 @@ import (
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -46,6 +48,12 @@ var (
 	}
 	defaultBlobSizeLimitWarn = func(ns string) int {
 		return 32
+	}
+	defaultMaxUserMetadataSummarySize = func(ns string) int {
+		return 400
+	}
+	defaultMaxUserMetadataDetailsSize = func(ns string) int {
+		return 20000
 	}
 	defaultMaxLinksPerRequest = func(ns string) int {
 		return 10
@@ -411,9 +419,11 @@ func newTestFrontendHandler(
 ) *frontendHandler {
 	return &frontendHandler{
 		config: &Config{
-			BlobSizeLimitError: blobSizeLimitError,
-			BlobSizeLimitWarn:  blobSizeLimitWarn,
-			MaxIDLengthLimit:   func() int { return maxIDLengthLimit },
+			BlobSizeLimitError:         blobSizeLimitError,
+			BlobSizeLimitWarn:          blobSizeLimitWarn,
+			MaxIDLengthLimit:           func() int { return maxIDLengthLimit },
+			MaxUserMetadataDetailsSize: defaultMaxUserMetadataDetailsSize,
+			MaxUserMetadataSummarySize: defaultMaxUserMetadataSummarySize,
 		},
 		logger: log.NewNoopLogger(),
 	}
@@ -434,6 +444,8 @@ func TestRequestIDGeneratedWhenMissing(t *testing.T) {
 				BlobSizeLimitWarn:          defaultBlobSizeLimitWarn,
 				MaxIDLengthLimit:           func() int { return maxIDLengthLimit },
 				DefaultActivityRetryPolicy: dynamicconfig.GetTypedPropertyFnFilteredByNamespace(getDefaultRetrySettings("")),
+				MaxUserMetadataDetailsSize: defaultMaxUserMetadataDetailsSize,
+				MaxUserMetadataSummarySize: defaultMaxUserMetadataSummarySize,
 			},
 			linkValidator: newLinkValidator(
 				defaultMaxLinksPerRequest,
@@ -484,6 +496,111 @@ func TestRequestIDGeneratedWhenMissing(t *testing.T) {
 		require.NotEmpty(t, req.GetRequestId(), "server must generate a request ID when client omits it")
 		require.NoError(t, validateUUID(req.GetRequestId()), "generated request ID must be a valid UUID")
 	})
+
+	t.Run("UnpauseActivityExecution", func(t *testing.T) {
+		req := &workflowservice.UnpauseActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+		}
+		err := validateAndNormalizeUnpauseActivityExecutionRequest(req, maxIDLengthLimit)
+		require.NoError(t, err)
+		require.NotEmpty(t, req.GetRequestId(), "server must generate a request ID when client omits it")
+		require.NoError(t, validateUUID(req.GetRequestId()), "generated request ID must be a valid UUID")
+	})
+
+	t.Run("ResetActivityExecution", func(t *testing.T) {
+		req := &workflowservice.ResetActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+		}
+		err := validateAndNormalizeResetActivityExecutionRequest(req, maxIDLengthLimit)
+		require.NoError(t, err)
+		require.NotEmpty(t, req.GetRequestId(), "server must generate a request ID when client omits it")
+		require.NoError(t, validateUUID(req.GetRequestId()), "generated request ID must be a valid UUID")
+	})
+
+	t.Run("UpdateActivityExecutionOptions", func(t *testing.T) {
+		req := &workflowservice.UpdateActivityExecutionOptionsRequest{
+			ActivityId:      defaultActivityID,
+			RestoreOriginal: true,
+		}
+		err := validateAndNormalizeUpdateActivityExecutionOptionsRequest(req, getDefaultRetrySettings, maxIDLengthLimit)
+		require.NoError(t, err)
+		require.NotEmpty(t, req.GetRequestId(), "server must generate a request ID when client omits it")
+		require.NoError(t, validateUUID(req.GetRequestId()), "generated request ID must be a valid UUID")
+	})
+}
+
+func TestValidateAndPopulateStartRequest_ValidatesCompletionCallbackLinks(t *testing.T) {
+	h := &frontendHandler{
+		config: &Config{
+			BlobSizeLimitError:         defaultBlobSizeLimitError,
+			BlobSizeLimitWarn:          defaultBlobSizeLimitWarn,
+			DefaultActivityRetryPolicy: getDefaultRetrySettings,
+			EnableCallbacks:            func(string) bool { return true },
+			MaxIDLengthLimit:           func() int { return defaultMaxIDLengthLimit },
+			MaxUserMetadataDetailsSize: defaultMaxUserMetadataDetailsSize,
+			MaxUserMetadataSummarySize: defaultMaxUserMetadataSummarySize,
+		},
+		callbackValidator: callback.NewValidator(
+			func(string) int { return 10 },
+			func(string) int { return 1000 },
+			func(string) int { return 4096 },
+			func(string) callback.AddressMatchRules { return callback.AddressMatchRules{} },
+		),
+		linkValidator: newLinkValidator(
+			func(string) int { return 1 },
+			func(string) int { return 2000 },
+			defaultLinkMaxSize,
+		),
+		logger: log.NewNoopLogger(),
+	}
+	newRequest := func(callbackLinks []*commonpb.Link) *workflowservice.StartActivityExecutionRequest {
+		return &workflowservice.StartActivityExecutionRequest{
+			Namespace:           defaultNamespaceID,
+			ActivityId:          defaultActivityID,
+			ActivityType:        &commonpb.ActivityType{Name: defaultActivityType},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+			StartToCloseTimeout: durationpb.New(10 * time.Second),
+			CompletionCallbacks: []*commonpb.Callback{{
+				Variant: &commonpb.Callback_Internal_{
+					Internal: &commonpb.Callback_Internal{},
+				},
+				Links: callbackLinks,
+			}},
+		}
+	}
+
+	t.Run("invalid callback link", func(t *testing.T) {
+		req := newRequest([]*commonpb.Link{{
+			Variant: &commonpb.Link_BatchJob_{
+				BatchJob: &commonpb.Link_BatchJob{},
+			},
+		}})
+
+		_, err := h.validateAndPopulateStartRequest(t.Context(), req, namespace.ID(defaultNamespaceID))
+
+		var invalidArgument *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgument)
+		require.ErrorContains(t, err, "batch job link must not have an empty job ID")
+	})
+
+	t.Run("too many combined links", func(t *testing.T) {
+		req := newRequest([]*commonpb.Link{{
+			Variant: &commonpb.Link_BatchJob_{
+				BatchJob: &commonpb.Link_BatchJob{JobId: "callback-job"},
+			},
+		}})
+		req.Links = []*commonpb.Link{{
+			Variant: &commonpb.Link_BatchJob_{
+				BatchJob: &commonpb.Link_BatchJob{JobId: "request-job"},
+			},
+		}}
+
+		_, err := h.validateAndPopulateStartRequest(t.Context(), req, namespace.ID(defaultNamespaceID))
+
+		var invalidArgument *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgument)
+		require.ErrorContains(t, err, "cannot attach more than 1 links per request, got 2")
+	})
 }
 
 func validateUUID(s string) error {
@@ -509,7 +626,7 @@ func TestRequestIDTooLong(t *testing.T) {
 			RetryPolicy:         &commonpb.RetryPolicy{},
 			RequestId:           tooLong,
 		}
-		err := validateAndNormalizeStartRequest(req, h.config.MaxIDLengthLimit(), h.config.BlobSizeLimitError, h.config.BlobSizeLimitWarn, h.logger, h.saMapperProvider, h.saValidator)
+		err := validateAndNormalizeStartRequest(req, h.config, h.logger, h.saMapperProvider, h.saValidator)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 	})
@@ -543,6 +660,37 @@ func TestRequestIDTooLong(t *testing.T) {
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 	})
+
+	t.Run("UnpauseActivityExecution", func(t *testing.T) {
+		req := &workflowservice.UnpauseActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			RequestId:  tooLong,
+		}
+		err := validateAndNormalizeUnpauseActivityExecutionRequest(req, maxIDLengthLimit)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+	})
+
+	t.Run("ResetActivityExecution", func(t *testing.T) {
+		req := &workflowservice.ResetActivityExecutionRequest{
+			ActivityId: defaultActivityID,
+			RequestId:  tooLong,
+		}
+		err := validateAndNormalizeResetActivityExecutionRequest(req, maxIDLengthLimit)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+	})
+
+	t.Run("UpdateActivityExecutionOptions", func(t *testing.T) {
+		req := &workflowservice.UpdateActivityExecutionOptionsRequest{
+			ActivityId:      defaultActivityID,
+			RestoreOriginal: true,
+			RequestId:       tooLong,
+		}
+		err := validateAndNormalizeUpdateActivityExecutionOptionsRequest(req, getDefaultRetrySettings, maxIDLengthLimit)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+	})
 }
 
 func TestValidateStandAloneRequestIDTooLong(t *testing.T) {
@@ -560,7 +708,7 @@ func TestValidateStandAloneRequestIDTooLong(t *testing.T) {
 	}
 
 	h := newTestFrontendHandler(defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, defaultMaxIDLengthLimit)
-	err := validateAndNormalizeStartRequest(req, h.config.MaxIDLengthLimit(), h.config.BlobSizeLimitError, h.config.BlobSizeLimitWarn, h.logger, h.saMapperProvider, h.saValidator)
+	err := validateAndNormalizeStartRequest(req, h.config, h.logger, h.saMapperProvider, h.saValidator)
 	var invalidArgErr *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArgErr)
 }
@@ -580,7 +728,7 @@ func TestValidateStandAloneInputTooLarge(t *testing.T) {
 	}
 
 	h := newTestFrontendHandler(defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, defaultMaxIDLengthLimit)
-	err := validateAndNormalizeStartRequest(req, h.config.MaxIDLengthLimit(), h.config.BlobSizeLimitError, h.config.BlobSizeLimitWarn, h.logger, h.saMapperProvider, h.saValidator)
+	err := validateAndNormalizeStartRequest(req, h.config, h.logger, h.saMapperProvider, h.saValidator)
 	var invalidArgErr *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArgErr)
 }
@@ -607,8 +755,79 @@ func TestValidateStandAloneInputWarningSizeShouldSucceed(t *testing.T) {
 		func(ns string) int { return payloadSize },
 		defaultMaxIDLengthLimit,
 	)
-	err := validateAndNormalizeStartRequest(req, h.config.MaxIDLengthLimit(), h.config.BlobSizeLimitError, h.config.BlobSizeLimitWarn, h.logger, h.saMapperProvider, h.saValidator)
+	err := validateAndNormalizeStartRequest(req, h.config, h.logger, h.saMapperProvider, h.saValidator)
 	require.NoError(t, err)
+}
+
+func TestValidateStandaloneUserMetadata(t *testing.T) {
+	summary := &commonpb.Payload{Data: []byte("summary")}
+	details := &commonpb.Payload{Data: []byte("details")}
+
+	tests := []struct {
+		name         string
+		metadata     *sdkpb.UserMetadata
+		summaryLimit int
+		detailsLimit int
+		errContains  string
+	}{
+		{
+			name:         "summary exceeds size limit",
+			metadata:     &sdkpb.UserMetadata{Summary: summary},
+			summaryLimit: summary.Size() - 1,
+			detailsLimit: details.Size() + 1000,
+			errContains:  "user_metadata.summary exceeds size limit",
+		},
+		{
+			name:         "details exceeds size limit",
+			metadata:     &sdkpb.UserMetadata{Details: details},
+			summaryLimit: summary.Size() + 1000,
+			detailsLimit: details.Size() - 1,
+			errContains:  "user_metadata.details exceeds size limit",
+		},
+		{
+			name:         "payloads at size limits",
+			metadata:     &sdkpb.UserMetadata{Summary: summary, Details: details},
+			summaryLimit: summary.Size(),
+			detailsLimit: details.Size(),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			h := &frontendHandler{
+				config: &Config{
+					BlobSizeLimitError:         defaultBlobSizeLimitError,
+					BlobSizeLimitWarn:          defaultBlobSizeLimitWarn,
+					DefaultActivityRetryPolicy: getDefaultRetrySettings,
+					MaxIDLengthLimit:           func() int { return defaultMaxIDLengthLimit },
+					MaxUserMetadataSummarySize: func(string) int { return test.summaryLimit },
+					MaxUserMetadataDetailsSize: func(string) int { return test.detailsLimit },
+				},
+				linkValidator: newLinkValidator(
+					defaultMaxLinksPerRequest,
+					func(string) int { return 2000 },
+					defaultLinkMaxSize,
+				),
+				logger: log.NewNoopLogger(),
+			}
+			req := &workflowservice.StartActivityExecutionRequest{
+				Namespace:           defaultNamespaceID,
+				ActivityId:          defaultActivityID,
+				ActivityType:        &commonpb.ActivityType{Name: defaultActivityType},
+				TaskQueue:           &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+				StartToCloseTimeout: durationpb.New(10 * time.Second),
+				UserMetadata:        test.metadata,
+			}
+			_, err := h.validateAndPopulateStartRequest(t.Context(), req, namespace.ID(defaultNamespaceID))
+			if test.errContains == "" {
+				require.NoError(t, err)
+				return
+			}
+			var invalidArgument *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgument)
+			require.ErrorContains(t, err, test.errContains)
+		})
+	}
 }
 
 func TestValidateStandAlone_IDPolicyShouldDefault(t *testing.T) {
@@ -625,7 +844,7 @@ func TestValidateStandAlone_IDPolicyShouldDefault(t *testing.T) {
 	}
 
 	h := newTestFrontendHandler(defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, defaultMaxIDLengthLimit)
-	err := validateAndNormalizeStartRequest(req, h.config.MaxIDLengthLimit(), h.config.BlobSizeLimitError, h.config.BlobSizeLimitWarn, h.logger, h.saMapperProvider, h.saValidator)
+	err := validateAndNormalizeStartRequest(req, h.config, h.logger, h.saMapperProvider, h.saValidator)
 
 	require.NoError(t, err)
 	require.Equal(t, enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE, req.IdReusePolicy)

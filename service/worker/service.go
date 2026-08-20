@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 
+	otellog "go.opentelemetry.io/otel/log"
 	"go.temporal.io/api/serviceerror"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -24,6 +25,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
 	"go.temporal.io/server/service/worker/replicator"
 	"go.temporal.io/server/service/worker/scanner"
@@ -44,6 +46,8 @@ type (
 	// Archiver: Handles archival of workflow histories.
 	Service struct {
 		logger                 log.Logger
+		eventLogger            otellog.Logger
+		eventDataProvider      wideevents.NamespaceReplicationTaskEventDataProvider
 		clusterMetadata        cluster.Metadata
 		clientBean             client.Bean
 		clusterMetadataManager persistence.ClusterMetadataManager
@@ -67,6 +71,7 @@ type (
 		workerManager                    *workerManager
 		perNamespaceWorkerManager        *PerNamespaceWorkerManager
 		scanner                          *scanner.Scanner
+		parentClosePolicyProcessor       *parentclosepolicy.Processor
 		matchingClient                   matchingservice.MatchingServiceClient
 		namespaceReplicationTaskExecutor nsreplication.TaskExecutor
 		customTaskHandler                func(ctx context.Context, task *replicationspb.ReplicationTask) error
@@ -93,6 +98,7 @@ type (
 		BatcherRPS                           dynamicconfig.IntPropertyFnWithNamespaceFilter
 		BatcherConcurrency                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 		EnableParentClosePolicyWorker        dynamicconfig.BoolPropertyFn
+		EmitNamespaceLifecycleEvents         dynamicconfig.BoolPropertyFn
 		PerNamespaceWorkerCount              dynamicconfig.TypedSubscribableWithNamespaceFilter[int]
 		PerNamespaceWorkerOptions            dynamicconfig.TypedSubscribableWithNamespaceFilter[sdkworker.Options]
 		PerNamespaceWorkerStartRate          dynamicconfig.FloatPropertyFn
@@ -110,6 +116,8 @@ type (
 
 func NewService(
 	logger log.SnTaggedLogger,
+	eventLogger otellog.Logger,
+	eventDataProvider wideevents.NamespaceReplicationTaskEventDataProvider,
 	serviceConfig *Config,
 	sdkClientFactory sdk.ClientFactory,
 	clusterMetadata cluster.Metadata,
@@ -143,6 +151,8 @@ func NewService(
 		config:                    serviceConfig,
 		sdkClientFactory:          sdkClientFactory,
 		logger:                    logger,
+		eventLogger:               eventLogger,
+		eventDataProvider:         eventDataProvider,
 		clusterMetadata:           clusterMetadata,
 		clientBean:                clientBean,
 		clusterMetadataManager:    clusterMetadataManager,
@@ -218,6 +228,7 @@ func NewConfig(
 		BatcherRPS:                           dynamicconfig.BatcherRPS.Get(dc),
 		BatcherConcurrency:                   dynamicconfig.BatcherConcurrency.Get(dc),
 		EnableParentClosePolicyWorker:        dynamicconfig.EnableParentClosePolicyWorker.Get(dc),
+		EmitNamespaceLifecycleEvents:         dynamicconfig.EmitNamespaceLifecycleEvents.Get(dc),
 		PerNamespaceWorkerCount:              dynamicconfig.WorkerPerNamespaceWorkerCount.Subscribe(dc),
 		PerNamespaceWorkerOptions:            dynamicconfig.WorkerPerNamespaceWorkerOptions.Subscribe(dc),
 		PerNamespaceWorkerStartRate:          dynamicconfig.WorkerPerNamespaceWorkerStartRate.Get(dc),
@@ -297,6 +308,9 @@ func (s *Service) Stop() {
 	s.scanner.Stop()
 	s.perNamespaceWorkerManager.Stop()
 	s.workerManager.Stop()
+	if s.parentClosePolicyProcessor != nil {
+		s.parentClosePolicyProcessor.Stop()
+	}
 	s.visibilityManager.Close()
 
 	s.server.GracefulStop()
@@ -325,6 +339,7 @@ func (s *Service) startParentClosePolicyProcessor() {
 			tag.Error(err),
 		)
 	}
+	s.parentClosePolicyProcessor = processor
 }
 
 func (s *Service) initScanner(serializer serialization.Serializer) error {
@@ -367,6 +382,9 @@ func (s *Service) startReplicator() {
 		s.clusterMetadata,
 		s.clientBean,
 		s.logger,
+		s.eventLogger,
+		s.config.EmitNamespaceLifecycleEvents,
+		s.eventDataProvider,
 		s.metricsHandler,
 		s.hostInfo,
 		s.workerServiceResolver,

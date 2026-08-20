@@ -313,6 +313,11 @@ func (s *WorkflowCompletionPaginationTestSuite) TestBufferOverflowFailsWorkflowT
 	history := env.GetHistory(env.Namespace().String(), we)
 	s.Equal(1, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED))
 	s.Equal(0, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED))
+	for _, e := range history {
+		if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED {
+			s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_REQUEST_TOO_LARGE, e.GetWorkflowTaskFailedEventAttributes().GetCause())
+		}
+	}
 }
 
 // TestOutOfOrderPagesReassemble verifies that pages buffered out of arrival order

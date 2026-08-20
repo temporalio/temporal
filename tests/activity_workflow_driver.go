@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	activitypb "go.temporal.io/api/activity/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -23,9 +24,12 @@ import (
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/chasm/lib/activity/model"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -201,23 +205,27 @@ func (a *wfaHandle) activityInfo(t require.TestingT) activityInfo {
 	return info
 }
 
-// terminalStatus waits for the activity to reach a terminal state and reports it. A workflow activity's
+// terminalOutcome waits for the activity to reach a terminal state and reports it. A workflow activity's
 // terminal status is not in PendingActivities, so it is read from the workflow-result error's cause.
-func (a *wfaHandle) terminalStatus(t require.TestingT) enumspb.ActivityExecutionStatus {
+func (a *wfaHandle) terminalOutcome(t require.TestingT) activityTerminalOutcome {
 	err := a.run.Get(a.d.ctx, nil)
 	if err == nil {
-		return enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED
+		return activityTerminalOutcome{status: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED}
 	}
 	// A canceled activity is returned as a bare CanceledError, not wrapped in an ActivityError.
 	if _, ok := errors.AsType[*temporal.CanceledError](err); ok {
-		return enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED
+		return activityTerminalOutcome{status: enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED}
 	}
 	var actErr *temporal.ActivityError
 	require.ErrorAs(t, err, &actErr)
-	if _, ok := actErr.Unwrap().(*temporal.TimeoutError); ok {
-		return enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+	outcome := activityTerminalOutcome{
+		status:     enumspb.ACTIVITY_EXECUTION_STATUS_FAILED,
+		retryState: actErr.RetryState(),
 	}
-	return enumspb.ACTIVITY_EXECUTION_STATUS_FAILED
+	if _, ok := actErr.Unwrap().(*temporal.TimeoutError); ok {
+		outcome.status = enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT
+	}
+	return outcome
 }
 
 // activityInfoIfInProgress returns the shared activity projection and whether the activity still has
@@ -238,6 +246,7 @@ func wfaActivityInfo(p *workflowpb.PendingActivityInfo) activityInfo {
 		Attempt:                    p.GetAttempt(),
 		CurrentRetryInterval:       p.GetCurrentRetryInterval().AsDuration().Round(time.Second),
 		NextAttemptScheduleTimeSet: p.GetNextAttemptScheduleTime() != nil,
+		LastHeartbeatDetails:       activityMarshalPayloads(p.GetHeartbeatDetails()),
 	}
 }
 
@@ -250,15 +259,60 @@ func (a *wfaHandle) waitForCancelRequested(t testing.TB) {
 	}, activityDriverTimeout, activityDriverPollInterval)
 }
 
+func (a *wfaHandle) respondCanceledByID() error {
+	_, err := a.d.env.FrontendClient().RespondActivityTaskCanceledById(
+		a.d.ctx,
+		&workflowservice.RespondActivityTaskCanceledByIdRequest{
+			Namespace:  a.d.env.Namespace().String(),
+			WorkflowId: a.workflowID,
+			ActivityId: a.activityID,
+			RunId:      a.runID,
+			Identity:   a.d.env.Tv().WorkerIdentity(),
+		},
+	)
+	return err
+}
+
 // rpc performs the frontend RPC for a non-Poll, non-timer event and returns its error.
 func (a *wfaHandle) rpc(t testing.TB, e model.Event) error {
 	fc := a.d.env.FrontendClient()
 	ns := a.d.env.Namespace().String()
 	switch e.Type {
-	case model.RespondFailedType:
-		_, err := fc.RespondActivityTaskFailed(a.d.ctx, &workflowservice.RespondActivityTaskFailedRequest{
-			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(), Failure: activityFailure(e.Retryable, a.cfg.NextRetryDelay),
+	case model.HeartbeatType:
+		_, err := fc.RecordActivityTaskHeartbeat(a.d.ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: ns, TaskToken: a.token, Details: activityRecordedHeartbeatDetails,
 		})
+		return err
+	case model.RespondCompletedType:
+		_, err := fc.RespondActivityTaskCompleted(a.d.ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(),
+			Result: payloads.EncodeString("result"),
+		})
+		return err
+	case model.RespondCompletedByIDType:
+		_, err := fc.RespondActivityTaskCompletedById(a.d.ctx, &workflowservice.RespondActivityTaskCompletedByIdRequest{
+			Namespace: ns, WorkflowId: a.workflowID, RunId: a.runID, ActivityId: a.activityID, Identity: a.d.env.Tv().WorkerIdentity(),
+			Result: payloads.EncodeString("result"),
+		})
+		return err
+	case model.RespondFailedType:
+		req := &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(), Failure: respondFailedFailure(e, a.cfg.NextRetryDelay),
+		}
+		if e.HasHeartbeatDetails {
+			req.LastHeartbeatDetails = activityHeartbeatDetails
+		}
+		_, err := fc.RespondActivityTaskFailed(a.d.ctx, req)
+		return err
+	case model.RespondFailedByIDType:
+		req := &workflowservice.RespondActivityTaskFailedByIdRequest{
+			Namespace: ns, WorkflowId: a.workflowID, RunId: a.runID, ActivityId: a.activityID, Identity: a.d.env.Tv().WorkerIdentity(),
+			Failure: respondFailedFailure(e, a.cfg.NextRetryDelay),
+		}
+		if e.HasHeartbeatDetails {
+			req.LastHeartbeatDetails = activityHeartbeatDetails
+		}
+		_, err := fc.RespondActivityTaskFailedById(a.d.ctx, req)
 		return err
 	case model.RespondCanceledType:
 		_, err := fc.RespondActivityTaskCanceled(a.d.ctx, &workflowservice.RespondActivityTaskCanceledRequest{
@@ -282,9 +336,21 @@ func (a *wfaHandle) rpc(t testing.TB, e model.Event) error {
 			Namespace: ns, WorkflowId: a.workflowID, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(), Reason: "drive", RequestId: uuid.NewString(),
 		})
 		return err
+	case model.UnpauseType:
+		_, err := fc.UnpauseActivityExecution(a.d.ctx, &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace: ns, WorkflowId: a.workflowID, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(),
+		})
+		return err
 	case model.ResetType:
 		_, err := fc.ResetActivityExecution(a.d.ctx, &workflowservice.ResetActivityExecutionRequest{
-			Namespace: ns, WorkflowId: a.workflowID, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(), KeepPaused: e.KeepPaused,
+			Namespace: ns, WorkflowId: a.workflowID, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(), KeepPaused: e.KeepPaused, ResetHeartbeat: e.ResetHeartbeat,
+		})
+		return err
+	case model.UpdateOptionsType:
+		_, err := fc.UpdateActivityExecutionOptions(a.d.ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace: ns, WorkflowId: a.workflowID, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(),
+			ActivityOptions: &activitypb.ActivityOptions{HeartbeatTimeout: durationpb.New(time.Hour)},
+			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"heartbeat_timeout"}},
 		})
 		return err
 	default:

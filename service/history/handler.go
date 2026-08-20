@@ -1856,6 +1856,26 @@ func (h *Handler) PollWorkflowExecutionUpdate(
 	return engine.PollWorkflowExecutionUpdate(ctx, request)
 }
 
+func (h *Handler) PollWorkflowExecutionTimeSkipping(
+	ctx context.Context,
+	request *historyservice.PollWorkflowExecutionTimeSkippingRequest,
+) (*historyservice.PollWorkflowExecutionTimeSkippingResponse, error) {
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(
+		namespace.ID(request.GetNamespaceId()),
+		request.GetRequest().GetWorkflowExecution().GetWorkflowId(),
+	)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	return engine.PollWorkflowExecutionTimeSkipping(ctx, request)
+}
+
 func (h *Handler) StreamWorkflowReplicationMessages(
 	server historyservice.HistoryService_StreamWorkflowReplicationMessagesServer,
 ) (retErr error) {
@@ -2587,6 +2607,12 @@ func (h *Handler) StartNexusOperation(
 		if len(ps.GetPayloads()) == 1 {
 			payload = ps.GetPayloads()[0]
 		}
+		if payload != nil {
+			if payload.Metadata == nil {
+				payload.Metadata = make(map[string][]byte, 1)
+			}
+			payload.Metadata[commonnexus.SystemPayloadMetadataKey] = []byte("true")
+		}
 		response.Variant = &nexuspb.StartOperationResponse_SyncSuccess{
 			SyncSuccess: &nexuspb.StartOperationResponse_Sync{
 				Payload: payload,
@@ -2609,7 +2635,6 @@ func (h *Handler) StartNexusOperation(
 		Response: response,
 	}, nil
 }
-
 func (h *Handler) CancelNexusOperation(
 	ctx context.Context,
 	req *historyservice.CancelNexusOperationRequest,

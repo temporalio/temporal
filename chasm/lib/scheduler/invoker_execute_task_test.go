@@ -8,8 +8,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
@@ -20,6 +22,7 @@ import (
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -31,14 +34,18 @@ type invokerExecuteTestEnv struct {
 	mockHistoryClient  *historyservicemock.MockHistoryServiceClient
 }
 
-func newInvokerExecuteTestEnv(t *testing.T) *invokerExecuteTestEnv {
+func newInvokerExecuteTestEnv(t *testing.T, configure ...func(*scheduler.Config)) *invokerExecuteTestEnv {
 	env := newTestEnv(t, withMockEngine())
 
 	mockFrontendClient := workflowservicemock.NewMockWorkflowServiceClient(env.Ctrl)
 	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(env.Ctrl)
 
+	config := defaultConfig()
+	for _, fn := range configure {
+		fn(config)
+	}
 	handler := scheduler.NewInvokerExecuteTaskHandler(scheduler.InvokerTaskHandlerOptions{
-		Config:         defaultConfig(),
+		Config:         config,
 		MetricsHandler: metrics.NoopMetricsHandler,
 		BaseLogger:     env.Logger,
 		SpecProcessor:  env.SpecProcessor,
@@ -181,6 +188,83 @@ func TestExecuteTask_Basic(t *testing.T) {
 		ExpectedRunningWorkflows: 2,
 		ExpectedActionCount:      2,
 	})
+}
+
+func TestExecuteTask_ForwardsVersioningOverride(t *testing.T) {
+	tests := map[string]struct {
+		override *workflowpb.VersioningOverride
+		enabled  bool
+	}{
+		"pinned": {
+			enabled: true,
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_Pinned{
+					Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+						Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+						Version: &deploymentpb.WorkerDeploymentVersion{
+							DeploymentName: "deployment",
+							BuildId:        "build-id",
+						},
+					},
+				},
+			},
+		},
+		"one-time": {
+			enabled: true,
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_OneTime{
+					OneTime: &workflowpb.VersioningOverride_OneTimeOverride{
+						TargetDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+							DeploymentName: "deployment",
+							BuildId:        "build-id",
+						},
+					},
+				},
+			},
+		},
+		"disabled": {
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true},
+			},
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			env := newInvokerExecuteTestEnv(t, func(config *scheduler.Config) {
+				tweakables := scheduler.DefaultTweakables
+				tweakables.EnableVersioningOverride = test.enabled
+				config.Tweakables = func(string) scheduler.Tweakables { return tweakables }
+			})
+			env.Scheduler.GetSchedule().GetAction().GetStartWorkflow().VersioningOverride = test.override
+			startTime := timestamppb.New(env.TimeSource.Now())
+
+			env.mockFrontendClient.EXPECT().
+				StartWorkflowExecution(gomock.Any(), gomock.Any()).
+				DoAndReturn(func(_ context.Context, request *workflowservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*workflowservice.StartWorkflowExecutionResponse, error) {
+					var expected *workflowpb.VersioningOverride
+					if test.enabled {
+						expected = test.override
+					}
+					require.True(t, proto.Equal(expected, request.GetVersioningOverride()))
+					return &workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil
+				})
+
+			runExecuteTestCase(t, env, &executeTestCase{
+				InitialBufferedStarts: []*schedulespb.BufferedStart{{
+					NominalTime:   startTime,
+					ActualTime:    startTime,
+					DesiredTime:   startTime,
+					RequestId:     "request-id",
+					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+					Attempt:       1,
+				}},
+				ExpectedBufferedStarts:   1,
+				ExpectedRunningWorkflows: 1,
+				ExpectedActionCount:      1,
+			})
+		})
+	}
 }
 
 func TestExecuteTask_DistinctRequestsCanReuseCompletedWorkflowID(t *testing.T) {

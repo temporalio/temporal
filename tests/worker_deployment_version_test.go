@@ -1300,6 +1300,12 @@ func (s *DeploymentVersionSuite) TestUpdateVersionMetadata() {
 	s.Equal(metadataIdentity, resp.GetWorkerDeploymentVersionInfo().GetLastModifierIdentity())
 }
 
+// testInvokeScaler returns the scaler that scaling groups backed by the test-invoke compute
+// provider must declare.
+func testInvokeScaler() *computepb.ComputeScaler {
+	return &computepb.ComputeScaler{Type: "no-sync"}
+}
+
 func (s *DeploymentVersionSuite) createDeploymentAndVersion(
 	env *testcore.TestEnv,
 	tv *testvars.TestVars,
@@ -1339,7 +1345,7 @@ func (s *DeploymentVersionSuite) TestUpdateComputeConfig_Success() {
 
 	s.createDeploymentAndVersion(env, env.Tv(), createIdentity, &computepb.ComputeConfig{
 		ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
-			"sg1": {Provider: validProvider},
+			"sg1": {Provider: validProvider, Scaler: testInvokeScaler()},
 		},
 	})
 
@@ -1353,6 +1359,7 @@ func (s *DeploymentVersionSuite) TestUpdateComputeConfig_Success() {
 				ScalingGroup: &computepb.ComputeConfigScalingGroup{
 					TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_ACTIVITY},
 					Provider:       validProvider,
+					Scaler:         testInvokeScaler(),
 				},
 			},
 		},
@@ -1370,10 +1377,11 @@ func (s *DeploymentVersionSuite) TestUpdateComputeConfig_Success() {
 		a.Equal(updateIdentity, info.GetLastModifierIdentity())
 		a.True(proto.Equal(&computepb.ComputeConfig{
 			ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
-				"sg1": {Provider: validProvider},
+				"sg1": {Provider: validProvider, Scaler: testInvokeScaler()},
 				"sg2": {
 					TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_ACTIVITY},
 					Provider:       validProvider,
+					Scaler:         testInvokeScaler(),
 				},
 			},
 		}, info.GetComputeConfig()))
@@ -1446,6 +1454,7 @@ func (s *DeploymentVersionSuite) TestUpdateComputeConfig_UpdateExistingGroup() {
 			"sg1": {
 				TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
 				Provider:       validProvider,
+				Scaler:         testInvokeScaler(),
 			},
 		},
 	})
@@ -1477,6 +1486,7 @@ func (s *DeploymentVersionSuite) TestUpdateComputeConfig_UpdateExistingGroup() {
 				"sg1": {
 					TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_ACTIVITY},
 					Provider:       validProvider,
+					Scaler:         testInvokeScaler(),
 				},
 			},
 		}, descResp.GetWorkerDeploymentVersionInfo().GetComputeConfig()))
@@ -1489,10 +1499,11 @@ func (s *DeploymentVersionSuite) TestUpdateComputeConfig_RemoveScalingGroup() {
 
 	s.createDeploymentAndVersion(env, env.Tv(), env.Tv().Any().String(), &computepb.ComputeConfig{
 		ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
-			"sg1": {Provider: validProvider},
+			"sg1": {Provider: validProvider, Scaler: testInvokeScaler()},
 			"sg2": {
 				TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_ACTIVITY},
 				Provider:       validProvider,
+				Scaler:         testInvokeScaler(),
 			},
 		},
 	})
@@ -1517,6 +1528,7 @@ func (s *DeploymentVersionSuite) TestUpdateComputeConfig_RemoveScalingGroup() {
 				"sg2": {
 					TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_ACTIVITY},
 					Provider:       validProvider,
+					Scaler:         testInvokeScaler(),
 				},
 			},
 		}, descResp.GetWorkerDeploymentVersionInfo().GetComputeConfig()))
@@ -1556,7 +1568,7 @@ func (s *DeploymentVersionSuite) TestUpdateComputeConfig_InvalidProvider() {
 	env := s.newTestEnv()
 	s.createDeploymentAndVersion(env, env.Tv(), env.Tv().Any().String(), &computepb.ComputeConfig{
 		ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
-			"sg1": {Provider: computeprovider.TestInvokeComputeProviderValidComputeProvider()},
+			"sg1": {Provider: computeprovider.TestInvokeComputeProviderValidComputeProvider(), Scaler: testInvokeScaler()},
 		},
 	})
 
@@ -1640,6 +1652,7 @@ func (s *DeploymentVersionSuite) TestValidateComputeConfig_Valid() {
 			"sg1": {
 				ScalingGroup: &computepb.ComputeConfigScalingGroup{
 					Provider: computeprovider.TestInvokeComputeProviderValidComputeProvider(),
+					Scaler:   testInvokeScaler(),
 				},
 			},
 		},
@@ -1694,6 +1707,7 @@ func (s *DeploymentVersionSuite) TestValidateComputeConfig_VersionNotFound() {
 			"sg1": {
 				ScalingGroup: &computepb.ComputeConfigScalingGroup{
 					Provider: computeprovider.TestInvokeComputeProviderValidComputeProvider(),
+					Scaler:   testInvokeScaler(),
 				},
 			},
 		},
@@ -3204,6 +3218,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_Success() {
 		ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
 			"sg1": {
 				Provider: computeprovider.TestInvokeComputeProviderValidComputeProvider(),
+				Scaler:   testInvokeScaler(),
 			},
 		},
 	}
@@ -3524,6 +3539,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_MultipleVersi
 		ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
 			"sg1": {
 				Provider: computeprovider.TestInvokeComputeProviderValidComputeProvider(),
+				Scaler:   testInvokeScaler(),
 			},
 		},
 	}
@@ -3531,6 +3547,7 @@ func (s *DeploymentVersionSuite) TestCreateWorkerDeploymentVersion_MultipleVersi
 		ScalingGroups: map[string]*computepb.ComputeConfigScalingGroup{
 			"sg2": {
 				Provider: computeprovider.TestInvokeComputeProviderValidComputeProvider(),
+				Scaler:   testInvokeScaler(),
 			},
 		},
 	}

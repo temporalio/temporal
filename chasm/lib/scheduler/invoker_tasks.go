@@ -298,7 +298,11 @@ func (h *InvokerExecuteTaskHandler) cancelWorkflows(
 				metricsHandler.Counter(metrics.ScheduleCancelWorkflowErrors.Name()).Record(1)
 			}
 
-			// Cancels are only attempted once.
+			// Cancels are only attempted once here: transient failures are
+			// already retried at the history-client layer (resource.HistoryClient
+			// is retry-wrapped), so a single best-effort attempt is intentional.
+			// todo: consider splitting these out to individual tasks so they can be retried
+			// independently
 			result.CompletedCancels = append(result.CompletedCancels, wf)
 		})
 	}
@@ -336,7 +340,11 @@ func (h *InvokerExecuteTaskHandler) terminateWorkflows(
 				metricsHandler.Counter(metrics.ScheduleTerminateWorkflowErrors.Name()).Record(1)
 			}
 
-			// Terminates are only attempted once.
+			// Terminates are only attempted once here: transient failures are
+			// already retried at the history-client layer (resource.HistoryClient
+			// is retry-wrapped), so a single best-effort attempt is intentional.
+			// todo: consider splitting these out to individual tasks so they can be retried
+			// independently
 			result.CompletedTerminates = append(result.CompletedTerminates, wf)
 		})
 	}
@@ -493,9 +501,11 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 	isRunning := len(runningWorkflows) > 0
 	result.missedCatchupByActionRunning = make(map[bool]int64)
 
-	// Processing completely ignores any BufferedStart that's already executing/backing off.
+	// Processing ignores starts that are already executing or backing off. An existing
+	// deferred BUFFER_ONE start still participates so it can reject later starts.
 	pendingBufferedStarts := util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
-		return start.Attempt == 0
+		return start.Attempt == 0 ||
+			(start.Attempt == -1 && scheduler.resolveOverlapPolicy(start.GetOverlapPolicy()) == enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE)
 	})
 
 	// Resolve overlap policies and trim BufferedStarts that are skipped by policy.
@@ -685,6 +695,9 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 		LastCompletionResult: &commonpb.Payloads{
 			Payloads: lcr,
 		},
+	}
+	if h.config.Tweakables(scheduler.Namespace).EnableVersioningOverride {
+		request.VersioningOverride = requestSpec.VersioningOverride
 	}
 
 	result, err := h.frontendClient.StartWorkflowExecution(ctx, request)

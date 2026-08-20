@@ -49,13 +49,18 @@ func NewWorkflowWithSignal(
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) (historyi.MutableState, error) {
-	newMutableState, err := CreateMutableState(
+	startTime := workflow.AdjustNowWithTimeSkipping(
+		shard.GetTimeSource().Now(),
+		startRequest.GetTimeSkippingStatePropagation(),
+	)
+	newMutableState, err := createMutableState(
 		shard,
 		namespaceEntry,
 		startRequest.StartRequest.WorkflowExecutionTimeout,
 		startRequest.StartRequest.WorkflowRunTimeout,
 		workflowID,
 		runID,
+		startTime,
 	)
 	if err != nil {
 		return nil, err
@@ -154,13 +159,14 @@ func NewWorkflowLeaseAndContext(
 	), nil
 }
 
-func CreateMutableState(
+func createMutableState(
 	shard historyi.ShardContext,
 	namespaceEntry *namespace.Namespace,
 	executionTimeout *durationpb.Duration,
 	runTimeout *durationpb.Duration,
 	workflowID string,
 	runID string,
+	startTime time.Time,
 ) (historyi.MutableState, error) {
 	newMutableState := workflow.NewMutableState(
 		shard,
@@ -169,7 +175,7 @@ func CreateMutableState(
 		namespaceEntry,
 		workflowID,
 		runID,
-		shard.GetTimeSource().Now(),
+		startTime,
 	)
 	if err := newMutableState.SetHistoryTree(executionTimeout, runTimeout, runID); err != nil {
 		return nil, err

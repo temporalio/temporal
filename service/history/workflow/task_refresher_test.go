@@ -1453,8 +1453,10 @@ func (s *taskRefresherSuite) TestRefreshTasksForTimeSkipping() {
 	for _, tc := range []struct {
 		name                   string
 		tsi                    *persistencespb.TimeSkippingInfo
+		status                 enumspb.WorkflowExecutionStatus
 		minVersionedTransition *persistencespb.VersionedTransition
 		wantRegen              bool
+		wantFastForwardRegen   bool
 	}{
 		{
 			// Skip at transition 5, watermark 3 → new to this peer → re-stamp.
@@ -1477,8 +1479,19 @@ func (s *taskRefresherSuite) TestRefreshTasksForTimeSkipping() {
 			minVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: common.EmptyVersion, TransitionCount: 4},
 			wantRegen:              false,
 		},
+		{
+			name:                   "FullRefresh/RegeneratesFastForwardOnly",
+			tsi:                    tsiAt(5),
+			minVersionedTransition: EmptyVersionedTransition,
+			wantRegen:              false,
+			wantFastForwardRegen:   true,
+		},
 	} {
 		s.Run(tc.name, func() {
+			status := tc.status
+			if status == enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED {
+				status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+			}
 			mutableState, err := NewMutableStateFromDB(
 				s.mockShard,
 				s.mockShard.GetEventsCache(),
@@ -1493,7 +1506,7 @@ func (s *taskRefresherSuite) TestRefreshTasksForTimeSkipping() {
 					ExecutionState: &persistencespb.WorkflowExecutionState{
 						RunId:  tests.RunID,
 						State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-						Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+						Status: status,
 					},
 					NextEventId: int64(20),
 				},
@@ -1506,7 +1519,12 @@ func (s *taskRefresherSuite) TestRefreshTasksForTimeSkipping() {
 			if tc.wantRegen {
 				times = 1
 			}
+			fastForwardTimes := 0
+			if tc.wantFastForwardRegen {
+				fastForwardTimes = 1
+			}
 			s.mockTaskGenerator.EXPECT().RegenerateTimerTasksForTimeSkipping().Return(nil).Times(times)
+			s.mockTaskGenerator.EXPECT().GenerateTimeSkippingFastForwardTimerTask().Return(nil).Times(fastForwardTimes)
 
 			err = s.taskRefresher.refreshTasksForTimeSkipping(mutableState, s.mockTaskGenerator, tc.minVersionedTransition)
 			s.NoError(err)

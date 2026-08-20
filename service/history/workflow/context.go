@@ -539,7 +539,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 	if err != nil {
 		return err
 	}
-	NotifyOnExecutionSnapshot(engine, newWorkflow)
+	NotifyOnExecutionSnapshot(engine, c.archetypeID, newWorkflow)
 	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), newMutableState)
 
 	return nil
@@ -845,13 +845,6 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		if err != nil {
 			return err
 		}
-	}
-
-	if updateWorkflow == nil {
-		if newWorkflow != nil || len(newWorkflowEventsSeq) != 0 {
-			return serviceerror.NewInternal("current workflow mutation skipped with new workflow snapshot")
-		}
-		return nil
 	}
 
 	if err := c.mergeUpdateWithNewReplicationTasks(
