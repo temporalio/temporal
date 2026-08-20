@@ -958,51 +958,6 @@ func createNexusOperationFailure(operation Operation, scheduledEventID int64, ca
 	}
 }
 
-// invocationTraceContext captures per-call contextual information used for HTTP tracing and failure logging.
-type invocationTraceContext struct {
-	operationTag      string // "StartOperation" or "CancelOperation"
-	namespaceName     string // source (caller) namespace
-	targetNamespaceID string
-	requestID         string
-	operation         string
-	endpointName      string
-	workflowID        string
-	runID             string
-	attemptStart      time.Time
-	attempt           int32
-}
-
-// tags returns the structured log tags describing the call.
-func (c invocationTraceContext) tags() []tag.Tag {
-	return []tag.Tag{
-		tag.Operation(c.operationTag),
-		tag.WorkflowNamespace(c.namespaceName),
-		tag.NexusEndpointTargetNamespaceID(c.targetNamespaceID),
-		tag.RequestID(c.requestID),
-		tag.NexusOperation(c.operation),
-		tag.Endpoint(c.endpointName),
-		tag.WorkflowID(c.workflowID),
-		tag.WorkflowRunID(c.runID),
-		tag.AttemptStart(c.attemptStart),
-		tag.Attempt(c.attempt),
-	}
-}
-
-// logCallFailure logs a failed outbound Nexus call.
-func (e taskExecutor) logCallFailure(traceCtx invocationTraceContext, callErr error, failureSource string) {
-	if callErr == nil {
-		return
-	}
-	tags := append(traceCtx.tags(), tag.Error(callErr))
-	msg := fmt.Sprintf("Nexus %s request failed", traceCtx.operationTag)
-	_, isTimeoutBelowMin := errors.AsType[*operationTimeoutBelowMinError](callErr)
-	if failureSource == commonnexus.FailureSourceWorker || isTimeoutBelowMin {
-		e.Logger.Debug(msg, tags...)
-	} else {
-		e.Logger.Error(msg, tags...)
-	}
-}
-
 func startCallOutcomeTag(callCtx context.Context, result *nexusrpc.ClientStartOperationResponse[*commonpb.Payload], callErr error) string {
 
 	if callErr != nil {
@@ -1062,6 +1017,51 @@ func cancelCallOutcomeTag(callCtx context.Context, callErr error) string {
 		return "unknown-error"
 	}
 	return "successful"
+}
+
+// invocationTraceContext captures per-call contextual information used for HTTP tracing and failure logging.
+type invocationTraceContext struct {
+	operationTag      string // "StartOperation" or "CancelOperation"
+	namespaceName     string // source (caller) namespace
+	targetNamespaceID string
+	requestID         string
+	operation         string
+	endpointName      string
+	workflowID        string
+	runID             string
+	attemptStart      time.Time
+	attempt           int32
+}
+
+// tags returns the structured log tags describing the call.
+func (c invocationTraceContext) tags() []tag.Tag {
+	return []tag.Tag{
+		tag.Operation(c.operationTag),
+		tag.WorkflowNamespace(c.namespaceName),
+		tag.NexusEndpointTargetNamespaceID(c.targetNamespaceID),
+		tag.RequestID(c.requestID),
+		tag.NexusOperation(c.operation),
+		tag.Endpoint(c.endpointName),
+		tag.WorkflowID(c.workflowID),
+		tag.WorkflowRunID(c.runID),
+		tag.AttemptStart(c.attemptStart),
+		tag.Attempt(c.attempt),
+	}
+}
+
+// logCallFailure logs a failed outbound Nexus call.
+func (e taskExecutor) logCallFailure(traceCtx invocationTraceContext, callErr error, failureSource string) {
+	if callErr == nil {
+		return
+	}
+	tags := append(traceCtx.tags(), tag.Error(callErr))
+	msg := fmt.Sprintf("Nexus %s request failed", traceCtx.operationTag)
+	_, isTimeoutBelowMin := errors.AsType[*operationTimeoutBelowMinError](callErr)
+	if failureSource == commonnexus.FailureSourceWorker || isTimeoutBelowMin {
+		e.Logger.Debug(msg, tags...)
+	} else {
+		e.Logger.Error(msg, tags...)
+	}
 }
 
 func isDestinationDown(err error) bool {
