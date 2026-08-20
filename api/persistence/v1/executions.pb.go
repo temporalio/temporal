@@ -375,7 +375,7 @@ type WorkflowExecutionInfo struct {
 	DeclinedTargetVersionUpgrade *v17.DeclinedTargetVersionUpgrade `protobuf:"bytes,114,opt,name=declined_target_version_upgrade,json=declinedTargetVersionUpgrade,proto3" json:"declined_target_version_upgrade,omitempty"`
 	// Time skipping info that contains the config and runtime history of the time skipping for the workflow.
 	TimeSkippingInfo *TimeSkippingInfo `protobuf:"bytes,115,opt,name=time_skipping_info,json=timeSkippingInfo,proto3" json:"time_skipping_info,omitempty"`
-	// Most recently applied unpause and pause request ids, needed to dedupuplicate these.
+	// Most recently applied unpause and pause request ids, needed to deduplicate these.
 	// Since pause_info is no longer available in unpaused, fallback to last_pause_request_id
 	// to de-dupe a pause, which is written only on unpause, to avoid duplicate id storage.
 	// Only last_pause_request_id, not last_unpause_request_id, is carried across continue-as-new,
