@@ -33,19 +33,23 @@ var (
 	errParentChildTaskAlreadyResolved   = errors.New("parent-child replication task is already resolved")
 )
 
+type parentChildXDCTestSuite struct {
+	xdcBaseSuite
+}
+
 type (
 	parentChildWorkflow int
 
 	parentChildCluster int
 
-	parentChildTaskDisposition int
+	parentChildReplicationTaskAction int
 
 	parentChildScenario struct {
-		steps        []parentChildStep
+		steps        []parentChildScenarioStep
 		expectations []parentChildExpectation
 	}
 
-	parentChildStep struct {
+	parentChildScenarioStep struct {
 		name string
 		run  func(context.Context, *parentChildScenarioRuntime) error
 	}
@@ -67,13 +71,12 @@ type (
 		parentTestVars *testvars.TestVars
 		childTestVars  *testvars.TestVars
 
-		activeClusterIndex       int
-		needsWorkflowTaskRefresh bool
-		gates                    [2]*parentChildReplicationGate
-		removeHooks              []func()
-		heldTasks                map[parentChildReplicationLane]*parentChildReplicationTask
-		deliveredEvents          map[parentChildWorkflow]map[enumspb.EventType][]*historypb.HistoryEvent
-		trace                    []string
+		activeClusterIndex     int
+		gates                  [2]*parentChildReplicationGate
+		removeHooks            []func()
+		heldTasks              map[parentChildReplicationLane]*parentChildReplicationTask
+		eventsFromAppliedTasks map[parentChildWorkflow]map[enumspb.EventType][]*historypb.HistoryEvent
+		trace                  []string
 	}
 
 	parentChildReplicationLane struct {
@@ -118,9 +121,9 @@ const (
 )
 
 const (
-	deliverTask parentChildTaskDisposition = iota
-	holdTask
-	dropTask
+	applyReplicationTask parentChildReplicationTaskAction = iota
+	holdReplicationTask
+	ackReplicationTaskWithoutApplying
 )
 
 func (s *parentChildXDCTestSuite) runParentChildScenario(scenario parentChildScenario) {
@@ -155,9 +158,9 @@ func (s *parentChildXDCTestSuite) runParentChildScenario(scenario parentChildSce
 
 func newParentChildScenarioRuntime(s *parentChildXDCTestSuite) *parentChildScenarioRuntime {
 	return &parentChildScenarioRuntime{
-		suite:           s,
-		heldTasks:       make(map[parentChildReplicationLane]*parentChildReplicationTask),
-		deliveredEvents: make(map[parentChildWorkflow]map[enumspb.EventType][]*historypb.HistoryEvent),
+		suite:                  s,
+		heldTasks:              make(map[parentChildReplicationLane]*parentChildReplicationTask),
+		eventsFromAppliedTasks: make(map[parentChildWorkflow]map[enumspb.EventType][]*historypb.HistoryEvent),
 	}
 }
 
@@ -198,21 +201,6 @@ func (r *parentChildScenarioRuntime) initialize(ctx context.Context) error {
 
 	r.parentTestVars = testvars.New(r.suite.T()).WithTaskQueue("parent-child-xdc-parent-task-queue")
 	r.childTestVars = testvars.New(r.suite.T()).WithTaskQueue("parent-child-xdc-child-task-queue")
-	startResp, err := r.suite.clusters[r.activeClusterIndex].FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:           r.namespace,
-		WorkflowId:          r.parentID,
-		WorkflowType:        &commonpb.WorkflowType{Name: "parent-workflow"},
-		TaskQueue:           r.parentTestVars.TaskQueue(),
-		RequestId:           uuid.NewString(),
-		WorkflowRunTimeout:  durationpb.New(time.Minute),
-		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		Identity:            r.parentTestVars.WorkerIdentity(),
-	})
-	if err != nil {
-		return err
-	}
-	r.parentRunID = startResp.GetRunId()
-	r.tracef("started parent %s/%s on cluster %d", r.parentID, r.parentRunID, r.activeClusterIndex)
 	return nil
 }
 
@@ -227,58 +215,77 @@ func (r *parentChildScenarioRuntime) close() {
 	}
 }
 
-func deliverThrough(
-	targetCluster parentChildCluster,
-	workflow parentChildWorkflow,
-	eventType enumspb.EventType,
-) parentChildStep {
-	return replicationStep(deliverTask, targetCluster, workflow, eventType)
-}
-
-func holdAt(
-	targetCluster parentChildCluster,
-	workflow parentChildWorkflow,
-	eventType enumspb.EventType,
-) parentChildStep {
-	return replicationStep(holdTask, targetCluster, workflow, eventType)
-}
-
-func dropAt(
-	targetCluster parentChildCluster,
-	workflow parentChildWorkflow,
-	eventType enumspb.EventType,
-) parentChildStep {
-	return replicationStep(dropTask, targetCluster, workflow, eventType)
-}
-
-func replicationStep(
-	disposition parentChildTaskDisposition,
-	targetCluster parentChildCluster,
-	workflow parentChildWorkflow,
-	eventType enumspb.EventType,
-) parentChildStep {
-	return parentChildStep{
-		name: fmt.Sprintf("%s %s to %s at %s", disposition, workflow, targetCluster, eventType),
+func startParentWorkflow() parentChildScenarioStep {
+	return parentChildScenarioStep{
+		name: "start parent workflow on the active cluster",
 		run: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
-			return runtime.applyThrough(ctx, targetCluster, workflow, eventType, disposition)
+			return runtime.startParentWorkflow(ctx)
 		},
 	}
 }
 
-func startChild() parentChildStep {
-	return parentChildStep{
-		name: "run parent workflow task with StartChild command",
+// Event checkpoints identify a replication task; each action applies to the entire task.
+func applyReplicationThroughTaskContainingEvent(
+	targetCluster parentChildCluster,
+	workflow parentChildWorkflow,
+	eventType enumspb.EventType,
+) parentChildScenarioStep {
+	return replicationTaskStep(applyReplicationTask, targetCluster, workflow, eventType)
+}
+
+func holdReplicationAtTaskContainingEvent(
+	targetCluster parentChildCluster,
+	workflow parentChildWorkflow,
+	eventType enumspb.EventType,
+) parentChildScenarioStep {
+	return replicationTaskStep(holdReplicationTask, targetCluster, workflow, eventType)
+}
+
+func acknowledgeReplicationTaskContainingEventWithoutApplying(
+	targetCluster parentChildCluster,
+	workflow parentChildWorkflow,
+	eventType enumspb.EventType,
+) parentChildScenarioStep {
+	return replicationTaskStep(ackReplicationTaskWithoutApplying, targetCluster, workflow, eventType)
+}
+
+func replicationTaskStep(
+	action parentChildReplicationTaskAction,
+	targetCluster parentChildCluster,
+	workflow parentChildWorkflow,
+	eventType enumspb.EventType,
+) parentChildScenarioStep {
+	return parentChildScenarioStep{
+		name: fmt.Sprintf("%s %s replication to %s at task containing %s", action, workflow, targetCluster, eventType),
 		run: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
-			return runtime.startChild(ctx)
+			return runtime.processReplicationThroughTaskContainingEvent(ctx, targetCluster, workflow, eventType, action)
 		},
 	}
 }
 
-func failoverTo(targetCluster parentChildCluster) parentChildStep {
-	return parentChildStep{
-		name: fmt.Sprintf("fail over to %s", targetCluster),
+func completeParentWorkflowTaskWithStartChildCommand() parentChildScenarioStep {
+	return parentChildScenarioStep{
+		name: "complete parent workflow task with a StartChild command",
+		run: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
+			return runtime.completeParentWorkflowTaskWithStartChildCommand(ctx)
+		},
+	}
+}
+
+func failoverNamespaceTo(targetCluster parentChildCluster) parentChildScenarioStep {
+	return parentChildScenarioStep{
+		name: fmt.Sprintf("force fail over the namespace to %s", targetCluster),
 		run: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
 			return runtime.failover(ctx, targetCluster)
+		},
+	}
+}
+
+func refreshParentWorkflowTasks() parentChildScenarioStep {
+	return parentChildScenarioStep{
+		name: "refresh parent workflow tasks on the new active cluster",
+		run: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
+			return runtime.refreshParentWorkflowTasks(ctx)
 		},
 	}
 }
@@ -317,7 +324,7 @@ func childIsOrphaned() parentChildExpectation {
 		name: "child belongs to the losing parent branch",
 		check: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
 			if runtime.childRunID == "" {
-				return errors.New("child WorkflowExecutionStarted was not delivered")
+				return errors.New("child WorkflowExecutionStarted was not applied")
 			}
 			childEvents, err := runtime.childHistory(ctx)
 			if err != nil {
@@ -335,7 +342,7 @@ func childIsOrphaned() parentChildExpectation {
 			}
 			childStartedAttrs := childStartedEvent.GetWorkflowExecutionStartedEventAttributes()
 			if childStartedAttrs == nil {
-				return errors.New("delivered child start event has no attributes")
+				return errors.New("persisted child start event has no attributes")
 			}
 			parentExecution := childStartedAttrs.GetParentWorkflowExecution()
 			if parentExecution.GetWorkflowId() != runtime.parentID || parentExecution.GetRunId() != runtime.parentRunID {
@@ -362,7 +369,7 @@ func childIsOrphaned() parentChildExpectation {
 				if startedAttrs != nil &&
 					startedAttrs.GetWorkflowExecution().GetWorkflowId() == runtime.childID &&
 					startedAttrs.GetWorkflowExecution().GetRunId() == runtime.childRunID {
-					return errors.New("current parent branch owns the delivered child")
+					return errors.New("current parent branch owns the applied child")
 				}
 			}
 			if currentInitiatedEvent == nil {
@@ -413,13 +420,34 @@ func childHasStatus(status enumspb.WorkflowExecutionStatus) parentChildExpectati
 	}
 }
 
-// Event checkpoints select a replication task; the disposition applies to the task's entire event batch.
-func (r *parentChildScenarioRuntime) applyThrough(
+func (r *parentChildScenarioRuntime) startParentWorkflow(ctx context.Context) error {
+	if r.parentRunID != "" {
+		return fmt.Errorf("parent workflow is already started with run ID %q", r.parentRunID)
+	}
+	startResp, err := r.activeCluster().FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:           r.namespace,
+		WorkflowId:          r.parentID,
+		WorkflowType:        &commonpb.WorkflowType{Name: "parent-workflow"},
+		TaskQueue:           r.parentTestVars.TaskQueue(),
+		RequestId:           uuid.NewString(),
+		WorkflowRunTimeout:  durationpb.New(time.Minute),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		Identity:            r.parentTestVars.WorkerIdentity(),
+	})
+	if err != nil {
+		return err
+	}
+	r.parentRunID = startResp.GetRunId()
+	r.tracef("  started parent %s/%s on cluster %d", r.parentID, r.parentRunID, r.activeClusterIndex)
+	return nil
+}
+
+func (r *parentChildScenarioRuntime) processReplicationThroughTaskContainingEvent(
 	ctx context.Context,
 	targetCluster parentChildCluster,
 	workflow parentChildWorkflow,
 	eventType enumspb.EventType,
-	targetDisposition parentChildTaskDisposition,
+	targetAction parentChildReplicationTaskAction,
 ) error {
 	targetClusterIndex := int(targetCluster)
 	if targetClusterIndex < 0 || targetClusterIndex >= len(r.gates) {
@@ -445,35 +473,35 @@ func (r *parentChildScenarioRuntime) applyThrough(
 			return err
 		}
 		containsCheckpoint := historyContainsEvent(events, eventType)
-		disposition := deliverTask
+		action := applyReplicationTask
 		if containsCheckpoint {
-			disposition = targetDisposition
+			action = targetAction
 		}
 
 		r.tracef(
 			"  %s task %d to cluster %d for %s [%s]",
-			disposition,
+			action,
 			task.task.GetSourceTaskId(),
 			targetClusterIndex,
 			workflow,
 			formatParentChildReplicationTask(task.task, events),
 		)
-		switch disposition {
-		case deliverTask:
+		switch action {
+		case applyReplicationTask:
 			delete(r.heldTasks, lane)
-			if err := task.deliver(); err != nil {
+			if err := task.apply(); err != nil {
 				return err
 			}
-			r.recordDeliveredEvents(workflow, task, events)
-		case holdTask:
+			r.recordAppliedTaskEvents(workflow, task, events)
+		case holdReplicationTask:
 			r.heldTasks[lane] = task
-		case dropTask:
+		case ackReplicationTaskWithoutApplying:
 			delete(r.heldTasks, lane)
-			if err := task.drop(); err != nil {
+			if err := task.acknowledgeWithoutApplying(); err != nil {
 				return err
 			}
 		default:
-			return fmt.Errorf("unknown replication task disposition %d", disposition)
+			return fmt.Errorf("unknown replication task action %d", action)
 		}
 
 		if containsCheckpoint {
@@ -482,21 +510,10 @@ func (r *parentChildScenarioRuntime) applyThrough(
 	}
 }
 
-func (r *parentChildScenarioRuntime) startChild(ctx context.Context) error {
-	if r.needsWorkflowTaskRefresh {
-		_, err := r.activeCluster().AdminClient().RefreshWorkflowTasks(ctx, &adminservice.RefreshWorkflowTasksRequest{
-			NamespaceId: r.namespaceID,
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: r.parentID,
-				RunId:      r.parentRunID,
-			},
-		})
-		if err != nil {
-			return err
-		}
-		r.needsWorkflowTaskRefresh = false
+func (r *parentChildScenarioRuntime) completeParentWorkflowTaskWithStartChildCommand(ctx context.Context) error {
+	if r.parentRunID == "" {
+		return errors.New("parent workflow is not started")
 	}
-
 	poller := taskpoller.New(r.suite.T(), r.activeCluster().FrontendClient(), r.namespace)
 	_, err := poller.PollAndHandleWorkflowTask(r.parentTestVars, func(
 		task *workflowservice.PollWorkflowTaskQueueResponse,
@@ -526,6 +543,20 @@ func (r *parentChildScenarioRuntime) startChild(ctx context.Context) error {
 			}},
 		}, nil
 	}, taskpoller.WithTimeout(testTimeout))
+	return err
+}
+
+func (r *parentChildScenarioRuntime) refreshParentWorkflowTasks(ctx context.Context) error {
+	if r.parentRunID == "" {
+		return errors.New("parent workflow is not started")
+	}
+	_, err := r.activeCluster().AdminClient().RefreshWorkflowTasks(ctx, &adminservice.RefreshWorkflowTasksRequest{
+		NamespaceId: r.namespaceID,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: r.parentID,
+			RunId:      r.parentRunID,
+		},
+	})
 	return err
 }
 
@@ -559,7 +590,6 @@ func (r *parentChildScenarioRuntime) failover(ctx context.Context, target parent
 	}, replicationWaitTime, replicationCheckInterval)
 	r.suite.waitForNamespaceCacheRefresh()
 	r.activeClusterIndex = targetClusterIndex
-	r.needsWorkflowTaskRefresh = true
 	r.tracef("  active cluster is now %d (%s)", targetClusterIndex, targetCluster)
 	return nil
 }
@@ -607,17 +637,17 @@ func (r *parentChildScenarioRuntime) workflowID(workflow parentChildWorkflow) (s
 	}
 }
 
-func (r *parentChildScenarioRuntime) recordDeliveredEvents(
+func (r *parentChildScenarioRuntime) recordAppliedTaskEvents(
 	workflow parentChildWorkflow,
 	task *parentChildReplicationTask,
 	events []*historypb.HistoryEvent,
 ) {
-	if r.deliveredEvents[workflow] == nil {
-		r.deliveredEvents[workflow] = make(map[enumspb.EventType][]*historypb.HistoryEvent)
+	if r.eventsFromAppliedTasks[workflow] == nil {
+		r.eventsFromAppliedTasks[workflow] = make(map[enumspb.EventType][]*historypb.HistoryEvent)
 	}
 	for _, event := range events {
 		eventType := event.GetEventType()
-		r.deliveredEvents[workflow][eventType] = append(r.deliveredEvents[workflow][eventType], event)
+		r.eventsFromAppliedTasks[workflow][eventType] = append(r.eventsFromAppliedTasks[workflow][eventType], event)
 		if workflow == childWorkflow && eventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
 			r.childRunID = task.metadata.runID
 		}
@@ -711,15 +741,15 @@ func (g *parentChildReplicationGate) close() {
 	})
 }
 
-func (t *parentChildReplicationTask) deliver() error {
+func (t *parentChildReplicationTask) apply() error {
 	return t.resolve(true)
 }
 
-func (t *parentChildReplicationTask) drop() error {
+func (t *parentChildReplicationTask) acknowledgeWithoutApplying() error {
 	return t.resolve(false)
 }
 
-func (t *parentChildReplicationTask) resolve(execute bool) error {
+func (t *parentChildReplicationTask) resolve(shouldApply bool) error {
 	t.mu.Lock()
 	if t.resolved {
 		t.mu.Unlock()
@@ -729,7 +759,7 @@ func (t *parentChildReplicationTask) resolve(execute bool) error {
 	t.mu.Unlock()
 
 	var err error
-	if execute {
+	if shouldApply {
 		err = t.execute()
 	}
 	t.result <- err
@@ -909,15 +939,15 @@ func (cluster parentChildCluster) String() string {
 	}
 }
 
-func (disposition parentChildTaskDisposition) String() string {
-	switch disposition {
-	case deliverTask:
-		return "deliver"
-	case holdTask:
+func (action parentChildReplicationTaskAction) String() string {
+	switch action {
+	case applyReplicationTask:
+		return "apply"
+	case holdReplicationTask:
 		return "hold"
-	case dropTask:
-		return "drop"
+	case ackReplicationTaskWithoutApplying:
+		return "ack-without-apply"
 	default:
-		return fmt.Sprintf("disposition(%d)", disposition)
+		return fmt.Sprintf("action(%d)", action)
 	}
 }

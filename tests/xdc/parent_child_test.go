@@ -10,10 +10,6 @@ import (
 	"go.temporal.io/server/tests/testcore"
 )
 
-type parentChildXDCTestSuite struct {
-	xdcBaseSuite
-}
-
 func TestParentChildXDCTestSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, new(parentChildXDCTestSuite))
@@ -41,13 +37,27 @@ func (s *parentChildXDCTestSuite) TearDownSuite() {
 // parent abandons a running child from its losing branch as WORKFLOW_ALREADY_EXISTS.
 func (s *parentChildXDCTestSuite) TestReproOrphanedChildAfterForceFailover() {
 	s.runParentChildScenario(parentChildScenario{
-		steps: []parentChildStep{
-			deliverThrough(initialStandbyCluster, parentWorkflow, enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED),
-			startChild(),
-			holdAt(initialStandbyCluster, parentWorkflow, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED),
-			deliverThrough(initialStandbyCluster, childWorkflow, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED),
-			failoverTo(initialStandbyCluster),
-			startChild(),
+		steps: []parentChildScenarioStep{
+			startParentWorkflow(),
+			applyReplicationThroughTaskContainingEvent(
+				initialStandbyCluster,
+				parentWorkflow,
+				enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+			),
+			completeParentWorkflowTaskWithStartChildCommand(),
+			holdReplicationAtTaskContainingEvent(
+				initialStandbyCluster,
+				parentWorkflow,
+				enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+			),
+			applyReplicationThroughTaskContainingEvent(
+				initialStandbyCluster,
+				childWorkflow,
+				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			),
+			failoverNamespaceTo(initialStandbyCluster),
+			refreshParentWorkflowTasks(),
+			completeParentWorkflowTaskWithStartChildCommand(),
 		},
 		expectations: []parentChildExpectation{
 			parentStartChildFailed(enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_WORKFLOW_ALREADY_EXISTS),

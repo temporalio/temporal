@@ -46,36 +46,36 @@ func TestParentChildReplicationGate(t *testing.T) {
 		require.Equal(t, int32(2), executions.Load())
 	})
 
-	t.Run("delivers and drops exactly once", func(t *testing.T) {
+	t.Run("applies and acknowledges without applying exactly once", func(t *testing.T) {
 		gate := newParentChildReplicationGate("namespace", "parent", "child")
 		defer gate.close()
 
-		deliverErr := errors.New("deliver failed")
-		var delivered atomic.Int32
-		deliverResult := interceptParentChildTask(
+		applyErr := errors.New("apply failed")
+		var applied atomic.Int32
+		applyResult := interceptParentChildTask(
 			gate,
 			newParentChildHistoryReplicationTask("namespace", "parent", 1),
 			func() error {
-				delivered.Add(1)
-				return deliverErr
+				applied.Add(1)
+				return applyErr
 			},
 		)
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		deferredTask, err := gate.nextForWorkflow(ctx, "parent")
 		cancel()
 		require.NoError(t, err)
-		require.Zero(t, delivered.Load())
-		require.ErrorIs(t, deferredTask.deliver(), deliverErr)
-		require.ErrorIs(t, receiveParentChildInterceptResult(t, deliverResult), deliverErr)
-		require.ErrorIs(t, deferredTask.deliver(), errParentChildTaskAlreadyResolved)
-		require.Equal(t, int32(1), delivered.Load())
+		require.Zero(t, applied.Load())
+		require.ErrorIs(t, deferredTask.apply(), applyErr)
+		require.ErrorIs(t, receiveParentChildInterceptResult(t, applyResult), applyErr)
+		require.ErrorIs(t, deferredTask.apply(), errParentChildTaskAlreadyResolved)
+		require.Equal(t, int32(1), applied.Load())
 
-		var dropped atomic.Int32
-		dropResult := interceptParentChildTask(
+		var appliedWithoutPermission atomic.Int32
+		ackResult := interceptParentChildTask(
 			gate,
 			newParentChildHistoryReplicationTask("namespace", "child", 2),
 			func() error {
-				dropped.Add(1)
+				appliedWithoutPermission.Add(1)
 				return nil
 			},
 		)
@@ -83,10 +83,10 @@ func TestParentChildReplicationGate(t *testing.T) {
 		deferredTask, err = gate.nextForWorkflow(ctx, "child")
 		cancel()
 		require.NoError(t, err)
-		require.NoError(t, deferredTask.drop())
-		require.NoError(t, receiveParentChildInterceptResult(t, dropResult))
-		require.ErrorIs(t, deferredTask.drop(), errParentChildTaskAlreadyResolved)
-		require.Zero(t, dropped.Load())
+		require.NoError(t, deferredTask.acknowledgeWithoutApplying())
+		require.NoError(t, receiveParentChildInterceptResult(t, ackResult))
+		require.ErrorIs(t, deferredTask.acknowledgeWithoutApplying(), errParentChildTaskAlreadyResolved)
+		require.Zero(t, appliedWithoutPermission.Load())
 	})
 
 	t.Run("keeps tasks for the other workflow buffered", func(t *testing.T) {
@@ -112,7 +112,7 @@ func TestParentChildReplicationGate(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, int64(2), parentTask.task.GetSourceTaskId())
 		require.Len(t, gate.buffered["child"], 1)
-		require.NoError(t, parentTask.drop())
+		require.NoError(t, parentTask.acknowledgeWithoutApplying())
 		require.NoError(t, receiveParentChildInterceptResult(t, parentResult))
 
 		ctx, cancel = context.WithTimeout(context.Background(), time.Second)
@@ -120,7 +120,7 @@ func TestParentChildReplicationGate(t *testing.T) {
 		cancel()
 		require.NoError(t, err)
 		require.Equal(t, int64(1), childTask.task.GetSourceTaskId())
-		require.NoError(t, childTask.drop())
+		require.NoError(t, childTask.acknowledgeWithoutApplying())
 		require.NoError(t, receiveParentChildInterceptResult(t, childResult))
 	})
 
@@ -155,7 +155,7 @@ func TestParentChildReplicationGate(t *testing.T) {
 	})
 }
 
-func TestParentChildScenarioDropAt(t *testing.T) {
+func TestParentChildHarnessAcknowledgeReplicationTaskWithoutApplying(t *testing.T) {
 	gate := newParentChildReplicationGate("namespace", "parent", "child")
 	defer gate.close()
 
@@ -174,23 +174,23 @@ func TestParentChildScenarioDropAt(t *testing.T) {
 		return nil
 	})
 	runtime := &parentChildScenarioRuntime{
-		parentID:        "parent",
-		gates:           [2]*parentChildReplicationGate{nil, gate},
-		heldTasks:       make(map[parentChildReplicationLane]*parentChildReplicationTask),
-		deliveredEvents: make(map[parentChildWorkflow]map[enumspb.EventType][]*historypb.HistoryEvent),
+		parentID:               "parent",
+		gates:                  [2]*parentChildReplicationGate{nil, gate},
+		heldTasks:              make(map[parentChildReplicationLane]*parentChildReplicationTask),
+		eventsFromAppliedTasks: make(map[parentChildWorkflow]map[enumspb.EventType][]*historypb.HistoryEvent),
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	err = dropAt(initialStandbyCluster, parentWorkflow, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED).run(ctx, runtime)
+	err = acknowledgeReplicationTaskContainingEventWithoutApplying(initialStandbyCluster, parentWorkflow, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED).run(ctx, runtime)
 	cancel()
 	require.NoError(t, err)
 	require.NoError(t, receiveParentChildInterceptResult(t, interceptResult))
 	require.Zero(t, executions.Load())
-	require.Empty(t, runtime.deliveredEvents)
-	require.Contains(t, runtime.trace, "  drop task 1 to cluster 1 for parent [WorkflowTaskStarted, WorkflowTaskCompleted]")
+	require.Empty(t, runtime.eventsFromAppliedTasks)
+	require.Contains(t, runtime.trace, "  ack-without-apply task 1 to cluster 1 for parent [WorkflowTaskStarted, WorkflowTaskCompleted]")
 }
 
-func TestParentChildScenarioReleasesHeldTaskAfterFailover(t *testing.T) {
+func TestParentChildHarnessAppliesPreviouslyHeldTaskAfterActiveClusterChanges(t *testing.T) {
 	gate := newParentChildReplicationGate("namespace", "parent", "child")
 	defer gate.close()
 
@@ -209,28 +209,28 @@ func TestParentChildScenarioReleasesHeldTaskAfterFailover(t *testing.T) {
 		return nil
 	})
 	runtime := &parentChildScenarioRuntime{
-		parentID:        "parent",
-		gates:           [2]*parentChildReplicationGate{nil, gate},
-		heldTasks:       make(map[parentChildReplicationLane]*parentChildReplicationTask),
-		deliveredEvents: make(map[parentChildWorkflow]map[enumspb.EventType][]*historypb.HistoryEvent),
+		parentID:               "parent",
+		gates:                  [2]*parentChildReplicationGate{nil, gate},
+		heldTasks:              make(map[parentChildReplicationLane]*parentChildReplicationTask),
+		eventsFromAppliedTasks: make(map[parentChildWorkflow]map[enumspb.EventType][]*historypb.HistoryEvent),
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	err = holdAt(initialStandbyCluster, parentWorkflow, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED).run(ctx, runtime)
+	err = holdReplicationAtTaskContainingEvent(initialStandbyCluster, parentWorkflow, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED).run(ctx, runtime)
 	cancel()
 	require.NoError(t, err)
 	require.Zero(t, executions.Load())
 
 	runtime.activeClusterIndex = int(initialStandbyCluster)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
-	err = deliverThrough(initialStandbyCluster, parentWorkflow, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED).run(ctx, runtime)
+	err = applyReplicationThroughTaskContainingEvent(initialStandbyCluster, parentWorkflow, enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED).run(ctx, runtime)
 	cancel()
 	require.NoError(t, err)
 	require.NoError(t, receiveParentChildInterceptResult(t, interceptResult))
 	require.Equal(t, int32(1), executions.Load())
 }
 
-func TestParentChildScenarioV2ApplyThrough(t *testing.T) {
+func TestParentChildHarnessVersionedTransitionApplyThrough(t *testing.T) {
 	gate := newParentChildReplicationGate("namespace", "parent", "child")
 	defer gate.close()
 
@@ -263,24 +263,24 @@ func TestParentChildScenarioV2ApplyThrough(t *testing.T) {
 	await.RequireTrue(t, func() bool { return len(gate.pending) == 2 }, time.Second, time.Millisecond)
 
 	runtime := &parentChildScenarioRuntime{
-		parentID:        "parent",
-		gates:           [2]*parentChildReplicationGate{nil, gate},
-		heldTasks:       make(map[parentChildReplicationLane]*parentChildReplicationTask),
-		deliveredEvents: make(map[parentChildWorkflow]map[enumspb.EventType][]*historypb.HistoryEvent),
+		parentID:               "parent",
+		gates:                  [2]*parentChildReplicationGate{nil, gate},
+		heldTasks:              make(map[parentChildReplicationLane]*parentChildReplicationTask),
+		eventsFromAppliedTasks: make(map[parentChildWorkflow]map[enumspb.EventType][]*historypb.HistoryEvent),
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	err = dropAt(initialStandbyCluster, parentWorkflow, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED).run(ctx, runtime)
+	err = acknowledgeReplicationTaskContainingEventWithoutApplying(initialStandbyCluster, parentWorkflow, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED).run(ctx, runtime)
 	cancel()
 	require.NoError(t, err)
 	require.NoError(t, receiveParentChildInterceptResult(t, verifyResult))
 	require.NoError(t, receiveParentChildInterceptResult(t, syncResult))
 	require.Equal(t, int32(1), verifyExecutions.Load())
 	require.Zero(t, syncExecutions.Load())
-	require.Contains(t, runtime.trace, "  deliver task 1 to cluster 1 for parent [VerifyVersionedTransition]")
-	require.Contains(t, runtime.trace, "  drop task 2 to cluster 1 for parent [WorkflowTaskStarted, WorkflowTaskCompleted]")
+	require.Contains(t, runtime.trace, "  apply task 1 to cluster 1 for parent [VerifyVersionedTransition]")
+	require.Contains(t, runtime.trace, "  ack-without-apply task 2 to cluster 1 for parent [WorkflowTaskStarted, WorkflowTaskCompleted]")
 }
 
-func TestDecodeParentChildV2ReplicationEvents(t *testing.T) {
+func TestParentChildHarnessDecodeTransitionHistoryReplicationEvents(t *testing.T) {
 	events := []*historypb.HistoryEvent{
 		{EventId: 1, EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
 		{EventId: 2, EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED},
