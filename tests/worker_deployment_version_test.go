@@ -22,7 +22,9 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	computeprovider "go.temporal.io/auto-scaled-workers/wci/workflow/compute_provider"
+	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
@@ -30,6 +32,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
@@ -146,6 +149,22 @@ func (s *DeploymentVersionSuite) updateMetadata(env *testcore.TestEnv, tv *testv
 
 func (s *DeploymentVersionSuite) startVersionWorkflow(ctx context.Context, env *testcore.TestEnv, tv *testvars.TestVars) {
 	go s.pollFromDeployment(ctx, env, tv)
+	s.waitForVersionWorkflow(ctx, env, tv)
+}
+
+func (s *DeploymentVersionSuite) startVersionWorkflowAndStopPoll(ctx context.Context, env *testcore.TestEnv, tv *testvars.TestVars) {
+	pollCtx, cancelPoll := context.WithCancel(ctx)
+	pollDone := make(chan struct{})
+	go func() {
+		defer close(pollDone)
+		s.pollFromDeployment(pollCtx, env, tv)
+	}()
+	s.waitForVersionWorkflow(ctx, env, tv)
+	cancelPoll()
+	<-pollDone
+}
+
+func (s *DeploymentVersionSuite) waitForVersionWorkflow(ctx context.Context, env *testcore.TestEnv, tv *testvars.TestVars) {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := assert.New(t)
 		resp, err := s.describeVersion(env, tv)
@@ -548,7 +567,7 @@ func (s *DeploymentVersionSuite) TestWorkerDeploymentLatencyMetricTags() {
 			tv := env.Tv()
 
 			if tc.versioned {
-				s.startVersionWorkflow(s.Context(), env, tv)
+				s.startVersionWorkflowAndStopPoll(s.Context(), env, tv)
 				s.NoError(s.setCurrent(env, tv, false))
 			}
 
@@ -624,6 +643,221 @@ func (s *DeploymentVersionSuite) TestWorkerDeploymentLatencyMetricTags() {
 				s.True(seenTaskTypes[enumspb.TASK_QUEUE_TYPE_ACTIVITY.String()])
 			}
 		})
+	}
+}
+
+func (s *DeploymentVersionSuite) TestWorkerDeploymentActivityOutcomeMetricTags() {
+	for _, tc := range []struct {
+		name            string
+		outcome         string
+		expectError     bool
+		expectedMetrics []string
+	}{
+		{
+			name:    "success",
+			outcome: "success",
+			expectedMetrics: []string{
+				metrics.WorkflowTasksCompleted.Name(),
+				metrics.ActivitySuccess.Name(),
+				metrics.ActivityE2ELatency.Name(),
+				metrics.ActivityStartToCloseLatency.Name(),
+				metrics.ActivityScheduleToCloseLatency.Name(),
+			},
+		},
+		{
+			name:        "terminal failure",
+			outcome:     "fail",
+			expectError: true,
+			expectedMetrics: []string{
+				metrics.ActivityTaskFail.Name(),
+				metrics.ActivityFail.Name(),
+				metrics.ActivityE2ELatency.Name(),
+				metrics.ActivityStartToCloseLatency.Name(),
+				metrics.ActivityScheduleToCloseLatency.Name(),
+			},
+		},
+		{
+			name:            "cancellation",
+			outcome:         "cancel",
+			expectError:     true,
+			expectedMetrics: []string{metrics.ActivityCancel.Name()},
+		},
+		{
+			name:        "terminal timeout",
+			outcome:     "timeout",
+			expectError: true,
+			expectedMetrics: []string{
+				metrics.ActivityTaskTimeout.Name(),
+				metrics.ActivityTimeout.Name(),
+			},
+		},
+	} {
+		s.Run(tc.name, func(s *DeploymentVersionSuite) {
+			env, tv, capture := s.newWorkerDeploymentMetricTestEnv()
+			w := worker.New(env.SdkClient(), tv.TaskQueue().GetName(), worker.Options{
+				DeploymentOptions: worker.DeploymentOptions{
+					Version:       tv.SDKDeploymentVersion(),
+					UseVersioning: true,
+				},
+				Identity:               tv.WorkerIdentity(),
+				DisableEagerActivities: true,
+			})
+			activityStarted := make(chan struct{}, 1)
+			activityFn := func(ctx context.Context) error {
+				activityStarted <- struct{}{}
+				switch tc.outcome {
+				case "success":
+					return nil
+				case "fail":
+					return errors.New("intentional activity failure") //nolint:err113
+				case "cancel":
+					for ctx.Err() == nil {
+						activity.RecordHeartbeat(ctx)
+						time.Sleep(10 * time.Millisecond)
+					}
+					return ctx.Err()
+				case "timeout":
+					select {
+					case <-ctx.Done():
+						return ctx.Err()
+					case <-time.After(time.Second):
+						return nil
+					}
+				default:
+					return fmt.Errorf("unknown activity outcome %q", tc.outcome)
+				}
+			}
+			workflowFn := func(ctx workflow.Context) error {
+				startToCloseTimeout := time.Minute
+				if tc.outcome == "timeout" {
+					startToCloseTimeout = 200 * time.Millisecond
+				}
+				ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+					StartToCloseTimeout: startToCloseTimeout,
+					HeartbeatTimeout:    time.Second,
+					WaitForCancellation: true,
+					RetryPolicy: &temporal.RetryPolicy{
+						MaximumAttempts: 1,
+					},
+				})
+				return workflow.ExecuteActivity(ctx, "worker-deployment-metric-activity").Get(ctx, nil)
+			}
+
+			w.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{
+				Name:               "worker-deployment-activity-outcome-metric-workflow",
+				VersioningBehavior: workflow.VersioningBehaviorAutoUpgrade,
+			})
+			w.RegisterActivityWithOptions(activityFn, activity.RegisterOptions{
+				Name: "worker-deployment-metric-activity",
+			})
+			s.NoError(w.Start())
+			defer w.Stop()
+
+			run, err := env.SdkClient().ExecuteWorkflow(
+				s.Context(),
+				sdkclient.StartWorkflowOptions{
+					ID:        tv.WorkflowID(),
+					TaskQueue: tv.TaskQueue().GetName(),
+				},
+				"worker-deployment-activity-outcome-metric-workflow",
+			)
+			s.NoError(err)
+			if tc.outcome == "cancel" {
+				env.WaitForChannel(activityStarted)
+				s.NoError(env.SdkClient().CancelWorkflow(s.Context(), run.GetID(), run.GetRunID()))
+			}
+			if tc.expectError {
+				s.Error(run.Get(s.Context(), nil))
+			} else {
+				s.NoError(run.Get(s.Context(), nil))
+			}
+
+			s.requireWorkerDeploymentMetricTags(capture, tv, tc.expectedMetrics...)
+		})
+	}
+}
+
+func (s *DeploymentVersionSuite) TestWorkerDeploymentFailedWorkflowTaskMetricTags() {
+	env, tv, capture := s.newWorkerDeploymentMetricTestEnv()
+	run, err := env.SdkClient().ExecuteWorkflow(
+		s.Context(),
+		sdkclient.StartWorkflowOptions{
+			ID:        tv.WorkflowID(),
+			TaskQueue: tv.TaskQueue().GetName(),
+			VersioningOverride: &sdkclient.PinnedVersioningOverride{
+				Version: tv.SDKDeploymentVersion(),
+			},
+		},
+		"worker-deployment-failed-workflow-task-metric-workflow",
+	)
+	s.NoError(err)
+	defer func() {
+		_ = env.SdkClient().TerminateWorkflow(s.Context(), run.GetID(), run.GetRunID(), "test cleanup")
+	}()
+
+	pollCtx, cancelPoll := context.WithTimeout(s.Context(), 10*time.Second)
+	defer cancelPoll()
+	task, err := env.FrontendClient().PollWorkflowTaskQueue(pollCtx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace:         env.Namespace().String(),
+		TaskQueue:         tv.TaskQueue(),
+		Identity:          tv.WorkerIdentity(),
+		DeploymentOptions: tv.WorkerDeploymentOptions(true),
+	})
+	s.NoError(err)
+	s.NotEmpty(task.GetTaskToken())
+	_, err = env.FrontendClient().RespondWorkflowTaskFailed(s.Context(), &workflowservice.RespondWorkflowTaskFailedRequest{
+		Namespace:         env.Namespace().String(),
+		TaskToken:         task.GetTaskToken(),
+		Cause:             enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
+		Identity:          tv.WorkerIdentity(),
+		DeploymentOptions: tv.WorkerDeploymentOptions(true),
+	})
+	s.NoError(err)
+
+	s.requireWorkerDeploymentMetricTags(capture, tv, metrics.FailedWorkflowTasksCounter.Name())
+}
+
+func (s *DeploymentVersionSuite) newWorkerDeploymentMetricTestEnv() (
+	*testcore.TestEnv,
+	*testvars.TestVars,
+	*testcore.NamespaceMetricCapture,
+) {
+	env := s.newTestEnv(
+		testcore.WithDynamicConfig(dynamicconfig.MetricsBreakdownByBuildID, true),
+		testcore.WithDynamicConfig(dynamicconfig.MetricsBreakdownByTaskQueue, true),
+	)
+	tv := env.Tv()
+	s.startVersionWorkflowAndStopPoll(s.Context(), env, tv)
+	s.NoError(s.setCurrent(env, tv, false))
+	capture := env.StartNamespaceMetricCapture()
+	return env, tv, capture
+}
+
+func (s *DeploymentVersionSuite) requireWorkerDeploymentMetricTags(
+	capture *testcore.NamespaceMetricCapture,
+	tv *testvars.TestVars,
+	metricNames ...string,
+) {
+	for _, metricName := range metricNames {
+		s.EventuallyWithT(func(t *assert.CollectT) {
+			a := assert.New(t)
+			recordings := capture.CollectMetric(metricName, func(recording *metricstest.CapturedRecording) bool {
+				taskQueue, hasTaskQueue := recording.Tags["taskqueue"]
+				return !hasTaskQueue || taskQueue == tv.TaskQueue().GetName()
+			})
+			if !a.NotEmpty(recordings, "expected %s in namespace %s", metricName, tv.NamespaceName()) {
+				return
+			}
+			hasExpectedTags := false
+			for _, recording := range recordings {
+				if recording.Tags["worker_deployment_name"] == tv.DeploymentSeries() &&
+					recording.Tags["worker_build_id"] == tv.BuildID() {
+					hasExpectedTags = true
+					break
+				}
+			}
+			a.True(hasExpectedTags, "expected %s with deployment %q and build ID %q", metricName, tv.DeploymentSeries(), tv.BuildID())
+		}, 5*time.Second, 50*time.Millisecond)
 	}
 }
 
