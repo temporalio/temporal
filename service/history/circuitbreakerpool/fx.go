@@ -24,7 +24,7 @@ type OutboundQueueCircuitBreakerPool struct {
 func OutboundQueueCircuitBreakerPoolProvider(
 	namespaceRegistry namespace.Registry,
 	config *configs.Config,
-	logger log.Logger,
+	logger log.SnTaggedLogger,
 ) *OutboundQueueCircuitBreakerPool {
 	return &OutboundQueueCircuitBreakerPool{
 		CircuitBreakerPool: NewCircuitBreakerPool(
@@ -60,7 +60,7 @@ func OutboundQueueCircuitBreakerPoolProvider(
 func onStateChange(
 	key tasks.TaskGroupNamespaceIDAndDestination,
 	nsName string,
-	logger log.Logger,
+	logger log.SnTaggedLogger,
 ) func(name string, from gobreaker.State, to gobreaker.State) {
 	return func(_ string, from gobreaker.State, to gobreaker.State) {
 		logger.Warn(
