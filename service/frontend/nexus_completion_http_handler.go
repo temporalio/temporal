@@ -149,8 +149,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 	if err != nil {
 		h.Logger.Error("failed to get namespace for nexus completion request", tag.WorkflowNamespaceID(targetNamespaceID), tag.Error(err))
 		h.preProcessErrorsCounter.Record(1)
-		var nfe *serviceerror.NamespaceNotFound
-		if errors.As(err, &nfe) {
+		if _, ok := errors.AsType[*serviceerror.NamespaceNotFound](err); ok {
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "namespace %q not found", targetNamespaceID)
 		}
 		return commonnexus.ConvertGRPCError(err, false)
@@ -199,8 +198,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 	}
 
 	if err := rCtx.interceptRequest(ctx, r); err != nil {
-		var notActiveErr *serviceerror.NamespaceNotActive
-		if errors.As(err, &notActiveErr) {
+		if _, ok := errors.AsType[*serviceerror.NamespaceNotActive](err); ok {
 			return h.forwardCompleteOperation(ctx, r, rCtx)
 		}
 		return err
@@ -238,12 +236,10 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		return nil
 	}
 	logger.Error("failed to process nexus completion request", tag.Error(err))
-	var namespaceInactiveErr *serviceerror.NamespaceNotActive
-	if errors.As(err, &namespaceInactiveErr) {
+	if _, ok := errors.AsType[*serviceerror.NamespaceNotActive](err); ok {
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "cluster inactive")
 	}
-	var notFoundErr *serviceerror.NotFound
-	if errors.As(err, &notFoundErr) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 		return commonnexus.ConvertGRPCError(err, true)
 	}
 	return commonnexus.ConvertGRPCError(err, false)
@@ -550,8 +546,7 @@ func (c *requestContext) capturePanicAndRecordMetrics(ctxPtr *context.Context, e
 	} else if c.outcomeTag.Key != "" {
 		c.metricsHandler = c.metricsHandler.WithTags(c.outcomeTag)
 	} else {
-		var he *nexus.HandlerError
-		if errors.As(*errPtr, &he) {
+		if he, ok := errors.AsType[*nexus.HandlerError](*errPtr); ok {
 			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("error_" + strings.ToLower(string(he.Type))))
 		} else {
 			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("error_internal"))
@@ -605,8 +600,7 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexusrpc
 		// If frontend.exposeAuthorizerErrors is false, Authorize err is either an explicitly set reason, or a generic
 		// "Request unauthorized." message.
 		// Otherwise, expose the underlying error.
-		var permissionDeniedError *serviceerror.PermissionDenied
-		if errors.As(err, &permissionDeniedError) {
+		if permissionDeniedError, ok := errors.AsType[*serviceerror.PermissionDenied](err); ok {
 			c.outcomeTag = metrics.OutcomeTag("unauthorized")
 			return commonnexus.AdaptAuthorizeError(permissionDeniedError)
 		}

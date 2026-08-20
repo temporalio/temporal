@@ -49,8 +49,7 @@ func NewOperatorNotSupportedError(
 }
 
 func wrapConverterError(message string, err error) error {
-	var converterErr *ConverterError
-	if errors.As(err, &converterErr) {
+	if converterErr, ok := errors.AsType[*ConverterError](err); ok {
 		return NewConverterError("%s: %v", message, converterErr)
 	}
 	return err

@@ -184,8 +184,7 @@ func (c *operationContext) interceptRequest(
 		// If frontend.exposeAuthorizerErrors is false, Authorize err is either an explicitly set reason, or a generic
 		// "Request unauthorized." message.
 		// Otherwise, expose the underlying error.
-		var permissionDeniedError *serviceerror.PermissionDenied
-		if errors.As(err, &permissionDeniedError) {
+		if permissionDeniedError, ok := errors.AsType[*serviceerror.PermissionDenied](err); ok {
 			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("unauthorized"))
 			return commonnexus.AdaptAuthorizeError(permissionDeniedError)
 		}
@@ -399,8 +398,7 @@ func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (
 			metrics.OutcomeTag("namespace_not_found"),
 		)
 
-		var nfe *serviceerror.NamespaceNotFound
-		if errors.As(err, &nfe) {
+		if _, ok := errors.AsType[*serviceerror.NamespaceNotFound](err); ok {
 			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "namespace not found: %q", nc.namespaceName)
 		}
 		return nil, commonnexus.ConvertGRPCError(err, false)
@@ -455,8 +453,7 @@ func (h *nexusHandler) StartOperation(
 	})
 
 	if err := oc.interceptRequest(ctx, request, options.Header); err != nil {
-		var notActiveErr *serviceerror.NamespaceNotActive
-		if errors.As(err, &notActiveErr) {
+		if _, ok := errors.AsType[*serviceerror.NamespaceNotActive](err); ok {
 			return h.forwardStartOperation(ctx, service, operation, input, options, oc)
 		}
 		return nil, err
@@ -686,8 +683,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		},
 	})
 	if err := oc.interceptRequest(ctx, request, options.Header); err != nil {
-		var notActiveErr *serviceerror.NamespaceNotActive
-		if errors.As(err, &notActiveErr) {
+		if _, ok := errors.AsType[*serviceerror.NamespaceNotActive](err); ok {
 			return h.forwardCancelOperation(ctx, service, operation, token, options, oc)
 		}
 		return err

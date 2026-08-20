@@ -408,8 +408,7 @@ func (env *VersioningTestEnv) pollUntilRegistered(s parallelsuite.Scope, tv *tes
 			Namespace: env.Namespace().String(),
 			Version:   tv.DeploymentVersionString(),
 		})
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			t.Require().NoError(err)
 			return
 		}
