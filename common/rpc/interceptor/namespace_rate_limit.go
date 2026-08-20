@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.temporal.io/server/service/frontend/configs"
 	"google.golang.org/grpc"
 )
@@ -51,39 +52,41 @@ type (
 var _ grpc.UnaryServerInterceptor = (*NamespaceRateLimitInterceptorImpl)(nil).Intercept
 var _ NamespaceRateLimitInterceptor = (*NamespaceRateLimitInterceptorImpl)(nil)
 
-func NewNexusNamespaceRateLimitInterceptor(ni NamespaceRateLimitInterceptor) *NexusNamespaceRateLimitInterceptor {
-	return &NexusNamespaceRateLimitInterceptor{
+func NewNamespaceRateLimitInterceptorWrapper(ni NamespaceRateLimitInterceptor) *NamespaceRateLimitInterceptorWrapper {
+	return &NamespaceRateLimitInterceptorWrapper{
 		ni: ni,
 	}
 }
 
-// NexusNamespaceRateLimitInterceptor is a wrapper on namespace rate limiter
+// NamespaceRateLimitInterceptorWrapper is a wrapper on namespace rate limiter
 // draft-review: should this interim be removed in favor of a lock step impl w/ deps
-type NexusNamespaceRateLimitInterceptor struct {
+type NamespaceRateLimitInterceptorWrapper struct {
 	ni NamespaceRateLimitInterceptor
 }
 
-func (n *NexusNamespaceRateLimitInterceptor) InterceptNexus(
+func (n *NamespaceRateLimitInterceptorWrapper) Intercept(
 	ctx context.Context,
-	in NexusInterceptorInput,
-	next NexusHandlerFunc,
+	req any,
+	info *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
+) (resp any, err error) {
+	return n.ni.Intercept(ctx, req, info, handler)
+}
+
+func (n *NamespaceRateLimitInterceptorWrapper) InterceptNexus(
+	ctx context.Context,
+	in nexus.InterceptorInput,
+	next nexus.HandlerFunc,
 ) (out any, retErr error) {
-	apiName, err := NexusAPINameFromContext(ctx)
+	header, err := nexus.HeaderFromInterceptorInput(in)
 	if err != nil {
-		return nil, &InterceptorError{
+		return nil, &nexus.InterceptorError{
 			Err:     commonnexus.ConvertGRPCError(err, true),
 			Outcome: "interceptor_failed",
 		}
 	}
-	header, err := NexusHeaderFromInterceptorInput(in)
-	if err != nil {
-		return nil, &InterceptorError{
-			Err:     commonnexus.ConvertGRPCError(err, true),
-			Outcome: "interceptor_failed",
-		}
-	}
-	if err := n.ni.Allow(namespace.Name(in.NamespaceName()), apiName, header); err != nil {
-		return nil, &InterceptorError{
+	if err := n.ni.Allow(namespace.Name(in.NamespaceName()), in.APIName(), header); err != nil {
+		return nil, &nexus.InterceptorError{
 			Err:     commonnexus.ConvertGRPCError(err, true),
 			Outcome: "namespace_rate_limited",
 		}

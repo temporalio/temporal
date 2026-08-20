@@ -19,7 +19,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
-	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.temporal.io/server/common/rpc/tlsinfo"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -162,34 +162,22 @@ func (a *Interceptor) Intercept(
 
 func (a *Interceptor) InterceptNexus(
 	ctx context.Context,
-	in interceptor.NexusInterceptorInput,
-	next interceptor.NexusHandlerFunc,
+	in nexus.InterceptorInput,
+	next nexus.HandlerFunc,
 ) (any, error) {
 	a.logger.Debug("authorizing request")
 	if a.authorizer == nil {
 		return next(ctx, in)
 	}
 	namespaceName := in.NamespaceName()
-	apiName, err := interceptor.NexusAPINameFromContext(ctx)
-	if err != nil {
-		return nil, &interceptor.InterceptorError{
-			Err:     commonnexus.ConvertGRPCError(err, false),
-			Outcome: "interceptor_failed",
-		}
-	}
-	endpointName, err := interceptor.NexusEndpointNameFromContext(ctx)
-	if err != nil {
-		return nil, &interceptor.InterceptorError{
-			Err:     commonnexus.ConvertGRPCError(err, false),
-			Outcome: "interceptor_failed",
-		}
-	}
+	apiName := in.APIName()
+	endpointName := in.EndpointName()
 	claims, _ := ctx.Value(MappedClaims).(*Claims) //nolint:revive // unchecked-type-assertion: empty claims will 403
 	// draft-review: check if this might be required to preserve compatibility for custom authorizers
 	// or if its ok since an interface was not already used instead
 	// switch in.(type) {
-	// case interceptor.StartNexusOpInput, interceptor.CancelNexusOpInput:
-	// case *interceptor.CancelNexusOpInput:
+	// case nexus.StartOpInput, nexus.CancelOpInput:
+	// case *nexus.CancelOpInput:
 	// }
 	ct := &CallTarget{
 		APIName:           apiName,
@@ -201,13 +189,13 @@ func (a *Interceptor) InterceptNexus(
 	if err != nil {
 		if permissionDeniedError, ok := errors.AsType[*serviceerror.PermissionDenied](err); ok {
 			a.logger.Debug("Request unauthorized")
-			return nil, &interceptor.InterceptorError{
+			return nil, &nexus.InterceptorError{
 				Err:     commonnexus.AdaptAuthorizeError(permissionDeniedError),
 				Outcome: "unauthorized",
 			}
 		}
 		a.logger.Error("Authorization internal error with processing nexus request", tag.Error(err))
-		return nil, &interceptor.InterceptorError{
+		return nil, &nexus.InterceptorError{
 			Err:     commonnexus.ConvertGRPCError(err, false),
 			Outcome: "internal_auth_error",
 		}

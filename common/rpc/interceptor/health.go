@@ -7,6 +7,7 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/api"
+	"go.temporal.io/server/common/rpc/interceptor/nexus"
 	"google.golang.org/grpc"
 )
 
@@ -32,14 +33,31 @@ func (i *HealthInterceptor) Intercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (any, error) {
-	// only enforce health check on WorkflowService and OperatorService
-	if strings.HasPrefix(info.FullMethod, api.WorkflowServicePrefix) ||
-		strings.HasPrefix(info.FullMethod, api.OperatorServicePrefix) {
-		if !i.healthy.Load() {
-			return nil, notHealthyErr
-		}
+	if i.isNotHealthy(info.FullMethod) {
+		return nil, notHealthyErr
 	}
 	return handler(ctx, req)
+}
+
+func (i *HealthInterceptor) InterceptNexus(
+	ctx context.Context,
+	in nexus.InterceptorInput,
+	next nexus.HandlerFunc,
+) (any, error) {
+	if i.isNotHealthy(in.OperationName()) {
+		return nil, notHealthyErr
+	}
+	return next(ctx, in)
+}
+
+func (i *HealthInterceptor) isNotHealthy(methodName string) bool {
+	if i.healthy.Load() {
+		return false
+	}
+
+	// only enforce health check on WorkflowService and OperatorService
+	return strings.HasPrefix(methodName, api.WorkflowServicePrefix) ||
+		strings.HasPrefix(methodName, api.OperatorServicePrefix)
 }
 
 func (i *HealthInterceptor) SetHealthy(healthy bool) {

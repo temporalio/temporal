@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/interceptor/logtags"
+	"go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/frontend/configs"
 	"google.golang.org/grpc"
@@ -47,6 +48,7 @@ type (
 		// SetFailureSource records which side produced a failure. Only the start/cancel
 		// handlers return this to the caller; the completion handler discards it.
 		SetFailureSource(string)
+		// TBD - check if this is really needed, could remove the error handler interceptor
 		// HandleRequestError reports a failed request to the shared ErrorHandler.
 		HandleRequestError(error)
 	}
@@ -64,7 +66,7 @@ var (
 	updateResponseMessageBody anypb.Any
 	_                         = updateResponseMessageBody.MarshalFrom(&updatepb.Response{})
 
-	_ grpc.UnaryServerInterceptor  = (*TelemetryInterceptor)(nil).UnaryIntercept
+	_ grpc.UnaryServerInterceptor  = (*TelemetryInterceptor)(nil).Intercept
 	_ grpc.StreamServerInterceptor = (*TelemetryInterceptor)(nil).StreamIntercept
 )
 
@@ -179,7 +181,7 @@ func telemetryOverrideOperationTag(fullName, operation string) string {
 	return operation
 }
 
-func (ti *TelemetryInterceptor) UnaryIntercept(
+func (ti *TelemetryInterceptor) Intercept(
 	ctx context.Context,
 	req any,
 	info *grpc.UnaryServerInfo,
@@ -243,8 +245,8 @@ func TelemetryContextFromContext(ctx context.Context) (TelemetryContext, error) 
 // GetMetricsHandlerFromContext.
 func (ti *TelemetryInterceptor) InterceptNexus(
 	ctx context.Context,
-	in NexusInterceptorInput,
-	next NexusHandlerFunc,
+	in nexus.InterceptorInput,
+	next nexus.HandlerFunc,
 ) (out any, retErr error) {
 
 	// draft-review: it it not worth splitting the metrics into pre and post forwarder interceptor groups.
@@ -269,13 +271,13 @@ func (ti *TelemetryInterceptor) InterceptNexus(
 
 	defer func() {
 		reportErr := retErr
-		if taggedErr, ok := errors.AsType[*InterceptorError](retErr); ok {
+		if taggedErr, ok := errors.AsType[*nexus.InterceptorError](retErr); ok {
 			telemetryContext.SetMetricsOutcome(taggedErr.Outcome)
 			reportErr = taggedErr.Err
 		}
 		metricsHandler := telemetryContext.MetricsHandler(reportErr)
 		switch in.(type) {
-		case CompleteNexusOpInput:
+		case nexus.CompleteOpInput:
 			metricsHandler.Counter(metrics.NexusCompletionRequests.Name()).Record(1)
 			metricsHandler.Histogram(metrics.NexusCompletionLatencyHistogram.Name(), metrics.Milliseconds).Record(time.Since(startTime).Milliseconds())
 		default:

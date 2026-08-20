@@ -9,10 +9,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/authorization"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/cluster/clustertest"
-	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -110,21 +108,6 @@ func newOperationContext(options contextOptions) *operationContext {
 		1,
 	)
 
-	checker := mockNamespaceChecker(oc.namespace.Name())
-	oc.auth = authorization.NewInterceptor(
-		nil,
-		mockAuthorizer{},
-		oc.metricsHandler,
-		oc.logger,
-		checker,
-		nil,
-		"",
-		"",
-		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
-		dynamicconfig.GetBoolPropertyFn(false), // enableCrossNamespaceCommands
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // enablePrincipalPropagation
-		dynamicconfig.GetBoolPropertyFn(false),                    // disableStreamingAuthorizer
-	)
 	oc.namespaceConcurrencyLimitInterceptor = interceptor.NewConcurrentRequestLimitInterceptor(
 		nil,
 		nil,
@@ -151,25 +134,11 @@ func newOperationContext(options contextOptions) *operationContext {
 	oc.clusterMetadata = clustertest.NewMetadataForTest(
 		cluster.NewTestClusterMetadataConfig(true, !options.namespacePassive),
 	)
-	oc.forwardingEnabledForNamespace = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(
-		options.redirectAllow,
-	)
 	re, err := dynamicconfig.ConvertWildcardStringListToRegexp(options.headersBlacklist)
 	if err != nil {
 		panic(err) // nolint:forbidigo
 	}
 	oc.headersBlacklist = dynamicconfig.GetTypedPropertyFn(re)
-	oc.redirectionInterceptor = interceptor.NewRedirection(
-		nil,
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
-		nil,
-		config.DCRedirectionPolicy{Policy: interceptor.DCRedirectionPolicyAllAPIsForwarding},
-		oc.logger,
-		nil,
-		oc.metricsHandlerForInterceptors,
-		clock.NewRealTimeSource(),
-		oc.clusterMetadata,
-	)
 
 	return oc
 }

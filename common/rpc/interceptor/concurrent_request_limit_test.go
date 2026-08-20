@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas/calculator"
 	"go.temporal.io/server/common/quotas/quotastest"
+	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
@@ -151,20 +152,9 @@ func TestConcurrentRequestLimitInterceptor_InterceptNexus(t *testing.T) {
 		dynamicconfig.GetIntPropertyFnFilteredByNamespace(1),
 		map[string]int{"NexusAPI": 1},
 	)
-	input := NewStartNexusOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil)
-	t.Run("missing API name", func(t *testing.T) {
-		nextCalled := false
-		_, err := interceptor.InterceptNexus(context.Background(), input, func(context.Context, NexusInterceptorInput) (any, error) {
-			nextCalled = true
-			return nil, nil
-		})
-		var interceptorErr *InterceptorError
-		require.ErrorAs(t, err, &interceptorErr)
-		require.Equal(t, "interceptor_failed", interceptorErr.Outcome)
-		require.False(t, nextCalled)
-	})
+	input := withAPIName(interceptornexus.NewStartOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil), "NexusAPI")
 
-	ctx := WithNexusAPIName(context.Background(), "NexusAPI")
+	ctx := context.Background()
 
 	blockUntilFirstReqStarted := make(chan struct{})
 	unblockFirstRequest := make(chan struct{})
@@ -174,7 +164,7 @@ func TestConcurrentRequestLimitInterceptor_InterceptNexus(t *testing.T) {
 		_, err := interceptor.InterceptNexus(
 			ctx,
 			input,
-			func(context.Context, NexusInterceptorInput) (any, error) {
+			func(context.Context, interceptornexus.InterceptorInput) (any, error) {
 				close(blockUntilFirstReqStarted)
 				<-unblockFirstRequest
 				return nil, nil
@@ -187,12 +177,12 @@ func TestConcurrentRequestLimitInterceptor_InterceptNexus(t *testing.T) {
 	_, err := interceptor.InterceptNexus(
 		ctx,
 		input,
-		func(context.Context, NexusInterceptorInput) (any, error) {
+		func(context.Context, interceptornexus.InterceptorInput) (any, error) {
 			t.Fatal("second request reached handler")
 			return nil, errors.New("throttled request reached")
 		},
 	)
-	var interceptorErr *InterceptorError
+	var interceptorErr *interceptornexus.InterceptorError
 	require.ErrorAs(t, err, &interceptorErr)
 	require.Equal(t, "namespace_concurrency_limited", interceptorErr.Outcome)
 
@@ -293,4 +283,24 @@ func (h testRequestHandler) Handle(context.Context, any) (any, error) {
 	<-h.respond
 
 	return nil, nil
+}
+
+func withRequestMetadataForTest(in interceptornexus.InterceptorInput, metadata interceptornexus.RequestMetadata) interceptornexus.InterceptorInput {
+	switch v := in.(type) {
+	case interceptornexus.StartOpInput:
+		v.WithRequestMetadata(metadata)
+		return v
+	case interceptornexus.CancelOpInput:
+		v.WithRequestMetadata(metadata)
+		return v
+	case interceptornexus.CompleteOpInput:
+		v.WithRequestMetadata(metadata)
+		return v
+	default:
+		return in
+	}
+}
+
+func withAPIName(in interceptornexus.InterceptorInput, apiName string) interceptornexus.InterceptorInput {
+	return withRequestMetadataForTest(in, interceptornexus.RequestMetadata{APIName: apiName})
 }

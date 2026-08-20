@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/rpc/interceptor/nexus"
 	"google.golang.org/grpc"
 )
 
@@ -95,25 +96,18 @@ func (i *RateLimitInterceptor) Allow(
 // InterceptNexus enforces the global rate limit for a Nexus request.
 func (i *RateLimitInterceptor) InterceptNexus(
 	ctx context.Context,
-	in NexusInterceptorInput,
-	next NexusHandlerFunc,
+	in nexus.InterceptorInput,
+	next nexus.HandlerFunc,
 ) (any, error) {
-	apiName, err := NexusAPINameFromContext(ctx)
+	header, err := nexus.HeaderFromInterceptorInput(in)
 	if err != nil {
-		return nil, &InterceptorError{
+		return nil, &nexus.InterceptorError{
 			Err:     commonnexus.ConvertGRPCError(err, true),
 			Outcome: "interceptor_failed",
 		}
 	}
-	header, err := NexusHeaderFromInterceptorInput(in)
-	if err != nil {
-		return nil, &InterceptorError{
-			Err:     commonnexus.ConvertGRPCError(err, true),
-			Outcome: "interceptor_failed",
-		}
-	}
-	if err := i.Allow(apiName, header); err != nil {
-		return nil, &InterceptorError{
+	if err := i.Allow(in.APIName(), header); err != nil {
+		return nil, &nexus.InterceptorError{
 			Err:     commonnexus.ConvertGRPCError(err, true),
 			Outcome: "global_rate_limited",
 		}

@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
+	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
@@ -36,40 +37,36 @@ func (s *namespaceRateLimitInterceptorSuite) TestInterceptNexus() {
 	for _, tc := range []struct {
 		name            string
 		apiName         string
-		input           NexusInterceptorInput
+		input           interceptornexus.InterceptorInput
 		allow           *bool
 		nextCalled      bool
 		expectedOutcome string
 	}{
-		{name: "allowed", apiName: "NexusOperation", input: NewStartNexusOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil), allow: new(true), nextCalled: true},
-		{name: "rate limited", apiName: "NexusOperation", input: NewStartNexusOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil), allow: new(false), expectedOutcome: "namespace_rate_limited"},
-		{name: "missing API name", expectedOutcome: "interceptor_failed"},
-		{name: "missing request header", apiName: "NexusOperation", input: NewCompleteNexusOpInput(testNamespace, nil), expectedOutcome: "interceptor_failed"},
+		{name: "allowed", apiName: "NexusOperation", input: withAPIName(interceptornexus.NewStartOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil), "NexusOperation"), allow: new(true), nextCalled: true},
+		{name: "rate limited", apiName: "NexusOperation", input: withAPIName(interceptornexus.NewStartOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil), "NexusOperation"), allow: new(false), expectedOutcome: "namespace_rate_limited"},
+		{name: "missing request header", apiName: "NexusOperation", input: withAPIName(interceptornexus.NewCompleteOpInput(testNamespace, nil), "NexusOperation"), expectedOutcome: "interceptor_failed"},
 	} {
 		s.Run(tc.name, func() {
 			ctx := context.Background()
-			if tc.apiName != "" {
-				ctx = WithNexusAPIName(ctx, tc.apiName)
-			}
 			if tc.allow != nil {
 				s.mockRateLimiter.EXPECT().Allow(gomock.Any(), gomock.Any()).Return(*tc.allow)
 			}
 			input := tc.input
 			if input == nil {
-				input = NewStartNexusOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil)
+				input = interceptornexus.NewStartOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil)
 			}
 			nextCalled := false
-			wrapper := NewNexusNamespaceRateLimitInterceptor(s.newImpl(false))
+			wrapper := NewNamespaceRateLimitInterceptorWrapper(s.newImpl(false))
 			_, err := wrapper.InterceptNexus(
 				ctx,
 				input,
-				func(context.Context, NexusInterceptorInput) (any, error) {
+				func(context.Context, interceptornexus.InterceptorInput) (any, error) {
 					nextCalled = true
 					return nil, nil
 				},
 			)
 			if tc.expectedOutcome != "" {
-				var interceptorErr *InterceptorError
+				var interceptorErr *interceptornexus.InterceptorError
 				s.ErrorAs(err, &interceptorErr)
 				s.Equal(tc.expectedOutcome, interceptorErr.Outcome)
 			} else {
