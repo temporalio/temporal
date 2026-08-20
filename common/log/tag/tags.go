@@ -1013,6 +1013,10 @@ func NexusOperation(operation string) ZapTag {
 	return NewStringTag("nexus-operation", operation)
 }
 
+func NexusService(service string) ZapTag {
+	return NewStringTag("nexus-service", service)
+}
+
 // NexusTaskQueueName returns tag for NexusTaskQueueName
 func NexusTaskQueueName(taskQueueName string) ZapTag {
 	return NewStringTag("nexus-task-queue-name", taskQueueName)
