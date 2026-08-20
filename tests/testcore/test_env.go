@@ -314,8 +314,8 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	// Attach version headers decorator to the test context.
 	testcontext.AttachDecorator(t, versionHeadersContextKey{}, headers.SetVersions)
 
-	// Restore as much of the test's timeout budget as the context's 2-minute
-	// ceiling allows, now that setup is done.
+	// Restore as much of the test's timeout budget as the context's ceiling
+	// allows, now that setup is done.
 	testcontext.EnsureRemaining(testcontext.For(t), t, testcontext.DefaultTimeout())
 
 	env := &TestEnv{

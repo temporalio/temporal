@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/common/debug"
 	"google.golang.org/grpc/metadata"
 )
 
@@ -27,7 +26,7 @@ func TestWithTimeout(t *testing.T) {
 			deadline, ok := ctx.Deadline()
 			require.True(t, ok)
 			require.Equal(t, start.Add(DefaultTimeout()), deadline)
-			require.Equal(t, 90*time.Second*debug.TimeoutMultiplier, DefaultTimeout())
+			require.Equal(t, 90*time.Second, DefaultTimeout())
 		})
 	})
 
@@ -39,7 +38,7 @@ func TestWithTimeout(t *testing.T) {
 			ctx := For(t, WithTimeout(time.Second))
 			deadline, ok := ctx.Deadline()
 			require.True(t, ok)
-			require.Equal(t, start.Add(time.Second*debug.TimeoutMultiplier), deadline)
+			require.Equal(t, start.Add(time.Second), deadline)
 		})
 	})
 }
@@ -148,7 +147,7 @@ func TestCleanup(t *testing.T) {
 		t.Parallel()
 
 		synctest.Test(t, func(t *testing.T) {
-			timeout := time.Millisecond * debug.TimeoutMultiplier
+			timeout := time.Millisecond
 
 			tb := newRecordingTB()
 			tb.run(func() {
@@ -170,7 +169,7 @@ func TestEnvTimeout(t *testing.T) {
 			ctx := For(t)
 			deadline, ok := ctx.Deadline()
 			require.True(t, ok)
-			require.Equal(t, start.Add(10*time.Second*debug.TimeoutMultiplier), deadline)
+			require.Equal(t, start.Add(10*time.Second), deadline)
 		})
 	})
 
@@ -182,7 +181,27 @@ func TestEnvTimeout(t *testing.T) {
 			ctx := For(t, WithTimeout(time.Second))
 			deadline, ok := ctx.Deadline()
 			require.True(t, ok)
-			require.Equal(t, start.Add(time.Second*debug.TimeoutMultiplier), deadline)
+			require.Equal(t, start.Add(time.Second), deadline)
+		})
+	})
+
+	t.Run("remains extendable, unlike an explicit WithTimeout", func(t *testing.T) {
+		t.Setenv("TEMPORAL_TEST_TIMEOUT", "10s")
+
+		synctest.Test(t, func(t *testing.T) {
+			start := time.Now()
+			ctx := For(t)
+			originalDeadline, ok := ctx.Deadline()
+			require.True(t, ok)
+			require.Equal(t, start.Add(10*time.Second), originalDeadline)
+
+			// TEMPORAL_TEST_TIMEOUT only raises the baseline; it must not pin
+			// a hard ceiling the way WithTimeout does.
+			refreshed := EnsureRemaining(ctx, t, time.Minute)
+
+			refreshedDeadline, ok := refreshed.Deadline()
+			require.True(t, ok)
+			require.Equal(t, start.Add(time.Minute), refreshedDeadline)
 		})
 	})
 }
@@ -218,11 +237,11 @@ func TestEnsureRemaining(t *testing.T) {
 			require.True(t, ok)
 			require.Equal(t, start.Add(DefaultTimeout()), originalDeadline)
 
-			refreshed := EnsureRemaining(ctx, t, 10*time.Minute*debug.TimeoutMultiplier)
+			refreshed := EnsureRemaining(ctx, t, 10*time.Minute)
 
 			refreshedDeadline, ok := refreshed.Deadline()
 			require.True(t, ok)
-			require.Equal(t, start.Add(maxTimeout*debug.TimeoutMultiplier), refreshedDeadline)
+			require.Equal(t, start.Add(maxTimeout), refreshedDeadline)
 		})
 	})
 
@@ -237,7 +256,7 @@ func TestEnsureRemaining(t *testing.T) {
 
 			refreshedDeadline, ok := refreshed.Deadline()
 			require.True(t, ok)
-			require.Equal(t, start.Add(100*time.Millisecond*debug.TimeoutMultiplier), refreshedDeadline)
+			require.Equal(t, start.Add(100*time.Millisecond), refreshedDeadline)
 			require.Same(t, ctx, refreshed, "context should not have been replaced")
 		})
 	})
@@ -334,9 +353,11 @@ func TestEnsureRemaining(t *testing.T) {
 				// Extending is an optimization, so it isn't in a position to
 				// fail the call; leave the caller's own deadline and
 				// cancellation intact.
-				for _, foreign := range []context.Context{withDeadline, context.Background()} {
-					require.Equal(t, foreign, EnsureRemaining(foreign, tb, 10*time.Millisecond))
-				}
+				require.Same(t, withDeadline, EnsureRemaining(withDeadline, tb, 10*time.Millisecond))
+				// context.Background() isn't a pointer, so require.Same can't
+				// compare it; require.Equal is identity-equivalent here since
+				// it's a zero-sized singleton value.
+				require.Equal(t, context.Background(), EnsureRemaining(context.Background(), tb, 10*time.Millisecond))
 			})
 
 			require.Empty(t, tb.fatal())

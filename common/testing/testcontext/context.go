@@ -16,12 +16,13 @@ import (
 const (
 	defaultTimeout = 90 * time.Second
 	// maxTimeout caps the *total* lifetime of a test context that uses the
-	// default timeout, measured from its creation - it is not a per-extension
-	// budget. [EnsureRemaining] may extend such a context until
-	// createdAt+maxTimeout and no further.
+	// default or TEMPORAL_TEST_TIMEOUT-configured timeout, measured from its
+	// creation - it is not a per-extension budget. [EnsureRemaining] may
+	// extend such a context until createdAt+max(timeout, maxTimeout) and no
+	// further.
 	//
-	// An explicitly configured timeout ([WithTimeout] or TEMPORAL_TEST_TIMEOUT)
-	// is its own ceiling and is never extended beyond it.
+	// A timeout requested via [WithTimeout] is its own ceiling and is never
+	// extended beyond it.
 	maxTimeout          = 2 * time.Minute
 	testNameMetadataKey = "temporal-test-name"
 	testTimeoutEnvVar   = "TEMPORAL_TEST_TIMEOUT"
@@ -185,9 +186,9 @@ func AttachDecorator[K comparable](tb testing.TB, key K, decorator func(context.
 // EnsureRemaining extends the test context so at least minRemaining remains
 // from now, and returns the context to use.
 //
-// A context created with an explicit timeout ([WithTimeout] or
-// TEMPORAL_TEST_TIMEOUT) is never extended past that timeout; one using the
-// default timeout may grow to a total lifetime of [maxTimeout].
+// A context created with [WithTimeout] is never extended past that timeout;
+// one using the default or a TEMPORAL_TEST_TIMEOUT-configured timeout may
+// grow to a total lifetime of max(timeout, [maxTimeout]).
 //
 // Only the returned context - and later [For] calls - see the extension: a
 // context captured earlier keeps its original, shorter deadline, since a
@@ -260,8 +261,9 @@ type contextState struct {
 	createdAt time.Time
 	// timeout is the timeout the context was created with; immutable.
 	timeout time.Duration
-	// explicitTimeout records whether timeout was requested explicitly (via
-	// [WithTimeout] or TEMPORAL_TEST_TIMEOUT) rather than defaulted; immutable.
+	// explicitTimeout records whether timeout was pinned via [WithTimeout],
+	// making it a hard ceiling. TEMPORAL_TEST_TIMEOUT only raises the
+	// baseline and remains extendable, like the default. Immutable.
 	explicitTimeout bool
 
 	mu sync.Mutex
@@ -322,8 +324,9 @@ func getOrCreateContextState(tb testing.TB, cfg config) *contextState {
 func (s *contextState) maxDeadline() time.Time {
 	limit := s.timeout
 	if !s.explicitTimeout {
-		// Only a defaulted timeout may grow; see [maxTimeout].
-		limit = maxTimeout * debug.TimeoutMultiplier
+		// A defaulted or TEMPORAL_TEST_TIMEOUT-configured timeout may grow,
+		// up to whichever of the two is larger; see [maxTimeout].
+		limit = max(limit, maxTimeout*debug.TimeoutMultiplier)
 	}
 	return s.createdAt.Add(limit)
 }
@@ -370,10 +373,11 @@ func effectiveTimeout(customTimeout time.Duration) (timeout time.Duration, expli
 		return customTimeout, true
 	}
 
-	// 2. TEMPORAL_TEST_TIMEOUT environment variable.
+	// 2. TEMPORAL_TEST_TIMEOUT environment variable. Like the default, this
+	// only raises the baseline - it does not pin a hard ceiling.
 	if envTimeout := os.Getenv(testTimeoutEnvVar); envTimeout != "" {
 		if dur, err := time.ParseDuration(envTimeout); err == nil && dur > 0 {
-			return dur, true
+			return dur, false
 		}
 	}
 
