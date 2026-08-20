@@ -2069,7 +2069,6 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 
 		sideEffectTasks := componentAttr.GetSideEffectTasks()
 		for _, sideEffectTask := range slices.Backward(sideEffectTasks) {
-
 			if sideEffectTask.PhysicalTaskStatus == physicalTaskStatusCreated {
 				break
 			}
