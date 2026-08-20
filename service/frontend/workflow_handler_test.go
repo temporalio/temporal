@@ -66,7 +66,6 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tasktoken"
-	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/wideevents"
@@ -186,8 +185,6 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 				},
 			}
 		},
-		WorkerNameMaxLength:        func(string) int { return 1000 },
-		WorkerSourceContextMaxSize: func(string) int { return 4096 },
 	})
 	saValidator := searchattribute.NewValidator(
 		s.mockResource.GetSearchAttributesProvider(),
@@ -1155,9 +1152,7 @@ func (s *WorkflowHandlerSuite) startWorkflowWithCallbacks(
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidCallbackLinks() {
 	cbs := []*commonpb.Callback{
 		{
-			Variant: &commonpb.Callback_Internal_{
-				Internal: &commonpb.Callback_Internal{},
-			},
+			Variant: nexusCallbackVariant(),
 			Links: []*commonpb.Link{
 				{
 					Variant: &commonpb.Link_WorkflowEvent_{
@@ -1176,7 +1171,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidCallback
 
 // Assert that Workflows can only accept Nexus-variant callbacks. (Or Internal.)
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_NonNexusCallback() {
-	tests := []struct {
+	testCases := []struct {
 		Name     string
 		Callback *commonpb.Callback
 		ErrMsg   string
@@ -1203,7 +1198,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_NonNexusCallbac
 		},
 	}
 
-	for _, test := range tests {
+	for _, test := range testCases {
 		s.Run(test.Name, func() {
 			_, err := s.startWorkflowWithCallbacks([]*commonpb.Callback{test.Callback})
 			s.Require().ErrorContains(err, test.ErrMsg)
@@ -1237,11 +1232,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidAggregat
 		RequestId: uuid.NewString(),
 		CompletionCallbacks: []*commonpb.Callback{
 			{
-				Variant: &commonpb.Callback_Nexus_{
-					Nexus: &commonpb.Callback_Nexus{
-						Url: "http://localhost/test",
-					},
-				},
+				Variant: nexusCallbackVariant(),
 				Links: []*commonpb.Link{
 					{
 						Variant: &commonpb.Link_WorkflowEvent_{
@@ -4367,7 +4358,7 @@ func TestValidateRequestId(t *testing.T) {
 // (snakeCaseBatchType -> stored string -> batchOperationTypeFromString) used by
 // Describe/ListBatchOperations to report the operation type.
 func TestBatchOperationTypeMemoRoundTrip(t *testing.T) {
-	cases := []struct {
+	testCases := []struct {
 		name     string
 		input    enumspb.BatchOperationType
 		memo     string
@@ -4406,7 +4397,7 @@ func TestBatchOperationTypeMemoRoundTrip(t *testing.T) {
 		//nolint:staticcheck // SA1019: intentionally exercising legacy enum values as input
 		{"update options (legacy enum)", enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS, batcher.BatchTypeUpdateWorkflowOptions, enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS},
 	}
-	for _, tc := range cases {
+	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			memo := snakeCaseBatchType(tc.input)
 			require.Equal(t, tc.memo, memo, "memo string")
@@ -4447,7 +4438,7 @@ func TestBatchOperationTypeMemoRoundTrip(t *testing.T) {
 }
 
 func TestWorkflowBatchOperationMemoRollingUpgradeCompatibility(t *testing.T) {
-	cases := []struct {
+	testCases := []struct {
 		name       string
 		batchType  enumspb.BatchOperationType
 		legacyMemo string
@@ -4459,7 +4450,7 @@ func TestWorkflowBatchOperationMemoRollingUpgradeCompatibility(t *testing.T) {
 		{"reset", enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW, "reset"},
 		{"update options", enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS, "update_options"},
 	}
-	for _, tt := range cases {
+	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			require.Equal(t, tt.legacyMemo, snakeCaseBatchType(tt.batchType),
 				"workflow batch memos written during a rolling upgrade must remain readable by pre-upgrade frontends")
@@ -4515,89 +4506,59 @@ func TestDedupLinksFromCallbacks(t *testing.T) {
 			},
 		},
 	}
-	callbacks := []*commonpb.Callback{
-		{
-			Variant: &commonpb.Callback_Nexus_{
-				Nexus: &commonpb.Callback_Nexus{},
-			},
-			Links: []*commonpb.Link{
-				{
-					Variant: &commonpb.Link_WorkflowEvent_{
-						WorkflowEvent: &commonpb.Link_WorkflowEvent{
-							Namespace:  "test-ns",
-							WorkflowId: "test-workflow-id",
-							RunId:      "test-run-id",
-							Reference: &commonpb.Link_WorkflowEvent_EventRef{
-								EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-									EventId:   3,
-									EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
-								},
-							},
-						},
-					},
-				},
-				{
-					Variant: &commonpb.Link_WorkflowEvent_{
-						WorkflowEvent: &commonpb.Link_WorkflowEvent{
-							Namespace:  "test-ns",
-							WorkflowId: "test-workflow-id",
-							RunId:      "test-run-id",
-							Reference: &commonpb.Link_WorkflowEvent_EventRef{
-								EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-									EventId:   5,
-									EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
-								},
-							},
-						},
-					},
+
+	// Returns a new pair of callbacks to be mutated in tests.
+	getCallbacks := func() []*commonpb.Callback {
+		return []*commonpb.Callback{
+			{
+				Variant: nexusCallbackVariant(),
+				Links: []*commonpb.Link{
+					common.CloneProto(links[0]),
+					common.CloneProto(links[1]),
 				},
 			},
-		},
-		{
-			Variant: &commonpb.Callback_Internal_{
-				Internal: &commonpb.Callback_Internal{},
-			},
-			Links: []*commonpb.Link{
-				{
-					Variant: &commonpb.Link_WorkflowEvent_{
-						WorkflowEvent: &commonpb.Link_WorkflowEvent{
-							Namespace:  "test-ns",
-							WorkflowId: "test-workflow-id",
-							RunId:      "test-run-id",
-							Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
-								RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-									RequestId: "test-request-id",
-									EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-								},
-							},
-						},
-					},
+			{
+				Variant: &commonpb.Callback_Internal_{
+					Internal: &commonpb.Callback_Internal{},
+				},
+				Links: []*commonpb.Link{
+					common.CloneProto(links[2]),
 				},
 			},
-		},
+		}
 	}
 
-	dedupedLinks := dedupLinksFromCallbacks(links, callbacks)
-	assert.Len(t, dedupedLinks, 1)
-	protoassert.ProtoEqual(
-		t,
-		&commonpb.Link{
-			Variant: &commonpb.Link_WorkflowEvent_{
-				WorkflowEvent: &commonpb.Link_WorkflowEvent{
-					Namespace:  "test-ns",
-					WorkflowId: "test-workflow-id",
-					RunId:      "test-run-id",
-					Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
-						RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-							RequestId: "test-request-id",
-							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-						},
-					},
-				},
-			},
-		},
-		dedupedLinks[0],
-	)
+	// Because the second Callback is the Internal-variant, the link
+	// it carries will not be considered for deduping.
+	t.Run("IgnoreNonNexusCallbackLinks", func(t *testing.T) {
+		callbacks := getCallbacks()
+		dedupedLinks := dedupLinksFromCallbacks(links, callbacks)
+		require.Len(t, dedupedLinks, 1)
+		protorequire.ProtoEqual(t, dedupedLinks[0], links[2])
+	})
+
+	// Remove links[1] from callbacks[0].Links. links[1] should then not
+	// be deduped, and be in the resulting slice.
+	t.Run("UniqueNexusLink", func(t *testing.T) {
+		callbacks := getCallbacks()
+		callbacks[0].Links = callbacks[0].Links[:1]
+
+		dedupedLinks := dedupLinksFromCallbacks(links, callbacks)
+		require.Len(t, dedupedLinks, 2)
+		protorequire.ProtoEqual(t, dedupedLinks[0], links[1])
+		protorequire.ProtoEqual(t, dedupedLinks[1], links[2]) // Same as before.
+	})
+
+	// Change the type of the second callback to be a Nexus-variant.
+	// Now all callback links will be considered for deduping, filtering
+	// everything out.
+	t.Run("AllDupes", func(t *testing.T) {
+		callbacks := getCallbacks()
+		callbacks[1].Variant = nexusCallbackVariant()
+
+		dedupedLinks := dedupLinksFromCallbacks(links, callbacks)
+		require.Empty(t, dedupedLinks)
+	})
 }
 
 func (s *WorkflowHandlerSuite) Test_DeleteWorkflowExecution() {
@@ -5820,10 +5781,8 @@ func (s *WorkflowHandlerSuite) TestPrepareUpdateWorkflowRequest_ValidatesComplet
 			},
 		}
 		request := newRequest([]*commonpb.Callback{{
-			Variant: &commonpb.Callback_Nexus_{
-				Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/callback"},
-			},
-			Links: []*commonpb.Link{callbackLink},
+			Variant: nexusCallbackVariant(),
+			Links:   []*commonpb.Link{callbackLink},
 		}})
 		request.Request.Links = []*commonpb.Link{common.CloneProto(callbackLink)}
 
@@ -5838,9 +5797,7 @@ func (s *WorkflowHandlerSuite) TestPrepareUpdateWorkflowRequest_ValidatesComplet
 			context.Background(),
 			s.testNamespace,
 			newRequest([]*commonpb.Callback{{
-				Variant: &commonpb.Callback_Internal_{
-					Internal: &commonpb.Callback_Internal{},
-				},
+				Variant: nexusCallbackVariant(),
 				Links: []*commonpb.Link{{
 					Variant: &commonpb.Link_BatchJob_{
 						BatchJob: &commonpb.Link_BatchJob{},
@@ -5856,9 +5813,7 @@ func (s *WorkflowHandlerSuite) TestPrepareUpdateWorkflowRequest_ValidatesComplet
 
 	s.Run("rejects too many combined links", func() {
 		request := newRequest([]*commonpb.Callback{{
-			Variant: &commonpb.Callback_Internal_{
-				Internal: &commonpb.Callback_Internal{},
-			},
+			Variant: nexusCallbackVariant(),
 			Links: []*commonpb.Link{{
 				Variant: &commonpb.Link_BatchJob_{
 					BatchJob: &commonpb.Link_BatchJob{JobId: "callback-job"},
@@ -5914,4 +5869,12 @@ type routingMatchingClient struct {
 
 func (r *routingMatchingClient) Route(p tqid.Partition) (string, error) {
 	return r.routeFn(p)
+}
+
+func nexusCallbackVariant() *commonpb.Callback_Nexus_ {
+	return &commonpb.Callback_Nexus_{
+		Nexus: &commonpb.Callback_Nexus{
+			Url: "https://localhost/nexus-callback",
+		},
+	}
 }

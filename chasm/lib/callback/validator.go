@@ -8,31 +8,27 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
 	"google.golang.org/grpc/status"
 )
 
 // Kind identifies a callback variant.
-type Kind int
+type Kind string
 
 const (
-	// KindUnspecified is the kind of a callback with an unset or unrecognized variant.
-	KindUnspecified Kind = iota
-	KindNexus
-	KindWorker
-	KindInternal
+	// KindUnknown is the kind of a callback with an unset or unrecognized variant.
+	KindUnknown Kind = "unknown"
+	KindNexus   Kind = "nexus"
+	KindWorker  Kind = "worker"
 )
 
 func (k Kind) String() string {
 	switch k {
-	case KindNexus:
-		return "nexus"
-	case KindWorker:
-		return "worker"
-	case KindInternal:
-		return "internal"
+	case KindUnknown, KindNexus, KindWorker:
+		return string(k)
 	default:
-		return "unspecified"
+		return string(KindUnknown)
 	}
 }
 
@@ -44,68 +40,43 @@ func KindOf(cb *commonpb.Callback) Kind {
 	case *commonpb.Callback_Worker_:
 		return KindWorker
 	case *commonpb.Callback_Internal_:
-		return KindInternal
+		// Internal-variant callbacks are not used and should be removed entirely.
+		return KindUnknown
 	default:
-		return KindUnspecified
+		return KindUnknown
 	}
-}
-
-// EnabledCallbackKinds is the set of client-supplied callback kinds that may be attached to an execution.
-// (e.g. Worker-variant callbacks might only be supported for SANO.)
-type EnabledCallbackKinds []Kind
-
-func (e EnabledCallbackKinds) Contains(k Kind) bool {
-	return slices.Contains(e, k)
-}
-
-func (e EnabledCallbackKinds) String() string {
-	names := make([]string, len(e))
-	for i, kind := range e {
-		names[i] = kind.String()
-	}
-	return strings.Join(names, ",")
 }
 
 // ConvertEnabledKinds converts a dynamic config value — a list of kind names as spelled by
-// [Kind.String] — into the [EnabledCallbackKinds] it denotes. Names are matched
-// case-insensitively and duplicates are dropped.
+// Kind.String() — into the []Kind it denotes.
 //
-// Any unrecognized name rejects the whole value: a typo is a far likelier explanation than a
-// deliberate reference to a kind this server does not know, and silently dropping the name would
-// leave that kind's callbacks failing with Unimplemented and nothing pointing at the config. An
-// empty list is rejected for the same reason — it is operator error, not "enable nothing". On
-// error the [dynamicconfig.Collection] logs and falls back to the setting's default.
-func ConvertEnabledKinds(val any) (EnabledCallbackKinds, error) {
+// Returns an error and use the default config value if _any_ callback kinds are unrecognized.
+// An empty list not specifying any callback kinds is allowed.
+func ConvertEnabledKinds(val any) ([]Kind, error) {
 	names, err := dynamicconfig.ConvertStructure[[]string](nil)(val)
 	if err != nil {
 		return nil, err
 	}
-	if len(names) == 0 {
-		return nil, fmt.Errorf("no callback kinds named, expected a non-empty subset of [nexus, worker]")
-	}
 
-	// The kinds an operator may name. Internal callbacks are server-generated, so they are always
-	// allowed and cannot be configured.
+	enabledKinds := make([]Kind, 0, 2)
 	configurableKinds := map[string]Kind{
 		KindNexus.String():  KindNexus,
 		KindWorker.String(): KindWorker,
 	}
-
-	var enabledKinds EnabledCallbackKinds
 	var unknownNames []string
 	for _, name := range names {
-		kind, ok := configurableKinds[strings.ToLower(strings.TrimSpace(name))]
+		kind, ok := configurableKinds[name]
 		if !ok {
 			unknownNames = append(unknownNames, name)
 			continue
 		}
-		if !enabledKinds.Contains(kind) {
+		if !slices.Contains(enabledKinds, kind) {
 			enabledKinds = append(enabledKinds, kind)
 		}
 	}
 	if len(unknownNames) > 0 {
 		return nil, fmt.Errorf(
-			"%v does not name a known callback kind, expected a non-empty subset of [nexus, worker]",
+			"%v does not match a known callback kind [nexus, worker]",
 			unknownNames)
 	}
 	return enabledKinds, nil
@@ -120,28 +91,30 @@ type Validator interface {
 
 type ValidateOptions struct {
 	// EnabledKinds are the callback kinds that may be attached to the execution being validated.
-	// A client-supplied callback of any other kind is rejected with an Unimplemented error.
-	EnabledKinds EnabledCallbackKinds
+	// A client-supplied callback of any other kind is rejected with an InvalidArgument error.
+	EnabledKinds []Kind
 }
 
 // OnlyNexus returns a ValidateOptions that only enables Nexus-variant callbacks. This is the default
-// behavior for all completion callbacks except for those on standalone Nexus operations, which may
-// supoprt Worker-variant callbacks as well.
+// behavior for all execution types except for those on standalone Nexus operations, which may
+// support Worker-variant callbacks.
 func OnlyNexus() ValidateOptions {
 	return ValidateOptions{
 		EnabledKinds: []Kind{KindNexus},
 	}
 }
 
-// ValidatorConfig holds the limits a [Validator] enforces. Every field is required.
+// ValidatorConfig holds the limits a [Validator] enforces.
 type ValidatorConfig struct {
-	MaxPerExecution dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxPerExecution  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxIDLengthLimit dynamicconfig.IntPropertyFn // All ID types use the same global setting.
 	// Nexus-variant limits.
 	URLMaxLength  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	HeaderMaxSize dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EndpointRules dynamicconfig.TypedPropertyFnWithNamespaceFilter[AddressMatchRules]
 	// Worker-variant limits.
-	WorkerNameMaxLength        dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxServiceNameLength       dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxOperationNameLength     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	WorkerSourceContextMaxSize dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
@@ -149,10 +122,12 @@ type ValidatorConfig struct {
 func NewValidatorConfig(dc *dynamicconfig.Collection) ValidatorConfig {
 	return ValidatorConfig{
 		MaxPerExecution:            MaxPerExecution.Get(dc),
+		MaxIDLengthLimit:           dynamicconfig.MaxIDLengthLimit.Get(dc),
 		URLMaxLength:               dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
 		HeaderMaxSize:              dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
 		EndpointRules:              AllowedAddresses.Get(dc),
-		WorkerNameMaxLength:        WorkerNameMaxLength.Get(dc),
+		MaxServiceNameLength:       nexusoperation.MaxServiceNameLength.Get(dc),
+		MaxOperationNameLength:     nexusoperation.MaxOperationNameLength.Get(dc),
 		WorkerSourceContextMaxSize: WorkerSourceContextMaxSize.Get(dc),
 	}
 }
@@ -181,43 +156,38 @@ func (v *validator) Validate(
 
 	for i, cb := range cbs {
 		kind := KindOf(cb)
-		switch kind {
-		case KindUnspecified:
-			return serviceerror.NewUnimplementedf(
-				"completion_callbacks[%d]: unknown callback variant: %T", i, cb.GetVariant())
-		case KindInternal:
-			// Internal callbacks are server-generated, so they are neither gated on operator
-			// config nor have any fields to validate. CHASM has no Internal variant, so
-			// FromAPICallback rejects them with InvalidArgument when the execution is backed by
-			// CHASM.
-			continue
-		}
 
-		if !opts.EnabledKinds.Contains(kind) {
-			return serviceerror.NewUnimplementedf(
-				"completion_callbacks[%d]: %s callbacks are not enabled for this execution type", i, kind)
+		enableCheckThen := func(fn func() error) error {
+			if !slices.Contains(opts.EnabledKinds, kind) {
+				return serviceerror.NewInvalidArgumentf("%s callbacks are not enabled for this execution type", kind)
+			}
+			return fn()
 		}
 
 		var err error
 		switch kind {
 		case KindNexus:
-			err = v.validateNexus(namespaceName, i, cb.GetNexus())
+			err = enableCheckThen(func() error { return v.validateNexus(namespaceName, cb.GetNexus()) })
 		case KindWorker:
-			err = v.validateWorker(namespaceName, i, cb.GetWorker())
+			err = enableCheckThen(func() error { return v.validateWorker(namespaceName, cb.GetWorker()) })
+		case KindUnknown:
+			fallthrough
+		default:
+			err = serviceerror.NewUnimplementedf("unknown callback variant: %T", cb.GetVariant())
 		}
 		if err != nil {
-			return err
+			return fmt.Errorf("completion_callbacks[%d]: %w", i, err)
 		}
 	}
 	return nil
 }
 
-func (v *validator) validateNexus(namespaceName string, idx int, cb *commonpb.Callback_Nexus) error {
+func (v *validator) validateNexus(namespaceName string, cb *commonpb.Callback_Nexus) error {
 	rawURL := cb.GetUrl()
 	if len(rawURL) > v.config.URLMaxLength(namespaceName) {
 		return serviceerror.NewInvalidArgumentf(
-			"completion_callbacks[%d]: invalid url: url length longer than max length allowed of %d",
-			idx, v.config.URLMaxLength(namespaceName),
+			"invalid url: url length longer than max length allowed of %d",
+			v.config.URLMaxLength(namespaceName),
 		)
 	}
 	if err := v.config.EndpointRules(namespaceName).Validate(rawURL); err != nil {
@@ -225,7 +195,7 @@ func (v *validator) validateNexus(namespaceName string, idx int, cb *commonpb.Ca
 		if s, ok := status.FromError(err); ok {
 			msg = s.Message()
 		}
-		return serviceerror.NewInvalidArgumentf("completion_callbacks[%d]: %s", idx, msg)
+		return serviceerror.NewInvalidArgument(msg)
 	}
 
 	// Validate total size of all headers, as well as normalize to lowercase.
@@ -237,40 +207,41 @@ func (v *validator) validateNexus(namespaceName string, idx int, cb *commonpb.Ca
 	}
 	if headerSize > v.config.HeaderMaxSize(namespaceName) {
 		return serviceerror.NewInvalidArgumentf(
-			"completion_callbacks[%d]: invalid header: header size longer than max allowed size of %d",
-			idx, v.config.HeaderMaxSize(namespaceName),
+			"invalid header: header size longer than max allowed size of %d",
+			v.config.HeaderMaxSize(namespaceName),
 		)
 	}
 	cb.Header = lowerCaseHeaders
 	return nil
 }
 
-func (v *validator) validateWorker(namespaceName string, idx int, cb *commonpb.Callback_Worker) error {
-	nameLimit := v.config.WorkerNameMaxLength(namespaceName)
+func (v *validator) validateWorker(namespaceName string, cb *commonpb.Callback_Worker) error {
 	for _, field := range []struct {
-		name  string
-		value string
+		name      string
+		value     string
+		maxLength int
 	}{
-		{"task_queue_name", cb.GetTaskQueueName()},
-		{"service", cb.GetService()},
-		{"operation", cb.GetOperation()},
+		{"task_queue_name", cb.GetTaskQueueName(), v.config.MaxIDLengthLimit()},
+		{"service", cb.GetService(), v.config.MaxServiceNameLength(namespaceName)},
+		{"operation", cb.GetOperation(), v.config.MaxOperationNameLength(namespaceName)},
 	} {
 		if field.value == "" {
-			return serviceerror.NewInvalidArgumentf(
-				"completion_callbacks[%d].worker.%s is required", idx, field.name)
+			return serviceerror.NewInvalidArgumentf("%s is required", field.name)
 		}
-		if len(field.value) > nameLimit {
+		if len(field.value) > field.maxLength {
 			return serviceerror.NewInvalidArgumentf(
-				"completion_callbacks[%d].worker.%s exceeds length limit. Length=%d Limit=%d",
-				idx, field.name, len(field.value), nameLimit)
+				"%s exceeds length limit. Length=%d Limit=%d",
+				field.name, len(field.value), field.maxLength)
 		}
 	}
 
 	// Max size for Worker callback source context blobs.
-	if size := cb.GetSourceContext().Size(); size > v.config.WorkerSourceContextMaxSize(namespaceName) {
+	maxSize := v.config.WorkerSourceContextMaxSize(namespaceName)
+	if size := cb.GetSourceContext().Size(); size > maxSize {
 		return serviceerror.NewInvalidArgumentf(
-			"completion_callbacks[%d].worker.source_context exceeds size limit. Length=%d Limit=%d",
-			idx, size, v.config.WorkerSourceContextMaxSize(namespaceName))
+			"source_context exceeds size limit. Length=%d Limit=%d",
+			size, v.config.WorkerSourceContextMaxSize(namespaceName))
 	}
+
 	return nil
 }

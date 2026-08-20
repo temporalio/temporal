@@ -548,12 +548,10 @@ func TestValidateAndPopulateStartRequest_ValidatesCompletionCallbackLinks(t *tes
 			EndpointRules: func(string) callback.AddressMatchRules {
 				return callback.AddressMatchRules{
 					Rules: []callback.AddressMatchRule{
-						{Regexp: regexp.MustCompile(`.*`), AllowInsecure: true},
+						{Regexp: regexp.MustCompile("test-endpoint"), AllowInsecure: false},
 					},
 				}
 			},
-			WorkerNameMaxLength:        func(string) int { return 1000 },
-			WorkerSourceContextMaxSize: func(string) int { return 4096 },
 		}),
 		linkValidator: newLinkValidator(
 			func(string) int { return 1 },
@@ -570,8 +568,10 @@ func TestValidateAndPopulateStartRequest_ValidatesCompletionCallbackLinks(t *tes
 			TaskQueue:           &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
 			StartToCloseTimeout: durationpb.New(10 * time.Second),
 			CompletionCallbacks: []*commonpb.Callback{{
-				Variant: &commonpb.Callback_Internal_{
-					Internal: &commonpb.Callback_Internal{},
+				Variant: &commonpb.Callback_Nexus_{
+					Nexus: &commonpb.Callback_Nexus{
+						Url: "https://test-endpoint/",
+					},
 				},
 				Links: callbackLinks,
 			}},

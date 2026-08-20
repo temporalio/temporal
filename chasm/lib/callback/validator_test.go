@@ -13,7 +13,7 @@ import (
 
 // allowAllKindsOpts is a stock ValidateOptions for tests.
 var allowAllKindsOpts = ValidateOptions{
-	EnabledKinds: EnabledCallbackKinds{KindNexus, KindWorker},
+	EnabledKinds: []Kind{KindNexus, KindWorker},
 }
 
 // newTestValidatorConfig returns a config with permissive limits, for tests that tighten only the
@@ -27,10 +27,12 @@ func newTestValidatorConfig() ValidatorConfig {
 
 	return ValidatorConfig{
 		MaxPerExecution:            func(string) int { return 10 },
+		MaxIDLengthLimit:           func() int { return 10 },
 		URLMaxLength:               func(string) int { return 1000 },
 		HeaderMaxSize:              func(string) int { return 4096 },
 		EndpointRules:              func(string) AddressMatchRules { return allowAll },
-		WorkerNameMaxLength:        func(string) int { return 1000 },
+		MaxServiceNameLength:       func(string) int { return 100 },
+		MaxOperationNameLength:     func(string) int { return 100 },
 		WorkerSourceContextMaxSize: func(string) int { return 4096 },
 	}
 }
@@ -39,7 +41,7 @@ func testWorkerCallback() *commonpb.Callback {
 	return &commonpb.Callback{
 		Variant: &commonpb.Callback_Worker_{
 			Worker: &commonpb.Callback_Worker{
-				TaskQueueName: "completions-task-queue",
+				TaskQueueName: "wc-queue",
 				Service:       "HTTPAdapter",
 				Operation:     "DeliverAsWebhook",
 				SourceContext: &commonpb.Payload{Data: []byte("source-context")},
@@ -171,20 +173,24 @@ func TestValidateCallbacks(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("InternalCallbackSkipped", func(t *testing.T) {
+	t.Run("InternalCallbacksFail", func(t *testing.T) {
 		cbs := []*commonpb.Callback{
-			{Variant: &commonpb.Callback_Internal_{
-				Internal: &commonpb.Callback_Internal{},
-			}},
+			{
+				Variant: &commonpb.Callback_Internal_{
+					Internal: &commonpb.Callback_Internal{},
+				},
+			},
 		}
 		err := v.Validate(context.Background(), "ns", cbs, allowAllKindsOpts)
-		require.NoError(t, err)
+		require.ErrorContains(t, err, "unknown callback variant")
 	})
 }
 
 func TestValidateWorkerCallback(t *testing.T) {
 	cfg := newTestValidatorConfig()
-	cfg.WorkerNameMaxLength = func(string) int { return 10 }
+	cfg.MaxIDLengthLimit = func() int { return 10 }
+	cfg.MaxServiceNameLength = func(string) int { return 10 }
+	cfg.MaxOperationNameLength = func(string) int { return 10 }
 	cfg.WorkerSourceContextMaxSize = func(string) int { return 20 }
 	v := NewValidator(cfg)
 
@@ -196,39 +202,39 @@ func TestValidateWorkerCallback(t *testing.T) {
 		{
 			name:   "task_queue_name is required",
 			mutate: func(w *commonpb.Callback_Worker) { w.TaskQueueName = "" },
-			errMsg: "completion_callbacks[1].worker.task_queue_name is required",
+			errMsg: "completion_callbacks[1]: task_queue_name is required",
 		},
 		{
 			name:   "task_queue_name length",
 			mutate: func(w *commonpb.Callback_Worker) { w.TaskQueueName = strings.Repeat("x", 11) },
-			errMsg: "completion_callbacks[1].worker.task_queue_name exceeds length limit. Length=11 Limit=10",
+			errMsg: "completion_callbacks[1]: task_queue_name exceeds length limit. Length=11 Limit=10",
 		},
 		{
 			name:   "service is required",
 			mutate: func(w *commonpb.Callback_Worker) { w.Service = "" },
-			errMsg: "completion_callbacks[1].worker.service is required",
+			errMsg: "completion_callbacks[1]: service is required",
 		},
 		{
 			name:   "service length",
 			mutate: func(w *commonpb.Callback_Worker) { w.Service = strings.Repeat("x", 11) },
-			errMsg: "completion_callbacks[1].worker.service exceeds length limit",
+			errMsg: "completion_callbacks[1]: service exceeds length limit",
 		},
 		{
 			name:   "operation is required",
 			mutate: func(w *commonpb.Callback_Worker) { w.Operation = "" },
-			errMsg: "completion_callbacks[1].worker.operation is required",
+			errMsg: "completion_callbacks[1]: operation is required",
 		},
 		{
 			name:   "operation length",
 			mutate: func(w *commonpb.Callback_Worker) { w.Operation = strings.Repeat("x", 11) },
-			errMsg: "completion_callbacks[1].worker.operation exceeds length limit",
+			errMsg: "completion_callbacks[1]: operation exceeds length limit",
 		},
 		{
 			name: "source_context size",
 			mutate: func(w *commonpb.Callback_Worker) {
 				w.SourceContext = &commonpb.Payload{Data: []byte(strings.Repeat("x", 21))}
 			},
-			errMsg: "completion_callbacks[1].worker.source_context exceeds size limit",
+			errMsg: "completion_callbacks[1]: source_context exceeds size limit",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -260,42 +266,35 @@ func TestValidateEnabledKinds(t *testing.T) {
 		Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/cb"},
 	}}
 	workerCb := testWorkerCallback()
-	internalCb := &commonpb.Callback{Variant: &commonpb.Callback_Internal_{
-		Internal: &commonpb.Callback_Internal{Data: []byte("data")},
-	}}
 
 	t.Run("AllSupported", func(t *testing.T) {
 		require.NoError(t, v.Validate(ctx, "ns",
-			[]*commonpb.Callback{nexusCb, workerCb, internalCb},
+			[]*commonpb.Callback{nexusCb, workerCb},
 			allowAllKindsOpts,
 		))
 	})
 
 	t.Run("NoCallbacks", func(t *testing.T) {
 		require.NoError(t, v.Validate(ctx, "ns", nil, ValidateOptions{
-			EnabledKinds: EnabledCallbackKinds{KindNexus},
+			EnabledKinds: []Kind{KindNexus},
 		}))
 	})
 
 	t.Run("NoKindsEnabled", func(t *testing.T) {
 		// The zero value supports no client-supplied kinds at all.
 		err := v.Validate(ctx, "ns", []*commonpb.Callback{nexusCb}, ValidateOptions{})
-		var unimplementedErr *serviceerror.Unimplemented
-		require.ErrorAs(t, err, &unimplementedErr)
-		require.Contains(t, err.Error(), "completion_callbacks[0]: nexus callbacks are not enabled")
-	})
-
-	t.Run("InternalAlwaysAllowed", func(t *testing.T) {
-		require.NoError(t, v.Validate(ctx, "ns", []*commonpb.Callback{internalCb}, ValidateOptions{}))
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Contains(t, err.Error(), "completion_callbacks[0]: nexus callbacks are not enabled for this execution type")
 	})
 
 	t.Run("DisabledKind", func(t *testing.T) {
 		err := v.Validate(ctx, "ns",
 			[]*commonpb.Callback{nexusCb, workerCb},
-			ValidateOptions{EnabledKinds: EnabledCallbackKinds{KindNexus}},
+			ValidateOptions{EnabledKinds: []Kind{KindNexus}},
 		)
-		var unimplementedErr *serviceerror.Unimplemented
-		require.ErrorAs(t, err, &unimplementedErr)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
 		require.Contains(t, err.Error(),
 			"completion_callbacks[1]: worker callbacks are not enabled for this execution type")
 	})
@@ -305,17 +304,17 @@ func TestValidateEnabledKinds(t *testing.T) {
 		invalidCb := testWorkerCallback()
 		invalidCb.GetWorker().TaskQueueName = ""
 		err := v.Validate(ctx, "ns", []*commonpb.Callback{invalidCb}, ValidateOptions{
-			EnabledKinds: EnabledCallbackKinds{KindNexus},
+			EnabledKinds: []Kind{KindNexus},
 		})
-		var unimplementedErr *serviceerror.Unimplemented
-		require.ErrorAs(t, err, &unimplementedErr)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
 		require.Contains(t, err.Error(),
 			"completion_callbacks[0]: worker callbacks are not enabled for this execution type")
 	})
 
 	t.Run("UnsetVariant", func(t *testing.T) {
 		err := v.Validate(ctx, "ns", []*commonpb.Callback{{}}, ValidateOptions{
-			EnabledKinds: EnabledCallbackKinds{KindNexus},
+			EnabledKinds: []Kind{KindNexus},
 		})
 		var unimplementedErr *serviceerror.Unimplemented
 		require.ErrorAs(t, err, &unimplementedErr)
@@ -327,25 +326,23 @@ func TestConvertEnabledKinds(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		val  any
-		want EnabledCallbackKinds
+		want []Kind
 	}{
-		{name: "Nexus", val: []string{"nexus"}, want: EnabledCallbackKinds{KindNexus}},
+		// Empty lists are supported. It means no callbacks are allowed on the execution.
+		{name: "Empty", val: []string{}, want: []Kind{}},
+		{name: "Nil", val: nil, want: []Kind{}},
+		{name: "Nexus", val: []string{"nexus"}, want: []Kind{KindNexus}},
 		{
 			name: "Both",
 			val:  []string{"nexus", "worker"},
-			want: EnabledCallbackKinds{KindNexus, KindWorker},
+			want: []Kind{KindNexus, KindWorker},
 		},
 		{
 			name: "OrderPreserved",
 			val:  []string{"worker", "nexus"},
-			want: EnabledCallbackKinds{KindWorker, KindNexus},
+			want: []Kind{KindWorker, KindNexus},
 		},
-		{
-			name: "NamesNormalized",
-			val:  []any{" Nexus", "WORKER "},
-			want: EnabledCallbackKinds{KindNexus, KindWorker},
-		},
-		{name: "DuplicatesDropped", val: []string{"nexus", "nexus"}, want: EnabledCallbackKinds{KindNexus}},
+		{name: "DuplicatesDropped", val: []string{"nexus", "nexus"}, want: []Kind{KindNexus}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := ConvertEnabledKinds(tc.val)
@@ -363,30 +360,33 @@ func TestConvertEnabledKinds(t *testing.T) {
 		errMsg string
 	}{
 		{name: "NotAList", val: 42, errMsg: "source data must be an array or slice"},
-		{name: "Empty", val: []string{}, errMsg: "no callback kinds named"},
-		{name: "Nil", val: nil, errMsg: "no callback kinds named"},
 		{
 			name:   "OnlyUnknownNames",
 			val:    []string{"carrier-pigeon"},
-			errMsg: `[carrier-pigeon] does not name a known callback kind`,
+			errMsg: `[carrier-pigeon] does not match a known callback kind`,
 		},
 		{
 			// A typo beside a valid name must not be silently dropped: the operator would otherwise
 			// see that kind's callbacks fail with Unimplemented and nothing pointing at the config.
 			name:   "UnknownNameBesideKnownName",
 			val:    []string{"nexsus", "worker"},
-			errMsg: `[nexsus] does not name a known callback kind`,
+			errMsg: `[nexsus] does not match a known callback kind`,
 		},
 		{
 			// Internal callbacks are server-generated and cannot be enabled by an operator.
 			name:   "Internal",
 			val:    []string{"nexus", "internal"},
-			errMsg: `[internal] does not name a known callback kind`,
+			errMsg: `[internal] does not match a known callback kind`,
+		},
+		{
+			name:   "Names not normalized or trimmed",
+			val:    []any{" Nexus", "WORKER", "   nexus", "worker "},
+			errMsg: "[ Nexus WORKER    nexus worker ] does not match a known callback kind",
 		},
 		{
 			name:   "AllUnknownNamesReported",
 			val:    []string{"nexsus", "wroker"},
-			errMsg: `[nexsus wroker] does not name a known callback kind`,
+			errMsg: `[nexsus wroker] does not match a known callback kind`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -414,19 +414,20 @@ func TestKindOf(t *testing.T) {
 			wantName: "worker",
 		},
 		{
+			// Internal-variant callbacks should be removed; treated as Unknown.
 			callback: &commonpb.Callback{Variant: &commonpb.Callback_Internal_{Internal: &commonpb.Callback_Internal{}}},
-			want:     KindInternal,
-			wantName: "internal",
+			want:     KindUnknown,
+			wantName: "unknown",
 		},
 		{
 			callback: &commonpb.Callback{},
-			want:     KindUnspecified,
-			wantName: "unspecified",
+			want:     KindUnknown,
+			wantName: "unknown",
 		},
 		{
 			callback: nil,
-			want:     KindUnspecified,
-			wantName: "unspecified",
+			want:     KindUnknown,
+			wantName: "unknown",
 		},
 	} {
 		t.Run(tc.wantName, func(t *testing.T) {
