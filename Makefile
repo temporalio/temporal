@@ -265,7 +265,6 @@ $(MOCKGEN): $(STAMPDIR)/mockgen-$(MOCKGEN_VER)
 STRINGER_VER := v0.49.0
 STRINGER := $(LOCALBIN)/stringer
 $(STAMPDIR)/stringer-$(STRINGER_VER): | $(STAMPDIR) $(LOCALBIN)
-	@rm -f $(STRINGER)
 	$(call go-install-tool,$(STRINGER),golang.org/x/tools/cmd/stringer,$(STRINGER_VER))
 	@touch $@
 $(STRINGER): $(STAMPDIR)/stringer-$(STRINGER_VER)
