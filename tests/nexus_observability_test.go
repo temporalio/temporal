@@ -55,13 +55,9 @@ func (s *NexusObservabilitySuite) newTestEnv(chasmEnabled bool) *NexusTestEnv {
 func (s *NexusObservabilitySuite) TestStartFailureEmitsCorrelatableSignals(chasmEnabled bool) {
 	env := s.newTestEnv(chasmEnabled)
 
-	ctx := s.Context()
 	tv := env.Tv()
-	callerTaskQueue := tv.TaskQueue().GetName()
-	serviceName := tv.Service()
-	operationName := tv.Operation()
 	handlerRequests := make(chan nexusHandlerRequest, 1)
-	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), nexustest.Handler{
+	endpointName := env.createRandomExternalNexusServer(s.Context(), s.T(), nexustest.Handler{
 		OnStartOperation: func(handlerCtx context.Context, service, operation string, _ *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 			select {
 			case handlerRequests <- nexusHandlerRequest{service: service, operation: operation, requestID: options.RequestID}:
@@ -73,33 +69,33 @@ func (s *NexusObservabilitySuite) TestStartFailureEmitsCorrelatableSignals(chasm
 	})
 
 	callerWorkflow := func(ctx workflow.Context) error {
-		nexusClient := workflow.NewNexusClient(endpointName, serviceName)
-		return nexusClient.ExecuteOperation(ctx, operationName, nil, workflow.NexusOperationOptions{
+		nexusClient := workflow.NewNexusClient(endpointName, tv.Service())
+		return nexusClient.ExecuteOperation(ctx, tv.Operation(), nil, workflow.NexusOperationOptions{
 			ScheduleToCloseTimeout: 3 * time.Second,
 		}).Get(ctx, nil)
 	}
 
-	callerWorker := worker.New(env.SdkClient(), callerTaskQueue, worker.Options{})
+	callerWorker := worker.New(env.SdkClient(), tv.TaskQueue().GetName(), worker.Options{})
 	callerWorker.RegisterWorkflowWithOptions(callerWorkflow, workflow.RegisterOptions{Name: tv.WorkflowType().GetName()})
 	s.NoError(callerWorker.Start())
 	s.T().Cleanup(callerWorker.Stop)
 
 	logCapture := env.StartLogCapture()
 	metricCapture := env.StartNamespaceMetricCapture()
-	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), client.StartWorkflowOptions{
 		ID:        tv.WorkflowID(),
-		TaskQueue: callerTaskQueue,
+		TaskQueue: tv.TaskQueue().GetName(),
 	}, tv.WorkflowType().GetName())
 	s.NoError(err)
 
 	var handlerRequest nexusHandlerRequest
 	select {
 	case handlerRequest = <-handlerRequests:
-	case <-ctx.Done():
+	case <-s.Context().Done():
 		s.FailNow("timed out waiting for the Nexus handler request")
 	}
-	s.Require().Equal(serviceName, handlerRequest.service)
-	s.Require().Equal(operationName, handlerRequest.operation)
+	s.Require().Equal(tv.Service(), handlerRequest.service)
+	s.Require().Equal(tv.Operation(), handlerRequest.operation)
 	s.Require().NotEmpty(handlerRequest.requestID)
 
 	var failureLog *testlogger.CapturedLog
@@ -125,5 +121,5 @@ func (s *NexusObservabilitySuite) TestStartFailureEmitsCorrelatableSignals(chasm
 	s.Require().NotEmpty(metricCapture.Metric(chasmnexus.OutboundRequestCounter.Name()))
 	s.Require().NotEmpty(metricCapture.Metric(chasmnexus.OutboundRequestLatency.Name()))
 
-	s.NoError(env.SdkClient().TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "observability contract verified"))
+	s.NoError(env.SdkClient().TerminateWorkflow(s.Context(), run.GetID(), run.GetRunID(), "observability contract verified"))
 }
