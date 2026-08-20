@@ -374,10 +374,10 @@ func normalizedFailureLines(data string) []string {
 func findLastAssertionFailureBlock(lines []string) (string, bool) {
 	var failLine string
 	for i, line := range slices.Backward(lines) {
-		line := strings.TrimSpace(line)
-		if failLine == "" && strings.HasPrefix(line, goTestFailLinePrefix) {
+		trimmed := strings.TrimSpace(line)
+		if failLine == "" && strings.HasPrefix(trimmed, goTestFailLinePrefix) {
 			// Keep the final Go test failure line because it carries the test duration.
-			failLine = line
+			failLine = trimmed
 			continue
 		}
 		if !strings.Contains(line, "Error Trace:") {
