@@ -211,7 +211,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "operation token length exceeds allowed limit (%d/%d)", len(r.OperationToken), tokenLimit)
 	}
 
-	links := commonnexus.ConvertNexusLinksToProtoLinks(r.Links, h.Logger)
+	links := commonnexus.ConvertNexusLinksToProtoLinks(r.Links, logger)
 
 	var successPayload *commonpb.Payload
 	switch r.State { // nolint:exhaustive
