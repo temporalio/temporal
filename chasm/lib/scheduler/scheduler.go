@@ -652,7 +652,6 @@ func (s *Scheduler) HandleNexusCompletion(
 	for _, start := range invoker.GetBufferedStarts() {
 		if start.GetRequestId() == info.RequestId && start.GetCompleted() == nil {
 			workflowID = start.GetWorkflowId()
-			start.OverlapPolicy = s.resolveOverlapPolicy(start.GetOverlapPolicy())
 			tracksCompletionResult = internal.TracksCompletionResult(start.GetOverlapPolicy())
 			break
 		}
