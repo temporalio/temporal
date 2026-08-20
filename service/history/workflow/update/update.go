@@ -370,8 +370,8 @@ func (u *Update) Admit(
 	return nil
 }
 
-// AttachCallbacks attaches completion callbacks from a second caller to an update
-// that has already progressed past admission. If the update is accepted, it writes
+// AttachCallbacksOnDuplicateUpdates attaches completion callbacks from a second caller to an update
+// that has already progressed to admission. If the update is accepted, it writes
 // a WorkflowExecutionOptionsUpdatedEvent with the caller's callbacks and request ID.
 // If the update is in stateSent (sent to worker, not yet accepted), callbacks are
 // buffered in memory and flushed when the update is accepted. If the update is
@@ -381,7 +381,7 @@ func (u *Update) Admit(
 // Returns (true, nil) if the caller should proceed (callbacks attached or update already completed),
 // (false, nil) if the update is in an early state where attachment does not apply,
 // or (false, error) if the update is in a transient state where the caller should retry.
-func (u *Update) AttachCallbacks(
+func (u *Update) AttachCallbacksOnDuplicateUpdates(
 	req *updatepb.Request,
 	eventStore EventStore,
 ) (isCallbackAttached bool, err error) {
@@ -401,20 +401,23 @@ func (u *Update) AttachCallbacks(
 		stateProvisionallyAborted:
 		// Provisional states are transient — they exist only between an event write
 		// and its OnAfterCommit callback within a single workflow task completion
-		// transaction. In practice, AttachCallbacks should never see these states because
+		// transaction. In practice, AttachCallbacksOnDuplicateUpdates should never see these states because
 		// a new UpdateWorkflowExecution API call must acquire the workflow lock,
 		// which means the previous transaction has already committed and provisional
 		// states have resolved. This guard is kept defensively in case future code
-		// paths call AttachCallbacks within the same transaction.
+		// paths call AttachCallbacksOnDuplicateUpdates within the same transaction.
 		return false, serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, "workflow update is not yet accepted, please retry")
 
-	case stateSent:
+	case stateAdmitted, stateSent:
+		// stateAdmitted: if update is Admitted but hasn't yet proceeded to Sent, attach should
+		// still happen so that the callbacks for the duplicate request fire when update completes
 		// stateSent: the update has been sent to the worker but not yet accepted.
 		// Buffer the callbacks in memory; they will be flushed to the event store
 		// when the update is accepted in onAcceptanceMsg.
 		// Returning (true, nil) is safe because:
 		// - The caller already holds the workflow lock
-		// - A workflow task already exists (the update was sent via one)
+		// - A workflow task either already exists (stateSent: the update was sent via one)
+		// or it will be created if required for moving it to Sent(stateAdmitted)
 		// - No new workflow task is needed — just buffer until acceptance
 		// - The event will be written atomically with acceptance
 		// If the Update struct is lost (registry cleared), the abort mechanism fires
