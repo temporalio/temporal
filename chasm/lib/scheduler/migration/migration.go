@@ -73,6 +73,7 @@ func LegacyToCreateFromMigrationStateRequest(
 		state.ScheduleId,
 		state.ConflictToken,
 		getWorkflowID(schedule),
+		schedule.GetPolicies(),
 	)
 
 	runningBufferedStarts := convertRunningWorkflowsToBufferedStarts(
@@ -208,6 +209,7 @@ func convertBufferedStartsLegacyToCHASM(
 	namespaceID, scheduleID string,
 	conflictToken int64,
 	baseWorkflowID string,
+	policies *schedulepb.SchedulePolicies,
 ) []*schedulespb.BufferedStart {
 	if len(v1Starts) == 0 {
 		return nil
@@ -233,9 +235,19 @@ func convertBufferedStartsLegacyToCHASM(
 		}
 
 		if v2Start.WorkflowId == "" {
+			// Mirrors scheduler.AppendsTimestamp, inlined because this package is imported
+			// by the legacy scheduler and so cannot import it back. A buffered start can
+			// carry UNSPECIFIED, which inherits the schedule's policy.
+			overlapPolicy := v1Start.GetOverlapPolicy()
+			if overlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED {
+				overlapPolicy = policies.GetOverlapPolicy()
+			}
+			appendTimestamp := overlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL ||
+				!policies.GetKeepOriginalWorkflowId()
 			v2Start.WorkflowId = schedulerinternal.GenerateWorkflowID(
 				baseWorkflowID,
 				v1Start.GetNominalTime().AsTime(),
+				appendTimestamp,
 			)
 
 			// Unlike the request ID, the workflow ID is user-visible, and dedup

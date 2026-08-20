@@ -325,6 +325,56 @@ func TestProcessTimeRange_Basic(t *testing.T) {
 	require.Less(t, res.NextWakeupTime, end.Add(defaultInterval*2))
 }
 
+func TestProcessTimeRange_KeepOriginalWorkflowID(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := chasm.NewMutableContext(context.Background(), env.Node)
+
+	schedule := defaultSchedule()
+	schedule.Policies.KeepOriginalWorkflowId = true
+	sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, schedule, nil)
+	require.NoError(t, err)
+	processor := newTestSpecProcessor(env.Ctrl)
+
+	end := time.Now()
+	start := end.Add(-defaultInterval * 5)
+
+	res, err := processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
+	require.NoError(t, err)
+	require.Len(t, res.BufferedStarts, 5)
+
+	// Every action reuses the action's workflow ID verbatim, with no timestamp appended.
+	for _, b := range res.BufferedStarts {
+		require.Equal(t, sched.WorkflowID(), b.WorkflowId)
+	}
+}
+
+func TestProcessTimeRange_KeepOriginalWorkflowIDAllowAllStillAppends(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := chasm.NewMutableContext(context.Background(), env.Node)
+
+	schedule := defaultSchedule()
+	schedule.Policies.KeepOriginalWorkflowId = true
+	schedule.Policies.OverlapPolicy = enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL
+	sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, schedule, nil)
+	require.NoError(t, err)
+	processor := newTestSpecProcessor(env.Ctrl)
+
+	end := time.Now()
+	start := end.Add(-defaultInterval * 5)
+
+	res, err := processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
+	require.NoError(t, err)
+	require.Len(t, res.BufferedStarts, 5)
+
+	// ALLOW_ALL permits concurrent runs, which cannot share a workflow ID, so the
+	// timestamp is still appended.
+	for _, b := range res.BufferedStarts {
+		nominalTime := b.NominalTime.AsTime()
+		expectedTimestamp := nominalTime.Truncate(time.Second).Format(time.RFC3339)
+		require.Equal(t, sched.WorkflowID()+"-"+expectedTimestamp, b.WorkflowId)
+	}
+}
+
 func TestProcessTimeRange_ComputeLimitExceeded(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := chasm.NewMutableContext(context.Background(), env.Node)
