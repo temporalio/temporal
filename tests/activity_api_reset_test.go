@@ -296,6 +296,80 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_UnpausesRunningAc
 	s.Equal(int32(1), startedActivityCount.Load())
 }
 
+func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_TimesOutOnUnpause() {
+	s.startToCloseTimeout = time.Second
+	s.activityRetryPolicy = &temporal.RetryPolicy{MaximumAttempts: 1}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	activityCompleteCh := make(chan struct{})
+	defer close(activityCompleteCh)
+	activityFunction := func() (string, error) {
+		<-activityCompleteCh
+		return "done!", nil
+	}
+
+	workflowFn := s.makeWorkflowFunc(activityFunction)
+	s.SdkWorker().RegisterWorkflow(workflowFn)
+	s.SdkWorker().RegisterActivity(activityFunction)
+
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:        s.tv.WorkflowID(),
+		TaskQueue: s.TaskQueue(),
+	}, workflowFn)
+	s.Require().NoError(err)
+
+	var activityStartedAt time.Time
+	await.Require(ctx, s.T(), func(t *await.T) {
+		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		require.NoError(t, err)
+		require.Len(t, description.GetPendingActivities(), 1)
+		pendingActivity := description.PendingActivities[0]
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, pendingActivity.State)
+		require.NotNil(t, pendingActivity.LastStartedTime)
+		activityStartedAt = pendingActivity.LastStartedTime.AsTime()
+	}, 5*time.Second, 200*time.Millisecond)
+
+	_, err = s.FrontendClient().PauseActivity(ctx, &workflowservice.PauseActivityRequest{
+		Namespace: s.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowRun.GetID()},
+		Activity:  &workflowservice.PauseActivityRequest_Id{Id: "activity-id"},
+	})
+	s.Require().NoError(err)
+
+	await.Require(ctx, s.T(), func(t *await.T) {
+		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		require.NoError(t, err)
+		require.Len(t, description.GetPendingActivities(), 1)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED, description.PendingActivities[0].State)
+		require.True(t, description.PendingActivities[0].Paused)
+	}, 5*time.Second, 200*time.Millisecond)
+
+	// Allow the original timeout task to be processed while the activity is paused.
+	originalDeadline := activityStartedAt.Add(s.startToCloseTimeout)
+	require.Eventually(s.T(), func() bool {
+		return time.Now().After(originalDeadline.Add(2 * time.Second))
+	}, 5*time.Second, 100*time.Millisecond)
+
+	description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+	s.Require().NoError(err)
+	s.Require().Len(description.GetPendingActivities(), 1)
+	s.True(description.PendingActivities[0].Paused)
+
+	s.Require().NoError(s.resetFn(ctx, workflowRun.GetID(), "activity-id", false, false))
+
+	workflowResultCtx, workflowResultCancel := context.WithTimeout(ctx, 10*time.Second)
+	defer workflowResultCancel()
+	err = workflowRun.Get(workflowResultCtx, nil)
+	s.Require().Error(err)
+	var activityErr *temporal.ActivityError
+	s.Require().ErrorAs(err, &activityErr)
+	timeoutErr, ok := activityErr.Unwrap().(*temporal.TimeoutError)
+	s.Require().True(ok)
+	s.Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, timeoutErr.TimeoutType())
+}
+
 func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_InRetry() {
 	// reset is called while activity is in retry
 	s.initialRetryInterval = 1 * time.Minute
