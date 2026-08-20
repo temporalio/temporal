@@ -46,8 +46,8 @@ func (b *Buffer) Apply(ctx context.Context) bool {
 func (b *Buffer) Cancel(ctx context.Context) bool {
 	canceled := false
 	b.effects = nil
-	for _, v := range slices.Backward(b.cancels) {
-		v(ctx)
+	for _, cancel := range slices.Backward(b.cancels) {
+		cancel(ctx)
 		canceled = true
 	}
 	b.cancels = nil
