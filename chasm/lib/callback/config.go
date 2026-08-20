@@ -20,25 +20,6 @@ var MaxPerExecution = dynamicconfig.NewNamespaceIntSetting(
 	`MaxPerExecution is the maximum number of callbacks that can be attached to an execution (workflow or standalone activity).`,
 )
 
-// The workflow and update settings live here rather than with the rest of the frontend.* keys
-// to avoid a circular dependency.
-var EnabledWorkflowCallbackKinds = dynamicconfig.NewNamespaceTypedSettingWithConverter(
-	"frontend.enabledWorkflowCallbackKinds",
-	ConvertEnabledKinds,
-	EnabledCallbackKinds{KindNexus},
-	`The list of completion callback kinds that may be attached to a workflow execution.
-Must be a non-empty list naming only "nexus" and/or "worker".`,
-)
-
-var EnabledWorkflowUpdateCallbackKinds = dynamicconfig.NewNamespaceTypedSettingWithConverter(
-	"frontend.enabledWorkflowUpdateCallbackKinds",
-	ConvertEnabledKinds,
-	EnabledCallbackKinds{KindNexus},
-	`The list of completion callback kinds that may be attached to a workflow update.
-Must be a non-empty list naming only "nexus" and/or "worker".
-Callbacks are only recorded if history.enableUpdateCallbacks is also set.`,
-)
-
 var WorkerNameMaxLength = dynamicconfig.NewNamespaceIntSetting(
 	"callback.worker.maxNameLength",
 	1000,

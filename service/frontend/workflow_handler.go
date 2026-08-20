@@ -681,9 +681,7 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 	}
 
 	if cbs := request.GetCompletionCallbacks(); len(cbs) > 0 {
-		opts := callback.ValidateOptions{
-			EnabledKinds: wh.config.WorkflowCallbackKinds(namespaceName.String()),
-		}
+		opts := callback.OnlyNexus()
 		if err := wh.callbackValidator.Validate(ctx, namespaceName.String(), cbs, opts); err != nil {
 			return nil, err
 		}
@@ -5479,9 +5477,7 @@ func (wh *WorkflowHandler) prepareUpdateWorkflowRequest(
 	}
 
 	if cbs := request.GetRequest().GetCompletionCallbacks(); len(cbs) > 0 {
-		opts := callback.ValidateOptions{
-			EnabledKinds: wh.config.WorkflowUpdateCallbackKinds(namespaceName.String()),
-		}
+		opts := callback.OnlyNexus()
 		if err := wh.callbackValidator.Validate(ctx, namespaceName.String(), cbs, opts); err != nil {
 			return err
 		}

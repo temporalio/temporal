@@ -124,6 +124,15 @@ type ValidateOptions struct {
 	EnabledKinds EnabledCallbackKinds
 }
 
+// OnlyNexus returns a ValidateOptions that only enables Nexus-variant callbacks. This is the default
+// behavior for all completion callbacks except for those on standalone Nexus operations, which may
+// supoprt Worker-variant callbacks as well.
+func OnlyNexus() ValidateOptions {
+	return ValidateOptions{
+		EnabledKinds: []Kind{KindNexus},
+	}
+}
+
 // ValidatorConfig holds the limits a [Validator] enforces. Every field is required.
 type ValidatorConfig struct {
 	MaxPerExecution dynamicconfig.IntPropertyFnWithNamespaceFilter

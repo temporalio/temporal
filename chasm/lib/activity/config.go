@@ -40,14 +40,6 @@ var (
 		`Allows attaching completion callbacks to standalone activity executions.`,
 	)
 
-	EnabledCallbackKinds = dynamicconfig.NewNamespaceTypedSettingWithConverter(
-		"activity.enabledCallbackKinds",
-		callback.ConvertEnabledKinds,
-		callback.EnabledCallbackKinds{callback.KindNexus},
-		`The list of completion callback kinds that may be attached to a standalone activity execution.
-Must be a non-empty list naming only "nexus" and/or "worker". Requires activity.enableCallbacks.`,
-	)
-
 	EnableStandaloneActivityOperatorCommands = dynamicconfig.NewNamespaceBoolSetting(
 		"history.enableStandaloneActivityOperatorCommands",
 		false,
@@ -60,7 +52,6 @@ type Config struct {
 	BlobSizeLimitWarn                         dynamicconfig.IntPropertyFnWithNamespaceFilter
 	BreakdownMetricsByTaskQueue               dynamicconfig.TypedPropertyFnWithTaskQueueFilter[bool]
 	EnableCallbacks                           dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnabledCallbackKinds                      dynamicconfig.TypedPropertyFnWithNamespaceFilter[callback.EnabledCallbackKinds]
 	Enabled                                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableStandaloneActivityOperatorCommands  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	LongPollBuffer                            dynamicconfig.DurationPropertyFnWithNamespaceFilter
@@ -82,7 +73,6 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		BreakdownMetricsByTaskQueue:               dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
 		DefaultActivityRetryPolicy:                dynamicconfig.DefaultActivityRetryPolicy.Get(dc),
 		EnableCallbacks:                           EnableCallbacks.Get(dc),
-		EnabledCallbackKinds:                      EnabledCallbackKinds.Get(dc),
 		Enabled:                                   Enabled.Get(dc),
 		EnableStandaloneActivityOperatorCommands:  EnableStandaloneActivityOperatorCommands.Get(dc),
 		LongPollBuffer:                            LongPollBuffer.Get(dc),

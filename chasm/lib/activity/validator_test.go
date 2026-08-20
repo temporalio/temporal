@@ -2,6 +2,7 @@ package activity
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 	"time"
 
@@ -540,12 +541,20 @@ func TestValidateAndPopulateStartRequest_ValidatesCompletionCallbackLinks(t *tes
 			MaxUserMetadataDetailsSize: defaultMaxUserMetadataDetailsSize,
 			MaxUserMetadataSummarySize: defaultMaxUserMetadataSummarySize,
 		},
-		callbackValidator: callback.NewValidator(
-			func(string) int { return 10 },
-			func(string) int { return 1000 },
-			func(string) int { return 4096 },
-			func(string) callback.AddressMatchRules { return callback.AddressMatchRules{} },
-		),
+		callbackValidator: callback.NewValidator(callback.ValidatorConfig{
+			MaxPerExecution: func(string) int { return 2000 },
+			URLMaxLength:    func(string) int { return 1024 },
+			HeaderMaxSize:   func(string) int { return 4096 },
+			EndpointRules: func(string) callback.AddressMatchRules {
+				return callback.AddressMatchRules{
+					Rules: []callback.AddressMatchRule{
+						{Regexp: regexp.MustCompile(`.*`), AllowInsecure: true},
+					},
+				}
+			},
+			WorkerNameMaxLength:        func(string) int { return 1000 },
+			WorkerSourceContextMaxSize: func(string) int { return 4096 },
+		}),
 		linkValidator: newLinkValidator(
 			func(string) int { return 1 },
 			func(string) int { return 2000 },

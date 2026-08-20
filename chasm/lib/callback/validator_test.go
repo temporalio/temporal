@@ -9,8 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
 )
 
 // allowAllKindsOpts is a stock ValidateOptions for tests.
@@ -395,34 +393,6 @@ func TestConvertEnabledKinds(t *testing.T) {
 			got, err := ConvertEnabledKinds(tc.val)
 			require.ErrorContains(t, err, tc.errMsg)
 			require.Nil(t, got)
-		})
-	}
-}
-
-// Confirm that a value which enables no kinds falls back to the setting's default rather than
-// disabling all callbacks.
-func TestEnabledKinds_InvalidConfigFallsBackToDefault(t *testing.T) {
-	dc := dynamicconfig.NewCollection(
-		dynamicconfig.StaticClient{
-			EnabledWorkflowCallbackKinds.Key(): []string{"carrier-pigeon"},
-		},
-		log.NewNoopLogger(),
-	)
-	require.Equal(t,
-		EnabledCallbackKinds{KindNexus},
-		EnabledWorkflowCallbackKinds.Get(dc)("ns"),
-	)
-}
-
-func TestEnabledKindsFromDynamicConfig(t *testing.T) {
-	// The settings default to Nexus only: Worker callbacks are opt-in per namespace.
-	dc := dynamicconfig.NewNoopCollection()
-	for name, setting := range map[string]dynamicconfig.NamespaceTypedSetting[EnabledCallbackKinds]{
-		"workflow": EnabledWorkflowCallbackKinds,
-		"update":   EnabledWorkflowUpdateCallbackKinds,
-	} {
-		t.Run(name, func(t *testing.T) {
-			require.Equal(t, EnabledCallbackKinds{KindNexus}, setting.Get(dc)("ns"))
 		})
 	}
 }

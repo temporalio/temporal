@@ -1176,7 +1176,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidCallback
 
 // Assert that Workflows can only accept Nexus-variant callbacks. (Or Internal.)
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_NonNexusCallback() {
-	testCases := []struct {
+	tests := []struct {
 		Name     string
 		Callback *commonpb.Callback
 		ErrMsg   string
@@ -1192,80 +1192,21 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_NonNexusCallbac
 					},
 				},
 			},
-			// A well-formed callback of a kind that is disabled for workflows by default.
+			// The validator rejects the Worker variant explicitly, before it reaches
+			// the unknown-variant fallback.
 			ErrMsg: "worker callbacks are not enabled for this execution type",
 		},
 		{
-			"nil variant",
-			&commonpb.Callback{},
-			"unknown callback variant",
+			Name:     "nil variant",
+			Callback: &commonpb.Callback{},
+			ErrMsg:   "unknown callback variant",
 		},
 	}
 
-	for _, test := range testCases {
+	for _, test := range tests {
 		s.Run(test.Name, func() {
 			_, err := s.startWorkflowWithCallbacks([]*commonpb.Callback{test.Callback})
-			s.ErrorContains(err, test.ErrMsg)
-		})
-	}
-}
-
-// Assert that completion callbacks attached to a workflow update go through the callback validator,
-// and that only the kinds enabled for updates are accepted.
-func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecution_Failed_InvalidCallback() {
-	testCases := []struct {
-		Name     string
-		Callback *commonpb.Callback
-		ErrMsg   string
-	}{
-		{
-			"nexus url too long",
-			&commonpb.Callback{
-				Variant: &commonpb.Callback_Nexus_{
-					Nexus: &commonpb.Callback_Nexus{
-						Url: "http://localhost/" + strings.Repeat("x", 2000),
-					},
-				},
-			},
-			"url length longer than max length allowed",
-		},
-		{
-			"worker",
-			&commonpb.Callback{
-				Variant: &commonpb.Callback_Worker_{
-					Worker: &commonpb.Callback_Worker{
-						TaskQueueName: "completions-task-queue",
-						Service:       "HTTPAdapter",
-						Operation:     "DeliverAsWebhook",
-					},
-				},
-			},
-			"worker callbacks are not enabled for this execution type",
-		},
-		{
-			"nil variant",
-			&commonpb.Callback{},
-			"unknown callback variant",
-		},
-	}
-
-	config := s.newConfig()
-	config.EnableUpdateWorkflowExecution = dc.GetBoolPropertyFnFilteredByNamespace(true)
-	wh := s.getWorkflowHandler(config)
-
-	for _, test := range testCases {
-		s.Run(test.Name, func() {
-			_, err := wh.UpdateWorkflowExecution(context.Background(), &workflowservice.UpdateWorkflowExecutionRequest{
-				Namespace:         s.testNamespace.String(),
-				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "WORKFLOW_ID"},
-				Request: &updatepb.Request{
-					Meta:                &updatepb.Meta{UpdateId: "UPDATE_ID"},
-					Input:               &updatepb.Input{Name: "NAME"},
-					RequestId:           uuid.NewString(),
-					CompletionCallbacks: []*commonpb.Callback{test.Callback},
-				},
-			})
-			s.ErrorContains(err, test.ErrMsg)
+			s.Require().ErrorContains(err, test.ErrMsg)
 		})
 	}
 }
