@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/rpc/interceptor/nexus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
@@ -56,13 +57,29 @@ func (c *ContextMetadataInterceptor) Intercept(
 	resp, err := handler(ctx, req)
 
 	if c.setTrailer {
-		c.appendContextMetadataToTrailer(ctx, info)
+		c.appendContextMetadataToTrailer(ctx, info.FullMethod)
 	}
 
 	return resp, err
 }
 
-func (c *ContextMetadataInterceptor) appendContextMetadataToTrailer(ctx context.Context, info *grpc.UnaryServerInfo) {
+func (c *ContextMetadataInterceptor) InterceptNexus(
+	ctx context.Context,
+	in nexus.InterceptorInput,
+	next nexus.HandlerFunc,
+) (any, error) {
+	ctx = contextutil.WithMetadataContext(ctx)
+
+	resp, err := next(ctx, in)
+
+	if c.setTrailer {
+		c.appendContextMetadataToTrailer(ctx, in.APIName())
+	}
+
+	return resp, err
+}
+
+func (c *ContextMetadataInterceptor) appendContextMetadataToTrailer(ctx context.Context, method string) {
 	// If the context is done, the gRPC stream may already be in streamDone state,
 	// and SetTrailer would return ErrIllegalHeaderWrite ("SendHeader called multiple times").
 	select {
@@ -74,7 +91,7 @@ func (c *ContextMetadataInterceptor) appendContextMetadataToTrailer(ctx context.
 	allMetadata := contextutil.ContextMetadataGetAll(ctx)
 	if len(allMetadata) == 0 {
 		c.throttledLogger.Info("ContextMetadataInterceptor: No metadata in context, not setting trailer",
-			tag.NewStringTag("fullMethod", info.FullMethod),
+			tag.NewStringTag("fullMethod", method),
 		)
 		return
 	}
@@ -84,13 +101,13 @@ func (c *ContextMetadataInterceptor) appendContextMetadataToTrailer(ctx context.
 	trailer := metadata.Pairs(trailerPairs...)
 	c.throttledLogger.Info("ContextMetadataInterceptor: Setting trailer",
 		tag.NewAnyTag("trailer", trailer),
-		tag.NewStringTag("fullMethod", info.FullMethod),
+		tag.NewStringTag("fullMethod", method),
 	)
 
 	if err := grpc.SetTrailer(ctx, trailer); err != nil {
 		c.logger.Error("ContextMetadataInterceptor: Failed to set trailer",
 			tag.Error(err),
-			tag.NewStringTag("fullMethod", info.FullMethod))
+			tag.NewStringTag("fullMethod", method))
 	}
 }
 

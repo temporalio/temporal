@@ -12,6 +12,8 @@ import (
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.temporal.io/server/common/tasktoken"
 	"google.golang.org/grpc"
 )
@@ -28,6 +30,13 @@ type (
 		enableTokenNamespaceEnforcement        dynamicconfig.BoolPropertyFn
 		maxNamespaceLength                     dynamicconfig.IntPropertyFn
 		additionalAllowedMethodsDuringHandover map[string]struct{}
+	}
+
+	// NamespaceStateValidatorInterceptor contains NamespaceValidatorInterceptor to validate state.
+	// It is separate from NamespaceValidatorInterceptor to allow both to expose cleaner
+	// Intercept/InterceptNexus methods that are used as gRPC and Nexus interceptors
+	NamespaceStateValidatorInterceptor struct {
+		nvi *NamespaceValidatorInterceptor
 	}
 )
 
@@ -86,8 +95,8 @@ var (
 	}
 )
 
-var _ grpc.UnaryServerInterceptor = (*NamespaceValidatorInterceptor)(nil).StateValidationIntercept
-var _ grpc.UnaryServerInterceptor = (*NamespaceValidatorInterceptor)(nil).NamespaceValidateIntercept
+var _ grpc.UnaryServerInterceptor = (*NamespaceValidatorInterceptor)(nil).Intercept
+var _ grpc.UnaryServerInterceptor = (*NamespaceStateValidatorInterceptor)(nil).Intercept
 
 func NewNamespaceValidatorInterceptor(
 	namespaceRegistry namespace.Registry,
@@ -108,12 +117,19 @@ func NewNamespaceValidatorInterceptor(
 	}
 }
 
-func (ni *NamespaceValidatorInterceptor) NamespaceValidateIntercept(
+func NewNamespaceStateValidatorInterceptor(nvi *NamespaceValidatorInterceptor) *NamespaceStateValidatorInterceptor {
+	return &NamespaceStateValidatorInterceptor{
+		nvi: nvi,
+	}
+}
+
+func (nsvi *NamespaceStateValidatorInterceptor) Intercept(
 	ctx context.Context,
 	req any,
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (any, error) {
+	ni := nsvi.nvi
 	err := ni.setNamespaceIfNotPresent(req)
 	if err != nil {
 		return nil, err
@@ -126,6 +142,26 @@ func (ni *NamespaceValidatorInterceptor) NamespaceValidateIntercept(
 	}
 
 	return handler(ctx, req)
+}
+
+func (nsvi *NamespaceStateValidatorInterceptor) InterceptNexus(
+	ctx context.Context,
+	in nexus.InterceptorInput,
+	next nexus.HandlerFunc,
+) (any, error) {
+	ni := nsvi.nvi
+	ns, err := in.NamespaceEntry()
+	if err != nil {
+		return nil, &nexus.InterceptorError{
+			Err:     commonnexus.ConvertGRPCError(err, false),
+			Outcome: "interceptor_failed",
+		}
+	}
+	if err := ni.ValidateName(ns.Info().GetName()); err != nil {
+		return nil, err
+	}
+
+	return next(ctx, in)
 }
 
 // ValidateName validates a namespace name (currently only a max length check).
@@ -198,8 +234,8 @@ func (ni *NamespaceValidatorInterceptor) setNamespace(
 	}
 }
 
-// StateValidationIntercept runs ValidateState - see docstring for that method.
-func (ni *NamespaceValidatorInterceptor) StateValidationIntercept(
+// Intercept runs ValidateState - see docstring for that method.
+func (ni *NamespaceValidatorInterceptor) Intercept(
 	ctx context.Context,
 	req any,
 	info *grpc.UnaryServerInfo,
@@ -228,6 +264,28 @@ func (ni *NamespaceValidatorInterceptor) ValidateState(namespaceEntry *namespace
 		return err
 	}
 	return ni.checkReplicationState(namespaceEntry, fullMethod, businessID)
+}
+
+// InterceptNexus validates the namespace state for a Nexus request.
+func (ni *NamespaceValidatorInterceptor) InterceptNexus(
+	ctx context.Context,
+	in nexus.InterceptorInput,
+	next nexus.HandlerFunc,
+) (any, error) {
+	namespaceEntry, err := in.NamespaceEntry()
+	if err != nil {
+		return nil, &nexus.InterceptorError{
+			Err:     commonnexus.ConvertGRPCError(err, false),
+			Outcome: "interceptor_failed",
+		}
+	}
+	if err := ni.ValidateState(namespaceEntry, in.APIName(), in.ForwardingInfo().BusinessID); err != nil {
+		return nil, &nexus.InterceptorError{
+			Err:     commonnexus.ConvertGRPCError(err, false),
+			Outcome: "invalid_namespace_state",
+		}
+	}
+	return next(ctx, in)
 }
 
 func (ni *NamespaceValidatorInterceptor) extractNamespace(req any) (*namespace.Namespace, error) {

@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/routing"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
+	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/frontend/configs"
 	"google.golang.org/grpc/codes"
@@ -64,12 +65,19 @@ func NewNexusOperationHTTPHandler(
 	redirectionInterceptor *interceptor.Redirection,
 	namespaceValidationInterceptor *interceptor.NamespaceValidatorInterceptor,
 	namespaceRateLimitInterceptor interceptor.NamespaceRateLimitInterceptor,
+	nexusNamespaceRateLimitInterceptor *interceptor.NamespaceRateLimitInterceptorWrapper,
 	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
+	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
+	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
+	nexusForwarder *nexusForwardingInterceptor,
+	interceptorsProvider *InterceptorsProvider,
+	customNexusInterceptors []interceptornexus.Interceptor,
 	logger log.Logger,
 	httpTraceProvider commonnexus.HTTPClientTraceProvider,
 	httpServerHandlerInstrumenter telemetry.HTTPServerHandlerInstrumenter,
 ) *NexusOperationHTTPHandler {
+
 	return &NexusOperationHTTPHandler{
 		base: nexusrpc.BaseHTTPHandler{
 			Logger:           log.NewSlogLogger(logger),
@@ -87,22 +95,18 @@ func NewNexusOperationHTTPHandler(
 		httpServerHandlerInstrumenter:        httpServerHandlerInstrumenter,
 		nexusHandler: nexusrpc.NewHTTPHandler(nexusrpc.HandlerOptions{
 			Handler: &nexusHandler{
-				logger:                        logger,
-				metricsHandler:                metricsHandler,
-				clusterMetadata:               clusterMetadata,
-				namespaceRegistry:             namespaceRegistry,
-				matchingClient:                matchingservice.MatchingServiceClient(matchingClient),
-				auth:                          authInterceptor,
-				telemetryInterceptor:          telemetryInterceptor,
-				requestErrorHandler:           requestErrorHandler,
-				redirectionInterceptor:        redirectionInterceptor,
-				forwardingEnabledForNamespace: serviceConfig.EnableNamespaceNotActiveAutoForwarding,
-				forwardingClients:             clientCache,
-				payloadSizeLimit:              serviceConfig.BlobSizeLimitError,
-				headersBlacklist:              serviceConfig.NexusRequestHeadersBlacklist,
-				useForwardByEndpoint:          serviceConfig.NexusForwardRequestUseEndpoint,
-				metricTagConfig:               serviceConfig.NexusOperationsMetricTagConfig,
-				httpTraceProvider:             httpTraceProvider,
+				logger:               logger,
+				metricsHandler:       metricsHandler,
+				clusterMetadata:      clusterMetadata,
+				namespaceRegistry:    namespaceRegistry,
+				matchingClient:       matchingservice.MatchingServiceClient(matchingClient),
+				requestErrorHandler:  requestErrorHandler,
+				payloadSizeLimit:     serviceConfig.BlobSizeLimitError,
+				headersBlacklist:     serviceConfig.NexusRequestHeadersBlacklist,
+				useForwardByEndpoint: serviceConfig.NexusForwardRequestUseEndpoint,
+				metricTagConfig:      serviceConfig.NexusOperationsMetricTagConfig,
+				httpTraceProvider:    httpTraceProvider,
+				nexusInterceptors:    interceptorsProvider.GetNexusInterceptors(),
 			},
 			GetResultTimeout: serviceConfig.KeepAliveMaxConnectionIdle(),
 			Logger:           log.NewSlogLogger(logger),

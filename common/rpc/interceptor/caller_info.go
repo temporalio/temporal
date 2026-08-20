@@ -6,6 +6,7 @@ import (
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/rpc/interceptor/nexus"
 	"google.golang.org/grpc"
 )
 
@@ -38,6 +39,20 @@ func (i *CallerInfoInterceptor) Intercept(
 	)
 
 	return handler(ctx, req)
+}
+
+// InterceptNexus adds caller information for a Nexus request.
+func (i *CallerInfoInterceptor) InterceptNexus(
+	ctx context.Context,
+	in nexus.InterceptorInput,
+	next nexus.HandlerFunc,
+) (any, error) {
+	ctx = PopulateCallerInfo(
+		ctx,
+		in.NamespaceName,
+		func() string { return nexus.MethodName(in) },
+	)
+	return next(headers.Propagate(ctx), in)
 }
 
 // PopulateCallerInfo gets current caller info value from the context and updates any that are missing.

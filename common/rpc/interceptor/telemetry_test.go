@@ -2,9 +2,12 @@ package interceptor
 
 import (
 	"context"
+	"errors"
 	"testing"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -20,11 +23,111 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+type nexusTelemetryContext struct {
+	outcome    string
+	handled    error
+	hasHandled bool
+}
+
+func (c *nexusTelemetryContext) MetricsHandler(error) metrics.Handler {
+	return metrics.NoopMetricsHandler
+}
+
+func (c *nexusTelemetryContext) MetricsHandlerForInterceptors() metrics.Handler {
+	return metrics.NoopMetricsHandler
+}
+
+func (c *nexusTelemetryContext) MetricsLogger() log.Logger {
+	return log.NewNoopLogger()
+}
+
+func (c *nexusTelemetryContext) SetMetricsOutcome(outcome string) {
+	c.outcome = outcome
+}
+
+func (c *nexusTelemetryContext) SetFailureSource(string) {}
+
+func (c *nexusTelemetryContext) HandleRequestError(err error) {
+	c.handled = err
+	c.hasHandled = true
+}
+
+func TestTelemetryInterceptNexus(t *testing.T) {
+	input := interceptornexus.NewStartOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil)
+	for _, tc := range []struct {
+		name            string
+		setContext      bool
+		handler         interceptornexus.HandlerFunc
+		expectedOutcome string
+		expectedError   error
+		nextCalled      bool
+		expectHandled   bool
+	}{
+		{
+			name:       "regular telemetry capture",
+			setContext: true,
+			handler: func(context.Context, interceptornexus.InterceptorInput) (any, error) {
+				return nil, nil
+			},
+			nextCalled:    true,
+			expectHandled: true,
+		},
+		{
+			name: "missing telemetry context",
+			handler: func(context.Context, interceptornexus.InterceptorInput) (any, error) {
+				return nil, nil
+			},
+			expectedError: errors.New("telemetry context not found"),
+		},
+		{
+			name:       "tagged error",
+			setContext: true,
+			handler: func(context.Context, interceptornexus.InterceptorInput) (any, error) {
+				return nil, &interceptornexus.InterceptorError{Err: errors.New("rejected"), Outcome: "rejected"}
+			},
+			expectedOutcome: "rejected",
+			expectedError:   &interceptornexus.InterceptorError{Err: errors.New("rejected"), Outcome: "rejected"},
+			nextCalled:      true,
+			expectHandled:   true,
+		},
+		{
+			name:       "ensure metrics still captured on panics",
+			setContext: true,
+			handler: func(context.Context, interceptornexus.InterceptorInput) (any, error) {
+				panic("")
+			},
+			expectedError: errors.New("panic: "),
+			nextCalled:    true,
+			expectHandled: true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := context.Background()
+			telemetryContext := &nexusTelemetryContext{}
+			if tc.setContext {
+				ctx = WithTelemetryContext(ctx, telemetryContext)
+			}
+			nextCalled := false
+			_, err := (&TelemetryInterceptor{}).InterceptNexus(ctx, input, func(ctx context.Context, input interceptornexus.InterceptorInput) (any, error) {
+				nextCalled = true
+				return tc.handler(ctx, input)
+			})
+			require.Equal(t, tc.expectedError, err)
+			require.Equal(t, tc.nextCalled, nextCalled)
+			if tc.setContext {
+				require.Equal(t, tc.expectedOutcome, telemetryContext.outcome)
+			}
+			require.Equal(t, tc.expectHandled, telemetryContext.hasHandled)
+		})
+	}
+}
 
 const (
 	startWorkflow   = "StartWorkflowExecution"

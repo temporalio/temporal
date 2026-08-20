@@ -2,6 +2,9 @@ package interceptor
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -16,6 +19,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/interceptor/logtags"
+	"go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/frontend/configs"
 	"google.golang.org/grpc"
@@ -25,6 +29,8 @@ import (
 type (
 	metricsContextKey struct{}
 
+	telemetryContextKey struct{}
+
 	TelemetryInterceptor struct {
 		namespaceRegistry   namespace.Registry
 		metricsHandler      metrics.Handler
@@ -32,6 +38,19 @@ type (
 		workflowTags        *logtags.WorkflowTags
 		logAllReqErrors     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		requestErrorHandler ErrorHandler
+	}
+
+	TelemetryContext interface {
+		MetricsHandler(error) metrics.Handler
+		MetricsHandlerForInterceptors() metrics.Handler
+		MetricsLogger() log.Logger
+		SetMetricsOutcome(string)
+		// SetFailureSource records which side produced a failure. Only the start/cancel
+		// handlers return this to the caller; the completion handler discards it.
+		SetFailureSource(string)
+		// TBD - check if this is really needed, could remove the error handler interceptor
+		// HandleRequestError reports a failed request to the shared ErrorHandler.
+		HandleRequestError(error)
 	}
 )
 
@@ -47,7 +66,7 @@ var (
 	updateResponseMessageBody anypb.Any
 	_                         = updateResponseMessageBody.MarshalFrom(&updatepb.Response{})
 
-	_ grpc.UnaryServerInterceptor  = (*TelemetryInterceptor)(nil).UnaryIntercept
+	_ grpc.UnaryServerInterceptor  = (*TelemetryInterceptor)(nil).Intercept
 	_ grpc.StreamServerInterceptor = (*TelemetryInterceptor)(nil).StreamIntercept
 )
 
@@ -162,7 +181,7 @@ func telemetryOverrideOperationTag(fullName, operation string) string {
 	return operation
 }
 
-func (ti *TelemetryInterceptor) UnaryIntercept(
+func (ti *TelemetryInterceptor) Intercept(
 	ctx context.Context,
 	req any,
 	info *grpc.UnaryServerInfo,
@@ -202,6 +221,89 @@ func (ti *TelemetryInterceptor) UnaryIntercept(
 
 func AddTelemetryContext(ctx context.Context, metricsHandler metrics.Handler) context.Context {
 	return context.WithValue(ctx, metricsCtxKey, metricsHandler)
+}
+
+// WithTelemetryContext returns a context with telemetry for interceptors that need to
+// record their own telemetry - like the forwarder interceptor.
+func WithTelemetryContext(ctx context.Context, telemetryContext TelemetryContext) context.Context {
+	return context.WithValue(ctx, telemetryContextKey{}, telemetryContext)
+}
+
+func TelemetryContextFromContext(ctx context.Context) (TelemetryContext, error) {
+	telemetryContext, ok := ctx.Value(telemetryContextKey{}).(TelemetryContext)
+	if !ok {
+		return nil, errors.New("telemetry context not found")
+	}
+	return telemetryContext, nil
+}
+
+// InterceptNexus records request metrics and recovers panics for a Nexus request.
+// It runs after auth and redirection, mirroring the gRPC chain, so requests rejected or
+// forwarded by those interceptors are not counted here
+// It also publishes the metrics context that downstream interceptors read via
+// GetMetricsHandlerFromContext.
+func (ti *TelemetryInterceptor) InterceptNexus(
+	ctx context.Context,
+	in nexus.InterceptorInput,
+	next nexus.HandlerFunc,
+) (out any, retErr error) {
+
+	// draft-review: it it not worth splitting the metrics into pre and post forwarder interceptor groups.
+	// The only "additional" telemetry from fwder is in the case of an actual redirect happening-
+	// this should anyway be additional metric and get captured in both original and redirected
+	// clusters as the request did indeed get handled in both places.
+	// If there is some reason why this should be avoided, then split them such that
+	// we just "add" the telemetry context as the outermost and then the recorder section
+	// is added after the authz and fwder interceptors
+
+	telemetryContext, err := TelemetryContextFromContext(ctx)
+	if err != nil {
+		return nil, err
+	}
+	// required for forwarder interceptor to grab metrics handle when reporting
+	ctx = metrics.AddMetricsContext(ctx)
+	ctx = AddTelemetryContext(ctx, telemetryContext.MetricsHandlerForInterceptors())
+	interceptorMetricsHandler := telemetryContext.MetricsHandlerForInterceptors()
+	metrics.ServiceRequests.With(interceptorMetricsHandler).Record(1)
+
+	startTime := time.Now().UTC()
+
+	defer func() {
+		reportErr := retErr
+		if taggedErr, ok := errors.AsType[*nexus.InterceptorError](retErr); ok {
+			telemetryContext.SetMetricsOutcome(taggedErr.Outcome)
+			reportErr = taggedErr.Err
+		}
+		metricsHandler := telemetryContext.MetricsHandler(reportErr)
+		switch in.(type) {
+		case nexus.CompleteOpInput:
+			metricsHandler.Counter(metrics.NexusCompletionRequests.Name()).Record(1)
+			metricsHandler.Histogram(metrics.NexusCompletionLatencyHistogram.Name(), metrics.Milliseconds).Record(time.Since(startTime).Milliseconds())
+		default:
+			metrics.NexusRequests.With(metricsHandler).Record(1)
+			metrics.NexusLatency.With(metricsHandler).Record(time.Since(startTime))
+			if reportErr != nil {
+				metrics.NexusRequestErrors.With(metricsHandler).Record(1)
+			}
+		}
+		ti.RecordLatencyMetrics(ctx, startTime, interceptorMetricsHandler)
+		telemetryContext.HandleRequestError(reportErr)
+	}()
+	// recover before recording so that metrics are still recorded in case of a panic
+	defer func() {
+		recovered := recover() //nolint:revive
+		if recovered == nil {
+			return
+		}
+		err, ok := recovered.(error)
+		if !ok {
+			err = fmt.Errorf("panic: %v", recovered)
+		}
+		telemetryContext.MetricsLogger().Error("Panic captured", tag.SysStackTrace(string(debug.Stack())), tag.Error(err))
+		retErr = err
+	}()
+
+	return next(ctx, in)
 }
 
 func (ti *TelemetryInterceptor) RecordLatencyMetrics(ctx context.Context, startTime time.Time, metricsHandler metrics.Handler) {

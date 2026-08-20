@@ -2,15 +2,19 @@ package interceptor
 
 import (
 	"context"
+	"errors"
 	"testing"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas/calculator"
 	"go.temporal.io/server/common/quotas/quotastest"
+	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
@@ -139,6 +143,53 @@ func TestNamespaceCountLimitInterceptor_Intercept(t *testing.T) {
 	}
 }
 
+func TestConcurrentRequestLimitInterceptor_InterceptNexus(t *testing.T) {
+	interceptor := NewConcurrentRequestLimitInterceptor(
+		nil,
+		quotastest.NewFakeMemberCounter(1),
+		log.NewNoopLogger(),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(1),
+		dynamicconfig.GetIntPropertyFnFilteredByNamespace(1),
+		map[string]int{"NexusAPI": 1},
+	)
+	input := withAPIName(interceptornexus.NewStartOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil), "NexusAPI")
+
+	ctx := context.Background()
+
+	blockUntilFirstReqStarted := make(chan struct{})
+	unblockFirstRequest := make(chan struct{})
+	firstReqErrorCh := make(chan error, 1)
+
+	go func() {
+		_, err := interceptor.InterceptNexus(
+			ctx,
+			input,
+			func(context.Context, interceptornexus.InterceptorInput) (any, error) {
+				close(blockUntilFirstReqStarted)
+				<-unblockFirstRequest
+				return nil, nil
+			},
+		)
+		firstReqErrorCh <- err
+	}()
+	<-blockUntilFirstReqStarted
+	// second req should never proceed to calling next
+	_, err := interceptor.InterceptNexus(
+		ctx,
+		input,
+		func(context.Context, interceptornexus.InterceptorInput) (any, error) {
+			t.Fatal("second request reached handler")
+			return nil, errors.New("throttled request reached")
+		},
+	)
+	var interceptorErr *interceptornexus.InterceptorError
+	require.ErrorAs(t, err, &interceptorErr)
+	require.Equal(t, "namespace_concurrency_limited", interceptorErr.Outcome)
+
+	close(unblockFirstRequest)
+	require.NoError(t, <-firstReqErrorCh)
+}
+
 // run the test case by simulating a bunch of blocked pollers, sending a final request, and verifying that it is either
 // rate limited or not.
 func (tc *nsCountLimitTestCase) run(t *testing.T) {
@@ -232,4 +283,24 @@ func (h testRequestHandler) Handle(context.Context, any) (any, error) {
 	<-h.respond
 
 	return nil, nil
+}
+
+func withRequestMetadataForTest(in interceptornexus.InterceptorInput, metadata interceptornexus.RequestMetadata) interceptornexus.InterceptorInput {
+	switch v := in.(type) {
+	case interceptornexus.StartOpInput:
+		v.WithRequestMetadata(metadata)
+		return v
+	case interceptornexus.CancelOpInput:
+		v.WithRequestMetadata(metadata)
+		return v
+	case interceptornexus.CompleteOpInput:
+		v.WithRequestMetadata(metadata)
+		return v
+	default:
+		return in
+	}
+}
+
+func withAPIName(in interceptornexus.InterceptorInput, apiName string) interceptornexus.InterceptorInput {
+	return withRequestMetadataForTest(in, interceptornexus.RequestMetadata{APIName: apiName})
 }

@@ -8,7 +8,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/headers"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/rpc/interceptor/nexus"
 	"google.golang.org/grpc"
 )
 
@@ -89,4 +91,26 @@ func (i *RateLimitInterceptor) Allow(
 		return RateLimitServerBusy
 	}
 	return nil
+}
+
+// InterceptNexus enforces the global rate limit for a Nexus request.
+func (i *RateLimitInterceptor) InterceptNexus(
+	ctx context.Context,
+	in nexus.InterceptorInput,
+	next nexus.HandlerFunc,
+) (any, error) {
+	header, err := nexus.HeaderFromInterceptorInput(in)
+	if err != nil {
+		return nil, &nexus.InterceptorError{
+			Err:     commonnexus.ConvertGRPCError(err, true),
+			Outcome: "interceptor_failed",
+		}
+	}
+	if err := i.Allow(in.APIName(), header); err != nil {
+		return nil, &nexus.InterceptorError{
+			Err:     commonnexus.ConvertGRPCError(err, true),
+			Outcome: "global_rate_limited",
+		}
+	}
+	return next(ctx, in)
 }
