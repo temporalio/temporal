@@ -39,7 +39,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics/metricstest"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
@@ -2699,48 +2698,27 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure(chasmEnabled
 	}
 	s.Require().NotEmpty(handlerRequestID)
 
-	records := logCapture.Snapshot()
-	failureLogIndex := slices.IndexFunc(records, func(record testlogger.CapturedLog) bool {
-		requestID, ok := record.TagValue(tag.RequestID("").Key())
-		return record.Level == testlogger.Error &&
-			record.Message == "Nexus StartOperation request failed" &&
-			ok && requestID == handlerRequestID
-	})
-	s.Require().NotEqual(-1, failureLogIndex, "Nexus StartOperation failure log not found")
-	failureLog := records[failureLogIndex]
-	requireTag := func(key string) tag.Tag {
-		i := slices.IndexFunc(failureLog.Tags, func(t tag.Tag) bool { return t.Key() == key })
-		s.Require().NotEqual(-1, i, "log tag %q not found", key)
-		return failureLog.Tags[i]
-	}
-	attemptStartTag := requireTag(tag.AttemptStart(time.Time{}).Key())
-	_, ok := attemptStartTag.Value().(time.Time)
-	s.Require().True(ok)
-	errorTag := requireTag(tag.Error(errors.New("")).Key())
-	errorMessage, ok := failureLog.TagValue(tag.Error(errors.New("")).Key())
-	s.Require().True(ok)
-	s.Require().Equal("handler error (BAD_REQUEST)", errorMessage)
 	attempt := int32(0)
 	if chasmEnabled {
 		attempt = 1
 	}
-	s.Require().Contains(records, testlogger.CapturedLog{
+	s.True(logCapture.Contains(testlogger.CapturedLogPattern{
 		Level:   testlogger.Error,
 		Message: "Nexus StartOperation request failed",
-		Tags: []tag.Tag{
-			tag.Operation("StartOperation"),
-			tag.WorkflowNamespace(env.Namespace().String()),
-			tag.NexusEndpointTargetNamespaceID(""),
-			tag.RequestID(handlerRequestID),
-			tag.NexusOperation("operation"),
-			tag.Endpoint(endpointName),
-			tag.WorkflowID(run.GetID()),
-			tag.WorkflowRunID(run.GetRunID()),
-			attemptStartTag,
-			tag.Attempt(attempt),
-			errorTag,
+		Tags: map[string]any{
+			"operation":                          "StartOperation",
+			"wf-namespace":                       env.Namespace().String(),
+			"nexus-endpoint-target-namespace-id": "",
+			"request-id":                         handlerRequestID,
+			"nexus-operation":                    "operation",
+			"endpoint":                           endpointName,
+			"wf-id":                              run.GetID(),
+			"wf-run-id":                          run.GetRunID(),
+			"attempt-start":                      testlogger.AnyTagValue,
+			"attempt":                            attempt,
+			"error":                              "handler error (BAD_REQUEST)",
 		},
-	})
+	}), "Nexus StartOperation failure log not found")
 
 	outboundRequests := metricCapture.Metric("nexus_outbound_requests")
 	s.Len(outboundRequests, 1)

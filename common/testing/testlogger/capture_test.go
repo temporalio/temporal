@@ -1,8 +1,10 @@
 package testlogger_test
 
 import (
+	"errors"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/log"
@@ -85,6 +87,31 @@ func TestCaptureSnapshotIsDefensiveCopy(t *testing.T) {
 		Message: "message",
 		Tags:    []tag.Tag{tag.String("key", "original")},
 	}}, capture.Snapshot())
+}
+
+func TestCaptureContains(t *testing.T) {
+	t.Parallel()
+
+	testLogger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+	capture := testLogger.StartCapture()
+	testLogger.Error("failed", tag.String("operation", "StartOperation"), tag.Time("attempt-start", time.Now()), tag.Error(errors.New("failure")))
+
+	pattern := testlogger.CapturedLogPattern{
+		Level:   testlogger.Error,
+		Message: "failed",
+		Tags: map[string]any{
+			"operation":     "StartOperation",
+			"attempt-start": testlogger.AnyTagValue,
+			"error":         "failure",
+		},
+	}
+	require.True(t, capture.Contains(pattern))
+
+	pattern.Tags["operation"] = "CancelOperation"
+	require.False(t, capture.Contains(pattern))
+	pattern.Tags["operation"] = "StartOperation"
+	pattern.Tags["unexpected"] = "value"
+	require.False(t, capture.Contains(pattern))
 }
 
 func TestCaptureRecordsConcurrentDerivedLoggers(t *testing.T) {

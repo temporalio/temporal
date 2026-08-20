@@ -1,6 +1,7 @@
 package testlogger
 
 import (
+	"fmt"
 	"slices"
 	"sync"
 
@@ -22,6 +23,42 @@ func (r CapturedLog) TagValue(key string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// CapturedLogPattern describes a captured log using formatted tag values.
+// Tags must match exactly; AnyTagValue requires a tag without constraining its value.
+type CapturedLogPattern struct {
+	Level   Level
+	Message string
+	Tags    map[string]any
+}
+
+type anyTagValue struct{}
+
+// AnyTagValue matches any formatted value for a tag that must be present.
+var AnyTagValue = &anyTagValue{}
+
+func (p CapturedLogPattern) matches(record CapturedLog) bool {
+	if record.Level != p.Level || record.Message != p.Message || len(record.Tags) != len(p.Tags) {
+		return false
+	}
+
+	matchedTags := make(map[string]struct{}, len(record.Tags))
+	for _, actual := range record.Tags {
+		key := actual.Key()
+		expected, ok := p.Tags[key]
+		if !ok {
+			return false
+		}
+		if _, duplicate := matchedTags[key]; duplicate {
+			return false
+		}
+		matchedTags[key] = struct{}{}
+		if _, anyValue := expected.(*anyTagValue); !anyValue && formatValue(actual) != fmt.Sprint(expected) {
+			return false
+		}
+	}
+	return len(matchedTags) == len(p.Tags)
 }
 
 // Capture is an opt-in recording of TestLogger calls.
@@ -60,6 +97,11 @@ func (c *Capture) Snapshot() []CapturedLog {
 		records[i].Tags = slices.Clone(record.Tags)
 	}
 	return records
+}
+
+// Contains reports whether the capture includes a log matching pattern.
+func (c *Capture) Contains(pattern CapturedLogPattern) bool {
+	return slices.ContainsFunc(c.Snapshot(), pattern.matches)
 }
 
 func (c *Capture) record(record CapturedLog) {
