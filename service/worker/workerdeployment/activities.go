@@ -174,6 +174,10 @@ func (a *Activities) DeleteWorkerDeploymentVersion(ctx context.Context, args *de
 		},
 	)
 	if err != nil {
+		var notFoundErr *serviceerror.NotFound
+		if errors.As(err, &notFoundErr) {
+			return nil
+		}
 		return err
 	}
 
