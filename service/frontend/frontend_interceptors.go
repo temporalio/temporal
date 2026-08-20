@@ -29,10 +29,7 @@ type Interceptor interface {
 }
 
 type InterceptorsProvider struct {
-	interceptors []Interceptor
-	// nexusInterceptors are different from interceptors due to a few reasons
-	// eventual goal is to have exact same set and order
-	ninterceptors          []Interceptor
+	interceptors           []Interceptor
 	retryableInterceptor   *interceptor.RetryableInterceptor // required to be last in chain after custom interceptors
 	customGRPCInterceptors []grpc.UnaryServerInterceptor     // required for legacy reasons
 }
@@ -72,37 +69,10 @@ func NewInterceptorsProvider(
 		namespaceStateValidatorInterceptor,
 		namespaceLogInterceptor,
 		metricsCtxInjectorInterceptor,
-		// for gRPC, auth is before telemetry
 		authInterceptor,
 		namespaceHandoverInterceptor,
 		redirectionSlot,
 		telemetryInterceptor,
-		// rest of the chain is identical for gRPC and Nexus
-		healthInterceptor,
-		namespaceValidatorInterceptor,
-		namespaceCountLimiterInterceptor,
-		namespaceRateLimiterInterceptorWrapper,
-		rateLimitInterceptor,
-		sdkVersionInterceptor,
-		callerInfoInterceptor,
-		slowRequestLoggerInterceptor,
-		chasmRequestVisibilityInterceptor,
-		contextMetadataInterceptor,
-	}
-	ninterceptors := []Interceptor{
-		maskInternalErrorDetailsInterceptor,
-		serviceErrorInterceptor,
-		frontendServiceErrorInterceptor,
-		businessIDInterceptor,
-		namespaceStateValidatorInterceptor,
-		namespaceLogInterceptor,
-		metricsCtxInjectorInterceptor,
-		// for Nexus, telemetry is before auth
-		telemetryInterceptor,
-		authInterceptor,
-		namespaceHandoverInterceptor,
-		redirectionSlot,
-		// rest of the chain is identical for gRPC and Nexus
 		healthInterceptor,
 		namespaceValidatorInterceptor,
 		namespaceCountLimiterInterceptor,
@@ -121,7 +91,6 @@ func NewInterceptorsProvider(
 
 	return &InterceptorsProvider{
 		interceptors:           interceptors,
-		ninterceptors:          ninterceptors,
 		customGRPCInterceptors: customGRPCInterceptors,
 		retryableInterceptor:   retryableInterceptor,
 	}
@@ -140,7 +109,7 @@ func (n *InterceptorsProvider) GetInterceptors() []grpc.UnaryServerInterceptor {
 
 func (n *InterceptorsProvider) GetNexusInterceptors() []nexus.Interceptor {
 	nexusInterceptors := []nexus.Interceptor{}
-	for _, i := range n.ninterceptors {
+	for _, i := range n.interceptors {
 		nexusInterceptors = append(nexusInterceptors, i.InterceptNexus)
 	}
 
