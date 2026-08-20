@@ -707,6 +707,7 @@ func (a *activities) processSingleTask(
 					WorkflowExecution: executionInfo.Execution,
 					SignalName:        operation.SignalOperation.GetSignal(),
 					Input:             operation.SignalOperation.GetInput(),
+					Header:            operation.SignalOperation.GetHeader(),
 					Identity:          operation.SignalOperation.GetIdentity(),
 					RequestId: deterministicRequestID(batchOperation.Request.GetJobId(), "signal",
 						executionInfo.Execution.GetWorkflowId(), executionInfo.Execution.GetRunId(), operation.SignalOperation.GetSignal()),

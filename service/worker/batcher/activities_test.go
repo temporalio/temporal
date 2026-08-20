@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
@@ -859,6 +860,83 @@ func (s *activitiesSuite) TestStartTaskProcessor_SignalUsesWorkerNamespace() {
 
 	resp := <-respCh
 	s.NoError(resp.err)
+}
+
+// TestStartTaskProcessor_SignalForwardsRequestFields verifies the signal path
+// forwards every field the requester supplied, including the header that carries
+// tracing and auth tokens through to the receiving workflow.
+func (s *activitiesSuite) TestStartTaskProcessor_SignalForwardsRequestFields() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	a := &activities{
+		activityDeps: activityDeps{
+			FrontendClient: s.mockFrontendClient,
+			Logger:         log.NewTestLogger(),
+			MetricsHandler: metrics.NoopMetricsHandler,
+		},
+	}
+
+	input := payloads.EncodeString("signal-input")
+	header := &commonpb.Header{
+		Fields: map[string]*commonpb.Payload{
+			"tracing-token": payload.EncodeString("trace-me"),
+		},
+	}
+	batchOperation := &batchspb.BatchOperationInput{
+		NamespaceId: "some-namespace-id",
+		BatchType:   enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW,
+		Request: &workflowservice.StartBatchOperationRequest{
+			Namespace: "untrusted-namespace",
+			JobId:     "job-id",
+			Reason:    "batch reason",
+			Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
+				SignalOperation: &batchpb.BatchOperationSignal{
+					Signal:   "test-signal",
+					Input:    input,
+					Header:   header,
+					Identity: "batch-signaler",
+				},
+			},
+		},
+	}
+
+	testPage := &page{
+		executionInfos: []*workflowpb.WorkflowExecutionInfo{
+			{Execution: &commonpb.WorkflowExecution{WorkflowId: "test-workflow-id", RunId: "test-run-id"}},
+		},
+	}
+
+	var captured *workflowservice.SignalWorkflowExecutionRequest
+	s.mockFrontendClient.EXPECT().
+		SignalWorkflowExecution(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *workflowservice.SignalWorkflowExecutionRequest, _ ...any) (*workflowservice.SignalWorkflowExecutionResponse, error) {
+			captured = req
+			return &workflowservice.SignalWorkflowExecutionResponse{}, nil
+		})
+
+	taskCh := make(chan task, 1)
+	respCh := make(chan taskResponse, 1)
+	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 1000 }))
+
+	go a.startTaskProcessor(ctx, batchOperation, "trusted-namespace", taskCh, respCh, limiter, s.mockFrontendClient, metrics.NoopMetricsHandler, log.NewTestLogger())
+
+	taskCh <- task{executionInfo: testPage.executionInfos[0], attempts: 1, page: testPage}
+
+	resp := <-respCh
+	s.NoError(resp.err)
+
+	s.Require().NotNil(captured)
+	s.Equal("trusted-namespace", captured.Namespace, "must use worker namespace, not request namespace")
+	protorequire.ProtoEqual(s.T(), testPage.executionInfos[0].Execution, captured.WorkflowExecution)
+	s.Equal("test-signal", captured.SignalName)
+	protorequire.ProtoEqual(s.T(), input, captured.Input)
+	protorequire.ProtoEqual(s.T(), header, captured.Header)
+	s.Equal("batch-signaler", captured.Identity)
+	s.Equal(
+		deterministicRequestID("job-id", "signal", "test-workflow-id", "test-run-id", "test-signal"),
+		captured.RequestId,
+	)
 }
 
 // TestStartTaskProcessor_RetryableErrorsDoNotDeadlock verifies that repeated retryable
