@@ -13,7 +13,7 @@ type taskGC struct {
 	db     *taskQueueDB
 	config *taskQueueConfig
 
-	lock           int64
+	lock           atomic.Int64
 	ackLevel       int64
 	lastDeleteTime time.Time
 }
@@ -93,9 +93,9 @@ func (tgc *taskGC) checkPrecond(ackLevel int64, batchSize int, ignoreTimeCond bo
 }
 
 func (tgc *taskGC) tryLock() bool {
-	return atomic.CompareAndSwapInt64(&tgc.lock, 0, 1)
+	return tgc.lock.CompareAndSwap(0, 1)
 }
 
 func (tgc *taskGC) unlock() {
-	atomic.StoreInt64(&tgc.lock, 0)
+	tgc.lock.Store(0)
 }

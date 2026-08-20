@@ -1110,8 +1110,7 @@ func (s *ChasmSuite) TestNamespaceDelete_WithChasmExecutions() {
 				PageSize:  10,
 				Query:     visQuery,
 			})
-			var notFound *serviceerror.NamespaceNotFound
-			if errors.As(err, &notFound) {
+			if _, ok := errors.AsType[*serviceerror.NamespaceNotFound](err); ok {
 				return // namespace fully deleted is also acceptable
 			}
 			require.NoError(t, err)

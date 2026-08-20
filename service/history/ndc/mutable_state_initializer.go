@@ -112,36 +112,36 @@ func (r *MutableStateInitializerImpl) InitializeFromDB(
 		_, dbRecordVersion := mutableState.GetUpdateCondition()
 		dbHistorySize := mutableState.GetHistorySize()
 		return NewWorkflow(
-				r.shardContext.GetClusterMetadata(),
-				wfContext,
-				mutableState,
-				releaseFn,
-			), MutableStateInitializationSpec{
-				ExistsInDB:      true,
-				IsBrandNew:      false,
-				DBRecordVersion: dbRecordVersion,
-				DBHistorySize:   dbHistorySize,
-			}, nil
+			r.shardContext.GetClusterMetadata(),
+			wfContext,
+			mutableState,
+			releaseFn,
+		), MutableStateInitializationSpec{
+			ExistsInDB:      true,
+			IsBrandNew:      false,
+			DBRecordVersion: dbRecordVersion,
+			DBHistorySize:   dbHistorySize,
+		}, nil
 	case *serviceerror.NotFound:
 		return NewWorkflow(
-				r.shardContext.GetClusterMetadata(),
-				wfContext,
-				workflow.NewMutableState(
-					r.shardContext,
-					r.shardContext.GetEventsCache(),
-					r.logger,
-					namespaceEntry,
-					workflowKey.WorkflowID,
-					workflowKey.RunID,
-					time.Now().UTC(),
-				),
-				releaseFn,
-			), MutableStateInitializationSpec{
-				ExistsInDB:      false,
-				IsBrandNew:      true,
-				DBRecordVersion: 1,
-				DBHistorySize:   0,
-			}, nil
+			r.shardContext.GetClusterMetadata(),
+			wfContext,
+			workflow.NewMutableState(
+				r.shardContext,
+				r.shardContext.GetEventsCache(),
+				r.logger,
+				namespaceEntry,
+				workflowKey.WorkflowID,
+				workflowKey.RunID,
+				time.Now().UTC(),
+			),
+			releaseFn,
+		), MutableStateInitializationSpec{
+			ExistsInDB:      false,
+			IsBrandNew:      true,
+			DBRecordVersion: 1,
+			DBHistorySize:   0,
+		}, nil
 	default:
 		releaseFn(err)
 		return nil, MutableStateInitializationSpec{}, err
@@ -179,16 +179,16 @@ func (r *MutableStateInitializerImpl) InitializeFromToken(
 		return nil, MutableStateInitializationSpec{}, err
 	}
 	return NewWorkflow(
-			r.shardContext.GetClusterMetadata(),
-			wfContext,
-			mutableState,
-			wcache.NoopReleaseFn,
-		), MutableStateInitializationSpec{
-			ExistsInDB:      existsInDB,
-			IsBrandNew:      false,
-			DBRecordVersion: dbRecordVersion,
-			DBHistorySize:   dbHistorySize,
-		}, nil
+		r.shardContext.GetClusterMetadata(),
+		wfContext,
+		mutableState,
+		wcache.NoopReleaseFn,
+	), MutableStateInitializationSpec{
+		ExistsInDB:      existsInDB,
+		IsBrandNew:      false,
+		DBRecordVersion: dbRecordVersion,
+		DBHistorySize:   dbHistorySize,
+	}, nil
 }
 
 func (r *MutableStateInitializerImpl) flushBufferEvents(
