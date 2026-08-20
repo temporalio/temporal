@@ -47,7 +47,7 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 		traceLogger := log.With(e.Logger,
 			tag.WorkflowNamespace(ns.Name().String()),
 			tag.Operation("CompleteNexusOperation"),
-			tag.String("destination", task.destination),
+			tag.Destination(task.destination),
 			tag.WorkflowID(n.workflowID),
 			tag.WorkflowRunID(n.runID),
 			tag.AttemptStart(time.Now().UTC()),

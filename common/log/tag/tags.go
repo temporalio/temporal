@@ -989,6 +989,11 @@ func Endpoint(endpoint string) ZapTag {
 	return NewStringTag("endpoint", endpoint)
 }
 
+// Destination returns a tag for an outbound task's destination.
+func Destination(destination string) ZapTag {
+	return NewStringTag("destination", destination)
+}
+
 func BuildId(buildId string) ZapTag {
 	return NewStringTag("build-id", buildId)
 }
