@@ -129,6 +129,16 @@ func (c *clientImpl) DescribeTaskQueuePartition(
 	return c.client.DescribeTaskQueuePartition(ctx, request, opts...)
 }
 
+func (c *clientImpl) DumpDynamicConfigValues(
+	ctx context.Context,
+	request *adminservice.DumpDynamicConfigValuesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.DumpDynamicConfigValuesResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DumpDynamicConfigValues(ctx, request, opts...)
+}
+
 func (c *clientImpl) ForceUnloadTaskQueuePartition(
 	ctx context.Context,
 	request *adminservice.ForceUnloadTaskQueuePartitionRequest,

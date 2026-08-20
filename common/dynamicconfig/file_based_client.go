@@ -14,6 +14,7 @@ import (
 )
 
 var _ Client = (*FileBasedClient)(nil)
+var _ ClientWithConfigValueMap = (*FileBasedClient)(nil)
 var _ NotifyingClient = (*FileBasedClient)(nil)
 
 const (
@@ -119,6 +120,10 @@ func (fc *FileBasedClient) getMetricsHandler() metrics.Handler {
 func (fc *FileBasedClient) GetValue(key Key) []ConstrainedValue {
 	values := fc.values.Load().(ConfigValueMap) // nolint:revive // unchecked-type-assertion
 	return values[key]
+}
+
+func (fc *FileBasedClient) GetAllValues() ConfigValueMap {
+	return fc.values.Load().(ConfigValueMap) // nolint:revive // unchecked-type-assertion
 }
 
 func (fc *FileBasedClient) init() error {

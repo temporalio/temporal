@@ -3,6 +3,9 @@ package tdbg
 import (
 	"bytes"
 	"context"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -13,7 +16,19 @@ import (
 
 type dynamicConfigAdminClient struct {
 	adminservice.AdminServiceClient
-	request *adminservice.GetDynamicConfigValueRequest
+	request    *adminservice.GetDynamicConfigValueRequest
+	dumpCalled bool
+}
+
+func (c *dynamicConfigAdminClient) DumpDynamicConfigValues(
+	_ context.Context,
+	_ *adminservice.DumpDynamicConfigValuesRequest,
+	_ ...grpc.CallOption,
+) (*adminservice.DumpDynamicConfigValuesResponse, error) {
+	c.dumpCalled = true
+	return &adminservice.DumpDynamicConfigValuesResponse{
+		Values: []byte(`{"frontend.workflowtimeskippingenabled":[{"constraints":{"namespace":"A"},"value":true}]}`),
+	}, nil
 }
 
 func (c *dynamicConfigAdminClient) GetDynamicConfigValue(
@@ -52,4 +67,28 @@ func TestGetDynamicConfigValue(t *testing.T) {
 	require.Equal(t, "frontend.WorkflowTimeSkippingEnabled", adminClient.request.GetKey())
 	require.Equal(t, "A", adminClient.request.GetNamespace())
 	require.Equal(t, "true\n", output.String())
+}
+
+func TestDumpDynamicConfigValues(t *testing.T) {
+	t.Chdir(t.TempDir())
+	adminClient := &dynamicConfigAdminClient{}
+	var output bytes.Buffer
+	app := NewCliApp(func(params *Params) {
+		params.ClientFactory = dynamicConfigClientFactory{adminClient: adminClient}
+		params.Writer = &output
+	})
+
+	err := app.Run([]string{"tdbg", "dc", "dump", "cvs"})
+	require.NoError(t, err)
+	require.True(t, adminClient.dumpCalled)
+	filename := strings.TrimSpace(output.String())
+	require.Regexp(t, `^tmp_dc_cvs_\d{8}T\d{6}Z\.json$`, filename)
+	contents, err := os.ReadFile(filepath.Clean(filename))
+	require.NoError(t, err)
+	require.JSONEq(t, `{
+		"frontend.workflowtimeskippingenabled": [{
+			"constraints": {"namespace": "A"},
+			"value": true
+		}]
+	}`, string(contents))
 }

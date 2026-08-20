@@ -191,6 +191,21 @@ func (c *retryableClient) DescribeTaskQueuePartition(
 	return resp, err
 }
 
+func (c *retryableClient) DumpDynamicConfigValues(
+	ctx context.Context,
+	request *adminservice.DumpDynamicConfigValuesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.DumpDynamicConfigValuesResponse, error) {
+	var resp *adminservice.DumpDynamicConfigValuesResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DumpDynamicConfigValues(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) ForceUnloadTaskQueuePartition(
 	ctx context.Context,
 	request *adminservice.ForceUnloadTaskQueuePartitionRequest,

@@ -2219,6 +2219,30 @@ func (adh *AdminHandler) GetDynamicConfigValue(
 	return &adminservice.GetDynamicConfigValueResponse{Value: encodedValue}, nil
 }
 
+func (adh *AdminHandler) DumpDynamicConfigValues(
+	_ context.Context,
+	request *adminservice.DumpDynamicConfigValuesRequest,
+) (_ *adminservice.DumpDynamicConfigValuesResponse, retErr error) {
+	defer log.CapturePanic(adh.logger, &retErr)
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	values, err := adh.dynamicConfig.GetAllValues()
+	if err != nil {
+		return nil, serviceerror.NewUnimplemented(err.Error())
+	}
+	valuesByKey := make(map[string][]dynamicconfig.ConstrainedValue, len(values))
+	for key, constrainedValues := range values {
+		valuesByKey[key.String()] = constrainedValues
+	}
+	encodedValues, err := json.Marshal(valuesByKey)
+	if err != nil {
+		return nil, serviceerror.NewInternalf("unable to encode dynamic config values: %v", err)
+	}
+	return &adminservice.DumpDynamicConfigValuesResponse{Values: encodedValues}, nil
+}
+
 func (adh *AdminHandler) MigrateSchedule(ctx context.Context, request *adminservice.MigrateScheduleRequest) (_ *adminservice.MigrateScheduleResponse, retErr error) {
 	defer log.CapturePanic(adh.logger, &retErr)
 	if request == nil {

@@ -267,6 +267,20 @@ func (s *adminHandlerSuite) TestGetDynamicConfigValueUnknownKey() {
 	s.ErrorAs(err, &invalidArgument)
 }
 
+func (s *adminHandlerSuite) TestDumpDynamicConfigValues() {
+	response, err := s.handler.DumpDynamicConfigValues(
+		s.T().Context(),
+		&adminservice.DumpDynamicConfigValuesRequest{},
+	)
+	s.Require().NoError(err)
+	s.JSONEq(fmt.Sprintf(`{
+		"frontend.workflowtimeskippingenabled": [{
+			"constraints": {"namespace": %q},
+			"value": true
+		}]
+	}`, s.namespace), string(response.GetValues()))
+}
+
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Success() {
 	var clusterName = "cluster"
 	s.mockNamespaceCache.EXPECT().GetAllNamespaces().Return(nil)

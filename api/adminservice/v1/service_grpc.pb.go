@@ -66,6 +66,7 @@ const (
 	AdminService_ForceUnloadTaskQueuePartition_FullMethodName       = "/temporal.server.api.adminservice.v1.AdminService/ForceUnloadTaskQueuePartition"
 	AdminService_GetTaskQueueUserData_FullMethodName                = "/temporal.server.api.adminservice.v1.AdminService/GetTaskQueueUserData"
 	AdminService_GetDynamicConfigValue_FullMethodName               = "/temporal.server.api.adminservice.v1.AdminService/GetDynamicConfigValue"
+	AdminService_DumpDynamicConfigValues_FullMethodName             = "/temporal.server.api.adminservice.v1.AdminService/DumpDynamicConfigValues"
 	AdminService_MigrateSchedule_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/MigrateSchedule"
 )
 
@@ -162,6 +163,8 @@ type AdminServiceClient interface {
 	GetTaskQueueUserData(ctx context.Context, in *GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*GetTaskQueueUserDataResponse, error)
 	// GetDynamicConfigValue returns the effective dynamic config value for a key and filters.
 	GetDynamicConfigValue(ctx context.Context, in *GetDynamicConfigValueRequest, opts ...grpc.CallOption) (*GetDynamicConfigValueResponse, error)
+	// DumpDynamicConfigValues returns all constrained values held by the dynamic config client.
+	DumpDynamicConfigValues(ctx context.Context, in *DumpDynamicConfigValuesRequest, opts ...grpc.CallOption) (*DumpDynamicConfigValuesResponse, error)
 	// MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
 	MigrateSchedule(ctx context.Context, in *MigrateScheduleRequest, opts ...grpc.CallOption) (*MigrateScheduleResponse, error)
 }
@@ -610,6 +613,15 @@ func (c *adminServiceClient) GetDynamicConfigValue(ctx context.Context, in *GetD
 	return out, nil
 }
 
+func (c *adminServiceClient) DumpDynamicConfigValues(ctx context.Context, in *DumpDynamicConfigValuesRequest, opts ...grpc.CallOption) (*DumpDynamicConfigValuesResponse, error) {
+	out := new(DumpDynamicConfigValuesResponse)
+	err := c.cc.Invoke(ctx, AdminService_DumpDynamicConfigValues_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *adminServiceClient) MigrateSchedule(ctx context.Context, in *MigrateScheduleRequest, opts ...grpc.CallOption) (*MigrateScheduleResponse, error) {
 	out := new(MigrateScheduleResponse)
 	err := c.cc.Invoke(ctx, AdminService_MigrateSchedule_FullMethodName, in, out, opts...)
@@ -712,6 +724,8 @@ type AdminServiceServer interface {
 	GetTaskQueueUserData(context.Context, *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error)
 	// GetDynamicConfigValue returns the effective dynamic config value for a key and filters.
 	GetDynamicConfigValue(context.Context, *GetDynamicConfigValueRequest) (*GetDynamicConfigValueResponse, error)
+	// DumpDynamicConfigValues returns all constrained values held by the dynamic config client.
+	DumpDynamicConfigValues(context.Context, *DumpDynamicConfigValuesRequest) (*DumpDynamicConfigValuesResponse, error)
 	// MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
 	MigrateSchedule(context.Context, *MigrateScheduleRequest) (*MigrateScheduleResponse, error)
 	mustEmbedUnimplementedAdminServiceServer()
@@ -858,6 +872,9 @@ func (UnimplementedAdminServiceServer) GetTaskQueueUserData(context.Context, *Ge
 }
 func (UnimplementedAdminServiceServer) GetDynamicConfigValue(context.Context, *GetDynamicConfigValueRequest) (*GetDynamicConfigValueResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetDynamicConfigValue not implemented")
+}
+func (UnimplementedAdminServiceServer) DumpDynamicConfigValues(context.Context, *DumpDynamicConfigValuesRequest) (*DumpDynamicConfigValuesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DumpDynamicConfigValues not implemented")
 }
 func (UnimplementedAdminServiceServer) MigrateSchedule(context.Context, *MigrateScheduleRequest) (*MigrateScheduleResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MigrateSchedule not implemented")
@@ -1711,6 +1728,24 @@ func _AdminService_GetDynamicConfigValue_Handler(srv interface{}, ctx context.Co
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_DumpDynamicConfigValues_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DumpDynamicConfigValuesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).DumpDynamicConfigValues(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_DumpDynamicConfigValues_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).DumpDynamicConfigValues(ctx, req.(*DumpDynamicConfigValuesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AdminService_MigrateSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(MigrateScheduleRequest)
 	if err := dec(in); err != nil {
@@ -1915,6 +1950,10 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetDynamicConfigValue",
 			Handler:    _AdminService_GetDynamicConfigValue_Handler,
+		},
+		{
+			MethodName: "DumpDynamicConfigValues",
+			Handler:    _AdminService_DumpDynamicConfigValues_Handler,
 		},
 		{
 			MethodName: "MigrateSchedule",

@@ -31,6 +31,13 @@ type (
 		GetValue(key Key) []ConstrainedValue
 	}
 
+	// ClientWithConfigValueMap is an optional interface for clients that can return all of
+	// their currently held values.
+	ClientWithConfigValueMap interface {
+		Client
+		GetAllValues() ConfigValueMap
+	}
+
 	// NotifyingClient is an optional interface that a Client can also implement, that adds
 	// support for faster notifications of dynamic config changes.
 	NotifyingClient interface {
@@ -54,8 +61,8 @@ type (
 	// other cases, the exact type must be used. If a Value is returned with an unexpected
 	// type, it will be ignored.
 	ConstrainedValue struct {
-		Constraints Constraints
-		Value       any
+		Constraints Constraints `json:"constraints"`
+		Value       any         `json:"value"`
 	}
 	TypedConstrainedValue[T any] struct {
 		Constraints Constraints
@@ -85,13 +92,13 @@ type (
 	// each.) If you return a ConstrainedValue with Namespace and ShardID set, for example,
 	// that value will never be used, even if the Namespace matches.
 	Constraints struct {
-		Namespace     string
-		NamespaceID   string
-		TaskQueueName string
-		Destination   string
-		ChasmTaskType string
-		TaskQueueType enumspb.TaskQueueType
-		ShardID       int32
-		TaskType      enumsspb.TaskType
+		Namespace     string                `json:"namespace,omitempty"`
+		NamespaceID   string                `json:"namespaceId,omitempty"`
+		TaskQueueName string                `json:"taskQueueName,omitempty"`
+		Destination   string                `json:"destination,omitempty"`
+		ChasmTaskType string                `json:"chasmTaskType,omitempty"`
+		TaskQueueType enumspb.TaskQueueType `json:"taskQueueType,omitempty"`
+		ShardID       int32                 `json:"shardId,omitempty"`
+		TaskType      enumsspb.TaskType     `json:"taskType,omitempty"`
 	}
 )

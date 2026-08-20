@@ -34,6 +34,25 @@ The server uses the setting's existing property function, so this example checks
 2. The configured value with no constraints.
 3. The registered code default, which is `false` for `frontend.WorkflowTimeSkippingEnabled`.
 
+## Dump all constrained values
+
+Dump the complete `ConfigValueMap` held by the dynamic config client in the frontend process:
+
+```bash
+./tdbg \
+  --address 127.0.0.1:7233 \
+  dc dump cvs
+```
+
+The command writes pretty-printed JSON in the current directory and prints the filename:
+
+```text
+tmp_dc_cvs_20260820T034405Z.json
+```
+
+The timestamp is UTC. The file contains configured values and their constraints; it does not contain registered code defaults or effective values.
+The command accepts dump responses up to 128 MiB.
+
 ## Other filters
 
 Supply only the filters used by the setting being queried.
@@ -74,7 +93,8 @@ An ad hoc benchmark on an Apple M4 Pro measured the direct property function at 
 
 ## Current scope
 
-- The command returns one effective value as JSON.
+- `dc get` returns one effective value as JSON.
 - It queries the in-memory dynamic config state of the frontend process receiving the RPC.
-- It does not dump all keys or explain how the value was selected.
+- `dc dump cvs` dumps all values only when the configured client supports returning its `ConfigValueMap`. The built-in file-based, static, and memory clients support it.
+- It does not explain how an effective value was selected.
 - It uses the setting registered for the key. It cannot observe a service-specific default introduced at a call site with `WithDefault`.

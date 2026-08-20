@@ -125,6 +125,15 @@ func NewCollection(client Client, logger log.Logger) *Collection {
 	}
 }
 
+// GetAllValues returns all values currently held by the Client.
+func (c *Collection) GetAllValues() (ConfigValueMap, error) {
+	client, ok := c.client.(ClientWithConfigValueMap)
+	if !ok {
+		return nil, errors.New("dynamic config client does not support getting all values")
+	}
+	return client.GetAllValues(), nil
+}
+
 // GetEffectiveValue returns the effective value of a registered setting for the given filters.
 func (c *Collection) GetEffectiveValue(key Key, filters Constraints) (any, error) {
 	setting := queryRegistry(key)
