@@ -118,6 +118,7 @@ var (
 	ErrSentinel              = serviceerror.NewNotFound("schedule is a sentinel")
 	ErrSentinelBlocked       = serviceerror.NewUnavailable("schedule is a sentinel; please retry after sentinel expires")
 	ErrMigrationPending      = serviceerror.NewUnavailable("schedule has a pending migration to workflow; please retry later")
+	ErrBufferedStartNotFound = serviceerror.NewUnavailable("the buffered start request couldn't be found")
 )
 
 // NewScheduler returns an initialized CHASM scheduler root component.
@@ -613,40 +614,23 @@ func countsAsFailureForPause(status enumspb.WorkflowExecutionStatus) bool {
 	}
 }
 
+// Nexus-completion-ignored reasons. Limited cardinality for ReasonTag.
+const (
+	callbackIgnoredUnrecognizedRequest metrics.ReasonString = "unrecognized_request_id"
+	callbackIgnoredAlreadyCompleted    metrics.ReasonString = "already_completed"
+)
+
 // HandleNexusCompletion allows Scheduler to record workflow completions from
 // worfklows started by the same scheduler tree's Invoker.
 func (s *Scheduler) HandleNexusCompletion(
 	ctx chasm.MutableContext,
 	info *persistencespb.ChasmNexusCompletion,
 ) error {
-	if s.Closed {
-		// The schedule can close (Delete, migration to V1, idle-task quiescence) while
-		// a start it made is still running; that start's completion then arrives here
-		// as a late straggler. Nothing upstream guards this for us: the CHASM engine
-		// only validates ancestor lifecycle on a ref, never the target's own, so a ref
-		// pointing at the root (as this one does) sails through unchecked.
-		msg := "handled Nexus completion for a late straggler after the schedule was closed"
-		s.getOrCreateEventLog(ctx).LogEvent(ctx,
-			fmt.Sprintf("%s: %s", msg, info.RequestId))
-		ctx.Logger().Warn(msg,
-			tag.RequestID(info.RequestId),
-			tag.ScheduleID(s.ScheduleId))
-		return ErrClosed
-	}
-
 	invoker := s.Invoker.Get(ctx)
 	metricsHandler := newTaggedMetricsHandler(ctx.MetricsHandler(), s)
 
-	workflowID := ""
-	tracksCompletionResult := true
-	for _, start := range invoker.GetBufferedStarts() {
-		if start.GetRequestId() == info.RequestId && start.GetCompleted() == nil {
-			workflowID = start.GetWorkflowId()
-			tracksCompletionResult = s.resolveOverlapPolicy(start.GetOverlapPolicy()) != enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL
-			break
-		}
-	}
-	if workflowID == "" {
+	start, err := s.getBufferedStart(ctx, info.RequestId)
+	if err != nil {
 		// If the request ID was removed, the request must have already been processed;
 		// fast-succeed.
 		msg := "handled Nexus completion with an unrecognized request ID"
@@ -655,9 +639,27 @@ func (s *Scheduler) HandleNexusCompletion(
 		ctx.Logger().Warn(msg,
 			tag.RequestID(info.RequestId),
 			tag.ScheduleID(s.ScheduleId))
-		metricsHandler.Counter(metrics.ScheduleCallbackIgnored.Name()).Record(1)
+		metricsHandler.Counter(metrics.ScheduleCallbackIgnored.Name()).
+			Record(1, metrics.ReasonTag(callbackIgnoredUnrecognizedRequest))
 		return nil
 	}
+
+	if start.GetCompleted() != nil {
+		// A duplicate delivery of a completion we already recorded — expected
+		// occasionally as a retry, but watch if this reason dominates the metric.
+		msg := "handled Nexus completion for an already-completed buffered start"
+		s.getOrCreateEventLog(ctx).LogEvent(ctx,
+			fmt.Sprintf("%s: %s", msg, info.RequestId))
+		ctx.Logger().Warn(msg,
+			tag.RequestID(info.RequestId),
+			tag.ScheduleID(s.ScheduleId))
+		metricsHandler.Counter(metrics.ScheduleCallbackIgnored.Name()).
+			Record(1, metrics.ReasonTag(callbackIgnoredAlreadyCompleted))
+		return nil
+	}
+
+	workflowID := start.GetWorkflowId()
+	tracksCompletionResult := s.resolveOverlapPolicy(start.GetOverlapPolicy()) != enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL
 
 	// Record how long it took for the callback to arrive after the action completed.
 	// Use ctx.Now instead of time.Since to use a consistent time source across nodes,
@@ -1118,6 +1120,19 @@ func (s *Scheduler) startWorkflowSearchAttributes(
 	return &commonpb.SearchAttributes{
 		IndexedFields: fields,
 	}
+}
+
+func (s *Scheduler) getBufferedStart(
+	ctx chasm.Context,
+	requestID string,
+) (*schedulespb.BufferedStart, error) {
+	invoker := s.Invoker.Get(ctx)
+	for _, start := range invoker.GetBufferedStarts() {
+		if start.GetRequestId() == requestID {
+			return start, nil
+		}
+	}
+	return nil, ErrBufferedStartNotFound
 }
 
 func userCustomSearchAttributes(fields map[string]*commonpb.Payload) map[string]*commonpb.Payload {

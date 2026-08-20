@@ -186,14 +186,18 @@ func TestHandleNexusCompletion_AllowAllDoesNotUpdateCompletionState(t *testing.T
 	require.NoError(t, err)
 }
 
-// TestHandleNexusCompletion_ClosedScheduleReturnsError covers the late-straggler
-// case: a schedule can close (Delete, migration to V1, idle-task quiescence)
-// while a start it made is still running, and that start's completion arrives
-// afterward. The CHASM engine only validates ancestor lifecycle on a ref, never
-// the target's own, so a ref pointing at the root (as this one does) isn't
-// blocked upstream — HandleNexusCompletion must guard it itself, the same as
-// every other Scheduler method.
-func TestHandleNexusCompletion_ClosedScheduleReturnsError(t *testing.T) {
+// TestHandleNexusCompletion_LateStragglerAfterCloseIsNotBlocked documents a
+// deliberate, temporary tradeoff: a schedule can close (Delete, migration to
+// V1, idle-task quiescence) while a start it made is still running, since none
+// of those paths drain BufferedStarts first. That start's completion then
+// arrives as a late straggler. HandleNexusCompletion does not reject it on
+// s.Closed today: an ALLOW_ALL schedule is expected to have completions arrive
+// after it closes, and a blanket guard would lock those out forever along with
+// the genuinely-stray ones. Distinguishing the two needs a more considered
+// fix than "if s.Closed return err" — tracked for a follow-up PR. For now this
+// pins down that a late straggler is still processed rather than silently
+// swallowed or erroring.
+func TestHandleNexusCompletion_LateStragglerAfterCloseIsNotBlocked(t *testing.T) {
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
 	_, engineCtx := newTestEngineContext(t, logger)
 
@@ -235,9 +239,8 @@ func TestHandleNexusCompletion_ClosedScheduleReturnsError(t *testing.T) {
 
 	// Second, separate transaction: the straggling start's completion arrives after
 	// the close committed. The ref still resolves (the engine only validates
-	// ancestor lifecycle, never the target's own), so the guard inside
-	// HandleNexusCompletion is the only thing standing between this and a state
-	// mutation on a closed schedule.
+	// ancestor lifecycle, never the target's own), so nothing upstream stops this
+	// from reaching HandleNexusCompletion.
 	_, _, err = chasm.UpdateComponent(engineCtx, rootRef,
 		func(s *scheduler.Scheduler, ctx chasm.MutableContext, _ struct{}) (struct{}, error) {
 			return struct{}{}, s.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
@@ -248,15 +251,53 @@ func TestHandleNexusCompletion_ClosedScheduleReturnsError(t *testing.T) {
 				CloseTime: timestamppb.New(now),
 			})
 		}, struct{}{})
-	require.ErrorIs(t, err, scheduler.ErrClosed)
+	require.NoError(t, err)
 
 	_, err = chasm.ReadComponent(engineCtx, rootRef,
 		func(s *scheduler.Scheduler, ctx chasm.Context, _ struct{}) (struct{}, error) {
-			require.Equal(t, initial, s.LastCompletionResult.Get(ctx))
-			require.Nil(t, s.Invoker.Get(ctx).BufferedStarts[0].GetCompleted())
+			require.NotEqual(t, initial, s.LastCompletionResult.Get(ctx))
+			require.NotNil(t, s.LastCompletionResult.Get(ctx).GetSuccess())
+			require.NotNil(t, s.Invoker.Get(ctx).BufferedStarts[0].GetCompleted())
 			return struct{}{}, nil
 		}, struct{}{})
 	require.NoError(t, err)
+}
+
+// TestHandleNexusCompletion_AlreadyCompletedIsIgnored verifies that a
+// duplicate delivery of a completion for a BufferedStart that's already
+// recorded as completed is fast-succeeded without mutating state again,
+// distinctly from the unrecognized-request-ID case (both fast-succeed, but
+// for different reasons — see the ScheduleCallbackIgnored ReasonTag).
+func TestHandleNexusCompletion_AlreadyCompletedIsIgnored(t *testing.T) {
+	sched, ctx, node := setupSchedulerForTest(t)
+	sched.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{{
+		RequestId: "req-1", WorkflowId: "wf-1", RunId: "run-1", Attempt: 1,
+		ActualTime: timestamppb.New(time.Now().Add(-time.Minute)),
+		StartTime:  timestamppb.New(time.Now().Add(-30 * time.Second)),
+		Completed: &schedulespb.CompletedResult{
+			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			CloseTime: timestamppb.New(time.Now().Add(-15 * time.Second)),
+		},
+	}}
+	initial := &schedulerpb.LastCompletionResult{Success: &commonpb.Payload{Data: []byte("previous-result")}}
+	sched.LastCompletionResult = chasm.NewDataField(ctx, initial)
+
+	// A second delivery of the same completion, now that the start is already
+	// marked completed, must not touch LastCompletionResult again.
+	err := sched.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+		RequestId: "req-1",
+		Outcome: &persistencespb.ChasmNexusCompletion_Success{
+			Success: &commonpb.Payload{Data: []byte("duplicate-delivery")},
+		},
+		CloseTime: timestamppb.New(time.Now()),
+	})
+	require.NoError(t, err)
+
+	_, err = node.CloseTransaction()
+	require.NoError(t, err)
+
+	readCtx := chasm.NewContext(context.Background(), node)
+	require.Equal(t, initial, sched.LastCompletionResult.Get(readCtx))
 }
 
 // TestHandleNexusCompletion_Failure verifies that a failed workflow completion
