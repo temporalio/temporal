@@ -43,7 +43,9 @@ func ConvertNexusLinksToProtoLinks(nexusLinks []nexus.Link, logger log.Logger) [
 				Variant: &commonpb.Link_Activity_{Activity: link},
 			})
 		default:
-			logger.Warn("invalid Nexus link data type", tag.NewStringTag("link-type", nexusLink.Type))
+			logger.Warn("invalid Nexus link data type",
+				tag.NewStringTag("nexus-link-type", nexusLink.Type),
+			)
 		}
 	}
 	return out
