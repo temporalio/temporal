@@ -77,7 +77,6 @@ type TestEnv struct {
 	taskPoller     *taskpoller.TaskPoller
 	t              *testing.T
 	tv             *testvars.TestVars
-	ctx            context.Context
 	dedicatedGuard *dedicatedClusterGuard
 
 	sdkClientOnce sync.Once
@@ -258,6 +257,10 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	// Check test sharding early, before any expensive operations.
 	checkTestShard(t)
 
+	// Create the test context before any expensive setup, so that the deadline
+	// extension below can compensate for the time setup takes.
+	testcontext.For(t)
+
 	var options testOptions
 	for _, opt := range opts {
 		opt(&options)
@@ -311,6 +314,10 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	// Attach version headers decorator to the test context.
 	testcontext.AttachDecorator(t, versionHeadersContextKey{}, headers.SetVersions)
 
+	// Restore as much of the test's timeout budget as the context's ceiling
+	// allows, now that setup is done.
+	testcontext.EnsureRemaining(testcontext.For(t), t, testcontext.DefaultTimeout())
+
 	env := &TestEnv{
 		FunctionalTestBase: base,
 		Assertions:         require.New(t),
@@ -321,7 +328,6 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		taskPoller:         taskpoller.New(t, cluster.FrontendClient(), ns.String()),
 		t:                  t,
 		tv:                 tv,
-		ctx:                testcontext.For(t),
 		sdkWorkerTQ:        RandomizeStr("tq-" + t.Name()),
 		dedicatedGuard:     dedicatedGuard,
 	}
@@ -460,9 +466,11 @@ func (e *TestEnv) Tv() *testvars.TestVars {
 //	ctx, cancel := context.WithTimeout(env.Context(), 10*time.Second)
 //	defer cancel()
 //
+// The context is deliberately not cached; see [testcontext.EnsureRemaining].
+//
 // Deprecated: use the suite's Context() method instead.
 func (e *TestEnv) Context() context.Context {
-	return e.ctx
+	return testcontext.For(e.t)
 }
 
 // WaitForChannel waits for ch to receive using the TestEnv context.
@@ -470,7 +478,7 @@ func (e *TestEnv) WaitForChannel(ch <-chan struct{}) {
 	e.t.Helper()
 	select {
 	case <-ch:
-	case <-e.ctx.Done():
+	case <-e.Context().Done():
 		e.FailNow("context timeout while waiting for channel")
 	}
 }
@@ -480,7 +488,7 @@ func (e *TestEnv) SendToChannel(ch chan<- struct{}) {
 	e.t.Helper()
 	select {
 	case ch <- struct{}{}:
-	case <-e.ctx.Done():
+	case <-e.Context().Done():
 		e.FailNow("context timeout while sending to channel")
 	}
 }
