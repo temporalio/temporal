@@ -28,7 +28,7 @@ func (r CapturedLog) TagValue(key string) (string, bool) {
 type Capture struct {
 	anyTags map[string]map[string]struct{}
 
-	mu      sync.RWMutex
+	mu      sync.Mutex
 	records []CapturedLog
 }
 
@@ -51,8 +51,8 @@ func newCapture(anyTags []tag.Tag) *Capture {
 
 // Snapshot returns a defensive copy of the captured log calls.
 func (c *Capture) Snapshot() []CapturedLog {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
+	c.mu.Lock()
+	defer c.mu.Unlock()
 
 	records := make([]CapturedLog, len(c.records))
 	for i, record := range c.records {
@@ -66,10 +66,8 @@ func (c *Capture) record(record CapturedLog) {
 	if len(c.anyTags) > 0 {
 		matched := false
 		for _, t := range record.Tags {
-			if values := c.anyTags[t.Key()]; values != nil {
-				_, matched = values[formatValue(t)]
-			}
-			if matched {
+			if _, ok := c.anyTags[t.Key()][formatValue(t)]; ok {
+				matched = true
 				break
 			}
 		}

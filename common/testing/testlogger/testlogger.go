@@ -145,7 +145,6 @@ type sharedTestLoggerState struct {
 		captures     map[*Capture]struct{}
 		closed       bool
 	}
-	captureCount    atomic.Int32
 	mode            Mode
 	logExpectations bool
 	logCaller       bool
@@ -369,7 +368,6 @@ func (tl *TestLogger) StartCapture(anyTags ...tag.Tag) *Capture {
 	capture := newCapture(anyTags)
 	tl.state.mu.Lock()
 	tl.state.mu.captures[capture] = struct{}{}
-	tl.state.captureCount.Add(1)
 	tl.state.mu.Unlock()
 	return capture
 }
@@ -379,7 +377,6 @@ func (tl *TestLogger) StopCapture(capture *Capture) {
 	tl.state.mu.Lock()
 	if _, ok := tl.state.mu.captures[capture]; ok {
 		delete(tl.state.mu.captures, capture)
-		tl.state.captureCount.Add(-1)
 	}
 	tl.state.mu.Unlock()
 }
@@ -425,7 +422,7 @@ func (tl *TestLogger) recordExpectationMatches(level Level, msg string, tags []t
 }
 
 func (tl *TestLogger) recordCaptures(level Level, msg string, tags []tag.Tag) {
-	if tl.state.captureCount.Load() == 0 {
+	if len(tl.state.mu.captures) == 0 {
 		return
 	}
 	record := CapturedLog{
