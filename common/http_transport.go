@@ -21,8 +21,8 @@ const (
 // it without sending a GOAWAY or RST) stays in the pool and stalls every request multiplexed onto
 // it until their individual deadlines expire.
 //
-// tlsConfig may be nil. If set, it is cloned before use because callers typically pass a config
-// shared with other clients.
+// tlsConfig may be nil. If set, it is cloned before use, because enabling HTTP/2 appends to the
+// config's NextProtos and callers typically pass a config shared with other clients.
 func NewHTTPTransport(tlsConfig *tls.Config) (*http.Transport, error) {
 	// dialer and transport field values copied from http.DefaultTransport.
 	dialer := &net.Dialer{
@@ -41,8 +41,8 @@ func NewHTTPTransport(tlsConfig *tls.Config) (*http.Transport, error) {
 	if tlsConfig != nil {
 		t.TLSClientConfig = tlsConfig.Clone()
 	}
-	// ConfigureTransports enables HTTP/2 on the base transport and returns the linked HTTP/2
-	// configuration used to set the health-check timeouts.
+	// Must come after TLSClientConfig is set: this negotiates h2 via ALPN, and replacing the TLS
+	// config afterwards would drop that negotiation and silently fall back to HTTP/1.1.
 	h2, err := http2.ConfigureTransports(t)
 	if err != nil {
 		return nil, fmt.Errorf("configure http2 transport: %w", err)
