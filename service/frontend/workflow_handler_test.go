@@ -160,6 +160,7 @@ func (s *WorkflowHandlerSuite) SetupTest() {
 	s.mockProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
 	s.mockHistoryArchiver = archiver.NewMockHistoryArchiver(s.controller)
 	s.mockVisibilityArchiver = archiver.NewMockVisibilityArchiver(s.controller)
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.tokenSerializer = tasktoken.NewSerializer()
 
