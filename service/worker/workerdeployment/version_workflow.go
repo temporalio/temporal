@@ -332,7 +332,7 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 		// First ensure deployment workflow is running
 		//nolint:staticcheck // SA1019
 		if !d.VersionState.StartedDeploymentWorkflow {
-			activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+			activityCtx := workflow.WithActivityOptions(ctx, DefaultActivityOptions)
 			err := workflow.ExecuteActivity(activityCtx, d.a.StartWorkerDeploymentWorkflow, &deploymentspb.StartWorkerDeploymentRequest{
 				DeploymentName: d.VersionState.Version.DeploymentName,
 				RequestId:      d.newUUID(ctx),
@@ -452,7 +452,7 @@ func (d *VersionWorkflowRunner) handleUpdateVersionComputeConfig(ctx workflow.Co
 		DeploymentName: d.VersionState.Version.DeploymentName,
 		BuildId:        d.VersionState.Version.BuildId,
 	}
-	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	activityCtx := workflow.WithActivityOptions(ctx, DefaultActivityOptions)
 	var computeConfigSummary *computepb.ComputeConfigSummary
 	err := workflow.ExecuteActivity(activityCtx, d.a.UpdateWorkerControllerInstance, &deploymentspb.UpdateWorkerControllerInstanceInput{
 		Version:             apiVersion,
@@ -545,7 +545,7 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 		}
 	}
 
-	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	activityCtx := workflow.WithActivityOptions(ctx, DefaultActivityOptions)
 
 	// Manual deletion of versions is only possible when:
 	// 1. The version is not current or ramping (checked in the deployment wf)
@@ -682,7 +682,7 @@ func (d *VersionWorkflowRunner) doesVersionHaveActivePollers(ctx workflow.Contex
 		TaskQueuesAndTypes:      tqNameToTypes,
 		WorkerDeploymentVersion: d.VersionState.Version,
 	}
-	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	activityCtx := workflow.WithActivityOptions(ctx, DefaultActivityOptions)
 	var hasPollers bool
 	err := workflow.ExecuteActivity(activityCtx, d.a.CheckIfTaskQueuesHavePollers, checkPollersReq).Get(ctx, &hasPollers)
 	if err != nil {
@@ -1113,7 +1113,7 @@ func (d *VersionWorkflowRunner) refreshDrainageInfo(ctx workflow.Context) {
 		}
 	}
 
-	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+	activityCtx := workflow.WithActivityOptions(ctx, DefaultActivityOptions)
 	var a *VersionActivities
 	var newInfo *deploymentpb.VersionDrainageInfo
 	err = workflow.ExecuteActivity(
@@ -1263,7 +1263,7 @@ func (d *VersionWorkflowRunner) syncVersionDataToComputeStatus(ctx workflow.Cont
 			logger := workflow.GetLogger(ctx)
 
 			var result deploymentpb.ComputeStatus
-			resp := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, defaultActivityOptions), d.a.DescribeWorkerControllerInstanceStatus, state.GetVersion())
+			resp := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, DefaultActivityOptions), d.a.DescribeWorkerControllerInstanceStatus, state.GetVersion())
 			if err := resp.Get(ctx, &result); err != nil {
 				logger.Error("failed to sync compute status", "error", err)
 			} else if result.ProviderValidation != nil {
@@ -1313,7 +1313,7 @@ func (d *VersionWorkflowRunner) syncVersionDataToTaskQueues(ctx workflow.Context
 
 	// calling SyncDeploymentVersionUserData for each batch
 	for _, batch := range batches {
-		activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
+		activityCtx := workflow.WithActivityOptions(ctx, DefaultActivityOptions)
 		var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
 
 		err := workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, &deploymentspb.SyncDeploymentVersionUserDataRequest{
