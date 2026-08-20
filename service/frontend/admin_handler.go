@@ -2183,6 +2183,47 @@ func convertFailoverHistoryToReplicationProto(
 	return replicationProto
 }
 
+func (adh *AdminHandler) GetDynamicConfigValue(
+	_ context.Context,
+	request *adminservice.GetDynamicConfigValueRequest,
+) (_ *adminservice.GetDynamicConfigValueResponse, retErr error) {
+	defer log.CapturePanic(adh.logger, &retErr)
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetKey() == "" {
+		return nil, serviceerror.NewInvalidArgument("dynamic config key is not set")
+	}
+	constraints, constraintFields, err := dynamicconfig.ParseConstraintsJSONWithFields(request.GetConstraints())
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgumentf("invalid dynamic config constraints: %v", err)
+	}
+
+	value, err := adh.dynamicConfig.GetEffectiveValue(
+		dynamicconfig.MakeKey(request.GetKey()),
+		constraints,
+		constraintFields...,
+	)
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgument(err.Error())
+	}
+
+	encodedValue, err := json.Marshal(value)
+	if err != nil {
+		return nil, serviceerror.NewInternalf("unable to encode dynamic config value: %v", err)
+	}
+	response := &adminservice.GetDynamicConfigValueResponse{Value: encodedValue}
+	if request.GetIncludeConstrainedValues() {
+		response.ConstrainedValues, err = json.Marshal(
+			adh.dynamicConfig.GetConfiguredValues(dynamicconfig.MakeKey(request.GetKey())),
+		)
+		if err != nil {
+			return nil, serviceerror.NewInternalf("unable to encode dynamic config constrained values: %v", err)
+		}
+	}
+	return response, nil
+}
+
 func (adh *AdminHandler) DumpDynamicConfigValues(
 	_ context.Context,
 	request *adminservice.DumpDynamicConfigValuesRequest,

@@ -281,6 +281,21 @@ func (c *retryableClient) GetDLQTasks(
 	return resp, err
 }
 
+func (c *retryableClient) GetDynamicConfigValue(
+	ctx context.Context,
+	request *adminservice.GetDynamicConfigValueRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetDynamicConfigValueResponse, error) {
+	var resp *adminservice.GetDynamicConfigValueResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.GetDynamicConfigValue(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) GetNamespace(
 	ctx context.Context,
 	request *adminservice.GetNamespaceRequest,

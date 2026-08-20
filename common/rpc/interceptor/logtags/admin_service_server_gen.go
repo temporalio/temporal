@@ -93,6 +93,10 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 		return nil
 	case *adminservice.GetDLQTasksResponse:
 		return nil
+	case *adminservice.GetDynamicConfigValueRequest:
+		return nil
+	case *adminservice.GetDynamicConfigValueResponse:
+		return nil
 	case *adminservice.GetNamespaceRequest:
 		return nil
 	case *adminservice.GetNamespaceResponse:

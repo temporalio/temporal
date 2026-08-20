@@ -18,6 +18,8 @@ type dynamicConfigAdminClient struct {
 	adminservice.AdminServiceClient
 	dumpCalled  bool
 	dumpOptions []grpc.CallOption
+	request     *adminservice.GetDynamicConfigValueRequest
+	getResponse *adminservice.GetDynamicConfigValueResponse
 }
 
 func (c *dynamicConfigAdminClient) DumpDynamicConfigValues(
@@ -32,6 +34,18 @@ func (c *dynamicConfigAdminClient) DumpDynamicConfigValues(
 	}, nil
 }
 
+func (c *dynamicConfigAdminClient) GetDynamicConfigValue(
+	_ context.Context,
+	request *adminservice.GetDynamicConfigValueRequest,
+	_ ...grpc.CallOption,
+) (*adminservice.GetDynamicConfigValueResponse, error) {
+	c.request = request
+	if c.getResponse != nil {
+		return c.getResponse, nil
+	}
+	return &adminservice.GetDynamicConfigValueResponse{Value: []byte("true")}, nil
+}
+
 type dynamicConfigClientFactory struct {
 	ClientFactory
 	adminClient adminservice.AdminServiceClient
@@ -39,6 +53,101 @@ type dynamicConfigClientFactory struct {
 
 func (f dynamicConfigClientFactory) AdminClient(*cli.Context) adminservice.AdminServiceClient {
 	return f.adminClient
+}
+
+func TestGetDynamicConfigValue(t *testing.T) {
+	adminClient := &dynamicConfigAdminClient{}
+	var output bytes.Buffer
+	app := NewCliApp(func(params *Params) {
+		params.ClientFactory = dynamicConfigClientFactory{adminClient: adminClient}
+		params.Writer = &output
+	})
+
+	err := app.Run([]string{
+		"tdbg",
+		"dc", "get",
+		"--key", "frontend.WorkflowTimeSkippingEnabled",
+		"--constraints", `{"namespace":"A"}`,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "frontend.WorkflowTimeSkippingEnabled", adminClient.request.GetKey())
+	require.JSONEq(t, `{"namespace":"A"}`, adminClient.request.GetConstraints())
+	require.False(t, adminClient.request.GetIncludeConstrainedValues())
+	require.Equal(t, "true\n", output.String())
+}
+
+func TestGetDynamicConfigValueInvalidConstraints(t *testing.T) {
+	adminClient := &dynamicConfigAdminClient{}
+	app := NewCliApp(func(params *Params) {
+		params.ClientFactory = dynamicConfigClientFactory{adminClient: adminClient}
+	})
+	app.ExitErrHandler = func(*cli.Context, error) {}
+
+	err := app.Run([]string{
+		"tdbg",
+		"dc", "get",
+		"--key", "frontend.WorkflowTimeSkippingEnabled",
+		"--constraints", `{"shardId":"one"}`,
+	})
+	require.ErrorContains(t, err, "invalid dynamic config constraints")
+	require.Nil(t, adminClient.request)
+}
+
+func TestGetDynamicConfigValueVerbose(t *testing.T) {
+	adminClient := &dynamicConfigAdminClient{}
+	adminClient.getResponse = &adminservice.GetDynamicConfigValueResponse{
+		Value: []byte("true"),
+		ConstrainedValues: []byte(`[
+			{"constraints":{"namespace":"A"},"value":true},
+			{"constraints":{"namespace":"B"},"value":false},
+			{"constraints":{},"value":false}
+		]`),
+	}
+	var output bytes.Buffer
+	app := NewCliApp(func(params *Params) {
+		params.ClientFactory = dynamicConfigClientFactory{adminClient: adminClient}
+		params.Writer = &output
+	})
+
+	err := app.Run([]string{
+		"tdbg",
+		"dc", "get",
+		"-k", "frontend.WorkflowTimeSkippingEnabled",
+		"-c", `{"namespace":"A"}`,
+		"-v",
+	})
+	require.NoError(t, err)
+	require.True(t, adminClient.request.GetIncludeConstrainedValues())
+	require.JSONEq(t, `{
+		"key": "frontend.WorkflowTimeSkippingEnabled",
+		"queryConstraints": {"namespace": "A"},
+		"effectiveValue": true,
+		"constrainedValues": [
+			{"constraints":{"namespace":"A"},"value":true},
+			{"constraints":{"namespace":"B"},"value":false},
+			{"constraints":{},"value":false}
+		]
+	}`, output.String())
+}
+
+func TestDynamicConfigHelpShowsAliasUsage(t *testing.T) {
+	for _, args := range [][]string{
+		{"tdbg", "dc", "--help"},
+		{"tdbg", "dc", "get", "--help"},
+		{"tdbg", "dc", "dump", "--help"},
+	} {
+		t.Run(strings.Join(args[1:], " "), func(t *testing.T) {
+			var output bytes.Buffer
+			app := NewCliApp(func(params *Params) {
+				params.Writer = &output
+			})
+
+			err := app.Run(args)
+			require.NoError(t, err)
+			require.Contains(t, output.String(), "tdbg dynamic-config")
+			require.Contains(t, output.String(), "tdbg dc")
+		})
+	}
 }
 
 func TestDumpDynamicConfigValues(t *testing.T) {

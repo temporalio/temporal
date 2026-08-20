@@ -17,6 +17,18 @@ const (
 	Precedence{{.Name}}
 {{- end}}
 )
+
+func (p Precedence) SupportedConstraints() []string {
+	switch p {
+{{- range $P := .Precedences}}
+	case Precedence{{$P.Name}}:
+		return []string{ {{- range $Index, $Field := $P.Fields}}{{if $Index}}, {{end}}{{printf "%q" $Field.JSONName}}{{end}}}
+{{- end}}
+	default:
+		return nil
+	}
+}
+
 {{$Precedences := .Precedences }}
 {{- range $T :=.Types}}
 {{- range $P := $Precedences}}
@@ -102,7 +114,7 @@ func (s {{$P.Name}}TypedSetting[T]) Get(c *Collection) TypedPropertyFn[T] {
 func (s {{$P.Name}}TypedSetting[T]) Get(c *Collection) TypedPropertyFnWith{{$P.Name}}Filter[T] {
 {{- end}}
 	return func({{$P.GoArgs}}) T {
-		prec := {{$P.Expr}}
+		prec := {{template "constraintPrecedence" $P}}
 		return matchAndConvert(
 			c,
 			s.key,
@@ -119,7 +131,7 @@ func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) Get(c *Collection) TypedPr
 func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) Get(c *Collection) TypedPropertyFnWith{{$P.Name}}Filter[T] {
 {{- end}}
 	return func({{$P.GoArgs}}) T {
-		prec := {{$P.Expr}}
+		prec := {{template "constraintPrecedence" $P}}
 		return matchAndConvertWithConstrainedDefault(
 			c,
 			s.key,
@@ -143,7 +155,7 @@ func (s {{$P.Name}}TypedSetting[T]) Subscribe(c *Collection) TypedSubscribable[T
 func (s {{$P.Name}}TypedSetting[T]) Subscribe(c *Collection) TypedSubscribableWith{{$P.Name}}Filter[T] {
 	return func({{$P.GoArgs}}, callback func(T)) (T, func()) {
 {{- end}}
-		prec := {{$P.Expr}}
+		prec := {{template "constraintPrecedence" $P}}
 		return subscribe(c, s.key, s.def, s.convert, prec, callback)
 	}
 }
@@ -161,14 +173,14 @@ func (s {{$P.Name}}TypedSetting[T]) dispatchUpdate(c *Collection, sub any, cvs [
 {{if eq $P.Name "Global" -}}
 func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) Subscribe(c *Collection) TypedSubscribable[T] {
 	return func(callback func(T)) (T, func()) {
-		prec := {{$P.Expr}}
+		prec := {{template "constraintPrecedence" $P}}
 		return subscribeWithConstrainedDefault(c, s.key, s.cdef, s.convert, prec, callback)
 	}
 }
 {{- else -}}
 func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) Subscribe(c *Collection) TypedSubscribableWith{{$P.Name}}Filter[T] {
 	return func({{$P.GoArgs}}, callback func(T)) (T, func()) {
-		prec := {{$P.Expr}}
+		prec := {{template "constraintPrecedence" $P}}
 		return subscribeWithConstrainedDefault(c, s.key, s.cdef, s.convert, prec, callback)
 	}
 }
@@ -223,3 +235,15 @@ func Get{{$T.Name}}PropertyFnFilteredBy{{$P.Name}}(value {{$T.GoType}}) {{$T.Nam
 {{end }}{{/* if $T.IsGeneric */}}
 {{- end}}{{/* range $T :=.Types */}}
 {{- end}}{{/* range $P := $Precedences */}}
+
+{{- define "constraintPrecedence" -}}
+{{- if gt (len .Precedence) 2 -}}
+[]Constraints{
+{{- range $Fields := .Precedence}}
+			{ {{- range $Index, $Field := $Fields}}{{if $Index}}, {{end}}{{$Field.GoName}}: {{$Field.Value}}{{end}}},
+{{- end}}
+		}
+{{- else -}}
+[]Constraints{ {{- range $PrecedenceIndex, $Fields := .Precedence}}{{if $PrecedenceIndex}}, {{end}}{ {{- range $FieldIndex, $Field := $Fields}}{{if $FieldIndex}}, {{end}}{{$Field.GoName}}: {{$Field.Value}}{{end}}}{{end}}}
+{{- end}}
+{{- end}}

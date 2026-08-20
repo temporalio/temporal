@@ -22,6 +22,30 @@ const (
 	PrecedenceChasmTaskType
 )
 
+func (p Precedence) SupportedConstraints() []string {
+	switch p {
+	case PrecedenceGlobal:
+		return []string{}
+	case PrecedenceNamespace:
+		return []string{"namespace"}
+	case PrecedenceNamespaceID:
+		return []string{"namespaceId"}
+	case PrecedenceTaskQueue:
+		return []string{"namespace", "taskQueueName", "taskQueueType"}
+	case PrecedenceShardID:
+		return []string{"shardId"}
+	case PrecedenceTaskType:
+		return []string{"taskType"}
+	case PrecedenceDestination:
+		return []string{"namespace", "destination"}
+	case PrecedenceChasmTaskType:
+		return []string{"chasmTaskType"}
+	default:
+		return nil
+	}
+}
+
+
 type GlobalBoolSetting = GlobalTypedSetting[bool]
 type GlobalBoolConstrainedDefaultSetting = GlobalTypedConstrainedDefaultSetting[bool]
 

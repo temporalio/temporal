@@ -227,6 +227,11 @@ service AdminService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
   }
 
+  // GetDynamicConfigValue returns the effective dynamic config value for a key and constraints.
+  rpc GetDynamicConfigValue(GetDynamicConfigValueRequest) returns (GetDynamicConfigValueResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
+
   // DumpDynamicConfigValues returns all constrained values held by the dynamic config client.
   rpc DumpDynamicConfigValues(DumpDynamicConfigValuesRequest) returns (DumpDynamicConfigValuesResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
