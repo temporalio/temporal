@@ -66,7 +66,6 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tasktoken"
-	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/wideevents"
@@ -4489,7 +4488,7 @@ func TestDedupLinksFromCallbacks(t *testing.T) {
 		callbacks := getCallbacks()
 		dedupedLinks := dedupLinksFromCallbacks(links, callbacks)
 		require.Len(t, dedupedLinks, 1)
-		protoassert.ProtoEqual(t, dedupedLinks[0], links[2])
+		protorequire.ProtoEqual(t, dedupedLinks[0], links[2])
 	})
 
 	// Remove links[1] from callbacks[0].Links. links[1] should then not
@@ -4500,8 +4499,8 @@ func TestDedupLinksFromCallbacks(t *testing.T) {
 
 		dedupedLinks := dedupLinksFromCallbacks(links, callbacks)
 		require.Len(t, dedupedLinks, 2)
-		protoassert.ProtoEqual(t, dedupedLinks[0], links[1])
-		protoassert.ProtoEqual(t, dedupedLinks[1], links[2]) // Same as before.
+		protorequire.ProtoEqual(t, dedupedLinks[0], links[1])
+		protorequire.ProtoEqual(t, dedupedLinks[1], links[2]) // Same as before.
 	})
 
 	// Change the type of the second callback to be a Nexus-variant.
@@ -4512,7 +4511,7 @@ func TestDedupLinksFromCallbacks(t *testing.T) {
 		callbacks[1].Variant = nexusCallbackVariant()
 
 		dedupedLinks := dedupLinksFromCallbacks(links, callbacks)
-		require.Len(t, dedupedLinks, 0)
+		require.Empty(t, dedupedLinks)
 	})
 }
 
