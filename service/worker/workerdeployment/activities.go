@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/worker_versioning"
@@ -179,6 +180,10 @@ func (a *Activities) DeleteWorkerDeploymentVersion(ctx context.Context, args *de
 		// this update or when its history no longer exists. Allow the Deployment workflow
 		// to remove its stale reference.
 		if errors.As(err, &notFoundErr) {
+			metrics.WorkerDeploymentVersionNotFoundDuringDelete.With(a.MetricsHandler).Record(
+				1,
+				metrics.NamespaceTag(a.namespace.Name().String()),
+			)
 			activity.GetLogger(ctx).Warn(
 				"version workflow not found during deletion; allowing deployment workflow to remove stale reference",
 				"namespace", a.namespace.Name().String(),

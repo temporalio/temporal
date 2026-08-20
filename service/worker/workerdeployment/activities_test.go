@@ -9,6 +9,8 @@ import (
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.uber.org/mock/gomock"
@@ -44,8 +46,14 @@ func TestDeleteWorkerDeploymentVersion(t *testing.T) {
 				Return(nil, tt.historyErr)
 
 			tv := testvars.New(t)
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
 			activity := &Activities{
-				activityDeps: activityDeps{HistoryClient: historyClient},
+				activityDeps: activityDeps{
+					HistoryClient:  historyClient,
+					MetricsHandler: metricsHandler,
+				},
 				namespace: namespace.NewLocalNamespaceForTest(
 					&persistencespb.NamespaceInfo{Id: tv.NamespaceID().String(), Name: tv.NamespaceName().String()},
 					nil,
@@ -62,8 +70,14 @@ func TestDeleteWorkerDeploymentVersion(t *testing.T) {
 			})
 			if tt.wantErr {
 				require.Error(t, err)
+				require.Empty(t, capture.Snapshot()[metrics.WorkerDeploymentVersionNotFoundDuringDelete.Name()])
 			} else {
 				require.NoError(t, err)
+				recordings := capture.Snapshot()[metrics.WorkerDeploymentVersionNotFoundDuringDelete.Name()]
+				require.Len(t, recordings, 1)
+				require.Equal(t, int64(1), recordings[0].Value)
+				namespaceTag := metrics.NamespaceTag(tv.NamespaceName().String())
+				require.Equal(t, namespaceTag.Value, recordings[0].Tags[namespaceTag.Key])
 			}
 		})
 	}
