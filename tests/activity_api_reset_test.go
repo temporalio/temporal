@@ -348,7 +348,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_TimesOutOnUnpause
 
 	// Allow the original timeout task to be processed while the activity is paused.
 	originalDeadline := activityStartedAt.Add(s.startToCloseTimeout)
-	require.Eventually(s.T(), func() bool {
+	await.RequireTrue(s.T(), func() bool {
 		return time.Now().After(originalDeadline.Add(2 * time.Second))
 	}, 5*time.Second, 100*time.Millisecond)
 
