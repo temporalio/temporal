@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
@@ -694,6 +695,7 @@ func (s *DeploymentVersionSuite) TestWorkerDeploymentActivityOutcomeMetricTags()
 	} {
 		s.Run(tc.name, func(s *DeploymentVersionSuite) {
 			env, tv, capture := s.newWorkerDeploymentMetricTestEnv()
+			releaseTimeoutActivity := make(chan struct{})
 			w := worker.New(env.SdkClient(), tv.TaskQueue().GetName(), worker.Options{
 				DeploymentOptions: worker.DeploymentOptions{
 					Version:       tv.SDKDeploymentVersion(),
@@ -711,18 +713,19 @@ func (s *DeploymentVersionSuite) TestWorkerDeploymentActivityOutcomeMetricTags()
 				case "fail":
 					return errors.New("intentional activity failure") //nolint:err113
 				case "cancel":
-					for ctx.Err() == nil {
+					heartbeatTicker := time.NewTicker(10 * time.Millisecond)
+					defer heartbeatTicker.Stop()
+					for {
 						activity.RecordHeartbeat(ctx)
-						time.Sleep(10 * time.Millisecond)
+						select {
+						case <-ctx.Done():
+							return ctx.Err()
+						case <-heartbeatTicker.C:
+						}
 					}
-					return ctx.Err()
 				case "timeout":
-					select {
-					case <-ctx.Done():
-						return ctx.Err()
-					case <-time.After(time.Second):
-						return nil
-					}
+					<-releaseTimeoutActivity
+					return nil
 				default:
 					return fmt.Errorf("unknown activity outcome %q", tc.outcome)
 				}
@@ -752,6 +755,7 @@ func (s *DeploymentVersionSuite) TestWorkerDeploymentActivityOutcomeMetricTags()
 			})
 			s.NoError(w.Start())
 			defer w.Stop()
+			defer close(releaseTimeoutActivity)
 
 			run, err := env.SdkClient().ExecuteWorkflow(
 				s.Context(),
@@ -772,7 +776,7 @@ func (s *DeploymentVersionSuite) TestWorkerDeploymentActivityOutcomeMetricTags()
 				s.NoError(run.Get(s.Context(), nil))
 			}
 
-			s.requireWorkerDeploymentMetricTags(capture, tv, tc.expectedMetrics...)
+			requireWorkerDeploymentMetricTags(s, capture, tv, tc.expectedMetrics...)
 		})
 	}
 }
@@ -814,7 +818,7 @@ func (s *DeploymentVersionSuite) TestWorkerDeploymentFailedWorkflowTaskMetricTag
 	})
 	s.NoError(err)
 
-	s.requireWorkerDeploymentMetricTags(capture, tv, metrics.FailedWorkflowTasksCounter.Name())
+	requireWorkerDeploymentMetricTags(s, capture, tv, metrics.FailedWorkflowTasksCounter.Name())
 }
 
 func (s *DeploymentVersionSuite) newWorkerDeploymentMetricTestEnv() (
@@ -833,21 +837,20 @@ func (s *DeploymentVersionSuite) newWorkerDeploymentMetricTestEnv() (
 	return env, tv, capture
 }
 
-func (s *DeploymentVersionSuite) requireWorkerDeploymentMetricTags(
+func requireWorkerDeploymentMetricTags(
+	s parallelsuite.Scope,
 	capture *testcore.NamespaceMetricCapture,
 	tv *testvars.TestVars,
 	metricNames ...string,
 ) {
 	for _, metricName := range metricNames {
-		s.EventuallyWithT(func(t *assert.CollectT) {
-			a := assert.New(t)
+		await.Require(s.Context(), s.TB(), func(t *await.T) {
+			r := t.Require()
 			recordings := capture.CollectMetric(metricName, func(recording *metricstest.CapturedRecording) bool {
 				taskQueue, hasTaskQueue := recording.Tags["taskqueue"]
 				return !hasTaskQueue || taskQueue == tv.TaskQueue().GetName()
 			})
-			if !a.NotEmpty(recordings, "expected %s in namespace %s", metricName, tv.NamespaceName()) {
-				return
-			}
+			r.NotEmpty(recordings, "expected %s in namespace %s", metricName, tv.NamespaceName())
 			hasExpectedTags := false
 			for _, recording := range recordings {
 				if recording.Tags["worker_deployment_name"] == tv.DeploymentSeries() &&
@@ -856,7 +859,7 @@ func (s *DeploymentVersionSuite) requireWorkerDeploymentMetricTags(
 					break
 				}
 			}
-			a.True(hasExpectedTags, "expected %s with deployment %q and build ID %q", metricName, tv.DeploymentSeries(), tv.BuildID())
+			r.True(hasExpectedTags, "expected %s with deployment %q and build ID %q", metricName, tv.DeploymentSeries(), tv.BuildID())
 		}, 5*time.Second, 50*time.Millisecond)
 	}
 }
