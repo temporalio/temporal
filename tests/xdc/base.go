@@ -187,12 +187,13 @@ func (s *xdcBaseSuite) waitForClusterConnected(
 	sourceCluster *testcore.TestCluster,
 	targetClusterName string,
 ) {
+	expectedNumHistoryShards := cmp.Or(s.numHistoryShards, int32(1))
 	s.logger.Info("wait for clusters to be synced", tag.SourceCluster(sourceCluster.ClusterName()), tag.TargetCluster(targetClusterName))
 	await.Require(context.Background(), s.T(), func(c *await.T) {
 		s.logger.Info("check if clusters are synced", tag.SourceCluster(sourceCluster.ClusterName()), tag.TargetCluster(targetClusterName))
 		resp, err := sourceCluster.HistoryClient().GetReplicationStatus(c.Context(), &historyservice.GetReplicationStatusRequest{})
 		require.NoError(c, err)
-		require.Lenf(c, resp.Shards, int(s.numHistoryShards), "unexpected history shard count")
+		require.Lenf(c, resp.Shards, int(expectedNumHistoryShards), "unexpected history shard count")
 
 		for _, shard := range resp.Shards {
 			require.NotNil(c, shard)
