@@ -26,16 +26,12 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership/static"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/persistence"
-	persistenceclient "go.temporal.io/server/common/persistence/client"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
-	"go.temporal.io/server/common/persistence/serialization"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/pprof"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/telemetry"
@@ -258,12 +254,7 @@ func newClusterWithPersistenceTestBaseFactory(
 	clusterMetadataConfig, pConfig, err = temporal.ApplyClusterMetadataConfigProvider(
 		logger,
 		cfg,
-		resolver.NewNoopResolver(),
-		persistenceclient.FactoryProvider,
-		testBase.AbstractDataStoreFactory,
-		testBase.VisibilityStoreFactory,
-		metrics.NoopMetricsHandler,
-		serialization.NewSerializer(),
+		testBase.Factory,
 	)
 	if err != nil {
 		return nil, err
