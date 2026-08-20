@@ -7107,16 +7107,19 @@ func (ms *MutableStateImpl) updatePauseInfoSearchAttribute() error {
 
 func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute() error {
 	var reportedProblems []string
+	problemCause := "unknown"
 	switch wftFailure := ms.executionInfo.LastWorkflowTaskFailure.(type) {
 	case *persistencespb.WorkflowExecutionInfo_LastWorkflowTaskFailureCause:
+		problemCause = fmt.Sprintf("WorkflowTaskFailedCause%s", wftFailure.LastWorkflowTaskFailureCause.String())
 		reportedProblems = []string{
 			"category=WorkflowTaskFailed",
-			fmt.Sprintf("cause=WorkflowTaskFailedCause%s", wftFailure.LastWorkflowTaskFailureCause.String()),
+			fmt.Sprintf("cause=%s", problemCause),
 		}
 	case *persistencespb.WorkflowExecutionInfo_LastWorkflowTaskTimedOutType:
+		problemCause = fmt.Sprintf("WorkflowTaskTimedOutCause%s", wftFailure.LastWorkflowTaskTimedOutType.String())
 		reportedProblems = []string{
 			"category=WorkflowTaskTimedOut",
-			fmt.Sprintf("cause=WorkflowTaskTimedOutCause%s", wftFailure.LastWorkflowTaskTimedOutType.String()),
+			fmt.Sprintf("cause=%s", problemCause),
 		}
 	}
 
@@ -7148,6 +7151,12 @@ func (ms *MutableStateImpl) UpdateReportedProblemsSearchAttribute() error {
 	// Log the search attribute change
 	ms.logReportedProblemsChange(existingProblems, reportedProblems)
 
+	metrics.WorkflowReportedProblemsSet.With(ms.metricsHandler.WithTags(
+		metrics.NamespaceTag(ms.GetNamespaceEntry().Name().String()),
+		metrics.StringTag("cause", problemCause),
+		metrics.WorkflowTypeTag(ms.GetExecutionInfo().WorkflowTypeName),
+	)).Record(1)
+
 	ms.updateSearchAttributes(map[string]*commonpb.Payload{sadefs.TemporalReportedProblems: reportedProblemsPayload})
 	return ms.taskGenerator.GenerateUpsertVisibilityTask()
 }
@@ -7164,6 +7173,11 @@ func (ms *MutableStateImpl) RemoveReportedProblemsSearchAttribute() error {
 
 	// Log the removal of the search attribute
 	ms.logReportedProblemsChange(ms.decodeReportedProblems(temporalReportedProblems), nil)
+
+	metrics.WorkflowReportedProblemsCleared.With(ms.metricsHandler.WithTags(
+		metrics.NamespaceTag(ms.GetNamespaceEntry().Name().String()),
+		metrics.WorkflowTypeTag(ms.GetExecutionInfo().WorkflowTypeName),
+	)).Record(1)
 
 	ms.executionInfo.LastWorkflowTaskFailure = nil
 
