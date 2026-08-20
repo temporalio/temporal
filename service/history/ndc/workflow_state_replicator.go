@@ -224,6 +224,7 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 		nil,
 		false,
 		skipCloseTransferTask,
+		nil,
 	)
 }
 
@@ -255,6 +256,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	// live ms after the lock is released would race with the next writer.
 	var ms historyi.MutableState
 	var appliedMS *persistencespb.WorkflowMutableState
+	captureMutableState := func(createdMS historyi.MutableState) { ms = createdMS }
 	origin := wideevents.ReplicationTaskOriginFromContext(ctx)
 	defer func() {
 		if emitLifecycle && retError == nil {
@@ -302,7 +304,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	if versionedTransitionArtifact.IsFirstSync {
 		// this is the first replication task for this workflow
 		// TODO: Handle reset case to reduce the amount of history events write
-		continueProcess, err := r.handleFirstReplicationTask(ctx, archetypeID, wfCtx, versionedTransitionArtifact, sourceClusterName)
+		continueProcess, err := r.handleFirstReplicationTask(ctx, archetypeID, wfCtx, versionedTransitionArtifact, sourceClusterName, captureMutableState)
 		if err != nil || !continueProcess {
 			return err
 		}
@@ -311,7 +313,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	ms, err = wfCtx.LoadMutableState(ctx, r.shardContext)
 	switch err.(type) {
 	case *serviceerror.NotFound:
-		return r.applySnapshot(ctx, namespaceID, wid, rid, archetypeID, wfCtx, releaseFn, nil, versionedTransitionArtifact, sourceClusterName)
+		return r.applySnapshot(ctx, namespaceID, wid, rid, archetypeID, wfCtx, releaseFn, nil, versionedTransitionArtifact, sourceClusterName, captureMutableState)
 	case nil:
 		localTransitionHistory := ms.GetExecutionInfo().TransitionHistory
 		if len(localTransitionHistory) == 0 {
@@ -358,7 +360,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 			}
 			if localLastWriteVersion < sourceLastWriteVersion ||
 				localLastHistoryItem.GetEventId() <= sourceLastHistoryItem.EventId {
-				return r.applySnapshot(ctx, namespaceID, wid, rid, archetypeID, wfCtx, releaseFn, ms, versionedTransitionArtifact, sourceClusterName)
+				return r.applySnapshot(ctx, namespaceID, wid, rid, archetypeID, wfCtx, releaseFn, ms, versionedTransitionArtifact, sourceClusterName, nil)
 			}
 			return consts.ErrDuplicate
 		}
@@ -371,7 +373,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 		case errors.Is(err, consts.ErrStaleState):
 			// local is stale, try to apply mutable state update
 			if snapshot != nil {
-				return r.applySnapshot(ctx, namespaceID, wid, rid, archetypeID, wfCtx, releaseFn, ms, versionedTransitionArtifact, sourceClusterName)
+				return r.applySnapshot(ctx, namespaceID, wid, rid, archetypeID, wfCtx, releaseFn, ms, versionedTransitionArtifact, sourceClusterName, nil)
 			}
 			return r.applyMutation(ctx, namespaceID, wid, rid, archetypeID, wfCtx, ms, releaseFn, versionedTransitionArtifact, sourceClusterName)
 		case errors.Is(err, consts.ErrStaleReference):
@@ -584,6 +586,7 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 	wfCtx historyi.WorkflowContext,
 	versionedTransition *replicationspb.VersionedTransitionArtifact,
 	sourceClusterName string,
+	captureMutableState func(historyi.MutableState),
 ) (continueProcess bool, retErr error) {
 	mutation, snapshot, executionState, executionInfo, err := parseVersionedTransitionAttributes(versionedTransition)
 	if err != nil {
@@ -602,6 +605,7 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 			snapshot,
 			versionedTransition,
 			sourceClusterName,
+			captureMutableState,
 		)
 	}
 
@@ -626,6 +630,7 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTaskWithoutNewRun(
 	snapshot *replicationspb.SyncWorkflowStateSnapshotAttributes,
 	versionedTransition *replicationspb.VersionedTransitionArtifact,
 	sourceClusterName string,
+	captureMutableState func(historyi.MutableState),
 ) (continueProcess bool, retErr error) {
 	nsEntry, err := r.namespaceRegistry.GetNamespaceByID(namespace.ID(executionInfo.NamespaceId))
 	if err != nil {
@@ -694,6 +699,9 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTaskWithoutNewRun(
 	)
 	if errors.Is(err, consts.ErrDuplicate) {
 		return true, nil
+	}
+	if err == nil && captureMutableState != nil {
+		captureMutableState(localMutableState)
 	}
 
 	return false, err
@@ -994,6 +1002,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 	localMutableState historyi.MutableState,
 	versionedTransition *replicationspb.VersionedTransitionArtifact,
 	sourceClusterName string,
+	captureMutableState func(historyi.MutableState),
 ) error {
 	attribute := versionedTransition.GetSyncWorkflowStateSnapshotAttributes()
 	if attribute == nil || attribute.State == nil {
@@ -1026,6 +1035,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 			versionedTransition.NewRunInfo,
 			true,
 			versionedTransition.IsCloseTransferTaskAcked && versionedTransition.IsForceReplication,
+			captureMutableState,
 		)
 	}
 	return r.applySnapshotWhenWorkflowExist(
@@ -1678,6 +1688,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
 	newRunInfo *replicationspb.NewRunInfo,
 	isStateBased bool,
 	skipGenerateCloseTransferTask bool,
+	captureMutableState func(historyi.MutableState),
 ) error {
 	var lastWriteVersion int64
 	executionInfo := sourceMutableState.ExecutionInfo
@@ -1744,6 +1755,9 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
 	err = taskRefresher.Refresh(ctx, mutableState, skipGenerateCloseTransferTask)
 	if err != nil {
 		return err
+	}
+	if captureMutableState != nil {
+		captureMutableState(mutableState)
 	}
 	return r.transactionMgr.CreateWorkflow(
 		ctx,

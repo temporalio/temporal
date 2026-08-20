@@ -103,6 +103,7 @@ func TestReplicationLifecycleEncodeApplied(t *testing.T) {
 		LastEventID:        9,
 		LastEventVersion:   5,
 		Outcome:            "applied",
+		NewRunID:           "continued-run",
 		NewExecutionRunID:  "new-run",
 		SignalCount:        6,
 		UpdateCount:        2,
@@ -110,6 +111,7 @@ func TestReplicationLifecycleEncodeApplied(t *testing.T) {
 	f := attrMap(p.Attributes())
 
 	require.Equal(t, "applied", f["phase"].AsString())
+	require.Equal(t, "continued-run", f["new_run_id"].AsString())
 	require.Equal(t, "new-run", f["new_execution_run_id"].AsString())
 	require.Equal(t, int64(6), f["signal_count"].AsInt64())
 	require.Equal(t, int64(2), f["update_count"].AsInt64())
@@ -243,6 +245,7 @@ func TestReplicationLifecycleFieldSetLocked(t *testing.T) {
 			"phase":                 "applied",
 			"outcome":               "applied",
 			"error":                 "boom",
+			"new_run_id":            "new-run",
 			"state":                 "Running",
 			"status":                "Unspecified",
 			"applied_next_event_id": int64(10),
