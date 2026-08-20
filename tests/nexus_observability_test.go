@@ -2,7 +2,6 @@ package tests
 
 import (
 	"context"
-	"regexp"
 	"testing"
 	"time"
 
@@ -12,7 +11,6 @@ import (
 	"go.temporal.io/sdk/workflow"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/testing/parallelsuite"
@@ -40,13 +38,12 @@ func TestNexusObservabilitySuiteCHASM(t *testing.T) {
 	parallelsuite.Run(t, &NexusObservabilitySuite{}, true)
 }
 
-func (s *NexusObservabilitySuite) newTestEnv(chasmEnabled bool, logger log.Logger) *NexusTestEnv {
+func (s *NexusObservabilitySuite) newTestEnv(chasmEnabled bool) *NexusTestEnv {
 	rolloutPercent := 0
 	if chasmEnabled {
 		rolloutPercent = 100
 	}
 	return newNexusTestEnv(s.T(), true,
-		testcore.WithLogger(logger),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, chasmEnabled),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, chasmEnabled),
 		testcore.WithDynamicConfig(chasmnexus.EnableChasmWorkflowOperations, chasmEnabled),
@@ -56,9 +53,7 @@ func (s *NexusObservabilitySuite) newTestEnv(chasmEnabled bool, logger log.Logge
 }
 
 func (s *NexusObservabilitySuite) TestStartFailureEmitsCorrelatableSignals(chasmEnabled bool) {
-	testLogger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
-	testlogger.DontFailOnError(testLogger)
-	env := s.newTestEnv(chasmEnabled, testLogger)
+	env := s.newTestEnv(chasmEnabled)
 
 	ctx := s.Context()
 	tv := env.Tv()
@@ -66,13 +61,6 @@ func (s *NexusObservabilitySuite) TestStartFailureEmitsCorrelatableSignals(chasm
 	serviceName := tv.Service()
 	operationName := tv.Operation()
 	handlerRequests := make(chan nexusHandlerRequest, 1)
-	handlerRelease := make(chan struct{}, 1)
-	s.T().Cleanup(func() {
-		select {
-		case handlerRelease <- struct{}{}:
-		default:
-		}
-	})
 	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), nexustest.Handler{
 		OnStartOperation: func(handlerCtx context.Context, service, operation string, _ *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
 			select {
@@ -80,12 +68,7 @@ func (s *NexusObservabilitySuite) TestStartFailureEmitsCorrelatableSignals(chasm
 			case <-handlerCtx.Done():
 				return nil, handlerCtx.Err()
 			}
-			select {
-			case <-handlerRelease:
-				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "intentional failure")
-			case <-handlerCtx.Done():
-				return nil, handlerCtx.Err()
-			}
+			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "intentional failure")
 		},
 	})
 
@@ -101,6 +84,7 @@ func (s *NexusObservabilitySuite) TestStartFailureEmitsCorrelatableSignals(chasm
 	s.NoError(callerWorker.Start())
 	s.T().Cleanup(callerWorker.Stop)
 
+	logCapture := env.StartLogCapture()
 	metricCapture := env.StartNamespaceMetricCapture()
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		ID:        tv.WorkflowID(),
@@ -118,19 +102,26 @@ func (s *NexusObservabilitySuite) TestStartFailureEmitsCorrelatableSignals(chasm
 	s.Require().Equal(operationName, handlerRequest.operation)
 	s.Require().NotEmpty(handlerRequest.requestID)
 
-	expectation := testLogger.Expect(testlogger.Error, "^"+regexp.QuoteMeta(historyStartFailureLog)+"$",
-		tag.WorkflowNamespace("^"+regexp.QuoteMeta(env.Namespace().String())+"$"),
-		tag.RequestID("^"+regexp.QuoteMeta(handlerRequest.requestID)+"$"),
-	)
-	select {
-	case handlerRelease <- struct{}{}:
-	case <-ctx.Done():
-		s.FailNow("timed out releasing the Nexus handler")
-	}
-
+	var failureLog *testlogger.CapturedLog
 	s.Await(func(s *NexusObservabilitySuite) {
-		s.Require().True(expectation.Matched())
+		records := logCapture.Snapshot()
+		for i := range records {
+			requestID, ok := records[i].TagValue(tag.RequestID("").Key())
+			if records[i].Level == testlogger.Error &&
+				records[i].Message == historyStartFailureLog &&
+				ok && requestID == handlerRequest.requestID {
+				failureLog = &records[i]
+				return
+			}
+		}
+		s.Require().NotNil(failureLog, "Nexus StartOperation failure log not found")
 	}, 10*time.Second, 100*time.Millisecond)
+	namespace, ok := failureLog.TagValue(tag.WorkflowNamespace("").Key())
+	s.Require().True(ok)
+	s.Require().Equal(env.Namespace().String(), namespace)
+	requestID, ok := failureLog.TagValue(tag.RequestID("").Key())
+	s.Require().True(ok)
+	s.Require().Equal(handlerRequest.requestID, requestID)
 	s.Require().NotEmpty(metricCapture.Metric(chasmnexus.OutboundRequestCounter.Name()))
 	s.Require().NotEmpty(metricCapture.Metric(chasmnexus.OutboundRequestLatency.Name()))
 
