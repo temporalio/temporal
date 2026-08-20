@@ -308,6 +308,19 @@ func (c *operationContext) enrichNexusOperationMetrics(service, operation string
 	}
 }
 
+// enrichNexusOperationLogs adds Nexus operation context to the handler-side logger.
+func (c *operationContext) enrichNexusOperationLogs(service, operation, requestID string) {
+	tags := []tag.Tag{
+		tag.NexusService(service),
+		tag.NexusOperation(operation),
+		tag.Endpoint(c.endpointName),
+	}
+	if requestID != "" {
+		tags = append(tags, tag.RequestID(requestID))
+	}
+	c.logger = log.With(c.logger, tags...)
+}
+
 // Key to extract a nexusContext object from a context.Context.
 type nexusContextKey struct{}
 
@@ -397,6 +410,7 @@ func (h *nexusHandler) StartOperation(
 	}
 	ctx = oc.augmentContext(ctx, options.Header)
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
+	oc.enrichNexusOperationLogs(service, operation, options.RequestID)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	var links []*nexuspb.Link
@@ -637,6 +651,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	}
 	ctx = oc.augmentContext(ctx, options.Header)
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
+	oc.enrichNexusOperationLogs(service, operation, "")
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	request := oc.matchingRequest(&nexuspb.Request{
