@@ -566,8 +566,7 @@ func (e *ChasmEngine) updateComponent(
 	// reject it as non-retryable (FailedPrecondition) without running updateFn or persisting.
 	if requestID != "" && executionLease.GetMutableState().HasRequestID(requestID) {
 		executionLease.GetReleaseFn()(nil)
-		return nil, serviceerror.NewFailedPreconditionf(
-			"request ID %s has already been used for this execution", requestID)
+		return nil, chasm.ErrRequestIDAlreadyUsed
 	}
 
 	defer func() {
