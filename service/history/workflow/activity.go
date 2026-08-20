@@ -350,8 +350,8 @@ func ResetActivity(
 			return nil
 		}
 
+		// unpauseActivityInfo already incremented the activity stamp.
 		if !wasPaused {
-			// Unpausing above already increments the activity stamp.
 			activityInfo.Stamp++
 		}
 
@@ -382,6 +382,9 @@ func unpauseActivityInfo(ai *persistencespb.ActivityInfo) {
 	ai.PauseInfo = nil
 	ai.Stamp++
 
+	// Timer tasks can be dropped while paused without clearing this mask. Clear all
+	// bits so transaction close recreates the earliest timer. This can create duplicate
+	// timer tasks, but after one processes the timeout, the others become no-ops.
 	ai.TimerTaskStatus = TimerTaskStatusNone
 }
 
