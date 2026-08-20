@@ -238,9 +238,8 @@ func TelemetryContextFromContext(ctx context.Context) (TelemetryContext, error) 
 }
 
 // InterceptNexus records request metrics and recovers panics for a Nexus request.
-// It runs outermost in the chain, so metrics are recorded in the source cluster even
-// when the forwarder redirects. Forwarded requests are distinguished by the
-// "request_forwarded" outcome tag rather than by being omitted.
+// It runs after auth and redirection, mirroring the gRPC chain, so requests rejected or
+// forwarded by those interceptors are not counted here
 // It also publishes the metrics context that downstream interceptors read via
 // GetMetricsHandlerFromContext.
 func (ti *TelemetryInterceptor) InterceptNexus(
