@@ -40,7 +40,7 @@ import (
 )
 
 const nexusCompletionAPIName = configs.CompleteNexusOperation
-const nexusCompletionMethodNameForMetrics = "CompleteNexusOperation"
+const nexusCompletionMethodName = "CompleteNexusOperation"
 
 type nexusCompletionHandler struct {
 	ClusterMetadata                      cluster.Metadata
@@ -157,7 +157,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 	}
 	logger := log.With(
 		h.Logger,
-		tag.Operation(nexusCompletionMethodNameForMetrics),
+		tag.Operation(nexusCompletionMethodName),
 		tag.WorkflowNamespace(ns.Name().String()),
 		tag.WorkflowNamespaceID(targetNamespaceID),
 		tag.WorkflowID(targetBusinessID),
@@ -171,7 +171,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		logger:                 logger,
 		metricsHandler:         h.MetricsHandler.WithTags(metrics.NamespaceTag(ns.Name().String())),
 		metricsHandlerForInterceptors: h.MetricsHandler.WithTags(
-			metrics.OperationTag(nexusCompletionMethodNameForMetrics),
+			metrics.OperationTag(nexusCompletionMethodName),
 			metrics.NamespaceTag(ns.Name().String()),
 		),
 		requestStartTime: startTime,
@@ -517,7 +517,7 @@ func (c *requestContext) augmentContext(ctx context.Context, header http.Header)
 	ctx = interceptor.PopulateCallerInfo(
 		ctx,
 		func() string { return c.namespace.Name().String() },
-		func() string { return nexusCompletionMethodNameForMetrics },
+		func() string { return nexusCompletionMethodName },
 	)
 	if userAgent := header.Get(headerUserAgent); userAgent != "" {
 		// Preserve original strict behavior: only process if exactly one delimiter present.
@@ -632,7 +632,7 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexusrpc
 	if c.namespace.ActiveClusterName(namespace.RoutingKey{ID: c.businessID}) != c.ClusterMetadata.GetCurrentClusterName() {
 		if c.shouldForwardRequest(ctx, request.HTTPRequest.Header, c.businessID) {
 			c.forwarded = true
-			handler, forwardStartTime := c.RedirectionInterceptor.BeforeCall(nexusCompletionMethodNameForMetrics)
+			handler, forwardStartTime := c.RedirectionInterceptor.BeforeCall(nexusCompletionMethodName)
 			c.cleanupFunctions = append(c.cleanupFunctions, func(retErr error) {
 				c.RedirectionInterceptor.AfterCall(handler, forwardStartTime, c.namespace.ActiveClusterName(namespace.RoutingKey{ID: c.businessID}), c.namespace.Name().String(), retErr)
 			})
@@ -649,7 +649,7 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexusrpc
 				request,
 				"",
 				c.metricsHandlerForInterceptors,
-				[]tag.Tag{tag.Operation(nexusCompletionMethodNameForMetrics), tag.WorkflowNamespace(c.namespace.Name().String())},
+				[]tag.Tag{tag.Operation(nexusCompletionMethodName), tag.WorkflowNamespace(c.namespace.Name().String())},
 				retErr,
 				c.namespace.Name(),
 			)
