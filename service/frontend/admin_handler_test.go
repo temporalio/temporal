@@ -204,6 +204,17 @@ func (s *adminHandlerSuite) SetupTest() {
 		chasmRegistry,
 		nsreplication.NewNoopDataMerger(),
 		nil, // schedulerClient - not needed for most admin handler tests
+		dynamicconfig.NewCollection(
+			dynamicconfig.StaticClient{
+				dynamicconfig.WorkflowTimeSkippingEnabled.Key(): []dynamicconfig.ConstrainedValue{
+					{
+						Constraints: dynamicconfig.Constraints{Namespace: s.namespace.String()},
+						Value:       true,
+					},
+				},
+			},
+			s.mockResource.GetLogger(),
+		),
 		tasks.NewDefaultTaskCategoryRegistry(),
 		s.mockResource.GetMatchingClient(),
 	}
@@ -227,6 +238,33 @@ func (s *adminHandlerSuite) SetupTest() {
 func (s *adminHandlerSuite) TearDownTest() {
 	s.controller.Finish()
 	s.handler.Stop()
+}
+
+func (s *adminHandlerSuite) TestGetDynamicConfigValue() {
+	response, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
+		Key:       dynamicconfig.WorkflowTimeSkippingEnabled.Key().String(),
+		Namespace: s.namespace.String(),
+	})
+	s.Require().NoError(err)
+	s.Equal([]byte("true"), response.GetValue())
+}
+
+func (s *adminHandlerSuite) TestGetDynamicConfigValueDefault() {
+	response, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
+		Key:       dynamicconfig.WorkflowTimeSkippingEnabled.Key().String(),
+		Namespace: "other-namespace",
+	})
+	s.Require().NoError(err)
+	s.Equal([]byte("false"), response.GetValue())
+}
+
+func (s *adminHandlerSuite) TestGetDynamicConfigValueUnknownKey() {
+	_, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
+		Key: "unknown-key",
+	})
+	s.Require().Error(err)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
 }
 
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Success() {

@@ -227,6 +227,11 @@ service AdminService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
   }
 
+  // GetDynamicConfigValue returns the effective dynamic config value for a key and filters.
+  rpc GetDynamicConfigValue(GetDynamicConfigValueRequest) returns (GetDynamicConfigValueResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
+
   // MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
   rpc MigrateSchedule(MigrateScheduleRequest) returns (MigrateScheduleResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;

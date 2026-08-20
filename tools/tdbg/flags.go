@@ -21,6 +21,10 @@ var (
 	FlagMaxEventID                 = "max-event-id"
 	FlagTaskQueue                  = "task-queue"
 	FlagTaskQueueType              = "task-queue-type"
+	FlagDynamicConfigKey           = "key"
+	FlagDestination                = "destination"
+	FlagChasmTaskType              = "chasm-task-type"
+	FlagTaskType                   = "task-type"
 	FlagContextTimeout             = "context-timeout"
 	FlagContextTimeoutAlias        = []string{"ct"}
 	FlagCluster                    = "cluster"

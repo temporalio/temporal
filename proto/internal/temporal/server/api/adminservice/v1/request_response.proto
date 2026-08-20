@@ -618,6 +618,23 @@ message GetTaskQueueUserDataResponse {
   int64 version = 2;
 }
 
+message GetDynamicConfigValueRequest {
+  string key = 1;
+  string namespace = 2;
+  string namespace_id = 3;
+  string task_queue = 4;
+  temporal.api.enums.v1.TaskQueueType task_queue_type = 5;
+  int32 shard_id = 6;
+  temporal.server.api.enums.v1.TaskType task_type = 7;
+  string destination = 8;
+  string chasm_task_type = 9;
+}
+
+message GetDynamicConfigValueResponse {
+  // JSON-encoded effective value.
+  bytes value = 1;
+}
+
 // StartAdminBatchOperationRequest starts an admin batch operation.
 // WARNING: Batch Operations are exposed to all users of the namespace. Admin Batch Operations should be exercised with caution.
 message StartAdminBatchOperationRequest {

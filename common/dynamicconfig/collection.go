@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/pingable"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/util"
@@ -124,6 +125,72 @@ func NewCollection(client Client, logger log.Logger) *Collection {
 	}
 }
 
+// GetEffectiveValue returns the effective value of a registered setting for the given filters.
+func (c *Collection) GetEffectiveValue(key Key, filters Constraints) (any, error) {
+	setting := queryRegistry(key)
+	if setting == nil {
+		return nil, fmt.Errorf("unregistered dynamic config key %q", key)
+	}
+
+	get := reflect.ValueOf(setting).MethodByName("Get")
+	if !get.IsValid() || get.Type().NumIn() != 1 || get.Type().In(0) != reflect.TypeFor[*Collection]() {
+		return nil, fmt.Errorf("dynamic config setting %q does not implement Get", key)
+	}
+	propertyFnResults := get.Call([]reflect.Value{reflect.ValueOf(c)})
+	if len(propertyFnResults) != 1 || propertyFnResults[0].Kind() != reflect.Func {
+		return nil, fmt.Errorf("dynamic config setting %q returned an invalid property function", key)
+	}
+
+	filterValues, err := effectiveValueFilterValues(setting.Precedence(), filters)
+	if err != nil {
+		return nil, fmt.Errorf("dynamic config setting %q: %w", key, err)
+	}
+	propertyFn := propertyFnResults[0]
+	if propertyFn.Type().NumIn() != len(filterValues) {
+		return nil, fmt.Errorf("dynamic config setting %q property function has an unexpected signature", key)
+	}
+	for i, filterValue := range filterValues {
+		if filterValue.Type() != propertyFn.Type().In(i) {
+			return nil, fmt.Errorf("dynamic config setting %q property function has an unexpected filter type", key)
+		}
+	}
+	valueResults := propertyFn.Call(filterValues)
+	if len(valueResults) != 1 {
+		return nil, fmt.Errorf("dynamic config setting %q property function returned an unexpected number of values", key)
+	}
+	return valueResults[0].Interface(), nil
+}
+
+func effectiveValueFilterValues(precedence Precedence, filters Constraints) ([]reflect.Value, error) {
+	switch precedence {
+	case PrecedenceGlobal:
+		return nil, nil
+	case PrecedenceNamespace:
+		return []reflect.Value{reflect.ValueOf(filters.Namespace)}, nil
+	case PrecedenceNamespaceID:
+		return []reflect.Value{reflect.ValueOf(namespace.ID(filters.NamespaceID))}, nil
+	case PrecedenceTaskQueue:
+		return []reflect.Value{
+			reflect.ValueOf(filters.Namespace),
+			reflect.ValueOf(filters.TaskQueueName),
+			reflect.ValueOf(filters.TaskQueueType),
+		}, nil
+	case PrecedenceShardID:
+		return []reflect.Value{reflect.ValueOf(filters.ShardID)}, nil
+	case PrecedenceTaskType:
+		return []reflect.Value{reflect.ValueOf(filters.TaskType)}, nil
+	case PrecedenceDestination:
+		return []reflect.Value{
+			reflect.ValueOf(filters.Namespace),
+			reflect.ValueOf(filters.Destination),
+		}, nil
+	case PrecedenceChasmTaskType:
+		return []reflect.Value{reflect.ValueOf(filters.ChasmTaskType)}, nil
+	default:
+		return nil, fmt.Errorf("unsupported precedence %d", precedence)
+	}
+}
+
 func (c *Collection) Start() {
 	c.subscriptionLock.Lock()
 	defer c.subscriptionLock.Unlock()
@@ -215,6 +282,7 @@ func findMatch(
 	if len(cvs) == 0 {
 		return nil, errKeyNotPresent
 	} else if len(cvs) > constraintsCacheThreshold && len(cvs) <= math.MaxInt32 {
+		// @fx the thershold is too low now
 		return findMatchWithCache(cache, cvs, precedence)
 	}
 
