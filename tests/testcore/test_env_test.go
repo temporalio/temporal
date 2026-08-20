@@ -4,7 +4,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/parallelsuite"
@@ -53,46 +52,46 @@ func (s *TestEnvSuite) TestDedicatedClusterGuard_ConcurrentRecord() {
 
 func (s *TestEnvSuite) TestStartLogCapture() {
 	testLogger := testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
+	env := &TestEnv{
+		FunctionalTestBase: &FunctionalTestBase{externalNamespace: namespace.Name("external")},
+		Logger:             testLogger,
+		nsName:             namespace.Name("primary"),
+		nsID:               namespace.ID("primary-id"),
+		t:                  s.T(),
+	}
+
 	var capture *testlogger.Capture
-
-	s.T().Run("capture", func(t *testing.T) {
-		env := &TestEnv{
-			FunctionalTestBase: &FunctionalTestBase{externalNamespace: namespace.Name("external")},
-			Logger:             testLogger,
-			nsName:             namespace.Name("primary"),
-			nsID:               namespace.ID("primary-id"),
-			t:                  t,
-		}
-		capture = env.StartLogCapture()
-
-		// logs in namespace
-		testLogger.Info("primary name", tag.WorkflowNamespace("primary"))
-		testLogger.Info("primary ID", tag.WorkflowNamespaceID("primary-id"))
-		testLogger.Info("external name", tag.WorkflowNamespace("external"))
-
-		testLogger.Info("unrelated name", tag.WorkflowNamespace("unrelated"))
-		testLogger.Info("unrelated ID", tag.WorkflowNamespaceID("unrelated-id"))
-
-		testLogger.Info("target only", tag.NexusEndpointTargetNamespaceID("primary-id"))
-		testLogger.Info("unscoped")
+	// Register verification first so StartLogCapture stops capture before this cleanup runs.
+	s.T().Cleanup(func() {
+		testLogger.Info("after cleanup", tag.WorkflowNamespace("primary"))
+		s.Require().ElementsMatch([]testlogger.CapturedLog{
+			{
+				Level:   testlogger.Info,
+				Message: "primary name",
+				Tags:    []tag.Tag{tag.WorkflowNamespace("primary")},
+			},
+			{
+				Level:   testlogger.Info,
+				Message: "primary ID",
+				Tags:    []tag.Tag{tag.WorkflowNamespaceID("primary-id")},
+			},
+			{
+				Level:   testlogger.Info,
+				Message: "external name",
+				Tags:    []tag.Tag{tag.WorkflowNamespace("external")},
+			},
+		}, capture.Snapshot())
 	})
-	testLogger.Info("after cleanup", tag.WorkflowNamespace("primary"))
+	capture = env.StartLogCapture()
 
-	require.ElementsMatch(s.T(), []testlogger.CapturedLog{
-		{
-			Level:   testlogger.Info,
-			Message: "primary name",
-			Tags:    []tag.Tag{tag.WorkflowNamespace("primary")},
-		},
-		{
-			Level:   testlogger.Info,
-			Message: "primary ID",
-			Tags:    []tag.Tag{tag.WorkflowNamespaceID("primary-id")},
-		},
-		{
-			Level:   testlogger.Info,
-			Message: "external name",
-			Tags:    []tag.Tag{tag.WorkflowNamespace("external")},
-		},
-	}, capture.Snapshot())
+	// logs in namespace
+	testLogger.Info("primary name", tag.WorkflowNamespace("primary"))
+	testLogger.Info("primary ID", tag.WorkflowNamespaceID("primary-id"))
+	testLogger.Info("external name", tag.WorkflowNamespace("external"))
+
+	testLogger.Info("unrelated name", tag.WorkflowNamespace("unrelated"))
+	testLogger.Info("unrelated ID", tag.WorkflowNamespaceID("unrelated-id"))
+
+	testLogger.Info("target only", tag.NexusEndpointTargetNamespaceID("primary-id"))
+	testLogger.Info("unscoped")
 }

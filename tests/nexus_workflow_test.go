@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics/metricstest"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
@@ -47,6 +48,7 @@ import (
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/tests/testcore"
@@ -2628,9 +2630,15 @@ func (s *NexusWorkflowTestSuite) TestNexusCallbackAfterCallerComplete(chasmEnabl
 func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure(chasmEnabled bool) {
 	env := s.newTestEnv(chasmEnabled)
 	taskQueue := testcore.RandomizeStr(s.T().Name())
+	handlerRequestIDs := make(chan string, 1)
 
 	h := nexustest.Handler{
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			select {
+			case handlerRequestIDs <- options.RequestID:
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
 			return nil, &nexus.HandlerError{
 				Type: nexus.HandlerErrorTypeBadRequest,
 				Cause: &nexus.FailureError{
@@ -2661,7 +2669,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure(chasmEnabled
 	s.NoError(w.Start())
 	s.T().Cleanup(w.Stop)
 
-	capture := env.StartNamespaceMetricCapture()
+	logCapture := env.StartLogCapture()
+	metricCapture := env.StartNamespaceMetricCapture()
 	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), client.StartWorkflowOptions{
 		TaskQueue: taskQueue,
 	}, callerWF)
@@ -2682,7 +2691,31 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure(chasmEnabled
 	s.NoError(json.Unmarshal(failure.Details, &details))
 	s.Equal("details", details)
 
-	outboundRequests := capture.Metric("nexus_outbound_requests")
+	var handlerRequestID string
+	select {
+	case handlerRequestID = <-handlerRequestIDs:
+	case <-s.Context().Done():
+		s.FailNow("timed out waiting for the Nexus handler request")
+	}
+	s.Require().NotEmpty(handlerRequestID)
+
+	var failureLog *testlogger.CapturedLog
+	records := logCapture.Snapshot()
+	for i := range records {
+		requestID, ok := records[i].TagValue(tag.RequestID("").Key())
+		if records[i].Level == testlogger.Error &&
+			records[i].Message == "Nexus StartOperation request failed" &&
+			ok && requestID == handlerRequestID {
+			failureLog = &records[i]
+			break
+		}
+	}
+	s.Require().NotNil(failureLog, "Nexus StartOperation failure log not found")
+	namespace, ok := failureLog.TagValue(tag.WorkflowNamespace("").Key())
+	s.Require().True(ok)
+	s.Require().Equal(env.Namespace().String(), namespace)
+
+	outboundRequests := metricCapture.Metric("nexus_outbound_requests")
 	s.Len(outboundRequests, 1)
 	// Confirming that requests which do not go through our frontend are not tagged with `failure_source`
 	s.Subset(outboundRequests[0].Tags, map[string]string{"namespace": env.Namespace().String(), "method": "StartOperation", "failure_source": "_unknown_", "outcome": "handler-error:BAD_REQUEST"})
