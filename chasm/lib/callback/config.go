@@ -20,6 +20,18 @@ var MaxPerExecution = dynamicconfig.NewNamespaceIntSetting(
 	`MaxPerExecution is the maximum number of callbacks that can be attached to an execution (workflow or standalone activity).`,
 )
 
+// TODO(chrsmith): This just caps the size of an individual source context payload.
+// We also need to wire through an aggregate max size, for all callbacks in an execution.
+// (We expect that users will want fewer worker callbacks with larger payloads than the
+// full 2k execution callbacks, with a much smaller per-callback payload size.)
+
+var WorkerSourceContextMaxSize = dynamicconfig.NewNamespaceIntSetting(
+	"callback.worker.sourceContextMaxSize",
+	64*1024,
+	`The maximum allowed size, in bytes, of the opaque source context attached to a Worker completion
+callback. The server carries this payload to the callback's handler untouched.`,
+)
+
 var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
 	"callback.request.timeout",
 	time.Second*10,
