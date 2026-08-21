@@ -119,7 +119,9 @@ func (lb *defaultLoadBalancer) PickWritePartition(
 		partitionCount,
 		number.DecodeCompact8(pc.BacklogCap),
 	)
-	return taskQueue.NormalPartition(partitionID), estimatedTasksAllPartitions
+	partition := taskQueue.NormalPartition(partitionID)
+
+	return partition, estimatedTasksAllPartitions
 }
 
 // pickWritePartitionByGap picks a partition with probability proportional to how far its backlog
