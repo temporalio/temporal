@@ -913,7 +913,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 			return serviceerror.NewNamespaceNotFound(childInfo.Namespace)
 		}
 
-		return t.createFirstWorkflowTask(ctx, targetNamespaceID.String(), childExecution, parentClock, childClock)
+		return t.createFirstWorkflowTask(ctx, targetNamespaceID.String(), childExecution, parentClock, childClock, task)
 	}
 
 	// remaining 2 cases:
@@ -1070,7 +1070,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 			if err != nil {
 				return err
 			}
-			return t.createFirstWorkflowTask(ctx, targetNamespaceID.String(), childExecution, parentClock, childClock)
+			return t.createFirstWorkflowTask(ctx, targetNamespaceID.String(), childExecution, parentClock, childClock, task)
 		}
 		// now if there was no child found after reset then it could mean one of the following.
 		// 1. The parent never got a chance to start the child. So we should go ahead and start one (below)
@@ -1171,7 +1171,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	return t.createFirstWorkflowTask(ctx, targetNamespaceID.String(), &commonpb.WorkflowExecution{
 		WorkflowId: childInfo.StartedWorkflowId,
 		RunId:      childRunID,
-	}, parentClock, childClock)
+	}, parentClock, childClock, task)
 }
 
 // verifyChildWorkflow describes the childWorkflowID and identifies its parent. It then checks if the current run was derived from that parent by comparing the OriginalRunID value.
@@ -1440,6 +1440,7 @@ func (t *transferQueueActiveTaskExecutor) createFirstWorkflowTask(
 	execution *commonpb.WorkflowExecution,
 	parentClock *clockspb.VectorClock,
 	childClock *clockspb.VectorClock,
+	task *tasks.StartChildExecutionTask,
 ) error {
 	_, err := t.historyRawClient.ScheduleWorkflowTask(ctx, &historyservice.ScheduleWorkflowTaskRequest{
 		NamespaceId:         namespaceID,
@@ -1448,7 +1449,42 @@ func (t *transferQueueActiveTaskExecutor) createFirstWorkflowTask(
 		ParentClock:         parentClock,
 		ChildClock:          childClock,
 	})
+	if isUnexpectedChildNotFound(err) {
+		t.recordChildExecutionNotFound(err, task, namespaceID, execution)
+	}
 	return err
+}
+
+// isUnexpectedChildNotFound reports whether the child is absent for a reason the parent's committed
+// ChildWorkflowExecutionStarted cannot account for.
+func isUnexpectedChildNotFound(err error) bool {
+	if !common.IsNotFoundError(err) {
+		return false
+	}
+	// A closed child results in ErrWorkflowCompleted, which is also a NotFound
+	return err.Error() != consts.ErrWorkflowCompleted.Error()
+}
+
+// recordChildExecutionNotFound counts and logs the missing child
+func (t *transferQueueActiveTaskExecutor) recordChildExecutionNotFound(
+	err error,
+	task *tasks.StartChildExecutionTask,
+	childNamespaceID string,
+	childExecution *commonpb.WorkflowExecution,
+) {
+	metrics.ChildExecutionNotFound.With(t.metricHandler).Record(1)
+	t.logger.Error(
+		"Child execution not found after ChildWorkflowExecutionStarted was recorded; StartChildExecution task will be dropped",
+		tag.WorkflowNamespaceID(task.NamespaceID),
+		tag.WorkflowID(task.WorkflowID),
+		tag.WorkflowRunID(task.RunID),
+		tag.NewStringTag("child-namespace-id", childNamespaceID),
+		tag.NewStringTag("child-workflow-id", childExecution.GetWorkflowId()),
+		tag.NewStringTag("child-run-id", childExecution.GetRunId()),
+		tag.NewInt64("initiated-event-id", task.InitiatedEventID),
+		tag.Error(err),
+		tag.ErrorType(err),
+	)
 }
 
 func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionCompleted(
