@@ -219,10 +219,12 @@ func (h *SchedulerMigrateToWorkflowTaskHandler) Execute(
 		Priority:                 &commonpb.Priority{},
 	}
 
+	callCtx, cancel := h.config.serviceCallContext(ctx)
 	_, err = h.historyClient.StartWorkflowExecution(
-		ctx,
+		callCtx,
 		common.CreateHistoryStartWorkflowRequest(result.namespaceID, startReq, nil, nil, result.now),
 	)
+	cancel()
 	if err != nil {
 		// Treat already-started as success for idempotency.
 		var alreadyStartedErr *serviceerror.WorkflowExecutionAlreadyStarted

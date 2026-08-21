@@ -700,7 +700,9 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 		request.VersioningOverride = requestSpec.VersioningOverride
 	}
 
-	result, err := h.frontendClient.StartWorkflowExecution(ctx, request)
+	callCtx, cancel := h.config.serviceCallContext(ctx)
+	result, err := h.frontendClient.StartWorkflowExecution(callCtx, request)
+	cancel()
 	if err != nil {
 		return err
 	}
@@ -742,7 +744,9 @@ func (h *InvokerExecuteTaskHandler) terminateWorkflow(
 			FirstExecutionRunId: target.RunId,
 		},
 	}
-	_, err := h.historyClient.TerminateWorkflowExecution(ctx, request)
+	callCtx, cancel := h.config.serviceCallContext(ctx)
+	_, err := h.historyClient.TerminateWorkflowExecution(callCtx, request)
+	cancel()
 	return err
 }
 
@@ -761,7 +765,9 @@ func (h *InvokerExecuteTaskHandler) cancelWorkflow(
 			FirstExecutionRunId: target.RunId,
 		},
 	}
-	_, err := h.historyClient.RequestCancelWorkflowExecution(ctx, request)
+	callCtx, cancel := h.config.serviceCallContext(ctx)
+	_, err := h.historyClient.RequestCancelWorkflowExecution(callCtx, request)
+	cancel()
 	return err
 }
 

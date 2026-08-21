@@ -190,6 +190,42 @@ func TestExecuteTask_Basic(t *testing.T) {
 	})
 }
 
+func TestExecuteTask_UsesServiceCallTimeout(t *testing.T) {
+	const serviceCallTimeout = time.Second
+	env := newInvokerExecuteTestEnv(t, func(config *scheduler.Config) {
+		config.ServiceCallTimeout = func() time.Duration { return serviceCallTimeout }
+	})
+	startTime := timestamppb.New(env.TimeSource.Now())
+
+	env.mockFrontendClient.EXPECT().
+		StartWorkflowExecution(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, _ *workflowservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*workflowservice.StartWorkflowExecutionResponse, error) {
+			deadline, ok := ctx.Deadline()
+			require.True(t, ok)
+			require.Greater(t, time.Until(deadline), time.Duration(0))
+			require.LessOrEqual(t, time.Until(deadline), serviceCallTimeout)
+			return &workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil
+		})
+
+	runExecuteTestCase(t, env, &executeTestCase{
+		InitialBufferedStarts: []*schedulespb.BufferedStart{{
+			NominalTime:   startTime,
+			ActualTime:    startTime,
+			DesiredTime:   startTime,
+			RequestId:     "req1",
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			Attempt:       1,
+		}},
+		ExpectedBufferedStarts:      1,
+		ExpectedRunningWorkflows:    1,
+		ExpectedTerminateWorkflows:  0,
+		ExpectedCancelWorkflows:     0,
+		ExpectedActionCount:         1,
+		ExpectedOverlapSkipped:      0,
+		ExpectedMissedCatchupWindow: 0,
+	})
+}
+
 func TestExecuteTask_ForwardsVersioningOverride(t *testing.T) {
 	tests := map[string]struct {
 		override *workflowpb.VersioningOverride
