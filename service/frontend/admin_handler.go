@@ -2224,6 +2224,34 @@ func (adh *AdminHandler) GetDynamicConfigValue(
 	return response, nil
 }
 
+func (adh *AdminHandler) DescribeDynamicConfigSetting(
+	_ context.Context,
+	request *adminservice.DescribeDynamicConfigSettingRequest,
+) (_ *adminservice.DescribeDynamicConfigSettingResponse, retErr error) {
+	defer log.CapturePanic(adh.logger, &retErr)
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetKey() == "" {
+		return nil, serviceerror.NewInvalidArgument("dynamic config key is not set")
+	}
+
+	description, err := adh.dynamicConfig.DescribeSetting(dynamicconfig.MakeKey(request.GetKey()))
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgument(err.Error())
+	}
+	constraintPrecedence := make([]*adminservice.DynamicConfigConstraintFields, len(description.ConstraintPrecedence))
+	for i, fields := range description.ConstraintPrecedence {
+		constraintPrecedence[i] = &adminservice.DynamicConfigConstraintFields{Fields: fields}
+	}
+	return &adminservice.DescribeDynamicConfigSettingResponse{
+		Key:                  request.GetKey(),
+		Precedence:           description.Precedence,
+		SupportedConstraints: description.SupportedConstraints,
+		ConstraintPrecedence: constraintPrecedence,
+	}, nil
+}
+
 func (adh *AdminHandler) DumpDynamicConfigValues(
 	_ context.Context,
 	request *adminservice.DumpDynamicConfigValuesRequest,

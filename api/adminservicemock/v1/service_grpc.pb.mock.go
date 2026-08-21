@@ -223,6 +223,26 @@ func (mr *MockAdminServiceClientMockRecorder) DescribeDLQJob(ctx, in any, opts .
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeDLQJob", reflect.TypeOf((*MockAdminServiceClient)(nil).DescribeDLQJob), varargs...)
 }
 
+// DescribeDynamicConfigSetting mocks base method.
+func (m *MockAdminServiceClient) DescribeDynamicConfigSetting(ctx context.Context, in *adminservice.DescribeDynamicConfigSettingRequest, opts ...grpc.CallOption) (*adminservice.DescribeDynamicConfigSettingResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DescribeDynamicConfigSetting", varargs...)
+	ret0, _ := ret[0].(*adminservice.DescribeDynamicConfigSettingResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeDynamicConfigSetting indicates an expected call of DescribeDynamicConfigSetting.
+func (mr *MockAdminServiceClientMockRecorder) DescribeDynamicConfigSetting(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeDynamicConfigSetting", reflect.TypeOf((*MockAdminServiceClient)(nil).DescribeDynamicConfigSetting), varargs...)
+}
+
 // DescribeHistoryHost mocks base method.
 func (m *MockAdminServiceClient) DescribeHistoryHost(ctx context.Context, in *adminservice.DescribeHistoryHostRequest, opts ...grpc.CallOption) (*adminservice.DescribeHistoryHostResponse, error) {
 	m.ctrl.T.Helper()
@@ -1298,6 +1318,21 @@ func (m *MockAdminServiceServer) DescribeDLQJob(arg0 context.Context, arg1 *admi
 func (mr *MockAdminServiceServerMockRecorder) DescribeDLQJob(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeDLQJob", reflect.TypeOf((*MockAdminServiceServer)(nil).DescribeDLQJob), arg0, arg1)
+}
+
+// DescribeDynamicConfigSetting mocks base method.
+func (m *MockAdminServiceServer) DescribeDynamicConfigSetting(arg0 context.Context, arg1 *adminservice.DescribeDynamicConfigSettingRequest) (*adminservice.DescribeDynamicConfigSettingResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DescribeDynamicConfigSetting", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.DescribeDynamicConfigSettingResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeDynamicConfigSetting indicates an expected call of DescribeDynamicConfigSetting.
+func (mr *MockAdminServiceServerMockRecorder) DescribeDynamicConfigSetting(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeDynamicConfigSetting", reflect.TypeOf((*MockAdminServiceServer)(nil).DescribeDynamicConfigSetting), arg0, arg1)
 }
 
 // DescribeHistoryHost mocks base method.

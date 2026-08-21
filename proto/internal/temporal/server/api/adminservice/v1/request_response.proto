@@ -633,6 +633,21 @@ message GetDynamicConfigValueResponse {
   bytes constrained_values = 2;
 }
 
+message DescribeDynamicConfigSettingRequest {
+  string key = 1;
+}
+
+message DynamicConfigConstraintFields {
+  repeated string fields = 1;
+}
+
+message DescribeDynamicConfigSettingResponse {
+  string key = 1;
+  string precedence = 2;
+  repeated string supported_constraints = 3;
+  repeated DynamicConfigConstraintFields constraint_precedence = 4;
+}
+
 message DumpDynamicConfigValuesRequest {}
 
 message DumpDynamicConfigValuesResponse {

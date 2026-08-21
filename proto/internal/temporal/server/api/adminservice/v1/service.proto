@@ -232,6 +232,11 @@ service AdminService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
   }
 
+  // DescribeDynamicConfigSetting returns constraint metadata for a registered dynamic config setting.
+  rpc DescribeDynamicConfigSetting(DescribeDynamicConfigSettingRequest) returns (DescribeDynamicConfigSettingResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
+
   // DumpDynamicConfigValues returns all constrained values held by the dynamic config client.
   rpc DumpDynamicConfigValues(DumpDynamicConfigValuesRequest) returns (DumpDynamicConfigValuesResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;

@@ -16,10 +16,11 @@ import (
 
 type dynamicConfigAdminClient struct {
 	adminservice.AdminServiceClient
-	dumpCalled  bool
-	dumpOptions []grpc.CallOption
-	request     *adminservice.GetDynamicConfigValueRequest
-	getResponse *adminservice.GetDynamicConfigValueResponse
+	dumpCalled      bool
+	dumpOptions     []grpc.CallOption
+	request         *adminservice.GetDynamicConfigValueRequest
+	getResponse     *adminservice.GetDynamicConfigValueResponse
+	describeRequest *adminservice.DescribeDynamicConfigSettingRequest
 }
 
 func (c *dynamicConfigAdminClient) DumpDynamicConfigValues(
@@ -44,6 +45,26 @@ func (c *dynamicConfigAdminClient) GetDynamicConfigValue(
 		return c.getResponse, nil
 	}
 	return &adminservice.GetDynamicConfigValueResponse{Value: []byte("true")}, nil
+}
+
+func (c *dynamicConfigAdminClient) DescribeDynamicConfigSetting(
+	_ context.Context,
+	request *adminservice.DescribeDynamicConfigSettingRequest,
+	_ ...grpc.CallOption,
+) (*adminservice.DescribeDynamicConfigSettingResponse, error) {
+	c.describeRequest = request
+	return &adminservice.DescribeDynamicConfigSettingResponse{
+		Key:                  request.GetKey(),
+		Precedence:           "TaskQueue",
+		SupportedConstraints: []string{"namespace", "taskQueueName", "taskQueueType"},
+		ConstraintPrecedence: []*adminservice.DynamicConfigConstraintFields{
+			{Fields: []string{"namespace", "taskQueueName", "taskQueueType"}},
+			{Fields: []string{"namespace", "taskQueueName"}},
+			{Fields: []string{"taskQueueName"}},
+			{Fields: []string{"namespace"}},
+			{},
+		},
+	}, nil
 }
 
 type dynamicConfigClientFactory struct {
@@ -130,10 +151,40 @@ func TestGetDynamicConfigValueVerbose(t *testing.T) {
 	}`, output.String())
 }
 
+func TestDescribeDynamicConfigSetting(t *testing.T) {
+	adminClient := &dynamicConfigAdminClient{}
+	var output bytes.Buffer
+	app := NewCliApp(func(params *Params) {
+		params.ClientFactory = dynamicConfigClientFactory{adminClient: adminClient}
+		params.Writer = &output
+	})
+
+	err := app.Run([]string{
+		"tdbg",
+		"dc", "describe",
+		"-k", "admin.matchingNamespaceTaskqueueToPartitionDispatchRate",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "admin.matchingNamespaceTaskqueueToPartitionDispatchRate", adminClient.describeRequest.GetKey())
+	require.JSONEq(t, `{
+		"key": "admin.matchingNamespaceTaskqueueToPartitionDispatchRate",
+		"precedence": "TaskQueue",
+		"supportedConstraints": ["namespace", "taskQueueName", "taskQueueType"],
+		"order": [
+			{"namespace":"<namespace>","taskQueueName":"<taskQueueName>","taskQueueType":"<taskQueueType>"},
+			{"namespace":"<namespace>","taskQueueName":"<taskQueueName>"},
+			{"taskQueueName":"<taskQueueName>"},
+			{"namespace":"<namespace>"},
+			{}
+		]
+	}`, output.String())
+}
+
 func TestDynamicConfigHelpShowsAliasUsage(t *testing.T) {
 	for _, args := range [][]string{
 		{"tdbg", "dc", "--help"},
 		{"tdbg", "dc", "get", "--help"},
+		{"tdbg", "dc", "describe", "--help"},
 		{"tdbg", "dc", "dump", "--help"},
 	} {
 		t.Run(strings.Join(args[1:], " "), func(t *testing.T) {

@@ -49,6 +49,22 @@ func newDynamicConfigCommands(clientFactory ClientFactory) []*cli.Command {
 			},
 		},
 		{
+			Name:      "describe",
+			Usage:     "Describe the constraints supported by one dynamic config key",
+			UsageText: "tdbg dynamic-config describe [command options]\ntdbg dc describe [command options]",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:     FlagDynamicConfigKey,
+					Aliases:  []string{"k"},
+					Usage:    "Dynamic config key",
+					Required: true,
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return describeDynamicConfigSetting(c, clientFactory)
+			},
+		},
+		{
 			Name:      "dump",
 			Usage:     "Dump all configured dynamic config values",
 			UsageText: "tdbg dynamic-config dump [command options]\ntdbg dc dump [command options]",
@@ -57,6 +73,42 @@ func newDynamicConfigCommands(clientFactory ClientFactory) []*cli.Command {
 			},
 		},
 	}
+}
+
+func describeDynamicConfigSetting(c *cli.Context, clientFactory ClientFactory) error {
+	ctx, cancel := newContext(c)
+	defer cancel()
+	response, err := clientFactory.AdminClient(c).DescribeDynamicConfigSetting(
+		ctx,
+		&adminservice.DescribeDynamicConfigSettingRequest{Key: c.String(FlagDynamicConfigKey)},
+	)
+	if err != nil {
+		return fmt.Errorf("unable to describe dynamic config setting: %w", err)
+	}
+
+	order := make([]map[string]string, len(response.GetConstraintPrecedence()))
+	for i, constraintFields := range response.GetConstraintPrecedence() {
+		order[i] = make(map[string]string, len(constraintFields.GetFields()))
+		for _, constraintField := range constraintFields.GetFields() {
+			order[i][constraintField] = fmt.Sprintf("<%s>", constraintField)
+		}
+	}
+	output, err := json.MarshalIndent(struct {
+		Key                  string              `json:"key"`
+		Precedence           string              `json:"precedence"`
+		SupportedConstraints []string            `json:"supportedConstraints"`
+		Order                []map[string]string `json:"order"`
+	}{
+		Key:                  response.GetKey(),
+		Precedence:           response.GetPrecedence(),
+		SupportedConstraints: response.GetSupportedConstraints(),
+		Order:                order,
+	}, "", "  ")
+	if err != nil {
+		return fmt.Errorf("unable to format dynamic config setting description: %w", err)
+	}
+	_, err = fmt.Fprintln(c.App.Writer, string(output))
+	return err
 }
 
 func getDynamicConfigValue(c *cli.Context, clientFactory ClientFactory) error {

@@ -164,6 +164,22 @@ func (s *collectionSuite) TestGetEffectiveValueRejectsUnsupportedConstraint() {
 	)
 }
 
+func (s *collectionSuite) TestDescribeSetting() {
+	setting := dynamicconfig.NewTaskQueueBoolSetting("describe-task-queue", false, "")
+
+	description, err := s.cln.DescribeSetting(setting.Key())
+	s.Require().NoError(err)
+	s.Equal("TaskQueue", description.Precedence)
+	s.Equal([]string{"namespace", "taskQueueName", "taskQueueType"}, description.SupportedConstraints)
+	s.Equal([][]string{
+		{"namespace", "taskQueueName", "taskQueueType"},
+		{"namespace", "taskQueueName"},
+		{"taskQueueName"},
+		{"namespace"},
+		{},
+	}, description.ConstraintPrecedence)
+}
+
 func (s *collectionSuite) TestGetEffectiveValueFilterSignatures() {
 	testCases := []struct {
 		name        string

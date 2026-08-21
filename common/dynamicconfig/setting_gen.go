@@ -22,6 +22,29 @@ const (
 	PrecedenceChasmTaskType
 )
 
+func (p Precedence) Name() string {
+	switch p {
+	case PrecedenceGlobal:
+		return "Global"
+	case PrecedenceNamespace:
+		return "Namespace"
+	case PrecedenceNamespaceID:
+		return "NamespaceID"
+	case PrecedenceTaskQueue:
+		return "TaskQueue"
+	case PrecedenceShardID:
+		return "ShardID"
+	case PrecedenceTaskType:
+		return "TaskType"
+	case PrecedenceDestination:
+		return "Destination"
+	case PrecedenceChasmTaskType:
+		return "ChasmTaskType"
+	default:
+		return "Unknown"
+	}
+}
+
 func (p Precedence) SupportedConstraints() []string {
 	switch p {
 	case PrecedenceGlobal:
@@ -45,6 +68,57 @@ func (p Precedence) SupportedConstraints() []string {
 	}
 }
 
+// ConstraintPrecedence returns the constraint fields checked by this precedence, in lookup order.
+func (p Precedence) ConstraintPrecedence() [][]string {
+	switch p {
+	case PrecedenceGlobal:
+		return [][]string{
+			{},
+		}
+	case PrecedenceNamespace:
+		return [][]string{
+			{"namespace"},
+			{},
+		}
+	case PrecedenceNamespaceID:
+		return [][]string{
+			{"namespaceId"},
+			{},
+		}
+	case PrecedenceTaskQueue:
+		return [][]string{
+			{"namespace", "taskQueueName", "taskQueueType"},
+			{"namespace", "taskQueueName"},
+			{"taskQueueName"},
+			{"namespace"},
+			{},
+		}
+	case PrecedenceShardID:
+		return [][]string{
+			{"shardId"},
+			{},
+		}
+	case PrecedenceTaskType:
+		return [][]string{
+			{"taskType"},
+			{},
+		}
+	case PrecedenceDestination:
+		return [][]string{
+			{"namespace", "destination"},
+			{"destination"},
+			{"namespace"},
+			{},
+		}
+	case PrecedenceChasmTaskType:
+		return [][]string{
+			{"chasmTaskType"},
+			{},
+		}
+	default:
+		return nil
+	}
+}
 
 type GlobalBoolSetting = GlobalTypedSetting[bool]
 type GlobalBoolConstrainedDefaultSetting = GlobalTypedConstrainedDefaultSetting[bool]

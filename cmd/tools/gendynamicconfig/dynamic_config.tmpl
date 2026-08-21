@@ -18,6 +18,17 @@ const (
 {{- end}}
 )
 
+func (p Precedence) Name() string {
+	switch p {
+{{- range .Precedences}}
+	case Precedence{{.Name}}:
+		return "{{.Name}}"
+{{- end}}
+	default:
+		return "Unknown"
+	}
+}
+
 func (p Precedence) SupportedConstraints() []string {
 	switch p {
 {{- range $P := .Precedences}}
@@ -29,6 +40,21 @@ func (p Precedence) SupportedConstraints() []string {
 	}
 }
 
+// ConstraintPrecedence returns the constraint fields checked by this precedence, in lookup order.
+func (p Precedence) ConstraintPrecedence() [][]string {
+	switch p {
+{{- range $P := .Precedences}}
+	case Precedence{{$P.Name}}:
+		return [][]string{
+{{- range $Fields := $P.Precedence}}
+			{ {{- range $Index, $Field := $Fields}}{{if $Index}}, {{end}}{{printf "%q" $Field.JSONName}}{{end}}},
+{{- end}}
+		}
+{{- end}}
+	default:
+		return nil
+	}
+}
 {{$Precedences := .Precedences }}
 {{- range $T :=.Types}}
 {{- range $P := $Precedences}}

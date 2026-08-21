@@ -298,6 +298,26 @@ func (s *adminHandlerSuite) TestGetDynamicConfigValueUnknownKey() {
 	s.ErrorAs(err, &invalidArgument)
 }
 
+func (s *adminHandlerSuite) TestDescribeDynamicConfigSetting() {
+	response, err := s.handler.DescribeDynamicConfigSetting(
+		context.Background(),
+		&adminservice.DescribeDynamicConfigSettingRequest{
+			Key: "admin.matchingNamespaceTaskqueueToPartitionDispatchRate",
+		},
+	)
+	s.Require().NoError(err)
+	s.Equal("admin.matchingNamespaceTaskqueueToPartitionDispatchRate", response.GetKey())
+	s.Equal("TaskQueue", response.GetPrecedence())
+	s.Equal([]string{"namespace", "taskQueueName", "taskQueueType"}, response.GetSupportedConstraints())
+	s.Equal([]*adminservice.DynamicConfigConstraintFields{
+		{Fields: []string{"namespace", "taskQueueName", "taskQueueType"}},
+		{Fields: []string{"namespace", "taskQueueName"}},
+		{Fields: []string{"taskQueueName"}},
+		{Fields: []string{"namespace"}},
+		{Fields: []string{}},
+	}, response.GetConstraintPrecedence())
+}
+
 func (s *adminHandlerSuite) TestDumpDynamicConfigValues() {
 	response, err := s.handler.DumpDynamicConfigValues(
 		s.T().Context(),
