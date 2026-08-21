@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -465,8 +466,22 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		switch err.(type) {
 		case nil:
 			// noop
-		case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
+		case *serviceerror.NotFound:
+			if parentChildLifecycleEnabled(t.shardContext) {
+				payload := parentChildPayloadForCloseTask(
+					task,
+					parentNamespaceID,
+					&commonpb.WorkflowExecution{WorkflowId: parentWorkflowID, RunId: parentRunID},
+					parentInitiatedID,
+					parentInitiatedVersion,
+				)
+				payload.Phase = wideevents.ParentChildPhaseRecordChildCompletion
+				payload.Outcome = wideevents.ParentChildOutcomeNotFoundIgnored
+				emitParentChildLifecycleEvent(t.shardContext, payload, err)
+			}
 			// parent gone, noop
+		case *serviceerror.NamespaceNotFound:
+			// namespace gone, noop
 		default:
 			return err
 		}
@@ -1121,9 +1136,24 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 				// for retryable error just return
 				return err
 			}
-			switch err.(type) {
+			switch typedErr := err.(type) {
 			case *serviceerror.WorkflowExecutionAlreadyStarted:
 				failedCause = enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_WORKFLOW_ALREADY_EXISTS
+				if parentChildLifecycleEnabled(t.shardContext) {
+					payload := parentChildPayloadForStartChildTask(
+						task,
+						targetNamespaceID.String(),
+						&commonpb.WorkflowExecution{WorkflowId: attributes.WorkflowId, RunId: typedErr.RunId},
+					)
+					payload.Phase = wideevents.ParentChildPhaseChildStart
+					payload.Outcome = wideevents.ParentChildOutcomeWorkflowAlreadyExists
+					payload.Details = map[string]any{
+						"existing_first_run_id":      typedErr.FirstExecutionRunId,
+						"existing_start_request_id":  typedErr.StartRequestId,
+						"requested_start_request_id": childInfo.CreateRequestId,
+					}
+					emitParentChildLifecycleEvent(t.shardContext, payload, err)
+				}
 			case *serviceerror.NamespaceNotFound:
 				failedCause = enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND
 			default:

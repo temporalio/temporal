@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	otellog "go.opentelemetry.io/otel/log"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
@@ -208,6 +209,11 @@ func (s *ContextTest) SetLoggers(l log.Logger) {
 // SetMetricsHandler sets  s.metricsHandler. Only used by tests.
 func (s *ContextTest) SetMetricsHandler(h metrics.Handler) {
 	s.metricsHandler = h
+}
+
+// SetEventLoggerForTesting replaces the wide-event logger used by the shard.
+func (s *ContextTest) SetEventLoggerForTesting(logger otellog.Logger) {
+	s.eventLogger = logger
 }
 
 // SetHistoryClientForTesting sets history client. Only used by tests.

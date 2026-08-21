@@ -23,6 +23,8 @@ import (
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -114,12 +116,17 @@ func Invoke(
 	}
 
 	metricsHandler := shardContext.GetMetricsHandler()
+	asyncResend := shardContext.GetConfig().EnableAsyncParentWorkflowResend()
+	resendMode := "inline"
+	if asyncResend {
+		resendMode = "async"
+	}
 
 	// The measured resend, run either inline or in the background.
 	resend := func(ctx context.Context) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
 		metrics.ParentWorkflowResendAttempts.With(metricsHandler).Record(1)
 		startTime := time.Now().UTC()
-		resp, err := resendParentAndVerify(ctx, request, workflowConsistencyChecker, shardContext, namespaceID, versionedTransition, versionHistories, errVerify)
+		resp, err := resendParentAndVerify(ctx, request, workflowConsistencyChecker, shardContext, namespaceID, versionedTransition, versionHistories, errVerify, resendMode)
 		metrics.ParentWorkflowResendLatency.With(metricsHandler).Record(time.Since(startTime))
 		if err != nil {
 			recordResendFailure(shardContext, metricsHandler, request, err)
@@ -127,7 +134,7 @@ func Invoke(
 		return resp, err
 	}
 
-	if !shardContext.GetConfig().EnableAsyncParentWorkflowResend() {
+	if !asyncResend {
 		return resend(ctx)
 	}
 
@@ -138,9 +145,13 @@ func Invoke(
 	// retry while an earlier resend runs, so without these a stale parent, or a namespace with many
 	// of them, would spawn goroutines without bound.
 	parentKey := definition.NewWorkflowKey(request.NamespaceId, request.ParentExecution.WorkflowId, request.ParentExecution.RunId)
-	claimed, atCapacity := inFlightResends.tryClaim(parentKey, shardContext.GetConfig().ParentWorkflowResendMaxInFlight())
+	maxInFlight := shardContext.GetConfig().ParentWorkflowResendMaxInFlight()
+	claimed, atCapacity := inFlightResends.tryClaim(parentKey, maxInFlight)
 	if atCapacity {
 		metrics.ParentWorkflowResendLimited.With(metricsHandler).Record(1)
+		details := parentResendEventDetails(resendMode, errVerify)
+		details["max_in_flight"] = maxInFlight
+		emitParentResendLifecycleEvent(shardContext, request, wideevents.ParentChildOutcomeLimited, nil, details)
 		shardContext.GetLogger().Warn("Dropped parent workflow resend, shard is at its in-flight limit",
 			tag.WorkflowNamespaceID(request.GetNamespaceId()),
 			tag.NewStringTag("parent-workflow-id", request.ParentExecution.GetWorkflowId()),
@@ -153,8 +164,22 @@ func Invoke(
 	}
 	if !claimed {
 		metrics.ParentWorkflowResendSkipped.With(metricsHandler).Record(1)
+		emitParentResendLifecycleEvent(
+			shardContext,
+			request,
+			wideevents.ParentChildOutcomeDeduplicated,
+			nil,
+			parentResendEventDetails(resendMode, errVerify),
+		)
 		return nil, errVerify
 	}
+	emitParentResendLifecycleEvent(
+		shardContext,
+		request,
+		wideevents.ParentChildOutcomeScheduled,
+		nil,
+		parentResendEventDetails(resendMode, errVerify),
+	)
 
 	// The context is detached from the request, which gRPC cancels when this handler returns, and
 	// rooted at the shard lifecycle so the work stops with the shard.
@@ -205,26 +230,43 @@ func resendParentAndVerify(
 	versionedTransition *persistencespb.VersionedTransition,
 	versionHistories *historyspb.VersionHistories,
 	errVerify error,
+	resendMode string,
 ) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
 	// Resend parent workflow from source cluster
 
 	clusterMetadata := shardContext.GetClusterMetadata()
 	targetClusterInfo := clusterMetadata.GetAllClusterInfo()[clusterMetadata.GetCurrentClusterName()]
+	activeClusterName := ""
+	emitResult := func(outcome wideevents.ParentChildOutcome, eventErr error, stage string) {
+		details := parentResendEventDetails(resendMode, errVerify)
+		if activeClusterName != "" {
+			details["source_cluster"] = activeClusterName
+		}
+		if stage != "" {
+			details["stage"] = stage
+		}
+		emitParentResendLifecycleEvent(shardContext, request, outcome, eventErr, details)
+	}
 
 	namespaceEntry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
+		emitResult(wideevents.ParentChildOutcomeFailed, err, "resolve_namespace")
 		return nil, err
 	}
 
-	activeClusterName := namespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: request.ParentExecution.WorkflowId})
+	activeClusterName = namespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: request.ParentExecution.WorkflowId})
 	if activeClusterName == clusterMetadata.GetCurrentClusterName() {
-		return nil, errors.New("namespace becomes active when processing task as standby")
+		err = errors.New("namespace becomes active when processing task as standby")
+		emitResult(wideevents.ParentChildOutcomeFailed, err, "resolve_source_cluster")
+		return nil, err
 	}
 
 	remoteAdminClient, err := shardContext.GetRemoteAdminClient(activeClusterName)
 	if err != nil {
+		emitResult(wideevents.ParentChildOutcomeFailed, err, "resolve_remote_client")
 		return nil, err
 	}
+	emitResult(wideevents.ParentChildOutcomeStarted, nil, "sync_workflow_state")
 
 	resp, err := remoteAdminClient.SyncWorkflowState(ctx, &adminservice.SyncWorkflowStateRequest{
 		NamespaceId: request.NamespaceId,
@@ -243,23 +285,28 @@ func resendParentAndVerify(
 			// parent workflow is not found on source cluster,
 			// we can return empty response to indicate that verification is done
 			// TODO: add parent workflow to workflowNotFoundCache
+			emitResult(wideevents.ParentChildOutcomeSourceNotFound, err, "sync_workflow_state")
 			return &historyservice.VerifyChildExecutionCompletionRecordedResponse{}, nil
 		}
 		var failedPreconditionErr *serviceerror.FailedPrecondition
 		if errors.As(err, &failedPreconditionErr) {
 			// Unable to perform sync state. Transition history maybe disabled in source cluster.
+			emitResult(wideevents.ParentChildOutcomeFailed, err, "sync_workflow_state")
 			return nil, errVerify
 		}
+		emitResult(wideevents.ParentChildOutcomeFailed, err, "sync_workflow_state")
 		return nil, err
 	}
 
 	engine, err := shardContext.GetEngine(ctx)
 	if err != nil {
+		emitResult(wideevents.ParentChildOutcomeFailed, err, "get_engine")
 		return nil, err
 	}
 	err = engine.ReplicateVersionedTransition(ctx, chasm.WorkflowArchetypeID, resp.VersionedTransitionArtifact, activeClusterName)
 	if err != nil {
 		if !errors.Is(err, consts.ErrDuplicate) {
+			emitResult(wideevents.ParentChildOutcomeFailed, err, "replicate_versioned_transition")
 			return nil, err
 		}
 	}
@@ -267,7 +314,52 @@ func resendParentAndVerify(
 	// Verify child execution again after resending parent workflow
 	_, _, err = verifyChildExecution(ctx, workflowConsistencyChecker, request)
 	if err != nil {
+		emitResult(wideevents.ParentChildOutcomeFailed, err, "verify_after_resend")
 		return nil, err
 	}
+	emitResult(wideevents.ParentChildOutcomeSucceeded, nil, "")
 	return &historyservice.VerifyChildExecutionCompletionRecordedResponse{}, nil
+}
+
+func parentResendEventDetails(mode string, initialError error) map[string]any {
+	return map[string]any{
+		"initial_error_type": util.ErrorType(initialError),
+		"mode":               mode,
+	}
+}
+
+func emitParentResendLifecycleEvent(
+	shardContext historyi.ShardContext,
+	request *historyservice.VerifyChildExecutionCompletionRecordedRequest,
+	outcome wideevents.ParentChildOutcome,
+	err error,
+	details map[string]any,
+) {
+	if !shardContext.GetConfig().EmitReplicationLifecycleEvents() {
+		return
+	}
+	logger := shardContext.GetEventLogger()
+	if logger == nil {
+		return
+	}
+
+	payload := wideevents.ParentChildLifecyclePayload{
+		Phase:                  wideevents.ParentChildPhaseParentResend,
+		Outcome:                outcome,
+		LocalCluster:           shardContext.GetClusterMetadata().GetCurrentClusterName(),
+		LocalShard:             shardContext.GetShardID(),
+		ParentNamespaceID:      request.GetNamespaceId(),
+		ParentWorkflowID:       request.GetParentExecution().GetWorkflowId(),
+		ParentRunID:            request.GetParentExecution().GetRunId(),
+		ChildWorkflowID:        request.GetChildExecution().GetWorkflowId(),
+		ChildRunID:             request.GetChildExecution().GetRunId(),
+		ParentInitiatedID:      request.GetParentInitiatedId(),
+		ParentInitiatedVersion: request.GetParentInitiatedVersion(),
+		Details:                details,
+	}
+	if err != nil {
+		payload.Error = err.Error()
+		payload.ErrorType = util.ErrorType(err)
+	}
+	wideevents.Emit(logger, payload)
 }

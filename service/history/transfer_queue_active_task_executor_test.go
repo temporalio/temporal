@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -48,6 +49,7 @@ import (
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/protomock"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -832,6 +834,10 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessWorkflowTask_StampMism
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasParent() {
+	capture := &parentChildEventCapture{}
+	s.mockShard.GetConfig().EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockShard.SetEventLoggerForTesting(capture)
+
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
@@ -907,6 +913,18 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 
 	resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.NoError(resp.ExecutionErr)
+
+	s.mockHistoryClient.EXPECT().RecordChildExecutionCompleted(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("parent not found"))
+	resp = s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.Require().NoError(resp.ExecutionErr)
+	s.Equal([]string{string(wideevents.ParentChildOutcomeNotFoundIgnored)}, parentChildOutcomes(capture))
+	records := parentChildRecords(capture)
+	s.Len(records, 1)
+	attributes := wideEventAttributes(records[0])
+	s.Equal("record_child_completion", attributes["phase"].AsString())
+	s.Equal(parentExecution.GetWorkflowId(), attributes["parent_workflow_id"].AsString())
+	s.Equal(execution.GetWorkflowId(), attributes["child_workflow_id"].AsString())
+	s.Equal(taskID, attributes["local_task_id"].AsInt64())
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParent() {
@@ -2540,6 +2558,10 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Re
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Failure() {
+	capture := &parentChildEventCapture{}
+	s.mockShard.GetConfig().EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockShard.SetEventLoggerForTesting(capture)
+
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
@@ -2619,12 +2641,27 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 		ci,
 		rootExecutionInfo,
 		nil,
-	)).Return(nil, serviceerror.NewWorkflowExecutionAlreadyStarted("msg", "", ""))
+	)).Return(nil, serviceerror.NewWorkflowExecutionAlreadyStarted("msg", "request-id", "existing-run-id"))
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.NoError(resp.ExecutionErr)
+	s.Require().NoError(resp.ExecutionErr)
+	s.Equal([]string{string(wideevents.ParentChildOutcomeWorkflowAlreadyExists)}, parentChildOutcomes(capture))
+	records := parentChildRecords(capture)
+	s.Len(records, 1)
+	attributes := wideEventAttributes(records[0])
+	s.Equal("child_start", attributes["phase"].AsString())
+	s.Equal(execution.GetWorkflowId(), attributes["parent_workflow_id"].AsString())
+	s.Equal(childWorkflowID, attributes["child_workflow_id"].AsString())
+	s.Equal("existing-run-id", attributes["child_run_id"].AsString())
+	s.Equal(cluster.TestCurrentClusterName, attributes["local_cluster"].AsString())
+	s.Equal(int64(s.mockShard.GetShardID()), attributes["local_shard"].AsInt64())
+	s.Equal(taskID, attributes["local_task_id"].AsInt64())
+	s.Equal(
+		`{"existing_first_run_id":"","existing_start_request_id":"request-id","requested_start_request_id":"`+ci.GetCreateRequestId()+`"}`,
+		attributes["details"].AsString(),
+	)
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Failure_InvalidVersioningOverride() {

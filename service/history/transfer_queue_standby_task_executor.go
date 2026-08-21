@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/ndc"
@@ -343,6 +344,17 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			// no need for mutable state anymore, release workflow lock
 			release(nil)
 
+			lifecyclePayload := parentChildPayloadForCloseVerification(
+				t.shardContext,
+				transferTask,
+				parentNamespaceID,
+				&commonpb.WorkflowExecution{WorkflowId: parentWorkflowID, RunId: parentRunID},
+				parentInitiatedID,
+				parentInitiatedVersion,
+				resendParent,
+			)
+			emitParentChildCloseVerificationStarted(t.shardContext, lifecyclePayload, resendParent)
+
 			_, err := t.historyRawClient.VerifyChildExecutionCompletionRecorded(ctx, &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 				NamespaceId: parentNamespaceID,
 				ParentExecution: &commonpb.WorkflowExecution{
@@ -358,6 +370,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 				Clock:                  parentClock,
 				ResendParent:           resendParent,
 			})
+			emitParentChildCloseVerificationResult(t.shardContext, lifecyclePayload, resendParent, err)
 			switch err.(type) {
 			case nil, *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
 				// Case 1: Target workflow is in the desired state.
@@ -527,6 +540,22 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			},
 			Clock: childClock,
 		})
+		if parentChildLifecycleEnabled(t.shardContext) {
+			if outcome, ok := parentChildVerificationOutcome(
+				err,
+				wideevents.ParentChildOutcomeChildNotFound,
+				wideevents.ParentChildOutcomeFirstWorkflowTaskMissing,
+			); ok {
+				payload := parentChildPayloadForStartChildTask(
+					transferTask,
+					childTargetNamespaceID,
+					&commonpb.WorkflowExecution{WorkflowId: childStartedWorkflowID, RunId: childStartedRunID},
+				)
+				payload.Phase = wideevents.ParentChildPhaseVerifyFirstWorkflowTask
+				payload.Outcome = outcome
+				emitParentChildLifecycleEvent(t.shardContext, payload, err)
+			}
+		}
 		switch err.(type) {
 		case nil, *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
 			// Case 1: Target workflow is in the desired state.
