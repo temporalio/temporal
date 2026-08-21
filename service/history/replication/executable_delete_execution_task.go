@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -29,10 +30,10 @@ type ExecutableDeleteExecutionTask struct {
 	chasm.ComponentRef
 	ExecutableTask
 
-	// taskVersion is the namespace failover version of the cluster that deleted the execution.
+	// lastWriteVersion is the source execution's last write version when it was deleted.
 	// It is common.EmptyVersion when the source did not stamp one, i.e. for tasks generated before
 	// the version was introduced and for deletions synthesized from another replication task.
-	taskVersion int64
+	lastWriteVersion int64
 }
 
 var _ ctasks.Task = (*ExecutableDeleteExecutionTask)(nil)
@@ -59,9 +60,9 @@ func NewExecutableDeleteExecutionTask(
 	// Only take the version from a genuine delete execution replication task. Other replication
 	// tasks (sync/verify versioned transition) synthesize a deletion out of their own task, whose
 	// version describes a different operation and must not be interpreted as a deletion version.
-	taskVersion := common.EmptyVersion
+	lastWriteVersion := common.EmptyVersion
 	if rawInfo.GetTaskType() == enumsspb.TASK_TYPE_REPLICATION_DELETE_EXECUTION {
-		taskVersion = rawInfo.GetVersion()
+		lastWriteVersion = rawInfo.GetVersion()
 	}
 
 	return &ExecutableDeleteExecutionTask{
@@ -84,7 +85,7 @@ func NewExecutableDeleteExecutionTask(
 			sourceShardKey,
 			replicationTask,
 		),
-		taskVersion: taskVersion,
+		lastWriteVersion: lastWriteVersion,
 	}
 }
 
@@ -129,29 +130,10 @@ func (e *ExecutableDeleteExecutionTask) Execute() error {
 	if err != nil {
 		return err
 	}
-	// The deletion was decided by the cluster that was active at e.taskVersion. If the namespace has
-	// failed over since then, the execution is owned by another cluster now and this deletion is
-	// stale: applying it would drop state the new active cluster may still be mutating (and replicate
-	// nothing back). The new active cluster deletes and replicates on its own retention timer.
-	namespaceFailoverVersion := namespaceEntry.FailoverVersion(e.BusinessID)
-	if e.taskVersion != common.EmptyVersion && e.taskVersion < namespaceFailoverVersion {
-		e.Logger.Warn("Skipping delete execution replication task generated before a failover",
-			tag.WorkflowNamespaceID(e.NamespaceID),
-			tag.WorkflowID(e.BusinessID),
-			tag.WorkflowRunID(e.RunID),
-			tag.TaskID(e.TaskID()),
-			tag.TaskVersion(e.taskVersion),
-			tag.FailoverVersion(namespaceFailoverVersion),
-		)
-		metrics.ReplicationTasksSkipped.With(e.MetricsHandler).Record(
-			1,
-			metrics.OperationTag(metrics.DeleteExecutionReplicationTaskScope),
-			metrics.NamespaceTag(namespaceName),
-		)
-		return nil
-	}
 	currentCluster := e.ClusterMetadata.GetCurrentClusterName()
-	if namespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: e.BusinessID}) == currentCluster {
+	// Legacy tasks have no execution-state fence and remain unsafe to apply on an active cluster.
+	if e.lastWriteVersion == common.EmptyVersion &&
+		namespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: e.BusinessID}) == currentCluster {
 		e.Logger.Warn("Skipping delete execution replication task on active cluster",
 			tag.WorkflowNamespaceID(e.NamespaceID),
 			tag.WorkflowID(e.BusinessID),
@@ -173,6 +155,28 @@ func (e *ExecutableDeleteExecutionTask) Execute() error {
 	archetypeID, err := e.ArchetypeID(e.ChasmRegistry)
 	if err != nil {
 		return err
+	}
+	if e.lastWriteVersion != common.EmptyVersion {
+		targetLastWriteVersion, err := e.getLastWriteVersion(ctx, archetypeID)
+		if err != nil {
+			return err
+		}
+		if e.lastWriteVersion != targetLastWriteVersion {
+			e.Logger.Warn("Skipping delete execution replication task due to last write version mismatch",
+				tag.WorkflowNamespaceID(e.NamespaceID),
+				tag.WorkflowID(e.BusinessID),
+				tag.WorkflowRunID(e.RunID),
+				tag.TaskID(e.TaskID()),
+				tag.IncomingVersion(e.lastWriteVersion),
+				tag.CurrentVersion(targetLastWriteVersion),
+			)
+			metrics.ReplicationTasksSkipped.With(e.MetricsHandler).Record(
+				1,
+				metrics.OperationTag(metrics.DeleteExecutionReplicationTaskScope),
+				metrics.NamespaceTag(namespaceName),
+			)
+			return nil
+		}
 	}
 	switch archetypeID {
 	case chasm.WorkflowArchetypeID:
@@ -207,6 +211,38 @@ func (e *ExecutableDeleteExecutionTask) deleteWorkflowExecution(ctx context.Cont
 
 func (e *ExecutableDeleteExecutionTask) deleteChasmExecution(ctx context.Context) error {
 	return e.ChasmEngine.DeleteExecution(ctx, e.ComponentRef, chasm.DeleteExecutionRequest{})
+}
+
+func (e *ExecutableDeleteExecutionTask) getLastWriteVersion(
+	ctx context.Context,
+	archetypeID chasm.ArchetypeID,
+) (_ int64, retError error) {
+	namespaceID := namespace.ID(e.NamespaceID)
+	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(namespaceID, e.BusinessID)
+	if err != nil {
+		return common.EmptyVersion, err
+	}
+	workflowContext, release, err := e.WorkflowCache.GetOrCreateChasmExecution(
+		ctx,
+		shardContext,
+		namespaceID,
+		&commonpb.WorkflowExecution{
+			WorkflowId: e.BusinessID,
+			RunId:      e.RunID,
+		},
+		archetypeID,
+		locks.PriorityLow,
+	)
+	if err != nil {
+		return common.EmptyVersion, err
+	}
+	defer func() { release(retError) }()
+
+	mutableState, err := workflowContext.LoadMutableState(ctx, shardContext)
+	if err != nil {
+		return common.EmptyVersion, err
+	}
+	return mutableState.GetLastWriteVersion()
 }
 
 func (e *ExecutableDeleteExecutionTask) HandleErr(err error) error {

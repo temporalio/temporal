@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -23,6 +24,7 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
+	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
 )
 
@@ -35,6 +37,8 @@ type (
 		clusterMetadata *cluster.MockMetadata
 		shardController *shard.MockController
 		namespaceCache  *namespace.MockRegistry
+		workflowCache   *wcache.MockCache
+		chasmEngine     *chasm.MockEngine
 		metricsHandler  metrics.Handler
 		logger          log.Logger
 		config          *configs.Config
@@ -64,6 +68,8 @@ func (s *executableDeleteExecutionTaskSuite) SetupTest() {
 	s.clusterMetadata = cluster.NewMockMetadata(s.controller)
 	s.shardController = shard.NewMockController(s.controller)
 	s.namespaceCache = namespace.NewMockRegistry(s.controller)
+	s.workflowCache = wcache.NewMockCache(s.controller)
+	s.chasmEngine = chasm.NewMockEngine(s.controller)
 	s.metricsHandler = metrics.NoopMetricsHandler
 	s.logger = log.NewNoopLogger()
 	s.config = tests.NewDynamicConfig()
@@ -82,10 +88,12 @@ func (s *executableDeleteExecutionTaskSuite) SetupTest() {
 		Config:          s.config,
 		ClusterMetadata: s.clusterMetadata,
 		ShardController: s.shardController,
+		ChasmEngine:     s.chasmEngine,
 		NamespaceCache:  s.namespaceCache,
 		MetricsHandler:  s.metricsHandler,
 		Logger:          s.logger,
 		ThrottledLogger: s.logger,
+		WorkflowCache:   s.workflowCache,
 	}
 
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -111,51 +119,53 @@ func (s *executableDeleteExecutionTaskSuite) TestExecute_CurrentClusterPassive_D
 	s.NoError(s.newTask().Execute())
 }
 
-// A task generated before the namespace failed over is stale: the cluster that decided the deletion
-// no longer owns the execution, so the deletion must not be applied here.
-func (s *executableDeleteExecutionTaskSuite) TestExecute_StaleVersionAfterFailover_SkipsTask() {
-	taskVersion := cluster.TestAlternativeClusterInitialFailoverVersion
-	namespaceEntry := s.namespaceEntryWithFailoverVersion(
-		cluster.TestAlternativeClusterName,
-		taskVersion+cluster.TestFailoverVersionIncrement,
-	)
+func (s *executableDeleteExecutionTaskSuite) TestExecute_MatchingLastWriteVersion_DeletesWorkflowExecution() {
+	lastWriteVersion := cluster.TestAlternativeClusterInitialFailoverVersion
+	namespaceEntry := s.namespaceEntry(cluster.TestAlternativeClusterName)
 	s.namespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(namespaceEntry, nil).Times(3)
 
-	// No delete is expected on the shard controller / engine.
-	s.NoError(s.newTaskWithVersion(taskVersion).Execute())
-}
-
-func (s *executableDeleteExecutionTaskSuite) TestExecute_CurrentVersion_DeletesWorkflowExecution() {
-	taskVersion := cluster.TestAlternativeClusterInitialFailoverVersion
-	namespaceEntry := s.namespaceEntryWithFailoverVersion(cluster.TestAlternativeClusterName, taskVersion)
-	s.namespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(namespaceEntry, nil).Times(3)
-
+	s.expectLastWriteVersion(chasm.WorkflowArchetypeID, lastWriteVersion)
 	s.expectDeleteWorkflowExecution()
 
-	s.NoError(s.newTaskWithVersion(taskVersion).Execute())
+	s.NoError(s.newTaskWithVersion(lastWriteVersion).Execute())
 }
 
-// The target's namespace entry may lag behind the source's. A task newer than the locally known
-// failover version is not stale and must still be applied.
-func (s *executableDeleteExecutionTaskSuite) TestExecute_VersionNewerThanNamespace_DeletesWorkflowExecution() {
-	taskVersion := cluster.TestAlternativeClusterInitialFailoverVersion + cluster.TestFailoverVersionIncrement
-	namespaceEntry := s.namespaceEntryWithFailoverVersion(
-		cluster.TestAlternativeClusterName,
-		cluster.TestAlternativeClusterInitialFailoverVersion,
-	)
+func (s *executableDeleteExecutionTaskSuite) TestExecute_MismatchedLastWriteVersion_SkipsTask() {
+	lastWriteVersion := cluster.TestAlternativeClusterInitialFailoverVersion
+	namespaceEntry := s.namespaceEntry(cluster.TestAlternativeClusterName)
 	s.namespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(namespaceEntry, nil).Times(3)
 
+	s.expectLastWriteVersion(chasm.WorkflowArchetypeID, lastWriteVersion+cluster.TestFailoverVersionIncrement)
+
+	s.NoError(s.newTaskWithVersion(lastWriteVersion).Execute())
+}
+
+func (s *executableDeleteExecutionTaskSuite) TestExecute_VersionedTaskOnActiveCluster_DeletesWorkflowExecution() {
+	lastWriteVersion := cluster.TestAlternativeClusterInitialFailoverVersion
+	namespaceEntry := s.namespaceEntry(cluster.TestCurrentClusterName)
+	s.namespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(namespaceEntry, nil).Times(3)
+
+	s.expectLastWriteVersion(chasm.WorkflowArchetypeID, lastWriteVersion)
 	s.expectDeleteWorkflowExecution()
 
-	s.NoError(s.newTaskWithVersion(taskVersion).Execute())
+	s.NoError(s.newTaskWithVersion(lastWriteVersion).Execute())
+}
+
+func (s *executableDeleteExecutionTaskSuite) TestExecute_MatchingLastWriteVersion_DeletesChasmExecution() {
+	lastWriteVersion := cluster.TestAlternativeClusterInitialFailoverVersion
+	archetypeID := chasm.ArchetypeID(42)
+	namespaceEntry := s.namespaceEntry(cluster.TestAlternativeClusterName)
+	s.namespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(namespaceEntry, nil).Times(3)
+
+	s.expectLastWriteVersion(archetypeID, lastWriteVersion)
+	s.chasmEngine.EXPECT().DeleteExecution(gomock.Any(), gomock.Any(), chasm.DeleteExecutionRequest{}).Return(nil)
+
+	s.NoError(s.newTaskWithVersionAndArchetype(lastWriteVersion, archetypeID).Execute())
 }
 
 // Tasks generated before the version was introduced carry no version and must keep being applied.
 func (s *executableDeleteExecutionTaskSuite) TestExecute_UnversionedTask_DeletesWorkflowExecution() {
-	namespaceEntry := s.namespaceEntryWithFailoverVersion(
-		cluster.TestAlternativeClusterName,
-		cluster.TestAlternativeClusterInitialFailoverVersion+cluster.TestFailoverVersionIncrement,
-	)
+	namespaceEntry := s.namespaceEntry(cluster.TestAlternativeClusterName)
 	s.namespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(namespaceEntry, nil).Times(3)
 
 	s.expectDeleteWorkflowExecution()
@@ -166,10 +176,7 @@ func (s *executableDeleteExecutionTaskSuite) TestExecute_UnversionedTask_Deletes
 // Sync/verify versioned transition tasks synthesize a deletion out of their own replication task.
 // Their version describes a different operation and must not be treated as a deletion version.
 func (s *executableDeleteExecutionTaskSuite) TestExecute_SynthesizedDeletion_IgnoresSourceTaskVersion() {
-	namespaceEntry := s.namespaceEntryWithFailoverVersion(
-		cluster.TestAlternativeClusterName,
-		cluster.TestAlternativeClusterInitialFailoverVersion+cluster.TestFailoverVersionIncrement,
-	)
+	namespaceEntry := s.namespaceEntry(cluster.TestAlternativeClusterName)
 	s.namespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(namespaceEntry, nil).Times(3)
 
 	s.expectDeleteWorkflowExecution()
@@ -196,6 +203,26 @@ func (s *executableDeleteExecutionTaskSuite) TestExecute_SynthesizedDeletion_Ign
 	s.NoError(task.Execute())
 }
 
+func (s *executableDeleteExecutionTaskSuite) expectLastWriteVersion(
+	archetypeID chasm.ArchetypeID,
+	lastWriteVersion int64,
+) {
+	shardContext := historyi.NewMockShardContext(s.controller)
+	workflowContext := historyi.NewMockWorkflowContext(s.controller)
+	mutableState := historyi.NewMockMutableState(s.controller)
+	s.shardController.EXPECT().GetShardByNamespaceWorkflow(s.namespaceID, s.workflowID).Return(shardContext, nil)
+	s.workflowCache.EXPECT().GetOrCreateChasmExecution(
+		gomock.Any(),
+		shardContext,
+		s.namespaceID,
+		&commonpb.WorkflowExecution{WorkflowId: s.workflowID, RunId: s.runID},
+		archetypeID,
+		locks.PriorityLow,
+	).Return(workflowContext, func(error) {}, nil)
+	workflowContext.EXPECT().LoadMutableState(gomock.Any(), shardContext).Return(mutableState, nil)
+	mutableState.EXPECT().GetLastWriteVersion().Return(lastWriteVersion, nil)
+}
+
 func (s *executableDeleteExecutionTaskSuite) expectDeleteWorkflowExecution() {
 	shardContext := historyi.NewMockShardContext(s.controller)
 	engine := historyi.NewMockEngine(s.controller)
@@ -215,6 +242,13 @@ func (s *executableDeleteExecutionTaskSuite) newTask() *ExecutableDeleteExecutio
 }
 
 func (s *executableDeleteExecutionTaskSuite) newTaskWithVersion(version int64) *ExecutableDeleteExecutionTask {
+	return s.newTaskWithVersionAndArchetype(version, chasm.WorkflowArchetypeID)
+}
+
+func (s *executableDeleteExecutionTaskSuite) newTaskWithVersionAndArchetype(
+	version int64,
+	archetypeID chasm.ArchetypeID,
+) *ExecutableDeleteExecutionTask {
 	return NewExecutableDeleteExecutionTask(
 		s.processToolBox,
 		s.taskID,
@@ -229,7 +263,7 @@ func (s *executableDeleteExecutionTaskSuite) newTaskWithVersion(version int64) *
 				RunId:       s.runID,
 				TaskId:      s.taskID,
 				TaskType:    enumsspb.TASK_TYPE_REPLICATION_DELETE_EXECUTION,
-				ArchetypeId: chasm.WorkflowArchetypeID,
+				ArchetypeId: archetypeID,
 				Version:     version,
 			},
 		},

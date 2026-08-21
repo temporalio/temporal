@@ -208,6 +208,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Success() {
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
 		time.Time{},
@@ -236,6 +237,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
 		time.Time{},
@@ -253,6 +255,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
 		time.Time{},
@@ -269,6 +272,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
 		time.Time{},
@@ -296,6 +300,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
 		time.Time{},
@@ -312,6 +317,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
 		time.Time{},
@@ -328,6 +334,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
 		time.Time{},
@@ -343,6 +350,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
 		time.Time{},
@@ -355,7 +363,8 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 }
 
 func (s *contextSuite) TestDeleteWorkflowExecution_EmitsReplicationTaskWhenWorkflowActiveInCurrentCluster() {
-	captured := s.runDeleteWorkflowExecutionForReplicationCheck(cluster.TestCurrentClusterName)
+	lastWriteVersion := tests.Version + 100
+	captured := s.runDeleteWorkflowExecutionForReplicationCheck(cluster.TestCurrentClusterName, lastWriteVersion)
 
 	replicationTasks := captured.Tasks[tasks.CategoryReplication]
 	s.Require().Len(replicationTasks, 1, "expected a DeleteExecutionReplicationTask when workflow is active in current cluster")
@@ -363,12 +372,11 @@ func (s *contextSuite) TestDeleteWorkflowExecution_EmitsReplicationTaskWhenWorkf
 	s.True(ok, "task should be *DeleteExecutionReplicationTask")
 	s.Equal(captured.WorkflowID, deleteTask.WorkflowID)
 	s.Equal(captured.NamespaceID, deleteTask.NamespaceID)
-	s.Equal(tests.Version, deleteTask.Version,
-		"task should carry the failover version this cluster is active at")
+	s.Equal(lastWriteVersion, deleteTask.Version)
 }
 
 func (s *contextSuite) TestDeleteWorkflowExecution_NoReplicationTaskWhenWorkflowActiveInOtherCluster() {
-	captured := s.runDeleteWorkflowExecutionForReplicationCheck(cluster.TestAlternativeClusterName)
+	captured := s.runDeleteWorkflowExecutionForReplicationCheck(cluster.TestAlternativeClusterName, tests.Version)
 
 	s.Empty(captured.Tasks[tasks.CategoryReplication],
 		"expected no DeleteExecutionReplicationTask when workflow is active in another cluster")
@@ -376,6 +384,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_NoReplicationTaskWhenWorkflow
 
 func (s *contextSuite) runDeleteWorkflowExecutionForReplicationCheck(
 	workflowActiveCluster string,
+	lastWriteVersion int64,
 ) *persistence.AddHistoryTasksRequest {
 	nsID := namespace.NewID()
 	nsEntry := namespace.NewGlobalNamespaceForTest(
@@ -414,6 +423,7 @@ func (s *contextSuite) runDeleteWorkflowExecutionForReplicationCheck(
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		lastWriteVersion,
 		[]byte("branchToken"),
 		0,
 		time.Time{},
@@ -441,6 +451,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
 		time.Time{},
@@ -459,6 +470,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
 		time.Time{},
