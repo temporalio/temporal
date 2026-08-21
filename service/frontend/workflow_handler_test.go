@@ -77,6 +77,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -2870,6 +2871,140 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Signal() {
 
 	_, err = wh.StartBatchOperation(context.Background(), request)
 	s.NoError(err)
+}
+
+func TestBuildUnpauseActivityVisibilityQuery(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name         string
+		query        string
+		activityType string
+		want         string
+		wantErr      bool
+	}{
+		{
+			name:         "explicit targets",
+			activityType: "ActivityFunc",
+		},
+		{
+			name:         "scoped query",
+			query:        "WorkflowType='ScopedWorkflow'",
+			activityType: "ActivityFunc",
+			want:         "(WorkflowType = 'ScopedWorkflow') and (TemporalPauseInfo = 'property:activityType=ActivityFunc')",
+		},
+		{
+			name:         "boolean query preserves precedence and escapes activity type",
+			query:        "WorkflowType='ScopedWorkflow' OR WorkflowType='OtherWorkflow'",
+			activityType: "Activity'Func",
+			want:         "(WorkflowType = 'ScopedWorkflow' or WorkflowType = 'OtherWorkflow') and (TemporalPauseInfo = 'property:activityType=Activity\\'Func')",
+		},
+		{
+			name:         "order by is dropped",
+			query:        "WorkflowType='ScopedWorkflow' ORDER BY StartTime DESC",
+			activityType: "ActivityFunc",
+			want:         "(WorkflowType = 'ScopedWorkflow') and (TemporalPauseInfo = 'property:activityType=ActivityFunc')",
+		},
+		{
+			name:         "set operation",
+			query:        "WorkflowId='test' UNION SELECT * FROM other",
+			activityType: "ActivityFunc",
+			wantErr:      true,
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := buildUnpauseActivityVisibilityQuery(tt.query, tt.activityType)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func (s *WorkflowHandlerSuite) TestStartBatchOperation_UnpauseActivitiesPreservesTargetScope() {
+	testNamespace := namespace.Name("test-namespace")
+	targetExecution := &commonpb.Execution{
+		Type:       enumspb.EXECUTION_TYPE_WORKFLOW,
+		BusinessId: uuid.NewString(),
+		RunId:      uuid.NewString(),
+	}
+	testCases := []struct {
+		name       string
+		request    *workflowservice.StartBatchOperationRequest
+		wantQuery  string
+		wantTarget *commonpb.Execution
+	}{
+		{
+			name: "visibility query",
+			request: &workflowservice.StartBatchOperationRequest{
+				Namespace:       testNamespace.String(),
+				VisibilityQuery: "WorkflowType='ScopedWorkflow'",
+				JobId:           uuid.NewString(),
+				Reason:          "test",
+				Operation: &workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation{
+					UnpauseActivitiesOperation: &batchpb.BatchOperationUnpauseActivities{
+						Activity: &batchpb.BatchOperationUnpauseActivities_Type{Type: "ActivityFunc"},
+					},
+				},
+			},
+			wantQuery: "(WorkflowType = 'ScopedWorkflow') and (TemporalPauseInfo = 'property:activityType=ActivityFunc')",
+		},
+		{
+			name: "explicit target",
+			request: &workflowservice.StartBatchOperationRequest{
+				Namespace:        testNamespace.String(),
+				TargetExecutions: []*commonpb.Execution{targetExecution},
+				JobId:            uuid.NewString(),
+				Reason:           "test",
+				Operation: &workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation{
+					UnpauseActivitiesOperation: &batchpb.BatchOperationUnpauseActivities{
+						Activity: &batchpb.BatchOperationUnpauseActivities_Type{Type: "ActivityFunc"},
+					},
+				},
+			},
+			wantTarget: targetExecution,
+		},
+	}
+
+	for _, tt := range testCases {
+		s.Run(tt.name, func() {
+			namespaceID := namespace.ID(uuid.NewString())
+			wh := s.getWorkflowHandler(s.newConfig())
+			originalRequest := proto.Clone(tt.request).(*workflowservice.StartBatchOperationRequest)
+			var input batchspb.BatchOperationInput
+
+			s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
+			s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
+			s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(
+					_ context.Context,
+					request *historyservice.StartWorkflowExecutionRequest,
+					_ ...grpc.CallOption,
+				) (*historyservice.StartWorkflowExecutionResponse, error) {
+					s.Require().NoError(payloads.Decode(request.StartRequest.Input, &input))
+					return &historyservice.StartWorkflowExecutionResponse{}, nil
+				},
+			)
+
+			_, err := wh.StartBatchOperation(context.Background(), tt.request)
+			s.Require().NoError(err)
+			s.ProtoEqual(originalRequest, tt.request)
+			s.Equal(tt.wantQuery, input.Request.GetVisibilityQuery())
+			if tt.wantTarget == nil {
+				s.Empty(input.Request.GetTargetExecutions())
+			} else {
+				s.Require().Len(input.Request.GetTargetExecutions(), 1)
+				s.ProtoEqual(tt.wantTarget, input.Request.GetTargetExecutions()[0])
+			}
+		})
+	}
 }
 
 func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal() {
