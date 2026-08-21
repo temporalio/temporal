@@ -55,10 +55,12 @@ var (
 
 // batchProcessorConfig holds the configuration for batch processing
 type batchProcessorConfig struct {
-	namespace         string
-	adjustedQuery     string
-	batchType         enumspb.BatchOperationType
-	concurrency       int
+	namespace     string
+	adjustedQuery string
+	batchType     enumspb.BatchOperationType
+	concurrency   int
+	// heartbeatTimeout of the activity, or 0 for default.
+	heartbeatTimeout  time.Duration
 	initialPageToken  []byte
 	initialExecutions []*commonpb.WorkflowExecution
 	// initialTargetExecutions holds an explicit list of activity target
@@ -226,6 +228,15 @@ func fetchPage(
 	}, nil
 }
 
+// heartbeatInterval returns a fraction of the heartbeat timeout the activity was scheduled with.
+// Uses default activity heartbeat timeout of 10s, returning 2.5s, if not set.
+func heartbeatInterval(heartbeatTimeout time.Duration) time.Duration {
+	if heartbeatTimeout <= 0 {
+		heartbeatTimeout = defaultActivityHeartBeatTimeout
+	}
+	return heartbeatTimeout / 4
+}
+
 // processWorkflowsWithProactiveFetching handles the core logic for both batch activity functions
 // nolint:revive,cognitive-complexity
 func (a *activities) processWorkflowsWithProactiveFetching(
@@ -244,8 +255,8 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	taskCh := make(chan task, concurrency)
 	respCh := make(chan taskResponse, concurrency)
 
-	// Ticker for frequent heartbeats to avoid timeout during slow processing, 1/4 of the default heartbeat timeout (10s)
-	heartbeatTicker := time.NewTicker(defaultActivityHeartBeatTimeout / 4)
+	// Ticker for frequent heartbeats to avoid timeout during slow processing.
+	heartbeatTicker := time.NewTicker(heartbeatInterval(config.heartbeatTimeout))
 	defer heartbeatTicker.Stop()
 
 	for range concurrency {
@@ -495,6 +506,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		adjustedQuery:           visibilityQuery,
 		batchType:               batchParams.BatchType,
 		concurrency:             a.getOperationConcurrency(int(batchParams.Concurrency)),
+		heartbeatTimeout:        batchParams.GetActivityHeartbeatTimeout().AsDuration(),
 		initialPageToken:        hbd.PageToken,
 		initialExecutions:       executions,
 		initialTargetExecutions: targetExecutions,

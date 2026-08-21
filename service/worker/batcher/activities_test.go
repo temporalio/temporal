@@ -21,6 +21,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/mocks"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
@@ -1649,4 +1651,112 @@ func (s *activitiesSuite) TestDeterministicRequestID_ScopedToJob() {
 
 	s.NotEqual(deterministicRequestID(jobA, parts...), deterministicRequestID(jobB, parts...))
 	s.NotEqual(deterministicRequestID(jobA, "signal", "workflow-id", "run-id", "other-signal"), deterministicRequestID(jobA, parts...))
+}
+
+func (s *activitiesSuite) TestHeartbeatInterval() {
+	for _, tc := range []struct {
+		name             string
+		heartbeatTimeout time.Duration
+		expected         time.Duration
+	}{
+		{
+			name:             "unset assumes the default timeout",
+			heartbeatTimeout: 0,
+			expected:         defaultActivityHeartBeatTimeout / 4,
+		},
+		{
+			name:             "negative assumes the default timeout",
+			heartbeatTimeout: -time.Second,
+			expected:         defaultActivityHeartBeatTimeout / 4,
+		},
+		{
+			name:             "a shorter timeout heartbeats more often",
+			heartbeatTimeout: time.Second,
+			expected:         250 * time.Millisecond,
+		},
+		{
+			name:             "a longer timeout heartbeats less often",
+			heartbeatTimeout: 2 * time.Minute,
+			expected:         30 * time.Second,
+		},
+	} {
+		s.Run(tc.name, func() {
+			interval := heartbeatInterval(tc.heartbeatTimeout)
+			s.Equal(tc.expected, interval)
+			if tc.heartbeatTimeout > 0 {
+				s.Less(interval, tc.heartbeatTimeout,
+					"the interval must stay under the timeout it was derived from")
+			}
+		})
+	}
+}
+
+// TestProcessWorkflowsWithProactiveFetching_HeartbeatsWithinShortTimeout verifies
+// the activity heartbeats on a cadence derived from the heartbeat timeout it was
+// scheduled with. A cadence fixed to the default outlives a shorter timeout, so
+// the activity would time out mid-batch while making progress.
+func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_HeartbeatsWithinShortTimeout() {
+	const heartbeatTimeout = 40 * time.Millisecond
+
+	// The task takes many heartbeat intervals to process, so a correct cadence
+	// heartbeats during it while the default cadence (2.5s) would not.
+	fakeWorker := func(
+		ctx context.Context,
+		taskCh chan task,
+		respCh chan taskResponse,
+		_ quotas.RequestRateLimiter,
+		_ workflowservice.WorkflowServiceClient,
+		_ metrics.Handler,
+		_ log.Logger,
+	) {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case t := <-taskCh:
+				select {
+				case <-time.After(20 * heartbeatTimeout):
+				case <-ctx.Done():
+					return
+				}
+				select {
+				case respCh <- taskResponse{page: t.page}:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}
+
+	a := &activities{}
+	config := batchProcessorConfig{
+		batchType:        enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
+		concurrency:      1,
+		heartbeatTimeout: heartbeatTimeout,
+		initialExecutions: []*commonpb.WorkflowExecution{
+			{WorkflowId: "wf-1", RunId: "run-1"},
+		},
+	}
+	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 10000 }))
+
+	var heartbeats atomic.Int32
+	env := s.NewTestActivityEnvironment()
+	env.SetOnActivityHeartbeatListener(func(_ *activity.Info, _ converter.EncodedValues) {
+		heartbeats.Add(1)
+	})
+	runner := func(ctx context.Context) (HeartBeatDetails, error) {
+		return a.processWorkflowsWithProactiveFetching(
+			ctx, config, fakeWorker, limiter, nil, metrics.NoopMetricsHandler, log.NewTestLogger(), HeartBeatDetails{},
+		)
+	}
+	env.RegisterActivity(runner)
+
+	encoded, err := env.ExecuteActivity(runner)
+	s.Require().NoError(err)
+	var hbd HeartBeatDetails
+	s.Require().NoError(encoded.Get(&hbd))
+	s.Equal(1, hbd.SuccessCount)
+
+	s.Positive(heartbeats.Load(),
+		"the activity must heartbeat while processing a task that outlasts its heartbeat timeout")
 }
