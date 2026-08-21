@@ -282,16 +282,23 @@ func (b *BackfillerTaskHandler) allowedBufferedStarts(
 
 	return backfillerBufferCapacity(
 		len(invoker.GetBufferedStarts()),
-		recentActionCount,
+		invoker.completedBufferedStartCount(),
 		tweakables.MaxBufferSize,
 		tweakables.GeneratorBufferReserveSize,
 		backfillerCount,
 	), nil
 }
 
-func backfillerBufferCapacity(bufferedCount, retainedActionCount, maxBufferSize, generatorReserve, backfillerCount int) int {
+// backfillerBufferCapacity returns the number of starts one Backfiller can add.
+// Backfillers share half the buffer after pending starts and the Generator's
+// reserve are removed. Completed starts do not consume capacity.
+func backfillerBufferCapacity(bufferedCount, completedCount, maxBufferSize, generatorReserve, backfillerCount int) int {
 	backfillerCount = max(1, backfillerCount)
-	pending := max(0, bufferedCount-retainedActionCount)
-	available := max(0, (maxBufferSize/2)-pending-generatorReserve)
+	available := max(0, backfillerBufferPoolSize(maxBufferSize, generatorReserve)-incompleteBufferedStartCount(bufferedCount, completedCount))
 	return available / backfillerCount
+}
+
+// backfillerBufferPoolSize returns the buffer capacity shared by Backfillers.
+func backfillerBufferPoolSize(maxBufferSize, generatorReserve int) int {
+	return max(0, maxBufferSize/2-generatorReserve)
 }

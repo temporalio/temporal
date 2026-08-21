@@ -739,7 +739,7 @@ func (s *Scheduler) Describe(
 	info.FutureActionTimes = futureActionTimes
 	// BufferedStarts holds waiting, running, and recently-completed entries; only the
 	// waiting portion (those not yet surfaced via RecentActions) counts as buffered.
-	info.BufferSize = int64(len(invoker.GetBufferedStarts()) - len(info.RecentActions))
+	info.BufferSize = int64(invoker.waitingBufferedStartCount())
 
 	executionInfo := ctx.ExecutionInfo()
 	info.StateSizeBytes = int64(executionInfo.ApproximateStateSize)
@@ -1017,7 +1017,7 @@ func (s *Scheduler) SearchAttributes(ctx chasm.Context) []chasm.SearchAttributeK
 
 		invoker := s.Invoker.Get(ctx)
 		runningWorkflowCount := int64(len(invoker.runningWorkflowExecutions()))
-		bufferedStartsCount := int64(len(invoker.GetBufferedStarts()) - len(invoker.recentActions()))
+		bufferedStartsCount := int64(invoker.waitingBufferedStartCount())
 
 		// Emitted even when zero so that exact and range queries both work.
 		out = append(out,

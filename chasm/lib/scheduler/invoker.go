@@ -417,6 +417,32 @@ func (i *Invoker) recentActions() []*schedulepb.ScheduleActionResult {
 	return results
 }
 
+// waitingBufferedStartCount returns the number of BufferedStarts that have not
+// yet been started (no RunId assigned): waiting in the buffer, as opposed to
+// running or completed. This is the user-facing "buffer size" — recentActions
+// covers the running/completed portion.
+func (i *Invoker) waitingBufferedStartCount() int {
+	count := 0
+	for _, start := range i.GetBufferedStarts() {
+		if start.GetRunId() == "" {
+			count++
+		}
+	}
+	return count
+}
+
+// completedBufferedStartCount returns the number of completed starts currently
+// retained for reporting.
+func (i *Invoker) completedBufferedStartCount() int {
+	count := 0
+	for _, start := range i.GetBufferedStarts() {
+		if start.GetCompleted() != nil {
+			count++
+		}
+	}
+	return count
+}
+
 // applyCompletedRetention removes the oldest completed BufferedStarts beyond
 // the retention limit.
 func (i *Invoker) applyCompletedRetention() {
@@ -441,4 +467,10 @@ func (i *Invoker) applyCompletedRetention() {
 	}
 
 	i.BufferedStarts = append(nonCompleted, completed...)
+}
+
+// incompleteBufferedStartCount returns the number of starts that are pending
+// or running. Completed starts are retained for reporting only.
+func incompleteBufferedStartCount(bufferedCount, completedCount int) int {
+	return max(0, bufferedCount-completedCount)
 }
