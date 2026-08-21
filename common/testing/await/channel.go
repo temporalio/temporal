@@ -8,6 +8,7 @@ import (
 
 // Rcv waits for and returns the next value from ch using the test context.
 // Like a regular receive, a closed channel returns the element type's zero value.
+// It fails the test if the context ends before ch produces a value.
 func Rcv[T any](tb testing.TB, ch <-chan T) T {
 	tb.Helper()
 
