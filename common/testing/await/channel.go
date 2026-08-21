@@ -6,9 +6,9 @@ import (
 	"go.temporal.io/server/common/testing/testcontext"
 )
 
-// RequireReceive waits for and returns the next value from ch using the test context.
+// Receive waits for and returns the next value from ch using the test context.
 // It fails the test if the context ends or ch closes before producing a value.
-func RequireReceive[T any](tb testing.TB, ch <-chan T) T {
+func Receive[T any](tb testing.TB, ch <-chan T) T {
 	tb.Helper()
 
 	ctx := testcontext.For(tb)
@@ -27,9 +27,9 @@ func RequireReceive[T any](tb testing.TB, ch <-chan T) T {
 	}
 }
 
-// RequireSend waits to send value to ch using the test context.
+// Send waits to send value to ch using the test context.
 // It fails the test if the context ends or ch closes before accepting the value.
-func RequireSend[T any](tb testing.TB, ch chan<- T, value T) {
+func Send[T any](tb testing.TB, ch chan<- T, value T) {
 	tb.Helper()
 
 	ctx := testcontext.For(tb)

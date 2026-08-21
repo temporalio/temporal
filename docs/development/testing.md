@@ -70,12 +70,12 @@ await.RequireTrue(t, func() bool {
 
 ### Blocking on channels
 
-Use `await.RequireReceive` and `await.RequireSend` for blocking channel operations.
+Use `await.Receive` and `await.Send` for blocking channel operations.
 They fail the test if its context ends or the channel closes.
 
 ```go
-headers := await.RequireReceive(t, requestHeaders)
-await.RequireSend(t, responses, response)
+headers := await.Receive(t, requestHeaders)
+await.Send(t, responses, response)
 ```
 
 Keep an explicit `select` when testing non-blocking behavior, waiting on multiple channels,

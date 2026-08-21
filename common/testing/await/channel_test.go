@@ -9,7 +9,7 @@ import (
 	"go.temporal.io/server/common/testing/testcontext"
 )
 
-func TestRequireReceive(t *testing.T) {
+func TestReceive(t *testing.T) {
 	t.Parallel()
 
 	t.Run("receives value", func(t *testing.T) {
@@ -18,7 +18,7 @@ func TestRequireReceive(t *testing.T) {
 		ch := make(chan string, 1)
 		ch <- "value"
 
-		require.Equal(t, "value", await.RequireReceive(t, ch))
+		require.Equal(t, "value", await.Receive(t, ch))
 	})
 
 	t.Run("fails when channel closes", func(t *testing.T) {
@@ -29,7 +29,7 @@ func TestRequireReceive(t *testing.T) {
 		tb := newRecordingTB()
 
 		tb.run(func() {
-			await.RequireReceive(tb, ch)
+			await.Receive(tb, ch)
 		})
 
 		require.Contains(t, tb.fatals(), "channel closed before receiving a value")
@@ -43,21 +43,21 @@ func TestRequireReceive(t *testing.T) {
 
 		tb.run(func() {
 			cancelTestContext(tb)
-			await.RequireReceive(tb, ch)
+			await.Receive(tb, ch)
 		})
 
 		require.Contains(t, tb.fatals(), "context canceled")
 	})
 }
 
-func TestRequireSend(t *testing.T) {
+func TestSend(t *testing.T) {
 	t.Parallel()
 
 	t.Run("sends value", func(t *testing.T) {
 		t.Parallel()
 
 		ch := make(chan string, 1)
-		await.RequireSend(t, ch, "value")
+		await.Send(t, ch, "value")
 
 		require.Equal(t, "value", <-ch)
 	})
@@ -70,7 +70,7 @@ func TestRequireSend(t *testing.T) {
 		tb := newRecordingTB()
 
 		tb.run(func() {
-			await.RequireSend(tb, ch, "value")
+			await.Send(tb, ch, "value")
 		})
 
 		require.Contains(t, tb.fatals(), "channel closed before sending a value")
@@ -84,7 +84,7 @@ func TestRequireSend(t *testing.T) {
 
 		tb.run(func() {
 			cancelTestContext(tb)
-			await.RequireSend(tb, ch, "value")
+			await.Send(tb, ch, "value")
 		})
 
 		require.Contains(t, tb.fatals(), "context canceled")

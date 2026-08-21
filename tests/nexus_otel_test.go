@@ -112,7 +112,7 @@ func (s *NexusOTELSuite) TestCallback() {
 	s.NoError(err)
 	s.NoError(env.SdkClient().GetWorkflow(s.Context(), env.Tv().WorkflowID(), startResponse.RunId).Get(s.Context(), nil))
 
-	headers := await.RequireReceive(s.T(), requestHeaders)
+	headers := await.Receive(s.T(), requestHeaders)
 	s.Equal(callbackHeaderValue, headers.Get("X-Callback-Header"))
 	httpSpans := s.requireNexusHTTPSpans(exporter, []nexusHTTPSpan{{
 		TraceID:     1,
@@ -177,7 +177,7 @@ func (s *NexusOTELSuite) TestOperation() {
 		ScheduleToCloseTimeout: durationpb.New(time.Minute),
 	})
 	s.NoError(err)
-	nexusRequestID := await.RequireReceive(s.T(), requestIDs)
+	nexusRequestID := await.Receive(s.T(), requestIDs)
 
 	pollResponse, err := callerEnv.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
 		Namespace:   callerEnv.Namespace().String(),
@@ -284,7 +284,7 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 	})
 	s.NoError(err)
 
-	request := await.RequireReceive(s.T(), requests)
+	request := await.Receive(s.T(), requests)
 	operationURLPath := "/nexus/endpoints/" + endpoint.Id + "/services/" + service.Name + "/" + operation.Name()
 	httpSpans := s.requireNexusHTTPSpans(exporter, []nexusHTTPSpan{
 		{
@@ -355,7 +355,7 @@ func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 	})
 	var handlerErr *nexus.HandlerError
 	s.Require().ErrorAs(err, &handlerErr)
-	s.NoError(await.RequireReceive(s.T(), pollerErrCh))
+	s.NoError(await.Receive(s.T(), pollerErrCh))
 
 	httpSpans := s.requireNexusHTTPSpans(exporter, []nexusHTTPSpan{{
 		TraceID:     1,
