@@ -6,11 +6,13 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/propagation"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
@@ -28,6 +30,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -40,6 +43,8 @@ type nexusHTTPSpan struct {
 	ServiceName  string
 	Kind         oteltrace.SpanKind
 	URLPath      string
+	Status       codes.Code
+	NexusAttrs   map[string]any
 }
 
 type NexusOTELSuite struct {
@@ -140,10 +145,15 @@ func (s *NexusOTELSuite) TestOperation() {
 		workflow.GetSignalChannel(ctx, "complete").Receive(ctx, nil)
 		return nil, nil
 	}
+	requestIDs := make(chan string, 1)
 	operation := temporalnexus.NewWorkflowRunOperation(
 		"test-operation",
 		handlerWorkflow,
 		func(_ context.Context, _ nexus.NoValue, options nexus.StartOperationOptions) (client.StartWorkflowOptions, error) {
+			select {
+			case requestIDs <- options.RequestID:
+			default:
+			}
 			return client.StartWorkflowOptions{
 				ID:        options.RequestID,
 				TaskQueue: handlerTaskQueue,
@@ -171,6 +181,12 @@ func (s *NexusOTELSuite) TestOperation() {
 		ScheduleToCloseTimeout: durationpb.New(time.Minute),
 	})
 	s.NoError(err)
+	var nexusRequestID string
+	select {
+	case nexusRequestID = <-requestIDs:
+	case <-s.Context().Done():
+		s.FailNow("timed out waiting for Nexus operation", s.Context().Err().Error())
+	}
 
 	pollResponse, err := callerEnv.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
 		Namespace:   callerEnv.Namespace().String(),
@@ -198,6 +214,9 @@ func (s *NexusOTELSuite) TestOperation() {
 			ServiceName: "io.temporal.history",
 			Kind:        oteltrace.SpanKindClient,
 			URLPath:     operationURLPath,
+			NexusAttrs: map[string]any{
+				"nexus.request_id": nexusRequestID,
+			},
 		},
 		{
 			TraceID:      1,
@@ -207,6 +226,12 @@ func (s *NexusOTELSuite) TestOperation() {
 			ServiceName:  "io.temporal.frontend",
 			Kind:         oteltrace.SpanKindServer,
 			URLPath:      operationURLPath,
+			NexusAttrs: map[string]any{
+				"nexus.endpoint":   handlerWorkerEndpoint.GetSpec().GetName(),
+				"nexus.operation":  operation.Name(),
+				"nexus.request_id": nexusRequestID,
+				"nexus.service":    service.Name,
+			},
 		},
 		{
 			TraceID:     2,
@@ -224,6 +249,11 @@ func (s *NexusOTELSuite) TestOperation() {
 			ServiceName:  "io.temporal.frontend",
 			Kind:         oteltrace.SpanKindServer,
 			URLPath:      operationURLPath + "/cancel",
+			NexusAttrs: map[string]any{
+				"nexus.endpoint":  handlerWorkerEndpoint.GetSpec().GetName(),
+				"nexus.operation": operation.Name(),
+				"nexus.service":   service.Name,
+			},
 		},
 	})
 }
@@ -234,10 +264,14 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 	env := s.newTestEnv(exporter)
 	tv := env.Tv().WithTaskQueue(env.WorkerTaskQueue())
 
-	requestHeaders := make(chan nexus.Header, 1)
+	type nexusRequest struct {
+		header    nexus.Header
+		requestID string
+	}
+	requests := make(chan nexusRequest, 1)
 	service := nexus.NewService("test-service")
 	operation := nexus.NewSyncOperation("test-operation", func(_ context.Context, _ nexus.NoValue, options nexus.StartOperationOptions) (string, error) {
-		requestHeaders <- options.Header
+		requests <- nexusRequest{header: options.Header, requestID: options.RequestID}
 		return tv.Any().String(), nil
 	})
 	service.MustRegister(operation)
@@ -259,9 +293,9 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 	})
 	s.NoError(err)
 
-	var headers nexus.Header
+	var request nexusRequest
 	select {
-	case headers = <-requestHeaders:
+	case request = <-requests:
 	case <-s.Context().Done():
 		s.FailNow("timed out waiting for Nexus operation", s.Context().Err().Error())
 	}
@@ -274,6 +308,10 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 			ServiceName: "io.temporal.history",
 			Kind:        oteltrace.SpanKindClient,
 			URLPath:     operationURLPath,
+			NexusAttrs: map[string]any{
+				"nexus.namespace":  env.Namespace().String(),
+				"nexus.request_id": request.requestID,
+			},
 		},
 		{
 			TraceID:      1,
@@ -283,22 +321,33 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 			ServiceName:  "io.temporal.frontend",
 			Kind:         oteltrace.SpanKindServer,
 			URLPath:      operationURLPath,
+			NexusAttrs: map[string]any{
+				"nexus.endpoint":   endpoint.GetSpec().GetName(),
+				"nexus.operation":  operation.Name(),
+				"nexus.request_id": request.requestID,
+				"nexus.service":    service.Name,
+			},
 		},
 	})
 	spanContext := oteltrace.SpanContextFromContext(
-		propagation.TraceContext{}.Extract(s.Context(), propagation.MapCarrier(headers)),
+		propagation.TraceContext{}.Extract(s.Context(), propagation.MapCarrier(request.header)),
 	)
 	s.Require().True(spanContext.IsValid())
 	s.Require().Equal(spanContext.TraceID(), httpSpans[0].SpanContext.TraceID())
 	s.Require().Equal(spanContext.SpanID(), httpSpans[0].SpanContext.SpanID())
 }
 
-// Verifies the namespace and task queue dispatch route is instrumented independently of forwarding.
+// Verifies the namespace and task queue route propagates tracing and records handler failures without forwarding.
 func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 	exporter := tracetest.NewInMemoryExporter()
 	env := s.newTestEnv(exporter)
 	taskQueue := env.Tv().TaskQueue().GetName()
-	pollerErrCh := env.nexusTaskPoller(s.Context(), s.T(), taskQueue, nexusEchoHandler)
+	pollerErrCh := env.nexusTaskPoller(s.Context(), s.T(), taskQueue, func(
+		*testing.T,
+		*workflowservice.PollNexusTaskQueueResponse,
+	) (*nexusTaskResponse, error) {
+		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "deliberate test failure")
+	})
 	dispatchURL, err := url.Parse(env.dispatchByTaskQueueURL(taskQueue))
 	s.NoError(err)
 	nexusClient, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
@@ -313,10 +362,13 @@ func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 		traceID      = "4bf92f3577b34da6a3ce929d0e0e4736"
 		parentSpanID = "00f067aa0ba902b7"
 	)
+	requestID := env.Tv().RequestID()
 	_, err = nexusrpc.StartOperation(s.Context(), nexusClient, op, env.Tv().Any().String(), nexus.StartOperationOptions{
-		Header: nexus.Header{"traceparent": "00-" + traceID + "-" + parentSpanID + "-01"},
+		Header:    nexus.Header{"traceparent": "00-" + traceID + "-" + parentSpanID + "-01"},
+		RequestID: requestID,
 	})
-	s.NoError(err)
+	var handlerErr *nexus.HandlerError
+	s.Require().ErrorAs(err, &handlerErr)
 	s.NoError(<-pollerErrCh)
 
 	httpSpans := s.requireNexusHTTPSpans(exporter, []nexusHTTPSpan{{
@@ -326,51 +378,46 @@ func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 		ServiceName: "io.temporal.frontend",
 		Kind:        oteltrace.SpanKindServer,
 		URLPath:     dispatchURL.Path + "/test-service/my-operation",
+		Status:      codes.Error,
+		NexusAttrs: map[string]any{
+			"nexus.operation":  "my-operation",
+			"nexus.request_id": requestID,
+			"nexus.service":    "test-service",
+		},
 	}})
 	s.Require().Equal(traceID, httpSpans[0].SpanContext.TraceID().String())
 	s.Require().Equal(parentSpanID, httpSpans[0].Parent.SpanID().String())
 }
 
-// requireNexusHTTPSpans compares all exported HTTP spans after assigning stable local IDs
-// and returns the matching raw spans for context propagation assertions.
+// requireNexusHTTPSpans compares all exported HTTP spans and their Nexus attributes after
+// assigning stable local IDs, then returns the raw spans for context propagation assertions.
 func (s *NexusOTELSuite) requireNexusHTTPSpans(
 	exporter *tracetest.InMemoryExporter,
 	expected []nexusHTTPSpan,
 ) tracetest.SpanStubs {
 	s.T().Helper()
 	var httpSpans tracetest.SpanStubs
-	s.Await(func(s *NexusOTELSuite) {
+	requireExportedSpans(s, exporter, expected, func(spans tracetest.SpanStubs) []nexusHTTPSpan {
 		var actual []nexusHTTPSpan
-		actual, httpSpans = s.nexusHTTPSpans(exporter.GetSpans())
-		s.Require().Equal(expected, actual)
-	}, 10*time.Second, 100*time.Millisecond)
+		actual, httpSpans = s.nexusHTTPSpans(spans)
+		return actual
+	})
 	return httpSpans
 }
 
 func (s *NexusOTELSuite) nexusHTTPSpans(
 	spans tracetest.SpanStubs,
 ) ([]nexusHTTPSpan, tracetest.SpanStubs) {
-	httpSpans := slices.DeleteFunc(spans, func(span tracetest.SpanStub) bool {
-		return span.InstrumentationScope.Name != otelhttp.ScopeName
+	httpSpans := testtelemetry.FilterSpans(spans, func(span tracetest.SpanStub) bool {
+		return span.InstrumentationScope.Name == otelhttp.ScopeName
 	})
 	slices.SortFunc(httpSpans, func(a, b tracetest.SpanStub) int {
 		return a.StartTime.Compare(b.StartTime)
 	})
-
-	traceIDs := make(map[oteltrace.TraceID]int)
-	spanIDs := make(map[oteltrace.TraceID]map[oteltrace.SpanID]int)
-	for _, span := range httpSpans {
-		traceID := span.SpanContext.TraceID()
-		if _, ok := traceIDs[traceID]; !ok {
-			traceIDs[traceID] = len(traceIDs) + 1
-			spanIDs[traceID] = make(map[oteltrace.SpanID]int)
-		}
-		spanIDs[traceID][span.SpanContext.SpanID()] = len(spanIDs[traceID]) + 1
-	}
+	localIDs := testtelemetry.LocalSpanIDs(httpSpans)
 
 	result := make([]nexusHTTPSpan, 0, len(httpSpans))
-	for _, span := range httpSpans {
-		traceID := span.SpanContext.TraceID()
+	for i, span := range httpSpans {
 		var serviceName string
 		if span.Resource != nil {
 			if value, ok := span.Resource.Set().Value(semconv.ServiceNameKey); ok {
@@ -378,26 +425,49 @@ func (s *NexusOTELSuite) nexusHTTPSpans(
 			}
 		}
 		var urlPath string
+		var nexusAttrs map[string]any
 		for _, attr := range span.Attributes {
+			key := string(attr.Key)
+			if strings.HasPrefix(key, "nexus.") {
+				if nexusAttrs == nil {
+					nexusAttrs = make(map[string]any)
+				}
+				nexusAttrs[key] = attr.Value.AsInterface()
+			}
 			if attr.Key == semconv.URLPathKey {
 				urlPath = attr.Value.AsString()
-				break
 			}
-			if attr.Key == semconv.URLFullKey {
+			if urlPath == "" && attr.Key == semconv.URLFullKey {
 				if parsedURL, err := url.Parse(attr.Value.AsString()); err == nil {
 					urlPath = parsedURL.Path
 				}
 			}
 		}
 		result = append(result, nexusHTTPSpan{
-			TraceID:      traceIDs[traceID],
-			SpanID:       spanIDs[traceID][span.SpanContext.SpanID()],
-			ParentSpanID: spanIDs[traceID][span.Parent.SpanID()],
+			TraceID:      localIDs[i].Trace,
+			SpanID:       localIDs[i].Span,
+			ParentSpanID: localIDs[i].Parent,
 			Name:         span.Name,
 			ServiceName:  serviceName,
 			Kind:         span.SpanKind,
 			URLPath:      urlPath,
+			Status:       span.Status.Code,
+			NexusAttrs:   nexusAttrs,
 		})
 	}
 	return result, httpSpans
+}
+
+func requireExportedSpans[T any](
+	s *NexusOTELSuite,
+	exporter *tracetest.InMemoryExporter,
+	expected []T,
+	project func(tracetest.SpanStubs) []T,
+) {
+	s.T().Helper()
+	s.Await(func(s *NexusOTELSuite) {
+		actual := project(exporter.GetSpans())
+		s.Require().Len(actual, len(expected))
+		s.Require().Equal(expected, actual)
+	}, 10*time.Second, 100*time.Millisecond)
 }

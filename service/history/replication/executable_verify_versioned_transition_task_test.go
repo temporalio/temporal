@@ -1,6 +1,7 @@
 package replication
 
 import (
+	"encoding/json"
 	"errors"
 	"math/rand"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	otellog "go.opentelemetry.io/otel/log"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -273,9 +275,9 @@ func (s *executableVerifyVersionedTransitionTaskSuite) mockGetMutableState(
 	runId string,
 	mutableState historyi.MutableState,
 	err error,
-) {
+) *gomock.Call {
 	shardContext := historyi.NewMockShardContext(s.controller)
-	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
+	shardCall := s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(s.task.NamespaceID),
 		s.task.WorkflowID,
 	).Return(shardContext, nil)
@@ -294,6 +296,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) mockGetMutableState(
 		chasm.WorkflowArchetypeID,
 		locks.PriorityHigh,
 	).Return(wfCtx, func(err error) {}, err)
+	return shardCall
 }
 
 func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch_NotUpToDate() {
@@ -596,6 +599,16 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBra
 }
 
 func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBranch_NotUpToDate() {
+	s.config.EmitReplicationLifecycleEvents = func() bool { return true }
+	eventCapture := &eventCaptureLogger{}
+	eventShard := historyi.NewMockShardContext(s.controller)
+	eventShard.EXPECT().GetEventLogger().Return(eventCapture).Times(2)
+	eventShard.EXPECT().GetShardID().Return(int32(1)).Times(2)
+	s.namespaceCache.EXPECT().GetNamespaceName(namespace.ID(s.namespaceID)).
+		Return(namespace.Name("test-namespace"), nil).Times(2)
+	s.executableTask.EXPECT().Attempt().Return(1)
+	s.executableTask.EXPECT().SourceShardKey().Return(s.sourceShardKey).AnyTimes()
+
 	taskNextEvent := int64(10)
 	replicationTask := &replicationspb.ReplicationTask{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK,
@@ -654,7 +667,14 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBra
 		},
 	).AnyTimes()
 
-	s.mockGetMutableState(s.namespaceID, s.workflowID, s.runID, mu, nil)
+	executingCall := s.shardController.EXPECT().GetShardByNamespaceWorkflow(
+		namespace.ID(s.namespaceID), s.workflowID,
+	).Return(eventShard, nil)
+	loadCall := s.mockGetMutableState(s.namespaceID, s.workflowID, s.runID, mu, nil)
+	appliedCall := s.shardController.EXPECT().GetShardByNamespaceWorkflow(
+		namespace.ID(s.namespaceID), s.workflowID,
+	).Return(eventShard, nil)
+	gomock.InOrder(executingCall, loadCall, appliedCall)
 
 	task := NewExecutableVerifyVersionedTransitionTask(
 		s.toolBox,
@@ -678,6 +698,27 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBra
 
 	err := task.Execute()
 	s.NoError(err)
+	s.Require().Len(eventCapture.records, 2)
+	attrs := make(map[string]otellog.Value)
+	eventCapture.records[1].WalkAttributes(func(kv otellog.KeyValue) bool {
+		attrs[kv.Key] = kv.Value
+		return true
+	})
+	s.Equal("backfilled", attrs["outcome"].AsString())
+	s.Equal(s.newRunID, attrs["new_run_id"].AsString())
+	var details struct {
+		RecoveryAction    string `json:"recovery_action"`
+		FirstEventID      int64  `json:"first_event_id"`
+		FirstEventVersion int64  `json:"first_event_version"`
+		LastEventID       int64  `json:"last_event_id"`
+		LastEventVersion  int64  `json:"last_event_version"`
+	}
+	s.NoError(json.Unmarshal([]byte(attrs["details"].AsString()), &details))
+	s.Equal("resend_history", details.RecoveryAction)
+	s.Equal(int64(9), details.FirstEventID)
+	s.Equal(int64(1), details.FirstEventVersion)
+	s.Equal(int64(9), details.LastEventID)
+	s.Equal(int64(1), details.LastEventVersion)
 }
 
 func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_Skip_TerminalState() {
