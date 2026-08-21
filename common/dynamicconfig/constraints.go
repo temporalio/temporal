@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
-	"sort"
+	"slices"
 	"strings"
 )
 
@@ -42,6 +42,6 @@ func ParseConstraintsJSONWithFields(input string) (Constraints, []string, error)
 	for field := range encodedFields {
 		fields = append(fields, field)
 	}
-	sort.Strings(fields)
+	slices.Sort(fields)
 	return *constraints, fields, nil
 }
