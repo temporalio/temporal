@@ -79,7 +79,7 @@ type (
 	// HistoryExecution is the SQL persistence interface for history executions
 	HistoryExecution interface {
 		InsertIntoExecutions(ctx context.Context, row *ExecutionsRow) (sql.Result, error)
-		UpdateExecutions(ctx context.Context, update *ExecutionsUpdate) (sql.Result, error)
+		UpdateExecutions(ctx context.Context, row *ExecutionsRow) (sql.Result, error)
 		SelectFromExecutions(ctx context.Context, filter ExecutionsFilter) (*ExecutionsRow, error)
 		DeleteFromExecutions(ctx context.Context, filter ExecutionsFilter) (sql.Result, error)
 		ReadLockExecutions(ctx context.Context, filter ExecutionsFilter) (int64, int64, error)
@@ -99,5 +99,11 @@ type (
 		// Required params - {shardID, namespaceID, workflowID, runID, archetypeID}
 		DeleteFromCurrentExecutions(ctx context.Context, filter CurrentExecutionsFilter) (sql.Result, error)
 		LockCurrentExecutions(ctx context.Context, filter CurrentExecutionsFilter) (*CurrentExecutionsRow, error)
+	}
+
+	// HistoryExecutionConditionalUpdater lets SQL plugins condition an execution
+	// update on the previously stored record version or next event ID.
+	HistoryExecutionConditionalUpdater interface {
+		UpdateExecutionsWithCondition(ctx context.Context, update *ExecutionsUpdate) (sql.Result, error)
 	}
 )

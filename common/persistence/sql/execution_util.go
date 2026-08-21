@@ -1170,10 +1170,29 @@ func (m *sqlExecutionStore) updateExecution(
 	if err != nil {
 		return err
 	}
-	result, err := tx.UpdateExecutions(ctx, &sqlplugin.ExecutionsUpdate{
-		ExecutionsRow: *row,
-		Condition:     condition,
-	})
+
+	var result sql.Result
+	conditionalUpdater, supportsConditionalUpdate := tx.(sqlplugin.HistoryExecutionConditionalUpdater)
+	if supportsConditionalUpdate {
+		result, err = conditionalUpdater.UpdateExecutionsWithCondition(ctx, &sqlplugin.ExecutionsUpdate{
+			ExecutionsRow: *row,
+			Condition:     condition,
+		})
+	} else {
+		if err := lockAndCheckExecution(
+			ctx,
+			tx,
+			shardID,
+			row.NamespaceID,
+			workflowID,
+			row.RunID,
+			condition,
+			dbRecordVersion,
+		); err != nil {
+			return err
+		}
+		result, err = tx.UpdateExecutions(ctx, row)
+	}
 	if err != nil {
 		return serviceerror.NewUnavailablef("updateExecution failed. Erorr: %v", err)
 	}
@@ -1182,7 +1201,7 @@ func (m *sqlExecutionStore) updateExecution(
 		return serviceerror.NewUnavailablef("updateExecution failed. Failed to verify number of rows affected. Erorr: %v", err)
 	}
 	if rowsAffected != 1 {
-		if rowsAffected == 0 {
+		if rowsAffected == 0 && supportsConditionalUpdate {
 			if err := lockAndCheckExecution(
 				ctx,
 				tx,
