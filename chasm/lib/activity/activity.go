@@ -306,14 +306,14 @@ func (a *Activity) taskScheduleToStartMetricsHandler(ctx chasm.Context) metrics.
 	namespaceEntry := ctx.NamespaceEntry()
 	namespaceName := namespaceEntry.Name().String()
 	taskQueue := a.GetTaskQueue().GetName()
-	return metrics.GetPerTaskQueuePartitionTypeScope(
+	return withUnversionedWorkerDeploymentMetricTags(metrics.GetPerTaskQueuePartitionTypeScope(
 		a.baseMetricsHandler(ctx, metrics.HistoryRecordActivityTaskStartedScope),
 		namespaceName,
 		tqid.UnsafeTaskQueueFamily(namespaceEntry.ID().String(), taskQueue).
 			TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY).
 			RootPartition(),
 		actCtx.config.BreakdownMetricsByTaskQueue(namespaceName, taskQueue, enumspb.TASK_QUEUE_TYPE_ACTIVITY),
-	)
+	))
 }
 
 // GenerateRecordActivityTaskStartedResponse generates the response for HandleStarted.
@@ -591,7 +591,7 @@ func (a *Activity) HandleCompleted(
 	}
 
 	baseHandler := a.baseMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCompletedScope)
-	enrichedHandler := a.enrichedMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCompletedScope)
+	enrichedHandler := a.completionMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCompletedScope)
 
 	if err := TransitionCompleted.Apply(a, ctx, completeEvent{
 		req:             event.Request,
@@ -615,7 +615,7 @@ func (a *Activity) HandleFailed(
 	}
 
 	baseHandler := a.baseMetricsHandler(ctx, metrics.HistoryRespondActivityTaskFailedScope)
-	enrichedHandler := a.enrichedMetricsHandler(ctx, metrics.HistoryRespondActivityTaskFailedScope)
+	enrichedHandler := a.completionMetricsHandler(ctx, metrics.HistoryRespondActivityTaskFailedScope)
 	failedRequest := event.Request.GetFailedRequest()
 	failure := failedRequest.GetFailure()
 
@@ -667,7 +667,7 @@ func (a *Activity) HandleCanceled(
 		return nil, consts.ErrActivityTaskNotCancelRequested
 	}
 
-	metricsHandler := a.enrichedMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCanceledScope)
+	metricsHandler := a.completionMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCanceledScope)
 
 	if err := TransitionCanceled.Apply(a, ctx, cancelEvent{
 		details:        event.Request.GetCancelRequest().GetDetails(),
@@ -962,7 +962,7 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request
 
 	// Transition to Canceled if no attempt in progress; otherwise wait for worker response.
 	if !hasAttemptInProgress {
-		metricsHandler := a.enrichedMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCanceledScope)
+		metricsHandler := a.completionMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCanceledScope)
 		err := TransitionCanceled.Apply(a, ctx, cancelEvent{
 			metricsHandler: metricsHandler,
 			fromStatus:     originalStatus,
@@ -2070,6 +2070,20 @@ func (a *Activity) enrichedMetricsHandler(ctx chasm.Context, operation string) m
 		metrics.ActivityTypeTag(a.GetActivityType().GetName()),
 		metrics.VersioningBehaviorTag(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED),
 		metrics.WorkflowTypeTag(WorkflowTypeTag),
+	)
+}
+
+func (a *Activity) completionMetricsHandler(ctx chasm.Context, operation string) metrics.Handler {
+	return withUnversionedWorkerDeploymentMetricTags(a.enrichedMetricsHandler(ctx, operation))
+}
+
+func withUnversionedWorkerDeploymentMetricTags(handler metrics.Handler) metrics.Handler {
+	// TODO: Populate these labels when Standalone Activities support Worker Versioning.
+	// Until then, preserve label-key parity with Workflow Activity metrics so Prometheus does
+	// not reject samples emitted under the same metric names.
+	return handler.WithTags(
+		metrics.WorkerDeploymentNameTag("", false),
+		metrics.WorkerDeploymentBuildIDTag("", false),
 	)
 }
 
