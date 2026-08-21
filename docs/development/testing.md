@@ -78,8 +78,7 @@ headers := await.Rcv(t, requestHeaders)
 await.Snd(t, responses, response)
 ```
 
-Keep an explicit `select` when testing non-blocking behavior, waiting on multiple channels,
-or returning a context error from a callback.
+Keep an explicit `select` when testing non-blocking behavior or waiting on multiple channels.
 
 ### Parallelization
 
