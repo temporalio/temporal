@@ -304,8 +304,7 @@ func (a *Activities) UpdateWorkerControllerInstanceFromDeployment(ctx context.Co
 	upserts := scalingGroupUpdatesToWCI(input.GetUpsertScalingGroups())
 	resp, err := a.WorkerControllerInstanceClient.UpdateWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), nil, input.GetIdentity(), upserts, input.GetRemoveScalingGroups())
 	if err != nil {
-		var invalidArgs *serviceerror.InvalidArgument
-		if errors.As(err, &invalidArgs) {
+		if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
 			return nil, temporal.NewNonRetryableApplicationError(err.Error(), errInvalidComputeConfig, nil)
 		}
 		return nil, err
