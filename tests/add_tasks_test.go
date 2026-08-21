@@ -88,7 +88,7 @@ func (s *AddTasksSuite) TestAddTasks_Ok() {
 			s.NoError(err)
 
 			// Get the task that we skipped, and add it back
-			task := await.RequireReceive(s.T(), skippedTasks)
+			task := await.Receive(s.T(), skippedTasks)
 
 			shouldSkip.Store(false)
 			blob, err := serialization.NewSerializer().SerializeTask(task)

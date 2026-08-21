@@ -78,7 +78,7 @@ func TestGRPCBuilder(t *testing.T) {
 	)
 	require.NoError(t, err)
 	conn.Connect()
-	require.NoError(t, await.RequireReceive(t, serverErrs))
+	require.NoError(t, await.Receive(t, serverErrs))
 
 	// The gRPC library calls [resolver.Resolver.Close] when the connection is closed in a background goroutine, so we
 	// can't synchronously assert that [ServiceResolver.RemoveListener] was called right after the connection is closed.

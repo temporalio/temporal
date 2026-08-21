@@ -1046,7 +1046,7 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 	s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
 
 	env.Logger.Info("Waiting for cancel to complete.", tag.WorkflowRunID(we.RunId))
-	await.RequireReceive(s.T(), cancelCh)
+	await.Receive(s.T(), cancelCh)
 	s.True(activityCanceled, "Activity was not cancelled.")
 	env.Logger.Info("Activity cancelled.", tag.WorkflowRunID(we.RunId))
 }

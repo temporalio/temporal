@@ -90,11 +90,11 @@ func (w *internalRulesTestWorkflow) ActivityFuncForRetryActivity() (string, erro
 	w.startedActivityCount.Add(1)
 
 	if !w.letActivitySucceed.Load() {
-		await.RequireReceive(w.tb, w.activityFailedCn)
+		await.Receive(w.tb, w.activityFailedCn)
 		activityErr := errors.New("bad-luck-please-retry")
 		return "", activityErr
 	}
-	await.RequireReceive(w.tb, w.activityCompleteCn)
+	await.Receive(w.tb, w.activityCompleteCn)
 	return "done!", nil
 }
 
@@ -105,13 +105,13 @@ func (w *internalRulesTestWorkflow) ActivityFuncForRetryTask() (string, error) {
 		activityErr := errors.New("bad-luck-please-retry")
 		return "", activityErr
 	}
-	await.RequireReceive(w.tb, w.activityCompleteCn)
+	await.Receive(w.tb, w.activityCompleteCn)
 	return "done!", nil
 }
 
 func (w *internalRulesTestWorkflow) ActivityFuncForPrePause() (string, error) {
 	w.startedActivityCount.Add(1)
-	await.RequireReceive(w.tb, w.activityCompleteCn)
+	await.Receive(w.tb, w.activityCompleteCn)
 	return "done!", nil
 }
 

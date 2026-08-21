@@ -263,14 +263,14 @@ func (s *Versioning3Suite) testWorkflowWithPinnedOverride(env *VersioningTestEnv
 
 	runID := env.startWorkflow(s, tv, tv.VersioningOverridePinned())
 
-	await.RequireReceive(s.T(), wftCompleted)
+	await.Receive(s.T(), wftCompleted)
 	env.verifyWorkflowVersioning(s, tv, vbUnpinned, tv.Deployment(), tv.VersioningOverridePinned(), nil)
 	env.verifyVersioningSAs(s, tv, vbPinned, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, tv)
 	if sticky {
 		env.verifyWorkflowStickyQueue(s, tv.WithRunID(runID))
 	}
 
-	await.RequireReceive(s.T(), actCompleted)
+	await.Receive(s.T(), actCompleted)
 	env.verifyWorkflowVersioning(s, tv, vbUnpinned, tv.Deployment(), tv.VersioningOverridePinned(), nil)
 
 	env.pollWftAndHandle(s, tv, sticky, nil,
@@ -308,7 +308,7 @@ func (s *Versioning3Suite) testPinnedWorkflowWithLateActivityPoller(env *Version
 	override := tv.VersioningOverridePinned()
 	env.startWorkflow(s, tv, override)
 
-	await.RequireReceive(s.T(), wftCompleted)
+	await.Receive(s.T(), wftCompleted)
 	env.verifyWorkflowVersioning(s, tv, vbUnpinned, tv.Deployment(), override, nil)
 	// Wait long enough to make sure the activity is backlogged.
 	env.validateBacklogCount(s, tv, tqTypeAct, 1)
@@ -369,14 +369,14 @@ func (s *Versioning3Suite) testUnpinnedWorkflow(env *VersioningTestEnv, sticky b
 
 	runID := env.startWorkflow(s, tv, nil)
 
-	await.RequireReceive(s.T(), wftCompleted)
+	await.Receive(s.T(), wftCompleted)
 	env.verifyWorkflowVersioning(s, tv, vbUnpinned, tv.Deployment(), nil, nil)
 	env.verifyVersioningSAs(s, tv, vbUnpinned, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, tv)
 	if sticky {
 		env.verifyWorkflowStickyQueue(s, tv.WithRunID(runID))
 	}
 
-	await.RequireReceive(s.T(), actCompleted)
+	await.Receive(s.T(), actCompleted)
 	env.verifyWorkflowVersioning(s, tv, vbUnpinned, tv.Deployment(), nil, nil)
 
 	env.pollWftAndHandle(s, tv, sticky, nil,
@@ -1320,7 +1320,7 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 			return env.respondActivity(), nil
 		})
 
-	await.RequireReceive(s.T(), act1Started)
+	await.Receive(s.T(), act1Started)
 	env.pollActivityAndHandle(s, tv1, act2Failed,
 		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 			s.NotNil(task)
@@ -1337,7 +1337,7 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 			return nil, errors.New("intentional activity failure")
 		})
 
-	await.RequireReceive(s.T(), act2Started)
+	await.Receive(s.T(), act2Started)
 	env.verifyWorkflowVersioning(s, tv1, vbUnpinned, tv1.Deployment(), nil, nil)
 
 	// 2. Set d2 as the current deployment
@@ -1393,8 +1393,8 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 			close(transitionStarted)
 			env.Logger.Info("Transition wft started")
 			// 8. Complete the transition after act1 completes and act2's first attempt fails.
-			await.RequireReceive(s.T(), act1Completed)
-			await.RequireReceive(s.T(), act2Failed)
+			await.Receive(s.T(), act1Completed)
+			await.Receive(s.T(), act2Failed)
 			transitionCompleted.Store(true)
 			env.Logger.Info("Transition wft completed")
 			return env.respondEmptyWft(tv2, sticky, vbUnpinned), nil
@@ -1405,7 +1405,7 @@ func (s *Versioning3Suite) testTransitionFromActivity(sticky bool) {
 	}
 
 	// 9. Now all activities should complete.
-	await.RequireReceive(s.T(), act2To4Completed)
+	await.Receive(s.T(), act2To4Completed)
 	select {
 	case err := <-act2To4Err:
 		s.NoError(err)
@@ -1613,7 +1613,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectInherit(crossTq boo
 	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), startOpts, "wf")
 	s.NoError(err)
 	// wait for it to start on v1
-	await.RequireReceive(s.T(), wfStarted)
+	await.Receive(s.T(), wfStarted)
 	close(wfStarted) // force panic if replayed
 
 	// make v2 current for both parent and child and unblock the wf to start the child
@@ -2160,7 +2160,7 @@ func (s *Versioning3Suite) testChildWorkflowInheritanceExpectNoInherit(crossTq b
 	s.NoError(err)
 
 	// wait for it to start on v1
-	await.RequireReceive(s.T(), wfStarted)
+	await.Receive(s.T(), wfStarted)
 	close(wfStarted)
 
 	// make v2 current for both parent and child and unblock the wf to start the child
@@ -2434,7 +2434,7 @@ func (s *Versioning3Suite) testPinnedCaNUpgradeOnCaN(normalTask, speculativeTask
 			})
 
 		// Wait for the new run's first workflow task
-		await.RequireReceive(s.T(), wftNewRunDone)
+		await.Receive(s.T(), wftNewRunDone)
 
 		// Verify the new workflow run is on v2 (not v1) because of AUTO_UPGRADE initial behavior
 		// But if testing with Pinned V1 override, it should be on v1
@@ -2567,7 +2567,7 @@ func (s *Versioning3Suite) testPinnedCaNUseRampingVersionOnCaN(pinnedOverride, n
 				s.NotNil(task)
 				return env.respondCompleteWorkflow(postCaNTV, vbPinned), nil
 			})
-		await.RequireReceive(s.T(), wftNewRunDone)
+		await.Receive(s.T(), wftNewRunDone)
 
 		env.verifyWorkflowVersioning(s, postCaNTV, vbPinned, postCaNTV.Deployment(), override, nil)
 		env.verifyVersioningSAs(s, postCaNTV, vbPinned, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, postCaNTV)
@@ -2621,7 +2621,7 @@ func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN_SubsequentWFTGoe
 				s.NotNil(task)
 				return env.respondEmptyWft(tv2, false, vbUnpinned), nil
 			})
-		await.RequireReceive(s.T(), firstWFTDone)
+		await.Receive(s.T(), firstWFTDone)
 
 		// Signal the UseRampingVersion run (omit run ID to target the current run).
 		// The resulting WFT should go to v1 (Target/current), not v2 (ramping) — (1).
@@ -2656,7 +2656,7 @@ func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN_SubsequentWFTGoe
 					DeploymentOptions:  tv2.WorkerDeploymentOptions(true),
 				}, nil
 			})
-		await.RequireReceive(s.T(), secondWFTDone)
+		await.Receive(s.T(), secondWFTDone)
 
 		// The CaN run's first WFT must land on v1 (current), NOT v2 (ramping) — (2).
 		// UseRampingVersion is not inherited by a CaN issued from the resulting workflow.
@@ -2666,7 +2666,7 @@ func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN_SubsequentWFTGoe
 				s.NotNil(task)
 				return env.respondCompleteWorkflow(tv1, vbUnpinned), nil
 			})
-		await.RequireReceive(s.T(), thirdRunDone)
+		await.Receive(s.T(), thirdRunDone)
 
 		env.verifyWorkflowVersioning(s, tv1, vbUnpinned, tv1.Deployment(), nil, nil)
 		env.verifyVersioningSAs(s, tv1, vbUnpinned, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, tv1)
@@ -2731,7 +2731,7 @@ func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN_RetryInheritsIni
 					DeploymentOptions:  tv2.WorkerDeploymentOptions(true),
 				}, nil
 			})
-		await.RequireReceive(s.T(), firstAttemptDone)
+		await.Receive(s.T(), firstAttemptDone)
 
 		// Retry run: ContinueAsNewInitialVersioningBehavior=USE_RAMPING_VERSION is propagated,
 		// so the retry's first WFT must also land on v2 (ramping), not v1 (current).
@@ -2741,7 +2741,7 @@ func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN_RetryInheritsIni
 				s.NotNil(task)
 				return env.respondCompleteWorkflow(tv2, vbUnpinned), nil
 			})
-		await.RequireReceive(s.T(), retryRunDone)
+		await.Receive(s.T(), retryRunDone)
 
 		env.verifyWorkflowVersioning(s, tv2, vbUnpinned, tv2.Deployment(), nil, nil)
 		env.verifyVersioningSAs(s, tv2, vbUnpinned, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, tv2)
@@ -2809,7 +2809,7 @@ func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN_ChildDoesNotInhe
 					DeploymentOptions:  tv2.WorkerDeploymentOptions(true),
 				}, nil
 			})
-		await.RequireReceive(s.T(), parentWFT1Done)
+		await.Receive(s.T(), parentWFT1Done)
 
 		// Child workflows do NOT inherit UseRampingVersion.
 		childWFTDone := make(chan struct{})
@@ -2818,7 +2818,7 @@ func (s *Versioning3Suite) TestPinnedCaN_UseRampingVersionOnCaN_ChildDoesNotInhe
 				s.NotNil(task)
 				return env.respondCompleteWorkflow(tv1, vbUnpinned), nil
 			})
-		await.RequireReceive(s.T(), childWFTDone)
+		await.Receive(s.T(), childWFTDone)
 
 		// Verify the child did not inherit UseRampingVersion.
 		s.Await(func(s *Versioning3Suite) {
@@ -2966,7 +2966,7 @@ func (s *Versioning3Suite) TestAutoUpgradeCaN_UpgradeOnCaN() {
 			})
 
 		// Wait for the new run's first workflow task on v2
-		await.RequireReceive(s.T(), wftNewRunDone)
+		await.Receive(s.T(), wftNewRunDone)
 
 		// Verify the new workflow run is on v2 (not v1) because of AUTO_UPGRADE initial behavior
 		// The new workflow has the worker-sent AutoUpgrade behavior from the first WFT completion after CaN.
@@ -3114,7 +3114,7 @@ func (s *Versioning3Suite) testCan(crossTq bool, behavior enumspb.VersioningBeha
 	s.NoError(err)
 
 	// wait for it to start on v1
-	await.RequireReceive(s.T(), wfStarted)
+	await.Receive(s.T(), wfStarted)
 	close(wfStarted) // force panic if replayed
 
 	// make v2 current
@@ -3629,7 +3629,7 @@ func (s *Versioning3Suite) TestActivityTQLags_DependentActivityCompletesOnTheNew
 			return env.respondActivity(), nil
 		})
 
-	await.RequireReceive(s.T(), activityTaskCh)
+	await.Receive(s.T(), activityTaskCh)
 
 	// Verify that the workflow is still running on v1.
 	s.Await(func(s *Versioning3Suite) {
@@ -4523,7 +4523,7 @@ func (s *Versioning3Suite) TestVersionedQueueUnload() {
 	}()
 
 	// Wait for 10 seconds
-	await.RequireReceive(s.T(), keepAliveDone)
+	await.Receive(s.T(), keepAliveDone)
 
 	// Send a poll from v1 and ensure the poller gets the task
 	taskReceived := false
@@ -4716,7 +4716,7 @@ func (s *Versioning3Suite) TestPinnedCaN_NoAUOnCaN_NoInfiniteLoop() {
 	// Start workflow — first WFT is handled by the async poller above (pinned on v1)
 	runID := env.startWorkflow(s, tv1, nil)
 	execution := tv1.WithRunID(runID).WorkflowExecution()
-	await.RequireReceive(s.T(), wftCompleted)
+	await.Receive(s.T(), wftCompleted)
 	env.verifyWorkflowVersioning(s, tv1, vbPinned, tv1.Deployment(), nil, nil)
 
 	env.pollUntilRegistered(s, tv2)
@@ -5084,7 +5084,7 @@ func (s *Versioning3Suite) TestOverride_SuppressesTargetVersionChangedSignal() {
 	// Start workflow — first WFT is handled by the async poller above (pinned on v1)
 	env.startWorkflow(s, tv1, nil)
 	execution := tv1.WorkflowExecution()
-	await.RequireReceive(s.T(), wftCompleted)
+	await.Receive(s.T(), wftCompleted)
 	env.verifyWorkflowVersioning(s, tv1, vbPinned, tv1.Deployment(), nil, nil)
 
 	// Apply pinned override to v1 via UpdateWorkflowExecutionOptions
@@ -5142,7 +5142,7 @@ func (s *Versioning3Suite) TestAutoUpgrade_SuppressesTargetVersionChangedSignal(
 	// Start workflow — first WFT is handled by the async poller above (AutoUpgrade on v1)
 	runID := env.startWorkflow(s, tv1, nil)
 	execution := tv1.WithRunID(runID).WorkflowExecution()
-	await.RequireReceive(s.T(), wftCompleted)
+	await.Receive(s.T(), wftCompleted)
 	env.verifyWorkflowVersioning(s, tv1, vbUnpinned, tv1.Deployment(), nil, nil)
 
 	env.pollUntilRegistered(s, tv2)
@@ -5193,7 +5193,7 @@ func (s *Versioning3Suite) TestPinnedCaN_TargetChangesAgain_SignalsTrue() {
 	// Start workflow — first WFT is handled by the async poller above (pinned on v1)
 	runID := env.startWorkflow(s, tv1, nil)
 	execution := tv1.WithRunID(runID).WorkflowExecution()
-	await.RequireReceive(s.T(), wftCompleted)
+	await.Receive(s.T(), wftCompleted)
 	env.verifyWorkflowVersioning(s, tv1, vbPinned, tv1.Deployment(), nil, nil)
 
 	env.pollUntilRegistered(s, tv2)
@@ -5294,7 +5294,7 @@ func (s *Versioning3Suite) TestRemoveOverride_ClearsDeclinedState() {
 	// Start workflow — first WFT is handled by the async poller above (pinned on v1)
 	runID := env.startWorkflow(s, tv1, nil)
 	execution := tv1.WithRunID(runID).WorkflowExecution()
-	await.RequireReceive(s.T(), wftCompleted)
+	await.Receive(s.T(), wftCompleted)
 	env.verifyWorkflowVersioning(s, tv1, vbPinned, tv1.Deployment(), nil, nil)
 
 	// Set v2 as current, trigger signal
@@ -5447,7 +5447,7 @@ func (s *Versioning3Suite) TestStalePartition_RevisionSuppressesTrampolining() {
 	// Start workflow — first WFT handled by async poller (pinned on v1)
 	runID := env.startWorkflow(s, tv1, nil)
 	execution := tv1.WithRunID(runID).WorkflowExecution()
-	await.RequireReceive(s.T(), wftCompleted)
+	await.Receive(s.T(), wftCompleted)
 	env.verifyWorkflowVersioning(s, tv1, vbPinned, tv1.Deployment(), nil, nil)
 
 	// Register v2, set v2 as current (revision increments)
@@ -5584,7 +5584,7 @@ func (s *Versioning3Suite) TestInlinePath_StableRouting_NoSpuriousFlag() {
 
 	runID := env.startWorkflow(s, tv1, nil)
 	execution := tv1.WithRunID(runID).WorkflowExecution()
-	await.RequireReceive(s.T(), wftCompleted)
+	await.Receive(s.T(), wftCompleted)
 	env.verifyWorkflowVersioning(s, tv1, vbPinned, tv1.Deployment(), nil, nil)
 
 	// Trigger a regular WFT via a first signal.
@@ -5818,7 +5818,7 @@ func (s *Versioning3Suite) TestPinnedCaN_RollbackResetsDeclined() {
 	// Start workflow — first WFT is handled by the async poller above (pinned on v1)
 	runID := env.startWorkflow(s, tv1, nil)
 	execution := tv1.WithRunID(runID).WorkflowExecution()
-	await.RequireReceive(s.T(), wftCompleted)
+	await.Receive(s.T(), wftCompleted)
 	env.verifyWorkflowVersioning(s, tv1, vbPinned, tv1.Deployment(), nil, nil)
 
 	env.pollUntilRegistered(s, tv2)
@@ -5962,7 +5962,7 @@ func (s *Versioning3Suite) TestPinnedCaN_NeverSignaled_NewRunGetsSignalForUnvers
 	// Start workflow — first WFT is handled by the async poller above (pinned on v1)
 	runID := env.startWorkflow(s, tv1, nil)
 	execution := tv1.WithRunID(runID).WorkflowExecution()
-	await.RequireReceive(s.T(), wftCompleted)
+	await.Receive(s.T(), wftCompleted)
 	env.verifyWorkflowVersioning(s, tv1, vbPinned, tv1.Deployment(), nil, nil)
 
 	// Trigger a WFT and CaN without any target change — no signal fires.
@@ -6099,7 +6099,7 @@ func (s *Versioning3Suite) TestPinnedCaN_UpgradeToUnversioned() {
 					"CaN run should have a different run ID")
 				return env.respondCompleteWorkflowUnversioned(tv1), nil
 			})
-		await.RequireReceive(s.T(), wftNewRunDone)
+		await.Receive(s.T(), wftNewRunDone)
 	})
 }
 

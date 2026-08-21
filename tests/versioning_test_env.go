@@ -124,7 +124,7 @@ func (env *VersioningTestEnv) pollAndQueryWorkflow(
 	_, err := env.queryWorkflow(s.Context(), tv)
 	s.Require().NoError(err)
 
-	await.RequireReceive(s.TB(), queryResultCh)
+	await.Receive(s.TB(), queryResultCh)
 }
 
 // drainWorkflowTaskAfterSetCurrent is a helper that sets the current deployment version,
@@ -152,7 +152,7 @@ func (env *VersioningTestEnv) drainWorkflowTaskAfterSetCurrentWithOverride(
 	runID := env.startWorkflow(s, tv, override)
 	execution := tv.WithRunID(runID).WorkflowExecution()
 
-	await.RequireReceive(s.TB(), wftCompleted)
+	await.Receive(s.TB(), wftCompleted)
 
 	return execution, runID
 }
@@ -177,7 +177,7 @@ func (env *VersioningTestEnv) drainWorkflowTaskAfterSetCurrent(
 	runID := env.startWorkflow(s, tv, nil)
 	execution := tv.WithRunID(runID).WorkflowExecution()
 
-	await.RequireReceive(s.TB(), wftCompleted)
+	await.Receive(s.TB(), wftCompleted)
 
 	return execution, runID
 }
@@ -198,7 +198,7 @@ func (env *VersioningTestEnv) pollAndDispatchNexusTask(
 
 	_, err := matchingClient.DispatchNexusTask(s.Context(), nexusRequest)
 	s.Require().NoError(err)
-	await.RequireReceive(s.TB(), nexusCompleted)
+	await.Receive(s.TB(), nexusCompleted)
 }
 
 func (env *VersioningTestEnv) describeVersioningInfo(
@@ -885,7 +885,7 @@ func (env *VersioningTestEnv) doPollWftAndHandle(
 		return poller, resp
 	}
 	go func() {
-		_, _ = f() // errors are surfaced via the test context timeout in RequireReceive
+		_, _ = f() // errors are surfaced via the test context timeout in Receive
 		close(async)
 	}()
 	return nil, nil
@@ -917,7 +917,7 @@ func (env *VersioningTestEnv) pollWftAndHandleQueries(
 		return poller, resp
 	}
 	go func() {
-		_, _ = f() // errors are surfaced via the test context timeout in RequireReceive
+		_, _ = f() // errors are surfaced via the test context timeout in Receive
 		close(async)
 	}()
 	return nil, nil
@@ -949,7 +949,7 @@ func (env *VersioningTestEnv) pollNexusTaskAndHandle(
 		return poller, resp
 	}
 	go func() {
-		_, _ = f() // errors are surfaced via the test context timeout in RequireReceive
+		_, _ = f() // errors are surfaced via the test context timeout in Receive
 		close(async)
 	}()
 	return nil, nil
@@ -995,7 +995,7 @@ func (env *VersioningTestEnv) doPollActivityAndHandle(
 		s.Require().NoError(f())
 	} else {
 		go func() {
-			_ = f() // errors are surfaced via the test context timeout in RequireReceive
+			_ = f() // errors are surfaced via the test context timeout in Receive
 			close(async)
 		}()
 	}
