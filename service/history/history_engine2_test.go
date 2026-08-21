@@ -2791,7 +2791,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParent()
 	s.Equal(request.GetParentInitiatedId(), attributes["parent_initiated_id"].AsInt64())
 	s.Equal(request.GetParentInitiatedVersion(), attributes["parent_initiated_version"].AsInt64())
 	s.Require().JSONEq(fmt.Sprintf(
-		`{"initial_error_type":%q,"mode":"inline","source_cluster":%q,"stage":"sync_workflow_state"}`,
+		`{"initial_error_type":%q,"source_cluster":%q,"stage":"sync_workflow_state"}`,
 		util.ErrorType(&serviceerror.NotFound{}),
 		cluster.TestCurrentClusterName,
 	), attributes["details"].AsString())
@@ -2896,7 +2896,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentAs
 	attributes := wideEventAttributes(records[2])
 	s.Equal(util.ErrorType(serviceerror.NewUnavailable("source cluster unavailable")), attributes["error_type"].AsString())
 	s.Require().JSONEq(fmt.Sprintf(
-		`{"initial_error_type":%q,"mode":"async","source_cluster":%q,"stage":"sync_workflow_state"}`,
+		`{"initial_error_type":%q,"source_cluster":%q,"stage":"sync_workflow_state"}`,
 		util.ErrorType(&serviceerror.NotFound{}),
 		cluster.TestCurrentClusterName,
 	), attributes["details"].AsString())
@@ -2931,7 +2931,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentLi
 	s.Require().Equal([]string{string(wideevents.ParentChildOutcomeLimited)}, parentChildOutcomes(capture))
 	attributes := wideEventAttributes(parentChildRecords(capture)[0])
 	s.Require().JSONEq(fmt.Sprintf(
-		`{"initial_error_type":%q,"max_in_flight":0,"mode":"async"}`,
+		`{"initial_error_type":%q,"max_in_flight":0}`,
 		util.ErrorType(&serviceerror.NotFound{}),
 	), attributes["details"].AsString())
 }

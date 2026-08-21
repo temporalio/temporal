@@ -116,17 +116,14 @@ func Invoke(
 	}
 
 	metricsHandler := shardContext.GetMetricsHandler()
+	emitLifecycle := shardContext.GetConfig().EmitReplicationLifecycleEvents()
 	asyncResend := shardContext.GetConfig().EnableAsyncParentWorkflowResend()
-	resendMode := "inline"
-	if asyncResend {
-		resendMode = "async"
-	}
 
 	// The measured resend, run either inline or in the background.
 	resend := func(ctx context.Context) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
 		metrics.ParentWorkflowResendAttempts.With(metricsHandler).Record(1)
 		startTime := time.Now().UTC()
-		resp, err := resendParentAndVerify(ctx, request, workflowConsistencyChecker, shardContext, namespaceID, versionedTransition, versionHistories, errVerify, resendMode)
+		resp, err := resendParentAndVerify(ctx, request, workflowConsistencyChecker, shardContext, namespaceID, versionedTransition, versionHistories, errVerify, emitLifecycle)
 		metrics.ParentWorkflowResendLatency.With(metricsHandler).Record(time.Since(startTime))
 		if err != nil {
 			recordResendFailure(shardContext, metricsHandler, request, err)
@@ -149,9 +146,11 @@ func Invoke(
 	claimed, atCapacity := inFlightResends.tryClaim(parentKey, maxInFlight)
 	if atCapacity {
 		metrics.ParentWorkflowResendLimited.With(metricsHandler).Record(1)
-		details := parentResendEventDetails(resendMode, errVerify)
-		details["max_in_flight"] = maxInFlight
-		emitParentResendLifecycleEvent(shardContext, request, wideevents.ParentChildOutcomeLimited, nil, details)
+		if emitLifecycle {
+			details := parentResendEventDetails(errVerify)
+			details["max_in_flight"] = maxInFlight
+			emitParentResendLifecycleEvent(shardContext, request, wideevents.ParentChildOutcomeLimited, nil, details)
+		}
 		shardContext.GetLogger().Warn("Dropped parent workflow resend, shard is at its in-flight limit",
 			tag.WorkflowNamespaceID(request.GetNamespaceId()),
 			tag.NewStringTag("parent-workflow-id", request.ParentExecution.GetWorkflowId()),
@@ -164,22 +163,26 @@ func Invoke(
 	}
 	if !claimed {
 		metrics.ParentWorkflowResendSkipped.With(metricsHandler).Record(1)
+		if emitLifecycle {
+			emitParentResendLifecycleEvent(
+				shardContext,
+				request,
+				wideevents.ParentChildOutcomeDeduplicated,
+				nil,
+				parentResendEventDetails(errVerify),
+			)
+		}
+		return nil, errVerify
+	}
+	if emitLifecycle {
 		emitParentResendLifecycleEvent(
 			shardContext,
 			request,
-			wideevents.ParentChildOutcomeDeduplicated,
+			wideevents.ParentChildOutcomeScheduled,
 			nil,
-			parentResendEventDetails(resendMode, errVerify),
+			parentResendEventDetails(errVerify),
 		)
-		return nil, errVerify
 	}
-	emitParentResendLifecycleEvent(
-		shardContext,
-		request,
-		wideevents.ParentChildOutcomeScheduled,
-		nil,
-		parentResendEventDetails(resendMode, errVerify),
-	)
 
 	// The context is detached from the request, which gRPC cancels when this handler returns, and
 	// rooted at the shard lifecycle so the work stops with the shard.
@@ -230,7 +233,7 @@ func resendParentAndVerify(
 	versionedTransition *persistencespb.VersionedTransition,
 	versionHistories *historyspb.VersionHistories,
 	errVerify error,
-	resendMode string,
+	emitLifecycle bool,
 ) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
 	// Resend parent workflow from source cluster
 
@@ -238,7 +241,10 @@ func resendParentAndVerify(
 	targetClusterInfo := clusterMetadata.GetAllClusterInfo()[clusterMetadata.GetCurrentClusterName()]
 	activeClusterName := ""
 	emitResult := func(outcome wideevents.ParentChildOutcome, eventErr error, stage string) {
-		details := parentResendEventDetails(resendMode, errVerify)
+		if !emitLifecycle {
+			return
+		}
+		details := parentResendEventDetails(errVerify)
 		if activeClusterName != "" {
 			details["source_cluster"] = activeClusterName
 		}
@@ -321,10 +327,9 @@ func resendParentAndVerify(
 	return &historyservice.VerifyChildExecutionCompletionRecordedResponse{}, nil
 }
 
-func parentResendEventDetails(mode string, initialError error) map[string]any {
+func parentResendEventDetails(initialError error) map[string]any {
 	return map[string]any{
 		"initial_error_type": util.ErrorType(initialError),
-		"mode":               mode,
 	}
 }
 
@@ -335,14 +340,6 @@ func emitParentResendLifecycleEvent(
 	err error,
 	details map[string]any,
 ) {
-	if !shardContext.GetConfig().EmitReplicationLifecycleEvents() {
-		return
-	}
-	logger := shardContext.GetEventLogger()
-	if logger == nil {
-		return
-	}
-
 	payload := wideevents.ParentChildLifecyclePayload{
 		Phase:                  wideevents.ParentChildPhaseParentResend,
 		Outcome:                outcome,
@@ -361,5 +358,5 @@ func emitParentResendLifecycleEvent(
 		payload.Error = err.Error()
 		payload.ErrorType = util.ErrorType(err)
 	}
-	wideevents.Emit(logger, payload)
+	wideevents.Emit(shardContext.GetEventLogger(), payload)
 }

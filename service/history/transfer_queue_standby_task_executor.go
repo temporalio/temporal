@@ -344,16 +344,19 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			// no need for mutable state anymore, release workflow lock
 			release(nil)
 
-			lifecyclePayload := parentChildPayloadForCloseVerification(
-				t.shardContext,
-				transferTask,
-				parentNamespaceID,
-				&commonpb.WorkflowExecution{WorkflowId: parentWorkflowID, RunId: parentRunID},
-				parentInitiatedID,
-				parentInitiatedVersion,
-				resendParent,
-			)
-			emitParentChildCloseVerificationStarted(t.shardContext, lifecyclePayload, resendParent)
+			emitLifecycle := parentChildLifecycleEnabled(t.shardContext)
+			var lifecyclePayload wideevents.ParentChildLifecyclePayload
+			if emitLifecycle {
+				lifecyclePayload = parentChildPayloadForCloseVerification(
+					transferTask,
+					parentNamespaceID,
+					&commonpb.WorkflowExecution{WorkflowId: parentWorkflowID, RunId: parentRunID},
+					parentInitiatedID,
+					parentInitiatedVersion,
+					resendParent,
+				)
+				emitParentChildCloseVerificationStarted(t.shardContext, lifecyclePayload, resendParent)
+			}
 
 			_, err := t.historyRawClient.VerifyChildExecutionCompletionRecorded(ctx, &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 				NamespaceId: parentNamespaceID,
@@ -370,7 +373,9 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 				Clock:                  parentClock,
 				ResendParent:           resendParent,
 			})
-			emitParentChildCloseVerificationResult(t.shardContext, lifecyclePayload, resendParent, err)
+			if emitLifecycle {
+				emitParentChildCloseVerificationResult(t.shardContext, lifecyclePayload, resendParent, err)
+			}
 			switch err.(type) {
 			case nil, *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
 				// Case 1: Target workflow is in the desired state.

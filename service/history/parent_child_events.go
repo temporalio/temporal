@@ -50,17 +50,13 @@ func parentChildPayloadForCloseTask(
 }
 
 func parentChildPayloadForCloseVerification(
-	shardContext historyi.ShardContext,
 	task *tasks.CloseExecutionTask,
 	parentNamespaceID string,
 	parentExecution *commonpb.WorkflowExecution,
 	parentInitiatedID int64,
 	parentInitiatedVersion int64,
 	resendParent bool,
-) *wideevents.ParentChildLifecyclePayload {
-	if !parentChildLifecycleEnabled(shardContext) {
-		return nil
-	}
+) wideevents.ParentChildLifecyclePayload {
 	payload := parentChildPayloadForCloseTask(
 		task,
 		parentNamespaceID,
@@ -73,31 +69,27 @@ func parentChildPayloadForCloseVerification(
 		"resend_parent_requested": resendParent,
 		"verification_scope":      "passive",
 	}
-	return &payload
+	return payload
 }
 
 func emitParentChildCloseVerificationStarted(
 	shardContext historyi.ShardContext,
-	payload *wideevents.ParentChildLifecyclePayload,
+	payload wideevents.ParentChildLifecyclePayload,
 	resendParent bool,
 ) {
-	if payload == nil || !resendParent {
+	if !resendParent {
 		return
 	}
-	event := *payload
-	event.Outcome = wideevents.ParentChildOutcomeStarted
-	emitParentChildLifecycleEvent(shardContext, event, nil)
+	payload.Outcome = wideevents.ParentChildOutcomeStarted
+	emitParentChildLifecycleEvent(shardContext, payload, nil)
 }
 
 func emitParentChildCloseVerificationResult(
 	shardContext historyi.ShardContext,
-	payload *wideevents.ParentChildLifecyclePayload,
+	payload wideevents.ParentChildLifecyclePayload,
 	resendParent bool,
 	err error,
 ) {
-	if payload == nil {
-		return
-	}
 	outcome, emit := parentChildVerificationOutcome(
 		err,
 		wideevents.ParentChildOutcomeNotFound,
@@ -115,9 +107,8 @@ func emitParentChildCloseVerificationResult(
 	if !emit {
 		return
 	}
-	event := *payload
-	event.Outcome = outcome
-	emitParentChildLifecycleEvent(shardContext, event, err)
+	payload.Outcome = outcome
+	emitParentChildLifecycleEvent(shardContext, payload, err)
 }
 
 func populateParentChildTaskInfo(
@@ -136,21 +127,13 @@ func emitParentChildLifecycleEvent(
 	payload wideevents.ParentChildLifecyclePayload,
 	err error,
 ) {
-	if !parentChildLifecycleEnabled(shardContext) {
-		return
-	}
-	logger := shardContext.GetEventLogger()
-	if logger == nil {
-		return
-	}
-
 	payload.LocalCluster = shardContext.GetClusterMetadata().GetCurrentClusterName()
 	payload.LocalShard = shardContext.GetShardID()
 	if err != nil {
 		payload.Error = err.Error()
 		payload.ErrorType = util.ErrorType(err)
 	}
-	wideevents.Emit(logger, payload)
+	wideevents.Emit(shardContext.GetEventLogger(), payload)
 }
 
 func parentChildLifecycleEnabled(shardContext historyi.ShardContext) bool {
