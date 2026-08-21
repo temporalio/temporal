@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/sdk"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -245,10 +246,18 @@ func (a *Activities) runOverdueScan(ctx context.Context, query string) error {
 // ListAllNamespaces returns the names of every namespace active in the current cluster,
 // from the namespace registry's in-memory snapshot. The snapshot may lag persistence by
 // up to the registry's refresh interval, which is acceptable for a best-effort scanner.
+//
+// Namespaces active elsewhere are excluded: these invariants read visibility records,
+// and a standby's records track its lagging replica, so a schedule ticking normally
+// looks arbitrarily overdue there.
 func (a *Activities) ListAllNamespaces() []string {
 	var names []string
 	for _, ns := range a.namespaceRegistry.GetAllNamespaces() {
 		if ns.State() == enumspb.NAMESPACE_STATE_DELETED {
+			continue
+		}
+		//nolint:forbidigo // scanner works per namespace, not per workflow.
+		if !ns.ActiveInCluster(a.currentClusterName) {
 			continue
 		}
 		names = append(names, ns.Name().String())
@@ -371,7 +380,38 @@ func (a *Activities) scheduleIsExpectedNotToFire(ctx context.Context, nsName, sc
 		len(desc.GetInfo().GetRunningWorkflows()) > 0 {
 		return true
 	}
+
+	// Confirm the invariant against what Describe just returned: the candidate came from
+	// a ScheduleNextActionTime index entry, which goes stale on replication or indexing
+	// lag. This also covers SKIP with a running workflow, which is deliberately not an
+	// exemption above - the Generator keeps advancing FutureActionTimes, so an exemption
+	// would mask a genuinely stalled SKIP schedule.
+	if !a.nextActionTimeIsOverdue(desc.GetInfo().GetFutureActionTimes()) {
+		a.logger.Info("overdue candidate was not overdue on re-check; visibility entry was stale",
+			tag.WorkflowNamespace(nsName), tag.ScheduleID(scheduleID))
+		metrics.ScheduleInvariantsScannerOverdueNextActionTimeStaleCandidateCount.With(
+			a.metricsHandler.WithTags(metrics.NamespaceTag(nsName))).Record(1)
+		return true
+	}
 	return false
+}
+
+// nextActionTimeIsOverdue applies the candidate query's predicate to futureActionTimes.
+//
+// An empty list is not overdue - nothing pending can be late - which is the normal shape
+// for an action-exhausted schedule. The unknown-state scanner covers that case.
+func (a *Activities) nextActionTimeIsOverdue(futureActionTimes []*timestamppb.Timestamp) bool {
+	threshold := a.timeSource.Now().UTC().Add(-a.opts().OverdueNextActionTimeTolerance)
+	for _, t := range futureActionTimes {
+		if t == nil {
+			continue
+		}
+		// Ordered soonest-first, but don't rely on it.
+		if !t.AsTime().Before(threshold) {
+			return false
+		}
+	}
+	return len(futureActionTimes) > 0
 }
 
 func (a *Activities) emitCount(metricName, namespaceTagValue string, count int64) {
