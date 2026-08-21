@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
@@ -285,11 +286,7 @@ func (s *SizeLimitSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 		env.Logger.Info("PollAndHandleWorkflowTask", tag.Error(err))
 	}()
 
-	select {
-	case <-sigReadyToSendChan:
-	case <-s.Context().Done():
-		s.FailNow("timed out waiting for workflow task handler to be ready")
-	}
+	await.RequireReceive(s.T(), sigReadyToSendChan)
 
 	_, err = env.FrontendClient().SignalWorkflowExecution(s.Context(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         env.Namespace().String(),

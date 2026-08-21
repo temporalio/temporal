@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/nettest"
 	"google.golang.org/grpc"
 )
@@ -75,7 +76,7 @@ func testDialer(t *testing.T, target string, dial func(rpcFactory *nettest.RPCFa
 
 		conn := dial(rpcFactory)
 		conn.Connect()
-		require.NoError(t, <-errs)
+		require.NoError(t, await.RequireReceive(t, errs))
 		assert.Equal(t, target, conn.Target())
 		assert.NoError(t, conn.Close())
 	})

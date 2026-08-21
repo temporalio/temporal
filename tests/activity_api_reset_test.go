@@ -121,7 +121,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterRetry() {
 			return "", activityErr
 		}
 
-		s.WaitForChannel(ctx, activityCompleteCh) //nolint:staticcheck
+		await.RequireReceive(s.T(), activityCompleteCh)
 		return "done!", nil
 	}
 
@@ -180,7 +180,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WhileRunning() {
 	var startedActivityCount atomic.Int32
 	activityFunction := func() (string, error) {
 		startedActivityCount.Add(1)
-		s.WaitForChannel(ctx, activityCompleteCh) //nolint:staticcheck
+		await.RequireReceive(s.T(), activityCompleteCh)
 		return "done!", nil
 	}
 
@@ -240,7 +240,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_UnpausesRunningAc
 	var startedActivityCount atomic.Int32
 	activityFunction := func() (string, error) {
 		startedActivityCount.Add(1)
-		s.WaitForChannel(ctx, activityCompleteCh) //nolint:staticcheck
+		await.RequireReceive(s.T(), activityCompleteCh)
 		return "done!", nil
 	}
 
@@ -392,7 +392,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_InRetry() {
 			return "", activityErr
 		}
 
-		s.WaitForChannel(ctx, activityCompleteCh) //nolint:staticcheck
+		await.RequireReceive(s.T(), activityCompleteCh)
 		return "done!", nil
 	}
 
@@ -464,7 +464,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_KeepPaused() {
 			return "", activityErr
 		}
 
-		s.WaitForChannel(ctx, activityCompleteCh) //nolint:staticcheck
+		await.RequireReceive(s.T(), activityCompleteCh)
 		return "done!", nil
 	}
 
@@ -592,7 +592,7 @@ func (s *ActivityApiResetClientTestSuite) runResetHeartbeatDetails(resetHeartbea
 			return "", errors.New("bad-luck-please-retry")
 		}
 		// not the first iteration
-		s.WaitForChannel(ctx, activityCompleteCh) //nolint:staticcheck
+		await.RequireReceive(s.T(), activityCompleteCh)
 		for activityShouldFinish.Load() == false {
 			activity.RecordHeartbeat(ctx, "second")
 			time.Sleep(time.Second) //nolint:forbidigo
@@ -704,7 +704,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WhilePaused() {
 		if !activityWasReset.Load() {
 			return "", errors.New("bad-luck-please-retry")
 		}
-		s.WaitForChannel(ctx, activityCompleteCh) //nolint:staticcheck
+		await.RequireReceive(s.T(), activityCompleteCh)
 		return "done!", nil
 	}
 
@@ -783,7 +783,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_TerminateWhileDef
 
 	activityFunction := func() (string, error) {
 		startedActivityCount.Add(1)
-		s.WaitForChannel(ctx, activityBlockCh) //nolint:staticcheck
+		await.RequireReceive(s.T(), activityBlockCh)
 		return "done!", nil
 	}
 
