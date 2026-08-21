@@ -133,6 +133,72 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandNew(
 	s.True(releaseCalled)
 }
 
+func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_NoCurrentRecord_ClosedWithSuccessor_CreatesAsZombie() {
+	ctx := context.Background()
+
+	namespaceID := namespace.ID("some random namespace ID")
+	workflowID := "some random workflow ID"
+	runID := "some random run ID"
+	successorRunID := "successor run ID"
+
+	releaseCalled := false
+
+	targetWorkflow := NewMockWorkflow(s.controller)
+	weContext := historyi.NewMockWorkflowContext(s.controller)
+	mutableState := historyi.NewMockMutableState(s.controller)
+	var releaseFn historyi.ReleaseWorkflowContextFunc = func(error) { releaseCalled = true }
+	targetWorkflow.EXPECT().GetContext().Return(weContext).AnyTimes()
+	targetWorkflow.EXPECT().GetMutableState().Return(mutableState).AnyTimes()
+	targetWorkflow.EXPECT().GetReleaseFn().Return(releaseFn).AnyTimes()
+
+	workflowSnapshot := &persistence.WorkflowSnapshot{}
+	// Non-empty event sequence so the reapply branch of createAsZombie is exercised (rather than
+	// short-circuited by empty lists). On the passive apply path reapply is forwarded to the active
+	// cluster; here the mock stands in for a successful reapply.
+	workflowEventsSeq := []*persistence.WorkflowEvents{{
+		Events: []*historypb.HistoryEvent{{
+			EventId: common.FirstEventID + rand.Int63(),
+		}},
+	}}
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId:       namespaceID.String(),
+		WorkflowId:        workflowID,
+		NewExecutionRunId: successorRunID,
+	}).AnyTimes()
+	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: runID,
+	}).AnyTimes()
+	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
+	mutableState.EXPECT().GetReapplyCandidateEvents().Return(nil)
+	mutableState.EXPECT().CloseTransactionAsSnapshot(context.Background(), historyi.TransactionPolicyPassive).Return(
+		workflowSnapshot, workflowEventsSeq, nil,
+	)
+
+	s.mockTransactionMgr.EXPECT().GetCurrentWorkflowRunID(
+		ctx, namespaceID, workflowID, chasm.WorkflowArchetypeID,
+	).Return("", nil)
+
+	// A closed run with a successor and no current record must not resurrect as current: even with
+	// events to reapply, it is persisted via bypass-current without touching the (absent) current
+	// record. SuppressBy is never called since there is no current workflow to suppress against.
+	weContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, workflowEventsSeq).Return(nil)
+	weContext.EXPECT().CreateWorkflowExecution(
+		gomock.Any(),
+		s.mockShard,
+		persistence.CreateWorkflowModeBypassCurrent,
+		"",
+		int64(0),
+		mutableState,
+		workflowSnapshot,
+		workflowEventsSeq,
+		gomock.Any(),
+	).Return(nil)
+
+	err := s.createMgr.dispatchForNewWorkflow(ctx, chasm.WorkflowArchetypeID, targetWorkflow)
+	s.NoError(err)
+	s.True(releaseCalled)
+}
+
 func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_CreateAsCurrent() {
 	ctx := context.Background()
 
