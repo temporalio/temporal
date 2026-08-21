@@ -412,6 +412,7 @@ type Config struct {
 	ArchivalProcessorArchiveDelay                       dynamicconfig.DurationPropertyFn
 	ArchivalBackendMaxRPS                               dynamicconfig.FloatPropertyFn
 	ArchivalQueueMaxReaderCount                         dynamicconfig.IntPropertyFn
+	ArchivalQueueArchiveOnlyOnActiveCluster             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	WorkflowExecutionMaxInFlightUpdates                           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	WorkflowExecutionMaxInFlightUpdatePayloads                    dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -818,6 +819,7 @@ func NewConfig(
 		ArchivalProcessorArchiveDelay:                       dynamicconfig.ArchivalProcessorArchiveDelay.Get(dc),
 		ArchivalBackendMaxRPS:                               dynamicconfig.ArchivalBackendMaxRPS.Get(dc),
 		ArchivalQueueMaxReaderCount:                         dynamicconfig.ArchivalQueueMaxReaderCount.Get(dc),
+		ArchivalQueueArchiveOnlyOnActiveCluster:             dynamicconfig.ArchivalQueueArchiveOnlyOnActiveCluster.Get(dc),
 
 		// workflow update related
 		WorkflowExecutionMaxInFlightUpdates:                           dynamicconfig.WorkflowExecutionMaxInFlightUpdates.Get(dc),
