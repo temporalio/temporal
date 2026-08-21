@@ -326,6 +326,49 @@ func setStandbyTaskDiscardDelay(
 	}
 }
 
+func enableChildWorkflowResend(cluster parentChildCluster) parentChildScenarioStep {
+	return parentChildScenarioStep{
+		name: fmt.Sprintf("enable child workflow resend on %s", cluster),
+		run: func(_ context.Context, runtime *parentChildScenarioRuntime) error {
+			clusterIndex := int(cluster)
+			if clusterIndex < 0 || clusterIndex >= len(runtime.suite.clusters) {
+				return fmt.Errorf("unknown parent-child cluster %d", cluster)
+			}
+			runtime.cleanups = append(runtime.cleanups, runtime.suite.clusters[clusterIndex].OverrideDynamicConfig(
+				runtime.suite.T(),
+				dynamicconfig.EnableChildWorkflowResend,
+				true,
+			))
+			return nil
+		},
+	}
+}
+
+func setStandbyTaskResendDelay(
+	cluster parentChildCluster,
+	taskType enumsspb.TaskType,
+	duration time.Duration,
+) parentChildScenarioStep {
+	return parentChildScenarioStep{
+		name: fmt.Sprintf("set standby %s resend delay on %s to %s", taskType, cluster, duration),
+		run: func(_ context.Context, runtime *parentChildScenarioRuntime) error {
+			clusterIndex := int(cluster)
+			if clusterIndex < 0 || clusterIndex >= len(runtime.suite.clusters) {
+				return fmt.Errorf("unknown parent-child cluster %d", cluster)
+			}
+			runtime.cleanups = append(runtime.cleanups, runtime.suite.clusters[clusterIndex].OverrideDynamicConfig(
+				runtime.suite.T(),
+				dynamicconfig.StandbyTaskMissingEventsResendDelay,
+				[]dynamicconfig.ConstrainedValue{{
+					Constraints: dynamicconfig.Constraints{TaskType: taskType},
+					Value:       duration,
+				}},
+			))
+			return nil
+		},
+	}
+}
+
 func startParentWorkflow() parentChildScenarioStep {
 	return parentChildScenarioStep{
 		name: "start parent workflow on the active cluster",

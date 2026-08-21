@@ -192,25 +192,33 @@ func (s *parentChildXDCTestSuite) TestReproOrphanedChildAfterForceFailover() {
 	})
 }
 
-// TestStandbyVerifiesMissingChild covers the cross-shard ordering where the parent update
+// TestStandbyResendsMissingChild covers the cross-shard ordering where the parent update
 // identifying a started child reaches the passive while the child's WorkflowExecutionStarted
 // task remains delayed.
 //
-//	                           | parent on target                | child on target | active         | outcome
-//	---------------------------+---------------------------------+-----------------+----------------+---------------------------------------------
-//	parent prefix arrives      | WFT scheduled                   | does not exist  | initial active | common parent prefix
-//	child start is delayed     | unchanged                       | does not exist  | initial active | child start remains unapplied
-//	parent child-start arrives | ChildWorkflowExecutionStarted   | does not exist  | initial active | standby verifies the child's first WFT
-//	verification fails         | child-start relationship exists | does not exist  | initial active | VerifyFirstWorkflowTaskScheduled: NotFound
-//	discard window expires     | unchanged                       | does not exist  | initial active | standby StartChild task is discarded
+//	                           | parent on target                | child on target       | active         | outcome
+//	---------------------------+---------------------------------+-----------------------+----------------+---------------------------------------------
+//	parent prefix arrives      | WFT scheduled                   | does not exist        | initial active | common parent prefix
+//	child start is delayed     | unchanged                       | does not exist        | initial active | child start remains unapplied
+//	parent child-start arrives | ChildWorkflowExecutionStarted   | does not exist        | initial active | standby verifies the child's first WFT
+//	verification fails         | child-start relationship exists | does not exist        | initial active | VerifyFirstWorkflowTaskScheduled: NotFound
+//	child is resent            | unchanged                       | RUNNING, WFT scheduled | initial active | child state is restored from the source
 //
 // Event checkpoints select an entire replication task, not an individual event. The delayed child
-// start task intentionally remains unapplied while the standby StartChild task is allowed to expire.
-func (s *parentChildXDCTestSuite) TestStandbyVerifiesMissingChild() {
+// start task intentionally remains unapplied while child state is restored through state sync.
+func (s *parentChildXDCTestSuite) TestStandbyResendsMissingChild() {
 	s.runParentChildScenario(parentChildScenario{
 		steps: []parentChildScenarioStep{
-			// Track source time without the production standby lag so task expiration is observable quickly.
+			// Track source time without the production standby lag so the task becomes resend-eligible quickly.
 			setStandbyClusterDelay(initialStandbyCluster, 0),
+			// Enable the child resend path on the passive cluster.
+			enableChildWorkflowResend(initialStandbyCluster),
+			// Skip the normal resend delay so the pending standby StartChild task requests a state sync.
+			setStandbyTaskResendDelay(
+				initialStandbyCluster,
+				enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION,
+				0,
+			),
 			// Create the parent and its first workflow task on the initial active cluster.
 			startParentWorkflow(),
 			// Establish the parent on the passive before replicating its child relationship.
@@ -227,30 +235,36 @@ func (s *parentChildXDCTestSuite) TestStandbyVerifiesMissingChild() {
 				childWorkflow,
 				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 			),
+			// Confirm that the ordinary child replication task remains unapplied before verification.
+			confirmWorkflowIsMissingOnCluster(initialStandbyCluster, childWorkflow),
 			// Apply the parent's child-start record, triggering verification of the missing child.
 			applyReplicationThroughTaskContainingEvent(
 				initialStandbyCluster,
 				parentWorkflow,
 				enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED,
 			),
-			// Observe the exact missing-child error before shortening the task's discard window.
+			// Observe the original missing-child error returned while the resend runs in the background.
 			waitForHistoryVerificationFailureOnCluster(
 				initialStandbyCluster,
 				historyClientVerifyFirstWorkflowTask,
 				&serviceerror.NotFound{},
 			),
-			// Expire only the pending standby StartChild task; its next attempt should return ErrTaskDiscarded.
-			setStandbyTaskDiscardDelay(
-				initialStandbyCluster,
-				enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION,
-				0,
-			),
 		},
 		expectations: []parentChildExpectation{
-			workflowIsMissingOnCluster(initialStandbyCluster, childWorkflow),
-			taskWasDiscardedOnCluster(
+			{
+				name: "child workflow resend is attempted on the initial standby cluster",
+				check: func(_ context.Context, runtime *parentChildScenarioRuntime) error {
+					return runtime.requireCapturedMetric(
+						initialStandbyCluster,
+						metrics.ChildWorkflowResendAttempts.Name(),
+						nil,
+					)
+				},
+			},
+			workflowHasEventOnCluster(
 				initialStandbyCluster,
-				metrics.TaskTypeTransferStandbyTaskStartChildExecution,
+				childWorkflow,
+				enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 			),
 		},
 	})
