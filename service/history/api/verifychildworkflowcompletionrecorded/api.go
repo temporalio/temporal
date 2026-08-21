@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/workflowresend"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
@@ -94,7 +95,7 @@ func Invoke(
 	request *historyservice.VerifyChildExecutionCompletionRecordedRequest,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	shardContext historyi.ShardContext,
-	inFlightResends *InFlightResends,
+	inFlightResends *workflowresend.InFlightResends,
 ) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if err := api.ValidateNamespaceUUID(namespaceID); err != nil {
@@ -138,7 +139,7 @@ func Invoke(
 	// retry while an earlier resend runs, so without these a stale parent, or a namespace with many
 	// of them, would spawn goroutines without bound.
 	parentKey := definition.NewWorkflowKey(request.NamespaceId, request.ParentExecution.WorkflowId, request.ParentExecution.RunId)
-	claimed, atCapacity := inFlightResends.tryClaim(parentKey, shardContext.GetConfig().ParentWorkflowResendMaxInFlight())
+	claimed, atCapacity := inFlightResends.TryClaim(parentKey, shardContext.GetConfig().ParentWorkflowResendMaxInFlight())
 	if atCapacity {
 		metrics.ParentWorkflowResendLimited.With(metricsHandler).Record(1)
 		shardContext.GetLogger().Warn("Dropped parent workflow resend, shard is at its in-flight limit",
@@ -162,7 +163,7 @@ func Invoke(
 	resendCtx, cancel := context.WithTimeout(resendCtx, shardContext.GetConfig().ReplicationTaskApplyTimeout())
 	go func() {
 		defer cancel()
-		defer inFlightResends.release(parentKey)
+		defer inFlightResends.Release(parentKey)
 		defer func() {
 			var panicErr error
 			log.CapturePanic(shardContext.GetLogger(), &panicErr)
