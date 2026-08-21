@@ -6,7 +6,7 @@ import (
 	"go.temporal.io/server/common/testing/testcontext"
 )
 
-// Rcv waits for and returns the next value from ch using the test context.
+// Rcv waits for and returns the next value from ch.
 // A closed ch yields the zero value, as with a plain receive.
 // It fails the test if the context ends before ch produces a value.
 func Rcv[T any](tb testing.TB, ch <-chan T) T {
