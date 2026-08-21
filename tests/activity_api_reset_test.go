@@ -121,7 +121,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterRetry() {
 			return "", activityErr
 		}
 
-		await.Receive(s.T(), activityCompleteCh)
+		await.Rcv(s.T(), activityCompleteCh)
 		return "done!", nil
 	}
 
@@ -180,7 +180,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WhileRunning() {
 	var startedActivityCount atomic.Int32
 	activityFunction := func() (string, error) {
 		startedActivityCount.Add(1)
-		await.Receive(s.T(), activityCompleteCh)
+		await.Rcv(s.T(), activityCompleteCh)
 		return "done!", nil
 	}
 
@@ -240,7 +240,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_UnpausesRunningAc
 	var startedActivityCount atomic.Int32
 	activityFunction := func() (string, error) {
 		startedActivityCount.Add(1)
-		await.Receive(s.T(), activityCompleteCh)
+		await.Rcv(s.T(), activityCompleteCh)
 		return "done!", nil
 	}
 
@@ -392,7 +392,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_InRetry() {
 			return "", activityErr
 		}
 
-		await.Receive(s.T(), activityCompleteCh)
+		await.Rcv(s.T(), activityCompleteCh)
 		return "done!", nil
 	}
 
@@ -464,7 +464,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_KeepPaused() {
 			return "", activityErr
 		}
 
-		await.Receive(s.T(), activityCompleteCh)
+		await.Rcv(s.T(), activityCompleteCh)
 		return "done!", nil
 	}
 
@@ -592,7 +592,7 @@ func (s *ActivityApiResetClientTestSuite) runResetHeartbeatDetails(resetHeartbea
 			return "", errors.New("bad-luck-please-retry")
 		}
 		// not the first iteration
-		await.Receive(s.T(), activityCompleteCh)
+		await.Rcv(s.T(), activityCompleteCh)
 		for activityShouldFinish.Load() == false {
 			activity.RecordHeartbeat(ctx, "second")
 			time.Sleep(time.Second) //nolint:forbidigo
@@ -704,7 +704,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WhilePaused() {
 		if !activityWasReset.Load() {
 			return "", errors.New("bad-luck-please-retry")
 		}
-		await.Receive(s.T(), activityCompleteCh)
+		await.Rcv(s.T(), activityCompleteCh)
 		return "done!", nil
 	}
 
@@ -783,7 +783,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_TerminateWhileDef
 
 	activityFunction := func() (string, error) {
 		startedActivityCount.Add(1)
-		await.Receive(s.T(), activityBlockCh)
+		await.Rcv(s.T(), activityBlockCh)
 		return "done!", nil
 	}
 

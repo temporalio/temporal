@@ -505,7 +505,7 @@ func (s *DeploymentVersionSuite) startVersionedWorkflow(ctx context.Context, env
 	defer w.Stop()
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tv.TaskQueue().String()}, wf)
 	s.NoError(err)
-	await.Receive(s.T(), started)
+	await.Rcv(s.T(), started)
 	return run
 }
 

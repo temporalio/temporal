@@ -126,7 +126,7 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 						return "", activityErr
 					}
 
-					await.Receive(t, activityUpdated)
+					await.Rcv(t, activityUpdated)
 					return "done!", nil
 				}
 
@@ -356,7 +356,7 @@ func TestActivityApiUpdateClientTestSuite(t *testing.T) {
 						return "", activityErr
 					}
 
-					await.Receive(t, activityUpdated)
+					await.Rcv(t, activityUpdated)
 					return "done!", nil
 				}
 
@@ -477,7 +477,7 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 			if startedActivityCount.Load() == 1 {
 				return "", errors.New("bad-luck-please-retry")
 			}
-			await.Receive(t, activityUpdated)
+			await.Rcv(t, activityUpdated)
 			return "done!", nil
 		}
 
@@ -669,7 +669,7 @@ func TestActivityUpdateExecutionOptionsApi(t *testing.T) {
 			if startedActivityCount.Load() == 1 {
 				return "", errors.New("bad-luck-please-retry")
 			}
-			await.Receive(t, activityUpdated)
+			await.Rcv(t, activityUpdated)
 			return "done!", nil
 		}
 

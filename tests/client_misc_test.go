@@ -838,7 +838,7 @@ func (s *ClientMiscTestSuite) Test_BufferedQuery() {
 
 	err = workflowRun.Get(s.Context(), nil)
 	s.NoError(err)
-	s.NoError(await.Receive(s.T(), describeErrCh)) // assert on test goroutine after workflow completes
+	s.NoError(await.Rcv(s.T(), describeErrCh)) // assert on test goroutine after workflow completes
 }
 
 func (s *ClientMiscTestSuite) assertHistory(env *testcore.TestEnv, wid, rid string, expected []enumspb.EventType) {

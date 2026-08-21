@@ -76,7 +76,7 @@ func testDialer(t *testing.T, target string, dial func(rpcFactory *nettest.RPCFa
 
 		conn := dial(rpcFactory)
 		conn.Connect()
-		require.NoError(t, await.Receive(t, errs))
+		require.NoError(t, await.Rcv(t, errs))
 		assert.Equal(t, target, conn.Target())
 		assert.NoError(t, conn.Close())
 	})
