@@ -1021,6 +1021,7 @@ var (
 	FailedWorkflowTasksCounter                    = NewCounterDef("failed_workflow_tasks")
 	WorkflowTaskAttempt                           = NewDimensionlessHistogramDef("workflow_task_attempt")
 	StaleMutableStateCounter                      = NewCounterDef("stale_mutable_state")
+	PaginationTokenBranchMismatchCounter          = NewCounterDef("pagination_token_branch_mismatch")
 	AutoResetPointsLimitExceededCounter           = NewCounterDef("auto_reset_points_exceed_limit")
 	AutoResetPointCorruptionCounter               = NewCounterDef("auto_reset_point_corruption")
 	BatchableTaskBatchCount                       = NewGaugeDef("batchable_task_batch_count")
