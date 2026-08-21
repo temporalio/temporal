@@ -403,9 +403,11 @@ func (s *Scheduler) NewImmediateBackfiller(
 	backfiller.Request = &schedulerpb.BackfillerState_TriggerRequest{
 		TriggerRequest: request,
 	}
-	// Trigger backfills fire a single action at creation time; processTrigger uses
-	// LastProcessedTime as that action's deterministic time, so it must be set.
-	backfiller.LastProcessedTime = timestamppb.New(ctx.Now(s))
+	triggerTime := timestamp.TimeValue(request.GetScheduledTime())
+	if triggerTime.IsZero() {
+		triggerTime = ctx.Now(s)
+	}
+	backfiller.LastProcessedTime = timestamppb.New(triggerTime)
 	return backfiller
 }
 
