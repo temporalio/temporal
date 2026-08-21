@@ -10,10 +10,9 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
-	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/validation"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -38,24 +37,22 @@ type frontendHandler struct {
 	config            *Config
 	namespaceRegistry namespace.Registry
 	endpointRegistry  commonnexus.EndpointRegistry
-	validator         *validator
+	validatorRegistry *validation.ValidatorRegistry
 }
 
 func NewFrontendHandler(
 	client nexusoperationpb.NexusOperationServiceClient,
 	config *Config,
-	logger log.Logger,
 	namespaceRegistry namespace.Registry,
 	endpointRegistry commonnexus.EndpointRegistry,
-	saMapperProvider searchattribute.MapperProvider,
-	saValidator *searchattribute.Validator,
+	validatorRegistry *validation.ValidatorRegistry,
 ) FrontendHandler {
 	return &frontendHandler{
 		client:            client,
 		config:            config,
 		namespaceRegistry: namespaceRegistry,
 		endpointRegistry:  endpointRegistry,
-		validator:         newValidator(config, logger, saMapperProvider, saValidator),
+		validatorRegistry: validatorRegistry,
 	}
 }
 
@@ -72,7 +69,7 @@ func (h *frontendHandler) StartNexusOperationExecution(
 		return nil, err
 	}
 
-	if err := h.validator.validateAndNormalizeStartRequest(req); err != nil {
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, req); err != nil {
 		return nil, err
 	}
 
@@ -82,12 +79,19 @@ func (h *frontendHandler) StartNexusOperationExecution(
 		return nil, err
 	}
 
-	resp, err := h.client.StartNexusOperation(ctx, &nexusoperationpb.StartNexusOperationRequest{
+	result, err := h.client.StartNexusOperation(ctx, &nexusoperationpb.StartNexusOperationRequest{
 		EndpointId:      endpointEntry.GetId(),
 		NamespaceId:     namespaceID.String(),
 		FrontendRequest: req,
 	})
-	return resp.GetFrontendResponse(), err
+	if err != nil {
+		return nil, err
+	}
+	resp := result.GetFrontendResponse()
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 func (h *frontendHandler) DescribeNexusOperationExecution(
@@ -103,15 +107,22 @@ func (h *frontendHandler) DescribeNexusOperationExecution(
 		return nil, err
 	}
 
-	if err := h.validator.validateAndNormalizeDescribeRequest(req, namespaceID.String()); err != nil {
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, req); err != nil {
 		return nil, err
 	}
 
-	resp, err := h.client.DescribeNexusOperation(ctx, &nexusoperationpb.DescribeNexusOperationRequest{
+	result, err := h.client.DescribeNexusOperation(ctx, &nexusoperationpb.DescribeNexusOperationRequest{
 		NamespaceId:     namespaceID.String(),
 		FrontendRequest: req,
 	})
-	return resp.GetFrontendResponse(), err
+	if err != nil {
+		return nil, err
+	}
+	resp := result.GetFrontendResponse()
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 // PollNexusOperationExecution long-polls for a Nexus operation to reach a specific stage.
@@ -123,20 +134,27 @@ func (h *frontendHandler) PollNexusOperationExecution(
 		return nil, ErrStandaloneNexusOperationDisabled
 	}
 
-	if err := h.validator.validateAndNormalizePollRequest(req); err != nil {
-		return nil, err
-	}
-
 	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(req.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
 
-	resp, err := h.client.PollNexusOperation(ctx, &nexusoperationpb.PollNexusOperationRequest{
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, req); err != nil {
+		return nil, err
+	}
+
+	result, err := h.client.PollNexusOperation(ctx, &nexusoperationpb.PollNexusOperationRequest{
 		NamespaceId:     namespaceID.String(),
 		FrontendRequest: req,
 	})
-	return resp.GetFrontendResponse(), err
+	if err != nil {
+		return nil, err
+	}
+	resp := result.GetFrontendResponse()
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 func (h *frontendHandler) ListNexusOperationExecutions(
@@ -145,6 +163,10 @@ func (h *frontendHandler) ListNexusOperationExecutions(
 ) (*workflowservice.ListNexusOperationExecutionsResponse, error) {
 	if !h.isStandaloneNexusOperationEnabled(req.GetNamespace()) {
 		return nil, ErrStandaloneNexusOperationDisabled
+	}
+
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, req); err != nil {
+		return nil, err
 	}
 
 	pageSize := req.GetPageSize()
@@ -195,10 +217,14 @@ func (h *frontendHandler) ListNexusOperationExecutions(
 		})
 	}
 
-	return &workflowservice.ListNexusOperationExecutionsResponse{
+	listResp := &workflowservice.ListNexusOperationExecutionsResponse{
 		Operations:    operations,
 		NextPageToken: resp.NextPageToken,
-	}, nil
+	}
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, listResp); err != nil {
+		return nil, err
+	}
+	return listResp, nil
 }
 
 func (h *frontendHandler) CountNexusOperationExecutions(
@@ -207,6 +233,10 @@ func (h *frontendHandler) CountNexusOperationExecutions(
 ) (*workflowservice.CountNexusOperationExecutionsResponse, error) {
 	if !h.isStandaloneNexusOperationEnabled(req.GetNamespace()) {
 		return nil, ErrStandaloneNexusOperationDisabled
+	}
+
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, req); err != nil {
+		return nil, err
 	}
 
 	resp, err := chasm.CountExecutions[*Operation](ctx, &chasm.CountExecutionsRequest{
@@ -225,10 +255,14 @@ func (h *frontendHandler) CountNexusOperationExecutions(
 		})
 	}
 
-	return &workflowservice.CountNexusOperationExecutionsResponse{
+	countResp := &workflowservice.CountNexusOperationExecutionsResponse{
 		Count:  resp.Count,
 		Groups: groups,
-	}, nil
+	}
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, countResp); err != nil {
+		return nil, err
+	}
+	return countResp, nil
 }
 
 func (h *frontendHandler) RequestCancelNexusOperationExecution(
@@ -244,7 +278,7 @@ func (h *frontendHandler) RequestCancelNexusOperationExecution(
 		return nil, err
 	}
 
-	if err := h.validator.validateAndNormalizeCancelRequest(req); err != nil {
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, req); err != nil {
 		return nil, err
 	}
 
@@ -256,7 +290,11 @@ func (h *frontendHandler) RequestCancelNexusOperationExecution(
 		return nil, err
 	}
 
-	return &workflowservice.RequestCancelNexusOperationExecutionResponse{}, nil
+	resp := &workflowservice.RequestCancelNexusOperationExecutionResponse{}
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 func (h *frontendHandler) TerminateNexusOperationExecution(
@@ -272,7 +310,7 @@ func (h *frontendHandler) TerminateNexusOperationExecution(
 		return nil, err
 	}
 
-	if err := h.validator.validateAndNormalizeTerminateRequest(req); err != nil {
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, req); err != nil {
 		return nil, err
 	}
 
@@ -284,7 +322,11 @@ func (h *frontendHandler) TerminateNexusOperationExecution(
 		return nil, err
 	}
 
-	return &workflowservice.TerminateNexusOperationExecutionResponse{}, nil
+	resp := &workflowservice.TerminateNexusOperationExecutionResponse{}
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 func (h *frontendHandler) DeleteNexusOperationExecution(
@@ -300,7 +342,7 @@ func (h *frontendHandler) DeleteNexusOperationExecution(
 		return nil, err
 	}
 
-	if err := h.validator.validateAndNormalizeDeleteRequest(req); err != nil {
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, req); err != nil {
 		return nil, err
 	}
 
@@ -312,7 +354,11 @@ func (h *frontendHandler) DeleteNexusOperationExecution(
 		return nil, err
 	}
 
-	return &workflowservice.DeleteNexusOperationExecutionResponse{}, nil
+	resp := &workflowservice.DeleteNexusOperationExecutionResponse{}
+	if err := validation.ValidateAndNormalize(h.validatorRegistry, resp); err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 // isStandaloneNexusOperationEnabled checks if standalone Nexus operations are enabled for the given namespace.
