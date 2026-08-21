@@ -2897,6 +2897,89 @@ func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_SkipsResendForRemove
 	}, 10*time.Second, 10*time.Millisecond)
 }
 
+func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_SkipsApplyWhenActiveClusterChanges() {
+	s.config.EnableChildWorkflowResend = func() bool { return true }
+
+	namespaceID := namespace.ID(uuid.NewString())
+	initialNamespaceEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: namespaceID.String(), Name: "failover-namespace"},
+		&persistencespb.NamespaceConfig{},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestCurrentClusterName,
+			Clusters:          cluster.TestAllClusterNames,
+		},
+		tests.Version,
+	)
+	failedOverNamespaceEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: namespaceID.String(), Name: "failover-namespace"},
+		&persistencespb.NamespaceConfig{},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName,
+			Clusters:          cluster.TestAllClusterNames,
+		},
+		tests.Version,
+	)
+	failedOver := make(chan struct{})
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).DoAndReturn(
+		func(namespace.ID) (*namespace.Namespace, error) {
+			select {
+			case <-failedOver:
+				return failedOverNamespaceEntry, nil
+			default:
+				return initialNamespaceEntry, nil
+			}
+		},
+	).AnyTimes()
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{})
+
+	request := &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
+		NamespaceId: namespaceID.String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowID,
+			RunId:      tests.RunID,
+		},
+		ResendChild: true,
+	}
+
+	mockClusterMetadata := cluster.NewMockMetadata(s.controller)
+	mockClusterMetadata.EXPECT().GetClusterID().Return(tests.Version).AnyTimes()
+	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName).AnyTimes()
+	mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo)
+	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, tests.Version).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShard.SetClusterMetadata(mockClusterMetadata)
+
+	syncResponse := &adminservice.SyncWorkflowStateResponse{
+		VersionedTransitionArtifact: &replicationspb.VersionedTransitionArtifact{},
+	}
+	s.mockShard.Resource.RemoteAdminClient.EXPECT().SyncWorkflowState(gomock.Any(), protomock.Eq(&adminservice.SyncWorkflowStateRequest{
+		NamespaceId: request.NamespaceId,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: request.WorkflowExecution.WorkflowId,
+			RunId:      request.WorkflowExecution.RunId,
+		},
+		TargetClusterId: int32(cluster.TestAlternativeClusterInitialFailoverVersion),
+		ArchetypeId:     chasm.WorkflowArchetypeID,
+	})).DoAndReturn(
+		func(context.Context, *adminservice.SyncWorkflowStateRequest, ...grpc.CallOption) (*adminservice.SyncWorkflowStateResponse, error) {
+			close(failedOver)
+			return syncResponse, nil
+		},
+	)
+
+	err := s.historyEngine.VerifyFirstWorkflowTaskScheduled(metrics.AddMetricsContext(s.T().Context()), request)
+	var notFound *serviceerror.NotFound
+	s.ErrorAs(err, &notFound)
+
+	childKey := definition.NewWorkflowKey(request.NamespaceId, request.WorkflowExecution.WorkflowId, request.WorkflowExecution.RunId)
+	await.RequireTrue(s.T(), func() bool {
+		claimed, _ := s.historyEngine.childResends.TryClaim(childKey, 8)
+		if claimed {
+			s.historyEngine.childResends.Release(childKey)
+		}
+		return claimed
+	}, 10*time.Second, 10*time.Millisecond)
+}
+
 func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_ResendChildDeduped() {
 	s.config.EnableChildWorkflowResend = func() bool { return true }
 
