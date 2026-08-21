@@ -120,19 +120,19 @@ type (
 	}
 )
 
-var (
-	batchActivityRetryPolicy = temporal.RetryPolicy{
-		InitialInterval:    10 * time.Second,
-		BackoffCoefficient: 1.7,
-		MaximumInterval:    5 * time.Minute,
-	}
-
-	batchActivityOptions = workflow.ActivityOptions{
+// batchActivityOptions builds the activity options for a batch operation's activity.
+func batchActivityOptions(heartbeatTimeout time.Duration) workflow.ActivityOptions {
+	return workflow.ActivityOptions{
 		ScheduleToStartTimeout: 5 * time.Minute,
 		StartToCloseTimeout:    infiniteDuration,
-		RetryPolicy:            &batchActivityRetryPolicy,
+		HeartbeatTimeout:       heartbeatTimeout,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    10 * time.Second,
+			BackoffCoefficient: 1.7,
+			MaximumInterval:    5 * time.Minute,
+		},
 	}
-)
+}
 
 // BatchWorkflowProtobuf is the workflow that runs a batch job of resetting workflows.
 func BatchWorkflowProtobuf(ctx workflow.Context, batchParams *batchspb.BatchOperationInput) (HeartBeatDetails, error) {
@@ -141,8 +141,7 @@ func BatchWorkflowProtobuf(ctx workflow.Context, batchParams *batchspb.BatchOper
 	}
 
 	batchParams = setDefaultParams(batchParams)
-	batchActivityOptions.HeartbeatTimeout = batchParams.ActivityHeartbeatTimeout.AsDuration()
-	opt := workflow.WithActivityOptions(ctx, batchActivityOptions)
+	opt := workflow.WithActivityOptions(ctx, batchActivityOptions(batchParams.GetActivityHeartbeatTimeout().AsDuration()))
 	var result HeartBeatDetails
 	var ac *activities
 	err := workflow.ExecuteActivity(opt, ac.BatchActivityWithProtobuf, batchParams).Get(ctx, &result)
