@@ -876,6 +876,13 @@ func isNonRetryableError(err error, batchType enumspb.BatchOperationType) bool {
 		return false
 	}
 
+	// Avoid retry on InvalidArgument, which can burn batch rate limit and
+	// log same per-target failure multiple times. This is similar to how
+	// fetchPage treats InvalidArgument.
+	if _, isInvalidArgument := errors.AsType[*serviceerror.InvalidArgument](err); isInvalidArgument {
+		return true
+	}
+
 	errMsg := err.Error()
 
 	// Operation-specific non-retryable errors

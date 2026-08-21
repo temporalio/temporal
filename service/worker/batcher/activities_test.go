@@ -786,6 +786,49 @@ func (s *activitiesSuite) TestIsNonRetryableError() {
 			batchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
 			want:      false,
 		},
+		{
+			// An InvalidArgument is permanent whatever the batch type: the same
+			// arguments fail the same way on every attempt.
+			name:      "InvalidArgument for RESET_WORKFLOW returns true",
+			err:       serviceerror.NewInvalidArgument("Workflow task finish ID must be > 1 && <= workflow last event ID."),
+			batchType: enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW,
+			want:      true,
+		},
+		{
+			name:      "InvalidArgument for SIGNAL_WORKFLOW returns true",
+			err:       serviceerror.NewInvalidArgument("signal name is not set"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW,
+			want:      true,
+		},
+		{
+			name:      "InvalidArgument for UNPAUSE_ACTIVITY returns true",
+			err:       serviceerror.NewInvalidArgument("activity type is not set"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY,
+			want:      true,
+		},
+		{
+			// The batch type carries no operation-specific rule at all, so this
+			// covers the path that used to fall through to "retryable".
+			name:      "InvalidArgument for DELETE_ACTIVITY returns true",
+			err:       serviceerror.NewInvalidArgument("run id is not valid"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY,
+			want:      true,
+		},
+		{
+			// The task layer may annotate before processTaskWithRetries sees it.
+			name:      "wrapped InvalidArgument returns true",
+			err:       fmt.Errorf("reset workflow: %w", serviceerror.NewInvalidArgument("invalid reset point")),
+			batchType: enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW,
+			want:      true,
+		},
+		{
+			// Only the typed error is permanent; the same wording from an
+			// untyped error carries no such guarantee.
+			name:      "untyped error mentioning invalid argument returns false",
+			err:       errors.New("invalid argument"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW,
+			want:      false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -1073,6 +1116,72 @@ func (s *activitiesSuite) TestStartTaskProcessor_ActivityTerminalStateIsNotRetri
 	}
 
 	s.Equal(int32(1), calls.Load(), "terminal-state failure must not be retried")
+}
+
+// TestStartTaskProcessor_InvalidArgumentIsNotRetried verifies that an
+// InvalidArgument from a target's own operation is attempted exactly once. The
+// same arguments fail the same way every time, and processTaskWithRetries retries
+// in place paced only by the batch's rate limiter, so retrying spends the whole
+// AttemptsOnRetryableError budget -- and the batch's request budget -- to arrive
+// at the same failure. Unlike the activity FailedPrecondition case, this holds
+// for every batch type.
+func (s *activitiesSuite) TestStartTaskProcessor_InvalidArgumentIsNotRetried() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	a := &activities{
+		activityDeps: activityDeps{
+			FrontendClient: s.mockFrontendClient,
+			Logger:         log.NewTestLogger(),
+			MetricsHandler: metrics.NoopMetricsHandler,
+		},
+	}
+
+	batchOperation := &batchspb.BatchOperationInput{
+		NamespaceId: "some-namespace-id",
+		BatchType:   enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW,
+		// Generous retry budget: the point is that none of it gets used.
+		AttemptsOnRetryableError: 50,
+		Request: &workflowservice.StartBatchOperationRequest{
+			Namespace: "ns",
+			JobId:     "job-id",
+			Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
+				SignalOperation: &batchpb.BatchOperationSignal{Signal: "test-signal"},
+			},
+		},
+	}
+
+	var calls atomic.Int32
+	s.mockFrontendClient.EXPECT().
+		SignalWorkflowExecution(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(context.Context, *workflowservice.SignalWorkflowExecutionRequest, ...any) (*workflowservice.SignalWorkflowExecutionResponse, error) {
+			calls.Add(1)
+			return nil, serviceerror.NewInvalidArgument("signal name is not set")
+		}).
+		AnyTimes()
+
+	testPage := &page{
+		executionInfos: []*workflowpb.WorkflowExecutionInfo{
+			{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-1", RunId: "run-1"}},
+		},
+	}
+
+	taskCh := make(chan task, 1)
+	respCh := make(chan taskResponse, 1)
+	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 1000 }))
+
+	go a.startTaskProcessor(ctx, batchOperation, "ns", taskCh, respCh, limiter, s.mockFrontendClient, metrics.NoopMetricsHandler, log.NewTestLogger())
+
+	taskCh <- task{executionInfo: testPage.executionInfos[0], attempts: 1, page: testPage}
+
+	select {
+	case resp := <-respCh:
+		s.Require().Error(resp.err)
+	case <-time.After(10 * time.Second):
+		s.FailNow("timed out waiting for task response")
+	}
+
+	s.Equal(int32(1), calls.Load(), "an InvalidArgument must not be retried")
 }
 
 // TestStartTaskProcessor_TerminationForwardsRequestFields verifies the terminate
