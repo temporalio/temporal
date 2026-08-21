@@ -85,6 +85,7 @@ import (
 	"go.temporal.io/server/service/history/api/updateworkflowoptions"
 	"go.temporal.io/server/service/history/api/verifychildworkflowcompletionrecorded"
 	"go.temporal.io/server/service/history/api/verifyfirstworkflowtaskscheduled"
+	"go.temporal.io/server/service/history/api/workflowresend"
 	"go.temporal.io/server/service/history/circuitbreakerpool"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -137,7 +138,8 @@ type (
 		workflowDeleteManager      deletemanager.DeleteManager
 		serializer                 serialization.Serializer
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
-		parentResends              verifychildworkflowcompletionrecorded.InFlightResends
+		parentResends              workflowresend.InFlightResends
+		childResends               workflowresend.InFlightResends
 		chasmEngine                chasm.Engine
 		versionChecker             headers.VersionChecker
 		versionCache               worker_versioning.VersionMembershipAndReactivationStatusCache
@@ -560,7 +562,13 @@ func (e *historyEngineImpl) VerifyFirstWorkflowTaskScheduled(
 	ctx context.Context,
 	request *historyservice.VerifyFirstWorkflowTaskScheduledRequest,
 ) (retError error) {
-	return verifyfirstworkflowtaskscheduled.Invoke(ctx, request, e.workflowConsistencyChecker)
+	return verifyfirstworkflowtaskscheduled.Invoke(
+		ctx,
+		request,
+		e.workflowConsistencyChecker,
+		e.shardContext,
+		&e.childResends,
+	)
 }
 
 // RecordWorkflowTaskStarted starts a workflow task

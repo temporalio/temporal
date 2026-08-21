@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/workflowresend"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
@@ -101,7 +102,7 @@ func Invoke(
 	request *historyservice.VerifyChildExecutionCompletionRecordedRequest,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	shardContext historyi.ShardContext,
-	inFlightResends *InFlightResends,
+	inFlightResends *workflowresend.InFlightResends,
 ) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if err := api.ValidateNamespaceUUID(namespaceID); err != nil {
@@ -148,7 +149,7 @@ func Invoke(
 	// of them, would spawn goroutines without bound.
 	parentKey := definition.NewWorkflowKey(request.NamespaceId, request.ParentExecution.WorkflowId, request.ParentExecution.RunId)
 	maxInFlight := shardContext.GetConfig().ParentWorkflowResendMaxInFlight()
-	claimed, atCapacity := inFlightResends.tryClaim(parentKey, maxInFlight)
+	claimed, atCapacity := inFlightResends.TryClaim(parentKey, maxInFlight)
 	if atCapacity {
 		metrics.ParentWorkflowResendLimited.With(metricsHandler).Record(1)
 		if emitLifecycle {
@@ -197,7 +198,7 @@ func Invoke(
 	resendCtx, cancel := context.WithTimeout(resendCtx, shardContext.GetConfig().ReplicationTaskApplyTimeout())
 	go func() {
 		defer cancel()
-		defer inFlightResends.release(parentKey)
+		defer inFlightResends.Release(parentKey)
 		defer func() {
 			var panicErr error
 			log.CapturePanic(shardContext.GetLogger(), &panicErr)

@@ -593,6 +593,7 @@ message VerifyFirstWorkflowTaskScheduledRequest {
   string namespace_id = 1;
   temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
   temporal.server.api.clock.v1.VectorClock clock = 3;
+  bool resend_child = 4;
 }
 
 message VerifyFirstWorkflowTaskScheduledResponse {}

@@ -1143,6 +1143,16 @@ var (
 	ParentWorkflowResendLimited = NewCounterDef("parent_workflow_resend_limited")
 	// ParentWorkflowResendLatency measures a resend: cross-cluster state fetch plus local apply.
 	ParentWorkflowResendLatency = NewTimerDef("parent_workflow_resend_latency")
+	// ChildWorkflowResendAttempts counts child resends started by standby first-task verification.
+	ChildWorkflowResendAttempts = NewCounterDef("child_workflow_resend_attempts")
+	// ChildWorkflowResendSkipped counts attempts that found a resend for the same child in flight.
+	ChildWorkflowResendSkipped = NewCounterDef("child_workflow_resend_skipped")
+	// ChildWorkflowResendFailures counts failed resends. Async resends report failure nowhere else.
+	ChildWorkflowResendFailures = NewCounterDef("child_workflow_resend_failures")
+	// ChildWorkflowResendLimited counts resends dropped because the shard was at its in-flight cap.
+	ChildWorkflowResendLimited = NewCounterDef("child_workflow_resend_limited")
+	// ChildWorkflowResendLatency measures a resend: cross-cluster state fetch plus local apply.
+	ChildWorkflowResendLatency = NewTimerDef("child_workflow_resend_latency")
 	// ReplicationOrphanedHistoryBranch tracks cases where history branch cleanup was skipped on error
 	// to avoid deleting successfully written history. These orphaned branches will be cleaned up by GC.
 	ReplicationOrphanedHistoryBranch = NewCounterDef("replication_orphaned_history_branch")
