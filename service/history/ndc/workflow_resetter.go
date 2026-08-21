@@ -7,6 +7,8 @@ import (
 	"errors"
 	"time"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -34,7 +36,6 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/history/workflow/update"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -510,7 +511,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 	resetRequestID string,
 ) (Workflow, error) {
 
-	resetBranchToken, err := r.forkAndGenerateBranchToken(
+	resetBranchToken, newBaseBranchToken, err := r.forkAndGenerateBranchToken(
 		ctx,
 		namespaceID,
 		workflowID,
@@ -520,6 +521,10 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	if newBaseBranchToken == nil {
+		newBaseBranchToken = baseBranchToken
 	}
 
 	resetContext := workflow.NewContext(
@@ -544,7 +549,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 			workflowID,
 			baseRunID,
 		),
-		baseBranchToken,
+		newBaseBranchToken,
 		baseRebuildLastEventID,
 		new(baseRebuildLastEventVersion),
 		definition.NewWorkflowKey(
@@ -677,7 +682,7 @@ func (r *workflowResetterImpl) forkAndGenerateBranchToken(
 	forkBranchToken []byte,
 	forkNodeID int64,
 	resetRunID string,
-) ([]byte, error) {
+) ([]byte, []byte, error) {
 	// fork a new history branch
 	shardID := r.shardContext.GetShardID()
 	resp, err := r.executionMgr.ForkHistoryBranch(ctx, &persistence.ForkHistoryBranchRequest{
@@ -689,10 +694,10 @@ func (r *workflowResetterImpl) forkAndGenerateBranchToken(
 		NewRunID:        resetRunID,
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return resp.NewBranchToken, nil
+	return resp.NewBranchToken, resp.BaseBranchToken, nil
 }
 
 func (r *workflowResetterImpl) terminateWorkflow(
@@ -1204,7 +1209,7 @@ func logSkippedOperation(
 		tag.WorkflowID(workflowKey.WorkflowID),
 		tag.WorkflowRunID(workflowKey.RunID),
 		tag.WorkflowEventID(event.GetEventId()),
-		tag.NewStringerTag("wf-history-event-type", event.GetEventType()),
+		tag.Stringer("wf-history-event-type", event.GetEventType()),
 	)
 }
 

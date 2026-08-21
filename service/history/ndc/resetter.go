@@ -98,9 +98,13 @@ func (r *resetterImpl) resetWorkflow(
 		return nil, err
 	}
 
-	resetBranchToken, err := r.getResetBranchToken(ctx, baseBranchToken, baseLastEventID)
+	resetBranchToken, newBaseBranchToken, err := r.getResetBranchToken(ctx, baseBranchToken, baseLastEventID)
 	if err != nil {
 		return nil, err
+	}
+
+	if newBaseBranchToken == nil {
+		newBaseBranchToken = baseBranchToken
 	}
 
 	requestID := uuid.NewString()
@@ -112,7 +116,7 @@ func (r *resetterImpl) resetWorkflow(
 			r.workflowID,
 			r.baseRunID,
 		),
-		baseBranchToken,
+		newBaseBranchToken,
 		baseLastEventID,
 		new(baseLastEventVersion),
 		definition.NewWorkflowKey(
@@ -205,7 +209,7 @@ func (r *resetterImpl) getResetBranchToken(
 	ctx context.Context,
 	baseBranchToken []byte,
 	baseLastEventID int64,
-) ([]byte, error) {
+) ([]byte, []byte, error) {
 
 	// fork a new history branch
 	shardID := r.shard.GetShardID()
@@ -218,8 +222,8 @@ func (r *resetterImpl) getResetBranchToken(
 		NewRunID:        r.newRunID,
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return resp.NewBranchToken, nil
+	return resp.NewBranchToken, resp.BaseBranchToken, nil
 }

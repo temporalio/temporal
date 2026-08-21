@@ -10,6 +10,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -46,8 +49,6 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
-	"go.uber.org/mock/gomock"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -598,6 +599,7 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 
 func (s *workflowResetterSuite) TestGenerateBranchToken() {
 	baseBranchToken := []byte("some random base branch token")
+	resurrectedBaseBranchToken := []byte("some random resurrected new base branch token")
 	baseNodeID := int64(1234)
 
 	resetBranchToken := []byte("some random reset branch token")
@@ -610,13 +612,14 @@ func (s *workflowResetterSuite) TestGenerateBranchToken() {
 		ShardID:         shardID,
 		NamespaceID:     s.namespaceID.String(),
 		NewRunID:        s.resetRunID,
-	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken}, nil)
+	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken, BaseBranchToken: resurrectedBaseBranchToken}, nil)
 
-	newBranchToken, err := s.workflowResetter.forkAndGenerateBranchToken(
+	newBranchToken, newBaseBranchToken, err := s.workflowResetter.forkAndGenerateBranchToken(
 		context.Background(), s.namespaceID, s.workflowID, baseBranchToken, baseNodeID, s.resetRunID,
 	)
 	s.NoError(err)
 	s.Equal(resetBranchToken, newBranchToken)
+	s.Equal(newBaseBranchToken, resurrectedBaseBranchToken)
 }
 
 func (s *workflowResetterSuite) TestTerminateWorkflow() {
