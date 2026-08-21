@@ -3,6 +3,7 @@ package verifychildworkflowcompletionrecorded
 import (
 	"context"
 	"errors"
+	"maps"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -352,9 +353,7 @@ func emitParentResendLifecycleEvent(
 	details map[string]any,
 ) {
 	eventDetails := make(map[string]any, len(details)+11)
-	for key, value := range details {
-		eventDetails[key] = value
-	}
+	maps.Copy(eventDetails, details)
 	eventDetails["event_type"] = wideevents.ParentChildLifecycleEventType
 	eventDetails["phase"] = wideevents.ParentChildPhaseParentResend
 	eventDetails["outcome"] = outcome
