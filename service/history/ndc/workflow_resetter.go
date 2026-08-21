@@ -7,8 +7,6 @@ import (
 	"errors"
 	"time"
 
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -36,6 +34,7 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/history/workflow/update"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -136,6 +135,10 @@ func (r *workflowResetterImpl) ResetWorkflow(
 
 	var currentWorkflowMutation *persistence.WorkflowMutation
 	var currentWorkflowEventsSeq []*persistence.WorkflowEvents
+	// Every reapply path below deliberately uses the pre-fork baseBranchToken, not the rewritten
+	// token that forkAndGenerateBranchToken returns. A storage layer that rewrites the base token
+	// only guarantees the range below the fork point is readable through it; these reads start at
+	// the fork point and go up, so they must keep the caller's original token.
 	var reapplyEventsFn workflowResetReapplyEventsFn
 	// currentWorkflow is nil only for a reset by explicit runId whose workflow has no current
 	// execution (the current run was deleted while older runs survive). This is exclusive to the
