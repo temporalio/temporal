@@ -23,7 +23,7 @@ func Rcv[T any](tb testing.TB, ch <-chan T) T {
 	}
 }
 
-// Snd waits to send value to ch using the test context.
+// Snd waits to send value to ch.
 // It fails the test if the context ends or ch closes before accepting the value.
 func Snd[T any](tb testing.TB, ch chan<- T, value T) {
 	tb.Helper()
