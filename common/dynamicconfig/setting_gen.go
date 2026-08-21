@@ -3,6 +3,7 @@
 package dynamicconfig
 
 import (
+	"reflect"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -984,6 +985,7 @@ func NewGlobalTypedSettingWithConstrainedDefault[T any](key string, convert func
 
 func (s GlobalTypedSetting[T]) Key() Key               { return s.key }
 func (s GlobalTypedSetting[T]) Precedence() Precedence { return PrecedenceGlobal }
+func (s GlobalTypedSetting[T]) ValueType() reflect.Type { return reflect.TypeFor[T]() }
 func (s GlobalTypedSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
@@ -991,6 +993,9 @@ func (s GlobalTypedSetting[T]) Validate(v any) error {
 
 func (s GlobalTypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
 func (s GlobalTypedConstrainedDefaultSetting[T]) Precedence() Precedence { return PrecedenceGlobal }
+func (s GlobalTypedConstrainedDefaultSetting[T]) ValueType() reflect.Type {
+	return reflect.TypeFor[T]()
+}
 func (s GlobalTypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
@@ -1120,6 +1125,7 @@ func NewNamespaceTypedSettingWithConstrainedDefault[T any](key string, convert f
 
 func (s NamespaceTypedSetting[T]) Key() Key               { return s.key }
 func (s NamespaceTypedSetting[T]) Precedence() Precedence { return PrecedenceNamespace }
+func (s NamespaceTypedSetting[T]) ValueType() reflect.Type { return reflect.TypeFor[T]() }
 func (s NamespaceTypedSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
@@ -1127,6 +1133,9 @@ func (s NamespaceTypedSetting[T]) Validate(v any) error {
 
 func (s NamespaceTypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
 func (s NamespaceTypedConstrainedDefaultSetting[T]) Precedence() Precedence { return PrecedenceNamespace }
+func (s NamespaceTypedConstrainedDefaultSetting[T]) ValueType() reflect.Type {
+	return reflect.TypeFor[T]()
+}
 func (s NamespaceTypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
@@ -1256,6 +1265,7 @@ func NewNamespaceIDTypedSettingWithConstrainedDefault[T any](key string, convert
 
 func (s NamespaceIDTypedSetting[T]) Key() Key               { return s.key }
 func (s NamespaceIDTypedSetting[T]) Precedence() Precedence { return PrecedenceNamespaceID }
+func (s NamespaceIDTypedSetting[T]) ValueType() reflect.Type { return reflect.TypeFor[T]() }
 func (s NamespaceIDTypedSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
@@ -1263,6 +1273,9 @@ func (s NamespaceIDTypedSetting[T]) Validate(v any) error {
 
 func (s NamespaceIDTypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
 func (s NamespaceIDTypedConstrainedDefaultSetting[T]) Precedence() Precedence { return PrecedenceNamespaceID }
+func (s NamespaceIDTypedConstrainedDefaultSetting[T]) ValueType() reflect.Type {
+	return reflect.TypeFor[T]()
+}
 func (s NamespaceIDTypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
@@ -1392,6 +1405,7 @@ func NewTaskQueueTypedSettingWithConstrainedDefault[T any](key string, convert f
 
 func (s TaskQueueTypedSetting[T]) Key() Key               { return s.key }
 func (s TaskQueueTypedSetting[T]) Precedence() Precedence { return PrecedenceTaskQueue }
+func (s TaskQueueTypedSetting[T]) ValueType() reflect.Type { return reflect.TypeFor[T]() }
 func (s TaskQueueTypedSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
@@ -1399,6 +1413,9 @@ func (s TaskQueueTypedSetting[T]) Validate(v any) error {
 
 func (s TaskQueueTypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
 func (s TaskQueueTypedConstrainedDefaultSetting[T]) Precedence() Precedence { return PrecedenceTaskQueue }
+func (s TaskQueueTypedConstrainedDefaultSetting[T]) ValueType() reflect.Type {
+	return reflect.TypeFor[T]()
+}
 func (s TaskQueueTypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
@@ -1552,6 +1569,7 @@ func NewShardIDTypedSettingWithConstrainedDefault[T any](key string, convert fun
 
 func (s ShardIDTypedSetting[T]) Key() Key               { return s.key }
 func (s ShardIDTypedSetting[T]) Precedence() Precedence { return PrecedenceShardID }
+func (s ShardIDTypedSetting[T]) ValueType() reflect.Type { return reflect.TypeFor[T]() }
 func (s ShardIDTypedSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
@@ -1559,6 +1577,9 @@ func (s ShardIDTypedSetting[T]) Validate(v any) error {
 
 func (s ShardIDTypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
 func (s ShardIDTypedConstrainedDefaultSetting[T]) Precedence() Precedence { return PrecedenceShardID }
+func (s ShardIDTypedConstrainedDefaultSetting[T]) ValueType() reflect.Type {
+	return reflect.TypeFor[T]()
+}
 func (s ShardIDTypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
@@ -1688,6 +1709,7 @@ func NewTaskTypeTypedSettingWithConstrainedDefault[T any](key string, convert fu
 
 func (s TaskTypeTypedSetting[T]) Key() Key               { return s.key }
 func (s TaskTypeTypedSetting[T]) Precedence() Precedence { return PrecedenceTaskType }
+func (s TaskTypeTypedSetting[T]) ValueType() reflect.Type { return reflect.TypeFor[T]() }
 func (s TaskTypeTypedSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
@@ -1695,6 +1717,9 @@ func (s TaskTypeTypedSetting[T]) Validate(v any) error {
 
 func (s TaskTypeTypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
 func (s TaskTypeTypedConstrainedDefaultSetting[T]) Precedence() Precedence { return PrecedenceTaskType }
+func (s TaskTypeTypedConstrainedDefaultSetting[T]) ValueType() reflect.Type {
+	return reflect.TypeFor[T]()
+}
 func (s TaskTypeTypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
@@ -1824,6 +1849,7 @@ func NewDestinationTypedSettingWithConstrainedDefault[T any](key string, convert
 
 func (s DestinationTypedSetting[T]) Key() Key               { return s.key }
 func (s DestinationTypedSetting[T]) Precedence() Precedence { return PrecedenceDestination }
+func (s DestinationTypedSetting[T]) ValueType() reflect.Type { return reflect.TypeFor[T]() }
 func (s DestinationTypedSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
@@ -1831,6 +1857,9 @@ func (s DestinationTypedSetting[T]) Validate(v any) error {
 
 func (s DestinationTypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
 func (s DestinationTypedConstrainedDefaultSetting[T]) Precedence() Precedence { return PrecedenceDestination }
+func (s DestinationTypedConstrainedDefaultSetting[T]) ValueType() reflect.Type {
+	return reflect.TypeFor[T]()
+}
 func (s DestinationTypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
@@ -1980,6 +2009,7 @@ func NewChasmTaskTypeTypedSettingWithConstrainedDefault[T any](key string, conve
 
 func (s ChasmTaskTypeTypedSetting[T]) Key() Key               { return s.key }
 func (s ChasmTaskTypeTypedSetting[T]) Precedence() Precedence { return PrecedenceChasmTaskType }
+func (s ChasmTaskTypeTypedSetting[T]) ValueType() reflect.Type { return reflect.TypeFor[T]() }
 func (s ChasmTaskTypeTypedSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
@@ -1987,6 +2017,9 @@ func (s ChasmTaskTypeTypedSetting[T]) Validate(v any) error {
 
 func (s ChasmTaskTypeTypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
 func (s ChasmTaskTypeTypedConstrainedDefaultSetting[T]) Precedence() Precedence { return PrecedenceChasmTaskType }
+func (s ChasmTaskTypeTypedConstrainedDefaultSetting[T]) ValueType() reflect.Type {
+	return reflect.TypeFor[T]()
+}
 func (s ChasmTaskTypeTypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err

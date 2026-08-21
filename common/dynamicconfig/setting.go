@@ -2,6 +2,8 @@
 
 package dynamicconfig
 
+import "reflect"
+
 type (
 	// Precedence is an enum for the search order precedence of a dynamic config setting.
 	// E.g., use the global value, check namespace then global, check task queue then
@@ -33,6 +35,7 @@ type (
 	GenericSetting interface {
 		Key() Key
 		Precedence() Precedence
+		ValueType() reflect.Type
 		Validate(v any) error
 
 		// for internal use:

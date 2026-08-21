@@ -2246,6 +2246,7 @@ func (adh *AdminHandler) DescribeDynamicConfigSetting(
 	}
 	return &adminservice.DescribeDynamicConfigSettingResponse{
 		Key:                  request.GetKey(),
+		ValueType:            description.ValueType,
 		Precedence:           description.Precedence,
 		SupportedConstraints: description.SupportedConstraints,
 		ConstraintPrecedence: constraintPrecedence,

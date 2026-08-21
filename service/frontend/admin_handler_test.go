@@ -307,6 +307,7 @@ func (s *adminHandlerSuite) TestDescribeDynamicConfigSetting() {
 	)
 	s.Require().NoError(err)
 	s.Equal("admin.matchingNamespaceTaskqueueToPartitionDispatchRate", response.GetKey())
+	s.Equal("float64", response.GetValueType())
 	s.Equal("TaskQueue", response.GetPrecedence())
 	s.Equal([]string{"namespace", "taskQueueName", "taskQueueType"}, response.GetSupportedConstraints())
 	s.Equal([]*adminservice.DynamicConfigConstraintFields{

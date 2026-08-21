@@ -646,6 +646,7 @@ message DescribeDynamicConfigSettingResponse {
   string precedence = 2;
   repeated string supported_constraints = 3;
   repeated DynamicConfigConstraintFields constraint_precedence = 4;
+  string value_type = 5;
 }
 
 message DumpDynamicConfigValuesRequest {}

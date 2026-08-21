@@ -169,6 +169,7 @@ func (s *collectionSuite) TestDescribeSetting() {
 
 	description, err := s.cln.DescribeSetting(setting.Key())
 	s.Require().NoError(err)
+	s.Equal("bool", description.ValueType)
 	s.Equal("TaskQueue", description.Precedence)
 	s.Equal([]string{"namespace", "taskQueueName", "taskQueueType"}, description.SupportedConstraints)
 	s.Equal([][]string{
@@ -178,6 +179,19 @@ func (s *collectionSuite) TestDescribeSetting() {
 		{"namespace"},
 		{},
 	}, description.ConstraintPrecedence)
+}
+
+func (s *collectionSuite) TestDescribeSettingNilDefault() {
+	setting := dynamicconfig.NewGlobalTypedSettingWithConverter[*int](
+		"describe-nil-default",
+		func(any) (*int, error) { return nil, nil },
+		nil,
+		"",
+	)
+
+	description, err := s.cln.DescribeSetting(setting.Key())
+	s.Require().NoError(err)
+	s.Equal("*int", description.ValueType)
 }
 
 func (s *collectionSuite) TestGetEffectiveValueFilterSignatures() {

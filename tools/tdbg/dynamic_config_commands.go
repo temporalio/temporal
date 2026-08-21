@@ -95,11 +95,13 @@ func describeDynamicConfigSetting(c *cli.Context, clientFactory ClientFactory) e
 	}
 	output, err := json.MarshalIndent(struct {
 		Key                  string              `json:"key"`
+		ValueType            string              `json:"valueType"`
 		Precedence           string              `json:"precedence"`
 		SupportedConstraints []string            `json:"supportedConstraints"`
 		Order                []map[string]string `json:"order"`
 	}{
 		Key:                  response.GetKey(),
+		ValueType:            response.GetValueType(),
 		Precedence:           response.GetPrecedence(),
 		SupportedConstraints: response.GetSupportedConstraints(),
 		Order:                order,

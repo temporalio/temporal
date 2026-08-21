@@ -55,6 +55,7 @@ func (c *dynamicConfigAdminClient) DescribeDynamicConfigSetting(
 	c.describeRequest = request
 	return &adminservice.DescribeDynamicConfigSettingResponse{
 		Key:                  request.GetKey(),
+		ValueType:            "float64",
 		Precedence:           "TaskQueue",
 		SupportedConstraints: []string{"namespace", "taskQueueName", "taskQueueType"},
 		ConstraintPrecedence: []*adminservice.DynamicConfigConstraintFields{
@@ -168,6 +169,7 @@ func TestDescribeDynamicConfigSetting(t *testing.T) {
 	require.Equal(t, "admin.matchingNamespaceTaskqueueToPartitionDispatchRate", adminClient.describeRequest.GetKey())
 	require.JSONEq(t, `{
 		"key": "admin.matchingNamespaceTaskqueueToPartitionDispatchRate",
+		"valueType": "float64",
 		"precedence": "TaskQueue",
 		"supportedConstraints": ["namespace", "taskQueueName", "taskQueueType"],
 		"order": [

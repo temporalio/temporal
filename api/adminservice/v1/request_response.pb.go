@@ -5695,6 +5695,7 @@ type DescribeDynamicConfigSettingResponse struct {
 	Precedence           string                           `protobuf:"bytes,2,opt,name=precedence,proto3" json:"precedence,omitempty"`
 	SupportedConstraints []string                         `protobuf:"bytes,3,rep,name=supported_constraints,json=supportedConstraints,proto3" json:"supported_constraints,omitempty"`
 	ConstraintPrecedence []*DynamicConfigConstraintFields `protobuf:"bytes,4,rep,name=constraint_precedence,json=constraintPrecedence,proto3" json:"constraint_precedence,omitempty"`
+	ValueType            string                           `protobuf:"bytes,5,opt,name=value_type,json=valueType,proto3" json:"value_type,omitempty"`
 	unknownFields        protoimpl.UnknownFields
 	sizeCache            protoimpl.SizeCache
 }
@@ -5755,6 +5756,13 @@ func (x *DescribeDynamicConfigSettingResponse) GetConstraintPrecedence() []*Dyna
 		return x.ConstraintPrecedence
 	}
 	return nil
+}
+
+func (x *DescribeDynamicConfigSettingResponse) GetValueType() string {
+	if x != nil {
+		return x.ValueType
+	}
+	return ""
 }
 
 type DumpDynamicConfigValuesRequest struct {
@@ -6688,14 +6696,16 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"#DescribeDynamicConfigSettingRequest\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\"7\n" +
 	"\x1dDynamicConfigConstraintFields\x12\x16\n" +
-	"\x06fields\x18\x01 \x03(\tR\x06fields\"\x86\x02\n" +
+	"\x06fields\x18\x01 \x03(\tR\x06fields\"\xa5\x02\n" +
 	"$DescribeDynamicConfigSettingResponse\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x1e\n" +
 	"\n" +
 	"precedence\x18\x02 \x01(\tR\n" +
 	"precedence\x123\n" +
 	"\x15supported_constraints\x18\x03 \x03(\tR\x14supportedConstraints\x12w\n" +
-	"\x15constraint_precedence\x18\x04 \x03(\v2B.temporal.server.api.adminservice.v1.DynamicConfigConstraintFieldsR\x14constraintPrecedence\" \n" +
+	"\x15constraint_precedence\x18\x04 \x03(\v2B.temporal.server.api.adminservice.v1.DynamicConfigConstraintFieldsR\x14constraintPrecedence\x12\x1d\n" +
+	"\n" +
+	"value_type\x18\x05 \x01(\tR\tvalueType\" \n" +
 	"\x1eDumpDynamicConfigValuesRequest\"9\n" +
 	"\x1fDumpDynamicConfigValuesResponse\x12\x16\n" +
 	"\x06values\x18\x01 \x01(\fR\x06values\"\x88\x03\n" +

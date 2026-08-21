@@ -141,6 +141,7 @@ func (c *Collection) GetConfiguredValues(key Key) []ConstrainedValue {
 }
 
 type SettingDescription struct {
+	ValueType            string
 	Precedence           string
 	SupportedConstraints []string
 	ConstraintPrecedence [][]string
@@ -154,6 +155,7 @@ func (c *Collection) DescribeSetting(key Key) (SettingDescription, error) {
 	}
 	precedence := setting.Precedence()
 	return SettingDescription{
+		ValueType:            setting.ValueType().String(),
 		Precedence:           precedence.Name(),
 		SupportedConstraints: precedence.SupportedConstraints(),
 		ConstraintPrecedence: precedence.ConstraintPrecedence(),

@@ -4,6 +4,7 @@
 package dynamicconfig
 
 import (
+	"reflect"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -109,6 +110,7 @@ func New{{$P.Name}}TypedSettingWithConstrainedDefault[T any](key string, convert
 
 func (s {{$P.Name}}TypedSetting[T]) Key() Key               { return s.key }
 func (s {{$P.Name}}TypedSetting[T]) Precedence() Precedence { return Precedence{{$P.Name}} }
+func (s {{$P.Name}}TypedSetting[T]) ValueType() reflect.Type { return reflect.TypeFor[T]() }
 func (s {{$P.Name}}TypedSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
@@ -116,6 +118,9 @@ func (s {{$P.Name}}TypedSetting[T]) Validate(v any) error {
 
 func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
 func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) Precedence() Precedence { return Precedence{{$P.Name}} }
+func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) ValueType() reflect.Type {
+	return reflect.TypeFor[T]()
+}
 func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
