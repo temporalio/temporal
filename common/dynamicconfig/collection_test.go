@@ -144,6 +144,14 @@ func (s *collectionSuite) TestGetEffectiveValueWithConstrainedDefault() {
 	s.Equal(10, value)
 }
 
+func (s *collectionSuite) TestGetEffectiveValueWithNilDefault() {
+	setting := dynamicconfig.NewGlobalTypedSetting[map[string]any]("testGetEffectiveValueWithNilDefault", nil, "")
+
+	value, err := s.cln.GetEffectiveValue(setting.Key(), dynamicconfig.Constraints{})
+	s.Require().NoError(err)
+	s.Nil(value)
+}
+
 func (s *collectionSuite) TestGetEffectiveValueUnknownKey() {
 	_, err := s.cln.GetEffectiveValue(dynamicconfig.MakeKey(unknownKey), dynamicconfig.Constraints{})
 	s.Require().Error(err)
@@ -166,22 +174,23 @@ func (s *collectionSuite) TestGetEffectiveValueRejectsUnsupportedConstraint() {
 
 func (s *collectionSuite) TestGetEffectiveValueFilterSignatures() {
 	testCases := []struct {
+		name        string
 		setting     dynamicconfig.GenericSetting
 		constraints dynamicconfig.Constraints
 	}{
-		{dynamicconfig.NewGlobalIntSetting("effective-global", 1, ""), dynamicconfig.Constraints{}},
-		{dynamicconfig.NewNamespaceIntSetting("effective-namespace", 1, ""), dynamicconfig.Constraints{Namespace: "namespace"}},
-		{dynamicconfig.NewNamespaceIDIntSetting("effective-namespace-id", 1, ""), dynamicconfig.Constraints{NamespaceID: "namespace-id"}},
-		{dynamicconfig.NewTaskQueueIntSetting("effective-task-queue", 1, ""), dynamicconfig.Constraints{
+		{"global", dynamicconfig.NewGlobalIntSetting("effective-global", 1, ""), dynamicconfig.Constraints{}},
+		{"namespace", dynamicconfig.NewNamespaceIntSetting("effective-namespace", 1, ""), dynamicconfig.Constraints{Namespace: "namespace"}},
+		{"namespace ID", dynamicconfig.NewNamespaceIDIntSetting("effective-namespace-id", 1, ""), dynamicconfig.Constraints{NamespaceID: "namespace-id"}},
+		{"task queue", dynamicconfig.NewTaskQueueIntSetting("effective-task-queue", 1, ""), dynamicconfig.Constraints{
 			Namespace: "namespace", TaskQueueName: "task-queue", TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		}},
-		{dynamicconfig.NewShardIDIntSetting("effective-shard-id", 1, ""), dynamicconfig.Constraints{ShardID: 1}},
-		{dynamicconfig.NewTaskTypeIntSetting("effective-task-type", 1, ""), dynamicconfig.Constraints{TaskType: enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK}},
-		{dynamicconfig.NewDestinationIntSetting("effective-destination", 1, ""), dynamicconfig.Constraints{
+		{"shard ID", dynamicconfig.NewShardIDIntSetting("effective-shard-id", 1, ""), dynamicconfig.Constraints{ShardID: 1}},
+		{"task type", dynamicconfig.NewTaskTypeIntSetting("effective-task-type", 1, ""), dynamicconfig.Constraints{TaskType: enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK}},
+		{"destination", dynamicconfig.NewDestinationIntSetting("effective-destination", 1, ""), dynamicconfig.Constraints{
 			Namespace: "namespace", Destination: "destination",
 		}},
-		{dynamicconfig.NewChasmTaskTypeIntSetting("effective-chasm-task-type", 1, ""), dynamicconfig.Constraints{ChasmTaskType: "task-type"}},
-		{dynamicconfig.NewNamespaceIntSettingWithConstrainedDefault(
+		{"CHASM task type", dynamicconfig.NewChasmTaskTypeIntSetting("effective-chasm-task-type", 1, ""), dynamicconfig.Constraints{ChasmTaskType: "task-type"}},
+		{"constrained default", dynamicconfig.NewNamespaceIntSettingWithConstrainedDefault(
 			"effective-constrained-default",
 			[]dynamicconfig.TypedConstrainedValue[int]{{Value: 1}},
 			"",
@@ -189,9 +198,14 @@ func (s *collectionSuite) TestGetEffectiveValueFilterSignatures() {
 	}
 
 	for _, testCase := range testCases {
-		value, err := s.cln.GetEffectiveValue(testCase.setting.Key(), testCase.constraints)
-		s.Require().NoError(err)
-		s.Equal(1, value)
+		s.Run(testCase.name, func() {
+			s.client.Set(testCase.setting.Key().String(), []dynamicconfig.ConstrainedValue{
+				{Constraints: testCase.constraints, Value: 2},
+			})
+			value, err := s.cln.GetEffectiveValue(testCase.setting.Key(), testCase.constraints)
+			s.Require().NoError(err)
+			s.Equal(2, value)
+		})
 	}
 }
 
