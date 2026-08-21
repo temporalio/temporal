@@ -21,18 +21,13 @@ func TestRcv(t *testing.T) {
 		require.Equal(t, "value", await.Rcv(t, ch))
 	})
 
-	t.Run("fails when channel closes", func(t *testing.T) {
+	t.Run("returns zero value when channel closes", func(t *testing.T) {
 		t.Parallel()
 
 		ch := make(chan string)
 		close(ch)
-		tb := newRecordingTB()
 
-		tb.run(func() {
-			await.Rcv(tb, ch)
-		})
-
-		require.Contains(t, tb.fatals(), "channel closed before receiving a value")
+		require.Empty(t, await.Rcv(t, ch))
 	})
 
 	t.Run("fails when context ends", func(t *testing.T) {
