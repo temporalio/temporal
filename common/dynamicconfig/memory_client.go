@@ -33,6 +33,23 @@ func (d *MemoryClient) GetValue(key Key) []ConstrainedValue {
 	return d.getValueLocked(key)
 }
 
+func (d *MemoryClient) GetAllValues() ConfigValueMap {
+	d.lock.RLock()
+	defer d.lock.RUnlock()
+
+	keys := make(map[Key]struct{})
+	for _, override := range d.overrides {
+		if override.valid {
+			keys[override.key] = struct{}{}
+		}
+	}
+	values := make(ConfigValueMap, len(keys))
+	for key := range keys {
+		values[key] = d.getValueLocked(key)
+	}
+	return values
+}
+
 func (d *MemoryClient) getValueLocked(key Key) []ConstrainedValue {
 	var result []ConstrainedValue
 	for _, override := range slices.Backward(d.overrides) {

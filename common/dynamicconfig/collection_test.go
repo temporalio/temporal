@@ -88,6 +88,149 @@ func (s *collectionSuite) TestGetIntPropertyFilteredByNamespace() {
 	s.Equal(50, value(namespace))
 }
 
+func (s *collectionSuite) TestGetEffectiveValue() {
+	setting := dynamicconfig.NewNamespaceBoolSetting("testGetEffectiveValue", false, "")
+	s.client.Set(setting.Key().String(), []dynamicconfig.ConstrainedValue{
+		{
+			Constraints: dynamicconfig.Constraints{Namespace: "namespace-a"},
+			Value:       true,
+		},
+		{Value: false},
+	})
+
+	value, err := s.cln.GetEffectiveValue(setting.Key(), dynamicconfig.Constraints{Namespace: "namespace-a"})
+	s.Require().NoError(err)
+	s.Equal(true, value)
+
+	value, err = s.cln.GetEffectiveValue(setting.Key(), dynamicconfig.Constraints{Namespace: "namespace-b"})
+	s.Require().NoError(err)
+	s.Equal(false, value)
+
+	s.client.Set(setting.Key().String(), nil)
+	value, err = s.cln.GetEffectiveValue(setting.Key(), dynamicconfig.Constraints{Namespace: "namespace-a"})
+	s.Require().NoError(err)
+	s.Equal(false, value)
+}
+
+func (s *collectionSuite) TestGetEffectiveValueWithConstrainedDefault() {
+	setting := dynamicconfig.NewNamespaceIntSettingWithConstrainedDefault(
+		"testGetEffectiveValueWithConstrainedDefault",
+		[]dynamicconfig.TypedConstrainedValue[int]{
+			{Constraints: dynamicconfig.Constraints{Namespace: "special"}, Value: 34},
+			{Value: 10},
+		},
+		"",
+	)
+	s.client.Set(setting.Key().String(), []dynamicconfig.ConstrainedValue{
+		{Constraints: dynamicconfig.Constraints{Namespace: "configured"}, Value: 50},
+		{Value: 20},
+	})
+
+	value, err := s.cln.GetEffectiveValue(setting.Key(), dynamicconfig.Constraints{Namespace: "configured"})
+	s.Require().NoError(err)
+	s.Equal(50, value)
+
+	value, err = s.cln.GetEffectiveValue(setting.Key(), dynamicconfig.Constraints{Namespace: "special"})
+	s.Require().NoError(err)
+	s.Equal(34, value)
+
+	value, err = s.cln.GetEffectiveValue(setting.Key(), dynamicconfig.Constraints{Namespace: "normal"})
+	s.Require().NoError(err)
+	s.Equal(20, value)
+
+	s.client.Set(setting.Key().String(), nil)
+	value, err = s.cln.GetEffectiveValue(setting.Key(), dynamicconfig.Constraints{Namespace: "normal"})
+	s.Require().NoError(err)
+	s.Equal(10, value)
+}
+
+func (s *collectionSuite) TestGetEffectiveValueUnknownKey() {
+	_, err := s.cln.GetEffectiveValue(dynamicconfig.MakeKey(unknownKey), dynamicconfig.Constraints{})
+	s.Require().Error(err)
+}
+
+func (s *collectionSuite) TestGetEffectiveValueRejectsUnsupportedConstraint() {
+	setting := dynamicconfig.NewNamespaceBoolSetting("effective-invalid-constraint", false, "")
+
+	_, err := s.cln.GetEffectiveValue(
+		setting.Key(),
+		dynamicconfig.Constraints{Namespace: "namespace-a", TaskQueueName: "queue-a"},
+		"namespace",
+		"taskQueueName",
+	)
+	s.Require().EqualError(
+		err,
+		`dynamic config setting "effective-invalid-constraint" does not support constraint "taskQueueName"; supported constraints: ["namespace"]`,
+	)
+}
+
+func (s *collectionSuite) TestDescribeSetting() {
+	setting := dynamicconfig.NewTaskQueueBoolSetting("describe-task-queue", false, "")
+
+	description, err := s.cln.DescribeSetting(setting.Key())
+	s.Require().NoError(err)
+	s.Equal("bool", description.ValueType)
+	s.Equal("TaskQueue", description.Precedence)
+	s.Equal([]string{"namespace", "taskQueueName", "taskQueueType"}, description.SupportedConstraints)
+	s.Equal([][]string{
+		{"namespace", "taskQueueName", "taskQueueType"},
+		{"namespace", "taskQueueName"},
+		{"taskQueueName"},
+		{"namespace"},
+		{},
+	}, description.ConstraintPrecedence)
+}
+
+func (s *collectionSuite) TestDescribeSettingNilDefault() {
+	setting := dynamicconfig.NewGlobalTypedSettingWithConverter[*int](
+		"describe-nil-default",
+		func(any) (*int, error) { return nil, nil },
+		nil,
+		"",
+	)
+
+	description, err := s.cln.DescribeSetting(setting.Key())
+	s.Require().NoError(err)
+	s.Equal("*int", description.ValueType)
+}
+
+func (s *collectionSuite) TestGetEffectiveValueFilterSignatures() {
+	testCases := []struct {
+		name        string
+		setting     dynamicconfig.GenericSetting
+		constraints dynamicconfig.Constraints
+	}{
+		{"global", dynamicconfig.NewGlobalIntSetting("effective-global", 1, ""), dynamicconfig.Constraints{}},
+		{"namespace", dynamicconfig.NewNamespaceIntSetting("effective-namespace", 1, ""), dynamicconfig.Constraints{Namespace: "namespace"}},
+		{"namespace ID", dynamicconfig.NewNamespaceIDIntSetting("effective-namespace-id", 1, ""), dynamicconfig.Constraints{NamespaceID: "namespace-id"}},
+		{"task queue", dynamicconfig.NewTaskQueueIntSetting("effective-task-queue", 1, ""), dynamicconfig.Constraints{
+			Namespace: "namespace", TaskQueueName: "task-queue", TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		}},
+		{"shard ID", dynamicconfig.NewShardIDIntSetting("effective-shard-id", 1, ""), dynamicconfig.Constraints{ShardID: 1}},
+		{"task type", dynamicconfig.NewTaskTypeIntSetting("effective-task-type", 1, ""), dynamicconfig.Constraints{TaskType: enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK}},
+		{"destination", dynamicconfig.NewDestinationIntSetting("effective-destination", 1, ""), dynamicconfig.Constraints{
+			Namespace: "namespace", Destination: "destination",
+		}},
+		{"CHASM task type", dynamicconfig.NewChasmTaskTypeIntSetting("effective-chasm-task-type", 1, ""), dynamicconfig.Constraints{ChasmTaskType: "task-type"}},
+		{"constrained default", dynamicconfig.NewNamespaceIntSettingWithConstrainedDefault(
+			"effective-constrained-default",
+			[]dynamicconfig.TypedConstrainedValue[int]{{Value: 1}},
+			"",
+		), dynamicconfig.Constraints{Namespace: "namespace"}},
+	}
+
+	for _, testCase := range testCases {
+		s.Run(testCase.name, func() {
+			s.client.Set(testCase.setting.Key().String(), []dynamicconfig.ConstrainedValue{
+				{Constraints: testCase.constraints, Value: 2},
+			})
+			value, err := s.cln.GetEffectiveValue(testCase.setting.Key(), testCase.constraints)
+			s.Require().NoError(err)
+			s.Equal(2, value)
+		})
+	}
+}
+
 func (s *collectionSuite) TestGetStringPropertyFnFilteredByNamespace() {
 	ns := "testNamespace"
 	setting := dynamicconfig.NewNamespaceStringSetting(testGetStringPropertyFilteredByNamespaceKey, "abc", "")

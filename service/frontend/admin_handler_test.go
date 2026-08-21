@@ -205,6 +205,17 @@ func (s *adminHandlerSuite) SetupTest() {
 		chasmRegistry,
 		nsreplication.NewNoopDataMerger(),
 		nil, // schedulerClient - not needed for most admin handler tests
+		dynamicconfig.NewCollection(
+			dynamicconfig.StaticClient{
+				dynamicconfig.WorkflowTimeSkippingEnabled.Key(): []dynamicconfig.ConstrainedValue{
+					{
+						Constraints: dynamicconfig.Constraints{Namespace: s.namespace.String()},
+						Value:       true,
+					},
+				},
+			},
+			s.mockResource.GetLogger(),
+		),
 		tasks.NewDefaultTaskCategoryRegistry(),
 		s.mockResource.GetMatchingClient(),
 	}
@@ -228,6 +239,99 @@ func (s *adminHandlerSuite) SetupTest() {
 func (s *adminHandlerSuite) TearDownTest() {
 	s.controller.Finish()
 	s.handler.Stop()
+}
+
+func (s *adminHandlerSuite) TestGetDynamicConfigValue() {
+	response, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
+		Key:                      dynamicconfig.WorkflowTimeSkippingEnabled.Key().String(),
+		Constraints:              fmt.Sprintf(`{"namespace":%q}`, s.namespace),
+		IncludeConstrainedValues: true,
+	})
+	s.Require().NoError(err)
+	s.Equal([]byte("true"), response.GetValue())
+	s.JSONEq(fmt.Sprintf(`[
+		{
+			"constraints": {"namespace": %q},
+			"value": true
+		}
+	]`, s.namespace), string(response.GetConstrainedValues()))
+}
+
+func (s *adminHandlerSuite) TestGetDynamicConfigValueDefault() {
+	response, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
+		Key:         dynamicconfig.WorkflowTimeSkippingEnabled.Key().String(),
+		Constraints: `{"namespace":"other-namespace"}`,
+	})
+	s.Require().NoError(err)
+	s.Equal([]byte("false"), response.GetValue())
+	s.Empty(response.GetConstrainedValues())
+}
+
+func (s *adminHandlerSuite) TestGetDynamicConfigValueInvalidConstraints() {
+	_, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
+		Key:         dynamicconfig.WorkflowTimeSkippingEnabled.Key().String(),
+		Constraints: `{"unknown":"value"}`,
+	})
+	s.Require().Error(err)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
+}
+
+func (s *adminHandlerSuite) TestGetDynamicConfigValueUnsupportedConstraint() {
+	_, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
+		Key:         "frontend.WorkflowTimeSkippingEnabled",
+		Constraints: `{"namespace":"namespace-a","taskQueueName":"queue-a"}`,
+	})
+	s.Require().EqualError(
+		err,
+		`dynamic config setting "frontend.workflowtimeskippingenabled" does not support constraint "taskQueueName"; supported constraints: ["namespace"]`,
+	)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
+}
+
+func (s *adminHandlerSuite) TestGetDynamicConfigValueUnknownKey() {
+	_, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
+		Key: "unknown-key",
+	})
+	s.Require().Error(err)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
+}
+
+func (s *adminHandlerSuite) TestDescribeDynamicConfigSetting() {
+	response, err := s.handler.DescribeDynamicConfigSetting(
+		context.Background(),
+		&adminservice.DescribeDynamicConfigSettingRequest{
+			Key: "admin.matchingNamespaceTaskqueueToPartitionDispatchRate",
+		},
+	)
+	s.Require().NoError(err)
+	s.Equal("admin.matchingNamespaceTaskqueueToPartitionDispatchRate", response.GetKey())
+	s.Equal("float64", response.GetValueType())
+	s.Equal("TaskQueue", response.GetPrecedence())
+	s.Equal([]string{"namespace", "taskQueueName", "taskQueueType"}, response.GetSupportedConstraints())
+	s.Equal([]*adminservice.DynamicConfigConstraintFields{
+		{Fields: []string{"namespace", "taskQueueName", "taskQueueType"}},
+		{Fields: []string{"namespace", "taskQueueName"}},
+		{Fields: []string{"taskQueueName"}},
+		{Fields: []string{"namespace"}},
+		{Fields: []string{}},
+	}, response.GetConstraintPrecedence())
+}
+
+func (s *adminHandlerSuite) TestDumpDynamicConfigValues() {
+	response, err := s.handler.DumpDynamicConfigValues(
+		s.T().Context(),
+		&adminservice.DumpDynamicConfigValuesRequest{},
+	)
+	s.Require().NoError(err)
+	s.JSONEq(fmt.Sprintf(`{
+		"frontend.workflowtimeskippingenabled": [{
+			"constraints": {"namespace": %q},
+			"value": true
+		}]
+	}`, s.namespace), string(response.GetValues()))
 }
 
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Success() {

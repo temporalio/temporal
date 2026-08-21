@@ -618,6 +618,44 @@ message GetTaskQueueUserDataResponse {
   int64 version = 2;
 }
 
+message GetDynamicConfigValueRequest {
+  string key = 1;
+  // JSON-encoded dynamic config constraints.
+  string constraints = 2;
+  // Include the configured constrained values currently held for this key.
+  bool include_constrained_values = 3;
+}
+
+message GetDynamicConfigValueResponse {
+  // JSON-encoded effective value.
+  bytes value = 1;
+  // JSON-encoded configured constrained values. Compiled defaults are not included.
+  bytes constrained_values = 2;
+}
+
+message DescribeDynamicConfigSettingRequest {
+  string key = 1;
+}
+
+message DynamicConfigConstraintFields {
+  repeated string fields = 1;
+}
+
+message DescribeDynamicConfigSettingResponse {
+  string key = 1;
+  string precedence = 2;
+  repeated string supported_constraints = 3;
+  repeated DynamicConfigConstraintFields constraint_precedence = 4;
+  string value_type = 5;
+}
+
+message DumpDynamicConfigValuesRequest {}
+
+message DumpDynamicConfigValuesResponse {
+  // JSON-encoded ConfigValueMap held by the dynamic config client.
+  bytes values = 1;
+}
+
 // StartAdminBatchOperationRequest starts an admin batch operation.
 // WARNING: Batch Operations are exposed to all users of the namespace. Admin Batch Operations should be exercised with caution.
 message StartAdminBatchOperationRequest {

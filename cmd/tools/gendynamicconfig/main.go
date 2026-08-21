@@ -12,10 +12,15 @@ type (
 		GoType    string
 		IsGeneric bool
 	}
+	constraintField struct {
+		GoName   string
+		JSONName string
+		Value    string
+	}
 	settingPrecedence struct {
-		Name   string
-		GoArgs string
-		Expr   string
+		Name       string
+		GoArgs     string
+		Precedence [][]constraintField
 	}
 
 	dynamicConfigData struct {
@@ -24,9 +29,64 @@ type (
 	}
 )
 
+func (p settingPrecedence) Fields() []constraintField {
+	var fields []constraintField
+	seen := make(map[string]struct{})
+	for _, constraints := range p.Precedence {
+		for _, constraint := range constraints {
+			if _, ok := seen[constraint.JSONName]; ok {
+				continue
+			}
+			seen[constraint.JSONName] = struct{}{}
+			fields = append(fields, constraint)
+		}
+	}
+	return fields
+}
+
 var (
 	//go:embed dynamic_config.tmpl
 	dynamicConfigTemplate string
+	namespaceConstraint   = constraintField{
+		GoName:   "Namespace",
+		JSONName: "namespace",
+		Value:    "namespace",
+	}
+	namespaceIDConstraint = constraintField{
+		GoName:   "NamespaceID",
+		JSONName: "namespaceId",
+		Value:    "namespaceID.String()",
+	}
+	taskQueueNameConstraint = constraintField{
+		GoName:   "TaskQueueName",
+		JSONName: "taskQueueName",
+		Value:    "taskQueue",
+	}
+	taskQueueTypeConstraint = constraintField{
+		GoName:   "TaskQueueType",
+		JSONName: "taskQueueType",
+		Value:    "taskQueueType",
+	}
+	shardIDConstraint = constraintField{
+		GoName:   "ShardID",
+		JSONName: "shardId",
+		Value:    "shardID",
+	}
+	taskTypeConstraint = constraintField{
+		GoName:   "TaskType",
+		JSONName: "taskType",
+		Value:    "taskType",
+	}
+	destinationConstraint = constraintField{
+		GoName:   "Destination",
+		JSONName: "destination",
+		Value:    "destination",
+	}
+	chasmTaskTypeConstraint = constraintField{
+		GoName:   "ChasmTaskType",
+		JSONName: "chasmTaskType",
+		Value:    "chasmTaskType",
+	}
 
 	data = dynamicConfigData{
 		Types: []settingType{
@@ -62,19 +122,19 @@ var (
 		},
 		Precedences: []settingPrecedence{
 			{
-				Name:   "Global",
-				GoArgs: "",
-				Expr:   "[]Constraints{{}}",
+				Name:       "Global",
+				GoArgs:     "",
+				Precedence: [][]constraintField{{}},
 			},
 			{
-				Name:   "Namespace",
-				GoArgs: "namespace string",
-				Expr:   "[]Constraints{{Namespace: namespace}, {}}",
+				Name:       "Namespace",
+				GoArgs:     "namespace string",
+				Precedence: [][]constraintField{{namespaceConstraint}, {}},
 			},
 			{
-				Name:   "NamespaceID",
-				GoArgs: "namespaceID namespace.ID",
-				Expr:   "[]Constraints{{NamespaceID: namespaceID.String()}, {}}",
+				Name:       "NamespaceID",
+				GoArgs:     "namespaceID namespace.ID",
+				Precedence: [][]constraintField{{namespaceIDConstraint}, {}},
 			},
 			{
 				Name:   "TaskQueue",
@@ -82,38 +142,38 @@ var (
 				// A task-queue-name-only filter applies to a single task queue name across all
 				// namespaces, with higher precedence than a namespace-only filter. This is intended to
 				// be used by the default partition count and is probably not useful otherwise.
-				Expr: `[]Constraints{
-			{Namespace: namespace, TaskQueueName: taskQueue, TaskQueueType: taskQueueType},
-			{Namespace: namespace, TaskQueueName: taskQueue},
-			{TaskQueueName: taskQueue},
-			{Namespace: namespace},
-			{},
-		}`,
+				Precedence: [][]constraintField{
+					{namespaceConstraint, taskQueueNameConstraint, taskQueueTypeConstraint},
+					{namespaceConstraint, taskQueueNameConstraint},
+					{taskQueueNameConstraint},
+					{namespaceConstraint},
+					{},
+				},
 			},
 			{
-				Name:   "ShardID",
-				GoArgs: "shardID int32",
-				Expr:   "[]Constraints{{ShardID: shardID}, {}}",
+				Name:       "ShardID",
+				GoArgs:     "shardID int32",
+				Precedence: [][]constraintField{{shardIDConstraint}, {}},
 			},
 			{
-				Name:   "TaskType",
-				GoArgs: "taskType enumsspb.TaskType",
-				Expr:   "[]Constraints{{TaskType: taskType}, {}}",
+				Name:       "TaskType",
+				GoArgs:     "taskType enumsspb.TaskType",
+				Precedence: [][]constraintField{{taskTypeConstraint}, {}},
 			},
 			{
 				Name:   "Destination",
 				GoArgs: "namespace string, destination string",
-				Expr: `[]Constraints{
-			{Namespace: namespace, Destination: destination},
-			{Destination: destination},
-			{Namespace: namespace},
-			{},
-		}`,
+				Precedence: [][]constraintField{
+					{namespaceConstraint, destinationConstraint},
+					{destinationConstraint},
+					{namespaceConstraint},
+					{},
+				},
 			},
 			{
-				Name:   "ChasmTaskType",
-				GoArgs: "chasmTaskType string",
-				Expr:   "[]Constraints{{ChasmTaskType: chasmTaskType}, {}}",
+				Name:       "ChasmTaskType",
+				GoArgs:     "chasmTaskType string",
+				Precedence: [][]constraintField{{chasmTaskTypeConstraint}, {}},
 			},
 		}}
 )
