@@ -5897,7 +5897,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 			if err != nil {
 				return nil, err
 			}
-			input.Request = proto.Clone(request).(*workflowservice.StartBatchOperationRequest)
+			input.Request = proto.CloneOf(request)
 			input.Request.VisibilityQuery = unpauseQuery
 		case *batchpb.BatchOperationUnpauseActivities_MatchAll:
 			input.Request.VisibilityQuery = visibilityQuery
@@ -5995,7 +5995,7 @@ func buildUnpauseActivityVisibilityQuery(query string, activityType string) (str
 	activityTypeExpr := &sqlparser.ComparisonExpr{
 		Operator: sqlparser.EqualStr,
 		Left:     &sqlparser.ColName{Name: sqlparser.NewColIdent(sadefs.TemporalPauseInfo)},
-		Right:    sqlparser.NewStrVal([]byte(fmt.Sprintf("property:activityType=%s", activityType))),
+		Right:    sqlparser.NewStrVal(fmt.Appendf(nil, "property:activityType=%s", activityType)),
 	}
 	selectStmt.Where.Expr = &sqlparser.ParenExpr{Expr: selectStmt.Where.Expr}
 	selectStmt.AddWhere(&sqlparser.ParenExpr{Expr: activityTypeExpr})
