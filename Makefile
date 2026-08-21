@@ -172,11 +172,10 @@ $(STAMPDIR):
 $(LOCALBIN):
 	@mkdir -p $(LOCALBIN)
 
-# When updating the version, update the golangci-lint GHA workflow as well.
 .PHONY: golangci-lint
 GOLANGCI_LINT_BASE_REV ?= $(MAIN_BRANCH)
 GOLANGCI_LINT_FIX ?= true
-GOLANGCI_LINT_VERSION := v2.9.0
+GOLANGCI_LINT_VERSION := v2.13.0
 GOLANGCI_LINT := $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
@@ -229,7 +228,7 @@ YAMLFMT := $(LOCALBIN)/yamlfmt-$(YAMLFMT_VER)
 $(YAMLFMT): | $(LOCALBIN)
 	$(call go-install-tool,$(YAMLFMT),github.com/google/yamlfmt/cmd/yamlfmt,$(YAMLFMT_VER))
 
-GOIMPORTS_VER := v0.36.0
+GOIMPORTS_VER := v0.49.0
 GOIMPORTS := $(LOCALBIN)/goimports-$(GOIMPORTS_VER)
 $(STAMPDIR)/goimports-$(GOIMPORTS_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(GOIMPORTS),golang.org/x/tools/cmd/goimports,$(GOIMPORTS_VER))
@@ -263,7 +262,7 @@ $(STAMPDIR)/mockgen-$(MOCKGEN_VER): | $(STAMPDIR) $(LOCALBIN)
 	@touch $@
 $(MOCKGEN): $(STAMPDIR)/mockgen-$(MOCKGEN_VER)
 
-STRINGER_VER := v0.36.0
+STRINGER_VER := v0.49.0
 STRINGER := $(LOCALBIN)/stringer
 $(STAMPDIR)/stringer-$(STRINGER_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(STRINGER),golang.org/x/tools/cmd/stringer,$(STRINGER_VER))

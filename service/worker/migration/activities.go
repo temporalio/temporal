@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 
+	otellog "go.opentelemetry.io/otel/log"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
@@ -32,6 +33,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/wideevents"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"google.golang.org/grpc/metadata"
 )
@@ -123,11 +125,13 @@ type (
 		clientFactory                    serverClient.Factory
 		clientBean                       serverClient.Bean
 		Logger                           log.Logger
+		EventLogger                      otellog.Logger
 		MetricsHandler                   metrics.Handler
 		forceReplicationMetricsHandler   metrics.Handler
 		namespaceReplicationQueue        persistence.NamespaceReplicationQueue
 		generateMigrationTaskViaFrontend dynamicconfig.BoolPropertyFn
 		enableHistoryRateLimiter         dynamicconfig.BoolPropertyFn
+		emitNamespaceLifecycleEvents     dynamicconfig.BoolPropertyFn
 		workflowVerifier                 WorkflowVerifier
 		chasmRegistry                    *chasm.Registry
 	}
@@ -375,13 +379,22 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitR
 	return isReady, nil
 }
 
-func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverRequest) error {
+func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverRequest) (retErr error) {
 	// Use the highest priority caller type for checking handover state
 	// since during handover state namespace has no availability
 	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(waitRequest.Namespace, headers.CallerTypeAPI, ""))
 
+	// The wait never returns on its own while shards lag: it is killed from the outside, the SDK
+	// cancels the context off the heartbeat, the next status call fails, and this defer runs.
+	// The snapshot is empty on a successful handover, which emits nothing.
+	var snapshot wideevents.HandoverLagSnapshot
+	start := time.Now()
+	defer func() {
+		a.emitHandoverIncomplete(waitRequest, &snapshot, time.Since(start), retErr)
+	}()
+
 	for {
-		done, err := a.checkHandoverOnce(ctx, waitRequest)
+		done, err := a.checkHandoverOnce(ctx, waitRequest, &snapshot)
 		if err != nil {
 			return err
 		}
@@ -394,8 +407,28 @@ func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverR
 	}
 }
 
+func (a *activities) emitHandoverIncomplete(
+	waitRequest waitHandoverRequest,
+	snapshot *wideevents.HandoverLagSnapshot,
+	elapsed time.Duration,
+	exitErr error,
+) {
+	if a.emitNamespaceLifecycleEvents == nil || !a.emitNamespaceLifecycleEvents() {
+		return
+	}
+	wideevents.EmitHandoverIncomplete(
+		a.EventLogger,
+		waitRequest.Namespace,
+		a.namespaceIDForEvent(waitRequest.Namespace),
+		waitRequest.RemoteCluster,
+		snapshot,
+		elapsed,
+		exitErr,
+	)
+}
+
 // Check if remote cluster has caught up on all shards on replication tasks
-func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHandoverRequest) (bool, error) {
+func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHandoverRequest, snapshot *wideevents.HandoverLagSnapshot) (bool, error) {
 	resp, err := a.HistoryClient.GetReplicationStatus(ctx, &historyservice.GetReplicationStatusRequest{
 		RemoteClusters: []string{waitRequest.RemoteCluster}, // only the specified remote cluster
 	})
@@ -462,11 +495,15 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 		maxHandoverLag        int64
 	)
 
+	// Reset each poll so the summary sees the final state, not an accumulation.
+	*snapshot = wideevents.NewHandoverLagSnapshot(len(localShards), handoverInfosMissingCount)
+
 	for _, status := range shardStatuses {
 		if status.isReady {
 			readyShardCount++
 		} else {
 			notReadyShardCount++
+			snapshot.AddLaggingShard(status.shardID, status.laggingTasks)
 		}
 
 		if status.laggingTasks > maxHandoverLag {
@@ -474,6 +511,11 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 			maxHandoverLagShardID = status.shardID
 		}
 	}
+
+	snapshot.ReadyCount = readyShardCount
+	snapshot.NotReadyCount = notReadyShardCount
+	snapshot.MaxLaggingTasks = maxHandoverLag
+	snapshot.MaxLaggingTasksShardID = maxHandoverLagShardID
 
 	// emit metrics about how many shards are ready
 	a.MetricsHandler.Gauge(metrics.HandoverReadyShardCountGauge.Name()).Record(
@@ -498,6 +540,15 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 	}
 
 	return isReady, nil
+}
+
+// namespaceIDForEvent lets events join on ID rather than name. Called once per activity.
+func (a *activities) namespaceIDForEvent(name string) string {
+	ns, err := a.NamespaceRegistry.GetNamespace(namespace.Name(name))
+	if err != nil {
+		return ""
+	}
+	return ns.ID().String()
 }
 
 func (a *activities) generateWorkflowReplicationTask(

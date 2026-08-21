@@ -5,6 +5,7 @@ import (
 	"net"
 
 	"github.com/gorilla/mux"
+	otellog "go.opentelemetry.io/otel/log"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
@@ -781,6 +782,7 @@ func AdminHandlerProvider(
 	replicatorNamespaceReplicationQueue FEReplicatorNamespaceReplicationQueue,
 	visibilityMgr manager.VisibilityManager,
 	logger log.SnTaggedLogger,
+	eventLogger otellog.Logger,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	taskManager persistence.TaskManager,
 	fairTaskManager persistence.FairTaskManager,
@@ -813,6 +815,7 @@ func AdminHandlerProvider(
 		replicatorNamespaceReplicationQueue,
 		visibilityMgr,
 		logger,
+		eventLogger,
 		taskManager,
 		fairTaskManager,
 		persistenceExecutionManager,
@@ -867,6 +870,7 @@ func NamespaceDLQHandlerProvider(
 func OperatorHandlerProvider(
 	configuration *Config,
 	logger log.SnTaggedLogger,
+	eventLogger otellog.Logger,
 	sdkClientFactory sdk.ClientFactory,
 	metricsHandler metrics.Handler,
 	visibilityMgr manager.VisibilityManager,
@@ -882,6 +886,7 @@ func OperatorHandlerProvider(
 	args := NewOperatorHandlerImplArgs{
 		configuration,
 		logger,
+		eventLogger,
 		sdkClientFactory,
 		metricsHandler,
 		visibilityMgr,
@@ -919,6 +924,7 @@ func HandlerProvider(
 	visibilityMgr manager.VisibilityManager,
 	chasmVisibilityMgr chasm.VisibilityManager,
 	logger log.SnTaggedLogger,
+	eventLogger otellog.Logger,
 	throttledLogger log.ThrottledLogger,
 	persistenceExecutionManager persistence.ExecutionManager,
 	clusterMetadataManager persistence.ClusterMetadataManager,
@@ -961,6 +967,7 @@ func HandlerProvider(
 		namespaceReplicationQueue,
 		visibilityMgr,
 		logger,
+		eventLogger,
 		throttledLogger,
 		persistenceExecutionManager.GetName(),
 		clusterMetadataManager,

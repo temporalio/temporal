@@ -7,6 +7,21 @@ import (
 	"go.temporal.io/api/serviceerror"
 )
 
+// ValidateRequest validates all links attached directly to a request or embedded in its callbacks.
+func ValidateRequest(
+	links []*commonpb.Link,
+	callbacks []*commonpb.Callback,
+	maxAllowedLinks int,
+	maxSize int,
+) error {
+	allLinks := make([]*commonpb.Link, 0, len(links)+len(callbacks))
+	allLinks = append(allLinks, links...)
+	for _, callback := range callbacks {
+		allLinks = append(allLinks, callback.GetLinks()...)
+	}
+	return Validate(allLinks, maxAllowedLinks, maxSize)
+}
+
 // Validate checks that the given links do not exceed the configured count and
 // per-link size limits, and that each link's variant has its required fields
 // populated.
@@ -56,6 +71,16 @@ func Validate(links []*commonpb.Link, maxAllowedLinks, maxSize int) error {
 			}
 			if t.Activity.GetRunId() == "" {
 				return serviceerror.NewInvalidArgument("activity link must not have an empty run ID field")
+			}
+		case *commonpb.Link_Workflow_:
+			if t.Workflow.GetNamespace() == "" {
+				return serviceerror.NewInvalidArgument("workflow link must not have an empty namespace field")
+			}
+			if t.Workflow.GetWorkflowId() == "" {
+				return serviceerror.NewInvalidArgument("workflow link must not have an empty workflow ID field")
+			}
+			if t.Workflow.GetRunId() == "" {
+				return serviceerror.NewInvalidArgument("workflow link must not have an empty run ID field")
 			}
 		default:
 			return serviceerror.NewInvalidArgument("unsupported link variant")

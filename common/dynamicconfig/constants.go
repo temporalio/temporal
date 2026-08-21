@@ -236,6 +236,11 @@ response to a StartWorkflowExecution request and skipping the trip through match
 		2*time.Second,
 		`NamespaceCacheRefreshInterval is the key for namespace cache refresh interval dynamic config`,
 	)
+	EmitNamespaceLifecycleEvents = NewGlobalBoolSetting(
+		"system.emitNamespaceLifecycleEvents",
+		false,
+		`EmitNamespaceLifecycleEvents controls whether services emit NamespaceLifecycle and NamespaceReplicationLifecycle wide events. Cluster-level; default off.`,
+	)
 	PersistenceHealthSignalMetricsEnabled = NewGlobalBoolSetting(
 		"system.persistenceHealthSignalMetricsEnabled",
 		true,
@@ -1720,7 +1725,7 @@ leaves the membership ring, giving in-flight long-polls time to drain before the
 	EmitReplicationLifecycleEvents = NewGlobalBoolSetting(
 		"history.emitReplicationLifecycleEvents",
 		false,
-		`EmitReplicationLifecycleEvents controls whether the history service emits ReplicationLifecycle wide events (sent/executing/applied phases). Cluster-level; default off.`,
+		`EmitReplicationLifecycleEvents controls whether the history service emits ReplicationLifecycle wide events (sent/executing/applied/skipped/error phases). Cluster-level; default off.`,
 	)
 	EnableCloseInboundReplicationStreamOnShutdown = NewGlobalBoolSetting(
 		"history.enableCloseInboundReplicationStreamOnShutdown",
@@ -1912,7 +1917,7 @@ This can help reduce effects of shard movement.`,
 	)
 	EnableHostLevelEventsCache = NewGlobalBoolSetting(
 		"history.enableHostLevelEventsCache",
-		false,
+		true,
 		`EnableHostLevelEventsCache controls if the events cache is host level. Requires service restart to take effect.`,
 	)
 	AcquireShardInterval = NewGlobalDurationSetting(
@@ -2017,6 +2022,11 @@ NOTE: The outbound queue has a separate configuration: outboundQueuePendingTaskC
 		`QueueReaderStuckCriticalAttempts is the max number of task loading attempts for a certain task range
 before that task range is split into a separate slice to unblock loading for later range.
 currently only work for scheduled queues and the task range is 1s.`,
+	)
+	QueueReaderStuckShadowMode = NewGlobalBoolSetting(
+		"history.queueReaderStuckShadowMode",
+		false,
+		`QueueReaderStuckShadowMode controls whether reader stuck alerts are suppressed and only logged.`,
 	)
 	QueueCriticalSlicesCount = NewGlobalIntSetting(
 		"history.queueCriticalSlicesCount",
@@ -2608,6 +2618,18 @@ system.transactionSizeLimit, since each batch is persisted within a single trans
 		10000,
 		`MaximumSignalsPerExecution is max number of signals supported by single execution`,
 	)
+	MaximumRequestIDsPerExecution = NewNamespaceIntSetting(
+		"history.maximumRequestIDsPerExecution",
+		25,
+		`MaximumRequestIDsPerExecution is the hard cap on CHASM-attached request IDs retained per
+execution for UpdateComponent idempotency; the oldest are swept beyond this limit. Set to 0 to disable the count cap.`,
+	)
+	RequestIDMaxAge = NewNamespaceDurationSetting(
+		"history.requestIDMaxAge",
+		7*24*time.Hour,
+		`RequestIDMaxAge is the maximum age of a CHASM-attached request ID retained per execution for
+UpdateComponent idempotency. Set to 0 to disable age-based sweeping.`,
+	)
 	ShardUpdateMinInterval = NewGlobalDurationSetting(
 		"history.shardUpdateMinInterval",
 		5*time.Minute,
@@ -3066,6 +3088,11 @@ time (mirrors gRPC MaxConnectionAge's +/-10% jitter). Values outside [0, 1] are 
 		"history.ReplicationStreamSenderErrorRetryExpiration",
 		3*time.Minute,
 		`ReplicationStreamSenderErrorRetryExpiration is the max retry duration for sending replication tasks`,
+	)
+	ReplicationStreamSenderSkipStuckTask = NewGlobalBoolSetting(
+		"history.ReplicationStreamSenderSkipStuckTask",
+		false,
+		`ReplicationStreamSenderSkipStuckTask, when true, makes the replication stream sender log, emit a metric, and skip (advance the watermark past) a task that could not be built ("converted") after exhausting retries, instead of failing and wedging the whole stream. Only unbuildable tasks (corrupt/unusable source info) are skipped; transient send/rate-limit failures and infra/teardown errors (shard-ownership-lost, stream error, context canceled) are not, so they still tear the stream down. Deterministic non-retryable send failures such as an oversized gRPC message are not handled here (left to the transport-layer message-size fix).`,
 	)
 	ReplicationExecutableTaskErrorRetryWait = NewGlobalDurationSetting(
 		"history.ReplicationExecutableTaskErrorRetryWait",
