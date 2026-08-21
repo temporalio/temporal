@@ -17,12 +17,15 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 )
 
+const defaultAWSSigningService = "es"
+
 type awsSigningTransport struct {
-	creds   aws.CredentialsProvider
-	signer  *v4signer.Signer
-	region  string
-	service string
-	wrapped http.RoundTripper
+	creds                aws.CredentialsProvider
+	signer               *v4signer.Signer
+	region               string
+	service              string
+	addPayloadHashHeader bool
+	wrapped              http.RoundTripper
 }
 
 func (t *awsSigningTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -41,6 +44,9 @@ func (t *awsSigningTransport) RoundTrip(req *http.Request) (*http.Response, erro
 	}
 
 	hash := fmt.Sprintf("%x", sha256.Sum256(bodyBytes))
+	if t.addPayloadHashHeader {
+		req.Header.Set("X-Amz-Content-Sha256", hash)
+	}
 	err = t.signer.SignHTTP(req.Context(), creds, req, hash, t.service, t.region, time.Now())
 	if err != nil {
 		return nil, fmt.Errorf("failed to sign request: %w", err)
@@ -64,6 +70,10 @@ func NewAwsHttpClient(config ESAWSRequestSigningConfig) (*http.Client, error) {
 		if config.Region == "" {
 			return nil, fmt.Errorf("unable to resolve AWS region for obtaining AWS Elastic signing credentials")
 		}
+	}
+
+	if config.Service == "" {
+		config.Service = defaultAWSSigningService
 	}
 
 	var credsProvider aws.CredentialsProvider
@@ -99,11 +109,12 @@ func NewAwsHttpClient(config ESAWSRequestSigningConfig) (*http.Client, error) {
 
 	return &http.Client{
 		Transport: &awsSigningTransport{
-			creds:   credsProvider,
-			signer:  v4signer.NewSigner(),
-			region:  config.Region,
-			service: "es",
-			wrapped: http.DefaultTransport,
+			creds:                credsProvider,
+			signer:               v4signer.NewSigner(),
+			region:               config.Region,
+			service:              config.Service,
+			addPayloadHashHeader: config.AddPayloadHashHeader,
+			wrapped:              http.DefaultTransport,
 		},
 	}, nil
 }
