@@ -1869,3 +1869,96 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_HeartbeatsWi
 	s.Positive(heartbeats.Load(),
 		"the activity must heartbeat while processing a task that outlasts its heartbeat timeout")
 }
+
+// TestProcessSingleTask_NilUpdateMask verifies that an options-update batch whose
+// request carries no UpdateMask is forwarded rather than dereferenced. The task
+// runs on a bare goroutine started by processWorkflowsWithProactiveFetching, so a
+// nil dereference here takes down the worker process rather than failing the
+// batch -- and ValidateBatchOperation only requires an UpdateMask for the
+// workflow-options operation, not the activity-options one.
+func (s *activitiesSuite) TestProcessSingleTask_NilUpdateMask() {
+	execution := &commonpb.WorkflowExecution{WorkflowId: "wf-1", RunId: "run-1"}
+	testPage := &page{
+		executionInfos: []*workflowpb.WorkflowExecutionInfo{{Execution: execution}},
+	}
+	testTask := task{executionInfo: testPage.executionInfos[0], attempts: 1, page: testPage}
+
+	s.Run("update activity options", func() {
+		var captured *workflowservice.UpdateActivityOptionsRequest
+		s.mockFrontendClient.EXPECT().
+			UpdateActivityOptions(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, req *workflowservice.UpdateActivityOptionsRequest, _ ...any) (*workflowservice.UpdateActivityOptionsResponse, error) {
+				captured = req
+				return &workflowservice.UpdateActivityOptionsResponse{}, nil
+			})
+
+		batchOperation := &batchspb.BatchOperationInput{
+			NamespaceId: "some-namespace-id",
+			BatchType:   enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS,
+			Request: &workflowservice.StartBatchOperationRequest{
+				Namespace: "ns",
+				JobId:     "job-id",
+				Operation: &workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation{
+					UpdateActivityOptionsOperation: &batchpb.BatchOperationUpdateActivityOptions{
+						Identity:        "batch-updater",
+						RestoreOriginal: true,
+						// UpdateMask deliberately unset.
+						Activity: &batchpb.BatchOperationUpdateActivityOptions_MatchAll{MatchAll: true},
+					},
+				},
+			},
+		}
+
+		s.NoError(s.processSingleTaskForTest(batchOperation, testTask))
+		s.Require().NotNil(captured)
+		s.Equal("batch-updater", captured.GetIdentity())
+		s.True(captured.GetRestoreOriginal())
+		s.Require().NotNil(captured.GetUpdateMask())
+		s.Empty(captured.GetUpdateMask().GetPaths())
+	})
+
+	s.Run("update workflow options", func() {
+		var captured *workflowservice.UpdateWorkflowExecutionOptionsRequest
+		s.mockFrontendClient.EXPECT().
+			UpdateWorkflowExecutionOptions(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, req *workflowservice.UpdateWorkflowExecutionOptionsRequest, _ ...any) (*workflowservice.UpdateWorkflowExecutionOptionsResponse, error) {
+				captured = req
+				return &workflowservice.UpdateWorkflowExecutionOptionsResponse{}, nil
+			})
+
+		batchOperation := &batchspb.BatchOperationInput{
+			NamespaceId: "some-namespace-id",
+			BatchType:   enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS,
+			Request: &workflowservice.StartBatchOperationRequest{
+				Namespace: "ns",
+				JobId:     "job-id",
+				Operation: &workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation{
+					UpdateWorkflowOptionsOperation: &batchpb.BatchOperationUpdateWorkflowExecutionOptions{
+						Identity: "batch-updater",
+						// UpdateMask deliberately unset.
+					},
+				},
+			},
+		}
+
+		s.NoError(s.processSingleTaskForTest(batchOperation, testTask))
+		s.Require().NotNil(captured)
+		s.Equal("batch-updater", captured.GetIdentity())
+		s.Require().NotNil(captured.GetUpdateMask())
+		s.Empty(captured.GetUpdateMask().GetPaths())
+	})
+}
+
+// processSingleTaskForTest runs one task through processSingleTask against the
+// suite's mock frontend client.
+func (s *activitiesSuite) processSingleTaskForTest(batchOperation *batchspb.BatchOperationInput, t task) error {
+	a := &activities{
+		activityDeps: activityDeps{
+			FrontendClient: s.mockFrontendClient,
+			Logger:         log.NewTestLogger(),
+			MetricsHandler: metrics.NoopMetricsHandler,
+		},
+	}
+	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 1000 }))
+	return a.processSingleTask(context.Background(), batchOperation, "ns", t, limiter, s.mockFrontendClient, log.NewTestLogger())
+}

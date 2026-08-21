@@ -809,9 +809,9 @@ func (a *activities) processSingleTask(
 				_, err := frontendClient.UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 					Namespace:                namespace,
 					WorkflowExecution:        executionInfo.Execution,
-					WorkflowExecutionOptions: operation.UpdateWorkflowOptionsOperation.WorkflowExecutionOptions,
-					UpdateMask:               &fieldmaskpb.FieldMask{Paths: operation.UpdateWorkflowOptionsOperation.UpdateMask.Paths},
-					Identity:                 operation.UpdateWorkflowOptionsOperation.Identity,
+					WorkflowExecutionOptions: operation.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions(),
+					UpdateMask:               &fieldmaskpb.FieldMask{Paths: operation.UpdateWorkflowOptionsOperation.GetUpdateMask().GetPaths()},
+					Identity:                 operation.UpdateWorkflowOptionsOperation.GetIdentity(),
 				})
 				return err
 			})
@@ -846,9 +846,9 @@ func (a *activities) processSingleTask(
 				updateRequest := &workflowservice.UpdateActivityOptionsRequest{
 					Namespace:       namespace,
 					Execution:       executionInfo.Execution,
-					UpdateMask:      &fieldmaskpb.FieldMask{Paths: operation.UpdateActivityOptionsOperation.UpdateMask.Paths},
-					RestoreOriginal: operation.UpdateActivityOptionsOperation.RestoreOriginal,
-					Identity:        operation.UpdateActivityOptionsOperation.Identity,
+					UpdateMask:      &fieldmaskpb.FieldMask{Paths: operation.UpdateActivityOptionsOperation.GetUpdateMask().GetPaths()},
+					RestoreOriginal: operation.UpdateActivityOptionsOperation.GetRestoreOriginal(),
+					Identity:        operation.UpdateActivityOptionsOperation.GetIdentity(),
 				}
 
 				switch ao := operation.UpdateActivityOptionsOperation.GetActivity().(type) {
