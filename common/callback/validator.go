@@ -122,7 +122,34 @@ type validator struct {
 	config ValidatorConfig
 }
 
+// NewValidator returns a new Validator. Callers should ensure the ValidatorConfig
+// sets all fields. To avoid panics any missing config properties will be stubbed
+// out and return 0 or a zero value.
 func NewValidator(config ValidatorConfig) Validator {
+	dynamicConfigStub := func(_ string) int { return 0 }
+	setDefaultOfZero := func(dc *dynamicconfig.IntPropertyFnWithNamespaceFilter) {
+		// Note: dc is &config.Field, so it is never nil; the nil check must be on
+		// the function value it points at.
+		if *dc == nil {
+			*dc = dynamicConfigStub
+		}
+	}
+
+	setDefaultOfZero(&config.MaxPerExecution)
+	if config.MaxIDLengthLimit == nil {
+		config.MaxIDLengthLimit = func() int { return 0 }
+	}
+	setDefaultOfZero(&config.URLMaxLength)
+	setDefaultOfZero(&config.HeaderMaxSize)
+	if config.EndpointRules == nil {
+		config.EndpointRules = func(_ string) AddressMatchRules {
+			return AddressMatchRules{}
+		}
+	}
+	setDefaultOfZero(&config.MaxServiceNameLength)
+	setDefaultOfZero(&config.MaxOperationNameLength)
+	setDefaultOfZero(&config.WorkerSourceContextMaxSize)
+
 	return &validator{config: config}
 }
 

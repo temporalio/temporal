@@ -436,3 +436,22 @@ func TestKindOf(t *testing.T) {
 		})
 	}
 }
+
+func TestZeroConfigDoesNotPanic(t *testing.T) {
+	ctx := context.Background()
+
+	v := NewValidator(ValidatorConfig{})
+
+	err := v.Validate(ctx, "ns", nil, allowAllKindsOpts)
+	require.NoError(t, err)
+
+	nexusCb := &commonpb.Callback{
+		Variant: &commonpb.Callback_Nexus_{
+			Nexus: &commonpb.Callback_Nexus{
+				Url: "https://localhost/cb",
+			},
+		},
+	}
+	err = v.Validate(ctx, "ns", []*commonpb.Callback{nexusCb, testWorkerCallback()}, allowAllKindsOpts)
+	require.Error(t, err)
+}
