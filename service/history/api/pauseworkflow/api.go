@@ -46,6 +46,20 @@ func Invoke(
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
 
+			// Deduplicate a pause retry. Use PauseInfo, but fallback to LastPauseRequestId.
+			// De-dupe before running/paused state check.
+			lastPauseRequestID := mutableState.GetExecutionInfo().GetLastPauseRequestId()
+			if pauseInfo := mutableState.GetExecutionInfo().GetPauseInfo(); pauseInfo != nil {
+				lastPauseRequestID = pauseInfo.GetRequestId()
+			}
+			if requestID := pauseRequest.GetRequestId(); requestID != "" && requestID == lastPauseRequestID {
+				// Already paused with the same request id, nothing to do
+				return &api.UpdateWorkflowAction{
+					Noop:               true,
+					CreateWorkflowTask: false,
+				}, nil
+			}
+
 			releaseFn := workflowLease.GetReleaseFn()
 			// Make sure the workflow is not closed.
 			if !mutableState.IsWorkflowExecutionRunning() {
@@ -57,14 +71,6 @@ func Invoke(
 
 			// Check if workflow is already paused
 			if mutableState.GetExecutionState().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
-				pauseInfo := mutableState.GetExecutionInfo().PauseInfo
-				if pauseInfo != nil && pauseInfo.RequestId != "" && pauseInfo.RequestId == pauseRequest.GetRequestId() {
-					// Already paused with the same request id, nothing to do
-					return &api.UpdateWorkflowAction{
-						Noop:               true,
-						CreateWorkflowTask: false,
-					}, nil
-				}
 				releaseFn(nil)
 				return nil, serviceerror.NewFailedPrecondition("workflow is already paused.")
 			}

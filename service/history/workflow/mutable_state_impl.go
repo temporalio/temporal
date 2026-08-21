@@ -653,6 +653,13 @@ func NewMutableStateInChain(
 	newMutableState.executionInfo.WorkflowExecutionTimerTaskStatus = currentMutableState.GetExecutionInfo().WorkflowExecutionTimerTaskStatus
 	newMutableState.executionInfo.ChildrenInitializedPostResetPoint = currentMutableState.GetExecutionInfo().ChildrenInitializedPostResetPoint
 
+	// LastPauseRequestId follows the chain to de-dupe a retry with no run id.
+	// LastUnpauseRequestId does not carry over, not worth the added size, and just
+	// causes "not paused" error instead of success/no-op on stale retry of unpause.
+	lastPauseRequestID := currentMutableState.GetExecutionInfo().GetLastPauseRequestId()
+	newMutableState.executionInfo.LastPauseRequestId = lastPauseRequestID
+	newMutableState.approximateSize += len(lastPauseRequestID)
+
 	// TODO: Today other information like autoResetPoints, previousRunID, firstRunID, etc.
 	// are carried over in AddWorkflowExecutionStartedEventWithOptions. Ideally all information
 	// should be carried over here since some information is not part of the startedEvent.
@@ -3416,10 +3423,18 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUnpausedEvent(event *historypb
 		return err
 	}
 
+	// Both LastPauseRequestId and LastUnPauseRequestId are saved on unpause.
+	requestID := event.GetWorkflowExecutionUnpausedEventAttributes().GetRequestId()
+	ms.approximateSize += len(requestID) - len(ms.executionInfo.LastUnpauseRequestId)
+	ms.executionInfo.LastUnpauseRequestId = requestID
+
 	// save pauseInfoSize before clearing so that we can adjust approximate size later before returning success
 	pauseInfoSize := 0
 	if ms.executionInfo.PauseInfo != nil {
 		pauseInfoSize = ms.GetExecutionInfo().GetPauseInfo().Size()
+		pauseRequestID := ms.executionInfo.PauseInfo.GetRequestId()
+		ms.approximateSize += len(pauseRequestID) - len(ms.executionInfo.LastPauseRequestId)
+		ms.executionInfo.LastPauseRequestId = pauseRequestID
 		// Clear pause info in mutable state.
 		ms.executionInfo.PauseInfo = nil
 	}
