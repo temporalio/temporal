@@ -2,6 +2,7 @@ package batcher
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
@@ -13,6 +14,7 @@ import (
 	"go.temporal.io/sdk/testsuite"
 	batchspb "go.temporal.io/server/api/batch/v1"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type batcherSuite struct {
@@ -104,4 +106,64 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Executions_Protobuf() {
 	})
 	err := s.env.GetWorkflowError()
 	s.Require().NoError(err)
+}
+
+func (s *batcherSuite) TestSetDefaultParams() {
+	for _, tc := range []struct {
+		name                     string
+		input                    *batchspb.BatchOperationInput
+		expectedAttempts         int64
+		expectedHeartbeatTimeout time.Duration
+	}{
+		{
+			name:                     "unset takes the defaults",
+			input:                    &batchspb.BatchOperationInput{},
+			expectedAttempts:         defaultAttemptsOnRetryableError,
+			expectedHeartbeatTimeout: defaultActivityHeartBeatTimeout,
+		},
+		{
+			// A single retry is a valid request: the caller wants a task that
+			// keeps failing to be given up on quickly, not retried 50 times.
+			name:                     "one attempt is honored",
+			input:                    &batchspb.BatchOperationInput{AttemptsOnRetryableError: 1},
+			expectedAttempts:         1,
+			expectedHeartbeatTimeout: defaultActivityHeartBeatTimeout,
+		},
+		{
+			name:                     "explicit attempts are honored",
+			input:                    &batchspb.BatchOperationInput{AttemptsOnRetryableError: 7},
+			expectedAttempts:         7,
+			expectedHeartbeatTimeout: defaultActivityHeartBeatTimeout,
+		},
+		{
+			name:                     "negative attempts take the default",
+			input:                    &batchspb.BatchOperationInput{AttemptsOnRetryableError: -1},
+			expectedAttempts:         defaultAttemptsOnRetryableError,
+			expectedHeartbeatTimeout: defaultActivityHeartBeatTimeout,
+		},
+		{
+			name: "explicit heartbeat timeout is honored",
+			input: &batchspb.BatchOperationInput{
+				AttemptsOnRetryableError: 3,
+				ActivityHeartbeatTimeout: durationpb.New(time.Minute),
+			},
+			expectedAttempts:         3,
+			expectedHeartbeatTimeout: time.Minute,
+		},
+		{
+			name: "non-positive heartbeat timeout takes the default",
+			input: &batchspb.BatchOperationInput{
+				AttemptsOnRetryableError: 3,
+				ActivityHeartbeatTimeout: durationpb.New(0),
+			},
+			expectedAttempts:         3,
+			expectedHeartbeatTimeout: defaultActivityHeartBeatTimeout,
+		},
+	} {
+		s.Run(tc.name, func() {
+			params := setDefaultParams(tc.input)
+			s.Equal(tc.expectedAttempts, params.GetAttemptsOnRetryableError())
+			s.Equal(tc.expectedHeartbeatTimeout, params.GetActivityHeartbeatTimeout().AsDuration())
+		})
+	}
 }

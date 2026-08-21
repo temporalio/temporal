@@ -337,7 +337,7 @@ func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) 
 }
 
 func setDefaultParams(params *batchspb.BatchOperationInput) *batchspb.BatchOperationInput {
-	if params.GetAttemptsOnRetryableError() <= 1 {
+	if params.GetAttemptsOnRetryableError() < 1 {
 		params.AttemptsOnRetryableError = defaultAttemptsOnRetryableError
 	}
 	if params.GetActivityHeartbeatTimeout().AsDuration() <= 0 {
