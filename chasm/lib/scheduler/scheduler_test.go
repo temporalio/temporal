@@ -411,7 +411,14 @@ func TestCreateSchedulerFromMigration_NoRunning(t *testing.T) {
 			GeneratorState: &schedulerpb.GeneratorState{
 				LastProcessedTime: timestamppb.New(time.Now().Add(-time.Hour)),
 			},
-			InvokerState: &schedulerpb.InvokerState{},
+			InvokerState: &schedulerpb.InvokerState{BufferedStarts: []*schedulespb.BufferedStart{{
+				NominalTime:   timestamppb.New(time.Now()),
+				ActualTime:    timestamppb.New(time.Now()),
+				DesiredTime:   timestamppb.New(time.Now()),
+				RequestId:     "pending-migrated-start",
+				WorkflowId:    "pending-migrated-start",
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_TERMINATE_OTHER,
+			}}},
 		},
 	}
 
@@ -421,19 +428,17 @@ func TestCreateSchedulerFromMigration_NoRunning(t *testing.T) {
 	_, err = infra.node.CloseTransaction()
 	require.NoError(t, err)
 
-	hasGeneratorTask := false
-outer:
+	immediateTasks := 0
 	for _, taskList := range infra.nodeBackend.TasksByCategory {
 		for _, task := range taskList {
 			chasmTask, ok := task.(*tasks.ChasmTask)
 			if ok && chasmTask.GetVisibilityTime().Equal(chasm.TaskScheduledTimeImmediate) {
-				hasGeneratorTask = true
-				break outer
+				immediateTasks++
 			}
 		}
 	}
-	require.True(t, hasGeneratorTask,
-		"expected an immediate GeneratorTask after migration with no running workflows")
+	require.GreaterOrEqual(t, immediateTasks, 2,
+		"expected immediate generator and buffered-start processing tasks after migration")
 }
 
 func TestContextMetadata(t *testing.T) {
