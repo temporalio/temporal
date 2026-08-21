@@ -68,6 +68,19 @@ await.RequireTrue(t, func() bool {
 
 `RequireTrue` is the wrong tool when dealing with errors or assertions; use `Require` instead.
 
+### Blocking on channels
+
+Use `await.RequireReceive` and `await.RequireSend` for blocking channel operations.
+They fail the test if its context ends or the channel closes.
+
+```go
+headers := await.RequireReceive(t, requestHeaders)
+await.RequireSend(t, responses, response)
+```
+
+Keep an explicit `select` when testing non-blocking behavior, waiting on multiple channels,
+or returning a context error from a callback.
+
 ### Parallelization
 
 All tests (and subtests!) should use `t.Parallel()` to be run concurrently;
