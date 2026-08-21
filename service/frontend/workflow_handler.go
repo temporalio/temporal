@@ -5889,7 +5889,14 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		case *batchpb.BatchOperationUnpauseActivities_Type:
 			searchValue := fmt.Sprintf("property:activityType=%s", a.Type)
 			escapedSearchValue := sqlparser.String(sqlparser.NewStrVal([]byte(searchValue)))
-			input.Request.VisibilityQuery = fmt.Sprintf("%s = %s", sadefs.TemporalPauseInfo, escapedSearchValue)
+			pausePredicate := fmt.Sprintf("%s = %s", sadefs.TemporalPauseInfo, escapedSearchValue)
+			// Narrow the query to those with paused activity of this type.
+			// Note that memo still records the caller's query, not this effective one.
+			if len(visibilityQuery) > 0 {
+				input.Request.VisibilityQuery = fmt.Sprintf("(%s) AND (%s)", visibilityQuery, pausePredicate)
+			} else {
+				input.Request.VisibilityQuery = pausePredicate
+			}
 		case *batchpb.BatchOperationUnpauseActivities_MatchAll:
 			input.Request.VisibilityQuery = visibilityQuery
 		}

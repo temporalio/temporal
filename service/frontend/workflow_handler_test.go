@@ -6074,3 +6074,98 @@ type routingMatchingClient struct {
 func (r *routingMatchingClient) Route(p tqid.Partition) (string, error) {
 	return r.routeFn(p)
 }
+
+// TestStartBatchOperation_UnpauseActivities_QueryScoping verifies that unpausing
+// activities of a given type narrows the batch to workflows with such a paused
+// activity *within* the caller's query, rather than replacing it. Replacing it
+// would unpause matching activities in every workflow in the namespace. The memo
+// keeps recording the caller's query.
+func (s *WorkflowHandlerSuite) TestStartBatchOperation_UnpauseActivities_QueryScoping() {
+	const (
+		activityType    = "my-activity"
+		pausePredicate  = "TemporalPauseInfo = 'property:activityType=my-activity'"
+		callerQuery     = "WorkflowType='unit-test'"
+		identity        = "batch-unpauser"
+		operationReason = "unit test"
+	)
+
+	for _, tc := range []struct {
+		name          string
+		callerQuery   string
+		expectedQuery string
+	}{
+		{
+			name:          "caller query is preserved and narrowed",
+			callerQuery:   callerQuery,
+			expectedQuery: "(" + callerQuery + ") AND (" + pausePredicate + ")",
+		},
+		{
+			name:          "no caller query uses the predicate alone",
+			callerQuery:   "",
+			expectedQuery: pausePredicate,
+		},
+	} {
+		s.Run(tc.name, func() {
+			testNamespace := namespace.Name("test-namespace")
+			namespaceID := namespace.ID(uuid.NewString())
+			jobID := uuid.NewString()
+			wh := s.getWorkflowHandler(s.newConfig())
+
+			s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
+			s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).
+				Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
+
+			var startedInput *batchspb.BatchOperationInput
+			var startedMemo *commonpb.Memo
+			s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(
+					_ context.Context,
+					request *historyservice.StartWorkflowExecutionRequest,
+					_ ...grpc.CallOption,
+				) (*historyservice.StartWorkflowExecutionResponse, error) {
+					startedInput = &batchspb.BatchOperationInput{}
+					s.Require().NoError(payloads.Decode(request.StartRequest.Input, startedInput))
+					startedMemo = request.StartRequest.Memo
+					return &historyservice.StartWorkflowExecutionResponse{}, nil
+				},
+			)
+
+			request := &workflowservice.StartBatchOperationRequest{
+				Namespace:       testNamespace.String(),
+				JobId:           jobID,
+				Reason:          operationReason,
+				VisibilityQuery: tc.callerQuery,
+				Operation: &workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation{
+					UnpauseActivitiesOperation: &batchpb.BatchOperationUnpauseActivities{
+						Identity: identity,
+						Activity: &batchpb.BatchOperationUnpauseActivities_Type{Type: activityType},
+					},
+				},
+			}
+			if tc.callerQuery == "" {
+				// A batch must name its targets somehow; use an execution list so
+				// the request stays valid without a query.
+				request.TargetExecutions = []*commonpb.Execution{
+					{Type: enumspb.EXECUTION_TYPE_WORKFLOW, BusinessId: "wf-1"},
+				}
+			}
+
+			_, err := wh.StartBatchOperation(context.Background(), request)
+			s.NoError(err)
+
+			s.Require().NotNil(startedInput)
+			s.Equal(tc.expectedQuery, startedInput.GetRequest().GetVisibilityQuery(),
+				"the batch must run within the caller's query")
+
+			// The memo keeps the caller's query, so an absent one stays absent.
+			s.Require().NotNil(startedMemo)
+			memoQuery, ok := startedMemo.GetFields()[batcher.BatchOperationVisibilityQueryMemo]
+			if tc.callerQuery == "" {
+				s.False(ok)
+			} else {
+				s.True(ok)
+				s.ProtoEqual(payload.EncodeString(tc.callerQuery), memoQuery)
+			}
+		})
+	}
+}
