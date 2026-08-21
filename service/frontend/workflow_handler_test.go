@@ -2887,10 +2887,16 @@ func TestBuildUnpauseActivityVisibilityQuery(t *testing.T) {
 			want:         "(WorkflowType = 'ScopedWorkflow') and (TemporalPauseInfo = 'property:activityType=ActivityFunc')",
 		},
 		{
-			name:         "boolean query with ordering and escaped activity type",
-			query:        "WorkflowType='ScopedWorkflow' OR WorkflowType='OtherWorkflow' ORDER BY StartTime DESC",
+			name:         "boolean query preserves precedence and escapes activity type",
+			query:        "WorkflowType='ScopedWorkflow' OR WorkflowType='OtherWorkflow'",
 			activityType: "Activity'Func",
 			want:         "(WorkflowType = 'ScopedWorkflow' or WorkflowType = 'OtherWorkflow') and (TemporalPauseInfo = 'property:activityType=Activity\\'Func')",
+		},
+		{
+			name:         "order by is dropped",
+			query:        "WorkflowType='ScopedWorkflow' ORDER BY StartTime DESC",
+			activityType: "ActivityFunc",
+			want:         "(WorkflowType = 'ScopedWorkflow') and (TemporalPauseInfo = 'property:activityType=ActivityFunc')",
 		},
 		{
 			name:         "set operation",
