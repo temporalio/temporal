@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 )
@@ -117,7 +118,7 @@ func (r report) string() string {
 	var out strings.Builder
 	r.writeSummary(&out)
 
-	writeGroups := func(title string, groups []objectGroup) {
+	writeGroups := func(title string, groups []objectGroup, includeAddresses bool) {
 		fmt.Fprintf(&out, "%s:\n", title)
 		if len(groups) == 0 {
 			out.WriteString("  none\n")
@@ -125,14 +126,17 @@ func (r report) string() string {
 		}
 		for _, group := range groups {
 			fmt.Fprintf(&out, "  %s: %s\n", group.counts(), group.name())
+			if includeAddresses {
+				fmt.Fprintf(&out, "    addresses: %#x\n", slices.Sorted(maps.Keys(group.addresses)))
+			}
 		}
 	}
 	out.WriteByte('\n')
-	writeGroups("unexpected retained objects", r.retained[retentionUnexpected].groups)
+	writeGroups("unexpected retained objects", r.retained[retentionUnexpected].groups, true)
 	out.WriteByte('\n')
-	writeGroups("expected retained objects", r.retained[retentionExpected].groups)
+	writeGroups("expected retained objects", r.retained[retentionExpected].groups, false)
 	out.WriteByte('\n')
-	writeGroups("baseline retained objects", r.retained[retentionBaseline].groups)
+	writeGroups("baseline retained objects", r.retained[retentionBaseline].groups, false)
 
 	if len(r.unmatchedExpected) > 0 {
 		out.WriteString("\nstale expected patterns:\n")
