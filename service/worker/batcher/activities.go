@@ -818,6 +818,7 @@ func (a *activities) processSingleTask(
 	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
 		err = processTask(ctx, limiter, task,
 			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
+				// Note that ResetAttempts is ignored, and always resets attempt to 1.
 				resetRequest := &workflowservice.ResetActivityRequest{
 					Namespace:              namespace,
 					Execution:              executionInfo.Execution,
