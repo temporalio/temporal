@@ -8,7 +8,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/tqid"
 	"google.golang.org/grpc/status"
@@ -117,20 +116,6 @@ type ValidatorConfig struct {
 	MaxServiceNameLength       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxOperationNameLength     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	WorkerSourceContextMaxSize dynamicconfig.IntPropertyFnWithNamespaceFilter
-}
-
-// NewValidatorConfig builds the production [ValidatorConfig] from dynamic config.
-func NewValidatorConfig(dc *dynamicconfig.Collection) ValidatorConfig {
-	return ValidatorConfig{
-		MaxPerExecution:            MaxPerExecution.Get(dc),
-		MaxIDLengthLimit:           dynamicconfig.MaxIDLengthLimit.Get(dc),
-		URLMaxLength:               dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
-		HeaderMaxSize:              dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
-		EndpointRules:              AllowedAddresses.Get(dc),
-		MaxServiceNameLength:       nexusoperation.MaxServiceNameLength.Get(dc),
-		MaxOperationNameLength:     nexusoperation.MaxOperationNameLength.Get(dc),
-		WorkerSourceContextMaxSize: WorkerSourceContextMaxSize.Get(dc),
-	}
 }
 
 type validator struct {
