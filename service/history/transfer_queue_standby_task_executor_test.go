@@ -902,21 +902,43 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	s.Equal(string(wideevents.ReplicationExecuting), attributes["phase"].AsString())
 	s.Equal(wideevents.ParentChildPhaseVerifyChildCompletion, details["phase"])
 	s.Equal(wideevents.ParentChildOutcomeStarted, details["outcome"])
+	s.Equal(s.namespaceID.String(), attributes["namespace_id"].AsString())
 	s.Equal(parentExecution.GetWorkflowId(), attributes["parent_workflow_id"].AsString())
+	s.Equal(parentExecution.GetRunId(), attributes["parent_run_id"].AsString())
 	s.Equal(execution.GetWorkflowId(), attributes["workflow_id"].AsString())
-	s.Equal(execution.GetWorkflowId(), details["child_workflow_id"])
+	s.Equal(execution.GetRunId(), attributes["run_id"].AsString())
+	s.Equal(transferTask.GetType().String(), attributes["task_type"].AsString())
+	s.Equal(int64(1), attributes["attempt"].AsInt64())
 	s.Equal("Completed", details["child_workflow_state"])
 	s.Equal(parentInitiatedID, attributes["parent_initiated_id"].AsInt64())
+	s.Equal(parentNamespaceID, details["parent_namespace_id"])
 	s.InDelta(float64(parentInitiatedVersion), details["parent_initiated_version"], 0)
 	s.InDelta(float64(taskID), details["local_task_id"], 0)
-	s.InDelta(1, details["attempt"], 0)
-	s.Equal(transferTask.GetType().String(), details["local_task_type"])
-	s.Equal(true, details["resend_parent_requested"])
-	s.Equal("passive", details["verification_scope"])
+	s.InDelta(float64(transferTask.GetVersion()), details["version"], 0)
+	s.Require().NotContains(details, "attempt")
+	for _, key := range []string{
+		"child_namespace_id",
+		"child_workflow_id",
+		"child_run_id",
+		"local_cluster",
+		"local_task_type",
+		"parent_initiated_id",
+		"parent_run_id",
+		"parent_workflow_id",
+		"resend_parent_requested",
+		"verification_scope",
+	} {
+		for _, record := range records {
+			s.Require().NotContains(wideEventDetails(record), key)
+		}
+	}
 	missingDetails := wideEventDetails(records[5])
 	s.Equal(wideevents.ParentChildOutcomeCompletionMissing, missingDetails["outcome"])
 	s.Equal(util.ErrorType(consts.ErrWorkflowNotReady), missingDetails["error_type"])
-	s.Equal(true, missingDetails["resend_parent_requested"])
+	s.InDelta(1, missingDetails["attempt"], 0)
+	verifiedAttributes := wideEventAttributes(records[1])
+	s.Require().NotContains(verifiedAttributes, "attempt")
+	s.InDelta(1, wideEventDetails(records[1])["attempt"], 0)
 	ignoredAttributes := wideEventAttributes(records[3])
 	s.Equal(string(wideevents.ReplicationApplied), ignoredAttributes["phase"].AsString())
 	s.Equal(wideevents.ParentChildOutcomeVerified, ignoredAttributes["outcome"].AsString())

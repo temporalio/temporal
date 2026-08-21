@@ -36,8 +36,6 @@ func emitChildCompletionVerificationStarted(
 	)
 	details["phase"] = wideevents.ParentChildPhaseVerifyChildCompletion
 	details["outcome"] = wideevents.ParentChildOutcomeStarted
-	details["resend_parent_requested"] = true
-	details["verification_scope"] = "passive"
 	emitParentChildReplicationEvent(
 		shardContext,
 		payload,
@@ -93,8 +91,9 @@ func emitChildCompletionVerificationResult(
 	)
 	details["phase"] = wideevents.ParentChildPhaseVerifyChildCompletion
 	details["outcome"] = outcome
-	details["resend_parent_requested"] = resendParent
-	details["verification_scope"] = "passive"
+	if attempt >= 0 {
+		details["attempt"] = attempt
+	}
 	replicationPhase := wideevents.ReplicationError
 	if err == nil || outcome == wideevents.ParentChildOutcomeIgnored {
 		replicationPhase = wideevents.ReplicationApplied
@@ -126,13 +125,7 @@ func parentChildEventForCloseTask(
 	payload.ParentRunID = parentRunID
 	payload.ParentInitiatedID = parentInitiatedID
 	details["parent_namespace_id"] = parentNamespaceID
-	details["parent_workflow_id"] = parentWorkflowID
-	details["parent_run_id"] = parentRunID
-	details["child_namespace_id"] = task.GetNamespaceID()
-	details["child_workflow_id"] = task.GetWorkflowID()
-	details["child_run_id"] = task.GetRunID()
 	details["child_workflow_state"] = childWorkflowState
-	details["parent_initiated_id"] = parentInitiatedID
 	details["parent_initiated_version"] = parentInitiatedVersion
 	return payload, details
 }
@@ -147,16 +140,11 @@ func parentChildEventForTask(
 		namespaceName = name.String()
 	}
 	details := map[string]any{
-		"event_type":      wideevents.ParentChildLifecycleEventType,
-		"local_cluster":   shardContext.GetClusterMetadata().GetCurrentClusterName(),
-		"local_task_id":   task.GetTaskID(),
-		"local_task_type": task.GetType().String(),
+		"event_type":    wideevents.ParentChildLifecycleEventType,
+		"local_task_id": task.GetTaskID(),
 	}
 	if versionedTask, ok := task.(tasks.HasVersion); ok {
 		details["version"] = versionedTask.GetVersion()
-	}
-	if attempt >= 0 {
-		details["attempt"] = attempt
 	}
 	return wideevents.ReplicationLifecyclePayload{
 		TaskType:    task.GetType().String(),
