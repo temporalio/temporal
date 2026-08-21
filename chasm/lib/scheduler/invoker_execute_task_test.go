@@ -668,6 +668,47 @@ func TestExecuteTask_ExceedsMaxActionsPerExecution(t *testing.T) {
 	})
 }
 
+func TestExecuteTask_MaxActionsPerExecutionAcrossPhases(t *testing.T) {
+	const maxActions = 2
+	env := newInvokerExecuteTestEnv(t, func(config *scheduler.Config) {
+		tweakables := scheduler.DefaultTweakables
+		tweakables.MaxActionsPerExecution = maxActions
+		config.Tweakables = func(string) scheduler.Tweakables { return tweakables }
+	})
+	startTime := timestamppb.New(env.TimeSource.Now())
+
+	env.mockHistoryClient.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any()).Times(1).
+		Return(nil, nil)
+	env.mockHistoryClient.EXPECT().RequestCancelWorkflowExecution(gomock.Any(), gomock.Any()).Times(1).
+		Return(nil, nil)
+
+	runExecuteTestCase(t, env, &executeTestCase{
+		InitialBufferedStarts: []*schedulespb.BufferedStart{{
+			NominalTime:   startTime,
+			ActualTime:    startTime,
+			DesiredTime:   startTime,
+			RequestId:     "retry",
+			WorkflowId:    "retry-workflow",
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			Attempt:       2,
+			BackoffTime:   startTime,
+		}},
+		InitialCancelWorkflows: []*commonpb.WorkflowExecution{{
+			WorkflowId: "cancel-workflow",
+			RunId:      "cancel-run",
+		}},
+		InitialTerminateWorkflows: []*commonpb.WorkflowExecution{{
+			WorkflowId: "terminate-workflow",
+			RunId:      "terminate-run",
+		}},
+		ExpectedBufferedStarts:     1,
+		ExpectedRunningWorkflows:   0,
+		ExpectedActionCount:        0,
+		ExpectedCancelWorkflows:    0,
+		ExpectedTerminateWorkflows: 0,
+	})
+}
+
 // Two concurrent ExecuteTasks can both clone the invoker before either
 // commits, both fire StartWorkflow for the same RequestId, and both observe
 // success (server dedupes by RequestId). The losing commit must not
