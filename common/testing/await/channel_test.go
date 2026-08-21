@@ -57,7 +57,7 @@ func TestSnd(t *testing.T) {
 		require.Equal(t, "value", <-ch)
 	})
 
-	t.Run("fails when channel closes", func(t *testing.T) {
+	t.Run("fails instead of panicking when channel closes", func(t *testing.T) {
 		t.Parallel()
 
 		ch := make(chan string)
