@@ -49,3 +49,7 @@ history.ReplicationEnableUpdateWithNewTaskMerge:
   - value: true
 history.hostLevelCacheMaxSize:
   - value: 8192
+frontend.allowedExperiments:
+  - value:
+      - "chasm-scheduler"
+    constraints: {}

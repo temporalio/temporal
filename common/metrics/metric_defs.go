@@ -1439,14 +1439,17 @@ var (
 	HistoryScavengerSkipCount                                 = NewCounterDef("scavenger_skips")
 	ScheduleInvariantsScannerOverdueNextActionTimeCount       = NewCounterDef("schedule_invariants_scanner_overdue_next_action_time")
 	ScheduleInvariantsScannerOverdueNextActionTimeCapHitCount = NewCounterDef("schedule_invariants_scanner_overdue_next_action_time_cap_hit")
-	ScheduleInvariantsScannerStuckOpenCount                   = NewCounterDef("schedule_invariants_scanner_stuck_open")
-	ScheduleInvariantsScannerUnknownStateCount                = NewCounterDef("schedule_invariants_scanner_unknown_state")
-	ScheduleInvariantsScannerErrorCount                       = NewCounterDef("schedule_invariants_scanner_errors")
-	ExecutionsOutstandingCount                                = NewGaugeDef("executions_outstanding")
-	ScavengerValidationRequestsCount                          = NewCounterDef("scavenger_validation_requests")
-	ScavengerValidationFailuresCount                          = NewCounterDef("scavenger_validation_failures")
-	ScavengerValidationSkipsCount                             = NewCounterDef("scavenger_validation_skips")
-	AddSearchAttributesFailuresCount                          = NewCounterDef("add_search_attributes_failures")
+	// Overdue candidates cleared by the DescribeSchedule re-check, i.e. stale index
+	// entries. Swallowing every candidate means the re-check itself has broken.
+	ScheduleInvariantsScannerOverdueNextActionTimeStaleCandidateCount = NewCounterDef("schedule_invariants_scanner_overdue_next_action_time_stale_candidate")
+	ScheduleInvariantsScannerStuckOpenCount                           = NewCounterDef("schedule_invariants_scanner_stuck_open")
+	ScheduleInvariantsScannerUnknownStateCount                        = NewCounterDef("schedule_invariants_scanner_unknown_state")
+	ScheduleInvariantsScannerErrorCount                               = NewCounterDef("schedule_invariants_scanner_errors")
+	ExecutionsOutstandingCount                                        = NewGaugeDef("executions_outstanding")
+	ScavengerValidationRequestsCount                                  = NewCounterDef("scavenger_validation_requests")
+	ScavengerValidationFailuresCount                                  = NewCounterDef("scavenger_validation_failures")
+	ScavengerValidationSkipsCount                                     = NewCounterDef("scavenger_validation_skips")
+	AddSearchAttributesFailuresCount                                  = NewCounterDef("add_search_attributes_failures")
 
 	// Delete Namespace metrics.
 	ReclaimResourcesNamespaceDeleteSuccessCount = NewCounterDef(
