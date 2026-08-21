@@ -41,24 +41,6 @@ func (m *sqlExecutionStore) applyWorkflowMutationTx(
 		return serviceerror.NewInternalf("uuid parse failed. Error: %v", err)
 	}
 
-	// TODO Remove me if UPDATE holds the lock to the end of a transaction
-	if err := lockAndCheckExecution(ctx,
-		tx,
-		shardID,
-		namespaceIDBytes,
-		workflowID,
-		runIDBytes,
-		workflowMutation.Condition,
-		workflowMutation.DBRecordVersion,
-	); err != nil {
-		switch err.(type) {
-		case *p.WorkflowConditionFailedError, *p.ConditionFailedError:
-			return err
-		default:
-			return serviceerror.NewUnavailablef("applyWorkflowMutationTx failed. Failed to lock executions row. Error: %v", err)
-		}
-	}
-
 	if err := m.updateExecution(ctx,
 		tx,
 		namespaceID,
@@ -69,8 +51,14 @@ func (m *sqlExecutionStore) applyWorkflowMutationTx(
 		lastWriteVersion,
 		workflowMutation.DBRecordVersion,
 		shardID,
+		workflowMutation.Condition,
 	); err != nil {
-		return serviceerror.NewUnavailablef("applyWorkflowMutationTx failed. Failed to update executions row. Erorr: %v", err)
+		switch err.(type) {
+		case *p.WorkflowConditionFailedError, *p.ConditionFailedError:
+			return err
+		default:
+			return serviceerror.NewUnavailablef("applyWorkflowMutationTx failed. Failed to update executions row. Erorr: %v", err)
+		}
 	}
 
 	if err := applyTasks(ctx,
@@ -209,24 +197,6 @@ func (m *sqlExecutionStore) applyWorkflowSnapshotTxAsReset(
 		return err
 	}
 
-	// TODO Is there a way to modify the various map tables without fear of other people adding rows after we delete, without locking the executions row?
-	if err := lockAndCheckExecution(ctx,
-		tx,
-		shardID,
-		namespaceIDBytes,
-		workflowID,
-		runIDBytes,
-		workflowSnapshot.Condition,
-		workflowSnapshot.DBRecordVersion,
-	); err != nil {
-		switch err.(type) {
-		case *p.WorkflowConditionFailedError, *p.ConditionFailedError:
-			return err
-		default:
-			return serviceerror.NewUnavailablef("applyWorkflowSnapshotTxAsReset failed. Failed to lock executions row. Error: %v", err)
-		}
-	}
-
 	if err := m.updateExecution(ctx,
 		tx,
 		namespaceID,
@@ -237,8 +207,14 @@ func (m *sqlExecutionStore) applyWorkflowSnapshotTxAsReset(
 		lastWriteVersion,
 		workflowSnapshot.DBRecordVersion,
 		shardID,
+		workflowSnapshot.Condition,
 	); err != nil {
-		return serviceerror.NewUnavailablef("applyWorkflowSnapshotTxAsReset failed. Failed to update executions row. Erorr: %v", err)
+		switch err.(type) {
+		case *p.WorkflowConditionFailedError, *p.ConditionFailedError:
+			return err
+		default:
+			return serviceerror.NewUnavailablef("applyWorkflowSnapshotTxAsReset failed. Failed to update executions row. Erorr: %v", err)
+		}
 	}
 
 	if err := applyTasks(ctx,
@@ -1179,6 +1155,7 @@ func (m *sqlExecutionStore) updateExecution(
 	lastWriteVersion int64,
 	dbRecordVersion int64,
 	shardID int32,
+	condition int64,
 ) error {
 	row, err := m.buildExecutionRow(
 		namespaceID,
@@ -1193,7 +1170,10 @@ func (m *sqlExecutionStore) updateExecution(
 	if err != nil {
 		return err
 	}
-	result, err := tx.UpdateExecutions(ctx, row)
+	result, err := tx.UpdateExecutions(ctx, &sqlplugin.ExecutionsUpdate{
+		ExecutionsRow: *row,
+		Condition:     condition,
+	})
 	if err != nil {
 		return serviceerror.NewUnavailablef("updateExecution failed. Erorr: %v", err)
 	}
@@ -1202,6 +1182,20 @@ func (m *sqlExecutionStore) updateExecution(
 		return serviceerror.NewUnavailablef("updateExecution failed. Failed to verify number of rows affected. Erorr: %v", err)
 	}
 	if rowsAffected != 1 {
+		if rowsAffected == 0 {
+			if err := lockAndCheckExecution(
+				ctx,
+				tx,
+				shardID,
+				row.NamespaceID,
+				workflowID,
+				row.RunID,
+				condition,
+				dbRecordVersion,
+			); err != nil {
+				return err
+			}
+		}
 		return serviceerror.NewNotFoundf("updateExecution failed. Affected %v rows updated instead of 1.", rowsAffected)
 	}
 

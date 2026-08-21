@@ -17,7 +17,9 @@ const (
 
 	updateExecutionQuery = `UPDATE executions SET
  db_record_version = :db_record_version, next_event_id = :next_event_id, last_write_version = :last_write_version, data = :data, data_encoding = :data_encoding, state = :state, state_encoding = :state_encoding
- WHERE shard_id = :shard_id AND namespace_id = :namespace_id AND workflow_id = :workflow_id AND run_id = :run_id`
+ WHERE shard_id = :shard_id AND namespace_id = :namespace_id AND workflow_id = :workflow_id AND run_id = :run_id
+ AND ((CAST(:db_record_version AS BIGINT) != 0 AND db_record_version = CAST(:db_record_version AS BIGINT) - 1)
+      OR (CAST(:db_record_version AS BIGINT) = 0 AND next_event_id = :condition))`
 
 	getExecutionQuery = `SELECT ` + executionsColumns + ` FROM executions
  WHERE shard_id = $1 AND namespace_id = $2 AND workflow_id = $3 AND run_id = $4`
@@ -194,11 +196,11 @@ func (pdb *db) InsertIntoExecutions(
 // UpdateExecutions updates a single row in executions table
 func (pdb *db) UpdateExecutions(
 	ctx context.Context,
-	row *sqlplugin.ExecutionsRow,
+	update *sqlplugin.ExecutionsUpdate,
 ) (sql.Result, error) {
 	return pdb.NamedExecContext(ctx,
 		updateExecutionQuery,
-		row,
+		update,
 	)
 }
 
