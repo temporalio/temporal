@@ -924,6 +924,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 	s.Equal("record_child_completion", attributes["phase"].AsString())
 	s.Equal(parentExecution.GetWorkflowId(), attributes["parent_workflow_id"].AsString())
 	s.Equal(execution.GetWorkflowId(), attributes["child_workflow_id"].AsString())
+	s.Equal("Completed", attributes["child_workflow_state"].AsString())
 	s.Equal(taskID, attributes["local_task_id"].AsInt64())
 }
 
@@ -2653,6 +2654,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 	attributes := wideEventAttributes(records[0])
 	s.Equal("child_start", attributes["phase"].AsString())
 	s.Equal(execution.GetWorkflowId(), attributes["parent_workflow_id"].AsString())
+	s.Equal("Running", attributes["parent_workflow_state"].AsString())
 	s.Equal(childWorkflowID, attributes["child_workflow_id"].AsString())
 	s.Equal("existing-run-id", attributes["child_run_id"].AsString())
 	s.Equal(cluster.TestCurrentClusterName, attributes["local_cluster"].AsString())

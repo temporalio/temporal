@@ -340,6 +340,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			parentInitiatedID := executionInfo.ParentInitiatedId
 			parentInitiatedVersion := executionInfo.ParentInitiatedVersion
 			parentClock := executionInfo.ParentClock
+			childWorkflowState := mutableState.GetExecutionState().GetState().String()
 
 			// no need for mutable state anymore, release workflow lock
 			release(nil)
@@ -355,6 +356,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 					parentInitiatedVersion,
 					resendParent,
 				)
+				lifecyclePayload.ChildWorkflowState = childWorkflowState
 				emitParentChildCloseVerificationStarted(t.shardContext, lifecyclePayload, resendParent)
 			}
 
@@ -509,6 +511,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		childStartedWorkflowID := childWorkflowInfo.StartedWorkflowId
 		childStartedRunID := childWorkflowInfo.StartedRunId
 		childClock := childWorkflowInfo.Clock
+		parentWorkflowState := mutableState.GetExecutionState().GetState().String()
 
 		// no need for mutable state anymore, release workflow lock
 		release(nil)
@@ -556,6 +559,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 					childTargetNamespaceID,
 					&commonpb.WorkflowExecution{WorkflowId: childStartedWorkflowID, RunId: childStartedRunID},
 				)
+				payload.ParentWorkflowState = parentWorkflowState
 				payload.Phase = wideevents.ParentChildPhaseVerifyFirstWorkflowTask
 				payload.Outcome = outcome
 				emitParentChildLifecycleEvent(t.shardContext, payload, err)

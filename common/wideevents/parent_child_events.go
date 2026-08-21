@@ -47,10 +47,13 @@ type ParentChildLifecyclePayload struct {
 	ParentNamespaceID string
 	ParentWorkflowID  string
 	ParentRunID       string
+	// ParentWorkflowState and ChildWorkflowState are populated only for the side local to the emitter.
+	ParentWorkflowState string
 
-	ChildNamespaceID string
-	ChildWorkflowID  string
-	ChildRunID       string
+	ChildNamespaceID   string
+	ChildWorkflowID    string
+	ChildRunID         string
+	ChildWorkflowState string
 
 	ParentInitiatedID      int64
 	ParentInitiatedVersion int64
@@ -78,6 +81,12 @@ func (p ParentChildLifecyclePayload) Attributes() []log.KeyValue {
 		log.String("child_namespace_id", p.ChildNamespaceID),
 		log.String("child_workflow_id", p.ChildWorkflowID),
 		log.String("child_run_id", p.ChildRunID),
+	}
+	if p.ParentWorkflowState != "" {
+		attrs = append(attrs, log.String("parent_workflow_state", p.ParentWorkflowState))
+	}
+	if p.ChildWorkflowState != "" {
+		attrs = append(attrs, log.String("child_workflow_state", p.ChildWorkflowState))
 	}
 	if p.ParentInitiatedID != 0 || p.ParentInitiatedVersion != 0 {
 		attrs = append(attrs,

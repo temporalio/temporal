@@ -35,7 +35,10 @@ func verifyChildExecution(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	request *historyservice.VerifyChildExecutionCompletionRecordedRequest,
 ) (versionedTransition *persistencespb.VersionedTransition,
-	versionHistories *historyspb.VersionHistories, retError error) {
+	versionHistories *historyspb.VersionHistories,
+	parentWorkflowState string,
+	retError error,
+) {
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		request.Clock,
@@ -51,28 +54,29 @@ func verifyChildExecution(
 		locks.PriorityLow,
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, "", err
 	}
 	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
 	mutableState := workflowLease.GetMutableState()
+	parentWorkflowState = mutableState.GetExecutionState().GetState().String()
 	if !mutableState.IsWorkflowExecutionRunning() &&
 		mutableState.GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		// parent has already completed and can't be blocked after failover.
-		return nil, nil, nil
+		return nil, nil, parentWorkflowState, nil
 	}
 
 	onCurrentBranch, err := api.IsHistoryEventOnCurrentBranch(mutableState, request.ParentInitiatedId, request.ParentInitiatedVersion)
 	if err != nil {
 		// initiated event not found on any branch
-		return nil, nil, consts.ErrWorkflowNotReady
+		return nil, nil, parentWorkflowState, consts.ErrWorkflowNotReady
 	}
 
 	if !onCurrentBranch {
 		// due to conflict resolution, the initiated event may on a different branch of the workflow.
 		// we don't have to do anything and can simply return not found error. Standby logic
 		// after seeing this error will give up verification.
-		return nil, nil, consts.ErrChildExecutionNotFound
+		return nil, nil, parentWorkflowState, consts.ErrChildExecutionNotFound
 	}
 
 	ci, isRunning := mutableState.GetChildExecutionInfo(request.ParentInitiatedId)
@@ -80,15 +84,15 @@ func verifyChildExecution(
 		if ci.StartedEventId != common.EmptyEventID &&
 			ci.GetStartedWorkflowId() != request.ChildExecution.GetWorkflowId() {
 			// this can happen since we may not have the initiated version
-			return nil, nil, consts.ErrChildExecutionNotFound
+			return nil, nil, parentWorkflowState, consts.ErrChildExecutionNotFound
 		}
 
-		return nil, nil, consts.ErrWorkflowNotReady
+		return nil, nil, parentWorkflowState, consts.ErrWorkflowNotReady
 	}
 
 	versionedTransition = transitionhistory.CopyVersionedTransition(transitionhistory.LastVersionedTransition(mutableState.GetExecutionInfo().TransitionHistory))
 	versionHistories = versionhistory.CopyVersionHistories(mutableState.GetExecutionInfo().VersionHistories)
-	return versionedTransition, versionHistories, nil
+	return versionedTransition, versionHistories, parentWorkflowState, nil
 }
 
 func Invoke(
@@ -104,7 +108,7 @@ func Invoke(
 	}
 
 	resendParent := false
-	versionedTransition, versionHistories, errVerify := verifyChildExecution(ctx, workflowConsistencyChecker, request)
+	versionedTransition, versionHistories, parentWorkflowState, errVerify := verifyChildExecution(ctx, workflowConsistencyChecker, request)
 	switch errVerify.(type) {
 	case nil:
 		return &historyservice.VerifyChildExecutionCompletionRecordedResponse{}, nil
@@ -123,7 +127,7 @@ func Invoke(
 	resend := func(ctx context.Context) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
 		metrics.ParentWorkflowResendAttempts.With(metricsHandler).Record(1)
 		startTime := time.Now().UTC()
-		resp, err := resendParentAndVerify(ctx, request, workflowConsistencyChecker, shardContext, namespaceID, versionedTransition, versionHistories, errVerify, emitLifecycle)
+		resp, err := resendParentAndVerify(ctx, request, workflowConsistencyChecker, shardContext, namespaceID, versionedTransition, versionHistories, errVerify, parentWorkflowState, emitLifecycle)
 		metrics.ParentWorkflowResendLatency.With(metricsHandler).Record(time.Since(startTime))
 		if err != nil {
 			recordResendFailure(shardContext, metricsHandler, request, err)
@@ -149,7 +153,7 @@ func Invoke(
 		if emitLifecycle {
 			details := parentResendEventDetails(errVerify)
 			details["max_in_flight"] = maxInFlight
-			emitParentResendLifecycleEvent(shardContext, request, wideevents.ParentChildOutcomeLimited, nil, details)
+			emitParentResendLifecycleEvent(shardContext, request, parentWorkflowState, wideevents.ParentChildOutcomeLimited, nil, details)
 		}
 		shardContext.GetLogger().Warn("Dropped parent workflow resend, shard is at its in-flight limit",
 			tag.WorkflowNamespaceID(request.GetNamespaceId()),
@@ -167,6 +171,7 @@ func Invoke(
 			emitParentResendLifecycleEvent(
 				shardContext,
 				request,
+				parentWorkflowState,
 				wideevents.ParentChildOutcomeDeduplicated,
 				nil,
 				parentResendEventDetails(errVerify),
@@ -178,6 +183,7 @@ func Invoke(
 		emitParentResendLifecycleEvent(
 			shardContext,
 			request,
+			parentWorkflowState,
 			wideevents.ParentChildOutcomeScheduled,
 			nil,
 			parentResendEventDetails(errVerify),
@@ -233,6 +239,7 @@ func resendParentAndVerify(
 	versionedTransition *persistencespb.VersionedTransition,
 	versionHistories *historyspb.VersionHistories,
 	errVerify error,
+	parentWorkflowState string,
 	emitLifecycle bool,
 ) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
 	// Resend parent workflow from source cluster
@@ -251,7 +258,7 @@ func resendParentAndVerify(
 		if stage != "" {
 			details["stage"] = stage
 		}
-		emitParentResendLifecycleEvent(shardContext, request, outcome, eventErr, details)
+		emitParentResendLifecycleEvent(shardContext, request, parentWorkflowState, outcome, eventErr, details)
 	}
 
 	namespaceEntry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
@@ -318,7 +325,10 @@ func resendParentAndVerify(
 	}
 
 	// Verify child execution again after resending parent workflow
-	_, _, err = verifyChildExecution(ctx, workflowConsistencyChecker, request)
+	_, _, observedParentWorkflowState, err := verifyChildExecution(ctx, workflowConsistencyChecker, request)
+	if observedParentWorkflowState != "" {
+		parentWorkflowState = observedParentWorkflowState
+	}
 	if err != nil {
 		emitResult(wideevents.ParentChildOutcomeFailed, err, "verify_after_resend")
 		return nil, err
@@ -336,6 +346,7 @@ func parentResendEventDetails(initialError error) map[string]any {
 func emitParentResendLifecycleEvent(
 	shardContext historyi.ShardContext,
 	request *historyservice.VerifyChildExecutionCompletionRecordedRequest,
+	parentWorkflowState string,
 	outcome wideevents.ParentChildOutcome,
 	err error,
 	details map[string]any,
@@ -348,6 +359,7 @@ func emitParentResendLifecycleEvent(
 		ParentNamespaceID:      request.GetNamespaceId(),
 		ParentWorkflowID:       request.GetParentExecution().GetWorkflowId(),
 		ParentRunID:            request.GetParentExecution().GetRunId(),
+		ParentWorkflowState:    parentWorkflowState,
 		ChildWorkflowID:        request.GetChildExecution().GetWorkflowId(),
 		ChildRunID:             request.GetChildExecution().GetRunId(),
 		ParentInitiatedID:      request.GetParentInitiatedId(),

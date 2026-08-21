@@ -427,6 +427,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	parentRunID := executionInfo.ParentRunId
 	parentInitiatedID := executionInfo.ParentInitiatedId
 	parentInitiatedVersion := executionInfo.ParentInitiatedVersion
+	childWorkflowState := mutableState.GetExecutionState().GetState().String()
 	var parentClock *clockspb.VectorClock
 	if executionInfo.ParentClock != nil {
 		parentClock = vclock.NewVectorClock(
@@ -475,6 +476,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 					parentInitiatedID,
 					parentInitiatedVersion,
 				)
+				payload.ChildWorkflowState = childWorkflowState
 				payload.Phase = wideevents.ParentChildPhaseRecordChildCompletion
 				payload.Outcome = wideevents.ParentChildOutcomeNotFoundIgnored
 				emitParentChildLifecycleEvent(t.shardContext, payload, err)
@@ -1145,6 +1147,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 						targetNamespaceID.String(),
 						&commonpb.WorkflowExecution{WorkflowId: attributes.WorkflowId, RunId: typedErr.RunId},
 					)
+					payload.ParentWorkflowState = mutableState.GetExecutionState().GetState().String()
 					payload.Phase = wideevents.ParentChildPhaseChildStart
 					payload.Outcome = wideevents.ParentChildOutcomeWorkflowAlreadyExists
 					payload.Details = map[string]any{
