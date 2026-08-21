@@ -750,15 +750,18 @@ func (s *FunctionalTestBase) RegisterTest(t testlogger.CleanupCapableT) {
 		s.t.addTest(t)
 	}
 
+	base := s
 	t.Cleanup(func() {
-		if tl, ok := s.Logger.(*testlogger.TestLogger); ok {
+		// testing.T retains executed cleanup slots, so release the captured base explicitly.
+		defer func() { base = nil }()
+		if tl, ok := base.Logger.(*testlogger.TestLogger); ok {
 			if f := tl.Failure(); f != nil {
 				t.Errorf("cluster poisoned by %s log: %s", f.Level, f.Msg)
 			}
 		}
-		wasLast := s.t != nil && s.t.removeTest(t)
-		if wasLast && s.Poisoned() {
-			if err := s.tearDownTestCluster(); err != nil {
+		wasLast := base.t != nil && base.t.removeTest(t)
+		if wasLast && base.Poisoned() {
+			if err := base.tearDownTestCluster(); err != nil {
 				t.Logf("Failed to tear down poisoned cluster: %v", err)
 			}
 		}
