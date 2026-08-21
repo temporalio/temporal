@@ -8,49 +8,6 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
-func emitFirstWorkflowTaskVerificationResult(
-	shardContext historyi.ShardContext,
-	task *tasks.StartChildExecutionTask,
-	childNamespaceID string,
-	childWorkflowID string,
-	childRunID string,
-	parentWorkflowState string,
-	attempt int,
-	err error,
-) {
-	if !parentChildLifecycleEnabled(shardContext) {
-		return
-	}
-	outcome, emit := parentChildVerificationOutcome(
-		err,
-		wideevents.ParentChildOutcomeChildNotFound,
-		wideevents.ParentChildOutcomeFirstWorkflowTaskMissing,
-	)
-	if !emit {
-		return
-	}
-	payload, details := parentChildEventForStartChildTask(
-		shardContext,
-		task,
-		childNamespaceID,
-		childWorkflowID,
-		childRunID,
-		parentWorkflowState,
-		attempt,
-	)
-	details["phase"] = wideevents.ParentChildPhaseVerifyFirstWorkflowTask
-	details["outcome"] = outcome
-	emitParentChildReplicationEvent(
-		shardContext,
-		payload,
-		wideevents.ReplicationError,
-		wideevents.ReplOperationStandbyVerification,
-		"Standby first workflow task verification failed",
-		err,
-		details,
-	)
-}
-
 func emitChildCompletionVerificationStarted(
 	shardContext historyi.ShardContext,
 	task *tasks.CloseExecutionTask,
@@ -105,7 +62,7 @@ func emitChildCompletionVerificationResult(
 	attempt int,
 	err error,
 ) {
-	if !parentChildLifecycleEnabled(shardContext) {
+	if !resendParent || !parentChildLifecycleEnabled(shardContext) {
 		return
 	}
 	outcome, emit := parentChildVerificationOutcome(
@@ -113,14 +70,12 @@ func emitChildCompletionVerificationResult(
 		wideevents.ParentChildOutcomeNotFound,
 		wideevents.ParentChildOutcomeCompletionMissing,
 	)
-	if resendParent {
-		switch err.(type) {
-		case nil:
-			outcome, emit = wideevents.ParentChildOutcomeVerified, true
-		case *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
-			outcome, emit = wideevents.ParentChildOutcomeIgnored, true
-		default:
-		}
+	switch err.(type) {
+	case nil:
+		outcome, emit = wideevents.ParentChildOutcomeVerified, true
+	case *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
+		outcome, emit = wideevents.ParentChildOutcomeIgnored, true
+	default:
 	}
 	if !emit {
 		return
@@ -153,28 +108,6 @@ func emitChildCompletionVerificationResult(
 		err,
 		details,
 	)
-}
-
-func parentChildEventForStartChildTask(
-	shardContext historyi.ShardContext,
-	task *tasks.StartChildExecutionTask,
-	childNamespaceID string,
-	childWorkflowID string,
-	childRunID string,
-	parentWorkflowState string,
-	attempt int,
-) (wideevents.ReplicationLifecyclePayload, map[string]any) {
-	payload, details := parentChildEventForTask(shardContext, task, attempt)
-	details["parent_namespace_id"] = task.GetNamespaceID()
-	details["parent_workflow_id"] = task.GetWorkflowID()
-	details["parent_run_id"] = task.GetRunID()
-	details["parent_workflow_state"] = parentWorkflowState
-	details["child_namespace_id"] = childNamespaceID
-	details["child_workflow_id"] = childWorkflowID
-	details["child_run_id"] = childRunID
-	details["parent_initiated_id"] = task.InitiatedEventID
-	details["parent_initiated_version"] = task.Version
-	return payload, details
 }
 
 func parentChildEventForCloseTask(

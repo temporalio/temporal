@@ -97,7 +97,7 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 	case *tasks.SignalExecutionTask:
 		err = t.processSignalExecution(ctx, task)
 	case *tasks.StartChildExecutionTask:
-		err = t.processStartChildExecution(ctx, task, executable.Attempt())
+		err = t.processStartChildExecution(ctx, task)
 	case *tasks.ResetWorkflowTask:
 		// no reset needed for standby
 		// TODO: add error logs
@@ -496,7 +496,6 @@ func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
 func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 	ctx context.Context,
 	transferTask *tasks.StartChildExecutionTask,
-	attempt int,
 ) error {
 	processTaskIfClosed := true
 	actionFn := func(ctx context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, release historyi.ReleaseWorkflowContextFunc) (any, error) {
@@ -520,8 +519,6 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		childStartedWorkflowID := childWorkflowInfo.StartedWorkflowId
 		childStartedRunID := childWorkflowInfo.StartedRunId
 		childClock := childWorkflowInfo.Clock
-		parentWorkflowState := mutableState.GetExecutionState().GetState().String()
-
 		// no need for mutable state anymore, release workflow lock
 		release(nil)
 
@@ -557,16 +554,6 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			},
 			Clock: childClock,
 		})
-		emitFirstWorkflowTaskVerificationResult(
-			t.shardContext,
-			transferTask,
-			childTargetNamespaceID,
-			childStartedWorkflowID,
-			childStartedRunID,
-			parentWorkflowState,
-			attempt,
-			err,
-		)
 		switch err.(type) {
 		case nil, *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
 			// Case 1: Target workflow is in the desired state.

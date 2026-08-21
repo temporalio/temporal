@@ -850,6 +850,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	s.ErrorAs(resp.ExecutionErr, &verificationErr)
 	var resourceExhaustedErr *serviceerror.ResourceExhausted
 	s.ErrorAs(resp.ExecutionErr, &resourceExhaustedErr)
+	s.Require().Empty(parentChildRecords(capture))
 
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.localVerificationDuration))
 	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationWithResendParentRequest).Return(nil, nil)
@@ -881,9 +882,6 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	s.Equal(randomErr, verificationErr.Unwrap())
 
 	s.Equal([]string{
-		string(wideevents.ParentChildOutcomeNotFound),
-		string(wideevents.ParentChildOutcomeCompletionMissing),
-		string(wideevents.ParentChildOutcomeFailed),
 		string(wideevents.ParentChildOutcomeStarted),
 		string(wideevents.ParentChildOutcomeVerified),
 		string(wideevents.ParentChildOutcomeStarted),
@@ -898,11 +896,12 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 		string(wideevents.ParentChildOutcomeFailed),
 	}, parentChildOutcomes(capture))
 	records := parentChildRecords(capture)
-	s.Require().Len(records, 15)
+	s.Require().Len(records, 12)
 	attributes := wideEventAttributes(records[0])
 	details := wideEventDetails(records[0])
-	s.Equal(string(wideevents.ReplicationError), attributes["phase"].AsString())
+	s.Equal(string(wideevents.ReplicationExecuting), attributes["phase"].AsString())
 	s.Equal(wideevents.ParentChildPhaseVerifyChildCompletion, details["phase"])
+	s.Equal(wideevents.ParentChildOutcomeStarted, details["outcome"])
 	s.Equal(parentExecution.GetWorkflowId(), attributes["parent_workflow_id"].AsString())
 	s.Equal(execution.GetWorkflowId(), attributes["workflow_id"].AsString())
 	s.Equal(execution.GetWorkflowId(), details["child_workflow_id"])
@@ -912,18 +911,13 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	s.InDelta(float64(taskID), details["local_task_id"], 0)
 	s.InDelta(1, details["attempt"], 0)
 	s.Equal(transferTask.GetType().String(), details["local_task_type"])
-	s.Equal(util.ErrorType(consts.ErrWorkflowExecutionNotFound), details["error_type"])
-	s.Equal(false, details["resend_parent_requested"])
+	s.Equal(true, details["resend_parent_requested"])
 	s.Equal("passive", details["verification_scope"])
-	startedAttributes := wideEventAttributes(records[3])
-	startedDetails := wideEventDetails(records[3])
-	s.Equal(string(wideevents.ReplicationExecuting), startedAttributes["phase"].AsString())
-	s.Equal(int64(1), startedAttributes["attempt"].AsInt64())
-	s.Equal(wideevents.ParentChildPhaseVerifyChildCompletion, startedDetails["phase"])
-	s.Equal(wideevents.ParentChildOutcomeStarted, startedDetails["outcome"])
-	s.Equal(true, startedDetails["resend_parent_requested"])
-	s.Equal("passive", startedDetails["verification_scope"])
-	ignoredAttributes := wideEventAttributes(records[6])
+	missingDetails := wideEventDetails(records[5])
+	s.Equal(wideevents.ParentChildOutcomeCompletionMissing, missingDetails["outcome"])
+	s.Equal(util.ErrorType(consts.ErrWorkflowNotReady), missingDetails["error_type"])
+	s.Equal(true, missingDetails["resend_parent_requested"])
+	ignoredAttributes := wideEventAttributes(records[3])
 	s.Equal(string(wideevents.ReplicationApplied), ignoredAttributes["phase"].AsString())
 	s.Equal(wideevents.ParentChildOutcomeVerified, ignoredAttributes["outcome"].AsString())
 }
@@ -1299,30 +1293,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.NoError(resp.ExecutionErr)
 
-	s.Equal([]string{
-		string(wideevents.ParentChildOutcomeFirstWorkflowTaskMissing),
-		string(wideevents.ParentChildOutcomeChildNotFound),
-		string(wideevents.ParentChildOutcomeFailed),
-		string(wideevents.ParentChildOutcomeFirstWorkflowTaskMissing),
-		string(wideevents.ParentChildOutcomeFailed),
-	}, parentChildOutcomes(capture))
-	records := parentChildRecords(capture)
-	s.Require().Len(records, 5)
-	attributes := wideEventAttributes(records[0])
-	details := wideEventDetails(records[0])
-	s.Equal(string(wideevents.ReplicationError), attributes["phase"].AsString())
-	s.Equal(wideevents.ParentChildPhaseVerifyFirstWorkflowTask, details["phase"])
-	s.Equal(execution.GetWorkflowId(), attributes["workflow_id"].AsString())
-	s.Equal(execution.GetWorkflowId(), details["parent_workflow_id"])
-	s.Equal("Running", details["parent_workflow_state"])
-	s.Equal(childWorkflowID, details["child_workflow_id"])
-	s.Equal(childRunID, details["child_run_id"])
-	s.InDelta(float64(transferTask.InitiatedEventID), details["parent_initiated_id"], 0)
-	s.InDelta(float64(transferTask.Version), details["parent_initiated_version"], 0)
-	s.InDelta(float64(taskID), details["local_task_id"], 0)
-	s.InDelta(1, details["attempt"], 0)
-	s.Equal(transferTask.GetType().String(), details["local_task_type"])
-	s.Equal(util.ErrorType(consts.ErrWorkflowNotReady), details["error_type"])
+	s.Require().Empty(parentChildRecords(capture))
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_Success() {
