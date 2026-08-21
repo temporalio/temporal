@@ -7416,8 +7416,8 @@ func (ms *MutableStateImpl) PopTasks() map[tasks.Category][]tasks.Task {
 }
 
 func (ms *MutableStateImpl) DeleteCHASMPureTasks(maxScheduledTime time.Time) {
-	for lastTaskIdx := len(ms.chasmPureTasks) - 1; lastTaskIdx >= 0; lastTaskIdx-- {
-		task := ms.chasmPureTasks[lastTaskIdx]
+	for lastTaskIdx, task := range slices.Backward(ms.chasmPureTasks) {
+
 		if !task.GetVisibilityTime().Before(maxScheduledTime) {
 			ms.chasmPureTasks = ms.chasmPureTasks[:lastTaskIdx+1]
 			return
