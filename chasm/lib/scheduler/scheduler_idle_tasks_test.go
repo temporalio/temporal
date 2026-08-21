@@ -60,9 +60,16 @@ func runIdleValidateTestCase(t *testing.T, env *testEnv, c *idleValidateTestCase
 // anchorLastEventTo backdates Info.UpdateTime/CreateTime so that
 // idleDeadline = anchor + idleTime; pairs with scheduledTime = anchor + idleTime
 // to make Validate's expiration check resolve to "stable".
+//
+// LastEventTime is rewritten too, not just advanced: idleDeadline floors the
+// recomputed value at that high water mark, so backdating Info alone cannot move
+// the deadline earlier. Production never lowers the mark - Info.CreateTime is
+// written once and Info.UpdateTime only moves forward - so this is a test
+// fixture constructing a hypothetical persisted state, not a supported mutation.
 func anchorLastEventTo(sched *scheduler.Scheduler, anchor time.Time) {
 	sched.Info.UpdateTime = timestamppb.New(anchor)
 	sched.Info.CreateTime = timestamppb.New(anchor)
+	sched.LastEventTime = timestamppb.New(anchor)
 }
 
 func TestIdleTask_Execute(t *testing.T) {
