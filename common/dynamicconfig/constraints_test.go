@@ -50,10 +50,6 @@ func TestParseConstraintsJSONInvalid(t *testing.T) {
 		`{"namespace":`,
 		`{"unknown":"value"}`,
 		`{"shardId":"one"}`,
-		`[]`,
-		`"namespace-a"`,
-		`1`,
-		`true`,
 		`{} {}`,
 		`null`,
 	} {

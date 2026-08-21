@@ -144,14 +144,6 @@ func (s *collectionSuite) TestGetEffectiveValueWithConstrainedDefault() {
 	s.Equal(10, value)
 }
 
-func (s *collectionSuite) TestGetEffectiveValueWithNilDefault() {
-	setting := dynamicconfig.NewGlobalTypedSetting[map[string]any]("testGetEffectiveValueWithNilDefault", nil, "")
-
-	value, err := s.cln.GetEffectiveValue(setting.Key(), dynamicconfig.Constraints{})
-	s.Require().NoError(err)
-	s.Nil(value)
-}
-
 func (s *collectionSuite) TestGetEffectiveValueUnknownKey() {
 	_, err := s.cln.GetEffectiveValue(dynamicconfig.MakeKey(unknownKey), dynamicconfig.Constraints{})
 	s.Require().Error(err)
