@@ -5893,9 +5893,12 @@ func (wh *WorkflowHandler) StartBatchOperation(
 
 		switch a := op.UnpauseActivitiesOperation.GetActivity().(type) {
 		case *batchpb.BatchOperationUnpauseActivities_Type:
-			searchValue := fmt.Sprintf("property:activityType=%s", a.Type)
-			escapedSearchValue := sqlparser.String(sqlparser.NewStrVal([]byte(searchValue)))
-			input.Request.VisibilityQuery = fmt.Sprintf("%s = %s", sadefs.TemporalPauseInfo, escapedSearchValue)
+			unpauseQuery, err := buildUnpauseActivityVisibilityQuery(visibilityQuery, a.Type)
+			if err != nil {
+				return nil, err
+			}
+			input.Request = proto.Clone(request).(*workflowservice.StartBatchOperationRequest)
+			input.Request.VisibilityQuery = unpauseQuery
 		case *batchpb.BatchOperationUnpauseActivities_MatchAll:
 			input.Request.VisibilityQuery = visibilityQuery
 		}
@@ -5968,6 +5971,35 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		return nil, err
 	}
 	return &workflowservice.StartBatchOperationResponse{}, nil
+}
+
+// buildUnpauseActivityVisibilityQuery narrows the caller's scope to workflows containing a
+// paused activity of the requested type. Only the WHERE expression is returned because the batch
+// worker appends its own execution-status filter.
+func buildUnpauseActivityVisibilityQuery(query string, activityType string) (string, error) {
+	if query == "" {
+		return "", nil
+	}
+
+	// Visibility queries are predicate fragments, so wrap the query in a synthetic SELECT to obtain
+	// a WHERE expression. Reject set operations (i.e., UNION) because they do not expose a single WHERE clause to extend.
+	stmt, err := sqlparser.Parse("select * from dummy where " + query)
+	if err != nil {
+		return "", serviceerror.NewInvalidArgumentf("invalid visibility query: %v", err)
+	}
+	selectStmt, ok := stmt.(*sqlparser.Select)
+	if !ok {
+		return "", serviceerror.NewInvalidArgument("invalid visibility query: set operations are not supported")
+	}
+
+	activityTypeExpr := &sqlparser.ComparisonExpr{
+		Operator: sqlparser.EqualStr,
+		Left:     &sqlparser.ColName{Name: sqlparser.NewColIdent(sadefs.TemporalPauseInfo)},
+		Right:    sqlparser.NewStrVal([]byte(fmt.Sprintf("property:activityType=%s", activityType))),
+	}
+	selectStmt.Where.Expr = &sqlparser.ParenExpr{Expr: selectStmt.Where.Expr}
+	selectStmt.AddWhere(&sqlparser.ParenExpr{Expr: activityTypeExpr})
+	return sqlparser.String(selectStmt.Where.Expr), nil
 }
 
 // snakeCaseBatchType maps a batch operation type enum to the canonical string
