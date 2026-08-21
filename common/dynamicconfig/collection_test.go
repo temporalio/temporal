@@ -112,6 +112,38 @@ func (s *collectionSuite) TestGetEffectiveValue() {
 	s.Equal(false, value)
 }
 
+func (s *collectionSuite) TestGetEffectiveValueWithConstrainedDefault() {
+	setting := dynamicconfig.NewNamespaceIntSettingWithConstrainedDefault(
+		"testGetEffectiveValueWithConstrainedDefault",
+		[]dynamicconfig.TypedConstrainedValue[int]{
+			{Constraints: dynamicconfig.Constraints{Namespace: "special"}, Value: 34},
+			{Value: 10},
+		},
+		"",
+	)
+	s.client.Set(setting.Key().String(), []dynamicconfig.ConstrainedValue{
+		{Constraints: dynamicconfig.Constraints{Namespace: "configured"}, Value: 50},
+		{Value: 20},
+	})
+
+	value, err := s.cln.GetEffectiveValue(setting.Key(), dynamicconfig.Constraints{Namespace: "configured"})
+	s.Require().NoError(err)
+	s.Equal(50, value)
+
+	value, err = s.cln.GetEffectiveValue(setting.Key(), dynamicconfig.Constraints{Namespace: "special"})
+	s.Require().NoError(err)
+	s.Equal(34, value)
+
+	value, err = s.cln.GetEffectiveValue(setting.Key(), dynamicconfig.Constraints{Namespace: "normal"})
+	s.Require().NoError(err)
+	s.Equal(20, value)
+
+	s.client.Set(setting.Key().String(), nil)
+	value, err = s.cln.GetEffectiveValue(setting.Key(), dynamicconfig.Constraints{Namespace: "normal"})
+	s.Require().NoError(err)
+	s.Equal(10, value)
+}
+
 func (s *collectionSuite) TestGetEffectiveValueUnknownKey() {
 	_, err := s.cln.GetEffectiveValue(dynamicconfig.MakeKey(unknownKey), dynamicconfig.Constraints{})
 	s.Require().Error(err)
