@@ -1128,8 +1128,8 @@ func (s *standaloneActivityTestSuite) TestStart() {
 			RequestId:           env.Tv().Any().String(),
 			Links:               links,
 		})
-		require.Error(t, err)
 		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
+		require.ErrorContains(t, err, "cannot attach more than 2 links to an activity")
 	})
 
 	t.Run("PerExecutionCapNotEnforcedWhenLinksWillBeDropped", func(t *testing.T) {

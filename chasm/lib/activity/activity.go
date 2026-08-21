@@ -515,7 +515,7 @@ func (a *Activity) attachLinks(ctx chasm.MutableContext, links []*commonpb.Link,
 	if err := validator.ValidateRequest(namespaceName, links); err != nil {
 		return err
 	}
-	if err := validator.ValidateComponentTotal(namespaceName, len(ctx.Links(a)), len(links)); err != nil {
+	if err := validator.ValidateTotal(namespaceName, len(ctx.Links(a)), len(links)); err != nil {
 		return err
 	}
 	return ctx.SetRequestLinks(a, requestID, links)
