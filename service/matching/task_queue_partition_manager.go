@@ -437,7 +437,7 @@ func validatePartitionScaleDrift(
 
 // signalPartitionScaler sends a signal to the partition scaler that a new task has arrived
 // (directly from history, not forwarded).
-func (pm *taskQueuePartitionManagerImpl) signalPartitionScaler() {
+func (pm *taskQueuePartitionManagerImpl) signalPartitionScaler(ctx context.Context) {
 	if pm.scaleManager == nil {
 		return // only run on root partition
 	}
@@ -447,12 +447,11 @@ func (pm *taskQueuePartitionManagerImpl) signalPartitionScaler() {
 	if effectiveWrite == 0 {
 		effectiveWrite = max(1, pm.config.NumWritePartitions())
 	}
-	// we assume that tasks are balanced uniformly across partitions, so if the root has
-	// seen 1 task then all have seen ~1 task, so the whole queue has seen 'effective'
-	// tasks in total.
-	// TODO(dp): this will change when we add non-uniform load balancing. we should eventually
-	// aggregate real stats instead of assuming
-	pm.scaleManager.AddedTasks(effectiveWrite)
+	estimatedTasksAllPartitions := matching.ParseEstimatedTasksAllPartitions(ctx)
+	if estimatedTasksAllPartitions == 0 {
+		estimatedTasksAllPartitions = effectiveWrite
+	}
+	pm.scaleManager.AddedTasks(estimatedTasksAllPartitions)
 }
 
 func (pm *taskQueuePartitionManagerImpl) sendPartitionCountTrailer(ctx context.Context) {
@@ -564,7 +563,7 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 		return "", false, err
 	}
 	if params.forwardInfo == nil {
-		pm.signalPartitionScaler()
+		pm.signalPartitionScaler(ctx)
 	}
 
 	var spoolQueue, syncMatchQueue physicalTaskQueueManager
@@ -1025,7 +1024,7 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 		return nil, err
 	}
 	if request.ForwardInfo == nil {
-		pm.signalPartitionScaler()
+		pm.signalPartitionScaler(ctx)
 	}
 
 	task := newInternalQueryTask(taskID, request)
@@ -1095,7 +1094,7 @@ func (pm *taskQueuePartitionManagerImpl) DispatchNexusTask(
 		return nil, err
 	}
 	if request.ForwardInfo == nil {
-		pm.signalPartitionScaler()
+		pm.signalPartitionScaler(ctx)
 	}
 
 	deadline, _ := ctx.Deadline() // If not set by user, our client will set a default.

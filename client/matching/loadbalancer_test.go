@@ -1,6 +1,7 @@
 package matching
 
 import (
+	"math"
 	"math/rand"
 	"sync"
 	"testing"
@@ -365,18 +366,24 @@ func TestPickWritePartition_BacklogAware(t *testing.T) {
 		BacklogCap:   200,
 		BacklogCount: []number.Compact8{0, number.EncodeCompact8(13_000_000)},
 	}
+	gap0 := backlogCap - number.DecodeCompact8(0)
+	gap1 := backlogCap - number.DecodeCompact8(number.EncodeCompact8(13_000_000))
 	counts := make([]int, 2)
+	estimatedTasks := 0
 	const n = 3000
 	for range n {
-		p := lb.PickWritePartition(taskQueue, pc)
+		p, estimatedTasksAllPartitions := lb.PickWritePartition(taskQueue, pc)
 		counts[p.PartitionId()]++
+		if p.IsRoot() {
+			estimatedTasks += estimatedTasksAllPartitions
+		}
 	}
 	require.Greater(t, counts[0], counts[1], "emptier partition should receive more writes")
 	require.Positive(t, counts[1], "the below-cap partition should still receive some writes")
-	gap0 := backlogCap - number.DecodeCompact8(0)
-	gap1 := backlogCap - number.DecodeCompact8(number.EncodeCompact8(13_000_000))
 	require.InDelta(t, float64(n)*float64(gap0)/float64(gap0+gap1), counts[0], float64(n)*0.05,
 		"writes split in proportion to each partition's gap to cap")
+	require.InDelta(t, n, estimatedTasks, float64(n)*0.05,
+		"root samples should estimate total writes without bias")
 
 	// Now, every partition at/above cap -> no gap to weight by, so the picker declines and the caller
 	// falls back to uniform random.
@@ -388,12 +395,42 @@ func TestPickWritePartition_BacklogAware(t *testing.T) {
 	}
 	atCap := make([]int, 2)
 	for range n {
-		p := lb.PickWritePartition(taskQueue, pcAtCap)
+		p, estimatedTasksAllPartitions := lb.PickWritePartition(taskQueue, pcAtCap)
 		atCap[p.PartitionId()]++
+		require.Equal(t, 2, estimatedTasksAllPartitions)
 	}
 	for i := range atCap {
 		require.InDelta(t, n/2, atCap[i], float64(n)*0.1, "at-cap partition %d roughly uniform", i)
 	}
+}
+
+func TestPickWritePartition_RootProbabilityFloor(t *testing.T) {
+	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
+	require.NoError(t, err)
+	taskQueue := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	lb := &defaultLoadBalancer{
+		namespaceIDToName: func(namespace.ID) (namespace.Name, error) { return "fake-namespace", nil },
+		taskQueueLBs:      make(map[tqid.TaskQueue]*tqLoadBalancer),
+	}
+
+	pc := PartitionCounts{
+		Read:         2,
+		Write:        2,
+		BacklogCap:   number.EncodeCompact8(1000),
+		BacklogCount: []number.Compact8{number.EncodeCompact8(1000), 0},
+	}
+	const attempts = 100_000
+	rootPicks := 0
+	expectedProbability := writePartitionRootProbabilityFloor
+	expectedTasksAllPartitions := int(math.Round(1 / expectedProbability))
+	for range attempts {
+		partition, estimatedTasksAllPartitions := lb.PickWritePartition(taskQueue, pc)
+		if partition.IsRoot() {
+			rootPicks++
+		}
+		require.Equal(t, expectedTasksAllPartitions, estimatedTasksAllPartitions)
+	}
+	require.InDelta(t, attempts*expectedProbability, rootPicks, attempts*expectedProbability*0.2)
 }
 
 func TestPickWritePartition_NoBacklogUniform(t *testing.T) {
@@ -411,8 +448,9 @@ func TestPickWritePartition_NoBacklogUniform(t *testing.T) {
 	counts := make([]int, 4)
 	const n = 4000
 	for range n {
-		p := lb.PickWritePartition(taskQueue, pc)
+		p, estimatedTasksAllPartitions := lb.PickWritePartition(taskQueue, pc)
 		counts[p.PartitionId()]++
+		require.Equal(t, 4, estimatedTasksAllPartitions)
 	}
 	for i := range counts {
 		require.InDelta(t, n/4, counts[i], float64(n)*0.1, "partition %d roughly uniform", i)

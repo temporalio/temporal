@@ -3,6 +3,7 @@ package matching
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"errors"
 	"slices"
 
@@ -20,6 +21,7 @@ import (
 // The "-bin" suffix instructs grpc to base64-encode the value, so we can use binary.
 const partitionCountsHeaderName = "pcnt-bin"
 const partitionCountsTrailerName = "pcnt-bin"
+const estimatedTasksAllPartitionsHeaderName = "etap-bin"
 
 // PartitionCounts is a smaller version of taskqueuespb.ClientPartitionCounts that we can more
 // easily pass around and put in a map.
@@ -92,6 +94,27 @@ func ParsePartitionCountsFromIncomingContext(ctx context.Context) (PartitionCoun
 		return PartitionCounts{}, nil
 	}
 	return parsePartitionCounts(vals[0])
+}
+
+func appendEstimatedTasksAllPartitions(ctx context.Context, estimatedTasksAllPartitions int, isRoot bool) context.Context {
+	if estimatedTasksAllPartitions <= 0 || !isRoot {
+		return ctx
+	}
+	b := make([]byte, 8)
+	binary.LittleEndian.PutUint64(b, uint64(estimatedTasksAllPartitions))
+	return metadata.AppendToOutgoingContext(ctx, estimatedTasksAllPartitionsHeaderName, string(b))
+}
+
+func ParseEstimatedTasksAllPartitions(ctx context.Context) int {
+	vals := metadata.ValueFromIncomingContext(ctx, estimatedTasksAllPartitionsHeaderName)
+	if len(vals) == 0 || len(vals[0]) != 8 {
+		return 0
+	}
+	estimatedTasksAllPartitions := binary.LittleEndian.Uint64([]byte(vals[0]))
+	if estimatedTasksAllPartitions == 0 || estimatedTasksAllPartitions > uint64(^uint(0)>>1) {
+		return 0
+	}
+	return int(estimatedTasksAllPartitions)
 }
 
 func parsePartitionCountsFromTrailer(trailer metadata.MD) (PartitionCounts, error) {
