@@ -5613,6 +5613,119 @@ func TestCanonicalizeScheduleSpec_DurationValidationKillSwitch(t *testing.T) {
 	}
 }
 
+func TestValidateScheduleTimestamps(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		spec      *schedulepb.ScheduleSpec
+		errString string
+	}{
+		{
+			name: "start time",
+			spec: &schedulepb.ScheduleSpec{
+				StartTime: &timestamppb.Timestamp{Nanos: 1_000_000_000},
+			},
+			errString: "start time is not a valid timestamp",
+		},
+		{
+			name: "end time",
+			spec: &schedulepb.ScheduleSpec{
+				EndTime: &timestamppb.Timestamp{Nanos: 1_000_000_000},
+			},
+			errString: "end time is not a valid timestamp",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.ErrorContains(t, validateScheduleTimestamps(tc.spec), tc.errString)
+		})
+	}
+}
+
+func TestScheduleValidationKillSwitches(t *testing.T) {
+	testCases := []struct {
+		name       string
+		validation string
+		errString  string
+		schedule   func() *schedulepb.Schedule
+		validate   func(*WorkflowHandler, *schedulepb.Schedule) error
+		assertOK   func(*testing.T, *schedulepb.Schedule)
+	}{
+		{
+			name:       "timestamp",
+			validation: scheduleValidationTimestamp,
+			errString:  "start time is not a valid timestamp",
+			schedule: func() *schedulepb.Schedule {
+				return &schedulepb.Schedule{Spec: &schedulepb.ScheduleSpec{
+					StartTime: &timestamppb.Timestamp{Nanos: 1_000_000_000},
+					EndTime:   &timestamppb.Timestamp{Seconds: 3600, Nanos: 1_000_000_000},
+				}}
+			},
+			validate: func(wh *WorkflowHandler, schedule *schedulepb.Schedule) error {
+				return wh.canonicalizeScheduleSpec(schedule, "test-namespace")
+			},
+			assertOK: func(t *testing.T, schedule *schedulepb.Schedule) {
+				require.Equal(t, time.Unix(1, 0).UTC(), schedule.GetSpec().GetStartTime().AsTime())
+				require.Equal(t, time.Unix(3601, 0).UTC(), schedule.GetSpec().GetEndTime().AsTime())
+			},
+		},
+		{
+			name:       "remaining actions",
+			validation: scheduleValidationRemainingActions,
+			errString:  "remaining actions cannot be negative",
+			schedule: func() *schedulepb.Schedule {
+				return &schedulepb.Schedule{State: &schedulepb.ScheduleState{RemainingActions: -1}}
+			},
+			validate: func(wh *WorkflowHandler, schedule *schedulepb.Schedule) error {
+				return wh.canonicalizeScheduleSpec(schedule, "test-namespace")
+			},
+		},
+		{
+			name:       "overlap policy",
+			validation: scheduleValidationOverlapPolicy,
+			errString:  "unsupported overlap policy",
+			schedule: func() *schedulepb.Schedule {
+				return &schedulepb.Schedule{Policies: &schedulepb.SchedulePolicies{
+					OverlapPolicy: enumspb.ScheduleOverlapPolicy(99),
+				}}
+			},
+			validate: func(wh *WorkflowHandler, schedule *schedulepb.Schedule) error {
+				return wh.validateScheduleOverlapPolicies(schedule, nil, "test-namespace")
+			},
+		},
+	}
+
+	for _, validation := range testCases {
+		for _, toggle := range []struct {
+			name      string
+			disabled  []string
+			wantError bool
+		}{
+			{name: "enforced by default", wantError: true},
+			{name: "unrelated validation disabled", disabled: []string{scheduleValidationScheduleDuration}, wantError: true},
+			{name: "validation disabled", disabled: []string{validation.validation}},
+		} {
+			t.Run(validation.name+"/"+toggle.name, func(t *testing.T) {
+				wh := newScheduleSpecHandler(func(c *Config) {
+					if toggle.disabled != nil {
+						c.DisabledScheduleValidations = dc.GetTypedPropertyFnFilteredByNamespace(toggle.disabled)
+					}
+				})
+				schedule := validation.schedule()
+				err := validation.validate(wh, schedule)
+				if toggle.wantError {
+					var invalidArgument *serviceerror.InvalidArgument
+					require.ErrorAs(t, err, &invalidArgument)
+					require.ErrorContains(t, err, validation.errString)
+					return
+				}
+				require.NoError(t, err)
+				if validation.assertOK != nil {
+					validation.assertOK(t, schedule)
+				}
+			})
+		}
+	}
+}
+
 // Regression test for SCH-057: CreateSchedule and UpdateSchedule must reject malformed
 // interval duration protobufs with InvalidArgument before either the V1 or the CHASM
 // backend is invoked.
@@ -5665,6 +5778,130 @@ func (s *WorkflowHandlerSuite) TestCreateUpdateSchedule_RejectsMalformedInterval
 		s.ErrorAs(err, &invalidArgument)
 		s.Contains(err.Error(), "not a valid duration")
 	})
+}
+
+func (s *WorkflowHandlerSuite) TestScheduleValidation() {
+	config := s.newConfig()
+	config.EnableSchedules = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
+	ctx := context.Background()
+	create := func(schedule *schedulepb.Schedule, initialPatch *schedulepb.SchedulePatch) error {
+		_, err := wh.CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+			Namespace:    s.testNamespace.String(),
+			ScheduleId:   "test-schedule",
+			RequestId:    uuid.NewString(),
+			Schedule:     schedule,
+			InitialPatch: initialPatch,
+		})
+		return err
+	}
+	update := func(schedule *schedulepb.Schedule) error {
+		_, err := wh.UpdateSchedule(ctx, &workflowservice.UpdateScheduleRequest{
+			Namespace:  s.testNamespace.String(),
+			ScheduleId: "test-schedule",
+			RequestId:  uuid.NewString(),
+			Schedule:   schedule,
+		})
+		return err
+	}
+	assertInvalidArgument := func(err error, want string) {
+		s.T().Helper()
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+		s.ErrorContains(err, want)
+	}
+
+	invalidPolicy := enumspb.ScheduleOverlapPolicy(99)
+	malformedTimestamp := func() *schedulepb.Schedule {
+		return &schedulepb.Schedule{Spec: &schedulepb.ScheduleSpec{
+			StartTime: &timestamppb.Timestamp{Nanos: 1_000_000_000},
+			EndTime:   &timestamppb.Timestamp{Seconds: 3600, Nanos: 1_000_000_000},
+		}}
+	}
+	negativeRemainingActions := func() *schedulepb.Schedule {
+		return &schedulepb.Schedule{State: &schedulepb.ScheduleState{RemainingActions: -1}}
+	}
+	invalidSchedulePolicy := func() *schedulepb.Schedule {
+		return &schedulepb.Schedule{Policies: &schedulepb.SchedulePolicies{OverlapPolicy: invalidPolicy}}
+	}
+	invalidBackfillPolicy := func() *schedulepb.SchedulePatch {
+		return &schedulepb.SchedulePatch{BackfillRequest: []*schedulepb.BackfillRequest{{
+			OverlapPolicy: invalidPolicy,
+		}}}
+	}
+
+	// No backend call is expected: every case is rejected before either schedule backend is selected.
+	for _, tc := range []struct {
+		name      string
+		errString string
+		invoke    func() error
+	}{
+		{
+			name:      "CreateSchedule timestamp",
+			errString: "start time is not a valid timestamp",
+			invoke:    func() error { return create(malformedTimestamp(), nil) },
+		},
+		{
+			name:      "UpdateSchedule timestamp",
+			errString: "start time is not a valid timestamp",
+			invoke:    func() error { return update(malformedTimestamp()) },
+		},
+		{
+			name:      "CreateSchedule remaining actions",
+			errString: "remaining actions cannot be negative",
+			invoke:    func() error { return create(negativeRemainingActions(), nil) },
+		},
+		{
+			name:      "UpdateSchedule remaining actions",
+			errString: "remaining actions cannot be negative",
+			invoke:    func() error { return update(negativeRemainingActions()) },
+		},
+		{
+			name:      "CreateSchedule schedule policy",
+			errString: "unsupported overlap policy",
+			invoke:    func() error { return create(invalidSchedulePolicy(), nil) },
+		},
+		{
+			name:      "CreateSchedule initial patch",
+			errString: "unsupported overlap policy",
+			invoke:    func() error { return create(&schedulepb.Schedule{}, invalidBackfillPolicy()) },
+		},
+		{
+			name:      "UpdateSchedule policy",
+			errString: "unsupported overlap policy",
+			invoke:    func() error { return update(invalidSchedulePolicy()) },
+		},
+		{
+			name:      "PatchSchedule trigger",
+			errString: "unsupported overlap policy",
+			invoke: func() error {
+				_, err := wh.PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+					Namespace:  s.testNamespace.String(),
+					ScheduleId: "test-schedule",
+					Patch: &schedulepb.SchedulePatch{TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{
+						OverlapPolicy: invalidPolicy,
+					}},
+				})
+				return err
+			},
+		},
+		{
+			name:      "PatchSchedule backfill",
+			errString: "unsupported overlap policy",
+			invoke: func() error {
+				_, err := wh.PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+					Namespace:  s.testNamespace.String(),
+					ScheduleId: "test-schedule",
+					Patch:      invalidBackfillPolicy(),
+				})
+				return err
+			},
+		},
+	} {
+		s.Run(tc.name, func() {
+			assertInvalidArgument(tc.invoke(), tc.errString)
+		})
+	}
 }
 
 func (s *WorkflowHandlerSuite) TestUpdateSchedule_ValidationAndErrors() {
