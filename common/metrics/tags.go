@@ -342,10 +342,27 @@ const (
 	PollerScaleReasonTaskQueueRateLimited ReasonString = "task_queue_rate_limited"
 )
 
+const (
+	PollerScaleSignalBacklog = "backlog"
+	PollerScaleSignalRatio   = "ratio"
+
+	PollerScaleComparisonBoth    = "both"
+	PollerScaleComparisonNewOnly = "new_only"
+	PollerScaleComparisonOldOnly = "old_only"
+)
+
 // PollerScaleDecisionTag records the direction of a poller scaling decision (scale up, scale
 // down, or hold). Pair it with ReasonTag for the cause. See metrics.PollerScaleDecisionCounter.
 func PollerScaleDecisionTag(decision string) Tag {
 	return Tag{Key: pollerScaleDecisionTag, Value: decision}
+}
+
+func PollerScaleSignalTag(signal string) Tag {
+	return Tag{Key: "signal", Value: signal}
+}
+
+func PollerScaleComparisonResultTag(result string) Tag {
+	return Tag{Key: "result", Value: result}
 }
 
 func MatchingTaskPriorityTag(value int32) Tag {
