@@ -1059,9 +1059,7 @@ func (m *workflowTaskStateMachine) failWorkflowTask(
 		newAttemptsSinceLastSuccess = m.ms.executionInfo.WorkflowTaskAttemptsSinceLastSuccess + 1
 		// Also increment Attempt for transient workflow task tracking
 		newAttempt = m.ms.executionInfo.WorkflowTaskAttempt + 1
-		if m.ms.config.EnableWorkflowTaskStampIncrementOnFailure() {
-			m.ms.executionInfo.WorkflowTaskStamp += 1
-		}
+		m.ms.executionInfo.WorkflowTaskStamp += 1
 	}
 
 	failWorkflowTaskInfo := &historyi.WorkflowTaskInfo{
