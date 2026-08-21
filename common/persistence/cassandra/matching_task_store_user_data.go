@@ -48,11 +48,11 @@ func (d *userDataStore) GetTaskQueueUserData(
 	query := d.Session.Query(templateGetTaskQueueUserDataQuery,
 		request.NamespaceID,
 		request.TaskQueue,
-	).WithContext(ctx)
+	)
 	var version int64
 	var userDataBytes []byte
 	var encoding string
-	if err := query.Scan(&userDataBytes, &encoding, &version); err != nil {
+	if err := query.Scan(ctx, &userDataBytes, &encoding, &version); err != nil {
 		return nil, gocql.ConvertError("GetTaskQueueData", err)
 	}
 
@@ -66,7 +66,7 @@ func (d *userDataStore) UpdateTaskQueueUserData(
 	ctx context.Context,
 	request *p.InternalUpdateTaskQueueUserDataRequest,
 ) error {
-	batch := d.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
+	batch := d.Session.NewBatch(gocql.LoggedBatch)
 
 	for taskQueue, update := range request.Updates {
 		if update.Version == 0 {
@@ -95,7 +95,7 @@ func (d *userDataStore) UpdateTaskQueueUserData(
 	}
 
 	previous := make(map[string]any)
-	applied, iter, err := d.Session.MapExecuteBatchCAS(batch, previous)
+	applied, iter, err := batch.MapExecCAS(ctx, previous)
 	for _, update := range request.Updates {
 		if update.Applied != nil {
 			*update.Applied = applied
@@ -134,8 +134,8 @@ func (d *userDataStore) UpdateTaskQueueUserData(
 }
 
 func (d *userDataStore) ListTaskQueueUserDataEntries(ctx context.Context, request *p.ListTaskQueueUserDataEntriesRequest) (*p.InternalListTaskQueueUserDataEntriesResponse, error) {
-	query := d.Session.Query(templateListTaskQueueUserDataQuery, request.NamespaceID).WithContext(ctx)
-	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
+	query := d.Session.Query(templateListTaskQueueUserDataQuery, request.NamespaceID)
+	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter(ctx)
 
 	response := &p.InternalListTaskQueueUserDataEntriesResponse{}
 	row := make(map[string]any)
@@ -172,8 +172,8 @@ func (d *userDataStore) ListTaskQueueUserDataEntries(ctx context.Context, reques
 }
 
 func (d *userDataStore) GetTaskQueuesByBuildId(ctx context.Context, request *p.GetTaskQueuesByBuildIdRequest) ([]string, error) {
-	query := d.Session.Query(templateListTaskQueueNamesByBuildIdQuery, request.NamespaceID, request.BuildID).WithContext(ctx)
-	iter := query.PageSize(listTaskQueueNamesByBuildIdPageSize).Iter()
+	query := d.Session.Query(templateListTaskQueueNamesByBuildIdQuery, request.NamespaceID, request.BuildID)
+	iter := query.PageSize(listTaskQueueNamesByBuildIdPageSize).Iter(ctx)
 
 	var taskQueues []string
 	row := make(map[string]any)
@@ -207,7 +207,7 @@ func (d *userDataStore) GetTaskQueuesByBuildId(ctx context.Context, request *p.G
 
 func (d *userDataStore) CountTaskQueuesByBuildId(ctx context.Context, request *p.CountTaskQueuesByBuildIdRequest) (int, error) {
 	var count int
-	query := d.Session.Query(templateCountTaskQueueByBuildIdQuery, request.NamespaceID, request.BuildID).WithContext(ctx)
-	err := query.Scan(&count)
+	query := d.Session.Query(templateCountTaskQueueByBuildIdQuery, request.NamespaceID, request.BuildID)
+	err := query.Scan(ctx, &count)
 	return count, err
 }

@@ -69,11 +69,11 @@ func (d *ShardStore) GetOrCreateShard(
 		rowTypeShardRunID,
 		defaultVisibilityTimestamp,
 		rowTypeShardTaskID,
-	).WithContext(ctx)
+	)
 
 	var data []byte
 	var encoding string
-	err := query.Scan(&data, &encoding)
+	err := query.Scan(ctx, &data, &encoding)
 	if err == nil {
 		return &p.InternalGetOrCreateShardResponse{
 			ShardInfo: p.NewDataBlob(data, encoding),
@@ -99,10 +99,10 @@ func (d *ShardStore) GetOrCreateShard(
 		shardInfo.Data,
 		shardInfo.EncodingType.String(),
 		rangeID,
-	).WithContext(ctx)
+	)
 
 	previous := make(map[string]any)
-	applied, err := query.MapScanCAS(previous)
+	applied, err := query.MapScanCAS(ctx, previous)
 	if err != nil {
 		return nil, gocql.ConvertError("GetOrCreateShard", err)
 	}
@@ -132,10 +132,10 @@ func (d *ShardStore) UpdateShard(
 		defaultVisibilityTimestamp,
 		rowTypeShardTaskID,
 		request.PreviousRangeID,
-	).WithContext(ctx)
+	)
 
 	previous := make(map[string]any)
-	applied, err := query.MapScanCAS(previous)
+	applied, err := query.MapScanCAS(ctx, previous)
 	if err != nil {
 		return gocql.ConvertError("UpdateShard", err)
 	}
