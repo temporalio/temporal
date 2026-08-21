@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 
 	otellog "go.opentelemetry.io/otel/log"
@@ -48,8 +49,8 @@ func wideEventAttributes(record otellog.Record) map[string]otellog.Value {
 func parentChildOutcomes(capture *parentChildEventCapture) []string {
 	var outcomes []string
 	for _, record := range parentChildRecords(capture) {
-		if outcome, ok := wideEventAttributes(record)["outcome"]; ok {
-			outcomes = append(outcomes, outcome.AsString())
+		if outcome, ok := wideEventDetails(record)["outcome"].(string); ok {
+			outcomes = append(outcomes, outcome)
 		}
 	}
 	return outcomes
@@ -58,9 +59,22 @@ func parentChildOutcomes(capture *parentChildEventCapture) []string {
 func parentChildRecords(capture *parentChildEventCapture) []otellog.Record {
 	var records []otellog.Record
 	for _, record := range capture.snapshot() {
-		if record.EventName() == wideevents.ParentChildLifecycleEventName {
+		if record.EventName() == wideevents.ReplicationLifecycleEventName &&
+			wideEventDetails(record)["event_type"] == wideevents.ParentChildLifecycleEventType {
 			records = append(records, record)
 		}
 	}
 	return records
+}
+
+func wideEventDetails(record otellog.Record) map[string]any {
+	attribute, ok := wideEventAttributes(record)["details"]
+	if !ok {
+		return nil
+	}
+	var details map[string]any
+	if err := json.Unmarshal([]byte(attribute.AsString()), &details); err != nil {
+		return nil
+	}
+	return details
 }

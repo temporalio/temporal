@@ -92,6 +92,7 @@ type (
 		mockClusterMetadata         *cluster.MockMetadata
 		mockVisibilityManager       *manager.MockVisibilityManager
 		mockWorkflowStateReplicator *ndc.MockWorkflowStateReplicator
+		parentChildEventCapture     *parentChildEventCapture
 
 		workflowCache    wcache.Cache
 		historyEngine    *historyEngineImpl
@@ -145,6 +146,7 @@ func (s *engine2Suite) SetupTest() {
 	s.mockMemoryScheduledQueue.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 
 	s.config = tests.NewDynamicConfig()
+	s.parentChildEventCapture = &parentChildEventCapture{}
 	mockShard := shard.NewTestContext(
 		s.controller,
 		&persistencespb.ShardInfo{
@@ -152,6 +154,7 @@ func (s *engine2Suite) SetupTest() {
 			RangeId: 1,
 		},
 		s.config,
+		s.parentChildEventCapture,
 	)
 	reg := hsm.NewRegistry()
 	err := workflow.RegisterStateMachine(reg)
@@ -2688,8 +2691,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParent()
 	// Inline resend: the RPC pulls and re-verifies before returning.
 	s.config.EnableAsyncParentWorkflowResend = func() bool { return false }
 	s.config.EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
-	capture := &parentChildEventCapture{}
-	s.mockShard.SetEventLoggerForTesting(capture)
+	capture := s.parentChildEventCapture
 
 	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 		NamespaceId: tests.ParentNamespaceID.String(),
@@ -2779,19 +2781,22 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParent()
 	records := parentChildRecords(capture)
 	s.Require().Len(records, 2)
 	attributes := wideEventAttributes(records[0])
-	s.Equal(string(wideevents.ParentChildPhaseParentResend), attributes["phase"].AsString())
-	s.Equal(cluster.TestAlternativeClusterName, attributes["local_cluster"].AsString())
-	s.Equal(int64(1), attributes["local_shard"].AsInt64())
-	s.Equal(request.GetParentExecution().GetWorkflowId(), attributes["parent_workflow_id"].AsString())
-	s.Equal(request.GetChildExecution().GetWorkflowId(), attributes["child_workflow_id"].AsString())
-	s.Equal(request.GetParentInitiatedId(), attributes["parent_initiated_id"].AsInt64())
-	s.Equal(request.GetParentInitiatedVersion(), attributes["parent_initiated_version"].AsInt64())
-	s.Require().JSONEq(fmt.Sprintf(
-		`{"initial_error_type":%q,"source_cluster":%q,"stage":"sync_workflow_state"}`,
-		util.ErrorType(&serviceerror.NotFound{}),
-		cluster.TestCurrentClusterName,
-	), attributes["details"].AsString())
-	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE.String(), wideEventAttributes(records[1])["parent_workflow_state"].AsString())
+	details := wideEventDetails(records[0])
+	s.Equal(string(wideevents.ReplicationExecuting), attributes["phase"].AsString())
+	s.Equal(wideevents.ParentChildPhaseParentResend, details["phase"])
+	s.Equal(cluster.TestAlternativeClusterName, details["local_cluster"])
+	s.Equal(int64(1), attributes["shard"].AsInt64())
+	s.Equal(request.GetParentExecution().GetWorkflowId(), attributes["workflow_id"].AsString())
+	s.Equal(request.GetParentExecution().GetWorkflowId(), details["parent_workflow_id"])
+	s.Equal(request.GetChildExecution().GetWorkflowId(), details["child_workflow_id"])
+	s.InDelta(float64(request.GetParentInitiatedId()), details["parent_initiated_id"], 0)
+	s.InDelta(float64(request.GetParentInitiatedVersion()), details["parent_initiated_version"], 0)
+	s.Equal(cluster.TestCurrentClusterName, attributes["source_cluster"].AsString())
+	s.Equal(util.ErrorType(&serviceerror.NotFound{}), details["initial_error_type"])
+	s.Equal("sync_workflow_state", details["stage"])
+	s.Equal(string(wideevents.ReplicationApplied), wideEventAttributes(records[1])["phase"].AsString())
+	s.Equal(wideevents.ParentChildOutcomeVerified, wideEventAttributes(records[1])["outcome"].AsString())
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE.String(), wideEventDetails(records[1])["parent_workflow_state"])
 
 	// Source NotFound is a terminal, successful outcome: there is no parent state left to pull.
 	sourceMissingRequest := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
@@ -2826,8 +2831,11 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParent()
 		string(wideevents.ParentChildOutcomeStarted),
 		string(wideevents.ParentChildOutcomeSourceNotFound),
 	}, parentChildOutcomes(capture))
-	sourceNotFoundAttributes := wideEventAttributes(parentChildRecords(capture)[3])
-	s.Equal(util.ErrorType(serviceerror.NewNotFound("")), sourceNotFoundAttributes["error_type"].AsString())
+	sourceNotFoundRecord := parentChildRecords(capture)[3]
+	s.Equal(string(wideevents.ReplicationApplied), wideEventAttributes(sourceNotFoundRecord)["phase"].AsString())
+	s.Equal(wideevents.ParentChildOutcomeVerified, wideEventAttributes(sourceNotFoundRecord)["outcome"].AsString())
+	sourceNotFoundDetails := wideEventDetails(sourceNotFoundRecord)
+	s.Equal(util.ErrorType(serviceerror.NewNotFound("")), sourceNotFoundDetails["error_type"])
 }
 
 // Async resend: the RPC returns the verification error immediately and the pull runs in the
@@ -2835,8 +2843,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParent()
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentAsync() {
 	s.config.EnableAsyncParentWorkflowResend = func() bool { return true }
 	s.config.EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
-	capture := &parentChildEventCapture{}
-	s.mockShard.SetEventLoggerForTesting(capture)
+	capture := s.parentChildEventCapture
 
 	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 		NamespaceId: tests.ParentNamespaceID.String(),
@@ -2891,20 +2898,18 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentAs
 	}, parentChildOutcomes(capture))
 	records := parentChildRecords(capture)
 	attributes := wideEventAttributes(records[2])
-	s.Equal(util.ErrorType(serviceerror.NewUnavailable("source cluster unavailable")), attributes["error_type"].AsString())
-	s.Require().JSONEq(fmt.Sprintf(
-		`{"initial_error_type":%q,"source_cluster":%q,"stage":"sync_workflow_state"}`,
-		util.ErrorType(&serviceerror.NotFound{}),
-		cluster.TestCurrentClusterName,
-	), attributes["details"].AsString())
+	details := wideEventDetails(records[2])
+	s.Equal(util.ErrorType(serviceerror.NewUnavailable("source cluster unavailable")), details["error_type"])
+	s.Equal(util.ErrorType(&serviceerror.NotFound{}), details["initial_error_type"])
+	s.Equal("sync_workflow_state", details["stage"])
+	s.Equal(cluster.TestCurrentClusterName, attributes["source_cluster"].AsString())
 }
 
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentLimited() {
 	s.config.EnableAsyncParentWorkflowResend = func() bool { return true }
 	s.config.ParentWorkflowResendMaxInFlight = func() int { return 0 }
 	s.config.EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
-	capture := &parentChildEventCapture{}
-	s.mockShard.SetEventLoggerForTesting(capture)
+	capture := s.parentChildEventCapture
 
 	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 		NamespaceId: tests.ParentNamespaceID.String(),
@@ -2926,11 +2931,9 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentLi
 	var notFound *serviceerror.NotFound
 	s.Require().ErrorAs(err, &notFound)
 	s.Require().Equal([]string{string(wideevents.ParentChildOutcomeLimited)}, parentChildOutcomes(capture))
-	attributes := wideEventAttributes(parentChildRecords(capture)[0])
-	s.Require().JSONEq(fmt.Sprintf(
-		`{"initial_error_type":%q,"max_in_flight":0}`,
-		util.ErrorType(&serviceerror.NotFound{}),
-	), attributes["details"].AsString())
+	details := wideEventDetails(parentChildRecords(capture)[0])
+	s.Equal(util.ErrorType(&serviceerror.NotFound{}), details["initial_error_type"])
+	s.InDelta(0, details["max_in_flight"], 0)
 }
 
 // TestVerifyChildExecutionCompletionRecorded_ResendParentDeduped asserts that a second attempt for
@@ -2938,8 +2941,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentLi
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentDeduped() {
 	s.config.EnableAsyncParentWorkflowResend = func() bool { return true }
 	s.config.EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
-	capture := &parentChildEventCapture{}
-	s.mockShard.SetEventLoggerForTesting(capture)
+	capture := s.parentChildEventCapture
 
 	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 		NamespaceId: tests.ParentNamespaceID.String(),
@@ -2999,6 +3001,8 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentDe
 		string(wideevents.ParentChildOutcomeStarted),
 		string(wideevents.ParentChildOutcomeDeduplicated),
 	}, parentChildOutcomes(capture))
+	deduplicatedRecord := parentChildRecords(capture)[2]
+	s.Equal(string(wideevents.ReplicationExecuting), wideEventAttributes(deduplicatedRecord)["phase"].AsString())
 
 	close(release)
 	released = true

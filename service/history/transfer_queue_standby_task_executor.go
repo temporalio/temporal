@@ -20,7 +20,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/ndc"
@@ -98,13 +97,13 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 	case *tasks.SignalExecutionTask:
 		err = t.processSignalExecution(ctx, task)
 	case *tasks.StartChildExecutionTask:
-		err = t.processStartChildExecution(ctx, task)
+		err = t.processStartChildExecution(ctx, task, executable.Attempt())
 	case *tasks.ResetWorkflowTask:
 		// no reset needed for standby
 		// TODO: add error logs
 		err = nil
 	case *tasks.CloseExecutionTask:
-		err = t.processCloseExecution(ctx, task)
+		err = t.processCloseExecution(ctx, task, executable.Attempt())
 	case *tasks.DeleteExecutionTask:
 		err = t.processDeleteExecutionTask(ctx, task, false)
 	case *tasks.ChasmTask:
@@ -295,6 +294,7 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 	ctx context.Context,
 	transferTask *tasks.CloseExecutionTask,
+	attempt int,
 ) error {
 	processTaskIfClosed := true
 	actionFn := func(ctx context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, release historyi.ReleaseWorkflowContextFunc) (any, error) {
@@ -345,20 +345,18 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			// no need for mutable state anymore, release workflow lock
 			release(nil)
 
-			emitLifecycle := parentChildLifecycleEnabled(t.shardContext)
-			var lifecyclePayload wideevents.ParentChildLifecyclePayload
-			if emitLifecycle {
-				lifecyclePayload = parentChildPayloadForCloseVerification(
-					transferTask,
-					parentNamespaceID,
-					&commonpb.WorkflowExecution{WorkflowId: parentWorkflowID, RunId: parentRunID},
-					parentInitiatedID,
-					parentInitiatedVersion,
-					resendParent,
-				)
-				lifecyclePayload.ChildWorkflowState = childWorkflowState
-				emitParentChildCloseVerificationStarted(t.shardContext, lifecyclePayload, resendParent)
-			}
+			emitChildCompletionVerificationStarted(
+				t.shardContext,
+				transferTask,
+				parentNamespaceID,
+				parentWorkflowID,
+				parentRunID,
+				parentInitiatedID,
+				parentInitiatedVersion,
+				childWorkflowState,
+				resendParent,
+				attempt,
+			)
 
 			_, err := t.historyRawClient.VerifyChildExecutionCompletionRecorded(ctx, &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 				NamespaceId: parentNamespaceID,
@@ -375,9 +373,19 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 				Clock:                  parentClock,
 				ResendParent:           resendParent,
 			})
-			if emitLifecycle {
-				emitParentChildCloseVerificationResult(t.shardContext, lifecyclePayload, resendParent, err)
-			}
+			emitChildCompletionVerificationResult(
+				t.shardContext,
+				transferTask,
+				parentNamespaceID,
+				parentWorkflowID,
+				parentRunID,
+				parentInitiatedID,
+				parentInitiatedVersion,
+				childWorkflowState,
+				resendParent,
+				attempt,
+				err,
+			)
 			switch err.(type) {
 			case nil, *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
 				// Case 1: Target workflow is in the desired state.
@@ -488,6 +496,7 @@ func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
 func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 	ctx context.Context,
 	transferTask *tasks.StartChildExecutionTask,
+	attempt int,
 ) error {
 	processTaskIfClosed := true
 	actionFn := func(ctx context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, release historyi.ReleaseWorkflowContextFunc) (any, error) {
@@ -548,23 +557,16 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			},
 			Clock: childClock,
 		})
-		if parentChildLifecycleEnabled(t.shardContext) {
-			if outcome, ok := parentChildVerificationOutcome(
-				err,
-				wideevents.ParentChildOutcomeChildNotFound,
-				wideevents.ParentChildOutcomeFirstWorkflowTaskMissing,
-			); ok {
-				payload := parentChildPayloadForStartChildTask(
-					transferTask,
-					childTargetNamespaceID,
-					&commonpb.WorkflowExecution{WorkflowId: childStartedWorkflowID, RunId: childStartedRunID},
-				)
-				payload.ParentWorkflowState = parentWorkflowState
-				payload.Phase = wideevents.ParentChildPhaseVerifyFirstWorkflowTask
-				payload.Outcome = outcome
-				emitParentChildLifecycleEvent(t.shardContext, payload, err)
-			}
-		}
+		emitFirstWorkflowTaskVerificationResult(
+			t.shardContext,
+			transferTask,
+			childTargetNamespaceID,
+			childStartedWorkflowID,
+			childStartedRunID,
+			parentWorkflowState,
+			attempt,
+			err,
+		)
 		switch err.(type) {
 		case nil, *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
 			// Case 1: Target workflow is in the desired state.

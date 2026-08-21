@@ -45,8 +45,9 @@ func NewTestContextWithTimeSource(
 	shardInfo *persistencespb.ShardInfo,
 	config *configs.Config,
 	timeSource clock.TimeSource,
+	eventLogger ...otellog.Logger,
 ) *ContextTest {
-	result := NewTestContext(ctrl, shardInfo, config)
+	result := NewTestContext(ctrl, shardInfo, config, eventLogger...)
 	result.timeSource = timeSource
 	result.taskKeyManager.generator.timeSource = timeSource
 	result.Resource.TimeSource = timeSource
@@ -57,15 +58,21 @@ func NewTestContext(
 	ctrl *gomock.Controller,
 	shardInfo *persistencespb.ShardInfo,
 	config *configs.Config,
+	eventLogger ...otellog.Logger,
 ) *ContextTest {
+	var logger otellog.Logger
+	if len(eventLogger) > 0 {
+		logger = eventLogger[0]
+	}
 	resourceTest := resourcetest.NewTest(ctrl, primitives.HistoryService)
 	eventsCache := events.NewMockCache(ctrl)
 	shard := newTestContext(
 		resourceTest,
 		eventsCache,
 		ContextConfigOverrides{
-			ShardInfo: shardInfo,
-			Config:    config,
+			ShardInfo:   shardInfo,
+			Config:      config,
+			EventLogger: logger,
 		},
 	)
 	return &ContextTest{
@@ -81,6 +88,7 @@ type ContextConfigOverrides struct {
 	Registry         namespace.Registry
 	ClusterMetadata  cluster.Metadata
 	ExecutionManager persistence.ExecutionManager
+	EventLogger      otellog.Logger
 }
 
 type StubContext struct {
@@ -142,6 +150,7 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 		lifecycleCtx:        lifecycleCtx,
 		lifecycleCancel:     lifecycleCancel,
 		queueMetricEmitter:  sync.Once{},
+		eventLogger:         config.EventLogger,
 
 		state:              contextStateAcquired,
 		engineFuture:       future.NewFuture[historyi.Engine](),
@@ -209,11 +218,6 @@ func (s *ContextTest) SetLoggers(l log.Logger) {
 // SetMetricsHandler sets  s.metricsHandler. Only used by tests.
 func (s *ContextTest) SetMetricsHandler(h metrics.Handler) {
 	s.metricsHandler = h
-}
-
-// SetEventLoggerForTesting replaces the wide-event logger used by the shard.
-func (s *ContextTest) SetEventLoggerForTesting(logger otellog.Logger) {
-	s.eventLogger = logger
 }
 
 // SetHistoryClientForTesting sets history client. Only used by tests.

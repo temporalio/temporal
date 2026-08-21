@@ -1,95 +1,113 @@
 package history
 
 import (
-	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/wideevents"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 )
 
-func parentChildPayloadForStartChildTask(
+func emitFirstWorkflowTaskVerificationResult(
+	shardContext historyi.ShardContext,
 	task *tasks.StartChildExecutionTask,
 	childNamespaceID string,
-	childExecution *commonpb.WorkflowExecution,
-) wideevents.ParentChildLifecyclePayload {
-	payload := wideevents.ParentChildLifecyclePayload{
-		ParentNamespaceID:      task.GetNamespaceID(),
-		ParentWorkflowID:       task.GetWorkflowID(),
-		ParentRunID:            task.GetRunID(),
-		ChildNamespaceID:       childNamespaceID,
-		ChildWorkflowID:        childExecution.GetWorkflowId(),
-		ChildRunID:             childExecution.GetRunId(),
-		ParentInitiatedID:      task.InitiatedEventID,
-		ParentInitiatedVersion: task.Version,
-	}
-	populateParentChildTaskInfo(&payload, task)
-	return payload
-}
-
-func parentChildPayloadForCloseTask(
-	task *tasks.CloseExecutionTask,
-	parentNamespaceID string,
-	parentExecution *commonpb.WorkflowExecution,
-	parentInitiatedID int64,
-	parentInitiatedVersion int64,
-) wideevents.ParentChildLifecyclePayload {
-	payload := wideevents.ParentChildLifecyclePayload{
-		ParentNamespaceID:      parentNamespaceID,
-		ParentWorkflowID:       parentExecution.GetWorkflowId(),
-		ParentRunID:            parentExecution.GetRunId(),
-		ChildNamespaceID:       task.GetNamespaceID(),
-		ChildWorkflowID:        task.GetWorkflowID(),
-		ChildRunID:             task.GetRunID(),
-		ParentInitiatedID:      parentInitiatedID,
-		ParentInitiatedVersion: parentInitiatedVersion,
-	}
-	populateParentChildTaskInfo(&payload, task)
-	return payload
-}
-
-func parentChildPayloadForCloseVerification(
-	task *tasks.CloseExecutionTask,
-	parentNamespaceID string,
-	parentExecution *commonpb.WorkflowExecution,
-	parentInitiatedID int64,
-	parentInitiatedVersion int64,
-	resendParent bool,
-) wideevents.ParentChildLifecyclePayload {
-	payload := parentChildPayloadForCloseTask(
-		task,
-		parentNamespaceID,
-		parentExecution,
-		parentInitiatedID,
-		parentInitiatedVersion,
-	)
-	payload.Phase = wideevents.ParentChildPhaseVerifyChildCompletion
-	payload.Details = map[string]any{
-		"resend_parent_requested": resendParent,
-		"verification_scope":      "passive",
-	}
-	return payload
-}
-
-func emitParentChildCloseVerificationStarted(
-	shardContext historyi.ShardContext,
-	payload wideevents.ParentChildLifecyclePayload,
-	resendParent bool,
-) {
-	if !resendParent {
-		return
-	}
-	payload.Outcome = wideevents.ParentChildOutcomeStarted
-	emitParentChildLifecycleEvent(shardContext, payload, nil)
-}
-
-func emitParentChildCloseVerificationResult(
-	shardContext historyi.ShardContext,
-	payload wideevents.ParentChildLifecyclePayload,
-	resendParent bool,
+	childWorkflowID string,
+	childRunID string,
+	parentWorkflowState string,
+	attempt int,
 	err error,
 ) {
+	if !parentChildLifecycleEnabled(shardContext) {
+		return
+	}
+	outcome, emit := parentChildVerificationOutcome(
+		err,
+		wideevents.ParentChildOutcomeChildNotFound,
+		wideevents.ParentChildOutcomeFirstWorkflowTaskMissing,
+	)
+	if !emit {
+		return
+	}
+	payload, details := parentChildEventForStartChildTask(
+		shardContext,
+		task,
+		childNamespaceID,
+		childWorkflowID,
+		childRunID,
+		parentWorkflowState,
+		attempt,
+	)
+	details["phase"] = wideevents.ParentChildPhaseVerifyFirstWorkflowTask
+	details["outcome"] = outcome
+	emitParentChildReplicationEvent(
+		shardContext,
+		payload,
+		wideevents.ReplicationError,
+		wideevents.ReplOperationStandbyVerification,
+		"Standby first workflow task verification failed",
+		err,
+		details,
+	)
+}
+
+func emitChildCompletionVerificationStarted(
+	shardContext historyi.ShardContext,
+	task *tasks.CloseExecutionTask,
+	parentNamespaceID string,
+	parentWorkflowID string,
+	parentRunID string,
+	parentInitiatedID int64,
+	parentInitiatedVersion int64,
+	childWorkflowState string,
+	resendParent bool,
+	attempt int,
+) {
+	if !resendParent || !parentChildLifecycleEnabled(shardContext) {
+		return
+	}
+	payload, details := parentChildEventForCloseTask(
+		shardContext,
+		task,
+		parentNamespaceID,
+		parentWorkflowID,
+		parentRunID,
+		parentInitiatedID,
+		parentInitiatedVersion,
+		childWorkflowState,
+		attempt,
+	)
+	details["phase"] = wideevents.ParentChildPhaseVerifyChildCompletion
+	details["outcome"] = wideevents.ParentChildOutcomeStarted
+	details["resend_parent_requested"] = true
+	details["verification_scope"] = "passive"
+	emitParentChildReplicationEvent(
+		shardContext,
+		payload,
+		wideevents.ReplicationExecuting,
+		wideevents.ReplOperationStandbyVerification,
+		"Standby child completion verification started with parent resend requested",
+		nil,
+		details,
+	)
+}
+
+func emitChildCompletionVerificationResult(
+	shardContext historyi.ShardContext,
+	task *tasks.CloseExecutionTask,
+	parentNamespaceID string,
+	parentWorkflowID string,
+	parentRunID string,
+	parentInitiatedID int64,
+	parentInitiatedVersion int64,
+	childWorkflowState string,
+	resendParent bool,
+	attempt int,
+	err error,
+) {
+	if !parentChildLifecycleEnabled(shardContext) {
+		return
+	}
 	outcome, emit := parentChildVerificationOutcome(
 		err,
 		wideevents.ParentChildOutcomeNotFound,
@@ -107,31 +125,136 @@ func emitParentChildCloseVerificationResult(
 	if !emit {
 		return
 	}
-	payload.Outcome = outcome
-	emitParentChildLifecycleEvent(shardContext, payload, err)
-}
-
-func populateParentChildTaskInfo(
-	payload *wideevents.ParentChildLifecyclePayload,
-	task tasks.Task,
-) {
-	payload.LocalTaskID = task.GetTaskID()
-	payload.LocalTaskType = task.GetType().String()
-	if versionedTask, ok := task.(tasks.HasVersion); ok {
-		payload.LocalTaskVersion = versionedTask.GetVersion()
+	payload, details := parentChildEventForCloseTask(
+		shardContext,
+		task,
+		parentNamespaceID,
+		parentWorkflowID,
+		parentRunID,
+		parentInitiatedID,
+		parentInitiatedVersion,
+		childWorkflowState,
+		attempt,
+	)
+	details["phase"] = wideevents.ParentChildPhaseVerifyChildCompletion
+	details["outcome"] = outcome
+	details["resend_parent_requested"] = resendParent
+	details["verification_scope"] = "passive"
+	replicationPhase := wideevents.ReplicationError
+	if err == nil || outcome == wideevents.ParentChildOutcomeIgnored {
+		replicationPhase = wideevents.ReplicationApplied
 	}
+	emitParentChildReplicationEvent(
+		shardContext,
+		payload,
+		replicationPhase,
+		wideevents.ReplOperationStandbyVerification,
+		"Standby child completion verification completed",
+		err,
+		details,
+	)
 }
 
-func emitParentChildLifecycleEvent(
+func parentChildEventForStartChildTask(
 	shardContext historyi.ShardContext,
-	payload wideevents.ParentChildLifecyclePayload,
+	task *tasks.StartChildExecutionTask,
+	childNamespaceID string,
+	childWorkflowID string,
+	childRunID string,
+	parentWorkflowState string,
+	attempt int,
+) (wideevents.ReplicationLifecyclePayload, map[string]any) {
+	payload, details := parentChildEventForTask(shardContext, task, attempt)
+	details["parent_namespace_id"] = task.GetNamespaceID()
+	details["parent_workflow_id"] = task.GetWorkflowID()
+	details["parent_run_id"] = task.GetRunID()
+	details["parent_workflow_state"] = parentWorkflowState
+	details["child_namespace_id"] = childNamespaceID
+	details["child_workflow_id"] = childWorkflowID
+	details["child_run_id"] = childRunID
+	details["parent_initiated_id"] = task.InitiatedEventID
+	details["parent_initiated_version"] = task.Version
+	return payload, details
+}
+
+func parentChildEventForCloseTask(
+	shardContext historyi.ShardContext,
+	task *tasks.CloseExecutionTask,
+	parentNamespaceID string,
+	parentWorkflowID string,
+	parentRunID string,
+	parentInitiatedID int64,
+	parentInitiatedVersion int64,
+	childWorkflowState string,
+	attempt int,
+) (wideevents.ReplicationLifecyclePayload, map[string]any) {
+	payload, details := parentChildEventForTask(shardContext, task, attempt)
+	payload.ParentWorkflowID = parentWorkflowID
+	payload.ParentRunID = parentRunID
+	payload.ParentInitiatedID = parentInitiatedID
+	details["parent_namespace_id"] = parentNamespaceID
+	details["parent_workflow_id"] = parentWorkflowID
+	details["parent_run_id"] = parentRunID
+	details["child_namespace_id"] = task.GetNamespaceID()
+	details["child_workflow_id"] = task.GetWorkflowID()
+	details["child_run_id"] = task.GetRunID()
+	details["child_workflow_state"] = childWorkflowState
+	details["parent_initiated_id"] = parentInitiatedID
+	details["parent_initiated_version"] = parentInitiatedVersion
+	return payload, details
+}
+
+func parentChildEventForTask(
+	shardContext historyi.ShardContext,
+	task tasks.Task,
+	attempt int,
+) (wideevents.ReplicationLifecyclePayload, map[string]any) {
+	namespaceName := ""
+	if name, err := shardContext.GetNamespaceRegistry().GetNamespaceName(namespace.ID(task.GetNamespaceID())); err == nil {
+		namespaceName = name.String()
+	}
+	details := map[string]any{
+		"event_type":      wideevents.ParentChildLifecycleEventType,
+		"local_cluster":   shardContext.GetClusterMetadata().GetCurrentClusterName(),
+		"local_task_id":   task.GetTaskID(),
+		"local_task_type": task.GetType().String(),
+	}
+	if versionedTask, ok := task.(tasks.HasVersion); ok {
+		details["version"] = versionedTask.GetVersion()
+	}
+	if attempt >= 0 {
+		details["attempt"] = attempt
+	}
+	return wideevents.ReplicationLifecyclePayload{
+		TaskType:    task.GetType().String(),
+		Shard:       shardContext.GetShardID(),
+		Namespace:   namespaceName,
+		NamespaceID: task.GetNamespaceID(),
+		WorkflowID:  task.GetWorkflowID(),
+		RunID:       task.GetRunID(),
+		Attempt:     int32(attempt),
+	}, details
+}
+
+func emitParentChildReplicationEvent(
+	shardContext historyi.ShardContext,
+	payload wideevents.ReplicationLifecyclePayload,
+	phase wideevents.ReplicationPhase,
+	operation string,
+	message string,
 	err error,
+	details map[string]any,
 ) {
-	payload.LocalCluster = shardContext.GetClusterMetadata().GetCurrentClusterName()
-	payload.LocalShard = shardContext.GetShardID()
-	if err != nil {
-		payload.Error = err.Error()
-		payload.ErrorType = util.ErrorType(err)
+	if phase == wideevents.ReplicationError {
+		wideevents.EmitReplicationError(shardContext.GetEventLogger(), payload, operation, message, err, details)
+		return
+	}
+	details["operation"] = operation
+	details["message"] = message
+	payload.Phase = phase
+	payload.Details = details
+	if phase == wideevents.ReplicationApplied {
+		payload.Outcome = wideevents.ParentChildOutcomeVerified
 	}
 	wideevents.Emit(shardContext.GetEventLogger(), payload)
 }
@@ -142,9 +265,9 @@ func parentChildLifecycleEnabled(shardContext historyi.ShardContext) bool {
 
 func parentChildVerificationOutcome(
 	err error,
-	notFoundOutcome wideevents.ParentChildOutcome,
-	notReadyOutcome wideevents.ParentChildOutcome,
-) (wideevents.ParentChildOutcome, bool) {
+	notFoundOutcome string,
+	notReadyOutcome string,
+) (string, bool) {
 	if err == nil {
 		return "", false
 	}
