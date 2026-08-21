@@ -15,6 +15,7 @@ type (
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		TargetClusters      []string
+		IsForceReplication  bool
 	}
 )
 

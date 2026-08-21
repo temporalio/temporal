@@ -918,6 +918,11 @@ func (c *syncVersionedTransitionTaskConverter) convertTaskEquivalents(
 	taskInfo *tasks.SyncVersionedTransitionTask,
 	targetClusterID int32,
 ) (*replicationspb.ReplicationTask, error) {
+	if taskInfo.IsForceReplication {
+		for _, taskEquivalent := range taskInfo.TaskEquivalents {
+			setTaskForceReplication(taskEquivalent)
+		}
+	}
 	if len(taskInfo.TaskEquivalents) == 0 {
 		// no task equivalents, nothing to do
 		c.logger.Info("No task equivalents for sync versioned transition task, dropping the task.",
@@ -958,4 +963,19 @@ func (c *syncVersionedTransitionTaskConverter) convertTaskEquivalents(
 			},
 		},
 	)
+}
+
+func setTaskForceReplication(task tasks.Task) {
+	switch task := task.(type) {
+	case *tasks.HistoryReplicationTask:
+		task.IsForceReplication = true
+	case *tasks.SyncActivityTask:
+		task.IsForceReplication = true
+	case *tasks.SyncHSMTask:
+		task.IsForceReplication = true
+	case *tasks.SyncWorkflowStateTask:
+		task.IsForceReplication = true
+	case *tasks.SyncVersionedTransitionTask:
+		task.IsForceReplication = true
+	}
 }

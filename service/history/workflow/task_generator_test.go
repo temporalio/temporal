@@ -835,18 +835,37 @@ func TestTaskGeneratorImpl_GenerateMigrationTasks(t *testing.T) {
 				require.Equal(t, tc.expectedTaskTypes[0].String(), resultTasks[0].GetType().String())
 				syncVersionTask, ok := resultTasks[0].(*tasks.SyncVersionedTransitionTask)
 				require.True(t, ok)
+				require.True(t, syncVersionTask.IsForceReplication)
 				require.Equal(t, chasm.WorkflowArchetypeID, syncVersionTask.GetArchetypeID())
 				taskEquivalent := syncVersionTask.TaskEquivalents
 				require.Len(t, taskEquivalent, len(tc.expectedTaskEquivalentTypes))
 				for i, equivalent := range taskEquivalent {
 					require.Equal(t, tc.expectedTaskEquivalentTypes[i], equivalent.GetType())
+					requireMigrationTaskIsForceReplication(t, equivalent)
 				}
 			} else {
 				for i, task := range resultTasks {
 					require.Equal(t, tc.expectedTaskTypes[i], task.GetType())
+					requireMigrationTaskIsForceReplication(t, task)
 				}
 			}
 		})
+	}
+}
+
+func requireMigrationTaskIsForceReplication(t *testing.T, task tasks.Task) {
+	t.Helper()
+	switch task := task.(type) {
+	case *tasks.HistoryReplicationTask:
+		require.True(t, task.IsForceReplication)
+	case *tasks.SyncActivityTask:
+		require.True(t, task.IsForceReplication)
+	case *tasks.SyncHSMTask:
+		require.True(t, task.IsForceReplication)
+	case *tasks.SyncWorkflowStateTask:
+		require.True(t, task.IsForceReplication)
+	default:
+		require.Failf(t, "unexpected migration task type", "%T", task)
 	}
 }
 

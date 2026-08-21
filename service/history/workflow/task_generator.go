@@ -839,11 +839,12 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 		taskEquivalents = make([]tasks.Task, 0, len(r.mutableState.GetPendingActivityInfos())+1)
 		taskEquivalents = append(taskEquivalents, &tasks.HistoryReplicationTask{
 			// TaskID, VisibilityTimestamp is set by shard
-			WorkflowKey:    workflowKey,
-			FirstEventID:   executionInfo.LastFirstEventId,
-			NextEventID:    nextEventID,
-			Version:        lastItem.GetVersion(),
-			TargetClusters: targetClusters,
+			WorkflowKey:        workflowKey,
+			FirstEventID:       executionInfo.LastFirstEventId,
+			NextEventID:        nextEventID,
+			Version:            lastItem.GetVersion(),
+			TargetClusters:     targetClusters,
+			IsForceReplication: true,
 		})
 		activityIDs := make(map[int64]struct{}, len(r.mutableState.GetPendingActivityInfos()))
 		for activityID := range r.mutableState.GetPendingActivityInfos() {
@@ -855,11 +856,13 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 			r.mutableState.GetPendingActivityInfos(),
 			activityIDs,
 			targetClusters,
+			true,
 		)...)
 		taskEquivalents = append(taskEquivalents, &tasks.SyncHSMTask{
 			WorkflowKey: workflowKey,
 			// TaskID and VisibilityTimestamp are set by shard
-			TargetClusters: targetClusters,
+			TargetClusters:     targetClusters,
+			IsForceReplication: true,
 		})
 	}
 

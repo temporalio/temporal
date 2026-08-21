@@ -19,6 +19,7 @@ type (
 		Version             int64
 		NewRunID            string
 		TargetClusters      []string
+		IsForceReplication  bool
 
 		// deprecated
 		BranchToken       []byte

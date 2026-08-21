@@ -109,14 +109,15 @@ type (
 		ProcessToolBox
 
 		// immutable data
-		taskID            int64
-		metricsTag        string
-		taskCreationTime  time.Time
-		taskReceivedTime  time.Time
-		sourceClusterName string
-		sourceShardKey    ClusterShardKey
-		taskPriority      enumsspb.TaskPriority
-		replicationTask   *replicationspb.ReplicationTask
+		taskID               int64
+		metricsTag           string
+		taskCreationTime     time.Time
+		taskReceivedTime     time.Time
+		sourceClusterName    string
+		sourceShardKey       ClusterShardKey
+		taskPriority         enumsspb.TaskPriority
+		replicationTask      *replicationspb.ReplicationTask
+		bypassGradualConnect bool
 
 		// mutable data
 		taskState              int32
@@ -777,6 +778,9 @@ func (e *ExecutableTaskImpl) SyncState(
 
 		tasksToAdd := make([]*adminservice.AddTasksRequest_Task, 0, len(taskEquivalents))
 		for _, taskEquivalent := range taskEquivalents {
+			if e.replicationTask.GetRawTaskInfo().GetIsForceReplication() {
+				taskEquivalent.IsForceReplication = true
+			}
 			blob, err := e.Serializer.ReplicationTaskInfoToBlob(taskEquivalent)
 			if err != nil {
 				return false, err
@@ -901,6 +905,9 @@ FilterLoop:
 // admittedByGradualConnect reports whether businessID is admitted by the namespace gradual-connect
 // replication ramp. It fails open when no complete ramp schedule is recorded.
 func (e *ExecutableTaskImpl) admittedByGradualConnect(namespaceEntry *namespace.Namespace, businessID string) bool {
+	if e.bypassGradualConnect {
+		return true
+	}
 	ramp := namespaceEntry.ReplicationRamp(e.ClusterMetadata.GetCurrentClusterName())
 	if ramp == nil || ramp.GetStartTime() == nil || ramp.GetDuration() == nil {
 		return true

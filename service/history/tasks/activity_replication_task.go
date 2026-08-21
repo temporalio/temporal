@@ -17,6 +17,7 @@ type (
 		Version             int64
 		ScheduledEventID    int64
 		TargetClusters      []string
+		IsForceReplication  bool
 	}
 )
 

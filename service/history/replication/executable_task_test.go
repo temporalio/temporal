@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -553,6 +554,7 @@ func (s *executableTaskSuite) TestResend_Error() {
 }
 
 func (s *executableTaskSuite) TestResend_TransitionHistoryDisabled() {
+	s.task.replicationTask.RawTaskInfo.IsForceReplication = true
 	syncStateErr := &serviceerrors.SyncState{
 		NamespaceId: uuid.NewString(),
 		WorkflowId:  uuid.NewString(),
@@ -607,6 +609,9 @@ func (s *executableTaskSuite) TestResend_TransitionHistoryDisabled() {
 			s.Len(request.Tasks, len(s.task.replicationTask.GetRawTaskInfo().TaskEquivalents))
 			for _, task := range request.Tasks {
 				s.Equal(tasks.CategoryIDReplication, int(task.CategoryId))
+				taskInfo, err := s.serializer.ReplicationTaskInfoFromBlob(task.Blob)
+				s.NoError(err)
+				s.True(taskInfo.GetIsForceReplication())
 			}
 			return nil, nil
 		},
@@ -1161,9 +1166,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_RampComplete_A
 	}
 }
 
-// TestGetNamespaceInfo_GradualConnect_Monotonicity checks that admission only grows over time: a
-// workflow ID admitted at one tick is never shed later. DELETE/VERIFY task safety depends on this.
-func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_Monotonicity() {
+func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_AdmissionGrowsAsClockMovesForward() {
 	sampleInterval := time.Minute
 	connectTime := s.timeSource.Now()
 	namespaceEntry, namespaceID := s.newGradualConnectNamespace(&persistencespb.NamespaceReplicationRamp{
@@ -1196,6 +1199,34 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_Monotonicity()
 	for _, wfID := range workflowIDs {
 		s.True(admitted[wfID], "workflow %s must be admitted by the time the ramp reaches 100%%", wfID)
 	}
+}
+
+func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_ClockRegressionCanShedOrdinaryTask() {
+	connectTime := s.timeSource.Now()
+	namespaceEntry, namespaceID := s.newGradualConnectNamespace(&persistencespb.NamespaceReplicationRamp{
+		StartTime:         timestamppb.New(connectTime),
+		Duration:          durationpb.New(10 * time.Minute),
+		InitialPercentage: 0,
+	})
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
+
+	var businessID string
+	for {
+		businessID = uuid.NewString()
+		if dynamicconfig.RolloutAccepts([]byte(businessID), 50) && !dynamicconfig.RolloutAccepts([]byte(businessID), 10) {
+			break
+		}
+	}
+
+	s.timeSource.Update(connectTime.Add(5 * time.Minute))
+	_, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, businessID)
+	s.NoError(err)
+	s.True(toProcess)
+
+	s.timeSource.Update(connectTime.Add(time.Minute))
+	_, toProcess, err = s.task.GetNamespaceInfo(context.Background(), namespaceID, businessID)
+	s.NoError(err)
+	s.False(toProcess, "ordinary tasks may be shed after clock regression and are repaired by force replication")
 }
 
 func (s *executableTaskSuite) TestMarkPoisonPill() {

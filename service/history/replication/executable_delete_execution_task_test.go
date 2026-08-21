@@ -23,6 +23,8 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -152,6 +154,13 @@ func (s *executableDeleteExecutionTaskSuite) namespaceEntry(activeCluster string
 			Clusters: []string{
 				cluster.TestCurrentClusterName,
 				cluster.TestAlternativeClusterName,
+			},
+			ClusterReplicationRamps: map[string]*persistencespb.NamespaceReplicationRamp{
+				cluster.TestCurrentClusterName: {
+					StartTime:         timestamppb.Now(),
+					Duration:          durationpb.New(time.Hour),
+					InitialPercentage: 0,
+				},
 			},
 		},
 		FailoverVersion: cluster.TestCurrentClusterInitialFailoverVersion,
