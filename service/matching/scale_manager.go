@@ -55,7 +55,9 @@ type scaleManager struct {
 	nextShadowLog    time.Time
 	prevShadowTarget int32
 
-	currentTarget atomic.Int32
+	// store separately from scaleState to avoid data race
+	currentWrite atomic.Int32
+
 	// batch counts estimated tasks across all partitions in between calls to the scaler
 	batch  atomic.Int64
 	wakeup chan struct{}
@@ -120,7 +122,7 @@ func (sm *scaleManager) Start(scaleState *persistencespb.PartitionScaleState, sc
 }
 
 func (sm *scaleManager) getLatestWritePartitions() int32 {
-	if n := sm.currentTarget.Load(); n > 0 {
+	if n := sm.currentWrite.Load(); n > 0 {
 		return n
 	}
 	return int32(sm.getWritePartitions())
@@ -308,9 +310,9 @@ func (sm *scaleManager) setState(newState *persistencespb.PartitionScaleState, s
 	prevInfo := scaleStateToInfo(sm.scaleState, settings)
 
 	sm.scaleState = newState
-	sm.currentTarget.Store(newState.GetTarget())
 
 	newInfo := scaleStateToInfo(sm.scaleState, settings)
+	sm.currentWrite.Store(newInfo.GetWrite())
 
 	// only push ephemeral data if _info_ changed, not on any state change
 	if !proto.Equal(prevInfo, newInfo) {
