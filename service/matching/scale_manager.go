@@ -32,8 +32,8 @@ import (
 // All scaler/state work is funneled through a single background goroutine. That
 // goroutine owns scaleState/scaleDB/lastDecision and is the only caller of
 // partitionScaler, so the scaler implementation can rely on serial calls and
-// scaleState needs no lock. AddedTasks talks to the worker only via the atomic
-// batch counter and the wakeup channel, so it never blocks.
+// scaleState needs no lock. AddedTasks talks to the worker only via atomics and
+// the wakeup channel, so it never blocks.
 type scaleManager struct {
 	partition              tqid.Partition
 	logger                 log.Logger
@@ -55,6 +55,8 @@ type scaleManager struct {
 	nextShadowLog    time.Time
 	prevShadowTarget int32
 
+	currentTarget atomic.Int32
+	// batch counts estimated tasks across all partitions in between calls to the scaler
 	batch  atomic.Int64
 	wakeup chan struct{}
 }
@@ -117,16 +119,22 @@ func (sm *scaleManager) Start(scaleState *persistencespb.PartitionScaleState, sc
 	sm.background.Go(sm.backgroundWork)
 }
 
-// AddedTasks is called on a batch of tasks added.
+func (sm *scaleManager) getLatestWritePartitions() int32 {
+	if n := sm.currentTarget.Load(); n > 0 {
+		return n
+	}
+	return int32(sm.getWritePartitions())
+}
+
+// AddedTasks records one root sample representing estimated queue-wide task additions.
 // This is called in the task add path, so it shouldn't block.
-func (sm *scaleManager) AddedTasks(numTasks int) {
+func (sm *scaleManager) AddedTasks(estimatedTasksAllPartitions int) {
 	if sm == nil {
 		return
 	}
 
-	// scale target batch size by numTasks (since numTasks is scaled by partitions)
-	batchSize := int64(numTasks) * sm.batchSize
-	if sm.batch.Add(int64(numTasks)) < batchSize {
+	// wait until the batch has accumulated ~batchSize tasks per partition
+	if sm.batch.Add(int64(estimatedTasksAllPartitions)) < sm.batchSize*int64(sm.getLatestWritePartitions()) {
 		return // not enough for a batch yet
 	}
 
@@ -300,6 +308,7 @@ func (sm *scaleManager) setState(newState *persistencespb.PartitionScaleState, s
 	prevInfo := scaleStateToInfo(sm.scaleState, settings)
 
 	sm.scaleState = newState
+	sm.currentTarget.Store(newState.GetTarget())
 
 	newInfo := scaleStateToInfo(sm.scaleState, settings)
 

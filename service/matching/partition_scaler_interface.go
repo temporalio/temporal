@@ -38,7 +38,7 @@ type PartitionScaler interface {
 }
 
 type PartitionScalerInput struct {
-	NumTasks      int // new tasks added since last call
+	NumTasks      int // estimated tasks added since last call
 	CurrentTarget int
 	BacklogCounts []byte
 	PrivateState  *anypb.Any

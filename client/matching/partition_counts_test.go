@@ -15,6 +15,24 @@ import (
 	"google.golang.org/grpc/metadata"
 )
 
+func TestEstimatedTasksAllPartitionsMetadata(t *testing.T) {
+	for _, estimatedTasksAllPartitions := range []int{1, 2, 100, 102} {
+		outgoingCtx := appendEstimatedTasksAllPartitions(context.Background(), estimatedTasksAllPartitions)
+		md, ok := metadata.FromOutgoingContext(outgoingCtx)
+		require.True(t, ok)
+		incomingCtx := metadata.NewIncomingContext(context.Background(), md)
+		require.Equal(t, estimatedTasksAllPartitions, ParseEstimatedTasksAllPartitions(incomingCtx))
+	}
+
+	for _, estimatedTasksAllPartitions := range []int{0, -1} {
+		outgoingCtx := appendEstimatedTasksAllPartitions(context.Background(), estimatedTasksAllPartitions)
+		md, ok := metadata.FromOutgoingContext(outgoingCtx)
+		require.True(t, ok)
+		incomingCtx := metadata.NewIncomingContext(context.Background(), md)
+		require.Zero(t, ParseEstimatedTasksAllPartitions(incomingCtx))
+	}
+}
+
 // setTrailerInOpts finds the grpc.TrailerCallOption in opts and populates it.
 func setTrailerInOpts(opts []grpc.CallOption, pc PartitionCounts) {
 	v, _ := pc.encode(true) // trailer path (server -> client) includes backlog info
