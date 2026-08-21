@@ -52,7 +52,7 @@ func TestDumpDynamicConfigValues(t *testing.T) {
 		params.ErrWriter = &stderr
 	})
 
-	err := app.Run([]string{"tdbg", "dc", "dump", "cvs"})
+	err := app.Run([]string{"tdbg", "dc", "dump"})
 	require.NoError(t, err)
 	require.True(t, adminClient.dumpCalled)
 	require.Len(t, adminClient.dumpOptions, 1)
@@ -70,4 +70,18 @@ func TestDumpDynamicConfigValues(t *testing.T) {
 			"value": true
 		}]
 	}`, string(contents))
+}
+
+func TestDynamicConfigDumpHelp(t *testing.T) {
+	var output bytes.Buffer
+	app := NewCliApp(func(params *Params) {
+		params.Writer = &output
+	})
+
+	err := app.Run([]string{"tdbg", "dc", "dump", "--help"})
+	require.NoError(t, err)
+	require.Contains(t, output.String(), "Dump all configured dynamic config values")
+	require.Contains(t, output.String(), "tdbg dynamic-config dump [command options]")
+	require.Contains(t, output.String(), "tdbg dc dump [command options]")
+	require.NotContains(t, output.String(), "cvs")
 }

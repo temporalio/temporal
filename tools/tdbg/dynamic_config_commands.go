@@ -22,16 +22,11 @@ var dynamicConfigDumpNote = fmt.Sprintf(
 func newDynamicConfigCommands(clientFactory ClientFactory) []*cli.Command {
 	return []*cli.Command{
 		{
-			Name:  "dump",
-			Usage: "Dump dynamic config data",
-			Subcommands: []*cli.Command{
-				{
-					Name:  "cvs",
-					Usage: "Dump all constrained values held by the dynamic config client",
-					Action: func(c *cli.Context) error {
-						return dumpDynamicConfigValues(c, clientFactory)
-					},
-				},
+			Name:      "dump",
+			Usage:     "Dump all configured dynamic config values",
+			UsageText: "tdbg dynamic-config dump [command options]\ntdbg dc dump [command options]",
+			Action: func(c *cli.Context) error {
+				return dumpDynamicConfigValues(c, clientFactory)
 			},
 		},
 	}
