@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"errors"
+	"slices"
 	"strconv"
 
 	"go.opentelemetry.io/otel/trace"
@@ -1034,9 +1035,9 @@ func (c *ContextImpl) mergeUpdateWithNewReplicationTasks(
 			t.NewRunID = newRunID
 			taskEquivalents := t.TaskEquivalents
 			taskEquivalentsUpdated := false
-			for idx := len(taskEquivalents) - 1; idx >= 0; idx-- {
+			for _, taskEquivalent := range slices.Backward(taskEquivalents) {
 				// For state based, we should update a sync versioned transition task and update a history task inside task equivalent.
-				if historyTask, ok := taskEquivalents[idx].(*tasks.HistoryReplicationTask); ok {
+				if historyTask, ok := taskEquivalent.(*tasks.HistoryReplicationTask); ok {
 					historyTask.NewRunBranchToken = newRunBranchToken
 					historyTask.NewRunID = newRunID
 					taskEquivalentsUpdated = true
