@@ -184,7 +184,8 @@ func resendChildAndVerify(
 	}
 	targetClusterInfo := clusterMetadata.GetAllClusterInfo()[currentClusterName]
 
-	activeClusterName := namespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: req.WorkflowExecution.WorkflowId})
+	routingKey := namespace.RoutingKey{ID: req.WorkflowExecution.GetWorkflowId()}
+	activeClusterName := namespaceEntry.ActiveClusterName(routingKey)
 	if activeClusterName == currentClusterName {
 		return errors.New("namespace becomes active when processing task as standby")
 	}
@@ -220,7 +221,8 @@ func resendChildAndVerify(
 	if err != nil {
 		return err
 	}
-	if !namespaceEntry.IsOnCluster(currentClusterName) {
+	if !namespaceEntry.IsOnCluster(currentClusterName) ||
+		namespaceEntry.ActiveClusterName(routingKey) != activeClusterName {
 		return nil
 	}
 
