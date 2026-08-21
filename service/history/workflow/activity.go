@@ -62,7 +62,6 @@ func UpdateActivityInfoForRetries(
 	attempt int32,
 	failure *failurepb.Failure,
 	nextScheduledTime *timestamppb.Timestamp,
-	isActivityRetryStampIncrementEnabled bool,
 ) {
 	previousAttempt := ai.Attempt
 	ai.Attempt = attempt
@@ -84,7 +83,7 @@ func UpdateActivityInfoForRetries(
 	ai.ActivityReset = false
 	ai.ResetHeartbeats = false
 
-	if isActivityRetryStampIncrementEnabled && attempt > previousAttempt {
+	if attempt > previousAttempt {
 		ai.Stamp++
 	}
 }

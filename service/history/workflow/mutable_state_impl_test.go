@@ -3142,7 +3142,6 @@ func (s *mutableStateSuite) TestRetryWorkflowTask_WithNextRetryDelay() {
 }
 func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
-	s.mockConfig.EnableActivityRetryStampIncrement = dynamicconfig.GetBoolPropertyFn(true)
 
 	// scheduling, starting & completing workflow task is omitted here
 
@@ -3211,7 +3210,6 @@ func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
 
 func (s *mutableStateSuite) TestRetryActivity_PausedIncrementsStamp() {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
-	s.mockConfig.EnableActivityRetryStampIncrement = dynamicconfig.GetBoolPropertyFn(true)
 
 	workflowTaskCompletedEventID := int64(4)
 	_, activityInfo, err := s.mutableState.AddActivityTaskScheduledEvent(

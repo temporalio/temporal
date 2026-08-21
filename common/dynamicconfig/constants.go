@@ -220,11 +220,6 @@ in the consistent hash ring used by ringpop. Changing it may cause service disru
 		time.Hour,
 		`Minimum retention duration for local namespaces. This value should only be lowered for testing purposes.`,
 	)
-	EnableActivityRetryStampIncrement = NewGlobalBoolSetting(
-		"system.enableActivityRetryStampIncrement",
-		false,
-		`EnableActivityRetryStampIncrement indicates if activity retry stamp increment is enabled`,
-	)
 	EnableEagerWorkflowStart = NewNamespaceBoolSetting(
 		"system.enableEagerWorkflowStart",
 		true,
@@ -2721,11 +2716,6 @@ the number of children greater than or equal to this threshold`,
 		"history.workflowTaskRetryMaxInterval",
 		time.Minute*10,
 		`WorkflowTaskRetryMaxInterval is the maximum interval added to a workflow task's startToClose timeout for slowing down retry`,
-	)
-	EnableWorkflowTaskStampIncrementOnFailure = NewGlobalBoolSetting(
-		"history.enableWorkflowTaskStampIncrementOnFailure",
-		false,
-		`EnableWorkflowTaskStampIncrementOnFailure controls whether the workflow task stamp is incremented when a workflow task fails and is rescheduled`,
 	)
 	DiscardSpeculativeWorkflowTaskMaximumEventsCount = NewGlobalIntSetting(
 		"history.discardSpeculativeWorkflowTaskMaximumEventsCount",
