@@ -7,6 +7,8 @@ import (
 	"errors"
 	"time"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -34,7 +36,6 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/history/workflow/update"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -522,10 +523,6 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		return nil, err
 	}
 
-	if newBaseBranchToken == nil {
-		newBaseBranchToken = baseBranchToken
-	}
-
 	resetContext := workflow.NewContext(
 		r.shardContext.GetConfig(),
 		definition.NewWorkflowKey(
@@ -696,6 +693,9 @@ func (r *workflowResetterImpl) forkAndGenerateBranchToken(
 		return nil, nil, err
 	}
 
+	if len(resp.BaseBranchToken) == 0 {
+		return resp.NewBranchToken, forkBranchToken, nil
+	}
 	return resp.NewBranchToken, resp.BaseBranchToken, nil
 }
 
@@ -1208,7 +1208,7 @@ func logSkippedOperation(
 		tag.WorkflowID(workflowKey.WorkflowID),
 		tag.WorkflowRunID(workflowKey.RunID),
 		tag.WorkflowEventID(event.GetEventId()),
-		tag.Stringer("wf-history-event-type", event.GetEventType()),
+		tag.NewStringerTag("wf-history-event-type", event.GetEventType()),
 	)
 }
 

@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
@@ -102,10 +101,6 @@ func (r *resetterImpl) resetWorkflow(
 	resetBranchToken, newBaseBranchToken, err := r.getResetBranchToken(ctx, baseBranchToken, baseLastEventID)
 	if err != nil {
 		return nil, err
-	}
-
-	if newBaseBranchToken == nil {
-		newBaseBranchToken = baseBranchToken
 	}
 
 	requestID := uuid.NewString()
@@ -226,5 +221,10 @@ func (r *resetterImpl) getResetBranchToken(
 		return nil, nil, err
 	}
 
+	// An empty resp.BaseBranchToken means the storage layer did not rewrite the
+	// token. So it is still valid.
+	if len(resp.BaseBranchToken) == 0 {
+		return resp.NewBranchToken, baseBranchToken, nil
+	}
 	return resp.NewBranchToken, resp.BaseBranchToken, nil
 }
