@@ -6062,19 +6062,68 @@ func (wh *WorkflowHandler) StopBatchOperation(
 		return nil, errBatchAPINotAllowed
 	}
 
+	// The job ID is a caller-supplied workflow ID and the terminate below is an
+	// in-process call, so it does not go through the authorization check a
+	// TerminateWorkflowExecution API call would. Confirm the target really is a
+	// batcher workflow first, otherwise this API terminates any workflow in the
+	// namespace whose ID the caller can name.
+	execution, err := wh.getBatchJobExecution(ctx, request.GetNamespace(), request.GetJobId())
+	if err != nil {
+		return nil, err
+	}
+
 	terminateReq := &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: request.GetNamespace(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: request.GetJobId(),
-		},
-		Reason:   request.GetReason(),
-		Identity: request.GetIdentity(),
+		// Pinned to the run that was validated, so a run of the same workflow ID
+		// started in between cannot be terminated in its place.
+		WorkflowExecution: execution,
+		Reason:            request.GetReason(),
+		Identity:          request.GetIdentity(),
 	}
-	_, err := wh.TerminateWorkflowExecution(ctx, terminateReq)
+	_, err = wh.TerminateWorkflowExecution(ctx, terminateReq)
 	if err != nil {
 		return nil, err
 	}
 	return &workflowservice.StopBatchOperationResponse{}, nil
+}
+
+// getBatchJobExecution resolves a batch job ID to the workflow execution running
+// that job, verifying that it is in fact a batcher workflow: one started by
+// StartBatchOperation or StartAdminBatchOperation, both of which use a known
+// workflow type and hide the workflow behind a batcher namespace division. A job
+// ID naming any other workflow is rejected, so the batch APIs cannot be used to
+// act on workflows that are not batch jobs.
+func (wh *WorkflowHandler) getBatchJobExecution(
+	ctx context.Context,
+	nsName string,
+	jobID string,
+) (*commonpb.WorkflowExecution, error) {
+	resp, err := wh.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: nsName,
+		Execution: &commonpb.WorkflowExecution{WorkflowId: jobID},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	executionInfo := resp.GetWorkflowExecutionInfo()
+	switch executionInfo.GetType().GetName() {
+	case batcher.BatchWFTypeName, batcher.BatchWFTypeProtobufName:
+	default:
+		return nil, errBatchJobIDNotValid
+	}
+
+	var division string
+	if divisionPayload, ok := executionInfo.GetSearchAttributes().GetIndexedFields()[sadefs.TemporalNamespaceDivision]; ok {
+		if err := payload.Decode(divisionPayload, &division); err != nil {
+			return nil, err
+		}
+	}
+	if division != batcher.NamespaceDivision && division != batcher.AdminNamespaceDivision {
+		return nil, errBatchJobIDNotValid
+	}
+
+	return executionInfo.GetExecution(), nil
 }
 
 func (wh *WorkflowHandler) DescribeBatchOperation(

@@ -3240,30 +3240,154 @@ func (s *WorkflowHandlerSuite) TestStopBatchOperation() {
 	testNamespace := namespace.Name("test-namespace")
 	namespaceID := namespace.ID(uuid.NewString())
 	jobID := uuid.NewString()
+	runID := uuid.NewString()
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
-	s.mockHistoryClient.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(
-			_ context.Context,
-			request *historyservice.TerminateWorkflowExecutionRequest,
-			_ ...grpc.CallOption,
-		) (*historyservice.TerminateWorkflowExecutionResponse, error) {
-			s.Equal(namespaceID.String(), request.NamespaceId)
-			s.Equal(jobID, request.TerminateRequest.WorkflowExecution.GetWorkflowId())
-			s.Equal("", request.TerminateRequest.WorkflowExecution.GetRunId())
-			return &historyservice.TerminateWorkflowExecutionResponse{}, nil
-		},
-	)
-	request := &workflowservice.StopBatchOperationRequest{
-		Namespace: testNamespace.String(),
-		JobId:     jobID,
-		Reason:    "reason",
-	}
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), gomock.Any()).
+		Return(searchattribute.TestNameTypeMap(), nil).AnyTimes()
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil).AnyTimes()
 
-	_, err := wh.StopBatchOperation(context.Background(), request)
-	s.NoError(err)
+	for _, tc := range []struct {
+		name         string
+		workflowType string
+		division     string
+	}{
+		{
+			name:         "protobuf batcher workflow",
+			workflowType: batcher.BatchWFTypeProtobufName,
+			division:     batcher.NamespaceDivision,
+		},
+		{
+			// Batches started before the protobuf workflow type existed are still
+			// running during a rolling upgrade and must remain stoppable.
+			name:         "legacy batcher workflow",
+			workflowType: batcher.BatchWFTypeName,
+			division:     batcher.NamespaceDivision,
+		},
+		{
+			name:         "admin batcher workflow",
+			workflowType: batcher.BatchWFTypeProtobufName,
+			division:     batcher.AdminNamespaceDivision,
+		},
+	} {
+		s.Run(tc.name, func() {
+			s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+				&historyservice.DescribeWorkflowExecutionResponse{
+					WorkflowExecutionInfo: batchJobExecutionInfo(jobID, runID, tc.workflowType, tc.division),
+				}, nil)
+			s.mockHistoryClient.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(
+					_ context.Context,
+					request *historyservice.TerminateWorkflowExecutionRequest,
+					_ ...grpc.CallOption,
+				) (*historyservice.TerminateWorkflowExecutionResponse, error) {
+					s.Equal(namespaceID.String(), request.NamespaceId)
+					s.Equal(jobID, request.TerminateRequest.WorkflowExecution.GetWorkflowId())
+					// Pinned to the run that was validated as a batch job.
+					s.Equal(runID, request.TerminateRequest.WorkflowExecution.GetRunId())
+					return &historyservice.TerminateWorkflowExecutionResponse{}, nil
+				},
+			)
+
+			request := &workflowservice.StopBatchOperationRequest{
+				Namespace: testNamespace.String(),
+				JobId:     jobID,
+				Reason:    "reason",
+			}
+
+			_, err := wh.StopBatchOperation(context.Background(), request)
+			s.NoError(err)
+		})
+	}
+}
+
+// batchJobExecutionInfo builds the execution info DescribeWorkflowExecution
+// returns for a workflow of the given type and namespace division.
+func batchJobExecutionInfo(jobID, runID, workflowType, division string) *workflowpb.WorkflowExecutionInfo {
+	info := &workflowpb.WorkflowExecutionInfo{
+		Execution: &commonpb.WorkflowExecution{WorkflowId: jobID, RunId: runID},
+		Type:      &commonpb.WorkflowType{Name: workflowType},
+		Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	}
+	if division != "" {
+		info.SearchAttributes = &commonpb.SearchAttributes{
+			IndexedFields: map[string]*commonpb.Payload{
+				sadefs.TemporalNamespaceDivision: payload.EncodeString(division),
+			},
+		}
+	}
+	return info
+}
+
+// TestStopBatchOperation_NotBatchJob verifies that a job ID naming a workflow
+// that is not a batcher workflow is rejected without terminating anything. The
+// terminate is an in-process call that skips the authorization check a
+// TerminateWorkflowExecution API call goes through, so without this the batch
+// API would terminate any workflow in the namespace whose ID a caller can name.
+func (s *WorkflowHandlerSuite) TestStopBatchOperation_NotBatchJob() {
+	testNamespace := namespace.Name("test-namespace")
+	namespaceID := namespace.ID(uuid.NewString())
+	jobID := uuid.NewString()
+	runID := uuid.NewString()
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), gomock.Any()).
+		Return(searchattribute.TestNameTypeMap(), nil).AnyTimes()
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil).AnyTimes()
+
+	for _, tc := range []struct {
+		name         string
+		workflowType string
+		division     string
+	}{
+		{
+			// The attack this guards against: a user workflow whose ID is passed
+			// as the job ID.
+			name:         "user workflow",
+			workflowType: "my-user-workflow",
+			division:     "",
+		},
+		{
+			// A batcher workflow type alone is not enough: the type name is
+			// unreserved, so a user could start a workflow using it.
+			name:         "batcher workflow type without the batcher division",
+			workflowType: batcher.BatchWFTypeProtobufName,
+			division:     "",
+		},
+		{
+			name:         "batcher workflow type in another division",
+			workflowType: batcher.BatchWFTypeProtobufName,
+			division:     "TemporalScheduler",
+		},
+		{
+			name:         "batcher division without a batcher workflow type",
+			workflowType: "my-user-workflow",
+			division:     batcher.NamespaceDivision,
+		},
+	} {
+		s.Run(tc.name, func() {
+			// No TerminateWorkflowExecution expectation: the mock controller fails
+			// the test if the handler terminates anything.
+			s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+				&historyservice.DescribeWorkflowExecutionResponse{
+					WorkflowExecutionInfo: batchJobExecutionInfo(jobID, runID, tc.workflowType, tc.division),
+				}, nil)
+
+			request := &workflowservice.StopBatchOperationRequest{
+				Namespace: testNamespace.String(),
+				JobId:     jobID,
+				Reason:    "reason",
+			}
+
+			_, err := wh.StopBatchOperation(context.Background(), request)
+			var invalidArgumentErr *serviceerror.InvalidArgument
+			s.ErrorAs(err, &invalidArgumentErr)
+		})
+	}
 }
 
 func (s *WorkflowHandlerSuite) TestStopBatchOperation_InvalidRequest() {
