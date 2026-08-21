@@ -96,7 +96,10 @@ func ParsePartitionCountsFromIncomingContext(ctx context.Context) (PartitionCoun
 	return parsePartitionCounts(vals[0])
 }
 
-func appendEstimatedTasksAllPartitions(ctx context.Context, estimatedTasksAllPartitions int) context.Context {
+func appendEstimatedTasksAllPartitions(ctx context.Context, estimatedTasksAllPartitions int, isRoot bool) context.Context {
+	if estimatedTasksAllPartitions <= 0 || !isRoot {
+		return ctx
+	}
 	b := make([]byte, 8)
 	binary.LittleEndian.PutUint64(b, uint64(estimatedTasksAllPartitions))
 	return metadata.AppendToOutgoingContext(ctx, estimatedTasksAllPartitionsHeaderName, string(b))

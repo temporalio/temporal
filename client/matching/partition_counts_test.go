@@ -17,7 +17,7 @@ import (
 
 func TestEstimatedTasksAllPartitionsMetadata(t *testing.T) {
 	for _, estimatedTasksAllPartitions := range []int{1, 2, 100, 102} {
-		outgoingCtx := appendEstimatedTasksAllPartitions(context.Background(), estimatedTasksAllPartitions)
+		outgoingCtx := appendEstimatedTasksAllPartitions(context.Background(), estimatedTasksAllPartitions, true)
 		md, ok := metadata.FromOutgoingContext(outgoingCtx)
 		require.True(t, ok)
 		incomingCtx := metadata.NewIncomingContext(context.Background(), md)
@@ -25,9 +25,9 @@ func TestEstimatedTasksAllPartitionsMetadata(t *testing.T) {
 	}
 
 	for _, estimatedTasksAllPartitions := range []int{0, -1} {
-		outgoingCtx := appendEstimatedTasksAllPartitions(context.Background(), estimatedTasksAllPartitions)
+		outgoingCtx := appendEstimatedTasksAllPartitions(context.Background(), estimatedTasksAllPartitions, true)
 		md, ok := metadata.FromOutgoingContext(outgoingCtx)
-		require.True(t, ok)
+		require.False(t, ok)
 		incomingCtx := metadata.NewIncomingContext(context.Background(), md)
 		require.Zero(t, ParseEstimatedTasksAllPartitions(incomingCtx))
 	}
