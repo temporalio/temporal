@@ -176,6 +176,14 @@ func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
 		d.handlePropagationComplete(completion)
 		d.setStateChanged()
 	})
+	tqRegistrationPropCompleteChannel := workflow.GetSignalChannel(ctx, TqRegistrationPropagationCompleteSignal)
+	d.signalHandler.signalSelector.AddReceive(tqRegistrationPropCompleteChannel, func(c workflow.ReceiveChannel, more bool) {
+		d.signalHandler.processingSignals++
+		defer func() { d.signalHandler.processingSignals-- }()
+		c.Receive(ctx, nil)
+		d.handleTqRegistrationPropagationComplete()
+		d.setStateChanged()
+	})
 
 	// Keep waiting for signals, when it's time to CaN the main goroutine will exit.
 	for {
@@ -247,6 +255,18 @@ func (d *WorkflowRunner) handlePropagationComplete(completion *deploymentspb.Pro
 	d.logger.Info("Propagation completed for revision",
 		"revision", revisionNumber,
 		"build_id", buildID)
+}
+
+// handleTqRegistrationPropagationComplete handles the signal from version workflows indicating
+// that a task queue registration propagation has completed.
+func (d *WorkflowRunner) handleTqRegistrationPropagationComplete() {
+	if d.State.PendingTqRegistrationPropagations <= 0 {
+		d.logger.Error("Received TQ registration propagation complete signal, but counter is already zero")
+		return
+	}
+	d.State.PendingTqRegistrationPropagations--
+	d.logger.Info("TQ registration propagation completed",
+		"remaining", d.State.PendingTqRegistrationPropagations)
 }
 
 func (d *WorkflowRunner) updateVersionSummary(summary *deploymentspb.WorkerDeploymentVersionSummary) {
@@ -730,6 +750,15 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		routingConfigToSync = d.GetState().GetRoutingConfig()
 	}
 
+	// Track registration propagation for current/ramping versions so that
+	// RoutingConfigUpdateState reflects the in-flight propagation.
+	trackingRegistrationPropagation := false
+	if d.hasMinVersion(TqRegistrationPropagationTracking) && routingConfigToSync != nil &&
+		isVersionCurrentOrRamping(routingConfigToSync, args.GetVersion().GetBuildId(), args.GetVersion().GetDeploymentName()) {
+		d.State.PendingTqRegistrationPropagations++
+		trackingRegistrationPropagation = true
+	}
+
 	// Register task-queue worker in version workflow.
 	activityCtx := workflow.WithActivityOptions(ctx, defaultActivityOptions)
 	err = workflow.ExecuteActivity(activityCtx, d.a.RegisterWorkerInVersion, &deploymentspb.RegisterWorkerInVersionArgs{
@@ -740,6 +769,9 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		RoutingConfig: routingConfigToSync,
 	}).Get(ctx, nil)
 	if err != nil {
+		if trackingRegistrationPropagation {
+			d.State.PendingTqRegistrationPropagations--
+		}
 		var appError *temporal.ApplicationError
 		if errors.As(err, &appError) {
 			if appError.Type() == errMaxTaskQueuesInVersionType {
@@ -935,6 +967,9 @@ func (d *WorkflowRunner) handleSetRampingVersion(ctx workflow.Context, args *dep
 			pendingRoutingConfig.RevisionNumber++
 			// only setting it in the request if it's async mode
 			routingConfigToSync = pendingRoutingConfig
+			// Reset TQ registration propagation counter since any in-flight registration
+			// propagations are for the old routing config and will be superseded.
+			d.State.PendingTqRegistrationPropagations = 0
 		}
 
 		if newRampingVersion == "" {
@@ -1435,6 +1470,9 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 			pendingRoutingConfig.RevisionNumber++
 			// only setting it in the request if it's async mode
 			routingConfigToSync = pendingRoutingConfig
+			// Reset TQ registration propagation counter since any in-flight registration
+			// propagations are for the old routing config and will be superseded.
+			d.State.PendingTqRegistrationPropagations = 0
 		}
 
 		// Unset ramping if it's being promoted to current
