@@ -2876,7 +2876,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Signal() {
 func TestBuildUnpauseActivityVisibilityQuery(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
+	testCases := []struct {
 		name         string
 		query        string
 		activityType string
@@ -2907,7 +2907,7 @@ func TestBuildUnpauseActivityVisibilityQuery(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
@@ -2929,7 +2929,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_UnpauseActivitiesPreserve
 		BusinessId: uuid.NewString(),
 		RunId:      uuid.NewString(),
 	}
-	tests := []struct {
+	testCases := []struct {
 		name       string
 		request    *workflowservice.StartBatchOperationRequest
 		wantQuery  string
@@ -2967,7 +2967,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_UnpauseActivitiesPreserve
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range testCases {
 		s.Run(tt.name, func() {
 			namespaceID := namespace.ID(uuid.NewString())
 			wh := s.getWorkflowHandler(s.newConfig())
