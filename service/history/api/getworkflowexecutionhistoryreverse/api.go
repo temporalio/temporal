@@ -103,6 +103,23 @@ func Invoke(
 		}
 
 		execution.RunId = continuationToken.GetRunId()
+
+		var namespaceName namespace.Name
+		if entry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID); err == nil {
+			namespaceName = entry.Name()
+		}
+		if err = api.ValidateBranchTokenForExecution(
+			ctx,
+			shardContext,
+			workflowConsistencyChecker,
+			eventNotifier,
+			namespaceName,
+			namespaceID,
+			execution,
+			continuationToken.BranchToken,
+		); err != nil {
+			return nil, err
+		}
 	}
 
 	// TODO below is a temporal solution to guard against invalid event batch
