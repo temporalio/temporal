@@ -6,7 +6,8 @@ import (
 	"fmt"
 	"maps"
 	"os"
-	"sync/atomic"
+	"slices"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -970,6 +971,42 @@ type SpanExporterInputs struct {
 	Config     *config.Config `optional:"true"`
 }
 
+type otelLoggerErrorHandler struct {
+	mu            sync.Mutex
+	registrations []*log.Logger
+}
+
+func (h *otelLoggerErrorHandler) Handle(err error) {
+	h.mu.Lock()
+	var logger log.Logger
+	if len(h.registrations) != 0 {
+		logger = *h.registrations[len(h.registrations)-1]
+	}
+	h.mu.Unlock()
+	if logger != nil {
+		logger.Warn("OTEL error", tag.Error(err), tag.ServiceErrorType(err))
+	}
+}
+
+func (h *otelLoggerErrorHandler) add(registration *log.Logger) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.registrations = append(h.registrations, registration)
+}
+
+func (h *otelLoggerErrorHandler) remove(registration *log.Logger) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	// The lifecycle hook keeps the registration alive, so drop the logger reference explicitly.
+	*registration = nil
+	if i := slices.Index(h.registrations, registration); i >= 0 {
+		h.registrations = slices.Delete(h.registrations, i, i+1)
+	}
+}
+
+// OTEL exposes one process-global error handler, but multiple Temporal servers can share a process.
+var globalOTELLoggerErrorHandler otelLoggerErrorHandler
+
 // TraceExportModule holds process-global telemetry fx state defining the set of
 // OTEL trace/span exporters used by tracing instrumentation. The following
 // types can be overriden/augmented with fx.Replace/fx.Decorate:
@@ -977,13 +1014,6 @@ type SpanExporterInputs struct {
 // - []go.opentelemetry.io/otel/sdk/trace.SpanExporter
 var TraceExportModule = fx.Options(
 	fx.Provide(func(inputs SpanExporterInputs) ([]otelsdktrace.SpanExporter, error) {
-		var tracingReady atomic.Bool
-		otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
-			if tracingReady.Load() { // ignore errors during startup
-				inputs.Logger.Warn("OTEL error", tag.Error(err), tag.ServiceErrorType(err))
-			}
-		}))
-
 		// (1) Exporters from config.
 		exportersByType := map[telemetry.SpanExporterType]otelsdktrace.SpanExporter{}
 		if inputs.Config != nil {
@@ -1007,15 +1037,27 @@ var TraceExportModule = fx.Options(
 		maps.Copy(exportersByType, exportersByTypeFromEnv) // env overrides config
 		maps.Copy(exportersByType, customExportersByType)  // custom overrides all
 		exporters := expmaps.Values(exportersByType)
+		registration := new(log.Logger)
+		*registration = inputs.Logger
+		startExporters := startAll(exporters)
+		shutdownExporters := shutdownAll(exporters)
 
 		// Configure exporters' lifecycle hooks.
 		inputs.Lifecycyle.Append(fx.Hook{
 			OnStart: func(ctx context.Context) error {
-				err = startAll(exporters)(ctx)
-				tracingReady.Store(true)
-				return err
+				if err := startExporters(ctx); err != nil {
+					globalOTELLoggerErrorHandler.remove(registration)
+					return err
+				}
+				// Ignore errors during startup by registering only once the exporters are running.
+				globalOTELLoggerErrorHandler.add(registration)
+				otel.SetErrorHandler(&globalOTELLoggerErrorHandler)
+				return nil
 			},
-			OnStop: shutdownAll(exporters),
+			OnStop: func(ctx context.Context) error {
+				globalOTELLoggerErrorHandler.remove(registration)
+				return shutdownExporters(ctx)
+			},
 		})
 		return exporters, nil
 	}),
@@ -1086,10 +1128,6 @@ var ServiceTracingModule = fx.Options(
 		tp := otelsdktrace.NewTracerProvider(opts...)
 		lc.Append(fx.Hook{
 			OnStop: func(ctx context.Context) error {
-				otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
-					// ignore errors during shutdown
-				}))
-
 				shutdownCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 				defer cancel()
 
