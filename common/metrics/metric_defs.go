@@ -1061,9 +1061,13 @@ var (
 		"persisted_mutable_state_size",
 		WithDescription("Size of the persisted Workflow Execution's state in DB, emitted each time a workflow execution is updated."),
 	)
-	ExecutionInfoSize                    = NewBytesHistogramDef("execution_info_size")
-	ExecutionStateSize                   = NewBytesHistogramDef("execution_state_size")
-	ActivityInfoSize                     = NewBytesHistogramDef("activity_info_size")
+	ExecutionInfoSize        = NewBytesHistogramDef("execution_info_size")
+	ExecutionStateSize       = NewBytesHistogramDef("execution_state_size")
+	ActivityInfoSize         = NewBytesHistogramDef("activity_info_size")
+	ActivityFailureTotalSize = NewBytesHistogramDef(
+		"activity_failure_total_size",
+		WithDescription("Total size of the last failures retained across a Workflow Execution's pending activities, emitted each time an activity failure is recorded."),
+	)
 	TimerInfoSize                        = NewBytesHistogramDef("timer_info_size")
 	ChildInfoSize                        = NewBytesHistogramDef("child_info_size")
 	RequestCancelInfoSize                = NewBytesHistogramDef("request_cancel_info_size")

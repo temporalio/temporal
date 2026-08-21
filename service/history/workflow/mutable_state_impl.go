@@ -86,6 +86,9 @@ const (
 	mutableStateInvalidHistoryActionMsgTemplate = mutableStateInvalidHistoryActionMsg + ": %v, %v"
 
 	int64SizeBytes = 8
+
+	// Retained size for one activity failure once the limit MutableStateActivityFailureTotalSizeLimitError is exceeded.
+	minRetainedActivityFailureSize = 128
 )
 
 // Scheduled tasks with timestamp after this will not be created.
@@ -166,7 +169,9 @@ type (
 		// Running approximate total size of mutable state fields (except buffered events) when written to DB in bytes.
 		// Buffered events are added to this value when calling GetApproximatePersistedSize.
 		approximateSize int
-		chasmNodeSizes  map[string]int // chasm node path -> key + node size in bytes
+		// Running total of RetryLastFailure.Size() over pendingActivityInfoIDs.
+		activityFailureSize int
+		chasmNodeSizes      map[string]int // chasm node path -> key + node size in bytes
 		// Total number of tomestones tracked in mutable state
 		totalTombstones int
 		// Buffer events from DB
@@ -347,6 +352,7 @@ func NewMutableState(
 		chasmTree: &noopChasmTree{},
 
 		approximateSize:              0,
+		activityFailureSize:          0,
 		chasmNodeSizes:               make(map[string]int),
 		totalTombstones:              0,
 		currentVersion:               namespaceEntry.FailoverVersion(workflowID),
@@ -471,6 +477,7 @@ func NewMutableStateFromDB(
 	for _, activityInfo := range dbRecord.ActivityInfos {
 		mutableState.pendingActivityIDToEventID[activityInfo.ActivityId] = activityInfo.ScheduledEventId
 		mutableState.approximateSize += activityInfo.Size()
+		mutableState.activityFailureSize += activityInfo.GetRetryLastFailure().Size()
 		if (activityInfo.TimerTaskStatus & TimerTaskStatusCreatedHeartbeat) > 0 {
 			// Sets last pending timer heartbeat to year 2000.
 			// This ensures at least one heartbeat task will be processed for the pending activity.
@@ -2165,6 +2172,7 @@ func (ms *MutableStateImpl) UpdateActivityInfo(
 	ai.LastHeartbeatDetails = incomingActivityInfo.GetDetails()
 	ai.Attempt = incomingActivityInfo.GetAttempt()
 	ai.RetryLastWorkerIdentity = incomingActivityInfo.GetLastWorkerIdentity()
+	ms.activityFailureSize += incomingActivityInfo.LastFailure.Size() - ai.GetRetryLastFailure().Size()
 	ai.RetryLastFailure = incomingActivityInfo.LastFailure
 
 	if resetActivityTimerTaskStatus {
@@ -2227,6 +2235,7 @@ func (ms *MutableStateImpl) DeleteActivity(
 		delete(ms.pendingActivityInfoIDs, scheduledEventID)
 		delete(ms.pendingActivityTimerHeartbeats, scheduledEventID)
 		ms.approximateSize -= activityInfo.Size() + int64SizeBytes
+		ms.activityFailureSize -= activityInfo.GetRetryLastFailure().Size()
 
 		if _, ok = ms.pendingActivityIDToEventID[activityInfo.ActivityId]; ok {
 			delete(ms.pendingActivityIDToEventID, activityInfo.ActivityId)
@@ -6912,7 +6921,9 @@ func (ms *MutableStateImpl) RetryActivity(
 		// need to update activity
 		if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
 			ClearActivityStartedState(activityInfo)
-			activityInfo.RetryLastFailure = ms.truncateRetryableActivityFailure(activityFailure)
+			truncated := ms.truncateRetryableActivityFailure(activityInfo, activityFailure)
+			ms.activityFailureSize += truncated.Size() - activityInfo.GetRetryLastFailure().Size()
+			activityInfo.RetryLastFailure = truncated
 			activityInfo.Attempt++
 			if ms.config.EnableActivityRetryStampIncrement() {
 				activityInfo.Stamp++
@@ -6994,11 +7005,15 @@ func (ms *MutableStateImpl) updateActivityInfoForRetries(
 	activityFailure *failurepb.Failure,
 ) error {
 	return ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
+		// The truncation and the size accounting both read the failure being replaced, so they run
+		// before UpdateActivityInfoForRetries overwrites RetryLastFailure.
+		truncated := ms.truncateRetryableActivityFailure(activityInfo, activityFailure)
+		ms.activityFailureSize += truncated.Size() - activityInfo.GetRetryLastFailure().Size()
 		UpdateActivityInfoForRetries(
 			activityInfo,
 			ms.GetCurrentVersion(),
 			nextAttempt,
-			ms.truncateRetryableActivityFailure(activityFailure),
+			truncated,
 			timestamppb.New(nextScheduledTime),
 			ms.config.EnableActivityRetryStampIncrement(),
 		)
@@ -7214,11 +7229,43 @@ func (ms *MutableStateImpl) decodeReportedProblems(p *commonpb.Payload) []string
 	return problems
 }
 
+// truncateRetryableActivityFailure decides whether activityFailure needs to be fully preserved or truncated using
+// two limits: per failure limit and total limit.
 func (ms *MutableStateImpl) truncateRetryableActivityFailure(
+	activityInfo *persistencespb.ActivityInfo,
 	activityFailure *failurepb.Failure,
 ) *failurepb.Failure {
+	if activityFailure == nil {
+		return nil
+	}
+
 	namespaceName := ms.namespaceEntry.Name().String()
 	failureSize := activityFailure.Size()
+
+	// What every other pending activity holds. activityInfo's own failure is being replaced, so excluding it here.
+	totalWithout := ms.activityFailureSize - activityInfo.GetRetryLastFailure().Size()
+	metrics.ActivityFailureTotalSize.With(ms.metricsHandler).Record(int64(totalWithout + failureSize))
+
+	totalLimitError := ms.config.MutableStateActivityFailureTotalSizeLimitError(namespaceName)
+	if totalLimitError > 0 && failureSize+totalWithout > totalLimitError {
+		ms.shard.GetThrottledLogger().Warn("total activity failure size exceeds error limit.",
+			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
+			tag.WorkflowID(ms.executionInfo.WorkflowId),
+			tag.WorkflowRunID(ms.executionState.RunId),
+			tag.NewInt("activity-failure-total-size", totalWithout+failureSize),
+		)
+		return failure.TruncateWithDepth(activityFailure, minRetainedActivityFailureSize, 0)
+	}
+
+	totalLimitWarn := ms.config.MutableStateActivityFailureTotalSizeLimitWarn(namespaceName)
+	if totalLimitWarn > 0 && totalWithout+failureSize > totalLimitWarn {
+		ms.shard.GetThrottledLogger().Warn("total activity failure size exceeds warn limit.",
+			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
+			tag.WorkflowID(ms.executionInfo.WorkflowId),
+			tag.WorkflowRunID(ms.executionState.RunId),
+			tag.NewInt("activity-failure-total-size", totalWithout+failureSize),
+		)
+	}
 
 	if failureSize <= ms.config.MutableStateActivityFailureSizeLimitWarn(namespaceName) {
 		return activityFailure
@@ -9360,6 +9407,7 @@ func (ms *MutableStateImpl) applyUpdatesToSubStateMachines(
 ) error {
 	err := applyUpdatesToSubStateMachine(ms, ms.pendingActivityInfoIDs, ms.updateActivityInfos, updatedActivityInfos, isSnapshot, ms.DeleteActivity, func(current, incoming *persistencespb.ActivityInfo) {
 		incoming.TimerTaskStatus = ms.getActivityTimerTaskStatus(current, incoming)
+		ms.activityFailureSize += incoming.RetryLastFailure.Size() - current.GetRetryLastFailure().Size()
 	}, func(ai *persistencespb.ActivityInfo) {
 		ms.pendingActivityIDToEventID[ai.ActivityId] = ai.ScheduledEventId
 		ms.activityInfosUserDataUpdated[ai.ScheduledEventId] = struct{}{}
