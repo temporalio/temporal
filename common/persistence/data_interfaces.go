@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -18,7 +20,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/tasks"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Archetype is a type alias for chasm.Archetype to avoid circular dependency.
@@ -927,8 +928,9 @@ type (
 		NewBranchToken []byte
 		// The storage layer might have changed the base branch token. This
 		// response represents the changed base branch token to be used for further
-		// processing. An empty value indicates that the caller's base branch token
-		// is still valid.
+		// processing in a workflow rebuild operation.
+		// An empty value indicates that the caller's base branch token
+		// is still correct.
 		BaseBranchToken []byte
 	}
 
