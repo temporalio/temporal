@@ -259,13 +259,13 @@ func respondFailedFailure(e model.Event, nextRetryDelay time.Duration) *failurep
 			FailureInfo: &failurepb.Failure_ServerFailureInfo{ServerFailureInfo: &failurepb.ServerFailureInfo{NonRetryable: !e.Failure.Retryable}},
 		}
 	case model.StartToCloseTimeoutFailureType:
-		return syntheticTimeoutFailure(enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
+		return syntheticTimeoutFailure(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, e.Failure.WithCause)
 	case model.HeartbeatTimeoutFailureType:
-		return syntheticTimeoutFailure(enumspb.TIMEOUT_TYPE_HEARTBEAT)
+		return syntheticTimeoutFailure(enumspb.TIMEOUT_TYPE_HEARTBEAT, e.Failure.WithCause)
 	case model.ScheduleToStartTimeoutFailureType:
-		return syntheticTimeoutFailure(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START)
+		return syntheticTimeoutFailure(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START, e.Failure.WithCause)
 	case model.ScheduleToCloseTimeoutFailureType:
-		return syntheticTimeoutFailure(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE)
+		return syntheticTimeoutFailure(enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, e.Failure.WithCause)
 	case model.UnknownFailureType:
 		return &failurepb.Failure{Message: "test unknown failure"}
 	default:
@@ -274,14 +274,23 @@ func respondFailedFailure(e model.Event, nextRetryDelay time.Duration) *failurep
 }
 
 // syntheticTimeoutFailure creates a worker-reported timeout for the by-ID failure RPC,
-// exercising failure classification rather than the server's timeout-task path.
-func syntheticTimeoutFailure(timeoutType enumspb.TimeoutType) *failurepb.Failure {
-	return &failurepb.Failure{
+// exercising failure classification rather than the server's timeout-task path. When withCause is
+// set, the timeout wraps an underlying application failure as its Cause, modeling a worker that
+// reports the real failure alongside the timeout.
+func syntheticTimeoutFailure(timeoutType enumspb.TimeoutType, withCause bool) *failurepb.Failure {
+	failure := &failurepb.Failure{
 		Message: "test synthetic timeout failure",
 		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
 			TimeoutType: timeoutType,
 		}},
 	}
+	if withCause {
+		failure.Cause = &failurepb.Failure{
+			Message:     "test failure",
+			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "TestFailure"}},
+		}
+	}
+	return failure
 }
 
 // activityTimeoutInfo is the information a driver uses to identify a timeout.

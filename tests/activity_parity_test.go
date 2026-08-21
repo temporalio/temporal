@@ -156,8 +156,8 @@ func (s *activityParityTestSuite) TestSyntheticFailuresHaveRetryParity() {
 		})
 	}
 
-	// Both implementations close these failures without retrying. WFA surfaces them as timed out,
-	// while SAA surfaces worker-reported timeouts as failed, so terminal status itself is not parity.
+	// Both implementations close these failures without retrying, and surface them as timed out,
+	// and set terminal state as timeout.
 	nonRetryableTimeouts := []struct {
 		name  string
 		event model.Event
@@ -178,8 +178,8 @@ func (s *activityParityTestSuite) TestSyntheticFailuresHaveRetryParity() {
 			s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
 				t := s.T()
 				require.Equal(t, activityTerminalOutcome{
-					status:     enumspb.ACTIVITY_EXECUTION_STATUS_FAILED,
-					retryState: enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
+					status:     enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+					retryState: enumspb.RETRY_STATE_TIMEOUT,
 				}, newSAADriver(t, env, cfg).driveTrace(t, trace).terminalOutcome(t))
 			})
 		})
@@ -244,6 +244,28 @@ func (s *activityParityTestSuite) TestTimeoutPreservesUnderlyingFailureCause() {
 				model.Poll,
 				model.FailRetryably,
 				model.ScheduleToCloseElapses,
+			},
+		)
+	})
+	// A worker may report a schedule-to-start or schedule-to-close timeout directly through
+	// RespondActivityTaskFailedById while carrying the real failure as the timeout's Cause. There is
+	// no prior attempt here, so a preserved cause can only have come from the worker-reported
+	// failure, exercising the by-ID timeout path end to end.
+	s.Run("ScheduleToStartViaRespondFailedByID", func(s *activityParityTestSuite) {
+		fail := model.Event{Type: model.RespondFailedByIDType, Failure: &model.Failure{Type: model.ScheduleToStartTimeoutFailureType, WithCause: true}}
+		assertCausePreserved(s.T(), activityConfig{},
+			[]model.Event{
+				model.Poll,
+				fail,
+			},
+		)
+	})
+	s.Run("ScheduleToCloseViaRespondFailedByID", func(s *activityParityTestSuite) {
+		fail := model.Event{Type: model.RespondFailedByIDType, Failure: &model.Failure{Type: model.ScheduleToCloseTimeoutFailureType, WithCause: true}}
+		assertCausePreserved(s.T(), activityConfig{},
+			[]model.Event{
+				model.Poll,
+				fail,
 			},
 		)
 	})

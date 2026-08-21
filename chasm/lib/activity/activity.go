@@ -643,6 +643,28 @@ func (a *Activity) HandleFailed(
 		return &historyservice.RespondActivityTaskFailedResponse{}, nil
 	}
 
+	// A worker-reported schedule-to-start or schedule-to-close timeout is a server-enforced
+	// deadline, not an execution failure. Close the activity as TIMED_OUT (mirroring the
+	// timer-queue path in activity_tasks.go) instead of FAILED.
+	if timeoutType := failure.GetTimeoutFailureInfo().GetTimeoutType(); timeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START ||
+		timeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE {
+		// Record the same retry state the timer handlers use for these deadlines.
+		timedOutRetryState := enumspb.RETRY_STATE_TIMEOUT
+		if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+			timedOutRetryState = enumspb.RETRY_STATE_CANCEL_REQUESTED
+		}
+		if err := TransitionTimedOut.Apply(a, ctx, timeoutEvent{
+			timeoutType:    timeoutType,
+			retryState:     timedOutRetryState,
+			metricsHandler: enrichedHandler,
+			// Preserve the real underlying failure the worker attached, if any.
+			cause: failure.GetCause(),
+		}); err != nil {
+			return nil, err
+		}
+		return &historyservice.RespondActivityTaskFailedResponse{}, nil
+	}
+
 	if err := TransitionFailed.Apply(a, ctx, failedEvent{
 		req:             event.Request,
 		retryState:      retryState,

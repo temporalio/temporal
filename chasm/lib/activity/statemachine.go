@@ -386,6 +386,11 @@ type timeoutEvent struct {
 	metricsHandler metrics.Handler
 	timeoutType    enumspb.TimeoutType
 	retryState     enumspb.RetryState
+	// cause, when set, is recorded as the Cause of a synthesized schedule-to-start or
+	// schedule-to-close timeout failure. It lets a worker-reported timeout (via
+	// RespondActivityTaskFailed[ById]) surface the real underlying failure. When nil, the prior
+	// attempt's failure is used, which is the timer-queue path.
+	cause *failurepb.Failure
 }
 
 // TransitionTimedOut transitions to TimedOut status.
@@ -409,11 +414,17 @@ var TransitionTimedOut = chasm.NewTransition(
 			switch timeoutType {
 			case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 				enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
+				// Prefer a worker-reported cause (RespondActivityTaskFailed[ById]) over the prior
+				// attempt's failure so the real underlying failure is surfaced when present.
+				cause := priorAttemptFailure
+				if event.cause != nil {
+					cause = event.cause
+				}
 				err = a.recordScheduleToStartOrCloseTimeoutFailure(
 					ctx,
 					timeoutType,
 					fmt.Sprintf(common.FailureReasonActivityTimeout, timeoutType.String()),
-					priorAttemptFailure,
+					cause,
 				)
 			case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
 				failure := createStartToCloseTimeoutFailure()

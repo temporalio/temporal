@@ -52,6 +52,7 @@ type Failure struct {
 	Type         FailureType
 	Retryable    bool // controls the non-retryable flag for application and server failures.
 	LargeMessage bool // sends a failure message exceeding activityFailureSizeLimit
+	WithCause    bool // for a timeout failure, wrap an underlying application failure as its Cause
 }
 
 // FailureType identifies the kind of failure a RespondFailed event reports.
@@ -158,7 +159,7 @@ func (e Event) String() string {
 		if e.Failure.Type == ApplicationFailureType || e.Failure.Type == ServerFailureType {
 			return fmt.Sprintf("%s[retryable=%v,heartbeatDetails=%v,failureType=%d]", e.Type.String(), e.Failure.Retryable, e.HasHeartbeatDetails, e.Failure.Type)
 		}
-		return fmt.Sprintf("%s[heartbeatDetails=%v,failureType=%d]", e.Type.String(), e.HasHeartbeatDetails, e.Failure.Type)
+		return fmt.Sprintf("%s[heartbeatDetails=%v,failureType=%d,withCause=%v]", e.Type.String(), e.HasHeartbeatDetails, e.Failure.Type, e.Failure.WithCause)
 	case ResetType:
 		return fmt.Sprintf("%s[keepPaused=%v,resetHeartbeat=%v]", e.Type.String(), e.KeepPaused, e.ResetHeartbeat)
 	default:
