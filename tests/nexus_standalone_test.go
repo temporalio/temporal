@@ -296,10 +296,10 @@ func (s *NexusStandaloneTestSuite) TestDescribeStandaloneNexusOperation() {
 			terminateErrCh <- err
 		}()
 
-		s.NoError(await.Receive(s.T(), terminateErrCh))
+		s.NoError(await.Rcv(s.T(), terminateErrCh))
 
 		// Verify the longpoll result.
-		result := await.Receive(s.T(), describeResultCh)
+		result := await.Rcv(s.T(), describeResultCh)
 		s.NoError(result.err)
 		longPollResp := result.resp
 
@@ -497,7 +497,7 @@ func (s *NexusStandaloneTestSuite) TestDescribeStandaloneNexusOperation() {
 			protorequire.ProtoEqual(t, expectedResult, pollResp.GetResult())
 		}, 10*time.Second, 100*time.Millisecond)
 
-		s.NoError(await.Receive(s.T(), pollerErrCh))
+		s.NoError(await.Rcv(s.T(), pollerErrCh))
 	})
 
 	s.Run("IncludeOutcome_Failure", func(s *NexusStandaloneTestSuite) {
@@ -813,7 +813,7 @@ func (s *NexusStandaloneTestSuite) TestDescribeStandaloneNexusOperation() {
 					tc.assertOutcome(t, descResp, pollResp)
 				}, 10*time.Second, 100*time.Millisecond)
 
-				s.NoError(await.Receive(s.T(), pollerErrCh))
+				s.NoError(await.Rcv(s.T(), pollerErrCh))
 			})
 		}
 	})
@@ -1884,7 +1884,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 			pollResultCh <- pollResult{resp: resp, err: err}
 		}()
 
-		await.Receive(s.T(), pollStartedCh)
+		await.Rcv(s.T(), pollStartedCh)
 
 		// PollNexusOperationExecution should not resolve before the operation is started.
 		select {
@@ -1936,7 +1936,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 		s.NoError(err)
 
 		// Verify the poll result.
-		result := await.Receive(s.T(), pollResultCh)
+		result := await.Rcv(s.T(), pollResultCh)
 		s.NoError(result.err)
 		protorequire.ProtoEqual(s.T(), &workflowservice.PollNexusOperationExecutionResponse{
 			RunId:          startResp.RunId,
@@ -2001,7 +2001,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 					pollResultCh <- pollResult{resp: resp, err: err}
 				}()
 
-				await.Receive(s.T(), pollStartedCh)
+				await.Rcv(s.T(), pollStartedCh)
 
 				// PollNexusOperationExecution should not resolve before the operation is closed.
 				select {
@@ -2023,10 +2023,10 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 					terminateErrCh <- err
 				}()
 
-				s.NoError(await.Receive(s.T(), terminateErrCh))
+				s.NoError(await.Rcv(s.T(), terminateErrCh))
 
 				// Verify the poll result.
-				result := await.Receive(s.T(), pollResultCh)
+				result := await.Rcv(s.T(), pollResultCh)
 				s.NoError(result.err)
 				pollResp := result.resp
 
@@ -2140,7 +2140,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 			}, pollResp.GetFailure())
 		}, 10*time.Second, 100*time.Millisecond)
 
-		s.NoError(await.Receive(s.T(), pollerErrCh))
+		s.NoError(await.Rcv(s.T(), pollerErrCh))
 	})
 
 	s.Run("NamespaceNotFound", func(s *NexusStandaloneTestSuite) {
@@ -2243,7 +2243,7 @@ func (s *NexusStandaloneTestSuite) TestAsyncCompletionIgnoresExecutionTransition
 		Endpoint:    endpointName,
 	})
 	s.NoError(err)
-	callback := await.Receive(s.T(), callbackCh)
+	callback := await.Rcv(s.T(), callbackCh)
 	callbackToken := callback.token
 	callbackURL := callback.url
 

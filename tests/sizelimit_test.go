@@ -286,7 +286,7 @@ func (s *SizeLimitSuite) TestWorkflowFailed_PayloadSizeTooLarge() {
 		env.Logger.Info("PollAndHandleWorkflowTask", tag.Error(err))
 	}()
 
-	await.Receive(s.T(), sigReadyToSendChan)
+	await.Rcv(s.T(), sigReadyToSendChan)
 
 	_, err = env.FrontendClient().SignalWorkflowExecution(s.Context(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace:         env.Namespace().String(),
