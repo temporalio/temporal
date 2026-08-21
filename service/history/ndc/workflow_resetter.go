@@ -7,8 +7,6 @@ import (
 	"errors"
 	"time"
 
-	"google.golang.org/protobuf/types/known/timestamppb"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -36,6 +34,7 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/history/workflow/update"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -682,7 +681,7 @@ func (r *workflowResetterImpl) forkAndGenerateBranchToken(
 	forkBranchToken []byte,
 	forkNodeID int64,
 	resetRunID string,
-) ([]byte, []byte, error) {
+) (newBranchToken []byte, forkedBaseBranchToken []byte, err error) {
 	// fork a new history branch
 	shardID := r.shardContext.GetShardID()
 	resp, err := r.executionMgr.ForkHistoryBranch(ctx, &persistence.ForkHistoryBranchRequest{

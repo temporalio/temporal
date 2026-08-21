@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
@@ -209,7 +210,7 @@ func (r *resetterImpl) getResetBranchToken(
 	ctx context.Context,
 	baseBranchToken []byte,
 	baseLastEventID int64,
-) ([]byte, []byte, error) {
+) (newBranchToken []byte, forkedBaseBranchToken []byte, err error) {
 
 	// fork a new history branch
 	shardID := r.shard.GetShardID()
