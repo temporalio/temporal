@@ -25,8 +25,9 @@ const _loadCause_name = "UnspecifiedTaskQueryDescribeUserDataNexusTaskPollOtherR
 var _loadCause_index = [...]uint8{0, 11, 15, 20, 28, 36, 45, 49, 58, 68, 73}
 
 func (i loadCause) String() string {
-	if i < 0 || i >= loadCause(len(_loadCause_index)-1) {
+	idx := int(i) - 0
+	if i < 0 || idx >= len(_loadCause_index)-1 {
 		return "loadCause(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _loadCause_name[_loadCause_index[i]:_loadCause_index[i+1]]
+	return _loadCause_name[_loadCause_index[idx]:_loadCause_index[idx+1]]
 }

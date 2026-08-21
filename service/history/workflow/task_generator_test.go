@@ -836,17 +836,38 @@ func TestTaskGeneratorImpl_GenerateMigrationTasks(t *testing.T) {
 				syncVersionTask, ok := resultTasks[0].(*tasks.SyncVersionedTransitionTask)
 				require.True(t, ok)
 				require.Equal(t, chasm.WorkflowArchetypeID, syncVersionTask.GetArchetypeID())
+				require.Equal(t, enumsspb.TASK_PRIORITY_LOW, syncVersionTask.Priority)
 				taskEquivalent := syncVersionTask.TaskEquivalents
 				require.Len(t, taskEquivalent, len(tc.expectedTaskEquivalentTypes))
 				for i, equivalent := range taskEquivalent {
 					require.Equal(t, tc.expectedTaskEquivalentTypes[i], equivalent.GetType())
+					requireLowReplicationPriority(t, equivalent)
 				}
 			} else {
 				for i, task := range resultTasks {
 					require.Equal(t, tc.expectedTaskTypes[i], task.GetType())
+					requireLowReplicationPriority(t, task)
 				}
 			}
 		})
+	}
+}
+
+func requireLowReplicationPriority(t *testing.T, task tasks.Task) {
+	t.Helper()
+	switch task := task.(type) {
+	case *tasks.SyncWorkflowStateTask:
+		require.Equal(t, enumsspb.TASK_PRIORITY_LOW, task.Priority)
+	case *tasks.SyncVersionedTransitionTask:
+		require.Equal(t, enumsspb.TASK_PRIORITY_LOW, task.Priority)
+	case *tasks.HistoryReplicationTask:
+		require.Equal(t, enumsspb.TASK_PRIORITY_LOW, task.Priority)
+	case *tasks.SyncActivityTask:
+		require.Equal(t, enumsspb.TASK_PRIORITY_LOW, task.Priority)
+	case *tasks.SyncHSMTask:
+		require.Equal(t, enumsspb.TASK_PRIORITY_LOW, task.Priority)
+	default:
+		require.Fail(t, "unexpected migration task type", "%T", task)
 	}
 }
 
