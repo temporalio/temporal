@@ -20,7 +20,7 @@ import (
 )
 
 func TestNamespaceReplicationLifecycleEventName(t *testing.T) {
-	require.Equal(t, "namespace_replication_lifecycle", NamespaceReplicationLifecyclePayload{}.EventName())
+	require.Equal(t, NamespaceLifecycleEventName, NamespaceReplicationLifecyclePayload{}.EventName())
 }
 
 func TestNamespaceReplicationTaskContext(t *testing.T) {
@@ -60,7 +60,7 @@ func TestEmitNamespaceReplicationLifecycle(t *testing.T) {
 	})
 
 	require.Len(t, logger.records, 1)
-	require.Equal(t, NamespaceReplicationLifecycleEventName, logger.records[0].EventName())
+	require.Equal(t, NamespaceLifecycleEventName, logger.records[0].EventName())
 	got := namespaceReplicationRecordValues(logger.records[0])
 	require.Equal(t, map[string]any{
 		"phase":        "dlqed",
