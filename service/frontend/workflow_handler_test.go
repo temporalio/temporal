@@ -4488,7 +4488,7 @@ func TestDedupLinksFromCallbacks(t *testing.T) {
 		callbacks := getCallbacks()
 		dedupedLinks := dedupLinksFromCallbacks(links, callbacks)
 		require.Len(t, dedupedLinks, 1)
-		protorequire.ProtoEqual(t, dedupedLinks[0], links[2])
+		protorequire.ProtoEqual(t, links[2], dedupedLinks[0])
 	})
 
 	// Remove links[1] from callbacks[0].Links. links[1] should then not
@@ -4499,8 +4499,8 @@ func TestDedupLinksFromCallbacks(t *testing.T) {
 
 		dedupedLinks := dedupLinksFromCallbacks(links, callbacks)
 		require.Len(t, dedupedLinks, 2)
-		protorequire.ProtoEqual(t, dedupedLinks[0], links[1])
-		protorequire.ProtoEqual(t, dedupedLinks[1], links[2]) // Same as before.
+		protorequire.ProtoEqual(t, links[1], dedupedLinks[0])
+		protorequire.ProtoEqual(t, links[2], dedupedLinks[1]) // Same as before.
 	})
 
 	// Change the type of the second callback to be a Nexus-variant.
