@@ -235,9 +235,10 @@ func (c *operationContext) interceptRequest(
 		}
 	})
 
-	cleanup, err := c.namespaceConcurrencyLimitInterceptor.Allow(
+	cleanup, err := c.namespaceConcurrencyLimitInterceptor.AllowWithMetricKey(
 		c.namespace.Name(),
 		c.apiName,
+		c.method,
 		c.metricsHandlerForInterceptors,
 		request,
 	)
