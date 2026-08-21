@@ -79,6 +79,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	"go.temporal.io/server/common/sqlquery"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
@@ -5806,7 +5807,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	// Malformed queries (e.g. "()") would otherwise cause the batch activity
 	// to retry indefinitely since the error is not marked non-retryable.
 	if q := request.GetVisibilityQuery(); len(q) > 0 {
-		if _, err := sqlparser.Parse("select * from dummy where " + q); err != nil {
+		if _, err := sqlparser.Parse(fmt.Sprintf(sqlquery.QueryTemplate, q)); err != nil {
 			return nil, serviceerror.NewInvalidArgumentf("invalid visibility query: %v", err)
 		}
 	}
@@ -5891,16 +5892,13 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		input.BatchType = enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY
 		identity = op.UnpauseActivitiesOperation.GetIdentity()
 
-		switch a := op.UnpauseActivitiesOperation.GetActivity().(type) {
-		case *batchpb.BatchOperationUnpauseActivities_Type:
+		if a, ok := op.UnpauseActivitiesOperation.GetActivity().(*batchpb.BatchOperationUnpauseActivities_Type); ok {
 			unpauseQuery, err := buildUnpauseActivityVisibilityQuery(visibilityQuery, a.Type)
 			if err != nil {
 				return nil, err
 			}
 			input.Request = proto.CloneOf(request)
 			input.Request.VisibilityQuery = unpauseQuery
-		case *batchpb.BatchOperationUnpauseActivities_MatchAll:
-			input.Request.VisibilityQuery = visibilityQuery
 		}
 	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
 		input.BatchType = enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY
@@ -5978,12 +5976,15 @@ func (wh *WorkflowHandler) StartBatchOperation(
 // worker appends its own execution-status filter.
 func buildUnpauseActivityVisibilityQuery(query string, activityType string) (string, error) {
 	if query == "" {
+		// An empty query means the caller targeted executions explicitly, so there is no scope to
+		// narrow.
 		return "", nil
 	}
 
 	// Visibility queries are predicate fragments, so wrap the query in a synthetic SELECT to obtain
-	// a WHERE expression. Reject set operations (i.e., UNION) because they do not expose a single WHERE clause to extend.
-	stmt, err := sqlparser.Parse("select * from dummy where " + query)
+	// a WHERE expression. Reject set operations (for example, UNION) because they do not expose a
+	// single WHERE clause to extend.
+	stmt, err := sqlparser.Parse(fmt.Sprintf(sqlquery.QueryTemplate, query))
 	if err != nil {
 		return "", serviceerror.NewInvalidArgumentf("invalid visibility query: %v", err)
 	}
