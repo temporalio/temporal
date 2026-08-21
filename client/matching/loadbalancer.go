@@ -161,7 +161,16 @@ func pickWritePartitionByGap(
 		return partitionID, int(math.Round(1 / writePartitionRootProbabilityFloor))
 	}
 
-	return pickPartitionByGap(counts[:partitionCount], backlogCap, total), int(math.Round(1 / rootProbability))
+	return pickPartitionByGap(counts[:partitionCount], backlogCap, total), randomRound(1 / rootProbability)
+}
+
+// randomRound rounds without biasing the expected value.
+func randomRound(x float64) int {
+	n := math.Floor(x)
+	if rand.Float64() < x-n {
+		n++
+	}
+	return int(n)
 }
 
 func pickPartitionByGap(counts []number.Compact8, backlogCap int64, total int64) int {
