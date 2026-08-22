@@ -6,7 +6,33 @@ import (
 	"time"
 
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/service/history/tasks"
 )
+
+// NextTaskTime returns the earliest non-visibility CHASM physical task after
+// the supplied time. Physical tasks can be stale; callers should execute task
+// validation when the returned time is reached.
+func (e *Engine) NextTaskTime(ref chasm.ComponentRef, after time.Time) (time.Time, bool, error) {
+	exec, err := e.executionForRef(ref)
+	if err != nil {
+		return time.Time{}, false, err
+	}
+
+	var next time.Time
+	for category, categoryTasks := range exec.backend.TasksByCategory {
+		if category == tasks.CategoryVisibility {
+			continue
+		}
+		for _, task := range categoryTasks {
+			visibilityTime := task.GetVisibilityTime()
+			if !visibilityTime.After(after) || (!next.IsZero() && !visibilityTime.Before(next)) {
+				continue
+			}
+			next = visibilityTime
+		}
+	}
+	return next, !next.IsZero(), nil
+}
 
 // ExecutePureTask validates and executes a pure task atomically via [Engine.UpdateComponent].
 // It returns taskDropped set to true if [chasm.PureTaskHandler.Validate] returns (false, nil),
@@ -78,6 +104,44 @@ func (e *Engine) FirePureTasks(ref chasm.ComponentRef, referenceTime time.Time) 
 
 	if err := exec.closeTransaction(); err != nil {
 		return executed, err
+	}
+	return executed, nil
+}
+
+// FireSideEffectTasks executes side-effect tasks due by referenceTime. Stale physical
+// tasks are ignored after their logical task has been removed from the tree.
+func (e *Engine) FireSideEffectTasks(ref chasm.ComponentRef, referenceTime time.Time) (executed int, err error) {
+	exec, err := e.executionForRef(ref)
+	if err != nil {
+		return 0, err
+	}
+	engineCtx := chasm.NewEngineContext(context.Background(), e)
+	for category, categoryTasks := range exec.backend.TasksByCategory {
+		if category == tasks.CategoryVisibility {
+			continue
+		}
+		for _, task := range categoryTasks {
+			chasmTask, ok := task.(*tasks.ChasmTask)
+			if !ok || chasmTask.GetVisibilityTime().After(referenceTime) {
+				continue
+			}
+			inTree, valid, err := exec.node.ValidateSideEffectTask(engineCtx, chasmTask)
+			if err != nil {
+				return executed, err
+			}
+			if !inTree || !valid {
+				continue
+			}
+			if err := exec.node.ExecuteSideEffectTask(
+				engineCtx,
+				exec.key,
+				chasmTask,
+				func(chasm.NodeBackend, chasm.Context, chasm.Component) error { return nil },
+			); err != nil {
+				return executed, err
+			}
+			executed++
+		}
 	}
 	return executed, nil
 }
