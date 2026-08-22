@@ -175,10 +175,10 @@ func (h *HistoryStore) ReadHistoryBranch(
 	}
 
 	nodes := make([]p.InternalHistoryNode, 0, request.PageSize)
-	message := make(map[string]any)
+	message := make(map[string]any, 5)
 	for iter.MapScan(message) {
 		nodes = append(nodes, convertHistoryNode(message))
-		message = make(map[string]any)
+		clear(message)
 	}
 
 	if err := iter.Close(); err != nil {
