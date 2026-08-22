@@ -1,6 +1,7 @@
 package nexusoperation
 
 import (
+	"context"
 	"slices"
 	"strings"
 
@@ -10,6 +11,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -33,10 +35,12 @@ type cancelOrTerminateRequest interface {
 // Requests are mutated in place: defaults are applied, values are capped to their configured
 // limits, and headers are lower-cased.
 type validator struct {
-	config           *Config
-	logger           log.Logger
-	saMapperProvider searchattribute.MapperProvider
-	saValidator      *searchattribute.Validator
+	config            *Config
+	logger            log.Logger
+	saMapperProvider  searchattribute.MapperProvider
+	saValidator       *searchattribute.Validator
+	callbackValidator callbacks.Validator
+	linkValidator     *linkValidator
 }
 
 func newValidator(
@@ -44,16 +48,23 @@ func newValidator(
 	logger log.Logger,
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
+	callbackValidator callbacks.Validator,
+	linkValidator *linkValidator,
 ) *validator {
 	return &validator{
-		config:           config,
-		logger:           logger,
-		saMapperProvider: saMapperProvider,
-		saValidator:      saValidator,
+		config:            config,
+		logger:            logger,
+		saMapperProvider:  saMapperProvider,
+		saValidator:       saValidator,
+		callbackValidator: callbackValidator,
+		linkValidator:     linkValidator,
 	}
 }
 
-func (v *validator) validateAndNormalizeStartRequest(req *workflowservice.StartNexusOperationExecutionRequest) error {
+func (v *validator) validateAndNormalizeStartRequest(
+	ctx context.Context,
+	req *workflowservice.StartNexusOperationExecutionRequest,
+) error {
 	ns := req.GetNamespace()
 
 	if err := v.normalizeRequestID(&req.RequestId); err != nil {
@@ -85,6 +96,25 @@ func (v *validator) validateAndNormalizeStartRequest(req *workflowservice.StartN
 	req.NexusHeader = loweredHeaders
 
 	if err := v.validateAndNormalizeSearchAttributes(req); err != nil {
+		return err
+	}
+	// Callbacks
+	cbs := req.GetCompletionCallbacks()
+	if len(cbs) > 0 {
+		opts := callbacks.ValidatorOptions{
+			EnabledKinds: v.config.EnabledCallbackKinds(ns),
+		}
+		if err := v.callbackValidator.Validate(ctx, ns, cbs, opts); err != nil {
+			return err
+		}
+	}
+	// Links
+	if links := req.GetLinks(); len(links) > 0 {
+		if err := v.linkValidator.ValidateRequestWithCallbacks(ns, links, cbs); err != nil {
+			return err
+		}
+	}
+	if err := v.validateOnConflictOptions(req); err != nil {
 		return err
 	}
 
@@ -311,6 +341,31 @@ func (v *validator) normalizeIDPolicies(req *workflowservice.StartNexusOperation
 	if req.GetIdConflictPolicy() == enumspb.NEXUS_OPERATION_ID_CONFLICT_POLICY_UNSPECIFIED {
 		req.IdConflictPolicy = enumspb.NEXUS_OPERATION_ID_CONFLICT_POLICY_FAIL
 	}
+}
+
+// validateOnConflictOptions validates the on_conflict_options of a start request:
+//   - attach_completion_callbacks requires attach_request_id, since it is embedded into the keys we use
+//     to persist them on the Operation's Callbacks map.
+//   - attach_request_id requires at least one completion callback or link, since attaching a request ID
+//     is only meaningful alongside something to attach.
+//
+// attach_links is independent and may be set on its own.
+func (v *validator) validateOnConflictOptions(req *workflowservice.StartNexusOperationExecutionRequest) error {
+	onConflictOptions := req.GetOnConflictOptions()
+	if onConflictOptions == nil {
+		return nil
+	}
+	if onConflictOptions.GetAttachCompletionCallbacks() && !onConflictOptions.GetAttachRequestId() {
+		return serviceerror.NewInvalidArgument(
+			"on_conflict_options: attach_completion_callbacks requires attach_request_id to be set")
+	}
+	if onConflictOptions.GetAttachRequestId() &&
+		len(req.GetCompletionCallbacks()) == 0 &&
+		len(req.GetLinks()) == 0 {
+		return serviceerror.NewInvalidArgument(
+			"on_conflict_options: attach_request_id requires at least one completion callback or link")
+	}
+	return nil
 }
 
 // normalizeRequestID validates the request ID, or sets it to a UUID if empty.

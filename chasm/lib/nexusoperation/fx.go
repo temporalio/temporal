@@ -30,6 +30,7 @@ const nexusCallbackSourceHeader = "Nexus-Callback-Source"
 var Module = fx.Module(
 	"chasm.lib.nexusoperation",
 	fx.Provide(configProvider),
+	fx.Provide(linkValidatorProvider),
 	fx.Provide(commonnexus.NewCallbackTokenGenerator),
 	fx.Provide(endpointRegistryProvider),
 	fx.Invoke(endpointRegistryLifetimeHooks),
@@ -50,6 +51,7 @@ var Module = fx.Module(
 var FrontendModule = fx.Module(
 	"chasm.lib.nexusoperation.frontend",
 	fx.Provide(configProvider),
+	fx.Provide(linkValidatorProvider),
 	fx.Provide(nexusoperationpb.NewNexusOperationServiceLayeredClient),
 	fx.Provide(NewFrontendHandler),
 	fx.Provide(newComponentOnlyLibrary),

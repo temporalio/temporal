@@ -1,10 +1,12 @@
 package tests
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -20,6 +22,7 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type NexusTestEnv struct {
@@ -32,6 +35,38 @@ func newNexusTestEnv(t *testing.T, useTemporalFailures bool, opts ...testcore.Te
 		TestEnv:             testcore.NewEnv(t, opts...),
 		useTemporalFailures: useTemporalFailures,
 	}
+}
+
+// startNexusOperation starts a standalone Nexus operation, applying defaults for
+// required fields tests usually don't care about.
+func (env *NexusTestEnv) startNexusOperation(
+	ctx context.Context,
+	req *workflowservice.StartNexusOperationExecutionRequest,
+) (*workflowservice.StartNexusOperationExecutionResponse, error) {
+	req.Namespace = cmp.Or(req.Namespace, env.Namespace().String())
+	req.Service = cmp.Or(req.Service, "test-service")
+	req.Operation = cmp.Or(req.Operation, "test-operation")
+	req.RequestId = cmp.Or(req.RequestId, env.Tv().RequestID())
+	if req.ScheduleToCloseTimeout == nil {
+		req.ScheduleToCloseTimeout = durationpb.New(10 * time.Minute)
+	}
+
+	return env.FrontendClient().StartNexusOperationExecution(ctx, req)
+}
+
+// describeNexusOperation describes a standalone Nexus operation by ID, including its outcome.
+func (env *NexusTestEnv) describeNexusOperation(
+	ctx context.Context,
+	t require.TestingT,
+	operationID string,
+) *workflowservice.DescribeNexusOperationExecutionResponse {
+	descResp, err := env.FrontendClient().DescribeNexusOperationExecution(ctx, &workflowservice.DescribeNexusOperationExecutionRequest{
+		Namespace:      env.Namespace().String(),
+		OperationId:    operationID,
+		IncludeOutcome: true,
+	})
+	require.NoError(t, err)
+	return descResp
 }
 
 func (env *NexusTestEnv) createNexusEndpoint(ctx context.Context, t *testing.T, name string, taskQueue string) *nexuspb.Endpoint {
@@ -113,6 +148,37 @@ func (env *NexusTestEnv) dispatchByNamespaceAndTaskQueueURL(namespace string, ta
 			Namespace: namespace,
 			TaskQueue: taskQueue,
 		})
+}
+
+// createSyncSuccessEndpoint registers an endpoint whose handler completes every operation
+// synchronously with the supplied result payload. Shutdown as part with the test's Cleanup.
+func (env *NexusTestEnv) createSyncSuccessEndpoint(ctx context.Context, t *testing.T, result string) string {
+	return env.createRandomExternalNexusServer(ctx, t, nexustest.Handler{
+		OnStartOperation: func(
+			ctx context.Context,
+			service, operation string,
+			input *nexus.LazyValue,
+			options nexus.StartOperationOptions,
+		) (nexus.HandlerStartOperationResult[any], error) {
+			return &nexus.HandlerStartOperationResultSync[any]{Value: result}, nil
+		},
+	})
+}
+
+// createAsyncEndpoint registers an endpoint whose handler leaves every operation running async,
+// so calls to the endpoint remain in the STARTED state until it is completed by other means.
+// (e.g. the Nexus operation gets canceled or terminated.)
+func (env *NexusTestEnv) createAsyncEndpoint(ctx context.Context, t *testing.T) string {
+	return env.createRandomExternalNexusServer(ctx, t, nexustest.Handler{
+		OnStartOperation: func(
+			ctx context.Context,
+			service, operation string,
+			input *nexus.LazyValue,
+			options nexus.StartOperationOptions,
+		) (nexus.HandlerStartOperationResult[any], error) {
+			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test-operation-token"}, nil
+		},
+	})
 }
 
 // nexusTaskResponse represents a successful response from a nexus task handler.
@@ -417,4 +483,12 @@ func newNexusCompletionHandler(t *testing.T) (*completionHandler, string) {
 		srv.Close()
 	})
 	return ch, srv.URL
+}
+
+// nexusCompletionCallback builds a Nexus-variant completion callback targeting url, typically the URL
+// returned by [newNexusCompletionHandler].
+func nexusCompletionCallback(url string) *commonpb.Callback {
+	return &commonpb.Callback{
+		Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: url}},
+	}
 }
