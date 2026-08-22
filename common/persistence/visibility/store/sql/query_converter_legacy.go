@@ -72,6 +72,8 @@ var (
 		sqlparser.NotInStr,
 		sqlparser.StartsWithStr,
 		sqlparser.NotStartsWithStr,
+		sqlparser.LikeStr,
+		sqlparser.NotLikeStr,
 	}
 
 	supportedKeyworkListOperators = []string{
@@ -403,6 +405,28 @@ func (c *QueryConverterLegacy) convertComparisonExpr(exprRef *sqlparser.Expr) er
 		}
 		expr.Escape = defaultLikeEscapeExpr
 		valueExpr.Val = escapeLikeValueForPrefixSearch(valueExpr.Val, defaultLikeEscapeChar)
+	case sqlparser.LikeStr, sqlparser.NotLikeStr:
+		// KeywordList and Text comparisons were already rewritten above and reject
+		// LIKE through their own operator allowlists.
+		if saColNameExpr.valueType != enumspb.INDEXED_VALUE_TYPE_KEYWORD {
+			return query.NewConverterError(
+				"%s: operator '%s' not supported for search attribute %q of type %s",
+				query.InvalidExpressionErrMessage,
+				expr.Operator,
+				saColNameExpr.alias,
+				saColNameExpr.valueType.String(),
+			)
+		}
+		if _, ok := expr.Right.(*unsafeSQLString); !ok {
+			return query.NewConverterError(
+				"%s: right-hand side of '%s' must be a literal string (got: %v)",
+				query.InvalidExpressionErrMessage,
+				expr.Operator,
+				sqlparser.String(expr.Right),
+			)
+		}
+		// The value is a raw LIKE pattern ('%' and '_' wildcards) supplied by the
+		// user, so it is passed through without escaping.
 	}
 
 	return nil

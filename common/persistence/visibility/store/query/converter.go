@@ -107,6 +107,8 @@ var (
 		sqlparser.NotInStr,
 		sqlparser.StartsWithStr,
 		sqlparser.NotStartsWithStr,
+		sqlparser.LikeStr,
+		sqlparser.NotLikeStr,
 	}
 
 	supportedKeywordListOperators = []string{

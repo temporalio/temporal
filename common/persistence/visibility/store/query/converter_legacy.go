@@ -505,6 +505,22 @@ func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, e
 			return nil, NewConverterError("right-hand side of '%v' must be a string", comparisonExpr.Operator)
 		}
 		query = elastic.NewBoolQuery().MustNot(elastic.NewPrefixQuery(colName, v))
+	case sqlparser.LikeStr, sqlparser.NotLikeStr:
+		if tp != enumspb.INDEXED_VALUE_TYPE_KEYWORD {
+			return nil, NewConverterError(
+				"operator '%v' not supported for search attribute %q of type %s",
+				comparisonExpr.Operator, alias, tp.String())
+		}
+		v, ok := colValues[0].(string)
+		if !ok {
+			return nil, NewConverterError("right-hand side of '%v' must be a string", comparisonExpr.Operator)
+		}
+		wildcardQuery := elastic.NewWildcardQuery(colName, ConvertLikePatternToESWildcard(v))
+		if comparisonExpr.Operator == sqlparser.LikeStr {
+			query = wildcardQuery
+		} else {
+			query = elastic.NewBoolQuery().MustNot(wildcardQuery)
+		}
 	}
 
 	return query, nil
