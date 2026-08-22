@@ -95,11 +95,21 @@ func (ni *ConcurrentRequestLimitInterceptor) Allow(
 	if token == 0 {
 		return func() {}, nil
 	}
-	// for GetWorkflowExecutionHistoryRequest, we only care about long poll requests
-	longPollReq, ok := req.(*workflowservice.GetWorkflowExecutionHistoryRequest)
-	if ok && !longPollReq.WaitNewEvent {
-		// ignore non-long-poll GetHistory calls.
-		return func() {}, nil
+	// Some APIs are only long-running when their long-poll parameter is set
+	switch req.(type) {
+	case *workflowservice.GetWorkflowExecutionHistoryRequest:
+		if !IsLongPollGetWorkflowExecutionHistoryRequest(req) {
+			return func() {}, nil
+		}
+	case *workflowservice.DescribeActivityExecutionRequest:
+		if !IsLongPollDescribeActivityExecutionRequest(req) {
+			return func() {}, nil
+		}
+	case *workflowservice.DescribeNexusOperationExecutionRequest:
+		if !IsLongPollDescribeNexusOperationExecutionRequest(req) {
+			return func() {}, nil
+		}
+	default:
 	}
 
 	counter := ni.counter(namespaceName, methodName)
