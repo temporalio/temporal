@@ -580,8 +580,10 @@ func TestValidateAndPopulateStartRequest_CombinesRequestAndCallbackLinks(t *test
 			},
 		}},
 		CompletionCallbacks: []*commonpb.Callback{{
-			Variant: &commonpb.Callback_Internal_{
-				Internal: &commonpb.Callback_Internal{},
+			Variant: &commonpb.Callback_Nexus_{
+				Nexus: &commonpb.Callback_Nexus{
+					Url: "http://localhost/cb",
+				},
 			},
 			Links: []*commonpb.Link{{
 				Variant: &commonpb.Link_BatchJob_{

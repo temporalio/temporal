@@ -1156,9 +1156,7 @@ func (s *WorkflowHandlerSuite) startWorkflowWithCallbacks(
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidCallbackLinks() {
 	cbs := []*commonpb.Callback{
 		{
-			Variant: &commonpb.Callback_Internal_{
-				Internal: &commonpb.Callback_Internal{},
-			},
+			Variant: nexusCallbackVariant(),
 			Links: []*commonpb.Link{
 				{
 					Variant: &commonpb.Link_WorkflowEvent_{

@@ -3,27 +3,52 @@ package callbacks
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/tqid"
 	"google.golang.org/grpc/status"
 )
 
+type ValidatorOptions struct {
+	// EnabledKinds are the callback kinds that may be attached to the execution being validated.
+	// A client-supplied callback of any other kind is rejected with an InvalidArgument error.
+	EnabledKinds []Kind
+}
+
+// OnlyNexus returns a ValidateOptions that only enables Nexus-variant callbacks. This is the default
+// behavior for all execution types except for those on standalone Nexus operations, which may
+// support Worker-variant callbacks.
+func OnlyNexus() ValidatorOptions {
+	return ValidatorOptions{
+		EnabledKinds: []Kind{KindNexus},
+	}
+}
+
 // Validator validates completion callbacks attached to executions (e.g. workflows and standalone activities).
 type Validator interface {
-	Validate(ctx context.Context, namespaceName string, cbs []*commonpb.Callback) error
+	// Validate rejects callbacks that are not enabled for the execution, or are malformed.
+	// Will mutate the supplied Callbacks to normalize. e.g. converting Nexus headers to lower-case.
+	Validate(ctx context.Context, namespaceName string, cbs []*commonpb.Callback, opts ValidatorOptions) error
 }
 
 // ValidatorConfig holds the limits a [Validator] enforces.
 type ValidatorConfig struct {
 	MaxCallbacksPerExecution dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxIDLengthLimit         dynamicconfig.IntPropertyFn // All ID types use the same global setting.
 
 	// Nexus-variant limits.
 	URLMaxLength  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	HeaderMaxSize dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EndpointRules dynamicconfig.TypedPropertyFnWithNamespaceFilter[AddressMatchRules]
+
+	// Worker-variant limits.
+	MaxServiceNameLength       dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxOperationNameLength     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	WorkerSourceContextMaxSize dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 func (vc *ValidatorConfig) Validate() error {
@@ -59,55 +84,113 @@ func NewValidator(config ValidatorConfig) (Validator, error) {
 	return &validator{config: config}, nil
 }
 
-// Validate validates completion callbacks: count, URL length, endpoint allowlist, header size, and normalizes header
-// keys to lowercase.
-func (v *validator) Validate(_ context.Context, namespaceName string, cbs []*commonpb.Callback) error {
+// Validate validates completion callbacks: their kind, their count, and the fields of each variant.
+// Nexus header keys are normalized to lowercase in place.
+func (v *validator) Validate(
+	_ context.Context,
+	namespaceName string,
+	cbs []*commonpb.Callback,
+	opts ValidatorOptions,
+) error {
 	if len(cbs) > v.config.MaxCallbacksPerExecution(namespaceName) {
 		return serviceerror.NewInvalidArgumentf(
 			"cannot attach more than %d callbacks to an execution", v.config.MaxCallbacksPerExecution(namespaceName),
 		)
 	}
 
-	for _, cb := range cbs {
-		switch variant := cb.GetVariant().(type) {
-		case *commonpb.Callback_Nexus_:
-			rawURL := variant.Nexus.GetUrl()
-			if len(rawURL) > v.config.URLMaxLength(namespaceName) {
-				return serviceerror.NewInvalidArgumentf(
-					"invalid url: url length longer than max length allowed of %d", v.config.URLMaxLength(namespaceName),
-				)
-			}
-			if err := v.config.EndpointRules(namespaceName).Validate(rawURL); err != nil {
-				if s, ok := status.FromError(err); ok {
-					return serviceerror.NewInvalidArgument(s.Message())
-				}
-				return serviceerror.NewInvalidArgument(err.Error())
-			}
-
-			headerSize := 0
-			lowerCaseHeaders := make(map[string]string, len(variant.Nexus.GetHeader()))
-			for k, val := range variant.Nexus.GetHeader() {
-				headerSize += len(k) + len(val)
-				lowerCaseHeaders[strings.ToLower(k)] = val
-			}
-			if headerSize > v.config.HeaderMaxSize(namespaceName) {
-				return serviceerror.NewInvalidArgumentf(
-					"invalid header: header size longer than max allowed size of %d", v.config.HeaderMaxSize(namespaceName),
-				)
-			}
-			variant.Nexus.Header = lowerCaseHeaders
-		case *commonpb.Callback_Worker_:
-			// Worker callbacks aren't supported anywhere. Later, we will refactor this validator
-			// to make which callback kinds are supported configurable.
-			return serviceerror.NewInvalidArgument("worker callbacks are not enabled for this execution type")
-		case *commonpb.Callback_Internal_:
-			// Internal callbacks are server-generated, so there is nothing to validate.
-			// CHASM has no Internal variant, so FromAPICallback rejects them with
-			// InvalidArgument when the execution is backed by CHASM.
-			continue
-		default:
-			return serviceerror.NewUnimplemented(fmt.Sprintf("unknown callback variant: %T", variant))
+	for i, cb := range cbs {
+		if err := v.validateCallback(cb, namespaceName, opts); err != nil {
+			return fmt.Errorf("completion_callbacks[%d]: %w", i, err)
 		}
 	}
+	return nil
+}
+
+func (v *validator) validateCallback(cb *commonpb.Callback, namespaceName string, opts ValidatorOptions) error {
+	kind := KindOf(cb)
+
+	// For unknown callbacks, prefer the "unknown callback variant" error below.
+	if kind != KindUnknown && !slices.Contains(opts.EnabledKinds, kind) {
+		return serviceerror.NewInvalidArgumentf("%s callbacks are not enabled for this execution type", kind)
+	}
+
+	switch kind {
+	case KindNexus:
+		return v.validateNexus(namespaceName, cb.GetNexus())
+	case KindWorker:
+		return v.validateWorker(namespaceName, cb.GetWorker())
+	case KindUnknown:
+		fallthrough
+	default:
+		return serviceerror.NewUnimplementedf("unknown callback variant: %T", cb.GetVariant())
+	}
+}
+
+func (v *validator) validateNexus(namespaceName string, cb *commonpb.Callback_Nexus) error {
+	rawURL := cb.GetUrl()
+	if len(rawURL) > v.config.URLMaxLength(namespaceName) {
+		return serviceerror.NewInvalidArgumentf(
+			"invalid url: url length longer than max length allowed of %d",
+			v.config.URLMaxLength(namespaceName),
+		)
+	}
+	if err := v.config.EndpointRules(namespaceName).Validate(rawURL); err != nil {
+		msg := err.Error()
+		if s, ok := status.FromError(err); ok {
+			msg = s.Message()
+		}
+		return serviceerror.NewInvalidArgument(msg)
+	}
+
+	// Validate total size of all headers, as well as normalize to lowercase.
+	headerSize := 0
+	lowerCaseHeaders := make(map[string]string, len(cb.GetHeader()))
+	for k, val := range cb.GetHeader() {
+		headerSize += len(k) + len(val)
+		lowerCaseHeaders[strings.ToLower(k)] = val
+	}
+	if headerSize > v.config.HeaderMaxSize(namespaceName) {
+		return serviceerror.NewInvalidArgumentf(
+			"invalid header: header size longer than max allowed size of %d",
+			v.config.HeaderMaxSize(namespaceName),
+		)
+	}
+	cb.Header = lowerCaseHeaders
+	return nil
+}
+
+func (v *validator) validateWorker(namespaceName string, cb *commonpb.Callback_Worker) error {
+	// Task Queue
+	if err := tqid.Validate(cb.GetTaskQueueName(), v.config.MaxIDLengthLimit()); err != nil {
+		return err
+	}
+
+	// Nexus handler
+	for _, field := range []struct {
+		name      string
+		value     string
+		maxLength int
+	}{
+		{"service", cb.GetService(), v.config.MaxServiceNameLength(namespaceName)},
+		{"operation", cb.GetOperation(), v.config.MaxOperationNameLength(namespaceName)},
+	} {
+		if field.value == "" {
+			return serviceerror.NewInvalidArgumentf("%s is required", field.name)
+		}
+		if len(field.value) > field.maxLength {
+			return serviceerror.NewInvalidArgumentf(
+				"%s exceeds length limit. Length=%d Limit=%d",
+				field.name, len(field.value), field.maxLength)
+		}
+	}
+
+	// Source Context blob
+	maxSize := v.config.WorkerSourceContextMaxSize(namespaceName)
+	if size := cb.GetSourceContext().Size(); size > maxSize {
+		return serviceerror.NewInvalidArgumentf(
+			"source_context exceeds size limit. Length=%d Limit=%d",
+			size, v.config.WorkerSourceContextMaxSize(namespaceName))
+	}
+
 	return nil
 }

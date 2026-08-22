@@ -242,7 +242,7 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument(opts []testcore.T
 			_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 			var invalidArgument *serviceerror.InvalidArgument
 			s.ErrorAs(err, &invalidArgument)
-			s.Equal(tc.message, err.Error())
+			s.ErrorContains(err, tc.message)
 		})
 	}
 }
