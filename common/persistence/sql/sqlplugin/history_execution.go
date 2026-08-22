@@ -27,6 +27,14 @@ type (
 		DBRecordVersion  int64
 	}
 
+	// ExecutionsUpdate contains a row and the condition expected by its update.
+	// A non-zero DBRecordVersion expects the stored version to be one less;
+	// otherwise Condition is the expected next event ID.
+	ExecutionsUpdate struct {
+		ExecutionsRow
+		Condition int64
+	}
+
 	// ExecutionsFilter contains the column names within executions table that
 	// can be used to filter results through a WHERE clause
 	ExecutionsFilter struct {
@@ -91,5 +99,11 @@ type (
 		// Required params - {shardID, namespaceID, workflowID, runID, archetypeID}
 		DeleteFromCurrentExecutions(ctx context.Context, filter CurrentExecutionsFilter) (sql.Result, error)
 		LockCurrentExecutions(ctx context.Context, filter CurrentExecutionsFilter) (*CurrentExecutionsRow, error)
+	}
+
+	// HistoryExecutionConditionalUpdater lets SQL plugins condition an execution
+	// update on the previously stored record version or next event ID.
+	HistoryExecutionConditionalUpdater interface {
+		UpdateExecutionsWithCondition(ctx context.Context, update *ExecutionsUpdate) (sql.Result, error)
 	}
 )

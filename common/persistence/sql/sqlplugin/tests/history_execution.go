@@ -135,8 +135,13 @@ func (s *historyExecutionSuite) TestInsertUpdate_Success() {
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
+	condition := execution.NextEventID
 	execution = s.newRandomExecutionRow(shardID, namespaceID, workflowID, runID, rand.Int63(), rand.Int63())
-	result, err = s.store.UpdateExecutions(newExecutionContext(), &execution)
+	conditionalStore := s.store.(sqlplugin.HistoryExecutionConditionalUpdater)
+	result, err = conditionalStore.UpdateExecutionsWithCondition(newExecutionContext(), &sqlplugin.ExecutionsUpdate{
+		ExecutionsRow: execution,
+		Condition:     condition,
+	})
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
@@ -168,6 +173,7 @@ func (s *historyExecutionSuite) TestInsertUpdateSelect() {
 	lastWriteVersion := rand.Int63()
 
 	execution := s.newRandomExecutionRow(shardID, namespaceID, workflowID, runID, nextEventID, lastWriteVersion)
+	execution.DBRecordVersion = 5
 	result, err := s.store.InsertIntoExecutions(newExecutionContext(), &execution)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
@@ -175,7 +181,11 @@ func (s *historyExecutionSuite) TestInsertUpdateSelect() {
 	s.Equal(1, int(rowsAffected))
 
 	execution = s.newRandomExecutionRow(shardID, namespaceID, workflowID, runID, rand.Int63(), rand.Int63())
-	result, err = s.store.UpdateExecutions(newExecutionContext(), &execution)
+	execution.DBRecordVersion = 6
+	conditionalStore := s.store.(sqlplugin.HistoryExecutionConditionalUpdater)
+	result, err = conditionalStore.UpdateExecutionsWithCondition(newExecutionContext(), &sqlplugin.ExecutionsUpdate{
+		ExecutionsRow: execution,
+	})
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
 	s.NoError(err)
@@ -190,6 +200,63 @@ func (s *historyExecutionSuite) TestInsertUpdateSelect() {
 	row, err := s.store.SelectFromExecutions(newExecutionContext(), filter)
 	s.NoError(err)
 	s.Equal(&execution, row)
+}
+
+func (s *historyExecutionSuite) TestUpdateWithCondition_Fail() {
+	conditionalStore := s.store.(sqlplugin.HistoryExecutionConditionalUpdater)
+	tests := []struct {
+		name                string
+		storedRecordVersion int64
+		updateRecordVersion int64
+		conditionOffset     int64
+	}{
+		{
+			name:            "legacy next event ID",
+			conditionOffset: 1,
+		},
+		{
+			name:                "record version",
+			storedRecordVersion: 5,
+			updateRecordVersion: 7,
+		},
+	}
+
+	for _, test := range tests {
+		s.Run(test.name, func() {
+			shardID := rand.Int31()
+			namespaceID := primitives.NewUUID()
+			workflowID := shuffle.String(testHistoryExecutionWorkflowID)
+			runID := primitives.NewUUID()
+
+			stored := s.newRandomExecutionRow(shardID, namespaceID, workflowID, runID, rand.Int63(), rand.Int63())
+			stored.DBRecordVersion = test.storedRecordVersion
+			result, err := s.store.InsertIntoExecutions(newExecutionContext(), &stored)
+			s.NoError(err)
+			rowsAffected, err := result.RowsAffected()
+			s.NoError(err)
+			s.Equal(1, int(rowsAffected))
+
+			updated := s.newRandomExecutionRow(shardID, namespaceID, workflowID, runID, rand.Int63(), rand.Int63())
+			updated.DBRecordVersion = test.updateRecordVersion
+			result, err = conditionalStore.UpdateExecutionsWithCondition(newExecutionContext(), &sqlplugin.ExecutionsUpdate{
+				ExecutionsRow: updated,
+				Condition:     stored.NextEventID + test.conditionOffset,
+			})
+			s.NoError(err)
+			rowsAffected, err = result.RowsAffected()
+			s.NoError(err)
+			s.Equal(0, int(rowsAffected))
+
+			row, err := s.store.SelectFromExecutions(newExecutionContext(), sqlplugin.ExecutionsFilter{
+				ShardID:     shardID,
+				NamespaceID: namespaceID,
+				WorkflowID:  workflowID,
+				RunID:       runID,
+			})
+			s.NoError(err)
+			s.Equal(&stored, row)
+		})
+	}
 }
 
 func (s *historyExecutionSuite) TestDeleteSelect() {
