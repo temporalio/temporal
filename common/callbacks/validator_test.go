@@ -54,7 +54,6 @@ func newValidatorConfig() ValidatorConfig {
 		MaxOperationNameLength:     func(string) int { return 40 },
 		WorkerSourceContextMaxSize: func(string) int { return 1000 },
 	}
-
 }
 
 func mustNewValidator(t *testing.T, cfg ValidatorConfig) Validator {

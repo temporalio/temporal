@@ -177,6 +177,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 	healthInterceptor.SetHealthy(true)
 
 	cbValidator, err := callbacks.NewValidator(callbacks.ValidatorConfig{
+		MaxIDLengthLimit:         func() int { return 100 },
 		MaxCallbacksPerExecution: func(string) int { return 2000 },
 		URLMaxLength:             config.CallbackURLMaxLength,
 		HeaderMaxSize:            config.CallbackHeaderMaxSize,
@@ -187,6 +188,9 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 				},
 			}
 		},
+		MaxServiceNameLength:       func(string) int { return 100 },
+		MaxOperationNameLength:     func(string) int { return 100 },
+		WorkerSourceContextMaxSize: func(string) int { return 4096 },
 	})
 	s.NoError(err)
 
@@ -242,6 +246,8 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 			s.mockResource.GetNamespaceRegistry(),
 			nil,
 			s.mockResource.GetSearchAttributesMapperProvider(),
+			nil,
+			nil,
 			nil,
 		),
 		nil, // Not testing CHASM registry here
