@@ -1387,9 +1387,9 @@ func TestQueryConverter_ConvertComparisonExprFail(t *testing.T) {
 
 		{
 			name: "unsupported keyword operator",
-			in:   "AliasForKeyword01 LIKE 'foo'",
+			in:   "AliasForKeyword01 <=> 'foo'",
 			err: fmt.Sprintf(
-				"%s: operator 'LIKE' not supported for Keyword type search attribute 'AliasForKeyword01'",
+				"%s: operator '<=>' not supported for Keyword type search attribute 'AliasForKeyword01'",
 				NotSupportedErrMessage,
 			),
 		},

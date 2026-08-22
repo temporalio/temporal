@@ -147,6 +147,20 @@ func (c *queryConverter) ConvertKeywordComparisonExpr(
 			res, _ = c.BuildNotExpr(res)
 		}
 		return res, nil
+	case sqlparser.LikeStr, sqlparser.NotLikeStr:
+		v, ok := value.(string)
+		if !ok {
+			return nil, query.NewConverterError(
+				"%s: right-hand side of operator '%s' must be a string",
+				query.InvalidExpressionErrMessage,
+				strings.ToUpper(operator),
+			)
+		}
+		var res elastic.Query = elastic.NewWildcardQuery(colName, query.ConvertLikePatternToESWildcard(v))
+		if operator == sqlparser.NotLikeStr {
+			res, _ = c.BuildNotExpr(res)
+		}
+		return res, nil
 	default:
 		return c.ConvertComparisonExpr(operator, col, value)
 	}

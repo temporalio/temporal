@@ -619,7 +619,7 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 		},
 		{
 			name:  "invalid query",
-			query: "WorkflowId LIKE 'wid'",
+			query: "WorkflowId <=> 'wid'",
 			err:   query.NotSupportedErrMessage,
 		},
 		{

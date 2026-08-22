@@ -357,22 +357,36 @@ func (s *queryConverterSuite) TestConvertComparisonExpr() {
 		},
 		{
 			name:   "like expression",
-			input:  "AliasForKeyword01 like 'foo%'",
-			output: "",
-			err: query.NewConverterError(
-				"%s: invalid operator 'like' in `%s`",
-				query.InvalidExpressionErrMessage,
-				"AliasForKeyword01 like 'foo%'",
-			),
+			input:  "AliasForKeyword01 like '%foo%'",
+			output: "Keyword01 like '%foo%'",
+			err:    nil,
 		},
 		{
 			name:   "not like expression",
-			input:  "AliasForKeyword01 NOT LIKE 'foo%'",
+			input:  "AliasForKeyword01 NOT LIKE '%foo%'",
+			output: "Keyword01 not like '%foo%'",
+			err:    nil,
+		},
+		{
+			name:   "like expression error: not a keyword type",
+			input:  "AliasForDatetime01 like '2020-02-15T20:30:40Z'",
 			output: "",
 			err: query.NewConverterError(
-				"%s: invalid operator 'not like' in `%s`",
+				"%s: operator '%s' not supported for search attribute %q of type %s",
 				query.InvalidExpressionErrMessage,
-				"AliasForKeyword01 not like 'foo%'",
+				sqlparser.LikeStr,
+				"AliasForDatetime01",
+				enumspb.INDEXED_VALUE_TYPE_DATETIME.String(),
+			),
+		},
+		{
+			name:   "like expression error: not a string",
+			input:  "AliasForKeyword01 like 123",
+			output: "",
+			err: query.NewConverterError(
+				"%s: right-hand side of '%s' must be a literal string (got: 123)",
+				query.InvalidExpressionErrMessage,
+				sqlparser.LikeStr,
 			),
 		},
 	}
@@ -1035,8 +1049,8 @@ func TestSupportedComparisonOperators(t *testing.T) {
 	s.True(isSupportedComparisonOperator(sqlparser.GreaterEqualStr), msg)
 	s.True(isSupportedComparisonOperator(sqlparser.InStr), msg)
 	s.True(isSupportedComparisonOperator(sqlparser.NotInStr), msg)
-	s.False(isSupportedComparisonOperator(sqlparser.LikeStr), msg)
-	s.False(isSupportedComparisonOperator(sqlparser.NotLikeStr), msg)
+	s.True(isSupportedComparisonOperator(sqlparser.LikeStr), msg)
+	s.True(isSupportedComparisonOperator(sqlparser.NotLikeStr), msg)
 }
 
 func TestSupportedKeywordListOperators(t *testing.T) {
