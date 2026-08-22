@@ -853,6 +853,67 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation() {
 	s.Require().NoError(s.env.GetWorkflowError())
 }
 
+// Test_DeleteVersion_AsyncPropagationFailureKeepsWorkflowOpen verifies that when
+// task-queue delete propagation fails with a non-retryable error, the version
+// workflow stays open (propagation counter is not decremented) so that the
+// system does not lose track of the incomplete cleanup.
+func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagationFailureKeepsWorkflowOpen() {
+	tv := testvars.New(s.T())
+
+	var a *VersionActivities
+	s.env.OnActivity(a.DeleteWorkerControllerInstance, mock.Anything, mock.Anything).Return(nil).Maybe()
+	s.env.OnActivity(a.CheckIfTaskQueuesHavePollers, mock.Anything, mock.Anything).Return(false, nil).Maybe()
+
+	// Simulate failure: task-queue delete propagation returns a non-retryable error,
+	// as if the matching service rejected the request.
+	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).
+		Return(nil, temporal.NewNonRetryableApplicationError("delete propagation failed", "test-error", nil)).
+		Once()
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.UpdateWorkflow(DeleteVersion, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) {
+				s.Fail("delete version should not have been rejected", err)
+			},
+			OnAccept: func() {},
+			OnComplete: func(_ any, err error) {
+				s.Require().NoError(err)
+			},
+		}, &deploymentspb.DeleteVersionArgs{AsyncPropagation: true})
+	}, time.Millisecond)
+
+	// Verify consequence: after propagation fails, check the workflow is still open.
+	observedOpen := false
+	s.env.RegisterDelayedCallback(func() {
+		observedOpen = !s.env.IsWorkflowCompleted()
+		s.env.CancelWorkflow()
+	}, 100*time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+		NamespaceName: tv.NamespaceName().String(),
+		NamespaceId:   tv.NamespaceID().String(),
+		VersionState: &deploymentspb.VersionLocalState{
+			Version: &deploymentspb.WorkerDeploymentVersion{
+				DeploymentName: tv.DeploymentSeries(),
+				BuildId:        tv.BuildID(),
+			},
+			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
+				tv.TaskQueue().Name: {
+					TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
+						int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
+					},
+				},
+			},
+			Status:                    enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
+			StartedDeploymentWorkflow: true,
+		},
+	})
+
+	s.True(observedOpen, "workflow should remain open when delete propagation fails")
+	s.True(temporal.IsCanceledError(s.env.GetWorkflowError()))
+}
+
 // Test_DeleteVersion_AsyncPropagation_BlocksWorkerRegistration tests that:
 // 1. When deletion with async propagation is in progress, worker registration is blocked
 // 2. Worker registration completes after propagation finishes
