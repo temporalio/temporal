@@ -104,6 +104,7 @@ var Module = fx.Options(
 	fx.Provide(NamespaceValidatorInterceptorProvider),
 	fx.Provide(NamespaceRateLimitersProvider),
 	fx.Provide(NamespaceRateLimitInterceptorProvider),
+	fx.Provide(interceptor.NewNoopCallerRateLimitInterceptor),
 	fx.Provide(SDKVersionInterceptorProvider),
 	fx.Provide(CallerInfoInterceptorProvider),
 	fx.Provide(SlowRequestLoggerInterceptorProvider),
