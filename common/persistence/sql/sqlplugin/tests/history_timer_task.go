@@ -187,6 +187,38 @@ func (s *historyHistoryTimerTaskSuite) TestInsertSelect_Multiple() {
 	s.Equal(tasks, rows)
 }
 
+func (s *historyHistoryTimerTaskSuite) TestInsertSelect_MultipleAtSameTimestamp() {
+	shardID := rand.Int31()
+	timestamp := s.now()
+	laterTimestamp := timestamp.Add(time.Millisecond)
+
+	tasks := []sqlplugin.TimerTasksRow{
+		s.newRandomTimerTaskRow(shardID, timestamp, 1),
+		s.newRandomTimerTaskRow(shardID, timestamp, 2),
+		s.newRandomTimerTaskRow(shardID, timestamp, 3),
+		s.newRandomTimerTaskRow(shardID, laterTimestamp, 1),
+	}
+	result, err := s.store.InsertIntoTimerTasks(newExecutionContext(), tasks)
+	s.NoError(err)
+	rowsAffected, err := result.RowsAffected()
+	s.NoError(err)
+	s.Equal(len(tasks), int(rowsAffected))
+
+	filter := sqlplugin.TimerTasksRangeFilter{
+		ShardID:                         shardID,
+		InclusiveMinVisibilityTimestamp: timestamp,
+		InclusiveMinTaskID:              2,
+		ExclusiveMaxVisibilityTimestamp: laterTimestamp.Add(common.ScheduledTaskMinPrecision),
+		PageSize:                        len(tasks),
+	}
+	rows, err := s.store.RangeSelectFromTimerTasks(newExecutionContext(), filter)
+	s.NoError(err)
+	for index := range rows {
+		rows[index].ShardID = shardID
+	}
+	s.Equal(tasks[1:], rows)
+}
+
 func (s *historyHistoryTimerTaskSuite) TestDeleteSelect_Single() {
 	shardID := rand.Int31()
 	timestamp := s.now()
