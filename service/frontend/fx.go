@@ -640,7 +640,6 @@ func NamespaceRateLimitInterceptorProvider(
 	return interceptor.NewNamespaceRateLimitInterceptor(
 		namespaceRegistry,
 		quotas.NewRoutingRateLimiter(mapping),
-		map[string]int{}, // no token overrides
 		configs.PollTaskAPISet,
 		serviceConfig.PollWaitForNamespaceRateLimitToken,
 		metricsHandler,
