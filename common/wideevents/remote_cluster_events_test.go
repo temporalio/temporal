@@ -7,7 +7,7 @@ import (
 )
 
 func TestRemoteClusterLifecycleEventName(t *testing.T) {
-	require.Equal(t, "remote_cluster_lifecycle", RemoteClusterLifecyclePayload{}.EventName())
+	require.Equal(t, NamespaceLifecycleEventName, RemoteClusterLifecyclePayload{}.EventName())
 }
 
 func TestRemoteClusterLifecycleFieldSetMatchesNamespaceLifecycle(t *testing.T) {
