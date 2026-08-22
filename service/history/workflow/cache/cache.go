@@ -373,6 +373,7 @@ func (c *cacheImpl) makeReleaseFunc(
 			}()
 			if rec := recover(); rec != nil {
 				wfContext.Clear()
+				wfContext.RefreshCacheSize()
 				wfContext.Unlock()
 				c.Release(cacheKey)
 				panic(rec)
@@ -380,6 +381,7 @@ func (c *cacheImpl) makeReleaseFunc(
 				if err != nil || forceClearContext {
 					// TODO see issue #668, there are certain type or errors which can bypass the clear
 					wfContext.Clear()
+					wfContext.RefreshCacheSize()
 					wfContext.Unlock()
 					c.Release(cacheKey)
 				} else {
@@ -393,6 +395,7 @@ func (c *cacheImpl) makeReleaseFunc(
 							tag.WorkflowRunID(wfContext.GetWorkflowKey().RunID),
 						)
 					}
+					wfContext.RefreshCacheSize()
 					wfContext.Unlock()
 					c.Release(cacheKey)
 					if isDirty {
