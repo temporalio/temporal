@@ -10,6 +10,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -664,12 +665,17 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 
 	tracksCompletionResult := internal.TracksCompletionResult(start.GetOverlapPolicy())
 	var lcr []*commonpb.Payload
-	continuedFailure := lastCompletionState.Failure
+	var continuedFailure *failurepb.Failure
+	// Read the policy stamped on the start rather than resolving against the
+	// schedule's live policy, mirroring V1's startWorkflow, which compares
+	// start.OverlapPolicy directly. Native V2 starts are always stamped with a
+	// concrete policy when buffered; starts migrated from V1 carry none, and V1
+	// passed completion state to those.
 	if tracksCompletionResult && lastCompletionState.Success != nil {
 		lcr = append(lcr, lastCompletionState.Success)
 	}
-	if !tracksCompletionResult {
-		continuedFailure = nil
+	if tracksCompletionResult {
+		continuedFailure = lastCompletionState.Failure
 	}
 	var completionCallbacks []*commonpb.Callback
 	if tracksCompletionResult {
