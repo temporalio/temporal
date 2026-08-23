@@ -453,7 +453,7 @@ func TestScheduleCHASM(t *testing.T) {
 func testScheduleTimeSkippingFastForward(t *testing.T) {
 	opts := append(scheduleCommonOpts(t), testcore.WithDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true))
 	s := newScheduleEnv(t, opts...)
-	ctx := chasmContextFactory(s.Context())
+	ctx := chasmContextFactory(testcontext.For(t))
 
 	sid := testcore.RandomizeStr("sched-time-skipping")
 	wid := testcore.RandomizeStr("sched-time-skipping-wf")

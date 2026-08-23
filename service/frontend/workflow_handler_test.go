@@ -3822,7 +3822,7 @@ func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingConfig() {
 	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	wh := s.getWorkflowHandler(config)
 
-	tests := []struct {
+	testCases := []struct {
 		name    string
 		config  *commonpb.TimeSkippingConfig
 		wantErr bool
@@ -3837,7 +3837,7 @@ func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingConfig() {
 			Id: "over-one-year", Duration: durationpb.New(365*24*time.Hour + time.Second),
 		}}, wantErr: true},
 	}
-	for _, tc := range tests {
+	for _, tc := range testCases {
 		s.Run(tc.name, func() {
 			err := wh.validateAndPopulateScheduleTimeSkippingConfig(
 				&schedulepb.Schedule{TimeSkippingConfig: tc.config}, s.testNamespace)
