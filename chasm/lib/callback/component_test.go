@@ -133,27 +133,32 @@ func TestFromAPICallback(t *testing.T) {
 	})
 }
 
-// Asserts that CHASM Callbacks do not support the new Worker callback variant.
-func TestWorkerCallbacksNotSupported(t *testing.T) {
-	apiCb := &commonpb.Callback{
-		Variant: &commonpb.Callback_Worker_{
-			Worker: &commonpb.Callback_Worker{},
-		},
-	}
-	chasmCB, err := FromAPICallback(apiCb)
-	require.NoError(t, err)
+// Test the error case when the CHASM callback has a bogus value.
+// The positive cases are covered in the round-tripping scenarios
+// in TestFromAPICallback.
+func TestToAPICallbackUnsupportedVariant(t *testing.T) {
+	cb := &Callback{CallbackState: &callbackspb.CallbackState{
+		Callback: &callbackspb.Callback{},
+	}}
+	_, err := cb.ToAPICallback()
+	var internalErr *serviceerror.Internal
+	require.ErrorAs(t, err, &internalErr)
+	require.ErrorContains(t, err, "unsupported CHASM callback type")
+}
 
+// A callback whose variant this server doesn't know how to invoke can still be persisted (by a server that
+// does, or by a future version), so its invocation task has to be rejected rather than crash.
+func TestLoadInvocationArgsUnsupportedVariant(t *testing.T) {
 	cb := &Callback{
 		CallbackState: &callbackspb.CallbackState{
-			Callback: chasmCB,
+			Callback: &callbackspb.Callback{},
 		},
 	}
-	_, err = cb.loadInvocationArgs(&chasm.MockMutableContext{}, nil)
+	_, err := cb.loadInvocationArgs(&chasm.MockMutableContext{}, nil)
 
 	var unprocessableErr *queueserrors.UnprocessableTaskError
 	require.ErrorAs(t, err, &unprocessableErr)
 	require.ErrorContains(t, err, "unprocessable callback variant")
-	require.ErrorContains(t, err, "Callback_Worker_")
 }
 
 // Verify the setResult method sets the "result" field based on the Callback state.

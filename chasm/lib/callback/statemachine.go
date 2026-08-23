@@ -36,6 +36,13 @@ func callbackDestination(cb *callbackspb.Callback) (string, error) {
 	}
 }
 
+// Destination returns the destination this callback's invocation tasks are grouped under. Callers
+// outside this package need it to look the callback up in per-destination structures such as the
+// outbound queue's circuit breaker pool.
+func (c *Callback) Destination() (string, error) {
+	return callbackDestination(c.GetCallback())
+}
+
 // EventScheduled is triggered when the callback is meant to be scheduled for the first time - when its Trigger
 // condition is met.
 type EventScheduled struct{}

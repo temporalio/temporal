@@ -628,7 +628,7 @@ func (o *Operation) buildCompletionCallbackInfos(ctx chasm.Context) ([]*apinexus
 	sortedCallbackKeys := slices.Sorted(maps.Keys(o.Callbacks))
 	infos := make([]*apinexusoperationpb.CallbackInfo, 0, len(o.Callbacks))
 	for _, id := range sortedCallbackKeys {
-		info, err := o.Callbacks[id].Get(ctx).ToAPICallbackInfo()
+		info, err := o.Callbacks[id].Get(ctx).ToAPICallbackInfo(ctx)
 		if err != nil {
 			return nil, err
 		}

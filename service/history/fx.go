@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"github.com/sony/gobreaker"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
@@ -43,12 +44,14 @@ import (
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/archival"
+	"go.temporal.io/server/service/history/circuitbreakerpool"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/workerdeployment"
@@ -123,10 +126,27 @@ var Module = fx.Options(
 	activity.HistoryModule,
 	scheduler.Module,
 	callback.Module,
+	fx.Provide(CallbackDestinationBlockedProvider),
 	chasmnexus.Module,
 	chasmworkflow.Module,
 	chasmworkflow.HistoryHandlerModule,
 )
+
+// CallbackDestinationBlockedProvider lets the callback library report a callback as BLOCKED while
+// the outbound queue's circuit breaker for its destination is open. Only the history service runs
+// that queue, so only it can answer.
+func CallbackDestinationBlockedProvider(
+	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
+) callback.DestinationBlockedFn {
+	return func(namespaceID string, destination string) bool {
+		cb := outboundQueueCBPool.Get(tasks.TaskGroupNamespaceIDAndDestination{
+			TaskGroup:   callback.InvocationTaskGroup,
+			NamespaceID: namespaceID,
+			Destination: destination,
+		})
+		return cb.State() != gobreaker.StateClosed
+	}
+}
 
 func ServerProvider(grpcServerOptions []grpc.ServerOption) *grpc.Server {
 	return grpc.NewServer(grpcServerOptions...)
