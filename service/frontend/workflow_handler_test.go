@@ -3820,7 +3820,18 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingConfig() {
 	config := s.newConfig()
 	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.ScheduleTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
+	s.Require().ErrorIs(
+		wh.validateAndPopulateScheduleTimeSkippingConfig(
+			&schedulepb.Schedule{TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true}},
+			s.testNamespace,
+		),
+		errScheduleTimeSkippingNotEnabled,
+	)
+
+	config.ScheduleTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh = s.getWorkflowHandler(config)
 
 	testCases := []struct {
 		name    string

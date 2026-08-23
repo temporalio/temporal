@@ -755,6 +755,9 @@ func (wh *WorkflowHandler) validateAndPopulateScheduleTimeSkippingConfig(
 	if config == nil {
 		return nil
 	}
+	if !wh.config.ScheduleTimeSkippingEnabled(ns.String()) {
+		return errScheduleTimeSkippingNotEnabled
+	}
 	if err := wh.validateAndPopulateTimeSkippingConfig(config, ns); err != nil {
 		return err
 	}

@@ -451,7 +451,11 @@ func TestScheduleCHASM(t *testing.T) {
 }
 
 func testScheduleTimeSkippingFastForward(t *testing.T) {
-	opts := append(scheduleCommonOpts(t), testcore.WithDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true))
+	opts := append(
+		scheduleCommonOpts(t),
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true),
+		testcore.WithDynamicConfig(dynamicconfig.ScheduleTimeSkippingEnabled, true),
+	)
 	s := newScheduleEnv(t, opts...)
 	ctx := chasmContextFactory(testcontext.For(t))
 
