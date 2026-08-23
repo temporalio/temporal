@@ -226,6 +226,116 @@ func (s *matchingEngineSuite) TearDownTest() {
 	s.matchingEngine.Stop()
 }
 
+func (s *matchingEngineSuite) TestRecordActivityTaskStartedRetriesAttemptDeadline() {
+	synctest.Test(s.T(), func(t *testing.T) {
+		task := newInternalTaskForSyncMatch(&persistencespb.TaskInfo{
+			NamespaceId:      s.ns.ID().String(),
+			WorkflowId:       uuid.NewString(),
+			RunId:            uuid.NewString(),
+			ScheduledEventId: 1,
+		}, nil, 0, nil)
+		pollRequest := &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: s.ns.Name().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: "activity-task-queue"},
+		}
+		expectedResponse := &historyservice.RecordActivityTaskStartedResponse{Attempt: 1}
+
+		var requestID string
+		attempts := 0
+		s.mockHistoryClient.EXPECT().
+			RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+			DoAndReturn(func(ctx context.Context, request *historyservice.RecordActivityTaskStartedRequest, _ ...grpc.CallOption) (*historyservice.RecordActivityTaskStartedResponse, error) {
+				attempts++
+				if attempts == 1 {
+					requestID = request.GetRequestId()
+					_, err := uuid.Parse(requestID)
+					require.NoError(t, err)
+					<-ctx.Done()
+					return nil, ctx.Err()
+				}
+
+				require.Equal(t, requestID, request.GetRequestId())
+				return expectedResponse, nil
+			}).Times(2)
+
+		response, err := s.matchingEngine.recordActivityTaskStarted(context.Background(), pollRequest, task)
+		require.NoError(t, err)
+		require.Same(t, expectedResponse, response)
+		require.Equal(t, 2, attempts)
+	})
+}
+
+func (s *matchingEngineSuite) TestRecordWorkflowTaskStartedRetriesAttemptDeadline() {
+	synctest.Test(s.T(), func(t *testing.T) {
+		task := newInternalTaskForSyncMatch(&persistencespb.TaskInfo{
+			NamespaceId:      s.ns.ID().String(),
+			WorkflowId:       uuid.NewString(),
+			RunId:            uuid.NewString(),
+			ScheduledEventId: 1,
+		}, nil, 0, nil)
+		pollRequest := &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: s.ns.Name().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: "workflow-task-queue"},
+		}
+		expectedResponse := &historyservice.RecordWorkflowTaskStartedResponse{Attempt: 1}
+
+		var requestID string
+		attempts := 0
+		s.mockHistoryClient.EXPECT().
+			RecordWorkflowTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+			DoAndReturn(func(ctx context.Context, request *historyservice.RecordWorkflowTaskStartedRequest, _ ...grpc.CallOption) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+				attempts++
+				if attempts == 1 {
+					requestID = request.GetRequestId()
+					_, err := uuid.Parse(requestID)
+					require.NoError(t, err)
+					<-ctx.Done()
+					return nil, ctx.Err()
+				}
+
+				require.Equal(t, requestID, request.GetRequestId())
+				return expectedResponse, nil
+			}).Times(2)
+
+		response, err := s.matchingEngine.recordWorkflowTaskStarted(context.Background(), pollRequest, task)
+		require.NoError(t, err)
+		require.Same(t, expectedResponse, response)
+		require.Equal(t, 2, attempts)
+	})
+}
+
+func TestRecordTaskStartedWithRetryStopsAtExistingBoundaries(t *testing.T) {
+	task := newInternalTaskForSyncMatch(&persistencespb.TaskInfo{}, nil, 0, nil)
+
+	t.Run("definitive error", func(t *testing.T) {
+		attempts := 0
+		_, err := recordTaskStartedWithRetry(context.Background(), task, func(context.Context) (struct{}, error) {
+			attempts++
+			return struct{}{}, randomTestError
+		})
+
+		require.ErrorIs(t, err, randomTestError)
+		require.Equal(t, 1, attempts)
+	})
+
+	t.Run("parent deadline", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			parentCtx, cancel := context.WithTimeout(context.Background(), recordTaskStartedSyncMatchTimeout/2)
+			defer cancel()
+
+			attempts := 0
+			_, err := recordTaskStartedWithRetry(parentCtx, task, func(ctx context.Context) (struct{}, error) {
+				attempts++
+				<-ctx.Done()
+				return struct{}{}, ctx.Err()
+			})
+
+			require.ErrorIs(t, err, context.DeadlineExceeded)
+			require.Equal(t, 1, attempts)
+		})
+	})
+}
+
 func (s *matchingEngineSuite) newMatchingEngine(
 	config *Config,
 	taskMgr persistence.TaskManager,
