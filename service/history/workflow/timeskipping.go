@@ -161,38 +161,6 @@ func propagateTimeSkippingToNextRun(
 	return newTSC, stateProp
 }
 
-// propagateTimeSkippingToOtherExecution snapshots the current execution's time skipping into another
-// execution (e.g. a child workflow), which shares the current execution's virtual clock. Two rules:
-//  1. State: nothing propagates except virtual time.
-//  2. Config: everything propagates except the fast-forward config, and the whole config can be
-//     suppressed by DisablePropagation.
-func propagateTimeSkippingToOtherExecution(
-	tsi *persistencespb.TimeSkippingInfo,
-) (*commonpb.TimeSkippingConfig, *commonpb.TimeSkippingStatePropagation) {
-	if tsi == nil {
-		return nil, nil
-	}
-	tsc := tsi.GetConfig()
-	accum := NewTimeSkippingInfoUtil(tsi).GetAccumulatedSkippedDuration()
-
-	var stateProp *commonpb.TimeSkippingStatePropagation
-	if accum > 0 {
-		stateProp = &commonpb.TimeSkippingStatePropagation{
-			InitialSkippedDuration: durationpb.New(accum),
-			InitialSkipCount:       0,
-		}
-	}
-
-	if tsc == nil || tsc.GetDisablePropagation() {
-		return nil, stateProp
-	}
-
-	// Propagate the whole config except the per-execution fast-forward.
-	newTSC := common.CloneProto(tsc)
-	newTSC.FastForwardConfig = nil
-	return newTSC, stateProp
-}
-
 // =============================================================================
 // Time Skipping Runtime Time Impacts
 // =============================================================================
