@@ -3500,6 +3500,14 @@ because executions scanner support for SQL is not yet implemented.`,
 		`HistoryScannerVerifyRetention indicates if the history scavenger should verify data retention.
 When enabled, the scavenger will delete completed workflow execution data that are older than the namespace retention period plus worker.executionDataDurationBuffer.`,
 	)
+	HistoryScannerRPS = NewGlobalIntSetting(
+		"worker.historyScannerRPS",
+		0,
+		`HistoryScannerRPS is the maximum rate of persistence calls from the history scavenger.
+The history scavenger issues heavy scan and delete calls, so it can be worth throttling it
+independently of the rest of worker.Scanner. When set to 0 (the default) the history scavenger
+falls back to worker.scannerPersistenceMaxQPS.`,
+	)
 	EnableBatcherNamespace = NewNamespaceBoolSetting(
 		"worker.enableNamespaceBatcher",
 		true,
