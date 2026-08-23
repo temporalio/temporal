@@ -522,12 +522,13 @@ func shippedEventRange(
 }
 
 // emitReplicationVerifyApplied emits a best-effort "applied" ReplicationLifecycle event for a
-// verify task. Outcome is "verified" when verification passed (no error) and "resend_needed" when
-// the task requested a state resend; any other error is reported with its message. ms may be nil
+// verify task. Outcome is "verified" for a no-op success, "backfilled" after repairing history,
+// "resend_needed" when requesting state resend, or "error". ms may be nil
 // (e.g. the workflow was not found) in which case only identity fields are populated.
 func (e *ExecutableVerifyVersionedTransitionTask) emitReplicationVerifyApplied(
 	ms *persistencespb.WorkflowMutableState,
 	retErr error,
+	backfillDetails map[string]any,
 ) {
 	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(namespace.ID(e.NamespaceID), e.WorkflowID)
 	if err != nil {
@@ -548,6 +549,8 @@ func (e *ExecutableVerifyVersionedTransitionTask) emitReplicationVerifyApplied(
 			outcome = "error"
 			errStr = retErr.Error()
 		}
+	} else if backfillDetails != nil {
+		outcome = "backfilled"
 	}
 
 	var nsName string
@@ -568,6 +571,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) emitReplicationVerifyApplied(
 		SourceCluster: e.SourceClusterName(),
 		SourceShard:   e.SourceShardKey().ShardID,
 		SourceTaskID:  e.TaskID(),
+		NewRunID:      e.taskAttr.GetNewRunId(),
 	}
 	if vt := e.ReplicationTask().GetVersionedTransition(); vt != nil {
 		payload.FailoverVersion = vt.GetNamespaceFailoverVersion()
@@ -582,6 +586,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) emitReplicationVerifyApplied(
 	if ms != nil {
 		details["actual"] = actualState(ms)
 	}
+	maps.Copy(details, backfillDetails)
 	payload.Details = details
 
 	wideevents.Emit(logger, payload)

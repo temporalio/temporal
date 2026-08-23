@@ -640,7 +640,6 @@ func NamespaceRateLimitInterceptorProvider(
 	return interceptor.NewNamespaceRateLimitInterceptor(
 		namespaceRegistry,
 		quotas.NewRoutingRateLimiter(mapping),
-		map[string]int{}, // no token overrides
 		configs.PollTaskAPISet,
 		serviceConfig.PollWaitForNamespaceRateLimitToken,
 		metricsHandler,
@@ -782,6 +781,7 @@ func AdminHandlerProvider(
 	replicatorNamespaceReplicationQueue FEReplicatorNamespaceReplicationQueue,
 	visibilityMgr manager.VisibilityManager,
 	logger log.SnTaggedLogger,
+	eventLogger otellog.Logger,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	taskManager persistence.TaskManager,
 	fairTaskManager persistence.FairTaskManager,
@@ -814,6 +814,7 @@ func AdminHandlerProvider(
 		replicatorNamespaceReplicationQueue,
 		visibilityMgr,
 		logger,
+		eventLogger,
 		taskManager,
 		fairTaskManager,
 		persistenceExecutionManager,
@@ -868,6 +869,7 @@ func NamespaceDLQHandlerProvider(
 func OperatorHandlerProvider(
 	configuration *Config,
 	logger log.SnTaggedLogger,
+	eventLogger otellog.Logger,
 	sdkClientFactory sdk.ClientFactory,
 	metricsHandler metrics.Handler,
 	visibilityMgr manager.VisibilityManager,
@@ -883,6 +885,7 @@ func OperatorHandlerProvider(
 	args := NewOperatorHandlerImplArgs{
 		configuration,
 		logger,
+		eventLogger,
 		sdkClientFactory,
 		metricsHandler,
 		visibilityMgr,

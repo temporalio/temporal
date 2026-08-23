@@ -35,14 +35,20 @@ import (
 
 type wfaDriver struct {
 	env *testcore.TestEnv
-	ctx context.Context
+	t   *testing.T
 	cfg activityConfig
 }
 
 // newWFADriver builds a driver. cfg.StartDelay is ignored: a workflow activity has no per-activity
 // start delay.
 func newWFADriver(t *testing.T, env *testcore.TestEnv, cfg activityConfig) *wfaDriver {
-	return &wfaDriver{env: env, ctx: testcontext.For(t), cfg: cfg}
+	return &wfaDriver{env: env, t: t, cfg: cfg}
+}
+
+// testContext returns the driver's current test context, deliberately not cached;
+// see [testcontext.EnsureRemaining].
+func (d *wfaDriver) testContext() context.Context {
+	return testcontext.For(d.t)
 }
 
 // wfaHandle is a handle to a workflow-scheduled activity.
@@ -71,6 +77,10 @@ func (a *wfaHandle) driveEvent(t testing.TB, e model.Event) {
 	driveActivityEvent(t, a, e)
 }
 
+func (a *wfaHandle) testContext() context.Context {
+	return a.d.testContext()
+}
+
 func (a *wfaHandle) awaitTimeout(t testing.TB, e model.Event, deadline time.Time) {
 	awaitActivityTimeout(t, a, e, deadline)
 }
@@ -86,7 +96,7 @@ func (a *wfaHandle) timeoutInfo(t require.TestingT) activityTimeoutInfo {
 		}
 	}
 	var timeoutErr *temporal.TimeoutError
-	if errors.As(a.run.Get(a.d.ctx, nil), &timeoutErr) {
+	if errors.As(a.run.Get(a.testContext(), nil), &timeoutErr) {
 		return activityTimeoutInfo{timeout: timeoutErr.TimeoutType(), terminal: true}
 	}
 	return activityTimeoutInfo{terminal: true}
@@ -95,7 +105,7 @@ func (a *wfaHandle) timeoutInfo(t require.TestingT) activityTimeoutInfo {
 // awaitDispatchDelay waits for the public dispatch deadline to become due. A following Poll is what
 // proves that the task actually reached Matching.
 func (a *wfaHandle) awaitDispatchDelay(t testing.TB, e model.Event) {
-	awaitActivityDispatchDelay(a.d.ctx, t, e, func(t require.TestingT) (bool, enumspb.PendingActivityState, *timestamppb.Timestamp, any) {
+	awaitActivityDispatchDelay(a.testContext(), t, e, func(t require.TestingT) (bool, enumspb.PendingActivityState, *timestamppb.Timestamp, any) {
 		pa := a.pendingActivityInfo(t)
 		if pa == nil {
 			return false, enumspb.PENDING_ACTIVITY_STATE_UNSPECIFIED, nil, "activity is no longer in progress"
@@ -120,12 +130,12 @@ func (d *wfaDriver) start(t *testing.T, cfg activityConfig) *wfaHandle {
 	t.Cleanup(w.Stop)
 
 	wfID := testcore.RandomizeStr("wfa-run")
-	run, err := d.env.SdkClient().ExecuteWorkflow(d.ctx,
+	run, err := d.env.SdkClient().ExecuteWorkflow(d.testContext(),
 		sdkclient.StartWorkflowOptions{ID: wfID, TaskQueue: wfTQ},
 		wfaSingleActivityWorkflow, wfaActivityParams{Cfg: cfg, ActivityTQ: actTQ, ActivityID: actID})
 	require.NoError(t, err)
 	a := &wfaHandle{
-		activityDriverState: activityDriverState{ctx: d.ctx, cfg: cfg},
+		activityDriverState: activityDriverState{cfg: cfg},
 		d:                   d,
 		run:                 run,
 		workflowID:          wfID,
@@ -134,7 +144,7 @@ func (d *wfaDriver) start(t *testing.T, cfg activityConfig) *wfaHandle {
 		taskQueue:           actTQ,
 	}
 	// The workflow schedules the activity, so it does not exist yet when ExecuteWorkflow returns.
-	await.Require(d.ctx, t, func(t *await.T) {
+	await.Require(d.testContext(), t, func(t *await.T) {
 		_, activityInProgress := a.activityInfoIfInProgress(t)
 		t.Require().True(activityInProgress, "the workflow has not scheduled its activity")
 	}, activityDriverTimeout, activityDriverPollInterval)
@@ -187,7 +197,7 @@ func wfaSingleActivityWorkflow(ctx workflow.Context, params wfaActivityParams) e
 // pendingActivityInfo is the activity's entry in the workflow's pending set, nil once it is no longer
 // pending.
 func (a *wfaHandle) pendingActivityInfo(t require.TestingT) *workflowpb.PendingActivityInfo {
-	resp, err := a.d.env.SdkClient().DescribeWorkflowExecution(a.d.ctx, a.workflowID, a.runID)
+	resp, err := a.d.env.SdkClient().DescribeWorkflowExecution(a.testContext(), a.workflowID, a.runID)
 	require.NoError(t, err)
 	for _, pa := range resp.GetPendingActivities() {
 		if pa.GetActivityId() == a.activityID {
@@ -208,7 +218,7 @@ func (a *wfaHandle) activityInfo(t require.TestingT) activityInfo {
 // terminalOutcome waits for the activity to reach a terminal state and reports it. A workflow activity's
 // terminal status is not in PendingActivities, so it is read from the workflow-result error's cause.
 func (a *wfaHandle) terminalOutcome(t require.TestingT) activityTerminalOutcome {
-	err := a.run.Get(a.d.ctx, nil)
+	err := a.run.Get(a.testContext(), nil)
 	if err == nil {
 		return activityTerminalOutcome{status: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED}
 	}
@@ -252,7 +262,7 @@ func wfaActivityInfo(p *workflowpb.PendingActivityInfo) activityInfo {
 
 // waitForCancelRequested waits until the workflow-initiated cancellation reaches the activity.
 func (a *wfaHandle) waitForCancelRequested(t testing.TB) {
-	await.Require(a.d.ctx, t, func(t *await.T) {
+	await.Require(a.testContext(), t, func(t *await.T) {
 		pendingActivity := a.pendingActivityInfo(t)
 		t.Require().NotNil(pendingActivity, "activity is no longer in progress")
 		t.Require().Equal(enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED, pendingActivity.GetState())
@@ -261,7 +271,7 @@ func (a *wfaHandle) waitForCancelRequested(t testing.TB) {
 
 func (a *wfaHandle) respondCanceledByID() error {
 	_, err := a.d.env.FrontendClient().RespondActivityTaskCanceledById(
-		a.d.ctx,
+		a.testContext(),
 		&workflowservice.RespondActivityTaskCanceledByIdRequest{
 			Namespace:  a.d.env.Namespace().String(),
 			WorkflowId: a.workflowID,
@@ -277,20 +287,21 @@ func (a *wfaHandle) respondCanceledByID() error {
 func (a *wfaHandle) rpc(t testing.TB, e model.Event) error {
 	fc := a.d.env.FrontendClient()
 	ns := a.d.env.Namespace().String()
+	ctx := a.testContext()
 	switch e.Type {
 	case model.HeartbeatType:
-		_, err := fc.RecordActivityTaskHeartbeat(a.d.ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+		_, err := fc.RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
 			Namespace: ns, TaskToken: a.token, Details: activityRecordedHeartbeatDetails,
 		})
 		return err
 	case model.RespondCompletedType:
-		_, err := fc.RespondActivityTaskCompleted(a.d.ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+		_, err := fc.RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
 			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(),
 			Result: payloads.EncodeString("result"),
 		})
 		return err
 	case model.RespondCompletedByIDType:
-		_, err := fc.RespondActivityTaskCompletedById(a.d.ctx, &workflowservice.RespondActivityTaskCompletedByIdRequest{
+		_, err := fc.RespondActivityTaskCompletedById(ctx, &workflowservice.RespondActivityTaskCompletedByIdRequest{
 			Namespace: ns, WorkflowId: a.workflowID, RunId: a.runID, ActivityId: a.activityID, Identity: a.d.env.Tv().WorkerIdentity(),
 			Result: payloads.EncodeString("result"),
 		})
@@ -302,7 +313,7 @@ func (a *wfaHandle) rpc(t testing.TB, e model.Event) error {
 		if e.HasHeartbeatDetails {
 			req.LastHeartbeatDetails = activityHeartbeatDetails
 		}
-		_, err := fc.RespondActivityTaskFailed(a.d.ctx, req)
+		_, err := fc.RespondActivityTaskFailed(ctx, req)
 		return err
 	case model.RespondFailedByIDType:
 		req := &workflowservice.RespondActivityTaskFailedByIdRequest{
@@ -312,16 +323,16 @@ func (a *wfaHandle) rpc(t testing.TB, e model.Event) error {
 		if e.HasHeartbeatDetails {
 			req.LastHeartbeatDetails = activityHeartbeatDetails
 		}
-		_, err := fc.RespondActivityTaskFailedById(a.d.ctx, req)
+		_, err := fc.RespondActivityTaskFailedById(ctx, req)
 		return err
 	case model.RespondCanceledType:
-		_, err := fc.RespondActivityTaskCanceled(a.d.ctx, &workflowservice.RespondActivityTaskCanceledRequest{
+		_, err := fc.RespondActivityTaskCanceled(ctx, &workflowservice.RespondActivityTaskCanceledRequest{
 			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(),
 		})
 		return err
 	case model.RequestCancelType:
 		if err := a.d.env.SdkClient().SignalWorkflow(
-			a.d.ctx,
+			ctx,
 			a.workflowID,
 			a.runID,
 			wfaCancelSignal,
@@ -332,22 +343,22 @@ func (a *wfaHandle) rpc(t testing.TB, e model.Event) error {
 		a.waitForCancelRequested(t)
 		return nil
 	case model.PauseType:
-		_, err := fc.PauseActivityExecution(a.d.ctx, &workflowservice.PauseActivityExecutionRequest{
+		_, err := fc.PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
 			Namespace: ns, WorkflowId: a.workflowID, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(), Reason: "drive", RequestId: uuid.NewString(),
 		})
 		return err
 	case model.UnpauseType:
-		_, err := fc.UnpauseActivityExecution(a.d.ctx, &workflowservice.UnpauseActivityExecutionRequest{
+		_, err := fc.UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
 			Namespace: ns, WorkflowId: a.workflowID, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(),
 		})
 		return err
 	case model.ResetType:
-		_, err := fc.ResetActivityExecution(a.d.ctx, &workflowservice.ResetActivityExecutionRequest{
+		_, err := fc.ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
 			Namespace: ns, WorkflowId: a.workflowID, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(), KeepPaused: e.KeepPaused, ResetHeartbeat: e.ResetHeartbeat,
 		})
 		return err
 	case model.UpdateOptionsType:
-		_, err := fc.UpdateActivityExecutionOptions(a.d.ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+		_, err := fc.UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
 			Namespace: ns, WorkflowId: a.workflowID, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(),
 			ActivityOptions: &activitypb.ActivityOptions{HeartbeatTimeout: durationpb.New(time.Hour)},
 			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"heartbeat_timeout"}},
@@ -359,7 +370,7 @@ func (a *wfaHandle) rpc(t testing.TB, e model.Event) error {
 }
 
 func (a *wfaHandle) pollForTask(t require.TestingT, timeout time.Duration) *workflowservice.PollActivityTaskQueueResponse {
-	ctx, cancel := context.WithTimeout(a.d.ctx, timeout)
+	ctx, cancel := context.WithTimeout(a.testContext(), timeout)
 	defer cancel()
 	resp, err := a.d.env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
 		Namespace: a.d.env.Namespace().String(),
