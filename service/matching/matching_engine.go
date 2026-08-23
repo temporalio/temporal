@@ -3574,18 +3574,29 @@ func recordTaskStartedWithRetry[T any](
 	task *internalTask,
 	operation func(context.Context) (T, error),
 ) (T, error) {
+	ambiguousStart := false
 	for {
 		attemptCtx, cancel := newRecordTaskStartedContext(parentCtx, task)
 		response, err := operation(attemptCtx)
 		attemptDeadlineExceeded := attemptCtx.Err() == context.DeadlineExceeded
 		cancel()
 
-		if err == nil ||
-			!common.IsContextDeadlineExceededErr(err) ||
-			!attemptDeadlineExceeded ||
-			parentCtx.Err() != nil {
+		if err == nil || parentCtx.Err() != nil {
 			return response, err
 		}
+		if common.IsContextDeadlineExceededErr(err) && attemptDeadlineExceeded {
+			ambiguousStart = true
+			continue
+		}
+
+		var resourceExhaustedErr *serviceerror.ResourceExhausted
+		if ambiguousStart &&
+			errors.As(err, &resourceExhaustedErr) &&
+			resourceExhaustedErr.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
+			continue
+		}
+
+		return response, err
 	}
 }
 

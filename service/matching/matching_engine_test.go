@@ -253,9 +253,12 @@ func (s *matchingEngineSuite) TestRecordActivityTaskStartedRetriesAttemptDeadlin
 				} else {
 					require.Equal(t, requestID, request.GetRequestId())
 				}
-				if attempts <= 2 {
+				switch attempts {
+				case 1:
 					<-ctx.Done()
 					return nil, ctx.Err()
+				case 2:
+					return nil, consts.ErrResourceExhaustedBusyWorkflow
 				}
 
 				return expectedResponse, nil
@@ -295,18 +298,21 @@ func (s *matchingEngineSuite) TestRecordWorkflowTaskStartedRetriesAttemptDeadlin
 				} else {
 					require.Equal(t, requestID, request.GetRequestId())
 				}
-				if attempts <= 2 {
+				switch attempts {
+				case 1, 2:
 					<-ctx.Done()
 					return nil, ctx.Err()
+				case 3:
+					return nil, consts.ErrResourceExhaustedBusyWorkflow
 				}
 
 				return expectedResponse, nil
-			}).Times(3)
+			}).Times(4)
 
 		response, err := s.matchingEngine.recordWorkflowTaskStarted(context.Background(), pollRequest, task)
 		require.NoError(t, err)
 		require.Same(t, expectedResponse, response)
-		require.Equal(t, 3, attempts)
+		require.Equal(t, 4, attempts)
 	})
 }
 
@@ -322,6 +328,34 @@ func TestRecordTaskStartedWithRetryStopsAtExistingBoundaries(t *testing.T) {
 
 		require.ErrorIs(t, err, randomTestError)
 		require.Equal(t, 1, attempts)
+	})
+
+	t.Run("initial busy workflow", func(t *testing.T) {
+		attempts := 0
+		_, err := recordTaskStartedWithRetry(context.Background(), task, func(context.Context) (struct{}, error) {
+			attempts++
+			return struct{}{}, consts.ErrResourceExhaustedBusyWorkflow
+		})
+
+		require.ErrorIs(t, err, consts.ErrResourceExhaustedBusyWorkflow)
+		require.Equal(t, 1, attempts)
+	})
+
+	t.Run("definitive error after ambiguous deadline", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			attempts := 0
+			_, err := recordTaskStartedWithRetry(context.Background(), task, func(ctx context.Context) (struct{}, error) {
+				attempts++
+				if attempts == 1 {
+					<-ctx.Done()
+					return struct{}{}, ctx.Err()
+				}
+				return struct{}{}, randomTestError
+			})
+
+			require.ErrorIs(t, err, randomTestError)
+			require.Equal(t, 2, attempts)
+		})
 	})
 
 	t.Run("parent deadline", func(t *testing.T) {
