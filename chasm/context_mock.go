@@ -187,6 +187,7 @@ type MockMutableContext struct {
 	Tasks                   []MockTask
 	LinksByRequest          map[Component]map[string][]*commonpb.Link
 	UserMetadataByComponent map[Component]*sdkpb.UserMetadata
+	TimeSkippingConfig      *commonpb.TimeSkippingConfig
 }
 
 func (c *MockMutableContext) AddTask(component Component, attributes TaskAttributes, payload any) {
@@ -229,6 +230,12 @@ func (c *MockMutableContext) withValue(key any, value any) Context {
 		MockContext: *ContextWithValue(&c.MockContext, key, value),
 		Tasks:       slices.Clone(c.Tasks),
 	}
+}
+
+func (c *MockMutableContext) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.TimeSkippingConfig = config
 }
 
 type MockTask struct {
