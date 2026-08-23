@@ -3567,8 +3567,8 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	})
 }
 
-// recordTaskStartedWithRetry gives an ambiguous task-start attempt another chance to return its
-// idempotent response while the worker poll that can receive the task is still active.
+// recordTaskStartedWithRetry retries an ambiguous task-start request while the worker poll that
+// can receive its idempotent response is still active.
 func recordTaskStartedWithRetry[T any](
 	parentCtx context.Context,
 	task *internalTask,

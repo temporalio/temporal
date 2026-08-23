@@ -250,18 +250,21 @@ func (s *matchingEngineSuite) TestRecordActivityTaskStartedRetriesAttemptDeadlin
 					requestID = request.GetRequestId()
 					_, err := uuid.Parse(requestID)
 					require.NoError(t, err)
+				} else {
+					require.Equal(t, requestID, request.GetRequestId())
+				}
+				if attempts <= 2 {
 					<-ctx.Done()
 					return nil, ctx.Err()
 				}
 
-				require.Equal(t, requestID, request.GetRequestId())
 				return expectedResponse, nil
-			}).Times(2)
+			}).Times(3)
 
 		response, err := s.matchingEngine.recordActivityTaskStarted(context.Background(), pollRequest, task)
 		require.NoError(t, err)
 		require.Same(t, expectedResponse, response)
-		require.Equal(t, 2, attempts)
+		require.Equal(t, 3, attempts)
 	})
 }
 
@@ -289,18 +292,21 @@ func (s *matchingEngineSuite) TestRecordWorkflowTaskStartedRetriesAttemptDeadlin
 					requestID = request.GetRequestId()
 					_, err := uuid.Parse(requestID)
 					require.NoError(t, err)
+				} else {
+					require.Equal(t, requestID, request.GetRequestId())
+				}
+				if attempts <= 2 {
 					<-ctx.Done()
 					return nil, ctx.Err()
 				}
 
-				require.Equal(t, requestID, request.GetRequestId())
 				return expectedResponse, nil
-			}).Times(2)
+			}).Times(3)
 
 		response, err := s.matchingEngine.recordWorkflowTaskStarted(context.Background(), pollRequest, task)
 		require.NoError(t, err)
 		require.Same(t, expectedResponse, response)
-		require.Equal(t, 2, attempts)
+		require.Equal(t, 3, attempts)
 	})
 }
 
