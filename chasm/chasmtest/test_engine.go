@@ -536,6 +536,7 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 	)
 
 	backend := &chasm.MockNodeBackend{
+		HandleNow: e.timeSource.Now,
 		// NextTransitionCount is the count the in-flight transaction will commit as.
 		HandleNextTransitionCount: func() int64 {
 			bsMu.Lock()
@@ -589,7 +590,6 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 		backend: backend,
 		node: chasm.NewEmptyTree(
 			e.registry,
-			e.timeSource,
 			backend,
 			chasm.DefaultPathEncoder,
 			e.logger,
