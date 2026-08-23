@@ -420,6 +420,7 @@ func TestScheduleCHASM(t *testing.T) {
 	t.Run("TestUpdateScheduleMemoOnly", func(t *testing.T) { t.Parallel(); testUpdateScheduleMemoOnly(t, newContext) })
 	t.Run("TestStateSizeBytesReported", func(t *testing.T) { t.Parallel(); testStateSizeBytesReported(t, newContext) })
 	t.Run("TestBufferOverrunDropsActions", func(t *testing.T) { t.Parallel(); testBufferOverrunDropsActions(t, newContext) })
+	t.Run("TestTimeSkippingFastForward", func(t *testing.T) { t.Parallel(); testScheduleTimeSkippingFastForward(t) })
 	t.Run("TestDescribeCatchupWindowAfterCreateAndUpdate", func(t *testing.T) {
 		t.Parallel()
 		testDescribeCatchupWindowAfterCreateAndUpdate(t)
@@ -447,6 +448,56 @@ func TestScheduleCHASM(t *testing.T) {
 		t.Parallel()
 		testPauseOnFailureIgnoresCancelTerminate(t, newContext, stopByTerminate)
 	})
+}
+
+func testScheduleTimeSkippingFastForward(t *testing.T) {
+	opts := append(scheduleCommonOpts(t), testcore.WithDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true))
+	s := newScheduleEnv(t, opts...)
+	ctx := chasmContextFactory(s.Context())
+
+	sid := testcore.RandomizeStr("sched-time-skipping")
+	wid := testcore.RandomizeStr("sched-time-skipping-wf")
+	wt := testcore.RandomizeStr("sched-time-skipping-wt")
+	var runs atomic.Int32
+	registerCountingWorkflow(s, wt, &runs)
+
+	now := time.Now().UTC()
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{{
+				Interval: durationpb.New(time.Hour),
+				Phase:    durationpb.New(now.Sub(now.Truncate(time.Hour))),
+			}},
+		},
+		Action: startWorkflowAction(s, wid, wt),
+		Policies: &schedulepb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		},
+		State: &schedulepb.ScheduleState{Paused: true},
+	}
+	createSchedule(ctx, t, s, sid, schedule)
+
+	schedule.State.Paused = false
+	schedule.TimeSkippingConfig = &commonpb.TimeSkippingConfig{
+		Enabled: true,
+		FastForwardConfig: &commonpb.FastForwardConfig{
+			Id:       uuid.NewString(),
+			Duration: durationpb.New(5*time.Hour + 30*time.Minute),
+		},
+	}
+	_, err := s.FrontendClient().UpdateSchedule(ctx, &workflowservice.UpdateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		return runs.Load() >= 5
+	}, time.Minute, pollInterval)
+	require.Equal(t, int32(5), runs.Load())
 }
 
 func testDescribeCatchupWindowAfterCreateAndUpdate(t *testing.T) {
