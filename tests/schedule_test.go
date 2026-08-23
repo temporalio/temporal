@@ -502,6 +502,40 @@ func testScheduleTimeSkippingFastForward(t *testing.T) {
 		return runs.Load() >= 5
 	}, time.Minute, pollInterval)
 	require.Equal(t, int32(5), runs.Load())
+
+	var describe *workflowservice.DescribeScheduleResponse
+	require.Eventually(t, func() bool {
+		var err error
+		describe, err = s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		return err == nil && len(describe.GetInfo().GetRecentActions()) >= 2
+	}, time.Minute, pollInterval)
+
+	seenRunIDs := make(map[string]struct{}, 2)
+	for _, action := range describe.GetInfo().GetRecentActions()[:2] {
+		execution := action.GetStartWorkflowResult()
+		require.NotEmpty(t, execution.GetWorkflowId())
+		require.NotEmpty(t, execution.GetRunId())
+		require.NotContains(t, seenRunIDs, execution.GetRunId())
+		seenRunIDs[execution.GetRunId()] = struct{}{}
+
+		wallTime := time.Now()
+		workflowDescription, err := s.FrontendClient().DescribeWorkflowExecution(
+			ctx,
+			&workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: s.Namespace().String(),
+				Execution: execution,
+			},
+		)
+		require.NoError(t, err)
+		timeSkippingInfo := workflowDescription.GetWorkflowExtendedInfo().GetTimeSkippingInfo()
+		require.NotNil(t, timeSkippingInfo)
+		require.True(t, timeSkippingInfo.GetEffectiveConfig().GetEnabled())
+		require.Nil(t, timeSkippingInfo.GetEffectiveConfig().GetFastForwardConfig())
+		require.Greater(t, timeSkippingInfo.GetCurrentTime().AsTime().Sub(wallTime), 30*time.Minute)
+	}
 }
 
 func testDescribeCatchupWindowAfterCreateAndUpdate(t *testing.T) {
