@@ -15,7 +15,9 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const NamespaceReplicationLifecycleEventName = "namespace_replication_lifecycle"
+// NamespaceReplicationLifecycleEventName aliases NamespaceLifecycleEventName for compatibility.
+// TODO: Remove it after callers migrate to NamespaceLifecycleEventName.
+const NamespaceReplicationLifecycleEventName = NamespaceLifecycleEventName
 
 type NamespaceReplicationPhase string
 
@@ -89,12 +91,12 @@ func (defaultNamespaceReplicationTaskEventDataProvider) Extract(
 	}, true
 }
 
-// NamespaceReplicationLifecyclePayload uses the namespace lifecycle envelope while retaining a
-// distinct event name. Replication-specific data is carried in Details.
+// NamespaceReplicationLifecyclePayload uses the namespace lifecycle envelope. Replication-specific
+// data is carried in Details.
 type NamespaceReplicationLifecyclePayload NamespaceLifecyclePayload
 
 func (p NamespaceReplicationLifecyclePayload) EventName() string {
-	return NamespaceReplicationLifecycleEventName
+	return NamespaceLifecycleEventName
 }
 
 func (p NamespaceReplicationLifecyclePayload) Attributes() []log.KeyValue {
