@@ -156,6 +156,14 @@ type (
 		// allowNoTasks opts out of the anti-vacuity check for steps that genuinely
 		// generate no transfer or timer task on either side.
 		allowNoTasks bool
+		// requireActive / forbidActive assert on the ACTIVE side's task types for this step,
+		// as normalized Go type names ("*tasks.UserTimerTask").
+		//
+		// The diff itself only proves the two sides agree; it cannot notice both sides
+		// losing a task together. Use these where a case exists to pin a specific behavior
+		// and "neither side produced it" would be a silent regression rather than a pass.
+		requireActive []string
+		forbidActive  []string
 	}
 
 	rtCase struct {
@@ -761,14 +769,38 @@ func rtFailActivityWithRetry(s *rtSuite, ms *workflow.MutableStateImpl) error {
 }
 
 func rtStartTimer(s *rtSuite, ms *workflow.MutableStateImpl) error {
-	_, _, err := ms.AddTimerStartedEvent(
-		s.lastCompletedWorkflowTaskID,
-		&commandpb.StartTimerCommandAttributes{
-			TimerId:            "roundtrip-timer",
-			StartToFireTimeout: durationpb.New(5 * time.Minute),
-		},
-	)
-	return err
+	return rtStartTimerNamed("roundtrip-timer", 5*time.Minute)(s, ms)
+}
+
+// rtStartTimerNamed starts a user timer with an explicit ID and duration, so a case can set
+// up several timers with a known firing order.
+func rtStartTimerNamed(
+	timerID string,
+	startToFire time.Duration,
+) func(*rtSuite, *workflow.MutableStateImpl) error {
+	return func(s *rtSuite, ms *workflow.MutableStateImpl) error {
+		_, _, err := ms.AddTimerStartedEvent(
+			s.lastCompletedWorkflowTaskID,
+			&commandpb.StartTimerCommandAttributes{
+				TimerId:            timerID,
+				StartToFireTimeout: durationpb.New(startToFire),
+			},
+		)
+		return err
+	}
+}
+
+// rtFireTimer fires a user timer, which is what the timer queue executor does when the
+// timer task comes due. It also schedules a workflow task, as the executor does, so the
+// workflow can react to the fired timer.
+func rtFireTimer(timerID string) func(*rtSuite, *workflow.MutableStateImpl) error {
+	return func(s *rtSuite, ms *workflow.MutableStateImpl) error {
+		if _, err := ms.AddTimerFiredEvent(timerID); err != nil {
+			return err
+		}
+		_, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+		return err
+	}
 }
 
 func rtStartChildWorkflow(s *rtSuite, ms *workflow.MutableStateImpl) error {

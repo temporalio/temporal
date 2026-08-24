@@ -168,6 +168,8 @@ func (s *rtSuite) diffTasks(
 		s.diffCategory(step, category, activeTasks[category], passiveTasks[category])
 	}
 
+	s.assertActiveExpectations(step, activeTasks)
+
 	// A step where neither side produced anything compares nothing and passes for free.
 	// That is almost always a broken fixture rather than a real "no tasks" outcome, so make
 	// the step opt into it explicitly.
@@ -175,6 +177,26 @@ func (s *rtSuite) diffTasks(
 		s.NotZero(compared,
 			"step %q produced no transfer or timer tasks on either side, so the diff was "+
 				"vacuous; set allowNoTasks on the step if that is genuinely expected", step.name)
+	}
+}
+
+// assertActiveExpectations checks a step's requireActive / forbidActive claims against the
+// active side, which is the source of truth for what should exist at all.
+func (s *rtSuite) assertActiveExpectations(step rtStep, activeTasks map[tasks.Category][]tasks.Task) {
+	if len(step.requireActive) == 0 && len(step.forbidActive) == 0 {
+		return
+	}
+	present := make(map[string]bool)
+	for _, categoryTasks := range activeTasks {
+		for _, task := range categoryTasks {
+			present[fmt.Sprintf("%T", task)] = true
+		}
+	}
+	for _, want := range step.requireActive {
+		s.True(present[want], "step %q: expected the active side to produce a %s", step.name, want)
+	}
+	for _, unwanted := range step.forbidActive {
+		s.False(present[unwanted], "step %q: expected the active side NOT to produce a %s", step.name, unwanted)
 	}
 }
 
