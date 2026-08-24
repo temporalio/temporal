@@ -1,14 +1,20 @@
-package ndc
+package roundtrip
 
 // Round-trip differential replication test.
 //
-// This sits alongside the other tests in tests/ndc, but it is not a cluster test: it needs
-// no onebox, no gRPC, and no replication stream. Two in-process clusters are assembled
-// directly out of the real components, and the artifact is handed from producer to consumer.
-// It runs in about a second.
+// This sits under tests/ndc, but it is not a cluster test: it needs no onebox, no gRPC, and
+// no replication stream. Two in-process clusters are assembled directly out of the real
+// components, and the artifact is handed from producer to consumer. It runs in about a second.
 //
-// Where service/history/ndc/task_refresh_framework_test.go hand-writes both the input protos
-// and the expected task list, this framework derives the expectation from the active cluster:
+// Files in this package:
+//
+//	framework_test.go   the fixture, the active driver, artifact production, passive apply
+//	capture_test.go     how passive tasks are captured
+//	diff_test.go        normalization, the allowlist, failure reporting
+//	cases_*_test.go     one file per use case; cases_common_test.go holds shared step lists
+//
+// Rather than hand-write the expected task list, this framework derives the expectation from
+// the active cluster:
 //
 //  1. drive an ACTIVE cluster's mutable state through the real active-side APIs
 //     (AddWorkflowExecutionStartedEvent, AddActivityTaskScheduledEvent, ...) and close the
@@ -37,12 +43,12 @@ package ndc
 // user timer tasks come from closeTransactionHandleActivityUserTimerTasks on the active side
 // but from CreateNextActivityTimer/CreateNextUserTimer in the task refresher on the passive
 // side; visibility tasks differ in multiplicity. Those divergences live in an explicit,
-// citation-carrying allowlist in roundtrip_diff_test.go, and anything outside it fails -- so
+// citation-carrying allowlist in diff_test.go, and anything outside it fails -- so
 // the allowlist is the reviewable spec of where active and passive legitimately differ.
 //
 // Nothing in the ndc package is stubbed or reached into: the passive side runs its real
 // transaction manager, and tasks are captured by wrapping the passive cluster's
-// ExecutionManager (see roundtrip_capture_test.go). The diff therefore compares what the
+// ExecutionManager (see capture_test.go). The diff therefore compares what the
 // passive cluster actually stored.
 
 import (
@@ -88,7 +94,7 @@ import (
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	historyndc "go.temporal.io/server/service/history/ndc"
+	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -503,10 +509,10 @@ func (s *rtSuite) applyArtifact(
 	ctx context.Context,
 	artifact *replicationspb.VersionedTransitionArtifact,
 ) map[tasks.Category][]tasks.Task {
-	replicator := historyndc.NewWorkflowStateReplicator(
+	replicator := ndc.NewWorkflowStateReplicator(
 		s.passive.shard,
 		s.passive.wfCache,
-		historyndc.NewMockEventsReapplier(s.controller),
+		ndc.NewMockEventsReapplier(s.controller),
 		serialization.NewSerializer(),
 		quotas.NoopRequestRateLimiter,
 		s.logger,

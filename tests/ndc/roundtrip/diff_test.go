@@ -1,4 +1,4 @@
-package ndc
+package roundtrip
 
 // Diff engine for the round-trip framework: normalization, the allowlist of legitimate
 // active/passive divergences, and failure reporting.
