@@ -17,16 +17,6 @@ type CapturedLog struct {
 	Tags    []tag.Tag
 }
 
-// TagValue returns the formatted value of the first tag with the provided key.
-func (r CapturedLog) TagValue(key string) (string, bool) {
-	for _, t := range r.Tags {
-		if t.Key() == key {
-			return formatValue(t), true
-		}
-	}
-	return "", false
-}
-
 // CapturedLogPattern describes a captured log using formatted tag values.
 // Tags must match exactly; AnyTagValue requires a tag without constraining its value.
 type CapturedLogPattern struct {
@@ -60,7 +50,7 @@ func (p CapturedLogPattern) matches(record CapturedLog) bool {
 			return false
 		}
 	}
-	return len(matchedTags) == len(p.Tags)
+	return true
 }
 
 func (p CapturedLogPattern) formattedTags() map[string]string {
