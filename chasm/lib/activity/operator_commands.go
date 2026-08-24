@@ -25,6 +25,7 @@ import (
 // Operator commands: update-options, cancel, pause, unpause and reset, together
 // with the deferred-intent machinery they share.
 
+//revive:disable-next-line:cognitive-complexity
 func (a *Activity) UpdateActivityExecutionOptions(
 	ctx chasm.MutableContext,
 	req *activitypb.UpdateActivityExecutionOptionsRequest,
