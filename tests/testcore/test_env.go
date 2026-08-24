@@ -259,7 +259,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 
 	// Create the test context before any expensive setup, so that the deadline
 	// extension below can compensate for the time setup takes.
-	testcontext.For(t)
+	ctx := testcontext.For(t)
 
 	var options testOptions
 	for _, opt := range opts {
@@ -296,6 +296,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	baseName := strings.ReplaceAll(t.Name(), "/", "-")
 	ns := namespace.Name(RandomizeStr(baseName))
 	nsID, err := base.RegisterNamespace(
+		ctx,
 		ns,
 		1, // 1 day retention
 		enumspb.ARCHIVAL_STATE_DISABLED,
