@@ -137,7 +137,7 @@ func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor) *s
 
 // testEnv holds all components needed for scheduler tests.
 type testEnv struct {
-	t             *testing.T // only used within these setup helpers
+	t             *testing.T
 	Ctrl          *gomock.Controller
 	Registry      *chasm.Registry
 	Node          *chasm.Node
@@ -147,6 +147,10 @@ type testEnv struct {
 	SpecProcessor scheduler.SpecProcessor
 	MockEngine    *chasm.MockEngine
 	Logger        log.Logger
+
+	// allowStuckReason, when non-empty, suppresses the stuckness invariant
+	// asserted by CloseTransaction. See AllowStuck.
+	allowStuckReason string
 }
 
 // testEnvConfig holds configuration options for testEnv.
@@ -429,10 +433,44 @@ func (e *testEnv) ReadContext() chasm.Context {
 	return chasm.NewContext(context.Background(), e.Node)
 }
 
-// CloseTransaction closes the current CHASM transaction.
+// CloseTransaction closes the current CHASM transaction and then asserts the
+// stuckness invariant: a scheduler that is not in a terminal state must carry
+// at least one live logical pure task, or nothing will ever wake it again.
+//
+// This runs on every test in the package that closes through testEnv, so the
+// existing suite doubles as a stuckness detector at no extra cost. Tests that
+// deliberately construct a state with no pending work must opt out explicitly
+// via AllowStuck.
+//
+// The invariant is checked only on a successful close, since Node.Snapshot
+// requires a clean tree.
 func (e *testEnv) CloseTransaction() error {
+	e.t.Helper()
+
 	_, err := e.Node.CloseTransaction()
-	return err
+	if err != nil {
+		return err
+	}
+	if e.allowStuckReason == "" {
+		requireNotStuck(e.t, e.Node, e.Scheduler)
+		requireIdleCloseTimeBacked(e.t, e.Registry, e.Node, e.Scheduler)
+	}
+	return nil
+}
+
+// AllowStuck opts this test out of the stuckness invariant asserted by
+// CloseTransaction, for tests that deliberately drive the scheduler into a
+// state with no pending work.
+//
+// reason is mandatory: an unexplained opt-out is indistinguishable from a
+// silently tolerated bug, and the set of tests that need one is itself a
+// finding worth reviewing.
+func (e *testEnv) AllowStuck(reason string) {
+	e.t.Helper()
+	if reason == "" {
+		e.t.Fatal("AllowStuck requires a reason explaining why this test tolerates a stuck scheduler")
+	}
+	e.allowStuckReason = reason
 }
 
 // HasTask returns true if the given task type was added with the given visibilityTime.

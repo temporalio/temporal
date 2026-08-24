@@ -233,6 +233,17 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 			retriedStarts))
 
 	i.addTasks(ctx)
+
+	// Recording a start advances getLastEventTime: recentActions only sees a
+	// start once it has a RunId, so stamping one moves the idle deadline later
+	// and invalidates any in-flight idle task. addTasks arms invoker tasks
+	// only, so without this the schedule is left open with no idle task and a
+	// stale IdleCloseTime. Mirrors the completion path, which re-generates for
+	// the same reason.
+	if newlyStarted > 0 {
+		i.Scheduler.Get(ctx).Generator.Get(ctx).Generate(ctx)
+	}
+
 	return newlyStarted, droppedDuplicates
 }
 
