@@ -1,8 +1,6 @@
 package nexus
 
 import (
-	"fmt"
-
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/temporalnexus"
@@ -49,7 +47,9 @@ func ConvertNexusLinksToProtoLinks(nexusLinks []nexus.Link, logger log.Logger) [
 			link, err := temporalnexus.ConvertNexusLinkToLinkWorkflow(nexusLink)
 			if err != nil {
 				logger.Warn(
-					fmt.Sprintf("failed to parse link to %q: %s", nexusLink.Type, nexusLink.URL),
+					"failed to parse link",
+					tag.NewStringTag("nexus-link-type", nexusLink.Type),
+					tag.URL(nexusLink.URL.String()),
 					tag.Error(err),
 				)
 				continue
