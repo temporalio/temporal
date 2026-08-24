@@ -14,6 +14,7 @@ import (
 )
 
 type fatalRecorder struct {
+	testing.TB
 	helperCalled bool
 	message      string
 }
@@ -113,10 +114,9 @@ func TestCaptureContains(t *testing.T) {
 	pattern := testlogger.CapturedLogPattern{
 		Level:   testlogger.Error,
 		Message: "failed",
-		Tags: map[string]any{
-			"operation":     "StartOperation",
-			"attempt-start": testlogger.AnyTagValue,
-			"error":         "failure",
+		Tags: map[string]string{
+			"operation": "StartOperation",
+			"error":     "failure",
 		},
 	}
 	capture.RequireContains(t, pattern)
@@ -129,7 +129,7 @@ func TestCaptureContains(t *testing.T) {
 	require.Contains(t, recorder.message, "CancelOperation")
 	require.Contains(t, recorder.message, "StartOperation")
 
-	// A pattern with an extra tag matches nothing, since tag sets must match exactly.
+	// A pattern with an extra tag matches nothing.
 	pattern.Tags["operation"] = "StartOperation"
 	pattern.Tags["unexpected"] = "value"
 	recorder = &fatalRecorder{}

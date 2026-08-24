@@ -18,61 +18,36 @@ type CapturedLog struct {
 }
 
 // CapturedLogPattern describes a captured log using formatted tag values.
-// Tags must match exactly; AnyTagValue requires a tag without constraining its value.
+// Tags match a subset of the captured log's tags.
 type CapturedLogPattern struct {
 	Level   Level
 	Message string
-	Tags    map[string]any
+	Tags    map[string]string
 }
 
-type anyTagValue struct{}
-
-// AnyTagValue matches any formatted value for a tag that must be present.
-var AnyTagValue = &anyTagValue{}
-
 func (p CapturedLogPattern) matches(record CapturedLog) bool {
-	if record.Level != p.Level || record.Message != p.Message || len(record.Tags) != len(p.Tags) {
+	if record.Level != p.Level || record.Message != p.Message {
 		return false
 	}
 
-	matchedTags := make(map[string]struct{}, len(record.Tags))
-	for _, actual := range record.Tags {
-		key := actual.Key()
-		expected, ok := p.Tags[key]
-		if !ok {
-			return false
-		}
-		if _, duplicate := matchedTags[key]; duplicate {
-			return false
-		}
-		matchedTags[key] = struct{}{}
-		if _, anyValue := expected.(*anyTagValue); !anyValue && formatValue(actual) != fmt.Sprint(expected) {
+	for key, expected := range p.Tags {
+		if !slices.ContainsFunc(record.Tags, func(actual tag.Tag) bool {
+			return actual.Key() == key && formatValue(actual) == expected
+		}) {
 			return false
 		}
 	}
 	return true
 }
 
-func (p CapturedLogPattern) formattedTags() map[string]string {
-	formatted := make(map[string]string, len(p.Tags))
-	for key, value := range p.Tags {
-		if _, anyValue := value.(*anyTagValue); anyValue {
-			formatted[key] = "<any>"
-		} else {
-			formatted[key] = fmt.Sprint(value)
-		}
-	}
-	return formatted
-}
-
-type requireTestingT interface {
-	Helper()
-	Fatalf(format string, args ...any)
+type captureFilterTag struct {
+	key   string
+	value string
 }
 
 // Capture is an opt-in recording of TestLogger calls.
 type Capture struct {
-	anyTags map[string]map[string]struct{}
+	filterTags map[captureFilterTag]struct{}
 
 	mu      sync.Mutex
 	records []CapturedLog
@@ -83,14 +58,9 @@ func newCapture(anyTags []tag.Tag) *Capture {
 	if len(anyTags) == 0 {
 		return capture
 	}
-	capture.anyTags = make(map[string]map[string]struct{})
+	capture.filterTags = make(map[captureFilterTag]struct{}, len(anyTags))
 	for _, t := range anyTags {
-		values := capture.anyTags[t.Key()]
-		if values == nil {
-			values = make(map[string]struct{})
-			capture.anyTags[t.Key()] = values
-		}
-		values[formatValue(t)] = struct{}{}
+		capture.filterTags[captureFilterTag{key: t.Key(), value: formatValue(t)}] = struct{}{}
 	}
 	return capture
 }
@@ -109,7 +79,7 @@ func (c *Capture) Snapshot() []CapturedLog {
 }
 
 // RequireContains fails the test with tag diffs when the capture does not include a matching log.
-func (c *Capture) RequireContains(t requireTestingT, pattern CapturedLogPattern) {
+func (c *Capture) RequireContains(t TestingT, pattern CapturedLogPattern) {
 	t.Helper()
 	records := c.Snapshot()
 	if slices.ContainsFunc(records, pattern.matches) {
@@ -118,23 +88,20 @@ func (c *Capture) RequireContains(t requireTestingT, pattern CapturedLogPattern)
 
 	var failure strings.Builder
 	fmt.Fprintf(&failure, "captured log pattern not found: level=%s message=%q", pattern.Level, pattern.Message)
-	expectedTags := pattern.formattedTags()
 	candidateCount := 0
 	for _, record := range records {
 		if record.Level != pattern.Level || record.Message != pattern.Message {
 			continue
 		}
 		candidateCount++
-		actualTags := make(map[string]string, len(record.Tags))
+		actualTags := make(map[string]string, len(pattern.Tags))
 		for _, actual := range record.Tags {
 			key := actual.Key()
-			if _, anyValue := pattern.Tags[key].(*anyTagValue); anyValue {
-				actualTags[key] = "<any>"
-			} else {
+			if _, expected := pattern.Tags[key]; expected {
 				actualTags[key] = formatValue(actual)
 			}
 		}
-		fmt.Fprintf(&failure, "\n\ncandidate %d tag mismatch (-want +got):\n%s", candidateCount, cmp.Diff(expectedTags, actualTags))
+		fmt.Fprintf(&failure, "\n\ncandidate %d tag mismatch (-want +got):\n%s", candidateCount, cmp.Diff(pattern.Tags, actualTags))
 	}
 	if candidateCount == 0 {
 		fmt.Fprintf(&failure, "\n\nno captured log had the expected level and message; captured logs: %+v", records)
@@ -143,10 +110,10 @@ func (c *Capture) RequireContains(t requireTestingT, pattern CapturedLogPattern)
 }
 
 func (c *Capture) record(record CapturedLog) {
-	if len(c.anyTags) > 0 {
+	if len(c.filterTags) > 0 {
 		matched := false
 		for _, t := range record.Tags {
-			if _, ok := c.anyTags[t.Key()][formatValue(t)]; ok {
+			if _, ok := c.filterTags[captureFilterTag{key: t.Key(), value: formatValue(t)}]; ok {
 				matched = true
 				break
 			}
