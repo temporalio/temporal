@@ -100,14 +100,6 @@ func (c *Capture) Snapshot() []CapturedLog {
 	return records
 }
 
-// Contains reports whether the capture includes a matching log.
-func (c *Capture) Contains(pattern CapturedLogPattern) bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	return slices.ContainsFunc(c.records, pattern.matches)
-}
-
 // RequireContains fails the test with tag diffs when the capture does not include a matching log.
 func (c *Capture) RequireContains(t TestingT, pattern CapturedLogPattern) {
 	t.Helper()

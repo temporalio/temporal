@@ -90,30 +90,6 @@ func TestCaptureSnapshotIsDefensiveCopy(t *testing.T) {
 	}}, capture.Snapshot())
 }
 
-func TestCaptureContains(t *testing.T) {
-	t.Parallel()
-
-	testLogger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
-	capture := testLogger.StartCapture()
-	testLogger.Error("failed", tag.String("operation", "StartOperation"), tag.Time("attempt-start", time.Now()))
-
-	require.True(t, capture.Contains(testlogger.CapturedLogPattern{
-		Level:   testlogger.Error,
-		Message: "failed",
-		Tags: map[string]any{
-			"operation":     "StartOperation",
-			"attempt-start": testlogger.AnyTagValue,
-		},
-	}))
-	require.False(t, capture.Contains(testlogger.CapturedLogPattern{
-		Level:   testlogger.Error,
-		Message: "failed",
-		Tags: map[string]any{
-			"operation": "CancelOperation",
-		},
-	}))
-}
-
 func TestCaptureRequireContains(t *testing.T) {
 	t.Parallel()
 
@@ -121,57 +97,65 @@ func TestCaptureRequireContains(t *testing.T) {
 	capture := testLogger.StartCapture()
 	testLogger.Error("failed", tag.String("operation", "StartOperation"), tag.Time("attempt-start", time.Now()), tag.Error(errors.New("failure")))
 
-	capture.RequireContains(t, testlogger.CapturedLogPattern{
-		Level:   testlogger.Error,
-		Message: "failed",
-		Tags: map[string]any{
-			"operation":     "StartOperation",
-			"attempt-start": testlogger.AnyTagValue,
-			"error":         "failure",
-		},
+	t.Run("matching pattern", func(t *testing.T) {
+		capture.RequireContains(t, testlogger.CapturedLogPattern{
+			Level:   testlogger.Error,
+			Message: "failed",
+			Tags: map[string]any{
+				"operation":     "StartOperation",
+				"attempt-start": testlogger.AnyTagValue,
+				"error":         "failure",
+			},
+		})
 	})
 
-	recorder := &mockT{T: t}
-	capture.RequireContains(recorder, testlogger.CapturedLogPattern{
-		Level:   testlogger.Error,
-		Message: "failed",
-		Tags: map[string]any{
-			"operation":     "CancelOperation",
-			"attempt-start": testlogger.AnyTagValue,
-			"error":         "failure",
-		},
+	t.Run("mismatched tag", func(t *testing.T) {
+		recorder := &mockT{T: t}
+		capture.RequireContains(recorder, testlogger.CapturedLogPattern{
+			Level:   testlogger.Error,
+			Message: "failed",
+			Tags: map[string]any{
+				"operation":     "CancelOperation",
+				"attempt-start": testlogger.AnyTagValue,
+				"error":         "failure",
+			},
+		})
+		failure := recorder.failure.Load()
+		require.NotNil(t, failure)
+		require.Contains(t, *failure, "candidate 1 tag mismatch")
+		require.Contains(t, *failure, "CancelOperation")
+		require.Contains(t, *failure, "StartOperation")
 	})
-	failure := recorder.failure.Load()
-	require.NotNil(t, failure)
-	require.Contains(t, *failure, "candidate 1 tag mismatch")
-	require.Contains(t, *failure, "CancelOperation")
-	require.Contains(t, *failure, "StartOperation")
 
 	// A pattern with an extra tag matches nothing.
-	recorder = &mockT{T: t}
-	capture.RequireContains(recorder, testlogger.CapturedLogPattern{
-		Level:   testlogger.Error,
-		Message: "failed",
-		Tags: map[string]any{
-			"operation":     "StartOperation",
-			"attempt-start": testlogger.AnyTagValue,
-			"error":         "failure",
-			"unexpected":    "value",
-		},
+	t.Run("extra tag", func(t *testing.T) {
+		recorder := &mockT{T: t}
+		capture.RequireContains(recorder, testlogger.CapturedLogPattern{
+			Level:   testlogger.Error,
+			Message: "failed",
+			Tags: map[string]any{
+				"operation":     "StartOperation",
+				"attempt-start": testlogger.AnyTagValue,
+				"error":         "failure",
+				"unexpected":    "value",
+			},
+		})
+		failure := recorder.failure.Load()
+		require.NotNil(t, failure)
+		require.Contains(t, *failure, "unexpected")
 	})
-	failure = recorder.failure.Load()
-	require.NotNil(t, failure)
-	require.Contains(t, *failure, "unexpected")
 
-	recorder = &mockT{T: t}
-	capture.RequireContains(recorder, testlogger.CapturedLogPattern{
-		Level:   testlogger.Warn,
-		Message: "missing",
+	t.Run("missing level and message", func(t *testing.T) {
+		recorder := &mockT{T: t}
+		capture.RequireContains(recorder, testlogger.CapturedLogPattern{
+			Level:   testlogger.Warn,
+			Message: "missing",
+		})
+		failure := recorder.failure.Load()
+		require.NotNil(t, failure)
+		require.Contains(t, *failure, `Error "failed" operation=StartOperation`)
+		require.NotContains(t, *failure, "zapcore")
 	})
-	failure = recorder.failure.Load()
-	require.NotNil(t, failure)
-	require.Contains(t, *failure, `Error "failed" operation=StartOperation`)
-	require.NotContains(t, *failure, "zapcore")
 }
 
 func TestCaptureRecordsConcurrentDerivedLoggers(t *testing.T) {
