@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testcontext"
@@ -550,6 +551,23 @@ func (e *TestEnv) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, va
 		e.dedicatedGuard.record("global dynamic config used")
 	}
 	return e.cluster.host.overrideDynamicConfigForTest(e.t, setting.Key(), value)
+}
+
+// StartNamespaceLogCapture starts a log capture scoped to the namespaces owned by this test environment.
+func (e *TestEnv) StartNamespaceLogCapture() *testlogger.Capture {
+	testLogger, ok := e.Logger.(*testlogger.TestLogger)
+	if !ok {
+		e.t.Fatalf("StartNamespaceLogCapture requires a *testlogger.TestLogger logger, got %T", e.Logger)
+	}
+	capture := testLogger.StartCapture(
+		tag.WorkflowNamespace(e.Namespace().String()),
+		tag.WorkflowNamespaceID(e.NamespaceID().String()),
+		tag.WorkflowNamespace(e.ExternalNamespace().String()),
+	)
+	e.t.Cleanup(func() {
+		testLogger.StopCapture(capture)
+	})
+	return capture
 }
 
 // StartGlobalMetricCapture starts a cluster-global metrics capture for this test and automatically stops it during cleanup.
