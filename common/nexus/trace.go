@@ -89,7 +89,7 @@ func (p *LoggedHTTPClientTraceProvider) NewTrace(attempt int32, logger log.Logge
 		return nil
 	}
 
-	return p.newClientTrace(logger, config.Hooks)
+	return p.newClientTrace(log.With(logger, tag.ComponentNexusProtocol), config.Hooks)
 }
 
 func (p *LoggedHTTPClientTraceProvider) NewForwardingTrace(logger log.Logger) *httptrace.ClientTrace {
@@ -98,7 +98,7 @@ func (p *LoggedHTTPClientTraceProvider) NewForwardingTrace(logger log.Logger) *h
 		return nil
 	}
 
-	return p.newClientTrace(logger, config.Hooks)
+	return p.newClientTrace(log.With(logger, tag.ComponentNexusProtocol), config.Hooks)
 }
 
 //nolint:revive // cognitive complexity (> 25 max) but is just adding a logging function for each method in the list.
