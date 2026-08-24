@@ -2693,6 +2693,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure(chasmEnabled
 	handlerRequestID := await.Rcv(s.T(), handlerRequestIDs)
 	s.Require().NotEmpty(handlerRequestID)
 
+	// The attempt tag is off by one between implementations: HSM's task carries the count of
+	// *completed* attempts, CHASM's is 1-based.
 	attempt := int32(0)
 	if chasmEnabled {
 		attempt = 1

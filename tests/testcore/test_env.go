@@ -562,7 +562,6 @@ func (e *TestEnv) StartNamespaceLogCapture() *testlogger.Capture {
 	capture := testLogger.StartCapture(
 		tag.WorkflowNamespace(e.Namespace().String()),
 		tag.WorkflowNamespaceID(e.NamespaceID().String()),
-		tag.WorkflowNamespace(e.ExternalNamespace().String()),
 	)
 	e.t.Cleanup(func() {
 		testLogger.StopCapture(capture)
