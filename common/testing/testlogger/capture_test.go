@@ -2,7 +2,6 @@ package testlogger_test
 
 import (
 	"errors"
-	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -12,20 +11,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/testlogger"
 )
-
-type fatalRecorder struct {
-	testing.TB
-	helperCalled bool
-	message      string
-}
-
-func (r *fatalRecorder) Helper() {
-	r.helperCalled = true
-}
-
-func (r *fatalRecorder) Fatalf(format string, args ...any) {
-	r.message = fmt.Sprintf(format, args...)
-}
 
 func TestCaptureLifecycle(t *testing.T) {
 	t.Parallel()
@@ -104,6 +89,30 @@ func TestCaptureSnapshotIsDefensiveCopy(t *testing.T) {
 	}}, capture.Snapshot())
 }
 
+func TestCaptureContains(t *testing.T) {
+	t.Parallel()
+
+	testLogger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+	capture := testLogger.StartCapture()
+	testLogger.Error("failed", tag.String("operation", "StartOperation"), tag.Time("attempt-start", time.Now()))
+
+	require.True(t, capture.Contains(testlogger.CapturedLogPattern{
+		Level:   testlogger.Error,
+		Message: "failed",
+		Tags: map[string]any{
+			"operation":     "StartOperation",
+			"attempt-start": testlogger.AnyTagValue,
+		},
+	}))
+	require.False(t, capture.Contains(testlogger.CapturedLogPattern{
+		Level:   testlogger.Error,
+		Message: "failed",
+		Tags: map[string]any{
+			"operation": "CancelOperation",
+		},
+	}))
+}
+
 func TestCaptureRequireContains(t *testing.T) {
 	t.Parallel()
 
@@ -121,7 +130,7 @@ func TestCaptureRequireContains(t *testing.T) {
 		},
 	})
 
-	recorder := &fatalRecorder{}
+	recorder := &mockT{T: t}
 	capture.RequireContains(recorder, testlogger.CapturedLogPattern{
 		Level:   testlogger.Error,
 		Message: "failed",
@@ -131,13 +140,14 @@ func TestCaptureRequireContains(t *testing.T) {
 			"error":         "failure",
 		},
 	})
-	require.True(t, recorder.helperCalled)
-	require.Contains(t, recorder.message, "candidate 1 tag mismatch")
-	require.Contains(t, recorder.message, "CancelOperation")
-	require.Contains(t, recorder.message, "StartOperation")
+	failure := recorder.failure.Load()
+	require.NotNil(t, failure)
+	require.Contains(t, *failure, "candidate 1 tag mismatch")
+	require.Contains(t, *failure, "CancelOperation")
+	require.Contains(t, *failure, "StartOperation")
 
 	// A pattern with an extra tag matches nothing.
-	recorder = &fatalRecorder{}
+	recorder = &mockT{T: t}
 	capture.RequireContains(recorder, testlogger.CapturedLogPattern{
 		Level:   testlogger.Error,
 		Message: "failed",
@@ -148,7 +158,19 @@ func TestCaptureRequireContains(t *testing.T) {
 			"unexpected":    "value",
 		},
 	})
-	require.Contains(t, recorder.message, "unexpected")
+	failure = recorder.failure.Load()
+	require.NotNil(t, failure)
+	require.Contains(t, *failure, "unexpected")
+
+	recorder = &mockT{T: t}
+	capture.RequireContains(recorder, testlogger.CapturedLogPattern{
+		Level:   testlogger.Warn,
+		Message: "missing",
+	})
+	failure = recorder.failure.Load()
+	require.NotNil(t, failure)
+	require.Contains(t, *failure, `Error "failed" operation=StartOperation`)
+	require.NotContains(t, *failure, "zapcore")
 }
 
 func TestCaptureRecordsConcurrentDerivedLoggers(t *testing.T) {

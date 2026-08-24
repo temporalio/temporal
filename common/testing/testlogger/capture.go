@@ -100,6 +100,14 @@ func (c *Capture) Snapshot() []CapturedLog {
 	return records
 }
 
+// Contains reports whether the capture includes a matching log.
+func (c *Capture) Contains(pattern CapturedLogPattern) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	return slices.ContainsFunc(c.records, pattern.matches)
+}
+
 // RequireContains fails the test with tag diffs when the capture does not include a matching log.
 func (c *Capture) RequireContains(t TestingT, pattern CapturedLogPattern) {
 	t.Helper()
@@ -129,7 +137,13 @@ func (c *Capture) RequireContains(t TestingT, pattern CapturedLogPattern) {
 		fmt.Fprintf(&failure, "\n\ncandidate %d tag mismatch (-want +got):\n%s", candidateCount, cmp.Diff(expectedTags, actualTags))
 	}
 	if candidateCount == 0 {
-		fmt.Fprintf(&failure, "\n\nno captured log had the expected level and message; captured logs: %+v", records)
+		failure.WriteString("\n\nno captured log had the expected level and message; captured logs:")
+		for _, record := range records {
+			fmt.Fprintf(&failure, "\n- %s %q", record.Level, record.Message)
+			for _, actual := range record.Tags {
+				fmt.Fprintf(&failure, " %s=%s", actual.Key(), formatValue(actual))
+			}
+		}
 	}
 	t.Fatalf("%s", failure.String())
 }
