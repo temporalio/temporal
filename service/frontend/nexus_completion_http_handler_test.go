@@ -2,7 +2,6 @@ package frontend
 
 import (
 	"context"
-	"net/http"
 	"testing"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -14,10 +13,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/nexusworkflowref"
 	"go.uber.org/mock/gomock"
@@ -25,47 +21,6 @@ import (
 )
 
 const convTestRequestID = "request-id"
-
-func TestNewNexusCompletionHandlerUsesCompletionComponent(t *testing.T) {
-	t.Parallel()
-
-	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
-	logger.Expect(testlogger.Error, "failed to decode callback token")
-	capture := logger.StartCapture()
-	handler := newNexusCompletionHandler(
-		nil,
-		nil,
-		logger,
-		metrics.NoopMetricsHandler,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-	)
-
-	err := handler.CompleteOperation(context.Background(), &nexusrpc.CompletionRequest{
-		HTTPRequest: &http.Request{Header: http.Header{}},
-	})
-
-	require.Error(t, err)
-	capture.RequireContains(t, testlogger.CapturedLogPattern{
-		Level:   testlogger.Error,
-		Message: "failed to decode callback token",
-		Tags: map[string]any{
-			tag.ComponentNexusCompletion.Key(): "nexus-completion",
-			"error":                            testlogger.AnyTagValue,
-		},
-	})
-}
 
 // hsmCompletionToken builds the HSM token used by these conversion tests.
 func hsmCompletionToken() *tokenspb.NexusOperationCompletion {

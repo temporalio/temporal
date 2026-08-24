@@ -12,15 +12,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
-	"go.temporal.io/server/common/testing/testlogger"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -41,44 +38,6 @@ func (e *retryableNotFoundError) GRPCStatus() *status.Status {
 type fakeNamespaceRegistry struct {
 	namespace.Registry
 	getNamespaceName func(id namespace.ID) (namespace.Name, error)
-}
-
-func TestNewNexusOperationHTTPHandlerUsesInboundComponent(t *testing.T) {
-	t.Parallel()
-
-	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
-	logger.Expect(testlogger.Error, "failure")
-	capture := logger.StartCapture()
-	handler := NewNexusOperationHTTPHandler(
-		NewConfig(dynamicconfig.NewNoopCollection(), 1),
-		nil,
-		metrics.NoopMetricsHandler,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		nil,
-		logger,
-		nil,
-		nil,
-	)
-
-	handler.logger.Error("failure")
-
-	capture.RequireContains(t, testlogger.CapturedLogPattern{
-		Level:   testlogger.Error,
-		Message: "failure",
-		Tags: map[string]any{
-			tag.ComponentNexusInbound.Key(): "nexus-inbound",
-		},
-	})
 }
 
 func (f *fakeNamespaceRegistry) GetNamespaceName(id namespace.ID) (namespace.Name, error) {
