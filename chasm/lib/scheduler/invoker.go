@@ -442,7 +442,10 @@ func (i *Invoker) recentActions(storedActions []*schedulepb.ScheduleActionResult
 			StartWorkflowStatus: status,
 		})
 	}
-	return results
+	slices.SortFunc(results, func(a, b *schedulepb.ScheduleActionResult) int {
+		return a.GetActualTime().AsTime().Compare(b.GetActualTime().AsTime())
+	})
+	return util.SliceTail(results, recentActionCount)
 }
 
 func (i *Invoker) bufferedStartsCount() int {
