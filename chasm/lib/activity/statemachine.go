@@ -34,6 +34,62 @@ func (a *Activity) SetStateMachineState(state activitypb.ActivityExecutionStatus
 	a.Status = state
 }
 
+type (
+	rescheduleEvent struct {
+		retryInterval       time.Duration
+		retryIntervalSource activitypb.ActivityRetryIntervalSource
+		failure             *failurepb.Failure
+		timeoutType         enumspb.TimeoutType
+	}
+
+	completeEvent struct {
+		req             *historyservice.RespondActivityTaskCompletedRequest
+		baseHandler     metrics.Handler
+		enrichedHandler metrics.Handler
+	}
+
+	failedEvent struct {
+		req             *historyservice.RespondActivityTaskFailedRequest
+		retryState      enumspb.RetryState
+		baseHandler     metrics.Handler
+		enrichedHandler metrics.Handler
+	}
+
+	terminateEvent struct {
+		request        chasm.TerminateComponentRequest
+		metricsHandler metrics.Handler
+		fromStatus     activitypb.ActivityExecutionStatus
+	}
+
+	cancelEvent struct {
+		details        *commonpb.Payloads
+		metricsHandler metrics.Handler
+		fromStatus     activitypb.ActivityExecutionStatus
+	}
+
+	timeoutEvent struct {
+		metricsHandler metrics.Handler
+		timeoutType    enumspb.TimeoutType
+		retryState     enumspb.RetryState
+	}
+
+	pauseEvent struct {
+		req            *workflowservice.PauseActivityExecutionRequest
+		metricsHandler metrics.Handler
+	}
+
+	unpauseEvent struct {
+		req            *workflowservice.UnpauseActivityExecutionRequest
+		metricsHandler metrics.Handler
+	}
+
+	resetEvent struct {
+		req            *workflowservice.ResetActivityExecutionRequest
+		resetTime      time.Time
+		metricsHandler metrics.Handler
+	}
+)
+
 // TransitionScheduled transitions to Scheduled status. This is only called on the initial
 // scheduling of the activity.
 var TransitionScheduled = chasm.NewTransition(
@@ -45,13 +101,6 @@ var TransitionScheduled = chasm.NewTransition(
 		return a.applyScheduled(ctx)
 	},
 )
-
-type rescheduleEvent struct {
-	retryInterval       time.Duration
-	retryIntervalSource activitypb.ActivityRetryIntervalSource
-	failure             *failurepb.Failure
-	timeoutType         enumspb.TimeoutType
-}
 
 // TransitionRescheduled transitions to Scheduled from Started, which happens on retries. The event
 // to pass in is the failure to be recorded from the previously failed attempt.
@@ -76,12 +125,6 @@ var TransitionStarted = chasm.NewTransition(
 	},
 )
 
-type completeEvent struct {
-	req             *historyservice.RespondActivityTaskCompletedRequest
-	baseHandler     metrics.Handler
-	enrichedHandler metrics.Handler
-}
-
 // TransitionCompleted transitions to Completed status. SCHEDULED and PAUSED are included because
 // RespondActivityTaskCompletedById can force-complete an activity that has no attempt in
 // progress, mirroring workflow-activity behavior.
@@ -100,13 +143,6 @@ var TransitionCompleted = chasm.NewTransition(
 	},
 )
 
-type failedEvent struct {
-	req             *historyservice.RespondActivityTaskFailedRequest
-	retryState      enumspb.RetryState
-	baseHandler     metrics.Handler
-	enrichedHandler metrics.Handler
-}
-
 // TransitionFailed transitions to Failed status.
 var TransitionFailed = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
@@ -120,12 +156,6 @@ var TransitionFailed = chasm.NewTransition(
 		return a.applyFailed(ctx, event)
 	},
 )
-
-type terminateEvent struct {
-	request        chasm.TerminateComponentRequest
-	metricsHandler metrics.Handler
-	fromStatus     activitypb.ActivityExecutionStatus
-}
 
 // TransitionTerminated transitions to Terminated status.
 var TransitionTerminated = chasm.NewTransition(
@@ -159,12 +189,6 @@ var TransitionCancelRequested = chasm.NewTransition(
 	},
 )
 
-type cancelEvent struct {
-	details        *commonpb.Payloads
-	metricsHandler metrics.Handler
-	fromStatus     activitypb.ActivityExecutionStatus
-}
-
 // TransitionCanceled transitions to Canceled status.
 var TransitionCanceled = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
@@ -175,12 +199,6 @@ var TransitionCanceled = chasm.NewTransition(
 		return a.applyCanceled(ctx, event)
 	},
 )
-
-type timeoutEvent struct {
-	metricsHandler metrics.Handler
-	timeoutType    enumspb.TimeoutType
-	retryState     enumspb.RetryState
-}
 
 // TransitionTimedOut transitions to TimedOut status.
 var TransitionTimedOut = chasm.NewTransition(
@@ -197,11 +215,6 @@ var TransitionTimedOut = chasm.NewTransition(
 		return a.applyTimedOut(ctx, event)
 	},
 )
-
-type pauseEvent struct {
-	req            *workflowservice.PauseActivityExecutionRequest
-	metricsHandler metrics.Handler
-}
 
 // TransitionPaused transitions a SCHEDULED activity to PAUSED status. The stamp is bumped to
 // invalidate any pending dispatch task so the activity is not dispatched while paused.
@@ -228,11 +241,6 @@ var TransitionPauseRequested = chasm.NewTransition(
 		return a.applyPauseRequested(ctx, event)
 	},
 )
-
-type unpauseEvent struct {
-	req            *workflowservice.UnpauseActivityExecutionRequest
-	metricsHandler metrics.Handler
-}
 
 // TransitionUnpaused transitions PAUSED → SCHEDULED, triggering a dispatch task that will lead to
 // another activity attempt.
@@ -271,12 +279,6 @@ var TransitionAttemptFailedWhilePauseRequested = chasm.NewTransition(
 		return a.applyFailedAttempt(ctx, event)
 	},
 )
-
-type resetEvent struct {
-	req            *workflowservice.ResetActivityExecutionRequest
-	resetTime      time.Time
-	metricsHandler metrics.Handler
-}
 
 // TransitionReset resets a SCHEDULED or PAUSED activity back to attempt 1. The stamp is bumped to
 // invalidate any pending dispatch task, then a new dispatch task is added at the given schedule time.
