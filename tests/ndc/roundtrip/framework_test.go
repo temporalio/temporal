@@ -190,6 +190,9 @@ type (
 		// scheduled off a completed workflow task's event ID.
 		lastCompletedWorkflowTaskID int64
 		scheduledActivityID         int64
+		// scheduledActivityIDs maps an activity ID to its scheduled event ID, for cases that
+		// juggle several activities at once.
+		scheduledActivityIDs map[string]int64
 
 		// firedRules tracks which allowlist rules were used, so the suite can report
 		// rules that have gone stale.
@@ -207,6 +210,7 @@ func (s *rtSuite) SetupTest() {
 	s.logger = log.NewTestLogger()
 	s.config = tests.NewDynamicConfig()
 	s.firedRules = make(map[string]int)
+	s.scheduledActivityIDs = make(map[string]int64)
 
 	s.workflowID = "roundtrip-wf-" + uuid.NewString()
 	s.runID = uuid.NewString()
@@ -766,6 +770,159 @@ func rtFailActivityWithRetry(s *rtSuite, ms *workflow.MutableStateImpl) error {
 			"expected the activity to keep retrying, got retry state %v", retryState)
 	}
 	return nil
+}
+
+// rtActivityTimeouts is the timeout configuration for one activity. A zero duration means
+// the timeout is not configured, so that timer never applies.
+type rtActivityTimeouts struct {
+	scheduleToStart time.Duration
+	scheduleToClose time.Duration
+	startToClose    time.Duration
+	heartbeat       time.Duration
+}
+
+// rtScheduleActivityNamed schedules an activity under an explicit ID with explicit timeouts,
+// so a case can run several at once with deliberately different deadlines. maxAttempts of 1
+// means no retry policy at all, which also makes the activity's start non-transient.
+func rtScheduleActivityNamed(
+	activityID string,
+	timeouts rtActivityTimeouts,
+	maxAttempts int32,
+) func(*rtSuite, *workflow.MutableStateImpl) error {
+	return func(s *rtSuite, ms *workflow.MutableStateImpl) error {
+		attributes := &commandpb.ScheduleActivityTaskCommandAttributes{
+			ActivityId:             activityID,
+			ActivityType:           &commonpb.ActivityType{Name: "roundtrip-activity-type"},
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: rtTaskQueue},
+			ScheduleToStartTimeout: durationpb.New(timeouts.scheduleToStart),
+			ScheduleToCloseTimeout: durationpb.New(timeouts.scheduleToClose),
+			StartToCloseTimeout:    durationpb.New(timeouts.startToClose),
+			HeartbeatTimeout:       durationpb.New(timeouts.heartbeat),
+		}
+		if maxAttempts != 1 {
+			attributes.RetryPolicy = &commonpb.RetryPolicy{
+				InitialInterval:    durationpb.New(time.Second),
+				BackoffCoefficient: 1,
+				MaximumInterval:    durationpb.New(time.Second),
+				MaximumAttempts:    maxAttempts,
+			}
+		}
+
+		_, activityInfo, err := ms.AddActivityTaskScheduledEvent(
+			s.lastCompletedWorkflowTaskID, attributes, false,
+		)
+		if err != nil {
+			return err
+		}
+		s.scheduledActivityIDs[activityID] = activityInfo.ScheduledEventId
+		return nil
+	}
+}
+
+func rtStartActivityNamed(activityID string) func(*rtSuite, *workflow.MutableStateImpl) error {
+	return func(s *rtSuite, ms *workflow.MutableStateImpl) error {
+		scheduledEventID, ok := s.scheduledActivityIDs[activityID]
+		if !ok {
+			return serviceerror.NewInternalf("activity %q was never scheduled", activityID)
+		}
+		activityInfo, ok := ms.GetActivityInfo(scheduledEventID)
+		if !ok {
+			return serviceerror.NewInternalf("no activity info for %q", activityID)
+		}
+		_, err := ms.AddActivityTaskStartedEvent(
+			activityInfo, scheduledEventID, uuid.NewString(), "roundtrip-test",
+			nil, nil, nil, "", nil,
+		)
+		return err
+	}
+}
+
+func rtCompleteActivityNamed(activityID string) func(*rtSuite, *workflow.MutableStateImpl) error {
+	return func(s *rtSuite, ms *workflow.MutableStateImpl) error {
+		scheduledEventID, ok := s.scheduledActivityIDs[activityID]
+		if !ok {
+			return serviceerror.NewInternalf("activity %q was never scheduled", activityID)
+		}
+		activityInfo, ok := ms.GetActivityInfo(scheduledEventID)
+		if !ok {
+			return serviceerror.NewInternalf("no activity info for %q", activityID)
+		}
+		_, err := ms.AddActivityTaskCompletedEvent(
+			scheduledEventID, activityInfo.StartedEventId,
+			&workflowservicepb.RespondActivityTaskCompletedRequest{Identity: "roundtrip-test"},
+		)
+		return err
+	}
+}
+
+// rtHeartbeatActivityNamed records a heartbeat, which updates the activity without moving
+// any of its timer deadlines when no heartbeat timeout is configured: StartedTime and the
+// timeouts are untouched, and the heartbeat timer does not apply at all.
+//
+// That makes it the step that exercises getActivityTimerTaskStatus's carryover. The activity
+// owning the live timer task is the one being replicated, and its mask has to survive the
+// apply or the passive cluster generates a duplicate timeout task for a deadline that never
+// moved.
+func rtHeartbeatActivityNamed(activityID string) func(*rtSuite, *workflow.MutableStateImpl) error {
+	return func(s *rtSuite, ms *workflow.MutableStateImpl) error {
+		scheduledEventID, ok := s.scheduledActivityIDs[activityID]
+		if !ok {
+			return serviceerror.NewInternalf("activity %q was never scheduled", activityID)
+		}
+		activityInfo, ok := ms.GetActivityInfo(scheduledEventID)
+		if !ok {
+			return serviceerror.NewInternalf("no activity info for %q", activityID)
+		}
+		ms.UpdateActivityProgress(activityInfo, &workflowservicepb.RecordActivityTaskHeartbeatRequest{
+			Identity: "roundtrip-test",
+		})
+		return nil
+	}
+}
+
+// rtTimeoutActivityNamed times an activity out the way the timer queue executor does: hand
+// RetryActivity a timeout failure and act on the retry state it returns.
+//
+// The timeout type decides the outcome. START_TO_CLOSE and HEARTBEAT go through the normal
+// retry check, so the activity retries while attempts remain. SCHEDULE_TO_START and
+// SCHEDULE_TO_CLOSE are server-enforced deadlines rather than execution failures, so
+// RetryActivity short-circuits to RETRY_STATE_TIMEOUT and the activity closes instead.
+func rtTimeoutActivityNamed(
+	activityID string,
+	timeoutType enumspb.TimeoutType,
+) func(*rtSuite, *workflow.MutableStateImpl) error {
+	return func(s *rtSuite, ms *workflow.MutableStateImpl) error {
+		scheduledEventID, ok := s.scheduledActivityIDs[activityID]
+		if !ok {
+			return serviceerror.NewInternalf("activity %q was never scheduled", activityID)
+		}
+		activityInfo, ok := ms.GetActivityInfo(scheduledEventID)
+		if !ok {
+			return serviceerror.NewInternalf("no activity info for %q", activityID)
+		}
+		startedEventID := activityInfo.StartedEventId
+
+		timeoutFailure := &failurepb.Failure{
+			Message: "activity timeout",
+			FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+				TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{TimeoutType: timeoutType},
+			},
+		}
+
+		retryState, err := ms.RetryActivity(activityInfo, timeoutFailure)
+		if err != nil {
+			return err
+		}
+		if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
+			// Retrying: no timed-out event is written, the attempt counter moves and an
+			// ActivityRetryTimerTask carries the activity back to the task queue.
+			return nil
+		}
+		_, err = ms.AddActivityTaskTimedOutEvent(
+			scheduledEventID, startedEventID, timeoutFailure, retryState,
+		)
+		return err
+	}
 }
 
 func rtStartTimer(s *rtSuite, ms *workflow.MutableStateImpl) error {
