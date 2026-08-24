@@ -331,6 +331,37 @@ func TestRecordExecuteResult_AllowAllRecentActionsBounded(t *testing.T) {
 	require.Len(t, env.Scheduler.ListInfo(ctx).GetRecentActions(), 5)
 }
 
+func TestExecuteTask_StartTimeUsesFrameworkClock(t *testing.T) {
+	env := newInvokerExecuteTestEnv(t)
+	frameworkNow := env.TimeSource.Now().Add(24 * time.Hour)
+	env.TimeSource.Update(frameworkNow)
+	env.Scheduler.Schedule.State.Paused = true
+
+	startTime := timestamppb.New(frameworkNow)
+	env.mockFrontendClient.EXPECT().
+		StartWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil)
+
+	runExecuteTestCase(t, env, &executeTestCase{
+		InitialBufferedStarts: []*schedulespb.BufferedStart{{
+			NominalTime:   startTime,
+			ActualTime:    startTime,
+			DesiredTime:   startTime,
+			RequestId:     "req1",
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			Attempt:       1,
+		}},
+		ExpectedBufferedStarts:   0,
+		ExpectedRunningWorkflows: 0,
+		ExpectedActionCount:      1,
+		ValidateInvoker: func(t *testing.T, _ *scheduler.Invoker, env *invokerExecuteTestEnv) {
+			recentActions := env.Scheduler.Info.GetRecentActions()
+			require.Len(t, recentActions, 1)
+			require.True(t, frameworkNow.Equal(recentActions[0].GetActualTime().AsTime()))
+		},
+	})
+}
+
 func TestExecuteTask_ForwardsVersioningOverride(t *testing.T) {
 	tests := map[string]struct {
 		override *workflowpb.VersioningOverride

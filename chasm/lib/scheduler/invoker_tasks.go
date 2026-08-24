@@ -411,6 +411,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 				start,
 				lastCompletionState,
 				schedulerRef,
+				now,
 				timeSkippingConfig,
 				timeSkippingStatePropagation,
 			)
@@ -663,6 +664,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 	start *schedulespb.BufferedStart,
 	lastCompletionState *schedulerpb.LastCompletionResult,
 	schedulerRef []byte,
+	actualStartTime time.Time,
 	timeSkippingConfig *commonpb.TimeSkippingConfig,
 	timeSkippingStatePropagation *commonpb.TimeSkippingStatePropagation,
 ) error {
@@ -740,8 +742,6 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 	if err != nil {
 		return err
 	}
-	actualStartTime := time.Now()
-
 	// Set metadata on the cloned start. The clone was created in startWorkflows
 	// before spawning this goroutine, and will be copied back to the Invoker's
 	// BufferedStarts in recordExecuteResult.
