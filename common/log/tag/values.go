@@ -141,7 +141,6 @@ var (
 	ComponentNexusCompletion           = component("nexus-completion")
 	ComponentNexusProtocol             = component("nexus-protocol")
 	ComponentNexusRegistry             = component("nexus-registry")
-	ComponentNexusTaskDelivery         = component("nexus-task-delivery") // Reserved pending the task delivery audit.
 	VersionChecker                     = component("version-checker")
 )
 

@@ -319,6 +319,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 		completion           nexusrpc.CompleteOperationOptions
 		headerValue          string
 		expectsInternalError bool
+		expectedLogMessage   string
 		assertOutcome        func(*testing.T, callbacks.Callback)
 	}{
 		{
@@ -407,6 +408,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 			}(),
 			headerValue:          encodedRef,
 			expectsInternalError: true,
+			expectedLogMessage:   "failed to complete Nexus operation: %v",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_BACKING_OFF, cb.State())
 			},
@@ -428,6 +430,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 			}(),
 			headerValue:          encodedRef,
 			expectsInternalError: true,
+			expectedLogMessage:   "failed to complete Nexus operation: %v",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
 			},
@@ -445,6 +448,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 			}(),
 			headerValue:          "invalid-base64!!!",
 			expectsInternalError: true,
+			expectedLogMessage:   "failed to decode CHASM callback token",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
 			},
@@ -540,9 +544,13 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 
 			if tc.expectsInternalError {
 				require.ErrorContains(t, err, "internal error, reference-id:")
-				records := capture.Snapshot()
-				require.Len(t, records, 1)
-				require.Contains(t, records[0].Tags, tag.NewStringTag("component", "nexus-completion"))
+				capture.RequireContains(t, testlogger.CapturedLogPattern{
+					Level:   testlogger.Error,
+					Message: tc.expectedLogMessage,
+					Tags: map[string]any{
+						tag.ComponentNexusCompletion.Key(): "nexus-completion",
+					},
+				})
 			} else {
 				require.NoError(t, err)
 			}
