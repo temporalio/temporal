@@ -2633,11 +2633,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure(chasmEnabled
 
 	h := nexustest.Handler{
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-			select {
-			case handlerRequestIDs <- options.RequestID:
-			default:
-				// A redelivered task carries the same request ID.
-			}
+			handlerRequestIDs <- options.RequestID
 			return nil, &nexus.HandlerError{
 				Type: nexus.HandlerErrorTypeBadRequest,
 				Cause: &nexus.FailureError{
