@@ -312,7 +312,7 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 		// replication task cleanup reads only Scopes[0], and the receiver's fold
 		// cannot vouch for windows its connection has never seen.
 		s.isolation.Reconcile(
-			attr.GetPauseHighNamespaceIds(),
+			attr.GetThrottleHighNamespaceIds(),
 			attr.GetHighPriorityState().GetInclusiveLowWatermark(),
 			memberAckedWatermarks(attr.GetIsolatedLaneStates()),
 		)
