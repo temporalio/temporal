@@ -119,20 +119,22 @@ func TestCaptureContains(t *testing.T) {
 			"error":         "failure",
 		},
 	}
-	require.True(t, capture.Contains(pattern))
 	capture.RequireContains(t, pattern)
 
 	pattern.Tags["operation"] = "CancelOperation"
-	require.False(t, capture.Contains(pattern))
 	recorder := &fatalRecorder{}
 	capture.RequireContains(recorder, pattern)
 	require.True(t, recorder.helperCalled)
 	require.Contains(t, recorder.message, "candidate 1 tag mismatch")
 	require.Contains(t, recorder.message, "CancelOperation")
 	require.Contains(t, recorder.message, "StartOperation")
+
+	// A pattern with an extra tag matches nothing, since tag sets must match exactly.
 	pattern.Tags["operation"] = "StartOperation"
 	pattern.Tags["unexpected"] = "value"
-	require.False(t, capture.Contains(pattern))
+	recorder = &fatalRecorder{}
+	capture.RequireContains(recorder, pattern)
+	require.Contains(t, recorder.message, "unexpected")
 }
 
 func TestCaptureRecordsConcurrentDerivedLoggers(t *testing.T) {

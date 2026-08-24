@@ -108,11 +108,6 @@ func (c *Capture) Snapshot() []CapturedLog {
 	return records
 }
 
-// Contains reports whether the capture includes a log matching pattern.
-func (c *Capture) Contains(pattern CapturedLogPattern) bool {
-	return slices.ContainsFunc(c.Snapshot(), pattern.matches)
-}
-
 // RequireContains fails the test with tag diffs when the capture does not include a matching log.
 func (c *Capture) RequireContains(t requireTestingT, pattern CapturedLogPattern) {
 	t.Helper()
