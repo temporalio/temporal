@@ -2,6 +2,7 @@ package circuitbreakerpool
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/sony/gobreaker"
 	"go.temporal.io/server/common/circuitbreaker"
@@ -63,14 +64,24 @@ func onStateChange(
 	logger log.SnTaggedLogger,
 ) func(name string, from gobreaker.State, to gobreaker.State) {
 	return func(_ string, from gobreaker.State, to gobreaker.State) {
-		logger.Warn(
-			"outbound queue circuit breaker state change",
+		tags := []tag.Tag{
 			tag.WorkflowNamespace(nsName),
 			tag.WorkflowNamespaceID(key.NamespaceID),
 			tag.Destination(key.Destination),
 			tag.NewStringTag("task-group", key.TaskGroup),
 			tag.NewStringTag("from-state", from.String()),
 			tag.NewStringTag("to-state", to.String()),
-		)
+		}
+		if component, ok := componentForTaskGroup(key.TaskGroup); ok {
+			tags = append(tags, component)
+		}
+		logger.Warn("outbound queue circuit breaker state change", tags...)
 	}
+}
+
+func componentForTaskGroup(taskGroup string) (tag.Tag, bool) {
+	if taskGroup == "nexus" || strings.HasPrefix(taskGroup, "nexusoperations.") {
+		return tag.ComponentNexusOutbound, true
+	}
+	return nil, false
 }
