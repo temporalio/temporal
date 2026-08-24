@@ -521,7 +521,7 @@ func runSharedScheduleTests(t *testing.T, newContext contextFactory) {
 	t.Run("TestBasics", func(t *testing.T) { t.Parallel(); testBasics(t, newContext) })
 	t.Run("TestInput", func(t *testing.T) { t.Parallel(); testInput(t, newContext) })
 	t.Run("TestLastCompletionAndError", func(t *testing.T) { t.Parallel(); testLastCompletionAndError(t, newContext) })
-	t.Run("TestAllowAllDoesNotRemainActive", func(t *testing.T) { t.Parallel(); testAllowAllDoesNotRemainActive(t, newContext) })
+	t.Run("TestAllowAllDescribeContract", func(t *testing.T) { t.Parallel(); testAllowAllDescribeContract(t, newContext) })
 	t.Run("TestScheduleContinuesAfterWorkflowRetryFailure", func(t *testing.T) { t.Parallel(); testScheduleContinuesAfterWorkflowRetryFailure(t, newContext) })
 	t.Run("TestListSchedulesReturnsWorkflowStatus", func(t *testing.T) { t.Parallel(); testListSchedulesReturnsWorkflowStatus(t, newContext) })
 	t.Run("TestListSchedulesRecentActionsCapped", func(t *testing.T) { t.Parallel(); testListSchedulesRecentActionsCapped(t, newContext) })
@@ -568,7 +568,9 @@ func runSharedScheduleTests(t *testing.T, newContext contextFactory) {
 	t.Run("TestBufferOneDeferredFiresAfterCompletion", func(t *testing.T) { t.Parallel(); testBufferOneDeferredFiresAfterCompletion(t, newContext) })
 }
 
-func testAllowAllDoesNotRemainActive(t *testing.T, newContext contextFactory) {
+// testAllowAllDescribeContract verifies the customer-facing Describe state shared by V1 and CHASM.
+// ALLOW_ALL executions appear in RecentActions but not RunningWorkflows; sequential executions remain active.
+func testAllowAllDescribeContract(t *testing.T, newContext contextFactory) {
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 	sid := testcore.RandomizeStr("sched-allow-all-active")
 	wid := testcore.RandomizeStr("sched-allow-all-active-wf")
@@ -602,17 +604,30 @@ func testAllowAllDoesNotRemainActive(t *testing.T, newContext contextFactory) {
 
 	patchSchedule(ctx, t, s, sid, triggerPatch(enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL))
 	var allowAllRun *commonpb.WorkflowExecution
+	var allowAllDescribe *workflowservice.DescribeScheduleResponse
 	require.Eventually(t, func() bool {
 		desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
 			Namespace: s.Namespace().String(), ScheduleId: sid,
 		})
-		if err != nil || runs.Load() != 1 || len(desc.GetInfo().GetRecentActions()) != 1 {
+		if err != nil || runs.Load() != 1 || desc.GetInfo().GetActionCount() != 1 ||
+			desc.GetInfo().GetBufferSize() != 0 || len(desc.GetInfo().GetRecentActions()) != 1 ||
+			len(desc.GetInfo().GetRunningWorkflows()) != 0 {
 			return false
 		}
-		require.Empty(t, desc.GetInfo().GetRunningWorkflows())
-		allowAllRun = desc.GetInfo().GetRecentActions()[0].GetStartWorkflowResult()
-		return allowAllRun.GetRunId() != ""
-	}, awaitTimeout, pollInterval, "ALLOW_ALL start should be recent but not active")
+		recent := desc.GetInfo().GetRecentActions()[0]
+		if recent.GetStartWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING ||
+			recent.GetScheduleTime() == nil || recent.GetActualTime() == nil {
+			return false
+		}
+		allowAllRun = recent.GetStartWorkflowResult()
+		if allowAllRun.GetRunId() == "" {
+			return false
+		}
+		allowAllDescribe = desc
+		return true
+	}, awaitTimeout, pollInterval, "ALLOW_ALL Describe state should be recent, running, and not active")
+	require.Empty(t, allowAllDescribe.GetInfo().GetRunningWorkflows())
+	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, allowAllDescribe.GetInfo().GetRecentActions()[0].GetStartWorkflowStatus())
 
 	allowAllNominal, err := time.Parse(time.RFC3339, strings.TrimPrefix(allowAllRun.GetWorkflowId(), wid+"-"))
 	require.NoError(t, err)
@@ -622,16 +637,34 @@ func testAllowAllDoesNotRemainActive(t *testing.T, newContext contextFactory) {
 
 	patchSchedule(ctx, t, s, sid, triggerPatch(enumspb.SCHEDULE_OVERLAP_POLICY_SKIP))
 	var sequentialRun *commonpb.WorkflowExecution
+	var sequentialDescribe *workflowservice.DescribeScheduleResponse
 	require.Eventually(t, func() bool {
 		desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
 			Namespace: s.Namespace().String(), ScheduleId: sid,
 		})
-		if err != nil || runs.Load() != 2 || len(desc.GetInfo().GetRunningWorkflows()) != 1 {
+		if err != nil || runs.Load() != 2 || desc.GetInfo().GetActionCount() != 2 ||
+			desc.GetInfo().GetBufferSize() != 0 || len(desc.GetInfo().GetRecentActions()) != 2 ||
+			len(desc.GetInfo().GetRunningWorkflows()) != 1 {
 			return false
 		}
 		sequentialRun = desc.GetInfo().GetRunningWorkflows()[0]
-		return sequentialRun.GetRunId() != "" && sequentialRun.GetRunId() != allowAllRun.GetRunId()
+		if sequentialRun.GetRunId() == "" || sequentialRun.GetRunId() == allowAllRun.GetRunId() {
+			return false
+		}
+		for _, recent := range desc.GetInfo().GetRecentActions() {
+			if recent.GetStartWorkflowStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING ||
+				recent.GetScheduleTime() == nil || recent.GetActualTime() == nil {
+				return false
+			}
+		}
+		sequentialDescribe = desc
+		return true
 	}, awaitTimeout, pollInterval, "ALLOW_ALL execution should not block a sequential trigger")
+	require.Equal(t, []*commonpb.WorkflowExecution{sequentialRun}, sequentialDescribe.GetInfo().GetRunningWorkflows())
+	require.ElementsMatch(t, []*commonpb.WorkflowExecution{allowAllRun, sequentialRun}, []*commonpb.WorkflowExecution{
+		sequentialDescribe.GetInfo().GetRecentActions()[0].GetStartWorkflowResult(),
+		sequentialDescribe.GetInfo().GetRecentActions()[1].GetStartWorkflowResult(),
+	})
 
 	require.NoError(t, s.SdkClient().SignalWorkflow(ctx, allowAllRun.GetWorkflowId(), allowAllRun.GetRunId(), "fail", nil))
 	require.Eventually(t, func() bool {
@@ -646,6 +679,13 @@ func testAllowAllDoesNotRemainActive(t *testing.T, newContext contextFactory) {
 	})
 	require.NoError(t, err)
 	require.False(t, desc.GetSchedule().GetState().GetPaused())
+	require.Equal(t, int64(2), desc.GetInfo().GetActionCount())
+	require.Zero(t, desc.GetInfo().GetBufferSize())
+	require.Equal(t, []*commonpb.WorkflowExecution{sequentialRun}, desc.GetInfo().GetRunningWorkflows())
+	require.Len(t, desc.GetInfo().GetRecentActions(), 2)
+	for _, recent := range desc.GetInfo().GetRecentActions() {
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, recent.GetStartWorkflowStatus())
+	}
 	require.NoError(t, s.SdkClient().SignalWorkflow(ctx, sequentialRun.GetWorkflowId(), sequentialRun.GetRunId(), "complete", nil))
 }
 
