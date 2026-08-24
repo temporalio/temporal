@@ -554,23 +554,56 @@ func (s *rtSuite) passivePosition(ctx context.Context) rtPassivePos {
 // ---------------------------------------------------------------------------
 
 func rtStartWorkflow(s *rtSuite, ms *workflow.MutableStateImpl) error {
-	_, err := ms.AddWorkflowExecutionStartedEvent(
-		&commonpb.WorkflowExecution{WorkflowId: s.workflowID, RunId: s.runID},
-		&historyservice.StartWorkflowExecutionRequest{
-			Attempt:     1,
-			NamespaceId: tests.NamespaceID.String(),
-			StartRequest: &workflowservicepb.StartWorkflowExecutionRequest{
-				Namespace:                tests.Namespace.String(),
-				WorkflowId:               s.workflowID,
-				WorkflowType:             &commonpb.WorkflowType{Name: rtWorkflowType},
-				TaskQueue:                &taskqueuepb.TaskQueue{Name: rtTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-				WorkflowExecutionTimeout: durationpb.New(time.Hour),
-				WorkflowRunTimeout:       durationpb.New(time.Hour),
-				WorkflowTaskTimeout:      durationpb.New(10 * time.Second),
-				Identity:                 "roundtrip-test",
-			},
+	return rtStartWorkflowWith(s, ms, 0, enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED)
+}
+
+// rtStartWorkflowWith starts the workflow with a first-workflow-task backoff, which makes
+// the start emit a WorkflowBackoffTimerTask instead of dispatching a workflow task right
+// away. The initiator selects the backoff type that GenerateDelayedWorkflowTasks stamps on
+// the task: unspecified means a delayed start, RETRY means a workflow retry, and
+// CRON_SCHEDULE means a cron firing.
+func rtStartWorkflowWith(
+	s *rtSuite,
+	ms *workflow.MutableStateImpl,
+	firstWorkflowTaskBackoff time.Duration,
+	initiator enumspb.ContinueAsNewInitiator,
+) error {
+	request := &historyservice.StartWorkflowExecutionRequest{
+		Attempt:                1,
+		NamespaceId:            tests.NamespaceID.String(),
+		ContinueAsNewInitiator: initiator,
+		StartRequest: &workflowservicepb.StartWorkflowExecutionRequest{
+			Namespace:                tests.Namespace.String(),
+			WorkflowId:               s.workflowID,
+			WorkflowType:             &commonpb.WorkflowType{Name: rtWorkflowType},
+			TaskQueue:                &taskqueuepb.TaskQueue{Name: rtTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			WorkflowExecutionTimeout: durationpb.New(time.Hour),
+			WorkflowRunTimeout:       durationpb.New(time.Hour),
+			WorkflowTaskTimeout:      durationpb.New(10 * time.Second),
+			Identity:                 "roundtrip-test",
 		},
+	}
+	if firstWorkflowTaskBackoff > 0 {
+		request.FirstWorkflowTaskBackoff = durationpb.New(firstWorkflowTaskBackoff)
+	}
+	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE {
+		request.StartRequest.CronSchedule = "*/1 * * * *"
+	}
+
+	startEvent, err := ms.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{WorkflowId: s.workflowID, RunId: s.runID},
+		request,
 	)
+	if err != nil {
+		return err
+	}
+
+	// Production starts a workflow and settles its first workflow task in one transaction,
+	// via AddFirstWorkflowTaskScheduled: that is the branch which either emits a
+	// WorkflowBackoffTimerTask (backoff set) or schedules the first workflow task (backoff
+	// zero). Calling AddWorkflowTaskScheduledEvent directly instead would skip the branch
+	// entirely and the backoff task would never be generated on the active side.
+	_, err = ms.AddFirstWorkflowTaskScheduled(nil, startEvent, false)
 	return err
 }
 

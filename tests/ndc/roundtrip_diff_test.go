@@ -71,12 +71,23 @@ var rtGlobalAllowlist = []rtAllowRule{
 			"delta, and GenerateWorkflowStartTasks then regenerates the run timeout " +
 			"unconditionally: on a first run isFirstRun is true, so the execution timeout " +
 			"timer is never created, executionTimeoutTimerTaskStatus stays " +
-			"TimerTaskStatusNone, and the `status == None` branch always fires. Note that " +
-			"WorkflowExecutionTimerTaskStatus does NOT guard this -- gating the mask clearing " +
-			"on full refresh (the refreshTasksForActivity idiom) does not fix it. The likely " +
-			"fix is to skip RefreshTasksForWorkflowStart on a partial refresh entirely, since " +
-			"every creation and rebuild path uses the full Refresh and so start tasks always " +
-			"exist by then.",
+			"TimerTaskStatusNone, and the `status == None` branch always fires.\n" +
+			"\n" +
+			"Scope: the trigger is the CREATED -> RUNNING transition, which " +
+			"UpdateWorkflowStateStatus performs when the first workflow task is scheduled. A " +
+			"normal workflow does that in the same transaction as the start, so the delta the " +
+			"passive side sees is a snapshot, both sides refresh in full, and they agree -- " +
+			"which is why only TestWorkflowBackoffTimer reproduces this. A workflow with a " +
+			"first-workflow-task backoff (delayed start, retry backoff, cron) schedules its " +
+			"first workflow task in a LATER transaction, so CREATED -> RUNNING arrives as a " +
+			"mutation and the partial refresh duplicates the timer. So this affects delayed, " +
+			"retrying and cron workflows, not ordinary ones.\n" +
+			"\n" +
+			"Note that WorkflowExecutionTimerTaskStatus does NOT guard this -- gating the mask " +
+			"clearing on full refresh (the refreshTasksForActivity idiom) does not fix it. The " +
+			"likely fix is to skip RefreshTasksForWorkflowStart on a partial refresh entirely, " +
+			"since every creation and rebuild path uses the full Refresh and so start tasks " +
+			"always exist by then.",
 		ref: "service/history/workflow/task_refresher.go RefreshTasksForWorkflowStart -> " +
 			"task_generator.go GenerateWorkflowStartTasks",
 		match: func(side rtSide, identity string) bool {

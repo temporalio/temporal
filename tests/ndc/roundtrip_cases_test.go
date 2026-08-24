@@ -1,6 +1,12 @@
 package ndc
 
-import "fmt"
+import (
+	"fmt"
+	"time"
+
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/service/history/workflow"
+)
 
 // Lifecycle cases for the round-trip framework. See
 // roundtrip_framework_test.go for what a case actually does.
@@ -28,7 +34,6 @@ func (s *rtSuite) TestWorkflowTaskLifecycle() {
 		name: "WorkflowTaskLifecycle",
 		steps: []rtStep{
 			{name: "start-workflow", fn: rtStartWorkflow},
-			{name: "schedule-workflow-task", fn: rtScheduleWorkflowTask},
 			{name: "start-workflow-task", fn: rtStartWorkflowTask},
 			{name: "complete-workflow-task", fn: rtCompleteWorkflowTask, allowNoTasks: true},
 			// A second workflow task, this time with the first one properly completed. The
@@ -93,8 +98,8 @@ func (s *rtSuite) TestCompleteWorkflow() {
 // the precondition for scheduling activities, timers and child workflows.
 func rtStartedWorkflowSteps() []rtStep {
 	return []rtStep{
+		// The start step also schedules the first workflow task, as production does.
 		{name: "start-workflow", fn: rtStartWorkflow},
-		{name: "schedule-workflow-task", fn: rtScheduleWorkflowTask},
 		{name: "start-workflow-task", fn: rtStartWorkflowTask},
 		{name: "complete-workflow-task", fn: rtCompleteWorkflowTask, allowNoTasks: true},
 	}
@@ -128,4 +133,46 @@ func (s *rtSuite) TestActivityRetries() {
 		)
 	}
 	s.runCase(rtCase{name: "ActivityRetries", steps: steps})
+}
+
+// TestWorkflowBackoffTimer covers a workflow whose first workflow task is delayed, so the
+// start emits a WorkflowBackoffTimerTask instead of dispatching a workflow task.
+//
+// This is the one start-task path the other cases never reach:
+// RefreshTasksForWorkflowStart only calls GenerateDelayedWorkflowTasks when the workflow has
+// not had a workflow task yet AND the started event carries a non-zero
+// FirstWorkflowTaskBackoff, so every other case skips it entirely.
+//
+// The three subcases differ only in the started event's initiator, which is what
+// GenerateDelayedWorkflowTasks turns into the task's WorkflowBackoffType. The backoff type
+// is part of the task identity, so a passive side that reconstructed the task but lost the
+// initiator would fail here rather than silently look equivalent.
+func (s *rtSuite) TestWorkflowBackoffTimer() {
+	backoffCase := func(name string, initiator enumspb.ContinueAsNewInitiator) rtCase {
+		return rtCase{
+			name: name,
+			steps: []rtStep{
+				{
+					name: "start-workflow-with-backoff",
+					fn: func(s *rtSuite, ms *workflow.MutableStateImpl) error {
+						return rtStartWorkflowWith(s, ms, time.Minute, initiator)
+					},
+				},
+				// The backoff timer fires and the first workflow task finally goes out. Worth
+				// including because it is the transition that clears HadOrHasWorkflowTask, and
+				// so the point after which the backoff task must not be regenerated.
+				{name: "schedule-workflow-task", fn: rtScheduleWorkflowTask},
+			},
+		}
+	}
+
+	for _, tc := range []rtCase{
+		backoffCase("DelayStart", enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED),
+		backoffCase("Retry", enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY),
+		backoffCase("Cron", enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE),
+	} {
+		s.SetupTest() // each subcase needs its own pair of clusters
+		s.runCase(tc)
+		s.TearDownTest()
+	}
 }
