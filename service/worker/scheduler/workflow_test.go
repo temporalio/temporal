@@ -113,6 +113,28 @@ func (s *workflowSuite) describe() *schedulespb.DescribeResponse {
 	return &resp
 }
 
+func (s *workflowSuite) TestGetListInfoWithNegativeRemainingActions() {
+	args := &schedulespb.StartScheduleArgs{
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(time.Hour)}},
+			},
+			State: &schedulepb.ScheduleState{
+				LimitedActions:   true,
+				RemainingActions: -1,
+			},
+			Action: s.defaultAction("myid"),
+		},
+		State: &schedulespb.InternalState{},
+	}
+
+	var info *schedulepb.ScheduleListInfo
+	s.NotPanics(func() {
+		info = GetListInfoFromStartArgs(args, baseStartTime, newSpecBuilderForTest(0, 0))
+	})
+	s.Empty(info.GetFutureActionTimes())
+}
+
 func (s *workflowSuite) runningWorkflows() []string {
 	desc := s.describe()
 	var out []string

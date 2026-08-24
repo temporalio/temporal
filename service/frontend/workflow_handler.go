@@ -3907,6 +3907,9 @@ func (wh *WorkflowHandler) CreateSchedule(
 	if err := wh.validateScheduleOverlapPolicies(request.Schedule, request.InitialPatch, namespaceName.String()); err != nil {
 		return nil, err
 	}
+	if err := wh.validateSchedulePatchTimestamps(request.InitialPatch, namespaceName.String()); err != nil {
+		return nil, err
+	}
 	err := wh.canonicalizeScheduleSpec(request.Schedule, namespaceName.String())
 	if err != nil {
 		return nil, err
@@ -4872,6 +4875,9 @@ func (wh *WorkflowHandler) PatchSchedule(
 		return nil, errNotesTooLong
 	}
 	if err := wh.validateScheduleOverlapPolicies(nil, request.Patch, request.Namespace); err != nil {
+		return nil, err
+	}
+	if err := wh.validateSchedulePatchTimestamps(request.Patch, request.Namespace); err != nil {
 		return nil, err
 	}
 
@@ -7002,14 +7008,16 @@ func validateScheduleIntervalDurations(spec *schedulepb.ScheduleSpec) error {
 }
 
 func validateScheduleTimestamps(spec *schedulepb.ScheduleSpec) error {
-	if startTime := spec.GetStartTime(); startTime != nil {
-		if err := startTime.CheckValid(); err != nil {
-			return fmt.Errorf("start time is not a valid timestamp: %w", err)
-		}
+	if err := validateTimestamp(spec.GetStartTime(), "start time"); err != nil {
+		return err
 	}
-	if endTime := spec.GetEndTime(); endTime != nil {
-		if err := endTime.CheckValid(); err != nil {
-			return fmt.Errorf("end time is not a valid timestamp: %w", err)
+	return validateTimestamp(spec.GetEndTime(), "end time")
+}
+
+func validateTimestamp(timestamp *timestamppb.Timestamp, field string) error {
+	if timestamp != nil {
+		if err := timestamp.CheckValid(); err != nil {
+			return fmt.Errorf("%s is not a valid timestamp: %w", field, err)
 		}
 	}
 	return nil
@@ -7050,6 +7058,29 @@ func (wh *WorkflowHandler) validateScheduleOverlapPolicies(
 	for i, backfill := range patch.GetBackfillRequest() {
 		if err := validateScheduleOverlapPolicy(backfill.GetOverlapPolicy(), fmt.Sprintf("backfill request %d", i)); err != nil {
 			return wh.handleScheduleValidationError(err, scheduleValidationOverlapPolicy, namespaceName)
+		}
+	}
+	return nil
+}
+
+func (wh *WorkflowHandler) validateSchedulePatchTimestamps(
+	patch *schedulepb.SchedulePatch,
+	namespaceName string,
+) error {
+	if patch == nil {
+		return nil
+	}
+	if trigger := patch.GetTriggerImmediately(); trigger != nil {
+		if err := validateTimestamp(trigger.GetScheduledTime(), "trigger immediately request scheduled time"); err != nil {
+			return wh.handleScheduleValidationError(err, scheduleValidationTimestamp, namespaceName)
+		}
+	}
+	for i, backfill := range patch.GetBackfillRequest() {
+		if err := validateTimestamp(backfill.GetStartTime(), fmt.Sprintf("backfill request %d start time", i)); err != nil {
+			return wh.handleScheduleValidationError(err, scheduleValidationTimestamp, namespaceName)
+		}
+		if err := validateTimestamp(backfill.GetEndTime(), fmt.Sprintf("backfill request %d end time", i)); err != nil {
+			return wh.handleScheduleValidationError(err, scheduleValidationTimestamp, namespaceName)
 		}
 	}
 	return nil

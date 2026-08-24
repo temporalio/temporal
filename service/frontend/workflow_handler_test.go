@@ -5995,6 +5995,16 @@ func (s *WorkflowHandlerSuite) TestScheduleValidation() {
 			OverlapPolicy: invalidPolicy,
 		}}}
 	}
+	invalidBackfillTimestamp := func() *schedulepb.SchedulePatch {
+		return &schedulepb.SchedulePatch{BackfillRequest: []*schedulepb.BackfillRequest{{
+			StartTime: &timestamppb.Timestamp{Nanos: 1_000_000_000},
+		}}}
+	}
+	invalidTriggerTimestamp := func() *schedulepb.SchedulePatch {
+		return &schedulepb.SchedulePatch{TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{
+			ScheduledTime: &timestamppb.Timestamp{Nanos: 1_000_000_000},
+		}}
+	}
 
 	// No backend call is expected: every case is rejected before either schedule backend is selected.
 	for _, tc := range []struct {
@@ -6033,6 +6043,11 @@ func (s *WorkflowHandlerSuite) TestScheduleValidation() {
 			invoke:    func() error { return create(&schedulepb.Schedule{}, invalidBackfillPolicy()) },
 		},
 		{
+			name:      "CreateSchedule initial patch timestamp",
+			errString: "backfill request 0 start time is not a valid timestamp",
+			invoke:    func() error { return create(&schedulepb.Schedule{}, invalidBackfillTimestamp()) },
+		},
+		{
 			name:      "UpdateSchedule policy",
 			errString: "unsupported overlap policy",
 			invoke:    func() error { return update(invalidSchedulePolicy()) },
@@ -6052,6 +6067,18 @@ func (s *WorkflowHandlerSuite) TestScheduleValidation() {
 			},
 		},
 		{
+			name:      "PatchSchedule trigger timestamp",
+			errString: "trigger immediately request scheduled time is not a valid timestamp",
+			invoke: func() error {
+				_, err := wh.PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+					Namespace:  s.testNamespace.String(),
+					ScheduleId: "test-schedule",
+					Patch:      invalidTriggerTimestamp(),
+				})
+				return err
+			},
+		},
+		{
 			name:      "PatchSchedule backfill",
 			errString: "unsupported overlap policy",
 			invoke: func() error {
@@ -6059,6 +6086,18 @@ func (s *WorkflowHandlerSuite) TestScheduleValidation() {
 					Namespace:  s.testNamespace.String(),
 					ScheduleId: "test-schedule",
 					Patch:      invalidBackfillPolicy(),
+				})
+				return err
+			},
+		},
+		{
+			name:      "PatchSchedule backfill timestamp",
+			errString: "backfill request 0 start time is not a valid timestamp",
+			invoke: func() error {
+				_, err := wh.PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+					Namespace:  s.testNamespace.String(),
+					ScheduleId: "test-schedule",
+					Patch:      invalidBackfillTimestamp(),
 				})
 				return err
 			},
