@@ -320,6 +320,11 @@ func TestRecordExecuteResult_AllowAllRecentActionsBounded(t *testing.T) {
 		recentRunIDs[action.GetStartWorkflowResult().GetRunId()] = struct{}{}
 	}
 	require.NotContains(t, recentRunIDs, "run-0")
+	bufferedRequestIDs := make(map[string]struct{}, len(invoker.GetBufferedStarts()))
+	for _, start := range invoker.GetBufferedStarts() {
+		bufferedRequestIDs[start.GetRequestId()] = struct{}{}
+	}
+	require.NotContains(t, bufferedRequestIDs, "req-0")
 	require.Len(t, env.Scheduler.ListInfo(ctx).GetRecentActions(), 5)
 }
 
