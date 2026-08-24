@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.opentelemetry.io/otel/trace"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
@@ -85,6 +86,18 @@ type operationContext struct {
 	headersBlacklist              dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 	metricTagConfig               dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
 	cleanupFunctions              []func(map[string]string, error)
+}
+
+func (c *operationContext) annotateServerSpan(
+	ctx context.Context,
+	service, operation, requestID string,
+) {
+	nexusrpc.AnnotateServerSpan(trace.SpanFromContext(ctx), nexusrpc.ServerSpanAttributes{
+		Endpoint:  c.endpointName,
+		Service:   service,
+		Operation: operation,
+		RequestID: requestID,
+	})
 }
 
 // Panic handler and metrics recording function.
@@ -234,7 +247,12 @@ func (c *operationContext) interceptRequest(
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 
-	if err := c.namespaceRateLimitInterceptor.Allow(c.namespace.Name(), c.apiName, header); err != nil {
+	if err := c.namespaceRateLimitInterceptor.Allow(
+		ctx,
+		c.namespace.Name(),
+		c.apiName,
+		header,
+	); err != nil {
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("namespace_rate_limited"))
 		return commonnexus.ConvertGRPCError(err, true)
 	}
@@ -306,6 +324,19 @@ func (c *operationContext) enrichNexusOperationMetrics(service, operation string
 	if len(tags) > 0 {
 		c.metricsHandler = c.metricsHandler.WithTags(tags...)
 	}
+}
+
+// enrichNexusOperationLogs adds Nexus operation context to the handler-side logger.
+func (c *operationContext) enrichNexusOperationLogs(service, operation, requestID string) {
+	tags := []tag.Tag{
+		tag.NexusService(service),
+		tag.NexusOperation(operation),
+		tag.Endpoint(c.endpointName),
+	}
+	if requestID != "" {
+		tags = append(tags, tag.RequestID(requestID))
+	}
+	c.logger = log.With(c.logger, tags...)
 }
 
 // Key to extract a nexusContext object from a context.Context.
@@ -397,6 +428,8 @@ func (h *nexusHandler) StartOperation(
 	}
 	ctx = oc.augmentContext(ctx, options.Header)
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
+	oc.enrichNexusOperationLogs(service, operation, options.RequestID)
+	oc.annotateServerSpan(ctx, service, operation, options.RequestID)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	var links []*nexuspb.Link
@@ -637,6 +670,8 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	}
 	ctx = oc.augmentContext(ctx, options.Header)
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
+	oc.enrichNexusOperationLogs(service, operation, "")
+	oc.annotateServerSpan(ctx, service, operation, "")
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	request := oc.matchingRequest(&nexuspb.Request{

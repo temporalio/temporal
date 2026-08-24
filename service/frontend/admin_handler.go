@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	otellog "go.opentelemetry.io/otel/log"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
@@ -85,6 +86,7 @@ type (
 		status int32
 
 		logger                     log.Logger
+		eventLogger                otellog.Logger
 		numberOfHistoryShards      int32
 		config                     *Config
 		namespaceDLQHandler        nsreplication.DLQMessageHandler
@@ -123,6 +125,7 @@ type (
 		ReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
 		visibilityMgr                       manager.VisibilityManager
 		Logger                              log.Logger
+		EventLogger                         otellog.Logger
 		TaskManager                         persistence.TaskManager
 		FairTaskManager                     persistence.FairTaskManager
 		PersistenceExecutionManager         persistence.ExecutionManager
@@ -173,6 +176,7 @@ func NewAdminHandler(
 
 	return &AdminHandler{
 		logger:                     args.Logger,
+		eventLogger:                args.EventLogger,
 		status:                     common.DaemonStatusInitialized,
 		numberOfHistoryShards:      args.PersistenceConfig.NumHistoryShards,
 		config:                     args.Config,
@@ -864,7 +868,32 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 	ctx context.Context,
 	request *adminservice.AddOrUpdateRemoteClusterRequest,
 ) (_ *adminservice.AddOrUpdateRemoteClusterResponse, retError error) {
+	var (
+		lifecycleEvent     *remoteClusterLifecycleEvent
+		remoteResponse     *adminservice.DescribeClusterResponse
+		persistedBefore    *persistence.GetClusterMetadataResponse
+		persistenceRequest *persistence.SaveClusterMetadataRequest
+	)
+	// Bracket deferred emission with panic capture: the inner capture converts handler panics
+	// into retError for the event, while the outer capture recovers panics from emission itself.
 	defer log.CapturePanic(adh.logger, &retError)
+	defer func() {
+		lifecycleEvent.emitUpsertFailure(retError, remoteResponse, persistedBefore, persistenceRequest)
+	}()
+	defer log.CapturePanic(adh.logger, &retError)
+	lifecycleEvent = newRemoteClusterUpsertLifecycleEvent(
+		ctx,
+		adh.eventLogger,
+		adh.clusterMetadata,
+		adh.config,
+		remoteClusterAPIAdmin,
+		remoteClusterUpsertRequestFields{
+			FrontendAddress:               request.GetFrontendAddress(),
+			FrontendHTTPAddress:           request.GetFrontendHttpAddress(), //nolint:staticcheck // Audit the deprecated API request as received.
+			EnableRemoteClusterConnection: request.GetEnableRemoteClusterConnection(),
+			EnableReplication:             request.GetEnableReplication(),
+		},
+	)
 
 	adminClient := adh.clientFactory.NewRemoteAdminClientWithTimeout(
 		request.GetFrontendAddress(),
@@ -874,6 +903,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 
 	// Fetch cluster metadata from remote cluster
 	resp, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
+	remoteResponse = resp
 	if err != nil {
 		return nil, err
 	}
@@ -905,14 +935,14 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 	)
 	switch err.(type) {
 	case nil:
+		persistedBefore = clusterData
 		updateRequestVersion = clusterData.Version
 	case *serviceerror.NotFound:
 		updateRequestVersion = 0
 	default:
 		return nil, err
 	}
-
-	applied, err := clusterMetadataMrg.SaveClusterMetadata(ctx, &persistence.SaveClusterMetadataRequest{
+	saveRequest := &persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: &persistencespb.ClusterMetadata{
 			ClusterName:              resp.GetClusterName(),
 			HistoryShardCount:        resp.GetHistoryShardCount(),
@@ -927,7 +957,9 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 			Tags:                     resp.GetTags(),
 		},
 		Version: updateRequestVersion,
-	})
+	}
+	persistenceRequest = saveRequest
+	applied, err := clusterMetadataMrg.SaveClusterMetadata(ctx, saveRequest)
 	if err != nil {
 		return nil, err
 	}
@@ -935,6 +967,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 		return nil, serviceerror.NewInvalidArgument(
 			"Cannot update remote cluster due to update immutable fields")
 	}
+	lifecycleEvent.emitUpsertSuccess(persistedBefore, persistenceRequest)
 	return &adminservice.AddOrUpdateRemoteClusterResponse{}, nil
 }
 
@@ -944,18 +977,42 @@ func (adh *AdminHandler) RemoveRemoteCluster(
 	ctx context.Context,
 	request *adminservice.RemoveRemoteClusterRequest,
 ) (_ *adminservice.RemoveRemoteClusterResponse, retError error) {
+	var (
+		lifecycleEvent     *remoteClusterLifecycleEvent
+		cachedBefore       cachedRemoteClusterLookup
+		persistenceRequest *persistence.DeleteClusterMetadataRequest
+	)
+	// Bracket deferred emission with panic capture: the inner capture converts handler panics
+	// into retError for the event, while the outer capture recovers panics from emission itself.
 	defer log.CapturePanic(adh.logger, &retError)
-
-	if err := validateClusterNotInUseByNamespaces(adh.namespaceRegistry, adh.clusterMetadata.GetCurrentClusterName(), request.GetClusterName()); err != nil {
-		return nil, err
-	}
-
-	if err := adh.clusterMetadataManager.DeleteClusterMetadata(
+	defer func() {
+		lifecycleEvent.emitRemoveFailure(retError, cachedBefore, persistenceRequest)
+	}()
+	defer log.CapturePanic(adh.logger, &retError)
+	clusterName := request.GetClusterName()
+	lifecycleEvent = newRemoteClusterRemoveLifecycleEvent(
 		ctx,
-		&persistence.DeleteClusterMetadataRequest{ClusterName: request.GetClusterName()},
-	); err != nil {
+		adh.eventLogger,
+		adh.clusterMetadata,
+		adh.config,
+		remoteClusterAPIAdmin,
+		remoteClusterRemoveRequestFields{ClusterName: clusterName},
+	)
+	if lifecycleEvent != nil {
+		// Admin does not use the cluster cache for removal; this lookup is audit-only.
+		cachedBefore = lookupCachedRemoteCluster(adh.clusterMetadata, clusterName)
+	}
+
+	if err := validateClusterNotInUseByNamespaces(adh.namespaceRegistry, adh.clusterMetadata.GetCurrentClusterName(), clusterName); err != nil {
 		return nil, err
 	}
+
+	deleteRequest := &persistence.DeleteClusterMetadataRequest{ClusterName: clusterName}
+	persistenceRequest = deleteRequest
+	if err := adh.clusterMetadataManager.DeleteClusterMetadata(ctx, deleteRequest); err != nil {
+		return nil, err
+	}
+	lifecycleEvent.emitRemoveSuccess(cachedBefore, persistenceRequest)
 	return &adminservice.RemoveRemoteClusterResponse{}, nil
 }
 

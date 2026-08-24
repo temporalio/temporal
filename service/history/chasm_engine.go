@@ -566,8 +566,7 @@ func (e *ChasmEngine) updateComponent(
 	// reject it as non-retryable (FailedPrecondition) without running updateFn or persisting.
 	if requestID != "" && executionLease.GetMutableState().HasRequestID(requestID) {
 		executionLease.GetReleaseFn()(nil)
-		return nil, serviceerror.NewFailedPreconditionf(
-			"request ID %s has already been used for this execution", requestID)
+		return nil, chasm.ErrRequestIDAlreadyUsed
 	}
 
 	defer func() {
@@ -728,6 +727,11 @@ func (e *ChasmEngine) pollComponent(
 	monotonicPredicate func(chasm.Context, chasm.Component) (bool, error),
 ) (retRef []byte, retError error) {
 
+	shardContext, err := e.getShardContext(ctx, requestRef)
+	if err != nil {
+		return nil, err
+	}
+
 	var ch <-chan struct{}
 	var unsubscribe func()
 	defer func() {
@@ -771,6 +775,11 @@ func (e *ChasmEngine) pollComponent(
 			ref, err = checkPredicateOrSubscribe()
 			if err != nil || ref != nil {
 				return ref, err
+			}
+		case <-shardContext.GetLifecycleContext().Done():
+			return nil, &persistence.ShardOwnershipLostError{
+				ShardID: shardContext.GetShardID(),
+				Msg:     "shard closed",
 			}
 		case <-ctx.Done():
 			return nil, ctx.Err()

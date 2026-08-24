@@ -84,6 +84,80 @@ func (s *WorkflowAPIBatchSignalClientTestSuite) TestWorkflowBatchSignal_Separate
 	s.Equal("first-signal-data,second-signal-data", result)
 }
 
+func (s *WorkflowAPIBatchSignalClientTestSuite) TestWorkflowBatchSignal_PausedWorkflow() {
+	env := newWorkflowBatchEnv(s.T())
+	t := s.T()
+	ctx := s.Context()
+
+	workflowType := testcore.RandomizeStr(t.Name())
+	env.SdkWorker().RegisterWorkflowWithOptions(signalReceivingWorkflow, workflow.RegisterOptions{Name: workflowType})
+
+	run, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:        testcore.RandomizeStr(t.Name()),
+		TaskQueue: env.WorkerTaskQueue(),
+	}, workflowType)
+	require.NoError(t, err)
+
+	_, err = env.FrontendClient().PauseWorkflowExecution(ctx, &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: run.GetID(),
+		RunId:      run.GetRunID(),
+		Identity:   "batch-signal-test",
+		Reason:     "test",
+		RequestId:  uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	query := fmt.Sprintf("WorkflowId = '%s'", run.GetID())
+	//nolint:forbidigo // for tests with waits
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		resp, err := env.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: env.Namespace().String(),
+			PageSize:  1,
+			Query:     fmt.Sprintf("%s AND ExecutionStatus = 'Paused'", query),
+		})
+		require.NoError(c, err)
+		require.Len(c, resp.GetExecutions(), 1)
+	}, 10*time.Second, 100*time.Millisecond)
+
+	inputPayloads, err := converter.GetDefaultDataConverter().ToPayloads("signal-while-paused")
+	require.NoError(t, err)
+	jobID := uuid.NewString()
+	_, err = env.SdkClient().WorkflowService().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
+		Namespace: env.Namespace().String(),
+		Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
+			SignalOperation: &batchpb.BatchOperationSignal{
+				Signal:   batchSignalTestSignalName,
+				Input:    inputPayloads,
+				Identity: "batch-signaler",
+			},
+		},
+		VisibilityQuery: query,
+		JobId:           jobID,
+		Reason:          "test",
+	})
+	require.NoError(t, err)
+	assertWorkflowBatchOperationSucceeded(ctx, t, env, jobID)
+
+	desc, err := env.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+	require.NoError(t, err)
+	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, desc.GetWorkflowExecutionInfo().GetStatus())
+
+	_, err = env.FrontendClient().UnpauseWorkflowExecution(ctx, &workflowservice.UnpauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: run.GetID(),
+		RunId:      run.GetRunID(),
+		Identity:   "batch-signal-test",
+		Reason:     "test",
+		RequestId:  uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	var result string
+	require.NoError(t, run.Get(ctx, &result))
+	require.Equal(t, "signal-while-paused", result)
+}
+
 // signalWorkflowViaBatch starts a batch signal operation targeting a single
 // workflow execution and returns the batch job ID.
 func (s *WorkflowAPIBatchSignalClientTestSuite) signalWorkflowViaBatch(

@@ -239,7 +239,7 @@ response to a StartWorkflowExecution request and skipping the trip through match
 	EmitNamespaceLifecycleEvents = NewGlobalBoolSetting(
 		"system.emitNamespaceLifecycleEvents",
 		false,
-		`EmitNamespaceLifecycleEvents controls whether services emit NamespaceLifecycle wide events for namespace CRUD and handover phases. Cluster-level; default off.`,
+		`EmitNamespaceLifecycleEvents controls whether services emit NamespaceLifecycle and NamespaceReplicationLifecycle wide events. Cluster-level; default off.`,
 	)
 	PersistenceHealthSignalMetricsEnabled = NewGlobalBoolSetting(
 		"system.persistenceHealthSignalMetricsEnabled",
@@ -1717,6 +1717,20 @@ leaves the membership ring, giving in-flight long-polls time to drain before the
 
 	// keys for history
 
+	EnablePaginationTokenBranchValidation = NewGlobalBoolSetting(
+		"history.enablePaginationTokenBranchValidation",
+		true,
+		`EnablePaginationTokenBranchValidation enables checking that the branch token in a
+GetWorkflowExecutionHistory(Reverse) page token is the current branch token of the requested
+execution.`,
+	)
+	EnablePaginationTokenBranchValidationShadowMode = NewGlobalBoolSetting(
+		"history.enablePaginationTokenBranchValidationShadowMode",
+		false,
+		`EnablePaginationTokenBranchValidationShadowMode logs and emits metrics for a page token whose
+branch token is not the execution's current one, but still serves the read.`,
+	)
+
 	EnableReplicationStream = NewGlobalBoolSetting(
 		"history.enableReplicationStream",
 		true,
@@ -1725,7 +1739,7 @@ leaves the membership ring, giving in-flight long-polls time to drain before the
 	EmitReplicationLifecycleEvents = NewGlobalBoolSetting(
 		"history.emitReplicationLifecycleEvents",
 		false,
-		`EmitReplicationLifecycleEvents controls whether the history service emits ReplicationLifecycle wide events (sent/executing/applied phases). Cluster-level; default off.`,
+		`EmitReplicationLifecycleEvents controls whether the history service emits ReplicationLifecycle wide events (sent/executing/applied/skipped/error phases). Cluster-level; default off.`,
 	)
 	EnableCloseInboundReplicationStreamOnShutdown = NewGlobalBoolSetting(
 		"history.enableCloseInboundReplicationStreamOnShutdown",
