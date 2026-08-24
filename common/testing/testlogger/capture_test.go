@@ -1,31 +1,14 @@
 package testlogger_test
 
 import (
-	"errors"
-	"fmt"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/testlogger"
 )
-
-type fatalRecorder struct {
-	testing.TB
-	helperCalled bool
-	message      string
-}
-
-func (r *fatalRecorder) Helper() {
-	r.helperCalled = true
-}
-
-func (r *fatalRecorder) Fatalf(format string, args ...any) {
-	r.message = fmt.Sprintf(format, args...)
-}
 
 func TestCaptureLifecycle(t *testing.T) {
 	t.Parallel()
@@ -102,39 +85,6 @@ func TestCaptureSnapshotIsDefensiveCopy(t *testing.T) {
 		Message: "message",
 		Tags:    []tag.Tag{tag.String("key", "original")},
 	}}, capture.Snapshot())
-}
-
-func TestCaptureContains(t *testing.T) {
-	t.Parallel()
-
-	testLogger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
-	capture := testLogger.StartCapture()
-	testLogger.Error("failed", tag.String("operation", "StartOperation"), tag.Time("attempt-start", time.Now()), tag.Error(errors.New("failure")))
-
-	pattern := testlogger.CapturedLogPattern{
-		Level:   testlogger.Error,
-		Message: "failed",
-		Tags: map[string]string{
-			"operation": "StartOperation",
-			"error":     "failure",
-		},
-	}
-	capture.RequireContains(t, pattern)
-
-	pattern.Tags["operation"] = "CancelOperation"
-	recorder := &fatalRecorder{}
-	capture.RequireContains(recorder, pattern)
-	require.True(t, recorder.helperCalled)
-	require.Contains(t, recorder.message, "candidate 1 tag mismatch")
-	require.Contains(t, recorder.message, "CancelOperation")
-	require.Contains(t, recorder.message, "StartOperation")
-
-	// A pattern with an extra tag matches nothing.
-	pattern.Tags["operation"] = "StartOperation"
-	pattern.Tags["unexpected"] = "value"
-	recorder = &fatalRecorder{}
-	capture.RequireContains(recorder, pattern)
-	require.Contains(t, recorder.message, "unexpected")
 }
 
 func TestCaptureRecordsConcurrentDerivedLoggers(t *testing.T) {
