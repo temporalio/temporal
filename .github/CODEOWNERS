@@ -14,9 +14,7 @@
 /chasm/lib/nexusoperation/ @temporalio/act @temporalio/nexus
 /chasm/lib/callback/ @temporalio/act @temporalio/nexus
 /chasm/lib/workflow/nexus_* @temporalio/act @temporalio/nexus
-
-# Nexus files directly in /chasm/, which /chasm/* would otherwise capture.
-/chasm/nexus_* @temporalio/act @temporalio/nexus
+/chasm/nexus_* @temporalio/nexus
 
 # Service Clients
 
@@ -35,9 +33,7 @@
 
 /common/tasks/ @temporalio/oss-foundations @temporalio/cgs
 /common/persistence/ @temporalio/oss-foundations @temporalio/oss-matching @temporalio/cgs
-/common/persistence/nexus_endpoint* @temporalio/oss-foundations @temporalio/oss-matching @temporalio/cgs @temporalio/nexus
 /common/persistence/**/nexus_endpoint* @temporalio/oss-foundations @temporalio/oss-matching @temporalio/cgs @temporalio/nexus
-/common/persistence/**/nexus_endpoints* @temporalio/oss-foundations @temporalio/oss-matching @temporalio/cgs @temporalio/nexus
 
 # Components
 
@@ -60,7 +56,7 @@
 
 # Frontend Service
 
-/service/frontend/nexus_* @temporalio/act @temporalio/nexus
+/service/frontend/nexus_* @temporalio/nexus
 
 # History Service
 
@@ -93,7 +89,7 @@
 /service/worker/dlq/ @temporalio/oss-foundations
 
 /service/worker/scanner/ @temporalio/oss-foundations @temporalio/oss-matching
-/service/worker/scanner/executions/ @temporalio/oss-foundations 
+/service/worker/scanner/executions/ @temporalio/oss-foundations
 /service/worker/scanner/history/ @temporalio/oss-foundations
 /service/worker/scanner/build_ids/ @temporalio/oss-matching
 /service/worker/scanner/taskqueue/ @temporalio/oss-matching
@@ -104,11 +100,6 @@
 /service/worker/parentclosepolicy/ @temporalio/oss-foundations @temporalio/act
 
 /tools/ @temporalio/server
-
-# Functional Tests
-
-/tests/nexus_* @temporalio/act @temporalio/nexus
-/tests/**/nexus_* @temporalio/act @temporalio/nexus
 
 # Generated code
 *.pb.go        @temporalio/server @temporalio/cgs @temporalio/nexus
