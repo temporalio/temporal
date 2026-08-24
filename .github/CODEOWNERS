@@ -105,6 +105,11 @@
 
 /tools/ @temporalio/server
 
+# Functional Tests
+
+/tests/nexus_* @temporalio/act @temporalio/nexus
+/tests/**/nexus_* @temporalio/act @temporalio/nexus
+
 # Generated code
 *.pb.go        @temporalio/server @temporalio/cgs @temporalio/nexus
 *.pb.mock.go   @temporalio/server @temporalio/cgs @temporalio/nexus
