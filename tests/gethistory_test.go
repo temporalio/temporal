@@ -800,7 +800,7 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_ContinuationFromAnothe
 	)
 
 	otherNamespace := namespace.Name(testcore.RandomizeStr("other-namespace"))
-	_, err := env.RegisterNamespace(otherNamespace, 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
+	_, err := env.RegisterNamespace(s.Context(), otherNamespace, 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
 
 	startMultiBatchWorkflow(s.Context(), s.Require(), env)
@@ -848,7 +848,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistoryReverse_ContinuationFro
 	)
 
 	otherNamespace := namespace.Name(testcore.RandomizeStr("other-namespace"))
-	_, err := env.RegisterNamespace(otherNamespace, 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
+	_, err := env.RegisterNamespace(s.Context(), otherNamespace, 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
 
 	startMultiBatchWorkflow(s.Context(), s.Require(), env)
