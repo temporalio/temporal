@@ -150,6 +150,7 @@ type (
 		tokenSerializer               *tasktoken.Serializer
 		historySerializer             serialization.Serializer
 		logger                        log.Logger
+		nexusEndpointLogger           log.Logger
 		throttledLogger               log.ThrottledLogger
 		namespaceRegistry             namespace.Registry
 		hostInfoProvider              membership.HostInfoProvider
@@ -296,6 +297,7 @@ func NewEngine(
 		workerDeploymentClient: workerDeploymentClient,
 		historySerializer:      historySerializer,
 		logger:                 log.With(logger, tag.ComponentMatchingEngine),
+		nexusEndpointLogger:    log.With(logger, tag.ComponentNexusRegistry),
 		throttledLogger:        log.With(throttledLogger, tag.ComponentMatchingEngine),
 		namespaceRegistry:      namespaceRegistry,
 		hostInfoProvider:       hostInfoProvider,
@@ -2834,9 +2836,9 @@ func (e *matchingEngineImpl) CreateNexusEndpoint(ctx context.Context, request *m
 		timeSource: e.timeSource,
 	})
 	if err != nil {
-		e.logger.Error("Failed to create Nexus endpoint", tag.Error(err), tag.Endpoint(request.GetSpec().GetName()))
+		e.nexusEndpointLogger.Error("Failed to create Nexus endpoint", tag.Error(err), tag.Endpoint(request.GetSpec().GetName()))
 	} else {
-		e.logger.Info("Created Nexus endpoint", tag.Endpoint(request.GetSpec().GetName()))
+		e.nexusEndpointLogger.Info("Created Nexus endpoint", tag.Endpoint(request.GetSpec().GetName()))
 	}
 	return res, err
 }
@@ -2851,9 +2853,9 @@ func (e *matchingEngineImpl) UpdateNexusEndpoint(ctx context.Context, request *m
 		timeSource: e.timeSource,
 	})
 	if err != nil {
-		e.logger.Error("Failed to update Nexus endpoint", tag.Error(err), tag.Endpoint(request.GetSpec().GetName()))
+		e.nexusEndpointLogger.Error("Failed to update Nexus endpoint", tag.Error(err), tag.Endpoint(request.GetSpec().GetName()))
 	} else {
-		e.logger.Info("Updated Nexus endpoint", tag.Endpoint(request.GetSpec().GetName()))
+		e.nexusEndpointLogger.Info("Updated Nexus endpoint", tag.Endpoint(request.GetSpec().GetName()))
 	}
 	return res, err
 }
@@ -2862,9 +2864,9 @@ func (e *matchingEngineImpl) DeleteNexusEndpoint(ctx context.Context, request *m
 	// Write API, let persistence verify table ownership.
 	res, err := e.nexusEndpointClient.DeleteNexusEndpoint(ctx, request)
 	if err != nil {
-		e.logger.Error("Failed to delete Nexus endpoint", tag.Error(err), tag.Endpoint(request.GetId()))
+		e.nexusEndpointLogger.Error("Failed to delete Nexus endpoint", tag.Error(err), tag.Endpoint(request.GetId()))
 	} else {
-		e.logger.Info("Deleted Nexus endpoint", tag.Endpoint(request.GetId()))
+		e.nexusEndpointLogger.Info("Deleted Nexus endpoint", tag.Endpoint(request.GetId()))
 	}
 	return res, err
 }
@@ -2874,11 +2876,11 @@ func (e *matchingEngineImpl) ListNexusEndpoints(ctx context.Context, request *ma
 	// Read API, verify table ownership via membership.
 	isOwner, ownershipLostCh, err := e.checkNexusEndpointsOwnership()
 	if err != nil {
-		e.logger.Error("Failed to check Nexus endpoints ownership", tag.Error(err))
+		e.nexusEndpointLogger.Error("Failed to check Nexus endpoints ownership", tag.Error(err))
 		return nil, serviceerror.NewAbortedf("cannot verify ownership of Nexus endpoints table: %v", err)
 	}
 	if !isOwner {
-		e.logger.Error("Matching node doesn't think it's the Nexus endpoints table owner", tag.Error(err))
+		e.nexusEndpointLogger.Error("Matching node doesn't think it's the Nexus endpoints table owner", tag.Error(err))
 		return nil, serviceerror.NewAborted("matching node doesn't think it's the Nexus endpoints table owner")
 	}
 
@@ -2934,7 +2936,7 @@ func (e *matchingEngineImpl) notifyNexusEndpointsOwnershipChange() {
 	// watchMembership method and is the only way the channel may be replaced.
 	isOwner, _, err := e.checkNexusEndpointsOwnership()
 	if err != nil {
-		e.logger.Error("Failed to check Nexus endpoints ownership", tag.Error(err))
+		e.nexusEndpointLogger.Error("Failed to check Nexus endpoints ownership", tag.Error(err))
 		return
 	}
 	if !isOwner {
