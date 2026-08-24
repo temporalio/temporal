@@ -13,6 +13,10 @@
 
 /chasm/lib/nexusoperation/ @temporalio/act @temporalio/nexus
 /chasm/lib/callback/ @temporalio/act @temporalio/nexus
+/chasm/lib/workflow/nexus_* @temporalio/act @temporalio/nexus
+
+# Nexus files directly in /chasm/, which /chasm/* would otherwise capture.
+/chasm/nexus_* @temporalio/act @temporalio/nexus
 
 # Service Clients
 
@@ -31,6 +35,9 @@
 
 /common/tasks/ @temporalio/oss-foundations @temporalio/cgs
 /common/persistence/ @temporalio/oss-foundations @temporalio/oss-matching @temporalio/cgs
+/common/persistence/nexus_endpoint* @temporalio/oss-foundations @temporalio/oss-matching @temporalio/cgs @temporalio/nexus
+/common/persistence/**/nexus_endpoint* @temporalio/oss-foundations @temporalio/oss-matching @temporalio/cgs @temporalio/nexus
+/common/persistence/**/nexus_endpoints* @temporalio/oss-foundations @temporalio/oss-matching @temporalio/cgs @temporalio/nexus
 
 # Components
 
@@ -50,6 +57,10 @@
 
 # DB Schema
 /schema/**/visibility/ @temporalio/oss-foundations
+
+# Frontend Service
+
+/service/frontend/nexus_* @temporalio/act @temporalio/nexus
 
 # History Service
 
