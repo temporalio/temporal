@@ -883,8 +883,8 @@ func AdminReplicateWorkflow(
 //
 // It supports three mutually-exclusive selection modes, all sharing the required --target flag:
 //   - single:          --schedule-id <id> (performs immediately, as before)
-//   - from visibility: --from-visibility [--query <q>] (default query is chosen from --target: the
-//     running V1 schedules when migrating to chasm, the running V2 schedules when migrating to workflow)
+//   - from visibility: --from-visibility [--query <q>] (starts a durable namespace-scoped batch;
+//     the source scheduler query is chosen from --target and --query is appended as a filter)
 //   - stdin:           JSON lines piped on stdin, one {"namespace":..., "schedule_id":...} per line
 //
 // The from-visibility and stdin modes default to a dry-run; pass --execute to perform the migration.
@@ -902,16 +902,22 @@ func AdminMigrateSchedule(c *cli.Context, clientFactory ClientFactory) error {
 	if !fromVisibility && c.IsSet(FlagVisibilityQuery) {
 		return fmt.Errorf("--%s is only valid with --%s", FlagVisibilityQuery, FlagFromVisibility)
 	}
-	// --workers applies to the bulk modes (--from-visibility and stdin); it has no effect when
-	// migrating a single --schedule-id, so reject it there rather than silently ignoring it.
-	if scheduleID != "" && c.IsSet(FlagWorkers) {
-		return fmt.Errorf("--%s is only valid with --%s or when piping JSON lines on stdin", FlagWorkers, FlagFromVisibility)
+	// Client-side concurrency and output logs only apply to piped migrations. Visibility-based
+	// migrations are executed by the durable server-side batcher.
+	if scheduleID != "" && (c.IsSet(FlagWorkers) || c.IsSet(FlagOutputLog)) {
+		return fmt.Errorf("--%s and --%s are only valid when piping JSON lines on stdin", FlagWorkers, FlagOutputLog)
+	}
+	if !fromVisibility && (c.IsSet(FlagReason) || c.IsSet(FlagJobID)) {
+		return fmt.Errorf("--%s and --%s are only valid with --%s", FlagReason, FlagJobID, FlagFromVisibility)
 	}
 
 	switch {
 	case fromVisibility:
 		if scheduleID != "" {
 			return fmt.Errorf("--%s cannot be combined with --%s", FlagFromVisibility, FlagScheduleID)
+		}
+		if c.IsSet(FlagWorkers) || c.IsSet(FlagOutputLog) {
+			return fmt.Errorf("--%s and --%s are only valid when piping JSON lines on stdin", FlagWorkers, FlagOutputLog)
 		}
 		return migrateSchedulesFromVisibility(c, clientFactory, target, targetStr)
 	case scheduleID != "":
@@ -1188,8 +1194,8 @@ func migrateSingleSchedule(
 	return nil
 }
 
-// migrateSchedulesFromVisibility selects schedules via a visibility query and migrates each.
-// When --query is not supplied the default query is chosen from the --target direction.
+// migrateSchedulesFromVisibility previews or starts a durable server-side migration batch.
+// The target determines the source scheduler query; --query is an optional additional filter.
 func migrateSchedulesFromVisibility(
 	c *cli.Context,
 	clientFactory ClientFactory,
@@ -1201,79 +1207,57 @@ func migrateSchedulesFromVisibility(
 		return err
 	}
 
-	// When --query is not supplied the default is chosen from the --target direction: migrating
-	// to CHASM (V2) selects the running V1 (workflow-backed) schedules to move forward, while
-	// migrating to workflow (V1) selects the running V2 (CHASM) schedules to roll back.
-	query := c.String(FlagVisibilityQuery)
-	if query == "" {
-		if target == adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM {
-			// Forward migration V1 -> V2: all running V1 (workflow-backed) schedules.
-			query = v1ScheduleVisibilityQuery()
-		} else {
-			// Rollback V2 -> V1: all running V2 (CHASM) schedules.
-			query = v2ScheduleVisibilityQuery()
-		}
+	userQuery := c.String(FlagVisibilityQuery)
+	sourceQuery := v2ScheduleVisibilityQuery()
+	if target == adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM {
+		sourceQuery = v1ScheduleVisibilityQuery()
+	}
+	effectiveQuery := sourceQuery
+	if userQuery != "" {
+		effectiveQuery = fmt.Sprintf("(%s) AND (%s)", sourceQuery, userQuery)
 	}
 
-	execute := c.Bool(FlagExecute)
-	workers := max(c.Int(FlagWorkers), 1)
 	wfClient := clientFactory.WorkflowClient(c)
-	adminClient := clientFactory.AdminClient(c)
+	ctx, cancel := newContext(c)
+	defer cancel()
+	countResp, err := wfClient.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+		Namespace: ns,
+		Query:     effectiveQuery,
+	})
+	if err != nil {
+		return fmt.Errorf("unable to count schedules from visibility: %w", err)
+	}
 
-	// Schedules are listed (paginated) on this goroutine and fed to a pool of workers
-	// that migrate them concurrently.
-	var summary migrateSummary
-	closeLog, err := openMigrateLog(c, &summary)
+	if !c.Bool(FlagExecute) {
+		_, _ = fmt.Fprintf(c.App.Writer, "Dry-run: %d schedule(s) in namespace %q match %q and would be migrated to %s. Re-run with --%s to start the batch.\n",
+			countResp.GetCount(), ns, effectiveQuery, targetStr, FlagExecute)
+		return nil
+	}
+
+	reason, err := getRequiredOption(c, FlagReason)
 	if err != nil {
 		return err
 	}
-	defer closeLog()
-	jobs := make(chan migrateJob)
-	var wg sync.WaitGroup
-	for range workers {
-		wg.Go(func() {
-			for job := range jobs {
-				migrateOne(c, adminClient, job.namespace, job.scheduleID, target, targetStr, execute, &summary)
-			}
-		})
+	jobID := c.String(FlagJobID)
+	if jobID == "" {
+		jobID = fmt.Sprintf("batch-migrate-schedules-%d", time.Now().UnixNano())
 	}
-
-	var listErr error
-	var nextPageToken []byte
-	for {
-		ctx, cancel := newContext(c)
-		resp, err := wfClient.ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-			Namespace:     ns,
-			Query:         query,
-			NextPageToken: nextPageToken,
-		})
-		cancel()
-		if err != nil {
-			listErr = fmt.Errorf("unable to list schedules from visibility: %w", err)
-			break
-		}
-
-		for _, exec := range resp.GetExecutions() {
-			workflowID := exec.GetExecution().GetWorkflowId()
-			// CHASM scheduler executions store the schedule id directly as the workflow id;
-			// TrimPrefix is a no-op for them and handles any V1 records defensively.
-			scheduleID := strings.TrimPrefix(workflowID, primitives.ScheduleWorkflowIDPrefix)
-			jobs <- migrateJob{namespace: ns, scheduleID: scheduleID}
-		}
-
-		nextPageToken = resp.GetNextPageToken()
-		if len(nextPageToken) == 0 {
-			break
-		}
+	_, err = clientFactory.AdminClient(c).StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
+		Namespace:       ns,
+		VisibilityQuery: userQuery,
+		JobId:           jobID,
+		Reason:          reason,
+		Identity:        getCurrentUserFromEnv(),
+		Operation: &adminservice.StartAdminBatchOperationRequest_MigrateSchedulesOperation{
+			MigrateSchedulesOperation: &adminservice.BatchOperationMigrateSchedules{Target: target},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("unable to start batch schedule migration: %w", err)
 	}
-	close(jobs)
-	wg.Wait()
-
-	// Always report what was migrated before surfacing a listing error: if pagination fails
-	// partway through, workers may have already migrated the schedules listed so far, and the
-	// user needs to see that partial progress.
-	summary.print(c, execute)
-	return listErr
+	_, _ = fmt.Fprintf(c.App.Writer, "Batch schedule migration started for %d schedule(s) in namespace %q with Job ID: %s\n",
+		countResp.GetCount(), ns, jobID)
+	return nil
 }
 
 type migrateJob struct {

@@ -1367,6 +1367,11 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 	switch op := request.Operation.(type) {
 	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation:
 		batchTypeMemo = "refresh_tasks"
+	case *adminservice.StartAdminBatchOperationRequest_MigrateSchedulesOperation:
+		batchTypeMemo = "migrate_schedules_to_" + strings.TrimPrefix(
+			strings.ToLower(op.MigrateSchedulesOperation.GetTarget().String()),
+			"scheduler_target_",
+		)
 	default:
 		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)
 	}
@@ -1423,9 +1428,8 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 func validateAdminBatchOperation(params *adminservice.StartAdminBatchOperationRequest) error {
 	if params.GetOperation() == nil ||
 		params.GetReason() == "" ||
-		params.GetNamespace() == "" ||
-		(params.GetVisibilityQuery() == "" && len(params.GetExecutions()) == 0) {
-		return serviceerror.NewInvalidArgument("must provide required parameters: Operation, Reason, Namespace, AND one of (Query OR Executions)")
+		params.GetNamespace() == "" {
+		return serviceerror.NewInvalidArgument("must provide required parameters: Operation, Reason, Namespace")
 	}
 
 	if len(params.GetJobId()) == 0 {
@@ -1437,7 +1441,22 @@ func validateAdminBatchOperation(params *adminservice.StartAdminBatchOperationRe
 
 	switch op := params.GetOperation().(type) {
 	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation:
-		// No additional validation needed
+		if params.GetVisibilityQuery() == "" && len(params.GetExecutions()) == 0 {
+			return serviceerror.NewInvalidArgument("refresh tasks requires one of Query OR Executions")
+		}
+		return nil
+	case *adminservice.StartAdminBatchOperationRequest_MigrateSchedulesOperation:
+		switch op.MigrateSchedulesOperation.GetTarget() {
+		case adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM,
+			adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW:
+		case adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_UNSPECIFIED:
+			return errMigrationTargetNotSet
+		default:
+			return serviceerror.NewInvalidArgumentf("unknown migration target: %v", op.MigrateSchedulesOperation.GetTarget())
+		}
+		if params.GetIdentity() == "" {
+			return errIdentityNotSet
+		}
 		return nil
 	default:
 		return serviceerror.NewInvalidArgumentf("not supported admin batch type: %T", op)

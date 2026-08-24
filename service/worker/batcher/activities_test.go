@@ -25,14 +25,18 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/adminservicemock/v1"
 	batchspb "go.temporal.io/server/api/batch/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
+	"go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/mock/gomock"
 )
 
@@ -581,6 +585,89 @@ func (s *activitiesSuite) TestAdjustQueryAdminBatchType() {
 		adjustedQuery := a.adjustQueryAdminBatchType(adminReq)
 		s.Equal("WorkflowType='MyWorkflow'", adjustedQuery)
 	})
+
+	s.Run("Migrate to CHASM selects running V1 schedules", func() {
+		adminReq := &adminservice.StartAdminBatchOperationRequest{
+			VisibilityQuery: "ScheduleId STARTS_WITH 'critical-'",
+			Operation: &adminservice.StartAdminBatchOperationRequest_MigrateSchedulesOperation{
+				MigrateSchedulesOperation: &adminservice.BatchOperationMigrateSchedules{
+					Target: adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM,
+				},
+			},
+		}
+		adjustedQuery := a.adjustQueryAdminBatchType(adminReq)
+		s.Equal(fmt.Sprintf("(TemporalNamespaceDivision = '%s' AND ExecutionStatus = 'Running') AND (ScheduleId STARTS_WITH 'critical-')", scheduler.NamespaceDivision), adjustedQuery)
+	})
+
+	s.Run("Migrate to workflow selects all running V2 schedules", func() {
+		adminReq := &adminservice.StartAdminBatchOperationRequest{
+			Operation: &adminservice.StartAdminBatchOperationRequest_MigrateSchedulesOperation{
+				MigrateSchedulesOperation: &adminservice.BatchOperationMigrateSchedules{
+					Target: adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
+				},
+			},
+		}
+		adjustedQuery := a.adjustQueryAdminBatchType(adminReq)
+		s.Equal(fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Running'", chasm.SchedulerArchetypeID), adjustedQuery)
+	})
+}
+
+func (s *activitiesSuite) TestProcessAdminTask_MigrateSchedule() {
+	ctx := context.Background()
+	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 100 }))
+
+	tests := []struct {
+		name       string
+		workflowID string
+		target     adminservice.MigrateScheduleRequest_SchedulerTarget
+		scheduleID string
+	}{
+		{
+			name:       "V1 workflow ID to CHASM",
+			workflowID: primitives.ScheduleWorkflowIDPrefix + "schedule-1",
+			target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM,
+			scheduleID: "schedule-1",
+		},
+		{
+			name:       "V2 business ID to workflow",
+			workflowID: "schedule-2",
+			target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
+			scheduleID: "schedule-2",
+		},
+	}
+
+	for _, test := range tests {
+		s.Run(test.name, func() {
+			mockAdminClient := adminservicemock.NewMockAdminServiceClient(s.controller)
+			a := &activities{activityDeps: activityDeps{AdminClient: mockAdminClient}}
+			batchOperation := &batchspb.BatchOperationInput{
+				NamespaceId: "namespace-id",
+				AdminRequest: &adminservice.StartAdminBatchOperationRequest{
+					Namespace: "namespace",
+					JobId:     "migration-job",
+					Identity:  "test-identity",
+					Operation: &adminservice.StartAdminBatchOperationRequest_MigrateSchedulesOperation{
+						MigrateSchedulesOperation: &adminservice.BatchOperationMigrateSchedules{Target: test.target},
+					},
+				},
+			}
+			testTask := task{executionInfo: &workflowpb.WorkflowExecutionInfo{
+				Execution: &commonpb.WorkflowExecution{WorkflowId: test.workflowID},
+			}}
+
+			mockAdminClient.EXPECT().MigrateSchedule(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, req *adminservice.MigrateScheduleRequest, _ ...any) (*adminservice.MigrateScheduleResponse, error) {
+					s.Equal("namespace", req.Namespace)
+					s.Equal(test.scheduleID, req.ScheduleId)
+					s.Equal(test.target, req.Target)
+					s.Equal("test-identity", req.Identity)
+					s.Equal(deterministicRequestID("migration-job", "migrate-schedule", test.target.String(), test.scheduleID), req.RequestId)
+					return &adminservice.MigrateScheduleResponse{}, nil
+				})
+
+			s.Require().NoError(a.processAdminTask(ctx, batchOperation, testTask, limiter))
+		})
+	}
 }
 
 func (s *activitiesSuite) TestProcessAdminTask_RefreshWorkflowTasks() {

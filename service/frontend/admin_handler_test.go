@@ -111,6 +111,49 @@ func TestAdminHandlerSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestValidateAdminBatchOperation_MigrateSchedules(t *testing.T) {
+	validRequest := func(target adminservice.MigrateScheduleRequest_SchedulerTarget) *adminservice.StartAdminBatchOperationRequest {
+		return &adminservice.StartAdminBatchOperationRequest{
+			Namespace: "namespace",
+			JobId:     "job-id",
+			Reason:    "schedule migration",
+			Identity:  "test-identity",
+			Operation: &adminservice.StartAdminBatchOperationRequest_MigrateSchedulesOperation{
+				MigrateSchedulesOperation: &adminservice.BatchOperationMigrateSchedules{Target: target},
+			},
+		}
+	}
+
+	t.Run("target selects source schedules without a user query", func(t *testing.T) {
+		require.NoError(t, validateAdminBatchOperation(validRequest(
+			adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM,
+		)))
+	})
+
+	t.Run("unspecified target is rejected", func(t *testing.T) {
+		require.Error(t, validateAdminBatchOperation(validRequest(
+			adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_UNSPECIFIED,
+		)))
+	})
+
+	t.Run("unknown target is rejected", func(t *testing.T) {
+		require.Error(t, validateAdminBatchOperation(validRequest(
+			adminservice.MigrateScheduleRequest_SchedulerTarget(99),
+		)))
+	})
+
+	t.Run("refresh still requires a selector", func(t *testing.T) {
+		require.Error(t, validateAdminBatchOperation(&adminservice.StartAdminBatchOperationRequest{
+			Namespace: "namespace",
+			JobId:     "job-id",
+			Reason:    "refresh",
+			Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
+				RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
+			},
+		}))
+	})
+}
+
 func (s *adminHandlerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())
@@ -948,9 +991,9 @@ func (s *adminHandlerSuite) Test_DescribeCluster_CurrentCluster_Success() {
 	s.NoError(err)
 	s.Equal(resp.GetClusterName(), clusterName)
 	s.Equal(resp.GetClusterId(), clusterID)
-	s.Equal(resp.GetHistoryShardCount(), int32(0))
-	s.Equal(resp.GetFailoverVersionIncrement(), int64(0))
-	s.Equal(resp.GetInitialFailoverVersion(), int64(0))
+	s.Equal(int32(0), resp.GetHistoryShardCount())
+	s.Equal(int64(0), resp.GetFailoverVersionIncrement())
+	s.Equal(int64(0), resp.GetInitialFailoverVersion())
 	s.True(resp.GetIsGlobalNamespaceEnabled())
 }
 
@@ -986,9 +1029,9 @@ func (s *adminHandlerSuite) Test_DescribeCluster_NonCurrentCluster_Success() {
 	s.NoError(err)
 	s.Equal(resp.GetClusterName(), clusterName)
 	s.Equal(resp.GetClusterId(), clusterID)
-	s.Equal(resp.GetHistoryShardCount(), int32(0))
-	s.Equal(resp.GetFailoverVersionIncrement(), int64(0))
-	s.Equal(resp.GetInitialFailoverVersion(), int64(0))
+	s.Equal(int32(0), resp.GetHistoryShardCount())
+	s.Equal(int64(0), resp.GetFailoverVersionIncrement())
+	s.Equal(int64(0), resp.GetInitialFailoverVersion())
 	s.True(resp.GetIsGlobalNamespaceEnabled())
 }
 
@@ -1009,8 +1052,8 @@ func (s *adminHandlerSuite) Test_ListClusters_Success() {
 		PageSize: pageSize,
 	})
 	s.NoError(err)
-	s.Equal(1, len(resp.Clusters))
-	s.Equal(0, len(resp.GetNextPageToken()))
+	s.Len(resp.Clusters, 1)
+	s.Empty(resp.GetNextPageToken())
 }
 
 func (s *adminHandlerSuite) TestStreamWorkflowReplicationMessages_ClientToServerBroken() {
@@ -1496,7 +1539,7 @@ func (s *adminHandlerSuite) TestDescribeDLQJob() {
 			}
 			s.NoError(err)
 			s.NotNil(response)
-			s.EqualValues(tc.expectedResponse, *response)
+			s.Equal(tc.expectedResponse, *response)
 		})
 	}
 }
@@ -1851,7 +1894,7 @@ func (s *adminHandlerSuite) TestDescribeTaskQueuePartition() {
 	})
 	s.NoError(err)
 	s.NotNil(resp)
-	s.Equal(2, len(resp.VersionsInfoInternal))
+	s.Len(resp.VersionsInfoInternal, 2)
 
 	s.validatePhysicalTaskQueueInfo(unversionedPhysicalTaskQueueInfo, resp.VersionsInfoInternal[unversioned].GetPhysicalTaskQueueInfo())
 	s.validatePhysicalTaskQueueInfo(versionedPhysicalTaskQueueInfo, resp.VersionsInfoInternal[buildID].GetPhysicalTaskQueueInfo())
