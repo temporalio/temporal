@@ -22,10 +22,12 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
@@ -451,6 +453,8 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+			capture := logger.StartCapture()
 			ctrl := gomock.NewController(t)
 			namespaceRegistryMock := namespace.NewMockRegistry(ctrl)
 			factory := namespace.NewDefaultReplicationResolverFactory()
@@ -503,7 +507,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 				NamespaceRegistry: namespaceRegistryMock,
 				MetricsHandler:    metrics.NoopMetricsHandler,
 				HistoryClient:     historyClient,
-				Logger:            log.NewNoopLogger(),
+				Logger:            logger,
 				Config: &callbacks.Config{
 					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
 					RetryPolicy: func() backoff.RetryPolicy {
@@ -536,6 +540,9 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 
 			if tc.expectsInternalError {
 				require.ErrorContains(t, err, "internal error, reference-id:")
+				records := capture.Snapshot()
+				require.Len(t, records, 1)
+				require.Contains(t, records[0].Tags, tag.NewStringTag("component", "nexus-completion"))
 			} else {
 				require.NoError(t, err)
 			}

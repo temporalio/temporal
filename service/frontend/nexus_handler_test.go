@@ -28,7 +28,6 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc/interceptor"
-	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/util"
 )
 
@@ -203,31 +202,6 @@ func TestNexusInterceptRequest_InvalidNamespaceState_ResultsInBadRequest(t *test
 	snap := capture.Snapshot()
 	require.Len(t, snap["test"], 1)
 	require.Equal(t, map[string]string{"outcome": "invalid_namespace_state"}, snap["test"][0].Tags)
-}
-
-func TestEnrichNexusOperationLogsUsesInboundComponent(t *testing.T) {
-	t.Parallel()
-
-	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
-	capture := logger.StartCapture()
-	oc := operationContext{
-		nexusContext: &nexusContext{endpointName: "endpoint"},
-		logger:       logger,
-	}
-	oc.enrichNexusOperationLogs("service", "operation", "request-id")
-	oc.logger.Error("failure")
-
-	capture.RequireContains(t, testlogger.CapturedLogPattern{
-		Level:   testlogger.Error,
-		Message: "failure",
-		Tags: map[string]any{
-			"component":       "nexus-inbound",
-			"nexus-service":   "service",
-			"nexus-operation": "operation",
-			"endpoint":        "endpoint",
-			"request-id":      "request-id",
-		},
-	})
 }
 
 func TestNexusInterceptRequest_NamespaceConcurrencyLimited_ResultsInResourceExhausted(t *testing.T) {

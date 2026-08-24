@@ -7,6 +7,7 @@ import (
 
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -25,6 +26,7 @@ func RegisterExecutor(
 	registry *hsm.Registry,
 	executorOptions TaskExecutorOptions,
 ) error {
+	executorOptions.Logger = log.With(executorOptions.Logger, tag.ComponentNexusCompletion)
 	exec := taskExecutor{executorOptions}
 	if err := hsm.RegisterImmediateExecutor(
 		registry,

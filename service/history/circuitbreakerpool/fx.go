@@ -61,21 +61,24 @@ func OutboundQueueCircuitBreakerPoolProvider(
 func onStateChange(
 	key tasks.TaskGroupNamespaceIDAndDestination,
 	nsName string,
-	logger log.SnTaggedLogger,
+	logger log.Logger,
 ) func(name string, from gobreaker.State, to gobreaker.State) {
+	logger = log.With(
+		logger,
+		tag.WorkflowNamespace(nsName),
+		tag.WorkflowNamespaceID(key.NamespaceID),
+		tag.Destination(key.Destination),
+		tag.NewStringTag("task-group", key.TaskGroup),
+	)
+	if component, ok := componentForTaskGroup(key.TaskGroup); ok {
+		logger = log.With(logger, component)
+	}
 	return func(_ string, from gobreaker.State, to gobreaker.State) {
-		tags := []tag.Tag{
-			tag.WorkflowNamespace(nsName),
-			tag.WorkflowNamespaceID(key.NamespaceID),
-			tag.Destination(key.Destination),
-			tag.NewStringTag("task-group", key.TaskGroup),
+		logger.Warn(
+			"outbound queue circuit breaker state change",
 			tag.NewStringTag("from-state", from.String()),
 			tag.NewStringTag("to-state", to.String()),
-		}
-		if component, ok := componentForTaskGroup(key.TaskGroup); ok {
-			tags = append(tags, component)
-		}
-		logger.Warn("outbound queue circuit breaker state change", tags...)
+		)
 	}
 }
 
