@@ -104,7 +104,7 @@ func TestCaptureSnapshotIsDefensiveCopy(t *testing.T) {
 	}}, capture.Snapshot())
 }
 
-func TestCaptureContains(t *testing.T) {
+func TestCaptureRequireContains(t *testing.T) {
 	t.Parallel()
 
 	testLogger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
