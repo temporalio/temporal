@@ -256,7 +256,6 @@ func newMatchingEngine(
 		},
 		queryResults:        collection.NewSyncMap[string, chan *queryResult](),
 		logger:              logger,
-		nexusEndpointLogger: log.With(logger, tag.ComponentNexusRegistry),
 		throttledLogger:     log.ThrottledLogger(logger),
 		metricsHandler:      metrics.NoopMetricsHandler,
 		matchingRawClient:   mockMatchingClient,
@@ -4077,29 +4076,6 @@ func (s *matchingEngineSuite) TestCheckNexusEndpointsOwnership() {
 	isOwner, _, err = s.matchingEngine.checkNexusEndpointsOwnership()
 	s.NoError(err)
 	s.False(isOwner)
-}
-
-func (s *matchingEngineSuite) TestCreateNexusEndpointLogsRegistryComponent() {
-	const endpointName = "test-endpoint"
-	createErr := errors.New("create failed")
-	s.mockNexusEndpointManager.EXPECT().CreateOrUpdateNexusEndpoint(gomock.Any(), gomock.Any()).Return(nil, createErr)
-	s.logger.Expect(testlogger.Error, "Failed to create Nexus endpoint")
-	capture := s.logger.StartCapture()
-
-	_, err := s.matchingEngine.CreateNexusEndpoint(context.Background(), &matchingservice.CreateNexusEndpointRequest{
-		Spec: &persistencespb.NexusEndpointSpec{Name: endpointName},
-	})
-
-	s.ErrorIs(err, createErr)
-	capture.RequireContains(s.T(), testlogger.CapturedLogPattern{
-		Level:   testlogger.Error,
-		Message: "Failed to create Nexus endpoint",
-		Tags: map[string]any{
-			tag.ComponentNexusRegistry.Key(): "nexus-registry",
-			tag.Error(createErr).Key():       createErr,
-			tag.Endpoint(endpointName).Key(): endpointName,
-		},
-	})
 }
 
 func (s *matchingEngineSuite) TestNotifyNexusEndpointsOwnershipLost() {

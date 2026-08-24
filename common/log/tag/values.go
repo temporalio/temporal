@@ -135,15 +135,14 @@ var (
 	ComponentPersistence               = component("persistence")
 	ComponentWorkflowUpdate            = component("workflow-update")
 	ComponentTaskScheduler             = component("task-scheduler")
-	// Nexus components follow the server-side observability taxonomy.
-	ComponentNexusCaller       = component("nexus-caller")
-	ComponentNexusOutbound     = component("nexus-outbound")
-	ComponentNexusInbound      = component("nexus-inbound")
-	ComponentNexusCompletion   = component("nexus-completion")
-	ComponentNexusProtocol     = component("nexus-protocol")
-	ComponentNexusRegistry     = component("nexus-registry")
-	ComponentNexusTaskDelivery = component("nexus-task-delivery") // Reserved pending the task delivery audit.
-	VersionChecker             = component("version-checker")
+	ComponentNexusCaller               = component("nexus-caller")
+	ComponentNexusOutbound             = component("nexus-outbound")
+	ComponentNexusInbound              = component("nexus-inbound")
+	ComponentNexusCompletion           = component("nexus-completion")
+	ComponentNexusProtocol             = component("nexus-protocol")
+	ComponentNexusRegistry             = component("nexus-registry")
+	ComponentNexusTaskDelivery         = component("nexus-task-delivery") // Reserved pending the task delivery audit.
+	VersionChecker                     = component("version-checker")
 )
 
 // Pre-defined values for scope tag
