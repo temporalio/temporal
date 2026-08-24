@@ -4611,6 +4611,7 @@ func (wh *WorkflowHandler) describeScheduleWorkflow(ctx context.Context, request
 		return nil, serviceerror.NewInternalf("describe schedule: %v", err)
 	}
 	// Search attributes in the Action are already in external ("aliased") form. Do not alias them here.
+	queryResponse.Info.TimeSkippingInfo = describeResponse.GetWorkflowExtendedInfo().GetTimeSkippingInfo()
 
 	// for all running workflows started by the schedule, we should check that they're still running
 	origLen := len(queryResponse.Info.RunningWorkflows)

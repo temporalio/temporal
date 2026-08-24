@@ -844,6 +844,7 @@ func (s *Scheduler) Describe(
 
 	executionInfo := ctx.ExecutionInfo()
 	info.StateSizeBytes = int64(executionInfo.ApproximateStateSize)
+	info.TimeSkippingInfo = ctx.GetTimeSkippingInfo()
 
 	return &schedulerpb.DescribeScheduleResponse{
 		FrontendResponse: &workflowservice.DescribeScheduleResponse{

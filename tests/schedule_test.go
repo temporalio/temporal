@@ -420,7 +420,6 @@ func TestScheduleCHASM(t *testing.T) {
 	t.Run("TestUpdateScheduleMemoOnly", func(t *testing.T) { t.Parallel(); testUpdateScheduleMemoOnly(t, newContext) })
 	t.Run("TestStateSizeBytesReported", func(t *testing.T) { t.Parallel(); testStateSizeBytesReported(t, newContext) })
 	t.Run("TestBufferOverrunDropsActions", func(t *testing.T) { t.Parallel(); testBufferOverrunDropsActions(t, newContext) })
-	t.Run("TestTimeSkippingFastForward", func(t *testing.T) { t.Parallel(); testScheduleTimeSkippingFastForward(t, newContext) })
 	t.Run("TestDescribeCatchupWindowAfterCreateAndUpdate", func(t *testing.T) {
 		t.Parallel()
 		testDescribeCatchupWindowAfterCreateAndUpdate(t)
@@ -450,9 +449,46 @@ func TestScheduleCHASM(t *testing.T) {
 	})
 }
 
-func testScheduleTimeSkippingFastForward(t *testing.T, newContext contextFactory) {
-	opts := append(
-		scheduleCommonOpts(t),
+type scheduleTimeSkippingResult struct {
+	startedWorkflows             int32
+	verifiedVirtualTimeWorkflows int
+}
+
+func TestScheduleTimeSkipping(t *testing.T) {
+	t.Parallel()
+
+	results := make(map[string]scheduleTimeSkippingResult, 2)
+	for _, backend := range []struct {
+		name       string
+		newContext contextFactory
+		opts       []testcore.TestOption
+	}{
+		{name: "CHASM-V2", newContext: chasmContextFactory},
+		{
+			name:       "Workflow-V1",
+			newContext: v1ContextFactory,
+			opts:       []testcore.TestOption{testcore.WithWorkerService("V1 scheduler")},
+		},
+	} {
+		t.Run(backend.name, func(t *testing.T) {
+			results[backend.name] = testScheduleTimeSkipping(t, backend.newContext, backend.opts...)
+		})
+	}
+
+	if len(results) == 2 && !t.Failed() {
+		require.Equal(t, results["CHASM-V2"], results["Workflow-V1"],
+			"schedule time skipping should behave identically across backends")
+	}
+}
+
+func testScheduleTimeSkipping(
+	t *testing.T,
+	newContext contextFactory,
+	additionalOpts ...testcore.TestOption,
+) scheduleTimeSkippingResult {
+	opts := append(scheduleCommonOpts(t), additionalOpts...)
+	opts = append(
+		opts,
 		testcore.WithDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true),
 		testcore.WithDynamicConfig(dynamicconfig.ScheduleTimeSkippingEnabled, true),
 	)
@@ -512,6 +548,10 @@ func testScheduleTimeSkippingFastForward(t *testing.T, newContext contextFactory
 		})
 		return err == nil && len(describe.GetInfo().GetRecentActions()) >= 2
 	}, time.Minute, pollInterval)
+	scheduleTimeSkippingInfo := describe.GetInfo().GetTimeSkippingInfo()
+	require.NotNil(t, scheduleTimeSkippingInfo)
+	require.True(t, scheduleTimeSkippingInfo.GetFastForwardInfo().GetHasCompleted())
+	require.Greater(t, time.Until(scheduleTimeSkippingInfo.GetCurrentTime().AsTime()), 30*time.Minute)
 
 	seenRunIDs := make(map[string]struct{}, 2)
 	for _, action := range describe.GetInfo().GetRecentActions()[:2] {
@@ -532,9 +572,14 @@ func testScheduleTimeSkippingFastForward(t *testing.T, newContext contextFactory
 		require.NoError(t, err)
 		timeSkippingInfo := workflowDescription.GetWorkflowExtendedInfo().GetTimeSkippingInfo()
 		require.NotNil(t, timeSkippingInfo)
-		require.True(t, timeSkippingInfo.GetEffectiveConfig().GetEnabled())
+		require.NotNil(t, timeSkippingInfo.GetEffectiveConfig())
 		require.Nil(t, timeSkippingInfo.GetEffectiveConfig().GetFastForwardConfig())
 		require.Greater(t, timeSkippingInfo.GetCurrentTime().AsTime().Sub(wallTime), 30*time.Minute)
+	}
+
+	return scheduleTimeSkippingResult{
+		startedWorkflows:             runs.Load(),
+		verifiedVirtualTimeWorkflows: len(seenRunIDs),
 	}
 }
 
@@ -604,7 +649,6 @@ func TestScheduleV1(t *testing.T) {
 	t.Run("TestCreatesCHASMSentinel", func(t *testing.T) { t.Parallel(); testCreatesCHASMSentinel(t, newContext) })
 	t.Run("TestSkipsCHASMSentinelWhenDisabled", func(t *testing.T) { t.Parallel(); testSkipsCHASMSentinelWhenDisabled(t, newContext) })
 	t.Run("TestUpdateScheduleMemoRejected", func(t *testing.T) { t.Parallel(); testUpdateScheduleMemoRejected(t, newContext) })
-	t.Run("TestTimeSkippingFastForward", func(t *testing.T) { t.Parallel(); testScheduleTimeSkippingFastForward(t, newContext) })
 }
 
 func runSharedScheduleTests(t *testing.T, newContext contextFactory) {

@@ -36,6 +36,7 @@ type MockContext struct {
 	HandleLinks                         func(component Component) []*commonpb.Link
 	HandleRequestLinks                  func(component Component, requestID string) ([]*commonpb.Link, error)
 	HandleUserMetadata                  func(component Component) *sdkpb.UserMetadata
+	HandleGetTimeSkippingInfo           func() *commonpb.TimeSkippingInfo
 	HandleGetTimeSkippingPropagateState func() (*commonpb.TimeSkippingConfig, *commonpb.TimeSkippingStatePropagation)
 
 	// GoCtx is the underlying context.Context used for context value lookups.
@@ -77,6 +78,13 @@ func (c *MockContext) GetTimeSkippingPropagateState() (
 		return nil, nil
 	}
 	return c.HandleGetTimeSkippingPropagateState()
+}
+
+func (c *MockContext) GetTimeSkippingInfo() *commonpb.TimeSkippingInfo {
+	if c.HandleGetTimeSkippingInfo == nil {
+		return nil
+	}
+	return c.HandleGetTimeSkippingInfo()
 }
 
 func (c *MockContext) RequestHeader(key string) string {
@@ -186,6 +194,7 @@ func (c *MockContext) withValue(key any, value any) Context {
 		HandleLinks:                         c.HandleLinks,
 		HandleRequestLinks:                  c.HandleRequestLinks,
 		HandleUserMetadata:                  c.HandleUserMetadata,
+		HandleGetTimeSkippingInfo:           c.HandleGetTimeSkippingInfo,
 		HandleGetTimeSkippingPropagateState: c.HandleGetTimeSkippingPropagateState,
 	}
 }
