@@ -5,10 +5,14 @@ import (
 	"strings"
 
 	"github.com/sony/gobreaker"
+	"go.temporal.io/server/chasm"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/circuitbreaker"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/fx"
@@ -70,8 +74,8 @@ func onStateChange(
 		tag.Destination(key.Destination),
 		tag.NewStringTag("task-group", key.TaskGroup),
 	)
-	if component, ok := componentForTaskGroup(key.TaskGroup); ok {
-		logger = log.With(logger, component)
+	if isNexusTaskGroup(key.TaskGroup) {
+		logger = log.With(logger, tag.ComponentNexusOutbound)
 	}
 	return func(_ string, from gobreaker.State, to gobreaker.State) {
 		logger.Warn(
@@ -82,9 +86,10 @@ func onStateChange(
 	}
 }
 
-func componentForTaskGroup(taskGroup string) (tag.Tag, bool) {
-	if taskGroup == "nexus" || strings.HasPrefix(taskGroup, "nexusoperations.") {
-		return tag.ComponentNexusOutbound, true
-	}
-	return nil, false
+func isNexusTaskGroup(taskGroup string) bool {
+	return taskGroup == chasmnexus.TaskGroupName ||
+		taskGroup == nexusoperations.TaskTypeInvocation ||
+		taskGroup == nexusoperations.TaskTypeCancelation ||
+		taskGroup == callbacks.TaskTypeInvocation ||
+		strings.HasPrefix(taskGroup, chasm.CallbackLibraryName+".")
 }
