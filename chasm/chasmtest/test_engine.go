@@ -247,8 +247,7 @@ func (e *Engine) UpdateComponent(
 	options := constructTransitionOptions(opts...)
 	if options.RequestID != "" {
 		if _, ok := execution.requestIDs[options.RequestID]; ok {
-			return nil, serviceerror.NewFailedPreconditionf(
-				"request ID %s has already been used for this execution", options.RequestID)
+			return nil, chasm.ErrRequestIDAlreadyUsed
 		}
 	}
 

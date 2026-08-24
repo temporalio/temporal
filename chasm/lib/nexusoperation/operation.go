@@ -263,7 +263,7 @@ func (o *Operation) HandleNexusCompletion(
 	links := completion.GetLinks()
 
 	// For completion-before-start, apply the started transition first.
-	if o.GetStatus() == nexusoperationpb.OPERATION_STATUS_SCHEDULED {
+	if TransitionStarted.Possible(o) {
 		startTime := timestamp.TimeValuePtr(completion.GetStartTime())
 		if err := o.onStarted(ctx, completion.GetOperationToken(), startTime, links); err != nil {
 			return err

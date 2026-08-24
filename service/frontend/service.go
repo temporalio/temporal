@@ -35,6 +35,7 @@ const (
 // Config represents configuration for frontend service
 type Config struct {
 	NumHistoryShards                     int32
+	EmitNamespaceLifecycleEvents         dynamicconfig.BoolPropertyFn
 	PersistenceMaxQPS                    dynamicconfig.IntPropertyFn
 	PersistenceGlobalMaxQPS              dynamicconfig.IntPropertyFn
 	PersistenceNamespaceMaxQPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -287,6 +288,7 @@ func NewConfig(
 ) *Config {
 	return &Config{
 		NumHistoryShards:                     numHistoryShards,
+		EmitNamespaceLifecycleEvents:         dynamicconfig.EmitNamespaceLifecycleEvents.Get(dc),
 		PersistenceMaxQPS:                    dynamicconfig.FrontendPersistenceMaxQPS.Get(dc),
 		PersistenceGlobalMaxQPS:              dynamicconfig.FrontendPersistenceGlobalMaxQPS.Get(dc),
 		PersistenceNamespaceMaxQPS:           dynamicconfig.FrontendPersistenceNamespaceMaxQPS.Get(dc),

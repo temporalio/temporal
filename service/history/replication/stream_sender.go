@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
@@ -591,7 +592,14 @@ Loop:
 				// Wrap as convertError so isSkippable can tell "the task could not be built"
 				// (its source info is corrupt/unusable) apart from transient send/rate-limit
 				// failures, which must not be skipped.
-				return s.recordRetry(item, attempt, &convertError{err: fmt.Errorf("convert: %w", err)})
+				return s.recordRetry(
+					item,
+					enumsspb.REPLICATION_TASK_TYPE_UNSPECIFIED,
+					priority,
+					attempt,
+					wideevents.ReplOperationTaskConversion,
+					&convertError{err: fmt.Errorf("convert: %w", err)},
+				)
 			}
 			if task == nil {
 				return nil
@@ -622,7 +630,7 @@ Loop:
 					0,
 					"",
 				)); err != nil {
-					return s.recordRetry(item, attempt, fmt.Errorf("rate_limit: %w", err))
+					return s.recordRetry(item, task.GetTaskType(), priority, attempt, wideevents.ReplOperationRateLimit, fmt.Errorf("rate_limit: %w", err))
 				}
 				metrics.ReplicationRateLimitLatency.With(s.metrics).Record(time.Since(rlStartTime), metrics.OperationTag(TaskOperationTag(task)))
 			}
@@ -639,7 +647,7 @@ Loop:
 					},
 				},
 			}); err != nil {
-				return s.recordRetry(item, attempt, fmt.Errorf("send: %w", err))
+				return s.recordRetry(item, task.GetTaskType(), priority, attempt, wideevents.ReplOperationStreamSend, fmt.Errorf("send: %w", err))
 			}
 			skipCount = 0
 			metrics.ReplicationTasksSend.With(s.metrics).Record(
@@ -768,9 +776,24 @@ func (s *StreamSenderImpl) getTaskPriority(task tasks.Task) enumsspb.TaskPriorit
 			return enumsspb.TASK_PRIORITY_LOW
 		}
 		return t.Priority
+	case *tasks.SyncVersionedTransitionTask:
+		return defaultHighTaskPriority(t.Priority)
+	case *tasks.HistoryReplicationTask:
+		return defaultHighTaskPriority(t.Priority)
+	case *tasks.SyncActivityTask:
+		return defaultHighTaskPriority(t.Priority)
+	case *tasks.SyncHSMTask:
+		return defaultHighTaskPriority(t.Priority)
 	default:
 		return enumsspb.TASK_PRIORITY_HIGH
 	}
+}
+
+func defaultHighTaskPriority(priority enumsspb.TaskPriority) enumsspb.TaskPriority {
+	if priority == enumsspb.TASK_PRIORITY_UNSPECIFIED {
+		return enumsspb.TASK_PRIORITY_HIGH
+	}
+	return priority
 }
 
 func (s *StreamSenderImpl) getTaskTargetCluster(task tasks.Task) []string {
@@ -792,7 +815,10 @@ func (s *StreamSenderImpl) getTaskTargetCluster(task tasks.Task) []string {
 
 func (s *StreamSenderImpl) recordRetry(
 	item tasks.Task,
+	replicationTaskType enumsspb.ReplicationTaskType,
+	priority enumsspb.TaskPriority,
 	attempt int64,
+	operation string,
 	err error,
 ) error {
 	s.shardContext.GetThrottledLogger().Warn("Replication task send retry",
@@ -802,6 +828,9 @@ func (s *StreamSenderImpl) recordRetry(
 		tag.Counter(int(attempt)),
 		tag.Error(err),
 	)
+	if s.config.EmitReplicationLifecycleEvents() {
+		s.emitReplicationSenderError(item, replicationTaskType, priority, attempt, operation, "Replication task send retry", err)
+	}
 	return err
 }
 
