@@ -47,10 +47,10 @@ func ConvertNexusLinksToProtoLinks(nexusLinks []nexus.Link, logger log.Logger) [
 			link, err := temporalnexus.ConvertNexusLinkToLinkWorkflow(nexusLink)
 			if err != nil {
 				logger.Warn(
-					"failed to convert Nexus link",
+					"failed to parse Nexus link",
+					tag.Error(err),
 					tag.NewStringTag("nexus-link-type", nexusLink.Type),
 					tag.URL(nexusLink.URL.String()),
-					tag.Error(err),
 				)
 				continue
 			}
