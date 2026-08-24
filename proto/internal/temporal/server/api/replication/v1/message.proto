@@ -70,8 +70,8 @@ message SyncReplicationState {
   // Namespace IDs the receiver reports as overwhelming the HIGH (live) lane. The
   // sender isolates these namespaces' HIGH traffic onto throttled severity-tier
   // lanes. The priority lives in the field name: a future LOW-lane extension adds
-  // its own pause_low_namespace_ids rather than widening this one.
-  repeated string pause_high_namespace_ids = 5;
+  // its own throttle_low_namespace_ids rather than widening this one.
+  repeated string throttle_high_namespace_ids = 5;
   // Low watermarks of the isolated per-namespace lanes, keyed by namespace ID.
   // Absence of a key is ambiguous: it means either "the receiver has not tracked
   // this lane yet" or "the lane retired and drained". A sender must therefore never

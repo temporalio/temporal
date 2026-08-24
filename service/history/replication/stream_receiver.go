@@ -353,9 +353,9 @@ func (r *StreamReceiverImpl) ackMessage(
 		return 0, NewStreamError("InclusiveLowWaterMark is not set", serviceerror.NewInternal("Invalid inclusive low watermark"))
 	}
 
-	var pauseHighNamespaceIDs []string
+	var throttleHighNamespaceIDs []string
 	if receiverMode == ReceiverModeTieredStack {
-		pauseHighNamespaceIDs = r.NamespaceThrottler.ThrottledNamespaceIDs(r.clientShardKey.ShardID)
+		throttleHighNamespaceIDs = r.NamespaceThrottler.ThrottledNamespaceIDs(r.clientShardKey.ShardID)
 	}
 	if err := stream.Send(&adminservice.StreamWorkflowReplicationMessagesRequest{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
@@ -364,7 +364,7 @@ func (r *StreamReceiverImpl) ackMessage(
 				InclusiveLowWatermarkTime: timestamppb.New(inclusiveLowWaterMarkTime),
 				HighPriorityState:         highPriorityWatermark,
 				LowPriorityState:          lowPriorityWatermark,
-				PauseHighNamespaceIds:     pauseHighNamespaceIDs,
+				ThrottleHighNamespaceIds:  throttleHighNamespaceIDs,
 				IsolatedLaneStates:        isolatedLaneStates,
 				// Advertise that this receiver routes isolated_namespace_id-tagged
 				// messages, so the sender may safely emit lane traffic to it.

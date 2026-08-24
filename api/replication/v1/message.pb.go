@@ -427,8 +427,8 @@ type SyncReplicationState struct {
 	// Namespace IDs the receiver reports as overwhelming the HIGH (live) lane. The
 	// sender isolates these namespaces' HIGH traffic onto throttled severity-tier
 	// lanes. The priority lives in the field name: a future LOW-lane extension adds
-	// its own pause_low_namespace_ids rather than widening this one.
-	PauseHighNamespaceIds []string `protobuf:"bytes,5,rep,name=pause_high_namespace_ids,json=pauseHighNamespaceIds,proto3" json:"pause_high_namespace_ids,omitempty"`
+	// its own throttle_low_namespace_ids rather than widening this one.
+	ThrottleHighNamespaceIds []string `protobuf:"bytes,5,rep,name=throttle_high_namespace_ids,json=throttleHighNamespaceIds,proto3" json:"throttle_high_namespace_ids,omitempty"`
 	// Low watermarks of the isolated per-namespace lanes, keyed by namespace ID.
 	// Absence of a key is ambiguous: it means either "the receiver has not tracked
 	// this lane yet" or "the lane retired and drained". A sender must therefore never
@@ -501,9 +501,9 @@ func (x *SyncReplicationState) GetLowPriorityState() *ReplicationState {
 	return nil
 }
 
-func (x *SyncReplicationState) GetPauseHighNamespaceIds() []string {
+func (x *SyncReplicationState) GetThrottleHighNamespaceIds() []string {
 	if x != nil {
-		return x.PauseHighNamespaceIds
+		return x.ThrottleHighNamespaceIds
 	}
 	return nil
 }
@@ -2205,13 +2205,13 @@ const file_temporal_server_api_replication_v1_message_proto_rawDesc = "" +
 	"\x1elast_processed_visibility_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x1blastProcessedVisibilityTime\"N\n" +
 	"\x0fSyncShardStatus\x12;\n" +
 	"\vstatus_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"statusTime\"\xf2\x05\n" +
+	"statusTime\"\xf8\x05\n" +
 	"\x14SyncReplicationState\x126\n" +
 	"\x17inclusive_low_watermark\x18\x01 \x01(\x03R\x15inclusiveLowWatermark\x12[\n" +
 	"\x1cinclusive_low_watermark_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x19inclusiveLowWatermarkTime\x12d\n" +
 	"\x13high_priority_state\x18\x03 \x01(\v24.temporal.server.api.replication.v1.ReplicationStateR\x11highPriorityState\x12b\n" +
-	"\x12low_priority_state\x18\x04 \x01(\v24.temporal.server.api.replication.v1.ReplicationStateR\x10lowPriorityState\x127\n" +
-	"\x18pause_high_namespace_ids\x18\x05 \x03(\tR\x15pauseHighNamespaceIds\x12\x82\x01\n" +
+	"\x12low_priority_state\x18\x04 \x01(\v24.temporal.server.api.replication.v1.ReplicationStateR\x10lowPriorityState\x12=\n" +
+	"\x1bthrottle_high_namespace_ids\x18\x05 \x03(\tR\x18throttleHighNamespaceIds\x12\x82\x01\n" +
 	"\x14isolated_lane_states\x18\x06 \x03(\v2P.temporal.server.api.replication.v1.SyncReplicationState.IsolatedLaneStatesEntryR\x12isolatedLaneStates\x12@\n" +
 	"\x1csupports_namespace_isolation\x18\a \x01(\bR\x1asupportsNamespaceIsolation\x1a{\n" +
 	"\x17IsolatedLaneStatesEntry\x12\x10\n" +

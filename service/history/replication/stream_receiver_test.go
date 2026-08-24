@@ -453,7 +453,7 @@ func (s *streamReceiverSuite) TestAckMessage_TieredStack_ReportsThrottledNamespa
 	s.Len(s.stream.requests, 1)
 	state := s.stream.requests[0].GetSyncReplicationState()
 	// Only the local shard's throttled set is reported.
-	s.Equal([]string{"ns-hot-a", "ns-hot-b"}, state.PauseHighNamespaceIds)
+	s.Equal([]string{"ns-hot-a", "ns-hot-b"}, state.ThrottleHighNamespaceIds)
 	s.Equal(s.streamReceiver.clientShardKey.ShardID, throttler.queriedShardID)
 }
 

@@ -3,7 +3,7 @@ package replication
 // NamespaceThrottler tracks per-namespace HIGH-priority (live) replication task load on
 // the receiver and reports which namespaces are overwhelming the shared lane. The
 // reported namespace IDs travel back to the sender in SyncReplicationState acks
-// (pause_high_namespace_ids), which isolates those namespaces' live replication onto
+// (throttle_high_namespace_ids), which isolates those namespaces' live replication onto
 // dedicated throttled lanes so they cannot stall the default lane.
 //
 // Load and throttle decisions can be scoped to the receiver's local shard: a namespace
