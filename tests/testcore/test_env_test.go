@@ -62,11 +62,9 @@ func (s *TestEnvSuite) TestStartNamespaceLogCapture() {
 
 	capture := env.StartNamespaceLogCapture()
 
-	// logs in namespace
 	testLogger.Info("primary name", tag.WorkflowNamespace("primary"))
 	testLogger.Info("primary ID", tag.WorkflowNamespaceID("primary-id"))
 	testLogger.Info("external name", tag.WorkflowNamespace("external"))
-
 	testLogger.Info("unrelated name", tag.WorkflowNamespace("unrelated"))
 	testLogger.Info("unrelated ID", tag.WorkflowNamespaceID("unrelated-id"))
 
@@ -83,11 +81,6 @@ func (s *TestEnvSuite) TestStartNamespaceLogCapture() {
 			Level:   testlogger.Info,
 			Message: "primary ID",
 			Tags:    []tag.Tag{tag.WorkflowNamespaceID("primary-id")},
-		},
-		{
-			Level:   testlogger.Info,
-			Message: "external name",
-			Tags:    []tag.Tag{tag.WorkflowNamespace("external")},
 		},
 	}, capture.Snapshot())
 }
