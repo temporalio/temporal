@@ -26,17 +26,14 @@ import (
 	"slices"
 	"time"
 
-	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	commonfailure "go.temporal.io/server/common/failure"
-	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -161,6 +158,34 @@ func (a *Activity) recordFailedAttempt(
 		attempt.CurrentRetryInterval = durationpb.New(retryInterval)
 		attempt.CurrentRetryIntervalSource = retryIntervalSource
 	}
+	return nil
+}
+
+// recordScheduleToStartOrCloseTimeoutFailure records schedule-to-start or schedule-to-close timeout outcomes. Such
+// timeouts are not retried, so we set the outcome failure directly and leave the attempt failure as is.
+func (a *Activity) recordScheduleToStartOrCloseTimeoutFailure(
+	ctx chasm.MutableContext,
+	timeoutType enumspb.TimeoutType,
+	message string,
+	cause *failurepb.Failure,
+) error {
+	failure := &failurepb.Failure{
+		Message: message,
+		Cause:   cause,
+		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+			TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+				TimeoutType:          timeoutType,
+				LastHeartbeatDetails: a.lastHeartbeatDetails(ctx),
+			},
+		},
+	}
+
+	a.Outcome.Get(ctx).Variant = &activitypb.ActivityOutcome_Failed_{
+		Failed: &activitypb.ActivityOutcome_Failed{
+			Failure: failure,
+		},
+	}
+
 	return nil
 }
 
@@ -431,180 +456,3 @@ func createHeartbeatTimeoutFailure() *failurepb.Failure {
 
 // Transition bodies. Each is invoked from a chasm.Transition in statemachine.go, which
 // has already validated that the activity is in a legal source state.
-
-// applyScheduled is the body of TransitionScheduled: it opens the first attempt and
-// emits the dispatch, ScheduleToStart and ScheduleToClose tasks.
-func (a *Activity) applyScheduled(ctx chasm.MutableContext) error {
-	attempt := a.LastAttempt.Get(ctx)
-
-	attempt.Count++
-	attempt.Stamp++
-
-	// Start delay defers the dispatch and extends ScheduleToClose and ScheduleToStart timeouts. StartToClose and
-	// Heartbeat timeouts are unaffected as they only start when a worker picks up the task.
-	dispatchTime := a.firstDispatchTime()
-	attempt.DispatchTime = timestamppb.New(dispatchTime)
-
-	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
-		ctx.AddTask(
-			a,
-			chasm.TaskAttributes{
-				ScheduledTime: dispatchTime.Add(timeout),
-			},
-			&activitypb.ScheduleToStartTimeoutTask{
-				Stamp: attempt.GetStamp(),
-			})
-	}
-
-	if deadline := a.scheduleToCloseDeadline(); !deadline.IsZero() {
-		a.ScheduleToCloseStamp++
-		ctx.AddTask(
-			a,
-			chasm.TaskAttributes{
-				ScheduledTime: deadline,
-			},
-			&activitypb.ScheduleToCloseTimeoutTask{Stamp: a.GetScheduleToCloseStamp()})
-	}
-
-	dispatchAttrs := chasm.TaskAttributes{}
-	if dispatchTime.After(a.ScheduleTime.AsTime()) {
-		dispatchAttrs.ScheduledTime = dispatchTime
-	}
-	ctx.AddTask(
-		a,
-		dispatchAttrs,
-		a.newActivityDispatchTask(ctx))
-
-	return nil
-}
-
-// applyRescheduled is the body of TransitionRescheduled: it records the failed attempt
-// and re-emits the dispatch and ScheduleToStart tasks at the retry time.
-func (a *Activity) applyRescheduled(ctx chasm.MutableContext, event rescheduleEvent) error {
-	if err := a.applyFailedAttempt(ctx, event); err != nil {
-		return err
-	}
-
-	attempt := a.LastAttempt.Get(ctx)
-	retryScheduledTime := dispatchTimeForRetry(attempt).AsTime()
-	attempt.DispatchTime = timestamppb.New(retryScheduledTime)
-
-	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
-		ctx.AddTask(
-			a,
-			chasm.TaskAttributes{
-				ScheduledTime: retryScheduledTime.Add(timeout),
-			},
-			&activitypb.ScheduleToStartTimeoutTask{
-				Stamp: attempt.GetStamp(),
-			})
-	}
-
-	ctx.AddTask(
-		a,
-		chasm.TaskAttributes{
-			ScheduledTime: retryScheduledTime,
-		},
-		a.newActivityDispatchTask(ctx))
-
-	return nil
-}
-
-// applyTimedOut is the body of TransitionTimedOut: it records the timeout failure for the
-// relevant timeout type and closes the activity.
-func (a *Activity) applyTimedOut(ctx chasm.MutableContext, event timeoutEvent) error {
-	timeoutType := event.timeoutType
-
-	return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
-		a.Outcome.Get(ctx).RetryState = event.retryState
-		priorAttemptFailure := a.LastAttempt.Get(ctx).GetLastFailureDetails().GetFailure()
-		var err error
-		switch timeoutType {
-		case enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
-			enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE:
-			err = a.recordScheduleToStartOrCloseTimeoutFailure(
-				ctx,
-				timeoutType,
-				fmt.Sprintf(common.FailureReasonActivityTimeout, timeoutType.String()),
-				priorAttemptFailure,
-			)
-		case enumspb.TIMEOUT_TYPE_START_TO_CLOSE:
-			failure := createStartToCloseTimeoutFailure()
-			failure.GetTimeoutFailureInfo().LastHeartbeatDetails = a.lastHeartbeatDetails(ctx)
-			failure.Cause = priorAttemptFailure
-			err = a.recordFailedAttempt(ctx, 0, activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED, failure, ctx.Now(a), true)
-		case enumspb.TIMEOUT_TYPE_HEARTBEAT:
-			failure := createHeartbeatTimeoutFailure()
-			failure.GetTimeoutFailureInfo().LastHeartbeatDetails = a.lastHeartbeatDetails(ctx)
-			failure.Cause = priorAttemptFailure
-			err = a.recordFailedAttempt(ctx, 0, activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED, failure, ctx.Now(a), true)
-		default:
-			err = fmt.Errorf("unhandled activity timeout: %v", timeoutType)
-		}
-		if err != nil {
-			return err
-		}
-
-		retryPreventedByScheduleToClose := event.retryState == enumspb.RETRY_STATE_TIMEOUT &&
-			(timeoutType == enumspb.TIMEOUT_TYPE_START_TO_CLOSE ||
-				timeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT)
-		if retryPreventedByScheduleToClose {
-			if err := a.recordScheduleToStartOrCloseTimeoutFailure(
-				ctx,
-				enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
-				common.FailureReasonActivityRetryScheduleToCloseTimeout,
-				priorAttemptFailure,
-			); err != nil {
-				return err
-			}
-		}
-
-		a.emitOnTimedOutMetrics(event.metricsHandler, timeoutType)
-
-		return nil
-	})
-}
-
-// applyStarted is the body of TransitionStarted: it records the worker that picked the
-// attempt up and emits the StartToClose and Heartbeat tasks.
-func (a *Activity) applyStarted(ctx chasm.MutableContext, request *historyservice.RecordActivityTaskStartedRequest) error {
-	attempt := a.LastAttempt.Get(ctx)
-	attempt.StartedTime = timestamppb.New(ctx.Now(a))
-	attempt.StartedStamp = request.GetStamp()
-	// Record the first-ever worker pickup time once and never update on retries or resets.
-	if a.FirstAttemptStartedTime == nil {
-		a.FirstAttemptStartedTime = attempt.GetStartedTime()
-	}
-	attempt.StartRequestId = request.GetRequestId()
-	attempt.LastWorkerIdentity = request.GetPollRequest().GetIdentity()
-	attempt.SdkName = ctx.RequestHeader(headers.ClientNameHeaderName)
-	attempt.SdkVersion = ctx.RequestHeader(headers.ClientVersionHeaderName)
-	if versionDirective := request.GetVersionDirective().GetDeploymentVersion(); versionDirective != nil {
-		attempt.LastDeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
-			BuildId:        versionDirective.GetBuildId(),
-			DeploymentName: versionDirective.GetDeploymentName(),
-		}
-	}
-	startTime := attempt.GetStartedTime().AsTime()
-	ctx.AddTask(
-		a,
-		chasm.TaskAttributes{
-			ScheduledTime: startTime.Add(a.GetStartToCloseTimeout().AsDuration()),
-		},
-		&activitypb.StartToCloseTimeoutTask{
-			Stamp: a.LastAttempt.Get(ctx).GetStamp(),
-		})
-
-	if heartbeatTimeout := a.GetHeartbeatTimeout().AsDuration(); heartbeatTimeout > 0 {
-		ctx.AddTask(
-			a,
-			chasm.TaskAttributes{
-				ScheduledTime: startTime.Add(heartbeatTimeout),
-			},
-			&activitypb.HeartbeatTimeoutTask{
-				Stamp: attempt.GetStamp(),
-			})
-	}
-
-	return nil
-}
