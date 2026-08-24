@@ -98,6 +98,8 @@ func TestCaptureRequireContains(t *testing.T) {
 	testLogger.Error("failed", tag.String("operation", "StartOperation"), tag.Time("attempt-start", time.Now()), tag.Error(errors.New("failure")))
 
 	t.Run("matching pattern", func(t *testing.T) {
+		t.Parallel()
+
 		capture.RequireContains(t, testlogger.CapturedLogPattern{
 			Level:   testlogger.Error,
 			Message: "failed",
@@ -110,12 +112,14 @@ func TestCaptureRequireContains(t *testing.T) {
 	})
 
 	t.Run("mismatched tag", func(t *testing.T) {
+		t.Parallel()
+
 		recorder := &mockT{T: t}
 		capture.RequireContains(recorder, testlogger.CapturedLogPattern{
 			Level:   testlogger.Error,
 			Message: "failed",
 			Tags: map[string]any{
-				"operation":     "CancelOperation",
+				"operation":     "CancelOperation", // does not match!
 				"attempt-start": testlogger.AnyTagValue,
 				"error":         "failure",
 			},
@@ -129,6 +133,8 @@ func TestCaptureRequireContains(t *testing.T) {
 
 	// A pattern with an extra tag matches nothing.
 	t.Run("extra tag", func(t *testing.T) {
+		t.Parallel()
+
 		recorder := &mockT{T: t}
 		capture.RequireContains(recorder, testlogger.CapturedLogPattern{
 			Level:   testlogger.Error,
@@ -137,7 +143,7 @@ func TestCaptureRequireContains(t *testing.T) {
 				"operation":     "StartOperation",
 				"attempt-start": testlogger.AnyTagValue,
 				"error":         "failure",
-				"unexpected":    "value",
+				"unexpected":    "value", // does not match!
 			},
 		})
 		failure := recorder.failure.Load()
@@ -146,10 +152,13 @@ func TestCaptureRequireContains(t *testing.T) {
 	})
 
 	t.Run("missing level and message", func(t *testing.T) {
+		t.Parallel()
+
 		recorder := &mockT{T: t}
 		capture.RequireContains(recorder, testlogger.CapturedLogPattern{
 			Level:   testlogger.Warn,
 			Message: "missing",
+			// missing ... does not match!
 		})
 		failure := recorder.failure.Load()
 		require.NotNil(t, failure)
