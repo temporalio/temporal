@@ -648,6 +648,42 @@ func rtStartWorkflowTask(s *rtSuite, ms *workflow.MutableStateImpl) error {
 // rtCompleteWorkflowTask completes the started workflow task. Activities, timers and child
 // workflows are all scheduled off a completed workflow task's event ID, so most steps below
 // need this to have run first.
+// rtFailWorkflowTask fails the started workflow task, as RespondWorkflowTaskFailed does.
+// This increments the workflow task attempt counter but does not reschedule: the caller
+// schedules the retry, which is why the retry cases pair this with rtScheduleWorkflowTask.
+func rtFailWorkflowTask(s *rtSuite, ms *workflow.MutableStateImpl) error {
+	workflowTask := ms.GetStartedWorkflowTask()
+	if workflowTask == nil {
+		return serviceerror.NewInternal("no started workflow task to fail")
+	}
+	if _, err := ms.AddWorkflowTaskFailedEvent(
+		workflowTask,
+		enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE,
+		&failurepb.Failure{Message: "roundtrip-workflow-task-failure"},
+		"roundtrip-test",
+		nil, "", "", "", 0,
+	); err != nil {
+		return err
+	}
+	ms.FlushBufferedEvents()
+	return nil
+}
+
+// rtTimeoutWorkflowTask times the started workflow task out, as the timer queue executor
+// does when its start-to-close timer fires. Like a failure this increments the attempt
+// counter and leaves rescheduling to the caller.
+func rtTimeoutWorkflowTask(s *rtSuite, ms *workflow.MutableStateImpl) error {
+	workflowTask := ms.GetStartedWorkflowTask()
+	if workflowTask == nil {
+		return serviceerror.NewInternal("no started workflow task to time out")
+	}
+	if _, err := ms.AddWorkflowTaskTimedOutEvent(workflowTask); err != nil {
+		return err
+	}
+	ms.FlushBufferedEvents()
+	return nil
+}
+
 func rtCompleteWorkflowTask(s *rtSuite, ms *workflow.MutableStateImpl) error {
 	workflowTask := ms.GetStartedWorkflowTask()
 	if workflowTask == nil {
