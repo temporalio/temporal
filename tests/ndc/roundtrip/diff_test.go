@@ -186,17 +186,31 @@ func (s *rtSuite) assertActiveExpectations(step rtStep, activeTasks map[tasks.Ca
 	if len(step.requireActive) == 0 && len(step.forbidActive) == 0 {
 		return
 	}
-	present := make(map[string]bool)
-	for _, categoryTasks := range activeTasks {
-		for _, task := range categoryTasks {
-			present[fmt.Sprintf("%T", task)] = true
+	// Only the categories the diff actually compares, so these assertions and the diff are
+	// talking about the same set of tasks.
+	var identities []string
+	for _, category := range []tasks.Category{tasks.CategoryTransfer, tasks.CategoryTimer} {
+		for _, task := range activeTasks[category] {
+			identities = append(identities, rtNormalize(task))
 		}
 	}
+	matches := func(want string) bool {
+		for _, identity := range identities {
+			if strings.Contains(identity, want) {
+				return true
+			}
+		}
+		return false
+	}
 	for _, want := range step.requireActive {
-		s.True(present[want], "step %q: expected the active side to produce a %s", step.name, want)
+		s.True(matches(want),
+			"step %q: expected the active side to produce a task matching %q, got %v",
+			step.name, want, identities)
 	}
 	for _, unwanted := range step.forbidActive {
-		s.False(present[unwanted], "step %q: expected the active side NOT to produce a %s", step.name, unwanted)
+		s.False(matches(unwanted),
+			"step %q: expected the active side NOT to produce a task matching %q, got %v",
+			step.name, unwanted, identities)
 	}
 }
 
@@ -272,6 +286,11 @@ func (s *rtSuite) applyAllowlist(side rtSide, identities []string, rules []rtAll
 			s.NotEmpty(rule.ref, "allowlist rule %q needs a code citation", rule.name)
 			if rule.match(side, identity) {
 				s.firedRules[rule.name]++
+				if rule.knownDefect {
+					// Recorded separately because a defect rule may be scoped to a single
+					// step, and the teardown report only walks the global list.
+					s.firedDefects[rule.name]++
+				}
 				waived = true
 				break
 			}
@@ -289,14 +308,14 @@ func (s *rtSuite) applyAllowlist(side rtSide, identities []string, rules []rtAll
 func (s *rtSuite) reportUnusedAllowRules() {
 	var unused, defectsHit []string
 	for _, rule := range rtGlobalAllowlist {
-		switch {
-		case s.firedRules[rule.name] == 0:
+		if s.firedRules[rule.name] == 0 {
 			unused = append(unused, rule.name)
-		case rule.knownDefect:
-			defectsHit = append(defectsHit,
-				fmt.Sprintf("%s (x%d)", rule.name, s.firedRules[rule.name]))
 		}
 	}
+	for name, count := range s.firedDefects {
+		defectsHit = append(defectsHit, fmt.Sprintf("%s (x%d)", name, count))
+	}
+	sort.Strings(defectsHit)
 	if len(unused) > 0 {
 		s.T().Logf("round-trip allowlist rules that never fired: %s", strings.Join(unused, ", "))
 	}

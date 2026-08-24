@@ -103,6 +103,7 @@ import (
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -156,8 +157,10 @@ type (
 		// allowNoTasks opts out of the anti-vacuity check for steps that genuinely
 		// generate no transfer or timer task on either side.
 		allowNoTasks bool
-		// requireActive / forbidActive assert on the ACTIVE side's task types for this step,
-		// as normalized Go type names ("*tasks.UserTimerTask").
+		// requireActive / forbidActive assert on the ACTIVE side's tasks for this step. Each
+		// entry is matched as a substring of a task's normalized identity, so it can be as
+		// coarse as a type ("*tasks.UserTimerTask") or as specific as a field
+		// ("timeoutType:Heartbeat").
 		//
 		// The diff itself only proves the two sides agree; it cannot notice both sides
 		// losing a task together. Use these where a case exists to pin a specific behavior
@@ -195,8 +198,10 @@ type (
 		scheduledActivityIDs map[string]int64
 
 		// firedRules tracks which allowlist rules were used, so the suite can report
-		// rules that have gone stale.
-		firedRules map[string]int
+		// rules that have gone stale. firedDefects is the subset that waived a known
+		// passive-side bug, tracked separately so step-scoped defects still get reported.
+		firedRules   map[string]int
+		firedDefects map[string]int
 	}
 )
 
@@ -210,6 +215,7 @@ func (s *rtSuite) SetupTest() {
 	s.logger = log.NewTestLogger()
 	s.config = tests.NewDynamicConfig()
 	s.firedRules = make(map[string]int)
+	s.firedDefects = make(map[string]int)
 	s.scheduledActivityIDs = make(map[string]int64)
 
 	s.workflowID = "roundtrip-wf-" + uuid.NewString()
@@ -913,6 +919,71 @@ func rtHeartbeatActivityNamed(activityID string) func(*rtSuite, *workflow.Mutabl
 			Identity: "roundtrip-test",
 		})
 		return nil
+	}
+}
+
+// rtPauseActivityNamed pauses an activity. A paused activity is skipped by both
+// refreshTasksForActivity and LoadAndSortActivityTimers, so it stops owning any timer task
+// and stops being dispatched -- on both sides, independently.
+func rtPauseActivityNamed(activityID string) func(*rtSuite, *workflow.MutableStateImpl) error {
+	return func(s *rtSuite, ms *workflow.MutableStateImpl) error {
+		return workflow.PauseActivity(ms, activityID, &persistencespb.ActivityInfo_PauseInfo{
+			PauseTime: timestamppb.New(time.Now().UTC()),
+			RequestId: "roundtrip-pause",
+			PausedBy: &persistencespb.ActivityInfo_PauseInfo_Manual_{
+				Manual: &persistencespb.ActivityInfo_PauseInfo_Manual{
+					Identity: "roundtrip-test",
+					Reason:   "roundtrip pause",
+				},
+			},
+		})
+	}
+}
+
+// rtUnpauseActivityNamed resumes a paused activity. Jitter is zero deliberately: UnpauseActivity
+// randomizes the regenerated retry task's schedule time when jitter is set, which would make
+// the active side's task timestamp unreproducible.
+func rtUnpauseActivityNamed(activityID string) func(*rtSuite, *workflow.MutableStateImpl) error {
+	return func(s *rtSuite, ms *workflow.MutableStateImpl) error {
+		activityInfo, ok := ms.GetActivityByActivityID(activityID)
+		if !ok {
+			return serviceerror.NewInternalf("no activity %q to unpause", activityID)
+		}
+		return workflow.UnpauseActivity(
+			s.active.shard, ms, activityInfo,
+			false, // resetAttempts
+			false, // resetHeartbeat
+			0,     // jitter
+		)
+	}
+}
+
+// rtUpdateActivityOptionsNamed changes an activity's options the way the
+// UpdateActivityOptions API does: apply the field changes, bump the stamp to move the
+// activity version, and clear TimerTaskStatus to invalidate every timer task already created
+// for it.
+//
+// The mask clearing is the part that matters and the part easy to get wrong in a test driver.
+// The API calls it "invalidate timers": whatever pending timeout task exists points at the
+// old option values, so it has to be replaced. Setting the field alone would leave the active
+// side holding a stale timer and make the passive side look wrong by comparison.
+func rtUpdateActivityOptionsNamed(
+	activityID string,
+	apply func(*persistencespb.ActivityInfo),
+) func(*rtSuite, *workflow.MutableStateImpl) error {
+	return func(s *rtSuite, ms *workflow.MutableStateImpl) error {
+		scheduledEventID, ok := s.scheduledActivityIDs[activityID]
+		if !ok {
+			return serviceerror.NewInternalf("activity %q was never scheduled", activityID)
+		}
+		return ms.UpdateActivity(scheduledEventID, func(
+			activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState,
+		) error {
+			apply(activityInfo)
+			activityInfo.Stamp++
+			activityInfo.TimerTaskStatus = workflow.TimerTaskStatusNone
+			return nil
+		})
 	}
 }
 
