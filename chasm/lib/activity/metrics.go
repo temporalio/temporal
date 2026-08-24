@@ -13,8 +13,6 @@ import (
 	"go.temporal.io/server/common/tqid"
 )
 
-// Metrics handlers and emitters.
-
 func (a *Activity) taskScheduleToStartMetricsHandler(ctx chasm.Context) metrics.Handler {
 	actCtx := activityContextFromChasm(ctx)
 	namespaceEntry := ctx.NamespaceEntry()

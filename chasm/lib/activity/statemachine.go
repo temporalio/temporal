@@ -341,8 +341,8 @@ var TransitionResetAttemptFailedToScheduled = chasm.NewTransition(
 	},
 )
 
-// The methods below are transition bodies. Each is called only by the transition above it,
-// which validates the source state first. Do not call them directly.
+// The methods below are transition bodies, invoked from the transitions above once the
+// source state has been validated. Do not call them from outside this file.
 
 func (a *Activity) applyScheduled(ctx chasm.MutableContext) error {
 	attempt := a.LastAttempt.Get(ctx)
@@ -674,6 +674,14 @@ func (a *Activity) applyUnpaused(
 		chasm.TaskAttributes{ScheduledTime: dispatchTime},
 		a.newActivityDispatchTask(ctx))
 	return nil
+}
+
+// applyFailedAttempt mutates activity state when a worker yields with retries remaining.
+func (a *Activity) applyFailedAttempt(ctx chasm.MutableContext, event rescheduleEvent) error {
+	attempt := a.LastAttempt.Get(ctx)
+	attempt.Count++
+	attempt.Stamp++
+	return a.recordFailedAttempt(ctx, event.retryInterval, event.retryIntervalSource, event.failure, ctx.Now(a), false)
 }
 
 func (a *Activity) applyReset(ctx chasm.MutableContext, event resetEvent) error {

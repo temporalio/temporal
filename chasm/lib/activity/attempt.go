@@ -118,14 +118,6 @@ func (a *Activity) currentRetryInterval(ctx chasm.Context, attempt *activitypb.A
 	return nil
 }
 
-// applyFailedAttempt mutates activity state when a worker yields with retries remaining.
-func (a *Activity) applyFailedAttempt(ctx chasm.MutableContext, event rescheduleEvent) error {
-	attempt := a.LastAttempt.Get(ctx)
-	attempt.Count++
-	attempt.Stamp++
-	return a.recordFailedAttempt(ctx, event.retryInterval, event.retryIntervalSource, event.failure, ctx.Now(a), false)
-}
-
 // recordFailedAttempt records any failures resulting from a tried attempt, including worker application failures and
 // start-to-close timeouts. Since the calls come from retried attempts we update the attempt failure info but leave
 // the outcome failure empty to avoid duplication.
