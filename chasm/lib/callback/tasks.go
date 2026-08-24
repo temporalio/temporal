@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -97,7 +98,7 @@ func newInvocationTaskHandler(opts invocationTaskHandlerOptions) *invocationTask
 		config:             opts.Config,
 		namespaceRegistry:  opts.NamespaceRegistry,
 		metricsHandler:     opts.MetricsHandler,
-		logger:             opts.Logger,
+		logger:             log.With(opts.Logger, tag.ComponentNexusCompletion),
 		httpCallerProvider: opts.HTTPCallerProvider,
 		httpTraceProvider:  opts.HTTPTraceProvider,
 		historyClient:      opts.HistoryClient,

@@ -42,9 +42,8 @@ func (n invocableOutbound) Invoke(
 	task *callbackspb.InvocationTask,
 	taskAttr chasm.TaskAttributes,
 ) invocationResult {
-	logger := log.With(h.logger, tag.ComponentNexusCompletion)
 	if h.httpTraceProvider != nil {
-		traceLogger := log.With(logger,
+		traceLogger := log.With(h.logger,
 			tag.WorkflowNamespace(ns.Name().String()),
 			tag.Operation("CompleteNexusOperation"),
 			tag.Destination(taskAttr.Destination),
@@ -79,7 +78,7 @@ func (n invocableOutbound) Invoke(
 
 	if err != nil {
 		retryable := isRetryableCallError(err)
-		logger.Error("Callback request failed", tag.Error(err), tag.Bool("retryable", retryable))
+		h.logger.Error("Callback request failed", tag.Error(err), tag.Bool("retryable", retryable))
 		if retryable {
 			return invocationResultRetry{err}
 		}
