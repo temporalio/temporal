@@ -103,7 +103,8 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 		// re-establish the current record here - that would resurrect a deleted workflow - so the target
 		// is persisted bypass-current:
 		//   - running target: a non-current run is never running, so this is an anomaly -> error.
-		//   - closed target: bypass-current, leaving the current record missing.
+		//   - not-running target (closed, or already a zombie - IsWorkflowExecutionRunning() is false
+		//     for both): bypass-current, leaving the current record missing.
 		// A carried newWorkflow (continue-as-new/cron/retry successor) still holds real history we must
 		// not drop, so it is passed through to the zombie path: it is persisted bypass-current (as a
 		// zombie) when not already present locally, and skipped when it is. It never becomes the current
@@ -268,8 +269,9 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsCurrent(
 //
 // It exists solely for the deleted-current-run (orphan) path in this file, where currentWorkflow is
 // nil because the current execution record is gone. In that case there is nothing to suppress
-// against and the target is guaranteed closed (dispatchForExistingWorkflow only reaches the zombie
-// path for a non-running target), so it stays passive. Do NOT reuse this elsewhere or call it with a
+// against and the target is guaranteed not running - closed or already a zombie
+// (dispatchForExistingWorkflow only reaches the zombie path for a non-running target), so it stays
+// passive. Do NOT reuse this elsewhere or call it with a
 // nil current for a running target: it would report the target as suppressed without zombifying it.
 // Everywhere else, call targetWorkflow.SuppressBy(currentWorkflow) directly.
 func suppressTargetPolicy(targetWorkflow Workflow, currentWorkflow Workflow) (historyi.TransactionPolicy, error) {
