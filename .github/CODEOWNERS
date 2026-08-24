@@ -33,7 +33,7 @@
 
 /common/tasks/ @temporalio/oss-foundations @temporalio/cgs
 /common/persistence/ @temporalio/oss-foundations @temporalio/oss-matching @temporalio/cgs
-/common/persistence/**/nexus_endpoint* @temporalio/oss-foundations @temporalio/oss-matching @temporalio/cgs @temporalio/nexus
+/common/persistence/**/nexus_endpoint* @temporalio/oss-foundations @temporalio/oss-matching @temporalio/nexus
 
 # Components
 
