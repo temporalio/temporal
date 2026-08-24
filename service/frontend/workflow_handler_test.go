@@ -3817,6 +3817,50 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 	s.Require().Equal(int32(999), tsc.GetMaxSessionSkipCount())
 }
 
+func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingConfig() {
+	config := s.newConfig()
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.ScheduleTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	wh := s.getWorkflowHandler(config)
+	s.Require().ErrorIs(
+		wh.validateAndPopulateScheduleTimeSkippingConfig(
+			&schedulepb.Schedule{TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true}},
+			s.testNamespace,
+		),
+		errScheduleTimeSkippingNotEnabled,
+	)
+
+	config.ScheduleTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh = s.getWorkflowHandler(config)
+
+	testCases := []struct {
+		name    string
+		config  *commonpb.TimeSkippingConfig
+		wantErr bool
+	}{
+		{name: "unset"},
+		{name: "disabled", config: &commonpb.TimeSkippingConfig{Enabled: false}},
+		{name: "enabled without fast forward", config: &commonpb.TimeSkippingConfig{Enabled: true}, wantErr: true},
+		{name: "one year", config: &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{
+			Id: "one-year", Duration: durationpb.New(365 * 24 * time.Hour),
+		}}},
+		{name: "over one year", config: &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{
+			Id: "over-one-year", Duration: durationpb.New(365*24*time.Hour + time.Second),
+		}}, wantErr: true},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			err := wh.validateAndPopulateScheduleTimeSkippingConfig(
+				&schedulepb.Schedule{TimeSkippingConfig: tc.config}, s.testNamespace)
+			if tc.wantErr {
+				s.Require().Error(err)
+			} else {
+				s.Require().NoError(err)
+			}
+		})
+	}
+}
+
 func (s *WorkflowHandlerSuite) TestPollWorkflowExecutionTimeSkipping() {
 	validExecution := &commonpb.WorkflowExecution{WorkflowId: "wf-id"}
 	newReq := func(fastForwardID string) *workflowservice.PollWorkflowExecutionTimeSkippingRequest {

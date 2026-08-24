@@ -65,6 +65,7 @@ type Scheduler struct {
 var (
 	_ (chasm.VisibilitySearchAttributesProvider) = (*Scheduler)(nil)
 	_ (chasm.VisibilityMemoProvider)             = (*Scheduler)(nil)
+	_ (chasm.TimeSkippingRuntimeGate)            = (*Scheduler)(nil)
 )
 
 var (
@@ -146,6 +147,7 @@ func NewScheduler(
 		EventLog:             chasm.NewComponentField(ctx, NewEventLog(ctx)),
 	}
 	sched.setNullableFields()
+	ctx.SetTimeSkippingConfig(input.GetTimeSkippingConfig())
 	sched.Info.CreateTime = timestamppb.New(ctx.Now(sched))
 	sched.applyPausePatch(ctx, patch)
 
@@ -314,6 +316,7 @@ func CreateSchedulerFromMigration(
 		EventLog:             chasm.NewComponentField(ctx, NewEventLog(ctx)),
 	}
 	sched.setNullableFields()
+	ctx.SetTimeSkippingConfig(sched.Schedule.GetTimeSkippingConfig())
 
 	// These components won't start with any tasks, as stale running workflow entries
 	// can cause immediate computation after migration to drop actions due to overlap
@@ -349,6 +352,31 @@ func (s *Scheduler) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 	}
 
 	return chasm.LifecycleStateRunning
+}
+
+// IsExecutionSkippable reports whether the scheduler has no internal work that
+// must complete before its virtual clock advances to the next timer.
+func (s *Scheduler) IsExecutionSkippable(ctx chasm.Context) bool {
+	if s.Sentinel || s.Closed || s.WorkflowMigration != nil || s.Schedule.GetState().GetPaused() || s.hasMoreBackfills() {
+		return false
+	}
+	lastProcessedTime := s.Generator.Get(ctx).GetLastProcessedTime()
+	if lastProcessedTime == nil || lastProcessedTime.AsTime().Before(s.Info.GetUpdateTime().AsTime()) {
+		return false
+	}
+
+	invoker := s.Invoker.Get(ctx)
+	if len(invoker.GetCancelWorkflows()) > 0 || len(invoker.GetTerminateWorkflows()) > 0 {
+		return false
+	}
+	for _, start := range invoker.GetBufferedStarts() {
+		// Running workflows are external to the scheduler execution and do not
+		// block its clock; overlap policy handles them at the next scheduled tick.
+		if start.GetRunId() == "" && start.GetCompleted() == nil {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Scheduler) ContextMetadata(_ chasm.Context) map[string]string {
@@ -929,6 +957,7 @@ func (s *Scheduler) Update(
 
 	s.Schedule = req.FrontendRequest.Schedule
 	s.setNullableFields()
+	ctx.SetTimeSkippingConfig(s.Schedule.GetTimeSkippingConfig())
 
 	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
 	s.updateConflictToken()
