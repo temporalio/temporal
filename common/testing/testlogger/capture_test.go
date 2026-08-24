@@ -16,7 +16,7 @@ func TestCaptureLifecycle(t *testing.T) {
 	t.Parallel()
 
 	testLogger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
-	testLogger.Info("before")
+	testLogger.Info("before") // won't be captured
 
 	capture := testLogger.StartCapture()
 	testLogger.Debug("debug", tag.String("key", "value"))
@@ -24,7 +24,7 @@ func TestCaptureLifecycle(t *testing.T) {
 	testLogger.Warn("warn")
 	testLogger.Error("error")
 	testLogger.StopCapture(capture)
-	testLogger.Info("after")
+	testLogger.Info("after") // won't be captured
 
 	require.Equal(t, []testlogger.CapturedLog{
 		{Level: testlogger.Debug, Message: "debug", Tags: []tag.Tag{tag.String("key", "value")}},
