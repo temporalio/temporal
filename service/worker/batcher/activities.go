@@ -39,6 +39,8 @@ import (
 const (
 	pageSize                         = 1000
 	statusRunningOrPausedQueryFilter = "ExecutionStatus='Running' OR ExecutionStatus='Paused'"
+	// Five activity attempts allow about 105 seconds of retry backoff, plus time spent in each call.
+	maxVisibilityQueryActivityAttempts = 5
 
 	// defaultTaskTimeout bounds how long processing a single task may take so
 	// that one hung operation cannot block the task processor forever.
@@ -141,6 +143,21 @@ func (p *page) done() bool {
 	return p.successCount+p.errorCount == p.length()
 }
 
+func visibilityQueryError(err error, attempt int32) error {
+	var invalidArgErr *serviceerror.InvalidArgument
+	if errors.As(err, &invalidArgErr) {
+		return temporal.NewNonRetryableApplicationError(err.Error(), "InvalidArgument", err)
+	}
+	if attempt >= maxVisibilityQueryActivityAttempts {
+		return temporal.NewNonRetryableApplicationError(
+			fmt.Sprintf("visibility query failed repeatedly after %d activity attempts; failing batch operation: %v", attempt, err),
+			"VisibilityQueryFailed",
+			err,
+		)
+	}
+	return err
+}
+
 // recordCompletedPages records stats for each page that is now fully done and advances the
 // heartbeat resume point to the oldest page that is not yet done.
 func recordCompletedPages(hbd *HeartBeatDetails, resultPage *page) {
@@ -184,11 +201,7 @@ func fetchPage(
 				Query:         config.adjustedQuery,
 			})
 		if err != nil {
-			var invalidArgErr *serviceerror.InvalidArgument
-			if errors.As(err, &invalidArgErr) {
-				return nil, temporal.NewNonRetryableApplicationError(err.Error(), "InvalidArgument", err)
-			}
-			return nil, err
+			return nil, visibilityQueryError(err, activity.GetInfo(ctx).Attempt)
 		}
 
 		targetExecutionInfo = make([]*commonpb.Execution, 0, len(resp.GetExecutions()))
@@ -207,11 +220,7 @@ func fetchPage(
 			Query:         config.adjustedQuery,
 		})
 		if err != nil {
-			var invalidArgErr *serviceerror.InvalidArgument
-			if errors.As(err, &invalidArgErr) {
-				return nil, temporal.NewNonRetryableApplicationError(err.Error(), "InvalidArgument", err)
-			}
-			return nil, err
+			return nil, visibilityQueryError(err, activity.GetInfo(ctx).Attempt)
 		}
 
 		executionInfos = make([]*workflowpb.WorkflowExecutionInfo, 0, len(resp.Executions))
@@ -479,11 +488,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 			if err != nil {
 				metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
 				logger.Error("Failed to get estimate execution count", tag.Error(err))
-				var invalidArgErr *serviceerror.InvalidArgument
-				if errors.As(err, &invalidArgErr) {
-					return HeartBeatDetails{}, temporal.NewNonRetryableApplicationError(err.Error(), "InvalidArgument", err)
-				}
-				return HeartBeatDetails{}, err
+				return HeartBeatDetails{}, visibilityQueryError(err, activity.GetInfo(ctx).Attempt)
 			}
 			estimateCount = count
 		}

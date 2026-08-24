@@ -55,6 +55,44 @@ func TestActivitiesSuite(t *testing.T) {
 	suite.Run(t, new(activitiesSuite))
 }
 
+func (s *activitiesSuite) TestVisibilityQueryError() {
+	tests := []struct {
+		name string
+		err  error
+	}{
+		{name: "service deadline exceeded", err: serviceerror.NewDeadlineExceeded("visibility deadline exceeded")},
+		{name: "context deadline exceeded", err: context.DeadlineExceeded},
+		{name: "service unavailable", err: serviceerror.NewUnavailable("visibility unavailable")},
+	}
+
+	for _, test := range tests {
+		s.Run(test.name, func() {
+			for attempt := int32(1); attempt < maxVisibilityQueryActivityAttempts; attempt++ {
+				err := visibilityQueryError(test.err, attempt)
+				s.Equal(test.err, err)
+			}
+
+			err := visibilityQueryError(test.err, maxVisibilityQueryActivityAttempts)
+			var appErr *temporal.ApplicationError
+			s.Require().ErrorAs(err, &appErr)
+			s.True(appErr.NonRetryable())
+			s.Equal("VisibilityQueryFailed", appErr.Type())
+			s.Contains(err.Error(), fmt.Sprintf("visibility query failed repeatedly after %d activity attempts", maxVisibilityQueryActivityAttempts))
+			s.Contains(err.Error(), "failing batch operation")
+		})
+	}
+
+	s.Run("invalid argument", func() {
+		invalidArgumentErr := serviceerror.NewInvalidArgument("invalid visibility query")
+		err := visibilityQueryError(invalidArgumentErr, 1)
+		var appErr *temporal.ApplicationError
+		s.Require().ErrorAs(err, &appErr)
+		s.True(appErr.NonRetryable())
+		s.Equal("InvalidArgument", appErr.Type())
+		s.Contains(err.Error(), "invalid visibility query")
+	})
+}
+
 func (s *activitiesSuite) TestTaskTimeoutContext() {
 	s.Run("no parent deadline applies default timeout", func() {
 		ctx, cancel := taskTimeoutContext(context.Background())
