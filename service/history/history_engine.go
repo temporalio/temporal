@@ -138,8 +138,7 @@ type (
 		workflowDeleteManager      deletemanager.DeleteManager
 		serializer                 serialization.Serializer
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
-		parentResends              workflowresend.InFlightResends
-		childResends               workflowresend.InFlightResends
+		workflowResendScheduler    workflowresend.Scheduler
 		chasmEngine                chasm.Engine
 		versionChecker             headers.VersionChecker
 		versionCache               worker_versioning.VersionMembershipAndReactivationStatusCache
@@ -165,6 +164,7 @@ func NewEngineWithShardContext(
 	sdkClientFactory sdk.ClientFactory,
 	eventNotifier events.Notifier,
 	config *configs.Config,
+	workflowResendScheduler workflowresend.Scheduler,
 	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 	workerDeploymentClient workerdeployment.Client,
 	routingInfoCache worker_versioning.RoutingInfoCache,
@@ -222,6 +222,7 @@ func NewEngineWithShardContext(
 		eventNotifier:              eventNotifier,
 		fastForwardNotifier:        notification.NewTimeSkippingFastForwardNotifier(),
 		config:                     config,
+		workflowResendScheduler:    workflowResendScheduler,
 		sdkClientFactory:           sdkClientFactory,
 		matchingClient:             matchingClient,
 		rawMatchingClient:          rawMatchingClient,
@@ -567,7 +568,7 @@ func (e *historyEngineImpl) VerifyFirstWorkflowTaskScheduled(
 		request,
 		e.workflowConsistencyChecker,
 		e.shardContext,
-		&e.childResends,
+		e.workflowResendScheduler,
 	)
 }
 
@@ -751,7 +752,13 @@ func (e *historyEngineImpl) VerifyChildExecutionCompletionRecorded(
 	ctx context.Context,
 	req *historyservice.VerifyChildExecutionCompletionRecordedRequest,
 ) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
-	return verifychildworkflowcompletionrecorded.Invoke(ctx, req, e.workflowConsistencyChecker, e.shardContext, &e.parentResends)
+	return verifychildworkflowcompletionrecorded.Invoke(
+		ctx,
+		req,
+		e.workflowConsistencyChecker,
+		e.shardContext,
+		e.workflowResendScheduler,
+	)
 }
 
 func (e *historyEngineImpl) ReplicateEventsV2(

@@ -32,12 +32,12 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
@@ -56,6 +56,7 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/workflowresend"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -99,6 +100,7 @@ type (
 		workflowCache    wcache.Cache
 		historyEngine    *historyEngineImpl
 		mockExecutionMgr *persistence.MockExecutionManager
+		resendScheduler  *workflowresend.HostScheduler
 
 		config        *configs.Config
 		logger        *log.MockLogger
@@ -149,6 +151,16 @@ func (s *engine2Suite) SetupTest() {
 
 	s.config = tests.NewDynamicConfig()
 	s.parentChildEventCapture = &parentChildEventCapture{}
+	resendScheduler := workflowresend.NewHostScheduler(
+		func() int { return s.config.WorkflowResendHostMaxInFlight() },
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+	)
+	s.T().Cleanup(func() {
+		resendScheduler.InitiateShutdown()
+		resendScheduler.WaitShutdown()
+	})
+	s.resendScheduler = resendScheduler
 	mockShard := shard.NewTestContext(
 		s.controller,
 		&persistencespb.ShardInfo{
@@ -234,6 +246,7 @@ func (s *engine2Suite) SetupTest() {
 			log.NewNoopLogger(),
 		),
 		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(mockShard, s.workflowCache),
+		workflowResendScheduler:    s.resendScheduler,
 		persistenceVisibilityMgr:   s.mockVisibilityManager,
 		nDCWorkflowStateReplicator: s.mockWorkflowStateReplicator,
 		workerDeploymentClient:     noopWorkerDeploymentClient{},
@@ -251,6 +264,8 @@ func (s *engine2Suite) SetupSubTest() {
 }
 
 func (s *engine2Suite) TearDownTest() {
+	s.resendScheduler.InitiateShutdown()
+	s.resendScheduler.WaitShutdown()
 	s.controller.Finish()
 	s.mockShard.StopForTest()
 }
@@ -2753,14 +2768,6 @@ func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_ResendChildAsync() {
 	case <-time.After(10 * time.Second):
 		s.Fail("background child resend was not re-verified")
 	}
-	childKey := definition.NewWorkflowKey(request.NamespaceId, request.WorkflowExecution.WorkflowId, request.WorkflowExecution.RunId)
-	await.RequireTrue(s.T(), func() bool {
-		claimed, _ := s.historyEngine.childResends.TryClaim(childKey, 8)
-		if claimed {
-			s.historyEngine.childResends.Release(childKey)
-		}
-		return claimed
-	}, 10*time.Second, 10*time.Millisecond)
 }
 
 func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_ResendChildWithLocalCheckpoint() {
@@ -2848,22 +2855,26 @@ func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_ResendChildWithLocal
 	case <-time.After(10 * time.Second):
 		s.Fail("background child resend did not use the local checkpoint")
 	}
-
-	childKey := definition.NewWorkflowKey(request.NamespaceId, request.WorkflowExecution.WorkflowId, request.WorkflowExecution.RunId)
-	await.RequireTrue(s.T(), func() bool {
-		claimed, _ := s.historyEngine.childResends.TryClaim(childKey, 8)
-		if claimed {
-			s.historyEngine.childResends.Release(childKey)
-		}
-		return claimed
-	}, 10*time.Second, 10*time.Millisecond)
 }
 
 func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_SkipsResendForRemovedNamespace() {
 	s.config.EnableChildWorkflowResend = func() bool { return true }
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.mockShard.SetMetricsHandler(metricsHandler)
 
 	namespaceID := namespace.ID(uuid.NewString())
-	namespaceEntry := namespace.NewGlobalNamespaceForTest(
+	initialNamespaceEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: namespaceID.String(), Name: "removed-namespace"},
+		&persistencespb.NamespaceConfig{},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName,
+			Clusters:          cluster.TestAllClusterNames,
+		},
+		tests.Version,
+	)
+	removedNamespaceEntry := namespace.NewGlobalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: namespaceID.String(), Name: "removed-namespace"},
 		&persistencespb.NamespaceConfig{},
 		&persistencespb.NamespaceReplicationConfig{
@@ -2872,7 +2883,16 @@ func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_SkipsResendForRemove
 		},
 		tests.Version,
 	)
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(namespaceEntry, nil).AnyTimes()
+	resendChecked := make(chan struct{})
+	gomock.InOrder(
+		s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(initialNamespaceEntry, nil),
+		s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).DoAndReturn(
+			func(namespace.ID) (*namespace.Namespace, error) {
+				close(resendChecked)
+				return removedNamespaceEntry, nil
+			},
+		),
+	)
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{})
 
 	request := &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
@@ -2886,15 +2906,16 @@ func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_SkipsResendForRemove
 	err := s.historyEngine.VerifyFirstWorkflowTaskScheduled(metrics.AddMetricsContext(s.T().Context()), request)
 	var notFound *serviceerror.NotFound
 	s.ErrorAs(err, &notFound)
-
-	childKey := definition.NewWorkflowKey(request.NamespaceId, request.WorkflowExecution.WorkflowId, request.WorkflowExecution.RunId)
-	await.RequireTrue(s.T(), func() bool {
-		claimed, _ := s.historyEngine.childResends.TryClaim(childKey, 8)
-		if claimed {
-			s.historyEngine.childResends.Release(childKey)
-		}
-		return claimed
-	}, 10*time.Second, 10*time.Millisecond)
+	select {
+	case <-resendChecked:
+	case <-time.After(10 * time.Second):
+		s.Fail("background child resend did not check namespace membership")
+	}
+	s.resendScheduler.InitiateShutdown()
+	s.resendScheduler.WaitShutdown()
+	metricSnapshot := capture.Snapshot()
+	s.Require().Len(metricSnapshot[metrics.ChildWorkflowResendAttempts.Name()], 1)
+	s.Require().Empty(metricSnapshot[metrics.ChildWorkflowResendFailures.Name()])
 }
 
 func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_SkipsApplyWhenActiveClusterChanges() {
@@ -2969,19 +2990,19 @@ func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_SkipsApplyWhenActive
 	err := s.historyEngine.VerifyFirstWorkflowTaskScheduled(metrics.AddMetricsContext(s.T().Context()), request)
 	var notFound *serviceerror.NotFound
 	s.ErrorAs(err, &notFound)
-
-	childKey := definition.NewWorkflowKey(request.NamespaceId, request.WorkflowExecution.WorkflowId, request.WorkflowExecution.RunId)
-	await.RequireTrue(s.T(), func() bool {
-		claimed, _ := s.historyEngine.childResends.TryClaim(childKey, 8)
-		if claimed {
-			s.historyEngine.childResends.Release(childKey)
-		}
-		return claimed
-	}, 10*time.Second, 10*time.Millisecond)
+	select {
+	case <-failedOver:
+	case <-time.After(10 * time.Second):
+		s.Fail("background child resend did not reach the source cluster")
+	}
 }
 
 func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_ResendChildDeduped() {
 	s.config.EnableChildWorkflowResend = func() bool { return true }
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.mockShard.SetMetricsHandler(metricsHandler)
 
 	request := &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
 		NamespaceId: tests.NamespaceID.String(),
@@ -3005,9 +3026,13 @@ func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_ResendChildDeduped()
 	release := make(chan struct{})
 	finished := make(chan struct{})
 	s.mockShard.Resource.RemoteAdminClient.EXPECT().SyncWorkflowState(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(context.Context, *adminservice.SyncWorkflowStateRequest, ...grpc.CallOption) (*adminservice.SyncWorkflowStateResponse, error) {
+		DoAndReturn(func(ctx context.Context, _ *adminservice.SyncWorkflowStateRequest, _ ...grpc.CallOption) (*adminservice.SyncWorkflowStateResponse, error) {
 			close(entered)
-			<-release
+			select {
+			case <-release:
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
 			close(finished)
 			return nil, serviceerror.NewUnavailable("source cluster unavailable")
 		}).Times(1)
@@ -3032,14 +3057,13 @@ func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_ResendChildDeduped()
 	case <-time.After(10 * time.Second):
 		s.Fail("background child resend did not finish")
 	}
-	childKey := definition.NewWorkflowKey(request.NamespaceId, request.WorkflowExecution.WorkflowId, request.WorkflowExecution.RunId)
-	await.RequireTrue(s.T(), func() bool {
-		claimed, _ := s.historyEngine.childResends.TryClaim(childKey, 8)
-		if claimed {
-			s.historyEngine.childResends.Release(childKey)
-		}
-		return claimed
-	}, 10*time.Second, 10*time.Millisecond)
+	s.resendScheduler.InitiateShutdown()
+	s.resendScheduler.WaitShutdown()
+	metricSnapshot := capture.Snapshot()
+	s.Require().Len(metricSnapshot[metrics.ChildWorkflowResendAttempts.Name()], 1)
+	s.Require().Len(metricSnapshot[metrics.ChildWorkflowResendSkipped.Name()], 1)
+	s.Require().Len(metricSnapshot[metrics.ChildWorkflowResendFailures.Name()], 1)
+	s.Require().Len(metricSnapshot[metrics.ChildWorkflowResendLatency.Name()], 1)
 }
 
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_WorkflowNotExist() {
@@ -3069,6 +3093,10 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParent()
 	s.config.EnableAsyncParentWorkflowResend = func() bool { return false }
 	s.config.EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 	capture := s.parentChildEventCapture
+	metricsHandler := metricstest.NewCaptureHandler()
+	metricsCapture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(metricsCapture)
+	s.mockShard.SetMetricsHandler(metricsHandler)
 
 	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 		NamespaceId: tests.ParentNamespaceID.String(),
@@ -3213,6 +3241,70 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParent()
 	s.Equal(wideevents.ParentChildOutcomeVerified, wideEventAttributes(sourceNotFoundRecord)["outcome"].AsString())
 	sourceNotFoundDetails := wideEventDetails(sourceNotFoundRecord)
 	s.Equal(util.ErrorType(serviceerror.NewNotFound("")), sourceNotFoundDetails["error_type"])
+	metricSnapshot := metricsCapture.Snapshot()
+	s.Require().Len(metricSnapshot[metrics.ParentWorkflowResendAttempts.Name()], 2)
+	s.Require().Len(metricSnapshot[metrics.ParentWorkflowResendLatency.Name()], 2)
+	s.Require().Empty(metricSnapshot[metrics.ParentWorkflowResendFailures.Name()])
+}
+
+func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentInlinePreservesNamespaceNotFound() {
+	s.config.EnableAsyncParentWorkflowResend = func() bool { return false }
+
+	namespaceID := namespace.ID(uuid.NewString())
+	namespaceEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: namespaceID.String(), Name: "missing-parent-namespace"},
+		&persistencespb.NamespaceConfig{},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName,
+			Clusters:          cluster.TestAllClusterNames,
+		},
+		tests.Version,
+	)
+	namespaceNotFoundErr := serviceerror.NewNamespaceNotFound(namespaceID.String())
+	guardChecked := make(chan struct{})
+	gomock.InOrder(
+		s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(namespaceEntry, nil),
+		s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).DoAndReturn(
+			func(namespace.ID) (*namespace.Namespace, error) {
+				close(guardChecked)
+				return nil, namespaceNotFoundErr
+			},
+		),
+	)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{})
+	s.mockShard.Resource.RemoteAdminClient.EXPECT().SyncWorkflowState(gomock.Any(), gomock.Any()).Times(0)
+	s.mockWorkflowStateReplicator.EXPECT().ReplicateVersionedTransition(
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+	).Times(0)
+
+	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
+		NamespaceId: namespaceID.String(),
+		ParentExecution: &commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowID,
+			RunId:      tests.RunID,
+		},
+		ChildExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "child workflowId",
+			RunId:      "child runId",
+		},
+		ParentInitiatedId:      123,
+		ParentInitiatedVersion: 100,
+		ResendParent:           true,
+	}
+
+	_, err := s.historyEngine.VerifyChildExecutionCompletionRecorded(
+		metrics.AddMetricsContext(s.T().Context()),
+		request,
+	)
+	s.Require().Same(namespaceNotFoundErr, err)
+	select {
+	case <-guardChecked:
+	default:
+		s.Fail("inline parent resend did not reach the namespace guard")
+	}
 }
 
 // Async resend: the RPC returns the verification error immediately and the pull runs in the
@@ -3284,7 +3376,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentAs
 
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentLimited() {
 	s.config.EnableAsyncParentWorkflowResend = func() bool { return true }
-	s.config.ParentWorkflowResendMaxInFlight = func() int { return 0 }
+	s.config.WorkflowResendHostMaxInFlight = func() int { return 0 }
 	s.config.EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 	capture := s.parentChildEventCapture
 
@@ -3313,12 +3405,217 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentLi
 	s.InDelta(0, details["max_in_flight"], 0)
 }
 
+func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_SkipsResendForRemovedNamespace() {
+	s.config.EnableAsyncParentWorkflowResend = func() bool { return true }
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.mockShard.SetMetricsHandler(metricsHandler)
+
+	namespaceID := namespace.ID(uuid.NewString())
+	initialNamespaceEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: namespaceID.String(), Name: "removed-parent-namespace"},
+		&persistencespb.NamespaceConfig{},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName,
+			Clusters:          cluster.TestAllClusterNames,
+		},
+		tests.Version,
+	)
+	removedNamespaceEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: namespaceID.String(), Name: "removed-parent-namespace"},
+		&persistencespb.NamespaceConfig{},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName,
+			Clusters:          []string{cluster.TestAlternativeClusterName},
+		},
+		tests.Version,
+	)
+	guardChecked := make(chan struct{})
+	gomock.InOrder(
+		s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(initialNamespaceEntry, nil),
+		s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).DoAndReturn(
+			func(namespace.ID) (*namespace.Namespace, error) {
+				close(guardChecked)
+				return removedNamespaceEntry, nil
+			},
+		),
+	)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{})
+	s.mockShard.Resource.RemoteAdminClient.EXPECT().SyncWorkflowState(gomock.Any(), gomock.Any()).Times(0)
+	s.mockWorkflowStateReplicator.EXPECT().ReplicateVersionedTransition(
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+	).Times(0)
+
+	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
+		NamespaceId: namespaceID.String(),
+		ParentExecution: &commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowID,
+			RunId:      tests.RunID,
+		},
+		ChildExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "child workflowId",
+			RunId:      "child runId",
+		},
+		ParentInitiatedId:      123,
+		ParentInitiatedVersion: 100,
+		ResendParent:           true,
+	}
+
+	_, err := s.historyEngine.VerifyChildExecutionCompletionRecorded(
+		metrics.AddMetricsContext(s.T().Context()),
+		request,
+	)
+	s.Require().ErrorAs(err, new(*serviceerror.NotFound))
+
+	select {
+	case <-guardChecked:
+	case <-time.After(10 * time.Second):
+		s.Fail("background parent resend did not check namespace membership")
+	}
+	s.resendScheduler.InitiateShutdown()
+	s.resendScheduler.WaitShutdown()
+	metricSnapshot := capture.Snapshot()
+	s.Require().Len(metricSnapshot[metrics.ParentWorkflowResendAttempts.Name()], 1)
+	s.Require().Empty(metricSnapshot[metrics.ParentWorkflowResendFailures.Name()])
+}
+
+func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentAsyncSkipsApplyAfterFailover() {
+	s.config.EnableAsyncParentWorkflowResend = func() bool { return true }
+
+	namespaceID := namespace.ID(uuid.NewString())
+	initialNamespaceEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: namespaceID.String(), Name: "parent-resend-failover-namespace"},
+		&persistencespb.NamespaceConfig{},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestCurrentClusterName,
+			Clusters:          cluster.TestAllClusterNames,
+		},
+		tests.Version,
+	)
+	failedOverNamespaceEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: namespaceID.String(), Name: "parent-resend-failover-namespace"},
+		&persistencespb.NamespaceConfig{},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName,
+			Clusters:          cluster.TestAllClusterNames,
+		},
+		tests.Version,
+	)
+	failedOver := make(chan struct{})
+	secondGuardLookup := make(chan struct{}, 1)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).DoAndReturn(
+		func(namespace.ID) (*namespace.Namespace, error) {
+			select {
+			case <-failedOver:
+				select {
+				case secondGuardLookup <- struct{}{}:
+				default:
+				}
+				return failedOverNamespaceEntry, nil
+			default:
+				return initialNamespaceEntry, nil
+			}
+		},
+	).AnyTimes()
+
+	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
+		NamespaceId: namespaceID.String(),
+		ParentExecution: &commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowID,
+			RunId:      tests.RunID,
+		},
+		ChildExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "child workflowId",
+			RunId:      "child runId",
+		},
+		ParentInitiatedId:      123,
+		ParentInitiatedVersion: 100,
+		ResendParent:           true,
+	}
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{})
+
+	mockClusterMetadata := cluster.NewMockMetadata(s.controller)
+	mockClusterMetadata.EXPECT().GetClusterID().Return(tests.Version).AnyTimes()
+	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName).AnyTimes()
+	mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo)
+	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, tests.Version).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShard.SetClusterMetadata(mockClusterMetadata)
+
+	syncResponse := &adminservice.SyncWorkflowStateResponse{
+		VersionedTransitionArtifact: &replicationspb.VersionedTransitionArtifact{},
+	}
+	s.mockShard.Resource.RemoteAdminClient.EXPECT().SyncWorkflowState(gomock.Any(), protomock.Eq(&adminservice.SyncWorkflowStateRequest{
+		NamespaceId: request.NamespaceId,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: request.ParentExecution.WorkflowId,
+			RunId:      request.ParentExecution.RunId,
+		},
+		TargetClusterId: int32(cluster.TestAlternativeClusterInitialFailoverVersion),
+		ArchetypeId:     chasm.WorkflowArchetypeID,
+	})).DoAndReturn(
+		func(context.Context, *adminservice.SyncWorkflowStateRequest, ...grpc.CallOption) (*adminservice.SyncWorkflowStateResponse, error) {
+			close(failedOver)
+			return syncResponse, nil
+		},
+	)
+	s.mockWorkflowStateReplicator.EXPECT().ReplicateVersionedTransition(
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Any(),
+	).Times(0)
+
+	_, err := s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(s.T().Context()), request)
+	s.Require().ErrorAs(err, new(*serviceerror.NotFound))
+
+	select {
+	case <-secondGuardLookup:
+	case <-time.After(10 * time.Second):
+		s.Fail("background parent resend did not recheck namespace state after SyncWorkflowState")
+	}
+}
+
+func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_HostAtCapacity() {
+	s.config.EnableAsyncParentWorkflowResend = func() bool { return true }
+	s.config.WorkflowResendHostMaxInFlight = func() int { return 0 }
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.mockShard.SetMetricsHandler(metricsHandler)
+
+	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
+		NamespaceId: tests.ParentNamespaceID.String(),
+		ParentExecution: &commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowID,
+			RunId:      tests.RunID,
+		},
+		ChildExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "child workflowId",
+			RunId:      "child runId",
+		},
+		ResendParent: true,
+	}
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{})
+
+	_, err := s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(s.T().Context()), request)
+	s.Require().ErrorAs(err, new(*serviceerror.NotFound))
+	s.Require().Len(capture.Snapshot()[metrics.ParentWorkflowResendLimited.Name()], 1)
+}
+
 // TestVerifyChildExecutionCompletionRecorded_ResendParentDeduped asserts that a second attempt for
 // the same parent does not start a concurrent resend while the first is still running.
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentDeduped() {
 	s.config.EnableAsyncParentWorkflowResend = func() bool { return true }
 	s.config.EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 	capture := s.parentChildEventCapture
+	metricsHandler := metricstest.NewCaptureHandler()
+	metricsCapture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(metricsCapture)
+	s.mockShard.SetMetricsHandler(metricsHandler)
 
 	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 		NamespaceId: tests.ParentNamespaceID.String(),
@@ -3354,9 +3651,13 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentDe
 		}
 	}()
 	s.mockShard.Resource.RemoteAdminClient.EXPECT().SyncWorkflowState(gomock.Any(), gomock.Any()).
-		DoAndReturn(func(context.Context, *adminservice.SyncWorkflowStateRequest, ...grpc.CallOption) (*adminservice.SyncWorkflowStateResponse, error) {
+		DoAndReturn(func(ctx context.Context, _ *adminservice.SyncWorkflowStateRequest, _ ...grpc.CallOption) (*adminservice.SyncWorkflowStateResponse, error) {
 			close(entered)
-			<-release
+			select {
+			case <-release:
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
 			return nil, serviceerror.NewUnavailable("source cluster unavailable")
 		}).Times(1)
 
@@ -3392,6 +3693,13 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentDe
 		string(wideevents.ParentChildOutcomeDeduplicated),
 		string(wideevents.ParentChildOutcomeFailed),
 	}, parentChildOutcomes(capture))
+	s.resendScheduler.InitiateShutdown()
+	s.resendScheduler.WaitShutdown()
+	metricSnapshot := metricsCapture.Snapshot()
+	s.Require().Len(metricSnapshot[metrics.ParentWorkflowResendAttempts.Name()], 1)
+	s.Require().Len(metricSnapshot[metrics.ParentWorkflowResendSkipped.Name()], 1)
+	s.Require().Len(metricSnapshot[metrics.ParentWorkflowResendFailures.Name()], 1)
+	s.Require().Len(metricSnapshot[metrics.ParentWorkflowResendLatency.Name()], 1)
 }
 
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_WorkflowClosed() {

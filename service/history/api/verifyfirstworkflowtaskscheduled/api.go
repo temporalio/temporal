@@ -3,20 +3,17 @@ package verifyfirstworkflowtaskscheduled
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
-	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -34,7 +31,7 @@ func Invoke(
 	req *historyservice.VerifyFirstWorkflowTaskScheduledRequest,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	shardContext historyi.ShardContext,
-	inFlightResends *workflowresend.InFlightResends,
+	resendScheduler workflowresend.Scheduler,
 ) error {
 	namespaceID := namespace.ID(req.GetNamespaceId())
 	if err := api.ValidateNamespaceUUID(namespaceID); err != nil {
@@ -69,46 +66,37 @@ func Invoke(
 			errVerify,
 		)
 		metrics.ChildWorkflowResendLatency.With(metricsHandler).Record(time.Since(startTime))
-		if err != nil {
-			recordResendFailure(shardContext, metricsHandler, req, err)
+		if err != nil && !isExpectedResendError(err) {
+			metrics.ChildWorkflowResendFailures.With(metricsHandler).Record(1)
 		}
+		logResendFailure(shardContext, req, err)
 		return err
 	}
 
 	childKey := definition.NewWorkflowKey(req.NamespaceId, req.WorkflowExecution.WorkflowId, req.WorkflowExecution.RunId)
-	claimed, atCapacity := inFlightResends.TryClaim(childKey, shardContext.GetConfig().ChildWorkflowResendMaxInFlight())
-	if atCapacity {
-		metrics.ChildWorkflowResendLimited.With(metricsHandler).Record(1)
-		shardContext.GetLogger().Warn("Dropped child workflow resend, shard is at its in-flight limit",
-			tag.WorkflowNamespaceID(req.GetNamespaceId()),
-			tag.WorkflowID(req.WorkflowExecution.GetWorkflowId()),
-			tag.WorkflowRunID(req.WorkflowExecution.GetRunId()),
-			tag.NewInt("max-in-flight", shardContext.GetConfig().ChildWorkflowResendMaxInFlight()),
-		)
-		return errVerify
-	}
-	if !claimed {
-		metrics.ChildWorkflowResendSkipped.With(metricsHandler).Record(1)
-		return errVerify
-	}
-
 	resendCtx := rpc.CopyContextValues(shardContext.GetLifecycleContext(), ctx)
-	resendCtx, cancel := context.WithTimeout(resendCtx, shardContext.GetConfig().ReplicationTaskApplyTimeout())
-	go func() {
-		defer cancel()
-		defer inFlightResends.Release(childKey)
-		defer func() {
-			var panicErr error
-			log.CapturePanic(shardContext.GetLogger(), &panicErr)
-			if panicErr != nil {
-				metrics.ChildWorkflowResendFailures.With(metricsHandler).Record(1)
-			}
-		}()
-		_ = resend(resendCtx)
-	}()
+	submitResult := resendScheduler.TrySubmit(
+		resendCtx,
+		childKey,
+		shardContext.GetConfig().ReplicationTaskApplyTimeout(),
+		func(ctx context.Context) {
+			_ = resend(ctx)
+		},
+	)
+	switch submitResult {
+	case workflowresend.SubmitResultAccepted:
+	case workflowresend.SubmitResultDuplicate:
+		metrics.ChildWorkflowResendSkipped.With(metricsHandler).Record(1)
+	case workflowresend.SubmitResultAtCapacity:
+		metrics.ChildWorkflowResendLimited.With(metricsHandler).Record(1)
+	default:
+		// SubmitResultFailed and unknown values are admission failures.
+		metrics.ChildWorkflowResendFailures.With(metricsHandler).Record(1)
+	}
+	// The submission result is intentionally used only for metrics. Preserve the verification error
+	// so the durable standby task retries regardless of the admission outcome.
 	return errVerify
 }
-
 func verifyFirstWorkflowTaskScheduled(
 	ctx context.Context,
 	req *historyservice.VerifyFirstWorkflowTaskScheduledRequest,
@@ -147,19 +135,33 @@ func verifyFirstWorkflowTaskScheduled(
 	return nil, nil, nil
 }
 
-func recordResendFailure(
+func logResendFailure(
 	shardContext historyi.ShardContext,
-	metricsHandler metrics.Handler,
 	req *historyservice.VerifyFirstWorkflowTaskScheduledRequest,
 	err error,
 ) {
-	metrics.ChildWorkflowResendFailures.With(metricsHandler).Record(1)
-	shardContext.GetLogger().Error("Failed to resend child workflow for first workflow task verification",
+	if isExpectedResendError(err) {
+		return
+	}
+	shardContext.GetThrottledLogger().Error(
+		"Failed to resend child workflow for first workflow task verification",
 		tag.WorkflowNamespaceID(req.GetNamespaceId()),
 		tag.WorkflowID(req.WorkflowExecution.GetWorkflowId()),
 		tag.WorkflowRunID(req.WorkflowExecution.GetRunId()),
 		tag.Error(err),
 	)
+}
+
+func isExpectedResendError(err error) bool {
+	if err == nil || common.IsContextCanceledErr(err) {
+		return true
+	}
+	var notFoundErr *serviceerror.NotFound
+	var workflowNotReadyErr *serviceerror.WorkflowNotReady
+	var namespaceNotFoundErr *serviceerror.NamespaceNotFound
+	return errors.As(err, &notFoundErr) ||
+		errors.As(err, &workflowNotReadyErr) ||
+		errors.As(err, &namespaceNotFoundErr)
 }
 
 func resendChildAndVerify(
@@ -172,73 +174,27 @@ func resendChildAndVerify(
 	versionHistories *historyspb.VersionHistories,
 	errVerify error,
 ) error {
-	clusterMetadata := shardContext.GetClusterMetadata()
-	currentClusterName := clusterMetadata.GetCurrentClusterName()
-
-	namespaceEntry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
-	if err != nil {
-		return err
-	}
-	if !namespaceEntry.IsOnCluster(currentClusterName) {
-		return nil
-	}
-	targetClusterInfo := clusterMetadata.GetAllClusterInfo()[currentClusterName]
-
-	routingKey := namespace.RoutingKey{ID: req.WorkflowExecution.GetWorkflowId()}
-	activeClusterName := namespaceEntry.ActiveClusterName(routingKey)
-	if activeClusterName == currentClusterName {
-		return errors.New("namespace becomes active when processing task as standby")
-	}
-
-	remoteAdminClient, err := shardContext.GetRemoteAdminClient(activeClusterName)
-	if err != nil {
-		return err
-	}
-
-	resp, err := remoteAdminClient.SyncWorkflowState(ctx, &adminservice.SyncWorkflowStateRequest{
-		NamespaceId: req.NamespaceId,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: req.WorkflowExecution.WorkflowId,
-			RunId:      req.WorkflowExecution.RunId,
-		},
-		ArchetypeId:         chasm.WorkflowArchetypeID,
-		VersionedTransition: versionedTransition,
-		VersionHistories:    versionHistories,
-		TargetClusterId:     int32(targetClusterInfo.InitialFailoverVersion),
-	})
-	if err != nil {
-		if common.IsNotFoundError(err) {
-			return nil
-		}
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		if errors.As(err, &failedPreconditionErr) {
-			return errVerify
-		}
-		return err
-	}
-
-	namespaceEntry, err = shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
-	if err != nil {
-		return err
-	}
-	if !namespaceEntry.IsOnCluster(currentClusterName) ||
-		namespaceEntry.ActiveClusterName(routingKey) != activeClusterName {
-		return nil
-	}
-
-	engine, err := shardContext.GetEngine(ctx)
-	if err != nil {
-		return err
-	}
-	if err := engine.ReplicateVersionedTransition(
+	result, err := workflowresend.SyncWorkflowStateFromSource(
 		ctx,
-		chasm.WorkflowArchetypeID,
-		resp.VersionedTransitionArtifact,
-		activeClusterName,
-	); err != nil && !errors.Is(err, consts.ErrDuplicate) {
+		shardContext,
+		namespaceID,
+		req.WorkflowExecution,
+		versionedTransition,
+		versionHistories,
+		nil,
+	)
+	if err != nil {
 		return err
 	}
-
-	_, _, err = verifyFirstWorkflowTaskScheduled(ctx, req, workflowConsistencyChecker)
-	return err
+	switch result {
+	case workflowresend.SyncWorkflowStateResultSourceNotFound:
+		return nil
+	case workflowresend.SyncWorkflowStateResultSkipped:
+		return errVerify
+	case workflowresend.SyncWorkflowStateResultApplied:
+		_, _, err = verifyFirstWorkflowTaskScheduled(ctx, req, workflowConsistencyChecker)
+		return err
+	default:
+		return fmt.Errorf("unknown workflow state sync result: %d", result)
+	}
 }

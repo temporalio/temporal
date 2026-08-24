@@ -332,7 +332,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			taskTime := transferTask.GetVisibilityTime()
 			localVerificationTime := taskTime.Add(t.config.MaxLocalParentWorkflowVerificationDuration())
 
-			resendParent := now.After(localVerificationTime) && mutableState.IsTransitionHistoryEnabled() && mutableState.CurrentVersionedTransition() != nil
+			resendParent := now.After(localVerificationTime)
 
 			// Copy needed values from executionInfo before releasing mutable state
 			parentNamespaceID := executionInfo.ParentNamespaceId
@@ -345,6 +345,18 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 
 			// no need for mutable state anymore, release workflow lock
 			release(nil)
+			if resendParent {
+				// Parent and child workflows may use different namespace transition-history settings.
+				parentNamespaceEntry, err := t.registry.GetNamespaceByID(namespace.ID(parentNamespaceID))
+				switch err.(type) {
+				case nil:
+					resendParent = t.config.EnableTransitionHistory(parentNamespaceEntry.Name().String())
+				case *serviceerror.NamespaceNotFound:
+					return nil, nil
+				default:
+					return nil, err
+				}
+			}
 
 			emitChildCompletionVerificationStarted(
 				t.shardContext,
@@ -520,7 +532,6 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		childStartedWorkflowID := childWorkflowInfo.StartedWorkflowId
 		childStartedRunID := childWorkflowInfo.StartedRunId
 		childClock := childWorkflowInfo.Clock
-		transitionHistoryEnabled := mutableState.IsTransitionHistoryEnabled() && mutableState.CurrentVersionedTransition() != nil
 
 		// no need for mutable state anymore, release workflow lock
 		release(nil)
@@ -556,6 +567,19 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		resendTime := transferTask.GetVisibilityTime().Add(
 			t.config.StandbyTaskMissingEventsResendDelay(transferTask.GetType()),
 		)
+		resendChild := t.getCurrentTime().After(resendTime)
+		if resendChild {
+			// Parent and child workflows may use different namespace transition-history settings.
+			childNamespaceEntry, err := t.registry.GetNamespaceByID(namespace.ID(childTargetNamespaceID))
+			switch err.(type) {
+			case nil:
+				resendChild = t.config.EnableTransitionHistory(childNamespaceEntry.Name().String())
+			case *serviceerror.NamespaceNotFound:
+				return nil, nil
+			default:
+				return nil, err
+			}
+		}
 
 		_, err = t.historyRawClient.VerifyFirstWorkflowTaskScheduled(ctx, &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
 			NamespaceId: childTargetNamespaceID,
@@ -564,7 +588,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 				RunId:      childStartedRunID,
 			},
 			Clock:       childClock,
-			ResendChild: t.getCurrentTime().After(resendTime) && transitionHistoryEnabled,
+			ResendChild: resendChild,
 		})
 		switch err.(type) {
 		case nil, *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
