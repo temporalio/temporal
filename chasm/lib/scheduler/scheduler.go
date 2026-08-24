@@ -643,6 +643,18 @@ func countsAsFailureForPause(status enumspb.WorkflowExecutionStatus) bool {
 	}
 }
 
+func (s *Scheduler) recordIgnoredCallback(
+	ctx chasm.MutableContext,
+	metricsHandler metrics.Handler,
+	requestID string,
+	reason metrics.ReasonString,
+	message string,
+) {
+	s.getOrCreateEventLog(ctx).LogEvent(ctx, fmt.Sprintf("%s: %s", message, requestID))
+	ctx.Logger().Warn(message, tag.RequestID(requestID), tag.ScheduleID(s.ScheduleId))
+	metricsHandler.Counter(metrics.ScheduleCallbackIgnored.Name()).Record(1, metrics.ReasonTag(reason))
+}
+
 // HandleNexusCompletion allows Scheduler to record workflow completions from
 // worfklows started by the same scheduler tree's Invoker.
 func (s *Scheduler) HandleNexusCompletion(
@@ -662,27 +674,25 @@ func (s *Scheduler) HandleNexusCompletion(
 	if start == nil {
 		// If the request ID was removed, the request must have already been processed;
 		// fast-succeed.
-		msg := "handled Nexus completion with an unrecognized request ID"
-		s.getOrCreateEventLog(ctx).LogEvent(ctx,
-			fmt.Sprintf("%s: %s", msg, info.RequestId))
-		ctx.Logger().Warn(msg,
-			tag.RequestID(info.RequestId),
-			tag.ScheduleID(s.ScheduleId))
-		metricsHandler.Counter(metrics.ScheduleCallbackIgnored.Name()).
-			Record(1, metrics.ReasonTag(callbackIgnoredUnrecognizedRequest))
+		s.recordIgnoredCallback(
+			ctx,
+			metricsHandler,
+			info.RequestId,
+			callbackIgnoredUnrecognizedRequest,
+			"handled Nexus completion with an unrecognized request ID",
+		)
 		return nil
 	}
 	if start.GetCompleted() != nil {
 		// Completion callbacks may be validly redelivered, for example after a workflow reset.
 		// Preserve state but keep the duplicate observable through the log and metric.
-		msg := "handled Nexus completion for an already-completed buffered start"
-		s.getOrCreateEventLog(ctx).LogEvent(ctx,
-			fmt.Sprintf("%s: %s", msg, info.RequestId))
-		ctx.Logger().Warn(msg,
-			tag.RequestID(info.RequestId),
-			tag.ScheduleID(s.ScheduleId))
-		metricsHandler.Counter(metrics.ScheduleCallbackIgnored.Name()).
-			Record(1, metrics.ReasonTag(callbackIgnoredAlreadyCompleted))
+		s.recordIgnoredCallback(
+			ctx,
+			metricsHandler,
+			info.RequestId,
+			callbackIgnoredAlreadyCompleted,
+			"handled Nexus completion for an already-completed buffered start",
+		)
 		return nil
 	}
 	workflowID := start.GetWorkflowId()

@@ -185,7 +185,7 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 	// Remove failed (non-retryable) starts from the buffer.
 	removedStarts := 0
 	retriedStarts := 0
-	startedAllowAll := make(map[string]struct{})
+	startedUntracked := make(map[string]struct{})
 	i.BufferedStarts = slices.DeleteFunc(i.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
 		failed := failed[start.RequestId]
 		if failed {
@@ -221,7 +221,7 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 			start.OverlapPolicy = completedStart.GetOverlapPolicy()
 			if !internal.TracksCompletionResult(completedStart.GetOverlapPolicy()) {
 				i.Scheduler.Get(ctx).recordRecentAction(completedStart, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
-				startedAllowAll[start.RequestId] = struct{}{}
+				startedUntracked[start.RequestId] = struct{}{}
 				removedStarts++
 				continue
 			}
@@ -236,7 +236,7 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 		}
 	}
 	i.BufferedStarts = slices.DeleteFunc(i.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
-		_, remove := startedAllowAll[start.GetRequestId()]
+		_, remove := startedUntracked[start.GetRequestId()]
 		return remove
 	})
 
@@ -274,22 +274,22 @@ func (i *Invoker) recordCompletedAction(
 	i.getOrCreateEventLog(ctx).LogEvent(ctx, fmt.Sprintf("recording completed action: %s", requestID))
 
 	// Find the BufferedStart and mark it as completed.
-	completedAllowAll := ""
+	completedUntracked := ""
 	for _, start := range i.BufferedStarts {
 		if start.GetRequestId() == requestID {
 			scheduleTime = start.DesiredTime.AsTime()
 			if !internal.TracksCompletionResult(start.GetOverlapPolicy()) {
 				i.Scheduler.Get(ctx).recordRecentAction(start, completed.GetStatus())
-				completedAllowAll = requestID
+				completedUntracked = requestID
 			} else {
 				start.Completed = completed
 			}
 			break
 		}
 	}
-	if completedAllowAll != "" {
+	if completedUntracked != "" {
 		i.BufferedStarts = slices.DeleteFunc(i.BufferedStarts, func(start *schedulespb.BufferedStart) bool {
-			return start.GetRequestId() == completedAllowAll
+			return start.GetRequestId() == completedUntracked
 		})
 	}
 
