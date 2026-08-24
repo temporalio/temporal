@@ -18,10 +18,14 @@ import (
 type HTTPClientTransportInstrumenter func(http.RoundTripper) http.RoundTripper
 
 // NewHTTPClientTransportInstrumenter binds a tracer provider and propagator for reuse across HTTP transports.
+// It returns nil when tracing is disabled so callers can avoid tracing-only work.
 func NewHTTPClientTransportInstrumenter(
 	tracerProvider trace.TracerProvider,
 	propagator propagation.TextMapPropagator,
 ) HTTPClientTransportInstrumenter {
+	if !isEnabled(tracerProvider) {
+		return nil
+	}
 	return func(rt http.RoundTripper) http.RoundTripper {
 		return NewHTTPClientTransport(rt, tracerProvider, propagator)
 	}
@@ -39,10 +43,14 @@ func (i HTTPClientTransportInstrumenter) Instrument(rt http.RoundTripper) http.R
 type HTTPServerHandlerInstrumenter func(handler http.Handler, spanName string) http.Handler
 
 // NewHTTPServerHandlerInstrumenter binds a tracer provider and propagator for reuse across HTTP server handlers.
+// It returns nil when tracing is disabled so callers can avoid tracing-only work.
 func NewHTTPServerHandlerInstrumenter(
 	tracerProvider trace.TracerProvider,
 	propagator propagation.TextMapPropagator,
 ) HTTPServerHandlerInstrumenter {
+	if !isEnabled(tracerProvider) {
+		return nil
+	}
 	return func(handler http.Handler, spanName string) http.Handler {
 		return NewHTTPHandler(handler, spanName, tracerProvider, propagator)
 	}
@@ -69,11 +77,12 @@ func NewHTTPClientTransport(
 	if propagator == nil {
 		propagator = propagation.TraceContext{}
 	}
+	if rt == nil {
+		rt = http.DefaultTransport
+	}
+	rt = &httpClientSpanAttributesTransport{rt: rt}
 	isDebug := DebugMode()
 	if isDebug {
-		if rt == nil {
-			rt = http.DefaultTransport
-		}
 		rt = &debugHTTPClientSpanTransport{rt: rt}
 	}
 	rt = otelhttp.NewTransport(
@@ -110,6 +119,29 @@ func NewHTTPHandler(
 		otelhttp.WithTracerProvider(tracerProvider),
 		otelhttp.WithPropagators(propagator),
 	)
+}
+
+type httpClientSpanAttributesKey struct{}
+
+// WithHTTPClientSpanAttributes returns req with attrs for its HTTP client span.
+func WithHTTPClientSpanAttributes(req *http.Request, attrs ...attribute.KeyValue) *http.Request {
+	return req.WithContext(context.WithValue(req.Context(), httpClientSpanAttributesKey{}, attrs))
+}
+
+type httpClientSpanAttributesTransport struct {
+	rt http.RoundTripper
+}
+
+var _ http.RoundTripper = (*httpClientSpanAttributesTransport)(nil)
+
+func (t *httpClientSpanAttributesTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	span := trace.SpanFromContext(req.Context())
+	if span.IsRecording() {
+		if attrs, ok := req.Context().Value(httpClientSpanAttributesKey{}).([]attribute.KeyValue); ok {
+			span.SetAttributes(attrs...)
+		}
+	}
+	return t.rt.RoundTrip(req)
 }
 
 type debugHTTPClientRequestStateKey struct{}

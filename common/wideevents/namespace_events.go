@@ -3,9 +3,9 @@ package wideevents
 import "go.opentelemetry.io/otel/log"
 
 // NamespaceLifecycleEventName is the stable event name for the generic, phase-discriminated wide
-// event describing namespace-level activity (replication, failover, configuration, admission,
-// handover, etc.). This package owns only the stable envelope: the set of phase values and the
-// contents of Details are supplied by the emitter.
+// event describing namespace lifecycle activity (failover, configuration, admission, handover,
+// etc.). This package owns only the stable envelope: the set of phase values and the contents of
+// Details are supplied by the emitter.
 const NamespaceLifecycleEventName = "namespace_lifecycle"
 
 // NamespaceLifecyclePayload is the NamespaceLifecycle payload. The identity fields are stable;
