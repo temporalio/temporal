@@ -239,6 +239,11 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 		_, remove := startedUntracked[start.GetRequestId()]
 		return remove
 	})
+	if len(startedUntracked) > 0 {
+		// ALLOW_ALL starts have no completion callback to rearm an idle task after
+		// their start-only history advances the idle deadline.
+		i.Scheduler.Get(ctx).Generator.Get(ctx).Generate(ctx)
+	}
 
 	i.getOrCreateEventLog(ctx).LogEvent(ctx,
 		fmt.Sprintf("recordExecuteResult kicked off %d starts, removed %d starts, retried %d starts",
