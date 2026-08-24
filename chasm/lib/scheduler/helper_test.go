@@ -212,6 +212,12 @@ func withEngineTimeSource(ts *clock.EventTimeSource) engineTestOption {
 	}
 }
 
+func withEngineMetricsHandler(handler metrics.Handler) engineTestOption {
+	return func(c *engineTestConfig) {
+		c.engineOpts = append(c.engineOpts, chasmtest.WithMetricsHandler(handler))
+	}
+}
+
 // newTestEngineContext builds a CHASM registry with the core and scheduler
 // libraries registered, wraps it in a chasmtest.Engine, and returns the
 // engine along with an engine-bound context ready for chasm.StartExecution /

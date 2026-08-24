@@ -17,6 +17,8 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/chasm/lib/scheduler/migration"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/testing/testlogger"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -170,6 +172,66 @@ func TestHandleNexusCompletion_ExistingAllowAllDoesNotUpdateCompletionState(t *t
 			require.Empty(t, invoker.GetBufferedStarts())
 			require.Len(t, sched.Info.GetRecentActions(), 1)
 			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, sched.Info.GetRecentActions()[0].GetStartWorkflowStatus())
+		})
+	}
+}
+
+func TestHandleNexusCompletion_IgnoredReasonMetric(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		setup  func(*scheduler.Invoker)
+		reason string
+	}{
+		{
+			name:   "unrecognized request",
+			reason: "unrecognized_request_id",
+		},
+		{
+			name: "already completed",
+			setup: func(invoker *scheduler.Invoker) {
+				invoker.BufferedStarts = []*schedulespb.BufferedStart{{
+					RequestId: "request-id",
+					Completed: &schedulespb.CompletedResult{
+						Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+					},
+				}}
+			},
+			reason: "already_completed",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			recorder := metricstest.NewCaptureHandler()
+			capture := recorder.StartCapture()
+			defer recorder.StopCapture(capture)
+
+			logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+			_, engineCtx := newTestEngineContext(t, logger, withEngineMetricsHandler(recorder))
+			_, err := chasm.StartExecution(
+				engineCtx,
+				chasm.ExecutionKey{NamespaceID: namespaceID, BusinessID: scheduleID},
+				scheduler.CreateScheduler,
+				&schedulerpb.CreateScheduleRequest{
+					NamespaceId: namespaceID,
+					FrontendRequest: &workflowservice.CreateScheduleRequest{
+						Namespace: namespace, ScheduleId: scheduleID, Schedule: defaultSchedule(), RequestId: "create-request",
+					},
+				},
+			)
+			require.NoError(t, err)
+			rootRef := chasm.NewComponentRef[*scheduler.Scheduler](chasm.ExecutionKey{NamespaceID: namespaceID, BusinessID: scheduleID})
+
+			_, _, err = chasm.UpdateComponent(engineCtx, rootRef,
+				func(s *scheduler.Scheduler, ctx chasm.MutableContext, _ struct{}) (struct{}, error) {
+					if tc.setup != nil {
+						tc.setup(s.Invoker.Get(ctx))
+					}
+					return struct{}{}, s.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{RequestId: "request-id"})
+				}, struct{}{})
+			require.NoError(t, err)
+
+			recordings := capture.Snapshot()[metrics.ScheduleCallbackIgnored.Name()]
+			require.Len(t, recordings, 1)
+			require.Equal(t, tc.reason, recordings[0].Tags["reason"])
 		})
 	}
 }

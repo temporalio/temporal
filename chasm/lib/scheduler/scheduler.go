@@ -68,6 +68,11 @@ var (
 	_ (chasm.VisibilityMemoProvider)             = (*Scheduler)(nil)
 )
 
+const (
+	callbackIgnoredUnrecognizedRequest metrics.ReasonString = "unrecognized_request_id"
+	callbackIgnoredAlreadyCompleted    metrics.ReasonString = "already_completed"
+)
+
 var (
 	executionStatusRunning   = "Running"
 	executionStatusCompleted = "Completed"
@@ -647,16 +652,14 @@ func (s *Scheduler) HandleNexusCompletion(
 	invoker := s.Invoker.Get(ctx)
 	metricsHandler := newTaggedMetricsHandler(ctx.MetricsHandler(), s)
 
-	workflowID := ""
-	tracksCompletionResult := true
-	for _, start := range invoker.GetBufferedStarts() {
-		if start.GetRequestId() == info.RequestId && start.GetCompleted() == nil {
-			workflowID = start.GetWorkflowId()
-			tracksCompletionResult = internal.TracksCompletionResult(start.GetOverlapPolicy())
+	var start *schedulespb.BufferedStart
+	for _, bufferedStart := range invoker.GetBufferedStarts() {
+		if bufferedStart.GetRequestId() == info.RequestId {
+			start = bufferedStart
 			break
 		}
 	}
-	if workflowID == "" {
+	if start == nil {
 		// If the request ID was removed, the request must have already been processed;
 		// fast-succeed.
 		msg := "handled Nexus completion with an unrecognized request ID"
@@ -665,9 +668,23 @@ func (s *Scheduler) HandleNexusCompletion(
 		ctx.Logger().Warn(msg,
 			tag.RequestID(info.RequestId),
 			tag.ScheduleID(s.ScheduleId))
-		metricsHandler.Counter(metrics.ScheduleCallbackIgnored.Name()).Record(1)
+		metricsHandler.Counter(metrics.ScheduleCallbackIgnored.Name()).
+			Record(1, metrics.ReasonTag(callbackIgnoredUnrecognizedRequest))
 		return nil
 	}
+	if start.GetCompleted() != nil {
+		msg := "handled Nexus completion for an already-completed buffered start"
+		s.getOrCreateEventLog(ctx).LogEvent(ctx,
+			fmt.Sprintf("%s: %s", msg, info.RequestId))
+		ctx.Logger().Warn(msg,
+			tag.RequestID(info.RequestId),
+			tag.ScheduleID(s.ScheduleId))
+		metricsHandler.Counter(metrics.ScheduleCallbackIgnored.Name()).
+			Record(1, metrics.ReasonTag(callbackIgnoredAlreadyCompleted))
+		return nil
+	}
+	workflowID := start.GetWorkflowId()
+	tracksCompletionResult := internal.TracksCompletionResult(start.GetOverlapPolicy())
 
 	// Record how long it took for the callback to arrive after the action completed.
 	// Use ctx.Now instead of time.Since to use a consistent time source across nodes,
