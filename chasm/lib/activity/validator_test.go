@@ -554,6 +554,9 @@ func TestValidateAndPopulateStartRequest_CombinesRequestAndCallbackLinks(t *test
 			BlobSizeLimitWarn:          defaultBlobSizeLimitWarn,
 			DefaultActivityRetryPolicy: getDefaultRetrySettings,
 			EnableCallbacks:            func(string) bool { return true },
+			EnabledCallbackKinds: func(string) []callbacks.Kind {
+				return []callbacks.Kind{callbacks.KindNexus}
+			},
 			MaxIDLengthLimit:           func() int { return defaultMaxIDLengthLimit },
 			MaxUserMetadataDetailsSize: defaultMaxUserMetadataDetailsSize,
 			MaxUserMetadataSummarySize: defaultMaxUserMetadataSummarySize,

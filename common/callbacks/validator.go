@@ -19,15 +19,6 @@ type ValidatorOptions struct {
 	EnabledKinds []Kind
 }
 
-// OnlyNexus returns a ValidateOptions that only enables Nexus-variant callbacks. This is the default
-// behavior for all execution types except for those on standalone Nexus operations, which may
-// support Worker-variant callbacks.
-func OnlyNexus() ValidatorOptions {
-	return ValidatorOptions{
-		EnabledKinds: []Kind{KindNexus},
-	}
-}
-
 // Validator validates completion callbacks attached to executions (e.g. workflows and standalone activities).
 type Validator interface {
 	// Validate rejects callbacks that are not enabled for the execution, or are malformed.

@@ -26,6 +26,20 @@ var WorkerSourceContextMaxSize = dynamicconfig.NewNamespaceIntSetting(
 callback. The server carries this payload to the callback's handler untouched.`,
 )
 
+var WorkflowEnabledKinds = dynamicconfig.NewNamespaceTypedSettingWithConverter(
+	"workflow.enabledCallbackKinds",
+	commoncallbacks.ConvertEnabledKinds,
+	[]commoncallbacks.Kind{commoncallbacks.KindNexus},
+	`The list of completion callback kinds that may be attached to a workflow execution.`,
+)
+
+var WorkflowUpdateEnabledKinds = dynamicconfig.NewNamespaceTypedSettingWithConverter(
+	"workflowUpdate.enabledCallbackKinds",
+	commoncallbacks.ConvertEnabledKinds,
+	[]commoncallbacks.Kind{commoncallbacks.KindNexus},
+	`The list of completion callback kinds that may be attached to a workflow update.`,
+)
+
 var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
 	"callback.request.timeout",
 	time.Second*10,
