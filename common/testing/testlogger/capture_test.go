@@ -111,29 +111,43 @@ func TestCaptureRequireContains(t *testing.T) {
 	capture := testLogger.StartCapture()
 	testLogger.Error("failed", tag.String("operation", "StartOperation"), tag.Time("attempt-start", time.Now()), tag.Error(errors.New("failure")))
 
-	pattern := testlogger.CapturedLogPattern{
+	capture.RequireContains(t, testlogger.CapturedLogPattern{
 		Level:   testlogger.Error,
 		Message: "failed",
-		Tags: map[string]string{
-			"operation": "StartOperation",
-			"error":     "failure",
+		Tags: map[string]any{
+			"operation":     "StartOperation",
+			"attempt-start": testlogger.AnyTagValue,
+			"error":         "failure",
 		},
-	}
-	capture.RequireContains(t, pattern)
+	})
 
-	pattern.Tags["operation"] = "CancelOperation"
 	recorder := &fatalRecorder{}
-	capture.RequireContains(recorder, pattern)
+	capture.RequireContains(recorder, testlogger.CapturedLogPattern{
+		Level:   testlogger.Error,
+		Message: "failed",
+		Tags: map[string]any{
+			"operation":     "CancelOperation",
+			"attempt-start": testlogger.AnyTagValue,
+			"error":         "failure",
+		},
+	})
 	require.True(t, recorder.helperCalled)
 	require.Contains(t, recorder.message, "candidate 1 tag mismatch")
 	require.Contains(t, recorder.message, "CancelOperation")
 	require.Contains(t, recorder.message, "StartOperation")
 
 	// A pattern with an extra tag matches nothing.
-	pattern.Tags["operation"] = "StartOperation"
-	pattern.Tags["unexpected"] = "value"
 	recorder = &fatalRecorder{}
-	capture.RequireContains(recorder, pattern)
+	capture.RequireContains(recorder, testlogger.CapturedLogPattern{
+		Level:   testlogger.Error,
+		Message: "failed",
+		Tags: map[string]any{
+			"operation":     "StartOperation",
+			"attempt-start": testlogger.AnyTagValue,
+			"error":         "failure",
+			"unexpected":    "value",
+		},
+	})
 	require.Contains(t, recorder.message, "unexpected")
 }
 
