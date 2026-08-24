@@ -673,6 +673,8 @@ func (s *Scheduler) HandleNexusCompletion(
 		return nil
 	}
 	if start.GetCompleted() != nil {
+		// Completion callbacks may be validly redelivered, for example after a workflow reset.
+		// Preserve state but keep the duplicate observable through the log and metric.
 		msg := "handled Nexus completion for an already-completed buffered start"
 		s.getOrCreateEventLog(ctx).LogEvent(ctx,
 			fmt.Sprintf("%s: %s", msg, info.RequestId))
