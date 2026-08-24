@@ -17,6 +17,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
 	chasmactivity "go.temporal.io/server/chasm/lib/activity"
+	"go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
@@ -29,10 +30,11 @@ import (
 )
 
 // NexusHandler-variant completion callbacks are gated per execution type by an
-// "enabledCallbackKinds" dynamic config setting, which defaults to Nexus-only. These tests
-// exercise both sides of that gate for every execution type that accepts completion callbacks:
+// "enabledCallbackKinds" dynamic config setting, which never enables the NexusHandler kind by
+// default. These tests exercise both sides of that gate for every execution type that accepts
+// completion callbacks:
 //
-//   - with the setting at its default, attaching a NexusHandler callback is rejected up front;
+//   - without "nexusHandler" in the setting, attaching a NexusHandler callback is rejected up front;
 //   - with "nexusHandler" added to the setting, the callback is accepted and registered on the
 //     execution, is triggered when the execution closes, and then fails to be delivered.
 //
@@ -159,6 +161,7 @@ func TestNexusHandlerCallbacks(t *testing.T) {
 	t.Run("Workflow", testNexusHandlerCallbackOnWorkflow)
 	t.Run("WorkflowUpdate", testNexusHandlerCallbackOnWorkflowUpdate)
 	t.Run("StandaloneActivity", testNexusHandlerCallbackOnStandaloneActivity)
+	t.Run("StandaloneNexusOperation", testNexusHandlerCallbackOnStandaloneNexusOperation)
 }
 
 // testNexusHandlerCallbackOnWorkflow attaches a NexusHandler callback to a workflow execution via
@@ -372,6 +375,78 @@ func testNexusHandlerCallbackOnStandaloneActivity(t *testing.T) {
 	requireNexusHandlerCallbackRetriedWithoutDelivery(t, capture, describe)
 }
 
+// testWorkerCallbackOnStandaloneNexusOperation attaches a Worker callback to a standalone Nexus
+// operation via StartNexusOperationExecution.
+func testWorkerCallbackOnStandaloneNexusOperation(t *testing.T) {
+	t.Parallel()
+
+	// Unlike the other execution types, standalone Nexus operations accept no callback kinds by
+	// default, so the Nexus-only baseline the rejection below exercises has to be set explicitly.
+	env := newNexusTestEnv(t, true,
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(nexusoperation.Enabled, true),
+		testcore.WithDynamicConfig(nexusoperation.EnabledCallbackKinds, []string{"nexus"}),
+	)
+	ctx := testcontext.For(t)
+	capture := env.StartNamespaceMetricCapture()
+
+	// A worker-target endpoint whose task queue nobody polls: the operation starts and then stays
+	// open until the test terminates it.
+	endpointName := env.createRandomNexusEndpoint(ctx, t).GetSpec().GetName()
+
+	operationID := testcore.RandomizeStr("worker-callback-nexus-operation")
+	cbTaskQueue := testcore.RandomizeStr("worker-callback-nexus-operation-completions")
+	newStartRequest := func() *workflowservice.StartNexusOperationExecutionRequest {
+		return &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId:         operationID,
+			Endpoint:            endpointName,
+			RequestId:           uuid.NewString(),
+			CompletionCallbacks: []*commonpb.Callback{workerCallback(cbTaskQueue)},
+		}
+	}
+
+	// With only the Nexus kind enabled, the callback is rejected before the operation is created.
+	_, err := env.startNexusOperation(ctx, newStartRequest())
+	require.ErrorContains(t, err, workerCallbackNotEnabledErr)
+
+	env.OverrideDynamicConfig(nexusoperation.EnabledCallbackKinds, []string{"nexus", "worker"})
+
+	startResp, err := env.startNexusOperation(ctx, newStartRequest())
+	require.NoError(t, err)
+	require.True(t, startResp.GetStarted())
+
+	describe := describeNexusOperationCallbacks(ctx, env, operationID, startResp.GetRunId())
+
+	// The callback is registered on the open operation, and has not been triggered yet.
+	await.Require(ctx, t, func(c *await.T) {
+		cbs, err := describe()
+		require.NoError(c, err)
+		requireWorkerCallbackRegistered(c, cbs, cbTaskQueue)
+		require.Equal(c, enumspb.CALLBACK_STATE_STANDBY, cbs[0].state)
+	}, 15*time.Second, 200*time.Millisecond)
+
+	// Every callback on a standalone operation is triggered by the operation completing. The trigger
+	// is reported by a Nexus-operation-specific proto, so it is read here rather than through
+	// observedCallback.
+	cbInfos := env.describeNexusOperation(ctx, t, operationID).GetCompletionCallbacks()
+	require.Len(t, cbInfos, 1)
+	require.NotNil(t, cbInfos[0].GetTrigger().GetOperationCompleted())
+
+	// Close the operation, which triggers the callback.
+	_, err = env.FrontendClient().TerminateNexusOperationExecution(ctx, &workflowservice.TerminateNexusOperationExecutionRequest{
+		Namespace:   env.Namespace().String(),
+		OperationId: operationID,
+		RunId:       startResp.GetRunId(),
+		RequestId:   uuid.NewString(),
+		Identity:    t.Name(),
+		Reason:      "close the operation to trigger its completion callback",
+	})
+	require.NoError(t, err)
+
+	requireWorkerCallbackTriggered(t, describe, cbTaskQueue)
+	requireWorkerCallbackRetriedWithoutDelivery(t, capture, describe)
+}
+
 func describeWorkflowCallbacks(ctx context.Context, env *testcore.TestEnv, workflowID, runID string) describeCallbacksFn {
 	return func() ([]observedCallback, error) {
 		resp, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowID, runID)
@@ -408,6 +483,33 @@ func describeActivityCallbacks(ctx context.Context, env *testcore.TestEnv, activ
 		}
 		cbs := make([]observedCallback, 0, len(resp.GetCallbacks()))
 		for _, cb := range resp.GetCallbacks() {
+			cbs = append(cbs, observedCallback{
+				callback:                cb.GetInfo().GetCallback(),
+				state:                   cb.GetInfo().GetState(),
+				attempt:                 cb.GetInfo().GetAttempt(),
+				lastAttemptFailure:      cb.GetInfo().GetLastAttemptFailure(),
+				lastAttemptCompleteTime: cb.GetInfo().GetLastAttemptCompleteTime(),
+				nextAttemptScheduleTime: cb.GetInfo().GetNextAttemptScheduleTime(),
+			})
+		}
+		return cbs, nil
+	}
+}
+
+func describeNexusOperationCallbacks(ctx context.Context, env *NexusTestEnv, operationID, runID string) describeCallbacksFn {
+	return func() ([]observedCallback, error) {
+		resp, err := env.FrontendClient().DescribeNexusOperationExecution(
+			ctx,
+			&workflowservice.DescribeNexusOperationExecutionRequest{
+				Namespace:   env.Namespace().String(),
+				OperationId: operationID,
+				RunId:       runID,
+			})
+		if err != nil {
+			return nil, err
+		}
+		cbs := make([]observedCallback, 0, len(resp.GetCompletionCallbacks()))
+		for _, cb := range resp.GetCompletionCallbacks() {
 			cbs = append(cbs, observedCallback{
 				callback:                cb.GetInfo().GetCallback(),
 				state:                   cb.GetInfo().GetState(),
