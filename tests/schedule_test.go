@@ -4964,6 +4964,7 @@ type scheduleClosesCase struct {
 	name         string
 	prefix       string
 	state        *schedulepb.ScheduleState
+	policies     *schedulepb.SchedulePolicies
 	expectedRuns int32
 
 	// buildSpec receives the current time at the moment the schedule is created
@@ -5015,6 +5016,17 @@ func testScheduleClosesFromIdle(t *testing.T, newContext contextFactory) {
 			strictRunCount: true,
 		},
 		{
+			name:         "FinalAllowAllAction",
+			prefix:       "sched-final-allow-all-closes",
+			expectedRuns: 1,
+			buildSpec: func(_ time.Time) *schedulepb.ScheduleSpec {
+				return intervalSpec(fastInterval)
+			},
+			state:          &schedulepb.ScheduleState{LimitedActions: true, RemainingActions: 1},
+			policies:       &schedulepb.SchedulePolicies{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL},
+			strictRunCount: true,
+		},
+		{
 			name:         "IntervalEndTime",
 			prefix:       "sched-interval-end-closes",
 			expectedRuns: 1,
@@ -5045,9 +5057,10 @@ func runScheduleClosesFromIdleCase(t *testing.T, newContext contextFactory, c sc
 
 	ctx := newContext(s.Context())
 	createSchedule(ctx, t, s, sid, &schedulepb.Schedule{
-		Spec:   c.buildSpec(time.Now().UTC()),
-		State:  c.state,
-		Action: startWorkflowAction(s, wid, wt),
+		Spec:     c.buildSpec(time.Now().UTC()),
+		Policies: c.policies,
+		State:    c.state,
+		Action:   startWorkflowAction(s, wid, wt),
 	})
 
 	// A hard action budget must land on exactly expectedRuns; time-bounded specs
