@@ -110,11 +110,11 @@ func newNexusCompletionHandler(
 	}
 }
 
-func newNexusCompletionHTTPHandler(handler *nexusCompletionHandler, logger log.Logger) *nexusCompletionHTTPHandler {
+func newNexusCompletionHTTPHandler(handler *nexusCompletionHandler) *nexusCompletionHTTPHandler {
 	return &nexusCompletionHTTPHandler{
 		httpHandler: nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{
 			Handler:    handler,
-			Logger:     log.NewSlogLogger(log.With(logger, tag.ComponentNexusCompletion)),
+			Logger:     log.NewSlogLogger(handler.Logger),
 			Serializer: commonnexus.PayloadSerializer,
 		}),
 	}
