@@ -1530,6 +1530,7 @@ func (s *scheduler) startWorkflow(
 			ContinuedFailure:         continuedFailure,
 			UserMetadata:             newWorkflow.UserMetadata,
 			Priority:                 newWorkflow.Priority,
+			TimeSkippingConfig:       s.Schedule.GetTimeSkippingConfig(),
 		},
 	}
 	for {

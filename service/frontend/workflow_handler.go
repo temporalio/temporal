@@ -3751,6 +3751,7 @@ func (wh *WorkflowHandler) createScheduleWorkflow(
 		Memo:                     request.Memo,
 		SearchAttributes:         sa,
 		Priority:                 &commonpb.Priority{}, // ie default priority
+		TimeSkippingConfig:       request.Schedule.GetTimeSkippingConfig(),
 	}
 	_, err = wh.historyClient.StartWorkflowExecution(
 		ctx,
@@ -4841,6 +4842,21 @@ func (wh *WorkflowHandler) updateScheduleWorkflow(
 			Input:             inputPayloads,
 			Identity:          request.Identity,
 			RequestId:         request.RequestId,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	_, err = wh.historyClient.UpdateWorkflowExecutionOptions(ctx, &historyservice.UpdateWorkflowExecutionOptionsRequest{
+		NamespaceId: namespaceID.String(),
+		UpdateRequest: &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+			Namespace:         request.Namespace,
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+			WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+				TimeSkippingConfig: request.Schedule.GetTimeSkippingConfig(),
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+			Identity:   request.Identity,
 		},
 	})
 	if err != nil {
