@@ -1,6 +1,8 @@
 package nexus
 
 import (
+	"fmt"
+
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/temporalnexus"
