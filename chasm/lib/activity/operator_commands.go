@@ -22,9 +22,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// Operator commands: update-options, cancel, pause, unpause and reset, together
-// with the deferred-intent machinery they share.
-
 //revive:disable-next-line:cognitive-complexity
 func (a *Activity) UpdateActivityExecutionOptions(
 	ctx chasm.MutableContext,
@@ -593,6 +590,3 @@ func (a *Activity) restoreOriginalOptions(ctx chasm.MutableContext) {
 	}
 	a.reissueScheduleToClose(ctx)
 }
-
-// Transition bodies. Each is invoked from a chasm.Transition in statemachine.go, which
-// has already validated that the activity is in a legal source state.

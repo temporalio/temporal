@@ -453,6 +453,3 @@ func createHeartbeatTimeoutFailure() *failurepb.Failure {
 		},
 	}
 }
-
-// Transition bodies. Each is invoked from a chasm.Transition in statemachine.go, which
-// has already validated that the activity is in a legal source state.

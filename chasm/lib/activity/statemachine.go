@@ -341,11 +341,6 @@ var TransitionResetAttemptFailedToScheduled = chasm.NewTransition(
 	},
 )
 
-// Transition bodies. Each is the body of exactly one chasm.Transition above, which has
-// already validated that the activity is in a legal source state.
-
-// applyScheduled is the body of TransitionScheduled: it opens the first attempt and
-// emits the dispatch, ScheduleToStart and ScheduleToClose tasks.
 func (a *Activity) applyScheduled(ctx chasm.MutableContext) error {
 	attempt := a.LastAttempt.Get(ctx)
 
@@ -390,8 +385,6 @@ func (a *Activity) applyScheduled(ctx chasm.MutableContext) error {
 	return nil
 }
 
-// applyRescheduled is the body of TransitionRescheduled: it records the failed attempt
-// and re-emits the dispatch and ScheduleToStart tasks at the retry time.
 func (a *Activity) applyRescheduled(ctx chasm.MutableContext, event rescheduleEvent) error {
 	if err := a.applyFailedAttempt(ctx, event); err != nil {
 		return err
@@ -422,8 +415,6 @@ func (a *Activity) applyRescheduled(ctx chasm.MutableContext, event rescheduleEv
 	return nil
 }
 
-// applyStarted is the body of TransitionStarted: it records the worker that picked the
-// attempt up and emits the StartToClose and Heartbeat tasks.
 func (a *Activity) applyStarted(ctx chasm.MutableContext, request *historyservice.RecordActivityTaskStartedRequest) error {
 	attempt := a.LastAttempt.Get(ctx)
 	attempt.StartedTime = timestamppb.New(ctx.Now(a))
@@ -466,7 +457,6 @@ func (a *Activity) applyStarted(ctx chasm.MutableContext, request *historyservic
 	return nil
 }
 
-// applyCompleted is the body of TransitionCompleted: it records the successful outcome.
 func (a *Activity) applyCompleted(ctx chasm.MutableContext, event completeEvent) error {
 	return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 		req := event.req.GetCompleteRequest()
@@ -528,7 +518,6 @@ func (a *Activity) applyFailed(ctx chasm.MutableContext, event failedEvent) erro
 	})
 }
 
-// applyTerminated is the body of TransitionTerminated: it records the terminated outcome.
 func (a *Activity) applyTerminated(ctx chasm.MutableContext, event terminateEvent) error {
 	return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 		a.TerminateState = &activitypb.ActivityTerminateState{
@@ -555,8 +544,6 @@ func (a *Activity) applyTerminated(ctx chasm.MutableContext, event terminateEven
 	})
 }
 
-// applyCancelRequested is the body of TransitionCancelRequested: it records the cancel
-// request and drops any deferred reset intent.
 func (a *Activity) applyCancelRequested(ctx chasm.MutableContext, req *workflowservice.RequestCancelActivityExecutionRequest) error {
 	a.CancelState = &activitypb.ActivityCancelState{
 		Identity:    req.GetIdentity(),
@@ -571,7 +558,6 @@ func (a *Activity) applyCancelRequested(ctx chasm.MutableContext, req *workflows
 	return nil
 }
 
-// applyCanceled is the body of TransitionCanceled: it records the canceled outcome.
 func (a *Activity) applyCanceled(ctx chasm.MutableContext, event cancelEvent) error {
 	return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 		outcome := a.Outcome.Get(ctx)
@@ -596,8 +582,6 @@ func (a *Activity) applyCanceled(ctx chasm.MutableContext, event cancelEvent) er
 	})
 }
 
-// applyTimedOut is the body of TransitionTimedOut: it records the timeout failure for the
-// relevant timeout type and closes the activity.
 func (a *Activity) applyTimedOut(ctx chasm.MutableContext, event timeoutEvent) error {
 	timeoutType := event.timeoutType
 
@@ -651,9 +635,6 @@ func (a *Activity) applyTimedOut(ctx chasm.MutableContext, event timeoutEvent) e
 	})
 }
 
-// applyPaused is the body of TransitionPaused: it records the pause and bumps the attempt
-// stamp so that any pending dispatch task is invalidated and the activity is not
-// dispatched while paused.
 func (a *Activity) applyPaused(ctx chasm.MutableContext, event pauseEvent) error {
 	a.recordPauseState(ctx, event)
 	attempt := a.LastAttempt.Get(ctx)
@@ -670,8 +651,6 @@ func (a *Activity) applyPauseRequested(ctx chasm.MutableContext, event pauseEven
 	return nil
 }
 
-// applyUnpaused is the body of TransitionUnpaused: it bumps the attempt stamp and re-emits
-// the dispatch and ScheduleToStart tasks so that another attempt is made.
 func (a *Activity) applyUnpaused(
 	ctx chasm.MutableContext,
 	event unpauseEvent,
@@ -694,9 +673,6 @@ func (a *Activity) applyUnpaused(
 	return nil
 }
 
-// applyReset is the body of TransitionReset: it returns the activity to attempt 1, bumps the
-// attempt stamp to invalidate any pending dispatch task, and re-emits the dispatch and
-// ScheduleToStart tasks at the reset time.
 func (a *Activity) applyReset(ctx chasm.MutableContext, event resetEvent) error {
 	attempt := a.LastAttempt.Get(ctx)
 	attempt.Count = 1
@@ -724,9 +700,6 @@ func (a *Activity) applyReset(ctx chasm.MutableContext, event resetEvent) error 
 	return nil
 }
 
-// applyResetAttemptFailedToPaused is the body of
-// TransitionResetAttemptFailedToPaused: it applies the deferred reset and leaves the
-// activity paused, emitting no dispatch task.
 func (a *Activity) applyResetAttemptFailedToPaused(ctx chasm.MutableContext, event rescheduleEvent) error {
 	attempt := a.LastAttempt.Get(ctx)
 	a.ResetShouldPause = false
@@ -744,9 +717,6 @@ func (a *Activity) applyResetAttemptFailedToPaused(ctx chasm.MutableContext, eve
 	return nil
 }
 
-// applyResetAttemptFailedToScheduled is the body of
-// TransitionResetAttemptFailedToScheduled: it applies the deferred reset and re-emits
-// the dispatch and ScheduleToStart tasks.
 func (a *Activity) applyResetAttemptFailedToScheduled(ctx chasm.MutableContext, event rescheduleEvent) error {
 	attempt := a.LastAttempt.Get(ctx)
 	currentTime := ctx.Now(a)
