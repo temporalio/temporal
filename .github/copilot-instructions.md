@@ -62,6 +62,7 @@ Apply these patterns when reviewing PRs or suggesting code changes.
 
 - Follow existing patterns: "We have been passing through the frontend request in other libraries. Let's keep the same pattern here"
 - Use existing utilities before creating new ones
+- Use static logger messages and record all dynamic content in structured tags
 - Follow CLI documentation conventions (capitalize proper nouns)
 - Match existing metric tag formats (CONSTANT_CASE for enum values)
 - Use the same error message style (no punctuation for single sentences)
