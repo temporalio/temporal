@@ -23,6 +23,7 @@ func TestCaptureLifecycle(t *testing.T) {
 	testLogger.Info("info")
 	testLogger.Warn("warn")
 	testLogger.Error("error")
+
 	testLogger.StopCapture(capture)
 	testLogger.Info("after") // won't be captured
 
