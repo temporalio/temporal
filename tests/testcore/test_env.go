@@ -553,7 +553,7 @@ func (e *TestEnv) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, va
 	return e.cluster.host.overrideDynamicConfigForTest(e.t, setting.Key(), value)
 }
 
-// StartNamespaceLogCapture starts a log capture scoped to the namespaces owned by this test environment.
+// StartNamespaceLogCapture starts a log capture scoped to this test environment's namespace.
 func (e *TestEnv) StartNamespaceLogCapture() *testlogger.Capture {
 	testLogger, ok := e.Logger.(*testlogger.TestLogger)
 	if !ok {
