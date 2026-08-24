@@ -341,6 +341,9 @@ var TransitionResetAttemptFailedToScheduled = chasm.NewTransition(
 	},
 )
 
+// The methods below are transition bodies. Each is called only by the transition above it,
+// which validates the source state first. Do not call them directly.
+
 func (a *Activity) applyScheduled(ctx chasm.MutableContext) error {
 	attempt := a.LastAttempt.Get(ctx)
 
