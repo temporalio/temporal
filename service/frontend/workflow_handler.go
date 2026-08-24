@@ -69,6 +69,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/priorities"
@@ -5974,8 +5975,8 @@ func (wh *WorkflowHandler) StartBatchOperation(
 // buildUnpauseActivityVisibilityQuery narrows the caller's scope to workflows containing a
 // paused activity of the requested type. Only the WHERE expression is returned because the batch
 // worker appends its own execution-status filter.
-func buildUnpauseActivityVisibilityQuery(query string, activityType string) (string, error) {
-	if query == "" {
+func buildUnpauseActivityVisibilityQuery(q string, activityType string) (string, error) {
+	if q == "" {
 		// An empty query means the caller targeted executions explicitly, so there is no scope to
 		// narrow.
 		return "", nil
@@ -5984,7 +5985,7 @@ func buildUnpauseActivityVisibilityQuery(query string, activityType string) (str
 	// Visibility queries are predicate fragments, so wrap the query in a synthetic SELECT to obtain
 	// a WHERE expression. Reject set operations (for example, UNION) because they do not expose a
 	// single WHERE clause to extend.
-	stmt, err := sqlparser.Parse(fmt.Sprintf(sqlquery.QueryTemplate, query))
+	stmt, err := sqlparser.Parse(fmt.Sprintf(sqlquery.QueryTemplate, q))
 	if err != nil {
 		return "", serviceerror.NewInvalidArgumentf("invalid visibility query: %v", err)
 	}
@@ -5995,11 +5996,13 @@ func buildUnpauseActivityVisibilityQuery(query string, activityType string) (str
 
 	activityTypeExpr := &sqlparser.ComparisonExpr{
 		Operator: sqlparser.EqualStr,
-		Left:     &sqlparser.ColName{Name: sqlparser.NewColIdent(sadefs.TemporalPauseInfo)},
+		Left:     query.NewColName(sadefs.TemporalPauseInfo),
 		Right:    sqlparser.NewStrVal(fmt.Appendf(nil, "property:activityType=%s", activityType)),
 	}
-	selectStmt.Where.Expr = &sqlparser.ParenExpr{Expr: selectStmt.Where.Expr}
-	selectStmt.AddWhere(&sqlparser.ParenExpr{Expr: activityTypeExpr})
+	selectStmt.Where.Expr = &sqlparser.AndExpr{
+		Left:  activityTypeExpr,
+		Right: &sqlparser.ParenExpr{Expr: selectStmt.Where.Expr},
+	}
 	return sqlparser.String(selectStmt.Where.Expr), nil
 }
 

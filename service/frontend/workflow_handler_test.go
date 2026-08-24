@@ -2884,19 +2884,19 @@ func TestBuildUnpauseActivityVisibilityQuery(t *testing.T) {
 			name:         "scoped query",
 			query:        "WorkflowType='ScopedWorkflow'",
 			activityType: "ActivityFunc",
-			want:         "(WorkflowType = 'ScopedWorkflow') and (TemporalPauseInfo = 'property:activityType=ActivityFunc')",
+			want:         "TemporalPauseInfo = 'property:activityType=ActivityFunc' and (WorkflowType = 'ScopedWorkflow')",
 		},
 		{
 			name:         "boolean query preserves precedence and escapes activity type",
 			query:        "WorkflowType='ScopedWorkflow' OR WorkflowType='OtherWorkflow'",
 			activityType: "Activity'Func",
-			want:         "(WorkflowType = 'ScopedWorkflow' or WorkflowType = 'OtherWorkflow') and (TemporalPauseInfo = 'property:activityType=Activity\\'Func')",
+			want:         "TemporalPauseInfo = 'property:activityType=Activity\\'Func' and (WorkflowType = 'ScopedWorkflow' or WorkflowType = 'OtherWorkflow')",
 		},
 		{
 			name:         "order by is dropped",
 			query:        "WorkflowType='ScopedWorkflow' ORDER BY StartTime DESC",
 			activityType: "ActivityFunc",
-			want:         "(WorkflowType = 'ScopedWorkflow') and (TemporalPauseInfo = 'property:activityType=ActivityFunc')",
+			want:         "TemporalPauseInfo = 'property:activityType=ActivityFunc' and (WorkflowType = 'ScopedWorkflow')",
 		},
 		{
 			name:         "set operation",
@@ -2947,7 +2947,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_UnpauseActivitiesPreserve
 					},
 				},
 			},
-			wantQuery: "(WorkflowType = 'ScopedWorkflow') and (TemporalPauseInfo = 'property:activityType=ActivityFunc')",
+			wantQuery: "TemporalPauseInfo = 'property:activityType=ActivityFunc' and (WorkflowType = 'ScopedWorkflow')",
 		},
 		{
 			name: "explicit target",
