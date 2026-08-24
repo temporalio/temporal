@@ -274,6 +274,65 @@ func (s *historyHistoryScheduledTaskSuite) TestInsertSelect_MultiplePages() {
 	s.Equal(tasks, allRows)
 }
 
+// TestInsertSelect_PageBoundarySplitsSameTimestamp verifies that when a page
+// boundary falls in the middle of tasks sharing the same timestamp, no rows
+// are lost or duplicated. This is the critical edge case for the tuple cursor:
+// the cursor advances to (sameTimestamp, lastTaskID+1) and the next page must
+// pick up the remaining tasks at that timestamp without re-reading prior ones.
+func (s *historyHistoryScheduledTaskSuite) TestInsertSelect_PageBoundarySplitsSameTimestamp() {
+	shardID := rand.Int31()
+	categoryID := rand.Int31()
+	timestamp := s.now()
+	pageSize := 2
+
+	// Insert 5 tasks at the SAME timestamp.
+	// With pageSize=2, pages will split within the same timestamp group:
+	// Page 1: taskID=1, taskID=2
+	// Page 2: taskID=3, taskID=4  (cursor splits here within same ts)
+	// Page 3: taskID=5
+	// Page 4: empty
+	var tasks []sqlplugin.HistoryScheduledTasksRow
+	for taskID := int64(1); taskID <= 5; taskID++ {
+		tasks = append(tasks, s.newRandomScheduledTaskRow(shardID, categoryID, timestamp, taskID))
+	}
+	result, err := s.store.InsertIntoHistoryScheduledTasks(newExecutionContext(), tasks)
+	s.NoError(err)
+	rowsAffected, err := result.RowsAffected()
+	s.NoError(err)
+	s.Equal(5, int(rowsAffected))
+
+	// Paginate through all rows
+	var allRows []sqlplugin.HistoryScheduledTasksRow
+	filter := sqlplugin.HistoryScheduledTasksRangeFilter{
+		ShardID:                         shardID,
+		CategoryID:                      categoryID,
+		InclusiveMinVisibilityTimestamp: timestamp,
+		InclusiveMinTaskID:              0,
+		ExclusiveMaxVisibilityTimestamp: timestamp.Add(common.ScheduledTaskMinPrecision),
+		PageSize:                        pageSize,
+	}
+	pageCount := 0
+	for {
+		page, err := s.store.RangeSelectFromHistoryScheduledTasks(newExecutionContext(), filter)
+		s.NoError(err)
+		if len(page) == 0 {
+			break
+		}
+		pageCount++
+		for index := range page {
+			page[index].ShardID = shardID
+			page[index].CategoryID = categoryID
+		}
+		allRows = append(allRows, page...)
+		lastRow := page[len(page)-1]
+		filter.InclusiveMinVisibilityTimestamp = lastRow.VisibilityTimestamp
+		filter.InclusiveMinTaskID = lastRow.TaskID + 1
+	}
+	s.Equal(3, pageCount, "expected 3 pages for 5 tasks with pageSize=2")
+	s.Equal(5, len(allRows), "all rows must be returned exactly once")
+	s.Equal(tasks, allRows)
+}
+
 func (s *historyHistoryScheduledTaskSuite) now() time.Time {
 	return time.Now().UTC().Truncate(time.Millisecond)
 }
