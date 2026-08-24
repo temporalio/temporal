@@ -420,7 +420,7 @@ func TestScheduleCHASM(t *testing.T) {
 	t.Run("TestUpdateScheduleMemoOnly", func(t *testing.T) { t.Parallel(); testUpdateScheduleMemoOnly(t, newContext) })
 	t.Run("TestStateSizeBytesReported", func(t *testing.T) { t.Parallel(); testStateSizeBytesReported(t, newContext) })
 	t.Run("TestBufferOverrunDropsActions", func(t *testing.T) { t.Parallel(); testBufferOverrunDropsActions(t, newContext) })
-	t.Run("TestTimeSkippingFastForward", func(t *testing.T) { t.Parallel(); testScheduleTimeSkippingFastForward(t) })
+	t.Run("TestTimeSkippingFastForward", func(t *testing.T) { t.Parallel(); testScheduleTimeSkippingFastForward(t, newContext) })
 	t.Run("TestDescribeCatchupWindowAfterCreateAndUpdate", func(t *testing.T) {
 		t.Parallel()
 		testDescribeCatchupWindowAfterCreateAndUpdate(t)
@@ -450,14 +450,14 @@ func TestScheduleCHASM(t *testing.T) {
 	})
 }
 
-func testScheduleTimeSkippingFastForward(t *testing.T) {
+func testScheduleTimeSkippingFastForward(t *testing.T, newContext contextFactory) {
 	opts := append(
 		scheduleCommonOpts(t),
 		testcore.WithDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true),
 		testcore.WithDynamicConfig(dynamicconfig.ScheduleTimeSkippingEnabled, true),
 	)
 	s := newScheduleEnv(t, opts...)
-	ctx := chasmContextFactory(testcontext.For(t))
+	ctx := newContext(testcontext.For(t))
 
 	sid := testcore.RandomizeStr("sched-time-skipping")
 	wid := testcore.RandomizeStr("sched-time-skipping-wf")
@@ -604,6 +604,7 @@ func TestScheduleV1(t *testing.T) {
 	t.Run("TestCreatesCHASMSentinel", func(t *testing.T) { t.Parallel(); testCreatesCHASMSentinel(t, newContext) })
 	t.Run("TestSkipsCHASMSentinelWhenDisabled", func(t *testing.T) { t.Parallel(); testSkipsCHASMSentinelWhenDisabled(t, newContext) })
 	t.Run("TestUpdateScheduleMemoRejected", func(t *testing.T) { t.Parallel(); testUpdateScheduleMemoRejected(t, newContext) })
+	t.Run("TestTimeSkippingFastForward", func(t *testing.T) { t.Parallel(); testScheduleTimeSkippingFastForward(t, newContext) })
 }
 
 func runSharedScheduleTests(t *testing.T, newContext contextFactory) {

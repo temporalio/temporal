@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/historyservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
+	"go.temporal.io/server/chasm"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -68,6 +69,9 @@ func (a *activities) StartWorkflow(ctx context.Context, req *schedulespb.StartWo
 	if err := a.waitForRateLimiterPermission(req); err != nil {
 		return nil, err
 	}
+	if err := a.populateTimeSkippingPropagation(ctx, req.Request); err != nil {
+		return nil, err
+	}
 
 	req.Request.Namespace = a.namespace.String()
 
@@ -84,6 +88,38 @@ func (a *activities) StartWorkflow(ctx context.Context, req *schedulespb.StartWo
 		RunId:         res.RunId,
 		RealStartTime: timestamppb.New(now),
 	}, nil
+}
+
+func (a *activities) populateTimeSkippingPropagation(
+	ctx context.Context,
+	request *workflowservice.StartWorkflowExecutionRequest,
+) error {
+	activityInfo := activity.GetInfo(ctx)
+	response, err := a.HistoryClient.DescribeMutableState(ctx, &historyservice.DescribeMutableStateRequest{
+		NamespaceId: a.namespaceID.String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: activityInfo.WorkflowExecution.ID,
+			RunId:      activityInfo.WorkflowExecution.RunID,
+		},
+		SkipForceReload: true,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to load scheduler time-skipping state: %w", err)
+	}
+
+	mutableState := response.GetCacheMutableState()
+	if mutableState == nil {
+		mutableState = response.GetDatabaseMutableState()
+	}
+	timeSkippingInfo := mutableState.GetExecutionInfo().GetTimeSkippingInfo()
+	if timeSkippingInfo == nil {
+		request.TimeSkippingConfig = nil
+		request.TimeSkippingStatePropagation = nil
+		return nil
+	}
+	request.TimeSkippingConfig, request.TimeSkippingStatePropagation =
+		chasm.PropagateTimeSkippingToOtherExecution(timeSkippingInfo)
+	return nil
 }
 
 func (a *activities) waitForRateLimiterPermission(req *schedulespb.StartWorkflowRequest) error {
