@@ -119,7 +119,7 @@ func TestCaptureRequireContains(t *testing.T) {
 			Level:   testlogger.Error,
 			Message: "failed",
 			Tags: map[string]any{
-				"operation":     "CancelOperation", // does not match!
+				"operation":     "CancelOperation", // mismatch!
 				"attempt-start": testlogger.AnyTagValue,
 				"error":         "failure",
 			},
@@ -143,7 +143,7 @@ func TestCaptureRequireContains(t *testing.T) {
 				"operation":     "StartOperation",
 				"attempt-start": testlogger.AnyTagValue,
 				"error":         "failure",
-				"unexpected":    "value", // does not match!
+				"unexpected":    "value", // extra!
 			},
 		})
 		failure := recorder.failure.Load()
@@ -158,7 +158,7 @@ func TestCaptureRequireContains(t *testing.T) {
 		capture.RequireContains(recorder, testlogger.CapturedLogPattern{
 			Level:   testlogger.Warn,
 			Message: "missing",
-			// missing ... does not match!
+			// missing!
 		})
 		failure := recorder.failure.Load()
 		require.NotNil(t, failure)
