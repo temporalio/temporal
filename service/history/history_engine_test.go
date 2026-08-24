@@ -49,12 +49,14 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/api"
@@ -7027,4 +7029,209 @@ func addFailWorkflowEvent(
 		"",
 	)
 	return event
+}
+
+func (s *engineSuite) mockExecutionWithForeignBranchToken(
+	we *commonpb.WorkflowExecution,
+) (ownedToken []byte, foreignToken []byte) {
+	branchUtil := persistence.NewHistoryBranchUtil(serialization.NewSerializer())
+	treeID := uuid.NewString()
+	ownedBranchID := uuid.NewString()
+	foreignBranchID := uuid.NewString()
+
+	ownedBranchToken, err := branchUtil.NewHistoryBranch(
+		tests.NamespaceID.String(), we.WorkflowId, we.RunId, treeID, &ownedBranchID, nil, 0, 0, 0)
+	s.NoError(err)
+	foreignBranchToken, err := branchUtil.NewHistoryBranch(
+		tests.NamespaceID.String(), we.WorkflowId, we.RunId, treeID, &foreignBranchID, nil, 0, 0, 0)
+	s.NoError(err)
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{
+		State: &persistencespb.WorkflowMutableState{
+			ExecutionState: &persistencespb.WorkflowExecutionState{
+				State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				RunId:  we.RunId,
+			},
+			NextEventId: 5,
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+				NamespaceId: tests.NamespaceID.String(),
+				WorkflowId:  we.WorkflowId,
+				VersionHistories: &historyspb.VersionHistories{
+					CurrentVersionHistoryIndex: 0,
+					Histories: []*historyspb.VersionHistory{
+						{
+							BranchToken: ownedBranchToken,
+							Items: []*historyspb.VersionHistoryItem{
+								{EventId: 4, Version: 0},
+							},
+						},
+					},
+				},
+			},
+		},
+		MutableStateStats: persistence.MutableStateStatistics{},
+	}, nil).AnyTimes()
+
+	return ownedBranchToken, foreignBranchToken
+}
+
+func (s *engineSuite) getHistoryRequestWithPageToken(
+	we *commonpb.WorkflowExecution,
+	continuation *tokenspb.HistoryContinuation,
+	waitNewEvent bool,
+) *historyservice.GetWorkflowExecutionHistoryRequest {
+	nextPageToken, err := api.SerializeHistoryToken(continuation)
+	s.NoError(err)
+	return &historyservice.GetWorkflowExecutionHistoryRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		Request: &workflowservice.GetWorkflowExecutionHistoryRequest{
+			Execution:              we,
+			MaximumPageSize:        10,
+			NextPageToken:          nextPageToken,
+			WaitNewEvent:           waitNewEvent,
+			HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT,
+			SkipArchival:           true,
+		},
+	}
+}
+
+// expectHistoryReadWithBranchToken allows the history read and pins the branch token it is issued with.
+func (s *engineSuite) expectHistoryReadWithBranchToken(branchToken []byte) {
+	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).
+		Return(searchattribute.TestNameTypeMap(), nil).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().GetIndexName().Return(esIndexName).AnyTimes()
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.ReadHistoryBranchRequest) (*persistence.ReadHistoryBranchResponse, error) {
+			s.Equal(branchToken, request.BranchToken)
+			return &persistence.ReadHistoryBranchResponse{HistoryEvents: []*historypb.HistoryEvent{}}, nil
+		},
+	).MinTimes(1)
+}
+
+func (s *engineSuite) TestGetWorkflowExecutionHistory_BranchTokenNotOwnedByExecution() {
+	we := commonpb.WorkflowExecution{WorkflowId: "wid-foreign-branch", RunId: uuid.NewString()}
+
+	engine, err := s.historyEngine.shardContext.GetEngine(context.Background())
+	s.NoError(err)
+
+	s.config.EnablePaginationTokenBranchValidationShadowMode = dynamicconfig.GetBoolPropertyFn(false)
+	_, foreignBranchToken := s.mockExecutionWithForeignBranchToken(&we)
+	req := s.getHistoryRequestWithPageToken(&we, &tokenspb.HistoryContinuation{
+		RunId:             we.GetRunId(),
+		FirstEventId:      common.FirstEventID,
+		NextEventId:       5,
+		PersistenceToken:  []byte("some random persistence token"),
+		BranchToken:       foreignBranchToken,
+		IsWorkflowRunning: true,
+	}, false)
+
+	// The history read must never be attempted, on either the decoded or the raw path.
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Times(0)
+	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Times(0)
+
+	for _, sendRawHistory := range []bool{false, true} {
+		s.config.SendRawWorkflowHistory = func(string) bool { return sendRawHistory }
+		_, err = engine.GetWorkflowExecutionHistory(context.Background(), req)
+		var branchErr *serviceerrors.CurrentBranchChanged
+		s.ErrorAs(err, &branchErr, "sendRawHistory=%v", sendRawHistory)
+	}
+}
+
+func (s *engineSuite) TestGetWorkflowExecutionHistory_ForeignBranchTokenServedWhenNotEnforcing() {
+	we := commonpb.WorkflowExecution{WorkflowId: "wid-foreign-branch-served", RunId: uuid.NewString()}
+
+	engine, err := s.historyEngine.shardContext.GetEngine(context.Background())
+	s.NoError(err)
+
+	s.config.SendRawWorkflowHistory = func(string) bool { return false }
+	_, foreignBranchToken := s.mockExecutionWithForeignBranchToken(&we)
+	// Not enforcing reads with the caller's token, exactly as before validation existed.
+	s.expectHistoryReadWithBranchToken(foreignBranchToken)
+
+	for _, tc := range []struct {
+		name       string
+		validation bool
+		shadow     bool
+	}{
+		{name: "shadow mode", validation: true, shadow: true},
+		{name: "validation disabled", validation: false, shadow: false},
+	} {
+		s.config.EnablePaginationTokenBranchValidation = dynamicconfig.GetBoolPropertyFn(tc.validation)
+		s.config.EnablePaginationTokenBranchValidationShadowMode = dynamicconfig.GetBoolPropertyFn(tc.shadow)
+		_, err = engine.GetWorkflowExecutionHistory(
+			context.Background(),
+			s.getHistoryRequestWithPageToken(&we, &tokenspb.HistoryContinuation{
+				RunId:             we.GetRunId(),
+				FirstEventId:      common.FirstEventID,
+				NextEventId:       5,
+				PersistenceToken:  []byte("some random persistence token"),
+				BranchToken:       foreignBranchToken,
+				IsWorkflowRunning: true,
+			}, false),
+		)
+		s.NoError(err, tc.name)
+	}
+}
+
+func (s *engineSuite) TestGetWorkflowExecutionHistory_LongPollDiscardsRequestBranchToken() {
+	we := commonpb.WorkflowExecution{WorkflowId: "wid-longpoll-overwrite", RunId: uuid.NewString()}
+
+	engine, err := s.historyEngine.shardContext.GetEngine(context.Background())
+	s.NoError(err)
+
+	s.config.EnablePaginationTokenBranchValidationShadowMode = dynamicconfig.GetBoolPropertyFn(false)
+	s.config.SendRawWorkflowHistory = func(string) bool { return false }
+	ownedBranchToken, foreignBranchToken := s.mockExecutionWithForeignBranchToken(&we)
+	s.expectHistoryReadWithBranchToken(ownedBranchToken)
+
+	// An empty persistence token and a next event ID behind mutable state select the long poll
+	// refresh, which replaces the caller's branch token instead of validating it.
+	req := s.getHistoryRequestWithPageToken(&we, &tokenspb.HistoryContinuation{
+		RunId:             we.GetRunId(),
+		FirstEventId:      common.FirstEventID,
+		NextEventId:       2,
+		PersistenceToken:  nil,
+		BranchToken:       foreignBranchToken,
+		IsWorkflowRunning: true,
+	}, true)
+
+	_, err = engine.GetWorkflowExecutionHistory(context.Background(), req)
+	s.NoError(err)
+}
+
+func (s *engineSuite) TestGetWorkflowExecutionHistoryReverse_BranchTokenNotOwnedByExecution() {
+	we := commonpb.WorkflowExecution{WorkflowId: "wid-foreign-branch-reverse", RunId: uuid.NewString()}
+
+	engine, err := s.historyEngine.shardContext.GetEngine(context.Background())
+	s.NoError(err)
+
+	s.config.EnablePaginationTokenBranchValidationShadowMode = dynamicconfig.GetBoolPropertyFn(false)
+	_, foreignBranchToken := s.mockExecutionWithForeignBranchToken(&we)
+
+	nextPageToken, err := api.SerializeHistoryToken(&tokenspb.HistoryContinuation{
+		RunId:            we.GetRunId(),
+		FirstEventId:     common.FirstEventID,
+		NextEventId:      5,
+		PersistenceToken: []byte("some random persistence token"),
+		BranchToken:      foreignBranchToken,
+	})
+	s.NoError(err)
+
+	// The history read must never be attempted.
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranchReverse(gomock.Any(), gomock.Any()).Times(0)
+
+	_, err = engine.GetWorkflowExecutionHistoryReverse(
+		context.Background(),
+		&historyservice.GetWorkflowExecutionHistoryReverseRequest{
+			NamespaceId: tests.NamespaceID.String(),
+			Request: &workflowservice.GetWorkflowExecutionHistoryReverseRequest{
+				Execution:       &we,
+				MaximumPageSize: 10,
+				NextPageToken:   nextPageToken,
+			},
+		},
+	)
+	var branchErr *serviceerrors.CurrentBranchChanged
+	s.ErrorAs(err, &branchErr)
 }
