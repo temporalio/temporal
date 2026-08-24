@@ -2700,6 +2700,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure(chasmEnabled
 		Level:   testlogger.Error,
 		Message: "Nexus StartOperation request failed",
 		Tags: map[string]any{
+			"component":                          "nexus-caller",
 			"operation":                          "StartOperation",
 			"wf-namespace":                       env.Namespace().String(),
 			"nexus-endpoint-target-namespace-id": "",

@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -182,20 +183,31 @@ func TestInitializationFallback(t *testing.T) {
 	testEndpoint := newEndpointEntry(t.Name())
 	mocks := newTestMocks(t)
 
-	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewUnavailable("matching unavailable test error")).MinTimes(1)
+	matchingErr := serviceerror.NewUnavailable("matching unavailable test error")
+	mocks.matchingClient.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(nil, matchingErr).MinTimes(1)
 	mocks.persistence.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(&persistence.ListNexusEndpointsResponse{
 		TableVersion:  int64(1),
 		NextPageToken: nil,
 		Entries:       []*persistencespb.NexusEndpointEntry{testEndpoint},
 	}, nil)
 
-	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.NewNoopLogger(), metrics.NoopMetricsHandler)
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+	capture := logger.StartCapture()
+	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, logger, metrics.NoopMetricsHandler)
 	reg.StartLifecycle()
 	defer reg.StopLifecycle()
 
 	endpoint, err := reg.GetByID(context.Background(), testEndpoint.Id)
 	require.NoError(t, err)
 	protoassert.ProtoEqual(t, testEndpoint, endpoint)
+	capture.RequireContains(t, testlogger.CapturedLogPattern{
+		Level:   testlogger.Error,
+		Message: "error from matching when initializing Nexus endpoint cache",
+		Tags: map[string]any{
+			"component": "nexus-registry",
+			"error":     matchingErr.Error(),
+		},
+	})
 
 	reg.dataLock.RLock()
 	defer reg.dataLock.RUnlock()

@@ -99,7 +99,7 @@ func NewEndpointRegistry(
 		endpointsByName: make(map[string]*persistencespb.NexusEndpointEntry),
 		matchingClient:  matchingClient,
 		persistence:     persistence,
-		logger:          logger,
+		logger:          log.With(logger, tag.ComponentNexusRegistry),
 		readThroughCacheByID: cache.NewWithMetrics(config.readThroughCacheSize(), &cache.Options{
 			TTL: config.readThroughCacheTTL(),
 		}, metricsHandler.WithTags(metrics.CacheTypeTag(metrics.NexusEndpointRegistryReadThroughCacheTypeTagValue))),

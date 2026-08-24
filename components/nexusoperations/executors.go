@@ -75,6 +75,7 @@ func RegisterExecutor(
 	registry *hsm.Registry,
 	options TaskExecutorOptions,
 ) error {
+	options.Logger = log.With(options.Logger, tag.ComponentNexusCaller)
 	exec := taskExecutor{options}
 	if err := hsm.RegisterImmediateExecutor(
 		registry,

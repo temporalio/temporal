@@ -142,6 +142,7 @@ func (h *NexusOperationHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w h
 	params := prepareRequest(commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue, w, r)
 	logger := log.With(
 		h.logger,
+		tag.ComponentNexusInbound,
 		tag.WorkflowNamespace(params.Namespace),
 		tag.NexusTaskQueueName(params.TaskQueue),
 	)
@@ -183,7 +184,7 @@ func (h *NexusOperationHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w h
 // Handler for [nexushttp.RouteSet.DispatchNexusTaskByEndpoint].
 func (h *NexusOperationHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseWriter, r *http.Request) {
 	endpointIDEscaped := prepareRequest(commonnexus.RouteDispatchNexusTaskByEndpoint, w, r)
-	logger := log.With(h.logger, tag.NexusEndpointID(endpointIDEscaped))
+	logger := log.With(h.logger, tag.ComponentNexusInbound, tag.NexusEndpointID(endpointIDEscaped))
 
 	endpointID, err := url.PathUnescape(endpointIDEscaped)
 	if err != nil {

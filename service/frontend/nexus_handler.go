@@ -329,6 +329,7 @@ func (c *operationContext) enrichNexusOperationMetrics(service, operation string
 // enrichNexusOperationLogs adds Nexus operation context to the handler-side logger.
 func (c *operationContext) enrichNexusOperationLogs(service, operation, requestID string) {
 	tags := []tag.Tag{
+		tag.ComponentNexusInbound,
 		tag.NexusService(service),
 		tag.NexusOperation(operation),
 		tag.Endpoint(c.endpointName),
@@ -635,6 +636,7 @@ func (h *nexusHandler) forwardStartOperation(
 
 	if h.httpTraceProvider != nil {
 		traceLogger := log.With(h.logger,
+			tag.ComponentNexusInbound,
 			tag.Operation(oc.method),
 			tag.WorkflowNamespace(oc.namespaceName),
 			tag.RequestID(options.RequestID),
@@ -774,6 +776,7 @@ func (h *nexusHandler) forwardCancelOperation(
 
 	if h.httpTraceProvider != nil {
 		traceLogger := log.With(h.logger,
+			tag.ComponentNexusInbound,
 			tag.Operation(oc.method),
 			tag.WorkflowNamespace(oc.namespaceName),
 			tag.NexusOperation(operation),
