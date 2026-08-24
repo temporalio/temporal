@@ -1,8 +1,6 @@
 package nexus
 
 import (
-	"fmt"
-
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/temporalnexus"
@@ -21,8 +19,10 @@ func ConvertNexusLinksToProtoLinks(nexusLinks []nexus.Link, logger log.Logger) [
 			link, err := ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
 			if err != nil {
 				logger.Warn(
-					fmt.Sprintf("failed to parse link to %q: %s", nexusLink.Type, nexusLink.URL),
+					"failed to parse Nexus link",
 					tag.Error(err),
+					tag.NewStringTag("nexus-link-type", nexusLink.Type),
+					tag.URL(nexusLink.URL.String()),
 				)
 				continue
 			}
@@ -33,8 +33,10 @@ func ConvertNexusLinksToProtoLinks(nexusLinks []nexus.Link, logger log.Logger) [
 			link, err := ConvertNexusLinkToLinkActivity(nexusLink)
 			if err != nil {
 				logger.Warn(
-					fmt.Sprintf("failed to parse link to %q: %s", nexusLink.Type, nexusLink.URL),
+					"failed to parse Nexus link",
 					tag.Error(err),
+					tag.NewStringTag("nexus-link-type", nexusLink.Type),
+					tag.URL(nexusLink.URL.String()),
 				)
 				continue
 			}
@@ -54,7 +56,9 @@ func ConvertNexusLinksToProtoLinks(nexusLinks []nexus.Link, logger log.Logger) [
 				Variant: &commonpb.Link_Workflow_{Workflow: link},
 			})
 		default:
-			logger.Warn(fmt.Sprintf("invalid link data type: %q", nexusLink.Type))
+			logger.Warn("invalid Nexus link data type",
+				tag.NewStringTag("nexus-link-type", nexusLink.Type),
+			)
 		}
 	}
 	return out
