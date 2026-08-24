@@ -14,7 +14,7 @@
 /chasm/lib/nexusoperation/ @temporalio/act @temporalio/nexus
 /chasm/lib/callback/ @temporalio/act @temporalio/nexus
 /chasm/lib/workflow/nexus_* @temporalio/act @temporalio/nexus
-/chasm/nexus_* @temporalio/nexus
+/chasm/nexus_* @temporalio/act @temporalio/nexus
 
 # Service Clients
 
