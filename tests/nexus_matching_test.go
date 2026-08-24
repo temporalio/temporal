@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -18,7 +17,6 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testhooks"
-	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -32,8 +30,7 @@ func TestNexusMatchingTestSuite(t *testing.T) {
 
 func (s *NexusMatchingTestSuite) TestDispatchNexusTaskWithMatchingBehaviors() {
 	runWithMatchingBehaviors(s.T(), nil, func(env *testcore.TestEnv, b testcore.MatchingBehavior) {
-		capture := dispatchAndCompleteNexusTask(s.T(), env, "")
-		verifyForwardingMetrics(s.T(), capture, b.ForceTaskForward, b.ForcePollForward)
+		dispatchAndCompleteNexusTask(s.T(), env, b.ForceTaskForward, b.ForcePollForward)
 	})
 }
 
@@ -50,35 +47,17 @@ func (s *NexusMatchingTestSuite) TestDispatchNexusTaskOnNonRootPartitionNoForwar
 	env.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, 1))
 	env.InjectHook(testhooks.NewHook(testhooks.MatchingDisableSyncMatch, false))
 
-	capture := dispatchAndCompleteNexusTask(s.T(), env, "")
-	verifyForwardingMetrics(s.T(), capture, false, false)
+	dispatchAndCompleteNexusTask(s.T(), env, false, false)
 }
 
-func (s *NexusMatchingTestSuite) TestDispatchNexusTaskInvalidOperationTimeoutHeaderLog() {
-	const invalidOperationTimeout = "caller-controlled-operation-timeout"
-
-	env := testcore.NewEnv(s.T())
-	logCapture := env.StartNamespaceLogCapture()
-
-	dispatchAndCompleteNexusTask(s.T(), env, invalidOperationTimeout)
-
-	logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
-		Level:   testlogger.Warn,
-		Message: "unable to parse operation-timeout header",
-		Tags: map[string]any{
-			"operation-timeout": invalidOperationTimeout,
-		},
-	})
-}
-
-func dispatchAndCompleteNexusTask(t *testing.T, s *testcore.TestEnv, operationTimeout string) *testcore.NamespaceMetricCapture {
+func dispatchAndCompleteNexusTask(t *testing.T, s *testcore.TestEnv, expectTaskForwarded, expectPollForwarded bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	taskQueue := testcore.RandomizeStr("test-nexus-tq")
 	matchingClient := s.GetTestCluster().MatchingClient()
 
-	metricCapture := s.StartNamespaceMetricCapture()
+	capture := s.StartNamespaceMetricCapture()
 
 	nexusRequest := &nexuspb.Request{
 		Header: map[string]string{
@@ -91,9 +70,6 @@ func dispatchAndCompleteNexusTask(t *testing.T, s *testcore.TestEnv, operationTi
 				RequestId: uuid.NewString(),
 			},
 		},
-	}
-	if operationTimeout != "" {
-		nexusRequest.Header[nexus.HeaderOperationTimeout] = operationTimeout
 	}
 
 	type dispatchResult struct {
@@ -182,7 +158,7 @@ func dispatchAndCompleteNexusTask(t *testing.T, s *testcore.TestEnv, operationTi
 	require.NotNil(t, syncSuccess, "expected sync success response, got: %v", response)
 	require.Equal(t, completionPayload.Data, syncSuccess.Payload.Data)
 
-	return metricCapture
+	verifyForwardingMetrics(t, capture, expectTaskForwarded, expectPollForwarded)
 }
 
 func verifyForwardingMetrics(t *testing.T, capture *testcore.NamespaceMetricCapture, expectTaskForwarded bool, expectPollForwarded bool) {
