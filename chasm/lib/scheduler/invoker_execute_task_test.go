@@ -15,6 +15,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/chasmtest"
@@ -26,6 +27,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -475,6 +477,68 @@ func TestExecuteTask_UsesBufferedOverlapPolicy(t *testing.T) {
 			require.Equal(t, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL, invoker.BufferedStarts[0].GetOverlapPolicy())
 		},
 	})
+}
+
+func TestExecuteTask_PropagatesScheduleTimeSkipping(t *testing.T) {
+	tests := []struct {
+		name         string
+		disable      bool
+		expectConfig bool
+	}{
+		{name: "propagates without fast forward", expectConfig: true},
+		{name: "disable propagation", disable: true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newInvokerExecuteTestEnv(t)
+			config := &commonpb.TimeSkippingConfig{
+				Enabled:            true,
+				DisablePropagation: tc.disable,
+				FastForwardConfig: &commonpb.FastForwardConfig{
+					Id:       "schedule-fast-forward",
+					Duration: durationpb.New(5 * time.Hour),
+				},
+			}
+			env.Scheduler.Schedule.TimeSkippingConfig = config
+			env.NodeBackend.HandleGetExecutionInfo = func() *persistencespb.WorkflowExecutionInfo {
+				return &persistencespb.WorkflowExecutionInfo{
+					TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+						Config:                     config,
+						AccumulatedSkippedDuration: durationpb.New(2 * time.Hour),
+					},
+				}
+			}
+			startTime := timestamppb.New(env.TimeSource.Now())
+
+			env.mockFrontendClient.EXPECT().
+				StartWorkflowExecution(gomock.Any(), gomock.Any()).
+				DoAndReturn(func(_ context.Context, request *workflowservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*workflowservice.StartWorkflowExecutionResponse, error) {
+					if tc.expectConfig {
+						require.True(t, request.GetTimeSkippingConfig().GetEnabled())
+						require.Nil(t, request.GetTimeSkippingConfig().GetFastForwardConfig())
+					} else {
+						require.Nil(t, request.GetTimeSkippingConfig())
+					}
+					require.Equal(t, 2*time.Hour, request.GetTimeSkippingStatePropagation().GetInitialSkippedDuration().AsDuration())
+					require.Zero(t, request.GetTimeSkippingStatePropagation().GetInitialSkipCount())
+					return &workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil
+				})
+
+			runExecuteTestCase(t, env, &executeTestCase{
+				InitialBufferedStarts: []*schedulespb.BufferedStart{{
+					NominalTime:   startTime,
+					ActualTime:    startTime,
+					DesiredTime:   startTime,
+					RequestId:     "request-id",
+					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+					Attempt:       1,
+				}},
+				ExpectedBufferedStarts:   1,
+				ExpectedRunningWorkflows: 1,
+				ExpectedActionCount:      1,
+			})
+		})
+	}
 }
 
 // Execute is scheduled with an empty buffer.

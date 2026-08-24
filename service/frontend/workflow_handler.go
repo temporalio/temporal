@@ -113,6 +113,7 @@ const (
 	maxReasonLength              = 1000 // Maximum length for the reason field in RateLimitUpdate configurations.
 	defaultUserTerminateReason   = "terminated by user via frontend"
 	defaultUserTerminateIdentity = "frontend-service"
+	maxScheduleFastForward       = 365 * 24 * time.Hour
 )
 
 type (
@@ -706,6 +707,8 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 
+	// TODO(time-skipping): Accept TimeSkippingStatePropagation only from trusted server callers such as
+	// schedules starting workflows; external clients must not be allowed to set this internal field.
 	if err := wh.validateAndPopulateTimeSkippingConfig(request.GetTimeSkippingConfig(), namespaceName); err != nil {
 		return nil, err
 	}
@@ -742,6 +745,35 @@ func (wh *WorkflowHandler) validateAndPopulateTimeSkippingConfig(
 			return serviceerror.NewInvalidArgument("time_skipping_config: cannot set fast_forward when enabled is false")
 		}
 		return nil
+	}
+	return nil
+}
+
+func (wh *WorkflowHandler) validateAndPopulateScheduleTimeSkippingConfig(
+	schedule *schedulepb.Schedule,
+	ns namespace.Name,
+) error {
+	config := schedule.GetTimeSkippingConfig()
+	if config == nil {
+		return nil
+	}
+	if !wh.config.ScheduleTimeSkippingEnabled(ns.String()) {
+		return errScheduleTimeSkippingNotEnabled
+	}
+	if err := wh.validateAndPopulateTimeSkippingConfig(config, ns); err != nil {
+		return err
+	}
+	if !config.GetEnabled() {
+		return nil
+	}
+	fastForward := config.GetFastForwardConfig()
+	if fastForward == nil {
+		return serviceerror.NewInvalidArgument(
+			"schedule time_skipping_config: fast_forward_config is required when enabled")
+	}
+	if fastForward.GetDuration().AsDuration() > maxScheduleFastForward {
+		return serviceerror.NewInvalidArgument(
+			"schedule time_skipping_config: fast_forward duration cannot exceed 365 days")
 	}
 	return nil
 }
@@ -3908,6 +3940,9 @@ func (wh *WorkflowHandler) CreateSchedule(
 	if err != nil {
 		return nil, err
 	}
+	if err = wh.validateAndPopulateScheduleTimeSkippingConfig(request.Schedule, namespaceName); err != nil {
+		return nil, err
+	}
 
 	if err = wh.validateStartWorkflowArgsForSchedule(namespaceName, request.GetSchedule().GetAction().GetStartWorkflow()); err != nil {
 		return nil, err
@@ -4721,6 +4756,9 @@ func (wh *WorkflowHandler) UpdateSchedule(
 	}
 	err := wh.canonicalizeScheduleSpec(request.Schedule, namespaceName.String())
 	if err != nil {
+		return nil, err
+	}
+	if err = wh.validateAndPopulateScheduleTimeSkippingConfig(request.Schedule, namespaceName); err != nil {
 		return nil, err
 	}
 
