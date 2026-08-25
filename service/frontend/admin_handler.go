@@ -402,8 +402,7 @@ func (adh *AdminHandler) unaliasAndValidateSearchAttributes(historyBatches []*co
 
 			unaliasedSas, err := searchattribute.UnaliasFields(adh.saMapperProvider, sas, nsName.String())
 			if err != nil {
-				var invArgErr *serviceerror.InvalidArgument
-				if !errors.As(err, &invArgErr) {
+				if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); !ok {
 					return nil, err
 				}
 				// Mapper returns InvalidArgument if alias is not found. It means that history has field names, not aliases.
