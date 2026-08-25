@@ -320,7 +320,8 @@ func GrpcServerOptionsProvider(
 		// TODO: Deprecate WithChainedFrontendGrpcInterceptors and provide a inner custom interceptor
 		unaryInterceptors = append(unaryInterceptors, customInterceptors...)
 	}
-	if faultInterceptor := faultinjection.GRPCUnaryServerInterceptor(testHooks); faultInterceptor != nil {
+	faultGenerator := faultinjection.NewTestHookGenerator(testHooks)
+	if faultInterceptor := faultinjection.GRPCUnaryServerInterceptor(faultGenerator); faultInterceptor != nil {
 		unaryInterceptors = append(unaryInterceptors, faultInterceptor)
 	}
 	// retry interceptor should be the most inner interceptor

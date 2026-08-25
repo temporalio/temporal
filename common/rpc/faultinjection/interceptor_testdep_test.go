@@ -18,7 +18,7 @@ import (
 func TestGRPCUnaryServerInterceptor_NoGenerator(t *testing.T) {
 	t.Parallel()
 
-	interceptor := GRPCUnaryServerInterceptor(testhooks.NewTestHooks())
+	interceptor := GRPCUnaryServerInterceptor(NewTestHookGenerator(testhooks.NewTestHooks()))
 	response, err := interceptor(
 		context.Background(),
 		"request",
@@ -41,7 +41,7 @@ func TestGRPCUnaryServerInterceptor_BeforeHandler(t *testing.T) {
 	generator.RegisterRequestCallback(RPCFaultScope{NamespaceID: "namespace-id"}, func(context.Context, string, any) (bool, any, error) {
 		return true, nil, injectedErr
 	})
-	interceptor := GRPCUnaryServerInterceptor(testHooks)
+	interceptor := GRPCUnaryServerInterceptor(NewTestHookGenerator(testHooks))
 	handlerCalled := false
 
 	response, err := interceptor(
@@ -67,7 +67,7 @@ func TestGRPCUnaryServerInterceptor_AfterHandler(t *testing.T) {
 	generator.RegisterResponseCallback(RPCFaultScope{NamespaceName: "namespace-name"}, func(context.Context, string, any, any, error) (bool, any, error) {
 		return true, "replacement", nil
 	})
-	interceptor := GRPCUnaryServerInterceptor(testHooks)
+	interceptor := GRPCUnaryServerInterceptor(NewTestHookGenerator(testHooks))
 
 	response, err := interceptor(
 		context.Background(),
@@ -94,7 +94,7 @@ func TestGRPCUnaryServerInterceptor_HandlerError(t *testing.T) {
 		require.ErrorIs(t, err, handlerErr)
 		return true, nil, injectedErr
 	})
-	interceptor := GRPCUnaryServerInterceptor(testHooks)
+	interceptor := GRPCUnaryServerInterceptor(NewTestHookGenerator(testHooks))
 	handlerCalled := false
 
 	response, err := interceptor(
