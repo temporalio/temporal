@@ -244,7 +244,6 @@ func TestInsertAssignmentRuleMaxRules(t *testing.T) {
 
 	// insert fourth --> error
 	_, err = insertAssignmentRule(mkAssignmentRuleWithoutRamp("1"), data, clock, 0, maxRules)
-	require.Error(t, err)
 	require.Equal(t, errExceedsMaxAssignmentRules(4, maxRules), err)
 }
 
@@ -256,7 +255,6 @@ func TestInsertAssignmentRuleInVersionSet(t *testing.T) {
 
 	// target 0 --> failure
 	_, err := insertAssignmentRule(mkAssignmentRuleWithoutRamp("0"), data, clock, 0, ignoreMaxRules)
-	require.Error(t, err)
 	require.Equal(t, errTargetIsVersionSetMember, err)
 }
 
@@ -268,7 +266,6 @@ func TestInsertAssignmentRulePartiallyRampedRuleIsRedirectSource(t *testing.T) {
 
 	// insert 1 --> failure
 	_, err = insertAssignmentRule(mkAssignmentRuleWithRamp("0", 10), data, clock, 0, ignoreMaxRules)
-	require.Error(t, err)
 	require.Equal(t, errPartiallyRampedAssignmentRuleIsRedirectRuleSource, err)
 }
 
@@ -279,7 +276,6 @@ func TestInsertAssignmentRuleInvalidNegativeIndex(t *testing.T) {
 
 	// insert @ -1 --> failure
 	_, err := insertAssignmentRule(mkAssignmentRuleWithoutRamp("0"), data, clock, -1, ignoreMaxRules)
-	require.Error(t, err)
 	require.Equal(t, errInvalidNegativeIndex, err)
 }
 
@@ -290,12 +286,10 @@ func TestInsertAssignmentRuleInvalidRampPercentage(t *testing.T) {
 
 	// insert with ramp percent < 0 --> failure
 	_, err := insertAssignmentRule(mkAssignmentRuleWithRamp("0", -1), data, clock, 0, ignoreMaxRules)
-	require.Error(t, err)
 	require.Equal(t, errInvalidRampPercentage, err)
 
 	// insert with ramp percent > 100 --> failure
 	_, err = insertAssignmentRule(mkAssignmentRuleWithRamp("0", 101), data, clock, 0, ignoreMaxRules)
-	require.Error(t, err)
 	require.Equal(t, errInvalidRampPercentage, err)
 }
 
@@ -369,7 +363,6 @@ func TestReplaceAssignmentRuleInVersionSet(t *testing.T) {
 
 	// replace 0 --> failure
 	_, err = replaceAssignmentRule(mkAssignmentRuleWithoutRamp("0"), data, clock, 0, false)
-	require.Error(t, err)
 	require.Equal(t, errTargetIsVersionSetMember, err)
 }
 
@@ -387,7 +380,6 @@ func TestReplaceAssignmentRulePartiallyRampedRuleIsRedirectSource(t *testing.T) 
 
 	// replace with target isSource and ramp < 100 --> failure
 	_, err := replaceAssignmentRule(mkAssignmentRuleWithRamp("0", 10), data, clock, 0, false)
-	require.Error(t, err)
 	require.Equal(t, errPartiallyRampedAssignmentRuleIsRedirectRuleSource, err)
 }
 
@@ -405,7 +397,6 @@ func TestReplaceAssignmentRuleTestRequireFullyRamped(t *testing.T) {
 		mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("1"), clock, nil),
 	}
 	_, err = replaceAssignmentRule(mkAssignmentRuleWithRamp("2", 20), data, clock, 0, false)
-	require.Error(t, err)
 	require.Equal(t, errRequireFullyRampedAssignmentRule, err)
 
 	// same as above but with force --> success
@@ -423,12 +414,10 @@ func TestReplaceAssignmentRuleIndexOutOfBounds(t *testing.T) {
 
 	// replace @ -1 --> failure
 	_, err := replaceAssignmentRule(mkAssignmentRuleWithoutRamp("0"), data, clock, -1, false)
-	require.Error(t, err)
 	require.Equal(t, errAssignmentRuleIndexOutOfBounds(-1, len(data.AssignmentRules)), err)
 
 	// replace @ 1 --> failure
 	_, err = replaceAssignmentRule(mkAssignmentRuleWithoutRamp("0"), data, clock, 1, false)
-	require.Error(t, err)
 	require.Equal(t, errAssignmentRuleIndexOutOfBounds(1, len(data.AssignmentRules)), err)
 }
 
@@ -442,12 +431,10 @@ func TestReplaceAssignmentRuleInvalidRampPercentage(t *testing.T) {
 
 	// replace with ramp percent < 0 --> failure
 	_, err := replaceAssignmentRule(mkAssignmentRuleWithRamp("0", -1), data, clock, 0, false)
-	require.Error(t, err)
 	require.Equal(t, errInvalidRampPercentage, err)
 
 	// replace with ramp percent > 100 --> failure
 	_, err = replaceAssignmentRule(mkAssignmentRuleWithRamp("0", 101), data, clock, 0, false)
-	require.Error(t, err)
 	require.Equal(t, errInvalidRampPercentage, err)
 }
 
@@ -508,7 +495,6 @@ func TestDeleteAssignmentRuleTestRequireFullyRamped(t *testing.T) {
 		mkAssignmentRulePersistence(mkAssignmentRuleWithoutRamp("1"), clock, nil),
 	}
 	_, err = deleteAssignmentRule(data, clock, 0, false)
-	require.Error(t, err)
 	require.Equal(t, errRequireFullyRampedAssignmentRule, err)
 
 	// same as above but with force --> success
@@ -534,12 +520,10 @@ func TestDeleteAssignmentRuleIndexOutOfBounds(t *testing.T) {
 
 	// delete @ -1 --> failure
 	_, err := deleteAssignmentRule(data, clock, -1, false)
-	require.Error(t, err)
 	require.Equal(t, errAssignmentRuleIndexOutOfBounds(-1, len(data.AssignmentRules)), err)
 
 	// delete @ 1 --> failure
 	_, err = deleteAssignmentRule(data, clock, 1, false)
-	require.Error(t, err)
 	require.Equal(t, errAssignmentRuleIndexOutOfBounds(1, len(data.AssignmentRules)), err)
 }
 
@@ -553,25 +537,19 @@ func TestAddRedirectRuleBasic(t *testing.T) {
 	data, err := insertRedirectRule(rule1, initialData, clock, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
 	require.NoError(t, err)
 	expectedSet = append(expectedSet, mkRedirectRulePersistence(rule1, clock, nil))
-	for _, r := range data.RedirectRules {
-		require.Contains(t, expectedSet, r)
-	}
+	protorequire.ProtoElementsMatch(t, expectedSet, data.RedirectRules)
 
 	rule2 := mkRedirectRule("2", "0")
 	data, err = insertRedirectRule(rule2, data, clock, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
 	require.NoError(t, err)
 	expectedSet = append(expectedSet, mkRedirectRulePersistence(rule2, clock, nil))
-	for _, r := range data.RedirectRules {
-		require.Contains(t, expectedSet, r)
-	}
+	protorequire.ProtoElementsMatch(t, expectedSet, data.RedirectRules)
 
 	rule3 := mkRedirectRule("3", "0")
 	data, err = insertRedirectRule(rule3, data, clock, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
 	require.NoError(t, err)
 	expectedSet = append(expectedSet, mkRedirectRulePersistence(rule3, clock, nil))
-	for _, r := range data.RedirectRules {
-		require.Contains(t, expectedSet, r)
-	}
+	protorequire.ProtoElementsMatch(t, expectedSet, data.RedirectRules)
 
 	protorequire.ProtoEqual(t, mkInitialData(0, clock), initialData)
 }
@@ -593,7 +571,6 @@ func TestAddRedirectRuleMaxRules(t *testing.T) {
 
 	// insert fourth --> error
 	_, err = insertRedirectRule(mkRedirectRule("10", "20"), data, clock, maxRules, ignoreMaxUpstreamBuildIDs)
-	require.Error(t, err)
 	require.Equal(t, errExceedsMaxRedirectRules(4, maxRules), err)
 }
 
@@ -605,12 +582,10 @@ func TestAddRedirectRuleInVersionSet(t *testing.T) {
 
 	// insert with source build id "0" --> failure
 	_, err := insertRedirectRule(mkRedirectRule("0", "1"), initialData, clock, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
-	require.Error(t, err)
 	require.Equal(t, errSourceIsVersionSetMember, err)
 
 	// insert with target build id "0" --> failure
 	_, err = insertRedirectRule(mkRedirectRule("1", "0"), initialData, clock, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
-	require.Error(t, err)
 	require.Equal(t, errTargetIsVersionSetMember, err)
 }
 
@@ -625,7 +600,6 @@ func TestAddRedirectRuleSourceIsPartiallyRampedAssignmentRuleTarget(t *testing.T
 
 	// insert redirect rule with target 1 --> failure
 	_, err := insertRedirectRule(mkRedirectRule("1", "0"), data, clock, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
-	require.Error(t, err)
 	require.Equal(t, errSourceIsPartiallyRampedAssignmentRuleTarget, err)
 }
 
@@ -640,7 +614,6 @@ func TestAddRedirectRuleAlreadyExists(t *testing.T) {
 
 	// insert with source build id "0" --> failure
 	_, err = insertRedirectRule(mkRedirectRule("0", "6"), data, clock, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
-	require.Error(t, err)
 	require.Equal(t, errSourceAlreadyExists("0", "1"), err)
 }
 
@@ -651,7 +624,6 @@ func TestAddRedirectRuleCreateCycle(t *testing.T) {
 
 	// insert with source -> target == "0" -> "0" --> failure
 	_, err := insertRedirectRule(mkRedirectRule("0", "0"), initialData, clock, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
-	require.Error(t, err)
 	require.Equal(t, errIsCyclic, err)
 
 	// insert with source -> target == "0" -> "1" --> success
@@ -660,7 +632,6 @@ func TestAddRedirectRuleCreateCycle(t *testing.T) {
 
 	// insert with source build id "1" -> "0" --> failure
 	_, err = insertRedirectRule(mkRedirectRule("1", "0"), data, clock, ignoreMaxRules, ignoreMaxUpstreamBuildIDs)
-	require.Error(t, err)
 	require.Equal(t, errIsCyclic, err)
 }
 
@@ -683,7 +654,6 @@ func TestAddRedirectRuleMaxUpstreamBuildIDs(t *testing.T) {
 	// insert (6->7)
 	// 4 ---> 5 ---> 6 ---> 7
 	_, err = insertRedirectRule(mkRedirectRule("6", "7"), data, clock, ignoreMaxRules, maxUpstreamBuildIDs)
-	require.Error(t, err)
 	require.Equal(t, errExceedsMaxUpstreamBuildIDs(3, maxUpstreamBuildIDs), err)
 }
 
@@ -717,6 +687,7 @@ func TestReplaceRedirectRuleBasic(t *testing.T) {
 		newActive := getActiveRedirectRuleBySrc(source, data)
 		protorequire.ProtoEqual(t, rule, newActive.GetRule())
 		deleted := getDeletedRedirectRuleBySrc(source, data)
+		require.Len(t, deleted, 1)
 		require.Equal(t, prevRule.GetRule().GetSourceBuildId(), deleted[0].GetRule().GetSourceBuildId())
 		require.Equal(t, prevRule.GetRule().GetTargetBuildId(), deleted[0].GetRule().GetTargetBuildId())
 		for _, dr := range deleted {
@@ -743,7 +714,6 @@ func TestReplaceRedirectRuleInVersionSet(t *testing.T) {
 
 	// replace with target 0 --> failure
 	_, err = replaceRedirectRule(mkRedirectRule("1", "0"), data, clock, ignoreMaxUpstreamBuildIDs)
-	require.Error(t, err)
 	require.Equal(t, errTargetIsVersionSetMember, err)
 }
 
@@ -759,19 +729,15 @@ func TestReplaceRedirectRuleCreateCycle(t *testing.T) {
 	var err error
 
 	_, err = replaceRedirectRule(mkRedirectRule("0", "0"), data, clock, ignoreMaxUpstreamBuildIDs)
-	require.Error(t, err)
 	require.Equal(t, errIsCyclic, err)
 
 	_, err = replaceRedirectRule(mkRedirectRule("2", "0"), data, clock, ignoreMaxUpstreamBuildIDs)
-	require.Error(t, err)
 	require.Equal(t, errIsCyclic, err)
 
 	_, err = replaceRedirectRule(mkRedirectRule("1", "0"), data, clock, ignoreMaxUpstreamBuildIDs)
-	require.Error(t, err)
 	require.Equal(t, errIsCyclic, err)
 
 	_, err = replaceRedirectRule(mkRedirectRule("2", "1"), data, clock, ignoreMaxUpstreamBuildIDs)
-	require.Error(t, err)
 	require.Equal(t, errIsCyclic, err)
 }
 
@@ -796,7 +762,6 @@ func TestReplaceRedirectRuleMaxUpstreamBuildIDs(t *testing.T) {
 	// replace(2, new_target=4)
 	// 2 ---> 4 ---> 5 ---> 6
 	_, err = replaceRedirectRule(mkRedirectRule("2", "4"), data, clock, maxUpstreamBuildIDs)
-	require.Error(t, err)
 	require.Equal(t, errExceedsMaxUpstreamBuildIDs(3, maxUpstreamBuildIDs), err)
 }
 
@@ -822,7 +787,6 @@ func TestReplaceRedirectRuleNotFound(t *testing.T) {
 
 	// fails because no rules to replace
 	_, err = replaceRedirectRule(mkRedirectRule("1", "100"), data, clock, ignoreMaxUpstreamBuildIDs)
-	require.Error(t, err)
 	require.Equal(t, errSourceNotFound("1"), err)
 
 	data.RedirectRules = []*persistencespb.RedirectRule{
@@ -831,7 +795,6 @@ func TestReplaceRedirectRuleNotFound(t *testing.T) {
 
 	// fails because source doesnt exist
 	_, err = replaceRedirectRule(mkRedirectRule("1", "100"), data, clock, ignoreMaxUpstreamBuildIDs)
-	require.Error(t, err)
 	require.Equal(t, errSourceNotFound("1"), err)
 }
 
@@ -873,7 +836,6 @@ func TestDeleteRedirectRuleNotFound(t *testing.T) {
 
 	// fails because no rules to delete
 	_, err := deleteRedirectRule("1", data, clock)
-	require.Error(t, err)
 	require.Equal(t, errSourceNotFound("1"), err)
 
 	// insert a rule to replace
@@ -883,7 +845,6 @@ func TestDeleteRedirectRuleNotFound(t *testing.T) {
 
 	// fails because no rule with that source
 	_, err = deleteRedirectRule("1", data, clock)
-	require.Error(t, err)
 	require.Equal(t, errSourceNotFound("1"), err)
 }
 
@@ -1071,7 +1032,6 @@ func TestCommitBuildIDNoRecentPoller(t *testing.T) {
 
 	// without force --> fail
 	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIDReq("10", false), false, ignoreMaxRules)
-	require.Error(t, err)
 	require.Equal(t, errNoRecentPollerOnCommitVersion("10"), err)
 
 	// with force --> success
@@ -1094,7 +1054,6 @@ func TestCommitBuildIDInVersionSet(t *testing.T) {
 
 	// with target 0 --> fail
 	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIDReq("0", false), true, ignoreMaxRules)
-	require.Error(t, err)
 	require.Equal(t, errTargetIsVersionSetMember, err)
 }
 
@@ -1115,7 +1074,6 @@ func TestCommitBuildIDMaxAssignmentRules(t *testing.T) {
 
 	// commit a new target, no rules to be deleted --> fail
 	_, err = CommitBuildID(clock2, data, mkNewCommitBuildIDReq("1000", false), true, maxRules)
-	require.Error(t, err)
 	require.Equal(t, errExceedsMaxAssignmentRules(4, maxRules), err)
 }
 
