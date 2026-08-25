@@ -72,8 +72,8 @@ func NextPageToken(nextPageToken []byte) ZapTag {
 }
 
 // PageSize returns tag for PageSize
-func PageSize(pageSize int64) ZapTag {
-	return NewInt64("page-size", pageSize)
+func PageSize(pageSize int) ZapTag {
+	return NewInt("page-size", pageSize)
 }
 
 // ==========  Workflow tags defined here: ( wf is short for workflow) ==========
