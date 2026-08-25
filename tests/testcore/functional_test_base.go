@@ -692,26 +692,6 @@ func (s *FunctionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
 	}
 }
 
-// Deprecated: use (*TestEnv).WaitForChannel instead.
-func (s *FunctionalTestBase) WaitForChannel(ctx context.Context, ch chan struct{}) {
-	s.T().Helper()
-	select {
-	case <-ch:
-	case <-ctx.Done():
-		s.FailNow("context timeout while waiting for channel")
-	}
-}
-
-// Deprecated: use (*TestEnv).SendToChannel instead.
-func (s *FunctionalTestBase) SendToChannel(ctx context.Context, ch chan struct{}) {
-	s.T().Helper()
-	select {
-	case ch <- struct{}{}:
-	case <-ctx.Done():
-		s.FailNow("context timeout while sending to channel")
-	}
-}
-
 // TODO (alex): change to nsName namespace.Name
 func (s *FunctionalTestBase) SendSignal(nsName string, execution *commonpb.WorkflowExecution, signalName string,
 	input *commonpb.Payloads, identity string) error {
