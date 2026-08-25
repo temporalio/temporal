@@ -173,9 +173,9 @@ $(LOCALBIN):
 	@mkdir -p $(LOCALBIN)
 
 .PHONY: golangci-lint
+LINT_CODE_TARGETS ?= ./...
 GOLANGCI_LINT_BASE_REV ?= $(MAIN_BRANCH)
 GOLANGCI_LINT_FIX ?= true
-GOLANGCI_LINT_TARGETS ?= ./...
 GOLANGCI_LINT_VERSION := v2.13.0
 GOLANGCI_LINT := $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 $(GOLANGCI_LINT): $(LOCALBIN)
@@ -405,26 +405,31 @@ lint-actions: $(ACTIONLINT)
 	@$(ACTIONLINT)
 
 .PHONY: lint-code lint-code-fast
-# --new-from-rev filters reported issues after analysis; this target also reduces inputs before analysis.
+# --new-from-rev filters reported issues after analysis.
+# This target also reduces package inputs before analysis.
 lint-code-fast:
-	@git rev-parse --verify --quiet "$(GOLANGCI_LINT_BASE_REV)^{commit}" >/dev/null || { \
-		echo "GOLANGCI_LINT_BASE_REV=$(GOLANGCI_LINT_BASE_REV) is not a known commit; fetch it or override GOLANGCI_LINT_BASE_REV"; \
+	@if ! git rev-parse --verify --quiet "$(GOLANGCI_LINT_BASE_REV)^{commit}" >/dev/null; then \
+		printf '%s\n' "GOLANGCI_LINT_BASE_REV=$(GOLANGCI_LINT_BASE_REV) is not a known commit; fetch it or override GOLANGCI_LINT_BASE_REV"; \
 		exit 1; \
-	}
-	@targets=$$({ \
+	fi
+	@changed_files=$$({ \
 		git diff --name-only --diff-filter=ACMR "$(GOLANGCI_LINT_BASE_REV)" -- '*.go'; \
 		git ls-files --others --exclude-standard -- '*.go'; \
-	} | while IFS= read -r file; do \
-		dir=$$(dirname "$$file"); \
-		[ "$$dir" = "." ] && echo "." || echo "./$$dir"; \
-	done | sort -u | tr '\n' ' '); \
-	$(MAKE) GOLANGCI_LINT_TARGETS="$$targets" lint-code
+	}); \
+	targets=; \
+	if [ -n "$$changed_files" ]; then \
+		targets=$$(printf '%s\n' "$$changed_files" | while IFS= read -r file; do \
+			dir=$$(dirname "$$file"); \
+			[ "$$dir" = "." ] && printf '.\n' || printf './%s\n' "$$dir"; \
+		done | sort -u | tr '\n' ' '); \
+	fi; \
+	$(MAKE) LINT_CODE_TARGETS="$$targets" lint-code
 
 lint-code: $(GOLANGCI_LINT) $(ERRORTYPE)
 	@printf $(COLOR) "Linting code..."
-	@if [ -n "$(strip $(GOLANGCI_LINT_TARGETS))" ]; then \
-		$(GOLANGCI_LINT) run --verbose --build-tags $(ALL_TEST_TAGS) --timeout 10m --fix=$(GOLANGCI_LINT_FIX) --new-from-rev=$(GOLANGCI_LINT_BASE_REV) --config=.github/.golangci.yml $(GOLANGCI_LINT_TARGETS) && \
-		go vet -tags $(ALL_TEST_TAGS) -vettool="$(ERRORTYPE)" -style-check=false $(GOLANGCI_LINT_TARGETS); \
+	@if [ -n "$(strip $(LINT_CODE_TARGETS))" ]; then \
+		$(GOLANGCI_LINT) run --verbose --build-tags $(ALL_TEST_TAGS) --timeout 10m --fix=$(GOLANGCI_LINT_FIX) --new-from-rev=$(GOLANGCI_LINT_BASE_REV) --config=.github/.golangci.yml $(LINT_CODE_TARGETS) && \
+		go vet -tags $(ALL_TEST_TAGS) -vettool="$(ERRORTYPE)" -style-check=false $(LINT_CODE_TARGETS); \
 	else \
 		printf $(COLOR) "No changed Go packages to lint."; \
 	fi
