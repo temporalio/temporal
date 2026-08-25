@@ -183,7 +183,7 @@ func TestExecuteTask_Basic(t *testing.T) {
 	env.mockFrontendClient.EXPECT().
 		StartWorkflowExecution(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, req *workflowservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*workflowservice.StartWorkflowExecutionResponse, error) {
-			require.Empty(t, req.GetCompletionCallbacks())
+			require.Len(t, req.GetCompletionCallbacks(), 1)
 			require.Empty(t, req.GetLastCompletionResult().GetPayloads())
 			require.Nil(t, req.GetContinuedFailure())
 			return &workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil
@@ -247,7 +247,7 @@ func TestExecuteTask_AllowAllRemovedAcrossEngineTransaction(t *testing.T) {
 	frontendClient := workflowservicemock.NewMockWorkflowServiceClient(ctrl)
 	frontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, req *workflowservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*workflowservice.StartWorkflowExecutionResponse, error) {
-			require.Empty(t, req.GetCompletionCallbacks())
+			require.Len(t, req.GetCompletionCallbacks(), 1)
 			return &workflowservice.StartWorkflowExecutionResponse{RunId: "allow-all-run"}, nil
 		})
 	handler := scheduler.NewInvokerExecuteTaskHandler(scheduler.InvokerTaskHandlerOptions{
