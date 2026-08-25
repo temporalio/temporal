@@ -105,20 +105,24 @@ func (tm *TaskMatcher) recycleToken(*internalTask) {
 //   - ratelimit is exceeded (does not apply to query task)
 //   - context deadline is exceeded
 //   - task is matched and consumer returns error in response channel
-func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, error) {
+//
+// Offer returns whether the task was matched, whether it was forwarded to another partition to
+// attempt a remote sync match (true regardless of whether that forward matched, so the origin
+// partition can tag the tasks_added metric), and any error.
+func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (matched, forwarded bool, err error) {
 	if !tm.isBacklogNegligible() {
 		// To ensure better dispatch ordering, we block sync match when a significant backlog is present.
 		// Note that this check does not make a noticeable difference for history tasks, as they do not wait for a
 		// poller to become available. In presence of a backlog the chance of a poller being available when sync match
 		// request comes is almost zero.
 		// This check is mostly effective for the sync match requests that come from child partitions for spooled tasks.
-		return false, nil
+		return false, false, nil
 	}
 
 	if !task.isForwarded() {
 		if err := tm.rateLimiter.Wait(ctx); err != nil {
 			metrics.SyncThrottlePerTaskQueueCounter.With(tm.metricsHandler).Record(1)
-			return false, err
+			return false, false, err
 		}
 		// because we waited on the rate limiter to offer this task,
 		// attach the rate limiter's RecycleToken func to the task
@@ -137,14 +141,16 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 			if err.startErr == nil && !task.isForwarded() {
 				tm.emitDispatchLatency(task, false)
 			}
-			return true, err.startErr
+			return true, false, err.startErr
 		}
-		return false, nil
+		return false, false, nil
 	default:
 		// no poller waiting for tasks, try forwarding this task to the
 		// root partition if possible
 		select {
 		case token := <-tm.fwdrAddReqTokenC():
+			// We attempted a remote sync match via forwarding; report forwarded=true below
+			// regardless of whether the forward matched.
 			if err := tm.fwdr.ForwardTask(ctx, task); err == nil {
 				// task was remotely sync matched on the parent partition
 				token.release()
@@ -152,20 +158,22 @@ func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, err
 					// if there are multiple forwarding hops, only the initial source partition emits this metric
 					tm.emitDispatchLatency(task, true)
 				}
-				return true, nil
+				return true, true, nil
 			}
 			token.release()
+			return false, true, nil
 		default:
 			if !tm.isForwardingAllowed() && // we are the root partition and forwarding is not possible
 				task.source == enumsspb.TASK_SOURCE_DB_BACKLOG && // task was from backlog (stored in db)
 				task.isForwarded() { // task came from a child partition
 				// a forwarded backlog task from a child partition, block trying
 				// to match with a poller until ctx timeout
-				return tm.offerOrTimeout(ctx, task)
+				matched, err := tm.offerOrTimeout(ctx, task)
+				return matched, false, err
 			}
 		}
 
-		return false, nil
+		return false, false, nil
 	}
 }
 

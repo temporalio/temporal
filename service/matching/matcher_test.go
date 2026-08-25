@@ -123,7 +123,7 @@ func (t *MatcherTestSuite) TestLocalSyncMatch() {
 	time.Sleep(10 * time.Millisecond)
 	task := newInternalTaskForSyncMatch(randomTaskInfo().Data, nil, 0, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	syncMatch, err := t.childMatcher.Offer(ctx, task)
+	syncMatch, _, err := t.childMatcher.Offer(ctx, task)
 	cancel()
 	t.NoError(err)
 	t.True(syncMatch)
@@ -195,11 +195,11 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 				// blocks - so we don't need to do this
 				time.Sleep(10 * time.Millisecond)
 			}
-			remoteSyncMatch, err = t.rootMatcher.Offer(ctx, task)
+			remoteSyncMatch, _, err = t.rootMatcher.Offer(ctx, task)
 		},
 	).Return(&matchingservice.AddWorkflowTaskResponse{}, nil)
 
-	_, err0 := t.childMatcher.Offer(ctx, task)
+	_, _, err0 := t.childMatcher.Offer(ctx, task)
 	t.NoError(err0)
 	cancel()
 	t.NotNil(req)
@@ -243,7 +243,7 @@ func (t *MatcherTestSuite) TestRejectSyncMatchWhenBacklog() {
 	// Since the partition currently has no pollers, the test verifies that the task is not blocked locally
 	// by asserting a context cancellation due to a timeout never occurred and we received a *false* due to a
 	// non-negligible backlog.
-	happened, err := t.rootMatcher.Offer(newCtx, syncMatchTask)
+	happened, _, err := t.rootMatcher.Offer(newCtx, syncMatchTask)
 	if newCtx.Err() != nil {
 		t.FailNow("waited on a local poller due to a negligible backlog")
 
@@ -467,7 +467,7 @@ func (t *MatcherTestSuite) TestSyncMatchFailure() {
 		},
 	).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottleTest)
 
-	syncMatch, err := t.childMatcher.Offer(ctx, task)
+	syncMatch, _, err := t.childMatcher.Offer(ctx, task)
 	cancel()
 	t.NotNil(req)
 	t.NoError(err)
@@ -760,7 +760,7 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 			req = arg1
 			task := newInternalTaskForSyncMatch(task.event.AllocatedTaskInfo.Data, req.ForwardInfo, 0, nil)
 			close(pollSigC)
-			remoteSyncMatch, err = t.rootMatcher.Offer(ctx, task)
+			remoteSyncMatch, _, err = t.rootMatcher.Offer(ctx, task)
 		},
 	).Return(&matchingservice.AddWorkflowTaskResponse{}, nil)
 
