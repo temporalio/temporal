@@ -66,6 +66,9 @@ const (
 	LimitMemoSpecSize = 11
 	// trigger immediately timestamp is added to the PatchRequest
 	TriggerImmediatelyTimestamp = 12
+	// honor SchedulePolicies.keep_original_workflow_id: don't append the nominal
+	// timestamp to the started workflow id
+	KeepOriginalWorkflowID = 13
 )
 
 const (
@@ -215,7 +218,7 @@ var (
 		ReuseTimer:                        true,
 		NextTimeCacheV2Size:               14, // see note below
 		SpecFieldLengthLimit:              10,
-		Version:                           TriggerImmediatelyTimestamp,
+		Version:                           KeepOriginalWorkflowID,
 	}
 
 	// Note on NextTimeCacheV2Size: This value must be > FutureActionCountForList. Each
@@ -1468,13 +1471,35 @@ func (s *scheduler) recordAction(result *schedulepb.ScheduleActionResult, nonOve
 	}
 }
 
+// AppendsTimestamp reports whether the scheduler appends the nominal timestamp to the
+// workflow id of a started workflow, given the effective overlap policy for the action and
+// the schedule's keep_original_workflow_id policy.
+//
+// SCHEDULE_OVERLAP_POLICY_ALLOW_ALL always appends, overriding keep_original_workflow_id,
+// because concurrent runs cannot share a workflow id. Note that the overlap policy can be
+// overridden per-action (trigger/backfill), so a schedule that keeps the original id may
+// still produce timestamped ids for individual ALLOW_ALL actions.
+func AppendsTimestamp(overlapPolicy enumspb.ScheduleOverlapPolicy, keepOriginalWorkflowID bool) bool {
+	return overlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL || !keepOriginalWorkflowID
+}
+
 func (s *scheduler) startWorkflow(
 	start *schedulespb.BufferedStart,
 	newWorkflow *workflowpb.NewWorkflowExecutionInfo,
 ) (*schedulepb.ScheduleActionResult, error) {
 	nominalTimeSec := start.NominalTime.AsTime().UTC().Truncate(time.Second)
 	workflowID := newWorkflow.WorkflowId
-	if start.OverlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL || s.tweakables.AlwaysAppendTimestamp {
+	keepOriginalWorkflowID := s.hasMinVersion(KeepOriginalWorkflowID) &&
+		s.Schedule.Policies.GetKeepOriginalWorkflowId()
+	appendTimestamp := start.OverlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL ||
+		s.tweakables.AlwaysAppendTimestamp
+	if keepOriginalWorkflowID {
+		// ALLOW_ALL permits concurrent runs, which cannot share a workflow id, so it
+		// overrides the opt-out. A buffered start can carry UNSPECIFIED (it's resolved
+		// in ProcessBuffer), so resolve against the schedule's policy first.
+		appendTimestamp = AppendsTimestamp(s.resolveOverlapPolicy(start.OverlapPolicy), true)
+	}
+	if appendTimestamp {
 		// must match AppendedTimestampForValidation
 		workflowID += "-" + nominalTimeSec.Format(time.RFC3339)
 	}
@@ -1505,8 +1530,13 @@ func (s *scheduler) startWorkflow(
 
 	// Reject duplicates as part of WFID reuse policy when possible, as a measure
 	// against WFT timeouts/failures that lead to non-determinism.
+	//
+	// When the workflow id is reused verbatim across actions (keep_original_workflow_id,
+	// with no timestamp appended), REJECT_DUPLICATE would reject every action after the
+	// first one, since a closed run with that id always exists. Those schedules fall back
+	// to ALLOW_DUPLICATE and rely on RequestId for start deduplication instead.
 	reusePolicy := enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE
-	if start.Manual {
+	if start.Manual || (keepOriginalWorkflowID && !appendTimestamp) {
 		reusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	}
 

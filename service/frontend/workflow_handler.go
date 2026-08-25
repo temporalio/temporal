@@ -3959,6 +3959,11 @@ func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 		return nil
 	}
 
+	// Always validate with room for the appended timestamp, even when the schedule set
+	// keep_original_workflow_id. The overlap policy can be overridden per-action, and an
+	// ALLOW_ALL trigger or backfill appends the timestamp regardless of that policy; since
+	// PatchSchedule doesn't revalidate the resulting id, accepting a base id that only
+	// fits without the suffix would defer the failure to StartWorkflowExecution.
 	if err := wh.validator.ValidateWorkflowID(startWorkflow.WorkflowId + scheduler.AppendedTimestampForValidation); err != nil {
 		return err
 	}

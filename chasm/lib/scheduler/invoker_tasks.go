@@ -16,6 +16,7 @@ import (
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	schedulerinternal "go.temporal.io/server/chasm/lib/scheduler/internal"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -655,8 +656,17 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 		}
 	}
 
+	// When the workflow id is reused verbatim across actions (keep_original_workflow_id,
+	// with no timestamp appended), REJECT_DUPLICATE would reject every action after the
+	// first one, since a closed run with that id always exists. Those schedules fall back
+	// to ALLOW_DUPLICATE and rely on RequestId for start deduplication instead.
+	//
+	// The decision is derived from the buffered start's own id and nominal time, not
+	// from the schedule's current action or policies: a start can sit in the buffer
+	// across an update that changes either one, and re-deriving would then pick a
+	// reuse policy that doesn't match the id the start actually carries.
 	reusePolicy := enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE
-	if start.Manual {
+	if start.Manual || !schedulerinternal.WorkflowIDHasTimestamp(start.WorkflowId, start.NominalTime.AsTime()) {
 		reusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	}
 
