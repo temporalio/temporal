@@ -90,7 +90,7 @@ func newNexusCompletionHandler(
 	return &nexusCompletionHandler{
 		ClusterMetadata:                      clusterMetadata,
 		NamespaceRegistry:                    namespaceRegistry,
-		Logger:                               log.With(logger, tag.ComponentNexusCompletion),
+		Logger:                               log.With(logger, tag.NexusStageCallerInbound),
 		MetricsHandler:                       metricsHandler,
 		Config:                               serviceConfig,
 		CallbackTokenGenerator:               callbackTokenGenerator,

@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/protoassert"
@@ -193,7 +194,7 @@ func TestInitializationFallback(t *testing.T) {
 
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
 	capture := logger.StartCapture()
-	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, logger, metrics.NoopMetricsHandler)
+	reg := NewEndpointRegistry(mocks.config, mocks.matchingClient, mocks.persistence, log.With(logger, tag.ComponentPersistence), metrics.NoopMetricsHandler)
 	reg.StartLifecycle()
 	defer reg.StopLifecycle()
 
@@ -204,8 +205,9 @@ func TestInitializationFallback(t *testing.T) {
 		Level:   testlogger.Error,
 		Message: "error from matching when initializing Nexus endpoint cache",
 		Tags: map[string]any{
-			"component": "nexus-registry",
-			"error":     matchingErr.Error(),
+			"component":   "persistence",
+			"nexus-stage": "registry",
+			"error":       matchingErr.Error(),
 		},
 	})
 

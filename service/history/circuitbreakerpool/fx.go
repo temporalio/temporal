@@ -11,7 +11,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tasks"
@@ -74,8 +73,8 @@ func onStateChange(
 		tag.Destination(key.Destination),
 		tag.NewStringTag("task-group", key.TaskGroup),
 	)
-	if isNexusTaskGroup(key.TaskGroup) {
-		logger = log.With(logger, tag.ComponentNexusOutbound)
+	if stage, ok := nexusStageForTaskGroup(key.TaskGroup); ok {
+		logger = log.With(logger, stage)
 	}
 	return func(_ string, from gobreaker.State, to gobreaker.State) {
 		logger.Warn(
@@ -86,10 +85,15 @@ func onStateChange(
 	}
 }
 
-func isNexusTaskGroup(taskGroup string) bool {
-	return taskGroup == chasmnexus.TaskGroupName ||
-		taskGroup == nexusoperations.TaskTypeInvocation ||
-		taskGroup == nexusoperations.TaskTypeCancelation ||
-		taskGroup == callbacks.TaskTypeInvocation ||
-		strings.HasPrefix(taskGroup, chasm.CallbackLibraryName+".")
+func nexusStageForTaskGroup(taskGroup string) (tag.ZapTag, bool) {
+	switch {
+	case taskGroup == chasmnexus.TaskGroupName,
+		taskGroup == nexusoperations.TaskTypeInvocation,
+		taskGroup == nexusoperations.TaskTypeCancelation:
+		return tag.NexusStageCallerOutbound, true
+	case strings.HasPrefix(taskGroup, chasm.CallbackLibraryName+"."):
+		return tag.NexusStageHandlerOutbound, true
+	default:
+		return tag.ZapTag{}, false
+	}
 }

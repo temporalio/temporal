@@ -57,7 +57,7 @@ func (o InvocationTaskHandlerOptions) toBase() nexusTaskHandlerBase {
 		config:            o.Config,
 		namespaceRegistry: o.NamespaceRegistry,
 		metricsHandler:    o.MetricsHandler,
-		logger:            log.With(o.Logger, tag.ComponentNexusCaller),
+		logger:            log.With(o.Logger, tag.NexusStageCallerOperation),
 		clientProvider:    o.ClientProvider,
 		endpointRegistry:  o.EndpointRegistry,
 		httpTraceProvider: o.HTTPTraceProvider,

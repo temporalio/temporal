@@ -511,7 +511,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 				NamespaceRegistry: namespaceRegistryMock,
 				MetricsHandler:    metrics.NoopMetricsHandler,
 				HistoryClient:     historyClient,
-				Logger:            logger,
+				Logger:            log.With(logger, tag.ComponentWorker),
 				Config: &callbacks.Config{
 					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
 					RetryPolicy: func() backoff.RetryPolicy {
@@ -548,7 +548,8 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 					Level:   testlogger.Error,
 					Message: tc.expectedLogMessage,
 					Tags: map[string]any{
-						tag.ComponentNexusCompletion.Key(): "nexus-completion",
+						"component":   "worker",
+						"nexus-stage": "handler-outbound",
 					},
 				})
 			} else {
