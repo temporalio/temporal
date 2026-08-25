@@ -46,18 +46,18 @@ func TestRPCFaultGenerator_Generate(t *testing.T) {
 	} {
 		stage := stage
 		for _, test := range []struct {
-			name      string
-			request   any
-			callbacks []callback
-			miss      bool
-			response  any
-			err       error
-			calls     []string
+			name          string
+			request       any
+			callbacks     []callback
+			expectedMiss  bool
+			expectedResp  any
+			expectedErr   error
+			expectedCalls []string
 		}{
 			{
-				name:    "no callbacks",
-				request: "request",
-				miss:    true,
+				name:         "no callbacks",
+				request:      "request",
+				expectedMiss: true,
 			},
 			{
 				name:    "namespace before global",
@@ -66,8 +66,8 @@ func TestRPCFaultGenerator_Generate(t *testing.T) {
 					{name: "namespace", scope: RPCFaultScope{NamespaceID: "namespace-id"}, response: "namespace response"},
 					{name: "global", response: "global response"},
 				},
-				response: "namespace response",
-				calls:    []string{"namespace"},
+				expectedResp:  "namespace response",
+				expectedCalls: []string{"namespace"},
 			},
 			{
 				name:    "global after namespace miss",
@@ -76,8 +76,8 @@ func TestRPCFaultGenerator_Generate(t *testing.T) {
 					{name: "namespace", scope: RPCFaultScope{NamespaceID: "namespace-id"}, miss: true},
 					{name: "global", response: "response"},
 				},
-				response: "response",
-				calls:    []string{"namespace", "global"},
+				expectedResp:  "response",
+				expectedCalls: []string{"namespace", "global"},
 			},
 			{
 				name:    "namespace mismatch",
@@ -85,7 +85,7 @@ func TestRPCFaultGenerator_Generate(t *testing.T) {
 				callbacks: []callback{
 					{name: "namespace", scope: RPCFaultScope{NamespaceID: "namespace-id"}, err: injectedErr},
 				},
-				miss: true,
+				expectedMiss: true,
 			},
 			{
 				name:    "matched error",
@@ -93,8 +93,8 @@ func TestRPCFaultGenerator_Generate(t *testing.T) {
 				callbacks: []callback{
 					{name: "namespace", scope: RPCFaultScope{NamespaceID: "namespace-id"}, err: injectedErr},
 				},
-				err:   injectedErr,
-				calls: []string{"namespace"},
+				expectedErr:   injectedErr,
+				expectedCalls: []string{"namespace"},
 			},
 			{
 				name:    "first match wins",
@@ -104,8 +104,8 @@ func TestRPCFaultGenerator_Generate(t *testing.T) {
 					{name: "second", scope: RPCFaultScope{NamespaceID: "namespace-id"}, response: "response"},
 					{name: "third", scope: RPCFaultScope{NamespaceID: "namespace-id"}, response: "other response"}, // never reached!
 				},
-				response: "response",
-				calls:    []string{"first", "second"},
+				expectedResp:  "response",
+				expectedCalls: []string{"first", "second"},
 			},
 			{
 				name:    "scope with namespace ID and name/namespace ID",
@@ -113,8 +113,8 @@ func TestRPCFaultGenerator_Generate(t *testing.T) {
 				callbacks: []callback{
 					{name: "namespace", scope: bothNamespaces, response: "response"},
 				},
-				response: "response",
-				calls:    []string{"namespace"},
+				expectedResp:  "response",
+				expectedCalls: []string{"namespace"},
 			},
 			{
 				name:    "scope with namespace ID and name/namespace name",
@@ -122,8 +122,8 @@ func TestRPCFaultGenerator_Generate(t *testing.T) {
 				callbacks: []callback{
 					{name: "namespace", scope: bothNamespaces, response: "response"},
 				},
-				response: "response",
-				calls:    []string{"namespace"},
+				expectedResp:  "response",
+				expectedCalls: []string{"namespace"},
 			},
 		} {
 			test := test
@@ -143,6 +143,7 @@ func TestRPCFaultGenerator_Generate(t *testing.T) {
 					}
 					return !callback.miss, callback.response, callback.err
 				}
+
 				for _, callback := range test.callbacks {
 					callback := callback
 					switch stage.stage {
@@ -171,14 +172,14 @@ func TestRPCFaultGenerator_Generate(t *testing.T) {
 					t.Fatalf("unknown RPC fault stage: %v", stage.stage)
 				}
 
-				if test.err == nil {
+				if test.expectedErr == nil {
 					require.NoError(t, err)
 				} else {
-					require.ErrorIs(t, err, test.err)
+					require.ErrorIs(t, err, test.expectedErr)
 				}
-				require.Equal(t, !test.miss, matched)
-				require.Equal(t, test.response, response)
-				require.Equal(t, test.calls, calls)
+				require.Equal(t, !test.expectedMiss, matched)
+				require.Equal(t, test.expectedResp, response)
+				require.Equal(t, test.expectedCalls, calls)
 			})
 		}
 	}
