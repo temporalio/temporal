@@ -19,7 +19,6 @@ import (
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/protorequire"
 	"golang.org/x/sync/errgroup"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -344,11 +343,12 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 	treeID := uuid.NewString()
 	concurrency := 1
 	m := &sync.Map{}
+	writtenHistories := make([]*historypb.History, concurrency)
+	readHistories := make([]*historypb.History, concurrency)
 
 	// test create new branch along with appending new nodes
 	var group errgroup.Group
-	for i := range concurrency {
-		idx := i
+	for idx := range concurrency {
 		group.Go(func() error {
 			bi, err := s.newHistoryBranch(treeID)
 			if err != nil {
@@ -395,22 +395,22 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 				return fmt.Errorf("read history branch: got %d events, want 20", len(events))
 			}
 			historyR.Events = events
-
-			if !proto.Equal(historyW, historyR) {
-				return errors.New("read history does not match written history")
-			}
+			writtenHistories[idx] = historyW
+			readHistories[idx] = historyR
 			return nil
 		})
 	}
 
 	s.NoError(group.Wait())
+	for idx := range concurrency {
+		s.ProtoEqual(writtenHistories[idx], readHistories[idx])
+	}
 	branches := s.descTree(treeID)
 	s.Len(branches, concurrency)
 
 	group = errgroup.Group{}
 	// test appending nodes(override and new nodes) on each branch concurrently
-	for i := range concurrency {
-		idx := i
+	for idx := range concurrency {
 		group.Go(func() error {
 			branch, ok := s.getBranchByKey(m, idx)
 			if !ok {
@@ -448,7 +448,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 				return fmt.Errorf("read first overridden history: got %d events, want 5", len(events))
 			}
 			_, err = s.readWithError(branch, 1, 25)
-			if _, ok := err.(*serviceerror.DataLoss); !ok {
+			if _, ok := errors.AsType[*serviceerror.DataLoss](err); !ok {
 				return fmt.Errorf("read first corrupted history: got %T, want *serviceerror.DataLoss", err)
 			}
 
@@ -468,7 +468,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyCreateAndAppendBranches() {
 				return fmt.Errorf("read second overridden history: got %d events, want 6", len(events))
 			}
 			_, err = s.readWithError(branch, 1, 25)
-			if _, ok := err.(*serviceerror.DataLoss); !ok {
+			if _, ok := errors.AsType[*serviceerror.DataLoss](err); !ok {
 				return fmt.Errorf("read second corrupted history: got %T, want *serviceerror.DataLoss", err)
 			}
 
@@ -536,7 +536,6 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 	s.NoError(err)
 
 	readEvents := s.read(masterBr, 1, int64(concurrency)+2)
-	s.NoError(err)
 	s.Len(readEvents, 1)
 
 	branches = s.descTree(treeID)
@@ -557,15 +556,13 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 	err = s.appendOneByOne(masterBr, events[1:], reserveTxn(len(events[1:])))
 	s.NoError(err)
 	events = s.read(masterBr, 1, int64(concurrency)+2)
-	s.NoError(err)
 	s.Len(events, (concurrency)+1)
 
 	level1ID := new(sync.Map)
 	level1Br := new(sync.Map)
 	// test forking from master branch and append nodes
 	var group errgroup.Group
-	for i := range concurrency {
-		idx := i
+	for idx := range concurrency {
 		group.Go(func() error {
 			forkNodeID := rand.Int63n(int64(concurrency)) + 2
 			level1ID.Store(idx, forkNodeID)
@@ -579,7 +576,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 			// cannot append to ancestors
 			events := s.genRandomEvents([]int64{forkNodeID - 1}, 1)
 			err = s.appendNewNode(bi, events, reserveTxn(1))
-			if _, ok := err.(*p.InvalidPersistenceRequestError); !ok {
+			if _, ok := errors.AsType[*p.InvalidPersistenceRequestError](err); !ok {
 				return fmt.Errorf("append to ancestor: got %T, want *persistence.InvalidPersistenceRequestError", err)
 			}
 
@@ -627,8 +624,7 @@ func (s *HistoryV2PersistenceSuite) TestConcurrentlyForkAndAppendBranches() {
 	group = errgroup.Group{}
 
 	// test forking for second level of branch
-	for i := 1; i < concurrency; i++ {
-		idx := i
+	for idx := 1; idx < concurrency; idx++ {
 		group.Go(func() error {
 			// Event we fork from level1 branch, it is possible that the new branch will fork from master branch
 			forkNodeID := rand.Int63n(int64(concurrency)*2) + 2

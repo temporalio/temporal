@@ -72,8 +72,7 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationQueue() {
 	wg := sync.WaitGroup{}
 	publishErrCh := make(chan error, numMessages)
 
-	for i := range concurrentSenders {
-		senderNum := i
+	for senderNum := range concurrentSenders {
 		wg.Go(func() {
 			for message := range messageChan {
 				err := s.Publish(s.ctx, message)
@@ -160,8 +159,7 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationDLQ() {
 	wg := sync.WaitGroup{}
 	publishErrCh := make(chan error, numMessages)
 
-	for i := range concurrentSenders {
-		senderNum := i
+	for senderNum := range concurrentSenders {
 		wg.Go(func() {
 			for message := range messageChan {
 				err := s.PublishToNamespaceDLQ(s.ctx, message)
@@ -188,7 +186,7 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationDLQ() {
 	s.NoError(err, "GetReplicationMessages failed.")
 	s.Empty(token)
 	s.Equal(len(result1)+len(result2), numMessages)
-	_, _, err = s.GetMessagesFromNamespaceDLQ(s.ctx, persistence.EmptyQueueMessageID, 1<<63-1, numMessages, nil)
+	_, token, err = s.GetMessagesFromNamespaceDLQ(s.ctx, persistence.EmptyQueueMessageID, 1<<63-1, numMessages, nil)
 	s.NoError(err, "GetReplicationMessages failed.")
 	s.Empty(token)
 

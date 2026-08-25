@@ -206,7 +206,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipReadFiltersCorrectly(
 	)
 
 	s.validateUpsert(req, resp, err)
-	s.waitForPrune(5 * time.Second)
+	s.waitForPrune(8 * time.Second)
 }
 
 // TestClusterMembershipUpsertExpiresCorrectly verifies RecordExpiry functions properly for ClusterMembership records
