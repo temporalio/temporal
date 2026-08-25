@@ -13,7 +13,7 @@ import (
 	"go.temporal.io/server/common/testing/testhooks"
 )
 
-func TestRPCFaultGenerator_NoCallbacks(t *testing.T) {
+func TestNoCallbacks(t *testing.T) {
 	t.Parallel()
 
 	testHooks := testhooks.NewTestHooks()
@@ -23,7 +23,7 @@ func TestRPCFaultGenerator_NoCallbacks(t *testing.T) {
 	require.False(t, ok)
 }
 
-func TestRPCFaultGenerator_CallbackSeparationAndArguments(t *testing.T) {
+func TestCallbackSeparationAndArguments(t *testing.T) {
 	t.Parallel()
 
 	testHooks := testhooks.NewTestHooks()
@@ -73,7 +73,7 @@ func TestRPCFaultGenerator_CallbackSeparationAndArguments(t *testing.T) {
 	require.Equal(t, 1, responseCalls)
 }
 
-func TestRPCFaultGenerator_FirstMatchWins(t *testing.T) {
+func TestFirstMatchWins(t *testing.T) {
 	t.Parallel()
 
 	testHooks := testhooks.NewTestHooks()
@@ -102,7 +102,7 @@ func TestRPCFaultGenerator_FirstMatchWins(t *testing.T) {
 	require.Equal(t, []int{1, 2}, calls)
 }
 
-func TestRPCFaultGenerator_UnregisterIsIdempotent(t *testing.T) {
+func TestUnregisterIsIdempotent(t *testing.T) {
 	t.Parallel()
 
 	testHooks := testhooks.NewTestHooks()
@@ -118,7 +118,7 @@ func TestRPCFaultGenerator_UnregisterIsIdempotent(t *testing.T) {
 	require.False(t, ok)
 }
 
-func TestRPCFaultGenerator_UnregisterDuringGenerate(t *testing.T) {
+func TestUnregisterDuringGenerate(t *testing.T) {
 	t.Parallel()
 
 	testHooks := testhooks.NewTestHooks()
@@ -156,7 +156,7 @@ func TestRPCFaultGenerator_UnregisterDuringGenerate(t *testing.T) {
 	require.False(t, ok)
 }
 
-func TestRPCFaultGenerator_RegistersNamespaceIDAndNameAliases(t *testing.T) {
+func TestRegistersNamespaceIDAndNameAliases(t *testing.T) {
 	t.Parallel()
 
 	testHooks := testhooks.NewTestHooks()
