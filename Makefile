@@ -175,6 +175,7 @@ $(LOCALBIN):
 .PHONY: golangci-lint
 GOLANGCI_LINT_BASE_REV ?= $(MAIN_BRANCH)
 GOLANGCI_LINT_FIX ?= true
+GOLANGCI_LINT_TARGETS ?= ./...
 GOLANGCI_LINT_VERSION := v2.13.0
 GOLANGCI_LINT := $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 $(GOLANGCI_LINT): $(LOCALBIN)
@@ -403,9 +404,18 @@ lint-actions: $(ACTIONLINT)
 	@printf $(COLOR) "Linting GitHub actions..."
 	@$(ACTIONLINT)
 
+.PHONY: lint-code lint-code-changed
+lint-code-changed:
+	@targets=$$(./develop/golangci-lint-targets.sh "$(GOLANGCI_LINT_BASE_REV)") && \
+		$(MAKE) GOLANGCI_LINT_TARGETS="$$targets" lint-code
+
 lint-code: $(GOLANGCI_LINT) $(ERRORTYPE)
 	@printf $(COLOR) "Linting code..."
-	@$(GOLANGCI_LINT) run --verbose --build-tags $(ALL_TEST_TAGS) --timeout 10m --fix=$(GOLANGCI_LINT_FIX) --new-from-rev=$(GOLANGCI_LINT_BASE_REV) --config=.github/.golangci.yml
+	@if [ -n "$(strip $(GOLANGCI_LINT_TARGETS))" ]; then \
+		$(GOLANGCI_LINT) run --verbose --build-tags $(ALL_TEST_TAGS) --timeout 10m --fix=$(GOLANGCI_LINT_FIX) --new-from-rev=$(GOLANGCI_LINT_BASE_REV) --config=.github/.golangci.yml $(GOLANGCI_LINT_TARGETS); \
+	else \
+		printf $(COLOR) "No changed Go packages to lint."; \
+	fi
 	@go vet -tags $(ALL_TEST_TAGS) -vettool="$(ERRORTYPE)" -style-check=false ./...
 
 lint-yaml: $(YAMLFMT)
