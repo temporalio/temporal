@@ -70,7 +70,7 @@ func InjectRPCResponseFault(t testing.TB, tc *TestCluster, scope RPCFaultScope, 
 func injectRPCFault(t testing.TB, scope RPCFaultScope, register func(func(any, error) (bool, any, error)) func()) func() {
 	t.Helper()
 
-	if scope == (RPCFaultScope{}) {
+	if scope.NamespaceID == "" && scope.NamespaceName == "" {
 		t.Fatal("RPC fault injection requires a namespace scope")
 		return func() {}
 	}

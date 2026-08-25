@@ -1,6 +1,6 @@
 //go:build test_dep
 
-package faultinjection
+package faultinjection_test
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/rpc/faultinjection"
 	"go.temporal.io/server/common/testing/await"
 )
 
@@ -21,27 +22,26 @@ func TestRPCFaultGenerator_Generate(t *testing.T) {
 	handlerResponse := &struct{}{}
 	handlerErr := errors.New("handler")
 	injectedErr := errors.New("injected")
-	bothNamespaces := RPCFaultScope{NamespaceID: "namespace-id", NamespaceName: "namespace-name"}
+	bothNamespaces := faultinjection.RPCFaultScope{NamespaceID: "namespace-id", NamespaceName: "namespace-name"}
 
 	type callback struct {
 		name     string
-		scope    RPCFaultScope
+		scope    faultinjection.RPCFaultScope
 		miss     bool
 		response any
 		err      error
 	}
 
 	for _, stage := range []struct {
-		name  string
-		stage rpcFaultStage
+		name     string
+		response bool
 	}{
 		{
-			name:  "request",
-			stage: rpcFaultStageRequest,
+			name: "request",
 		},
 		{
-			name:  "response",
-			stage: rpcFaultStageResponse,
+			name:     "response",
+			response: true,
 		},
 	} {
 		stage := stage
@@ -63,7 +63,7 @@ func TestRPCFaultGenerator_Generate(t *testing.T) {
 				name:    "namespace before global",
 				request: &matchingservice.AddWorkflowTaskRequest{NamespaceId: "namespace-id"},
 				callbacks: []callback{
-					{name: "namespace", scope: RPCFaultScope{NamespaceID: "namespace-id"}, response: "namespace response"},
+					{name: "namespace", scope: faultinjection.RPCFaultScope{NamespaceID: "namespace-id"}, response: "namespace response"},
 					{name: "global", response: "global response"},
 				},
 				expectedResp:  "namespace response",
@@ -73,7 +73,7 @@ func TestRPCFaultGenerator_Generate(t *testing.T) {
 				name:    "global after namespace miss",
 				request: &matchingservice.AddWorkflowTaskRequest{NamespaceId: "namespace-id"},
 				callbacks: []callback{
-					{name: "namespace", scope: RPCFaultScope{NamespaceID: "namespace-id"}, miss: true},
+					{name: "namespace", scope: faultinjection.RPCFaultScope{NamespaceID: "namespace-id"}, miss: true},
 					{name: "global", response: "response"},
 				},
 				expectedResp:  "response",
@@ -83,7 +83,7 @@ func TestRPCFaultGenerator_Generate(t *testing.T) {
 				name:    "namespace mismatch",
 				request: &matchingservice.AddWorkflowTaskRequest{NamespaceId: "other-namespace-id"},
 				callbacks: []callback{
-					{name: "namespace", scope: RPCFaultScope{NamespaceID: "namespace-id"}, err: injectedErr},
+					{name: "namespace", scope: faultinjection.RPCFaultScope{NamespaceID: "namespace-id"}, err: injectedErr},
 				},
 				expectedMiss: true,
 			},
@@ -91,7 +91,7 @@ func TestRPCFaultGenerator_Generate(t *testing.T) {
 				name:    "matched error",
 				request: &matchingservice.AddWorkflowTaskRequest{NamespaceId: "namespace-id"},
 				callbacks: []callback{
-					{name: "namespace", scope: RPCFaultScope{NamespaceID: "namespace-id"}, err: injectedErr},
+					{name: "namespace", scope: faultinjection.RPCFaultScope{NamespaceID: "namespace-id"}, err: injectedErr},
 				},
 				expectedErr:   injectedErr,
 				expectedCalls: []string{"namespace"},
@@ -100,9 +100,9 @@ func TestRPCFaultGenerator_Generate(t *testing.T) {
 				name:    "first match wins",
 				request: &matchingservice.AddWorkflowTaskRequest{NamespaceId: "namespace-id"},
 				callbacks: []callback{
-					{name: "first", scope: RPCFaultScope{NamespaceID: "namespace-id"}, miss: true}, // no match!
-					{name: "second", scope: RPCFaultScope{NamespaceID: "namespace-id"}, response: "response"},
-					{name: "third", scope: RPCFaultScope{NamespaceID: "namespace-id"}, response: "other response"}, // never reached!
+					{name: "first", scope: faultinjection.RPCFaultScope{NamespaceID: "namespace-id"}, miss: true}, // no match!
+					{name: "second", scope: faultinjection.RPCFaultScope{NamespaceID: "namespace-id"}, response: "response"},
+					{name: "third", scope: faultinjection.RPCFaultScope{NamespaceID: "namespace-id"}, response: "other response"}, // never reached!
 				},
 				expectedResp:  "response",
 				expectedCalls: []string{"first", "second"},
@@ -130,14 +130,14 @@ func TestRPCFaultGenerator_Generate(t *testing.T) {
 			t.Run(stage.name+"/"+test.name, func(t *testing.T) {
 				t.Parallel()
 
-				generator := NewRPCFaultGenerator()
+				generator := faultinjection.NewRPCFaultGenerator()
 				var calls []string
 				invoke := func(callback callback, actualCtx context.Context, actualMethod string, actualRequest, actualResponse any, actualErr error) (bool, any, error) {
 					calls = append(calls, callback.name)
 					require.Equal(t, ctx, actualCtx)
 					require.Equal(t, fullMethod, actualMethod)
 					require.Equal(t, test.request, actualRequest)
-					if stage.stage == rpcFaultStageResponse {
+					if stage.response {
 						require.Equal(t, handlerResponse, actualResponse)
 						require.ErrorIs(t, actualErr, handlerErr)
 					}
@@ -146,30 +146,24 @@ func TestRPCFaultGenerator_Generate(t *testing.T) {
 
 				for _, callback := range test.callbacks {
 					callback := callback
-					switch stage.stage {
-					case rpcFaultStageRequest:
-						generator.RegisterRequestCallback(callback.scope, func(actualCtx context.Context, actualMethod string, actualRequest any) (bool, any, error) {
-							return invoke(callback, actualCtx, actualMethod, actualRequest, nil, nil)
-						})
-					case rpcFaultStageResponse:
+					if stage.response {
 						generator.RegisterResponseCallback(callback.scope, func(actualCtx context.Context, actualMethod string, actualRequest, actualResponse any, actualErr error) (bool, any, error) {
 							return invoke(callback, actualCtx, actualMethod, actualRequest, actualResponse, actualErr)
 						})
-					default:
-						t.Fatalf("unknown RPC fault stage: %v", stage.stage)
+					} else {
+						generator.RegisterRequestCallback(callback.scope, func(actualCtx context.Context, actualMethod string, actualRequest any) (bool, any, error) {
+							return invoke(callback, actualCtx, actualMethod, actualRequest, nil, nil)
+						})
 					}
 				}
 
 				var matched bool
 				var response any
 				var err error
-				switch stage.stage {
-				case rpcFaultStageRequest:
-					matched, response, err = generator.GenerateRequest(ctx, fullMethod, test.request)
-				case rpcFaultStageResponse:
+				if stage.response {
 					matched, response, err = generator.GenerateResponse(ctx, fullMethod, test.request, handlerResponse, handlerErr)
-				default:
-					t.Fatalf("unknown RPC fault stage: %v", stage.stage)
+				} else {
+					matched, response, err = generator.GenerateRequest(ctx, fullMethod, test.request)
 				}
 
 				if test.expectedErr == nil {
@@ -191,8 +185,8 @@ func TestRPCFaultGenerator_Unregister(t *testing.T) {
 	t.Run("idempotent", func(t *testing.T) {
 		t.Parallel()
 
-		generator := NewRPCFaultGenerator()
-		unregister := generator.RegisterRequestCallback(RPCFaultScope{NamespaceID: "namespace-id"}, func(context.Context, string, any) (bool, any, error) {
+		generator := faultinjection.NewRPCFaultGenerator()
+		unregister := generator.RegisterRequestCallback(faultinjection.RPCFaultScope{NamespaceID: "namespace-id"}, func(context.Context, string, any) (bool, any, error) {
 			return true, "response", nil
 		})
 
@@ -212,8 +206,8 @@ func TestRPCFaultGenerator_Unregister(t *testing.T) {
 	t.Run("removes namespace ID and name registrations", func(t *testing.T) {
 		t.Parallel()
 
-		generator := NewRPCFaultGenerator()
-		unregister := generator.RegisterRequestCallback(RPCFaultScope{NamespaceID: "namespace-id", NamespaceName: "namespace-name"}, func(context.Context, string, any) (bool, any, error) {
+		generator := faultinjection.NewRPCFaultGenerator()
+		unregister := generator.RegisterRequestCallback(faultinjection.RPCFaultScope{NamespaceID: "namespace-id", NamespaceName: "namespace-name"}, func(context.Context, string, any) (bool, any, error) {
 			return true, "response", nil
 		})
 		unregister()
@@ -244,10 +238,10 @@ func TestRPCFaultGenerator_Unregister(t *testing.T) {
 	t.Run("during generate", func(t *testing.T) {
 		t.Parallel()
 
-		generator := NewRPCFaultGenerator()
+		generator := faultinjection.NewRPCFaultGenerator()
 		callbackStarted := make(chan struct{})
 		continueCallback := make(chan struct{})
-		unregister := generator.RegisterRequestCallback(RPCFaultScope{NamespaceID: "namespace-id"}, func(context.Context, string, any) (bool, any, error) {
+		unregister := generator.RegisterRequestCallback(faultinjection.RPCFaultScope{NamespaceID: "namespace-id"}, func(context.Context, string, any) (bool, any, error) {
 			await.Snd(t, callbackStarted, struct{}{})
 			await.Rcv(t, continueCallback)
 			return true, "response", nil

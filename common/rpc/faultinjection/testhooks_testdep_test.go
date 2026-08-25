@@ -1,6 +1,6 @@
 //go:build test_dep
 
-package faultinjection
+package faultinjection_test
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/rpc/faultinjection"
 	"go.temporal.io/server/common/testing/testhooks"
 	"google.golang.org/grpc"
 )
@@ -18,7 +19,7 @@ import (
 func TestGRPCUnaryServerInterceptor_NoGenerator(t *testing.T) {
 	t.Parallel()
 
-	interceptor := GRPCUnaryServerInterceptor(NewTestHookGenerator(testhooks.NewTestHooks()))
+	interceptor := faultinjection.GRPCUnaryServerInterceptor(faultinjection.NewTestHookGenerator(testhooks.NewTestHooks()))
 	response, err := interceptor(
 		context.Background(),
 		"request",
@@ -37,11 +38,11 @@ func TestGRPCUnaryServerInterceptor_BeforeHandler(t *testing.T) {
 
 	testHooks := testhooks.NewTestHooks()
 	injectedErr := errors.New("injected")
-	generator := NewTestRPCFaultGenerator(testHooks)
-	generator.RegisterRequestCallback(RPCFaultScope{NamespaceID: "namespace-id"}, func(context.Context, string, any) (bool, any, error) {
+	generator := faultinjection.NewTestRPCFaultGenerator(testHooks)
+	generator.RegisterRequestCallback(faultinjection.RPCFaultScope{NamespaceID: "namespace-id"}, func(context.Context, string, any) (bool, any, error) {
 		return true, nil, injectedErr
 	})
-	interceptor := GRPCUnaryServerInterceptor(NewTestHookGenerator(testHooks))
+	interceptor := faultinjection.GRPCUnaryServerInterceptor(faultinjection.NewTestHookGenerator(testHooks))
 	handlerCalled := false
 
 	response, err := interceptor(
@@ -63,11 +64,11 @@ func TestGRPCUnaryServerInterceptor_AfterHandler(t *testing.T) {
 	t.Parallel()
 
 	testHooks := testhooks.NewTestHooks()
-	generator := NewTestRPCFaultGenerator(testHooks)
-	generator.RegisterResponseCallback(RPCFaultScope{NamespaceName: "namespace-name"}, func(context.Context, string, any, any, error) (bool, any, error) {
+	generator := faultinjection.NewTestRPCFaultGenerator(testHooks)
+	generator.RegisterResponseCallback(faultinjection.RPCFaultScope{NamespaceName: "namespace-name"}, func(context.Context, string, any, any, error) (bool, any, error) {
 		return true, "replacement", nil
 	})
-	interceptor := GRPCUnaryServerInterceptor(NewTestHookGenerator(testHooks))
+	interceptor := faultinjection.GRPCUnaryServerInterceptor(faultinjection.NewTestHookGenerator(testHooks))
 
 	response, err := interceptor(
 		context.Background(),
@@ -88,13 +89,13 @@ func TestGRPCUnaryServerInterceptor_HandlerError(t *testing.T) {
 	testHooks := testhooks.NewTestHooks()
 	handlerErr := errors.New("handler")
 	injectedErr := errors.New("injected")
-	generator := NewTestRPCFaultGenerator(testHooks)
-	generator.RegisterResponseCallback(RPCFaultScope{NamespaceID: "namespace-id"}, func(_ context.Context, _ string, _, response any, err error) (bool, any, error) {
+	generator := faultinjection.NewTestRPCFaultGenerator(testHooks)
+	generator.RegisterResponseCallback(faultinjection.RPCFaultScope{NamespaceID: "namespace-id"}, func(_ context.Context, _ string, _, response any, err error) (bool, any, error) {
 		require.Nil(t, response)
 		require.ErrorIs(t, err, handlerErr)
 		return true, nil, injectedErr
 	})
-	interceptor := GRPCUnaryServerInterceptor(NewTestHookGenerator(testHooks))
+	interceptor := faultinjection.GRPCUnaryServerInterceptor(faultinjection.NewTestHookGenerator(testHooks))
 	handlerCalled := false
 
 	response, err := interceptor(
@@ -116,8 +117,8 @@ func TestNewTestRPCFaultGenerator_UnregisterRemovesHook(t *testing.T) {
 	t.Parallel()
 
 	testHooks := testhooks.NewTestHooks()
-	generator := NewTestRPCFaultGenerator(testHooks)
-	unregister := generator.RegisterRequestCallback(RPCFaultScope{NamespaceID: "namespace-id"}, func(context.Context, string, any) (bool, any, error) {
+	generator := faultinjection.NewTestRPCFaultGenerator(testHooks)
+	unregister := generator.RegisterRequestCallback(faultinjection.RPCFaultScope{NamespaceID: "namespace-id"}, func(context.Context, string, any) (bool, any, error) {
 		return false, nil, nil
 	})
 	_, ok := testhooks.Get(testHooks, testhooks.RPCRequestFaultGeneratorByNamespaceID, namespace.ID("namespace-id"))

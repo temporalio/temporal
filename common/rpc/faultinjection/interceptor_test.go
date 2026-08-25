@@ -1,4 +1,4 @@
-package faultinjection
+package faultinjection_test
 
 import (
 	"context"
@@ -6,24 +6,25 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/rpc/faultinjection"
 	"google.golang.org/grpc"
 )
 
 func TestGRPCUnaryServerInterceptor_NilGenerator(t *testing.T) {
 	t.Parallel()
 
-	require.Nil(t, GRPCUnaryServerInterceptor(nil))
+	require.Nil(t, faultinjection.GRPCUnaryServerInterceptor(nil))
 }
 
 func TestGRPCUnaryServerInterceptor_ConfiguredBeforeHandler(t *testing.T) {
 	t.Parallel()
 
 	injectedErr := errors.New("injected")
-	generator := NewRPCFaultGenerator()
-	generator.RegisterRequestCallback(RPCFaultScope{}, func(context.Context, string, any) (bool, any, error) {
+	generator := faultinjection.NewRPCFaultGenerator()
+	generator.RegisterRequestCallback(faultinjection.RPCFaultScope{}, func(context.Context, string, any) (bool, any, error) {
 		return true, nil, injectedErr
 	})
-	interceptor := GRPCUnaryServerInterceptor(generator)
+	interceptor := faultinjection.GRPCUnaryServerInterceptor(generator)
 	handlerCalled := false
 
 	response, err := interceptor(
@@ -44,11 +45,11 @@ func TestGRPCUnaryServerInterceptor_ConfiguredBeforeHandler(t *testing.T) {
 func TestGRPCUnaryServerInterceptor_ConfiguredAfterHandler(t *testing.T) {
 	t.Parallel()
 
-	generator := NewRPCFaultGenerator()
-	generator.RegisterResponseCallback(RPCFaultScope{}, func(context.Context, string, any, any, error) (bool, any, error) {
+	generator := faultinjection.NewRPCFaultGenerator()
+	generator.RegisterResponseCallback(faultinjection.RPCFaultScope{}, func(context.Context, string, any, any, error) (bool, any, error) {
 		return true, "replacement", nil
 	})
-	interceptor := GRPCUnaryServerInterceptor(generator)
+	interceptor := faultinjection.GRPCUnaryServerInterceptor(generator)
 
 	response, err := interceptor(
 		context.Background(),
@@ -68,13 +69,13 @@ func TestGRPCUnaryServerInterceptor_ConfiguredHandlerError(t *testing.T) {
 
 	handlerErr := errors.New("handler")
 	injectedErr := errors.New("injected")
-	generator := NewRPCFaultGenerator()
-	generator.RegisterResponseCallback(RPCFaultScope{}, func(_ context.Context, _ string, _, response any, err error) (bool, any, error) {
+	generator := faultinjection.NewRPCFaultGenerator()
+	generator.RegisterResponseCallback(faultinjection.RPCFaultScope{}, func(_ context.Context, _ string, _, response any, err error) (bool, any, error) {
 		require.Nil(t, response)
 		require.ErrorIs(t, err, handlerErr)
 		return true, nil, injectedErr
 	})
-	interceptor := GRPCUnaryServerInterceptor(generator)
+	interceptor := faultinjection.GRPCUnaryServerInterceptor(generator)
 
 	response, err := interceptor(
 		context.Background(),
