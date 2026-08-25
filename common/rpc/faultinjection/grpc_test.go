@@ -209,7 +209,7 @@ func TestRPCFaultGenerator_Unregister(t *testing.T) {
 		require.Nil(t, response)
 	})
 
-	t.Run("namespace ID and name", func(t *testing.T) {
+	t.Run("removes namespace ID and name registrations", func(t *testing.T) {
 		t.Parallel()
 
 		generator := NewRPCFaultGenerator()
