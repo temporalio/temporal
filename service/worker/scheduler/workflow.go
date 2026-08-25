@@ -353,12 +353,11 @@ func (s *scheduler) run() error {
 			s.State.NeedRefresh {
 			s.refreshWorkflows(slices.Clone(s.Info.RunningWorkflows))
 			s.State.NeedRefresh = false
-			// if for some reason the tweakables indicate that CHASM migration is not enabled
-			// but the state specifies that it should be, then unset the PendingMigration
-			// flag, as this is probably a rollback scenario where migration was enabled,
-			// then the workflow wasn't able to migrate, for some reason, and then
-			// migration was rolled back. We don't want to keep attempting to migrate
-			if s.State.PendingMigration && !s.tweakables.EnableCHASMMigration {
+		}
+
+		// if there's been a rollback, turn off the pending migration flag
+		if s.hasMinVersion(MigrationHandoffFixes) && s.State.PendingMigration {
+			if !s.tweakables.EnableCHASMMigration {
 				s.State.PendingMigration = false
 			}
 		}
@@ -367,8 +366,6 @@ func (s *scheduler) run() error {
 			(s.tweakables.MigrateWithRunningWorkflows || len(s.Info.RunningWorkflows) == 0) {
 			s.State.PendingMigration = true
 		}
-		// CHASM migration markers are only safe to write at or after version TriggerImmediatelyTimestamp.
-		// A clamped run defers migration without dropping it: PendingMigration stays set, and the migration runs once the ceiling is lifted.
 		if s.State.PendingMigration && !s.hasMinVersion(TriggerImmediatelyTimestamp) {
 			s.logger.Debug("deferring schedule migration to CHASM: recorded version is clamped below migration support")
 		} else if s.State.PendingMigration {

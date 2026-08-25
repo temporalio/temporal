@@ -116,17 +116,16 @@ func TestScheduleMigrationV1ToV2_AdminMigratePreservesRunningWorkflowHistory(t *
 // even with a workflow still running and is still broken (see
 // TestScheduleMigrationV1ToV2_AdminMigratePreservesRunningWorkflowHistory).
 func TestScheduleMigrationV1ToV2_RolloutMigration(t *testing.T) {
-	// The eligibility-check ordering fix (property 1) is gated on
-	// MigrationHandoffFixes, which is intentionally not yet the shipped
-	// CurrentTweakablePolicies.Version -- it is activated in a follow-up deploy
-	// for rollback safety (see the TODO on CurrentTweakablePolicies in
-	// service/worker/scheduler/workflow.go). Force it here so this test exercises
-	// the fix regardless of the current rollout state, mirroring how the
-	// scheduler package's own unit tests (e.g.
-	// TestAutoMigrateReconcilesRunningWorkflowBeforeCheck) pin the version.
-	prevVersion := scheduler.CurrentTweakablePolicies.Version
-	scheduler.CurrentTweakablePolicies.Version = scheduler.MigrationHandoffFixes
-	defer func() { scheduler.CurrentTweakablePolicies.Version = prevVersion }()
+	// Property 1 is gated on MigrationHandoffFixes, which is not yet the shipped
+	// CurrentTweakablePolicies.Version. Unlike the scheduler package's unit tests, this one
+	// can't force it: that global is read by the live worker's goroutines, and this
+	// package's schedule tests run in parallel against a shared cluster, so writing it
+	// would race and would pin unrelated schedules to an unshipped version.
+	if scheduler.CurrentTweakablePolicies.Version < scheduler.MigrationHandoffFixes {
+		t.Skipf("MigrationHandoffFixes (%d) is not yet the shipped scheduler version (%d); "+
+			"this test activates with the follow-up version bump",
+			scheduler.MigrationHandoffFixes, scheduler.CurrentTweakablePolicies.Version)
+	}
 
 	env := testcore.NewEnv(t, testcore.WithWorkerService("V1 scheduler"))
 	ctx := testcore.NewContext()

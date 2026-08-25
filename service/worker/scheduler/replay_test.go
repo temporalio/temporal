@@ -126,8 +126,11 @@ func TestReplaysWithDynamicConfigChange(t *testing.T) {
 	}
 }
 
-// TestEveryVersionIsMapped checks every version from InitialVersion to the highest maps to a
-// server release whose snapshot is present, so a newly added version can't escape replay coverage.
+// TestEveryVersionIsMapped checks every version from InitialVersion up to the version this
+// binary records maps to a server release whose snapshot is present, so a newly activated
+// version can't escape replay coverage. The ceiling is CurrentTweakablePolicies.Version
+// rather than the highest declared constant: a version may be declared a deploy before it
+// is activated, and no released server writes histories at that version yet.
 func TestEveryVersionIsMapped(t *testing.T) {
 	mapped := map[scheduler.SchedulerWorkflowVersion]bool{}
 	for _, vr := range versionReleases {
@@ -135,8 +138,10 @@ func TestEveryVersionIsMapped(t *testing.T) {
 		_, err := os.Stat(filepath.Join("testdata", "replay_"+vr.server+".json.gz"))
 		require.NoErrorf(t, err, "missing snapshot replay_%s.json.gz", vr.server)
 	}
-	for v := scheduler.InitialVersion; v <= scheduler.TriggerImmediatelyTimestamp; v++ {
-		require.Truef(t, mapped[v], "scheduler version v%d is not mapped to a server release in versionReleases", int(v))
+	for v := scheduler.InitialVersion; v <= scheduler.CurrentTweakablePolicies.Version; v++ {
+		require.Truef(t, mapped[v],
+			"scheduler version v%d is recorded by this binary but is not mapped to a release in "+
+				"versionReleases; add the release and its replay_<release>.json.gz snapshot", int(v))
 	}
 }
 

@@ -16,7 +16,8 @@ import (
 
 type mockSchedulerClient struct {
 	schedulerpb.SchedulerServiceClient
-	migrateErr error
+	migrateErr  error
+	createCalls int
 }
 
 func (m *mockSchedulerClient) CreateFromMigrationState(
@@ -24,6 +25,7 @@ func (m *mockSchedulerClient) CreateFromMigrationState(
 	_ *schedulerpb.CreateFromMigrationStateRequest,
 	_ ...grpc.CallOption,
 ) (*schedulerpb.CreateFromMigrationStateResponse, error) {
+	m.createCalls++
 	return &schedulerpb.CreateFromMigrationStateResponse{}, m.migrateErr
 }
 
@@ -117,4 +119,48 @@ func TestMigrateScheduleToChasm_MigrationDisabled(t *testing.T) {
 	})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "migration is currently disabled")
+}
+
+// The guard must refuse before touching the scheduler service, not merely translate its
+// error -- otherwise it creates the V2 target and then reports failure, leaving both a V1
+// workflow and a V2 schedule behind.
+func TestMigrateScheduleToChasm_MigrationDisabledShortCircuits(t *testing.T) {
+	client := &mockSchedulerClient{}
+	a := newTestActivities(client, testNamespaceID)
+	a.migrationEnabled = func() bool { return false }
+
+	err := a.MigrateScheduleToChasm(context.Background(), &schedulerpb.CreateFromMigrationStateRequest{
+		NamespaceId: testNamespaceID,
+	})
+	require.Error(t, err)
+	require.Zero(t, client.createCalls, "the V2 schedule must not be created while migration is disabled")
+}
+
+// The non-retryable namespace mismatch must not be masked by the retryable disabled
+// error, which would turn a permanent misroute into an endless retry loop.
+func TestMigrateScheduleToChasm_NamespaceMismatchBeatsDisabledCheck(t *testing.T) {
+	client := &mockSchedulerClient{}
+	a := newTestActivities(client, testNamespaceID)
+	a.migrationEnabled = func() bool { return false }
+
+	err := a.MigrateScheduleToChasm(context.Background(), &schedulerpb.CreateFromMigrationStateRequest{
+		NamespaceId: "different-namespace-id",
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "does not match activity namespace ID")
+	require.Zero(t, client.createCalls)
+}
+
+// Documents the fail-open default of the `migrationEnabled != nil` guard: an unwired
+// dependency migrates as if enabled, which is the wrong polarity for a rollback guard.
+func TestMigrateScheduleToChasm_MigrationEnabledUnwired(t *testing.T) {
+	client := &mockSchedulerClient{}
+	a := newTestActivities(client, testNamespaceID)
+	a.migrationEnabled = nil
+
+	err := a.MigrateScheduleToChasm(context.Background(), &schedulerpb.CreateFromMigrationStateRequest{
+		NamespaceId: testNamespaceID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, client.createCalls, "unwired migrationEnabled currently fails open")
 }

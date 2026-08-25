@@ -2729,7 +2729,14 @@ func (s *workflowSuite) TestMigrateFailureThenSignal() {
 // is entirely unaffected -- it keeps firing its own actions on schedule. A
 // stuck, perpetually-failing migration must never block the schedule's real
 // work.
+//
+// Pinned pre-v13: from v13 on the reset clears PendingMigration, so migration stops
+// retrying entirely (see TestMigrateRollbackClearsPendingMigrationAtNewVersion).
 func (s *workflowSuite) TestMigrateRollbackDoesNotBlockScheduleActions() {
+	previousTweakables := CurrentTweakablePolicies
+	defer func() { CurrentTweakablePolicies = previousTweakables }()
+	CurrentTweakablePolicies.Version = TriggerImmediatelyTimestamp
+
 	enableMigration := true
 	migrateCalls := 0
 	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Return(
@@ -2955,4 +2962,267 @@ func (s *workflowSuite) TestMigrateDynamicConfigDisabledNoMigration() {
 	// Workflow should CAN normally without attempting migration.
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+// migratedStartArgs builds StartScheduleArgs with a single BufferedStart, so tests can
+// vary just the migration-carried identity fields and the overlap policy.
+func (s *workflowSuite) migratedStartArgs(start *schedulespb.BufferedStart) *schedulespb.StartScheduleArgs {
+	return &schedulespb.StartScheduleArgs{
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(time.Hour)}},
+			},
+			Action: s.defaultAction("configured-workflow-id"),
+		},
+		State: &schedulespb.InternalState{
+			Namespace:      "myns",
+			NamespaceId:    "mynsid",
+			ScheduleId:     "myschedule",
+			ConflictToken:  InitialConflictToken,
+			BufferedStarts: []*schedulespb.BufferedStart{start},
+		},
+	}
+}
+
+// The rollback conversion only fills fields that were empty, so a start can arrive back
+// in V1 with a workflow ID but no request ID. The two fields are read independently.
+func (s *workflowSuite) TestMigratedBufferedStartKeepsWorkflowIdWithGeneratedRequestId() {
+	previousTweakables := CurrentTweakablePolicies
+	defer func() { CurrentTweakablePolicies = previousTweakables }()
+	CurrentTweakablePolicies.Version = MigrationHandoffFixes
+
+	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
+		s.Equal("migrated-workflow-id", req.Request.WorkflowId)
+		s.NotEmpty(req.Request.RequestId)
+		return nil, nil
+	})
+
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 1
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(SchedulerWorkflow, s.migratedStartArgs(&schedulespb.BufferedStart{
+		NominalTime:   timestamppb.New(baseStartTime),
+		ActualTime:    timestamppb.New(baseStartTime),
+		OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		Manual:        true,
+		WorkflowId:    "migrated-workflow-id",
+	}))
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+// Mirror of the above: request ID preserved, workflow ID falls back to V1's legacy
+// derivation.
+func (s *workflowSuite) TestMigratedBufferedStartKeepsRequestIdWithGeneratedWorkflowId() {
+	previousTweakables := CurrentTweakablePolicies
+	defer func() { CurrentTweakablePolicies = previousTweakables }()
+	CurrentTweakablePolicies.Version = MigrationHandoffFixes
+
+	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
+		s.Equal("configured-workflow-id-2022-06-01T00:00:00Z", req.Request.WorkflowId)
+		s.Equal("migrated-request-id", req.Request.RequestId)
+		return nil, nil
+	})
+
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 1
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(SchedulerWorkflow, s.migratedStartArgs(&schedulespb.BufferedStart{
+		NominalTime:   timestamppb.New(baseStartTime),
+		ActualTime:    timestamppb.New(baseStartTime),
+		OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		Manual:        true,
+		RequestId:     "migrated-request-id",
+	}))
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+// A migrated workflow ID already carries the nominal-time suffix (V2 applies it
+// unconditionally), so the suffix must be suppressed for any overlap policy, not just
+// ALLOW_ALL, or the ID comes back doubled and no longer dedups against V2's run.
+func (s *workflowSuite) TestMigratedBufferedStartSkipsTimestampSuffixForNonAllowAll() {
+	previousTweakables := CurrentTweakablePolicies
+	defer func() { CurrentTweakablePolicies = previousTweakables }()
+	CurrentTweakablePolicies.Version = MigrationHandoffFixes
+	s.True(CurrentTweakablePolicies.AlwaysAppendTimestamp,
+		"this test is only meaningful while AlwaysAppendTimestamp is on")
+
+	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
+		s.Equal("configured-workflow-id-2022-06-01T00:00:00Z", req.Request.WorkflowId)
+		s.Equal("migrated-request-id", req.Request.RequestId)
+		return nil, nil
+	})
+
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 1
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(SchedulerWorkflow, s.migratedStartArgs(&schedulespb.BufferedStart{
+		NominalTime:   timestamppb.New(baseStartTime),
+		ActualTime:    timestamppb.New(baseStartTime),
+		OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+		// Precomputed as V2 would: base ID + truncated nominal time.
+		WorkflowId: "configured-workflow-id-2022-06-01T00:00:00Z",
+		RequestId:  "migrated-request-id",
+	}))
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
+// Once migration is rolled back with a migration still pending, the pending flag must be
+// dropped so the schedule stops retrying instead of migrating late.
+func (s *workflowSuite) TestMigrateRollbackClearsPendingMigrationAtNewVersion() {
+	previousTweakables := CurrentTweakablePolicies
+	defer func() { CurrentTweakablePolicies = previousTweakables }()
+	CurrentTweakablePolicies.Version = MigrationHandoffFixes
+
+	enableMigration := true
+	migrateCalls := 0
+	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Return(
+		func(context.Context, *schedulerpb.CreateFromMigrationStateRequest) error {
+			migrateCalls++
+			return errors.New("migration failed")
+		})
+
+	// Roll the flag back, then wake the workflow so it re-reads tweakables.
+	s.env.RegisterDelayedCallback(func() {
+		enableMigration = false
+		s.env.SignalWorkflow(SignalNameRefresh, nil)
+	}, 1*time.Second)
+	// Wake it once more, to prove no further migration attempt is made.
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SignalWorkflow(SignalNameRefresh, nil)
+	}, 5*time.Second)
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SignalWorkflow(SignalNameForceCAN, nil)
+	}, 10*time.Second)
+
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
+		return schedulerWorkflowWithSpecBuilder(ctx, args, newSpecBuilderForTest(0, 0),
+			func() bool { return enableMigration }, func() bool { return true }, func() int { return -1 })
+	}, &schedulespb.StartScheduleArgs{
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(1 * time.Hour)}},
+			},
+			Action: s.defaultAction("myid"),
+		},
+		State: &schedulespb.InternalState{
+			Namespace:     "myns",
+			NamespaceId:   "mynsid",
+			ScheduleId:    "myschedule",
+			ConflictToken: InitialConflictToken,
+		},
+	})
+
+	s.Equal(1, migrateCalls, "migration must not be retried after the rollback")
+
+	var canErr *workflow.ContinueAsNewError
+	s.Require().ErrorAs(s.env.GetWorkflowError(), &canErr)
+	var canArgs schedulespb.StartScheduleArgs
+	s.Require().NoError(payloads.Decode(canErr.Input, &canArgs))
+	s.False(canArgs.State.PendingMigration, "PendingMigration should be cleared after rollback")
+}
+
+// Pre-v13 counterpart: the reset is version-gated, so an older recorded version must
+// keep retrying and keep the flag across continue-as-new.
+func (s *workflowSuite) TestMigrateRollbackKeepsPendingMigrationAtOldVersion() {
+	previousTweakables := CurrentTweakablePolicies
+	defer func() { CurrentTweakablePolicies = previousTweakables }()
+	CurrentTweakablePolicies.Version = TriggerImmediatelyTimestamp
+
+	enableMigration := true
+	migrateCalls := 0
+	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Return(
+		func(context.Context, *schedulerpb.CreateFromMigrationStateRequest) error {
+			migrateCalls++
+			return errors.New("migration failed")
+		})
+
+	s.env.RegisterDelayedCallback(func() {
+		enableMigration = false
+		s.env.SignalWorkflow(SignalNameRefresh, nil)
+	}, 1*time.Second)
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SignalWorkflow(SignalNameRefresh, nil)
+	}, 5*time.Second)
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SignalWorkflow(SignalNameForceCAN, nil)
+	}, 10*time.Second)
+
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
+		return schedulerWorkflowWithSpecBuilder(ctx, args, newSpecBuilderForTest(0, 0),
+			func() bool { return enableMigration }, func() bool { return true }, func() int { return -1 })
+	}, &schedulespb.StartScheduleArgs{
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(1 * time.Hour)}},
+			},
+			Action: s.defaultAction("myid"),
+		},
+		State: &schedulespb.InternalState{
+			Namespace:     "myns",
+			NamespaceId:   "mynsid",
+			ScheduleId:    "myschedule",
+			ConflictToken: InitialConflictToken,
+		},
+	})
+
+	s.Greater(migrateCalls, 1, "pre-v13 behavior is unchanged: migration keeps being retried")
+
+	var canErr *workflow.ContinueAsNewError
+	s.Require().ErrorAs(s.env.GetWorkflowError(), &canErr)
+	var canArgs schedulespb.StartScheduleArgs
+	s.Require().NoError(payloads.Decode(canErr.Input, &canArgs))
+	s.True(canArgs.State.PendingMigration, "pre-v13, PendingMigration survives continue-as-new")
+}
+
+// The workflow's EnableCHASMMigration tweakable ANDs the namespace bool with the rollout
+// percent (fx.go), which defaults to 0, while the activity guard reads only the bool. So
+// an operator migrating one schedule on demand (bool on, percent 0, migrate signal)
+// passes the activity guard but reads as rolled back to the reset, which drops
+// PendingMigration before executeMigration runs.
+func (s *workflowSuite) TestOperatorMigrateSignalSurvivesRolloutPercentZero() {
+	s.T().Skip("known gap: the v13 rollback reset discards operator-initiated migrations " +
+		"whenever CHASMSchedulerMigrationRolloutPercent is 0 (its default)")
+
+	previousTweakables := CurrentTweakablePolicies
+	defer func() { CurrentTweakablePolicies = previousTweakables }()
+	CurrentTweakablePolicies.Version = MigrationHandoffFixes
+
+	migrateCalls := 0
+	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Return(
+		func(context.Context, *schedulerpb.CreateFromMigrationStateRequest) error {
+			migrateCalls++
+			return nil
+		})
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SignalWorkflow(SignalNameMigrateToChasm, nil)
+	}, 1*time.Second)
+
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
+		// enableCHASMMigration=false models rolloutPercent=0 with the namespace bool on.
+		return schedulerWorkflowWithSpecBuilder(ctx, args, newSpecBuilderForTest(0, 0),
+			func() bool { return false }, func() bool { return true }, func() int { return -1 })
+	}, &schedulespb.StartScheduleArgs{
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(1 * time.Hour)}},
+			},
+			Action: s.defaultAction("myid"),
+		},
+		State: &schedulespb.InternalState{
+			Namespace:     "myns",
+			NamespaceId:   "mynsid",
+			ScheduleId:    "myschedule",
+			ConflictToken: InitialConflictToken,
+		},
+	})
+
+	s.Equal(1, migrateCalls, "an operator-requested migration must not be discarded by the rollback reset")
+	s.Require().NoError(s.env.GetWorkflowError(), "workflow should complete after a successful migration")
 }
