@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	rpcfaultinjection "go.temporal.io/server/common/rpc/faultinjection"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -456,6 +457,22 @@ func (e *TestEnv) T() *testing.T {
 
 func (e *TestEnv) Tv() *testvars.TestVars {
 	return e.tv
+}
+
+// InjectRPCResponseFault registers a post-handler fault injection scoped to this test's namespace.
+// Requests match either the namespace ID or name filter, depending on which
+// namespace field they expose. Requests without either field are ignored.
+// Returns a cleanup function that disables the fault.
+func (e *TestEnv) InjectRPCResponseFault(fault RPCResponseFault) func() {
+	scope := rpcfaultinjection.RPCFaultScope{
+		NamespaceID:   e.nsID,
+		NamespaceName: e.nsName,
+	}
+	return injectRPCFault(e.t, func(inject func(any, error) (bool, any, error)) func() {
+		return e.GetTestCluster().Host().GetRPCFaultGenerator().RegisterResponseCallback(scope, func(_ context.Context, _ string, req, resp any, err error) (bool, any, error) {
+			return inject(req, fault(req, resp, err))
+		})
+	})
 }
 
 // Context returns the test-level timeout context with RPC version headers already included.
