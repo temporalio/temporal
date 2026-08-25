@@ -408,37 +408,32 @@ lint-actions: $(ACTIONLINT)
 # --new-from-rev filters reported issues _after_ analysis; this target also reduces package inputs _before_ analysis.
 lint-code-fast:
 	@if ! git rev-parse --verify --quiet "$(GOLANGCI_LINT_BASE_REV)^{commit}" >/dev/null; then \
-		printf '%s\n' "GOLANGCI_LINT_BASE_REV=$(GOLANGCI_LINT_BASE_REV) is not a known commit; fetch it or override GOLANGCI_LINT_BASE_REV"; \
+		printf $(RED) "GOLANGCI_LINT_BASE_REV=$(GOLANGCI_LINT_BASE_REV) is not a known commit; fetch it or override GOLANGCI_LINT_BASE_REV"; \
 		exit 1; \
 	fi
-	@changed_files=$$({ \
-		git diff --name-only --diff-filter=ACMR "$(GOLANGCI_LINT_BASE_REV)" -- '*.go'; \
+	@base=$$(git merge-base HEAD "$(GOLANGCI_LINT_BASE_REV)"); \
+	targets=$$({ \
+		git diff --no-renames --name-only "$$base" -- '*.go'; \
 		git ls-files --others --exclude-standard -- '*.go'; \
-	}); \
-	targets=; \
-	if [ -n "$$changed_files" ]; then \
-		targets=$$(printf '%s\n' "$$changed_files" | while IFS= read -r file; do \
-			dir=$$(dirname "$$file"); \
-			[ "$$dir" = "." ] && printf '.\n' || printf './%s\n' "$$dir"; \
-		done | sort -u | tr '\n' ' '); \
-	fi; \
-	$(MAKE) LINT_CODE_TARGETS="$$targets" lint-code
+	} | sed 's|^|./|; s|/[^/]*$$||' | sort -u \
+	  | while read -r dir; do [ -d "$$dir" ] && printf '%s ' "$$dir"; done); \
+	if [ -z "$$targets" ]; then \
+		printf $(COLOR) "No changed Go packages to lint."; \
+	else \
+		$(MAKE) GOLANGCI_LINT_BASE_REV="$$base" LINT_CODE_TARGETS="$$targets" lint-code; \
+	fi
 
 lint-code: $(GOLANGCI_LINT) $(ERRORTYPE)
 	@printf $(COLOR) "Linting code..."
-	@if [ -n "$(strip $(LINT_CODE_TARGETS))" ]; then \
-		$(GOLANGCI_LINT) run \
-			--verbose \
-			--build-tags $(ALL_TEST_TAGS) \
-			--timeout 10m \
-			--fix=$(GOLANGCI_LINT_FIX) \
-			--new-from-rev=$(GOLANGCI_LINT_BASE_REV) \
-			--config=.github/.golangci.yml \
-			$(LINT_CODE_TARGETS) && \
-		go vet -tags $(ALL_TEST_TAGS) -vettool="$(ERRORTYPE)" -style-check=false $(LINT_CODE_TARGETS); \
-	else \
-		printf $(COLOR) "No changed Go packages to lint."; \
-	fi
+	@$(GOLANGCI_LINT) run \
+		--verbose \
+		--build-tags $(ALL_TEST_TAGS) \
+		--timeout 10m \
+		--fix=$(GOLANGCI_LINT_FIX) \
+		--new-from-rev=$(GOLANGCI_LINT_BASE_REV) \
+		--config=.github/.golangci.yml \
+		$(LINT_CODE_TARGETS)
+	@go vet -tags $(ALL_TEST_TAGS) -vettool="$(ERRORTYPE)" -style-check=false $(LINT_CODE_TARGETS)
 
 lint-yaml: $(YAMLFMT)
 	@printf $(COLOR) "Checking YAML formatting..."
