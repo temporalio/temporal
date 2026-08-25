@@ -222,9 +222,10 @@ executing. `InjectRPCResponseFault` runs after the handler and receives `(req, r
 an injected error can model an operation that executed but whose response was lost. The test fails
 if the fault never triggers.
 
-The `env` methods scope faults to the test's namespace. Use `testcore.InjectRPCRequestFault` or
-`testcore.InjectRPCResponseFault` directly only when an unscoped fault is required. Only unary RPCs
-are intercepted; streaming RPCs are unaffected.
+The `env` methods scope faults to the test's namespace. The raw `testcore.InjectRPCRequestFault`
+and `testcore.InjectRPCResponseFault` helpers require an explicit `testcore.WithNamespaceID` or
+`testcore.WithNamespaceName` option; namespace-less fault injection is unsupported. Only unary
+RPCs are intercepted; streaming RPCs are unaffected.
 
 ### testhooks package
 

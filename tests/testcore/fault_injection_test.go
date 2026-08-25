@@ -6,83 +6,53 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/namespace"
 )
 
-func TestRPCFaultOptionsMatchesNamespace(t *testing.T) {
+func TestRPCFaultOptionsNamespaceScopes(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		name    string
-		options rpcFaultOptions
-		request any
-		matches bool
+		name              string
+		options           rpcFaultOptions
+		namespaceID       namespace.ID
+		namespaceName     namespace.Name
+		hasNamespaceScope bool
 	}{
 		{
-			name:    "no filters",
-			request: struct{}{},
-			matches: true,
+			name: "no namespace scope",
 		},
 		{
-			name:    "matching namespace ID",
-			options: rpcFaultOptions{namespaceID: "namespace-id"},
-			request: &matchingservice.AddWorkflowTaskRequest{NamespaceId: "namespace-id"},
-			matches: true,
+			name:              "namespace ID",
+			options:           rpcFaultOptions{namespaceID: "namespace-id"},
+			namespaceID:       "namespace-id",
+			hasNamespaceScope: true,
 		},
 		{
-			name: "matching namespace ID with both filters",
+			name:              "namespace name",
+			options:           rpcFaultOptions{namespaceName: "namespace-name"},
+			namespaceName:     "namespace-name",
+			hasNamespaceScope: true,
+		},
+		{
+			name: "namespace ID and name",
 			options: rpcFaultOptions{
 				namespaceID:   "namespace-id",
 				namespaceName: "namespace-name",
 			},
-			request: &matchingservice.AddWorkflowTaskRequest{NamespaceId: "namespace-id"},
-			matches: true,
-		},
-		{
-			name:    "mismatched namespace ID",
-			options: rpcFaultOptions{namespaceID: "namespace-id"},
-			request: &matchingservice.AddWorkflowTaskRequest{NamespaceId: "other-namespace-id"},
-		},
-		{
-			name:    "empty namespace ID",
-			options: rpcFaultOptions{namespaceID: "namespace-id"},
-			request: &matchingservice.AddWorkflowTaskRequest{},
-		},
-		{
-			name:    "matching namespace name",
-			options: rpcFaultOptions{namespaceName: "namespace-name"},
-			request: &workflowservice.StartWorkflowExecutionRequest{Namespace: "namespace-name"},
-			matches: true,
-		},
-		{
-			name: "matching namespace name with both filters",
-			options: rpcFaultOptions{
-				namespaceID:   "namespace-id",
-				namespaceName: "namespace-name",
-			},
-			request: &workflowservice.StartWorkflowExecutionRequest{Namespace: "namespace-name"},
-			matches: true,
-		},
-		{
-			name:    "mismatched namespace name",
-			options: rpcFaultOptions{namespaceName: "namespace-name"},
-			request: &workflowservice.StartWorkflowExecutionRequest{Namespace: "other-namespace-name"},
-		},
-		{
-			name: "namespace-less request",
-			options: rpcFaultOptions{
-				namespaceID:   "namespace-id",
-				namespaceName: "namespace-name",
-			},
-			request: struct{}{},
+			namespaceID:       "namespace-id",
+			namespaceName:     "namespace-name",
+			hasNamespaceScope: true,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tc.matches, tc.options.matchesNamespace(tc.request))
+			namespaceID, namespaceName, ok := tc.options.namespaceScopes()
+			require.Equal(t, tc.hasNamespaceScope, ok)
+			require.Equal(t, tc.namespaceID, namespaceID)
+			require.Equal(t, tc.namespaceName, namespaceName)
 		})
 	}
 }

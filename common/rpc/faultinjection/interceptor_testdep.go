@@ -5,6 +5,8 @@ package faultinjection
 import (
 	"context"
 
+	"go.temporal.io/server/common/namespace"
+	rpcinterceptor "go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/testing/testhooks"
 	"google.golang.org/grpc"
 )
@@ -23,7 +25,7 @@ import (
 func GRPCUnaryServerInterceptor(testHooks testhooks.TestHooks) grpc.UnaryServerInterceptor {
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
 		// Check before handler (can short-circuit)
-		if generate, ok := testhooks.Get(testHooks, testhooks.RPCRequestFaultGenerator, testhooks.GlobalScope); ok {
+		if generate, ok := getRequestFaultGenerator(testHooks, req); ok {
 			if matched, resp, err := generate(ctx, info.FullMethod, req); matched {
 				return resp, err
 			}
@@ -33,7 +35,7 @@ func GRPCUnaryServerInterceptor(testHooks testhooks.TestHooks) grpc.UnaryServerI
 		resp, err := handler(ctx, req)
 
 		// Check after handler (can modify response/error)
-		if generate, ok := testhooks.Get(testHooks, testhooks.RPCResponseFaultGenerator, testhooks.GlobalScope); ok {
+		if generate, ok := getResponseFaultGenerator(testHooks, req); ok {
 			if matched, newResp, newErr := generate(ctx, info.FullMethod, req, resp, err); matched {
 				return newResp, newErr
 			}
@@ -41,4 +43,40 @@ func GRPCUnaryServerInterceptor(testHooks testhooks.TestHooks) grpc.UnaryServerI
 
 		return resp, err
 	}
+}
+
+func getRequestFaultGenerator(testHooks testhooks.TestHooks, req any) (func(context.Context, string, any) (bool, any, error), bool) {
+	if namespaceID, ok := namespaceIDFromRequest(req); ok {
+		return testhooks.Get(testHooks, testhooks.RPCRequestFaultGeneratorByNamespaceID, namespaceID)
+	}
+	if namespaceName, ok := namespaceNameFromRequest(req); ok {
+		return testhooks.Get(testHooks, testhooks.RPCRequestFaultGeneratorByNamespaceName, namespaceName)
+	}
+	return nil, false
+}
+
+func getResponseFaultGenerator(testHooks testhooks.TestHooks, req any) (func(context.Context, string, any, any, error) (bool, any, error), bool) {
+	if namespaceID, ok := namespaceIDFromRequest(req); ok {
+		return testhooks.Get(testHooks, testhooks.RPCResponseFaultGeneratorByNamespaceID, namespaceID)
+	}
+	if namespaceName, ok := namespaceNameFromRequest(req); ok {
+		return testhooks.Get(testHooks, testhooks.RPCResponseFaultGeneratorByNamespaceName, namespaceName)
+	}
+	return nil, false
+}
+
+func namespaceIDFromRequest(req any) (namespace.ID, bool) {
+	request, ok := req.(rpcinterceptor.NamespaceIDGetter)
+	if !ok || request.GetNamespaceId() == "" {
+		return "", false
+	}
+	return namespace.ID(request.GetNamespaceId()), true
+}
+
+func namespaceNameFromRequest(req any) (namespace.Name, bool) {
+	request, ok := req.(rpcinterceptor.NamespaceNameGetter)
+	if !ok || request.GetNamespace() == "" {
+		return "", false
+	}
+	return namespace.Name(request.GetNamespace()), true
 }

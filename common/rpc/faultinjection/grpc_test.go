@@ -1,3 +1,5 @@
+//go:build test_dep
+
 package faultinjection
 
 import (
@@ -6,23 +8,25 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/testing/testhooks"
 )
 
 func TestRPCFaultGenerator_NoCallbacks(t *testing.T) {
 	t.Parallel()
 
-	generator := NewRPCFaultGenerator()
-	matched, response, err := generator.GenerateRequest(context.Background(), "/test.Service/Method", "request")
+	testHooks := testhooks.NewTestHooks()
+	NewRPCFaultGenerator(testHooks)
+	_, ok := testhooks.Get(testHooks, testhooks.RPCRequestFaultGeneratorByNamespaceID, namespace.ID("namespace-id"))
 
-	require.NoError(t, err)
-	require.Nil(t, response)
-	require.False(t, matched)
+	require.False(t, ok)
 }
 
 func TestRPCFaultGenerator_CallbackSeparationAndArguments(t *testing.T) {
 	t.Parallel()
 
-	generator := NewRPCFaultGenerator()
+	testHooks := testhooks.NewTestHooks()
+	generator := NewRPCFaultGenerator(testHooks)
 	ctx := context.Background()
 	request := &struct{}{}
 	response := &struct{}{}
@@ -31,14 +35,14 @@ func TestRPCFaultGenerator_CallbackSeparationAndArguments(t *testing.T) {
 	injectedErr := errors.New("injected")
 	requestCalls := 0
 	responseCalls := 0
-	generator.RegisterRequestCallback(func(actualCtx context.Context, fullMethod string, actualRequest any) (bool, any, error) {
+	generator.RegisterRequestCallback("namespace-id", "", func(actualCtx context.Context, fullMethod string, actualRequest any) (bool, any, error) {
 		requestCalls++
 		require.Equal(t, ctx, actualCtx)
 		require.Equal(t, "/test.Service/Method", fullMethod)
 		require.Same(t, request, actualRequest)
 		return false, nil, nil
 	})
-	generator.RegisterResponseCallback(func(actualCtx context.Context, fullMethod string, actualRequest, actualResponse any, actualErr error) (bool, any, error) {
+	generator.RegisterResponseCallback("namespace-id", "", func(actualCtx context.Context, fullMethod string, actualRequest, actualResponse any, actualErr error) (bool, any, error) {
 		responseCalls++
 		require.Equal(t, ctx, actualCtx)
 		require.Equal(t, "/test.Service/Method", fullMethod)
@@ -48,14 +52,18 @@ func TestRPCFaultGenerator_CallbackSeparationAndArguments(t *testing.T) {
 		return true, replacement, injectedErr
 	})
 
-	matched, actualResponse, actualErr := generator.GenerateRequest(ctx, "/test.Service/Method", request)
+	generateRequest, ok := testhooks.Get(testHooks, testhooks.RPCRequestFaultGeneratorByNamespaceID, namespace.ID("namespace-id"))
+	require.True(t, ok)
+	matched, actualResponse, actualErr := generateRequest(ctx, "/test.Service/Method", request)
 	require.NoError(t, actualErr)
 	require.Nil(t, actualResponse)
 	require.False(t, matched)
 	require.Equal(t, 1, requestCalls)
 	require.Equal(t, 0, responseCalls)
 
-	matched, actualResponse, actualErr = generator.GenerateResponse(ctx, "/test.Service/Method", request, response, handlerErr)
+	generateResponse, ok := testhooks.Get(testHooks, testhooks.RPCResponseFaultGeneratorByNamespaceID, namespace.ID("namespace-id"))
+	require.True(t, ok)
+	matched, actualResponse, actualErr = generateResponse(ctx, "/test.Service/Method", request, response, handlerErr)
 
 	require.ErrorIs(t, actualErr, injectedErr)
 	require.Same(t, replacement, actualResponse)
@@ -67,22 +75,25 @@ func TestRPCFaultGenerator_CallbackSeparationAndArguments(t *testing.T) {
 func TestRPCFaultGenerator_FirstMatchWins(t *testing.T) {
 	t.Parallel()
 
-	generator := NewRPCFaultGenerator()
+	testHooks := testhooks.NewTestHooks()
+	generator := NewRPCFaultGenerator(testHooks)
 	var calls []int
-	generator.RegisterRequestCallback(func(context.Context, string, any) (bool, any, error) {
+	generator.RegisterRequestCallback("namespace-id", "", func(context.Context, string, any) (bool, any, error) {
 		calls = append(calls, 1)
 		return false, nil, nil
 	})
-	generator.RegisterRequestCallback(func(context.Context, string, any) (bool, any, error) {
+	generator.RegisterRequestCallback("namespace-id", "", func(context.Context, string, any) (bool, any, error) {
 		calls = append(calls, 2)
 		return true, "response", nil
 	})
-	generator.RegisterRequestCallback(func(context.Context, string, any) (bool, any, error) {
+	generator.RegisterRequestCallback("namespace-id", "", func(context.Context, string, any) (bool, any, error) {
 		calls = append(calls, 3)
 		return true, "other response", nil
 	})
 
-	matched, response, err := generator.GenerateRequest(context.Background(), "/test.Service/Method", "request")
+	generate, ok := testhooks.Get(testHooks, testhooks.RPCRequestFaultGeneratorByNamespaceID, namespace.ID("namespace-id"))
+	require.True(t, ok)
+	matched, response, err := generate(context.Background(), "/test.Service/Method", "request")
 
 	require.NoError(t, err)
 	require.Equal(t, "response", response)
@@ -93,27 +104,27 @@ func TestRPCFaultGenerator_FirstMatchWins(t *testing.T) {
 func TestRPCFaultGenerator_UnregisterIsIdempotent(t *testing.T) {
 	t.Parallel()
 
-	generator := NewRPCFaultGenerator()
-	unregister := generator.RegisterRequestCallback(func(context.Context, string, any) (bool, any, error) {
+	testHooks := testhooks.NewTestHooks()
+	generator := NewRPCFaultGenerator(testHooks)
+	unregister := generator.RegisterRequestCallback("namespace-id", "", func(context.Context, string, any) (bool, any, error) {
 		return true, "response", nil
 	})
 
 	unregister()
 	unregister()
-	matched, response, err := generator.GenerateRequest(context.Background(), "/test.Service/Method", "request")
+	_, ok := testhooks.Get(testHooks, testhooks.RPCRequestFaultGeneratorByNamespaceID, namespace.ID("namespace-id"))
 
-	require.NoError(t, err)
-	require.Nil(t, response)
-	require.False(t, matched)
+	require.False(t, ok)
 }
 
 func TestRPCFaultGenerator_UnregisterDuringGenerate(t *testing.T) {
 	t.Parallel()
 
-	generator := NewRPCFaultGenerator()
+	testHooks := testhooks.NewTestHooks()
+	generator := NewRPCFaultGenerator(testHooks)
 	callbackStarted := make(chan struct{})
 	continueCallback := make(chan struct{})
-	unregister := generator.RegisterRequestCallback(func(context.Context, string, any) (bool, any, error) {
+	unregister := generator.RegisterRequestCallback("namespace-id", "", func(context.Context, string, any) (bool, any, error) {
 		close(callbackStarted)
 		<-continueCallback
 		return true, "response", nil
@@ -124,8 +135,10 @@ func TestRPCFaultGenerator_UnregisterDuringGenerate(t *testing.T) {
 		err      error
 	}
 	resultCh := make(chan result, 1)
+	generate, ok := testhooks.Get(testHooks, testhooks.RPCRequestFaultGeneratorByNamespaceID, namespace.ID("namespace-id"))
+	require.True(t, ok)
 	go func() {
-		matched, response, err := generator.GenerateRequest(context.Background(), "/test.Service/Method", "request")
+		matched, response, err := generate(context.Background(), "/test.Service/Method", "request")
 		resultCh <- result{matched: matched, response: response, err: err}
 	}()
 
@@ -138,8 +151,36 @@ func TestRPCFaultGenerator_UnregisterDuringGenerate(t *testing.T) {
 	require.Equal(t, "response", generateResult.response)
 	require.True(t, generateResult.matched)
 
-	matched, response, err := generator.GenerateRequest(context.Background(), "/test.Service/Method", "request")
+	_, ok = testhooks.Get(testHooks, testhooks.RPCRequestFaultGeneratorByNamespaceID, namespace.ID("namespace-id"))
+	require.False(t, ok)
+}
+
+func TestRPCFaultGenerator_RegistersNamespaceIDAndNameAliases(t *testing.T) {
+	t.Parallel()
+
+	testHooks := testhooks.NewTestHooks()
+	generator := NewRPCFaultGenerator(testHooks)
+	unregister := generator.RegisterRequestCallback("namespace-id", "namespace-name", func(context.Context, string, any) (bool, any, error) {
+		return true, "response", nil
+	})
+
+	generateByID, ok := testhooks.Get(testHooks, testhooks.RPCRequestFaultGeneratorByNamespaceID, namespace.ID("namespace-id"))
+	require.True(t, ok)
+	generateByName, ok := testhooks.Get(testHooks, testhooks.RPCRequestFaultGeneratorByNamespaceName, namespace.Name("namespace-name"))
+	require.True(t, ok)
+
+	matched, response, err := generateByID(context.Background(), "/test.Service/Method", "request")
 	require.NoError(t, err)
-	require.Nil(t, response)
-	require.False(t, matched)
+	require.True(t, matched)
+	require.Equal(t, "response", response)
+	matched, response, err = generateByName(context.Background(), "/test.Service/Method", "request")
+	require.NoError(t, err)
+	require.True(t, matched)
+	require.Equal(t, "response", response)
+
+	unregister()
+	_, ok = testhooks.Get(testHooks, testhooks.RPCRequestFaultGeneratorByNamespaceID, namespace.ID("namespace-id"))
+	require.False(t, ok)
+	_, ok = testhooks.Get(testHooks, testhooks.RPCRequestFaultGeneratorByNamespaceName, namespace.Name("namespace-name"))
+	require.False(t, ok)
 }

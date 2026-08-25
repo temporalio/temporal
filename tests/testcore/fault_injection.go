@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"go.temporal.io/server/common/namespace"
 	rpcfaultinjection "go.temporal.io/server/common/rpc/faultinjection"
 )
 
@@ -24,33 +25,21 @@ type rpcFault func(req, resp any, err error) error
 
 type rpcFaultCallback func(req, resp any, err error) (bool, any, error)
 
-type registerRPCFault func(*rpcfaultinjection.RPCFaultGenerator, rpcFaultCallback) func()
+type registerRPCFault func(*rpcfaultinjection.RPCFaultGenerator, namespace.ID, namespace.Name, rpcFaultCallback) func()
 
 type rpcFaultOptions struct {
 	namespaceID   string
 	namespaceName string
 }
 
-func (o rpcFaultOptions) matchesNamespace(req any) bool {
-	if o.namespaceID == "" && o.namespaceName == "" {
-		return true
-	}
-
-	if o.namespaceID != "" {
-		if r, ok := req.(interface{ GetNamespaceId() string }); ok && r.GetNamespaceId() == o.namespaceID {
-			return true
-		}
-	}
-	if o.namespaceName != "" {
-		if r, ok := req.(interface{ GetNamespace() string }); ok && r.GetNamespace() == o.namespaceName {
-			return true
-		}
-	}
-	return false
+func (o rpcFaultOptions) namespaceScopes() (namespace.ID, namespace.Name, bool) {
+	namespaceID := namespace.ID(o.namespaceID)
+	namespaceName := namespace.Name(o.namespaceName)
+	return namespaceID, namespaceName, namespaceID != "" || namespaceName != ""
 }
 
 // WithNamespaceID matches requests that expose the given namespace ID.
-// When combined with [WithNamespaceName], matching either option is sufficient.
+// When combined with [WithNamespaceName], requests that expose an ID use the ID scope.
 func WithNamespaceID(id string) RPCFaultOption {
 	return func(o *rpcFaultOptions) {
 		o.namespaceID = id
@@ -58,7 +47,7 @@ func WithNamespaceID(id string) RPCFaultOption {
 }
 
 // WithNamespaceName matches requests that expose the given namespace name.
-// When combined with [WithNamespaceID], matching either option is sufficient.
+// When combined with [WithNamespaceID], requests without an ID use the name scope.
 func WithNamespaceName(name string) RPCFaultOption {
 	return func(o *rpcFaultOptions) {
 		o.namespaceName = name
@@ -70,8 +59,8 @@ func WithNamespaceName(name string) RPCFaultOption {
 // trigger a fault and what error to return.
 //
 // Prefer [TestEnv.InjectRPCRequestFault], which scopes the fault to the test's
-// namespace. Use InjectRPCRequestFault directly only when an unscoped fault is
-// required. Only unary RPCs are intercepted; streaming RPCs are unaffected.
+// namespace. Direct use requires [WithNamespaceID] or [WithNamespaceName]. Only
+// unary RPCs are intercepted; streaming RPCs are unaffected.
 //
 // Returns a cleanup function that disables the fault injection when called.
 // The test fails if the fault is never injected before the test completes.
@@ -84,7 +73,7 @@ func WithNamespaceName(name string) RPCFaultOption {
 //	            return serviceerror.NewNotFound("injected fault")
 //	        }
 //	        return nil
-//	    })
+//	    }, testcore.WithNamespaceID("namespace-id"))
 func InjectRPCRequestFault(t testing.TB, tc *TestCluster, fault RPCRequestFault, opts ...RPCFaultOption) func() {
 	return injectRPCFault(t, tc, func(req, _ any, _ error) error {
 		return fault(req)
@@ -96,8 +85,8 @@ func InjectRPCRequestFault(t testing.TB, tc *TestCluster, fault RPCRequestFault,
 // Returning an error discards the handler response and returns the injected error.
 //
 // Prefer [TestEnv.InjectRPCResponseFault], which scopes the fault to the test's
-// namespace. Use InjectRPCResponseFault directly only when an unscoped fault is
-// required. Only unary RPCs are intercepted; streaming RPCs are unaffected.
+// namespace. Direct use requires [WithNamespaceID] or [WithNamespaceName]. Only
+// unary RPCs are intercepted; streaming RPCs are unaffected.
 //
 // Returns a cleanup function that disables the fault injection when called.
 // The test fails if the fault is never injected before the test completes.
@@ -105,14 +94,14 @@ func InjectRPCResponseFault(t testing.TB, tc *TestCluster, fault RPCResponseFaul
 	return injectRPCFault(t, tc, rpcFault(fault), registerRPCResponseFault, opts...)
 }
 
-func registerRPCRequestFault(generator *rpcfaultinjection.RPCFaultGenerator, callback rpcFaultCallback) func() {
-	return generator.RegisterRequestCallback(func(_ context.Context, _ string, req any) (bool, any, error) {
+func registerRPCRequestFault(generator *rpcfaultinjection.RPCFaultGenerator, namespaceID namespace.ID, namespaceName namespace.Name, callback rpcFaultCallback) func() {
+	return generator.RegisterRequestCallback(namespaceID, namespaceName, func(_ context.Context, _ string, req any) (bool, any, error) {
 		return callback(req, nil, nil)
 	})
 }
 
-func registerRPCResponseFault(generator *rpcfaultinjection.RPCFaultGenerator, callback rpcFaultCallback) func() {
-	return generator.RegisterResponseCallback(func(_ context.Context, _ string, req, resp any, err error) (bool, any, error) {
+func registerRPCResponseFault(generator *rpcfaultinjection.RPCFaultGenerator, namespaceID namespace.ID, namespaceName namespace.Name, callback rpcFaultCallback) func() {
+	return generator.RegisterResponseCallback(namespaceID, namespaceName, func(_ context.Context, _ string, req, resp any, err error) (bool, any, error) {
 		return callback(req, resp, err)
 	})
 }
@@ -123,6 +112,11 @@ func injectRPCFault(t testing.TB, tc *TestCluster, fault rpcFault, register regi
 	var options rpcFaultOptions
 	for _, opt := range opts {
 		opt(&options)
+	}
+	namespaceID, namespaceName, ok := options.namespaceScopes()
+	if !ok {
+		t.Fatal("RPC fault injection requires WithNamespaceID or WithNamespaceName")
+		return func() {}
 	}
 
 	generator := tc.Host().GetFaultInjector()
@@ -135,11 +129,7 @@ func injectRPCFault(t testing.TB, tc *TestCluster, fault rpcFault, register regi
 	var logMu sync.Mutex
 	loggingEnabled := true
 
-	unregister := register(generator, func(req, resp any, err error) (bool, any, error) {
-		if !options.matchesNamespace(req) {
-			return false, nil, nil
-		}
-
+	unregister := register(generator, namespaceID, namespaceName, func(req, resp any, err error) (bool, any, error) {
 		if injectedErr := fault(req, resp, err); injectedErr != nil {
 			fired.Store(true)
 			logMu.Lock()
