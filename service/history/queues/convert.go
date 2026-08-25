@@ -300,6 +300,8 @@ func ToPersistenceTaskTypePredicate(
 func FromPersistenceTaskTypePredicate(
 	attributes *persistencespb.TaskTypePredicateAttributes,
 ) tasks.Predicate {
+	//nolint:staticcheck // NewTypePredicate is deprecated for new construction; this is the one
+	// legitimate caller, deserializing a shard checkpointed before #6445 unified this predicate.
 	return tasks.NewTypePredicate(attributes.TaskTypes)
 }
 
@@ -319,6 +321,9 @@ func ToPersistenceDestinationPredicate(
 func FromPersistenceDestinationPredicate(
 	attributes *persistencespb.DestinationPredicateAttributes,
 ) tasks.Predicate {
+	//nolint:staticcheck // NewDestinationPredicate is deprecated for new construction; this is
+	// the one legitimate caller, deserializing a shard checkpointed before #6445 unified this
+	// predicate.
 	return tasks.NewDestinationPredicate(attributes.Destinations)
 }
 
@@ -338,6 +343,9 @@ func ToPersistenceOutboundTaskGroupPredicate(
 func FromPersistenceOutboundTaskGroupPredicate(
 	attributes *persistencespb.OutboundTaskGroupPredicateAttributes,
 ) tasks.Predicate {
+	//nolint:staticcheck // NewOutboundTaskGroupPredicate is deprecated for new construction; this
+	// is the one legitimate caller, deserializing a shard checkpointed before #6445 unified this
+	// predicate.
 	return tasks.NewOutboundTaskGroupPredicate(attributes.Groups)
 }
 
