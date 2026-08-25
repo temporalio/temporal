@@ -481,18 +481,14 @@ func (s *Scheduler) identity() string {
 }
 
 func (s *Scheduler) overlapPolicy() enumspb.ScheduleOverlapPolicy {
-	policy := s.Schedule.GetPolicies().GetOverlapPolicy()
-	if policy == enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED {
-		policy = enumspb.SCHEDULE_OVERLAP_POLICY_SKIP
-	}
-	return policy
+	return internal.ResolveOverlapPolicy(
+		enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED,
+		s.Schedule.GetPolicies().GetOverlapPolicy(),
+	)
 }
 
 func (s *Scheduler) resolveOverlapPolicy(overlapPolicy enumspb.ScheduleOverlapPolicy) enumspb.ScheduleOverlapPolicy {
-	if overlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED {
-		overlapPolicy = s.overlapPolicy()
-	}
-	return overlapPolicy
+	return internal.ResolveOverlapPolicy(overlapPolicy, s.overlapPolicy())
 }
 
 // validateCachedState clears cached fields whenever the Scheduler's

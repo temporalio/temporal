@@ -380,12 +380,9 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 			break
 		}
 
-		// Clone start before concurrent access. The clone will have RunId/StartTime
-		// set by startWorkflow, then copied back to the original in recordExecuteResult.
+		// Clone start before concurrent access. Buffered starts carry the policy
+		// resolved when they entered CHASM, including through migration.
 		start = common.CloneProto(start)
-		// Snapshot the resolved policy before dispatch so a later schedule update
-		// cannot change this action's completion-tracking behavior.
-		start.OverlapPolicy = scheduler.resolveOverlapPolicy(start.GetOverlapPolicy())
 
 		// Run all starts concurrently.
 		newCtx := ctx.Clone()

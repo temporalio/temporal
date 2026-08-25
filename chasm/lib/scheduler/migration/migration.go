@@ -77,6 +77,7 @@ func LegacyToCreateFromMigrationStateRequest(
 		state.ScheduleId,
 		state.ConflictToken,
 		getWorkflowID(schedule),
+		schedule.GetPolicies().GetOverlapPolicy(),
 	)
 
 	runningBufferedStarts := convertRunningWorkflowsToBufferedStarts(
@@ -223,6 +224,7 @@ func convertBufferedStartsLegacyToCHASM(
 	namespaceID, scheduleID string,
 	conflictToken int64,
 	baseWorkflowID string,
+	scheduleOverlapPolicy enumspb.ScheduleOverlapPolicy,
 ) []*schedulespb.BufferedStart {
 	if len(v1Starts) == 0 {
 		return nil
@@ -265,6 +267,10 @@ func convertBufferedStartsLegacyToCHASM(
 
 		v2Start.Attempt = 0
 		v2Start.BackoffTime = nil
+		v2Start.OverlapPolicy = schedulerinternal.ResolveOverlapPolicy(
+			v2Start.GetOverlapPolicy(),
+			scheduleOverlapPolicy,
+		)
 
 		v2Starts[i] = v2Start
 	}

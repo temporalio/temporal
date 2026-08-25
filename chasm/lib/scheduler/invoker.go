@@ -221,11 +221,7 @@ func (i *Invoker) recordExecuteResult(
 		}
 		if completedStart, ok := completed[start.RequestId]; ok {
 			newlyStarted++
-			// Persist the dispatch-time resolution before making lifecycle decisions.
-			// A later schedule-policy update must not reclassify this started action.
-			resolvedOverlapPolicy := completedStart.GetOverlapPolicy()
-			start.OverlapPolicy = resolvedOverlapPolicy
-			if !internal.TracksCompletionResult(resolvedOverlapPolicy) {
+			if !internal.TracksCompletionResult(start.GetOverlapPolicy()) {
 				startOnlyActions = append(startOnlyActions, completedStart)
 				startedUntracked[start.RequestId] = struct{}{}
 				removedStarts++
