@@ -849,7 +849,7 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 
 	task, err := dbq.PollTask(ctx, pollMetadata)
 	if task != nil {
-		task.pollerScalingDecision = dbq.MakePollerScalingDecision(ctx, pollMetadata.localPollStartTime)
+		task.pollerScalingDecision = dbq.MakePollerScalingDecision(ctx, pollMetadata.localPollStartTime, task.source)
 	}
 
 	// Update poller timestamp when poll ends, unless cancelled (e.g., shutdown/disconnect).
@@ -1459,20 +1459,24 @@ func (pm *taskQueuePartitionManagerImpl) describe(
 			isRampingDescribe := deploymentVersion.GetDeploymentName() == rampingVersion.GetDeploymentName() &&
 				deploymentVersion.GetBuildId() == rampingVersion.GetBuildId()
 
-			if isUnversionedDescribe {
-				// Reduce unversioned stats by any shares attributed to versioned queues.
-				if currentExists {
-					subtractStatsByPriority(adjustedStatsByPriority, unversionedCurrentShareByPriority)
+			// Skip versioning attribution for partitions that don't support versioning
+			// (e.g. sticky queues): their stats belong entirely to the queue itself.
+			if pm.partition.SupportsVersioning() {
+				if isUnversionedDescribe {
+					// Reduce unversioned stats by any shares attributed to versioned queues.
+					if currentExists {
+						subtractStatsByPriority(adjustedStatsByPriority, unversionedCurrentShareByPriority)
+					}
+					// Only subtract the ramping share when ramping is to a versioned deployment. If ramping is to
+					// unversioned, that share should remain part of the unversioned queue stats.
+					if rampingExists && !isRampingToUnversioned {
+						subtractStatsByPriority(adjustedStatsByPriority, unversionedRampingShareByPriority)
+					}
+				} else if isCurrentDescribe && currentExists {
+					mergeStatsByPriority(adjustedStatsByPriority, unversionedCurrentShareByPriority)
+				} else if isRampingDescribe && rampingExists {
+					mergeStatsByPriority(adjustedStatsByPriority, unversionedRampingShareByPriority)
 				}
-				// Only subtract the ramping share when ramping is to a versioned deployment. If ramping is to
-				// unversioned, that share should remain part of the unversioned queue stats.
-				if rampingExists && !isRampingToUnversioned {
-					subtractStatsByPriority(adjustedStatsByPriority, unversionedRampingShareByPriority)
-				}
-			} else if isCurrentDescribe && currentExists {
-				mergeStatsByPriority(adjustedStatsByPriority, unversionedCurrentShareByPriority)
-			} else if isRampingDescribe && rampingExists {
-				mergeStatsByPriority(adjustedStatsByPriority, unversionedRampingShareByPriority)
 			}
 
 			vInfo.PhysicalTaskQueueInfo.TaskQueueStatsByPriorityKey = adjustedStatsByPriority

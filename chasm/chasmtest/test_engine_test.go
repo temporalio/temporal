@@ -3,10 +3,12 @@ package chasmtest_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/chasmtest"
 	"go.temporal.io/server/chasm/lib/tests"
@@ -39,7 +41,89 @@ func TestTasksArePhysicallyGenerated(t *testing.T) {
 	})
 }
 
-func startStore(t *testing.T, ttl time.Duration) (*chasmtest.Engine, chasm.ComponentRef) {
+func TestUpdateComponentDeduplicatesRequestID(t *testing.T) {
+	e, ref := startStore(t, 0)
+	updateCount := 0
+	update := func() ([]byte, error) {
+		_, updatedRef, err := chasm.UpdateComponent(engineContext(e), ref,
+			func(*tests.PayloadStore, chasm.MutableContext, any) (any, error) {
+				updateCount++
+				return nil, nil
+			}, nil, chasm.WithRequestID("request-id"))
+		return updatedRef, err
+	}
+
+	updatedRef, err := update()
+	require.NoError(t, err)
+	require.NotEmpty(t, updatedRef)
+
+	updatedRef, err = update()
+	var failedPrecondition *serviceerror.FailedPrecondition
+	require.ErrorAs(t, err, &failedPrecondition)
+	require.ErrorIs(t, err, chasm.ErrRequestIDAlreadyUsed)
+	require.Nil(t, updatedRef)
+	require.Equal(t, 1, updateCount)
+}
+
+func TestUpdateComponentDoesNotRecordFailedRequestID(t *testing.T) {
+	e, ref := startStore(t, 0)
+	updateErr := errors.New("update failed")
+	updateCount := 0
+	update := func(errToReturn error) error {
+		_, _, err := chasm.UpdateComponent(engineContext(e), ref,
+			func(*tests.PayloadStore, chasm.MutableContext, any) (any, error) {
+				updateCount++
+				return nil, errToReturn
+			}, nil, chasm.WithRequestID("request-id"))
+		return err
+	}
+
+	require.ErrorIs(t, update(updateErr), updateErr)
+	require.NoError(t, update(nil))
+	require.Equal(t, 2, updateCount)
+}
+
+func TestUpdateComponentDeduplicatesCreationRequestID(t *testing.T) {
+	e, ref := startStore(t, 0, chasm.WithRequestID("request-id"))
+	updateCount := 0
+	_, _, err := chasm.UpdateComponent(engineContext(e), ref,
+		func(*tests.PayloadStore, chasm.MutableContext, any) (any, error) {
+			updateCount++
+			return nil, nil
+		}, nil, chasm.WithRequestID("request-id"))
+	var failedPrecondition *serviceerror.FailedPrecondition
+	require.ErrorAs(t, err, &failedPrecondition)
+	require.Equal(t, 0, updateCount)
+}
+
+func TestStartExecutionDeduplicatesUpdateRequestID(t *testing.T) {
+	e, ref := startStore(t, 0)
+	ctx := engineContext(e)
+	_, _, err := chasm.UpdateComponent(ctx, ref,
+		func(*tests.PayloadStore, chasm.MutableContext, any) (any, error) {
+			return nil, nil
+		}, nil, chasm.WithRequestID("request-id"))
+	require.NoError(t, err)
+
+	startCount := 0
+	startKey := ref.ExecutionKey
+	startKey.RunID = ""
+	result, err := chasm.StartExecution(ctx, startKey,
+		func(chasm.MutableContext, any) (*tests.PayloadStore, error) {
+			startCount++
+			return nil, nil
+		}, nil, chasm.WithRequestID("request-id"))
+	require.NoError(t, err)
+	require.False(t, result.Created)
+	require.Equal(t, ref.ExecutionKey, result.ExecutionKey)
+	require.Equal(t, 0, startCount)
+}
+
+func startStore(
+	t *testing.T,
+	ttl time.Duration,
+	opts ...chasm.TransitionOption,
+) (*chasmtest.Engine, chasm.ComponentRef) {
 	registry := chasm.NewRegistry(log.NewNoopLogger())
 	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
 	require.NoError(t, registry.Register(tests.Library))
@@ -56,7 +140,7 @@ func startStore(t *testing.T, ttl time.Duration) (*chasmtest.Engine, chasm.Compo
 				return nil, err
 			}
 			return store, addPayload(store, mc, "first", ttl)
-		}, nil)
+		}, nil, opts...)
 	require.NoError(t, err)
 
 	key.RunID = result.ExecutionKey.RunID

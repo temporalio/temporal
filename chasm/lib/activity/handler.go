@@ -157,8 +157,9 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 				return nil, nil
 			},
 			nil,
+			chasm.WithRequestID(requestID),
 		)
-		if err != nil {
+		if err != nil && !errors.Is(err, chasm.ErrRequestIDAlreadyUsed) {
 			return nil, err
 		}
 	}

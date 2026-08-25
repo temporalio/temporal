@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/temporal/environment"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -45,10 +46,11 @@ type RPCFactory struct {
 	logger         log.Logger
 	metricsHandler metrics.Handler
 
-	frontendURL       string
-	frontendHTTPURL   string
-	frontendHTTPPort  int
-	frontendTLSConfig *tls.Config
+	frontendURL                       string
+	frontendHTTPURL                   string
+	frontendHTTPPort                  int
+	frontendTLSConfig                 *tls.Config
+	frontendHTTPTransportInstrumenter telemetry.HTTPClientTransportInstrumenter
 
 	grpcListener             func() net.Listener
 	tlsFactory               encryption.TLSConfigProvider
@@ -77,8 +79,7 @@ type RPCFactory struct {
 	EnableInternodeClientKeepalive bool
 }
 
-// NewFactory builds a new RPCFactory
-// conforming to the underlying configuration
+// NewFactory builds a new RPCFactory conforming to the underlying configuration.
 func NewFactory(
 	cfg *config.Config,
 	sName primitives.ServiceName,
@@ -89,6 +90,7 @@ func NewFactory(
 	frontendHTTPURL string,
 	frontendHTTPPort int,
 	frontendTLSConfig *tls.Config,
+	frontendHTTPTransportInstrumenter telemetry.HTTPClientTransportInstrumenter,
 	commonDialOptions []grpc.DialOption,
 	perServiceDialOptions map[primitives.ServiceName][]grpc.DialOption,
 	monitor membership.Monitor,
@@ -101,21 +103,22 @@ func NewFactory(
 		requireRemoteClusterAuth = cfg.Global.Authorization.RemoteClusterAuth.Require
 	}
 	f := &RPCFactory{
-		config:                   cfg,
-		serviceName:              sName,
-		logger:                   logger,
-		metricsHandler:           metricsHandler,
-		frontendURL:              frontendURL,
-		frontendHTTPURL:          frontendHTTPURL,
-		frontendHTTPPort:         frontendHTTPPort,
-		frontendTLSConfig:        frontendTLSConfig,
-		tlsFactory:               tlsProvider,
-		commonDialOptions:        commonDialOptions,
-		perServiceDialOptions:    perServiceDialOptions,
-		tokenProvider:            tokenProvider,
-		authHeaderName:           authHeaderName,
-		requireRemoteClusterAuth: requireRemoteClusterAuth,
-		monitor:                  monitor,
+		config:                            cfg,
+		serviceName:                       sName,
+		logger:                            logger,
+		metricsHandler:                    metricsHandler,
+		frontendURL:                       frontendURL,
+		frontendHTTPURL:                   frontendHTTPURL,
+		frontendHTTPPort:                  frontendHTTPPort,
+		frontendTLSConfig:                 frontendTLSConfig,
+		frontendHTTPTransportInstrumenter: frontendHTTPTransportInstrumenter,
+		tlsFactory:                        tlsProvider,
+		commonDialOptions:                 commonDialOptions,
+		perServiceDialOptions:             perServiceDialOptions,
+		tokenProvider:                     tokenProvider,
+		authHeaderName:                    authHeaderName,
+		requireRemoteClusterAuth:          requireRemoteClusterAuth,
+		monitor:                           monitor,
 	}
 	f.grpcListener = sync.OnceValue(f.createGRPCListener)
 	f.localFrontendClient = sync.OnceValues(f.createLocalFrontendHTTPClient)
@@ -432,32 +435,20 @@ func (d *RPCFactory) CreateLocalFrontendHTTPClient() (*common.FrontendHTTPClient
 // createLocalFrontendHTTPClient creates an HTTP client for communicating with the frontend.
 // It uses either the provided frontendURL or membership to resolve the frontend address.
 func (d *RPCFactory) createLocalFrontendHTTPClient() (*common.FrontendHTTPClient, error) {
-	// dialer and transport field values copied from http.DefaultTransport.
-	dialer := &net.Dialer{
-		Timeout:   30 * time.Second,
-		KeepAlive: 30 * time.Second,
+	transport, err := common.NewHTTPTransport(d.frontendTLSConfig)
+	if err != nil {
+		return nil, err
 	}
-	transport := &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
-		DialContext:           dialer.DialContext,
-		ForceAttemptHTTP2:     true,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-	}
-	client := http.Client{}
-
 	// Default to http unless TLS is configured.
 	scheme := "http"
 	if d.frontendTLSConfig != nil {
-		transport.TLSClientConfig = d.frontendTLSConfig
 		scheme = "https"
 	}
 
 	var address string
+	var clientTransport http.RoundTripper
 	if r := serviceResolverFromGRPCURL(d.frontendHTTPURL); r != nil {
-		client.Transport = &roundTripper{
+		clientTransport = &roundTripper{
 			resolver:   r,
 			underlying: transport,
 			httpPort:   d.frontendHTTPPort,
@@ -465,8 +456,11 @@ func (d *RPCFactory) createLocalFrontendHTTPClient() (*common.FrontendHTTPClient
 		address = "internal" // This will be replaced by the roundTripper
 	} else {
 		// Use the URL as-is and leave the transport unmodified.
-		client.Transport = transport
+		clientTransport = transport
 		address = d.frontendHTTPURL
+	}
+	client := http.Client{
+		Transport: d.frontendHTTPTransportInstrumenter.Instrument(clientTransport),
 	}
 
 	return &common.FrontendHTTPClient{

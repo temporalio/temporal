@@ -1092,7 +1092,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		},
 	}
 
-	childRunID, childClock, err := t.startWorkflow(
+	childRunID, childClock, err := t.startChildWorkflow(
 		ctx,
 		task,
 		parentNamespaceName,
@@ -1671,7 +1671,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecution(
 	return err
 }
 
-func (t *transferQueueActiveTaskExecutor) startWorkflow(
+func (t *transferQueueActiveTaskExecutor) startChildWorkflow(
 	ctx context.Context,
 	task *tasks.StartChildExecutionTask,
 	namespace namespace.Name,
@@ -1719,6 +1719,12 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 		TimeSkippingConfig:       attributes.GetTimeSkippingConfig(),
 	}
 
+	statePropagation := attributes.GetTimeSkippingStatePropagation()
+	nowForExpirationAndBackoff := workflow.AdjustNowWithTimeSkipping(
+		t.shardContext.GetTimeSource().Now(),
+		statePropagation,
+	)
+
 	request := common.CreateHistoryStartWorkflowRequest(
 		targetNamespaceID.String(),
 		startRequest,
@@ -1734,13 +1740,13 @@ func (t *transferQueueActiveTaskExecutor) startWorkflow(
 			Clock:            vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
 		},
 		rootExecutionInfo,
-		t.shardContext.GetTimeSource().Now(),
+		nowForExpirationAndBackoff,
 	)
 
 	request.SourceVersionStamp = sourceVersionStamp
 	request.InheritedBuildId = inheritedBuildId
 	request.InheritedPinnedVersion = inheritedPinnedVersion
-	request.TimeSkippingStatePropagation = attributes.GetTimeSkippingStatePropagation()
+	request.TimeSkippingStatePropagation = statePropagation
 
 	// Only set the AutoUpgrade info if the Pinned version is not set.
 	if request.InheritedPinnedVersion == nil {

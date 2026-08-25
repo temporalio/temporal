@@ -32,7 +32,7 @@ Apply these patterns when reviewing PRs or suggesting code changes.
 - Do not use single-value type assertions on errors (`err.(*T)`); this panics instead of failing the test when the type doesn't match. Use `errors.As` with a guarded return.
 - When launching a goroutine to maintain a precondition for later assertions (e.g., keeping pollers active so a deployment version gets registered), loop until context cancellation rather than running once. A single attempt that times out exits silently, leaving downstream Eventually/propagation waits to hang until their own deadline.
 - Never call testify assertions (`s.NoError`, `s.Equal`, `require.NoError`, even `assert.NoError`) inside a `go func()` — if the goroutine outlives the test, the assertion panics the binary with `panic: Fail in goroutine after TestXxx has completed`. Move assertions to the test goroutine or use a buffered error channel.
-- Any `<-ch` that isn't inside a `select` with `ctx.Done()` will hang indefinitely if the sender never sends. Always provide a context cancellation fallback.
+- Prefer `await.Rcv` and `await.Snd` for blocking channel operations so tests fail on timeout instead of hanging indefinitely.
 - Never write to package-level or global variables in tests — parallel tests share the same process; thread values through function parameters instead.
 - Never use `time.Sleep` or `time.Since(start) > threshold` to enforce ordering — use channels, `sync.WaitGroup`, or `EventuallyWithT` instead.
 - When using `EventuallyWithT` (or similar) to wait for a condition driven by a background goroutine, ensure the goroutine's timeout is longer than the `EventuallyWithT` deadline — if the background op times out first, the condition will never be satisfied and the wait will hang until its own deadline.
@@ -102,24 +102,20 @@ Use this core structure for every actionable finding.
 Replace `SEVERITY` with `nit`, `small`, `med`, or `high`:
 
 ```markdown
-**SEVERITY** — One-line summary.
+<details>
+<summary><strong>SEVERITY</strong> — One-line summary.</summary>
 
-**Issue:** Concise explanation of what is wrong and why it matters.
+Concise explanation of what is wrong and why it matters, followed by any
+supporting evidence, examples, or implementation notes.
+
+</details>
 
 **Suggestion:** Concrete fix or alternative.
 ```
 
-Keep the issue and suggestion self-contained.
-Put supplementary evidence, examples, or implementation notes in an optional collapsible block:
-
-```markdown
-<details>
-<summary>Additional details</summary>
-
-Supporting material.
-
-</details>
-```
+Use HTML tags rather than Markdown inside `<summary>`.
+The summary line is all a reader sees before expanding, so it must state the problem on its own.
+Keep the suggestion outside the collapsible block, as a code suggestion wherever the fix is a concrete edit.
 
 ### Severity levels
 

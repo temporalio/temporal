@@ -14,10 +14,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/temporalio/sqlparser"
+	otellog "go.opentelemetry.io/otel/log"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
 	querypb "go.temporal.io/api/query/v1"
@@ -36,7 +38,6 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
-	"go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
@@ -47,6 +48,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -127,7 +129,7 @@ type (
 
 		status int32
 
-		callbackValidator               callback.Validator
+		callbackValidator               callbacks.Validator
 		tokenSerializer                 *tasktoken.Serializer
 		config                          *Config
 		versionChecker                  headers.VersionChecker
@@ -306,11 +308,12 @@ func (wh *WorkflowHandler) ValidateWorkerDeploymentVersionComputeConfig(
 
 // NewWorkflowHandler creates a gRPC handler for workflowservice
 func NewWorkflowHandler(
-	callbackValidator callback.Validator,
+	callbackValidator callbacks.Validator,
 	config *Config,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	visibilityMgr manager.VisibilityManager,
 	logger log.Logger,
+	eventLogger otellog.Logger,
 	throttledLogger log.Logger,
 	persistenceExecutionName string,
 	clusterMetadataManager persistence.ClusterMetadataManager,
@@ -349,10 +352,17 @@ func NewWorkflowHandler(
 		versionChecker:        headers.NewDefaultVersionChecker(),
 		namespaceHandler: newNamespaceHandler(
 			logger,
+			eventLogger,
 			persistenceMetadataManager,
 			namespaceRegistry,
 			clusterMetadata,
-			nsreplication.NewReplicator(namespaceReplicationQueue, logger),
+			nsreplication.NewReplicator(
+				namespaceReplicationQueue,
+				logger,
+				eventLogger,
+				config.EmitNamespaceLifecycleEvents,
+				clusterMetadata.GetCurrentClusterName(),
+			),
 			archivalMetadata,
 			archiverProvider,
 			timeSource,
@@ -685,12 +695,12 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 
 	request.Links = dedupLinksFromCallbacks(request.GetLinks(), request.GetCompletionCallbacks())
 
-	allLinks := make([]*commonpb.Link, 0, len(request.GetLinks())+len(request.GetCompletionCallbacks()))
-	allLinks = append(allLinks, request.GetLinks()...)
-	for _, cb := range request.GetCompletionCallbacks() {
-		allLinks = append(allLinks, cb.GetLinks()...)
-	}
-	if err := commonlinks.Validate(allLinks, wh.config.MaxLinksPerRequest(namespaceName.String()), wh.config.LinkMaxSize(namespaceName.String())); err != nil {
+	if err := commonlinks.ValidateWithCallbacks(
+		request.GetLinks(),
+		request.GetCompletionCallbacks(),
+		wh.config.MaxLinksPerRequest(namespaceName.String()),
+		wh.config.LinkMaxSize(namespaceName.String()),
+	); err != nil {
 		return nil, err
 	}
 
@@ -1815,6 +1825,17 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 	return &workflowservice.RespondActivityTaskCompletedByIdResponse{}, nil
 }
 
+func validateActivityFailureNextRetryDelays(activityFailure *failurepb.Failure) error {
+	for current := activityFailure; current != nil; current = current.GetCause() {
+		if delay := current.GetApplicationFailureInfo().GetNextRetryDelay(); delay != nil {
+			if err := delay.CheckValid(); err != nil {
+				return serviceerror.NewInvalidArgumentf("NextRetryDelay is not a valid duration: %v", err)
+			}
+		}
+	}
+	return nil
+}
+
 // RespondActivityTaskFailed is called by application worker when it is done processing an ActivityTask.  It will
 // result in a new 'ActivityTaskFailed' event being written to the workflow history and a new WorkflowTask
 // created for the workflow instance so new commands could be made.  Use the 'taskToken' provided as response of
@@ -1848,6 +1869,9 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 
 	if request.GetFailure() != nil && request.GetFailure().GetApplicationFailureInfo() == nil {
 		return nil, errFailureMustHaveApplicationFailureInfo
+	}
+	if err := validateActivityFailureNextRetryDelays(request.GetFailure()); err != nil {
+		return nil, err
 	}
 
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
@@ -1984,6 +2008,9 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.Name().String())
 
 	response := workflowservice.RespondActivityTaskFailedByIdResponse{}
+	if err := validateActivityFailureNextRetryDelays(request.GetFailure()); err != nil {
+		return nil, err
+	}
 
 	if request.GetLastHeartbeatDetails() != nil {
 		if err := common.CheckEventBlobSizeLimit(
@@ -5478,7 +5505,17 @@ func (wh *WorkflowHandler) prepareUpdateWorkflowRequest(
 		}
 	}
 
-	return nil
+	request.GetRequest().Links = dedupLinksFromCallbacks(
+		request.GetRequest().GetLinks(),
+		request.GetRequest().GetCompletionCallbacks(),
+	)
+
+	return commonlinks.ValidateWithCallbacks(
+		request.GetRequest().GetLinks(),
+		request.GetRequest().GetCompletionCallbacks(),
+		wh.config.MaxLinksPerRequest(namespaceName.String()),
+		wh.config.LinkMaxSize(namespaceName.String()),
+	)
 }
 
 func (wh *WorkflowHandler) PollWorkflowExecutionUpdate(
@@ -6531,6 +6568,8 @@ func (wh *WorkflowHandler) checkWorkerDeploymentReadRateLimit(ctx context.Contex
 	return nil
 }
 
+// Returns the provided links, but filtering out any which are also present on the supplied callbacks.
+// Links from non-Nexus callbacks are not considered for deduping.
 func dedupLinksFromCallbacks(
 	links []*commonpb.Link,
 	callbacks []*commonpb.Callback,
@@ -6538,7 +6577,6 @@ func dedupLinksFromCallbacks(
 	if len(links) == 0 {
 		return nil
 	}
-	var res []*commonpb.Link
 	callbacksLinks := make([]*commonpb.Link, 0, len(callbacks))
 	for _, cb := range callbacks {
 		if cb.GetNexus() != nil {
@@ -6546,6 +6584,8 @@ func dedupLinksFromCallbacks(
 			callbacksLinks = append(callbacksLinks, cb.GetLinks()...)
 		}
 	}
+
+	var res []*commonpb.Link
 	for _, link := range links {
 		isDup := false
 		for _, cbLink := range callbacksLinks {
@@ -7252,7 +7292,9 @@ func (wh *WorkflowHandler) CreateWorkflowRule(
 		request.GetSpec(),
 		request.GetIdentity(),
 		request.GetDescription(),
-		request.GetNamespace())
+		request.GetNamespace(),
+		request.GetForceScan(),
+		request.GetRequestId())
 	if err != nil {
 		return nil, err
 	}

@@ -1,13 +1,15 @@
 package tasks
 
+import "sync"
+
 type testSequentialTaskQueue[T Task] struct {
-	q  chan T
-	id int
+	sync.Mutex
+	tasks []T
+	id    int
 }
 
-func newTestSequentialTaskQueue[T Task](id, capacity int) SequentialTaskQueue[T] {
+func newTestSequentialTaskQueue[T Task](id int) SequentialTaskQueue[T] {
 	return &testSequentialTaskQueue[T]{
-		q:  make(chan T, capacity),
 		id: id,
 	}
 }
@@ -17,23 +19,30 @@ func (s *testSequentialTaskQueue[T]) ID() any {
 }
 
 func (s *testSequentialTaskQueue[T]) Add(task T) {
-	s.q <- task
+	s.Lock()
+	defer s.Unlock()
+	s.tasks = append(s.tasks, task)
 }
 
 func (s *testSequentialTaskQueue[T]) Remove() T {
-	select {
-	case t := <-s.q:
-		return t
-	default:
-		var emptyT T
-		return emptyT
+	s.Lock()
+	defer s.Unlock()
+	var task T
+	if len(s.tasks) == 0 {
+		return task
 	}
+	task, s.tasks = s.tasks[0], s.tasks[1:]
+	return task
 }
 
 func (s *testSequentialTaskQueue[T]) IsEmpty() bool {
-	return len(s.q) == 0
+	s.Lock()
+	defer s.Unlock()
+	return len(s.tasks) == 0
 }
 
 func (s *testSequentialTaskQueue[T]) Len() int {
-	return len(s.q)
+	s.Lock()
+	defer s.Unlock()
+	return len(s.tasks)
 }
