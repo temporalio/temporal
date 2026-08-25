@@ -141,12 +141,13 @@ var (
 // Pre-defined values for Nexus stage tag. Nexus stage identifies the request lifecycle position;
 // component continues to identify the concrete module emitting the log.
 var (
-	NexusStageCallerOperation = nexusStage("caller-operation")
-	NexusStageCallerOutbound  = nexusStage("caller-outbound")
-	NexusStageCallerInbound   = nexusStage("caller-inbound")
-	NexusStageHandlerInbound  = nexusStage("handler-inbound")
-	NexusStageHandlerOutbound = nexusStage("handler-outbound")
-	NexusStageRegistry        = nexusStage("registry")
+	NexusStageCallerOperation     = nexusStage("caller-operation")
+	NexusStageCallerOutbound      = nexusStage("caller-outbound")
+	NexusStageCallerInbound       = nexusStage("caller-inbound")
+	NexusStageHandlerInbound      = nexusStage("handler-inbound")
+	NexusStageHandlerTaskDelivery = nexusStage("handler-task-delivery")
+	NexusStageHandlerOutbound     = nexusStage("handler-outbound")
+	NexusStageRegistry            = nexusStage("registry")
 )
 
 // Pre-defined values for scope tag

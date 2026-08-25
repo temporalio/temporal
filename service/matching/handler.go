@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -38,14 +39,16 @@ type (
 	Handler struct {
 		matchingservice.UnimplementedMatchingServiceServer
 
-		engine            Engine
-		config            *Config
-		metricsHandler    metrics.Handler
-		logger            log.Logger
-		startWG           sync.WaitGroup
-		throttledLogger   log.Logger
-		namespaceRegistry namespace.Registry
-		workersRegistry   workers.Registry
+		engine                   Engine
+		config                   *Config
+		metricsHandler           metrics.Handler
+		logger                   log.Logger
+		nexusTaskLogger          log.Logger
+		startWG                  sync.WaitGroup
+		throttledLogger          log.Logger
+		nexusTaskThrottledLogger log.Logger
+		namespaceRegistry        namespace.Registry
+		workersRegistry          workers.Registry
 	}
 
 	HandlerParams struct {
@@ -91,10 +94,12 @@ func NewHandler(
 	params HandlerParams,
 ) *Handler {
 	handler := &Handler{
-		config:          params.Config,
-		metricsHandler:  params.MetricsHandler,
-		logger:          params.Logger,
-		throttledLogger: params.ThrottledLogger,
+		config:                   params.Config,
+		metricsHandler:           params.MetricsHandler,
+		logger:                   params.Logger,
+		nexusTaskLogger:          log.With(params.Logger, tag.NexusStageHandlerTaskDelivery),
+		throttledLogger:          params.ThrottledLogger,
+		nexusTaskThrottledLogger: log.With(params.ThrottledLogger, tag.NexusStageHandlerTaskDelivery),
 		engine: NewEngine(
 			params.TaskManager,
 			params.FairTaskManager,
@@ -519,12 +524,12 @@ func (h *Handler) CheckTaskQueueVersionMembership(
 }
 
 func (h *Handler) DispatchNexusTask(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest) (_ *matchingservice.DispatchNexusTaskResponse, retError error) {
-	defer log.CapturePanic(h.logger, &retError)
+	defer log.CapturePanic(h.nexusTaskLogger, &retError)
 	return h.engine.DispatchNexusTask(ctx, request)
 }
 
 func (h *Handler) PollNexusTaskQueue(ctx context.Context, request *matchingservice.PollNexusTaskQueueRequest) (_ *matchingservice.PollNexusTaskQueueResponse, retError error) {
-	defer log.CapturePanic(h.logger, &retError)
+	defer log.CapturePanic(h.nexusTaskLogger, &retError)
 	opMetrics := h.opMetricsHandler(
 		request.GetNamespaceId(),
 		request.GetRequest().GetTaskQueue(),
@@ -544,7 +549,7 @@ func (h *Handler) PollNexusTaskQueue(ctx context.Context, request *matchingservi
 	if _, err := common.ValidateLongPollContextTimeoutIsSet(
 		ctx,
 		"PollNexusTaskQueue",
-		h.throttledLogger,
+		h.nexusTaskThrottledLogger,
 	); err != nil {
 		return nil, err
 	}
@@ -552,7 +557,7 @@ func (h *Handler) PollNexusTaskQueue(ctx context.Context, request *matchingservi
 }
 
 func (h *Handler) RespondNexusTaskCompleted(ctx context.Context, request *matchingservice.RespondNexusTaskCompletedRequest) (_ *matchingservice.RespondNexusTaskCompletedResponse, retError error) {
-	defer log.CapturePanic(h.logger, &retError)
+	defer log.CapturePanic(h.nexusTaskLogger, &retError)
 	opMetrics := h.opMetricsHandler(
 		request.GetNamespaceId(),
 		request.GetTaskQueue(),
@@ -565,7 +570,7 @@ func (h *Handler) RespondNexusTaskCompleted(ctx context.Context, request *matchi
 }
 
 func (h *Handler) RespondNexusTaskFailed(ctx context.Context, request *matchingservice.RespondNexusTaskFailedRequest) (_ *matchingservice.RespondNexusTaskFailedResponse, retError error) {
-	defer log.CapturePanic(h.logger, &retError)
+	defer log.CapturePanic(h.nexusTaskLogger, &retError)
 	opMetrics := h.opMetricsHandler(
 		request.GetNamespaceId(),
 		request.GetTaskQueue(),

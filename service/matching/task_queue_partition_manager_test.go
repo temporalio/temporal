@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -26,6 +27,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
@@ -2036,6 +2038,21 @@ func newTestDispatchNexusTaskRequest(forwardInfo *taskqueuespb.TaskForwardInfo) 
 		Request:     &nexuspb.Request{},
 		ForwardInfo: forwardInfo,
 	}
+}
+
+func (s *PartitionManagerTestSuite) TestDispatchNexusTaskLogsHandlerTaskDeliveryStage() {
+	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
+	capture := logger.StartCapture(tag.NewStringTag("nexus-stage", "handler-task-delivery"))
+	defer logger.StopCapture(capture)
+	s.partitionMgr.logger = logger
+
+	request := newTestDispatchNexusTaskRequest(nil)
+	request.Request.Header = map[string]string{nexus.HeaderOperationTimeout: "invalid"}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	_, _ = s.partitionMgr.DispatchNexusTask(ctx, "task-id-1", request)
+	s.Require().Len(capture.Snapshot(), 1)
 }
 
 func (s *PartitionManagerTestSuite) TestTaskAddHooks_NexusDispatch_FiresWhenNoPollers() {
