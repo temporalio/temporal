@@ -145,7 +145,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				activityFunction := func() (string, error) {
 					startedActivityCount.Add(1)
 					if startedActivityCount.Load() == 1 {
-						s.WaitForChannel(activityPausedCn)
+						await.Rcv(t, activityPausedCn)
 						return "", activityErr
 					}
 					return "done!", nil
@@ -272,7 +272,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				activityFunction := func() (string, error) {
 					startedActivityCount.Add(1)
 					if startedActivityCount.Load() == 1 {
-						s.WaitForChannel(activityPausedCn)
+						await.Rcv(t, activityPausedCn)
 						return "", activityErr
 					}
 					if shouldSucceed.Load() {
@@ -571,7 +571,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 						activityErr := errors.New("bad-luck-please-retry")
 						return "", activityErr
 					}
-					s.WaitForChannel(activityCompleteCn)
+					await.Rcv(t, activityCompleteCn)
 					return "done!", nil
 				}
 
@@ -669,7 +669,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				activityFunction := func() (string, error) {
 					startedActivityCount.Add(1)
 					if startedActivityCount.Load() == 1 {
-						s.WaitForChannel(activityPausedCn)
+						await.Rcv(t, activityPausedCn)
 						return "", activityErr
 					}
 					return "done!", nil
@@ -860,7 +860,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 					if !activityWasReset.Load() {
 						return "", errors.New("bad-luck-please-retry")
 					}
-					s.WaitForChannel(activityCompleteCh)
+					await.Rcv(t, activityCompleteCh)
 					return "done!", nil
 				}
 
@@ -1006,7 +1006,7 @@ func TestActivityApiPause_AttributesToActivityInContextMetadata(t *testing.T) {
 	}, workflowFn)
 	require.NoError(t, err)
 
-	s.WaitForChannel(activityStartedCn)
+	await.Rcv(t, activityStartedCn)
 
 	var trailer metadata.MD
 	_, err = s.FrontendClient().PauseActivity(ctx, &workflowservice.PauseActivityRequest{

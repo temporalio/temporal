@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/wideevents"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -170,7 +171,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	)
 	s.Require().NoError(err)
 	s.Require().Len(eventLogger.records, 1)
-	s.Equal("namespace_replication_lifecycle", eventLogger.records[0].EventName())
+	s.Equal(wideevents.NamespaceLifecycleEventName, eventLogger.records[0].EventName())
 	attrs := make(map[string]otellog.Value)
 	eventLogger.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
 		attrs[kv.Key] = kv.Value
