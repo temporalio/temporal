@@ -81,7 +81,7 @@ func TestRPCFaultGenerator_FirstMatchWins(t *testing.T) {
 	var calls []int
 	generator.RegisterRequestCallback(RPCFaultScope{NamespaceID: "namespace-id"}, func(context.Context, string, any) (bool, any, error) {
 		calls = append(calls, 1)
-		return false, nil, nil
+		return false, nil, nil // no match!
 	})
 	generator.RegisterRequestCallback(RPCFaultScope{NamespaceID: "namespace-id"}, func(context.Context, string, any) (bool, any, error) {
 		calls = append(calls, 2)
@@ -89,7 +89,7 @@ func TestRPCFaultGenerator_FirstMatchWins(t *testing.T) {
 	})
 	generator.RegisterRequestCallback(RPCFaultScope{NamespaceID: "namespace-id"}, func(context.Context, string, any) (bool, any, error) {
 		calls = append(calls, 3)
-		return true, "other response", nil
+		return true, "other response", nil // never reached!
 	})
 
 	generate, ok := testhooks.Get(testHooks, testhooks.RPCRequestFaultGeneratorByNamespaceID, namespace.ID("namespace-id"))
