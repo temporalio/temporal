@@ -3,6 +3,9 @@
 
 *                @temporalio/server @temporalio/cgs @temporalio/nexus
 
+# This generated file has no code owner to allow automated updates by CI.
+/tests/testcore/shard_salt.txt
+
 # CHASM
 
 # This only matching files directly in /chasm/ folder, but not any nested files

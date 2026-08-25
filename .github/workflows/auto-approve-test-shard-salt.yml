@@ -1,0 +1,37 @@
+name: Auto-approve test shard salt updates
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - tests/testcore/shard_salt.txt
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  auto_approve:
+    if: >-
+      github.actor == 'temporal-cicd[bot]' &&
+      github.event.pull_request.user.login == 'temporal-cicd[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'auto/optimize-test-sharding' &&
+      github.event.pull_request.title == 'Update test shard salt'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate changed files and approve
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          set -euo pipefail
+
+          mapfile -t changed_files < <(gh pr view "${PR_URL}" --json files --jq '.files[].path')
+          if (( ${#changed_files[@]} != 1 )) || [[ "${changed_files[0]}" != "tests/testcore/shard_salt.txt" ]]; then
+            echo "Refusing to approve unexpected changed files: ${changed_files[*]}" >&2
+            exit 1
+          fi
+
+          gh pr review --approve "${PR_URL}"
