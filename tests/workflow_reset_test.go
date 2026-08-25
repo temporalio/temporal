@@ -238,7 +238,7 @@ func (s *WorkflowResetSuite) TestOriginalExecutionRunId() {
 
 // Test that the workflow options are updated when the workflow is reset.
 func (s *WorkflowResetSuite) TestResetWorkflowWithOptionsUpdate() {
-	env := testcore.NewEnv(s.T(), testcore.WithWorkerService("worker-deployment version registration"))
+	env := testcore.NewEnv(s.T())
 	deploymentName := "testing"
 	buildID := "v.123"
 
@@ -316,7 +316,7 @@ func (s *WorkflowResetSuite) TestResetWorkflowWithOptionsUpdate() {
 
 // Test batch reset operation with version update as post reset operation
 func (s *WorkflowResetSuite) TestBatchResetWithOptionsUpdate() {
-	env := testcore.NewEnv(s.T(), testcore.WithWorkerService("batch operations"))
+	env := testcore.NewEnv(s.T())
 	deploymentName := "batch-testing"
 	buildID := "v.456"
 

@@ -200,7 +200,7 @@ func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_Succes
 }
 
 func (s *ActivityApiBatchUnpauseClientTestSuite) TestActivityBatchUnpause_MatchAll() {
-	env := testcore.NewEnv(s.T(), testcore.WithWorkerService("batch operations"))
+	env := testcore.NewEnv(s.T())
 	ctx := s.Context()
 
 	const workflowCount = 10

@@ -114,8 +114,8 @@ func runSchedulePauseRecoveryMatrix(t *testing.T, newContext contextFactory) {
 
 // pauseInteractionOpts returns the schedule test options plus the dynamic config
 // required to enable the workflow pause feature.
-func pauseInteractionOpts(t *testing.T) []testcore.TestOption {
-	return append(scheduleCommonOpts(t),
+func pauseInteractionOpts() []testcore.TestOption {
+	return append(scheduleCommonOpts(),
 		testcore.WithDynamicConfig(dynamicconfig.WorkflowPauseEnabled, true),
 	)
 }
@@ -141,7 +141,7 @@ func setupPausedScheduledWorkflow(
 	policy enumspb.ScheduleOverlapPolicy,
 	register func(s *testcore.TestEnv, wt string),
 ) *scheduledPauseFixture {
-	env := newScheduleEnv(t, pauseInteractionOpts(t)...)
+	env := newScheduleEnv(t, pauseInteractionOpts()...)
 
 	sid := testcore.RandomizeStr("sched-pause-" + policy.String())
 	wid := testcore.RandomizeStr("sched-pause-wf-" + policy.String())
@@ -433,7 +433,7 @@ func testSchedulePauseContinueAsNew(t *testing.T, newContext contextFactory) {
 	// The scheduler matches the continued run's completion by the request ID in
 	// the completion callback token, which only survives continue-as-new in the
 	// envelope token format (gated off by default).
-	opts := append(pauseInteractionOpts(t), testcore.WithDynamicConfig(callback.EncodeInternalTokenWithEnvelope, true))
+	opts := append(pauseInteractionOpts(), testcore.WithDynamicConfig(callback.EncodeInternalTokenWithEnvelope, true))
 
 	// First run waits for the "go" signal, then continues-as-new; the continued
 	// run completes immediately.
@@ -528,7 +528,7 @@ func testSchedulePauseReset(t *testing.T, newContext contextFactory) {
 		)
 	}
 
-	f := setupPausedTriggeredWorkflow(t, newContext, pauseInteractionOpts(t), "sched-pause-reset", register, afterStart)
+	f := setupPausedTriggeredWorkflow(t, newContext, pauseInteractionOpts(), "sched-pause-reset", register, afterStart)
 
 	// Reset the paused workflow to a point before it was paused.
 	resetResp, err := f.env.FrontendClient().ResetWorkflowExecution(f.ctx, &workflowservice.ResetWorkflowExecutionRequest{

@@ -29,12 +29,11 @@ func TestActivityAPIBatchTerminateClientTestSuite(t *testing.T) {
 	parallelsuite.Run(t, &ActivityAPIBatchTerminateClientTestSuite{})
 }
 
-// newStandaloneActivityBatchEnv builds a standalone-activity test env that also
-// has the batcher worker service running so that activity batch operations
-// (terminate/cancel/delete) can be exercised end-to-end. It mirrors
-// standaloneActivityTestSuite.newTestEnv (enabling the CHASM/activity feature
-// flags) and additionally enables the "batch operations" worker service and
-// raises the per-namespace concurrent batch limit to the functional-test limit.
+// newStandaloneActivityBatchEnv builds a standalone-activity test env where
+// activity batch operations (terminate/cancel/delete) can be exercised
+// end-to-end. It mirrors standaloneActivityTestSuite.newTestEnv (enabling the
+// CHASM/activity feature flags) and raises the per-namespace concurrent batch
+// limit to the functional-test limit.
 func newStandaloneActivityBatchEnv(t *testing.T) *standaloneActivityEnv {
 	return newStandaloneActivityBatchEnvWithBatchOperations(t, true)
 }
@@ -43,7 +42,6 @@ func newStandaloneActivityBatchEnvWithBatchOperations(t *testing.T, enabled bool
 	env := &standaloneActivityEnv{
 		TestEnv: testcore.NewEnv(
 			t,
-			testcore.WithWorkerService("batch operations"),
 			// These tests intentionally start multiple batch operations in the same namespace.
 			// The default per-namespace limit is 1, so raise it to the functional test limit.
 			testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, testcore.ClientSuiteLimit),

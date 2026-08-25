@@ -1889,8 +1889,6 @@ func (s *DeploymentVersionSuite) setAndCheckOverrideWithExpectedOutput(env *test
 // The following tests test the VersioningOverride functionality when passed via the UpdateWorkflowExecutionOptions API.
 func (s *DeploymentVersionSuite) TestUpdateWorkflowExecutionOptions_SetPinned_CacheMissAndHits() {
 	env := s.newTestEnv(
-		// TODO: remove WithWorkerService once legacy suite-scoped cluster behavior is removed.
-		testcore.WithWorkerService("worker-deployment version membership cache test"),
 		testcore.WithDynamicConfig(dynamicconfig.VersionMembershipCacheTTL, 5*time.Second),
 	)
 
@@ -2868,8 +2866,6 @@ func (s *DeploymentVersionSuite) makeAutoUpgradeOverride() *workflowpb.Versionin
 
 func (s *DeploymentVersionSuite) TestStartWorkflowExecution_WithPinnedOverride_CacheMissAndHits() {
 	env := s.newTestEnv(
-		// TODO: remove WithWorkerService once legacy suite-scoped cluster behavior is removed.
-		testcore.WithWorkerService("worker-deployment version membership cache test"),
 		testcore.WithDynamicConfig(dynamicconfig.VersionMembershipCacheTTL, 5*time.Second),
 	)
 
@@ -2920,8 +2916,6 @@ func (s *DeploymentVersionSuite) TestStartWorkflowExecution_WithUnpinnedOverride
 
 func (s *DeploymentVersionSuite) TestSignalWithStartWorkflowExecution_WithPinnedOverride_CacheMissAndHits() {
 	env := s.newTestEnv(
-		// TODO: remove WithWorkerService once legacy suite-scoped cluster behavior is removed.
-		testcore.WithWorkerService("worker-deployment version membership cache test"),
 		testcore.WithDynamicConfig(dynamicconfig.VersionMembershipCacheTTL, 5*time.Second),
 	)
 
