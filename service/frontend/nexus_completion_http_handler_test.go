@@ -17,6 +17,7 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/components/nexusoperations"
@@ -227,17 +228,8 @@ func wrappedTemporalFailure(t *testing.T, cause *failurepb.Failure) *nexus.Failu
 	}
 }
 
-func completionFailure(t *testing.T, original *nexus.Failure, blobSizeLimitError, blobSizeLimitWarn int) (*failurepb.Failure, bool) {
-	t.Helper()
-	failure, err := commonnexus.NexusFailureToTemporalFailure(*nexusrpc.UnwrapFailure(original))
-	require.NoError(t, err)
-	if failure.Size() <= blobSizeLimitError {
-		return failure, false
-	}
-	return truncateOversizedFailure(failure, blobSizeLimitError, blobSizeLimitWarn), true
-}
-
-// completeHSMAndCaptureFailure returns the HSM failure sent to History.
+// completeHSMAndCaptureFailure returns the HSM failure sent to History. It drives the failure through
+// resolveFailureForCompletion, the same production code CompleteOperation calls.
 func completeHSMAndCaptureFailure(
 	t *testing.T,
 	state nexus.OperationState,
@@ -253,14 +245,15 @@ func completeHSMAndCaptureFailure(
 			got = req.GetFailure()
 			return &historyservice.CompleteNexusOperationResponse{}, nil
 		})
-	h := &nexusCompletionHandler{HistoryClient: client}
+	h := &nexusCompletionHandler{HistoryClient: client, ThrottledLogger: log.NewNoopLogger()}
 	req := &nexusrpc.CompletionRequest{
 		State: state,
 		Error: &nexus.OperationError{State: state, OriginalFailure: originalFailure},
 	}
-	failure, failureTruncated := completionFailure(t, originalFailure, blobSizeLimitError, blobSizeLimitWarn)
+	failure, failureTruncated, err := h.resolveFailureForCompletion(req, "namespace-id", "workflow-id", "run-id", blobSizeLimitError, blobSizeLimitWarn, metrics.NoopMetricsHandler)
+	require.NoError(t, err)
 
-	err := h.completeOperation(context.Background(), log.NewNoopLogger(), hsmCompletionToken(), nil, failure, failureTruncated, req, nil, false)
+	err = h.completeOperation(context.Background(), log.NewNoopLogger(), hsmCompletionToken(), nil, failure, failureTruncated, req, nil, false)
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	return got
@@ -315,7 +308,9 @@ func TestCompleteOperation_HSM_FailureSize(t *testing.T) {
 	})
 }
 
-// completeChasmAndCaptureFailure returns the CHASM failure sent to History.
+// completeChasmAndCaptureFailure returns the CHASM failure sent to History. It drives the failure through
+// resolveFailureForCompletion, the same production code CompleteOperation calls, rather than
+// reimplementing its unwrap/convert/size-check/truncate decision.
 func completeChasmAndCaptureFailure(
 	t *testing.T,
 	state nexus.OperationState,
@@ -331,14 +326,15 @@ func completeChasmAndCaptureFailure(
 			got = req.GetFailure()
 			return &historyservice.CompleteNexusOperationChasmResponse{}, nil
 		})
-	h := &nexusCompletionHandler{HistoryClient: client}
+	h := &nexusCompletionHandler{HistoryClient: client, ThrottledLogger: log.NewNoopLogger()}
 	req := &nexusrpc.CompletionRequest{
 		State: state,
 		Error: &nexus.OperationError{State: state, OriginalFailure: originalFailure},
 	}
-	failure, failureTruncated := completionFailure(t, originalFailure, blobSizeLimitError, blobSizeLimitWarn)
+	failure, failureTruncated, err := h.resolveFailureForCompletion(req, "namespace-id", "workflow-id", "run-id", blobSizeLimitError, blobSizeLimitWarn, metrics.NoopMetricsHandler)
+	require.NoError(t, err)
 
-	err := h.completeOperation(context.Background(), log.NewNoopLogger(), chasmCompletionToken(t), nil, failure, failureTruncated, req, nil, true)
+	err = h.completeOperation(context.Background(), log.NewNoopLogger(), chasmCompletionToken(t), nil, failure, failureTruncated, req, nil, true)
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	return got
@@ -357,13 +353,42 @@ func TestCompleteOperation_CHASM_FailureSize(t *testing.T) {
 		require.True(t, proto.Equal(want, got))
 	})
 
-	for _, state := range []nexus.OperationState{nexus.OperationStateFailed, nexus.OperationStateCanceled} {
-		t.Run("truncates "+string(state)+" failures", func(t *testing.T) {
+	// CHASM has no separate State field on the completion request: HandleNexusCompletion routes to
+	// onCanceled vs. onFailed based solely on whether the top-level failure carries CanceledFailureInfo,
+	// so that marker must survive truncation.
+	for _, tc := range []struct {
+		name     string
+		original *nexus.Failure
+		canceled bool
+	}{
+		{
+			name: "failed",
+			original: wrappedTemporalFailure(t, &failurepb.Failure{
+				Message: longMessage,
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "SomeError"},
+				},
+			}),
+			canceled: false,
+		},
+		{
+			name: "canceled",
+			original: wrappedTemporalFailure(t, &failurepb.Failure{
+				Message: longMessage,
+				FailureInfo: &failurepb.Failure_CanceledFailureInfo{
+					CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
+				},
+			}),
+			canceled: true,
+		},
+	} {
+		t.Run("truncates "+tc.name+" failures", func(t *testing.T) {
 			const limit = 150
-			got := completeChasmAndCaptureFailure(t, state, &nexus.Failure{Message: longMessage}, limit, 80)
+			got := completeChasmAndCaptureFailure(t, nexus.OperationStateFailed, tc.original, limit, 80)
 			require.LessOrEqual(t, got.Size(), limit)
 			require.Equal(t, common.FailureReasonFailureExceedsLimit, got.GetMessage())
 			require.Less(t, len(got.GetCause().GetMessage()), len(longMessage))
+			require.Equal(t, tc.canceled, got.GetCanceledFailureInfo() != nil)
 		})
 	}
 }

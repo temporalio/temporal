@@ -222,28 +222,15 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 
 	var successPayload *commonpb.Payload
 	var failure *failurepb.Failure
-	failureTruncated := false
+	var failureTruncated bool
 	switch r.State { // nolint:exhaustive
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
-		nexusFailure := nexusrpc.UnwrapFailure(r.Error.OriginalFailure)
-		failure, err = commonnexus.NexusFailureToTemporalFailure(*nexusFailure)
+		failure, failureTruncated, err = h.resolveFailureForCompletion(
+			r, targetNamespaceID, targetBusinessID, targetRunID, blobSizeLimitError, blobSizeLimitWarn, rCtx.metricsHandler,
+		)
 		if err != nil {
 			logger.Error("cannot convert nexus failure from completion request", tag.Error(err))
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid failure content")
-		}
-		if err := common.CheckEventBlobSizeLimit(
-			failure.Size(),
-			min(blobSizeLimitWarn, blobSizeLimitError),
-			blobSizeLimitError,
-			targetNamespaceID,
-			targetBusinessID,
-			targetRunID,
-			rCtx.metricsHandler,
-			h.ThrottledLogger,
-			nexusCompletionMethodName,
-		); err != nil {
-			failure = truncateOversizedFailure(failure, blobSizeLimitError, blobSizeLimitWarn)
-			failureTruncated = true
 		}
 	case nexus.OperationStateSucceeded:
 		var result *commonpb.Payload
@@ -286,6 +273,38 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		return commonnexus.ConvertGRPCError(err, true)
 	}
 	return commonnexus.ConvertGRPCError(err, false)
+}
+
+// resolveFailureForCompletion converts a failed/canceled completion's failure to its canonical Temporal
+// form and truncates it if it exceeds blobSizeLimitError, returning the failure to persist and whether it
+// was truncated.
+func (h *nexusCompletionHandler) resolveFailureForCompletion(
+	r *nexusrpc.CompletionRequest,
+	targetNamespaceID, targetBusinessID, targetRunID string,
+	blobSizeLimitError, blobSizeLimitWarn int,
+	metricsHandler metrics.Handler,
+) (*failurepb.Failure, bool, error) {
+	// Temporal->Temporal calls transmit the real failure as the wrapper OperationError's cause.
+	// Unwrap it so the caller sees the handler's original error rather than the generic wrapper.
+	nexusFailure := nexusrpc.UnwrapFailure(r.Error.OriginalFailure)
+	failure, err := commonnexus.NexusFailureToTemporalFailure(*nexusFailure)
+	if err != nil {
+		return nil, false, err
+	}
+	if err := common.CheckEventBlobSizeLimit(
+		failure.Size(),
+		min(blobSizeLimitWarn, blobSizeLimitError),
+		blobSizeLimitError,
+		targetNamespaceID,
+		targetBusinessID,
+		targetRunID,
+		metricsHandler,
+		h.ThrottledLogger,
+		nexusCompletionMethodName,
+	); err != nil {
+		return truncateOversizedFailure(failure, blobSizeLimitError, blobSizeLimitWarn), true, nil
+	}
+	return failure, false, nil
 }
 
 // completeOperation dispatches the completion to the framework named by its
@@ -367,6 +386,11 @@ func truncateOversizedFailure(failure *failurepb.Failure, blobSizeLimitError, bl
 		return failure
 	}
 	wrapper := commonfailure.NewServerFailure(common.FailureReasonFailureExceedsLimit, true)
+	if failure.GetCanceledFailureInfo() != nil {
+		// CHASM derives canceled vs. failed from the top-level CanceledFailureInfo alone (it has no
+		// separate state field), so this must survive truncation.
+		wrapper.FailureInfo = &failurepb.Failure_CanceledFailureInfo{CanceledFailureInfo: &failurepb.CanceledFailureInfo{}}
+	}
 	budget := min(blobSizeLimitWarn, blobSizeLimitError)
 	// Leave room for the wrapper itself plus the tag/length prefix embedding the cause adds.
 	const causeEmbeddingOverhead = 8
