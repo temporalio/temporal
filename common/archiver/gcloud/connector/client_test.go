@@ -98,6 +98,81 @@ func (s *clientSuite) TestUploadWriterCloseError() {
 	s.Require().EqualError(err, "Not Found")
 }
 
+func (s *clientSuite) TestUploadIfHashChangedSkipsMatchingObject() {
+	ctx := context.Background()
+	mockStorageClient := connector.NewMockGcloudStorageClient(s.controller)
+	mockBucketHandleClient := connector.NewMockBucketHandleWrapper(s.controller)
+	mockObjectHandler := connector.NewMockObjectHandleWrapper(s.controller)
+	storageWrapper, err := connector.NewClientWithParams(mockStorageClient)
+	s.Require().NoError(err)
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
+	s.Require().NoError(err)
+	recordHash := "matching-hash"
+
+	mockStorageClient.EXPECT().Bucket("my-bucket-cad").Return(mockBucketHandleClient)
+	mockBucketHandleClient.EXPECT().Object("temporal_archival/development/myfile.visibility").Return(mockObjectHandler)
+	mockObjectHandler.EXPECT().Attrs(ctx).Return(&storage.ObjectAttrs{Metadata: map[string]string{
+		archiver.VisibilityArchivalRecordHashMetadataKey: recordHash,
+	}}, nil)
+
+	err = storageWrapper.UploadIfHashChanged(ctx, URI, "myfile.visibility", []byte("{}"), recordHash)
+	s.Require().NoError(err)
+}
+
+func (s *clientSuite) TestUploadIfHashChangedOverwritesDifferentObject() {
+	ctx := context.Background()
+	mockStorageClient := connector.NewMockGcloudStorageClient(s.controller)
+	mockBucketHandleClient := connector.NewMockBucketHandleWrapper(s.controller)
+	mockObjectHandler := connector.NewMockObjectHandleWrapper(s.controller)
+	mockWriter := connector.NewMockWriterWrapper(s.controller)
+	storageWrapper, err := connector.NewClientWithParams(mockStorageClient)
+	s.Require().NoError(err)
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
+	s.Require().NoError(err)
+	recordHash := "new-hash"
+
+	mockStorageClient.EXPECT().Bucket("my-bucket-cad").Return(mockBucketHandleClient)
+	mockBucketHandleClient.EXPECT().Object("temporal_archival/development/myfile.visibility").Return(mockObjectHandler)
+	mockObjectHandler.EXPECT().Attrs(ctx).Return(&storage.ObjectAttrs{Metadata: map[string]string{
+		archiver.VisibilityArchivalRecordHashMetadataKey: "old-hash",
+	}}, nil)
+	mockObjectHandler.EXPECT().NewWriter(ctx).Return(mockWriter)
+	mockWriter.EXPECT().SetMetadata(map[string]string{
+		archiver.VisibilityArchivalRecordHashMetadataKey: recordHash,
+	})
+	mockWriter.EXPECT().Write([]byte("{}")).Return(2, nil)
+	mockWriter.EXPECT().Close().Return(nil)
+
+	err = storageWrapper.UploadIfHashChanged(ctx, URI, "myfile.visibility", []byte("{}"), recordHash)
+	s.Require().NoError(err)
+}
+
+func (s *clientSuite) TestUploadIfHashChangedWritesMissingObject() {
+	ctx := context.Background()
+	mockStorageClient := connector.NewMockGcloudStorageClient(s.controller)
+	mockBucketHandleClient := connector.NewMockBucketHandleWrapper(s.controller)
+	mockObjectHandler := connector.NewMockObjectHandleWrapper(s.controller)
+	mockWriter := connector.NewMockWriterWrapper(s.controller)
+	storageWrapper, err := connector.NewClientWithParams(mockStorageClient)
+	s.Require().NoError(err)
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
+	s.Require().NoError(err)
+	recordHash := "new-hash"
+
+	mockStorageClient.EXPECT().Bucket("my-bucket-cad").Return(mockBucketHandleClient)
+	mockBucketHandleClient.EXPECT().Object("temporal_archival/development/myfile.visibility").Return(mockObjectHandler)
+	mockObjectHandler.EXPECT().Attrs(ctx).Return(nil, storage.ErrObjectNotExist)
+	mockObjectHandler.EXPECT().NewWriter(ctx).Return(mockWriter)
+	mockWriter.EXPECT().SetMetadata(map[string]string{
+		archiver.VisibilityArchivalRecordHashMetadataKey: recordHash,
+	})
+	mockWriter.EXPECT().Write([]byte("{}")).Return(2, nil)
+	mockWriter.EXPECT().Close().Return(nil)
+
+	err = storageWrapper.UploadIfHashChanged(ctx, URI, "myfile.visibility", []byte("{}"), recordHash)
+	s.Require().NoError(err)
+}
+
 func (s *clientSuite) TestExist() {
 	ctx := context.Background()
 	testCases := []struct {

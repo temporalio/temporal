@@ -30,6 +30,7 @@ type (
 	// Client is a wrapper around Google cloud storages client library.
 	Client interface {
 		Upload(ctx context.Context, URI archiver.URI, fileName string, file []byte) error
+		UploadIfHashChanged(ctx context.Context, URI archiver.URI, fileName string, file []byte, recordHash string) error
 		Get(ctx context.Context, URI archiver.URI, file string) ([]byte, error)
 		Query(ctx context.Context, URI archiver.URI, fileNamePrefix string) ([]string, error)
 		QueryWithFilters(ctx context.Context, URI archiver.URI, fileNamePrefix string, pageSize, offset int, filters []Precondition) ([]string, bool, int, error)
@@ -70,9 +71,32 @@ func NewClientWithParams(clientD GcloudStorageClient) (Client, error) {
 // Upload push a file to gcloud storage bucket (sinkPath)
 // example:
 // Upload(ctx, mockBucketHandleClient, "gs://my-bucket-cad/temporal_archival/development", "45273645-fileName.history", fileReader)
-func (s *storageWrapper) Upload(ctx context.Context, URI archiver.URI, fileName string, file []byte) (err error) {
+func (s *storageWrapper) Upload(ctx context.Context, URI archiver.URI, fileName string, file []byte) error {
 	bucket := s.client.Bucket(URI.Hostname())
-	writer := bucket.Object(formatSinkPath(URI.Path()) + "/" + fileName).NewWriter(ctx)
+	return upload(ctx, bucket.Object(formatSinkPath(URI.Path())+"/"+fileName), file, nil)
+}
+
+func (s *storageWrapper) UploadIfHashChanged(ctx context.Context, URI archiver.URI, fileName string, file []byte, recordHash string) error {
+	bucket := s.client.Bucket(URI.Hostname())
+	object := bucket.Object(formatSinkPath(URI.Path()) + "/" + fileName)
+	attrs, err := object.Attrs(ctx)
+	if err == nil && attrs.Metadata[archiver.VisibilityArchivalRecordHashMetadataKey] == recordHash {
+		return nil
+	}
+	if err != nil && !errors.Is(err, storage.ErrObjectNotExist) {
+		return err
+	}
+
+	return upload(ctx, object, file, map[string]string{
+		archiver.VisibilityArchivalRecordHashMetadataKey: recordHash,
+	})
+}
+
+func upload(ctx context.Context, object ObjectHandleWrapper, file []byte, metadata map[string]string) (err error) {
+	writer := object.NewWriter(ctx)
+	if metadata != nil {
+		writer.SetMetadata(metadata)
+	}
 	defer func() {
 		err = multierr.Combine(err, writer.Close())
 	}()

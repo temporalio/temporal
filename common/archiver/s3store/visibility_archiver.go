@@ -126,11 +126,21 @@ func (v *visibilityArchiver) Archive(
 		archiveFailReason = errEncodeVisibilityRecord
 		return err
 	}
+	var recordHash string
+	if featureCatalog.VisibilityArchivalRecordDeduplication {
+		recordHash = archiver.VisibilityArchivalRecordHash(encodedVisibilityRecord)
+	}
 	indexes := createIndexesToArchive(request)
 	// Upload archive to all indexes
 	for _, element := range indexes {
 		key := constructTimestampIndex(URI.Path(), request.GetNamespaceId(), element.primaryIndex, element.primaryIndexValue, element.secondaryIndex, element.secondaryIndexTimestamp, request.GetRunId())
-		if err := Upload(ctx, v.s3cli, URI, key, encodedVisibilityRecord); err != nil {
+		var err error
+		if featureCatalog.VisibilityArchivalRecordDeduplication {
+			err = UploadIfHashChanged(ctx, v.s3cli, URI, key, encodedVisibilityRecord, recordHash)
+		} else {
+			err = Upload(ctx, v.s3cli, URI, key, encodedVisibilityRecord)
+		}
+		if err != nil {
 			archiveFailReason = errWriteKey
 			return err
 		}

@@ -39,6 +39,7 @@ type visibilityArchiverSuite struct {
 
 	controller      *gomock.Controller
 	testArchivalURI archiver.URI
+	fsEmulation     *s3FsEmulation
 }
 
 func TestVisibilityArchiverSuite(t *testing.T) {
@@ -119,7 +120,7 @@ func (s *visibilityArchiverSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	s.s3cli = mocks.NewMockS3API(s.controller)
-	setupFsEmulation(s.s3cli)
+	s.fsEmulation = setupFsEmulation(s.s3cli)
 	s.setupVisibilityDirectory()
 }
 
@@ -204,6 +205,43 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 	err = encoder.Decode(data, archivedRecord)
 	s.NoError(err)
 	s.Equal(request, archivedRecord)
+}
+
+func (s *visibilityArchiverSuite) TestArchive_ContentAwareDeduplication() {
+	visibilityArchiver := s.newTestVisibilityArchiver()
+	closeTimestamp := timestamp.TimeNowPtrUtc()
+	request := &archiverspb.VisibilityRecord{
+		NamespaceId:      testNamespaceID,
+		Namespace:        testNamespace,
+		WorkflowId:       testWorkflowID,
+		RunId:            testRunID,
+		WorkflowTypeName: testWorkflowTypeName,
+		StartTime:        timestamppb.New(closeTimestamp.AsTime().Add(-time.Hour)),
+		CloseTime:        closeTimestamp,
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		HistoryLength:    100,
+	}
+	URI, err := archiver.NewURI(testBucketURI + "/test-content-aware-deduplication")
+	s.Require().NoError(err)
+	initialPutCount := s.fsEmulation.putCount
+
+	err = visibilityArchiver.Archive(context.Background(), URI, request)
+	s.Require().NoError(err)
+	s.Equal(initialPutCount+4, s.fsEmulation.putCount)
+
+	deduplicationOption := archiver.GetVisibilityArchivalRecordDeduplicationOption()
+	err = visibilityArchiver.Archive(context.Background(), URI, request, deduplicationOption)
+	s.Require().NoError(err)
+	s.Equal(initialPutCount+8, s.fsEmulation.putCount)
+
+	err = visibilityArchiver.Archive(context.Background(), URI, request, deduplicationOption)
+	s.Require().NoError(err)
+	s.Equal(initialPutCount+8, s.fsEmulation.putCount)
+
+	request.HistoryLength++
+	err = visibilityArchiver.Archive(context.Background(), URI, request, deduplicationOption)
+	s.Require().NoError(err)
+	s.Equal(initialPutCount+12, s.fsEmulation.putCount)
 }
 
 func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidURI() {

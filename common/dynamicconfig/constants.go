@@ -2498,6 +2498,11 @@ visibility if they were removed from the mutable state`,
 		100,
 		`ArchivalTaskBatchSize is batch size for archivalQueueProcessor`,
 	)
+	EnableVisibilityArchivalRecordDeduplication = NewNamespaceBoolSetting(
+		"history.enableVisibilityArchivalRecordDeduplication",
+		false,
+		`EnableVisibilityArchivalRecordDeduplication enables content-aware visibility archival deduplication for S3 and GCS`,
+	)
 	ArchivalProcessorMaxPollRPS = NewGlobalIntSetting(
 		"history.archivalProcessorMaxPollRPS",
 		20,

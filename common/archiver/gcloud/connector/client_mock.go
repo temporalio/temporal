@@ -116,3 +116,17 @@ func (mr *MockClientMockRecorder) Upload(ctx, URI, fileName, file any) *gomock.C
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Upload", reflect.TypeOf((*MockClient)(nil).Upload), ctx, URI, fileName, file)
 }
+
+// UploadIfHashChanged mocks base method.
+func (m *MockClient) UploadIfHashChanged(ctx context.Context, URI archiver.URI, fileName string, file []byte, recordHash string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UploadIfHashChanged", ctx, URI, fileName, file, recordHash)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UploadIfHashChanged indicates an expected call of UploadIfHashChanged.
+func (mr *MockClientMockRecorder) UploadIfHashChanged(ctx, URI, fileName, file, recordHash any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadIfHashChanged", reflect.TypeOf((*MockClient)(nil).UploadIfHashChanged), ctx, URI, fileName, file, recordHash)
+}

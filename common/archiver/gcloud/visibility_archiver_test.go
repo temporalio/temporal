@@ -175,6 +175,34 @@ func (s *visibilityArchiverSuite) TestVisibilityArchive() {
 	s.NoError(err)
 }
 
+func (s *visibilityArchiverSuite) TestVisibilityArchive_ContentAwareDeduplication() {
+	ctx := context.Background()
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/visibility")
+	s.Require().NoError(err)
+	storageWrapper := connector.NewMockClient(s.controller)
+	storageWrapper.EXPECT().Exist(gomock.Any(), URI, gomock.Any()).Return(false, nil)
+	visibilityArchiver := newVisibilityArchiver(s.logger, s.metricsHandler, storageWrapper)
+
+	request := &archiverspb.VisibilityRecord{
+		Namespace:        testNamespace,
+		NamespaceId:      testNamespaceID,
+		WorkflowId:       testWorkflowID,
+		RunId:            testRunID,
+		WorkflowTypeName: testWorkflowTypeName,
+		StartTime:        timestamp.TimeNowPtrUtc(),
+		CloseTime:        timestamp.TimeNowPtrUtc(),
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		HistoryLength:    101,
+	}
+	encodedRecord, err := encode(request)
+	s.Require().NoError(err)
+	expectedHash := archiver.VisibilityArchivalRecordHash(encodedRecord)
+	storageWrapper.EXPECT().UploadIfHashChanged(gomock.Any(), URI, gomock.Any(), encodedRecord, expectedHash).Return(nil).Times(2)
+
+	err = visibilityArchiver.Archive(ctx, URI, request, archiver.GetVisibilityArchivalRecordDeduplicationOption())
+	s.Require().NoError(err)
+}
+
 func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidQuery() {
 	ctx := context.Background()
 	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/visibility")
