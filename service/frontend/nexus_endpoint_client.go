@@ -211,8 +211,8 @@ func (c *NexusEndpointClient) List(
 		c.logger.Error(
 			"error listing Nexus endpoints from persistence",
 			tag.Error(err),
-			tag.NewBinaryTag("next-page-token", request.NextPageToken),
-			tag.NewInt32("page-size", pageSize),
+			tag.NextPageToken(request.NextPageToken),
+			tag.PageSize(int64(pageSize)),
 		)
 		return nil, serviceerror.NewInternal("error listing Nexus endpoints")
 	}
@@ -293,8 +293,8 @@ func (c *NexusEndpointClient) listAndFilterByName(
 			c.logger.Error(
 				"error listing Nexus endpoints from persistence with Name filter",
 				tag.Error(err),
-				tag.NewBinaryTag("next-page-token", currentPageToken),
-				tag.NewInt("page-size", pageSize),
+				tag.NextPageToken(currentPageToken),
+				tag.PageSize(int64(pageSize)),
 				tag.Endpoint(request.Name),
 			)
 			return nil, serviceerror.NewInternal("error listing Nexus endpoints")
