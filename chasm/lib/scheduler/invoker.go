@@ -218,8 +218,11 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 		}
 		if completedStart, ok := completed[start.RequestId]; ok {
 			newlyStarted++
-			start.OverlapPolicy = completedStart.GetOverlapPolicy()
-			if !internal.TracksCompletionResult(completedStart.GetOverlapPolicy()) {
+			// Persist the dispatch-time resolution before making lifecycle decisions.
+			// A later schedule-policy update must not reclassify this started action.
+			resolvedOverlapPolicy := completedStart.GetOverlapPolicy()
+			start.OverlapPolicy = resolvedOverlapPolicy
+			if !internal.TracksCompletionResult(resolvedOverlapPolicy) {
 				i.Scheduler.Get(ctx).recordRecentAction(completedStart, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
 				startedUntracked[start.RequestId] = struct{}{}
 				removedStarts++
