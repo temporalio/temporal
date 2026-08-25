@@ -124,6 +124,19 @@ func TestCherryPick(t *testing.T) {
 	})
 }
 
+func TestBufferedCancelRequestOutcomesAreNotCherryPickable(t *testing.T) {
+	definitions := []hsm.EventDefinition{
+		nexusoperations.CancelRequestCompletedEventDefinition{},
+		nexusoperations.CancelRequestFailedEventDefinition{},
+	}
+	for _, definition := range definitions {
+		t.Run(definition.Type().String(), func(t *testing.T) {
+			err := definition.CherryPick(nil, nil, nil)
+			require.ErrorIs(t, err, hsm.ErrNotCherryPickable)
+		})
+	}
+}
+
 func TestTerminalStatesDeletion(t *testing.T) {
 	testCases := []struct {
 		name       string
