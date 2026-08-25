@@ -68,15 +68,7 @@ func (c *ContextMetadataInterceptor) InterceptNexus(
 	in nexus.InterceptorInput,
 	next nexus.HandlerFunc,
 ) (any, error) {
-	ctx = contextutil.WithMetadataContext(ctx)
-
-	resp, err := next(ctx, in)
-
-	if c.setTrailer {
-		c.appendContextMetadataToTrailer(ctx, in.APIName())
-	}
-
-	return resp, err
+	return next(ctx, in)
 }
 
 func (c *ContextMetadataInterceptor) appendContextMetadataToTrailer(ctx context.Context, method string) {

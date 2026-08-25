@@ -39,14 +39,12 @@ func (i *HealthInterceptor) Intercept(
 	return handler(ctx, req)
 }
 
+// InterceptNexus is a no-op as nexus APIs are considered internal
 func (i *HealthInterceptor) InterceptNexus(
 	ctx context.Context,
 	in nexus.InterceptorInput,
 	next nexus.HandlerFunc,
 ) (any, error) {
-	if i.isNotHealthy(in.OperationName()) {
-		return nil, notHealthyErr
-	}
 	return next(ctx, in)
 }
 

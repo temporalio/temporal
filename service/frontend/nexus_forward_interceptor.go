@@ -59,13 +59,7 @@ func (i *nexusForwardingInterceptor) InterceptNexus(
 	next interceptornexus.HandlerFunc,
 ) (out any, retErr error) {
 	info := in.ForwardingInfo()
-	header, err := interceptornexus.HeaderFromInterceptorInput(in)
-	if err != nil {
-		return nil, &interceptornexus.InterceptorError{
-			Err:     err,
-			Outcome: "interceptor_failed",
-		}
-	}
+	header := in.Header()
 	namespaceEntry, err := in.NamespaceEntry()
 	if err != nil {
 		return nil, &interceptornexus.InterceptorError{
@@ -85,16 +79,13 @@ func (i *nexusForwardingInterceptor) InterceptNexus(
 		}
 	}
 
-	telemetryContext, err := interceptor.TelemetryContextFromContext(ctx)
-	if err != nil {
-		return nil, &interceptornexus.InterceptorError{
-			Err:     err,
-			Outcome: "interceptor_failed",
-		}
-	}
-	telemetryContext.SetMetricsOutcome("request_forwarded")
+	interceptornexus.SetOutcomeOverride(ctx, interceptornexus.OutcomeRequestForwarded)
 
-	metricsHandler, forwardStartTime := i.redirectionInterceptor.BeforeCall(interceptornexus.MethodName(in))
+	// this is the user-facing operation identity, and the DCRedirection prefix
+	// matches the convention the gRPC redirection path uses for the same metrics.
+	metricsHandler, forwardStartTime := i.redirectionInterceptor.BeforeCall(
+		interceptor.DCRedirectionMetricsPrefix + in.MethodName(),
+	)
 	defer func() {
 		redirectionErr := retErr
 		if taggedErr, ok := errors.AsType[*interceptornexus.InterceptorError](retErr); ok {
@@ -105,11 +96,11 @@ func (i *nexusForwardingInterceptor) InterceptNexus(
 
 	switch request := in.(type) {
 	case interceptornexus.StartOpInput:
-		out, retErr = i.forwardStartOperation(ctx, request, info, namespaceEntry, targetCluster, telemetryContext)
+		out, retErr = i.forwardStartOperation(ctx, request, info, namespaceEntry, targetCluster)
 	case interceptornexus.CancelOpInput:
-		retErr = i.forwardCancelOperation(ctx, request, info, namespaceEntry, targetCluster, telemetryContext)
+		retErr = i.forwardCancelOperation(ctx, request, info, namespaceEntry, targetCluster)
 	case interceptornexus.CompleteOpInput:
-		retErr = i.forwardCompleteOperation(ctx, request, info, namespaceEntry, targetCluster, telemetryContext)
+		retErr = i.forwardCompleteOperation(ctx, request, info, namespaceEntry, targetCluster)
 	default:
 		return nil, &interceptornexus.InterceptorError{
 			Err: nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "forwarding failed, unknown operation type"),
@@ -139,18 +130,22 @@ func (i *nexusForwardingInterceptor) forwardStartOperation(
 	info interceptornexus.ForwardingInfo,
 	namespaceEntry *namespace.Namespace,
 	targetCluster string,
-	telemetryContext interceptor.TelemetryContext,
 ) (any, error) {
+	logger := log.With(
+		i.logger,
+		tag.SourceCluster(i.clusterMetadata.GetCurrentClusterName()),
+		tag.TargetCluster(targetCluster),
+	)
 	request.StartOperationOptions.Header[interceptor.DCRedirectionAPIHeaderName] = "true"
 	request.StartOperationOptions.Header[interceptor.DCRedirectionSourceCellHeaderName] = i.clusterMetadata.GetCurrentClusterName()
-	client, err := i.nexusClientForActiveCluster(request.ServiceName(), info, namespaceEntry, targetCluster, telemetryContext)
+	client, err := i.nexusClientForActiveCluster(ctx, request.ServiceName(), info, namespaceEntry, targetCluster)
 	if err != nil {
 		return nil, err
 	}
 	ctx = i.withForwardingTrace(ctx, "StartNexusOperation", request.OperationName(), request.StartOperationOptions.RequestID, info, namespaceEntry, targetCluster)
 	response, err := client.StartOperation(ctx, request.OperationName(), request.StartOperationInput.Reader, request.StartOperationOptions)
 	if err != nil {
-		i.logger.Error("received error from remote cluster for forwarded Nexus start operation request", tag.Error(err))
+		logger.Error("received error from remote cluster for forwarded Nexus start operation request", tag.Error(err))
 		return nil, &interceptornexus.InterceptorError{Err: err, Outcome: "forwarded_request_error"}
 	}
 	if response.Successful != nil {
@@ -165,22 +160,26 @@ func (i *nexusForwardingInterceptor) forwardCancelOperation(
 	info interceptornexus.ForwardingInfo,
 	namespaceEntry *namespace.Namespace,
 	targetCluster string,
-	telemetryContext interceptor.TelemetryContext,
 ) error {
+	logger := log.With(
+		i.logger,
+		tag.SourceCluster(i.clusterMetadata.GetCurrentClusterName()),
+		tag.TargetCluster(targetCluster),
+	)
 	request.CancelOperationOptions.Header[interceptor.DCRedirectionAPIHeaderName] = "true"
 	request.CancelOperationOptions.Header[interceptor.DCRedirectionSourceCellHeaderName] = i.clusterMetadata.GetCurrentClusterName()
-	client, err := i.nexusClientForActiveCluster(request.ServiceName(), info, namespaceEntry, targetCluster, telemetryContext)
+	client, err := i.nexusClientForActiveCluster(ctx, request.ServiceName(), info, namespaceEntry, targetCluster)
 	if err != nil {
 		return err
 	}
 	handle, err := client.NewOperationHandle(request.OperationName(), request.CancellationToken)
 	if err != nil {
-		i.logger.Warn("invalid Nexus cancel operation", tag.Error(err))
+		logger.Warn("invalid Nexus cancel operation", tag.Error(err))
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation")
 	}
 	ctx = i.withForwardingTrace(ctx, "CancelNexusOperation", request.OperationName(), "", info, namespaceEntry, targetCluster)
 	if err := handle.Cancel(ctx, request.CancelOperationOptions); err != nil {
-		i.logger.Error("received error from remote cluster for forwarded Nexus cancel operation request", tag.Error(err))
+		logger.Error("received error from remote cluster for forwarded Nexus cancel operation request", tag.Error(err))
 		return &interceptornexus.InterceptorError{Err: err, Outcome: "forwarded_request_error"}
 	}
 	return nil
@@ -192,16 +191,20 @@ func (i *nexusForwardingInterceptor) forwardCompleteOperation(
 	info interceptornexus.ForwardingInfo,
 	namespaceEntry *namespace.Namespace,
 	targetCluster string,
-	telemetryContext interceptor.TelemetryContext,
 ) error {
+	logger := log.With(
+		i.logger,
+		tag.SourceCluster(i.clusterMetadata.GetCurrentClusterName()),
+		tag.TargetCluster(targetCluster),
+	)
 	client, err := i.forwardingClients.Get(targetCluster)
 	if err != nil {
-		i.logger.Error("unable to get HTTP client for forward request", tag.Operation("CompleteNexusOperation"), tag.WorkflowNamespace(namespaceEntry.Name().String()), tag.Error(err), tag.SourceCluster(i.clusterMetadata.GetCurrentClusterName()), tag.TargetCluster(targetCluster))
+		logger.Error("unable to get HTTP client for forward request", tag.Operation("CompleteNexusOperation"), tag.WorkflowNamespace(namespaceEntry.Name().String()), tag.Error(err), tag.SourceCluster(i.clusterMetadata.GetCurrentClusterName()), tag.TargetCluster(targetCluster))
 		return &interceptornexus.InterceptorError{Err: nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error"), Outcome: "request_forwarding_failed"}
 	}
 	forwardURL, err := url.JoinPath(client.BaseURL(), commonnexus.RouteCompletionCallback.Path(namespaceEntry.Name().String()))
 	if err != nil {
-		i.logger.Error("failed to construct forwarding request URL", tag.Operation("CompleteNexusOperation"), tag.WorkflowNamespace(namespaceEntry.Name().String()), tag.Error(err), tag.TargetCluster(targetCluster))
+		logger.Error("failed to construct forwarding request URL", tag.Operation("CompleteNexusOperation"), tag.WorkflowNamespace(namespaceEntry.Name().String()), tag.Error(err), tag.TargetCluster(targetCluster))
 		return &interceptornexus.InterceptorError{Err: nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error"), Outcome: "request_forwarding_failed"}
 	}
 	request.CompletionRequest.HTTPRequest.Header.Set(interceptor.DCRedirectionAPIHeaderName, "true")
@@ -214,7 +217,8 @@ func (i *nexusForwardingInterceptor) forwardCompleteOperation(
 	}
 	ctx = i.withForwardingTrace(ctx, "CompleteNexusOperation", "", "", info, namespaceEntry, targetCluster)
 	err = nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
-		HTTPCaller: (&nexusForwardingHTTPHeaderWrapper{client: client, originalRequestHeaders: info.OriginalRequestHeaders, telemetryContext: telemetryContext}).Do,
+		// completions dont report a failure source back to the caller through headers
+		HTTPCaller: (&nexusForwardingHTTPHeaderWrapper{client: client, originalRequestHeaders: info.OriginalRequestHeaders}).Do,
 	}).CompleteOperation(ctx, forwardURL, completion)
 	if err != nil {
 		return &interceptornexus.InterceptorError{Err: err, Outcome: "forwarded_request_error"}
@@ -234,15 +238,24 @@ func completeOperationOptions(request *nexusrpc.CompletionRequest) (nexusrpc.Com
 }
 
 func (i *nexusForwardingInterceptor) nexusClientForActiveCluster(
+	ctx context.Context,
 	service string,
 	info interceptornexus.ForwardingInfo,
 	namespaceEntry *namespace.Namespace,
 	targetCluster string,
-	telemetryContext interceptor.TelemetryContext,
 ) (*nexusrpc.HTTPClient, error) {
+	var setFailureSource func(string) // required for setting the source in case of a failure
+	if oc, ok := operationContextFromContext(ctx); ok {
+		setFailureSource = oc.setFailureSource
+	}
+	logger := log.With(
+		i.logger,
+		tag.SourceCluster(i.clusterMetadata.GetCurrentClusterName()),
+		tag.TargetCluster(targetCluster),
+	)
 	httpClient, err := i.forwardingClients.Get(targetCluster)
 	if err != nil {
-		i.logger.Error("failed to forward Nexus request: error creating HTTP client", tag.Error(err), tag.SourceCluster(i.clusterMetadata.GetCurrentClusterName()), tag.TargetCluster(targetCluster))
+		logger.Error("failed to forward Nexus request: error creating HTTP client", tag.Error(err), tag.SourceCluster(i.clusterMetadata.GetCurrentClusterName()), tag.TargetCluster(targetCluster))
 		return nil, &interceptornexus.InterceptorError{Err: nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "request forwarding failed"), Outcome: "request_forwarding_failed"}
 	}
 	var baseURL string
@@ -252,11 +265,11 @@ func (i *nexusForwardingInterceptor) nexusClientForActiveCluster(
 		baseURL, err = url.JoinPath(httpClient.BaseURL(), commonnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.Path(commonnexus.NamespaceAndTaskQueue{Namespace: namespaceEntry.Name().String(), TaskQueue: info.TaskQueue}))
 	}
 	if err != nil {
-		i.logger.Error("failed to forward Nexus request: error constructing ServiceBaseURL", tag.URL(httpClient.BaseURL()), tag.WorkflowNamespace(namespaceEntry.Name().String()), tag.WorkflowTaskQueueName(info.TaskQueue), tag.Error(err))
+		logger.Error("failed to forward Nexus request: error constructing ServiceBaseURL", tag.URL(httpClient.BaseURL()), tag.WorkflowNamespace(namespaceEntry.Name().String()), tag.WorkflowTaskQueueName(info.TaskQueue), tag.Error(err))
 		return nil, &interceptornexus.InterceptorError{Err: nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "request forwarding failed"), Outcome: "request_forwarding_failed"}
 	}
 	return nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
-		HTTPCaller: (&nexusForwardingHTTPHeaderWrapper{client: httpClient, originalRequestHeaders: info.OriginalRequestHeaders, telemetryContext: telemetryContext}).Do,
+		HTTPCaller: (&nexusForwardingHTTPHeaderWrapper{client: httpClient, originalRequestHeaders: info.OriginalRequestHeaders, setFailureSource: setFailureSource}).Do,
 		BaseURL:    baseURL,
 		Service:    service,
 	})
@@ -293,7 +306,7 @@ func (i *nexusForwardingInterceptor) withForwardingTrace(
 type nexusForwardingHTTPHeaderWrapper struct {
 	client                 *common.FrontendHTTPClient
 	originalRequestHeaders http.Header
-	telemetryContext       interceptor.TelemetryContext
+	setFailureSource       func(string)
 }
 
 func (f *nexusForwardingHTTPHeaderWrapper) Do(request *http.Request) (*http.Response, error) {
@@ -308,8 +321,8 @@ func (f *nexusForwardingHTTPHeaderWrapper) Do(request *http.Request) (*http.Resp
 		return nil, err
 	}
 
-	if source := response.Header.Get(commonnexus.FailureSourceHeaderName); source != "" && f.telemetryContext != nil {
-		f.telemetryContext.SetFailureSource(source)
+	if source := response.Header.Get(commonnexus.FailureSourceHeaderName); source != "" && f.setFailureSource != nil {
+		f.setFailureSource(source)
 	}
 	return response, nil
 }

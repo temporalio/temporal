@@ -1772,14 +1772,14 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAuthErrors(cha
 	}
 
 	publicCallbackURL := "http://" + env.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path(env.Namespace().String())
-	// capture := env.StartNamespaceMetricCapture()
+	capture := env.StartNamespaceMetricCapture()
 	err = s.sendNexusCompletionRequest(s.Context(), publicCallbackURL, completion)
-	// completionRequests := capture.Metric("nexus_completion_requests")
+	completionRequests := capture.Metric("nexus_completion_requests")
 	var handlerErr *nexus.HandlerError
 	s.ErrorAs(err, &handlerErr)
 	s.Equal(nexus.HandlerErrorTypeUnauthorized, handlerErr.Type)
-	// s.Len(completionRequests, 1)
-	// s.Subset(completionRequests[0].Tags, map[string]string{"namespace": env.Namespace().String(), "outcome": "unauthorized"})
+	s.Len(completionRequests, 1)
+	s.Subset(completionRequests[0].Tags, map[string]string{"namespace": env.Namespace().String(), "outcome": "unauthorized"})
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAuthErrorsNoIdentifier(chasmEnabled bool) {
@@ -1802,14 +1802,14 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAuthErrorsNoId
 		Header: nexus.Header{commonnexus.CallbackTokenHeader: callbackToken},
 	}
 	publicCallbackURL := "http://" + env.HttpAPIAddress() + commonnexus.PathCompletionCallbackNoIdentifier
-	// capture := env.StartNamespaceMetricCapture()
+	capture := env.StartNamespaceMetricCapture()
 	err = s.sendNexusCompletionRequest(s.Context(), publicCallbackURL, completion)
-	// completionRequests := capture.Metric("nexus_completion_requests")
+	completionRequests := capture.Metric("nexus_completion_requests")
 	var handlerErr *nexus.HandlerError
 	s.ErrorAs(err, &handlerErr)
 	s.Equal(nexus.HandlerErrorTypeUnauthorized, handlerErr.Type)
-	// s.Len(completionRequests, 1)
-	// s.Subset(completionRequests[0].Tags, map[string]string{"namespace": env.Namespace().String(), "outcome": "unauthorized"})
+	s.Len(completionRequests, 1)
+	s.Subset(completionRequests[0].Tags, map[string]string{"namespace": env.Namespace().String(), "outcome": "unauthorized"})
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionInternalAuth(chasmEnabled bool) {

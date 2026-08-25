@@ -102,7 +102,7 @@ func TestSDKVersionInterceptNexus(t *testing.T) {
 			nextCalled := false
 			_, err := interceptor.InterceptNexus(
 				tc.ctx,
-				interceptornexus.NewStartOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil),
+				interceptornexus.NewStartOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil, interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{}),
 				func(context.Context, interceptornexus.InterceptorInput) (any, error) {
 					nextCalled = true
 					return nil, nil

@@ -122,9 +122,6 @@ func (i *RoutingKeyInterceptor) Intercept(
 	return handler(ctx, req)
 }
 
-// TBD: check if this is needed or if this can also be a passthrough
-//
-//nolint:staticcheck
 func (i *RoutingKeyInterceptor) InterceptNexus(
 	ctx context.Context,
 	in nexus.InterceptorInput,

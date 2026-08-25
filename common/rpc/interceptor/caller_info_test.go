@@ -2,6 +2,7 @@ package interceptor
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -10,6 +11,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
@@ -127,6 +129,14 @@ func (s *callerInfoSuite) TestIntercept_CallerName() {
 }
 
 func (s *callerInfoSuite) TestInterceptNexus() {
+	completeInput, err := interceptornexus.NewCompleteOpInput(
+		testNamespace,
+		&nexusrpc.CompletionRequest{HTTPRequest: &http.Request{}},
+		nil,
+		interceptornexus.ForwardingInfo{},
+		interceptornexus.RequestMetadata{},
+	)
+	s.NoError(err)
 	for _, tc := range []struct {
 		name           string
 		input          interceptornexus.InterceptorInput
@@ -135,17 +145,17 @@ func (s *callerInfoSuite) TestInterceptNexus() {
 	}{
 		{
 			name:           "start",
-			input:          interceptornexus.NewStartOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil),
+			input:          interceptornexus.NewStartOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil, interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{}),
 			expectedOrigin: "StartNexusOperation",
 		},
 		{
 			name:       "cancel - preserves background origin",
-			input:      interceptornexus.NewCancelOpInput("s", "o", testNamespace, nexus.CancelOperationOptions{}, "t"),
+			input:      interceptornexus.NewCancelOpInput("s", "o", testNamespace, nexus.CancelOperationOptions{}, "t", interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{}),
 			callerInfo: headers.SystemBackgroundHighCallerInfo,
 		},
 		{
 			name:           "complete",
-			input:          interceptornexus.NewCompleteOpInput(testNamespace, nil),
+			input:          completeInput,
 			expectedOrigin: "CompleteNexusOperation",
 		},
 	} {

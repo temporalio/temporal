@@ -37,9 +37,8 @@ func (s *rateLimitInterceptorSuite) TestInterceptNexus() {
 		nextCalled      bool
 		expectedOutcome string
 	}{
-		{name: "allowed", apiName: "NexusOperation", input: withAPIName(interceptornexus.NewStartOpInput("service", "operation", testNamespace, nexus.StartOperationOptions{}, nil), "NexusOperation"), allow: new(true), nextCalled: true},
-		{name: "rate limited", apiName: "NexusOperation", input: withAPIName(interceptornexus.NewStartOpInput("service", "operation", testNamespace, nexus.StartOperationOptions{}, nil), "NexusOperation"), allow: new(false), expectedOutcome: "global_rate_limited"},
-		{name: "missing request header", apiName: "NexusOperation", input: withAPIName(interceptornexus.NewCompleteOpInput(testNamespace, nil), "NexusOperation"), expectedOutcome: "interceptor_failed"},
+		{name: "allowed", apiName: "NexusOperation", input: interceptornexus.NewStartOpInput("service", "operation", testNamespace, nexus.StartOperationOptions{}, nil, interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{APIName: "NexusOperation"}), allow: new(true), nextCalled: true},
+		{name: "rate limited", apiName: "NexusOperation", input: interceptornexus.NewStartOpInput("service", "operation", testNamespace, nexus.StartOperationOptions{}, nil, interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{APIName: "NexusOperation"}), allow: new(false), expectedOutcome: "global_rate_limited"},
 	} {
 		s.Run(tc.name, func() {
 			ctx := context.Background()
@@ -49,7 +48,7 @@ func (s *rateLimitInterceptorSuite) TestInterceptNexus() {
 			}
 			input := tc.input
 			if input == nil {
-				input = interceptornexus.NewStartOpInput("service", "operation", testNamespace, nexus.StartOperationOptions{}, nil)
+				input = interceptornexus.NewStartOpInput("service", "operation", testNamespace, nexus.StartOperationOptions{}, nil, interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{})
 			}
 			nextCalled := false
 			_, err := interceptor.InterceptNexus(

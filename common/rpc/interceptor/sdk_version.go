@@ -5,7 +5,6 @@ import (
 	"sync"
 
 	"go.temporal.io/server/common/headers"
-	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.temporal.io/server/common/versioninfo"
 	"google.golang.org/grpc"
@@ -59,7 +58,7 @@ func (vi *SDKVersionInterceptor) InterceptNexus(
 	}
 	if err := vi.versionChecker.ClientSupported(ctx); err != nil {
 		return nil, &nexus.InterceptorError{
-			Err:     commonnexus.ConvertGRPCError(err, true),
+			Err:     err,
 			Outcome: "unsupported_client",
 		}
 	}

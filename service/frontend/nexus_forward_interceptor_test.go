@@ -52,16 +52,17 @@ func TestNexusForwardingInterceptorInterceptNexus(t *testing.T) {
 			Scheme:  "http",
 		},
 	}}
-	input := interceptornexus.NewStartOpInput("s", "o", testNamespace, nexus.StartOperationOptions{
+	options := nexus.StartOperationOptions{
 		Header: nexus.Header{"X-Request": "request"},
-	}, nexus.NewLazyValue(nexus.DefaultSerializer(), &nexus.Reader{
+	}
+	requestInput := nexus.NewLazyValue(nexus.DefaultSerializer(), &nexus.Reader{
 		ReadCloser: io.NopCloser(bytes.NewBufferString(`"input"`)),
 		Header:     nexus.Header{"type": "json"},
-	}))
-	input.WithForwardingInfo(interceptornexus.ForwardingInfo{
+	})
+	forwardingInfo := interceptornexus.ForwardingInfo{
 		OriginalRequestHeaders: http.Header{"X-Original": {"original"}},
 		TaskQueue:              "task-queue",
-	})
+	}
 
 	for _, tc := range []struct {
 		name            string
@@ -139,14 +140,16 @@ func TestNexusForwardingInterceptorInterceptNexus(t *testing.T) {
 					NexusForwardRequestUseEndpoint:         dynamicconfig.GetBoolPropertyFn(false),
 				},
 			}
-			input.WithRequestMetadata(interceptornexus.RequestMetadata{
-				NamespaceEntry: tc.namespace,
-			})
-			ctx := interceptor.WithTelemetryContext(context.Background(), &forwardingTelemetryContext{})
+			in := interceptornexus.NewStartOpInput(
+				"s", "o", testNamespace, options, requestInput,
+				forwardingInfo,
+				interceptornexus.RequestMetadata{NamespaceEntry: tc.namespace},
+			)
+			ctx := context.Background()
 			nextCalled := false
 			result, err := forwarder.InterceptNexus(
 				ctx,
-				input,
+				in,
 				func(context.Context, interceptornexus.InterceptorInput) (any, error) {
 					nextCalled = true
 					return requestHandledLocally, nil
@@ -174,30 +177,6 @@ func TestNexusForwardingInterceptorInterceptNexus(t *testing.T) {
 		})
 	}
 }
-
-type forwardingTelemetryContext struct {
-	failureSource string
-}
-
-func (*forwardingTelemetryContext) MetricsHandler(error) metrics.Handler {
-	return metrics.NoopMetricsHandler
-}
-
-func (*forwardingTelemetryContext) MetricsHandlerForInterceptors() metrics.Handler {
-	return metrics.NoopMetricsHandler
-}
-
-func (*forwardingTelemetryContext) MetricsLogger() log.Logger {
-	return log.NewNoopLogger()
-}
-
-func (*forwardingTelemetryContext) SetMetricsOutcome(string) {}
-
-func (c *forwardingTelemetryContext) SetFailureSource(source string) {
-	c.failureSource = source
-}
-
-func (*forwardingTelemetryContext) HandleRequestError(error) {}
 
 type testFrontendHTTPClientCache struct {
 	clients map[string]*common.FrontendHTTPClient

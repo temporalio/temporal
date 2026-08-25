@@ -128,8 +128,9 @@ func (s *namespaceValidatorSuite) TestInterceptNexus() {
 	}{
 		{
 			name: "resolved namespace",
-			input: withRequestMetadataForTest(
-				interceptornexus.NewStartOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil),
+			input: interceptornexus.NewStartOpInput(
+				"s", "o", testNamespace, nexus.StartOperationOptions{}, nil,
+				interceptornexus.ForwardingInfo{},
 				interceptornexus.RequestMetadata{
 					APIName: api.NexusServicePrefix + "DispatchNexusTask",
 					NamespaceEntry: namespace.NewNamespaceForTest(
@@ -145,8 +146,9 @@ func (s *namespaceValidatorSuite) TestInterceptNexus() {
 		},
 		{
 			name: "invalid namespace state",
-			input: withRequestMetadataForTest(
-				interceptornexus.NewStartOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil),
+			input: interceptornexus.NewStartOpInput(
+				"s", "o", testNamespace, nexus.StartOperationOptions{}, nil,
+				interceptornexus.ForwardingInfo{},
 				interceptornexus.RequestMetadata{
 					APIName: api.NexusServicePrefix + "DispatchNexusTask",
 					NamespaceEntry: namespace.NewNamespaceForTest(
@@ -162,9 +164,10 @@ func (s *namespaceValidatorSuite) TestInterceptNexus() {
 		},
 		{
 			name: "missing namespace",
-			input: withAPIName(
-				interceptornexus.NewStartOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil),
-				"NexusAPI",
+			input: interceptornexus.NewStartOpInput(
+				"s", "o", testNamespace, nexus.StartOperationOptions{}, nil,
+				interceptornexus.ForwardingInfo{},
+				interceptornexus.RequestMetadata{APIName: "NexusAPI"},
 			),
 			expectedOutcome: "interceptor_failed",
 		},
@@ -896,12 +899,10 @@ func (s *namespaceValidatorSuite) Test_Intercept_SearchAttributeRequests() {
 }
 
 func (s *namespaceValidatorSuite) Test_NamespaceValidateIntercept() {
-	nvi := NewNamespaceValidatorInterceptor(
+	nnvi := NewNamespaceStateValidatorInterceptor(
 		s.mockRegistry,
-		dynamicconfig.GetBoolPropertyFn(false),
 		dynamicconfig.GetIntPropertyFn(10),
-		nil)
-	nnvi := NewNamespaceStateValidatorInterceptor(nvi)
+	)
 	serverInfo := &grpc.UnaryServerInfo{
 		FullMethod: api.WorkflowServicePrefix + "random",
 	}
@@ -966,59 +967,52 @@ func (s *namespaceValidatorSuite) TestSetNamespace() {
 	namespaceEntry, err := namespace.FromPersistentState(detail, factory(detail))
 	s.NoError(err)
 
-	nvi := NewNamespaceValidatorInterceptor(
-		s.mockRegistry,
-		dynamicconfig.GetBoolPropertyFn(false),
-		dynamicconfig.GetIntPropertyFn(10),
-		nil,
-	)
-
 	queryReq := &workflowservice.RespondQueryTaskCompletedRequest{}
-	nvi.setNamespace(namespaceEntry, queryReq)
+	setNamespace(namespaceEntry, queryReq)
 	s.Equal(namespaceEntryName, queryReq.Namespace)
 	queryReq.Namespace = namespaceRequestName
-	nvi.setNamespace(namespaceEntry, queryReq)
+	setNamespace(namespaceEntry, queryReq)
 	s.Equal(namespaceRequestName, queryReq.Namespace)
 
 	completeWorkflowTaskReq := &workflowservice.RespondWorkflowTaskCompletedRequest{}
-	nvi.setNamespace(namespaceEntry, completeWorkflowTaskReq)
+	setNamespace(namespaceEntry, completeWorkflowTaskReq)
 	s.Equal(namespaceEntryName, completeWorkflowTaskReq.Namespace)
 	completeWorkflowTaskReq.Namespace = namespaceRequestName
-	nvi.setNamespace(namespaceEntry, completeWorkflowTaskReq)
+	setNamespace(namespaceEntry, completeWorkflowTaskReq)
 	s.Equal(namespaceRequestName, completeWorkflowTaskReq.Namespace)
 
 	failWorkflowTaskReq := &workflowservice.RespondWorkflowTaskFailedRequest{}
-	nvi.setNamespace(namespaceEntry, failWorkflowTaskReq)
+	setNamespace(namespaceEntry, failWorkflowTaskReq)
 	s.Equal(namespaceEntryName, failWorkflowTaskReq.Namespace)
 	failWorkflowTaskReq.Namespace = namespaceRequestName
-	nvi.setNamespace(namespaceEntry, failWorkflowTaskReq)
+	setNamespace(namespaceEntry, failWorkflowTaskReq)
 	s.Equal(namespaceRequestName, failWorkflowTaskReq.Namespace)
 
 	heartbeatActivityTaskReq := &workflowservice.RecordActivityTaskHeartbeatRequest{}
-	nvi.setNamespace(namespaceEntry, heartbeatActivityTaskReq)
+	setNamespace(namespaceEntry, heartbeatActivityTaskReq)
 	s.Equal(namespaceEntryName, heartbeatActivityTaskReq.Namespace)
 	heartbeatActivityTaskReq.Namespace = namespaceRequestName
-	nvi.setNamespace(namespaceEntry, heartbeatActivityTaskReq)
+	setNamespace(namespaceEntry, heartbeatActivityTaskReq)
 	s.Equal(namespaceRequestName, heartbeatActivityTaskReq.Namespace)
 
 	cancelActivityTaskReq := &workflowservice.RespondActivityTaskCanceledRequest{}
-	nvi.setNamespace(namespaceEntry, cancelActivityTaskReq)
+	setNamespace(namespaceEntry, cancelActivityTaskReq)
 	s.Equal(namespaceEntryName, cancelActivityTaskReq.Namespace)
 	cancelActivityTaskReq.Namespace = namespaceRequestName
-	nvi.setNamespace(namespaceEntry, cancelActivityTaskReq)
+	setNamespace(namespaceEntry, cancelActivityTaskReq)
 	s.Equal(namespaceRequestName, cancelActivityTaskReq.Namespace)
 
 	completeActivityTaskReq := &workflowservice.RespondActivityTaskCompletedRequest{}
-	nvi.setNamespace(namespaceEntry, completeActivityTaskReq)
+	setNamespace(namespaceEntry, completeActivityTaskReq)
 	s.Equal(namespaceEntryName, completeActivityTaskReq.Namespace)
 	completeActivityTaskReq.Namespace = namespaceRequestName
-	nvi.setNamespace(namespaceEntry, completeActivityTaskReq)
+	setNamespace(namespaceEntry, completeActivityTaskReq)
 	s.Equal(namespaceRequestName, completeActivityTaskReq.Namespace)
 
 	failActivityTaskReq := &workflowservice.RespondActivityTaskFailedRequest{}
-	nvi.setNamespace(namespaceEntry, failActivityTaskReq)
+	setNamespace(namespaceEntry, failActivityTaskReq)
 	s.Equal(namespaceEntryName, failActivityTaskReq.Namespace)
 	failActivityTaskReq.Namespace = namespaceRequestName
-	nvi.setNamespace(namespaceEntry, failActivityTaskReq)
+	setNamespace(namespaceEntry, failActivityTaskReq)
 	s.Equal(namespaceRequestName, failActivityTaskReq.Namespace)
 }

@@ -201,7 +201,7 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_Forbidden() {
 		client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{BaseURL: dispatchURL, Service: "test-service"})
 		s.NoError(err)
 
-		// capture := env.StartNamespaceMetricCapture()
+		capture := env.StartNamespaceMetricCapture()
 
 		_, err = nexusrpc.StartOperation(s.Context(), client, op, "input", nexus.StartOperationOptions{})
 
@@ -209,10 +209,10 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_Forbidden() {
 		s.ErrorAs(err, &handlerErr)
 		tc.checkFailure(s, handlerErr)
 
-		// requests := capture.Metric("nexus_requests")
-		// s.Len(requests, 1)
-		// s.Subset(requests[0].Tags, map[string]string{"namespace": env.Namespace().String(), "method": "StartNexusOperation", "outcome": tc.expectedOutcomeMetric})
-		// s.Equal(int64(1), requests[0].Value)
+		requests := capture.Metric("nexus_requests")
+		s.Len(requests, 1)
+		s.Subset(requests[0].Tags, map[string]string{"namespace": env.Namespace().String(), "method": "StartNexusOperation", "outcome": tc.expectedOutcomeMetric})
+		s.Equal(int64(1), requests[0].Value)
 	}
 
 	for _, tc := range testCases {

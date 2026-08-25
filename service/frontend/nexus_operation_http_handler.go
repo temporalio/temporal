@@ -27,7 +27,6 @@ import (
 	"go.temporal.io/server/common/routing"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
-	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/frontend/configs"
 	"google.golang.org/grpc/codes"
@@ -37,18 +36,15 @@ import (
 
 // Small wrapper that does some pre-processing before handing requests over to the Nexus SDK's HTTP handler.
 type NexusOperationHTTPHandler struct {
-	base                                 nexusrpc.BaseHTTPHandler
-	logger                               log.Logger
-	nexusHandler                         http.Handler
-	enpointRegistry                      commonnexus.EndpointRegistry
-	namespaceRegistry                    namespace.Registry
-	preprocessErrorCounter               metrics.CounterFunc
-	auth                                 *authorization.Interceptor
-	namespaceValidationInterceptor       *interceptor.NamespaceValidatorInterceptor
-	namespaceRateLimitInterceptor        interceptor.NamespaceRateLimitInterceptor
-	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor
-	rateLimitInterceptor                 *interceptor.RateLimitInterceptor
-	httpServerHandlerInstrumenter        telemetry.HTTPServerHandlerInstrumenter
+	base                           nexusrpc.BaseHTTPHandler
+	logger                         log.Logger
+	nexusHandler                   http.Handler
+	enpointRegistry                commonnexus.EndpointRegistry
+	namespaceRegistry              namespace.Registry
+	namespaceValidationInterceptor *interceptor.NamespaceValidatorInterceptor
+	preprocessErrorCounter         metrics.CounterFunc
+	auth                           *authorization.Interceptor
+	httpServerHandlerInstrumenter  telemetry.HTTPServerHandlerInstrumenter
 }
 
 func NewNexusOperationHTTPHandler(
@@ -60,19 +56,9 @@ func NewNexusOperationHTTPHandler(
 	namespaceRegistry namespace.Registry,
 	endpointRegistry commonnexus.EndpointRegistry,
 	authInterceptor *authorization.Interceptor,
-	telemetryInterceptor *interceptor.TelemetryInterceptor,
-	requestErrorHandler *interceptor.RequestErrorHandler,
-	redirectionInterceptor *interceptor.Redirection,
 	namespaceValidationInterceptor *interceptor.NamespaceValidatorInterceptor,
-	namespaceRateLimitInterceptor interceptor.NamespaceRateLimitInterceptor,
-	nexusNamespaceRateLimitInterceptor *interceptor.NamespaceRateLimitInterceptorWrapper,
-	namespaceConcurrencyLimitInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
-	rateLimitInterceptor *interceptor.RateLimitInterceptor,
-	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
-	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
-	nexusForwarder *nexusForwardingInterceptor,
+	requestErrorHandler *interceptor.RequestErrorHandler,
 	interceptorsProvider *InterceptorsProvider,
-	customNexusInterceptors []interceptornexus.Interceptor,
 	logger log.Logger,
 	httpTraceProvider commonnexus.HTTPClientTraceProvider,
 	httpServerHandlerInstrumenter telemetry.HTTPServerHandlerInstrumenter,
@@ -83,31 +69,28 @@ func NewNexusOperationHTTPHandler(
 			Logger:           log.NewSlogLogger(logger),
 			FailureConverter: nexusrpc.DefaultFailureConverter(),
 		},
-		logger:                               logger,
-		enpointRegistry:                      endpointRegistry,
-		namespaceRegistry:                    namespaceRegistry,
-		auth:                                 authInterceptor,
-		namespaceValidationInterceptor:       namespaceValidationInterceptor,
-		namespaceRateLimitInterceptor:        namespaceRateLimitInterceptor,
-		namespaceConcurrencyLimitInterceptor: namespaceConcurrencyLimitInterceptor,
-		rateLimitInterceptor:                 rateLimitInterceptor,
-		preprocessErrorCounter:               metricsHandler.Counter(metrics.NexusRequestPreProcessErrors.Name()).Record,
-		httpServerHandlerInstrumenter:        httpServerHandlerInstrumenter,
+		logger:                         logger,
+		enpointRegistry:                endpointRegistry,
+		namespaceRegistry:              namespaceRegistry,
+		auth:                           authInterceptor,
+		namespaceValidationInterceptor: namespaceValidationInterceptor,
+		preprocessErrorCounter:         metricsHandler.Counter(metrics.NexusRequestPreProcessErrors.Name()).Record,
+		httpServerHandlerInstrumenter:  httpServerHandlerInstrumenter,
 		nexusHandler: nexusrpc.NewHTTPHandler(nexusrpc.HandlerOptions{
-			Handler: &nexusHandler{
-				logger:               logger,
-				metricsHandler:       metricsHandler,
-				clusterMetadata:      clusterMetadata,
-				namespaceRegistry:    namespaceRegistry,
-				matchingClient:       matchingservice.MatchingServiceClient(matchingClient),
-				requestErrorHandler:  requestErrorHandler,
-				payloadSizeLimit:     serviceConfig.BlobSizeLimitError,
-				headersBlacklist:     serviceConfig.NexusRequestHeadersBlacklist,
-				useForwardByEndpoint: serviceConfig.NexusForwardRequestUseEndpoint,
-				metricTagConfig:      serviceConfig.NexusOperationsMetricTagConfig,
-				httpTraceProvider:    httpTraceProvider,
-				nexusInterceptors:    interceptorsProvider.GetNexusInterceptors(),
-			},
+			Handler: newNexusHandler(
+				logger,
+				metricsHandler,
+				clusterMetadata,
+				namespaceRegistry,
+				matchingservice.MatchingServiceClient(matchingClient),
+				requestErrorHandler,
+				serviceConfig.BlobSizeLimitError,
+				serviceConfig.NexusRequestHeadersBlacklist,
+				serviceConfig.NexusForwardRequestUseEndpoint,
+				serviceConfig.NexusOperationsMetricTagConfig,
+				httpTraceProvider,
+				interceptorsProvider.NexusInterceptors(),
+			),
 			GetResultTimeout: serviceConfig.KeepAliveMaxConnectionIdle(),
 			Logger:           log.NewSlogLogger(logger),
 			Serializer:       commonnexus.PayloadSerializer,
@@ -249,14 +232,10 @@ func (h *NexusOperationHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseW
 
 func (h *NexusOperationHTTPHandler) baseNexusContext(apiName string, header http.Header) *nexusContext {
 	return &nexusContext{
-		namespaceValidationInterceptor:       h.namespaceValidationInterceptor,
-		namespaceRateLimitInterceptor:        h.namespaceRateLimitInterceptor,
-		namespaceConcurrencyLimitInterceptor: h.namespaceConcurrencyLimitInterceptor,
-		rateLimitInterceptor:                 h.rateLimitInterceptor,
-		apiName:                              apiName,
-		requestStartTime:                     time.Now(),
-		responseHeaders:                      make(map[string]string),
-		callerFailureSupport:                 header.Get(nexusrpc.HeaderTemporalNexusFailureSupport) == "true",
+		apiName:              apiName,
+		requestStartTime:     time.Now(),
+		responseHeaders:      make(map[string]string),
+		callerFailureSupport: header.Get(nexusrpc.HeaderTemporalNexusFailureSupport) == "true",
 	}
 }
 
@@ -326,14 +305,13 @@ func (h *NexusOperationHTTPHandler) parseTLSAndAuthInfo(r *http.Request, nc *nex
 		return "" // TODO: support audience getter
 	})
 
-	var err error
 	if authInfo != nil {
-		nc.claims, err = h.auth.GetClaims(authInfo)
+		claims, err := h.auth.GetClaims(authInfo)
 		if err != nil {
 			return nil, err
 		}
 		// Make the auth info and claims available on the context.
-		r = r.WithContext(h.auth.EnhanceContext(r.Context(), authInfo, nc.claims))
+		r = r.WithContext(h.auth.EnhanceContext(r.Context(), authInfo, claims))
 	}
 
 	return r, nil

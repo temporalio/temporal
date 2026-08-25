@@ -135,7 +135,6 @@ var Module = fx.Options(
 	fx.Provide(newNexusForwardingInterceptor),
 	fx.Provide(interceptor.NewNamespaceRateLimitInterceptorWrapper),
 	fx.Provide(NewInterceptorsProvider),
-	fx.Supply([]Interceptor(nil)), // placeholder for custom unified interceptors thaw will get chained
 	fx.Provide(newNexusCompletionHandler),
 	fx.Provide(NewNexusOperationHTTPHandler),
 	fx.Provide(newNexusCompletionHTTPHandler),
@@ -243,31 +242,11 @@ func GrpcServerOptionsProvider(
 	serviceConfig *Config,
 	serviceName primitives.ServiceName,
 	rpcFactory common.RPCFactory,
-	serviceErrorInterceptor *interceptor.ServiceErrorInterceptor,
-	namespaceLogInterceptor *interceptor.NamespaceLogInterceptor,
-	namespaceRateLimiterInterceptor interceptor.NamespaceRateLimitInterceptor,
-	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
-	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
-	namespaceStateValidatorInterceptor *interceptor.NamespaceStateValidatorInterceptor,
-	frontendServiceErrorInterceptor *interceptor.FrontendServiceErrorInterceptor,
-	namespaceHandoverInterceptor *interceptor.NamespaceHandoverInterceptor,
 	interceptorsProvider *InterceptorsProvider,
-	businessIDInterceptor *interceptor.RoutingKeyInterceptor,
-	redirectionInterceptor *interceptor.Redirection,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
-	retryableInterceptor *interceptor.RetryableInterceptor,
-	healthInterceptor *interceptor.HealthInterceptor,
-	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	traceStatsHandler telemetry.ServerStatsHandler,
 	metricsStatsHandler metrics.ServerStatsHandler,
-	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
-	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
 	authInterceptor *authorization.Interceptor,
-	maskInternalErrorDetailsInterceptor *interceptor.MaskInternalErrorDetailsInterceptor,
-	contextMetadataInterceptor *interceptor.ContextMetadataInterceptor,
-	slowRequestLoggerInterceptor *interceptor.SlowRequestLoggerInterceptor,
-	chasmRequestVisibilityInterceptor *chasm.ChasmVisibilityInterceptor,
-	customInterceptors []grpc.UnaryServerInterceptor,
 	customStreamInterceptors []grpc.StreamServerInterceptor,
 	metricsHandler metrics.Handler,
 ) GrpcServerOptions {
@@ -295,45 +274,8 @@ func GrpcServerOptionsProvider(
 	if err != nil {
 		logger.Fatal("creating gRPC server options failed", tag.Error(err))
 	}
-	// unaryInterceptors := []grpc.UnaryServerInterceptor{
-	// 	// Order of interceptors is important
-	// 	// Mask error interceptor should be the most outer interceptor since it handle the errors format
-	// 	// Service Error Interceptor should be the next most outer interceptor on error handling
-	// 	maskInternalErrorDetailsInterceptor.Intercept,
-	// 	serviceErrorInterceptor.Intercept,
-	// 	frontendServiceErrorInterceptor.Intercept,
-	// 	//interceptor.NewFrontendServiceErrorInterceptor(logger),
-	// 	// BusinessID interceptor extracts business ID and adds it to context for use, must be before any interceptor that touches namespaces (namespaceValidator, handoverInterceptor)
-	// 	businessIDInterceptor.Intercept,
-	// 	namespaceStateValidatorInterceptor.Intercept,
-	// 	namespaceLogInterceptor.Intercept,                    // TODO: Deprecate this with a outer custom interceptor
-	// 	metrics.NewServerMetricsContextInjectorInterceptor(), // TODO
-	// 	authInterceptor.Intercept,
-	// 	// Handover interceptor has to above redirection because the request will route to the correct cluster after handover completed.
-	// 	// And retry cannot be performed before customInterceptors.
-	// 	namespaceHandoverInterceptor.Intercept,
-	// 	redirectionInterceptor.Intercept, // TODO, this will have to merge with the nexus frontend interceptor, eval later
-	// 	// Telemetry interceptor must be after redirection to ensure metrics are recorded in the correct cluster
-	// 	telemetryInterceptor.Intercept,
-	// 	healthInterceptor.Intercept,
-	// 	namespaceValidatorInterceptor.Intercept,
-	// 	namespaceCountLimiterInterceptor.Intercept,
-	// 	namespaceRateLimiterInterceptor.Intercept,
-	// 	rateLimitInterceptor.Intercept,
-	// 	sdkVersionInterceptor.Intercept,
-	// 	callerInfoInterceptor.Intercept,
-	// 	slowRequestLoggerInterceptor.Intercept,
-	// 	chasmRequestVisibilityInterceptor.Intercept, //TODO: this will require nexus interceptor types to be moved out
-	// 	contextMetadataInterceptor.Intercept,
-	// }
-	// if len(customInterceptors) > 0 {
-	// 	// TODO: Deprecate WithChainedFrontendGrpcInterceptors and provide a inner custom interceptor
-	// 	unaryInterceptors = append(unaryInterceptors, customInterceptors...)
-	// }
-	// // retry interceptor should be the most inner interceptor
-	// unaryInterceptors = append(unaryInterceptors, retryableInterceptor.Intercept)
 
-	unaryInterceptors := interceptorsProvider.GetInterceptors()
+	unaryInterceptors := interceptorsProvider.GrpcInterceptors()
 
 	streamInterceptor := []grpc.StreamServerInterceptor{
 		authInterceptor.InterceptStream,
@@ -710,9 +652,12 @@ func NamespaceValidatorInterceptorProvider(
 }
 
 func NamespaceStateValidatorInterceptorProvider(
-	nvi *interceptor.NamespaceValidatorInterceptor,
+	params NamespaceValidatorInterceptorParams,
 ) *interceptor.NamespaceStateValidatorInterceptor {
-	return interceptor.NewNamespaceStateValidatorInterceptor(nvi)
+	return interceptor.NewNamespaceStateValidatorInterceptor(
+		params.NamespaceRegistry,
+		params.ServiceConfig.MaxIDLengthLimit,
+	)
 }
 
 func SDKVersionInterceptorProvider() *interceptor.SDKVersionInterceptor {

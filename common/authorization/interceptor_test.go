@@ -71,18 +71,19 @@ func TestAuthorizerInterceptorSuite(t *testing.T) {
 }
 
 func (s *authorizerInterceptorSuite) TestInterceptNexus() {
+	apiName, endpoint := "NexusAPI", "endpoint"
 	input := interceptornexus.NewStartOpInput(
 		"s",
 		"o",
 		testNamespace,
 		nexus.StartOperationOptions{},
 		nil,
+		interceptornexus.ForwardingInfo{},
+		interceptornexus.RequestMetadata{
+			APIName:      apiName,
+			EndpointName: endpoint,
+		},
 	)
-	apiName, endpoint := "NexusAPI", "endpoint"
-	input.WithRequestMetadata(interceptornexus.RequestMetadata{
-		APIName:      apiName,
-		EndpointName: endpoint,
-	})
 	expectedTarget := &CallTarget{
 		APIName:           apiName,
 		NexusEndpointName: endpoint,
