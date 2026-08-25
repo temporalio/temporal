@@ -46,9 +46,9 @@ func TestDetermineVersionTransitions(t *testing.T) {
 			versions: []SchedulerWorkflowVersion{oldPeerCeiling, oldPeerCeiling, oldPeerCeiling},
 		},
 		{
-			name:     "advances to ceiling",
+			name:     "current version below dynamic config ceiling",
 			ceiling:  oldPeerCeiling,
-			defaults: []SchedulerWorkflowVersion{oldPeerCeiling - 1, oldPeerCeiling + 1, oldPeerCeiling + 2},
+			defaults: []SchedulerWorkflowVersion{oldPeerCeiling - 1, oldPeerCeiling, oldPeerCeiling + 1},
 			versions: []SchedulerWorkflowVersion{oldPeerCeiling - 1, oldPeerCeiling, oldPeerCeiling},
 		},
 		{
