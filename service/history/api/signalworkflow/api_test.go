@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -117,6 +118,7 @@ func (s *signalWorkflowSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
 		},
 		s.shardContext,
 		s.workflowConsistencyChecker,
+		testhooks.NewTestHooks(),
 	)
 	s.Nil(resp)
 	s.ErrorIs(consts.ErrWorkflowClosing, err)

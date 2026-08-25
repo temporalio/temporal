@@ -3,6 +3,7 @@ package xdc
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -24,6 +25,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
+	namespacepkg "go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/await"
@@ -38,7 +40,44 @@ type blockedReplicationTask struct {
 	result  chan error
 }
 
-func (s *FunctionalClustersTestSuite) TestBufferedEventsFlushedAndReappliedAfterFailover() {
+var allBufferedEventTypes = []enumspb.EventType{
+	enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
+	enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED,
+	enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED,
+	enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT,
+	enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED,
+	enumspb.EVENT_TYPE_TIMER_FIRED,
+	enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
+	enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED,
+	enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
+	enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+	enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED,
+	enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED,
+	enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED,
+	enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_FAILED,
+	enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_CANCELED,
+	enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT,
+	enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED,
+	enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED,
+	enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_SIGNALED,
+	enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_REJECTED,
+	enumspb.EVENT_TYPE_WORKFLOW_PROPERTIES_MODIFIED_EXTERNALLY,
+	enumspb.EVENT_TYPE_ACTIVITY_PROPERTIES_MODIFIED_EXTERNALLY,
+	enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED,
+	enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED,
+	enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED,
+	enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED,
+	enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED,
+	enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT,
+	enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+	enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED,
+	enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED,
+	enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED,
+	enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UNPAUSED,
+	enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED,
+}
+
+func (s *FunctionalClustersTestSuite) TestAllBufferedEventTypesFlushedAndReappliedAfterFailover() {
 	if !s.enableTransitionHistory {
 		s.T().Skip("buffered event state-based replication requires transition history")
 	}
@@ -72,17 +111,15 @@ func (s *FunctionalClustersTestSuite) TestBufferedEventsFlushedAndReappliedAfter
 	heldWorkflowTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, taskQueue)
 	s.Require().NotEmpty(heldWorkflowTask.TaskToken)
 
+	s.clusters[0].InjectHook(
+		s.T(),
+		testhooks.NewHook(testhooks.HistorySignalWorkflowInjectEvents, func() []*historypb.HistoryEvent {
+			return bufferedEventsRequiringInjection(updateID)
+		}),
+		namespacepkg.ID(namespace.NamespaceInfo.Id),
+	)
 	optionsRequestID := s.completeActivityAndBufferExternalEvents(ctx, ns, execution, taskQueue)
-
-	expectedBufferedTypes := []enumspb.EventType{
-		enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
-		enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED,
-		enumspb.EVENT_TYPE_TIMER_FIRED,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-	}
-	s.assertBufferedEventTypes(ctx, 0, ns, execution, expectedBufferedTypes)
+	s.assertBufferedEventTypes(ctx, 0, ns, execution, allBufferedEventTypes)
 
 	err = s.syncWorkflowState(ctx, namespace.NamespaceInfo.Id, execution)
 	var workflowNotReady *serviceerror.WorkflowNotReady
@@ -95,7 +132,7 @@ func (s *FunctionalClustersTestSuite) TestBufferedEventsFlushedAndReappliedAfter
 	// Phase 4: resolve the conflict and verify losing-branch storage versus reapplication.
 	s.releaseReplicationTask(ctx, replicationToOldActive)
 	s.assertNoBufferedEvents(ctx, 0, ns, execution)
-	s.assertBufferedEventsPersistedOnLosingBranch(ctx, ns, namespace.NamespaceInfo.Id, execution, updateID, optionsRequestID)
+	s.assertBufferedEventsPersistedOnLosingBranch(ctx, ns, namespace.NamespaceInfo.Id, execution, updateID, optionsRequestID, allBufferedEventTypes)
 	err = s.syncWorkflowState(ctx, namespace.NamespaceInfo.Id, execution)
 	s.Require().NoError(err)
 
@@ -120,9 +157,68 @@ func (s *FunctionalClustersTestSuite) TestBufferedEventsFlushedAndReappliedAfter
 	s.Require().Equal(1, countBufferedEventType(finalHistory, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED))
 	s.Require().Equal(1, countBufferedEventType(finalHistory, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED))
 	s.Require().Equal(2, countBufferedEventType(finalHistory, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED))
-	s.Require().Zero(countBufferedEventType(finalHistory, enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED))
-	s.Require().Zero(countBufferedEventType(finalHistory, enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED))
-	s.Require().Zero(countBufferedEventType(finalHistory, enumspb.EVENT_TYPE_TIMER_FIRED))
+	assertOnlyExpectedBufferedEventsReapplied(s.T(), finalHistory)
+}
+
+func bufferedEventsRequiringInjection(updateID string) []*historypb.HistoryEvent {
+	// Generate the common cases through public APIs. Inject the remaining event
+	// records into the same live history transaction because many outcomes are
+	// mutually exclusive, and the two "properties modified externally" events
+	// do not currently have a production API emitter.
+	directlyGenerated := map[enumspb.EventType]struct{}{
+		enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED:               {},
+		enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:             {},
+		enumspb.EVENT_TYPE_TIMER_FIRED:                         {},
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED: {},
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:         {},
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED:  {},
+	}
+	events := make([]*historypb.HistoryEvent, 0, len(allBufferedEventTypes)-len(directlyGenerated))
+	for _, eventType := range allBufferedEventTypes {
+		if _, ok := directlyGenerated[eventType]; ok {
+			continue
+		}
+		events = append(events, newBufferedHistoryEvent(eventType, updateID))
+	}
+	return events
+}
+
+func newBufferedHistoryEvent(eventType enumspb.EventType, updateID string) *historypb.HistoryEvent {
+	event := &historypb.HistoryEvent{EventType: eventType}
+
+	// Every history event's attribute field follows the enum's snake-case name.
+	// Allocate the generated attribute message so buffer flush ID wiring traverses
+	// the same shape as a production event.
+	eventName := eventType.String()
+	attributeName := strings.ToLower(eventName[:1]) + eventName[1:] + "EventAttributes"
+	message := event.ProtoReflect()
+	field := message.Descriptor().Fields().ByJSONName(attributeName)
+	if field == nil {
+		panic("history attribute field not found for " + eventType.String())
+	}
+	message.Set(field, message.NewField(field))
+
+	if eventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED {
+		attributes := event.GetWorkflowExecutionUpdateAdmittedEventAttributes()
+		attributes.Request = &updatepb.Request{
+			Meta:  &updatepb.Meta{UpdateId: updateID},
+			Input: &updatepb.Input{Name: "buffered-update"},
+		}
+		attributes.Origin = enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_REAPPLY
+	}
+	return event
+}
+
+func assertOnlyExpectedBufferedEventsReapplied(t require.TestingT, history []*historypb.HistoryEvent) {
+	expectedCounts := map[enumspb.EventType]int{
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:         2,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:  1,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED: 1,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED:  1,
+	}
+	for _, eventType := range allBufferedEventTypes {
+		require.Equal(t, expectedCounts[eventType], countBufferedEventType(history, eventType), eventType.String())
+	}
 }
 
 func (s *FunctionalClustersTestSuite) startWorkflowWithPendingActivity(
@@ -518,6 +614,7 @@ func (s *FunctionalClustersTestSuite) assertBufferedEventsPersistedOnLosingBranc
 	execution *commonpb.WorkflowExecution,
 	updateID string,
 	optionsRequestID string,
+	expectedEventTypes []enumspb.EventType,
 ) {
 	s.T().Helper()
 	losingHistory := s.findNonCurrentHistoryBranch(ctx, ns, namespaceID, execution, func(history []*historypb.HistoryEvent) bool {
@@ -527,14 +624,7 @@ func (s *FunctionalClustersTestSuite) assertBufferedEventsPersistedOnLosingBranc
 	s.Require().True(hasWorkflowTaskFailedForFailover(losingHistory))
 	s.Require().True(hasOptionsUpdatedRequest(losingHistory, optionsRequestID))
 
-	for _, eventType := range []enumspb.EventType{
-		enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
-		enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED,
-		enumspb.EVENT_TYPE_TIMER_FIRED,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-	} {
+	for _, eventType := range expectedEventTypes {
 		event := findBufferedEventsHistoryEvent(losingHistory, eventType)
 		s.Require().NotNil(event, "%s must be written to the losing branch", eventType)
 		s.Require().NotEqual(common.BufferedEventID, event.EventId)

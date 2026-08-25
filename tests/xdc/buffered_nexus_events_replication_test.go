@@ -141,7 +141,7 @@ func (s *NexusStateReplicationSuite) TestBufferedNexusEventsReapplySharedOperati
 	s.Require().True(hasNexusEventForScheduledID(losingHistory, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, losingOnlyOperationScheduledEventID))
 	s.Require().Equal(2, countNexusEvents(losingHistory, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED))
 
-	for attempt := 0; attempt < 10; attempt++ {
+	for range 10 {
 		targetHistory := s.getWorkflowHistory(ctx, s.T(), 1, ns, execution)
 		if hasNexusEventForScheduledID(targetHistory, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED, sharedOperationScheduledEventID) {
 			break
