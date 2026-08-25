@@ -37,8 +37,8 @@ type Scheduler interface {
 	) SubmitResult
 }
 
-// HostScheduler deduplicates workflow resends and bounds their concurrency across a history host.
-type HostScheduler struct {
+// BoundedWorkflowScheduler deduplicates workflow resends and bounds their concurrency.
+type BoundedWorkflowScheduler struct {
 	pool *ctasks.DynamicWorkerPoolScheduler
 
 	logger         log.Logger
@@ -48,19 +48,19 @@ type HostScheduler struct {
 	inFlight map[definition.WorkflowKey]struct{}
 }
 
-var _ Scheduler = (*HostScheduler)(nil)
+var _ Scheduler = (*BoundedWorkflowScheduler)(nil)
 
-// NewHostScheduler creates a host-level scheduler with no task buffer.
-func NewHostScheduler(
+// NewBoundedWorkflowScheduler creates a bounded workflow scheduler with no task buffer.
+func NewBoundedWorkflowScheduler(
 	maxConcurrency dynamicconfig.IntPropertyFn,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
-) *HostScheduler {
-	limiter := hostSchedulerLimiter{
+) *BoundedWorkflowScheduler {
+	limiter := boundedWorkflowSchedulerLimiter{
 		maxConcurrency: maxConcurrency,
 		logger:         logger,
 	}
-	return &HostScheduler{
+	return &BoundedWorkflowScheduler{
 		pool: ctasks.NewDynamicWorkerPoolScheduler(
 			limiter,
 			metrics.NoopMetricsHandler,
@@ -71,7 +71,7 @@ func NewHostScheduler(
 	}
 }
 
-func (s *HostScheduler) TrySubmit(
+func (s *BoundedWorkflowScheduler) TrySubmit(
 	ctx context.Context,
 	key definition.WorkflowKey,
 	timeout time.Duration,
@@ -82,7 +82,7 @@ func (s *HostScheduler) TrySubmit(
 	return s.trySubmit(ctx, key, timeout, run)
 }
 
-func (s *HostScheduler) trySubmit(
+func (s *BoundedWorkflowScheduler) trySubmit(
 	ctx context.Context,
 	key definition.WorkflowKey,
 	timeout time.Duration,
@@ -121,7 +121,7 @@ func (s *HostScheduler) trySubmit(
 	return SubmitResultAccepted
 }
 
-func (s *HostScheduler) tryClaim(key definition.WorkflowKey) bool {
+func (s *BoundedWorkflowScheduler) tryClaim(key definition.WorkflowKey) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.inFlight[key]; ok {
@@ -131,28 +131,28 @@ func (s *HostScheduler) tryClaim(key definition.WorkflowKey) bool {
 	return true
 }
 
-func (s *HostScheduler) release(key definition.WorkflowKey) {
+func (s *BoundedWorkflowScheduler) release(key definition.WorkflowKey) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.inFlight, key)
 }
 
 // InitiateShutdown cancels running jobs and aborts jobs waiting to run.
-func (s *HostScheduler) InitiateShutdown() {
+func (s *BoundedWorkflowScheduler) InitiateShutdown() {
 	s.pool.InitiateShutdown()
 }
 
 // WaitShutdown waits for all scheduler goroutines to exit.
-func (s *HostScheduler) WaitShutdown() {
+func (s *BoundedWorkflowScheduler) WaitShutdown() {
 	s.pool.WaitShutdown()
 }
 
-type hostSchedulerLimiter struct {
+type boundedWorkflowSchedulerLimiter struct {
 	maxConcurrency dynamicconfig.IntPropertyFn
 	logger         log.Logger
 }
 
-func (l hostSchedulerLimiter) Concurrency() (concurrency int) {
+func (l boundedWorkflowSchedulerLimiter) Concurrency() (concurrency int) {
 	var panicErr error
 	defer func() {
 		if panicErr != nil {
@@ -163,7 +163,7 @@ func (l hostSchedulerLimiter) Concurrency() (concurrency int) {
 	return l.maxConcurrency()
 }
 
-func (hostSchedulerLimiter) BufferSize() int {
+func (boundedWorkflowSchedulerLimiter) BufferSize() int {
 	return 0
 }
 

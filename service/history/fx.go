@@ -502,7 +502,7 @@ func WorkflowResendSchedulerProvider(
 		tag.ScopeHost,
 		tag.Operation(workflowresend.OperationName),
 	)
-	workflowResendScheduler := workflowresend.NewHostScheduler(
+	workflowResendScheduler := workflowresend.NewBoundedWorkflowScheduler(
 		serviceConfig.WorkflowResendHostMaxInFlight,
 		schedulerLogger,
 		metricsHandler,

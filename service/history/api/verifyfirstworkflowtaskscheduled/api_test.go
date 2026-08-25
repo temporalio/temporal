@@ -52,7 +52,7 @@ type (
 		mockExecutionMgr           *persistence.MockExecutionManager
 		shardContext               *shard.ContextTest
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
-		resendScheduler            *workflowresend.HostScheduler
+		resendScheduler            *workflowresend.BoundedWorkflowScheduler
 
 		logger log.Logger
 	}
@@ -68,7 +68,7 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) SetupTest() {
 
 	config := tests.NewDynamicConfig()
 	config.WorkflowResendHostMaxInFlight = func() int { return 1 }
-	s.resendScheduler = workflowresend.NewHostScheduler(
+	s.resendScheduler = workflowresend.NewBoundedWorkflowScheduler(
 		config.WorkflowResendHostMaxInFlight,
 		log.NewNoopLogger(),
 		metrics.NoopMetricsHandler,

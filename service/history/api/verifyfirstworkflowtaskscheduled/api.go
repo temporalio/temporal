@@ -85,6 +85,7 @@ func Invoke(
 	)
 	switch submitResult {
 	case workflowresend.SubmitResultAccepted:
+		// Accepted work records its attempt when execution starts.
 	case workflowresend.SubmitResultDuplicate:
 		metrics.ChildWorkflowResendSkipped.With(metricsHandler).Record(1)
 	case workflowresend.SubmitResultAtCapacity:

@@ -100,7 +100,7 @@ type (
 		workflowCache    wcache.Cache
 		historyEngine    *historyEngineImpl
 		mockExecutionMgr *persistence.MockExecutionManager
-		resendScheduler  *workflowresend.HostScheduler
+		resendScheduler  *workflowresend.BoundedWorkflowScheduler
 
 		config        *configs.Config
 		logger        *log.MockLogger
@@ -151,7 +151,7 @@ func (s *engine2Suite) SetupTest() {
 
 	s.config = tests.NewDynamicConfig()
 	s.parentChildEventCapture = &parentChildEventCapture{}
-	resendScheduler := workflowresend.NewHostScheduler(
+	resendScheduler := workflowresend.NewBoundedWorkflowScheduler(
 		func() int { return s.config.WorkflowResendHostMaxInFlight() },
 		log.NewNoopLogger(),
 		metrics.NoopMetricsHandler,

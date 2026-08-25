@@ -33,11 +33,11 @@ func TestSubmitResultZeroValueFailsSafe(t *testing.T) {
 	require.Equal(t, SubmitResultFailed, result)
 }
 
-func TestHostSchedulerDeduplicatesAndReleasesWorkflow(t *testing.T) {
+func TestBoundedWorkflowSchedulerDeduplicatesAndReleasesWorkflow(t *testing.T) {
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
 	defer metricsHandler.StopCapture(capture)
-	scheduler := NewHostScheduler(func() int { return 2 }, log.NewNoopLogger(), metricsHandler)
+	scheduler := NewBoundedWorkflowScheduler(func() int { return 2 }, log.NewNoopLogger(), metricsHandler)
 	t.Cleanup(func() {
 		scheduler.InitiateShutdown()
 		scheduler.WaitShutdown()
@@ -101,11 +101,11 @@ func TestHostSchedulerDeduplicatesAndReleasesWorkflow(t *testing.T) {
 	require.Zero(t, duplicateRuns.Load())
 }
 
-func TestHostSchedulerSharedConcurrencyRejectsAndReleasesWorkflow(t *testing.T) {
+func TestBoundedWorkflowSchedulerSharedConcurrencyRejectsAndReleasesWorkflow(t *testing.T) {
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
 	defer metricsHandler.StopCapture(capture)
-	scheduler := NewHostScheduler(func() int { return 1 }, log.NewNoopLogger(), metricsHandler)
+	scheduler := NewBoundedWorkflowScheduler(func() int { return 1 }, log.NewNoopLogger(), metricsHandler)
 	t.Cleanup(func() {
 		scheduler.InitiateShutdown()
 		scheduler.WaitShutdown()
@@ -154,8 +154,8 @@ func TestHostSchedulerSharedConcurrencyRejectsAndReleasesWorkflow(t *testing.T) 
 	requireSignal(t, resubmittedWorkflowRan)
 }
 
-func TestHostSchedulerShutdownCancelsAndCleansUp(t *testing.T) {
-	scheduler := NewHostScheduler(func() int { return 1 }, log.NewNoopLogger(), metrics.NoopMetricsHandler)
+func TestBoundedWorkflowSchedulerShutdownCancelsAndCleansUp(t *testing.T) {
+	scheduler := NewBoundedWorkflowScheduler(func() int { return 1 }, log.NewNoopLogger(), metrics.NoopMetricsHandler)
 
 	started := make(chan struct{})
 	finished := make(chan struct{})
@@ -177,8 +177,8 @@ func TestHostSchedulerShutdownCancelsAndCleansUp(t *testing.T) {
 	require.Empty(t, scheduler.inFlight)
 }
 
-func TestHostSchedulerCallerCancellationReachesRunningJob(t *testing.T) {
-	scheduler := NewHostScheduler(func() int { return 1 }, log.NewNoopLogger(), metrics.NoopMetricsHandler)
+func TestBoundedWorkflowSchedulerCallerCancellationReachesRunningJob(t *testing.T) {
+	scheduler := NewBoundedWorkflowScheduler(func() int { return 1 }, log.NewNoopLogger(), metrics.NoopMetricsHandler)
 	t.Cleanup(func() {
 		scheduler.InitiateShutdown()
 		scheduler.WaitShutdown()
@@ -203,8 +203,8 @@ func TestHostSchedulerCallerCancellationReachesRunningJob(t *testing.T) {
 	requireSignal(t, finished)
 }
 
-func TestHostSchedulerAbortCleansUp(t *testing.T) {
-	scheduler := NewHostScheduler(func() int { return 1 }, log.NewNoopLogger(), metrics.NoopMetricsHandler)
+func TestBoundedWorkflowSchedulerAbortCleansUp(t *testing.T) {
+	scheduler := NewBoundedWorkflowScheduler(func() int { return 1 }, log.NewNoopLogger(), metrics.NoopMetricsHandler)
 	scheduler.InitiateShutdown()
 
 	var runs atomic.Int32
@@ -220,8 +220,8 @@ func TestHostSchedulerAbortCleansUp(t *testing.T) {
 	require.Empty(t, scheduler.inFlight)
 }
 
-func TestHostSchedulerTimeoutReleasesWorkflow(t *testing.T) {
-	scheduler := NewHostScheduler(func() int { return 1 }, log.NewNoopLogger(), metrics.NoopMetricsHandler)
+func TestBoundedWorkflowSchedulerTimeoutReleasesWorkflow(t *testing.T) {
+	scheduler := NewBoundedWorkflowScheduler(func() int { return 1 }, log.NewNoopLogger(), metrics.NoopMetricsHandler)
 	t.Cleanup(func() {
 		scheduler.InitiateShutdown()
 		scheduler.WaitShutdown()
@@ -251,8 +251,8 @@ func TestHostSchedulerTimeoutReleasesWorkflow(t *testing.T) {
 	requireSignal(t, resubmittedWorkflowRan)
 }
 
-func TestHostSchedulerTaskPanicFailsOpen(t *testing.T) {
-	scheduler := NewHostScheduler(func() int { return 1 }, log.NewNoopLogger(), metrics.NoopMetricsHandler)
+func TestBoundedWorkflowSchedulerTaskPanicFailsOpen(t *testing.T) {
+	scheduler := NewBoundedWorkflowScheduler(func() int { return 1 }, log.NewNoopLogger(), metrics.NoopMetricsHandler)
 	t.Cleanup(func() {
 		scheduler.InitiateShutdown()
 		scheduler.WaitShutdown()
@@ -278,10 +278,10 @@ func TestHostSchedulerTaskPanicFailsOpen(t *testing.T) {
 	requireSignal(t, resubmittedWorkflowRan)
 }
 
-func TestHostSchedulerLimitProviderPanicFailsOpen(t *testing.T) {
+func TestBoundedWorkflowSchedulerLimitProviderPanicFailsOpen(t *testing.T) {
 	var panicLimit atomic.Bool
 	panicLimit.Store(true)
-	scheduler := NewHostScheduler(func() int {
+	scheduler := NewBoundedWorkflowScheduler(func() int {
 		if panicLimit.Swap(false) {
 			panic("test panic")
 		}
@@ -310,8 +310,8 @@ func TestHostSchedulerLimitProviderPanicFailsOpen(t *testing.T) {
 	requireSignal(t, resubmittedWorkflowRan)
 }
 
-func TestHostSchedulerSubmitPanicFailsOpen(t *testing.T) {
-	scheduler := NewHostScheduler(func() int { return 1 }, log.NewNoopLogger(), metrics.NoopMetricsHandler)
+func TestBoundedWorkflowSchedulerSubmitPanicFailsOpen(t *testing.T) {
+	scheduler := NewBoundedWorkflowScheduler(func() int { return 1 }, log.NewNoopLogger(), metrics.NoopMetricsHandler)
 	t.Cleanup(func() {
 		scheduler.InitiateShutdown()
 		scheduler.WaitShutdown()
