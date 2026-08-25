@@ -779,8 +779,7 @@ func isAlreadyStartedError(err error) bool {
 }
 
 func isRateLimitedError(err error) (time.Duration, bool) {
-	var expectedErr *rateLimitedError
-	if errors.As(err, &expectedErr) {
+	if expectedErr, ok := errors.AsType[*rateLimitedError](err); ok {
 		return expectedErr.delay, true
 	}
 	return 0, false
