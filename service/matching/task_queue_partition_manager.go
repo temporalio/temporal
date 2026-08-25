@@ -355,7 +355,7 @@ func (pm *taskQueuePartitionManagerImpl) StartScaleManager(scaleState *persisten
 	pm.scaleManager.Start(scaleState, pm.defaultQueue())
 }
 
-func (pm *taskQueuePartitionManagerImpl) checkPartitionCounts(ctx context.Context, forWrite bool) error {
+func (pm *taskQueuePartitionManagerImpl) checkPartitionCounts(ctx context.Context, forWrite bool, logger log.Logger) error {
 	normal, ok := pm.partition.(*tqid.NormalPartition)
 	if !ok {
 		return nil // only normal partitions do dynamic scaling
@@ -377,7 +377,7 @@ func (pm *taskQueuePartitionManagerImpl) checkPartitionCounts(ctx context.Contex
 	// if client has sent its idea of counts, also validate drift
 	clientPC, err := matching.ParsePartitionCountsFromIncomingContext(ctx)
 	if err != nil {
-		pm.throttledLogger.Info("partition count header parse error", tag.Error(err))
+		logger.Info("partition count header parse error", tag.Error(err))
 		return nil // just log and skip the check
 	} else if !clientPC.Valid() {
 		return nil // client didn't send anything or invalid, skip check
@@ -452,7 +452,7 @@ func (pm *taskQueuePartitionManagerImpl) signalPartitionScaler(ctx context.Conte
 	pm.scaleManager.AddedTasks(estimatedTasksAllPartitions)
 }
 
-func (pm *taskQueuePartitionManagerImpl) sendPartitionCountTrailer(ctx context.Context) {
+func (pm *taskQueuePartitionManagerImpl) sendPartitionCountTrailer(ctx context.Context, logger log.Logger) {
 	// note this sends the trailer even if there is no scale info (i.e. dynamic partition
 	// scaling is not enabled). that will instruct clients to fall back to dynamic config.
 	scaleInfo := pm.userDataManager.PartitionScale()
@@ -464,7 +464,7 @@ func (pm *taskQueuePartitionManagerImpl) sendPartitionCountTrailer(ctx context.C
 	}.SetTrailer(ctx)
 	if err != nil {
 		// TODO(dp): this is very noisy in unit tests, figure out how to log it only in non-test
-		pm.throttledLogger.Debug("error setting partition count trailer", tag.Error(err))
+		logger.Debug("error setting partition count trailer", tag.Error(err))
 	}
 }
 
@@ -556,8 +556,8 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 	ctx context.Context,
 	params addTaskParams,
 ) (buildId string, syncMatched bool, err error) {
-	defer pm.sendPartitionCountTrailer(ctx)
-	if err := pm.checkPartitionCounts(ctx, true); err != nil {
+	defer pm.sendPartitionCountTrailer(ctx, pm.throttledLogger)
+	if err := pm.checkPartitionCounts(ctx, true, pm.throttledLogger); err != nil {
 		return "", false, err
 	}
 	if params.forwardInfo == nil {
@@ -728,8 +728,8 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 	ctx context.Context,
 	pollMetadata *pollMetadata,
 ) (*internalTask, bool, error) {
-	defer pm.sendPartitionCountTrailer(ctx)
-	if err := pm.checkPartitionCounts(ctx, false); err != nil {
+	defer pm.sendPartitionCountTrailer(ctx, pm.throttledLogger)
+	if err := pm.checkPartitionCounts(ctx, false, pm.throttledLogger); err != nil {
 		return nil, false, err
 	}
 
@@ -1015,9 +1015,9 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 	request *matchingservice.QueryWorkflowRequest,
 ) (*matchingservice.QueryWorkflowResponse, error) {
 	// TODO(dp): if this partition becomes invalid while the query is blocked, we should cancel the match
-	defer pm.sendPartitionCountTrailer(ctx)
+	defer pm.sendPartitionCountTrailer(ctx, pm.throttledLogger)
 	// query counts as "write" for partition load balancing
-	if err := pm.checkPartitionCounts(ctx, true); err != nil {
+	if err := pm.checkPartitionCounts(ctx, true, pm.throttledLogger); err != nil {
 		return nil, err
 	}
 	if request.ForwardInfo == nil {
@@ -1085,9 +1085,11 @@ func (pm *taskQueuePartitionManagerImpl) DispatchNexusTask(
 	request *matchingservice.DispatchNexusTaskRequest,
 ) (*matchingservice.DispatchNexusTaskResponse, error) {
 	// TODO(dp): if this partition becomes invalid while the query is blocked, we should cancel the match
-	defer pm.sendPartitionCountTrailer(ctx)
+	logger := log.With(pm.logger, tag.NexusStageHandlerTaskDelivery)
+	throttledLogger := log.With(pm.throttledLogger, tag.NexusStageHandlerTaskDelivery)
+	defer pm.sendPartitionCountTrailer(ctx, throttledLogger)
 	// nexus counts as "write" for partition load balancing
-	if err := pm.checkPartitionCounts(ctx, true); err != nil {
+	if err := pm.checkPartitionCounts(ctx, true, throttledLogger); err != nil {
 		return nil, err
 	}
 	if request.ForwardInfo == nil {
@@ -1101,7 +1103,7 @@ func (pm *taskQueuePartitionManagerImpl) DispatchNexusTask(
 			opTimeout, err := time.ParseDuration(opTimeoutHeader)
 			if err != nil {
 				// Operation-Timeout header is not required so don't fail request on parsing errors.
-				pm.logger.Warn(
+				logger.Warn(
 					"unable to parse operation-timeout header",
 					tag.Error(err),
 					tag.NewStringTag(nexus.HeaderOperationTimeout, opTimeoutHeader),
