@@ -20,12 +20,6 @@ type RPCResponseFault func(req, resp any, handlerErr error) error
 // RPCFaultScope identifies a namespace by ID, name, or both.
 type RPCFaultScope = rpcfaultinjection.RPCFaultScope
 
-type rpcFault func(req, resp any, err error) error
-
-type rpcFaultCallback func(req, resp any, err error) (bool, any, error)
-
-type registerRPCFault func(*rpcfaultinjection.RPCFaultGenerator, RPCFaultScope, rpcFaultCallback) func()
-
 // InjectRPCRequestFault registers a pre-handler fault injection that applies to all services
 // (frontend, history, matching). The fault function determines which requests
 // trigger a fault and what error to return.
@@ -48,9 +42,11 @@ type registerRPCFault func(*rpcfaultinjection.RPCFaultGenerator, RPCFaultScope, 
 //	        return nil
 //	    })
 func InjectRPCRequestFault(t testing.TB, tc *TestCluster, scope RPCFaultScope, fault RPCRequestFault) func() {
-	return injectRPCFault(t, tc, scope, func(req, _ any, _ error) error {
-		return fault(req)
-	}, registerRPCRequestFault)
+	return injectRPCFault(t, scope, func(inject func(any, error) (bool, any, error)) func() {
+		return tc.Host().GetRPCFaultGenerator().RegisterRequestCallback(scope, func(_ context.Context, _ string, req any) (bool, any, error) {
+			return inject(req, fault(req))
+		})
+	})
 }
 
 // InjectRPCResponseFault registers a post-handler fault injection that applies to all services
@@ -64,22 +60,14 @@ func InjectRPCRequestFault(t testing.TB, tc *TestCluster, scope RPCFaultScope, f
 // Returns a cleanup function that disables the fault injection when called.
 // The test fails if the fault is never injected before the test completes.
 func InjectRPCResponseFault(t testing.TB, tc *TestCluster, scope RPCFaultScope, fault RPCResponseFault) func() {
-	return injectRPCFault(t, tc, scope, rpcFault(fault), registerRPCResponseFault)
-}
-
-func registerRPCRequestFault(generator *rpcfaultinjection.RPCFaultGenerator, scope RPCFaultScope, callback rpcFaultCallback) func() {
-	return generator.RegisterRequestCallback(scope, func(_ context.Context, _ string, req any) (bool, any, error) {
-		return callback(req, nil, nil)
+	return injectRPCFault(t, scope, func(inject func(any, error) (bool, any, error)) func() {
+		return tc.Host().GetRPCFaultGenerator().RegisterResponseCallback(scope, func(_ context.Context, _ string, req, resp any, err error) (bool, any, error) {
+			return inject(req, fault(req, resp, err))
+		})
 	})
 }
 
-func registerRPCResponseFault(generator *rpcfaultinjection.RPCFaultGenerator, scope RPCFaultScope, callback rpcFaultCallback) func() {
-	return generator.RegisterResponseCallback(scope, func(_ context.Context, _ string, req, resp any, err error) (bool, any, error) {
-		return callback(req, resp, err)
-	})
-}
-
-func injectRPCFault(t testing.TB, tc *TestCluster, scope RPCFaultScope, fault rpcFault, register registerRPCFault) func() {
+func injectRPCFault(t testing.TB, scope RPCFaultScope, register func(func(any, error) (bool, any, error)) func()) func() {
 	t.Helper()
 
 	if scope == (RPCFaultScope{}) {
@@ -87,18 +75,12 @@ func injectRPCFault(t testing.TB, tc *TestCluster, scope RPCFaultScope, fault rp
 		return func() {}
 	}
 
-	generator := tc.Host().GetRPCFaultGenerator()
-	if generator == nil {
-		t.Fatal("fault injector is nil")
-		return func() {}
-	}
-
 	var fired atomic.Bool
 	var logMu sync.Mutex
 	loggingEnabled := true
 
-	unregister := register(generator, scope, func(req, resp any, err error) (bool, any, error) {
-		if injectedErr := fault(req, resp, err); injectedErr != nil {
+	unregister := register(func(req any, injectedErr error) (bool, any, error) {
+		if injectedErr != nil {
 			fired.Store(true)
 			logMu.Lock()
 			if loggingEnabled {
