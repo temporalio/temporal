@@ -391,14 +391,6 @@ func (a *Activities) scheduleIsExpectedNotToFire(ctx context.Context, nsName, sc
 }
 
 // nextActionTimeIsOverdue applies the candidate query's predicate to futureActionTimes.
-//
-// Only the earliest entry counts: visibility indexes FutureActionTimes[0] as
-// ScheduleNextActionTime, so anything wider than that is a stronger predicate than the
-// candidate query and would suppress a stalled schedule whose cached horizon still holds
-// later, not-yet-due entries.
-//
-// An empty list is not overdue - nothing pending can be late - which is the normal shape
-// for an action-exhausted schedule. The unknown-state scanner covers that case.
 func (a *Activities) nextActionTimeIsOverdue(futureActionTimes []*timestamppb.Timestamp) bool {
 	var earliest time.Time
 	var found bool
