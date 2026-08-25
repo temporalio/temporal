@@ -582,9 +582,7 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexusrpc
 		}
 	}
 
-	authInfo := c.AuthInterceptor.GetAuthInfo(tlsInfo, request.HTTPRequest.Header, func() string {
-		return "" // TODO: support audience getter
-	})
+	authInfo := c.AuthInterceptor.GetAuthInfoForNonUnaryRequest(ctx, tlsInfo, request.HTTPRequest.Header)
 
 	var claims *authorization.Claims
 	var err error

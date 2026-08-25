@@ -319,9 +319,7 @@ func (h *NexusOperationHTTPHandler) parseTLSAndAuthInfo(r *http.Request, nc *nex
 		}
 	}
 
-	authInfo := h.auth.GetAuthInfo(tlsInfo, r.Header, func() string {
-		return "" // TODO: support audience getter
-	})
+	authInfo := h.auth.GetAuthInfoForNonUnaryRequest(r.Context(), tlsInfo, r.Header)
 
 	var err error
 	if authInfo != nil {

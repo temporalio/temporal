@@ -6,6 +6,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"errors"
+	"net/http"
 	"slices"
 	"testing"
 
@@ -849,6 +850,60 @@ func (s *authorizerInterceptorSuite) TestInterceptStream_AudienceMapperSkippedWi
 	ss := &mockServerStream{ctx: inCtx}
 	err := interceptor.InterceptStream(nil, ss, streamInfo, streamHandler)
 	s.NoError(err)
+}
+
+func (s *authorizerInterceptorSuite) TestGetAuthInfoForNonUnaryRequest_AudiencePassedToClaimMapper() {
+	mockAudienceMapper := NewMockJWTAudienceMapper(s.controller)
+	mockAudienceMapper.EXPECT().Audience(ctx, nil, nil).Return("request-audience")
+
+	interceptor := NewInterceptor(
+		s.mockClaimMapper,
+		s.mockAuthorizer,
+		s.mockMetricsHandler,
+		log.NewNoopLogger(),
+		mockNamespaceChecker(testNamespace),
+		mockAudienceMapper,
+		"",
+		"",
+		dynamicconfig.GetBoolPropertyFn(false),
+		dynamicconfig.GetBoolPropertyFn(false),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		dynamicconfig.GetBoolPropertyFn(false),
+	)
+
+	authInfo := interceptor.GetAuthInfoForNonUnaryRequest(
+		ctx,
+		nil,
+		http.Header{"Authorization": {"Bearer some-token"}},
+	)
+
+	s.Equal(&AuthInfo{AuthToken: "Bearer some-token", Audience: "request-audience"}, authInfo)
+}
+
+func (s *authorizerInterceptorSuite) TestGetAuthInfoForNonUnaryRequest_AudienceMapperSkippedWithoutToken() {
+	mockAudienceMapper := NewMockJWTAudienceMapper(s.controller)
+	interceptor := NewInterceptor(
+		s.mockClaimMapper,
+		s.mockAuthorizer,
+		s.mockMetricsHandler,
+		log.NewNoopLogger(),
+		mockNamespaceChecker(testNamespace),
+		mockAudienceMapper,
+		"",
+		"",
+		dynamicconfig.GetBoolPropertyFn(false),
+		dynamicconfig.GetBoolPropertyFn(false),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		dynamicconfig.GetBoolPropertyFn(false),
+	)
+
+	cert := &x509.Certificate{Subject: pkix.Name{CommonName: "client"}}
+	tlsInfo := &credentials.TLSInfo{State: tls.ConnectionState{VerifiedChains: [][]*x509.Certificate{{cert}}}}
+	authInfo := interceptor.GetAuthInfoForNonUnaryRequest(ctx, tlsInfo, http.Header{})
+
+	s.Empty(authInfo.AuthToken)
+	s.Empty(authInfo.Audience)
+	s.NotNil(authInfo.TLSSubject)
 }
 
 func (s *authorizerInterceptorSuite) TestInterceptStream_ContextPropagated() {

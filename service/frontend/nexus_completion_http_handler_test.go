@@ -2,6 +2,8 @@ package frontend
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -13,6 +15,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/nexusworkflowref"
@@ -21,6 +24,71 @@ import (
 )
 
 const convTestRequestID = "request-id"
+
+func TestNexusCompletionHTTPHandler_JWTAudience(t *testing.T) {
+	testCases := []struct {
+		name               string
+		token              string
+		tokenAudience      string
+		configuredAudience string
+		wantDenied         bool
+	}{
+		{
+			name:               "matching audience",
+			token:              "Bearer token",
+			tokenAudience:      "nexus-api",
+			configuredAudience: "nexus-api",
+		},
+		{
+			name:               "mismatching audience",
+			token:              "Bearer token",
+			tokenAudience:      "other-api",
+			configuredAudience: "nexus-api",
+			wantDenied:         true,
+		},
+		{
+			name:          "no configured audience",
+			token:         "Bearer token",
+			tokenAudience: "other-api",
+		},
+		{
+			name:               "no token",
+			configuredAudience: "nexus-api",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := &nexusCompletionHandler{
+				AuthInterceptor: newAudienceTestInterceptor(tc.tokenAudience, tc.configuredAudience, errorAuthorizer{}),
+				Logger:          log.NewNoopLogger(),
+			}
+			requestContext := &requestContext{
+				nexusCompletionHandler: h,
+				namespace: namespace.NewLocalNamespaceForTest(
+					&persistencespb.NamespaceInfo{Name: "test-namespace"},
+					nil,
+					"active",
+				),
+				logger: log.NewNoopLogger(),
+			}
+			httpRequest := httptest.NewRequest(http.MethodPost, "/", nil)
+			if tc.token != "" {
+				httpRequest.Header.Set("Authorization", tc.token)
+			}
+
+			err := requestContext.interceptRequest(context.Background(), &nexusrpc.CompletionRequest{HTTPRequest: httpRequest})
+			if tc.wantDenied {
+				var permissionDenied *serviceerror.PermissionDenied
+				require.ErrorAs(t, err, &permissionDenied)
+			} else {
+				var handlerError *nexus.HandlerError
+				require.ErrorAs(t, err, &handlerError)
+				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerError.Type)
+			}
+		})
+	}
+}
 
 // hsmCompletionToken builds the HSM token used by these conversion tests.
 func hsmCompletionToken() *tokenspb.NexusOperationCompletion {

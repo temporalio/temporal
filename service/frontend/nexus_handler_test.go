@@ -40,6 +40,44 @@ func (mockAuthorizer) Authorize(ctx context.Context, caller *authorization.Claim
 
 var _ authorization.Authorizer = mockAuthorizer{}
 
+type audienceClaimMapper struct {
+	tokenAudience string
+}
+
+func (m audienceClaimMapper) GetClaims(authInfo *authorization.AuthInfo) (*authorization.Claims, error) {
+	if authInfo.Audience != "" && authInfo.Audience != m.tokenAudience {
+		return nil, serviceerror.NewPermissionDenied("audience mismatch", "")
+	}
+	return &authorization.Claims{System: authorization.RoleAdmin}, nil
+}
+
+type errorAuthorizer struct{}
+
+func (errorAuthorizer) Authorize(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error) {
+	return authorization.Result{}, serviceerror.NewInternal("stop after authorization")
+}
+
+func newAudienceTestInterceptor(
+	tokenAudience string,
+	configuredAudience string,
+	authorizer authorization.Authorizer,
+) *authorization.Interceptor {
+	return authorization.NewInterceptor(
+		audienceClaimMapper{tokenAudience: tokenAudience},
+		authorizer,
+		metrics.NoopMetricsHandler,
+		log.NewNoopLogger(),
+		mockNamespaceChecker("test-namespace"),
+		authorization.NewAudienceMapper(configuredAudience),
+		"",
+		"",
+		dynamicconfig.GetBoolPropertyFn(true),
+		dynamicconfig.GetBoolPropertyFn(false),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		dynamicconfig.GetBoolPropertyFn(false),
+	)
+}
+
 type mockRateLimiter struct {
 	allow bool
 }
