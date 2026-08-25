@@ -109,25 +109,29 @@ func (r *RPCFaultGenerator) registerCallback(scope RPCFaultScope, stage rpcFault
 	r.mu.Unlock()
 
 	return func() {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		for _, scope := range scopes {
-			bucket := r.callbacks[scope]
-			if bucket == nil {
-				continue
+		r.unregisterCallback(scopes, entry.id)
+	}
+}
+
+func (r *RPCFaultGenerator) unregisterCallback(scopes []rpcCallbackScope, id uint64) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, scope := range scopes {
+		bucket := r.callbacks[scope]
+		if bucket == nil {
+			continue
+		}
+		for i, existing := range bucket.callbacks {
+			if existing.id == id {
+				bucket.callbacks = append(bucket.callbacks[:i], bucket.callbacks[i+1:]...)
+				break
 			}
-			for i, existing := range bucket.callbacks {
-				if existing.id == entry.id {
-					bucket.callbacks = append(bucket.callbacks[:i], bucket.callbacks[i+1:]...)
-					break
-				}
+		}
+		if len(bucket.callbacks) == 0 {
+			if bucket.unregister != nil {
+				bucket.unregister()
 			}
-			if len(bucket.callbacks) == 0 {
-				if bucket.unregister != nil {
-					bucket.unregister()
-				}
-				delete(r.callbacks, scope)
-			}
+			delete(r.callbacks, scope)
 		}
 	}
 }
