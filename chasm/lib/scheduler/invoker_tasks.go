@@ -10,12 +10,14 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/scheduler/internal"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -381,6 +383,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 		// Clone start before concurrent access. The clone will have RunId/StartTime
 		// set by startWorkflow, then copied back to the original in recordExecuteResult.
 		start = common.CloneProto(start)
+		start.OverlapPolicy = scheduler.resolveOverlapPolicy(start.GetOverlapPolicy())
 
 		// Run all starts concurrently.
 		newCtx := ctx.Clone()
@@ -660,20 +663,34 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 		reusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	}
 
+	tracksCompletionResult := internal.TracksCompletionResult(start.GetOverlapPolicy())
 	var lcr []*commonpb.Payload
-	if lastCompletionState.Success != nil {
+	var continuedFailure *failurepb.Failure
+	// Read the policy stamped on the start rather than resolving against the
+	// schedule's live policy, mirroring V1's startWorkflow, which compares
+	// start.OverlapPolicy directly. Native V2 starts are always stamped with a
+	// concrete policy when buffered; starts migrated from V1 carry none, and V1
+	// passed completion state to those.
+	if tracksCompletionResult && lastCompletionState.Success != nil {
 		lcr = append(lcr, lastCompletionState.Success)
 	}
-	// Build the completion callback with this start's request ID packed into its token, so the
-	// completion is matched by a request ID that rides in the callback header and survives
-	// continue-as-new, rather than the started workflow's callback state which is re-stamped on each
-	// new run.
-	callback, err := chasm.GenerateNexusCallback(schedulerRef, start.RequestId, h.config.EncodeInternalTokenWithEnvelope(scheduler.Namespace))
-	if err != nil {
-		return err
+	if tracksCompletionResult {
+		continuedFailure = lastCompletionState.Failure
+	}
+	var completionCallbacks []*commonpb.Callback
+	if tracksCompletionResult {
+		// Build the completion callback with this start's request ID packed into its token, so the
+		// completion is matched by a request ID that rides in the callback header and survives
+		// continue-as-new, rather than the started workflow's callback state which is re-stamped on each
+		// new run.
+		callback, err := chasm.GenerateNexusCallback(schedulerRef, start.RequestId, h.config.EncodeInternalTokenWithEnvelope(scheduler.Namespace))
+		if err != nil {
+			return err
+		}
+		completionCallbacks = []*commonpb.Callback{callback}
 	}
 	request := &workflowservice.StartWorkflowExecutionRequest{
-		CompletionCallbacks:      []*commonpb.Callback{callback},
+		CompletionCallbacks:      completionCallbacks,
 		Header:                   requestSpec.Header,
 		Identity:                 scheduler.identity(),
 		Input:                    requestSpec.Input,
@@ -691,7 +708,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 		WorkflowTaskTimeout:      requestSpec.WorkflowTaskTimeout,
 		WorkflowType:             requestSpec.WorkflowType,
 		Priority:                 requestSpec.Priority,
-		ContinuedFailure:         lastCompletionState.Failure,
+		ContinuedFailure:         continuedFailure,
 		LastCompletionResult: &commonpb.Payloads{
 			Payloads: lcr,
 		},
@@ -711,7 +728,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 	// BufferedStarts in recordExecuteResult.
 	start.RunId = result.RunId
 	start.StartTime = timestamppb.New(actualStartTime)
-	start.HasCallback = true
+	start.HasCallback = tracksCompletionResult
 
 	// Record time taken from action eligible to workflow started.
 	if !start.Manual {

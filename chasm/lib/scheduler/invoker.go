@@ -11,6 +11,8 @@ import (
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/scheduler/internal"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -183,6 +185,7 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 	// Remove failed (non-retryable) starts from the buffer.
 	removedStarts := 0
 	retriedStarts := 0
+	startedAllowAll := make(map[string]struct{})
 	i.BufferedStarts = slices.DeleteFunc(i.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
 		failed := failed[start.RequestId]
 		if failed {
@@ -214,10 +217,17 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 			continue
 		}
 		if completedStart, ok := completed[start.RequestId]; ok {
+			newlyStarted++
+			start.OverlapPolicy = completedStart.GetOverlapPolicy()
+			if completedStart.GetOverlapPolicy() == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL {
+				i.Scheduler.Get(ctx).recordRecentAction(completedStart, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
+				startedAllowAll[start.RequestId] = struct{}{}
+				removedStarts++
+				continue
+			}
 			start.RunId = completedStart.GetRunId()
 			start.StartTime = completedStart.GetStartTime()
 			start.HasCallback = true
-			newlyStarted++
 		}
 		if retry, ok := retryable[start.RequestId]; ok {
 			start.Attempt++
@@ -225,6 +235,10 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 			retriedStarts++
 		}
 	}
+	i.BufferedStarts = slices.DeleteFunc(i.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
+		_, remove := startedAllowAll[start.GetRequestId()]
+		return remove
+	})
 
 	i.getOrCreateEventLog(ctx).LogEvent(ctx,
 		fmt.Sprintf("recordExecuteResult kicked off %d starts, removed %d starts, retried %d starts",
@@ -260,12 +274,23 @@ func (i *Invoker) recordCompletedAction(
 	i.getOrCreateEventLog(ctx).LogEvent(ctx, fmt.Sprintf("recording completed action: %s", requestID))
 
 	// Find the BufferedStart and mark it as completed.
+	completedAllowAll := ""
 	for _, start := range i.BufferedStarts {
 		if start.GetRequestId() == requestID {
 			scheduleTime = start.DesiredTime.AsTime()
-			start.Completed = completed
+			if start.GetOverlapPolicy() == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL {
+				i.Scheduler.Get(ctx).recordRecentAction(start, completed.GetStatus())
+				completedAllowAll = requestID
+			} else {
+				start.Completed = completed
+			}
 			break
 		}
+	}
+	if completedAllowAll != "" {
+		i.BufferedStarts = slices.DeleteFunc(i.BufferedStarts, func(start *schedulespb.BufferedStart) bool {
+			return start.GetRequestId() == completedAllowAll
+		})
 	}
 
 	// Re-enable deferred starts (Attempt == -1) so they can be re-processed by
@@ -380,7 +405,8 @@ func (i *Invoker) getEligibleBufferedStarts() []*schedulespb.BufferedStart {
 func (i *Invoker) runningWorkflowExecutions() []*commonpb.WorkflowExecution {
 	var running []*commonpb.WorkflowExecution
 	for _, start := range i.GetBufferedStarts() {
-		if start.GetRunId() != "" && start.GetCompleted() == nil {
+		if start.GetRunId() != "" && start.GetCompleted() == nil &&
+			internal.TracksCompletionResult(start.GetOverlapPolicy()) {
 			running = append(running, &commonpb.WorkflowExecution{
 				WorkflowId: start.GetWorkflowId(),
 				RunId:      start.GetRunId(),
@@ -390,11 +416,13 @@ func (i *Invoker) runningWorkflowExecutions() []*commonpb.WorkflowExecution {
 	return running
 }
 
-// recentActions returns started/completed actions as ScheduleActionResults.
-// This includes both running workflows (with status RUNNING) and completed
-// workflows (with their final status).
-func (i *Invoker) recentActions() []*schedulepb.ScheduleActionResult {
-	var results []*schedulepb.ScheduleActionResult
+// recentActions combines stored start-only actions with completion-tracked actions
+// represented by BufferedStarts.
+func (i *Invoker) recentActions(storedActions []*schedulepb.ScheduleActionResult) []*schedulepb.ScheduleActionResult {
+	results := make([]*schedulepb.ScheduleActionResult, 0, len(storedActions)+len(i.GetBufferedStarts()))
+	for _, action := range storedActions {
+		results = append(results, common.CloneProto(action))
+	}
 	for _, start := range i.GetBufferedStarts() {
 		// Only include workflows that have been started (have a RunId).
 		if start.GetRunId() == "" {
@@ -415,6 +443,16 @@ func (i *Invoker) recentActions() []*schedulepb.ScheduleActionResult {
 		})
 	}
 	return results
+}
+
+func (i *Invoker) bufferedStartsCount() int {
+	count := 0
+	for _, start := range i.GetBufferedStarts() {
+		if start.GetRunId() == "" {
+			count++
+		}
+	}
+	return count
 }
 
 // applyCompletedRetention removes the oldest completed BufferedStarts beyond
