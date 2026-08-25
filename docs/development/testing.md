@@ -217,15 +217,12 @@ env.InjectRPCRequestFault(
     })
 ```
 
-`InjectRPCRequestFault` runs before the handler, so an injected error prevents the operation from
-executing. `InjectRPCResponseFault` runs after the handler and receives `(req, resp, handlerErr)`, so
-an injected error can model an operation that executed but whose response was lost. The test fails
-if the fault never triggers.
+`InjectRPCRequestFault` runs _before_ the handler, so an injected error prevents the operation from
+executing. `InjectRPCResponseFault` runs _after_ the handler, so an injected error can model an
+operation that executed but whose response was lost. The test fails if the fault never triggers.
+Only unary RPCs are intercepted; streaming RPCs are unaffected.
 
-The `env` methods scope faults to the test's namespace. The raw `testcore.InjectRPCRequestFault`
-and `testcore.InjectRPCResponseFault` helpers require an explicit `testcore.WithNamespaceID` or
-`testcore.WithNamespaceName` option; namespace-less fault injection is unsupported. Only unary
-RPCs are intercepted; streaming RPCs are unaffected.
+The `env` methods scope faults to the test's namespace.
 
 ### testhooks package
 
