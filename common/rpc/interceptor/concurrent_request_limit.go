@@ -12,7 +12,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/quotas/calculator"
 	"go.temporal.io/server/common/rpc/interceptor/nexus"
 	"google.golang.org/grpc"
@@ -129,7 +128,7 @@ func (ni *ConcurrentRequestLimitInterceptor) InterceptNexus(
 	defer cleanup()
 	if err != nil {
 		return nil, &nexus.InterceptorError{
-			Err:     commonnexus.ConvertGRPCError(err, false),
+			Err:     err,
 			Outcome: "namespace_concurrency_limited",
 		}
 	}

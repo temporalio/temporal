@@ -152,7 +152,11 @@ func TestConcurrentRequestLimitInterceptor_InterceptNexus(t *testing.T) {
 		dynamicconfig.GetIntPropertyFnFilteredByNamespace(1),
 		map[string]int{"NexusAPI": 1},
 	)
-	input := withAPIName(interceptornexus.NewStartOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil), "NexusAPI")
+	input := interceptornexus.NewStartOpInput(
+		"s", "o", testNamespace, nexus.StartOperationOptions{}, nil,
+		interceptornexus.ForwardingInfo{},
+		interceptornexus.RequestMetadata{APIName: "NexusAPI"},
+	)
 
 	ctx := context.Background()
 
@@ -283,24 +287,4 @@ func (h testRequestHandler) Handle(context.Context, any) (any, error) {
 	<-h.respond
 
 	return nil, nil
-}
-
-func withRequestMetadataForTest(in interceptornexus.InterceptorInput, metadata interceptornexus.RequestMetadata) interceptornexus.InterceptorInput {
-	switch v := in.(type) {
-	case interceptornexus.StartOpInput:
-		v.WithRequestMetadata(metadata)
-		return v
-	case interceptornexus.CancelOpInput:
-		v.WithRequestMetadata(metadata)
-		return v
-	case interceptornexus.CompleteOpInput:
-		v.WithRequestMetadata(metadata)
-		return v
-	default:
-		return in
-	}
-}
-
-func withAPIName(in interceptornexus.InterceptorInput, apiName string) interceptornexus.InterceptorInput {
-	return withRequestMetadataForTest(in, interceptornexus.RequestMetadata{APIName: apiName})
 }

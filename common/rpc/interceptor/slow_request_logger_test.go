@@ -5,12 +5,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/rpc/interceptor"
+	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
@@ -95,4 +97,41 @@ func (s *slowRequestLoggerSuite) TestIntercept() {
 	info.FullMethod = workflowservice.WorkflowService_PollWorkflowExecutionUpdate_FullMethodName
 	_, err = s.interceptor.Intercept(ctx, nil, info, slowHandler)
 	s.NoError(err)
+}
+
+func (s *slowRequestLoggerSuite) TestInterceptNexus() {
+	ctx := context.Background()
+
+	const nexusDispatchAPIName = "/temporal.api.nexusservice.v1.NexusService/DispatchByNamespaceAndTaskQueue"
+
+	makeNext := func(delay time.Duration) interceptornexus.HandlerFunc {
+		return func(context.Context, interceptornexus.InterceptorInput) (any, error) {
+			//nolint:forbidigo // Allow time.Sleep for timeout tests
+			time.Sleep(delay)
+			return nil, nil
+		}
+	}
+	fastNext := makeNext(0)
+	slowNext := makeNext(testThreshold + 1)
+
+	// The operation name here is deliberately not a known API name: the interceptor
+	// must key off APIName, not OperationName.
+	input := interceptornexus.NewStartOpInput(
+		"test-service",
+		"user-defined-operation",
+		"namespace-name",
+		nexus.StartOperationOptions{},
+		nil,
+		interceptornexus.ForwardingInfo{},
+		interceptornexus.RequestMetadata{APIName: nexusDispatchAPIName},
+	)
+
+	// Ensure fast requests aren't logged.
+	_, err := s.interceptor.InterceptNexus(ctx, input, fastNext)
+	s.Require().NoError(err)
+
+	// Ensure slow requests are logged.
+	s.logger.EXPECT().Warn(gomock.Eq("Slow gRPC call"), gomock.Any()).Times(1)
+	_, err = s.interceptor.InterceptNexus(ctx, input, slowNext)
+	s.Require().NoError(err)
 }

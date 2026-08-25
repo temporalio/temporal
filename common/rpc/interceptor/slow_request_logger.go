@@ -48,7 +48,7 @@ func (i *SlowRequestLoggerInterceptor) InterceptNexus(
 	in nexus.InterceptorInput,
 	next nexus.HandlerFunc,
 ) (any, error) {
-	tracker := i.trackSlowRequestFn(in.OperationName(), in)
+	tracker := i.trackSlowRequestFn(in.APIName(), in)
 	defer tracker()
 	return next(ctx, in)
 }

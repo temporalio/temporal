@@ -8,7 +8,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/headers"
-	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc/interceptor/nexus"
 	"google.golang.org/grpc"
@@ -99,16 +98,9 @@ func (i *RateLimitInterceptor) InterceptNexus(
 	in nexus.InterceptorInput,
 	next nexus.HandlerFunc,
 ) (any, error) {
-	header, err := nexus.HeaderFromInterceptorInput(in)
-	if err != nil {
+	if err := i.Allow(in.APIName(), in.Header()); err != nil {
 		return nil, &nexus.InterceptorError{
-			Err:     commonnexus.ConvertGRPCError(err, true),
-			Outcome: "interceptor_failed",
-		}
-	}
-	if err := i.Allow(in.APIName(), header); err != nil {
-		return nil, &nexus.InterceptorError{
-			Err:     commonnexus.ConvertGRPCError(err, true),
+			Err:     err,
 			Outcome: "global_rate_limited",
 		}
 	}

@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -30,103 +31,123 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type nexusTelemetryContext struct {
-	outcome    string
-	handled    error
-	hasHandled bool
-}
-
-func (c *nexusTelemetryContext) MetricsHandler(error) metrics.Handler {
-	return metrics.NoopMetricsHandler
-}
-
-func (c *nexusTelemetryContext) MetricsHandlerForInterceptors() metrics.Handler {
-	return metrics.NoopMetricsHandler
-}
-
-func (c *nexusTelemetryContext) MetricsLogger() log.Logger {
-	return log.NewNoopLogger()
-}
-
-func (c *nexusTelemetryContext) SetMetricsOutcome(outcome string) {
-	c.outcome = outcome
-}
-
-func (c *nexusTelemetryContext) SetFailureSource(string) {}
-
-func (c *nexusTelemetryContext) HandleRequestError(err error) {
-	c.handled = err
-	c.hasHandled = true
-}
-
-func TestTelemetryInterceptNexus(t *testing.T) {
-	input := interceptornexus.NewStartOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil)
+func TestTelemetryInterceptNexusOutermost(t *testing.T) {
+	extraTag := metrics.StringTag("configured", "tag")
+	input := interceptornexus.NewStartOpInput(
+		"s", "o", testNamespace, nexus.StartOperationOptions{}, nil,
+		interceptornexus.ForwardingInfo{},
+		interceptornexus.RequestMetadata{MetricTags: []metrics.Tag{extraTag}},
+	)
 	for _, tc := range []struct {
 		name            string
-		setContext      bool
-		handler         interceptornexus.HandlerFunc
+		handlerOut      any
+		handlerErr      error
+		setOverride     string
 		expectedOutcome string
-		expectedError   error
-		nextCalled      bool
-		expectHandled   bool
+		expectedErrors  int
 	}{
 		{
-			name:       "regular telemetry capture",
-			setContext: true,
-			handler: func(context.Context, interceptornexus.InterceptorInput) (any, error) {
-				return nil, nil
-			},
-			nextCalled:    true,
-			expectHandled: true,
+			name:            "sync success is derived from the result type",
+			handlerOut:      &nexus.HandlerStartOperationResultSync[any]{},
+			expectedOutcome: "sync_success",
 		},
 		{
-			name: "missing telemetry context",
-			handler: func(context.Context, interceptornexus.InterceptorInput) (any, error) {
-				return nil, nil
-			},
-			expectedError: errors.New("telemetry context not found"),
+			name:            "async success is derived from the result type",
+			handlerOut:      &nexus.HandlerStartOperationResultAsync{},
+			expectedOutcome: "async_success",
 		},
 		{
-			name:       "tagged error",
-			setContext: true,
-			handler: func(context.Context, interceptornexus.InterceptorInput) (any, error) {
-				return nil, &interceptornexus.InterceptorError{Err: errors.New("rejected"), Outcome: "rejected"}
-			},
+			name:            "an interceptor's outcome rides on its error",
+			handlerErr:      &interceptornexus.InterceptorError{Err: errors.New("rejected"), Outcome: "rejected"},
 			expectedOutcome: "rejected",
-			expectedError:   &interceptornexus.InterceptorError{Err: errors.New("rejected"), Outcome: "rejected"},
-			nextCalled:      true,
-			expectHandled:   true,
+			expectedErrors:  1,
 		},
 		{
-			name:       "ensure metrics still captured on panics",
-			setContext: true,
-			handler: func(context.Context, interceptornexus.InterceptorInput) (any, error) {
-				panic("")
-			},
-			expectedError: errors.New("panic: "),
-			nextCalled:    true,
-			expectHandled: true,
+			name:            "an unclassified error counts as internal",
+			handlerErr:      errors.New("boom"),
+			expectedOutcome: "internal_error",
+			expectedErrors:  1,
+		},
+		{
+			name:            "a short-circuiting interceptor overrides the success outcome",
+			handlerOut:      &nexus.HandlerStartOperationResultSync[any]{},
+			setOverride:     interceptornexus.OutcomeRequestForwarded,
+			expectedOutcome: "request_forwarded",
+		},
+		{
+			name:            "an error outcome wins over the override",
+			handlerErr:      &interceptornexus.InterceptorError{Err: errors.New("forward failed"), Outcome: "forwarded_request_error"},
+			setOverride:     interceptornexus.OutcomeRequestForwarded,
+			expectedOutcome: "forwarded_request_error",
+			expectedErrors:  1,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx := context.Background()
-			telemetryContext := &nexusTelemetryContext{}
-			if tc.setContext {
-				ctx = WithTelemetryContext(ctx, telemetryContext)
-			}
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+
+			telemetry := NewTelemetryInterceptor(nil, metricsHandler, log.NewNoopLogger(), nil, nil)
 			nextCalled := false
-			_, err := (&TelemetryInterceptor{}).InterceptNexus(ctx, input, func(ctx context.Context, input interceptornexus.InterceptorInput) (any, error) {
-				nextCalled = true
-				return tc.handler(ctx, input)
-			})
-			require.Equal(t, tc.expectedError, err)
-			require.Equal(t, tc.nextCalled, nextCalled)
-			if tc.setContext {
-				require.Equal(t, tc.expectedOutcome, telemetryContext.outcome)
-			}
-			require.Equal(t, tc.expectHandled, telemetryContext.hasHandled)
+			out, err := telemetry.InterceptNexusOutermost(
+				context.Background(),
+				input,
+				func(ctx context.Context, _ interceptornexus.InterceptorInput) (any, error) {
+					nextCalled = true
+					// Downstream interceptors read the published handler from the context.
+					require.NotNil(t, GetMetricsHandlerFromContext(ctx, log.NewNoopLogger()))
+					if tc.setOverride != "" {
+						interceptornexus.SetOutcomeOverride(ctx, tc.setOverride)
+					}
+					return tc.handlerOut, tc.handlerErr
+				},
+			)
+			require.True(t, nextCalled)
+			require.Equal(t, tc.handlerOut, out)
+			require.Equal(t, tc.handlerErr, err)
+
+			snapshot := capture.Snapshot()
+			namespaceTag := metrics.NamespaceTag(testNamespace)
+
+			outcomeTag := metrics.OutcomeTag(tc.expectedOutcome)
+			methodTag := metrics.NexusMethodTag("StartNexusOperation")
+			nexusRequests := snapshot[metrics.NexusRequests.Name()]
+			require.Len(t, nexusRequests, 1)
+			require.Equal(t, outcomeTag.Value, nexusRequests[0].Tags[outcomeTag.Key])
+			require.Equal(t, methodTag.Value, nexusRequests[0].Tags[methodTag.Key])
+			require.Equal(t, namespaceTag.Value, nexusRequests[0].Tags[namespaceTag.Key])
+			require.Equal(t, extraTag.Value, nexusRequests[0].Tags[extraTag.Key])
+			require.Len(t, snapshot[metrics.NexusLatency.Name()], 1)
+			require.Len(t, snapshot[metrics.NexusRequestErrors.Name()], tc.expectedErrors)
+
+			requests := snapshot[metrics.ServiceRequests.Name()]
+			require.Len(t, requests, 1)
+			require.Equal(t, "StartNexusOperation", requests[0].Tags[metrics.OperationTagName])
+			require.Equal(t, namespaceTag.Value, requests[0].Tags[namespaceTag.Key])
+			require.Len(t, snapshot[metrics.ServiceLatency.Name()], 1)
 		})
 	}
+}
+
+// The shared chain position records nothing; InterceptNexusOutermost is the only recorder.
+func TestTelemetryInterceptNexusRecordsNothing(t *testing.T) {
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
+	telemetry := NewTelemetryInterceptor(nil, metricsHandler, log.NewNoopLogger(), nil, nil)
+	nextCalled := false
+	_, err := telemetry.InterceptNexus(
+		context.Background(),
+		interceptornexus.NewStartOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil, interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{}),
+		func(context.Context, interceptornexus.InterceptorInput) (any, error) {
+			nextCalled = true
+			return nil, nil
+		},
+	)
+	require.NoError(t, err)
+	require.True(t, nextCalled)
+	require.Empty(t, capture.Snapshot())
 }
 
 const (

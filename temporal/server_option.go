@@ -18,9 +18,9 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
-	"go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/service/frontend"
 	"google.golang.org/grpc"
 )
 
@@ -210,11 +210,12 @@ func WithChainedFrontendGrpcInterceptors(
 	})
 }
 
-// TBD: this will become unified interceptors instead
-//
-//nolint:staticcheck
-func WithChainedFrontendNexusInterceptors(
-	interceptors ...nexus.Interceptor,
+// WithChainedFrontendInterceptors sets an ordered chain of custom gRPC+Nexus interceptors that will be invoked for all
+// Frontend gRPC and Nexus API calls respectively. The list of custom interceptors will be appended to the end of the internal
+// ServerInterceptors. The custom interceptors will be invoked in the order as they appear in the supplied list, after
+// the internal ServerInterceptors.
+func WithChainedFrontendInterceptors(
+	interceptors ...frontend.Interceptor,
 ) ServerOption {
 	return applyFunc(func(s *serverOptions) {
 		s.customFrontendUnifiedInterceptors = interceptors

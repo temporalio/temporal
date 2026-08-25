@@ -21,9 +21,9 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
-	"go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/service/frontend"
 	"google.golang.org/grpc"
 )
 
@@ -62,7 +62,7 @@ type (
 		persistenceFactoryProvider        persistenceClient.FactoryProviderFn
 		searchAttributesMapper            searchattribute.Mapper
 		customFrontendInterceptors        []grpc.UnaryServerInterceptor
-		customFrontendUnifiedInterceptors []nexus.Interceptor
+		customFrontendUnifiedInterceptors []frontend.Interceptor
 		additionalStreamInterceptors      []grpc.StreamServerInterceptor
 		metricHandler                     metrics.Handler
 		eventLoggerProvider               otellog.LoggerProvider

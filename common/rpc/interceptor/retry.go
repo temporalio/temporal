@@ -44,9 +44,7 @@ func (i *RetryableInterceptor) Intercept(
 	return response, err
 }
 
-// TBD: evaluate if adding retry is necessary/correct for Nexus
-//
-//nolint:staticcheck
+// InterceptNexus is a no-op as retries are on the caller side
 func (i *RetryableInterceptor) InterceptNexus(
 	ctx context.Context,
 	in nexus.InterceptorInput,

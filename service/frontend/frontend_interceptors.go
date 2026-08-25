@@ -33,6 +33,7 @@ type Interceptor interface {
 
 type InterceptorsProvider struct {
 	interceptors           []Interceptor
+	nexusTelemetry         nexus.Interceptor                 // required to be first in the Nexus chain
 	retryableInterceptor   *interceptor.RetryableInterceptor // required to be last in chain after custom interceptors
 	customGRPCInterceptors []grpc.UnaryServerInterceptor     // required for legacy reasons
 	faultGenerator         grpcfaults.Generator
@@ -54,7 +55,6 @@ func NewInterceptorsProvider(
 	namespaceStateValidatorInterceptor *interceptor.NamespaceStateValidatorInterceptor,
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	namespaceRateLimiterInterceptorWrapper *interceptor.NamespaceRateLimitInterceptorWrapper,
-	retryableInterceptor *interceptor.RetryableInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
 	callerInfoInterceptor *interceptor.CallerInfoInterceptor,
@@ -64,6 +64,7 @@ func NewInterceptorsProvider(
 	customGRPCInterceptors []grpc.UnaryServerInterceptor,
 	customInterceptors []Interceptor,
 	testHooks testhooks.TestHooks,
+	retryableInterceptor *interceptor.RetryableInterceptor,
 ) *InterceptorsProvider {
 
 	interceptors := []Interceptor{
@@ -96,14 +97,15 @@ func NewInterceptorsProvider(
 
 	return &InterceptorsProvider{
 		interceptors:           interceptors,
+		nexusTelemetry:         telemetryInterceptor.InterceptNexusOutermost,
 		customGRPCInterceptors: customGRPCInterceptors,
 		retryableInterceptor:   retryableInterceptor,
 		faultGenerator:         grpcfaultstest.NewGenerator(testHooks),
 	}
 }
 
-func (n *InterceptorsProvider) GetInterceptors() []grpc.UnaryServerInterceptor {
-	grpcInterceptors := []grpc.UnaryServerInterceptor{}
+func (n *InterceptorsProvider) GrpcInterceptors() []grpc.UnaryServerInterceptor {
+	grpcInterceptors := make([]grpc.UnaryServerInterceptor, 0, len(n.interceptors)+len(n.customGRPCInterceptors)+1)
 	for _, i := range n.interceptors {
 		grpcInterceptors = append(grpcInterceptors, i.Intercept)
 	}
@@ -117,8 +119,13 @@ func (n *InterceptorsProvider) GetInterceptors() []grpc.UnaryServerInterceptor {
 	return grpcInterceptors
 }
 
-func (n *InterceptorsProvider) GetNexusInterceptors() []nexus.Interceptor {
-	nexusInterceptors := []nexus.Interceptor{}
+func (n *InterceptorsProvider) NexusInterceptors() []nexus.Interceptor {
+	nexusInterceptors := make([]nexus.Interceptor, 0, len(n.interceptors)+2)
+	// telemetry is the outermost in chain for Nexus requests to allow recording
+	// all metrics and retain behavior. In the future, gRPC will also move telemetry
+	// to outermost after an impact evaluation- this will allow gRPC to also capture
+	// all metrics from authz/redirection related failures as well.
+	nexusInterceptors = append(nexusInterceptors, n.nexusTelemetry)
 	for _, i := range n.interceptors {
 		nexusInterceptors = append(nexusInterceptors, i.InterceptNexus)
 	}

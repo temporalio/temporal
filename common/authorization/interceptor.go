@@ -196,7 +196,7 @@ func (a *Interceptor) InterceptNexus(
 		}
 		a.logger.Error("Authorization internal error with processing nexus request", tag.Error(err))
 		return nil, &nexus.InterceptorError{
-			Err:     commonnexus.ConvertGRPCError(err, false),
+			Err:     err,
 			Outcome: "internal_auth_error",
 		}
 	}

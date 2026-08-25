@@ -12,7 +12,6 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.temporal.io/server/service/frontend/configs"
@@ -118,16 +117,9 @@ func (n *NamespaceRateLimitInterceptorWrapper) InterceptNexus(
 	in nexus.InterceptorInput,
 	next nexus.HandlerFunc,
 ) (out any, retErr error) {
-	header, err := nexus.HeaderFromInterceptorInput(in)
-	if err != nil {
+	if err := n.ni.Allow(ctx, namespace.Name(in.NamespaceName()), in.APIName(), in.Header()); err != nil {
 		return nil, &nexus.InterceptorError{
-			Err:     commonnexus.ConvertGRPCError(err, true),
-			Outcome: "interceptor_failed",
-		}
-	}
-	if err := n.ni.Allow(namespace.Name(in.NamespaceName()), in.APIName(), header); err != nil {
-		return nil, &nexus.InterceptorError{
-			Err:     commonnexus.ConvertGRPCError(err, true),
+			Err:     err,
 			Outcome: "namespace_rate_limited",
 		}
 	}

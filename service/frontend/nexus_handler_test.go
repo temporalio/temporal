@@ -14,12 +14,10 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/common/rpc/interceptor"
 )
 
 type mockAuthorizer struct{}
@@ -76,9 +74,7 @@ func newOperationContext(options contextOptions) *operationContext {
 		nexusContext: &nexusContext{},
 	}
 	oc.logger = log.NewTestLogger()
-	mh := metricstest.NewCaptureHandler()
-	oc.metricsHandlerForInterceptors = mh
-	oc.metricsHandler = mh
+	oc.metricsHandlerForInterceptors = metricstest.NewCaptureHandler()
 	oc.clientVersionChecker = headers.NewDefaultVersionChecker()
 	oc.apiName = "/temporal.api.nexusservice.v1.NexusService/DispatchNexusTask"
 	oc.responseHeaders = make(map[string]string)
@@ -106,28 +102,6 @@ func newOperationContext(options contextOptions) *operationContext {
 			},
 		},
 		1,
-	)
-
-	oc.namespaceConcurrencyLimitInterceptor = interceptor.NewConcurrentRequestLimitInterceptor(
-		nil,
-		nil,
-		oc.logger,
-		func(ns string) int { return options.quota },
-		func(ns string) int { return options.quota },
-		map[string]int{
-			oc.apiName: 1,
-		},
-	)
-	oc.namespaceRateLimitInterceptor = interceptor.NewNamespaceRateLimitInterceptor(
-		nil,
-		mockRateLimiter{options.namespaceRateLimitAllow},
-		map[string]struct{}{},
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
-		metrics.NoopMetricsHandler,
-	)
-	oc.rateLimitInterceptor = interceptor.NewRateLimitInterceptor(
-		mockRateLimiter{options.rateLimitAllow},
-		make(map[string]int),
 	)
 
 	oc.clusterMetadata = clustertest.NewMetadataForTest(

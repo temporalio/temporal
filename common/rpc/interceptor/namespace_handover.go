@@ -92,10 +92,6 @@ func (i *NamespaceHandoverInterceptor) handlesMethod(fullMethod string) bool {
 	return false
 }
 
-// draft-review: this looks correct, but check in review
-// If this is the right way, extract the common logic into a util
-//
-//nolint:staticcheck
 func (i *NamespaceHandoverInterceptor) InterceptNexus(
 	ctx context.Context,
 	in nexus.InterceptorInput,
