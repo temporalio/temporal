@@ -195,9 +195,9 @@ func (c *NexusEndpointClient) List(
 		return c.listAndFilterByName(ctx, request)
 	}
 
-	pageSize := request.GetPageSize()
+	pageSize := int(request.GetPageSize())
 	if pageSize == 0 {
-		pageSize = int32(c.config.listDefaultPageSize())
+		pageSize = c.config.listDefaultPageSize()
 	} else if err := c.validatePageSize(pageSize); err != nil {
 		return nil, err
 	}
@@ -205,14 +205,14 @@ func (c *NexusEndpointClient) List(
 	resp, err := c.persistence.ListNexusEndpoints(ctx, &p.ListNexusEndpointsRequest{
 		LastKnownTableVersion: 0,
 		NextPageToken:         request.NextPageToken,
-		PageSize:              int(pageSize),
+		PageSize:              pageSize,
 	})
 	if err != nil {
 		c.logger.Error(
 			"error listing Nexus endpoints from persistence",
 			tag.Error(err),
 			tag.NextPageToken(request.NextPageToken),
-			tag.PageSize(int(pageSize)),
+			tag.PageSize(pageSize),
 		)
 		return nil, serviceerror.NewInternal("error listing Nexus endpoints")
 	}
@@ -409,14 +409,14 @@ func validateGetRequest(request *operatorservice.GetNexusEndpointRequest) error 
 	return issues.GetError()
 }
 
-func (c *NexusEndpointClient) validatePageSize(pageSize int32) error {
+func (c *NexusEndpointClient) validatePageSize(pageSize int) error {
 	// pageSize == 0 is treated as unset and will be changed to the default and does not go through this validation
 	if pageSize < 0 {
 		return serviceerror.NewInvalidArgument("page_size is negative")
 	}
 
 	maxPageSize := c.config.listMaxPageSize()
-	if pageSize > int32(maxPageSize) {
+	if pageSize > maxPageSize {
 		return serviceerror.NewInvalidArgumentf("page_size exceeds limit of %d", maxPageSize)
 	}
 
