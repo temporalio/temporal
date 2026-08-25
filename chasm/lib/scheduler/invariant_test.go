@@ -2,7 +2,7 @@ package scheduler_test
 
 import (
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -165,7 +165,7 @@ func describeSched(sched *scheduler.Scheduler, total int, byPath map[string]int)
 	for p := range byPath {
 		paths = append(paths, fmt.Sprintf("%s=%d", p, byPath[p]))
 	}
-	sort.Strings(paths)
+	slices.Sort(paths)
 
 	var b strings.Builder
 	fmt.Fprintf(&b, "\n  scheduleID:     %s", sched.GetScheduleId())
