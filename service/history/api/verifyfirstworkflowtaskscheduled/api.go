@@ -73,6 +73,10 @@ func Invoke(
 		return err
 	}
 
+	if resendScheduler == nil {
+		return resend(ctx)
+	}
+
 	childKey := definition.NewWorkflowKey(req.NamespaceId, req.WorkflowExecution.WorkflowId, req.WorkflowExecution.RunId)
 	resendCtx := rpc.CopyContextValues(shardContext.GetLifecycleContext(), ctx)
 	submitResult := resendScheduler.TrySubmit(

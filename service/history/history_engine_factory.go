@@ -67,7 +67,7 @@ type (
 func (f *historyEngineFactory) CreateEngine(
 	shard historyi.ShardContext,
 ) historyi.Engine {
-	return NewEngineWithShardContext(
+	return newEngineWithShardContext(
 		shard,
 		f.ClientBean,
 		f.MatchingClient,
