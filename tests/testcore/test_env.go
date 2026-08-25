@@ -463,10 +463,10 @@ func (e *TestEnv) Tv() *testvars.TestVars {
 // namespace field they expose. Requests without either field are ignored.
 // Returns a cleanup function that disables the fault.
 func (e *TestEnv) InjectRPCRequestFault(fault RPCRequestFault) func() {
-	return InjectRPCRequestFault(e.t, e.GetTestCluster(), fault,
-		WithNamespaceID(e.nsID.String()),
-		WithNamespaceName(e.nsName.String()),
-	)
+	return InjectRPCRequestFault(e.t, e.GetTestCluster(), RPCFaultScope{
+		NamespaceID:   e.nsID,
+		NamespaceName: e.nsName,
+	}, fault)
 }
 
 // InjectRPCResponseFault registers a post-handler fault injection scoped to this test's namespace.
@@ -474,10 +474,10 @@ func (e *TestEnv) InjectRPCRequestFault(fault RPCRequestFault) func() {
 // namespace field they expose. Requests without either field are ignored.
 // Returns a cleanup function that disables the fault.
 func (e *TestEnv) InjectRPCResponseFault(fault RPCResponseFault) func() {
-	return InjectRPCResponseFault(e.t, e.GetTestCluster(), fault,
-		WithNamespaceID(e.nsID.String()),
-		WithNamespaceName(e.nsName.String()),
-	)
+	return InjectRPCResponseFault(e.t, e.GetTestCluster(), RPCFaultScope{
+		NamespaceID:   e.nsID,
+		NamespaceName: e.nsName,
+	}, fault)
 }
 
 // Context returns the test-level timeout context with RPC version headers already included.

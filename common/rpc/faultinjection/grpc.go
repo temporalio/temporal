@@ -21,7 +21,7 @@ type RPCRequestCallback func(ctx context.Context, fullMethod string, req any) (m
 // RPCResponseCallback is a callback function for post-handler RPC fault injection.
 type RPCResponseCallback func(ctx context.Context, fullMethod string, req, resp any, err error) (matched bool, newResp any, newErr error)
 
-type rpcCallback func(ctx context.Context, fullMethod string, stage rpcFaultStage, req, resp any, err error) (matched bool, newResp any, newErr error)
+type rpcCallback func(ctx context.Context, fullMethod string, req, resp any, err error) (matched bool, newResp any, newErr error)
 
 // rpcCallbackEntry represents a registered RPC callback with its ID.
 type rpcCallbackEntry struct {
@@ -29,10 +29,15 @@ type rpcCallbackEntry struct {
 	callback rpcCallback
 }
 
+// RPCFaultScope identifies a namespace by ID, name, or both.
+type RPCFaultScope struct {
+	NamespaceID   namespace.ID
+	NamespaceName namespace.Name
+}
+
 type rpcCallbackScope struct {
-	stage         rpcFaultStage
-	namespaceID   namespace.ID
-	namespaceName namespace.Name
+	RPCFaultScope
+	stage rpcFaultStage
 }
 
 type rpcCallbackBucket struct {
@@ -58,37 +63,31 @@ func NewRPCFaultGenerator(testHooks testhooks.TestHooks) *RPCFaultGenerator {
 
 // RegisterRequestCallback registers a pre-handler RPC fault injection callback and returns a
 // cleanup function that removes the callback when called.
-func (r *RPCFaultGenerator) RegisterRequestCallback(namespaceID namespace.ID, namespaceName namespace.Name, cb RPCRequestCallback) func() {
-	return r.registerCallback(namespaceID, namespaceName, rpcFaultStageRequest, func(ctx context.Context, fullMethod string, stage rpcFaultStage, req, _ any, _ error) (bool, any, error) {
-		if stage != rpcFaultStageRequest {
-			return false, nil, nil
-		}
+func (r *RPCFaultGenerator) RegisterRequestCallback(scope RPCFaultScope, cb RPCRequestCallback) func() {
+	return r.registerCallback(scope, rpcFaultStageRequest, func(ctx context.Context, fullMethod string, req, _ any, _ error) (bool, any, error) {
 		return cb(ctx, fullMethod, req)
 	})
 }
 
 // RegisterResponseCallback registers a post-handler RPC fault injection callback and returns a
 // cleanup function that removes the callback when called.
-func (r *RPCFaultGenerator) RegisterResponseCallback(namespaceID namespace.ID, namespaceName namespace.Name, cb RPCResponseCallback) func() {
-	return r.registerCallback(namespaceID, namespaceName, rpcFaultStageResponse, func(ctx context.Context, fullMethod string, stage rpcFaultStage, req, resp any, err error) (bool, any, error) {
-		if stage != rpcFaultStageResponse {
-			return false, nil, nil
-		}
+func (r *RPCFaultGenerator) RegisterResponseCallback(scope RPCFaultScope, cb RPCResponseCallback) func() {
+	return r.registerCallback(scope, rpcFaultStageResponse, func(ctx context.Context, fullMethod string, req, resp any, err error) (bool, any, error) {
 		return cb(ctx, fullMethod, req, resp, err)
 	})
 }
 
-func (r *RPCFaultGenerator) registerCallback(namespaceID namespace.ID, namespaceName namespace.Name, stage rpcFaultStage, cb rpcCallback) func() {
+func (r *RPCFaultGenerator) registerCallback(scope RPCFaultScope, stage rpcFaultStage, cb rpcCallback) func() {
 	if r == nil {
 		return func() {}
 	}
 
 	var scopes []rpcCallbackScope
-	if namespaceID != "" {
-		scopes = append(scopes, rpcCallbackScope{stage: stage, namespaceID: namespaceID})
+	if scope.NamespaceID != "" {
+		scopes = append(scopes, rpcCallbackScope{RPCFaultScope: RPCFaultScope{NamespaceID: scope.NamespaceID}, stage: stage})
 	}
-	if namespaceName != "" {
-		scopes = append(scopes, rpcCallbackScope{stage: stage, namespaceName: namespaceName})
+	if scope.NamespaceName != "" {
+		scopes = append(scopes, rpcCallbackScope{RPCFaultScope: RPCFaultScope{NamespaceName: scope.NamespaceName}, stage: stage})
 	}
 	if len(scopes) == 0 {
 		return func() {}
@@ -131,22 +130,22 @@ func (r *RPCFaultGenerator) registerCallback(namespaceID namespace.ID, namespace
 
 func (r *RPCFaultGenerator) installHook(scope rpcCallbackScope) func() {
 	switch {
-	case scope.namespaceID != "" && scope.stage == rpcFaultStageRequest:
+	case scope.NamespaceID != "" && scope.stage == rpcFaultStageRequest:
 		return testhooks.Set(r.testHooks, testhooks.RPCRequestFaultGeneratorByNamespaceID, func(ctx context.Context, fullMethod string, req any) (bool, any, error) {
 			return r.generate(ctx, fullMethod, scope, req, nil, nil)
-		}, scope.namespaceID)
-	case scope.namespaceID != "":
+		}, scope.NamespaceID)
+	case scope.NamespaceID != "":
 		return testhooks.Set(r.testHooks, testhooks.RPCResponseFaultGeneratorByNamespaceID, func(ctx context.Context, fullMethod string, req, resp any, err error) (bool, any, error) {
 			return r.generate(ctx, fullMethod, scope, req, resp, err)
-		}, scope.namespaceID)
+		}, scope.NamespaceID)
 	case scope.stage == rpcFaultStageRequest:
 		return testhooks.Set(r.testHooks, testhooks.RPCRequestFaultGeneratorByNamespaceName, func(ctx context.Context, fullMethod string, req any) (bool, any, error) {
 			return r.generate(ctx, fullMethod, scope, req, nil, nil)
-		}, scope.namespaceName)
+		}, scope.NamespaceName)
 	default:
 		return testhooks.Set(r.testHooks, testhooks.RPCResponseFaultGeneratorByNamespaceName, func(ctx context.Context, fullMethod string, req, resp any, err error) (bool, any, error) {
 			return r.generate(ctx, fullMethod, scope, req, resp, err)
-		}, scope.namespaceName)
+		}, scope.NamespaceName)
 	}
 }
 
@@ -165,7 +164,7 @@ func (r *RPCFaultGenerator) generate(ctx context.Context, fullMethod string, sco
 	r.mu.RUnlock()
 
 	for _, entry := range callbacks {
-		if matched, newResp, newErr := entry.callback(ctx, fullMethod, scope.stage, req, resp, err); matched {
+		if matched, newResp, newErr := entry.callback(ctx, fullMethod, req, resp, err); matched {
 			return true, newResp, newErr
 		}
 	}

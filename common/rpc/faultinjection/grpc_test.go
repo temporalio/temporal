@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testhooks"
 )
 
@@ -35,14 +36,14 @@ func TestRPCFaultGenerator_CallbackSeparationAndArguments(t *testing.T) {
 	injectedErr := errors.New("injected")
 	requestCalls := 0
 	responseCalls := 0
-	generator.RegisterRequestCallback("namespace-id", "", func(actualCtx context.Context, fullMethod string, actualRequest any) (bool, any, error) {
+	generator.RegisterRequestCallback(RPCFaultScope{NamespaceID: "namespace-id"}, func(actualCtx context.Context, fullMethod string, actualRequest any) (bool, any, error) {
 		requestCalls++
 		require.Equal(t, ctx, actualCtx)
 		require.Equal(t, "/test.Service/Method", fullMethod)
 		require.Same(t, request, actualRequest)
 		return false, nil, nil
 	})
-	generator.RegisterResponseCallback("namespace-id", "", func(actualCtx context.Context, fullMethod string, actualRequest, actualResponse any, actualErr error) (bool, any, error) {
+	generator.RegisterResponseCallback(RPCFaultScope{NamespaceID: "namespace-id"}, func(actualCtx context.Context, fullMethod string, actualRequest, actualResponse any, actualErr error) (bool, any, error) {
 		responseCalls++
 		require.Equal(t, ctx, actualCtx)
 		require.Equal(t, "/test.Service/Method", fullMethod)
@@ -78,15 +79,15 @@ func TestRPCFaultGenerator_FirstMatchWins(t *testing.T) {
 	testHooks := testhooks.NewTestHooks()
 	generator := NewRPCFaultGenerator(testHooks)
 	var calls []int
-	generator.RegisterRequestCallback("namespace-id", "", func(context.Context, string, any) (bool, any, error) {
+	generator.RegisterRequestCallback(RPCFaultScope{NamespaceID: "namespace-id"}, func(context.Context, string, any) (bool, any, error) {
 		calls = append(calls, 1)
 		return false, nil, nil
 	})
-	generator.RegisterRequestCallback("namespace-id", "", func(context.Context, string, any) (bool, any, error) {
+	generator.RegisterRequestCallback(RPCFaultScope{NamespaceID: "namespace-id"}, func(context.Context, string, any) (bool, any, error) {
 		calls = append(calls, 2)
 		return true, "response", nil
 	})
-	generator.RegisterRequestCallback("namespace-id", "", func(context.Context, string, any) (bool, any, error) {
+	generator.RegisterRequestCallback(RPCFaultScope{NamespaceID: "namespace-id"}, func(context.Context, string, any) (bool, any, error) {
 		calls = append(calls, 3)
 		return true, "other response", nil
 	})
@@ -106,7 +107,7 @@ func TestRPCFaultGenerator_UnregisterIsIdempotent(t *testing.T) {
 
 	testHooks := testhooks.NewTestHooks()
 	generator := NewRPCFaultGenerator(testHooks)
-	unregister := generator.RegisterRequestCallback("namespace-id", "", func(context.Context, string, any) (bool, any, error) {
+	unregister := generator.RegisterRequestCallback(RPCFaultScope{NamespaceID: "namespace-id"}, func(context.Context, string, any) (bool, any, error) {
 		return true, "response", nil
 	})
 
@@ -124,9 +125,9 @@ func TestRPCFaultGenerator_UnregisterDuringGenerate(t *testing.T) {
 	generator := NewRPCFaultGenerator(testHooks)
 	callbackStarted := make(chan struct{})
 	continueCallback := make(chan struct{})
-	unregister := generator.RegisterRequestCallback("namespace-id", "", func(context.Context, string, any) (bool, any, error) {
-		close(callbackStarted)
-		<-continueCallback
+	unregister := generator.RegisterRequestCallback(RPCFaultScope{NamespaceID: "namespace-id"}, func(context.Context, string, any) (bool, any, error) {
+		await.Snd(t, callbackStarted, struct{}{})
+		await.Rcv(t, continueCallback)
 		return true, "response", nil
 	})
 	type result struct {
@@ -139,13 +140,13 @@ func TestRPCFaultGenerator_UnregisterDuringGenerate(t *testing.T) {
 	require.True(t, ok)
 	go func() {
 		matched, response, err := generate(context.Background(), "/test.Service/Method", "request")
-		resultCh <- result{matched: matched, response: response, err: err}
+		await.Snd(t, resultCh, result{matched: matched, response: response, err: err})
 	}()
 
-	<-callbackStarted
+	await.Rcv(t, callbackStarted)
 	unregister()
-	close(continueCallback)
-	generateResult := <-resultCh
+	await.Snd(t, continueCallback, struct{}{})
+	generateResult := await.Rcv(t, resultCh)
 
 	require.NoError(t, generateResult.err)
 	require.Equal(t, "response", generateResult.response)
@@ -160,7 +161,7 @@ func TestRPCFaultGenerator_RegistersNamespaceIDAndNameAliases(t *testing.T) {
 
 	testHooks := testhooks.NewTestHooks()
 	generator := NewRPCFaultGenerator(testHooks)
-	unregister := generator.RegisterRequestCallback("namespace-id", "namespace-name", func(context.Context, string, any) (bool, any, error) {
+	unregister := generator.RegisterRequestCallback(RPCFaultScope{NamespaceID: "namespace-id", NamespaceName: "namespace-name"}, func(context.Context, string, any) (bool, any, error) {
 		return true, "response", nil
 	})
 
