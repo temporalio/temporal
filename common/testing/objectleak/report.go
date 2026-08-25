@@ -11,6 +11,8 @@ import (
 
 type retentionClass int
 
+const maxInlineAddresses = 32
+
 const (
 	retentionUnexpected retentionClass = iota
 	retentionExpected
@@ -127,7 +129,13 @@ func (r report) string() string {
 		for _, group := range groups {
 			fmt.Fprintf(&out, "  %s: %s\n", group.counts(), group.name())
 			if includeAddresses {
-				fmt.Fprintf(&out, "    addresses: %#x\n", slices.Sorted(maps.Keys(group.addresses)))
+				addresses := slices.Sorted(maps.Keys(group.addresses))
+				inlineAddresses := addresses[:min(len(addresses), maxInlineAddresses)]
+				fmt.Fprintf(&out, "    addresses: %#x", inlineAddresses)
+				if remaining := len(addresses) - len(inlineAddresses); remaining > 0 {
+					fmt.Fprintf(&out, " ... and %d more", remaining)
+				}
+				out.WriteByte('\n')
 			}
 		}
 	}

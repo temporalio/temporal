@@ -25,9 +25,12 @@ func writeHeapDiagnostics(
 	executable string,
 	writeHeapDump func(*os.File),
 ) error {
-	heapDump, err := os.Create(filepath.Join(outputDir, "heap.dump"))
+	heapDump, err := os.OpenFile(filepath.Join(outputDir, "heap.dump"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
+	}
+	if err := heapDump.Chmod(0o600); err != nil {
+		return errors.Join(err, heapDump.Close())
 	}
 	writeHeapDump(heapDump)
 	if err := heapDump.Close(); err != nil {
@@ -38,7 +41,19 @@ func writeHeapDiagnostics(
 	if err != nil {
 		return err
 	}
-	destination, err := os.OpenFile(filepath.Join(outputDir, "leakcheck.test"), os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
+	destinationPath := filepath.Join(outputDir, filepath.Base(executable))
+	if destinationInfo, err := os.Stat(destinationPath); err == nil {
+		sourceInfo, err := source.Stat()
+		if err != nil {
+			return errors.Join(err, source.Close())
+		}
+		if os.SameFile(sourceInfo, destinationInfo) {
+			return source.Close()
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return errors.Join(err, source.Close())
+	}
+	destination, err := os.OpenFile(destinationPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
 	if err != nil {
 		return errors.Join(err, source.Close())
 	}
