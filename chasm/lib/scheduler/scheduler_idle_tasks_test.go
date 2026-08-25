@@ -132,12 +132,13 @@ func TestIdleTask_AllowAllStartRearmsIdleTimer(t *testing.T) {
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 			Attempt:       1,
 		})
-		invoker.RecordExecuteResult(ctx, []*schedulespb.BufferedStart{{
+		_, _, startOnlyActions := invoker.RecordExecuteResult(ctx, []*schedulespb.BufferedStart{{
 			RequestId:     "allow-all-request",
 			RunId:         "allow-all-run",
 			StartTime:     timestamppb.New(startTime),
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 		}}, nil)
+		s.RecordStartOnlyActions(ctx, startOnlyActions)
 		return nil
 	}))
 

@@ -308,7 +308,8 @@ func TestRecordExecuteResult_AllowAllRecentActionsBounded(t *testing.T) {
 		completed = append(completed, result)
 	}
 
-	newlyStarted, droppedDuplicates := invoker.RecordExecuteResult(ctx, completed, nil)
+	newlyStarted, droppedDuplicates, startOnlyActions := invoker.RecordExecuteResult(ctx, completed, nil)
+	env.Scheduler.RecordStartOnlyActions(ctx, startOnlyActions)
 	require.Equal(t, scheduler.RecentActionCount+2, newlyStarted)
 	require.Zero(t, droppedDuplicates)
 	require.Empty(t, invoker.GetBufferedStarts())
@@ -861,9 +862,10 @@ func TestExecuteTask_RecordResultIdempotentOnRace(t *testing.T) {
 		StartTime: loserStartTime,
 	}}
 
-	newlyStarted, droppedDuplicates := invoker.RecordExecuteResult(ctx, loser, nil)
+	newlyStarted, droppedDuplicates, startOnlyActions := invoker.RecordExecuteResult(ctx, loser, nil)
 	require.Equal(t, 0, newlyStarted, "duplicate RunId-set start must not be counted")
 	require.Equal(t, 1, droppedDuplicates, "the dropped completion must be reported for observability")
+	require.Empty(t, startOnlyActions)
 	live := invoker.BufferedStarts[0]
 	require.Equal(t, winning, live.RunId, "live RunId must not be stomped")
 	require.Equal(t, startTime.AsTime(), live.StartTime.AsTime(), "live StartTime must not be stomped")
@@ -884,9 +886,10 @@ func TestExecuteTask_RecordResultIdempotentOnRace(t *testing.T) {
 		RunId:     "first-run",
 		StartTime: startTime,
 	}}
-	newlyStarted, droppedDuplicates = invoker.RecordExecuteResult(ctx, first, nil)
+	newlyStarted, droppedDuplicates, startOnlyActions = invoker.RecordExecuteResult(ctx, first, nil)
 	require.Equal(t, 1, newlyStarted, "first-time RunId assignment must be counted")
 	require.Equal(t, 0, droppedDuplicates, "no duplicate was dropped")
+	require.Empty(t, startOnlyActions)
 	freshlyStarted := invoker.BufferedStarts[1]
 	require.Equal(t, "first-run", freshlyStarted.RunId)
 	require.Equal(t, startTime.AsTime(), freshlyStarted.StartTime.AsTime())
@@ -924,9 +927,10 @@ func TestExecuteTask_RecordResultIdempotentOnRetryableRace(t *testing.T) {
 		BackoffTime: loserBackoff,
 	}}
 
-	newlyStarted, droppedDuplicates := invoker.RecordExecuteResult(ctx, nil, retryable)
+	newlyStarted, droppedDuplicates, startOnlyActions := invoker.RecordExecuteResult(ctx, nil, retryable)
 	require.Equal(t, 0, newlyStarted)
 	require.Equal(t, 0, droppedDuplicates, "retryable drops aren't counted as duplicates - only completed-side drops are")
+	require.Empty(t, startOnlyActions)
 	live := invoker.BufferedStarts[0]
 	require.Equal(t, int64(1), live.Attempt, "Attempt must not be incremented on a started entry")
 	require.Nil(t, live.BackoffTime, "BackoffTime must not be set on a started entry")

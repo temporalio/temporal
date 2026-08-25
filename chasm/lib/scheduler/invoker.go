@@ -156,10 +156,13 @@ func (e *executeResult) Append(o executeResult) executeResult {
 
 // recordExecuteResult updates the Invoker's internal state with the results of a
 // completed InvokerExecuteTask. It returns the number of *new* actions recorded
-// (starts that transitioned from "no RunId" to "has RunId" in this call) and
-// the number of completed results that were dropped because they were previously
-// recorded.
-func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeResult) (newlyStarted, droppedDuplicates int) {
+// (starts that transitioned from "no RunId" to "has RunId" in this call), the
+// number of completed results that were dropped because they were previously
+// recorded, and starts that do not remain active while awaiting completion.
+func (i *Invoker) recordExecuteResult(
+	ctx chasm.MutableContext,
+	result *executeResult,
+) (newlyStarted, droppedDuplicates int, startOnlyActions []*schedulespb.BufferedStart) {
 	completed := make(map[string]*schedulespb.BufferedStart) // request ID -> BufferedStart with RunId/StartTime
 	failed := make(map[string]bool)                          // request ID -> is present
 	retryable := make(map[string]*schedulespb.BufferedStart) // request ID -> *BufferedStart
@@ -223,7 +226,7 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 			resolvedOverlapPolicy := completedStart.GetOverlapPolicy()
 			start.OverlapPolicy = resolvedOverlapPolicy
 			if !internal.TracksCompletionResult(resolvedOverlapPolicy) {
-				i.Scheduler.Get(ctx).recordRecentAction(completedStart, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
+				startOnlyActions = append(startOnlyActions, completedStart)
 				startedUntracked[start.RequestId] = struct{}{}
 				removedStarts++
 				continue
@@ -242,12 +245,6 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 		_, remove := startedUntracked[start.GetRequestId()]
 		return remove
 	})
-	if len(startedUntracked) > 0 {
-		// ALLOW_ALL starts have no completion callback to rearm an idle task after
-		// their start-only history advances the idle deadline.
-		i.Scheduler.Get(ctx).Generator.Get(ctx).Generate(ctx)
-	}
-
 	i.getOrCreateEventLog(ctx).LogEvent(ctx,
 		fmt.Sprintf("recordExecuteResult kicked off %d starts, removed %d starts, retried %d starts",
 			newlyStarted,
@@ -255,7 +252,7 @@ func (i *Invoker) recordExecuteResult(ctx chasm.MutableContext, result *executeR
 			retriedStarts))
 
 	i.addTasks(ctx)
-	return newlyStarted, droppedDuplicates
+	return newlyStarted, droppedDuplicates, startOnlyActions
 }
 
 // runningWorkflowID returns the workflow ID associated with the given

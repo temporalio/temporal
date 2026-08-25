@@ -614,6 +614,20 @@ func (s *Scheduler) recordRecentAction(
 	s.Info.RecentActions = util.SliceTail(s.Info.RecentActions, recentActionCount)
 }
 
+func (s *Scheduler) recordStartOnlyActions(
+	ctx chasm.MutableContext,
+	starts []*schedulespb.BufferedStart,
+) {
+	for _, start := range starts {
+		s.recordRecentAction(start, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
+	}
+	if len(starts) > 0 {
+		// These starts have no completion callback to rearm an idle task after
+		// their start-only history advances the idle deadline.
+		s.Generator.Get(ctx).Generate(ctx)
+	}
+}
+
 func (s *Scheduler) recentActions(ctx chasm.Context) []*schedulepb.ScheduleActionResult {
 	return s.Invoker.Get(ctx).recentActions(s.Info.GetRecentActions())
 }
