@@ -129,10 +129,30 @@ func TestRPCFaultGenerator_GenerateArguments(t *testing.T) {
 		requestCalls  int
 		responseCalls int
 	}{
-		{name: "global request", stage: rpcFaultStageRequest, requestCalls: 1},
-		{name: "namespace request", scope: RPCFaultScope{NamespaceID: "namespace-id"}, stage: rpcFaultStageRequest, callbackErr: injectedErr, requestCalls: 1},
-		{name: "global response", stage: rpcFaultStageResponse, responseCalls: 1},
-		{name: "namespace response", scope: RPCFaultScope{NamespaceID: "namespace-id"}, stage: rpcFaultStageResponse, callbackErr: injectedErr, responseCalls: 1},
+		{
+			name:         "global request",
+			stage:        rpcFaultStageRequest,
+			requestCalls: 1,
+		},
+		{
+			name:         "namespace request",
+			scope:        RPCFaultScope{NamespaceID: "namespace-id"},
+			stage:        rpcFaultStageRequest,
+			callbackErr:  injectedErr,
+			requestCalls: 1,
+		},
+		{
+			name:          "global response",
+			stage:         rpcFaultStageResponse,
+			responseCalls: 1,
+		},
+		{
+			name:          "namespace response",
+			scope:         RPCFaultScope{NamespaceID: "namespace-id"},
+			stage:         rpcFaultStageResponse,
+			callbackErr:   injectedErr,
+			responseCalls: 1,
+		},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
