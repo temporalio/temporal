@@ -2770,7 +2770,7 @@ func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_ResendChildAsync() {
 	}
 }
 
-func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_ResendChildWithLocalCheckpoint() {
+func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_DoesNotResendChildWhenWorkflowNotReady() {
 	s.config.EnableChildWorkflowResend = func() bool { return true }
 
 	request := &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
@@ -2782,20 +2782,6 @@ func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_ResendChildWithLocal
 		ResendChild: true,
 	}
 
-	versionedTransition := &persistencespb.VersionedTransition{
-		NamespaceFailoverVersion: tests.Version,
-		TransitionCount:          3,
-	}
-	versionHistories := &historyspb.VersionHistories{
-		Histories: []*historyspb.VersionHistory{
-			{
-				BranchToken: []byte{4, 5, 6},
-				Items: []*historyspb.VersionHistoryItem{
-					{EventId: 1, Version: tests.Version},
-				},
-			},
-		},
-	}
 	ms := workflow.TestGlobalMutableState(
 		s.historyEngine.shardContext,
 		s.mockEventsCache,
@@ -2815,46 +2801,14 @@ func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_ResendChildWithLocal
 		200*time.Second,
 		"identity",
 	)
-	ms.GetExecutionInfo().TransitionHistory = []*persistencespb.VersionedTransition{versionedTransition}
-	ms.GetExecutionInfo().VersionHistories = versionHistories
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
 		&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(s.T().Context(), ms)},
 		nil,
 	)
 
-	mockClusterMetadata := cluster.NewMockMetadata(s.controller)
-	mockClusterMetadata.EXPECT().GetClusterID().Return(tests.Version).AnyTimes()
-	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName).AnyTimes()
-	mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo)
-	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, tests.Version).Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockShard.SetClusterMetadata(mockClusterMetadata)
-
-	syncCalled := make(chan struct{})
-	s.mockShard.Resource.RemoteAdminClient.EXPECT().SyncWorkflowState(gomock.Any(), protomock.Eq(&adminservice.SyncWorkflowStateRequest{
-		NamespaceId: request.NamespaceId,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: request.WorkflowExecution.WorkflowId,
-			RunId:      request.WorkflowExecution.RunId,
-		},
-		VersionedTransition: versionedTransition,
-		VersionHistories:    versionHistories,
-		TargetClusterId:     int32(cluster.TestAlternativeClusterInitialFailoverVersion),
-		ArchetypeId:         chasm.WorkflowArchetypeID,
-	})).DoAndReturn(
-		func(context.Context, *adminservice.SyncWorkflowStateRequest, ...grpc.CallOption) (*adminservice.SyncWorkflowStateResponse, error) {
-			close(syncCalled)
-			return nil, &serviceerror.NotFound{}
-		},
-	)
-
 	err := s.historyEngine.VerifyFirstWorkflowTaskScheduled(metrics.AddMetricsContext(s.T().Context()), request)
 	var workflowNotReady *serviceerror.WorkflowNotReady
 	s.ErrorAs(err, &workflowNotReady)
-	select {
-	case <-syncCalled:
-	case <-time.After(10 * time.Second):
-		s.Fail("background child resend did not use the local checkpoint")
-	}
 }
 
 func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_SkipsResendForRemovedNamespace() {

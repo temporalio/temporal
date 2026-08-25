@@ -43,7 +43,7 @@ func Invoke(
 		return nil
 	}
 	switch errVerify.(type) {
-	case *serviceerror.NotFound, *serviceerror.WorkflowNotReady:
+	case *serviceerror.NotFound:
 		if !req.GetResendChild() || !shardContext.GetConfig().EnableChildWorkflowResend() {
 			return errVerify
 		}
