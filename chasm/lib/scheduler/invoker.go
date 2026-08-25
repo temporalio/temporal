@@ -449,6 +449,14 @@ func (i *Invoker) recentActions(storedActions []*schedulepb.ScheduleActionResult
 	return util.SliceTail(results, recentActionCount)
 }
 
+// bufferedStartsCount returns the actions whose successful StartWorkflowExecution
+// result has not yet been recorded. BufferedStarts also retains running and completed
+// actions for lifecycle tracking and history, so its length is not the API buffer size.
+// This preserves V1's distinction: V1 removes selected starts from BufferedStarts
+// before recording them as running or recent, while CHASM uses a recorded RunId as
+// the durable boundary between those states.
+// Count starts without a RunId directly because recent actions include start-only
+// ALLOW_ALL records stored outside BufferedStarts and are capped independently.
 func (i *Invoker) bufferedStartsCount() int {
 	count := 0
 	for _, start := range i.GetBufferedStarts() {
