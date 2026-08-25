@@ -904,8 +904,9 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagationFailureKeepsWo
 					},
 				},
 			},
-			Status:                    enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
-			SyncBatchSize:             int32(s.workerDeploymentClient.getSyncBatchSize()),
+			Status:        enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+			SyncBatchSize: int32(s.workerDeploymentClient.getSyncBatchSize()),
+			//nolint:staticcheck // SA1019: worker versioning v0.31
 			StartedDeploymentWorkflow: true,
 		},
 	})
