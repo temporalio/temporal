@@ -10,12 +10,12 @@ import (
 // WriteHeapDiagnostics writes a raw heap dump to outputDir. It may contain
 // sensitive data.
 func WriteHeapDiagnostics(outputDir string) error {
-	return writeHeapDiagnostics(outputDir, func(heapDump *os.File) {
+	return writeHeapDumpFile(outputDir, func(heapDump *os.File) {
 		debug.WriteHeapDump(heapDump.Fd())
 	})
 }
 
-func writeHeapDiagnostics(
+func writeHeapDumpFile(
 	outputDir string,
 	writeHeapDump func(*os.File),
 ) error {
