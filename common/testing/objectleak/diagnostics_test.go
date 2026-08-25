@@ -14,7 +14,7 @@ func TestWriteHeapDiagnostics(t *testing.T) {
 	require.NoError(t, os.WriteFile(heapDumpPath, []byte("old heap"), 0o644))
 	require.NoError(t, os.Chmod(heapDumpPath, 0o644))
 
-	err := writeHeapDiagnostics(outputDir, func(heapDump *os.File) {
+	err := writeHeapDumpFile(outputDir, func(heapDump *os.File) {
 		_, err := heapDump.WriteString("heap")
 		require.NoError(t, err)
 	})
