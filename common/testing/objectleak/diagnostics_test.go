@@ -23,9 +23,11 @@ func TestWriteHeapDiagnostics(t *testing.T) {
 	heapDump, err := os.ReadFile(heapDumpPath)
 	require.NoError(t, err)
 	require.Equal(t, []byte("heap"), heapDump)
+
 	heapDumpInfo, err := os.Stat(heapDumpPath)
 	require.NoError(t, err)
 	require.Equal(t, os.FileMode(0o600), heapDumpInfo.Mode().Perm())
+
 	entries, err := os.ReadDir(outputDir)
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
