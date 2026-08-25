@@ -50,6 +50,9 @@ type pauseWorkflowExecutionEnv struct {
 	activityCompletedOnce sync.Once
 
 	activityShouldSucceed atomic.Bool
+
+	activityReleasedCh chan struct{}
+	activityAttempts   atomic.Int32
 }
 
 func TestPauseWorkflowExecutionSuite(t *testing.T) {
@@ -70,6 +73,7 @@ func (s *PauseWorkflowExecutionSuite) newTestEnv(opts ...testcore.TestOption) *p
 		pauseIdentity:       "functional-test",
 		pauseReason:         "pausing workflow for acceptance test",
 		activityCompletedCh: make(chan struct{}, 1),
+		activityReleasedCh:  make(chan struct{}),
 	}
 
 	env.workflowFn = func(ctx workflow.Context) (string, error) {
@@ -123,6 +127,9 @@ func (s *PauseWorkflowExecutionSuite) newTestEnv(opts ...testcore.TestOption) *p
 	env.SdkWorker().RegisterWorkflow(env.workflowWithFailingActivity)
 	env.SdkWorker().RegisterActivity(env.failingActivity)
 
+	env.SdkWorker().RegisterWorkflow(env.workflowWithBlockingFailingActivity)
+	env.SdkWorker().RegisterActivity(env.blockingFailingActivity)
+
 	return env
 }
 
@@ -132,6 +139,32 @@ func (env *pauseWorkflowExecutionEnv) failingActivity(ctx context.Context) (stri
 		return "activity-completed", nil
 	}
 	return "", errors.New("activity-failure")
+}
+
+// blockingFailingActivity records each attempt, blocks until the test releases
+// it, then fails retryably. This lets a test control exactly when an in-flight
+// attempt reports its failure.
+func (env *pauseWorkflowExecutionEnv) blockingFailingActivity(ctx context.Context) error {
+	env.activityAttempts.Add(1)
+	<-env.activityReleasedCh
+	return errors.New("activity-failure")
+}
+
+// workflowWithBlockingFailingActivity executes blockingFailingActivity with an
+// unbounded retry policy.
+func (env *pauseWorkflowExecutionEnv) workflowWithBlockingFailingActivity(ctx workflow.Context) error {
+	ao := workflow.ActivityOptions{
+		ActivityID:             "blocking-failing-activity",
+		StartToCloseTimeout:    60 * time.Second,
+		ScheduleToCloseTimeout: 2 * time.Minute,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    1 * time.Second,
+			BackoffCoefficient: 1,
+		},
+	}
+	ctx = workflow.WithActivityOptions(ctx, ao)
+
+	return workflow.ExecuteActivity(ctx, env.blockingFailingActivity).Get(ctx, nil)
 }
 
 // workflowWithFailingActivity is a workflow that executes the failing activity.
@@ -2201,6 +2234,56 @@ func (s *PauseWorkflowExecutionSuite) TestActivityRetryDeferredWhilePaused() {
 		s.NoError(err)
 		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc.GetWorkflowExecutionInfo().GetStatus())
 	}, 15*time.Second, 200*time.Millisecond)
+}
+
+// TestActivityRetryDeferredWhilePausedInFlightAttempt covers the case that
+// TestActivityRetryDeferredWhilePaused does not: an activity attempt that is
+// already running on a worker when the pause lands, and only then fails
+// retryably. Its retry must be deferred until unpause, exactly as for an
+// activity that was already in retry backoff when the workflow was paused.
+func (s *PauseWorkflowExecutionSuite) TestActivityRetryDeferredWhilePausedInFlightAttempt() {
+	env := s.newTestEnv()
+
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        testcore.RandomizeStr("pause-inflight-activity-wf-" + s.T().Name()),
+		TaskQueue: env.WorkerTaskQueue(),
+	}
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, env.workflowWithBlockingFailingActivity)
+	s.NoError(err)
+	workflowID := workflowRun.GetID()
+	runID := workflowRun.GetRunID()
+
+	// Wait until the first attempt is running on the worker, so the pause lands
+	// while the activity is in flight rather than in retry backoff.
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		s.Equal(int32(1), env.activityAttempts.Load())
+	}, 15*time.Second, 100*time.Millisecond)
+
+	_, err = env.FrontendClient().PauseWorkflowExecution(s.Context(), &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: workflowID,
+		RunId:      runID,
+		Identity:   env.pauseIdentity,
+		Reason:     env.pauseReason,
+		RequestId:  uuid.NewString(),
+	})
+	s.NoError(err)
+	s.Await(func(s *PauseWorkflowExecutionSuite) {
+		s.assertWorkflowIsPaused(env, workflowID, runID)
+	}, 5*time.Second, 200*time.Millisecond)
+
+	// Let the in-flight attempt fail retryably now that the workflow is paused.
+	close(env.activityReleasedCh)
+
+	// Wait across several retry intervals; no further attempt may be dispatched
+	// while the workflow is paused.
+	s.NoError(util.InterruptibleSleep(s.Context(), 5*time.Second))
+	desc, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowID, runID)
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, desc.GetWorkflowExecutionInfo().GetStatus())
+	s.Len(desc.PendingActivities, 1, "activity should still be pending while paused")
+	s.Equal(int32(1), env.activityAttempts.Load(),
+		"activity must not be dispatched again while the workflow is paused")
 }
 
 // assertPausedWorkflowTimesOut starts env.workflowFn (which blocks on its
