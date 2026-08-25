@@ -682,14 +682,12 @@ func (s *Scheduler) HandleNexusCompletion(
 		}
 	}
 	if start == nil {
-		// If the request ID was removed, the request must have already been processed;
-		// fast-succeed.
-		s.recordIgnoredCallback(
-			ctx,
-			metricsHandler,
-			info.RequestId,
-			callbackIgnoredUnrecognizedRequest,
-			"handled Nexus completion with an unrecognized request ID",
+		// Missing request IDs are expected for start-only ALLOW_ALL actions because
+		// their callbacks remain attached for rolling-upgrade compatibility.
+		// TODO: Restore warning and event logging once those callbacks can be safely omitted.
+		metricsHandler.Counter(metrics.ScheduleCallbackIgnored.Name()).Record(
+			1,
+			metrics.ReasonTag(callbackIgnoredUnrecognizedRequest),
 		)
 		return nil
 	}
