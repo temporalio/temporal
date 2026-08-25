@@ -405,25 +405,29 @@ lint-actions: $(ACTIONLINT)
 	@$(ACTIONLINT)
 
 .PHONY: lint-code lint-code-fast
+# --new-from-rev filters reported issues after analysis; this target also reduces inputs before analysis.
 lint-code-fast:
-	@git rev-parse --verify --quiet "$(GOLANGCI_LINT_BASE_REV)^{commit}" >/dev/null
+	@git rev-parse --verify --quiet "$(GOLANGCI_LINT_BASE_REV)^{commit}" >/dev/null || { \
+		echo "GOLANGCI_LINT_BASE_REV=$(GOLANGCI_LINT_BASE_REV) is not a known commit; fetch it or override GOLANGCI_LINT_BASE_REV"; \
+		exit 1; \
+	}
 	@targets=$$({ \
 		git diff --name-only --diff-filter=ACMR "$(GOLANGCI_LINT_BASE_REV)" -- '*.go'; \
 		git ls-files --others --exclude-standard -- '*.go'; \
 	} | while IFS= read -r file; do \
 		dir=$$(dirname "$$file"); \
 		[ "$$dir" = "." ] && echo "." || echo "./$$dir"; \
-	done | sort -u); \
+	done | sort -u | tr '\n' ' '); \
 	$(MAKE) GOLANGCI_LINT_TARGETS="$$targets" lint-code
 
 lint-code: $(GOLANGCI_LINT) $(ERRORTYPE)
 	@printf $(COLOR) "Linting code..."
 	@if [ -n "$(strip $(GOLANGCI_LINT_TARGETS))" ]; then \
-		$(GOLANGCI_LINT) run --verbose --build-tags $(ALL_TEST_TAGS) --timeout 10m --fix=$(GOLANGCI_LINT_FIX) --new-from-rev=$(GOLANGCI_LINT_BASE_REV) --config=.github/.golangci.yml $(GOLANGCI_LINT_TARGETS); \
+		$(GOLANGCI_LINT) run --verbose --build-tags $(ALL_TEST_TAGS) --timeout 10m --fix=$(GOLANGCI_LINT_FIX) --new-from-rev=$(GOLANGCI_LINT_BASE_REV) --config=.github/.golangci.yml $(GOLANGCI_LINT_TARGETS) && \
+		go vet -tags $(ALL_TEST_TAGS) -vettool="$(ERRORTYPE)" -style-check=false $(GOLANGCI_LINT_TARGETS); \
 	else \
 		printf $(COLOR) "No changed Go packages to lint."; \
 	fi
-	@go vet -tags $(ALL_TEST_TAGS) -vettool="$(ERRORTYPE)" -style-check=false ./...
 
 lint-yaml: $(YAMLFMT)
 	@printf $(COLOR) "Checking YAML formatting..."
