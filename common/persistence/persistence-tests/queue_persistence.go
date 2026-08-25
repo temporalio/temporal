@@ -2,9 +2,7 @@ package persistencetests
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -12,6 +10,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/persistence"
+	"golang.org/x/sync/errgroup"
 )
 
 type (
@@ -69,28 +68,23 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationQueue() {
 		close(messageChan)
 	}()
 
-	wg := sync.WaitGroup{}
-	publishErrCh := make(chan error, numMessages)
+	var group errgroup.Group
 
 	for senderNum := range concurrentSenders {
-		wg.Go(func() {
+		group.Go(func() error {
+			var publishErr error
 			for message := range messageChan {
 				err := s.Publish(s.ctx, message)
-				id := message.Attributes.(*replicationspb.ReplicationTask_NamespaceTaskAttributes).NamespaceTaskAttributes.Id
-				if err != nil {
-					publishErrCh <- fmt.Errorf("enqueue message failed when sender %d tried to send %s: %w", senderNum, id, err)
+				if err != nil && publishErr == nil {
+					id := message.Attributes.(*replicationspb.ReplicationTask_NamespaceTaskAttributes).NamespaceTaskAttributes.Id
+					publishErr = fmt.Errorf("enqueue message failed when sender %d tried to send %s: %w", senderNum, id, err)
 				}
 			}
+			return publishErr
 		})
 	}
 
-	wg.Wait()
-	close(publishErrCh)
-	var publishErrs []error
-	for err := range publishErrCh {
-		publishErrs = append(publishErrs, err)
-	}
-	s.NoError(errors.Join(publishErrs...))
+	s.NoError(group.Wait())
 
 	result, lastRetrievedMessageID, err := s.GetReplicationMessages(s.ctx, persistence.EmptyQueueMessageID, numMessages)
 	s.NoError(err, "GetReplicationMessages failed.")
@@ -156,28 +150,23 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationDLQ() {
 		close(messageChan)
 	}()
 
-	wg := sync.WaitGroup{}
-	publishErrCh := make(chan error, numMessages)
+	var group errgroup.Group
 
 	for senderNum := range concurrentSenders {
-		wg.Go(func() {
+		group.Go(func() error {
+			var publishErr error
 			for message := range messageChan {
 				err := s.PublishToNamespaceDLQ(s.ctx, message)
-				id := message.Attributes.(*replicationspb.ReplicationTask_NamespaceTaskAttributes).NamespaceTaskAttributes.Id
-				if err != nil {
-					publishErrCh <- fmt.Errorf("enqueue message failed when sender %d tried to send %s: %w", senderNum, id, err)
+				if err != nil && publishErr == nil {
+					id := message.Attributes.(*replicationspb.ReplicationTask_NamespaceTaskAttributes).NamespaceTaskAttributes.Id
+					publishErr = fmt.Errorf("enqueue message failed when sender %d tried to send %s: %w", senderNum, id, err)
 				}
 			}
+			return publishErr
 		})
 	}
 
-	wg.Wait()
-	close(publishErrCh)
-	var publishErrs []error
-	for err := range publishErrCh {
-		publishErrs = append(publishErrs, err)
-	}
-	s.NoError(errors.Join(publishErrs...))
+	s.NoError(group.Wait())
 
 	result1, token, err := s.GetMessagesFromNamespaceDLQ(s.ctx, persistence.EmptyQueueMessageID, maxMessageID, numMessages/2, nil)
 	s.NoError(err, "GetReplicationMessages failed.")
