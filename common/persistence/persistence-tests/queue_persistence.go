@@ -175,9 +175,9 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationDLQ() {
 	s.NoError(err, "GetReplicationMessages failed.")
 	s.Empty(token)
 	s.Equal(len(result1)+len(result2), numMessages)
-	_, token, err = s.GetMessagesFromNamespaceDLQ(s.ctx, persistence.EmptyQueueMessageID, 1<<63-1, numMessages, nil)
+	_, nextToken, err := s.GetMessagesFromNamespaceDLQ(s.ctx, persistence.EmptyQueueMessageID, 1<<63-1, numMessages, nil)
 	s.NoError(err, "GetReplicationMessages failed.")
-	s.Empty(token)
+	s.NotEmpty(nextToken)
 
 	lastMessageID := result2[len(result2)-1].SourceTaskId
 	err = s.DeleteMessageFromNamespaceDLQ(s.ctx, lastMessageID)
