@@ -25,7 +25,6 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
-	namespacepkg "go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/await"
@@ -111,14 +110,15 @@ func (s *FunctionalClustersTestSuite) TestAllBufferedEventTypesFlushedAndReappli
 	heldWorkflowTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, taskQueue)
 	s.Require().NotEmpty(heldWorkflowTask.TaskToken)
 
-	s.clusters[0].InjectHook(
-		s.T(),
-		testhooks.NewHook(testhooks.HistorySignalWorkflowInjectEvents, func() []*historypb.HistoryEvent {
-			return bufferedEventsRequiringInjection(updateID)
-		}),
-		namespacepkg.ID(namespace.NamespaceInfo.Id),
-	)
+	removeInjector := s.bufferedEventInjector.set(func(request *persistence.UpdateWorkflowExecutionRequest) {
+		injectBufferedEventsIntoPersistence(request, namespace.NamespaceInfo.Id, workflowID, updateID)
+	})
+	defer removeInjector()
 	optionsRequestID := s.completeActivityAndBufferExternalEvents(ctx, ns, execution, taskQueue)
+	removeInjector()
+	// The injector changes only the persisted mutation. Reload the shard so the
+	// live mutable state sees exactly the buffer that failover will flush.
+	s.closeBufferedEventsShard(ctx, namespace.NamespaceInfo.Id, workflowID)
 	s.assertBufferedEventTypes(ctx, 0, ns, execution, allBufferedEventTypes)
 
 	err = s.syncWorkflowState(ctx, namespace.NamespaceInfo.Id, execution)
@@ -181,6 +181,38 @@ func bufferedEventsRequiringInjection(updateID string) []*historypb.HistoryEvent
 		events = append(events, newBufferedHistoryEvent(eventType, updateID))
 	}
 	return events
+}
+
+func injectBufferedEventsIntoPersistence(
+	request *persistence.UpdateWorkflowExecutionRequest,
+	namespaceID string,
+	workflowID string,
+	updateID string,
+) {
+	mutation := &request.UpdateWorkflowMutation
+	if mutation.ExecutionInfo.GetNamespaceId() != namespaceID || mutation.ExecutionInfo.GetWorkflowId() != workflowID {
+		return
+	}
+	for _, bufferedEvent := range mutation.NewBufferedEvents {
+		if bufferedEvent.GetWorkflowExecutionSignaledEventAttributes().GetSignalName() != "buffered-signal" {
+			continue
+		}
+		for _, injectedEvent := range bufferedEventsRequiringInjection(updateID) {
+			injectedEvent.EventId = bufferedEvent.EventId
+			injectedEvent.Version = bufferedEvent.Version
+			injectedEvent.EventTime = bufferedEvent.EventTime
+			injectedEvent.TaskId = bufferedEvent.TaskId
+			mutation.NewBufferedEvents = append(mutation.NewBufferedEvents, injectedEvent)
+		}
+		return
+	}
+}
+
+func (s *xdcBaseSuite) closeBufferedEventsShard(ctx context.Context, namespaceID string, workflowID string) {
+	s.T().Helper()
+	shardID := common.WorkflowIDToHistoryShard(namespaceID, workflowID, s.numHistoryShards)
+	_, err := s.clusters[0].AdminClient().CloseShard(ctx, &adminservice.CloseShardRequest{ShardId: shardID})
+	s.Require().NoError(err)
 }
 
 func newBufferedHistoryEvent(eventType enumspb.EventType, updateID string) *historypb.HistoryEvent {

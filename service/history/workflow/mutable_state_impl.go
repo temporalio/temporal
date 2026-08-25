@@ -1382,19 +1382,6 @@ func (ms *MutableStateImpl) AddHistoryEvent(t enumspb.EventType, setAttributes f
 	return event
 }
 
-// AddHistoryEventForTesting adds an event to the history builder without treating it as a CHASM event.
-// Production callers must use AddHistoryEvent so CHASM event definitions are validated at transaction close.
-func (ms *MutableStateImpl) AddHistoryEventForTesting(
-	t enumspb.EventType,
-	setAttributes func(*historypb.HistoryEvent),
-) *historypb.HistoryEvent {
-	event := ms.hBuilder.AddHistoryEvent(t, setAttributes)
-	if event.EventId != common.BufferedEventID {
-		ms.writeEventToCache(event)
-	}
-	return event
-}
-
 // SetReplayEventBatchID records the first event ID of the history batch that subsequent
 // GenerateEventLoadToken calls should reference. Only needed during replay. The rebuilder sets it
 // for each batch before applying its events.

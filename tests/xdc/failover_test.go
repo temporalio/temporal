@@ -43,6 +43,7 @@ import (
 type (
 	FunctionalClustersTestSuite struct {
 		xdcBaseSuite
+		bufferedEventInjector *bufferedEventPersistenceInjector
 	}
 	FunctionalClustersWithRedirectionTestSuite struct {
 		xdcBaseSuite
@@ -73,7 +74,10 @@ func TestFuncClustersTestSuite(t *testing.T) {
 }
 
 func (s *FunctionalClustersTestSuite) SetupSuite() {
-	s.setupSuite()
+	s.bufferedEventInjector = &bufferedEventPersistenceInjector{}
+	s.setupSuite(testcore.WithAdditionalServerOptions(
+		bufferedEventPersistenceServerOption(s.bufferedEventInjector),
+	))
 }
 
 func (s *FunctionalClustersTestSuite) SetupTest() {

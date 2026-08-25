@@ -132,6 +132,13 @@ func WithDynamicConfigOverrides(overrides map[dynamicconfig.Key]any) TestCluster
 	}
 }
 
+// WithAdditionalServerOptions adds server construction options to a test cluster.
+func WithAdditionalServerOptions(options ...temporal.ServerOption) TestClusterOption {
+	return func(params *testClusterParams) {
+		params.AdditionalServerOptions = append(params.AdditionalServerOptions, options...)
+	}
+}
+
 func withArchivalConfig() TestClusterOption {
 	return func(params *testClusterParams) {
 		params.EnableArchival = true

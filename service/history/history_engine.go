@@ -654,7 +654,7 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 	ctx context.Context,
 	req *historyservice.SignalWorkflowExecutionRequest,
 ) (resp *historyservice.SignalWorkflowExecutionResponse, retError error) {
-	return signalworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker, e.testHooks)
+	return signalworkflow.Invoke(ctx, req, e.shardContext, e.workflowConsistencyChecker)
 }
 
 // SignalWithStartWorkflowExecution signals current workflow (if running) or creates & signals a new workflow

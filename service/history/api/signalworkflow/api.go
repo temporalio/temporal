@@ -4,27 +4,19 @@ import (
 	"context"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
-
-type historyEventInjector interface {
-	AddHistoryEventForTesting(enumspb.EventType, func(*historypb.HistoryEvent)) *historypb.HistoryEvent
-}
 
 func Invoke(
 	ctx context.Context,
 	req *historyservice.SignalWorkflowExecutionRequest,
 	shard historyi.ShardContext,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-	testHooks testhooks.TestHooks,
 ) (resp *historyservice.SignalWorkflowExecutionResponse, retError error) {
 	namespaceEntry, err := api.GetActiveNamespace(shard, namespace.ID(req.GetNamespaceId()), req.SignalRequest.WorkflowExecution.WorkflowId)
 	if err != nil {
@@ -106,19 +98,6 @@ func Invoke(
 			)
 			if err != nil {
 				return nil, err
-			}
-			if injectedEvents, ok := testhooks.Get(testHooks, testhooks.HistorySignalWorkflowInjectEvents, namespaceID); ok {
-				injector, ok := mutableState.(historyEventInjector)
-				if !ok {
-					return nil, serviceerror.NewInternal("mutable state does not support test history event injection")
-				}
-				for _, injectedEvent := range injectedEvents() {
-					injector.AddHistoryEventForTesting(injectedEvent.GetEventType(), func(event *historypb.HistoryEvent) {
-						event.Attributes = injectedEvent.Attributes
-						event.UserMetadata = injectedEvent.UserMetadata
-						event.Links = injectedEvent.Links
-					})
-				}
 			}
 
 			return &api.UpdateWorkflowAction{
