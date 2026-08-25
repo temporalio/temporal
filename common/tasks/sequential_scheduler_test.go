@@ -385,7 +385,7 @@ func (s *sequentialSchedulerSuite) newTestProcessor() *SequentialScheduler[*Mock
 		return 1
 	}
 	factory := func(task *MockTask) SequentialTaskQueue[*MockTask] {
-		return newTestSequentialTaskQueue[*MockTask](1, 3000)
+		return newTestSequentialTaskQueue[*MockTask](1)
 	}
 	return NewSequentialScheduler[*MockTask](
 		&SequentialSchedulerOptions{
@@ -405,7 +405,7 @@ func (s *sequentialSchedulerSuite) newTestProcessorWithQueueSize(queueSize int) 
 		return 1
 	}
 	factory := func(task *MockTask) SequentialTaskQueue[*MockTask] {
-		return newTestSequentialTaskQueue[*MockTask](1, 3000)
+		return newTestSequentialTaskQueue[*MockTask](1)
 	}
 	return NewSequentialScheduler[*MockTask](
 		&SequentialSchedulerOptions{

@@ -38,7 +38,6 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
-	"go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
@@ -49,6 +48,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -129,7 +129,7 @@ type (
 
 		status int32
 
-		callbackValidator               callback.Validator
+		callbackValidator               callbacks.Validator
 		tokenSerializer                 *tasktoken.Serializer
 		config                          *Config
 		versionChecker                  headers.VersionChecker
@@ -308,7 +308,7 @@ func (wh *WorkflowHandler) ValidateWorkerDeploymentVersionComputeConfig(
 
 // NewWorkflowHandler creates a gRPC handler for workflowservice
 func NewWorkflowHandler(
-	callbackValidator callback.Validator,
+	callbackValidator callbacks.Validator,
 	config *Config,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	visibilityMgr manager.VisibilityManager,
@@ -695,7 +695,7 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 
 	request.Links = dedupLinksFromCallbacks(request.GetLinks(), request.GetCompletionCallbacks())
 
-	if err := commonlinks.ValidateRequest(
+	if err := commonlinks.ValidateWithCallbacks(
 		request.GetLinks(),
 		request.GetCompletionCallbacks(),
 		wh.config.MaxLinksPerRequest(namespaceName.String()),
@@ -5510,7 +5510,7 @@ func (wh *WorkflowHandler) prepareUpdateWorkflowRequest(
 		request.GetRequest().GetCompletionCallbacks(),
 	)
 
-	return commonlinks.ValidateRequest(
+	return commonlinks.ValidateWithCallbacks(
 		request.GetRequest().GetLinks(),
 		request.GetRequest().GetCompletionCallbacks(),
 		wh.config.MaxLinksPerRequest(namespaceName.String()),
@@ -6568,6 +6568,8 @@ func (wh *WorkflowHandler) checkWorkerDeploymentReadRateLimit(ctx context.Contex
 	return nil
 }
 
+// Returns the provided links, but filtering out any which are also present on the supplied callbacks.
+// Links from non-Nexus callbacks are not considered for deduping.
 func dedupLinksFromCallbacks(
 	links []*commonpb.Link,
 	callbacks []*commonpb.Callback,
@@ -6575,7 +6577,6 @@ func dedupLinksFromCallbacks(
 	if len(links) == 0 {
 		return nil
 	}
-	var res []*commonpb.Link
 	callbacksLinks := make([]*commonpb.Link, 0, len(callbacks))
 	for _, cb := range callbacks {
 		if cb.GetNexus() != nil {
@@ -6583,6 +6584,8 @@ func dedupLinksFromCallbacks(
 			callbacksLinks = append(callbacksLinks, cb.GetLinks()...)
 		}
 	}
+
+	var res []*commonpb.Link
 	for _, link := range links {
 		isDup := false
 		for _, cbLink := range callbacksLinks {

@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/tests/testcore"
@@ -118,12 +119,7 @@ func (s *NexusOTELSuite) TestCallback() {
 	s.NoError(err)
 	s.NoError(env.SdkClient().GetWorkflow(s.Context(), env.Tv().WorkflowID(), startResponse.RunId).Get(s.Context(), nil))
 
-	var headers http.Header
-	select {
-	case headers = <-requestHeaders:
-	case <-s.Context().Done():
-		s.FailNow("timed out waiting for Nexus callback", s.Context().Err().Error())
-	}
+	headers := await.Rcv(s.T(), requestHeaders)
 	s.Equal(callbackHeaderValue, headers.Get("X-Callback-Header"))
 	httpSpans := s.requireNexusHTTPSpans(exporter, []nexusHTTPSpan{{
 		TraceID:     1,
@@ -188,12 +184,7 @@ func (s *NexusOTELSuite) TestOperation() {
 		ScheduleToCloseTimeout: durationpb.New(time.Minute),
 	})
 	s.NoError(err)
-	var nexusRequestID string
-	select {
-	case nexusRequestID = <-requestIDs:
-	case <-s.Context().Done():
-		s.FailNow("timed out waiting for Nexus operation", s.Context().Err().Error())
-	}
+	nexusRequestID := await.Rcv(s.T(), requestIDs)
 
 	pollResponse, err := callerEnv.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
 		Namespace:   callerEnv.Namespace().String(),
@@ -300,12 +291,7 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 	})
 	s.NoError(err)
 
-	var request nexusRequest
-	select {
-	case request = <-requests:
-	case <-s.Context().Done():
-		s.FailNow("timed out waiting for Nexus operation", s.Context().Err().Error())
-	}
+	request := await.Rcv(s.T(), requests)
 	operationURLPath := "/nexus/endpoints/" + endpoint.Id + "/services/" + service.Name + "/" + operation.Name()
 	httpSpans := s.requireNexusHTTPSpans(exporter, []nexusHTTPSpan{
 		{
@@ -393,7 +379,7 @@ func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 	})
 	var handlerErr *nexus.HandlerError
 	s.Require().ErrorAs(err, &handlerErr)
-	s.NoError(<-pollerErrCh)
+	s.NoError(await.Rcv(s.T(), pollerErrCh))
 
 	httpSpans := s.requireNexusHTTPSpans(exporter, []nexusHTTPSpan{{
 		TraceID:     1,
