@@ -131,7 +131,7 @@ func newTemporal(t *testing.T, params *temporalParams) *temporalImpl {
 		workerConfig:              params.WorkerConfig,
 		replicationStreamRecorder: NewReplicationStreamRecorder(),
 	}
-	impl.faultInjector = rpcfaultinjection.NewRPCFaultGenerator(impl.testHooks)
+	impl.faultInjector = rpcfaultinjection.NewTestRPCFaultGenerator(impl.testHooks)
 
 	// Base options are independent of which services this test cluster starts.
 	// [Start] adds the per-service config and static host map.

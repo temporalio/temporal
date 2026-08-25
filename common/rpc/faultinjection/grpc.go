@@ -5,7 +5,7 @@ import (
 	"sync"
 
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/testing/testhooks"
+	rpcinterceptor "go.temporal.io/server/common/rpc/interceptor"
 )
 
 type rpcFaultStage int
@@ -47,16 +47,15 @@ type rpcCallbackBucket struct {
 
 // RPCFaultGenerator handles fault injection for RPC requests and responses.
 type RPCFaultGenerator struct {
-	mu        sync.RWMutex
-	testHooks testhooks.TestHooks
-	callbacks map[rpcCallbackScope]*rpcCallbackBucket
-	nextID    uint64
+	mu          sync.RWMutex
+	callbacks   map[rpcCallbackScope]*rpcCallbackBucket
+	nextID      uint64
+	installHook func(rpcCallbackScope) func()
 }
 
 // NewRPCFaultGenerator creates a new RPCFaultGenerator instance.
-func NewRPCFaultGenerator(testHooks testhooks.TestHooks) *RPCFaultGenerator {
+func NewRPCFaultGenerator() *RPCFaultGenerator {
 	return &RPCFaultGenerator{
-		testHooks: testHooks,
 		callbacks: make(map[rpcCallbackScope]*rpcCallbackBucket),
 	}
 }
@@ -99,7 +98,10 @@ func (r *RPCFaultGenerator) registerCallback(scope RPCFaultScope, stage rpcFault
 	for _, scope := range scopes {
 		bucket := r.callbacks[scope]
 		if bucket == nil {
-			bucket = &rpcCallbackBucket{unregister: r.installHook(scope)}
+			bucket = &rpcCallbackBucket{}
+			if r.installHook != nil {
+				bucket.unregister = r.installHook(scope)
+			}
 			r.callbacks[scope] = bucket
 		}
 		bucket.callbacks = append(bucket.callbacks, entry)
@@ -121,40 +123,42 @@ func (r *RPCFaultGenerator) registerCallback(scope RPCFaultScope, stage rpcFault
 				}
 			}
 			if len(bucket.callbacks) == 0 {
-				bucket.unregister()
+				if bucket.unregister != nil {
+					bucket.unregister()
+				}
 				delete(r.callbacks, scope)
 			}
 		}
 	}
 }
 
-func (r *RPCFaultGenerator) installHook(scope rpcCallbackScope) func() {
-	switch {
-	case scope.NamespaceID != "" && scope.stage == rpcFaultStageRequest:
-		return testhooks.Set(r.testHooks, testhooks.RPCRequestFaultGeneratorByNamespaceID, func(ctx context.Context, fullMethod string, req any) (bool, any, error) {
-			return r.generate(ctx, fullMethod, scope, req, nil, nil)
-		}, scope.NamespaceID)
-	case scope.NamespaceID != "":
-		return testhooks.Set(r.testHooks, testhooks.RPCResponseFaultGeneratorByNamespaceID, func(ctx context.Context, fullMethod string, req, resp any, err error) (bool, any, error) {
-			return r.generate(ctx, fullMethod, scope, req, resp, err)
-		}, scope.NamespaceID)
-	case scope.NamespaceName != "" && scope.stage == rpcFaultStageRequest:
-		return testhooks.Set(r.testHooks, testhooks.RPCRequestFaultGeneratorByNamespaceName, func(ctx context.Context, fullMethod string, req any) (bool, any, error) {
-			return r.generate(ctx, fullMethod, scope, req, nil, nil)
-		}, scope.NamespaceName)
-	case scope.NamespaceName != "":
-		return testhooks.Set(r.testHooks, testhooks.RPCResponseFaultGeneratorByNamespaceName, func(ctx context.Context, fullMethod string, req, resp any, err error) (bool, any, error) {
-			return r.generate(ctx, fullMethod, scope, req, resp, err)
-		}, scope.NamespaceName)
-	case scope.stage == rpcFaultStageRequest:
-		return testhooks.Set(r.testHooks, testhooks.RPCRequestFaultGenerator, func(ctx context.Context, fullMethod string, req any) (bool, any, error) {
-			return r.generate(ctx, fullMethod, scope, req, nil, nil)
-		}, testhooks.GlobalScope)
-	default:
-		return testhooks.Set(r.testHooks, testhooks.RPCResponseFaultGenerator, func(ctx context.Context, fullMethod string, req, resp any, err error) (bool, any, error) {
-			return r.generate(ctx, fullMethod, scope, req, resp, err)
-		}, testhooks.GlobalScope)
+// GenerateRequest checks registered RPC callbacks before the handler runs.
+func (r *RPCFaultGenerator) GenerateRequest(ctx context.Context, fullMethod string, req any) (bool, any, error) {
+	return r.generateForRequest(ctx, fullMethod, rpcFaultStageRequest, req, nil, nil)
+}
+
+// GenerateResponse checks registered RPC callbacks after the handler runs.
+func (r *RPCFaultGenerator) GenerateResponse(ctx context.Context, fullMethod string, req, resp any, err error) (bool, any, error) {
+	return r.generateForRequest(ctx, fullMethod, rpcFaultStageResponse, req, resp, err)
+}
+
+func (r *RPCFaultGenerator) generateForRequest(ctx context.Context, fullMethod string, stage rpcFaultStage, req, resp any, err error) (bool, any, error) {
+	if namespaceID, ok := namespaceIDFromRequest(req); ok {
+		if matched, newResp, newErr := r.generate(ctx, fullMethod, rpcCallbackScope{
+			RPCFaultScope: RPCFaultScope{NamespaceID: namespaceID},
+			stage:         stage,
+		}, req, resp, err); matched {
+			return true, newResp, newErr
+		}
+	} else if namespaceName, ok := namespaceNameFromRequest(req); ok {
+		if matched, newResp, newErr := r.generate(ctx, fullMethod, rpcCallbackScope{
+			RPCFaultScope: RPCFaultScope{NamespaceName: namespaceName},
+			stage:         stage,
+		}, req, resp, err); matched {
+			return true, newResp, newErr
+		}
 	}
+	return r.generate(ctx, fullMethod, rpcCallbackScope{stage: stage}, req, resp, err)
 }
 
 func (r *RPCFaultGenerator) generate(ctx context.Context, fullMethod string, scope rpcCallbackScope, req, resp any, err error) (bool, any, error) {
@@ -177,4 +181,20 @@ func (r *RPCFaultGenerator) generate(ctx context.Context, fullMethod string, sco
 		}
 	}
 	return false, nil, nil
+}
+
+func namespaceIDFromRequest(req any) (namespace.ID, bool) {
+	request, ok := req.(rpcinterceptor.NamespaceIDGetter)
+	if !ok || request.GetNamespaceId() == "" {
+		return "", false
+	}
+	return namespace.ID(request.GetNamespaceId()), true
+}
+
+func namespaceNameFromRequest(req any) (namespace.Name, bool) {
+	request, ok := req.(rpcinterceptor.NamespaceNameGetter)
+	if !ok || request.GetNamespace() == "" {
+		return "", false
+	}
+	return namespace.Name(request.GetNamespace()), true
 }
