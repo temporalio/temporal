@@ -1107,7 +1107,7 @@ func (pm *taskQueuePartitionManagerImpl) DispatchNexusTask(
 				pm.logger.Warn(
 					"unable to parse operation-timeout header",
 					tag.Error(err),
-					tag.NewStringTag(nexus.HeaderOperationTimeout, opTimeoutHeader),
+					tag.NewStringTag("operation-timeout-header", opTimeoutHeader),
 					tag.WorkflowNamespaceID(request.NamespaceId),
 				)
 			} else {
