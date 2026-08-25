@@ -2509,8 +2509,7 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationErrorRehydration(chasmEn
 				if !errors.As(err, &opErr) {
 					return nil, fmt.Errorf("expected NexusOperationError, got %w", err)
 				}
-				var canceledErr *temporal.CanceledError
-				if !errors.As(opErr, &canceledErr) {
+				if _, ok := errors.AsType[*temporal.CanceledError](opErr); !ok {
 					return nil, fmt.Errorf("expected CanceledError, got %w", err)
 				}
 			default:

@@ -184,8 +184,7 @@ func fetchPage(
 				Query:         config.adjustedQuery,
 			})
 		if err != nil {
-			var invalidArgErr *serviceerror.InvalidArgument
-			if errors.As(err, &invalidArgErr) {
+			if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
 				return nil, temporal.NewNonRetryableApplicationError(err.Error(), "InvalidArgument", err)
 			}
 			return nil, err
@@ -207,8 +206,7 @@ func fetchPage(
 			Query:         config.adjustedQuery,
 		})
 		if err != nil {
-			var invalidArgErr *serviceerror.InvalidArgument
-			if errors.As(err, &invalidArgErr) {
+			if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
 				return nil, temporal.NewNonRetryableApplicationError(err.Error(), "InvalidArgument", err)
 			}
 			return nil, err
@@ -479,8 +477,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 			if err != nil {
 				metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
 				logger.Error("Failed to get estimate execution count", tag.Error(err))
-				var invalidArgErr *serviceerror.InvalidArgument
-				if errors.As(err, &invalidArgErr) {
+				if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
 					return HeartBeatDetails{}, temporal.NewNonRetryableApplicationError(err.Error(), "InvalidArgument", err)
 				}
 				return HeartBeatDetails{}, err
