@@ -221,3 +221,138 @@ func TestGRPCUnaryServerInterceptor_NamespaceLessRequest(t *testing.T) {
 	require.Equal(t, "response", response)
 	require.False(t, callbackCalled)
 }
+
+func TestGRPCUnaryServerInterceptor_GlobalRequest(t *testing.T) {
+	t.Parallel()
+
+	testHooks := testhooks.NewTestHooks()
+	injectedErr := errors.New("injected")
+	testhooks.Set(
+		testHooks,
+		testhooks.RPCRequestFaultGenerator,
+		func(context.Context, string, any) (bool, any, error) {
+			return true, nil, injectedErr
+		},
+		testhooks.GlobalScope,
+	)
+	interceptor := GRPCUnaryServerInterceptor(testHooks)
+	handlerCalled := false
+
+	response, err := interceptor(
+		context.Background(),
+		"request",
+		&grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"},
+		func(context.Context, any) (any, error) {
+			handlerCalled = true
+			return "response", nil
+		},
+	)
+
+	require.ErrorIs(t, err, injectedErr)
+	require.Nil(t, response)
+	require.False(t, handlerCalled)
+}
+
+func TestGRPCUnaryServerInterceptor_GlobalResponse(t *testing.T) {
+	t.Parallel()
+
+	testHooks := testhooks.NewTestHooks()
+	testhooks.Set(
+		testHooks,
+		testhooks.RPCResponseFaultGenerator,
+		func(context.Context, string, any, any, error) (bool, any, error) {
+			return true, "replacement", nil
+		},
+		testhooks.GlobalScope,
+	)
+	interceptor := GRPCUnaryServerInterceptor(testHooks)
+
+	response, err := interceptor(
+		context.Background(),
+		"request",
+		&grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"},
+		func(context.Context, any) (any, error) {
+			return "response", nil
+		},
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, "replacement", response)
+}
+
+func TestGRPCUnaryServerInterceptor_GlobalAfterNamespaceMiss(t *testing.T) {
+	t.Parallel()
+
+	testHooks := testhooks.NewTestHooks()
+	var calls []string
+	testhooks.Set(
+		testHooks,
+		testhooks.RPCRequestFaultGeneratorByNamespaceID,
+		func(context.Context, string, any) (bool, any, error) {
+			calls = append(calls, "namespace")
+			return false, nil, nil
+		},
+		namespace.ID("namespace-id"),
+	)
+	testhooks.Set(
+		testHooks,
+		testhooks.RPCRequestFaultGenerator,
+		func(context.Context, string, any) (bool, any, error) {
+			calls = append(calls, "global")
+			return true, "replacement", nil
+		},
+		testhooks.GlobalScope,
+	)
+	interceptor := GRPCUnaryServerInterceptor(testHooks)
+
+	response, err := interceptor(
+		context.Background(),
+		&matchingservice.AddWorkflowTaskRequest{NamespaceId: "namespace-id"},
+		&grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"},
+		func(context.Context, any) (any, error) {
+			return "response", nil
+		},
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, "replacement", response)
+	require.Equal(t, []string{"namespace", "global"}, calls)
+}
+
+func TestGRPCUnaryServerInterceptor_NamespaceResponseBeforeGlobal(t *testing.T) {
+	t.Parallel()
+
+	testHooks := testhooks.NewTestHooks()
+	globalCalled := false
+	testhooks.Set(
+		testHooks,
+		testhooks.RPCResponseFaultGeneratorByNamespaceID,
+		func(context.Context, string, any, any, error) (bool, any, error) {
+			return true, "namespace response", nil
+		},
+		namespace.ID("namespace-id"),
+	)
+	testhooks.Set(
+		testHooks,
+		testhooks.RPCResponseFaultGenerator,
+		func(context.Context, string, any, any, error) (bool, any, error) {
+			globalCalled = true
+			return true, "global response", nil
+		},
+		testhooks.GlobalScope,
+	)
+	interceptor := GRPCUnaryServerInterceptor(testHooks)
+
+	response, err := interceptor(
+		context.Background(),
+		&matchingservice.AddWorkflowTaskRequest{NamespaceId: "namespace-id"},
+		&grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"},
+		func(context.Context, any) (any, error) {
+			return "response", nil
+		},
+	)
+
+	require.NoError(t, err)
+	require.Equal(t, "namespace response", response)
+	require.False(t, globalCalled)
+}

@@ -29,7 +29,7 @@ type rpcCallbackEntry struct {
 	callback rpcCallback
 }
 
-// RPCFaultScope identifies a namespace by ID, name, or both.
+// RPCFaultScope identifies a namespace by ID, name, or both. An empty scope applies globally.
 type RPCFaultScope struct {
 	NamespaceID   namespace.ID
 	NamespaceName namespace.Name
@@ -90,7 +90,7 @@ func (r *RPCFaultGenerator) registerCallback(scope RPCFaultScope, stage rpcFault
 		scopes = append(scopes, rpcCallbackScope{RPCFaultScope: RPCFaultScope{NamespaceName: scope.NamespaceName}, stage: stage})
 	}
 	if len(scopes) == 0 {
-		return func() {}
+		scopes = append(scopes, rpcCallbackScope{stage: stage})
 	}
 
 	r.mu.Lock()
@@ -138,14 +138,22 @@ func (r *RPCFaultGenerator) installHook(scope rpcCallbackScope) func() {
 		return testhooks.Set(r.testHooks, testhooks.RPCResponseFaultGeneratorByNamespaceID, func(ctx context.Context, fullMethod string, req, resp any, err error) (bool, any, error) {
 			return r.generate(ctx, fullMethod, scope, req, resp, err)
 		}, scope.NamespaceID)
-	case scope.stage == rpcFaultStageRequest:
+	case scope.NamespaceName != "" && scope.stage == rpcFaultStageRequest:
 		return testhooks.Set(r.testHooks, testhooks.RPCRequestFaultGeneratorByNamespaceName, func(ctx context.Context, fullMethod string, req any) (bool, any, error) {
 			return r.generate(ctx, fullMethod, scope, req, nil, nil)
 		}, scope.NamespaceName)
-	default:
+	case scope.NamespaceName != "":
 		return testhooks.Set(r.testHooks, testhooks.RPCResponseFaultGeneratorByNamespaceName, func(ctx context.Context, fullMethod string, req, resp any, err error) (bool, any, error) {
 			return r.generate(ctx, fullMethod, scope, req, resp, err)
 		}, scope.NamespaceName)
+	case scope.stage == rpcFaultStageRequest:
+		return testhooks.Set(r.testHooks, testhooks.RPCRequestFaultGenerator, func(ctx context.Context, fullMethod string, req any) (bool, any, error) {
+			return r.generate(ctx, fullMethod, scope, req, nil, nil)
+		}, testhooks.GlobalScope)
+	default:
+		return testhooks.Set(r.testHooks, testhooks.RPCResponseFaultGenerator, func(ctx context.Context, fullMethod string, req, resp any, err error) (bool, any, error) {
+			return r.generate(ctx, fullMethod, scope, req, resp, err)
+		}, testhooks.GlobalScope)
 	}
 }
 

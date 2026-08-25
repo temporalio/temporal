@@ -30,6 +30,11 @@ func GRPCUnaryServerInterceptor(testHooks testhooks.TestHooks) grpc.UnaryServerI
 				return resp, err
 			}
 		}
+		if generate, ok := testhooks.Get(testHooks, testhooks.RPCRequestFaultGenerator, testhooks.GlobalScope); ok {
+			if matched, resp, err := generate(ctx, info.FullMethod, req); matched {
+				return resp, err
+			}
+		}
 
 		// Call handler
 		resp, err := handler(ctx, req)
@@ -40,7 +45,11 @@ func GRPCUnaryServerInterceptor(testHooks testhooks.TestHooks) grpc.UnaryServerI
 				return newResp, newErr
 			}
 		}
-
+		if generate, ok := testhooks.Get(testHooks, testhooks.RPCResponseFaultGenerator, testhooks.GlobalScope); ok {
+			if matched, newResp, newErr := generate(ctx, info.FullMethod, req, resp, err); matched {
+				return newResp, newErr
+			}
+		}
 		return resp, err
 	}
 }

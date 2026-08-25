@@ -13,7 +13,7 @@ import (
 	"go.temporal.io/server/common/testing/testhooks"
 )
 
-func TestNoCallbacks(t *testing.T) {
+func TestRPCFaultGenerator_NoCallbacks(t *testing.T) {
 	t.Parallel()
 
 	testHooks := testhooks.NewTestHooks()
@@ -23,7 +23,36 @@ func TestNoCallbacks(t *testing.T) {
 	require.False(t, ok)
 }
 
-func TestCallbackSeparationAndArguments(t *testing.T) {
+func TestRPCFaultGenerator_GlobalScope(t *testing.T) {
+	t.Parallel()
+
+	testHooks := testhooks.NewTestHooks()
+	generator := NewRPCFaultGenerator(testHooks)
+	request := &struct{}{}
+	response := &struct{}{}
+	generator.RegisterRequestCallback(RPCFaultScope{}, func(context.Context, string, any) (bool, any, error) {
+		return true, response, nil
+	})
+	generator.RegisterResponseCallback(RPCFaultScope{}, func(context.Context, string, any, any, error) (bool, any, error) {
+		return true, response, nil
+	})
+
+	generateRequest, ok := testhooks.Get(testHooks, testhooks.RPCRequestFaultGenerator, testhooks.GlobalScope)
+	require.True(t, ok)
+	matched, actualResponse, err := generateRequest(context.Background(), "/test.Service/Method", request)
+	require.NoError(t, err)
+	require.True(t, matched)
+	require.Same(t, response, actualResponse)
+
+	generateResponse, ok := testhooks.Get(testHooks, testhooks.RPCResponseFaultGenerator, testhooks.GlobalScope)
+	require.True(t, ok)
+	matched, actualResponse, err = generateResponse(context.Background(), "/test.Service/Method", request, nil, nil)
+	require.NoError(t, err)
+	require.True(t, matched)
+	require.Same(t, response, actualResponse)
+}
+
+func TestRPCFaultGenerator_CallbackSeparationAndArguments(t *testing.T) {
 	t.Parallel()
 
 	testHooks := testhooks.NewTestHooks()
@@ -73,7 +102,7 @@ func TestCallbackSeparationAndArguments(t *testing.T) {
 	require.Equal(t, 1, responseCalls)
 }
 
-func TestFirstMatchWins(t *testing.T) {
+func TestRPCFaultGenerator_FirstMatchWins(t *testing.T) {
 	t.Parallel()
 
 	testHooks := testhooks.NewTestHooks()
@@ -102,7 +131,7 @@ func TestFirstMatchWins(t *testing.T) {
 	require.Equal(t, []int{1, 2}, calls)
 }
 
-func TestUnregisterIsIdempotent(t *testing.T) {
+func TestRPCFaultGenerator_UnregisterIsIdempotent(t *testing.T) {
 	t.Parallel()
 
 	testHooks := testhooks.NewTestHooks()
@@ -118,7 +147,7 @@ func TestUnregisterIsIdempotent(t *testing.T) {
 	require.False(t, ok)
 }
 
-func TestUnregisterDuringGenerate(t *testing.T) {
+func TestRPCFaultGenerator_UnregisterDuringGenerate(t *testing.T) {
 	t.Parallel()
 
 	testHooks := testhooks.NewTestHooks()
@@ -156,7 +185,7 @@ func TestUnregisterDuringGenerate(t *testing.T) {
 	require.False(t, ok)
 }
 
-func TestRegistersNamespaceIDAndNameAliases(t *testing.T) {
+func TestRPCFaultGenerator_RegistersNamespaceIDAndNameAliases(t *testing.T) {
 	t.Parallel()
 
 	testHooks := testhooks.NewTestHooks()
