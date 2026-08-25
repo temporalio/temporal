@@ -427,10 +427,10 @@ func TestCache_ItemHasCacheSizeDefined(t *testing.T) {
 	startWG.Add(numPuts)
 	endWG.Add(numPuts)
 
-	sizeWithinLimit := make(chan bool, 1)
+	sizeWithinLimit := make(chan bool)
 	go func() {
 		startWG.Wait()
-		sizeWithinLimit <- cache.Size() < maxTotalBytes
+		await.Snd(t, sizeWithinLimit, cache.Size() < maxTotalBytes)
 	}()
 	for range numPuts {
 		go func() {
@@ -443,7 +443,7 @@ func TestCache_ItemHasCacheSizeDefined(t *testing.T) {
 		startWG.Done()
 	}
 
-	sizeWasWithinLimit := <-sizeWithinLimit
+	sizeWasWithinLimit := await.Rcv(t, sizeWithinLimit)
 	endWG.Wait()
 	require.True(t, sizeWasWithinLimit)
 }
