@@ -404,10 +404,17 @@ lint-actions: $(ACTIONLINT)
 	@printf $(COLOR) "Linting GitHub actions..."
 	@$(ACTIONLINT)
 
-.PHONY: lint-code lint-code-changed
-lint-code-changed:
-	@targets=$$(./develop/golangci-lint-targets.sh "$(GOLANGCI_LINT_BASE_REV)") && \
-		$(MAKE) GOLANGCI_LINT_TARGETS="$$targets" lint-code
+.PHONY: lint-code lint-code-fast
+lint-code-fast:
+	@git rev-parse --verify --quiet "$(GOLANGCI_LINT_BASE_REV)^{commit}" >/dev/null
+	@targets=$$({ \
+		git diff --name-only --diff-filter=ACMR "$(GOLANGCI_LINT_BASE_REV)" -- '*.go'; \
+		git ls-files --others --exclude-standard -- '*.go'; \
+	} | while IFS= read -r file; do \
+		dir=$$(dirname "$$file"); \
+		[ "$$dir" = "." ] && echo "." || echo "./$$dir"; \
+	done | sort -u); \
+	$(MAKE) GOLANGCI_LINT_TARGETS="$$targets" lint-code
 
 lint-code: $(GOLANGCI_LINT) $(ERRORTYPE)
 	@printf $(COLOR) "Linting code..."
