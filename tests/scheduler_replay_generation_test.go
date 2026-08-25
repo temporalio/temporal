@@ -14,6 +14,7 @@ import (
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -47,7 +48,7 @@ func TestGenerateSchedulerVersionCeilingReplayHistory(t *testing.T) {
 		testcore.WithWorkerService("V1 scheduler replay fixture"),
 	)...)
 	env.OverrideDynamicConfig(dynamicconfig.SchedulerV1VersionCeiling, ceiling)
-	ctx := env.Context()
+	ctx := testcore.NewContext()
 	scheduleID := testcore.RandomizeStr("version-ceiling-replay")
 	workflowID := scheduler.WorkflowIDPrefix + scheduleID
 
@@ -58,7 +59,7 @@ func TestGenerateSchedulerVersionCeilingReplayHistory(t *testing.T) {
 	})
 
 	var runID string
-	require.Eventually(t, func() bool {
+	await.RequireTruef(t, func() bool {
 		desc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: env.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
@@ -71,7 +72,7 @@ func TestGenerateSchedulerVersionCeilingReplayHistory(t *testing.T) {
 	}, 30*time.Second, 100*time.Millisecond, "V1 scheduler workflow did not start")
 
 	// Wait until the first task has recorded tweakables before forcing the run to close.
-	require.Eventually(t, func() bool {
+	await.RequireTruef(t, func() bool {
 		iter := env.SdkClient().GetWorkflowHistory(ctx, workflowID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 		for iter.HasNext() {
 			event, err := iter.Next()
@@ -96,7 +97,7 @@ func TestGenerateSchedulerVersionCeilingReplayHistory(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.Eventually(t, func() bool {
+	await.RequireTruef(t, func() bool {
 		desc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: env.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
