@@ -348,7 +348,7 @@ func TestReplaceAssignmentRuleBasic(t *testing.T) {
 	_, err = replaceAssignmentRule(rule11, data, clock, 99, false)
 	require.Error(t, err)
 
-	_, err = replaceAssignmentRule(rule11, data, clock, 99, false)
+	_, err = replaceAssignmentRule(rule11, data, clock, -1, false)
 	require.Error(t, err)
 }
 
@@ -388,9 +388,6 @@ func TestReplaceAssignmentRuleTestRequireFullyRamped(t *testing.T) {
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)
 	var err error
-	data.AssignmentRules = []*persistencespb.AssignmentRule{
-		mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("1", 10), clock, nil),
-	}
 
 	// replace fully-ramped rule with partially-ramped rule --> failure
 	data.AssignmentRules = []*persistencespb.AssignmentRule{
@@ -486,9 +483,6 @@ func TestDeleteAssignmentRuleTestRequireFullyRamped(t *testing.T) {
 	clock := hlc.Zero(1)
 	data := mkInitialData(0, clock)
 	var err error
-	data.AssignmentRules = []*persistencespb.AssignmentRule{
-		mkAssignmentRulePersistence(mkAssignmentRuleWithRamp("1", 10), clock, nil),
-	}
 
 	// delete only fully-ramped rule --> failure
 	data.AssignmentRules = []*persistencespb.AssignmentRule{
