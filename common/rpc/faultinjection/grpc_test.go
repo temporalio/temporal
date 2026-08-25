@@ -24,7 +24,7 @@ func TestRPCFaultGenerator_GenerateRequest(t *testing.T) {
 	type callback struct {
 		name     string
 		scope    RPCFaultScope
-		matched  bool
+		miss     bool
 		response any
 		err      error
 	}
@@ -44,8 +44,8 @@ func TestRPCFaultGenerator_GenerateRequest(t *testing.T) {
 			name:    "namespace before global",
 			request: &matchingservice.AddWorkflowTaskRequest{NamespaceId: "namespace-id"},
 			callbacks: []callback{
-				{name: "namespace", scope: RPCFaultScope{NamespaceID: "namespace-id"}, matched: true, response: "namespace response"},
-				{name: "global", matched: true, response: "global response"},
+				{name: "namespace", scope: RPCFaultScope{NamespaceID: "namespace-id"}, response: "namespace response"},
+				{name: "global", response: "global response"},
 			},
 			response: "namespace response",
 			calls:    []string{"namespace"},
@@ -54,8 +54,8 @@ func TestRPCFaultGenerator_GenerateRequest(t *testing.T) {
 			name:    "global after namespace miss",
 			request: &matchingservice.AddWorkflowTaskRequest{NamespaceId: "namespace-id"},
 			callbacks: []callback{
-				{name: "namespace", scope: RPCFaultScope{NamespaceID: "namespace-id"}},
-				{name: "global", matched: true, response: "response"},
+				{name: "namespace", scope: RPCFaultScope{NamespaceID: "namespace-id"}, miss: true},
+				{name: "global", response: "response"},
 			},
 			response: "response",
 			calls:    []string{"namespace", "global"},
@@ -64,7 +64,7 @@ func TestRPCFaultGenerator_GenerateRequest(t *testing.T) {
 			name:    "namespace mismatch",
 			request: &matchingservice.AddWorkflowTaskRequest{NamespaceId: "other-namespace-id"},
 			callbacks: []callback{
-				{name: "namespace", scope: RPCFaultScope{NamespaceID: "namespace-id"}, matched: true, err: errors.New("injected")},
+				{name: "namespace", scope: RPCFaultScope{NamespaceID: "namespace-id"}, err: errors.New("injected")},
 			},
 		},
 		{
@@ -74,16 +74,16 @@ func TestRPCFaultGenerator_GenerateRequest(t *testing.T) {
 				UpdateNamespaceRequest: &workflowservice.UpdateNamespaceRequest{Namespace: "namespace-name"},
 			},
 			callbacks: []callback{
-				{name: "namespace", scope: RPCFaultScope{NamespaceName: "namespace-name"}, matched: true, err: errors.New("injected")},
+				{name: "namespace", scope: RPCFaultScope{NamespaceName: "namespace-name"}, err: errors.New("injected")},
 			},
 		},
 		{
 			name:    "first match wins",
 			request: &matchingservice.AddWorkflowTaskRequest{NamespaceId: "namespace-id"},
 			callbacks: []callback{
-				{name: "first", scope: RPCFaultScope{NamespaceID: "namespace-id"}}, // no match!
-				{name: "second", scope: RPCFaultScope{NamespaceID: "namespace-id"}, matched: true, response: "response"},
-				{name: "third", scope: RPCFaultScope{NamespaceID: "namespace-id"}, matched: true, response: "other response"}, // never reached!
+				{name: "first", scope: RPCFaultScope{NamespaceID: "namespace-id"}, miss: true}, // no match!
+				{name: "second", scope: RPCFaultScope{NamespaceID: "namespace-id"}, response: "response"},
+				{name: "third", scope: RPCFaultScope{NamespaceID: "namespace-id"}, response: "other response"}, // never reached!
 			},
 			response: "response",
 			calls:    []string{"first", "second"},
@@ -97,7 +97,7 @@ func TestRPCFaultGenerator_GenerateRequest(t *testing.T) {
 			for _, callback := range test.callbacks {
 				generator.RegisterRequestCallback(callback.scope, func(context.Context, string, any) (bool, any, error) {
 					calls = append(calls, callback.name)
-					return callback.matched, callback.response, callback.err
+					return !callback.miss, callback.response, callback.err
 				})
 			}
 
@@ -272,7 +272,7 @@ func TestRPCFaultGenerator_Unregister(t *testing.T) {
 	})
 }
 
-func TestRPCFaultGenerator_RegistersNamespaceIDAndNameAliases(t *testing.T) {
+func TestRPCFaultGenerator_ScopeWithNamespaceIDAndName(t *testing.T) {
 	t.Parallel()
 
 	generator := NewRPCFaultGenerator()
