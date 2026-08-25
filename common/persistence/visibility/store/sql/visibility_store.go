@@ -277,8 +277,7 @@ func (s *VisibilityStore) countChasmExecutions(
 		request.ArchetypeId,
 	)
 	if err != nil {
-		var converterErr *query.ConverterError
-		if errors.As(err, &converterErr) {
+		if converterErr, ok := errors.AsType[*query.ConverterError](err); ok {
 			return nil, converterErr.ToInvalidArgument()
 		}
 		return nil, err
@@ -326,8 +325,7 @@ func (s *VisibilityStore) countChasmExecutionsLegacy(
 	)
 	selectFilter, err := converter.BuildCountStmt()
 	if err != nil {
-		var converterErr *query.ConverterError
-		if errors.As(err, &converterErr) {
+		if converterErr, ok := errors.AsType[*query.ConverterError](err); ok {
 			return nil, converterErr.ToInvalidArgument()
 		}
 		return nil, err
@@ -391,8 +389,7 @@ func (s *VisibilityStore) listExecutionsInternal(
 	if err != nil {
 		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be
 		// only mapper errors).
-		var converterErr *query.ConverterError
-		if errors.As(err, &converterErr) {
+		if converterErr, ok := errors.AsType[*query.ConverterError](err); ok {
 			return nil, converterErr.ToInvalidArgument()
 		}
 		return nil, err
@@ -493,8 +490,7 @@ func (s *VisibilityStore) listExecutionsInternalLegacy(
 	selectFilter, err := converter.BuildSelectStmt(request.PageSize, request.NextPageToken)
 	if err != nil {
 		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be only mapper errors).
-		var converterErr *query.ConverterError
-		if errors.As(err, &converterErr) {
+		if converterErr, ok := errors.AsType[*query.ConverterError](err); ok {
 			return nil, converterErr.ToInvalidArgument()
 		}
 		return nil, err
@@ -575,8 +571,7 @@ func (s *VisibilityStore) countWorkflowExecutionsLegacy(
 	selectFilter, err := converter.BuildCountStmt()
 	if err != nil {
 		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be only mapper errors).
-		var converterErr *query.ConverterError
-		if errors.As(err, &converterErr) {
+		if converterErr, ok := errors.AsType[*query.ConverterError](err); ok {
 			return nil, converterErr.ToInvalidArgument()
 		}
 		return nil, err
@@ -626,8 +621,7 @@ func (s *VisibilityStore) countWorkflowExecutions(
 	if err != nil {
 		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be
 		// only mapper errors).
-		var converterErr *query.ConverterError
-		if errors.As(err, &converterErr) {
+		if converterErr, ok := errors.AsType[*query.ConverterError](err); ok {
 			return nil, converterErr.ToInvalidArgument()
 		}
 		return nil, err

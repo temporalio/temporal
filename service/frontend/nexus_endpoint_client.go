@@ -416,8 +416,7 @@ func (c *NexusEndpointClient) transformServiceError(err error, message string) e
 	if err == nil {
 		return nil
 	}
-	var notFound *serviceerror.NotFound
-	if errors.As(err, &notFound) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 		return err
 	}
 	c.logger.Error(message, tag.Error(err))

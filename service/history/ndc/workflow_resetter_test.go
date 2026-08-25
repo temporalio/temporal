@@ -374,6 +374,69 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentExecutionMissing() {
 func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 	ctx := context.Background()
 	baseBranchToken := []byte("some random base branch token")
+	forkedBaseBranchToken := []byte("some random forked base branch token")
+	baseRebuildLastEventID := int64(1233)
+	baseRebuildLastEventVersion := int64(12)
+
+	resetBranchToken := []byte("some random reset branch token")
+	resetRequestID := uuid.NewString()
+	resetStats := RebuildStats{
+		HistorySize:          4411,
+		ExternalPayloadSize:  1234,
+		ExternalPayloadCount: 56,
+	}
+	resetMutableState := historyi.NewMockMutableState(s.controller)
+
+	s.mockExecutionMgr.EXPECT().ForkHistoryBranch(gomock.Any(), gomock.Any()).Return(
+		&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken, BaseBranchToken: forkedBaseBranchToken}, nil,
+	)
+
+	s.mockStateRebuilder.EXPECT().Rebuild(
+		ctx,
+		gomock.Any(),
+		definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			s.workflowID,
+			s.baseRunID,
+		),
+		forkedBaseBranchToken,
+		baseRebuildLastEventID,
+		new(baseRebuildLastEventVersion),
+		definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			s.workflowID,
+			s.resetRunID,
+		),
+		resetBranchToken,
+		resetRequestID,
+	).Return(resetMutableState, resetStats, nil)
+	resetMutableState.EXPECT().SetBaseWorkflow(
+		s.baseRunID,
+		baseRebuildLastEventID,
+		baseRebuildLastEventVersion,
+	)
+	resetMutableState.EXPECT().AddHistorySize(resetStats.HistorySize)
+	resetMutableState.EXPECT().AddExternalPayloadSize(resetStats.ExternalPayloadSize)
+	resetMutableState.EXPECT().AddExternalPayloadCount(resetStats.ExternalPayloadCount)
+
+	resetWorkflow, err := s.workflowResetter.replayResetWorkflow(
+		ctx,
+		s.namespaceID,
+		s.workflowID,
+		s.baseRunID,
+		baseBranchToken,
+		baseRebuildLastEventID,
+		baseRebuildLastEventVersion,
+		s.resetRunID,
+		resetRequestID,
+	)
+	s.NoError(err)
+	s.Equal(resetMutableState, resetWorkflow.GetMutableState())
+}
+
+func (s *workflowResetterSuite) TestReplayResetWorkflow_EmptyBaseBranchToken() {
+	ctx := context.Background()
+	baseBranchToken := []byte("some random base branch token")
 	baseRebuildLastEventID := int64(1233)
 	baseRebuildLastEventVersion := int64(12)
 
@@ -598,6 +661,31 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 
 func (s *workflowResetterSuite) TestGenerateBranchToken() {
 	baseBranchToken := []byte("some random base branch token")
+	resurrectedBaseBranchToken := []byte("some random resurrected new base branch token")
+	baseNodeID := int64(1234)
+
+	resetBranchToken := []byte("some random reset branch token")
+
+	shardID := s.mockShard.GetShardID()
+	s.mockExecutionMgr.EXPECT().ForkHistoryBranch(gomock.Any(), &persistence.ForkHistoryBranchRequest{
+		ForkBranchToken: baseBranchToken,
+		ForkNodeID:      baseNodeID,
+		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID.String(), s.workflowID, s.resetRunID),
+		ShardID:         shardID,
+		NamespaceID:     s.namespaceID.String(),
+		NewRunID:        s.resetRunID,
+	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken, BaseBranchToken: resurrectedBaseBranchToken}, nil)
+
+	newBranchToken, newBaseBranchToken, err := s.workflowResetter.forkAndGenerateBranchToken(
+		context.Background(), s.namespaceID, s.workflowID, baseBranchToken, baseNodeID, s.resetRunID,
+	)
+	s.NoError(err)
+	s.Equal(resetBranchToken, newBranchToken)
+	s.Equal(resurrectedBaseBranchToken, newBaseBranchToken)
+}
+
+func (s *workflowResetterSuite) TestGenerateBranchToken_EmptyBaseBranchToken() {
+	baseBranchToken := []byte("some random base branch token")
 	baseNodeID := int64(1234)
 
 	resetBranchToken := []byte("some random reset branch token")
@@ -612,11 +700,12 @@ func (s *workflowResetterSuite) TestGenerateBranchToken() {
 		NewRunID:        s.resetRunID,
 	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken}, nil)
 
-	newBranchToken, err := s.workflowResetter.forkAndGenerateBranchToken(
+	newBranchToken, newBaseBranchToken, err := s.workflowResetter.forkAndGenerateBranchToken(
 		context.Background(), s.namespaceID, s.workflowID, baseBranchToken, baseNodeID, s.resetRunID,
 	)
 	s.NoError(err)
 	s.Equal(resetBranchToken, newBranchToken)
+	s.Equal(baseBranchToken, newBaseBranchToken)
 }
 
 func (s *workflowResetterSuite) TestTerminateWorkflow() {
