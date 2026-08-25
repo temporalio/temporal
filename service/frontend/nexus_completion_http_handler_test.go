@@ -198,7 +198,7 @@ func TestCompleteOperation_FrameworkFallback(t *testing.T) {
 			h := &nexusCompletionHandler{HistoryClient: client}
 			req := &nexusrpc.CompletionRequest{State: nexus.OperationStateSucceeded, OperationToken: "operation-token"}
 
-			err := h.completeOperation(context.Background(), log.NewNoopLogger(), tc.token(t), &commonpb.Payload{}, req, nil, !tc.chasmDisabled, 0, 0)
+			err := h.completeOperation(context.Background(), log.NewNoopLogger(), tc.token(t), &commonpb.Payload{}, nil, false, req, nil, !tc.chasmDisabled)
 			if tc.wantErr != nil {
 				require.ErrorIs(t, err, tc.wantErr)
 			} else {
@@ -227,6 +227,16 @@ func wrappedTemporalFailure(t *testing.T, cause *failurepb.Failure) *nexus.Failu
 	}
 }
 
+func completionFailure(t *testing.T, original *nexus.Failure, blobSizeLimitError, blobSizeLimitWarn int) (*failurepb.Failure, bool) {
+	t.Helper()
+	failure, err := commonnexus.NexusFailureToTemporalFailure(*nexusrpc.UnwrapFailure(original))
+	require.NoError(t, err)
+	if failure.Size() <= blobSizeLimitError {
+		return failure, false
+	}
+	return truncateOversizedFailure(failure, blobSizeLimitError, blobSizeLimitWarn), true
+}
+
 // completeHSMAndCaptureFailure returns the HSM failure sent to History.
 func completeHSMAndCaptureFailure(
 	t *testing.T,
@@ -248,8 +258,9 @@ func completeHSMAndCaptureFailure(
 		State: state,
 		Error: &nexus.OperationError{State: state, OriginalFailure: originalFailure},
 	}
+	failure, failureTruncated := completionFailure(t, originalFailure, blobSizeLimitError, blobSizeLimitWarn)
 
-	err := h.completeOperation(context.Background(), log.NewNoopLogger(), hsmCompletionToken(), nil, req, nil, false, blobSizeLimitError, blobSizeLimitWarn)
+	err := h.completeOperation(context.Background(), log.NewNoopLogger(), hsmCompletionToken(), nil, failure, failureTruncated, req, nil, false)
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	return got
@@ -261,9 +272,8 @@ func TestCompleteOperation_HSM_FailureSize(t *testing.T) {
 	longMessage := strings.Repeat("this failure message is way too long to fit under the configured limits. ", 10)
 	t.Run("forwards failures below the limit", func(t *testing.T) {
 		original := &nexus.Failure{Message: "small failure", Metadata: map[string]string{"k": "v"}}
-		got := decodeCanonicalFailure(t, completeHSMAndCaptureFailure(t, nexus.OperationStateFailed, original, 1<<20, 1<<20))
-		want, err := commonnexus.NexusFailureToTemporalFailure(*nexusrpc.UnwrapFailure(original))
-		require.NoError(t, err)
+		got := completeHSMAndCaptureFailure(t, nexus.OperationStateFailed, original, 1<<20, 1<<20)
+		want := commonnexus.NexusFailureToProtoFailure(*original)
 		require.True(t, proto.Equal(want, got))
 	})
 
@@ -296,14 +306,12 @@ func TestCompleteOperation_HSM_FailureSize(t *testing.T) {
 		wireSize := commonnexus.NexusFailureToProtoFailure(originalFailure).Size()
 		canonical, err := commonnexus.NexusFailureToTemporalFailure(originalFailure)
 		require.NoError(t, err)
-		canonicalSize := canonical.Size()
-		require.Greater(t, wireSize, canonicalSize)
-		limit := (wireSize + canonicalSize) / 2
-		require.Greater(t, limit, canonicalSize)
-		require.Less(t, limit, wireSize)
+		limit := canonical.Size()
+		require.Greater(t, wireSize, limit)
 
-		got := decodeCanonicalFailure(t, completeHSMAndCaptureFailure(t, nexus.OperationStateFailed, &originalFailure, limit, limit))
-		require.Equal(t, originalFailure.Message, got.GetMessage())
+		got := completeHSMAndCaptureFailure(t, nexus.OperationStateFailed, &originalFailure, limit, limit)
+		want := commonnexus.NexusFailureToProtoFailure(originalFailure)
+		require.True(t, proto.Equal(want, got))
 	})
 }
 
@@ -328,8 +336,9 @@ func completeChasmAndCaptureFailure(
 		State: state,
 		Error: &nexus.OperationError{State: state, OriginalFailure: originalFailure},
 	}
+	failure, failureTruncated := completionFailure(t, originalFailure, blobSizeLimitError, blobSizeLimitWarn)
 
-	err := h.completeOperation(context.Background(), log.NewNoopLogger(), chasmCompletionToken(t), nil, req, nil, true, blobSizeLimitError, blobSizeLimitWarn)
+	err := h.completeOperation(context.Background(), log.NewNoopLogger(), chasmCompletionToken(t), nil, failure, failureTruncated, req, nil, true)
 	require.NoError(t, err)
 	require.NotNil(t, got)
 	return got
@@ -364,7 +373,7 @@ func TestTruncateOversizedFailure(t *testing.T) {
 
 	t.Run("within budget is returned unchanged", func(t *testing.T) {
 		f := &failurepb.Failure{Message: "small"}
-		got := truncateOversizedFailure(log.NewNoopLogger(), f, 1000, 500)
+		got := truncateOversizedFailure(f, 1000, 500)
 		require.Same(t, f, got)
 	})
 
@@ -379,7 +388,7 @@ func TestTruncateOversizedFailure(t *testing.T) {
 		{"warn misconfigured above error", 100, 1 << 20},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := truncateOversizedFailure(log.NewNoopLogger(), oversized, tc.errorLimit, tc.warnLimit)
+			got := truncateOversizedFailure(oversized, tc.errorLimit, tc.warnLimit)
 			require.LessOrEqual(t, got.Size(), tc.errorLimit, "truncated failure must respect the error limit regardless of the warn limit")
 			require.Equal(t, common.FailureReasonFailureExceedsLimit, got.GetMessage())
 			require.NotNil(t, got.GetCause())
