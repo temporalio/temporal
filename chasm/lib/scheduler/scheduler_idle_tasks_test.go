@@ -5,10 +5,13 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
@@ -97,6 +100,59 @@ func TestIdleTask_ExecuteInitializesEventLogMissingFromOlderTree(t *testing.T) {
 	eventLog := sched.EventLog.Get(ctx)
 	require.Len(t, eventLog.Events, 1)
 	require.Equal(t, "schedule closed from idle timer", eventLog.Events[0].Message)
+}
+
+func TestIdleTask_AllowAllStartRearmsIdleTimer(t *testing.T) {
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	timeSource := clock.NewEventTimeSource()
+	timeSource.Update(base)
+
+	schedule := defaultSchedule()
+	schedule.Spec = &schedulepb.ScheduleSpec{}
+	testEngine := newSchedulerTestEngine(t, schedule, withEngineTimeSource(timeSource))
+
+	_, err := testEngine.engine.FirePureTasks(testEngine.rootRef, base)
+	require.NoError(t, err)
+	oldIdleDeadline := base.Add(scheduler.DefaultTweakables.IdleTime)
+	require.NoError(t, testEngine.readScheduler(func(s *scheduler.Scheduler, _ chasm.Context) error {
+		require.Equal(t, oldIdleDeadline, s.IdleCloseTime.AsTime())
+		return nil
+	}))
+
+	startTime := base.Add(time.Minute)
+	timeSource.Update(startTime)
+	require.NoError(t, testEngine.updateScheduler(func(s *scheduler.Scheduler, ctx chasm.MutableContext) error {
+		invoker := s.Invoker.Get(ctx)
+		invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{
+			RequestId:     "allow-all-request",
+			WorkflowId:    "allow-all-workflow",
+			NominalTime:   timestamppb.New(startTime),
+			ActualTime:    timestamppb.New(startTime),
+			DesiredTime:   timestamppb.New(startTime),
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			Attempt:       1,
+		})
+		_, _, startOnlyActions := invoker.RecordExecuteResult(ctx, []*schedulespb.BufferedStart{{
+			RequestId:     "allow-all-request",
+			RunId:         "allow-all-run",
+			StartTime:     timestamppb.New(startTime),
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		}}, nil)
+		s.RecordStartOnlyActions(ctx, startOnlyActions)
+		return nil
+	}))
+
+	_, err = testEngine.engine.FirePureTasks(testEngine.rootRef, oldIdleDeadline)
+	require.NoError(t, err)
+
+	newIdleDeadline := startTime.Add(scheduler.DefaultTweakables.IdleTime)
+	timeSource.Update(newIdleDeadline)
+	_, err = testEngine.engine.FirePureTasks(testEngine.rootRef, newIdleDeadline)
+	require.NoError(t, err)
+	require.NoError(t, testEngine.readScheduler(func(s *scheduler.Scheduler, _ chasm.Context) error {
+		require.True(t, s.Closed)
+		return nil
+	}))
 }
 
 func TestIdleTask_Validate_SchedulerNotIdle(t *testing.T) {
