@@ -73,6 +73,7 @@ type (
 	// MaybeTerminalTaskError are errors which (if IsTerminalTaskError returns true) cannot be retried and should
 	// not be rescheduled. Tasks should be enqueued to the DLQ immediately if an error is marked as terminal.
 	MaybeTerminalTaskError interface {
+		error
 		IsTerminalTaskError() bool
 	}
 )
@@ -476,8 +477,7 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 		}
 	}()
 
-	var resourceExhaustedErr *serviceerror.ResourceExhausted
-	if errors.As(err, &resourceExhaustedErr) {
+	if resourceExhaustedErr, ok := errors.AsType[*serviceerror.ResourceExhausted](err); ok {
 		switch resourceExhaustedErr.Cause { //nolint:exhaustive
 		case enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW:
 			err = consts.ErrResourceExhaustedBusyWorkflow
@@ -520,8 +520,7 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 }
 
 func (e *executableImpl) isUnexpectedNonRetryableError(err error) bool {
-	var terr MaybeTerminalTaskError
-	if errors.As(err, &terr) {
+	if terr, ok := errors.AsType[MaybeTerminalTaskError](err); ok {
 		return terr.IsTerminalTaskError()
 	}
 

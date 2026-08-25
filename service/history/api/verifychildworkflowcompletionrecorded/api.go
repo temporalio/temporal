@@ -245,8 +245,7 @@ func resendParentAndVerify(
 			// TODO: add parent workflow to workflowNotFoundCache
 			return &historyservice.VerifyChildExecutionCompletionRecordedResponse{}, nil
 		}
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		if errors.As(err, &failedPreconditionErr) {
+		if _, ok := errors.AsType[*serviceerror.FailedPrecondition](err); ok {
 			// Unable to perform sync state. Transition history maybe disabled in source cluster.
 			return nil, errVerify
 		}
