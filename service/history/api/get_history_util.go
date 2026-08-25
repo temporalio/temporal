@@ -357,6 +357,14 @@ func ProcessOutgoingSearchAttributes(
 ) error {
 	saTypeMap, err := saProvider.GetSearchAttributes(persistenceVisibilityMgr.GetIndexName(), false)
 	if err != nil {
+		// Preserve a persistence rate-limit error's type instead of flattening it to
+		// Unavailable: common/backoff.Retry only applies its longer throttle backoff to
+		// *serviceerror.ResourceExhausted (via a direct type assertion), so wrapping it here
+		// would cause callers to retry against an already-exhausted persistence budget at the
+		// ordinary, faster rate.
+		if common.IsResourceExhausted(err) {
+			return err
+		}
 		return serviceerror.NewUnavailablef(consts.ErrUnableToGetSearchAttributesMessage, err)
 	}
 	for _, event := range events {
