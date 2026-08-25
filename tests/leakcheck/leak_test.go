@@ -44,7 +44,7 @@ var objectLeakOpts = []objectleak.Option{
 //	LEAK_ITERS_WARMUP  warmup clusters before snapshotting the baseline
 //	LEAK_OUTPUT_DIR    directory for diagnostics on failure
 //	LEAK_GC_SETTLE_TIMEOUT maximum time to settle object leak checks
-//	LEAK_HEAP_DUMP     set to 1 to write a raw heap dump and matching test executable on object leak failure; these files may contain sensitive data
+//	LEAK_HEAP_DUMP     set to 1 to write a raw heap dump on object leak failure; this file may contain sensitive data
 func TestClusterShutdownLeak(t *testing.T) {
 	iters, err := strconv.Atoi(os.Getenv("LEAK_ITERS"))
 	if err != nil {
