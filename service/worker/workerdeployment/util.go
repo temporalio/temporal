@@ -386,16 +386,14 @@ func isRetryableUpdateError(err error) bool {
 		return true
 	}
 
-	var errWfNotReady *serviceerror.WorkflowNotReady
-	if errors.As(err, &errWfNotReady) {
+	if _, ok := errors.AsType[*serviceerror.WorkflowNotReady](err); ok {
 		// Update edge cases, can retry.
 		return true
 	}
 
 	// All updates that are admitted as the workflow is closing due to CaN are considered retryable.
 	// The ErrWorkflowClosing and ResourceExhausted could be nested.
-	var errMultiOps *serviceerror.MultiOperationExecution
-	if errors.As(err, &errMultiOps) {
+	if errMultiOps, ok := errors.AsType[*serviceerror.MultiOperationExecution](err); ok {
 		for _, e := range errMultiOps.OperationErrors() {
 			if e == nil {
 				continue

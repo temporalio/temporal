@@ -216,6 +216,12 @@ func withEngineTimeSource(ts *clock.EventTimeSource) engineTestOption {
 	}
 }
 
+func withEngineMetricsHandler(handler metrics.Handler) engineTestOption {
+	return func(c *engineTestConfig) {
+		c.engineOpts = append(c.engineOpts, chasmtest.WithMetricsHandler(handler))
+	}
+}
+
 func newEngineTestConfig(opts ...engineTestOption) *engineTestConfig {
 	config := &engineTestConfig{}
 	for _, opt := range opts {

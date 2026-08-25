@@ -48,8 +48,11 @@ import (
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -89,6 +92,7 @@ type (
 		mockClusterMetadata         *cluster.MockMetadata
 		mockVisibilityManager       *manager.MockVisibilityManager
 		mockWorkflowStateReplicator *ndc.MockWorkflowStateReplicator
+		parentChildEventCapture     *parentChildEventCapture
 
 		workflowCache    wcache.Cache
 		historyEngine    *historyEngineImpl
@@ -142,6 +146,7 @@ func (s *engine2Suite) SetupTest() {
 	s.mockMemoryScheduledQueue.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
 
 	s.config = tests.NewDynamicConfig()
+	s.parentChildEventCapture = &parentChildEventCapture{}
 	mockShard := shard.NewTestContext(
 		s.controller,
 		&persistencespb.ShardInfo{
@@ -149,6 +154,7 @@ func (s *engine2Suite) SetupTest() {
 			RangeId: 1,
 		},
 		s.config,
+		s.parentChildEventCapture,
 	)
 	reg := hsm.NewRegistry()
 	err := workflow.RegisterStateMachine(reg)
@@ -2684,6 +2690,8 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_WorkflowNotExi
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParent() {
 	// Inline resend: the RPC pulls and re-verifies before returning.
 	s.config.EnableAsyncParentWorkflowResend = func() bool { return false }
+	s.config.EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	capture := s.parentChildEventCapture
 
 	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 		NamespaceId: tests.ParentNamespaceID.String(),
@@ -2705,7 +2713,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParent()
 	mockClusterMetadata := cluster.NewMockMetadata(s.controller)
 	mockClusterMetadata.EXPECT().GetClusterID().Return(tests.Version).AnyTimes()
 	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName).AnyTimes()
-	mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo)
+	mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, tests.Version).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockShard.SetClusterMetadata(mockClusterMetadata)
 
@@ -2740,17 +2748,13 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParent()
 	).Return(resp, nil)
 	s.mockWorkflowStateReplicator.EXPECT().ReplicateVersionedTransition(gomock.Any(), chasm.WorkflowArchetypeID, resp.VersionedTransitionArtifact, cluster.TestCurrentClusterName).Return(nil)
 
-	// prepare closed workflow
+	// The parent can land as a zombie after conflict resolution; preserve that state in the event.
 	ms := workflow.TestGlobalMutableState(s.historyEngine.shardContext, s.mockEventsCache, log.NewTestLogger(), tests.Version, tests.WorkflowID, tests.RunID)
 	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
 	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
-	_, err := ms.AddTimeoutWorkflowEvent(
-		enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
-		uuid.NewString(),
-	)
-	s.NoError(err)
+	ms.GetExecutionState().State = enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
 	ms.GetExecutionInfo().VersionHistories = &historyspb.VersionHistories{
 		CurrentVersionHistoryIndex: 0,
 		Histories: []*historyspb.VersionHistory{
@@ -2767,14 +2771,79 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParent()
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
-	_, err = s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
-	s.NoError(err)
+	_, err := s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
+	s.Require().NoError(err)
+
+	s.Require().Equal([]string{
+		string(wideevents.ParentChildOutcomeStarted),
+		string(wideevents.ParentChildOutcomeSucceeded),
+	}, parentChildOutcomes(capture))
+	records := parentChildRecords(capture)
+	s.Require().Len(records, 2)
+	attributes := wideEventAttributes(records[0])
+	details := wideEventDetails(records[0])
+	s.Equal(string(wideevents.ReplicationExecuting), attributes["phase"].AsString())
+	s.Equal(wideevents.ParentChildPhaseParentResend, details["phase"])
+	s.Equal(cluster.TestAlternativeClusterName, details["local_cluster"])
+	s.Equal(int64(1), attributes["shard"].AsInt64())
+	s.Equal(request.GetParentExecution().GetWorkflowId(), attributes["workflow_id"].AsString())
+	s.Equal(request.GetParentExecution().GetWorkflowId(), details["parent_workflow_id"])
+	s.Equal(request.GetChildExecution().GetWorkflowId(), details["child_workflow_id"])
+	s.InDelta(float64(request.GetParentInitiatedId()), details["parent_initiated_id"], 0)
+	s.InDelta(float64(request.GetParentInitiatedVersion()), details["parent_initiated_version"], 0)
+	s.Equal(cluster.TestCurrentClusterName, attributes["source_cluster"].AsString())
+	s.Equal(util.ErrorType(&serviceerror.NotFound{}), details["initial_error_type"])
+	s.Equal("sync_workflow_state", details["stage"])
+	s.Equal(string(wideevents.ReplicationApplied), wideEventAttributes(records[1])["phase"].AsString())
+	s.Equal(wideevents.ParentChildOutcomeVerified, wideEventAttributes(records[1])["outcome"].AsString())
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE.String(), wideEventDetails(records[1])["parent_workflow_state"])
+
+	// Source NotFound is a terminal, successful outcome: there is no parent state left to pull.
+	sourceMissingRequest := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
+		NamespaceId: request.GetNamespaceId(),
+		ParentExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "parent missing on source",
+			RunId:      uuid.NewString(),
+		},
+		ChildExecution:         request.GetChildExecution(),
+		ParentInitiatedId:      request.GetParentInitiatedId(),
+		ParentInitiatedVersion: request.GetParentInitiatedVersion(),
+		ResendParent:           true,
+	}
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{})
+	s.mockShard.Resource.RemoteAdminClient.EXPECT().SyncWorkflowState(
+		gomock.Any(),
+		&adminservice.SyncWorkflowStateRequest{
+			NamespaceId: sourceMissingRequest.NamespaceId,
+			Execution:   sourceMissingRequest.ParentExecution,
+			ArchetypeId: chasm.WorkflowArchetypeID,
+			TargetClusterId: int32(
+				cluster.TestAlternativeClusterInitialFailoverVersion,
+			),
+		},
+	).Return(nil, serviceerror.NewNotFound("parent missing on source"))
+
+	_, err = s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), sourceMissingRequest)
+	s.Require().NoError(err)
+	s.Require().Equal([]string{
+		string(wideevents.ParentChildOutcomeStarted),
+		string(wideevents.ParentChildOutcomeSucceeded),
+		string(wideevents.ParentChildOutcomeStarted),
+		string(wideevents.ParentChildOutcomeSourceNotFound),
+	}, parentChildOutcomes(capture))
+	sourceNotFoundRecord := parentChildRecords(capture)[3]
+	s.Equal(string(wideevents.ReplicationApplied), wideEventAttributes(sourceNotFoundRecord)["phase"].AsString())
+	s.Equal(wideevents.ParentChildOutcomeVerified, wideEventAttributes(sourceNotFoundRecord)["outcome"].AsString())
+	sourceNotFoundDetails := wideEventDetails(sourceNotFoundRecord)
+	s.Equal(util.ErrorType(serviceerror.NewNotFound("")), sourceNotFoundDetails["error_type"])
 }
 
 // Async resend: the RPC returns the verification error immediately and the pull runs in the
 // background.
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentAsync() {
 	s.config.EnableAsyncParentWorkflowResend = func() bool { return true }
+	s.config.EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	capture := s.parentChildEventCapture
 
 	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 		NamespaceId: tests.ParentNamespaceID.String(),
@@ -2819,12 +2888,60 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentAs
 	case <-time.After(10 * time.Second):
 		s.Fail("background resend did not call SyncWorkflowState")
 	}
+	await.RequireTrue(s.T(), func() bool {
+		return len(parentChildOutcomes(capture)) >= 3
+	}, 10*time.Second, 10*time.Millisecond)
+	s.Require().Equal([]string{
+		string(wideevents.ParentChildOutcomeScheduled),
+		string(wideevents.ParentChildOutcomeStarted),
+		string(wideevents.ParentChildOutcomeFailed),
+	}, parentChildOutcomes(capture))
+	records := parentChildRecords(capture)
+	attributes := wideEventAttributes(records[2])
+	details := wideEventDetails(records[2])
+	s.Equal(util.ErrorType(serviceerror.NewUnavailable("source cluster unavailable")), details["error_type"])
+	s.Equal(util.ErrorType(&serviceerror.NotFound{}), details["initial_error_type"])
+	s.Equal("sync_workflow_state", details["stage"])
+	s.Equal(cluster.TestCurrentClusterName, attributes["source_cluster"].AsString())
+}
+
+func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentLimited() {
+	s.config.EnableAsyncParentWorkflowResend = func() bool { return true }
+	s.config.ParentWorkflowResendMaxInFlight = func() int { return 0 }
+	s.config.EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	capture := s.parentChildEventCapture
+
+	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
+		NamespaceId: tests.ParentNamespaceID.String(),
+		ParentExecution: &commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowID,
+			RunId:      tests.RunID,
+		},
+		ChildExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "child workflowId",
+			RunId:      "child runId",
+		},
+		ParentInitiatedId:      123,
+		ParentInitiatedVersion: 100,
+		ResendParent:           true,
+	}
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{})
+
+	_, err := s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
+	var notFound *serviceerror.NotFound
+	s.Require().ErrorAs(err, &notFound)
+	s.Require().Equal([]string{string(wideevents.ParentChildOutcomeLimited)}, parentChildOutcomes(capture))
+	details := wideEventDetails(parentChildRecords(capture)[0])
+	s.Equal(util.ErrorType(&serviceerror.NotFound{}), details["initial_error_type"])
+	s.InDelta(0, details["max_in_flight"], 0)
 }
 
 // TestVerifyChildExecutionCompletionRecorded_ResendParentDeduped asserts that a second attempt for
 // the same parent does not start a concurrent resend while the first is still running.
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentDeduped() {
 	s.config.EnableAsyncParentWorkflowResend = func() bool { return true }
+	s.config.EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	capture := s.parentChildEventCapture
 
 	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 		NamespaceId: tests.ParentNamespaceID.String(),
@@ -2853,6 +2970,12 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentDe
 	// Times(1): only one resend may reach the source. It blocks so the second attempt overlaps.
 	entered := make(chan struct{})
 	release := make(chan struct{})
+	released := false
+	defer func() {
+		if !released {
+			close(release)
+		}
+	}()
 	s.mockShard.Resource.RemoteAdminClient.EXPECT().SyncWorkflowState(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(context.Context, *adminservice.SyncWorkflowStateRequest, ...grpc.CallOption) (*adminservice.SyncWorkflowStateResponse, error) {
 			close(entered)
@@ -2873,8 +2996,25 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentDe
 	// Second attempt while the first is in flight: must not start another resend.
 	_, err = s.historyEngine.VerifyChildExecutionCompletionRecorded(ctx, request)
 	s.Error(err)
+	s.Require().Equal([]string{
+		string(wideevents.ParentChildOutcomeScheduled),
+		string(wideevents.ParentChildOutcomeStarted),
+		string(wideevents.ParentChildOutcomeDeduplicated),
+	}, parentChildOutcomes(capture))
+	deduplicatedRecord := parentChildRecords(capture)[2]
+	s.Equal(string(wideevents.ReplicationExecuting), wideEventAttributes(deduplicatedRecord)["phase"].AsString())
 
 	close(release)
+	released = true
+	await.RequireTrue(s.T(), func() bool {
+		return len(parentChildOutcomes(capture)) >= 4
+	}, 10*time.Second, 10*time.Millisecond)
+	s.Require().Equal([]string{
+		string(wideevents.ParentChildOutcomeScheduled),
+		string(wideevents.ParentChildOutcomeStarted),
+		string(wideevents.ParentChildOutcomeDeduplicated),
+		string(wideevents.ParentChildOutcomeFailed),
+	}, parentChildOutcomes(capture))
 }
 
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_WorkflowClosed() {
