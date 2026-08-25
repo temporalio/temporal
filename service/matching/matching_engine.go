@@ -287,6 +287,7 @@ func NewEngine(
 	partitionScalerFactory PartitionScalerFactory,
 ) Engine {
 	scopedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope))
+	matchingLogger := log.With(logger, tag.ComponentMatchingEngine)
 	e := &matchingEngineImpl{
 		status:                 common.DaemonStatusInitialized,
 		taskManager:            taskManager,
@@ -296,8 +297,8 @@ func NewEngine(
 		tokenSerializer:        tasktoken.NewSerializer(),
 		workerDeploymentClient: workerDeploymentClient,
 		historySerializer:      historySerializer,
-		logger:                 log.With(logger, tag.ComponentMatchingEngine),
-		nexusEndpointLogger:    log.With(logger, tag.ComponentNexusRegistry),
+		logger:                 matchingLogger,
+		nexusEndpointLogger:    log.With(matchingLogger, tag.NexusStageRegistry),
 		throttledLogger:        log.With(throttledLogger, tag.ComponentMatchingEngine),
 		namespaceRegistry:      namespaceRegistry,
 		hostInfoProvider:       hostInfoProvider,

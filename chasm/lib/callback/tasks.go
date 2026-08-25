@@ -98,7 +98,7 @@ func newInvocationTaskHandler(opts invocationTaskHandlerOptions) *invocationTask
 		config:             opts.Config,
 		namespaceRegistry:  opts.NamespaceRegistry,
 		metricsHandler:     opts.MetricsHandler,
-		logger:             log.With(opts.Logger, tag.ComponentNexusCompletion),
+		logger:             log.With(opts.Logger, tag.NexusStageHandlerOutbound),
 		httpCallerProvider: opts.HTTPCallerProvider,
 		httpTraceProvider:  opts.HTTPTraceProvider,
 		historyClient:      opts.HistoryClient,

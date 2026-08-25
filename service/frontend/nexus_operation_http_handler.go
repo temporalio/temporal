@@ -70,7 +70,7 @@ func NewNexusOperationHTTPHandler(
 	httpTraceProvider commonnexus.HTTPClientTraceProvider,
 	httpServerHandlerInstrumenter telemetry.HTTPServerHandlerInstrumenter,
 ) *NexusOperationHTTPHandler {
-	logger = log.With(logger, tag.ComponentNexusInbound)
+	logger = log.With(logger, tag.NexusStageHandlerInbound)
 	return &NexusOperationHTTPHandler{
 		base: nexusrpc.BaseHTTPHandler{
 			Logger:           log.NewSlogLogger(logger),
