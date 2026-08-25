@@ -701,8 +701,7 @@ func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(ctx context.Context
 }
 
 func taskAddErrResult(err error) string {
-	var resourceExhausted *serviceerror.ResourceExhausted
-	if errors.As(err, &resourceExhausted) {
+	if _, ok := errors.AsType[*serviceerror.ResourceExhausted](err); ok {
 		return metrics.TaskAddResultThrottled
 	}
 	return metrics.TaskAddResultFailure
@@ -849,7 +848,7 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 
 	task, err := dbq.PollTask(ctx, pollMetadata)
 	if task != nil {
-		task.pollerScalingDecision = dbq.MakePollerScalingDecision(ctx, pollMetadata.localPollStartTime)
+		task.pollerScalingDecision = dbq.MakePollerScalingDecision(ctx, pollMetadata.localPollStartTime, task.source)
 	}
 
 	// Update poller timestamp when poll ends, unless cancelled (e.g., shutdown/disconnect).

@@ -256,6 +256,19 @@ func Invoke(
 			continuationToken.FirstEventId = continuationToken.GetNextEventId()
 			continuationToken.NextEventId = nextEventID
 			continuationToken.IsWorkflowRunning = isWorkflowRunning
+		} else {
+			if err = api.ValidateBranchTokenForExecution(
+				ctx,
+				shardContext,
+				workflowConsistencyChecker,
+				eventNotifier,
+				namespaceName,
+				namespaceID,
+				execution,
+				continuationToken.BranchToken,
+			); err != nil {
+				return nil, err
+			}
 		}
 	} else {
 		continuationToken = &tokenspb.HistoryContinuation{}
@@ -281,8 +294,7 @@ func Invoke(
 	// when data inconsistency occurs. Long term solution should check event
 	// batch pointing backwards within history store.
 	defer func() {
-		var dataLossErr *serviceerror.DataLoss
-		if errors.As(retError, &dataLossErr) {
+		if _, ok := errors.AsType[*serviceerror.DataLoss](retError); ok {
 			api.TrimHistoryNode(
 				ctx,
 				shardContext,

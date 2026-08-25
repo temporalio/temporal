@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/util"
 	queueerrors "go.temporal.io/server/service/history/queues/errors"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/fx"
@@ -73,9 +74,8 @@ func (g *GeneratorTaskHandler) Execute(
 
 	// If the high water mark is earlier than when a schedule was updated, we must skip any actions that hadn't
 	// yet been processed.
-	if scheduler.Info.GetUpdateTime().AsTime().After(generator.LastProcessedTime.AsTime()) {
-		generator.LastProcessedTime = scheduler.Info.GetUpdateTime()
-	}
+	generator.LastProcessedTime = timestamppb.New(
+		util.MaxTime(generator.LastProcessedTime.AsTime(), scheduler.Info.GetUpdateTime().AsTime()))
 
 	// Process time range between last high water mark and system time.
 	t1 := generator.LastProcessedTime.AsTime()

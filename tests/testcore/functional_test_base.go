@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/taskpoller"
+	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testtelemetry"
@@ -102,6 +103,7 @@ type (
 		EnableHistoryTaskRecorder bool
 		EnableReplicationRecorder bool
 		EnableArchival            bool
+		SpanExporter              sdktrace.SpanExporter
 		AdditionalServerOptions   []temporal.ServerOption
 	}
 	TestClusterOption func(params *testClusterParams)
@@ -177,6 +179,12 @@ func WithClusterHistoryTaskRecorder() TestClusterOption {
 func WithReplicationStreamRecorder() TestClusterOption {
 	return func(params *testClusterParams) {
 		params.EnableReplicationRecorder = true
+	}
+}
+
+func withSpanExporter(exporter sdktrace.SpanExporter) TestClusterOption {
+	return func(params *testClusterParams) {
+		params.SpanExporter = exporter
 	}
 }
 
@@ -309,6 +317,9 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		AdditionalServerOptions:   params.AdditionalServerOptions,
 		WorkerConfig:              WorkerConfig{DisableWorker: !params.EnableWorkerService},
 	}
+	if params.SpanExporter != nil {
+		setSpanExporter(s.testClusterConfig, "test", params.SpanExporter)
+	}
 
 	// Apply configuration for shared clusters.
 	if params.SharedCluster {
@@ -323,9 +334,7 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		s.otelExporter = testtelemetry.NewFileExporter(otelOutputDir)
 
 		// Direct the OTEL exporter to the collector.
-		s.testClusterConfig.SpanExporters = map[telemetry.SpanExporterType]sdktrace.SpanExporter{
-			telemetry.OtelTracesOtlpExporterType: s.otelExporter,
-		}
+		setSpanExporter(s.testClusterConfig, telemetry.OtelTracesOtlpExporterType, s.otelExporter)
 	}
 
 	var err error
@@ -334,13 +343,21 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 	s.Require().NoError(err)
 
 	// Setup test cluster namespaces.
+	ctx := testcontext.For(s.T())
 	s.namespace = namespace.Name(RandomizeStr("namespace"))
-	s.namespaceID, err = s.RegisterNamespace(s.Namespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
+	s.namespaceID, err = s.RegisterNamespace(ctx, s.Namespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
 
 	s.externalNamespace = namespace.Name(RandomizeStr("external-namespace"))
-	_, err = s.RegisterNamespace(s.ExternalNamespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
+	_, err = s.RegisterNamespace(ctx, s.ExternalNamespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
+}
+
+func setSpanExporter(clusterConfig *TestClusterConfig, exporterType telemetry.SpanExporterType, exporter sdktrace.SpanExporter) {
+	if clusterConfig.SpanExporters == nil {
+		clusterConfig.SpanExporters = make(map[telemetry.SpanExporterType]sdktrace.SpanExporter)
+	}
+	clusterConfig.SpanExporters[exporterType] = exporter
 }
 
 func sharedClusterPersistence(defaults persistencetests.TestBaseOptions) persistencetests.TestBaseOptions {
@@ -489,6 +506,7 @@ func (s *FunctionalTestBase) tearDownSdk() {
 //  2. Update search attributes would require an extra API call,
 //  3. One more extra API call would be necessary to get namespace.ID.
 func (s *FunctionalTestBase) RegisterNamespace(
+	ctx context.Context,
 	nsName namespace.Name,
 	retentionDays int32,
 	archivalState enumspb.ArchivalState,
@@ -525,7 +543,7 @@ func (s *FunctionalTestBase) RegisterNamespace(
 		},
 		IsGlobalNamespace: false,
 	}
-	_, err := s.testCluster.testBase.MetadataManager.CreateNamespace(context.Background(), namespaceRequest)
+	_, err := s.testCluster.testBase.MetadataManager.CreateNamespace(ctx, namespaceRequest)
 
 	if err != nil {
 		return namespace.EmptyID, err
@@ -535,7 +553,7 @@ func (s *FunctionalTestBase) RegisterNamespace(
 	ticker := time.NewTicker(NamespaceCacheRefreshInterval / 2)
 	defer ticker.Stop()
 	for {
-		_, describeErr := s.FrontendClient().DescribeNamespace(NewContext(), &workflowservice.DescribeNamespaceRequest{
+		_, describeErr := s.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
 			Namespace: nsName.String(),
 		})
 		if describeErr == nil {
@@ -547,7 +565,7 @@ func (s *FunctionalTestBase) RegisterNamespace(
 		<-ticker.C
 	}
 
-	_, err = s.OperatorClient().AddSearchAttributes(NewContext(), &operatorservice.AddSearchAttributesRequest{
+	_, err = s.OperatorClient().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
 		Namespace:        nsName.String(),
 		SearchAttributes: expectedSearchAttributes,
 	})
@@ -557,7 +575,7 @@ func (s *FunctionalTestBase) RegisterNamespace(
 
 	namespaceCacheDeadline = time.Now().Add(5 * NamespaceCacheRefreshInterval)
 	for {
-		listResp, listErr := s.OperatorClient().ListSearchAttributes(NewContext(), &operatorservice.ListSearchAttributesRequest{
+		listResp, listErr := s.OperatorClient().ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{
 			Namespace: nsName.String(),
 		})
 		if listErr == nil {
@@ -689,26 +707,6 @@ func (s *FunctionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
 			behavior.InjectHooks(s)
 			subtest()
 		})
-	}
-}
-
-// Deprecated: use (*TestEnv).WaitForChannel instead.
-func (s *FunctionalTestBase) WaitForChannel(ctx context.Context, ch chan struct{}) {
-	s.T().Helper()
-	select {
-	case <-ch:
-	case <-ctx.Done():
-		s.FailNow("context timeout while waiting for channel")
-	}
-}
-
-// Deprecated: use (*TestEnv).SendToChannel instead.
-func (s *FunctionalTestBase) SendToChannel(ctx context.Context, ch chan struct{}) {
-	s.T().Helper()
-	select {
-	case ch <- struct{}{}:
-	case <-ctx.Done():
-		s.FailNow("context timeout while sending to channel")
 	}
 }
 

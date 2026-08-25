@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/contextutil"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
@@ -143,7 +144,7 @@ func (s *chasmEngineSuite) initAssertions() {
 	s.ProtoAssertions = protorequire.New(s.T())
 }
 
-func (s *chasmEngineSuite) TestNewExecution_BrandNew() {
+func (s *chasmEngineSuite) TestStartExecution_BrandNew() {
 	tv := testvars.New(s.T())
 
 	ref := chasm.NewComponentRef[*testComponent](
@@ -161,7 +162,7 @@ func (s *chasmEngineSuite) TestNewExecution_BrandNew() {
 			_ context.Context,
 			request *persistence.CreateWorkflowExecutionRequest,
 		) (*persistence.CreateWorkflowExecutionResponse, error) {
-			s.validateCreateRequest(request, s.archetypeID, newActivityID, "", 0)
+			s.validateCreateRequest(request, s.archetypeID, newActivityID, "", 0, 0)
 			runID = request.NewWorkflowSnapshot.ExecutionState.RunId
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
@@ -186,6 +187,41 @@ func (s *chasmEngineSuite) TestNewExecution_BrandNew() {
 	s.Equal(expectedExecutionKey, result.ExecutionKey)
 	s.validateNewExecutionResponseRef(result.ExecutionRef, expectedExecutionKey)
 	s.True(result.Created)
+}
+
+func (s *chasmEngineSuite) TestStartExecution_WaitsForShardEngine() {
+	tv := testvars.New(s.T())
+
+	ref := chasm.NewComponentRef[*testComponent](
+		chasm.ExecutionKey{
+			NamespaceID: string(tests.NamespaceID),
+			BusinessID:  tv.WorkflowID(),
+			RunID:       "",
+		},
+	)
+
+	// Use a mock shard context here which is easier to assert that GetEngine method is called.
+	mockShardContext := historyi.NewMockShardContext(s.controller)
+	mockShardController := shard.NewMockController(s.controller)
+	s.engine.SetShardController(mockShardController)
+
+	expectedErr := serviceerror.NewUnavailable("shard not ready")
+	mockShardController.EXPECT().GetShardByID(gomock.Any()).Return(mockShardContext, nil).Times(1)
+	mockShardContext.EXPECT().GetEngine(gomock.Any()).Return(nil, expectedErr).Times(1)
+
+	startFnCalled := false
+	result, err := s.engine.StartExecution(
+		context.Background(),
+		ref,
+		func(chasm.MutableContext) (chasm.RootComponent, error) {
+			startFnCalled = true
+			return &testComponent{}, nil
+		},
+	)
+
+	s.ErrorIs(err, expectedErr)
+	s.False(startFnCalled)
+	s.False(result.Created)
 }
 
 func (s *chasmEngineSuite) TestStartExecution_SetsContextMetadata() {
@@ -217,7 +253,7 @@ func (s *chasmEngineSuite) TestStartExecution_SetsContextMetadata() {
 	s.assertTestContextMetadata(requestCtx, newActivityID, "start-request")
 }
 
-func (s *chasmEngineSuite) TestNewExecution_RequestIDDedup() {
+func (s *chasmEngineSuite) TestStartExecution_RequestIDDedup() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
 
@@ -257,7 +293,7 @@ func (s *chasmEngineSuite) TestNewExecution_RequestIDDedup() {
 	s.False(result.Created)
 }
 
-func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_AllowDuplicate() {
+func (s *chasmEngineSuite) TestStartExecution_ReusePolicy_AllowDuplicate() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
 
@@ -275,17 +311,37 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_AllowDuplicate() {
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 	)
 
-	var runID string
-	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).Return(
-		nil,
-		currentRunConditionFailedErr,
-	).Times(1)
+	var currentExecutionLastRunningClock int64
 	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
 			_ context.Context,
 			request *persistence.CreateWorkflowExecutionRequest,
 		) (*persistence.CreateWorkflowExecutionResponse, error) {
-			s.validateCreateRequest(request, s.archetypeID, newActivityID, tv.RunID(), currentRunConditionFailedErr.LastWriteVersion)
+			// Test the case where current execution is closed after new execution's mutable state
+			// snapshot is prepared in memory.
+			var err error
+			currentExecutionLastRunningClock, err = s.mockShard.GenerateTaskID()
+			if err != nil {
+				return nil, err
+			}
+			return nil, currentRunConditionFailedErr
+		},
+	).Times(1)
+
+	var runID string
+	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *persistence.CreateWorkflowExecutionRequest,
+		) (*persistence.CreateWorkflowExecutionResponse, error) {
+			s.validateCreateRequest(
+				request,
+				s.archetypeID,
+				newActivityID,
+				tv.RunID(),
+				currentRunConditionFailedErr.LastWriteVersion,
+				currentExecutionLastRunningClock,
+			)
 			runID = request.NewWorkflowSnapshot.ExecutionState.RunId
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
@@ -313,7 +369,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_AllowDuplicate() {
 	s.True(result.Created)
 }
 
-func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Success() {
+func (s *chasmEngineSuite) TestStartExecution_ReusePolicy_FailedOnly_Success() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
 
@@ -331,17 +387,37 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Success() {
 		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 	)
 
-	var runID string
-	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).Return(
-		nil,
-		currentRunConditionFailedErr,
-	).Times(1)
+	var currentExecutionLastRunningClock int64
 	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
 			_ context.Context,
 			request *persistence.CreateWorkflowExecutionRequest,
 		) (*persistence.CreateWorkflowExecutionResponse, error) {
-			s.validateCreateRequest(request, s.archetypeID, newActivityID, tv.RunID(), currentRunConditionFailedErr.LastWriteVersion)
+			// Test the case where current execution is closed after new execution's mutable state
+			// snapshot is prepared in memory.
+			var err error
+			currentExecutionLastRunningClock, err = s.mockShard.GenerateTaskID()
+			if err != nil {
+				return nil, err
+			}
+			return nil, currentRunConditionFailedErr
+		},
+	).Times(1)
+
+	var runID string
+	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *persistence.CreateWorkflowExecutionRequest,
+		) (*persistence.CreateWorkflowExecutionResponse, error) {
+			s.validateCreateRequest(
+				request,
+				s.archetypeID,
+				newActivityID,
+				tv.RunID(),
+				currentRunConditionFailedErr.LastWriteVersion,
+				currentExecutionLastRunningClock,
+			)
 			runID = request.NewWorkflowSnapshot.ExecutionState.RunId
 			return tests.CreateWorkflowExecutionResponse, nil
 		},
@@ -369,7 +445,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Success() {
 	s.True(result.Created)
 }
 
-func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Fail() {
+func (s *chasmEngineSuite) TestStartExecution_ReusePolicy_FailedOnly_Fail() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
 
@@ -404,7 +480,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_FailedOnly_Fail() {
 	s.False(result.Created)
 }
 
-func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_RejectDuplicate() {
+func (s *chasmEngineSuite) TestStartExecution_ReusePolicy_RejectDuplicate() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
 
@@ -439,7 +515,7 @@ func (s *chasmEngineSuite) TestNewExecution_ReusePolicy_RejectDuplicate() {
 	s.False(result.Created)
 }
 
-func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_UseExisting() {
+func (s *chasmEngineSuite) TestStartExecution_ConflictPolicy_UseExisting() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
 
@@ -484,7 +560,7 @@ func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_UseExisting() {
 	s.False(result.Created)
 }
 
-func (s *chasmEngineSuite) TestNewExecution_ConflictPolicy_TerminateExisting() {
+func (s *chasmEngineSuite) TestStartExecution_ConflictPolicy_TerminateExisting() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
 
@@ -591,15 +667,17 @@ func (s *chasmEngineSuite) validateCreateRequest(
 	expectedActivityID string,
 	expectedPreviousRunID string,
 	expectedPreviousLastWriteVersion int64,
+	previousLastRunningClock int64,
 ) {
 	s.Equal(expectedArchetypeID, request.ArchetypeID)
 
-	if expectedPreviousRunID == "" && expectedPreviousLastWriteVersion == 0 {
+	if expectedPreviousRunID == "" && expectedPreviousLastWriteVersion == 0 && previousLastRunningClock == 0 {
 		s.Equal(persistence.CreateWorkflowModeBrandNew, request.Mode)
 	} else {
 		s.Equal(persistence.CreateWorkflowModeUpdateCurrent, request.Mode)
 		s.Equal(expectedPreviousRunID, request.PreviousRunID)
 		s.Equal(expectedPreviousLastWriteVersion, request.PreviousLastWriteVersion)
+		s.Less(previousLastRunningClock, request.NewWorkflowSnapshot.ExecutionInfo.LastRunningClock)
 	}
 
 	s.Len(request.NewWorkflowSnapshot.ChasmNodes, 1)
@@ -981,6 +1059,7 @@ func (s *chasmEngineSuite) TestUpdateComponent_RequestIDIdempotency() {
 	dupRef, err := update()
 	var failedPrecondition *serviceerror.FailedPrecondition
 	s.ErrorAs(err, &failedPrecondition)
+	s.ErrorIs(err, chasm.ErrRequestIDAlreadyUsed)
 	s.Nil(dupRef)
 	s.Equal(1, updateCount, "updateFn must not run again for a duplicate request ID")
 }
@@ -1460,6 +1539,70 @@ func (s *chasmEngineSuite) testPollComponentWait(useEmptyRunID bool) {
 	s.Equal(activityID, <-newActivityID)
 }
 
+// TestPollComponent_ShardClosed verifies that a poll blocked waiting for notifications returns a
+// ShardOwnershipLost service error as soon as the shard moves off this host, rather than blocking
+// until the context deadline.
+func (s *chasmEngineSuite) TestPollComponent_ShardClosed() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+
+	resolvedKey := chasm.ExecutionKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+		RunID:       tv.RunID(),
+	}
+	pollRef := chasm.NewComponentRef[*testComponent](resolvedKey)
+
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{
+			State: s.buildPersistenceMutableState(
+				resolvedKey,
+				&persistencespb.ActivityInfo{},
+				enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				nil),
+		}, nil).
+		AnyTimes()
+
+	s.mockShard.Resource.HistoryServiceResolver.EXPECT().
+		Lookup(convert.Int32ToString(s.mockShard.GetShardID())).
+		Return(membership.NewHostInfoFromAddress("owner-host:1234"), nil).
+		Times(1)
+	s.mockShard.Resource.HostInfoProvider.EXPECT().
+		HostInfo().
+		Return(membership.NewHostInfoFromAddress("current-host:5678")).
+		Times(1)
+
+	pollErr := make(chan error, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		// Predicate is never satisfied, so the poll subscribes and blocks.
+		_, err := s.engine.PollComponent(
+			ctx,
+			pollRef,
+			func(chasm.Context, chasm.Component) (bool, error) {
+				return false, nil
+			},
+		)
+		pollErr <- err
+	}()
+
+	// Let the poll park in its select, then move the shard off this host.
+	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
+	s.mockShard.UnloadForOwnershipLost()
+
+	select {
+	case err := <-pollErr:
+		var solErr *serviceerrors.ShardOwnershipLost
+		s.ErrorAs(err, &solErr)
+		s.Equal("owner-host:1234", solErr.OwnerHost)
+		s.Equal("current-host:5678", solErr.CurrentHost)
+	case <-time.After(5 * time.Second):
+		s.FailNow("poll did not return after shard close")
+	}
+}
+
 // TestPollComponent_StaleState tests that PollComponent returns a user-friendly Unavailable error
 // when the submitted component reference is ahead of persisted state (e.g. due to namespace
 // failover).
@@ -1769,6 +1912,8 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_NotFound() {
 			_ context.Context,
 			request *persistence.CreateWorkflowExecutionRequest,
 		) (*persistence.CreateWorkflowExecutionResponse, error) {
+			s.Equal(persistence.CreateWorkflowModeBrandNew, request.Mode)
+
 			s.NotNil(request.NewWorkflowSnapshot)
 			createdRunID = request.NewWorkflowSnapshot.ExecutionState.RunId
 			s.NotEmpty(createdRunID)
@@ -1879,22 +2024,36 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingClosed() {
 		}, nil).Times(2)
 
 	// Mock GetWorkflowExecution for the closed execution.
-	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
-		Return(&persistence.GetWorkflowExecutionResponse{
-			State: s.buildPersistenceMutableState(
-				chasm.ExecutionKey{
-					NamespaceID: executionKey.NamespaceID,
-					BusinessID:  executionKey.BusinessID,
-					RunID:       tv.RunID(),
-				},
-				&persistencespb.ActivityInfo{
-					ActivityId: tv.ActivityID(),
-				},
-				enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-				enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-				nil,
-			),
-		}, nil).Times(1)
+	var currentExecutionLastRunningClock int64
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *persistence.GetWorkflowExecutionRequest,
+		) (*persistence.GetWorkflowExecutionResponse, error) {
+			// Test the case where current execution is closed after new execution's mutable state
+			// snapshot is prepared in memory.
+			var err error
+			currentExecutionLastRunningClock, err = s.mockShard.GenerateTaskID()
+			if err != nil {
+				return nil, err
+			}
+			return &persistence.GetWorkflowExecutionResponse{
+				State: s.buildPersistenceMutableState(
+					chasm.ExecutionKey{
+						NamespaceID: executionKey.NamespaceID,
+						BusinessID:  executionKey.BusinessID,
+						RunID:       tv.RunID(),
+					},
+					&persistencespb.ActivityInfo{
+						ActivityId: tv.ActivityID(),
+					},
+					enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+					enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+					nil,
+				),
+			}, nil
+		},
+	).Times(1)
 
 	// Mock CreateWorkflowExecution for new execution with UpdateCurrent mode
 	// (since we already have a lease on the closed execution).
@@ -1910,6 +2069,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingClosed() {
 			createdRunID = request.NewWorkflowSnapshot.ExecutionState.RunId
 			s.NotEmpty(createdRunID)
 			s.NotEqual(tv.RunID(), createdRunID) // New run should have different RunID.
+			s.Less(currentExecutionLastRunningClock, request.NewWorkflowSnapshot.ExecutionInfo.LastRunningClock)
 
 			return tests.CreateWorkflowExecutionResponse, nil
 		},

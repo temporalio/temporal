@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.opentelemetry.io/otel/trace"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
@@ -85,6 +86,18 @@ type operationContext struct {
 	headersBlacklist              dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 	metricTagConfig               dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
 	cleanupFunctions              []func(map[string]string, error)
+}
+
+func (c *operationContext) annotateServerSpan(
+	ctx context.Context,
+	service, operation, requestID string,
+) {
+	nexusrpc.AnnotateServerSpan(trace.SpanFromContext(ctx), nexusrpc.ServerSpanAttributes{
+		Endpoint:  c.endpointName,
+		Service:   service,
+		Operation: operation,
+		RequestID: requestID,
+	})
 }
 
 // Panic handler and metrics recording function.
@@ -171,8 +184,7 @@ func (c *operationContext) interceptRequest(
 		// If frontend.exposeAuthorizerErrors is false, Authorize err is either an explicitly set reason, or a generic
 		// "Request unauthorized." message.
 		// Otherwise, expose the underlying error.
-		var permissionDeniedError *serviceerror.PermissionDenied
-		if errors.As(err, &permissionDeniedError) {
+		if permissionDeniedError, ok := errors.AsType[*serviceerror.PermissionDenied](err); ok {
 			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("unauthorized"))
 			return commonnexus.AdaptAuthorizeError(permissionDeniedError)
 		}
@@ -234,7 +246,12 @@ func (c *operationContext) interceptRequest(
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 
-	if err := c.namespaceRateLimitInterceptor.Allow(c.namespace.Name(), c.apiName, header); err != nil {
+	if err := c.namespaceRateLimitInterceptor.Allow(
+		ctx,
+		c.namespace.Name(),
+		c.apiName,
+		header,
+	); err != nil {
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("namespace_rate_limited"))
 		return commonnexus.ConvertGRPCError(err, true)
 	}
@@ -308,6 +325,19 @@ func (c *operationContext) enrichNexusOperationMetrics(service, operation string
 	}
 }
 
+// enrichNexusOperationLogs adds Nexus operation context to the handler-side logger.
+func (c *operationContext) enrichNexusOperationLogs(service, operation, requestID string) {
+	tags := []tag.Tag{
+		tag.NexusService(service),
+		tag.NexusOperation(operation),
+		tag.Endpoint(c.endpointName),
+	}
+	if requestID != "" {
+		tags = append(tags, tag.RequestID(requestID))
+	}
+	c.logger = log.With(c.logger, tags...)
+}
+
 // Key to extract a nexusContext object from a context.Context.
 type nexusContextKey struct{}
 
@@ -373,8 +403,7 @@ func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (
 			metrics.OutcomeTag("namespace_not_found"),
 		)
 
-		var nfe *serviceerror.NamespaceNotFound
-		if errors.As(err, &nfe) {
+		if _, ok := errors.AsType[*serviceerror.NamespaceNotFound](err); ok {
 			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "namespace not found: %q", nc.namespaceName)
 		}
 		return nil, commonnexus.ConvertGRPCError(err, false)
@@ -397,6 +426,8 @@ func (h *nexusHandler) StartOperation(
 	}
 	ctx = oc.augmentContext(ctx, options.Header)
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
+	oc.enrichNexusOperationLogs(service, operation, options.RequestID)
+	oc.annotateServerSpan(ctx, service, operation, options.RequestID)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	var links []*nexuspb.Link
@@ -427,8 +458,7 @@ func (h *nexusHandler) StartOperation(
 	})
 
 	if err := oc.interceptRequest(ctx, request, options.Header); err != nil {
-		var notActiveErr *serviceerror.NamespaceNotActive
-		if errors.As(err, &notActiveErr) {
+		if _, ok := errors.AsType[*serviceerror.NamespaceNotActive](err); ok {
 			return h.forwardStartOperation(ctx, service, operation, input, options, oc)
 		}
 		return nil, err
@@ -637,6 +667,8 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	}
 	ctx = oc.augmentContext(ctx, options.Header)
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
+	oc.enrichNexusOperationLogs(service, operation, "")
+	oc.annotateServerSpan(ctx, service, operation, "")
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	request := oc.matchingRequest(&nexuspb.Request{
@@ -656,8 +688,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		},
 	})
 	if err := oc.interceptRequest(ctx, request, options.Header); err != nil {
-		var notActiveErr *serviceerror.NamespaceNotActive
-		if errors.As(err, &notActiveErr) {
+		if _, ok := errors.AsType[*serviceerror.NamespaceNotActive](err); ok {
 			return h.forwardCancelOperation(ctx, service, operation, token, options, oc)
 		}
 		return err

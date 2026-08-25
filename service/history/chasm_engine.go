@@ -189,7 +189,7 @@ func (e *ChasmEngine) startExecution(
 	startFn func(chasm.MutableContext) (chasm.RootComponent, error),
 	options chasm.TransitionOptions,
 ) (result chasm.StartExecutionResult, retErr error) {
-	shardContext, err := e.getShardContext(executionRef)
+	shardContext, err := e.getShardContext(ctx, executionRef)
 	if err != nil {
 		return chasm.StartExecutionResult{}, err
 	}
@@ -285,7 +285,7 @@ func (e *ChasmEngine) updateWithStartExecution(
 	updateFn func(chasm.MutableContext, chasm.Component) error,
 	options chasm.TransitionOptions,
 ) (result chasm.EngineUpdateWithStartExecutionResult, retError error) {
-	shardContext, err := e.getShardContext(executionRef)
+	shardContext, err := e.getShardContext(ctx, executionRef)
 	if err != nil {
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
@@ -566,8 +566,7 @@ func (e *ChasmEngine) updateComponent(
 	// reject it as non-retryable (FailedPrecondition) without running updateFn or persisting.
 	if requestID != "" && executionLease.GetMutableState().HasRequestID(requestID) {
 		executionLease.GetReleaseFn()(nil)
-		return nil, serviceerror.NewFailedPreconditionf(
-			"request ID %s has already been used for this execution", requestID)
+		return nil, chasm.ErrRequestIDAlreadyUsed
 	}
 
 	defer func() {
@@ -728,6 +727,11 @@ func (e *ChasmEngine) pollComponent(
 	monotonicPredicate func(chasm.Context, chasm.Component) (bool, error),
 ) (retRef []byte, retError error) {
 
+	shardContext, err := e.getShardContext(ctx, requestRef)
+	if err != nil {
+		return nil, err
+	}
+
 	var ch <-chan struct{}
 	var unsubscribe func()
 	defer func() {
@@ -771,6 +775,11 @@ func (e *ChasmEngine) pollComponent(
 			ref, err = checkPredicateOrSubscribe()
 			if err != nil || ref != nil {
 				return ref, err
+			}
+		case <-shardContext.GetLifecycleContext().Done():
+			return nil, &persistence.ShardOwnershipLostError{
+				ShardID: shardContext.GetShardID(),
+				Msg:     "shard closed",
 			}
 		case <-ctx.Done():
 			return nil, ctx.Err()
@@ -1137,7 +1146,22 @@ func (e *ChasmEngine) handleReusePolicy(
 		)
 	}
 
-	err := newExecutionParams.executionContext.CreateWorkflowExecution(
+	// If current execution is closed after the newExecutionParams are prepared,
+	// the LastRunningClock in the prepared execution snapshot will be smaller than
+	// the current execution's LastRunningClock, causing the new execution to be marked
+	// as zombie in standby cluster.
+	//
+	// Here we basically refresh the LastRunningClock in the prepared execution snapshot to avoid this issue.
+	updatedExecutionInfo, updatedEvents, err := newExecutionParams.mutableState.UpdateLastRunningClock(newExecutionParams.events)
+	if err != nil {
+		return chasm.StartExecutionResult{}, err
+	}
+	// Following assignments are technically not necessary since those pointers point to the same underlying fields that are updated,
+	// but it makes the code more explicit and easier to read.
+	newExecutionParams.snapshot.ExecutionInfo = updatedExecutionInfo
+	newExecutionParams.events = updatedEvents
+
+	if err := newExecutionParams.executionContext.CreateWorkflowExecution(
 		ctx,
 		shardContext,
 		persistence.CreateWorkflowModeUpdateCurrent,
@@ -1147,8 +1171,7 @@ func (e *ChasmEngine) handleReusePolicy(
 		newExecutionParams.snapshot,
 		newExecutionParams.events,
 		historyi.TransactionPolicyActive,
-	)
-	if err != nil {
+	); err != nil {
 		return chasm.StartExecutionResult{}, err
 	}
 
@@ -1166,15 +1189,26 @@ func (e *ChasmEngine) handleReusePolicy(
 }
 
 func (e *ChasmEngine) getShardContext(
+	ctx context.Context,
 	ref chasm.ComponentRef,
 ) (historyi.ShardContext, error) {
-	return e.shardController.GetShardByID(
+	shardContext, err := e.shardController.GetShardByID(
 		common.WorkflowIDToHistoryShard(
 			ref.NamespaceID,
 			ref.BusinessID,
 			e.config.NumberOfShards,
 		),
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Block until shard is acquired and ready to serve traffic.
+	_, err = shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return shardContext, nil
 }
 
 // getExecutionLease returns shard context and mutable state for the chasm execution, with the lock
@@ -1187,7 +1221,7 @@ func (e *ChasmEngine) getExecutionLease(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 ) (historyi.ShardContext, api.WorkflowLease, error) {
-	shardContext, err := e.getShardContext(ref)
+	shardContext, err := e.getShardContext(ctx, ref)
 	if err != nil {
 		return nil, nil, err
 	}

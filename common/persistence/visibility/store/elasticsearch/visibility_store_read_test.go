@@ -1650,7 +1650,7 @@ func (s *ESVisibilitySuite) Test_buildPaginationQuery() {
 			searchAfter:  []any{json.Number(fmt.Sprintf("%d", startTime.UnixNano()))},
 			res: []elastic.Query{
 				elastic.NewBoolQuery().Filter(
-					elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(time.RFC3339Nano)),
+					elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(paginationDatetimeFormat)),
 				),
 			},
 			err: nil,
@@ -1670,7 +1670,7 @@ func (s *ESVisibilitySuite) Test_buildPaginationQuery() {
 				elastic.NewBoolQuery().
 					MustNot(elastic.NewExistsQuery(sadefs.CloseTime)).
 					Filter(
-						elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(time.RFC3339Nano)),
+						elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(paginationDatetimeFormat)),
 					),
 			},
 			err: nil,
@@ -1687,12 +1687,12 @@ func (s *ESVisibilitySuite) Test_buildPaginationQuery() {
 			},
 			res: []elastic.Query{
 				elastic.NewBoolQuery().Filter(
-					elastic.NewRangeQuery(sadefs.CloseTime).Lt(closeTime.Format(time.RFC3339Nano)),
+					elastic.NewRangeQuery(sadefs.CloseTime).Lt(closeTime.Format(paginationDatetimeFormat)),
 				),
 				elastic.NewBoolQuery().
 					Filter(
-						elastic.NewTermQuery(sadefs.CloseTime, closeTime.Format(time.RFC3339Nano)),
-						elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(time.RFC3339Nano)),
+						elastic.NewTermQuery(sadefs.CloseTime, closeTime.Format(paginationDatetimeFormat)),
+						elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(paginationDatetimeFormat)),
 					),
 			},
 			err: nil,
@@ -1711,17 +1711,17 @@ func (s *ESVisibilitySuite) Test_buildPaginationQuery() {
 			},
 			res: []elastic.Query{
 				elastic.NewBoolQuery().Filter(
-					elastic.NewRangeQuery(sadefs.CloseTime).Lt(closeTime.Format(time.RFC3339Nano)),
+					elastic.NewRangeQuery(sadefs.CloseTime).Lt(closeTime.Format(paginationDatetimeFormat)),
 				),
 				elastic.NewBoolQuery().
 					Filter(
-						elastic.NewTermQuery(sadefs.CloseTime, closeTime.Format(time.RFC3339Nano)),
-						elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(time.RFC3339Nano)),
+						elastic.NewTermQuery(sadefs.CloseTime, closeTime.Format(paginationDatetimeFormat)),
+						elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(paginationDatetimeFormat)),
 					),
 				elastic.NewBoolQuery().
 					Filter(
-						elastic.NewTermQuery(sadefs.CloseTime, closeTime.Format(time.RFC3339Nano)),
-						elastic.NewTermQuery(sadefs.StartTime, startTime.Format(time.RFC3339Nano)),
+						elastic.NewTermQuery(sadefs.CloseTime, closeTime.Format(paginationDatetimeFormat)),
+						elastic.NewTermQuery(sadefs.StartTime, startTime.Format(paginationDatetimeFormat)),
 						elastic.NewRangeQuery(sadefs.RunID).Gt("random-run-id"),
 					),
 			},
@@ -2354,4 +2354,61 @@ func (s *ESVisibilitySuite) TestValuesInterceptor_ChasmMapper() {
 	s.Error(err)
 	var converterErr *query.ConverterError
 	s.ErrorAs(err, &converterErr)
+}
+
+func TestPaginationDatetimeFormat(t *testing.T) {
+	testCases := []struct {
+		name string
+		in   time.Time
+		out  string
+	}{
+		{
+			name: "zero nanos",
+			in:   time.Date(2023, 4, 5, 6, 7, 8, 0, time.UTC),
+			out:  "2023-04-05T06:07:08.000000000Z",
+		},
+		{
+			name: "full nanos",
+			in:   time.Date(2023, 4, 5, 6, 7, 8, 123456789, time.UTC),
+			out:  "2023-04-05T06:07:08.123456789Z",
+		},
+		{
+			name: "trailing zeros in nanos",
+			in:   time.Date(2023, 4, 5, 6, 7, 8, 123000000, time.UTC),
+			out:  "2023-04-05T06:07:08.123000000Z",
+		},
+		{
+			name: "leading zeros in nanos",
+			in:   time.Date(2023, 4, 5, 6, 7, 8, 42, time.UTC),
+			out:  "2023-04-05T06:07:08.000000042Z",
+		},
+		{
+			name: "unix epoch",
+			in:   time.Unix(0, 0).UTC(),
+			out:  "1970-01-01T00:00:00.000000000Z",
+		},
+		{
+			name: "positive timezone offset",
+			in:   time.Date(2023, 4, 5, 6, 7, 8, 0, time.FixedZone("", 2*60*60+30*60)),
+			out:  "2023-04-05T06:07:08.000000000+02:30",
+		},
+		{
+			name: "negative timezone offset",
+			in:   time.Date(2023, 4, 5, 6, 7, 8, 123456789, time.FixedZone("", -5*60*60)),
+			out:  "2023-04-05T06:07:08.123456789-05:00",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			out := tc.in.Format(paginationDatetimeFormat)
+			r.Equal(tc.out, out)
+			// The formatted value must remain a valid RFC3339 datetime, and parsing it back must
+			// return the original instant.
+			parsed, err := time.Parse(time.RFC3339Nano, out)
+			r.NoError(err)
+			r.True(tc.in.Equal(parsed), "expected %v, got %v", tc.in, parsed)
+		})
+	}
 }

@@ -133,6 +133,7 @@ func (q *namespaceReplicationQueueImpl) GetReplicationMessages(
 			return nil, lastMessageID, fmt.Errorf("failed to decode task: %v", err)
 		}
 
+		replicationTask.SourceTaskId = message.ID
 		lastMessageID = message.ID
 		replicationTasks = append(replicationTasks, replicationTask)
 	}

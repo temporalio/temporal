@@ -198,6 +198,9 @@ func (e *ExecutableTaskImpl) Nack(err error) {
 		"replication task: %v encountered nack event",
 		e.taskID,
 	), tag.Error(err))
+	e.emitReplicationTaskError(wideevents.ReplOperationTaskExecution, "Replication task encountered nack event", err, map[string]any{
+		"terminal": true,
+	})
 	now := time.Now().UTC()
 	e.emitFinishMetrics(now)
 
@@ -731,8 +734,10 @@ func (e *ExecutableTaskImpl) SyncState(
 	}
 	resp, err := remoteAdminClient.SyncWorkflowState(ctx, req)
 	if err != nil {
-		var resourceExhaustedError *serviceerror.ResourceExhausted
-		if errors.As(err, &resourceExhaustedError) {
+		if _, ok := errors.AsType[*serviceerror.ResourceExhausted](err); ok {
+			e.emitReplicationTaskError(wideevents.ReplOperationSyncState, "Sync workflow state request exceeded resource limits", err, map[string]any{
+				"request_payload_size": req.Size(),
+			})
 			return false, serviceerror.NewInvalidArgumentf("sync workflow state failed due to resource exhausted: %v, request payload size: %v", err, req.Size())
 		}
 		logger := log.With(e.Logger,
@@ -742,15 +747,19 @@ func (e *ExecutableTaskImpl) SyncState(
 			tag.ReplicationTask(e.replicationTask),
 		)
 
-		var workflowNotReady *serviceerror.WorkflowNotReady
-		if errors.As(err, &workflowNotReady) {
+		if _, ok := errors.AsType[*serviceerror.WorkflowNotReady](err); ok {
 			logger.Info("Dropped replication task as source mutable state has buffered events.", tag.Error(err))
+			e.emitReplicationTaskError(wideevents.ReplOperationSyncState, "Dropped replication task because source mutable state has buffered events", err, map[string]any{
+				"disposition": wideevents.ReplDispositionDiscarded,
+			})
 			return false, nil
 		}
-		var notFoundErr *serviceerror.NotFound
-		if errors.As(err, &notFoundErr) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			logger.Error(
 				"workflow not found in source cluster, proceed to cleanup")
+			e.emitReplicationTaskError(wideevents.ReplOperationSyncState, "Workflow not found in source cluster; cleaning up target", err, map[string]any{
+				"recovery_action": wideevents.ReplRecoveryActionCleanup,
+			})
 			// workflow is not found in source cluster, cleanup workflow in target cluster
 			return false, e.DeleteWorkflow(
 				ctx,
@@ -761,8 +770,7 @@ func (e *ExecutableTaskImpl) SyncState(
 				),
 			)
 		}
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		if !errors.As(err, &failedPreconditionErr) {
+		if _, ok := errors.AsType[*serviceerror.FailedPrecondition](err); !ok {
 			return false, err
 		}
 		// Unable to perform sync state. Transition history maybe disabled in source cluster.
@@ -772,6 +780,9 @@ func (e *ExecutableTaskImpl) SyncState(
 		if len(taskEquivalents) == 0 {
 			// Just drop the task since there's nothing to replicate in event-based stack.
 			logger.Info("Dropped replication task as there's no event-based replication task equivalent.")
+			e.emitReplicationTaskError(wideevents.ReplOperationSyncState, "Dropped replication task because no event-based equivalent exists", err, map[string]any{
+				"disposition": wideevents.ReplDispositionDiscarded,
+			})
 			return false, nil
 		}
 
@@ -792,6 +803,11 @@ func (e *ExecutableTaskImpl) SyncState(
 			ShardId: e.sourceShardKey.ShardID,
 			Tasks:   tasksToAdd,
 		})
+		if err != nil {
+			e.emitReplicationTaskError(wideevents.ReplOperationSyncState, "Failed to enqueue event-based replication task equivalents", err, map[string]any{
+				"equivalent_count": len(tasksToAdd),
+			})
+		}
 		return false, err
 	}
 
@@ -806,12 +822,14 @@ func (e *ExecutableTaskImpl) SyncState(
 	if err != nil {
 		return false, err
 	}
-	// No TaskID: this artifact was re-fetched from the source, so it is not this task's payload.
-	ctx = wideevents.SetReplicationTaskOrigin(ctx, wideevents.ReplicationTaskOrigin{ShardID: e.sourceShardKey.ShardID})
+	ctx = setReplicationTaskOrigin(ctx, e, wideevents.ReplApplyArtifactSourceSyncStateRefetch)
 	err = engine.ReplicateVersionedTransition(ctx, syncStateErr.ArchetypeId, resp.VersionedTransitionArtifact, e.SourceClusterName())
 	if err == nil || errors.Is(err, consts.ErrDuplicate) {
 		return true, nil
 	}
+	e.emitReplicationTaskError(wideevents.ReplOperationSyncStateApply, "Failed to apply mutable state refetched from source", err, map[string]any{
+		"apply_artifact_source": wideevents.ReplApplyArtifactSourceSyncStateRefetch,
+	})
 	return false, err
 }
 
@@ -838,8 +856,7 @@ func (e *ExecutableTaskImpl) DeleteWorkflow(
 		},
 		ClosedWorkflowOnly: false,
 	})
-	var notFoundErr *serviceerror.NotFound
-	if errors.As(err, &notFoundErr) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 		return nil
 	}
 	return err
@@ -863,6 +880,9 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 		_, err = e.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
 		if err != nil {
 			e.ThrottledLogger.Error("Failed to SyncNamespaceFromSourceCluster", tag.Error(err))
+			e.emitReplicationTaskError(wideevents.ReplOperationNamespaceSync, "Failed to refresh namespace from source cluster; replication task skipped", err, map[string]any{
+				"disposition": wideevents.ReplDispositionDiscarded,
+			})
 			return "", false, nil
 		}
 	default:
@@ -901,6 +921,11 @@ func (e *ExecutableTaskImpl) MarkPoisonPill() error {
 			tag.SourceCluster(e.SourceClusterName()),
 			tag.ReplicationTask(taskInfo),
 		)
+		e.emitReplicationTaskError(wideevents.ReplOperationDLQWrite, "Writing replication task to DLQ reached maximum attempts", nil, map[string]any{
+			"dlq_attempt": e.markPoisonPillAttempts,
+			"disposition": wideevents.ReplDispositionDiscarded,
+			"terminal":    true,
+		})
 		return nil
 	}
 	e.markPoisonPillAttempts++
@@ -913,7 +938,7 @@ func (e *ExecutableTaskImpl) MarkPoisonPill() error {
 		return err
 	}
 
-	e.Logger.Error("Enqueued replication task to DLQ",
+	dlqLogger := log.With(e.Logger,
 		tag.TargetShardID(shardContext.GetShardID()),
 		tag.SourceShardID(e.sourceShardKey.ShardID),
 		tag.WorkflowNamespaceID(e.replicationTask.RawTaskInfo.NamespaceId),
@@ -931,7 +956,21 @@ func (e *ExecutableTaskImpl) MarkPoisonPill() error {
 	)
 	defer cancel()
 
-	return writeTaskToDLQ(ctx, e.DLQWriter, e.sourceShardKey.ShardID, e.SourceClusterName(), shardContext.GetShardID(), taskInfo)
+	err = writeTaskToDLQ(ctx, e.DLQWriter, e.sourceShardKey.ShardID, e.SourceClusterName(), shardContext.GetShardID(), taskInfo)
+	if err != nil {
+		dlqLogger.Error("Failed to enqueue replication task to DLQ", tag.Error(err))
+		e.emitReplicationTaskError(wideevents.ReplOperationDLQWrite, "Failed to enqueue replication task to DLQ", err, map[string]any{
+			"target_shard": shardContext.GetShardID(),
+		})
+		return err
+	}
+	dlqLogger.Error("Enqueued replication task to DLQ")
+	e.emitReplicationTaskError(wideevents.ReplOperationDLQWrite, "Enqueued replication task to DLQ", nil, map[string]any{
+		"target_shard": shardContext.GetShardID(),
+		"disposition":  wideevents.ReplDispositionDLQ,
+		"terminal":     true,
+	})
+	return nil
 }
 
 func newTaskContext(

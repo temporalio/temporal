@@ -1071,7 +1071,7 @@ func (s *streamBasedReplicationTestSuite) TestPassiveActivityRetryTimerReplicati
 	s.NoError(err)
 	defer sdkClient.Close()
 
-	var activityAttempts int32
+	var activityAttempts atomic.Int32
 
 	// Workflow with activity that retries with 3 second intervals
 	simpleWorkflow := func(ctx workflow.Context) (string, error) {
@@ -1096,7 +1096,7 @@ func (s *streamBasedReplicationTestSuite) TestPassiveActivityRetryTimerReplicati
 
 	// Activity that sleeps 3 seconds and fails twice, succeeds on 3rd attempt
 	simpleActivity := func(ctx context.Context) (string, error) {
-		attempt := atomic.AddInt32(&activityAttempts, 1)
+		attempt := activityAttempts.Add(1)
 		if attempt < 3 {
 			return "", fmt.Errorf("failed attempt %d", attempt)
 		}
