@@ -43,8 +43,7 @@ func (a *VersionActivities) StartWorkerDeploymentWorkflow(
 	logger.Info("starting worker-deployment workflow", "deploymentName", input.DeploymentName)
 	identity := "deployment-version workflow " + activity.GetInfo(ctx).WorkflowExecution.ID
 	err := a.WorkerDeploymentClient.StartWorkerDeployment(ctx, a.namespace, input.DeploymentName, identity, input.RequestId)
-	var precond *serviceerror.FailedPrecondition
-	if errors.As(err, &precond) {
+	if _, ok := errors.AsType[*serviceerror.FailedPrecondition](err); ok {
 		return temporal.NewNonRetryableApplicationError("failed to create deployment", errTooManyDeployments, err)
 	}
 	return err
@@ -217,8 +216,7 @@ func (a *VersionActivities) UpdateWorkerControllerInstance(ctx context.Context, 
 	upserts := scalingGroupUpdatesToWCI(input.GetUpsertScalingGroups())
 	resp, err := a.WorkerControllerInstanceClient.UpdateWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), nil, input.GetIdentity(), upserts, input.GetRemoveScalingGroups())
 	if err != nil {
-		var invalidArgs *serviceerror.InvalidArgument
-		if errors.As(err, &invalidArgs) {
+		if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
 			return nil, temporal.NewNonRetryableApplicationError(err.Error(), errInvalidComputeConfig, nil)
 		}
 		return nil, err

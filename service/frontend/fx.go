@@ -9,7 +9,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
-	"go.temporal.io/server/chasm/lib/callback"
+	chasmcallback "go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -143,7 +144,7 @@ var Module = fx.Options(
 	chasmnexus.Module,
 	chasmscheduler.Module,
 	chasmworkflow.Module,
-	callback.Module,
+	chasmcallback.Module,
 	activity.FrontendModule,
 	fx.Provide(visibility.ChasmVisibilityManagerProvider),
 	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
@@ -903,13 +904,13 @@ func OperatorHandlerProvider(
 
 // callbackValidatorProvider creates a callback Validator using the production dynamic config keys
 // so that existing operator configurations (callback.allowedAddresses) are honored.
-func callbackValidatorProvider(dc *dynamicconfig.Collection) callback.Validator {
-	return callback.NewValidator(
-		callback.MaxPerExecution.Get(dc),
-		dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
-		dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
-		callback.AllowedAddresses.Get(dc),
-	)
+func callbackValidatorProvider(dc *dynamicconfig.Collection) (callbacks.Validator, error) {
+	return callbacks.NewValidator(callbacks.ValidatorConfig{
+		MaxCallbacksPerExecution: chasmcallback.MaxPerExecution.Get(dc),
+		URLMaxLength:             dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
+		HeaderMaxSize:            dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
+		EndpointRules:            chasmcallback.AllowedAddresses.Get(dc),
+	})
 }
 
 func HandlerProvider(
@@ -948,7 +949,7 @@ func HandlerProvider(
 	healthInterceptor *interceptor.HealthInterceptor,
 	scheduleSpecBuilder *scheduler.SpecBuilder,
 	activityHandler activity.FrontendHandler,
-	callbackValidator callback.Validator,
+	callbackValidator callbacks.Validator,
 	nexusOperationHandler chasmnexus.FrontendHandler,
 	registry *chasm.Registry,
 	frontendServiceResolver membership.ServiceResolver,

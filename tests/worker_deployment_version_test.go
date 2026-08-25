@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
@@ -504,7 +505,7 @@ func (s *DeploymentVersionSuite) startVersionedWorkflow(ctx context.Context, env
 	defer w.Stop()
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tv.TaskQueue().String()}, wf)
 	s.NoError(err)
-	env.WaitForChannel(started)
+	await.Rcv(s.T(), started)
 	return run
 }
 
