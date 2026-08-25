@@ -405,8 +405,7 @@ lint-actions: $(ACTIONLINT)
 	@$(ACTIONLINT)
 
 .PHONY: lint-code lint-code-fast
-# --new-from-rev filters reported issues after analysis.
-# This target also reduces package inputs before analysis.
+# --new-from-rev filters reported issues _after_ analysis; this target also reduces package inputs _before_ analysis.
 lint-code-fast:
 	@if ! git rev-parse --verify --quiet "$(GOLANGCI_LINT_BASE_REV)^{commit}" >/dev/null; then \
 		printf '%s\n' "GOLANGCI_LINT_BASE_REV=$(GOLANGCI_LINT_BASE_REV) is not a known commit; fetch it or override GOLANGCI_LINT_BASE_REV"; \
