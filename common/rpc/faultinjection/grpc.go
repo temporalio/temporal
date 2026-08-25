@@ -130,24 +130,24 @@ func (r *RPCFaultGenerator) registerCallback(namespaceID namespace.ID, namespace
 }
 
 func (r *RPCFaultGenerator) installHook(scope rpcCallbackScope) func() {
-	if scope.namespaceID != "" {
-		if scope.stage == rpcFaultStageRequest {
-			return testhooks.Set(r.testHooks, testhooks.RPCRequestFaultGeneratorByNamespaceID, func(ctx context.Context, fullMethod string, req any) (bool, any, error) {
-				return r.generate(ctx, fullMethod, scope, req, nil, nil)
-			}, scope.namespaceID)
-		}
+	switch {
+	case scope.namespaceID != "" && scope.stage == rpcFaultStageRequest:
+		return testhooks.Set(r.testHooks, testhooks.RPCRequestFaultGeneratorByNamespaceID, func(ctx context.Context, fullMethod string, req any) (bool, any, error) {
+			return r.generate(ctx, fullMethod, scope, req, nil, nil)
+		}, scope.namespaceID)
+	case scope.namespaceID != "":
 		return testhooks.Set(r.testHooks, testhooks.RPCResponseFaultGeneratorByNamespaceID, func(ctx context.Context, fullMethod string, req, resp any, err error) (bool, any, error) {
 			return r.generate(ctx, fullMethod, scope, req, resp, err)
 		}, scope.namespaceID)
-	}
-	if scope.stage == rpcFaultStageRequest {
+	case scope.stage == rpcFaultStageRequest:
 		return testhooks.Set(r.testHooks, testhooks.RPCRequestFaultGeneratorByNamespaceName, func(ctx context.Context, fullMethod string, req any) (bool, any, error) {
 			return r.generate(ctx, fullMethod, scope, req, nil, nil)
 		}, scope.namespaceName)
+	default:
+		return testhooks.Set(r.testHooks, testhooks.RPCResponseFaultGeneratorByNamespaceName, func(ctx context.Context, fullMethod string, req, resp any, err error) (bool, any, error) {
+			return r.generate(ctx, fullMethod, scope, req, resp, err)
+		}, scope.namespaceName)
 	}
-	return testhooks.Set(r.testHooks, testhooks.RPCResponseFaultGeneratorByNamespaceName, func(ctx context.Context, fullMethod string, req, resp any, err error) (bool, any, error) {
-		return r.generate(ctx, fullMethod, scope, req, resp, err)
-	}, scope.namespaceName)
 }
 
 func (r *RPCFaultGenerator) generate(ctx context.Context, fullMethod string, scope rpcCallbackScope, req, resp any, err error) (bool, any, error) {
