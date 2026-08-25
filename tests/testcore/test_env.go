@@ -458,28 +458,6 @@ func (e *TestEnv) Tv() *testvars.TestVars {
 	return e.tv
 }
 
-// InjectRPCRequestFault registers a pre-handler fault injection scoped to this test's namespace.
-// Requests match either the namespace ID or name filter, depending on which
-// namespace field they expose. Requests without either field are ignored.
-// Returns a cleanup function that disables the fault.
-func (e *TestEnv) InjectRPCRequestFault(fault RPCRequestFault) func() {
-	return InjectRPCRequestFault(e.t, e.GetTestCluster(), RPCFaultScope{
-		NamespaceID:   e.nsID,
-		NamespaceName: e.nsName,
-	}, fault)
-}
-
-// InjectRPCResponseFault registers a post-handler fault injection scoped to this test's namespace.
-// Requests match either the namespace ID or name filter, depending on which
-// namespace field they expose. Requests without either field are ignored.
-// Returns a cleanup function that disables the fault.
-func (e *TestEnv) InjectRPCResponseFault(fault RPCResponseFault) func() {
-	return InjectRPCResponseFault(e.t, e.GetTestCluster(), RPCFaultScope{
-		NamespaceID:   e.nsID,
-		NamespaceName: e.nsName,
-	}, fault)
-}
-
 // Context returns the test-level timeout context with RPC version headers already included.
 // This context will be canceled when the test timeout occurs. Use this directly for all RPC
 // operations - no need to wrap with NewContext or add headers manually.
