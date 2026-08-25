@@ -246,10 +246,6 @@ func (a *Activities) runOverdueScan(ctx context.Context, query string) error {
 // ListAllNamespaces returns the names of every namespace active in the current cluster,
 // from the namespace registry's in-memory snapshot. The snapshot may lag persistence by
 // up to the registry's refresh interval, which is acceptable for a best-effort scanner.
-//
-// Namespaces active elsewhere are excluded: these invariants read visibility records,
-// and a standby's records track its lagging replica, so a schedule ticking normally
-// looks arbitrarily overdue there.
 func (a *Activities) ListAllNamespaces() []string {
 	var names []string
 	for _, ns := range a.namespaceRegistry.GetAllNamespaces() {
@@ -383,9 +379,7 @@ func (a *Activities) scheduleIsExpectedNotToFire(ctx context.Context, nsName, sc
 
 	// Confirm the invariant against what Describe just returned: the candidate came from
 	// a ScheduleNextActionTime index entry, which goes stale on replication or indexing
-	// lag. This also covers SKIP with a running workflow, which is deliberately not an
-	// exemption above - the Generator keeps advancing FutureActionTimes, so an exemption
-	// would mask a genuinely stalled SKIP schedule.
+	// lag.
 	if !a.nextActionTimeIsOverdue(desc.GetInfo().GetFutureActionTimes()) {
 		a.logger.Info("overdue candidate was not overdue on re-check; visibility entry was stale",
 			tag.WorkflowNamespace(nsName), tag.ScheduleID(scheduleID))
