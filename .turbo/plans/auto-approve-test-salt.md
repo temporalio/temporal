@@ -6,7 +6,7 @@ status: done
 
 ## Context
 
-The scheduled test-sharding optimizer already creates a single-file pull request and enables squash auto-merge. The pull request remains blocked because the generated salt file inherits CODEOWNERS and Temporal has no guarded auto-approval workflow for this CICD change on `main`.
+The scheduled test-sharding optimizer already creates a single-file pull request and enables squash auto-merge. The pull request remains blocked because the generated salt file inherits CODEOWNERS and the optimizer does not approve the CICD change.
 
 ## Pattern Survey
 
@@ -32,22 +32,22 @@ The scheduled test-sharding optimizer already creates a single-file pull request
 
 ### Proposed Alignment
 
-Combine Temporal's existing approval mechanism with the stronger same-repository and exact-file validation used by SaaS bot workflows, and follow SaaS's late ownerless CODEOWNERS override.
+Use Temporal's existing approval mechanism directly in the trusted scheduled optimizer, and follow SaaS's late ownerless CODEOWNERS override.
 
 ## Implementation Steps
 
 1. **Exempt the generated salt from CODEOWNERS**
    - Add an explanatory comment and exact ownerless `/tests/testcore/shard_salt.txt` entry to `.github/CODEOWNERS` after the broad ownership rules.
-2. **Add guarded approval automation**
-   - Add `.github/workflows/auto-approve-test-shard-salt.yml` for pull requests to `main` that touch the salt path.
-   - Gate approval on the CICD author, same-repository source, canonical branch, and exact title from `.github/workflows/optimize-test-sharding.yml`.
-   - Query pull-request files through `gh`, fail closed unless the salt is the sole changed file, then approve with the standard Actions token.
+2. **Approve the generated pull request**
+   - Capture the pull-request URL in `.github/workflows/optimize-test-sharding.yml` after the trusted scheduled job creates it.
+   - Approve with the standard Actions token in a following step while retaining the CICD App token for pull-request creation and auto-merge.
+   - Skip approval when the optimizer detects no salt change and therefore creates no pull request.
 
 ## Verification
 
 - Run `make lint-actions`; expect actionlint to accept all workflows.
 - Run `git diff --check`; expect no whitespace errors.
-- Statically inspect the workflow predicate and file query; expect every approved design guard and only `tests/testcore/shard_salt.txt` in the allowlist.
+- Statically inspect the workflow token boundaries; expect the CICD App token to create the pull request and enable auto-merge, and the standard Actions token to approve it.
 - Compare the ownerless rule with the SaaS generated-file convention; expect it to appear after Temporal's wildcard rule.
 
 ## Context Files
