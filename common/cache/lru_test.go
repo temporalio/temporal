@@ -427,10 +427,10 @@ func TestCache_ItemHasCacheSizeDefined(t *testing.T) {
 	startWG.Add(numPuts)
 	endWG.Add(numPuts)
 
-	sizeWithinLimit := make(chan bool)
+	sizeDuringPuts := make(chan int)
 	go func() {
 		startWG.Wait()
-		await.Snd(t, sizeWithinLimit, cache.Size() < maxTotalBytes)
+		await.Snd(t, sizeDuringPuts, cache.Size())
 	}()
 	for range numPuts {
 		go func() {
@@ -443,9 +443,9 @@ func TestCache_ItemHasCacheSizeDefined(t *testing.T) {
 		startWG.Done()
 	}
 
-	sizeWasWithinLimit := await.Rcv(t, sizeWithinLimit)
+	size := await.Rcv(t, sizeDuringPuts)
 	endWG.Wait()
-	require.True(t, sizeWasWithinLimit)
+	require.Less(t, size, maxTotalBytes)
 }
 
 func TestCache_ItemHasCacheSizeDefined_PutWithNewKeys(t *testing.T) {
@@ -792,14 +792,7 @@ func TestCache_UnusedExpiry(t *testing.T) {
 		l.loops.Wait()
 		close(c)
 	}()
-	await.RequireTrue(t, func() bool {
-		select {
-		case <-c:
-			return true
-		default:
-			return false
-		}
-	}, 2*time.Second, 100*time.Millisecond)
+	await.Rcv(t, c)
 	timeSource.Advance(ttl + 1*time.Second)
 	// The cache should still have entry 4,
 	r.Equal(1, cache.Size())
