@@ -78,6 +78,13 @@ func WithTimeSource(ts clock.TimeSource) EngineOption {
 	}
 }
 
+// WithMetricsHandler overrides the engine's default no-op metrics handler.
+func WithMetricsHandler(handler metrics.Handler) EngineOption {
+	return func(e *Engine) {
+		e.metrics = handler
+	}
+}
+
 var defaultTransitionOptions = chasm.TransitionOptions{
 	ReusePolicy:    chasm.BusinessIDReusePolicyAllowDuplicate,
 	ConflictPolicy: chasm.BusinessIDConflictPolicyFail,

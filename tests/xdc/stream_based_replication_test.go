@@ -473,17 +473,22 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 	})
 	s.NoError(err)
 
+	// Wipe the local copies on the passive cluster. The frontend DeleteWorkflowExecution API rejects
+	// deletions on a cluster that is passive for the workflow (they would not be replicated), so go
+	// through the history service directly, which is the same path replication apply uses. The admin
+	// force-delete API is not usable here: it deletes the DB rows without clearing the workflow cache,
+	// so the target keeps serving the deleted runs from cache.
 	client1 := s.clusters[1].FrontendClient()
-	_, err = client1.DeleteWorkflowExecution(testcore.NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
-		Namespace: ns,
+	_, err = s.clusters[1].HistoryClient().DeleteWorkflowExecution(testcore.NewContext(), &historyservice.DeleteWorkflowExecutionRequest{
+		NamespaceId: resp.NamespaceInfo.GetId(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.GetRunId(),
 		},
 	})
 	s.NoError(err)
-	_, err = client1.DeleteWorkflowExecution(testcore.NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
-		Namespace: ns,
+	_, err = s.clusters[1].HistoryClient().DeleteWorkflowExecution(testcore.NewContext(), &historyservice.DeleteWorkflowExecutionRequest{
+		NamespaceId: resp.NamespaceInfo.GetId(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      resetResp.GetRunId(),
