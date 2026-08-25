@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -78,6 +79,7 @@ type (
 		logger                       log.Logger
 		eventLogger                  otellog.Logger
 		taskRefresher                workflow.TaskRefresher
+		testHooks                    testhooks.TestHooks
 	}
 )
 
@@ -89,6 +91,7 @@ func NewWorkflowStateReplicator(
 	persistenceRateLimiter quotas.RequestRateLimiter,
 	logger log.Logger,
 	eventLogger otellog.Logger,
+	testHooks testhooks.TestHooks,
 ) *WorkflowStateReplicatorImpl {
 
 	logger = log.With(logger, tag.ComponentWorkflowStateReplicator)
@@ -105,6 +108,7 @@ func NewWorkflowStateReplicator(
 		logger:                       logger,
 		eventLogger:                  eventLogger,
 		taskRefresher:                workflow.NewTaskRefresher(shardContext),
+		testHooks:                    testHooks,
 	}
 }
 
@@ -228,12 +232,58 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 	)
 }
 
-//nolint:revive // cognitive complexity 37 (> max enabled 25)
 func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	ctx context.Context,
 	archetypeID chasm.ArchetypeID,
 	versionedTransitionArtifact *replicationspb.VersionedTransitionArtifact,
 	sourceClusterName string,
+) error {
+	wfCtx, err := r.workflowContextFromTestHook(ctx)
+	if err != nil {
+		return err
+	}
+	if wfCtx != nil && (versionedTransitionArtifact.GetSyncWorkflowStateMutationAttributes() == nil ||
+		versionedTransitionArtifact.GetIsFirstSync()) {
+		return serviceerror.NewInvalidArgument("pre-acquired workflow context only supports non-first-sync mutations")
+	}
+	return r.replicateVersionedTransition(
+		ctx,
+		archetypeID,
+		versionedTransitionArtifact,
+		sourceClusterName,
+		wfCtx,
+	)
+}
+
+func (r *WorkflowStateReplicatorImpl) workflowContextFromTestHook(
+	ctx context.Context,
+) (historyi.WorkflowContext, error) {
+	hook, ok := testhooks.Get(
+		r.testHooks,
+		testhooks.HistoryWorkflowExecutionInterceptor,
+		testhooks.GlobalScope,
+	)
+	if !ok {
+		return nil, nil
+	}
+	value, ok := hook.WorkflowContextForReplication(ctx)
+	if !ok {
+		return nil, nil
+	}
+	wfCtx, ok := value.(historyi.WorkflowContext)
+	if !ok {
+		return nil, serviceerror.NewInternal("test hook returned an invalid workflow context")
+	}
+	return wfCtx, nil
+}
+
+//nolint:revive // cognitive complexity 37 (> max enabled 25)
+func (r *WorkflowStateReplicatorImpl) replicateVersionedTransition(
+	ctx context.Context,
+	archetypeID chasm.ArchetypeID,
+	versionedTransitionArtifact *replicationspb.VersionedTransitionArtifact,
+	sourceClusterName string,
+	preAcquiredWorkflowContext historyi.WorkflowContext,
 ) (retError error) {
 	if versionedTransitionArtifact.StateAttributes == nil {
 		return serviceerror.NewInvalidArgument("both snapshot and mutation are nil")
@@ -268,19 +318,28 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 		}
 	}()
 
-	wfCtx, releaseFn, err := r.workflowCache.GetOrCreateChasmExecution(
-		ctx,
-		r.shardContext,
-		namespaceID,
-		&commonpb.WorkflowExecution{
-			WorkflowId: wid,
-			RunId:      rid,
-		},
-		archetypeID,
-		locks.PriorityHigh,
-	)
-	if err != nil {
-		return err
+	wfCtx := preAcquiredWorkflowContext
+	releaseFn := wcache.NoopReleaseFn
+	if wfCtx == nil {
+		wfCtx, releaseFn, err = r.workflowCache.GetOrCreateChasmExecution(
+			ctx,
+			r.shardContext,
+			namespaceID,
+			&commonpb.WorkflowExecution{
+				WorkflowId: wid,
+				RunId:      rid,
+			},
+			archetypeID,
+			locks.PriorityHigh,
+		)
+		if err != nil {
+			return err
+		}
+	} else {
+		workflowKey := wfCtx.GetWorkflowKey()
+		if workflowKey.NamespaceID != namespaceID.String() || workflowKey.WorkflowID != wid || workflowKey.RunID != rid {
+			return serviceerror.NewInvalidArgument("pre-acquired workflow context does not match replication artifact")
+		}
 	}
 	if emitLifecycle {
 		// Snapshot the post-apply mutable state at release time: the only point that is both after
@@ -313,10 +372,16 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	ms, err = wfCtx.LoadMutableState(ctx, r.shardContext)
 	switch err.(type) {
 	case *serviceerror.NotFound:
+		if preAcquiredWorkflowContext != nil {
+			return serviceerror.NewInvalidArgument("pre-acquired workflow context cannot apply a snapshot")
+		}
 		return r.applySnapshot(ctx, namespaceID, wid, rid, archetypeID, wfCtx, releaseFn, nil, versionedTransitionArtifact, sourceClusterName, captureMutableState)
 	case nil:
 		localTransitionHistory := ms.GetExecutionInfo().TransitionHistory
 		if len(localTransitionHistory) == 0 {
+			if preAcquiredWorkflowContext != nil {
+				return serviceerror.NewInvalidArgument("pre-acquired workflow context requires local transition history")
+			}
 			// This could happen when versioned transition feature is just enabled
 			// TODO: Revisit these logic when working on roll out/back plan
 			if snapshot == nil {
@@ -377,6 +442,9 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 			}
 			return r.applyMutation(ctx, namespaceID, wid, rid, archetypeID, wfCtx, ms, releaseFn, versionedTransitionArtifact, sourceClusterName)
 		case errors.Is(err, consts.ErrStaleReference):
+			if preAcquiredWorkflowContext != nil {
+				return serviceerror.NewInvalidArgument("pre-acquired workflow context cannot backfill history")
+			}
 			releaseFn(nil)
 			return r.backFillEvents(ctx, namespaceID, wid, rid, executionInfo.VersionHistories, versionedTransitionArtifact.EventBatches, versionedTransitionArtifact.NewRunInfo, sourceClusterName, transitionhistory.LastVersionedTransition(sourceTransitionHistory))
 		default:

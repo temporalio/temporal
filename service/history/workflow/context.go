@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -44,6 +45,7 @@ type (
 		throttledLogger log.ThrottledLogger
 		metricsHandler  metrics.Handler
 		config          *configs.Config
+		testHooks       testhooks.TestHooks
 
 		lock           locks.PrioritySemaphore
 		MutableState   historyi.MutableState
@@ -73,6 +75,19 @@ type (
 		identity  workflowTaskIdentity           // the workflow task this buffer belongs to
 		namespace string                         // namespace name
 	}
+
+	// TestHookUpdateWorkflowExecutionRequest is passed only to the test-only
+	// HistoryWorkflowExecutionInterceptor.
+	TestHookUpdateWorkflowExecutionRequest struct {
+		WorkflowContext                 *ContextImpl
+		ShardContext                    historyi.ShardContext
+		UpdateMode                      persistence.UpdateWorkflowMode
+		NewContext                      historyi.WorkflowContext
+		NewMutableState                 historyi.MutableState
+		UpdateWorkflowTransactionPolicy historyi.TransactionPolicy
+		NewWorkflowTransactionPolicy    *historyi.TransactionPolicy
+		PrepareTransaction              func() error
+	}
 )
 
 var _ historyi.WorkflowContext = (*ContextImpl)(nil)
@@ -99,6 +114,52 @@ func NewContext(
 	metricsHandler metrics.Handler,
 	paginationLimiter *limiter.KeyedBytesLimiter,
 ) *ContextImpl {
+	return newContext(
+		config,
+		workflowKey,
+		archetypeID,
+		logger,
+		throttledLogger,
+		metricsHandler,
+		paginationLimiter,
+		testhooks.TestHooks{},
+	)
+}
+
+// NewContextWithTestHooks creates a cache-owned workflow context with access to
+// test-only hooks. Production builds always resolve these hooks as unset.
+func NewContextWithTestHooks(
+	config *configs.Config,
+	workflowKey definition.WorkflowKey,
+	archetypeID chasm.ArchetypeID,
+	logger log.Logger,
+	throttledLogger log.ThrottledLogger,
+	metricsHandler metrics.Handler,
+	paginationLimiter *limiter.KeyedBytesLimiter,
+	testHooks testhooks.TestHooks,
+) *ContextImpl {
+	return newContext(
+		config,
+		workflowKey,
+		archetypeID,
+		logger,
+		throttledLogger,
+		metricsHandler,
+		paginationLimiter,
+		testHooks,
+	)
+}
+
+func newContext(
+	config *configs.Config,
+	workflowKey definition.WorkflowKey,
+	archetypeID chasm.ArchetypeID,
+	logger log.Logger,
+	throttledLogger log.ThrottledLogger,
+	metricsHandler metrics.Handler,
+	paginationLimiter *limiter.KeyedBytesLimiter,
+	testHooks testhooks.TestHooks,
+) *ContextImpl {
 	tags := func() []tag.Tag {
 		return []tag.Tag{
 			tag.WorkflowNamespaceID(workflowKey.NamespaceID),
@@ -115,6 +176,7 @@ func NewContext(
 		config:            config,
 		lock:              locks.NewPrioritySemaphore(1),
 		paginationLimiter: paginationLimiter,
+		testHooks:         testHooks,
 	}
 	softassert.That(
 		contextImpl.throttledLogger,
@@ -788,6 +850,61 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	newMutableState historyi.MutableState,
 	updateWorkflowTransactionPolicy historyi.TransactionPolicy,
 	newWorkflowTransactionPolicy *historyi.TransactionPolicy,
+) error {
+	if hook, ok := testhooks.Get(
+		c.testHooks,
+		testhooks.HistoryWorkflowExecutionInterceptor,
+		testhooks.GlobalScope,
+	); ok {
+		request := &TestHookUpdateWorkflowExecutionRequest{
+			WorkflowContext:                 c,
+			ShardContext:                    shardContext,
+			UpdateMode:                      updateMode,
+			NewContext:                      newContext,
+			NewMutableState:                 newMutableState,
+			UpdateWorkflowTransactionPolicy: updateWorkflowTransactionPolicy,
+			NewWorkflowTransactionPolicy:    newWorkflowTransactionPolicy,
+			PrepareTransaction: func() error {
+				return c.prepareUpdateWorkflowExecutionWithNew(
+					shardContext,
+					newContext,
+					newMutableState,
+					newWorkflowTransactionPolicy,
+				)
+			},
+		}
+		return hook.InterceptUpdate(ctx, request, func() error {
+			return c.updateWorkflowExecutionWithNew(
+				ctx,
+				shardContext,
+				updateMode,
+				newContext,
+				newMutableState,
+				updateWorkflowTransactionPolicy,
+				newWorkflowTransactionPolicy,
+			)
+		})
+	}
+
+	return c.updateWorkflowExecutionWithNew(
+		ctx,
+		shardContext,
+		updateMode,
+		newContext,
+		newMutableState,
+		updateWorkflowTransactionPolicy,
+		newWorkflowTransactionPolicy,
+	)
+}
+
+func (c *ContextImpl) updateWorkflowExecutionWithNew(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	updateMode persistence.UpdateWorkflowMode,
+	newContext historyi.WorkflowContext,
+	newMutableState historyi.MutableState,
+	updateWorkflowTransactionPolicy historyi.TransactionPolicy,
+	newWorkflowTransactionPolicy *historyi.TransactionPolicy,
 ) (retError error) {
 
 	defer func() {
@@ -796,31 +913,14 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		}
 	}()
 
-	if newContext != nil && newMutableState != nil && newWorkflowTransactionPolicy != nil {
-		if *newWorkflowTransactionPolicy == historyi.TransactionPolicyActive {
-			execInfo := newMutableState.GetExecutionInfo()
-			newArchetypeID := newContext.GetArchetypeID()
-			if rl := shardContext.BusinessIDReuseRateLimiter(
-				namespace.ID(execInfo.NamespaceId),
-				execInfo.WorkflowId,
-				newArchetypeID,
-			); rl != nil && !rl.Allow() {
-				archetypeName, _ := shardContext.ChasmRegistry().ArchetypeDisplayName(newArchetypeID)
-				metrics.BusinessIDReuseRateLimited.With(shardContext.GetMetricsHandler()).Record(
-					1,
-					metrics.ResourceExhaustedCauseTag(consts.ErrBusinessIDRateLimitExceeded.Cause),
-					metrics.ResourceExhaustedScopeTag(consts.ErrBusinessIDRateLimitExceeded.Scope),
-					metrics.StringTag("archetype", archetypeName),
-				)
-				return consts.ErrBusinessIDRateLimitExceeded
-			}
-		}
-		c.MutableState.SetSuccessorRunID(newMutableState.GetExecutionState().RunId)
+	if err := c.prepareUpdateWorkflowExecutionWithNew(
+		shardContext,
+		newContext,
+		newMutableState,
+		newWorkflowTransactionPolicy,
+	); err != nil {
+		return err
 	}
-
-	// reconcileTaskCompletionBuffer drops an orphaned buffer for the pagination of
-	// RespondWorkflowTaskCompleted requests.
-	c.reconcileTaskCompletionBuffer()
 
 	updateWorkflow, updateWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsMutation(
 		ctx,
@@ -908,6 +1008,40 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		int(c.MutableState.GetNextEventID()-1),
 	)
 
+	return nil
+}
+
+func (c *ContextImpl) prepareUpdateWorkflowExecutionWithNew(
+	shardContext historyi.ShardContext,
+	newContext historyi.WorkflowContext,
+	newMutableState historyi.MutableState,
+	newWorkflowTransactionPolicy *historyi.TransactionPolicy,
+) error {
+	if newContext != nil && newMutableState != nil && newWorkflowTransactionPolicy != nil {
+		if *newWorkflowTransactionPolicy == historyi.TransactionPolicyActive {
+			execInfo := newMutableState.GetExecutionInfo()
+			newArchetypeID := newContext.GetArchetypeID()
+			if rl := shardContext.BusinessIDReuseRateLimiter(
+				namespace.ID(execInfo.NamespaceId),
+				execInfo.WorkflowId,
+				newArchetypeID,
+			); rl != nil && !rl.Allow() {
+				archetypeName, _ := shardContext.ChasmRegistry().ArchetypeDisplayName(newArchetypeID)
+				metrics.BusinessIDReuseRateLimited.With(shardContext.GetMetricsHandler()).Record(
+					1,
+					metrics.ResourceExhaustedCauseTag(consts.ErrBusinessIDRateLimitExceeded.Cause),
+					metrics.ResourceExhaustedScopeTag(consts.ErrBusinessIDRateLimitExceeded.Scope),
+					metrics.StringTag("archetype", archetypeName),
+				)
+				return consts.ErrBusinessIDRateLimitExceeded
+			}
+		}
+		c.MutableState.SetSuccessorRunID(newMutableState.GetExecutionState().RunId)
+	}
+
+	// reconcileTaskCompletionBuffer drops an orphaned buffer for the pagination of
+	// RespondWorkflowTaskCompleted requests.
+	c.reconcileTaskCompletionBuffer()
 	return nil
 }
 

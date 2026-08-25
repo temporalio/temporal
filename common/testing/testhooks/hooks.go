@@ -12,6 +12,14 @@ import (
 	historytasks "go.temporal.io/server/service/history/tasks"
 )
 
+// HistoryWorkflowExecutionHook defines the test-only seams used to replace an
+// active workflow update with a passive replication apply. InterceptUpdate's payload
+// is owned by service/history/workflow and is intentionally opaque here.
+type HistoryWorkflowExecutionHook interface {
+	InterceptUpdate(context.Context, any, func() error) error
+	WorkflowContextForReplication(context.Context) (any, bool)
+}
+
 // Test hook keys with their return type and scope.
 // Try to avoid global scope as it requires a dedicated test cluster.
 var (
@@ -28,8 +36,11 @@ var (
 	HistoryReplicationDLQWriteInterceptor    = newKey[func(*persistencespb.ReplicationTaskInfo, func() error) error, global]()
 	HistoryChasmRuntimeProvider              = newKey[func(chasm.Engine, chasm.VisibilityManager, *chasm.Registry), global]()
 	HistoryTransferTaskInterceptor           = newKey[func(historytasks.Task, func()), namespace.ID]()
-	HistoryDLQTaskDeleteInterceptor          = newKey[func(context.Context, *historyservice.DeleteDLQTasksRequest, func(context.Context, *historyservice.DeleteDLQTasksRequest) (*historyservice.DeleteDLQTasksResponse, error)) (*historyservice.DeleteDLQTasksResponse, error), global]()
-	NamespaceReplicationTaskInterceptor      = newKey[func(context.Context, *replicationspb.NamespaceTaskAttributes, func() error) error, namespace.Name]()
+	// HistoryWorkflowExecutionInterceptor is only active in test_dep builds. The
+	// production testhooks implementation always reports it as unset.
+	HistoryWorkflowExecutionInterceptor = newKey[HistoryWorkflowExecutionHook, global]()
+	HistoryDLQTaskDeleteInterceptor     = newKey[func(context.Context, *historyservice.DeleteDLQTasksRequest, func(context.Context, *historyservice.DeleteDLQTasksRequest) (*historyservice.DeleteDLQTasksResponse, error)) (*historyservice.DeleteDLQTasksResponse, error), global]()
+	NamespaceReplicationTaskInterceptor = newKey[func(context.Context, *replicationspb.NamespaceTaskAttributes, func() error) error, namespace.Name]()
 )
 
 // keyID is a unique identifier for a key, used as a map key.
