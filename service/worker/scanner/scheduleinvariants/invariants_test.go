@@ -333,9 +333,32 @@ func TestScheduleIsExpectedNotToFire(t *testing.T) {
 			want: false,
 		},
 		{
-			name: "unordered_times_with_one_pending",
+			// The stalled-generator shape: visibility indexes FutureActionTimes[0],
+			// which is overdue, while the rest of the cached horizon is still future.
+			// Requiring every entry to be overdue would delay detection by the full
+			// cache depth.
+			name: "only_earliest_entry_overdue",
+			resp: func() *workflowservice.DescribeScheduleResponse {
+				times := []time.Time{overdueActionTime()}
+				for i := range 9 {
+					times = append(times, testNow.Add(time.Duration(i+1)*time.Hour))
+				}
+				return describeResp(false, enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, 0, times...)
+			}(),
+			want: false,
+		},
+		{
+			// Ordering isn't guaranteed: the earliest entry decides, wherever it sits.
+			name: "unordered_earliest_is_overdue",
 			resp: describeResp(false, enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, 0,
-				overdueActionTime(), pendingActionTime()),
+				pendingActionTime(), overdueActionTime()),
+			want: false,
+		},
+		{
+			// Stale index entry: every cached time is still in the future.
+			name: "all_entries_pending",
+			resp: describeResp(false, enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, 0,
+				pendingActionTime(), pendingActionTime().Add(time.Hour)),
 			want: true,
 		},
 		{
