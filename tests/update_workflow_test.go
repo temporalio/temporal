@@ -1393,10 +1393,10 @@ func (s *WorkflowUpdateSuite) TestStickySpeculativeWorkflowTask_AcceptComplete_S
 
 	// Inject StickyWorkerUnavailable for AddWorkflowTask on the sticky queue.
 	// This causes history to fall back to the normal queue.
-	env.InjectRPCFault(
-		func(req, resp any, _ error) error {
+	env.InjectRPCRequestFault(
+		func(req any) error {
 			r, ok := req.(*matchingservice.AddWorkflowTaskRequest)
-			if ok && resp == nil && r.GetTaskQueue().GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
+			if ok && r.GetTaskQueue().GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
 				return serviceerrors.NewStickyWorkerUnavailable()
 			}
 			return nil

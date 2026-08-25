@@ -6,27 +6,25 @@ import (
 	"sync/atomic"
 )
 
-// RPCCallback is a callback function for RPC fault injection.
-// It receives context, method name, request, and response (nil for pre-handler calls).
-//
-// Parameters:
-//   - ctx: the request context
-//   - fullMethod: the full gRPC method name
-//   - req: the request proto message
-//   - resp: the response proto message (nil when called before handler)
-//   - err: the error from handler (nil when called before handler)
-//
-// Returns:
-//   - bool: if true, the callback matched and the returned values should be used.
-//     If false, the callback did not match and other callbacks should be checked.
-//   - any: replacement response (only used if matched is true)
-//   - error: replacement error (only used if matched is true)
-type RPCCallback func(ctx context.Context, fullMethod string, req, resp any, err error) (matched bool, newResp any, newErr error)
+type rpcFaultStage int
+
+const (
+	rpcFaultStageRequest rpcFaultStage = iota
+	rpcFaultStageResponse
+)
+
+// RPCRequestCallback is a callback function for pre-handler RPC fault injection.
+type RPCRequestCallback func(ctx context.Context, fullMethod string, req any) (matched bool, newResp any, newErr error)
+
+// RPCResponseCallback is a callback function for post-handler RPC fault injection.
+type RPCResponseCallback func(ctx context.Context, fullMethod string, req, resp any, err error) (matched bool, newResp any, newErr error)
+
+type rpcCallback func(ctx context.Context, fullMethod string, stage rpcFaultStage, req, resp any, err error) (matched bool, newResp any, newErr error)
 
 // rpcCallbackEntry represents a registered RPC callback with its ID.
 type rpcCallbackEntry struct {
 	id       uint64
-	callback RPCCallback
+	callback rpcCallback
 }
 
 // RPCFaultGenerator handles fault injection for RPC requests and responses.
@@ -43,9 +41,29 @@ func NewRPCFaultGenerator() *RPCFaultGenerator {
 	}
 }
 
-// RegisterCallback registers an RPC fault injection callback and returns a
+// RegisterRequestCallback registers a pre-handler RPC fault injection callback and returns a
 // cleanup function that removes the callback when called.
-func (r *RPCFaultGenerator) RegisterCallback(cb RPCCallback) func() {
+func (r *RPCFaultGenerator) RegisterRequestCallback(cb RPCRequestCallback) func() {
+	return r.registerCallback(func(ctx context.Context, fullMethod string, stage rpcFaultStage, req, _ any, _ error) (bool, any, error) {
+		if stage != rpcFaultStageRequest {
+			return false, nil, nil
+		}
+		return cb(ctx, fullMethod, req)
+	})
+}
+
+// RegisterResponseCallback registers a post-handler RPC fault injection callback and returns a
+// cleanup function that removes the callback when called.
+func (r *RPCFaultGenerator) RegisterResponseCallback(cb RPCResponseCallback) func() {
+	return r.registerCallback(func(ctx context.Context, fullMethod string, stage rpcFaultStage, req, resp any, err error) (bool, any, error) {
+		if stage != rpcFaultStageResponse {
+			return false, nil, nil
+		}
+		return cb(ctx, fullMethod, req, resp, err)
+	})
+}
+
+func (r *RPCFaultGenerator) registerCallback(cb rpcCallback) func() {
 	if r == nil {
 		return func() {}
 	}
@@ -68,9 +86,19 @@ func (r *RPCFaultGenerator) RegisterCallback(cb RPCCallback) func() {
 	}
 }
 
-// Generate checks all registered RPC callbacks for the given request/response.
+// GenerateRequest checks all registered RPC callbacks before the handler runs.
 // Returns (true, resp, err) if a callback matched, or (false, nil, nil) if no callbacks matched.
-func (r *RPCFaultGenerator) Generate(ctx context.Context, fullMethod string, req, resp any, err error) (bool, any, error) {
+func (r *RPCFaultGenerator) GenerateRequest(ctx context.Context, fullMethod string, req any) (bool, any, error) {
+	return r.generate(ctx, fullMethod, rpcFaultStageRequest, req, nil, nil)
+}
+
+// GenerateResponse checks all registered RPC callbacks after the handler runs.
+// Returns (true, resp, err) if a callback matched, or (false, nil, nil) if no callbacks matched.
+func (r *RPCFaultGenerator) GenerateResponse(ctx context.Context, fullMethod string, req, resp any, err error) (bool, any, error) {
+	return r.generate(ctx, fullMethod, rpcFaultStageResponse, req, resp, err)
+}
+
+func (r *RPCFaultGenerator) generate(ctx context.Context, fullMethod string, stage rpcFaultStage, req, resp any, err error) (bool, any, error) {
 	if r == nil {
 		return false, nil, nil
 	}
@@ -85,7 +113,7 @@ func (r *RPCFaultGenerator) Generate(ctx context.Context, fullMethod string, req
 	r.mu.RUnlock()
 
 	for _, entry := range callbacks {
-		if matched, newResp, newErr := entry.callback(ctx, fullMethod, req, resp, err); matched {
+		if matched, newResp, newErr := entry.callback(ctx, fullMethod, stage, req, resp, err); matched {
 			return true, newResp, newErr
 		}
 	}

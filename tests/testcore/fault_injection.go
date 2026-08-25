@@ -2,18 +2,29 @@ package testcore
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"testing"
+
+	rpcfaultinjection "go.temporal.io/server/common/rpc/faultinjection"
 )
 
-// RPCFault determines whether a fault should be injected for a given RPC.
-// It receives the request, response, and error.
-// For pre-handler calls, resp and err are nil.
+// RPCRequestFault determines whether a fault should be injected before an RPC handler runs.
 // Return the error to inject, or nil to not inject a fault.
-type RPCFault func(req, resp any, err error) error
+type RPCRequestFault func(req any) error
 
-// RPCFaultOption configures the behavior of [InjectRPCFault].
+// RPCResponseFault determines whether a fault should be injected after an RPC handler runs.
+// Return the error to inject, or nil to preserve the handler response and error.
+type RPCResponseFault func(req, resp any, handlerErr error) error
+
+// RPCFaultOption configures the behavior of RPC fault injection.
 type RPCFaultOption func(*rpcFaultOptions)
+
+type rpcFault func(req, resp any, err error) error
+
+type rpcFaultCallback func(req, resp any, err error) (bool, any, error)
+
+type registerRPCFault func(*rpcfaultinjection.RPCFaultGenerator, rpcFaultCallback) func()
 
 type rpcFaultOptions struct {
 	namespaceID   string
@@ -54,28 +65,59 @@ func WithNamespaceName(name string) RPCFaultOption {
 	}
 }
 
-// InjectRPCFault registers a fault injection that applies to all services
+// InjectRPCRequestFault registers a pre-handler fault injection that applies to all services
 // (frontend, history, matching). The fault function determines which requests
 // trigger a fault and what error to return.
 //
-// The fault function is called twice per RPC: before the handler (resp=nil, err=nil)
-// and after. Returning an error before handler short-circuits; returning after
-// modifies the response.
+// Prefer [TestEnv.InjectRPCRequestFault], which scopes the fault to the test's
+// namespace. Use InjectRPCRequestFault directly only when an unscoped fault is
+// required. Only unary RPCs are intercepted; streaming RPCs are unaffected.
 //
 // Returns a cleanup function that disables the fault injection when called.
 // The test fails if the fault is never injected before the test completes.
 //
 // Example:
 //
-//	testcore.InjectRPCFault(s.T(), s.GetTestCluster(),
-//	    func(req, _ any, _ error) error {
-//	        r, ok := req.(*matchingservice.AddWorkflowTaskRequest)
-//	        if ok {
+//	testcore.InjectRPCRequestFault(s.T(), s.GetTestCluster(),
+//	    func(req any) error {
+//	        if _, ok := req.(*matchingservice.AddWorkflowTaskRequest); ok {
 //	            return serviceerror.NewNotFound("injected fault")
 //	        }
 //	        return nil
 //	    })
-func InjectRPCFault(t testing.TB, tc *TestCluster, fault RPCFault, opts ...RPCFaultOption) func() {
+func InjectRPCRequestFault(t testing.TB, tc *TestCluster, fault RPCRequestFault, opts ...RPCFaultOption) func() {
+	return injectRPCFault(t, tc, func(req, _ any, _ error) error {
+		return fault(req)
+	}, registerRPCRequestFault, opts...)
+}
+
+// InjectRPCResponseFault registers a post-handler fault injection that applies to all services
+// (frontend, history, matching). The fault function receives the handler response and error.
+// Returning an error discards the handler response and returns the injected error.
+//
+// Prefer [TestEnv.InjectRPCResponseFault], which scopes the fault to the test's
+// namespace. Use InjectRPCResponseFault directly only when an unscoped fault is
+// required. Only unary RPCs are intercepted; streaming RPCs are unaffected.
+//
+// Returns a cleanup function that disables the fault injection when called.
+// The test fails if the fault is never injected before the test completes.
+func InjectRPCResponseFault(t testing.TB, tc *TestCluster, fault RPCResponseFault, opts ...RPCFaultOption) func() {
+	return injectRPCFault(t, tc, rpcFault(fault), registerRPCResponseFault, opts...)
+}
+
+func registerRPCRequestFault(generator *rpcfaultinjection.RPCFaultGenerator, callback rpcFaultCallback) func() {
+	return generator.RegisterRequestCallback(func(_ context.Context, _ string, req any) (bool, any, error) {
+		return callback(req, nil, nil)
+	})
+}
+
+func registerRPCResponseFault(generator *rpcfaultinjection.RPCFaultGenerator, callback rpcFaultCallback) func() {
+	return generator.RegisterResponseCallback(func(_ context.Context, _ string, req, resp any, err error) (bool, any, error) {
+		return callback(req, resp, err)
+	})
+}
+
+func injectRPCFault(t testing.TB, tc *TestCluster, fault rpcFault, register registerRPCFault, opts ...RPCFaultOption) func() {
 	t.Helper()
 
 	var options rpcFaultOptions
@@ -90,21 +132,30 @@ func InjectRPCFault(t testing.TB, tc *TestCluster, fault RPCFault, opts ...RPCFa
 	}
 
 	var fired atomic.Bool
+	var logMu sync.Mutex
+	loggingEnabled := true
 
-	unregister := generator.RegisterCallback(func(ctx context.Context, fullMethod string, req, resp any, err error) (bool, any, error) {
+	unregister := register(generator, func(req, resp any, err error) (bool, any, error) {
 		if !options.matchesNamespace(req) {
 			return false, nil, nil
 		}
 
 		if injectedErr := fault(req, resp, err); injectedErr != nil {
 			fired.Store(true)
-			t.Logf("Fault injection fired: %T", req)
+			logMu.Lock()
+			if loggingEnabled {
+				t.Logf("Fault injection fired: %T", req)
+			}
+			logMu.Unlock()
 			return true, nil, injectedErr
 		}
 		return false, nil, nil
 	})
 
 	t.Cleanup(func() {
+		logMu.Lock()
+		loggingEnabled = false
+		logMu.Unlock()
 		unregister()
 		if !fired.Load() {
 			t.Error("fault injection was registered but never fired - the fault was never injected")

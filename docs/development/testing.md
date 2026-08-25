@@ -197,7 +197,7 @@ or if there's no SDK support for that API available yet.
 
 You'll find a fully initialized task poller in any functional test suite, look for `s.TaskPoller`.
 
-_NOTE_: The previous `testcore.TaskPoller` has been deprecated and should not be used in new code._
+_NOTE: The previous `testcore.TaskPoller` has been deprecated and should not be used in new code._
 
 ### gRPC fault injection
 
@@ -208,18 +208,23 @@ It returns a cleanup function that can be used to remove the fault again.
 **Example:**
 
 ```go
-testcore.InjectRPCFault(s.T(), s.GetTestCluster(),
-    func(req, _ any, _ error) error {
-        r, ok := req.(*matchingservice.AddWorkflowTaskRequest)
-        if ok {
+env.InjectRPCRequestFault(
+    func(req any) error {
+        if _, ok := req.(*matchingservice.AddWorkflowTaskRequest); ok {
             return serviceerror.NewNotFound("injected fault")
         }
         return nil
     })
 ```
 
-The fault function receives `(req, resp, err)`. For pre-handler calls, `resp` and `err` are nil.
-Return an error to inject the fault, or nil to skip. The test fails if the fault never triggers.
+`InjectRPCRequestFault` runs before the handler, so an injected error prevents the operation from
+executing. `InjectRPCResponseFault` runs after the handler and receives `(req, resp, handlerErr)`, so
+an injected error can model an operation that executed but whose response was lost. The test fails
+if the fault never triggers.
+
+The `env` methods scope faults to the test's namespace. Use `testcore.InjectRPCRequestFault` or
+`testcore.InjectRPCResponseFault` directly only when an unscoped fault is required. Only unary RPCs
+are intercepted; streaming RPCs are unaffected.
 
 ### testhooks package
 
