@@ -40,15 +40,12 @@ type (
 		Remove(key any)
 		// GetAndDo returns the value corresponding to the key, and apply fn to key value before return value
 		// return (value, value exist or not, error when evaluation fn)
-		// fn is evaluated while holding the map's write lock, so it must not block.
 		GetAndDo(key any, fn ActionFunc) (any, bool, error)
 		// PutOrDo put the key value in the map, if key does not exists, otherwise, call fn with existing key and value
 		// return (value, fn evaluated or not, error when evaluation fn)
-		// fn is evaluated while holding the map's write lock, so it must not block.
 		PutOrDo(key any, value any, fn ActionFunc) (any, bool, error)
 		// RemoveIf deletes the given key from the map if fn return true
 		// return whether the key is removed or not
-		// fn is evaluated while holding the map's write lock, so it must not block.
 		RemoveIf(key any, fn PredicateFunc) bool
 		// Iter returns an iterator to the map
 		Iter() MapIterator
