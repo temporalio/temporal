@@ -68,6 +68,18 @@ await.RequireTrue(t, func() bool {
 
 `RequireTrue` is the wrong tool when dealing with errors or assertions; use `Require` instead.
 
+### Blocking on channels
+
+Use `await.Rcv` and `await.Snd` for blocking channel operations.
+They fail the test if its context ends or the channel closes.
+
+```go
+headers := await.Rcv(t, requestHeaders)
+await.Snd(t, responses, response)
+```
+
+Keep an explicit `select` when testing non-blocking behavior or waiting on multiple channels.
+
 ### Parallelization
 
 All tests (and subtests!) should use `t.Parallel()` to be run concurrently;

@@ -15,7 +15,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/chasmtest"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/payload"
@@ -77,13 +76,8 @@ func TestCreateScheduler_InitialPauseState(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
 			logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
-			registry := chasm.NewRegistry(logger)
-			require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
-			require.NoError(t, registry.Register(newTestLibrary(logger, newRealSpecProcessor(ctrl, logger))))
-			testEngine := chasmtest.NewEngine(t, registry)
-			engineCtx := chasm.NewEngineContext(context.Background(), testEngine)
+			_, engineCtx := newTestEngineContext(t, logger)
 			input := defaultSchedule()
 			input.State.Paused = tc.initialPaused
 

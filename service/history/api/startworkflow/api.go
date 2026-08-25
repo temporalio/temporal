@@ -392,13 +392,30 @@ func (s *Starter) createAsCurrent(
 	if _, err := s.createOrUpdateLeaseFn(creationParams.workflowLease, s.shardContext, nil); err != nil {
 		return err
 	}
+
+	// If current workflow is closed after the original creationParams were prepared,
+	// the LastRunningClock in the prepared workflow snapshot will be smaller than
+	// the current workflow's LastRunningClock, causing the new workflow to be marked
+	// as zombie in standby cluster.
+	//
+	// Here we basically refresh the LastRunningClock in the prepared workflow snapshot to avoid this issue.
+	mutableState := creationParams.workflowLease.GetMutableState()
+	updateExecutionInfo, updatedWorkflowEventBatches, err := mutableState.UpdateLastRunningClock(creationParams.workflowEventBatches)
+	if err != nil {
+		return err
+	}
+	// Following assignments are technically not necessary since those pointers point to the same underlying fields that are updated,
+	// but it makes the code more explicit and easier to read.
+	creationParams.workflowSnapshot.ExecutionInfo = updateExecutionInfo
+	creationParams.workflowEventBatches = updatedWorkflowEventBatches
+
 	return creationParams.workflowLease.GetContext().CreateWorkflowExecution(
 		ctx,
 		s.shardContext,
 		persistence.CreateWorkflowModeUpdateCurrent,
 		currentWorkflowConditionFailed.RunID,
 		currentWorkflowConditionFailed.LastWriteVersion,
-		creationParams.workflowLease.GetMutableState(),
+		mutableState,
 		creationParams.workflowSnapshot,
 		creationParams.workflowEventBatches,
 		historyi.TransactionPolicyActive,

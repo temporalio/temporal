@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -879,20 +880,26 @@ func (c *physicalTaskQueueManagerImpl) GetFairnessWeightOverrides() fairnessWeig
 
 func (c *physicalTaskQueueManagerImpl) MakePollerScalingDecision(
 	ctx context.Context,
-	pollStartTime time.Time) *taskqueuepb.PollerScalingDecision {
-	return c.makePollerScalingDecisionImpl(pollStartTime, func() *taskqueuepb.TaskQueueStats {
+	pollStartTime time.Time,
+	taskSource enumsspb.TaskSource,
+) *taskqueuepb.PollerScalingDecision {
+	return c.makePollerScalingDecisionImpl(pollStartTime, taskSource, func() *taskqueuepb.TaskQueueStats {
 		return c.partitionMgr.GetPhysicalQueueAdjustedStats(ctx, c)
 	})
 }
 
 func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 	pollStartTime time.Time,
+	taskSource enumsspb.TaskSource,
 	statsFn func() *taskqueuepb.TaskQueueStats,
 ) *taskqueuepb.PollerScalingDecision {
 	pollWaitTime := c.partitionMgr.engine.timeSource.Since(pollStartTime)
-	// If a poller has waited around a while, we can always suggest a decrease.
-	if pollWaitTime >= c.partitionMgr.config.PollerScalingWaitTime() {
-		// Decrease if any poll matched after sitting idle for some configured period
+	// Only suggest scaling down for non-backlog tasks. Sync-matched tasks typically have
+	// tens of milliseconds latency, so a long wait means the poller was genuinely
+	// idle — there are more pollers than needed. For backlog tasks, the wait most likely
+	// comes from the DB read path (write → reader → matcher), not excess pollers. Skip
+	// the scale-down and fall through to the scale-up checks below.
+	if pollWaitTime >= c.partitionMgr.config.PollerScalingWaitTime() && taskSource != enumsspb.TASK_SOURCE_DB_BACKLOG {
 		c.recordPollerScaleDecision(metrics.PollerScaleDecisionDown, metrics.PollerScaleReasonIdle)
 		return &taskqueuepb.PollerScalingDecision{
 			PollRequestDeltaSuggestion: -1,
@@ -913,6 +920,11 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 	delta := int32(0)
 	var reason metrics.ReasonString
 	stats := statsFn()
+	// If dispatch is bottlenecked by a task queue rate limit, adding pollers won't help.
+	if stats.GetRateLimitingActive() {
+		c.recordPollerScaleDecision(metrics.PollerScaleDecisionHold, metrics.PollerScaleReasonTaskQueueRateLimited)
+		return nil
+	}
 	if stats.GetApproximateBacklogCount() > 0 &&
 		stats.GetApproximateBacklogAge().AsDuration() > c.partitionMgr.config.PollerScalingBacklogAgeScaleUp() {
 		// Always increase when there is a backlog, even if we're a partition. It's also important to increase for

@@ -1036,6 +1036,8 @@ var TraceExportModule = fx.Options(
 //     default: propagation.TraceContext{}
 //   - telemetry.ServerStatsHandler
 //   - telemetry.ClientStatsHandler
+//   - telemetry.HTTPClientTransportInstrumenter
+//   - telemetry.HTTPServerHandlerInstrumenter
 var ServiceTracingModule = fx.Options(
 	fx.Supply([]otelsdktrace.BatchSpanProcessorOption{}),
 	fx.Provide(
@@ -1105,6 +1107,8 @@ var ServiceTracingModule = fx.Options(
 	fx.Provide(func() propagation.TextMapPropagator { return propagation.TraceContext{} }),
 	fx.Provide(telemetry.NewServerStatsHandler),
 	fx.Provide(telemetry.NewClientStatsHandler),
+	fx.Provide(telemetry.NewHTTPClientTransportInstrumenter),
+	fx.Provide(telemetry.NewHTTPServerHandlerInstrumenter),
 	fx.Provide(metrics.NewServerStatsHandler),
 )
 
@@ -1150,105 +1154,86 @@ type fxLogAdapter struct {
 
 func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 	switch e := e.(type) {
-	case *fxevent.OnStartExecuting:
-		l.logger.Debug("OnStart hook executing",
-			tag.ComponentFX,
-			tag.String("callee", e.FunctionName),
-			tag.String("caller", e.CallerName),
-		)
+	case *fxevent.OnStartExecuting,
+		*fxevent.OnStopExecuting,
+		*fxevent.Invoking,
+		*fxevent.BeforeRun:
+		// These events only signal that work is about to start. The
+		// corresponding completion events are logged if they fail.
 	case *fxevent.OnStartExecuted:
 		if e.Err != nil {
-			l.logger.Error("OnStart hook failed",
+			l.logger.Error(
+				"OnStart hook failed",
 				tag.ComponentFX,
 				tag.String("callee", e.FunctionName),
 				tag.String("caller", e.CallerName),
-				tag.Error(e.Err),
-			)
-		} else {
-			l.logger.Debug("OnStart hook executed",
-				tag.ComponentFX,
-				tag.String("callee", e.FunctionName),
-				tag.String("caller", e.CallerName),
-				tag.Stringer("runtime", e.Runtime),
-			)
+				tag.Error(e.Err))
 		}
-	case *fxevent.OnStopExecuting:
-		l.logger.Debug("OnStop hook executing",
-			tag.ComponentFX,
-			tag.String("callee", e.FunctionName),
-			tag.String("caller", e.CallerName),
-		)
 	case *fxevent.OnStopExecuted:
 		if e.Err != nil {
-			l.logger.Error("OnStop hook failed",
+			l.logger.Error(
+				"OnStop hook failed",
 				tag.ComponentFX,
 				tag.String("callee", e.FunctionName),
 				tag.String("caller", e.CallerName),
-				tag.Error(e.Err),
-			)
-		} else {
-			l.logger.Debug("OnStop hook executed",
-				tag.ComponentFX,
-				tag.String("callee", e.FunctionName),
-				tag.String("caller", e.CallerName),
-				tag.Stringer("runtime", e.Runtime),
-			)
+				tag.Error(e.Err))
 		}
 	case *fxevent.Supplied:
 		if e.Err != nil {
-			l.logger.Error("supplied",
+			l.logger.Error(
+				"supplied",
 				tag.ComponentFX,
 				tag.String("type", e.TypeName),
 				tag.String("module", e.ModuleName),
-				tag.Error(e.Err))
+				tag.Error(e.Err),
+			)
 		}
 	case *fxevent.Provided:
 		if e.Err != nil {
-			l.logger.Error("error encountered while applying options",
+			l.logger.Error(
+				"error encountered while applying options",
 				tag.ComponentFX,
 				tag.String("module", e.ModuleName),
-				tag.Error(e.Err))
+				tag.Error(e.Err),
+			)
 		}
 	case *fxevent.Replaced:
 		if e.Err != nil {
-			l.logger.Error("error encountered while replacing",
+			l.logger.Error(
+				"error encountered while replacing",
 				tag.ComponentFX,
 				tag.String("module", e.ModuleName),
-				tag.Error(e.Err))
+				tag.Error(e.Err),
+			)
 		}
 	case *fxevent.Decorated:
 		if e.Err != nil {
-			l.logger.Error("error encountered while applying options",
+			l.logger.Error(
+				"error encountered while applying options",
 				tag.ComponentFX,
 				tag.String("module", e.ModuleName),
-				tag.Error(e.Err))
+				tag.Error(e.Err),
+			)
 		}
 	case *fxevent.Run:
 		if e.Err != nil {
-			l.logger.Error("error returned",
+			l.logger.Error(
+				"error returned",
 				tag.ComponentFX,
 				tag.String("name", e.Name),
 				tag.String("kind", e.Kind),
 				tag.String("module", e.ModuleName),
-				tag.Error(e.Err),
-			)
+				tag.Error(e.Err))
 		}
-	case *fxevent.Invoking:
-		// Do not log stack as it will make logs hard to read.
-		l.logger.Debug("invoking",
-			tag.ComponentFX,
-			tag.String("function", e.FunctionName),
-			tag.String("module", e.ModuleName),
-		)
 	case *fxevent.Invoked:
 		if e.Err != nil {
-			l.logger.Error("invoke failed",
+			l.logger.Error(
+				"invoke failed",
 				tag.ComponentFX,
 				tag.Error(e.Err),
 				tag.String("stack", e.Trace),
 				tag.String("function", e.FunctionName),
-				tag.String("module", e.ModuleName),
-			)
+				tag.String("module", e.ModuleName))
 		}
 	case *fxevent.Stopping:
 		l.logger.Info("received signal",
@@ -1256,35 +1241,42 @@ func (l *fxLogAdapter) LogEvent(e fxevent.Event) {
 			tag.Stringer("signal", e.Signal))
 	case *fxevent.Stopped:
 		if e.Err != nil {
-			l.logger.Error("stop failed", tag.ComponentFX, tag.Error(e.Err))
+			l.logger.Error(
+				"stop failed",
+				tag.ComponentFX,
+				tag.Error(e.Err),
+			)
 		}
 	case *fxevent.RollingBack:
-		l.logger.Error("start failed, rolling back", tag.ComponentFX, tag.Error(e.StartErr))
+		l.logger.Error(
+			"start failed, rolling back",
+			tag.ComponentFX,
+			tag.Error(e.StartErr),
+		)
 	case *fxevent.RolledBack:
 		if e.Err != nil {
-			l.logger.Error("rollback failed", tag.ComponentFX, tag.Error(e.Err))
+			l.logger.Error(
+				"rollback failed",
+				tag.ComponentFX,
+				tag.Error(e.Err),
+			)
 		}
 	case *fxevent.Started:
 		if e.Err != nil {
-			l.logger.Error("start failed", tag.ComponentFX, tag.Error(e.Err))
-		} else {
-			l.logger.Debug("started", tag.ComponentFX)
+			l.logger.Error(
+				"start failed",
+				tag.ComponentFX,
+				tag.Error(e.Err),
+			)
 		}
 	case *fxevent.LoggerInitialized:
 		if e.Err != nil {
-			l.logger.Error("custom logger initialization failed", tag.ComponentFX, tag.Error(e.Err))
-		} else {
-			l.logger.Debug("initialized custom fxevent.Logger",
+			l.logger.Error(
+				"custom logger initialization failed",
 				tag.ComponentFX,
-				tag.String("function", e.ConstructorName))
+				tag.Error(e.Err),
+			)
 		}
-	case *fxevent.BeforeRun:
-		l.logger.Debug("before run",
-			tag.ComponentFX,
-			tag.String("name", e.Name),
-			tag.String("kind", e.Kind),
-			tag.String("module", e.ModuleName),
-		)
 	default:
 		l.logger.Warn("unknown fx log type, update fxLogAdapter",
 			tag.ComponentFX,
