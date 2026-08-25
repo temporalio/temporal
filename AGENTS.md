@@ -48,7 +48,7 @@ Before starting the implementation of any request, you MUST REVIEW the following
 
 ## Important Commands:
 - Fast Go linting (changed packages): `make lint-code-fast`
-- Full Go linting (all files): `make lint-code`
+- Full Go linting (all packages): `make lint-code`
 - Formatting imports: `make fmt-imports`
 - Code generation: `make proto`
 - Update API proto: `make update-go-api`
