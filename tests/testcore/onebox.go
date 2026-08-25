@@ -65,7 +65,7 @@ type (
 
 		replicationStreamRecorder *ReplicationStreamRecorder
 		historyTaskRecorder       *HistoryTaskRecorder
-		faultInjector             *rpcfaultinjection.RPCFaultGenerator
+		rpcFaultGenerator         *rpcfaultinjection.RPCFaultGenerator
 
 		callbackLock sync.RWMutex
 		onGetClaims  func(*authorization.AuthInfo) (*authorization.Claims, error)
@@ -131,7 +131,7 @@ func newTemporal(t *testing.T, params *temporalParams) *temporalImpl {
 		workerConfig:              params.WorkerConfig,
 		replicationStreamRecorder: NewReplicationStreamRecorder(),
 	}
-	impl.faultInjector = rpcfaultinjection.NewTestRPCFaultGenerator(impl.testHooks)
+	impl.rpcFaultGenerator = rpcfaultinjection.NewTestRPCFaultGenerator(impl.testHooks)
 
 	// Base options are independent of which services this test cluster starts.
 	// [Start] adds the per-service config and static host map.
@@ -354,8 +354,8 @@ func (c *temporalImpl) GetHistoryTaskRecorder() *HistoryTaskRecorder {
 	return c.historyTaskRecorder
 }
 
-func (c *temporalImpl) GetFaultInjector() *rpcfaultinjection.RPCFaultGenerator {
-	return c.faultInjector
+func (c *temporalImpl) GetRPCFaultGenerator() *rpcfaultinjection.RPCFaultGenerator {
+	return c.rpcFaultGenerator
 }
 
 func (c *temporalImpl) TLSConfigProvider() *encryption.FixedTLSConfigProvider {

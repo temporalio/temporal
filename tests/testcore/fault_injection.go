@@ -87,7 +87,7 @@ func injectRPCFault(t testing.TB, tc *TestCluster, scope RPCFaultScope, fault rp
 		return func() {}
 	}
 
-	generator := tc.Host().GetFaultInjector()
+	generator := tc.Host().GetRPCFaultGenerator()
 	if generator == nil {
 		t.Fatal("fault injector is nil")
 		return func() {}
