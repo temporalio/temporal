@@ -516,7 +516,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_RetentionClearsSkippedWorkflowI
 
 	// NewEnv's namespace has 1 day retention, which cannot be lowered through the frontend.
 	ns := namespace.Name(testcore.RandomizeStr("ts-retention"))
-	_, err := env.RegisterNamespace(ns, 0, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
+	_, err := env.RegisterNamespace(s.Context(), ns, 0, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.NoError(err)
 
 	tv := testvars.New(s.T())
