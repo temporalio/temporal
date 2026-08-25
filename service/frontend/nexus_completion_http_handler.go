@@ -291,6 +291,9 @@ func (h *nexusCompletionHandler) resolveFailureForCompletion(
 	if err != nil {
 		return nil, false, err
 	}
+	// CheckEventBlobSizeLimit only enforces errorLimit once actualSize also exceeds warnLimit, so
+	// without clamping warnLimit to at most errorLimit, a namespace misconfigured this way would
+	// let the oversized failure through unenforced instead of truncating it.
 	if err := common.CheckEventBlobSizeLimit(
 		failure.Size(),
 		min(blobSizeLimitWarn, blobSizeLimitError),

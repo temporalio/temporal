@@ -16,6 +16,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
+	commonfailure "go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -306,6 +307,19 @@ func TestCompleteOperation_HSM_FailureSize(t *testing.T) {
 		want := commonnexus.NexusFailureToProtoFailure(originalFailure)
 		require.True(t, proto.Equal(want, got))
 	})
+
+	t.Run("still truncates when the warn limit is misconfigured above the error limit", func(t *testing.T) {
+		original := wrappedTemporalFailure(t, &failurepb.Failure{
+			Message: longMessage,
+			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "SomeApplicationError"},
+			},
+		})
+		const limit = 150
+		got := decodeCanonicalFailure(t, completeHSMAndCaptureFailure(t, nexus.OperationStateFailed, original, limit, 1<<20))
+		require.LessOrEqual(t, got.Size(), limit)
+		require.Equal(t, common.FailureReasonFailureExceedsLimit, got.GetMessage())
+	})
 }
 
 // completeChasmAndCaptureFailure returns the CHASM failure sent to History. It drives the failure through
@@ -419,4 +433,13 @@ func TestTruncateOversizedFailure(t *testing.T) {
 			require.NotNil(t, got.GetCause())
 		})
 	}
+
+	t.Run("errorLimit too small to fit any cause drops it entirely", func(t *testing.T) {
+		bareMarkerSize := commonfailure.NewServerFailure(common.FailureReasonFailureExceedsLimit, true).Size()
+		errorLimit := bareMarkerSize + 1
+		got := truncateOversizedFailure(oversized, errorLimit, errorLimit)
+		require.LessOrEqual(t, got.Size(), errorLimit)
+		require.Equal(t, common.FailureReasonFailureExceedsLimit, got.GetMessage())
+		require.Nil(t, got.GetCause())
+	})
 }

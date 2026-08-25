@@ -1563,6 +1563,133 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure(chasmEnabled boo
 	s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED)
 }
 
+// TestNexusOperationAsyncFailure_OversizedFailure verifies that a failed/canceled async completion
+// whose failure exceeds the target namespace's BlobSizeLimitError is truncated and accepted, rather
+// than rejected outright. Unlike an oversized result (see the large payload cases in
+// TestNexusOperationSyncCompletion_LargePayload and TestNexusOperationAsyncCompletion), an oversized
+// failure must still resolve the operation.
+func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure_OversizedFailure(chasmEnabled bool) {
+	const blobSizeLimitWarn = 800
+	const blobSizeLimitError = 1000
+
+	testCases := []struct {
+		name         string
+		state        nexus.OperationState
+		canonicalMsg *failurepb.Failure
+		canceled     bool
+	}{
+		{
+			name:  "failed",
+			state: nexus.OperationStateFailed,
+			canonicalMsg: &failurepb.Failure{
+				Message: strings.Repeat("a", 5000),
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "SomeApplicationError"},
+				},
+			},
+		},
+		{
+			name:  "canceled",
+			state: nexus.OperationStateCanceled,
+			canonicalMsg: &failurepb.Failure{
+				Message: strings.Repeat("a", 5000),
+				FailureInfo: &failurepb.Failure_CanceledFailureInfo{
+					CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
+				},
+			},
+			canceled: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func(s *NexusWorkflowTestSuite) {
+			nf, err := commonnexus.TemporalFailureToNexusFailure(tc.canonicalMsg)
+			s.NoError(err)
+			opErr := &nexus.OperationError{
+				State: tc.state,
+				Cause: &nexus.FailureError{Failure: nf},
+			}
+
+			env := s.newTestEnv(
+				chasmEnabled,
+				testcore.WithDynamicConfig(dynamicconfig.BlobSizeLimitWarn, blobSizeLimitWarn),
+				testcore.WithDynamicConfig(dynamicconfig.BlobSizeLimitError, blobSizeLimitError),
+			)
+			ctx := s.Context()
+			taskQueue := testcore.RandomizeStr(s.T().Name())
+
+			var callbackToken, publicCallbackURL string
+
+			h := nexustest.Handler{
+				OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+					callbackToken = options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
+					publicCallbackURL = options.CallbackURL
+					return &nexus.HandlerStartOperationResultAsync{OperationToken: "test"}, nil
+				},
+			}
+			endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
+
+			callerWF := func(ctx workflow.Context) error {
+				c := workflow.NewNexusClient(endpointName, "service")
+				fut := c.ExecuteOperation(ctx, "operation", "input", workflow.NexusOperationOptions{})
+				return fut.Get(ctx, nil)
+			}
+
+			w := worker.New(env.SdkClient(), taskQueue, worker.Options{})
+			w.RegisterWorkflow(callerWF)
+			s.NoError(w.Start())
+			defer w.Stop()
+
+			run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+				TaskQueue: taskQueue,
+			}, callerWF)
+			s.NoError(err)
+
+			// Wait for the handler to be called by checking for the NexusOperationStarted event.
+			s.EventuallyWithT(func(t *assert.CollectT) {
+				hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
+				historyrequire.New(t).RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
+			}, time.Second*10, time.Millisecond*200)
+
+			completion := nexusrpc.CompleteOperationOptions{
+				Error:  opErr,
+				Header: nexus.Header{commonnexus.CallbackTokenHeader: callbackToken},
+			}
+			err = s.sendNexusCompletionRequest(ctx, publicCallbackURL, completion)
+			s.NoError(err, "an oversized failure must be truncated and accepted, not rejected")
+
+			err = run.Get(ctx, nil)
+			s.Error(err)
+
+			hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
+
+			var wrapperFailure *failurepb.Failure
+			if tc.canceled {
+				event := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED)
+				wrapperFailure = event.GetNexusOperationCanceledEventAttributes().GetFailure()
+			} else {
+				event := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED)
+				wrapperFailure = event.GetNexusOperationFailedEventAttributes().GetFailure()
+			}
+			failure := wrapperFailure.GetCause()
+			s.Equal(common.FailureReasonFailureExceedsLimit, failure.GetMessage())
+			s.LessOrEqual(failure.Size(), blobSizeLimitError)
+			if tc.canceled {
+				s.NotNil(failure.GetCanceledFailureInfo())
+			} else {
+				s.True(failure.GetServerFailureInfo().GetNonRetryable())
+			}
+			// The original 5000-byte message must survive, truncated rather than dropped entirely.
+			s.NotNil(failure.GetCause())
+			s.NotEmpty(failure.GetCause().GetMessage())
+			s.Less(len(failure.GetCause().GetMessage()), len(tc.canonicalMsg.GetMessage()))
+			if !tc.canceled {
+				s.Equal("SomeApplicationError", failure.GetCause().GetApplicationFailureInfo().GetType())
+			}
+		})
+	}
+}
+
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors(chasmEnabled bool) {
 	s.Run("NamespaceNotFound", func(s *NexusWorkflowTestSuite) {
 		env := s.newTestEnv(chasmEnabled, testcore.WithDedicatedCluster())
