@@ -459,6 +459,22 @@ func (e *TestEnv) Tv() *testvars.TestVars {
 	return e.tv
 }
 
+// InjectRPCRequestFault registers a pre-handler fault injection scoped to this test's namespace.
+// Requests match either the namespace ID or name filter, depending on which
+// namespace field they expose. Requests without either field are ignored.
+// Returns a cleanup function that disables the fault.
+func (e *TestEnv) InjectRPCRequestFault(fault RPCRequestFault) func() {
+	scope := rpcfaultinjection.RPCFaultScope{
+		NamespaceID:   e.nsID,
+		NamespaceName: e.nsName,
+	}
+	return injectRPCFault(e.t, func(inject func(any, error) (bool, any, error)) func() {
+		return e.GetTestCluster().Host().GetRPCFaultGenerator().RegisterRequestCallback(scope, func(_ context.Context, _ string, req any) (bool, any, error) {
+			return inject(req, fault(req))
+		})
+	})
+}
+
 // InjectRPCResponseFault registers a post-handler fault injection scoped to this test's namespace.
 // Requests match either the namespace ID or name filter, depending on which
 // namespace field they expose. Requests without either field are ignored.
