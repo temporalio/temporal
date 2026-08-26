@@ -74,18 +74,14 @@ func TestGenerateSchedulerVersionCeilingReplayHistory(t *testing.T) {
 		}, 30*time.Second, 100*time.Millisecond, "V1 scheduler did not record tweakables")
 		require.Equal(t, ceiling, recorded.VersionCeiling)
 		require.True(t, recorded.VersionCeilingSet)
-		wantOverride := -1
 		wantVersion := scheduler.SchedulerWorkflowVersion(scheduler.TriggerImmediatelyTimestamp)
 		if override >= int(wantVersion) && override <= int(scheduler.LatestSchedulerWorkflowVersion) {
 			wantVersion = scheduler.SchedulerWorkflowVersion(override)
-			wantOverride = override
 		}
 		if ceiling >= 0 {
 			wantVersion = min(wantVersion, scheduler.SchedulerWorkflowVersion(ceiling))
 		}
 		require.Equal(t, wantVersion, recorded.Version)
-		require.Equal(t, wantOverride, recorded.VersionOverride)
-		require.True(t, recorded.VersionOverrideSet)
 		return execution
 	})
 }

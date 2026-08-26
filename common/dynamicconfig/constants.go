@@ -3602,13 +3602,13 @@ is non-fatal: the search continues past this threshold.`,
 		"worker.schedulerV1VersionCeiling",
 		-1,
 		`SchedulerV1VersionCeiling caps the workflow version the V1 scheduler records into history, so histories written on this cluster stay replayable on peer clusters that do not support newer versions. Set it to the highest scheduler version supported by the lowest peer. Intended for multi-cluster failover and rollback.
-The ceiling is read once when a worker starts a scheduler workflow run and held fixed for that run. A negative value (the default) disables the cap. The selected version, after applying this cap, is held fixed for the run.`,
+The ceiling is read once when a worker starts a scheduler workflow run and held fixed for that run. A negative value (the default) disables the cap.`,
 	)
 	SchedulerV1VersionOverride = NewNamespaceIntSetting(
 		"worker.schedulerV1VersionOverride",
 		-1,
 		`SchedulerV1VersionOverride selects a newer V1 scheduler workflow version without requiring a follow-up server release to change the default. Set it to an explicitly supported version greater than or equal to the current default; a negative value (the default) keeps the current default. Values below the current default or above the latest version supported by this binary are ignored.
-The selected version is captured at the start of each scheduler workflow run. Use SchedulerV1VersionCeiling to restrict the selected version for rollback compatibility.`,
+The override is evaluated with each scheduler tweakables update and can only advance the recorded version. Use SchedulerV1VersionCeiling to restrict the selected version for rollback compatibility.`,
 	)
 	WorkerDeleteNamespaceActivityLimits = NewGlobalTypedSetting(
 		"worker.deleteNamespaceActivityLimitsConfig",

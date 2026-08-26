@@ -178,10 +178,8 @@ type (
 		SpecFieldLengthLimit              int                      // item limit per spec field on the ScheduleInfo memo
 		Version                           SchedulerWorkflowVersion // Used to keep track of schedules version to release new features and for backward compatibility
 		// version 0 corresponds to the schedule version that comes before introducing the Version parameter
-		VersionCeiling     int  // Version ceiling captured for this run
-		VersionCeilingSet  bool // Distinguishes a ceiling of zero from histories that predate this field
-		VersionOverride    int  // Version override captured for this run
-		VersionOverrideSet bool // Distinguishes an unset override from histories that predate this field
+		VersionCeiling    int  // Version ceiling captured for this run
+		VersionCeilingSet bool // Distinguishes a ceiling of zero from histories that predate this field
 
 		EnableCHASMMigration        bool // Whether to automatically migrate this schedule to CHASM (V2)
 		MigrateWithRunningWorkflows bool // Whether to migrate this schedule to CHASM (V2) while it has running workflows
@@ -1392,9 +1390,8 @@ func (s *scheduler) updateTweakables() {
 	// Use MutableSideEffect so that we can change the defaults without breaking determinism.
 	get := func(ctx workflow.Context) any {
 		p := CurrentTweakablePolicies
-		p.Version, p.VersionCeiling, p.VersionOverride = s.determineVersion(p.Version)
+		p.Version, p.VersionCeiling = s.determineVersion(p.Version)
 		p.VersionCeilingSet = true
-		p.VersionOverrideSet = true
 		// Only set migration config at/after the TriggerImmediatelyTimestamp version.
 		if p.Version >= TriggerImmediatelyTimestamp {
 			p.EnableCHASMMigration = s.enableCHASMMigration()
@@ -1816,35 +1813,31 @@ func (s *scheduler) hasMinVersion(version SchedulerWorkflowVersion) bool {
 }
 
 // determineVersion returns the scheduler workflow version and the run's recorded ceiling.
-func (s *scheduler) determineVersion(defaultVersion SchedulerWorkflowVersion) (SchedulerWorkflowVersion, int, int) {
+func (s *scheduler) determineVersion(defaultVersion SchedulerWorkflowVersion) (SchedulerWorkflowVersion, int) {
 	// A marker written before VersionCeiling fields existed has already selected this run's
 	// version. Backfill its ceiling from that value rather than applying a newly configured clamp.
 	if !s.tweakables.VersionCeilingSet && s.tweakables != (TweakablePolicies{}) {
-		return s.tweakables.Version, int(s.tweakables.Version), -1
+		return s.tweakables.Version, int(s.tweakables.Version)
 	}
 
-	if s.tweakables.VersionCeilingSet {
-		if !s.tweakables.VersionOverrideSet {
-			return clampVersion(max(defaultVersion, s.tweakables.Version), s.tweakables.VersionCeiling), s.tweakables.VersionCeiling, -1
+	ceiling := s.tweakables.VersionCeiling
+	if !s.tweakables.VersionCeilingSet {
+		ceiling = s.versionCeiling()
+		if ceiling > int(LatestSchedulerWorkflowVersion) {
+			s.logger.Warn("worker.schedulerV1VersionCeiling above the latest supported version; no effect in this binary",
+				"ceiling", ceiling, "latestSupportedVersion", LatestSchedulerWorkflowVersion)
 		}
-		return s.tweakables.Version, s.tweakables.VersionCeiling, s.tweakables.VersionOverride
 	}
 
-	ceiling := s.versionCeiling()
 	override := -1
 	if s.versionOverride != nil {
 		override = s.versionOverride()
-	}
-	if ceiling > int(LatestSchedulerWorkflowVersion) {
-		s.logger.Warn("worker.schedulerV1VersionCeiling above the latest supported version; no effect in this binary",
-			"ceiling", ceiling, "latestSupportedVersion", LatestSchedulerWorkflowVersion)
 	}
 	if override > int(LatestSchedulerWorkflowVersion) {
 		s.logger.Warn("worker.schedulerV1VersionOverride above the latest supported version; ignored",
 			"override", override, "latestSupportedVersion", LatestSchedulerWorkflowVersion)
 	}
-	version, recordedOverride := versionForNewRun(defaultVersion, ceiling, override)
-	return version, ceiling, recordedOverride
+	return versionWithOverride(max(defaultVersion, s.tweakables.Version), ceiling, override), ceiling
 }
 
 // clampVersion lowers v to ceiling. A negative ceiling is unset (no clamp); a ceiling at or above
@@ -1866,7 +1859,7 @@ func GetListInfoFromStartArgs(args *schedulespb.StartScheduleArgs, now time.Time
 	// Create a scheduler outside of workflow context with just the fields we need to call
 	// getListInfo. Note that this does not take into account InitialPatch.
 	tweakables := CurrentTweakablePolicies
-	tweakables.Version, _ = versionForNewRun(tweakables.Version, versionCeiling, versionOverride)
+	tweakables.Version = versionWithOverride(tweakables.Version, versionCeiling, versionOverride)
 	s := &scheduler{
 		StartScheduleArgs: args,
 		tweakables:        tweakables,
@@ -1878,15 +1871,11 @@ func GetListInfoFromStartArgs(args *schedulespb.StartScheduleArgs, now time.Time
 	return s.getListInfo(false)
 }
 
-func versionForNewRun(defaultVersion SchedulerWorkflowVersion, ceiling, override int) (SchedulerWorkflowVersion, int) {
-	recordedOverride := -1
+func versionWithOverride(defaultVersion SchedulerWorkflowVersion, ceiling, override int) SchedulerWorkflowVersion {
 	if override >= int(defaultVersion) && override <= int(LatestSchedulerWorkflowVersion) {
-		recordedOverride = override
+		defaultVersion = SchedulerWorkflowVersion(override)
 	}
-	if recordedOverride >= 0 {
-		defaultVersion = SchedulerWorkflowVersion(recordedOverride)
-	}
-	return clampVersion(defaultVersion, ceiling), recordedOverride
+	return clampVersion(defaultVersion, ceiling)
 }
 
 func isUserScheduleError(err error) bool {
