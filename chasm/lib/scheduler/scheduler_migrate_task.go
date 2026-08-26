@@ -225,8 +225,7 @@ func (h *SchedulerMigrateToWorkflowTaskHandler) Execute(
 	)
 	if err != nil {
 		// Treat already-started as success for idempotency.
-		var alreadyStartedErr *serviceerror.WorkflowExecutionAlreadyStarted
-		if !errors.As(err, &alreadyStartedErr) {
+		if _, ok := errors.AsType[*serviceerror.WorkflowExecutionAlreadyStarted](err); !ok {
 			return fmt.Errorf("failed to start V1 scheduler workflow: %w", err)
 		}
 	}
