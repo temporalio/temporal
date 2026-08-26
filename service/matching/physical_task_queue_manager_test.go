@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/goro"
@@ -835,4 +836,227 @@ func TestDrainCompletionNoReloadDraining(t *testing.T) {
 	// verify no new persistence calls on pri queue
 	assert.Equal(t, prevPriStats.updateCount, priQueueData.persistenceStats().updateCount,
 		"no new UpdateTaskQueue calls should be made to drained table after reload")
+}
+
+// setLocalRateTrackers replaces this queue's own add and sync-match trackers with ones driven by a
+// fake clock advanced exactly one second, so getLocalAddAndSyncMatchedRates returns the given
+// per-second rates exactly. Both trackers share the clock, matching the production invariant that
+// they are created together so their windows line up.
+func (s *PhysicalTaskQueueManagerTestSuite) setLocalRateTrackers(addRate, syncMatchedRate int) {
+	timeSource := clock.NewEventTimeSource()
+	timeSource.Update(time.Now())
+
+	added := newTaskTracker(timeSource, 5*time.Second, 30*time.Second)
+	syncMatched := newTaskTracker(timeSource, 5*time.Second, 30*time.Second)
+	added.inc(addRate)
+	syncMatched.inc(syncMatchedRate)
+	timeSource.Advance(time.Second)
+
+	pri := s.tqMgr.config.DefaultPriorityKey
+	s.tqMgr.taskTrackerLock.Lock()
+	defer s.tqMgr.taskTrackerLock.Unlock()
+	s.tqMgr.tasksAdded[pri] = added
+	s.tqMgr.tasksSyncMatched[pri] = syncMatched
+}
+
+func (s *PhysicalTaskQueueManagerTestSuite) allowAllScalingDecisions() {
+	rl := quotas.NewMockRateLimiter(s.controller)
+	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+	s.tqMgr.pollerScalingRateLimiter = rl
+}
+
+func (s *PhysicalTaskQueueManagerTestSuite) TestGetLocalAddAndSyncMatchedRates() {
+	s.tqMgr.taskTrackerLock.Lock()
+	s.Empty(s.tqMgr.tasksSyncMatched)
+	s.tqMgr.taskTrackerLock.Unlock()
+
+	// Incrementing any one tracker map must initialize all three for that priority, or the rates
+	// would be measured over windows that don't line up.
+	s.tqMgr.incTaskTracker(s.tqMgr.tasksDispatched, 1, 1)
+	s.tqMgr.taskTrackerLock.Lock()
+	s.Contains(s.tqMgr.tasksAdded, priorityKey(1))
+	s.Contains(s.tqMgr.tasksDispatched, priorityKey(1))
+	s.Contains(s.tqMgr.tasksSyncMatched, priorityKey(1))
+	s.tqMgr.taskTrackerLock.Unlock()
+
+	// Rates aggregate across priorities.
+	s.setLocalRateTrackers(100, 40)
+	addRate, syncMatchedRate := s.tqMgr.getLocalAddAndSyncMatchedRates()
+	s.InEpsilon(float32(100), addRate, 0.001)
+	s.InEpsilon(float32(40), syncMatchedRate, 0.001)
+}
+
+func TestRatioExceeds(t *testing.T) {
+	// Nothing arriving is never a reason to scale up, whatever the denominator.
+	assert.False(t, ratioExceeds(0, 0, 1.2))
+	assert.False(t, ratioExceeds(0, 10, 1.2))
+	// Tasks arriving with nothing draining is the strongest reason to scale up.
+	assert.True(t, ratioExceeds(1, 0, 1.2))
+	assert.True(t, ratioExceeds(100, 0, 1e9))
+	// Ordinary comparisons.
+	assert.False(t, ratioExceeds(110, 100, 1.2))
+	assert.True(t, ratioExceeds(130, 100, 1.2))
+	assert.False(t, ratioExceeds(100, 100, 1.2))
+}
+
+// TestPollScalingRatioImprovedSignalFiresOnZeroSyncMatch covers the case the improved signal
+// exists for: tasks are arriving and the total dispatch rate keeps up because the backlog is being
+// drained, but nothing is being sync matched, so pollers are not actually keeping up.
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingRatioImprovedSignalFiresOnZeroSyncMatch() {
+	s.allowAllScalingDecisions()
+	s.tqMgr.partitionMgr.config.UseImprovedSignalsForPollerScaling = func() bool { return true }
+
+	// Old signal: 100/100 = 1.0, below the 1.2 default, does not fire.
+	fakeStats := &taskqueuepb.TaskQueueStats{TasksAddRate: 100, TasksDispatchRate: 100}
+	// New signal: tasks arriving, nothing sync matched.
+	s.setLocalRateTrackers(100, 0)
+
+	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), enumsspb.TASK_SOURCE_HISTORY, func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	s.Require().NotNil(decision)
+	s.Equal(int32(1), decision.PollRequestDeltaSuggestion)
+}
+
+// TestPollScalingRatioImprovedSignalHoldsWhenSyncMatchingKeepsUp is the converse: the old signal
+// fires but the improved one does not, so with the flag on there must be no scale-up.
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingRatioImprovedSignalHoldsWhenSyncMatchingKeepsUp() {
+	s.allowAllScalingDecisions()
+	s.tqMgr.partitionMgr.config.UseImprovedSignalsForPollerScaling = func() bool { return true }
+
+	// Old signal: 100/10 = 10, well above the 1.2 default, would fire.
+	fakeStats := &taskqueuepb.TaskQueueStats{TasksAddRate: 100, TasksDispatchRate: 10}
+	// New signal: 100/100 = 1.0, below the default.
+	s.setLocalRateTrackers(100, 100)
+
+	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), enumsspb.TASK_SOURCE_HISTORY, func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	s.Nil(decision)
+}
+
+// TestPollScalingRatioFlagOffKeepsOldSignal pins that the improved signal is inert while the flag
+// is off, in both directions, so shadow mode cannot change behavior.
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingRatioFlagOffKeepsOldSignal() {
+	s.allowAllScalingDecisions()
+	s.tqMgr.partitionMgr.config.UseImprovedSignalsForPollerScaling = func() bool { return false }
+
+	// Old fires, new would not: still scales up.
+	s.setLocalRateTrackers(100, 100)
+	oldFiresStats := &taskqueuepb.TaskQueueStats{TasksAddRate: 100, TasksDispatchRate: 10}
+	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), enumsspb.TASK_SOURCE_HISTORY, func() *taskqueuepb.TaskQueueStats { return oldFiresStats })
+	s.Require().NotNil(decision)
+	s.Equal(int32(1), decision.PollRequestDeltaSuggestion)
+
+	// New would fire, old does not: still no scale-up.
+	s.setLocalRateTrackers(100, 0)
+	newFiresStats := &taskqueuepb.TaskQueueStats{TasksAddRate: 100, TasksDispatchRate: 100}
+	decision = s.tqMgr.makePollerScalingDecisionImpl(time.Now(), enumsspb.TASK_SOURCE_HISTORY, func() *taskqueuepb.TaskQueueStats { return newFiresStats })
+	s.Nil(decision)
+}
+
+// TestPollScalingRatioUsesLocalAddRate pins that the improved signal pairs this queue's own add
+// rate with its own sync match rate. Reusing the add rate from TaskQueueStats would compare two
+// differently-attributed populations: a version's queue can be credited the whole unversioned add
+// rate while having no sync matches of its own, which would peg the ratio at +Inf forever.
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingRatioUsesLocalAddRate() {
+	s.allowAllScalingDecisions()
+	s.tqMgr.partitionMgr.config.UseImprovedSignalsForPollerScaling = func() bool { return true }
+
+	// Stats credit this queue with a large add rate, but nothing has actually flowed through it.
+	fakeStats := &taskqueuepb.TaskQueueStats{TasksAddRate: 1000, TasksDispatchRate: 1000}
+	s.setLocalRateTrackers(0, 0)
+
+	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), enumsspb.TASK_SOURCE_HISTORY, func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	s.Nil(decision)
+}
+
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingSignalComparisonMetric() {
+	testCases := []struct {
+		name            string
+		addRate         float32
+		dispatchRate    float32
+		localAddRate    int
+		localSyncMatchd int
+		wantResult      string // empty means nothing should be emitted
+	}{
+		{
+			name: "both fire",
+			// old: 100/10 = 10; new: 100/10 = 10.
+			addRate: 100, dispatchRate: 10, localAddRate: 100, localSyncMatchd: 10,
+			wantResult: metrics.PollerScaleComparisonBoth,
+		},
+		{
+			name: "only the improved signal fires",
+			// old: 100/100 = 1.0; new: 100/0 = unbounded.
+			addRate: 100, dispatchRate: 100, localAddRate: 100, localSyncMatchd: 0,
+			wantResult: metrics.PollerScaleComparisonNewOnly,
+		},
+		{
+			name: "only the old signal fires",
+			// old: 100/10 = 10; new: 100/100 = 1.0.
+			addRate: 100, dispatchRate: 10, localAddRate: 100, localSyncMatchd: 100,
+			wantResult: metrics.PollerScaleComparisonOldOnly,
+		},
+		{
+			name: "neither fires",
+			// old: 10/100 = 0.1; new: 10/100 = 0.1.
+			addRate: 10, dispatchRate: 100, localAddRate: 10, localSyncMatchd: 100,
+			wantResult: "",
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			s.SetupTest()
+			s.allowAllScalingDecisions()
+			handler := s.enablePollerScaleDecisionMetrics()
+			capture := handler.StartCapture()
+			defer handler.StopCapture(capture)
+
+			s.setLocalRateTrackers(tc.localAddRate, tc.localSyncMatchd)
+			fakeStats := &taskqueuepb.TaskQueueStats{TasksAddRate: tc.addRate, TasksDispatchRate: tc.dispatchRate}
+			s.tqMgr.makePollerScalingDecisionImpl(time.Now(), enumsspb.TASK_SOURCE_HISTORY, func() *taskqueuepb.TaskQueueStats { return fakeStats })
+
+			recordings := capture.Snapshot()[metrics.PollerScaleSignalComparisonCounter.Name()]
+			if tc.wantResult == "" {
+				s.Empty(recordings)
+				return
+			}
+			s.Require().Len(recordings, 1)
+			s.Equal(int64(1), recordings[0].Value)
+			s.Equal(metrics.PollerScaleSignalRatio, recordings[0].Tags[metrics.PollerScaleSignalTag("").Key])
+			s.Equal(tc.wantResult, recordings[0].Tags[metrics.PollerScaleComparisonResultTag("").Key])
+		})
+	}
+}
+
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingSignalComparisonMetricDisabledByDefault() {
+	s.allowAllScalingDecisions()
+	// The opt-in metrics config defaults to false; the comparison rides on the same gate.
+	handler := metricstest.NewCaptureHandler()
+	s.tqMgr.metricsHandler = handler
+	capture := handler.StartCapture()
+	defer handler.StopCapture(capture)
+
+	s.setLocalRateTrackers(100, 0)
+	fakeStats := &taskqueuepb.TaskQueueStats{TasksAddRate: 100, TasksDispatchRate: 10}
+	s.tqMgr.makePollerScalingDecisionImpl(time.Now(), enumsspb.TASK_SOURCE_HISTORY, func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	s.Empty(capture.Snapshot()[metrics.PollerScaleSignalComparisonCounter.Name()])
+}
+
+// TestPollScalingSignalComparisonNotEvaluatedOnBacklogScaleUp pins that the ratio comparison is
+// only evaluated when the decision actually reaches the ratio check. A backlog scale-up short
+// circuits it, so shadow data isn't skewed by decisions the ratio never influenced.
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingSignalComparisonNotEvaluatedOnBacklogScaleUp() {
+	s.allowAllScalingDecisions()
+	handler := s.enablePollerScaleDecisionMetrics()
+	capture := handler.StartCapture()
+	defer handler.StopCapture(capture)
+
+	s.setLocalRateTrackers(100, 0) // would fire the improved ratio signal
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 100,
+		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
+	}
+	s.tqMgr.makePollerScalingDecisionImpl(time.Now(), enumsspb.TASK_SOURCE_HISTORY, func() *taskqueuepb.TaskQueueStats { return fakeStats })
+
+	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonBacklog)
+	s.Empty(capture.Snapshot()[metrics.PollerScaleSignalComparisonCounter.Name()])
 }

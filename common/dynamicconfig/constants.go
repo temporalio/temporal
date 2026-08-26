@@ -1570,6 +1570,15 @@ dispatch rate above which a decision to scale up the number of pollers will be i
 metric describing why pollers are scaled up, down, or held for a physical task queue. This is opt-in and can be
 scoped by namespace and/or task queue.`,
 	)
+	MatchingUseImprovedSignalsForPollerScaling = NewTaskQueueBoolSetting(
+		"matching.useImprovedSignalsForPollerScaling",
+		false,
+		`MatchingUseImprovedSignalsForPollerScaling, when enabled, uses the physical queue's sync match rate instead of
+its total dispatch rate as the denominator of the poller scaling add-to-dispatch ratio check. The total dispatch rate
+includes tasks dispatched from the backlog, which makes it track the add rate closely and so masks a poor sync match
+rate. Both signals are always evaluated and compared via the poller_scale_signal_comparison metric; this setting only
+controls which one drives the decision.`,
+	)
 	MatchingUseNewMatcher = NewTaskQueueTypedSettingWithConverter(
 		"matching.useNewMatcher",
 		ConvertGradualChange(true),

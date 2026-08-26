@@ -1404,6 +1404,14 @@ var (
 				"dynamic config matching.enablePollerScalingDecisionMetrics is enabled. Dimensions: namespace, taskqueue, "+
 				"task_type, partition, decision (scale_up/scale_down/hold), reason (idle/backlog/task_rate/rate_limited)"),
 	)
+	PollerScaleSignalComparisonCounter = NewCounterDef(
+		"poller_scale_signal_comparison",
+		WithDescription(
+			"Compares the old and improved poller scaling signals in shadow mode. Emitted on every scaling decision "+
+				"where at least one of the two signals fires. Dimensions: namespace, taskqueue, task_type, partition, "+
+				"signal (ratio), result (both/new_only/old_only). Gated by "+
+				"matching.enablePollerScalingDecisionMetrics."),
+	)
 	// ----------------------------------------------------------------------------------------------------------------
 
 	PartitionCacheSize = NewGaugeDef(

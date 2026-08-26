@@ -30,6 +30,8 @@ const (
 	forwardedTag            = "forwarded"
 	pollResultTagName       = "poll_result"
 	pollerScaleDecisionTag  = "decision"
+	pollerScaleSignalTag    = "signal"
+	pollerScaleResultTag    = "result"
 	fromCluster             = "from_cluster"
 	toCluster               = "to_cluster"
 	taskQueue               = "taskqueue"
@@ -348,10 +350,34 @@ const (
 	PollerScaleReasonTaskQueueRateLimited ReasonString = "task_queue_rate_limited"
 )
 
+// PollerScaleSignalRatio names the add-to-dispatch ratio scale-up signal in the "signal" tag of
+// metrics.PollerScaleSignalComparisonCounter.
+const PollerScaleSignalRatio = "ratio"
+
+// Values for the "result" tag of metrics.PollerScaleSignalComparisonCounter, describing which of
+// the old and improved signals fired.
+const (
+	PollerScaleComparisonBoth    = "both"
+	PollerScaleComparisonNewOnly = "new_only"
+	PollerScaleComparisonOldOnly = "old_only"
+)
+
 // PollerScaleDecisionTag records the direction of a poller scaling decision (scale up, scale
 // down, or hold). Pair it with ReasonTag for the cause. See metrics.PollerScaleDecisionCounter.
 func PollerScaleDecisionTag(decision string) Tag {
 	return Tag{Key: pollerScaleDecisionTag, Value: decision}
+}
+
+// PollerScaleSignalTag records which scale-up signal a shadow-mode comparison is about. Pair it
+// with PollerScaleComparisonResultTag. See metrics.PollerScaleSignalComparisonCounter.
+func PollerScaleSignalTag(signal string) Tag {
+	return Tag{Key: pollerScaleSignalTag, Value: signal}
+}
+
+// PollerScaleComparisonResultTag records which of the old and improved signals fired.
+// See metrics.PollerScaleSignalComparisonCounter.
+func PollerScaleComparisonResultTag(result string) Tag {
+	return Tag{Key: pollerScaleResultTag, Value: result}
 }
 
 func MatchingTaskPriorityTag(value int32) Tag {

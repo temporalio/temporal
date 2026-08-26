@@ -95,6 +95,9 @@ type (
 		taskTrackerLock sync.Mutex
 		tasksAdded      map[priorityKey]*taskTracker
 		tasksDispatched map[priorityKey]*taskTracker
+		// tasksSyncMatched tracks the subset of tasksDispatched that were matched to a waiting
+		// poller instead of being read back from the backlog. Used only by poller scaling.
+		tasksSyncMatched map[priorityKey]*taskTracker
 		// tasksRateLimited tracks rate-limit events in a sliding window for stats reporting.
 		tasksRateLimited *taskTracker
 	}
@@ -162,6 +165,7 @@ func newPhysicalTaskQueueManager(
 		metricsHandler:           taggedMetricsHandler,
 		tasksAdded:               make(map[priorityKey]*taskTracker),
 		tasksDispatched:          make(map[priorityKey]*taskTracker),
+		tasksSyncMatched:         make(map[priorityKey]*taskTracker),
 		tasksRateLimited:         e.newTaskTracker(),
 		pollerScalingRateLimiter: quotas.NewDefaultOutgoingRateLimiter(pollerScalingRateLimitFn),
 		deploymentRegistrationCh: make(chan struct{}, 1),
@@ -530,7 +534,17 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		task.backlogCountHint = c.backlogCountHint
 
 		if pollMetadata.forwardedFrom == "" { // track the task on the child, not where a poll was forwarded to
-			c.incTaskTracker(c.tasksDispatched, priorityKey(task.getPriority().GetPriorityKey()), 1)
+			pri := priorityKey(task.getPriority().GetPriorityKey())
+			c.incTaskTracker(c.tasksDispatched, pri, 1)
+			// A task that still carries its history source was matched to a poller directly rather
+			// than read back from the backlog, i.e. it was sync matched. Query and Nexus tasks are
+			// also sourced from history and are never backlogged, so they count as sync matches too.
+			// Tasks whose source was lost (a "started" task handed back by a forwarded poll) are
+			// deliberately not counted; only root and sticky queues consume this rate, and neither
+			// forwards polls.
+			if task.source == enumsspb.TASK_SOURCE_HISTORY {
+				c.incTaskTracker(c.tasksSyncMatched, pri, 1)
+			}
 		}
 		return task, nil
 	}
@@ -937,9 +951,38 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 		// as they have only 1 partition.
 		return nil
 	} else {
-		if float64(stats.GetTasksAddRate())/float64(stats.GetTasksDispatchRate()) > c.partitionMgr.config.PollerScalingTaskAddToDispatchRatio() {
-			// Increase if we're adding tasks faster than we're dispatching them. Particularly useful for Nexus tasks,
-			// since those (currently) don't get backlogged.
+		// Increase if we're adding tasks faster than we're draining them. Particularly useful for
+		// Nexus tasks, since those (currently) don't get backlogged.
+		//
+		// Two signals are evaluated on every decision so they can be compared in shadow mode:
+		//
+		//   old: add rate / total dispatch rate, both taken from the adjusted queue stats.
+		//   new: add rate / sync match rate, both taken from this queue's own trackers.
+		//
+		// The old denominator counts tasks dispatched from the backlog, so under sustained backlog
+		// pressure it tracks the add rate closely and the ratio sits near 1 no matter how badly
+		// pollers are keeping up. The sync match rate excludes backlog dispatches, so it only
+		// measures work that found a poller waiting.
+		//
+		// The new signal deliberately does not reuse stats.GetTasksAddRate(): the partition manager
+		// re-attributes rates across the unversioned queue and the current/ramping version queues
+		// before returning them, so pairing that numerator with this queue's own sync match rate
+		// would compare two different populations. During a version rollout that skew is severe --
+		// a version's queue can be attributed the whole unversioned add rate while having no sync
+		// matches of its own, which would peg the ratio at +Inf and scale up forever.
+		threshold := c.partitionMgr.config.PollerScalingTaskAddToDispatchRatio()
+		oldRatioFires := ratioExceeds(float64(stats.GetTasksAddRate()), float64(stats.GetTasksDispatchRate()), threshold)
+
+		localAddRate, localSyncMatchedRate := c.getLocalAddAndSyncMatchedRates()
+		newRatioFires := ratioExceeds(float64(localAddRate), float64(localSyncMatchedRate), threshold)
+
+		c.recordPollerScaleSignalComparison(metrics.PollerScaleSignalRatio, oldRatioFires, newRatioFires)
+
+		scaleUpByRatio := oldRatioFires
+		if c.partitionMgr.config.UseImprovedSignalsForPollerScaling() {
+			scaleUpByRatio = newRatioFires
+		}
+		if scaleUpByRatio {
 			delta = 1
 			reason = metrics.PollerScaleReasonTaskRate
 		}
@@ -964,6 +1007,65 @@ func (c *physicalTaskQueueManagerImpl) recordPollerScaleDecision(decision string
 	}
 	c.metricsHandler.Counter(metrics.PollerScaleDecisionCounter.Name()).
 		Record(1, metrics.PollerScaleDecisionTag(decision), metrics.ReasonTag(reason))
+}
+
+// recordPollerScaleSignalComparison emits the poller_scale_signal_comparison metric comparing the
+// old and improved scale-up signals. Emitted only when at least one of the two fires, so the
+// counter stays quiet on idle queues. Gated by the same opt-in dynamic config as the poller scaling
+// decision metrics.
+func (c *physicalTaskQueueManagerImpl) recordPollerScaleSignalComparison(signal string, oldFires, newFires bool) {
+	if !oldFires && !newFires {
+		return
+	}
+	if !c.partitionMgr.config.EnablePollerScalingDecisionMetrics() {
+		return
+	}
+	var result string
+	switch {
+	case oldFires && newFires:
+		result = metrics.PollerScaleComparisonBoth
+	case newFires:
+		result = metrics.PollerScaleComparisonNewOnly
+	default:
+		result = metrics.PollerScaleComparisonOldOnly
+	}
+	c.metricsHandler.Counter(metrics.PollerScaleSignalComparisonCounter.Name()).
+		Record(1, metrics.PollerScaleSignalTag(signal), metrics.PollerScaleComparisonResultTag(result))
+}
+
+// ratioExceeds reports whether numerator/denominator is above threshold, without producing NaN or
+// +Inf for a zero denominator. Nothing arriving is never a reason to scale up; something arriving
+// while nothing drains is the strongest reason there is.
+func ratioExceeds(numerator, denominator, threshold float64) bool {
+	if numerator <= 0 {
+		return false
+	}
+	if denominator <= 0 {
+		return true
+	}
+	return numerator/denominator > threshold
+}
+
+// getLocalAddAndSyncMatchedRates returns this physical queue's own add and sync match rates,
+// aggregated over priorities. Both are read under one lock so they cover the same window.
+//
+// These are the raw tracker rates, not the rates in TaskQueueStats: the latter are re-attributed
+// across the unversioned and versioned queues by the partition manager, which would make the two
+// sides of the ratio incomparable. They are also kept out of GetStatsByPriority because
+// TaskQueueStats is a public API proto and the sync match rate is only used internally for scaling
+// decisions. If we ever want to expose it in metrics or DescribeTaskQueue, move it into
+// GetStatsByPriority and add a proto field.
+func (c *physicalTaskQueueManagerImpl) getLocalAddAndSyncMatchedRates() (addRate, syncMatchedRate float32) {
+	c.taskTrackerLock.Lock()
+	defer c.taskTrackerLock.Unlock()
+
+	for _, tt := range c.tasksAdded {
+		addRate += tt.rate()
+	}
+	for _, tt := range c.tasksSyncMatched {
+		syncMatchedRate += tt.rate()
+	}
+	return addRate, syncMatchedRate
 }
 
 func (c *physicalTaskQueueManagerImpl) UpdateRemotePriorityBacklogs(backlogs remotePriorityBacklogSet) {
@@ -995,6 +1097,7 @@ func (c *physicalTaskQueueManagerImpl) incTaskTracker(
 		// Initialize all task trackers together; or the timeframes won't line up.
 		c.tasksAdded[priorityKey] = c.partitionMgr.engine.newTaskTracker()
 		c.tasksDispatched[priorityKey] = c.partitionMgr.engine.newTaskTracker()
+		c.tasksSyncMatched[priorityKey] = c.partitionMgr.engine.newTaskTracker()
 		tracker = intervals[priorityKey]
 	}
 	tracker.inc(n)
