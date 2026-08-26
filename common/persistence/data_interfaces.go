@@ -391,6 +391,10 @@ type (
 
 		ActivityInfos       map[int64]*persistencespb.ActivityInfo
 		TimerInfos          map[string]*persistencespb.TimerInfo
+		// TimerInfoBlobs holds user timer entries that were never decoded in
+		// memory. They are persisted verbatim, avoiding a decode/encode round
+		// trip, and are disjoint from TimerInfos.
+		TimerInfoBlobs      map[string]*commonpb.DataBlob
 		ChildExecutionInfos map[int64]*persistencespb.ChildExecutionInfo
 		RequestCancelInfos  map[int64]*persistencespb.RequestCancelInfo
 		SignalInfos         map[int64]*persistencespb.SignalInfo

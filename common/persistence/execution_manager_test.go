@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -234,5 +235,182 @@ func TestExecutionManager_TrimHistoryBranchSkipped_EmptyBranchToken(t *testing.T
 	}
 	if _, ok := err.(*p.ConditionFailedError); !ok {
 		t.Fatalf("expected ConditionFailedError, got %T", err)
+	}
+}
+
+func TestExecutionManager_GetWorkflowExecutionLeavesTimerInfosEncoded(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockp.NewMockExecutionStore(ctrl)
+	store.EXPECT().GetName().AnyTimes().Return("mock-store")
+
+	serializer := serialization.NewSerializer()
+	timerInfoBlob, err := serializer.TimerInfoToBlob(&persistencespb.TimerInfo{TimerId: "t1", StartedEventId: 5})
+	if err != nil {
+		t.Fatalf("TimerInfoToBlob error: %v", err)
+	}
+	executionInfo := &persistencespb.WorkflowExecutionInfo{
+		NamespaceId:    "namespace",
+		WorkflowId:     "workflow",
+		UserTimerCount: 1,
+	}
+	executionState := &persistencespb.WorkflowExecutionState{
+		RunId:  "run",
+		State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	}
+	executionInfoBlob, err := serializer.WorkflowExecutionInfoToBlob(executionInfo)
+	if err != nil {
+		t.Fatalf("WorkflowExecutionInfoToBlob error: %v", err)
+	}
+	executionStateBlob, err := serializer.WorkflowExecutionStateToBlob(executionState)
+	if err != nil {
+		t.Fatalf("WorkflowExecutionStateToBlob error: %v", err)
+	}
+
+	store.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		&p.InternalGetWorkflowExecutionResponse{
+			State: &p.InternalWorkflowMutableState{
+				ExecutionInfo:  executionInfoBlob,
+				ExecutionState: executionStateBlob,
+				TimerInfos:     map[string]*commonpb.DataBlob{"t1": timerInfoBlob},
+			},
+			DBRecordVersion: 3,
+		},
+		nil,
+	)
+
+	em := p.NewExecutionManager(
+		store,
+		serializer,
+		nil,
+		testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError),
+		dynamicconfig.GetIntPropertyFn(1024*1024),
+		dynamicconfig.GetBoolPropertyFn(false),
+	)
+
+	resp, err := em.GetWorkflowExecution(context.Background(), &p.GetWorkflowExecutionRequest{
+		ShardID:     1,
+		NamespaceID: "namespace",
+		WorkflowID:  "workflow",
+		RunID:       "run",
+		ArchetypeID: chasm.WorkflowArchetypeID,
+	})
+	if err != nil {
+		t.Fatalf("GetWorkflowExecution error: %v", err)
+	}
+	if len(resp.State.TimerInfos) != 0 {
+		t.Fatalf("expected state timer infos to be left empty, got %v", resp.State.TimerInfos)
+	}
+	if len(resp.TimerInfoBlobs) != 1 || resp.TimerInfoBlobs["t1"] != timerInfoBlob {
+		t.Fatalf("expected timer info blob to be passed through verbatim, got %v", resp.TimerInfoBlobs)
+	}
+	if resp.MutableStateStats.TimerInfoCount != 1 || resp.MutableStateStats.TotalUserTimerCount != 1 {
+		t.Fatalf("unexpected timer stats: %+v", resp.MutableStateStats)
+	}
+	if resp.DBRecordVersion != 3 {
+		t.Fatalf("unexpected DB record version: %v", resp.DBRecordVersion)
+	}
+}
+
+func TestExecutionManager_SetWorkflowExecutionPersistsEncodedTimerInfosVerbatim(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockp.NewMockExecutionStore(ctrl)
+	store.EXPECT().GetName().AnyTimes().Return("mock-store")
+
+	serializer := serialization.NewSerializer()
+	encodedTimerBlob, err := serializer.TimerInfoToBlob(&persistencespb.TimerInfo{TimerId: "t-encoded", StartedEventId: 5})
+	if err != nil {
+		t.Fatalf("TimerInfoToBlob error: %v", err)
+	}
+	decodedTimer := &persistencespb.TimerInfo{TimerId: "t-decoded", StartedEventId: 6}
+
+	var captured *p.InternalSetWorkflowExecutionRequest
+	store.EXPECT().SetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *p.InternalSetWorkflowExecutionRequest) error {
+			captured = req
+			return nil
+		},
+	)
+
+	em := p.NewExecutionManager(
+		store,
+		serializer,
+		nil,
+		testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError),
+		dynamicconfig.GetIntPropertyFn(1024*1024),
+		dynamicconfig.GetBoolPropertyFn(false),
+	)
+
+	_, err = em.SetWorkflowExecution(context.Background(), &p.SetWorkflowExecutionRequest{
+		ShardID:     1,
+		RangeID:     1,
+		ArchetypeID: chasm.WorkflowArchetypeID,
+		SetWorkflowSnapshot: p.WorkflowSnapshot{
+			ExecutionInfo:  &persistencespb.WorkflowExecutionInfo{NamespaceId: "namespace", WorkflowId: "workflow"},
+			ExecutionState: &persistencespb.WorkflowExecutionState{RunId: "run"},
+			TimerInfos:     map[string]*persistencespb.TimerInfo{"t-decoded": decodedTimer},
+			TimerInfoBlobs: map[string]*commonpb.DataBlob{"t-encoded": encodedTimerBlob},
+		},
+	})
+	if err != nil {
+		t.Fatalf("SetWorkflowExecution error: %v", err)
+	}
+
+	persistedTimerInfos := captured.SetWorkflowSnapshot.TimerInfos
+	if len(persistedTimerInfos) != 2 {
+		t.Fatalf("expected both timer entries to be persisted, got %v", persistedTimerInfos)
+	}
+	if persistedTimerInfos["t-encoded"] != encodedTimerBlob {
+		t.Fatal("expected encoded timer entry to be persisted verbatim")
+	}
+	roundTrippedTimer, err := serializer.TimerInfoFromBlob(persistedTimerInfos["t-decoded"])
+	if err != nil {
+		t.Fatalf("TimerInfoFromBlob error: %v", err)
+	}
+	if roundTrippedTimer.String() != decodedTimer.String() {
+		t.Fatalf("expected decoded timer to survive a round trip, got %v", roundTrippedTimer)
+	}
+}
+
+func TestExecutionManager_SetWorkflowExecutionRejectsDuplicateTimerInfos(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockp.NewMockExecutionStore(ctrl)
+	store.EXPECT().GetName().AnyTimes().Return("mock-store")
+
+	serializer := serialization.NewSerializer()
+	timerBlob, err := serializer.TimerInfoToBlob(&persistencespb.TimerInfo{TimerId: "dup"})
+	if err != nil {
+		t.Fatalf("TimerInfoToBlob error: %v", err)
+	}
+
+	// no store expectations, serialization must fail before reaching the store
+	em := p.NewExecutionManager(
+		store,
+		serializer,
+		nil,
+		testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError),
+		dynamicconfig.GetIntPropertyFn(1024*1024),
+		dynamicconfig.GetBoolPropertyFn(false),
+	)
+
+	_, err = em.SetWorkflowExecution(context.Background(), &p.SetWorkflowExecutionRequest{
+		ShardID:     1,
+		RangeID:     1,
+		ArchetypeID: chasm.WorkflowArchetypeID,
+		SetWorkflowSnapshot: p.WorkflowSnapshot{
+			ExecutionInfo:  &persistencespb.WorkflowExecutionInfo{NamespaceId: "namespace", WorkflowId: "workflow"},
+			ExecutionState: &persistencespb.WorkflowExecutionState{RunId: "run"},
+			TimerInfos:     map[string]*persistencespb.TimerInfo{"dup": {TimerId: "dup"}},
+			TimerInfoBlobs: map[string]*commonpb.DataBlob{"dup": timerBlob},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected SetWorkflowExecution to reject duplicate user timer entries")
 	}
 }

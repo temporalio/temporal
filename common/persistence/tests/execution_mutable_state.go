@@ -47,6 +47,7 @@ type (
 		ShardManager      p.ShardManager
 		ExecutionManager  p.ExecutionManager
 		HistoryBranchUtil p.HistoryBranchUtil
+		Serializer        serialization.Serializer
 		Logger            log.Logger
 
 		// MutableStateTableCounts reports per-table surviving row counts for a run's
@@ -82,6 +83,7 @@ func NewExecutionMutableStateSuite(
 			dynamicconfig.GetBoolPropertyFn(false),
 		),
 		HistoryBranchUtil: p.NewHistoryBranchUtil(serializer),
+		Serializer:        serializer,
 		Logger:            logger,
 	}
 }
@@ -2803,6 +2805,18 @@ func (s *ExecutionMutableStateSuite) Accumulate(
 		SignalInfos:         snapshot.SignalInfos,
 		SignalRequestedIds:  convert.StringSetToSlice(snapshot.SignalRequestedIDs),
 		ChasmNodes:          snapshot.ChasmNodes,
+	}
+	// user timer entries persisted verbatim are indistinguishable from decoded
+	// ones once read back
+	if len(snapshot.TimerInfoBlobs) > 0 {
+		if mutableState.TimerInfos == nil {
+			mutableState.TimerInfos = make(map[string]*persistencespb.TimerInfo, len(snapshot.TimerInfoBlobs))
+		}
+		for key, blob := range snapshot.TimerInfoBlobs {
+			info, err := s.Serializer.TimerInfoFromBlob(blob)
+			s.NoError(err)
+			mutableState.TimerInfos[key] = info
+		}
 	}
 	dbRecordVersion := snapshot.DBRecordVersion
 

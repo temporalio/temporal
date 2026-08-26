@@ -149,6 +149,12 @@ func (t *userTimers) all() map[string]*persistencespb.TimerInfo {
 	return t.typed
 }
 
+// decoded returns the entries decoded so far without forcing decoding of the
+// remaining encoded entries.
+func (t *userTimers) decoded() map[string]*persistencespb.TimerInfo {
+	return t.typed
+}
+
 // untouchedBlobs hands out the entries that were never accessed since load.
 // Ownership of the returned map is transferred to the caller.
 func (t *userTimers) untouchedBlobs() map[string]*commonpb.DataBlob {

@@ -7684,7 +7684,8 @@ func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
 		NextEventID:    ms.hBuilder.NextEventID(),
 
 		ActivityInfos:       ms.pendingActivityInfoIDs,
-		TimerInfos:          ms.pendingUserTimers.all(),
+		TimerInfos:          ms.pendingUserTimers.decoded(),
+		TimerInfoBlobs:      ms.pendingUserTimers.untouchedBlobs(),
 		ChildExecutionInfos: ms.pendingChildExecutionInfoIDs,
 		RequestCancelInfos:  ms.pendingRequestCancelInfoIDs,
 		SignalInfos:         ms.pendingSignalInfoIDs,
