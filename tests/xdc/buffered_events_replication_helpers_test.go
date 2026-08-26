@@ -198,6 +198,21 @@ func (s *xdcBaseSuite) terminateWorkflowEventually(ctx context.Context, target w
 	}, replicationWaitTime, replicationCheckInterval)
 }
 
+// The buffered-event conflict tests intentionally use a fixed two-cluster topology:
+//
+//  1. Cluster 0 starts active, establishes the common history, and holds the workflow task while
+//     naturally produced events enter its buffer.
+//  2. Replication is blocked in both directions for this workflow. A namespace failover makes
+//     cluster 1 active, where a signal creates the winning branch.
+//  3. Cluster 1 -> cluster 0 replication is released first. Cluster 0 is now passive; applying the
+//     winner resolves the conflict, failover-closes its outstanding workflow task, and flushes the
+//     buffer onto the losing branch.
+//  4. Cluster 0 -> cluster 1 replication is then released so conflict resolution sees the losing
+//     branch and reapplies or skips its events against the winner.
+//  5. Cluster 1 -> cluster 0 replication is finally released until both current histories converge.
+//
+// Replication channel names below identify the receiving cluster: replicationToOldActive contains
+// tasks executing on cluster 0, and replicationToNewActive contains tasks executing on cluster 1.
 func (s *xdcBaseSuite) finishNaturallyBufferedConflict(
 	ctx context.Context,
 	conflict naturallyBufferedConflict,
@@ -758,6 +773,8 @@ func (s *xdcBaseSuite) blockReplicationForWorkflow(
 	workflowID string,
 ) <-chan *blockedReplicationTask {
 	s.T().Helper()
+	// The interceptor runs on the receiving cluster, so clusterIndex identifies the replication
+	// destination rather than the cluster that generated the task.
 	tasks := make(chan *blockedReplicationTask, 20)
 	s.clusters[clusterIndex].InjectHook(
 		s.T(),
