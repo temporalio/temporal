@@ -66,6 +66,7 @@ func runIdleValidateTestCase(t *testing.T, env *testEnv, c *idleValidateTestCase
 func anchorLastEventTo(sched *scheduler.Scheduler, anchor time.Time) {
 	sched.Info.UpdateTime = timestamppb.New(anchor)
 	sched.Info.CreateTime = timestamppb.New(anchor)
+	sched.LastEventTime = timestamppb.New(anchor)
 }
 
 func TestIdleTask_Execute(t *testing.T) {

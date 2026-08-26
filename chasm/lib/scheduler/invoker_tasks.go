@@ -244,7 +244,8 @@ func (h *InvokerExecuteTaskHandler) Execute(
 			s := i.Scheduler.Get(ctx)
 			// Use newlyStarted (not len(result.CompletedStarts)) so a concurrent
 			// ExecuteTask's duplicate StartWorkflow can't inflate ActionCount.
-			newlyStarted, droppedDuplicates, startOnlyActions := i.recordExecuteResult(ctx, &result)
+			newlyStarted, droppedDuplicates, latestStartTime, startOnlyActions := i.recordExecuteResult(ctx, &result)
+			s.advanceLastEventTimeTo(latestStartTime)
 			s.recordStartOnlyActions(ctx, startOnlyActions)
 			s.recordActionResult(&schedulerActionResult{actionCount: int64(newlyStarted)})
 			if droppedDuplicates > 0 {
