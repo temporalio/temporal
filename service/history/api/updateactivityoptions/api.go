@@ -78,7 +78,11 @@ func Invoke(
 			for _, activityID := range activityIDs {
 				activityInfo, activityFound := mutableState.GetActivityByActivityID(activityID)
 				if !activityFound {
-					return nil, consts.ErrActivityNotFound
+					shardContext.GetLogger().Warn(
+						"updateactivityoptions: activity unavailable for metrics",
+						tag.ActivityID(activityID),
+					)
+					continue
 				}
 				currentActivityMetrics = append(currentActivityMetrics, api.NewActivityMetricsInfo(mutableState, activityInfo))
 			}

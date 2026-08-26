@@ -34,6 +34,9 @@ func Invoke(
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
 			var currentActivityMetrics []api.ActivityMetricsInfo
+			if !mutableState.IsWorkflowExecutionRunning() {
+				return nil, consts.ErrWorkflowCompleted
+			}
 			frontendRequest := request.GetFrontendRequest()
 			var activityIDs []string
 			switch a := frontendRequest.GetActivity().(type) {
