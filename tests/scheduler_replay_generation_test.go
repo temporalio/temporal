@@ -2,6 +2,7 @@ package tests
 
 import (
 	"compress/gzip"
+	"context"
 	"os"
 	"strconv"
 	"testing"
@@ -14,13 +15,15 @@ import (
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
-// TestGenerateSchedulerVersionCeilingReplayHistory records a small V1 scheduler history at the
+// TestGenerateSchedulerVersionCeilingReplayHistory records a V1 scheduler history at the
 // checked-out revision. Run this test at both the producer and compatibility-base revisions, then
 // put both outputs in service/worker/scheduler/testdata; TestReplays will exercise both histories.
 //
@@ -31,82 +34,92 @@ import (
 //	go test -tags integration,test_dep ./tests \
 //	  -run '^TestGenerateSchedulerVersionCeilingReplayHistory$' -count=1
 //
-// For the rollback direction, copy the producer fixture into the base checkout's scheduler
+// A replay fixture must exercise and assert the behavior it is intended to preserve before it is
+// captured. To add one, call generateSchedulerReplayHistory with a scenario that configures the
+// producer, drives the behavior, and returns the run after making that assertion. Add the output
+// to scheduler/testdata; TestReplays automatically runs it against each replay configuration.
+//
+// For rollback compatibility, copy the producer fixture into the base checkout's scheduler
 // testdata directory and run its TestReplays. That executes the history with the actual base
 // worker instead of relying on a duplicate "legacy" workflow kept in the PR.
 func TestGenerateSchedulerVersionCeilingReplayHistory(t *testing.T) {
+	generateSchedulerReplayHistory(t, func(t *testing.T, ctx context.Context, env *testcore.TestEnv) *commonpb.WorkflowExecution {
+		ceiling, err := strconv.Atoi(os.Getenv("SCHEDULER_VERSION_CEILING"))
+		require.NoError(t, err, "SCHEDULER_VERSION_CEILING must be an integer")
+		env.OverrideDynamicConfig(dynamicconfig.SchedulerV1VersionCeiling, ceiling)
+		scheduleID := testcore.RandomizeStr("version-ceiling-replay")
+		workflowID := scheduler.WorkflowIDPrefix + scheduleID
+
+		createSchedule(ctx, t, env, scheduleID, &schedulepb.Schedule{
+			Spec:   intervalSpec(time.Hour),
+			Action: startWorkflowAction(env, testcore.RandomizeStr("unused-action"), "unused-workflow"),
+			State:  &schedulepb.ScheduleState{Paused: true},
+		})
+
+		execution := waitForSchedulerWorkflowExecution(t, ctx, env, workflowID)
+		// The first task records the version ceiling in a MutableSideEffect marker. Without it,
+		// this fixture would not cover the configuration-driven behavior.
+		var recorded scheduler.TweakablePolicies
+		await.RequireTruef(t, func() bool {
+			var ok bool
+			recorded, ok = recordedSchedulerTweakables(ctx, env, execution)
+			return ok
+		}, 30*time.Second, 100*time.Millisecond, "V1 scheduler did not record tweakables")
+		require.Equal(t, ceiling, recorded.VersionCeiling)
+		require.True(t, recorded.VersionCeilingSet)
+		wantVersion := scheduler.SchedulerWorkflowVersion(scheduler.TriggerImmediatelyTimestamp)
+		if ceiling >= 0 {
+			wantVersion = min(wantVersion, scheduler.SchedulerWorkflowVersion(ceiling))
+		}
+		require.Equal(t, wantVersion, recorded.Version)
+		return execution
+	})
+}
+
+// generateSchedulerReplayHistory captures one completed V1 scheduler run after scenario has
+// verified the producer behavior it needs in the history. The caller owns the scenario-specific
+// configuration and assertions; this helper owns the common V1 worker, forced Continue-As-New,
+// and fixture serialization. The checked-in replay test should then use the desired current
+// behavior/configuration to replay the generated history.
+func generateSchedulerReplayHistory(
+	t *testing.T,
+	scenario func(t *testing.T, ctx context.Context, env *testcore.TestEnv) *commonpb.WorkflowExecution,
+) {
+	t.Helper()
 	output := os.Getenv("SCHEDULER_REPLAY_OUTPUT")
 	if output == "" {
 		t.Skip("set SCHEDULER_REPLAY_OUTPUT to generate a scheduler replay fixture")
 	}
-	ceiling, err := strconv.Atoi(os.Getenv("SCHEDULER_VERSION_CEILING"))
-	require.NoError(t, err, "SCHEDULER_VERSION_CEILING must be an integer")
 
 	env := newScheduleEnv(t, append(
 		scheduleCommonOpts(t),
 		testcore.WithDedicatedCluster(),
 		testcore.WithWorkerService("V1 scheduler replay fixture"),
 	)...)
-	env.OverrideDynamicConfig(dynamicconfig.SchedulerV1VersionCeiling, ceiling)
 	ctx := testcore.NewContext()
-	scheduleID := testcore.RandomizeStr("version-ceiling-replay")
-	workflowID := scheduler.WorkflowIDPrefix + scheduleID
+	execution := scenario(t, ctx, env)
+	require.NotNil(t, execution, "scheduler replay scenario must return the run to capture")
+	require.NotEmpty(t, execution.GetWorkflowId(), "scheduler replay scenario must return a workflow ID")
+	require.NotEmpty(t, execution.GetRunId(), "scheduler replay scenario must return a run ID")
 
-	createSchedule(ctx, t, env, scheduleID, &schedulepb.Schedule{
-		Spec:   intervalSpec(time.Hour),
-		Action: startWorkflowAction(env, testcore.RandomizeStr("unused-action"), "unused-workflow"),
-		State:  &schedulepb.ScheduleState{Paused: true},
-	})
-
-	var runID string
-	await.RequireTruef(t, func() bool {
-		desc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: env.Namespace().String(),
-			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
-		})
-		if err != nil {
-			return false
-		}
-		runID = desc.GetWorkflowExecutionInfo().GetExecution().GetRunId()
-		return runID != ""
-	}, 30*time.Second, 100*time.Millisecond, "V1 scheduler workflow did not start")
-
-	// Wait until the first task has recorded tweakables before forcing the run to close.
-	await.RequireTruef(t, func() bool {
-		iter := env.SdkClient().GetWorkflowHistory(ctx, workflowID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
-		for iter.HasNext() {
-			event, err := iter.Next()
-			if err != nil {
-				return false
-			}
-			if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
-				return true
-			}
-		}
-		return false
-	}, 30*time.Second, 100*time.Millisecond, "V1 scheduler did not complete its first workflow task")
-
-	_, err = env.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace: env.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      runID,
-		},
-		SignalName: scheduler.SignalNameForceCAN,
-		Identity:   "scheduler replay fixture generator",
+	_, err := env.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: execution,
+		SignalName:        scheduler.SignalNameForceCAN,
+		Identity:          "scheduler replay fixture generator",
 	})
 	require.NoError(t, err)
 
 	await.RequireTruef(t, func() bool {
 		desc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: env.Namespace().String(),
-			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+			Execution: execution,
 		})
 		return err == nil && desc.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW
 	}, 30*time.Second, 100*time.Millisecond, "V1 scheduler did not continue as new")
 
 	history := &historypb.History{}
-	iter := env.SdkClient().GetWorkflowHistory(ctx, workflowID, runID, false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	iter := env.SdkClient().GetWorkflowHistory(ctx, execution.GetWorkflowId(), execution.GetRunId(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 	for iter.HasNext() {
 		event, err := iter.Next()
 		require.NoError(t, err)
@@ -122,4 +135,68 @@ func TestGenerateSchedulerVersionCeilingReplayHistory(t *testing.T) {
 	require.NoError(t, err)
 	_, err = w.Write(data)
 	require.NoError(t, err)
+}
+
+func waitForSchedulerWorkflowExecution(
+	t *testing.T,
+	ctx context.Context,
+	env *testcore.TestEnv,
+	workflowID string,
+) *commonpb.WorkflowExecution {
+	t.Helper()
+	var execution *commonpb.WorkflowExecution
+	await.RequireTruef(t, func() bool {
+		desc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+		})
+		if err != nil {
+			return false
+		}
+		execution = desc.GetWorkflowExecutionInfo().GetExecution()
+		return execution.GetRunId() != ""
+	}, 30*time.Second, 100*time.Millisecond, "V1 scheduler workflow did not start")
+	return execution
+}
+
+func recordedSchedulerTweakables(
+	ctx context.Context,
+	env *testcore.TestEnv,
+	execution *commonpb.WorkflowExecution,
+) (scheduler.TweakablePolicies, bool) {
+	iter := env.SdkClient().GetWorkflowHistory(
+		ctx,
+		execution.GetWorkflowId(),
+		execution.GetRunId(),
+		false,
+		enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT,
+	)
+	for iter.HasNext() {
+		event, err := iter.Next()
+		if err != nil {
+			return scheduler.TweakablePolicies{}, false
+		}
+		attrs := event.GetMarkerRecordedEventAttributes()
+		if attrs.GetMarkerName() != "MutableSideEffect" {
+			continue
+		}
+		data := attrs.GetDetails()["data"].GetPayloads()
+		if len(data) != 2 {
+			continue
+		}
+		var id string
+		if payload.Decode(data[0], &id) != nil || id != "tweakables" {
+			continue
+		}
+		var payloads commonpb.Payloads
+		if proto.Unmarshal(data[1].GetData(), &payloads) != nil || len(payloads.GetPayloads()) != 1 {
+			continue
+		}
+		var tweakables scheduler.TweakablePolicies
+		if payload.Decode(payloads.GetPayloads()[0], &tweakables) != nil {
+			return scheduler.TweakablePolicies{}, false
+		}
+		return tweakables, true
+	}
+	return scheduler.TweakablePolicies{}, false
 }

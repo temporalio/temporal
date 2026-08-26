@@ -105,6 +105,35 @@ func TestDetermineVersionLocksAtZeroCeiling(t *testing.T) {
 	require.Equal(t, 0, recordedCeiling)
 }
 
+func TestDetermineVersionPreservesLegacyRecordedVersion(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		version SchedulerWorkflowVersion
+	}{
+		{name: "initial version", version: InitialVersion},
+		{name: "current version", version: TriggerImmediatelyTimestamp},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			s := &scheduler{
+				logger: log.NewSdkLogger(log.NewNoopLogger()),
+				versionCeiling: func() int {
+					calls++
+					return oldPeerCeiling
+				},
+			}
+			s.tweakables = CurrentTweakablePolicies
+			s.tweakables.Version = tc.version
+			// VersionCeilingSet is false for a marker written before this field existed.
+
+			version, ceiling := s.determineVersion(TriggerImmediatelyTimestamp)
+			require.Equal(t, tc.version, version)
+			require.Equal(t, int(tc.version), ceiling)
+			require.Zero(t, calls, "legacy histories must not read the current version ceiling")
+		})
+	}
+}
+
 // TestVersionCeilingWithCHASMMigration verifies that a clamp below the CHASM gate keeps migration
 // markers out of history, and that once the ceiling is lifted (on the next run) the deferred
 // migration runs.

@@ -1765,6 +1765,12 @@ func (s *scheduler) hasMinVersion(version SchedulerWorkflowVersion) bool {
 
 // determineVersion returns the scheduler workflow version and the run's recorded ceiling.
 func (s *scheduler) determineVersion(defaultVersion SchedulerWorkflowVersion) (SchedulerWorkflowVersion, int) {
+	// A marker written before VersionCeiling fields existed has already selected this run's
+	// version. Backfill its ceiling from that value rather than applying a newly configured clamp.
+	if !s.tweakables.VersionCeilingSet && s.tweakables != (TweakablePolicies{}) {
+		return s.tweakables.Version, int(s.tweakables.Version)
+	}
+
 	ceiling := s.tweakables.VersionCeiling
 	if !s.tweakables.VersionCeilingSet {
 		ceiling = s.versionCeiling()
