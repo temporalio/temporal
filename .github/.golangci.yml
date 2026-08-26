@@ -241,6 +241,8 @@ issues:
 run:
   timeout: 10m
   modules-download-mode: readonly
+  # Avoid the host-wide runner lock so local agents can lint separate workspaces concurrently.
+  allow-parallel-runners: true
 
 output:
   sort-order:
