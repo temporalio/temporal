@@ -220,6 +220,12 @@ func withEngineTimeSource(ts *clock.EventTimeSource) engineTestOption {
 	}
 }
 
+func withEngineMetricsHandler(handler metrics.Handler) engineTestOption {
+	return func(c *engineTestConfig) {
+		c.engineOpts = append(c.engineOpts, chasmtest.WithMetricsHandler(handler))
+	}
+}
+
 func newEngineTestConfig(opts ...engineTestOption) *engineTestConfig {
 	config := &engineTestConfig{}
 	for _, opt := range opts {
@@ -250,6 +256,11 @@ func newTestEngineContextFromConfig(
 	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
 	require.NoError(t, registry.Register(newTestLibrary(logger, specProcessor)))
 
+	config.engineOpts = append(config.engineOpts, chasmtest.WithInvariantCheck(
+		func(t *testing.T, node *chasm.Node, root chasm.RootComponent) {
+			requireValidSchedulerState(t, registry, node, root)
+		},
+	))
 	engine := chasmtest.NewEngine(t, registry, config.engineOpts...)
 	return engine, chasm.NewEngineContext(context.Background(), engine)
 }
@@ -435,7 +446,7 @@ func (e *testEnv) ReadContext() chasm.Context {
 
 // CloseTransaction closes the current CHASM transaction and then asserts the
 // stuckness invariant: a scheduler that is not in a terminal state must carry
-// at least one live logical pure task, or nothing will ever wake it again.
+// at least one live logical task, or nothing will ever wake it again.
 //
 // This runs on every test in the package that closes through testEnv, so the
 // existing suite doubles as a stuckness detector at no extra cost. Tests that

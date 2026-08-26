@@ -75,7 +75,7 @@ func TestIdleDeadlineRearmedAfterRecordingStart(t *testing.T) {
 
 	// Record the start through the real invoker path.
 	ctx2 := env.MutableContext()
-	newlyStarted, _ := sched.Invoker.Get(ctx2).RecordExecuteResult(ctx2,
+	newlyStarted, _, _ := sched.Invoker.Get(ctx2).RecordExecuteResult(ctx2,
 		[]*schedulespb.BufferedStart{{
 			RequestId:  "req-final-action",
 			WorkflowId: "wf-final-action",
