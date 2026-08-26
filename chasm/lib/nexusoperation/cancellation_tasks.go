@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
 )
@@ -159,8 +160,15 @@ func (h *cancellationInvocationTaskHandler) Execute(
 	if err != nil {
 		return fmt.Errorf("failed to construct invocation: %w", err)
 	}
+	header := nexus.Header(args.headers)
+	if h.config.UseNewFailureWireFormat(ns.Name().String()) {
+		if header == nil {
+			header = make(nexus.Header, 1)
+		}
+		header.Set(nexusrpc.HeaderTemporalNexusFailureSupport, "true")
+	}
 	startTime := time.Now() // nolint:forbidigo // Time can be used for timing metrics.
-	callErr := inv.Cancel(callCtx, args, nexus.CancelOperationOptions{Header: nexus.Header(args.headers)})
+	callErr := inv.Cancel(callCtx, args, nexus.CancelOperationOptions{Header: header})
 	failureSource := failureSourceFromContext(callCtx)
 
 	h.recordCallOutcome(endpoint, cancelCallOutcomeTag(callCtx, callErr), callErr, time.Since(startTime), failureSource, traceCtx)

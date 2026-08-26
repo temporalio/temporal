@@ -773,8 +773,15 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 			}
 		}
 
+		header := nexus.Header(args.headers)
+		if e.Config.UseNewFailureWireFormat(ns.Name().String()) {
+			if header == nil {
+				header = make(nexus.Header, 1)
+			}
+			header.Set(nexusrpc.HeaderTemporalNexusFailureSupport, "true")
+		}
 		startTime = time.Now()
-		callErr = handle.Cancel(callCtx, nexus.CancelOperationOptions{Header: nexus.Header(args.headers)})
+		callErr = handle.Cancel(callCtx, nexus.CancelOperationOptions{Header: header})
 	}
 	failureSource := failureSourceFromContext(callCtx)
 	methodTag := metrics.NexusMethodTag("CancelOperation")
