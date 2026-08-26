@@ -3,6 +3,7 @@ package migration
 import (
 	"fmt"
 	"maps"
+	"slices"
 	"strconv"
 	"time"
 
@@ -15,8 +16,11 @@ import (
 	schedulerinternal "go.temporal.io/server/chasm/lib/scheduler/internal"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+const legacyRecentActionCount = 10
 
 // LegacyToCreateFromMigrationStateRequest converts legacy (workflow-backed) scheduler
 // state to a CreateFromMigrationStateRequest proto. This is the primary V1-to-V2
@@ -37,8 +41,8 @@ import (
 //   - High water mark (becomes Generator.LastProcessedTime)
 //   - Search attributes and memo
 //
-// Note: In V2, RunningWorkflows and RecentActions are computed on-demand from
-// BufferedStarts by the Invoker, rather than being stored separately in ScheduleInfo.
+// Note: In V2, completion-tracked RunningWorkflows and RecentActions are computed
+// on-demand from BufferedStarts. Start-only recent actions remain in ScheduleInfo.
 func LegacyToCreateFromMigrationStateRequest(
 	schedule *schedulepb.Schedule,
 	info *schedulepb.ScheduleInfo,
@@ -47,7 +51,7 @@ func LegacyToCreateFromMigrationStateRequest(
 	memo *commonpb.Memo,
 	migrationTime time.Time,
 ) *schedulerpb.CreateFromMigrationStateRequest {
-	// V2 computes RunningWorkflows/RecentActions on-demand from BufferedStarts
+	// Imported recent actions are represented by BufferedStarts in V2.
 	infoClone := common.CloneProto(info)
 	infoClone.RunningWorkflows = nil
 	infoClone.RecentActions = nil
@@ -73,6 +77,7 @@ func LegacyToCreateFromMigrationStateRequest(
 		state.ScheduleId,
 		state.ConflictToken,
 		getWorkflowID(schedule),
+		schedule.GetPolicies().GetOverlapPolicy(),
 	)
 
 	runningBufferedStarts := convertRunningWorkflowsToBufferedStarts(
@@ -164,6 +169,17 @@ func CHASMToLegacyStartScheduleArgs(
 		invokerBuffered = invoker.GetBufferedStarts()
 	}
 	bufferedStarts, running, recent := splitBufferedStartsForLegacy(invokerBuffered)
+	if len(info.GetRecentActions()) > 0 {
+		storedRecent := make([]*schedulepb.ScheduleActionResult, 0, len(info.GetRecentActions()))
+		for _, action := range info.GetRecentActions() {
+			storedRecent = append(storedRecent, common.CloneProto(action))
+		}
+		recent = append(storedRecent, recent...)
+		slices.SortFunc(recent, func(a, b *schedulepb.ScheduleActionResult) int {
+			return a.GetActualTime().AsTime().Compare(b.GetActualTime().AsTime())
+		})
+		recent = util.SliceTail(recent, legacyRecentActionCount)
+	}
 	ongoingBackfills, triggerStarts := convertBackfillersCHASMToLegacy(backfillers, migrationTime)
 	bufferedStarts = append(bufferedStarts, triggerStarts...)
 
@@ -208,6 +224,7 @@ func convertBufferedStartsLegacyToCHASM(
 	namespaceID, scheduleID string,
 	conflictToken int64,
 	baseWorkflowID string,
+	scheduleOverlapPolicy enumspb.ScheduleOverlapPolicy,
 ) []*schedulespb.BufferedStart {
 	if len(v1Starts) == 0 {
 		return nil
@@ -250,6 +267,10 @@ func convertBufferedStartsLegacyToCHASM(
 
 		v2Start.Attempt = 0
 		v2Start.BackoffTime = nil
+		v2Start.OverlapPolicy = schedulerinternal.ResolveOverlapPolicy(
+			v2Start.GetOverlapPolicy(),
+			scheduleOverlapPolicy,
+		)
 
 		v2Starts[i] = v2Start
 	}
@@ -466,7 +487,7 @@ func splitBufferedStartsForLegacy(
 		// to later non-ALLOW_ALL starts. They still appear in RecentActions above,
 		// matching V1.
 		if start.GetCompleted() == nil &&
-			start.GetOverlapPolicy() != enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL {
+			schedulerinternal.TracksCompletionResult(start.GetOverlapPolicy()) {
 			running = append(running, &commonpb.WorkflowExecution{
 				WorkflowId: start.GetWorkflowId(),
 				RunId:      start.GetRunId(),

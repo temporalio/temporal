@@ -740,8 +740,7 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		RoutingConfig: routingConfigToSync,
 	}).Get(ctx, nil)
 	if err != nil {
-		var appError *temporal.ApplicationError
-		if errors.As(err, &appError) {
+		if appError, ok := errors.AsType[*temporal.ApplicationError](err); ok {
 			if appError.Type() == errMaxTaskQueuesInVersionType {
 				return temporal.NewApplicationError(
 					fmt.Sprintf("cannot add task queue %v since maximum number of task queues (%d) have been registered in deployment", args.TaskQueueName, args.MaxTaskQueues),

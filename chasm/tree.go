@@ -255,11 +255,6 @@ type (
 	}
 )
 
-// IsEmpty reports whether the mutation contains no node updates or deletions.
-func (m NodesMutation) IsEmpty() bool {
-	return len(m.UpdatedNodes) == 0 && len(m.DeletedNodes) == 0
-}
-
 // NewTreeFromDB creates a new in-memory CHASM tree from a collection of flattened persistence CHASM nodes.
 // This method should only be used when loading an existing CHASM tree from database.
 // If serializedNodes is empty, the tree will be considered as a legacy Workflow execution without any CHASM nodes.
@@ -2074,8 +2069,7 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 		}
 
 		sideEffectTasks := componentAttr.GetSideEffectTasks()
-		for idx := len(sideEffectTasks) - 1; idx >= 0; idx-- {
-			sideEffectTask := sideEffectTasks[idx]
+		for _, sideEffectTask := range slices.Backward(sideEffectTasks) {
 			if sideEffectTask.PhysicalTaskStatus == physicalTaskStatusCreated {
 				break
 			}

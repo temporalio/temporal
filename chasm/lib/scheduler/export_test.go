@@ -65,11 +65,18 @@ func (i *Invoker) RecordExecuteResult(
 	ctx chasm.MutableContext,
 	completed []*schedulespb.BufferedStart,
 	retryable []*schedulespb.BufferedStart,
-) (newlyStarted, droppedDuplicates int) {
+) (newlyStarted, droppedDuplicates int, startOnlyActions []*schedulespb.BufferedStart) {
 	return i.recordExecuteResult(ctx, &executeResult{
 		CompletedStarts: completed,
 		RetryableStarts: retryable,
 	})
+}
+
+func (s *Scheduler) RecordStartOnlyActions(
+	ctx chasm.MutableContext,
+	starts []*schedulespb.BufferedStart,
+) {
+	s.recordStartOnlyActions(ctx, starts)
 }
 
 func (b *BackfillerTaskHandler) ProcessBackfill(

@@ -6,12 +6,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/chasmtest"
 	"go.temporal.io/server/chasm/lib/scheduler"
+	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
@@ -183,6 +187,158 @@ func newRealSpecProcessor(ctrl *gomock.Controller, logger log.Logger) scheduler.
 		logger,
 		newLegacySpecBuilder(0, 0),
 	)
+}
+
+// engineTestConfig holds configuration options for newTestEngineContext.
+type engineTestConfig struct {
+	specProcessor scheduler.SpecProcessor
+	timeSource    *clock.EventTimeSource
+	engineOpts    []chasmtest.EngineOption
+}
+
+// engineTestOption is a functional option for configuring newTestEngineContext.
+type engineTestOption func(*engineTestConfig)
+
+// withEngineSpecProcessor configures newTestEngineContext with a custom
+// SpecProcessor, instead of the default real one.
+func withEngineSpecProcessor(sp scheduler.SpecProcessor) engineTestOption {
+	return func(c *engineTestConfig) {
+		c.specProcessor = sp
+	}
+}
+
+// withEngineTimeSource configures the CHASM test engine with a controllable
+// time source, for tests that need to advance time explicitly.
+func withEngineTimeSource(ts *clock.EventTimeSource) engineTestOption {
+	return func(c *engineTestConfig) {
+		c.timeSource = ts
+		c.engineOpts = append(c.engineOpts, chasmtest.WithTimeSource(ts))
+	}
+}
+
+func withEngineMetricsHandler(handler metrics.Handler) engineTestOption {
+	return func(c *engineTestConfig) {
+		c.engineOpts = append(c.engineOpts, chasmtest.WithMetricsHandler(handler))
+	}
+}
+
+func newEngineTestConfig(opts ...engineTestOption) *engineTestConfig {
+	config := &engineTestConfig{}
+	for _, opt := range opts {
+		opt(config)
+	}
+	return config
+}
+
+// newTestEngineContext builds a CHASM registry with the core and scheduler
+// libraries registered, wraps it in a chasmtest.Engine, and returns the
+// engine along with an engine-bound context ready for chasm.StartExecution /
+// ReadComponent / etc.
+func newTestEngineContext(t *testing.T, logger log.Logger, opts ...engineTestOption) (*chasmtest.Engine, context.Context) {
+	return newTestEngineContextFromConfig(t, logger, newEngineTestConfig(opts...))
+}
+
+func newTestEngineContextFromConfig(
+	t *testing.T,
+	logger log.Logger,
+	config *engineTestConfig,
+) (*chasmtest.Engine, context.Context) {
+	specProcessor := config.specProcessor
+	if specProcessor == nil {
+		specProcessor = newRealSpecProcessor(gomock.NewController(t), logger)
+	}
+
+	registry := chasm.NewRegistry(logger)
+	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
+	require.NoError(t, registry.Register(newTestLibrary(logger, specProcessor)))
+
+	engine := chasmtest.NewEngine(t, registry, config.engineOpts...)
+	return engine, chasm.NewEngineContext(context.Background(), engine)
+}
+
+// schedulerTestEngine bundles a CHASM test engine, a created Scheduler root
+// component, and convenience accessors, for tests that drive a Scheduler
+// through its actual task handlers rather than the newTestEnv rapid harness.
+type schedulerTestEngine struct {
+	engine     *chasmtest.Engine
+	engineCtx  context.Context
+	rootRef    chasm.ComponentRef
+	logger     log.Logger
+	timeSource *clock.EventTimeSource
+}
+
+// newSchedulerTestEngine builds a schedulerTestEngine and creates a schedule
+// on it via the real CreateSchedule handler path. If no time source is
+// supplied via withEngineTimeSource, a controllable one is created and
+// wired in automatically.
+func newSchedulerTestEngine(
+	t *testing.T,
+	schedule *schedulepb.Schedule,
+	opts ...engineTestOption,
+) *schedulerTestEngine {
+	t.Helper()
+
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+	config := newEngineTestConfig(opts...)
+	if config.timeSource == nil {
+		config.timeSource = clock.NewEventTimeSource()
+		config.timeSource.Update(time.Now())
+		config.engineOpts = append(config.engineOpts, chasmtest.WithTimeSource(config.timeSource))
+	}
+	engine, engineCtx := newTestEngineContextFromConfig(t, logger, config)
+	rootRef := chasm.NewComponentRef[*scheduler.Scheduler](chasm.ExecutionKey{
+		NamespaceID: namespaceID,
+		BusinessID:  scheduleID,
+	})
+	_, err := scheduler.NewTestHandler(logger).CreateSchedule(engineCtx, &schedulerpb.CreateScheduleRequest{
+		NamespaceId: namespaceID,
+		FrontendRequest: &workflowservice.CreateScheduleRequest{
+			Namespace:  namespace,
+			ScheduleId: scheduleID,
+			Schedule:   schedule,
+			RequestId:  "create-request",
+		},
+	})
+	require.NoError(t, err)
+	return &schedulerTestEngine{
+		engine:     engine,
+		engineCtx:  engineCtx,
+		rootRef:    rootRef,
+		logger:     logger,
+		timeSource: config.timeSource,
+	}
+}
+
+// updateScheduler runs update against the Scheduler root component through
+// the engine's UpdateComponent path.
+func (e *schedulerTestEngine) updateScheduler(
+	update func(*scheduler.Scheduler, chasm.MutableContext) error,
+) error {
+	_, _, err := chasm.UpdateComponent(
+		e.engineCtx,
+		e.rootRef,
+		func(s *scheduler.Scheduler, ctx chasm.MutableContext, _ struct{}) (struct{}, error) {
+			return struct{}{}, update(s, ctx)
+		},
+		struct{}{},
+	)
+	return err
+}
+
+// readScheduler runs read against the Scheduler root component through the
+// engine's read-only ReadComponent path.
+func (e *schedulerTestEngine) readScheduler(
+	read func(*scheduler.Scheduler, chasm.Context) error,
+) error {
+	_, err := chasm.ReadComponent(
+		e.engineCtx,
+		e.rootRef,
+		func(s *scheduler.Scheduler, ctx chasm.Context, _ struct{}) (struct{}, error) {
+			return struct{}{}, read(s, ctx)
+		},
+		struct{}{},
+	)
+	return err
 }
 
 // newTestEnv creates a new test environment with the given options.

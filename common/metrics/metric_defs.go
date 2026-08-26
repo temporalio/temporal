@@ -724,6 +724,9 @@ var (
 	HistoryCount                     = NewDimensionlessHistogramDef("history_count")
 	TasksCompletedPerShardInfoUpdate = NewDimensionlessHistogramDef("tasks_per_shardinfo_update")
 	TimeBetweenShardInfoUpdates      = NewTimerDef("time_between_shardinfo_update")
+	ShardInfoSize                    = NewBytesHistogramDef("shard_info_size")
+	QueueStateSize                   = NewBytesHistogramDef("queue_state_size")
+	QueueStateSizeTotal              = NewCounterDef("queue_state_size_total")
 	SearchAttributesSize             = NewBytesHistogramDef("search_attributes_size")
 	MemoSize                         = NewBytesHistogramDef("memo_size")
 	TooManyPendingChildWorkflows     = NewCounterDef(
@@ -827,6 +830,10 @@ var (
 	ShardInfoScheduledQueueLagTimer = NewTimerDef(
 		"shardinfo_scheduled_queue_lag",
 		WithDescription("A histogram across history shards for the difference between the earliest scheduled time of pending history tasks and current time."),
+	)
+	ShardInfoImmediateQueueBacklogAge = NewTimerDef(
+		"shardinfo_immediate_queue_backlog_age",
+		WithDescription("Age of the oldest task at or above the last checkpointed ack level, per immediate task category. The time-based counterpart to shardinfo_immediate_queue_lag, sharing its ack level and so its blind spots. The ack level advances once per queue checkpoint, so a task completed since that checkpoint still counts until the next one, and the age it reports is its own, not a bound. Not emitted when the read is shed or fails, so absence does not mean no backlog."),
 	)
 	SyncShardFromRemoteCounter = NewCounterDef("syncshard_remote_count")
 	SyncShardFromRemoteFailure = NewCounterDef("syncshard_remote_failed")
@@ -934,6 +941,10 @@ var (
 		"chasm_incoming_signal_duplicate",
 		WithDescription("The number of duplicate signal request IDs detected when writing to the CHASM IncomingSignals map. Non-zero values indicate unexpected signal redelivery."),
 	)
+	CHASMRequestIDEvicted = NewCounterDef(
+		"chasm_request_id_evicted",
+		WithDescription("The number of CHASM-attached request IDs swept from an execution's dedup map for exceeding history.maximumRequestIDsPerExecution or history.requestIDMaxAge."),
+	)
 	TaskScheduleToStartLatency  = NewTimerDef("task_schedule_to_start_latency")
 	TaskBatchCompleteCounter    = NewCounterDef("task_batch_complete_counter")
 	TaskReschedulerPendingTasks = NewDimensionlessHistogramDef("task_rescheduler_pending_tasks")
@@ -945,7 +956,10 @@ var (
 	QueueScheduleLatency         = NewTimerDef("queue_latency_schedule") // latency for scheduling 100 tasks in one task channel
 	QueueReaderCountHistogram    = NewDimensionlessHistogramDef("queue_reader_count")
 	QueueSliceCountHistogram     = NewDimensionlessHistogramDef("queue_slice_count")
+	QueueSliceCountTotal         = NewCounterDef("queue_slice_count_total")
+	QueueSlicePendingKeys        = NewDimensionlessHistogramDef("queue_slice_pending_keys")
 	QueueActionCounter           = NewCounterDef("queue_actions")
+	QueueAlertShadowCounter      = NewCounterDef("queue_alert_shadow")
 	QueuePredicateResolutionLoss = NewCounterDef(
 		"queue_predicate_resolution_loss",
 		WithDescription("The number of times a queue slice lost predicate resolution by keeping a broad predicate "+
@@ -1012,6 +1026,7 @@ var (
 	FailedWorkflowTasksCounter                    = NewCounterDef("failed_workflow_tasks")
 	WorkflowTaskAttempt                           = NewDimensionlessHistogramDef("workflow_task_attempt")
 	StaleMutableStateCounter                      = NewCounterDef("stale_mutable_state")
+	PaginationTokenBranchMismatchCounter          = NewCounterDef("pagination_token_branch_mismatch")
 	AutoResetPointsLimitExceededCounter           = NewCounterDef("auto_reset_points_exceed_limit")
 	AutoResetPointCorruptionCounter               = NewCounterDef("auto_reset_point_corruption")
 	BatchableTaskBatchCount                       = NewGaugeDef("batchable_task_batch_count")
@@ -1105,6 +1120,7 @@ var (
 	ReplicationStreamReadBufferMissLag = NewDimensionlessHistogramDef("replication_stream_read_buffer_miss_lag")
 	ReplicationTaskSendAttempt         = NewDimensionlessHistogramDef("replication_task_send_attempt")
 	ReplicationTaskSendError           = NewCounterDef("replication_task_send_error")
+	ReplicationTaskSendSkipped         = NewCounterDef("replication_task_send_skipped")
 	ReplicationTaskGenerationLatency   = NewTimerDef("replication_task_generation_latency")
 	ReplicationTaskLoadLatency         = NewTimerDef("replication_task_load_latency")
 	ReplicationTaskLoadSize            = NewDimensionlessHistogramDef("replication_task_load_size")
@@ -1621,9 +1637,11 @@ var (
 	WorkerDeploymentCreated                           = NewCounterDef("worker_deployment_created")
 	WorkerDeploymentVersionCreated                    = NewCounterDef("worker_deployment_version_created")
 	WorkerDeploymentVersionCreatedManagedByController = NewCounterDef("worker_deployment_version_created_managed_by_controller")
+	WorkerDeploymentVersionNotFoundDuringDelete       = NewCounterDef("worker_deployment_version_not_found_during_delete")
 	WorkerDeploymentVersionVisibilityQueryCount       = NewCounterDef("worker_deployment_version_visibility_query_count")
 	WorkerDeploymentVersioningOverrideCounter         = NewCounterDef("worker_deployment_versioning_override_count")
 	WorkerDeploymentVersioningOneTimeOverrideCounter  = NewCounterDef("worker_deployment_versioning_one_time_override_count")
+	WorkerDeploymentVersionDeletePropagationFailure   = NewCounterDef("worker_deployment_version_delete_propagation_failure")
 	StartDeploymentTransitionCounter                  = NewCounterDef("start_deployment_transition_count")
 	VersioningDataPropagationLatency                  = NewTimerDef("versioning_data_propagation_latency")
 	SlowVersioningDataPropagationCounter              = NewCounterDef("slow_versioning_data_propagation")

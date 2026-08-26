@@ -3,7 +3,10 @@ package circuitbreakerpool
 import (
 	"fmt"
 
+	"github.com/sony/gobreaker"
 	"go.temporal.io/server/common/circuitbreaker"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tasks"
@@ -21,6 +24,7 @@ type OutboundQueueCircuitBreakerPool struct {
 func OutboundQueueCircuitBreakerPoolProvider(
 	namespaceRegistry namespace.Registry,
 	config *configs.Config,
+	logger log.SnTaggedLogger,
 ) *OutboundQueueCircuitBreakerPool {
 	return &OutboundQueueCircuitBreakerPool{
 		CircuitBreakerPool: NewCircuitBreakerPool(
@@ -37,6 +41,7 @@ func OutboundQueueCircuitBreakerPoolProvider(
 						key.NamespaceID,
 						key.Destination,
 					),
+					OnStateChange: onStateChange(key, nsName.String(), logger),
 				})
 				initial, cancel := config.OutboundQueueCircuitBreakerSettings(
 					nsName.String(),
@@ -48,5 +53,24 @@ func OutboundQueueCircuitBreakerPoolProvider(
 				return cb
 			},
 		),
+	}
+}
+
+// onStateChange logs breaker transitions.
+func onStateChange(
+	key tasks.TaskGroupNamespaceIDAndDestination,
+	nsName string,
+	logger log.SnTaggedLogger,
+) func(name string, from gobreaker.State, to gobreaker.State) {
+	return func(_ string, from gobreaker.State, to gobreaker.State) {
+		logger.Warn(
+			"outbound queue circuit breaker state change",
+			tag.WorkflowNamespace(nsName),
+			tag.WorkflowNamespaceID(key.NamespaceID),
+			tag.Destination(key.Destination),
+			tag.NewStringTag("task-group", key.TaskGroup),
+			tag.NewStringTag("from-state", from.String()),
+			tag.NewStringTag("to-state", to.String()),
+		)
 	}
 }
