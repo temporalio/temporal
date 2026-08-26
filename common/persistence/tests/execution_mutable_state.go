@@ -2776,6 +2776,19 @@ func (s *ExecutionMutableStateSuite) AssertMSEqualWithDB(
 	actualMutableState := resp.State
 	actualDBRecordVersion := resp.DBRecordVersion
 
+	// user timer entries are returned still encoded by GetWorkflowExecution,
+	// decode them here so the comparison covers the full persisted state
+	if len(resp.TimerInfoBlobs) > 0 {
+		if actualMutableState.TimerInfos == nil {
+			actualMutableState.TimerInfos = make(map[string]*persistencespb.TimerInfo, len(resp.TimerInfoBlobs))
+		}
+		for key, blob := range resp.TimerInfoBlobs {
+			timerInfo, err := s.Serializer.TimerInfoFromBlob(blob)
+			s.NoError(err)
+			actualMutableState.TimerInfos[key] = timerInfo
+		}
+	}
+
 	expectedMutableState, expectedDBRecordVersion := s.Accumulate(snapshot, mutations...)
 
 	// need to special handling signal request IDs ...

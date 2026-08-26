@@ -389,8 +389,8 @@ type (
 		// TODO deprecate NextEventID in favor of DBRecordVersion
 		NextEventID int64
 
-		ActivityInfos       map[int64]*persistencespb.ActivityInfo
-		TimerInfos          map[string]*persistencespb.TimerInfo
+		ActivityInfos map[int64]*persistencespb.ActivityInfo
+		TimerInfos    map[string]*persistencespb.TimerInfo
 		// TimerInfoBlobs holds user timer entries that were never decoded in
 		// memory. They are persisted verbatim, avoiding a decode/encode round
 		// trip, and are disjoint from TimerInfos.
