@@ -865,6 +865,7 @@ func TestExecuteTask_RecordResultIdempotentOnRace(t *testing.T) {
 		RunId:     "loser-run",
 		StartTime: loserStartTime,
 	}}
+	lastEventTime := env.Scheduler.LastEventTime.AsTime()
 
 	newlyStarted, droppedDuplicates, startOnlyActions := invoker.RecordExecuteResult(ctx, loser, nil)
 	require.Equal(t, 0, newlyStarted, "duplicate RunId-set start must not be counted")
@@ -874,6 +875,8 @@ func TestExecuteTask_RecordResultIdempotentOnRace(t *testing.T) {
 	require.Equal(t, winning, live.RunId, "live RunId must not be stomped")
 	require.Equal(t, startTime.AsTime(), live.StartTime.AsTime(), "live StartTime must not be stomped")
 	require.True(t, live.HasCallback, "live HasCallback must not be cleared")
+	require.Equal(t, lastEventTime, env.Scheduler.LastEventTime.AsTime(),
+		"duplicate result must not advance the last-event high water mark")
 
 	// First-mover case: a CompletedStart for a fresh RequestId increments
 	// newlyStarted and writes through to the live entry.
@@ -898,6 +901,83 @@ func TestExecuteTask_RecordResultIdempotentOnRace(t *testing.T) {
 	require.Equal(t, "first-run", freshlyStarted.RunId)
 	require.Equal(t, startTime.AsTime(), freshlyStarted.StartTime.AsTime())
 	require.True(t, freshlyStarted.HasCallback, "first-time RunId assignment must set HasCallback")
+}
+
+func TestRecordExecuteResult_AdvancesLastEventTimeBeforeRetention(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := env.MutableContext()
+	invoker := env.Scheduler.Invoker.Get(ctx)
+	base := env.TimeSource.Now().Add(time.Hour)
+
+	var completedStarts []*schedulespb.BufferedStart
+	for idx := range scheduler.RecentActionCount + 1 {
+		startTime := base.Add(time.Duration(idx) * time.Second)
+		bufferedStart := &schedulespb.BufferedStart{
+			NominalTime: timestamppb.New(startTime),
+			ActualTime:  timestamppb.New(startTime),
+			DesiredTime: timestamppb.New(startTime),
+			RequestId:   fmt.Sprintf("req-%d", idx),
+			WorkflowId:  fmt.Sprintf("wf-%d", idx),
+			Attempt:     1,
+		}
+		invoker.BufferedStarts = append(invoker.BufferedStarts, bufferedStart)
+		completedStarts = append(completedStarts, &schedulespb.BufferedStart{
+			RequestId: fmt.Sprintf("req-%d", idx),
+			RunId:     fmt.Sprintf("run-%d", idx),
+			StartTime: timestamppb.New(startTime),
+		})
+	}
+
+	newlyStarted, droppedDuplicates, startOnlyActions := invoker.RecordExecuteResult(ctx, completedStarts, nil)
+	require.Equal(t, scheduler.RecentActionCount+1, newlyStarted)
+	require.Zero(t, droppedDuplicates)
+	require.Empty(t, startOnlyActions)
+
+	latestStartTime := base.Add(scheduler.RecentActionCount * time.Second)
+	require.Equal(t, latestStartTime.UTC(), env.Scheduler.LastEventTime.AsTime())
+
+	for idx, start := range invoker.BufferedStarts {
+		start.Completed = &schedulespb.CompletedResult{
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			// The latest-started workflow closes first and is evicted by retention.
+			CloseTime: timestamppb.New(base.Add(time.Duration(scheduler.RecentActionCount-idx) * time.Second)),
+		}
+	}
+	invoker.ApplyCompletedRetention()
+
+	require.Len(t, invoker.BufferedStarts, scheduler.RecentActionCount)
+	require.NotEqual(t, latestStartTime.UTC(), invoker.BufferedStarts[len(invoker.BufferedStarts)-1].GetStartTime().AsTime())
+	require.Equal(t, latestStartTime.UTC(), env.Scheduler.LastEventTime.AsTime(),
+		"retention must not erase a start time captured before the Generator runs")
+}
+
+func TestRecordExecuteResult_AdvancesLastEventTimeForStartOnlyAction(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := env.MutableContext()
+	invoker := env.Scheduler.Invoker.Get(ctx)
+	startTime := env.TimeSource.Now().Add(time.Hour)
+	invoker.BufferedStarts = []*schedulespb.BufferedStart{{
+		NominalTime:   timestamppb.New(startTime),
+		ActualTime:    timestamppb.New(startTime),
+		DesiredTime:   timestamppb.New(startTime),
+		RequestId:     "req",
+		WorkflowId:    "wf",
+		OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		Attempt:       1,
+	}}
+
+	newlyStarted, droppedDuplicates, startOnlyActions := invoker.RecordExecuteResult(ctx, []*schedulespb.BufferedStart{{
+		RequestId: "req",
+		RunId:     "run",
+		StartTime: timestamppb.New(startTime),
+	}}, nil)
+
+	require.Equal(t, 1, newlyStarted)
+	require.Zero(t, droppedDuplicates)
+	require.Len(t, startOnlyActions, 1)
+	require.Empty(t, invoker.BufferedStarts)
+	require.Equal(t, startTime.UTC(), env.Scheduler.LastEventTime.AsTime(),
+		"start-only action must advance the mark before leaving BufferedStarts")
 }
 
 // A RetryableStart for a request whose live BufferedStart already has RunId
