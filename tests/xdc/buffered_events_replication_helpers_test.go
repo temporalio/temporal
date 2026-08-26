@@ -13,6 +13,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
+	"go.temporal.io/api/operatorservice/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
@@ -27,23 +29,19 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/testhooks"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/durationpb"
-
-	nexuspb "go.temporal.io/api/nexus/v1"
-	"go.temporal.io/api/operatorservice/v1"
-
-	commonnexus "go.temporal.io/server/common/nexus"
-	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type blockedReplicationTask struct {
@@ -251,12 +249,11 @@ func (s *xdcBaseSuite) finishNaturallyBufferedConflict(
 	return losingHistory
 }
 
-func signalExternalWorkflowCommand(namespace, workflowID, runID, signalName string) *commandpb.Command {
+func signalExternalWorkflowCommand(workflowID, runID, signalName string) *commandpb.Command {
 	return &commandpb.Command{
 		CommandType: enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
 		Attributes: &commandpb.Command_SignalExternalWorkflowExecutionCommandAttributes{
 			SignalExternalWorkflowExecutionCommandAttributes: &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
-				Namespace:  namespace,
 				Execution:  &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
 				SignalName: signalName,
 			},
@@ -264,12 +261,11 @@ func signalExternalWorkflowCommand(namespace, workflowID, runID, signalName stri
 	}
 }
 
-func cancelExternalWorkflowCommand(namespace, workflowID, runID string) *commandpb.Command {
+func cancelExternalWorkflowCommand(workflowID, runID string) *commandpb.Command {
 	return &commandpb.Command{
 		CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION,
 		Attributes: &commandpb.Command_RequestCancelExternalWorkflowExecutionCommandAttributes{
 			RequestCancelExternalWorkflowExecutionCommandAttributes: &commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{
-				Namespace:  namespace,
 				WorkflowId: workflowID,
 				RunId:      runID,
 			},

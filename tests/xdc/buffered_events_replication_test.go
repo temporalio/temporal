@@ -413,10 +413,10 @@ func (s *FunctionalClustersTestSuite) TestNaturallyBufferedExternalWorkflowOutco
 	heldWorkflowTask := s.completeWorkflowTaskAndReturnNext(ctx, workflowTaskCompletion{
 		Task: firstTask,
 		Commands: []*commandpb.Command{
-			signalExternalWorkflowCommand(ns, signalTargetID, "", "successful-external-signal"),
-			signalExternalWorkflowCommand(ns, missingWorkflowID, missingRunID, "failed-external-signal"),
-			cancelExternalWorkflowCommand(ns, missingWorkflowID, missingRunID),
-			cancelExternalWorkflowCommand(ns, cancelTargetID, cancelTargetExecution.RunId),
+			signalExternalWorkflowCommand(signalTargetID, "", "successful-external-signal"),
+			signalExternalWorkflowCommand(missingWorkflowID, missingRunID, "failed-external-signal"),
+			cancelExternalWorkflowCommand(missingWorkflowID, missingRunID),
+			cancelExternalWorkflowCommand(cancelTargetID, cancelTargetExecution.RunId),
 		},
 	})
 	s.Require().NotEmpty(heldWorkflowTask.TaskToken)
