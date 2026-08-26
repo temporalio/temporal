@@ -152,7 +152,7 @@ func (g *GeneratorTaskHandler) Execute(
 func (g *GeneratorTaskHandler) rearmTasks(
 	ctx chasm.MutableContext,
 	generator *Generator,
-	scheduler *Scheduler,
+	sched *Scheduler,
 	metricsHandler metrics.Handler,
 	idleTimeTotal time.Duration,
 	nextWakeupTime time.Time,
@@ -165,7 +165,7 @@ func (g *GeneratorTaskHandler) rearmTasks(
 	//   wakeup is available, e.g. a paused manual-only schedule. IdleTime=0
 	//   also lands here. An external trigger (Patch.Unpause, Update, or a
 	//   BackfillerTask's completion-time Generate call) revives us.
-	idleExpiration, isIdle := scheduler.getIdleExpiration(ctx, idleTimeTotal, nextWakeupTime)
+	idleExpiration, isIdle := sched.getIdleExpiration(ctx, idleTimeTotal, nextWakeupTime)
 	if isIdle {
 		// Schedule is complete, no need for another buffer task. We keep the schedule's
 		// backing mutable state explicitly open for the idle period, during which the
@@ -177,7 +177,7 @@ func (g *GeneratorTaskHandler) rearmTasks(
 		// second one would leave a permanent duplicate in the component's PureTasks,
 		// because SchedulerIdleTaskHandler.Validate only invalidates tasks whose
 		// deadline has moved *later*.
-		if scheduler.GetIdleCloseTime().AsTime().Equal(idleExpiration) {
+		if sched.GetIdleCloseTime().AsTime().Equal(idleExpiration) {
 			metricsHandler.Counter(metrics.ScheduleIdleTask.Name()).
 				Record(1, metrics.OutcomeTag(outcomeSkipped), metrics.ReasonTag(idleAlreadyArmed))
 			return
@@ -185,21 +185,21 @@ func (g *GeneratorTaskHandler) rearmTasks(
 
 		generator.getOrCreateEventLog(ctx).LogEvent(ctx,
 			fmt.Sprintf("scheduled idle task for %s", idleExpiration.Format(time.RFC3339)))
-		ctx.AddTask(scheduler, chasm.TaskAttributes{
+		ctx.AddTask(sched, chasm.TaskAttributes{
 			ScheduledTime: idleExpiration,
 		}, &schedulerpb.SchedulerIdleTask{
 			IdleTimeTotal: durationpb.New(idleTimeTotal),
 		})
 		// Record the idle-close deadline so it can be surfaced as the
 		// ScheduleIdleCloseTime search attribute for stuck-schedule detection.
-		scheduler.IdleCloseTime = timestamppb.New(idleExpiration)
+		sched.IdleCloseTime = timestamppb.New(idleExpiration)
 
 		return
 	}
 
 	// Not idle: the schedule has work again (or is being held open), so it's
 	// no longer pending an idle close.
-	scheduler.IdleCloseTime = nil
+	sched.IdleCloseTime = nil
 
 	if !nextWakeupTime.IsZero() {
 		// Keep the generator task perpetually scheduled. When paused, the next
