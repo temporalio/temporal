@@ -4,6 +4,7 @@ import (
 	"context"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/metrics"
@@ -12,10 +13,19 @@ import (
 	"go.uber.org/fx"
 )
 
+// DispatchTaskHook wraps an activity dispatch on the active cluster after CHASM validation and before it is sent to Matching.
+type DispatchTaskHook func(
+	context.Context,
+	string,
+	*activitypb.ActivityDispatchTask,
+	func(context.Context) error,
+) error
+
 type activityDispatchTaskHandlerOptions struct {
 	fx.In
 
-	MatchingClient resource.MatchingClient
+	MatchingClient   resource.MatchingClient
+	DispatchTaskHook DispatchTaskHook `optional:"true"`
 }
 
 type activityDispatchTaskHandler struct {
@@ -43,9 +53,25 @@ func (h *activityDispatchTaskHandler) Execute(
 	ctx context.Context,
 	activityRef chasm.ComponentRef,
 	_ chasm.TaskAttributes,
-	_ *activitypb.ActivityDispatchTask,
+	task *activitypb.ActivityDispatchTask,
 ) error {
-	return h.pushToMatching(ctx, activityRef)
+	request, err := h.createMatchingRequest(ctx, activityRef)
+	if err != nil {
+		return err
+	}
+
+	if h.opts.DispatchTaskHook != nil {
+		return h.opts.DispatchTaskHook(
+			ctx,
+			activityRef.NamespaceID,
+			task,
+			func(ctx context.Context) error {
+				return h.sendToMatching(ctx, request)
+			},
+		)
+	}
+
+	return h.sendToMatching(ctx, request)
 }
 
 // Discard spills the task to matching instead of silently discarding it on standby clusters when the activity
@@ -56,24 +82,38 @@ func (h *activityDispatchTaskHandler) Discard(
 	_ chasm.TaskAttributes,
 	_ *activitypb.ActivityDispatchTask,
 ) error {
-	return h.pushToMatching(ctx, activityRef)
+	return h.dispatchActivity(ctx, activityRef)
 }
 
-func (h *activityDispatchTaskHandler) pushToMatching(
+func (h *activityDispatchTaskHandler) dispatchActivity(
 	ctx context.Context,
 	activityRef chasm.ComponentRef,
 ) error {
-	request, err := chasm.ReadComponent(
+	request, err := h.createMatchingRequest(ctx, activityRef)
+	if err != nil {
+		return err
+	}
+
+	return h.sendToMatching(ctx, request)
+}
+
+func (h *activityDispatchTaskHandler) createMatchingRequest(
+	ctx context.Context,
+	activityRef chasm.ComponentRef,
+) (*matchingservice.AddActivityTaskRequest, error) {
+	return chasm.ReadComponent(
 		ctx,
 		activityRef,
 		(*Activity).createAddActivityTaskRequest,
 		activityRef.NamespaceID,
 	)
-	if err != nil {
-		return err
-	}
+}
 
-	_, err = h.opts.MatchingClient.AddActivityTask(ctx, request)
+func (h *activityDispatchTaskHandler) sendToMatching(
+	ctx context.Context,
+	request *matchingservice.AddActivityTaskRequest,
+) error {
+	_, err := h.opts.MatchingClient.AddActivityTask(ctx, request)
 
 	return err
 }
