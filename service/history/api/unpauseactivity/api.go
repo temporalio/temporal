@@ -8,7 +8,6 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -22,6 +21,7 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.UnpauseActivityResponse, retError error) {
 	var response *historyservice.UnpauseActivityResponse
+	var activityMetrics []api.ActivityMetricsInfo
 
 	err := api.GetAndUpdateWorkflowWithNew(
 		ctx,
@@ -34,7 +34,7 @@ func Invoke(
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
 			var err error
-			response, err = processUnpauseActivityRequest(shardContext, mutableState, request)
+			response, activityMetrics, err = processUnpauseActivityRequest(shardContext, mutableState, request)
 			if err != nil {
 				return nil, err
 			}
@@ -52,20 +52,11 @@ func Invoke(
 		return nil, err
 	}
 
-	frontendReq := request.GetFrontendRequest()
-	targetingMethod := "type"
-	if _, ok := frontendReq.GetActivity().(*workflowservice.UnpauseActivityRequest_Id); ok {
-		targetingMethod = "id"
-	} else if _, ok := frontendReq.GetActivity().(*workflowservice.UnpauseActivityRequest_UnpauseAll); ok {
-		targetingMethod = "unpause_all"
-	}
-	if ns, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.NamespaceId)); err == nil {
-		metrics.ActivityUnpause.With(shardContext.GetMetricsHandler().WithTags(
-			metrics.NamespaceTag(ns.Name().String()),
-			metrics.ActivityTargetingMethodTag(targetingMethod),
-		)).Record(1)
+	for _, info := range activityMetrics {
+		metrics.ActivityUnpause.With(info.Handler(shardContext, metrics.ActivityUnpausedScope)).Record(1)
 	}
 
+	frontendReq := request.GetFrontendRequest()
 	shardContext.GetLogger().Info("unpauseactivity: activity unpaused",
 		tag.WorkflowNamespaceID(request.GetNamespaceId()),
 		tag.WorkflowID(frontendReq.GetExecution().GetWorkflowId()),
@@ -82,10 +73,10 @@ func processUnpauseActivityRequest(
 	shardContext historyi.ShardContext,
 	mutableState historyi.MutableState,
 	request *historyservice.UnpauseActivityRequest,
-) (*historyservice.UnpauseActivityResponse, error) {
+) (*historyservice.UnpauseActivityResponse, []api.ActivityMetricsInfo, error) {
 
 	if !mutableState.IsWorkflowExecutionRunning() {
-		return nil, consts.ErrWorkflowCompleted
+		return nil, nil, consts.ErrWorkflowCompleted
 	}
 	frontendRequest := request.GetFrontendRequest()
 	var activityIDs []string
@@ -106,15 +97,16 @@ func processUnpauseActivityRequest(
 	}
 
 	if len(activityIDs) == 0 {
-		return nil, consts.ErrActivityNotFound
+		return nil, nil, consts.ErrActivityNotFound
 	}
 
+	var activityMetrics []api.ActivityMetricsInfo
 	for _, activityId := range activityIDs {
 
 		ai, activityFound := mutableState.GetActivityByActivityID(activityId)
 
 		if !activityFound {
-			return nil, consts.ErrActivityNotFound
+			return nil, nil, consts.ErrActivityNotFound
 		}
 
 		if !ai.Paused {
@@ -127,10 +119,10 @@ func processUnpauseActivityRequest(
 			frontendRequest.GetResetAttempts(),
 			frontendRequest.GetResetHeartbeat(),
 			frontendRequest.GetJitter().AsDuration()); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-
+		activityMetrics = append(activityMetrics, api.NewActivityMetricsInfo(mutableState, ai))
 	}
 
-	return &historyservice.UnpauseActivityResponse{}, nil
+	return &historyservice.UnpauseActivityResponse{}, activityMetrics, nil
 }

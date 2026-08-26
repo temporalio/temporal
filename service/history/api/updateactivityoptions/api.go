@@ -51,6 +51,7 @@ func Invoke(
 	)
 
 	var response *historyservice.UpdateActivityOptionsResponse
+	var activityMetrics []api.ActivityMetricsInfo
 
 	err := api.GetAndUpdateWorkflowWithNew(
 		ctx,
@@ -62,6 +63,8 @@ func Invoke(
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
+			activityIDs := getActivityIDs(updateRequest, mutableState)
+			var currentActivityMetrics []api.ActivityMetricsInfo
 			var err error
 			if updateRequest.RestoreOriginal {
 				response, err = restoreOriginalOptions(ctx, mutableState, updateRequest)
@@ -72,6 +75,14 @@ func Invoke(
 			if err != nil {
 				return nil, err
 			}
+			for _, activityID := range activityIDs {
+				activityInfo, activityFound := mutableState.GetActivityByActivityID(activityID)
+				if !activityFound {
+					return nil, consts.ErrActivityNotFound
+				}
+				currentActivityMetrics = append(currentActivityMetrics, api.NewActivityMetricsInfo(mutableState, activityInfo))
+			}
+			activityMetrics = currentActivityMetrics
 			return &api.UpdateWorkflowAction{
 				Noop:               false,
 				CreateWorkflowTask: false,
@@ -86,17 +97,8 @@ func Invoke(
 		return nil, err
 	}
 
-	targetingMethod := "type"
-	if _, ok := updateRequest.GetActivity().(*workflowservice.UpdateActivityOptionsRequest_Id); ok {
-		targetingMethod = "id"
-	} else if _, ok := updateRequest.GetActivity().(*workflowservice.UpdateActivityOptionsRequest_MatchAll); ok {
-		targetingMethod = "match_all"
-	}
-	if ns, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.NamespaceId)); err == nil {
-		metrics.ActivityUpdateOptions.With(shardContext.GetMetricsHandler().WithTags(
-			metrics.NamespaceTag(ns.Name().String()),
-			metrics.ActivityTargetingMethodTag(targetingMethod),
-		)).Record(1)
+	for _, info := range activityMetrics {
+		metrics.ActivityUpdateOptions.With(info.Handler(shardContext, metrics.ActivityUpdateOptionsScope)).Record(1)
 	}
 
 	logger := shardContext.GetLogger()
