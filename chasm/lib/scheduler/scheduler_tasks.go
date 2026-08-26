@@ -264,8 +264,7 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 		},
 	})
 	if err != nil {
-		var notFoundErr *serviceerror.NotFound
-		if errors.As(err, &notFoundErr) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			return &watchResult{
 				completed: &schedulespb.CompletedResult{
 					Status:    enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,

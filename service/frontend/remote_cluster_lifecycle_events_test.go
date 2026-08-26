@@ -295,7 +295,7 @@ func remoteClusterEventValues(
 ) (map[string]string, map[string]any) {
 	t.Helper()
 	require.Len(t, records, 1)
-	require.Equal(t, wideevents.RemoteClusterLifecycleEventName, records[0].EventName())
+	require.Equal(t, wideevents.NamespaceLifecycleEventName, records[0].EventName())
 	attrs := make(map[string]string)
 	records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
 		attrs[kv.Key] = kv.Value.AsString()

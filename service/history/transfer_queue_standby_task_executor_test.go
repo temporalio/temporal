@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -41,6 +42,8 @@ import (
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
 	"go.temporal.io/server/common/testing/protomock"
+	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
@@ -76,9 +79,10 @@ type (
 		mockRemoteAdminClient *adminservicemock.MockAdminServiceClient
 		mockChasmEngine       chasm.Engine
 
-		mockExecutionMgr     *persistence.MockExecutionManager
-		mockArchivalMetadata archiver.MetadataMock
-		mockArchiverProvider *provider.MockArchiverProvider
+		mockExecutionMgr        *persistence.MockExecutionManager
+		mockArchivalMetadata    archiver.MetadataMock
+		mockArchiverProvider    *provider.MockArchiverProvider
+		parentChildEventCapture *parentChildEventCapture
 
 		workflowCache             wcache.Cache
 		logger                    log.Logger
@@ -124,6 +128,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.chasmDiscardDuration = config.ChasmStandbyTaskDiscardDelay("")
 
 	s.controller = gomock.NewController(s.T())
+	s.parentChildEventCapture = &parentChildEventCapture{}
 	s.mockShard = shard.NewTestContextWithTimeSource(
 		s.controller,
 		&persistencespb.ShardInfo{
@@ -131,6 +136,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 		},
 		config,
 		s.timeSource,
+		s.parentChildEventCapture,
 	)
 
 	reg := hsm.NewRegistry()
@@ -725,6 +731,9 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_StampMis
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
+	capture := s.parentChildEventCapture
+	s.mockShard.GetConfig().EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
@@ -841,8 +850,17 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	s.ErrorAs(resp.ExecutionErr, &verificationErr)
 	var resourceExhaustedErr *serviceerror.ResourceExhausted
 	s.ErrorAs(resp.ExecutionErr, &resourceExhaustedErr)
+	s.Require().Empty(parentChildRecords(capture))
 
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.localVerificationDuration))
+	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationWithResendParentRequest).Return(nil, nil)
+	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.NoError(resp.ExecutionErr)
+
+	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationWithResendParentRequest).Return(nil, serviceerror.NewUnimplemented("not implemented"))
+	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.NoError(resp.ExecutionErr)
+
 	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationWithResendParentRequest).Return(nil, consts.ErrWorkflowNotReady)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
@@ -862,6 +880,68 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.ErrorAs(resp.ExecutionErr, &verificationErr)
 	s.Equal(randomErr, verificationErr.Unwrap())
+
+	s.Equal([]string{
+		string(wideevents.ParentChildOutcomeStarted),
+		string(wideevents.ParentChildOutcomeVerified),
+		string(wideevents.ParentChildOutcomeStarted),
+		string(wideevents.ParentChildOutcomeIgnored),
+		string(wideevents.ParentChildOutcomeStarted),
+		string(wideevents.ParentChildOutcomeCompletionMissing),
+		string(wideevents.ParentChildOutcomeStarted),
+		string(wideevents.ParentChildOutcomeCompletionMissing),
+		string(wideevents.ParentChildOutcomeStarted),
+		string(wideevents.ParentChildOutcomeCompletionMissing),
+		string(wideevents.ParentChildOutcomeStarted),
+		string(wideevents.ParentChildOutcomeFailed),
+	}, parentChildOutcomes(capture))
+	records := parentChildRecords(capture)
+	s.Require().Len(records, 12)
+	attributes := wideEventAttributes(records[0])
+	details := wideEventDetails(records[0])
+	s.Equal(string(wideevents.ReplicationExecuting), attributes["phase"].AsString())
+	s.Equal(wideevents.ParentChildPhaseVerifyChildCompletion, details["phase"])
+	s.Equal(wideevents.ParentChildOutcomeStarted, details["outcome"])
+	s.Equal(s.namespaceID.String(), attributes["namespace_id"].AsString())
+	s.Equal(parentExecution.GetWorkflowId(), attributes["parent_workflow_id"].AsString())
+	s.Equal(parentExecution.GetRunId(), attributes["parent_run_id"].AsString())
+	s.Equal(execution.GetWorkflowId(), attributes["workflow_id"].AsString())
+	s.Equal(execution.GetRunId(), attributes["run_id"].AsString())
+	s.Equal(transferTask.GetType().String(), attributes["task_type"].AsString())
+	s.Equal(int64(1), attributes["attempt"].AsInt64())
+	s.Equal("Completed", details["child_workflow_state"])
+	s.Equal(parentInitiatedID, attributes["parent_initiated_id"].AsInt64())
+	s.Equal(parentNamespaceID, details["parent_namespace_id"])
+	s.InDelta(float64(parentInitiatedVersion), details["parent_initiated_version"], 0)
+	s.InDelta(float64(taskID), details["local_task_id"], 0)
+	s.InDelta(float64(transferTask.GetVersion()), details["version"], 0)
+	s.Require().NotContains(details, "attempt")
+	for _, key := range []string{
+		"child_namespace_id",
+		"child_workflow_id",
+		"child_run_id",
+		"local_cluster",
+		"local_task_type",
+		"parent_initiated_id",
+		"parent_run_id",
+		"parent_workflow_id",
+		"resend_parent_requested",
+		"verification_scope",
+	} {
+		for _, record := range records {
+			s.Require().NotContains(wideEventDetails(record), key)
+		}
+	}
+	missingDetails := wideEventDetails(records[5])
+	s.Equal(wideevents.ParentChildOutcomeCompletionMissing, missingDetails["outcome"])
+	s.Equal(util.ErrorType(consts.ErrWorkflowNotReady), missingDetails["error_type"])
+	s.InDelta(1, missingDetails["attempt"], 0)
+	verifiedAttributes := wideEventAttributes(records[1])
+	s.Require().NotContains(verifiedAttributes, "attempt")
+	s.InDelta(1, wideEventDetails(records[1])["attempt"], 0)
+	ignoredAttributes := wideEventAttributes(records[3])
+	s.Equal(string(wideevents.ReplicationApplied), ignoredAttributes["phase"].AsString())
+	s.Equal(wideevents.ParentChildOutcomeVerified, ignoredAttributes["outcome"].AsString())
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pending() {
@@ -1125,6 +1205,9 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Succe
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_Pending() {
+	capture := s.parentChildEventCapture
+	s.mockShard.GetConfig().EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
@@ -1185,7 +1268,8 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
-	event = addChildWorkflowExecutionStartedEvent(mutableState, event.GetEventId(), childWorkflowID, uuid.NewString(), childWorkflowType, nil)
+	childRunID := uuid.NewString()
+	event = addChildWorkflowExecutionStartedEvent(mutableState, event.GetEventId(), childWorkflowID, childRunID, childWorkflowType, nil)
 	mutableState.FlushBufferedEvents()
 
 	// clear the cache
@@ -1230,6 +1314,8 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, nil)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.NoError(resp.ExecutionErr)
+
+	s.Require().Empty(parentChildRecords(capture))
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_Success() {

@@ -1,4 +1,4 @@
-package callback
+package callbacks
 
 import (
 	"context"
@@ -10,18 +10,40 @@ import (
 	"go.temporal.io/api/serviceerror"
 )
 
+func mustNewValidator(t *testing.T, cfg ValidatorConfig) Validator {
+	t.Helper()
+	v, err := NewValidator(cfg)
+	require.NoError(t, err)
+	return v
+}
+
+func TestValidatorConfigValidate(t *testing.T) {
+	cfg := ValidatorConfig{
+		MaxCallbacksPerExecution: func(string) int { return 10 },
+		HeaderMaxSize:            func(string) int { return 4096 },
+	}
+
+	_, err := NewValidator(cfg)
+	require.EqualError(t, err, "missing required fields: [URLMaxLength EndpointRules]")
+}
+
 func TestValidateCallbacks(t *testing.T) {
-	allowAll := AddressMatchRules{
+	ctx := context.Background()
+
+	allowAllAddresses := AddressMatchRules{
 		Rules: []AddressMatchRule{
 			{Regexp: regexp.MustCompile(`.*`), AllowInsecure: true},
 		},
 	}
-	v := NewValidator(
-		func(string) int { return 10 },
-		func(string) int { return 1000 },
-		func(string) int { return 4096 },
-		func(string) AddressMatchRules { return allowAll },
-	)
+	getStandardConfig := func() ValidatorConfig {
+		return ValidatorConfig{
+			MaxCallbacksPerExecution: func(string) int { return 10 },
+			URLMaxLength:             func(string) int { return 1000 },
+			HeaderMaxSize:            func(string) int { return 4096 },
+			EndpointRules:            func(string) AddressMatchRules { return allowAllAddresses },
+		}
+	}
+	v := mustNewValidator(t, getStandardConfig())
 
 	t.Run("ValidNexusCallback", func(t *testing.T) {
 		cbs := []*commonpb.Callback{
@@ -32,34 +54,28 @@ func TestValidateCallbacks(t *testing.T) {
 				},
 			}},
 		}
-		err := v.Validate(context.Background(), "ns", cbs)
+
+		err := v.Validate(ctx, "ns", cbs)
 		require.NoError(t, err)
 	})
 
 	t.Run("TooManyCallbacks", func(t *testing.T) {
-		v := NewValidator(
-			func(string) int { return 1 },
-			func(string) int { return 1000 },
-			func(string) int { return 4096 },
-			func(string) AddressMatchRules { return allowAll },
-		)
 		cbs := []*commonpb.Callback{
 			{Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/cb1"}}},
 			{Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/cb2"}}},
 		}
-		err := v.Validate(context.Background(), "ns", cbs)
+
+		cfg := getStandardConfig()
+		cfg.MaxCallbacksPerExecution = func(string) int { return 1 }
+		v := mustNewValidator(t, cfg)
+
+		err := v.Validate(ctx, "ns", cbs)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Contains(t, err.Error(), "cannot attach more than 1 callbacks")
 	})
 
 	t.Run("URLTooLong", func(t *testing.T) {
-		v := NewValidator(
-			func(string) int { return 10 },
-			func(string) int { return 50 },
-			func(string) int { return 4096 },
-			func(string) AddressMatchRules { return allowAll },
-		)
 		cbs := []*commonpb.Callback{
 			{Variant: &commonpb.Callback_Nexus_{
 				Nexus: &commonpb.Callback_Nexus{
@@ -67,7 +83,12 @@ func TestValidateCallbacks(t *testing.T) {
 				},
 			}},
 		}
-		err := v.Validate(context.Background(), "ns", cbs)
+
+		cfg := getStandardConfig()
+		cfg.URLMaxLength = func(string) int { return 50 }
+		v := mustNewValidator(t, cfg)
+
+		err := v.Validate(ctx, "ns", cbs)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Contains(t, err.Error(), "url length longer than max length allowed")
@@ -82,7 +103,8 @@ func TestValidateCallbacks(t *testing.T) {
 				},
 			}},
 		}
-		err := v.Validate(context.Background(), "ns", cbs)
+
+		err := v.Validate(ctx, "ns", cbs)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Contains(t, err.Error(), "header size longer than max allowed size")
@@ -97,7 +119,8 @@ func TestValidateCallbacks(t *testing.T) {
 				},
 			}},
 		}
-		err := v.Validate(context.Background(), "ns", cbs)
+
+		err := v.Validate(ctx, "ns", cbs)
 		require.NoError(t, err)
 		nexus := cbs[0].GetNexus()
 		require.Equal(t, "application/json", nexus.Header["content-type"])
@@ -107,12 +130,6 @@ func TestValidateCallbacks(t *testing.T) {
 	})
 
 	t.Run("URLNotInAllowlist", func(t *testing.T) {
-		v := NewValidator(
-			func(string) int { return 10 },
-			func(string) int { return 1000 },
-			func(string) int { return 4096 },
-			func(string) AddressMatchRules { return AddressMatchRules{} },
-		)
 		cbs := []*commonpb.Callback{
 			{Variant: &commonpb.Callback_Nexus_{
 				Nexus: &commonpb.Callback_Nexus{
@@ -120,7 +137,12 @@ func TestValidateCallbacks(t *testing.T) {
 				},
 			}},
 		}
-		err := v.Validate(context.Background(), "ns", cbs)
+
+		cfg := getStandardConfig()
+		cfg.EndpointRules = func(string) AddressMatchRules { return AddressMatchRules{} }
+		v := mustNewValidator(t, cfg)
+
+		err := v.Validate(ctx, "ns", cbs)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Contains(t, err.Error(), "does not match any configured callback address")
@@ -130,14 +152,15 @@ func TestValidateCallbacks(t *testing.T) {
 		cbs := []*commonpb.Callback{
 			{Variant: nil},
 		}
-		err := v.Validate(context.Background(), "ns", cbs)
+
+		err := v.Validate(ctx, "ns", cbs)
 		var unimplementedErr *serviceerror.Unimplemented
 		require.ErrorAs(t, err, &unimplementedErr)
 		require.Contains(t, err.Error(), "unknown callback variant")
 	})
 
 	t.Run("EmptyCallbacksNoError", func(t *testing.T) {
-		err := v.Validate(context.Background(), "ns", nil)
+		err := v.Validate(ctx, "ns", nil)
 		require.NoError(t, err)
 	})
 
@@ -147,7 +170,8 @@ func TestValidateCallbacks(t *testing.T) {
 				Internal: &commonpb.Callback_Internal{},
 			}},
 		}
-		err := v.Validate(context.Background(), "ns", cbs)
+
+		err := v.Validate(ctx, "ns", cbs)
 		require.NoError(t, err)
 	})
 }

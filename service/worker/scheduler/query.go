@@ -118,8 +118,7 @@ func getQueryFields(
 	).WithChasmMapper(chasmMapper).WithSearchAttributeInterceptor(saInterceptor)
 	_, err = queryConverter.Convert(queryString)
 	if err != nil {
-		var converterErr *query.ConverterError
-		if errors.As(err, &converterErr) {
+		if converterErr, ok := errors.AsType[*query.ConverterError](err); ok {
 			return nil, converterErr.ToInvalidArgument()
 		}
 		return nil, err
@@ -141,8 +140,7 @@ func getQueryFieldsLegacy(
 	queryConverter := elasticsearch.NewQueryConverterLegacy(fnInterceptor, nil, saNameType, chasmMapper)
 	_, err := queryConverter.ConvertWhereOrderBy(queryString)
 	if err != nil {
-		var converterErr *query.ConverterError
-		if errors.As(err, &converterErr) {
+		if converterErr, ok := errors.AsType[*query.ConverterError](err); ok {
 			return nil, converterErr.ToInvalidArgument()
 		}
 		return nil, err
