@@ -10,26 +10,28 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
+type LifecycleEvent struct {
+	ShardContext historyi.ShardContext
+	NamespaceID  namespace.ID
+	Execution    *commonpb.WorkflowExecution
+	ResendPhase  string
+	Message      string
+	Outcome      string
+	Err          error
+	Details      map[string]any
+}
+
 // EmitLifecycleEvent emits a parent or child workflow resend checkpoint.
-func EmitLifecycleEvent(
-	shardContext historyi.ShardContext,
-	namespaceID namespace.ID,
-	execution *commonpb.WorkflowExecution,
-	resendPhase string,
-	message string,
-	outcome string,
-	err error,
-	details map[string]any,
-) {
-	eventDetails := make(map[string]any, len(details)+4)
-	maps.Copy(eventDetails, details)
+func EmitLifecycleEvent(event LifecycleEvent) {
+	eventDetails := make(map[string]any, len(event.Details)+4)
+	maps.Copy(eventDetails, event.Details)
 	eventDetails["event_type"] = wideevents.ParentChildLifecycleEventType
-	eventDetails["phase"] = resendPhase
-	eventDetails["outcome"] = outcome
-	eventDetails["local_cluster"] = shardContext.GetClusterMetadata().GetCurrentClusterName()
+	eventDetails["phase"] = event.ResendPhase
+	eventDetails["outcome"] = event.Outcome
+	eventDetails["local_cluster"] = event.ShardContext.GetClusterMetadata().GetCurrentClusterName()
 
 	namespaceName := ""
-	if entry, namespaceErr := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID); namespaceErr == nil {
+	if entry, namespaceErr := event.ShardContext.GetNamespaceRegistry().GetNamespaceByID(event.NamespaceID); namespaceErr == nil {
 		namespaceName = entry.Name().String()
 	}
 	sourceCluster, ok := eventDetails["source_cluster"].(string)
@@ -37,42 +39,42 @@ func EmitLifecycleEvent(
 		sourceCluster = ""
 	}
 	delete(eventDetails, "source_cluster")
-	if err != nil {
-		eventDetails["error"] = err.Error()
-		eventDetails["error_type"] = util.ErrorType(err)
+	if event.Err != nil {
+		eventDetails["error"] = event.Err.Error()
+		eventDetails["error_type"] = util.ErrorType(event.Err)
 	}
 	payload := wideevents.ReplicationLifecyclePayload{
 		TaskType:      wideevents.ReplTaskSyncWorkflowState,
-		Shard:         shardContext.GetShardID(),
+		Shard:         event.ShardContext.GetShardID(),
 		Namespace:     namespaceName,
-		NamespaceID:   namespaceID.String(),
-		WorkflowID:    execution.GetWorkflowId(),
-		RunID:         execution.GetRunId(),
+		NamespaceID:   event.NamespaceID.String(),
+		WorkflowID:    event.Execution.GetWorkflowId(),
+		RunID:         event.Execution.GetRunId(),
 		SourceCluster: sourceCluster,
 	}
-	switch outcome {
+	switch event.Outcome {
 	case wideevents.ParentChildOutcomeScheduled,
 		wideevents.ParentChildOutcomeStarted,
 		wideevents.ParentChildOutcomeDeduplicated:
 		eventDetails["operation"] = wideevents.ReplOperationStandbyVerificationSyncState
-		eventDetails["message"] = message
+		eventDetails["message"] = event.Message
 		payload.Phase = wideevents.ReplicationExecuting
 		payload.Details = eventDetails
-		wideevents.Emit(shardContext.GetEventLogger(), payload)
+		wideevents.Emit(event.ShardContext.GetEventLogger(), payload)
 	case wideevents.ParentChildOutcomeSucceeded, wideevents.ParentChildOutcomeSourceNotFound:
 		eventDetails["operation"] = wideevents.ReplOperationStandbyVerificationSyncState
-		eventDetails["message"] = message
+		eventDetails["message"] = event.Message
 		payload.Phase = wideevents.ReplicationApplied
 		payload.Outcome = wideevents.ParentChildOutcomeVerified
 		payload.Details = eventDetails
-		wideevents.Emit(shardContext.GetEventLogger(), payload)
+		wideevents.Emit(event.ShardContext.GetEventLogger(), payload)
 	default:
 		wideevents.EmitReplicationError(
-			shardContext.GetEventLogger(),
+			event.ShardContext.GetEventLogger(),
 			payload,
 			wideevents.ReplOperationStandbyVerificationSyncState,
-			message,
-			err,
+			event.Message,
+			event.Err,
 			eventDetails,
 		)
 	}

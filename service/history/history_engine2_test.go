@@ -3164,7 +3164,7 @@ func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_ResendChildLimited()
 	details := wideEventDetails(parentChildRecords(capture)[0])
 	s.Equal(wideevents.ParentChildPhaseChildResend, details["phase"])
 	s.Equal(util.ErrorType(&serviceerror.NotFound{}), details["initial_error_type"])
-	s.InDelta(0, details["max_in_flight"], 0)
+	s.NotContains(details, "max_in_flight")
 }
 
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_WorkflowNotExist() {
@@ -3503,7 +3503,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentLi
 	s.Require().Equal([]string{string(wideevents.ParentChildOutcomeLimited)}, parentChildOutcomes(capture))
 	details := wideEventDetails(parentChildRecords(capture)[0])
 	s.Equal(util.ErrorType(&serviceerror.NotFound{}), details["initial_error_type"])
-	s.InDelta(0, details["max_in_flight"], 0)
+	s.NotContains(details, "max_in_flight")
 }
 
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_SkipsResendForRemovedNamespace() {

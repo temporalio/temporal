@@ -121,14 +121,12 @@ func Invoke(
 	case workflowresend.SubmitResultAtCapacity:
 		metrics.ChildWorkflowResendLimited.With(metricsHandler).Record(1)
 		if emitLifecycle {
-			details := childResendEventDetails(errVerify)
-			details["max_in_flight"] = shardContext.GetConfig().WorkflowResendHostMaxInFlight()
 			emitChildResendLifecycleEvent(
 				shardContext,
 				req,
 				wideevents.ParentChildOutcomeLimited,
 				nil,
-				details,
+				childResendEventDetails(errVerify),
 			)
 		}
 	default:
@@ -294,14 +292,14 @@ func emitChildResendLifecycleEvent(
 	details["child_namespace_id"] = request.GetNamespaceId()
 	details["child_workflow_id"] = request.GetWorkflowExecution().GetWorkflowId()
 	details["child_run_id"] = request.GetWorkflowExecution().GetRunId()
-	workflowresend.EmitLifecycleEvent(
-		shardContext,
-		namespace.ID(request.GetNamespaceId()),
-		request.GetWorkflowExecution(),
-		wideevents.ParentChildPhaseChildResend,
-		"Child workflow resend checkpoint",
-		outcome,
-		err,
-		details,
-	)
+	workflowresend.EmitLifecycleEvent(workflowresend.LifecycleEvent{
+		ShardContext: shardContext,
+		NamespaceID:  namespace.ID(request.GetNamespaceId()),
+		Execution:    request.GetWorkflowExecution(),
+		ResendPhase:  wideevents.ParentChildPhaseChildResend,
+		Message:      "Child workflow resend checkpoint",
+		Outcome:      outcome,
+		Err:          err,
+		Details:      details,
+	})
 }
