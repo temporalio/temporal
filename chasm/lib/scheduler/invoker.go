@@ -163,6 +163,7 @@ func (i *Invoker) recordExecuteResult(
 	ctx chasm.MutableContext,
 	result *executeResult,
 ) (newlyStarted, droppedDuplicates int, startOnlyActions []*schedulespb.BufferedStart) {
+	scheduler := i.Scheduler.Get(ctx)
 	completed := make(map[string]*schedulespb.BufferedStart) // request ID -> BufferedStart with RunId/StartTime
 	failed := make(map[string]bool)                          // request ID -> is present
 	retryable := make(map[string]*schedulespb.BufferedStart) // request ID -> *BufferedStart
@@ -221,6 +222,7 @@ func (i *Invoker) recordExecuteResult(
 		}
 		if completedStart, ok := completed[start.RequestId]; ok {
 			newlyStarted++
+			scheduler.advanceLastEventTimeTo(completedStart.GetStartTime().AsTime())
 			if !internal.TracksCompletionResult(start.GetOverlapPolicy()) {
 				startOnlyActions = append(startOnlyActions, completedStart)
 				startedUntracked[start.RequestId] = struct{}{}

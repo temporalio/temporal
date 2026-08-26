@@ -17,26 +17,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// This file covers the idle-deadline high water mark. Two defects were observed
-// on a production V2 schedule whose 43-action backfill all started inside the
-// same ~200ms:
-//
-//  1. The idle deadline regressed. 26 idle tasks were armed at ...36.930309597Z
-//     and 17 later ones at ...36.928841727Z - 1.5ms *earlier*. Cause: the
-//     deadline was recomputed from recentActions(), which completed-action
-//     retention had truncated, evicting the start that held the largest
-//     StartTime. generator_tasks.go's own comment says this "shouldn't happen if
-//     getLastEventTime is monotonic"; it wasn't.
-//
-//  2. 43 idle tasks accumulated on the root component. Cleanup runs only via
-//     SchedulerIdleTaskHandler.Validate, which drops a task only when the
-//     deadline has moved *later*. A flat (or regressed) deadline invalidates
-//     nothing, so every tick left another task behind.
-//
-// (1) is the correctness bug - it closes a schedule earlier than its retention
-// window allows. (2) is unbounded growth of the mutable state blob, one entry
-// per action between idle ticks.
-
 const idleTestIdleTime = 7 * 24 * time.Hour
 
 // bufferedStartSeed describes a completed action to seed into the Invoker.

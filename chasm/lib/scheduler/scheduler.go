@@ -552,10 +552,14 @@ func (s *Scheduler) getLastEventTime(ctx chasm.Context) time.Time {
 
 func (s *Scheduler) advanceLastEventTime(ctx chasm.MutableContext) time.Time {
 	latest := s.getLastEventTime(ctx)
-	if !latest.Equal(s.GetLastEventTime().AsTime()) {
+	s.advanceLastEventTimeTo(latest)
+	return latest
+}
+
+func (s *Scheduler) advanceLastEventTimeTo(latest time.Time) {
+	if latest.After(s.GetLastEventTime().AsTime()) {
 		s.LastEventTime = timestamppb.New(latest)
 	}
-	return latest
 }
 
 // isHeldOpen reports whether the schedule must stay open regardless of having
