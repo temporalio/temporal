@@ -701,8 +701,7 @@ func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(ctx context.Context
 }
 
 func taskAddErrResult(err error) string {
-	var resourceExhausted *serviceerror.ResourceExhausted
-	if errors.As(err, &resourceExhausted) {
+	if _, ok := errors.AsType[*serviceerror.ResourceExhausted](err); ok {
 		return metrics.TaskAddResultThrottled
 	}
 	return metrics.TaskAddResultFailure
