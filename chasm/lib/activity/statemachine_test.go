@@ -391,7 +391,7 @@ func TestPauseUnpauseReplacesDispatch(t *testing.T) {
 				LastAttempt: chasm.NewDataField(ctx, attemptState),
 			}
 			handler := newActivityDispatchTaskHandler(activityDispatchTaskHandlerOptions{})
-			oldTask := &activitypb.ActivityDispatchTask{Stamp: 7, DispatchReason: tc.expectedReason}
+			oldTask := &activitypb.ActivityDispatchTask{Stamp: 7}
 
 			err := TransitionPaused.Apply(activity, ctx, pauseEvent{metricsHandler: metrics.NoopMetricsHandler})
 			require.NoError(t, err)
@@ -1306,8 +1306,8 @@ func TestTransitionResetFromPaused(t *testing.T) {
 	}
 }
 
-// TestTransitionResetClearsCurrentRetryInterval verifies that TransitionReset clears the retry
-// interval so a reset activity is not delayed by a previous backoff period.
+// TestResetDuringRetryBackoff verifies that a reset during retry backoff clears the retry interval,
+// restarts at attempt 1, and replaces the pending retry dispatch with an immediate one.
 func TestResetDuringRetryBackoff(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
@@ -1332,7 +1332,7 @@ func TestResetDuringRetryBackoff(t *testing.T) {
 		Outcome:     chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
 	}
 	handler := newActivityDispatchTaskHandler(activityDispatchTaskHandlerOptions{})
-	oldTask := &activitypb.ActivityDispatchTask{Stamp: 7, DispatchReason: activitypb.DISPATCH_REASON_RETRY}
+	oldTask := &activitypb.ActivityDispatchTask{Stamp: 7}
 
 	err := TransitionReset.Apply(act, ctx, resetEvent{resetTime: defaultTime, metricsHandler: metrics.NoopMetricsHandler})
 	require.NoError(t, err)

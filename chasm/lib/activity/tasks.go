@@ -13,12 +13,16 @@ import (
 	"go.uber.org/fx"
 )
 
-// DispatchTaskHook wraps an activity dispatch on the active cluster after CHASM validation and before it is sent to Matching.
+// DispatchTaskHook wraps a validated activity dispatch on the active cluster before it is sent to
+// Matching. The hook must call dispatch exactly once. If it returns nil without calling dispatch,
+// task processing completes successfully without sending the Activity to Matching. Hook errors are
+// returned to task processing; returning an error after dispatch succeeds may cause the task to
+// retry and resend. Standby discard spills bypass the hook.
 type DispatchTaskHook func(
-	context.Context,
-	string,
-	*activitypb.ActivityDispatchTask,
-	func(context.Context) error,
+	ctx context.Context,
+	namespaceID string,
+	task *activitypb.ActivityDispatchTask,
+	dispatch func(context.Context) error,
 ) error
 
 type activityDispatchTaskHandlerOptions struct {
@@ -81,13 +85,6 @@ func (h *activityDispatchTaskHandler) Discard(
 	activityRef chasm.ComponentRef,
 	_ chasm.TaskAttributes,
 	_ *activitypb.ActivityDispatchTask,
-) error {
-	return h.dispatchActivity(ctx, activityRef)
-}
-
-func (h *activityDispatchTaskHandler) dispatchActivity(
-	ctx context.Context,
-	activityRef chasm.ComponentRef,
 ) error {
 	request, err := h.createMatchingRequest(ctx, activityRef)
 	if err != nil {

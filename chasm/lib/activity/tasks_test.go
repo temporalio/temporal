@@ -2,6 +2,7 @@ package activity
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -76,6 +77,73 @@ func TestActivityDispatchTaskHook(t *testing.T) {
 		err := handler.Execute(chasm.NewEngineContext(context.Background(), engine), activityRef, chasm.TaskAttributes{}, task)
 		require.NoError(t, err)
 		require.Equal(t, 1, hookCalls)
+	})
+
+	t.Run("honors hook result", func(t *testing.T) {
+		hookErr := errors.New("hook failed")
+		testCases := []struct {
+			name    string
+			hookErr error
+		}{
+			{name: "suppresses dispatch"},
+			{name: "propagates error", hookErr: hookErr},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				controller := gomock.NewController(t)
+				engine := chasm.NewMockEngine(controller)
+				activityRef := chasm.NewComponentRef[*Activity](chasm.ExecutionKey{NamespaceID: "namespace-id"})
+				chasmCtx := &chasm.MockMutableContext{
+					MockContext: chasm.MockContext{
+						HandleRef: func(chasm.Component) ([]byte, error) {
+							return []byte("component-ref"), nil
+						},
+					},
+				}
+				activity := &Activity{
+					ActivityState: &activitypb.ActivityState{
+						TaskQueue: &taskqueuepb.TaskQueue{Name: "task-queue"},
+					},
+					LastAttempt: chasm.NewDataField(chasmCtx, &activitypb.ActivityAttemptState{Stamp: 7}),
+				}
+
+				engine.EXPECT().ReadComponent(gomock.Any(), activityRef, gomock.Any()).DoAndReturn(
+					func(
+						_ context.Context,
+						_ chasm.ComponentRef,
+						readFn func(chasm.Context, chasm.Component) error,
+						_ ...chasm.TransitionOption,
+					) error {
+						return readFn(chasmCtx, activity)
+					},
+				)
+
+				handler := newActivityDispatchTaskHandler(activityDispatchTaskHandlerOptions{
+					MatchingClient: matchingservicemock.NewMockMatchingServiceClient(controller),
+					DispatchTaskHook: func(
+						context.Context,
+						string,
+						*activitypb.ActivityDispatchTask,
+						func(context.Context) error,
+					) error {
+						return tc.hookErr
+					},
+				})
+
+				err := handler.Execute(
+					chasm.NewEngineContext(context.Background(), engine),
+					activityRef,
+					chasm.TaskAttributes{},
+					&activitypb.ActivityDispatchTask{},
+				)
+				if tc.hookErr == nil {
+					require.NoError(t, err)
+				} else {
+					require.ErrorIs(t, err, tc.hookErr)
+				}
+			})
+		}
 	})
 
 	t.Run("skipped when request construction fails", func(t *testing.T) {
