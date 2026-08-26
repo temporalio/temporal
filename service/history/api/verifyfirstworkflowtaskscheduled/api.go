@@ -20,6 +20,8 @@ import (
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/workflowresend"
 	"go.temporal.io/server/service/history/consts"
@@ -56,6 +58,7 @@ func Invoke(
 	}
 
 	metricsHandler := shardContext.GetMetricsHandler()
+	emitLifecycle := shardContext.GetConfig().EmitReplicationLifecycleEvents()
 	resend := func(ctx context.Context) error {
 		metrics.ChildWorkflowResendAttempts.With(metricsHandler).Record(1)
 		startTime := time.Now().UTC()
@@ -68,6 +71,7 @@ func Invoke(
 			versionedTransition,
 			versionHistories,
 			errVerify,
+			emitLifecycle,
 		)
 		metrics.ChildWorkflowResendLatency.With(metricsHandler).Record(time.Since(startTime))
 		if err != nil && !isExpectedResendError(err) {
@@ -88,6 +92,15 @@ func Invoke(
 		childKey,
 		shardContext.GetConfig().ReplicationTaskApplyTimeout(),
 		func(ctx context.Context) {
+			if emitLifecycle {
+				emitChildResendLifecycleEvent(
+					shardContext,
+					req,
+					wideevents.ParentChildOutcomeScheduled,
+					nil,
+					childResendEventDetails(errVerify),
+				)
+			}
 			_ = resend(ctx)
 		},
 	)
@@ -96,8 +109,28 @@ func Invoke(
 		// Accepted work records its attempt when execution starts.
 	case workflowresend.SubmitResultDuplicate:
 		metrics.ChildWorkflowResendSkipped.With(metricsHandler).Record(1)
+		if emitLifecycle {
+			emitChildResendLifecycleEvent(
+				shardContext,
+				req,
+				wideevents.ParentChildOutcomeDeduplicated,
+				nil,
+				childResendEventDetails(errVerify),
+			)
+		}
 	case workflowresend.SubmitResultAtCapacity:
 		metrics.ChildWorkflowResendLimited.With(metricsHandler).Record(1)
+		if emitLifecycle {
+			details := childResendEventDetails(errVerify)
+			details["max_in_flight"] = shardContext.GetConfig().WorkflowResendHostMaxInFlight()
+			emitChildResendLifecycleEvent(
+				shardContext,
+				req,
+				wideevents.ParentChildOutcomeLimited,
+				nil,
+				details,
+			)
+		}
 	default:
 		// SubmitResultFailed and unknown values are admission failures.
 		metrics.ChildWorkflowResendFailures.With(metricsHandler).Record(1)
@@ -188,7 +221,23 @@ func resendChildAndVerify(
 	versionedTransition *persistencespb.VersionedTransition,
 	versionHistories *historyspb.VersionHistories,
 	errVerify error,
+	emitLifecycle bool,
 ) error {
+	activeClusterName := ""
+	emitResult := func(outcome string, eventErr error, stage string) {
+		if !emitLifecycle {
+			return
+		}
+		details := childResendEventDetails(errVerify)
+		if activeClusterName != "" {
+			details["source_cluster"] = activeClusterName
+		}
+		if stage != "" {
+			details["stage"] = stage
+		}
+		emitChildResendLifecycleEvent(shardContext, req, outcome, eventErr, details)
+	}
+
 	result, err := workflowresend.SyncWorkflowStateFromSource(
 		ctx,
 		shardContext,
@@ -196,20 +245,63 @@ func resendChildAndVerify(
 		req.WorkflowExecution,
 		versionedTransition,
 		versionHistories,
-		nil,
+		func(sourceCluster string) {
+			activeClusterName = sourceCluster
+			emitResult(wideevents.ParentChildOutcomeStarted, nil, "sync_workflow_state")
+		},
 	)
 	if err != nil {
+		emitResult(wideevents.ParentChildOutcomeFailed, err, "sync_workflow_state")
 		return err
 	}
 	switch result {
 	case workflowresend.SyncWorkflowStateResultSourceNotFound:
+		emitResult(
+			wideevents.ParentChildOutcomeSourceNotFound,
+			serviceerror.NewNotFound("child workflow not found on source cluster"),
+			"sync_workflow_state",
+		)
 		return nil
 	case workflowresend.SyncWorkflowStateResultSkipped:
 		return errVerify
 	case workflowresend.SyncWorkflowStateResultApplied:
-		_, _, _, err = verifyFirstWorkflowTaskScheduled(ctx, req, workflowConsistencyChecker)
-		return err
 	default:
 		return fmt.Errorf("unknown workflow state sync result: %d", result)
 	}
+
+	_, _, _, err = verifyFirstWorkflowTaskScheduled(ctx, req, workflowConsistencyChecker)
+	if err != nil {
+		emitResult(wideevents.ParentChildOutcomeFailed, err, "verify_after_resend")
+		return err
+	}
+	emitResult(wideevents.ParentChildOutcomeSucceeded, nil, "")
+	return nil
+}
+
+func childResendEventDetails(initialError error) map[string]any {
+	return map[string]any{
+		"initial_error_type": util.ErrorType(initialError),
+	}
+}
+
+func emitChildResendLifecycleEvent(
+	shardContext historyi.ShardContext,
+	request *historyservice.VerifyFirstWorkflowTaskScheduledRequest,
+	outcome string,
+	err error,
+	details map[string]any,
+) {
+	details["child_namespace_id"] = request.GetNamespaceId()
+	details["child_workflow_id"] = request.GetWorkflowExecution().GetWorkflowId()
+	details["child_run_id"] = request.GetWorkflowExecution().GetRunId()
+	workflowresend.EmitLifecycleEvent(
+		shardContext,
+		namespace.ID(request.GetNamespaceId()),
+		request.GetWorkflowExecution(),
+		wideevents.ParentChildPhaseChildResend,
+		"Child workflow resend checkpoint",
+		outcome,
+		err,
+		details,
+	)
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -332,67 +331,22 @@ func emitParentResendLifecycleEvent(
 	err error,
 	details map[string]any,
 ) {
-	eventDetails := make(map[string]any, len(details)+11)
-	maps.Copy(eventDetails, details)
-	eventDetails["event_type"] = wideevents.ParentChildLifecycleEventType
-	eventDetails["phase"] = wideevents.ParentChildPhaseParentResend
-	eventDetails["outcome"] = outcome
-	eventDetails["local_cluster"] = shardContext.GetClusterMetadata().GetCurrentClusterName()
-	eventDetails["parent_namespace_id"] = request.GetNamespaceId()
-	eventDetails["parent_workflow_id"] = request.GetParentExecution().GetWorkflowId()
-	eventDetails["parent_run_id"] = request.GetParentExecution().GetRunId()
-	eventDetails["parent_workflow_state"] = parentWorkflowState
-	eventDetails["child_workflow_id"] = request.GetChildExecution().GetWorkflowId()
-	eventDetails["child_run_id"] = request.GetChildExecution().GetRunId()
-	eventDetails["parent_initiated_id"] = request.GetParentInitiatedId()
-	eventDetails["parent_initiated_version"] = request.GetParentInitiatedVersion()
-
-	namespaceName := ""
-	if entry, namespaceErr := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.GetNamespaceId())); namespaceErr == nil {
-		namespaceName = entry.Name().String()
-	}
-	sourceCluster, ok := eventDetails["source_cluster"].(string)
-	if !ok {
-		sourceCluster = ""
-	}
-	delete(eventDetails, "source_cluster")
-	if err != nil {
-		eventDetails["error"] = err.Error()
-		eventDetails["error_type"] = util.ErrorType(err)
-	}
-	payload := wideevents.ReplicationLifecyclePayload{
-		TaskType:      wideevents.ReplTaskSyncWorkflowState,
-		Shard:         shardContext.GetShardID(),
-		Namespace:     namespaceName,
-		NamespaceID:   request.GetNamespaceId(),
-		WorkflowID:    request.GetParentExecution().GetWorkflowId(),
-		RunID:         request.GetParentExecution().GetRunId(),
-		SourceCluster: sourceCluster,
-	}
-	switch outcome {
-	case wideevents.ParentChildOutcomeScheduled,
-		wideevents.ParentChildOutcomeStarted,
-		wideevents.ParentChildOutcomeDeduplicated:
-		eventDetails["operation"] = wideevents.ReplOperationStandbyVerificationSyncState
-		eventDetails["message"] = "Parent workflow resend checkpoint"
-		payload.Phase = wideevents.ReplicationExecuting
-		payload.Details = eventDetails
-		wideevents.Emit(shardContext.GetEventLogger(), payload)
-	case wideevents.ParentChildOutcomeSucceeded, wideevents.ParentChildOutcomeSourceNotFound:
-		eventDetails["operation"] = wideevents.ReplOperationStandbyVerificationSyncState
-		eventDetails["message"] = "Parent workflow resend checkpoint"
-		payload.Phase = wideevents.ReplicationApplied
-		payload.Outcome = wideevents.ParentChildOutcomeVerified
-		payload.Details = eventDetails
-		wideevents.Emit(shardContext.GetEventLogger(), payload)
-	default:
-		wideevents.EmitReplicationError(
-			shardContext.GetEventLogger(),
-			payload,
-			wideevents.ReplOperationStandbyVerificationSyncState,
-			"Parent workflow resend checkpoint",
-			err,
-			eventDetails,
-		)
-	}
+	details["parent_namespace_id"] = request.GetNamespaceId()
+	details["parent_workflow_id"] = request.GetParentExecution().GetWorkflowId()
+	details["parent_run_id"] = request.GetParentExecution().GetRunId()
+	details["parent_workflow_state"] = parentWorkflowState
+	details["child_workflow_id"] = request.GetChildExecution().GetWorkflowId()
+	details["child_run_id"] = request.GetChildExecution().GetRunId()
+	details["parent_initiated_id"] = request.GetParentInitiatedId()
+	details["parent_initiated_version"] = request.GetParentInitiatedVersion()
+	workflowresend.EmitLifecycleEvent(
+		shardContext,
+		namespace.ID(request.GetNamespaceId()),
+		request.GetParentExecution(),
+		wideevents.ParentChildPhaseParentResend,
+		"Parent workflow resend checkpoint",
+		outcome,
+		err,
+		details,
+	)
 }
