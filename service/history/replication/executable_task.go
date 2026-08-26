@@ -734,8 +734,7 @@ func (e *ExecutableTaskImpl) SyncState(
 	}
 	resp, err := remoteAdminClient.SyncWorkflowState(ctx, req)
 	if err != nil {
-		var resourceExhaustedError *serviceerror.ResourceExhausted
-		if errors.As(err, &resourceExhaustedError) {
+		if _, ok := errors.AsType[*serviceerror.ResourceExhausted](err); ok {
 			e.emitReplicationTaskError(wideevents.ReplOperationSyncState, "Sync workflow state request exceeded resource limits", err, map[string]any{
 				"request_payload_size": req.Size(),
 			})
@@ -748,16 +747,14 @@ func (e *ExecutableTaskImpl) SyncState(
 			tag.ReplicationTask(e.replicationTask),
 		)
 
-		var workflowNotReady *serviceerror.WorkflowNotReady
-		if errors.As(err, &workflowNotReady) {
+		if _, ok := errors.AsType[*serviceerror.WorkflowNotReady](err); ok {
 			logger.Info("Dropped replication task as source mutable state has buffered events.", tag.Error(err))
 			e.emitReplicationTaskError(wideevents.ReplOperationSyncState, "Dropped replication task because source mutable state has buffered events", err, map[string]any{
 				"disposition": wideevents.ReplDispositionDiscarded,
 			})
 			return false, nil
 		}
-		var notFoundErr *serviceerror.NotFound
-		if errors.As(err, &notFoundErr) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			logger.Error(
 				"workflow not found in source cluster, proceed to cleanup")
 			e.emitReplicationTaskError(wideevents.ReplOperationSyncState, "Workflow not found in source cluster; cleaning up target", err, map[string]any{
@@ -773,8 +770,7 @@ func (e *ExecutableTaskImpl) SyncState(
 				),
 			)
 		}
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		if !errors.As(err, &failedPreconditionErr) {
+		if _, ok := errors.AsType[*serviceerror.FailedPrecondition](err); !ok {
 			return false, err
 		}
 		// Unable to perform sync state. Transition history maybe disabled in source cluster.
@@ -860,8 +856,7 @@ func (e *ExecutableTaskImpl) DeleteWorkflow(
 		},
 		ClosedWorkflowOnly: false,
 	})
-	var notFoundErr *serviceerror.NotFound
-	if errors.As(err, &notFoundErr) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 		return nil
 	}
 	return err
