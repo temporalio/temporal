@@ -9,19 +9,20 @@ import (
 // (scheduler_test) package so replay tests can vary the compute-limit configuration by injecting
 // a SpecBuilder with specific Max/WarnIterations accessors. Compiled only under test.
 func SchedulerWorkflowWithSpecBuilder(b *SpecBuilder) func(workflow.Context, *schedulespb.StartScheduleArgs) error {
-	return SchedulerWorkflowForReplay(b, -1)
+	return SchedulerWorkflowForReplay(b, -1, -1)
 }
 
 // SchedulerWorkflowForReplay exposes the dynamic inputs that can affect scheduler replay. Keeping
 // this constructor test-only lets replay fixtures be checked against configuration changes without
 // widening the production API.
-func SchedulerWorkflowForReplay(b *SpecBuilder, versionCeiling int) func(workflow.Context, *schedulespb.StartScheduleArgs) error {
+func SchedulerWorkflowForReplay(b *SpecBuilder, versionCeiling, versionOverride int) func(workflow.Context, *schedulespb.StartScheduleArgs) error {
 	return func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-		return schedulerWorkflowWithSpecBuilder(
+		return schedulerWorkflowWithSpecBuilderAndVersionOverride(
 			ctx, args, b,
 			func() bool { return false }, // enableCHASMMigration
 			func() bool { return false }, // migrateWithRunningWorkflows
 			func() int { return versionCeiling },
+			func() int { return versionOverride },
 		)
 	}
 }

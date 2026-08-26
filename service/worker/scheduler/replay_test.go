@@ -70,15 +70,17 @@ func TestReplays(t *testing.T) {
 	for _, f := range files {
 		t.Run(filepath.Base(f), func(t *testing.T) {
 			for _, tc := range []struct {
-				name           string
-				versionCeiling int
+				name            string
+				versionCeiling  int
+				versionOverride int
 			}{
-				{name: "ceiling-unset", versionCeiling: -1},
-				{name: "ceiling-below-current", versionCeiling: int(scheduler.TriggerImmediatelyTimestamp) - 1},
-				{name: "ceiling-above-current", versionCeiling: int(scheduler.TriggerImmediatelyTimestamp) + 1},
+				{name: "ceiling-unset", versionCeiling: -1, versionOverride: -1},
+				{name: "ceiling-below-current", versionCeiling: int(scheduler.TriggerImmediatelyTimestamp) - 1, versionOverride: -1},
+				{name: "ceiling-above-current", versionCeiling: int(scheduler.TriggerImmediatelyTimestamp) + 1, versionOverride: -1},
+				{name: "override-latest", versionCeiling: -1, versionOverride: int(scheduler.LatestSchedulerWorkflowVersion)},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
-					replay(t, loadHistory(t, f), schedulerWorkflowForReplay(math.MaxInt, tc.versionCeiling))
+					replay(t, loadHistory(t, f), schedulerWorkflowForReplay(math.MaxInt, tc.versionCeiling, tc.versionOverride))
 				})
 			}
 		})
@@ -105,11 +107,11 @@ func TestReplaysWithDynamicConfigChange(t *testing.T) {
 
 	for _, filename := range files {
 		// Original config: hard limit effectively disabled.
-		replay(t, loadHistory(t, filename), schedulerWorkflowForReplay(math.MaxInt, -1))
+		replay(t, loadHistory(t, filename), schedulerWorkflowForReplay(math.MaxInt, -1, -1))
 
 		// Simulated dynamic-config change: a much lower hard limit. Replay must still be
 		// deterministic because the recorded next times come from SideEffect markers.
-		replay(t, loadHistory(t, filename), schedulerWorkflowForReplay(1000, -1))
+		replay(t, loadHistory(t, filename), schedulerWorkflowForReplay(1000, -1, -1))
 	}
 }
 
@@ -142,12 +144,12 @@ func replay(t *testing.T, h *historypb.History, workflowFunc any) {
 	require.NoError(t, replayer.ReplayWorkflowHistory(log.NewSdkLogger(log.NewTestLogger()), h))
 }
 
-func schedulerWorkflowForReplay(maxIterations, versionCeiling int) any {
+func schedulerWorkflowForReplay(maxIterations, versionCeiling, versionOverride int) any {
 	b := scheduler.NewSpecBuilder(
 		func() int { return scheduler.DefaultWarnIterations },
 		func() int { return maxIterations },
 	)
-	return scheduler.SchedulerWorkflowForReplay(b, versionCeiling)
+	return scheduler.SchedulerWorkflowForReplay(b, versionCeiling, versionOverride)
 }
 
 // loadHistory reads a gzipped JSON history fixture.

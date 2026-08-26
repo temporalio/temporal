@@ -31,6 +31,7 @@ import (
 //
 //	SCHEDULER_REPLAY_OUTPUT=/tmp/replay_version_ceiling_base.json.gz \
 //	SCHEDULER_VERSION_CEILING=12 \
+//	SCHEDULER_VERSION_OVERRIDE=13 \
 //	go test -tags integration,test_dep ./tests \
 //	  -run '^TestGenerateSchedulerVersionCeilingReplayHistory$' -count=1
 //
@@ -46,7 +47,13 @@ func TestGenerateSchedulerVersionCeilingReplayHistory(t *testing.T) {
 	generateSchedulerReplayHistory(t, func(t *testing.T, ctx context.Context, env *testcore.TestEnv) *commonpb.WorkflowExecution {
 		ceiling, err := strconv.Atoi(os.Getenv("SCHEDULER_VERSION_CEILING"))
 		require.NoError(t, err, "SCHEDULER_VERSION_CEILING must be an integer")
+		override := -1
+		if value, ok := os.LookupEnv("SCHEDULER_VERSION_OVERRIDE"); ok {
+			override, err = strconv.Atoi(value)
+			require.NoError(t, err, "SCHEDULER_VERSION_OVERRIDE must be an integer")
+		}
 		env.OverrideDynamicConfig(dynamicconfig.SchedulerV1VersionCeiling, ceiling)
+		env.OverrideDynamicConfig(dynamicconfig.SchedulerV1VersionOverride, override)
 		scheduleID := testcore.RandomizeStr("version-ceiling-replay")
 		workflowID := scheduler.WorkflowIDPrefix + scheduleID
 
@@ -67,11 +74,18 @@ func TestGenerateSchedulerVersionCeilingReplayHistory(t *testing.T) {
 		}, 30*time.Second, 100*time.Millisecond, "V1 scheduler did not record tweakables")
 		require.Equal(t, ceiling, recorded.VersionCeiling)
 		require.True(t, recorded.VersionCeilingSet)
+		wantOverride := -1
 		wantVersion := scheduler.SchedulerWorkflowVersion(scheduler.TriggerImmediatelyTimestamp)
+		if override >= int(wantVersion) && override <= int(scheduler.LatestSchedulerWorkflowVersion) {
+			wantVersion = scheduler.SchedulerWorkflowVersion(override)
+			wantOverride = override
+		}
 		if ceiling >= 0 {
 			wantVersion = min(wantVersion, scheduler.SchedulerWorkflowVersion(ceiling))
 		}
 		require.Equal(t, wantVersion, recorded.Version)
+		require.Equal(t, wantOverride, recorded.VersionOverride)
+		require.True(t, recorded.VersionOverrideSet)
 		return execution
 	})
 }

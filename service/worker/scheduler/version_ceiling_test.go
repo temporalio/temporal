@@ -32,6 +32,26 @@ func TestClampVersion(t *testing.T) {
 	}
 }
 
+func TestVersionForNewRun(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		ceiling  int
+		override int
+		want     SchedulerWorkflowVersion
+	}{
+		{name: "default version", ceiling: -1, override: -1, want: TriggerImmediatelyTimestamp},
+		{name: "override latest", ceiling: -1, override: int(LatestSchedulerWorkflowVersion), want: LatestSchedulerWorkflowVersion},
+		{name: "ceiling caps override", ceiling: int(TriggerImmediatelyTimestamp) - 1, override: int(LatestSchedulerWorkflowVersion), want: TriggerImmediatelyTimestamp - 1},
+		{name: "override below current ignored", ceiling: -1, override: int(TriggerImmediatelyTimestamp) - 1, want: TriggerImmediatelyTimestamp},
+		{name: "override above latest ignored", ceiling: -1, override: int(LatestSchedulerWorkflowVersion) + 1, want: TriggerImmediatelyTimestamp},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			version, _ := versionForNewRun(TriggerImmediatelyTimestamp, tc.ceiling, tc.override)
+			require.Equal(t, tc.want, version)
+		})
+	}
+}
+
 func TestDetermineVersionTransitions(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -68,7 +88,7 @@ func TestDetermineVersionTransitions(t *testing.T) {
 				},
 			}
 			for i, defaultVersion := range tc.defaults {
-				version, ceiling := s.determineVersion(defaultVersion)
+				version, ceiling, _ := s.determineVersion(defaultVersion)
 				require.Equal(t, tc.versions[i], version)
 				require.Equal(t, tc.ceiling, ceiling)
 
@@ -90,7 +110,7 @@ func TestDetermineVersionLocksAtZeroCeiling(t *testing.T) {
 	s := &scheduler{versionCeiling: func() int { return ceiling }}
 
 	// First evaluation clamps to InitialVersion (0) and records it.
-	version, recordedCeiling := s.determineVersion(TriggerImmediatelyTimestamp)
+	version, recordedCeiling, _ := s.determineVersion(TriggerImmediatelyTimestamp)
 	require.Equal(t, InitialVersion, version)
 	require.Equal(t, 0, recordedCeiling)
 	s.tweakables = CurrentTweakablePolicies
@@ -100,7 +120,7 @@ func TestDetermineVersionLocksAtZeroCeiling(t *testing.T) {
 
 	// The configured ceiling is lifted mid-run, but the recorded ceiling stays at InitialVersion.
 	ceiling = -1
-	version, recordedCeiling = s.determineVersion(TriggerImmediatelyTimestamp)
+	version, recordedCeiling, _ = s.determineVersion(TriggerImmediatelyTimestamp)
 	require.Equal(t, InitialVersion, version)
 	require.Equal(t, 0, recordedCeiling)
 }
@@ -126,12 +146,58 @@ func TestDetermineVersionPreservesLegacyRecordedVersion(t *testing.T) {
 			s.tweakables.Version = tc.version
 			// VersionCeilingSet is false for a marker written before this field existed.
 
-			version, ceiling := s.determineVersion(TriggerImmediatelyTimestamp)
+			version, ceiling, _ := s.determineVersion(TriggerImmediatelyTimestamp)
 			require.Equal(t, tc.version, version)
 			require.Equal(t, int(tc.version), ceiling)
 			require.Zero(t, calls, "legacy histories must not read the current version ceiling")
 		})
 	}
+}
+
+func TestDetermineVersionPreservesRecordedOverride(t *testing.T) {
+	calls := 0
+	s := &scheduler{
+		logger:          log.NewSdkLogger(log.NewNoopLogger()),
+		versionCeiling:  func() int { return -1 },
+		versionOverride: func() int { calls++; return int(LatestSchedulerWorkflowVersion) },
+	}
+
+	version, ceiling, override := s.determineVersion(TriggerImmediatelyTimestamp)
+	require.Equal(t, SchedulerWorkflowVersion(LatestSchedulerWorkflowVersion), version)
+	require.Equal(t, -1, ceiling)
+	require.Equal(t, int(LatestSchedulerWorkflowVersion), override)
+	s.tweakables = CurrentTweakablePolicies
+	s.tweakables.Version = version
+	s.tweakables.VersionCeiling = ceiling
+	s.tweakables.VersionCeilingSet = true
+	s.tweakables.VersionOverride = override
+	s.tweakables.VersionOverrideSet = true
+
+	version, ceiling, override = s.determineVersion(LatestSchedulerWorkflowVersion)
+	require.Equal(t, SchedulerWorkflowVersion(LatestSchedulerWorkflowVersion), version)
+	require.Equal(t, -1, ceiling)
+	require.Equal(t, int(LatestSchedulerWorkflowVersion), override)
+	require.Equal(t, 1, calls, "override must be captured once per run")
+}
+
+func TestDetermineVersionPreservesRecordedCurrentVersion(t *testing.T) {
+	s := &scheduler{
+		logger:          log.NewSdkLogger(log.NewNoopLogger()),
+		versionCeiling:  func() int { return -1 },
+		versionOverride: func() int { return -1 },
+		tweakables: TweakablePolicies{
+			Version:            TriggerImmediatelyTimestamp,
+			VersionCeiling:     -1,
+			VersionCeilingSet:  true,
+			VersionOverride:    -1,
+			VersionOverrideSet: true,
+		},
+	}
+
+	version, ceiling, override := s.determineVersion(LatestSchedulerWorkflowVersion)
+	require.Equal(t, SchedulerWorkflowVersion(TriggerImmediatelyTimestamp), version)
+	require.Equal(t, -1, ceiling)
+	require.Equal(t, -1, override)
 }
 
 // TestVersionCeilingWithCHASMMigration verifies that a clamp below the CHASM gate keeps migration
