@@ -76,6 +76,7 @@ func (s *storageWrapper) Upload(ctx context.Context, URI archiver.URI, fileName 
 	return upload(ctx, bucket.Object(formatSinkPath(URI.Path())+"/"+fileName), file, nil)
 }
 
+// UploadIfHashChanged is best-effort because the metadata check and upload are not atomic.
 func (s *storageWrapper) UploadIfHashChanged(ctx context.Context, URI archiver.URI, fileName string, file []byte, recordHash string) error {
 	bucket := s.client.Bucket(URI.Hostname())
 	object := bucket.Object(formatSinkPath(URI.Path()) + "/" + fileName)

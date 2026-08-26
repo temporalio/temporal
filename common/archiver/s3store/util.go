@@ -191,6 +191,7 @@ func Upload(ctx context.Context, s3cli S3API, URI archiver.URI, key string, data
 	return upload(ctx, s3cli, URI, key, data, nil)
 }
 
+// UploadIfHashChanged is best-effort because the metadata check and upload are not atomic.
 func UploadIfHashChanged(ctx context.Context, s3cli S3API, URI archiver.URI, key string, data []byte, recordHash string) error {
 	ctx, cancel := ensureContextTimeout(ctx)
 	defer cancel()
