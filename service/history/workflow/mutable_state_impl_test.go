@@ -5649,9 +5649,9 @@ func (s *mutableStateSuite) verifyMutableState(current, target, origin *MutableS
 	compareMapOfProto(s, current.pendingActivityInfoIDs, current.updateActivityInfos)
 	s.Equal(map[int64]struct{}{89: {}}, current.deleteActivityInfos, "deleteActivityInfos mismatch")
 
-	compareMapOfProto(s, target.pendingTimerInfoIDs, current.pendingTimerInfoIDs)
-	s.Equal(target.pendingTimerEventIDToID, current.pendingTimerEventIDToID, "pendingTimerEventIDToID mismatch")
-	compareMapOfProto(s, target.pendingTimerInfoIDs, current.updateTimerInfos)
+	compareMapOfProto(s, target.pendingUserTimers.all(), current.pendingUserTimers.all())
+	s.Equal(target.pendingUserTimers.eventIDToID, current.pendingUserTimers.eventIDToID, "user timer event ID index mismatch")
+	compareMapOfProto(s, target.pendingUserTimers.all(), current.updateTimerInfos)
 	s.Equal(map[string]struct{}{"to-be-deleted": {}}, current.deleteTimerInfos, "deleteTimerInfos mismatch")
 
 	s.verifyChildExecutionInfos(target.pendingChildExecutionInfoIDs, current.pendingChildExecutionInfoIDs, origin.pendingChildExecutionInfoIDs)
@@ -5700,7 +5700,7 @@ func (s *mutableStateSuite) buildSnapshot(state *MutableStateImpl) *persistences
 			"25": {
 				Version:                       1234,
 				StartedEventId:                85,
-				ExpiryTime:                    state.pendingTimerInfoIDs["25"].ExpiryTime,
+				ExpiryTime:                    state.pendingUserTimers.all()["25"].ExpiryTime,
 				TimerId:                       "25",
 				LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
 			},
@@ -5879,7 +5879,7 @@ func (s *mutableStateSuite) TestApplySnapshot() {
 			for key := range targetMS.updateActivityInfos {
 				targetMS.activityInfosUserDataUpdated[key] = struct{}{}
 			}
-			targetMS.updateTimerInfos = targetMS.pendingTimerInfoIDs
+			targetMS.updateTimerInfos = targetMS.pendingUserTimers.all()
 			for key := range targetMS.updateTimerInfos {
 				targetMS.timerInfosUserDataUpdated[key] = struct{}{}
 			}
@@ -5926,7 +5926,7 @@ func (s *mutableStateSuite) buildMutation(
 	executionInfoClone.SubStateMachineTombstoneBatches = nil
 	mutation := &persistencespb.WorkflowMutableStateMutation{
 		UpdatedActivityInfos:            state.pendingActivityInfoIDs,
-		UpdatedTimerInfos:               state.pendingTimerInfoIDs,
+		UpdatedTimerInfos:               state.pendingUserTimers.all(),
 		UpdatedChildExecutionInfos:      state.pendingChildExecutionInfoIDs,
 		UpdatedRequestCancelInfos:       state.pendingRequestCancelInfoIDs,
 		UpdatedSignalInfos:              state.pendingSignalInfoIDs,
@@ -6036,7 +6036,7 @@ func (s *mutableStateSuite) TestApplyMutation() {
 			for key := range targetMS.updateActivityInfos {
 				targetMS.activityInfosUserDataUpdated[key] = struct{}{}
 			}
-			targetMS.updateTimerInfos = targetMS.pendingTimerInfoIDs
+			targetMS.updateTimerInfos = targetMS.pendingUserTimers.all()
 			for key := range targetMS.updateTimerInfos {
 				targetMS.timerInfosUserDataUpdated[key] = struct{}{}
 			}
@@ -8179,7 +8179,9 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareTasks() {
 		s.Equal(timerExpiry, utTasks[0].VisibilityTimestamp)
 
 		// The timer must be marked as created in mutable state.
-		s.Equal(int64(TimerTaskStatusCreated), ms.pendingTimerInfoIDs["t1"].TaskStatus)
+		timerInfo, ok := ms.GetUserTimerInfo("t1")
+		s.Require().True(ok)
+		s.Equal(int64(TimerTaskStatusCreated), timerInfo.TaskStatus)
 	})
 
 	s.Run("HandleActivityUserTimerTasks/Active_Running_UserTimer_AlreadyCreated", func() {
