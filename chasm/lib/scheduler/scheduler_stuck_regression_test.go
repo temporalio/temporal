@@ -13,32 +13,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// TestIdleDeadlineRearmedAfterRecordingStart pins the P1 raised in review on
-// "Align CHASM ALLOW_ALL lifecycle with V1" (#11631).
-//
-// Recording a start destroys the schedule's idle timer and does not replace it:
-//
-//   - The Generator arms a SchedulerIdleTask at D1 = getLastEventTime() +
-//     IdleTime, and records D1 in IdleCloseTime.
-//   - recordExecuteResult stamps RunId and StartTime onto the BufferedStart.
-//     recentActions skips empty-RunId starts, so that stamp is what first
-//     exposes the start to getLastEventTime, which maxes over ActualTime
-//     (populated from StartTime). The deadline moves to D2 > D1.
-//   - SchedulerIdleTaskHandler.Validate recomputes D2, finds it after the D1 the
-//     task was armed for, and drops the task as expiration_shift.
-//   - recordExecuteResult ends at i.addTasks(ctx), which arms only invoker
-//     tasks. Only Generator.Generate arms an idle task, and there is no Generate
-//     call anywhere in invoker.go or invoker_tasks.go.
-//
-// The schedule is then open with nothing that can ever close it, while
-// IdleCloseTime - the ScheduleIdleCloseTime search attribute the stuck-schedule
-// scanner reads - still advertises D1.
-//
-// The completion path already guards this hazard: Scheduler.recordCompletedAction
-// calls Generate immediately after recording, commenting that "additional events
-// invalidate in-flight idle tasks" (scheduler.go). The start path does not, so on
-// main the schedule stays stuck until a completion callback happens to arrive.
-// #11631 attaches no callback to ALLOW_ALL actions, which makes the gap permanent.
+// a regression test to ensure idle-tasks are handled correctly
 func TestIdleDeadlineRearmedAfterRecordingStart(t *testing.T) {
 	env := newTestEnv(t)
 	now := env.TimeSource.Now()
