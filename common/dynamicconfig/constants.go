@@ -2501,7 +2501,8 @@ visibility if they were removed from the mutable state`,
 	EnableVisibilityArchivalRecordDeduplication = NewNamespaceBoolSetting(
 		"history.enableVisibilityArchivalRecordDeduplication",
 		false,
-		`EnableVisibilityArchivalRecordDeduplication enables content-aware visibility archival deduplication for S3 and GCS`,
+		`EnableVisibilityArchivalRecordDeduplication enables content-aware visibility archival deduplication for S3 and GCS.
+When enabled, the archival store must allow reading object metadata in addition to writing objects.`,
 	)
 	ArchivalProcessorMaxPollRPS = NewGlobalIntSetting(
 		"history.archivalProcessorMaxPollRPS",

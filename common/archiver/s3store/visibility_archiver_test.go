@@ -244,6 +244,18 @@ func (s *visibilityArchiverSuite) TestArchive_ContentAwareDeduplication() {
 	s.Equal(initialPutCount+12, s.fsEmulation.putCount)
 }
 
+func (s *visibilityArchiverSuite) TestUploadIfHashChangedFailsWhenMetadataCannotBeRead() {
+	s3cli := mocks.NewMockS3API(s.controller)
+	URI, err := archiver.NewURI(testBucketURI + "/test-content-aware-deduplication")
+	s.Require().NoError(err)
+	accessErr := errors.New("access denied")
+
+	s3cli.EXPECT().HeadObject(gomock.Any(), gomock.Any()).Return(nil, accessErr)
+
+	err = UploadIfHashChanged(context.Background(), s3cli, URI, "test-key", []byte("{}"), "test-hash")
+	s.Require().ErrorIs(err, accessErr)
+}
+
 func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidURI() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	URI, err := archiver.NewURI("wrongscheme://")

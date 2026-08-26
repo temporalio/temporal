@@ -173,6 +173,25 @@ func (s *clientSuite) TestUploadIfHashChangedWritesMissingObject() {
 	s.Require().NoError(err)
 }
 
+func (s *clientSuite) TestUploadIfHashChangedFailsWhenMetadataCannotBeRead() {
+	ctx := context.Background()
+	mockStorageClient := connector.NewMockGcloudStorageClient(s.controller)
+	mockBucketHandleClient := connector.NewMockBucketHandleWrapper(s.controller)
+	mockObjectHandler := connector.NewMockObjectHandleWrapper(s.controller)
+	storageWrapper, err := connector.NewClientWithParams(mockStorageClient)
+	s.Require().NoError(err)
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
+	s.Require().NoError(err)
+	accessErr := errors.New("access denied")
+
+	mockStorageClient.EXPECT().Bucket("my-bucket-cad").Return(mockBucketHandleClient)
+	mockBucketHandleClient.EXPECT().Object("temporal_archival/development/myfile.visibility").Return(mockObjectHandler)
+	mockObjectHandler.EXPECT().Attrs(ctx).Return(nil, accessErr)
+
+	err = storageWrapper.UploadIfHashChanged(ctx, URI, "myfile.visibility", []byte("{}"), "test-hash")
+	s.Require().ErrorIs(err, accessErr)
+}
+
 func (s *clientSuite) TestExist() {
 	ctx := context.Background()
 	testCases := []struct {

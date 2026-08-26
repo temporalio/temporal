@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
+	server "go.temporal.io/server/temporal"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -65,6 +66,9 @@ type (
 		numHistoryShards   int32
 
 		enableTransitionHistory bool
+		enableArchival          bool
+
+		serverOptionsByCluster map[int][]server.ServerOption
 
 		// TODO: add sdkClient and worker here and remove its creation in many tests.
 	}
@@ -127,6 +131,8 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 	testClusterFactory := testcore.NewTestClusterFactory()
 	for clusterIndex, baseName := range clusterBaseNames {
 		clusterName := baseName + "_" + suffix
+		serverOptions := append([]server.ServerOption(nil), params.AdditionalServerOptions...)
+		serverOptions = append(serverOptions, s.serverOptionsByCluster[clusterIndex]...)
 		clusterConfig := &testcore.TestClusterConfig{
 			ClusterMetadata: cluster.Config{
 				EnableGlobalNamespace:    true,
@@ -147,8 +153,8 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 			Persistence:               persistenceDefaults,
 			DynamicConfigOverrides:    s.dynamicConfigOverrides,
 			DCRedirectionPolicy:       params.DCRedirectionPolicy,
-			EnableArchival:            params.EnableArchival,
-			AdditionalServerOptions:   params.AdditionalServerOptions,
+			EnableArchival:            params.EnableArchival || s.enableArchival,
+			AdditionalServerOptions:   serverOptions,
 			EnableMetricsCapture:      true,
 			EnableHistoryTaskRecorder: params.EnableHistoryTaskRecorder,
 			EnableReplicationRecorder: params.EnableReplicationRecorder,
