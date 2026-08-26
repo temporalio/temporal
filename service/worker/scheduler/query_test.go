@@ -7,6 +7,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
@@ -262,6 +263,7 @@ func TestGetQueryFields(t *testing.T) {
 					searchattribute.NewTestMapperProvider(&searchattribute.TestMapper{}),
 					nil,
 					tc.input,
+					log.NewNoopLogger(),
 				)
 				if tc.expectedErrMsg == "" {
 					s.NoError(err)
@@ -344,6 +346,7 @@ func TestValidateVisibilityQuery(t *testing.T) {
 					nil,
 					dynamicconfig.GetBoolPropertyFn(true),
 					tc.input,
+					log.NewNoopLogger(),
 				)
 				if tc.expectedErrMsg == "" {
 					s.NoError(err)

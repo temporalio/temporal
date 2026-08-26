@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/temporalio/sqlparser"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
@@ -77,6 +78,7 @@ func TestBuildQueryParams(t *testing.T) {
 					&searchattribute.TestMapper{},
 					nil,
 					chasm.UnspecifiedArchetypeID,
+					log.NewNoopLogger(),
 				)
 				if tc.err != "" {
 					r.Error(err)

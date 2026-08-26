@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -30,6 +31,7 @@ func TestSearchAttributeInterceptor(t *testing.T) {
 		"",
 		searchattribute.TestNameTypeMap(),
 		&searchattribute.TestMapper{},
+		log.NewNoopLogger(),
 	).WithSearchAttributeInterceptor(interceptor)
 
 	_, err := c.Convert("ExecutionStatus='Running' order by StartTime")
