@@ -141,3 +141,40 @@ func TestUserTimersUntouchedBlobsOwnershipTransfer(t *testing.T) {
 	require.Nil(t, container.blobs)
 	require.Equal(t, 1, container.len())
 }
+
+func TestUserTimersReseedClearsReverseIndex(t *testing.T) {
+	container, encode := newTestUserTimers(t)
+	container.seedBlobs(map[string]*commonpb.DataBlob{"t1": encode("t1")})
+
+	// decode-all is idempotent once blobs are drained
+	require.Len(t, container.all(), 1)
+	require.Nil(t, container.blobs)
+	require.Len(t, container.all(), 1)
+
+	// reseeding must not leave stale reverse index entries behind
+	container.seedTyped(map[string]*persistencespb.TimerInfo{
+		"t2": {TimerId: "t2", StartedEventId: 10},
+	})
+	info, ok := container.getByEventID(10)
+	require.True(t, ok)
+	require.Equal(t, "t2", info.GetTimerId())
+
+	container.seedTyped(nil)
+	_, ok = container.getByEventID(10)
+	require.False(t, ok)
+	require.Equal(t, 0, container.len())
+}
+
+func TestUserTimersUpdateTaskStatusOnEncodedEntry(t *testing.T) {
+	container, encode := newTestUserTimers(t)
+	container.seedBlobs(map[string]*commonpb.DataBlob{"t1": encode("t1")})
+
+	info, ok := container.get("t1")
+	require.True(t, ok)
+	info.TaskStatus = 42
+
+	got, ok := container.get("t1")
+	require.True(t, ok)
+	require.Same(t, info, got)
+	require.EqualValues(t, 42, got.TaskStatus)
+}
