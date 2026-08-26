@@ -287,6 +287,14 @@ func TestIsolationManager_BuildReaderState_ClampsOverallMinToMemberFloors(t *tes
 	require.Equal(t, int64(5000), m.MemberResumeFloor())
 }
 
+func TestIsolationManager_MemberResumeFloor_ZeroMinimum(t *testing.T) {
+	m := newIsolationManagerWithState(2, 5, 1, 0, 5000, []restoredMember{
+		{namespaceID: "zero", cursor: 0},
+		{namespaceID: "positive", cursor: 800},
+	})
+	require.Zero(t, m.MemberResumeFloor())
+}
+
 // Misconfiguration must clamp, not strand: tierCount < 1 would exclude isolated
 // namespaces from the shared lane while running zero tier send loops.
 func TestIsolationManager_ConfigClamps(t *testing.T) {
@@ -382,7 +390,7 @@ func TestIsolationManager_ConcurrentReconcileAndAdvance(t *testing.T) {
 		LowPriorityState:      &replicationspb.ReplicationState{InclusiveLowWatermark: 1},
 	}
 	var wg sync.WaitGroup
-	for g := 0; g < 4; g++ {
+	for g := range 4 {
 		wg.Go(func() {
 			ns := fmt.Sprintf("ns-%d", g)
 			for i := int64(1); i <= 50; i++ {

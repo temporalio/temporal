@@ -393,12 +393,12 @@ func (m *isolationManager) BuildReaderState(attr *replicationspb.SyncReplication
 func (m *isolationManager) MemberResumeFloor() int64 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	floor := int64(0)
+	if len(m.members) == 0 {
+		return 0
+	}
+	floor := int64(math.MaxInt64)
 	for _, st := range m.members {
-		resume := max(st.floor(), st.acked)
-		if floor == 0 || resume < floor {
-			floor = resume
-		}
+		floor = min(floor, max(st.floor(), st.acked))
 	}
 	return floor
 }
