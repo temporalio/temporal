@@ -183,7 +183,7 @@ func (a *Activities) DeleteWorkerDeploymentVersion(ctx context.Context, args *de
 			metrics.WorkerDeploymentVersionNotFoundDuringDelete.With(a.MetricsHandler).Record(
 				1,
 				metrics.NamespaceTag(a.namespace.Name().String()),
-				metrics.WorkerDeploymentNameTag(args.DeploymentName, true),
+				metrics.WorkerDeploymentNameTag(versionObj.GetDeploymentName(), true),
 				metrics.WorkerDeploymentBuildIDTag(versionObj.GetBuildId(), true),
 			)
 			activity.GetLogger(ctx).Warn(
