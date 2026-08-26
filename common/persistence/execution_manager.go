@@ -808,6 +808,13 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot( // unexport
 		}
 		result.TimerInfos[key] = blob
 	}
+	for key, blob := range input.TimerInfoBlobs {
+		if _, ok := result.TimerInfos[key]; ok {
+			return nil, serviceerror.NewInternalf(
+				"user timer info %q present in both encoded and decoded snapshot entries", key)
+		}
+		result.TimerInfos[key] = blob
+	}
 	for key, info := range input.ChildExecutionInfos {
 		blob, err := m.serializer.ChildExecutionInfoToBlob(info)
 		if err != nil {
