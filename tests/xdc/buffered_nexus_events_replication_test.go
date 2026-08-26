@@ -31,11 +31,10 @@ type bufferedNexusCallback struct {
 	token     string
 }
 
-// TestBufferedNexusEventsReapplySharedOperationAndSkipLosingOnlyOperation covers the failure shape from
-// temporalio/temporal#10986: a valid completion is followed in the same losing
-// branch by a completion for an operation that does not exist on the winner.
-// The missing operation must be skipped without aborting the batch containing the
-// valid completion.
+// TestBufferedNexusEventsReapplySharedOperationAndSkipLosingOnlyOperation buffers completion of an
+// operation shared by both branches plus start and completion of an operation created only on the
+// losing branch. It expects all three events on the loser, only the shared completion on the winner,
+// and the losing-only operation skipped. This covers temporalio/temporal#10986.
 func (s *NexusStateReplicationSuite) TestBufferedNexusEventsReapplySharedOperationAndSkipLosingOnlyOperation() {
 	if !s.enableTransitionHistory || s.chasmEnabled {
 		s.T().Skip("this conflict-reapplication regression is specific to transition-history HSM Nexus operations")
@@ -170,6 +169,9 @@ func (s *NexusStateReplicationSuite) TestBufferedNexusEventsReapplySharedOperati
 	}, replicationWaitTime, replicationCheckInterval)
 }
 
+// TestNaturallyBufferedNexusOutcomesFlushedAndReapplied buffers failed, canceled, timed-out, and
+// cancel-request-failed outcomes for operations shared by both branches. It expects the terminal operation
+// outcomes to be reapplied to the winner and the non-cherry-pickable cancellation result to remain on the loser.
 func (s *NexusStateReplicationSuite) TestNaturallyBufferedNexusOutcomesFlushedAndReapplied() {
 	if !s.enableTransitionHistory || s.chasmEnabled {
 		s.T().Skip("this conflict-reapplication regression is specific to transition-history HSM Nexus operations")
@@ -317,6 +319,9 @@ func (s *NexusStateReplicationSuite) TestNaturallyBufferedNexusOutcomesFlushedAn
 	)
 }
 
+// TestNaturallyBufferedNexusCancelRequestCompletedFlushedAndReapplied buffers a successful Nexus
+// cancel-request result. It expects the result to be persisted on the losing branch but skipped on the
+// winner because cancellation results are not cherry-pickable.
 func (s *NexusStateReplicationSuite) TestNaturallyBufferedNexusCancelRequestCompletedFlushedAndReapplied() {
 	if !s.enableTransitionHistory || s.chasmEnabled {
 		s.T().Skip("this conflict-reapplication regression is specific to transition-history HSM Nexus operations")

@@ -49,6 +49,10 @@ type blockedReplicationTask struct {
 // task, so it cannot enter the buffer. The tests below cover every other value
 // through its production API, transfer task, timer, callback, or reapplier.
 
+// TestNaturallyBufferedInputsFlushedAndReappliedAfterFailover buffers an activity result, timer,
+// cancel request, signal, options update, pause, and unpause behind one workflow task; conflict
+// reapplication then buffers an update-admitted event on the winner. It expects external inputs and
+// the update to reach the winner while activity, timer, and pause state remain only on the losing branch.
 func (s *FunctionalClustersTestSuite) TestNaturallyBufferedInputsFlushedAndReappliedAfterFailover() {
 	if !s.enableTransitionHistory {
 		s.T().Skip("buffered event state-based replication requires transition history")
@@ -151,6 +155,9 @@ func (s *FunctionalClustersTestSuite) TestNaturallyBufferedInputsFlushedAndReapp
 	assertOnlyExpectedBufferedEventsReapplied(s.T(), finalHistory, naturallyBufferedTypes)
 }
 
+// TestNaturallyBufferedActivityOutcomesFlushedToLosingBranch buffers started, completed, failed,
+// timed-out, and canceled activity outcomes. It expects all outcomes on the losing branch and none
+// to be reapplied to the winner, apart from the winner independently producing its own timeout.
 func (s *FunctionalClustersTestSuite) TestNaturallyBufferedActivityOutcomesFlushedToLosingBranch() {
 	if !s.enableTransitionHistory {
 		s.T().Skip("buffered event state-based replication requires transition history")
@@ -276,6 +283,9 @@ func (s *FunctionalClustersTestSuite) TestNaturallyBufferedActivityOutcomesFlush
 	)
 }
 
+// TestNaturallyBufferedChildWorkflowOutcomesFlushedToLosingBranch buffers child start failure,
+// started, completed, failed, canceled, timed-out, and terminated callbacks for children created only
+// on the losing branch. It expects every callback to be persisted there and skipped on the winner.
 func (s *FunctionalClustersTestSuite) TestNaturallyBufferedChildWorkflowOutcomesFlushedToLosingBranch() {
 	if !s.enableTransitionHistory {
 		s.T().Skip("buffered event state-based replication requires transition history")
@@ -413,6 +423,9 @@ func (s *FunctionalClustersTestSuite) TestNaturallyBufferedChildWorkflowOutcomes
 	}
 }
 
+// TestNaturallyBufferedExternalWorkflowOutcomesFlushedToLosingBranch buffers successful and failed
+// signal-external and cancel-external results. It expects every result on the losing branch and none
+// on the winner because the corresponding initiated commands do not exist there.
 func (s *FunctionalClustersTestSuite) TestNaturallyBufferedExternalWorkflowOutcomesFlushedToLosingBranch() {
 	if !s.enableTransitionHistory {
 		s.T().Skip("buffered event state-based replication requires transition history")
