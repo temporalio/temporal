@@ -75,7 +75,7 @@ func TestScheduler_IdleTask_DoesNotAccumulateAcrossCompletionBurst(t *testing.T)
 	// where every occurrence is kicked off back-to-back near "now" regardless
 	// of how spread out their eventual completions are.
 	const completions = 5
-	for i := 0; i < completions; i++ {
+	for i := range completions {
 		_, _, err = chasm.UpdateComponent(engineCtx, rootRef,
 			func(s *scheduler.Scheduler, ctx chasm.MutableContext, _ struct{}) (struct{}, error) {
 				invoker := s.Invoker.Get(ctx)
@@ -98,7 +98,7 @@ func TestScheduler_IdleTask_DoesNotAccumulateAcrossCompletionBurst(t *testing.T)
 	// durations. Each call is its own transaction, matching separate
 	// completion callbacks arriving independently.
 	var idleCloseTime time.Time
-	for i := 0; i < completions; i++ {
+	for i := range completions {
 		_, _, err = chasm.UpdateComponent(engineCtx, rootRef,
 			func(s *scheduler.Scheduler, ctx chasm.MutableContext, _ struct{}) (struct{}, error) {
 				return struct{}{}, s.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
@@ -124,7 +124,7 @@ func TestScheduler_IdleTask_DoesNotAccumulateAcrossCompletionBurst(t *testing.T)
 	// CloseTimes differ, but StartTime - what getLastEventTime actually reads
 	// - doesn't), so without deduplication each of the `completions` calls
 	// above appends its own SchedulerIdleTask. There should only ever be one.
-	count, err := engine.PureTaskCount(rootRef, idleCloseTime, reflect.TypeOf(&schedulerpb.SchedulerIdleTask{}))
+	count, err := engine.PureTaskCount(rootRef, idleCloseTime, reflect.TypeFor[*schedulerpb.SchedulerIdleTask]())
 	require.NoError(t, err)
 	require.Equal(t, 1, count,
 		"expected exactly one idle pure task after a completion burst, found %d", count)
