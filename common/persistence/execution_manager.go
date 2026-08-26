@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -482,7 +483,7 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 		// try to utilize resp as much as possible, for RebuildMutableState API
 		return nil, respErr
 	}
-	state, err := m.toWorkflowMutableState(response.State)
+	state, timerInfoBlobs, err := m.toWorkflowMutableStateWithEncodedTimerInfos(response.State)
 	if err != nil {
 		return nil, err
 	}
@@ -496,6 +497,7 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 		State:             state,
 		DBRecordVersion:   response.DBRecordVersion,
 		MutableStateStats: *statusOfInternalWorkflow(response.State, state, nil),
+		TimerInfoBlobs:    timerInfoBlobs,
 	}
 	return newResponse, respErr
 }
@@ -1140,6 +1142,21 @@ func (m *executionManagerImpl) trimHistoryNode(
 }
 
 func (m *executionManagerImpl) toWorkflowMutableState(internState *InternalWorkflowMutableState) (*persistencespb.WorkflowMutableState, error) {
+	state, _, err := m.toWorkflowMutableStateInternal(internState, true)
+	return state, err
+}
+
+// toWorkflowMutableStateWithEncodedTimerInfos leaves user timer entries encoded.
+// Entries that were not decoded are returned so they can be passed back to
+// persistence without an encode/decode round trip.
+func (m *executionManagerImpl) toWorkflowMutableStateWithEncodedTimerInfos(internState *InternalWorkflowMutableState) (*persistencespb.WorkflowMutableState, map[string]*commonpb.DataBlob, error) {
+	return m.toWorkflowMutableStateInternal(internState, false)
+}
+
+func (m *executionManagerImpl) toWorkflowMutableStateInternal(
+	internState *InternalWorkflowMutableState,
+	decodeTimerInfos bool,
+) (*persistencespb.WorkflowMutableState, map[string]*commonpb.DataBlob, error) {
 	state := &persistencespb.WorkflowMutableState{
 		ActivityInfos:       make(map[int64]*persistencespb.ActivityInfo),
 		TimerInfos:          make(map[string]*persistencespb.TimerInfo),
@@ -1151,41 +1168,36 @@ func (m *executionManagerImpl) toWorkflowMutableState(internState *InternalWorkf
 		NextEventId:         internState.NextEventID,
 		BufferedEvents:      make([]*historypb.HistoryEvent, len(internState.BufferedEvents)),
 	}
-	for key, blob := range internState.ActivityInfos {
-		info, err := m.serializer.ActivityInfoFromBlob(blob)
-		if err != nil {
-			return nil, err
-		}
-		state.ActivityInfos[key] = info
+	activityInfos, err := decodeBlobMap(internState.ActivityInfos, m.serializer.ActivityInfoFromBlob)
+	if err != nil {
+		return nil, nil, err
 	}
-	for key, blob := range internState.TimerInfos {
-		info, err := m.serializer.TimerInfoFromBlob(blob)
+	state.ActivityInfos = activityInfos
+	var untouchedTimerInfoBlobs map[string]*commonpb.DataBlob
+	if !decodeTimerInfos {
+		untouchedTimerInfoBlobs = internState.TimerInfos
+	} else {
+		timerInfos, err := decodeBlobMap(internState.TimerInfos, m.serializer.TimerInfoFromBlob)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		state.TimerInfos[key] = info
+		state.TimerInfos = timerInfos
 	}
-	for key, blob := range internState.ChildExecutionInfos {
-		info, err := m.serializer.ChildExecutionInfoFromBlob(blob)
-		if err != nil {
-			return nil, err
-		}
-		state.ChildExecutionInfos[key] = info
+	childExecutionInfos, err := decodeBlobMap(internState.ChildExecutionInfos, m.serializer.ChildExecutionInfoFromBlob)
+	if err != nil {
+		return nil, nil, err
 	}
-	for key, blob := range internState.RequestCancelInfos {
-		info, err := m.serializer.RequestCancelInfoFromBlob(blob)
-		if err != nil {
-			return nil, err
-		}
-		state.RequestCancelInfos[key] = info
+	state.ChildExecutionInfos = childExecutionInfos
+	requestCancelInfos, err := decodeBlobMap(internState.RequestCancelInfos, m.serializer.RequestCancelInfoFromBlob)
+	if err != nil {
+		return nil, nil, err
 	}
-	for key, blob := range internState.SignalInfos {
-		info, err := m.serializer.SignalInfoFromBlob(blob)
-		if err != nil {
-			return nil, err
-		}
-		state.SignalInfos[key] = info
+	state.RequestCancelInfos = requestCancelInfos
+	signalInfos, err := decodeBlobMap(internState.SignalInfos, m.serializer.SignalInfoFromBlob)
+	if err != nil {
+		return nil, nil, err
 	}
+	state.SignalInfos = signalInfos
 	for key, internal := range internState.ChasmNodes {
 		var node *persistencespb.ChasmNode
 		var err error
@@ -1196,15 +1208,14 @@ func (m *executionManagerImpl) toWorkflowMutableState(internState *InternalWorkf
 			node, err = m.serializer.ChasmNodeFromBlobs(internal.Metadata, internal.Data)
 		}
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		state.ChasmNodes[key] = node
 	}
-	var err error
 	state.ExecutionInfo, err = m.serializer.WorkflowExecutionInfoFromBlob(internState.ExecutionInfo)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if state.ExecutionInfo.AutoResetPoints == nil {
 		// TODO: check if we need this?
@@ -1212,20 +1223,35 @@ func (m *executionManagerImpl) toWorkflowMutableState(internState *InternalWorkf
 	}
 	state.ExecutionState, err = m.serializer.WorkflowExecutionStateFromBlob(internState.ExecutionState)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	state.BufferedEvents, err = m.DeserializeBufferedEvents(internState.BufferedEvents)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if internState.Checksum != nil {
 		state.Checksum, err = m.serializer.ChecksumFromBlob(internState.Checksum)
 	}
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return state, nil
+	return state, untouchedTimerInfoBlobs, nil
+}
+
+func decodeBlobMap[K comparable, V proto.Message](
+	blobs map[K]*commonpb.DataBlob,
+	fromBlob func(*commonpb.DataBlob) (V, error),
+) (map[K]V, error) {
+	infos := make(map[K]V, len(blobs))
+	for key, blob := range blobs {
+		info, err := fromBlob(blob)
+		if err != nil {
+			return nil, err
+		}
+		infos[key] = info
+	}
+	return infos, nil
 }
 
 func (m *executionManagerImpl) assertAndConvertArchetypeID(
