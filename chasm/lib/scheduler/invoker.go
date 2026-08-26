@@ -250,6 +250,11 @@ func (i *Invoker) recordExecuteResult(
 			retriedStarts))
 
 	i.addTasks(ctx)
+
+	if newlyStarted > 0 {
+		i.Scheduler.Get(ctx).Generator.Get(ctx).Generate(ctx)
+	}
+
 	return newlyStarted, droppedDuplicates, latestStartTime, startOnlyActions
 }
 

@@ -326,6 +326,7 @@ func TestGeneratorTask_IdleTask_SkipEmitsMetric(t *testing.T) {
 // one must not survive alongside it.
 func TestGeneratorTask_IdleTask_ReArmedWhenDeadlineAdvances(t *testing.T) {
 	env := newTestEnv(t, withSchedule(expiredSchedule(time.Now())))
+	env.AllowStuck("test commits a direct state mutation before running the generator that re-arms the idle task")
 	handler := newGeneratorHandler(env)
 
 	runGeneratorTick(t, env, handler)
@@ -352,6 +353,7 @@ func TestGeneratorTask_IdleTask_ReArmedWhenDeadlineAdvances(t *testing.T) {
 // where a bad skip guard would strand a schedule open forever.
 func TestGeneratorTask_IdleTask_ReArmedAfterPauseUnpause(t *testing.T) {
 	env := newTestEnv(t, withSchedule(expiredSchedule(time.Now())))
+	env.AllowStuck("test commits direct pause mutations before running the generator that reconciles idle tasks")
 	handler := newGeneratorHandler(env)
 
 	runGeneratorTick(t, env, handler)
