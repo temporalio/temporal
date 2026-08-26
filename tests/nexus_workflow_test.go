@@ -96,6 +96,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation(chasmEnabled bool
 			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test"}, nil
 		},
 		OnCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
+			if options.Header.Get(nexusrpc.HeaderTemporalNexusFailureSupport) != "true" {
+				return errors.New("expected Temporal failure response capability header")
+			}
 			if !firstCancelSeen {
 				// Fail cancel request once to test NexusOperationCancelRequestFailed event is recorded and request is retried.
 				firstCancelSeen = true
@@ -270,102 +273,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation(chasmEnabled bool
 	})
 	s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED)
 	s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED)
-}
-
-func (s *NexusWorkflowTestSuite) TestNexusOperationCancelationEnablesTemporalFailureCapability(chasmEnabled bool) {
-	env := s.newTestEnv(chasmEnabled)
-	ctx := s.Context()
-	workflowTaskQueue := testcore.RandomizeStr(s.T().Name() + "-workflow")
-	nexusTaskQueue := testcore.RandomizeStr(s.T().Name() + "-nexus")
-	// A worker endpoint exposes the server-generated Nexus requests through PollNexusTaskQueue so the test can inspect
-	// the exact capabilities delivered to an SDK worker.
-	endpoint := env.createNexusEndpoint(ctx, s.T(), testcore.RandomizedNexusEndpoint(s.T().Name()), nexusTaskQueue)
-
-	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
-		TaskQueue: workflowTaskQueue,
-	}, "workflow")
-	s.Require().NoError(err)
-
-	pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: env.Namespace().String(),
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: workflowTaskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
-		Identity: "test",
-	})
-	s.Require().NoError(err)
-
-	// Complete the start request asynchronously so the operation remains available for cancellation.
-	startPoller := env.nexusTaskPoller(ctx, s.T(), nexusTaskQueue, func(_ *testing.T, task *workflowservice.PollNexusTaskQueueResponse) (*nexusTaskResponse, error) {
-		if task.Request.GetStartOperation() == nil {
-			return nil, errors.New("expected start operation request")
-		}
-		return &nexusTaskResponse{
-			StartResult: &nexus.HandlerStartOperationResultAsync{OperationToken: "test"},
-		}, nil
-	})
-	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Identity:  "test",
-		TaskToken: pollResp.TaskToken,
-		Commands: []*commandpb.Command{
-			{
-				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
-				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
-					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
-						Endpoint:  endpoint.Spec.Name,
-						Service:   "test-service",
-						Operation: "test-operation",
-						Input:     testcore.MustToPayload(s.T(), "input"),
-					},
-				},
-			},
-		},
-	})
-	s.Require().NoError(err)
-	s.Require().NoError(await.Rcv(s.T(), startPoller))
-
-	pollResp, err = env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: env.Namespace().String(),
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: workflowTaskQueue,
-			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-		},
-		Identity: "test",
-	})
-	s.Require().NoError(err)
-	s.RequireHistoryEvent(pollResp.History.Events, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
-	scheduledEvent := s.RequireHistoryEvent(pollResp.History.Events, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED)
-
-	// Inspect the raw worker task because this capability controls how the SDK serializes a cancel handler failure.
-	cancelPoller := env.nexusTaskPoller(ctx, s.T(), nexusTaskQueue, func(_ *testing.T, task *workflowservice.PollNexusTaskQueueResponse) (*nexusTaskResponse, error) {
-		if task.Request.GetCancelOperation() == nil {
-			return nil, errors.New("expected cancel operation request")
-		}
-		if !task.Request.GetCapabilities().GetTemporalFailureResponses() {
-			return nil, errors.New("expected Temporal failure responses capability")
-		}
-		return &nexusTaskResponse{CancelResult: &struct{}{}}, nil
-	})
-	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Identity:  "test",
-		TaskToken: pollResp.TaskToken,
-		Commands: []*commandpb.Command{
-			{
-				CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION,
-				Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{
-					RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{
-						ScheduledEventId: scheduledEvent.EventId,
-					},
-				},
-			},
-		},
-	})
-	s.Require().NoError(err)
-	s.Require().NoError(await.Rcv(s.T(), cancelPoller))
-
-	err = env.SdkClient().TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "test")
-	s.Require().NoError(err)
 }
 
 // TestNexusOperationCancellationCrossTree verifies that a RequestCancelNexusOperation command is routed to the tree
