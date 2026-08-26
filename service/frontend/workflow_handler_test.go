@@ -4696,7 +4696,8 @@ func (s *WorkflowHandlerSuite) Test_DeleteWorkflowExecution() {
 
 	// History call failed.
 	s.mockResource.HistoryClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, errors.New("random error"))
-	s.mockResource.NamespaceCache.EXPECT().GetNamespaceID(namespace.Name("test-namespace")).Return(namespace.ID("test-namespace-id"), nil)
+	s.mockResource.NamespaceCache.EXPECT().GetNamespace(namespace.Name("test-namespace")).
+		Return(s.localNamespaceEntry("test-namespace", "test-namespace-id"), nil)
 	resp, err := wh.DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
 		Namespace: "test-namespace",
 		WorkflowExecution: &commonpb.WorkflowExecution{
@@ -4710,7 +4711,8 @@ func (s *WorkflowHandlerSuite) Test_DeleteWorkflowExecution() {
 
 	// Success case.
 	s.mockResource.HistoryClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(&historyservice.DeleteWorkflowExecutionResponse{}, nil)
-	s.mockResource.NamespaceCache.EXPECT().GetNamespaceID(namespace.Name("test-namespace")).Return(namespace.ID("test-namespace-id"), nil)
+	s.mockResource.NamespaceCache.EXPECT().GetNamespace(namespace.Name("test-namespace")).
+		Return(s.localNamespaceEntry("test-namespace", "test-namespace-id"), nil)
 	resp, err = wh.DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
 		Namespace: "test-namespace",
 		WorkflowExecution: &commonpb.WorkflowExecution{
@@ -4720,6 +4722,69 @@ func (s *WorkflowHandlerSuite) Test_DeleteWorkflowExecution() {
 	})
 	s.NoError(err)
 	s.NotNil(resp)
+}
+
+// A deletion is only replicated when it happens on the active cluster, so a request that lands on a
+// passive cluster (XDC redirection disabled) must be rejected instead of deleting the local copy only.
+func (s *WorkflowHandlerSuite) Test_DeleteWorkflowExecution_PassiveCluster() {
+	wh := s.getWorkflowHandler(s.newConfig())
+
+	s.mockResource.NamespaceCache.EXPECT().GetNamespace(namespace.Name("test-namespace")).
+		Return(s.globalNamespaceEntry("test-namespace", "test-namespace-id", cluster.TestAlternativeClusterName), nil)
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	// No DeleteWorkflowExecution call is expected on the history client.
+
+	resp, err := wh.DeleteWorkflowExecution(context.Background(), &workflowservice.DeleteWorkflowExecutionRequest{
+		Namespace: "test-namespace",
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "test-workflow-id",
+		},
+	})
+	s.Nil(resp)
+	var notActiveErr *serviceerror.NamespaceNotActive
+	s.ErrorAs(err, &notActiveErr)
+}
+
+func (s *WorkflowHandlerSuite) Test_DeleteWorkflowExecution_ActiveCluster() {
+	wh := s.getWorkflowHandler(s.newConfig())
+
+	s.mockResource.NamespaceCache.EXPECT().GetNamespace(namespace.Name("test-namespace")).
+		Return(s.globalNamespaceEntry("test-namespace", "test-namespace-id", cluster.TestCurrentClusterName), nil)
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockResource.HistoryClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&historyservice.DeleteWorkflowExecutionResponse{}, nil)
+
+	resp, err := wh.DeleteWorkflowExecution(context.Background(), &workflowservice.DeleteWorkflowExecutionRequest{
+		Namespace: "test-namespace",
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "test-workflow-id",
+		},
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+}
+
+func (s *WorkflowHandlerSuite) localNamespaceEntry(nsName string, nsID string) *namespace.Namespace {
+	return namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: nsID, Name: nsName},
+		nil,
+		cluster.TestCurrentClusterName,
+	)
+}
+
+func (s *WorkflowHandlerSuite) globalNamespaceEntry(nsName string, nsID string, activeCluster string) *namespace.Namespace {
+	return namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: nsID, Name: nsName},
+		nil,
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: activeCluster,
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			},
+		},
+		cluster.TestCurrentClusterInitialFailoverVersion,
+	)
 }
 
 func (s *WorkflowHandlerSuite) TestExecuteMultiOperation() {

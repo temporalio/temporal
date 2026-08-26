@@ -366,6 +366,8 @@ func (s *scheduler) run() error {
 			(s.tweakables.MigrateWithRunningWorkflows || len(s.Info.RunningWorkflows) == 0) {
 			s.State.PendingMigration = true
 		}
+		// CHASM migration markers are only safe to write at or after version TriggerImmediatelyTimestamp.
+		// A clamped run defers migration without dropping it: PendingMigration stays set, and the migration runs once the ceiling is lifted.
 		if s.State.PendingMigration && !s.hasMinVersion(TriggerImmediatelyTimestamp) {
 			s.logger.Debug("deferring schedule migration to CHASM: recorded version is clamped below migration support")
 		} else if s.State.PendingMigration {
