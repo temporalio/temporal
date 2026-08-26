@@ -33,6 +33,13 @@ func (a *Activity) baseMetricsHandler(ctx chasm.Context, operation string) metri
 	return ctx.MetricsHandler().WithTags(metrics.OperationTag(operation))
 }
 
+func operatorCommandMetricsHandler(ctx chasm.Context) metrics.Handler {
+	return ctx.MetricsHandler().WithTags(metrics.ActivityOperatorCommandTags(
+		ctx.NamespaceEntry().Name().String(),
+		"id",
+	)...)
+}
+
 // enrichedMetricsHandler adds standard activity tags in addition to the operation tag.
 func (a *Activity) enrichedMetricsHandler(ctx chasm.Context, operation string) metrics.Handler {
 	namespaceName := ctx.NamespaceEntry().Name()

@@ -107,20 +107,21 @@ func (s *activityParityTestSuite) TestScheduleToStartMetric() {
 
 func (s *activityParityTestSuite) TestMetrics() {
 	type activityMetric struct {
-		name                 string
-		compared             bool
-		counter              bool
-		baseHandler          bool
-		legacyWFAHandler     bool
-		workerDeploymentTags bool
-		recordingTagKeys     []string
+		name                   string
+		compared               bool
+		counter                bool
+		baseHandler            bool
+		operatorCommandHandler bool
+		workerDeploymentTags   bool
+		recordingTagKeys       []string
 	}
 	type scenario struct {
-		name    string
-		trace   []model.Event
-		cfg     activityConfig
-		saaOnly bool
-		anchor  string
+		name           string
+		trace          []model.Event
+		cfg            activityConfig
+		saaOnly        bool
+		anchor         string
+		requiredMetric string
 	}
 	type recordings map[string][]*metricstest.CapturedRecording
 
@@ -137,7 +138,7 @@ func (s *activityParityTestSuite) TestMetrics() {
 		"worker_build_id",
 		"worker_deployment_name",
 	}
-	legacyWFATagKeys := []string{
+	operatorCommandTagKeys := []string{
 		"activity_targeting_method",
 		"namespace",
 		"service_name",
@@ -152,10 +153,10 @@ func (s *activityParityTestSuite) TestMetrics() {
 		{name: metrics.ActivityTaskTimeout.Name(), compared: true, counter: true, workerDeploymentTags: true, recordingTagKeys: []string{"timeout_type"}},
 		{name: metrics.ActivityStartToCloseLatency.Name(), compared: true, workerDeploymentTags: true},
 		{name: metrics.ActivityScheduleToCloseLatency.Name(), compared: true, workerDeploymentTags: true},
-		{name: metrics.ActivityPause.Name(), compared: true, counter: true, legacyWFAHandler: true},
-		{name: metrics.ActivityUnpause.Name(), compared: true, counter: true, legacyWFAHandler: true},
-		{name: metrics.ActivityReset.Name(), compared: true, counter: true, legacyWFAHandler: true},
-		{name: metrics.ActivityUpdateOptions.Name(), compared: true, counter: true, legacyWFAHandler: true},
+		{name: metrics.ActivityPause.Name(), compared: true, counter: true, operatorCommandHandler: true},
+		{name: metrics.ActivityUnpause.Name(), compared: true, counter: true, operatorCommandHandler: true},
+		{name: metrics.ActivityReset.Name(), compared: true, counter: true, operatorCommandHandler: true},
+		{name: metrics.ActivityUpdateOptions.Name(), compared: true, counter: true, operatorCommandHandler: true},
 		{name: metrics.ActivityHeartbeatCount.Name(), compared: true, counter: true, baseHandler: true},
 		{name: metrics.ActivityPayloadSize.Name(), compared: true, counter: true, baseHandler: true},
 	}
@@ -168,10 +169,10 @@ func (s *activityParityTestSuite) TestMetrics() {
 		{name: "RetryableTaskFailure", trace: []model.Event{model.Poll, model.FailRetryably}, cfg: activityConfig{MaxAttempts: 2}},
 		{name: "RetryableTaskFailureWithHeartbeatDetails", trace: []model.Event{model.Poll, {Type: model.RespondFailedType, Failure: &model.Failure{Retryable: true}, HasHeartbeatDetails: true}}, cfg: activityConfig{MaxAttempts: 2}},
 		{name: "Heartbeat", trace: []model.Event{model.Poll, model.Heartbeat}, cfg: activityConfig{MaxAttempts: 1}},
-		{name: "Pause", trace: []model.Event{model.Poll, model.Pause}, cfg: activityConfig{MaxAttempts: 1}},
-		{name: "Unpause", trace: []model.Event{model.Poll, model.Pause, model.Unpause}, cfg: activityConfig{MaxAttempts: 1}},
-		{name: "Reset", trace: []model.Event{model.Poll, model.Reset}, cfg: activityConfig{MaxAttempts: 1}},
-		{name: "UpdateOptions", trace: []model.Event{model.Poll, model.UpdateOptions}, cfg: activityConfig{MaxAttempts: 1}},
+		{name: "Pause", trace: []model.Event{model.Poll, model.Pause}, cfg: activityConfig{MaxAttempts: 1}, requiredMetric: metrics.ActivityPause.Name()},
+		{name: "Unpause", trace: []model.Event{model.Poll, model.Pause, model.Unpause}, cfg: activityConfig{MaxAttempts: 1}, requiredMetric: metrics.ActivityUnpause.Name()},
+		{name: "Reset", trace: []model.Event{model.Poll, model.Reset}, cfg: activityConfig{MaxAttempts: 1}, requiredMetric: metrics.ActivityReset.Name()},
+		{name: "UpdateOptions", trace: []model.Event{model.Poll, model.UpdateOptions}, cfg: activityConfig{MaxAttempts: 1}, requiredMetric: metrics.ActivityUpdateOptions.Name()},
 		{name: "Terminate", trace: []model.Event{model.Poll, model.Terminate}, cfg: activityConfig{MaxAttempts: 1}, saaOnly: true},
 	}
 	expectedTimeoutType := func(trace []model.Event) string {
@@ -227,6 +228,18 @@ func (s *activityParityTestSuite) TestMetrics() {
 		sort.Strings(keys)
 		return keys
 	}
+	assertOperatorCommandMetric := func(
+		t *testing.T,
+		implementation string,
+		recs []*metricstest.CapturedRecording,
+	) {
+		require.Equal(t, operatorCommandTagKeys, seriesTagKeys(recs),
+			"%s must emit operator-command metrics with the shared tag keys", implementation)
+		for _, rec := range recs {
+			require.Equal(t, "id", rec.Tags["activity_targeting_method"],
+				"%s must target the activity by ID", implementation)
+		}
+	}
 	metricSeries := func(
 		t *testing.T,
 		implementation string,
@@ -264,6 +277,9 @@ func (s *activityParityTestSuite) TestMetrics() {
 		s.Run(sc.name, func(s *activityParityTestSuite) {
 			t := s.T()
 			saa, saaNS := captureMetrics(t, sc, true)
+			if sc.requiredMetric != "" {
+				require.NotEmpty(t, saa[sc.requiredMetric], "SAA must emit %s", sc.requiredMetric)
+			}
 			checkTags := func(implementation string, emitted recordings, namespace string) {
 				for name, recs := range emitted {
 					for _, rec := range recs {
@@ -289,6 +305,9 @@ func (s *activityParityTestSuite) TestMetrics() {
 			}
 
 			wfa, wfaNS := captureMetrics(t, sc, false)
+			if sc.requiredMetric != "" {
+				require.NotEmpty(t, wfa[sc.requiredMetric], "WFA must emit %s", sc.requiredMetric)
+			}
 			checkTags("WFA", wfa, wfaNS)
 			for _, metric := range catalog {
 				if !metric.compared {
@@ -299,15 +318,9 @@ func (s *activityParityTestSuite) TestMetrics() {
 					wfaTagKeys := seriesTagKeys(wfa[metric.name])
 					saaTagKeys := seriesTagKeys(saa[metric.name])
 					comparisonTagKeys := wfaTagKeys
-					if metric.legacyWFAHandler && len(wfa[metric.name]) > 0 {
-						require.Equal(t, legacyWFATagKeys, wfaTagKeys,
-							"WFA currently emits this metric from its legacy activity handler")
-						for _, rec := range wfa[metric.name] {
-							require.Equal(t, "id", rec.Tags["activity_targeting_method"])
-						}
-						require.Equal(t, perActivityTagKeys, saaTagKeys,
-							"SAA must use the standard per-activity tag keys")
-						comparisonTagKeys = []string{"namespace", "service_name"}
+					if metric.operatorCommandHandler && len(wfa[metric.name]) > 0 {
+						assertOperatorCommandMetric(t, "WFA", wfa[metric.name])
+						assertOperatorCommandMetric(t, "SAA", saa[metric.name])
 					} else {
 						if !metric.baseHandler && len(wfa[metric.name]) > 0 {
 							expectedTagKeys := append([]string{}, perActivityTagKeys...)

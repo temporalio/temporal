@@ -227,9 +227,17 @@ func ActivityTypeTag(value string) Tag {
 	return Tag{Key: activityType, Value: value}
 }
 
-// ActivityTargetingMethodTag returns a tag indicating how the activity was targeted: "id" or "type".
+// ActivityTargetingMethodTag identifies how activities were selected.
 func ActivityTargetingMethodTag(value string) Tag {
 	return Tag{Key: activityTargetingMethod, Value: value}
+}
+
+// ActivityOperatorCommandTags returns tags shared by workflow and standalone activity operator commands.
+func ActivityOperatorCommandTags(namespaceName string, targetingMethod string) []Tag {
+	return []Tag{
+		NamespaceTag(namespaceName),
+		ActivityTargetingMethodTag(targetingMethod),
+	}
 }
 
 // CommandTypeTag returns a new command type tag.
