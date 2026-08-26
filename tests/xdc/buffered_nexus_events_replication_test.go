@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/components/nexusoperations"
@@ -169,6 +170,230 @@ func (s *NexusStateReplicationSuite) TestBufferedNexusEventsReapplySharedOperati
 	}, replicationWaitTime, replicationCheckInterval)
 }
 
+func (s *NexusStateReplicationSuite) TestNaturallyBufferedNexusOutcomesFlushedAndReapplied() {
+	if !s.enableTransitionHistory || s.chasmEnabled {
+		s.T().Skip("this conflict-reapplication regression is specific to transition-history HSM Nexus operations")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	ns := s.createGlobalNamespace()
+	namespace, err := s.clusters[0].FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{Namespace: ns})
+	s.Require().NoError(err)
+
+	callbacks := make(chan bufferedNexusCallback, 4)
+	allowCancellationResponse := make(chan struct{})
+	handler := nexustest.Handler{
+		OnStartOperation: func(_ context.Context, _, operation string, _ *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			callbacks <- bufferedNexusCallback{
+				operation: operation,
+				url:       options.CallbackURL,
+				token:     options.CallbackHeader.Get(commonnexus.CallbackTokenHeader),
+			}
+			return &nexus.HandlerStartOperationResultAsync{OperationToken: operation}, nil
+		},
+		OnCancelOperation: func(_ context.Context, _, operation, _ string, _ nexus.CancelOperationOptions) error {
+			<-allowCancellationResponse
+			if operation == "cancel-failed" {
+				return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "expected cancellation failure")
+			}
+			return nil
+		},
+	}
+	endpointName := s.createBufferedNexusEndpoint(ctx, handler)
+
+	workflowID := "buffered-nexus-outcomes-" + uuid.NewString()
+	taskQueue := &taskqueuepb.TaskQueue{Name: workflowID, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	execution := s.startBufferedEventsWorkflow(ctx, ns, workflowID, taskQueue)
+	firstTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, taskQueue)
+	operations := []string{"failed", "canceled", "timed-out", "cancel-failed"}
+	commands := make([]*commandpb.Command, 0, len(operations))
+	for _, operation := range operations {
+		timeout := time.Minute
+		if operation == "timed-out" {
+			timeout = 5 * time.Second
+		}
+		commands = append(commands, scheduleBufferedNexusOperationCommandWithTimeout(endpointName, operation, timeout))
+	}
+	_, err = s.clusters[0].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		TaskToken: firstTask.TaskToken,
+		Identity:  "buffered-nexus-outcomes-test",
+		Commands:  commands,
+	})
+	s.Require().NoError(err)
+
+	operationCallbacks := make(map[string]bufferedNexusCallback, len(operations))
+	for range operations {
+		callback := receiveAnyBufferedNexusCallback(ctx, s.T(), callbacks)
+		operationCallbacks[callback.operation] = callback
+	}
+	await.Require(ctx, s.T(), func(t *await.T) {
+		history := s.getWorkflowHistory(t.Context(), t.AssertionT(), 0, ns, execution)
+		for _, operation := range operations {
+			scheduledID := findNexusScheduledEventID(history, operation)
+			require.Positive(t, scheduledID)
+			require.True(t, hasNexusEventForScheduledID(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, scheduledID))
+		}
+	}, replicationWaitTime, replicationCheckInterval)
+	s.waitForClusterSynced()
+
+	triggerTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, taskQueue)
+	history := triggerTask.History.Events
+	_, err = s.clusters[0].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		TaskToken:                  triggerTask.TaskToken,
+		Identity:                   "buffered-nexus-outcomes-test",
+		ForceCreateNewWorkflowTask: true,
+		Commands: []*commandpb.Command{
+			requestCancelNexusOperationCommand(findNexusScheduledEventID(history, "cancel-failed")),
+		},
+	})
+	s.Require().NoError(err)
+	heldTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, taskQueue)
+	s.Require().NotEmpty(heldTask.TaskToken)
+	close(allowCancellationResponse)
+
+	s.failNexusOperation(ctx, operationCallbacks["failed"])
+	s.cancelNexusOperation(ctx, operationCallbacks["canceled"].url, operationCallbacks["canceled"].token)
+	expectedTypes := []enumspb.EventType{
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED,
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED,
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT,
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED,
+	}
+	s.assertBufferedEventTypesPresent(ctx, 0, ns, execution, expectedTypes)
+
+	replicationToOldActive := s.blockReplicationForWorkflow(0, workflowID)
+	replicationToNewActive := s.blockReplicationForWorkflow(1, workflowID)
+	losingHistory := s.finishNaturallyBufferedConflict(
+		ctx,
+		ns,
+		namespace.NamespaceInfo.Id,
+		execution,
+		replicationToOldActive,
+		replicationToNewActive,
+		expectedTypes,
+		"nexus-outcomes-winner-signal",
+	)
+	for _, eventType := range expectedTypes {
+		s.Require().NotNil(findBufferedEventsHistoryEvent(losingHistory, eventType))
+	}
+}
+
+func (s *NexusStateReplicationSuite) TestNaturallyBufferedNexusCancelRequestCompletedFlushedAndReapplied() {
+	if !s.enableTransitionHistory || s.chasmEnabled {
+		s.T().Skip("this conflict-reapplication regression is specific to transition-history HSM Nexus operations")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+	defer cancel()
+	ns := s.createGlobalNamespace()
+	namespace, err := s.clusters[0].FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{Namespace: ns})
+	s.Require().NoError(err)
+
+	started := make(chan struct{}, 1)
+	canceled := make(chan struct{}, 1)
+	allowCancellationResponse := make(chan struct{})
+	handler := nexustest.Handler{
+		OnStartOperation: func(_ context.Context, _, operation string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			started <- struct{}{}
+			return &nexus.HandlerStartOperationResultAsync{OperationToken: operation}, nil
+		},
+		OnCancelOperation: func(_ context.Context, _, _, _ string, _ nexus.CancelOperationOptions) error {
+			canceled <- struct{}{}
+			<-allowCancellationResponse
+			return nil
+		},
+	}
+	endpointName := s.createBufferedNexusEndpoint(ctx, handler)
+	workflowID := "buffered-nexus-cancel-completed-" + uuid.NewString()
+	taskQueue := &taskqueuepb.TaskQueue{Name: workflowID, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	execution := s.startBufferedEventsWorkflow(ctx, ns, workflowID, taskQueue)
+	firstTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, taskQueue)
+	_, err = s.clusters[0].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		TaskToken: firstTask.TaskToken,
+		Identity:  "buffered-nexus-cancel-completed-test",
+		Commands:  []*commandpb.Command{scheduleBufferedNexusOperationCommand(endpointName, "cancel-completed")},
+	})
+	s.Require().NoError(err)
+	select {
+	case <-started:
+	case <-ctx.Done():
+		s.FailNow("timed out waiting for Nexus operation to start")
+	}
+	triggerTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, taskQueue)
+	scheduledID := findNexusScheduledEventID(triggerTask.History.Events, "cancel-completed")
+	s.Require().Positive(scheduledID)
+	s.waitForClusterSynced()
+	_, err = s.clusters[0].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		TaskToken:                  triggerTask.TaskToken,
+		Identity:                   "buffered-nexus-cancel-completed-test",
+		ForceCreateNewWorkflowTask: true,
+		Commands:                   []*commandpb.Command{requestCancelNexusOperationCommand(scheduledID)},
+	})
+	s.Require().NoError(err)
+	heldTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, taskQueue)
+	s.Require().NotEmpty(heldTask.TaskToken)
+	close(allowCancellationResponse)
+	select {
+	case <-canceled:
+	case <-ctx.Done():
+		s.FailNow("timed out waiting for Nexus cancellation handler")
+	}
+	expectedTypes := []enumspb.EventType{enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED}
+	s.assertBufferedEventTypesPresent(ctx, 0, ns, execution, expectedTypes)
+
+	replicationToOldActive := s.blockReplicationForWorkflow(0, workflowID)
+	replicationToNewActive := s.blockReplicationForWorkflow(1, workflowID)
+	s.finishNaturallyBufferedConflict(
+		ctx,
+		ns,
+		namespace.NamespaceInfo.Id,
+		execution,
+		replicationToOldActive,
+		replicationToNewActive,
+		expectedTypes,
+		"nexus-cancel-completed-winner-signal",
+	)
+}
+
+func (s *NexusStateReplicationSuite) createBufferedNexusEndpoint(ctx context.Context, handler nexustest.Handler) string {
+	s.T().Helper()
+	listenAddress := nexustest.AllocListenAddress()
+	nexustest.NewNexusServer(s.T(), listenAddress, handler)
+	for _, cluster := range s.clusters {
+		cluster.OverrideDynamicConfig(
+			s.T(),
+			nexusoperations.CallbackURLTemplate,
+			"http://"+s.clusters[0].Host().FrontendHTTPAddress()+"/namespaces/{{.NamespaceName}}/nexus/callback",
+		)
+	}
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
+	for _, cluster := range s.clusters {
+		_, err := cluster.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
+			Spec: &nexuspb.EndpointSpec{
+				Name: endpointName,
+				Target: &nexuspb.EndpointTarget{Variant: &nexuspb.EndpointTarget_External_{
+					External: &nexuspb.EndpointTarget_External{Url: "http://" + listenAddress},
+				}},
+			},
+		})
+		s.Require().NoError(err)
+	}
+	return endpointName
+}
+
+func (s *NexusStateReplicationSuite) failNexusOperation(ctx context.Context, callback bufferedNexusCallback) {
+	client := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{Serializer: commonnexus.PayloadSerializer})
+	err := client.CompleteOperation(ctx, callback.url, nexusrpc.CompleteOperationOptions{
+		Error: &nexus.OperationError{
+			State: nexus.OperationStateFailed,
+			Cause: &nexus.FailureError{Failure: nexus.Failure{Message: "expected operation failure"}},
+		},
+		Header: nexus.Header{commonnexus.CallbackTokenHeader: callback.token},
+	})
+	s.Require().NoError(err)
+}
+
 func (s *NexusStateReplicationSuite) setupBufferedNexusEndpoint(
 	ctx context.Context,
 ) (string, <-chan bufferedNexusCallback, chan struct{}) {
@@ -223,13 +448,29 @@ func (s *NexusStateReplicationSuite) setupBufferedNexusEndpoint(
 }
 
 func scheduleBufferedNexusOperationCommand(endpoint, operation string) *commandpb.Command {
+	return scheduleBufferedNexusOperationCommandWithTimeout(endpoint, operation, time.Minute)
+}
+
+func scheduleBufferedNexusOperationCommandWithTimeout(endpoint, operation string, timeout time.Duration) *commandpb.Command {
 	return &commandpb.Command{
 		CommandType: enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION,
 		Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 			ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
-				Endpoint:  endpoint,
-				Service:   "service",
-				Operation: operation,
+				Endpoint:               endpoint,
+				Service:                "service",
+				Operation:              operation,
+				ScheduleToCloseTimeout: durationpb.New(timeout),
+			},
+		},
+	}
+}
+
+func requestCancelNexusOperationCommand(scheduledEventID int64) *commandpb.Command {
+	return &commandpb.Command{
+		CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_NEXUS_OPERATION,
+		Attributes: &commandpb.Command_RequestCancelNexusOperationCommandAttributes{
+			RequestCancelNexusOperationCommandAttributes: &commandpb.RequestCancelNexusOperationCommandAttributes{
+				ScheduledEventId: scheduledEventID,
 			},
 		},
 	}
@@ -247,6 +488,20 @@ func receiveBufferedNexusCallback(
 		return operationCallback
 	case <-ctx.Done():
 		require.FailNow(t, "timed out waiting for Nexus operation callback", expectedOperation)
+		return bufferedNexusCallback{}
+	}
+}
+
+func receiveAnyBufferedNexusCallback(
+	ctx context.Context,
+	t require.TestingT,
+	operationCallbacks <-chan bufferedNexusCallback,
+) bufferedNexusCallback {
+	select {
+	case operationCallback := <-operationCallbacks:
+		return operationCallback
+	case <-ctx.Done():
+		require.FailNow(t, "timed out waiting for Nexus operation callback")
 		return bufferedNexusCallback{}
 	}
 }
