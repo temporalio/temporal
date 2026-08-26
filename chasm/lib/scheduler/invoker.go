@@ -158,12 +158,12 @@ func (e *executeResult) Append(o executeResult) executeResult {
 // completed InvokerExecuteTask. It returns the number of *new* actions recorded
 // (starts that transitioned from "no RunId" to "has RunId" in this call), the
 // number of completed results that were dropped because they were previously
-// recorded, and starts that do not remain active while awaiting completion.
+// recorded, the latest newly-started action time, and starts that do not remain
+// active while awaiting completion.
 func (i *Invoker) recordExecuteResult(
 	ctx chasm.MutableContext,
 	result *executeResult,
-) (newlyStarted, droppedDuplicates int, startOnlyActions []*schedulespb.BufferedStart) {
-	scheduler := i.Scheduler.Get(ctx)
+) (newlyStarted, droppedDuplicates int, latestStartTime time.Time, startOnlyActions []*schedulespb.BufferedStart) {
 	completed := make(map[string]*schedulespb.BufferedStart) // request ID -> BufferedStart with RunId/StartTime
 	failed := make(map[string]bool)                          // request ID -> is present
 	retryable := make(map[string]*schedulespb.BufferedStart) // request ID -> *BufferedStart
@@ -222,7 +222,7 @@ func (i *Invoker) recordExecuteResult(
 		}
 		if completedStart, ok := completed[start.RequestId]; ok {
 			newlyStarted++
-			scheduler.advanceLastEventTimeTo(completedStart.GetStartTime().AsTime())
+			latestStartTime = util.MaxTime(latestStartTime, completedStart.GetStartTime().AsTime())
 			if !internal.TracksCompletionResult(start.GetOverlapPolicy()) {
 				startOnlyActions = append(startOnlyActions, completedStart)
 				startedUntracked[start.RequestId] = struct{}{}
@@ -250,7 +250,7 @@ func (i *Invoker) recordExecuteResult(
 			retriedStarts))
 
 	i.addTasks(ctx)
-	return newlyStarted, droppedDuplicates, startOnlyActions
+	return newlyStarted, droppedDuplicates, latestStartTime, startOnlyActions
 }
 
 // runningWorkflowID returns the workflow ID associated with the given

@@ -90,10 +90,12 @@ func (i *Invoker) RecordExecuteResult(
 	completed []*schedulespb.BufferedStart,
 	retryable []*schedulespb.BufferedStart,
 ) (newlyStarted, droppedDuplicates int, startOnlyActions []*schedulespb.BufferedStart) {
-	return i.recordExecuteResult(ctx, &executeResult{
+	newlyStarted, droppedDuplicates, latestStartTime, startOnlyActions := i.recordExecuteResult(ctx, &executeResult{
 		CompletedStarts: completed,
 		RetryableStarts: retryable,
 	})
+	i.Scheduler.Get(ctx).advanceLastEventTimeTo(latestStartTime)
+	return newlyStarted, droppedDuplicates, startOnlyActions
 }
 
 func (s *Scheduler) RecordStartOnlyActions(

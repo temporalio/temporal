@@ -139,21 +139,33 @@ func (g *GeneratorTaskHandler) Execute(
 		invoker.EnqueueBufferedStarts(ctx, result.BufferedStarts)
 	}
 
+	scheduler.advanceLastEventTime(ctx)
+
 	// Write the new high water mark and future action times.
 	generator.LastProcessedTime = timestamppb.New(result.LastActionTime)
 	generator.UpdateFutureActionTimes(ctx, g.specBuilder)
 
+	g.rearmTasks(ctx, generator, scheduler, metricsHandler, tweakables.IdleTime, result.NextWakeupTime)
+	return nil
+}
+
+func (g *GeneratorTaskHandler) rearmTasks(
+	ctx chasm.MutableContext,
+	generator *Generator,
+	scheduler *Scheduler,
+	metricsHandler metrics.Handler,
+	idleTimeTotal time.Duration,
+	nextWakeupTime time.Time,
+) {
 	// Schedule the next timer task. Three outcomes are possible:
 	// - isIdle: the schedule is done; arm the idle task to close it.
-	// - NextWakeupTime is set: arm the next generator tick.
+	// - nextWakeupTime is set: arm the next generator tick.
 	// - Neither: Hold open without a task. This requires both that
 	//   isHeldOpen is true (paused or backfill pending) AND that no spec
 	//   wakeup is available, e.g. a paused manual-only schedule. IdleTime=0
 	//   also lands here. An external trigger (Patch.Unpause, Update, or a
 	//   BackfillerTask's completion-time Generate call) revives us.
-	idleTimeTotal := tweakables.IdleTime
-	scheduler.advanceLastEventTime(ctx)
-	idleExpiration, isIdle := scheduler.getIdleExpiration(ctx, idleTimeTotal, result.NextWakeupTime)
+	idleExpiration, isIdle := scheduler.getIdleExpiration(ctx, idleTimeTotal, nextWakeupTime)
 	if isIdle {
 		// Schedule is complete, no need for another buffer task. We keep the schedule's
 		// backing mutable state explicitly open for the idle period, during which the
@@ -168,7 +180,7 @@ func (g *GeneratorTaskHandler) Execute(
 		if scheduler.GetIdleCloseTime().AsTime().Equal(idleExpiration) {
 			metricsHandler.Counter(metrics.ScheduleIdleTask.Name()).
 				Record(1, metrics.OutcomeTag(outcomeSkipped), metrics.ReasonTag(idleAlreadyArmed))
-			return nil
+			return
 		}
 
 		generator.getOrCreateEventLog(ctx).LogEvent(ctx,
@@ -182,24 +194,22 @@ func (g *GeneratorTaskHandler) Execute(
 		// ScheduleIdleCloseTime search attribute for stuck-schedule detection.
 		scheduler.IdleCloseTime = timestamppb.New(idleExpiration)
 
-		return nil
+		return
 	}
 
 	// Not idle: the schedule has work again (or is being held open), so it's
 	// no longer pending an idle close.
 	scheduler.IdleCloseTime = nil
 
-	if !result.NextWakeupTime.IsZero() {
+	if !nextWakeupTime.IsZero() {
 		// Keep the generator task perpetually scheduled. When paused, the next
 		// fire will simply advance the HWM without appending actions (handled in
 		// ProcessTimeRange).
-		generator.scheduleTask(ctx, result.NextWakeupTime)
+		generator.scheduleTask(ctx, nextWakeupTime)
 	} else {
 		// Hold open without a task: see the comment block above.
 		metricsHandler.Counter(metrics.SchedulerGeneratorLoopCompleted.Name()).Record(1)
 	}
-
-	return nil
 }
 
 func (g *GeneratorTaskHandler) logSchedule(ctx chasm.MutableContext, logger log.Logger, msg string, generator *Generator, sched *Scheduler) {
