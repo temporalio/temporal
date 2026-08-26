@@ -17,7 +17,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
 	chasmactivity "go.temporal.io/server/chasm/lib/activity"
-	chasmcallback "go.temporal.io/server/chasm/lib/callback"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
@@ -198,7 +198,7 @@ func testWorkerCallbackOnWorkflow(t *testing.T) {
 	_, err := env.FrontendClient().StartWorkflowExecution(ctx, newStartRequest())
 	require.ErrorContains(t, err, workerCallbackNotEnabledErr)
 
-	env.OverrideDynamicConfig(chasmcallback.WorkflowEnabledKinds, []string{"nexus", "worker"})
+	env.OverrideDynamicConfig(chasmworkflow.EnabledCallbackKinds, []string{"nexus", "worker"})
 
 	req := newStartRequest()
 	_, err = env.FrontendClient().StartWorkflowExecution(ctx, req)
@@ -280,7 +280,7 @@ func testWorkerCallbackOnWorkflowUpdate(t *testing.T) {
 	_, err = env.FrontendClient().UpdateWorkflowExecution(ctx, newUpdateRequest())
 	require.ErrorContains(t, err, workerCallbackNotEnabledErr)
 
-	env.OverrideDynamicConfig(chasmcallback.WorkflowUpdateEnabledKinds, []string{"nexus", "worker"})
+	env.OverrideDynamicConfig(chasmworkflow.EnabledCallbackKinds, []string{"nexus", "worker"})
 
 	// The update runs to completion, which triggers the callback.
 	updateResp, err := env.FrontendClient().UpdateWorkflowExecution(ctx, newUpdateRequest())
