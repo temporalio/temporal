@@ -3,7 +3,7 @@ package replication
 import (
 	"fmt"
 	"math"
-	"sort"
+	"slices"
 	"sync"
 	"testing"
 
@@ -65,7 +65,7 @@ func admits(filter func(tasks.Task) bool, namespaceID string, taskID int64) bool
 
 func sorted(in []string) []string {
 	out := append([]string(nil), in...)
-	sort.Strings(out)
+	slices.Sort(out)
 	return out
 }
 
