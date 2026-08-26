@@ -811,8 +811,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 		if err != nil {
 			// A deleted run truncates the chain; other errors must fail the reset so a retry
 			// can reapply the full surviving chain, since reset is one-shot.
-			var notFound *serviceerror.NotFound
-			if errors.As(err, &notFound) {
+			if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 				break
 			}
 			return "", err
