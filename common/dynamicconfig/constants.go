@@ -3601,8 +3601,9 @@ is non-fatal: the search continues past this threshold.`,
 	SchedulerV1VersionCeiling = NewNamespaceIntSetting(
 		"worker.schedulerV1VersionCeiling",
 		-1,
-		`SchedulerV1VersionCeiling caps the workflow version the V1 scheduler records into history, so histories written on this cluster stay replayable on peer clusters that do not support newer versions. Set it to the highest scheduler version supported by the lowest peer. Intended for multi-cluster failover and rollback.
-At the first tweakables evaluation of each scheduler workflow run, the ceiling is recorded and held fixed. A workflow run is one execution between start and Continue-As-New. A negative value (the default) disables the cap.`,
+		`SchedulerV1VersionCeiling caps the workflow version the V1 scheduler records into history, so histories written on this cluster stay replayable on peer clusters that do not support newer versions. Set it to the highest scheduler version supported by the lowest peer. Intended for multi-cluster failover and rollback. The supported floor is version 1 (OSS v1.20). A negative value (the default) disables the cap.
+The ceiling is reread on every tweakables evaluation but only ratchets tighter within a run (one execution between start and Continue-As-New): a looser or unset value never raises it, and it never lowers a version already recorded for the run. Lowering the ceiling therefore takes effect on the next run, when Continue-As-New rereads dynamic config. A run is one execution between start and Continue-As-New.
+Operational notes: (1) A ceiling below 12 holds the version below CHASM migration support, so it pauses all V1->V2 CHASM migrations for the namespace until the ceiling is lifted (deferred, not dropped; see the schedule_migration_deferred_by_version_ceiling metric). (2) A ceiling below 6 skips custom search-attribute updates on schedule edits (see schedule_search_attribute_update_skipped_by_version_ceiling). (3) This caps V1 scheduler histories only; schedules already migrated to CHASM V2 are not made rollback-safe by it.`,
 	)
 	SchedulerV1VersionOverride = NewNamespaceIntSetting(
 		"worker.schedulerV1VersionOverride",

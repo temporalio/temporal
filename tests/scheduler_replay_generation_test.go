@@ -57,10 +57,20 @@ func TestGenerateSchedulerVersionCeilingReplayHistory(t *testing.T) {
 		scheduleID := testcore.RandomizeStr("version-ceiling-replay")
 		workflowID := scheduler.WorkflowIDPrefix + scheduleID
 
+		// A paused hourly schedule records only the version marker and continue-as-new. Set
+		// SCHEDULER_REPLAY_ACTIVE=1 to instead capture a behavior-rich history: an active, fast
+		// interval that actually starts workflows (StartWorkflow commands, buffer, next-time
+		// cache), which is what a reverse-replay artifact needs to exercise on the old peer.
+		spec := intervalSpec(time.Hour)
+		state := &schedulepb.ScheduleState{Paused: true}
+		if os.Getenv("SCHEDULER_REPLAY_ACTIVE") == "1" {
+			spec = intervalSpec(time.Second)
+			state = &schedulepb.ScheduleState{Paused: false}
+		}
 		createSchedule(ctx, t, env, scheduleID, &schedulepb.Schedule{
-			Spec:   intervalSpec(time.Hour),
+			Spec:   spec,
 			Action: startWorkflowAction(env, testcore.RandomizeStr("unused-action"), "unused-workflow"),
-			State:  &schedulepb.ScheduleState{Paused: true},
+			State:  state,
 		})
 
 		execution := waitForSchedulerWorkflowExecution(t, ctx, env, workflowID)

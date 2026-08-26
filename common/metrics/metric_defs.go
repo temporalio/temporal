@@ -1620,6 +1620,14 @@ var (
 		"schedule_migration_failed",
 		WithDescription("The number of times a schedule migration fails"),
 	)
+	ScheduleMigrationDeferredByVersionCeiling = NewCounterDef(
+		"schedule_migration_deferred_by_version_ceiling",
+		WithDescription("The number of times a pending CHASM migration was deferred because the V1 scheduler version ceiling (worker.schedulerV1VersionCeiling) held the recorded version below migration support. The migration is not dropped; it runs once the ceiling is lifted."),
+	)
+	ScheduleSearchAttributeUpdateSkippedByVersionCeiling = NewCounterDef(
+		"schedule_search_attribute_update_skipped_by_version_ceiling",
+		WithDescription("The number of times a custom search-attribute update was skipped because the V1 scheduler version ceiling (worker.schedulerV1VersionCeiling) held the recorded version below the version that supports the upsert."),
+	)
 	ScheduleOverlapSkipped = NewCounterDef(
 		"schedule_overlap_skipped",
 		WithDescription("The number of schedule actions skipped due to overlap policy"),
