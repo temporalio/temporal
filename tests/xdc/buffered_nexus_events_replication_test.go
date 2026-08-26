@@ -236,9 +236,32 @@ func (s *NexusStateReplicationSuite) TestNaturallyBufferedNexusOutcomesFlushedAn
 		}
 	}, replicationWaitTime, replicationCheckInterval)
 	s.waitForClusterSynced()
+	await.Require(ctx, s.T(), func(t *await.T) {
+		history := s.getWorkflowHistory(t.Context(), t.AssertionT(), 1, ns, execution)
+		for _, operation := range operations {
+			scheduledID := findNexusScheduledEventID(history, operation)
+			require.Positive(t, scheduledID)
+			require.True(t, hasNexusEventForScheduledID(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, scheduledID))
+		}
+	}, replicationWaitTime, replicationCheckInterval)
+	await.Require(ctx, s.T(), func(t *await.T) {
+		response, describeErr := s.clusters[1].FrontendClient().DescribeWorkflowExecution(t.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: ns,
+			Execution: execution,
+		})
+		require.NoError(t, describeErr)
+		require.Len(t, response.PendingNexusOperations, len(operations))
+	}, replicationWaitTime, replicationCheckInterval)
+	replicationToOldActive := s.blockReplicationForWorkflow(0, workflowID)
+	replicationToNewActive := s.blockReplicationForWorkflow(1, workflowID)
 
 	triggerTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, taskQueue)
 	history := triggerTask.History.Events
+	scheduledIDs := make(map[string]int64, len(operations))
+	for _, operation := range operations {
+		scheduledIDs[operation] = findNexusScheduledEventID(history, operation)
+		s.Require().Positive(scheduledIDs[operation])
+	}
 	_, err = s.clusters[0].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken:                  triggerTask.TaskToken,
 		Identity:                   "buffered-nexus-outcomes-test",
@@ -262,8 +285,6 @@ func (s *NexusStateReplicationSuite) TestNaturallyBufferedNexusOutcomesFlushedAn
 	}
 	s.assertBufferedEventTypesPresent(ctx, 0, ns, execution, expectedTypes)
 
-	replicationToOldActive := s.blockReplicationForWorkflow(0, workflowID)
-	replicationToNewActive := s.blockReplicationForWorkflow(1, workflowID)
 	losingHistory := s.finishNaturallyBufferedConflict(
 		ctx,
 		ns,
@@ -277,6 +298,23 @@ func (s *NexusStateReplicationSuite) TestNaturallyBufferedNexusOutcomesFlushedAn
 	for _, eventType := range expectedTypes {
 		s.Require().NotNil(findBufferedEventsHistoryEvent(losingHistory, eventType))
 	}
+	winningHistory := s.getWorkflowHistory(ctx, s.T(), 1, ns, execution)
+	for operation, eventType := range map[string]enumspb.EventType{
+		"failed":    enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED,
+		"canceled":  enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED,
+		"timed-out": enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT,
+	} {
+		s.Require().True(
+			hasNexusEventForScheduledID(winningHistory, eventType, scheduledIDs[operation]),
+			"%s for common operation %q must be reapplied to the winning branch",
+			eventType,
+			operation,
+		)
+	}
+	s.Require().False(
+		hasNexusEventForScheduledID(winningHistory, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED, scheduledIDs["cancel-failed"]),
+		"Nexus cancellation results are not cherry-pickable and must remain only on the losing branch",
+	)
 }
 
 func (s *NexusStateReplicationSuite) TestNaturallyBufferedNexusCancelRequestCompletedFlushedAndReapplied() {
@@ -324,6 +362,8 @@ func (s *NexusStateReplicationSuite) TestNaturallyBufferedNexusCancelRequestComp
 	scheduledID := findNexusScheduledEventID(triggerTask.History.Events, "cancel-completed")
 	s.Require().Positive(scheduledID)
 	s.waitForClusterSynced()
+	replicationToOldActive := s.blockReplicationForWorkflow(0, workflowID)
+	replicationToNewActive := s.blockReplicationForWorkflow(1, workflowID)
 	_, err = s.clusters[0].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		TaskToken:                  triggerTask.TaskToken,
 		Identity:                   "buffered-nexus-cancel-completed-test",
@@ -342,8 +382,6 @@ func (s *NexusStateReplicationSuite) TestNaturallyBufferedNexusCancelRequestComp
 	expectedTypes := []enumspb.EventType{enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED}
 	s.assertBufferedEventTypesPresent(ctx, 0, ns, execution, expectedTypes)
 
-	replicationToOldActive := s.blockReplicationForWorkflow(0, workflowID)
-	replicationToNewActive := s.blockReplicationForWorkflow(1, workflowID)
 	s.finishNaturallyBufferedConflict(
 		ctx,
 		ns,
@@ -353,6 +391,11 @@ func (s *NexusStateReplicationSuite) TestNaturallyBufferedNexusCancelRequestComp
 		replicationToNewActive,
 		expectedTypes,
 		"nexus-cancel-completed-winner-signal",
+	)
+	winningHistory := s.getWorkflowHistory(ctx, s.T(), 1, ns, execution)
+	s.Require().False(
+		hasNexusEventForScheduledID(winningHistory, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED, scheduledID),
+		"Nexus cancellation results are not cherry-pickable and must remain only on the losing branch",
 	)
 }
 
@@ -550,6 +593,16 @@ func hasNexusEventForScheduledID(history []*historypb.HistoryEvent, eventType en
 			eventScheduledID = event.GetNexusOperationStartedEventAttributes().GetScheduledEventId()
 		case enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED:
 			eventScheduledID = event.GetNexusOperationCompletedEventAttributes().GetScheduledEventId()
+		case enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED:
+			eventScheduledID = event.GetNexusOperationFailedEventAttributes().GetScheduledEventId()
+		case enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED:
+			eventScheduledID = event.GetNexusOperationCanceledEventAttributes().GetScheduledEventId()
+		case enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT:
+			eventScheduledID = event.GetNexusOperationTimedOutEventAttributes().GetScheduledEventId()
+		case enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED:
+			eventScheduledID = event.GetNexusOperationCancelRequestCompletedEventAttributes().GetScheduledEventId()
+		case enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED:
+			eventScheduledID = event.GetNexusOperationCancelRequestFailedEventAttributes().GetScheduledEventId()
 		default:
 			return false
 		}

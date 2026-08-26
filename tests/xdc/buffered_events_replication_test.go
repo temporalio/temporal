@@ -260,6 +260,20 @@ func (s *FunctionalClustersTestSuite) TestNaturallyBufferedActivityOutcomesFlush
 	s.assertBufferedEventTypes(ctx, 0, ns, execution, expectedTypes)
 	s.finishNaturallyBufferedConflict(ctx, ns, namespace.NamespaceInfo.Id, execution,
 		replicationToOldActive, replicationToNewActive, expectedTypes, "activity-winner-signal")
+	winningHistory := s.getWorkflowHistory(ctx, s.T(), 1, ns, execution)
+	for _, eventType := range []enumspb.EventType{
+		enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
+		enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED,
+		enumspb.EVENT_TYPE_ACTIVITY_TASK_FAILED,
+		enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED,
+	} {
+		s.Require().Zero(countBufferedEventType(winningHistory, eventType), "%s must remain only on the losing branch", eventType)
+	}
+	s.Require().Equal(
+		1,
+		countBufferedEventType(winningHistory, enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT),
+		"the winner may produce its own timeout, but must not contain a duplicate reapplied timeout",
+	)
 }
 
 func (s *FunctionalClustersTestSuite) TestNaturallyBufferedChildWorkflowOutcomesFlushedToLosingBranch() {
@@ -393,6 +407,10 @@ func (s *FunctionalClustersTestSuite) TestNaturallyBufferedChildWorkflowOutcomes
 	s.assertBufferedEventTypesPresent(ctx, 0, ns, execution, expectedTypes)
 	s.finishNaturallyBufferedConflict(ctx, ns, namespace.NamespaceInfo.Id, execution,
 		replicationToOldActive, replicationToNewActive, expectedTypes, "child-winner-signal")
+	winningHistory := s.getWorkflowHistory(ctx, s.T(), 1, ns, execution)
+	for _, eventType := range expectedTypes {
+		s.Require().Zero(countBufferedEventType(winningHistory, eventType), "%s has no child initiation on the winning branch and must be skipped", eventType)
+	}
 }
 
 func (s *FunctionalClustersTestSuite) TestNaturallyBufferedExternalWorkflowOutcomesFlushedToLosingBranch() {
@@ -435,6 +453,8 @@ func (s *FunctionalClustersTestSuite) TestNaturallyBufferedExternalWorkflowOutco
 		history := s.getWorkflowHistory(t.Context(), t.AssertionT(), 1, ns, execution)
 		require.NotEmpty(t, history)
 	}, replicationWaitTime, replicationCheckInterval)
+	replicationToOldActive := s.blockReplicationForWorkflow(0, workflowID)
+	replicationToNewActive := s.blockReplicationForWorkflow(1, workflowID)
 
 	missingWorkflowID := workflowID + "-missing"
 	missingRunID := uuid.NewString()
@@ -462,10 +482,12 @@ func (s *FunctionalClustersTestSuite) TestNaturallyBufferedExternalWorkflowOutco
 		enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
 	}
 	s.assertBufferedEventTypesPresent(ctx, 0, ns, execution, expectedTypes)
-	replicationToOldActive := s.blockReplicationForWorkflow(0, workflowID)
-	replicationToNewActive := s.blockReplicationForWorkflow(1, workflowID)
 	s.finishNaturallyBufferedConflict(ctx, ns, namespace.NamespaceInfo.Id, execution,
 		replicationToOldActive, replicationToNewActive, expectedTypes, "external-winner-signal")
+	winningHistory := s.getWorkflowHistory(ctx, s.T(), 1, ns, execution)
+	for _, eventType := range expectedTypes {
+		s.Require().Zero(countBufferedEventType(winningHistory, eventType), "%s must remain only on the losing branch", eventType)
+	}
 }
 
 func (s *xdcBaseSuite) finishNaturallyBufferedConflict(
@@ -478,7 +500,18 @@ func (s *xdcBaseSuite) finishNaturallyBufferedConflict(
 	expectedTypes []enumspb.EventType,
 	winnerSignal string,
 ) []*historypb.HistoryEvent {
-	err := s.syncWorkflowState(ctx, namespaceID, execution)
+	losingBranchMarker := "losing-branch-marker-" + uuid.NewString()
+	_, err := s.clusters[0].FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         ns,
+		WorkflowExecution: execution,
+		SignalName:        losingBranchMarker,
+		RequestId:         uuid.NewString(),
+		Identity:          "buffered-events-xdc-test",
+	})
+	s.Require().NoError(err)
+	s.Require().True(s.hasBufferedEventType(ctx, 0, ns, execution, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED))
+
+	err = s.syncWorkflowState(ctx, namespaceID, execution)
 	var workflowNotReady *serviceerror.WorkflowNotReady
 	s.Require().ErrorAs(err, &workflowNotReady)
 
@@ -502,10 +535,14 @@ func (s *xdcBaseSuite) finishNaturallyBufferedConflict(
 	}
 	s.Require().NoError(s.syncWorkflowState(ctx, namespaceID, execution))
 
-	s.releaseReplicationTask(ctx, replicationToNewActive)
-	for attempt := 0; attempt < 10 && !hasSignalNamed(s.getWorkflowHistory(ctx, s.T(), 1, ns, execution), winnerSignal); attempt++ {
-		s.releaseReplicationTask(ctx, replicationToNewActive)
-	}
+	await.Require(ctx, s.T(), func(t *await.T) {
+		s.tryReleaseReplicationTask(replicationToNewActive)
+		require.True(
+			t,
+			hasSignalNamed(s.getWorkflowHistory(t.Context(), t.AssertionT(), 1, ns, execution), losingBranchMarker),
+			"the losing branch marker must be reapplied before checking the rest of the batch",
+		)
+	}, replicationWaitTime, replicationCheckInterval)
 	for attempt := 0; attempt < 10 && !s.bufferedEventsHistoriesEqual(ctx, ns, execution); attempt++ {
 		s.releaseReplicationTask(ctx, replicationToOldActive)
 	}
@@ -981,18 +1018,32 @@ func (s *xdcBaseSuite) releaseReplicationTask(
 	s.T().Helper()
 	select {
 	case task := <-tasks:
-		err := task.execute()
-		task.result <- err
-		var duplicateError *serviceerror.AlreadyExists
-		var retryReplicationError *serviceerrors.RetryReplication
-		s.Require().True(
-			err == nil || errors.As(err, &duplicateError) || errors.As(err, &retryReplicationError),
-			"replication task failed: %v",
-			err,
-		)
+		s.executeReplicationTask(task)
 	case <-ctx.Done():
 		s.FailNow("timed out waiting for controlled history replication task", ctx.Err().Error())
 	}
+}
+
+func (s *xdcBaseSuite) tryReleaseReplicationTask(tasks <-chan *blockedReplicationTask) bool {
+	select {
+	case task := <-tasks:
+		s.executeReplicationTask(task)
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *xdcBaseSuite) executeReplicationTask(task *blockedReplicationTask) {
+	err := task.execute()
+	task.result <- err
+	var duplicateError *serviceerror.AlreadyExists
+	var retryReplicationError *serviceerrors.RetryReplication
+	s.Require().True(
+		err == nil || errors.As(err, &duplicateError) || errors.As(err, &retryReplicationError),
+		"replication task failed: %v",
+		err,
+	)
 }
 
 func workflowIDFromReplicationTask(task *replicationspb.ReplicationTask) string {
