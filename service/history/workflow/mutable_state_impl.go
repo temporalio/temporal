@@ -9326,8 +9326,13 @@ func (ms *MutableStateImpl) ShouldResetActivityTimerTaskMask(current, incoming *
 // point in time: processSingleActivityTimeoutTask re-derives the whole timer sequence
 // from current mutable state and fires whatever has expired, without consulting the
 // task's attempt or stamp ("we don't need to check activity Stamps"). So a pending task
-// whose deadline is unchanged is still correct no matter what else moved, and a task
-// whose deadline moved is useless no matter what stayed put.
+// whose deadline is unchanged is still correct no matter what else moved.
+//
+// Heartbeat progress is an exception. The active path does not create a new timeout
+// task for every heartbeat. It keeps the existing earlier wake-up, which re-derives
+// the latest heartbeat deadline and schedules the next task when it fires. Preserve
+// that bit when the activity attempt and options stamp are unchanged so the passive
+// path follows the same coalescing behavior.
 //
 // Attempt and stamp are therefore deliberately not consulted here: they are only ever
 // proxies for "some deadline probably moved", and comparing the deadlines answers that
@@ -9346,8 +9351,11 @@ func (ms *MutableStateImpl) getActivityTimerTaskStatus(current, incoming *persis
 	if !ms.clusterMetadata.IsVersionFromSameCluster(current.Version, incoming.Version) {
 		return TimerTaskStatusNone
 	}
-	return current.TimerTaskStatus &^
-		getActivityTimerDeadlines(current).changedMask(getActivityTimerDeadlines(incoming))
+	changedTimerMask := getActivityTimerDeadlines(current).changedMask(getActivityTimerDeadlines(incoming))
+	if current.Attempt == incoming.Attempt && current.Stamp == incoming.Stamp {
+		changedTimerMask &^= TimerTaskStatusCreatedHeartbeat
+	}
+	return current.TimerTaskStatus &^ changedTimerMask
 }
 
 func (ms *MutableStateImpl) applyUpdatesToSubStateMachines(
