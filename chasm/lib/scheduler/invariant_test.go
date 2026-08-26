@@ -20,7 +20,7 @@ import (
 // carry no pending work: they never re-arm and never close. Every confirmed
 // instance violated exactly one predicate:
 //
-//	!sched.Closed  =>  the tree carries at least one live logical task.
+//	  !sched.Closed  =>  the tree carries at least one live logical task.
 //
 // Note that this is a liveness property, not a transition-validity property.
 // The scheduler has no state enum to validate transitions against:
