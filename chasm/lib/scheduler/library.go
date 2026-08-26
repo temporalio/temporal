@@ -85,6 +85,7 @@ func (l *Library) Tasks() []*chasm.RegistrableTask {
 		chasm.NewRegistrablePureTask(
 			"idle",
 			l.SchedulerIdleTaskHandler,
+			chasm.WithSingletonTask(chasm.SingletonTaskModeReplace),
 		),
 		chasm.NewRegistrableSideEffectTask(
 			"callbacks",

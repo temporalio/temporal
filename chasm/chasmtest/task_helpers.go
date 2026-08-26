@@ -3,6 +3,7 @@ package chasmtest
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"time"
 
 	"go.temporal.io/server/chasm"
@@ -80,6 +81,35 @@ func (e *Engine) FirePureTasks(ref chasm.ComponentRef, referenceTime time.Time) 
 		return executed, err
 	}
 	return executed, nil
+}
+
+// PureTaskCount returns how many persisted pure tasks of the given payload
+// type exist across the execution at ref that are due by referenceTime,
+// without executing, validating, or otherwise mutating any of them.
+//
+// Unlike [Engine.Tasks], which only reflects the physical head-of-queue task,
+// this walks every logical pure task entry - useful for asserting that a task
+// type does not accumulate duplicates (e.g. after registering it with
+// [chasm.WithSingletonTask]).
+func (e *Engine) PureTaskCount(ref chasm.ComponentRef, referenceTime time.Time, taskType reflect.Type) (int, error) {
+	exec, err := e.executionForRef(ref)
+	if err != nil {
+		return 0, err
+	}
+
+	count := 0
+	err = exec.node.EachPureTask(
+		referenceTime,
+		func(_ chasm.NodePureTask, _ chasm.TaskAttributes, taskInstance any) (bool, error) {
+			if reflect.TypeOf(taskInstance) == taskType {
+				count++
+			}
+			// Never report as executed: this is a read-only probe and must
+			// not mutate or invalidate any task.
+			return false, nil
+		},
+	)
+	return count, err
 }
 
 // ExecuteSideEffectTask validates and executes a side effect task.
