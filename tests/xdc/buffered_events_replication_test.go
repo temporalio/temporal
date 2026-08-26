@@ -110,8 +110,6 @@ func (s *FunctionalClustersTestSuite) TestNaturallyBufferedInputsFlushedAndReapp
 	s.releaseReplicationTask(ctx, replicationToOldActive)
 	s.assertNoBufferedEvents(ctx, 0, ns, execution)
 	s.assertBufferedEventsPersistedOnLosingBranch(ctx, ns, namespace.NamespaceInfo.Id, execution, updateID, optionsRequestID, naturallyBufferedTypes)
-	err = s.syncWorkflowState(ctx, namespace.NamespaceInfo.Id, execution)
-	s.Require().NoError(err)
 
 	// Reapplying the losing update while the winner's workflow task is running
 	// naturally creates UpdateAdmitted as a buffered event.
@@ -122,8 +120,6 @@ func (s *FunctionalClustersTestSuite) TestNaturallyBufferedInputsFlushedAndReapp
 	await.Require(ctx, s.T(), func(t *await.T) {
 		require.False(t, s.hasBufferedEventType(t.Context(), 1, ns, execution, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED))
 	}, 45*time.Second, replicationCheckInterval)
-	s.Require().NoError(s.syncWorkflowStateFrom(ctx, 1, namespace.NamespaceInfo.Id, execution, 1))
-
 	// The timeout flush and conflict resolution can produce more than one
 	// state-based task. Release only this workflow's tasks until all reapplied
 	// inputs reach the active cluster.
@@ -524,20 +520,18 @@ func (s *xdcBaseSuite) finishNaturallyBufferedConflict(
 	s.assertNoBufferedEvents(ctx, 0, ns, execution)
 	losingHistory := s.findNonCurrentHistoryBranch(ctx, ns, namespaceID, execution, func(history []*historypb.HistoryEvent) bool {
 		for _, eventType := range expectedTypes {
-			if findBufferedEventsHistoryEvent(history, eventType) == nil {
+			if findHistoryEvent(history, eventType, nil) == nil {
 				return false
 			}
 		}
 		return true
 	})
 	for _, eventType := range expectedTypes {
-		event := findBufferedEventsHistoryEvent(losingHistory, eventType)
+		event := findHistoryEvent(losingHistory, eventType, nil)
 		s.Require().NotNil(event, "%s must be written to the losing branch", eventType)
 		s.Require().Positive(event.EventId)
 		s.Require().NotEqual(common.BufferedEventID, event.EventId)
 	}
-	s.Require().NoError(s.syncWorkflowState(ctx, namespaceID, execution))
-
 	await.Require(ctx, s.T(), func(t *await.T) {
 		s.tryReleaseReplicationTask(replicationToNewActive)
 		require.True(
@@ -913,32 +907,6 @@ func (s *xdcBaseSuite) writeSignalOnNewActive(
 	}, replicationWaitTime, replicationCheckInterval)
 }
 
-func (s *xdcBaseSuite) syncWorkflowState(
-	ctx context.Context,
-	namespaceID string,
-	execution *commonpb.WorkflowExecution,
-) error {
-	s.T().Helper()
-	return s.syncWorkflowStateFrom(ctx, 0, namespaceID, execution, 2)
-}
-
-func (s *xdcBaseSuite) syncWorkflowStateFrom(
-	ctx context.Context,
-	sourceCluster int,
-	namespaceID string,
-	execution *commonpb.WorkflowExecution,
-	targetClusterID int32,
-) error {
-	s.T().Helper()
-	_, err := s.clusters[sourceCluster].AdminClient().SyncWorkflowState(ctx, &adminservice.SyncWorkflowStateRequest{
-		NamespaceId:     namespaceID,
-		Execution:       execution,
-		TargetClusterId: targetClusterID,
-		ArchetypeId:     chasm.WorkflowArchetypeID,
-	})
-	return err
-}
-
 func (s *xdcBaseSuite) hasBufferedEventType(
 	ctx context.Context,
 	clusterIndex int,
@@ -954,7 +922,7 @@ func (s *xdcBaseSuite) hasBufferedEventType(
 	if err != nil {
 		return false
 	}
-	return findBufferedEventsHistoryEvent(response.GetCacheMutableState().GetBufferedEvents(), eventType) != nil
+	return findHistoryEvent(response.GetCacheMutableState().GetBufferedEvents(), eventType, nil) != nil
 }
 
 func (s *xdcBaseSuite) pollBufferedEventsWorkflowTask(
@@ -1120,7 +1088,7 @@ func (s *xdcBaseSuite) assertBufferedEventTypesPresent(
 			require.Equal(t, common.BufferedEventID, event.EventId)
 		}
 		for _, expectedType := range expectedTypes {
-			require.NotNil(t, findBufferedEventsHistoryEvent(bufferedEvents, expectedType), "%s must be naturally buffered", expectedType)
+			require.NotNil(t, findHistoryEvent(bufferedEvents, expectedType, nil), "%s must be naturally buffered", expectedType)
 		}
 	}, replicationWaitTime, replicationCheckInterval)
 }
@@ -1175,7 +1143,7 @@ func (s *FunctionalClustersTestSuite) assertBufferedEventsPersistedOnLosingBranc
 	s.Require().True(hasOptionsUpdatedRequest(losingHistory, optionsRequestID))
 
 	for _, eventType := range expectedEventTypes {
-		event := findBufferedEventsHistoryEvent(losingHistory, eventType)
+		event := findHistoryEvent(losingHistory, eventType, nil)
 		s.Require().NotNil(event, "%s must be written to the losing branch", eventType)
 		s.Require().NotEqual(common.BufferedEventID, event.EventId)
 		s.Require().Positive(event.EventId)
@@ -1333,16 +1301,4 @@ func hasOptionsUpdatedRequest(history []*historypb.HistoryEvent, requestID strin
 		}
 	}
 	return false
-}
-
-func findBufferedEventsHistoryEvent(
-	history []*historypb.HistoryEvent,
-	eventType enumspb.EventType,
-) *historypb.HistoryEvent {
-	for _, event := range history {
-		if event.EventType == eventType {
-			return event
-		}
-	}
-	return nil
 }

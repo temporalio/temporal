@@ -139,7 +139,7 @@ func (s *NexusStateReplicationSuite) TestBufferedNexusEventsReapplySharedOperati
 	)
 	s.Require().True(hasNexusEventForScheduledID(losingHistory, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED, losingOnlyOperationScheduledEventID))
 	s.Require().True(hasNexusEventForScheduledID(losingHistory, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, losingOnlyOperationScheduledEventID))
-	s.Require().Equal(2, countNexusEvents(losingHistory, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED))
+	s.Require().Equal(2, countBufferedEventType(losingHistory, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED))
 
 	for range 10 {
 		targetHistory := s.getWorkflowHistory(ctx, s.T(), 1, ns, execution)
@@ -298,7 +298,7 @@ func (s *NexusStateReplicationSuite) TestNaturallyBufferedNexusOutcomesFlushedAn
 		"nexus-outcomes-winner-signal",
 	)
 	for _, eventType := range expectedTypes {
-		s.Require().NotNil(findBufferedEventsHistoryEvent(losingHistory, eventType))
+		s.Require().NotNil(findHistoryEvent(losingHistory, eventType, nil))
 	}
 	winningHistory := s.getWorkflowHistory(ctx, s.T(), 1, ns, execution)
 	for operation, eventType := range map[string]enumspb.EventType{
@@ -616,14 +616,4 @@ func hasNexusEventForScheduledID(history []*historypb.HistoryEvent, eventType en
 		}
 	}
 	return false
-}
-
-func countNexusEvents(history []*historypb.HistoryEvent, eventType enumspb.EventType) int {
-	count := 0
-	for _, event := range history {
-		if event.EventType == eventType {
-			count++
-		}
-	}
-	return count
 }
