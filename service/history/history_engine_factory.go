@@ -56,7 +56,7 @@ type (
 		VersionMembershipCache          worker_versioning.VersionMembershipAndReactivationStatusCache
 		WorkerDeploymentClient          workerdeployment.Client
 		RoutingInfoCache                worker_versioning.RoutingInfoCache
-		WorkflowResendScheduler         workflowresend.Scheduler
+		WorkflowResendScheduler         workflowresend.Scheduler `optional:"true"`
 	}
 
 	historyEngineFactory struct {
@@ -67,14 +67,13 @@ type (
 func (f *historyEngineFactory) CreateEngine(
 	shard historyi.ShardContext,
 ) historyi.Engine {
-	return newEngineWithShardContext(
+	return NewEngineWithShardContext(
 		shard,
 		f.ClientBean,
 		f.MatchingClient,
 		f.SdkClientFactory,
 		f.EventNotifier,
 		f.Config,
-		f.WorkflowResendScheduler,
 		f.VersionMembershipCache,
 		f.WorkerDeploymentClient,
 		f.RoutingInfoCache,
@@ -97,5 +96,6 @@ func (f *historyEngineFactory) CreateEngine(
 		f.PersistenceRateLimiter,
 		f.TestHooks,
 		f.ChasmEngine,
+		WithWorkflowResendScheduler(f.WorkflowResendScheduler),
 	)
 }

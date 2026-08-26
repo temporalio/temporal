@@ -104,6 +104,13 @@ import (
 )
 
 type (
+	engineOptions struct {
+		workflowResendScheduler workflowresend.Scheduler
+	}
+
+	// EngineOption adds optional history engine dependencies without adding required parameters.
+	EngineOption func(*engineOptions)
+
 	historyEngineImpl struct {
 		status                     int32
 		currentClusterName         string
@@ -156,6 +163,21 @@ type (
 	}
 )
 
+// WithWorkflowResendScheduler configures the host-level workflow resend scheduler.
+func WithWorkflowResendScheduler(scheduler workflowresend.Scheduler) EngineOption {
+	return func(options *engineOptions) {
+		options.workflowResendScheduler = scheduler
+	}
+}
+
+func applyEngineOptions(options []EngineOption) engineOptions {
+	var result engineOptions
+	for _, option := range options {
+		option(&result)
+	}
+	return result
+}
+
 // NewEngineWithShardContext creates an instance of history engine
 func NewEngineWithShardContext(
 	shard historyi.ShardContext,
@@ -186,71 +208,9 @@ func NewEngineWithShardContext(
 	persistenceRateLimiter quotas.RequestRateLimiter,
 	testHooks testhooks.TestHooks,
 	chasmEngine chasm.Engine,
+	options ...EngineOption,
 ) historyi.Engine {
-	return newEngineWithShardContext(
-		shard,
-		clientBean,
-		matchingClient,
-		sdkClientFactory,
-		eventNotifier,
-		config,
-		nil,
-		versionCache,
-		workerDeploymentClient,
-		routingInfoCache,
-		rawMatchingClient,
-		workflowCache,
-		replicationProgressCache,
-		serializer,
-		queueProcessorFactories,
-		replicationTaskFetcherFactory,
-		replicationTaskExecutorProvider,
-		workflowConsistencyChecker,
-		tracerProvider,
-		persistenceVisibilityMgr,
-		eventBlobCache,
-		taskCategoryRegistry,
-		dlqWriter,
-		commandHandlerRegistry,
-		chasmWorkflowRegistry,
-		outboundQueueCBPool,
-		persistenceRateLimiter,
-		testHooks,
-		chasmEngine,
-	)
-}
-
-func newEngineWithShardContext(
-	shard historyi.ShardContext,
-	clientBean client.Bean,
-	matchingClient matchingservice.MatchingServiceClient,
-	sdkClientFactory sdk.ClientFactory,
-	eventNotifier events.Notifier,
-	config *configs.Config,
-	workflowResendScheduler workflowresend.Scheduler,
-	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
-	workerDeploymentClient workerdeployment.Client,
-	routingInfoCache worker_versioning.RoutingInfoCache,
-	rawMatchingClient matchingservice.MatchingServiceClient,
-	workflowCache wcache.Cache,
-	replicationProgressCache replication.ProgressCache,
-	serializer serialization.Serializer,
-	queueProcessorFactories []QueueFactory,
-	replicationTaskFetcherFactory replication.TaskFetcherFactory,
-	replicationTaskExecutorProvider replication.TaskExecutorProvider,
-	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-	tracerProvider trace.TracerProvider,
-	persistenceVisibilityMgr manager.VisibilityManager,
-	eventBlobCache persistence.XDCCache,
-	taskCategoryRegistry tasks.TaskCategoryRegistry,
-	dlqWriter replication.DLQWriter,
-	commandHandlerRegistry *workflow.CommandHandlerRegistry,
-	chasmWorkflowRegistry *chasmworkflow.Registry,
-	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
-	persistenceRateLimiter quotas.RequestRateLimiter,
-	testHooks testhooks.TestHooks,
-	chasmEngine chasm.Engine,
-) historyi.Engine {
+	engineOptions := applyEngineOptions(options)
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
 	logger := shard.GetLogger()
@@ -285,7 +245,7 @@ func newEngineWithShardContext(
 		eventNotifier:              eventNotifier,
 		fastForwardNotifier:        notification.NewTimeSkippingFastForwardNotifier(),
 		config:                     config,
-		workflowResendScheduler:    workflowResendScheduler,
+		workflowResendScheduler:    engineOptions.workflowResendScheduler,
 		sdkClientFactory:           sdkClientFactory,
 		matchingClient:             matchingClient,
 		rawMatchingClient:          rawMatchingClient,
