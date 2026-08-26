@@ -160,11 +160,9 @@ func (h *cancellationInvocationTaskHandler) Execute(
 	if err != nil {
 		return fmt.Errorf("failed to construct invocation: %w", err)
 	}
-	header := nexus.Header(args.headers)
+	header := buildRequestHeader(args.headers)
+	// If this request is handled by a newer server that supports Nexus failure serialization, trigger that behavior.
 	if h.config.UseNewFailureWireFormat(ns.Name().String()) {
-		if header == nil {
-			header = make(nexus.Header, 1)
-		}
 		header.Set(nexusrpc.HeaderTemporalNexusFailureSupport, "true")
 	}
 	startTime := time.Now() // nolint:forbidigo // Time can be used for timing metrics.
