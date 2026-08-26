@@ -66,8 +66,12 @@ func validateFields(l *commonpb.Link) error {
 		if t.Callback.GetExecution() == nil {
 			return serviceerror.NewInvalidArgument("callback link must have an execution")
 		}
-		if t.Callback.GetExecution().GetType() == enumspb.EXECUTION_TYPE_UNSPECIFIED {
+		exType := t.Callback.GetExecution().GetType()
+		if exType == enumspb.EXECUTION_TYPE_UNSPECIFIED {
 			return serviceerror.NewInvalidArgument("callback link execution must have a type")
+		}
+		if _, ok := enumspb.ExecutionType_name[int32(exType)]; !ok {
+			return serviceerror.NewInvalidArgument("callback link execution type is unknown")
 		}
 		if t.Callback.GetExecution().GetBusinessId() == "" {
 			return serviceerror.NewInvalidArgument("callback link execution must have a business ID")
