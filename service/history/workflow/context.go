@@ -86,7 +86,9 @@ type (
 		NewMutableState                 historyi.MutableState
 		UpdateWorkflowTransactionPolicy historyi.TransactionPolicy
 		NewWorkflowTransactionPolicy    *historyi.TransactionPolicy
+		HasInFlightUpdates              bool
 		PrepareTransaction              func() error
+		AfterCloseTransaction           func(*persistence.WorkflowMutation, *persistence.WorkflowSnapshot) error
 	}
 )
 
@@ -864,6 +866,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 			NewMutableState:                 newMutableState,
 			UpdateWorkflowTransactionPolicy: updateWorkflowTransactionPolicy,
 			NewWorkflowTransactionPolicy:    newWorkflowTransactionPolicy,
+			HasInFlightUpdates:              c.updateRegistry != nil && c.updateRegistry.Len() != 0,
 			PrepareTransaction: func() error {
 				return c.prepareUpdateWorkflowExecutionWithNew(
 					shardContext,
@@ -882,6 +885,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 				newMutableState,
 				updateWorkflowTransactionPolicy,
 				newWorkflowTransactionPolicy,
+				request.AfterCloseTransaction,
 			)
 		})
 	}
@@ -894,6 +898,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		newMutableState,
 		updateWorkflowTransactionPolicy,
 		newWorkflowTransactionPolicy,
+		nil,
 	)
 }
 
@@ -905,6 +910,7 @@ func (c *ContextImpl) updateWorkflowExecutionWithNew(
 	newMutableState historyi.MutableState,
 	updateWorkflowTransactionPolicy historyi.TransactionPolicy,
 	newWorkflowTransactionPolicy *historyi.TransactionPolicy,
+	afterCloseTransaction func(*persistence.WorkflowMutation, *persistence.WorkflowSnapshot) error,
 ) (retError error) {
 
 	defer func() {
@@ -944,6 +950,12 @@ func (c *ContextImpl) updateWorkflowExecutionWithNew(
 			*newWorkflowTransactionPolicy,
 		)
 		if err != nil {
+			return err
+		}
+	}
+
+	if afterCloseTransaction != nil {
+		if err := afterCloseTransaction(updateWorkflow, newWorkflow); err != nil {
 			return err
 		}
 	}
