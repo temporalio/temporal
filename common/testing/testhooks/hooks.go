@@ -12,12 +12,14 @@ import (
 	historytasks "go.temporal.io/server/service/history/tasks"
 )
 
-// HistoryWorkflowExecutionHook defines the test-only seams used to replace an
-// active workflow update with a passive replication apply. InterceptUpdate's payload
-// is owned by service/history/workflow and is intentionally opaque here.
-type HistoryWorkflowExecutionHook interface {
+// HistoryPassiveReplicationTestHook defines the test-only seams used to replace an
+// active workflow update with a passive replication apply and exercise the resulting
+// history tasks through standby execution. InterceptUpdate's payload is owned by
+// service/history/workflow and is intentionally opaque here.
+type HistoryPassiveReplicationTestHook interface {
 	InterceptUpdate(context.Context, any, func() error) error
 	WorkflowContextForReplication(context.Context) (any, bool)
+	ShouldExecuteTaskAsPassive(historytasks.Task) bool
 }
 
 // Test hook keys with their return type and scope.
@@ -36,9 +38,9 @@ var (
 	HistoryReplicationDLQWriteInterceptor    = newKey[func(*persistencespb.ReplicationTaskInfo, func() error) error, global]()
 	HistoryChasmRuntimeProvider              = newKey[func(chasm.Engine, chasm.VisibilityManager, *chasm.Registry), global]()
 	HistoryTransferTaskInterceptor           = newKey[func(historytasks.Task, func()), namespace.ID]()
-	// HistoryWorkflowExecutionInterceptor is only active in test_dep builds. The
-	// production testhooks implementation always reports it as unset.
-	HistoryWorkflowExecutionInterceptor = newKey[HistoryWorkflowExecutionHook, global]()
+	// HistoryPassiveReplicationTest enables the single-cluster passive replication
+	// test stack. The production testhooks implementation always reports it as unset.
+	HistoryPassiveReplicationTest       = newKey[HistoryPassiveReplicationTestHook, global]()
 	HistoryDLQTaskDeleteInterceptor     = newKey[func(context.Context, *historyservice.DeleteDLQTasksRequest, func(context.Context, *historyservice.DeleteDLQTasksRequest) (*historyservice.DeleteDLQTasksResponse, error)) (*historyservice.DeleteDLQTasksResponse, error), global]()
 	NamespaceReplicationTaskInterceptor = newKey[func(context.Context, *replicationspb.NamespaceTaskAttributes, func() error) error, namespace.Name]()
 )

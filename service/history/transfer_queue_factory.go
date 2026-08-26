@@ -10,7 +10,6 @@ import (
 	"go.temporal.io/server/common/sdk"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
@@ -34,7 +33,6 @@ type (
 		MatchingRawClient      resource.MatchingRawClient
 		VisibilityManager      manager.VisibilityManager
 		VersionMembershipCache worker_versioning.VersionMembershipAndReactivationStatusCache
-		TestHooks              testhooks.TestHooks
 	}
 
 	transferQueueFactory struct {
@@ -144,12 +142,13 @@ func (f *transferQueueFactory) CreateQueue(
 		f.ClientBean,
 	)
 
-	executor := queues.NewActiveStandbyExecutor(
+	executor := queues.NewActiveStandbyExecutorWithTestHooks(
 		currentClusterName,
 		f.NamespaceRegistry,
 		activeExecutor,
 		standbyExecutor,
 		logger,
+		f.TestHooks,
 	)
 	if f.ExecutorWrapper != nil {
 		executor = f.ExecutorWrapper.Wrap(executor)

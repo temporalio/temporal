@@ -260,7 +260,7 @@ func (r *WorkflowStateReplicatorImpl) workflowContextFromTestHook(
 ) (historyi.WorkflowContext, error) {
 	hook, ok := testhooks.Get(
 		r.testHooks,
-		testhooks.HistoryWorkflowExecutionInterceptor,
+		testhooks.HistoryPassiveReplicationTest,
 		testhooks.GlobalScope,
 	)
 	if !ok {

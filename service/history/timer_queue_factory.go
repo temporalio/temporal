@@ -144,12 +144,13 @@ func (f *timerQueueFactory) CreateQueue(
 		f.ClientBean,
 	)
 
-	executor := queues.NewActiveStandbyExecutor(
+	executor := queues.NewActiveStandbyExecutorWithTestHooks(
 		currentClusterName,
 		f.NamespaceRegistry,
 		activeExecutor,
 		standbyExecutor,
 		logger,
+		f.TestHooks,
 	)
 	if f.ExecutorWrapper != nil {
 		executor = f.ExecutorWrapper.Wrap(executor)

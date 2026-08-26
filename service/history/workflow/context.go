@@ -77,7 +77,7 @@ type (
 	}
 
 	// TestHookUpdateWorkflowExecutionRequest is passed only to the test-only
-	// HistoryWorkflowExecutionInterceptor.
+	// HistoryPassiveReplicationTest.
 	TestHookUpdateWorkflowExecutionRequest struct {
 		WorkflowContext                 *ContextImpl
 		ShardContext                    historyi.ShardContext
@@ -853,7 +853,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 ) error {
 	if hook, ok := testhooks.Get(
 		c.testHooks,
-		testhooks.HistoryWorkflowExecutionInterceptor,
+		testhooks.HistoryPassiveReplicationTest,
 		testhooks.GlobalScope,
 	); ok {
 		request := &TestHookUpdateWorkflowExecutionRequest{
