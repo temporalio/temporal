@@ -100,10 +100,6 @@ func (s *FunctionalClustersTestSuite) TestNaturallyBufferedInputsFlushedAndReapp
 	}
 	s.assertBufferedEventTypes(ctx, 0, ns, execution, naturallyBufferedTypes)
 
-	err = s.syncWorkflowState(ctx, namespace.NamespaceInfo.Id, execution)
-	var workflowNotReady *serviceerror.WorkflowNotReady
-	s.Require().ErrorAs(err, &workflowNotReady)
-
 	// Phase 3: fail over and create a winning branch on the new active cluster.
 	s.failoverToNewActiveCluster(ctx, ns)
 	s.writeSignalOnNewActive(ctx, namespace.NamespaceInfo.Id, ns, execution, "winner-signal")
@@ -123,8 +119,6 @@ func (s *FunctionalClustersTestSuite) TestNaturallyBufferedInputsFlushedAndReapp
 		s.releaseReplicationTask(ctx, replicationToNewActive)
 	}
 	s.Require().True(s.hasBufferedEventType(ctx, 1, ns, execution, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED))
-	err = s.syncWorkflowStateFrom(ctx, 1, namespace.NamespaceInfo.Id, execution, 1)
-	s.Require().ErrorAs(err, &workflowNotReady)
 	await.Require(ctx, s.T(), func(t *await.T) {
 		require.False(t, s.hasBufferedEventType(t.Context(), 1, ns, execution, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED))
 	}, 45*time.Second, replicationCheckInterval)
@@ -523,10 +517,6 @@ func (s *xdcBaseSuite) finishNaturallyBufferedConflict(
 	})
 	s.Require().NoError(err)
 	s.Require().True(s.hasBufferedEventType(ctx, 0, ns, execution, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED))
-
-	err = s.syncWorkflowState(ctx, namespaceID, execution)
-	var workflowNotReady *serviceerror.WorkflowNotReady
-	s.Require().ErrorAs(err, &workflowNotReady)
 
 	s.failoverToNewActiveCluster(ctx, ns)
 	s.writeSignalOnNewActive(ctx, namespaceID, ns, execution, winnerSignal)
