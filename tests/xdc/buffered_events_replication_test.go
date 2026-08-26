@@ -9,9 +9,7 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	failurepb "go.temporal.io/api/failure/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/testing/await"
 )
 
@@ -36,11 +34,9 @@ func (s *FunctionalClustersTestSuite) TestNaturallyBufferedInputsFlushedAndReapp
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
 
-	ns := s.createGlobalNamespace()
-	namespace, err := s.clusters[0].FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
-		Namespace: ns,
-	})
-	s.Require().NoError(err)
+	namespace := s.createBufferedEventsNamespace(ctx)
+	ns := namespace.Name
+	s.enableWorkflowPauseForTest()
 
 	// Phase 1: establish identical history with one pending activity.
 	execution, taskQueue := s.startWorkflowWithPendingActivity(ctx, ns)
@@ -73,18 +69,33 @@ func (s *FunctionalClustersTestSuite) TestNaturallyBufferedInputsFlushedAndReapp
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_PAUSED,
 		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UNPAUSED,
 	}
-	s.assertBufferedEventTypes(ctx, 0, ns, execution, naturallyBufferedTypes)
+	bufferedInputs := bufferedInputsExpectation{
+		Namespace:        namespace,
+		Execution:        execution,
+		UpdateID:         updateID,
+		OptionsRequestID: optionsRequestID,
+		EventTypes:       naturallyBufferedTypes,
+	}
+	s.assertBufferedEventTypes(ctx, bufferedEventExpectation{
+		Namespace:  ns,
+		Execution:  execution,
+		EventTypes: naturallyBufferedTypes,
+	})
 
 	// Phase 3: fail over and create a winning branch on the new active cluster.
 	s.failoverToNewActiveCluster(ctx, ns)
-	s.writeSignalOnNewActive(ctx, namespace.NamespaceInfo.Id, ns, execution, "winner-signal")
+	s.writeSignalOnNewActive(ctx, activeClusterSignal{
+		Namespace:  namespace,
+		Execution:  execution,
+		SignalName: "winner-signal",
+	})
 	winnerWorkflowTask := s.pollBufferedEventsWorkflowTask(ctx, 1, ns, taskQueue)
 	s.Require().NotEmpty(winnerWorkflowTask.TaskToken)
 
 	// Phase 4: resolve the conflict and verify losing-branch storage versus reapplication.
 	s.releaseReplicationTask(ctx, replicationToOldActive)
 	s.assertNoBufferedEvents(ctx, 0, ns, execution)
-	s.assertBufferedEventsPersistedOnLosingBranch(ctx, ns, namespace.NamespaceInfo.Id, execution, updateID, optionsRequestID, naturallyBufferedTypes)
+	s.assertBufferedEventsPersistedOnLosingBranch(ctx, bufferedInputs)
 
 	// Reapplying the losing update while the winner's workflow task is running
 	// naturally creates UpdateAdmitted as a buffered event.
@@ -98,10 +109,10 @@ func (s *FunctionalClustersTestSuite) TestNaturallyBufferedInputsFlushedAndReapp
 	// The timeout flush and conflict resolution can produce more than one
 	// state-based task. Release only this workflow's tasks until all reapplied
 	// inputs reach the active cluster.
-	for attempt := 0; attempt < 10 && !s.hasReappliedBufferedInputs(ctx, 1, ns, execution, updateID, optionsRequestID); attempt++ {
+	for attempt := 0; attempt < 10 && !s.hasReappliedBufferedInputs(ctx, bufferedInputs); attempt++ {
 		s.releaseReplicationTask(ctx, replicationToNewActive)
 	}
-	s.Require().True(s.hasReappliedBufferedInputs(ctx, 1, ns, execution, updateID, optionsRequestID))
+	s.Require().True(s.hasReappliedBufferedInputs(ctx, bufferedInputs))
 	for attempt := 0; attempt < 10 && !s.bufferedEventsHistoriesEqual(ctx, ns, execution); attempt++ {
 		s.releaseReplicationTask(ctx, replicationToOldActive)
 	}
@@ -130,13 +141,16 @@ func (s *FunctionalClustersTestSuite) TestNaturallyBufferedActivityOutcomesFlush
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	ns := s.createGlobalNamespace()
-	namespace, err := s.clusters[0].FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{Namespace: ns})
-	s.Require().NoError(err)
+	namespace := s.createBufferedEventsNamespace(ctx)
+	ns := namespace.Name
 
 	workflowID := "buffered-activities-xdc-" + uuid.NewString()
 	workflowQueue := &taskqueuepb.TaskQueue{Name: workflowID + "-workflow"}
-	execution := s.startBufferedEventsWorkflow(ctx, ns, workflowID, workflowQueue)
+	execution := s.startBufferedEventsWorkflow(ctx, startBufferedEventsWorkflowArgs{
+		Namespace:  ns,
+		WorkflowID: workflowID,
+		TaskQueue:  workflowQueue,
+	})
 	firstTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, workflowQueue)
 
 	activityQueues := map[string]*taskqueuepb.TaskQueue{}
@@ -145,43 +159,30 @@ func (s *FunctionalClustersTestSuite) TestNaturallyBufferedActivityOutcomesFlush
 		activityQueues[activityID] = &taskqueuepb.TaskQueue{Name: workflowID + "-" + activityID}
 		scheduleCommands = append(scheduleCommands, scheduleActivityCommand(activityID, activityQueues[activityID], time.Minute))
 	}
-	_, err = s.clusters[0].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		TaskToken: firstTask.TaskToken,
-		Identity:  "buffered-activities-xdc-test",
-		Commands:  scheduleCommands,
+	s.completeWorkflowTask(ctx, workflowTaskCompletion{
+		Task:     firstTask,
+		Commands: scheduleCommands,
 	})
-	s.Require().NoError(err)
 
 	// Start the activity that will be canceled before establishing the common
 	// prefix, so its cancellation request can be issued by a workflow command.
 	canceledTask := s.pollBufferedActivityTask(ctx, ns, activityQueues["canceled"])
-	_, err = s.clusters[0].FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace:         ns,
-		WorkflowExecution: execution,
-		SignalName:        "prepare-activity-cancellation",
-		RequestId:         uuid.NewString(),
-		Identity:          "buffered-activities-xdc-test",
+	s.signalWorkflow(ctx, workflowSignal{
+		Namespace:  ns,
+		Execution:  execution,
+		SignalName: "prepare-activity-cancellation",
 	})
-	s.Require().NoError(err)
 	cancelCommandTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, workflowQueue)
 	s.Require().NotNil(cancelCommandTask.History)
 	canceledScheduledID := findActivityScheduledEventID(cancelCommandTask.History.Events, "canceled")
 	s.Require().Positive(canceledScheduledID)
-	_, err = s.clusters[0].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		TaskToken:                  cancelCommandTask.TaskToken,
-		Identity:                   "buffered-activities-xdc-test",
-		ForceCreateNewWorkflowTask: true,
+	s.completeWorkflowTaskAndScheduleNext(ctx, workflowTaskCompletion{
+		Task: cancelCommandTask,
 		Commands: []*commandpb.Command{
-			{
-				CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_RequestCancelActivityTaskCommandAttributes{
-					RequestCancelActivityTaskCommandAttributes: &commandpb.RequestCancelActivityTaskCommandAttributes{ScheduledEventId: canceledScheduledID},
-				},
-			},
+			requestCancelActivityCommand(canceledScheduledID),
 			scheduleActivityCommand("timed-out", &taskqueuepb.TaskQueue{Name: workflowID + "-unpolled"}, 5*time.Second),
 		},
 	})
-	s.Require().NoError(err)
 
 	s.waitForClusterSynced()
 	await.Require(ctx, s.T(), func(t *await.T) {
@@ -197,28 +198,10 @@ func (s *FunctionalClustersTestSuite) TestNaturallyBufferedActivityOutcomesFlush
 	startedTask := s.pollBufferedActivityTask(ctx, ns, activityQueues["started"])
 	s.Require().NotEmpty(startedTask.TaskToken)
 	completedTask := s.pollBufferedActivityTask(ctx, ns, activityQueues["completed"])
-	_, err = s.clusters[0].FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
-		TaskToken: completedTask.TaskToken,
-		Identity:  "buffered-activities-xdc-test",
-	})
-	s.Require().NoError(err)
+	s.completeActivityTask(ctx, completedTask)
 	failedTask := s.pollBufferedActivityTask(ctx, ns, activityQueues["failed"])
-	_, err = s.clusters[0].FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
-		TaskToken: failedTask.TaskToken,
-		Identity:  "buffered-activities-xdc-test",
-		Failure: &failurepb.Failure{
-			Message: "expected activity failure",
-			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: true},
-			},
-		},
-	})
-	s.Require().NoError(err)
-	_, err = s.clusters[0].FrontendClient().RespondActivityTaskCanceled(ctx, &workflowservice.RespondActivityTaskCanceledRequest{
-		TaskToken: canceledTask.TaskToken,
-		Identity:  "buffered-activities-xdc-test",
-	})
-	s.Require().NoError(err)
+	s.failActivityTask(ctx, failedTask)
+	s.cancelActivityTask(ctx, canceledTask)
 
 	expectedTypes := []enumspb.EventType{
 		enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
@@ -229,9 +212,19 @@ func (s *FunctionalClustersTestSuite) TestNaturallyBufferedActivityOutcomesFlush
 		enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT,
 		enumspb.EVENT_TYPE_ACTIVITY_TASK_CANCELED,
 	}
-	s.assertBufferedEventTypes(ctx, 0, ns, execution, expectedTypes)
-	s.finishNaturallyBufferedConflict(ctx, ns, namespace.NamespaceInfo.Id, execution,
-		replicationToOldActive, replicationToNewActive, expectedTypes, "activity-winner-signal")
+	s.assertBufferedEventTypes(ctx, bufferedEventExpectation{
+		Namespace:  ns,
+		Execution:  execution,
+		EventTypes: expectedTypes,
+	})
+	s.finishNaturallyBufferedConflict(ctx, naturallyBufferedConflict{
+		Namespace:              namespace,
+		Execution:              execution,
+		ReplicationToOldActive: replicationToOldActive,
+		ReplicationToNewActive: replicationToNewActive,
+		ExpectedEventTypes:     expectedTypes,
+		WinnerSignal:           "activity-winner-signal",
+	})
 	winningHistory := s.getWorkflowHistory(ctx, s.T(), 1, ns, execution)
 	for _, eventType := range []enumspb.EventType{
 		enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
@@ -258,13 +251,16 @@ func (s *FunctionalClustersTestSuite) TestNaturallyBufferedChildWorkflowOutcomes
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	ns := s.createGlobalNamespace()
-	namespace, err := s.clusters[0].FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{Namespace: ns})
-	s.Require().NoError(err)
+	namespace := s.createBufferedEventsNamespace(ctx)
+	ns := namespace.Name
 
 	workflowID := "buffered-children-xdc-" + uuid.NewString()
 	parentQueue := &taskqueuepb.TaskQueue{Name: workflowID + "-parent"}
-	execution := s.startBufferedEventsWorkflow(ctx, ns, workflowID, parentQueue)
+	execution := s.startBufferedEventsWorkflow(ctx, startBufferedEventsWorkflowArgs{
+		Namespace:  ns,
+		WorkflowID: workflowID,
+		TaskQueue:  parentQueue,
+	})
 	firstTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, parentQueue)
 
 	childIDs := map[string]string{}
@@ -273,7 +269,11 @@ func (s *FunctionalClustersTestSuite) TestNaturallyBufferedChildWorkflowOutcomes
 		childIDs[outcome] = workflowID + "-" + outcome
 		childQueues[outcome] = &taskqueuepb.TaskQueue{Name: childIDs[outcome] + "-queue"}
 	}
-	duplicateExecution := s.startBufferedEventsWorkflow(ctx, ns, childIDs["duplicate"], childQueues["duplicate"])
+	duplicateExecution := s.startBufferedEventsWorkflow(ctx, startBufferedEventsWorkflowArgs{
+		Namespace:  ns,
+		WorkflowID: childIDs["duplicate"],
+		TaskQueue:  childQueues["duplicate"],
+	})
 	s.Require().NotEmpty(duplicateExecution.RunId)
 
 	s.waitForClusterSynced()
@@ -292,83 +292,40 @@ func (s *FunctionalClustersTestSuite) TestNaturallyBufferedChildWorkflowOutcomes
 		}
 		commands = append(commands, startChildWorkflowCommand(childIDs[outcome], childQueues[outcome], runTimeout))
 	}
-	_, err = s.clusters[0].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		TaskToken:                  firstTask.TaskToken,
-		Identity:                   "buffered-children-xdc-test",
-		ForceCreateNewWorkflowTask: true,
-		Commands:                   commands,
+	s.completeWorkflowTaskAndScheduleNext(ctx, workflowTaskCompletion{
+		Task:     firstTask,
+		Commands: commands,
 	})
-	s.Require().NoError(err)
 	heldWorkflowTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, parentQueue)
 	s.Require().NotEmpty(heldWorkflowTask.TaskToken)
 
 	completedTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, childQueues["completed"])
-	_, err = s.clusters[0].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		TaskToken: completedTask.TaskToken,
-		Identity:  "buffered-children-xdc-test",
-		Commands: []*commandpb.Command{{
-			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
-			},
-		}},
+	s.completeWorkflowTask(ctx, workflowTaskCompletion{
+		Task:     completedTask,
+		Commands: []*commandpb.Command{completeWorkflowCommand()},
 	})
-	s.Require().NoError(err)
 
 	failedTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, childQueues["failed"])
-	_, err = s.clusters[0].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		TaskToken: failedTask.TaskToken,
-		Identity:  "buffered-children-xdc-test",
-		Commands: []*commandpb.Command{{
-			CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{
-				FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{Failure: &failurepb.Failure{
-					Message: "expected child failure",
-					FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-						ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: true},
-					},
-				}},
-			},
-		}},
+	s.completeWorkflowTask(ctx, workflowTaskCompletion{
+		Task:     failedTask,
+		Commands: []*commandpb.Command{failWorkflowCommand("expected child failure")},
 	})
-	s.Require().NoError(err)
 
-	await.Require(ctx, s.T(), func(t *await.T) {
-		_, describeErr := s.clusters[0].FrontendClient().DescribeWorkflowExecution(t.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: ns,
-			Execution: &commonpb.WorkflowExecution{WorkflowId: childIDs["canceled"]},
-		})
-		require.NoError(t, describeErr)
-	}, replicationWaitTime, replicationCheckInterval)
-	_, err = s.clusters[0].FrontendClient().RequestCancelWorkflowExecution(ctx, &workflowservice.RequestCancelWorkflowExecutionRequest{
-		Namespace:         ns,
-		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: childIDs["canceled"]},
-		RequestId:         uuid.NewString(),
-		Identity:          "buffered-children-xdc-test",
+	s.requestWorkflowCancellationEventually(ctx, workflowCancellation{
+		Namespace: ns,
+		Execution: &commonpb.WorkflowExecution{WorkflowId: childIDs["canceled"]},
 	})
-	s.Require().NoError(err)
 	canceledTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, childQueues["canceled"])
-	_, err = s.clusters[0].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		TaskToken: canceledTask.TaskToken,
-		Identity:  "buffered-children-xdc-test",
-		Commands: []*commandpb.Command{{
-			CommandType: enumspb.COMMAND_TYPE_CANCEL_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CancelWorkflowExecutionCommandAttributes{
-				CancelWorkflowExecutionCommandAttributes: &commandpb.CancelWorkflowExecutionCommandAttributes{},
-			},
-		}},
+	s.completeWorkflowTask(ctx, workflowTaskCompletion{
+		Task:     canceledTask,
+		Commands: []*commandpb.Command{cancelWorkflowCommand()},
 	})
-	s.Require().NoError(err)
 
-	await.Require(ctx, s.T(), func(t *await.T) {
-		_, terminateErr := s.clusters[0].FrontendClient().TerminateWorkflowExecution(t.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
-			Namespace:         ns,
-			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: childIDs["terminated"]},
-			Reason:            "expected child termination",
-			Identity:          "buffered-children-xdc-test",
-		})
-		require.NoError(t, terminateErr)
-	}, replicationWaitTime, replicationCheckInterval)
+	s.terminateWorkflowEventually(ctx, workflowTermination{
+		Namespace: ns,
+		Execution: &commonpb.WorkflowExecution{WorkflowId: childIDs["terminated"]},
+		Reason:    "expected child termination",
+	})
 
 	expectedTypes := []enumspb.EventType{
 		enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED,
@@ -379,9 +336,19 @@ func (s *FunctionalClustersTestSuite) TestNaturallyBufferedChildWorkflowOutcomes
 		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TIMED_OUT,
 		enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_TERMINATED,
 	}
-	s.assertBufferedEventTypesPresent(ctx, 0, ns, execution, expectedTypes)
-	s.finishNaturallyBufferedConflict(ctx, ns, namespace.NamespaceInfo.Id, execution,
-		replicationToOldActive, replicationToNewActive, expectedTypes, "child-winner-signal")
+	s.assertBufferedEventTypesPresent(ctx, bufferedEventExpectation{
+		Namespace:  ns,
+		Execution:  execution,
+		EventTypes: expectedTypes,
+	})
+	s.finishNaturallyBufferedConflict(ctx, naturallyBufferedConflict{
+		Namespace:              namespace,
+		Execution:              execution,
+		ReplicationToOldActive: replicationToOldActive,
+		ReplicationToNewActive: replicationToNewActive,
+		ExpectedEventTypes:     expectedTypes,
+		WinnerSignal:           "child-winner-signal",
+	})
 	winningHistory := s.getWorkflowHistory(ctx, s.T(), 1, ns, execution)
 	for _, eventType := range expectedTypes {
 		s.Require().Zero(countBufferedEventType(winningHistory, eventType), "%s has no child initiation on the winning branch and must be skipped", eventType)
@@ -398,33 +365,40 @@ func (s *FunctionalClustersTestSuite) TestNaturallyBufferedExternalWorkflowOutco
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	ns := s.createGlobalNamespace()
-	namespace, err := s.clusters[0].FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{Namespace: ns})
-	s.Require().NoError(err)
+	namespace := s.createBufferedEventsNamespace(ctx)
+	ns := namespace.Name
 
 	workflowID := "buffered-external-xdc-" + uuid.NewString()
 	workflowQueue := &taskqueuepb.TaskQueue{Name: workflowID + "-source"}
-	execution := s.startBufferedEventsWorkflow(ctx, ns, workflowID, workflowQueue)
+	execution := s.startBufferedEventsWorkflow(ctx, startBufferedEventsWorkflowArgs{
+		Namespace:  ns,
+		WorkflowID: workflowID,
+		TaskQueue:  workflowQueue,
+	})
 	firstTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, workflowQueue)
 	signalTargetID := workflowID + "-signal-target"
 	signalTargetQueue := &taskqueuepb.TaskQueue{Name: signalTargetID + "-queue"}
-	signalTargetExecution := s.startBufferedEventsWorkflow(ctx, ns, signalTargetID, signalTargetQueue)
+	signalTargetExecution := s.startBufferedEventsWorkflow(ctx, startBufferedEventsWorkflowArgs{
+		Namespace:  ns,
+		WorkflowID: signalTargetID,
+		TaskQueue:  signalTargetQueue,
+	})
 	s.Require().NotEmpty(signalTargetExecution.RunId)
 	targetTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, signalTargetQueue)
-	_, err = s.clusters[0].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		TaskToken: targetTask.TaskToken,
-		Identity:  "buffered-external-xdc-test",
+	s.completeWorkflowTask(ctx, workflowTaskCompletion{
+		Task: targetTask,
 	})
-	s.Require().NoError(err)
 	cancelTargetID := workflowID + "-completed-cancel-target"
-	cancelTargetExecution := s.startBufferedEventsWorkflow(ctx, ns, cancelTargetID, &taskqueuepb.TaskQueue{Name: cancelTargetID + "-queue"})
-	_, err = s.clusters[0].FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace:         ns,
-		WorkflowExecution: cancelTargetExecution,
-		Reason:            "completed target makes external cancellation deterministic",
-		Identity:          "buffered-external-xdc-test",
+	cancelTargetExecution := s.startBufferedEventsWorkflow(ctx, startBufferedEventsWorkflowArgs{
+		Namespace:  ns,
+		WorkflowID: cancelTargetID,
+		TaskQueue:  &taskqueuepb.TaskQueue{Name: cancelTargetID + "-queue"},
 	})
-	s.Require().NoError(err)
+	s.terminateWorkflow(ctx, workflowTermination{
+		Namespace: ns,
+		Execution: cancelTargetExecution,
+		Reason:    "completed target makes external cancellation deterministic",
+	})
 
 	s.waitForClusterSynced()
 	await.Require(ctx, s.T(), func(t *await.T) {
@@ -436,10 +410,8 @@ func (s *FunctionalClustersTestSuite) TestNaturallyBufferedExternalWorkflowOutco
 
 	missingWorkflowID := workflowID + "-missing"
 	missingRunID := uuid.NewString()
-	heldWorkflowTask := s.respondWorkflowTaskAndStartNext(ctx, 0, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		TaskToken:                  firstTask.TaskToken,
-		Identity:                   "buffered-external-xdc-test",
-		ForceCreateNewWorkflowTask: true,
+	heldWorkflowTask := s.completeWorkflowTaskAndReturnNext(ctx, workflowTaskCompletion{
+		Task: firstTask,
 		Commands: []*commandpb.Command{
 			signalExternalWorkflowCommand(ns, signalTargetID, "", "successful-external-signal"),
 			signalExternalWorkflowCommand(ns, missingWorkflowID, missingRunID, "failed-external-signal"),
@@ -459,9 +431,19 @@ func (s *FunctionalClustersTestSuite) TestNaturallyBufferedExternalWorkflowOutco
 		enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_SIGNALED,
 		enumspb.EVENT_TYPE_EXTERNAL_WORKFLOW_EXECUTION_CANCEL_REQUESTED,
 	}
-	s.assertBufferedEventTypesPresent(ctx, 0, ns, execution, expectedTypes)
-	s.finishNaturallyBufferedConflict(ctx, ns, namespace.NamespaceInfo.Id, execution,
-		replicationToOldActive, replicationToNewActive, expectedTypes, "external-winner-signal")
+	s.assertBufferedEventTypesPresent(ctx, bufferedEventExpectation{
+		Namespace:  ns,
+		Execution:  execution,
+		EventTypes: expectedTypes,
+	})
+	s.finishNaturallyBufferedConflict(ctx, naturallyBufferedConflict{
+		Namespace:              namespace,
+		Execution:              execution,
+		ReplicationToOldActive: replicationToOldActive,
+		ReplicationToNewActive: replicationToNewActive,
+		ExpectedEventTypes:     expectedTypes,
+		WinnerSignal:           "external-winner-signal",
+	})
 	winningHistory := s.getWorkflowHistory(ctx, s.T(), 1, ns, execution)
 	for _, eventType := range expectedTypes {
 		s.Require().Zero(countBufferedEventType(winningHistory, eventType), "%s must remain only on the losing branch", eventType)

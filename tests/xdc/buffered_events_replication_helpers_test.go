@@ -11,6 +11,7 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
@@ -25,6 +26,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -49,61 +51,202 @@ type blockedReplicationTask struct {
 	result  chan error
 }
 
+type bufferedEventsNamespace struct {
+	Name string
+	ID   string
+}
+
+type startBufferedEventsWorkflowArgs struct {
+	Namespace  string
+	WorkflowID string
+	TaskQueue  *taskqueuepb.TaskQueue
+}
+
+type workflowTaskCompletion struct {
+	Task     *workflowservice.PollWorkflowTaskQueueResponse
+	Commands []*commandpb.Command
+}
+
+type bufferedEventExpectation struct {
+	Namespace  string
+	Execution  *commonpb.WorkflowExecution
+	EventTypes []enumspb.EventType
+}
+
+type workflowSignal struct {
+	Namespace  string
+	Execution  *commonpb.WorkflowExecution
+	SignalName string
+}
+
+type activeClusterSignal struct {
+	Namespace  bufferedEventsNamespace
+	Execution  *commonpb.WorkflowExecution
+	SignalName string
+}
+
+type workflowCancellation struct {
+	Namespace string
+	Execution *commonpb.WorkflowExecution
+}
+
+type workflowTermination struct {
+	Namespace string
+	Execution *commonpb.WorkflowExecution
+	Reason    string
+}
+
+type naturallyBufferedConflict struct {
+	Namespace              bufferedEventsNamespace
+	Execution              *commonpb.WorkflowExecution
+	ReplicationToOldActive <-chan *blockedReplicationTask
+	ReplicationToNewActive <-chan *blockedReplicationTask
+	ExpectedEventTypes     []enumspb.EventType
+	WinnerSignal           string
+}
+
+type bufferedInputsExpectation struct {
+	Namespace        bufferedEventsNamespace
+	Execution        *commonpb.WorkflowExecution
+	UpdateID         string
+	OptionsRequestID string
+	EventTypes       []enumspb.EventType
+}
+
 type bufferedNexusCallback struct {
 	operation string
 	url       string
 	token     string
 }
 
+type bufferedNexusOperationCompletion struct {
+	Callback bufferedNexusCallback
+	Result   string
+}
+
+type bufferedNexusLosingBranch struct {
+	Namespace        bufferedEventsNamespace
+	Execution        *commonpb.WorkflowExecution
+	ScheduledEventID int64
+}
+
+func (s *xdcBaseSuite) createBufferedEventsNamespace(ctx context.Context) bufferedEventsNamespace {
+	name := s.createGlobalNamespace()
+	response, err := s.clusters[0].FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Namespace: name,
+	})
+	s.Require().NoError(err)
+	return bufferedEventsNamespace{Name: name, ID: response.NamespaceInfo.Id}
+}
+
+func (s *xdcBaseSuite) enableWorkflowPauseForTest() {
+	s.T().Helper()
+	for _, cluster := range s.clusters {
+		cluster.OverrideDynamicConfig(s.T(), dynamicconfig.WorkflowPauseEnabled, true)
+	}
+}
+
+func (s *xdcBaseSuite) signalWorkflow(ctx context.Context, signal workflowSignal) {
+	s.T().Helper()
+	_, err := s.clusters[0].FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         signal.Namespace,
+		WorkflowExecution: signal.Execution,
+		SignalName:        signal.SignalName,
+		RequestId:         uuid.NewString(),
+		Identity:          "buffered-events-xdc-test",
+	})
+	s.Require().NoError(err)
+}
+
+func (s *xdcBaseSuite) requestWorkflowCancellationEventually(ctx context.Context, target workflowCancellation) {
+	s.T().Helper()
+	await.Require(ctx, s.T(), func(t *await.T) {
+		_, err := s.clusters[0].FrontendClient().DescribeWorkflowExecution(t.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: target.Namespace,
+			Execution: target.Execution,
+		})
+		require.NoError(t, err)
+	}, replicationWaitTime, replicationCheckInterval)
+	_, err := s.clusters[0].FrontendClient().RequestCancelWorkflowExecution(ctx, &workflowservice.RequestCancelWorkflowExecutionRequest{
+		Namespace:         target.Namespace,
+		WorkflowExecution: target.Execution,
+		RequestId:         uuid.NewString(),
+		Identity:          "buffered-events-xdc-test",
+	})
+	s.Require().NoError(err)
+}
+
+func (s *xdcBaseSuite) terminateWorkflow(ctx context.Context, target workflowTermination) {
+	s.T().Helper()
+	_, err := s.clusters[0].FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         target.Namespace,
+		WorkflowExecution: target.Execution,
+		Reason:            target.Reason,
+		Identity:          "buffered-events-xdc-test",
+	})
+	s.Require().NoError(err)
+}
+
+func (s *xdcBaseSuite) terminateWorkflowEventually(ctx context.Context, target workflowTermination) {
+	s.T().Helper()
+	await.Require(ctx, s.T(), func(t *await.T) {
+		_, err := s.clusters[0].FrontendClient().TerminateWorkflowExecution(t.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
+			Namespace:         target.Namespace,
+			WorkflowExecution: target.Execution,
+			Reason:            target.Reason,
+			Identity:          "buffered-events-xdc-test",
+		})
+		require.NoError(t, err)
+	}, replicationWaitTime, replicationCheckInterval)
+}
+
 func (s *xdcBaseSuite) finishNaturallyBufferedConflict(
 	ctx context.Context,
-	ns string,
-	namespaceID string,
-	execution *commonpb.WorkflowExecution,
-	replicationToOldActive <-chan *blockedReplicationTask,
-	replicationToNewActive <-chan *blockedReplicationTask,
-	expectedTypes []enumspb.EventType,
-	winnerSignal string,
+	conflict naturallyBufferedConflict,
 ) []*historypb.HistoryEvent {
 	losingBranchMarker := "losing-branch-marker-" + uuid.NewString()
 	_, err := s.clusters[0].FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace:         ns,
-		WorkflowExecution: execution,
+		Namespace:         conflict.Namespace.Name,
+		WorkflowExecution: conflict.Execution,
 		SignalName:        losingBranchMarker,
 		RequestId:         uuid.NewString(),
 		Identity:          "buffered-events-xdc-test",
 	})
 	s.Require().NoError(err)
-	s.Require().True(s.hasBufferedEventType(ctx, 0, ns, execution, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED))
+	s.Require().True(s.hasBufferedEventType(ctx, 0, conflict.Namespace.Name, conflict.Execution, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED))
 
-	s.failoverToNewActiveCluster(ctx, ns)
-	s.writeSignalOnNewActive(ctx, namespaceID, ns, execution, winnerSignal)
-	s.releaseReplicationTask(ctx, replicationToOldActive)
-	s.assertNoBufferedEvents(ctx, 0, ns, execution)
-	losingHistory := s.findNonCurrentHistoryBranch(ctx, ns, namespaceID, execution, func(history []*historypb.HistoryEvent) bool {
-		for _, eventType := range expectedTypes {
+	s.failoverToNewActiveCluster(ctx, conflict.Namespace.Name)
+	s.writeSignalOnNewActive(ctx, activeClusterSignal{
+		Namespace:  conflict.Namespace,
+		Execution:  conflict.Execution,
+		SignalName: conflict.WinnerSignal,
+	})
+	s.releaseReplicationTask(ctx, conflict.ReplicationToOldActive)
+	s.assertNoBufferedEvents(ctx, 0, conflict.Namespace.Name, conflict.Execution)
+	losingHistory := s.findNonCurrentHistoryBranch(ctx, conflict.Namespace.Name, conflict.Namespace.ID, conflict.Execution, func(history []*historypb.HistoryEvent) bool {
+		for _, eventType := range conflict.ExpectedEventTypes {
 			if findHistoryEvent(history, eventType, nil) == nil {
 				return false
 			}
 		}
 		return true
 	})
-	for _, eventType := range expectedTypes {
+	for _, eventType := range conflict.ExpectedEventTypes {
 		event := findHistoryEvent(losingHistory, eventType, nil)
 		s.Require().NotNil(event, "%s must be written to the losing branch", eventType)
 		s.Require().Positive(event.EventId)
 		s.Require().NotEqual(common.BufferedEventID, event.EventId)
 	}
 	await.Require(ctx, s.T(), func(t *await.T) {
-		s.tryReleaseReplicationTask(replicationToNewActive)
+		s.tryReleaseReplicationTask(conflict.ReplicationToNewActive)
 		require.True(
 			t,
-			hasSignalNamed(s.getWorkflowHistory(t.Context(), t.AssertionT(), 1, ns, execution), losingBranchMarker),
+			hasSignalNamed(s.getWorkflowHistory(t.Context(), t.AssertionT(), 1, conflict.Namespace.Name, conflict.Execution), losingBranchMarker),
 			"the losing branch marker must be reapplied before checking the rest of the batch",
 		)
 	}, replicationWaitTime, replicationCheckInterval)
-	for attempt := 0; attempt < 10 && !s.bufferedEventsHistoriesEqual(ctx, ns, execution); attempt++ {
-		s.releaseReplicationTask(ctx, replicationToOldActive)
+	for attempt := 0; attempt < 10 && !s.bufferedEventsHistoriesEqual(ctx, conflict.Namespace.Name, conflict.Execution); attempt++ {
+		s.releaseReplicationTask(ctx, conflict.ReplicationToOldActive)
 	}
 	return losingHistory
 }
@@ -151,22 +294,20 @@ func startChildWorkflowCommand(childID string, taskQueue *taskqueuepb.TaskQueue,
 
 func (s *xdcBaseSuite) startBufferedEventsWorkflow(
 	ctx context.Context,
-	ns string,
-	workflowID string,
-	taskQueue *taskqueuepb.TaskQueue,
+	args startBufferedEventsWorkflowArgs,
 ) *commonpb.WorkflowExecution {
 	response, err := s.clusters[0].FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:           ns,
-		WorkflowId:          workflowID,
+		Namespace:           args.Namespace,
+		WorkflowId:          args.WorkflowID,
 		WorkflowType:        &commonpb.WorkflowType{Name: "buffered-events-xdc"},
-		TaskQueue:           taskQueue,
+		TaskQueue:           args.TaskQueue,
 		RequestId:           uuid.NewString(),
 		WorkflowRunTimeout:  durationpb.New(time.Minute),
 		WorkflowTaskTimeout: durationpb.New(2 * time.Minute),
 		Identity:            "buffered-events-xdc-test",
 	})
 	s.Require().NoError(err)
-	return &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: response.RunId}
+	return &commonpb.WorkflowExecution{WorkflowId: args.WorkflowID, RunId: response.RunId}
 }
 
 func scheduleActivityCommand(activityID string, taskQueue *taskqueuepb.TaskQueue, startToClose time.Duration) *commandpb.Command {
@@ -184,6 +325,51 @@ func scheduleActivityCommand(activityID string, taskQueue *taskqueuepb.TaskQueue
 	}
 }
 
+func requestCancelActivityCommand(scheduledEventID int64) *commandpb.Command {
+	return &commandpb.Command{
+		CommandType: enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,
+		Attributes: &commandpb.Command_RequestCancelActivityTaskCommandAttributes{
+			RequestCancelActivityTaskCommandAttributes: &commandpb.RequestCancelActivityTaskCommandAttributes{
+				ScheduledEventId: scheduledEventID,
+			},
+		},
+	}
+}
+
+func completeWorkflowCommand() *commandpb.Command {
+	return &commandpb.Command{
+		CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+		Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
+		},
+	}
+}
+
+func failWorkflowCommand(message string) *commandpb.Command {
+	return &commandpb.Command{
+		CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
+		Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{
+			FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
+				Failure: &failurepb.Failure{
+					Message: message,
+					FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+						ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: true},
+					},
+				},
+			},
+		},
+	}
+}
+
+func cancelWorkflowCommand() *commandpb.Command {
+	return &commandpb.Command{
+		CommandType: enumspb.COMMAND_TYPE_CANCEL_WORKFLOW_EXECUTION,
+		Attributes: &commandpb.Command_CancelWorkflowExecutionCommandAttributes{
+			CancelWorkflowExecutionCommandAttributes: &commandpb.CancelWorkflowExecutionCommandAttributes{},
+		},
+	}
+}
+
 func (s *xdcBaseSuite) pollBufferedActivityTask(
 	ctx context.Context,
 	ns string,
@@ -197,6 +383,39 @@ func (s *xdcBaseSuite) pollBufferedActivityTask(
 	s.Require().NoError(err)
 	s.Require().NotEmpty(response.TaskToken)
 	return response
+}
+
+func (s *xdcBaseSuite) completeActivityTask(ctx context.Context, task *workflowservice.PollActivityTaskQueueResponse) {
+	s.T().Helper()
+	_, err := s.clusters[0].FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+		TaskToken: task.TaskToken,
+		Identity:  "buffered-events-xdc-test",
+	})
+	s.Require().NoError(err)
+}
+
+func (s *xdcBaseSuite) failActivityTask(ctx context.Context, task *workflowservice.PollActivityTaskQueueResponse) {
+	s.T().Helper()
+	_, err := s.clusters[0].FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+		TaskToken: task.TaskToken,
+		Identity:  "buffered-events-xdc-test",
+		Failure: &failurepb.Failure{
+			Message: "expected activity failure",
+			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: true},
+			},
+		},
+	})
+	s.Require().NoError(err)
+}
+
+func (s *xdcBaseSuite) cancelActivityTask(ctx context.Context, task *workflowservice.PollActivityTaskQueueResponse) {
+	s.T().Helper()
+	_, err := s.clusters[0].FrontendClient().RespondActivityTaskCanceled(ctx, &workflowservice.RespondActivityTaskCanceledRequest{
+		TaskToken: task.TaskToken,
+		Identity:  "buffered-events-xdc-test",
+	})
+	s.Require().NoError(err)
 }
 
 func findActivityScheduledEventID(history []*historypb.HistoryEvent, activityID string) int64 {
@@ -443,18 +662,15 @@ func (s *xdcBaseSuite) failoverToNewActiveCluster(ctx context.Context, ns string
 
 func (s *xdcBaseSuite) writeSignalOnNewActive(
 	ctx context.Context,
-	namespaceID string,
-	ns string,
-	execution *commonpb.WorkflowExecution,
-	signalName string,
+	signal activeClusterSignal,
 ) {
 	s.T().Helper()
 	request := &historyservice.SignalWorkflowExecutionRequest{
-		NamespaceId: namespaceID,
+		NamespaceId: signal.Namespace.ID,
 		SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
-			Namespace:         ns,
-			WorkflowExecution: execution,
-			SignalName:        signalName,
+			Namespace:         signal.Namespace.Name,
+			WorkflowExecution: signal.Execution,
+			SignalName:        signal.SignalName,
 			Identity:          "buffered-events-xdc-test",
 			RequestId:         uuid.NewString(),
 		},
@@ -464,8 +680,8 @@ func (s *xdcBaseSuite) writeSignalOnNewActive(
 		require.NoError(t, err)
 	}, replicationWaitTime, replicationCheckInterval)
 	await.Require(ctx, s.T(), func(t *await.T) {
-		history := s.getWorkflowHistory(t.Context(), t.AssertionT(), 1, ns, execution)
-		require.True(t, hasSignalNamed(history, signalName))
+		history := s.getWorkflowHistory(t.Context(), t.AssertionT(), 1, signal.Namespace.Name, signal.Execution)
+		require.True(t, hasSignalNamed(history, signal.SignalName))
 	}, replicationWaitTime, replicationCheckInterval)
 }
 
@@ -503,15 +719,39 @@ func (s *xdcBaseSuite) pollBufferedEventsWorkflowTask(
 	return response
 }
 
-func (s *xdcBaseSuite) respondWorkflowTaskAndStartNext(
+func (s *xdcBaseSuite) completeWorkflowTask(ctx context.Context, completion workflowTaskCompletion) {
+	s.T().Helper()
+	_, err := s.clusters[0].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		TaskToken: completion.Task.TaskToken,
+		Identity:  "buffered-events-xdc-test",
+		Commands:  completion.Commands,
+	})
+	s.Require().NoError(err)
+}
+
+func (s *xdcBaseSuite) completeWorkflowTaskAndScheduleNext(ctx context.Context, completion workflowTaskCompletion) {
+	s.T().Helper()
+	_, err := s.clusters[0].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		TaskToken:                  completion.Task.TaskToken,
+		Identity:                   "buffered-events-xdc-test",
+		Commands:                   completion.Commands,
+		ForceCreateNewWorkflowTask: true,
+	})
+	s.Require().NoError(err)
+}
+
+func (s *xdcBaseSuite) completeWorkflowTaskAndReturnNext(
 	ctx context.Context,
-	clusterIndex int,
-	request *workflowservice.RespondWorkflowTaskCompletedRequest,
+	completion workflowTaskCompletion,
 ) *workflowservice.PollWorkflowTaskQueueResponse {
 	s.T().Helper()
-	request.ForceCreateNewWorkflowTask = true
-	request.ReturnNewWorkflowTask = true
-	response, err := s.clusters[clusterIndex].FrontendClient().RespondWorkflowTaskCompleted(ctx, request)
+	response, err := s.clusters[0].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		TaskToken:                  completion.Task.TaskToken,
+		Identity:                   "buffered-events-xdc-test",
+		Commands:                   completion.Commands,
+		ForceCreateNewWorkflowTask: true,
+		ReturnNewWorkflowTask:      true,
+	})
 	s.Require().NoError(err)
 	s.Require().NotNil(response.GetWorkflowTask())
 	return response.GetWorkflowTask()
@@ -606,16 +846,13 @@ func workflowIDFromReplicationTask(task *replicationspb.ReplicationTask) string 
 
 func (s *xdcBaseSuite) assertBufferedEventTypes(
 	ctx context.Context,
-	clusterIndex int,
-	ns string,
-	execution *commonpb.WorkflowExecution,
-	expectedTypes []enumspb.EventType,
+	expectation bufferedEventExpectation,
 ) {
 	s.T().Helper()
 	await.Require(ctx, s.T(), func(t *await.T) {
-		response, err := s.clusters[clusterIndex].AdminClient().DescribeMutableState(t.Context(), &adminservice.DescribeMutableStateRequest{
-			Namespace: ns,
-			Execution: execution,
+		response, err := s.clusters[0].AdminClient().DescribeMutableState(t.Context(), &adminservice.DescribeMutableStateRequest{
+			Namespace: expectation.Namespace,
+			Execution: expectation.Execution,
 			Archetype: chasm.WorkflowArchetype,
 		})
 		require.NoError(t, err)
@@ -626,22 +863,19 @@ func (s *xdcBaseSuite) assertBufferedEventTypes(
 			require.Equal(t, common.BufferedEventID, event.EventId)
 			actualTypes = append(actualTypes, event.EventType)
 		}
-		require.ElementsMatch(t, expectedTypes, actualTypes)
+		require.ElementsMatch(t, expectation.EventTypes, actualTypes)
 	}, replicationWaitTime, replicationCheckInterval)
 }
 
 func (s *xdcBaseSuite) assertBufferedEventTypesPresent(
 	ctx context.Context,
-	clusterIndex int,
-	ns string,
-	execution *commonpb.WorkflowExecution,
-	expectedTypes []enumspb.EventType,
+	expectation bufferedEventExpectation,
 ) {
 	s.T().Helper()
 	await.Require(ctx, s.T(), func(t *await.T) {
-		response, err := s.clusters[clusterIndex].AdminClient().DescribeMutableState(t.Context(), &adminservice.DescribeMutableStateRequest{
-			Namespace: ns,
-			Execution: execution,
+		response, err := s.clusters[0].AdminClient().DescribeMutableState(t.Context(), &adminservice.DescribeMutableStateRequest{
+			Namespace: expectation.Namespace,
+			Execution: expectation.Execution,
 			Archetype: chasm.WorkflowArchetype,
 		})
 		require.NoError(t, err)
@@ -649,7 +883,7 @@ func (s *xdcBaseSuite) assertBufferedEventTypesPresent(
 		for _, event := range bufferedEvents {
 			require.Equal(t, common.BufferedEventID, event.EventId)
 		}
-		for _, expectedType := range expectedTypes {
+		for _, expectedType := range expectation.EventTypes {
 			require.NotNil(t, findHistoryEvent(bufferedEvents, expectedType, nil), "%s must be naturally buffered", expectedType)
 		}
 	}, replicationWaitTime, replicationCheckInterval)
@@ -689,22 +923,17 @@ func (s *xdcBaseSuite) getWorkflowHistory(
 
 func (s *FunctionalClustersTestSuite) assertBufferedEventsPersistedOnLosingBranch(
 	ctx context.Context,
-	ns string,
-	namespaceID string,
-	execution *commonpb.WorkflowExecution,
-	updateID string,
-	optionsRequestID string,
-	expectedEventTypes []enumspb.EventType,
+	expectation bufferedInputsExpectation,
 ) {
 	s.T().Helper()
-	losingHistory := s.findNonCurrentHistoryBranch(ctx, ns, namespaceID, execution, func(history []*historypb.HistoryEvent) bool {
+	losingHistory := s.findNonCurrentHistoryBranch(ctx, expectation.Namespace.Name, expectation.Namespace.ID, expectation.Execution, func(history []*historypb.HistoryEvent) bool {
 		return hasSignalNamed(history, "buffered-signal")
 	})
-	s.Require().True(hasUpdateAccepted(losingHistory, updateID))
+	s.Require().True(hasUpdateAccepted(losingHistory, expectation.UpdateID))
 	s.Require().True(hasWorkflowTaskFailedForFailover(losingHistory))
-	s.Require().True(hasOptionsUpdatedRequest(losingHistory, optionsRequestID))
+	s.Require().True(hasOptionsUpdatedRequest(losingHistory, expectation.OptionsRequestID))
 
-	for _, eventType := range expectedEventTypes {
+	for _, eventType := range expectation.EventTypes {
 		event := findHistoryEvent(losingHistory, eventType, nil)
 		s.Require().NotNil(event, "%s must be written to the losing branch", eventType)
 		s.Require().NotEqual(common.BufferedEventID, event.EventId)
@@ -788,13 +1017,9 @@ func (s *xdcBaseSuite) bufferedEventsHistoriesEqual(
 
 func (s *FunctionalClustersTestSuite) hasReappliedBufferedInputs(
 	ctx context.Context,
-	clusterIndex int,
-	ns string,
-	execution *commonpb.WorkflowExecution,
-	updateID string,
-	optionsRequestID string,
+	expectation bufferedInputsExpectation,
 ) bool {
-	history := s.getWorkflowHistory(ctx, s.T(), clusterIndex, ns, execution)
+	history := s.getWorkflowHistory(ctx, s.T(), 1, expectation.Namespace.Name, expectation.Execution)
 	hasSourceSignal := false
 	hasUpdate := false
 	hasCancel := false
@@ -804,11 +1029,11 @@ func (s *FunctionalClustersTestSuite) hasReappliedBufferedInputs(
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 			hasSourceSignal = hasSourceSignal || event.GetWorkflowExecutionSignaledEventAttributes().SignalName == "buffered-signal"
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ADMITTED:
-			hasUpdate = hasUpdate || event.GetWorkflowExecutionUpdateAdmittedEventAttributes().GetRequest().GetMeta().GetUpdateId() == updateID
+			hasUpdate = hasUpdate || event.GetWorkflowExecutionUpdateAdmittedEventAttributes().GetRequest().GetMeta().GetUpdateId() == expectation.UpdateID
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED:
 			hasCancel = true
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED:
-			hasOptionsUpdate = hasOptionsUpdate || event.GetWorkflowExecutionOptionsUpdatedEventAttributes().AttachedRequestId == optionsRequestID
+			hasOptionsUpdate = hasOptionsUpdate || event.GetWorkflowExecutionOptionsUpdatedEventAttributes().AttachedRequestId == expectation.OptionsRequestID
 		default:
 		}
 	}
@@ -901,6 +1126,16 @@ func (s *NexusStateReplicationSuite) failNexusOperation(ctx context.Context, cal
 		Header: nexus.Header{commonnexus.CallbackTokenHeader: callback.token},
 	})
 	s.Require().NoError(err)
+}
+
+func (s *NexusStateReplicationSuite) completeBufferedNexusOperation(ctx context.Context, completion bufferedNexusOperationCompletion) {
+	s.T().Helper()
+	s.completeNexusOperation(ctx, completion.Result, completion.Callback.url, completion.Callback.token)
+}
+
+func (s *NexusStateReplicationSuite) cancelBufferedNexusOperation(ctx context.Context, callback bufferedNexusCallback) {
+	s.T().Helper()
+	s.cancelNexusOperation(ctx, callback.url, callback.token)
 }
 
 func (s *NexusStateReplicationSuite) setupBufferedNexusEndpoint(
@@ -1017,14 +1252,11 @@ func receiveAnyBufferedNexusCallback(
 
 func (s *NexusStateReplicationSuite) findBufferedNexusLosingBranch(
 	ctx context.Context,
-	ns string,
-	namespaceID string,
-	execution *commonpb.WorkflowExecution,
-	losingScheduledID int64,
+	branch bufferedNexusLosingBranch,
 ) []*historypb.HistoryEvent {
 	s.T().Helper()
-	history := s.findNonCurrentHistoryBranch(ctx, ns, namespaceID, execution, func(history []*historypb.HistoryEvent) bool {
-		return hasNexusEventForScheduledID(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED, losingScheduledID)
+	history := s.findNonCurrentHistoryBranch(ctx, branch.Namespace.Name, branch.Namespace.ID, branch.Execution, func(history []*historypb.HistoryEvent) bool {
+		return hasNexusEventForScheduledID(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED, branch.ScheduledEventID)
 	})
 	for _, event := range history {
 		if event.EventType == enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED ||

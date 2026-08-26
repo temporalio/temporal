@@ -8,14 +8,12 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/testing/await"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 // TestBufferedNexusEventsReapplySharedOperationAndSkipLosingOnlyOperation buffers completion of an
@@ -29,37 +27,25 @@ func (s *NexusStateReplicationSuite) TestBufferedNexusEventsReapplySharedOperati
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	ns := s.createGlobalNamespace()
-	namespace, err := s.clusters[0].FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
-		Namespace: ns,
-	})
-	s.Require().NoError(err)
+	namespace := s.createBufferedEventsNamespace(ctx)
+	ns := namespace.Name
 
 	// Phase 1: establish identical history with one shared, started Nexus operation.
 	endpointName, operationCallbacks, allowLosingOnlyOperationStart := s.setupBufferedNexusEndpoint(ctx)
 
 	workflowID := "buffered-nexus-conflict-" + uuid.NewString()
 	taskQueue := &taskqueuepb.TaskQueue{Name: "buffered-nexus-conflict", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	startResponse, err := s.clusters[0].FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:           ns,
-		WorkflowId:          workflowID,
-		WorkflowType:        &commonpb.WorkflowType{Name: "buffered-nexus-conflict"},
-		TaskQueue:           taskQueue,
-		RequestId:           uuid.NewString(),
-		WorkflowRunTimeout:  durationpb.New(time.Minute),
-		WorkflowTaskTimeout: durationpb.New(30 * time.Second),
-		Identity:            "buffered-nexus-conflict-test",
+	execution := s.startBufferedEventsWorkflow(ctx, startBufferedEventsWorkflowArgs{
+		Namespace:  ns,
+		WorkflowID: workflowID,
+		TaskQueue:  taskQueue,
 	})
-	s.Require().NoError(err)
-	execution := &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: startResponse.RunId}
 
 	firstWorkflowTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, taskQueue)
-	_, err = s.clusters[0].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		TaskToken: firstWorkflowTask.TaskToken,
-		Identity:  "buffered-nexus-conflict-test",
-		Commands:  []*commandpb.Command{scheduleBufferedNexusOperationCommand(endpointName, "shared-operation")},
+	s.completeWorkflowTask(ctx, workflowTaskCompletion{
+		Task:     firstWorkflowTask,
+		Commands: []*commandpb.Command{scheduleBufferedNexusOperationCommand(endpointName, "shared-operation")},
 	})
-	s.Require().NoError(err)
 	sharedOperationCallback := receiveBufferedNexusCallback(ctx, s.T(), operationCallbacks, "shared-operation")
 	await.Require(ctx, s.T(), func(t *await.T) {
 		history := s.getWorkflowHistory(t.Context(), t.AssertionT(), 0, ns, execution)
@@ -79,22 +65,16 @@ func (s *NexusStateReplicationSuite) TestBufferedNexusEventsReapplySharedOperati
 	replicationToNewActive := s.blockReplicationForWorkflow(1, workflowID)
 
 	// Phase 2: hold a workflow task and buffer completions for shared and losing-only operations.
-	_, err = s.clusters[0].FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace:         ns,
-		WorkflowExecution: execution,
-		SignalName:        "create-losing-operation",
-		RequestId:         uuid.NewString(),
-		Identity:          "buffered-nexus-conflict-test",
+	s.signalWorkflow(ctx, workflowSignal{
+		Namespace:  ns,
+		Execution:  execution,
+		SignalName: "create-losing-operation",
 	})
-	s.Require().NoError(err)
 	scheduleLosingOnlyOperationTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, taskQueue)
-	_, err = s.clusters[0].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		TaskToken:                  scheduleLosingOnlyOperationTask.TaskToken,
-		Identity:                   "buffered-nexus-conflict-test",
-		ForceCreateNewWorkflowTask: true,
-		Commands:                   []*commandpb.Command{scheduleBufferedNexusOperationCommand(endpointName, "losing-only-operation")},
+	s.completeWorkflowTaskAndScheduleNext(ctx, workflowTaskCompletion{
+		Task:     scheduleLosingOnlyOperationTask,
+		Commands: []*commandpb.Command{scheduleBufferedNexusOperationCommand(endpointName, "losing-only-operation")},
 	})
-	s.Require().NoError(err)
 	heldWorkflowTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, taskQueue)
 	s.Require().NotEmpty(heldWorkflowTask.TaskToken)
 	losingOnlyOperationScheduledEventID := findNexusScheduledEventID(heldWorkflowTask.History.Events, "losing-only-operation")
@@ -102,28 +82,40 @@ func (s *NexusStateReplicationSuite) TestBufferedNexusEventsReapplySharedOperati
 	close(allowLosingOnlyOperationStart)
 	losingOnlyOperationCallback := receiveBufferedNexusCallback(ctx, s.T(), operationCallbacks, "losing-only-operation")
 
-	s.completeNexusOperation(ctx, "shared-result", sharedOperationCallback.url, sharedOperationCallback.token)
-	s.completeNexusOperation(ctx, "losing-result", losingOnlyOperationCallback.url, losingOnlyOperationCallback.token)
-	s.assertBufferedEventTypes(ctx, 0, ns, execution, []enumspb.EventType{
-		enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED,
-		enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED,
-		enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED,
+	s.completeBufferedNexusOperation(ctx, bufferedNexusOperationCompletion{
+		Callback: sharedOperationCallback,
+		Result:   "shared-result",
+	})
+	s.completeBufferedNexusOperation(ctx, bufferedNexusOperationCompletion{
+		Callback: losingOnlyOperationCallback,
+		Result:   "losing-result",
+	})
+	s.assertBufferedEventTypes(ctx, bufferedEventExpectation{
+		Namespace: ns,
+		Execution: execution,
+		EventTypes: []enumspb.EventType{
+			enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED,
+			enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED,
+			enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED,
+		},
 	})
 
 	// Phase 3: fail over and create a winning branch on the new active cluster.
 	s.failoverToNewActiveCluster(ctx, ns)
-	s.writeSignalOnNewActive(ctx, namespace.NamespaceInfo.Id, ns, execution, "nexus-winner-signal")
+	s.writeSignalOnNewActive(ctx, activeClusterSignal{
+		Namespace:  namespace,
+		Execution:  execution,
+		SignalName: "nexus-winner-signal",
+	})
 
 	// Phase 4: resolve the conflict and verify losing-branch storage versus reapplication.
 	s.releaseReplicationTask(ctx, replicationToOldActive)
 	s.assertNoBufferedEvents(ctx, 0, ns, execution)
-	losingHistory := s.findBufferedNexusLosingBranch(
-		ctx,
-		ns,
-		namespace.NamespaceInfo.Id,
-		execution,
-		losingOnlyOperationScheduledEventID,
-	)
+	losingHistory := s.findBufferedNexusLosingBranch(ctx, bufferedNexusLosingBranch{
+		Namespace:        namespace,
+		Execution:        execution,
+		ScheduledEventID: losingOnlyOperationScheduledEventID,
+	})
 	s.Require().True(hasNexusEventForScheduledID(losingHistory, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED, losingOnlyOperationScheduledEventID))
 	s.Require().True(hasNexusEventForScheduledID(losingHistory, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, losingOnlyOperationScheduledEventID))
 	s.Require().Equal(2, countBufferedEventType(losingHistory, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED))
@@ -166,9 +158,8 @@ func (s *NexusStateReplicationSuite) TestNaturallyBufferedNexusOutcomesFlushedAn
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	ns := s.createGlobalNamespace()
-	namespace, err := s.clusters[0].FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{Namespace: ns})
-	s.Require().NoError(err)
+	namespace := s.createBufferedEventsNamespace(ctx)
+	ns := namespace.Name
 
 	callbacks := make(chan bufferedNexusCallback, 4)
 	allowCancellationResponse := make(chan struct{})
@@ -193,7 +184,11 @@ func (s *NexusStateReplicationSuite) TestNaturallyBufferedNexusOutcomesFlushedAn
 
 	workflowID := "buffered-nexus-outcomes-" + uuid.NewString()
 	taskQueue := &taskqueuepb.TaskQueue{Name: workflowID, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	execution := s.startBufferedEventsWorkflow(ctx, ns, workflowID, taskQueue)
+	execution := s.startBufferedEventsWorkflow(ctx, startBufferedEventsWorkflowArgs{
+		Namespace:  ns,
+		WorkflowID: workflowID,
+		TaskQueue:  taskQueue,
+	})
 	firstTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, taskQueue)
 	operations := []string{"failed", "canceled", "timed-out", "cancel-failed"}
 	commands := make([]*commandpb.Command, 0, len(operations))
@@ -204,12 +199,10 @@ func (s *NexusStateReplicationSuite) TestNaturallyBufferedNexusOutcomesFlushedAn
 		}
 		commands = append(commands, scheduleBufferedNexusOperationCommandWithTimeout(endpointName, operation, timeout))
 	}
-	_, err = s.clusters[0].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		TaskToken: firstTask.TaskToken,
-		Identity:  "buffered-nexus-outcomes-test",
-		Commands:  commands,
+	s.completeWorkflowTask(ctx, workflowTaskCompletion{
+		Task:     firstTask,
+		Commands: commands,
 	})
-	s.Require().NoError(err)
 
 	operationCallbacks := make(map[string]bufferedNexusCallback, len(operations))
 	for range operations {
@@ -251,39 +244,38 @@ func (s *NexusStateReplicationSuite) TestNaturallyBufferedNexusOutcomesFlushedAn
 		scheduledIDs[operation] = findNexusScheduledEventID(history, operation)
 		s.Require().Positive(scheduledIDs[operation])
 	}
-	_, err = s.clusters[0].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		TaskToken:                  triggerTask.TaskToken,
-		Identity:                   "buffered-nexus-outcomes-test",
-		ForceCreateNewWorkflowTask: true,
+	s.completeWorkflowTaskAndScheduleNext(ctx, workflowTaskCompletion{
+		Task: triggerTask,
 		Commands: []*commandpb.Command{
 			requestCancelNexusOperationCommand(findNexusScheduledEventID(history, "cancel-failed")),
 		},
 	})
-	s.Require().NoError(err)
 	heldTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, taskQueue)
 	s.Require().NotEmpty(heldTask.TaskToken)
 	close(allowCancellationResponse)
 
 	s.failNexusOperation(ctx, operationCallbacks["failed"])
-	s.cancelNexusOperation(ctx, operationCallbacks["canceled"].url, operationCallbacks["canceled"].token)
+	s.cancelBufferedNexusOperation(ctx, operationCallbacks["canceled"])
 	expectedTypes := []enumspb.EventType{
 		enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED,
 		enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED,
 		enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT,
 		enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED,
 	}
-	s.assertBufferedEventTypesPresent(ctx, 0, ns, execution, expectedTypes)
+	s.assertBufferedEventTypesPresent(ctx, bufferedEventExpectation{
+		Namespace:  ns,
+		Execution:  execution,
+		EventTypes: expectedTypes,
+	})
 
-	losingHistory := s.finishNaturallyBufferedConflict(
-		ctx,
-		ns,
-		namespace.NamespaceInfo.Id,
-		execution,
-		replicationToOldActive,
-		replicationToNewActive,
-		expectedTypes,
-		"nexus-outcomes-winner-signal",
-	)
+	losingHistory := s.finishNaturallyBufferedConflict(ctx, naturallyBufferedConflict{
+		Namespace:              namespace,
+		Execution:              execution,
+		ReplicationToOldActive: replicationToOldActive,
+		ReplicationToNewActive: replicationToNewActive,
+		ExpectedEventTypes:     expectedTypes,
+		WinnerSignal:           "nexus-outcomes-winner-signal",
+	})
 	for _, eventType := range expectedTypes {
 		s.Require().NotNil(findHistoryEvent(losingHistory, eventType, nil))
 	}
@@ -316,9 +308,8 @@ func (s *NexusStateReplicationSuite) TestNaturallyBufferedNexusCancelRequestComp
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()
-	ns := s.createGlobalNamespace()
-	namespace, err := s.clusters[0].FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{Namespace: ns})
-	s.Require().NoError(err)
+	namespace := s.createBufferedEventsNamespace(ctx)
+	ns := namespace.Name
 
 	started := make(chan struct{}, 1)
 	canceled := make(chan struct{}, 1)
@@ -337,14 +328,16 @@ func (s *NexusStateReplicationSuite) TestNaturallyBufferedNexusCancelRequestComp
 	endpointName := s.createBufferedNexusEndpoint(ctx, handler)
 	workflowID := "buffered-nexus-cancel-completed-" + uuid.NewString()
 	taskQueue := &taskqueuepb.TaskQueue{Name: workflowID, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
-	execution := s.startBufferedEventsWorkflow(ctx, ns, workflowID, taskQueue)
-	firstTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, taskQueue)
-	_, err = s.clusters[0].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		TaskToken: firstTask.TaskToken,
-		Identity:  "buffered-nexus-cancel-completed-test",
-		Commands:  []*commandpb.Command{scheduleBufferedNexusOperationCommand(endpointName, "cancel-completed")},
+	execution := s.startBufferedEventsWorkflow(ctx, startBufferedEventsWorkflowArgs{
+		Namespace:  ns,
+		WorkflowID: workflowID,
+		TaskQueue:  taskQueue,
 	})
-	s.Require().NoError(err)
+	firstTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, taskQueue)
+	s.completeWorkflowTask(ctx, workflowTaskCompletion{
+		Task:     firstTask,
+		Commands: []*commandpb.Command{scheduleBufferedNexusOperationCommand(endpointName, "cancel-completed")},
+	})
 	select {
 	case <-started:
 	case <-ctx.Done():
@@ -356,13 +349,10 @@ func (s *NexusStateReplicationSuite) TestNaturallyBufferedNexusCancelRequestComp
 	s.waitForClusterSynced()
 	replicationToOldActive := s.blockReplicationForWorkflow(0, workflowID)
 	replicationToNewActive := s.blockReplicationForWorkflow(1, workflowID)
-	_, err = s.clusters[0].FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
-		TaskToken:                  triggerTask.TaskToken,
-		Identity:                   "buffered-nexus-cancel-completed-test",
-		ForceCreateNewWorkflowTask: true,
-		Commands:                   []*commandpb.Command{requestCancelNexusOperationCommand(scheduledID)},
+	s.completeWorkflowTaskAndScheduleNext(ctx, workflowTaskCompletion{
+		Task:     triggerTask,
+		Commands: []*commandpb.Command{requestCancelNexusOperationCommand(scheduledID)},
 	})
-	s.Require().NoError(err)
 	heldTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, taskQueue)
 	s.Require().NotEmpty(heldTask.TaskToken)
 	close(allowCancellationResponse)
@@ -372,18 +362,20 @@ func (s *NexusStateReplicationSuite) TestNaturallyBufferedNexusCancelRequestComp
 		s.FailNow("timed out waiting for Nexus cancellation handler")
 	}
 	expectedTypes := []enumspb.EventType{enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED}
-	s.assertBufferedEventTypesPresent(ctx, 0, ns, execution, expectedTypes)
+	s.assertBufferedEventTypesPresent(ctx, bufferedEventExpectation{
+		Namespace:  ns,
+		Execution:  execution,
+		EventTypes: expectedTypes,
+	})
 
-	s.finishNaturallyBufferedConflict(
-		ctx,
-		ns,
-		namespace.NamespaceInfo.Id,
-		execution,
-		replicationToOldActive,
-		replicationToNewActive,
-		expectedTypes,
-		"nexus-cancel-completed-winner-signal",
-	)
+	s.finishNaturallyBufferedConflict(ctx, naturallyBufferedConflict{
+		Namespace:              namespace,
+		Execution:              execution,
+		ReplicationToOldActive: replicationToOldActive,
+		ReplicationToNewActive: replicationToNewActive,
+		ExpectedEventTypes:     expectedTypes,
+		WinnerSignal:           "nexus-cancel-completed-winner-signal",
+	})
 	winningHistory := s.getWorkflowHistory(ctx, s.T(), 1, ns, execution)
 	s.Require().False(
 		hasNexusEventForScheduledID(winningHistory, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED, scheduledID),

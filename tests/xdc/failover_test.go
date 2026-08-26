@@ -30,7 +30,6 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
@@ -74,9 +73,6 @@ func TestFuncClustersTestSuite(t *testing.T) {
 }
 
 func (s *FunctionalClustersTestSuite) SetupSuite() {
-	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
-		dynamicconfig.WorkflowPauseEnabled.Key(): true,
-	}
 	s.setupSuite()
 }
 
