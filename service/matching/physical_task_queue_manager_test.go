@@ -847,6 +847,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) setLocalRateTrackers(addRate, syncMa
 	timeSource.Update(time.Now())
 
 	added := newTaskTracker(timeSource, 5*time.Second, 30*time.Second)
+	dispatched := newTaskTracker(timeSource, 5*time.Second, 30*time.Second)
 	syncMatched := newTaskTracker(timeSource, 5*time.Second, 30*time.Second)
 	added.inc(addRate)
 	syncMatched.inc(syncMatchedRate)
@@ -856,6 +857,10 @@ func (s *PhysicalTaskQueueManagerTestSuite) setLocalRateTrackers(addRate, syncMa
 	s.tqMgr.taskTrackerLock.Lock()
 	defer s.tqMgr.taskTrackerLock.Unlock()
 	s.tqMgr.tasksAdded[pri] = added
+	// Populate all three maps even though only two are read here: incTaskTracker keys its
+	// "initialize together" branch off whichever map it is handed, so leaving tasksDispatched
+	// unset would let a later increment silently re-create all three and wipe these rates.
+	s.tqMgr.tasksDispatched[pri] = dispatched
 	s.tqMgr.tasksSyncMatched[pri] = syncMatched
 }
 
@@ -1059,4 +1064,83 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingSignalComparisonNotEv
 
 	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonBacklog)
 	s.Empty(capture.Snapshot()[metrics.PollerScaleSignalComparisonCounter.Name()])
+}
+
+// TestPollScalingRatioThresholdsAreIndependent pins that the improved signal is thresholded by
+// matching.pollerScalingSyncMatchRatio, not by the old add-to-dispatch threshold. The two ratios
+// have different natural scales, and sharing a knob would mean retuning one perturbed the other.
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingRatioThresholdsAreIndependent() {
+	s.allowAllScalingDecisions()
+	s.tqMgr.partitionMgr.config.UseImprovedSignalsForPollerScaling = func() bool { return true }
+
+	// New ratio is 100/50 = 2.0. Raising only the sync-match threshold above it must suppress the
+	// scale-up, even though the old threshold stays at its default.
+	s.setLocalRateTrackers(100, 50)
+	s.tqMgr.partitionMgr.config.PollerScalingSyncMatchRatio = func() float64 { return 3.0 }
+	fakeStats := &taskqueuepb.TaskQueueStats{TasksAddRate: 100, TasksDispatchRate: 100}
+	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), enumsspb.TASK_SOURCE_HISTORY, func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	s.Nil(decision)
+
+	// Lowering it back below the ratio brings the scale-up back.
+	s.setLocalRateTrackers(100, 50)
+	s.tqMgr.partitionMgr.config.PollerScalingSyncMatchRatio = func() float64 { return 1.5 }
+	decision = s.tqMgr.makePollerScalingDecisionImpl(time.Now(), enumsspb.TASK_SOURCE_HISTORY, func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	s.Require().NotNil(decision)
+	s.Equal(int32(1), decision.PollRequestDeltaSuggestion)
+}
+
+// TestPollScalingRatioOldThresholdDoesNotGateImprovedSignal is the converse: moving the old
+// threshold must not change what the improved signal decides.
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingRatioOldThresholdDoesNotGateImprovedSignal() {
+	s.allowAllScalingDecisions()
+	s.tqMgr.partitionMgr.config.UseImprovedSignalsForPollerScaling = func() bool { return true }
+	// Absurdly high old threshold: nothing could ever fire the old signal.
+	s.tqMgr.partitionMgr.config.PollerScalingTaskAddToDispatchRatio = func() float64 { return 1e9 }
+
+	s.setLocalRateTrackers(100, 10) // new ratio 10, above the 1.2 sync-match default
+	fakeStats := &taskqueuepb.TaskQueueStats{TasksAddRate: 100, TasksDispatchRate: 100}
+	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), enumsspb.TASK_SOURCE_HISTORY, func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	s.Require().NotNil(decision)
+	s.Equal(int32(1), decision.PollRequestDeltaSuggestion)
+}
+
+// TestPollScalingNilStatsHolds pins that an unavailable stats read produces no decision. The
+// improved signal reads local trackers rather than stats, so without this guard a Describe outage
+// would let it keep suggesting scale-ups with the rate-limit check skipped.
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingNilStatsHolds() {
+	s.allowAllScalingDecisions()
+	s.setLocalRateTrackers(100, 0) // would otherwise fire the improved ratio signal
+
+	for _, improved := range []bool{false, true} {
+		s.tqMgr.partitionMgr.config.UseImprovedSignalsForPollerScaling = func() bool { return improved }
+		decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), enumsspb.TASK_SOURCE_HISTORY, func() *taskqueuepb.TaskQueueStats { return nil })
+		s.Nil(decision, "improved signals enabled: %v", improved)
+	}
+}
+
+// TestPollScalingNilStatsEmitsNoComparison pins that a stats outage doesn't pollute the shadow-mode
+// comparison data with samples the ratio check never actually evaluated.
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingNilStatsEmitsNoComparison() {
+	s.allowAllScalingDecisions()
+	handler := s.enablePollerScaleDecisionMetrics()
+	capture := handler.StartCapture()
+	defer handler.StopCapture(capture)
+
+	s.setLocalRateTrackers(100, 0)
+	s.tqMgr.makePollerScalingDecisionImpl(time.Now(), enumsspb.TASK_SOURCE_HISTORY, func() *taskqueuepb.TaskQueueStats { return nil })
+
+	s.Empty(capture.Snapshot()[metrics.PollerScaleSignalComparisonCounter.Name()])
+	s.Empty(capture.Snapshot()[metrics.PollerScaleDecisionCounter.Name()])
+}
+
+// TestSetLocalRateTrackersSurvivesIncTaskTracker guards the test helper itself: seeded rates must
+// not be silently reset by a subsequent tracker increment on any of the three maps.
+func (s *PhysicalTaskQueueManagerTestSuite) TestSetLocalRateTrackersSurvivesIncTaskTracker() {
+	s.setLocalRateTrackers(100, 40)
+	pri := s.tqMgr.config.DefaultPriorityKey
+	s.tqMgr.incTaskTracker(s.tqMgr.tasksDispatched, pri, 1)
+
+	addRate, syncMatchedRate := s.tqMgr.getLocalAddAndSyncMatchedRates()
+	s.InEpsilon(float32(100), addRate, 0.001)
+	s.InEpsilon(float32(40), syncMatchedRate, 0.001)
 }

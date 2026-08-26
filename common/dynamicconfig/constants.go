@@ -1563,6 +1563,18 @@ second per poller by one physical queue manager`,
 		`MatchingPollerScalingTaskAddToDispatchRatio is the ratio of task add rate to task
 dispatch rate above which a decision to scale up the number of pollers will be issued`,
 	)
+	MatchingPollerScalingSyncMatchRatio = NewTaskQueueFloatSetting(
+		"matching.pollerScalingSyncMatchRatio",
+		1.2,
+		`MatchingPollerScalingSyncMatchRatio is the ratio of task add rate to task sync match rate above which a
+decision to scale up the number of pollers will be issued, when matching.useImprovedSignalsForPollerScaling is
+enabled. This is deliberately a separate setting from matching.pollerScalingTaskAddToDispatchRatio even though the
+defaults match, because the two ratios have different natural scales: add rate and total dispatch rate are equal in
+steady state, so that ratio is centered on 1.0, whereas add rate over sync match rate is the reciprocal of the
+sync-matched fraction and so is always at least 1.0. At the 1.2 default this signal fires once the sync-matched
+fraction drops below roughly 83%. Keeping the knobs separate also means shadow-mode data can be re-collected at a
+different threshold without perturbing the signal it is being compared against.`,
+	)
 	MatchingEnablePollerScalingDecisionMetrics = NewTaskQueueBoolSetting(
 		"matching.enablePollerScalingDecisionMetrics",
 		false,
@@ -1576,8 +1588,9 @@ scoped by namespace and/or task queue.`,
 		`MatchingUseImprovedSignalsForPollerScaling, when enabled, uses the physical queue's sync match rate instead of
 its total dispatch rate as the denominator of the poller scaling add-to-dispatch ratio check. The total dispatch rate
 includes tasks dispatched from the backlog, which makes it track the add rate closely and so masks a poor sync match
-rate. Both signals are always evaluated and compared via the poller_scale_signal_comparison metric; this setting only
-controls which one drives the decision.`,
+rate. Whenever a scaling decision reaches the ratio check, both signals are evaluated and compared via the
+poller_scale_signal_comparison metric; this setting only controls which one drives the decision. The improved signal
+is thresholded by matching.pollerScalingSyncMatchRatio rather than matching.pollerScalingTaskAddToDispatchRatio.`,
 	)
 	MatchingUseNewMatcher = NewTaskQueueTypedSettingWithConverter(
 		"matching.useNewMatcher",

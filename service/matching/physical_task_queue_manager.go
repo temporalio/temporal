@@ -933,7 +933,15 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 
 	delta := int32(0)
 	var reason metrics.ReasonString
+	// Without stats we can't tell whether dispatch is rate limited or the backlog is growing, so
+	// don't guess. This matters more than it looks: the improved ratio signal below reads this
+	// queue's own trackers rather than these stats, so it would otherwise keep suggesting scale-ups
+	// right through a Describe outage, with the rate-limit check below silently skipped.
 	stats := statsFn()
+	if stats == nil {
+		return nil
+	}
+
 	// If dispatch is bottlenecked by a task queue rate limit, adding pollers won't help.
 	if stats.GetRateLimitingActive() {
 		c.recordPollerScaleDecision(metrics.PollerScaleDecisionHold, metrics.PollerScaleReasonTaskQueueRateLimited)
@@ -970,11 +978,25 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 		// would compare two different populations. During a version rollout that skew is severe --
 		// a version's queue can be attributed the whole unversioned add rate while having no sync
 		// matches of its own, which would peg the ratio at +Inf and scale up forever.
-		threshold := c.partitionMgr.config.PollerScalingTaskAddToDispatchRatio()
-		oldRatioFires := ratioExceeds(float64(stats.GetTasksAddRate()), float64(stats.GetTasksDispatchRate()), threshold)
+		// The two ratios get separate thresholds because they have different natural scales. Add
+		// rate and total dispatch rate are equal in steady state, so the old ratio is centered on
+		// 1.0 and its threshold reads as "adding this much faster than we drain". Add rate over
+		// sync match rate is the reciprocal of the sync-matched fraction, so it is always at least
+		// 1.0 and the same numeric threshold instead reads as "sync-matched fraction below 1/x".
+		// Sharing one knob would also mean retuning the improved signal perturbed the signal it is
+		// being compared against.
+		oldRatioFires := ratioExceeds(
+			float64(stats.GetTasksAddRate()),
+			float64(stats.GetTasksDispatchRate()),
+			c.partitionMgr.config.PollerScalingTaskAddToDispatchRatio(),
+		)
 
 		localAddRate, localSyncMatchedRate := c.getLocalAddAndSyncMatchedRates()
-		newRatioFires := ratioExceeds(float64(localAddRate), float64(localSyncMatchedRate), threshold)
+		newRatioFires := ratioExceeds(
+			float64(localAddRate),
+			float64(localSyncMatchedRate),
+			c.partitionMgr.config.PollerScalingSyncMatchRatio(),
+		)
 
 		c.recordPollerScaleSignalComparison(metrics.PollerScaleSignalRatio, oldRatioFires, newRatioFires)
 
@@ -1035,7 +1057,15 @@ func (c *physicalTaskQueueManagerImpl) recordPollerScaleSignalComparison(signal 
 
 // ratioExceeds reports whether numerator/denominator is above threshold, without producing NaN or
 // +Inf for a zero denominator. Nothing arriving is never a reason to scale up; something arriving
-// while nothing drains is the strongest reason there is.
+// while nothing drains is the strongest reason there is, so a zero denominator fires regardless of
+// threshold.
+//
+// Note that a zero denominator is far more common for the sync match rate than it ever was for the
+// total dispatch rate: a queue served entirely from its backlog has no sync matches at all. Such a
+// queue reaches this check only when its backlog is too young to have already triggered the backlog
+// branch, and raising the threshold will not damp it, because no threshold applies. That is
+// deliberate -- zero sync matches means no poll was ever waiting when a task arrived -- but it is
+// the main reason the improved signal wants shadow-mode validation before being enabled anywhere.
 func ratioExceeds(numerator, denominator, threshold float64) bool {
 	if numerator <= 0 {
 		return false

@@ -137,6 +137,7 @@ type (
 		PollerScalingWaitTime               dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		PollerScalingDecisionsPerSecond     dynamicconfig.FloatPropertyFnWithTaskQueueFilter
 		PollerScalingTaskAddToDispatchRatio dynamicconfig.FloatPropertyFnWithTaskQueueFilter
+		PollerScalingSyncMatchRatio         dynamicconfig.FloatPropertyFnWithTaskQueueFilter
 		EnablePollerScalingDecisionMetrics  dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		UseImprovedSignalsForPollerScaling  dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
@@ -232,6 +233,7 @@ type (
 		PollerScalingWaitTime               func() time.Duration
 		PollerScalingDecisionsPerSecond     func() float64
 		PollerScalingTaskAddToDispatchRatio func() float64
+		PollerScalingSyncMatchRatio         func() float64
 		EnablePollerScalingDecisionMetrics  func() bool
 		UseImprovedSignalsForPollerScaling  func() bool
 
@@ -386,6 +388,7 @@ func NewConfig(
 		PollerScalingWaitTime:               dynamicconfig.MatchingPollerScalingWaitTime.Get(dc),
 		PollerScalingDecisionsPerSecond:     dynamicconfig.MatchingPollerScalingDecisionsPerSecond.Get(dc),
 		PollerScalingTaskAddToDispatchRatio: dynamicconfig.MatchingPollerScalingTaskAddToDispatchRatio.Get(dc),
+		PollerScalingSyncMatchRatio:         dynamicconfig.MatchingPollerScalingSyncMatchRatio.Get(dc),
 		EnablePollerScalingDecisionMetrics:  dynamicconfig.MatchingEnablePollerScalingDecisionMetrics.Get(dc),
 		UseImprovedSignalsForPollerScaling:  dynamicconfig.MatchingUseImprovedSignalsForPollerScaling.Get(dc),
 
@@ -563,6 +566,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		PollerScalingTaskAddToDispatchRatio: func() float64 {
 			return config.PollerScalingTaskAddToDispatchRatio(ns.String(), taskQueueName, taskType)
+		},
+		PollerScalingSyncMatchRatio: func() float64 {
+			return config.PollerScalingSyncMatchRatio(ns.String(), taskQueueName, taskType)
 		},
 		EnablePollerScalingDecisionMetrics: func() bool {
 			return config.EnablePollerScalingDecisionMetrics(ns.String(), taskQueueName, taskType)

@@ -1407,10 +1407,12 @@ var (
 	PollerScaleSignalComparisonCounter = NewCounterDef(
 		"poller_scale_signal_comparison",
 		WithDescription(
-			"Compares the old and improved poller scaling signals in shadow mode. Emitted on every scaling decision "+
-				"where at least one of the two signals fires. Dimensions: namespace, taskqueue, task_type, partition, "+
-				"signal (ratio), result (both/new_only/old_only). Gated by "+
-				"matching.enablePollerScalingDecisionMetrics."),
+			"Compares the old and improved poller scaling signals in shadow mode. Only emitted when a scaling "+
+				"decision actually reaches the add-to-dispatch ratio check and at least one of the two signals "+
+				"fires, so it does not cover decisions settled earlier by the scale-down, rate-limit, or backlog "+
+				"branches, nor non-root normal partitions, which never reach the ratio check at all. Dimensions: "+
+				"namespace, taskqueue, task_type, partition, signal (ratio), result (both/new_only/old_only). "+
+				"Gated by matching.enablePollerScalingDecisionMetrics."),
 	)
 	// ----------------------------------------------------------------------------------------------------------------
 
