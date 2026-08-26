@@ -183,6 +183,8 @@ func (a *Activities) DeleteWorkerDeploymentVersion(ctx context.Context, args *de
 			metrics.WorkerDeploymentVersionNotFoundDuringDelete.With(a.MetricsHandler).Record(
 				1,
 				metrics.NamespaceTag(a.namespace.Name().String()),
+				metrics.WorkerDeploymentNameTag(args.DeploymentName, true),
+				metrics.WorkerDeploymentBuildIDTag(versionObj.GetBuildId(), true),
 			)
 			activity.GetLogger(ctx).Warn(
 				"version workflow not found during deletion; allowing deployment workflow to remove stale reference",
