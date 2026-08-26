@@ -150,5 +150,6 @@ func (s *workerComponent) newActivities(name namespace.Name, id namespace.ID, de
 		startWorkflowRateLimiter: lim,
 		maxBlobSize:              func() int { return s.maxBlobSize(name.String()) },
 		localActivitySleepLimit:  func() time.Duration { return s.localActivitySleepLimit(name.String()) },
+		migrationEnabled:         func() bool { return s.enableCHASMMigration(name.String()) },
 	}, cancel
 }
