@@ -2308,10 +2308,10 @@ func (s *workflowSuite) TestMigrateSuccess() {
 
 func (s *workflowSuite) TestAutoMigrateReconcilesRunningWorkflowBeforeCheck() {
 	// The early-refresh behavior is gated on RefreshBeforeMigrationCheck, which is
-	// intentionally NOT yet the shipped CurrentTweakablePolicies.Version (it is
-	// activated in a follow-up deploy for rollback safety -- see the TODO on
-	// CurrentTweakablePolicies in workflow.go). Force the version here so this
-	// guard exercises the branch regardless of the current rollout state.
+	// intentionally NOT yet the shipped CurrentTweakablePolicies.Version: activating
+	// a version in the same deploy that introduces it is not rollback-safe, so the
+	// bump lands in a follow-up deploy. Force the version here so this guard
+	// exercises the branch regardless of the current rollout state.
 	prevVersion := CurrentTweakablePolicies.Version
 	CurrentTweakablePolicies.Version = RefreshBeforeMigrationCheck
 	defer func() { CurrentTweakablePolicies.Version = prevVersion }()
