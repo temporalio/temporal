@@ -44,6 +44,7 @@ var objectLeakOpts = []objectleak.Option{
 //	LEAK_ITERS_WARMUP  warmup clusters before snapshotting the baseline
 //	LEAK_OUTPUT_DIR    directory for diagnostics on failure
 //	LEAK_GC_SETTLE_TIMEOUT maximum time to settle object leak checks
+//	LEAK_HEAP_DUMP     set to 1 to write a raw heap dump on object leak failure; this file may contain sensitive data
 func TestClusterShutdownLeak(t *testing.T) {
 	iters, err := strconv.Atoi(os.Getenv("LEAK_ITERS"))
 	if err != nil {
@@ -115,6 +116,13 @@ func TestClusterShutdownLeak(t *testing.T) {
 	writeProfile(t, outputDir, "heap", "heap.txt", 1)
 	writeProfile(t, outputDir, "allocs", "allocs.pb.gz", 0)
 	writeProfile(t, outputDir, "allocs", "allocs.txt", 1)
+	if leakErr != nil && os.Getenv("LEAK_HEAP_DUMP") == "1" {
+		if err := objectleak.WriteHeapDiagnostics(outputDir); err != nil {
+			t.Logf("failed to write raw heap diagnostics: %v", err)
+		} else {
+			t.Logf("raw heap diagnostics written to %s", outputDir)
+		}
+	}
 
 	if goleakErr != nil {
 		t.Error(goleakErr)

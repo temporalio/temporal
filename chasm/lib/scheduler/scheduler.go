@@ -511,11 +511,16 @@ func (s *Scheduler) updateConflictToken() {
 	s.ConflictToken++
 }
 
-// getLastEventTime returns the time of the last "event" to happen to the schedule.
-// An event here is the schedule getting created or updated, or an action. This
-// value is used for calculating the retention time (how long an idle schedule
-// lives after becoming idle).
-func (s *Scheduler) getLastEventTime(ctx chasm.Context) time.Time {
+// computeLastEventTime derives the last "event" time from currently-observable
+// state: schedule create/update, and the start time of any action still held in
+// the Invoker's buffer.
+//
+// The result is NOT monotonic. recentActions() reads BufferedStarts, which
+// applyCompletedRetention truncates to the last recentActionCount completed
+// entries (ordered by CloseTime). When the start holding the largest StartTime
+// is evicted - which happens whenever completion order differs from start order
+// - this value moves backwards. Callers must go through getLastEventTime.
+func (s *Scheduler) computeLastEventTime(ctx chasm.Context) time.Time {
 	latest := util.MaxTime(
 		s.Info.GetCreateTime().AsTime(),
 		s.Info.GetUpdateTime().AsTime(),
@@ -527,6 +532,34 @@ func (s *Scheduler) getLastEventTime(ctx chasm.Context) time.Time {
 	}
 
 	return latest
+}
+
+// getLastEventTime returns the time of the last "event" to happen to the schedule.
+// An event here is the schedule getting created or updated, or an action. This
+// value is used for calculating the retention time (how long an idle schedule
+// lives after becoming idle).
+//
+// Read-only: floors the recomputed value at the persisted high water mark so the
+// idle deadline can never regress. LastEventTime is nil on schedules created
+// before it was introduced, in which case this degrades exactly to the old
+// recompute-only behaviour until advanceLastEventTime writes it.
+func (s *Scheduler) getLastEventTime(ctx chasm.Context) time.Time {
+	return util.MaxTime(
+		s.computeLastEventTime(ctx),
+		s.GetLastEventTime().AsTime(),
+	)
+}
+
+func (s *Scheduler) advanceLastEventTime(ctx chasm.MutableContext) time.Time {
+	latest := s.getLastEventTime(ctx)
+	s.advanceLastEventTimeTo(latest)
+	return latest
+}
+
+func (s *Scheduler) advanceLastEventTimeTo(latest time.Time) {
+	if latest.After(s.GetLastEventTime().AsTime()) {
+		s.LastEventTime = timestamppb.New(latest)
+	}
 }
 
 // isHeldOpen reports whether the schedule must stay open regardless of having

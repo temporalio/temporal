@@ -107,3 +107,6 @@
 *_mock.go      @temporalio/server @temporalio/cgs @temporalio/nexus
 *_gen.go       @temporalio/server @temporalio/cgs @temporalio/nexus
 *.gen.go       @temporalio/server @temporalio/cgs @temporalio/nexus
+
+# This generated file has no code owner to allow automated updates by CI.
+/tests/testcore/shard_salt.txt
