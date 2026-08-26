@@ -550,12 +550,6 @@ func (s *Scheduler) getLastEventTime(ctx chasm.Context) time.Time {
 	)
 }
 
-// advanceLastEventTime moves the persisted high water mark forward to the
-// currently-observable last event time and returns the result. Never moves it
-// backwards, so an eviction from the retention window cannot lower it.
-//
-// Called from the Generator tick, which is the only place that arms an idle
-// task, so the mark is durable before any task Validate reads it back.
 func (s *Scheduler) advanceLastEventTime(ctx chasm.MutableContext) time.Time {
 	latest := s.getLastEventTime(ctx)
 	if !latest.Equal(s.GetLastEventTime().AsTime()) {

@@ -67,10 +67,7 @@ const (
 	idleInvalidatedHeldOpen        metrics.ReasonString = "held_open"
 	idleInvalidatedExpirationShift metrics.ReasonString = "expiration_shift"
 	idleInvalidatedClosed          metrics.ReasonString = "closed"
-
-	// idleAlreadyArmed pairs with outcomeSkipped: the Generator declined to arm
-	// an idle task because one is already pending at the same deadline.
-	idleAlreadyArmed metrics.ReasonString = "already_armed"
+	idleAlreadyArmed               metrics.ReasonString = "already_armed"
 )
 
 func (r *SchedulerIdleTaskHandler) Validate(

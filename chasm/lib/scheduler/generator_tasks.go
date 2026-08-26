@@ -152,9 +152,6 @@ func (g *GeneratorTaskHandler) Execute(
 	//   also lands here. An external trigger (Patch.Unpause, Update, or a
 	//   BackfillerTask's completion-time Generate call) revives us.
 	idleTimeTotal := tweakables.IdleTime
-	// Advance the last-event high water mark before deriving the deadline from it,
-	// so the value the idle task is armed against is durable and monotonic. See
-	// Scheduler.advanceLastEventTime.
 	scheduler.advanceLastEventTime(ctx)
 	idleExpiration, isIdle := scheduler.getIdleExpiration(ctx, idleTimeTotal, result.NextWakeupTime)
 	if isIdle {
@@ -167,10 +164,7 @@ func (g *GeneratorTaskHandler) Execute(
 		// An idle task armed at exactly this deadline is already pending: arming a
 		// second one would leave a permanent duplicate in the component's PureTasks,
 		// because SchedulerIdleTaskHandler.Validate only invalidates tasks whose
-		// deadline has moved *later*. Ticks that don't move the deadline (a burst of
-		// actions sharing a start time, a repeated no-op tick) would otherwise
-		// accumulate one task per tick. IdleCloseTime is written in the same
-		// transaction as the task, so the two cannot disagree.
+		// deadline has moved *later*.
 		if scheduler.GetIdleCloseTime().AsTime().Equal(idleExpiration) {
 			metricsHandler.Counter(metrics.ScheduleIdleTask.Name()).
 				Record(1, metrics.OutcomeTag(outcomeSkipped), metrics.ReasonTag(idleAlreadyArmed))
