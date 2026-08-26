@@ -2801,8 +2801,13 @@ func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_NilSchedulerResendsS
 	s.Require().ErrorAs(err, new(*serviceerror.Unavailable))
 }
 
-func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_DoesNotResendChildWhenWorkflowNotReady() {
+func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_ResendsChildWhenWorkflowNotReady() {
 	s.config.EnableChildWorkflowResend = func() bool { return true }
+	scheduler := s.historyEngine.workflowResendScheduler
+	s.historyEngine.workflowResendScheduler = nil
+	s.T().Cleanup(func() {
+		s.historyEngine.workflowResendScheduler = scheduler
+	})
 
 	request := &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
 		NamespaceId: tests.NamespaceID.String(),
@@ -2837,9 +2842,17 @@ func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_DoesNotResendChildWh
 		nil,
 	)
 
+	mockClusterMetadata := cluster.NewMockMetadata(s.controller)
+	mockClusterMetadata.EXPECT().GetClusterID().Return(tests.Version).AnyTimes()
+	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName).AnyTimes()
+	mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo)
+	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, tests.Version).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShard.SetClusterMetadata(mockClusterMetadata)
+	s.mockShard.Resource.RemoteAdminClient.EXPECT().SyncWorkflowState(gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewUnavailable("source cluster unavailable"))
+
 	err := s.historyEngine.VerifyFirstWorkflowTaskScheduled(metrics.AddMetricsContext(s.T().Context()), request)
-	var workflowNotReady *serviceerror.WorkflowNotReady
-	s.ErrorAs(err, &workflowNotReady)
+	s.Require().ErrorAs(err, new(*serviceerror.Unavailable))
 }
 
 func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_SkipsResendForRemovedNamespace() {

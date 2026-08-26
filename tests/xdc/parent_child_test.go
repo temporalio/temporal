@@ -12,7 +12,6 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -270,7 +269,7 @@ func (s *parentChildXDCTestSuite) TestStandbyResendsMissingChild() {
 	})
 }
 
-// TestStandbyVerifiesChildWithoutFirstWorkflowTask covers the cross-shard ordering where the
+// TestStandbyResendsChildWithoutFirstWorkflowTask covers the cross-shard ordering where the
 // child's WorkflowExecutionStarted reaches the passive, its first WorkflowTaskScheduled remains
 // delayed, and the parent update identifying the started child then arrives.
 //
@@ -281,18 +280,25 @@ func (s *parentChildXDCTestSuite) TestStandbyResendsMissingChild() {
 //	child first WFT is delayed | unchanged                       | unchanged                        | initial active | WorkflowTaskScheduled remains unapplied
 //	parent child-start arrives | ChildWorkflowExecutionStarted   | unchanged                        | initial active | standby verifies the child's first WFT
 //	verification fails        | child-start relationship exists | next event ID 2, no scheduled ID | initial active | VerifyFirstWorkflowTaskScheduled: WorkflowNotReady
-//	discard window expires    | unchanged                       | unchanged                        | initial active | standby StartChild task is discarded
+//	child is resent            | unchanged                       | RUNNING, WFT scheduled           | initial active | child state is restored from the source
 //
-// This scenario uses legacy history replication because it fixes each transaction's event range.
-// The gate can therefore apply WorkflowExecutionStarted while keeping the separate
-// WorkflowTaskScheduled task delayed through the assertions.
-func (s *parentChildXDCTestSuite) TestStandbyVerifiesChildWithoutFirstWorkflowTask() {
+// The replication gate applies WorkflowExecutionStarted while keeping the separate
+// WorkflowTaskScheduled update delayed, so recovery must come from state sync.
+func (s *parentChildXDCTestSuite) TestStandbyResendsChildWithoutFirstWorkflowTask() {
 	s.runParentChildScenario(parentChildScenario{
 		steps: []parentChildScenarioStep{
 			// Keep child Started and its first WFT in separate event-range replication tasks.
 			useLegacyHistoryReplication(),
-			// Track source time without the production standby lag so task expiration is observable quickly.
+			// Track source time without the production standby lag so the task becomes resend-eligible quickly.
 			setStandbyClusterDelay(initialStandbyCluster, 0),
+			// Enable the child resend path on the passive cluster.
+			enableChildWorkflowResend(initialStandbyCluster),
+			// Skip the normal resend delay so the pending standby StartChild task requests a state sync.
+			setStandbyTaskResendDelay(
+				initialStandbyCluster,
+				enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION,
+				0,
+			),
 			// Create the parent and its first workflow task on the initial active cluster.
 			startParentWorkflow(),
 			// Establish the parent on the passive before replicating its child relationship.
@@ -315,51 +321,42 @@ func (s *parentChildXDCTestSuite) TestStandbyVerifiesChildWithoutFirstWorkflowTa
 				childWorkflow,
 				enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 			),
+			// Drop the ordinary WFT replication task so it cannot heal the passive child.
+			acknowledgeDelayedReplicationWithoutApplying(initialStandbyCluster, childWorkflow),
+			// State sync uses transition history after the partial child state has been reproduced.
+			useTransitionHistory(),
+			// Initialize transition history on the source child while retaining its scheduled WFT.
+			signalChildWorkflow(),
+			// Do not let the transition update repair the passive through ordinary replication.
+			acknowledgeNextReplicationTaskWithoutApplying(initialStandbyCluster, childWorkflow),
 			// Apply the parent's child-start record, triggering verification of that partial child.
 			applyReplicationThroughTaskContainingEvent(
 				initialStandbyCluster,
 				parentWorkflow,
 				enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED,
 			),
-			// Observe the exact not-ready error before shortening the task's discard window.
+			// Observe the original not-ready error returned while the resend runs in the background.
 			waitForHistoryVerificationFailureOnCluster(
 				initialStandbyCluster,
 				historyClientVerifyFirstWorkflowTask,
 				&serviceerror.WorkflowNotReady{},
 			),
-			// Expire only the pending standby StartChild task; its next attempt should return ErrTaskDiscarded.
-			setStandbyTaskDiscardDelay(
-				initialStandbyCluster,
-				enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION,
-				0,
-			),
 		},
 		expectations: []parentChildExpectation{
 			{
-				name: "child exists without its first workflow task on the initial standby cluster",
-				check: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
-					mutableState, err := runtime.workflowMutableState(ctx, initialStandbyCluster, childWorkflow)
-					if err != nil {
-						return err
-					}
-					if state := mutableState.GetExecutionState().GetState(); state != enumsspb.WORKFLOW_EXECUTION_STATE_CREATED {
-						return fmt.Errorf("child state is %s, want %s", state, enumsspb.WORKFLOW_EXECUTION_STATE_CREATED)
-					}
-					if status := mutableState.GetExecutionState().GetStatus(); status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-						return fmt.Errorf("child status is %s, want %s", status, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
-					}
-					if scheduledEventID := mutableState.GetExecutionInfo().GetWorkflowTaskScheduledEventId(); scheduledEventID != common.EmptyEventID {
-						return fmt.Errorf("child workflow task scheduled event ID is %d, want %d", scheduledEventID, common.EmptyEventID)
-					}
-					if nextEventID := mutableState.GetNextEventId(); nextEventID != common.FirstEventID+1 {
-						return fmt.Errorf("child next event ID is %d, want %d", nextEventID, common.FirstEventID+1)
-					}
-					return nil
+				name: "child workflow resend is attempted on the initial standby cluster",
+				check: func(_ context.Context, runtime *parentChildScenarioRuntime) error {
+					return runtime.requireCapturedMetric(
+						initialStandbyCluster,
+						metrics.ChildWorkflowResendAttempts.Name(),
+						nil,
+					)
 				},
 			},
-			taskWasDiscardedOnCluster(
+			workflowHasEventOnCluster(
 				initialStandbyCluster,
-				metrics.TaskTypeTransferStandbyTaskStartChildExecution,
+				childWorkflow,
+				enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 			),
 		},
 	})

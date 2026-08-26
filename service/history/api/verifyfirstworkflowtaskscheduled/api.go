@@ -38,16 +38,20 @@ func Invoke(
 		return err
 	}
 
-	versionedTransition, versionHistories, errVerify := verifyFirstWorkflowTaskScheduled(ctx, req, workflowConsistencyChecker)
+	versionedTransition, versionHistories, firstWorkflowTaskMissing, errVerify := verifyFirstWorkflowTaskScheduled(ctx, req, workflowConsistencyChecker)
 	if errVerify == nil {
 		return nil
 	}
 	switch errVerify.(type) {
 	case *serviceerror.NotFound:
-		if !req.GetResendChild() || !shardContext.GetConfig().EnableChildWorkflowResend() {
+	case *serviceerror.WorkflowNotReady:
+		if !firstWorkflowTaskMissing {
 			return errVerify
 		}
 	default:
+		return errVerify
+	}
+	if !req.GetResendChild() || !shardContext.GetConfig().EnableChildWorkflowResend() {
 		return errVerify
 	}
 
@@ -102,11 +106,17 @@ func Invoke(
 	// so the durable standby task retries regardless of the admission outcome.
 	return errVerify
 }
+
 func verifyFirstWorkflowTaskScheduled(
 	ctx context.Context,
 	req *historyservice.VerifyFirstWorkflowTaskScheduledRequest,
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
-) (versionedTransition *persistencespb.VersionedTransition, versionHistories *historyspb.VersionHistories, retError error) {
+) (
+	versionedTransition *persistencespb.VersionedTransition,
+	versionHistories *historyspb.VersionHistories,
+	firstWorkflowTaskMissing bool,
+	retError error,
+) {
 	workflowLease, err := workflowConsistencyChecker.GetWorkflowLease(
 		ctx,
 		req.Clock,
@@ -118,14 +128,14 @@ func verifyFirstWorkflowTaskScheduled(
 		locks.PriorityLow,
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, false, err
 	}
 	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
 	mutableState := workflowLease.GetMutableState()
 	if !mutableState.IsWorkflowExecutionRunning() &&
 		mutableState.GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
-		return nil, nil, nil
+		return nil, nil, false, nil
 	}
 
 	if !mutableState.HadOrHasWorkflowTask() {
@@ -134,10 +144,10 @@ func verifyFirstWorkflowTaskScheduled(
 			transitionhistory.LastVersionedTransition(executionInfo.TransitionHistory),
 		)
 		versionHistories = versionhistory.CopyVersionHistories(executionInfo.VersionHistories)
-		return versionedTransition, versionHistories, consts.ErrWorkflowNotReady
+		return versionedTransition, versionHistories, true, consts.ErrWorkflowNotReady
 	}
 
-	return nil, nil, nil
+	return nil, nil, false, nil
 }
 
 func logResendFailure(
@@ -197,7 +207,7 @@ func resendChildAndVerify(
 	case workflowresend.SyncWorkflowStateResultSkipped:
 		return errVerify
 	case workflowresend.SyncWorkflowStateResultApplied:
-		_, _, err = verifyFirstWorkflowTaskScheduled(ctx, req, workflowConsistencyChecker)
+		_, _, _, err = verifyFirstWorkflowTaskScheduled(ctx, req, workflowConsistencyChecker)
 		return err
 	default:
 		return fmt.Errorf("unknown workflow state sync result: %d", result)

@@ -126,6 +126,29 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
+func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskScheduled_DoesNotResendUnrelatedWorkflowNotReady() {
+	s.shardContext.GetConfig().EnableChildWorkflowResend = func() bool { return true }
+	request := &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowID,
+			RunId:      tests.RunID,
+		},
+		ResendChild: true,
+	}
+	workflowNotReadyErr := serviceerror.NewWorkflowNotReady("unrelated workflow state")
+	workflowConsistencyChecker := api.NewMockWorkflowConsistencyChecker(s.controller)
+	workflowConsistencyChecker.EXPECT().GetWorkflowLease(
+		gomock.Any(),
+		gomock.Any(),
+		definition.NewWorkflowKey(tests.NamespaceID.String(), tests.WorkflowID, tests.RunID),
+		gomock.Any(),
+	).Return(nil, workflowNotReadyErr)
+
+	err := Invoke(s.T().Context(), request, workflowConsistencyChecker, s.shardContext, s.resendScheduler)
+	s.Same(workflowNotReadyErr, err)
+}
+
 func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskScheduled_HostAtCapacity() {
 	s.shardContext.GetConfig().EnableChildWorkflowResend = func() bool { return true }
 	metricsHandler := metricstest.NewCaptureHandler()
