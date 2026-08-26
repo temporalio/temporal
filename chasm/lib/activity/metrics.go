@@ -33,11 +33,13 @@ func (a *Activity) baseMetricsHandler(ctx chasm.Context, operation string) metri
 	return ctx.MetricsHandler().WithTags(metrics.OperationTag(operation))
 }
 
+// operatorCommandMetricsHandler uses ID targeting because standalone activities are addressed by ID.
 func operatorCommandMetricsHandler(ctx chasm.Context) metrics.Handler {
-	return ctx.MetricsHandler().WithTags(metrics.ActivityOperatorCommandTags(
+	return metrics.ActivityOperatorCommandHandler(
+		ctx.MetricsHandler(),
 		ctx.NamespaceEntry().Name().String(),
 		"id",
-	)...)
+	)
 }
 
 // enrichedMetricsHandler adds standard activity tags in addition to the operation tag.

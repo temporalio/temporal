@@ -93,10 +93,11 @@ func Invoke(
 		targetingMethod = "match_all"
 	}
 	if ns, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.NamespaceId)); err == nil {
-		metricsHandler := shardContext.GetMetricsHandler().WithTags(metrics.ActivityOperatorCommandTags(
+		metricsHandler := metrics.ActivityOperatorCommandHandler(
+			shardContext.GetMetricsHandler(),
 			ns.Name().String(),
 			targetingMethod,
-		)...)
+		)
 		metrics.ActivityUpdateOptions.With(metricsHandler).Record(1)
 	}
 

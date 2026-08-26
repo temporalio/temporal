@@ -232,12 +232,12 @@ func ActivityTargetingMethodTag(value string) Tag {
 	return Tag{Key: activityTargetingMethod, Value: value}
 }
 
-// ActivityOperatorCommandTags returns tags shared by workflow and standalone activity operator commands.
-func ActivityOperatorCommandTags(namespaceName string, targetingMethod string) []Tag {
-	return []Tag{
+// ActivityOperatorCommandHandler returns a handler shared by workflow and standalone activity operator commands.
+func ActivityOperatorCommandHandler(handler Handler, namespaceName string, targetingMethod string) Handler {
+	return handler.WithTags(
 		NamespaceTag(namespaceName),
 		ActivityTargetingMethodTag(targetingMethod),
-	}
+	)
 }
 
 // CommandTypeTag returns a new command type tag.

@@ -87,10 +87,11 @@ func Invoke(
 		targetingMethod = "id"
 	}
 	if ns, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.NamespaceId)); err == nil {
-		metricsHandler := shardContext.GetMetricsHandler().WithTags(metrics.ActivityOperatorCommandTags(
+		metricsHandler := metrics.ActivityOperatorCommandHandler(
+			shardContext.GetMetricsHandler(),
 			ns.Name().String(),
 			targetingMethod,
-		)...)
+		)
 		metrics.ActivityPause.With(metricsHandler).Record(1)
 	}
 
