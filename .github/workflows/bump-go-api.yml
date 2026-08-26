@@ -1,0 +1,269 @@
+name: Bump go.temporal.io/api
+
+# Reacts to a release being published in temporalio/api-go, forwarded here as a
+# repository_dispatch by that repo's notify-server-release.yml workflow.
+#
+# That forwarding only works because api-go's publish-release.yml flips the
+# release out of draft using a GitHub App token: events caused by GITHUB_TOKEN
+# do not trigger workflow runs, but events caused by an App token do. If
+# api-go's publish step ever switches to GITHUB_TOKEN, this automation stops
+# firing silently. The workflow_dispatch trigger is the manual recovery path.
+on:
+  repository_dispatch:
+    types:
+      - api-go-release
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "api-go release tag to bump to (e.g. v1.63.6)"
+        required: true
+        type: string
+      auto_merge:
+        description: "Enable auto-merge (patch bumps only, regardless)"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+# Serialize runs so two releases published minutes apart cannot race on branch
+# creation or leave two competing PRs open.
+concurrency:
+  group: bump-go-api
+  cancel-in-progress: false
+
+env:
+  MODULE: go.temporal.io/api
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate GitHub token
+        id: generate-token
+        uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2.2.2
+        with:
+          app-id: ${{ secrets.TEMPORAL_CICD_APP_ID }}
+          private-key: ${{ secrets.TEMPORAL_CICD_PRIVATE_KEY }}
+          owner: temporalio
+
+      - name: Checkout code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: main
+          token: ${{ steps.generate-token.outputs.token }}
+
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Resolve target tag
+        id: tag
+        env:
+          # The dispatch payload is only as trustworthy as whoever can dispatch
+          # to this repo, so it goes through the environment rather than being
+          # interpolated into the script body.
+          DISPATCH_TAG: ${{ github.event.client_payload.tag }}
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          tag=${DISPATCH_TAG:-$INPUT_TAG}
+          if [[ -z "$tag" ]]; then
+            echo "::error::No tag supplied by the dispatch payload or input"
+            exit 1
+          fi
+          echo "tag=$tag" >>"$GITHUB_OUTPUT"
+
+      - name: Decide whether to bump
+        id: decide
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          # The go.mod paths are enumerated here and passed in, rather than
+          # duplicated inside the tool, so the two cannot drift apart. The tool
+          # skips any that do not require the module, and fails if none do.
+          find . -name go.mod -print0 \
+            | xargs -0 go run ./cmd/tools/bump-go-api -tag "$TAG" \
+            | tee -a "$GITHUB_OUTPUT"
+
+      - name: Wait for the module proxy
+        if: steps.decide.outputs.needs_bump == 'true'
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          # A GitHub release is published before proxy.golang.org necessarily
+          # has the version, so poll before mutating anything.
+          for attempt in $(seq 1 6); do
+            if go list -m "$MODULE@$TAG" >/dev/null 2>&1; then
+              echo "$MODULE@$TAG is available"
+              exit 0
+            fi
+            echo "Attempt $attempt: $MODULE@$TAG not on the proxy yet"
+            sleep 30
+          done
+          echo "::error::$MODULE@$TAG never became available on the module proxy"
+          exit 1
+
+      - name: Bump all go modules
+        if: steps.decide.outputs.needs_bump == 'true'
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          find . -name go.mod -printf '%h\n' | while read -r dir; do
+            (
+              cd "$dir"
+              go get "$MODULE@$TAG"
+              go mod tidy
+            )
+          done
+
+      - name: Install protoc
+        if: steps.decide.outputs.needs_bump == 'true'
+        uses: jdx/mise-action@dba19683ed58901619b14f395a24841710cb4925 # v4.1.0
+        with:
+          working_directory: .github
+          install_args: protoc
+
+      - name: Regenerate proto code
+        if: steps.decide.outputs.needs_bump == 'true'
+        run: |
+          # protogen and protoc-gen-go-helpers are pinned to GO_API_VER, and
+          # proto/api.binpb depends on go.mod, so the bump legitimately
+          # invalidates generated output. Deliberately not `make proto`: that
+          # also runs lint-protos and lint-api, which are their own CI jobs on
+          # the resulting PR.
+          make protoc proto-codegen
+          make fmt
+
+      - name: Create pull request
+        id: pr
+        if: steps.decide.outputs.needs_bump == 'true'
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          CURRENT: ${{ steps.decide.outputs.current_version }}
+          BUMP_KIND: ${{ steps.decide.outputs.bump_kind }}
+        run: |
+          # Not `git diff --quiet`: codegen can add brand-new generated files,
+          # and the commit below stages untracked files with `git add -A`.
+          if [[ -z "$(git status --porcelain)" ]]; then
+            echo "Nothing changed; $MODULE is already at $TAG"
+            exit 0
+          fi
+
+          branch=auto/bump-go-api-$TAG
+
+          if [[ -n "$(gh pr list --head "$branch" --state open --json number \
+                        --jq '.[].number')" ]]; then
+            echo "A PR for $branch is already open; nothing to do"
+            exit 0
+          fi
+
+          # Clear a branch left behind by an earlier failed run for this tag.
+          # Guarded on there being no open PR for it, per the check above.
+          git push origin --delete "$branch" 2>/dev/null || true
+
+          git config --local user.name 'Temporal Data'
+          git config --local user.email 'commander-data@temporal.io'
+
+          git checkout -b "$branch"
+          git add -A
+          git commit -m "Bump $MODULE to $TAG"
+          git push origin "$branch"
+
+          # The PR body must satisfy check-pr-placeholders.yml: no line that is
+          # entirely wrapped in underscores, and no template section left empty.
+          {
+            echo "## What changed?"
+            echo
+            echo "Bumped \`$MODULE\` from \`$CURRENT\` to \`$TAG\` and "
+            echo "regenerated proto code."
+            echo
+            echo "## Why?"
+            echo
+            echo "temporalio/api-go published $TAG. Opened automatically by the"
+            echo "bump-go-api workflow."
+            echo
+            echo "Release: https://github.com/temporalio/api-go/releases/tag/$TAG"
+            echo "Changes: https://github.com/temporalio/api-go/compare/$CURRENT...$TAG"
+            echo
+            echo "## How did you test it?"
+            echo
+            echo "- [x] covered by existing tests"
+            echo
+            if [[ "$BUMP_KIND" == patch ]]; then
+              echo "This is a patch bump, so auto-merge is enabled."
+            else
+              echo "This is a $BUMP_KIND bump, so auto-merge is deliberately not"
+              echo "enabled and a human needs to review and merge it."
+            fi
+          } > /tmp/pr-body.md
+
+          gh pr create \
+            --base main \
+            --head "$branch" \
+            --title "Bump $MODULE to $TAG" \
+            --body-file /tmp/pr-body.md
+
+          echo "branch=$branch" >>"$GITHUB_OUTPUT"
+          echo "number=$(gh pr view "$branch" --json number --jq .number)" \
+            >>"$GITHUB_OUTPUT"
+
+      - name: Enable auto-merge
+        # Patch bumps are API-compatible by construction, so green CI is enough.
+        # Minor and major bumps can add or change surface, so they wait for a
+        # human.
+        if: >-
+          steps.pr.outputs.branch != ''
+          && steps.decide.outputs.bump_kind == 'patch'
+          && github.event.inputs.auto_merge != 'false'
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          BRANCH: ${{ steps.pr.outputs.branch }}
+        run: gh pr merge "$BRANCH" --auto --squash
+
+      - name: Close superseded bump PRs
+        if: steps.pr.outputs.branch != ''
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          BRANCH: ${{ steps.pr.outputs.branch }}
+          NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          # A stalled bump PR should not linger once a newer version exists.
+          gh pr list \
+            --state open \
+            --base main \
+            --json number,headRefName \
+            --jq '.[] | select(.headRefName | startswith("auto/bump-go-api-"))
+                  | .number' \
+            | while read -r stale_pr; do
+            if [[ "$stale_pr" == "$NUMBER" ]]; then
+              continue
+            fi
+            echo "Closing #$stale_pr, superseded by #$NUMBER"
+            gh pr close "$stale_pr" \
+              --comment "Superseded by #$NUMBER." \
+              --delete-branch
+          done
+
+      - name: Notify Slack on failure
+        if: failure()
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          # There is no cron fallback for this workflow, so a silent failure
+          # means the bump simply never happens.
+          if [[ -z "$SLACK_WEBHOOK" ]]; then
+            echo "SLACK_WEBHOOK is not set; skipping notification"
+            exit 0
+          fi
+          jq -n \
+            --arg text "Failed to bump $MODULE to ${TAG:-unknown}: $RUN_URL" \
+            '{text: $text}' \
+            | curl -sSf -X POST -H 'Content-Type: application/json' \
+                -d @- "$SLACK_WEBHOOK"
