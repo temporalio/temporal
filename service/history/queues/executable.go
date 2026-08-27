@@ -81,7 +81,7 @@ type (
 	// that a dispatch was metered by the controller's gate.
 	ThrottleKeyProvider interface {
 		ThrottleKey() (ThrottleKey, bool)
-		SetThrottleAdmitted(admitted bool)
+		SetThrottleAdmitted(key ThrottleKey)
 	}
 )
 
@@ -151,7 +151,7 @@ type (
 		throttleMu                 sync.Mutex
 		throttleKey                ThrottleKey
 		hasThrottleKey             bool
-		throttleAdmitted           bool
+		throttleAdmittedKey        ThrottleKey
 		throttleScope              enumspb.ResourceExhaustedScope
 		throttleAttempts           int
 		dlqEnabled                 dynamicconfig.BoolPropertyFn
@@ -872,6 +872,9 @@ func (e *executableImpl) reportThrottle(
 	scope enumspb.ResourceExhaustedScope,
 ) {
 	if e.throttleState == nil || !e.throttleState.Enabled() {
+		// Clear even when disabled: a mark left over from before the flag flipped would be
+		// consumed by the first rejection after it flips back, moving a rate on stale evidence.
+		e.clearThrottle()
 		return
 	}
 	if !IsControllerInput(err, cause) {
@@ -888,8 +891,8 @@ func (e *executableImpl) reportThrottle(
 	e.throttleKey = key
 	e.hasThrottleKey = true
 	e.throttleAttempts++
-	admitted := e.throttleAdmitted
-	e.throttleAdmitted = false
+	admitted := e.throttleAdmittedKey == key
+	e.throttleAdmittedKey = ThrottleKey{}
 	e.throttleMu.Unlock()
 
 	metrics.TaskThrottleWastedAttempts.With(e.chasmMetricsHandler).Record(
@@ -898,9 +901,7 @@ func (e *executableImpl) reportThrottle(
 		metrics.ResourceExhaustedScopeTag(scope),
 	)
 
-	if e.throttleState != nil {
-		e.throttleState.ReportThrottled(key, admitted)
-	}
+	e.throttleState.ReportThrottled(key, admitted)
 }
 
 func (e *executableImpl) clearThrottle() {
@@ -910,7 +911,7 @@ func (e *executableImpl) clearThrottle() {
 	e.hasThrottleKey = false
 	e.throttleKey = ThrottleKey{}
 	e.throttleScope = enumspb.RESOURCE_EXHAUSTED_SCOPE_UNSPECIFIED
-	e.throttleAdmitted = false
+	e.throttleAdmittedKey = ThrottleKey{}
 }
 
 func (e *executableImpl) reportCompletion() {
@@ -926,16 +927,20 @@ func (e *executableImpl) reportCompletion() {
 	}
 	metrics.TaskThrottleAttemptsPerCompletion.With(e.chasmMetricsHandler).Record(e.attempt.Load())
 	metrics.TaskThrottleCompletions.With(e.chasmMetricsHandler).Record(1)
-	if e.throttleState != nil && known {
+	if known {
 		e.throttleState.ReportSuccess(key)
 	}
 }
 
-func (e *executableImpl) SetThrottleAdmitted(admitted bool) {
+// SetThrottleAdmitted records which class granted the token for the dispatch about to happen.
+// The key matters as well as the fact: a task admitted under one budget can fail under a
+// different one, and crediting that rejection to the class that never granted it would move a
+// rate on evidence it did not produce. The zero key clears the mark.
+func (e *executableImpl) SetThrottleAdmitted(key ThrottleKey) {
 	e.throttleMu.Lock()
 	defer e.throttleMu.Unlock()
 
-	e.throttleAdmitted = admitted
+	e.throttleAdmittedKey = key
 }
 
 // ThrottleKey implements ThrottleKeyProvider.

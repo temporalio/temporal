@@ -133,6 +133,7 @@ type Config struct {
 	TaskThrottleControllerEnabled              dynamicconfig.BoolPropertyFn
 	TaskThrottleControllerBeta                 dynamicconfig.FloatPropertyFn
 	TaskThrottleControllerIncreaseRatio        dynamicconfig.FloatPropertyFn
+	TaskThrottleControllerLossThreshold        dynamicconfig.FloatPropertyFn
 	TaskThrottleControllerWindow               dynamicconfig.DurationPropertyFn
 	TaskThrottleControllerMinRate              dynamicconfig.FloatPropertyFn
 	TaskThrottleControllerMaxRate              dynamicconfig.FloatPropertyFn
@@ -589,6 +590,7 @@ func NewConfig(
 		TaskThrottleControllerEnabled:                        dynamicconfig.TaskThrottleControllerEnabled.Get(dc),
 		TaskThrottleControllerBeta:                           dynamicconfig.TaskThrottleControllerBeta.Get(dc),
 		TaskThrottleControllerIncreaseRatio:                  dynamicconfig.TaskThrottleControllerIncreaseRatio.Get(dc),
+		TaskThrottleControllerLossThreshold:                  dynamicconfig.TaskThrottleControllerLossThreshold.Get(dc),
 		TaskThrottleControllerWindow:                         dynamicconfig.TaskThrottleControllerWindow.Get(dc),
 		TaskThrottleControllerMinRate:                        dynamicconfig.TaskThrottleControllerMinRate.Get(dc),
 		TaskThrottleControllerMaxRate:                        dynamicconfig.TaskThrottleControllerMaxRate.Get(dc),

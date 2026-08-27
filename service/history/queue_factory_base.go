@@ -109,6 +109,7 @@ var QueueModule = fx.Options(
 // category and every shard on this host.
 func ThrottleStateProvider(
 	config *configs.Config,
+	timeSource clock.TimeSource,
 	logger log.SnTaggedLogger,
 	metricsHandler metrics.Handler,
 ) *queues.ThrottleState {
@@ -117,6 +118,7 @@ func ThrottleStateProvider(
 			Enabled:       config.TaskThrottleControllerEnabled,
 			Beta:          config.TaskThrottleControllerBeta,
 			IncreaseRatio: config.TaskThrottleControllerIncreaseRatio,
+			LossThreshold: config.TaskThrottleControllerLossThreshold,
 			Window:        config.TaskThrottleControllerWindow,
 			MinRate:       config.TaskThrottleControllerMinRate,
 			MaxRate:       config.TaskThrottleControllerMaxRate,
@@ -124,7 +126,7 @@ func ThrottleStateProvider(
 			MaxKeys:       config.TaskThrottleControllerMaxKeys,
 			KeyTTL:        config.TaskThrottleControllerKeyTTL,
 		},
-		clock.NewRealTimeSource(),
+		timeSource,
 		logger,
 		metricsHandler,
 	)

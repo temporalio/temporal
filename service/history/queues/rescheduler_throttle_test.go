@@ -36,8 +36,8 @@ func (e *throttledExecutable) ThrottleKey() (ThrottleKey, bool) {
 	return e.key, e.known
 }
 
-func (e *throttledExecutable) SetThrottleAdmitted(admitted bool) {
-	e.admitted = admitted
+func (e *throttledExecutable) SetThrottleAdmitted(key ThrottleKey) {
+	e.admitted = key != ThrottleKey{}
 }
 
 func (g *recordingGate) FireCh() <-chan struct{}    { return g.fireCh }

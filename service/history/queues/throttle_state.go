@@ -2,6 +2,7 @@ package queues
 
 import (
 	"errors"
+	"strconv"
 	"sync"
 	"time"
 
@@ -57,6 +58,7 @@ type (
 		Enabled       dynamicconfig.BoolPropertyFn
 		Beta          dynamicconfig.FloatPropertyFn
 		IncreaseRatio dynamicconfig.FloatPropertyFn
+		LossThreshold dynamicconfig.FloatPropertyFn
 		Window        dynamicconfig.DurationPropertyFn
 		MinRate       dynamicconfig.FloatPropertyFn
 		MaxRate       dynamicconfig.FloatPropertyFn
@@ -85,15 +87,20 @@ type (
 		key ThrottleKey
 
 		sync.Mutex
-		rate         float64
-		tokens       float64
-		lastRefill   time.Time
-		windowStart  time.Time
-		lastThrottle time.Time
-		lastDecrease time.Time
-		lastAccess   time.Time
-		decreases    int64
-		increases    int64
+		rate        float64
+		tokens      float64
+		lastRefill  time.Time
+		windowStart time.Time
+		lastAccess  time.Time
+		// releases and rejections are the evidence for the window that is currently open.
+		// Both scale with how much the class released, which is what keeps the control law
+		// independent of class size: a rule that decreased on any single rejection but only
+		// increased on a perfectly clean window would settle at a rate set by the enforcer's
+		// background rejection probability rather than by this class's own demand.
+		releases   int64
+		rejections int64
+		decreases  int64
+		increases  int64
 	}
 )
 
@@ -104,6 +111,7 @@ var namespaceBudgetCauses = map[enumspb.ResourceExhaustedCause]struct{}{
 	enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT:         {},
 	enumspb.RESOURCE_EXHAUSTED_CAUSE_OPS_LIMIT:         {},
 	enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT: {},
+	enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT:  {},
 }
 
 // shardScopedCauses are namespace budgets whose enforcement point is the shard owner.
@@ -214,6 +222,9 @@ func (k ThrottleKey) metricsTags() []metrics.Tag {
 	if k.Category != "" {
 		tags = append(tags, metrics.TaskCategoryTag(k.Category))
 	}
+	if k.Scope == ThrottleScopeNamespaceShard {
+		tags = append(tags, metrics.StringTag("shard_id", strconv.Itoa(int(k.ShardID))))
+	}
 	return tags
 }
 
@@ -255,6 +266,12 @@ func (s *ThrottleState) Admit(key ThrottleKey) bool {
 	entry.Lock()
 	defer entry.Unlock()
 
+	// The sweep only runs when a new key is inserted, and a host's key set goes stable within
+	// minutes of start up, so a class driven to MinRate by an incident would otherwise never be
+	// reconsidered. Treat a long idle entry as new.
+	if !entry.lastAccess.IsZero() && now.Sub(entry.lastAccess) > s.options.KeyTTL() {
+		entry.resetLocked(s.clamp(s.options.InitialRate()), now, window)
+	}
 	entry.lastAccess = now
 	s.advanceWindowLocked(entry, now, window)
 	entry.refillLocked(now, window)
@@ -264,6 +281,7 @@ func (s *ThrottleState) Admit(key ThrottleKey) bool {
 		return false
 	}
 	entry.tokens--
+	entry.releases++
 	metrics.TaskThrottleGateAdmitted.With(s.metricsHandler).Record(1, key.metricsTags()...)
 	return true
 }
@@ -299,18 +317,10 @@ func (s *ThrottleState) ReportThrottled(key ThrottleKey, admitted bool) {
 	if !admitted {
 		return
 	}
-	entry.lastThrottle = now
-	if !entry.lastDecrease.IsZero() && now.Sub(entry.lastDecrease) < window {
-		return
-	}
-	entry.rate = s.clamp(entry.rate * s.options.Beta())
-	entry.lastDecrease = now
-	entry.decreases++
-	// Tokens accumulated at the old rate would otherwise let the class overshoot the new one.
-	entry.tokens = min(entry.tokens, entry.burstLocked(window))
-
-	metrics.TaskThrottleRateDecreases.With(s.metricsHandler).Record(1, key.metricsTags()...)
-	metrics.TaskThrottleAdmittedRate.With(s.metricsHandler).Record(entry.rate, key.metricsTags()...)
+	// Only recorded here. The rate moves once per window, in advanceWindowLocked, so that a
+	// class running at its budget cannot ratchet itself down by rejecting routinely.
+	entry.rejections++
+	s.advanceWindowLocked(entry, now, window)
 }
 
 // Return gives back a token taken by Admit for a release that never happened, so scheduler
@@ -387,17 +397,56 @@ func (s *ThrottleState) Len() int {
 // advanceWindowLocked applies the additive increase when the window that just closed carried
 // no throttle at all. The window start is reset to now rather than stepped forward, so a long
 // idle period yields one increase, not one per elapsed window.
+// advanceWindowLocked closes the window that has elapsed and applies one rate change for it.
+// The decision is the observed loss ratio, not the presence of a single rejection: releases and
+// rejections both grow with class size, so the rate a class settles at follows its own demand
+// rather than the enforcer's background rejection probability.
+//
+// A class that released nothing is left alone. Increasing an idle class only builds credit it
+// will dump the moment it becomes due, which is the burst the burst cap exists to prevent.
 func (s *ThrottleState) advanceWindowLocked(entry *throttleEntry, now time.Time, window time.Duration) {
 	if now.Sub(entry.windowStart) < window {
 		return
 	}
-	if entry.lastThrottle.Before(entry.windowStart) {
-		entry.rate = s.clamp(entry.rate * (1 + s.options.IncreaseRatio()))
+	defer func() {
+		entry.windowStart = now
+		entry.releases, entry.rejections = 0, 0
+	}()
+
+	if entry.releases == 0 && entry.rejections == 0 {
+		return
+	}
+
+	// Rejections are observed after their release, so a rejection can land in the window after
+	// the one that released it. Bounding the ratio at 1 keeps that skew from reading as a loss
+	// rate above 100%.
+	loss := 1.0
+	if entry.releases > entry.rejections {
+		loss = float64(entry.rejections) / float64(entry.releases)
+	}
+
+	if loss > s.options.LossThreshold() {
+		entry.rate = s.clamp(entry.rate * s.beta())
+		entry.decreases++
+		// Tokens accumulated at the old rate would otherwise let the class overshoot the new one.
+		entry.tokens = min(entry.tokens, entry.burstLocked(window))
+		metrics.TaskThrottleRateDecreases.With(s.metricsHandler).Record(1, entry.key.metricsTags()...)
+	} else {
+		entry.rate = s.clamp(entry.rate * (1 + s.increaseRatio()))
 		entry.increases++
 		metrics.TaskThrottleRateIncreases.With(s.metricsHandler).Record(1, entry.key.metricsTags()...)
-		metrics.TaskThrottleAdmittedRate.With(s.metricsHandler).Record(entry.rate, entry.key.metricsTags()...)
 	}
-	entry.windowStart = now
+	metrics.TaskThrottleAdmittedRate.With(s.metricsHandler).Record(entry.rate, entry.key.metricsTags()...)
+}
+
+// resetLocked returns the entry to its freshly created state, keeping the identity but
+// discarding everything the control law had learned.
+func (e *throttleEntry) resetLocked(rate float64, now time.Time, window time.Duration) {
+	e.rate = rate
+	e.lastRefill = now
+	e.windowStart = now
+	e.releases, e.rejections = 0, 0
+	e.tokens = e.burstLocked(window)
 }
 
 func (e *throttleEntry) refillLocked(now time.Time, window time.Duration) {
@@ -416,7 +465,32 @@ func (e *throttleEntry) burstLocked(window time.Duration) float64 {
 }
 
 func (s *ThrottleState) clamp(rate float64) float64 {
-	return min(max(rate, s.options.MinRate()), s.options.MaxRate())
+	lo, hi := s.options.MinRate(), s.options.MaxRate()
+	if !(lo > 0) {
+		lo = 1
+	}
+	if !(hi >= lo) {
+		hi = lo
+	}
+	return min(max(rate, lo), hi)
+}
+
+// beta and increaseRatio are read from dynamic config on every window close, so a value that
+// inverts the control law is one bad config push away. A beta at or above 1 would raise the
+// rate on loss and an increase ratio at or below 0 would lower it on success; both are pinned
+// to a no-op instead, which stalls the controller rather than reversing it.
+func (s *ThrottleState) beta() float64 {
+	if b := s.options.Beta(); b > 0 && b < 1 {
+		return b
+	}
+	return 1
+}
+
+func (s *ThrottleState) increaseRatio() float64 {
+	if r := s.options.IncreaseRatio(); r > 0 {
+		return r
+	}
+	return 0
 }
 
 func (s *ThrottleState) peek(key ThrottleKey) *throttleEntry {

@@ -178,9 +178,9 @@ func executableThrottleKey(executable Executable) (ThrottleKey, bool) {
 
 // setThrottleAdmitted tells the executable whether this dispatch was metered by the controller,
 // so a rejection from it is a signal the control law may act on.
-func setThrottleAdmitted(executable Executable, admitted bool) {
+func setThrottleAdmitted(executable Executable, key ThrottleKey) {
 	if reporter, ok := executable.(ThrottleKeyProvider); ok {
-		reporter.SetThrottleAdmitted(admitted)
+		reporter.SetThrottleAdmitted(key)
 	}
 }
 
@@ -359,11 +359,11 @@ func (r *reschedulerImpl) drainClassLocked(
 			// Mark before submitting. TrySubmit hands the executable to a worker that can reach
 			// HandleErr before this goroutine continues, and a rejection the gate is not
 			// recorded as having issued is discarded by the control law.
-			setThrottleAdmitted(executable, true)
+			setThrottleAdmitted(executable, key.Throttle)
 		}
 		if !r.scheduler.TrySubmit(executable) {
 			if gated {
-				setThrottleAdmitted(executable, false)
+				setThrottleAdmitted(executable, ThrottleKey{})
 				r.throttleState.Return(key.Throttle)
 			}
 			pass.wakeAt(pass.now.Add(

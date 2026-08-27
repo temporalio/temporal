@@ -307,10 +307,10 @@ func (t *benchTask) GetTask() tasks.Task           { return t.Task }
 func (t *benchTask) GetPriority() ctasks.Priority  { return ctasks.PriorityHigh }
 func (t *benchTask) GetScheduledTime() time.Time   { return t.scheduledTime }
 func (t *benchTask) SetScheduledTime(ts time.Time) { t.scheduledTime = ts }
-func (t *benchTask) SetThrottleAdmitted(admitted bool) {
+func (t *benchTask) SetThrottleAdmitted(key ThrottleKey) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.throttleAdmitted = admitted
+	t.throttleAdmitted = key != ThrottleKey{}
 }
 
 func (t *benchTask) ThrottleKey() (ThrottleKey, bool) {

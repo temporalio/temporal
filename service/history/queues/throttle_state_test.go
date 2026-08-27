@@ -21,6 +21,7 @@ type throttleTestOverrides struct {
 	enabled     bool
 	beta        float64
 	increase    float64
+	lossThresh  float64
 	minRate     float64
 	maxRate     float64
 	initialRate float64
@@ -33,6 +34,7 @@ func defaultThrottleOverrides() throttleTestOverrides {
 		enabled:     true,
 		beta:        0.85,
 		increase:    0.10,
+		lossThresh:  0.05,
 		minRate:     1,
 		maxRate:     10000,
 		initialRate: 100,
@@ -56,6 +58,7 @@ func newTestThrottleStateWithWindow(
 			Enabled:       dynamicconfig.GetBoolPropertyFn(o.enabled),
 			Beta:          dynamicconfig.GetFloatPropertyFn(o.beta),
 			IncreaseRatio: dynamicconfig.GetFloatPropertyFn(o.increase),
+			LossThreshold: dynamicconfig.GetFloatPropertyFn(o.lossThresh),
 			Window:        dynamicconfig.GetDurationPropertyFn(window),
 			MinRate:       dynamicconfig.GetFloatPropertyFn(o.minRate),
 			MaxRate:       dynamicconfig.GetFloatPropertyFn(o.maxRate),
@@ -161,6 +164,14 @@ func testKey() ThrottleKey {
 	}
 }
 
+// closeWindow advances past the control window that is currently open and triggers the single
+// rate decision for it. The rate only ever moves at a window boundary, so a test that reports
+// evidence without closing the window is asserting on a decision that has not been made yet.
+func closeWindow(state *ThrottleState, ts *clock.EventTimeSource, key ThrottleKey) {
+	ts.Update(ts.Now().Add(testThrottleWindow))
+	state.ReportSuccess(key)
+}
+
 func TestThrottleState_OneDecreasePerWindow(t *testing.T) {
 	state, timeSource := newTestThrottleState(defaultThrottleOverrides())
 	key := testKey()
@@ -169,6 +180,7 @@ func TestThrottleState_OneDecreasePerWindow(t *testing.T) {
 		state.ReportThrottled(key, true)
 		timeSource.Update(timeSource.Now().Add(time.Millisecond))
 	}
+	closeWindow(state, timeSource, key)
 
 	decreases, _ := state.Counters(key)
 	require.Equal(t, int64(1), decreases, "a namespace at its budget rejects routinely; that is not 500 signals")
@@ -181,7 +193,7 @@ func TestThrottleState_DecreasesAcrossWindows(t *testing.T) {
 
 	for i := 0; i < 4; i++ {
 		state.ReportThrottled(key, true)
-		timeSource.Update(timeSource.Now().Add(testThrottleWindow))
+		closeWindow(state, timeSource, key)
 	}
 
 	decreases, _ := state.Counters(key)
@@ -194,13 +206,13 @@ func TestThrottleState_AdditiveIncreaseAfterCleanWindow(t *testing.T) {
 	key := testKey()
 
 	state.ReportThrottled(key, true)
+	closeWindow(state, timeSource, key)
 	require.InEpsilon(t, 85.0, state.AdmittedRate(key), 1e-9)
 
-	// Two clean windows: the first closes the window the throttle landed in, the second is clean.
-	timeSource.Update(timeSource.Now().Add(testThrottleWindow))
-	state.ReportSuccess(key)
-	timeSource.Update(timeSource.Now().Add(testThrottleWindow))
-	state.ReportSuccess(key)
+	// A window that released work and saw no rejection is what earns an increase. An idle
+	// window earns nothing, so the release here is the point of the test, not setup.
+	require.True(t, state.Admit(key))
+	closeWindow(state, timeSource, key)
 
 	_, increases := state.Counters(key)
 	require.Equal(t, int64(1), increases)
@@ -231,15 +243,15 @@ func TestThrottleState_ClampsRate(t *testing.T) {
 
 	for i := 0; i < 100; i++ {
 		state.ReportThrottled(key, true)
-		timeSource.Update(timeSource.Now().Add(testThrottleWindow))
+		closeWindow(state, timeSource, key)
 	}
 	require.InEpsilon(t, 20.0, state.AdmittedRate(key), 1e-9, "floor keeps the class making forward progress")
 
 	for i := 0; i < 200; i++ {
-		timeSource.Update(timeSource.Now().Add(testThrottleWindow))
-		state.ReportSuccess(key)
+		state.Admit(key)
+		closeWindow(state, timeSource, key)
 	}
-	require.InEpsilon(t, 120.0, state.AdmittedRate(key), 1e-9, "ceiling stops an idle class from dumping on the next burst")
+	require.InEpsilon(t, 120.0, state.AdmittedRate(key), 1e-9, "ceiling bounds what a recovering class can climb to")
 }
 
 func TestThrottleState_AdmitEnforcesRate(t *testing.T) {
@@ -347,7 +359,7 @@ func TestThrottleState_SweepsIdleKeys(t *testing.T) {
 }
 
 func TestThrottleState_ScopesAreIndependent(t *testing.T) {
-	state, _ := newTestThrottleState(defaultThrottleOverrides())
+	state, timeSource := newTestThrottleState(defaultThrottleOverrides())
 
 	namespaceKey := testKey()
 	hostKey := ThrottleKey{
@@ -357,6 +369,7 @@ func TestThrottleState_ScopesAreIndependent(t *testing.T) {
 	}
 
 	state.ReportThrottled(namespaceKey, true)
+	closeWindow(state, timeSource, namespaceKey)
 
 	require.InEpsilon(t, 85.0, state.AdmittedRate(namespaceKey), 1e-9)
 	require.Zero(t, state.AdmittedRate(hostKey))
@@ -409,12 +422,13 @@ func TestThrottleState_UnadmittedRejectionsDoNotBlockIncrease(t *testing.T) {
 	key := testKey()
 
 	state.ReportThrottled(key, true)
+	closeWindow(state, timeSource, key)
 	require.InEpsilon(t, 85.0, state.AdmittedRate(key), 1e-9)
 
 	for i := 0; i < 4; i++ {
-		timeSource.Update(timeSource.Now().Add(testThrottleWindow))
+		require.True(t, state.Admit(key))
 		state.ReportThrottled(key, false)
-		state.ReportSuccess(key)
+		closeWindow(state, timeSource, key)
 	}
 
 	_, increases := state.Counters(key)
@@ -454,4 +468,47 @@ func TestThrottleState_ReturnCannotExceedBurst(t *testing.T) {
 		}
 	}
 	require.Equal(t, 2, admitted)
+}
+
+// An idle class must not climb. Increasing a class that released nothing only banks credit it
+// will spend the instant it becomes due, which is the burst the cap exists to bound.
+func TestThrottleState_IdleWindowsDoNotMoveTheRate(t *testing.T) {
+	state, timeSource := newTestThrottleState(defaultThrottleOverrides())
+	key := testKey()
+
+	require.True(t, state.Admit(key))
+	closeWindow(state, timeSource, key)
+	rate := state.AdmittedRate(key)
+
+	for i := 0; i < 50; i++ {
+		closeWindow(state, timeSource, key)
+	}
+
+	require.InEpsilon(t, rate, state.AdmittedRate(key), 1e-9, "idle windows must leave the rate alone")
+}
+
+// The rate a class settles at must follow its own demand, not the enforcer's background
+// rejection probability. A rule that decreased on any single rejection but increased only on a
+// perfectly clean window would collapse here, because a large class is arithmetically less
+// likely to see a clean window than a small one at the same loss rate.
+func TestThrottleState_SteadyStateIsIndependentOfClassSize(t *testing.T) {
+	const backgroundLoss = 0.02 // well under the 0.05 threshold
+
+	rateFor := func(releasesPerWindow int) float64 {
+		state, timeSource := newTestThrottleState(defaultThrottleOverrides())
+		key := testKey()
+		for w := 0; w < 200; w++ {
+			for i := 0; i < releasesPerWindow; i++ {
+				if state.Admit(key) && float64(i)/float64(releasesPerWindow) < backgroundLoss {
+					state.ReportThrottled(key, true)
+				}
+			}
+			closeWindow(state, timeSource, key)
+		}
+		return state.AdmittedRate(key)
+	}
+
+	small, large := rateFor(10), rateFor(500)
+	require.InEpsilon(t, small, large, 0.01,
+		"a class releasing 50x more work must not settle at a different rate for that reason alone")
 }

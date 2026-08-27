@@ -1456,6 +1456,7 @@ func (s *executableSuite) newTestThrottleState() *queues.ThrottleState {
 			Enabled:       dynamicconfig.GetBoolPropertyFn(true),
 			Beta:          dynamicconfig.GetFloatPropertyFn(0.85),
 			IncreaseRatio: dynamicconfig.GetFloatPropertyFn(0.1),
+			LossThreshold: dynamicconfig.GetFloatPropertyFn(0.05),
 			Window:        dynamicconfig.GetDurationPropertyFn(time.Second),
 			MinRate:       dynamicconfig.GetFloatPropertyFn(1),
 			MaxRate:       dynamicconfig.GetFloatPropertyFn(10000),
@@ -1537,8 +1538,12 @@ func (s *executableSuite) TestHandleErr_ThrottleErrorsDriveController() {
 	s.Equal(1, throttleState.Len())
 	s.InEpsilon(100.0, throttleState.AdmittedRate(key), 1e-9)
 
-	provider.SetThrottleAdmitted(true)
+	// The rate moves once per window, so the decision for this rejection lands when the
+	// window it fell in closes.
+	provider.SetThrottleAdmitted(key)
 	s.Error(executable.HandleErr(throttleErr))
+	s.timeSource.Update(s.timeSource.Now().Add(time.Second))
+	throttleState.ReportSuccess(key)
 	s.InEpsilon(85.0, throttleState.AdmittedRate(key), 1e-9)
 
 	// A subsequent non-throttle failure must take the task out of the throttled class, so it is

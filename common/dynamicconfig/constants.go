@@ -2105,6 +2105,15 @@ admitted rate when a throttle is observed. At most one decrease is applied per c
 		`TaskThrottleControllerIncreaseRatio is the fraction of the current admitted rate added
 after a control window that saw no throttle. Expressed as a ratio so it is scale free.`,
 	)
+	TaskThrottleControllerLossThreshold = NewGlobalFloatSetting(
+		"history.taskThrottleControllerLossThreshold",
+		0.05,
+		`TaskThrottleControllerLossThreshold is the fraction of a class's metered releases that
+may be rejected in a control window before the admitted rate is decreased. Below it the rate
+increases. Zero would decrease on any rejection at all, which makes the rate a class settles at
+depend on the enforcer's background rejection probability rather than on its own demand.`,
+	)
+
 	TaskThrottleControllerWindow = NewGlobalDurationSetting(
 		"history.taskThrottleControllerWindow",
 		time.Second,

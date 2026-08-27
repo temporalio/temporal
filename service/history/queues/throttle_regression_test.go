@@ -137,7 +137,11 @@ func TestThrottleState_IndependentInstancesConvergeOnSharedBudget(t *testing.T) 
 				if admitted[i] == 0 {
 					continue
 				}
-				if over*float64(admitted[i])/float64(total) >= 1 {
+				// One report per rejected release. Reporting a single throttle for a whole
+				// window would understate loss for a large host and overstate it for a small
+				// one, which is exactly the size dependence the loss ratio removes.
+				rejected := int(math.Round(over * float64(admitted[i]) / float64(total)))
+				for j := 0; j < rejected; j++ {
 					s.ReportThrottled(key, true)
 				}
 			}
