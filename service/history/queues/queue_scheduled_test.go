@@ -145,7 +145,6 @@ func (s *scheduledQueueSuite) SetupTest() {
 			return ""
 		},
 		nil,
-		0,
 	)
 	s.scheduledQueue = NewScheduledQueue(
 		s.mockShard,

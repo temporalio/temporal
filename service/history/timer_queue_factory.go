@@ -176,7 +176,6 @@ func (f *timerQueueFactory) CreateQueue(
 		f.Config.TaskDLQInternalErrors,
 		f.Config.TaskDLQErrorPattern,
 		f.ThrottleState,
-		shardContext.GetShardID(),
 	)
 	return queues.NewScheduledQueue(
 		shardContext,

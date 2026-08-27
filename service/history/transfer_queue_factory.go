@@ -176,7 +176,6 @@ func (f *transferQueueFactory) CreateQueue(
 		f.Config.TaskDLQInternalErrors,
 		f.Config.TaskDLQErrorPattern,
 		f.ThrottleState,
-		shardContext.GetShardID(),
 	)
 	return queues.NewImmediateQueue(
 		shardContext,

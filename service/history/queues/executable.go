@@ -147,12 +147,10 @@ type (
 		invalidTaskReason          string
 		resourceExhaustedCount     int // does NOT include consts.ErrResourceExhaustedBusyWorkflow
 		throttleState              *ThrottleState
-		shardID                    int32
 		throttleMu                 sync.Mutex
 		throttleKey                ThrottleKey
 		hasThrottleKey             bool
 		throttleAdmittedKey        ThrottleKey
-		throttleScope              enumspb.ResourceExhaustedScope
 		throttleAttempts           int
 		dlqEnabled                 dynamicconfig.BoolPropertyFn
 		terminalFailureCause       error
@@ -163,7 +161,6 @@ type (
 	}
 	ExecutableParams struct {
 		ThrottleState              *ThrottleState
-		ShardID                    int32
 		DLQEnabled                 dynamicconfig.BoolPropertyFn
 		DLQWriter                  *DLQWriter
 		MaxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
@@ -254,7 +251,6 @@ func NewExecutable(
 		baseMetricsHandler:         metricsHandler,
 		tracer:                     tracer,
 		throttleState:              params.ThrottleState,
-		shardID:                    params.ShardID,
 		dlqWriter:                  params.DLQWriter,
 		dlqEnabled:                 params.DLQEnabled,
 		maxUnexpectedErrorAttempts: params.MaxUnexpectedErrorAttempts,
@@ -840,7 +836,7 @@ func (e *executableImpl) shouldResubmitOnNack(err error) bool {
 		// Namespace and system scoped throttles are shared budgets. Resubmitting synchronously
 		// would bypass the rescheduler, and with it the throttle controller, so every parked
 		// task would keep rediscovering the same constraint at full dispatch cost.
-		if e.throttleState != nil && e.throttleState.Enabled() && e.isThrottleScoped() {
+		if e.throttleState != nil && e.throttleState.Enabled() && e.isGovernedByController() {
 			return false
 		}
 		if e.resourceExhaustedCount > resourceExhaustedResubmitMaxAttempts {
@@ -877,6 +873,12 @@ func (e *executableImpl) reportThrottle(
 		e.clearThrottle()
 		return
 	}
+	metrics.TaskThrottleWastedAttempts.With(e.chasmMetricsHandler).Record(
+		1,
+		metrics.ResourceExhaustedCauseTag(cause),
+		metrics.ResourceExhaustedScopeTag(scope),
+	)
+
 	if !IsControllerInput(err, cause, scope) {
 		// The task's last constraint is no longer a shared budget, so it must not stay in a
 		// throttled rescheduler class governed by a budget it is not waiting on.
@@ -887,19 +889,12 @@ func (e *executableImpl) reportThrottle(
 	key := NewThrottleKey(cause, e.GetNamespaceID())
 
 	e.throttleMu.Lock()
-	e.throttleScope = scope
 	e.throttleKey = key
 	e.hasThrottleKey = true
 	e.throttleAttempts++
 	admitted := e.throttleAdmittedKey == key
 	e.throttleAdmittedKey = ThrottleKey{}
 	e.throttleMu.Unlock()
-
-	metrics.TaskThrottleWastedAttempts.With(e.chasmMetricsHandler).Record(
-		1,
-		metrics.ResourceExhaustedCauseTag(cause),
-		metrics.ResourceExhaustedScopeTag(scope),
-	)
 
 	e.throttleState.ReportThrottled(key, admitted)
 }
@@ -910,7 +905,6 @@ func (e *executableImpl) clearThrottle() {
 
 	e.hasThrottleKey = false
 	e.throttleKey = ThrottleKey{}
-	e.throttleScope = enumspb.RESOURCE_EXHAUSTED_SCOPE_UNSPECIFIED
 	e.throttleAdmittedKey = ThrottleKey{}
 }
 
@@ -951,16 +945,13 @@ func (e *executableImpl) ThrottleKey() (ThrottleKey, bool) {
 	return e.throttleKey, e.hasThrottleKey
 }
 
-func (e *executableImpl) isThrottleScoped() bool {
+// isGovernedByController reports whether this task is parked on a budget the controller paces.
+// Every governed cause is namespace scoped, so holding a key is the whole condition.
+func (e *executableImpl) isGovernedByController() bool {
 	e.throttleMu.Lock()
 	defer e.throttleMu.Unlock()
 
-	switch e.throttleScope { //nolint:exhaustive
-	case enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE, enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM:
-		return e.hasThrottleKey
-	default:
-		return false
-	}
+	return e.hasThrottleKey
 }
 
 func (e *executableImpl) backoffDuration(

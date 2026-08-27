@@ -105,18 +105,19 @@ func TestIsControllerInput(t *testing.T) {
 		{name: "concurrent limit", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT, scope: ns},
 		{name: "rps limit", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, scope: ns},
 
-		// Reports namespace scope but is enforced per (namespace, businessID, archetype), so one
-		// hot workflow ID must not ratchet the whole namespace down.
+		// Pinned against a *governed* cause on purpose. Its real cause is RPS_LIMIT, which the
+		// allowlist already rejects, so pairing it with APS_LIMIT is what actually exercises the
+		// errors.Is guard: delete that guard and this row fails, and only this row.
 		{
-			name:  "business id reuse",
+			name:  "business id reuse, even under a governed cause",
 			err:   consts.ErrBusinessIDRateLimitExceeded,
-			cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
+			cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
 			scope: ns,
 		},
 		{
 			name:  "business id reuse, wrapped",
 			err:   fmt.Errorf("wrapped: %w", consts.ErrBusinessIDRateLimitExceeded),
-			cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
+			cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
 			scope: ns,
 		},
 	} {
@@ -144,11 +145,7 @@ func TestNewThrottleKey_OneClassPerNamespaceAndCause(t *testing.T) {
 }
 
 func testKey() ThrottleKey {
-	return ThrottleKey{
-		Scope:       ThrottleScopeNamespace,
-		Cause:       enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
-		NamespaceID: "ns-1",
-	}
+	return NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
 }
 
 // closeWindow advances past the control window that is currently open and triggers the single

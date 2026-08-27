@@ -787,7 +787,6 @@ func (s *queueBaseSuite) newQueueBase(
 			return ""
 		},
 		nil,
-		0,
 	)
 	return newQueueBase(
 		mockShard,

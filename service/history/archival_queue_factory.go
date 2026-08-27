@@ -180,7 +180,6 @@ func (f *archivalQueueFactory) newScheduledQueue(shard historyi.ShardContext, ex
 		f.Config.TaskDLQInternalErrors,
 		f.Config.TaskDLQErrorPattern,
 		f.ThrottleState,
-		shard.GetShardID(),
 	)
 	return queues.NewScheduledQueue(
 		shard,

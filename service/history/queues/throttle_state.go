@@ -43,11 +43,10 @@ const numThrottleScopes = 3
 const throttleSweepDivisor = 4
 
 type (
-	// ThrottleKey identifies one controlled class. Category is populated only for
-	// infrastructure causes: a Cassandra, Elasticsearch or matching overload observed by one
-	// task category says nothing about a category that never touches that dependency.
-	// Namespace budget causes deliberately leave Category empty so every category shares
-	// the single enforced budget.
+	// ThrottleKey identifies one controlled class. Only Scope, Cause and NamespaceID are
+	// populated today, because every governed cause is a namespace budget and one budget is one
+	// class however the traffic is spread. ShardID and Category are the room a shard scoped or
+	// dependency scoped budget would need, so adding one does not reshape the key.
 	ThrottleKey struct {
 		Scope       ThrottleScope
 		Cause       enumspb.ResourceExhaustedCause
@@ -115,6 +114,16 @@ type (
 // System scoped instances of these same causes are excluded for now. They are enforced against
 // a budget this namespace only partly owns, so one namespace's class cannot learn the shape of
 // it from its own rejections.
+//
+// PERSISTENCE_LIMIT collapses two enforcement points. The per (namespace, shard) limiter and
+// the per namespace one report the same cause and scope, so they cannot be told apart here and
+// share a class: one hot shard's rejections pace every other shard of that namespace on this
+// host. Telling them apart needs a distinguishable error, not a change here.
+//
+// Adding RPS_LIMIT here would re-expose ErrBusinessIDRateLimitExceeded, which reports that
+// cause at namespace scope but is enforced per (namespace, businessID, archetype). The guard
+// for it in IsControllerInput is unreachable while RPS_LIMIT is absent, and is kept for that
+// day rather than because it fires today.
 var controlledCauses = map[enumspb.ResourceExhaustedCause]struct{}{
 	enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT:         {},
 	enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT: {},

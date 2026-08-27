@@ -83,11 +83,7 @@ func newTestRescheduler(
 }
 
 func apsKey(namespaceID string) ThrottleKey {
-	return ThrottleKey{
-		Scope:       ThrottleScopeNamespace,
-		Cause:       enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
-		NamespaceID: namespaceID,
-	}
+	return NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, namespaceID)
 }
 
 // A class waiting on a throttle budget must not hold up a class that failed for an unrelated
@@ -303,16 +299,16 @@ func TestReschedule_DifferentCausesAreDifferentClasses(t *testing.T) {
 
 	r, scheduler, _ := newTestRescheduler(t, ctrl, timeSource, state, 1000)
 
-	namespaceScoped := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, "ns-1")
-	systemScoped := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
-	require.NotEqual(t, namespaceScoped, systemScoped)
+	persistence := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, "ns-1")
+	aps := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
+	require.NotEqual(t, persistence, aps)
 
 	// Exhaust only the namespace scoped budget.
-	require.True(t, state.Admit(namespaceScoped))
+	require.True(t, state.Admit(persistence))
 
-	blocked := newThrottledExecutable(ctrl, namespaceScoped, true)
+	blocked := newThrottledExecutable(ctrl, persistence, true)
 	blocked.EXPECT().GetNamespaceID().Return("ns-1").AnyTimes()
-	free := newThrottledExecutable(ctrl, systemScoped, true)
+	free := newThrottledExecutable(ctrl, aps, true)
 	free.EXPECT().GetNamespaceID().Return("ns-1").AnyTimes()
 
 	r.Add(blocked, now)
