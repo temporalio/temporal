@@ -4987,6 +4987,9 @@ func (wh *WorkflowHandler) ListScheduleMatchingTimes(ctx context.Context, reques
 	if !wh.config.EnableSchedules(request.Namespace) {
 		return nil, errSchedulesNotAllowed
 	}
+	if err := wh.validateScheduleMatchingTimesTimestamps(request); err != nil {
+		return nil, err
+	}
 
 	// Prefer CHASM scheduler if enabled.
 	if wh.chasmSchedulerEnabled(ctx, request.Namespace) {
@@ -7082,6 +7085,18 @@ func (wh *WorkflowHandler) validateSchedulePatchTimestamps(
 		if err := validateTimestamp(backfill.GetEndTime(), fmt.Sprintf("backfill request %d end time", i)); err != nil {
 			return wh.handleScheduleValidationError(err, scheduleValidationTimestamp, namespaceName)
 		}
+	}
+	return nil
+}
+
+func (wh *WorkflowHandler) validateScheduleMatchingTimesTimestamps(
+	request *workflowservice.ListScheduleMatchingTimesRequest,
+) error {
+	if err := validateTimestamp(request.GetStartTime(), "start time"); err != nil {
+		return wh.handleScheduleValidationError(err, scheduleValidationTimestamp, request.GetNamespace())
+	}
+	if err := validateTimestamp(request.GetEndTime(), "end time"); err != nil {
+		return wh.handleScheduleValidationError(err, scheduleValidationTimestamp, request.GetNamespace())
 	}
 	return nil
 }

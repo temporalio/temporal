@@ -5806,6 +5806,55 @@ func TestValidateScheduleTimestamps(t *testing.T) {
 	}
 }
 
+func TestValidateScheduleMatchingTimesTimestamps(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		request   *workflowservice.ListScheduleMatchingTimesRequest
+		errString string
+	}{
+		{
+			name: "invalid start time",
+			request: &workflowservice.ListScheduleMatchingTimesRequest{
+				StartTime: &timestamppb.Timestamp{Nanos: 1_000_000_000},
+				EndTime:   timestamppb.Now(),
+			},
+			errString: "start time is not a valid timestamp",
+		},
+		{
+			name: "invalid end time",
+			request: &workflowservice.ListScheduleMatchingTimesRequest{
+				StartTime: timestamppb.Now(),
+				EndTime:   &timestamppb.Timestamp{Nanos: 1_000_000_000},
+			},
+			errString: "end time is not a valid timestamp",
+		},
+		{
+			name:    "missing range",
+			request: &workflowservice.ListScheduleMatchingTimesRequest{},
+		},
+		{
+			name: "epoch range",
+			request: &workflowservice.ListScheduleMatchingTimesRequest{
+				StartTime: &timestamppb.Timestamp{},
+				EndTime:   &timestamppb.Timestamp{},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			wh := newScheduleSpecHandler(nil)
+			err := wh.validateScheduleMatchingTimesTimestamps(tc.request)
+			if tc.errString == "" {
+				require.NoError(t, err)
+				return
+			}
+
+			var invalidArgument *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgument)
+			require.ErrorContains(t, err, tc.errString)
+		})
+	}
+}
+
 func TestScheduleValidationKillSwitches(t *testing.T) {
 	testCases := []struct {
 		name       string
