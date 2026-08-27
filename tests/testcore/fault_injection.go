@@ -4,24 +4,26 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	"go.temporal.io/server/common/rpc/grpcfaults"
 )
 
-// RPCRequestFault determines whether a fault should be injected before an RPC handler runs.
+// RequestFault determines whether a fault should be injected before a gRPC handler runs.
 // Return the error to inject, or nil to not inject a fault.
-type RPCRequestFault func(req any) error
+type RequestFault func(req any) error
 
-// RPCResponseFault determines whether a fault should be injected after an RPC handler runs.
+// ResponseFault determines whether a fault should be injected after a gRPC handler runs.
 // Return the error to inject, or nil to preserve the handler response and error.
-type RPCResponseFault func(req, resp any, handlerErr error) error
+type ResponseFault func(req, resp any, handlerErr error) error
 
-func injectRPCFault(t testing.TB, register func(func(any, error) (bool, any, error)) func()) func() {
+func injectFault(t testing.TB, register func(func(any, error) *grpcfaults.Outcome) func()) func() {
 	t.Helper()
 
 	var fired atomic.Bool
 	var logMu sync.Mutex
 	loggingEnabled := true
 
-	unregister := register(func(req any, injectedErr error) (bool, any, error) {
+	unregister := register(func(req any, injectedErr error) *grpcfaults.Outcome {
 		if injectedErr != nil {
 			fired.Store(true)
 			logMu.Lock()
@@ -29,9 +31,9 @@ func injectRPCFault(t testing.TB, register func(func(any, error) (bool, any, err
 				t.Logf("Fault injection fired: %T", req)
 			}
 			logMu.Unlock()
-			return true, nil, injectedErr
+			return &grpcfaults.Outcome{Error: injectedErr}
 		}
-		return false, nil, nil
+		return nil
 	})
 
 	t.Cleanup(func() {

@@ -1,6 +1,6 @@
 //go:build test_dep
 
-package faultinjection_test
+package grpcfaults_test
 
 import (
 	"context"
@@ -10,11 +10,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common/rpc/faultinjection"
+	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/testing/await"
 )
 
-func TestRPCFaultGenerator_Generate(t *testing.T) {
+func TestCallbackGenerator_Generate(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -22,11 +22,11 @@ func TestRPCFaultGenerator_Generate(t *testing.T) {
 	handlerResponse := &struct{}{}
 	handlerErr := errors.New("handler")
 	injectedErr := errors.New("injected")
-	bothNamespaces := faultinjection.RPCFaultScope{NamespaceID: "namespace-id", NamespaceName: "namespace-name"}
+	bothNamespaces := grpcfaults.Scope{NamespaceID: "namespace-id", NamespaceName: "namespace-name"}
 
 	type callback struct {
 		name     string
-		scope    faultinjection.RPCFaultScope
+		scope    grpcfaults.Scope
 		miss     bool
 		response any
 		err      error
@@ -63,7 +63,7 @@ func TestRPCFaultGenerator_Generate(t *testing.T) {
 				name:    "namespace before global",
 				request: &matchingservice.AddWorkflowTaskRequest{NamespaceId: "namespace-id"},
 				callbacks: []callback{
-					{name: "namespace", scope: faultinjection.RPCFaultScope{NamespaceID: "namespace-id"}, response: "namespace response"},
+					{name: "namespace", scope: grpcfaults.Scope{NamespaceID: "namespace-id"}, response: "namespace response"},
 					{name: "global", response: "global response"},
 				},
 				expectedResp:  "namespace response",
@@ -73,7 +73,7 @@ func TestRPCFaultGenerator_Generate(t *testing.T) {
 				name:    "global after namespace miss",
 				request: &matchingservice.AddWorkflowTaskRequest{NamespaceId: "namespace-id"},
 				callbacks: []callback{
-					{name: "namespace", scope: faultinjection.RPCFaultScope{NamespaceID: "namespace-id"}, miss: true},
+					{name: "namespace", scope: grpcfaults.Scope{NamespaceID: "namespace-id"}, miss: true},
 					{name: "global", response: "response"},
 				},
 				expectedResp:  "response",
@@ -83,7 +83,7 @@ func TestRPCFaultGenerator_Generate(t *testing.T) {
 				name:    "namespace mismatch",
 				request: &matchingservice.AddWorkflowTaskRequest{NamespaceId: "other-namespace-id"},
 				callbacks: []callback{
-					{name: "namespace", scope: faultinjection.RPCFaultScope{NamespaceID: "namespace-id"}, err: injectedErr},
+					{name: "namespace", scope: grpcfaults.Scope{NamespaceID: "namespace-id"}, err: injectedErr},
 				},
 				expectedMiss: true,
 			},
@@ -91,7 +91,7 @@ func TestRPCFaultGenerator_Generate(t *testing.T) {
 				name:    "matched error",
 				request: &matchingservice.AddWorkflowTaskRequest{NamespaceId: "namespace-id"},
 				callbacks: []callback{
-					{name: "namespace", scope: faultinjection.RPCFaultScope{NamespaceID: "namespace-id"}, err: injectedErr},
+					{name: "namespace", scope: grpcfaults.Scope{NamespaceID: "namespace-id"}, err: injectedErr},
 				},
 				expectedErr:   injectedErr,
 				expectedCalls: []string{"namespace"},
@@ -100,9 +100,9 @@ func TestRPCFaultGenerator_Generate(t *testing.T) {
 				name:    "first match wins",
 				request: &matchingservice.AddWorkflowTaskRequest{NamespaceId: "namespace-id"},
 				callbacks: []callback{
-					{name: "first", scope: faultinjection.RPCFaultScope{NamespaceID: "namespace-id"}, miss: true}, // no match!
-					{name: "second", scope: faultinjection.RPCFaultScope{NamespaceID: "namespace-id"}, response: "response"},
-					{name: "third", scope: faultinjection.RPCFaultScope{NamespaceID: "namespace-id"}, response: "other response"}, // never reached!
+					{name: "first", scope: grpcfaults.Scope{NamespaceID: "namespace-id"}, miss: true}, // no match!
+					{name: "second", scope: grpcfaults.Scope{NamespaceID: "namespace-id"}, response: "response"},
+					{name: "third", scope: grpcfaults.Scope{NamespaceID: "namespace-id"}, response: "other response"}, // never reached!
 				},
 				expectedResp:  "response",
 				expectedCalls: []string{"first", "second"},
@@ -130,9 +130,9 @@ func TestRPCFaultGenerator_Generate(t *testing.T) {
 			t.Run(stage.name+"/"+test.name, func(t *testing.T) {
 				t.Parallel()
 
-				generator := faultinjection.NewRPCFaultGenerator()
+				generator := grpcfaults.NewCallbackGenerator()
 				var calls []string
-				invoke := func(callback callback, actualCtx context.Context, actualMethod string, actualRequest, actualResponse any, actualErr error) (bool, any, error) {
+				invoke := func(callback callback, actualCtx context.Context, actualMethod string, actualRequest, actualResponse any, actualErr error) *grpcfaults.Outcome {
 					calls = append(calls, callback.name)
 					require.Equal(t, ctx, actualCtx)
 					require.Equal(t, fullMethod, actualMethod)
@@ -141,74 +141,78 @@ func TestRPCFaultGenerator_Generate(t *testing.T) {
 						require.Equal(t, handlerResponse, actualResponse)
 						require.ErrorIs(t, actualErr, handlerErr)
 					}
-					return !callback.miss, callback.response, callback.err
+					if callback.miss {
+						return nil
+					}
+					return &grpcfaults.Outcome{Response: callback.response, Error: callback.err}
 				}
 
 				for _, callback := range test.callbacks {
 					callback := callback
 					if stage.response {
-						generator.RegisterResponseCallback(callback.scope, func(actualCtx context.Context, actualMethod string, actualRequest, actualResponse any, actualErr error) (bool, any, error) {
+						generator.RegisterResponseCallback(callback.scope, func(actualCtx context.Context, actualMethod string, actualRequest, actualResponse any, actualErr error) *grpcfaults.Outcome {
 							return invoke(callback, actualCtx, actualMethod, actualRequest, actualResponse, actualErr)
 						})
 					} else {
-						generator.RegisterRequestCallback(callback.scope, func(actualCtx context.Context, actualMethod string, actualRequest any) (bool, any, error) {
+						generator.RegisterRequestCallback(callback.scope, func(actualCtx context.Context, actualMethod string, actualRequest any) *grpcfaults.Outcome {
 							return invoke(callback, actualCtx, actualMethod, actualRequest, nil, nil)
 						})
 					}
 				}
 
-				var matched bool
-				var response any
-				var err error
+				var outcome *grpcfaults.Outcome
 				if stage.response {
-					matched, response, err = generator.GenerateResponse(ctx, fullMethod, test.request, handlerResponse, handlerErr)
+					outcome = generator.GenerateResponse(ctx, fullMethod, test.request, handlerResponse, handlerErr)
 				} else {
-					matched, response, err = generator.GenerateRequest(ctx, fullMethod, test.request)
+					outcome = generator.GenerateRequest(ctx, fullMethod, test.request)
 				}
 
-				if test.expectedErr == nil {
-					require.NoError(t, err)
-				} else {
-					require.ErrorIs(t, err, test.expectedErr)
+				if test.expectedMiss {
+					require.Nil(t, outcome)
+					require.Equal(t, test.expectedCalls, calls)
+					return
 				}
-				require.Equal(t, !test.expectedMiss, matched)
-				require.Equal(t, test.expectedResp, response)
+				require.NotNil(t, outcome)
+				if test.expectedErr == nil {
+					require.NoError(t, outcome.Error)
+				} else {
+					require.ErrorIs(t, outcome.Error, test.expectedErr)
+				}
+				require.Equal(t, test.expectedResp, outcome.Response)
 				require.Equal(t, test.expectedCalls, calls)
 			})
 		}
 	}
 }
 
-func TestRPCFaultGenerator_Unregister(t *testing.T) {
+func TestCallbackGenerator_Unregister(t *testing.T) {
 	t.Parallel()
 
 	t.Run("idempotent", func(t *testing.T) {
 		t.Parallel()
 
-		generator := faultinjection.NewRPCFaultGenerator()
-		unregister := generator.RegisterRequestCallback(faultinjection.RPCFaultScope{NamespaceID: "namespace-id"}, func(context.Context, string, any) (bool, any, error) {
-			return true, "response", nil
+		generator := grpcfaults.NewCallbackGenerator()
+		unregister := generator.RegisterRequestCallback(grpcfaults.Scope{NamespaceID: "namespace-id"}, func(context.Context, string, any) *grpcfaults.Outcome {
+			return &grpcfaults.Outcome{Response: "response"}
 		})
 
 		unregister()
 		unregister()
-		matched, response, err := generator.GenerateRequest(
+		outcome := generator.GenerateRequest(
 			context.Background(),
 			"/test.Service/Method",
 			&matchingservice.AddWorkflowTaskRequest{NamespaceId: "namespace-id"},
 		)
 
-		require.NoError(t, err)
-		require.False(t, matched)
-		require.Nil(t, response)
+		require.Nil(t, outcome)
 	})
 
 	t.Run("removes namespace ID and name registrations", func(t *testing.T) {
 		t.Parallel()
 
-		generator := faultinjection.NewRPCFaultGenerator()
-		unregister := generator.RegisterRequestCallback(faultinjection.RPCFaultScope{NamespaceID: "namespace-id", NamespaceName: "namespace-name"}, func(context.Context, string, any) (bool, any, error) {
-			return true, "response", nil
+		generator := grpcfaults.NewCallbackGenerator()
+		unregister := generator.RegisterRequestCallback(grpcfaults.Scope{NamespaceID: "namespace-id", NamespaceName: "namespace-name"}, func(context.Context, string, any) *grpcfaults.Outcome {
+			return &grpcfaults.Outcome{Response: "response"}
 		})
 		unregister()
 
@@ -226,11 +230,9 @@ func TestRPCFaultGenerator_Unregister(t *testing.T) {
 			},
 		} {
 			t.Run(test.name, func(t *testing.T) {
-				matched, response, err := generator.GenerateRequest(context.Background(), "/test.Service/Method", test.request)
+				outcome := generator.GenerateRequest(context.Background(), "/test.Service/Method", test.request)
 
-				require.NoError(t, err)
-				require.False(t, matched)
-				require.Nil(t, response)
+				require.Nil(t, outcome)
 			})
 		}
 	})
@@ -238,27 +240,25 @@ func TestRPCFaultGenerator_Unregister(t *testing.T) {
 	t.Run("during generate", func(t *testing.T) {
 		t.Parallel()
 
-		generator := faultinjection.NewRPCFaultGenerator()
+		generator := grpcfaults.NewCallbackGenerator()
 		callbackStarted := make(chan struct{})
 		continueCallback := make(chan struct{})
-		unregister := generator.RegisterRequestCallback(faultinjection.RPCFaultScope{NamespaceID: "namespace-id"}, func(context.Context, string, any) (bool, any, error) {
+		unregister := generator.RegisterRequestCallback(grpcfaults.Scope{NamespaceID: "namespace-id"}, func(context.Context, string, any) *grpcfaults.Outcome {
 			await.Snd(t, callbackStarted, struct{}{})
 			await.Rcv(t, continueCallback)
-			return true, "response", nil
+			return &grpcfaults.Outcome{Response: "response"}
 		})
 		type result struct {
-			matched  bool
-			response any
-			err      error
+			outcome *grpcfaults.Outcome
 		}
 		resultCh := make(chan result, 1)
 		go func() {
-			matched, response, err := generator.GenerateRequest(
+			outcome := generator.GenerateRequest(
 				context.Background(),
 				"/test.Service/Method",
 				&matchingservice.AddWorkflowTaskRequest{NamespaceId: "namespace-id"},
 			)
-			await.Snd(t, resultCh, result{matched: matched, response: response, err: err})
+			await.Snd(t, resultCh, result{outcome: outcome})
 		}()
 
 		await.Rcv(t, callbackStarted)
@@ -266,17 +266,15 @@ func TestRPCFaultGenerator_Unregister(t *testing.T) {
 		await.Snd(t, continueCallback, struct{}{})
 		generateResult := await.Rcv(t, resultCh)
 
-		require.NoError(t, generateResult.err)
-		require.Equal(t, "response", generateResult.response)
-		require.True(t, generateResult.matched)
+		require.NotNil(t, generateResult.outcome)
+		require.Equal(t, "response", generateResult.outcome.Response)
+		require.NoError(t, generateResult.outcome.Error)
 
-		matched, response, err := generator.GenerateRequest(
+		outcome := generator.GenerateRequest(
 			context.Background(),
 			"/test.Service/Method",
 			&matchingservice.AddWorkflowTaskRequest{NamespaceId: "namespace-id"},
 		)
-		require.NoError(t, err)
-		require.False(t, matched)
-		require.Nil(t, response)
+		require.Nil(t, outcome)
 	})
 }

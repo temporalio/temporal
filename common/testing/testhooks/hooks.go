@@ -9,31 +9,32 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/rpc/grpcfaults"
 	historytasks "go.temporal.io/server/service/history/tasks"
 )
 
 // Test hook keys with their return type and scope.
 // Try to avoid global scope as it requires a dedicated test cluster.
 var (
-	MatchingDisableSyncMatch                 = newKey[bool, namespace.ID]()
-	MatchingLBForceReadPartition             = newKey[int, namespace.ID]()
-	MatchingLBForceWritePartition            = newKey[int, namespace.ID]()
-	UpdateWithStartInBetweenLockAndStart     = newKey[func(), namespace.ID]()
-	UpdateWithStartOnClosingWorkflowRetry    = newKey[func(), namespace.ID]()
-	TaskQueuesInDeploymentSyncBatchSize      = newKey[int, global]()
-	MatchingIgnoreRoutingConfigRevisionCheck = newKey[bool, namespace.ID]()
-	MatchingDeploymentRegisterErrorBackoff   = newKey[time.Duration, namespace.ID]()
-	MatchingForwardTaskDelay                 = newKey[time.Duration, namespace.ID]()
-	HistoryReplicationTaskInterceptor        = newKey[func(*replicationspb.ReplicationTask, func() error) error, global]()
-	HistoryReplicationDLQWriteInterceptor    = newKey[func(*persistencespb.ReplicationTaskInfo, func() error) error, global]()
-	HistoryChasmRuntimeProvider              = newKey[func(chasm.Engine, chasm.VisibilityManager, *chasm.Registry), global]()
-	HistoryTransferTaskInterceptor           = newKey[func(historytasks.Task, func()), namespace.ID]()
-	HistoryDLQTaskDeleteInterceptor          = newKey[func(context.Context, *historyservice.DeleteDLQTasksRequest, func(context.Context, *historyservice.DeleteDLQTasksRequest) (*historyservice.DeleteDLQTasksResponse, error)) (*historyservice.DeleteDLQTasksResponse, error), global]()
-	NamespaceReplicationTaskInterceptor      = newKey[func(context.Context, *replicationspb.NamespaceTaskAttributes, func() error) error, namespace.Name]()
-	RPCRequestFaultGeneratorByNamespaceID    = newKey[func(context.Context, string, any) (bool, any, error), namespace.ID]()
-	RPCRequestFaultGeneratorByNamespaceName  = newKey[func(context.Context, string, any) (bool, any, error), namespace.Name]()
-	RPCResponseFaultGeneratorByNamespaceID   = newKey[func(context.Context, string, any, any, error) (bool, any, error), namespace.ID]()
-	RPCResponseFaultGeneratorByNamespaceName = newKey[func(context.Context, string, any, any, error) (bool, any, error), namespace.Name]()
+	MatchingDisableSyncMatch                  = newKey[bool, namespace.ID]()
+	MatchingLBForceReadPartition              = newKey[int, namespace.ID]()
+	MatchingLBForceWritePartition             = newKey[int, namespace.ID]()
+	UpdateWithStartInBetweenLockAndStart      = newKey[func(), namespace.ID]()
+	UpdateWithStartOnClosingWorkflowRetry     = newKey[func(), namespace.ID]()
+	TaskQueuesInDeploymentSyncBatchSize       = newKey[int, global]()
+	MatchingIgnoreRoutingConfigRevisionCheck  = newKey[bool, namespace.ID]()
+	MatchingDeploymentRegisterErrorBackoff    = newKey[time.Duration, namespace.ID]()
+	MatchingForwardTaskDelay                  = newKey[time.Duration, namespace.ID]()
+	HistoryReplicationTaskInterceptor         = newKey[func(*replicationspb.ReplicationTask, func() error) error, global]()
+	HistoryReplicationDLQWriteInterceptor     = newKey[func(*persistencespb.ReplicationTaskInfo, func() error) error, global]()
+	HistoryChasmRuntimeProvider               = newKey[func(chasm.Engine, chasm.VisibilityManager, *chasm.Registry), global]()
+	HistoryTransferTaskInterceptor            = newKey[func(historytasks.Task, func()), namespace.ID]()
+	HistoryDLQTaskDeleteInterceptor           = newKey[func(context.Context, *historyservice.DeleteDLQTasksRequest, func(context.Context, *historyservice.DeleteDLQTasksRequest) (*historyservice.DeleteDLQTasksResponse, error)) (*historyservice.DeleteDLQTasksResponse, error), global]()
+	NamespaceReplicationTaskInterceptor       = newKey[func(context.Context, *replicationspb.NamespaceTaskAttributes, func() error) error, namespace.Name]()
+	GRPCRequestFaultGeneratorByNamespaceID    = newKey[grpcfaults.RequestCallback, namespace.ID]()
+	GRPCRequestFaultGeneratorByNamespaceName  = newKey[grpcfaults.RequestCallback, namespace.Name]()
+	GRPCResponseFaultGeneratorByNamespaceID   = newKey[grpcfaults.ResponseCallback, namespace.ID]()
+	GRPCResponseFaultGeneratorByNamespaceName = newKey[grpcfaults.ResponseCallback, namespace.Name]()
 )
 
 // keyID is a unique identifier for a key, used as a map key.

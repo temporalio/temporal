@@ -27,7 +27,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
-	rpcfaultinjection "go.temporal.io/server/common/rpc/faultinjection"
+	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -459,33 +459,33 @@ func (e *TestEnv) Tv() *testvars.TestVars {
 	return e.tv
 }
 
-// InjectRPCRequestFault registers a pre-handler fault injection scoped to this test's namespace.
+// InjectRequestFault registers a pre-handler gRPC fault injection scoped to this test's namespace.
 // Requests match either the namespace ID or name filter, depending on which
 // namespace field they expose. Requests without either field are ignored.
 // Returns a cleanup function that disables the fault.
-func (e *TestEnv) InjectRPCRequestFault(fault RPCRequestFault) func() {
-	scope := rpcfaultinjection.RPCFaultScope{
+func (e *TestEnv) InjectRequestFault(fault RequestFault) func() {
+	scope := grpcfaults.Scope{
 		NamespaceID:   e.nsID,
 		NamespaceName: e.nsName,
 	}
-	return injectRPCFault(e.t, func(inject func(any, error) (bool, any, error)) func() {
-		return e.GetTestCluster().Host().GetRPCFaultGenerator().RegisterRequestCallback(scope, func(_ context.Context, _ string, req any) (bool, any, error) {
+	return injectFault(e.t, func(inject func(any, error) *grpcfaults.Outcome) func() {
+		return e.GetTestCluster().Host().GetGRPCFaultGenerator().RegisterRequestCallback(scope, func(_ context.Context, _ string, req any) *grpcfaults.Outcome {
 			return inject(req, fault(req))
 		})
 	})
 }
 
-// InjectRPCResponseFault registers a post-handler fault injection scoped to this test's namespace.
+// InjectResponseFault registers a post-handler gRPC fault injection scoped to this test's namespace.
 // Requests match either the namespace ID or name filter, depending on which
 // namespace field they expose. Requests without either field are ignored.
 // Returns a cleanup function that disables the fault.
-func (e *TestEnv) InjectRPCResponseFault(fault RPCResponseFault) func() {
-	scope := rpcfaultinjection.RPCFaultScope{
+func (e *TestEnv) InjectResponseFault(fault ResponseFault) func() {
+	scope := grpcfaults.Scope{
 		NamespaceID:   e.nsID,
 		NamespaceName: e.nsName,
 	}
-	return injectRPCFault(e.t, func(inject func(any, error) (bool, any, error)) func() {
-		return e.GetTestCluster().Host().GetRPCFaultGenerator().RegisterResponseCallback(scope, func(_ context.Context, _ string, req, resp any, err error) (bool, any, error) {
+	return injectFault(e.t, func(inject func(any, error) *grpcfaults.Outcome) func() {
+		return e.GetTestCluster().Host().GetGRPCFaultGenerator().RegisterResponseCallback(scope, func(_ context.Context, _ string, req, resp any, err error) *grpcfaults.Outcome {
 			return inject(req, fault(req, resp, err))
 		})
 	})

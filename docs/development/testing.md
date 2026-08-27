@@ -208,7 +208,7 @@ It returns a cleanup function that can be used to remove the fault again.
 **Example:**
 
 ```go
-env.InjectRPCRequestFault(
+env.InjectRequestFault(
     func(req any) error {
         if _, ok := req.(*matchingservice.AddWorkflowTaskRequest); ok {
             return serviceerror.NewNotFound("injected fault")
@@ -217,8 +217,8 @@ env.InjectRPCRequestFault(
     })
 ```
 
-`InjectRPCRequestFault` runs _before_ the handler, so an injected error prevents the operation from
-executing. `InjectRPCResponseFault` runs _after_ the handler, so an injected error can model an
+`InjectRequestFault` runs _before_ the handler, so an injected error prevents the operation from
+executing. `InjectResponseFault` runs _after_ the handler, so an injected error can model an
 operation that executed but whose response was lost. The test fails if the fault never triggers.
 Only unary RPCs are intercepted; streaming RPCs are unaffected.
 
