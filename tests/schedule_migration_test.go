@@ -1315,7 +1315,6 @@ func TestScheduleMigrationV1ToV2NoDuplicateRecentActions(t *testing.T) {
 	// a CHASM sentinel (which would block the migration activity).
 	env := newScheduleEnv(
 		t,
-		testcore.WithWorkerService("V1 scheduler"),
 		testcore.WithSdkWorker(),
 	)
 
@@ -1463,7 +1462,6 @@ func TestScheduleMigrationDeferredWithRunningWorkflow(t *testing.T) {
 	// (workflow-backed) schedule rather than a CHASM sentinel.
 	env := newScheduleEnv(
 		t,
-		testcore.WithWorkerService("V1 scheduler"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigrationWithRunningWorkflows, false),
 	)
 
@@ -1964,7 +1962,6 @@ func (s *ScheduleMigrationTestSuite) TestPatchScheduleContextMetadata() {
 func TestScheduleMigration_StaleRunningDoesNotSkipPending(t *testing.T) {
 	env := newScheduleEnv(
 		t,
-		testcore.WithWorkerService("scheduler operations"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 	)
 
@@ -2237,7 +2234,6 @@ func TestScheduleMigration_NoRunningWorkflows_GeneratorStarts(t *testing.T) {
 
 	env := newScheduleEnv(
 		t,
-		testcore.WithWorkerService("scheduler operations"),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 	)
 	env.OverrideDynamicConfig(chasmscheduler.CurrentTweakables, tweakables)

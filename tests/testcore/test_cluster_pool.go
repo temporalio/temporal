@@ -226,18 +226,17 @@ const (
 
 // clusterRequest describes what a test needs from the cluster router.
 type clusterRequest struct {
-	kind              string // set by the router: shared, dedicated, or suite-scoped
-	dedicated         bool
-	dedicatedReason   string
-	needWorkerService bool
-	dynamicConfig     map[dynamicconfig.Key]any
-	clusterOpts       []TestClusterOption
+	kind            string // set by the router: shared, dedicated, or suite-scoped
+	dedicated       bool
+	dedicatedReason string
+	dynamicConfig   map[dynamicconfig.Key]any
+	clusterOpts     []TestClusterOption
 }
 
 // mustBeFresh reports whether the request requires a brand-new cluster that
 // cannot be reused.
 func (r clusterRequest) mustBeFresh() bool {
-	return r.needWorkerService || len(r.dynamicConfig) > 0 || len(r.clusterOpts) > 0
+	return len(r.dynamicConfig) > 0 || len(r.clusterOpts) > 0
 }
 
 // needsDedicated reports whether the request must be served by a dedicated
@@ -275,7 +274,7 @@ func (r clusterRequest) recordCreation(t *testing.T) {
 		"test":   t.Name(),
 		"kind":   r.kind,
 		"reason": r.reason(),
-		"worker": r.needWorkerService,
+		"worker": true,
 	})
 	if err != nil {
 		return
@@ -326,10 +325,7 @@ func (p *clusterRouter) getSuiteScoped(t *testing.T) *FunctionalTestBase {
 	suiteClusterAny, _ := p.suiteScoped.LoadOrStore(rootName, &suiteScopedCluster{})
 	suiteCluster := suiteClusterAny.(*suiteScopedCluster)
 	suiteCluster.once.Do(func() {
-		// TODO(stephan, #10580): remove this workaround once the proper cluster-pool fix lands.
-		// Enable the worker service on suite-scoped clusters. The only current user (Versioning3) needs the system
-		// worker for worker-deployment APIs.
-		suiteCluster.cluster = p.createCluster(t, clusterRequest{kind: clusterKindSuiteScoped, needWorkerService: true})
+		suiteCluster.cluster = p.createCluster(t, clusterRequest{kind: clusterKindSuiteScoped})
 	})
 	suiteCluster.cluster.SetT(t)
 	return suiteCluster.cluster
@@ -362,8 +358,7 @@ func (p *clusterRouter) createCluster(t *testing.T, req clusterRequest) *Functio
 	tbase := &FunctionalTestBase{}
 	tbase.SetT(t)
 
-	// The worker service is off unless the request explicitly needs it.
-	opts := []TestClusterOption{withWorkerService(req.needWorkerService)}
+	var opts []TestClusterOption
 	if req.kind != clusterKindDedicated {
 		opts = append(opts, WithSharedCluster())
 	}

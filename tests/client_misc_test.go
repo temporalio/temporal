@@ -1065,7 +1065,7 @@ func (s *ClientMiscTestSuite) Test_StickyWorkerRestartWorkflowTask() {
 }
 
 func (s *ClientMiscTestSuite) TestBatchSignal() {
-	env := testcore.NewEnv(s.T(), testcore.WithWorkerService("batch operations"))
+	env := testcore.NewEnv(s.T())
 
 	type myData struct {
 		Stuff  string
@@ -1125,7 +1125,6 @@ func (s *ClientMiscTestSuite) TestBatchSignal() {
 // Describe — the visibility query and reason).
 func (s *ClientMiscTestSuite) TestListBatchOperations() {
 	env := testcore.NewEnv(s.T(),
-		testcore.WithWorkerService("batch operations"),
 		// This test starts multiple batch operations in the same namespace; the
 		// default per-namespace limit is 1, so raise it to the functional-test limit.
 		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, testcore.ClientSuiteLimit),
@@ -1232,7 +1231,7 @@ func (s *ClientMiscTestSuite) TestListBatchOperations() {
 }
 
 func (s *ClientMiscTestSuite) TestBatchReset() {
-	env := testcore.NewEnv(s.T(), testcore.WithWorkerService("batch operations"))
+	env := testcore.NewEnv(s.T())
 	var count atomic.Int32
 
 	activityFn := func(ctx context.Context) (int32, error) {
@@ -1296,7 +1295,7 @@ func (s *ClientMiscTestSuite) TestBatchReset() {
 }
 
 func (s *ClientMiscTestSuite) TestBatchResetByBuildId() {
-	env := testcore.NewEnv(s.T(), testcore.WithWorkerService("batch operations"))
+	env := testcore.NewEnv(s.T())
 	tq := testcore.RandomizeStr(s.T().Name())
 	buildPrefix := uuid.NewString()[:6] + "-"
 	buildIdv1 := buildPrefix + "v1"

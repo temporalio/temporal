@@ -29,15 +29,14 @@ func TestWorkflowAPIBatchTerminateClientTestSuite(t *testing.T) {
 	parallelsuite.Run(t, &WorkflowAPIBatchTerminateClientTestSuite{})
 }
 
-// newWorkflowBatchEnv builds a test env with the "batch operations" worker
-// service running so that workflow batch operations (terminate/cancel/signal/
-// delete/reset/update options) can be exercised end-to-end. It raises the
+// newWorkflowBatchEnv builds a test env where workflow batch operations
+// (terminate/cancel/signal/delete/reset/update options) can be exercised
+// end-to-end. It raises the
 // per-namespace concurrent batch limit, since these tests intentionally start
 // multiple batch operations in the same namespace (the default limit is 1).
 func newWorkflowBatchEnv(t *testing.T) *testcore.TestEnv {
 	return testcore.NewEnv(
 		t,
-		testcore.WithWorkerService("batch operations"),
 		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, testcore.ClientSuiteLimit),
 		testcore.WithDynamicConfig(dynamicconfig.WorkflowPauseEnabled, true),
 	)

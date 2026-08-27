@@ -57,7 +57,7 @@ func (s *CallbacksSuite) TestScheduledCallbackTokenMigration_LegacyWriteEnvelope
 	testOpts := append([]testcore.TestOption{}, opts...)
 	testOpts = append(
 		testOpts,
-		scheduleCommonOpts(s.T())...,
+		scheduleCommonOpts()...,
 	)
 	testOpts = append(
 		testOpts,

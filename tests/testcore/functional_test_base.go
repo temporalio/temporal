@@ -95,7 +95,6 @@ type (
 		DCRedirectionPolicy       config.DCRedirectionPolicy
 		DynamicConfigOverrides    map[dynamicconfig.Key]any
 		EnableMTLS                bool
-		EnableWorkerService       bool
 		FaultInjectionConfig      *config.FaultInjection
 		NumHistoryShards          int32
 		Logger                    log.Logger
@@ -141,12 +140,6 @@ func withArchivalConfig() TestClusterOption {
 func withMTLS() TestClusterOption {
 	return func(params *testClusterParams) {
 		params.EnableMTLS = true
-	}
-}
-
-func withWorkerService(enabled bool) TestClusterOption {
-	return func(params *testClusterParams) {
-		params.EnableWorkerService = enabled
 	}
 }
 
@@ -274,9 +267,8 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption)
 	testClusterRouter.dedicated.reserveSlot(s.T())
 	s.setupCluster(options...)
 	clusterRequest{
-		kind:              clusterKindDedicated,
-		dedicatedReason:   "legacy-suite",
-		needWorkerService: ApplyTestClusterOptions(options).EnableWorkerService,
+		kind:            clusterKindDedicated,
+		dedicatedReason: "legacy-suite",
 	}.recordCreation(s.T())
 }
 
@@ -315,7 +307,6 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		EnableReplicationRecorder: params.EnableReplicationRecorder,
 		EnableArchival:            params.EnableArchival,
 		AdditionalServerOptions:   params.AdditionalServerOptions,
-		WorkerConfig:              WorkerConfig{DisableWorker: !params.EnableWorkerService},
 	}
 	if params.SpanExporter != nil {
 		setSpanExporter(s.testClusterConfig, "test", params.SpanExporter)
@@ -403,9 +394,7 @@ func (s *FunctionalTestBase) checkTestShard() {
 }
 
 func ApplyTestClusterOptions(options []TestClusterOption) testClusterParams {
-	params := testClusterParams{
-		EnableWorkerService: true,
-	}
+	var params testClusterParams
 	for _, opt := range options {
 		opt(&params)
 	}
