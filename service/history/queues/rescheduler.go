@@ -253,11 +253,6 @@ func (r *reschedulerImpl) rescheduleLoop() {
 
 }
 
-// reschedule drains every class that is both due and within its release budget. The budget is
-// a ceiling, never a quota: per task backoff still governs individual eligibility, so a class
-// with budget left may still release nothing because its head is not due yet. The head is never
-// reached past, because a class queue is time ordered and shrinkRange tracks the oldest pending
-// key to derive the ack level.
 // reschedulePass is the state one reschedule pass shares across classes: the running minimum
 // wake time, and a release ceiling every gated class draws from so one class cannot consume the
 // whole pass.
@@ -346,23 +341,29 @@ func (r *reschedulerImpl) drainClassLocked(
 			continue
 		}
 
-		if gated && !r.throttleState.Admit(key.Throttle) {
-			metrics.TaskReschedulerBudgetDenied.With(r.metricsHandler).Record(1, tags...)
-			// The class is over its admitted rate. Come back within the control window rather
-			// than at the head's own backoff, which is far longer.
-			pass.wakeAt(pass.now.Add(r.budgetRetryInterval()))
-			return
+		metered := false
+		if gated {
+			var allowed bool
+			allowed, metered = r.throttleState.admit(key.Throttle)
+			if !allowed {
+				metrics.TaskReschedulerBudgetDenied.With(r.metricsHandler).Record(1, tags...)
+				// The class is over its admitted rate. Come back within the control window
+				// rather than at the head's own backoff, which is far longer.
+				pass.wakeAt(pass.now.Add(r.budgetRetryInterval()))
+				return
+			}
 		}
 
 		executable.SetScheduledTime(pass.now)
-		if gated {
+		if metered {
 			// Mark before submitting. TrySubmit hands the executable to a worker that can reach
 			// HandleErr before this goroutine continues, and a rejection the gate is not
-			// recorded as having issued is discarded by the control law.
+			// recorded as having issued is discarded by the control law. Only a metered release
+			// is marked: past the key cap the gate admits without tracking anything.
 			setThrottleAdmitted(executable, key.Throttle)
 		}
 		if !r.scheduler.TrySubmit(executable) {
-			if gated {
+			if metered {
 				setThrottleAdmitted(executable, ThrottleKey{})
 				r.throttleState.Return(key.Throttle)
 			}
@@ -423,7 +424,7 @@ func (r *reschedulerImpl) rescheduleUngatedLocked(now time.Time) {
 // rather than in one burst per window.
 func (r *reschedulerImpl) budgetRetryInterval() time.Duration {
 	const budgetRetryDivisor = 10
-	interval := r.throttleState.Window() / budgetRetryDivisor
+	interval := r.throttleState.window() / budgetRetryDivisor
 	return max(interval, time.Millisecond)
 }
 

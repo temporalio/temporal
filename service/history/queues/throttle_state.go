@@ -251,13 +251,22 @@ func (s *ThrottleState) Enabled() bool {
 // It always returns true when the controller is disabled, and when the key cap has been hit,
 // so that the real limiter, not this cache, stays the enforcement point.
 func (s *ThrottleState) Admit(key ThrottleKey) bool {
+	allowed, _ := s.admit(key)
+	return allowed
+}
+
+// admit reports whether the class may release, and whether the gate actually metered that
+// release. The two differ past the key cap and while disabled, where the gate lets the task
+// through without tracking it: a rejection from an unmetered release is loss on a packet the
+// controller never sent, and counting it would move a rate on evidence it did not produce.
+func (s *ThrottleState) admit(key ThrottleKey) (allowed, metered bool) {
 	if !s.options.Enabled() {
-		return true
+		return true, false
 	}
 	entry := s.getOrCreate(key)
 	if entry == nil {
 		metrics.TaskThrottleGateAdmitted.With(s.metricsHandler).Record(1, key.metricsTags()...)
-		return true
+		return true, false
 	}
 
 	now := s.timeSource.Now()
@@ -272,12 +281,12 @@ func (s *ThrottleState) Admit(key ThrottleKey) bool {
 
 	if entry.tokens < 1 {
 		metrics.TaskThrottleGateSuppressed.With(s.metricsHandler).Record(1, key.metricsTags()...)
-		return false
+		return false, false
 	}
 	entry.tokens--
 	entry.releases++
 	metrics.TaskThrottleGateAdmitted.With(s.metricsHandler).Record(1, key.metricsTags()...)
-	return true
+	return true, true
 }
 
 // ReportThrottled feeds one observed throttle rejection into the controller.
@@ -454,7 +463,7 @@ func (e *throttleEntry) resetLocked(rate float64, now time.Time, window time.Dur
 // stable within minutes of start up, so without this a class driven to the floor by an incident
 // would climb back from MinRate instead of restarting at InitialRate.
 func (s *ThrottleState) touchLocked(entry *throttleEntry, now time.Time, window time.Duration) {
-	if !entry.lastAccess.IsZero() && now.Sub(entry.lastAccess) > s.options.KeyTTL() {
+	if !entry.lastAccess.IsZero() && now.Sub(entry.lastAccess) > s.keyTTL() {
 		entry.resetLocked(s.clamp(s.options.InitialRate()), now, window)
 	}
 	entry.lastAccess = now
@@ -486,16 +495,8 @@ func (s *ThrottleState) clamp(rate float64) float64 {
 	return min(max(rate, lo), hi)
 }
 
-// beta and increaseRatio are read from dynamic config on every window close, so a value that
-// inverts the control law is one bad config push away. A beta at or above 1 would raise the
-// rate on loss and an increase ratio at or below 0 would lower it on success; both are pinned
-// to a no-op instead, which stalls the controller rather than reversing it.
-// Window returns the control window, floored at a positive value. A non positive window would
-// close on every call and let a single release and its rejection be decided twice.
-func (s *ThrottleState) Window() time.Duration {
-	return s.window()
-}
-
+// window is the control window, floored at a positive value. A non positive window would close
+// on every call and let a single release and its rejection be decided twice.
 func (s *ThrottleState) window() time.Duration {
 	if w := s.options.Window(); w > 0 {
 		return w
@@ -505,6 +506,15 @@ func (s *ThrottleState) window() time.Duration {
 
 // lossThreshold is read on every window close, so a value outside [0,1] is one bad config push
 // away. Negative would decrease on a window with no loss at all; above one would never decrease.
+// keyTTL is the retention period, floored at a positive value. At zero every access would look
+// idle, so the bucket would be refilled to its burst on every call and enforce nothing.
+func (s *ThrottleState) keyTTL() time.Duration {
+	if ttl := s.options.KeyTTL(); ttl > 0 {
+		return ttl
+	}
+	return 5 * time.Minute
+}
+
 func (s *ThrottleState) lossThreshold() float64 {
 	t := s.options.LossThreshold()
 	if !(t >= 0) {
@@ -513,6 +523,10 @@ func (s *ThrottleState) lossThreshold() float64 {
 	return min(t, 1)
 }
 
+// beta and increaseRatio are read from dynamic config on every window close, so a value that
+// inverts the control law is one bad config push away. A beta at or above 1 would raise the
+// rate on loss and an increase ratio at or below 0 would lower it on success; both are pinned
+// to a no-op instead, which stalls the controller rather than reversing it.
 func (s *ThrottleState) beta() float64 {
 	if b := s.options.Beta(); b > 0 && b < 1 {
 		return b
@@ -558,7 +572,7 @@ func (s *ThrottleState) getOrCreate(key ThrottleKey) *throttleEntry {
 
 	if len(s.maps[key.Scope]) >= s.options.MaxKeys() {
 		metrics.TaskThrottleKeysDropped.With(s.metricsHandler).Record(1, key.metricsTags()...)
-		if now.Sub(s.lastCapLog[key.Scope]) >= s.options.KeyTTL() {
+		if now.Sub(s.lastCapLog[key.Scope]) >= s.keyTTL() {
 			s.lastCapLog[key.Scope] = now
 			s.logger.Warn("Throttle controller key cap reached, failing open.",
 				tag.NewStringTag("throttle-scope", key.Scope.String()),
@@ -587,7 +601,7 @@ func (s *ThrottleState) getOrCreate(key ThrottleKey) *throttleEntry {
 // maybeSweepLocked evicts idle keys. It runs inline on insert instead of from a goroutine so
 // ThrottleState needs no lifecycle of its own.
 func (s *ThrottleState) maybeSweepLocked(now time.Time) {
-	ttl := s.options.KeyTTL()
+	ttl := s.keyTTL()
 	if now.Sub(s.lastSweep) < ttl/throttleSweepDivisor {
 		return
 	}

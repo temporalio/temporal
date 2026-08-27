@@ -384,12 +384,15 @@ func TestThrottleState_ConvergesTowardEnforcedBudget(t *testing.T) {
 
 	// A token bucket enforcing 200/s rejects whenever the class asks for more than that.
 	const enforcedBudget = 200.0
-	state.ReportThrottled(key, true)
+	if state.Admit(key) {
+				state.ReportThrottled(key, true)
+			}
 	for window := 0; window < 60; window++ {
 		timeSource.Update(timeSource.Now().Add(testThrottleWindow))
 		if state.AdmittedRate(key) > enforcedBudget {
 			state.ReportThrottled(key, true)
 		} else {
+			state.Admit(key)
 			state.ReportSuccess(key)
 		}
 	}
@@ -397,6 +400,9 @@ func TestThrottleState_ConvergesTowardEnforcedBudget(t *testing.T) {
 	rate := state.AdmittedRate(key)
 	require.Greater(t, rate, enforcedBudget*0.5)
 	require.Less(t, rate, enforcedBudget*1.5)
+
+	_, increases := state.Counters(key)
+	require.Positive(t, increases, "a converging class must exercise the increase, not only decay")
 }
 
 // Only rejections from releases the gate metered may move the rate. Otherwise a namespace with
@@ -487,19 +493,32 @@ func TestThrottleState_IdleWindowsDoNotMoveTheRate(t *testing.T) {
 	require.InEpsilon(t, rate, state.AdmittedRate(key), 1e-9, "idle windows must leave the rate alone")
 }
 
-// The rate a class settles at must follow its own demand, not the enforcer's background
-// rejection probability. A rule that decreased on any single rejection but increased only on a
-// perfectly clean window would collapse here, because a large class is arithmetically less
-// likely to see a clean window than a small one at the same loss rate.
-func TestThrottleState_SteadyStateIsIndependentOfClassSize(t *testing.T) {
-	const backgroundLoss = 0.02 // well under the 0.05 threshold
+// A class must not be punished for being busy. The enforcer here rejects a fixed fraction of
+// what it is offered, the same fraction whatever the class size, and that fraction sits below
+// the loss threshold - so every class should be told it may go faster, whatever its size.
+//
+// This is the property the previous law lacked. It decreased on any single rejection but
+// increased only on a perfectly clean window, and the chance of a clean window is (1-p)^n: at
+// 2% loss a class releasing 100 per window sees one 13% of the time and one releasing 1000
+// essentially never, so both collapsed to the floor while a quiet class climbed. The rate a
+// class settled at was decided by its size rather than by the loss it was actually seeing.
+//
+// A hard capacity hides this, because loss then rises with the rate instead of staying
+// constant, so the enforcer below is deliberately probabilistic.
+func TestThrottleState_BusyClassIsNotPunishedForItsSize(t *testing.T) {
+	const rejectEveryNth = 50 // exactly 2% loss for any class size, under the 5% threshold
 
-	rateFor := func(releasesPerWindow int) float64 {
+	rateFor := func(demandPerWindow int) float64 {
 		state, timeSource := newTestThrottleState(defaultThrottleOverrides())
 		key := testKey()
-		for w := 0; w < 200; w++ {
-			for i := 0; i < releasesPerWindow; i++ {
-				if state.Admit(key) && float64(i)/float64(releasesPerWindow) < backgroundLoss {
+		admitted := 0
+		for w := 0; w < 300; w++ {
+			for i := 0; i < demandPerWindow; i++ {
+				if !state.Admit(key) {
+					continue
+				}
+				admitted++
+				if admitted%rejectEveryNth == 0 {
 					state.ReportThrottled(key, true)
 				}
 			}
@@ -508,7 +527,16 @@ func TestThrottleState_SteadyStateIsIndependentOfClassSize(t *testing.T) {
 		return state.AdmittedRate(key)
 	}
 
-	small, large := rateFor(10), rateFor(500)
-	require.InEpsilon(t, small, large, 0.01,
-		"a class releasing 50x more work must not settle at a different rate for that reason alone")
+	// Both are large enough that 2% is representable within a single window; a class releasing
+	// only a handful per window can observe 0% or 10% and nothing in between, and that
+	// quantisation, not the control law, would decide where it settled.
+	o := defaultThrottleOverrides()
+	for _, demand := range []int{100, 1000} {
+		rate := rateFor(demand)
+		require.Greater(t, rate, o.initialRate,
+			"a class seeing 2%% loss against a 5%% threshold must be allowed to speed up, "+
+				"whether it releases 100 or 1000 per window; demand=%d", demand)
+		require.Greater(t, rate, o.minRate*100,
+			"settling near the floor means size decided the rate, not loss; demand=%d", demand)
+	}
 }

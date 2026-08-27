@@ -1510,6 +1510,47 @@ func (s *executableSuite) TestHandleErr_NonThrottleErrorsAreNotControllerInputs(
 	}
 }
 
+// A shared budget throttle must not take the synchronous resubmit fast path. That path hands
+// the task straight back to the scheduler, bypassing the rescheduler and with it the gate, so
+// every parked task would keep rediscovering the same constraint at full dispatch cost - which
+// is the storm the controller exists to remove.
+func (s *executableSuite) TestNack_ThrottleScopedGoesToTheRescheduler() {
+	throttleState := s.newTestThrottleState()
+	executable := s.newTestExecutable(func(p *params) {
+		p.throttleState = throttleState
+	})
+
+	throttleErr := &serviceerror.ResourceExhausted{
+		Cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
+		Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+	}
+	s.Error(executable.HandleErr(throttleErr))
+
+	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).Times(0)
+	s.mockRescheduler.EXPECT().Add(executable, gomock.Any()).Times(1)
+
+	executable.Nack(throttleErr)
+}
+
+// Busy workflow is per workflow lock contention rather than a shared budget, so it keeps the
+// fast path even with the controller on. Losing that would slow down every lock retry.
+func (s *executableSuite) TestNack_BusyWorkflowKeepsTheFastPath() {
+	throttleState := s.newTestThrottleState()
+	executable := s.newTestExecutable(func(p *params) {
+		p.throttleState = throttleState
+	})
+
+	busyErr := &serviceerror.ResourceExhausted{
+		Cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
+		Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+	}
+	s.Error(executable.HandleErr(busyErr))
+
+	s.mockScheduler.EXPECT().TrySubmit(executable).Return(true).Times(1)
+
+	executable.Nack(busyErr)
+}
+
 func (s *executableSuite) TestHandleErr_ThrottleErrorsDriveController() {
 	throttleState := s.newTestThrottleState()
 	executable := s.newTestExecutable(func(p *params) {

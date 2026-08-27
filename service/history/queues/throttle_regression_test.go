@@ -315,3 +315,59 @@ func TestThrottleState_ReturnedReleaseLeavesTheLossDenominator(t *testing.T) {
 	require.InEpsilon(t, 85.0, state.AdmittedRate(key), 1e-9,
 		"one dispatch, one rejection is total loss; the refused admits must not dilute it")
 }
+
+// Past the key cap the gate admits without tracking anything, so the release is not metered and
+// a rejection from it is not evidence. Counting it would let a class the gate is not governing
+// drive that class's rate down the moment the cap frees up.
+func TestThrottleState_FailOpenAdmitIsNotMetered(t *testing.T) {
+	overrides := defaultThrottleOverrides()
+	overrides.maxKeys = 1
+	state, _ := newTestThrottleState(overrides)
+
+	tracked, overflow := apsKey("ns-tracked"), apsKey("ns-overflow")
+	require.True(t, state.Admit(tracked))
+
+	allowed, metered := state.admit(overflow)
+	require.True(t, allowed, "past the cap the real limiter stays the enforcement point")
+	require.False(t, metered, "an untracked release must not be reported as metered")
+}
+
+// KeyTTL drives the idle reset, so a non positive value would make every access look idle and
+// refill the bucket to its burst on every call - a silent fail open for tracked keys.
+func TestThrottleState_NonPositiveKeyTTLStillEnforces(t *testing.T) {
+	overrides := defaultThrottleOverrides()
+	overrides.initialRate = 1
+	overrides.minRate = 1
+	overrides.keyTTL = 0
+	state, timeSource := newTestThrottleState(overrides)
+	key := apsKey("ns-1")
+
+	require.True(t, state.Admit(key), "the burst allows the first release")
+	for i := 0; i < 5; i++ {
+		timeSource.Update(timeSource.Now().Add(time.Millisecond))
+		require.False(t, state.Admit(key), "an invalid TTL must not refill the bucket")
+	}
+}
+
+// The idle reset is the only thing that restores a stale rate: the sweep runs solely when a new
+// key is inserted, and a host whose key set has gone stable never inserts one. Without it a
+// class driven to the floor by an incident crawls back at the increase ratio instead of
+// restarting fresh, which is minutes of the host's retry path pinned near one release a second.
+func TestThrottleState_IdleKeyRestartsAtInitialRate(t *testing.T) {
+	o := defaultThrottleOverrides()
+	o.keyTTL = time.Minute
+	state, timeSource := newTestThrottleState(o)
+	key := testKey()
+
+	for i := 0; i < 40; i++ {
+		state.ReportThrottled(key, true)
+		closeWindow(state, timeSource, key)
+	}
+	require.InEpsilon(t, o.minRate, state.AdmittedRate(key), 1e-9, "driven to the floor")
+
+	timeSource.Update(timeSource.Now().Add(2 * o.keyTTL))
+	require.True(t, state.Admit(key), "the first touch after the retention period")
+
+	require.InEpsilon(t, o.initialRate, state.AdmittedRate(key), 1e-9,
+		"a class idle past its TTL must restart at InitialRate, not crawl up from the floor")
+}
