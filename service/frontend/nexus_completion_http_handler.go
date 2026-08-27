@@ -582,11 +582,9 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexusrpc
 		}
 	}
 
-	authInfo := c.AuthInterceptor.GetAuthInfoForNonUnaryRequest(ctx, tlsInfo, request.HTTPRequest.Header)
-
-	var claims *authorization.Claims
 	var err error
-	if authInfo != nil {
+	var claims *authorization.Claims
+	if authInfo := c.AuthInterceptor.GetAuthInfoForNonUnaryRequest(ctx, tlsInfo, request.HTTPRequest.Header); authInfo != nil {
 		claims, err = c.AuthInterceptor.GetClaims(authInfo)
 		if err != nil {
 			return err
