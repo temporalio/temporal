@@ -291,7 +291,7 @@ func TestReschedule_DisabledControllerReleasesEverythingDue(t *testing.T) {
 
 // The same cause reported at two different scopes is two different budgets. They must not share
 // a class, or whichever arrived last would decide how the other drains.
-func TestReschedule_SameCauseDifferentScopesAreDifferentClasses(t *testing.T) {
+func TestReschedule_DifferentCausesAreDifferentClasses(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	overrides := defaultThrottleOverrides()
 	overrides.initialRate = 1
@@ -303,16 +303,8 @@ func TestReschedule_SameCauseDifferentScopesAreDifferentClasses(t *testing.T) {
 
 	r, scheduler, _ := newTestRescheduler(t, ctrl, timeSource, state, 1000)
 
-	namespaceScoped := NewThrottleKey(
-		enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT,
-		enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
-		"ns-1", 0, "transfer",
-	)
-	systemScoped := NewThrottleKey(
-		enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT,
-		enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
-		"ns-1", 0, "transfer",
-	)
+	namespaceScoped := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, "ns-1")
+	systemScoped := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
 	require.NotEqual(t, namespaceScoped, systemScoped)
 
 	// Exhaust only the namespace scoped budget.

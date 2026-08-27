@@ -13,7 +13,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/tasks"
 )
 
 const testThrottleWindow = time.Second
@@ -73,88 +72,75 @@ func newTestThrottleStateWithWindow(
 	), timeSource
 }
 
-func TestNewThrottleKey_NamespaceBudgetCausesIgnoreCategory(t *testing.T) {
-	transfer := NewThrottleKey(
-		enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
-		enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
-		"ns-1", 7, tasks.CategoryTransfer.Name(),
-	)
-	timer := NewThrottleKey(
-		enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
-		enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
-		"ns-1", 9, tasks.CategoryTimer.Name(),
-	)
-
-	require.Equal(t, ThrottleScopeNamespace, transfer.Scope)
-	require.Empty(t, transfer.Category)
-	require.Zero(t, transfer.ShardID)
-	require.Equal(t, transfer, timer, "namespace budgets are shared across categories and shards")
-}
-
-func TestNewThrottleKey_InfrastructureCausesKeepCategory(t *testing.T) {
-	transfer := NewThrottleKey(
-		enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
-		enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
-		"ns-1", 7, tasks.CategoryTransfer.Name(),
-	)
-	visibility := NewThrottleKey(
-		enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
-		enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
-		"ns-1", 7, tasks.CategoryVisibility.Name(),
-	)
-
-	require.Equal(t, ThrottleScopeHost, transfer.Scope)
-	require.Equal(t, tasks.CategoryTransfer.Name(), transfer.Category)
-	require.Empty(t, transfer.NamespaceID, "host scope must not fan out per namespace")
-	require.NotEqual(t, transfer, visibility, "an Elasticsearch overload must not gate transfer tasks")
-}
-
-func TestNewThrottleKey_ConcurrentLimitIsShardScoped(t *testing.T) {
-	shard7 := NewThrottleKey(
-		enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
-		enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
-		"ns-1", 7, tasks.CategoryTransfer.Name(),
-	)
-	shard8 := NewThrottleKey(
-		enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
-		enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
-		"ns-1", 8, tasks.CategoryTransfer.Name(),
-	)
-
-	require.Equal(t, ThrottleScopeNamespaceShard, shard7.Scope)
-	require.NotEqual(t, shard7, shard8)
-}
-
-func TestNewThrottleKey_PersistenceLimitScopeDecidesRouting(t *testing.T) {
-	namespaceScoped := NewThrottleKey(
-		enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT,
-		enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
-		"ns-1", 7, tasks.CategoryTransfer.Name(),
-	)
-	systemScoped := NewThrottleKey(
-		enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT,
-		enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
-		"ns-1", 7, tasks.CategoryTransfer.Name(),
-	)
-
-	require.Equal(t, ThrottleScopeNamespace, namespaceScoped.Scope)
-	require.Equal(t, ThrottleScopeHost, systemScoped.Scope)
-}
-
+// The controller governs a deliberately short list, and only where the budget belongs to the
+// namespace. This table is the whole admission rule; widening coverage should show up here as
+// a row rather than as a new branch somewhere else.
 func TestIsControllerInput(t *testing.T) {
-	require.False(t, IsControllerInput(nil, enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW))
-	require.False(t, IsControllerInput(nil, enumspb.RESOURCE_EXHAUSTED_CAUSE_CIRCUIT_BREAKER_OPEN))
-	require.True(t, IsControllerInput(nil, enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT))
-	require.True(t, IsControllerInput(nil, enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED))
+	ns := enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE
+	system := enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM
+	unspecified := enumspb.RESOURCE_EXHAUSTED_SCOPE_UNSPECIFIED
 
-	// Enforced per (namespace, businessID, archetype) despite reporting namespace scope, so it
-	// must not drive a namespace wide class even though its cause is otherwise controller input.
-	require.True(t, IsControllerInput(nil, enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT))
-	require.False(t, IsControllerInput(
-		consts.ErrBusinessIDRateLimitExceeded, enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT))
-	require.False(t, IsControllerInput(
-		fmt.Errorf("wrapped: %w", consts.ErrBusinessIDRateLimitExceeded),
-		enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT))
+	for _, tc := range []struct {
+		name  string
+		err   error
+		cause enumspb.ResourceExhaustedCause
+		scope enumspb.ResourceExhaustedScope
+		want  bool
+	}{
+		{name: "aps at namespace scope", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, scope: ns, want: true},
+		{name: "persistence at namespace scope", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, scope: ns, want: true},
+
+		// A budget this namespace only partly owns: its own rejections cannot tell it the shape
+		// of a limit that other namespaces are also consuming.
+		{name: "aps at system scope", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, scope: system},
+		{name: "persistence at system scope", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, scope: system},
+		{name: "unspecified scope is not namespace", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, scope: unspecified},
+
+		// Per workflow lock contention, and a controller in its own right.
+		{name: "busy workflow", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, scope: ns},
+		{name: "circuit breaker", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_CIRCUIT_BREAKER_OPEN, scope: ns},
+
+		// Outside the governed list for now.
+		{name: "system overloaded", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED, scope: ns},
+		{name: "concurrent limit", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT, scope: ns},
+		{name: "rps limit", cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, scope: ns},
+
+		// Reports namespace scope but is enforced per (namespace, businessID, archetype), so one
+		// hot workflow ID must not ratchet the whole namespace down.
+		{
+			name:  "business id reuse",
+			err:   consts.ErrBusinessIDRateLimitExceeded,
+			cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
+			scope: ns,
+		},
+		{
+			name:  "business id reuse, wrapped",
+			err:   fmt.Errorf("wrapped: %w", consts.ErrBusinessIDRateLimitExceeded),
+			cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
+			scope: ns,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, IsControllerInput(tc.err, tc.cause, tc.scope))
+		})
+	}
+}
+
+// A namespace budget is one budget however the traffic is spread, so every task in the
+// namespace draws on the same class whatever its shard or category.
+func TestNewThrottleKey_OneClassPerNamespaceAndCause(t *testing.T) {
+	aps := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
+
+	require.Equal(t, ThrottleScopeNamespace, aps.Scope)
+	require.Equal(t, "ns-1", aps.NamespaceID)
+	require.Empty(t, aps.Category, "a namespace budget is not split per task category")
+	require.Zero(t, aps.ShardID, "nor per shard")
+
+	require.Equal(t, aps, NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1"))
+	require.NotEqual(t, aps, NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-2"),
+		"one namespace's budget must not gate another's")
+	require.NotEqual(t, aps, NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, "ns-1"),
+		"two budgets a namespace holds independently must not share a class")
 }
 
 func testKey() ThrottleKey {
@@ -362,21 +348,17 @@ func TestThrottleState_SweepsIdleKeys(t *testing.T) {
 	require.Positive(t, state.AdmittedRate(active))
 }
 
-func TestThrottleState_ScopesAreIndependent(t *testing.T) {
+func TestThrottleState_ClassesAreIndependent(t *testing.T) {
 	state, timeSource := newTestThrottleState(defaultThrottleOverrides())
 
 	namespaceKey := testKey()
-	hostKey := ThrottleKey{
-		Scope:    ThrottleScopeHost,
-		Cause:    enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
-		Category: tasks.CategoryTransfer.Name(),
-	}
+	otherCause := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, "ns-1")
 
 	state.ReportThrottled(namespaceKey, true)
 	closeWindow(state, timeSource, namespaceKey)
 
 	require.InEpsilon(t, 85.0, state.AdmittedRate(namespaceKey), 1e-9)
-	require.Zero(t, state.AdmittedRate(hostKey))
+	require.Zero(t, state.AdmittedRate(otherCause))
 	require.Equal(t, 1, state.Len())
 }
 

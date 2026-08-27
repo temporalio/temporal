@@ -191,14 +191,8 @@ func (t *benchTask) HandleErr(err error) error {
 		t.harness.rejections.Add(1)
 		admitted := t.throttleAdmitted
 		t.throttleAdmitted = false
-		if IsControllerInput(err, resourceExhausted.Cause) {
-			t.throttleKey = NewThrottleKey(
-				resourceExhausted.Cause,
-				resourceExhausted.Scope,
-				t.GetNamespaceID(),
-				0,
-				t.GetCategory().Name(),
-			)
+		if IsControllerInput(err, resourceExhausted.Cause, resourceExhausted.Scope) {
+			t.throttleKey = NewThrottleKey(resourceExhausted.Cause, t.GetNamespaceID())
 			t.hasThrottleKey = true
 			t.harness.state.ReportThrottled(t.throttleKey, admitted)
 		}
@@ -408,13 +402,7 @@ func runBenchConfig(t *testing.T, cfg benchConfig) benchResult {
 		timeSource:  timeSource,
 		latencies:   make([]time.Duration, 0, backlog),
 		doneCh:      make(chan struct{}),
-		throttleKey: NewThrottleKey(
-			enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
-			enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
-			benchNamespaceID,
-			0,
-			tasks.CategoryTransfer.Name(),
-		),
+		throttleKey: NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, benchNamespaceID),
 	}
 
 	scheduler.Start()

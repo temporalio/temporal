@@ -1562,13 +1562,7 @@ func (s *executableSuite) TestHandleErr_ThrottleErrorsDriveController() {
 		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 		Message: "namespace APS limit reached",
 	}
-	key := queues.NewThrottleKey(
-		throttleErr.Cause,
-		throttleErr.Scope,
-		tests.NamespaceID.String(),
-		0,
-		tasks.CategoryTransfer.Name(),
-	)
+	key := queues.NewThrottleKey(throttleErr.Cause, tests.NamespaceID.String())
 
 	provider, ok := executable.(queues.ThrottleKeyProvider)
 	s.True(ok)

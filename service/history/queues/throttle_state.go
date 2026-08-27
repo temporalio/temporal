@@ -21,15 +21,18 @@ type (
 	ThrottleScope int
 )
 
+// Only ThrottleScopeNamespace is produced today, because every governed cause is enforced
+// against the namespace's own budget. The other two are the shapes a widened controller would
+// need, and they exist so that adding one is a routing decision in NewThrottleKey rather than a
+// change to the key, the maps and the sweep.
 const (
-	// ThrottleScopeHost covers causes enforced for the whole process (system overload,
-	// system-wide persistence budgets, storage limits).
+	// ThrottleScopeHost is for causes enforced for the whole process: system overload,
+	// system wide persistence budgets, storage limits. Reserved, not currently produced.
 	ThrottleScopeHost ThrottleScope = iota
-	// ThrottleScopeNamespace covers per-namespace budgets that are enforced identically
-	// on every host and every shard.
+	// ThrottleScopeNamespace is for budgets enforced identically on every host and shard.
 	ThrottleScopeNamespace
-	// ThrottleScopeNamespaceShard covers per-namespace budgets whose enforcement point is
-	// the shard owner, so two shards for the same namespace converge independently.
+	// ThrottleScopeNamespaceShard is for namespace budgets whose enforcement point is the shard
+	// owner, so two shards for one namespace converge independently. Reserved.
 	ThrottleScopeNamespaceShard
 )
 
@@ -104,21 +107,17 @@ type (
 	}
 )
 
-// namespaceBudgetCauses are enforced against a namespace's own quota. They are keyed without
-// the task category because every category draws from the same token bucket.
-var namespaceBudgetCauses = map[enumspb.ResourceExhaustedCause]struct{}{
+// controlledCauses are the throttles the controller governs. It is deliberately a short list:
+// a class only benefits from being paced if the budget it is waiting on is shared across tasks
+// and its holder can tell when it frees up. Widening it is a line here plus a scope decision in
+// NewThrottleKey, and the ThrottleKey shape already carries shard and category for that.
+//
+// System scoped instances of these same causes are excluded for now. They are enforced against
+// a budget this namespace only partly owns, so one namespace's class cannot learn the shape of
+// it from its own rejections.
+var controlledCauses = map[enumspb.ResourceExhaustedCause]struct{}{
 	enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT:         {},
-	enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT:         {},
-	enumspb.RESOURCE_EXHAUSTED_CAUSE_OPS_LIMIT:         {},
 	enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT: {},
-	enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT:  {},
-}
-
-// shardScopedCauses are namespace budgets whose enforcement point is the shard owner.
-// CONSIDER(ppv): persistence per-shard namespace limits belong here too, but they report the
-// same (cause, scope) pair as the host wide namespace limit and cannot be told apart yet.
-var shardScopedCauses = map[enumspb.ResourceExhaustedCause]struct{}{
-	enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT: {},
 }
 
 func NewThrottleState(
@@ -140,74 +139,38 @@ func NewThrottleState(
 	return s
 }
 
-// IsControllerInput reports whether a rejection should drive the controller. Only rejections
-// from a budget shared across tasks qualify: the control law reacts by slowing a whole class,
-// which is pointless when the contended resource belongs to one workflow.
+// IsControllerInput reports whether a rejection should drive the controller. It must come from
+// a budget that is shared across tasks and owned by this namespace, because the control law
+// reacts by pacing a whole class: pacing helps nothing when the contended resource belongs to
+// one workflow, and it cannot converge on a budget the namespace only partly owns.
 //
-// BUSY_WORKFLOW is per-workflow lock contention and already has a dedicated fast path.
-// CIRCUIT_BREAKER_OPEN is itself a controller and would double-govern.
-// ErrBusinessIDRateLimitExceeded reports RPS_LIMIT at namespace scope but is enforced
-// per (namespace, businessID, archetype), so one hot workflow ID would otherwise ratchet the
-// namespace wide class down and gate every unrelated task in that namespace on the host.
-func IsControllerInput(err error, cause enumspb.ResourceExhaustedCause) bool {
+// ErrBusinessIDRateLimitExceeded reports a namespace scope but is enforced per
+// (namespace, businessID, archetype), so one hot workflow ID would otherwise ratchet the whole
+// namespace down and gate every unrelated task in it on this host.
+func IsControllerInput(
+	err error,
+	cause enumspb.ResourceExhaustedCause,
+	scope enumspb.ResourceExhaustedScope,
+) bool {
 	if errors.Is(err, consts.ErrBusinessIDRateLimitExceeded) {
 		return false
 	}
-	switch cause { //nolint:exhaustive
-	case enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
-		enumspb.RESOURCE_EXHAUSTED_CAUSE_CIRCUIT_BREAKER_OPEN:
+	if scope != enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE {
 		return false
-	default:
-		return true
 	}
+	_, ok := controlledCauses[cause]
+	return ok
 }
 
-// NewThrottleKey routes a reported (cause, scope) onto the class that shares its enforcement point.
-func NewThrottleKey(
-	cause enumspb.ResourceExhaustedCause,
-	scope enumspb.ResourceExhaustedScope,
-	namespaceID string,
-	shardID int32,
-	category string,
-) ThrottleKey {
-	_, isNamespaceBudget := namespaceBudgetCauses[cause]
-	switch {
-	case scope == enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE && isNamespaceBudget:
-		if _, shardScoped := shardScopedCauses[cause]; shardScoped {
-			return ThrottleKey{
-				Scope:       ThrottleScopeNamespaceShard,
-				Cause:       cause,
-				NamespaceID: namespaceID,
-				ShardID:     shardID,
-			}
-		}
-		return ThrottleKey{
-			Scope:       ThrottleScopeNamespace,
-			Cause:       cause,
-			NamespaceID: namespaceID,
-		}
-	case scope == enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE:
-		// A namespace scoped report for an infrastructure cause means one namespace's traffic
-		// is overloading a dependency on this shard; keep it off the host wide key.
-		return ThrottleKey{
-			Scope:       ThrottleScopeNamespaceShard,
-			Cause:       cause,
-			NamespaceID: namespaceID,
-			ShardID:     shardID,
-			Category:    category,
-		}
-	case isNamespaceBudget && scope == enumspb.RESOURCE_EXHAUSTED_SCOPE_UNSPECIFIED:
-		return ThrottleKey{
-			Scope:       ThrottleScopeNamespace,
-			Cause:       cause,
-			NamespaceID: namespaceID,
-		}
-	default:
-		return ThrottleKey{
-			Scope:    ThrottleScopeHost,
-			Cause:    cause,
-			Category: category,
-		}
+// NewThrottleKey builds the class a rejection belongs to. Every cause the controller currently
+// governs is enforced against the namespace's own budget, so there is one shape of key today.
+// The scope field distinguishes classes that share a map, and ShardID and Category are the room
+// left for a shard scoped or dependency scoped budget to be added without reshaping the key.
+func NewThrottleKey(cause enumspb.ResourceExhaustedCause, namespaceID string) ThrottleKey {
+	return ThrottleKey{
+		Scope:       ThrottleScopeNamespace,
+		Cause:       cause,
+		NamespaceID: namespaceID,
 	}
 }
 

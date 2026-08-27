@@ -877,14 +877,14 @@ func (e *executableImpl) reportThrottle(
 		e.clearThrottle()
 		return
 	}
-	if !IsControllerInput(err, cause) {
+	if !IsControllerInput(err, cause, scope) {
 		// The task's last constraint is no longer a shared budget, so it must not stay in a
 		// throttled rescheduler class governed by a budget it is not waiting on.
 		e.clearThrottle()
 		return
 	}
 
-	key := NewThrottleKey(cause, scope, e.GetNamespaceID(), e.shardID, e.GetCategory().Name())
+	key := NewThrottleKey(cause, e.GetNamespaceID())
 
 	e.throttleMu.Lock()
 	e.throttleScope = scope
