@@ -3605,6 +3605,12 @@ is non-fatal: the search continues past this threshold.`,
 The ceiling is reread on every tweakables evaluation but only ratchets tighter within a run (one execution between start and Continue-As-New): a looser or unset value never raises it, and it never lowers a version already recorded for the run. Lowering the ceiling therefore takes effect on the next run, when Continue-As-New rereads dynamic config. A run is one execution between start and Continue-As-New.
 Operational notes: (1) A ceiling below 12 holds the version below CHASM migration support, so it pauses all V1->V2 CHASM migrations for the namespace until the ceiling is lifted (deferred, not dropped). (2) A ceiling below 6 skips custom search-attribute updates on schedule edits. (3) This caps V1 scheduler histories only; schedules already migrated to CHASM V2 are not made rollback-safe by it.`,
 	)
+	SchedulerV1VersionOverride = NewNamespaceIntSetting(
+		"worker.schedulerV1VersionOverride",
+		-1,
+		`SchedulerV1VersionOverride selects a newer V1 scheduler workflow version without requiring a follow-up server release to change the default. Set it to an explicitly supported version greater than or equal to the current default; a negative value (the default) keeps the current default. Values below the current default or above the latest version supported by this binary are ignored.
+The override is reread during every scheduler tweakables evaluation through MutableSideEffect. It can advance the version in the current workflow run at the next evaluation, but cannot lower it or exceed that run's recorded SchedulerV1VersionCeiling.`,
+	)
 	WorkerDeleteNamespaceActivityLimits = NewGlobalTypedSetting(
 		"worker.deleteNamespaceActivityLimitsConfig",
 		sdkworker.Options{},
