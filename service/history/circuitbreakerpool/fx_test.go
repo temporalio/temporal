@@ -16,7 +16,7 @@ import (
 )
 
 func TestOnStateChangeNexusStage(t *testing.T) {
-	testCases := []struct {
+	for _, testCase := range []struct {
 		name      string
 		taskGroup string
 		stage     string
@@ -45,9 +45,7 @@ func TestOnStateChangeNexusStage(t *testing.T) {
 			name:      "shared HSM callback",
 			taskGroup: callbacks.TaskTypeInvocation,
 		},
-	}
-
-	for _, testCase := range testCases {
+	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
 			capture := logger.StartCapture()
