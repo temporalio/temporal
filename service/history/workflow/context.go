@@ -87,8 +87,18 @@ type (
 		UpdateWorkflowTransactionPolicy historyi.TransactionPolicy
 		NewWorkflowTransactionPolicy    *historyi.TransactionPolicy
 		HasInFlightUpdates              bool
-		PrepareTransaction              func() error
-		AfterCloseTransaction           func(*persistence.WorkflowMutation, *persistence.WorkflowSnapshot) error
+		PrepareMutableStateTransaction  func() error
+		CloseMutableStateTransaction    func() (*WorkflowTransactionPayload, error)
+		ExecuteWorkflowTransaction      func(*WorkflowTransactionPayload) error
+	}
+
+	// WorkflowTransactionPayload contains the persistence payload produced by closing
+	// an update-with-new transaction.
+	WorkflowTransactionPayload struct {
+		WorkflowMutation    *persistence.WorkflowMutation
+		WorkflowEvents      []*persistence.WorkflowEvents
+		NewWorkflowSnapshot *persistence.WorkflowSnapshot
+		NewWorkflowEvents   []*persistence.WorkflowEvents
 	}
 )
 
@@ -822,12 +832,30 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 			UpdateWorkflowTransactionPolicy: updateWorkflowTransactionPolicy,
 			NewWorkflowTransactionPolicy:    newWorkflowTransactionPolicy,
 			HasInFlightUpdates:              c.updateRegistry != nil && c.updateRegistry.Len() != 0,
-			PrepareTransaction: func() error {
-				return c.prepareUpdateWorkflowExecutionWithNew(
+			PrepareMutableStateTransaction: func() error {
+				return c.prepareMutableStateTransaction(
 					shardContext,
 					newContext,
 					newMutableState,
 					newWorkflowTransactionPolicy,
+				)
+			},
+			CloseMutableStateTransaction: func() (*WorkflowTransactionPayload, error) {
+				return c.closeMutableStateTransaction(
+					ctx,
+					newContext,
+					newMutableState,
+					updateWorkflowTransactionPolicy,
+					newWorkflowTransactionPolicy,
+				)
+			},
+			ExecuteWorkflowTransaction: func(payload *WorkflowTransactionPayload) error {
+				return c.executeWorkflowTransaction(
+					ctx,
+					shardContext,
+					updateMode,
+					newMutableState,
+					payload,
 				)
 			},
 		}
@@ -840,7 +868,6 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 				newMutableState,
 				updateWorkflowTransactionPolicy,
 				newWorkflowTransactionPolicy,
-				request.AfterCloseTransaction,
 			)
 		})
 	}
@@ -853,7 +880,6 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		newMutableState,
 		updateWorkflowTransactionPolicy,
 		newWorkflowTransactionPolicy,
-		nil,
 	)
 }
 
@@ -865,7 +891,6 @@ func (c *ContextImpl) updateWorkflowExecutionWithNew(
 	newMutableState historyi.MutableState,
 	updateWorkflowTransactionPolicy historyi.TransactionPolicy,
 	newWorkflowTransactionPolicy *historyi.TransactionPolicy,
-	afterCloseTransaction func(*persistence.WorkflowMutation, *persistence.WorkflowSnapshot) error,
 ) (retError error) {
 
 	defer func() {
@@ -873,8 +898,15 @@ func (c *ContextImpl) updateWorkflowExecutionWithNew(
 			c.Clear()
 		}
 	}()
+	if newContext != nil && newMutableState != nil && newWorkflowTransactionPolicy != nil {
+		defer func() {
+			if retError != nil {
+				newContext.Clear()
+			}
+		}()
+	}
 
-	if err := c.prepareUpdateWorkflowExecutionWithNew(
+	if err := c.prepareMutableStateTransaction(
 		shardContext,
 		newContext,
 		newMutableState,
@@ -883,47 +915,72 @@ func (c *ContextImpl) updateWorkflowExecutionWithNew(
 		return err
 	}
 
+	payload, err := c.closeMutableStateTransaction(
+		ctx,
+		newContext,
+		newMutableState,
+		updateWorkflowTransactionPolicy,
+		newWorkflowTransactionPolicy,
+	)
+	if err != nil {
+		return err
+	}
+	return c.executeWorkflowTransaction(
+		ctx,
+		shardContext,
+		updateMode,
+		newMutableState,
+		payload,
+	)
+}
+
+func (c *ContextImpl) closeMutableStateTransaction(
+	ctx context.Context,
+	newContext historyi.WorkflowContext,
+	newMutableState historyi.MutableState,
+	updateWorkflowTransactionPolicy historyi.TransactionPolicy,
+	newWorkflowTransactionPolicy *historyi.TransactionPolicy,
+) (*WorkflowTransactionPayload, error) {
 	updateWorkflow, updateWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsMutation(
 		ctx,
 		updateWorkflowTransactionPolicy,
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	var newWorkflow *persistence.WorkflowSnapshot
-	var newWorkflowEventsSeq []*persistence.WorkflowEvents
+	payload := &WorkflowTransactionPayload{
+		WorkflowMutation: updateWorkflow,
+		WorkflowEvents:   updateWorkflowEventsSeq,
+	}
 	if newContext != nil && newMutableState != nil && newWorkflowTransactionPolicy != nil {
-		defer func() {
-			if retError != nil {
-				newContext.Clear()
-			}
-		}()
-
-		newWorkflow, newWorkflowEventsSeq, err = newMutableState.CloseTransactionAsSnapshot(
+		payload.NewWorkflowSnapshot, payload.NewWorkflowEvents, err = newMutableState.CloseTransactionAsSnapshot(
 			ctx,
 			*newWorkflowTransactionPolicy,
 		)
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
+	return payload, nil
+}
 
-	if afterCloseTransaction != nil {
-		if err := afterCloseTransaction(updateWorkflow, newWorkflow); err != nil {
-			return err
-		}
-	}
-
+func (c *ContextImpl) executeWorkflowTransaction(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	updateMode persistence.UpdateWorkflowMode,
+	newMutableState historyi.MutableState,
+	payload *WorkflowTransactionPayload,
+) error {
 	if err := c.mergeUpdateWithNewReplicationTasks(
-		updateWorkflow,
-		newWorkflow,
+		payload.WorkflowMutation,
+		payload.NewWorkflowSnapshot,
 	); err != nil {
 		return err
 	}
 
-	eventsToReapply := updateWorkflowEventsSeq
-	if len(updateWorkflowEventsSeq) == 0 {
+	eventsToReapply := payload.WorkflowEvents
+	if len(payload.WorkflowEvents) == 0 {
 		if reapplyCandidateEvents := c.MutableState.GetReapplyCandidateEvents(); len(reapplyCandidateEvents) != 0 {
 			eventsToReapply = []*persistence.WorkflowEvents{
 				{
@@ -943,7 +1000,7 @@ func (c *ContextImpl) updateWorkflowExecutionWithNew(
 		eventsToReapply,
 		// The new run is created by applying events so the history builder in newMutableState contains the events be re-applied.
 		// So we can use newWorkflowEventsSeq directly to reapply events.
-		newWorkflowEventsSeq,
+		payload.NewWorkflowEvents,
 	); err != nil {
 		return err
 	}
@@ -953,11 +1010,11 @@ func (c *ContextImpl) updateWorkflowExecutionWithNew(
 		updateMode,
 		c.archetypeID,
 		c.MutableState.GetCurrentVersion(),
-		updateWorkflow,
-		updateWorkflowEventsSeq,
+		payload.WorkflowMutation,
+		payload.WorkflowEvents,
 		MutableStateFailoverVersion(newMutableState),
-		newWorkflow,
-		newWorkflowEventsSeq,
+		payload.NewWorkflowSnapshot,
+		payload.NewWorkflowEvents,
 		c.MutableState.IsWorkflow(),
 	); err != nil {
 		return err
@@ -978,7 +1035,7 @@ func (c *ContextImpl) updateWorkflowExecutionWithNew(
 	return nil
 }
 
-func (c *ContextImpl) prepareUpdateWorkflowExecutionWithNew(
+func (c *ContextImpl) prepareMutableStateTransaction(
 	shardContext historyi.ShardContext,
 	newContext historyi.WorkflowContext,
 	newMutableState historyi.MutableState,
