@@ -17,10 +17,12 @@ import (
 	sdkpb "go.temporal.io/api/sdk/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -33,7 +35,24 @@ type (
 	workflowSuite struct {
 		suite.Suite
 		testsuite.WorkflowTestSuite
-		env *testsuite.TestWorkflowEnvironment
+		env     *testsuite.TestWorkflowEnvironment
+		metrics *capturingMetricsHandler
+	}
+
+	capturingMetricsHandler struct {
+		timers []capturedTimer
+	}
+
+	capturedTimer struct {
+		name  string
+		value time.Duration
+	}
+
+	noopMetricsCounter    struct{}
+	noopMetricsGauge      struct{}
+	capturingMetricsTimer struct {
+		handler *capturingMetricsHandler
+		name    string
 	}
 )
 
@@ -46,7 +65,43 @@ func TestWorkflow(t *testing.T) {
 }
 
 func (s *workflowSuite) SetupTest() {
+	s.metrics = &capturingMetricsHandler{}
+	s.SetMetricsHandler(s.metrics)
 	s.env = s.NewTestWorkflowEnvironment()
+}
+
+func (h *capturingMetricsHandler) WithTags(map[string]string) sdkclient.MetricsHandler {
+	return h
+}
+
+func (h *capturingMetricsHandler) Counter(string) sdkclient.MetricsCounter {
+	return noopMetricsCounter{}
+}
+
+func (h *capturingMetricsHandler) Gauge(string) sdkclient.MetricsGauge {
+	return noopMetricsGauge{}
+}
+
+func (h *capturingMetricsHandler) Timer(name string) sdkclient.MetricsTimer {
+	return capturingMetricsTimer{handler: h, name: name}
+}
+
+func (h *capturingMetricsHandler) timerValues(name string) []time.Duration {
+	var values []time.Duration
+	for _, timer := range h.timers {
+		if timer.name == name {
+			values = append(values, timer.value)
+		}
+	}
+	return values
+}
+
+func (noopMetricsCounter) Inc(int64) {}
+
+func (noopMetricsGauge) Update(float64) {}
+
+func (t capturingMetricsTimer) Record(value time.Duration) {
+	t.handler.timers = append(t.handler.timers, capturedTimer{name: t.name, value: value})
 }
 
 func (s *workflowSuite) AfterTest(suiteName, testName string) {
@@ -467,7 +522,73 @@ func (s *workflowSuite) TestInitialPatch() {
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
 		s.Equal("myid-2022-06-01T00:00:00Z", req.Execution.WorkflowId)
 		s.False(req.LongPoll)
-		return &schedulespb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil
+		return &schedulespb.WatchWorkflowResponse{
+			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			CloseTime: timestamppb.New(baseStartTime.Add(10 * time.Minute)),
+		}, nil
+	})
+	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
+		return nil, nil
+	})
+
+	prevVersion := CurrentTweakablePolicies.Version
+	CurrentTweakablePolicies.Version = RefreshCompletionDesiredTime
+	defer func() { CurrentTweakablePolicies.Version = prevVersion }()
+
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 2
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{
+					Interval: durationpb.New(55 * time.Minute),
+				}},
+			},
+			Action: s.defaultAction("myid"),
+		},
+		State: &schedulespb.InternalState{
+			Namespace:     "myns",
+			NamespaceId:   "mynsid",
+			ScheduleId:    "myschedule",
+			ConflictToken: InitialConflictToken,
+		},
+		InitialPatch: &schedulepb.SchedulePatch{
+			TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
+		},
+	})
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	// The prior action closed (00:10) before the next start was even due (00:15), so the next
+	// start ran exactly on time -- it was never blocked waiting on the prior action. DesiredTime
+	// must stay at ActualTime, reporting zero delay, not the idle gap since the prior close.
+	s.Equal([]time.Duration{0}, s.metrics.timerValues(metrics.ScheduleActionDelay.Name()))
+}
+
+// TestInitialPatchRefreshCompletionAtOldVersion pins the pre-fix behavior for histories recorded
+// below RefreshCompletionDesiredTime: a refresh (non-long-poll) discovering the prior action's
+// completion must NOT populate BufferedStarts[0].DesiredTime, since that value flows into the
+// continue-as-new Input and any divergence there would be a replay nondeterminism break for
+// already-recorded histories, version-ceiling peers, or a rollback to older code.
+func (s *workflowSuite) TestInitialPatchRefreshCompletionAtOldVersion() {
+	prevVersion := CurrentTweakablePolicies.Version
+	CurrentTweakablePolicies.Version = TriggerImmediatelyTimestamp
+	defer func() { CurrentTweakablePolicies.Version = prevVersion }()
+
+	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 0, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-06-01T00:00:00Z", req.Request.WorkflowId)
+		return nil, nil
+	})
+	s.expectWatch(func(req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-06-01T00:00:00Z", req.Execution.WorkflowId)
+		s.False(req.LongPoll)
+		return &schedulespb.WatchWorkflowResponse{
+			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			CloseTime: timestamppb.New(baseStartTime.Add(10 * time.Minute)),
+		}, nil
 	})
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
@@ -498,6 +619,9 @@ func (s *workflowSuite) TestInitialPatch() {
 	})
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	// Falls back to the scheduled (actual) time, not the prior action's close time: the pre-fix
+	// baseline, unchanged for histories below the version gate.
+	s.Equal([]time.Duration{0}, s.metrics.timerValues(metrics.ScheduleActionDelay.Name()))
 }
 
 func (s *workflowSuite) TestCatchupWindow() {

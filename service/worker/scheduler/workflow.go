@@ -76,6 +76,8 @@ const (
 	//     from CHASM, preserving idempotency identity across the migration
 	//     handoff.
 	MigrationHandoffFixes = 13
+	// update the desired time for a buffered start when refresh discovers the prior action completed
+	RefreshCompletionDesiredTime = 14
 )
 
 const (
@@ -1017,8 +1019,19 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future, long bool
 	// starting the next). The legacy path doesn't use deferred starts
 	// (Attempt == -1) like CHASM, so BufferedStarts[0] is always the next
 	// pending start.
-	if long && len(s.State.BufferedStarts) > 0 {
-		s.State.BufferedStarts[0].DesiredTime = res.CloseTime
+	if len(s.State.BufferedStarts) > 0 {
+		next := s.State.BufferedStarts[0]
+		// A refresh can discover a completion long after the fact, once an unrelated, later
+		// buffered start already exists. Only backdate DesiredTime when the close genuinely
+		// came after this start was due -- i.e. this start was actually blocked waiting on it
+		// (e.g. BUFFER_ONE/BUFFER_ALL/CANCEL_OTHER). Otherwise the start ran on time and
+		// DesiredTime must stay at ActualTime, or an on-time start gets misreported as delayed
+		// by the entire idle gap. The long-poll path predates this check and stays unconditional.
+		refreshBackdate := s.hasMinVersion(RefreshCompletionDesiredTime) &&
+			res.CloseTime != nil && res.CloseTime.AsTime().After(next.ActualTime.AsTime())
+		if long || refreshBackdate {
+			next.DesiredTime = res.CloseTime
+		}
 	}
 
 	s.logger.Debug("started workflow finished", "workflow", id, "status", res.Status, "pause-after-failure", pauseOnFailure, "long", long)
