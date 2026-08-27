@@ -15,6 +15,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/components/nexusoperations"
@@ -79,9 +80,12 @@ func TestNexusCompletionHTTPHandler_JWTAudience(t *testing.T) {
 
 			err := requestContext.interceptRequest(context.Background(), &nexusrpc.CompletionRequest{HTTPRequest: httpRequest})
 			if tc.wantDenied {
-				var permissionDenied *serviceerror.PermissionDenied
-				require.ErrorAs(t, err, &permissionDenied)
+				var handlerError *nexus.HandlerError
+				require.ErrorAs(t, err, &handlerError)
+				require.Equal(t, nexus.HandlerErrorTypeUnauthenticated, handlerError.Type)
+				require.Equal(t, metrics.OutcomeTag("unauthorized"), requestContext.outcomeTag)
 			} else {
+				// Claim mapping succeeded, so the request reached errorAuthorizer's sentinel error.
 				var handlerError *nexus.HandlerError
 				require.ErrorAs(t, err, &handlerError)
 				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerError.Type)

@@ -900,6 +900,7 @@ func (s *authorizerInterceptorSuite) TestGetAuthInfoForRequest_AudienceMapperSki
 	cert := &x509.Certificate{Subject: pkix.Name{CommonName: "client"}}
 	tlsInfo := &credentials.TLSInfo{State: tls.ConnectionState{VerifiedChains: [][]*x509.Certificate{{cert}}}}
 	authInfo := interceptor.GetAuthInfoForRequest(ctx, tlsInfo, http.Header{})
+	s.Require().NotNil(authInfo)
 
 	s.Empty(authInfo.AuthToken)
 	s.Empty(authInfo.Audience)

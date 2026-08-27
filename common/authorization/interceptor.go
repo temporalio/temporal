@@ -29,8 +29,7 @@ type (
 )
 
 type (
-	// JWTAudienceMapper returns JWT audience for a given request. req and info are nil from streaming RPCs.
-	// They are also nil for non-unary HTTP requests.
+	// JWTAudienceMapper returns JWT audience for a given request. req and info are nil for gRPC streams and Nexus HTTP requests.
 	JWTAudienceMapper interface {
 		Audience(ctx context.Context, req any, info *grpc.UnaryServerInfo) string
 	}
@@ -239,14 +238,15 @@ type wrappedServerStream struct {
 
 func (w *wrappedServerStream) Context() context.Context { return w.ctx }
 
-// GetAuthInfoForRequest extracts auth info for a request without unary gRPC request metadata.
+// GetAuthInfoForRequest extracts auth info for gRPC streams and Nexus HTTP requests,
+// where there is no unary request to hand to the audience mapper.
 func (a *Interceptor) GetAuthInfoForRequest(
 	ctx context.Context,
 	tlsConnection *credentials.TLSInfo,
 	header headers.HeaderGetter,
 ) *AuthInfo {
 	return a.GetAuthInfo(tlsConnection, header, func() string {
-		// Skip the mapper for tokenless streams; calling custom impls with nil req/info would be a behavior change.
+		// The audience only applies to a token, so skip the mapper when there isn't one.
 		if a.audienceGetter == nil || header == nil || header.Get(a.authHeaderName) == "" {
 			return ""
 		}

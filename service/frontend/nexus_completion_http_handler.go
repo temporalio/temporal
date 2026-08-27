@@ -587,7 +587,9 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexusrpc
 	if authInfo := c.AuthInterceptor.GetAuthInfoForRequest(ctx, tlsInfo, request.HTTPRequest.Header); authInfo != nil {
 		claims, err = c.AuthInterceptor.GetClaims(authInfo)
 		if err != nil {
-			return err
+			c.outcomeTag = metrics.OutcomeTag("unauthorized")
+			c.logger.Error("failed to get claims for nexus completion request", tag.Error(err))
+			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnauthenticated, "unauthorized")
 		}
 		// Make the auth info and claims available on the context.
 		ctx = c.AuthInterceptor.EnhanceContext(ctx, authInfo, claims)
