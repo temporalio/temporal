@@ -153,6 +153,7 @@ type testEnv struct {
 type testEnvConfig struct {
 	specProcessor  scheduler.SpecProcessor
 	withMockEngine bool
+	schedule       *schedulepb.Schedule
 }
 
 // testEnvOption is a functional option for configuring testEnv.
@@ -172,6 +173,25 @@ func withMockEngine() testEnvOption {
 	return func(c *testEnvConfig) {
 		c.withMockEngine = true
 	}
+}
+
+// withSchedule overrides defaultSchedule(), for tests that need a spec other
+// than the package default 1-minute interval (e.g. an exhausted spec, which is
+// what drives the Generator into its idle branch).
+func withSchedule(schedule *schedulepb.Schedule) testEnvOption {
+	return func(c *testEnvConfig) {
+		c.schedule = schedule
+	}
+}
+
+// expiredSchedule returns a schedule whose spec has already ended, so the
+// Generator finds no next wakeup and takes its idle branch. This is the shape
+// of a real schedule that has run to the end of its subscription window.
+func expiredSchedule(now time.Time) *schedulepb.Schedule {
+	schedule := defaultSchedule()
+	schedule.Spec.StartTime = timestamppb.New(now.Add(-2 * time.Hour))
+	schedule.Spec.EndTime = timestamppb.New(now.Add(-1 * time.Hour))
+	return schedule
 }
 
 // newRealSpecProcessor creates a real SpecProcessor for tests.
@@ -213,6 +233,12 @@ func withEngineTimeSource(ts *clock.EventTimeSource) engineTestOption {
 	return func(c *engineTestConfig) {
 		c.timeSource = ts
 		c.engineOpts = append(c.engineOpts, chasmtest.WithTimeSource(ts))
+	}
+}
+
+func withEngineMetricsHandler(handler metrics.Handler) engineTestOption {
+	return func(c *engineTestConfig) {
+		c.engineOpts = append(c.engineOpts, chasmtest.WithMetricsHandler(handler))
 	}
 }
 
@@ -366,6 +392,11 @@ func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
 	now := time.Now()
 	timeSource.Update(now)
 
+	schedule := config.schedule
+	if schedule == nil {
+		schedule = defaultSchedule()
+	}
+
 	tv := testvars.New(t)
 	nodeBackend := &chasm.MockNodeBackend{
 		HandleNextTransitionCount: func() int64 { return 2 },
@@ -383,7 +414,7 @@ func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
 
 	node := chasm.NewEmptyTree(registry, timeSource, nodeBackend, nodePathEncoder, logger, metrics.NoopMetricsHandler)
 	ctx := chasm.NewMutableContext(context.Background(), node)
-	sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, defaultSchedule(), nil)
+	sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, schedule, nil)
 	if err != nil {
 		t.Fatalf("failed to create scheduler: %v", err)
 	}
