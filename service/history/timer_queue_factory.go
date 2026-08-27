@@ -114,6 +114,8 @@ func (f *timerQueueFactory) CreateQueue(
 		shardContext.GetTimeSource(),
 		logger,
 		metricsHandler,
+		f.ThrottleState,
+		f.Config.TaskReschedulerMaxThrottledReleasesPerPass,
 	)
 
 	activeExecutor := newTimerQueueActiveTaskExecutor(
@@ -173,6 +175,8 @@ func (f *timerQueueFactory) CreateQueue(
 		f.Config.TaskDLQUnexpectedErrorAttempts,
 		f.Config.TaskDLQInternalErrors,
 		f.Config.TaskDLQErrorPattern,
+		f.ThrottleState,
+		shardContext.GetShardID(),
 	)
 	return queues.NewScheduledQueue(
 		shardContext,

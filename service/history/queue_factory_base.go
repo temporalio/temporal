@@ -57,6 +57,7 @@ type (
 		RemoteHistoryFetcher eventhandler.HistoryPaginatedFetcher
 		ChasmEngine          chasm.Engine
 		ChasmRegistry        *chasm.Registry
+		ThrottleState        *queues.ThrottleState
 	}
 
 	QueueFactoryBase struct {
@@ -78,6 +79,7 @@ var QueueModule = fx.Options(
 	circuitbreakerpool.Module,
 	fx.Provide(
 		QueueSchedulerRateLimiterProvider,
+		ThrottleStateProvider,
 		func(tqm persistence.HistoryTaskQueueManager) queues.QueueWriter {
 			return tqm
 		},
@@ -102,6 +104,32 @@ var QueueModule = fx.Options(
 	),
 	fx.Invoke(QueueFactoryLifetimeHooks),
 )
+
+// ThrottleStateProvider builds the host level throttle controller shared by every queue
+// category and every shard on this host.
+func ThrottleStateProvider(
+	config *configs.Config,
+	logger log.SnTaggedLogger,
+	metricsHandler metrics.Handler,
+) *queues.ThrottleState {
+	return queues.NewThrottleState(
+		queues.ThrottleStateOptions{
+			Enabled:       config.TaskThrottleControllerEnabled,
+			Beta:          config.TaskThrottleControllerBeta,
+			IncreaseRatio: config.TaskThrottleControllerIncreaseRatio,
+			Window:        config.TaskThrottleControllerWindow,
+			MinRate:       config.TaskThrottleControllerMinRate,
+			MaxRate:       config.TaskThrottleControllerMaxRate,
+			InitialRate:   config.TaskThrottleControllerInitialRate,
+			MaxKeys:       config.TaskThrottleControllerMaxKeys,
+			KeyTTL:        config.TaskThrottleControllerKeyTTL,
+		},
+		clock.NewRealTimeSource(),
+		logger,
+		metricsHandler,
+	)
+}
+
 
 // additionalQueueFactories is a container for a list of queue factories that are only added to the group if
 // they are enabled. This exists because there is no way to conditionally add to a group with a provider that returns

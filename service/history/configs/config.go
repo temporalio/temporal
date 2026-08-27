@@ -130,6 +130,17 @@ type Config struct {
 	TaskDLQInternalErrors          dynamicconfig.BoolPropertyFn
 	TaskDLQErrorPattern            dynamicconfig.StringPropertyFn
 
+	TaskThrottleControllerEnabled              dynamicconfig.BoolPropertyFn
+	TaskThrottleControllerBeta                 dynamicconfig.FloatPropertyFn
+	TaskThrottleControllerIncreaseRatio        dynamicconfig.FloatPropertyFn
+	TaskThrottleControllerWindow               dynamicconfig.DurationPropertyFn
+	TaskThrottleControllerMinRate              dynamicconfig.FloatPropertyFn
+	TaskThrottleControllerMaxRate              dynamicconfig.FloatPropertyFn
+	TaskThrottleControllerInitialRate          dynamicconfig.FloatPropertyFn
+	TaskThrottleControllerMaxKeys              dynamicconfig.IntPropertyFn
+	TaskThrottleControllerKeyTTL               dynamicconfig.DurationPropertyFn
+	TaskReschedulerMaxThrottledReleasesPerPass dynamicconfig.IntPropertyFn
+
 	TaskSchedulerEnableRateLimiter            dynamicconfig.BoolPropertyFn
 	TaskSchedulerEnableRateLimiterShadowMode  dynamicconfig.BoolPropertyFn
 	TaskSchedulerRateLimiterStartupDelay      dynamicconfig.DurationPropertyFn
@@ -575,6 +586,16 @@ func NewConfig(
 		TaskDLQInternalErrors:          dynamicconfig.HistoryTaskDLQInternalErrors.Get(dc),
 		TaskDLQErrorPattern:            dynamicconfig.HistoryTaskDLQErrorPattern.Get(dc),
 
+		TaskThrottleControllerEnabled:                        dynamicconfig.TaskThrottleControllerEnabled.Get(dc),
+		TaskThrottleControllerBeta:                           dynamicconfig.TaskThrottleControllerBeta.Get(dc),
+		TaskThrottleControllerIncreaseRatio:                  dynamicconfig.TaskThrottleControllerIncreaseRatio.Get(dc),
+		TaskThrottleControllerWindow:                         dynamicconfig.TaskThrottleControllerWindow.Get(dc),
+		TaskThrottleControllerMinRate:                        dynamicconfig.TaskThrottleControllerMinRate.Get(dc),
+		TaskThrottleControllerMaxRate:                        dynamicconfig.TaskThrottleControllerMaxRate.Get(dc),
+		TaskThrottleControllerInitialRate:                    dynamicconfig.TaskThrottleControllerInitialRate.Get(dc),
+		TaskThrottleControllerMaxKeys:                        dynamicconfig.TaskThrottleControllerMaxKeys.Get(dc),
+		TaskThrottleControllerKeyTTL:                         dynamicconfig.TaskThrottleControllerKeyTTL.Get(dc),
+		TaskReschedulerMaxThrottledReleasesPerPass:           dynamicconfig.TaskReschedulerMaxThrottledReleasesPerPass.Get(dc),
 		TaskSchedulerEnableRateLimiter:                       dynamicconfig.TaskSchedulerEnableRateLimiter.Get(dc),
 		TaskSchedulerEnableRateLimiterShadowMode:             dynamicconfig.TaskSchedulerEnableRateLimiterShadowMode.Get(dc),
 		TaskSchedulerRateLimiterStartupDelay:                 dynamicconfig.TaskSchedulerRateLimiterStartupDelay.Get(dc),

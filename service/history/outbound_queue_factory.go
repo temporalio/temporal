@@ -224,6 +224,8 @@ func (f *outboundQueueFactory) CreateQueue(
 		shardContext.GetTimeSource(),
 		logger,
 		metricsHandler,
+		f.ThrottleState,
+		f.Config.TaskReschedulerMaxThrottledReleasesPerPass,
 	)
 
 	activeExecutor := newOutboundQueueActiveTaskExecutor(
@@ -275,6 +277,8 @@ func (f *outboundQueueFactory) CreateQueue(
 		f.Config.TaskDLQUnexpectedErrorAttempts,
 		f.Config.TaskDLQInternalErrors,
 		f.Config.TaskDLQErrorPattern,
+		f.ThrottleState,
+		shardContext.GetShardID(),
 	)
 	return queues.NewImmediateQueue(
 		shardContext,

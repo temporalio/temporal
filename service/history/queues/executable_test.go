@@ -57,6 +57,7 @@ type (
 		maxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
 		dlqInternalErrors          dynamicconfig.BoolPropertyFn
 		dlqErrorPattern            dynamicconfig.StringPropertyFn
+		throttleState              *queues.ThrottleState
 	}
 	option func(*params)
 )
@@ -124,6 +125,10 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 		expectError                  bool
 		expectedAttemptNoUserLatency time.Duration
 		expectBackoff                bool
+		// expectResubmit is false only when the throttle controller is enabled and the error is
+		// a namespace or system scoped throttle; these cases run with no controller at all, so
+		// the pre-existing fast path applies.
+		expectResubmit bool
 	}{
 		{
 			name:                         "NoError",
@@ -138,6 +143,7 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 			expectError:                  true,
 			expectedAttemptNoUserLatency: attemptNoUserLatency,
 			expectBackoff:                true,
+			expectResubmit:               true,
 		},
 		{
 			name:                         "NotFoundError",
@@ -159,6 +165,7 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 			expectError:                  true,
 			expectedAttemptNoUserLatency: 0,
 			expectBackoff:                false,
+			expectResubmit:               true,
 		},
 		{
 			name:                         "APSLimitError",
@@ -166,6 +173,7 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 			expectError:                  true,
 			expectedAttemptNoUserLatency: 0,
 			expectBackoff:                false,
+			expectResubmit:               true,
 		},
 		{
 			name: "OPSLimitError",
@@ -177,6 +185,7 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 			expectError:                  true,
 			expectedAttemptNoUserLatency: 0,
 			expectBackoff:                false,
+			expectResubmit:               true,
 		},
 		{
 			name:                         "PersistenceNamespaceLimitExceeded",
@@ -184,6 +193,7 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 			expectError:                  true,
 			expectedAttemptNoUserLatency: 0,
 			expectBackoff:                false,
+			expectResubmit:               true,
 		},
 	}
 
@@ -221,7 +231,9 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 
 			if tc.expectError {
 				s.Error(err)
-				s.mockScheduler.EXPECT().TrySubmit(executable).Return(false)
+				if tc.expectResubmit {
+					s.mockScheduler.EXPECT().TrySubmit(executable).Return(false)
+				}
 				s.mockRescheduler.EXPECT().Add(executable, gomock.Any())
 				executable.Nack(err)
 				return
@@ -1314,6 +1326,7 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 			params.MaxUnexpectedErrorAttempts = p.maxUnexpectedErrorAttempts
 			params.DLQInternalErrors = p.dlqInternalErrors
 			params.DLQErrorPattern = p.dlqErrorPattern
+			params.ThrottleState = p.throttleState
 		},
 	)
 }
@@ -1435,4 +1448,128 @@ func (s *executableSuite) TestTaskNack_BusyWorkflow_NoHandlerFallsBackToReschedu
 
 func (s *executableSuite) accessInternalState(executable queues.Executable) {
 	_ = fmt.Sprintf("%v", executable)
+}
+
+func (s *executableSuite) newTestThrottleState() *queues.ThrottleState {
+	return queues.NewThrottleState(
+		queues.ThrottleStateOptions{
+			Enabled:       dynamicconfig.GetBoolPropertyFn(true),
+			Beta:          dynamicconfig.GetFloatPropertyFn(0.85),
+			IncreaseRatio: dynamicconfig.GetFloatPropertyFn(0.1),
+			Window:        dynamicconfig.GetDurationPropertyFn(time.Second),
+			MinRate:       dynamicconfig.GetFloatPropertyFn(1),
+			MaxRate:       dynamicconfig.GetFloatPropertyFn(10000),
+			InitialRate:   dynamicconfig.GetFloatPropertyFn(100),
+			MaxKeys:       dynamicconfig.GetIntPropertyFn(1024),
+			KeyTTL:        dynamicconfig.GetDurationPropertyFn(time.Minute),
+		},
+		s.timeSource,
+		log.NewTestLogger(),
+		metrics.NoopMetricsHandler,
+	)
+}
+
+// Standby tasks are the largest population of "execute, do nothing, retry" and consume almost
+// nothing. Feeding their retries into the controller would throttle namespaces that are using
+// no resources at all.
+func (s *executableSuite) TestHandleErr_NonThrottleErrorsAreNotControllerInputs() {
+	testCases := []struct {
+		name    string
+		taskErr error
+	}{
+		{name: "StandbyTaskRetry", taskErr: consts.ErrTaskRetry},
+		{name: "DependencyTaskNotCompleted", taskErr: consts.ErrDependencyTaskNotCompleted},
+		{name: "NamespaceHandover", taskErr: consts.ErrNamespaceHandover},
+		{name: "NamespaceNotActive", taskErr: serviceerror.NewNamespaceNotActive("ns", "active", "standby")},
+		{name: "BusyWorkflow", taskErr: consts.ErrResourceExhaustedBusyWorkflow},
+		{
+			name: "CircuitBreakerOpen",
+			taskErr: &serviceerror.ResourceExhausted{
+				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CIRCUIT_BREAKER_OPEN,
+				Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+				Message: "circuit breaker open",
+			},
+		},
+		{name: "Unavailable", taskErr: serviceerror.NewUnavailable("unavailable")},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			throttleState := s.newTestThrottleState()
+			executable := s.newTestExecutable(func(p *params) {
+				p.throttleState = throttleState
+			})
+
+			for i := 0; i < 10; i++ {
+				_ = executable.HandleErr(tc.taskErr)
+			}
+
+			s.Zero(throttleState.Len())
+		})
+	}
+}
+
+func (s *executableSuite) TestHandleErr_ThrottleErrorsDriveController() {
+	throttleState := s.newTestThrottleState()
+	executable := s.newTestExecutable(func(p *params) {
+		p.throttleState = throttleState
+	})
+
+	throttleErr := &serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+		Message: "namespace APS limit reached",
+	}
+	key := queues.NewThrottleKey(
+		throttleErr.Cause,
+		throttleErr.Scope,
+		tests.NamespaceID.String(),
+		0,
+		tasks.CategoryTransfer.Name(),
+	)
+
+	provider, ok := executable.(queues.ThrottleKeyProvider)
+	s.True(ok)
+
+	// A rejection the gate never metered creates the class but must not move the rate: it is
+	// loss on a packet the controller did not send.
+	s.Error(executable.HandleErr(throttleErr))
+	s.Equal(1, throttleState.Len())
+	s.InEpsilon(100.0, throttleState.AdmittedRate(key), 1e-9)
+
+	provider.SetThrottleAdmitted(true)
+	s.Error(executable.HandleErr(throttleErr))
+	s.InEpsilon(85.0, throttleState.AdmittedRate(key), 1e-9)
+
+	// A subsequent non-throttle failure must take the task out of the throttled class, so it is
+	// not parked behind a budget it no longer needs.
+	s.Error(executable.HandleErr(serviceerror.NewUnavailable("unrelated")))
+	_, known := provider.ThrottleKey()
+	s.False(known)
+}
+
+// A workflow lock conflict is not a shared budget, so it must both keep its synchronous
+// resubmit fast path and take the task back out of the throttled class.
+func (s *executableSuite) TestHandleErr_BusyWorkflowClearsThrottleClass() {
+	throttleState := s.newTestThrottleState()
+	executable := s.newTestExecutable(func(p *params) {
+		p.throttleState = throttleState
+	})
+
+	s.Error(executable.HandleErr(&serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+		Message: "namespace APS limit reached",
+	}))
+	provider, ok := executable.(queues.ThrottleKeyProvider)
+	s.True(ok)
+	_, known := provider.ThrottleKey()
+	s.True(known)
+
+	s.Error(executable.HandleErr(consts.ErrResourceExhaustedBusyWorkflow))
+	_, known = provider.ThrottleKey()
+	s.False(known)
+
+	s.mockScheduler.EXPECT().TrySubmit(executable).Return(true)
+	executable.Nack(consts.ErrResourceExhaustedBusyWorkflow)
 }

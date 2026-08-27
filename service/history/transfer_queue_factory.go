@@ -114,6 +114,8 @@ func (f *transferQueueFactory) CreateQueue(
 		shardContext.GetTimeSource(),
 		logger,
 		metricsHandler,
+		f.ThrottleState,
+		f.Config.TaskReschedulerMaxThrottledReleasesPerPass,
 	)
 
 	activeExecutor := newTransferQueueActiveTaskExecutor(
@@ -173,6 +175,8 @@ func (f *transferQueueFactory) CreateQueue(
 		f.Config.TaskDLQUnexpectedErrorAttempts,
 		f.Config.TaskDLQInternalErrors,
 		f.Config.TaskDLQErrorPattern,
+		f.ThrottleState,
+		shardContext.GetShardID(),
 	)
 	return queues.NewImmediateQueue(
 		shardContext,

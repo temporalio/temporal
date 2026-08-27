@@ -3,6 +3,7 @@
 package queues
 
 import (
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -50,11 +52,24 @@ type (
 		rescheduleTime time.Time
 	}
 
+	// reschedulerKey partitions parked tasks by the throttle class that governs them as well as
+	// by namespace and priority, so a class that is waiting on a budget cannot head of line
+	// block a class that failed for an unrelated reason and is ready to run now. The whole
+	// ThrottleKey is part of the key, not just its cause: the same cause reported at namespace
+	// scope and at system scope is governed by two different budgets, and sharing one class
+	// between them would let whichever arrived last decide how the other drains.
+	reschedulerKey struct {
+		TaskChannelKey
+		Throttle ThrottleKey
+	}
+
 	reschedulerImpl struct {
-		scheduler      Scheduler
-		timeSource     clock.TimeSource
-		logger         log.Logger
-		metricsHandler metrics.Handler
+		scheduler                   Scheduler
+		timeSource                  clock.TimeSource
+		logger                      log.Logger
+		metricsHandler              metrics.Handler
+		throttleState               *ThrottleState
+		maxThrottledReleasesPerPass dynamicconfig.IntPropertyFn
 
 		status     int32
 		shutdownCh chan struct{}
@@ -64,7 +79,9 @@ type (
 		taskChannelKeyFn TaskChannelKeyFn
 
 		sync.Mutex
-		pqMap          map[TaskChannelKey]collection.Queue[rescheduledExecuable]
+		pqMap          map[reschedulerKey]collection.Queue[rescheduledExecuable]
+		keyOrder       []reschedulerKey
+		rrCursor       int
 		numExecutables int
 	}
 )
@@ -74,12 +91,19 @@ func NewRescheduler(
 	timeSource clock.TimeSource,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
+	throttleState *ThrottleState,
+	maxThrottledReleasesPerPass dynamicconfig.IntPropertyFn,
 ) *reschedulerImpl {
+	if maxThrottledReleasesPerPass == nil {
+		maxThrottledReleasesPerPass = dynamicconfig.GetIntPropertyFn(math.MaxInt)
+	}
 	return &reschedulerImpl{
-		scheduler:      scheduler,
-		timeSource:     timeSource,
-		logger:         logger,
-		metricsHandler: metricsHandler,
+		scheduler:                   scheduler,
+		timeSource:                  timeSource,
+		logger:                      logger,
+		metricsHandler:              metricsHandler,
+		throttleState:               throttleState,
+		maxThrottledReleasesPerPass: maxThrottledReleasesPerPass,
 
 		status:     common.DaemonStatusInitialized,
 		shutdownCh: make(chan struct{}),
@@ -87,7 +111,7 @@ func NewRescheduler(
 		timerGate:        timer.NewLocalGate(timeSource),
 		taskChannelKeyFn: scheduler.TaskChannelKeyFn(),
 
-		pqMap: make(map[TaskChannelKey]collection.Queue[rescheduledExecuable]),
+		pqMap: make(map[reschedulerKey]collection.Queue[rescheduledExecuable]),
 	}
 }
 
@@ -121,8 +145,13 @@ func (r *reschedulerImpl) Add(
 	executable Executable,
 	rescheduleTime time.Time,
 ) {
+	key := reschedulerKey{TaskChannelKey: r.taskChannelKeyFn(executable)}
+	if r.gating() {
+		key.Throttle, _ = executableThrottleKey(executable)
+	}
+
 	r.Lock()
-	pq := r.getOrCreatePQLocked(r.taskChannelKeyFn(executable))
+	pq := r.getOrCreateClassLocked(key)
 	pq.Add(rescheduledExecuable{
 		executable:     executable,
 		rescheduleTime: rescheduleTime,
@@ -133,6 +162,25 @@ func (r *reschedulerImpl) Add(
 
 	if r.isStopped() {
 		r.drain()
+	}
+}
+
+// executableThrottleKey returns the throttle controller key the executable last failed under.
+// Executables that did not fail with a controller relevant resource exhausted error report no
+// key, which keeps them in an ungated class.
+func executableThrottleKey(executable Executable) (ThrottleKey, bool) {
+	reporter, ok := executable.(ThrottleKeyProvider)
+	if !ok {
+		return ThrottleKey{}, false
+	}
+	return reporter.ThrottleKey()
+}
+
+// setThrottleAdmitted tells the executable whether this dispatch was metered by the controller,
+// so a rejection from it is a signal the control law may act on.
+func setThrottleAdmitted(executable Executable, admitted bool) {
+	if reporter, ok := executable.(ThrottleKeyProvider); ok {
+		reporter.SetThrottleAdmitted(admitted)
 	}
 }
 
@@ -205,12 +253,143 @@ func (r *reschedulerImpl) rescheduleLoop() {
 
 }
 
+// reschedule drains every class that is both due and within its release budget. The budget is
+// a ceiling, never a quota: per task backoff still governs individual eligibility, so a class
+// with budget left may still release nothing because its head is not due yet. The head is never
+// reached past, because a class queue is time ordered and shrinkRange tracks the oldest pending
+// key to derive the ack level.
+// reschedulePass is the state one reschedule pass shares across classes: the running minimum
+// wake time, and a release ceiling every gated class draws from so one class cannot consume the
+// whole pass.
+type reschedulePass struct {
+	now               time.Time
+	nextWake          time.Time
+	releasesRemaining int
+}
+
+func (p *reschedulePass) wakeAt(t time.Time) {
+	if p.nextWake.IsZero() || t.Before(p.nextWake) {
+		p.nextWake = t
+	}
+}
+
 func (r *reschedulerImpl) reschedule() {
 	r.Lock()
 	defer r.Unlock()
 
 	metrics.TaskReschedulerPendingTasks.With(r.metricsHandler).Record(int64(r.numExecutables))
 	now := r.timeSource.Now()
+
+	if !r.gating() {
+		r.rescheduleUngatedLocked(now)
+		return
+	}
+
+	// A non positive cap means unlimited, matching the unset default. Treating 0 as a literal
+	// ceiling would make every gated class break before its first release and never drain.
+	remaining := r.maxThrottledReleasesPerPass()
+	if remaining <= 0 {
+		remaining = math.MaxInt
+	}
+	pass := reschedulePass{now: now, releasesRemaining: remaining}
+
+	n := len(r.keyOrder)
+	for i := 0; i < n; i++ {
+		key := r.keyOrder[(r.rrCursor+i)%n]
+		if pq, ok := r.pqMap[key]; ok && !pq.IsEmpty() {
+			r.drainClassLocked(key, pq, &pass)
+		}
+	}
+	if n > 0 {
+		r.rrCursor = (r.rrCursor + 1) % n
+	}
+
+	if !pass.nextWake.IsZero() {
+		r.timerGate.Update(pass.nextWake)
+	}
+}
+
+// drainClassLocked releases from one class until it runs out of due tasks, of pass budget, or of
+// scheduler capacity, recording on pass when the class next wants to be woken.
+//
+// Budget is a ceiling, never a quota: per task backoff still governs individual eligibility, so a
+// class with budget left may still release nothing because its head is not due. The head is never
+// reached past, because a class queue is time ordered and shrinkRange derives the ack level from
+// the oldest pending key.
+func (r *reschedulerImpl) drainClassLocked(
+	key reschedulerKey,
+	pq collection.Queue[rescheduledExecuable],
+	pass *reschedulePass,
+) {
+	gated := key.Throttle != (ThrottleKey{})
+	metrics.TaskReschedulerClassQueueDepth.With(r.metricsHandler).Record(
+		int64(pq.Len()), r.classTags(key)...)
+
+	for !pq.IsEmpty() {
+		if gated && pass.releasesRemaining <= 0 {
+			// The pass, not the class, is out of room. Come back promptly, since the work is
+			// due and some other class may simply have taken this pass's releases.
+			pass.wakeAt(pass.now.Add(r.budgetRetryInterval()))
+			return
+		}
+
+		rescheduled := pq.Peek()
+		if rescheduleTime := rescheduled.rescheduleTime; pass.now.Before(rescheduleTime) {
+			pass.wakeAt(rescheduleTime)
+			return
+		}
+
+		executable := rescheduled.executable
+		if executable.State() == ctasks.TaskStateCancelled {
+			pq.Remove()
+			r.numExecutables--
+			continue
+		}
+
+		if gated && !r.throttleState.Admit(key.Throttle) {
+			metrics.TaskReschedulerBudgetDenied.With(r.metricsHandler).Record(1, r.classTags(key)...)
+			// The class is over its admitted rate. Come back within the control window rather
+			// than at the head's own backoff, which is far longer.
+			pass.wakeAt(pass.now.Add(r.budgetRetryInterval()))
+			return
+		}
+
+		executable.SetScheduledTime(pass.now)
+		if gated {
+			// Mark before submitting. TrySubmit hands the executable to a worker that can reach
+			// HandleErr before this goroutine continues, and a rejection the gate is not
+			// recorded as having issued is discarded by the control law.
+			setThrottleAdmitted(executable, true)
+		}
+		if !r.scheduler.TrySubmit(executable) {
+			if gated {
+				setThrottleAdmitted(executable, false)
+				r.throttleState.Return(key.Throttle)
+			}
+			pass.wakeAt(pass.now.Add(
+				backoff.Jitter(taskChanFullBackoff, taskChanFullBackoffJitterCoefficient)))
+			return
+		}
+
+		pq.Remove()
+		r.numExecutables--
+		metrics.TaskReschedulerReleases.With(r.metricsHandler).Record(1, r.classTags(key)...)
+		if gated {
+			pass.releasesRemaining--
+		}
+	}
+}
+
+// gating reports whether the throttle controller is governing releases. When it is not, the
+// rescheduler runs exactly as it does upstream: one queue per task channel key, no round robin
+// cursor, and the timer gate updated inline from whichever class set it last.
+func (r *reschedulerImpl) gating() bool {
+	return r.throttleState != nil && r.throttleState.Enabled()
+}
+
+// rescheduleUngatedLocked is the upstream reschedule loop, kept verbatim so that disabling the
+// controller disables the whole change and not just the admission gate.
+func (r *reschedulerImpl) rescheduleUngatedLocked(now time.Time) {
 	for _, pq := range r.pqMap {
 		for !pq.IsEmpty() {
 			rescheduled := pq.Peek()
@@ -228,8 +407,7 @@ func (r *reschedulerImpl) reschedule() {
 			}
 
 			executable.SetScheduledTime(now)
-			submitted := r.scheduler.TrySubmit(executable)
-			if !submitted {
+			if !r.scheduler.TrySubmit(executable) {
 				r.timerGate.Update(now.Add(backoff.Jitter(taskChanFullBackoff, taskChanFullBackoffJitterCoefficient)))
 				break
 			}
@@ -237,6 +415,23 @@ func (r *reschedulerImpl) reschedule() {
 			pq.Remove()
 			r.numExecutables--
 		}
+	}
+}
+
+// budgetRetryInterval is how long a budget denied class waits before the next release attempt.
+// It is a fraction of the control window so a class at its budget still releases smoothly
+// rather than in one burst per window.
+func (r *reschedulerImpl) budgetRetryInterval() time.Duration {
+	const budgetRetryDivisor = 10
+	interval := r.throttleState.options.Window() / budgetRetryDivisor
+	return max(interval, time.Millisecond)
+}
+
+func (r *reschedulerImpl) classTags(key reschedulerKey) []metrics.Tag {
+	return []metrics.Tag{
+		metrics.NamespaceIDTag(key.NamespaceID),
+		metrics.TaskPriorityTag(key.Priority.String()),
+		metrics.ResourceExhaustedCauseTag(key.Throttle.Cause),
 	}
 }
 
@@ -249,6 +444,7 @@ func (r *reschedulerImpl) cleanupPQ() {
 			delete(r.pqMap, key)
 		}
 	}
+	r.rebuildKeyOrderLocked()
 }
 
 func (r *reschedulerImpl) drain() {
@@ -261,16 +457,34 @@ func (r *reschedulerImpl) drain() {
 		}
 		delete(r.pqMap, key)
 	}
+	r.keyOrder = nil
+	r.rrCursor = 0
 
 	r.numExecutables = 0
+}
+
+func (r *reschedulerImpl) rebuildKeyOrderLocked() {
+	if len(r.keyOrder) == len(r.pqMap) {
+		return
+	}
+	order := r.keyOrder[:0]
+	for _, key := range r.keyOrder {
+		if _, ok := r.pqMap[key]; ok {
+			order = append(order, key)
+		}
+	}
+	r.keyOrder = order
+	if len(r.keyOrder) == 0 {
+		r.rrCursor = 0
+	}
 }
 
 func (r *reschedulerImpl) isStopped() bool {
 	return atomic.LoadInt32(&r.status) == common.DaemonStatusStopped
 }
 
-func (r *reschedulerImpl) getOrCreatePQLocked(
-	key TaskChannelKey,
+func (r *reschedulerImpl) getOrCreateClassLocked(
+	key reschedulerKey,
 ) collection.Queue[rescheduledExecuable] {
 	if pq, ok := r.pqMap[key]; ok {
 		return pq
@@ -278,6 +492,7 @@ func (r *reschedulerImpl) getOrCreatePQLocked(
 
 	pq := r.newPriorityQueue(nil)
 	r.pqMap[key] = pq
+	r.keyOrder = append(r.keyOrder, key)
 	return pq
 }
 

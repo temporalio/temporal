@@ -2086,6 +2086,68 @@ The actual count is calculated as base * (multiplier ^ level)`,
 The actual count is calculated as base * (multiplier ^ level)`,
 	)
 
+	TaskThrottleControllerEnabled = NewGlobalBoolSetting(
+		"history.taskThrottleControllerEnabled",
+		false,
+		`TaskThrottleControllerEnabled turns on the host level throttle aware task retry controller.
+When enabled, the rescheduler releases parked tasks for a throttled class at the class's AIMD
+admitted rate instead of letting every parked task rediscover the throttle on its own backoff.`,
+	)
+	TaskThrottleControllerBeta = NewGlobalFloatSetting(
+		"history.taskThrottleControllerBeta",
+		0.85,
+		`TaskThrottleControllerBeta is the multiplicative decrease factor applied to a class's
+admitted rate when a throttle is observed. At most one decrease is applied per control window.`,
+	)
+	TaskThrottleControllerIncreaseRatio = NewGlobalFloatSetting(
+		"history.taskThrottleControllerIncreaseRatio",
+		0.10,
+		`TaskThrottleControllerIncreaseRatio is the fraction of the current admitted rate added
+after a control window that saw no throttle. Expressed as a ratio so it is scale free.`,
+	)
+	TaskThrottleControllerWindow = NewGlobalDurationSetting(
+		"history.taskThrottleControllerWindow",
+		time.Second,
+		`TaskThrottleControllerWindow is the control window. At most one multiplicative decrease
+and one additive increase are applied per window per key.`,
+	)
+	TaskThrottleControllerMinRate = NewGlobalFloatSetting(
+		"history.taskThrottleControllerMinRate",
+		1.0,
+		`TaskThrottleControllerMinRate is the floor, in task releases per second, for a class's
+admitted rate. It guarantees forward progress and lets a class rediscover recovery.`,
+	)
+	TaskThrottleControllerMaxRate = NewGlobalFloatSetting(
+		"history.taskThrottleControllerMaxRate",
+		10000.0,
+		`TaskThrottleControllerMaxRate is the ceiling, in task releases per second, for a class's
+admitted rate. It stops a long idle period from letting additive increase climb without bound.`,
+	)
+	TaskThrottleControllerInitialRate = NewGlobalFloatSetting(
+		"history.taskThrottleControllerInitialRate",
+		1000.0,
+		`TaskThrottleControllerInitialRate is the admitted rate a newly tracked class starts at.`,
+	)
+	TaskThrottleControllerMaxKeys = NewGlobalIntSetting(
+		"history.taskThrottleControllerMaxKeys",
+		1024,
+		`TaskThrottleControllerMaxKeys caps the number of tracked keys per throttle scope map.
+Past the cap the controller fails open and lets the real limiter reject.`,
+	)
+	TaskThrottleControllerKeyTTL = NewGlobalDurationSetting(
+		"history.taskThrottleControllerKeyTTL",
+		5*time.Minute,
+		`TaskThrottleControllerKeyTTL is how long an idle throttle controller key is retained
+before the sweep evicts it.`,
+	)
+
+	TaskReschedulerMaxThrottledReleasesPerPass = NewGlobalIntSetting(
+		"history.taskReschedulerMaxThrottledReleasesPerPass",
+		1000,
+		`TaskReschedulerMaxThrottledReleasesPerPass caps how many tasks belonging to throttled
+classes a single rescheduler pass may release, so one pass cannot monopolize the scheduler.`,
+	)
+
 	TaskSchedulerEnableRateLimiter = NewGlobalBoolSetting(
 		"history.taskSchedulerEnableRateLimiter",
 		false,

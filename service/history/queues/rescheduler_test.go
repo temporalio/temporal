@@ -51,6 +51,8 @@ func (s *rescheudulerSuite) SetupTest() {
 		s.timeSource,
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
+		nil,
+		nil,
 	)
 }
 
@@ -65,6 +67,8 @@ func (s *rescheudulerSuite) TestStartStop() {
 		timeSource,
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
+		nil,
+		nil,
 	)
 
 	rescheduler.Start()
@@ -101,6 +105,8 @@ func (s *rescheudulerSuite) TestDrain() {
 		timeSource,
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
+		nil,
+		nil,
 	)
 
 	rescheduler.Start()

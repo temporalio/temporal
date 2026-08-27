@@ -157,6 +157,8 @@ func (f *archivalQueueFactory) newScheduledQueue(shard historyi.ShardContext, ex
 		shard.GetTimeSource(),
 		logger,
 		metricsHandler,
+		f.ThrottleState,
+		f.Config.TaskReschedulerMaxThrottledReleasesPerPass,
 	)
 
 	factory := queues.NewExecutableFactory(
@@ -177,6 +179,8 @@ func (f *archivalQueueFactory) newScheduledQueue(shard historyi.ShardContext, ex
 		f.Config.TaskDLQUnexpectedErrorAttempts,
 		f.Config.TaskDLQInternalErrors,
 		f.Config.TaskDLQErrorPattern,
+		f.ThrottleState,
+		shard.GetShardID(),
 	)
 	return queues.NewScheduledQueue(
 		shard,
