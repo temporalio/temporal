@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payloads"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -31,43 +32,120 @@ func TestClampVersion(t *testing.T) {
 	}
 }
 
-// TestDetermineVersionLocksAfterFirstEvaluation verifies the ceiling is read once and the version is
-// then locked for the run.
-func TestDetermineVersionLocksAfterFirstEvaluation(t *testing.T) {
-	calls := 0
-	s := &scheduler{versionCeiling: func() int { calls++; return oldPeerCeiling }}
+func TestDetermineVersionTransitions(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		ceiling  int
+		defaults []SchedulerWorkflowVersion
+		versions []SchedulerWorkflowVersion
+	}{
+		{
+			name:     "stays at ceiling",
+			ceiling:  oldPeerCeiling,
+			defaults: []SchedulerWorkflowVersion{oldPeerCeiling, oldPeerCeiling + 1, oldPeerCeiling + 2},
+			versions: []SchedulerWorkflowVersion{oldPeerCeiling, oldPeerCeiling, oldPeerCeiling},
+		},
+		{
+			name:     "current version below dynamic config ceiling",
+			ceiling:  oldPeerCeiling,
+			defaults: []SchedulerWorkflowVersion{oldPeerCeiling - 1, oldPeerCeiling, oldPeerCeiling + 1},
+			versions: []SchedulerWorkflowVersion{oldPeerCeiling - 1, oldPeerCeiling, oldPeerCeiling},
+		},
+		{
+			name:     "advances without ceiling",
+			ceiling:  -1,
+			defaults: []SchedulerWorkflowVersion{TriggerImmediatelyTimestamp - 1, TriggerImmediatelyTimestamp, TriggerImmediatelyTimestamp + 1},
+			versions: []SchedulerWorkflowVersion{TriggerImmediatelyTimestamp - 1, TriggerImmediatelyTimestamp, TriggerImmediatelyTimestamp + 1},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			s := &scheduler{
+				logger: log.NewSdkLogger(log.NewNoopLogger()),
+				versionCeiling: func() int {
+					calls++
+					return tc.ceiling
+				},
+			}
+			for i, defaultVersion := range tc.defaults {
+				version, ceiling := s.determineVersion(defaultVersion)
+				require.Equal(t, tc.versions[i], version)
+				require.Equal(t, tc.ceiling, ceiling)
 
-	// First evaluation: tweakables not yet recorded.
-	got := s.determineVersion(TriggerImmediatelyTimestamp)
-	require.Equal(t, SchedulerWorkflowVersion(oldPeerCeiling), got)
-	require.Equal(t, 1, calls)
-
-	// Record tweakables as the MutableSideEffect would after the first evaluation.
-	s.tweakables = CurrentTweakablePolicies
-	s.tweakables.Version = got
-
-	// Later evaluations reuse the recorded version and don't re-read the ceiling.
-	require.Equal(t, got, s.determineVersion(TriggerImmediatelyTimestamp))
-	require.Equal(t, 1, calls, "ceiling read once; version locked thereafter")
+				// MutableSideEffect stores this value for the next workflow task.
+				s.tweakables = CurrentTweakablePolicies
+				s.tweakables.Version = version
+				s.tweakables.VersionCeiling = ceiling
+				s.tweakables.VersionCeilingSet = true
+			}
+			require.Equal(t, len(tc.defaults), calls, "ceiling is re-read each iteration so it can ratchet tighter")
+		})
+	}
 }
 
-// TestDetermineVersionLocksAtZeroCeiling verifies the lock holds when the run is clamped to
-// InitialVersion (0): a mid-run ceiling change must not move the recorded version. This guards the
-// whole-struct "already recorded" check, which a bare Version != 0 check would miss (0 is a valid
-// recorded version).
+// TestDetermineVersionDowngradeOnNextRun verifies that after a run kept v13 as a floor while the
+// ceiling was tightened to 12, the following run (fresh tweakables after continue-as-new) reads
+// dynamic config and starts capped at 12.
+func TestDetermineVersionDowngradeOnNextRun(t *testing.T) {
+	ceiling := int(TriggerImmediatelyTimestamp)
+	s := &scheduler{
+		logger:         log.NewSdkLogger(log.NewNoopLogger()),
+		versionCeiling: func() int { return ceiling },
+	}
+	version, recordedCeiling := s.determineVersion(TriggerImmediatelyTimestamp)
+	require.Equal(t, SchedulerWorkflowVersion(TriggerImmediatelyTimestamp), version)
+	require.Equal(t, int(TriggerImmediatelyTimestamp), recordedCeiling)
+}
+
+// TestDetermineVersionLocksAtZeroCeiling verifies that zero is recorded as a real ceiling rather
+// than treated as an unset value.
 func TestDetermineVersionLocksAtZeroCeiling(t *testing.T) {
 	ceiling := 0
 	s := &scheduler{versionCeiling: func() int { return ceiling }}
 
 	// First evaluation clamps to InitialVersion (0) and records it.
-	got := s.determineVersion(TriggerImmediatelyTimestamp)
-	require.Equal(t, InitialVersion, got)
+	version, recordedCeiling := s.determineVersion(TriggerImmediatelyTimestamp)
+	require.Equal(t, InitialVersion, version)
+	require.Equal(t, 0, recordedCeiling)
 	s.tweakables = CurrentTweakablePolicies
-	s.tweakables.Version = got
+	s.tweakables.Version = version
+	s.tweakables.VersionCeiling = recordedCeiling
+	s.tweakables.VersionCeilingSet = true
 
-	// The ceiling is lifted mid-run, but the recorded version stays locked at InitialVersion.
+	// The configured ceiling is lifted mid-run, but the recorded ceiling stays at InitialVersion.
 	ceiling = -1
-	require.Equal(t, InitialVersion, s.determineVersion(TriggerImmediatelyTimestamp))
+	version, recordedCeiling = s.determineVersion(TriggerImmediatelyTimestamp)
+	require.Equal(t, InitialVersion, version)
+	require.Equal(t, 0, recordedCeiling)
+}
+
+func TestDetermineVersionPreservesLegacyRecordedVersion(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		version SchedulerWorkflowVersion
+	}{
+		{name: "initial version", version: InitialVersion},
+		{name: "current version", version: TriggerImmediatelyTimestamp},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			s := &scheduler{
+				logger: log.NewSdkLogger(log.NewNoopLogger()),
+				versionCeiling: func() int {
+					calls++
+					return oldPeerCeiling
+				},
+			}
+			s.tweakables = CurrentTweakablePolicies
+			s.tweakables.Version = tc.version
+			// VersionCeilingSet is false for a marker written before this field existed.
+
+			version, ceiling := s.determineVersion(TriggerImmediatelyTimestamp)
+			require.Equal(t, tc.version, version)
+			require.Equal(t, int(tc.version), ceiling)
+			require.Zero(t, calls, "legacy histories must not read the current version ceiling")
+		})
+	}
 }
 
 // TestVersionCeilingWithCHASMMigration verifies that a clamp below the CHASM gate keeps migration
