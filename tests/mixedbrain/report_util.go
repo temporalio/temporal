@@ -1,20 +1,21 @@
 package mixedbrain
 
 import (
-	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
 )
 
-const (
-	mixedBrainSummaryFile = "mixedbrain-summary.md"
-	diagnosticMaxLines    = 100
-	diagnosticMaxBytes    = 64 << 10
-)
+const mixedBrainSummaryFile = "mixedbrain-summary.md"
+
+type mixedBrainOmesError struct {
+	Scenario string
+	omesLogFinding
+}
 
 type mixedBrainReport struct {
 	StartedAt      time.Time
@@ -27,6 +28,7 @@ type mixedBrainReport struct {
 	ChaosEvents    *chaosEvents
 	ProxyCounts    map[string]int64
 	Logs           map[string]string
+	OmesErrors     []mixedBrainOmesError
 }
 
 func (r *mixedBrainReport) markdown() string {
@@ -61,6 +63,21 @@ func (r *mixedBrainReport) markdown() string {
 	} else {
 		fmt.Fprintf(&out, "- Proxy traffic: unavailable\n")
 	}
+	if len(r.OmesErrors) > 0 {
+		fmt.Fprintf(&out, "- **Recurring Omes errors:** %d\n", len(r.OmesErrors))
+		out.WriteString("\n## Recurring Omes errors\n\n")
+		out.WriteString("| Scenario | Level | Error | Occurrences | First seen |\n")
+		out.WriteString("| --- | --- | --- | ---: | --- |\n")
+		for _, finding := range r.OmesErrors {
+			fmt.Fprintf(&out, "| %s | %s | %s | %d | %s |\n",
+				markdownTableValue(finding.Scenario),
+				finding.level,
+				markdownTableValue(finding.message),
+				finding.count,
+				valueOrUnavailable(finding.firstSeen),
+			)
+		}
+	}
 	if len(events) > 0 {
 		out.WriteString("\n## Process restarts\n\n")
 		out.WriteString("| Target | Started | Restart completed | Cluster reformed | Result |\n")
@@ -75,11 +92,15 @@ func (r *mixedBrainReport) markdown() string {
 				formatEventTime(event.StartedAt),
 				formatEventTime(event.RestartedAt),
 				formatEventTime(event.ReformedAt),
-				strings.ReplaceAll(result, "|", "\\|"),
+				markdownTableValue(result),
 			)
 		}
 	}
 	return out.String()
+}
+
+func markdownTableValue(value string) string {
+	return strings.ReplaceAll(value, "|", "\\|")
 }
 
 func valueOrUnavailable(value string) string {
@@ -107,54 +128,39 @@ func registerMixedBrainReport(t *testing.T, outputRoot string, report *mixedBrai
 				"release": (*proxyRef).callCount[1].Load(),
 			}
 		}
+		collectOmesErrorFindings(t, report)
 		if err := os.WriteFile(filepath.Join(outputRoot, mixedBrainSummaryFile), []byte(report.markdown()), 0644); err != nil {
 			t.Errorf("write mixed-brain summary: %v", err)
-		}
-		if report.Passed {
-			return
-		}
-		for name, path := range report.Logs {
-			if strings.HasPrefix(name, "Omes ") {
-				synopsis, err := summarizeOmesFailure(path)
-				if os.IsNotExist(err) {
-					continue
-				}
-				if err != nil {
-					t.Logf("scan %s log: %v", name, err)
-					continue
-				}
-				if findings := synopsis.formatErrorFindings(); findings != "" {
-					t.Logf("Aggregated %s log errors (%s):\n%s", name, path, findings)
-					continue
-				}
-			}
-			tail, err := boundedLogTail(path, diagnosticMaxLines, diagnosticMaxBytes)
-			if os.IsNotExist(err) {
-				continue
-			}
-			if err != nil {
-				t.Logf("read %s diagnostics: %v", name, err)
-				continue
-			}
-			t.Logf("Trailing %s log (%s):\n%s", name, path, tail)
 		}
 	})
 }
 
-func boundedLogTail(path string, maxLines, maxBytes int) (string, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", err
-	}
-	if len(data) > maxBytes {
-		data = data[len(data)-maxBytes:]
-		if newline := bytes.IndexByte(data, '\n'); newline >= 0 {
-			data = data[newline+1:]
+func collectOmesErrorFindings(t *testing.T, report *mixedBrainReport) {
+	t.Helper()
+	report.OmesErrors = nil
+	for name, path := range report.Logs {
+		if !strings.HasPrefix(name, "Omes ") {
+			continue
+		}
+		synopsis, err := summarizeOmesFailure(path)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			t.Logf("scan %s log: %v", name, err)
+			continue
+		}
+		for _, finding := range synopsis.errorFindings {
+			report.OmesErrors = append(report.OmesErrors, mixedBrainOmesError{
+				Scenario:       strings.TrimPrefix(name, "Omes "),
+				omesLogFinding: finding,
+			})
 		}
 	}
-	lines := bytes.Split(bytes.TrimRight(data, "\n"), []byte{'\n'})
-	if len(lines) > maxLines {
-		lines = lines[len(lines)-maxLines:]
-	}
-	return string(bytes.Join(lines, []byte{'\n'})), nil
+	sort.Slice(report.OmesErrors, func(i, j int) bool {
+		if report.OmesErrors[i].Scenario != report.OmesErrors[j].Scenario {
+			return report.OmesErrors[i].Scenario < report.OmesErrors[j].Scenario
+		}
+		return report.OmesErrors[i].count > report.OmesErrors[j].count
+	})
 }
