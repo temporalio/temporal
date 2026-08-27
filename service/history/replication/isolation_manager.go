@@ -233,12 +233,16 @@ func (m *isolationManager) DefaultFilter() func(task tasks.Task) bool {
 	if len(m.members) == 0 {
 		return nil
 	}
-	predicate := predicates.Not[tasks.Task](tasks.NewNamespacePredicate(m.sortedMembers()))
+	members := make([]string, 0, len(m.members))
+	for ns := range m.members {
+		members = append(members, ns)
+	}
+	predicate := predicates.Not[tasks.Task](tasks.NewNamespacePredicate(members))
 	return predicate.Test
 }
 
-// sortedMembers returns the isolated namespaces in sorted order so filters and
-// persisted state are deterministic across calls. Caller must hold m.mu.
+// sortedMembers returns the isolated namespaces in sorted order so persisted state
+// is deterministic across calls. Caller must hold m.mu.
 func (m *isolationManager) sortedMembers() []string {
 	out := make([]string, 0, len(m.members))
 	for ns := range m.members {
