@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/wideevents"
@@ -153,6 +154,9 @@ func TestHandleNamespaceReplicationTaskCountsRetries(t *testing.T) {
 
 func TestHandleNamespaceReplicationTaskEmitsDLQed(t *testing.T) {
 	p, task, executor, queue, eventLogger := newReplicationEventTestProcessor(t, true, 1)
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	p.metricsHandler = metricsHandler
 	executor.EXPECT().Execute(gomock.Any(), task.GetNamespaceTaskAttributes()).Return(serviceerror.NewInvalidArgument("bad task"))
 	queue.EXPECT().PublishToDLQ(gomock.Any(), task).Return(nil)
 
@@ -162,6 +166,10 @@ func TestHandleNamespaceReplicationTaskEmitsDLQed(t *testing.T) {
 	require.InDelta(t, float64(1), dlqed["attempt_count"], 0)
 	require.Equal(t, "bad task", dlqed["error"])
 	require.NotContains(t, dlqed, "persistence_request")
+	recordings := capture.Snapshot()[metrics.ReplicatorFailures.Name()]
+	require.Len(t, recordings, 1)
+	taskTypeTag := metrics.ReplicationTaskTypeTag(task.TaskType)
+	require.Equal(t, taskTypeTag.Value, recordings[0].Tags[taskTypeTag.Key])
 }
 
 func TestHandleNamespaceReplicationTaskEventsDisabled(t *testing.T) {
