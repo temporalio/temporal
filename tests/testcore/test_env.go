@@ -10,11 +10,13 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/require"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
@@ -33,6 +35,7 @@ import (
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/temporal"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 // shardSalt is used to distribute functional tests across shards.
@@ -90,13 +93,13 @@ type TestOption func(*testOptions)
 
 type testOptions struct {
 	dedicatedCluster         bool
-	needWorkerService        bool
 	dedicatedReason          string
 	disableTestloggerFailure bool
 	dynamicConfigSettings    []dynamicConfigOverride
 	clusterOptions           []TestClusterOption
 	testVars                 func(*testvars.TestVars) *testvars.TestVars
 	historyTaskRecorder      bool
+	wantsWorkerService       bool
 }
 
 type dynamicConfigOverride struct {
@@ -150,13 +153,17 @@ func WithTestVars(fn func(*testvars.TestVars) *testvars.TestVars) TestOption {
 	}
 }
 
-// WithWorkerService enables the system worker service. The service is off by
-// default to avoid the worker overhead. This implies a dedicated cluster.
+// WithWorkerService enables a per-namespace system worker for this test's namespace.
+// Tests that opt in are routed to a single shared cluster dedicated to running the
+// worker-service process, so its fixed goroutine/memory cost is paid once instead of
+// on every shared-pool cluster; per-namespace workers are further gated by dynamic
+// config, so this only affects the calling test's own namespace. Does not require a
+// dedicated cluster.
 func WithWorkerService(reason string) TestOption {
+	withDC := WithDynamicConfig(dynamicconfig.WorkerPerNamespaceWorkerCount, 1)
 	return func(o *testOptions) {
-		o.dedicatedCluster = true
-		o.needWorkerService = true
-		o.dedicatedReason = "worker service required: " + reason
+		o.wantsWorkerService = true
+		withDC(o)
 	}
 }
 
@@ -284,11 +291,11 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 
 	// Obtain the test cluster from the router.
 	base := testClusterRouter.get(t, clusterRequest{
-		dedicated:         options.dedicatedCluster,
-		needWorkerService: options.needWorkerService,
-		dedicatedReason:   options.dedicatedReason,
-		dynamicConfig:     startupConfig,
-		clusterOpts:       options.clusterOptions,
+		dedicated:          options.dedicatedCluster,
+		dedicatedReason:    options.dedicatedReason,
+		wantsWorkerService: options.wantsWorkerService,
+		dynamicConfig:      startupConfig,
+		clusterOpts:        options.clusterOptions,
 	})
 	cluster := base.GetTestCluster()
 
@@ -338,6 +345,26 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 			t.Fatal(err)
 		}
 	})
+
+	if !options.dedicatedCluster && options.wantsWorkerService {
+		// The worker-service shared cluster outlives this test, so delete the
+		// test's namespace through the real delete-namespace workflow instead
+		// of letting it accumulate for the cluster's whole lifetime. This only
+		// applies to worker-service-enabled clusters: the delete-namespace
+		// workflow itself needs a worker polling the default worker task queue
+		// to run, which the plain shared pool doesn't have.
+		t.Cleanup(func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			_, err := env.OperatorClient().DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
+				Namespace:            ns.String(),
+				NamespaceDeleteDelay: durationpb.New(0),
+			})
+			if err != nil {
+				t.Logf("Failed to delete namespace %q: %v", ns, err)
+			}
+		})
+	}
 
 	if options.disableTestloggerFailure {
 		tl, ok := base.Logger.(*testlogger.TestLogger)

@@ -274,9 +274,8 @@ func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption)
 	testClusterRouter.dedicated.reserveSlot(s.T())
 	s.setupCluster(options...)
 	clusterRequest{
-		kind:              clusterKindDedicated,
-		dedicatedReason:   "legacy-suite",
-		needWorkerService: ApplyTestClusterOptions(options).EnableWorkerService,
+		kind:            clusterKindDedicated,
+		dedicatedReason: "legacy-suite",
 	}.recordCreation(s.T())
 }
 

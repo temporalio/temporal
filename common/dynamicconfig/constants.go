@@ -3612,6 +3612,38 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		false,
 		`WorkerGenerateMigrationTaskViaFrontend controls whether to generate migration tasks via frontend admin service.`,
 	)
+	WorkerDefaultActivityLimits = NewGlobalTypedSetting(
+		"worker.defaultActivityLimitsConfig",
+		sdkworker.Options{},
+		`WorkerDefaultActivityLimits is a struct with relevant sdkworker.Options settings for
+controlling worker concurrency on the shared default worker-service worker.
+Valid fields: MaxConcurrentActivityTaskPollers, MaxConcurrentWorkflowTaskPollers.
+`,
+	)
+	WorkerAddSearchAttributesActivityLimits = NewGlobalTypedSetting(
+		"worker.addSearchAttributesActivityLimitsConfig",
+		sdkworker.Options{},
+		`WorkerAddSearchAttributesActivityLimits is a struct with relevant sdkworker.Options
+settings for controlling remote activity concurrency for the add-search-attributes worker.
+Valid fields: MaxConcurrentActivityTaskPollers.
+`,
+	)
+	WorkerDLQActivityLimits = NewGlobalTypedSetting(
+		"worker.dlqActivityLimitsConfig",
+		sdkworker.Options{},
+		`WorkerDLQActivityLimits is a struct with relevant sdkworker.Options settings for
+controlling remote activity concurrency for the DLQ worker.
+Valid fields: MaxConcurrentActivityTaskPollers.
+`,
+	)
+	WorkerMigrationActivityLimits = NewGlobalTypedSetting(
+		"worker.migrationActivityLimitsConfig",
+		sdkworker.Options{},
+		`WorkerMigrationActivityLimits is a struct with relevant sdkworker.Options settings for
+controlling remote activity concurrency for the migration worker.
+Valid fields: MaxConcurrentActivityTaskPollers.
+`,
+	)
 	WorkerEnableHistoryRateLimiter = NewGlobalBoolSetting(
 		"worker.enableHistoryRateLimiter",
 		false,

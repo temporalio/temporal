@@ -3,6 +3,7 @@ package testcore
 import (
 	"time"
 
+	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/components/nexusoperations"
@@ -87,5 +88,23 @@ var (
 		// exercise the percent gate can override per-test.
 		dynamicconfig.CHASMSchedulerCreationRolloutPercent.Key():  100,
 		dynamicconfig.CHASMSchedulerMigrationRolloutPercent.Key(): 100,
+
+		// System workers are opt-in per namespace; see testcore.WithWorkerService.
+		dynamicconfig.WorkerPerNamespaceWorkerCount.Key(): 0,
+
+		// The worker-service host's own SDK workers (default worker + dedicated
+		// activity workers for addSearchAttributes/dlq/migration) don't need
+		// production-scale poller concurrency in tests; cut them to the minimum
+		// to reduce the fixed per-cluster goroutine/memory cost of running the
+		// worker service at all.
+		dynamicconfig.WorkerDefaultActivityLimits.Key(): sdkworker.Options{
+			// The SDK enforces a floor of 2 for MaxConcurrentWorkflowTaskPollers
+			// (sticky execution requires at least 2), so only activity pollers
+			// can be reduced here.
+			MaxConcurrentActivityTaskPollers: 1,
+		},
+		dynamicconfig.WorkerAddSearchAttributesActivityLimits.Key(): sdkworker.Options{MaxConcurrentActivityTaskPollers: 1},
+		dynamicconfig.WorkerDLQActivityLimits.Key():                 sdkworker.Options{MaxConcurrentActivityTaskPollers: 1},
+		dynamicconfig.WorkerMigrationActivityLimits.Key():           sdkworker.Options{MaxConcurrentActivityTaskPollers: 1},
 	}
 )

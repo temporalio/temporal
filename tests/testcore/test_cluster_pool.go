@@ -51,9 +51,14 @@ func init() {
 	}
 
 	testClusterRouter = &clusterRouter{
-		shared:     newClusterPool(sharedSize, false, maxLeases),
-		dedicated:  newClusterPool(dedicatedSize, true, maxLeases),
-		eventsFile: eventsFile,
+		shared: newClusterPool(sharedSize, false, maxLeases),
+		// A single cluster shared by every test that opts into the worker
+		// service (testcore.WithWorkerService), so the worker-service host's
+		// fixed goroutine/memory cost is paid once instead of once per shared
+		// pool slot.
+		workerShared: newClusterPool(1, false, maxLeases),
+		dedicated:    newClusterPool(dedicatedSize, true, maxLeases),
+		eventsFile:   eventsFile,
 	}
 }
 
@@ -177,9 +182,10 @@ func (s *clusterPoolSlot) tearDownLocked(t *testing.T) {
 
 // clusterRouter routes tests to shared/dedicated [clusterPool] or [suiteScopedCluster]s.
 type clusterRouter struct {
-	shared      *clusterPool
-	dedicated   *clusterPool
-	suiteScoped sync.Map
+	shared       *clusterPool
+	workerShared *clusterPool
+	dedicated    *clusterPool
+	suiteScoped  sync.Map
 
 	eventsFile *os.File
 }
@@ -219,25 +225,26 @@ func UseSuiteScopedCluster(t *testing.T) {
 
 // Cluster kinds recorded in creation events.
 const (
-	clusterKindShared      = "shared"
-	clusterKindDedicated   = "dedicated"
-	clusterKindSuiteScoped = "suite-scoped"
+	clusterKindShared       = "shared"
+	clusterKindWorkerShared = "worker-shared"
+	clusterKindDedicated    = "dedicated"
+	clusterKindSuiteScoped  = "suite-scoped"
 )
 
 // clusterRequest describes what a test needs from the cluster router.
 type clusterRequest struct {
-	kind              string // set by the router: shared, dedicated, or suite-scoped
-	dedicated         bool
-	dedicatedReason   string
-	needWorkerService bool
-	dynamicConfig     map[dynamicconfig.Key]any
-	clusterOpts       []TestClusterOption
+	kind               string // set by the router: shared, worker-shared, dedicated, or suite-scoped
+	dedicated          bool
+	dedicatedReason    string
+	wantsWorkerService bool // route to the worker-service-enabled shared cluster, or enable it on a dedicated cluster
+	dynamicConfig      map[dynamicconfig.Key]any
+	clusterOpts        []TestClusterOption
 }
 
 // mustBeFresh reports whether the request requires a brand-new cluster that
 // cannot be reused.
 func (r clusterRequest) mustBeFresh() bool {
-	return r.needWorkerService || len(r.dynamicConfig) > 0 || len(r.clusterOpts) > 0
+	return len(r.dynamicConfig) > 0 || len(r.clusterOpts) > 0
 }
 
 // needsDedicated reports whether the request must be served by a dedicated
@@ -252,6 +259,8 @@ func (r clusterRequest) reason() string {
 	switch r.kind {
 	case clusterKindShared:
 		return "shared pool"
+	case clusterKindWorkerShared:
+		return "worker-service shared pool"
 	case clusterKindSuiteScoped:
 		return "suite-scoped"
 	}
@@ -275,7 +284,6 @@ func (r clusterRequest) recordCreation(t *testing.T) {
 		"test":   t.Name(),
 		"kind":   r.kind,
 		"reason": r.reason(),
-		"worker": r.needWorkerService,
 	})
 	if err != nil {
 		return
@@ -302,12 +310,21 @@ func (p *clusterRouter) get(t *testing.T, req clusterRequest) (tb *FunctionalTes
 	if cluster := p.getSuiteScoped(t); cluster != nil {
 		return cluster
 	}
+	if req.wantsWorkerService {
+		return p.getWorkerShared(t)
+	}
 	return p.getShared(t)
 }
 
 func (p *clusterRouter) getShared(t *testing.T) *FunctionalTestBase {
 	return p.shared.get(t, func() *FunctionalTestBase {
 		return p.createCluster(t, clusterRequest{kind: clusterKindShared})
+	})
+}
+
+func (p *clusterRouter) getWorkerShared(t *testing.T) *FunctionalTestBase {
+	return p.workerShared.get(t, func() *FunctionalTestBase {
+		return p.createCluster(t, clusterRequest{kind: clusterKindWorkerShared, wantsWorkerService: true})
 	})
 }
 
@@ -326,10 +343,7 @@ func (p *clusterRouter) getSuiteScoped(t *testing.T) *FunctionalTestBase {
 	suiteClusterAny, _ := p.suiteScoped.LoadOrStore(rootName, &suiteScopedCluster{})
 	suiteCluster := suiteClusterAny.(*suiteScopedCluster)
 	suiteCluster.once.Do(func() {
-		// TODO(stephan, #10580): remove this workaround once the proper cluster-pool fix lands.
-		// Enable the worker service on suite-scoped clusters. The only current user (Versioning3) needs the system
-		// worker for worker-deployment APIs.
-		suiteCluster.cluster = p.createCluster(t, clusterRequest{kind: clusterKindSuiteScoped, needWorkerService: true})
+		suiteCluster.cluster = p.createCluster(t, clusterRequest{kind: clusterKindSuiteScoped})
 	})
 	suiteCluster.cluster.SetT(t)
 	return suiteCluster.cluster
@@ -362,8 +376,15 @@ func (p *clusterRouter) createCluster(t *testing.T, req clusterRequest) *Functio
 	tbase := &FunctionalTestBase{}
 	tbase.SetT(t)
 
-	// The worker service is off unless the request explicitly needs it.
-	opts := []TestClusterOption{withWorkerService(req.needWorkerService)}
+	// The worker service is enabled unconditionally on the dedicated
+	// worker-shared pool and on legacy suite-scoped clusters; on the plain
+	// shared pool and other dedicated clusters it's opt-in via
+	// wantsWorkerService (testcore.WithWorkerService), so most clusters never
+	// pay its fixed goroutine/memory cost. Per-namespace workers are gated by
+	// the WorkerPerNamespaceWorkerCount dynamic config default on top of that
+	// (see dynamic_config_overrides.go).
+	enableWorkerService := req.kind == clusterKindWorkerShared || req.kind == clusterKindSuiteScoped || req.wantsWorkerService
+	opts := []TestClusterOption{withWorkerService(enableWorkerService)}
 	if req.kind != clusterKindDedicated {
 		opts = append(opts, WithSharedCluster())
 	}

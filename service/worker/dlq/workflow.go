@@ -17,6 +17,7 @@ import (
 	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/debug"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
@@ -125,12 +126,14 @@ type (
 		HistoryClient      HistoryClient
 		CurrentClusterName CurrentClusterName
 		TaskClientDialer   TaskClientDialer
+		DynamicCollection  *dynamicconfig.Collection
 	}
 
 	workerComponent struct {
 		historyClient      HistoryClient
 		taskClientDialer   TaskClientDialer
 		currentClusterName string
+		atWorkerCfg        sdkworker.Options
 	}
 )
 
@@ -196,6 +199,7 @@ func newComponent(params workerComponentParams) workercommon.WorkerComponent {
 		historyClient:      params.HistoryClient,
 		currentClusterName: string(params.CurrentClusterName),
 		taskClientDialer:   params.TaskClientDialer,
+		atWorkerCfg:        dynamicconfig.WorkerDLQActivityLimits.Get(params.DynamicCollection)(),
 	}
 }
 
@@ -479,6 +483,7 @@ func (c *workerComponent) DedicatedActivityWorkerOptions() *workercommon.Dedicat
 				context.Background(),
 				headers.CallerTypePreemptable,
 			),
+			MaxConcurrentActivityTaskPollers: c.atWorkerCfg.MaxConcurrentActivityTaskPollers,
 		},
 	}
 }

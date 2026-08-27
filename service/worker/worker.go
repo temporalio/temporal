@@ -6,6 +6,7 @@ import (
 
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -24,6 +25,7 @@ type (
 		sdkClientFactory sdk.ClientFactory
 		workers          []sdkworker.Worker
 		workerComponents []workercommon.WorkerComponent
+		defaultWorkerCfg sdkworker.Options
 	}
 )
 
@@ -34,12 +36,14 @@ func NewWorkerManager(
 	logger log.Logger,
 	sdkClientFactory sdk.ClientFactory,
 	hostInfo membership.HostInfo,
+	dc *dynamicconfig.Collection,
 ) *workerManager {
 	return &workerManager{
 		hostInfo:         hostInfo,
 		logger:           logger,
 		sdkClientFactory: sdkClientFactory,
 		workerComponents: workerComponents,
+		defaultWorkerCfg: dynamicconfig.WorkerDefaultActivityLimits.Get(dc)(),
 	}
 }
 
@@ -49,9 +53,10 @@ func (wm *workerManager) Start() {
 	}
 
 	defaultWorkerOptions := sdkworker.Options{
-		Identity: "temporal-system@" + wm.hostInfo.Identity(),
-		// TODO: add dynamic config for worker options
-		BackgroundActivityContext: headers.SetCallerType(context.Background(), headers.CallerTypeBackgroundHigh),
+		Identity:                         "temporal-system@" + wm.hostInfo.Identity(),
+		BackgroundActivityContext:        headers.SetCallerType(context.Background(), headers.CallerTypeBackgroundHigh),
+		MaxConcurrentActivityTaskPollers: wm.defaultWorkerCfg.MaxConcurrentActivityTaskPollers,
+		MaxConcurrentWorkflowTaskPollers: wm.defaultWorkerCfg.MaxConcurrentWorkflowTaskPollers,
 	}
 	sdkClient := wm.sdkClientFactory.GetSystemClient()
 	defaultWorker := wm.sdkClientFactory.NewWorker(sdkClient, primitives.DefaultWorkerTaskQueue, defaultWorkerOptions)

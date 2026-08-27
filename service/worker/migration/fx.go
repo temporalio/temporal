@@ -89,7 +89,8 @@ func (wc *replicationWorkerComponent) DedicatedActivityWorkerOptions() *workerco
 	return &workercommon.DedicatedWorkerOptions{
 		TaskQueue: primitives.MigrationActivityTQ,
 		Options: sdkworker.Options{
-			BackgroundActivityContext: headers.SetCallerType(context.Background(), headers.CallerTypePreemptable),
+			BackgroundActivityContext:        headers.SetCallerType(context.Background(), headers.CallerTypePreemptable),
+			MaxConcurrentActivityTaskPollers: dynamicconfig.WorkerMigrationActivityLimits.Get(wc.DynamicCollection)().MaxConcurrentActivityTaskPollers,
 		},
 	}
 }

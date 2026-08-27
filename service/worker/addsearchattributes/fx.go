@@ -5,6 +5,7 @@ import (
 
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -19,21 +20,26 @@ type (
 	// addSearchAttributes represent background work needed for adding search attributes
 	addSearchAttributes struct {
 		initParams
+		atWorkerCfg sdkworker.Options
 	}
 
 	initParams struct {
 		fx.In
-		EsClient       esclient.Client
-		Manager        searchattribute.Manager
-		MetricsHandler metrics.Handler
-		Logger         log.Logger
+		EsClient          esclient.Client
+		Manager           searchattribute.Manager
+		MetricsHandler    metrics.Handler
+		Logger            log.Logger
+		DynamicCollection *dynamicconfig.Collection
 	}
 )
 
 var Module = workercommon.AnnotateWorkerComponentProvider(newComponent)
 
 func newComponent(params initParams) workercommon.WorkerComponent {
-	return &addSearchAttributes{initParams: params}
+	return &addSearchAttributes{
+		initParams:  params,
+		atWorkerCfg: dynamicconfig.WorkerAddSearchAttributesActivityLimits.Get(params.DynamicCollection)(),
+	}
 }
 
 func (wc *addSearchAttributes) RegisterWorkflow(registry sdkworker.Registry) {
@@ -53,7 +59,8 @@ func (wc *addSearchAttributes) DedicatedActivityWorkerOptions() *workercommon.De
 	return &workercommon.DedicatedWorkerOptions{
 		TaskQueue: primitives.AddSearchAttributesActivityTQ,
 		Options: sdkworker.Options{
-			BackgroundActivityContext: headers.SetCallerType(context.Background(), headers.CallerTypeAPI),
+			BackgroundActivityContext:        headers.SetCallerType(context.Background(), headers.CallerTypeAPI),
+			MaxConcurrentActivityTaskPollers: wc.atWorkerCfg.MaxConcurrentActivityTaskPollers,
 		},
 	}
 }
