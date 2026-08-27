@@ -19,6 +19,8 @@ func wrappedUnavailable() error {
 }
 
 func TestCallErrorToFailure_RetriesTransientServiceErrorEvenWhenWrapped(t *testing.T) {
+	t.Parallel()
+
 	failure, retryable, err := callErrorToFailure(wrappedUnavailable())
 	require.NoError(t, err)
 	require.True(t, retryable, "wrapped Unavailable must be classified as retryable")
@@ -26,6 +28,8 @@ func TestCallErrorToFailure_RetriesTransientServiceErrorEvenWhenWrapped(t *testi
 }
 
 func TestNewInvocationResult_RetriesTransientServiceErrorEvenWhenWrapped(t *testing.T) {
+	t.Parallel()
+
 	result, err := newInvocationResult(nil, wrappedUnavailable())
 	require.NoError(t, err)
 	require.IsType(t, invocationResultRetry{}, result,
