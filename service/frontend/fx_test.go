@@ -208,6 +208,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 
 			serviceErrorInterceptor := interceptor.NewServiceErrorInterceptor(
 				dynamicconfig.GetIntPropertyFn(4000),
+				log.NewTestLogger(),
 			)
 
 			// Create a rate limit interceptor which uses the per-instance and global RPS limits from the test case.
@@ -576,6 +577,7 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 
 			serviceErrorInterceptor := interceptor.NewServiceErrorInterceptor(
 				dynamicconfig.GetIntPropertyFn(4000),
+				log.NewTestLogger(),
 			)
 
 			// Create a rate limit interceptor.
@@ -779,6 +781,7 @@ func TestNamespaceRateLimitMetrics(t *testing.T) {
 
 			serviceErrorInterceptor := interceptor.NewServiceErrorInterceptor(
 				dynamicconfig.GetIntPropertyFn(4000),
+				log.NewTestLogger(),
 			)
 
 			// Create a rate limit interceptor which uses the per-instance and global RPS limits from the test case.

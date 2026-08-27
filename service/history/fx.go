@@ -249,9 +249,11 @@ func ConfigProvider(
 
 func ServiceErrorInterceptorProvider(
 	dc *dynamicconfig.Collection,
+	logger log.Logger,
 ) *interceptor.ServiceErrorInterceptor {
 	return interceptor.NewServiceErrorInterceptor(
 		dynamicconfig.MaxServiceErrorMessageLength.Get(dc),
+		logger,
 	)
 }
 

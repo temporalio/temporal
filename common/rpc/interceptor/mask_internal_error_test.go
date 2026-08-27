@@ -17,18 +17,20 @@ import (
 )
 
 func TestMaskUnknownOrInternalErrors(t *testing.T) {
-
 	statusOk := status.New(codes.OK, "OK")
 	testMaskUnknownOrInternalErrors(t, statusOk, false)
 
-	statusUnknown := status.New(codes.Unknown, "Unknown")
+	statusCanceled := status.New(codes.Canceled, "Canceled message")
+	testMaskUnknownOrInternalErrors(t, statusCanceled, false)
+
+	statusUnknown := status.New(codes.Unknown, "Unknown message")
 	testMaskUnknownOrInternalErrors(t, statusUnknown, true)
 
-	statusInternal := status.New(codes.Internal, "Internal")
+	statusInternal := status.New(codes.Internal, "Internal message")
 	testMaskUnknownOrInternalErrors(t, statusInternal, true)
 }
 
-func testMaskUnknownOrInternalErrors(t *testing.T, st *status.Status, expectRelpace bool) {
+func testMaskUnknownOrInternalErrors(t *testing.T, st *status.Status, expectReplace bool) {
 	controller := gomock.NewController(t)
 	mockRegistry := namespace.NewMockRegistry(controller)
 	mockLogger := log.NewMockLogger(controller)
@@ -36,27 +38,27 @@ func testMaskUnknownOrInternalErrors(t *testing.T, st *status.Status, expectRelp
 	errorMaskInterceptor := NewMaskInternalErrorDetailsInterceptor(
 		dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc), mockRegistry, mockLogger)
 
-	err := serviceerror.FromStatus(st)
-	if expectRelpace {
+	err := st.Err()
+	if expectReplace {
 		mockLogger.EXPECT().Error(gomock.Any(), gomock.Any()).Times(1)
 	}
-	errorMessage := errorMaskInterceptor.maskUnknownOrInternalErrors(nil, "test", err)
-	if expectRelpace {
+	gotError := errorMaskInterceptor.maskUnknownOrInternalErrors(nil, "test", err)
+	if expectReplace {
 		errorHash := common.ErrorHash(err)
-		expectedMessage := fmt.Sprintf("rpc error: code = %s desc = %s (%s)", st.Message(), errorFrontendMasked, errorHash)
+		expectedMessage := fmt.Sprintf(
+			"rpc error: code = %s desc = %s (%s)",
+			st.Code(),
+			errorFrontendMasked,
+			errorHash,
+		)
 
-		assert.Equal(t, expectedMessage, errorMessage.Error())
+		assert.Equal(t, expectedMessage, gotError.Error())
 	} else {
-		if err == nil {
-			assert.Equal(t, errorMessage, nil)
-		} else {
-			assert.Equal(t, errorMessage.Error(), st.Message())
-		}
+		assert.Equal(t, err, gotError)
 	}
 }
 
 func TestMaskInternalErrorDetailsInterceptor(t *testing.T) {
-
 	controller := gomock.NewController(t)
 	mockRegistry := namespace.NewMockRegistry(controller)
 	dc := dynamicconfig.NewNoopCollection()
