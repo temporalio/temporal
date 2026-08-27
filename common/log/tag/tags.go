@@ -66,6 +66,16 @@ func RequestID(requestID string) ZapTag {
 	return NewStringTag("request-id", requestID)
 }
 
+// NextPageToken returns tag for NextPageToken
+func NextPageToken(nextPageToken []byte) ZapTag {
+	return NewBinaryTag("next-page-token", nextPageToken)
+}
+
+// PageSize returns tag for PageSize
+func PageSize(pageSize int) ZapTag {
+	return NewInt("page-size", pageSize)
+}
+
 // ==========  Workflow tags defined here: ( wf is short for workflow) ==========
 
 // WorkflowAction returns tag for WorkflowAction
