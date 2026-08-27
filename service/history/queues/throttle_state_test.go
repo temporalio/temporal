@@ -2,6 +2,7 @@ package queues
 
 import (
 	"fmt"
+	"math"
 	"testing"
 	"time"
 
@@ -230,8 +231,11 @@ func TestThrottleState_NoIncreaseInAThrottledWindow(t *testing.T) {
 		timeSource.Update(timeSource.Now().Add(testThrottleWindow / 2))
 	}
 
-	_, increases := state.Counters(key)
-	require.Zero(t, increases)
+	decreases, increases := state.Counters(key)
+	require.Zero(t, increases, "a window carrying loss above the threshold must not increase")
+	// Five reports, but the first lands before any window has elapsed, so four windows close.
+	require.Equal(t, int64(4), decreases, "it must decrease instead, once per window")
+	require.InEpsilon(t, 100*math.Pow(0.85, 4), state.AdmittedRate(key), 1e-9)
 }
 
 func TestThrottleState_ClampsRate(t *testing.T) {
@@ -385,8 +389,8 @@ func TestThrottleState_ConvergesTowardEnforcedBudget(t *testing.T) {
 	// A token bucket enforcing 200/s rejects whenever the class asks for more than that.
 	const enforcedBudget = 200.0
 	if state.Admit(key) {
-				state.ReportThrottled(key, true)
-			}
+		state.ReportThrottled(key, true)
+	}
 	for window := 0; window < 60; window++ {
 		timeSource.Update(timeSource.Now().Add(testThrottleWindow))
 		if state.AdmittedRate(key) > enforcedBudget {
@@ -512,7 +516,7 @@ func TestThrottleState_BusyClassIsNotPunishedForItsSize(t *testing.T) {
 		state, timeSource := newTestThrottleState(defaultThrottleOverrides())
 		key := testKey()
 		admitted := 0
-		for w := 0; w < 300; w++ {
+		for w := 0; w < 20; w++ {
 			for i := 0; i < demandPerWindow; i++ {
 				if !state.Admit(key) {
 					continue
@@ -530,13 +534,20 @@ func TestThrottleState_BusyClassIsNotPunishedForItsSize(t *testing.T) {
 	// Both are large enough that 2% is representable within a single window; a class releasing
 	// only a handful per window can observe 0% or 10% and nothing in between, and that
 	// quantisation, not the control law, would decide where it settled.
+	// Deliberately short of MaxRate: a clamp would make any two arms compare equal and hide a
+	// size dependence of any size short of collapse.
 	o := defaultThrottleOverrides()
+	want := o.initialRate * math.Pow(1+o.increase, 20)
+	require.Less(t, want, o.maxRate, "the run must stay below the ceiling to mean anything")
+
+	rates := make([]float64, 0, 2)
 	for _, demand := range []int{100, 1000} {
 		rate := rateFor(demand)
-		require.Greater(t, rate, o.initialRate,
-			"a class seeing 2%% loss against a 5%% threshold must be allowed to speed up, "+
-				"whether it releases 100 or 1000 per window; demand=%d", demand)
-		require.Greater(t, rate, o.minRate*100,
-			"settling near the floor means size decided the rate, not loss; demand=%d", demand)
+		require.InEpsilon(t, want, rate, 1e-9,
+			"a class seeing 2%% loss against a 5%% threshold must be allowed to speed up every "+
+				"window, whether it releases 100 or 1000; demand=%d", demand)
+		rates = append(rates, rate)
 	}
+	require.InEpsilon(t, rates[0], rates[1], 1e-9,
+		"two classes seeing the same loss must settle at the same rate, whatever their size")
 }

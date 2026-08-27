@@ -156,6 +156,12 @@ func TestReschedule_BudgetIsCeilingNotQuota(t *testing.T) {
 	require.Equal(t, 1, r.Len(), "budget must not pull forward a task that is not due")
 	require.Len(t, gate.updates, 1)
 	require.Equal(t, now.Add(time.Minute), gate.updates[0])
+
+	// The due check deliberately precedes admission. Reversing them would burn a token every
+	// pass on a task that is never released, and at a 100ms poll the class would be denied by
+	// the time its head finally came due.
+	require.Zero(t, state.Len(),
+		"a not-due head must not reach the gate at all, so the class is not even created")
 }
 
 // One pass must wake the loop once, at the earliest of every reason it has to wake.

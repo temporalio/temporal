@@ -111,6 +111,7 @@ func TestThrottleState_IndependentInstancesConvergeOnSharedBudget(t *testing.T) 
 	// yet and AdmittedRate reports 0, which would pin the minimum at zero for the whole run.
 	minAggregate := math.Inf(1)
 	var lastAggregate float64
+	var tail []float64
 
 	for w := 0; w < windows; w++ {
 		now = now.Add(testThrottleWindow)
@@ -148,8 +149,11 @@ func TestThrottleState_IndependentInstancesConvergeOnSharedBudget(t *testing.T) 
 		}
 
 		lastAggregate = aggregate()
-		if w >= warmup && lastAggregate < minAggregate {
-			minAggregate = lastAggregate
+		if w >= warmup {
+			if lastAggregate < minAggregate {
+				minAggregate = lastAggregate
+			}
+			tail = append(tail, lastAggregate)
 		}
 	}
 
@@ -158,9 +162,18 @@ func TestThrottleState_IndependentInstancesConvergeOnSharedBudget(t *testing.T) 
 
 	// Generous bounds. The point is to catch a collapse to the floor or a runaway above the
 	// ceiling, not to pin AIMD's steady state oscillation to a narrow band.
-	require.Greater(t, lastAggregate, sharedBudget*0.4,
+	// Mean over the settled tail rather than the final sample: a multiplicative law oscillates,
+	// so a single reading measures where in the sawtooth the loop stopped, not where it settled.
+	var sum float64
+	for _, v := range tail {
+		sum += v
+	}
+	mean := sum / float64(len(tail))
+	t.Logf("settled aggregate: mean=%.1f final=%.1f budget=%.1f", mean, lastAggregate, sharedBudget)
+
+	require.Greater(t, mean, sharedBudget*0.4,
 		"aggregate collapsed far below the shared budget")
-	require.Less(t, lastAggregate, sharedBudget*2.0,
+	require.Less(t, mean, sharedBudget*2.0,
 		"aggregate ran away above the shared budget")
 	require.Greater(t, minAggregate, sharedBudget*0.10,
 		"aggregate suffered a sustained collective collapse")
@@ -370,4 +383,35 @@ func TestThrottleState_IdleKeyRestartsAtInitialRate(t *testing.T) {
 
 	require.InEpsilon(t, o.initialRate, state.AdmittedRate(key), 1e-9,
 		"a class idle past its TTL must restart at InitialRate, not crawl up from the floor")
+}
+
+// A rate decided at a window close governs the time after that close, not the window that just
+// ended. Refilling after the decision credits the elapsed second at the new rate, handing the
+// class tokens it never earned and bringing every increase forward by a whole window.
+func TestThrottleState_RefillCreditsTheWindowAtTheRateThatGovernedIt(t *testing.T) {
+	o := defaultThrottleOverrides()
+	o.initialRate = 100
+	o.maxRate = 10000
+	state, timeSource := newTestThrottleState(o)
+	key := testKey()
+
+	// Drain the whole burst inside the first window, with no rejections.
+	drained := 0
+	for state.Admit(key) {
+		drained++
+	}
+	require.Equal(t, 100, drained, "burst is rate x window")
+
+	// Close that window. It was clean, so the rate rises to 110 - but the second that just
+	// elapsed ran at 100, so only 100 tokens were earned by it.
+	timeSource.Update(timeSource.Now().Add(testThrottleWindow))
+
+	refilled := 0
+	for state.Admit(key) {
+		refilled++
+	}
+
+	require.InEpsilon(t, 110.0, state.AdmittedRate(key), 1e-9, "the clean window earned an increase")
+	require.Equal(t, 100, refilled,
+		"the elapsed window must be credited at the rate that governed it, not at the new one")
 }

@@ -417,6 +417,11 @@ func (s *ThrottleState) advanceWindowLocked(entry *throttleEntry, now time.Time,
 	if now.Sub(entry.windowStart) < window {
 		return
 	}
+	// Credit the elapsed time at the rate that was in force for it, before any decision changes
+	// that rate. A change decided now governs the time after now; crediting the window that is
+	// closing at the new rate would hand the class tokens it never earned and bring every
+	// increase forward by a whole window.
+	entry.refillLocked(now, window)
 	defer func() {
 		entry.windowStart = now
 		entry.releases, entry.rejections = 0, 0
@@ -504,8 +509,6 @@ func (s *ThrottleState) window() time.Duration {
 	return time.Second
 }
 
-// lossThreshold is read on every window close, so a value outside [0,1] is one bad config push
-// away. Negative would decrease on a window with no loss at all; above one would never decrease.
 // keyTTL is the retention period, floored at a positive value. At zero every access would look
 // idle, so the bucket would be refilled to its burst on every call and enforce nothing.
 func (s *ThrottleState) keyTTL() time.Duration {
@@ -515,6 +518,8 @@ func (s *ThrottleState) keyTTL() time.Duration {
 	return 5 * time.Minute
 }
 
+// lossThreshold is read on every window close, so a value outside [0,1] is one bad config push
+// away. Negative would decrease on a window with no loss at all; above one would never decrease.
 func (s *ThrottleState) lossThreshold() float64 {
 	t := s.options.LossThreshold()
 	if !(t >= 0) {
