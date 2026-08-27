@@ -7197,7 +7197,7 @@ func (s *mutableStateSuite) TestSetContextMetadata_ActivityNotFound() {
 	s.False(ok)
 }
 
-func (s *mutableStateSuite) TestAddActivityTaskStartedEventStoresWorkerControlTaskQueue() {
+func (s *mutableStateSuite) TestAddActivityTaskStartedEventStoresWorkerControlTaskQueueAndClearsUnversionedDeployment() {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 
 	// Setup workflow execution
@@ -7250,6 +7250,11 @@ func (s *mutableStateSuite) TestAddActivityTaskStartedEventStoresWorkerControlTa
 	)
 	s.NoError(err)
 	s.Empty(activityInfo.WorkerControlTaskQueue, "WorkerControlTaskQueue should be empty before activity starts")
+	activityInfo.LastWorkerDeploymentVersion = "previous-deployment:previous-build"
+	activityInfo.LastDeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: "previous-deployment",
+		BuildId:        "previous-build",
+	}
 
 	// Start activity with workerControlTaskQueue
 	expectedWorkerControlTaskQueue := "test-control-queue"
@@ -7270,6 +7275,8 @@ func (s *mutableStateSuite) TestAddActivityTaskStartedEventStoresWorkerControlTa
 	updatedActivityInfo, ok := s.mutableState.GetActivityInfo(activityInfo.ScheduledEventId)
 	s.True(ok)
 	s.Equal(expectedWorkerControlTaskQueue, updatedActivityInfo.WorkerControlTaskQueue)
+	s.Empty(updatedActivityInfo.LastWorkerDeploymentVersion)
+	s.Nil(updatedActivityInfo.LastDeploymentVersion)
 }
 
 func (s *mutableStateSuite) TestAddActivityTaskStartedEventApproximateSize() {
