@@ -53,10 +53,10 @@ func (s *convertSuite) TestConvertPredicate_And() {
 			),
 			predicates.Or[tasks.Task](
 				tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{
-					{"g1", "n1", "d1"},
+					{TaskGroup: "g1", NamespaceID: "n1", Destination: "d1"},
 				}),
 				tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{
-					{"g2", "n2", "d2"},
+					{TaskGroup: "g2", NamespaceID: "n2", Destination: "d2"},
 				}),
 			),
 		),
@@ -72,7 +72,7 @@ func (s *convertSuite) TestConvertPredicate_And() {
 			predicates.And[tasks.Task](
 				tasks.NewNamespacePredicate([]string{uuid.NewString()}),
 				tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{
-					{"g1", "n1", "d1"},
+					{TaskGroup: "g1", NamespaceID: "n1", Destination: "d1"},
 				}),
 			),
 		),
@@ -96,10 +96,10 @@ func (s *convertSuite) TestConvertPredicate_Or() {
 			),
 			predicates.And[tasks.Task](
 				tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{
-					{"g1", "n1", "d1"},
+					{TaskGroup: "g1", NamespaceID: "n1", Destination: "d1"},
 				}),
 				tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{
-					{"g2", "n2", "d2"},
+					{TaskGroup: "g2", NamespaceID: "n2", Destination: "d2"},
 				}),
 			),
 		),
@@ -115,7 +115,7 @@ func (s *convertSuite) TestConvertPredicate_Or() {
 			predicates.And[tasks.Task](
 				tasks.NewNamespacePredicate([]string{uuid.NewString()}),
 				tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{
-					{"g1", "n1", "d1"},
+					{TaskGroup: "g1", NamespaceID: "n1", Destination: "d1"},
 				}),
 			),
 		),
@@ -141,7 +141,7 @@ func (s *convertSuite) TestConvertPredicate_Not() {
 		predicates.Not(predicates.Not(predicates.Empty[tasks.Task]())),
 		predicates.Not[tasks.Task](tasks.NewNamespacePredicate([]string{uuid.NewString()})),
 		predicates.Not[tasks.Task](tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{
-			{"g1", "n1", "d1"},
+			{TaskGroup: "g1", NamespaceID: "n1", Destination: "d1"},
 		})),
 	}
 
@@ -220,8 +220,8 @@ func (s *convertSuite) TestConvertQueueState() {
 			NewScope(
 				NewRandomRange(),
 				tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{
-					{"g1", "n1", "d1"},
-					{"g2", "n2", "d2"},
+					{TaskGroup: "g1", NamespaceID: "n1", Destination: "d1"},
+					{TaskGroup: "g2", NamespaceID: "n2", Destination: "d2"},
 				}),
 			),
 		},

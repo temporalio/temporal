@@ -559,7 +559,7 @@ func (s *queueBaseSuite) TestCheckPoint_SlicePredicateAction() {
 	exclusiveReaderHighWatermark := tasks.MaximumKey
 	scopes := NewRandomScopes(3)
 	scopes[0].Predicate = tasks.NewNamespacePredicate([]string{uuid.NewString()})
-	scopes[2].Predicate = tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{{"g1", "n1", "d1"}})
+	scopes[2].Predicate = tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{{TaskGroup: "g1", NamespaceID: "n1", Destination: "d1"}})
 	initialQueueState := &queueState{
 		readerScopes: map[int64][]Scope{
 			DefaultReaderId: scopes,

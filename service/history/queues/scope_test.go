@@ -198,7 +198,7 @@ func (s *scopeSuite) TestCanMergeByRange() {
 		predicate,
 		tasks.NewNamespacePredicate(namespaceIDs),
 		tasks.NewNamespacePredicate([]string{uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()}),
-		tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{{"g1", "n1", "d1"}}),
+		tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{{TaskGroup: "g1", NamespaceID: "n1", Destination: "d1"}}),
 	}
 	s.True(predicate.Equals(testPredicates[0]))
 	s.True(predicate.Equals(testPredicates[1]))
