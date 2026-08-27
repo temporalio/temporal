@@ -169,19 +169,32 @@ func CHASMToLegacyStartScheduleArgs(
 		invokerBuffered = invoker.GetBufferedStarts()
 	}
 	bufferedStarts, running, recent := splitBufferedStartsForLegacy(invokerBuffered)
-	if len(info.GetRecentActions()) > 0 {
+	recentFromInfo := len(info.GetRecentActions()) > 0
+	if recentFromInfo {
 		storedRecent := make([]*schedulepb.ScheduleActionResult, 0, len(info.GetRecentActions()))
 		for _, action := range info.GetRecentActions() {
 			storedRecent = append(storedRecent, common.CloneProto(action))
 		}
 		recent = append(storedRecent, recent...)
+	}
+	ongoingBackfills, triggerStarts := convertBackfillersCHASMToLegacy(backfillers, migrationTime)
+	bufferedStarts = append(bufferedStarts, triggerStarts...)
+
+	// Sort phase: each list above is a concatenation of independently-ordered sources
+	// (stored info + invoker-derived for recent; invoker-derived + map-iteration-ordered
+	// triggers for bufferedStarts), so both need re-sorting by due/actual time. V1's
+	// processWatcherResult assumes BufferedStarts[0] is always the earliest-due pending start --
+	// it has no equivalent of CHASM's Attempt field to reorder around -- so an unsorted
+	// bufferedStarts would silently break that assumption on rollback.
+	if recentFromInfo {
 		slices.SortFunc(recent, func(a, b *schedulepb.ScheduleActionResult) int {
 			return a.GetActualTime().AsTime().Compare(b.GetActualTime().AsTime())
 		})
 		recent = util.SliceTail(recent, legacyRecentActionCount)
 	}
-	ongoingBackfills, triggerStarts := convertBackfillersCHASMToLegacy(backfillers, migrationTime)
-	bufferedStarts = append(bufferedStarts, triggerStarts...)
+	slices.SortFunc(bufferedStarts, func(a, b *schedulespb.BufferedStart) int {
+		return a.GetActualTime().AsTime().Compare(b.GetActualTime().AsTime())
+	})
 
 	var generatorLastProcessed *timestamppb.Timestamp
 	if generator != nil {

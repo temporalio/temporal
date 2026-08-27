@@ -327,6 +327,55 @@ func TestCHASMToLegacyStartScheduleArgs(t *testing.T) {
 	require.True(t, triggerFound)
 }
 
+// TestCHASMToLegacyStartScheduleArgs_BufferedStartsSortedByActualTime verifies that a manual
+// trigger queued before rollback -- whose own due time predates an already-pending regular
+// buffered start -- still ends up first in the converted V1 BufferedStarts list. V1's
+// processWatcherResult has no equivalent of CHASM's Attempt field and assumes BufferedStarts[0]
+// is always the earliest-due pending start; triggerStarts get appended after the regular pending
+// starts regardless of their own due time, so without an explicit sort this assumption would
+// silently break on rollback.
+func TestCHASMToLegacyStartScheduleArgs_BufferedStartsSortedByActualTime(t *testing.T) {
+	now := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+	scheduler := &schedulerpb.SchedulerState{
+		Namespace:     "ns",
+		NamespaceId:   "ns-id",
+		ScheduleId:    "sched-id",
+		ConflictToken: 1,
+		Schedule:      newTestSchedule(),
+		Info:          &schedulepb.ScheduleInfo{},
+	}
+	invoker := &schedulerpb.InvokerState{
+		BufferedStarts: []*schedulespb.BufferedStart{
+			{
+				// Due at -1m: later than the trigger below, but listed first.
+				NominalTime:   timestamppb.New(now.Add(-time.Minute)),
+				ActualTime:    timestamppb.New(now.Add(-time.Minute)),
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+			},
+		},
+	}
+	backfillers := map[string]*schedulerpb.BackfillerState{
+		"trigger-1": {
+			BackfillId: "trigger-1",
+			// Queued well before the pending buffered start's own due time.
+			LastProcessedTime: timestamppb.New(now.Add(-10 * time.Minute)),
+			Request: &schedulerpb.BackfillerState_TriggerRequest{
+				TriggerRequest: &schedulepb.TriggerImmediatelyRequest{
+					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+				},
+			},
+		},
+	}
+
+	args := CHASMToLegacyStartScheduleArgs(scheduler, nil, invoker, backfillers, nil, nil, nil, now)
+
+	require.Len(t, args.State.BufferedStarts, 2)
+	require.True(t, args.State.BufferedStarts[0].GetManual(), "the earlier-due manual trigger must sort first")
+	require.False(t, args.State.BufferedStarts[1].GetManual())
+	require.True(t,
+		args.State.BufferedStarts[0].GetActualTime().AsTime().Before(args.State.BufferedStarts[1].GetActualTime().AsTime()))
+}
+
 func TestCHASMToLegacyStartScheduleArgs_ExcludesAllowAllFromRunningWorkflows(t *testing.T) {
 	// Regression test: workflows started under ALLOW_ALL are tracked in V2 as
 	// BufferedStarts with a RunId (and no Completed) while they run. Modern V1
