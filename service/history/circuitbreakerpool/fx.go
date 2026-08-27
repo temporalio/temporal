@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	hsmcallbacks "go.temporal.io/server/components/callbacks"
 	hsmnexus "go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tasks"
@@ -78,6 +79,8 @@ func onStateChange(
 		logger = log.With(logger, tag.NexusStageCallerOutbound)
 	case hsmnexus.TaskTypeInvocation, hsmnexus.TaskTypeCancelation:
 		logger = log.With(logger, tag.NexusStageCallerOutbound)
+	case hsmcallbacks.TaskTypeInvocation:
+		logger = log.With(logger, tag.NexusStageHandlerOutbound)
 	case chasmcallback.InvocationTaskGroup:
 		logger = log.With(logger, tag.NexusStageHandlerOutbound)
 	}

@@ -10,7 +10,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/testlogger"
-	"go.temporal.io/server/components/callbacks"
+	hsmcallbacks "go.temporal.io/server/components/callbacks"
 	hsmnexus "go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -43,7 +43,8 @@ func TestOnStateChangeNexusStage(t *testing.T) {
 		},
 		{
 			name:      "shared HSM callback",
-			taskGroup: callbacks.TaskTypeInvocation,
+			taskGroup: hsmcallbacks.TaskTypeInvocation,
+			stage:     "handler-outbound",
 		},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
