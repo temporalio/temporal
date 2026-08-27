@@ -2684,6 +2684,8 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted_MissingChildStartedEven
 
 func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_ResendChildAsync() {
 	s.config.EnableChildWorkflowResend = func() bool { return true }
+	s.config.EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	capture := s.parentChildEventCapture
 
 	request := &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
 		NamespaceId: tests.NamespaceID.String(),
@@ -2768,6 +2770,66 @@ func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_ResendChildAsync() {
 	case <-time.After(10 * time.Second):
 		s.Fail("background child resend was not re-verified")
 	}
+	await.RequireTrue(s.T(), func() bool {
+		return len(parentChildOutcomes(capture)) >= 3
+	}, 10*time.Second, 10*time.Millisecond)
+	s.Require().Equal([]string{
+		string(wideevents.ParentChildOutcomeScheduled),
+		string(wideevents.ParentChildOutcomeStarted),
+		string(wideevents.ParentChildOutcomeSucceeded),
+	}, parentChildOutcomes(capture))
+	records := parentChildRecords(capture)
+	details := wideEventDetails(records[1])
+	attributes := wideEventAttributes(records[1])
+	s.Equal(wideevents.ParentChildPhaseChildResend, details["phase"])
+	s.Equal(request.GetNamespaceId(), details["child_namespace_id"])
+	s.Equal(request.GetWorkflowExecution().GetWorkflowId(), details["child_workflow_id"])
+	s.Equal(request.GetWorkflowExecution().GetRunId(), details["child_run_id"])
+	s.Equal(util.ErrorType(&serviceerror.NotFound{}), details["initial_error_type"])
+	s.Equal("sync_workflow_state", details["stage"])
+	s.Equal(cluster.TestCurrentClusterName, attributes["source_cluster"].AsString())
+	s.Equal(string(wideevents.ReplicationApplied), wideEventAttributes(records[2])["phase"].AsString())
+	s.Equal(wideevents.ParentChildOutcomeVerified, wideEventAttributes(records[2])["outcome"].AsString())
+}
+
+func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_ResendChildSourceNotFound() {
+	s.config.EnableChildWorkflowResend = func() bool { return true }
+	s.config.EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	capture := s.parentChildEventCapture
+
+	request := &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowID,
+			RunId:      tests.RunID,
+		},
+		ResendChild: true,
+	}
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{})
+
+	mockClusterMetadata := cluster.NewMockMetadata(s.controller)
+	mockClusterMetadata.EXPECT().GetClusterID().Return(tests.Version).AnyTimes()
+	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName).AnyTimes()
+	mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo)
+	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, tests.Version).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShard.SetClusterMetadata(mockClusterMetadata)
+	s.mockShard.Resource.RemoteAdminClient.EXPECT().SyncWorkflowState(gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewNotFound("child missing on source"))
+
+	err := s.historyEngine.VerifyFirstWorkflowTaskScheduled(metrics.AddMetricsContext(s.T().Context()), request)
+	s.Require().ErrorAs(err, new(*serviceerror.NotFound))
+	await.RequireTrue(s.T(), func() bool {
+		return len(parentChildOutcomes(capture)) >= 3
+	}, 10*time.Second, 10*time.Millisecond)
+	s.Require().Equal([]string{
+		string(wideevents.ParentChildOutcomeScheduled),
+		string(wideevents.ParentChildOutcomeStarted),
+		string(wideevents.ParentChildOutcomeSourceNotFound),
+	}, parentChildOutcomes(capture))
+	record := parentChildRecords(capture)[2]
+	s.Equal(string(wideevents.ReplicationApplied), wideEventAttributes(record)["phase"].AsString())
+	s.Equal(wideevents.ParentChildOutcomeVerified, wideEventAttributes(record)["outcome"].AsString())
+	s.Equal(util.ErrorType(serviceerror.NewNotFound("")), wideEventDetails(record)["error_type"])
 }
 
 func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_NilSchedulerResendsSynchronously() {
@@ -2997,9 +3059,11 @@ func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_SkipsApplyWhenActive
 
 func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_ResendChildDeduped() {
 	s.config.EnableChildWorkflowResend = func() bool { return true }
+	s.config.EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	eventCapture := s.parentChildEventCapture
 	metricsHandler := metricstest.NewCaptureHandler()
-	capture := metricsHandler.StartCapture()
-	defer metricsHandler.StopCapture(capture)
+	metricsCapture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(metricsCapture)
 	s.mockShard.SetMetricsHandler(metricsHandler)
 
 	request := &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
@@ -3048,6 +3112,11 @@ func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_ResendChildDeduped()
 
 	err = s.historyEngine.VerifyFirstWorkflowTaskScheduled(ctx, request)
 	s.ErrorAs(err, &notFound)
+	s.Require().Equal([]string{
+		string(wideevents.ParentChildOutcomeScheduled),
+		string(wideevents.ParentChildOutcomeStarted),
+		string(wideevents.ParentChildOutcomeDeduplicated),
+	}, parentChildOutcomes(eventCapture))
 
 	close(release)
 	select {
@@ -3055,13 +3124,47 @@ func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_ResendChildDeduped()
 	case <-time.After(10 * time.Second):
 		s.Fail("background child resend did not finish")
 	}
+	await.RequireTrue(s.T(), func() bool {
+		return len(parentChildOutcomes(eventCapture)) >= 4
+	}, 10*time.Second, 10*time.Millisecond)
+	s.Require().Equal([]string{
+		string(wideevents.ParentChildOutcomeScheduled),
+		string(wideevents.ParentChildOutcomeStarted),
+		string(wideevents.ParentChildOutcomeDeduplicated),
+		string(wideevents.ParentChildOutcomeFailed),
+	}, parentChildOutcomes(eventCapture))
 	s.resendScheduler.InitiateShutdown()
 	s.resendScheduler.WaitShutdown()
-	metricSnapshot := capture.Snapshot()
+	metricSnapshot := metricsCapture.Snapshot()
 	s.Require().Len(metricSnapshot[metrics.ChildWorkflowResendAttempts.Name()], 1)
 	s.Require().Len(metricSnapshot[metrics.ChildWorkflowResendSkipped.Name()], 1)
 	s.Require().Len(metricSnapshot[metrics.ChildWorkflowResendFailures.Name()], 1)
 	s.Require().Len(metricSnapshot[metrics.ChildWorkflowResendLatency.Name()], 1)
+}
+
+func (s *engine2Suite) TestVerifyFirstWorkflowTaskScheduled_ResendChildLimited() {
+	s.config.EnableChildWorkflowResend = func() bool { return true }
+	s.config.WorkflowResendHostMaxInFlight = func() int { return 0 }
+	s.config.EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	capture := s.parentChildEventCapture
+
+	request := &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowID,
+			RunId:      tests.RunID,
+		},
+		ResendChild: true,
+	}
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{})
+
+	err := s.historyEngine.VerifyFirstWorkflowTaskScheduled(metrics.AddMetricsContext(s.T().Context()), request)
+	s.Require().ErrorAs(err, new(*serviceerror.NotFound))
+	s.Require().Equal([]string{string(wideevents.ParentChildOutcomeLimited)}, parentChildOutcomes(capture))
+	details := wideEventDetails(parentChildRecords(capture)[0])
+	s.Equal(wideevents.ParentChildPhaseChildResend, details["phase"])
+	s.Equal(util.ErrorType(&serviceerror.NotFound{}), details["initial_error_type"])
+	s.NotContains(details, "max_in_flight")
 }
 
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_WorkflowNotExist() {
@@ -3400,7 +3503,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentLi
 	s.Require().Equal([]string{string(wideevents.ParentChildOutcomeLimited)}, parentChildOutcomes(capture))
 	details := wideEventDetails(parentChildRecords(capture)[0])
 	s.Equal(util.ErrorType(&serviceerror.NotFound{}), details["initial_error_type"])
-	s.InDelta(0, details["max_in_flight"], 0)
+	s.NotContains(details, "max_in_flight")
 }
 
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_SkipsResendForRemovedNamespace() {
