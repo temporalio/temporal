@@ -236,11 +236,13 @@ func (wm *PerNamespaceWorkerManager) getWorkerByNamespace(ns *namespace.Namespac
 		logger:  log.With(wm.logger, tag.WorkflowNamespace(ns.Name().String())),
 		retrier: backoff.NewRetrier(backoff.NewExponentialRetryPolicy(wm.initialRetry), clock.NewRealTimeSource()),
 	}
+	worker.lock.Lock()
 	count, c1 := wm.config.PerNamespaceWorkerCount(ns.Name().String(), worker.setWorkerCount)
 	opts, c2 := wm.config.PerNamespaceWorkerOptions(ns.Name().String(), worker.setWorkerOptions)
 	worker.ns = ns
 	worker.count = count
 	worker.opts = opts
+	worker.lock.Unlock()
 	worker.cancel = func() { c1(); c2() }
 
 	wm.workers[ns.ID()] = worker
@@ -416,7 +418,7 @@ func (w *perNamespaceWorker) refresh(args refreshArgs) (retErr error) {
 	fmt.Fprintf(&componentSet, "%d,", workerAllocation.local)
 
 	// get sdk worker options
-	fmt.Fprintf(&componentSet, "%+v,", w.opts)
+	fmt.Fprintf(&componentSet, "%+v,", args.opts)
 
 	// we do need a worker, but maybe we have one already
 	w.lock.Lock()
