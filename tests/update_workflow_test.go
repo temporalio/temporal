@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -19,10 +20,12 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
+	chasmcb "go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/taskpoller"
@@ -527,6 +530,72 @@ func (s *WorkflowUpdateSuite) TestNormalScheduledWorkflowTask_AcceptComplete() {
 	`, events)
 		})
 	}
+}
+
+func (s *WorkflowUpdateSuite) TestDuplicateUpdate_AttachesCallbackWhileAdmitted() {
+	env := testcore.NewEnv(s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowUpdateCallbacks, true),
+		testcore.WithDynamicConfig(chasmcb.AllowedAddresses,
+			[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}}),
+	)
+
+	runID := mustStartWorkflow(env, env.Tv()) // leaves a pending first WFT (unprocessed)
+	tv := env.Tv().WithRunID(runID)
+	const cbURL1, cbURL2 = "temporal://cb1", "temporal://cb2"
+
+	// enqueue an update request with given callbackURL
+	sendUpdateWithCallback := func(callbackURL string) {
+		go func() {
+			// fire and forget, no assertions inside goroutines - will be indirectly verified later on instead
+			_, _ = env.FrontendClient().UpdateWorkflowExecution(testcore.NewContext(),
+				&workflowservice.UpdateWorkflowExecutionRequest{
+					Namespace:         env.Namespace().String(),
+					WorkflowExecution: tv.WorkflowExecution(),
+					WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED},
+					Request: &updatepb.Request{
+						Meta:      &updatepb.Meta{UpdateId: tv.UpdateID()}, // use stable updateID
+						Input:     &updatepb.Input{Name: tv.HandlerName(), Args: payloads.EncodeString("args")},
+						RequestId: uuid.NewString(), // unique requestIDs to simulate multiple calls without reqID dedup
+						CompletionCallbacks: []*commonpb.Callback{{
+							Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackURL}},
+						}},
+					},
+				})
+		}()
+		waitUpdateAdmitted(env, tv) // just wait until admission
+	}
+
+	sendUpdateWithCallback(cbURL1) // original: admitted, not yet sent
+	sendUpdateWithCallback(cbURL2) // duplicate: arrives while original still only admitted, NOT sent/later
+
+	// Now accept and complete the single update which will have both callbacks
+	poller := taskpoller.New(s.TB(), env.FrontendClient(), env.Namespace().String())
+	_, err := poller.
+		PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{}).
+		HandleTask(tv, func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: env.UpdateAcceptCompleteCommands(tv),
+				Messages: env.UpdateAcceptCompleteMessages(tv, task.Messages[0]),
+			}, nil
+		})
+	s.Require().NoError(err)
+
+	// finally, check both callbacks exist
+	workflowExecDesc, err := env.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(),
+		&workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(), Execution: tv.WorkflowExecution(),
+		})
+	s.Require().NoError(err)
+	got := map[string]bool{}
+	for _, cb := range workflowExecDesc.GetCallbacks() {
+		if u := cb.GetTrigger().GetUpdateWorkflowExecutionCompleted(); u != nil && u.GetUpdateId() == tv.UpdateID() {
+			got[cb.GetCallback().GetNexus().GetUrl()] = true
+		}
+	}
+	s.True(got[cbURL1], "original callback URL should be listed")
+	s.True(got[cbURL2], "duplicate callback URL should also be listed")
 }
 
 func (s *WorkflowUpdateSuite) TestRunningWorkflowTask_NewEmptySpeculativeWorkflowTask_Rejected() {
