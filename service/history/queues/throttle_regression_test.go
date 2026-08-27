@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/metrics"
 	"go.uber.org/mock/gomock"
 )
 
@@ -480,4 +481,112 @@ func TestThrottleState_RefillCreditsTheWindowAtTheRateThatGovernedIt(t *testing.
 	require.InEpsilon(t, 110.0, state.AdmittedRate(key), 1e-9, "the clean window earned an increase")
 	require.Equal(t, 100, refilled,
 		"the elapsed window must be credited at the rate that governed it, not at the new one")
+}
+
+// A NaN rate makes tokens NaN, and every comparison against NaN is false - including the
+// tokens < 1 that decides admission. One bad dynamic config push would open the gate
+// permanently while the controller still reported itself enabled.
+func TestThrottleState_NaNInitialRateDoesNotOpenTheGate(t *testing.T) {
+	o := defaultThrottleOverrides()
+	o.initialRate = math.NaN()
+	o.minRate = 2
+	state, _ := newTestThrottleState(o)
+
+	key := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
+
+	// MinRate is 2 and the window is a second, so the burst is 2. A gate that has fallen open
+	// would admit indefinitely instead of stopping there.
+	admitted := 0
+	for i := 0; i < 50; i++ {
+		if allowed, _, _ := state.admit(key); allowed {
+			admitted++
+		}
+	}
+	require.Equal(t, 2, admitted,
+		"a NaN initial rate must fall back to the floor, not disable the gate")
+	require.False(t, math.IsNaN(state.AdmittedRate(key)), "the learned rate must not be NaN")
+}
+
+// The wall clock can step backwards under NTP. Liveness must only ever move forward: stamping
+// an older time here makes the recovery step read as a full TTL of idleness, which resets a
+// continuously busy class back to InitialRate and hands it a fresh burst.
+func TestThrottleState_BackwardClockDoesNotResetABusyClass(t *testing.T) {
+	o := defaultThrottleOverrides()
+	o.initialRate = 5
+	o.keyTTL = 5 * time.Minute
+	state, ts := newTestThrottleState(o)
+
+	key := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
+	start := ts.Now()
+
+	state.admit(key)
+	// Drive the rate down so a reset to InitialRate would be visible.
+	for i := 0; i < 6; i++ {
+		ts.Update(start.Add(time.Duration(i+1) * time.Second))
+		state.ReportThrottled(key, true)
+		state.admit(key)
+	}
+	driven := state.AdmittedRate(key)
+	require.Less(t, driven, float64(5), "the class should have been driven below InitialRate")
+
+	// Step back further than the TTL, then recover past where we were. Neither may look like an
+	// idle period. Without the guard the recovery reads as 10m of inactivity against a 5m TTL
+	// and resets the class to InitialRate.
+	ts.Update(start.Add(-10 * time.Minute))
+	state.admit(key)
+	ts.Update(start.Add(10 * time.Second))
+	state.admit(key)
+
+	after := state.AdmittedRate(key)
+	require.Less(t, after, float64(5),
+		"a clock step must not read as idleness and reset the rate to InitialRate")
+	// The class keeps what it learned. It may still have taken an ordinary clean-window
+	// increase on the way through, which is the control law working, not a reset.
+	require.Greater(t, after, driven,
+		"the surviving rate should be the learned one, carried forward")
+	require.Less(t, after, driven*1.25,
+		"only ordinary increases may apply; a jump beyond that is a reset in disguise")
+}
+
+// At or below zero the cap is already met by an empty map, so every class fails open and the
+// controller gates nothing while still reporting itself enabled.
+func TestThrottleState_NonPositiveMaxKeysStillEnforces(t *testing.T) {
+	for _, maxKeys := range []int{0, -1} {
+		o := defaultThrottleOverrides()
+		o.maxKeys = maxKeys
+		o.initialRate = 3
+		state, _ := newTestThrottleState(o)
+
+		key := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
+		admitted := 0
+		for i := 0; i < 50; i++ {
+			if allowed, _, _ := state.admit(key); allowed {
+				admitted++
+			}
+		}
+		require.Equal(t, 3, admitted,
+			"maxKeys %d must fall back to a usable cap, not disable the controller", maxKeys)
+	}
+}
+
+// Past the cap the untracked population is every namespace the host has seen. Tagging those
+// emissions by namespace moves the unbounded cardinality the cap exists to prevent out of the
+// map and into the metrics pipeline.
+func TestThrottleKey_CappedTagsOmitTheNamespace(t *testing.T) {
+	key := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
+
+	require.Contains(t, throttleTagKeys(key.metricsTags()), "namespace_id",
+		"a tracked key is bounded by the cap and keeps its namespace")
+	require.NotContains(t, throttleTagKeys(key.cappedTags()), "namespace_id",
+		"an untracked key must not carry per namespace cardinality")
+	require.Contains(t, throttleTagKeys(key.cappedTags()), "resource_exhausted_cause",
+		"the cause is still needed to tell the fail open paths apart")
+}
+
+func throttleTagKeys(tags []metrics.Tag) []string {
+	keys := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		keys = append(keys, tag.Key)
+	}
+	return keys
 }

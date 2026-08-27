@@ -43,6 +43,10 @@ const numThrottleScopes = 3
 // so eviction keeps up with churn without a dedicated goroutine.
 const throttleSweepDivisor = 4
 
+// defaultThrottleMaxKeys is the fallback cap when the configured one is not usable. It matches
+// the dynamic config default so a bad push lands on the documented value rather than a new one.
+const defaultThrottleMaxKeys = 1024
+
 type (
 	// ThrottleKey identifies one controlled class. Only Scope, Cause and NamespaceID are
 	// populated today, because every governed cause is a namespace budget and one budget is one
@@ -201,6 +205,17 @@ func (k ThrottleKey) metricsTags() []metrics.Tag {
 	return tags
 }
 
+// cappedTags describes a key the controller declined to track. It deliberately omits the
+// namespace: past the key cap the population is every namespace the host has ever seen, which
+// is the unbounded set the cap exists to stop holding. Tagging by namespace here would move
+// that cardinality out of the map and into the metrics pipeline instead of removing it.
+func (k ThrottleKey) cappedTags() []metrics.Tag {
+	return []metrics.Tag{
+		metrics.ResourceExhaustedCauseTag(k.Cause),
+		metrics.StringTag("throttle_scope", k.Scope.String()),
+	}
+}
+
 func (s ThrottleScope) String() string {
 	switch s {
 	case ThrottleScopeHost:
@@ -242,7 +257,7 @@ func (s *ThrottleState) admit(key ThrottleKey) (allowed, metered bool, retryAfte
 	}
 	entry := s.getOrCreate(key)
 	if entry == nil {
-		metrics.TaskThrottleGateAdmitted.With(s.metricsHandler).Record(1, key.metricsTags()...)
+		metrics.TaskThrottleGateAdmitted.With(s.metricsHandler).Record(1, key.cappedTags()...)
 		return true, false, 0
 	}
 
@@ -282,10 +297,11 @@ func (s *ThrottleState) ReportThrottled(key ThrottleKey, admitted bool) {
 		return
 	}
 	entry := s.getOrCreate(key)
-	metrics.TaskThrottleRejections.With(s.metricsHandler).Record(1, key.metricsTags()...)
 	if entry == nil {
+		metrics.TaskThrottleRejections.With(s.metricsHandler).Record(1, key.cappedTags()...)
 		return
 	}
+	metrics.TaskThrottleRejections.With(s.metricsHandler).Record(1, key.metricsTags()...)
 
 	now := s.timeSource.Now()
 	window := s.window()
@@ -448,7 +464,12 @@ func (s *ThrottleState) touchLocked(entry *throttleEntry, now time.Time, window 
 	if !entry.lastAccess.IsZero() && now.Sub(entry.lastAccess) > s.keyTTL() {
 		entry.resetLocked(s.clamp(s.options.InitialRate()), now, window)
 	}
-	entry.lastAccess = now
+	// Only ever move liveness forward. A wall clock stepped backwards would otherwise stamp an
+	// older time here, and the recovery step would then read as a full TTL of inactivity and
+	// reset a continuously busy class back to InitialRate.
+	if now.After(entry.lastAccess) {
+		entry.lastAccess = now
+	}
 }
 
 func (e *throttleEntry) refillLocked(now time.Time, window time.Duration) {
@@ -492,7 +513,23 @@ func (s *ThrottleState) clamp(rate float64) float64 {
 	if !(hi >= lo) {
 		hi = lo
 	}
+	// NaN survives both min and max, and a NaN rate makes tokens NaN, which makes the
+	// tokens < 1 admission test false forever: one bad config value would open the gate
+	// permanently. Treat it as unset rather than letting it through.
+	if math.IsNaN(rate) {
+		return lo
+	}
 	return min(max(rate, lo), hi)
+}
+
+// maxKeys is the per scope key cap, floored at a positive value. At zero or below the cap is
+// already met by an empty map, so every class would fail open and the controller would gate
+// nothing at all while still reporting that it was enabled.
+func (s *ThrottleState) maxKeys() int {
+	if n := s.options.MaxKeys(); n > 0 {
+		return n
+	}
+	return defaultThrottleMaxKeys
 }
 
 // window is the control window, floored at a positive value. A non positive window would close
@@ -552,6 +589,12 @@ func (s *ThrottleState) peek(key ThrottleKey) *throttleEntry {
 
 // getOrCreate returns the entry for a key, creating it lazily. It returns nil when the per map
 // key cap is reached, which the callers treat as fail open: admit, and let the real limiter reject.
+// The returned entry is not pinned: a concurrent sweep can drop it from the map between this
+// call and the caller taking its lock, leaving that caller to work on an orphan while a fresh
+// entry serves everyone else. The cost is bounded at one extra release, because the sweep only
+// evicts a key idle past its TTL and the orphan's own touchLocked would have refilled it to the
+// same burst anyway. A class idle that long is under no pressure, so pinning is not worth the
+// contention it would add to every lookup.
 func (s *ThrottleState) getOrCreate(key ThrottleKey) *throttleEntry {
 	if entry := s.peek(key); entry != nil {
 		return entry
@@ -570,8 +613,8 @@ func (s *ThrottleState) getOrCreate(key ThrottleKey) *throttleEntry {
 	now := s.timeSource.Now()
 	s.maybeSweepLocked(now)
 
-	if len(s.maps[key.Scope]) >= s.options.MaxKeys() {
-		metrics.TaskThrottleKeysDropped.With(s.metricsHandler).Record(1, key.metricsTags()...)
+	if len(s.maps[key.Scope]) >= s.maxKeys() {
+		metrics.TaskThrottleKeysDropped.With(s.metricsHandler).Record(1, key.cappedTags()...)
 		if now.Sub(s.lastCapLog[key.Scope]) >= s.keyTTL() {
 			s.lastCapLog[key.Scope] = now
 			s.logger.Warn("Throttle controller key cap reached, failing open.",

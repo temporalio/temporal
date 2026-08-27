@@ -581,6 +581,11 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	}()
 
 	if matchedErr := e.matchDLQErrorPattern(err); matchedErr != nil {
+		// This return skips the error classification below, which is the only other place a
+		// stale key is dropped. Without this the task keeps whatever budget it last failed
+		// under, and a Nack on the way to the DLQ parks it in that gated class to wait for a
+		// token it has no reason to need.
+		e.clearThrottle()
 		e.incAttempt()
 		return matchedErr
 	}

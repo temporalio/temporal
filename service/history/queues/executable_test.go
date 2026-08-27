@@ -1532,6 +1532,39 @@ func (s *executableSuite) TestNack_ThrottleScopedGoesToTheRescheduler() {
 	executable.Nack(throttleErr)
 }
 
+// A task that stops failing on a shared budget must stop being paced by it. The DLQ pattern
+// match returns from HandleErr before the error classification that is the only other place a
+// stale key is dropped, so without an explicit clear the task keeps whatever budget it last
+// failed under and its Nack parks it in that gated class - waiting on a token it has no reason
+// to need, on its way to the DLQ.
+func (s *executableSuite) TestHandleErr_DLQPatternClearsAStaleThrottleKey() {
+	throttleState := s.newTestThrottleState()
+	executable := s.newTestExecutable(func(p *params) {
+		p.throttleState = throttleState
+		p.dlqErrorPattern = func() string {
+			return "does-not-matter"
+		}
+	})
+
+	// Fail on a governed budget first, so the task is carrying a key.
+	throttleErr := &serviceerror.ResourceExhausted{
+		Cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
+		Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+	}
+	s.Error(executable.HandleErr(throttleErr))
+
+	provider, ok := executable.(queues.ThrottleKeyProvider)
+	s.Require().True(ok)
+	_, held := provider.ThrottleKey()
+	s.True(held, "the throttled attempt should have attached a key")
+
+	// The next attempt fails for an unrelated reason that matches the DLQ pattern.
+	s.Error(executable.HandleErr(serviceerror.NewUnavailable("does-not-matter")))
+
+	_, held = provider.ThrottleKey()
+	s.False(held, "a task headed for the DLQ must not still be parked on a budget")
+}
+
 // Busy workflow is per workflow lock contention rather than a shared budget, so it keeps the
 // fast path even with the controller on. Losing that would slow down every lock retry.
 func (s *executableSuite) TestNack_BusyWorkflowKeepsTheFastPath() {

@@ -39,7 +39,6 @@ type (
 		dlqInternalErrors          dynamicconfig.BoolPropertyFn
 		dlqErrorPattern            dynamicconfig.StringPropertyFn
 		throttleState              *ThrottleState
-		shardID                    int32
 	}
 )
 
