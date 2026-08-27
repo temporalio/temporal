@@ -509,6 +509,7 @@ jobs:
         with:
           name: mixed-brain-logs--${{ github.run_id }}--${{ github.run_attempt }}
           path: .testoutput/mixedbrain_*.log
+          include-hidden-files: true
           if-no-files-found: ignore
           retention-days: 14
 
