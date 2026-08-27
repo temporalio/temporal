@@ -92,6 +92,21 @@ func TestGenerateSchedulerVersionCeilingReplayHistory(t *testing.T) {
 			wantVersion = min(wantVersion, scheduler.SchedulerWorkflowVersion(ceiling))
 		}
 		require.Equal(t, wantVersion, recorded.Version)
+
+		// An active fixture must actually capture a scheduled action (the StartWorkflow command,
+		// buffer, and next-time cache the reverse-replay artifact exists to exercise). The
+		// tweakables marker lands on the first task, well before the first interval fires, so
+		// returning here would let the force-CAN signal below race the action and produce a
+		// history no richer than the paused fixture. Wait until at least one action is recorded.
+		if os.Getenv("SCHEDULER_REPLAY_ACTIVE") == "1" {
+			await.RequireTruef(t, func() bool {
+				desc, err := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+					Namespace:  env.Namespace().String(),
+					ScheduleId: scheduleID,
+				})
+				return err == nil && desc.GetInfo().GetActionCount() >= 1
+			}, 30*time.Second, 100*time.Millisecond, "active V1 scheduler did not start an action before force-CAN")
+		}
 		return execution
 	})
 }
