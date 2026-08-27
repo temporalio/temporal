@@ -934,6 +934,40 @@ func (c *ContextImpl) updateWorkflowExecutionWithNew(
 	)
 }
 
+func (c *ContextImpl) prepareMutableStateTransaction(
+	shardContext historyi.ShardContext,
+	newContext historyi.WorkflowContext,
+	newMutableState historyi.MutableState,
+	newWorkflowTransactionPolicy *historyi.TransactionPolicy,
+) error {
+	if newContext != nil && newMutableState != nil && newWorkflowTransactionPolicy != nil {
+		if *newWorkflowTransactionPolicy == historyi.TransactionPolicyActive {
+			execInfo := newMutableState.GetExecutionInfo()
+			newArchetypeID := newContext.GetArchetypeID()
+			if rl := shardContext.BusinessIDReuseRateLimiter(
+				namespace.ID(execInfo.NamespaceId),
+				execInfo.WorkflowId,
+				newArchetypeID,
+			); rl != nil && !rl.Allow() {
+				archetypeName, _ := shardContext.ChasmRegistry().ArchetypeDisplayName(newArchetypeID)
+				metrics.BusinessIDReuseRateLimited.With(shardContext.GetMetricsHandler()).Record(
+					1,
+					metrics.ResourceExhaustedCauseTag(consts.ErrBusinessIDRateLimitExceeded.Cause),
+					metrics.ResourceExhaustedScopeTag(consts.ErrBusinessIDRateLimitExceeded.Scope),
+					metrics.StringTag("archetype", archetypeName),
+				)
+				return consts.ErrBusinessIDRateLimitExceeded
+			}
+		}
+		c.MutableState.SetSuccessorRunID(newMutableState.GetExecutionState().RunId)
+	}
+
+	// reconcileTaskCompletionBuffer drops an orphaned buffer for the pagination of
+	// RespondWorkflowTaskCompleted requests.
+	c.reconcileTaskCompletionBuffer()
+	return nil
+}
+
 func (c *ContextImpl) closeMutableStateTransaction(
 	ctx context.Context,
 	newContext historyi.WorkflowContext,
@@ -1032,40 +1066,6 @@ func (c *ContextImpl) executeWorkflowTransaction(
 		int(c.MutableState.GetNextEventID()-1),
 	)
 
-	return nil
-}
-
-func (c *ContextImpl) prepareMutableStateTransaction(
-	shardContext historyi.ShardContext,
-	newContext historyi.WorkflowContext,
-	newMutableState historyi.MutableState,
-	newWorkflowTransactionPolicy *historyi.TransactionPolicy,
-) error {
-	if newContext != nil && newMutableState != nil && newWorkflowTransactionPolicy != nil {
-		if *newWorkflowTransactionPolicy == historyi.TransactionPolicyActive {
-			execInfo := newMutableState.GetExecutionInfo()
-			newArchetypeID := newContext.GetArchetypeID()
-			if rl := shardContext.BusinessIDReuseRateLimiter(
-				namespace.ID(execInfo.NamespaceId),
-				execInfo.WorkflowId,
-				newArchetypeID,
-			); rl != nil && !rl.Allow() {
-				archetypeName, _ := shardContext.ChasmRegistry().ArchetypeDisplayName(newArchetypeID)
-				metrics.BusinessIDReuseRateLimited.With(shardContext.GetMetricsHandler()).Record(
-					1,
-					metrics.ResourceExhaustedCauseTag(consts.ErrBusinessIDRateLimitExceeded.Cause),
-					metrics.ResourceExhaustedScopeTag(consts.ErrBusinessIDRateLimitExceeded.Scope),
-					metrics.StringTag("archetype", archetypeName),
-				)
-				return consts.ErrBusinessIDRateLimitExceeded
-			}
-		}
-		c.MutableState.SetSuccessorRunID(newMutableState.GetExecutionState().RunId)
-	}
-
-	// reconcileTaskCompletionBuffer drops an orphaned buffer for the pagination of
-	// RespondWorkflowTaskCompleted requests.
-	c.reconcileTaskCompletionBuffer()
 	return nil
 }
 
