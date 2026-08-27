@@ -7017,9 +7017,9 @@ func validateScheduleTimestamps(spec *schedulepb.ScheduleSpec) error {
 	return validateTimestamp(spec.GetEndTime(), "end time")
 }
 
-func validateTimestamp(timestamp *timestamppb.Timestamp, field string) error {
-	if timestamp != nil {
-		if err := timestamp.CheckValid(); err != nil {
+func validateTimestamp(value *timestamppb.Timestamp, field string) error {
+	if value != nil {
+		if err := value.CheckValid(); err != nil {
 			return fmt.Errorf("%s is not a valid timestamp: %w", field, err)
 		}
 	}
