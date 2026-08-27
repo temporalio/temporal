@@ -324,7 +324,7 @@ func (r *reschedulerImpl) drainClassLocked(
 		if gated && pass.releasesRemaining <= 0 {
 			// The pass, not the class, is out of room. Come back promptly, since the work is
 			// due and some other class may simply have taken this pass's releases.
-			pass.wakeAt(pass.now.Add(r.budgetRetryInterval()))
+			pass.wakeAt(pass.now.Add(r.budgetRetryInterval(0)))
 			return
 		}
 
@@ -344,12 +344,13 @@ func (r *reschedulerImpl) drainClassLocked(
 		metered := false
 		if gated {
 			var allowed bool
-			allowed, metered = r.throttleState.admit(key.Throttle)
+			var retryAfter time.Duration
+			allowed, metered, retryAfter = r.throttleState.admit(key.Throttle)
 			if !allowed {
 				metrics.TaskReschedulerBudgetDenied.With(r.metricsHandler).Record(1, tags...)
-				// The class is over its admitted rate. Come back within the control window
-				// rather than at the head's own backoff, which is far longer.
-				pass.wakeAt(pass.now.Add(r.budgetRetryInterval()))
+				// The class is over its admitted rate. Come back when the gate expects to have
+				// a token, rather than at the head's own backoff, which is far longer.
+				pass.wakeAt(pass.now.Add(r.budgetRetryInterval(retryAfter)))
 				return
 			}
 		}
@@ -420,11 +421,25 @@ func (r *reschedulerImpl) rescheduleUngatedLocked(now time.Time) {
 }
 
 // budgetRetryInterval is how long a budget denied class waits before the next release attempt.
-// It is a fraction of the control window so a class at its budget still releases smoothly
-// rather than in one burst per window.
-func (r *reschedulerImpl) budgetRetryInterval() time.Duration {
+//
+// eta is the gate's estimate of when it will next hold a token. It can only push the wait out,
+// never pull it in: a class at a low rate is told to wait the whole second its next token needs
+// instead of re-asking ten times to learn nothing, while a class at a high rate keeps the window
+// fraction.
+//
+// The fraction has to stay a floor rather than become a fallback. The bucket is shared by every
+// shard's rescheduler on the host, so a per-shard estimate is computed as though this shard were
+// the only consumer and is wrong by that factor. Letting it shorten the wait makes each shard
+// poll at the whole class's refill rate: at 200/s that is a 5ms wake per shard, twenty times the
+// current cost, to release the same tasks.
+//
+// The result is capped at one window because the rate moves at window close, so a longer wait
+// could sleep through an increase that would have released sooner.
+func (r *reschedulerImpl) budgetRetryInterval(eta time.Duration) time.Duration {
 	const budgetRetryDivisor = 10
-	interval := r.throttleState.window() / budgetRetryDivisor
+
+	window := r.throttleState.window()
+	interval := min(max(eta, window/budgetRetryDivisor), window)
 	return max(interval, time.Millisecond)
 }
 

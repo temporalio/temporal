@@ -255,7 +255,10 @@ func TestReschedule_BudgetDeniedWakesInsideControlWindow(t *testing.T) {
 
 	require.Equal(t, 5, r.Len())
 	require.Len(t, gate.updates, 1)
-	require.Equal(t, now.Add(testThrottleWindow/10), gate.updates[0])
+	// At 1/s the next whole token is a second out, which is also the window cap. The point is
+	// that the class comes back on the budget's schedule and not on the task's own backoff,
+	// which is far longer.
+	require.Equal(t, now.Add(time.Second), gate.updates[0])
 }
 
 // A disabled controller must leave the rescheduler behaving exactly as it did before.

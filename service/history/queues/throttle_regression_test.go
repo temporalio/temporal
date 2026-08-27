@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/clock"
 	"go.uber.org/mock/gomock"
 )
@@ -221,28 +222,93 @@ func TestReschedule_DeniedClassIsProbedOncePerPass(t *testing.T) {
 
 	require.Equal(t, 50, r.Len(), "a denied pass must release nothing")
 	require.Len(t, gate.updates, 1, "a denied pass must set exactly one wake")
-	require.Equal(t, now.Add(testThrottleWindow/10), gate.updates[0],
-		"a denied class must retry inside the control window, not at the task's own backoff")
+	// One wake for fifty parked tasks, placed on the budget's schedule: at 1/s the next token
+	// is a second away, which is also the window cap. The task's own backoff is far longer.
+	require.Equal(t, now.Add(time.Second), gate.updates[0],
+		"a denied class must retry on the budget's schedule, not at the task's own backoff")
 }
 
-// budgetRetryInterval is derived from the control window, so shrinking the window shrinks the
-// poll interval proportionally. The floor is the only thing standing between a small window and
-// a thousand wakes per second per gated shard.
-func TestReschedule_BudgetRetryIntervalTracksWindow(t *testing.T) {
+// budgetRetryInterval lets the gate's estimate push the wait out but never pull it in. A class
+// at a low rate waits the whole second its next token needs instead of re-asking ten times to
+// learn nothing; a class at a high rate keeps the window fraction.
+//
+// The fraction must stay a floor. The bucket is shared by every shard's rescheduler on the host,
+// so a per-shard estimate is computed as though this shard were the only consumer. Honouring a
+// shorter estimate would make each shard poll at the whole class's refill rate - at 200/s a 5ms
+// wake per shard, twenty times the cost, releasing the same tasks.
+func TestReschedule_BudgetRetryIntervalOnlyEverWaitsLonger(t *testing.T) {
 	for _, tc := range []struct {
+		name   string
 		window time.Duration
+		eta    time.Duration
 		want   time.Duration
 	}{
-		{window: 10 * time.Second, want: time.Second},
-		{window: time.Second, want: 100 * time.Millisecond},
-		{window: 200 * time.Millisecond, want: 20 * time.Millisecond},
+		{name: "no estimate falls back to a tenth of the window",
+			window: 10 * time.Second, eta: 0, want: time.Second},
+		{name: "no estimate, one second window",
+			window: time.Second, eta: 0, want: 100 * time.Millisecond},
+		{name: "no estimate, small window",
+			window: 200 * time.Millisecond, eta: 0, want: 20 * time.Millisecond},
+
+		{name: "an estimate longer than the fraction is honoured",
+			window: time.Second, eta: 400 * time.Millisecond, want: 400 * time.Millisecond},
+
+		// The regression this floor exists to prevent: a fast class must not poll faster.
+		{name: "an estimate shorter than the fraction is floored to the fraction",
+			window: time.Second, eta: 40 * time.Millisecond, want: 100 * time.Millisecond},
+		{name: "a high rate class whose token is microseconds away still waits the fraction",
+			window: time.Second, eta: 50 * time.Microsecond, want: 100 * time.Millisecond},
+
+		// The rate moves at window close, so a longer wait could sleep through an increase.
+		{name: "an estimate past the window is capped at the window",
+			window: time.Second, eta: 30 * time.Second, want: time.Second},
 	} {
-		o := defaultThrottleOverrides()
-		state, _ := newTestThrottleStateWithWindow(o, tc.window)
-		r := &reschedulerImpl{throttleState: state}
-		require.Equal(t, tc.want, r.budgetRetryInterval(),
-			"window %s should give a retry interval of %s", tc.window, tc.want)
+		t.Run(tc.name, func(t *testing.T) {
+			o := defaultThrottleOverrides()
+			state, _ := newTestThrottleStateWithWindow(o, tc.window)
+			r := &reschedulerImpl{throttleState: state}
+			require.Equal(t, tc.want, r.budgetRetryInterval(tc.eta))
+		})
 	}
+}
+
+// The estimate has to come from the gate, not be guessed by the caller: a denied class waits
+// exactly as long as its own bucket needs, which is what turns a wasted wake into a productive
+// one. At 4/s a denied class is one quarter of a second from its next token, so it must not be
+// told to come back at the window fraction of 100ms and find nothing three times over.
+func TestThrottleState_DeniedAdmitReportsWhenTheNextTokenArrives(t *testing.T) {
+	o := defaultThrottleOverrides()
+	o.initialRate = 4
+	state, _ := newTestThrottleStateWithWindow(o, time.Second)
+
+	key := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
+
+	// Burst is rate*window = 4 tokens. Drain them, then the next admit must be denied.
+	for i := 0; i < 4; i++ {
+		allowed, _, retryAfter := state.admit(key)
+		require.True(t, allowed, "token %d of the burst should be admitted", i+1)
+		require.Zero(t, retryAfter, "an admitted release reports no wait")
+	}
+
+	allowed, metered, retryAfter := state.admit(key)
+	require.False(t, allowed, "the burst is spent, so this release must be denied")
+	require.False(t, metered)
+	require.Equal(t, 250*time.Millisecond, retryAfter,
+		"at 4/s the next whole token is a quarter second away")
+}
+
+// A rate that cannot refill has no answer to give, and inventing one would park the class for a
+// wait nothing will satisfy. Reporting zero hands the choice back to the caller's fallback.
+func TestThrottleState_NonPositiveRateReportsNoEstimate(t *testing.T) {
+	e := &throttleEntry{rate: 0, tokens: 0}
+	require.Zero(t, e.tokenETALocked(), "a zero rate never refills, so there is no ETA to give")
+
+	e = &throttleEntry{rate: -1, tokens: 0}
+	require.Zero(t, e.tokenETALocked(), "a negative rate never refills either")
+
+	// A rate so small the wait overflows a Duration must not wrap into a short one.
+	e = &throttleEntry{rate: math.SmallestNonzeroFloat64, tokens: 0}
+	require.Zero(t, e.tokenETALocked(), "an unrepresentable wait reports no estimate")
 }
 
 // The admitted flag must be set before the task reaches the scheduler. TrySubmit hands the
@@ -340,7 +406,7 @@ func TestThrottleState_FailOpenAdmitIsNotMetered(t *testing.T) {
 	tracked, overflow := apsKey("ns-tracked"), apsKey("ns-overflow")
 	require.True(t, state.Admit(tracked))
 
-	allowed, metered := state.admit(overflow)
+	allowed, metered, _ := state.admit(overflow)
 	require.True(t, allowed, "past the cap the real limiter stays the enforcement point")
 	require.False(t, metered, "an untracked release must not be reported as metered")
 }

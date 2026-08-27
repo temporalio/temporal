@@ -2,6 +2,7 @@ package queues
 
 import (
 	"errors"
+	"math"
 	"strconv"
 	"sync"
 	"time"
@@ -223,7 +224,7 @@ func (s *ThrottleState) Enabled() bool {
 // It always returns true when the controller is disabled, and when the key cap has been hit,
 // so that the real limiter, not this cache, stays the enforcement point.
 func (s *ThrottleState) Admit(key ThrottleKey) bool {
-	allowed, _ := s.admit(key)
+	allowed, _, _ := s.admit(key)
 	return allowed
 }
 
@@ -231,14 +232,18 @@ func (s *ThrottleState) Admit(key ThrottleKey) bool {
 // release. The two differ past the key cap and while disabled, where the gate lets the task
 // through without tracking it: a rejection from an unmetered release is loss on a packet the
 // controller never sent, and counting it would move a rate on evidence it did not produce.
-func (s *ThrottleState) admit(key ThrottleKey) (allowed, metered bool) {
+//
+// retryAfter is set only on denial, and reports how long until the bucket holds a whole token.
+// It lets a denied caller wait exactly that long instead of re-asking on a fixed interval. It
+// is zero when the wait cannot be derived, which leaves the choice of interval to the caller.
+func (s *ThrottleState) admit(key ThrottleKey) (allowed, metered bool, retryAfter time.Duration) {
 	if !s.options.Enabled() {
-		return true, false
+		return true, false, 0
 	}
 	entry := s.getOrCreate(key)
 	if entry == nil {
 		metrics.TaskThrottleGateAdmitted.With(s.metricsHandler).Record(1, key.metricsTags()...)
-		return true, false
+		return true, false, 0
 	}
 
 	now := s.timeSource.Now()
@@ -253,12 +258,12 @@ func (s *ThrottleState) admit(key ThrottleKey) (allowed, metered bool) {
 
 	if entry.tokens < 1 {
 		metrics.TaskThrottleGateSuppressed.With(s.metricsHandler).Record(1, key.metricsTags()...)
-		return false, false
+		return false, false, entry.tokenETALocked()
 	}
 	entry.tokens--
 	entry.releases++
 	metrics.TaskThrottleGateAdmitted.With(s.metricsHandler).Record(1, key.metricsTags()...)
-	return true, true
+	return true, true, 0
 }
 
 // ReportThrottled feeds one observed throttle rejection into the controller.
@@ -459,6 +464,24 @@ func (e *throttleEntry) refillLocked(now time.Time, window time.Duration) {
 // idle cannot dump its whole backlog the moment it becomes due.
 func (e *throttleEntry) burstLocked(window time.Duration) float64 {
 	return max(1, e.rate*window.Seconds())
+}
+
+// tokenETALocked reports how long until the bucket holds a whole token at the current rate.
+// A non-positive rate never refills on its own, so it reports zero rather than a wait no
+// refill will satisfy; the caller decides what to do with that.
+//
+// The estimate is only good until the next window closes, because the rate moves there. The
+// caller is expected to cap it at one window rather than sleeping through a rate increase.
+func (e *throttleEntry) tokenETALocked() time.Duration {
+	deficit := 1 - e.tokens
+	if deficit <= 0 || e.rate <= 0 {
+		return 0
+	}
+	seconds := deficit / e.rate
+	if seconds > math.MaxInt64/float64(time.Second) {
+		return 0
+	}
+	return time.Duration(seconds * float64(time.Second))
 }
 
 func (s *ThrottleState) clamp(rate float64) float64 {
