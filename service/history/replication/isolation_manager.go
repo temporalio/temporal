@@ -13,6 +13,8 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
+const isolationBaseScopeCount = 3
+
 // isolationManager owns the sender-side state of HIGH-lane namespace isolation.
 // Each namespace the receiver reports as overwhelming the shared HIGH (live) lane is
 // split onto its own dedicated lane: an independent read cursor and wire stream,
@@ -413,16 +415,16 @@ func (m *isolationManager) MemberResumeFloor() int64 {
 // written by this codec, so it is rejected rather than silently dropped — a dropped
 // member would lift the scope-0 cleanup clamp over its unsent window.
 func parseIsolationState(readerState *persistencespb.QueueReaderState) (int64, []restoredMember, error) {
-	if len(readerState.Scopes) < 3 {
+	if len(readerState.Scopes) < isolationBaseScopeCount {
 		return 0, nil, nil
 	}
 	defaultCursor := readerState.Scopes[1].GetRange().GetInclusiveMin().GetTaskId()
 	var restored []restoredMember
-	for i, persistedScope := range readerState.Scopes[3:] {
+	for i, persistedScope := range readerState.Scopes[isolationBaseScopeCount:] {
 		scope := queues.FromPersistenceScope(persistedScope)
 		nsPredicate, ok := scope.Predicate.(*tasks.NamespacePredicate)
 		if !ok || len(nsPredicate.NamespaceIDs) != 1 {
-			return 0, nil, fmt.Errorf("isolation member scope %d has unexpected predicate %T", i+3, scope.Predicate)
+			return 0, nil, fmt.Errorf("isolation member scope %d has unexpected predicate %T", i+isolationBaseScopeCount, scope.Predicate)
 		}
 		for ns := range nsPredicate.NamespaceIDs {
 			restored = append(restored, restoredMember{
