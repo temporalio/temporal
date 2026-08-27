@@ -852,7 +852,7 @@ func (s *authorizerInterceptorSuite) TestInterceptStream_AudienceMapperSkippedWi
 	s.NoError(err)
 }
 
-func (s *authorizerInterceptorSuite) TestGetAuthInfoForNonUnaryRequest_AudiencePassedToClaimMapper() {
+func (s *authorizerInterceptorSuite) TestGetAuthInfoForRequest_AudiencePassedToClaimMapper() {
 	mockAudienceMapper := NewMockJWTAudienceMapper(s.controller)
 	mockAudienceMapper.EXPECT().Audience(ctx, nil, nil).Return("request-audience")
 
@@ -871,7 +871,7 @@ func (s *authorizerInterceptorSuite) TestGetAuthInfoForNonUnaryRequest_AudienceP
 		dynamicconfig.GetBoolPropertyFn(false),
 	)
 
-	authInfo := interceptor.GetAuthInfoForNonUnaryRequest(
+	authInfo := interceptor.GetAuthInfoForRequest(
 		ctx,
 		nil,
 		http.Header{"Authorization": {"Bearer some-token"}},
@@ -880,7 +880,7 @@ func (s *authorizerInterceptorSuite) TestGetAuthInfoForNonUnaryRequest_AudienceP
 	s.Equal(&AuthInfo{AuthToken: "Bearer some-token", Audience: "request-audience"}, authInfo)
 }
 
-func (s *authorizerInterceptorSuite) TestGetAuthInfoForNonUnaryRequest_AudienceMapperSkippedWithoutToken() {
+func (s *authorizerInterceptorSuite) TestGetAuthInfoForRequest_AudienceMapperSkippedWithoutToken() {
 	mockAudienceMapper := NewMockJWTAudienceMapper(s.controller)
 	interceptor := NewInterceptor(
 		s.mockClaimMapper,
@@ -899,7 +899,7 @@ func (s *authorizerInterceptorSuite) TestGetAuthInfoForNonUnaryRequest_AudienceM
 
 	cert := &x509.Certificate{Subject: pkix.Name{CommonName: "client"}}
 	tlsInfo := &credentials.TLSInfo{State: tls.ConnectionState{VerifiedChains: [][]*x509.Certificate{{cert}}}}
-	authInfo := interceptor.GetAuthInfoForNonUnaryRequest(ctx, tlsInfo, http.Header{})
+	authInfo := interceptor.GetAuthInfoForRequest(ctx, tlsInfo, http.Header{})
 
 	s.Empty(authInfo.AuthToken)
 	s.Empty(authInfo.Audience)

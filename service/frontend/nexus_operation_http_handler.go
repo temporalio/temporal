@@ -320,7 +320,7 @@ func (h *NexusOperationHTTPHandler) parseTLSAndAuthInfo(r *http.Request, nc *nex
 	}
 
 	var err error
-	if authInfo := h.auth.GetAuthInfoForNonUnaryRequest(r.Context(), tlsInfo, r.Header); authInfo != nil {
+	if authInfo := h.auth.GetAuthInfoForRequest(r.Context(), tlsInfo, r.Header); authInfo != nil {
 		nc.claims, err = h.auth.GetClaims(authInfo)
 		if err != nil {
 			return nil, err

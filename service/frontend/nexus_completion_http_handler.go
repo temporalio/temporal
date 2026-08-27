@@ -584,7 +584,7 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexusrpc
 
 	var err error
 	var claims *authorization.Claims
-	if authInfo := c.AuthInterceptor.GetAuthInfoForNonUnaryRequest(ctx, tlsInfo, request.HTTPRequest.Header); authInfo != nil {
+	if authInfo := c.AuthInterceptor.GetAuthInfoForRequest(ctx, tlsInfo, request.HTTPRequest.Header); authInfo != nil {
 		claims, err = c.AuthInterceptor.GetClaims(authInfo)
 		if err != nil {
 			return err
