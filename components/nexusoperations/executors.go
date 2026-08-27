@@ -164,6 +164,7 @@ func buildCallbackFromTemplate(callbackTemplate string, ns *namespace.Namespace)
 	return builder.String(), nil
 }
 
+//nolint:revive // The legacy executor is kept intact while existing HSM operations remain loadable.
 func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task InvocationTask) error {
 	ns, err := e.NamespaceRegistry.GetNamespaceByID(namespace.ID(ref.WorkflowKey.NamespaceID))
 	if err != nil {
@@ -466,7 +467,7 @@ func (e taskExecutor) saveStartedResult(env hsm.Environment, node *hsm.Node, ope
 				ScheduledEventId: eventID,
 				OperationToken:   result.Pending.Token,
 				// TODO(bergundy): Remove this fallback after the 1.27 release.
-				OperationId: result.Pending.Token,
+				OperationId: result.Pending.Token, //nolint:staticcheck // Retained for compatibility with older servers.
 				RequestId:   operation.RequestId,
 			},
 		}
@@ -678,6 +679,7 @@ func (e taskExecutor) recordOperationTimeout(node *hsm.Node, timeoutType enumspb
 	})
 }
 
+//nolint:revive // The legacy executor is kept intact while existing HSM operations remain loadable.
 func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Environment, ref hsm.Ref, task CancelationTask) error {
 	ns, err := e.NamespaceRegistry.GetNamespaceByID(namespace.ID(ref.WorkflowKey.NamespaceID))
 	if err != nil {
@@ -860,6 +862,7 @@ func (e taskExecutor) loadArgsForCancelation(ctx context.Context, env hsm.Enviro
 	return
 }
 
+//nolint:revive // The legacy executor is kept intact while existing HSM operations remain loadable.
 func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environment, ref hsm.Ref, callErr error, scheduledEventID int64) error {
 	return env.Access(ctx, ref, hsm.AccessWrite, func(n *hsm.Node) error {
 		return hsm.MachineTransition(n, func(c Cancelation) (hsm.TransitionOutput, error) {
@@ -956,7 +959,7 @@ func createNexusOperationFailure(operation Operation, scheduledEventID int64, ca
 				Operation:      operation.Operation,
 				OperationToken: operation.OperationToken,
 				// TODO(bergundy): This field is deprecated, remove it after the 1.27 release.
-				OperationId:      operation.OperationToken,
+				OperationId:      operation.OperationToken, //nolint:staticcheck // Retained for compatibility with older servers.
 				ScheduledEventId: scheduledEventID,
 			},
 		},
