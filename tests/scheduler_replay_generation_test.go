@@ -73,7 +73,7 @@ func TestGenerateSchedulerVersionCeilingReplayHistory(t *testing.T) {
 			State:  state,
 		})
 
-		execution := waitForSchedulerWorkflowExecution(t, ctx, env, workflowID)
+		execution := waitForSchedulerWorkflowExecution(ctx, t, env, workflowID)
 		// The first task records the version ceiling in a MutableSideEffect marker. Without it,
 		// this fixture would not cover the configuration-driven behavior.
 		var recorded scheduler.TweakablePolicies
@@ -173,8 +173,8 @@ func generateSchedulerReplayHistory(
 }
 
 func waitForSchedulerWorkflowExecution(
-	t *testing.T,
 	ctx context.Context,
+	t *testing.T,
 	env *testcore.TestEnv,
 	workflowID string,
 ) *commonpb.WorkflowExecution {
