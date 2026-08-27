@@ -197,7 +197,6 @@ func (a *Interceptor) InterceptStream(
 	if !bypassAuth {
 		tlsConnection := TLSInfoFromContext(ctx)
 		headerGetter := headers.NewGRPCHeaderGetter(ctx)
-
 		authInfo := a.GetAuthInfoForNonUnaryRequest(ctx, tlsConnection, headerGetter)
 
 		var claims *Claims
