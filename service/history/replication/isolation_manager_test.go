@@ -291,13 +291,70 @@ func (s *isolationManagerSuite) TestBuildReaderState_ClampsOverallMinToMemberFlo
 	s.Equal(int64(800), state.Scopes[0].GetRange().GetInclusiveMin().GetTaskId(),
 		"scope 0 must be clamped to the member's unsent window so cleanup cannot delete it")
 	s.Equal(int64(5000), state.Scopes[1].GetRange().GetInclusiveMin().GetTaskId())
-	s.Equal(int64(800), m.MemberResumeFloor())
+	floor, ok := m.MemberResumeFloor()
+	s.True(ok)
+	s.Equal(int64(800), floor)
 
 	// Once the lane catches up, the clamp lifts with it.
 	m.Reconcile([]string{"a"}, 5000, map[string]int64{"a": 5000})
 	state = m.BuildReaderState(attr)
 	s.Equal(int64(5000), state.Scopes[0].GetRange().GetInclusiveMin().GetTaskId())
-	s.Equal(int64(5000), m.MemberResumeFloor())
+	floor, ok = m.MemberResumeFloor()
+	s.True(ok)
+	s.Equal(int64(5000), floor)
+}
+
+func (s *isolationManagerSuite) TestMemberResumeFloor_ZeroMinimum() {
+	m := newIsolationManagerWithState(2, 5, 1, 0, 5000, []restoredMember{
+		{namespaceID: "zero", cursor: 0},
+		{namespaceID: "positive", cursor: 800},
+	})
+	floor, ok := m.MemberResumeFloor()
+	s.True(ok)
+	s.Zero(floor)
+}
+
+func (s *isolationManagerSuite) TestCollapseToDefaultLane_GatedOnSharedAck() {
+	m := newIsolationManager(2, 5, 1, 0)
+	m.AdvanceDefaultCursor(200)
+	s.rc(m, 100, "a", "b")
+
+	// A receiver's pre-existing shared watermark is not evidence that this sender
+	// re-covered the restored member windows.
+	s.False(m.CollapseToDefaultLane(200))
+	s.False(m.RecordDefaultLaneCoverage(101, 200))
+	s.True(m.RecordDefaultLaneCoverage(100, 200))
+	s.False(m.CollapseToDefaultLane(199))
+	s.Equal(1, m.NamespaceTier("a"))
+	s.Equal(1, m.NamespaceTier("b"))
+
+	// New unfiltered shared-lane sends do not move the fallback gate: tasks above
+	// the snapshotted cursor are already owned by the shared lane.
+	m.AdvanceDefaultCursor(300)
+	s.True(m.CollapseToDefaultLane(200))
+	s.Nil(m.DefaultFilter())
+	s.Empty(m.TierMembers(1))
+	s.False(m.CollapseToDefaultLane(200))
+}
+
+func (s *isolationManagerSuite) TestCollapseToDefaultLane_DropsPendingRetirements() {
+	m := newIsolationManager(2, 5, 1, 0)
+	m.AdvanceDefaultCursor(200)
+	s.rc(m, 100, "a")
+	m.Reconcile(nil, 200, map[string]int64{"a": 200})
+
+	s.True(m.CollapseToDefaultLane(200))
+	s.Empty(m.PopRetired())
+}
+
+func (s *isolationManagerSuite) TestCollapseToDefaultLane_EmptyReplayAtMemberFloor() {
+	m := newIsolationManager(2, 5, 1, 0)
+	s.rc(m, 100, "a")
+
+	// An exclusive queue high watermark at the inclusive member floor means there
+	// are no readable tasks in the member's [floor, high) window.
+	s.True(m.RecordDefaultLaneCoverage(100, 100))
+	s.True(m.CollapseToDefaultLane(100))
 }
 
 // Misconfiguration must clamp, not strand: tierCount < 1 would exclude isolated

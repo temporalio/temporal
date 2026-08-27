@@ -303,23 +303,32 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 		if s.isTieredStackEnabled {
 			s.flowController.RefreshReceiverFlowControlInfo(attr)
 		}
-		// Reconcile lane membership against the receiver's throttled set, then persist
-		// one scope per member lane (namespace predicate + applied watermark), so a
-		// reconnect reconstructs the lanes instead of re-sending the whole HIGH lane.
-		// Split floors and the merge-back gate anchor on applied (acked) watermarks so
-		// ordered HIGH events never straddle a hand-off with a gap. Scopes[0] is the
-		// receiver's overall min clamped to the member lanes' resume positions —
-		// replication task cleanup reads only Scopes[0], and the receiver's fold
-		// cannot vouch for windows its connection has never seen.
-		s.isolation.Reconcile(
-			attr.GetThrottleHighNamespaceIds(),
-			attr.GetHighPriorityState().GetInclusiveLowWatermark(),
-			memberAckedWatermarks(attr.GetIsolatedLaneStates()),
-		)
-		s.emitTierMetrics()
-		if err := s.sendPendingRetirements(); err != nil {
-			return err
+		highAcked := attr.GetHighPriorityState().GetInclusiveLowWatermark()
+		if s.isolationConfirmed.Load() {
+			// Reconcile lane membership against the receiver's throttled set, then persist
+			// one scope per member lane (namespace predicate + applied watermark), so a
+			// reconnect reconstructs the lanes instead of re-sending the whole HIGH lane.
+			// Split floors and the merge-back gate anchor on applied (acked) watermarks so
+			// ordered HIGH events never straddle a hand-off with a gap. Scopes[0] is the
+			// receiver's overall min clamped to the member lanes' resume positions —
+			// replication task cleanup reads only Scopes[0], and the receiver's fold
+			// cannot vouch for windows its connection has never seen.
+			s.isolation.Reconcile(
+				attr.GetThrottleHighNamespaceIds(),
+				highAcked,
+				memberAckedWatermarks(attr.GetIsolatedLaneStates()),
+			)
+			if err := s.sendPendingRetirements(); err != nil {
+				return err
+			}
+		} else {
+			// The shared lane is unfiltered until the receiver advertises support. Once
+			// it has applied through the shared cursor, restored member windows have been
+			// re-covered and their scopes can be collapsed instead of pinning cleanup for
+			// the lifetime of an older receiver connection.
+			s.isolation.CollapseToDefaultLane(highAcked)
 		}
+		s.emitTierMetrics()
 		if err := s.shardContext.UpdateReplicationQueueReaderState(readerID, s.isolation.BuildReaderState(attr)); err != nil {
 			return err
 		}
@@ -460,8 +469,11 @@ func (s *StreamSenderImpl) sendCatchUp(priority enumsspb.TaskPriority) (int64, e
 	catchupEndExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
 
 	catchupBeginInclusiveWatermark := s.catchupBeginWatermark(priority, catchupEndExclusiveWatermark)
+	var defaultFilter func(task tasks.Task) bool
+	recordDefaultCoverage := false
 	if s.isolation != nil && priority == enumsspb.TASK_PRIORITY_HIGH {
-		if !s.isolationConfirmed.Load() {
+		isolationConfirmed := s.isolationConfirmed.Load()
+		if !isolationConfirmed {
 			// Restored member lanes exist but the receiver has not (or will never —
 			// e.g. a version rollback) confirmed isolation support, so the tier
 			// loops may never run. Their unsent windows must ride the shared lane
@@ -469,9 +481,12 @@ func (s *StreamSenderImpl) sendCatchUp(priority enumsspb.TaskPriority) (int64, e
 			// position (the shared filter admits members while unconfirmed). If the
 			// receiver confirms later, tier lanes re-cover the same window —
 			// duplicates, applied idempotently, never a gap.
-			if memberFloor := s.isolation.MemberResumeFloor(); memberFloor > 0 {
+			if memberFloor, ok := s.isolation.MemberResumeFloor(); ok {
 				catchupBeginInclusiveWatermark = min(catchupBeginInclusiveWatermark, memberFloor)
+				recordDefaultCoverage = true
 			}
+		} else {
+			defaultFilter = s.isolation.DefaultFilter()
 		}
 		// Advance the default cursor BEFORE sending: the merge-back gate compares tier
 		// acked watermarks against it, so advancing first guarantees a namespace can
@@ -483,12 +498,15 @@ func (s *StreamSenderImpl) sendCatchUp(priority enumsspb.TaskPriority) (int64, e
 		priority,
 		catchupBeginInclusiveWatermark,
 		catchupEndExclusiveWatermark,
-		s.defaultLaneFilter(priority),
+		defaultFilter,
 		"", // shared HIGH / LOW lane, not an isolated member lane
 		sharedLaneTag,
 		nil,
 	); err != nil {
 		return 0, err
+	}
+	if recordDefaultCoverage {
+		s.isolation.RecordDefaultLaneCoverage(catchupBeginInclusiveWatermark, catchupEndExclusiveWatermark)
 	}
 	return catchupEndExclusiveWatermark, nil
 }
@@ -801,7 +819,7 @@ func (s *StreamSenderImpl) isolationFailoverWatermark(attr *replicationspb.SyncR
 		}
 	}
 	if s.isolationConfirmed.Load() {
-		if floor := s.isolation.MemberResumeFloor(); floor > 0 && floor < watermark {
+		if floor, ok := s.isolation.MemberResumeFloor(); ok && floor < watermark {
 			// The floor has no receiver-reported visibility time; pair the
 			// conservative task ID with an unknown (zero) timestamp rather than a
 			// fresher lane's time.
