@@ -3601,8 +3601,9 @@ is non-fatal: the search continues past this threshold.`,
 	SchedulerV1VersionCeiling = NewNamespaceIntSetting(
 		"worker.schedulerV1VersionCeiling",
 		-1,
-		`SchedulerV1VersionCeiling caps the workflow version the V1 scheduler records into history, so histories written on this cluster stay replayable on peer clusters that do not support newer versions. Set it to the highest scheduler version supported by the lowest peer. Intended for multi-cluster failover and rollback.
-The recorded TweakablePolicies.Version is clamped to min(current, ceiling). A negative value (the default) disables the clamp. A value at or above the highest supported version is a no-op. The ceiling is read once, when a worker starts running a schedule, and then held fixed for that run.`,
+		`SchedulerV1VersionCeiling caps the workflow version the V1 scheduler records into history, so histories written on this cluster stay replayable on peer clusters that do not support newer versions. Set it to the highest scheduler version supported by the lowest peer. Intended for multi-cluster failover and rollback. The supported floor is version 1 (OSS v1.20). A negative value (the default) disables the cap.
+The ceiling is reread on every tweakables evaluation but only ratchets tighter within a run (one execution between start and Continue-As-New): a looser or unset value never raises it, and it never lowers a version already recorded for the run. Lowering the ceiling therefore takes effect on the next run, when Continue-As-New rereads dynamic config. A run is one execution between start and Continue-As-New.
+Operational notes: (1) A ceiling below 12 holds the version below CHASM migration support, so it pauses all V1->V2 CHASM migrations for the namespace until the ceiling is lifted (deferred, not dropped). (2) A ceiling below 6 skips custom search-attribute updates on schedule edits. (3) This caps V1 scheduler histories only; schedules already migrated to CHASM V2 are not made rollback-safe by it.`,
 	)
 	WorkerDeleteNamespaceActivityLimits = NewGlobalTypedSetting(
 		"worker.deleteNamespaceActivityLimitsConfig",
