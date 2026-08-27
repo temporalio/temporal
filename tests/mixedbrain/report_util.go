@@ -114,6 +114,20 @@ func registerMixedBrainReport(t *testing.T, outputRoot string, report *mixedBrai
 			return
 		}
 		for name, path := range report.Logs {
+			if strings.HasPrefix(name, "Omes ") {
+				synopsis, err := summarizeOmesFailure(path)
+				if os.IsNotExist(err) {
+					continue
+				}
+				if err != nil {
+					t.Logf("scan %s log: %v", name, err)
+					continue
+				}
+				if findings := synopsis.formatErrorFindings(); findings != "" {
+					t.Logf("Aggregated %s log errors (%s):\n%s", name, path, findings)
+					continue
+				}
+			}
 			tail, err := boundedLogTail(path, diagnosticMaxLines, diagnosticMaxBytes)
 			if os.IsNotExist(err) {
 				continue

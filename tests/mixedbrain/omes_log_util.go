@@ -5,13 +5,17 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
 	"go.temporal.io/server/common/util"
 )
 
-const omesSynopsisMaxFieldBytes = 2 << 10
+const (
+	omesSynopsisMaxFieldBytes = 2 << 10
+	maxOmesErrorFindings      = 3
+)
 
 type omesLogEntry struct {
 	Level     string `json:"L"`
@@ -19,15 +23,16 @@ type omesLogEntry struct {
 	Message   string `json:"M"`
 }
 
-type omesFailureCause struct {
+type omesLogFinding struct {
+	level     string
 	message   string
 	count     int
 	firstSeen string
 }
 
 type omesFailureSynopsis struct {
-	finalError  string
-	likelyCause omesFailureCause
+	finalError    string
+	errorFindings []omesLogFinding
 }
 
 func newOmesFailure(scenario, logPath string, commandErr error) error {
@@ -44,12 +49,8 @@ func newOmesFailure(scenario, logPath string, commandErr error) error {
 	} else {
 		fmt.Fprintf(&message, "  command error: %v\n", commandErr)
 	}
-	if synopsis.likelyCause.message != "" {
-		fmt.Fprintf(&message, "  likely cause: %s (%d occurrences)\n",
-			synopsis.likelyCause.message, synopsis.likelyCause.count)
-		if synopsis.likelyCause.firstSeen != "" {
-			fmt.Fprintf(&message, "  first seen: %s\n", synopsis.likelyCause.firstSeen)
-		}
+	if findings := synopsis.formatErrorFindings(); findings != "" {
+		fmt.Fprintf(&message, "  recurring errors:\n%s", findings)
 	}
 	fmt.Fprintf(&message, "  full log: %s", logPath)
 	return fmt.Errorf("%s", message.String())
@@ -62,38 +63,103 @@ func summarizeOmesFailure(logPath string) (omesFailureSynopsis, error) {
 	}
 	defer func() { _ = f.Close() }()
 
-	causes := make(map[string]*omesFailureCause)
+	findings := omesErrorFindings{byKey: make(map[string]int)}
 	var synopsis omesFailureSynopsis
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
 	for scanner.Scan() {
+		line := scanner.Text()
 		var entry omesLogEntry
-		if err := json.Unmarshal(scanner.Bytes(), &entry); err != nil {
+		if err := json.Unmarshal([]byte(line), &entry); err == nil {
+			switch strings.ToLower(entry.Level) {
+			case "fatal":
+				synopsis.finalError = truncateSynopsisField(entry.Message)
+			default:
+				findings.add(entry.Level, entry.Timestamp, entry.Message)
+			}
 			continue
 		}
-		switch strings.ToLower(entry.Level) {
-		case "fatal":
-			synopsis.finalError = truncateSynopsisField(entry.Message)
-		case "error":
-			cause := omesRootCause(entry.Message)
-			if cause == "" || isCancellationError(cause) {
-				continue
-			}
-			candidate := causes[cause]
-			if candidate == nil {
-				candidate = &omesFailureCause{message: cause, firstSeen: normalizeLogTime(entry.Timestamp)}
-				causes[cause] = candidate
-			}
-			candidate.count++
-			if candidate.count > synopsis.likelyCause.count {
-				synopsis.likelyCause = *candidate
-			}
+		if timestamp, level, message, ok := parseWorkerLogError(line); ok {
+			findings.add(level, timestamp, message)
 		}
 	}
 	if err := scanner.Err(); err != nil {
 		return omesFailureSynopsis{}, err
 	}
+	synopsis.errorFindings = findings.top(maxOmesErrorFindings)
 	return synopsis, nil
+}
+
+type omesErrorFindings struct {
+	findings []omesLogFinding
+	byKey    map[string]int
+}
+
+func (f *omesErrorFindings) add(level, timestamp, message string) {
+	level = strings.ToUpper(level)
+	if level != "ERROR" {
+		return
+	}
+	message = omesRootCause(message)
+	if message == "" || isCancellationError(message) {
+		return
+	}
+	key := level + "\x00" + message
+	if index, ok := f.byKey[key]; ok {
+		f.findings[index].count++
+		return
+	}
+	f.byKey[key] = len(f.findings)
+	f.findings = append(f.findings, omesLogFinding{
+		level:     level,
+		message:   message,
+		count:     1,
+		firstSeen: normalizeLogTime(timestamp),
+	})
+}
+
+func (f omesErrorFindings) top(limit int) []omesLogFinding {
+	sort.SliceStable(f.findings, func(i, j int) bool {
+		return f.findings[i].count > f.findings[j].count
+	})
+	if len(f.findings) > limit {
+		return f.findings[:limit]
+	}
+	return f.findings
+}
+
+func (s omesFailureSynopsis) formatErrorFindings() string {
+	var out strings.Builder
+	for _, finding := range s.errorFindings {
+		fmt.Fprintf(&out, "    %s %s: %d occurrences", finding.level, finding.message, finding.count)
+		if finding.firstSeen != "" {
+			fmt.Fprintf(&out, " (first seen: %s)", finding.firstSeen)
+		}
+		out.WriteByte('\n')
+	}
+	return out.String()
+}
+
+func parseWorkerLogError(line string) (timestamp, level, message string, ok bool) {
+	timestamp, remainder, ok := strings.Cut(line, "\t")
+	if !ok {
+		return "", "", "", false
+	}
+	level, remainder, ok = strings.Cut(remainder, "\t")
+	if !ok {
+		return "", "", "", false
+	}
+	payloadIndex := strings.LastIndex(remainder, "\t{")
+	if payloadIndex < 0 {
+		return "", "", "", false
+	}
+	var fields struct {
+		Error string `json:"Error"`
+	}
+	if err := json.Unmarshal([]byte(remainder[payloadIndex+1:]), &fields); err != nil || fields.Error == "" {
+		return "", "", "", false
+	}
+	return timestamp, level, fields.Error, true
 }
 
 func omesRootCause(message string) string {
