@@ -16,6 +16,7 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -34,6 +35,12 @@ type (
 	ClientFactory interface {
 		AdminClient(c *cli.Context) adminservice.AdminServiceClient
 		WorkflowClient(c *cli.Context) workflowservice.WorkflowServiceClient
+	}
+	// HistoryClientFactory is implemented by client factories that can construct a
+	// client for a history host. It is separate from ClientFactory so existing
+	// tdbg test fakes and external implementations remain compatible.
+	HistoryClientFactory interface {
+		HistoryClient(c *cli.Context) historyservice.HistoryServiceClient
 	}
 	// ClientFactoryOption is used to configure the ClientFactory via NewClientFactory.
 	ClientFactoryOption func(params *clientFactoryParams)
@@ -83,21 +90,25 @@ func WithFrontendAddress(address string) ClientFactoryOption {
 
 // AdminClient builds an admin client.
 func (b *clientFactory) AdminClient(c *cli.Context) adminservice.AdminServiceClient {
-	connection, _ := b.createGRPCConnection(c)
+	connection, _ := b.createGRPCConnection(c, b.frontendAddressProvider.GetFrontendAddress(c))
 
 	return adminservice.NewAdminServiceClient(connection)
 }
 
 func (b *clientFactory) WorkflowClient(c *cli.Context) workflowservice.WorkflowServiceClient {
-	connection, _ := b.createGRPCConnection(c)
+	connection, _ := b.createGRPCConnection(c, b.frontendAddressProvider.GetFrontendAddress(c))
 
 	return workflowservice.NewWorkflowServiceClient(connection)
 }
 
-func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, error) {
-	frontendAddress := b.frontendAddressProvider.GetFrontendAddress(c)
+func (b *clientFactory) HistoryClient(c *cli.Context) historyservice.HistoryServiceClient {
+	connection, _ := b.createGRPCConnection(c, c.String(FlagHistoryAddress))
 
-	tlsConfig, err := b.createTLSConfig(c)
+	return historyservice.NewHistoryServiceClient(connection)
+}
+
+func (b *clientFactory) createGRPCConnection(c *cli.Context, address string) (*grpc.ClientConn, error) {
+	tlsConfig, err := b.createTLSConfig(c, address)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +123,7 @@ func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, 
 		grpcSecurityOptions,
 	}
 
-	connection, err := grpc.NewClient(frontendAddress, dialOpts...)
+	connection, err := grpc.NewClient(address, dialOpts...)
 	if err != nil {
 		b.logger.Fatal("Failed to create connection", tag.Error(err))
 		return nil, err
@@ -120,7 +131,7 @@ func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, 
 	return connection, nil
 }
 
-func (b *clientFactory) createTLSConfig(c *cli.Context) (*tls.Config, error) {
+func (b *clientFactory) createTLSConfig(c *cli.Context, address string) (*tls.Config, error) {
 	certPath := c.String(FlagTLSCertPath)
 	keyPath := c.String(FlagTLSKeyPath)
 	caPath := c.String(FlagTLSCaPath)
@@ -157,12 +168,8 @@ func (b *clientFactory) createTLSConfig(c *cli.Context) (*tls.Config, error) {
 		if serverName != "" {
 			host = serverName
 		} else {
-			hostPort := c.String(FlagAddress)
-			if hostPort == "" {
-				hostPort = DefaultFrontendAddress
-			}
 			// Ignoring error as we'll fail to dial anyway, and that will produce a meaningful error
-			host, _, _ = net.SplitHostPort(hostPort)
+			host, _, _ = net.SplitHostPort(address)
 		}
 		tlsConfig := auth.NewTLSConfigForServer(host, !disableHostNameVerification)
 		if caPool != nil {

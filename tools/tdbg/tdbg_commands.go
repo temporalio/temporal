@@ -294,6 +294,36 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 				return AdminDeleteWorkflow(c, clientFactory, prompterFactory(c))
 			},
 		},
+		{
+			Name:  "force-schedule-first-workflow-task",
+			Usage: "Force schedule the first workflow task on a history host",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:     FlagNamespaceID,
+					Usage:    "Namespace ID",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:     FlagWorkflowID,
+					Aliases:  FlagWorkflowIDAlias,
+					Usage:    "Workflow ID",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:    FlagRunID,
+					Aliases: FlagRunIDAlias,
+					Usage:   "Run ID (optional, uses latest if not specified)",
+				},
+				&cli.StringFlag{
+					Name:     FlagHistoryAddress,
+					Usage:    "History host address (IP:PORT)",
+					Required: true,
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminForceScheduleFirstWorkflowTask(c, clientFactory)
+			},
+		},
 	}
 }
 

@@ -351,12 +351,9 @@ func signalWorkflow(
 		return err
 	}
 
-	// Create a transfer task to schedule a workflow task
+	// Create a transfer task to schedule a workflow task.
 	if !mutableState.HasPendingWorkflowTask() && !mutableState.IsWorkflowExecutionStatusPaused() {
-
-		executionInfo := mutableState.GetExecutionInfo()
-		executionState := mutableState.GetExecutionState()
-		if !mutableState.HadOrHasWorkflowTask() && !executionInfo.ExecutionTime.AsTime().Equal(executionState.StartTime.AsTime()) {
+		if shardContext.GetTimeSource().Now().Before(mutableState.GetExecutionInfo().GetExecutionTime().AsTime()) {
 			metrics.SignalWithStartSkipDelayCounter.With(shardContext.GetMetricsHandler()).Record(1, metrics.NamespaceTag(request.GetNamespace()))
 
 			workflowKey := workflowLease.GetContext().GetWorkflowKey()

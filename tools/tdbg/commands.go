@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
@@ -744,6 +745,47 @@ func AdminRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory) erro
 		// nolint:errcheck // assuming that write will succeed.
 		fmt.Fprintln(c.App.Writer, "Refresh workflow task succeeded.")
 	}
+	return nil
+}
+
+// AdminForceScheduleFirstWorkflowTask schedules the first workflow task directly on a history host.
+func AdminForceScheduleFirstWorkflowTask(c *cli.Context, clientFactory ClientFactory) error {
+	namespaceID, err := getRequiredOption(c, FlagNamespaceID)
+	if err != nil {
+		return err
+	}
+	wid, err := getRequiredOption(c, FlagWorkflowID)
+	if err != nil {
+		return err
+	}
+	rid := c.String(FlagRunID)
+	if _, err := getRequiredOption(c, FlagHistoryAddress); err != nil {
+		return err
+	}
+
+	historyClientFactory, ok := clientFactory.(HistoryClientFactory)
+	if !ok {
+		return errors.New("client factory does not support history service clients")
+	}
+	historyClient := historyClientFactory.HistoryClient(c)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	_, err = historyClient.ScheduleWorkflowTask(ctx, &historyservice.ScheduleWorkflowTaskRequest{
+		NamespaceId: namespaceID,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      rid,
+		},
+		IsFirstWorkflowTask: true,
+	})
+	if err != nil {
+		return fmt.Errorf("unable to force schedule first workflow task: %w", err)
+	}
+
+	// nolint:errcheck // assuming that write will succeed.
+	fmt.Fprintln(c.App.Writer, "First workflow task scheduled successfully.")
 	return nil
 }
 
