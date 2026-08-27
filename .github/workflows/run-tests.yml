@@ -478,6 +478,7 @@ jobs:
         timeout-minutes: 20
         run: ./develop/github/monitor_test.sh make mixed-brain-test
         env:
+          GOTOOLCHAIN: auto
           TEST_TIMEOUT: 18m
           MIXED_BRAIN_TEST_DURATION: 5m
           PERSISTENCE_DRIVER: postgres12
