@@ -151,7 +151,7 @@ func fabricateStartedEventIfMissing(
 				ScheduledEventId: eventID,
 				OperationToken:   operationToken,
 				// TODO(bergundy): Remove this fallback after the 1.27 release.
-				OperationId: operationToken,
+				OperationId: operationToken, //nolint:staticcheck // Retained for compatibility with older servers.
 				RequestId:   requestID,
 			},
 		}

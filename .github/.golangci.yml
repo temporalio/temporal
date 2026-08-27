@@ -234,6 +234,10 @@ linters:
       - path: ^tools\/.+\.go
         linters:
           - revive
+      # These packages remain imported to read and maintain persisted HSM state.
+      - text: "SA1019: go.temporal.io/server/service/history/hsm/(callbacks|nexusoperations) is deprecated"
+        linters:
+          - staticcheck
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
