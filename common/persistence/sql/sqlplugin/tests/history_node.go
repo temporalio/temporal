@@ -435,6 +435,7 @@ func (s *historyNodeSuite) TestInsertSelectReverse_MultiPageSameNode() {
 		selectFilter.MaxTxnID = lastRow.TxnID
 	}
 	s.Equal(5, len(allRows), "reverse pagination must return all rows exactly once")
+	s.assertUniqueAndExpectedKeys(allRows, nodeID, nodeID, 1, 5)
 }
 
 // TestInsertSelectReverse_AcrossNodes verifies reverse pagination across
@@ -485,6 +486,33 @@ func (s *historyNodeSuite) TestInsertSelectReverse_AcrossNodes() {
 	}
 	// Must get all 9 rows — no gaps, no duplicates
 	s.Equal(9, len(allRows), "reverse pagination across nodes must return all rows")
+	s.assertUniqueAndExpectedKeys(allRows, 1, 3, 1, 3)
+}
+
+// assertUniqueAndExpectedKeys checks that rows contain no duplicate (NodeID, TxnID)
+// pairs and that their set equals the expected cartesian product of
+// [minNode, maxNode] × [minTxn, maxTxn].
+func (s *historyNodeSuite) assertUniqueAndExpectedKeys(
+	rows []sqlplugin.HistoryNodeRow,
+	minNode, maxNode, minTxn, maxTxn int64,
+) {
+	type key struct{ NodeID, TxnID int64 }
+
+	got := make(map[key]struct{}, len(rows))
+	for _, r := range rows {
+		k := key{r.NodeID, r.TxnID}
+		_, dup := got[k]
+		s.False(dup, "duplicate row: NodeID=%d TxnID=%d", r.NodeID, r.TxnID)
+		got[k] = struct{}{}
+	}
+
+	expected := make(map[key]struct{})
+	for n := minNode; n <= maxNode; n++ {
+		for t := minTxn; t <= maxTxn; t++ {
+			expected[key{n, t}] = struct{}{}
+		}
+	}
+	s.Equal(expected, got, "returned key set must match expected set")
 }
 
 func (s *historyNodeSuite) newRandomNodeRow(
