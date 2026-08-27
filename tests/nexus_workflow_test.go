@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -95,6 +96,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation(chasmEnabled bool
 			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test"}, nil
 		},
 		OnCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
+			if options.Header.Get(nexusrpc.HeaderTemporalNexusFailureSupport) != "true" {
+				return errors.New("expected Temporal failure response capability header")
+			}
 			if !firstCancelSeen {
 				// Fail cancel request once to test NexusOperationCancelRequestFailed event is recorded and request is retried.
 				firstCancelSeen = true
@@ -1938,8 +1942,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_Cancelati
 		require.NotNil(t, desc.PendingNexusOperations[0].CancellationInfo)
 	}, time.Second*10, time.Millisecond*100)
 
-	env.SendToChannel(canStartCh)
-	env.WaitForChannel(cancelSentCh)
+	await.Snd(s.T(), canStartCh, struct{}{})
+	await.Rcv(s.T(), cancelSentCh)
 
 	// Terminate the workflow for good measure.
 	err = env.SdkClient().TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "test")
@@ -2508,8 +2512,7 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationErrorRehydration(chasmEn
 				if !errors.As(err, &opErr) {
 					return nil, fmt.Errorf("expected NexusOperationError, got %w", err)
 				}
-				var canceledErr *temporal.CanceledError
-				if !errors.As(opErr, &canceledErr) {
+				if _, ok := errors.AsType[*temporal.CanceledError](opErr); !ok {
 					return nil, fmt.Errorf("expected CanceledError, got %w", err)
 				}
 			default:

@@ -162,7 +162,7 @@ func (s *DeploymentVersionSuite) startVersionWorkflowAndStopPoll(ctx context.Con
 	}()
 	s.waitForVersionWorkflow(ctx, env, tv)
 	cancelPoll()
-	<-pollDone
+	await.Rcv(s.T(), pollDone)
 }
 
 func (s *DeploymentVersionSuite) waitForVersionWorkflow(ctx context.Context, env *testcore.TestEnv, tv *testvars.TestVars) {
@@ -525,7 +525,7 @@ func (s *DeploymentVersionSuite) startVersionedWorkflow(ctx context.Context, env
 	defer w.Stop()
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tv.TaskQueue().String()}, wf)
 	s.NoError(err)
-	env.WaitForChannel(started)
+	await.Rcv(s.T(), started)
 	return run
 }
 
@@ -767,7 +767,7 @@ func (s *DeploymentVersionSuite) TestWorkerDeploymentActivityOutcomeMetricTags()
 			)
 			s.NoError(err)
 			if tc.outcome == "cancel" {
-				env.WaitForChannel(activityStarted)
+				await.Rcv(s.T(), activityStarted)
 				s.NoError(env.SdkClient().CancelWorkflow(s.Context(), run.GetID(), run.GetRunID()))
 			}
 			if tc.expectError {

@@ -369,8 +369,7 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 			err = hsmHandler(ctx, handler.mutableState, validator, handlerOpts.WorkflowTaskCompletedEventID, command)
 		}
 
-		var failWFTErr chasmworkflow.FailWorkflowTaskError
-		if errors.As(err, &failWFTErr) {
+		if failWFTErr, ok := errors.AsType[chasmworkflow.FailWorkflowTaskError](err); ok {
 			if failWFTErr.TerminateWorkflow {
 				return nil, handler.terminateWorkflow(failWFTErr.Cause, failWFTErr)
 			}
@@ -1567,8 +1566,7 @@ func (handler *workflowTaskCompletedHandler) failWorkflowTaskOnInvalidArgument(
 	wtFailedCause enumspb.WorkflowTaskFailedCause,
 	err error,
 ) error {
-	var invalidArgument *serviceerror.InvalidArgument
-	if errors.As(err, &invalidArgument) {
+	if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
 		return handler.failWorkflowTask(wtFailedCause, err)
 	}
 	return err

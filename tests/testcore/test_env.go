@@ -259,7 +259,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 
 	// Create the test context before any expensive setup, so that the deadline
 	// extension below can compensate for the time setup takes.
-	testcontext.For(t)
+	ctx := testcontext.For(t)
 
 	var options testOptions
 	for _, opt := range opts {
@@ -296,6 +296,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	baseName := strings.ReplaceAll(t.Name(), "/", "-")
 	ns := namespace.Name(RandomizeStr(baseName))
 	nsID, err := base.RegisterNamespace(
+		ctx,
 		ns,
 		1, // 1 day retention
 		enumspb.ARCHIVAL_STATE_DISABLED,
@@ -471,26 +472,6 @@ func (e *TestEnv) Tv() *testvars.TestVars {
 // Deprecated: use the suite's Context() method instead.
 func (e *TestEnv) Context() context.Context {
 	return testcontext.For(e.t)
-}
-
-// WaitForChannel waits for ch to receive using the TestEnv context.
-func (e *TestEnv) WaitForChannel(ch <-chan struct{}) {
-	e.t.Helper()
-	select {
-	case <-ch:
-	case <-e.Context().Done():
-		e.FailNow("context timeout while waiting for channel")
-	}
-}
-
-// SendToChannel sends to ch using the TestEnv context.
-func (e *TestEnv) SendToChannel(ch chan<- struct{}) {
-	e.t.Helper()
-	select {
-	case ch <- struct{}{}:
-	case <-e.Context().Done():
-		e.FailNow("context timeout while sending to channel")
-	}
 }
 
 // SdkClient returns the SDK client. It is lazily initialized on the first call.

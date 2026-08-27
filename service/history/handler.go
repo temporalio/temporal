@@ -2571,8 +2571,7 @@ func (h *Handler) StartNexusOperation(
 	}
 	result, err := h.nexusHandler.StartOperation(ctx, req.GetRequest().GetService(), req.GetRequest().GetOperation(), input, options)
 	if err != nil {
-		var opErr *nexus.OperationError
-		if errors.As(err, &opErr) {
+		if opErr, ok := errors.AsType[*nexus.OperationError](err); ok {
 			nexusFailure, convErr := nexusrpc.DefaultFailureConverter().ErrorToFailure(opErr)
 			if convErr != nil {
 				return nil, convErr

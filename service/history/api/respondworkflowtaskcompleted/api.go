@@ -917,8 +917,7 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 		//  when data inconsistency occurs
 		//  long term solution should check event batch pointing backwards within history store
 		defer func() {
-			var dataLossErr *serviceerror.DataLoss
-			if errors.As(retError, &dataLossErr) {
+			if _, ok := errors.AsType[*serviceerror.DataLoss](retError); ok {
 				api.TrimHistoryNode(
 					ctx,
 					handler.shardContext,

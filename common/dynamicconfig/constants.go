@@ -1740,7 +1740,7 @@ branch token is not the execution's current one, but still serves the read.`,
 	EmitReplicationLifecycleEvents = NewGlobalBoolSetting(
 		"history.emitReplicationLifecycleEvents",
 		false,
-		`EmitReplicationLifecycleEvents controls whether the history service emits ReplicationLifecycle wide events (sent/executing/applied/skipped/error phases). Cluster-level; default off.`,
+		`EmitReplicationLifecycleEvents controls whether the history service emits ReplicationLifecycle wide events, including parent-child diagnostics. Cluster-level; default off.`,
 	)
 	EnableCloseInboundReplicationStreamOnShutdown = NewGlobalBoolSetting(
 		"history.enableCloseInboundReplicationStreamOnShutdown",
