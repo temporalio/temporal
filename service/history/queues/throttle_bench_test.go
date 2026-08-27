@@ -325,6 +325,7 @@ func newBenchThrottleState(enabled bool, timeSource clock.TimeSource) *ThrottleS
 			Enabled:       dynamicconfig.GetBoolPropertyFn(enabled),
 			Beta:          dynamicconfig.GetFloatPropertyFn(0.85),
 			IncreaseRatio: dynamicconfig.GetFloatPropertyFn(0.10),
+			LossThreshold: dynamicconfig.GetFloatPropertyFn(0.05),
 			Window:        dynamicconfig.GetDurationPropertyFn(time.Second),
 			MinRate:       dynamicconfig.GetFloatPropertyFn(1),
 			MaxRate:       dynamicconfig.GetFloatPropertyFn(10000),

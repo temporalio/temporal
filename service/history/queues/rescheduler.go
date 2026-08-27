@@ -322,8 +322,8 @@ func (r *reschedulerImpl) drainClassLocked(
 	pass *reschedulePass,
 ) {
 	gated := key.Throttle != (ThrottleKey{})
-	metrics.TaskReschedulerClassQueueDepth.With(r.metricsHandler).Record(
-		int64(pq.Len()), r.classTags(key)...)
+	tags := r.classTags(key)
+	metrics.TaskReschedulerClassQueueDepth.With(r.metricsHandler).Record(int64(pq.Len()), tags...)
 
 	for !pq.IsEmpty() {
 		if gated && pass.releasesRemaining <= 0 {
@@ -347,7 +347,7 @@ func (r *reschedulerImpl) drainClassLocked(
 		}
 
 		if gated && !r.throttleState.Admit(key.Throttle) {
-			metrics.TaskReschedulerBudgetDenied.With(r.metricsHandler).Record(1, r.classTags(key)...)
+			metrics.TaskReschedulerBudgetDenied.With(r.metricsHandler).Record(1, tags...)
 			// The class is over its admitted rate. Come back within the control window rather
 			// than at the head's own backoff, which is far longer.
 			pass.wakeAt(pass.now.Add(r.budgetRetryInterval()))
@@ -373,7 +373,7 @@ func (r *reschedulerImpl) drainClassLocked(
 
 		pq.Remove()
 		r.numExecutables--
-		metrics.TaskReschedulerReleases.With(r.metricsHandler).Record(1, r.classTags(key)...)
+		metrics.TaskReschedulerReleases.With(r.metricsHandler).Record(1, tags...)
 		if gated {
 			pass.releasesRemaining--
 		}
@@ -423,7 +423,7 @@ func (r *reschedulerImpl) rescheduleUngatedLocked(now time.Time) {
 // rather than in one burst per window.
 func (r *reschedulerImpl) budgetRetryInterval() time.Duration {
 	const budgetRetryDivisor = 10
-	interval := r.throttleState.options.Window() / budgetRetryDivisor
+	interval := r.throttleState.Window() / budgetRetryDivisor
 	return max(interval, time.Millisecond)
 }
 

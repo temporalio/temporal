@@ -1005,7 +1005,7 @@ var (
 	)
 	TaskThrottleRateIncreases = NewCounterDef(
 		"task_throttle_rate_increases",
-		WithDescription("The number of additive increase events applied by the throttle controller after a clean window."),
+		WithDescription("The number of additive increase events applied by the throttle controller when a window closes at or below the loss threshold."),
 	)
 	TaskThrottleKeysTracked = NewGaugeDef(
 		"task_throttle_keys_tracked",

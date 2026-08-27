@@ -292,3 +292,26 @@ func TestReschedule_FailedSubmitUnmarksAdmitted(t *testing.T) {
 	require.False(t, e.admitted, "a failed submit must not leave the task marked admitted")
 	require.Equal(t, 1, r.Len(), "the task stays parked")
 }
+
+// A release the scheduler refused never reached the enforcer, so it cannot have been rejected.
+// Leaving it in the denominator makes a saturated scheduler read as a run of clean windows: the
+// class would climb to MaxRate having dispatched nothing, then dump a full burst the moment the
+// scheduler drained, which is the storm the controller exists to prevent.
+func TestThrottleState_ReturnedReleaseLeavesTheLossDenominator(t *testing.T) {
+	overrides := defaultThrottleOverrides()
+	overrides.initialRate = 100
+	state, timeSource := newTestThrottleState(overrides)
+	key := apsKey("ns-1")
+
+	// Twenty admits the scheduler refused, then one real dispatch that was rejected.
+	for i := 0; i < 20; i++ {
+		require.True(t, state.Admit(key))
+		state.Return(key)
+	}
+	require.True(t, state.Admit(key))
+	state.ReportThrottled(key, true)
+	closeWindow(state, timeSource, key)
+
+	require.InEpsilon(t, 85.0, state.AdmittedRate(key), 1e-9,
+		"one dispatch, one rejection is total loss; the refused admits must not dilute it")
+}

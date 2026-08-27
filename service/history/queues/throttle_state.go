@@ -261,18 +261,12 @@ func (s *ThrottleState) Admit(key ThrottleKey) bool {
 	}
 
 	now := s.timeSource.Now()
-	window := s.options.Window()
+	window := s.window()
 
 	entry.Lock()
 	defer entry.Unlock()
 
-	// The sweep only runs when a new key is inserted, and a host's key set goes stable within
-	// minutes of start up, so a class driven to MinRate by an incident would otherwise never be
-	// reconsidered. Treat a long idle entry as new.
-	if !entry.lastAccess.IsZero() && now.Sub(entry.lastAccess) > s.options.KeyTTL() {
-		entry.resetLocked(s.clamp(s.options.InitialRate()), now, window)
-	}
-	entry.lastAccess = now
+	s.touchLocked(entry, now, window)
 	s.advanceWindowLocked(entry, now, window)
 	entry.refillLocked(now, window)
 
@@ -308,12 +302,12 @@ func (s *ThrottleState) ReportThrottled(key ThrottleKey, admitted bool) {
 	}
 
 	now := s.timeSource.Now()
-	window := s.options.Window()
+	window := s.window()
 
 	entry.Lock()
 	defer entry.Unlock()
 
-	entry.lastAccess = now
+	s.touchLocked(entry, now, window)
 	if !admitted {
 		return
 	}
@@ -337,7 +331,14 @@ func (s *ThrottleState) Return(key ThrottleKey) {
 	entry.Lock()
 	defer entry.Unlock()
 
-	entry.tokens = min(entry.tokens+1, entry.burstLocked(s.options.Window()))
+	entry.tokens = min(entry.tokens+1, entry.burstLocked(s.window()))
+	// The release is leaving the denominator as well as the bucket. A dispatch that never
+	// happened cannot be rejected, so counting it would enter the loss ratio as a guaranteed
+	// success: a saturated scheduler would then read as a run of clean windows and climb to
+	// MaxRate with nothing dispatched at all.
+	if entry.releases > 0 {
+		entry.releases--
+	}
 }
 
 // ReportSuccess records a completion for the class. It advances the window bookkeeping so a
@@ -352,12 +353,14 @@ func (s *ThrottleState) ReportSuccess(key ThrottleKey) {
 	}
 
 	now := s.timeSource.Now()
-	window := s.options.Window()
+	window := s.window()
 
 	entry.Lock()
 	defer entry.Unlock()
 
-	entry.lastAccess = now
+	s.touchLocked(entry, now, window)
+	// Completion is not evidence the law weighs, but it is the moment a healthy class is most
+	// likely to be observed, so let it close a window that has already elapsed.
 	s.advanceWindowLocked(entry, now, window)
 }
 
@@ -394,9 +397,6 @@ func (s *ThrottleState) Len() int {
 	return total
 }
 
-// advanceWindowLocked applies the additive increase when the window that just closed carried
-// no throttle at all. The window start is reset to now rather than stepped forward, so a long
-// idle period yields one increase, not one per elapsed window.
 // advanceWindowLocked closes the window that has elapsed and applies one rate change for it.
 // The decision is the observed loss ratio, not the presence of a single rejection: releases and
 // rejections both grow with class size, so the rate a class settles at follows its own demand
@@ -425,7 +425,7 @@ func (s *ThrottleState) advanceWindowLocked(entry *throttleEntry, now time.Time,
 		loss = float64(entry.rejections) / float64(entry.releases)
 	}
 
-	if loss > s.options.LossThreshold() {
+	if loss > s.lossThreshold() {
 		entry.rate = s.clamp(entry.rate * s.beta())
 		entry.decreases++
 		// Tokens accumulated at the old rate would otherwise let the class overshoot the new one.
@@ -447,6 +447,17 @@ func (e *throttleEntry) resetLocked(rate float64, now time.Time, window time.Dur
 	e.windowStart = now
 	e.releases, e.rejections = 0, 0
 	e.tokens = e.burstLocked(window)
+}
+
+// touchLocked marks the entry live, resetting it first if it has been idle longer than the
+// retention period. The sweep only runs when a new key is inserted and a host's key set goes
+// stable within minutes of start up, so without this a class driven to the floor by an incident
+// would climb back from MinRate instead of restarting at InitialRate.
+func (s *ThrottleState) touchLocked(entry *throttleEntry, now time.Time, window time.Duration) {
+	if !entry.lastAccess.IsZero() && now.Sub(entry.lastAccess) > s.options.KeyTTL() {
+		entry.resetLocked(s.clamp(s.options.InitialRate()), now, window)
+	}
+	entry.lastAccess = now
 }
 
 func (e *throttleEntry) refillLocked(now time.Time, window time.Duration) {
@@ -479,6 +490,29 @@ func (s *ThrottleState) clamp(rate float64) float64 {
 // inverts the control law is one bad config push away. A beta at or above 1 would raise the
 // rate on loss and an increase ratio at or below 0 would lower it on success; both are pinned
 // to a no-op instead, which stalls the controller rather than reversing it.
+// Window returns the control window, floored at a positive value. A non positive window would
+// close on every call and let a single release and its rejection be decided twice.
+func (s *ThrottleState) Window() time.Duration {
+	return s.window()
+}
+
+func (s *ThrottleState) window() time.Duration {
+	if w := s.options.Window(); w > 0 {
+		return w
+	}
+	return time.Second
+}
+
+// lossThreshold is read on every window close, so a value outside [0,1] is one bad config push
+// away. Negative would decrease on a window with no loss at all; above one would never decrease.
+func (s *ThrottleState) lossThreshold() float64 {
+	t := s.options.LossThreshold()
+	if !(t >= 0) {
+		return 0
+	}
+	return min(t, 1)
+}
+
 func (s *ThrottleState) beta() float64 {
 	if b := s.options.Beta(); b > 0 && b < 1 {
 		return b
@@ -541,7 +575,7 @@ func (s *ThrottleState) getOrCreate(key ThrottleKey) *throttleEntry {
 		windowStart: now,
 		lastAccess:  now,
 	}
-	entry.tokens = entry.burstLocked(s.options.Window())
+	entry.tokens = entry.burstLocked(s.window())
 	s.maps[key.Scope][key] = entry
 	metrics.TaskThrottleKeysTracked.With(s.metricsHandler).Record(
 		float64(len(s.maps[key.Scope])),
