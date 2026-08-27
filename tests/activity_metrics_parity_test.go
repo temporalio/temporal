@@ -72,12 +72,14 @@ func (s *activityParityTestSuite) TestScheduleToStartMetric() {
 			taskQueue = result.taskQueue
 		}
 		expectedTags := map[string]string{
-			"namespace":    result.namespace,
-			"operation":    metrics.HistoryRecordActivityTaskStartedScope,
-			"partition":    "__normal__",
-			"service_name": string(primitives.HistoryService),
-			"task_type":    enumspb.TASK_QUEUE_TYPE_ACTIVITY.String(),
-			"taskqueue":    taskQueue,
+			"namespace":              result.namespace,
+			"operation":              metrics.HistoryRecordActivityTaskStartedScope,
+			"partition":              "__normal__",
+			"service_name":           string(primitives.HistoryService),
+			"task_type":              enumspb.TASK_QUEUE_TYPE_ACTIVITY.String(),
+			"taskqueue":              taskQueue,
+			"worker_build_id":        "",
+			"worker_deployment_name": "",
 		}
 		for _, recording := range result.recordings {
 			require.Equal(t, expectedTags, recording.Tags, "%s metric tags must match the activity-task start scope", implementation)
@@ -105,12 +107,13 @@ func (s *activityParityTestSuite) TestScheduleToStartMetric() {
 
 func (s *activityParityTestSuite) TestMetrics() {
 	type activityMetric struct {
-		name             string
-		compared         bool
-		counter          bool
-		baseHandler      bool
-		legacyWFAHandler bool
-		recordingTagKeys []string
+		name                 string
+		compared             bool
+		counter              bool
+		baseHandler          bool
+		legacyWFAHandler     bool
+		workerDeploymentTags bool
+		recordingTagKeys     []string
 	}
 	type scenario struct {
 		name    string
@@ -130,21 +133,25 @@ func (s *activityParityTestSuite) TestMetrics() {
 		"versioning_behavior",
 		"workflowType",
 	}
+	workerDeploymentTagKeys := []string{
+		"worker_build_id",
+		"worker_deployment_name",
+	}
 	legacyWFATagKeys := []string{
 		"activity_targeting_method",
 		"namespace",
 		"service_name",
 	}
 	catalog := []activityMetric{
-		{name: metrics.ActivitySuccess.Name(), compared: true, counter: true},
-		{name: metrics.ActivityFail.Name(), compared: true, counter: true},
-		{name: metrics.ActivityTaskFail.Name(), compared: true, counter: true},
-		{name: metrics.ActivityCancel.Name(), compared: true, counter: true},
+		{name: metrics.ActivitySuccess.Name(), compared: true, counter: true, workerDeploymentTags: true},
+		{name: metrics.ActivityFail.Name(), compared: true, counter: true, workerDeploymentTags: true},
+		{name: metrics.ActivityTaskFail.Name(), compared: true, counter: true, workerDeploymentTags: true},
+		{name: metrics.ActivityCancel.Name(), compared: true, counter: true, workerDeploymentTags: true},
 		{name: metrics.ActivityTerminate.Name()},
-		{name: metrics.ActivityTimeout.Name(), compared: true, counter: true, recordingTagKeys: []string{"timeout_type"}},
-		{name: metrics.ActivityTaskTimeout.Name(), compared: true, counter: true, recordingTagKeys: []string{"timeout_type"}},
-		{name: metrics.ActivityStartToCloseLatency.Name(), compared: true},
-		{name: metrics.ActivityScheduleToCloseLatency.Name(), compared: true},
+		{name: metrics.ActivityTimeout.Name(), compared: true, counter: true, workerDeploymentTags: true, recordingTagKeys: []string{"timeout_type"}},
+		{name: metrics.ActivityTaskTimeout.Name(), compared: true, counter: true, workerDeploymentTags: true, recordingTagKeys: []string{"timeout_type"}},
+		{name: metrics.ActivityStartToCloseLatency.Name(), compared: true, workerDeploymentTags: true},
+		{name: metrics.ActivityScheduleToCloseLatency.Name(), compared: true, workerDeploymentTags: true},
 		{name: metrics.ActivityPause.Name(), compared: true, counter: true, legacyWFAHandler: true},
 		{name: metrics.ActivityUnpause.Name(), compared: true, counter: true, legacyWFAHandler: true},
 		{name: metrics.ActivityReset.Name(), compared: true, counter: true, legacyWFAHandler: true},
@@ -304,6 +311,9 @@ func (s *activityParityTestSuite) TestMetrics() {
 					} else {
 						if !metric.baseHandler && len(wfa[metric.name]) > 0 {
 							expectedTagKeys := append([]string{}, perActivityTagKeys...)
+							if metric.workerDeploymentTags {
+								expectedTagKeys = append(expectedTagKeys, workerDeploymentTagKeys...)
+							}
 							expectedTagKeys = append(expectedTagKeys, metric.recordingTagKeys...)
 							sort.Strings(expectedTagKeys)
 							require.Equal(t, expectedTagKeys, wfaTagKeys,
