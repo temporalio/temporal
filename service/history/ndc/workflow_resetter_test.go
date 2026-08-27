@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/consts"
@@ -110,7 +111,7 @@ func (s *workflowResetterSuite) SetupTest() {
 
 	s.workflowResetter = NewWorkflowResetter(
 		s.mockShard,
-		wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler),
+		wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{}),
 		s.logger,
 	)
 	s.workflowResetter.stateRebuilder = s.mockStateRebuilder

@@ -39,8 +39,8 @@ var (
 	HistoryChasmRuntimeProvider              = newKey[func(chasm.Engine, chasm.VisibilityManager, *chasm.Registry), global]()
 	HistoryTransferTaskInterceptor           = newKey[func(historytasks.Task, func()), namespace.ID]()
 	// HistoryPassiveReplicationTest enables the single-cluster passive replication
-	// test stack. The production testhooks implementation always reports it as unset.
-	HistoryPassiveReplicationTest       = newKey[HistoryPassiveReplicationTestHook, global]()
+	// test stack for one namespace. Production builds always report it as unset.
+	HistoryPassiveReplicationTest       = newKey[HistoryPassiveReplicationTestHook, namespace.ID]()
 	HistoryDLQTaskDeleteInterceptor     = newKey[func(context.Context, *historyservice.DeleteDLQTasksRequest, func(context.Context, *historyservice.DeleteDLQTasksRequest) (*historyservice.DeleteDLQTasksResponse, error)) (*historyservice.DeleteDLQTasksResponse, error), global]()
 	NamespaceReplicationTaskInterceptor = newKey[func(context.Context, *replicationspb.NamespaceTaskAttributes, func() error) error, namespace.Name]()
 )

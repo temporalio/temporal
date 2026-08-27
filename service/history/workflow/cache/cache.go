@@ -100,25 +100,6 @@ func NewHostLevelCache(
 	config *configs.Config,
 	logger log.Logger,
 	handler metrics.Handler,
-) Cache {
-	return newHostLevelCache(config, logger, handler, testhooks.TestHooks{})
-}
-
-// NewHostLevelCacheWithTestHooks creates the history-service cache with access to
-// test-only hooks. Production builds always resolve these hooks as unset.
-func NewHostLevelCacheWithTestHooks(
-	config *configs.Config,
-	logger log.Logger,
-	handler metrics.Handler,
-	testHooks testhooks.TestHooks,
-) Cache {
-	return newHostLevelCache(config, logger, handler, testHooks)
-}
-
-func newHostLevelCache(
-	config *configs.Config,
-	logger log.Logger,
-	handler metrics.Handler,
 	testHooks testhooks.TestHooks,
 ) Cache {
 	maxSize := config.HistoryHostLevelCacheMaxSize()
@@ -315,7 +296,7 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 		workflowCtx = item.wfContext
 	} else {
 		metrics.CacheMissCounter.With(handler).Record(1)
-		workflowCtx = workflow.NewContextWithTestHooks(
+		workflowCtx = workflow.NewContext(
 			shardContext.GetConfig(),
 			cacheKey.WorkflowKey,
 			archetypeID,

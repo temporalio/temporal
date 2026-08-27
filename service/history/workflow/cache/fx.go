@@ -17,7 +17,7 @@ var Module = fx.Options(
 		handler metrics.Handler,
 		testHooks testhooks.TestHooks,
 	) Cache {
-		return NewHostLevelCacheWithTestHooks(config, logger, handler, testHooks)
+		return NewHostLevelCache(config, logger, handler, testHooks)
 	}),
 	fx.Invoke(func(
 		lc fx.Lifecycle,

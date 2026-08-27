@@ -115,51 +115,6 @@ func NewContext(
 	throttledLogger log.ThrottledLogger,
 	metricsHandler metrics.Handler,
 	paginationLimiter *limiter.KeyedBytesLimiter,
-) *ContextImpl {
-	return newContext(
-		config,
-		workflowKey,
-		archetypeID,
-		logger,
-		throttledLogger,
-		metricsHandler,
-		paginationLimiter,
-		testhooks.TestHooks{},
-	)
-}
-
-// NewContextWithTestHooks creates a cache-owned workflow context with access to
-// test-only hooks. Production builds always resolve these hooks as unset.
-func NewContextWithTestHooks(
-	config *configs.Config,
-	workflowKey definition.WorkflowKey,
-	archetypeID chasm.ArchetypeID,
-	logger log.Logger,
-	throttledLogger log.ThrottledLogger,
-	metricsHandler metrics.Handler,
-	paginationLimiter *limiter.KeyedBytesLimiter,
-	testHooks testhooks.TestHooks,
-) *ContextImpl {
-	return newContext(
-		config,
-		workflowKey,
-		archetypeID,
-		logger,
-		throttledLogger,
-		metricsHandler,
-		paginationLimiter,
-		testHooks,
-	)
-}
-
-func newContext(
-	config *configs.Config,
-	workflowKey definition.WorkflowKey,
-	archetypeID chasm.ArchetypeID,
-	logger log.Logger,
-	throttledLogger log.ThrottledLogger,
-	metricsHandler metrics.Handler,
-	paginationLimiter *limiter.KeyedBytesLimiter,
 	testHooks testhooks.TestHooks,
 ) *ContextImpl {
 	tags := func() []tag.Tag {
@@ -856,7 +811,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	if hook, ok := testhooks.Get(
 		c.testHooks,
 		testhooks.HistoryPassiveReplicationTest,
-		testhooks.GlobalScope,
+		namespace.ID(c.workflowKey.NamespaceID),
 	); ok {
 		request := &TestHookUpdateWorkflowExecutionRequest{
 			WorkflowContext:                 c,

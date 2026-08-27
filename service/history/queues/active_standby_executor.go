@@ -29,43 +29,6 @@ func NewActiveStandbyExecutor(
 	activeExecutor Executor,
 	standbyExecutor Executor,
 	logger log.Logger,
-) Executor {
-	return newActiveStandbyExecutor(
-		currentClusterName,
-		registry,
-		activeExecutor,
-		standbyExecutor,
-		logger,
-		testhooks.TestHooks{},
-	)
-}
-
-// NewActiveStandbyExecutorWithTestHooks creates an active/standby router with
-// access to test-only execution-mode overrides.
-func NewActiveStandbyExecutorWithTestHooks(
-	currentClusterName string,
-	registry namespace.Registry,
-	activeExecutor Executor,
-	standbyExecutor Executor,
-	logger log.Logger,
-	testHooks testhooks.TestHooks,
-) Executor {
-	return newActiveStandbyExecutor(
-		currentClusterName,
-		registry,
-		activeExecutor,
-		standbyExecutor,
-		logger,
-		testHooks,
-	)
-}
-
-func newActiveStandbyExecutor(
-	currentClusterName string,
-	registry namespace.Registry,
-	activeExecutor Executor,
-	standbyExecutor Executor,
-	logger log.Logger,
 	testHooks testhooks.TestHooks,
 ) Executor {
 	return &activeStandbyExecutor{
@@ -82,21 +45,23 @@ func (e *activeStandbyExecutor) Execute(
 	ctx context.Context,
 	executable Executable,
 ) ExecuteResponse {
+	namespaceID := namespace.ID(executable.GetNamespaceID())
 	if testHook, ok := testhooks.Get(
 		e.testHooks,
 		testhooks.HistoryPassiveReplicationTest,
-		testhooks.GlobalScope,
+		namespaceID,
 	); ok && testHook.ShouldExecuteTaskAsPassive(executable.GetTask()) {
 		return e.executeForPassiveReplicationTest(ctx, executable)
 	}
-	return e.executeNormally(ctx, executable)
+	return e.executeNormally(ctx, executable, namespaceID)
 }
 
 func (e *activeStandbyExecutor) executeNormally(
 	ctx context.Context,
 	executable Executable,
+	namespaceID namespace.ID,
 ) ExecuteResponse {
-	if e.isActiveTask(executable) {
+	if e.isActiveTask(executable, namespaceID) {
 		return e.activeExecutor.Execute(ctx, executable)
 	}
 	return e.executeStandby(ctx, executable)
@@ -126,21 +91,21 @@ func (e *activeStandbyExecutor) executeStandby(
 
 func (e *activeStandbyExecutor) isActiveTask(
 	executable Executable,
+	namespaceID namespace.ID,
 ) bool {
 	// Following is the existing task allocator logic for verifying active task
 
-	namespaceID := executable.GetNamespaceID()
-	entry, err := e.registry.GetNamespaceByID(namespace.ID(namespaceID))
+	entry, err := e.registry.GetNamespaceByID(namespaceID)
 	if err != nil {
-		e.logger.Warn("Unable to find namespace, process task as active.", tag.WorkflowNamespaceID(namespaceID), tag.Value(executable.GetTask()))
+		e.logger.Warn("Unable to find namespace, process task as active.", tag.WorkflowNamespaceID(namespaceID.String()), tag.Value(executable.GetTask()))
 		return true
 	}
 
 	if entry.ActiveClusterName(namespace.RoutingKey{ID: executable.GetWorkflowID()}) != e.currentClusterName {
-		e.logger.Debug("Process task as standby.", tag.WorkflowNamespaceID(namespaceID), tag.Value(executable.GetTask()))
+		e.logger.Debug("Process task as standby.", tag.WorkflowNamespaceID(namespaceID.String()), tag.Value(executable.GetTask()))
 		return false
 	}
 
-	e.logger.Debug("Process task as active.", tag.WorkflowNamespaceID(namespaceID), tag.Value(executable.GetTask()))
+	e.logger.Debug("Process task as active.", tag.WorkflowNamespaceID(namespaceID.String()), tag.Value(executable.GetTask()))
 	return true
 }

@@ -238,30 +238,23 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	versionedTransitionArtifact *replicationspb.VersionedTransitionArtifact,
 	sourceClusterName string,
 ) error {
-	wfCtx, err := r.workflowContextFromTestHook(ctx)
-	if err != nil {
-		return err
-	}
-	if wfCtx != nil && (versionedTransitionArtifact.GetSyncWorkflowStateMutationAttributes() == nil ||
-		versionedTransitionArtifact.GetIsFirstSync()) {
-		return serviceerror.NewInvalidArgument("pre-acquired workflow context only supports non-first-sync mutations")
-	}
 	return r.replicateVersionedTransition(
 		ctx,
 		archetypeID,
 		versionedTransitionArtifact,
 		sourceClusterName,
-		wfCtx,
+		nil,
 	)
 }
 
 func (r *WorkflowStateReplicatorImpl) workflowContextFromTestHook(
 	ctx context.Context,
+	namespaceID namespace.ID,
 ) (historyi.WorkflowContext, error) {
 	hook, ok := testhooks.Get(
 		r.testHooks,
 		testhooks.HistoryPassiveReplicationTest,
-		testhooks.GlobalScope,
+		namespaceID,
 	)
 	if !ok {
 		return nil, nil
@@ -297,6 +290,17 @@ func (r *WorkflowStateReplicatorImpl) replicateVersionedTransition(
 	namespaceID := namespace.ID(executionInfo.GetNamespaceId())
 	wid := executionInfo.GetWorkflowId()
 	rid := executionState.GetRunId()
+
+	if preAcquiredWorkflowContext == nil {
+		preAcquiredWorkflowContext, err = r.workflowContextFromTestHook(ctx, namespaceID)
+		if err != nil {
+			return err
+		}
+	}
+	if preAcquiredWorkflowContext != nil && (versionedTransitionArtifact.GetSyncWorkflowStateMutationAttributes() == nil ||
+		versionedTransitionArtifact.GetIsFirstSync()) {
+		return serviceerror.NewInvalidArgument("pre-acquired workflow context only supports non-first-sync mutations")
+	}
 
 	// emitLifecycle gates the best-effort applied/error lifecycle event; computed once here so the
 	// gate lives at the call site, like the other replication lifecycle emitters.
@@ -1321,6 +1325,7 @@ func (r *WorkflowStateReplicatorImpl) getNewRunWorkflow(
 		r.shardContext.GetThrottledLogger(),
 		r.shardContext.GetMetricsHandler(),
 		nil, // no pagination buffer limiter as it is a transient context
+		testhooks.TestHooks{},
 	)
 
 	return NewWorkflow(

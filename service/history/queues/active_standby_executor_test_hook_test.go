@@ -41,13 +41,13 @@ func TestActiveStandbyExecutor_ForcedStandbyRetryExecutesActive(t *testing.T) {
 	activeExecutor := NewMockExecutor(ctrl)
 	standbyExecutor := NewMockExecutor(ctrl)
 	testHooks := testhooks.NewTestHooks()
-	t.Cleanup(testhooks.Set(
+	t.Cleanup(testhooks.Set[testhooks.HistoryPassiveReplicationTestHook](
 		testHooks,
 		testhooks.HistoryPassiveReplicationTest,
-		testhooks.HistoryPassiveReplicationTestHook(activeStandbyPassiveReplicationTestHook{}),
-		testhooks.GlobalScope,
+		activeStandbyPassiveReplicationTestHook{},
+		namespace.ID("namespace_id"),
 	))
-	executor := NewActiveStandbyExecutorWithTestHooks(
+	executor := NewActiveStandbyExecutor(
 		currentCluster,
 		registry,
 		activeExecutor,
@@ -62,6 +62,7 @@ func TestActiveStandbyExecutor_ForcedStandbyRetryExecutesActive(t *testing.T) {
 		time.Time{},
 	)
 	executable := NewMockExecutable(ctrl)
+	executable.EXPECT().GetNamespaceID().Return("namespace_id")
 	executable.EXPECT().GetTask().Return(task)
 	standbyExecutor.EXPECT().Execute(gomock.Any(), executable).Return(ExecuteResponse{
 		ExecutedAsActive: false,
@@ -82,13 +83,13 @@ func TestActiveStandbyExecutor_ForcedStandbySuccessIsReturned(t *testing.T) {
 	activeExecutor := NewMockExecutor(ctrl)
 	standbyExecutor := NewMockExecutor(ctrl)
 	testHooks := testhooks.NewTestHooks()
-	t.Cleanup(testhooks.Set(
+	t.Cleanup(testhooks.Set[testhooks.HistoryPassiveReplicationTestHook](
 		testHooks,
 		testhooks.HistoryPassiveReplicationTest,
-		testhooks.HistoryPassiveReplicationTestHook(activeStandbyPassiveReplicationTestHook{}),
-		testhooks.GlobalScope,
+		activeStandbyPassiveReplicationTestHook{},
+		namespace.ID("namespace_id"),
 	))
-	executor := NewActiveStandbyExecutorWithTestHooks(
+	executor := NewActiveStandbyExecutor(
 		currentCluster,
 		registry,
 		activeExecutor,
@@ -103,6 +104,7 @@ func TestActiveStandbyExecutor_ForcedStandbySuccessIsReturned(t *testing.T) {
 		time.Time{},
 	)
 	executable := NewMockExecutable(ctrl)
+	executable.EXPECT().GetNamespaceID().Return("namespace_id")
 	executable.EXPECT().GetTask().Return(task)
 	standbyExecutor.EXPECT().Execute(gomock.Any(), executable).Return(ExecuteResponse{
 		ExecutedAsActive: false,

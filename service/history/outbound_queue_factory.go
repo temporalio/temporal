@@ -245,7 +245,7 @@ func (f *outboundQueueFactory) CreateQueue(
 		f.ClientBean,
 	)
 
-	executor := queues.NewActiveStandbyExecutorWithTestHooks(
+	executor := queues.NewActiveStandbyExecutor(
 		currentClusterName,
 		f.NamespaceRegistry,
 		activeExecutor,
