@@ -609,7 +609,6 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 	return nil
 }
 
-//nolint:revive,errcheck // In async mode the activities retry indefinitely so this function should not return error
 func (d *VersionWorkflowRunner) deleteVersionFromTaskQueuesAsync(ctx workflow.Context) {
 	// If there are propagations in progress, we ask them to cancel and wait for them to do so.
 	// The reason is that the ongoing upsert propagation may overwrite the delete that we want to send here, unintentionally undoing it.
@@ -617,7 +616,16 @@ func (d *VersionWorkflowRunner) deleteVersionFromTaskQueuesAsync(ctx workflow.Co
 	workflow.Await(ctx, func() bool { return d.asyncPropagationsInProgress == 1 }) // delete itself is counted as one
 	d.cancelPropagations = false                                                   // need to unset this in case the version is revived
 
-	d.deleteVersionFromTaskQueues(ctx, workflow.WithActivityOptions(ctx, propagationActivityOptions))
+	// Retryable failures retry indefinitely.
+	err := d.deleteVersionFromTaskQueues(ctx, workflow.WithActivityOptions(ctx, propagationActivityOptions))
+	if err != nil {
+		// Don't decrement asyncPropagationsInProgress — the workflow must stay open
+		// because task queues may still have stale version data. The metric below
+		// enables alerting for manual recovery.
+		d.logger.Error("failed to delete worker deployment version from task queues", "error", err)
+		d.metrics.Counter(metrics.WorkerDeploymentVersionDeletePropagationFailure.Name()).Inc(1)
+		return
+	}
 	d.asyncPropagationsInProgress--
 }
 

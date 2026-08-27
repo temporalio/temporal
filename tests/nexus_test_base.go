@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"errors"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/google/uuid"
@@ -66,16 +67,20 @@ func (env *NexusTestEnv) createRandomNexusEndpoint(ctx context.Context, t *testi
 
 // createRandomExternalNexusServer creates a mock nexus server that listens via a randomized endpointName and return this name to the caller.
 func (env *NexusTestEnv) createRandomExternalNexusServer(ctx context.Context, t *testing.T, handler nexustest.Handler) string {
-	endpointName := testcore.RandomizedNexusEndpoint(t.Name())
 	listenAddr := nexustest.AllocListenAddress()
 	nexustest.NewNexusServer(t, listenAddr, handler)
+	return env.createExternalNexusEndpoint(ctx, t, "http://"+listenAddr)
+}
+
+func (env *NexusTestEnv) createExternalNexusEndpoint(ctx context.Context, t *testing.T, url string) string {
+	endpointName := testcore.RandomizedNexusEndpoint(t.Name())
 	resp, err := env.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
 		Spec: &nexuspb.EndpointSpec{
 			Name: endpointName,
 			Target: &nexuspb.EndpointTarget{
 				Variant: &nexuspb.EndpointTarget_External_{
 					External: &nexuspb.EndpointTarget_External{
-						Url: "http://" + listenAddr,
+						Url: url,
 					},
 				},
 			},
@@ -92,6 +97,22 @@ func (env *NexusTestEnv) createRandomExternalNexusServer(ctx context.Context, t 
 	})
 
 	return endpointName
+}
+
+func (env *NexusTestEnv) dispatchByEndpointURL(endpoint string) string {
+	return "http://" + env.HttpAPIAddress() + "/" + cnexus.RouteDispatchNexusTaskByEndpoint.Path(endpoint)
+}
+
+func (env *NexusTestEnv) dispatchByTaskQueueURL(taskQueue string) string {
+	return env.dispatchByNamespaceAndTaskQueueURL(env.Namespace().String(), taskQueue)
+}
+
+func (env *NexusTestEnv) dispatchByNamespaceAndTaskQueueURL(namespace string, taskQueue string) string {
+	return "http://" + env.HttpAPIAddress() + "/" + cnexus.RouteDispatchNexusTaskByNamespaceAndTaskQueue.
+		Path(cnexus.NamespaceAndTaskQueue{
+			Namespace: namespace,
+			TaskQueue: taskQueue,
+		})
 }
 
 // nexusTaskResponse represents a successful response from a nexus task handler.
@@ -345,4 +366,55 @@ func (env *NexusTestEnv) respondNexusTaskCompletedWithOperationError(ctx context
 		return err
 	}
 	return nil
+}
+
+// completionHandler is a nexusrpc completion handler that hands each delivered completion to the
+// test on requestCh, then waits on requestCompleteCh for the error to return to the caller.
+type completionHandler struct {
+	requestCh         chan *nexusrpc.CompletionRequest
+	requestCompleteCh chan error
+	doneCh            chan struct{}
+}
+
+func (h *completionHandler) CompleteOperation(ctx context.Context, request *nexusrpc.CompletionRequest) error {
+	// Push the request to the requests channel.
+	select {
+	case h.requestCh <- request:
+	case <-h.doneCh:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+
+	// Pull from the rsponse channel.
+	select {
+	case err := <-h.requestCompleteCh:
+		return err
+	case <-h.doneCh:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// newNexusCompletionHandler returns a completion handler along with the URL of an HTTP server that
+// delivers completions to it, for use as the target of a completion callback. The server shuts
+// down when t cleans up.
+func newNexusCompletionHandler(t *testing.T) (*completionHandler, string) {
+	// Buffered so the server can deliver several completions (or retries) before the test drains them.
+	ch := &completionHandler{
+		requestCh:         make(chan *nexusrpc.CompletionRequest, 4),
+		requestCompleteCh: make(chan error, 4),
+		doneCh:            make(chan struct{}),
+	}
+
+	httpHandler := nexusrpc.CompletionHandlerOptions{Handler: ch}
+	srv := httptest.NewServer(nexusrpc.NewCompletionHTTPHandler(httpHandler))
+
+	t.Cleanup(func() {
+		// Unblock any calls to CompleteOperation; srv.Close waits for in-flight requests.
+		close(ch.doneCh)
+		srv.Close()
+	})
+	return ch, srv.URL
 }

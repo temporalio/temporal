@@ -84,11 +84,9 @@ func (s *ActivityAPIBatchCancelClientTestSuite) TestActivityBatchCancel_Success(
 	}
 }
 
-// TestActivityBatchCancel_ExcludesNonRunning verifies that a batch cancel query
-// omitting `ExecutionStatus = 'Running'` still only targets the running
-// activity: the server must add the filter automatically (adjustQueryBatchTypeEnum)
-// so an already-completed activity of the same type is excluded, not (re-)canceled.
-func (s *ActivityAPIBatchCancelClientTestSuite) TestActivityBatchCancel_ExcludesNonRunning() {
+// TestActivityBatchCancel_TargetsRunningAndPaused verifies that a batch cancel
+// query targets non-terminal activities while excluding completed activities.
+func (s *ActivityAPIBatchCancelClientTestSuite) TestActivityBatchCancel_TargetsRunningAndPaused() {
 	env := newStandaloneActivityBatchEnv(s.T())
 	t := s.T()
 	ctx := s.Context()
@@ -99,6 +97,16 @@ func (s *ActivityAPIBatchCancelClientTestSuite) TestActivityBatchCancel_Excludes
 	// task can't race and pick up the running activity's task instead.
 	runningID := testcore.RandomizeStr(fmt.Sprintf("%s-running", t.Name()))
 	runningResp := env.startAndValidateActivity(ctx, t, runningID, testcore.RandomizeStr(fmt.Sprintf("%s-running-tq", t.Name())))
+	pausedID := testcore.RandomizeStr(fmt.Sprintf("%s-paused", t.Name()))
+	pausedResp := env.startAndValidateActivity(ctx, t, pausedID, testcore.RandomizeStr(fmt.Sprintf("%s-paused-tq", t.Name())))
+	_, err := env.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		ActivityId: pausedID,
+		RunId:      pausedResp.RunId,
+		Identity:   "test-identity",
+		Reason:     "test-pause",
+	})
+	require.NoError(t, err)
 
 	// This activity completes normally before the batch runs, so it must be
 	// excluded from a batch operation scoped only by ActivityType.
@@ -106,7 +114,7 @@ func (s *ActivityAPIBatchCancelClientTestSuite) TestActivityBatchCancel_Excludes
 	completedID := testcore.RandomizeStr(fmt.Sprintf("%s-completed", t.Name()))
 	completedResp := env.startAndValidateActivity(ctx, t, completedID, completedTaskQueue)
 	pollResp := env.pollActivityTaskAndValidate(ctx, t, completedID, completedTaskQueue, completedResp.RunId)
-	_, err := env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+	_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
 		Namespace: env.Namespace().String(),
 		TaskToken: pollResp.TaskToken,
 		Result:    defaultResult,
@@ -116,17 +124,13 @@ func (s *ActivityAPIBatchCancelClientTestSuite) TestActivityBatchCancel_Excludes
 	// Query intentionally omits ExecutionStatus = 'Running'.
 	query := fmt.Sprintf("ActivityType = '%s'", activityType)
 
-	// Wait for both activities (one Running, one Completed) to be indexed.
-	//nolint:forbidigo // tests with waits
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		listResp, err := env.FrontendClient().ListActivityExecutions(ctx, &workflowservice.ListActivityExecutionsRequest{
-			Namespace: env.Namespace().String(),
-			PageSize:  10,
-			Query:     query,
-		})
-		require.NoError(c, err)
-		require.Len(c, listResp.GetExecutions(), 2)
-	}, testcore.WaitForESToSettle, 100*time.Millisecond)
+	// Wait for all activities to be indexed and the batch filter to see the
+	// running and paused activities, but not the completed activity.
+	waitForActivityBatchFilterToSettle(ctx, t, env, query, map[string]enumspb.ActivityExecutionStatus{
+		runningID:   enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
+		pausedID:    enumspb.ACTIVITY_EXECUTION_STATUS_PAUSED,
+		completedID: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+	})
 
 	jobID := uuid.NewString()
 	_, err = env.SdkClient().WorkflowService().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
@@ -143,8 +147,8 @@ func (s *ActivityAPIBatchCancelClientTestSuite) TestActivityBatchCancel_Excludes
 	})
 	s.NoError(err)
 
-	// The server-added ExecutionStatus = 'Running' filter must exclude the
-	// already-completed activity: only 1 execution is ever targeted, not 2.
+	// The server-added open-status filter must include the paused activity and
+	// exclude the completed activity.
 	//nolint:forbidigo // tests with waits
 	s.EventuallyWithT(func(c *assert.CollectT) {
 		desc, err := env.FrontendClient().DescribeBatchOperation(ctx, &workflowservice.DescribeBatchOperationRequest{
@@ -152,10 +156,11 @@ func (s *ActivityAPIBatchCancelClientTestSuite) TestActivityBatchCancel_Excludes
 			JobId:     jobID,
 		})
 		require.NoError(c, err)
-		require.EqualValues(c, 1, desc.GetTotalOperationCount())
+		require.EqualValues(c, 2, desc.GetTotalOperationCount())
 	}, 10*time.Second, 200*time.Millisecond)
 
 	env.eventuallyCanceled(ctx, t, runningID, runningResp.RunId)
+	env.eventuallyCanceled(ctx, t, pausedID, pausedResp.RunId)
 
 	// The already-completed activity must remain untouched by the batch.
 	descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{

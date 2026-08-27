@@ -151,6 +151,9 @@ func NewStreamReceiver(
 		}
 	}
 	receiver.flowController = NewReceiverFlowControl(taskTrackerMap, processToolBox.Config)
+	if receiver.NamespaceThrottler == nil {
+		receiver.NamespaceThrottler = NoopNamespaceThrottler{}
+	}
 	return receiver
 }
 
@@ -170,6 +173,13 @@ func (r *StreamReceiverImpl) Start() {
 		r.recvSignalChan,
 		r.Config.ReplicationStreamSendEmptyTaskDuration,
 		r.Config.ReplicationStreamReceiverLivenessMultiplier,
+		r.shutdownChan,
+		r.Stop,
+		r.logger,
+	)
+	go maxLifetimeMonitor(
+		r.Config.ReplicationStreamMaxLifetime,
+		r.Config.ReplicationStreamMaxLifetimeJitter,
 		r.shutdownChan,
 		r.Stop,
 		r.logger,

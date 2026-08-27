@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	otellog "go.opentelemetry.io/otel/log"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -13,6 +14,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -22,6 +24,7 @@ import (
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/wideevents"
 )
 
 const (
@@ -43,6 +46,9 @@ func newReplicationMessageProcessor(
 	currentCluster string,
 	sourceCluster string,
 	logger log.Logger,
+	eventLogger otellog.Logger,
+	emitNamespaceLifecycleEvents dynamicconfig.BoolPropertyFn,
+	eventDataProvider wideevents.NamespaceReplicationTaskEventDataProvider,
 	remotePeer adminservice.AdminServiceClient,
 	metricsHandler metrics.Handler,
 	namespaceTaskExecutor nsreplication.TaskExecutor,
@@ -74,45 +80,51 @@ func newReplicationMessageProcessor(
 	}
 
 	return &replicationMessageProcessor{
-		hostInfo:                  hostInfo,
-		serviceResolver:           serviceResolver,
-		status:                    common.DaemonStatusInitialized,
-		currentCluster:            currentCluster,
-		sourceCluster:             sourceCluster,
-		logger:                    logger,
-		remotePeer:                remotePeer,
-		namespaceTaskExecutor:     namespaceTaskExecutor,
-		customTaskHandler:         customTaskHandler,
-		metricsHandler:            metricsHandler.WithTags(metrics.OperationTag(metrics.NamespaceReplicationTaskScope)),
-		retryPolicyForTask:        retryPolicyForTask,
-		lastProcessedMessageID:    -1,
-		lastRetrievedMessageID:    -1,
-		done:                      make(chan struct{}),
-		namespaceReplicationQueue: namespaceReplicationQueue,
-		matchingClient:            matchingClient,
-		namespaceRegistry:         namespaceRegistry,
+		hostInfo:                     hostInfo,
+		serviceResolver:              serviceResolver,
+		status:                       common.DaemonStatusInitialized,
+		currentCluster:               currentCluster,
+		sourceCluster:                sourceCluster,
+		logger:                       logger,
+		eventLogger:                  eventLogger,
+		emitNamespaceLifecycleEvents: emitNamespaceLifecycleEvents,
+		eventDataProvider:            eventDataProvider,
+		remotePeer:                   remotePeer,
+		namespaceTaskExecutor:        namespaceTaskExecutor,
+		customTaskHandler:            customTaskHandler,
+		metricsHandler:               metricsHandler.WithTags(metrics.OperationTag(metrics.NamespaceReplicationTaskScope)),
+		retryPolicyForTask:           retryPolicyForTask,
+		lastProcessedMessageID:       -1,
+		lastRetrievedMessageID:       -1,
+		done:                         make(chan struct{}),
+		namespaceReplicationQueue:    namespaceReplicationQueue,
+		matchingClient:               matchingClient,
+		namespaceRegistry:            namespaceRegistry,
 	}
 }
 
 type (
 	replicationMessageProcessor struct {
-		hostInfo                  membership.HostInfo
-		serviceResolver           membership.ServiceResolver
-		status                    int32
-		currentCluster            string
-		sourceCluster             string
-		logger                    log.Logger
-		remotePeer                adminservice.AdminServiceClient
-		namespaceTaskExecutor     nsreplication.TaskExecutor
-		customTaskHandler         func(ctx context.Context, task *replicationspb.ReplicationTask) error
-		metricsHandler            metrics.Handler
-		retryPolicyForTask        func(*replicationspb.ReplicationTask) backoff.RetryPolicy
-		lastProcessedMessageID    int64
-		lastRetrievedMessageID    int64
-		done                      chan struct{}
-		namespaceReplicationQueue persistence.NamespaceReplicationQueue
-		matchingClient            matchingservice.MatchingServiceClient
-		namespaceRegistry         namespace.Registry
+		hostInfo                     membership.HostInfo
+		serviceResolver              membership.ServiceResolver
+		status                       int32
+		currentCluster               string
+		sourceCluster                string
+		logger                       log.Logger
+		eventLogger                  otellog.Logger
+		emitNamespaceLifecycleEvents dynamicconfig.BoolPropertyFn
+		eventDataProvider            wideevents.NamespaceReplicationTaskEventDataProvider
+		remotePeer                   adminservice.AdminServiceClient
+		namespaceTaskExecutor        nsreplication.TaskExecutor
+		customTaskHandler            func(ctx context.Context, task *replicationspb.ReplicationTask) error
+		metricsHandler               metrics.Handler
+		retryPolicyForTask           func(*replicationspb.ReplicationTask) backoff.RetryPolicy
+		lastProcessedMessageID       int64
+		lastRetrievedMessageID       int64
+		done                         chan struct{}
+		namespaceReplicationQueue    persistence.NamespaceReplicationQueue
+		matchingClient               matchingservice.MatchingServiceClient
+		namespaceRegistry            namespace.Registry
 	}
 )
 
@@ -177,9 +189,32 @@ func (p *replicationMessageProcessor) handleReplicationTasks() {
 	taskCtx := headers.SetCallerInfo(context.TODO(), headers.SystemPreemptableCallerInfo)
 	for taskIndex := range response.Messages.ReplicationTasks {
 		task := response.Messages.ReplicationTasks[taskIndex]
+		eventData, emitEvents := p.namespaceReplicationEventData(task)
+		if emitEvents {
+			p.emitNamespaceReplicationEvent(
+				eventData,
+				task.GetSourceTaskId(),
+				wideevents.NamespaceReplicationReceived,
+				0,
+				nil,
+			)
+		}
+
+		attemptCount := 0
 		policy := p.retryPolicyForTask(task)
 		err := backoff.ThrottleRetry(func() error {
-			return p.handleReplicationTask(taskCtx, task)
+			attemptCount++
+			attemptCtx := taskCtx
+			if emitEvents {
+				attemptCtx = wideevents.SetNamespaceReplicationTaskContext(taskCtx, wideevents.NamespaceReplicationTaskContext{
+					SourceCluster: p.sourceCluster,
+					TargetCluster: p.currentCluster,
+					SourceTaskID:  task.GetSourceTaskId(),
+					AttemptCount:  attemptCount,
+					EventData:     eventData,
+				})
+			}
+			return p.handleReplicationTask(attemptCtx, task)
 		}, policy, isTransientRetryableError)
 
 		if err != nil {
@@ -187,7 +222,6 @@ func (p *replicationMessageProcessor) handleReplicationTasks() {
 			p.logger.Error("Failed to apply replication tasks", tag.Error(err))
 
 			dlqErr := backoff.ThrottleRetry(func() error {
-
 				return p.putNamespaceReplicationTaskToDLQ(taskCtx, task)
 			}, policy, isTransientRetryableError)
 			if dlqErr != nil {
@@ -195,11 +229,48 @@ func (p *replicationMessageProcessor) handleReplicationTasks() {
 				metrics.ReplicatorDLQFailures.With(p.metricsHandler).Record(1)
 				return
 			}
+
+			if emitEvents {
+				p.emitNamespaceReplicationEvent(
+					eventData,
+					task.GetSourceTaskId(),
+					wideevents.NamespaceReplicationDLQed,
+					attemptCount,
+					err,
+				)
+			}
 		}
 	}
 
 	p.lastProcessedMessageID = response.Messages.GetLastRetrievedMessageId()
 	p.lastRetrievedMessageID = response.Messages.GetLastRetrievedMessageId()
+}
+
+func (p *replicationMessageProcessor) emitNamespaceReplicationEvent(
+	eventData wideevents.NamespaceReplicationTaskEventData,
+	sourceTaskID int64,
+	phase wideevents.NamespaceReplicationPhase,
+	attemptCount int,
+	err error,
+) {
+	wideevents.EmitNamespaceReplicationLifecycle(p.eventLogger, wideevents.NamespaceReplicationLifecycleInput{
+		Phase:         phase,
+		EventData:     eventData,
+		SourceCluster: p.sourceCluster,
+		TargetCluster: p.currentCluster,
+		SourceTaskID:  &sourceTaskID,
+		AttemptCount:  attemptCount,
+		Error:         err,
+	})
+}
+
+func (p *replicationMessageProcessor) namespaceReplicationEventData(
+	task *replicationspb.ReplicationTask,
+) (wideevents.NamespaceReplicationTaskEventData, bool) {
+	if !p.emitNamespaceLifecycleEvents() {
+		return wideevents.NamespaceReplicationTaskEventData{}, false
+	}
+	return p.eventDataProvider.Extract(task)
 }
 
 func (p *replicationMessageProcessor) putNamespaceReplicationTaskToDLQ(

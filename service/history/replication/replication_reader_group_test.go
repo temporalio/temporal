@@ -286,7 +286,6 @@ func (s *replicationReaderGroupSuite) makeQueueStateWithMembers(overall, high, l
 		},
 	}
 }
-
 func (s *replicationReaderGroupSuite) makeQueueState(overall, high, low int64) *persistencespb.QueueState {
 	makeScope := func(taskID int64) *persistencespb.QueueSliceScope {
 		return &persistencespb.QueueSliceScope{

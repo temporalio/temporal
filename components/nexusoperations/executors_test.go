@@ -973,16 +973,17 @@ func TestProcessStartToCloseTimeoutTask(t *testing.T) {
 
 func TestProcessCancelationTask(t *testing.T) {
 	cases := []struct {
-		name                  string
-		endpointNotFound      bool
-		onCancelOperation     func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error
-		expectedMetricOutcome string
-		checkOutcome          func(t *testing.T, op nexusoperations.Cancelation)
-		requestTimeout        time.Duration
-		schedToCloseTimeout   time.Duration
-		startToCloseTimeout   time.Duration
-		destinationDown       bool
-		header                map[string]string
+		name                        string
+		endpointNotFound            bool
+		onCancelOperation           func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error
+		expectedMetricOutcome       string
+		checkOutcome                func(t *testing.T, op nexusoperations.Cancelation)
+		requestTimeout              time.Duration
+		schedToCloseTimeout         time.Duration
+		startToCloseTimeout         time.Duration
+		destinationDown             bool
+		header                      map[string]string
+		disableNewFailureWireFormat bool
 	}{
 		{
 			name:            "failure",
@@ -1017,13 +1018,36 @@ func TestProcessCancelationTask(t *testing.T) {
 			},
 		},
 		{
-			name:            "success with headers",
+			name:            "success with temporal failure capability and user headers",
 			requestTimeout:  time.Hour,
 			destinationDown: false,
 			header:          map[string]string{"key": "value"},
 			onCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
 				if options.Header["key"] != "value" {
 					return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, `"key" header is not equal to "value"`)
+				}
+				if options.Header.Get(nexusrpc.HeaderTemporalNexusFailureSupport) != "true" {
+					return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "temporal failure capability is not enabled")
+				}
+				return nil
+			},
+			expectedMetricOutcome: "successful",
+			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
+				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SUCCEEDED, c.State())
+				require.Nil(t, c.LastAttemptFailure.GetApplicationFailureInfo())
+			},
+		},
+		{
+			name:                        "success without temporal failure capability",
+			requestTimeout:              time.Hour,
+			header:                      map[string]string{"key": "value"},
+			disableNewFailureWireFormat: true,
+			onCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
+				if options.Header["key"] != "value" {
+					return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, `"key" header is not equal to "value"`)
+				}
+				if options.Header.Get(nexusrpc.HeaderTemporalNexusFailureSupport) != "" {
+					return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "temporal failure capability is enabled")
 				}
 				return nil
 			},
@@ -1182,7 +1206,7 @@ func TestProcessCancelationTask(t *testing.T) {
 					RequestTimeout:                      dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
 					MinRequestTimeout:                   dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
 					RecordCancelRequestCompletionEvents: dynamicconfig.GetBoolPropertyFn(true),
-					UseNewFailureWireFormat:             dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+					UseNewFailureWireFormat:             dynamicconfig.GetBoolPropertyFnFilteredByNamespace(!tc.disableNewFailureWireFormat),
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},

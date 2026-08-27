@@ -342,10 +342,11 @@ const (
 )
 
 const (
-	PollerScaleReasonIdle        ReasonString = "idle"
-	PollerScaleReasonBacklog     ReasonString = "backlog"
-	PollerScaleReasonTaskRate    ReasonString = "task_rate"
-	PollerScaleReasonRateLimited ReasonString = "rate_limited"
+	PollerScaleReasonIdle                 ReasonString = "idle"
+	PollerScaleReasonBacklog              ReasonString = "backlog"
+	PollerScaleReasonTaskRate             ReasonString = "task_rate"
+	PollerScaleReasonRateLimited          ReasonString = "rate_limited"
+	PollerScaleReasonTaskQueueRateLimited ReasonString = "task_queue_rate_limited"
 )
 
 // PollerScaleDecisionTag records the direction of a poller scaling decision (scale up, scale

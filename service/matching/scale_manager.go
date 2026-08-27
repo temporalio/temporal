@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -21,6 +22,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/number"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/worker_versioning"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -309,7 +311,52 @@ func (sm *scaleManager) setState(newState *persistencespb.PartitionScaleState, s
 	sm.emitGaugeMetricsIfEnabled(float64(newInfo.Read), float64(newInfo.Write), float64(sm.scaleState.GetTarget()))
 }
 
-func (sm *scaleManager) describeRequest(id int32) *matchingservice.DescribeTaskQueuePartitionRequest {
+func (sm *scaleManager) versionsForDescribe() ([]string, error) {
+	// Get all the versions that this task queue has ever been a part of,
+	// they could have backlog even if not loaded, so we need to check them.
+	// Exclude drained versions because they definitely have no backlog.
+	//
+	// Also exclude deleted versions, even if they are not drained; if a
+	// non-drained version is deleted, the user killed all pollers and then
+	// force-deleted the version, explicitly abandoning it. The backlog can't
+	// be consumed by any existing pollers, so it should not prevent the partition
+	// from draining.
+	// If the user re-creates the version and the partition count does not scale
+	// back up to reach this backlog, the tasks will time out. That is reasonable
+	// given the force-delete, and better than the alternative of blocking partition
+	// scale down indefinitely.
+	userData, _, err := sm.userDataManager.GetUserData()
+	if err != nil {
+		return nil, err
+	}
+	perType := userData.GetData().GetPerType()[int32(sm.partition.TaskType())]
+	versionsSet := make(map[string]struct{})
+	//nolint:staticcheck // SA1019: old deployment data remains supported during migration
+	for _, versionData := range perType.GetDeploymentData().GetVersions() {
+		version := versionData.GetVersion()
+		if version.GetDeploymentName() == "" || version.GetBuildId() == "" || // legacy version data may have version=nil for unversioned
+			versionData.GetStatus() == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED {
+			continue
+		}
+		versionsSet[worker_versioning.WorkerDeploymentVersionToStringV32(version)] = struct{}{}
+	}
+
+	for deploymentName, deploymentData := range perType.GetDeploymentData().GetDeploymentsData() {
+		for buildID, versionData := range deploymentData.GetVersions() {
+			if versionData.GetDeleted() || versionData.GetStatus() == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED {
+				continue
+			}
+			versionsSet[worker_versioning.BuildIDToStringV32(deploymentName, buildID)] = struct{}{}
+		}
+	}
+	versions := make([]string, 0, len(versionsSet))
+	for version := range versionsSet {
+		versions = append(versions, version)
+	}
+	return versions, nil
+}
+
+func (sm *scaleManager) describeRequest(id int32, versions []string) *matchingservice.DescribeTaskQueuePartitionRequest {
 	return &matchingservice.DescribeTaskQueuePartitionRequest{
 		NamespaceId: sm.partition.NamespaceId(),
 		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
@@ -318,11 +365,16 @@ func (sm *scaleManager) describeRequest(id int32) *matchingservice.DescribeTaskQ
 			PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: id},
 		},
 		Versions: &taskqueuepb.TaskQueueVersionSelection{
+			BuildIds: versions,
+			// this is the default queue, equivalent to putting "" in the BuildIds list
 			Unversioned: true,
-			// TODO(dp)(carlydf): deal with inactive/deleted versions (use user data version info)
+			// versions list should already contain all the loaded per-version queues, we
+			// include AllActive too because it doesn't hurt and would cover recently-added
+			// versions in case the user data is stale for some reason
 			AllActive: true,
 		},
 		ReportInternalTaskQueueStatus: true,
+		OnlyIfLoaded:                  true,
 	}
 }
 
@@ -332,9 +384,15 @@ func (sm *scaleManager) updateBacklogAndDrainState(ctx context.Context) {
 	if read == 0 {
 		return
 	}
+	versions, err := sm.versionsForDescribe()
+	if err != nil {
+		return
+	}
 
 	prevBacklog := scaleState.GetBacklogCounts()
 	newBacklog := make([]byte, read)
+	// Preserve the last known backlog for partitions whose Describe call fails.
+	copy(newBacklog, prevBacklog)
 	backlogChanged := false
 
 	// check if we should evaluate drain state
@@ -347,9 +405,10 @@ func (sm *scaleManager) updateBacklogAndDrainState(ctx context.Context) {
 
 	for id := range read {
 		callCtx, cancel := context.WithTimeout(ctx, ioTimeout)
-		res, err := sm.matchingClient.DescribeTaskQueuePartition(callCtx, sm.describeRequest(id))
+		res, err := sm.matchingClient.DescribeTaskQueuePartition(callCtx, sm.describeRequest(id, versions))
 		cancel()
 		if err != nil {
+			// CONSIDER(carlydf): Emit a metric when an unloaded partition in the draining range blocks scale-down.
 			continue
 		}
 

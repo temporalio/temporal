@@ -22,6 +22,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/log"
@@ -31,6 +32,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -951,8 +953,13 @@ func v2ScheduleVisibilityQuery() string {
 
 // AdminScheduleStatus reports how many schedules in --namespace are currently V1
 // (workflow-backed) vs V2 (CHASM), using the same default visibility queries as
-// `schedule migrate --from-visibility`.
+// `schedule migrate --from-visibility`. With --schedule-id, it instead reports the migration
+// status of that one schedule.
 func AdminScheduleStatus(c *cli.Context, clientFactory ClientFactory) error {
+	if scheduleID := c.String(FlagScheduleID); scheduleID != "" {
+		return describeScheduleMigrationStatus(c, clientFactory, scheduleID)
+	}
+
 	ns, err := getRequiredOption(c, FlagNamespace)
 	if err != nil {
 		return err
@@ -987,6 +994,173 @@ func countScheduleVisibility(c *cli.Context, wfClient workflowservice.WorkflowSe
 		return 0, err
 	}
 	return resp.GetCount(), nil
+}
+
+// v2ScheduleStatus is what was found, if anything, on the CHASM (V2) side of a schedule ID.
+type v2ScheduleStatus struct {
+	found    bool
+	sentinel bool // only meaningful when found
+}
+
+// isGenuine reports whether this is a real V2 schedule, as opposed to a migration sentinel
+// reserving the ID.
+func (s v2ScheduleStatus) isGenuine() bool { return s.found && !s.sentinel }
+
+func (s v2ScheduleStatus) describe() string {
+	switch {
+	case !s.found:
+		return "not found"
+	case s.sentinel:
+		return "sentinel (V1→V2 migration placeholder)"
+	default:
+		return "genuine"
+	}
+}
+
+// v1ScheduleStatus is what was found, if anything, on the workflow (V1) side of a schedule ID.
+type v1ScheduleStatus struct {
+	found        bool
+	workflowType string // only meaningful when found
+}
+
+// isGenuine reports whether this is a real V1 scheduler workflow.
+func (s v1ScheduleStatus) isGenuine() bool {
+	return s.found && s.workflowType == scheduler.WorkflowType
+}
+
+// isSentinel reports whether this is a placeholder DummyWorkflow reserving the V1 workflow ID
+// during a V2->V1 rollback.
+func (s v1ScheduleStatus) isSentinel() bool {
+	return s.found && s.workflowType == dummy.DummyWFTypeName
+}
+
+func (s v1ScheduleStatus) describe() string {
+	switch {
+	case !s.found:
+		return "not found"
+	case s.isGenuine():
+		return "genuine"
+	case s.isSentinel():
+		return "sentinel (V2→V1 rollback placeholder)"
+	default:
+		return fmt.Sprintf("unexpected workflow type %q", s.workflowType)
+	}
+}
+
+// describeScheduleMigrationStatus reports whether a single schedule is currently V1
+// (workflow-backed), V2 (CHASM), or caught in a migration sentinel state, using the same
+// DescribeMutableState RPC as `execution describe`. It always probes both the V1 workflow ID and
+// the V2 (CHASM) business ID -- regardless of which form --schedule-id was given in -- so the
+// report reflects a confirmed lookup rather than an inference from the ID's shape alone.
+func describeScheduleMigrationStatus(c *cli.Context, clientFactory ClientFactory, scheduleID string) error {
+	ns, err := getRequiredOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+
+	rawID := strings.TrimPrefix(scheduleID, primitives.ScheduleWorkflowIDPrefix)
+	v1ID := scheduleID
+	if rawID == scheduleID {
+		v1ID = primitives.ScheduleWorkflowIDPrefix + scheduleID
+	}
+
+	adminClient := clientFactory.AdminClient(c)
+
+	v2, err := describeSchedulerChasmState(c, adminClient, ns, rawID)
+	if err != nil {
+		return fmt.Errorf("unable to describe schedule %q: %w", scheduleID, err)
+	}
+	v1, err := describeWorkflowTypeName(c, adminClient, ns, v1ID)
+	if err != nil {
+		return fmt.Errorf("unable to describe schedule %q: %w", scheduleID, err)
+	}
+
+	w := c.App.Writer
+	switch {
+	case v1.isGenuine() && !v2.found:
+		_, _ = fmt.Fprintf(w, "Schedule %q is a V1 (workflow-backed) schedule.\n", scheduleID)
+	case !v1.found && v2.isGenuine():
+		_, _ = fmt.Fprintf(w, "Schedule %q is a V2 (CHASM) schedule.\n", scheduleID)
+	case v1.isGenuine() && v2.sentinel:
+		_, _ = fmt.Fprintf(w, "Schedule %q is a V1 (workflow-backed) schedule.\n", scheduleID)
+		_, _ = fmt.Fprintf(w, "Additionally, a placeholder (\"sentinel\") V2 entity exists at business ID %q, "+
+			"reserving that ID while a V1→V2 migration is in progress. This is expected during migration and "+
+			"requires no action — the V1 schedule above remains authoritative until the migration completes.\n",
+			rawID)
+	case v1.isSentinel() && v2.isGenuine():
+		_, _ = fmt.Fprintf(w, "Schedule %q is a V2 (CHASM) schedule.\n", scheduleID)
+		_, _ = fmt.Fprintf(w, "Additionally, a placeholder (\"sentinel\") V1 workflow exists at workflow ID %q, "+
+			"reserving that ID while a V2→V1 rollback is in progress. This is expected during rollback and "+
+			"requires no action.\n", v1ID)
+	case !v1.found && !v2.found:
+		_, _ = fmt.Fprintf(w, "Schedule %q was not found as either a V1 (workflow-backed) or V2 (CHASM) schedule. "+
+			"It may not exist, may have been deleted, or the ID may be mistyped.\n", scheduleID)
+	default:
+		_, _ = fmt.Fprintf(w, "Schedule %q is in an unexpected state — both sides below should not normally be "+
+			"true at the same time. This needs manual investigation.\n", scheduleID)
+	}
+
+	_, _ = fmt.Fprint(w, "\nDetails:\n")
+	_, _ = fmt.Fprintf(w, "  %-22s[workflow ID %s]: %s\n", "V1 (workflow-backed)", v1ID, v1.describe())
+	_, _ = fmt.Fprintf(w, "  %-22s[business ID %s]: %s\n", "V2 (CHASM)", rawID, v2.describe())
+
+	_, _ = fmt.Fprint(w, "\nInspect further:\n")
+	_, _ = fmt.Fprintf(w, "  V1: tdbg execution describe --workflow-id %s -n %s\n", v1ID, ns)
+	_, _ = fmt.Fprintf(w, "  V2: tdbg execution describe --workflow-id %s --archetype %s -n %s\n", rawID, chasm.SchedulerArchetype, ns)
+
+	return nil
+}
+
+// describeSchedulerChasmState looks up the CHASM (V2) side of scheduleID and reports whether a
+// genuine schedule, a migration sentinel, or nothing exists there.
+func describeSchedulerChasmState(c *cli.Context, adminClient adminservice.AdminServiceClient, ns, scheduleID string) (v2ScheduleStatus, error) {
+	ctx, cancel := newContext(c)
+	defer cancel()
+	resp, err := adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace: ns,
+		Execution: &commonpb.WorkflowExecution{WorkflowId: scheduleID},
+		Archetype: chasm.SchedulerArchetype,
+	})
+	if common.IsNotFoundError(err) {
+		return v2ScheduleStatus{}, nil
+	}
+	if err != nil {
+		return v2ScheduleStatus{}, err
+	}
+
+	// The CHASM tree's root node -- the Scheduler component itself -- always encodes to the
+	// empty path.
+	node, ok := resp.GetDatabaseMutableState().GetChasmNodes()[""]
+	if !ok {
+		return v2ScheduleStatus{}, nil
+	}
+	var state schedulerpb.SchedulerState
+	if err := serialization.Decode(node.GetData(), &state); err != nil {
+		return v2ScheduleStatus{}, fmt.Errorf("failed to decode scheduler state: %w", err)
+	}
+	return v2ScheduleStatus{found: true, sentinel: state.GetSentinel()}, nil
+}
+
+// describeWorkflowTypeName looks up the workflow (V1) side of workflowID and reports its
+// workflow type, if it exists.
+func describeWorkflowTypeName(c *cli.Context, adminClient adminservice.AdminServiceClient, ns, workflowID string) (v1ScheduleStatus, error) {
+	ctx, cancel := newContext(c)
+	defer cancel()
+	resp, err := adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace: ns,
+		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+		Archetype: chasm.WorkflowArchetype,
+	})
+	if common.IsNotFoundError(err) {
+		return v1ScheduleStatus{}, nil
+	}
+	if err != nil {
+		return v1ScheduleStatus{}, err
+	}
+	return v1ScheduleStatus{
+		found:        true,
+		workflowType: resp.GetDatabaseMutableState().GetExecutionInfo().GetWorkflowTypeName(),
+	}, nil
 }
 
 // migrateSingleSchedule migrates one schedule and performs the migration immediately.

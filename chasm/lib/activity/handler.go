@@ -112,8 +112,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 	)
 
 	if err != nil {
-		var alreadyStartedErr *chasm.ExecutionAlreadyStartedError
-		if errors.As(err, &alreadyStartedErr) {
+		if alreadyStartedErr, ok := errors.AsType[*chasm.ExecutionAlreadyStartedError](err); ok {
 			return nil, serviceerror.NewActivityExecutionAlreadyStarted("activity execution already started", alreadyStartedErr.CurrentRequestID, alreadyStartedErr.CurrentRunID)
 		}
 
@@ -157,8 +156,9 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 				return nil, nil
 			},
 			nil,
+			chasm.WithRequestID(requestID),
 		)
-		if err != nil {
+		if err != nil && !errors.Is(err, chasm.ErrRequestIDAlreadyUsed) {
 			return nil, err
 		}
 	}
@@ -459,7 +459,7 @@ func (h *handler) ResetActivityExecution(ctx context.Context, req *activitypb.Re
 					RunId:      frontendReq.GetRunId(),
 				},
 				Activity:               &workflowservice.ResetActivityRequest_Id{Id: frontendReq.GetActivityId()},
-				ResetHeartbeat:         true,
+				ResetHeartbeat:         frontendReq.GetResetHeartbeat(),
 				RestoreOriginalOptions: frontendReq.GetRestoreOriginalOptions(),
 				KeepPaused:             frontendReq.GetKeepPaused(),
 				Jitter:                 frontendReq.GetJitter(),

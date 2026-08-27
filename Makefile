@@ -172,11 +172,11 @@ $(STAMPDIR):
 $(LOCALBIN):
 	@mkdir -p $(LOCALBIN)
 
-# When updating the version, update the golangci-lint GHA workflow as well.
 .PHONY: golangci-lint
+LINT_CODE_TARGETS ?= ./...
 GOLANGCI_LINT_BASE_REV ?= $(MAIN_BRANCH)
 GOLANGCI_LINT_FIX ?= true
-GOLANGCI_LINT_VERSION := v2.9.0
+GOLANGCI_LINT_VERSION := v2.13.0
 GOLANGCI_LINT := $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
@@ -229,7 +229,7 @@ YAMLFMT := $(LOCALBIN)/yamlfmt-$(YAMLFMT_VER)
 $(YAMLFMT): | $(LOCALBIN)
 	$(call go-install-tool,$(YAMLFMT),github.com/google/yamlfmt/cmd/yamlfmt,$(YAMLFMT_VER))
 
-GOIMPORTS_VER := v0.36.0
+GOIMPORTS_VER := v0.49.0
 GOIMPORTS := $(LOCALBIN)/goimports-$(GOIMPORTS_VER)
 $(STAMPDIR)/goimports-$(GOIMPORTS_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(GOIMPORTS),golang.org/x/tools/cmd/goimports,$(GOIMPORTS_VER))
@@ -263,7 +263,7 @@ $(STAMPDIR)/mockgen-$(MOCKGEN_VER): | $(STAMPDIR) $(LOCALBIN)
 	@touch $@
 $(MOCKGEN): $(STAMPDIR)/mockgen-$(MOCKGEN_VER)
 
-STRINGER_VER := v0.36.0
+STRINGER_VER := v0.49.0
 STRINGER := $(LOCALBIN)/stringer
 $(STAMPDIR)/stringer-$(STRINGER_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(STRINGER),golang.org/x/tools/cmd/stringer,$(STRINGER_VER))
@@ -404,10 +404,36 @@ lint-actions: $(ACTIONLINT)
 	@printf $(COLOR) "Linting GitHub actions..."
 	@$(ACTIONLINT)
 
+.PHONY: lint-code lint-code-fast
+# --new-from-rev filters reported issues _after_ analysis; this target also reduces package inputs _before_ analysis.
+lint-code-fast:
+	@if ! git rev-parse --verify --quiet "$(GOLANGCI_LINT_BASE_REV)^{commit}" >/dev/null; then \
+		printf $(RED) "GOLANGCI_LINT_BASE_REV=$(GOLANGCI_LINT_BASE_REV) is not a known commit; fetch it or override GOLANGCI_LINT_BASE_REV"; \
+		exit 1; \
+	fi
+	@base=$$(git merge-base HEAD "$(GOLANGCI_LINT_BASE_REV)"); \
+	targets=$$({ \
+		git diff --no-renames --name-only "$$base" -- '*.go'; \
+		git ls-files --others --exclude-standard -- '*.go'; \
+	} | sed 's|^|./|; s|/[^/]*$$||' | sort -u \
+	  | while read -r dir; do [ -d "$$dir" ] && printf '%s ' "$$dir"; done); \
+	if [ -z "$$targets" ]; then \
+		printf $(COLOR) "No changed Go packages to lint."; \
+	else \
+		$(MAKE) GOLANGCI_LINT_BASE_REV="$$base" LINT_CODE_TARGETS="$$targets" lint-code; \
+	fi
+
 lint-code: $(GOLANGCI_LINT) $(ERRORTYPE)
 	@printf $(COLOR) "Linting code..."
-	@$(GOLANGCI_LINT) run --verbose --build-tags $(ALL_TEST_TAGS) --timeout 10m --fix=$(GOLANGCI_LINT_FIX) --new-from-rev=$(GOLANGCI_LINT_BASE_REV) --config=.github/.golangci.yml
-	@go vet -tags $(ALL_TEST_TAGS) -vettool="$(ERRORTYPE)" -style-check=false ./...
+	@$(GOLANGCI_LINT) run \
+		--verbose \
+		--build-tags $(ALL_TEST_TAGS) \
+		--timeout 10m \
+		--fix=$(GOLANGCI_LINT_FIX) \
+		--new-from-rev=$(GOLANGCI_LINT_BASE_REV) \
+		--config=.github/.golangci.yml \
+		$(LINT_CODE_TARGETS)
+	@go vet -tags $(ALL_TEST_TAGS) -vettool="$(ERRORTYPE)" -style-check=false $(LINT_CODE_TARGETS)
 
 lint-yaml: $(YAMLFMT)
 	@printf $(COLOR) "Checking YAML formatting..."

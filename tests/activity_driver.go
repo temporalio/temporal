@@ -6,6 +6,7 @@ import (
 	"cmp"
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -57,6 +58,9 @@ const activityInput = "Input"
 // the event sets HasHeartbeatDetails; the server stores it as the activity's last heartbeat progress. It
 // differs from the model.Heartbeat payload so assertions can tell which source was persisted.
 var activityHeartbeatDetails = payloads.EncodeString("failure checkpoint details")
+
+// activityRecordedHeartbeatDetails is the checkpoint payload a driver sends for a model.Heartbeat event.
+var activityRecordedHeartbeatDetails = payloads.EncodeString("heartbeat details")
 
 // timerProcessorMaxShift is the floor the timer queue puts on a task's fire time: it will not fire one
 // earlier than now + this.
@@ -222,6 +226,13 @@ func isDispatchDelayEvent(et model.EventType) bool {
 	return et == model.StartDelayElapsesType || et == model.BackoffElapsesType
 }
 
+// activityFailureSizeLimit is used to truncate larger retryable failure message.
+var activityFailureSizeLimit = dynamicconfig.MutableStateActivityFailureSizeLimitError.Get(
+	dynamicconfig.NewCollection(dynamicconfig.StaticClient(nil), log.NewNoopLogger()))("")
+
+// activityLargeFailureMessage is an example large message which may get truncated.
+var activityLargeFailureMessage = strings.Repeat("x", 2*activityFailureSizeLimit)
+
 // respondFailedFailure is the Failure a RespondFailed event carries, or nil when the event omits it
 // (modeling a worker that calls RespondActivityTaskFailed without a Failure).
 func respondFailedFailure(e model.Event, nextRetryDelay time.Duration) *failurepb.Failure {
@@ -234,8 +245,12 @@ func respondFailedFailure(e model.Event, nextRetryDelay time.Duration) *failurep
 		if nextRetryDelay > 0 {
 			info.NextRetryDelay = durationpb.New(nextRetryDelay)
 		}
+		message := "test failure"
+		if e.Failure.LargeMessage {
+			message = activityLargeFailureMessage
+		}
 		return &failurepb.Failure{
-			Message:     "test failure",
+			Message:     message,
 			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: info},
 		}
 	case model.ServerFailureType:
@@ -278,7 +293,6 @@ type activityTimeoutInfo struct {
 
 // activityDriverState is the state shared by the two drivers.
 type activityDriverState struct {
-	ctx            context.Context
 	cfg            activityConfig
 	token          []byte
 	startedAttempt int32 // attempt number returned by the last successful Poll
@@ -292,6 +306,9 @@ func (a *activityDriverState) driverState() *activityDriverState {
 // drivenActivity is what the shared event driver needs from either implementation.
 type drivenActivity interface {
 	driverState() *activityDriverState
+	// testContext returns the driver's current test context, fetched fresh per
+	// call rather than cached, so a later timeout extension is visible.
+	testContext() context.Context
 	pollForTask(require.TestingT, time.Duration) *workflowservice.PollActivityTaskQueueResponse
 	awaitDispatchDelay(testing.TB, model.Event)
 	timeoutInfo(require.TestingT) activityTimeoutInfo
@@ -322,7 +339,7 @@ func awaitActivityTimeout(t testing.TB, a drivenActivity, e model.Event, deadlin
 	state := a.driverState()
 	want := timeoutType(e)
 	var got activityTimeoutInfo
-	await.Require(state.ctx, t, func(t *await.T) {
+	await.Require(a.testContext(), t, func(t *await.T) {
 		got = a.timeoutInfo(t)
 		fired := got.timeout == want && (got.terminal || got.attempt > state.startedAttempt)
 		t.Require().Truef(fired,

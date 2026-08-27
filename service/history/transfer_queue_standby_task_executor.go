@@ -103,7 +103,7 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 		// TODO: add error logs
 		err = nil
 	case *tasks.CloseExecutionTask:
-		err = t.processCloseExecution(ctx, task)
+		err = t.processCloseExecution(ctx, task, executable.Attempt())
 	case *tasks.DeleteExecutionTask:
 		err = t.processDeleteExecutionTask(ctx, task, false)
 	case *tasks.ChasmTask:
@@ -112,6 +112,7 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 	default:
 		err = errUnknownTransferTask
 	}
+	emitStandbyTaskError(t.shardContext, executable, taskType, err)
 
 	return queues.ExecuteResponse{
 		ExecutionMetricTags: metricsTags,
@@ -293,6 +294,7 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 	ctx context.Context,
 	transferTask *tasks.CloseExecutionTask,
+	attempt int,
 ) error {
 	processTaskIfClosed := true
 	actionFn := func(ctx context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, release historyi.ReleaseWorkflowContextFunc) (any, error) {
@@ -338,9 +340,23 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			parentInitiatedID := executionInfo.ParentInitiatedId
 			parentInitiatedVersion := executionInfo.ParentInitiatedVersion
 			parentClock := executionInfo.ParentClock
+			childWorkflowState := mutableState.GetExecutionState().GetState().String()
 
 			// no need for mutable state anymore, release workflow lock
 			release(nil)
+
+			emitChildCompletionVerificationStarted(
+				t.shardContext,
+				transferTask,
+				parentNamespaceID,
+				parentWorkflowID,
+				parentRunID,
+				parentInitiatedID,
+				parentInitiatedVersion,
+				childWorkflowState,
+				resendParent,
+				attempt,
+			)
 
 			_, err := t.historyRawClient.VerifyChildExecutionCompletionRecorded(ctx, &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 				NamespaceId: parentNamespaceID,
@@ -357,6 +373,19 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 				Clock:                  parentClock,
 				ResendParent:           resendParent,
 			})
+			emitChildCompletionVerificationResult(
+				t.shardContext,
+				transferTask,
+				parentNamespaceID,
+				parentWorkflowID,
+				parentRunID,
+				parentInitiatedID,
+				parentInitiatedVersion,
+				childWorkflowState,
+				resendParent,
+				attempt,
+				err,
+			)
 			switch err.(type) {
 			case nil, *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
 				// Case 1: Target workflow is in the desired state.
@@ -490,7 +519,6 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		childStartedWorkflowID := childWorkflowInfo.StartedWorkflowId
 		childStartedRunID := childWorkflowInfo.StartedRunId
 		childClock := childWorkflowInfo.Clock
-
 		// no need for mutable state anymore, release workflow lock
 		release(nil)
 
