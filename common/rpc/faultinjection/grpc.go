@@ -76,48 +76,48 @@ func (r *RPCFaultGenerator) RegisterResponseCallback(scope RPCFaultScope, cb RPC
 	})
 }
 
-func (r *RPCFaultGenerator) registerCallback(scope RPCFaultScope, stage rpcFaultStage, cb rpcCallback) func() {
+func (r *RPCFaultGenerator) registerCallback(faultScope RPCFaultScope, stage rpcFaultStage, cb rpcCallback) func() {
 	if r == nil {
 		return func() {}
 	}
 
-	var scopes []rpcCallbackScope
-	if scope.NamespaceID != "" {
-		scopes = append(scopes, rpcCallbackScope{RPCFaultScope: RPCFaultScope{NamespaceID: scope.NamespaceID}, stage: stage})
+	var callbackScopes []rpcCallbackScope
+	if faultScope.NamespaceID != "" {
+		callbackScopes = append(callbackScopes, rpcCallbackScope{RPCFaultScope: RPCFaultScope{NamespaceID: faultScope.NamespaceID}, stage: stage})
 	}
-	if scope.NamespaceName != "" {
-		scopes = append(scopes, rpcCallbackScope{RPCFaultScope: RPCFaultScope{NamespaceName: scope.NamespaceName}, stage: stage})
+	if faultScope.NamespaceName != "" {
+		callbackScopes = append(callbackScopes, rpcCallbackScope{RPCFaultScope: RPCFaultScope{NamespaceName: faultScope.NamespaceName}, stage: stage})
 	}
-	if len(scopes) == 0 {
-		scopes = append(scopes, rpcCallbackScope{stage: stage})
+	if len(callbackScopes) == 0 {
+		callbackScopes = append(callbackScopes, rpcCallbackScope{stage: stage})
 	}
 
 	r.mu.Lock()
 	r.nextID++
 	entry := rpcCallbackEntry{id: r.nextID, callback: cb}
-	for _, scope := range scopes {
-		bucket := r.callbacks[scope]
+	for _, callbackScope := range callbackScopes {
+		bucket := r.callbacks[callbackScope]
 		if bucket == nil {
 			bucket = &rpcCallbackBucket{}
 			if r.installHook != nil {
-				bucket.unregister = r.installHook(scope)
+				bucket.unregister = r.installHook(callbackScope)
 			}
-			r.callbacks[scope] = bucket
+			r.callbacks[callbackScope] = bucket
 		}
 		bucket.callbacks = append(bucket.callbacks, entry)
 	}
 	r.mu.Unlock()
 
 	return func() {
-		r.unregisterCallback(scopes, entry.id)
+		r.unregisterCallback(callbackScopes, entry.id)
 	}
 }
 
-func (r *RPCFaultGenerator) unregisterCallback(scopes []rpcCallbackScope, id uint64) {
+func (r *RPCFaultGenerator) unregisterCallback(callbackScopes []rpcCallbackScope, id uint64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	for _, scope := range scopes {
-		bucket := r.callbacks[scope]
+	for _, callbackScope := range callbackScopes {
+		bucket := r.callbacks[callbackScope]
 		if bucket == nil {
 			continue
 		}
@@ -131,22 +131,22 @@ func (r *RPCFaultGenerator) unregisterCallback(scopes []rpcCallbackScope, id uin
 			if bucket.unregister != nil {
 				bucket.unregister()
 			}
-			delete(r.callbacks, scope)
+			delete(r.callbacks, callbackScope)
 		}
 	}
 }
 
 // GenerateRequest checks registered RPC callbacks before the handler runs.
 func (r *RPCFaultGenerator) GenerateRequest(ctx context.Context, fullMethod string, req any) (bool, any, error) {
-	return r.generateForRequest(ctx, fullMethod, rpcFaultStageRequest, req, nil, nil)
+	return r.generateFaultForStage(ctx, fullMethod, rpcFaultStageRequest, req, nil, nil)
 }
 
 // GenerateResponse checks registered RPC callbacks after the handler runs.
 func (r *RPCFaultGenerator) GenerateResponse(ctx context.Context, fullMethod string, req, resp any, err error) (bool, any, error) {
-	return r.generateForRequest(ctx, fullMethod, rpcFaultStageResponse, req, resp, err)
+	return r.generateFaultForStage(ctx, fullMethod, rpcFaultStageResponse, req, resp, err)
 }
 
-func (r *RPCFaultGenerator) generateForRequest(ctx context.Context, fullMethod string, stage rpcFaultStage, req, resp any, err error) (bool, any, error) {
+func (r *RPCFaultGenerator) generateFaultForStage(ctx context.Context, fullMethod string, stage rpcFaultStage, req, resp any, err error) (bool, any, error) {
 	if namespaceID, ok := namespaceIDFromRequest(req); ok {
 		if matched, newResp, newErr := r.generate(ctx, fullMethod, rpcCallbackScope{
 			RPCFaultScope: RPCFaultScope{NamespaceID: namespaceID},
