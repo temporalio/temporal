@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -99,6 +101,10 @@ func TestProcessInvocationTask(t *testing.T) {
 		startToCloseTimeout        time.Duration
 		schedToStartTimeout        time.Duration
 		destinationDown            bool
+		// httpCallerErr, when set, makes the outbound HTTP caller fail with this error instead of
+		// performing a real request. Mirrors how net/http.Client.Do wraps a RoundTripper error in
+		// *url.Error before returning it.
+		httpCallerErr error
 	}{
 		{
 			name:            "async start",
@@ -380,6 +386,25 @@ func TestProcessInvocationTask(t *testing.T) {
 			},
 		},
 		{
+			// Regression test: the HTTP caller fails before reaching the handler (as it does when
+			// net/http.Client.Do wraps a RoundTripper error in *url.Error), so callErr here is a
+			// wrapped, not a direct, serviceerror.ServiceError. The operation must still back off.
+			name:           "transient service error wrapped by HTTP caller",
+			requestTimeout: time.Hour,
+			httpCallerErr: &url.Error{
+				Op:  "Post",
+				URL: "http://unavailable",
+				Err: serviceerror.NewUnavailable("no frontend host to route request to"),
+			},
+			expectedMetricOutcome: "service-error:Unavailable",
+			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
+				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
+				require.False(t, op.LastAttemptFailure.GetServerFailureInfo().GetNonRetryable())
+				require.Contains(t, op.LastAttemptFailure.Message, "Unavailable")
+				require.Empty(t, events)
+			},
+		},
+		{
 			name:                  "invocation timeout by request timeout",
 			requestTimeout:        2 * time.Millisecond,
 			schedToCloseTimeout:   time.Hour,
@@ -655,11 +680,17 @@ func TestProcessInvocationTask(t *testing.T) {
 				Logger:                 log.NewNoopLogger(),
 				EndpointRegistry:       endpointReg,
 				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexusrpc.HTTPClient, error) {
-					return nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
+					options := nexusrpc.HTTPClientOptions{
 						BaseURL:    "http://" + listenAddr,
 						Service:    service,
 						Serializer: commonnexus.PayloadSerializer,
-					})
+					}
+					if tc.httpCallerErr != nil {
+						options.HTTPCaller = func(*http.Request) (*http.Response, error) {
+							return nil, tc.httpCallerErr
+						}
+					}
+					return nexusrpc.NewHTTPClient(options)
 				},
 			}))
 

@@ -12,7 +12,9 @@ import (
 // wrappedUnavailable mirrors how net/http.Client.Do wraps a RoundTripper error:
 // the underlying serviceerror.Unavailable (e.g. returned by a membership-resolver
 // RoundTripper when no frontend host is available) is only reachable via Unwrap(),
-// not via a direct type assertion or a gRPC status.
+// not via a direct type assertion or a gRPC status. IsRetryableRPCError can't see
+// through that wrapping, so callers must pass the already-unwrapped serviceerror
+// (e.g. from errors.AsType), not the original wrapped error.
 func wrappedUnavailable() error {
 	return &url.Error{
 		Op:  "Post",
@@ -21,12 +23,7 @@ func wrappedUnavailable() error {
 	}
 }
 
-// TestCallErrorToFailure_RetriesTransientServiceErrorEvenWhenWrapped guards against a
-// regression where the retryability decision was made on the wrapped call error
-// (which IsRetryableRPCError cannot classify) instead of the unwrapped serviceerror
-// that errors.AsType already extracted. A transient Unavailable must stay retryable
-// regardless of how many layers wrap it, or a benign frontend blip is escalated into a
-// terminal, non-retryable operation failure.
+// Regression: a wrapped transient serviceerror must still be retried.
 func TestCallErrorToFailure_RetriesTransientServiceErrorEvenWhenWrapped(t *testing.T) {
 	failure, retryable, err := callErrorToFailure(wrappedUnavailable())
 	require.NoError(t, err)
@@ -41,11 +38,6 @@ func TestNewInvocationResult_RetriesTransientServiceErrorEvenWhenWrapped(t *test
 		"wrapped Unavailable must produce a retry result, not a terminal failure")
 }
 
-// TestIsRetryableRPCError_RequiresUnwrappedServiceError documents the exact mechanism:
-// IsRetryableRPCError only recognizes a serviceerror via a direct (non-unwrapping) type
-// assertion or a gRPC status; it cannot see through wrapping on its own. Callers that
-// already have the unwrapped serviceerror (e.g. from errors.AsType) must pass that value,
-// not the original wrapped error.
 func TestIsRetryableRPCError_RequiresUnwrappedServiceError(t *testing.T) {
 	wrapped := wrappedUnavailable()
 	unwrapped := serviceerror.NewUnavailable("no frontend host to route request to")
