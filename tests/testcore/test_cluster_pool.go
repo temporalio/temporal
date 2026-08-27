@@ -52,11 +52,11 @@ func init() {
 
 	testClusterRouter = &clusterRouter{
 		shared: newClusterPool(sharedSize, false, maxLeases),
-		// A single cluster shared by every test that opts into the worker
+		// A small pool shared by every test that opts into the worker
 		// service (testcore.WithWorkerService), so the worker-service host's
-		// fixed goroutine/memory cost is paid once instead of once per shared
-		// pool slot.
-		workerShared: newClusterPool(1, false, maxLeases),
+		// fixed goroutine/memory cost is paid across a handful of clusters
+		// instead of once per shared pool slot.
+		workerShared: newClusterPool(5, false, maxLeases),
 		dedicated:    newClusterPool(dedicatedSize, true, maxLeases),
 		eventsFile:   eventsFile,
 	}
