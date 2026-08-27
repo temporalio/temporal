@@ -42,7 +42,7 @@ func TestOnStateChangeNexusStage(t *testing.T) {
 			stage:     "handler-outbound",
 		},
 		{
-			name:      "shared HSM callback",
+			name:      "HSM handler outbound",
 			taskGroup: hsmcallbacks.TaskTypeInvocation,
 			stage:     "handler-outbound",
 		},
