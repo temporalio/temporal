@@ -480,21 +480,34 @@ jobs:
           MIXED_BRAIN_TEST_DURATION: 5m
           PERSISTENCE_DRIVER: postgres12
 
-      - name: Print memory snapshot
-        if: always()
-        run: cat .testoutput/memory/memory-snapshot.txt || true
+      - name: Print complete mixed-brain logs
+        if: failure()
+        run: cat .testoutput/mixedbrain_*.log || true
 
-      - name: Print current server logs
+      - name: Post-test reporting
         if: always()
-        run: cat .testoutput/mixedbrain_process-current.log || true
+        uses: ./.github/actions/post-test-reporting
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        with:
+          job_name: Mixed brain test
+          artifact_name_suffix: mixed-brain-test
 
-      - name: Print release server logs
+      - name: Append mixed-brain summary
         if: always()
-        run: cat .testoutput/mixedbrain_process-release.log || true
+        run: |
+          if [ -s .testoutput/mixedbrain-summary.md ]; then
+            cat .testoutput/mixedbrain-summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
 
-      - name: Print Omes logs
+      - name: Upload complete mixed-brain logs
         if: always()
-        run: cat .testoutput/mixedbrain_omes_*.log || true
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: mixed-brain-logs--${{ github.run_id }}--${{ github.run_attempt }}
+          path: .testoutput/mixedbrain_*.log
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Stop containerized dependencies
         if: always()
