@@ -595,8 +595,7 @@ func (c *QueryConverter[ExprT]) parseValueExpr(
 		}
 		return value, nil
 	case sqlparser.BoolVal:
-		// no-op: no validation needed
-		return bool(e), nil
+		return c.validateValueType(saName, saType, bool(e))
 	case sqlparser.ValTuple:
 		// This is "in (1,2,3)" case.
 		values := make([]any, 0, len(e))
@@ -608,6 +607,35 @@ func (c *QueryConverter[ExprT]) parseValueExpr(
 			values = append(values, item)
 		}
 		return values, nil
+	case *sqlparser.UnaryExpr:
+		// Negative value may be parsed as UnaryExpr
+		if e.Operator != sqlparser.UPlusStr && e.Operator != sqlparser.UMinusStr {
+			return nil, NewConverterError(
+				"%s: unary operator %q",
+				NotSupportedErrMessage,
+				e.Operator,
+			)
+		}
+		value, err := c.parseValueExpr(e.Expr, saName, saFieldName, saType)
+		if err != nil {
+			return nil, err
+		}
+		if e.Operator == sqlparser.UMinusStr {
+			switch v := value.(type) {
+			case int64:
+				value = -v
+			case float64:
+				value = -v
+			default:
+				// This catches some weird cases like `CustomKeyword = -'foo'`
+				return nil, NewConverterError(
+					"%s: unary operator not supported in %q",
+					InvalidExpressionErrMessage,
+					sqlparser.String(expr),
+				)
+			}
+		}
+		return value, nil
 	case *sqlparser.GroupConcatExpr:
 		return nil, NewConverterError("%s: 'group_concat'", NotSupportedErrMessage)
 	case *sqlparser.FuncExpr:
@@ -713,10 +741,20 @@ func (c *QueryConverter[ExprT]) validateValueType(
 		}
 		return tm.UTC().Format(c.storeQC.GetDatetimeFormat()), nil
 	case enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		enumspb.INDEXED_VALUE_TYPE_TEXT:
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST:
 		if _, ok := value.(string); !ok {
 			return nil, valueTypeErr
+		}
+		return value, nil
+	case enumspb.INDEXED_VALUE_TYPE_TEXT:
+		if v, ok := value.(string); !ok {
+			return nil, valueTypeErr
+		} else if strings.TrimSpace(v) == "" {
+			return nil, NewConverterError(
+				"%s: no tokens found filtering on Text type search attribute %s",
+				InvalidExpressionErrMessage,
+				saName,
+			)
 		}
 		return value, nil
 	default:
