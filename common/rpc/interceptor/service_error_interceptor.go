@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/util"
 	"google.golang.org/grpc"
@@ -18,17 +19,20 @@ const truncatedSuffix = "... <truncated>"
 type ServiceErrorInterceptor struct {
 	maxMessageLength dynamicconfig.IntPropertyFn
 
-	logger log.Logger
+	metricsHandler metrics.Handler
+	logger         log.Logger
 }
 
 func NewServiceErrorInterceptor(
 	maxMessageLength dynamicconfig.IntPropertyFn,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *ServiceErrorInterceptor {
 	return &ServiceErrorInterceptor{
 		maxMessageLength: maxMessageLength,
 
-		logger: logger,
+		metricsHandler: metricsHandler,
+		logger:         logger,
 	}
 }
 
@@ -64,6 +68,6 @@ func (i *ServiceErrorInterceptor) capturePanicHandler(
 	req any,
 	handler grpc.UnaryHandler,
 ) (_ any, retError error) {
-	defer log.CapturePanic(i.logger, &retError)
+	defer metrics.CapturePanic(i.logger, i.metricsHandler, &retError)
 	return handler(ctx, req)
 }

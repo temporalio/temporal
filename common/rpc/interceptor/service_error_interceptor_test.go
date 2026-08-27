@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc/codes"
@@ -36,8 +37,10 @@ func (e *ErrorWithoutStatus) Error() string {
 
 // Error returns string message.
 func TestServiceErrorInterceptorUnknown(t *testing.T) {
+	ctrl := gomock.NewController(t)
 	interceptor := NewServiceErrorInterceptor(
 		dynamicconfig.GetIntPropertyFn(testMaxMessageLength),
+		metrics.NewMockHandler(ctrl),
 		log.NewTestLogger(),
 	)
 
@@ -62,8 +65,10 @@ func TestServiceErrorInterceptorUnknown(t *testing.T) {
 }
 
 func TestServiceErrorInterceptorSer(t *testing.T) {
+	ctrl := gomock.NewController(t)
 	interceptor := NewServiceErrorInterceptor(
 		dynamicconfig.GetIntPropertyFn(testMaxMessageLength),
+		metrics.NewMockHandler(ctrl),
 		log.NewTestLogger(),
 	)
 	serErrors := []error{
@@ -80,8 +85,10 @@ func TestServiceErrorInterceptorSer(t *testing.T) {
 }
 
 func TestServiceErrorInterceptorTruncation(t *testing.T) {
+	ctrl := gomock.NewController(t)
 	interceptor := NewServiceErrorInterceptor(
 		dynamicconfig.GetIntPropertyFn(testMaxMessageLength),
+		metrics.NewMockHandler(ctrl),
 		log.NewTestLogger(),
 	)
 
@@ -196,16 +203,21 @@ func TestServiceErrorInterceptorPanic(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			controller := gomock.NewController(t)
-			mockLogger := log.NewMockLogger(controller)
+			ctrl := gomock.NewController(t)
+			metricsHandlerMock := metrics.NewMockHandler(ctrl)
+			loggerMock := log.NewMockLogger(ctrl)
 			interceptor := NewServiceErrorInterceptor(
 				dynamicconfig.GetIntPropertyFn(testMaxMessageLength),
-				mockLogger,
+				metricsHandlerMock,
+				loggerMock,
 			)
 
 			var loggedTags []tag.Tag
 			if tc.panicObj != nil {
-				mockLogger.EXPECT().Error("Panic is captured", gomock.Any(), gomock.Any()).
+				counterMock := metrics.NewMockCounterIface(ctrl)
+				counterMock.EXPECT().Record(int64(1))
+				metricsHandlerMock.EXPECT().Counter(metrics.ServicePanic.Name()).Return(counterMock)
+				loggerMock.EXPECT().Error("Panic is captured", gomock.Any(), gomock.Any()).
 					Do(func(_ string, tags ...tag.Tag) {
 						loggedTags = tags
 					}).
@@ -240,7 +252,7 @@ func TestServiceErrorInterceptorPanic(t *testing.T) {
 				require.Contains(t, tagsByKey, "error")
 			} else {
 				require.Equal(t, "ok", resp)
-				require.Nil(t, err)
+				require.NoError(t, err)
 			}
 		})
 	}

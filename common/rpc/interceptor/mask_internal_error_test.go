@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common"
@@ -52,9 +52,9 @@ func testMaskUnknownOrInternalErrors(t *testing.T, st *status.Status, expectRepl
 			errorHash,
 		)
 
-		assert.Equal(t, expectedMessage, gotError.Error())
+		require.Equal(t, expectedMessage, gotError.Error())
 	} else {
-		assert.Equal(t, err, gotError)
+		require.Equal(t, err, gotError)
 	}
 }
 
@@ -70,18 +70,18 @@ func TestMaskInternalErrorDetailsInterceptor(t *testing.T) {
 	test_namespace := "test-namespace"
 	req := &workflowservice.StartWorkflowExecutionRequest{Namespace: test_namespace}
 	mockRegistry.EXPECT().GetNamespace(namespace.Name(test_namespace)).Return(&namespace.Namespace{}, nil).AnyTimes()
-	assert.True(t, errorMask.shouldMaskErrors(req))
+	require.True(t, errorMask.shouldMaskErrors(req))
 
 	namespace_not_found := "namespace-not-found"
 	req = &workflowservice.StartWorkflowExecutionRequest{Namespace: namespace_not_found}
 	mockRegistry.EXPECT().GetNamespace(namespace.Name(namespace_not_found)).Return(nil, serviceerror.NewNamespaceNotFound("missing-namespace"))
-	assert.False(t, errorMask.shouldMaskErrors(req))
+	require.False(t, errorMask.shouldMaskErrors(req))
 
 	empty_namespace := ""
 	req = &workflowservice.StartWorkflowExecutionRequest{Namespace: empty_namespace}
 	mockRegistry.EXPECT().GetNamespace(namespace.Name(empty_namespace)).Return(nil, serviceerror.NewNamespaceNotFound("missing-namespace"))
-	assert.False(t, errorMask.shouldMaskErrors(req))
+	require.False(t, errorMask.shouldMaskErrors(req))
 
 	var ei any
-	assert.False(t, errorMask.shouldMaskErrors(ei))
+	require.False(t, errorMask.shouldMaskErrors(ei))
 }
