@@ -150,7 +150,6 @@ type (
 		tokenSerializer               *tasktoken.Serializer
 		historySerializer             serialization.Serializer
 		logger                        log.Logger
-		nexusEndpointLogger           log.Logger
 		throttledLogger               log.ThrottledLogger
 		namespaceRegistry             namespace.Registry
 		hostInfoProvider              membership.HostInfoProvider
@@ -287,7 +286,6 @@ func NewEngine(
 	partitionScalerFactory PartitionScalerFactory,
 ) Engine {
 	scopedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope))
-	matchingLogger := log.With(logger, tag.ComponentMatchingEngine)
 	e := &matchingEngineImpl{
 		status:                 common.DaemonStatusInitialized,
 		taskManager:            taskManager,
@@ -297,8 +295,7 @@ func NewEngine(
 		tokenSerializer:        tasktoken.NewSerializer(),
 		workerDeploymentClient: workerDeploymentClient,
 		historySerializer:      historySerializer,
-		logger:                 matchingLogger,
-		nexusEndpointLogger:    log.With(matchingLogger, tag.NexusStageRegistry),
+		logger:                 log.With(logger, tag.ComponentMatchingEngine),
 		throttledLogger:        log.With(throttledLogger, tag.ComponentMatchingEngine),
 		namespaceRegistry:      namespaceRegistry,
 		hostInfoProvider:       hostInfoProvider,
@@ -2830,7 +2827,7 @@ func (e *matchingEngineImpl) RespondNexusTaskFailed(ctx context.Context, request
 }
 
 func (e *matchingEngineImpl) CreateNexusEndpoint(ctx context.Context, request *matchingservice.CreateNexusEndpointRequest) (*matchingservice.CreateNexusEndpointResponse, error) {
-	logger := log.With(e.nexusEndpointLogger, tag.Endpoint(request.GetSpec().GetName()))
+	logger := log.With(e.logger, tag.NexusStageRegistry, tag.Endpoint(request.GetSpec().GetName()))
 	// Write API, let persistence verify table ownership.
 	res, err := e.nexusEndpointClient.CreateNexusEndpoint(ctx, &internalCreateNexusEndpointRequest{
 		spec:       request.GetSpec(),
@@ -2846,7 +2843,7 @@ func (e *matchingEngineImpl) CreateNexusEndpoint(ctx context.Context, request *m
 }
 
 func (e *matchingEngineImpl) UpdateNexusEndpoint(ctx context.Context, request *matchingservice.UpdateNexusEndpointRequest) (*matchingservice.UpdateNexusEndpointResponse, error) {
-	logger := log.With(e.nexusEndpointLogger, tag.Endpoint(request.GetSpec().GetName()))
+	logger := log.With(e.logger, tag.NexusStageRegistry, tag.Endpoint(request.GetSpec().GetName()))
 	// Write API, let persistence verify table ownership.
 	res, err := e.nexusEndpointClient.UpdateNexusEndpoint(ctx, &internalUpdateNexusEndpointRequest{
 		endpointID: request.GetId(),
@@ -2864,7 +2861,7 @@ func (e *matchingEngineImpl) UpdateNexusEndpoint(ctx context.Context, request *m
 }
 
 func (e *matchingEngineImpl) DeleteNexusEndpoint(ctx context.Context, request *matchingservice.DeleteNexusEndpointRequest) (*matchingservice.DeleteNexusEndpointResponse, error) {
-	logger := log.With(e.nexusEndpointLogger, tag.Endpoint(request.GetId()))
+	logger := log.With(e.logger, tag.NexusStageRegistry, tag.Endpoint(request.GetId()))
 	// Write API, let persistence verify table ownership.
 	res, err := e.nexusEndpointClient.DeleteNexusEndpoint(ctx, request)
 	if err != nil {
@@ -2876,15 +2873,16 @@ func (e *matchingEngineImpl) DeleteNexusEndpoint(ctx context.Context, request *m
 }
 
 func (e *matchingEngineImpl) ListNexusEndpoints(ctx context.Context, request *matchingservice.ListNexusEndpointsRequest) (*matchingservice.ListNexusEndpointsResponse, error) {
+	logger := log.With(e.logger, tag.NexusStageRegistry)
 	lastKnownVersion := request.LastKnownTableVersion
 	// Read API, verify table ownership via membership.
 	isOwner, ownershipLostCh, err := e.checkNexusEndpointsOwnership()
 	if err != nil {
-		e.nexusEndpointLogger.Error("Failed to check Nexus endpoints ownership", tag.Error(err))
+		logger.Error("Failed to check Nexus endpoints ownership", tag.Error(err))
 		return nil, serviceerror.NewAbortedf("cannot verify ownership of Nexus endpoints table: %v", err)
 	}
 	if !isOwner {
-		e.nexusEndpointLogger.Error("Matching node doesn't think it's the Nexus endpoints table owner", tag.Error(err))
+		logger.Error("Matching node doesn't think it's the Nexus endpoints table owner", tag.Error(err))
 		return nil, serviceerror.NewAborted("matching node doesn't think it's the Nexus endpoints table owner")
 	}
 
@@ -2936,11 +2934,12 @@ func (e *matchingEngineImpl) checkNexusEndpointsOwnership() (bool, <-chan struct
 }
 
 func (e *matchingEngineImpl) notifyNexusEndpointsOwnershipChange() {
+	logger := log.With(e.logger, tag.NexusStageRegistry)
 	// We don't care about the channel returned here. This method is ensured to only be called from the single
 	// watchMembership method and is the only way the channel may be replaced.
 	isOwner, _, err := e.checkNexusEndpointsOwnership()
 	if err != nil {
-		e.nexusEndpointLogger.Error("Failed to check Nexus endpoints ownership", tag.Error(err))
+		logger.Error("Failed to check Nexus endpoints ownership", tag.Error(err))
 		return
 	}
 	if !isOwner {
