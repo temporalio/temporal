@@ -138,8 +138,7 @@ var (
 	VersionChecker                     = component("version-checker")
 )
 
-// Pre-defined values for Nexus stage tag. Nexus stage identifies the request lifecycle position;
-// component continues to identify the concrete module emitting the log.
+// Pre-defined values for Nexus stage tag. Nexus stage identifies the request lifecycle position.
 var (
 	NexusStageCallerOperation = nexusStage("caller-operation")
 	NexusStageCallerOutbound  = nexusStage("caller-outbound")
