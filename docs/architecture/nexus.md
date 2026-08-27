@@ -233,11 +233,11 @@ The circuit breaker is dynamically configurable via:
 
 ## Nexus Operations
 
-The [`nexusoperations` component](../../components/nexusoperations) holds all of the logic for scheduling Nexus
-Operations from a workflow and maintaining the Operations's lifecycle.
+The legacy HSM [`nexusoperations` package](../../service/history/hsm/nexusoperations) holds the logic for scheduling
+Nexus Operations from a workflow and maintaining the Operations's lifecycle.
 
 There are some other pieces of Nexus logic spread around other parts of the server (`common`, `frontend`, and
-`matching`) but the history service logic is almost completely contained in the component.
+`matching`) but the legacy history service logic is almost completely contained in the package.
 
 A Nexus Operation is modelled as a collection of state machines, tasks, and executors using the Hierarchical State
 Machine framework (docs TBD).
@@ -342,8 +342,8 @@ The workflow closed trigger will trigger a callback when a workflow completes su
 cancellation, or termination, as well as carry over the callbacks to the next execution in a chain when a workflow is
 retried or continues-as-new.
 
-Similarly to Nexus Operations, callbacks are implemented via a hierarchical state machine and a set of executors, which
-are located in [the components directory](../../components/callbacks).
+Similarly to Nexus Operations, legacy callbacks are implemented via a hierarchical state machine and a set of
+executors in the [callbacks package](../../service/history/hsm/callbacks).
 
 Callbacks are continously retried using a [configurable retry policy][callback-retry-policy] until they succeed,
 permanently fail, or the workflow's retention period expires.

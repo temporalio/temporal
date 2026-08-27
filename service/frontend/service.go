@@ -21,7 +21,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/retrypolicy"
-	"go.temporal.io/server/components/nexusoperations"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -414,10 +413,10 @@ func NewConfig(
 		CallbackURLMaxLength:           dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
 		CallbackHeaderMaxSize:          dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
 		MaxCallbacksPerWorkflow:        dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
-		MaxNexusOperationTokenLength:   nexusoperations.MaxOperationTokenLength.Get(dc),
+		MaxNexusOperationTokenLength:   chasmnexus.MaxOperationTokenLength.Get(dc),
 		NexusRequestHeadersBlacklist:   dynamicconfig.FrontendNexusRequestHeadersBlacklist.Get(dc),
 		NexusForwardRequestUseEndpoint: dynamicconfig.FrontendNexusForwardRequestUseEndpointDispatch.Get(dc),
-		NexusOperationsMetricTagConfig: nexusoperations.MetricTagConfiguration.Get(dc),
+		NexusOperationsMetricTagConfig: chasmnexus.MetricTagConfiguration.Get(dc),
 
 		LinkMaxSize:        dynamicconfig.FrontendLinkMaxSize.Get(dc),
 		MaxLinksPerRequest: dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
