@@ -3,6 +3,7 @@ package xdc
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -46,7 +47,16 @@ import (
 
 type blockedReplicationTask struct {
 	execute func() error
-	result  chan error
+	once    sync.Once
+	done    chan struct{}
+	err     error
+}
+
+func (t *blockedReplicationTask) run() {
+	t.once.Do(func() {
+		t.err = t.execute()
+		close(t.done)
+	})
 }
 
 type bufferedEventsNamespace struct {
@@ -776,6 +786,7 @@ func (s *xdcBaseSuite) blockReplicationForWorkflow(
 	// The interceptor runs on the receiving cluster, so clusterIndex identifies the replication
 	// destination rather than the cluster that generated the task.
 	tasks := make(chan *blockedReplicationTask, 20)
+	stopped := make(chan struct{})
 	s.clusters[clusterIndex].InjectHook(
 		s.T(),
 		testhooks.NewHook(testhooks.HistoryReplicationTaskInterceptor, func(
@@ -787,13 +798,25 @@ func (s *xdcBaseSuite) blockReplicationForWorkflow(
 			}
 			blockedTask := &blockedReplicationTask{
 				execute: execute,
-				result:  make(chan error, 1),
+				done:    make(chan struct{}),
 			}
-			tasks <- blockedTask
-			return <-blockedTask.result
+			select {
+			case tasks <- blockedTask:
+			case <-stopped:
+				return execute()
+			}
+			select {
+			case <-blockedTask.done:
+			case <-stopped:
+				blockedTask.run()
+			}
+			return blockedTask.err
 		}),
 		testhooks.GlobalScope,
 	)
+	s.T().Cleanup(func() {
+		close(stopped)
+	})
 	return tasks
 }
 
@@ -821,14 +844,13 @@ func (s *xdcBaseSuite) tryReleaseReplicationTask(tasks <-chan *blockedReplicatio
 }
 
 func (s *xdcBaseSuite) executeReplicationTask(task *blockedReplicationTask) {
-	err := task.execute()
-	task.result <- err
+	task.run()
 	var duplicateError *serviceerror.AlreadyExists
 	var retryReplicationError *serviceerrors.RetryReplication
 	s.Require().True(
-		err == nil || errors.As(err, &duplicateError) || errors.As(err, &retryReplicationError),
+		task.err == nil || errors.As(task.err, &duplicateError) || errors.As(task.err, &retryReplicationError),
 		"replication task failed: %v",
-		err,
+		task.err,
 	)
 }
 

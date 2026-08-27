@@ -18,14 +18,14 @@ func (a *Activity) taskScheduleToStartMetricsHandler(ctx chasm.Context) metrics.
 	namespaceEntry := ctx.NamespaceEntry()
 	namespaceName := namespaceEntry.Name().String()
 	taskQueue := a.GetTaskQueue().GetName()
-	return metrics.GetPerTaskQueuePartitionTypeScope(
+	return withUnversionedWorkerDeploymentMetricTags(metrics.GetPerTaskQueuePartitionTypeScope(
 		a.baseMetricsHandler(ctx, metrics.HistoryRecordActivityTaskStartedScope),
 		namespaceName,
 		tqid.UnsafeTaskQueueFamily(namespaceEntry.ID().String(), taskQueue).
 			TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY).
 			RootPartition(),
 		actCtx.config.BreakdownMetricsByTaskQueue(namespaceName, taskQueue, enumspb.TASK_QUEUE_TYPE_ACTIVITY),
-	)
+	))
 }
 
 // baseMetricsHandler adds only the operation tag.
@@ -50,6 +50,20 @@ func (a *Activity) enrichedMetricsHandler(ctx chasm.Context, operation string) m
 		metrics.ActivityTypeTag(a.GetActivityType().GetName()),
 		metrics.VersioningBehaviorTag(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED),
 		metrics.WorkflowTypeTag(WorkflowTypeTag),
+	)
+}
+
+func (a *Activity) completionMetricsHandler(ctx chasm.Context, operation string) metrics.Handler {
+	return withUnversionedWorkerDeploymentMetricTags(a.enrichedMetricsHandler(ctx, operation))
+}
+
+func withUnversionedWorkerDeploymentMetricTags(handler metrics.Handler) metrics.Handler {
+	// TODO: Populate these labels when Standalone Activities support Worker Versioning.
+	// Until then, preserve label-key parity with Workflow Activity metrics so Prometheus does
+	// not reject samples emitted under the same metric names.
+	return handler.WithTags(
+		metrics.WorkerDeploymentNameTag("", false),
+		metrics.WorkerDeploymentBuildIDTag("", false),
 	)
 }
 

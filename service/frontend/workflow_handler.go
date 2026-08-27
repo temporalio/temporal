@@ -5176,17 +5176,23 @@ func (wh *WorkflowHandler) ListSchedules(
 		return nil, errListNotAllowed
 	}
 
+	metricsHandler := wh.metricsScope(ctx).WithTags(metrics.HeaderCallsiteTag("ListSchedules"))
 	chasmEnabled := wh.chasmSchedulerEnabled(ctx, namespaceName.String())
-	query, err := wh.prepareSchedulerQuery(chasmEnabled, request.Query, namespaceName)
+	schedulerQuery, err := wh.prepareSchedulerQuery(
+		chasmEnabled,
+		request.Query,
+		namespaceName,
+		metricsHandler,
+	)
 	if err != nil {
 		return nil, err
 	}
 
 	if chasmEnabled {
 		// CHASM ListSchedules will include schedules created in the V1/workflow stack.
-		return wh.listSchedulesChasm(ctx, request, namespaceName, namespaceID, query)
+		return wh.listSchedulesChasm(ctx, request, namespaceName, namespaceID, schedulerQuery)
 	}
-	return wh.listSchedulesWorkflow(ctx, request, namespaceName, namespaceID, query)
+	return wh.listSchedulesWorkflow(ctx, request, namespaceName, namespaceID, schedulerQuery)
 }
 
 // prepareSchedulerQuery validates a scheduler RPC's query argument, and wraps it
@@ -5195,6 +5201,7 @@ func (wh *WorkflowHandler) prepareSchedulerQuery(
 	chasmEnabled bool,
 	query string,
 	namespaceName namespace.Name,
+	metricsHandler metrics.Handler,
 ) (string, error) {
 	// Use different base queries based on code path:
 	// - CHASM path uses TemporalSystemExecutionStatus (translated via archetype ID)
@@ -5229,6 +5236,8 @@ func (wh *WorkflowHandler) prepareSchedulerQuery(
 			chasmMapper,
 			wh.config.VisibilityEnableUnifiedQueryConverter,
 			query,
+			metricsHandler,
+			wh.logger,
 		); err != nil {
 			return "", err
 		}
@@ -5365,17 +5374,23 @@ func (wh *WorkflowHandler) CountSchedules(
 		return nil, errListNotAllowed
 	}
 
+	metricsHandler := wh.metricsScope(ctx).WithTags(metrics.HeaderCallsiteTag("CountSchedules"))
 	chasmEnabled := wh.chasmSchedulerEnabled(ctx, namespaceName.String())
-	query, err := wh.prepareSchedulerQuery(chasmEnabled, request.Query, namespaceName)
+	schedulerQuery, err := wh.prepareSchedulerQuery(
+		chasmEnabled,
+		request.Query,
+		namespaceName,
+		metricsHandler,
+	)
 	if err != nil {
 		return nil, err
 	}
 
 	// Route to CHASM or V1 based on config (same pattern as ListSchedules)
 	if chasmEnabled {
-		return wh.countSchedulesChasm(ctx, namespaceID, namespaceName, query)
+		return wh.countSchedulesChasm(ctx, namespaceID, namespaceName, schedulerQuery)
 	}
-	return wh.countSchedulesWorkflow(ctx, namespaceID, namespaceName, query)
+	return wh.countSchedulesWorkflow(ctx, namespaceID, namespaceName, schedulerQuery)
 }
 
 // countSchedulesChasm counts schedules using CHASM APIs
