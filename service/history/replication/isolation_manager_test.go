@@ -278,13 +278,17 @@ func TestIsolationManager_BuildReaderState_ClampsOverallMinToMemberFloors(t *tes
 	require.Equal(t, int64(800), state.Scopes[0].GetRange().GetInclusiveMin().GetTaskId(),
 		"scope 0 must be clamped to the member's unsent window so cleanup cannot delete it")
 	require.Equal(t, int64(5000), state.Scopes[1].GetRange().GetInclusiveMin().GetTaskId())
-	require.Equal(t, int64(800), m.MemberResumeFloor())
+	floor, ok := m.MemberResumeFloor()
+	require.True(t, ok)
+	require.Equal(t, int64(800), floor)
 
 	// Once the lane catches up, the clamp lifts with it.
 	m.Reconcile([]string{"a"}, 5000, map[string]int64{"a": 5000})
 	state = m.BuildReaderState(attr)
 	require.Equal(t, int64(5000), state.Scopes[0].GetRange().GetInclusiveMin().GetTaskId())
-	require.Equal(t, int64(5000), m.MemberResumeFloor())
+	floor, ok = m.MemberResumeFloor()
+	require.True(t, ok)
+	require.Equal(t, int64(5000), floor)
 }
 
 func TestIsolationManager_MemberResumeFloor_ZeroMinimum(t *testing.T) {
@@ -292,7 +296,52 @@ func TestIsolationManager_MemberResumeFloor_ZeroMinimum(t *testing.T) {
 		{namespaceID: "zero", cursor: 0},
 		{namespaceID: "positive", cursor: 800},
 	})
-	require.Zero(t, m.MemberResumeFloor())
+	floor, ok := m.MemberResumeFloor()
+	require.True(t, ok)
+	require.Zero(t, floor)
+}
+
+func TestIsolationManager_CollapseToDefaultLane_GatedOnSharedAck(t *testing.T) {
+	m := newIsolationManager(2, 5, 1, 0)
+	m.AdvanceDefaultCursor(200)
+	reconcileAll(m, 100, "a", "b")
+
+	// A receiver's pre-existing shared watermark is not evidence that this sender
+	// re-covered the restored member windows.
+	require.False(t, m.CollapseToDefaultLane(200))
+	require.False(t, m.RecordDefaultLaneCoverage(101, 200))
+	require.True(t, m.RecordDefaultLaneCoverage(100, 200))
+	require.False(t, m.CollapseToDefaultLane(199))
+	require.Equal(t, 1, m.NamespaceTier("a"))
+	require.Equal(t, 1, m.NamespaceTier("b"))
+
+	// New unfiltered shared-lane sends do not move the fallback gate: tasks above
+	// the snapshotted cursor are already owned by the shared lane.
+	m.AdvanceDefaultCursor(300)
+	require.True(t, m.CollapseToDefaultLane(200))
+	require.Nil(t, m.DefaultFilter())
+	require.Empty(t, m.TierMembers(1))
+	require.False(t, m.CollapseToDefaultLane(200))
+}
+
+func TestIsolationManager_CollapseToDefaultLane_DropsPendingRetirements(t *testing.T) {
+	m := newIsolationManager(2, 5, 1, 0)
+	m.AdvanceDefaultCursor(200)
+	reconcileAll(m, 100, "a")
+	m.Reconcile(nil, 200, map[string]int64{"a": 200})
+
+	require.True(t, m.CollapseToDefaultLane(200))
+	require.Empty(t, m.PopRetired())
+}
+
+func TestIsolationManager_CollapseToDefaultLane_EmptyReplayAtMemberFloor(t *testing.T) {
+	m := newIsolationManager(2, 5, 1, 0)
+	reconcileAll(m, 100, "a")
+
+	// An exclusive queue high watermark at the inclusive member floor means there
+	// are no readable tasks in the member's [floor, high) window.
+	require.True(t, m.RecordDefaultLaneCoverage(100, 100))
+	require.True(t, m.CollapseToDefaultLane(100))
 }
 
 // Misconfiguration must clamp, not strand: tierCount < 1 would exclude isolated

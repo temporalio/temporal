@@ -59,10 +59,12 @@ type isolationManager struct {
 	cooldownCycles int
 	maxIsolated    int // max namespaces isolated at once; 0 = no limit
 
-	defaultCursor  int64
-	nextGeneration int64 // monotonic lane-incarnation counter
-	members        map[string]*isolatedMember
-	retired        []string // graduated namespaces awaiting a lane-retirement marker
+	defaultCursor          int64
+	nextGeneration         int64 // monotonic lane-incarnation counter
+	members                map[string]*isolatedMember
+	retired                []string // graduated namespaces awaiting a lane-retirement marker
+	defaultCoverageTarget  int64
+	defaultCoveragePending bool
 }
 
 // isolatedMember is one namespace's dedicated lane: the scope of tasks the lane owns
@@ -214,6 +216,7 @@ func (m *isolationManager) Reconcile(throttled []string, highAcked int64, member
 			st.acked = acked
 		}
 		m.members[ns] = st
+		m.defaultCoveragePending = false
 	}
 }
 
@@ -392,21 +395,64 @@ func (m *isolationManager) BuildReaderState(attr *replicationspb.SyncReplication
 }
 
 // MemberResumeFloor returns the minimum resume position over all member lanes
-// (max(floor, acked) per lane), or 0 when no namespace is isolated. Until the
-// receiver confirms isolation support, the shared lane's catch-up must start no
-// higher than this so restored members' unsent windows are covered by the shared
-// lane instead of stranding on tier lanes that will never run.
-func (m *isolationManager) MemberResumeFloor() int64 {
+// (max(floor, acked) per lane). Until the receiver confirms isolation support, the
+// shared lane's catch-up must start no higher than this so restored members' unsent
+// windows are covered by the shared lane instead of stranding on tier lanes that
+// will never run.
+func (m *isolationManager) MemberResumeFloor() (int64, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if len(m.members) == 0 {
-		return 0
+		return 0, false
 	}
 	floor := int64(math.MaxInt64)
 	for _, st := range m.members {
 		floor = min(floor, max(st.floor(), st.acked))
 	}
-	return floor
+	return floor, true
+}
+
+// RecordDefaultLaneCoverage records a successfully-sent unfiltered shared-lane scan
+// through the queue's exclusive high watermark.
+func (m *isolationManager) RecordDefaultLaneCoverage(beginInclusive, queueExclusiveHigh int64) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.members) == 0 {
+		return false
+	}
+	floor := int64(math.MaxInt64)
+	for _, st := range m.members {
+		floor = min(floor, max(st.floor(), st.acked))
+	}
+	if beginInclusive > floor {
+		return false
+	}
+	// Equality is valid: when the exclusive high watermark equals the member floor,
+	// the pending replay range is empty and no task at the floor is readable yet.
+	if queueExclusiveHigh < floor {
+		return false
+	}
+	m.defaultCoverageTarget = queueExclusiveHigh
+	m.defaultCoveragePending = true
+	return true
+}
+
+// CollapseToDefaultLane removes all isolated lanes once the receiver has applied a
+// recorded unfiltered shared-lane range. Requiring explicit coverage prevents a
+// receiver's pre-existing shared watermark from dropping unrestored member windows.
+func (m *isolationManager) CollapseToDefaultLane(defaultAcked int64) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.members) == 0 && len(m.retired) == 0 {
+		return false
+	}
+	if len(m.members) > 0 && (!m.defaultCoveragePending || defaultAcked < m.defaultCoverageTarget) {
+		return false
+	}
+	clear(m.members)
+	m.retired = nil
+	m.defaultCoveragePending = false
+	return true
 }
 
 // parseIsolationState extracts the shared-HIGH resume cursor and the member lanes
