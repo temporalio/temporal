@@ -566,6 +566,101 @@ func (s *workflowSuite) TestInitialPatch() {
 	s.Equal([]time.Duration{0}, s.metrics.timerValues(metrics.ScheduleActionDelay.Name()))
 }
 
+// TestRefreshCompletionDesiredTimeBacklog verifies the actual regression this fix targets: a
+// refresh discovering that the prior action closed AFTER the next buffered start's own due time
+// -- i.e. that start was genuinely blocked waiting on it -- backdates DesiredTime, so
+// ScheduleActionDelay measures from the real close instead of the start's original scheduled
+// time.
+//
+// A long-poll watcher gets installed as soon as a start is buffered behind a still-running
+// action, so that watcher (not a later refresh) is what normally discovers a genuine backlog's
+// completion. To exercise the refresh path specifically, this test never lets the long-poll
+// watcher resolve; discovery instead comes from an explicit refresh signal, mirroring the
+// watcher-interruption/worker-restart case described where refreshWorkflows finds a completion
+// the long-poll watcher missed.
+func (s *workflowSuite) TestRefreshCompletionDesiredTimeBacklog() {
+	prevVersion := CurrentTweakablePolicies.Version
+	CurrentTweakablePolicies.Version = RefreshCompletionDesiredTime
+	defer func() { CurrentTweakablePolicies.Version = prevVersion }()
+
+	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 0, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-06-01T00:00:00Z", req.Request.WorkflowId)
+		return nil, nil
+	})
+	// The first scheduled tick (:15) buffers behind the still-running manual action.
+	s.expectWatch(func(req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-06-01T00:00:00Z", req.Execution.WorkflowId)
+		s.False(req.LongPoll)
+		return &schedulespb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}, nil
+	})
+	// A long-poll watcher is installed right after. Resolve it well after the explicit refresh
+	// below is expected to have already discovered completion and started the buffered action,
+	// so discovery here is unambiguously via refresh; this resolution becomes a harmless,
+	// already-a-no-op duplicate (BufferedStarts is empty and the action is no longer running by
+	// then).
+	s.env.OnActivity(new(activities).WatchWorkflow, mock.Anything, mock.MatchedBy(func(req *schedulespb.WatchWorkflowRequest) bool {
+		return req.LongPoll
+	})).Once().AfterFn(func() time.Duration {
+		return 20 * time.Minute
+	}).Return(func(ctx context.Context, req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
+		return &schedulespb.WatchWorkflowResponse{
+			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			CloseTime: timestamppb.New(baseStartTime.Add(20 * time.Minute)),
+		}, nil
+	})
+	// An explicit refresh signal at :25 discovers the manual action actually closed at :20 --
+	// after the buffered start's own due time of :15, i.e. genuinely blocked.
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SignalWorkflow(SignalNameRefresh, nil)
+	}, 25*time.Minute)
+	s.expectWatch(func(req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 25, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-06-01T00:00:00Z", req.Execution.WorkflowId)
+		s.False(req.LongPoll)
+		return &schedulespb.WatchWorkflowResponse{
+			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			CloseTime: timestamppb.New(baseStartTime.Add(20 * time.Minute)),
+		}, nil
+	})
+	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 25, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
+		return nil, nil
+	})
+
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 3
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{
+					Interval: durationpb.New(15 * time.Minute),
+				}},
+			},
+			Action: s.defaultAction("myid"),
+			Policies: &schedulepb.SchedulePolicies{
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
+			},
+		},
+		State: &schedulespb.InternalState{
+			Namespace:     "myns",
+			NamespaceId:   "mynsid",
+			ScheduleId:    "myschedule",
+			ConflictToken: InitialConflictToken,
+		},
+		InitialPatch: &schedulepb.SchedulePatch{
+			TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
+		},
+	})
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	// Blocked from :15 (its own due time) until :20 (when the prior action actually closed):
+	// zero delay here would hide the very bug this test exists to catch.
+	s.Equal([]time.Duration{5 * time.Minute}, s.metrics.timerValues(metrics.ScheduleActionDelay.Name()))
+}
+
 // TestInitialPatchRefreshCompletionAtOldVersion pins the pre-fix behavior for histories recorded
 // below RefreshCompletionDesiredTime: a refresh (non-long-poll) discovering the prior action's
 // completion must NOT populate BufferedStarts[0].DesiredTime, since that value flows into the

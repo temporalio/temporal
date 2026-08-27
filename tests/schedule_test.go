@@ -538,13 +538,20 @@ func testActionDelayMetrics(t *testing.T, newContext contextFactory) {
 	wt := testcore.RandomizeStr("sched-action-delay-wt")
 
 	var activityCalls atomic.Int32
-	releaseFirstActivity := make(chan struct{})
+	releaseManualActivity := make(chan struct{})
+	releaseFirstScheduledActivity := make(chan struct{})
 	activityFn := func(ctx context.Context) error {
-		if activityCalls.Add(1) != 1 {
+		var release chan struct{}
+		switch activityCalls.Add(1) {
+		case 1:
+			release = releaseManualActivity
+		case 2:
+			release = releaseFirstScheduledActivity
+		default:
 			return nil
 		}
 		select {
-		case <-releaseFirstActivity:
+		case <-release:
 			return nil
 		case <-ctx.Done():
 			return ctx.Err()
@@ -587,21 +594,39 @@ func testActionDelayMetrics(t *testing.T, newContext contextFactory) {
 	})
 	require.NoError(t, err)
 
-	// Query the scheduler workflow directly because DescribeSchedule signals a refresh, which
-	// would race the long-poll completion path this first buffered action is intended to cover.
-	await.RequireTruef(t, func() bool {
+	// Query the scheduler workflow directly (not DescribeSchedule, which signals a refresh and
+	// would race the completion-discovery path each stage below is intended to cover).
+	queryBufferAndRunning := func() (bufferSize int64, running int) {
 		encoded, queryErr := s.SdkClient().QueryWorkflow(ctx, scheduler.WorkflowIDPrefix+sid, "", scheduler.QueryNameDescribe)
 		if queryErr != nil {
-			return false
+			return -1, -1
 		}
 		var response schedulespb.DescribeResponse
 		if encoded.Get(&response) != nil {
-			return false
+			return -1, -1
 		}
-		return activityCalls.Load() == 1 && response.GetInfo().GetBufferSize() == 1 &&
-			len(response.GetInfo().GetRunningWorkflows()) == 1
+		return response.GetInfo().GetBufferSize(), len(response.GetInfo().GetRunningWorkflows())
+	}
+	await.RequireTruef(t, func() bool {
+		bufferSize, running := queryBufferAndRunning()
+		return activityCalls.Load() == 1 && bufferSize == 1 && running == 1
 	}, awaitTimeout, pollInterval, "manual action should be running with the first scheduled action buffered")
-	close(releaseFirstActivity)
+	close(releaseManualActivity)
+
+	// Hold the first scheduled action open past the second scheduled tick, so the second
+	// scheduled action is buffered behind a still-running (not yet closed) action -- i.e.
+	// genuinely blocked, not merely started after an unrelated, already-finished one. Note this
+	// exercises DesiredTime backdating end-to-end (via whichever path discovers the completion --
+	// a long-poll watcher is installed as soon as a start is buffered behind a running action, so
+	// that watcher, not a later refresh, is what normally wins here). The specific
+	// refresh-discovers-a-real-backlog branch (refreshBackdate == true in processWatcherResult) is
+	// pinned deterministically by TestRefreshCompletionDesiredTimeBacklog in workflow_test.go,
+	// which controls discovery timing directly instead of racing a real watcher.
+	await.RequireTruef(t, func() bool {
+		bufferSize, running := queryBufferAndRunning()
+		return activityCalls.Load() == 2 && bufferSize == 1 && running == 1
+	}, awaitTimeout, pollInterval, "first scheduled action should be running with the second scheduled action buffered")
+	close(releaseFirstScheduledActivity)
 
 	// Do not describe the schedule while waiting. The second scheduled action must discover
 	// the prior completion through processBuffer's short refresh, not a DescribeSchedule signal.
