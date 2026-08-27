@@ -11,10 +11,7 @@ import (
 
 // wrappedUnavailable mirrors how net/http.Client.Do wraps a RoundTripper error:
 // the underlying serviceerror.Unavailable (e.g. returned by a membership-resolver
-// RoundTripper when no frontend host is available) is only reachable via Unwrap(),
-// not via a direct type assertion or a gRPC status. IsRetryableRPCError can't see
-// through that wrapping, so callers must pass the already-unwrapped serviceerror
-// (e.g. from errors.AsType), not the original wrapped error.
+// RoundTripper when no frontend host is available) is only reachable via Unwrap().
 func wrappedUnavailable() error {
 	return &url.Error{
 		Op:  "Post",
@@ -23,7 +20,7 @@ func wrappedUnavailable() error {
 	}
 }
 
-// Regression: a wrapped transient serviceerror must still be retried.
+// a wrapped transient serviceerror must still be retried.
 func TestCallErrorToFailure_RetriesTransientServiceErrorEvenWhenWrapped(t *testing.T) {
 	failure, retryable, err := callErrorToFailure(wrappedUnavailable())
 	require.NoError(t, err)

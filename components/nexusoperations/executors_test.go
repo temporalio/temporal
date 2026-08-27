@@ -101,10 +101,7 @@ func TestProcessInvocationTask(t *testing.T) {
 		startToCloseTimeout        time.Duration
 		schedToStartTimeout        time.Duration
 		destinationDown            bool
-		// httpCallerErr, when set, makes the outbound HTTP caller fail with this error instead of
-		// performing a real request. Mirrors how net/http.Client.Do wraps a RoundTripper error in
-		// *url.Error before returning it.
-		httpCallerErr error
+		httpCallerErr              error
 	}{
 		{
 			name:            "async start",
@@ -386,11 +383,10 @@ func TestProcessInvocationTask(t *testing.T) {
 			},
 		},
 		{
-			// Regression test: the HTTP caller fails before reaching the handler (as it does when
-			// net/http.Client.Do wraps a RoundTripper error in *url.Error), so callErr here is a
-			// wrapped, not a direct, serviceerror.ServiceError. The operation must still back off.
 			name:           "transient service error wrapped by HTTP caller",
 			requestTimeout: time.Hour,
+			// httpCallerErr, when set, makes the outbound HTTP caller fail with this error instead of
+			// performing a real request.
 			httpCallerErr: &url.Error{
 				Op:  "Post",
 				URL: "http://unavailable",
