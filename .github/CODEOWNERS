@@ -37,9 +37,7 @@
 
 # Legacy HSM implementations
 
-/service/history/hsm/callbacks/ @temporalio/act @temporalio/nexus
-/service/history/hsm/dummy/ @temporalio/act @temporalio/nexus
-/service/history/hsm/nexusoperations/ @temporalio/act @temporalio/nexus
+/service/history/hsm/ @temporalio/act @temporalio/nexus
 
 # Proto Definitions
 

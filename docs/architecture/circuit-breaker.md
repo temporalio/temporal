@@ -4,7 +4,7 @@ Most work in Temporal's history service drives workflows forward internally. But
 *outbound* calls to systems outside the server. The main example is [Nexus](./nexus.md): invoking a
 Nexus operation makes the server issue an HTTP request to a Nexus endpoint (which may be another
 Temporal namespace or an external service). Another example is delivering a workflow-completion
-[callback](../../service/history/hsm/callbacks) (an HTTP request the server sends when a workflow finishes).
+[callback](../../chasm/lib/callback) (an HTTP request the server sends when a workflow finishes).
 
 In these cases, the server — not a user Worker — is the client making the request.
 
