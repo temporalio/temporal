@@ -275,6 +275,7 @@ func (s *VisibilityStore) countChasmExecutions(
 		saMapper,
 		mapper,
 		request.ArchetypeId,
+		s.metricsHandler,
 		s.logger,
 	)
 	if err != nil {
@@ -386,6 +387,7 @@ func (s *VisibilityStore) listExecutionsInternal(
 		saMapper,
 		request.ChasmMapper,
 		request.ArchetypeID,
+		s.metricsHandler,
 		s.logger,
 	)
 	if err != nil {
@@ -619,6 +621,7 @@ func (s *VisibilityStore) countWorkflowExecutions(
 		saMapper,
 		nil,
 		chasm.UnspecifiedArchetypeID,
+		s.metricsHandler,
 		s.logger,
 	)
 	if err != nil {
@@ -932,9 +935,10 @@ func buildQueryParams(
 	saMapper searchattribute.Mapper,
 	chasmMapper *chasm.VisibilitySearchAttributesMapper,
 	archetypeID chasm.ArchetypeID,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) (*query.QueryParams[sqlparser.Expr], error) {
-	c := query.NewQueryConverter(sqlQC, namespaceName, saTypeMap, saMapper, logger).
+	c := query.NewQueryConverter(sqlQC, namespaceName, saTypeMap, saMapper, metricsHandler, logger).
 		WithChasmMapper(chasmMapper).
 		WithArchetypeID(archetypeID)
 

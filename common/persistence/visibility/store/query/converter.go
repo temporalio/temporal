@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -65,7 +66,8 @@ type (
 
 		seenNamespaceDivision bool
 
-		logger log.Logger
+		metricsHandler metrics.Handler
+		logger         log.Logger
 	}
 
 	QueryConverterOptionFunc[ExprT any] func(*QueryConverter[ExprT])
@@ -137,6 +139,7 @@ func NewQueryConverter[ExprT any](
 	namespaceName namespace.Name,
 	saTypeMap searchattribute.NameTypeMap,
 	saMapper searchattribute.Mapper,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *QueryConverter[ExprT] {
 	c := &QueryConverter[ExprT]{
@@ -149,7 +152,8 @@ func NewQueryConverter[ExprT any](
 
 		seenNamespaceDivision: false,
 
-		logger: logger,
+		metricsHandler: metricsHandler,
+		logger:         logger,
 	}
 	return c
 }
@@ -187,7 +191,7 @@ func (c *QueryConverter[ExprT]) Convert(
 ) (_ *QueryParams[ExprT], retError error) {
 	// Convert function may throw unexpected panics (eg: bugs).
 	// Capture them here to replace with an error.
-	defer log.CapturePanic(c.logger, &retError)
+	defer metrics.CapturePanic(c.logger, c.metricsHandler, &retError)
 
 	queryParams, err := c.convertWhereString(queryString)
 	if err != nil {

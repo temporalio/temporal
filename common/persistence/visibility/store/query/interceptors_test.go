@@ -6,7 +6,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/searchattribute"
+	"go.uber.org/mock/gomock"
 )
 
 type testSearchAttributeInterceptor struct {
@@ -25,12 +27,14 @@ func (t *testSearchAttributeInterceptor) Intercept(col *SAColumn) error {
 
 func TestSearchAttributeInterceptor(t *testing.T) {
 	t.Parallel()
+	ctrl := gomock.NewController(t)
 
 	interceptor := &testSearchAttributeInterceptor{}
 	c := NewNilQueryConverter(
 		"",
 		searchattribute.TestNameTypeMap(),
 		&searchattribute.TestMapper{},
+		metrics.NewMockHandler(ctrl),
 		log.NewNoopLogger(),
 	).WithSearchAttributeInterceptor(interceptor)
 

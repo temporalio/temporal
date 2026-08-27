@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -1849,6 +1850,7 @@ func TestQueryConverter_ResolveSearchAttributeAlias(t *testing.T) {
 				&searchattribute.TestMapper{
 					WithCustomScheduleID: tc.withCustomScheduleID,
 				},
+				metrics.NewMockHandler(ctrl),
 				log.NewNoopLogger(),
 			)
 
@@ -2614,10 +2616,12 @@ func TestQueryConverter_CapturePanic(t *testing.T) {
 	t.Parallel()
 	r := require.New(t)
 	ctrl := gomock.NewController(t)
-	logger := log.NewMockLogger(ctrl)
+	metricsHandlerMock := metrics.NewMockHandler(ctrl)
+	loggerMock := log.NewMockLogger(ctrl)
 	storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
 	queryConverter := newTestQueryConverter(storeQCMock)
-	queryConverter.logger = logger
+	queryConverter.metricsHandler = metricsHandlerMock
+	queryConverter.logger = loggerMock
 
 	keywordCol := NewSAColumn(
 		"AliasForKeyword01",
@@ -2625,7 +2629,10 @@ func TestQueryConverter_CapturePanic(t *testing.T) {
 		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 	)
 
-	logger.EXPECT().Error("Panic is captured", gomock.Any(), gomock.Any()).Return()
+	counterMock := metrics.NewMockCounterIface(ctrl)
+	counterMock.EXPECT().Record(int64(1))
+	metricsHandlerMock.EXPECT().Counter(metrics.ServicePanic.Name()).Return(counterMock)
+	loggerMock.EXPECT().Error("Panic is captured", gomock.Any(), gomock.Any()).Return()
 	storeQCMock.EXPECT().ConvertKeywordComparisonExpr(sqlparser.EqualStr, keywordCol, "foo").
 		DoAndReturn(
 			func(operator string, col *SAColumn, value any) (sqlparser.Expr, error) {
@@ -2645,6 +2652,7 @@ func newTestQueryConverter(
 		testNamespaceName,
 		searchattribute.TestNameTypeMap(),
 		&searchattribute.TestMapper{},
+		nil, // metricsHandler
 		log.NewNoopLogger(),
 	)
 }

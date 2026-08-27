@@ -8,10 +8,12 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	"go.uber.org/mock/gomock"
 )
 
 const (
@@ -257,12 +259,14 @@ func TestGetQueryFields(t *testing.T) {
 			tc.name,
 			func(t *testing.T) {
 				s := require.New(t)
+				ctrl := gomock.NewController(t)
 				fields, err := getQueryFields(
 					testNamespace,
 					searchattribute.TestNameTypeMap(),
 					searchattribute.NewTestMapperProvider(&searchattribute.TestMapper{}),
-					nil,
+					nil, // chasmMapper
 					tc.input,
+					metrics.NewMockHandler(ctrl),
 					log.NewNoopLogger(),
 				)
 				if tc.expectedErrMsg == "" {
@@ -339,6 +343,7 @@ func TestValidateVisibilityQuery(t *testing.T) {
 			tc.name,
 			func(t *testing.T) {
 				s := require.New(t)
+				ctrl := gomock.NewController(t)
 				err := ValidateVisibilityQuery(
 					testNamespace,
 					searchattribute.TestNameTypeMap(),
@@ -346,6 +351,7 @@ func TestValidateVisibilityQuery(t *testing.T) {
 					nil,
 					dynamicconfig.GetBoolPropertyFn(true),
 					tc.input,
+					metrics.NewMockHandler(ctrl),
 					log.NewNoopLogger(),
 				)
 				if tc.expectedErrMsg == "" {

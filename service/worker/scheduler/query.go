@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
@@ -73,6 +74,7 @@ func ValidateVisibilityQuery(
 	chasmMapper *chasm.VisibilitySearchAttributesMapper,
 	enableUnifiedQueryConverter dynamicconfig.BoolPropertyFn,
 	queryString string,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) error {
 	var fields []string
@@ -84,6 +86,7 @@ func ValidateVisibilityQuery(
 			saMapperProvider,
 			chasmMapper,
 			queryString,
+			metricsHandler,
 			logger,
 		)
 	} else {
@@ -108,6 +111,7 @@ func getQueryFields(
 	saMapperProvider searchattribute.MapperProvider,
 	chasmMapper *chasm.VisibilitySearchAttributesMapper,
 	queryString string,
+	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) ([]string, error) {
 	saMapper, err := saMapperProvider.GetMapper(namespaceName)
@@ -119,6 +123,7 @@ func getQueryFields(
 		namespaceName,
 		saNameType,
 		saMapper,
+		metricsHandler,
 		logger,
 	).WithChasmMapper(chasmMapper).WithSearchAttributeInterceptor(saInterceptor)
 	_, err = queryConverter.Convert(queryString)
