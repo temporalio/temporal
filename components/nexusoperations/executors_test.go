@@ -101,7 +101,9 @@ func TestProcessInvocationTask(t *testing.T) {
 		startToCloseTimeout        time.Duration
 		schedToStartTimeout        time.Duration
 		destinationDown            bool
-		httpCallerErr              error
+		// httpCallerErr, when set, fails the outbound HTTP call with this error instead of
+		// performing a real request.
+		httpCallerErr error
 	}{
 		{
 			name:            "async start",
@@ -385,8 +387,6 @@ func TestProcessInvocationTask(t *testing.T) {
 		{
 			name:           "transient service error wrapped by HTTP caller",
 			requestTimeout: time.Hour,
-			// httpCallerErr, when set, makes the outbound HTTP caller fail with this error instead of
-			// performing a real request.
 			httpCallerErr: &url.Error{
 				Op:  "Post",
 				URL: "http://unavailable",
