@@ -468,11 +468,15 @@ func (e *TestEnv) InjectRequestFault(fault RequestFault) func() {
 		NamespaceID:   e.nsID,
 		NamespaceName: e.nsName,
 	}
-	return injectFault(e.t, func(inject func(any, error) *grpcfaults.Outcome) func() {
-		return e.GetTestCluster().Host().GetGRPCFaultGenerator().RegisterRequestCallback(scope, func(_ context.Context, _ string, req any) *grpcfaults.Outcome {
-			return inject(req, fault(req))
-		})
+	tracker := newFaultTracker(e.t)
+	unregister := e.GetTestCluster().Host().GetGRPCFaultGenerator().RegisterRequestCallback(scope, func(_ context.Context, _ string, req any) *grpcfaults.Outcome {
+		if injectedErr := fault(req); injectedErr != nil {
+			tracker.markFired(req)
+			return &grpcfaults.Outcome{Error: injectedErr}
+		}
+		return nil
 	})
+	return tracker.attach(unregister)
 }
 
 // InjectResponseFault registers a post-handler gRPC fault injection scoped to this test's namespace.
@@ -484,11 +488,15 @@ func (e *TestEnv) InjectResponseFault(fault ResponseFault) func() {
 		NamespaceID:   e.nsID,
 		NamespaceName: e.nsName,
 	}
-	return injectFault(e.t, func(inject func(any, error) *grpcfaults.Outcome) func() {
-		return e.GetTestCluster().Host().GetGRPCFaultGenerator().RegisterResponseCallback(scope, func(_ context.Context, _ string, req, resp any, err error) *grpcfaults.Outcome {
-			return inject(req, fault(req, resp, err))
-		})
+	tracker := newFaultTracker(e.t)
+	unregister := e.GetTestCluster().Host().GetGRPCFaultGenerator().RegisterResponseCallback(scope, func(_ context.Context, _ string, req, resp any, err error) *grpcfaults.Outcome {
+		if injectedErr := fault(req, resp, err); injectedErr != nil {
+			tracker.markFired(req)
+			return &grpcfaults.Outcome{Error: injectedErr}
+		}
+		return nil
 	})
+	return tracker.attach(unregister)
 }
 
 // Context returns the test-level timeout context with RPC version headers already included.
