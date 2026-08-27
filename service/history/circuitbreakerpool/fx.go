@@ -2,16 +2,15 @@ package circuitbreakerpool
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/sony/gobreaker"
-	"go.temporal.io/server/chasm"
+	chasmcallback "go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/circuitbreaker"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/components/nexusoperations"
+	hsmnexus "go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/fx"
@@ -73,27 +72,21 @@ func onStateChange(
 		tag.Destination(key.Destination),
 		tag.NewStringTag("task-group", key.TaskGroup),
 	)
-	if stage, ok := nexusStageForTaskGroup(key.TaskGroup); ok {
-		logger = log.With(logger, stage)
+
+	switch key.TaskGroup {
+	case chasmnexus.TaskGroupName:
+		logger = log.With(logger, tag.NexusStageCallerOutbound)
+	case hsmnexus.TaskTypeInvocation, hsmnexus.TaskTypeCancelation:
+		logger = log.With(logger, tag.NexusStageCallerOutbound)
+	case chasmcallback.InvocationTaskGroup:
+		logger = log.With(logger, tag.NexusStageHandlerOutbound)
 	}
+
 	return func(_ string, from gobreaker.State, to gobreaker.State) {
 		logger.Warn(
 			"outbound queue circuit breaker state change",
 			tag.NewStringTag("from-state", from.String()),
 			tag.NewStringTag("to-state", to.String()),
 		)
-	}
-}
-
-func nexusStageForTaskGroup(taskGroup string) (tag.ZapTag, bool) {
-	switch {
-	case taskGroup == chasmnexus.TaskGroupName,
-		taskGroup == nexusoperations.TaskTypeInvocation,
-		taskGroup == nexusoperations.TaskTypeCancelation:
-		return tag.NexusStageCallerOutbound, true
-	case strings.HasPrefix(taskGroup, chasm.CallbackLibraryName+"."):
-		return tag.NexusStageHandlerOutbound, true
-	default:
-		return tag.ZapTag{}, false
 	}
 }

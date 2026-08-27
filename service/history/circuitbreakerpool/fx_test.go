@@ -5,12 +5,13 @@ import (
 
 	"github.com/sony/gobreaker"
 	"github.com/stretchr/testify/require"
+	chasmcallback "go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/components/callbacks"
-	"go.temporal.io/server/components/nexusoperations"
+	hsmnexus "go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -22,12 +23,12 @@ func TestOnStateChangeNexusStage(t *testing.T) {
 	}{
 		{
 			name:      "HSM caller invocation",
-			taskGroup: nexusoperations.TaskTypeInvocation,
+			taskGroup: hsmnexus.TaskTypeInvocation,
 			stage:     "caller-outbound",
 		},
 		{
 			name:      "HSM caller cancellation",
-			taskGroup: nexusoperations.TaskTypeCancelation,
+			taskGroup: hsmnexus.TaskTypeCancelation,
 			stage:     "caller-outbound",
 		},
 		{
@@ -37,7 +38,7 @@ func TestOnStateChangeNexusStage(t *testing.T) {
 		},
 		{
 			name:      "CHASM handler outbound",
-			taskGroup: "callback.invoke",
+			taskGroup: chasmcallback.InvocationTaskGroup,
 			stage:     "handler-outbound",
 		},
 		{
