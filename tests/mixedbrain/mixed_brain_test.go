@@ -68,6 +68,7 @@ var scenarios = []omesScenario{
 		namespace: "throughput-stress",
 		options: []string{
 			"internal-iterations=10",
+			"include-standalone-activity=true",
 			"nexus-enabled=true",
 			"nexus-endpoint=" + nexusEndpoint,
 		},
