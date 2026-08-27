@@ -96,6 +96,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelation(chasmEnabled bool
 			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test"}, nil
 		},
 		OnCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
+			if options.Header.Get(nexusrpc.HeaderTemporalNexusFailureSupport) != "true" {
+				return errors.New("expected Temporal failure response capability header")
+			}
 			if !firstCancelSeen {
 				// Fail cancel request once to test NexusOperationCancelRequestFailed event is recorded and request is retried.
 				firstCancelSeen = true
