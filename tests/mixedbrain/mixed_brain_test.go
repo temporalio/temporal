@@ -155,6 +155,9 @@ func TestMixedBrain(t *testing.T) {
 		currentSrv, currentLogFile = startDevServer(t, "current", currentLog, devserver.Options{
 			SourceDir:   sourceRoot(),
 			Persistence: persistence,
+			DynamicConfigValues: map[string]any{
+				"activity.enableStandalone": true,
+			},
 		})
 
 		var err error
@@ -179,10 +182,6 @@ func TestMixedBrain(t *testing.T) {
 			Persistence: persistence,
 			ClusterEndpoint: devserver.ClusterEndpoint{
 				RPCAddress: currentSrv.FrontendHostPort(),
-			},
-			// TODO: remove this once the release server defaults to standalone activities on. Currently the downgrade version of 1.31 has SAA defaulted to off.
-			DynamicConfigValues: map[string]any{
-				"activity.enableStandalone": true,
 			},
 		})
 	})
