@@ -204,8 +204,7 @@ type StartWorkflowExecutionRequest struct {
 	TimeSkippingStatePropagation *v14.TimeSkippingStatePropagation `protobuf:"bytes,19,opt,name=time_skipping_state_propagation,json=timeSkippingStatePropagation,proto3" json:"time_skipping_state_propagation,omitempty"`
 	// When present, StartWorkflowExecution may replace a conflicting child only after verifying under
 	// the child's lock that its parent initiation is absent from the supplied current branch and that
-	// its first run has only WorkflowExecutionStarted, possibly followed by an unstarted first
-	// WorkflowTaskScheduled event.
+	// its first run has only WorkflowExecutionStarted.
 	OrphanedChildReplacementInfo *OrphanedChildReplacementInfo `protobuf:"bytes,20,opt,name=orphaned_child_replacement_info,json=orphanedChildReplacementInfo,proto3" json:"orphaned_child_replacement_info,omitempty"`
 	unknownFields                protoimpl.UnknownFields
 	sizeCache                    protoimpl.SizeCache

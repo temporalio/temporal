@@ -116,25 +116,6 @@ func TestOrphanedChildReplacementDoesNotReplaceUnrelatedWorkflow(t *testing.T) {
 	))
 }
 
-func TestOrphanedChildReplacementAcceptsUnstartedWorkflowTask(t *testing.T) {
-	const childRunID = "child-run"
-	controller := gomock.NewController(t)
-	mutableState := historyi.NewMockMutableState(controller)
-	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
-		FirstExecutionRunId: childRunID,
-		State:               enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-	})
-	mutableState.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey("namespace", "child", childRunID))
-	mutableState.EXPECT().GetNextEventID().Return(common.FirstEventID + 2)
-	mutableState.EXPECT().HasCompletedAnyWorkflowTask().Return(false)
-	mutableState.EXPECT().GetPendingWorkflowTask().Return(&historyi.WorkflowTaskInfo{
-		ScheduledEventID: common.FirstEventID + 1,
-		StartedEventID:   common.EmptyEventID,
-	})
-
-	require.True(t, isOrphanedChildWithoutProgress(mutableState))
-}
-
 func TestReplaceOrphanedChildAction(t *testing.T) {
 	const (
 		parentNamespaceID = "parent-namespace"
@@ -168,46 +149,12 @@ func TestReplaceOrphanedChildAction(t *testing.T) {
 		firstRunID      string
 		nextEventID     int64
 		admittedUpdate  bool
-		workflowTask    *historyi.WorkflowTaskInfo
-		completedWFT    bool
 		expectedOutcome string
 	}{
 		{name: "start-only child on losing branch"},
 		{
-			name:        "first workflow task scheduled but not started",
-			state:       enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-			nextEventID: common.FirstEventID + 2,
-			workflowTask: &historyi.WorkflowTaskInfo{
-				ScheduledEventID: common.FirstEventID + 1,
-				StartedEventID:   common.EmptyEventID,
-			},
-		},
-		{
-			name:            "running without first workflow task",
+			name:            "running child",
 			state:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-			expectedOutcome: orphanedChildLocalProgress,
-		},
-		{
-			name:        "first workflow task started",
-			state:       enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-			nextEventID: common.FirstEventID + 2,
-			workflowTask: &historyi.WorkflowTaskInfo{
-				ScheduledEventID: common.FirstEventID + 1,
-				StartedEventID:   common.FirstEventID + 2,
-			},
-			expectedOutcome: orphanedChildLocalProgress,
-		},
-		{
-			name:            "workflow task completed",
-			state:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-			nextEventID:     common.FirstEventID + 2,
-			completedWFT:    true,
-			expectedOutcome: orphanedChildLocalProgress,
-		},
-		{
-			name:            "signal after first workflow task scheduled",
-			state:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-			nextEventID:     common.FirstEventID + 3,
 			expectedOutcome: orphanedChildLocalProgress,
 		},
 		{
@@ -314,12 +261,6 @@ func TestReplaceOrphanedChildAction(t *testing.T) {
 			mutableState.EXPECT().GetExecutionState().Return(executionState).AnyTimes()
 			mutableState.EXPECT().GetWorkflowKey().Return(workflowKey).AnyTimes()
 			mutableState.EXPECT().GetNextEventID().Return(nextEventID).AnyTimes()
-			if state == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING && nextEventID == common.FirstEventID+2 {
-				mutableState.EXPECT().HasCompletedAnyWorkflowTask().Return(tc.completedWFT)
-				if !tc.completedWFT {
-					mutableState.EXPECT().GetPendingWorkflowTask().Return(tc.workflowTask)
-				}
-			}
 			mutableState.EXPECT().GetCurrentVersion().Return(int64(1))
 			mutableState.EXPECT().VisitUpdates(gomock.Any())
 			updateRegistry := update.NewRegistry(mutableState)

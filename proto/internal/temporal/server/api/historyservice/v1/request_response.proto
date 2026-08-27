@@ -108,8 +108,7 @@ message StartWorkflowExecutionRequest {
   temporal.api.common.v1.TimeSkippingStatePropagation time_skipping_state_propagation = 19;
   // When present, StartWorkflowExecution may replace a conflicting child only after verifying under
   // the child's lock that its parent initiation is absent from the supplied current branch and that
-  // its first run has only WorkflowExecutionStarted, possibly followed by an unstarted first
-  // WorkflowTaskScheduled event.
+  // its first run has only WorkflowExecutionStarted.
   OrphanedChildReplacementInfo orphaned_child_replacement_info = 20;
 }
 

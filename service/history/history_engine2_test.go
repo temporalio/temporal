@@ -1912,6 +1912,27 @@ func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_RejectsCo
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED.String(), recordings[0].Tags["workflow_state"])
 }
 
+func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_RejectsRunningSnapshot() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.mockShard.SetMetricsHandler(metricsHandler)
+
+	s.setupStartWorkflowExecutionForRunning()
+	startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL)
+	startRequest.OrphanedChildReplacementInfo = &historyservice.OrphanedChildReplacementInfo{}
+
+	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
+
+	var expectedErr *serviceerror.WorkflowExecutionAlreadyStarted
+	s.ErrorAs(err, &expectedErr)
+	s.Nil(resp)
+	recordings := capture.Snapshot()[metrics.OrphanedChildWorkflowReplacement.Name()]
+	s.Len(recordings, 1)
+	s.Equal("rejected_unsupported_state", recordings[0].Tags["outcome"])
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING.String(), recordings[0].Tags["workflow_state"])
+}
+
 func (s *engine2Suite) TestStartWorkflowExecution_Dedup_Running_UseExisting() {
 	// ignore error when id conflict policy is USE_EXISTING
 	s.setupStartWorkflowExecutionForRunning()

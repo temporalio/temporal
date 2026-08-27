@@ -123,10 +123,11 @@ func ReplaceOrphanedChildAction(
 		}
 
 		// The current-row snapshot only selects this path. Recheck under the child lock and accept only
-		// Started, optionally followed by the first WFT Scheduled. In either case no workflow task was
-		// delivered to a worker. Exact event IDs reject signals, updates, timeouts, and any other durable
-		// progress; UpdateRegistry catches an admitted in-memory Update not yet present in history.
-		if !isOrphanedChildWithoutProgress(mutableState) ||
+		// the first run with WorkflowExecutionStarted as its sole event. UpdateRegistry catches an
+		// admitted in-memory Update not yet present in history.
+		if executionState.GetFirstExecutionRunId() != mutableState.GetWorkflowKey().RunID ||
+			executionState.GetState() != enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
+			mutableState.GetNextEventID() != common.FirstEventID+1 ||
 			workflowLease.GetContext().UpdateRegistry(ctx).Len() != 0 {
 			return reject(orphanedChildLocalProgress)
 		}
@@ -149,28 +150,6 @@ func ReplaceOrphanedChildAction(
 			return nil, err
 		}
 		return UpdateWorkflowTerminate, nil
-	}
-}
-
-func isOrphanedChildWithoutProgress(mutableState historyi.MutableState) bool {
-	executionState := mutableState.GetExecutionState()
-	if executionState.GetFirstExecutionRunId() != mutableState.GetWorkflowKey().RunID {
-		return false
-	}
-
-	switch executionState.GetState() {
-	case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:
-		return mutableState.GetNextEventID() == common.FirstEventID+1
-	case enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
-		if mutableState.GetNextEventID() != common.FirstEventID+2 || mutableState.HasCompletedAnyWorkflowTask() {
-			return false
-		}
-		workflowTask := mutableState.GetPendingWorkflowTask()
-		return workflowTask != nil &&
-			workflowTask.ScheduledEventID == common.FirstEventID+1 &&
-			workflowTask.StartedEventID == common.EmptyEventID
-	default:
-		return false
 	}
 }
 

@@ -473,8 +473,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 	orphanedChildReplacementRequested := orphanedChildReplacementInfo != nil &&
 		s.request.StartRequest.GetWorkflowIdConflictPolicy() == enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL
 	replaceOrphanedChild := orphanedChildReplacementRequested &&
-		(currentWorkflowConditionFailed.State == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
-			currentWorkflowConditionFailed.State == enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING)
+		currentWorkflowConditionFailed.State == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
 	if orphanedChildReplacementRequested && !replaceOrphanedChild {
 		metrics.OrphanedChildWorkflowReplacement.With(s.getMetricsHandler()).Record(
 			1,

@@ -2699,7 +2699,7 @@ where the user has set an explicit RetryPolicy, but not specified all the fields
 	EnableOrphanedChildWorkflowReplacement = NewNamespaceBoolSetting(
 		"history.enableOrphanedChildWorkflowReplacement",
 		false,
-		`Allows a parent to replace an orphaned child only while the current cluster sees its first run with no history after WorkflowExecutionStarted except an optional unstarted first WorkflowTaskScheduled event.
+		`Allows a parent to replace an orphaned child only while the current cluster sees its first run with no history after WorkflowExecutionStarted.
 The setting is evaluated against the parent namespace.
 Enable only after all history hosts that may process child starts in this cluster support orphaned child replacement info; an older host ignores the request field and may permanently record WORKFLOW_ALREADY_EXISTS in the parent history`,
 	)
