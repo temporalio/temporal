@@ -483,19 +483,6 @@ jobs:
           MIXED_BRAIN_TEST_DURATION: 5m
           PERSISTENCE_DRIVER: postgres12
 
-      - name: Print complete mixed-brain logs
-        if: failure()
-        run: cat .testoutput/mixedbrain_*.log || true
-
-      - name: Post-test reporting
-        if: always()
-        uses: ./.github/actions/post-test-reporting
-        env:
-          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-        with:
-          job_name: Mixed brain test
-          artifact_name_suffix: mixed-brain-test
-
       - name: Append mixed-brain summary
         if: always()
         run: |

@@ -123,7 +123,6 @@ FUNCTIONAL_TEST_ROOT          := ./tests
 FUNCTIONAL_TEST_XDC_ROOT      := ./tests/xdc
 FUNCTIONAL_TEST_NDC_ROOT      := ./tests/ndc
 MIXED_BRAIN_TEST_ROOT         := ./tests/mixedbrain
-MIXED_BRAIN_TEST_RUNNER_TIMEOUT ?= 17m
 DB_INTEGRATION_TEST_ROOT      := ./common/persistence/tests
 DB_TOOL_INTEGRATION_TEST_ROOT := ./tools/tests
 INTEGRATION_TEST_DIRS := $(DB_INTEGRATION_TEST_ROOT) $(DB_TOOL_INTEGRATION_TEST_ROOT) ./temporaltest
@@ -558,13 +557,9 @@ functional-with-fault-injection-test: clean-test-output
 
 mixed-brain-test: clean-test-output
 	@printf $(COLOR) "Run mixed brain tests..."
-	@mkdir -p $(LOCALBIN) $(TEST_OUTPUT_ROOT)
-	@go build -o $(LOCALBIN)/test-runner ./cmd/tools/test-runner
-	@$(MAKE) $(GOTESTSUM)
-	@cd $(MIXED_BRAIN_TEST_ROOT) && CGO_ENABLED=1 TEST_OUTPUT_ROOT=$(abspath $(TEST_OUTPUT_ROOT)) $(abspath $(LOCALBIN))/test-runner test \
-		--gotestsum-path=$(abspath $(GOTESTSUM)) --max-attempts=1 --total-timeout=$(MIXED_BRAIN_TEST_RUNNER_TIMEOUT) \
-		--junitfile=$(abspath $(TEST_OUTPUT_ROOT))/junit.mixedbrain.xml -- -v ./... $(COMPILED_TEST_ARGS) \
-		-coverprofile=$(abspath $(TEST_OUTPUT_ROOT))/coverage.mixedbrain.out
+	@mkdir -p $(TEST_OUTPUT_ROOT)
+	@cd $(MIXED_BRAIN_TEST_ROOT) && CGO_ENABLED=1 TEST_OUTPUT_ROOT=$(abspath $(TEST_OUTPUT_ROOT)) \
+		go test -v ./... $(COMPILED_TEST_ARGS)
 
 LEAK_OUTPUT_DIR        ?= $(TEST_OUTPUT_ROOT)/leakcheck
 LEAK_ITERS             ?= 15

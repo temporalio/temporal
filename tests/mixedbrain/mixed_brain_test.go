@@ -147,13 +147,36 @@ func TestMixedBrain(t *testing.T) {
 	persistence := devserver.PersistenceOptions{Driver: persistenceDriver}
 
 	var currentSrv, releaseSrv *devserver.Server
-	var currentLogFile, releaseLogFile *os.File
 	var conn *grpc.ClientConn
 	runID := fmt.Sprintf("mixed-brain-%d", time.Now().Unix())
+	// startDevServer registers server shutdown and log closure after this cleanup,
+	// so both logs are fully flushed before they are scanned. This also runs when
+	// setup or Omes fails.
+	t.Cleanup(func() {
+		var paths []string
+		for _, path := range []string{currentLog, releaseLog} {
+			if _, err := os.Stat(path); err == nil {
+				paths = append(paths, path)
+			} else if !os.IsNotExist(err) {
+				t.Errorf("inspect server log %s: %v", path, err)
+			}
+		}
+		if len(paths) == 0 {
+			return
+		}
+		problems, err := scanServerLogs(serverLogValidators, paths...)
+		if err != nil {
+			t.Errorf("scan server logs: %v", err)
+			return
+		}
+		for _, problem := range problems {
+			t.Error(problem)
+		}
+	})
 
 	t.Run("start current server", func(st *testing.T) {
 		// Server processes use the parent t so their context survives this sub-test.
-		currentSrv, currentLogFile = startDevServer(t, "current", currentLog, devserver.Options{
+		currentSrv, _ = startDevServer(t, "current", currentLog, devserver.Options{
 			SourceDir:   sourceRoot(),
 			Persistence: persistence,
 			DynamicConfigValues: map[string]any{
@@ -178,7 +201,7 @@ func TestMixedBrain(t *testing.T) {
 	defer func() { _ = conn.Close() }()
 
 	t.Run("start release server", func(_ *testing.T) {
-		releaseSrv, releaseLogFile = startDevServer(t, "release", releaseLog, devserver.Options{
+		releaseSrv, _ = startDevServer(t, "release", releaseLog, devserver.Options{
 			Ref:         releaseTag,
 			Persistence: persistence,
 			ClusterEndpoint: devserver.ClusterEndpoint{
@@ -222,15 +245,14 @@ func TestMixedBrain(t *testing.T) {
 		}()
 
 		type scenarioResult struct {
-			name string
-			err  error
+			err error
 		}
 		results := make(chan scenarioResult, len(scenarios))
 		for _, scenario := range scenarios {
 			go func() {
 				logPath := filepath.Join(logRoot, "mixedbrain_omes_"+scenario.name+".log")
 				err := runOmes(ctx, st, omesBinary, proxy.addr(), logPath, testDuration(), scenario, runID+"-"+scenario.name)
-				results <- scenarioResult{name: scenario.name, err: err}
+				results <- scenarioResult{err: err}
 			}()
 		}
 
@@ -248,7 +270,7 @@ func TestMixedBrain(t *testing.T) {
 			case result := <-results:
 				resultsRemaining--
 				if result.err != nil && scenarioErr == nil && chaosErr == nil {
-					scenarioErr = fmt.Errorf("Omes %s: %w", result.name, result.err)
+					scenarioErr = result.err
 					cancel(scenarioErr)
 				}
 			}
@@ -260,7 +282,9 @@ func TestMixedBrain(t *testing.T) {
 		if chaosErr != nil {
 			st.Fatalf("process chaos failed: %v", chaosErr)
 		}
-		require.NoError(st, scenarioErr)
+		if scenarioErr != nil {
+			st.Fatal(scenarioErr)
+		}
 	})
 	if t.Failed() {
 		return
@@ -277,22 +301,6 @@ func TestMixedBrain(t *testing.T) {
 		}
 	})
 
-	// Stop the servers so their logs are fully flushed, then scan them for
-	// panics, soft-assertion failures, and other problems that don't surface as
-	// a process exit. Runs regardless of whether "verify" failed, since a crashed
-	// server's log is exactly what we want to inspect.
-	_ = currentSrv.Stop()
-	_ = releaseSrv.Stop()
-	_ = currentLogFile.Close()
-	_ = releaseLogFile.Close()
-
-	t.Run("scan server logs", func(st *testing.T) {
-		problems, err := scanServerLogs(serverLogValidators, currentLog, releaseLog)
-		require.NoError(st, err)
-		for _, p := range problems {
-			st.Error(p)
-		}
-	})
 }
 
 // runOmes runs the given Omes scenario against serverAddr under the given run ID.
@@ -316,6 +324,7 @@ func runOmes(ctx context.Context, t *testing.T, binary, serverAddr, logPath stri
 
 		args := []string{
 			"run-scenario-with-worker",
+			"--log-encoding", "json",
 			"--scenario", scenario.name,
 			"--language", "go",
 			"--server-address", serverAddr,
@@ -347,7 +356,7 @@ func runOmes(ctx context.Context, t *testing.T, binary, serverAddr, logPath stri
 			if ctx.Err() != nil {
 				return context.Cause(ctx)
 			}
-			return fmt.Errorf("Omes scenario failed, check %s: %w", logPath, err)
+			return newOmesFailure(scenario.name, logPath, err)
 		}
 		return nil
 	}
