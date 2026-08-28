@@ -233,11 +233,11 @@ The circuit breaker is dynamically configurable via:
 
 ## Nexus Operations
 
-The legacy HSM [`nexusoperations` package](../../service/history/hsm/nexusoperations) holds the logic for scheduling
-Nexus Operations from a workflow and maintaining the Operations's lifecycle.
+The [`nexusoperations` component](../../components/nexusoperations) holds all of the logic for scheduling Nexus
+Operations from a workflow and maintaining the Operations's lifecycle.
 
 There are some other pieces of Nexus logic spread around other parts of the server (`common`, `frontend`, and
-`matching`) but the legacy history service logic is almost completely contained in the package.
+`matching`) but the history service logic is almost completely contained in the component.
 
 A Nexus Operation is modelled as a collection of state machines, tasks, and executors using the Hierarchical State
 Machine framework (docs TBD).

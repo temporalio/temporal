@@ -6,11 +6,11 @@ package matching
 import (
 	"time"
 
-	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	"go.temporal.io/server/service/matching/counter"
 )
 
@@ -378,7 +378,7 @@ func NewConfig(
 
 		ListNexusEndpointsLongPollTimeout: dynamicconfig.MatchingListNexusEndpointsLongPollTimeout.Get(dc),
 		NexusEndpointsRefreshInterval:     dynamicconfig.MatchingNexusEndpointsRefreshInterval.Get(dc),
-		MinDispatchTaskTimeout:            nexusoperation.MinDispatchTaskTimeout.Get(dc),
+		MinDispatchTaskTimeout:            nexusoperations.MinDispatchTaskTimeout.Get(dc),
 
 		PollerScalingBacklogAgeScaleUp:      dynamicconfig.MatchingPollerScalingBacklogAgeScaleUp.Get(dc),
 		PollerScalingWaitTime:               dynamicconfig.MatchingPollerScalingWaitTime.Get(dc),
