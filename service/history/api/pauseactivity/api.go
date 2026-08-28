@@ -34,6 +34,10 @@ func Invoke(
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
 			frontendRequest := request.GetFrontendRequest()
+			if !mutableState.IsWorkflowExecutionRunning() {
+				return nil, consts.ErrWorkflowCompleted
+			}
+
 			var activityIDs []string
 			switch a := frontendRequest.GetActivity().(type) {
 			case *workflowservice.PauseActivityRequest_Id:

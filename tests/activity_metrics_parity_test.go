@@ -310,7 +310,6 @@ func (s *activityParityTestSuite) TestMetrics() {
 					t := s.T()
 					wfaTagKeys := seriesTagKeys(wfa[metric.name])
 					saaTagKeys := seriesTagKeys(saa[metric.name])
-					comparisonTagKeys := wfaTagKeys
 					if !metric.baseHandler && len(wfa[metric.name]) > 0 {
 						expectedTagKeys := append([]string{}, perActivityTagKeys...)
 						if metric.workerDeploymentTags {
@@ -322,8 +321,8 @@ func (s *activityParityTestSuite) TestMetrics() {
 							"WFA must use the standard per-activity tag keys")
 					}
 					require.Equal(t, wfaTagKeys, saaTagKeys, "WFA and SAA tag keys must match")
-					wfaSeries := metricSeries(t, "WFA", wfa[metric.name], comparisonTagKeys, metric.counter)
-					saaSeries := metricSeries(t, "SAA", saa[metric.name], comparisonTagKeys, metric.counter)
+					wfaSeries := metricSeries(t, "WFA", wfa[metric.name], wfaTagKeys, metric.counter)
+					saaSeries := metricSeries(t, "SAA", saa[metric.name], wfaTagKeys, metric.counter)
 					if metric.counter {
 						require.Equal(t, wfaSeries, saaSeries, "WFA and SAA counter values must match")
 					} else {
@@ -352,7 +351,7 @@ func (s *activityParityTestSuite) TestOperatorMetricsPerActivityParity() {
 		{name: "UpdateOptions", metric: metrics.ActivityUpdateOptions.Name(), operation: metrics.ActivityUpdateOptionsScope, event: model.UpdateOptions},
 	}
 
-	captureWFA := func(t *testing.T, sc scenario) []*metricstest.CapturedRecording {
+	captureWFA := func(t *testing.T, sc scenario) ([]*metricstest.CapturedRecording, string) {
 		env := newActivityParityEnv(t)
 		ctx := testcontext.For(t)
 		workflowTaskQueue := testcore.RandomizeStr("operator-metrics-wfa-workflow")
@@ -422,7 +421,7 @@ func (s *activityParityTestSuite) TestOperatorMetricsPerActivityParity() {
 			t.Fatalf("unsupported operator event %v", sc.event.Type)
 		}
 		require.NoError(t, err)
-		return capture.Metric(sc.metric)
+		return capture.Metric(sc.metric), activityTaskQueue
 	}
 
 	captureSAA := func(t *testing.T, sc scenario) []*metricstest.CapturedRecording {
@@ -468,10 +467,14 @@ func (s *activityParityTestSuite) TestOperatorMetricsPerActivityParity() {
 	for _, sc := range scenarios {
 		s.Run(sc.name, func(s *activityParityTestSuite) {
 			t := s.T()
-			wfa := captureWFA(t, sc)
+			wfa, activityTaskQueue := captureWFA(t, sc)
 			saa := captureSAA(t, sc)
 			require.Len(t, wfa, 2, "one WFA request affecting two activities must emit two recordings")
 			require.Len(t, saa, 2, "two SAA requests affecting one activity each must emit two recordings")
+			for _, recording := range wfa {
+				require.Equal(t, activityTaskQueue, recording.Tags["taskqueue"],
+					"WFA must tag the activity task queue")
+			}
 			for _, recordings := range [][]*metricstest.CapturedRecording{wfa, saa} {
 				for _, recording := range recordings {
 					require.Equal(t, sc.operation, recording.Tags["operation"])
