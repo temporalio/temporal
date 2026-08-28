@@ -1070,6 +1070,10 @@ var (
 		"history_passive_replication_test_hook",
 		WithDescription("Number of times the test-only passive replication hook executes. This must be zero in production."),
 	)
+	ExecutionForceTerminations = NewCounterDef(
+		"execution_force_terminations",
+		WithDescription("The number of workflow or CHASM executions force terminated due to system conditions (not application specific reasons). Tagged by namespace, archetype, and reason."),
+	)
 	MutableStateSize = NewBytesHistogramDef(
 		"mutable_state_size",
 		WithDescription("The size of an individual Workflow Execution's state, emitted each time a workflow execution is retrieved or updated."),
