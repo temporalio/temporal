@@ -224,9 +224,18 @@ func RefreshTasksForWorkflowStart(
 		return nil
 	}
 
-	// Skip task generation if workflow state has not been updated since minVersionedTransition.
+	startVersion, err := mutableState.GetStartVersion()
+	if err != nil {
+		return err
+	}
+	workflowStartVersionedTransition := &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: startVersion,
+		TransitionCount:          1,
+	}
+	// Workflow start tasks belong only to the first state transition. Later execution
+	// state changes, such as unpausing a workflow, must not recreate them.
 	if transitionhistory.Compare(
-		executionState.LastUpdateVersionedTransition,
+		workflowStartVersionedTransition,
 		minVersionedTransition,
 	) < 0 {
 		return nil

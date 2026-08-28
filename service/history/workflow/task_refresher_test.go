@@ -112,7 +112,7 @@ func (s *taskRefresherSuite) TestRefreshWorkflowStartTasks() {
 			State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			LastUpdateVersionedTransition: &persistencespb.VersionedTransition{
-				TransitionCount:          1,
+				TransitionCount:          3,
 				NamespaceFailoverVersion: common.EmptyVersion,
 			},
 		},
@@ -164,8 +164,8 @@ func (s *taskRefresherSuite) TestRefreshWorkflowStartTasks() {
 	s.Equal(int32(TimerTaskStatusCreated), mutableState.GetExecutionInfo().WorkflowExecutionTimerTaskStatus)
 
 	err = RefreshTasksForWorkflowStart(context.Background(), mutableState, s.mockTaskGenerator, &persistencespb.VersionedTransition{
-		// TransitionCount is higher than workflow state's last update versioned transition,
-		// no task should be generated and no call to task generator should be made.
+		// The replicated range starts after the workflow-start transition. A later
+		// execution-state update must not regenerate workflow-start tasks.
 		TransitionCount:          2,
 		NamespaceFailoverVersion: common.EmptyVersion,
 	})
