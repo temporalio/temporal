@@ -417,7 +417,6 @@ func TestScheduleCHASM(t *testing.T) {
 	t.Run("TestSkipsWorkflowSentinelWhenDisabled", func(t *testing.T) { t.Parallel(); testSkipsWorkflowSentinelWhenDisabled(t, newContext) })
 	t.Run("TestLargeScheduleID", func(t *testing.T) { t.Parallel(); testLargeScheduleID(t, newContext) })
 	t.Run("TestUpdateScheduleMemo", func(t *testing.T) { t.Parallel(); testUpdateScheduleMemo(t, newContext) })
-	t.Run("TestUpdateScheduleMemoOnly", func(t *testing.T) { t.Parallel(); testUpdateScheduleMemoOnly(t, newContext) })
 	t.Run("TestStateSizeBytesReported", func(t *testing.T) { t.Parallel(); testStateSizeBytesReported(t, newContext) })
 	t.Run("TestBufferOverrunDropsActions", func(t *testing.T) { t.Parallel(); testBufferOverrunDropsActions(t, newContext) })
 	t.Run("TestDescribeCatchupWindowAfterCreateAndUpdate", func(t *testing.T) {
@@ -4131,80 +4130,6 @@ func testUpdateScheduleMemoRejected(t *testing.T, newContext contextFactory) {
 	require.Contains(t, err.Error(), "memo updates are not supported on workflow-backed schedules")
 }
 
-func testUpdateScheduleMemoOnly(t *testing.T, newContext contextFactory) {
-	// UpdateScheduleRequest uses replace semantics for the schedule field, so omitting it
-	// causes the schedule to be unset. Memo-only updates require the server to skip replacing
-	// the schedule when the field is nil, similar to how memo and search_attributes are handled.
-	t.Skip("memo-only updates not yet supported: omitting the schedule field unsets the schedule")
-
-	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
-
-	sid := "sched-test-update-memo-only"
-	wid := "sched-test-update-memo-only-wf"
-	wt := "sched-test-update-memo-only-wt"
-
-	s.SdkWorker().RegisterWorkflowWithOptions(
-		func(ctx workflow.Context) error { return nil },
-		workflow.RegisterOptions{Name: wt},
-	)
-
-	schedule := &schedulepb.Schedule{
-		Spec: &schedulepb.ScheduleSpec{
-			Interval: []*schedulepb.IntervalSpec{
-				{Interval: durationpb.New(1 * time.Hour)},
-			},
-		},
-		Action: &schedulepb.ScheduleAction{
-			Action: &schedulepb.ScheduleAction_StartWorkflow{
-				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
-					WorkflowId:   wid,
-					WorkflowType: &commonpb.WorkflowType{Name: wt},
-					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-				},
-			},
-		},
-	}
-
-	// Create schedule with initial memo.
-	memo1 := payload.EncodeString("val1")
-	ctx := newContext(s.Context())
-	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
-		Namespace:  s.Namespace().String(),
-		ScheduleId: sid,
-		Schedule:   schedule,
-		Identity:   "test",
-		RequestId:  uuid.NewString(),
-		Memo: &commonpb.Memo{
-			Fields: map[string]*commonpb.Payload{"key1": memo1},
-		},
-	})
-	require.NoError(t, err)
-
-	// Update only memo, without setting the schedule field.
-	memo2 := payload.EncodeString("val2")
-	_, err = s.FrontendClient().UpdateSchedule(newContext(s.Context()), &workflowservice.UpdateScheduleRequest{
-		Namespace:  s.Namespace().String(),
-		ScheduleId: sid,
-		Identity:   "test",
-		RequestId:  uuid.NewString(),
-		Memo: &commonpb.Memo{
-			Fields: map[string]*commonpb.Payload{"key1": memo2},
-		},
-	})
-	require.NoError(t, err)
-
-	// Verify memo was updated and schedule is still intact.
-	describeResp, err := s.FrontendClient().DescribeSchedule(newContext(s.Context()), &workflowservice.DescribeScheduleRequest{
-		Namespace:  s.Namespace().String(),
-		ScheduleId: sid,
-	})
-	require.NoError(t, err)
-	require.Equal(t, memo2.Data, describeResp.Memo.Fields["key1"].Data, "memo should be updated")
-	require.NotNil(t, describeResp.Schedule.Spec, "schedule spec should not be nil")
-	require.NotEmpty(t, describeResp.Schedule.Spec.Interval, "schedule spec intervals should be preserved")
-	require.NotNil(t, describeResp.Schedule.Action, "schedule action should be preserved")
-}
-
 func testCHASMUnpauseResumesProcessing(t *testing.T, newContext contextFactory) {
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
@@ -4637,18 +4562,8 @@ func testBackfillReprocessesCompletedAction(
 // testBackfillWithBufferOneOverlap pins the expected behavior of BUFFER_ONE
 // over a multi-tick backfill: the first start runs immediately, exactly one
 // follow-up is buffered (Attempt=-1 deferred), the rest are dropped, and the
-// deferred one runs once the first completes. Currently SKIPPED: fails on
-// both V1 and CHASM because the deferred start never gets re-enabled after
-// the running workflow completes. The first start fires, the rest never run.
-// Likely a real bug in the BUFFER_ONE + backfill (Manual=true) interaction -
-// recordCompletedAction's re-enable loop on Attempt==-1 may not be running
-// against backfill-buffered starts. Worth a separate investigation.
+// deferred one runs once the first completes.
 func testBackfillWithBufferOneOverlap(t *testing.T, newContext contextFactory) {
-	// TODO(temporalio/temporal): track removing this skip once the BUFFER_ONE
-	// backfill deferred re-enable path is fixed. Verify by running:
-	//   go test ./tests/ -run 'TestScheduleCHASM/Backfill/BufferOneOverlap' -v
-	t.Skip("BUFFER_ONE backfill deferred re-enable is broken on both V1 and CHASM; see test doc")
-
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := testcore.RandomizeStr("sched-backfill-buffer-one")

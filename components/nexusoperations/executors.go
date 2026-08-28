@@ -535,7 +535,7 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 
 	switch {
 	case errors.As(callErr, &serviceErr):
-		if !common.IsRetryableRPCError(callErr) {
+		if !common.IsRetryableRPCError(serviceErr) {
 			return handleNonRetryableStartOperationError(node, operation, callErr)
 		}
 		// Fall through all uncaught errors to retryable
