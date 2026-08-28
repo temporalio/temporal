@@ -141,10 +141,11 @@ var (
 // Pre-defined values for Nexus stage tag. Nexus stage identifies the request lifecycle position.
 var (
 	NexusStageCallerOperation = nexusStage("caller-operation")
-	NexusStageCallerOutbound  = nexusStage("caller-outbound")
+	NexusStageCallerQueue     = nexusStage("caller-queue")
 	NexusStageCallerInbound   = nexusStage("caller-inbound")
 	NexusStageHandlerInbound  = nexusStage("handler-inbound")
 	NexusStageHandlerOutbound = nexusStage("handler-outbound")
+	NexusStageHandlerQueue    = nexusStage("handler-queue")
 	NexusStageRegistry        = nexusStage("registry")
 )
 

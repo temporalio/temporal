@@ -407,7 +407,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 			}(),
 			headerValue:          encodedRef,
 			expectsInternalError: true,
-			expectedLogMessage:   "failed to complete Nexus operation: %v",
+			expectedLogMessage:   "failed to complete Nexus operation",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_BACKING_OFF, cb.State())
 			},
@@ -429,7 +429,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 			}(),
 			headerValue:          encodedRef,
 			expectsInternalError: true,
-			expectedLogMessage:   "failed to complete Nexus operation: %v",
+			expectedLogMessage:   "failed to complete Nexus operation",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
 			},

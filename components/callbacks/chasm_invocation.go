@@ -42,7 +42,6 @@ func logInternalError(logger log.Logger, internalMsg string, internalErr error) 
 }
 
 func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) invocationResult {
-	logger := log.With(e.Logger, tag.NexusStageHandlerOutbound)
 	// Get back the component ref and (optional) request ID from the callback token in the header.
 	header := nexus.Header(c.nexus.GetHeader())
 	if header == nil {
@@ -51,12 +50,12 @@ func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 
 	encodedToken := header.Get(commonnexus.CallbackTokenHeader)
 	if encodedToken == "" {
-		return invocationResultFail{logInternalError(logger, "callback missing token", nil)}
+		return invocationResultFail{logInternalError(e.Logger, "callback missing token", nil)}
 	}
 
 	ref, requestID, err := chasm.UnpackNexusCallbackToken(encodedToken)
 	if err != nil {
-		return invocationResultFail{logInternalError(logger, "failed to decode CHASM callback token", err)}
+		return invocationResultFail{logInternalError(e.Logger, "failed to decode CHASM callback token", err)}
 	}
 	// Older tokens don't carry a request ID; fall back to the one on the callback state machine.
 	if requestID == "" {
@@ -65,13 +64,13 @@ func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 
 	request, err := c.getHistoryRequest(ref, requestID)
 	if err != nil {
-		return invocationResultFail{logInternalError(logger, "failed to build history request: %v", err)}
+		return invocationResultFail{logInternalError(e.Logger, "failed to build history request", err)}
 	}
 
 	// RPC to History for cross-shard completion delivery.
 	_, err = e.HistoryClient.CompleteNexusOperationChasm(ctx, request)
 	if err != nil {
-		redactedErr := logInternalError(logger, "failed to complete Nexus operation: %v", err)
+		redactedErr := logInternalError(e.Logger, "failed to complete Nexus operation", err)
 		if isRetryableRPCResponse(err) {
 			return invocationResultRetry{redactedErr}
 		}

@@ -76,13 +76,13 @@ func onStateChange(
 
 	switch key.TaskGroup {
 	case chasmnexus.TaskGroupName:
-		logger = log.With(logger, tag.NexusStageCallerOutbound)
+		logger = log.With(logger, tag.NexusStageCallerQueue)
 	case hsmnexus.TaskTypeInvocation, hsmnexus.TaskTypeCancelation:
-		logger = log.With(logger, tag.NexusStageCallerOutbound)
+		logger = log.With(logger, tag.NexusStageCallerQueue)
 	case hsmcallbacks.TaskTypeInvocation:
-		logger = log.With(logger, tag.NexusStageHandlerOutbound)
+		logger = log.With(logger, tag.NexusStageHandlerQueue)
 	case chasmcallback.InvocationTaskGroup:
-		logger = log.With(logger, tag.NexusStageHandlerOutbound)
+		logger = log.With(logger, tag.NexusStageHandlerQueue)
 	}
 
 	return func(_ string, from gobreaker.State, to gobreaker.State) {

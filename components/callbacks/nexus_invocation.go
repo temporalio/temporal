@@ -43,9 +43,8 @@ func (n nexusInvocation) WrapError(result invocationResult, err error) error {
 }
 
 func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) invocationResult {
-	logger := log.With(e.Logger, tag.NexusStageHandlerOutbound)
 	if e.HTTPTraceProvider != nil {
-		traceLogger := log.With(logger,
+		traceLogger := log.With(e.Logger,
 			tag.WorkflowNamespace(ns.Name().String()),
 			tag.Operation("CompleteNexusOperation"),
 			tag.Destination(task.destination),
@@ -80,7 +79,7 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 
 	if err != nil {
 		retryable := isRetryableCallError(err)
-		logger.Error("Callback request failed", tag.Error(err), tag.Bool("retryable", retryable))
+		e.Logger.Error("Callback request failed", tag.Error(err), tag.Bool("retryable", retryable))
 		if retryable {
 			return invocationResultRetry{err}
 		}
