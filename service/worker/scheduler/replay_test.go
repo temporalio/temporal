@@ -84,47 +84,21 @@ func TestReplays(t *testing.T) {
 		t.Run(filepath.Base(f), func(t *testing.T) {
 			for _, tc := range []struct {
 				name            string
+				maxIterations   int
 				versionCeiling  int
 				versionOverride int
 			}{
-				{name: "ceiling-unset", versionCeiling: -1, versionOverride: -1},
-				{name: "ceiling-below-current", versionCeiling: int(scheduler.TriggerImmediatelyTimestamp) - 1, versionOverride: -1},
-				{name: "ceiling-above-current", versionCeiling: int(scheduler.TriggerImmediatelyTimestamp) + 1, versionOverride: -1},
-				{name: "override-latest", versionCeiling: -1, versionOverride: int(scheduler.LatestSchedulerWorkflowVersion)},
+				{name: "default", maxIterations: math.MaxInt, versionCeiling: -1, versionOverride: -1},
+				{name: "lower-spec-limit", maxIterations: 1000, versionCeiling: -1, versionOverride: -1},
+				{name: "ceiling-below-current", maxIterations: math.MaxInt, versionCeiling: int(scheduler.TriggerImmediatelyTimestamp) - 1, versionOverride: -1},
+				{name: "ceiling-above-current", maxIterations: math.MaxInt, versionCeiling: int(scheduler.TriggerImmediatelyTimestamp) + 1, versionOverride: -1},
+				{name: "override-latest", maxIterations: math.MaxInt, versionCeiling: -1, versionOverride: int(scheduler.LatestSchedulerWorkflowVersion)},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
-					replay(t, loadHistory(t, f), schedulerWorkflowForReplay(math.MaxInt, tc.versionCeiling, tc.versionOverride))
+					replay(t, loadHistory(t, f), schedulerWorkflowForReplay(tc.maxIterations, tc.versionCeiling, tc.versionOverride))
 				})
 			}
 		})
-	}
-}
-
-// TestReplaysWithDynamicConfigChange proves that changing the compute-limit dynamic config
-// (Max/WarnIterations) does not break replay of an existing schedule history. The scheduling
-// decisions (next times, cache-completed) live in SideEffect / MutableSideEffect markers, so
-// replay returns the recorded values rather than recomputing them against the new limits.
-// Each history is replayed twice: once with the "original" (effectively disabled) bound, then
-// again with a much lower bound simulating an operator lowering SchedulerSpecMaxIterations.
-//
-// testdata/replay_compute_limit_exceeded.json.gz is the fixture that makes this meaningful (not
-// a no-op): it is a V1 schedule whose spec actually tripped the hard limit while it was set to
-// 1000 (an over-excluded/pathological spec: calendar matches every second, exclude blocks every
-// second except a window ~1800s out, so GetNextTime scans past 1000 excluded candidates). It was
-// captured from a real V1 workflow run; replaying it here at both a lower and a higher bound
-// confirms the limit-exceeded decision is fixed in a SideEffect marker and cannot diverge on a
-// config change.
-func TestReplaysWithDynamicConfigChange(t *testing.T) {
-	files, err := filepath.Glob("testdata/replay_*.json.gz")
-	require.NoError(t, err)
-
-	for _, filename := range files {
-		// Original config: hard limit effectively disabled.
-		replay(t, loadHistory(t, filename), schedulerWorkflowForReplay(math.MaxInt, -1, -1))
-
-		// Simulated dynamic-config change: a much lower hard limit. Replay must still be
-		// deterministic because the recorded next times come from SideEffect markers.
-		replay(t, loadHistory(t, filename), schedulerWorkflowForReplay(1000, -1, -1))
 	}
 }
 
