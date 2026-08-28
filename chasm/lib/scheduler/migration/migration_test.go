@@ -327,14 +327,18 @@ func TestCHASMToLegacyStartScheduleArgs(t *testing.T) {
 	require.True(t, triggerFound)
 }
 
-// TestCHASMToLegacyStartScheduleArgs_BufferedStartsSortedByActualTime verifies that a manual
-// trigger queued before rollback -- whose own due time predates an already-pending regular
-// buffered start -- still ends up first in the converted V1 BufferedStarts list. V1's
-// processWatcherResult has no equivalent of CHASM's Attempt field and assumes BufferedStarts[0]
-// is always the earliest-due pending start; triggerStarts get appended after the regular pending
-// starts regardless of their own due time, so without an explicit sort this assumption would
-// silently break on rollback.
-func TestCHASMToLegacyStartScheduleArgs_BufferedStartsSortedByActualTime(t *testing.T) {
+// TestCHASMToLegacyStartScheduleArgs_PendingTriggerAppendsAfterExistingQueue verifies that a
+// still-pending manual trigger Backfiller -- even though its own due time predates an
+// already-pending regular buffered start -- ends up AFTER that start in the converted V1
+// BufferedStarts list, not before it. A pending trigger Backfiller hasn't been enqueued into the
+// invoker's buffer yet: BackfillerTaskHandler.processTrigger only calls
+// Invoker.EnqueueBufferedStarts (append-only) once its task actually executes, regardless of the
+// trigger's own due time. So simulating "if CHASM kept running" means the trigger belongs after
+// whatever's already buffered. V1's BUFFER_ONE (and "nothing running") always keeps whichever
+// entry is first in the list; if the earlier-due-but-not-yet-enqueued trigger were placed first
+// instead, a rolled-back scheduler with a running workflow would retain the trigger and
+// permanently drop the already-deferred regular start.
+func TestCHASMToLegacyStartScheduleArgs_PendingTriggerAppendsAfterExistingQueue(t *testing.T) {
 	now := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
 	scheduler := &schedulerpb.SchedulerState{
 		Namespace:     "ns",
@@ -347,17 +351,18 @@ func TestCHASMToLegacyStartScheduleArgs_BufferedStartsSortedByActualTime(t *test
 	invoker := &schedulerpb.InvokerState{
 		BufferedStarts: []*schedulespb.BufferedStart{
 			{
-				// Due at -1m: later than the trigger below, but listed first.
+				// Due at -1m: later than the trigger below, but already enqueued.
 				NominalTime:   timestamppb.New(now.Add(-time.Minute)),
 				ActualTime:    timestamppb.New(now.Add(-time.Minute)),
-				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
 			},
 		},
 	}
 	backfillers := map[string]*schedulerpb.BackfillerState{
 		"trigger-1": {
 			BackfillId: "trigger-1",
-			// Queued well before the pending buffered start's own due time.
+			// Requested well before the pending buffered start's own due time, but not
+			// yet enqueued into the invoker's buffer.
 			LastProcessedTime: timestamppb.New(now.Add(-10 * time.Minute)),
 			Request: &schedulerpb.BackfillerState_TriggerRequest{
 				TriggerRequest: &schedulepb.TriggerImmediatelyRequest{
@@ -370,10 +375,53 @@ func TestCHASMToLegacyStartScheduleArgs_BufferedStartsSortedByActualTime(t *test
 	args := CHASMToLegacyStartScheduleArgs(scheduler, nil, invoker, backfillers, nil, nil, nil, now)
 
 	require.Len(t, args.State.BufferedStarts, 2)
-	require.True(t, args.State.BufferedStarts[0].GetManual(), "the earlier-due manual trigger must sort first")
-	require.False(t, args.State.BufferedStarts[1].GetManual())
-	require.True(t,
-		args.State.BufferedStarts[0].GetActualTime().AsTime().Before(args.State.BufferedStarts[1].GetActualTime().AsTime()))
+	require.False(t, args.State.BufferedStarts[0].GetManual(), "the already-enqueued regular start must stay first")
+	require.True(t, args.State.BufferedStarts[1].GetManual(), "the not-yet-enqueued trigger must land after it")
+}
+
+// TestCHASMToLegacyStartScheduleArgs_MultipleTriggersDeterministicOrder verifies that when
+// multiple trigger Backfillers are pending simultaneously (built from a randomized map
+// iteration, so they have no defined relative order of their own), they still land in the
+// converted V1 BufferedStarts list in a deterministic order -- sorted by ActualTime -- rather
+// than depending on map iteration order.
+func TestCHASMToLegacyStartScheduleArgs_MultipleTriggersDeterministicOrder(t *testing.T) {
+	now := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+	scheduler := &schedulerpb.SchedulerState{
+		Namespace:     "ns",
+		NamespaceId:   "ns-id",
+		ScheduleId:    "sched-id",
+		ConflictToken: 1,
+		Schedule:      newTestSchedule(),
+		Info:          &schedulepb.ScheduleInfo{},
+	}
+	backfillers := map[string]*schedulerpb.BackfillerState{
+		"trigger-later": {
+			BackfillId:        "trigger-later",
+			LastProcessedTime: timestamppb.New(now.Add(-2 * time.Minute)),
+			Request: &schedulerpb.BackfillerState_TriggerRequest{
+				TriggerRequest: &schedulepb.TriggerImmediatelyRequest{
+					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+				},
+			},
+		},
+		"trigger-earlier": {
+			BackfillId:        "trigger-earlier",
+			LastProcessedTime: timestamppb.New(now.Add(-5 * time.Minute)),
+			Request: &schedulerpb.BackfillerState_TriggerRequest{
+				TriggerRequest: &schedulepb.TriggerImmediatelyRequest{
+					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+				},
+			},
+		},
+	}
+
+	for range 20 {
+		args := CHASMToLegacyStartScheduleArgs(scheduler, nil, nil, backfillers, nil, nil, nil, now)
+		require.Len(t, args.State.BufferedStarts, 2)
+		require.True(t,
+			args.State.BufferedStarts[0].GetActualTime().AsTime().Before(args.State.BufferedStarts[1].GetActualTime().AsTime()),
+			"triggers must be in ActualTime order regardless of map iteration order")
+	}
 }
 
 // TestCHASMToLegacyStartScheduleArgs_PreservesInvokerBufferedOrder verifies that two
