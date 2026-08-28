@@ -2,6 +2,7 @@ package tests
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 	"time"
 
@@ -16,7 +17,9 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/tests/testcore"
 	"go.temporal.io/server/tools/tdbg"
 	"go.temporal.io/server/tools/tdbg/tdbgtest"
@@ -146,7 +149,8 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestTdbgRefreshTasks_StartsBat
 
 	// tdbg qualifies the job ID with the namespace: the batch workflow runs in the system namespace,
 	// where job IDs from every namespace share one workflow ID space.
-	batchWorkflowID := jobID + ":" + ns
+	batchWorkflowIDPrefix := ns + ":"
+	batchWorkflowID := batchWorkflowIDPrefix + jobID
 	resp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: primitives.SystemLocalNamespace,
 		Execution: &commonpb.WorkflowExecution{WorkflowId: batchWorkflowID},
@@ -161,6 +165,23 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestTdbgRefreshTasks_StartsBat
 	})
 	var notFound *serviceerror.NotFound
 	s.ErrorAs(err, &notFound)
+
+	s.Await(func(s *AdminBatchRefreshWorkflowTasksTestSuite) {
+		resp, err := env.FrontendClient().ListWorkflowExecutions(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: primitives.SystemLocalNamespace,
+			Query: fmt.Sprintf("%s = '%s' AND WorkflowId STARTS_WITH '%s'",
+				sadefs.TemporalNamespaceDivision,
+				batcher.AdminNamespaceDivision,
+				batchWorkflowIDPrefix,
+			),
+		})
+		s.NoError(err)
+		var workflowIDs []string
+		for _, execution := range resp.GetExecutions() {
+			workflowIDs = append(workflowIDs, execution.GetExecution().GetWorkflowId())
+		}
+		s.Contains(workflowIDs, batchWorkflowID)
+	}, 10*time.Second, 500*time.Millisecond)
 }
 
 func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_InvalidArgument_NoOperation() {

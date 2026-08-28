@@ -769,7 +769,7 @@ func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory,
 	if jobID == "" {
 		jobID = fmt.Sprintf("batch-refresh-%d", time.Now().UnixNano())
 	}
-	jobIDWithNS := fmt.Sprintf("%s:%s", jobID, nsName)
+	jobIDWithNS := fmt.Sprintf("%s:%s", nsName, jobID)
 
 	ctx, cancel := newContext(c)
 	defer cancel()
