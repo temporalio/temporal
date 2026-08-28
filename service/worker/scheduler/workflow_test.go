@@ -2282,7 +2282,7 @@ func (s *workflowSuite) TestMigrateSuccess() {
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-		return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(),
+		return schedulerWorkflowWithSpecBuilder(ctx, args, newSpecBuilderForTest(0, 0),
 			func() bool { return enableMigration }, func() bool { return true })
 	}, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
@@ -2333,7 +2333,7 @@ func (s *workflowSuite) TestMigrateFailure() {
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-		return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(),
+		return schedulerWorkflowWithSpecBuilder(ctx, args, newSpecBuilderForTest(0, 0),
 			func() bool { return enableMigration }, func() bool { return true })
 	}, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
@@ -2387,7 +2387,7 @@ func (s *workflowSuite) TestMigrateFailureThenRetrySuccess() {
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-		return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(),
+		return schedulerWorkflowWithSpecBuilder(ctx, args, newSpecBuilderForTest(0, 0),
 			func() bool { return enableMigration }, func() bool { return true })
 	}, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
@@ -2449,7 +2449,7 @@ func (s *workflowSuite) TestMigrateFailureThenSignal() {
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 100
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-		return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(),
+		return schedulerWorkflowWithSpecBuilder(ctx, args, newSpecBuilderForTest(0, 0),
 			func() bool { return enableMigration }, func() bool { return true })
 	}, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
@@ -2493,7 +2493,7 @@ func (s *workflowSuite) TestMigrateDynamicConfig() {
 
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-		return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), func() bool { return true }, func() bool { return true })
+		return schedulerWorkflowWithSpecBuilder(ctx, args, newSpecBuilderForTest(0, 0), func() bool { return true }, func() bool { return true })
 	}, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
@@ -2542,7 +2542,7 @@ func (s *workflowSuite) TestMigrateDynamicConfigFlipsMidRun() {
 
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-		return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), func() bool { return enabled }, func() bool { return true })
+		return schedulerWorkflowWithSpecBuilder(ctx, args, newSpecBuilderForTest(0, 0), func() bool { return enabled }, func() bool { return true })
 	}, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
@@ -2581,7 +2581,7 @@ func (s *workflowSuite) TestMigrateDynamicConfigFailure() {
 
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-		return schedulerWorkflowWithSpecBuilder(ctx, args, NewSpecBuilder(), func() bool { return true }, func() bool { return true })
+		return schedulerWorkflowWithSpecBuilder(ctx, args, newSpecBuilderForTest(0, 0), func() bool { return true }, func() bool { return true })
 	}, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
@@ -2619,7 +2619,22 @@ func (s *workflowSuite) TestMigrateDynamicConfigDisabledNoMigration() {
 	CurrentTweakablePolicies.EnableCHASMMigration = false
 	defer func() { CurrentTweakablePolicies = prevTweakables }()
 
-	// No activity mock registered -- if migration is attempted, the test will fail.
+	s.env.OnActivity(new(activities).StartWorkflow, mock.Anything, mock.Anything).Maybe().Return(
+		func(context.Context, *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
+			return &schedulespb.StartWorkflowResponse{
+				RunId:         uuid.NewString(),
+				RealStartTime: timestamppb.New(s.env.Now()),
+			}, nil
+		})
+	s.env.OnActivity(new(activities).WatchWorkflow, mock.Anything, mock.Anything).Maybe().Return(
+		&schedulespb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil)
+
+	migrateCalls := 0
+	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Maybe().Return(
+		func(context.Context, *schedulerpb.CreateFromMigrationStateRequest) error {
+			migrateCalls++
+			return nil
+		})
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 3
 	s.env.SetStartTime(baseStartTime)
@@ -2643,4 +2658,5 @@ func (s *workflowSuite) TestMigrateDynamicConfigDisabledNoMigration() {
 	// Workflow should CAN normally without attempting migration.
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	s.Zero(migrateCalls)
 }

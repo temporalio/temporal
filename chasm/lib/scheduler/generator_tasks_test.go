@@ -1,6 +1,7 @@
 package scheduler_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -9,24 +10,48 @@ import (
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/chasmtest"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/testing/testlogger"
 	queueerrors "go.temporal.io/server/service/history/queues/errors"
 	"go.temporal.io/server/service/history/tasks"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func newGeneratorHandler(env *testEnv) *scheduler.GeneratorTaskHandler {
-	return scheduler.NewGeneratorTaskHandler(scheduler.GeneratorTaskHandlerOptions{
+type generatorHandlerOption func(*scheduler.GeneratorTaskHandlerOptions)
+
+// withTweakables overrides the handler config's Tweakables, starting from the
+// current defaults so callers set only the fields they care about.
+func withTweakables(fn func(*scheduler.Tweakables)) generatorHandlerOption {
+	return func(o *scheduler.GeneratorTaskHandlerOptions) {
+		tw := o.Config.Tweakables("")
+		fn(&tw)
+		o.Config.Tweakables = func(string) scheduler.Tweakables { return tw }
+	}
+}
+
+func withGeneratorMetrics(h metrics.Handler) generatorHandlerOption {
+	return func(o *scheduler.GeneratorTaskHandlerOptions) { o.MetricsHandler = h }
+}
+
+func newGeneratorHandler(env *testEnv, opts ...generatorHandlerOption) *scheduler.GeneratorTaskHandler {
+	o := scheduler.GeneratorTaskHandlerOptions{
 		Config:         defaultConfig(),
 		MetricsHandler: metrics.NoopMetricsHandler,
 		BaseLogger:     env.Logger,
 		SpecProcessor:  env.SpecProcessor,
-		SpecBuilder:    legacyscheduler.NewSpecBuilder(),
-	})
+		SpecBuilder:    newLegacySpecBuilder(0, 0),
+	}
+	for _, opt := range opts {
+		opt(&o)
+	}
+	return scheduler.NewGeneratorTaskHandler(o)
 }
 
 func TestGeneratorTask_Execute_ProcessTimeRangeFails(t *testing.T) {
@@ -103,6 +128,80 @@ func TestGeneratorTask_ExecuteBufferTask_Basic(t *testing.T) {
 	require.True(t, env.HasTask(&tasks.ChasmTask{}, chasm.TaskScheduledTimeImmediate))
 }
 
+// Once the buffer hits MaxBufferSize, further automated actions are dropped,
+// BufferDropped is incremented (accumulating across ticks), and the overrun
+// metric is recorded.
+func TestGeneratorTask_BufferOverrunDropsActions(t *testing.T) {
+	env := newTestEnv(t)
+
+	rec := metricstest.NewCaptureHandler()
+	capture := rec.StartCapture()
+	defer rec.StopCapture(capture)
+
+	const maxBufferSize = 2
+	handler := newGeneratorHandler(env,
+		withTweakables(func(tw *scheduler.Tweakables) { tw.MaxBufferSize = maxBufferSize }),
+		withGeneratorMetrics(rec))
+
+	ctx := env.MutableContext()
+	sched := env.Scheduler
+	generator := sched.Generator.Get(ctx)
+	invoker := sched.Invoker.Get(ctx)
+
+	// Pull the high water mark back so the range yields 5 actions, exceeding the
+	// buffer capacity of 2.
+	rewindHWM := func() time.Time {
+		hwm := ctx.Now(generator).UTC().Add(-defaultInterval * 5)
+		generator.LastProcessedTime = timestamppb.New(hwm)
+		return hwm
+	}
+	rewindHWM()
+	require.NoError(t, handler.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{}))
+
+	// Only the capacity is buffered; the 3 remaining actions are dropped.
+	require.Len(t, invoker.BufferedStarts, maxBufferSize)
+	require.Equal(t, int64(3), sched.Info.BufferDropped)
+
+	// A second tick with the buffer already full drops every action, accumulates
+	// BufferDropped, and still advances the high water mark.
+	hwm := rewindHWM()
+	require.NoError(t, handler.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{}))
+	require.Greater(t, sched.Info.BufferDropped, int64(3), "BufferDropped should accumulate across ticks")
+	require.True(t, generator.LastProcessedTime.AsTime().After(hwm), "HWM advances even when all actions drop")
+
+	// The overrun counter total tracks BufferDropped.
+	recs := capture.Snapshot()[metrics.ScheduleBufferOverruns.Name()]
+	require.NotEmpty(t, recs, "expected the buffer overrun counter to be recorded")
+	var total int64
+	for _, r := range recs {
+		v, ok := r.Value.(int64)
+		require.True(t, ok, "expected int64 counter value, got %T", r.Value)
+		total += v
+	}
+	require.Equal(t, sched.Info.BufferDropped, total)
+}
+
+// A non-positive MaxBufferSize disables the limit: nothing is dropped even over
+// a range that would overflow a small buffer.
+func TestGeneratorTask_MaxBufferSizeDisabledBuffersAll(t *testing.T) {
+	env := newTestEnv(t)
+
+	handler := newGeneratorHandler(env, withTweakables(func(tw *scheduler.Tweakables) { tw.MaxBufferSize = 0 }))
+
+	ctx := env.MutableContext()
+	sched := env.Scheduler
+	generator := sched.Generator.Get(ctx)
+	invoker := sched.Invoker.Get(ctx)
+
+	highWatermark := ctx.Now(generator).UTC().Add(-defaultInterval * 5)
+	generator.LastProcessedTime = timestamppb.New(highWatermark)
+
+	require.NoError(t, handler.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{}))
+
+	require.Len(t, invoker.BufferedStarts, 5)
+	require.Zero(t, sched.Info.BufferDropped)
+}
+
 func TestGeneratorTask_UpdateFutureActionTimes_UnlimitedActions(t *testing.T) {
 	env := newTestEnv(t)
 	handler := newGeneratorHandler(env)
@@ -132,6 +231,41 @@ func TestGeneratorTask_UpdateFutureActionTimes_LimitedActions(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Len(t, generator.FutureActionTimes, 2)
+}
+
+func TestGeneratorTask_UpdateFutureActionTimes_NegativeRemainingActionsDoesNotPanic(t *testing.T) {
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+	engine, engineCtx := newTestEngineContext(t, logger)
+
+	input := defaultSchedule()
+	input.State.LimitedActions = true
+	input.State.RemainingActions = -1
+
+	result, err := chasm.StartExecution(
+		engineCtx,
+		chasm.ExecutionKey{NamespaceID: namespaceID, BusinessID: scheduleID},
+		scheduler.CreateScheduler,
+		&schedulerpb.CreateScheduleRequest{
+			NamespaceId: namespaceID,
+			FrontendRequest: &workflowservice.CreateScheduleRequest{
+				Namespace:  namespace,
+				ScheduleId: scheduleID,
+				Schedule:   input,
+			},
+		},
+	)
+	require.NoError(t, err)
+
+	rootRef := chasm.NewComponentRef[*scheduler.Scheduler](result.ExecutionKey)
+	_, err = engine.FirePureTasks(rootRef, time.Now())
+	require.NoError(t, err)
+
+	_, err = chasm.ReadComponent(engineCtx, rootRef,
+		func(s *scheduler.Scheduler, ctx chasm.Context, _ struct{}) (struct{}, error) {
+			require.Empty(t, s.Generator.Get(ctx).FutureActionTimes)
+			return struct{}{}, nil
+		}, struct{}{})
+	require.NoError(t, err)
 }
 
 func TestGeneratorTask_Idle_SetsIdleCloseTime(t *testing.T) {
@@ -173,6 +307,52 @@ func TestGeneratorTask_NonIdle_ClearsIdleCloseTime(t *testing.T) {
 
 	require.NotEmpty(t, generator.FutureActionTimes)
 	require.Nil(t, sched.IdleCloseTime, "expected IdleCloseTime to be cleared when the schedule has work")
+}
+
+// TestGeneratorTask_FutureActionTimesRespectLastProcessedTimeWatermark pins the
+// fix for advertised future actions preceding the generator's own high water
+// mark. Generator execution clamps its processed range to LastProcessedTime,
+// so any occurrence at or before it has already been processed (or skipped) -
+// UpdateFutureActionTimes must not advertise it as still upcoming.
+//
+// Uses the scheduler-specific chasm test engine helper, rather than the
+// newTestEnv rapid harness, so the watermark mutation and the task execution
+// that reads it cross the same transaction boundary as production.
+func TestGeneratorTask_FutureActionTimesRespectLastProcessedTimeWatermark(t *testing.T) {
+	env := newSchedulerTestEngine(t, defaultSchedule())
+
+	// Push the generator's high water mark ten intervals ahead of "now",
+	// simulating a watermark that execution has already advanced past.
+	watermark := env.timeSource.Now().Add(10 * defaultInterval)
+	var generator *scheduler.Generator
+	require.NoError(t, env.updateScheduler(func(s *scheduler.Scheduler, ctx chasm.MutableContext) error {
+		generator = s.Generator.Get(ctx)
+		generator.LastProcessedTime = timestamppb.New(watermark)
+		generator.Generate(ctx)
+		return nil
+	}))
+
+	handler := scheduler.NewGeneratorTaskHandler(scheduler.GeneratorTaskHandlerOptions{
+		Config:         defaultConfig(),
+		MetricsHandler: metrics.NoopMetricsHandler,
+		BaseLogger:     env.logger,
+		SpecProcessor:  scheduler.NewSpecProcessor(defaultConfig(), metrics.NoopMetricsHandler, env.logger, newLegacySpecBuilder(0, 0)),
+		SpecBuilder:    newLegacySpecBuilder(0, 0),
+	})
+	dropped, err := chasmtest.ExecutePureTask(
+		context.Background(), env.engine, generator, handler, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{})
+	require.NoError(t, err)
+	require.False(t, dropped)
+
+	require.NoError(t, env.readScheduler(func(s *scheduler.Scheduler, ctx chasm.Context) error {
+		generator := s.Generator.Get(ctx)
+		require.NotEmpty(t, generator.GetFutureActionTimes())
+		for _, future := range generator.GetFutureActionTimes() {
+			require.True(t, future.AsTime().After(watermark),
+				"advertised future action %v is not after watermark %v", future.AsTime(), watermark)
+		}
+		return nil
+	}))
 }
 
 func TestGeneratorTask_UpdateFutureActionTimes_SkipsBeforeUpdateTime(t *testing.T) {
@@ -255,4 +435,61 @@ func TestUnpause_ResumesProcessing(t *testing.T) {
 	// side-effect tasks to start workflows. Without the fix, nothing runs.
 	require.True(t, env.HasTask(&tasks.ChasmTask{}, chasm.TaskScheduledTimeImmediate),
 		"schedule should resume processing after unpause")
+}
+
+// A nil or non-positive catchup window means "unset" and resolves to the
+// default (large) window, so automated actions that were missed while the
+// schedule was behind are caught up rather than dropped. Only a positive value
+// below the minimum is clamped up to MinCatchupWindow, which the final case
+// exercises to prove the window is actually enforced (so the "nothing missed"
+// result for the non-positive cases is meaningful, not a dead counter).
+//
+// With the default tweakables (MinCatchupWindow=10s, DefaultCatchupWindow=365d),
+// rewinding the high water mark by 5 intervals yields 5 automated actions each
+// 1-5 minutes old. Under the fix, a zero/negative window resolves to the default
+// and all 5 are caught up; under the old behavior it resolved to the 10s minimum
+// and all 5 would be dropped.
+func TestGeneratorTask_CatchupWindowResolvesNonPositiveToDefault(t *testing.T) {
+	cases := []struct {
+		name          string
+		catchupWindow *durationpb.Duration
+		caughtUp      bool // true: default window catches up all actions; false: window is enforced
+	}{
+		{"nil resolves to default", nil, true},
+		{"zero resolves to default", durationpb.New(0), true},
+		{"negative resolves to default", durationpb.New(-5 * time.Second), true},
+		{"below-min positive is clamped and enforced", durationpb.New(time.Second), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newTestEnv(t)
+			handler := newGeneratorHandler(env)
+
+			ctx := env.MutableContext()
+			sched := env.Scheduler
+			sched.Schedule.Policies.CatchupWindow = tc.catchupWindow
+
+			generator := sched.Generator.Get(ctx)
+			invoker := sched.Invoker.Get(ctx)
+
+			// Rewind the high water mark so the range yields 5 automated actions,
+			// each between 1 and 5 minutes old (all older than MinCatchupWindow).
+			hwm := ctx.Now(generator).UTC().Add(-defaultInterval * 5)
+			generator.LastProcessedTime = timestamppb.New(hwm)
+
+			require.NoError(t, handler.Execute(ctx, generator, chasm.TaskAttributes{}, &schedulerpb.GeneratorTask{}))
+
+			if tc.caughtUp {
+				require.Len(t, invoker.BufferedStarts, 5,
+					"a non-positive window should resolve to the default and catch up every missed action")
+				require.Zero(t, sched.Info.MissedCatchupWindow,
+					"no action should be missed when the window resolves to the default")
+			} else {
+				require.Less(t, len(invoker.BufferedStarts), 5,
+					"a below-min window is clamped to MinCatchupWindow and should drop older actions")
+				require.Positive(t, sched.Info.MissedCatchupWindow,
+					"actions older than the enforced window should be counted as missed")
+			}
+		})
+	}
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -57,6 +58,7 @@ type (
 		identity                string
 		workerControlTaskQueue  string
 		workflowTaskCompletedID int64
+		workflowTaskDeployment  *deploymentpb.Deployment
 
 		// internal state
 		hasBufferedEventsOrMessages         bool
@@ -111,6 +113,7 @@ func newWorkflowTaskCompletedHandler(
 	identity string,
 	workerControlTaskQueue string,
 	workflowTaskCompletedID int64,
+	workflowTaskDeployment *deploymentpb.Deployment,
 	mutableState historyi.MutableState,
 	updateRegistry update.Registry,
 	effects effect.Controller,
@@ -132,6 +135,7 @@ func newWorkflowTaskCompletedHandler(
 		identity:                identity,
 		workerControlTaskQueue:  workerControlTaskQueue,
 		workflowTaskCompletedID: workflowTaskCompletedID,
+		workflowTaskDeployment:  workflowTaskDeployment,
 
 		// internal state
 		hasBufferedEventsOrMessages:     hasBufferedEventsOrMessages,
@@ -365,8 +369,7 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 			err = hsmHandler(ctx, handler.mutableState, validator, handlerOpts.WorkflowTaskCompletedEventID, command)
 		}
 
-		var failWFTErr chasmworkflow.FailWorkflowTaskError
-		if errors.As(err, &failWFTErr) {
+		if failWFTErr, ok := errors.AsType[chasmworkflow.FailWorkflowTaskError](err); ok {
 			if failWFTErr.TerminateWorkflow {
 				return nil, handler.terminateWorkflow(failWFTErr.Cause, failWFTErr)
 			}
@@ -604,7 +607,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		uuid.NewString(),
 		handler.identity,
 		stamp,
-		nil,
+		handler.workflowTaskDeployment,
 		nil,
 		handler.workerControlTaskQueue, // Eager: activity runs on the same worker that completed the WFT.
 		shardClock,
@@ -628,6 +631,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		ai.Version,
 		ai.StartVersion,
 		nil,
+		0,
 	)
 	serializedToken, err := handler.tokenSerializer.Serialize(taskToken)
 	if err != nil {
@@ -655,6 +659,13 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		WorkflowType:                handler.mutableState.GetWorkflowType(),
 		WorkflowNamespace:           handler.mutableState.GetNamespaceEntry().Name().String(),
 		Priority:                    ai.Priority,
+		RetryPolicy: &commonpb.RetryPolicy{
+			InitialInterval:        ai.RetryInitialInterval,
+			BackoffCoefficient:     ai.RetryBackoffCoefficient,
+			MaximumInterval:        ai.RetryMaximumInterval,
+			MaximumAttempts:        ai.RetryMaximumAttempts,
+			NonRetryableErrorTypes: ai.RetryNonRetryableErrorTypes,
+		},
 	}
 	metrics.ActivityEagerExecutionCounter.With(
 		workflow.GetPerTaskQueueFamilyScope(handler.metricsHandler, handler.mutableState.GetNamespaceEntry().Name(), ai.TaskQueue, handler.config),
@@ -729,6 +740,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandRequestCancelActivity(
 					ai.Version,
 					ai.StartVersion,
 					nil,
+					0,
 				))
 				if err != nil {
 					return nil, err
@@ -1191,6 +1203,11 @@ func (handler *workflowTaskCompletedHandler) handleCommandStartChildWorkflow(
 		return nil, err
 	}
 
+	// Structural validation for VersioningOverride present on Start Child Workflow
+	if err := worker_versioning.ValidateVersioningOverrideStructure(attr.GetVersioningOverride()); err != nil {
+		return nil, handler.failWorkflowTask(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_START_CHILD_EXECUTION_ATTRIBUTES, err)
+	}
+
 	if handler.mutableState.GetAssignedBuildId() == "" {
 		// TODO: this is supported in new versioning [cleanup-old-wv]
 		if attr.InheritBuildId && attr.TaskQueue.GetName() != "" && attr.TaskQueue.Name != handler.mutableState.GetExecutionInfo().TaskQueue {
@@ -1442,7 +1459,7 @@ func (handler *workflowTaskCompletedHandler) handleRetry(
 		handler.mutableState.GetNamespaceEntry(),
 		handler.mutableState.GetWorkflowKey().WorkflowID,
 		newRunID,
-		handler.shard.GetTimeSource().Now(),
+		handler.mutableState.Now(),
 		handler.mutableState,
 	)
 	if err != nil {
@@ -1502,7 +1519,7 @@ func (handler *workflowTaskCompletedHandler) handleCron(
 		handler.mutableState.GetNamespaceEntry(),
 		handler.mutableState.GetWorkflowKey().WorkflowID,
 		newRunID,
-		handler.shard.GetTimeSource().Now(),
+		handler.mutableState.Now(),
 		handler.mutableState,
 	)
 	if err != nil {
@@ -1549,8 +1566,7 @@ func (handler *workflowTaskCompletedHandler) failWorkflowTaskOnInvalidArgument(
 	wtFailedCause enumspb.WorkflowTaskFailedCause,
 	err error,
 ) error {
-	var invalidArgument *serviceerror.InvalidArgument
-	if errors.As(err, &invalidArgument) {
+	if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
 		return handler.failWorkflowTask(wtFailedCause, err)
 	}
 	return err

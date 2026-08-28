@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
@@ -63,8 +64,9 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 
 		testInput := payload.EncodeString("test-input")
 		testHeader := map[string]string{"test-key": "test-value"}
-		testScheduleToStartTimeout := 2 * time.Minute
-		testStartToCloseTimeout := 3 * time.Minute
+		testScheduleToCloseTimeout := 24 * time.Hour
+		testScheduleToStartTimeout := 24 * time.Hour
+		testStartToCloseTimeout := 24 * time.Hour
 		testUserMetadata := &sdkpb.UserMetadata{
 			Summary: payload.EncodeString("test-summary"),
 			Details: payload.EncodeString("test-details"),
@@ -79,6 +81,7 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 			Endpoint:               endpointName,
 			Input:                  testInput,
 			NexusHeader:            testHeader,
+			ScheduleToCloseTimeout: durationpb.New(testScheduleToCloseTimeout),
 			ScheduleToStartTimeout: durationpb.New(testScheduleToStartTimeout),
 			StartToCloseTimeout:    durationpb.New(testStartToCloseTimeout),
 			UserMetadata:           testUserMetadata,
@@ -88,13 +91,14 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 		s.True(startResp.GetStarted())
 
 		// Ensure the operation is in a stable STARTED state.
-		_, err = env.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+		pollResp, err := env.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
 			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 			WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
 		})
 		s.NoError(err)
+		s.Equal(enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED, pollResp.GetWaitStage())
 
 		for _, tc := range []struct {
 			name  string
@@ -113,7 +117,7 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 				s.Equal(startResp.RunId, descResp.RunId)
 
 				info := descResp.GetInfo()
-				protorequire.ProtoEqual(s.T(), &nexuspb.NexusOperationExecutionInfo{
+				s.ProtoEqual(&nexuspb.NexusOperationExecutionInfo{
 					OperationId:            "test-op",
 					RunId:                  startResp.RunId,
 					Endpoint:               endpointName,
@@ -121,7 +125,7 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 					Operation:              "test-operation",
 					Status:                 enumspb.NEXUS_OPERATION_EXECUTION_STATUS_RUNNING,
 					State:                  enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED,
-					ScheduleToCloseTimeout: durationpb.New(10 * time.Minute),
+					ScheduleToCloseTimeout: durationpb.New(testScheduleToCloseTimeout),
 					ScheduleToStartTimeout: durationpb.New(testScheduleToStartTimeout),
 					StartToCloseTimeout:    durationpb.New(testStartToCloseTimeout),
 					NexusHeader:            testHeader,
@@ -292,22 +296,12 @@ func (s *NexusStandaloneTestSuite) TestDescribeStandaloneNexusOperation() {
 			terminateErrCh <- err
 		}()
 
-		select {
-		case err := <-terminateErrCh:
-			s.NoError(err)
-		case <-s.Context().Done():
-			s.T().Fatal("TerminateNexusOperationExecution timed out")
-		}
+		s.NoError(await.Rcv(s.T(), terminateErrCh))
 
 		// Verify the longpoll result.
-		var longPollResp *workflowservice.DescribeNexusOperationExecutionResponse
-		select {
-		case result := <-describeResultCh:
-			s.NoError(result.err)
-			longPollResp = result.resp
-		case <-s.Context().Done():
-			s.T().Fatal("DescribeNexusOperationExecution timed out")
-		}
+		result := await.Rcv(s.T(), describeResultCh)
+		s.NoError(result.err)
+		longPollResp := result.resp
 
 		s.Equal(startResp.RunId, longPollResp.GetRunId())
 		s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_TERMINATED, longPollResp.GetInfo().GetStatus())
@@ -503,7 +497,7 @@ func (s *NexusStandaloneTestSuite) TestDescribeStandaloneNexusOperation() {
 			protorequire.ProtoEqual(t, expectedResult, pollResp.GetResult())
 		}, 10*time.Second, 100*time.Millisecond)
 
-		s.NoError(<-pollerErrCh)
+		s.NoError(await.Rcv(s.T(), pollerErrCh))
 	})
 
 	s.Run("IncludeOutcome_Failure", func(s *NexusStandaloneTestSuite) {
@@ -819,7 +813,7 @@ func (s *NexusStandaloneTestSuite) TestDescribeStandaloneNexusOperation() {
 					tc.assertOutcome(t, descResp, pollResp)
 				}, 10*time.Second, 100*time.Millisecond)
 
-				s.NoError(<-pollerErrCh)
+				s.NoError(await.Rcv(s.T(), pollerErrCh))
 			})
 		}
 	})
@@ -865,6 +859,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCancel() {
 		})
 		s.NoError(err)
 
+		beforeCancelRequest := time.Now()
 		_, err = env.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
 			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
@@ -872,6 +867,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCancel() {
 			Reason:      "test cancellation",
 		})
 		s.NoError(err)
+		afterCancelRequest := time.Now()
 
 		// Verify state after cancel — operation is still running
 		descResp, err := env.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
@@ -897,6 +893,8 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCancel() {
 		}, descResp.GetInfo(), protorequire.IgnoreFields("operation_token", "last_attempt_complete_time", "request_id", "schedule_time", "expiration_time", "execution_duration", "cancellation_info"))
 		cancellationInfo := descResp.GetInfo().GetCancellationInfo()
 		s.NotNil(cancellationInfo)
+		s.NotNil(cancellationInfo.GetRequestedTime())
+		s.WithinRange(cancellationInfo.GetRequestedTime().AsTime(), beforeCancelRequest, afterCancelRequest)
 		s.NotEqual(enumspb.NEXUS_OPERATION_CANCELLATION_STATE_UNSPECIFIED, cancellationInfo.GetState())
 		protorequire.ProtoEqual(s.T(), &nexuspb.NexusOperationExecutionCancellationInfo{
 			Attempt: 1,
@@ -948,6 +946,66 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCancel() {
 		})
 		s.Error(err)
 		s.Contains(err.Error(), "cancellation already requested")
+	})
+
+	s.Run("RetryAfterTerminalStateAndIDReuse", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		endpointName := env.createRandomNexusEndpoint(s.Context(), s.T()).GetSpec().GetName()
+
+		firstStartResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: "test-op",
+			Endpoint:    endpointName,
+		})
+		s.NoError(err)
+
+		cancelRequest := &workflowservice.RequestCancelNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       firstStartResp.RunId,
+			RequestId:   "cancel-request-id",
+		}
+		_, err = env.FrontendClient().RequestCancelNexusOperationExecution(
+			s.Context(),
+			cancelRequest,
+		)
+		s.NoError(err)
+
+		_, err = env.FrontendClient().TerminateNexusOperationExecution(
+			s.Context(),
+			&workflowservice.TerminateNexusOperationExecutionRequest{
+				Namespace:   env.Namespace().String(),
+				OperationId: "test-op",
+				RunId:       firstStartResp.RunId,
+				RequestId:   "terminate-request-id",
+			},
+		)
+		s.NoError(err)
+
+		secondStartResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: "test-op",
+			Endpoint:    endpointName,
+			RequestId:   "second-start-request-id",
+		})
+		s.NoError(err)
+		s.NotEqual(firstStartResp.RunId, secondStartResp.RunId)
+
+		// The retry targets the closed execution and must not cancel its replacement.
+		_, err = env.FrontendClient().RequestCancelNexusOperationExecution(
+			s.Context(),
+			cancelRequest,
+		)
+		s.NoError(err)
+
+		describeResp, err := env.FrontendClient().DescribeNexusOperationExecution(
+			s.Context(),
+			&workflowservice.DescribeNexusOperationExecutionRequest{
+				Namespace:   env.Namespace().String(),
+				OperationId: "test-op",
+				RunId:       secondStartResp.RunId,
+			},
+		)
+		s.NoError(err)
+		s.Nil(describeResp.GetInfo().GetCancellationInfo())
 	})
 
 	s.Run("RequestCancel_ForwardsOriginalNexusHeaders", func(s *NexusStandaloneTestSuite) {
@@ -1658,7 +1716,7 @@ func (s *NexusStandaloneTestSuite) TestCountStandaloneNexusOperation() {
 			Query:     "GROUP BY Endpoint",
 		})
 		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
-		s.ErrorContains(err, "'GROUP BY' clause is only supported for ExecutionStatus")
+		s.ErrorContains(err, "'GROUP BY' clause is not supported for search attribute")
 	})
 
 	s.Run("InvalidQuery", func(s *NexusStandaloneTestSuite) {
@@ -1826,11 +1884,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 			pollResultCh <- pollResult{resp: resp, err: err}
 		}()
 
-		select {
-		case <-pollStartedCh:
-		case <-s.Context().Done():
-			s.T().Fatal("PollNexusOperationExecution did not start before timeout")
-		}
+		await.Rcv(s.T(), pollStartedCh)
 
 		// PollNexusOperationExecution should not resolve before the operation is started.
 		select {
@@ -1882,17 +1936,13 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 		s.NoError(err)
 
 		// Verify the poll result.
-		select {
-		case result := <-pollResultCh:
-			s.NoError(result.err)
-			protorequire.ProtoEqual(s.T(), &workflowservice.PollNexusOperationExecutionResponse{
-				RunId:          startResp.RunId,
-				WaitStage:      enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
-				OperationToken: "test-operation-token",
-			}, result.resp)
-		case <-s.Context().Done():
-			s.T().Fatal("PollNexusOperationExecution did not resolve before timeout")
-		}
+		result := await.Rcv(s.T(), pollResultCh)
+		s.NoError(result.err)
+		protorequire.ProtoEqual(s.T(), &workflowservice.PollNexusOperationExecutionResponse{
+			RunId:          startResp.RunId,
+			WaitStage:      enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
+			OperationToken: "test-operation-token",
+		}, result.resp)
 
 		descResp, err := env.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
 			Namespace:   env.Namespace().String(),
@@ -1951,11 +2001,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 					pollResultCh <- pollResult{resp: resp, err: err}
 				}()
 
-				select {
-				case <-pollStartedCh:
-				case <-s.Context().Done():
-					s.T().Fatal("PollNexusOperationExecution did not start before timeout")
-				}
+				await.Rcv(s.T(), pollStartedCh)
 
 				// PollNexusOperationExecution should not resolve before the operation is closed.
 				select {
@@ -1977,20 +2023,10 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 					terminateErrCh <- err
 				}()
 
-				select {
-				case err := <-terminateErrCh:
-					s.NoError(err)
-				case <-s.Context().Done():
-					s.T().Fatal("TerminateNexusOperationExecution timed out")
-				}
+				s.NoError(await.Rcv(s.T(), terminateErrCh))
 
 				// Verify the poll result.
-				var result pollResult
-				select {
-				case result = <-pollResultCh:
-				case <-s.Context().Done():
-					s.T().Fatal("PollNexusOperationExecution did not resolve before timeout")
-				}
+				result := await.Rcv(s.T(), pollResultCh)
 				s.NoError(result.err)
 				pollResp := result.resp
 
@@ -2104,7 +2140,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 			}, pollResp.GetFailure())
 		}, 10*time.Second, 100*time.Millisecond)
 
-		s.NoError(<-pollerErrCh)
+		s.NoError(await.Rcv(s.T(), pollerErrCh))
 	})
 
 	s.Run("NamespaceNotFound", func(s *NexusStandaloneTestSuite) {
@@ -2164,7 +2200,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 	})
 }
 
-func (s *NexusStandaloneTestSuite) TestAsyncCompletionIgnoresTransitionFieldsInCallbackToken() {
+func (s *NexusStandaloneTestSuite) TestAsyncCompletionIgnoresExecutionTransitionInCallbackToken() {
 	env := s.newTestEnv()
 	handlerLink := &commonpb.Link_WorkflowEvent{
 		Namespace:  env.Namespace().String(),
@@ -2207,15 +2243,9 @@ func (s *NexusStandaloneTestSuite) TestAsyncCompletionIgnoresTransitionFieldsInC
 		Endpoint:    endpointName,
 	})
 	s.NoError(err)
-	var callbackToken string
-	var callbackURL string
-	select {
-	case callback := <-callbackCh:
-		callbackToken = callback.token
-		callbackURL = callback.url
-	case <-s.Context().Done():
-		s.FailNow("timed out waiting for Nexus callback details", s.Context().Err().Error())
-	}
+	callback := await.Rcv(s.T(), callbackCh)
+	callbackToken := callback.token
+	callbackURL := callback.url
 
 	gen := &commonnexus.CallbackTokenGenerator{}
 	decodedToken, err := commonnexus.DecodeCallbackToken(callbackToken)
@@ -2223,8 +2253,11 @@ func (s *NexusStandaloneTestSuite) TestAsyncCompletionIgnoresTransitionFieldsInC
 	completionToken, err := gen.DecodeCompletion(decodedToken)
 	s.NoError(err)
 
-	// Deliberately corrupt transition fields in the callback token. Completion should
-	// still succeed because the handler strips these fields before validation.
+	// Deliberately corrupt the execution transition in the callback token. Completion should still
+	// succeed: it resolves at RefConsistencyLevelComponentCreation, which ignores the execution
+	// transition (staleness is checked against the component's creation transition instead) and
+	// re-establishes identity by request ID. The creation transition is left valid, as the framework
+	// legitimately relies on it to guarantee the loaded state knows about the operation.
 	ref := &persistencespb.ChasmComponentRef{}
 	s.NoError(ref.Unmarshal(completionToken.GetComponentRef()))
 	s.NotNil(ref.ExecutionVersionedTransition)
@@ -2232,10 +2265,6 @@ func (s *NexusStandaloneTestSuite) TestAsyncCompletionIgnoresTransitionFieldsInC
 	ref.ExecutionVersionedTransition = &persistencespb.VersionedTransition{
 		NamespaceFailoverVersion: ref.ExecutionVersionedTransition.NamespaceFailoverVersion + 1000,
 		TransitionCount:          ref.ExecutionVersionedTransition.TransitionCount + 1000,
-	}
-	ref.ComponentInitialVersionedTransition = &persistencespb.VersionedTransition{
-		NamespaceFailoverVersion: ref.ComponentInitialVersionedTransition.NamespaceFailoverVersion + 1000,
-		TransitionCount:          ref.ComponentInitialVersionedTransition.TransitionCount + 1000,
 	}
 	completionToken.ComponentRef, err = ref.Marshal()
 	s.NoError(err)

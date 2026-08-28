@@ -93,6 +93,7 @@ func (s *resetterSuite) SetupTest() {
 		s.logger,
 		s.mockShard.GetThrottledLogger(),
 		s.mockShard.GetMetricsHandler(),
+		nil,
 	)
 	s.newRunID = uuid.NewString()
 
@@ -108,6 +109,98 @@ func (s *resetterSuite) TearDownTest() {
 }
 
 func (s *resetterSuite) TestResetWorkflow_NoError() {
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	branchToken := []byte("some random branch token")
+	lastEventID := int64(500)
+	version := int64(123)
+	versionHistory := versionhistory.NewVersionHistory(
+		branchToken,
+		[]*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(lastEventID, version)},
+	)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
+
+	baseEventID := lastEventID - 100
+	baseVersion := version
+	incomingFirstEventID := baseEventID + 12
+	incomingVersion := baseVersion + 3
+
+	rebuildStats := RebuildStats{
+		HistorySize:          9999,
+		ExternalPayloadSize:  1234,
+		ExternalPayloadCount: 56,
+	}
+	newBranchToken := []byte("other random branch token")
+	resurrectedBranchToken := []byte("resurrected branch token")
+
+	s.mockBaseMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{VersionHistories: versionHistories}).AnyTimes()
+
+	mockBaseWorkflowReleaseFnCalled := false
+	mockBaseWorkflowReleaseFn := func(err error) {
+		mockBaseWorkflowReleaseFnCalled = true
+	}
+	mockBaseWorkflow := NewMockWorkflow(s.controller)
+	mockBaseWorkflow.EXPECT().GetMutableState().Return(s.mockBaseMutableState).AnyTimes()
+	mockBaseWorkflow.EXPECT().GetReleaseFn().Return(mockBaseWorkflowReleaseFn)
+
+	s.mockTransactionMgr.EXPECT().LoadWorkflow(
+		ctx,
+		s.namespaceID,
+		s.workflowID,
+		s.baseRunID,
+		chasm.WorkflowArchetypeID,
+	).Return(mockBaseWorkflow, nil)
+
+	s.mockStateBuilder.EXPECT().Rebuild(
+		ctx,
+		now,
+		definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			s.workflowID,
+			s.baseRunID,
+		),
+		resurrectedBranchToken,
+		baseEventID,
+		new(baseVersion),
+		definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			s.workflowID,
+			s.newRunID,
+		),
+		newBranchToken,
+		gomock.Any(),
+	).Return(s.mockRebuiltMutableState, rebuildStats, nil)
+	s.mockRebuiltMutableState.EXPECT().AddHistorySize(rebuildStats.HistorySize)
+	s.mockRebuiltMutableState.EXPECT().AddExternalPayloadSize(rebuildStats.ExternalPayloadSize)
+	s.mockRebuiltMutableState.EXPECT().AddExternalPayloadCount(rebuildStats.ExternalPayloadCount)
+
+	shardID := s.mockShard.GetShardID()
+	s.mockExecManager.EXPECT().ForkHistoryBranch(gomock.Any(), &persistence.ForkHistoryBranchRequest{
+		ForkBranchToken: branchToken,
+		ForkNodeID:      baseEventID + 1,
+		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID.String(), s.workflowID, s.newRunID),
+		ShardID:         shardID,
+		NamespaceID:     s.namespaceID.String(),
+		NewRunID:        s.newRunID,
+	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: newBranchToken, BaseBranchToken: resurrectedBranchToken}, nil)
+
+	s.mockRebuiltMutableState.EXPECT().RefreshExpirationTimeoutTask(gomock.Any()).Return(nil)
+
+	rebuiltMutableState, err := s.workflowResetter.resetWorkflow(
+		ctx,
+		now,
+		baseEventID,
+		baseVersion,
+		incomingFirstEventID,
+		incomingVersion,
+	)
+	s.NoError(err)
+	s.Equal(s.mockRebuiltMutableState, rebuiltMutableState)
+	s.True(mockBaseWorkflowReleaseFnCalled)
+}
+
+func (s *resetterSuite) TestResetWorkflow_NoError_BaseBranchToken_Nil() {
 	ctx := context.Background()
 	now := time.Now().UTC()
 
@@ -181,7 +274,7 @@ func (s *resetterSuite) TestResetWorkflow_NoError() {
 		ShardID:         shardID,
 		NamespaceID:     s.namespaceID.String(),
 		NewRunID:        s.newRunID,
-	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: newBranchToken}, nil)
+	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: newBranchToken, BaseBranchToken: nil}, nil)
 
 	s.mockRebuiltMutableState.EXPECT().RefreshExpirationTimeoutTask(gomock.Any()).Return(nil)
 

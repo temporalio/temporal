@@ -42,6 +42,7 @@ import (
 	hsmnexusworkflow "go.temporal.io/server/components/nexusoperations/workflow"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/workflowresend"
 	"go.temporal.io/server/service/history/archival"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -92,6 +93,7 @@ var Module = fx.Options(
 	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(EventNotifierProvider),
+	fx.Provide(WorkflowResendSchedulerProvider),
 	fx.Provide(HistoryEngineFactoryProvider),
 	fx.Provide(HandlerProvider),
 	fx.Provide(HistoryServiceServerProvider),
@@ -142,13 +144,7 @@ func ServiceResolverProvider(
 	return membershipMonitor.GetResolver(primitives.HistoryService)
 }
 
-func HandlerProvider(args NewHandlerArgs) (*Handler, error) {
-	// Build and store the Nexus handler
-	nexusHandler, err := buildNexusHandler(args.ChasmRegistry)
-	if err != nil {
-		return nil, err
-	}
-
+func HandlerProvider(args NewHandlerArgs, lc fx.Lifecycle) (*Handler, error) {
 	handler := &Handler{
 		status:                 common.DaemonStatusInitialized,
 		config:                 args.Config,
@@ -190,8 +186,31 @@ func HandlerProvider(args NewHandlerArgs) (*Handler, error) {
 		replicationTaskConverterProvider: args.ReplicationTaskConverterFactory,
 		streamReceiverMonitor:            args.StreamReceiverMonitor,
 		replicationServerRateLimiter:     args.ReplicationServerRateLimiter,
-		nexusHandler:                     nexusHandler,
 	}
+
+	// Build the Nexus handler in OnStart rather than here so that it runs after all
+	// fx.Invoke functions have completed. If we built it eagerly, the dependency chain
+	//
+	//   activity.HistoryModule (fx.Invoke)
+	//     → *library → *handler → historyservice.HistoryServiceServer
+	//       → HistoryServiceServerProvider → HandlerProvider (this function)
+	//
+	// would force HandlerProvider to run before modules like chasmtests.Module have had
+	// a chance to register their nexus services via their own fx.Invoke calls. As a
+	// result, buildNexusHandler would snapshot an empty registry and h.nexusHandler
+	// would remain nil, causing all StartNexusOperation calls to the system endpoint to
+	// return "no nexus services registered". OnStart hooks run after ALL invokes are
+	// done, so the registry is fully populated by the time we call buildNexusHandler.
+	lc.Append(fx.Hook{
+		OnStart: func(_ context.Context) error {
+			h, err := buildNexusHandler(args.ChasmRegistry)
+			if err != nil {
+				return err
+			}
+			handler.nexusHandler = h
+			return nil
+		},
+	})
 
 	return handler, nil
 }
@@ -230,9 +249,13 @@ func ConfigProvider(
 
 func ServiceErrorInterceptorProvider(
 	dc *dynamicconfig.Collection,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
 ) *interceptor.ServiceErrorInterceptor {
 	return interceptor.NewServiceErrorInterceptor(
 		dynamicconfig.MaxServiceErrorMessageLength.Get(dc),
+		metricsHandler,
+		logger,
 	)
 }
 
@@ -274,18 +297,21 @@ func TelemetryInterceptorProvider(
 }
 
 func HealthSignalAggregatorProvider(
+	lc fx.Lifecycle,
 	dynamicCollection *dynamicconfig.Collection,
 	logger log.ThrottledLogger,
 ) interceptor.HealthSignalAggregator {
-	return interceptor.NewHealthSignalAggregator(
+	aggregator := interceptor.NewHealthSignalAggregator(
 		logger,
 		dynamicconfig.HistoryHealthSignalMetricsEnabled.Get(dynamicCollection),
 		dynamicconfig.HistoryHealthSignalUsePercentiles.Get(dynamicCollection),
+		dynamicconfig.HealthCheckHistoryGRPCSettings.Get(dynamicCollection),
 		dynamicconfig.PersistenceHealthSignalWindowSize.Get(dynamicCollection)(),
 		dynamicconfig.PersistenceHealthSignalBufferSize.Get(dynamicCollection)(),
-		dynamicconfig.HistoryHealthSignalLatencyWindowSize.Get(dynamicCollection)(),
-		dynamicconfig.HistoryHealthSignalLatencyWindowCount.Get(dynamicCollection)(),
 	)
+	lc.Append(fx.StopHook(aggregator.Stop))
+
+	return aggregator
 }
 
 func HealthCheckInterceptorProvider(
@@ -332,7 +358,6 @@ func NamespaceRateLimitInterceptorProvider(
 			namespaceRateFn,
 			serviceConfig.OperatorRPSRatio,
 		),
-		map[string]int{},      // no token overrides
 		map[string]struct{}{}, // no long polls on history service
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // no long poll methods
 		metricsHandler,
@@ -467,6 +492,46 @@ func EventNotifierProvider(
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
 	lc.Append(fx.StartStopHook(svc.Start, svc.Stop))
+}
+
+func WorkflowResendSchedulerProvider(
+	lc fx.Lifecycle,
+	serviceConfig *configs.Config,
+	metricsHandler metrics.Handler,
+	logger log.ThrottledLogger,
+) workflowresend.Scheduler {
+	schedulerLogger := log.With(
+		logger,
+		tag.ComponentTaskScheduler,
+		tag.ScopeHost,
+		tag.Operation(workflowresend.OperationName),
+	)
+	workflowResendScheduler := workflowresend.NewBoundedWorkflowScheduler(
+		serviceConfig.WorkflowResendHostMaxInFlight,
+		schedulerLogger,
+		metricsHandler,
+	)
+	lc.Append(fx.Hook{
+		OnStop: func(ctx context.Context) error {
+			workflowResendScheduler.InitiateShutdown()
+
+			shutdownCtx, cancel := context.WithTimeout(ctx, time.Minute)
+			defer cancel()
+			stopped := make(chan struct{})
+			go func() {
+				workflowResendScheduler.WaitShutdown()
+				close(stopped)
+			}()
+			select {
+			case <-stopped:
+				return nil
+			case <-shutdownCtx.Done():
+				schedulerLogger.Warn("Workflow resend scheduler timed out during shutdown", tag.Error(shutdownCtx.Err()))
+				return shutdownCtx.Err()
+			}
+		},
+	})
+	return workflowResendScheduler
 }
 
 func ReplicationProgressCacheProvider(

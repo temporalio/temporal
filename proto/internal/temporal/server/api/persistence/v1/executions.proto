@@ -325,37 +325,35 @@ message TimeSkippingInfo {
   reserved 3;
   reserved "current_elapsed_duration_bound";
 
-  // Current time-skipping configuration applied to the workflow.
+  // Current time-skipping configuration applied to the execution.
   temporal.api.common.v1.TimeSkippingConfig config = 1;
 
-  // Total skipped duration for the current workflow execution run, including any
-  // inherited skipped duration carried over from a preceding execution that started this run.
+  // Total skipped duration for the current execution, including any
+  // inherited skipped duration carried over from a preceding run that started this one.
   google.protobuf.Duration accumulated_skipped_duration = 2;
 
   // The current fast-forward info for time skipping.
   FastForwardInfo fast_forward_info = 4;
+  VersionedTransition fast_forward_info_last_update_versioned_transition = 7;
 
   // Versioned transition at which this TimeSkippingInfo was last modified (i.e. when a
-  // skip transition changed accumulated_skipped_duration). Used by PartialRefresh to detect
-  // that pending timer tasks must be re-stamped against the new accumulated skip, since a
-  // skip mutates this workflow-level field without bumping any per-timer
-  // last_update_versioned_transition. Mirrors the per-entity stamps on TimerInfo/ActivityInfo.
+  // skip transition changed accumulated_skipped_duration or a request updated the config.)
   VersionedTransition last_update_versioned_transition = 5;
+
+  // Tracks the number of times a time-skipping transition has occurred since time skipping
+  // was most recently enabled. It is reset every time the skipping config is updated.
+  int32 session_skip_count = 6;
 }
 
 message FastForwardInfo {
+  reserved 3, 4;
+  reserved "source_event_id", "last_update_versioned_transition";
+
   // Target time for the fast-forward, expressed in virtual time.
   google.protobuf.Timestamp target_time = 1;
 
   // Indicates whether this fast-forward has already been reached, used for idempotency checks.
   bool has_reached = 2;
-
-  // Event ID of the WorkflowExecutionStartedEvent (always 1) or the most recent
-  // WorkflowExecutionOptionsUpdatedEvent that introduced the current time-skipping
-  // configuration. This is used as the task event ID for the time-skipping timer task,
-  // enabling reset and replication-conflict resolution to identify obsolete fast-forward tasks
-  // via the standard staleness check.
-  int64 source_event_id = 3;
 }
 
 // Internal wrapper message to distinguish "never notified" (nil wrapper) from
@@ -388,8 +386,11 @@ message WorkflowExecutionState {
   VersionedTransition last_update_versioned_transition = 5;
   google.protobuf.Timestamp start_time = 6;
   // Request IDs that are attached to the workflow execution. It can be the request ID that started
-  // the workflow execution or request IDs that were attached to an existing running workflow
-  // execution via StartWorkflowExecutionRequest.OnConflictOptions.
+  // the workflow execution, request IDs that were attached to an existing running workflow
+  // execution via StartWorkflowExecutionRequest.OnConflictOptions, or (for CHASM executions) request
+  // IDs recorded for UpdateComponent idempotency - the latter are marked by RequestIDInfo.attach_time
+  // and are swept per-execution by count (history.maximumRequestIDsPerExecution) and age
+  // (history.requestIDMaxAge).
   map<string, RequestIDInfo> request_ids = 7;
   // Run ID of the first execution in the chain (set on WorkflowExecutionStarted). Equals run_id
   // only for a first run; any continuation (continue-as-new, retry, cron, or reset)
@@ -401,6 +402,9 @@ message WorkflowExecutionState {
 message RequestIDInfo {
   temporal.api.enums.v1.EventType event_type = 1;
   int64 event_id = 2;
+  // Set only for request IDs attached by the CHASM framework for UpdateComponent idempotency.
+  // Used as an ordering key for lazy eviction when set.
+  google.protobuf.Timestamp attach_time = 3;
 }
 
 // transfer column
@@ -530,6 +534,10 @@ message TimerTaskInfo {
     // If the task addresses a CHASM component, this field will be set.
     ChasmTaskInfo chasm_task_info = 17;
   }
+
+  // VersionedTransition provides a unified solution for both intra-cluster and inter-cluster
+  // task verification. Task types can opt in to use it.
+  VersionedTransition versioned_transition = 18;
 }
 
 message ArchivalTaskInfo {
@@ -705,6 +713,8 @@ message ActivityInfo {
       // Id of the rule that paused the activity.
       string rule_id = 3;
     }
+
+    string request_id = 4;
   }
 
   PauseInfo pause_info = 46;

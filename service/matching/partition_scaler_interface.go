@@ -21,7 +21,7 @@ type PartitionScaler interface {
 	// NumTasks count may be estimated based on assumptions of load balancing across
 	// partitions.
 	//
-	// It will be given the current partition count target and its
+	// It will be given the current partition count target, current backlog counts, and its
 	// private state (optional). It returns a PartitionScalerDecision, which will usually be
 	// "no change". To make a change, it should return a number in NewTarget. Zero means
 	// disable managed scaling.
@@ -40,11 +40,13 @@ type PartitionScaler interface {
 type PartitionScalerInput struct {
 	NumTasks      int // new tasks added since last call
 	CurrentTarget int
+	BacklogCounts []byte
 	PrivateState  *anypb.Any
 }
 
 type PartitionScalerDecision struct {
 	NoChange     bool       // if true, don't do anything
 	NewTarget    int        // if zero, disable managed scaling, otherwise set partition target
+	BacklogCap   int        // target cap for backlog count
 	PrivateState *anypb.Any // optional private state to be stored with target
 }

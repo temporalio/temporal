@@ -949,7 +949,7 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions_Error() {
 	s.Error(err)
 	var invalidArgErr *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgErr)
-	s.Equal("ListWorkflowExecutions failed: elastic: Error 400 (Bad Request): error reason [type=]", invalidArgErr.Message)
+	s.Equal("ListWorkflowExecutions failed: VisibilityStore: Error 400 (Bad Request): error reason [type=]", invalidArgErr.Message)
 
 	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(ctx context.Context, p *client.SearchParameters) (*elastic.SearchResult, error) {
@@ -963,7 +963,21 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions_Error() {
 	_, err = s.visibilityStore.ListWorkflowExecutions(context.Background(), request)
 	var unavailableErr *serviceerror.Unavailable
 	s.ErrorAs(err, &unavailableErr)
-	s.Equal("ListWorkflowExecutions failed: elastic: Error 500 (Internal Server Error): error reason [type=]", unavailableErr.Message)
+	s.Equal("ListWorkflowExecutions failed: VisibilityStore: Error 500 (Internal Server Error)", unavailableErr.Message)
+
+	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, p *client.SearchParameters) (*elastic.SearchResult, error) {
+			return nil, &elastic.Error{
+				Status: 429,
+				Details: &elastic.ErrorDetails{
+					Reason: "error reason",
+				},
+			}
+		})
+	_, err = s.visibilityStore.ListWorkflowExecutions(context.Background(), request)
+	var resourceExhaustedErr *serviceerror.ResourceExhausted
+	s.ErrorAs(err, &resourceExhaustedErr)
+	s.Equal("ListWorkflowExecutions failed: VisibilityStore: Error 429 (Too Many Requests)", resourceExhaustedErr.Message)
 }
 
 func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsWithNamespaceDivision() {
@@ -1081,16 +1095,70 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions_GroupBy() {
 	}
 	s.True(temporalproto.DeepEqual(expectedResp, resp))
 
+	// Grouping by TemporalNamespaceDivision suppresses the default namespace
+	// division filter (no "must not exist" clause) so results span all divisions.
+	request.Query = "GROUP BY TemporalNamespaceDivision"
+	s.mockESClient.EXPECT().
+		CountGroupBy(
+			gomock.Any(),
+			testIndex,
+			elastic.NewBoolQuery().
+				Filter(
+					elastic.NewTermQuery(sadefs.NamespaceID, testNamespaceID.String()),
+				),
+			sadefs.TemporalNamespaceDivision,
+			elastic.NewTermsAggregation().Field(sadefs.TemporalNamespaceDivision).Missing(""),
+		).
+		Return(
+			&elastic.SearchResult{
+				Aggregations: map[string]json.RawMessage{
+					// The empty-string bucket comes from Missing("") and
+					// represents default-division (NULL) workflows.
+					sadefs.TemporalNamespaceDivision: json.RawMessage(
+						`{"buckets":[{"key":"","doc_count":50},{"key":"divisionA","doc_count":100},{"key":"divisionB","doc_count":10}]}`,
+					),
+				},
+			},
+			nil,
+		)
+	resp, err = s.visibilityStore.CountWorkflowExecutions(context.Background(), request)
+	s.NoError(err)
+	expectedResp = &store.InternalCountExecutionsResponse{
+		Count: 160,
+		Groups: []store.InternalAggregationGroup{
+			{
+				GroupValues: []*commonpb.Payload{
+					mustEncodeValue("", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+				},
+				Count: 50,
+			},
+			{
+				GroupValues: []*commonpb.Payload{
+					mustEncodeValue("divisionA", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+				},
+				Count: 100,
+			},
+			{
+				GroupValues: []*commonpb.Payload{
+					mustEncodeValue("divisionB", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+				},
+				Count: 10,
+			},
+		},
+	}
+	s.True(temporalproto.DeepEqual(expectedResp, resp))
+
 	// test only allowed to group by a single field
 	request.Query = "GROUP BY ExecutionStatus, WorkflowType"
 	resp, err = s.visibilityStore.CountWorkflowExecutions(context.Background(), request)
 	s.ErrorContains(err, "'GROUP BY' clause supports only a single field")
 	s.Nil(resp)
 
-	// test only allowed to group by ExecutionStatus and LowCardinalityKeyword fields
+	// test only allowed to group by ExecutionStatus, TemporalNamespaceDivision,
+	// and LowCardinalityKeyword fields
 	request.Query = "GROUP BY WorkflowType"
 	resp, err = s.visibilityStore.CountWorkflowExecutions(context.Background(), request)
-	s.ErrorContains(err, "'GROUP BY' clause is only supported for ExecutionStatus")
+	s.ErrorContains(err, "'GROUP BY' clause is not supported for search attribute WorkflowType")
 	s.Nil(resp)
 }
 
@@ -1444,59 +1512,6 @@ func (s *ESVisibilitySuite) TestGetWorkflowExecution() {
 	s.Contains(err.Error(), "GetWorkflowExecution failed")
 }
 
-func (s *ESVisibilitySuite) Test_detailedErrorMessage() {
-	err := errors.New("test message")
-	s.Equal("test message", detailedErrorMessage(err))
-
-	err = &elastic.Error{
-		Status: 500,
-	}
-	s.Equal("elastic: Error 500 (Internal Server Error)", detailedErrorMessage(err))
-
-	err = &elastic.Error{
-		Status: 500,
-		Details: &elastic.ErrorDetails{
-			Type:   "some type",
-			Reason: "some reason",
-		},
-	}
-	s.Equal("elastic: Error 500 (Internal Server Error): some reason [type=some type]", detailedErrorMessage(err))
-
-	err = &elastic.Error{
-		Status: 500,
-		Details: &elastic.ErrorDetails{
-			Type:   "some type",
-			Reason: "some reason",
-			RootCause: []*elastic.ErrorDetails{
-				{
-					Type:   "some type",
-					Reason: "some reason",
-				},
-			},
-		},
-	}
-	s.Equal("elastic: Error 500 (Internal Server Error): some reason [type=some type]", detailedErrorMessage(err))
-
-	err = &elastic.Error{
-		Status: 500,
-		Details: &elastic.ErrorDetails{
-			Type:   "some type",
-			Reason: "some reason",
-			RootCause: []*elastic.ErrorDetails{
-				{
-					Type:   "some other type1",
-					Reason: "some other reason1",
-				},
-				{
-					Type:   "some other type2",
-					Reason: "some other reason2",
-				},
-			},
-		},
-	}
-	s.Equal("elastic: Error 500 (Internal Server Error): some reason [type=some type], root causes: some other reason1 [type=some other type1], some other reason2 [type=some other type2]", detailedErrorMessage(err))
-}
-
 func (s *ESVisibilitySuite) TestProcessPageToken() {
 	closeTime := time.Now().UTC()
 	startTime := closeTime.Add(-1 * time.Minute)
@@ -1635,7 +1650,7 @@ func (s *ESVisibilitySuite) Test_buildPaginationQuery() {
 			searchAfter:  []any{json.Number(fmt.Sprintf("%d", startTime.UnixNano()))},
 			res: []elastic.Query{
 				elastic.NewBoolQuery().Filter(
-					elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(time.RFC3339Nano)),
+					elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(paginationDatetimeFormat)),
 				),
 			},
 			err: nil,
@@ -1655,7 +1670,7 @@ func (s *ESVisibilitySuite) Test_buildPaginationQuery() {
 				elastic.NewBoolQuery().
 					MustNot(elastic.NewExistsQuery(sadefs.CloseTime)).
 					Filter(
-						elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(time.RFC3339Nano)),
+						elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(paginationDatetimeFormat)),
 					),
 			},
 			err: nil,
@@ -1672,12 +1687,12 @@ func (s *ESVisibilitySuite) Test_buildPaginationQuery() {
 			},
 			res: []elastic.Query{
 				elastic.NewBoolQuery().Filter(
-					elastic.NewRangeQuery(sadefs.CloseTime).Lt(closeTime.Format(time.RFC3339Nano)),
+					elastic.NewRangeQuery(sadefs.CloseTime).Lt(closeTime.Format(paginationDatetimeFormat)),
 				),
 				elastic.NewBoolQuery().
 					Filter(
-						elastic.NewTermQuery(sadefs.CloseTime, closeTime.Format(time.RFC3339Nano)),
-						elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(time.RFC3339Nano)),
+						elastic.NewTermQuery(sadefs.CloseTime, closeTime.Format(paginationDatetimeFormat)),
+						elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(paginationDatetimeFormat)),
 					),
 			},
 			err: nil,
@@ -1696,17 +1711,17 @@ func (s *ESVisibilitySuite) Test_buildPaginationQuery() {
 			},
 			res: []elastic.Query{
 				elastic.NewBoolQuery().Filter(
-					elastic.NewRangeQuery(sadefs.CloseTime).Lt(closeTime.Format(time.RFC3339Nano)),
+					elastic.NewRangeQuery(sadefs.CloseTime).Lt(closeTime.Format(paginationDatetimeFormat)),
 				),
 				elastic.NewBoolQuery().
 					Filter(
-						elastic.NewTermQuery(sadefs.CloseTime, closeTime.Format(time.RFC3339Nano)),
-						elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(time.RFC3339Nano)),
+						elastic.NewTermQuery(sadefs.CloseTime, closeTime.Format(paginationDatetimeFormat)),
+						elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(paginationDatetimeFormat)),
 					),
 				elastic.NewBoolQuery().
 					Filter(
-						elastic.NewTermQuery(sadefs.CloseTime, closeTime.Format(time.RFC3339Nano)),
-						elastic.NewTermQuery(sadefs.StartTime, startTime.Format(time.RFC3339Nano)),
+						elastic.NewTermQuery(sadefs.CloseTime, closeTime.Format(paginationDatetimeFormat)),
+						elastic.NewTermQuery(sadefs.StartTime, startTime.Format(paginationDatetimeFormat)),
 						elastic.NewRangeQuery(sadefs.RunID).Gt("random-run-id"),
 					),
 			},
@@ -2339,4 +2354,61 @@ func (s *ESVisibilitySuite) TestValuesInterceptor_ChasmMapper() {
 	s.Error(err)
 	var converterErr *query.ConverterError
 	s.ErrorAs(err, &converterErr)
+}
+
+func TestPaginationDatetimeFormat(t *testing.T) {
+	testCases := []struct {
+		name string
+		in   time.Time
+		out  string
+	}{
+		{
+			name: "zero nanos",
+			in:   time.Date(2023, 4, 5, 6, 7, 8, 0, time.UTC),
+			out:  "2023-04-05T06:07:08.000000000Z",
+		},
+		{
+			name: "full nanos",
+			in:   time.Date(2023, 4, 5, 6, 7, 8, 123456789, time.UTC),
+			out:  "2023-04-05T06:07:08.123456789Z",
+		},
+		{
+			name: "trailing zeros in nanos",
+			in:   time.Date(2023, 4, 5, 6, 7, 8, 123000000, time.UTC),
+			out:  "2023-04-05T06:07:08.123000000Z",
+		},
+		{
+			name: "leading zeros in nanos",
+			in:   time.Date(2023, 4, 5, 6, 7, 8, 42, time.UTC),
+			out:  "2023-04-05T06:07:08.000000042Z",
+		},
+		{
+			name: "unix epoch",
+			in:   time.Unix(0, 0).UTC(),
+			out:  "1970-01-01T00:00:00.000000000Z",
+		},
+		{
+			name: "positive timezone offset",
+			in:   time.Date(2023, 4, 5, 6, 7, 8, 0, time.FixedZone("", 2*60*60+30*60)),
+			out:  "2023-04-05T06:07:08.000000000+02:30",
+		},
+		{
+			name: "negative timezone offset",
+			in:   time.Date(2023, 4, 5, 6, 7, 8, 123456789, time.FixedZone("", -5*60*60)),
+			out:  "2023-04-05T06:07:08.123456789-05:00",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			out := tc.in.Format(paginationDatetimeFormat)
+			r.Equal(tc.out, out)
+			// The formatted value must remain a valid RFC3339 datetime, and parsing it back must
+			// return the original instant.
+			parsed, err := time.Parse(time.RFC3339Nano, out)
+			r.NoError(err)
+			r.True(tc.in.Equal(parsed), "expected %v, got %v", tc.in, parsed)
+		})
+	}
 }

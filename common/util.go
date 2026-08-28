@@ -93,6 +93,8 @@ const (
 
 	// FailureReasonActivityTimeout is failureReason for when an activity times out, with %v as the timeout type.
 	FailureReasonActivityTimeout = "activity %v timeout"
+	// FailureReasonActivityRetryScheduleToCloseTimeout is failureReason for when an activity retry cannot be scheduled before its schedule-to-close timeout.
+	FailureReasonActivityRetryScheduleToCloseTimeout = "Not enough time to schedule next retry before activity ScheduleToClose timeout, giving up retrying"
 	// FailureReasonCompleteResultExceedsLimit is failureReason for complete result exceeds limit
 	FailureReasonCompleteResultExceedsLimit = "Complete result exceeds size limit."
 	// FailureReasonFailureDetailsExceedsLimit is failureReason for failure details exceeds limit
@@ -761,6 +763,9 @@ func getFieldNameFromStruct(structPtr any, fieldPtr any) (string, error) {
 }
 
 // IsRetryableRPCError checks if the error is a retryable gRPC error.
+//
+// This does not unwrap err: If err may be wrapped (e.g. by an HTTP client, which wraps
+// RoundTripper errors in *url.Error), unwrap it yourself and pass the unwrapped error here.
 func IsRetryableRPCError(err error) bool {
 	var st *status.Status
 	stGetter, ok := err.(interface{ Status() *status.Status })

@@ -16,6 +16,7 @@ import (
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/scheduler/internal"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -81,7 +82,13 @@ const (
 	// Lower bound for the deadline in which buffered actions are dropped.
 	startWorkflowMinDeadline = 5 * time.Second
 
-	// Upper bound on how many times starting an individual buffered action should be retried.
+	// InvokerMaxStartAttempts is the maximum number of StartWorkflowExecution
+	// RPCs issued for an individual buffered action, counting the first call.
+	// Attempt numbers are 1-based: recordProcessBufferResult readies a start at
+	// Attempt 1, and each retryable failure increments it. The bound is
+	// therefore inclusive - a start is refused locally (and dropped) only once
+	// its Attempt exceeds this value - so a value of 10 permits ten start RPCs,
+	// i.e. the initial call plus nine retries.
 	InvokerMaxStartAttempts = 10 // TODO - dial this up/remove it
 )
 
@@ -141,6 +148,9 @@ func (h *InvokerExecuteTaskHandler) Validate(
 	_ chasm.TaskInvocation,
 	_ *schedulerpb.InvokerExecuteTask,
 ) (bool, error) {
+	if invoker.Scheduler.Get(ctx).WorkflowMigration != nil {
+		return false, nil
+	}
 	// If another execute task already happened to kick everything off, we don't need
 	// this one.
 	eligibleStarts := invoker.getEligibleBufferedStarts()
@@ -206,6 +216,9 @@ func (h *InvokerExecuteTaskHandler) Execute(
 	if err != nil {
 		return fmt.Errorf("failed to read component: %w", err)
 	}
+	if scheduler == nil {
+		return errors.New("scheduler component was nil after read")
+	}
 
 	logger := newTaggedLogger(h.baseLogger, scheduler)
 	metricsHandler := newTaggedMetricsHandler(h.metricsHandler, scheduler)
@@ -231,7 +244,9 @@ func (h *InvokerExecuteTaskHandler) Execute(
 			s := i.Scheduler.Get(ctx)
 			// Use newlyStarted (not len(result.CompletedStarts)) so a concurrent
 			// ExecuteTask's duplicate StartWorkflow can't inflate ActionCount.
-			newlyStarted, droppedDuplicates := i.recordExecuteResult(ctx, &result)
+			newlyStarted, droppedDuplicates, latestStartTime, startOnlyActions := i.recordExecuteResult(ctx, &result)
+			s.advanceLastEventTimeTo(latestStartTime)
+			s.recordStartOnlyActions(ctx, startOnlyActions)
 			s.recordActionResult(&schedulerActionResult{actionCount: int64(newlyStarted)})
 			if droppedDuplicates > 0 {
 				h.recordDuplicateExecuteDrops(s, droppedDuplicates)
@@ -286,7 +301,11 @@ func (h *InvokerExecuteTaskHandler) cancelWorkflows(
 				metricsHandler.Counter(metrics.ScheduleCancelWorkflowErrors.Name()).Record(1)
 			}
 
-			// Cancels are only attempted once.
+			// Cancels are only attempted once here: transient failures are
+			// already retried at the history-client layer (resource.HistoryClient
+			// is retry-wrapped), so a single best-effort attempt is intentional.
+			// todo: consider splitting these out to individual tasks so they can be retried
+			// independently
 			result.CompletedCancels = append(result.CompletedCancels, wf)
 		})
 	}
@@ -324,7 +343,11 @@ func (h *InvokerExecuteTaskHandler) terminateWorkflows(
 				metricsHandler.Counter(metrics.ScheduleTerminateWorkflowErrors.Name()).Record(1)
 			}
 
-			// Terminates are only attempted once.
+			// Terminates are only attempted once here: transient failures are
+			// already retried at the history-client layer (resource.HistoryClient
+			// is retry-wrapped), so a single best-effort attempt is intentional.
+			// todo: consider splitting these out to individual tasks so they can be retried
+			// independently
 			result.CompletedTerminates = append(result.CompletedTerminates, wf)
 		})
 	}
@@ -358,15 +381,8 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 			break
 		}
 
-		// Check if this start is already started. If so, we crashed after
-		// starting a workflow, but before recording the result.
-		if invoker.isWorkflowStarted(start.WorkflowId) {
-			logger.Info("skipping already-started workflow", tag.WorkflowID(start.WorkflowId))
-			continue
-		}
-
-		// Clone start before concurrent access. The clone will have RunId/StartTime
-		// set by startWorkflow, then copied back to the original in recordExecuteResult.
+		// Clone start before concurrent access. Buffered starts carry the policy
+		// resolved when they entered CHASM, including through migration.
 		start = common.CloneProto(start)
 
 		// Run all starts concurrently.
@@ -412,6 +428,9 @@ func (h *InvokerProcessBufferTaskHandler) Validate(
 	attrs chasm.TaskInvocation,
 	_ *schedulerpb.InvokerProcessBufferTask,
 ) (bool, error) {
+	if invoker.Scheduler.Get(ctx).WorkflowMigration != nil {
+		return false, nil
+	}
 	valid, err := validateTaskHighWaterMark(invoker.GetLastProcessedTime(), attrs.ScheduledTime)
 	if err != nil {
 		return false, err
@@ -485,9 +504,11 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 	isRunning := len(runningWorkflows) > 0
 	result.missedCatchupByActionRunning = make(map[bool]int64)
 
-	// Processing completely ignores any BufferedStart that's already executing/backing off.
+	// Processing ignores starts that are already executing or backing off. An existing
+	// deferred BUFFER_ONE start still participates so it can reject later starts.
 	pendingBufferedStarts := util.FilterSlice(invoker.GetBufferedStarts(), func(start *schedulespb.BufferedStart) bool {
-		return start.Attempt == 0
+		return start.Attempt == 0 ||
+			(start.Attempt == -1 && scheduler.resolveOverlapPolicy(start.GetOverlapPolicy()) == enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE)
 	})
 
 	// Resolve overlap policies and trim BufferedStarts that are skipped by policy.
@@ -620,7 +641,9 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 ) error {
 	requestSpec := scheduler.GetSchedule().GetAction().GetStartWorkflow()
 
-	if start.Attempt >= InvokerMaxStartAttempts {
+	// Inclusive bound: Attempt is 1-based, so the attempt numbered
+	// InvokerMaxStartAttempts is the last one that gets an RPC.
+	if start.Attempt > InvokerMaxStartAttempts {
 		return errRetryLimitExceeded
 	}
 
@@ -640,14 +663,18 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 		reusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	}
 
+	tracksCompletionResult := internal.TracksCompletionResult(start.GetOverlapPolicy())
 	var lcr []*commonpb.Payload
-	if lastCompletionState.Success != nil {
+	continuedFailure := lastCompletionState.Failure
+	if tracksCompletionResult && lastCompletionState.Success != nil {
 		lcr = append(lcr, lastCompletionState.Success)
 	}
-	// Build the completion callback with this start's request ID packed into its token, so the
-	// completion is matched by a request ID that rides in the callback header and survives
-	// continue-as-new, rather than the started workflow's callback state which is re-stamped on each
-	// new run.
+	if !tracksCompletionResult {
+		continuedFailure = nil
+	}
+	// Always attach callbacks so StartWorkflowExecution requests remain compatible
+	// across mixed server versions. ALLOW_ALL callbacks become harmless late deliveries
+	// after their starts move to start-only history.
 	callback, err := chasm.GenerateNexusCallback(schedulerRef, start.RequestId, h.config.EncodeInternalTokenWithEnvelope(scheduler.Namespace))
 	if err != nil {
 		return err
@@ -671,10 +698,13 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 		WorkflowTaskTimeout:      requestSpec.WorkflowTaskTimeout,
 		WorkflowType:             requestSpec.WorkflowType,
 		Priority:                 requestSpec.Priority,
-		ContinuedFailure:         lastCompletionState.Failure,
+		ContinuedFailure:         continuedFailure,
 		LastCompletionResult: &commonpb.Payloads{
 			Payloads: lcr,
 		},
+	}
+	if h.config.Tweakables(scheduler.Namespace).EnableVersioningOverride {
+		request.VersioningOverride = requestSpec.VersioningOverride
 	}
 
 	result, err := h.frontendClient.StartWorkflowExecution(ctx, request)
@@ -756,8 +786,7 @@ func isAlreadyStartedError(err error) bool {
 }
 
 func isRateLimitedError(err error) (time.Duration, bool) {
-	var expectedErr *rateLimitedError
-	if errors.As(err, &expectedErr) {
+	if expectedErr, ok := errors.AsType[*rateLimitedError](err); ok {
 		return expectedErr.delay, true
 	}
 	return 0, false
@@ -785,6 +814,9 @@ func (h *InvokerExecuteTaskHandler) newInvokerTaskHandlerContext(
 ) invokerTaskHandlerContext {
 	tweakables := h.config.Tweakables(scheduler.Namespace)
 	maxActions := tweakables.MaxActionsPerExecution
+	if maxActions <= 0 {
+		maxActions = DefaultTweakables.MaxActionsPerExecution
+	}
 
 	return invokerTaskHandlerContext{
 		Context:      ctx,

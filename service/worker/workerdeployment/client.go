@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	wciclient "go.temporal.io/auto-scaled-workers/wci/client"
 	"go.temporal.io/sdk/temporal"
@@ -445,8 +446,7 @@ func (d *ClientImpl) DescribeVersion(
 
 	versionState, err := d.queryVersionState(ctx, namespaceEntry, deploymentName, buildID)
 	if err != nil {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			return nil, nil, serviceerror.NewNotFound("Worker Deployment Version not found")
 		}
 		return nil, nil, err
@@ -463,8 +463,7 @@ func (d *ClientImpl) DescribeVersion(
 	wciDesc, _, err := d.workerControllerInstanceClient.DescribeWorkerControllerInstance(ctx, namespaceEntry, apiVersion)
 	if err != nil {
 		// WCI may not exist if no compute config was ever set.
-		var notFound *serviceerror.NotFound
-		if !errors.As(err, &notFound) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); !ok {
 			return nil, nil, err
 		}
 	} else {
@@ -554,8 +553,7 @@ func (d *ClientImpl) UpdateVersionComputeConfig(
 		Meta:  &updatepb.Meta{UpdateId: "_update_compute_config_" + requestID, Identity: identity},
 	})
 	if err != nil {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			return serviceerror.NewNotFound(fmt.Sprintf(ErrWorkerDeploymentVersionNotFound, version.GetBuildId(), version.GetDeploymentName()))
 		}
 		return err
@@ -600,8 +598,7 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 
 	res, err := d.queryWorkflowWithRetry(ctx, req)
 	if err != nil {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			return nil, nil, serviceerror.NewNotFoundf(ErrWorkerDeploymentNotFound, deploymentName)
 		}
 		var queryFailed *serviceerror.QueryFailed
@@ -654,8 +651,7 @@ func (d *ClientImpl) queryCreateRequestID(
 
 	res, err := d.queryWorkflowWithRetry(ctx, req)
 	if err != nil {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			return nil, err
 		}
 		var queryFailed *serviceerror.QueryFailed
@@ -699,8 +695,7 @@ func (d *ClientImpl) workerDeploymentExists(
 		},
 	})
 	if err != nil {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			return false, nil
 		}
 		return false, err
@@ -739,13 +734,30 @@ func (d *ClientImpl) ListWorkerDeployments(
 		return nil, nil, err
 	}
 
-	workerDeploymentSummaries := make([]*deploymentspb.WorkerDeploymentSummary, 0, len(persistenceResp.Executions))
-	for _, ex := range persistenceResp.Executions {
+	return d.collapseDuplicateDeploymentSummaries(namespaceEntry.Name(), persistenceResp.Executions), persistenceResp.NextPageToken, nil
+}
+
+// collapseDuplicateDeploymentSummaries builds the per-deployment summaries for one fetched
+// Visibility page, collapsing overlapping records for the same deployment. Pagination state
+// remains owned by Visibility.
+func (d *ClientImpl) collapseDuplicateDeploymentSummaries(
+	namespaceName namespace.Name,
+	executions []*workflowpb.WorkflowExecutionInfo,
+) []*deploymentspb.WorkerDeploymentSummary {
+	type indexedSummary struct {
+		index     int
+		startTime time.Time
+	}
+
+	workerDeploymentSummaries := make([]*deploymentspb.WorkerDeploymentSummary, 0, len(executions))
+	summaryByDeploymentName := make(map[string]*indexedSummary, len(executions))
+	for _, ex := range executions {
 		var workerDeploymentInfo *deploymentspb.WorkerDeploymentWorkflowMemo
 		if ex.GetMemo() != nil {
+			var err error
 			workerDeploymentInfo, err = DecodeWorkerDeploymentMemo(ex.GetMemo())
 			if err != nil {
-				d.logger.Error("unable to decode worker deployment memo", tag.Error(err), tag.WorkflowNamespace(namespaceEntry.Name().String()), tag.WorkflowID(ex.GetExecution().GetWorkflowId()))
+				d.logger.Error("unable to decode worker deployment memo", tag.Error(err), tag.WorkflowNamespace(namespaceName.String()), tag.WorkflowID(ex.GetExecution().GetWorkflowId()))
 				continue
 			}
 		} else {
@@ -758,17 +770,43 @@ func (d *ClientImpl) ListWorkerDeployments(
 			}
 		}
 
-		workerDeploymentSummaries = append(workerDeploymentSummaries, &deploymentspb.WorkerDeploymentSummary{
+		summary := &deploymentspb.WorkerDeploymentSummary{
 			Name:                  workerDeploymentInfo.DeploymentName,
 			CreateTime:            workerDeploymentInfo.CreateTime,
 			RoutingConfig:         workerDeploymentInfo.RoutingConfig,
 			LatestVersionSummary:  workerDeploymentInfo.LatestVersionSummary,
 			RampingVersionSummary: workerDeploymentInfo.RampingVersionSummary,
 			CurrentVersionSummary: workerDeploymentInfo.CurrentVersionSummary,
-		})
+		}
+
+		// A single deployment can have more than one RUNNING Visibility record at once: creating a
+		// deployment immediately continues-as-new (and delete+recreate starts a fresh run), and
+		// Visibility is eventually consistent, so the successor run can become visible before the
+		// predecessor's close update lands. We collapse those into one summary, keeping the newest
+		// run. We key on the deployment name (stable across runs) and tiebreak on the raw execution
+		// start time
+		deploymentName := workerDeploymentInfo.GetDeploymentName()
+		startTime := ex.GetStartTime().AsTime()
+		if existing, ok := summaryByDeploymentName[deploymentName]; ok {
+			// Already seen this deployment on this page. Keep whichever run started later, but leave
+			// it in its original slot so the page's first-occurrence ordering is preserved.
+			if startTime.After(existing.startTime) {
+				workerDeploymentSummaries[existing.index] = summary
+				existing.startTime = startTime
+			}
+			continue
+		}
+
+		// First time we've seen this deployment: remember the slot it's about to occupy (the current
+		// length is the index the append lands on) so a later, newer run can overwrite it in place.
+		summaryByDeploymentName[deploymentName] = &indexedSummary{
+			index:     len(workerDeploymentSummaries),
+			startTime: startTime,
+		}
+		workerDeploymentSummaries = append(workerDeploymentSummaries, summary)
 	}
 
-	return workerDeploymentSummaries, persistenceResp.NextPageToken, nil
+	return workerDeploymentSummaries
 }
 
 func (d *ClientImpl) SetCurrentVersion(
@@ -850,8 +888,7 @@ func (d *ClientImpl) SetCurrentVersion(
 			},
 		)
 		if err != nil {
-			var notFound *serviceerror.NotFound
-			if errors.As(err, &notFound) {
+			if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 				return nil, serviceerror.NewNotFoundf(ErrWorkerDeploymentNotFound, deploymentName)
 			}
 			return nil, err
@@ -967,8 +1004,7 @@ func (d *ClientImpl) SetRampingVersion(
 			},
 		)
 		if err != nil {
-			var notFound *serviceerror.NotFound
-			if errors.As(err, &notFound) {
+			if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 				return nil, serviceerror.NewNotFoundf(ErrWorkerDeploymentNotFound, deploymentName)
 			}
 			return nil, err
@@ -1108,8 +1144,7 @@ func (d *ClientImpl) DeleteWorkerDeployment(
 		},
 	)
 	if err != nil {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			return nil
 		}
 		return err
@@ -1233,8 +1268,7 @@ func (d *ClientImpl) ensureWorkerDeploymentDoesNotExist(
 	// right nothing in case of duplicate request ID.)
 	res, err := d.queryCreateRequestID(ctx, namespaceEntry, deploymentName)
 	if err != nil {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			return nil, nil
 		}
 		return nil, err
@@ -1308,8 +1342,7 @@ func (d *ClientImpl) CreateWorkerDeploymentVersion(
 		updateRequest,
 	)
 	if err != nil {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			return serviceerror.NewNotFound(fmt.Sprintf(ErrWorkerDeploymentNotFound, deploymentName))
 		}
 		return err

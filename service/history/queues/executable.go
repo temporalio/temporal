@@ -73,6 +73,7 @@ type (
 	// MaybeTerminalTaskError are errors which (if IsTerminalTaskError returns true) cannot be retried and should
 	// not be rescheduled. Tasks should be enqueued to the DLQ immediately if an error is marked as terminal.
 	MaybeTerminalTaskError interface {
+		error
 		IsTerminalTaskError() bool
 	}
 )
@@ -86,6 +87,8 @@ var (
 	taskNotReadyReschedulePolicy               = common.CreateTaskNotReadyReschedulePolicy()
 	taskResourceExhuastedReschedulePolicy      = common.CreateTaskResourceExhaustedReschedulePolicy()
 	dependencyTaskNotCompletedReschedulePolicy = common.CreateDependencyTaskNotCompletedReschedulePolicy()
+
+	_ MaybeTerminalTaskError = terminalTaskError{}
 )
 
 const (
@@ -153,6 +156,27 @@ type (
 
 	TaskTypeTagProvider func(t tasks.Task, isActive bool, chasmRegistry *chasm.Registry) string
 )
+
+// terminalTaskError indicates a task hit an unexpected, unrecoverable invariant violation in its
+// own state. It is a generic implementation of a MaybeTerminalTaskError. The task framework treats it as terminal:
+// it records failure/corruption metrics, drops the task, and only sends it to the DLQ if that is enabled for the category.
+type terminalTaskError struct {
+	Message string
+}
+
+// NewTerminalTaskError returns an error that the task framework treats as terminal (non-retryable).
+func NewTerminalTaskError(message string) error {
+	return terminalTaskError{Message: message}
+}
+
+func (e terminalTaskError) Error() string {
+	return e.Message
+}
+
+// IsTerminalTaskError marks this error as terminal to be handled appropriately.
+func (terminalTaskError) IsTerminalTaskError() bool {
+	return true
+}
 
 func NewExecutable(
 	readerID int64,
@@ -367,6 +391,9 @@ func (e *executableImpl) Execute() (retErr error) {
 		// reset task priority since it changes between active/standby
 		e.resetAttempt()
 		e.priority = e.priorityAssigner.Assign(e)
+		// reset accumulated in-memory latency: time accrued under the previous
+		// active/standby regime must not be reported as this regime's TaskLatency
+		e.inMemoryNoUserLatency = 0
 	}
 	e.lastActiveness = resp.ExecutedAsActive
 
@@ -450,8 +477,7 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 		}
 	}()
 
-	var resourceExhaustedErr *serviceerror.ResourceExhausted
-	if errors.As(err, &resourceExhaustedErr) {
+	if resourceExhaustedErr, ok := errors.AsType[*serviceerror.ResourceExhausted](err); ok {
 		switch resourceExhaustedErr.Cause { //nolint:exhaustive
 		case enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW:
 			err = consts.ErrResourceExhaustedBusyWorkflow
@@ -494,8 +520,7 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 }
 
 func (e *executableImpl) isUnexpectedNonRetryableError(err error) bool {
-	var terr MaybeTerminalTaskError
-	if errors.As(err, &terr) {
+	if terr, ok := errors.AsType[MaybeTerminalTaskError](err); ok {
 		return terr.IsTerminalTaskError()
 	}
 

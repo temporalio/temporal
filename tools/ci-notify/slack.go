@@ -1,248 +1,165 @@
 package cinotify
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"net/http"
+	"strconv"
 	"strings"
-	"time"
+
+	"go.temporal.io/server/tools/common/github"
+	"go.temporal.io/server/tools/common/slack"
 )
 
-// SlackMessage represents a Slack Block Kit message
-type SlackMessage struct {
-	Text   string       `json:"text"`
-	Blocks []SlackBlock `json:"blocks"`
-}
-
-// SlackBlock represents a block in the Slack message
-type SlackBlock struct {
-	Type   string      `json:"type"`
-	Text   *SlackText  `json:"text,omitempty"`
-	Fields []SlackText `json:"fields,omitempty"`
-}
-
-// SlackText represents text content in a Slack block
-type SlackText struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
-}
+const maxFailures = 5
 
 // BuildFailureMessage creates a Slack message for CI failure
-func BuildFailureMessage(report *FailureReport) *SlackMessage {
-	// Header with alert emoji
-	headerBlock := SlackBlock{
-		Type: "section",
-		Text: &SlackText{
-			Type: "mrkdwn",
-			Text: ":rotating_light: *CI Failed on Main Branch* :rotating_light:",
-		},
-	}
-
-	// Workflow and commit info
-	commitURL := fmt.Sprintf("https://github.com/temporalio/temporal/commit/%s", report.Commit.SHA)
-	infoBlock := SlackBlock{
-		Type: "section",
-		Fields: []SlackText{
-			{
-				Type: "mrkdwn",
-				Text: fmt.Sprintf("*Workflow:*\n%s", report.Workflow.Name),
-			},
-			{
-				Type: "mrkdwn",
-				Text: fmt.Sprintf("*Branch:*\n`%s`", report.Workflow.HeadBranch),
-			},
-			{
-				Type: "mrkdwn",
-				Text: fmt.Sprintf("*Commit:*\n<%s|%s>", commitURL, report.Commit.ShortSHA),
-			},
-			{
-				Type: "mrkdwn",
-				Text: fmt.Sprintf("*Author:*\n%s", report.Commit.Author),
-			},
-		},
-	}
-
-	// Failure summary
-	summaryBlock := SlackBlock{
-		Type: "section",
-		Text: &SlackText{
-			Type: "mrkdwn",
-			Text: fmt.Sprintf("*Failed Jobs:* %d of %d total jobs",
-				len(report.FailedJobs), report.TotalJobs),
-		},
-	}
+func BuildFailureMessage(report *FailureReport) *slack.Message {
+	message := slack.NewMessage("CI Failed on Main")
+	message.AddSection(":rotating_light: *CI Failed on Main Branch* :rotating_light:")
 
 	// List of failed jobs
 	var failedJobNames []string
 	for _, job := range report.FailedJobs {
 		failedJobNames = append(failedJobNames,
-			fmt.Sprintf("• <%s|%s>", job.URL, job.Name))
+			fmt.Sprintf("<%s|%s>", job.URL, job.Name))
 	}
 
-	jobsBlock := SlackBlock{
-		Type: "section",
-		Text: &SlackText{
-			Type: "mrkdwn",
-			Text: fmt.Sprintf("*Failed Jobs:*\n%s",
-				strings.Join(failedJobNames, "\n")),
-		},
+	if len(report.Failures) > 0 {
+		failures := report.Failures
+		if len(failures) > maxFailures {
+			failures = failures[:maxFailures]
+		}
+
+		var failureLines []string
+		for _, failure := range failures {
+			failureLines = append(failureLines, fmt.Sprintf("`%s`", failure))
+		}
+		message.AddSection(fmt.Sprintf(
+			"*Failures (%d):* %s",
+			len(report.Failures),
+			strings.Join(failureLines, ", "),
+		))
 	}
 
-	// Link to workflow run
-	linkBlock := SlackBlock{
-		Type: "section",
-		Text: &SlackText{
-			Type: "mrkdwn",
-			Text: fmt.Sprintf("<%s|View Full Workflow Run>", report.Workflow.URL),
-		},
-	}
-
-	return &SlackMessage{
-		Text: fmt.Sprintf("CI Failed on Main: %s", report.Workflow.Name),
-		Blocks: []SlackBlock{
-			headerBlock,
-			infoBlock,
-			summaryBlock,
-			jobsBlock,
-			linkBlock,
-		},
-	}
+	message.AddSection(fmt.Sprintf(
+		"*Failed jobs (%d/%d):* %s",
+		len(report.FailedJobs),
+		report.TotalJobs,
+		strings.Join(failedJobNames, ", "),
+	))
+	message.AddSection(fmt.Sprintf("<%s|View Run>", report.Run.URL))
+	return message
 }
 
 // FormatMessageForDebug formats the message for console output
 func FormatMessageForDebug(report *FailureReport) string {
 	var sb strings.Builder
 	fmt.Fprint(&sb, "🚨 CI Failed on Main Branch 🚨\n\n")
-	fmt.Fprintf(&sb, "Workflow: %s\n", report.Workflow.Name)
-	fmt.Fprintf(&sb, "Branch: %s\n", report.Workflow.HeadBranch)
-	fmt.Fprintf(&sb, "Commit: %s (%s)\n", report.Commit.ShortSHA, report.Commit.Author)
-	fmt.Fprintf(&sb, "Failed Jobs: %d of %d total jobs\n\n", len(report.FailedJobs), report.TotalJobs)
-	fmt.Fprintln(&sb, "Failed Jobs:")
-	for _, job := range report.FailedJobs {
-		fmt.Fprintf(&sb, "  • %s\n    %s\n", job.Name, job.URL)
+	if len(report.Failures) > 0 {
+		var failures []string
+		for _, failure := range report.Failures[:min(len(report.Failures), maxFailures)] {
+			failures = append(failures, fmt.Sprintf("`%s`", failure))
+		}
+		fmt.Fprintf(&sb, "Failures (%d): %s\n", len(report.Failures), strings.Join(failures, ", "))
+		fmt.Fprintln(&sb)
 	}
-	fmt.Fprintf(&sb, "\nView Full Workflow Run: %s\n", report.Workflow.URL)
+
+	var failedJobNames []string
+	for _, job := range report.FailedJobs {
+		failedJobNames = append(failedJobNames, fmt.Sprintf("%s (%s)", job.Name, job.URL))
+	}
+	fmt.Fprintf(&sb, "Failed jobs (%d/%d): %s\n", len(report.FailedJobs), report.TotalJobs, strings.Join(failedJobNames, ", "))
+	fmt.Fprintf(&sb, "\nView Run: %s\n", report.Run.URL)
 	return sb.String()
 }
 
-// SendSlackMessage sends the message to Slack webhook
-func SendSlackMessage(webhookURL string, message *SlackMessage) error {
-	payload, err := json.Marshal(message)
-	if err != nil {
-		return fmt.Errorf("failed to marshal message: %w", err)
+// BuildDataRaceMessage creates a Slack message announcing data races on main.
+func BuildDataRaceMessage(report *DataRaceReport) *slack.Message {
+	runID := strconv.FormatInt(report.Run.DatabaseID, 10)
+	commitURL := github.CommitURL(temporalRepository, report.Run.HeadSHA)
+
+	message := slack.NewMessage(fmt.Sprintf("Data Race Detected on Main (%d)", len(report.DataRaces)))
+	message.AddSection(":rotating_light: *Data Race Detected on Main Branch* :rotating_light:")
+	message.AddFields(
+		fmt.Sprintf("*Commit:*\n<%s|%s>", commitURL, report.Run.ShortSHA()),
+		fmt.Sprintf("*Author:*\n%s", orUnknown(report.Author)),
+	)
+	if report.Title != "" {
+		message.AddSection(fmt.Sprintf("*Commit message:*\n%s", report.Title))
 	}
 
-	client := &http.Client{
-		Timeout: 30 * time.Second,
+	for _, race := range report.DataRaces {
+		var sb strings.Builder
+		if race.Location != "" {
+			fmt.Fprintf(&sb, "*%s*", race.Location)
+		}
+		for _, site := range raceSites(race.Details) {
+			fmt.Fprintf(&sb, "\n• %s", site)
+		}
+		fmt.Fprintf(&sb, "\n<%s|View job logs>", raceLink(runID, race))
+		message.AddSection(sb.String())
 	}
 
-	resp, err := client.Post(webhookURL, "application/json", bytes.NewBuffer(payload))
-	if err != nil {
-		return fmt.Errorf("failed to send message: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
+	return message
+}
 
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("slack returned status %d", resp.StatusCode)
+func orUnknown(s string) string {
+	if s == "" {
+		return "Unknown"
 	}
+	return s
+}
 
-	return nil
+// raceLink points at the specific job that reported the race so the alert is
+// directly actionable, falling back to the run when the job is unknown.
+func raceLink(runID string, race DataRace) string {
+	if race.JobID != "" {
+		return github.JobURL(temporalRepository, runID, race.JobID)
+	}
+	return github.RunURL(temporalRepository, runID)
 }
 
 // BuildSuccessReportMessage creates a Slack message for success report
-func BuildSuccessReportMessage(report *DigestReport) *SlackMessage {
-	// Header
-	headerBlock := SlackBlock{
-		Type: "section",
-		Text: &SlackText{
-			Type: "mrkdwn",
-			Text: fmt.Sprintf(":chart_with_upwards_trend: *Weekly CI Report - %s Branch*", report.Branch),
-		},
-	}
+func BuildSuccessReportMessage(report *DigestReport) *slack.Message {
+	message := slack.NewMessage(fmt.Sprintf("Weekly CI Report - %s Branch", report.Branch))
+	message.AddSection(fmt.Sprintf(":chart_with_upwards_trend: *Weekly CI Report - %s Branch*", report.Branch))
+	message.AddSection(fmt.Sprintf(
+		"*Report Period:* %s to %s",
+		report.StartDate.Format("Jan 2, 2006"),
+		report.EndDate.Format("Jan 2, 2006"),
+	))
+	message.AddFields(
+		fmt.Sprintf("*Success Rate:*\n%.1f%%", report.SuccessRate),
+		fmt.Sprintf("*Total Runs:*\n%d", report.TotalRuns),
+		fmt.Sprintf("*Failed Runs:*\n%d", report.FailedRuns),
+		fmt.Sprintf("*Successful Runs:*\n%d", report.SuccessfulRuns),
+		fmt.Sprintf("*Average Duration:*\n%s", formatDuration(report.AverageDuration)),
+		fmt.Sprintf("*Median Duration:*\n%s", formatDuration(report.MedianDuration)),
+	)
+	message.AddSection(fmt.Sprintf(
+		"*Run Duration Distribution:*\n"+
+			"• Under 20 minutes: %.1f%%\n"+
+			"• Under 25 minutes: %.1f%%\n"+
+			"• Under 30 minutes: %.1f%%",
+		report.Under20MinutesPercent,
+		report.Under25MinutesPercent,
+		report.Under30MinutesPercent,
+	))
 
-	// Period
-	periodBlock := SlackBlock{
-		Type: "section",
-		Text: &SlackText{
-			Type: "mrkdwn",
-			Text: fmt.Sprintf("*Report Period:* %s to %s",
-				report.StartDate.Format("Jan 2, 2006"),
-				report.EndDate.Format("Jan 2, 2006")),
-		},
-	}
-
-	// Metrics grid
-	metricsBlock := SlackBlock{
-		Type: "section",
-		Fields: []SlackText{
-			{
-				Type: "mrkdwn",
-				Text: fmt.Sprintf("*Success Rate:*\n%.1f%%", report.SuccessRate),
-			},
-			{
-				Type: "mrkdwn",
-				Text: fmt.Sprintf("*Total Runs:*\n%d", report.TotalRuns),
-			},
-			{
-				Type: "mrkdwn",
-				Text: fmt.Sprintf("*Failed Runs:*\n%d", report.FailedRuns),
-			},
-			{
-				Type: "mrkdwn",
-				Text: fmt.Sprintf("*Successful Runs:*\n%d", report.SuccessfulRuns),
-			},
-			{
-				Type: "mrkdwn",
-				Text: fmt.Sprintf("*Average Duration:*\n%s", formatDuration(report.AverageDuration)),
-			},
-			{
-				Type: "mrkdwn",
-				Text: fmt.Sprintf("*Median Duration:*\n%s", formatDuration(report.MedianDuration)),
-			},
-		},
-	}
-
-	// Timing percentiles section
-	timingBlock := SlackBlock{
-		Type: "section",
-		Text: &SlackText{
-			Type: "mrkdwn",
-			Text: fmt.Sprintf("*Run Duration Distribution:*\n"+
-				"• Under 20 minutes: %.1f%%\n"+
-				"• Under 25 minutes: %.1f%%\n"+
-				"• Under 30 minutes: %.1f%%",
-				report.Under20MinutesPercent,
-				report.Under25MinutesPercent,
-				report.Under30MinutesPercent),
-		},
-	}
-
-	blocks := []SlackBlock{headerBlock, periodBlock, metricsBlock, timingBlock}
 	slowestRuns := report.slowestRuns(3)
 	if len(slowestRuns) > 0 {
 		var slowest []string
 		for _, run := range slowestRuns {
 			slowest = append(slowest, fmt.Sprintf("• <%s|%s> — %s (%s)",
 				run.URL,
-				run.shortSHA(),
+				run.ShortSHA(),
 				formatDuration(run.Duration),
 				run.Conclusion,
 			))
 		}
-		blocks = append(blocks, SlackBlock{
-			Type: "section",
-			Text: &SlackText{
-				Type: "mrkdwn",
-				Text: fmt.Sprintf("*Slowest Runs:*\n%s", strings.Join(slowest, "\n")),
-			},
-		})
+		message.AddSection(fmt.Sprintf("*Slowest Runs:*\n%s", strings.Join(slowest, "\n")))
 	}
 
-	return &SlackMessage{
-		Text:   fmt.Sprintf("Weekly CI Report - %s Branch", report.Branch),
-		Blocks: blocks,
-	}
+	return message
 }
 
 // FormatReportForDebug formats the success report for console output
@@ -272,7 +189,7 @@ func FormatReportForDebug(report *DigestReport) string {
 			fmt.Fprintf(&sb, "  %s (%s): %s\n    %s\n",
 				formatDuration(run.Duration),
 				run.Conclusion,
-				run.shortSHA(),
+				run.ShortSHA(),
 				run.URL,
 			)
 		}

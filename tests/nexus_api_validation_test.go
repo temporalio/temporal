@@ -34,11 +34,11 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_WithNamespaceAndTa
 	// Also use this test to verify that namespaces are unescaped in the path.
 	taskQueue := testcore.RandomizeStr("task-queue")
 	namespace := "namespace not/found"
-	u := getDispatchByNsAndTqURL(env.HttpAPIAddress(), namespace, taskQueue)
+	u := env.dispatchByNamespaceAndTaskQueueURL(namespace, taskQueue)
 	client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{BaseURL: u, Service: "test-service"})
 	s.NoError(err)
 	capture := env.StartNamespaceMetricCaptureFor(namespace)
-	_, err = nexusrpc.StartOperation(env.Context(), client, op, "input", nexus.StartOperationOptions{})
+	_, err = nexusrpc.StartOperation(s.Context(), client, op, "input", nexus.StartOperationOptions{})
 	var handlerError *nexus.HandlerError
 	s.ErrorAs(err, &handlerError)
 	s.Equal(nexus.HandlerErrorTypeNotFound, handlerError.Type)
@@ -46,7 +46,13 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_WithNamespaceAndTa
 
 	requests := capture.Metric("nexus_requests")
 	s.Len(requests, 1)
-	s.Equal(map[string]string{"namespace": namespace, "method": "StartNexusOperation", "outcome": "namespace_not_found", "nexus_endpoint": "_unknown_"}, requests[0].Tags)
+	s.Equal(map[string]string{
+		"namespace":      namespace,
+		"method":         "StartNexusOperation",
+		"outcome":        "namespace_not_found",
+		"nexus_endpoint": "_unknown_",
+		"service_name":   "frontend",
+	}, requests[0].Tags)
 	s.Equal(int64(1), requests[0].Value)
 }
 
@@ -59,11 +65,11 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_WithNamespaceAndTa
 		namespace.WriteString("namespace-is-a-very-long-string")
 	}
 
-	u := getDispatchByNsAndTqURL(env.HttpAPIAddress(), namespace.String(), taskQueue)
+	u := env.dispatchByNamespaceAndTaskQueueURL(namespace.String(), taskQueue)
 	client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{BaseURL: u, Service: "test-service"})
 	s.NoError(err)
 	capture := env.StartGlobalMetricCapture()
-	_, err = nexusrpc.StartOperation(env.Context(), client, op, "input", nexus.StartOperationOptions{})
+	_, err = nexusrpc.StartOperation(s.Context(), client, op, "input", nexus.StartOperationOptions{})
 	var handlerErr *nexus.HandlerError
 	s.ErrorAs(err, &handlerErr)
 	s.Equal(nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
@@ -181,15 +187,15 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_Forbidden() {
 			testcore.WithDynamicConfig(dynamicconfig.ExposeAuthorizerErrors, tc.exposeAuthorizerErrors),
 		)
 		taskQueue := testcore.RandomizeStr("task-queue")
-		testEndpoint := env.createNexusEndpoint(env.Context(), s.T(), testcore.RandomizeStr("test-endpoint"), taskQueue)
+		testEndpoint := env.createNexusEndpoint(s.Context(), s.T(), testcore.RandomizeStr("test-endpoint"), taskQueue)
 
 		env.SetOnAuthorize(tc.onAuthorize(testEndpoint.Spec.Name))
 
 		var dispatchURL string
 		if dispatchOnlyByEndpoint {
-			dispatchURL = getDispatchByEndpointURL(env.HttpAPIAddress(), testEndpoint.Id)
+			dispatchURL = env.dispatchByEndpointURL(testEndpoint.Id)
 		} else {
-			dispatchURL = getDispatchByNsAndTqURL(env.HttpAPIAddress(), env.Namespace().String(), taskQueue)
+			dispatchURL = env.dispatchByTaskQueueURL(taskQueue)
 		}
 
 		client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{BaseURL: dispatchURL, Service: "test-service"})
@@ -197,7 +203,7 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_Forbidden() {
 
 		capture := env.StartNamespaceMetricCapture()
 
-		_, err = nexusrpc.StartOperation(env.Context(), client, op, "input", nexus.StartOperationOptions{})
+		_, err = nexusrpc.StartOperation(s.Context(), client, op, "input", nexus.StartOperationOptions{})
 
 		var handlerErr *nexus.HandlerError
 		s.ErrorAs(err, &handlerErr)
@@ -225,18 +231,18 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_PayloadSizeLimit()
 	testFn := func(s *NexusAPIValidationTestSuite, dispatchOnlyByEndpoint bool) {
 		env := newNexusTestEnv(s.T(), false)
 		taskQueue := testcore.RandomizeStr("task-queue")
-		testEndpoint := env.createNexusEndpoint(env.Context(), s.T(), testcore.RandomizeStr("test-endpoint"), taskQueue)
+		testEndpoint := env.createNexusEndpoint(s.Context(), s.T(), testcore.RandomizeStr("test-endpoint"), taskQueue)
 
 		var dispatchURL string
 		if dispatchOnlyByEndpoint {
-			dispatchURL = getDispatchByEndpointURL(env.HttpAPIAddress(), testEndpoint.Id)
+			dispatchURL = env.dispatchByEndpointURL(testEndpoint.Id)
 		} else {
-			dispatchURL = getDispatchByNsAndTqURL(env.HttpAPIAddress(), env.Namespace().String(), taskQueue)
+			dispatchURL = env.dispatchByTaskQueueURL(taskQueue)
 		}
 
 		client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{BaseURL: dispatchURL, Service: "test-service"})
 		s.NoError(err)
-		result, err := nexusrpc.StartOperation(env.Context(), client, op, input, nexus.StartOperationOptions{
+		result, err := nexusrpc.StartOperation(s.Context(), client, op, input, nexus.StartOperationOptions{
 			CallbackURL: "http://localhost/callback",
 			RequestID:   "request-id",
 		})
@@ -263,7 +269,7 @@ func (s *NexusAPIValidationTestSuite) TestNexus_RespondNexusTaskMethods_Verifies
 	ttBytes, err := tt.Marshal()
 	s.NoError(err)
 
-	_, err = env.FrontendClient().RespondNexusTaskCompleted(env.Context(), &workflowservice.RespondNexusTaskCompletedRequest{
+	_, err = env.FrontendClient().RespondNexusTaskCompleted(s.Context(), &workflowservice.RespondNexusTaskCompletedRequest{
 		Namespace: env.ExternalNamespace().String(),
 		Identity:  uuid.NewString(),
 		TaskToken: ttBytes,
@@ -271,7 +277,7 @@ func (s *NexusAPIValidationTestSuite) TestNexus_RespondNexusTaskMethods_Verifies
 	})
 	s.ErrorContains(err, "Operation requested with a token from a different namespace.")
 
-	_, err = env.FrontendClient().RespondNexusTaskFailed(env.Context(), &workflowservice.RespondNexusTaskFailedRequest{
+	_, err = env.FrontendClient().RespondNexusTaskFailed(s.Context(), &workflowservice.RespondNexusTaskFailedRequest{
 		Namespace: env.ExternalNamespace().String(),
 		Identity:  uuid.NewString(),
 		TaskToken: ttBytes,
@@ -291,7 +297,7 @@ func (s *NexusAPIValidationTestSuite) TestNexus_RespondNexusTaskCompleted_Valida
 	ttBytes, err := tt.Marshal()
 	s.NoError(err)
 
-	_, err = env.FrontendClient().RespondNexusTaskCompleted(env.Context(), &workflowservice.RespondNexusTaskCompletedRequest{
+	_, err = env.FrontendClient().RespondNexusTaskCompleted(s.Context(), &workflowservice.RespondNexusTaskCompletedRequest{
 		Namespace: env.Namespace().String(),
 		Identity:  uuid.NewString(),
 		TaskToken: ttBytes,
@@ -323,7 +329,7 @@ func (s *NexusAPIValidationTestSuite) TestNexus_RespondNexusTaskMethods_Validate
 	ttBytes, err := tt.Marshal()
 	s.NoError(err)
 
-	_, err = env.FrontendClient().RespondNexusTaskCompleted(env.Context(), &workflowservice.RespondNexusTaskCompletedRequest{
+	_, err = env.FrontendClient().RespondNexusTaskCompleted(s.Context(), &workflowservice.RespondNexusTaskCompletedRequest{
 		Namespace: env.Namespace().String(),
 		Identity:  uuid.NewString(),
 		TaskToken: ttBytes,
@@ -346,7 +352,7 @@ func (s *NexusAPIValidationTestSuite) TestNexus_RespondNexusTaskMethods_Validate
 	s.ErrorAs(err, &invalidArgumentErr)
 	s.Equal("failure details must be JSON serializable", invalidArgumentErr.Message)
 
-	_, err = env.FrontendClient().RespondNexusTaskFailed(env.Context(), &workflowservice.RespondNexusTaskFailedRequest{
+	_, err = env.FrontendClient().RespondNexusTaskFailed(s.Context(), &workflowservice.RespondNexusTaskFailedRequest{
 		Namespace: env.Namespace().String(),
 		Identity:  uuid.NewString(),
 		TaskToken: ttBytes,
@@ -362,11 +368,11 @@ func (s *NexusAPIValidationTestSuite) TestNexus_RespondNexusTaskMethods_Validate
 
 func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_ByEndpoint_EndpointNotFound() {
 	env := newNexusTestEnv(s.T(), false, testcore.WithDedicatedCluster())
-	u := getDispatchByEndpointURL(env.HttpAPIAddress(), uuid.NewString())
+	u := env.dispatchByEndpointURL(uuid.NewString())
 	client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{BaseURL: u, Service: "test-service"})
 	s.NoError(err)
 	capture := env.StartGlobalMetricCapture()
-	_, err = nexusrpc.StartOperation(env.Context(), client, op, "input", nexus.StartOperationOptions{})
+	_, err = nexusrpc.StartOperation(s.Context(), client, op, "input", nexus.StartOperationOptions{})
 	var handlerErr *nexus.HandlerError
 	s.ErrorAs(err, &handlerErr)
 	s.Equal(nexus.HandlerErrorTypeNotFound, handlerErr.Type)

@@ -13,6 +13,7 @@ import (
 
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/require"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
@@ -31,6 +32,7 @@ import (
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/temporal"
 )
 
 // shardSalt is used to distribute functional tests across shards.
@@ -53,6 +55,7 @@ type Env interface {
 	GetTestCluster() *TestCluster
 	CloseShard(namespaceID string, workflowID string)
 	OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func())
+	// Deprecated: use the suite's Context() method instead.
 	Context() context.Context
 	InjectHook(hook testhooks.Hook) (cleanup func())
 }
@@ -74,7 +77,6 @@ type TestEnv struct {
 	taskPoller     *taskpoller.TaskPoller
 	t              *testing.T
 	tv             *testvars.TestVars
-	ctx            context.Context
 	dedicatedGuard *dedicatedClusterGuard
 
 	sdkClientOnce sync.Once
@@ -109,6 +111,15 @@ type versionHeadersContextKey struct{}
 func WithDedicatedCluster() TestOption {
 	return func(o *testOptions) {
 		o.dedicatedCluster = true
+	}
+}
+
+// WithSpanExporter enables OpenTelemetry tracing with exporter on a dedicated test cluster.
+func WithSpanExporter(exporter sdktrace.SpanExporter) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, withSpanExporter(exporter))
+		o.dedicatedReason = "span exporter configured"
 	}
 }
 
@@ -173,7 +184,7 @@ func WithPersistenceFaultInjection(cfg *config.FaultInjection) TestOption {
 func WithArchival() TestOption {
 	return func(o *testOptions) {
 		o.dedicatedCluster = true
-		o.clusterOptions = append(o.clusterOptions, WithArchivalEnabled())
+		o.clusterOptions = append(o.clusterOptions, withArchivalConfig())
 		o.dedicatedReason = "archival enabled"
 	}
 }
@@ -184,10 +195,12 @@ func WithArchival() TestOption {
 func WithCustomArchivers(historyFactory provider.CustomHistoryArchiverFactory, visibilityFactory provider.CustomVisibilityArchiverFactory) TestOption {
 	return func(o *testOptions) {
 		o.dedicatedCluster = true
-		o.clusterOptions = append(o.clusterOptions,
-			WithCustomHistoryArchiverFactory(historyFactory),
-			WithCustomVisibilityArchiverFactory(visibilityFactory),
-		)
+		o.clusterOptions = append(o.clusterOptions, func(params *testClusterParams) {
+			params.AdditionalServerOptions = append(params.AdditionalServerOptions,
+				temporal.WithCustomHistoryArchiverFactory(historyFactory),
+				temporal.WithCustomVisibilityArchiverFactory(visibilityFactory),
+			)
+		})
 		o.dedicatedReason = "custom archivers used"
 	}
 }
@@ -244,6 +257,10 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	// Check test sharding early, before any expensive operations.
 	checkTestShard(t)
 
+	// Create the test context before any expensive setup, so that the deadline
+	// extension below can compensate for the time setup takes.
+	ctx := testcontext.For(t)
+
 	var options testOptions
 	for _, opt := range opts {
 		opt(&options)
@@ -279,6 +296,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	baseName := strings.ReplaceAll(t.Name(), "/", "-")
 	ns := namespace.Name(RandomizeStr(baseName))
 	nsID, err := base.RegisterNamespace(
+		ctx,
 		ns,
 		1, // 1 day retention
 		enumspb.ARCHIVAL_STATE_DISABLED,
@@ -297,6 +315,10 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	// Attach version headers decorator to the test context.
 	testcontext.AttachDecorator(t, versionHeadersContextKey{}, headers.SetVersions)
 
+	// Restore as much of the test's timeout budget as the context's ceiling
+	// allows, now that setup is done.
+	testcontext.EnsureRemaining(testcontext.For(t), t, testcontext.DefaultTimeout())
+
 	env := &TestEnv{
 		FunctionalTestBase: base,
 		Assertions:         require.New(t),
@@ -307,7 +329,6 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		taskPoller:         taskpoller.New(t, cluster.FrontendClient(), ns.String()),
 		t:                  t,
 		tv:                 tv,
-		ctx:                testcontext.For(t),
 		sdkWorkerTQ:        RandomizeStr("tq-" + t.Name()),
 		dedicatedGuard:     dedicatedGuard,
 	}
@@ -445,28 +466,12 @@ func (e *TestEnv) Tv() *testvars.TestVars {
 //
 //	ctx, cancel := context.WithTimeout(env.Context(), 10*time.Second)
 //	defer cancel()
+//
+// The context is deliberately not cached; see [testcontext.EnsureRemaining].
+//
+// Deprecated: use the suite's Context() method instead.
 func (e *TestEnv) Context() context.Context {
-	return e.ctx
-}
-
-// WaitForChannel waits for ch to receive using the TestEnv context.
-func (e *TestEnv) WaitForChannel(ch <-chan struct{}) {
-	e.t.Helper()
-	select {
-	case <-ch:
-	case <-e.ctx.Done():
-		e.FailNow("context timeout while waiting for channel")
-	}
-}
-
-// SendToChannel sends to ch using the TestEnv context.
-func (e *TestEnv) SendToChannel(ch chan<- struct{}) {
-	e.t.Helper()
-	select {
-	case ch <- struct{}{}:
-	case <-e.ctx.Done():
-		e.FailNow("context timeout while sending to channel")
-	}
+	return testcontext.For(e.t)
 }
 
 // SdkClient returns the SDK client. It is lazily initialized on the first call.

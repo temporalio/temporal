@@ -17,6 +17,7 @@ import (
 	activitypb "go.temporal.io/api/activity/v1"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	filterpb "go.temporal.io/api/filter/v1"
@@ -37,12 +38,13 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
-	"go.temporal.io/server/chasm/lib/callback"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	dc "go.temporal.io/server/common/dynamicconfig"
@@ -64,9 +66,9 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tasktoken"
-	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/worker/batcher"
@@ -74,6 +76,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -157,6 +160,7 @@ func (s *WorkflowHandlerSuite) SetupTest() {
 	s.mockProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
 	s.mockHistoryArchiver = archiver.NewMockHistoryArchiver(s.controller)
 	s.mockVisibilityArchiver = archiver.NewMockVisibilityArchiver(s.controller)
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.tokenSerializer = tasktoken.NewSerializer()
 
@@ -172,18 +176,21 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return(esIndexName).AnyTimes()
 	healthInterceptor := interceptor.NewHealthInterceptor()
 	healthInterceptor.SetHealthy(true)
-	cbValidator := callback.NewValidator(
-		func(string) int { return 2000 },
-		config.CallbackURLMaxLength,
-		config.CallbackHeaderMaxSize,
-		func(string) callback.AddressMatchRules {
-			return callback.AddressMatchRules{
-				Rules: []callback.AddressMatchRule{
+
+	cbValidator, err := callbacks.NewValidator(callbacks.ValidatorConfig{
+		MaxCallbacksPerExecution: func(string) int { return 2000 },
+		URLMaxLength:             config.CallbackURLMaxLength,
+		HeaderMaxSize:            config.CallbackHeaderMaxSize,
+		EndpointRules: func(string) callbacks.AddressMatchRules {
+			return callbacks.AddressMatchRules{
+				Rules: []callbacks.AddressMatchRule{
 					{Regexp: regexp.MustCompile(`.*`), AllowInsecure: true},
 				},
 			}
 		},
-	)
+	})
+	s.NoError(err)
+
 	saValidator := searchattribute.NewValidator(
 		s.mockResource.GetSearchAttributesProvider(),
 		s.mockResource.GetSearchAttributesMapperProvider(),
@@ -205,6 +212,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockProducer,
 		s.mockResource.GetVisibilityManager(),
 		s.mockResource.GetLogger(),
+		wideevents.NoopLogger(),
 		s.mockResource.GetThrottledLogger(),
 		s.mockResource.GetExecutionManager().GetName(),
 		s.mockResource.GetClusterMetadataManager(),
@@ -225,7 +233,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		clock.NewRealTimeSource(),
 		s.mockResource.GetMembershipMonitor(),
 		healthInterceptor,
-		scheduler.NewSpecBuilder(),
+		scheduler.NewSpecBuilder(func() int { return 0 }, func() int { return 0 }),
 		true,
 		nil, // Not testing activity handler here
 		nexusoperation.NewFrontendHandler(
@@ -245,6 +253,139 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 			saValidator,
 		),
 	)
+}
+
+func (s *WorkflowHandlerSuite) TestRespondNexusTaskCompleted_PreservesTaskQueueKindFromToken() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	testCases := []struct {
+		name         string
+		kind         enumspb.TaskQueueKind
+		expectedKind enumspb.TaskQueueKind
+	}{
+		{
+			name:         "worker commands kind preserved",
+			kind:         enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
+			expectedKind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
+		},
+		{
+			name:         "normal kind preserved",
+			kind:         enumspb.TASK_QUEUE_KIND_NORMAL,
+			expectedKind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		{
+			name:         "unspecified defaults to normal",
+			kind:         enumspb.TASK_QUEUE_KIND_UNSPECIFIED,
+			expectedKind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			token, err := s.tokenSerializer.SerializeNexusTaskToken(&tokenspb.NexusTask{
+				NamespaceId:   s.testNamespaceID.String(),
+				TaskQueue:     "test-tq",
+				TaskId:        "test-task-id",
+				TaskQueueKind: tc.kind,
+			})
+			s.NoError(err)
+
+			s.mockMatchingClient.EXPECT().
+				RespondNexusTaskCompleted(gomock.Any(), gomock.Any(), gomock.Any()).
+				DoAndReturn(func(_ context.Context, req *matchingservice.RespondNexusTaskCompletedRequest, _ ...grpc.CallOption) (*matchingservice.RespondNexusTaskCompletedResponse, error) {
+					s.Equal(tc.expectedKind, req.GetTaskQueue().GetKind())
+					return &matchingservice.RespondNexusTaskCompletedResponse{}, nil
+				})
+
+			_, err = wh.RespondNexusTaskCompleted(context.Background(), &workflowservice.RespondNexusTaskCompletedRequest{
+				Namespace: s.testNamespace.String(),
+				TaskToken: token,
+			})
+			s.NoError(err)
+		})
+	}
+}
+
+func (s *WorkflowHandlerSuite) TestRespondNexusTaskFailed_PreservesTaskQueueKindFromToken() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	testCases := []struct {
+		name         string
+		kind         enumspb.TaskQueueKind
+		expectedKind enumspb.TaskQueueKind
+	}{
+		{
+			name:         "worker commands kind preserved",
+			kind:         enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
+			expectedKind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
+		},
+		{
+			name:         "normal kind preserved",
+			kind:         enumspb.TASK_QUEUE_KIND_NORMAL,
+			expectedKind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		{
+			name:         "unspecified defaults to normal",
+			kind:         enumspb.TASK_QUEUE_KIND_UNSPECIFIED,
+			expectedKind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			token, err := s.tokenSerializer.SerializeNexusTaskToken(&tokenspb.NexusTask{
+				NamespaceId:   s.testNamespaceID.String(),
+				TaskQueue:     "test-tq",
+				TaskId:        "test-task-id",
+				TaskQueueKind: tc.kind,
+			})
+			s.NoError(err)
+
+			s.mockMatchingClient.EXPECT().
+				RespondNexusTaskFailed(gomock.Any(), gomock.Any(), gomock.Any()).
+				DoAndReturn(func(_ context.Context, req *matchingservice.RespondNexusTaskFailedRequest, _ ...grpc.CallOption) (*matchingservice.RespondNexusTaskFailedResponse, error) {
+					s.Equal(tc.expectedKind, req.GetTaskQueue().GetKind())
+					return &matchingservice.RespondNexusTaskFailedResponse{}, nil
+				})
+
+			_, err = wh.RespondNexusTaskFailed(context.Background(), &workflowservice.RespondNexusTaskFailedRequest{
+				Namespace: s.testNamespace.String(),
+				TaskToken: token,
+				Failure: &failurepb.Failure{
+					Message: "test failure",
+					FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
+						NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{},
+					},
+				},
+			})
+			s.NoError(err)
+		})
+	}
+}
+
+func (s *WorkflowHandlerSuite) TestPollNexusTaskQueue_EmptyLongPollReturnsNonNilResponse() {
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil).AnyTimes()
+
+	// An empty long poll: matching returns a response whose inner Response is nil. The handler
+	// must not surface that as a typed-nil pointer, which would panic downstream interceptors.
+	s.mockMatchingClient.EXPECT().
+		PollNexusTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&matchingservice.PollNexusTaskQueueResponse{}, nil)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	resp, err := wh.PollNexusTaskQueue(ctx, &workflowservice.PollNexusTaskQueueRequest{
+		Namespace: s.testNamespace.String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+	})
+	s.NoError(err)
+	s.NotNil(resp)
 }
 
 func (s *WorkflowHandlerSuite) TestCheckWorkerDeploymentReadRateLimitResourceExhaustedScope() {
@@ -372,6 +513,68 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_StartRequestNot
 	_, err := wh.StartWorkflowExecution(context.Background(), nil)
 	s.Error(err)
 	s.Equal(errRequestNotSet, err)
+}
+
+func (s *WorkflowHandlerSuite) TestValidateStartWorkflowArgsForSchedule_Failed_InvalidVersioningOverride() {
+	wh := s.getWorkflowHandler(s.newConfig())
+	err := wh.validateStartWorkflowArgsForSchedule(s.testNamespace, &workflowpb.NewWorkflowExecutionInfo{
+		WorkflowId:               "workflow-id",
+		WorkflowType:             &commonpb.WorkflowType{Name: "workflow-type"},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: "task-queue"},
+		WorkflowExecutionTimeout: durationpb.New(time.Second),
+		WorkflowRunTimeout:       durationpb.New(time.Second),
+		WorkflowTaskTimeout:      durationpb.New(time.Second),
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Override: &workflowpb.VersioningOverride_AutoUpgrade{},
+		},
+	})
+
+	s.ErrorContains(err, "auto-upgrade override must be true")
+}
+
+func (s *WorkflowHandlerSuite) TestValidateStartWorkflowArgsForSchedule_InvalidVersioningOverrideAllowedWhenDisabled() {
+	config := s.newConfig()
+	config.DisabledScheduleValidations = func(namespace string) []string {
+		s.Equal(s.testNamespace.String(), namespace)
+		return []string{"VERSIONING-OVERRIDE"}
+	}
+	wh := s.getWorkflowHandler(config)
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(s.testNamespace).Return(nil, nil)
+	err := wh.validateStartWorkflowArgsForSchedule(s.testNamespace, &workflowpb.NewWorkflowExecutionInfo{
+		WorkflowId:               "workflow-id",
+		WorkflowType:             &commonpb.WorkflowType{Name: "workflow-type"},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: "task-queue"},
+		WorkflowExecutionTimeout: durationpb.New(time.Second),
+		WorkflowRunTimeout:       durationpb.New(time.Second),
+		WorkflowTaskTimeout:      durationpb.New(time.Second),
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Override: &workflowpb.VersioningOverride_AutoUpgrade{},
+		},
+	})
+
+	s.Require().NoError(err)
+}
+
+func (s *WorkflowHandlerSuite) TestValidateStartWorkflowArgsForSchedule_Failed_InvalidVersioningOverrideVersion() {
+	wh := s.getWorkflowHandler(s.newConfig())
+	err := wh.validateStartWorkflowArgsForSchedule(s.testNamespace, &workflowpb.NewWorkflowExecutionInfo{
+		WorkflowId:               "workflow-id",
+		WorkflowType:             &commonpb.WorkflowType{Name: "workflow-type"},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: "task-queue"},
+		WorkflowExecutionTimeout: durationpb.New(time.Second),
+		WorkflowRunTimeout:       durationpb.New(time.Second),
+		WorkflowTaskTimeout:      durationpb.New(time.Second),
+		VersioningOverride: &workflowpb.VersioningOverride{
+			Override: &workflowpb.VersioningOverride_Pinned{
+				Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+					Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+					Version:  &deploymentpb.WorkerDeploymentVersion{BuildId: "build-id"},
+				},
+			},
+		},
+	})
+
+	s.ErrorContains(err, "WorkerDeploymentName cannot be empty")
 }
 
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_NamespaceNotSet() {
@@ -943,9 +1146,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidCallback
 		RequestId: uuid.NewString(),
 		CompletionCallbacks: []*commonpb.Callback{
 			{
-				Variant: &commonpb.Callback_Internal_{
-					Internal: &commonpb.Callback_Internal{},
-				},
+				Variant: nexusCallbackVariant(),
 				Links: []*commonpb.Link{
 					{
 						Variant: &commonpb.Link_WorkflowEvent_{
@@ -967,8 +1168,8 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidAggregat
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
 	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
-	config.CallbackEndpointConfigs = dc.GetTypedPropertyFnFilteredByNamespace(callback.AddressMatchRules{
-		Rules: []callback.AddressMatchRule{
+	config.CallbackEndpointConfigs = dc.GetTypedPropertyFnFilteredByNamespace(callbacks.AddressMatchRules{
+		Rules: []callbacks.AddressMatchRule{
 			{
 				Regexp:        regexp.MustCompile(`.*`),
 				AllowInsecure: true,
@@ -989,11 +1190,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidAggregat
 		RequestId: uuid.NewString(),
 		CompletionCallbacks: []*commonpb.Callback{
 			{
-				Variant: &commonpb.Callback_Nexus_{
-					Nexus: &commonpb.Callback_Nexus{
-						Url: "http://localhost/test",
-					},
-				},
+				Variant: nexusCallbackVariant(),
 				Links: []*commonpb.Link{
 					{
 						Variant: &commonpb.Link_WorkflowEvent_{
@@ -2478,6 +2675,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 
+	//nolint:staticcheck // SA1019: batch input uses the rollout-compatible legacy enum
 	params := &batchspb.BatchOperationInput{
 		NamespaceId: namespaceID.String(),
 		BatchType:   enumspb.BATCH_OPERATION_TYPE_TERMINATE,
@@ -2507,7 +2705,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
 			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(inputString, request.StartRequest.Identity)
-			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeTerminate), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
+			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeTerminateWorkflows), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
 			s.ProtoEqual(payload.EncodeString(inputString), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
 			s.ProtoEqual(
 				sadefs.MustEncodeValue(inputString, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
@@ -2543,6 +2741,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 
+	//nolint:staticcheck // SA1019: batch input uses the rollout-compatible legacy enum
 	params := &batchspb.BatchOperationInput{
 		NamespaceId: namespaceID.String(),
 		BatchType:   enumspb.BATCH_OPERATION_TYPE_CANCEL,
@@ -2572,7 +2771,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Cancellation() {
 			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(inputString, request.StartRequest.Identity)
-			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeCancel), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
+			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeCancelWorkflows), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
 			s.ProtoEqual(payload.EncodeString(inputString), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
 			s.ProtoEqual(
 				sadefs.MustEncodeValue(inputString, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
@@ -2609,6 +2808,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Signal() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 	signalPayloads := payloads.EncodeString(signalName)
+	//nolint:staticcheck // SA1019: batch input uses the rollout-compatible legacy enum
 	params := &batchspb.BatchOperationInput{
 		NamespaceId: namespaceID.String(),
 		BatchType:   enumspb.BATCH_OPERATION_TYPE_SIGNAL,
@@ -2640,7 +2840,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Signal() {
 			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(inputString, request.StartRequest.Identity)
-			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeSignal), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
+			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeSignalWorkflows), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
 			s.ProtoEqual(payload.EncodeString(inputString), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
 			s.ProtoEqual(
 				sadefs.MustEncodeValue(inputString, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
@@ -2667,6 +2867,140 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Signal() {
 
 	_, err = wh.StartBatchOperation(context.Background(), request)
 	s.NoError(err)
+}
+
+func TestBuildUnpauseActivityVisibilityQuery(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name         string
+		query        string
+		activityType string
+		want         string
+		wantErr      bool
+	}{
+		{
+			name:         "explicit targets",
+			activityType: "ActivityFunc",
+		},
+		{
+			name:         "scoped query",
+			query:        "WorkflowType='ScopedWorkflow'",
+			activityType: "ActivityFunc",
+			want:         "TemporalPauseInfo = 'property:activityType=ActivityFunc' and (WorkflowType = 'ScopedWorkflow')",
+		},
+		{
+			name:         "boolean query preserves precedence and escapes activity type",
+			query:        "WorkflowType='ScopedWorkflow' OR WorkflowType='OtherWorkflow'",
+			activityType: "Activity'Func",
+			want:         "TemporalPauseInfo = 'property:activityType=Activity\\'Func' and (WorkflowType = 'ScopedWorkflow' or WorkflowType = 'OtherWorkflow')",
+		},
+		{
+			name:         "order by is dropped",
+			query:        "WorkflowType='ScopedWorkflow' ORDER BY StartTime DESC",
+			activityType: "ActivityFunc",
+			want:         "TemporalPauseInfo = 'property:activityType=ActivityFunc' and (WorkflowType = 'ScopedWorkflow')",
+		},
+		{
+			name:         "set operation",
+			query:        "WorkflowId='test' UNION SELECT * FROM other",
+			activityType: "ActivityFunc",
+			wantErr:      true,
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := buildUnpauseActivityVisibilityQuery(tt.query, tt.activityType)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func (s *WorkflowHandlerSuite) TestStartBatchOperation_UnpauseActivitiesPreservesTargetScope() {
+	testNamespace := namespace.Name("test-namespace")
+	targetExecution := &commonpb.Execution{
+		Type:       enumspb.EXECUTION_TYPE_WORKFLOW,
+		BusinessId: uuid.NewString(),
+		RunId:      uuid.NewString(),
+	}
+	testCases := []struct {
+		name       string
+		request    *workflowservice.StartBatchOperationRequest
+		wantQuery  string
+		wantTarget *commonpb.Execution
+	}{
+		{
+			name: "visibility query",
+			request: &workflowservice.StartBatchOperationRequest{
+				Namespace:       testNamespace.String(),
+				VisibilityQuery: "WorkflowType='ScopedWorkflow'",
+				JobId:           uuid.NewString(),
+				Reason:          "test",
+				Operation: &workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation{
+					UnpauseActivitiesOperation: &batchpb.BatchOperationUnpauseActivities{
+						Activity: &batchpb.BatchOperationUnpauseActivities_Type{Type: "ActivityFunc"},
+					},
+				},
+			},
+			wantQuery: "TemporalPauseInfo = 'property:activityType=ActivityFunc' and (WorkflowType = 'ScopedWorkflow')",
+		},
+		{
+			name: "explicit target",
+			request: &workflowservice.StartBatchOperationRequest{
+				Namespace:        testNamespace.String(),
+				TargetExecutions: []*commonpb.Execution{targetExecution},
+				JobId:            uuid.NewString(),
+				Reason:           "test",
+				Operation: &workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation{
+					UnpauseActivitiesOperation: &batchpb.BatchOperationUnpauseActivities{
+						Activity: &batchpb.BatchOperationUnpauseActivities_Type{Type: "ActivityFunc"},
+					},
+				},
+			},
+			wantTarget: targetExecution,
+		},
+	}
+
+	for _, tt := range testCases {
+		s.Run(tt.name, func() {
+			namespaceID := namespace.ID(uuid.NewString())
+			wh := s.getWorkflowHandler(s.newConfig())
+			originalRequest := proto.Clone(tt.request).(*workflowservice.StartBatchOperationRequest)
+			var input batchspb.BatchOperationInput
+
+			s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
+			s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
+			s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(
+					_ context.Context,
+					request *historyservice.StartWorkflowExecutionRequest,
+					_ ...grpc.CallOption,
+				) (*historyservice.StartWorkflowExecutionResponse, error) {
+					s.Require().NoError(payloads.Decode(request.StartRequest.Input, &input))
+					return &historyservice.StartWorkflowExecutionResponse{}, nil
+				},
+			)
+
+			_, err := wh.StartBatchOperation(context.Background(), tt.request)
+			s.Require().NoError(err)
+			s.ProtoEqual(originalRequest, tt.request)
+			s.Equal(tt.wantQuery, input.Request.GetVisibilityQuery())
+			if tt.wantTarget == nil {
+				s.Empty(input.Request.GetTargetExecutions())
+			} else {
+				s.Require().Len(input.Request.GetTargetExecutions(), 1)
+				s.ProtoEqual(tt.wantTarget, input.Request.GetTargetExecutions()[0])
+			}
+		})
+	}
 }
 
 func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal() {
@@ -2698,6 +3032,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal
 			},
 		},
 	}
+	//nolint:staticcheck // SA1019: batch input uses the rollout-compatible legacy enum
 	params := &batchspb.BatchOperationInput{
 		NamespaceId: namespaceID.String(),
 		BatchType:   enumspb.BATCH_OPERATION_TYPE_SIGNAL,
@@ -2717,8 +3052,16 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal
 			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(identity, request.StartRequest.Identity)
-			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeSignal), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
+			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeSignalWorkflows), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
 			s.ProtoEqual(payload.EncodeString(reason), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
+			// Started via Executions (no VisibilityQuery), so the query memo must be
+			// absent and the executions memo must carry the target executions.
+			s.NotContains(request.StartRequest.Memo.Fields, batcher.BatchOperationVisibilityQueryMemo)
+			var gotExecutions []*commonpb.Execution
+			s.NoError(payload.Decode(request.StartRequest.Memo.Fields[batcher.BatchOperationExecutionsMemo], &gotExecutions))
+			s.Equal([]*commonpb.Execution{
+				{Type: enumspb.EXECUTION_TYPE_WORKFLOW, BusinessId: executions[0].WorkflowId, RunId: executions[0].RunId},
+			}, gotExecutions)
 			s.ProtoEqual(
 				sadefs.MustEncodeValue(identity, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 				request.StartRequest.SearchAttributes.IndexedFields[sadefs.BatcherUser],
@@ -2747,6 +3090,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset(
 	jobId := uuid.NewString()
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
+	//nolint:staticcheck // SA1019: batch input uses the rollout-compatible legacy enum
 	params := &batchspb.BatchOperationInput{
 		NamespaceId: namespaceID.String(),
 		BatchType:   enumspb.BATCH_OPERATION_TYPE_RESET,
@@ -2778,7 +3122,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset(
 			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(identity, request.StartRequest.Identity)
-			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeReset), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
+			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeResetWorkflows), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
 			s.ProtoEqual(payload.EncodeString(reason), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
 			s.ProtoEqual(
 				sadefs.MustEncodeValue(identity, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
@@ -2845,7 +3189,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Reset_
 			s.Equal(primitives.PerNSWorkerTaskQueue, request.StartRequest.TaskQueue.Name)
 			s.Equal(enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, request.StartRequest.WorkflowIdReusePolicy)
 			s.Equal(identity, request.StartRequest.Identity)
-			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeReset), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
+			s.ProtoEqual(payload.EncodeString(batcher.BatchTypeResetWorkflows), request.StartRequest.Memo.Fields[batcher.BatchOperationTypeMemo])
 			s.ProtoEqual(payload.EncodeString(reason), request.StartRequest.Memo.Fields[batcher.BatchReasonMemo])
 			s.ProtoEqual(
 				sadefs.MustEncodeValue(identity, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
@@ -3104,7 +3448,7 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_CompletedStatus() {
 						ExecutionTime: now,
 						Memo: &commonpb.Memo{
 							Fields: map[string]*commonpb.Payload{
-								batcher.BatchOperationTypeMemo: payload.EncodeString(batcher.BatchTypeReset),
+								batcher.BatchOperationTypeMemo: payload.EncodeString(batcher.BatchTypeResetWorkflows),
 							},
 						},
 						SearchAttributes: nil,
@@ -3145,7 +3489,7 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_CompletedStatus() {
 						ExecutionTime: now,
 						Memo: &commonpb.Memo{
 							Fields: map[string]*commonpb.Payload{
-								batcher.BatchOperationTypeMemo:  payload.EncodeString(batcher.BatchTypeTerminate),
+								batcher.BatchOperationTypeMemo:  payload.EncodeString(batcher.BatchTypeTerminateWorkflows),
 								batcher.BatchOperationStatsMemo: statsPayload,
 							},
 						},
@@ -3164,7 +3508,7 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_CompletedStatus() {
 		s.Equal(jobID, resp.GetJobId())
 		s.Equal(now, resp.GetStartTime())
 		s.Equal(now, resp.GetCloseTime())
-		s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE, resp.GetOperationType())
+		s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, resp.GetOperationType())
 		s.Equal(enumspb.BATCH_OPERATION_STATE_COMPLETED, resp.GetState())
 		s.Equal(int64(3), resp.GetTotalOperationCount())
 		s.Equal(int64(2), resp.GetCompleteOperationCount())
@@ -3203,7 +3547,7 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_RunningStatus() {
 					ExecutionTime: now,
 					Memo: &commonpb.Memo{
 						Fields: map[string]*commonpb.Payload{
-							batcher.BatchOperationTypeMemo: payload.EncodeString(batcher.BatchTypeTerminate),
+							batcher.BatchOperationTypeMemo: payload.EncodeString(batcher.BatchTypeTerminateWorkflows),
 						},
 					},
 					SearchAttributes: nil,
@@ -3226,7 +3570,7 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_RunningStatus() {
 	s.Equal(jobID, resp.GetJobId())
 	s.Equal(now, resp.GetStartTime())
 	s.Equal(now, resp.GetCloseTime())
-	s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE, resp.GetOperationType())
+	s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, resp.GetOperationType())
 	s.Equal(enumspb.BATCH_OPERATION_STATE_RUNNING, resp.GetState())
 	s.Assert().Equal(int64(5), resp.TotalOperationCount)
 	s.Assert().Equal(int64(3), resp.CompleteOperationCount)
@@ -3259,7 +3603,7 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_FailedStatus() {
 					ExecutionTime: now,
 					Memo: &commonpb.Memo{
 						Fields: map[string]*commonpb.Payload{
-							batcher.BatchOperationTypeMemo: payload.EncodeString(batcher.BatchTypeTerminate),
+							batcher.BatchOperationTypeMemo: payload.EncodeString(batcher.BatchTypeTerminateWorkflows),
 						},
 					},
 					SearchAttributes: nil,
@@ -3277,8 +3621,98 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_FailedStatus() {
 	s.Equal(jobID, resp.GetJobId())
 	s.Equal(now, resp.GetStartTime())
 	s.Equal(now, resp.GetCloseTime())
-	s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE, resp.GetOperationType())
+	s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, resp.GetOperationType())
 	s.Equal(enumspb.BATCH_OPERATION_STATE_FAILED, resp.GetState())
+}
+
+func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_QueryAndExecutions() {
+	testNamespace := namespace.Name("test-namespace")
+	namespaceID := namespace.ID(uuid.NewString())
+	jobID := uuid.NewString()
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+	now := timestamppb.New(time.Now())
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
+
+	s.Run("QueryAndExecutionsDecodedFromMemo", func() {
+		executions := []*commonpb.Execution{
+			{Type: enumspb.EXECUTION_TYPE_ACTIVITY, BusinessId: "activity-id", RunId: "run-id"},
+		}
+		executionsPayload, err := payload.Encode(executions)
+		s.Require().NoError(err)
+
+		s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(
+				_ context.Context,
+				request *historyservice.DescribeWorkflowExecutionRequest,
+				_ ...grpc.CallOption,
+			) (*historyservice.DescribeWorkflowExecutionResponse, error) {
+				return &historyservice.DescribeWorkflowExecutionResponse{
+					WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+						Execution: &commonpb.WorkflowExecution{
+							WorkflowId: jobID,
+						},
+						StartTime:     now,
+						CloseTime:     now,
+						Status:        enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+						ExecutionTime: now,
+						Memo: &commonpb.Memo{
+							Fields: map[string]*commonpb.Payload{
+								batcher.BatchOperationTypeMemo:            payload.EncodeString(batcher.BatchTypeTerminateActivities),
+								batcher.BatchOperationVisibilityQueryMemo: payload.EncodeString("ActivityType='foo'"),
+								batcher.BatchOperationExecutionsMemo:      executionsPayload,
+							},
+						},
+						SearchAttributes: nil,
+					},
+				}, nil
+			},
+		)
+		request := &workflowservice.DescribeBatchOperationRequest{
+			Namespace: testNamespace.String(),
+			JobId:     jobID,
+		}
+
+		resp, err := wh.DescribeBatchOperation(context.Background(), request)
+		s.NoError(err)
+		s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY, resp.GetOperationType())
+		s.Equal("ActivityType='foo'", resp.GetQuery())
+		s.Equal(executions, resp.GetExecutions())
+	})
+
+	s.Run("MissingTypeQueryAndExecutionsMemo_DefaultToZeroValues", func() {
+		s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(
+				_ context.Context,
+				request *historyservice.DescribeWorkflowExecutionRequest,
+				_ ...grpc.CallOption,
+			) (*historyservice.DescribeWorkflowExecutionResponse, error) {
+				return &historyservice.DescribeWorkflowExecutionResponse{
+					WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+						Execution: &commonpb.WorkflowExecution{
+							WorkflowId: jobID,
+						},
+						StartTime:        now,
+						CloseTime:        now,
+						Status:           enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+						ExecutionTime:    now,
+						Memo:             &commonpb.Memo{},
+						SearchAttributes: nil,
+					},
+				}, nil
+			},
+		)
+		request := &workflowservice.DescribeBatchOperationRequest{
+			Namespace: testNamespace.String(),
+			JobId:     jobID,
+		}
+
+		resp, err := wh.DescribeBatchOperation(context.Background(), request)
+		s.NoError(err)
+		s.Equal(enumspb.BATCH_OPERATION_TYPE_UNSPECIFIED, resp.GetOperationType())
+		s.Empty(resp.GetQuery())
+		s.Empty(resp.GetExecutions())
+	})
 }
 
 func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_InvalidRequest() {
@@ -3324,7 +3758,7 @@ func (s *WorkflowHandlerSuite) TestListBatchOperations() {
 						ExecutionTime: now,
 						Memo: &commonpb.Memo{
 							Fields: map[string]*commonpb.Payload{
-								batcher.BatchOperationTypeMemo: payload.EncodeString(batcher.BatchTypeTerminate),
+								batcher.BatchOperationTypeMemo: payload.EncodeString(batcher.BatchTypeTerminateWorkflows),
 							},
 						},
 					},
@@ -3449,27 +3883,147 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 	var invalidArgumentErr *serviceerror.InvalidArgument
 
 	// nil config is valid
-	s.Require().NoError(wh.validateTimeSkippingConfig(nil, s.testNamespace))
+	s.Require().NoError(wh.validateAndPopulateTimeSkippingConfig(nil, s.testNamespace))
 
 	// config with enabled=false but dynamic config disabled returns error
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
-	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace), &unimplementedErr)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace), &unimplementedErr)
 
 	// config with enabled=true but dynamic config disabled returns error
-	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace), &unimplementedErr)
+	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace), &unimplementedErr)
 
 	// config with enabled=false and dynamic config enabled is valid
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
-	s.Require().NoError(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace))
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	s.Require().NoError(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace))
 
 	// config with enabled=true and dynamic config enabled is valid
-	s.Require().NoError(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
+	s.Require().NoError(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
 
-	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
-		Enabled: false, FastForward: durationpb.New(time.Second * 10)}, s.testNamespace), &invalidArgumentErr)
+	// fast_forward set while enabled=false is rejected
+	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+		Enabled: false, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * 10), Id: "ff-id"}}, s.testNamespace), &invalidArgumentErr)
 
-	s.Require().ErrorAs(wh.validateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
-		Enabled: true, FastForward: durationpb.New(time.Second * -10)}, s.testNamespace), &invalidArgumentErr)
+	// negative fast_forward duration is rejected
+	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+		Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * -10), Id: "ff-id"}}, s.testNamespace), &invalidArgumentErr)
+
+	// fast_forward set without a fast_forward_id is rejected
+	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+		Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * 10)}}, s.testNamespace), &invalidArgumentErr)
+
+	// a blank (whitespace-only) fast_forward_id is rejected
+	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+		Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * 10), Id: "  "}}, s.testNamespace), &invalidArgumentErr)
+
+	// fast_forward with a valid fast_forward_id is accepted
+	s.Require().NoError(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+		Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * 10), Id: "ff-id"}}, s.testNamespace))
+
+	// MaxSkipPerSession is populated from dynamic config: a per-namespace override wins for that
+	// namespace, a constraint-less (per-cell) value is the fallback for other namespaces, and a
+	// value already set on the request is left untouched.
+	const otherNamespace = "other-namespace"
+	maxSkipClient := dc.StaticClient{
+		dc.WorkflowTimeSkippingEnabled.Key(): true,
+		dc.WorkflowTimeSkippingMaxSkipPerSession.Key(): []dc.ConstrainedValue{
+			{Value: 42}, // per-cell (constraint-less) value
+			{Constraints: dc.Constraints{Namespace: s.testNamespace.String()}, Value: 7}, // per-namespace override
+		},
+	}
+	maxSkipWH := s.getWorkflowHandler(NewConfig(dc.NewCollection(maxSkipClient, log.NewNoopLogger()), numHistoryShards))
+
+	// namespace with a per-namespace override uses that value
+	tsc := &commonpb.TimeSkippingConfig{Enabled: true}
+	s.Require().NoError(maxSkipWH.validateAndPopulateTimeSkippingConfig(tsc, s.testNamespace))
+	s.Require().Equal(int32(7), tsc.GetMaxSessionSkipCount())
+
+	// namespace without a per-namespace setting falls back to the per-cell value
+	tsc = &commonpb.TimeSkippingConfig{Enabled: true}
+	s.Require().NoError(maxSkipWH.validateAndPopulateTimeSkippingConfig(tsc, namespace.Name(otherNamespace)))
+	s.Require().Equal(int32(42), tsc.GetMaxSessionSkipCount())
+
+	// a value already on the request is preserved, not overwritten by dynamic config
+	tsc = &commonpb.TimeSkippingConfig{Enabled: true, MaxSessionSkipCount: 999}
+	s.Require().NoError(maxSkipWH.validateAndPopulateTimeSkippingConfig(tsc, s.testNamespace))
+	s.Require().Equal(int32(999), tsc.GetMaxSessionSkipCount())
+}
+
+func (s *WorkflowHandlerSuite) TestPollWorkflowExecutionTimeSkipping() {
+	validExecution := &commonpb.WorkflowExecution{WorkflowId: "wf-id"}
+	newReq := func(fastForwardID string) *workflowservice.PollWorkflowExecutionTimeSkippingRequest {
+		return &workflowservice.PollWorkflowExecutionTimeSkippingRequest{
+			Namespace:         s.testNamespace.String(),
+			WorkflowExecution: validExecution,
+			FastForwardId:     fastForwardID,
+		}
+	}
+	handler := func(timeSkippingEnabled bool) *WorkflowHandler {
+		config := s.newConfig()
+		config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(timeSkippingEnabled)
+		return s.getWorkflowHandler(config)
+	}
+
+	s.Run("nil request is rejected", func() {
+		_, err := handler(true).PollWorkflowExecutionTimeSkipping(context.Background(), nil)
+		s.ErrorIs(err, errRequestNotSet)
+	})
+
+	s.Run("invalid execution is rejected before namespace lookup", func() {
+		_, err := handler(true).PollWorkflowExecutionTimeSkipping(context.Background(),
+			&workflowservice.PollWorkflowExecutionTimeSkippingRequest{
+				Namespace:         s.testNamespace.String(),
+				WorkflowExecution: &commonpb.WorkflowExecution{}, // no workflow id
+				FastForwardId:     "ff-id",
+			})
+		s.ErrorIs(err, errWorkflowIDNotSet)
+	})
+
+	s.Run("disabled dynamic config is rejected", func() {
+		s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil)
+		_, err := handler(false).PollWorkflowExecutionTimeSkipping(context.Background(), newReq("ff-id"))
+		s.ErrorIs(err, errWorkflowTimeSkippingNotEnabled)
+	})
+
+	s.Run("blank fast_forward_id is rejected", func() {
+		s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil)
+		_, err := handler(true).PollWorkflowExecutionTimeSkipping(context.Background(), newReq("   "))
+		s.ErrorIs(err, errTimeSkippingFastForwardIDNotSet)
+	})
+
+	s.Run("valid request forwards to history and returns its response", func() {
+		req := newReq("ff-id")
+		s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil)
+
+		want := &workflowservice.PollWorkflowExecutionTimeSkippingResponse{
+			FastForwardPollingResult: enumspb.FAST_FORWARD_POLLING_RESULT_FAST_FORWARD_COMPLETED,
+			FastForwardInfo: &commonpb.TimeSkippingFastForwardInfo{
+				FastForwardId: "ff-id",
+				HasCompleted:  true,
+			},
+		}
+		s.mockHistoryClient.EXPECT().
+			PollWorkflowExecutionTimeSkipping(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, histReq *historyservice.PollWorkflowExecutionTimeSkippingRequest, _ ...grpc.CallOption) (*historyservice.PollWorkflowExecutionTimeSkippingResponse, error) {
+				// The frontend stamps the resolved namespace id and forwards the request verbatim.
+				s.Equal(s.testNamespaceID.String(), histReq.GetNamespaceId())
+				s.Same(req, histReq.GetRequest())
+				return &historyservice.PollWorkflowExecutionTimeSkippingResponse{Response: want}, nil
+			})
+
+		resp, err := handler(true).PollWorkflowExecutionTimeSkipping(context.Background(), req)
+		s.NoError(err)
+		s.Same(want, resp)
+	})
+
+	s.Run("history error is propagated", func() {
+		s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil)
+		s.mockHistoryClient.EXPECT().
+			PollWorkflowExecutionTimeSkipping(gomock.Any(), gomock.Any()).
+			Return(nil, serviceerror.NewUnavailable("history unavailable"))
+		_, err := handler(true).PollWorkflowExecutionTimeSkipping(context.Background(), newReq("ff-id"))
+		var unavailable *serviceerror.Unavailable
+		s.ErrorAs(err, &unavailable)
+	})
 }
 
 // TestExecuteMultiOperation_TimeSkipping_DCDisabled verifies that when the DC gate is off,
@@ -3477,7 +4031,7 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 // as a MultiOperationExecution error with the per-operation InvalidArgument at index 0.
 func (s *WorkflowHandlerSuite) TestExecuteMultiOperation_TimeSkipping_DCDisabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
 	// Namespace lookup happens before operation validation.
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace.Name(s.testNamespace.String())).Return(s.testNamespaceID, nil)
@@ -3525,7 +4079,7 @@ func (s *WorkflowHandlerSuite) TestExecuteMultiOperation_TimeSkipping_DCDisabled
 // forwarded to the history client inside the StartWorkflow request.
 func (s *WorkflowHandlerSuite) TestExecuteMultiOperation_TimeSkipping_DCEnabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	wh := s.getWorkflowHandler(config)
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace.Name(s.testNamespace.String())).Return(s.testNamespaceID, nil)
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
@@ -3582,7 +4136,7 @@ func (s *WorkflowHandlerSuite) TestExecuteMultiOperation_TimeSkipping_DCEnabled(
 // a StartWorkflowExecution with a TimeSkippingConfig is rejected.
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_TimeSkipping_DCDisabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
 
@@ -3605,7 +4159,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_TimeSkipping_DCDisable
 // forwarded to the history client inside the StartWorkflow request.
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_TimeSkipping_DCEnabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	wh := s.getWorkflowHandler(config)
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace.Name(s.testNamespace.String())).Return(s.testNamespaceID, nil)
@@ -3630,7 +4184,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_TimeSkipping_DCEnabled
 // a SignalWithStartWorkflowExecution with a TimeSkippingConfig is rejected.
 func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_TimeSkipping_DCDisabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
 
@@ -3654,7 +4208,7 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_TimeSkipping
 // forwarded to the history client inside the request.
 func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_TimeSkipping_DCEnabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	wh := s.getWorkflowHandler(config)
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace.Name(s.testNamespace.String())).Return(s.testNamespaceID, nil)
@@ -3680,7 +4234,7 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_TimeSkipping
 // a ResetWorkflowExecution request with a TimeSkippingConfig inside PostResetOperations is rejected.
 func (s *WorkflowHandlerSuite) TestResetWorkflowExecution_TimeSkipping_DCDisabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
 
 	_, err := wh.ResetWorkflowExecution(context.Background(), &workflowservice.ResetWorkflowExecutionRequest{
@@ -3712,7 +4266,7 @@ func (s *WorkflowHandlerSuite) TestResetWorkflowExecution_TimeSkipping_DCDisable
 // is off, a batch reset with a TimeSkippingConfig inside PostResetOperations is rejected.
 func (s *WorkflowHandlerSuite) TestStartBatchOperation_ResetOperation_TimeSkipping_DCDisabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
 	namespaceID := namespace.ID(uuid.NewString())
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
@@ -3752,7 +4306,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_ResetOperation_TimeSkippi
 // when the DC gate is off, a batch UpdateWorkflowOptions with a TimeSkippingConfig is rejected.
 func (s *WorkflowHandlerSuite) TestStartBatchOperation_UpdateWorkflowOptionsOperation_TimeSkipping_DCDisabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
 	namespaceID := namespace.ID(uuid.NewString())
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
@@ -3891,6 +4445,111 @@ func TestValidateRequestId(t *testing.T) {
 	assert.Len(t, req.RequestId, 36) // new UUID length
 }
 
+// TestBatchOperationTypeMemoRoundTrip verifies that the batch operation type the
+// frontend assigns in StartBatchOperation survives the memo round-trip
+// (snakeCaseBatchType -> stored string -> batchOperationTypeFromString) used by
+// Describe/ListBatchOperations to report the operation type.
+func TestBatchOperationTypeMemoRoundTrip(t *testing.T) {
+	cases := []struct {
+		name     string
+		input    enumspb.BatchOperationType
+		memo     string
+		expected enumspb.BatchOperationType
+	}{
+		// Activity batch operations round-trip to their own enum values.
+		{"terminate activities", enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY, batcher.BatchTypeTerminateActivities, enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY},
+		{"cancel activities", enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY, batcher.BatchTypeCancelActivities, enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY},
+		{"delete activities", enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY, batcher.BatchTypeDeleteActivities, enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY},
+		{"reset activities", enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY, batcher.BatchTypeResetActivities, enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY},
+		{"unpause activities", enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY, batcher.BatchTypeUnpauseActivities, enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY},
+		{"update activity options", enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS, batcher.BatchTypeUpdateActivitiesOptions, enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS},
+		// The disambiguated _WORKFLOW enum variants retain the legacy persisted
+		// memo strings during rollout and read back as the non-deprecated type.
+		{"terminate workflows", enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, batcher.BatchTypeTerminateWorkflows, enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW},
+		{"cancel workflows", enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW, batcher.BatchTypeCancelWorkflows, enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW},
+		{"signal workflows", enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW, batcher.BatchTypeSignalWorkflows, enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW},
+		{"delete workflows", enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW, batcher.BatchTypeDeleteWorkflows, enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW},
+		{"reset workflows", enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW, batcher.BatchTypeResetWorkflows, enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW},
+		{"update workflow options", enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS, batcher.BatchTypeUpdateWorkflowOptions, enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS},
+		// The legacy (non-suffixed) enum values are deprecated but still accepted as
+		// input to snakeCaseBatchType: a caller on an older SDK/CLI that hasn't picked
+		// up the new *_WORKFLOW enum values yet may still populate BatchOperationInput
+		// with the legacy value. They map to the same memo string as their *_WORKFLOW
+		// counterpart, and round-trip to the non-deprecated *_WORKFLOW operation type.
+		//nolint:staticcheck // SA1019: intentionally exercising legacy enum values as input
+		{"terminate (legacy enum)", enumspb.BATCH_OPERATION_TYPE_TERMINATE, batcher.BatchTypeTerminateWorkflows, enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW},
+		//nolint:staticcheck // SA1019: intentionally exercising legacy enum values as input
+		{"cancel (legacy enum)", enumspb.BATCH_OPERATION_TYPE_CANCEL, batcher.BatchTypeCancelWorkflows, enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW},
+		//nolint:staticcheck // SA1019: intentionally exercising legacy enum values as input
+		{"signal (legacy enum)", enumspb.BATCH_OPERATION_TYPE_SIGNAL, batcher.BatchTypeSignalWorkflows, enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW},
+		//nolint:staticcheck // SA1019: intentionally exercising legacy enum values as input
+		{"delete (legacy enum)", enumspb.BATCH_OPERATION_TYPE_DELETE, batcher.BatchTypeDeleteWorkflows, enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW},
+		//nolint:staticcheck // SA1019: intentionally exercising legacy enum values as input
+		{"reset (legacy enum)", enumspb.BATCH_OPERATION_TYPE_RESET, batcher.BatchTypeResetWorkflows, enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW},
+		//nolint:staticcheck // SA1019: intentionally exercising legacy enum values as input
+		{"update options (legacy enum)", enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS, batcher.BatchTypeUpdateWorkflowOptions, enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			memo := snakeCaseBatchType(tc.input)
+			require.Equal(t, tc.memo, memo, "memo string")
+			require.Equal(t, tc.expected, batchOperationTypeFromString(memo), "round-tripped operation type")
+		})
+	}
+
+	// Legacy memo strings (written before the workflow/activity suffix split) must
+	// still resolve for backwards compatibility with in-flight/old batch operations,
+	// reported as the non-deprecated *_WORKFLOW operation type.
+	legacy := map[string]enumspb.BatchOperationType{
+		"terminate":      enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
+		"cancel":         enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW,
+		"signal":         enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW,
+		"delete":         enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW,
+		"reset":          enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW,
+		"update_options": enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS,
+	}
+	for memo, expected := range legacy {
+		t.Run("legacy "+memo, func(t *testing.T) {
+			require.Equal(t, expected, batchOperationTypeFromString(memo))
+		})
+	}
+
+	suffixed := map[string]enumspb.BatchOperationType{
+		"terminate_workflows":     enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
+		"cancel_workflows":        enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW,
+		"signal_workflows":        enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW,
+		"delete_workflows":        enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW,
+		"reset_workflows":         enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW,
+		"update_workflow_options": enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS,
+	}
+	for memo, expected := range suffixed {
+		t.Run("suffixed "+memo, func(t *testing.T) {
+			require.Equal(t, expected, batchOperationTypeFromString(memo))
+		})
+	}
+}
+
+func TestWorkflowBatchOperationMemoRollingUpgradeCompatibility(t *testing.T) {
+	cases := []struct {
+		name       string
+		batchType  enumspb.BatchOperationType
+		legacyMemo string
+	}{
+		{"terminate", enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, "terminate"},
+		{"cancel", enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW, "cancel"},
+		{"signal", enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW, "signal"},
+		{"delete", enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW, "delete"},
+		{"reset", enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW, "reset"},
+		{"update options", enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS, "update_options"},
+	}
+	for _, tt := range cases {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.legacyMemo, snakeCaseBatchType(tt.batchType),
+				"workflow batch memos written during a rolling upgrade must remain readable by pre-upgrade frontends")
+		})
+	}
+}
+
 func TestDedupLinksFromCallbacks(t *testing.T) {
 	links := []*commonpb.Link{
 		{
@@ -3939,89 +4598,59 @@ func TestDedupLinksFromCallbacks(t *testing.T) {
 			},
 		},
 	}
-	callbacks := []*commonpb.Callback{
-		{
-			Variant: &commonpb.Callback_Nexus_{
-				Nexus: &commonpb.Callback_Nexus{},
-			},
-			Links: []*commonpb.Link{
-				{
-					Variant: &commonpb.Link_WorkflowEvent_{
-						WorkflowEvent: &commonpb.Link_WorkflowEvent{
-							Namespace:  "test-ns",
-							WorkflowId: "test-workflow-id",
-							RunId:      "test-run-id",
-							Reference: &commonpb.Link_WorkflowEvent_EventRef{
-								EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-									EventId:   3,
-									EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
-								},
-							},
-						},
-					},
-				},
-				{
-					Variant: &commonpb.Link_WorkflowEvent_{
-						WorkflowEvent: &commonpb.Link_WorkflowEvent{
-							Namespace:  "test-ns",
-							WorkflowId: "test-workflow-id",
-							RunId:      "test-run-id",
-							Reference: &commonpb.Link_WorkflowEvent_EventRef{
-								EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-									EventId:   5,
-									EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
-								},
-							},
-						},
-					},
+
+	// Returns a new pair of callbacks to be mutated in tests.
+	getCallbacks := func() []*commonpb.Callback {
+		return []*commonpb.Callback{
+			{
+				Variant: nexusCallbackVariant(),
+				Links: []*commonpb.Link{
+					common.CloneProto(links[0]),
+					common.CloneProto(links[1]),
 				},
 			},
-		},
-		{
-			Variant: &commonpb.Callback_Internal_{
-				Internal: &commonpb.Callback_Internal{},
-			},
-			Links: []*commonpb.Link{
-				{
-					Variant: &commonpb.Link_WorkflowEvent_{
-						WorkflowEvent: &commonpb.Link_WorkflowEvent{
-							Namespace:  "test-ns",
-							WorkflowId: "test-workflow-id",
-							RunId:      "test-run-id",
-							Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
-								RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-									RequestId: "test-request-id",
-									EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-								},
-							},
-						},
-					},
+			{
+				Variant: &commonpb.Callback_Internal_{
+					Internal: &commonpb.Callback_Internal{},
+				},
+				Links: []*commonpb.Link{
+					common.CloneProto(links[2]),
 				},
 			},
-		},
+		}
 	}
 
-	dedupedLinks := dedupLinksFromCallbacks(links, callbacks)
-	assert.Len(t, dedupedLinks, 1)
-	protoassert.ProtoEqual(
-		t,
-		&commonpb.Link{
-			Variant: &commonpb.Link_WorkflowEvent_{
-				WorkflowEvent: &commonpb.Link_WorkflowEvent{
-					Namespace:  "test-ns",
-					WorkflowId: "test-workflow-id",
-					RunId:      "test-run-id",
-					Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
-						RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-							RequestId: "test-request-id",
-							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-						},
-					},
-				},
-			},
-		},
-		dedupedLinks[0],
-	)
+	// Because the second Callback is the Internal-variant, the link
+	// it carries will not be considered for deduping.
+	t.Run("IgnoreNonNexusCallbackLinks", func(t *testing.T) {
+		callbacks := getCallbacks()
+		dedupedLinks := dedupLinksFromCallbacks(links, callbacks)
+		require.Len(t, dedupedLinks, 1)
+		protorequire.ProtoEqual(t, links[2], dedupedLinks[0])
+	})
+
+	// Remove links[1] from callbacks[0].Links. links[1] should then not
+	// be deduped, and be in the resulting slice.
+	t.Run("UniqueNexusLink", func(t *testing.T) {
+		callbacks := getCallbacks()
+		callbacks[0].Links = callbacks[0].Links[:1]
+
+		dedupedLinks := dedupLinksFromCallbacks(links, callbacks)
+		require.Len(t, dedupedLinks, 2)
+		protorequire.ProtoEqual(t, links[1], dedupedLinks[0])
+		protorequire.ProtoEqual(t, links[2], dedupedLinks[1]) // Same as before.
+	})
+
+	// Change the type of the second callback to be a Nexus-variant.
+	// Now all callback links will be considered for deduping, filtering
+	// everything out.
+	t.Run("AllDupes", func(t *testing.T) {
+		callbacks := getCallbacks()
+		callbacks[1].Variant = nexusCallbackVariant()
+
+		dedupedLinks := dedupLinksFromCallbacks(links, callbacks)
+		require.Empty(t, dedupedLinks)
+	})
 }
 
 func (s *WorkflowHandlerSuite) Test_DeleteWorkflowExecution() {
@@ -4067,7 +4696,8 @@ func (s *WorkflowHandlerSuite) Test_DeleteWorkflowExecution() {
 
 	// History call failed.
 	s.mockResource.HistoryClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, errors.New("random error"))
-	s.mockResource.NamespaceCache.EXPECT().GetNamespaceID(namespace.Name("test-namespace")).Return(namespace.ID("test-namespace-id"), nil)
+	s.mockResource.NamespaceCache.EXPECT().GetNamespace(namespace.Name("test-namespace")).
+		Return(s.localNamespaceEntry("test-namespace", "test-namespace-id"), nil)
 	resp, err := wh.DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
 		Namespace: "test-namespace",
 		WorkflowExecution: &commonpb.WorkflowExecution{
@@ -4081,7 +4711,8 @@ func (s *WorkflowHandlerSuite) Test_DeleteWorkflowExecution() {
 
 	// Success case.
 	s.mockResource.HistoryClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(&historyservice.DeleteWorkflowExecutionResponse{}, nil)
-	s.mockResource.NamespaceCache.EXPECT().GetNamespaceID(namespace.Name("test-namespace")).Return(namespace.ID("test-namespace-id"), nil)
+	s.mockResource.NamespaceCache.EXPECT().GetNamespace(namespace.Name("test-namespace")).
+		Return(s.localNamespaceEntry("test-namespace", "test-namespace-id"), nil)
 	resp, err = wh.DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
 		Namespace: "test-namespace",
 		WorkflowExecution: &commonpb.WorkflowExecution{
@@ -4091,6 +4722,69 @@ func (s *WorkflowHandlerSuite) Test_DeleteWorkflowExecution() {
 	})
 	s.NoError(err)
 	s.NotNil(resp)
+}
+
+// A deletion is only replicated when it happens on the active cluster, so a request that lands on a
+// passive cluster (XDC redirection disabled) must be rejected instead of deleting the local copy only.
+func (s *WorkflowHandlerSuite) Test_DeleteWorkflowExecution_PassiveCluster() {
+	wh := s.getWorkflowHandler(s.newConfig())
+
+	s.mockResource.NamespaceCache.EXPECT().GetNamespace(namespace.Name("test-namespace")).
+		Return(s.globalNamespaceEntry("test-namespace", "test-namespace-id", cluster.TestAlternativeClusterName), nil)
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	// No DeleteWorkflowExecution call is expected on the history client.
+
+	resp, err := wh.DeleteWorkflowExecution(context.Background(), &workflowservice.DeleteWorkflowExecutionRequest{
+		Namespace: "test-namespace",
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "test-workflow-id",
+		},
+	})
+	s.Nil(resp)
+	var notActiveErr *serviceerror.NamespaceNotActive
+	s.ErrorAs(err, &notActiveErr)
+}
+
+func (s *WorkflowHandlerSuite) Test_DeleteWorkflowExecution_ActiveCluster() {
+	wh := s.getWorkflowHandler(s.newConfig())
+
+	s.mockResource.NamespaceCache.EXPECT().GetNamespace(namespace.Name("test-namespace")).
+		Return(s.globalNamespaceEntry("test-namespace", "test-namespace-id", cluster.TestCurrentClusterName), nil)
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockResource.HistoryClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&historyservice.DeleteWorkflowExecutionResponse{}, nil)
+
+	resp, err := wh.DeleteWorkflowExecution(context.Background(), &workflowservice.DeleteWorkflowExecutionRequest{
+		Namespace: "test-namespace",
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "test-workflow-id",
+		},
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+}
+
+func (s *WorkflowHandlerSuite) localNamespaceEntry(nsName string, nsID string) *namespace.Namespace {
+	return namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: nsID, Name: nsName},
+		nil,
+		cluster.TestCurrentClusterName,
+	)
+}
+
+func (s *WorkflowHandlerSuite) globalNamespaceEntry(nsName string, nsID string, activeCluster string) *namespace.Namespace {
+	return namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: nsID, Name: nsName},
+		nil,
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: activeCluster,
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			},
+		},
+		cluster.TestCurrentClusterInitialFailoverVersion,
+	)
 }
 
 func (s *WorkflowHandlerSuite) TestExecuteMultiOperation() {
@@ -4391,6 +5085,7 @@ func (s *WorkflowHandlerSuite) TestShutdownWorker() {
 func (s *WorkflowHandlerSuite) TestShutdownWorkerWithEagerPollCancellation() {
 	config := s.newConfig()
 	config.EnableCancelWorkerPollsOnShutdown = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.EnableMatchingFanOutForPollCancellation = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	config.NumTaskQueueReadPartitions = dc.GetIntPropertyFnFilteredByTaskQueue(2) // 2 partitions
 	wh := s.getWorkflowHandler(config)
 	ctx := context.Background()
@@ -4399,10 +5094,18 @@ func (s *WorkflowHandlerSuite) TestShutdownWorkerWithEagerPollCancellation() {
 	taskQueue := "my-task-queue"
 	workerInstanceKey := "worker-instance-123"
 
-	// Expect cancellation for 2 partitions x 2 task types = 4 calls (in any order due to parallelization)
+	// Expect cancellation for 2 task types (workflow, activity); matching fans out to partitions internally.
 	s.mockMatchingClient.EXPECT().CancelOutstandingWorkerPolls(gomock.Any(), gomock.Any()).
-		Return(&matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: 1}, nil).
-		Times(4)
+		DoAndReturn(func(_ context.Context, req *matchingservice.CancelOutstandingWorkerPollsRequest, _ ...any) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
+			s.Equal(s.testNamespaceID.String(), req.GetNamespaceId())
+			partition, err := tqid.PartitionFromProto(req.GetTaskQueue(), req.GetNamespaceId(), req.GetTaskQueueType())
+			s.NoError(err)
+			s.True(partition.IsRoot(), "should send root partition only")
+			s.Equal(workerInstanceKey, req.GetWorkerInstanceKey())
+			s.Equal("worker", req.GetWorkerIdentity())
+			return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: 1}, nil
+		}).
+		Times(2)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).AnyTimes()
 
@@ -4433,6 +5136,7 @@ func (s *WorkflowHandlerSuite) TestShutdownWorkerDeduplicatesByHost() {
 	// When multiple partitions route to the same matching host, only one RPC should be sent per host.
 	config := s.newConfig()
 	config.EnableCancelWorkerPollsOnShutdown = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.EnableMatchingFanOutForPollCancellation = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	config.NumTaskQueueReadPartitions = dc.GetIntPropertyFnFilteredByTaskQueue(4) // 4 partitions
 	wh := s.getWorkflowHandler(config)
 	ctx := context.Background()
@@ -4481,11 +5185,52 @@ func (s *WorkflowHandlerSuite) TestShutdownWorkerDeduplicatesByHost() {
 	s.NoError(err)
 }
 
+func (s *WorkflowHandlerSuite) TestShutdownWorkerWithEagerPollCancellationFrontendFanOut() {
+	config := s.newConfig()
+	config.EnableCancelWorkerPollsOnShutdown = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.EnableMatchingFanOutForPollCancellation = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	config.NumTaskQueueReadPartitions = dc.GetIntPropertyFnFilteredByTaskQueue(2) // 2 partitions
+	wh := s.getWorkflowHandler(config)
+	ctx := context.Background()
+
+	stickyTaskQueue := "sticky-task-queue"
+	taskQueue := "my-task-queue"
+	workerInstanceKey := "worker-instance-123"
+
+	// Frontend fans out: 2 partitions x 2 task types = 4 calls
+	s.mockMatchingClient.EXPECT().CancelOutstandingWorkerPolls(gomock.Any(), gomock.Any()).
+		Return(&matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: 1}, nil).
+		Times(4)
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).AnyTimes()
+
+	expectedForceUnloadRequest := &matchingservice.ForceUnloadTaskQueuePartitionRequest{
+		NamespaceId: s.testNamespaceID.String(),
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     stickyTaskQueue,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		},
+	}
+
+	s.mockMatchingClient.EXPECT().ForceUnloadTaskQueuePartition(gomock.Any(), gomock.Eq(expectedForceUnloadRequest)).Return(&matchingservice.ForceUnloadTaskQueuePartitionResponse{}, nil)
+
+	_, err := wh.ShutdownWorker(ctx, &workflowservice.ShutdownWorkerRequest{
+		Namespace:         s.testNamespace.String(),
+		StickyTaskQueue:   stickyTaskQueue,
+		Identity:          "worker",
+		Reason:            "graceful shutdown",
+		WorkerInstanceKey: workerInstanceKey,
+		TaskQueue:         taskQueue,
+	})
+	s.NoError(err)
+}
+
 func (s *WorkflowHandlerSuite) TestShutdownWorkerWithCancellationError() {
 	// Verifies graceful degradation: ShutdownWorker succeeds even when poll cancellation fails.
 	// This ensures backward compatibility during rolling upgrades.
 	config := s.newConfig()
 	config.EnableCancelWorkerPollsOnShutdown = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.EnableMatchingFanOutForPollCancellation = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	config.NumTaskQueueReadPartitions = dc.GetIntPropertyFnFilteredByTaskQueue(1)
 	wh := s.getWorkflowHandler(config)
 	ctx := context.Background()
@@ -4497,7 +5242,7 @@ func (s *WorkflowHandlerSuite) TestShutdownWorkerWithCancellationError() {
 	// CancelOutstandingWorkerPolls returns an error (simulates old matching node)
 	s.mockMatchingClient.EXPECT().CancelOutstandingWorkerPolls(gomock.Any(), gomock.Any()).
 		Return(nil, serviceerror.NewUnimplemented("method not implemented")).
-		Times(2) // 1 partition x 2 task types
+		Times(2) // 2 task types (workflow, activity)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).AnyTimes()
 
@@ -4527,6 +5272,7 @@ func (s *WorkflowHandlerSuite) TestShutdownWorkerWithPartialCancellationFailure(
 	// Verifies ShutdownWorker succeeds when some cancellation calls succeed and others fail.
 	config := s.newConfig()
 	config.EnableCancelWorkerPollsOnShutdown = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.EnableMatchingFanOutForPollCancellation = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	config.NumTaskQueueReadPartitions = dc.GetIntPropertyFnFilteredByTaskQueue(2) // 2 partitions
 	wh := s.getWorkflowHandler(config)
 	ctx := context.Background()
@@ -4535,13 +5281,13 @@ func (s *WorkflowHandlerSuite) TestShutdownWorkerWithPartialCancellationFailure(
 	taskQueue := "my-task-queue"
 	workerInstanceKey := "worker-instance-123"
 
-	// Mixed results: some succeed, some fail (2 partitions x 2 task types = 4 calls)
+	// Mixed results: some succeed, some fail (2 task types = 2 calls)
 	s.mockMatchingClient.EXPECT().CancelOutstandingWorkerPolls(gomock.Any(), gomock.Any()).
 		Return(&matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: 1}, nil).
-		Times(2)
+		Times(1)
 	s.mockMatchingClient.EXPECT().CancelOutstandingWorkerPolls(gomock.Any(), gomock.Any()).
 		Return(nil, serviceerror.NewUnavailable("temporary error")).
-		Times(2)
+		Times(1)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Eq(s.testNamespace)).Return(s.testNamespaceID, nil).AnyTimes()
 
@@ -4690,6 +5436,19 @@ func (s *WorkflowHandlerSuite) TestPatchSchedule_ValidationAndErrors() {
 		s.Equal(errRequestNotSet, err)
 	})
 
+	s.Run("nil patch should return error", func() {
+		request := &workflowservice.PatchScheduleRequest{
+			Namespace:  s.testNamespace.String(),
+			ScheduleId: "test-schedule",
+			Patch:      nil,
+		}
+
+		resp, err := wh.PatchSchedule(ctx, request)
+		s.Nil(resp)
+		var invalidArgErr *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgErr)
+	})
+
 	s.Run("schedules disabled should return error", func() {
 		disabledConfig := s.newConfig()
 		disabledConfig.EnableSchedules = dc.GetBoolPropertyFnFilteredByNamespace(false)
@@ -4732,6 +5491,375 @@ func (s *WorkflowHandlerSuite) TestPatchSchedule_ValidationAndErrors() {
 		resp, err := wh.PatchSchedule(ctx, request)
 		s.Nil(resp)
 		s.Error(err)
+	})
+}
+
+// maxProtoDurationSeconds is the largest seconds value a google.protobuf.Duration may
+// carry (10000 years). Anything beyond it fails durationpb's CheckValid.
+const maxProtoDurationSeconds = int64(315576000000)
+
+func TestValidateActivityFailureNextRetryDelays(t *testing.T) {
+	applicationFailure := func(delay *durationpb.Duration, cause *failurepb.Failure) *failurepb.Failure {
+		return &failurepb.Failure{
+			Cause: cause,
+			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NextRetryDelay: delay},
+			},
+		}
+	}
+
+	testCases := []struct {
+		name    string
+		failure *failurepb.Failure
+		wantErr bool
+	}{
+		{name: "nil failure"},
+		{name: "nil retry delay", failure: applicationFailure(nil, nil)},
+		{name: "zero retry delay", failure: applicationFailure(durationpb.New(0), nil)},
+		{name: "negative retry delay", failure: applicationFailure(durationpb.New(-time.Second), nil)},
+		{
+			name:    "maximum duration",
+			failure: applicationFailure(&durationpb.Duration{Seconds: maxProtoDurationSeconds}, nil),
+		},
+		{
+			name:    "minimum duration",
+			failure: applicationFailure(&durationpb.Duration{Seconds: -maxProtoDurationSeconds}, nil),
+		},
+		{
+			name:    "mismatched positive seconds",
+			failure: applicationFailure(&durationpb.Duration{Seconds: 1, Nanos: -1}, nil),
+			wantErr: true,
+		},
+		{
+			name:    "mismatched negative seconds",
+			failure: applicationFailure(&durationpb.Duration{Seconds: -1, Nanos: 1}, nil),
+			wantErr: true,
+		},
+		{
+			name:    "nanos above range",
+			failure: applicationFailure(&durationpb.Duration{Nanos: 1000000000}, nil),
+			wantErr: true,
+		},
+		{
+			name:    "nanos below range",
+			failure: applicationFailure(&durationpb.Duration{Nanos: -1000000000}, nil),
+			wantErr: true,
+		},
+		{
+			name:    "seconds above range",
+			failure: applicationFailure(&durationpb.Duration{Seconds: maxProtoDurationSeconds + 1}, nil),
+			wantErr: true,
+		},
+		{
+			name:    "seconds below range",
+			failure: applicationFailure(&durationpb.Duration{Seconds: -maxProtoDurationSeconds - 1}, nil),
+			wantErr: true,
+		},
+		{
+			name: "invalid nested retry delay",
+			failure: applicationFailure(nil, &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_TimeoutFailureInfo{
+					TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{},
+				},
+				Cause: applicationFailure(&durationpb.Duration{Seconds: 1, Nanos: -1}, nil),
+			}),
+			wantErr: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateActivityFailureNextRetryDelays(tc.failure)
+			if !tc.wantErr {
+				require.NoError(t, err)
+				return
+			}
+
+			var invalidArgument *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgument)
+			require.ErrorContains(t, err, "NextRetryDelay is not a valid duration")
+		})
+	}
+}
+
+// newScheduleSpecHandler builds the minimum WorkflowHandler that canonicalizeScheduleSpec
+// needs: a config, a spec builder, and a logger for the non-enforcing path. configure is
+// nil to exercise the shipped dynamic config defaults.
+func newScheduleSpecHandler(configure func(*Config)) *WorkflowHandler {
+	config := NewConfig(dc.NewNoopCollection(), numHistoryShards)
+	if configure != nil {
+		configure(config)
+	}
+	return &WorkflowHandler{
+		config:              config,
+		throttledLogger:     log.NewNoopLogger(),
+		scheduleSpecBuilder: scheduler.NewSpecBuilder(func() int { return 0 }, func() int { return 0 }),
+	}
+}
+
+// Regression test for SCH-057. Malformed interval/phase duration protobufs (mismatched
+// seconds/nanos signs, nanos outside the protobuf range, seconds outside the protobuf
+// range) normalize to Go durations that satisfy the semantic interval checks, so schedule
+// intake used to accept them and persist the invalid wire form verbatim.
+func TestCanonicalizeScheduleSpec_IntervalDurationValidation(t *testing.T) {
+	testCases := []struct {
+		name        string
+		interval    *durationpb.Duration
+		phase       *durationpb.Duration
+		errContains string
+	}{
+		// Valid boundary values: these must keep working, and must not be capped or
+		// otherwise rewritten by the validation.
+		{
+			name:     "minimum valid interval",
+			interval: &durationpb.Duration{Seconds: 1},
+		},
+		{
+			name:     "maximum valid nanos",
+			interval: &durationpb.Duration{Seconds: 1, Nanos: 999999999},
+		},
+		{
+			name:     "valid interval and phase",
+			interval: durationpb.New(time.Hour),
+			phase:    durationpb.New(30 * time.Minute),
+		},
+		{
+			name:     "maximum protobuf seconds",
+			interval: &durationpb.Duration{Seconds: maxProtoDurationSeconds},
+		},
+		{
+			name:     "zero phase is valid",
+			interval: durationpb.New(time.Hour),
+			phase:    &durationpb.Duration{},
+		},
+
+		// Malformed protobuf wire values.
+		{
+			name:        "interval with mismatched signs",
+			interval:    &durationpb.Duration{Seconds: 2, Nanos: -1},
+			errContains: "interval is not a valid duration",
+		},
+		{
+			name:        "interval with nanos at 1e9",
+			interval:    &durationpb.Duration{Nanos: 1000000000},
+			errContains: "interval is not a valid duration",
+		},
+		{
+			name:        "interval with seconds above the protobuf range",
+			interval:    &durationpb.Duration{Seconds: maxProtoDurationSeconds + 1},
+			errContains: "interval is not a valid duration",
+		},
+		{
+			name:        "interval with seconds below the protobuf range",
+			interval:    &durationpb.Duration{Seconds: -maxProtoDurationSeconds - 1},
+			errContains: "interval is not a valid duration",
+		},
+		{
+			name:        "phase with nanos at 1e9",
+			interval:    &durationpb.Duration{Seconds: 2},
+			phase:       &durationpb.Duration{Nanos: 1000000000},
+			errContains: "phase is not a valid duration",
+		},
+		{
+			name:        "phase with mismatched signs",
+			interval:    durationpb.New(10 * time.Second),
+			phase:       &durationpb.Duration{Seconds: 1, Nanos: -1},
+			errContains: "phase is not a valid duration",
+		},
+		{
+			name:        "phase with nanos at -1e9",
+			interval:    durationpb.New(10 * time.Second),
+			phase:       &durationpb.Duration{Nanos: -1000000000},
+			errContains: "phase is not a valid duration",
+		},
+
+		// Controls: well-formed protobufs that violate the pre-existing semantic checks
+		// must still be rejected with the pre-existing messages.
+		{
+			name:        "normalized interval below the minimum",
+			interval:    &durationpb.Duration{Nanos: 500000000},
+			errContains: "interval is too small",
+		},
+		{
+			name:        "negative phase",
+			interval:    durationpb.New(10 * time.Second),
+			phase:       &durationpb.Duration{Seconds: -1},
+			errContains: "phase is negative",
+		},
+		{
+			name:        "phase not less than interval",
+			interval:    durationpb.New(10 * time.Second),
+			phase:       durationpb.New(10 * time.Second),
+			errContains: "phase cannot be greater than Interval",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			wh := newScheduleSpecHandler(nil)
+			schedule := &schedulepb.Schedule{
+				Spec: &schedulepb.ScheduleSpec{
+					Interval: []*schedulepb.IntervalSpec{{
+						Interval: tc.interval,
+						Phase:    tc.phase,
+					}},
+				},
+			}
+
+			err := wh.canonicalizeScheduleSpec(schedule, "test-namespace")
+			if tc.errContains == "" {
+				require.NoError(t, err)
+				return
+			}
+			var invalidArgument *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgument)
+			require.Contains(t, err.Error(), tc.errContains)
+		})
+	}
+}
+
+// The duration validation is enforced by default, but operators can disable it for a
+// namespace with frontend.disabledScheduleValidations. When disabled, a malformed duration
+// is logged and allowed through, and the spec still compiles on its normalized value.
+func TestCanonicalizeScheduleSpec_DurationValidationKillSwitch(t *testing.T) {
+	testCases := []struct {
+		name string
+		// configure is nil when the case exercises the shipped default.
+		configure   func(*Config)
+		errContains string
+	}{
+		{
+			name:        "enforced by default",
+			errContains: "interval is not a valid duration",
+		},
+		{
+			name: "unrelated validation disabled",
+			configure: func(c *Config) {
+				c.DisabledScheduleValidations = dc.GetTypedPropertyFnFilteredByNamespace(
+					[]string{scheduleValidationVersioningOverride},
+				)
+			},
+			errContains: "interval is not a valid duration",
+		},
+		{
+			name: "duration validation disabled",
+			configure: func(c *Config) {
+				c.DisabledScheduleValidations = func(namespace string) []string {
+					require.Equal(t, "test-namespace", namespace)
+					return []string{"Scheduler-Duration"}
+				}
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			wh := newScheduleSpecHandler(tc.configure)
+
+			schedule := &schedulepb.Schedule{
+				Spec: &schedulepb.ScheduleSpec{
+					Interval: []*schedulepb.IntervalSpec{{
+						Interval: &durationpb.Duration{Seconds: 2, Nanos: -1},
+					}},
+				},
+			}
+
+			err := wh.canonicalizeScheduleSpec(schedule, "test-namespace")
+			if tc.errContains != "" {
+				var invalidArgument *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgument)
+				require.Contains(t, err.Error(), tc.errContains)
+				return
+			}
+			require.NoError(t, err)
+			// Canonicalization still ran, on the malformed duration's normalized value.
+			require.Equal(t, 2*time.Second-time.Nanosecond,
+				schedule.GetSpec().GetInterval()[0].GetInterval().AsDuration())
+		})
+	}
+}
+
+// Regression test for SCH-057: CreateSchedule and UpdateSchedule must reject malformed
+// interval duration protobufs with InvalidArgument before either the V1 or the CHASM
+// backend is invoked.
+func (s *WorkflowHandlerSuite) TestCreateUpdateSchedule_RejectsMalformedIntervalDuration() {
+	config := s.newConfig()
+	config.EnableSchedules = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
+	ctx := context.Background()
+
+	// Mismatched seconds/nanos signs normalize to ~2s, and nanos=1e9 normalizes to 1s,
+	// so both satisfy the semantic interval/phase checks while being invalid on the wire.
+	malformedSchedule := func() *schedulepb.Schedule {
+		return &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{
+					Interval: &durationpb.Duration{Seconds: 2, Nanos: -1},
+					Phase:    &durationpb.Duration{Nanos: 1000000000},
+				}},
+			},
+		}
+	}
+
+	// No backend call is expected: the scheduler (CHASM) client is nil in this suite and
+	// the history client mock has no expectations registered, so reaching either backend
+	// fails the test.
+	s.Run("CreateSchedule", func() {
+		resp, err := wh.CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+			Namespace:  s.testNamespace.String(),
+			ScheduleId: "test-schedule",
+			Schedule:   malformedSchedule(),
+			RequestId:  uuid.NewString(),
+			Identity:   "test-identity",
+		})
+		s.Nil(resp)
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+		s.Contains(err.Error(), "not a valid duration")
+	})
+
+	s.Run("UpdateSchedule", func() {
+		resp, err := wh.UpdateSchedule(ctx, &workflowservice.UpdateScheduleRequest{
+			Namespace:  s.testNamespace.String(),
+			ScheduleId: "test-schedule",
+			Schedule:   malformedSchedule(),
+			RequestId:  uuid.NewString(),
+			Identity:   "test-identity",
+		})
+		s.Nil(resp)
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+		s.Contains(err.Error(), "not a valid duration")
+	})
+}
+
+func (s *WorkflowHandlerSuite) TestUpdateSchedule_ValidationAndErrors() {
+	config := s.newConfig()
+	config.EnableSchedules = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
+	ctx := context.Background()
+
+	// Note: a nil request is only reachable from direct in-process callers. Standard
+	// gRPC transport always decodes into a non-nil (possibly empty) request message.
+	s.Run("nil request should return error", func() {
+		resp, err := wh.UpdateSchedule(ctx, nil)
+		s.Nil(resp)
+		s.Equal(errRequestNotSet, err)
+	})
+
+	s.Run("schedules disabled should return error", func() {
+		disabledConfig := s.newConfig()
+		disabledConfig.EnableSchedules = dc.GetBoolPropertyFnFilteredByNamespace(false)
+		disabledWh := s.getWorkflowHandler(disabledConfig)
+
+		request := &workflowservice.UpdateScheduleRequest{
+			Namespace:  s.testNamespace.String(),
+			ScheduleId: "test-schedule",
+		}
+
+		resp, err := disabledWh.UpdateSchedule(ctx, request)
+		s.Nil(resp)
+		s.Equal(errSchedulesNotAllowed, err)
 	})
 }
 
@@ -4823,7 +5951,7 @@ func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_Priority() {
 // off, UpdateWorkflowExecutionOptions rejects a request containing a TimeSkippingConfig.
 func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_TimeSkipping_DCDisabled() {
 	config := s.newConfig()
-	config.TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
 
 	_, err := wh.UpdateWorkflowExecutionOptions(context.Background(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
@@ -4840,6 +5968,111 @@ func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_TimeSkipping_D
 	var unimplemented *serviceerror.Unimplemented
 	s.ErrorAs(err, &unimplemented)
 	s.ErrorContains(err, "The Time-Skipping feature is not enabled for namespace")
+}
+
+func (s *WorkflowHandlerSuite) TestPrepareUpdateWorkflowRequest_ValidatesCompletionCallbacks() {
+	config := s.newConfig()
+	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(1)
+	wh := s.getWorkflowHandler(config)
+	newRequest := func(callbacks []*commonpb.Callback) *workflowservice.UpdateWorkflowExecutionRequest {
+		return &workflowservice.UpdateWorkflowExecutionRequest{
+			Namespace:         s.testNamespace.String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: testWorkflowID},
+			Request: &updatepb.Request{
+				Meta:                &updatepb.Meta{UpdateId: "update-id"},
+				Input:               &updatepb.Input{Name: "update-name"},
+				RequestId:           "request-id",
+				CompletionCallbacks: callbacks,
+			},
+		}
+	}
+
+	s.Run("invalid callback", func() {
+		err := wh.prepareUpdateWorkflowRequest(
+			context.Background(),
+			s.testNamespace,
+			newRequest([]*commonpb.Callback{{}}),
+		)
+
+		var unimplemented *serviceerror.Unimplemented
+		s.ErrorAs(err, &unimplemented)
+		s.ErrorContains(err, "unknown callback variant")
+	})
+
+	s.Run("normalizes callback headers", func() {
+		request := newRequest([]*commonpb.Callback{{
+			Variant: &commonpb.Callback_Nexus_{
+				Nexus: &commonpb.Callback_Nexus{
+					Url:    "http://localhost/callback",
+					Header: map[string]string{"X-Request-ID": "value"},
+				},
+			},
+		}})
+
+		err := wh.prepareUpdateWorkflowRequest(context.Background(), s.testNamespace, request)
+
+		s.NoError(err)
+		s.Equal(map[string]string{"x-request-id": "value"}, request.GetRequest().GetCompletionCallbacks()[0].GetNexus().GetHeader())
+	})
+
+	s.Run("deduplicates links from Nexus callbacks", func() {
+		callbackLink := &commonpb.Link{
+			Variant: &commonpb.Link_BatchJob_{
+				BatchJob: &commonpb.Link_BatchJob{JobId: "job-id"},
+			},
+		}
+		request := newRequest([]*commonpb.Callback{{
+			Variant: nexusCallbackVariant(),
+			Links:   []*commonpb.Link{callbackLink},
+		}})
+		request.Request.Links = []*commonpb.Link{common.CloneProto(callbackLink)}
+
+		err := wh.prepareUpdateWorkflowRequest(context.Background(), s.testNamespace, request)
+
+		s.NoError(err)
+		s.Empty(request.GetRequest().GetLinks())
+	})
+
+	s.Run("rejects invalid callback links", func() {
+		err := wh.prepareUpdateWorkflowRequest(
+			context.Background(),
+			s.testNamespace,
+			newRequest([]*commonpb.Callback{{
+				Variant: nexusCallbackVariant(),
+				Links: []*commonpb.Link{{
+					Variant: &commonpb.Link_BatchJob_{
+						BatchJob: &commonpb.Link_BatchJob{},
+					},
+				}},
+			}}),
+		)
+
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+		s.ErrorContains(err, "batch job link must not have an empty job ID")
+	})
+
+	s.Run("rejects too many combined links", func() {
+		request := newRequest([]*commonpb.Callback{{
+			Variant: nexusCallbackVariant(),
+			Links: []*commonpb.Link{{
+				Variant: &commonpb.Link_BatchJob_{
+					BatchJob: &commonpb.Link_BatchJob{JobId: "callback-job"},
+				},
+			}},
+		}})
+		request.Request.Links = []*commonpb.Link{{
+			Variant: &commonpb.Link_BatchJob_{
+				BatchJob: &commonpb.Link_BatchJob{JobId: "request-job"},
+			},
+		}}
+
+		err := wh.prepareUpdateWorkflowRequest(context.Background(), s.testNamespace, request)
+
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+		s.ErrorContains(err, "cannot attach more than 1 links per request, got 2")
+	})
 }
 
 func (s *WorkflowHandlerSuite) TestUpdateActivityOptions_Priority() {
@@ -4877,4 +6110,12 @@ type routingMatchingClient struct {
 
 func (r *routingMatchingClient) Route(p tqid.Partition) (string, error) {
 	return r.routeFn(p)
+}
+
+func nexusCallbackVariant() *commonpb.Callback_Nexus_ {
+	return &commonpb.Callback_Nexus_{
+		Nexus: &commonpb.Callback_Nexus{
+			Url: "https://localhost/nexus-callback",
+		},
+	}
 }

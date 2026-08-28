@@ -28,7 +28,6 @@ type (
 	NamespaceHandoverInterceptor struct {
 		namespaceRegistry                      namespace.Registry
 		timeSource                             clock.TimeSource
-		enabledForNS                           dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		nsCacheRefreshInterval                 dynamicconfig.DurationPropertyFn
 		metricsHandler                         metrics.Handler
 		logger                                 log.Logger
@@ -59,7 +58,6 @@ func NewNamespaceHandoverInterceptor(
 	}
 
 	return &NamespaceHandoverInterceptor{
-		enabledForNS:                           dynamicconfig.EnableNamespaceHandoverWait.Get(dc),
 		nsCacheRefreshInterval:                 dynamicconfig.NamespaceCacheRefreshInterval.Get(dc),
 		namespaceRegistry:                      namespaceRegistry,
 		metricsHandler:                         metricsHandler,
@@ -109,7 +107,7 @@ func (i *NamespaceHandoverInterceptor) Intercept(
 	methodName := api.MethodName(info.FullMethod)
 	namespaceName := MustGetNamespaceName(i.namespaceRegistry, req)
 
-	if namespaceName != namespace.EmptyName && i.enabledForNS(namespaceName.String()) {
+	if namespaceName != namespace.EmptyName {
 		var waitTime *time.Duration
 		defer func() {
 			if waitTime != nil {

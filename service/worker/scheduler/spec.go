@@ -9,23 +9,33 @@ import (
 
 	"github.com/dgryski/go-farm"
 	schedulepb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/util"
 )
 
+const DefaultWarnIterations = 24 * 60 * 60
+
 type (
 	CompiledSpec struct {
-		spec     *schedulepb.ScheduleSpec
-		tz       *time.Location
-		calendar []*compiledCalendar
-		excludes []*compiledCalendar
+		spec           *schedulepb.ScheduleSpec
+		tz             *time.Location
+		calendar       []*compiledCalendar
+		excludes       []*compiledCalendar
+		warnIterations dynamicconfig.IntPropertyFn
+		maxIterations  dynamicconfig.IntPropertyFn
 	}
 
 	GetNextTimeResult struct {
 		Nominal time.Time // scheduled time before adding jitter
 		Next    time.Time // scheduled time after adding jitter
+		// ComputeLimitWarning is set when the search crossed the (non-fatal) warn threshold
+		// before returning. It carries no scheduling meaning; callers surface it as a metric +
+		// log so an over-excluded spec is observable without stopping the schedule.
+		ComputeLimitWarning bool
 	}
 
 	SpecBuilder struct {
@@ -34,7 +44,9 @@ type (
 		// equivalent value for the same location name. This isn't strictly true, for example if
 		// the time zone database is changed while the process is running. To handle that, we
 		// expire entries after a day. Note that we cache negative results also.
-		locationCache cache.Cache
+		locationCache  cache.Cache
+		warnIterations dynamicconfig.IntPropertyFn
+		maxIterations  dynamicconfig.IntPropertyFn
 	}
 
 	locationAndError struct {
@@ -43,8 +55,17 @@ type (
 	}
 )
 
-func NewSpecBuilder() *SpecBuilder {
+// ErrComputeLimitExceeded is returned by GetNextTime when the search for the next matching time
+// hits the hard compute iteration bound before finding a non-excluded time.
+var ErrComputeLimitExceeded = errors.New("schedule spec next-time search exceeded the compute iteration limit")
+var ErrScheduleSpecLimitHit = serviceerror.NewInvalidArgument("the schedule calendar specification has too many exclusions. Please modify the specification.")
+
+// NewSpecBuilder takes the compute-limit getters directly (rather than a *dynamicconfig.Collection)
+// so the dynamic-config plumbing stays in the wiring layer, per the common codebase pattern.
+func NewSpecBuilder(warnIterations, maxIterations dynamicconfig.IntPropertyFn) *SpecBuilder {
 	return &SpecBuilder{
+		warnIterations: warnIterations,
+		maxIterations:  maxIterations,
 		locationCache: cache.New(1000,
 			&cache.Options{
 				TTL: 24 * time.Hour,
@@ -78,10 +99,12 @@ func (b *SpecBuilder) NewCompiledSpec(spec *schedulepb.ScheduleSpec) (*CompiledS
 	}
 
 	cspec := &CompiledSpec{
-		spec:     spec,
-		tz:       tz,
-		calendar: ccs,
-		excludes: excludes,
+		spec:           spec,
+		tz:             tz,
+		calendar:       ccs,
+		excludes:       excludes,
+		warnIterations: b.warnIterations,
+		maxIterations:  b.maxIterations,
 	}
 
 	return cspec, nil
@@ -269,7 +292,7 @@ func (cs *CompiledSpec) CanonicalForm() *schedulepb.ScheduleSpec {
 // Returns the earliest time that matches the schedule spec that is after the given time.
 // Returns: Nominal is the time that matches, pre-jitter. Next is the nominal time with
 // jitter applied. If there is no matching time, Nominal and Next will be the zero time.
-func (cs *CompiledSpec) GetNextTime(jitterSeed string, after time.Time) GetNextTimeResult {
+func (cs *CompiledSpec) GetNextTime(jitterSeed string, after time.Time) (GetNextTimeResult, error) {
 	// If we're starting before the schedule's allowed time range, jump up to right before
 	// it (so that we can still return the first second of the range if it happens to match).
 	// note: AsTime returns unix epoch on nil StartTime
@@ -278,13 +301,32 @@ func (cs *CompiledSpec) GetNextTime(jitterSeed string, after time.Time) GetNextT
 	pastEndTime := func(t time.Time) bool {
 		return cs.spec.EndTime != nil && t.After(cs.spec.EndTime.AsTime()) || t.Year() > maxCalendarYear
 	}
+	warnIterations := cs.warnIterations()
+	if warnIterations <= 0 {
+		warnIterations = DefaultWarnIterations
+	}
+	maxIterations := cs.maxIterations()
+	if maxIterations <= 0 {
+		maxIterations = math.MaxInt // disabled: effectively unlimited
+	}
+
+	var warned bool
 	var nominal time.Time
-	for nominal.IsZero() || cs.excluded(nominal) {
+	for iterations := 0; nominal.IsZero() || cs.excluded(nominal); iterations++ {
+		// Hard bound: stop an over-excluded / adversarial spec from spinning toward
+		// maxCalendarYear. Disabled by default (maxIterations == math.MaxInt); an operator can
+		// lower it to re-enable enforcement. Well-formed specs resolve in a handful of iterations.
+		if iterations >= maxIterations {
+			return GetNextTimeResult{ComputeLimitWarning: true}, ErrComputeLimitExceeded
+		}
+		if iterations >= warnIterations {
+			warned = true
+		}
 		nominal = cs.rawNextTime(after)
 		after = nominal
 
 		if nominal.IsZero() || pastEndTime(nominal) {
-			return GetNextTimeResult{}
+			return GetNextTimeResult{ComputeLimitWarning: warned}, nil
 		}
 	}
 
@@ -295,7 +337,7 @@ func (cs *CompiledSpec) GetNextTime(jitterSeed string, after time.Time) GetNextT
 	}
 	next := cs.addJitter(jitterSeed, nominal, maxJitter)
 
-	return GetNextTimeResult{Nominal: nominal, Next: next}
+	return GetNextTimeResult{Nominal: nominal, Next: next, ComputeLimitWarning: warned}, nil
 }
 
 // Returns the next matching time (without jitter), or the zero value if no time matches.

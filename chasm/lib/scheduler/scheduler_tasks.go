@@ -67,6 +67,7 @@ const (
 	idleInvalidatedHeldOpen        metrics.ReasonString = "held_open"
 	idleInvalidatedExpirationShift metrics.ReasonString = "expiration_shift"
 	idleInvalidatedClosed          metrics.ReasonString = "closed"
+	idleAlreadyArmed               metrics.ReasonString = "already_armed"
 )
 
 func (r *SchedulerIdleTaskHandler) Validate(
@@ -92,9 +93,11 @@ func (r *SchedulerIdleTaskHandler) Validate(
 		return false, nil
 	}
 
-	// Deadline moved earlier - shouldn't happen if getLastEventTime is monotonic.
-	// Fire (closing the schedule is the safe call) but log so a real regression
-	// surfaces.
+	// Deadline moved earlier. getLastEventTime floors the recomputed value at the
+	// persisted LastEventTime mark, so this is now only reachable on a schedule
+	// whose mark predates that field (nil) - i.e. one that has not ticked since
+	// the upgrade. Fire anyway (closing the schedule is the safe call) but log,
+	// so a mark that is failing to hold the line still surfaces.
 	if idleExpiration.Before(taskAttrs.ScheduledTime) {
 		newTaggedLogger(r.baseLogger, scheduler).Warn("idle deadline regressed",
 			tag.Timestamp(idleExpiration),
@@ -187,6 +190,9 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 	if err != nil {
 		return fmt.Errorf("failed to read component: %w", err)
 	}
+	if scheduler == nil {
+		return errors.New("scheduler component was nil after read")
+	}
 
 	// Attach callbacks and check workflow status.
 	results := make(map[string]*watchResult, len(starts))
@@ -255,8 +261,7 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 		},
 	})
 	if err != nil {
-		var notFoundErr *serviceerror.NotFound
-		if errors.As(err, &notFoundErr) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			return &watchResult{
 				completed: &schedulespb.CompletedResult{
 					Status:    enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,

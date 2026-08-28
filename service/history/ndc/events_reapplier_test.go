@@ -15,6 +15,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -54,6 +55,7 @@ func (s *nDCEventReapplicationSuite) SetupTest() {
 	metricsHandler := metrics.NoopMetricsHandler
 	s.nDCReapplication = NewEventsReapplier(
 		hsm.NewRegistry(),
+		chasmworkflow.NewRegistry(),
 		metricsHandler,
 		logger,
 	)

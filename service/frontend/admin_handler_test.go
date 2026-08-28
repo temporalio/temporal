@@ -17,6 +17,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
+	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -41,7 +42,9 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
@@ -55,6 +58,7 @@ import (
 	serviceerror2 "go.temporal.io/server/common/serviceerror"
 	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/common/testing/historyrequire"
+	"go.temporal.io/server/common/testing/mockapi/operatorservicemock/v1"
 	"go.temporal.io/server/common/testing/mocksdk"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -160,6 +164,19 @@ func (s *adminHandlerSuite) SetupTest() {
 	err := chasmRegistry.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry()))
 	s.NoError(err)
 
+	saValidator := searchattribute.NewValidator(
+		s.mockResource.GetSearchAttributesProvider(),
+		mockSaMapperProvider,
+		cfg.SearchAttributesNumberOfKeysLimit,
+		cfg.SearchAttributesSizeOfValueLimit,
+		cfg.SearchAttributesTotalSizeLimit,
+		s.mockVisibilityMgr,
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		cfg.SuppressErrorSetSystemSearchAttribute,
+		metrics.NoopMetricsHandler,
+		log.NewNoopLogger(),
+	)
+
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
 		cfg,
@@ -167,22 +184,20 @@ func (s *adminHandlerSuite) SetupTest() {
 		s.mockProducer,
 		s.mockVisibilityMgr,
 		s.mockResource.GetLogger(),
+		nil,
 		s.mockResource.GetTaskManager(),
 		s.mockResource.GetTaskManager(),
 		s.mockResource.GetExecutionManager(),
 		s.mockResource.GetClusterMetadataManager(),
 		s.mockResource.GetMetadataManager(),
 		s.mockResource.GetClientFactory(),
-		s.mockResource.GetClientBean(),
 		s.mockResource.GetHistoryClient(),
 		s.mockResource.GetSDKClientFactory(),
 		s.mockResource.GetMembershipMonitor(),
 		s.mockResource.GetHostInfoProvider(),
-		s.mockResource.GetMetricsHandler(),
 		s.mockResource.GetNamespaceRegistry(),
-		s.mockResource.GetSearchAttributesProvider(),
-		s.mockResource.GetSearchAttributesManager(),
 		mockSaMapperProvider,
+		saValidator,
 		s.mockMetadata,
 		health.NewServer(),
 		serialization.NewSerializer(),
@@ -196,7 +211,6 @@ func (s *adminHandlerSuite) SetupTest() {
 	s.currentClusterName = "current-cluster"
 	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(s.currentClusterName).AnyTimes()
 	s.mockExecutionMgr.EXPECT().GetName().Return("mock-execution-manager").AnyTimes()
-	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{"mock-vis-store"})
 
 	namespaceDLQHandler := NamespaceDLQHandlerProvider(
 		s.mockMetadata,
@@ -216,316 +230,14 @@ func (s *adminHandlerSuite) TearDownTest() {
 	s.handler.Stop()
 }
 
-func (s *adminHandlerSuite) Test_AddSearchAttributes() {
-	handler := s.handler
-	ctx := context.Background()
-
-	type test struct {
-		Name     string
-		Request  *adminservice.AddSearchAttributesRequest
-		Expected error
-	}
-	// request validation tests
-	testCases1 := []test{
-		{
-			Name:     "nil request",
-			Request:  nil,
-			Expected: &serviceerror.InvalidArgument{Message: "Request is nil."},
-		},
-		{
-			Name:     "empty request",
-			Request:  &adminservice.AddSearchAttributesRequest{},
-			Expected: &serviceerror.InvalidArgument{Message: "SearchAttributes are not set on request."},
-		},
-	}
-	for _, testCase := range testCases1 {
-		s.T().Run(testCase.Name, func(t *testing.T) {
-			resp, err := handler.AddSearchAttributes(ctx, testCase.Request)
-			s.Equal(testCase.Expected, err)
-			s.Nil(resp)
-		})
-	}
-
-	// Elasticsearch is not configured
-	s.mockVisibilityMgr.EXPECT().GetIndexName().Return("").AnyTimes()
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestEsNameTypeMap(), nil).AnyTimes()
-	testCases3 := []test{
-		{
-			Name: "reserved key (empty index)",
-			Request: &adminservice.AddSearchAttributesRequest{
-				SearchAttributes: map[string]enumspb.IndexedValueType{
-					"WorkflowId": enumspb.INDEXED_VALUE_TYPE_TEXT,
-				},
-			},
-			Expected: &serviceerror.InvalidArgument{Message: "Search attribute WorkflowId is reserved by system."},
-		},
-		{
-			Name: "key already whitelisted (empty index)",
-			Request: &adminservice.AddSearchAttributesRequest{
-				SearchAttributes: map[string]enumspb.IndexedValueType{
-					"CustomTextField": enumspb.INDEXED_VALUE_TYPE_TEXT,
-				},
-			},
-			Expected: &serviceerror.InvalidArgument{Message: "Search attribute CustomTextField already exists."},
-		},
-	}
-	for _, testCase := range testCases3 {
-		s.T().Run(testCase.Name, func(t *testing.T) {
-			resp, err := handler.AddSearchAttributes(ctx, testCase.Request)
-			s.Equal(testCase.Expected, err)
-			s.Nil(resp)
-		})
-	}
-
-	// Configure Elasticsearch: add advanced visibility store config with index name.
-	s.mockVisibilityMgr.EXPECT().GetIndexName().Return("random-index-name").AnyTimes()
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestEsNameTypeMap(), nil).AnyTimes()
-	testCases2 := []test{
-		{
-			Name: "reserved key (ES configured)",
-			Request: &adminservice.AddSearchAttributesRequest{
-				SearchAttributes: map[string]enumspb.IndexedValueType{
-					"WorkflowId": enumspb.INDEXED_VALUE_TYPE_TEXT,
-				},
-			},
-			Expected: &serviceerror.InvalidArgument{Message: "Search attribute WorkflowId is reserved by system."},
-		},
-		{
-			Name: "key already whitelisted (ES configured)",
-			Request: &adminservice.AddSearchAttributesRequest{
-				SearchAttributes: map[string]enumspb.IndexedValueType{
-					"CustomTextField": enumspb.INDEXED_VALUE_TYPE_TEXT,
-				},
-			},
-			Expected: &serviceerror.InvalidArgument{Message: "Search attribute CustomTextField already exists."},
-		},
-	}
-	for _, testCase := range testCases2 {
-		s.T().Run(testCase.Name, func(t *testing.T) {
-			resp, err := handler.AddSearchAttributes(ctx, testCase.Request)
-			s.Equal(testCase.Expected, err)
-			s.Nil(resp)
-		})
-	}
-
-	mockSdkClient := mocksdk.NewMockClient(s.controller)
-	s.mockResource.SDKClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
-	s.mockVisibilityMgr.EXPECT().HasStoreName(elasticsearch.PersistenceName).Return(true).AnyTimes()
-
-	// Start workflow failed.
-	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), "temporal-sys-add-search-attributes-workflow", gomock.Any()).Return(nil, errors.New("start failed"))
-	resp, err := handler.AddSearchAttributes(ctx, &adminservice.AddSearchAttributesRequest{
-		SearchAttributes: map[string]enumspb.IndexedValueType{
-			"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		},
-	})
-	s.Error(err)
-	s.Equal("Unable to start temporal-sys-add-search-attributes-workflow workflow: start failed.", err.Error())
-	s.Nil(resp)
-
-	// Workflow failed.
-	mockRun := mocksdk.NewMockWorkflowRun(s.controller)
-	mockRun.EXPECT().Get(gomock.Any(), nil).Return(errors.New("workflow failed"))
-	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), "temporal-sys-add-search-attributes-workflow", gomock.Any()).Return(mockRun, nil)
-	resp, err = handler.AddSearchAttributes(ctx, &adminservice.AddSearchAttributesRequest{
-		SearchAttributes: map[string]enumspb.IndexedValueType{
-			"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		},
-	})
-	s.Error(err)
-	s.Equal("Workflow temporal-sys-add-search-attributes-workflow returned an error: workflow failed.", err.Error())
-	s.Nil(resp)
-
-	// Success case.
-	mockRun.EXPECT().Get(gomock.Any(), nil).Return(nil)
-	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), "temporal-sys-add-search-attributes-workflow", gomock.Any()).Return(mockRun, nil)
-
-	resp, err = handler.AddSearchAttributes(ctx, &adminservice.AddSearchAttributesRequest{
-		SearchAttributes: map[string]enumspb.IndexedValueType{
-			"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		},
-	})
-	s.NoError(err)
-	s.NotNil(resp)
-}
-
-func (s *adminHandlerSuite) Test_GetSearchAttributes_EmptyIndexName() {
-	handler := s.handler
-	ctx := context.Background()
-
-	resp, err := handler.GetSearchAttributes(ctx, nil)
-	s.Error(err)
-	s.Equal(&serviceerror.InvalidArgument{Message: "Request is nil."}, err)
-	s.Nil(resp)
-
-	mockSdkClient := mocksdk.NewMockClient(s.controller)
-	s.mockResource.SDKClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
-	s.mockNamespaceCache.EXPECT().GetNamespace(s.namespace).Return(s.namespaceEntry, nil).AnyTimes()
-
-	// Elasticsearch is not configured
-	s.mockVisibilityMgr.EXPECT().HasStoreName(elasticsearch.PersistenceName).Return(true).AnyTimes()
-	s.mockVisibilityMgr.EXPECT().GetIndexName().Return("").AnyTimes()
-	mockSdkClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), "temporal-sys-add-search-attributes-workflow", "").Return(
-		&workflowservice.DescribeWorkflowExecutionResponse{}, nil)
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestEsNameTypeMap(), nil).AnyTimes()
-
-	resp, err = handler.GetSearchAttributes(ctx, &adminservice.GetSearchAttributesRequest{Namespace: s.namespace.String()})
-	s.NoError(err)
-	s.NotNil(resp)
-}
-
-func (s *adminHandlerSuite) Test_GetSearchAttributes_NonEmptyIndexName() {
-	handler := s.handler
-	ctx := context.Background()
-
-	mockSdkClient := mocksdk.NewMockClient(s.controller)
-	s.mockResource.SDKClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
-
-	// Configure Elasticsearch: add advanced visibility store config with index name.
-	s.mockVisibilityMgr.EXPECT().HasStoreName(elasticsearch.PersistenceName).Return(true).AnyTimes()
-	s.mockVisibilityMgr.EXPECT().GetIndexName().Return("random-index-name").AnyTimes()
-
-	mockSdkClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), "temporal-sys-add-search-attributes-workflow", "").Return(
-		&workflowservice.DescribeWorkflowExecutionResponse{}, nil)
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestEsNameTypeMap(), nil).AnyTimes()
-	resp, err := handler.GetSearchAttributes(ctx, &adminservice.GetSearchAttributesRequest{})
-	s.NoError(err)
-	s.NotNil(resp)
-
-	mockSdkClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), "temporal-sys-add-search-attributes-workflow", "").Return(
-		&workflowservice.DescribeWorkflowExecutionResponse{}, nil)
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("another-index-name", true).Return(searchattribute.TestEsNameTypeMap(), nil).AnyTimes()
-	resp, err = handler.GetSearchAttributes(ctx, &adminservice.GetSearchAttributesRequest{IndexName: "another-index-name"})
-	s.NoError(err)
-	s.NotNil(resp)
-
-	mockSdkClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), "temporal-sys-add-search-attributes-workflow", "").Return(
-		nil, errors.New("random error"))
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestEsNameTypeMap(), nil).AnyTimes()
-	resp, err = handler.GetSearchAttributes(ctx, &adminservice.GetSearchAttributesRequest{Namespace: s.namespace.String()})
-	s.Error(err)
-	s.Nil(resp)
-}
-
-func (s *adminHandlerSuite) Test_RemoveSearchAttributes_EmptyIndexName() {
-	handler := s.handler
-	ctx := context.Background()
-
-	type test struct {
-		Name     string
-		Request  *adminservice.RemoveSearchAttributesRequest
-		Expected error
-	}
-	// request validation tests
-	testCases1 := []test{
-		{
-			Name:     "nil request",
-			Request:  nil,
-			Expected: &serviceerror.InvalidArgument{Message: "Request is nil."},
-		},
-		{
-			Name:     "empty request",
-			Request:  &adminservice.RemoveSearchAttributesRequest{},
-			Expected: &serviceerror.InvalidArgument{Message: "SearchAttributes are not set on request."},
-		},
-	}
-	for _, testCase := range testCases1 {
-		s.T().Run(testCase.Name, func(t *testing.T) {
-			resp, err := handler.RemoveSearchAttributes(ctx, testCase.Request)
-			s.Equal(testCase.Expected, err)
-			s.Nil(resp)
-		})
-	}
-
-	// Elasticsearch is not configured
-	s.mockVisibilityMgr.EXPECT().HasStoreName(elasticsearch.PersistenceName).Return(true).AnyTimes()
-	s.mockVisibilityMgr.EXPECT().GetIndexName().Return("").AnyTimes()
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestNameTypeMap(), nil).AnyTimes()
-	testCases2 := []test{
-		{
-			Name: "reserved search attribute (empty index)",
-			Request: &adminservice.RemoveSearchAttributesRequest{
-				SearchAttributes: []string{
-					"WorkflowId",
-				},
-			},
-			Expected: &serviceerror.InvalidArgument{Message: "Unable to remove non-custom search attributes: WorkflowId."},
-		},
-		{
-			Name: "search attribute doesn't exist (empty index)",
-			Request: &adminservice.RemoveSearchAttributesRequest{
-				SearchAttributes: []string{
-					"ProductId",
-				},
-			},
-			Expected: &serviceerror.InvalidArgument{Message: "Search attribute ProductId doesn't exist."},
-		},
-	}
-	for _, testCase := range testCases2 {
-		s.T().Run(testCase.Name, func(t *testing.T) {
-			resp, err := handler.RemoveSearchAttributes(ctx, testCase.Request)
-			s.Equal(testCase.Expected, err)
-			s.Nil(resp)
-		})
-	}
-}
-
-func (s *adminHandlerSuite) Test_RemoveSearchAttributes_NonEmptyIndexName() {
-	handler := s.handler
-	ctx := context.Background()
-
-	type test struct {
-		Name     string
-		Request  *adminservice.RemoveSearchAttributesRequest
-		Expected error
-	}
-	testCases := []test{
-		{
-			Name: "reserved search attribute (ES configured)",
-			Request: &adminservice.RemoveSearchAttributesRequest{
-				SearchAttributes: []string{
-					"WorkflowId",
-				},
-			},
-			Expected: &serviceerror.InvalidArgument{Message: "Unable to remove non-custom search attributes: WorkflowId."},
-		},
-		{
-			Name: "search attribute doesn't exist (ES configured)",
-			Request: &adminservice.RemoveSearchAttributesRequest{
-				SearchAttributes: []string{
-					"ProductId",
-				},
-			},
-			Expected: &serviceerror.InvalidArgument{Message: "Search attribute ProductId doesn't exist."},
-		},
-	}
-
-	// Configure Elasticsearch: add advanced visibility store config with index name.
-	s.mockVisibilityMgr.EXPECT().HasStoreName(elasticsearch.PersistenceName).Return(true).AnyTimes()
-	s.mockVisibilityMgr.EXPECT().GetIndexName().Return("random-index-name").AnyTimes()
-	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestEsNameTypeMap(), nil).AnyTimes()
-	for _, testCase := range testCases {
-		s.T().Run(testCase.Name, func(t *testing.T) {
-			resp, err := handler.RemoveSearchAttributes(ctx, testCase.Request)
-			s.Equal(testCase.Expected, err)
-			s.Nil(resp)
-		})
-	}
-
-	// Success case.
-	s.mockResource.SearchAttributesManager.EXPECT().SaveSearchAttributes(gomock.Any(), "random-index-name", gomock.Any()).Return(nil)
-
-	resp, err := handler.RemoveSearchAttributes(ctx, &adminservice.RemoveSearchAttributesRequest{
-		SearchAttributes: []string{
-			"CustomKeywordField",
-		},
-	})
-	s.NoError(err)
-	s.NotNil(resp)
-}
-
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Success() {
 	var clusterName = "cluster"
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		clusterName: {ClusterID: "cluster-id"},
+	})
 	s.mockNamespaceCache.EXPECT().GetAllNamespaces().Return(nil)
 	s.mockClusterMetadataManager.EXPECT().DeleteClusterMetadata(
 		gomock.Any(),
@@ -534,10 +246,20 @@ func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Success() {
 
 	_, err := s.handler.RemoveRemoteCluster(context.Background(), &adminservice.RemoveRemoteClusterRequest{ClusterName: clusterName})
 	s.NoError(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeSucceeded, details["outcome"])
+	s.Equal(remoteClusterMutationRemoved, details["mutation"])
+	s.Equal("cluster-id", details["remote_cluster_id"])
 }
 
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Error() {
 	var clusterName = "cluster"
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		clusterName: {},
+	})
 	s.mockNamespaceCache.EXPECT().GetAllNamespaces().Return(nil)
 	s.mockClusterMetadataManager.EXPECT().DeleteClusterMetadata(
 		gomock.Any(),
@@ -546,6 +268,45 @@ func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Error() {
 
 	_, err := s.handler.RemoveRemoteCluster(context.Background(), &adminservice.RemoveRemoteClusterRequest{ClusterName: clusterName})
 	s.Error(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeFailed, details["outcome"])
+	s.Equal(remoteClusterMutationUnknown, details["mutation"])
+	s.NotNil(details["persistence_request"])
+}
+
+func (s *adminHandlerSuite) Test_RemoveRemoteCluster_PanicEmitsFailure() {
+	clusterName := "cluster"
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockMetadata.EXPECT().GetAllClusterInfo().DoAndReturn(func() map[string]cluster.ClusterInformation {
+		panic("test panic")
+	})
+
+	_, err := s.handler.RemoveRemoteCluster(
+		context.Background(),
+		&adminservice.RemoveRemoteClusterRequest{ClusterName: clusterName},
+	)
+	s.Require().Error(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeFailed, details["outcome"])
+	s.Equal("Internal", details["error_code"])
+}
+
+func (s *adminHandlerSuite) Test_RemoveRemoteCluster_EventEmissionPanicCaptured() {
+	clusterName := "cluster"
+	s.handler.eventLogger = &panicRemoteClusterEventLogger{}
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockMetadata.EXPECT().GetAllClusterInfo().DoAndReturn(func() map[string]cluster.ClusterInformation {
+		panic("handler panic")
+	})
+
+	_, err := s.handler.RemoveRemoteCluster(
+		context.Background(),
+		&adminservice.RemoveRemoteClusterRequest{ClusterName: clusterName},
+	)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "event logger panic")
 }
 
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_BlockedByGlobalNamespace() {
@@ -671,6 +432,9 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordFound_Success() 
 	var clusterName = uuid.NewString()
 	var clusterID = uuid.NewString()
 	var recordVersion int64 = 5
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 
 	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(10)).Times(2)
 	s.mockMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
@@ -708,6 +472,11 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordFound_Success() 
 		FrontendAddress: rpcAddress,
 	})
 	s.NoError(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeSucceeded, details["outcome"])
+	s.Equal(remoteClusterMutationUpdated, details["mutation"])
+	s.Equal(remoteClusterTransitionUnchanged, details["requested_connection_transition"])
+	s.Equal(remoteClusterTransitionUnchanged, details["requested_replication_transition"])
 }
 
 func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordNotFound_Success() {
@@ -967,6 +736,9 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_EmptyR
 
 func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_DescribeCluster_Error() {
 	var rpcAddress = uuid.NewString()
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 
 	s.mockClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
 		s.mockAdminClient,
@@ -977,6 +749,56 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_DescribeCluster_Error(
 	)
 	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &adminservice.AddOrUpdateRemoteClusterRequest{FrontendAddress: rpcAddress})
 	s.Error(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeFailed, details["outcome"])
+	s.Equal("Unknown", details["error_code"])
+}
+
+func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_PanicEmitsFailure() {
+	rpcAddress := uuid.NewString()
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
+		s.mockAdminClient,
+	)
+	s.mockAdminClient.EXPECT().DescribeCluster(
+		gomock.Any(),
+		&adminservice.DescribeClusterRequest{},
+	).DoAndReturn(func(context.Context, *adminservice.DescribeClusterRequest, ...grpc.CallOption) (*adminservice.DescribeClusterResponse, error) {
+		panic("test panic")
+	})
+
+	_, err := s.handler.AddOrUpdateRemoteCluster(
+		context.Background(),
+		&adminservice.AddOrUpdateRemoteClusterRequest{FrontendAddress: rpcAddress},
+	)
+	s.Require().Error(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeFailed, details["outcome"])
+	s.Equal("Internal", details["error_code"])
+}
+
+func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_EventEmissionPanicCaptured() {
+	rpcAddress := uuid.NewString()
+	s.handler.eventLogger = &panicRemoteClusterEventLogger{}
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
+		s.mockAdminClient,
+	)
+	s.mockAdminClient.EXPECT().DescribeCluster(
+		gomock.Any(),
+		&adminservice.DescribeClusterRequest{},
+	).DoAndReturn(func(context.Context, *adminservice.DescribeClusterRequest, ...grpc.CallOption) (*adminservice.DescribeClusterResponse, error) {
+		panic("handler panic")
+	})
+
+	_, err := s.handler.AddOrUpdateRemoteCluster(
+		context.Background(),
+		&adminservice.AddOrUpdateRemoteClusterRequest{FrontendAddress: rpcAddress},
+	)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "event logger panic")
 }
 
 func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_GetClusterMetadata_Error() {
@@ -2613,5 +2435,176 @@ func (s *adminHandlerSuite) TestGetTaskQueueUserData() {
 		})
 		s.Error(err)
 		s.Nil(resp)
+	})
+}
+
+func (s *adminHandlerSuite) TestAddSearchAttributes() {
+	ctx := context.Background()
+	mockOperatorClient := operatorservicemock.NewMockOperatorServiceClient(s.controller)
+	request := &adminservice.AddSearchAttributesRequest{
+		SearchAttributes: map[string]enumspb.IndexedValueType{
+			"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		},
+		Namespace: s.namespace.String(),
+	}
+
+	s.Run("success", func() {
+		s.mockClientFactory.EXPECT().
+			NewLocalOperatorClientWithTimeout(gomock.Any()).
+			Return(mockOperatorClient, nil)
+		mockOperatorClient.EXPECT().
+			AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
+				SearchAttributes: request.GetSearchAttributes(),
+				Namespace:        request.GetNamespace(),
+			}).
+			Return(&operatorservice.AddSearchAttributesResponse{}, nil)
+
+		resp, err := s.handler.AddSearchAttributes(ctx, request)
+		s.NoError(err)
+		s.NotNil(resp)
+	})
+
+	s.Run("client factory error", func() {
+		s.mockClientFactory.EXPECT().
+			NewLocalOperatorClientWithTimeout(gomock.Any()).
+			Return(nil, errors.New("factory failure"))
+
+		resp, err := s.handler.AddSearchAttributes(ctx, request)
+		s.Error(err)
+		s.Nil(resp)
+		var unavailable *serviceerror.Unavailable
+		s.ErrorAs(err, &unavailable)
+	})
+
+	s.Run("operator client error", func() {
+		s.mockClientFactory.EXPECT().
+			NewLocalOperatorClientWithTimeout(gomock.Any()).
+			Return(mockOperatorClient, nil)
+		mockOperatorClient.EXPECT().
+			AddSearchAttributes(ctx, gomock.Any()).
+			Return(nil, serviceerror.NewInvalidArgument("invalid"))
+
+		resp, err := s.handler.AddSearchAttributes(ctx, request)
+		s.Error(err)
+		s.Nil(resp)
+		var invalidArg *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArg)
+	})
+}
+
+func (s *adminHandlerSuite) TestRemoveSearchAttributes() {
+	ctx := context.Background()
+	mockOperatorClient := operatorservicemock.NewMockOperatorServiceClient(s.controller)
+	request := &adminservice.RemoveSearchAttributesRequest{
+		SearchAttributes: []string{"CustomAttr"},
+		Namespace:        s.namespace.String(),
+	}
+
+	s.Run("success", func() {
+		s.mockClientFactory.EXPECT().
+			NewLocalOperatorClientWithTimeout(gomock.Any()).
+			Return(mockOperatorClient, nil)
+		mockOperatorClient.EXPECT().
+			RemoveSearchAttributes(ctx, &operatorservice.RemoveSearchAttributesRequest{
+				SearchAttributes: request.GetSearchAttributes(),
+				Namespace:        request.GetNamespace(),
+			}).
+			Return(&operatorservice.RemoveSearchAttributesResponse{}, nil)
+
+		resp, err := s.handler.RemoveSearchAttributes(ctx, request)
+		s.NoError(err)
+		s.NotNil(resp)
+	})
+
+	s.Run("client factory error", func() {
+		s.mockClientFactory.EXPECT().
+			NewLocalOperatorClientWithTimeout(gomock.Any()).
+			Return(nil, errors.New("factory failure"))
+
+		resp, err := s.handler.RemoveSearchAttributes(ctx, request)
+		s.Error(err)
+		s.Nil(resp)
+		var unavailable *serviceerror.Unavailable
+		s.ErrorAs(err, &unavailable)
+	})
+
+	s.Run("operator client error", func() {
+		s.mockClientFactory.EXPECT().
+			NewLocalOperatorClientWithTimeout(gomock.Any()).
+			Return(mockOperatorClient, nil)
+		mockOperatorClient.EXPECT().
+			RemoveSearchAttributes(ctx, gomock.Any()).
+			Return(nil, serviceerror.NewNotFound("not found"))
+
+		resp, err := s.handler.RemoveSearchAttributes(ctx, request)
+		s.Error(err)
+		s.Nil(resp)
+		var notFound *serviceerror.NotFound
+		s.ErrorAs(err, &notFound)
+	})
+}
+
+func (s *adminHandlerSuite) TestGetSearchAttributes() {
+	ctx := context.Background()
+	mockOperatorClient := operatorservicemock.NewMockOperatorServiceClient(s.controller)
+	request := &adminservice.GetSearchAttributesRequest{
+		Namespace: s.namespace.String(),
+	}
+
+	s.Run("success", func() {
+		customAttrs := map[string]enumspb.IndexedValueType{
+			"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		}
+		systemAttrs := map[string]enumspb.IndexedValueType{
+			"WorkflowId": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		}
+		storageSchema := map[string]string{"CustomAttr": "keyword"}
+
+		s.mockClientFactory.EXPECT().
+			NewLocalOperatorClientWithTimeout(gomock.Any()).
+			Return(mockOperatorClient, nil)
+		mockOperatorClient.EXPECT().
+			ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{
+				Namespace: request.GetNamespace(),
+			}).
+			Return(&operatorservice.ListSearchAttributesResponse{
+				CustomAttributes: customAttrs,
+				SystemAttributes: systemAttrs,
+				StorageSchema:    storageSchema,
+			}, nil)
+
+		resp, err := s.handler.GetSearchAttributes(ctx, request)
+		s.NoError(err)
+		s.NotNil(resp)
+		s.Equal(customAttrs, resp.GetCustomAttributes())
+		s.Equal(systemAttrs, resp.GetSystemAttributes())
+		s.Equal(storageSchema, resp.GetMapping())
+	})
+
+	s.Run("client factory error", func() {
+		s.mockClientFactory.EXPECT().
+			NewLocalOperatorClientWithTimeout(gomock.Any()).
+			Return(nil, errors.New("factory failure"))
+
+		resp, err := s.handler.GetSearchAttributes(ctx, request)
+		s.Error(err)
+		s.Nil(resp)
+		var unavailable *serviceerror.Unavailable
+		s.ErrorAs(err, &unavailable)
+	})
+
+	s.Run("operator client error", func() {
+		s.mockClientFactory.EXPECT().
+			NewLocalOperatorClientWithTimeout(gomock.Any()).
+			Return(mockOperatorClient, nil)
+		mockOperatorClient.EXPECT().
+			ListSearchAttributes(ctx, gomock.Any()).
+			Return(nil, serviceerror.NewUnavailable("unavailable"))
+
+		resp, err := s.handler.GetSearchAttributes(ctx, request)
+		s.Error(err)
+		s.Nil(resp)
+		var unavailable *serviceerror.Unavailable
+		s.ErrorAs(err, &unavailable)
 	})
 }

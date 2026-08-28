@@ -2,6 +2,7 @@ package flakereport
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,7 +10,13 @@ import (
 
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/tools/common/github"
 )
+
+func isGitHubRateLimitError(err error) bool {
+	var rateLimitErr *github.RateLimitError
+	return errors.As(err, &rateLimitErr)
+}
 
 const (
 	minFlakyFailures    = 3
@@ -64,6 +71,11 @@ func NewCliApp() *cli.App {
 					Value: defaultConcurrency,
 					Usage: "Number of parallel workers for artifact processing",
 				},
+				&cli.IntFlag{
+					Name:  "rps",
+					Value: github.DefaultAPIRPS,
+					Usage: "Maximum GitHub API requests per second",
+				},
 				&cli.StringFlag{
 					Name:  "output-dir",
 					Value: "out",
@@ -115,7 +127,7 @@ func NewCliApp() *cli.App {
 
 // fetchAndAnalyzeWorkflowRuns fetches workflow runs between since and until and counts successes.
 // until is zero for an open-ended (up to now) window.
-func fetchAndAnalyzeWorkflowRuns(ctx context.Context, repo string, workflowID int64, branch string, since, until time.Time) ([]WorkflowRun, int, error) {
+func fetchAndAnalyzeWorkflowRuns(ctx context.Context, repo string, workflowID int64, branch string, since, until time.Time) ([]github.Run, int, error) {
 	fmt.Println("\n=== Fetching workflow runs ===")
 	runs, err := fetchWorkflowRuns(ctx, repo, workflowID, branch, since, until)
 	if err != nil {
@@ -141,32 +153,35 @@ func fetchAndAnalyzeWorkflowRuns(ctx context.Context, repo string, workflowID in
 }
 
 // collectArtifactJobs collects all artifact jobs from workflow runs
-func collectArtifactJobs(ctx context.Context, repo string, runs []WorkflowRun, tempDir string) ([]ArtifactJob, error) {
+func collectArtifactJobs(ctx context.Context, repo string, runs []github.Run, tempDir string) ([]ArtifactJob, error) {
 	fmt.Println("\n=== Collecting artifacts ===")
 	var jobs []ArtifactJob
 	totalArtifacts := 0
 
 	for i, run := range runs {
-		artifacts, err := fetchRunArtifacts(ctx, repo, run.ID)
+		artifacts, err := fetchRunArtifacts(ctx, repo, run.DatabaseID)
 		if err != nil {
-			fmt.Printf("Warning: Failed to fetch artifacts for run %d: %v\n", run.ID, err)
+			if isGitHubRateLimitError(err) {
+				return nil, fmt.Errorf("cannot generate complete report: GitHub API rate limit while fetching artifacts for workflow run %d: %w", run.DatabaseID, err)
+			}
+			fmt.Printf("Warning: Failed to fetch artifacts for run %d: %v\n", run.DatabaseID, err)
 			continue
 		}
 
 		if len(artifacts) == 0 {
 			fmt.Printf("Run %d/%d (ID: %d, CreatedAt: %s): No test artifacts found\n",
-				i+1, len(runs), run.ID, run.CreatedAt.Format(time.RFC3339Nano))
+				i+1, len(runs), run.DatabaseID, run.CreatedAt.Format(time.RFC3339Nano))
 			continue
 		}
 
 		fmt.Printf("Run %d/%d (ID: %d, CreatedAt: %s): Found %d artifacts\n",
-			i+1, len(runs), run.ID, run.CreatedAt.Format(time.RFC3339Nano), len(artifacts))
+			i+1, len(runs), run.DatabaseID, run.CreatedAt.Format(time.RFC3339Nano), len(artifacts))
 
 		for _, artifact := range artifacts {
 			totalArtifacts++
 			jobs = append(jobs, ArtifactJob{
 				Repo:         repo,
-				RunID:        run.ID,
+				RunID:        run.DatabaseID,
 				RunCreatedAt: run.CreatedAt,
 				Artifact:     artifact,
 				TempDir:      tempDir,
@@ -182,9 +197,18 @@ func collectArtifactJobs(ctx context.Context, repo string, runs []WorkflowRun, t
 }
 
 // buildReportSummary builds the complete report summary from processed data
-func buildReportSummary(flakyReports, timeoutReports, crashReports, ciBreakerReports []TestReport,
+func buildReportSummary(flakyReports, timeoutReports, testRunnerTimeoutReports, crashReports, ciBreakerReports []TestReport,
 	suiteReports []SuiteReport,
-	allFailures []TestFailure, allTestRuns []TestRun, runs []WorkflowRun, successfulRuns int) *ReportSummary {
+	allFailures []TestFailure, allTestRuns []TestRun, runs []github.Run, successfulRuns int) *ReportSummary {
+	filteredFlakyReports := make([]TestReport, 0, len(flakyReports))
+	for _, report := range flakyReports {
+		// Tests that fail on every observed run are very likely false reporting.
+		if report.TotalRuns > 0 && report.FailureCount == report.TotalRuns {
+			continue
+		}
+		filteredFlakyReports = append(filteredFlakyReports, report)
+	}
+	flakyReports = filteredFlakyReports
 
 	// Calculate overall failure rate
 	overallFailureRate := 0.0
@@ -197,6 +221,7 @@ func buildReportSummary(flakyReports, timeoutReports, crashReports, ciBreakerRep
 	return &ReportSummary{
 		FlakyTests:         flakyReports,
 		Timeouts:           timeoutReports,
+		TestRunnerTimeouts: testRunnerTimeoutReports,
 		Crashes:            crashReports,
 		CIBreakers:         ciBreakerReports,
 		Suites:             suiteReports,
@@ -217,6 +242,7 @@ func runGenerateCommand(c *cli.Context) (err error) {
 	workflowID := c.Int64("workflow-id")
 	maxLinks := c.Int("max-links")
 	concurrency := c.Int("concurrency")
+	rps := c.Int("rps")
 	outputDir := c.String("output-dir")
 	slackWebhook := c.String("slack-webhook")
 	runID := c.String("run-id")
@@ -232,6 +258,9 @@ func runGenerateCommand(c *cli.Context) (err error) {
 			sendFailureNotification(slackWebhook, runID, refName, sha, repo, err)
 		}
 	}()
+	if err := github.SetAPIRPS(rps); err != nil {
+		return err
+	}
 
 	fmt.Println("Starting flaky test report generation...")
 	fmt.Printf("Repository: %s\n", repo)
@@ -239,6 +268,7 @@ func runGenerateCommand(c *cli.Context) (err error) {
 	fmt.Printf("Lookback days: %d\n", days)
 	fmt.Printf("Workflow ID: %d\n", workflowID)
 	fmt.Printf("Parallel workers: %d\n", concurrency)
+	fmt.Printf("GitHub API requests per second: %d\n", rps)
 
 	// Create context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
@@ -274,18 +304,25 @@ func runGenerateCommand(c *cli.Context) (err error) {
 
 	// Process artifacts in parallel
 	fmt.Println("\n=== Processing artifacts in parallel ===")
-	allFailures, allTestRuns, processedArtifacts := processArtifactsParallel(ctx, jobs, concurrency)
+	allFailures, allTestRuns, processedArtifacts, err := processArtifactsParallel(ctx, jobs, concurrency)
+	if err != nil {
+		return err
+	}
+	testFailures, testRunnerTimeouts := splitTestRunnerTimeoutFailures(allFailures)
+	allTestRuns = filterTestRunnerTimeoutRuns(allTestRuns)
 
 	fmt.Println("\n=== Processing Results ===")
 	fmt.Printf("Total test runs: %d\n", len(allTestRuns))
-	fmt.Printf("Total test failures found: %d\n", len(allFailures))
+	fmt.Printf("Total test failures found: %d\n", len(testFailures))
+	fmt.Printf("Test-runner timeouts: %d\n", len(testRunnerTimeouts))
 	fmt.Printf("Processed artifacts: %d\n", processedArtifacts)
 
 	// Count test runs by name for failure rate calculation
 	testRunCounts := countTestRuns(allTestRuns)
 
 	// Group failures by test name, then remove parent entries whose subtests were observed.
-	grouped := groupFailuresByTest(allFailures)
+	grouped := groupFailuresByTest(testFailures)
+	testRunnerTimeoutMap := groupFailuresByTest(testRunnerTimeouts)
 	filterParentTests(grouped, testRunCounts)
 	fmt.Printf("Unique tests with failures: %d\n", len(grouped))
 
@@ -296,7 +333,7 @@ func runGenerateCommand(c *cli.Context) (err error) {
 	fmt.Printf("Crash tests: %d\n", len(crashMap))
 
 	// Identify CI breakers (tests that failed all retries in a single job)
-	ciBreakerMap, ciBreakCounts := identifyCIBreakers(allFailures)
+	ciBreakerMap, ciBreakCounts := identifyCIBreakers(testFailures)
 	filterParentTests(ciBreakerMap, testRunCounts)
 	fmt.Printf("CI breaker tests (failed all retries): %d\n", len(ciBreakerMap))
 
@@ -304,18 +341,19 @@ func runGenerateCommand(c *cli.Context) (err error) {
 	reportWindow := newReportWindow(reportSince, now)
 	flakyReports := convertToReports(flakyMap, testRunCounts, repo, maxLinks, reportWindow)
 	timeoutReports := convertToReports(timeoutMap, testRunCounts, repo, maxLinks, reportWindow)
+	testRunnerTimeoutReports := convertEventReports(testRunnerTimeoutMap, repo, maxLinks, reportWindow)
 	crashReports := convertCrashesToReports(crashMap, jobs, repo, maxLinks, reportWindow)
-	ciBreakerReports := convertCIBreakersToReports(ciBreakerMap, ciBreakCounts, len(runs), repo, maxLinks, reportWindow)
+	ciBreakerReports := convertCIBreakersToReports(ciBreakerMap, ciBreakCounts, repo, maxLinks, reportWindow)
 
 	// Compute suite-level breakdown
-	suiteReports := generateSuiteReports(allFailures, allTestRuns)
+	suiteReports := generateSuiteReports(testFailures, allTestRuns)
 	fmt.Printf("Suites: %d\n", len(suiteReports))
 
 	// Build summary
 	summary := buildReportSummary(
-		flakyReports, timeoutReports, crashReports, ciBreakerReports,
+		flakyReports, timeoutReports, testRunnerTimeoutReports, crashReports, ciBreakerReports,
 		suiteReports,
-		allFailures, allTestRuns, runs, successfulRuns,
+		testFailures, allTestRuns, runs, successfulRuns,
 	)
 
 	// Optionally run Bayesian bisect analysis
@@ -360,10 +398,7 @@ func runGenerateCommand(c *cli.Context) (err error) {
 
 	// Write GitHub summary (to GITHUB_STEP_SUMMARY if set, otherwise to output dir)
 	fmt.Println("\n=== Writing GitHub summary ===")
-	summaryContent := generateGitHubSummary(summary, runID, maxLinks)
-	if len(bisectReports) > 0 {
-		summaryContent += generateBisectSummary(bisectReports, repo, bisectMinProbability)
-	}
+	summaryContent := generateGitHubSummary(summary, bisectReports, repo, runID, maxLinks, bisectMinProbability)
 	if err := writeGitHubSummary(summaryContent, outputDir); err != nil {
 		fmt.Printf("Warning: Failed to write GitHub summary: %v\n", err)
 	}
@@ -372,11 +407,13 @@ func runGenerateCommand(c *cli.Context) (err error) {
 	message := buildSuccessMessage(summary, runID, repo, days)
 	if slackWebhook != "" {
 		fmt.Println("\n=== Sending Slack notification ===")
-		if err := message.send(slackWebhook); err != nil {
+		if err := message.Send(slackWebhook); err != nil {
 			fmt.Printf("Warning: Failed to send Slack notification: %v\n", err)
+		} else {
+			fmt.Println("Slack notification sent successfully")
 		}
 	} else {
-		md := message.renderMarkdown()
+		md := message.RenderMarkdown()
 		if writeErr := os.WriteFile(filepath.Join(outputDir, "slack-report.md"), []byte(md), 0644); writeErr != nil {
 			fmt.Printf("Warning: Failed to write slack-report.md: %v\n", writeErr)
 		}
@@ -393,7 +430,7 @@ func sendFailureNotification(webhookURL, runID, refName, sha, repo string, err e
 
 	fmt.Println("Sending failure notification to Slack...")
 	message := buildFailureMessage(runID, refName, sha, repo)
-	if sendErr := message.send(webhookURL); sendErr != nil {
+	if sendErr := message.Send(webhookURL); sendErr != nil {
 		fmt.Printf("Warning: Failed to send failure notification: %v\n", sendErr)
 	}
 }

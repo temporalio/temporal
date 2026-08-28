@@ -34,6 +34,13 @@ func init() {
 		dedicatedSize = n
 	}
 
+	// In CI, recreate clusters after 50 tests to prevent resource accumulation.
+	// Locally, clusters are reused indefinitely for faster iteration.
+	var maxLeases int
+	if os.Getenv("CI") != "" {
+		maxLeases = 50
+	}
+
 	var eventsFile *os.File
 	if path := os.Getenv("TEMPORAL_TEST_CLUSTER_EVENTS_FILE"); path != "" {
 		f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
@@ -44,8 +51,8 @@ func init() {
 	}
 
 	testClusterRouter = &clusterRouter{
-		shared:     newClusterPool(sharedSize, false, 0),
-		dedicated:  newClusterPool(dedicatedSize, true, 0),
+		shared:     newClusterPool(sharedSize, false, maxLeases),
+		dedicated:  newClusterPool(dedicatedSize, true, maxLeases),
 		eventsFile: eventsFile,
 	}
 }

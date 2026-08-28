@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -44,6 +45,17 @@ func TestProcessBufferTask_Validate(t *testing.T) {
 			require.Equal(t, c.expectedValid, valid)
 		})
 	}
+}
+
+func TestProcessBufferTask_Validate_MigrationPending(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := env.MutableContext()
+	invoker := env.Scheduler.Invoker.Get(ctx)
+	env.Scheduler.WorkflowMigration = &schedulerpb.WorkflowMigrationState{}
+
+	valid, err := newProcessBufferHandler(env).Validate(ctx, invoker, chasm.TaskInvocation{}, &schedulerpb.InvokerProcessBufferTask{})
+	require.NoError(t, err)
+	require.False(t, valid)
 }
 
 // A buffer of only deferred starts (Attempt=-1) must NOT start a workflow or
@@ -303,6 +315,58 @@ func TestProcessBufferTask_BufferOne(t *testing.T) {
 				return start.Attempt > 0
 			}), 1)
 		},
+	})
+}
+
+func TestProcessBufferTask_BufferOneKeepsExistingDeferredStart(t *testing.T) {
+	env := newTestEnv(t)
+	startTime := timestamppb.New(env.TimeSource.Now())
+	runProcessBufferTestCase(t, env, &processBufferTestCase{
+		InitialBufferedStarts: []*schedulespb.BufferedStart{
+			{
+				NominalTime:   startTime,
+				ActualTime:    startTime,
+				DesiredTime:   startTime,
+				RequestId:     "deferred-first",
+				WorkflowId:    "deferred-first",
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
+				Attempt:       -1,
+			},
+			{
+				NominalTime:   startTime,
+				ActualTime:    startTime,
+				DesiredTime:   startTime,
+				RequestId:     "new-later",
+				WorkflowId:    "new-later",
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
+			},
+		},
+		InitialRunningWorkflows:  []*commonpb.WorkflowExecution{{WorkflowId: "running", RunId: "running-run"}},
+		ExpectedBufferedStarts:   1,
+		ExpectedRunningWorkflows: 1,
+		ExpectedOverlapSkipped:   1,
+		ValidateInvoker: func(t *testing.T, invoker *scheduler.Invoker) {
+			require.Equal(t, "deferred-first", invoker.GetBufferedStarts()[0].GetRequestId())
+			require.Equal(t, int64(-1), invoker.GetBufferedStarts()[0].GetAttempt())
+		},
+	})
+}
+
+func TestProcessBufferTask_BufferOneDropsDeferredStartPastCatchupWindow(t *testing.T) {
+	env := newTestEnv(t)
+	env.Scheduler.Schedule.Policies.CatchupWindow = durationpb.New(10 * time.Minute)
+	startTime := timestamppb.New(env.TimeSource.Now().Add(-15 * time.Minute))
+	runProcessBufferTestCase(t, env, &processBufferTestCase{
+		InitialBufferedStarts: []*schedulespb.BufferedStart{{
+			NominalTime:   startTime,
+			ActualTime:    startTime,
+			DesiredTime:   startTime,
+			RequestId:     "deferred-expired",
+			WorkflowId:    "deferred-expired",
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
+			Attempt:       -1,
+		}},
+		ExpectedMissedCatchupWindow: 1,
 	})
 }
 

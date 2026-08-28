@@ -144,13 +144,18 @@ func serializeTimerTask(
 
 func timeSkippingTimerTaskToProto(task *tasks.TimeSkippingTimerTask) *persistencespb.TimerTaskInfo {
 	return &persistencespb.TimerTaskInfo{
-		NamespaceId:    task.NamespaceID,
-		WorkflowId:     task.WorkflowID,
-		RunId:          task.RunID,
-		TaskId:         task.TaskID,
-		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
-		TaskType:       enumsspb.TASK_TYPE_TIMESKIPPING_TIMER,
-		EventId:        task.EventID,
+		NamespaceId:         task.NamespaceID,
+		WorkflowId:          task.WorkflowID,
+		RunId:               task.RunID,
+		TaskId:              task.TaskID,
+		VisibilityTime:      timestamppb.New(task.VisibilityTimestamp),
+		TaskType:            enumsspb.TASK_TYPE_TIMESKIPPING_TIMER,
+		VersionedTransition: task.VersionedTransition,
+		TaskDetails: &persistencespb.TimerTaskInfo_ChasmTaskInfo{
+			ChasmTaskInfo: &persistencespb.ChasmTaskInfo{
+				ArchetypeId: task.ArchetypeID,
+			},
+		},
 	}
 }
 
@@ -163,7 +168,8 @@ func timeSkippingTimerTaskFromProto(info *persistencespb.TimerTaskInfo) *tasks.T
 		),
 		VisibilityTimestamp: info.VisibilityTime.AsTime(),
 		TaskID:              info.TaskId,
-		EventID:             info.EventId,
+		VersionedTransition: info.VersionedTransition,
+		ArchetypeID:         info.GetChasmTaskInfo().GetArchetypeId(),
 	}
 }
 
@@ -1201,6 +1207,7 @@ func replicationActivityTaskToProto(
 		BranchToken:       nil,
 		NewRunBranchToken: nil,
 		VisibilityTime:    timestamppb.New(activityTask.VisibilityTimestamp),
+		Priority:          activityTask.Priority,
 		TargetClusters:    activityTask.TargetClusters,
 	}
 }
@@ -1222,6 +1229,7 @@ func replicationActivityTaskFromProto(
 		Version:             activityTask.Version,
 		TaskID:              activityTask.TaskId,
 		ScheduledEventID:    activityTask.ScheduledEventId,
+		Priority:            activityTask.Priority,
 		TargetClusters:      activityTask.TargetClusters,
 	}
 }
@@ -1243,6 +1251,7 @@ func replicationHistoryTaskToProto(
 		NewRunBranchToken: historyTask.NewRunBranchToken,
 		NewRunId:          historyTask.NewRunID,
 		VisibilityTime:    timestamppb.New(historyTask.VisibilityTimestamp),
+		Priority:          historyTask.Priority,
 		TargetClusters:    historyTask.TargetClusters,
 	}
 }
@@ -1268,6 +1277,7 @@ func replicationHistoryTaskFromProto(
 		BranchToken:         historyTask.BranchToken,
 		NewRunBranchToken:   historyTask.NewRunBranchToken,
 		NewRunID:            historyTask.NewRunId,
+		Priority:            historyTask.Priority,
 		TargetClusters:      historyTask.TargetClusters,
 	}
 }
@@ -1354,6 +1364,7 @@ func replicationSyncHSMTaskToProto(
 		TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_HSM,
 		TaskId:         syncHSMTask.TaskID,
 		VisibilityTime: timestamppb.New(syncHSMTask.VisibilityTimestamp),
+		Priority:       syncHSMTask.Priority,
 		TargetClusters: syncHSMTask.TargetClusters,
 	}
 }
@@ -1373,6 +1384,7 @@ func replicationSyncHSMTaskFromProto(
 		),
 		VisibilityTimestamp: visibilityTimestamp,
 		TaskID:              syncHSMTask.TaskId,
+		Priority:            syncHSMTask.Priority,
 		TargetClusters:      syncHSMTask.TargetClusters,
 	}
 }
@@ -1398,6 +1410,7 @@ func replicationSyncVersionedTransitionTaskToProto(
 		TaskId:                 syncVersionedTransitionTask.TaskID,
 		VisibilityTime:         timestamppb.New(syncVersionedTransitionTask.VisibilityTimestamp),
 		ArchetypeId:            syncVersionedTransitionTask.ArchetypeID,
+		Priority:               syncVersionedTransitionTask.Priority,
 		VersionedTransition:    syncVersionedTransitionTask.VersionedTransition,
 		FirstEventId:           syncVersionedTransitionTask.FirstEventID,
 		Version:                syncVersionedTransitionTask.FirstEventVersion,
@@ -1438,6 +1451,7 @@ func replicationSyncVersionedTransitionTaskFromProto(
 		VisibilityTimestamp:    visibilityTimestamp,
 		TaskID:                 syncVersionedTransitionTask.TaskId,
 		ArchetypeID:            syncVersionedTransitionTask.ArchetypeId,
+		Priority:               syncVersionedTransitionTask.Priority,
 		FirstEventID:           syncVersionedTransitionTask.FirstEventId,
 		FirstEventVersion:      syncVersionedTransitionTask.Version,
 		NextEventID:            syncVersionedTransitionTask.NextEventId,
@@ -1568,6 +1582,7 @@ func replicationDeleteExecutionTaskToProto(
 		TaskId:         task.TaskID,
 		VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
 		ArchetypeId:    task.ArchetypeID,
+		Version:        task.Version,
 	}
 }
 
@@ -1587,5 +1602,6 @@ func replicationDeleteExecutionTaskFromProto(
 		VisibilityTimestamp: visibilityTimestamp,
 		TaskID:              info.TaskId,
 		ArchetypeID:         info.ArchetypeId,
+		Version:             info.Version,
 	}
 }

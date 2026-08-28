@@ -1,23 +1,31 @@
 package scheduler_test
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/chasmtest"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -29,14 +37,18 @@ type invokerExecuteTestEnv struct {
 	mockHistoryClient  *historyservicemock.MockHistoryServiceClient
 }
 
-func newInvokerExecuteTestEnv(t *testing.T) *invokerExecuteTestEnv {
+func newInvokerExecuteTestEnv(t *testing.T, configure ...func(*scheduler.Config)) *invokerExecuteTestEnv {
 	env := newTestEnv(t, withMockEngine())
 
 	mockFrontendClient := workflowservicemock.NewMockWorkflowServiceClient(env.Ctrl)
 	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(env.Ctrl)
 
+	config := defaultConfig()
+	for _, fn := range configure {
+		fn(config)
+	}
 	handler := scheduler.NewInvokerExecuteTaskHandler(scheduler.InvokerTaskHandlerOptions{
-		Config:         defaultConfig(),
+		Config:         config,
 		MetricsHandler: metrics.NoopMetricsHandler,
 		BaseLogger:     env.Logger,
 		SpecProcessor:  env.SpecProcessor,
@@ -92,16 +104,7 @@ func runExecuteTestCase(t *testing.T, env *invokerExecuteTestEnv, c *executeTest
 	// Set LastProcessedTime to current time to ensure time checks pass.
 	invoker.LastProcessedTime = timestamppb.New(env.TimeSource.Now())
 
-	// Set expectations. The read and update calls will also update the Scheduler
-	// component, within the same transition.
-	env.ExpectReadComponent(ctx, invoker)
-	env.ExpectUpdateComponent(ctx, invoker)
-
-	// Create engine context for side effect task execution.
-	engineCtx := env.EngineContext()
-	err := env.handler.Execute(engineCtx, chasm.ComponentRef{}, chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{})
-	require.NoError(t, err)
-	require.NoError(t, env.CloseTransaction())
+	executeTaskOnce(t, env, ctx, invoker)
 
 	// Validate the results.
 	// BufferedStarts now includes both pending and running starts (they're kept after starting).
@@ -128,9 +131,32 @@ func runExecuteTestCase(t *testing.T, env *invokerExecuteTestEnv, c *executeTest
 	}
 }
 
+// executeTaskOnce runs a single InvokerExecuteTask pass against the live
+// Invoker and commits the resulting transition. Shared by the single-pass
+// table driver (runExecuteTestCase) and by tests that need to drive several
+// Execute passes in sequence.
+func executeTaskOnce(t *testing.T, env *invokerExecuteTestEnv, ctx chasm.MutableContext, invoker *scheduler.Invoker) {
+	t.Helper()
+
+	// Set expectations. The read and update calls will also update the Scheduler
+	// component, within the same transition.
+	env.ExpectReadComponent(ctx, invoker)
+	env.ExpectUpdateComponent(ctx, invoker)
+
+	// Create engine context for side effect task execution.
+	engineCtx := env.EngineContext()
+	err := env.handler.Execute(engineCtx, chasm.ComponentRef{}, chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{})
+	require.NoError(t, err)
+	require.NoError(t, env.CloseTransaction())
+}
+
 // Execute success case.
 func TestExecuteTask_Basic(t *testing.T) {
 	env := newInvokerExecuteTestEnv(t)
+	env.Scheduler.LastCompletionResult = chasm.NewDataField(env.MutableContext(), &schedulerpb.LastCompletionResult{
+		Success: &commonpb.Payload{Data: []byte("previous-result")},
+		Failure: &failurepb.Failure{Message: "previous-failure"},
+	})
 	startTime := timestamppb.New(env.TimeSource.Now())
 	bufferedStarts := []*schedulespb.BufferedStart{
 		{
@@ -156,18 +182,298 @@ func TestExecuteTask_Basic(t *testing.T) {
 	// Expect both buffered starts to result in workflow executions.
 	env.mockFrontendClient.EXPECT().
 		StartWorkflowExecution(gomock.Any(), gomock.Any()).
-		Times(2).
-		Return(&workflowservice.StartWorkflowExecutionResponse{
-			RunId: "run-id",
-		}, nil)
+		DoAndReturn(func(_ context.Context, req *workflowservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*workflowservice.StartWorkflowExecutionResponse, error) {
+			require.Len(t, req.GetCompletionCallbacks(), 1)
+			require.Empty(t, req.GetLastCompletionResult().GetPayloads())
+			require.Nil(t, req.GetContinuedFailure())
+			return &workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil
+		}).
+		Times(2)
 
-	// After execution, both BufferedStarts are kept (with RunId set).
-	// They become "running" workflows.
 	runExecuteTestCase(t, env, &executeTestCase{
 		InitialBufferedStarts:    bufferedStarts,
-		ExpectedBufferedStarts:   2, // kept after starting
-		ExpectedRunningWorkflows: 2,
+		ExpectedBufferedStarts:   0,
+		ExpectedRunningWorkflows: 0,
 		ExpectedActionCount:      2,
+		ValidateInvoker: func(t *testing.T, _ *scheduler.Invoker, env *invokerExecuteTestEnv) {
+			listInfo := env.Scheduler.ListInfo(env.ReadContext())
+			require.Len(t, listInfo.GetRecentActions(), 2)
+			for _, action := range listInfo.GetRecentActions() {
+				require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, action.GetStartWorkflowStatus())
+			}
+		},
+	})
+}
+
+func TestExecuteTask_AllowAllRemovedAcrossEngineTransaction(t *testing.T) {
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+	engine, engineCtx := newTestEngineContext(t, logger)
+	result, err := chasm.StartExecution(
+		engineCtx,
+		chasm.ExecutionKey{NamespaceID: namespaceID, BusinessID: scheduleID},
+		scheduler.CreateScheduler,
+		&schedulerpb.CreateScheduleRequest{
+			NamespaceId: namespaceID,
+			FrontendRequest: &workflowservice.CreateScheduleRequest{
+				Namespace:  namespace,
+				ScheduleId: scheduleID,
+				Schedule:   defaultSchedule(),
+			},
+		},
+	)
+	require.NoError(t, err)
+	rootRef := chasm.NewComponentRef[*scheduler.Scheduler](result.ExecutionKey)
+
+	startTime := timestamppb.Now()
+	var invoker *scheduler.Invoker
+	_, _, err = chasm.UpdateComponent(
+		engineCtx,
+		rootRef,
+		func(sched *scheduler.Scheduler, ctx chasm.MutableContext, _ struct{}) (struct{}, error) {
+			invoker = sched.Invoker.Get(ctx)
+			invoker.LastProcessedTime = startTime
+			invoker.BufferedStarts = []*schedulespb.BufferedStart{{
+				NominalTime: startTime, ActualTime: startTime, DesiredTime: startTime,
+				RequestId: "allow-all-request", WorkflowId: "allow-all-workflow",
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL, Attempt: 1,
+			}}
+			return struct{}{}, nil
+		},
+		struct{}{},
+	)
+	require.NoError(t, err)
+
+	ctrl := gomock.NewController(t)
+	frontendClient := workflowservicemock.NewMockWorkflowServiceClient(ctrl)
+	frontendClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *workflowservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*workflowservice.StartWorkflowExecutionResponse, error) {
+			require.Len(t, req.GetCompletionCallbacks(), 1)
+			return &workflowservice.StartWorkflowExecutionResponse{RunId: "allow-all-run"}, nil
+		})
+	handler := scheduler.NewInvokerExecuteTaskHandler(scheduler.InvokerTaskHandlerOptions{
+		Config:         defaultConfig(),
+		MetricsHandler: metrics.NoopMetricsHandler,
+		BaseLogger:     logger,
+		FrontendClient: frontendClient,
+	})
+
+	dropped, err := chasmtest.ExecuteSideEffectTask(
+		context.Background(),
+		engine,
+		invoker,
+		handler,
+		chasm.TaskAttributes{},
+		&schedulerpb.InvokerExecuteTask{},
+	)
+	require.NoError(t, err)
+	require.False(t, dropped)
+
+	_, err = chasm.ReadComponent(
+		engineCtx,
+		rootRef,
+		func(sched *scheduler.Scheduler, ctx chasm.Context, _ struct{}) (struct{}, error) {
+			persistedInvoker := sched.Invoker.Get(ctx)
+			require.Empty(t, persistedInvoker.GetBufferedStarts())
+			require.Len(t, sched.Info.GetRecentActions(), 1)
+			require.Equal(t, "allow-all-run", sched.Info.GetRecentActions()[0].GetStartWorkflowResult().GetRunId())
+			describe, describeErr := sched.Describe(ctx, &schedulerpb.DescribeScheduleRequest{}, newLegacySpecBuilder(0, 0))
+			require.NoError(t, describeErr)
+			require.Empty(t, describe.GetFrontendResponse().GetInfo().GetRunningWorkflows())
+			require.Len(t, describe.GetFrontendResponse().GetInfo().GetRecentActions(), 1)
+			require.Zero(t, describe.GetFrontendResponse().GetInfo().GetBufferSize())
+			return struct{}{}, nil
+		},
+		struct{}{},
+	)
+	require.NoError(t, err)
+}
+
+func TestRecordExecuteResult_AllowAllRecentActionsBounded(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := env.MutableContext()
+	invoker := env.Scheduler.Invoker.Get(ctx)
+	base := env.TimeSource.Now().Add(-time.Hour)
+	var completed []*schedulespb.BufferedStart
+	for idx := range scheduler.RecentActionCount + 2 {
+		startTime := timestamppb.New(base.Add(time.Duration(idx) * time.Minute))
+		start := &schedulespb.BufferedStart{
+			NominalTime: startTime, ActualTime: startTime, DesiredTime: startTime,
+			RequestId: fmt.Sprintf("req-%d", idx), WorkflowId: fmt.Sprintf("wf-%d", idx),
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL, Attempt: 1,
+		}
+		invoker.BufferedStarts = append(invoker.BufferedStarts, start)
+		result := proto.Clone(start).(*schedulespb.BufferedStart)
+		result.RunId = fmt.Sprintf("run-%d", idx)
+		result.StartTime = startTime
+		completed = append(completed, result)
+	}
+
+	newlyStarted, droppedDuplicates, startOnlyActions := invoker.RecordExecuteResult(ctx, completed, nil)
+	env.Scheduler.RecordStartOnlyActions(ctx, startOnlyActions)
+	require.Equal(t, scheduler.RecentActionCount+2, newlyStarted)
+	require.Zero(t, droppedDuplicates)
+	require.Empty(t, invoker.GetBufferedStarts())
+	require.Len(t, env.Scheduler.Info.GetRecentActions(), scheduler.RecentActionCount)
+	require.Equal(t, "run-2", env.Scheduler.Info.GetRecentActions()[0].GetStartWorkflowResult().GetRunId())
+	require.Equal(t, "run-11", env.Scheduler.Info.GetRecentActions()[scheduler.RecentActionCount-1].GetStartWorkflowResult().GetRunId())
+	recentRunIDs := make(map[string]struct{}, scheduler.RecentActionCount)
+	for _, action := range env.Scheduler.Info.GetRecentActions() {
+		recentRunIDs[action.GetStartWorkflowResult().GetRunId()] = struct{}{}
+	}
+	require.NotContains(t, recentRunIDs, "run-0")
+	bufferedRequestIDs := make(map[string]struct{}, len(invoker.GetBufferedStarts()))
+	for _, start := range invoker.GetBufferedStarts() {
+		bufferedRequestIDs[start.GetRequestId()] = struct{}{}
+	}
+	require.NotContains(t, bufferedRequestIDs, "req-0")
+	require.Len(t, env.Scheduler.ListInfo(ctx).GetRecentActions(), 5)
+}
+
+func TestExecuteTask_ForwardsVersioningOverride(t *testing.T) {
+	tests := map[string]struct {
+		override *workflowpb.VersioningOverride
+		enabled  bool
+	}{
+		"pinned": {
+			enabled: true,
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_Pinned{
+					Pinned: &workflowpb.VersioningOverride_PinnedOverride{
+						Behavior: workflowpb.VersioningOverride_PINNED_OVERRIDE_BEHAVIOR_PINNED,
+						Version: &deploymentpb.WorkerDeploymentVersion{
+							DeploymentName: "deployment",
+							BuildId:        "build-id",
+						},
+					},
+				},
+			},
+		},
+		"one-time": {
+			enabled: true,
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_OneTime{
+					OneTime: &workflowpb.VersioningOverride_OneTimeOverride{
+						TargetDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+							DeploymentName: "deployment",
+							BuildId:        "build-id",
+						},
+					},
+				},
+			},
+		},
+		"disabled": {
+			override: &workflowpb.VersioningOverride{
+				Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true},
+			},
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			env := newInvokerExecuteTestEnv(t, func(config *scheduler.Config) {
+				tweakables := scheduler.DefaultTweakables
+				tweakables.EnableVersioningOverride = test.enabled
+				config.Tweakables = func(string) scheduler.Tweakables { return tweakables }
+			})
+			env.Scheduler.GetSchedule().GetAction().GetStartWorkflow().VersioningOverride = test.override
+			startTime := timestamppb.New(env.TimeSource.Now())
+
+			env.mockFrontendClient.EXPECT().
+				StartWorkflowExecution(gomock.Any(), gomock.Any()).
+				DoAndReturn(func(_ context.Context, request *workflowservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*workflowservice.StartWorkflowExecutionResponse, error) {
+					var expected *workflowpb.VersioningOverride
+					if test.enabled {
+						expected = test.override
+					}
+					require.True(t, proto.Equal(expected, request.GetVersioningOverride()))
+					return &workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil
+				})
+
+			runExecuteTestCase(t, env, &executeTestCase{
+				InitialBufferedStarts: []*schedulespb.BufferedStart{{
+					NominalTime:   startTime,
+					ActualTime:    startTime,
+					DesiredTime:   startTime,
+					RequestId:     "request-id",
+					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+					Attempt:       1,
+				}},
+				ExpectedBufferedStarts:   0,
+				ExpectedRunningWorkflows: 0,
+				ExpectedActionCount:      1,
+			})
+		})
+	}
+}
+
+func TestExecuteTask_DistinctRequestsCanReuseCompletedWorkflowID(t *testing.T) {
+	env := newInvokerExecuteTestEnv(t)
+	startTime := timestamppb.New(env.TimeSource.Now())
+	bufferedStarts := []*schedulespb.BufferedStart{
+		{
+			NominalTime: startTime,
+			ActualTime:  startTime,
+			DesiredTime: startTime,
+			RequestId:   "automatic-request",
+			WorkflowId:  "workflow-id",
+			Attempt:     1,
+			RunId:       "completed-run",
+			StartTime:   startTime,
+			Completed:   &schedulespb.CompletedResult{},
+		},
+		{
+			NominalTime:   startTime,
+			ActualTime:    startTime,
+			DesiredTime:   startTime,
+			Manual:        true,
+			RequestId:     "backfill-request",
+			WorkflowId:    "workflow-id",
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+			Attempt:       1,
+		},
+	}
+
+	env.mockFrontendClient.EXPECT().
+		StartWorkflowExecution(gomock.Any(), startWorkflowExecutionRequestIDMatches("backfill-request")).
+		Times(1).
+		Return(&workflowservice.StartWorkflowExecutionResponse{RunId: "backfill-run"}, nil)
+
+	runExecuteTestCase(t, env, &executeTestCase{
+		InitialBufferedStarts:    bufferedStarts,
+		ExpectedBufferedStarts:   2,
+		ExpectedRunningWorkflows: 1,
+		ExpectedActionCount:      1,
+		ValidateInvoker: func(t *testing.T, invoker *scheduler.Invoker, _ *invokerExecuteTestEnv) {
+			require.Equal(t, "completed-run", invoker.BufferedStarts[0].GetRunId())
+			require.Equal(t, "backfill-run", invoker.BufferedStarts[1].GetRunId())
+		},
+	})
+}
+
+func TestExecuteTask_UsesBufferedOverlapPolicy(t *testing.T) {
+	env := newInvokerExecuteTestEnv(t)
+	env.Scheduler.Schedule.Policies.OverlapPolicy = enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL
+	startTime := timestamppb.New(env.TimeSource.Now())
+
+	env.mockFrontendClient.EXPECT().
+		StartWorkflowExecution(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *workflowservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*workflowservice.StartWorkflowExecutionResponse, error) {
+			require.Len(t, req.GetCompletionCallbacks(), 1)
+			return &workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil
+		})
+
+	runExecuteTestCase(t, env, &executeTestCase{
+		InitialBufferedStarts: []*schedulespb.BufferedStart{{
+			NominalTime: startTime, ActualTime: startTime, DesiredTime: startTime,
+			RequestId: "request-id", WorkflowId: "workflow-id", Attempt: 1,
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+		}},
+		ExpectedBufferedStarts:   1,
+		ExpectedRunningWorkflows: 1,
+		ExpectedActionCount:      1,
+		ValidateInvoker: func(t *testing.T, invoker *scheduler.Invoker, _ *invokerExecuteTestEnv) {
+			require.Equal(t, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL, invoker.BufferedStarts[0].GetOverlapPolicy())
+		},
 	})
 }
 
@@ -221,11 +527,11 @@ func TestExecuteTask_RetryableFailure(t *testing.T) {
 
 	// After execution:
 	// - Failed start stays in buffer with backoff (pending)
-	// - Successful start stays in buffer with RunId set (running)
+	// - Successful ALLOW_ALL start moves to recent-action history
 	runExecuteTestCase(t, env, &executeTestCase{
 		InitialBufferedStarts:    bufferedStarts,
-		ExpectedBufferedStarts:   2, // both kept: 1 failed (backoff) + 1 running
-		ExpectedRunningWorkflows: 1,
+		ExpectedBufferedStarts:   1,
+		ExpectedRunningWorkflows: 0,
 		ExpectedActionCount:      1,
 		ValidateInvoker: func(t *testing.T, invoker *scheduler.Invoker, env *invokerExecuteTestEnv) {
 			// Find the failed start (no RunId, has backoff).
@@ -273,6 +579,9 @@ func TestExecuteTask_AlreadyStarted(t *testing.T) {
 }
 
 // A buffered start fails from having exceeded its maximum retry limit.
+// InvokerMaxStartAttempts is an inclusive bound on the 1-based attempt number,
+// so the first attempt that is refused locally (zero RPCs, start dropped) is
+// the one past the limit.
 func TestExecuteTask_ExceedsMaxAttempts(t *testing.T) {
 	env := newInvokerExecuteTestEnv(t)
 	startTime := timestamppb.New(env.TimeSource.Now())
@@ -284,7 +593,7 @@ func TestExecuteTask_ExceedsMaxAttempts(t *testing.T) {
 			Manual:        false,
 			RequestId:     "req",
 			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
-			Attempt:       scheduler.InvokerMaxStartAttempts,
+			Attempt:       scheduler.InvokerMaxStartAttempts + 1,
 		},
 	}
 
@@ -294,6 +603,127 @@ func TestExecuteTask_ExceedsMaxAttempts(t *testing.T) {
 		ExpectedRunningWorkflows: 0,
 		ExpectedActionCount:      0,
 	})
+}
+
+// Boundary control: a start sitting at exactly InvokerMaxStartAttempts is still
+// within budget, so its RPC is issued and a success there is recorded normally.
+func TestExecuteTask_SucceedsOnFinalAttempt(t *testing.T) {
+	env := newInvokerExecuteTestEnv(t)
+	startTime := timestamppb.New(env.TimeSource.Now())
+
+	env.mockFrontendClient.EXPECT().
+		StartWorkflowExecution(gomock.Any(), startWorkflowExecutionRequestIDMatches("final")).
+		Times(1).
+		Return(&workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil)
+
+	runExecuteTestCase(t, env, &executeTestCase{
+		InitialBufferedStarts: []*schedulespb.BufferedStart{{
+			NominalTime:   startTime,
+			ActualTime:    startTime,
+			DesiredTime:   startTime,
+			Manual:        false,
+			RequestId:     "final",
+			WorkflowId:    "wf",
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			Attempt:       scheduler.InvokerMaxStartAttempts,
+		}},
+		ExpectedBufferedStarts:   0,
+		ExpectedRunningWorkflows: 0,
+		ExpectedActionCount:      1,
+	})
+}
+
+// InvokerMaxStartAttempts is documented as the maximum number of start
+// attempts, so a continuously retryable start must produce exactly that many
+// StartWorkflowExecution RPCs before it is dropped. Attempts are 1-based:
+// recordProcessBufferResult readies a start at Attempt 1, so the bound has to
+// be inclusive for the constant to mean what it says.
+//
+// This drives the real task order for a single automatic start - ProcessBuffer
+// promotes it, then ProcessBuffer (advancing the high-water mark past each
+// persisted backoff) and Execute alternate - and counts the RPCs.
+func TestExecuteTask_RetriesUpToMaxStartAttempts(t *testing.T) {
+	env := newInvokerExecuteTestEnv(t)
+	processBufferHandler := newProcessBufferHandler(env.testEnv)
+
+	var rpcCount int
+	env.mockFrontendClient.EXPECT().
+		StartWorkflowExecution(gomock.Any(), startWorkflowExecutionRequestIDMatches("retry")).
+		AnyTimes().
+		DoAndReturn(func(_ context.Context, _ *workflowservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*workflowservice.StartWorkflowExecutionResponse, error) {
+			rpcCount++
+			return nil, serviceerror.NewDeadlineExceeded("transient")
+		})
+
+	// Seed a single automatic, unprocessed buffered start (Attempt == 0), as the
+	// Generator would.
+	startTime := timestamppb.New(env.TimeSource.Now())
+	ctx := env.MutableContext()
+	invoker := env.Scheduler.Invoker.Get(ctx)
+	invoker.BufferedStarts = []*schedulespb.BufferedStart{{
+		NominalTime:   startTime,
+		ActualTime:    startTime,
+		DesiredTime:   startTime,
+		Manual:        false,
+		RequestId:     "retry",
+		WorkflowId:    "wf",
+		OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+	}}
+	invoker.LastProcessedTime = timestamppb.New(env.TimeSource.Now())
+	require.NoError(t, env.CloseTransaction())
+
+	// Attempt numbers observed at the head of each Execute pass.
+	var attempted []int64
+	maxIterations := 2*scheduler.InvokerMaxStartAttempts + 5
+	iterations := 0
+	for ; iterations < maxIterations; iterations++ {
+		starts := env.Scheduler.Invoker.Get(env.ReadContext()).GetBufferedStarts()
+		if len(starts) == 0 {
+			// The start was dropped: the retry budget is spent.
+			break
+		}
+
+		// Advance the framework clock to the persisted backoff deadline, which is
+		// where addTasks scheduled the next ProcessBuffer timer. This has to happen
+		// before the transaction's context is created, since chasm.Context.Now is
+		// captured at construction - as it is when the real timer task fires at its
+		// deadline. BackoffTime is framework-clock derived (see
+		// TestExecuteTask_BackoffUsesFrameworkClock), so the EventTimeSource is the
+		// only clock involved.
+		if backoffTime := starts[0].GetBackoffTime(); backoffTime != nil &&
+			backoffTime.AsTime().After(env.TimeSource.Now()) {
+			env.TimeSource.Update(backoffTime.AsTime())
+		}
+
+		ctx := env.MutableContext()
+		invoker := env.Scheduler.Invoker.Get(ctx)
+		require.NoError(t, processBufferHandler.Execute(ctx, invoker, chasm.TaskAttributes{}, &schedulerpb.InvokerProcessBufferTask{}))
+		require.NoError(t, env.CloseTransaction())
+
+		ctx = env.MutableContext()
+		invoker = env.Scheduler.Invoker.Get(ctx)
+		if starts := invoker.GetBufferedStarts(); len(starts) > 0 {
+			attempted = append(attempted, starts[0].GetAttempt())
+		}
+		executeTaskOnce(t, env, ctx, invoker)
+	}
+	require.Less(t, iterations, maxIterations, "retry loop never terminated")
+
+	require.Equal(t, scheduler.InvokerMaxStartAttempts, rpcCount,
+		"a continuously retryable start must issue exactly InvokerMaxStartAttempts StartWorkflowExecution RPCs")
+
+	// The executed attempt numbers must be a contiguous 1..InvokerMaxStartAttempts
+	// run, followed by the local refusal pass that drops the start.
+	var expectedAttempts []int64
+	for i := int64(1); i <= scheduler.InvokerMaxStartAttempts+1; i++ {
+		expectedAttempts = append(expectedAttempts, i)
+	}
+	require.Equal(t, expectedAttempts, attempted)
+
+	ctx = env.MutableContext()
+	invoker = env.Scheduler.Invoker.Get(ctx)
+	require.Empty(t, invoker.GetBufferedStarts(), "the exhausted start must be dropped from the buffer")
+	require.Equal(t, int64(0), env.Scheduler.Info.ActionCount, "no action was ever started")
 }
 
 // An execute task runs with cancels/terminations queued, which fail to execute.
@@ -395,11 +825,11 @@ func TestExecuteTask_ExceedsMaxActionsPerExecution(t *testing.T) {
 			RunId: "run-id",
 		}, nil)
 
-	// All BufferedStarts are kept: maxStarts get RunId set (running), the rest stay pending.
+	// Started ALLOW_ALL actions move to recent history; only the unexecuted half remains buffered.
 	runExecuteTestCase(t, env, &executeTestCase{
 		InitialBufferedStarts:    bufferedStarts,
-		ExpectedBufferedStarts:   maxStarts * 2, // all kept: started + pending
-		ExpectedRunningWorkflows: maxStarts,     // only started ones
+		ExpectedBufferedStarts:   maxStarts,
+		ExpectedRunningWorkflows: 0,
 		ExpectedActionCount:      int64(maxStarts),
 	})
 }
@@ -435,14 +865,18 @@ func TestExecuteTask_RecordResultIdempotentOnRace(t *testing.T) {
 		RunId:     "loser-run",
 		StartTime: loserStartTime,
 	}}
+	lastEventTime := env.Scheduler.LastEventTime.AsTime()
 
-	newlyStarted, droppedDuplicates := invoker.RecordExecuteResult(ctx, loser, nil)
+	newlyStarted, droppedDuplicates, startOnlyActions := invoker.RecordExecuteResult(ctx, loser, nil)
 	require.Equal(t, 0, newlyStarted, "duplicate RunId-set start must not be counted")
 	require.Equal(t, 1, droppedDuplicates, "the dropped completion must be reported for observability")
+	require.Empty(t, startOnlyActions)
 	live := invoker.BufferedStarts[0]
 	require.Equal(t, winning, live.RunId, "live RunId must not be stomped")
 	require.Equal(t, startTime.AsTime(), live.StartTime.AsTime(), "live StartTime must not be stomped")
 	require.True(t, live.HasCallback, "live HasCallback must not be cleared")
+	require.Equal(t, lastEventTime, env.Scheduler.LastEventTime.AsTime(),
+		"duplicate result must not advance the last-event high water mark")
 
 	// First-mover case: a CompletedStart for a fresh RequestId increments
 	// newlyStarted and writes through to the live entry.
@@ -459,13 +893,91 @@ func TestExecuteTask_RecordResultIdempotentOnRace(t *testing.T) {
 		RunId:     "first-run",
 		StartTime: startTime,
 	}}
-	newlyStarted, droppedDuplicates = invoker.RecordExecuteResult(ctx, first, nil)
+	newlyStarted, droppedDuplicates, startOnlyActions = invoker.RecordExecuteResult(ctx, first, nil)
 	require.Equal(t, 1, newlyStarted, "first-time RunId assignment must be counted")
 	require.Equal(t, 0, droppedDuplicates, "no duplicate was dropped")
+	require.Empty(t, startOnlyActions)
 	freshlyStarted := invoker.BufferedStarts[1]
 	require.Equal(t, "first-run", freshlyStarted.RunId)
 	require.Equal(t, startTime.AsTime(), freshlyStarted.StartTime.AsTime())
 	require.True(t, freshlyStarted.HasCallback, "first-time RunId assignment must set HasCallback")
+}
+
+func TestRecordExecuteResult_AdvancesLastEventTimeBeforeRetention(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := env.MutableContext()
+	invoker := env.Scheduler.Invoker.Get(ctx)
+	base := env.TimeSource.Now().Add(time.Hour)
+
+	var completedStarts []*schedulespb.BufferedStart
+	for idx := range scheduler.RecentActionCount + 1 {
+		startTime := base.Add(time.Duration(idx) * time.Second)
+		bufferedStart := &schedulespb.BufferedStart{
+			NominalTime: timestamppb.New(startTime),
+			ActualTime:  timestamppb.New(startTime),
+			DesiredTime: timestamppb.New(startTime),
+			RequestId:   fmt.Sprintf("req-%d", idx),
+			WorkflowId:  fmt.Sprintf("wf-%d", idx),
+			Attempt:     1,
+		}
+		invoker.BufferedStarts = append(invoker.BufferedStarts, bufferedStart)
+		completedStarts = append(completedStarts, &schedulespb.BufferedStart{
+			RequestId: fmt.Sprintf("req-%d", idx),
+			RunId:     fmt.Sprintf("run-%d", idx),
+			StartTime: timestamppb.New(startTime),
+		})
+	}
+
+	newlyStarted, droppedDuplicates, startOnlyActions := invoker.RecordExecuteResult(ctx, completedStarts, nil)
+	require.Equal(t, scheduler.RecentActionCount+1, newlyStarted)
+	require.Zero(t, droppedDuplicates)
+	require.Empty(t, startOnlyActions)
+
+	latestStartTime := base.Add(scheduler.RecentActionCount * time.Second)
+	require.Equal(t, latestStartTime.UTC(), env.Scheduler.LastEventTime.AsTime())
+
+	for idx, start := range invoker.BufferedStarts {
+		start.Completed = &schedulespb.CompletedResult{
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			// The latest-started workflow closes first and is evicted by retention.
+			CloseTime: timestamppb.New(base.Add(time.Duration(scheduler.RecentActionCount-idx) * time.Second)),
+		}
+	}
+	invoker.ApplyCompletedRetention()
+
+	require.Len(t, invoker.BufferedStarts, scheduler.RecentActionCount)
+	require.NotEqual(t, latestStartTime.UTC(), invoker.BufferedStarts[len(invoker.BufferedStarts)-1].GetStartTime().AsTime())
+	require.Equal(t, latestStartTime.UTC(), env.Scheduler.LastEventTime.AsTime(),
+		"retention must not erase a start time captured before the Generator runs")
+}
+
+func TestRecordExecuteResult_AdvancesLastEventTimeForStartOnlyAction(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := env.MutableContext()
+	invoker := env.Scheduler.Invoker.Get(ctx)
+	startTime := env.TimeSource.Now().Add(time.Hour)
+	invoker.BufferedStarts = []*schedulespb.BufferedStart{{
+		NominalTime:   timestamppb.New(startTime),
+		ActualTime:    timestamppb.New(startTime),
+		DesiredTime:   timestamppb.New(startTime),
+		RequestId:     "req",
+		WorkflowId:    "wf",
+		OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		Attempt:       1,
+	}}
+
+	newlyStarted, droppedDuplicates, startOnlyActions := invoker.RecordExecuteResult(ctx, []*schedulespb.BufferedStart{{
+		RequestId: "req",
+		RunId:     "run",
+		StartTime: timestamppb.New(startTime),
+	}}, nil)
+
+	require.Equal(t, 1, newlyStarted)
+	require.Zero(t, droppedDuplicates)
+	require.Len(t, startOnlyActions, 1)
+	require.Empty(t, invoker.BufferedStarts)
+	require.Equal(t, startTime.UTC(), env.Scheduler.LastEventTime.AsTime(),
+		"start-only action must advance the mark before leaving BufferedStarts")
 }
 
 // A RetryableStart for a request whose live BufferedStart already has RunId
@@ -499,12 +1011,90 @@ func TestExecuteTask_RecordResultIdempotentOnRetryableRace(t *testing.T) {
 		BackoffTime: loserBackoff,
 	}}
 
-	newlyStarted, droppedDuplicates := invoker.RecordExecuteResult(ctx, nil, retryable)
+	newlyStarted, droppedDuplicates, startOnlyActions := invoker.RecordExecuteResult(ctx, nil, retryable)
 	require.Equal(t, 0, newlyStarted)
 	require.Equal(t, 0, droppedDuplicates, "retryable drops aren't counted as duplicates - only completed-side drops are")
+	require.Empty(t, startOnlyActions)
 	live := invoker.BufferedStarts[0]
 	require.Equal(t, int64(1), live.Attempt, "Attempt must not be incremented on a started entry")
 	require.Nil(t, live.BackoffTime, "BackoffTime must not be set on a started entry")
+}
+
+func TestExecuteTask_EventLog(t *testing.T) {
+	newStart := func(requestID, runID string) *schedulespb.BufferedStart {
+		return &schedulespb.BufferedStart{RequestId: requestID, RunId: runID}
+	}
+
+	cases := []struct {
+		name       string
+		buffered   []*schedulespb.BufferedStart
+		cancels    []*commonpb.WorkflowExecution
+		terminates []*commonpb.WorkflowExecution
+		completed  []*schedulespb.BufferedStart
+		retryable  []*schedulespb.BufferedStart
+		wantLog    string
+	}{
+		{
+			name:      "kicked off counts newly started",
+			buffered:  []*schedulespb.BufferedStart{newStart("s1", "")},
+			completed: []*schedulespb.BufferedStart{newStart("s1", "run-1")},
+			wantLog:   "recordExecuteResult kicked off 1 starts, removed 0 starts, retried 0 starts",
+		},
+		{
+			name:      "retried counts retryable starts",
+			buffered:  []*schedulespb.BufferedStart{newStart("s1", "")},
+			retryable: []*schedulespb.BufferedStart{newStart("s1", "")},
+			wantLog:   "recordExecuteResult kicked off 0 starts, removed 0 starts, retried 1 starts",
+		},
+		{
+			name:     "surviving buffered starts are not counted as removed",
+			buffered: []*schedulespb.BufferedStart{newStart("a", ""), newStart("b", ""), newStart("c", "")},
+			wantLog:  "recordExecuteResult kicked off 0 starts, removed 0 starts, retried 0 starts",
+		},
+		{
+			name:    "surviving cancels are not counted as removed",
+			cancels: []*commonpb.WorkflowExecution{{RunId: "c1"}, {RunId: "c2"}},
+			wantLog: "recordExecuteResult kicked off 0 starts, removed 0 starts, retried 0 starts",
+		},
+		{
+			name:       "surviving terminates are not counted as removed",
+			terminates: []*commonpb.WorkflowExecution{{RunId: "t1"}},
+			wantLog:    "recordExecuteResult kicked off 0 starts, removed 0 starts, retried 0 starts",
+		},
+		{
+			name:       "survivors alongside real work count independently",
+			buffered:   []*schedulespb.BufferedStart{newStart("s1", ""), newStart("s2", "")},
+			cancels:    []*commonpb.WorkflowExecution{{RunId: "c1"}},
+			terminates: []*commonpb.WorkflowExecution{{RunId: "t1"}},
+			completed:  []*schedulespb.BufferedStart{newStart("s1", "run-1")},
+			retryable:  []*schedulespb.BufferedStart{newStart("s2", "")},
+			wantLog:    "recordExecuteResult kicked off 1 starts, removed 0 starts, retried 1 starts",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newTestEnv(t)
+			ctx := env.MutableContext()
+			invoker := env.Scheduler.Invoker.Get(ctx)
+
+			invoker.BufferedStarts = tc.buffered
+			invoker.CancelWorkflows = tc.cancels
+			invoker.TerminateWorkflows = tc.terminates
+			invoker.LastProcessedTime = timestamppb.New(env.TimeSource.Now())
+
+			eventLog := invoker.EventLog.Get(ctx)
+			eventLog.Events = nil
+
+			invoker.RecordExecuteResult(ctx, tc.completed, tc.retryable)
+
+			var messages []string
+			for _, e := range eventLog.Events {
+				messages = append(messages, e.Message)
+			}
+			require.Contains(t, messages, tc.wantLog)
+		})
+	}
 }
 
 // A start whose BackoffTime exactly equals LastProcessedTime must be eligible.
@@ -526,6 +1116,18 @@ func TestExecuteTask_Validate_BackoffEqualToLPTIsEligible(t *testing.T) {
 	valid, err := env.handler.Validate(ctx, invoker, chasm.TaskInvocation{}, &schedulerpb.InvokerExecuteTask{})
 	require.NoError(t, err)
 	require.True(t, valid, "BackoffTime == LastProcessedTime must be eligible (<=, not strict <)")
+}
+
+func TestExecuteTask_Validate_MigrationPending(t *testing.T) {
+	env := newInvokerExecuteTestEnv(t)
+	ctx := env.MutableContext()
+	invoker := env.Scheduler.Invoker.Get(ctx)
+	invoker.BufferedStarts = []*schedulespb.BufferedStart{{RequestId: "ready", Attempt: 1}}
+	env.Scheduler.WorkflowMigration = &schedulerpb.WorkflowMigrationState{}
+
+	valid, err := env.handler.Validate(ctx, invoker, chasm.TaskInvocation{}, &schedulerpb.InvokerExecuteTask{})
+	require.NoError(t, err)
+	require.False(t, valid)
 }
 
 // Validate must skip Execute when no work is ready.

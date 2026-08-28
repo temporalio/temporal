@@ -12,6 +12,7 @@ var (
 		"/temporal.server.api.matchingservice.v1.MatchingService/AddWorkflowTask":                        1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/CancelOutstandingPoll":                  1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/CancelOutstandingWorkerPolls":           2,
+		"/temporal.server.api.matchingservice.v1.MatchingService/CancelOutstandingWorkerPollsPartition":  2,
 		"/temporal.server.api.matchingservice.v1.MatchingService/DescribeTaskQueue":                      1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/ListTaskQueuePartitions":                1,
 		"/temporal.server.api.matchingservice.v1.MatchingService/PollActivityTaskQueue":                  1,
