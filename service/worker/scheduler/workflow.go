@@ -1939,6 +1939,14 @@ func clampVersion(v SchedulerWorkflowVersion, ceiling int) SchedulerWorkflowVers
 	return min(v, SchedulerWorkflowVersion(ceiling))
 }
 
+// resolveVersion applies a valid override, then lowers the result to the ceiling.
+func resolveVersion(v SchedulerWorkflowVersion, ceiling, override int) SchedulerWorkflowVersion {
+	if override >= int(v) && override <= int(LatestSchedulerWorkflowVersion) {
+		v = SchedulerWorkflowVersion(override)
+	}
+	return clampVersion(v, ceiling)
+}
+
 func panicIfErr(err error) {
 	if err != nil {
 		panic(err)
@@ -1964,13 +1972,6 @@ func GetListInfoFromStartArgs(args *schedulespb.StartScheduleArgs, now time.Time
 	s.compileSpec()
 	s.State.LastProcessedTime = timestamppb.New(now)
 	return s.getListInfo(false)
-}
-
-func resolveVersion(defaultVersion SchedulerWorkflowVersion, ceiling, override int) SchedulerWorkflowVersion {
-	if override >= int(defaultVersion) && override <= int(LatestSchedulerWorkflowVersion) {
-		defaultVersion = SchedulerWorkflowVersion(override)
-	}
-	return clampVersion(defaultVersion, ceiling)
 }
 
 func isUserScheduleError(err error) bool {
