@@ -171,7 +171,6 @@ linters:
       - ^api
       - ^proto
       - ^.git
-      - ^\.\./service/history/hsm/(callbacks|dummy|nexusoperations)/
     rules:
       - path-except: _test\.go|tests/.+\.go
         text: "time.Sleep"
