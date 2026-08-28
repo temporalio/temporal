@@ -41,19 +41,15 @@ const (
 //
 // Failure scenarios:
 //   - No worker polling: matching returns RequestTimeout -> *nexus.HandlerError{Type: UpstreamTimeout}.
-//     Retryable -- worker may come up later.
+//     Not retried — if no poller appeared within the dispatch timeout, the worker is likely gone.
 //   - Worker crashes after receiving the task: matching blocks waiting for a response until
 //     context deadline, then returns RequestTimeout. Indistinguishable from "no worker polling".
-//     Safe to retry because commands are idempotent (e.g., cancelling a missing activity is a
-//     no-op success per the worker contract).
 //   - Transport/RPC failure: *nexus.HandlerError. Retryable.
 //   - Worker failure (worker explicitly returns error): *temporal.ApplicationError or
 //     *temporal.CanceledError. Permanent — the worker contract requires success for all
 //     defined commands, so this indicates a bug or version incompatibility.
 //
 // Callers are responsible for enforcing retry limits (see MaxTaskAttempts).
-// These commands are best-effort — the activity will eventually time out anyway —
-// so excessive retries waste resources.
 type Dispatcher struct {
 	matchingClient resource.MatchingClient
 	config         *configs.Config
@@ -163,10 +159,12 @@ func (d *Dispatcher) handleError(nexusErr error, task *tasks.WorkerCommandsTask,
 		// Handler-level error (transport, timeout, internal). These are constructed by
 		// MatchingDispatchResponseToError for non-worker-returned failures.
 		if handlerErr.Type == nexus.HandlerErrorTypeUpstreamTimeout {
-			d.logger.Warn("No worker polling control queue",
+			d.logger.Debug("No worker polling control queue, dropping command",
 				tag.NewStringTag("control_queue", task.Destination))
 			d.recordCommandMetrics(task.Commands, namespaceName, "no_poller")
-			return nexusErr
+			// Don't retry — if no poller appeared within the dispatch timeout, the worker
+			// is likely gone.
+			return nil
 		}
 
 		if !handlerErr.Retryable() {

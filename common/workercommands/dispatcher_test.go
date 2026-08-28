@@ -169,11 +169,7 @@ func TestExecute_UpstreamTimeout(t *testing.T) {
 
 	task := testWorkerCommandsTask()
 	err := d.Execute(context.Background(), task, "test-namespace")
-	require.Error(t, err)
-
-	var he *nexus.HandlerError
-	require.ErrorAs(t, err, &he)
-	require.Equal(t, nexus.HandlerErrorTypeUpstreamTimeout, he.Type)
+	require.NoError(t, err, "upstream timeout should not be retried — worker is likely gone")
 
 	requireMetricValue(t, capture.Snapshot(), "no_poller")
 }
@@ -197,7 +193,7 @@ func TestHandleError_WorkerError_ReturnNil(t *testing.T) {
 	requireMetricValue(t, capture.Snapshot(), "worker_error")
 }
 
-func TestHandleError_UpstreamTimeout_ReturnRetryable(t *testing.T) {
+func TestHandleError_UpstreamTimeout_ReturnNil(t *testing.T) {
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
 	defer metricsHandler.StopCapture(capture)
@@ -210,11 +206,7 @@ func TestHandleError_UpstreamTimeout_ReturnRetryable(t *testing.T) {
 	handlerErr := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
 	task := testWorkerCommandsTask()
 	err := d.handleError(handlerErr, task, "test-namespace")
-	require.Error(t, err, "upstream timeout should be retried")
-
-	var he *nexus.HandlerError
-	require.ErrorAs(t, err, &he)
-	require.Equal(t, nexus.HandlerErrorTypeUpstreamTimeout, he.Type)
+	require.NoError(t, err, "upstream timeout should not be retried — worker is likely gone")
 
 	requireMetricValue(t, capture.Snapshot(), "no_poller")
 }
