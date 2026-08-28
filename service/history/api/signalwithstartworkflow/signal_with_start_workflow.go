@@ -12,7 +12,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/api"
@@ -353,21 +352,43 @@ func signalWorkflow(
 
 	// Create a transfer task to schedule a workflow task.
 	if !mutableState.HasPendingWorkflowTask() && !mutableState.IsWorkflowExecutionStatusPaused() {
-		if shardContext.GetTimeSource().Now().Before(mutableState.GetExecutionInfo().GetExecutionTime().AsTime()) {
-			metrics.SignalWithStartSkipDelayCounter.With(shardContext.GetMetricsHandler()).Record(1, metrics.NamespaceTag(request.GetNamespace()))
+		createWorkflowTask := true
+		now := shardContext.GetTimeSource().Now()
+		executionTime := mutableState.GetExecutionInfo().GetExecutionTime().AsTime()
+		beforeExecutionTime := now.Before(executionTime)
+
+		// Only runs still inside their backoff window can have the delay bypassed, so the start
+		// event is loaded lazily to keep it off the hot path.
+		if beforeExecutionTime && mutableState.IsWorkflowPendingOnWorkflowTaskBackoff() {
+			startEvent, err := mutableState.GetStartEvent(ctx)
+			if err != nil {
+				return err
+			}
+			startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
+			createWorkflowTask = startAttr.GetContinuedExecutionRunId() == "" ||
+				startAttr.GetInitiator() != enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW
+		}
+
+		if beforeExecutionTime {
+			message := "Skipped workflow start delay for signalWithStart request"
+			if !createWorkflowTask {
+				message = "Honored continue-as-new backoff for signalWithStart request"
+			}
 
 			workflowKey := workflowLease.GetContext().GetWorkflowKey()
 			shardContext.GetThrottledLogger().Info(
-				"Skipped workflow start delay for signalWithStart request",
+				message,
 				tag.WorkflowNamespace(request.GetNamespace()),
 				tag.WorkflowID(workflowKey.WorkflowID),
 				tag.WorkflowRunID(workflowKey.RunID),
 			)
 		}
 
-		_, err := mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
-		if err != nil {
-			return err
+		if createWorkflowTask {
+			_, err := mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
