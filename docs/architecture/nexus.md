@@ -245,7 +245,7 @@ Machine framework (docs TBD).
 ### `Operation` State Machine
 
 The
-[Operation](../../service/history/hsm/nexusoperations/statemachine.go#L41)
+[Operation](../../service/history/hsm/nexusoperations/statemachine.go)
 state machine manages the lifetime of an Operation the StartOperation request.
 
 The state machine transitions between these states (as defined in code):
@@ -325,7 +325,7 @@ releases the mutable state lock while making the HTTP request, and reacquires th
 Since Nexus Operations can provide their results asynchronously, when constructing the `StartOperation` call, the
 executor adds a callback URL along with a set of headers to later correlate the operation completion with the calling
 workflow and operation state machine. The
-[component.nexusoperations.callback.endpoint.template](../../service/history/hsm/nexusoperations/config.go#L127)
+[component.nexusoperations.callback.endpoint.template](../../service/history/hsm/nexusoperations/config.go)
 global dynamic config must be set to construct callback URLs or the executor will fail to process invocation tasks. When
 routing callbacks to external clusters and non-Temporal destinations, the URL is used and should be a value that is
 publically accessible to those external destinations. Callbacks that are routed internally within the cluster resolve
@@ -443,5 +443,5 @@ sequenceDiagram
     Frontend -->>- Client: Response
 ```
 
-[nexus-retry-policy]: ../../service/history/hsm/nexusoperations/config.go#L135-L145
+[nexus-retry-policy]: ../../service/history/hsm/nexusoperations/config.go
 [callback-retry-policy]: ../../chasm/lib/callback/config.go
