@@ -2220,7 +2220,7 @@ func (s *mutableStateSuite) TestContinueAsNewMinBackoffExecutionCompletesBeforeE
 		return time.Second
 	}
 
-	now := time.Date(2026, 8, 27, 12, 0, 0, 0, time.UTC)
+	now := time.Now()
 	s.mutableState.timeSource = clock.NewEventTimeSource().Update(now)
 
 	// Guard against clock skew or malformed state making StartTime later than now.
