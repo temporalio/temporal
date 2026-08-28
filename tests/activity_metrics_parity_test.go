@@ -453,6 +453,7 @@ func (s *activityParityTestSuite) TestOperatorMetricsPerActivityParity() {
 				switch key {
 				case "activityType", "namespace", "taskqueue", "workflowType":
 					value = ""
+				default:
 				}
 				tags = append(tags, key+"="+value)
 			}
@@ -486,7 +487,7 @@ const wfaOperatorMetricsActivityType = "operatorMetricsActivity"
 
 func wfaOperatorMetricsWorkflow(ctx workflow.Context, activityTaskQueue string) error {
 	futures := make([]workflow.Future, 0, 2)
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		activityCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 			ActivityID:          fmt.Sprintf("activity-%d", i),
 			TaskQueue:           activityTaskQueue,
