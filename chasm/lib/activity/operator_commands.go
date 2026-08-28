@@ -122,7 +122,7 @@ func (a *Activity) UpdateActivityExecutionOptions(
 		a.reissueDispatchAndScheduleToStart(ctx, attempt)
 	}
 
-	metricsHandler := operatorCommandMetricsHandler(ctx)
+	metricsHandler := a.enrichedMetricsHandler(ctx, metrics.ActivityUpdateOptionsScope)
 	a.emitOnUpdateOptionsMetrics(metricsHandler)
 
 	if requestID != "" {
@@ -303,7 +303,7 @@ func (a *Activity) handlePauseRequested(ctx chasm.MutableContext, req *activityp
 		return nil, serviceerror.NewFailedPreconditionf("activity is in non-pausable state %v", a.GetStatus())
 	}
 
-	metricsHandler := operatorCommandMetricsHandler(ctx)
+	metricsHandler := a.enrichedMetricsHandler(ctx, metrics.ActivityPausedScope)
 
 	event := pauseEvent{req: req.GetFrontendRequest(), metricsHandler: metricsHandler}
 	if canPause {
@@ -337,7 +337,7 @@ func (a *Activity) handleUnpauseRequested(ctx chasm.MutableContext, req *activit
 	if a.isTerminal() {
 		return nil, serviceerror.NewFailedPreconditionf("activity is in terminal state %v", a.GetStatus())
 	}
-	metricsHandler := operatorCommandMetricsHandler(ctx)
+	metricsHandler := a.enrichedMetricsHandler(ctx, metrics.ActivityUnpausedScope)
 
 	event := unpauseEvent{req: frontendReq, metricsHandler: metricsHandler}
 	switch {
@@ -445,7 +445,7 @@ func (a *Activity) handleReset(
 		}
 	}
 
-	metricsHandler := operatorCommandMetricsHandler(ctx)
+	metricsHandler := a.enrichedMetricsHandler(ctx, metrics.ActivityResetScope)
 
 	switch a.Status {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED:

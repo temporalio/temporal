@@ -51,6 +51,7 @@ func Invoke(
 	)
 
 	var response *historyservice.UpdateActivityOptionsResponse
+	var activityMetrics []workflow.ActivityMetricsInfo
 
 	err := api.GetAndUpdateWorkflowWithNew(
 		ctx,
@@ -62,15 +63,24 @@ func Invoke(
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
+			var updatedActivities []*persistencespb.ActivityInfo
 			var err error
 			if updateRequest.RestoreOriginal {
-				response, err = restoreOriginalOptions(ctx, mutableState, updateRequest)
+				response, updatedActivities, err = restoreOriginalOptions(ctx, mutableState, updateRequest)
 			} else {
-				response, err = processActivityOptionsRequest(validator, mutableState, updateRequest, request.GetNamespaceId())
+				response, updatedActivities, err = processActivityOptionsRequest(
+					validator,
+					mutableState,
+					updateRequest,
+					request.GetNamespaceId(),
+				)
 			}
 
 			if err != nil {
 				return nil, err
+			}
+			for _, activityInfo := range updatedActivities {
+				activityMetrics = append(activityMetrics, workflow.NewActivityMetricsInfo(mutableState, activityInfo))
 			}
 			return &api.UpdateWorkflowAction{
 				Noop:               false,
@@ -86,19 +96,8 @@ func Invoke(
 		return nil, err
 	}
 
-	targetingMethod := "type"
-	if _, ok := updateRequest.GetActivity().(*workflowservice.UpdateActivityOptionsRequest_Id); ok {
-		targetingMethod = "id"
-	} else if _, ok := updateRequest.GetActivity().(*workflowservice.UpdateActivityOptionsRequest_MatchAll); ok {
-		targetingMethod = "match_all"
-	}
-	if ns, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.NamespaceId)); err == nil {
-		metricsHandler := metrics.ActivityOperatorCommandHandler(
-			shardContext.GetMetricsHandler(),
-			ns.Name().String(),
-			targetingMethod,
-		)
-		metrics.ActivityUpdateOptions.With(metricsHandler).Record(1)
+	for _, info := range activityMetrics {
+		metrics.ActivityUpdateOptions.With(info.MetricsHandler(shardContext, metrics.ActivityUpdateOptionsScope)).Record(1)
 	}
 
 	logger := shardContext.GetLogger()
@@ -130,47 +129,49 @@ func processActivityOptionsRequest(
 	mutableState historyi.MutableState,
 	updateRequest *workflowservice.UpdateActivityOptionsRequest,
 	namespaceID string,
-) (*historyservice.UpdateActivityOptionsResponse, error) {
+) (*historyservice.UpdateActivityOptionsResponse, []*persistencespb.ActivityInfo, error) {
 	if !mutableState.IsWorkflowExecutionRunning() {
-		return nil, consts.ErrWorkflowCompleted
+		return nil, nil, consts.ErrWorkflowCompleted
 	}
 	mergeFrom := updateRequest.GetActivityOptions()
 	if mergeFrom == nil {
-		return nil, serviceerror.NewInvalidArgument("ActivityOptions are not provided")
+		return nil, nil, serviceerror.NewInvalidArgument("ActivityOptions are not provided")
 	}
 
 	activityIDs := getActivityIDs(updateRequest, mutableState)
 
 	if len(activityIDs) == 0 {
-		return nil, consts.ErrActivityNotFound
+		return nil, nil, consts.ErrActivityNotFound
 	}
 
 	mask := updateRequest.GetUpdateMask()
 	if mask == nil {
-		return nil, serviceerror.NewInvalidArgument("UpdateMask is not provided")
+		return nil, nil, serviceerror.NewInvalidArgument("UpdateMask is not provided")
 	}
 
 	updateFields := util.ParseFieldMask(mask)
 
 	var adjustedOptions *activitypb.ActivityOptions
+	updatedActivities := make([]*persistencespb.ActivityInfo, 0, len(activityIDs))
 	var err error
 	for _, activityId := range activityIDs {
 		ai, activityFound := mutableState.GetActivityByActivityID(activityId)
 
 		if !activityFound {
-			return nil, consts.ErrActivityNotFound
+			return nil, nil, consts.ErrActivityNotFound
 		}
 
 		if adjustedOptions, err = processActivityOptionsUpdate(validator, mutableState, namespaceID, ai, mergeFrom, updateFields); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
+		updatedActivities = append(updatedActivities, ai)
 	}
 
 	// fill the response
 	response := &historyservice.UpdateActivityOptionsResponse{
 		ActivityOptions: adjustedOptions,
 	}
-	return response, nil
+	return response, updatedActivities, nil
 }
 
 func processActivityOptionsUpdate(
@@ -325,33 +326,34 @@ func restoreOriginalOptions(
 	ctx context.Context,
 	ms historyi.MutableState,
 	updateRequest *workflowservice.UpdateActivityOptionsRequest,
-) (*historyservice.UpdateActivityOptionsResponse, error) {
+) (*historyservice.UpdateActivityOptionsResponse, []*persistencespb.ActivityInfo, error) {
 
 	activityIDs := getActivityIDs(updateRequest, ms)
 
 	if len(activityIDs) == 0 {
-		return nil, consts.ErrActivityNotFound
+		return nil, nil, consts.ErrActivityNotFound
 	}
 
 	var updatedOptions *activitypb.ActivityOptions
+	updatedActivities := make([]*persistencespb.ActivityInfo, 0, len(activityIDs))
 
 	for _, activityId := range activityIDs {
 		ai, activityFound := ms.GetActivityByActivityID(activityId)
 
 		if !activityFound {
-			return nil, consts.ErrActivityNotFound
+			return nil, nil, consts.ErrActivityNotFound
 		}
 
 		event, err := ms.GetActivityScheduledEvent(ctx, ai.ScheduledEventId)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		attrs, ok := event.Attributes.(*historypb.HistoryEvent_ActivityTaskScheduledEventAttributes)
 		if !ok {
-			return nil, serviceerror.NewInvalidArgument("ActivityTaskScheduledEvent is invalid")
+			return nil, nil, serviceerror.NewInvalidArgument("ActivityTaskScheduledEvent is invalid")
 		}
 		if attrs == nil || attrs.ActivityTaskScheduledEventAttributes == nil {
-			return nil, serviceerror.NewInvalidArgument("ActivityTaskScheduledEvent is incomplete")
+			return nil, nil, serviceerror.NewInvalidArgument("ActivityTaskScheduledEvent is incomplete")
 		}
 
 		originalOptions := attrs.ActivityTaskScheduledEventAttributes
@@ -369,12 +371,13 @@ func restoreOriginalOptions(
 		}
 
 		if updatedOptions, err = updateActivityOptions(ms, ai, activityOptions); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
+		updatedActivities = append(updatedActivities, ai)
 
 	}
 
 	return &historyservice.UpdateActivityOptionsResponse{
 		ActivityOptions: updatedOptions,
-	}, nil
+	}, updatedActivities, nil
 }

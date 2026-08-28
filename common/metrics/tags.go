@@ -64,7 +64,6 @@ const (
 	namespaceAllValue                              = "all"
 	clientName                                     = "client_name"
 	isInternal                                     = "is_internal"
-	activityTargetingMethod                        = "activity_targeting_method"
 	unknownValue                                   = "_unknown_"
 	totalMetricSuffix                              = "_total"
 	tagExcludedValue                               = "_tag_excluded_"
@@ -225,19 +224,6 @@ func ActivityTypeTag(value string) Tag {
 		value = unknownValue
 	}
 	return Tag{Key: activityType, Value: value}
-}
-
-// ActivityTargetingMethodTag identifies how activities were selected.
-func ActivityTargetingMethodTag(value string) Tag {
-	return Tag{Key: activityTargetingMethod, Value: value}
-}
-
-// ActivityOperatorCommandHandler returns a handler shared by workflow and standalone activity operator commands.
-func ActivityOperatorCommandHandler(handler Handler, namespaceName string, targetingMethod string) Handler {
-	return handler.WithTags(
-		NamespaceTag(namespaceName),
-		ActivityTargetingMethodTag(targetingMethod),
-	)
 }
 
 // CommandTypeTag returns a new command type tag.
