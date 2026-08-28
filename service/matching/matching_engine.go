@@ -2827,7 +2827,6 @@ func (e *matchingEngineImpl) RespondNexusTaskFailed(ctx context.Context, request
 }
 
 func (e *matchingEngineImpl) CreateNexusEndpoint(ctx context.Context, request *matchingservice.CreateNexusEndpointRequest) (*matchingservice.CreateNexusEndpointResponse, error) {
-	logger := log.With(e.logger, tag.Endpoint(request.GetSpec().GetName()))
 	// Write API, let persistence verify table ownership.
 	res, err := e.nexusEndpointClient.CreateNexusEndpoint(ctx, &internalCreateNexusEndpointRequest{
 		spec:       request.GetSpec(),
@@ -2835,15 +2834,14 @@ func (e *matchingEngineImpl) CreateNexusEndpoint(ctx context.Context, request *m
 		timeSource: e.timeSource,
 	})
 	if err != nil {
-		logger.Error("Failed to create Nexus endpoint", tag.Error(err))
+		e.logger.Error("Failed to create Nexus endpoint", tag.Error(err), tag.Endpoint(request.GetSpec().GetName()))
 	} else {
-		logger.Info("Created Nexus endpoint")
+		e.logger.Info("Created Nexus endpoint", tag.Endpoint(request.GetSpec().GetName()))
 	}
 	return res, err
 }
 
 func (e *matchingEngineImpl) UpdateNexusEndpoint(ctx context.Context, request *matchingservice.UpdateNexusEndpointRequest) (*matchingservice.UpdateNexusEndpointResponse, error) {
-	logger := log.With(e.logger, tag.Endpoint(request.GetSpec().GetName()))
 	// Write API, let persistence verify table ownership.
 	res, err := e.nexusEndpointClient.UpdateNexusEndpoint(ctx, &internalUpdateNexusEndpointRequest{
 		endpointID: request.GetId(),
@@ -2853,21 +2851,20 @@ func (e *matchingEngineImpl) UpdateNexusEndpoint(ctx context.Context, request *m
 		timeSource: e.timeSource,
 	})
 	if err != nil {
-		logger.Error("Failed to update Nexus endpoint", tag.Error(err))
+		e.logger.Error("Failed to update Nexus endpoint", tag.Error(err), tag.Endpoint(request.GetSpec().GetName()))
 	} else {
-		logger.Info("Updated Nexus endpoint")
+		e.logger.Info("Updated Nexus endpoint", tag.Endpoint(request.GetSpec().GetName()))
 	}
 	return res, err
 }
 
 func (e *matchingEngineImpl) DeleteNexusEndpoint(ctx context.Context, request *matchingservice.DeleteNexusEndpointRequest) (*matchingservice.DeleteNexusEndpointResponse, error) {
-	logger := log.With(e.logger, tag.Endpoint(request.GetId()))
 	// Write API, let persistence verify table ownership.
 	res, err := e.nexusEndpointClient.DeleteNexusEndpoint(ctx, request)
 	if err != nil {
-		logger.Error("Failed to delete Nexus endpoint", tag.Error(err))
+		e.logger.Error("Failed to delete Nexus endpoint", tag.Error(err), tag.Endpoint(request.GetId()))
 	} else {
-		logger.Info("Deleted Nexus endpoint")
+		e.logger.Info("Deleted Nexus endpoint", tag.Endpoint(request.GetId()))
 	}
 	return res, err
 }
