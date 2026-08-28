@@ -770,6 +770,7 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_NamespaceHandover() {
 // so drops emitted down the partition handler chain are recorded. Must be called once
 // before any task queue partitions are created.
 func (s *matchingEngineSuite) captureDroppedOnEngine() *metricstest.CaptureHandler {
+	s.Empty(s.matchingEngine.getTaskQueuePartitions(1), "captureDroppedOnEngine must run before any partition is loaded")
 	capture := metricstest.NewCaptureHandler()
 	s.matchingEngine.metricsHandler = capture
 	return capture
@@ -817,6 +818,7 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_DroppedTaskMetric() {
 				Return(nil, tc.err).Times(1)
 
 			c := capture.StartCapture()
+			defer capture.StopCapture(c)
 
 			resp, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
 				NamespaceId: namespaceID,
@@ -831,7 +833,6 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_DroppedTaskMetric() {
 			recordings := c.Snapshot()[metrics.DroppedTasksCounter.Name()]
 			s.Len(recordings, 1, "expected one tasks_dropped emission for %s", tc.name)
 			s.Equal(tc.wantReason, recordings[0].Tags["reason"])
-			capture.StopCapture(c)
 		})
 	}
 }
@@ -877,6 +878,7 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_DroppedTaskMetric() {
 				Return(nil, tc.err).Times(1)
 
 			c := capture.StartCapture()
+			defer capture.StopCapture(c)
 
 			resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
 				NamespaceId: namespaceID,
@@ -891,7 +893,6 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_DroppedTaskMetric() {
 			recordings := c.Snapshot()[metrics.DroppedTasksCounter.Name()]
 			s.Len(recordings, 1, "expected one tasks_dropped emission for %s", tc.name)
 			s.Equal(tc.wantReason, recordings[0].Tags["reason"])
-			capture.StopCapture(c)
 		})
 	}
 }
@@ -928,6 +929,7 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_DroppedTaskMetric_NoEmi
 				Return(nil, tc.err).Times(1)
 
 			c := capture.StartCapture()
+			defer capture.StopCapture(c)
 
 			_, err = s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
 				NamespaceId: namespaceID,
@@ -940,7 +942,6 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_DroppedTaskMetric_NoEmi
 
 			recordings := c.Snapshot()[metrics.DroppedTasksCounter.Name()]
 			s.Empty(recordings, "tasks_dropped must not fire when the error is returned to the caller (%s)", tc.name)
-			capture.StopCapture(c)
 		})
 	}
 }
@@ -974,6 +975,7 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_DroppedTaskMetric_NoEmi
 				Return(nil, tc.err).Times(1)
 
 			c := capture.StartCapture()
+			defer capture.StopCapture(c)
 
 			_, err = s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
 				NamespaceId: namespaceID,
@@ -986,7 +988,6 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_DroppedTaskMetric_NoEmi
 
 			recordings := c.Snapshot()[metrics.DroppedTasksCounter.Name()]
 			s.Empty(recordings, "tasks_dropped must not fire when the error is returned to the caller (%s)", tc.name)
-			capture.StopCapture(c)
 		})
 	}
 }
