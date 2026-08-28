@@ -1130,10 +1130,17 @@ so forwarding by endpoint ID will not work out of the box.`,
 		true,
 		`FrontendEnableBatcher enables batcher-related RPCs in the frontend`,
 	)
+	// Deprecated: FrontendMaxConcurrentAdminBatchOperationPerNamespace is no longer honored. Use
+	// FrontendMaxConcurrentAdminBatchOperation instead.
 	FrontendMaxConcurrentAdminBatchOperationPerNamespace = NewNamespaceIntSetting(
 		"frontend.MaxConcurrentAdminBatchOperationPerNamespace",
 		1,
-		`FrontendMaxConcurrentAdminBatchOperationPerNamespace is the max concurrent admin batch operation job count per namespace`,
+		`Deprecated: no longer honored. Use frontend.MaxConcurrentAdminBatchOperation instead.`,
+	)
+	FrontendMaxConcurrentAdminBatchOperation = NewGlobalIntSetting(
+		"frontend.MaxConcurrentAdminBatchOperation",
+		10,
+		`FrontendMaxConcurrentAdminBatchOperation is the max concurrent admin batch operation job count. Admin batch operations only run in the temporal-system namespace.`,
 	)
 	FrontendEnableBatchOperationsForStandaloneActivities = NewNamespaceBoolSetting(
 		"frontend.enableBatchOperationsForStandaloneActivities",

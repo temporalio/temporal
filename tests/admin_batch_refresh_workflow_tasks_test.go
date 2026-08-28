@@ -1,12 +1,12 @@
 package tests
 
 import (
+	"bytes"
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -16,8 +16,13 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/tests/testcore"
+	"go.temporal.io/server/tools/tdbg"
+	"go.temporal.io/server/tools/tdbg/tdbgtest"
 	"google.golang.org/grpc/codes"
 )
 
@@ -36,7 +41,7 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) newTestEnv(opts ...testcore.Te
 	// that haven't completed yet. The isolation test (A_SeparateLimitFromFrontendBatchOperation)
 	// explicitly sets limit to 1 to verify frontend and admin batch ops use separate limits.
 	baseOpts := []testcore.TestOption{
-		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentAdminBatchOperationPerNamespace, 10),
+		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentAdminBatchOperation, 10),
 	}
 	return testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
 }
@@ -44,6 +49,17 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) newTestEnv(opts ...testcore.Te
 func (s *AdminBatchRefreshWorkflowTasksTestSuite) simpleWorkflow(ctx workflow.Context) (string, error) {
 	// Simple workflow that just returns
 	return "done", nil
+}
+
+func (s *AdminBatchRefreshWorkflowTasksTestSuite) runTdbg(env *testcore.TestEnv, args ...string) error {
+	var out bytes.Buffer
+	return tdbgtest.NewCliApp(
+		func(params *tdbg.Params) {
+			params.ClientFactory = tdbg.NewClientFactory(tdbg.WithFrontendAddress(env.FrontendGRPCAddress()))
+			params.Writer = &out
+			params.ErrWriter = &out
+		},
+	).RunContext(s.Context(), append([]string{"tdbg"}, args...))
 }
 
 func (s *AdminBatchRefreshWorkflowTasksTestSuite) createWorkflow(env *testcore.TestEnv, workflowFn any) sdkclient.WorkflowRun {
@@ -91,7 +107,8 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_R
 	s.NotNil(resp)
 }
 
-func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_RefreshWorkflowTasks_WithVisibilityQuery() {
+// The job's execution is covered by the xdc suite; this test only covers tdbg starting it.
+func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestTdbgRefreshTasks_StartsBatchJobInSystemNamespace() {
 	env := s.newTestEnv()
 
 	env.SdkWorker().RegisterWorkflow(s.simpleWorkflow)
@@ -107,29 +124,64 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_R
 	err = workflowRun2.Get(s.Context(), &out)
 	s.NoError(err)
 
+	ns := env.Namespace().String()
+	query := "WorkflowType='simpleWorkflow'"
+
 	// Wait for workflows to be visible
-	s.EventuallyWithT(func(t *assert.CollectT) {
+	s.Await(func(s *AdminBatchRefreshWorkflowTasksTestSuite) {
 		resp, err := env.FrontendClient().CountWorkflowExecutions(s.Context(), &workflowservice.CountWorkflowExecutionsRequest{
-			Namespace: env.Namespace().String(),
-			Query:     "WorkflowType='simpleWorkflow'",
+			Namespace: ns,
+			Query:     query,
 		})
-		require.NoError(t, err)
-		require.GreaterOrEqual(t, resp.GetCount(), int64(2))
+		s.NoError(err)
+		s.GreaterOrEqual(resp.GetCount(), int64(2))
 	}, 10*time.Second, 500*time.Millisecond)
 
-	// Start admin batch operation using visibility query
-	resp, err := env.AdminClient().StartAdminBatchOperation(s.Context(), &adminservice.StartAdminBatchOperationRequest{
-		Namespace:       env.Namespace().String(),
-		VisibilityQuery: "WorkflowType='simpleWorkflow'",
-		JobId:           uuid.NewString(),
-		Reason:          "test refresh workflow tasks with query",
-		Identity:        "test-identity",
-		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
-			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
-		},
+	jobID := uuid.NewString()
+	s.NoError(s.runTdbg(env,
+		"--"+tdbg.FlagYes,
+		"--"+tdbg.FlagNamespace, ns,
+		"execution", "refresh-tasks",
+		"--"+tdbg.FlagVisibilityQuery, query,
+		"--"+tdbg.FlagReason, "test refresh workflow tasks with query",
+		"--"+tdbg.FlagJobID, jobID,
+	))
+
+	// tdbg qualifies the job ID with the namespace: the batch workflow runs in the system namespace,
+	// where job IDs from every namespace share one workflow ID space.
+	batchWorkflowIDPrefix := ns + ":"
+	batchWorkflowID := batchWorkflowIDPrefix + jobID
+	resp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: primitives.SystemLocalNamespace,
+		Execution: &commonpb.WorkflowExecution{WorkflowId: batchWorkflowID},
 	})
 	s.NoError(err)
-	s.NotNil(resp)
+	s.Equal(batchWorkflowID, resp.GetWorkflowExecutionInfo().GetExecution().GetWorkflowId())
+	s.Equal(primitives.PerNSWorkerTaskQueue, resp.GetExecutionConfig().GetTaskQueue().GetName())
+
+	_, err = env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: ns,
+		Execution: &commonpb.WorkflowExecution{WorkflowId: batchWorkflowID},
+	})
+	var notFound *serviceerror.NotFound
+	s.ErrorAs(err, &notFound)
+
+	s.Await(func(s *AdminBatchRefreshWorkflowTasksTestSuite) {
+		resp, err := env.FrontendClient().ListWorkflowExecutions(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: primitives.SystemLocalNamespace,
+			Query: fmt.Sprintf("%s = '%s' AND WorkflowId STARTS_WITH '%s'",
+				sadefs.TemporalNamespaceDivision,
+				batcher.AdminNamespaceDivision,
+				batchWorkflowIDPrefix,
+			),
+		})
+		s.NoError(err)
+		var workflowIDs []string
+		for _, execution := range resp.GetExecutions() {
+			workflowIDs = append(workflowIDs, execution.GetExecution().GetWorkflowId())
+		}
+		s.Contains(workflowIDs, batchWorkflowID)
+	}, 10*time.Second, 500*time.Millisecond)
 }
 
 func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_InvalidArgument_NoOperation() {
@@ -206,7 +258,7 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_I
 func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_0_SeparateLimitFromFrontendBatchOperation() {
 	env := s.newTestEnv(
 		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, 1),
-		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentAdminBatchOperationPerNamespace, 1),
+		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentAdminBatchOperation, 1),
 	)
 
 	env.SdkWorker().RegisterWorkflow(s.simpleWorkflow)
