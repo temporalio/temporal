@@ -1125,7 +1125,7 @@ func (s *scheduler) getFutureActionTimes(inWorkflowContext bool, n int) []*times
 	}
 
 	if s.hasMinVersion(AccurateFutureActionTimes) && s.Schedule.State.LimitedActions {
-		n = max(0, min(int(s.Schedule.State.RemainingActions), n))
+		n = min(int(s.Schedule.State.RemainingActions), n)
 	}
 
 	if s.cspec == nil {
