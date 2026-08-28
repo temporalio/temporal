@@ -13,9 +13,10 @@ type (
 		IsGeneric bool
 	}
 	settingPrecedence struct {
-		Name   string
-		GoArgs string
-		Expr   string
+		Name           string
+		GoArgs         string
+		PropertyFnArgs []string
+		Expr           string
 	}
 
 	dynamicConfigData struct {
@@ -67,18 +68,25 @@ var (
 				Expr:   "[]Constraints{{}}",
 			},
 			{
-				Name:   "Namespace",
-				GoArgs: "namespace string",
-				Expr:   "[]Constraints{{Namespace: namespace}, {}}",
+				Name:           "Namespace",
+				GoArgs:         "namespace string",
+				PropertyFnArgs: []string{"constraints.Namespace"},
+				Expr:           "[]Constraints{{Namespace: namespace}, {}}",
 			},
 			{
-				Name:   "NamespaceID",
-				GoArgs: "namespaceID namespace.ID",
-				Expr:   "[]Constraints{{NamespaceID: namespaceID.String()}, {}}",
+				Name:           "NamespaceID",
+				GoArgs:         "namespaceID namespace.ID",
+				PropertyFnArgs: []string{"namespace.ID(constraints.NamespaceID)"},
+				Expr:           "[]Constraints{{NamespaceID: namespaceID.String()}, {}}",
 			},
 			{
 				Name:   "TaskQueue",
 				GoArgs: "namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType",
+				PropertyFnArgs: []string{
+					"constraints.Namespace",
+					"constraints.TaskQueueName",
+					"constraints.TaskQueueType",
+				},
 				// A task-queue-name-only filter applies to a single task queue name across all
 				// namespaces, with higher precedence than a namespace-only filter. This is intended to
 				// be used by the default partition count and is probably not useful otherwise.
@@ -91,18 +99,21 @@ var (
 		}`,
 			},
 			{
-				Name:   "ShardID",
-				GoArgs: "shardID int32",
-				Expr:   "[]Constraints{{ShardID: shardID}, {}}",
+				Name:           "ShardID",
+				GoArgs:         "shardID int32",
+				PropertyFnArgs: []string{"constraints.ShardID"},
+				Expr:           "[]Constraints{{ShardID: shardID}, {}}",
 			},
 			{
-				Name:   "TaskType",
-				GoArgs: "taskType enumsspb.TaskType",
-				Expr:   "[]Constraints{{TaskType: taskType}, {}}",
+				Name:           "TaskType",
+				GoArgs:         "taskType enumsspb.TaskType",
+				PropertyFnArgs: []string{"constraints.TaskType"},
+				Expr:           "[]Constraints{{TaskType: taskType}, {}}",
 			},
 			{
-				Name:   "Destination",
-				GoArgs: "namespace string, destination string",
+				Name:           "Destination",
+				GoArgs:         "namespace string, destination string",
+				PropertyFnArgs: []string{"constraints.Namespace", "constraints.Destination"},
 				Expr: `[]Constraints{
 			{Namespace: namespace, Destination: destination},
 			{Destination: destination},
@@ -111,9 +122,10 @@ var (
 		}`,
 			},
 			{
-				Name:   "ChasmTaskType",
-				GoArgs: "chasmTaskType string",
-				Expr:   "[]Constraints{{ChasmTaskType: chasmTaskType}, {}}",
+				Name:           "ChasmTaskType",
+				GoArgs:         "chasmTaskType string",
+				PropertyFnArgs: []string{"constraints.ChasmTaskType"},
+				Expr:           "[]Constraints{{ChasmTaskType: chasmTaskType}, {}}",
 			},
 		}}
 )

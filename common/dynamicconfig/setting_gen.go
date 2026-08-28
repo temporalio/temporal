@@ -3,6 +3,7 @@
 package dynamicconfig
 
 import (
+	"reflect"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -21,6 +22,70 @@ const (
 	PrecedenceDestination
 	PrecedenceChasmTaskType
 )
+
+func (p Precedence) ConstraintDescription() string {
+	switch p {
+	case PrecedenceGlobal:
+		return "[]Constraints{{}}"
+	case PrecedenceNamespace:
+		return "[]Constraints{{Namespace: namespace}, {}}"
+	case PrecedenceNamespaceID:
+		return "[]Constraints{{NamespaceID: namespaceID.String()}, {}}"
+	case PrecedenceTaskQueue:
+		return "[]Constraints{\n\t\t\t{Namespace: namespace, TaskQueueName: taskQueue, TaskQueueType: taskQueueType},\n\t\t\t{Namespace: namespace, TaskQueueName: taskQueue},\n\t\t\t{TaskQueueName: taskQueue},\n\t\t\t{Namespace: namespace},\n\t\t\t{},\n\t\t}"
+	case PrecedenceShardID:
+		return "[]Constraints{{ShardID: shardID}, {}}"
+	case PrecedenceTaskType:
+		return "[]Constraints{{TaskType: taskType}, {}}"
+	case PrecedenceDestination:
+		return "[]Constraints{\n\t\t\t{Namespace: namespace, Destination: destination},\n\t\t\t{Destination: destination},\n\t\t\t{Namespace: namespace},\n\t\t\t{},\n\t\t}"
+	case PrecedenceChasmTaskType:
+		return "[]Constraints{{ChasmTaskType: chasmTaskType}, {}}"
+	default:
+		return ""
+	}
+}
+
+func (p Precedence) buildPropertyFnArgs(constraints Constraints) ([]reflect.Value, bool) {
+	switch p {
+	case PrecedenceGlobal:
+		return nil, true
+	case PrecedenceNamespace:
+		return []reflect.Value{
+			reflect.ValueOf(constraints.Namespace),
+		}, true
+	case PrecedenceNamespaceID:
+		return []reflect.Value{
+			reflect.ValueOf(namespace.ID(constraints.NamespaceID)),
+		}, true
+	case PrecedenceTaskQueue:
+		return []reflect.Value{
+			reflect.ValueOf(constraints.Namespace),
+			reflect.ValueOf(constraints.TaskQueueName),
+			reflect.ValueOf(constraints.TaskQueueType),
+		}, true
+	case PrecedenceShardID:
+		return []reflect.Value{
+			reflect.ValueOf(constraints.ShardID),
+		}, true
+	case PrecedenceTaskType:
+		return []reflect.Value{
+			reflect.ValueOf(constraints.TaskType),
+		}, true
+	case PrecedenceDestination:
+		return []reflect.Value{
+			reflect.ValueOf(constraints.Namespace),
+			reflect.ValueOf(constraints.Destination),
+		}, true
+	case PrecedenceChasmTaskType:
+		return []reflect.Value{
+			reflect.ValueOf(constraints.ChasmTaskType),
+		}, true
+	default:
+		return nil, false
+	}
+}
+
 
 type GlobalBoolSetting = GlobalTypedSetting[bool]
 type GlobalBoolConstrainedDefaultSetting = GlobalTypedConstrainedDefaultSetting[bool]

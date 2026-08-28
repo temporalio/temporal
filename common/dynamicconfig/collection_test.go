@@ -88,6 +88,152 @@ func (s *collectionSuite) TestGetIntPropertyFilteredByNamespace() {
 	s.Equal(50, value(namespace))
 }
 
+func (s *collectionSuite) TestGetEffectiveValue() {
+	normalSetting := dynamicconfig.NewNamespaceIntSetting("effective-resolution", 10, "")
+	constrainedDefaultSetting := dynamicconfig.NewNamespaceIntSettingWithConstrainedDefault(
+		"effective-constrained-default",
+		[]dynamicconfig.TypedConstrainedValue[int]{
+			{Constraints: dynamicconfig.Constraints{Namespace: "special"}, Value: 34},
+			{Value: 10},
+		},
+		"",
+	)
+
+	s.Run("all precedences and value types", func() {
+		testCases := []struct {
+			name             string
+			setting          dynamicconfig.GenericSetting
+			constraints      dynamicconfig.Constraints
+			queryConstraints dynamicconfig.Constraints
+			configuredValue  any
+		}{
+			{
+				name:            "global bool",
+				setting:         dynamicconfig.NewGlobalBoolSetting("effective-global", false, ""),
+				configuredValue: true,
+			},
+			{
+				name:        "namespace int with unused constraint",
+				setting:     dynamicconfig.NewNamespaceIntSetting("effective-namespace", 1, ""),
+				constraints: dynamicconfig.Constraints{Namespace: "namespace"},
+				queryConstraints: dynamicconfig.Constraints{
+					Namespace: "namespace", TaskQueueName: "unused-task-queue",
+				},
+				configuredValue: 2,
+			},
+			{
+				name:            "namespace ID float",
+				setting:         dynamicconfig.NewNamespaceIDFloatSetting("effective-namespace-id", 1, ""),
+				constraints:     dynamicconfig.Constraints{NamespaceID: "namespace-id"},
+				configuredValue: 2.5,
+			},
+			{
+				name:    "task queue string",
+				setting: dynamicconfig.NewTaskQueueStringSetting("effective-task-queue", "default", ""),
+				constraints: dynamicconfig.Constraints{
+					Namespace: "namespace", TaskQueueName: "task-queue", TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				},
+				configuredValue: "configured",
+			},
+			{
+				name:            "shard ID duration",
+				setting:         dynamicconfig.NewShardIDDurationSetting("effective-shard-id", time.Second, ""),
+				constraints:     dynamicconfig.Constraints{ShardID: 123},
+				configuredValue: 2 * time.Second,
+			},
+			{
+				name:            "task type map",
+				setting:         dynamicconfig.NewTaskTypeMapSetting("effective-task-type", nil, ""),
+				constraints:     dynamicconfig.Constraints{TaskType: enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK},
+				configuredValue: map[string]any{"value": "configured"},
+			},
+			{
+				name:    "destination typed",
+				setting: dynamicconfig.NewDestinationTypedSetting("effective-destination", []string{"default"}, ""),
+				constraints: dynamicconfig.Constraints{
+					Namespace: "namespace", Destination: "destination",
+				},
+				configuredValue: []string{"configured"},
+			},
+			{
+				name:            "CHASM task type",
+				setting:         dynamicconfig.NewChasmTaskTypeIntSetting("effective-chasm-task-type", 1, ""),
+				constraints:     dynamicconfig.Constraints{ChasmTaskType: "task-type"},
+				configuredValue: 2,
+			},
+		}
+
+		for _, testCase := range testCases {
+			s.Run(testCase.name, func() {
+				s.client.Set(testCase.setting.Key().String(), []dynamicconfig.ConstrainedValue{
+					{Constraints: testCase.constraints, Value: testCase.configuredValue},
+				})
+				queryConstraints := testCase.queryConstraints
+				if queryConstraints == (dynamicconfig.Constraints{}) {
+					queryConstraints = testCase.constraints
+				}
+				value, err := s.cln.GetEffectiveValue(testCase.setting.Key(), queryConstraints)
+				s.Require().NoError(err)
+				s.Equal(testCase.configuredValue, value)
+			})
+		}
+	})
+
+	s.Run("normal setting resolution", func() {
+		s.client.Set(normalSetting.Key().String(), []dynamicconfig.ConstrainedValue{
+			{Constraints: dynamicconfig.Constraints{Namespace: "configured"}, Value: 50},
+			{Value: 20},
+		})
+
+		for _, testCase := range []struct {
+			namespace string
+			expected  int
+		}{
+			{namespace: "configured", expected: 50},
+			{namespace: "other", expected: 20},
+		} {
+			value, err := s.cln.GetEffectiveValue(normalSetting.Key(), dynamicconfig.Constraints{Namespace: testCase.namespace})
+			s.Require().NoError(err)
+			s.Equal(testCase.expected, value)
+		}
+
+		s.client.Set(normalSetting.Key().String(), nil)
+		value, err := s.cln.GetEffectiveValue(normalSetting.Key(), dynamicconfig.Constraints{Namespace: "configured"})
+		s.Require().NoError(err)
+		s.Equal(10, value)
+	})
+
+	s.Run("constrained default resolution", func() {
+		s.client.Set(constrainedDefaultSetting.Key().String(), []dynamicconfig.ConstrainedValue{
+			{Constraints: dynamicconfig.Constraints{Namespace: "configured"}, Value: 50},
+			{Value: 20},
+		})
+
+		for _, testCase := range []struct {
+			namespace string
+			expected  int
+		}{
+			{namespace: "configured", expected: 50},
+			{namespace: "special", expected: 34},
+			{namespace: "other", expected: 20},
+		} {
+			value, err := s.cln.GetEffectiveValue(constrainedDefaultSetting.Key(), dynamicconfig.Constraints{Namespace: testCase.namespace})
+			s.Require().NoError(err)
+			s.Equal(testCase.expected, value)
+		}
+
+		s.client.Set(constrainedDefaultSetting.Key().String(), nil)
+		value, err := s.cln.GetEffectiveValue(constrainedDefaultSetting.Key(), dynamicconfig.Constraints{Namespace: "other"})
+		s.Require().NoError(err)
+		s.Equal(10, value)
+	})
+
+	s.Run("unknown key", func() {
+		_, err := s.cln.GetEffectiveValue(dynamicconfig.MakeKey(unknownKey), dynamicconfig.Constraints{})
+		s.Require().EqualError(err, `unregistered dynamic config key "unknownkey"`)
+	})
+}
+
 func (s *collectionSuite) TestGetStringPropertyFnFilteredByNamespace() {
 	ns := "testNamespace"
 	setting := dynamicconfig.NewNamespaceStringSetting(testGetStringPropertyFilteredByNamespaceKey, "abc", "")

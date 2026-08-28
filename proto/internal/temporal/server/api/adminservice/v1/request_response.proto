@@ -618,6 +618,23 @@ message GetTaskQueueUserDataResponse {
   int64 version = 2;
 }
 
+message GetDynamicConfigValueRequest {
+  string key = 1;
+  // JSON-encoded dynamic config constraints.
+  string constraints = 2;
+  // Include the configured constrained values currently held for this key.
+  bool include_constrained_values = 3;
+}
+
+message GetDynamicConfigValueResponse {
+  // JSON-encoded effective value.
+  bytes value = 1;
+  // JSON-encoded configured constrained values. Compiled defaults are not included.
+  bytes constrained_values = 2;
+  // Go expression defining the setting's constraint lookup order.
+  string constraint_description = 3;
+}
+
 message DumpDynamicConfigValuesRequest {}
 
 message DumpDynamicConfigValuesResponse {

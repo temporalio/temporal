@@ -241,6 +241,61 @@ func (s *adminHandlerSuite) TearDownTest() {
 	s.handler.Stop()
 }
 
+func (s *adminHandlerSuite) TestGetDynamicConfigValue() {
+	response, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
+		Key:                      dynamicconfig.WorkflowTimeSkippingEnabled.Key().String(),
+		Constraints:              fmt.Sprintf(`{"namespace":%q}`, s.namespace),
+		IncludeConstrainedValues: true,
+	})
+	s.Require().NoError(err)
+	s.Equal([]byte("true"), response.GetValue())
+	s.Equal("[]Constraints{{Namespace: namespace}, {}}", response.GetConstraintDescription())
+	s.JSONEq(fmt.Sprintf(`[
+		{
+			"constraints": {"namespace": %q},
+			"value": true
+		}
+	]`, s.namespace), string(response.GetConstrainedValues()))
+}
+
+func (s *adminHandlerSuite) TestGetDynamicConfigValueDefault() {
+	response, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
+		Key:         dynamicconfig.WorkflowTimeSkippingEnabled.Key().String(),
+		Constraints: `{"namespace":"other-namespace"}`,
+	})
+	s.Require().NoError(err)
+	s.Equal([]byte("false"), response.GetValue())
+	s.Empty(response.GetConstrainedValues())
+}
+
+func (s *adminHandlerSuite) TestGetDynamicConfigValueInvalidConstraints() {
+	_, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
+		Key:         dynamicconfig.WorkflowTimeSkippingEnabled.Key().String(),
+		Constraints: `{"unknown":"value"}`,
+	})
+	s.Require().Error(err)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
+}
+
+func (s *adminHandlerSuite) TestGetDynamicConfigValueIgnoresUnusedConstraint() {
+	response, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
+		Key:         "frontend.WorkflowTimeSkippingEnabled",
+		Constraints: fmt.Sprintf(`{"namespace":%q,"taskQueueName":"queue-a"}`, s.namespace),
+	})
+	s.Require().NoError(err)
+	s.Equal([]byte("true"), response.GetValue())
+}
+
+func (s *adminHandlerSuite) TestGetDynamicConfigValueUnknownKey() {
+	_, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
+		Key: "unknown-key",
+	})
+	s.Require().Error(err)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
+}
+
 func (s *adminHandlerSuite) TestDumpDynamicConfigValues() {
 	response, err := s.handler.DumpDynamicConfigValues(
 		s.T().Context(),

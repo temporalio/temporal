@@ -261,6 +261,20 @@ func (c *metricClient) GetDLQTasks(
 	return c.client.GetDLQTasks(ctx, request, opts...)
 }
 
+func (c *metricClient) GetDynamicConfigValue(
+	ctx context.Context,
+	request *adminservice.GetDynamicConfigValueRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.GetDynamicConfigValueResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientGetDynamicConfigValue")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.GetDynamicConfigValue(ctx, request, opts...)
+}
+
 func (c *metricClient) GetNamespace(
 	ctx context.Context,
 	request *adminservice.GetNamespaceRequest,
