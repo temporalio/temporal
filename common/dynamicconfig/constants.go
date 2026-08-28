@@ -1139,7 +1139,7 @@ so forwarding by endpoint ID will not work out of the box.`,
 	)
 	FrontendMaxConcurrentAdminBatchOperation = NewGlobalIntSetting(
 		"frontend.MaxConcurrentAdminBatchOperation",
-		1,
+		10,
 		`FrontendMaxConcurrentAdminBatchOperation is the max concurrent admin batch operation job count. Admin batch operations only run in the temporal-system namespace.`,
 	)
 	FrontendEnableBatchOperationsForStandaloneActivities = NewNamespaceBoolSetting(
