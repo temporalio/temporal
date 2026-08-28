@@ -144,7 +144,6 @@ var (
 	NexusStageCallerInbound   = nexusStage("caller-inbound")
 	NexusStageHandlerInbound  = nexusStage("handler-inbound")
 	NexusStageHandlerOutbound = nexusStage("handler-outbound")
-	NexusStageRegistry        = nexusStage("registry")
 )
 
 // Pre-defined values for scope tag
