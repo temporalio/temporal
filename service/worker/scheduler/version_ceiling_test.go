@@ -11,7 +11,6 @@ import (
 	"go.temporal.io/sdk/workflow"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payloads"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -79,39 +78,9 @@ func TestDetermineVersionTransitions(t *testing.T) {
 	}
 }
 
-func TestDetermineVersionPreservesLegacyRecordedVersion(t *testing.T) {
-	for _, tc := range []struct {
-		name    string
-		version SchedulerWorkflowVersion
-	}{
-		{name: "initial version", version: InitialVersion},
-		{name: "current version", version: TriggerImmediatelyTimestamp},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			calls := 0
-			s := &scheduler{
-				logger: log.NewSdkLogger(log.NewNoopLogger()),
-				versionCeiling: func() int {
-					calls++
-					return oldPeerCeiling
-				},
-			}
-			s.tweakables = CurrentTweakablePolicies
-			s.tweakables.Version = tc.version
-			// VersionCeilingSet is false for a marker written before this field existed.
-
-			version, ceiling := s.determineVersion(TriggerImmediatelyTimestamp)
-			require.Equal(t, tc.version, version)
-			require.Equal(t, int(tc.version), ceiling)
-			require.Zero(t, calls, "legacy histories must not read the current version ceiling")
-		})
-	}
-}
-
-// TestVersionCeilingWithCHASMMigration verifies that a clamp below the CHASM gate keeps migration
-// markers out of history, and that once the ceiling is lifted (on the next run) the deferred
-// migration runs.
-func (s *workflowSuite) TestVersionCeilingWithCHASMMigration() {
+// TestVersionCeilingDefersCHASMMigration verifies that a clamp below the CHASM gate keeps
+// migration markers out of history. The pending migration is retained for a later fresh run.
+func (s *workflowSuite) TestVersionCeilingDefersCHASMMigration() {
 	migrateCalls := 0
 	s.expectMigrate(&migrateCalls)
 
@@ -146,6 +115,27 @@ func (s *workflowSuite) TestVersionCeilingWithCHASMMigration() {
 
 	s.True(s.env.IsWorkflowCompleted())
 	s.Require().NoError(s.env.GetWorkflowError(), "second run completes via the deferred migration after the lift")
+	s.Equal(1, migrateCalls)
+}
+
+func (s *workflowSuite) TestVersionCeilingLiftAdvancesWithinRun() {
+	migrateCalls := 0
+	s.expectMigrate(&migrateCalls)
+
+	ceiling := int(oldPeerCeiling)
+	s.env.RegisterDelayedCallback(func() {
+		ceiling = -1
+		s.env.SignalWorkflow(SignalNameMigrateToChasm, nil)
+	}, 30*time.Minute)
+
+	s.runWithCeiling(
+		func() bool { return true },
+		func() bool { return true },
+		func() int { return ceiling },
+		pausedHourlySchedule(), 0)
+
+	s.True(s.env.IsWorkflowCompleted())
+	s.Require().NoError(s.env.GetWorkflowError())
 	s.Equal(1, migrateCalls)
 }
 

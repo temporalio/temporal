@@ -78,8 +78,6 @@ const (
 	MigrationHandoffFixes = 13
 	// update the desired time for a buffered start when refresh discovers the prior action completed
 	RefreshCompletionDesiredTime = 14
-	// LatestSchedulerWorkflowVersion is the newest workflow behavior this binary can activate.
-	LatestSchedulerWorkflowVersion SchedulerWorkflowVersion = RefreshCompletionDesiredTime
 )
 
 const (
@@ -135,7 +133,9 @@ type (
 		migrateWithRunningWorkflows func() bool
 		// versionCeiling is re-evaluated every iteration inside the "tweakables" MutableSideEffect.
 		// The version cannot decrease, but raising the ceiling can advance it on the next iteration.
-		versionCeiling func() int
+		versionCeiling        func() int
+		lastVersionCeiling    int
+		hasLastVersionCeiling bool
 
 		tweakables TweakablePolicies
 
@@ -179,8 +179,7 @@ type (
 		SpecFieldLengthLimit              int                      // item limit per spec field on the ScheduleInfo memo
 		Version                           SchedulerWorkflowVersion // Used to keep track of schedules version to release new features and for backward compatibility
 		// version 0 corresponds to the schedule version that comes before introducing the Version parameter
-		VersionCeiling    int  // Version ceiling captured for this iteration
-		VersionCeilingSet bool // Distinguishes a ceiling of zero from histories that predate this field
+		VersionCeiling int // Version ceiling captured for this iteration
 
 		EnableCHASMMigration        bool // Whether to automatically migrate this schedule to CHASM (V2)
 		MigrateWithRunningWorkflows bool // Whether to migrate this schedule to CHASM (V2) while it has running workflows
@@ -1401,7 +1400,6 @@ func (s *scheduler) updateTweakables() {
 	get := func(ctx workflow.Context) any {
 		p := CurrentTweakablePolicies
 		p.Version, p.VersionCeiling = s.determineVersion(p.Version)
-		p.VersionCeilingSet = true
 		// Only set migration config at/after the TriggerImmediatelyTimestamp version.
 		if p.Version >= TriggerImmediatelyTimestamp {
 			p.EnableCHASMMigration = s.enableCHASMMigration()
@@ -1864,18 +1862,14 @@ func (s *scheduler) hasMinVersion(version SchedulerWorkflowVersion) bool {
 // determineVersion returns this iteration's version and ceiling. The version cannot decrease, but
 // the latest ceiling is applied on each iteration.
 func (s *scheduler) determineVersion(defaultVersion SchedulerWorkflowVersion) (SchedulerWorkflowVersion, int) {
-	// Preserve the version selected by histories that predate VersionCeiling.
-	if !s.tweakables.VersionCeilingSet && s.tweakables != (TweakablePolicies{}) {
-		return s.tweakables.Version, int(s.tweakables.Version)
-	}
-
-	ceiling := -1
-	if s.versionCeiling != nil {
-		ceiling = s.versionCeiling()
-	}
-	if ceiling > int(LatestSchedulerWorkflowVersion) {
-		s.logger.Warn("worker.schedulerV1VersionCeiling above the latest supported version; no effect in this binary",
-			"ceiling", ceiling, "latestSupportedVersion", LatestSchedulerWorkflowVersion)
+	ceiling := s.versionCeiling()
+	if ceiling != s.lastVersionCeiling || !s.hasLastVersionCeiling {
+		if ceiling > int(defaultVersion) {
+			s.logger.Warn("worker.schedulerV1VersionCeiling above the version this binary records; no effect",
+				"ceiling", ceiling, "recordedVersion", defaultVersion)
+		}
+		s.lastVersionCeiling = ceiling
+		s.hasLastVersionCeiling = true
 	}
 	return determineVersionTransition(defaultVersion, s.tweakables.Version, ceiling)
 }
