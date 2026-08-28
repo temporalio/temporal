@@ -3075,6 +3075,7 @@ func (n *Node) IsStale(
 
 func (n *Node) Terminate(
 	request TerminateComponentRequest,
+	forceTerminationReason metrics.ReasonString,
 ) error {
 	if n.parent != nil {
 		return softassert.UnexpectedInternalErr(
@@ -3104,6 +3105,24 @@ func (n *Node) Terminate(
 	}
 
 	n.terminated = true
+	namespaceName := ""
+	namespaceEntry := n.backend.GetNamespaceEntry()
+	if namespaceEntry != nil {
+		namespaceName = namespaceEntry.Name().String()
+	}
+
+	archetypeID := n.ArchetypeID()
+	archetypeName, ok := n.registry.ComponentFqnByID(archetypeID)
+	if !ok {
+		archetypeName = strconv.FormatUint(uint64(archetypeID), 10)
+	}
+
+	metrics.ExecutionForceTerminations.With(n.metricsHandler).Record(
+		1,
+		metrics.NamespaceTag(namespaceName),
+		metrics.ArchetypeTag(archetypeName),
+		metrics.ReasonTag(forceTerminationReason),
+	)
 	return nil
 }
 

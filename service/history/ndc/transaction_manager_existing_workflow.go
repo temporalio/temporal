@@ -10,6 +10,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -273,12 +274,16 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsCurrent(
 // (dispatchForExistingWorkflow only reaches the zombie path for a non-running target), so it stays
 // passive. Do NOT reuse this elsewhere or call it with a
 // nil current for a running target: it would report the target as suppressed without zombifying it.
-// Everywhere else, call targetWorkflow.SuppressBy(currentWorkflow) directly.
-func suppressTargetPolicy(targetWorkflow Workflow, currentWorkflow Workflow) (historyi.TransactionPolicy, error) {
+// Everywhere else, call targetWorkflow.SuppressBy(currentWorkflow, metricsHandler) directly.
+func suppressTargetPolicy(
+	targetWorkflow Workflow,
+	currentWorkflow Workflow,
+	metricsHandler metrics.Handler,
+) (historyi.TransactionPolicy, error) {
 	if currentWorkflow == nil {
 		return historyi.TransactionPolicyPassive, nil
 	}
-	return targetWorkflow.SuppressBy(currentWorkflow)
+	return targetWorkflow.SuppressBy(currentWorkflow, metricsHandler)
 }
 
 // suppressNewWorkflowPolicy suppresses the carried new run (continue-as-new/cron/retry successor) by
@@ -286,14 +291,18 @@ func suppressTargetPolicy(targetWorkflow Workflow, currentWorkflow Workflow) (hi
 // for the deleted-current-run (orphan) path, where currentWorkflow is nil because the current
 // execution record is gone.
 //
-// With a real current workflow it defers to newWorkflow.SuppressBy(currentWorkflow). With no current
-// to compare against, the new run cannot be the current run, so a still-running successor is forced
-// into the zombie state (a closed one is left as is) before the caller persists it bypass-current. On
-// the passive apply path the successor is always remote-active, so zombie (never terminate) is the
-// correct suppression, matching SuppressBy's remote-active branch.
-func suppressNewWorkflowPolicy(newWorkflow Workflow, currentWorkflow Workflow) (historyi.TransactionPolicy, error) {
+// With a real current workflow it defers to newWorkflow.SuppressBy(currentWorkflow, metricsHandler).
+// With no current to compare against, the new run cannot be the current run, so a still-running
+// successor is forced into the zombie state (a closed one is left as is) before the caller persists
+// it bypass-current. On the passive apply path the successor is always remote-active, so zombie
+// (never terminate) is the correct suppression, matching SuppressBy's remote-active branch.
+func suppressNewWorkflowPolicy(
+	newWorkflow Workflow,
+	currentWorkflow Workflow,
+	metricsHandler metrics.Handler,
+) (historyi.TransactionPolicy, error) {
 	if currentWorkflow != nil {
-		return newWorkflow.SuppressBy(currentWorkflow)
+		return newWorkflow.SuppressBy(currentWorkflow, metricsHandler)
 	}
 	newMutableState := newWorkflow.GetMutableState()
 	if newMutableState.IsWorkflowExecutionRunning() {
@@ -317,7 +326,8 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 	archetypeID chasm.ArchetypeID,
 ) error {
 
-	targetPolicy, err := suppressTargetPolicy(targetWorkflow, currentWorkflow)
+	metricsHandler := r.shardContext.GetMetricsHandler()
+	targetPolicy, err := suppressTargetPolicy(targetWorkflow, currentWorkflow, metricsHandler)
 	if err != nil {
 		return err
 	}
@@ -331,7 +341,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 	if newWorkflow != nil {
 		// currentWorkflow is nil on the deleted-current-run (orphan) path; suppressNewWorkflowPolicy
 		// handles that by parking the successor as a zombie instead of suppressing against a current.
-		newWorkflowPolicy, err := suppressNewWorkflowPolicy(newWorkflow, currentWorkflow)
+		newWorkflowPolicy, err := suppressNewWorkflowPolicy(newWorkflow, currentWorkflow, metricsHandler)
 		if err != nil {
 			return err
 		}
@@ -397,6 +407,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCur
 	if currentWorkflow.GetMutableState().IsWorkflowExecutionRunning() {
 		currentWorkflowPolicy, err = currentWorkflow.SuppressBy(
 			targetWorkflow,
+			r.shardContext.GetMetricsHandler(),
 		)
 		if err != nil {
 			return err
@@ -473,7 +484,8 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 	archetypeID chasm.ArchetypeID,
 ) error {
 
-	targetWorkflowPolicy, err := suppressTargetPolicy(targetWorkflow, currentWorkflow)
+	metricsHandler := r.shardContext.GetMetricsHandler()
+	targetWorkflowPolicy, err := suppressTargetPolicy(targetWorkflow, currentWorkflow, metricsHandler)
 	if err != nil {
 		return err
 	}
@@ -487,7 +499,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 	if newWorkflow != nil {
 		// currentWorkflow is nil on the deleted-current-run (orphan) path; suppressNewWorkflowPolicy
 		// handles that by parking the successor as a zombie instead of suppressing against a current.
-		newWorkflowPolicy, err = suppressNewWorkflowPolicy(newWorkflow, currentWorkflow)
+		newWorkflowPolicy, err = suppressNewWorkflowPolicy(newWorkflow, currentWorkflow, metricsHandler)
 		if err != nil {
 			return err
 		}

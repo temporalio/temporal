@@ -11,9 +11,11 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/effect"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/components/callbacks"
@@ -122,6 +124,41 @@ func TerminateWorkflow(
 		links,
 	)
 	return err
+}
+
+func ForceTerminateWorkflow(
+	mutableState historyi.MutableState,
+	terminateReason string,
+	terminateDetails *commonpb.Payloads,
+	terminateIdentity string,
+	deleteAfterTerminate bool,
+	links []*commonpb.Link,
+	metricsHandler metrics.Handler,
+	forceTerminationReason metrics.ReasonString,
+) error {
+	if err := TerminateWorkflow(
+		mutableState,
+		terminateReason,
+		terminateDetails,
+		terminateIdentity,
+		deleteAfterTerminate,
+		links,
+	); err != nil {
+		return err
+	}
+
+	namespaceName := ""
+	if namespaceEntry := mutableState.GetNamespaceEntry(); namespaceEntry != nil {
+		namespaceName = namespaceEntry.Name().String()
+	}
+
+	metrics.ExecutionForceTerminations.With(metricsHandler).Record(
+		1,
+		metrics.NamespaceTag(namespaceName),
+		metrics.ArchetypeTag(chasm.WorkflowArchetype),
+		metrics.ReasonTag(forceTerminationReason),
+	)
+	return nil
 }
 
 // FindAutoResetPoint returns the auto reset point

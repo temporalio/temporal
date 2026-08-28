@@ -688,13 +688,15 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				return nil, err
 			}
 
-			if err := workflow.TerminateWorkflow(
+			if err := workflow.ForceTerminateWorkflow(
 				ms,
 				common.FailureReasonTransactionSizeExceedsLimit,
 				payloads.EncodeString(updateErr.Error()),
 				consts.IdentityHistoryService,
 				false,
 				nil, // no links necessary.
+				handler.metricsHandler,
+				chasm.ExecutionForceTerminationReasonEventBatchSizeExceedsLimit,
 			); err != nil {
 				return nil, err
 			}
