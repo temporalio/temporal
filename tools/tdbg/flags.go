@@ -24,9 +24,6 @@ var (
 	FlagDynamicConfigKey           = "key"
 	FlagDynamicConfigConstraints   = "constraints"
 	FlagVerbose                    = "verbose"
-	FlagDestination                = "destination"
-	FlagChasmTaskType              = "chasm-task-type"
-	FlagTaskType                   = "task-type"
 	FlagContextTimeout             = "context-timeout"
 	FlagContextTimeoutAlias        = []string{"ct"}
 	FlagCluster                    = "cluster"

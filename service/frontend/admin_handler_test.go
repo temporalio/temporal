@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -242,72 +243,133 @@ func (s *adminHandlerSuite) TearDownTest() {
 }
 
 func (s *adminHandlerSuite) TestGetDynamicConfigValue() {
-	response, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
-		Key:                      dynamicconfig.WorkflowTimeSkippingEnabled.Key().String(),
-		Constraints:              fmt.Sprintf(`{"namespace":%q}`, s.namespace),
-		IncludeConstrainedValues: true,
+	s.Run("returns effective and configured values", func() {
+		response, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
+			Key:                      dynamicconfig.WorkflowTimeSkippingEnabled.Key().String(),
+			Constraints:              fmt.Sprintf(`{"namespace":%q}`, s.namespace),
+			IncludeConstrainedValues: true,
+		})
+		s.Require().NoError(err)
+		s.Equal([]byte("true"), response.GetValue())
+		s.Equal("[]Constraints{{Namespace: namespace}, {}}", response.GetConstraintDescription())
+		s.JSONEq(fmt.Sprintf(`[
+			{
+				"constraints": {"namespace": %q},
+				"value": true
+			}
+		]`, s.namespace), string(response.GetConstrainedValues()))
 	})
+
+	s.Run("returns compiled default", func() {
+		response, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
+			Key:         dynamicconfig.WorkflowTimeSkippingEnabled.Key().String(),
+			Constraints: `{"namespace":"other-namespace"}`,
+		})
+		s.Require().NoError(err)
+		s.Equal([]byte("false"), response.GetValue())
+		s.Empty(response.GetConstrainedValues())
+	})
+
+	s.Run("rejects invalid constraints", func() {
+		_, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
+			Key:         dynamicconfig.WorkflowTimeSkippingEnabled.Key().String(),
+			Constraints: `{"unknown":"value"}`,
+		})
+		s.Require().Error(err)
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+	})
+
+	s.Run("ignores unused constraints", func() {
+		response, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
+			Key:         "frontend.WorkflowTimeSkippingEnabled",
+			Constraints: fmt.Sprintf(`{"namespace":%q,"taskQueueName":"queue-a"}`, s.namespace),
+		})
+		s.Require().NoError(err)
+		s.Equal([]byte("true"), response.GetValue())
+	})
+
+	s.Run("rejects unknown key", func() {
+		_, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
+			Key: "unknown-key",
+		})
+		s.Require().Error(err)
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+	})
+
+	s.Run("encodes duration value", func() {
+		key := dynamicconfig.DynamicConfigSubscriptionPollInterval.Key()
+		s.handler.dynamicConfig = dynamicconfig.NewCollection(
+			dynamicconfig.StaticClient{key: 90 * time.Second},
+			s.mockResource.GetLogger(),
+		)
+
+		response, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
+			Key:                      key.String(),
+			IncludeConstrainedValues: true,
+		})
+		s.Require().NoError(err)
+		s.JSONEq(`"1m30s"`, string(response.GetValue()))
+		s.JSONEq(`[
+			{
+				"constraints": {},
+				"value": "1m30s"
+			}
+		]`, string(response.GetConstrainedValues()))
+	})
+}
+
+func (s *adminHandlerSuite) TestDescribeDynamicConfigSetting() {
+	response, err := s.handler.DescribeDynamicConfigSetting(
+		context.Background(),
+		&adminservice.DescribeDynamicConfigSettingRequest{
+			Key: "admin.matchingNamespaceTaskqueueToPartitionDispatchRate",
+		},
+	)
 	s.Require().NoError(err)
-	s.Equal([]byte("true"), response.GetValue())
-	s.Equal("[]Constraints{{Namespace: namespace}, {}}", response.GetConstraintDescription())
-	s.JSONEq(fmt.Sprintf(`[
-		{
-			"constraints": {"namespace": %q},
-			"value": true
-		}
-	]`, s.namespace), string(response.GetConstrainedValues()))
-}
-
-func (s *adminHandlerSuite) TestGetDynamicConfigValueDefault() {
-	response, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
-		Key:         dynamicconfig.WorkflowTimeSkippingEnabled.Key().String(),
-		Constraints: `{"namespace":"other-namespace"}`,
-	})
-	s.Require().NoError(err)
-	s.Equal([]byte("false"), response.GetValue())
-	s.Empty(response.GetConstrainedValues())
-}
-
-func (s *adminHandlerSuite) TestGetDynamicConfigValueInvalidConstraints() {
-	_, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
-		Key:         dynamicconfig.WorkflowTimeSkippingEnabled.Key().String(),
-		Constraints: `{"unknown":"value"}`,
-	})
-	s.Require().Error(err)
-	var invalidArgument *serviceerror.InvalidArgument
-	s.ErrorAs(err, &invalidArgument)
-}
-
-func (s *adminHandlerSuite) TestGetDynamicConfigValueIgnoresUnusedConstraint() {
-	response, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
-		Key:         "frontend.WorkflowTimeSkippingEnabled",
-		Constraints: fmt.Sprintf(`{"namespace":%q,"taskQueueName":"queue-a"}`, s.namespace),
-	})
-	s.Require().NoError(err)
-	s.Equal([]byte("true"), response.GetValue())
-}
-
-func (s *adminHandlerSuite) TestGetDynamicConfigValueUnknownKey() {
-	_, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
-		Key: "unknown-key",
-	})
-	s.Require().Error(err)
-	var invalidArgument *serviceerror.InvalidArgument
-	s.ErrorAs(err, &invalidArgument)
+	s.Equal("admin.matchingNamespaceTaskqueueToPartitionDispatchRate", response.GetKey())
+	s.Equal("float64", response.GetValueType())
+	s.Equal(
+		"[]Constraints{{Namespace: namespace, TaskQueueName: taskQueue, TaskQueueType: taskQueueType}, "+
+			"{Namespace: namespace, TaskQueueName: taskQueue}, {TaskQueueName: taskQueue}, "+
+			"{Namespace: namespace}, {}}",
+		response.GetConstraintDescription(),
+	)
 }
 
 func (s *adminHandlerSuite) TestDumpDynamicConfigValues() {
-	response, err := s.handler.DumpDynamicConfigValues(
-		s.T().Context(),
-		&adminservice.DumpDynamicConfigValuesRequest{},
-	)
-	s.Require().NoError(err)
-	s.JSONEq(fmt.Sprintf(`{
-		"frontend.workflowtimeskippingenabled": [{
-			"constraints": {"namespace": %q},
-			"value": true
-		}]
-	}`, s.namespace), string(response.GetValues()))
+	s.Run("returns configured values", func() {
+		response, err := s.handler.DumpDynamicConfigValues(
+			s.T().Context(),
+			&adminservice.DumpDynamicConfigValuesRequest{},
+		)
+		s.Require().NoError(err)
+		s.JSONEq(fmt.Sprintf(`{
+			"frontend.workflowtimeskippingenabled": [{
+				"constraints": {"namespace": %q},
+				"value": true
+			}]
+		}`, s.namespace), string(response.GetValues()))
+	})
+
+	s.Run("returns marshal error", func() {
+		s.handler.dynamicConfig = dynamicconfig.NewCollection(
+			dynamicconfig.StaticClient{dynamicconfig.MakeKey("invalid"): make(chan struct{})},
+			s.mockResource.GetLogger(),
+		)
+
+		_, err := s.handler.DumpDynamicConfigValues(
+			s.T().Context(),
+			&adminservice.DumpDynamicConfigValuesRequest{},
+		)
+		s.Require().EqualError(
+			err,
+			`unable to encode dynamic config values: dynamic config key "invalid" constrained value at index 0: json: unsupported type: chan struct {}`,
+		)
+		var internal *serviceerror.Internal
+		s.ErrorAs(err, &internal)
+	})
 }
 
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Success() {

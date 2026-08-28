@@ -138,6 +138,23 @@ func (c *Collection) GetConfiguredValues(key Key) []ConstrainedValue {
 	return c.client.GetValue(key)
 }
 
+type SettingDescription struct {
+	ValueType             string
+	ConstraintDescription string
+}
+
+// DescribeSetting returns the generated constraint metadata for a registered setting.
+func (c *Collection) DescribeSetting(key Key) (SettingDescription, error) {
+	setting := queryRegistry(key)
+	if setting == nil {
+		return SettingDescription{}, fmt.Errorf("unregistered dynamic config key %q", key)
+	}
+	return SettingDescription{
+		ValueType:             setting.ValueType().String(),
+		ConstraintDescription: setting.Precedence().ConstraintDescription(),
+	}, nil
+}
+
 // GetEffectiveValue returns the effective value of a registered setting for the given constraints.
 func (c *Collection) GetEffectiveValue(
 	key Key,

@@ -146,6 +146,21 @@ func (c *retryableClient) DescribeDLQJob(
 	return resp, err
 }
 
+func (c *retryableClient) DescribeDynamicConfigSetting(
+	ctx context.Context,
+	request *adminservice.DescribeDynamicConfigSettingRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.DescribeDynamicConfigSettingResponse, error) {
+	var resp *adminservice.DescribeDynamicConfigSettingResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DescribeDynamicConfigSetting(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) DescribeHistoryHost(
 	ctx context.Context,
 	request *adminservice.DescribeHistoryHostRequest,

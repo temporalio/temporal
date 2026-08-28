@@ -60,8 +60,8 @@ type (
 	// other cases, the exact type must be used. If a Value is returned with an unexpected
 	// type, it will be ignored.
 	ConstrainedValue struct {
-		Constraints Constraints `json:"constraints"`
-		Value       any         `json:"value"`
+		Constraints Constraints
+		Value       any
 	}
 	TypedConstrainedValue[T any] struct {
 		Constraints Constraints

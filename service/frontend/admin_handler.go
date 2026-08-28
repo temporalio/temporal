@@ -2,7 +2,6 @@ package frontend
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -2265,7 +2264,7 @@ func (adh *AdminHandler) GetDynamicConfigValue(
 		return nil, serviceerror.NewInvalidArgument(err.Error())
 	}
 
-	encodedValue, err := json.Marshal(value)
+	encodedValue, err := dynamicconfig.MarshalValue(value)
 	if err != nil {
 		return nil, serviceerror.NewInternalf("unable to encode dynamic config value: %v", err)
 	}
@@ -2274,7 +2273,8 @@ func (adh *AdminHandler) GetDynamicConfigValue(
 		ConstraintDescription: constraintDescription,
 	}
 	if request.GetIncludeConstrainedValues() {
-		response.ConstrainedValues, err = json.Marshal(
+		response.ConstrainedValues, err = dynamicconfig.MarshalConstrainedValues(
+			key,
 			adh.dynamicConfig.GetConfiguredValues(key),
 		)
 		if err != nil {
@@ -2282,6 +2282,29 @@ func (adh *AdminHandler) GetDynamicConfigValue(
 		}
 	}
 	return response, nil
+}
+
+func (adh *AdminHandler) DescribeDynamicConfigSetting(
+	_ context.Context,
+	request *adminservice.DescribeDynamicConfigSettingRequest,
+) (_ *adminservice.DescribeDynamicConfigSettingResponse, retErr error) {
+	defer log.CapturePanic(adh.logger, &retErr)
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetKey() == "" {
+		return nil, serviceerror.NewInvalidArgument("dynamic config key is not set")
+	}
+
+	description, err := adh.dynamicConfig.DescribeSetting(dynamicconfig.MakeKey(request.GetKey()))
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgument(err.Error())
+	}
+	return &adminservice.DescribeDynamicConfigSettingResponse{
+		Key:                   request.GetKey(),
+		ValueType:             description.ValueType,
+		ConstraintDescription: description.ConstraintDescription,
+	}, nil
 }
 
 func (adh *AdminHandler) DumpDynamicConfigValues(
@@ -2297,11 +2320,7 @@ func (adh *AdminHandler) DumpDynamicConfigValues(
 	if err != nil {
 		return nil, serviceerror.NewUnimplemented(err.Error())
 	}
-	valuesByKey := make(map[string][]dynamicconfig.ConstrainedValue, len(values))
-	for key, constrainedValues := range values {
-		valuesByKey[key.String()] = constrainedValues
-	}
-	encodedValues, err := json.Marshal(valuesByKey)
+	encodedValues, err := dynamicconfig.MarshalConfigValueMap(values)
 	if err != nil {
 		return nil, serviceerror.NewInternalf("unable to encode dynamic config values: %v", err)
 	}

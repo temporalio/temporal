@@ -48,6 +48,10 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 		return nil
 	case *adminservice.DescribeDLQJobResponse:
 		return nil
+	case *adminservice.DescribeDynamicConfigSettingRequest:
+		return nil
+	case *adminservice.DescribeDynamicConfigSettingResponse:
+		return nil
 	case *adminservice.DescribeHistoryHostRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),

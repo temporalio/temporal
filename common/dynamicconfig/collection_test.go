@@ -234,6 +234,33 @@ func (s *collectionSuite) TestGetEffectiveValue() {
 	})
 }
 
+func (s *collectionSuite) TestDescribeSetting() {
+	setting := dynamicconfig.NewTaskQueueBoolSetting("describe-task-queue", false, "")
+
+	description, err := s.cln.DescribeSetting(setting.Key())
+	s.Require().NoError(err)
+	s.Equal("bool", description.ValueType)
+	s.Equal(
+		"[]Constraints{{Namespace: namespace, TaskQueueName: taskQueue, TaskQueueType: taskQueueType}, "+
+			"{Namespace: namespace, TaskQueueName: taskQueue}, {TaskQueueName: taskQueue}, "+
+			"{Namespace: namespace}, {}}",
+		description.ConstraintDescription,
+	)
+}
+
+func (s *collectionSuite) TestDescribeSettingNilDefault() {
+	setting := dynamicconfig.NewGlobalTypedSettingWithConverter[*int](
+		"describe-nil-default",
+		func(any) (*int, error) { return nil, nil },
+		nil,
+		"",
+	)
+
+	description, err := s.cln.DescribeSetting(setting.Key())
+	s.Require().NoError(err)
+	s.Equal("*int", description.ValueType)
+}
+
 func (s *collectionSuite) TestGetStringPropertyFnFilteredByNamespace() {
 	ns := "testNamespace"
 	setting := dynamicconfig.NewNamespaceStringSetting(testGetStringPropertyFilteredByNamespaceKey, "abc", "")

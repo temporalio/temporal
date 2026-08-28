@@ -135,6 +135,20 @@ func (c *metricClient) DescribeDLQJob(
 	return c.client.DescribeDLQJob(ctx, request, opts...)
 }
 
+func (c *metricClient) DescribeDynamicConfigSetting(
+	ctx context.Context,
+	request *adminservice.DescribeDynamicConfigSettingRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.DescribeDynamicConfigSettingResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientDescribeDynamicConfigSetting")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DescribeDynamicConfigSetting(ctx, request, opts...)
+}
+
 func (c *metricClient) DescribeHistoryHost(
 	ctx context.Context,
 	request *adminservice.DescribeHistoryHostRequest,

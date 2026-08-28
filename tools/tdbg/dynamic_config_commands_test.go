@@ -12,14 +12,18 @@ import (
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/server/api/adminservice/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type dynamicConfigAdminClient struct {
 	adminservice.AdminServiceClient
-	dumpCalled  bool
-	dumpOptions []grpc.CallOption
-	request     *adminservice.GetDynamicConfigValueRequest
-	getResponse *adminservice.GetDynamicConfigValueResponse
+	dumpCalled      bool
+	dumpOptions     []grpc.CallOption
+	dumpError       error
+	request         *adminservice.GetDynamicConfigValueRequest
+	getResponse     *adminservice.GetDynamicConfigValueResponse
+	describeRequest *adminservice.DescribeDynamicConfigSettingRequest
 }
 
 func (c *dynamicConfigAdminClient) DumpDynamicConfigValues(
@@ -29,6 +33,9 @@ func (c *dynamicConfigAdminClient) DumpDynamicConfigValues(
 ) (*adminservice.DumpDynamicConfigValuesResponse, error) {
 	c.dumpCalled = true
 	c.dumpOptions = options
+	if c.dumpError != nil {
+		return nil, c.dumpError
+	}
 	return &adminservice.DumpDynamicConfigValuesResponse{
 		Values: []byte(`{"frontend.workflowtimeskippingenabled":[{"constraints":{"namespace":"A"},"value":true}]}`),
 	}, nil
@@ -44,6 +51,19 @@ func (c *dynamicConfigAdminClient) GetDynamicConfigValue(
 		return c.getResponse, nil
 	}
 	return &adminservice.GetDynamicConfigValueResponse{Value: []byte("true")}, nil
+}
+
+func (c *dynamicConfigAdminClient) DescribeDynamicConfigSetting(
+	_ context.Context,
+	request *adminservice.DescribeDynamicConfigSettingRequest,
+	_ ...grpc.CallOption,
+) (*adminservice.DescribeDynamicConfigSettingResponse, error) {
+	c.describeRequest = request
+	return &adminservice.DescribeDynamicConfigSettingResponse{
+		Key:                   request.GetKey(),
+		ValueType:             "float64",
+		ConstraintDescription: "[]Constraints{{Namespace: namespace, TaskQueueName: taskQueue, TaskQueueType: taskQueueType}, {}}",
+	}, nil
 }
 
 type dynamicConfigClientFactory struct {
@@ -138,10 +158,33 @@ func TestGetDynamicConfigValueVerbose(t *testing.T) {
 	}`, output.String())
 }
 
+func TestDescribeDynamicConfigSetting(t *testing.T) {
+	adminClient := &dynamicConfigAdminClient{}
+	var output bytes.Buffer
+	app := NewCliApp(func(params *Params) {
+		params.ClientFactory = dynamicConfigClientFactory{adminClient: adminClient}
+		params.Writer = &output
+	})
+
+	err := app.Run([]string{
+		"tdbg",
+		"dc", "describe",
+		"-k", "admin.matchingNamespaceTaskqueueToPartitionDispatchRate",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "admin.matchingNamespaceTaskqueueToPartitionDispatchRate", adminClient.describeRequest.GetKey())
+	require.JSONEq(t, `{
+		"key": "admin.matchingNamespaceTaskqueueToPartitionDispatchRate",
+		"valueType": "float64",
+		"constraintDescription": "[]Constraints{{Namespace: namespace, TaskQueueName: taskQueue, TaskQueueType: taskQueueType}, {}}"
+	}`, output.String())
+}
+
 func TestDynamicConfigHelpShowsAliasUsage(t *testing.T) {
 	for _, args := range [][]string{
 		{"tdbg", "dc", "--help"},
 		{"tdbg", "dc", "get", "--help"},
+		{"tdbg", "dc", "describe", "--help"},
 		{"tdbg", "dc", "dump", "--help"},
 	} {
 		t.Run(strings.Join(args[1:], " "), func(t *testing.T) {
@@ -187,6 +230,30 @@ func TestDumpDynamicConfigValues(t *testing.T) {
 			"value": true
 		}]
 	}`, string(contents))
+}
+
+func TestDumpDynamicConfigValuesReturnsServerError(t *testing.T) {
+	t.Chdir(t.TempDir())
+	adminClient := &dynamicConfigAdminClient{
+		dumpError: status.Error(
+			codes.Internal,
+			`unable to encode dynamic config values: dynamic config key "invalid" constrained value at index 0: json: unsupported type: chan struct {}`,
+		),
+	}
+	app := NewCliApp(func(params *Params) {
+		params.ClientFactory = dynamicConfigClientFactory{adminClient: adminClient}
+	})
+	app.ExitErrHandler = func(*cli.Context, error) {}
+
+	err := app.Run([]string{"tdbg", "dc", "dump"})
+	require.EqualError(
+		t,
+		err,
+		`unable to dump dynamic config values: rpc error: code = Internal desc = unable to encode dynamic config values: dynamic config key "invalid" constrained value at index 0: json: unsupported type: chan struct {}`,
+	)
+	files, readErr := os.ReadDir(".")
+	require.NoError(t, readErr)
+	require.Empty(t, files)
 }
 
 func TestDynamicConfigDumpHelp(t *testing.T) {

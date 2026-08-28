@@ -52,6 +52,22 @@ func newDynamicConfigCommands(clientFactory ClientFactory) []*cli.Command {
 			},
 		},
 		{
+			Name:      "describe",
+			Usage:     "Describe one dynamic config setting",
+			UsageText: "tdbg dynamic-config describe [command options]\ntdbg dc describe [command options]",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:     FlagDynamicConfigKey,
+					Aliases:  []string{"k"},
+					Usage:    "Dynamic config key",
+					Required: true,
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return describeDynamicConfigSetting(c, clientFactory)
+			},
+		},
+		{
 			Name:      "dump",
 			Usage:     "Dump all configured dynamic config values",
 			UsageText: "tdbg dynamic-config dump [command options]\ntdbg dc dump [command options]",
@@ -60,6 +76,33 @@ func newDynamicConfigCommands(clientFactory ClientFactory) []*cli.Command {
 			},
 		},
 	}
+}
+
+func describeDynamicConfigSetting(c *cli.Context, clientFactory ClientFactory) error {
+	ctx, cancel := newContext(c)
+	defer cancel()
+	response, err := clientFactory.AdminClient(c).DescribeDynamicConfigSetting(
+		ctx,
+		&adminservice.DescribeDynamicConfigSettingRequest{Key: c.String(FlagDynamicConfigKey)},
+	)
+	if err != nil {
+		return fmt.Errorf("unable to describe dynamic config setting: %w", err)
+	}
+
+	output, err := json.MarshalIndent(struct {
+		Key                   string `json:"key"`
+		ValueType             string `json:"valueType"`
+		ConstraintDescription string `json:"constraintDescription"`
+	}{
+		Key:                   response.GetKey(),
+		ValueType:             response.GetValueType(),
+		ConstraintDescription: response.GetConstraintDescription(),
+	}, "", "  ")
+	if err != nil {
+		return fmt.Errorf("unable to format dynamic config setting description: %w", err)
+	}
+	_, err = fmt.Fprintln(c.App.Writer, string(output))
+	return err
 }
 
 func getDynamicConfigValue(c *cli.Context, clientFactory ClientFactory) error {

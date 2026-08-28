@@ -2,6 +2,7 @@ package main
 
 import (
 	_ "embed"
+	"strings"
 
 	"go.temporal.io/server/cmd/tools/codegen"
 )
@@ -24,6 +25,19 @@ type (
 		Precedences []settingPrecedence
 	}
 )
+
+func (p settingPrecedence) ConstraintDescription() string {
+	lines := strings.Split(p.Expr, "\n")
+	for i := range lines {
+		lines[i] = strings.TrimSpace(lines[i])
+	}
+	description := strings.Join(lines, " ")
+	description = strings.Replace(description, "[]Constraints{ ", "[]Constraints{", 1)
+	if before, ok := strings.CutSuffix(description, ", }"); ok {
+		description = before + "}"
+	}
+	return description
+}
 
 var (
 	//go:embed dynamic_config.tmpl

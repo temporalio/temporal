@@ -635,6 +635,16 @@ message GetDynamicConfigValueResponse {
   string constraint_description = 3;
 }
 
+message DescribeDynamicConfigSettingRequest {
+  string key = 1;
+}
+
+message DescribeDynamicConfigSettingResponse {
+  string key = 1;
+  string constraint_description = 2;
+  string value_type = 3;
+}
+
 message DumpDynamicConfigValuesRequest {}
 
 message DumpDynamicConfigValuesResponse {
