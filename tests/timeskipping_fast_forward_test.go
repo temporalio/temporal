@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -49,6 +50,17 @@ func (s *TimeSkippingFastForwardFunctionalSuite) getMutableState(env *testcore.T
 	return ms
 }
 
+// getMutableStateByWorkflowID resolves the current run of a workflow (the newest run of a
+// continue-as-new / retry / cron chain) and returns its persistence-layer mutable state.
+func (s *TimeSkippingFastForwardFunctionalSuite) getMutableStateByWorkflowID(ctx context.Context, env *testcore.TestEnv, workflowID string) *persistence.GetWorkflowExecutionResponse {
+	desc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+	})
+	s.NoError(err)
+	return s.getMutableState(env, workflowID, desc.WorkflowExecutionInfo.Execution.RunId)
+}
+
 func (s *TimeSkippingFastForwardFunctionalSuite) findTransitionedEvents(history []*historypb.HistoryEvent) []*historypb.HistoryEvent {
 	var out []*historypb.HistoryEvent
 	for _, e := range history {
@@ -76,7 +88,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_WithActivity() 
 	// B3 not fixed: fast-forward disable fires regardless of in-flight activity. Update this
 	// test when B3 lands so it asserts the disable is deferred to the next idle moment.
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := s.Context()
 
@@ -88,8 +100,8 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_WithActivity() 
 	)
 
 	cfg := &commonpb.TimeSkippingConfig{
-		Enabled:     true,
-		FastForward: durationpb.New(fastForward)}
+		Enabled:           true,
+		FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(fastForward), Id: "ff-id"}}
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, fastForwardStartReq(env, tv, 24*time.Hour, cfg))
 	s.NoError(err)
 	runID := startResp.RunId
@@ -210,7 +222,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_WithActivity() 
 // (a) skip-to-timer1 (DisabledAfterBound=false), (b) fast-forward-disable.
 func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PauseLifecycle() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	env.OverrideDynamicConfig(dynamicconfig.WorkflowPauseEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := s.Context()
@@ -222,8 +234,8 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PauseLifecycle(
 	)
 
 	cfg := &commonpb.TimeSkippingConfig{
-		Enabled:     true,
-		FastForward: durationpb.New(fastForward)}
+		Enabled:           true,
+		FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(fastForward), Id: "ff-id"}}
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, fastForwardStartReq(env, tv, 24*time.Hour, cfg))
 	s.NoError(err)
 	runID := startResp.RunId
@@ -336,9 +348,414 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PauseLifecycle(
 	s.True(ff.GetHasReached(), "HasReached must be true after fastForward timer fired")
 }
 
+// TestFastForward_PollWakesOnCompletion exercises the PollWorkflowExecutionTimeSkipping
+// long poll end-to-end through the notifier: the poll must NOT be answered by the
+// initial short-circuit read, it must park in the notifier wait, and it must be woken
+// when the fast-forward completes.
+//
+// Setup keeps the workflow non-idle (a pending activity) so close-tx time skipping
+// cannot fire and the fast-forward stays pending when the poll starts — forcing the
+// wait path. Completing the activity and its follow-up WFT drives the workflow idle,
+// so the idle close-tx skips to the fast-forward target and disables it. That persisted
+// mutation fires the notifier, which wakes the blocked poll with FAST_FORWARD_COMPLETED.
+func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PollWakesOnCompletion() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	ctx := s.Context()
+
+	// Large fast-forward: the wall-anchored wake-up timer will not fire during the test,
+	// so the only way the fast-forward completes is the idle close-tx skip we drive below.
+	const fastForward = 30 * time.Minute
+
+	cfg := &commonpb.TimeSkippingConfig{
+		Enabled:           true,
+		FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(fastForward), Id: "ff-id"}}
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, fastForwardStartReq(env, tv, 24*time.Hour, cfg))
+	s.NoError(err)
+	runID := startResp.RunId
+
+	// WT1: schedule an activity. The pending, dispatchable activity keeps the workflow
+	// non-idle, so no close-tx skip can fire and the fast-forward stays pending.
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{scheduleActivityCmd(tv)},
+		}, nil
+	})
+	s.NoError(err)
+
+	// Sanity: the fast-forward is pending (not reached) while the activity is in flight,
+	// so the poll's initial read cannot short-circuit.
+	ms := s.getMutableState(env, tv.WorkflowID(), runID)
+	ff := ms.State.ExecutionInfo.GetTimeSkippingInfo().GetFastForwardInfo()
+	s.NotNil(ff)
+	if ff != nil {
+		s.False(ff.GetHasReached())
+	}
+
+	type pollResult struct {
+		resp *workflowservice.PollWorkflowExecutionTimeSkippingResponse
+		err  error
+	}
+	resultCh := make(chan pollResult, 1)
+	go func() {
+		resp, pollErr := env.FrontendClient().PollWorkflowExecutionTimeSkipping(ctx, &workflowservice.PollWorkflowExecutionTimeSkippingRequest{
+			Namespace:         env.Namespace().String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+			FastForwardId:     "ff-id",
+		})
+		resultCh <- pollResult{resp, pollErr}
+	}()
+
+	// The poll must block in the notifier wait: the fast-forward is pending, so the initial
+	// read returns "keep waiting" rather than a terminal result. A prompt return here would
+	// mean it short-circuited, which is exactly what this test guards against.
+	select {
+	case r := <-resultCh:
+		s.Failf("poll returned before the fast-forward completed",
+			"result=%v err=%v", r.resp.GetFastForwardPollingResult(), r.err)
+	case <-time.After(2 * time.Second):
+	}
+
+	// Drive the workflow idle so the close-tx skip fires. Complete the activity, then
+	// complete the follow-up WFT with no commands: the idle close-tx skips to the
+	// fast-forward target and disables it (HasReached=true), waking the poll.
+	_, err = env.TaskPoller().PollAndHandleActivityTask(tv, taskpoller.CompleteActivityTask(tv))
+	s.NoError(err)
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	})
+	s.NoError(err)
+
+	// The notifier must wake the poll with FAST_FORWARD_COMPLETED.
+	select {
+	case r := <-resultCh:
+		s.NoError(r.err)
+		s.Equal(
+			enumspb.FAST_FORWARD_POLLING_RESULT_FAST_FORWARD_COMPLETED,
+			r.resp.GetFastForwardPollingResult())
+		s.NotNil(r.resp.GetFastForwardInfo())
+		s.True(r.resp.GetFastForwardInfo().GetHasCompleted())
+		s.Equal("ff-id", r.resp.GetFastForwardInfo().GetFastForwardId())
+	case <-time.After(30 * time.Second):
+		s.Fail("poll did not wake after the fast-forward completed")
+	}
+
+	// A subsequent poll for the same fast-forward returns the same result immediately:
+	// the fast-forward has completed, so the initial read short-circuits without ever
+	// entering the notifier wait.
+	resp2, err := env.FrontendClient().PollWorkflowExecutionTimeSkipping(ctx, &workflowservice.PollWorkflowExecutionTimeSkippingRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+		FastForwardId:     "ff-id",
+	})
+	s.NoError(err)
+	s.Equal(
+		enumspb.FAST_FORWARD_POLLING_RESULT_FAST_FORWARD_COMPLETED,
+		resp2.GetFastForwardPollingResult())
+	s.NotNil(resp2.GetFastForwardInfo())
+	s.True(resp2.GetFastForwardInfo().GetHasCompleted())
+	s.Equal("ff-id", resp2.GetFastForwardInfo().GetFastForwardId())
+
+	_, _ = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+		Reason:            "test cleanup",
+	})
+}
+
+// TestFastForward_PollWakesAcrossContinueAsNew proves the subscription really spans a chain of
+// runs. The notification key carries no RunID, so a poll that parks while run 1 is alive must be
+// woken by run 2's fast-forward completion after continue-as-new — even though the poll named
+// run 1 explicitly. This exercises two things together: the propagated fast-forward target keeps
+// the same id across the chain, and the publisher on run 2 lands on the key run 1's waiter holds.
+func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PollWakesAcrossContinueAsNew() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	ctx := s.Context()
+
+	// Large enough that the wall-anchored wake-up timer cannot fire during the test: the only way
+	// the fast-forward completes is the idle close-tx skip we drive on run 2.
+	const fastForward = 30 * time.Minute
+	const ffID = "ff-across-can"
+
+	cfg := &commonpb.TimeSkippingConfig{
+		Enabled:           true,
+		FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(fastForward), Id: ffID}}
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, fastForwardStartReq(env, tv, 24*time.Hour, cfg))
+	s.NoError(err)
+	run1ID := startResp.RunId
+
+	// WT1 schedules an activity, keeping run 1 non-idle so no close-tx skip can fire. The
+	// fast-forward is therefore still pending when the poll parks below.
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return cmdsResponse(scheduleActivityCmd(tv)), nil
+	})
+	s.NoError(err)
+
+	run1FF := s.getMutableState(env, tv.WorkflowID(), run1ID).State.ExecutionInfo.GetTimeSkippingInfo().GetFastForwardInfo()
+	s.NotNil(run1FF)
+	if run1FF != nil {
+		s.False(run1FF.GetHasReached(), "fast-forward must still be pending on run 1")
+	}
+
+	type pollResult struct {
+		resp *workflowservice.PollWorkflowExecutionTimeSkippingResponse
+		err  error
+	}
+	resultCh := make(chan pollResult, 1)
+	go func() {
+		resp, pollErr := env.FrontendClient().PollWorkflowExecutionTimeSkipping(ctx, &workflowservice.PollWorkflowExecutionTimeSkippingRequest{
+			Namespace:         env.Namespace().String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: run1ID},
+			FastForwardId:     ffID,
+		})
+		resultCh <- pollResult{resp, pollErr}
+	}()
+
+	// The poll must park in the notifier wait rather than short-circuit on its initial read.
+	select {
+	case r := <-resultCh:
+		s.Failf("poll returned before continue-as-new",
+			"result=%v err=%v", r.resp.GetFastForwardPollingResult(), r.err)
+	case <-time.After(2 * time.Second):
+	}
+
+	// Complete the activity, then continue-as-new on the follow-up WFT. Run 1 is closing, so it
+	// cannot skip; the still-pending fast-forward target propagates to run 2 instead.
+	_, err = env.TaskPoller().PollAndHandleActivityTask(tv, taskpoller.CompleteActivityTask(tv))
+	s.NoError(err)
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return cmdsResponse(continueAsNewCmd(tv.WorkflowType(), tv.TaskQueue())), nil
+	})
+	s.NoError(err)
+
+	// Run 2 must be a different run that inherited the pending fast-forward under the same id,
+	// otherwise the wake-up below would not prove anything about crossing the chain.
+	run2MS := s.getMutableStateByWorkflowID(ctx, env, tv.WorkflowID())
+	run2ID := run2MS.State.ExecutionState.RunId
+	s.NotEqual(run1ID, run2ID, "continue-as-new should have produced a new run")
+	run2TSI := run2MS.State.ExecutionInfo.GetTimeSkippingInfo()
+	s.NotNil(run2TSI)
+	if run2TSI != nil {
+		s.Equal(ffID, run2TSI.GetConfig().GetFastForwardConfig().GetId(),
+			"run 2 should inherit the same fast-forward id")
+		s.NotNil(run2TSI.GetFastForwardInfo())
+		if run2TSI.GetFastForwardInfo() != nil {
+			s.False(run2TSI.GetFastForwardInfo().GetHasReached(),
+				"run 2 should still have the fast-forward pending")
+		}
+	}
+
+	// An empty WFT drives run 2 idle, so its close-tx skip advances to the inherited target and
+	// completes the fast-forward. The publisher is run 2; the waiter subscribed naming run 1.
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(*workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	})
+	s.NoError(err)
+
+	select {
+	case r := <-resultCh:
+		s.NoError(r.err)
+		s.Equal(
+			enumspb.FAST_FORWARD_POLLING_RESULT_FAST_FORWARD_COMPLETED,
+			r.resp.GetFastForwardPollingResult())
+		s.NotNil(r.resp.GetFastForwardInfo())
+		if r.resp.GetFastForwardInfo() != nil {
+			s.True(r.resp.GetFastForwardInfo().GetHasCompleted())
+			s.Equal(ffID, r.resp.GetFastForwardInfo().GetFastForwardId())
+		}
+	case <-time.After(30 * time.Second):
+		s.Fail("poll did not wake when the fast-forward completed on the next run of the chain")
+	}
+
+	_, _ = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
+		Reason:            "test cleanup",
+	})
+}
+
+// TestFastForward_DescribeFollowsChain verifies DescribeWorkflowExecution keeps answering for the
+// current run after a continue-as-new, and reports the *virtual* clock inherited across the chain
+// rather than wall clock.
+func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_DescribeFollowsChain() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	ctx := s.Context()
+
+	const timer1 = time.Hour
+	const timer2 = 2 * time.Hour
+
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx,
+		fastForwardStartReq(env, tv, 24*time.Hour, &commonpb.TimeSkippingConfig{Enabled: true}))
+	s.NoError(err)
+	run1ID := startResp.RunId
+
+	// Run 1 skips timer1 then continues-as-new; run 2 skips timer2 then completes. The chain
+	// accumulates timer1+timer2 of virtual time.
+	state := 0
+	handler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		fired := firedTimers(task)
+		switch {
+		case state == 0:
+			state = 1
+			return cmdsResponse(timerCmd("t1", timer1)), nil
+		case state == 1 && fired["t1"]:
+			state = 2
+			return cmdsResponse(continueAsNewCmd(tv.WorkflowType(), tv.TaskQueue())), nil
+		case state == 2:
+			state = 3
+			return cmdsResponse(timerCmd("t2", timer2)), nil
+		case state == 3 && fired["t2"]:
+			state = 4
+			return cmdsResponse(completeCmd()), nil
+		}
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+	}
+	for range 20 {
+		if _, err := env.TaskPoller().PollAndHandleWorkflowTask(tv, handler); err != nil {
+			continue // long-poll emptiness between skips is expected
+		}
+		if state == 4 {
+			break
+		}
+	}
+	s.Equal(4, state, "the continue-as-new chain should have run to completion")
+
+	// Describe with no RunID must resolve to run 2, not the run the chain started on.
+	wallBeforeDescribe := time.Now()
+	desc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID()},
+	})
+	s.NoError(err)
+	s.NotEqual(run1ID, desc.GetWorkflowExecutionInfo().GetExecution().GetRunId(),
+		"describe should follow the chain to the current run")
+
+	tsInfo := desc.GetWorkflowExtendedInfo().GetTimeSkippingInfo()
+	s.NotNil(tsInfo, "describe must report time-skipping info for the current run of the chain")
+	if tsInfo == nil {
+		return
+	}
+	s.True(tsInfo.GetEffectiveConfig().GetEnabled(),
+		"the propagated config should still be enabled on the current run")
+
+	// CurrentTime is virtual, so it runs ahead of wall clock by everything the chain skipped.
+	// Comparing against the persisted accumulation keeps this independent of test duration.
+	accumulated := s.getMutableStateByWorkflowID(ctx, env, tv.WorkflowID()).
+		State.ExecutionInfo.GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration()
+	s.InDelta(float64(timer1+timer2), float64(accumulated), float64(time.Minute),
+		"the chain should have accumulated both timers of virtual time")
+	s.InDelta(float64(accumulated), float64(tsInfo.GetCurrentTime().AsTime().Sub(wallBeforeDescribe)),
+		float64(time.Minute), "describe's CurrentTime should be wall clock plus the accumulated skip")
+}
+
+// TestFastForward_PollWakesOnWorkflowEnd verifies that a PollWorkflowExecutionTimeSkipping long
+// poll parked on a still-pending fast-forward is woken — instantly and with the correct terminal
+// result — when the whole workflow execution ends before the fast-forward completes. Terminating
+// the run (state COMPLETED, status TERMINATED, no continuation) is the whole-execution-end signal;
+// canceling is analogous.
+func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_PollWakesOnWorkflowEnd() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	ctx := s.Context()
+
+	// Large fast-forward so it cannot complete on its own during the test; the only terminal
+	// event will be the termination we drive below.
+	const fastForward = 30 * time.Minute
+
+	cfg := &commonpb.TimeSkippingConfig{
+		Enabled:           true,
+		FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(fastForward), Id: "ff-id"}}
+	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, fastForwardStartReq(env, tv, 24*time.Hour, cfg))
+	s.NoError(err)
+	runID := startResp.RunId
+
+	// WT1: schedule an activity. The pending, dispatchable activity keeps the workflow non-idle,
+	// so no close-tx skip fires and the fast-forward stays pending while the poll is parked.
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{scheduleActivityCmd(tv)},
+		}, nil
+	})
+	s.NoError(err)
+
+	// Sanity: the fast-forward is pending, so the poll's initial read cannot short-circuit.
+	ms := s.getMutableState(env, tv.WorkflowID(), runID)
+	ff := ms.State.ExecutionInfo.GetTimeSkippingInfo().GetFastForwardInfo()
+	s.NotNil(ff)
+	if ff != nil {
+		s.False(ff.GetHasReached())
+	}
+
+	type pollResult struct {
+		resp *workflowservice.PollWorkflowExecutionTimeSkippingResponse
+		err  error
+	}
+	resultCh := make(chan pollResult, 1)
+	go func() {
+		resp, pollErr := env.FrontendClient().PollWorkflowExecutionTimeSkipping(ctx, &workflowservice.PollWorkflowExecutionTimeSkippingRequest{
+			Namespace:         env.Namespace().String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+			FastForwardId:     "ff-id",
+		})
+		resultCh <- pollResult{resp, pollErr}
+	}()
+
+	// The poll must park in the notifier wait: the fast-forward is pending, so a prompt return
+	// here would mean it short-circuited.
+	select {
+	case r := <-resultCh:
+		s.Failf("poll returned before the workflow ended", "result=%v err=%v", r.resp.GetFastForwardPollingResult(), r.err)
+	case <-time.After(2 * time.Second):
+	}
+
+	// End the whole execution while the poll is parked. Termination closes the run with no
+	// continuation, which fires the notifier with WorkflowExecutionCompleted=true.
+	_, err = env.FrontendClient().TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+		Reason:            "end while polling",
+	})
+	s.NoError(err)
+
+	// The notifier must wake the poll with a failure whose reason names the ended execution. The
+	// fast-forward info is still the pending (never-completed) one.
+	select {
+	case r := <-resultCh:
+		s.NoError(r.err)
+		s.Equal(
+			enumspb.FAST_FORWARD_POLLING_RESULT_FAST_FORWARD_FAILED,
+			r.resp.GetFastForwardPollingResult())
+		s.NotEmpty(r.resp.GetFailedReason(), "a failed poll must explain why")
+		s.NotNil(r.resp.GetFastForwardInfo())
+		s.False(r.resp.GetFastForwardInfo().GetHasCompleted())
+		s.Equal("ff-id", r.resp.GetFastForwardInfo().GetFastForwardId())
+	case <-time.After(30 * time.Second):
+		s.Fail("poll did not wake after the workflow ended")
+	}
+
+	// A subsequent poll returns the same terminal result immediately via the initial-read
+	// short-circuit (the run is closed with no continuation).
+	resp2, err := env.FrontendClient().PollWorkflowExecutionTimeSkipping(ctx, &workflowservice.PollWorkflowExecutionTimeSkippingRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+		FastForwardId:     "ff-id",
+	})
+	s.NoError(err)
+	s.Equal(
+		enumspb.FAST_FORWARD_POLLING_RESULT_FAST_FORWARD_FAILED,
+		resp2.GetFastForwardPollingResult())
+	s.NotEmpty(resp2.GetFailedReason())
+}
+
 func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_NoUserTimer() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := s.Context()
 
@@ -349,8 +766,8 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_NoUserTimer() {
 	)
 
 	cfg := &commonpb.TimeSkippingConfig{
-		Enabled:     true,
-		FastForward: durationpb.New(fastForward)}
+		Enabled:           true,
+		FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(fastForward), Id: "ff-id"}}
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, fastForwardStartReq(env, tv, 24*time.Hour, cfg))
 	s.NoError(err)
 	runID := startResp.RunId
@@ -392,7 +809,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_NoUserTimer() {
 
 func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_EqualsRunTimeout() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	ctx := s.Context()
 
 	const (
@@ -405,8 +822,8 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_EqualsRunTimeou
 	}, workflow.RegisterOptions{Name: "sleepEqualsTimeoutWorkflow"})
 
 	cfg := &commonpb.TimeSkippingConfig{
-		Enabled:     true,
-		FastForward: durationpb.New(fastForward),
+		Enabled:           true,
+		FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(fastForward), Id: "ff-id"},
 	}
 	workflowID := uuid.NewString()
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
@@ -445,7 +862,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestFastForward_EqualsRunTimeou
 
 func (s *TimeSkippingFastForwardFunctionalSuite) TestEventsOrderOfFastForwardTimerFiredDuringStartedWorkflowTask() {
 	env := testcore.NewEnv(s.T())
-	env.OverrideDynamicConfig(dynamicconfig.TimeSkippingEnabled, true)
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
 	tv := testvars.New(s.T())
 	ctx := s.Context()
 
@@ -454,7 +871,7 @@ func (s *TimeSkippingFastForwardFunctionalSuite) TestEventsOrderOfFastForwardTim
 		timer1Dur   = 45 * time.Second
 	)
 
-	cfg := &commonpb.TimeSkippingConfig{Enabled: true, FastForward: durationpb.New(fastForward)}
+	cfg := &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(fastForward), Id: "ff-id"}}
 	startResp, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           env.Namespace().String(),

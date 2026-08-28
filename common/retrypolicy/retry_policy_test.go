@@ -5,10 +5,213 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
+
+func TestIsRetryableFailure(t *testing.T) {
+	testCases := []struct {
+		name              string
+		failure           *failurepb.Failure
+		nonRetryableTypes []string
+		retryable         bool
+	}{
+		{
+			name:      "nil failure",
+			retryable: true,
+		},
+		{
+			name: "terminated failure",
+			failure: &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_TerminatedFailureInfo{TerminatedFailureInfo: &failurepb.TerminatedFailureInfo{}},
+			},
+		},
+		{
+			name: "canceled failure",
+			failure: &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_CanceledFailureInfo{CanceledFailureInfo: &failurepb.CanceledFailureInfo{}},
+			},
+		},
+		{
+			name: "unspecified timeout",
+			failure: &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+					TimeoutType: enumspb.TIMEOUT_TYPE_UNSPECIFIED,
+				}},
+			},
+		},
+		{
+			name: "start-to-close timeout",
+			failure: &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+					TimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+				}},
+			},
+			retryable: true,
+		},
+		{
+			name: "start-to-close timeout excluded",
+			failure: &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+					TimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+				}},
+			},
+			nonRetryableTypes: []string{TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String()},
+		},
+		{
+			name: "schedule-to-start timeout",
+			failure: &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+					TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+				}},
+			},
+		},
+		{
+			name: "schedule-to-start timeout excluded",
+			failure: &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+					TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+				}},
+			},
+			nonRetryableTypes: []string{TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START.String()},
+		},
+		{
+			name: "schedule-to-close timeout",
+			failure: &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+					TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+				}},
+			},
+		},
+		{
+			name: "schedule-to-close timeout excluded",
+			failure: &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+					TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+				}},
+			},
+			nonRetryableTypes: []string{TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE.String()},
+		},
+		{
+			name: "heartbeat timeout",
+			failure: &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+					TimeoutType: enumspb.TIMEOUT_TYPE_HEARTBEAT,
+				}},
+			},
+			retryable: true,
+		},
+		{
+			name: "heartbeat timeout excluded",
+			failure: &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+					TimeoutType: enumspb.TIMEOUT_TYPE_HEARTBEAT,
+				}},
+			},
+			nonRetryableTypes: []string{TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_HEARTBEAT.String()},
+		},
+		{
+			name: "heartbeat timeout with different timeout excluded",
+			failure: &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+					TimeoutType: enumspb.TIMEOUT_TYPE_HEARTBEAT,
+				}},
+			},
+			nonRetryableTypes: []string{TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String()},
+			retryable:         true,
+		},
+		{
+			name: "heartbeat timeout with unknown timeout excluded",
+			failure: &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+					TimeoutType: enumspb.TIMEOUT_TYPE_HEARTBEAT,
+				}},
+			},
+			nonRetryableTypes: []string{TimeoutFailureTypePrefix + "unknown timeout type string"},
+			retryable:         true,
+		},
+		{
+			name: "retryable server failure",
+			failure: &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_ServerFailureInfo{ServerFailureInfo: &failurepb.ServerFailureInfo{}},
+			},
+			retryable: true,
+		},
+		{
+			name: "non-retryable server failure",
+			failure: &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_ServerFailureInfo{ServerFailureInfo: &failurepb.ServerFailureInfo{NonRetryable: true}},
+			},
+		},
+		{
+			name: "application failure marked non-retryable",
+			failure: &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: true}},
+			},
+		},
+		{
+			name: "retryable application failure",
+			failure: &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "type"}},
+			},
+			retryable: true,
+		},
+		{
+			name: "application failure with different type excluded",
+			failure: &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "type"}},
+			},
+			nonRetryableTypes: []string{"otherType"},
+			retryable:         true,
+		},
+		{
+			name: "application failure type excluded",
+			failure: &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "type"}},
+			},
+			nonRetryableTypes: []string{"otherType", "type"},
+		},
+		{
+			name: "application failure type solely excluded",
+			failure: &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "type"}},
+			},
+			nonRetryableTypes: []string{"type"},
+		},
+		{
+			name: "child workflow failure",
+			failure: &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_ChildWorkflowExecutionFailureInfo{ChildWorkflowExecutionFailureInfo: &failurepb.ChildWorkflowExecutionFailureInfo{}},
+				Cause: &failurepb.Failure{
+					FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: true}},
+				},
+			},
+			retryable: true,
+		},
+		{
+			name: "child workflow failure containing activity failure",
+			failure: &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_ChildWorkflowExecutionFailureInfo{ChildWorkflowExecutionFailureInfo: &failurepb.ChildWorkflowExecutionFailureInfo{}},
+				Cause: &failurepb.Failure{
+					FailureInfo: &failurepb.Failure_ActivityFailureInfo{ActivityFailureInfo: &failurepb.ActivityFailureInfo{}},
+					Cause: &failurepb.Failure{
+						FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: true}},
+					},
+				},
+			},
+			retryable: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.retryable, IsRetryableFailure(tc.failure, tc.nonRetryableTypes))
+		})
+	}
+}
 
 func TestEnsureRetryPolicyDefaults(t *testing.T) {
 	defaultRetrySettings := DefaultRetrySettings{

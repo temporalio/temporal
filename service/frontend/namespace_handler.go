@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	otellog "go.opentelemetry.io/otel/log"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
@@ -39,6 +40,7 @@ type (
 	// such as registering, updating, and querying namespaces.
 	namespaceHandler struct {
 		logger                 log.Logger
+		eventLogger            otellog.Logger
 		metadataMgr            persistence.MetadataManager
 		namespaceRegistry      namespace.Registry
 		clusterMetadata        cluster.Metadata
@@ -68,6 +70,7 @@ var (
 // newNamespaceHandler create a new namespace handler
 func newNamespaceHandler(
 	logger log.Logger,
+	eventLogger otellog.Logger,
 	metadataMgr persistence.MetadataManager,
 	namespaceRegistry namespace.Registry,
 	clusterMetadata cluster.Metadata,
@@ -79,6 +82,7 @@ func newNamespaceHandler(
 ) *namespaceHandler {
 	return &namespaceHandler{
 		logger:                 logger,
+		eventLogger:            eventLogger,
 		metadataMgr:            metadataMgr,
 		namespaceRegistry:      namespaceRegistry,
 		clusterMetadata:        clusterMetadata,
@@ -248,6 +252,8 @@ func (d *namespaceHandler) RegisterNamespace(
 		return nil, err
 	}
 
+	d.emitNamespaceRegistered(buildNamespaceRegisteredInput(namespaceRequest, namespaceResponse.ID, registerRequest))
+
 	err = d.namespaceReplicator.HandleTransmissionTask(
 		ctx,
 		enumsspb.NAMESPACE_OPERATION_CREATE,
@@ -405,6 +411,10 @@ func (d *namespaceHandler) UpdateNamespace(
 	failoverNotificationVersion := getResponse.Namespace.FailoverNotificationVersion
 	isGlobalNamespace := getResponse.IsGlobalNamespace || updateRequest.PromoteNamespace
 	needsNamespacePromotion := !getResponse.IsGlobalNamespace && updateRequest.PromoteNamespace
+
+	// Snapshot pre-mutation namespace fields for the namespace_updated wide event emitted on success
+	// below; the after-snapshot is taken from the persisted record once the mutations complete.
+	eventBefore := namespaceStateFields(getResponse.Namespace, getResponse.IsGlobalNamespace)
 
 	currentHistoryArchivalState := &namespace.ArchivalConfigState{
 		State: config.HistoryArchivalState,
@@ -620,6 +630,15 @@ func (d *namespaceHandler) UpdateNamespace(
 		if err != nil {
 			return nil, err
 		}
+
+		d.emitNamespaceUpdated(buildNamespaceUpdatedInput(
+			eventBefore,
+			updateReq.Namespace,
+			isGlobalNamespace,
+			activeClusterChanged && isGlobalNamespace,
+			needsNamespacePromotion,
+			updateRequest,
+		))
 	}
 
 	err = d.namespaceReplicator.HandleTransmissionTask(
@@ -679,6 +698,8 @@ func (d *namespaceHandler) DeprecateNamespace(
 		return nil, err
 	}
 
+	eventBefore := namespaceStateFields(getResponse.Namespace, getResponse.IsGlobalNamespace)
+
 	getResponse.Namespace.ConfigVersion = getResponse.Namespace.ConfigVersion + 1
 	getResponse.Namespace.Info.State = enumspb.NAMESPACE_STATE_DEPRECATED
 	updateReq := &persistence.UpdateNamespaceRequest{
@@ -697,6 +718,15 @@ func (d *namespaceHandler) DeprecateNamespace(
 	if err != nil {
 		return nil, err
 	}
+
+	d.emitNamespaceUpdated(buildNamespaceUpdatedInput(
+		eventBefore,
+		updateReq.Namespace,
+		getResponse.IsGlobalNamespace,
+		false,
+		false,
+		nil,
+	))
 	return nil, nil
 }
 
@@ -706,6 +736,8 @@ func (d *namespaceHandler) CreateWorkflowRule(
 	createdByIdentity string,
 	description string,
 	nsName string,
+	forceScan bool,
+	requestID string,
 ) (*rulespb.WorkflowRule, error) {
 
 	if ruleSpec.GetId() == "" {
@@ -723,6 +755,10 @@ func (d *namespaceHandler) CreateWorkflowRule(
 
 	existingNamespace := getNamespaceResponse.Namespace
 	config := getNamespaceResponse.Namespace.Config
+
+	// Snapshot pre-mutation fields for the namespace_updated event emitted on success below; a
+	// workflow-rule create is a config mutation, mirroring how DeprecateNamespace reuses this event.
+	eventBefore := namespaceStateFields(existingNamespace, getNamespaceResponse.IsGlobalNamespace)
 
 	if config.WorkflowRules == nil {
 		config.WorkflowRules = make(map[string]*rulespb.WorkflowRule)
@@ -765,6 +801,13 @@ func (d *namespaceHandler) CreateWorkflowRule(
 	if err != nil {
 		return nil, err
 	}
+
+	updatedInput := buildNamespaceUpdatedInput(eventBefore, updateReq.Namespace, getNamespaceResponse.IsGlobalNamespace, false, false, nil)
+	updatedInput.WorkflowRuleCreated = ruleSpec.GetId()
+	updatedInput.WorkflowRuleCreatedDetail = workflowRule.String()
+	updatedInput.WorkflowRuleForceScan = forceScan
+	updatedInput.WorkflowRuleRequestID = requestID
+	d.emitNamespaceUpdated(updatedInput)
 
 	return workflowRule, nil
 }
@@ -838,10 +881,14 @@ func (d *namespaceHandler) DeleteWorkflowRule(
 	if config.WorkflowRules == nil {
 		return serviceerror.NewInvalidArgument("Workflow Rule with this ID not Found.")
 	}
-	_, ok := config.WorkflowRules[ruleID]
+	deletedRule, ok := config.WorkflowRules[ruleID]
 	if !ok {
 		return serviceerror.NewInvalidArgument("Workflow Rule with this ID not Found.")
 	}
+
+	// Snapshot pre-mutation fields for the namespace_updated event emitted on success below; a
+	// workflow-rule delete is a config mutation, mirroring how DeprecateNamespace reuses this event.
+	eventBefore := namespaceStateFields(existingNamespace, getNamespaceResponse.IsGlobalNamespace)
 
 	delete(config.WorkflowRules, ruleID)
 
@@ -857,7 +904,15 @@ func (d *namespaceHandler) DeleteWorkflowRule(
 		IsGlobalNamespace:   getNamespaceResponse.IsGlobalNamespace,
 		NotificationVersion: metadata.NotificationVersion,
 	}
-	return d.metadataMgr.UpdateNamespace(ctx, updateReq)
+	if err := d.metadataMgr.UpdateNamespace(ctx, updateReq); err != nil {
+		return err
+	}
+
+	updatedInput := buildNamespaceUpdatedInput(eventBefore, updateReq.Namespace, getNamespaceResponse.IsGlobalNamespace, false, false, nil)
+	updatedInput.WorkflowRuleDeleted = ruleID
+	updatedInput.WorkflowRuleDeletedDetail = deletedRule.String()
+	d.emitNamespaceUpdated(updatedInput)
+	return nil
 }
 
 func (d *namespaceHandler) ListWorkflowRules(
@@ -916,8 +971,9 @@ func (d *namespaceHandler) createResponse(
 			WorkflowTaskCompletionPagination:   d.config.EnableWorkflowTaskCompletionPagination(info.Name),
 		},
 		Limits: &namespacepb.NamespaceInfo_Limits{
-			BlobSizeLimitError: int64(d.config.BlobSizeLimitError(info.Name)),
-			MemoSizeLimitError: int64(d.config.MemoSizeLimitError(info.Name)),
+			BlobSizeLimitError:                   int64(d.config.BlobSizeLimitError(info.Name)),
+			MemoSizeLimitError:                   int64(d.config.MemoSizeLimitError(info.Name)),
+			WorkflowTaskCompletionSizeLimitError: int64(d.config.WorkflowTaskCompletionBufferSizeLimit(info.Name)),
 		},
 		SupportsSchedules: d.config.EnableSchedules(info.Name),
 	}

@@ -24,12 +24,13 @@ import (
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type saaDriver struct {
 	env              *testcore.TestEnv
-	ctx              context.Context
+	t                *testing.T
 	cfg              activityConfig
 	numStarted       int
 	activityIDPrefix string
@@ -39,10 +40,16 @@ type saaDriver struct {
 func newSAADriver(t *testing.T, env *testcore.TestEnv, cfg activityConfig) *saaDriver {
 	return &saaDriver{
 		env:              env,
-		ctx:              testcontext.For(t),
+		t:                t,
 		cfg:              cfg,
 		activityIDPrefix: t.Name(),
 	}
+}
+
+// testContext returns the driver's current test context, deliberately not cached;
+// see [testcontext.EnsureRemaining].
+func (d *saaDriver) testContext() context.Context {
+	return testcontext.For(d.t)
 }
 
 // saaHandle is a handle to an activity instance.
@@ -69,6 +76,10 @@ func (a *saaHandle) driveEvent(t testing.TB, e model.Event) {
 	driveActivityEvent(t, a, e)
 }
 
+func (a *saaHandle) testContext() context.Context {
+	return a.d.testContext()
+}
+
 func (a *saaHandle) awaitTimeout(t testing.TB, e model.Event, deadline time.Time) {
 	awaitActivityTimeout(t, a, e, deadline)
 }
@@ -93,7 +104,7 @@ func (a *saaHandle) timeoutInfo(t require.TestingT) activityTimeoutInfo {
 // awaitDispatchDelay waits for the public dispatch deadline to become due. A following Poll is what
 // proves that the task actually reached Matching.
 func (a *saaHandle) awaitDispatchDelay(t testing.TB, e model.Event) {
-	awaitActivityDispatchDelay(a.d.ctx, t, e, func(t require.TestingT) (bool, enumspb.PendingActivityState, *timestamppb.Timestamp, any) {
+	awaitActivityDispatchDelay(a.testContext(), t, e, func(t require.TestingT) (bool, enumspb.PendingActivityState, *timestamppb.Timestamp, any) {
 		info := a.describe(t).GetInfo()
 		return info.GetStatus() == enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
 			info.GetRunState(),
@@ -105,10 +116,10 @@ func (a *saaHandle) awaitDispatchDelay(t testing.TB, e model.Event) {
 func (d *saaDriver) start(t require.TestingT, cfg activityConfig) *saaHandle {
 	d.numStarted++
 	id := fmt.Sprintf("%s-%d", d.activityIDPrefix, d.numStarted)
-	resp, err := d.env.FrontendClient().StartActivityExecution(d.ctx, d.startRequest(cfg, id, id))
+	resp, err := d.env.FrontendClient().StartActivityExecution(d.testContext(), d.startRequest(cfg, id, id))
 	require.NoError(t, err)
 	return &saaHandle{
-		activityDriverState: activityDriverState{ctx: d.ctx, cfg: cfg},
+		activityDriverState: activityDriverState{cfg: cfg},
 		d:                   d,
 		activityID:          id,
 		runID:               resp.RunId,
@@ -149,7 +160,7 @@ func (d *saaDriver) startRequest(c activityConfig, activityID, taskQueue string)
 // describe returns the DescribeActivityExecution response, including the outcome, the last failure,
 // and the heartbeat details.
 func (a *saaHandle) describe(t require.TestingT) *workflowservice.DescribeActivityExecutionResponse {
-	resp, err := a.d.env.FrontendClient().DescribeActivityExecution(a.d.ctx, &workflowservice.DescribeActivityExecutionRequest{
+	resp, err := a.d.env.FrontendClient().DescribeActivityExecution(a.testContext(), &workflowservice.DescribeActivityExecutionRequest{
 		Namespace:               a.d.env.Namespace().String(),
 		ActivityId:              a.activityID,
 		RunId:                   a.runID,
@@ -167,13 +178,13 @@ func (a *saaHandle) activityInfo(t require.TestingT) activityInfo {
 	return saaActivityInfo(a.describe(t).GetInfo())
 }
 
-// terminalStatus waits for the activity to reach a terminal state and reports it.
+// terminalOutcome waits for the activity to reach a terminal state and reports it.
 // PollActivityExecution resolves once the activity is no longer running. An empty response means the
 // server's long-poll window expired, so resubmit.
-func (a *saaHandle) terminalStatus(t require.TestingT) enumspb.ActivityExecutionStatus {
+func (a *saaHandle) terminalOutcome(t require.TestingT) activityTerminalOutcome {
 	deadline := time.Now().Add(activityDriverTimeout)
 	for time.Now().Before(deadline) {
-		ctx, cancel := context.WithDeadline(a.d.ctx, deadline)
+		ctx, cancel := context.WithDeadline(a.testContext(), deadline)
 		resp, err := a.d.env.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
 			Namespace:  a.d.env.Namespace().String(),
 			ActivityId: a.activityID,
@@ -187,12 +198,21 @@ func (a *saaHandle) terminalStatus(t require.TestingT) enumspb.ActivityExecution
 			break // the deadline cancelled the long poll
 		}
 		if resp.GetRunId() != "" {
-			return a.describe(t).GetInfo().GetStatus()
+			describeResponse := a.describe(t)
+			return activityTerminalOutcome{
+				status:     describeResponse.GetInfo().GetStatus(),
+				retryState: describeResponse.GetOutcome().GetRetryState(),
+			}
 		}
 	}
-	t.Errorf("the activity did not reach a terminal status within %s of the trace finishing. Last observed: %+v",
-		activityDriverTimeout, a.activityInfo(t))
-	return enumspb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED
+	require.FailNow(
+		t,
+		"activity did not reach a terminal status",
+		"within %s of the trace finishing; last observed: %+v",
+		activityDriverTimeout,
+		a.activityInfo(t),
+	)
+	return activityTerminalOutcome{}
 }
 
 func saaActivityInfo(i *activitypb.ActivityExecutionInfo) activityInfo {
@@ -201,38 +221,102 @@ func saaActivityInfo(i *activitypb.ActivityExecutionInfo) activityInfo {
 		Attempt:                    i.GetAttempt(),
 		CurrentRetryInterval:       i.GetCurrentRetryInterval().AsDuration().Round(time.Second),
 		NextAttemptScheduleTimeSet: i.GetNextAttemptScheduleTime() != nil,
+		LastHeartbeatDetails:       activityMarshalPayloads(i.GetHeartbeatDetails()),
 	}
+}
+
+func (a *saaHandle) respondCanceledByID() error {
+	_, err := a.d.env.FrontendClient().RespondActivityTaskCanceledById(
+		a.testContext(),
+		&workflowservice.RespondActivityTaskCanceledByIdRequest{
+			Namespace:  a.d.env.Namespace().String(),
+			ActivityId: a.activityID,
+			RunId:      a.runID,
+			Identity:   a.d.env.Tv().WorkerIdentity(),
+		},
+	)
+	return err
 }
 
 // rpc performs the frontend RPC for a non-Poll, non-timer event and returns its error.
 func (a *saaHandle) rpc(_ testing.TB, e model.Event) error {
 	fc := a.d.env.FrontendClient()
 	ns := a.d.env.Namespace().String()
+	ctx := a.testContext()
 	switch e.Type {
-	case model.RespondFailedType:
-		_, err := fc.RespondActivityTaskFailed(a.d.ctx, &workflowservice.RespondActivityTaskFailedRequest{
-			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(), Failure: activityFailure(e.Retryable, a.cfg.NextRetryDelay),
+	case model.HeartbeatType:
+		_, err := fc.RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+			Namespace: ns, TaskToken: a.token, Details: activityRecordedHeartbeatDetails,
 		})
 		return err
+	case model.RespondCompletedType:
+		_, err := fc.RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(),
+			Result: payloads.EncodeString("result"),
+		})
+		return err
+	case model.RespondCompletedByIDType:
+		_, err := fc.RespondActivityTaskCompletedById(ctx, &workflowservice.RespondActivityTaskCompletedByIdRequest{
+			Namespace: ns, RunId: a.runID, ActivityId: a.activityID, Identity: a.d.env.Tv().WorkerIdentity(),
+			Result: payloads.EncodeString("result"),
+		})
+		return err
+	case model.RespondFailedType:
+		req := &workflowservice.RespondActivityTaskFailedRequest{
+			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(), Failure: respondFailedFailure(e, a.cfg.NextRetryDelay),
+		}
+		if e.HasHeartbeatDetails {
+			req.LastHeartbeatDetails = activityHeartbeatDetails
+		}
+		_, err := fc.RespondActivityTaskFailed(ctx, req)
+		return err
+	case model.RespondFailedByIDType:
+		req := &workflowservice.RespondActivityTaskFailedByIdRequest{
+			Namespace: ns, RunId: a.runID, ActivityId: a.activityID, Identity: a.d.env.Tv().WorkerIdentity(),
+			Failure: respondFailedFailure(e, a.cfg.NextRetryDelay),
+		}
+		if e.HasHeartbeatDetails {
+			req.LastHeartbeatDetails = activityHeartbeatDetails
+		}
+		_, err := fc.RespondActivityTaskFailedById(ctx, req)
+		return err
 	case model.RespondCanceledType:
-		_, err := fc.RespondActivityTaskCanceled(a.d.ctx, &workflowservice.RespondActivityTaskCanceledRequest{
+		_, err := fc.RespondActivityTaskCanceled(ctx, &workflowservice.RespondActivityTaskCanceledRequest{
 			Namespace: ns, TaskToken: a.token, Identity: a.d.env.Tv().WorkerIdentity(),
 		})
 		return err
 	case model.RequestCancelType:
-		_, err := fc.RequestCancelActivityExecution(a.d.ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+		_, err := fc.RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
+			Namespace: ns, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(),
+			Reason: "drive", RequestId: uuid.NewString(),
+		})
+		return err
+	case model.TerminateType:
+		_, err := fc.TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
 			Namespace: ns, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(),
 			Reason: "drive", RequestId: uuid.NewString(),
 		})
 		return err
 	case model.PauseType:
-		_, err := fc.PauseActivityExecution(a.d.ctx, &workflowservice.PauseActivityExecutionRequest{
+		_, err := fc.PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
 			Namespace: ns, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(), Reason: "drive", RequestId: uuid.NewString(),
 		})
 		return err
+	case model.UnpauseType:
+		_, err := fc.UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace: ns, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(),
+		})
+		return err
 	case model.ResetType:
-		_, err := fc.ResetActivityExecution(a.d.ctx, &workflowservice.ResetActivityExecutionRequest{
-			Namespace: ns, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(), KeepPaused: e.KeepPaused,
+		_, err := fc.ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
+			Namespace: ns, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(), KeepPaused: e.KeepPaused, ResetHeartbeat: e.ResetHeartbeat,
+		})
+		return err
+	case model.UpdateOptionsType:
+		_, err := fc.UpdateActivityExecutionOptions(ctx, &workflowservice.UpdateActivityExecutionOptionsRequest{
+			Namespace: ns, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(),
+			ActivityOptions: &activitypb.ActivityOptions{HeartbeatTimeout: durationpb.New(time.Hour)},
+			UpdateMask:      &fieldmaskpb.FieldMask{Paths: []string{"heartbeat_timeout"}},
 		})
 		return err
 	default:
@@ -241,7 +325,8 @@ func (a *saaHandle) rpc(_ testing.TB, e model.Event) error {
 }
 
 func (a *saaHandle) pollForTask(t require.TestingT, timeout time.Duration) *workflowservice.PollActivityTaskQueueResponse {
-	ctx, cancel := context.WithTimeout(a.d.ctx, timeout)
+	driverCtx := a.testContext()
+	ctx, cancel := context.WithTimeout(driverCtx, timeout)
 	defer cancel()
 	resp, err := a.d.env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
 		Namespace: a.d.env.Namespace().String(),
@@ -251,10 +336,10 @@ func (a *saaHandle) pollForTask(t require.TestingT, timeout time.Duration) *work
 	// Matching signals "waited, found nothing" with an empty response and a nil error, so any error
 	// means the poll did not complete cleanly.
 	if err != nil {
-		if a.d.ctx.Err() != nil {
+		if driverCtx.Err() != nil {
 			return nil // teardown
 		}
-		if deadline, ok := a.d.ctx.Deadline(); ok && time.Until(deadline) < common.MinLongPollTimeout {
+		if deadline, ok := driverCtx.Deadline(); ok && time.Until(deadline) < common.MinLongPollTimeout {
 			t.Errorf("saaDriver: test context budget exhausted before the poll could run (%.1fs left, need >= %s). "+
 				"Raise TEMPORAL_TEST_TIMEOUT and `go test -timeout`.\n  %v",
 				time.Until(deadline).Seconds(), common.MinLongPollTimeout, err)

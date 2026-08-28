@@ -47,7 +47,7 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 		traceLogger := log.With(e.Logger,
 			tag.WorkflowNamespace(ns.Name().String()),
 			tag.Operation("CompleteNexusOperation"),
-			tag.String("destination", task.destination),
+			tag.Destination(task.destination),
 			tag.WorkflowID(n.workflowID),
 			tag.WorkflowRunID(n.runID),
 			tag.AttemptStart(time.Now().UTC()),
@@ -93,8 +93,7 @@ func outcomeTag(callCtx context.Context, callErr error) string {
 		if callCtx.Err() != nil {
 			return "request-timeout"
 		}
-		var handlerErr *nexus.HandlerError
-		if errors.As(callErr, &handlerErr) {
+		if handlerErr, ok := errors.AsType[*nexus.HandlerError](callErr); ok {
 			return "handler-error:" + string(handlerErr.Type)
 		}
 		return "unknown-error"
@@ -103,8 +102,7 @@ func outcomeTag(callCtx context.Context, callErr error) string {
 }
 
 func isRetryableCallError(err error) bool {
-	var handlerError *nexus.HandlerError
-	if errors.As(err, &handlerError) {
+	if handlerError, ok := errors.AsType[*nexus.HandlerError](err); ok {
 		return handlerError.Retryable()
 	}
 	return true

@@ -66,6 +66,16 @@ func RequestID(requestID string) ZapTag {
 	return NewStringTag("request-id", requestID)
 }
 
+// NextPageToken returns tag for NextPageToken
+func NextPageToken(nextPageToken []byte) ZapTag {
+	return NewBinaryTag("next-page-token", nextPageToken)
+}
+
+// PageSize returns tag for PageSize
+func PageSize(pageSize int) ZapTag {
+	return NewInt("page-size", pageSize)
+}
+
 // ==========  Workflow tags defined here: ( wf is short for workflow) ==========
 
 // WorkflowAction returns tag for WorkflowAction
@@ -257,6 +267,11 @@ func WorkflowResetNextEventID(resetNextEventID int64) ZapTag {
 // WorkflowBranchToken returns tag for WorkflowBranchToken
 func WorkflowBranchToken(branchToken []byte) ZapTag {
 	return NewBinaryTag("wf-branch-token", branchToken)
+}
+
+// WorkflowRequestBranchToken returns tag for a branch token supplied by the caller
+func WorkflowRequestBranchToken(branchToken []byte) ZapTag {
+	return NewBinaryTag("wf-request-branch-token", branchToken)
 }
 
 // WorkflowTreeID returns tag for WorkflowTreeID
@@ -989,6 +1004,11 @@ func Endpoint(endpoint string) ZapTag {
 	return NewStringTag("endpoint", endpoint)
 }
 
+// Destination returns a tag for an outbound task's destination.
+func Destination(destination string) ZapTag {
+	return NewStringTag("destination", destination)
+}
+
 func BuildId(buildId string) ZapTag {
 	return NewStringTag("build-id", buildId)
 }
@@ -1013,6 +1033,10 @@ func NexusOperation(operation string) ZapTag {
 	return NewStringTag("nexus-operation", operation)
 }
 
+func NexusService(service string) ZapTag {
+	return NewStringTag("nexus-service", service)
+}
+
 // NexusTaskQueueName returns tag for NexusTaskQueueName
 func NexusTaskQueueName(taskQueueName string) ZapTag {
 	return NewStringTag("nexus-task-queue-name", taskQueueName)
@@ -1021,6 +1045,11 @@ func NexusTaskQueueName(taskQueueName string) ZapTag {
 // NexusEndpointTargetNamespaceID returns a tag for the namespace ID targeted by a Nexus endpoint's worker target.
 func NexusEndpointTargetNamespaceID(namespaceID string) ZapTag {
 	return NewStringTag("nexus-endpoint-target-namespace-id", namespaceID)
+}
+
+// NexusEndpointID returns a tag for a Nexus endpoint's ID, all that is known if its lookup failed.
+func NexusEndpointID(endpointID string) ZapTag {
+	return NewStringTag("nexus-endpoint-id", endpointID)
 }
 
 // WorkflowRuleID returns tag for WorkflowRuleID

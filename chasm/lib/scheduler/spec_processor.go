@@ -241,10 +241,10 @@ func (s *SpecProcessorImpl) checkNextScheduleResult(
 
 func catchupWindow(s *Scheduler, tweakables Tweakables) time.Duration {
 	cw := s.Schedule.GetPolicies().GetCatchupWindow()
-	if cw == nil {
+	// Only a positive value below the minimum is clamped up
+	if cw == nil || cw.AsDuration() <= 0 {
 		return tweakables.DefaultCatchupWindow
 	}
-
 	return max(cw.AsDuration(), tweakables.MinCatchupWindow)
 }
 

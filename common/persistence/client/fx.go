@@ -227,8 +227,7 @@ func managerProvider[T persistence.Closeable](newManagerFn func(Factory) (T, err
 	return func(f Factory, lc fx.Lifecycle) (T, error) {
 		manager, err := newManagerFn(f) // passing receiver (Factory) as first argument.
 		if err != nil {
-			var unimpl *serviceerror.Unimplemented
-			if errors.As(err, &unimpl) {
+			if _, ok := errors.AsType[*serviceerror.Unimplemented](err); ok {
 				// allow factories to return Unimplemented, and turn into nil so that fx init doesn't fail.
 				err = nil
 			}

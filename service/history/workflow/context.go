@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"errors"
+	"slices"
 	"strconv"
 
 	"go.opentelemetry.io/otel/trace"
@@ -539,7 +540,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 	if err != nil {
 		return err
 	}
-	NotifyOnExecutionSnapshot(engine, newWorkflow)
+	NotifyOnExecutionSnapshot(engine, c.archetypeID, newWorkflow)
 	emitStateTransitionCount(c.metricsHandler, shardContext.GetClusterMetadata(), newMutableState)
 
 	return nil
@@ -847,13 +848,6 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		}
 	}
 
-	if updateWorkflow == nil {
-		if newWorkflow != nil || len(newWorkflowEventsSeq) != 0 {
-			return serviceerror.NewInternal("current workflow mutation skipped with new workflow snapshot")
-		}
-		return nil
-	}
-
 	if err := c.mergeUpdateWithNewReplicationTasks(
 		updateWorkflow,
 		newWorkflow,
@@ -1041,9 +1035,9 @@ func (c *ContextImpl) mergeUpdateWithNewReplicationTasks(
 			t.NewRunID = newRunID
 			taskEquivalents := t.TaskEquivalents
 			taskEquivalentsUpdated := false
-			for idx := len(taskEquivalents) - 1; idx >= 0; idx-- {
+			for _, taskEquivalent := range slices.Backward(taskEquivalents) {
 				// For state based, we should update a sync versioned transition task and update a history task inside task equivalent.
-				if historyTask, ok := taskEquivalents[idx].(*tasks.HistoryReplicationTask); ok {
+				if historyTask, ok := taskEquivalent.(*tasks.HistoryReplicationTask); ok {
 					historyTask.NewRunBranchToken = newRunBranchToken
 					historyTask.NewRunID = newRunID
 					taskEquivalentsUpdated = true

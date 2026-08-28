@@ -69,7 +69,6 @@ import (
 // conflict resolve path + suppress current
 // 1. update from zombie to current & suppress current							-> nDCTransactionPolicySuppressCurrentAndUpdateAsCurrent
 // 2. update from zombie to current & new created as current & suppress current	-> nDCTransactionPolicySuppressCurrentAndUpdateAsCurrent
-
 type nDCTransactionPolicy int
 
 const (

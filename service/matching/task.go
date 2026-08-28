@@ -67,6 +67,9 @@ type (
 		// redirectedFromBacklog is true if this task was redirectedFromBacklog from the backlog it was read from
 		// (V2 and V3 versioning).
 		redirectedFromBacklog bool
+		// queued is true while this task is in matcherData.tasks. It's a matcher field (see below)
+		// but lives here so it packs into the padding next to redirectedFromBacklog.
+		queued bool
 		// pollerScalingDecision is assigned when the queue has advice to give to the poller about whether
 		// it should adjust its poller count
 		pollerScalingDecision *taskqueuepb.PollerScalingDecision
