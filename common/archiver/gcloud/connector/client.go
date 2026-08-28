@@ -30,7 +30,7 @@ type (
 	// Client is a wrapper around Google cloud storages client library.
 	Client interface {
 		Upload(ctx context.Context, URI archiver.URI, fileName string, file []byte) error
-		UploadIfHashChanged(ctx context.Context, URI archiver.URI, fileName string, file []byte, recordHash string) error
+		UploadIfHashChanged(ctx context.Context, URI archiver.URI, fileName string, file []byte, recordHash string) (bool, error)
 		Get(ctx context.Context, URI archiver.URI, file string) ([]byte, error)
 		Query(ctx context.Context, URI archiver.URI, fileNamePrefix string) ([]string, error)
 		QueryWithFilters(ctx context.Context, URI archiver.URI, fileNamePrefix string, pageSize, offset int, filters []Precondition) ([]string, bool, int, error)
@@ -77,20 +77,22 @@ func (s *storageWrapper) Upload(ctx context.Context, URI archiver.URI, fileName 
 }
 
 // UploadIfHashChanged is best-effort because the metadata check and upload are not atomic.
-func (s *storageWrapper) UploadIfHashChanged(ctx context.Context, URI archiver.URI, fileName string, file []byte, recordHash string) error {
+// It returns whether an upload was performed.
+func (s *storageWrapper) UploadIfHashChanged(ctx context.Context, URI archiver.URI, fileName string, file []byte, recordHash string) (bool, error) {
 	bucket := s.client.Bucket(URI.Hostname())
 	object := bucket.Object(formatSinkPath(URI.Path()) + "/" + fileName)
 	attrs, err := object.Attrs(ctx)
 	if err == nil && attrs.Metadata[archiver.VisibilityArchivalRecordHashMetadataKey] == recordHash {
-		return nil
+		return false, nil
 	}
 	if err != nil && !errors.Is(err, storage.ErrObjectNotExist) {
-		return err
+		return false, err
 	}
 
-	return upload(ctx, object, file, map[string]string{
+	err = upload(ctx, object, file, map[string]string{
 		archiver.VisibilityArchivalRecordHashMetadataKey: recordHash,
 	})
+	return err == nil, err
 }
 
 func upload(ctx context.Context, object ObjectHandleWrapper, file []byte, metadata map[string]string) (err error) {

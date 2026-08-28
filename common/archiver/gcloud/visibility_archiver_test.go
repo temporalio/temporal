@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/archiver/gcloud/connector"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -181,7 +182,10 @@ func (s *visibilityArchiverSuite) TestVisibilityArchive_ContentAwareDeduplicatio
 	s.Require().NoError(err)
 	storageWrapper := connector.NewMockClient(s.controller)
 	storageWrapper.EXPECT().Exist(gomock.Any(), URI, gomock.Any()).Return(false, nil)
-	visibilityArchiver := newVisibilityArchiver(s.logger, s.metricsHandler, storageWrapper)
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	visibilityArchiver := newVisibilityArchiver(s.logger, metricsHandler, storageWrapper)
 
 	request := &archiverspb.VisibilityRecord{
 		Namespace:        testNamespace,
@@ -196,11 +200,13 @@ func (s *visibilityArchiverSuite) TestVisibilityArchive_ContentAwareDeduplicatio
 	}
 	encodedRecord, err := encode(request)
 	s.Require().NoError(err)
-	expectedHash := archiver.VisibilityArchivalRecordHash(encodedRecord)
-	storageWrapper.EXPECT().UploadIfHashChanged(gomock.Any(), URI, gomock.Any(), encodedRecord, expectedHash).Return(nil).Times(2)
+	expectedHash, err := archiver.VisibilityArchivalRecordHash(request)
+	s.Require().NoError(err)
+	storageWrapper.EXPECT().UploadIfHashChanged(gomock.Any(), URI, gomock.Any(), encodedRecord, expectedHash).Return(false, nil).Times(2)
 
 	err = visibilityArchiver.Archive(ctx, URI, request, archiver.GetVisibilityArchivalRecordDeduplicationOption())
 	s.Require().NoError(err)
+	s.Require().Len(capture.Snapshot()[metrics.VisibilityArchiverBlobExistsCount.Name()], 2)
 }
 
 func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidQuery() {

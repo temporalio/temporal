@@ -115,8 +115,9 @@ func (s *clientSuite) TestUploadIfHashChangedSkipsMatchingObject() {
 		archiver.VisibilityArchivalRecordHashMetadataKey: recordHash,
 	}}, nil)
 
-	err = storageWrapper.UploadIfHashChanged(ctx, URI, "myfile.visibility", []byte("{}"), recordHash)
+	uploaded, err := storageWrapper.UploadIfHashChanged(ctx, URI, "myfile.visibility", []byte("{}"), recordHash)
 	s.Require().NoError(err)
+	s.Require().False(uploaded)
 }
 
 func (s *clientSuite) TestUploadIfHashChangedOverwritesDifferentObject() {
@@ -143,8 +144,9 @@ func (s *clientSuite) TestUploadIfHashChangedOverwritesDifferentObject() {
 	mockWriter.EXPECT().Write([]byte("{}")).Return(2, nil)
 	mockWriter.EXPECT().Close().Return(nil)
 
-	err = storageWrapper.UploadIfHashChanged(ctx, URI, "myfile.visibility", []byte("{}"), recordHash)
+	uploaded, err := storageWrapper.UploadIfHashChanged(ctx, URI, "myfile.visibility", []byte("{}"), recordHash)
 	s.Require().NoError(err)
+	s.Require().True(uploaded)
 }
 
 func (s *clientSuite) TestUploadIfHashChangedWritesMissingObject() {
@@ -169,8 +171,9 @@ func (s *clientSuite) TestUploadIfHashChangedWritesMissingObject() {
 	mockWriter.EXPECT().Write([]byte("{}")).Return(2, nil)
 	mockWriter.EXPECT().Close().Return(nil)
 
-	err = storageWrapper.UploadIfHashChanged(ctx, URI, "myfile.visibility", []byte("{}"), recordHash)
+	uploaded, err := storageWrapper.UploadIfHashChanged(ctx, URI, "myfile.visibility", []byte("{}"), recordHash)
 	s.Require().NoError(err)
+	s.Require().True(uploaded)
 }
 
 func (s *clientSuite) TestUploadIfHashChangedFailsWhenMetadataCannotBeRead() {
@@ -188,8 +191,9 @@ func (s *clientSuite) TestUploadIfHashChangedFailsWhenMetadataCannotBeRead() {
 	mockBucketHandleClient.EXPECT().Object("temporal_archival/development/myfile.visibility").Return(mockObjectHandler)
 	mockObjectHandler.EXPECT().Attrs(ctx).Return(nil, accessErr)
 
-	err = storageWrapper.UploadIfHashChanged(ctx, URI, "myfile.visibility", []byte("{}"), "test-hash")
+	uploaded, err := storageWrapper.UploadIfHashChanged(ctx, URI, "myfile.visibility", []byte("{}"), "test-hash")
 	s.Require().ErrorIs(err, accessErr)
+	s.Require().False(uploaded)
 }
 
 func (s *clientSuite) TestExist() {

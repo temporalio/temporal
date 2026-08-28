@@ -1440,6 +1440,7 @@ var (
 	VisibilityArchiverArchiveNonRetryableErrorCount           = NewCounterDef("visibility_archiver_archive_non_retryable_error")
 	VisibilityArchiverArchiveTransientErrorCount              = NewCounterDef("visibility_archiver_archive_transient_error")
 	VisibilityArchiveSuccessCount                             = NewCounterDef("visibility_archiver_archive_success")
+	VisibilityArchiverBlobExistsCount                         = NewCounterDef("visibility_archiver_blob_exists")
 	HistoryScavengerSuccessCount                              = NewCounterDef("scavenger_success")
 	HistoryScavengerErrorCount                                = NewCounterDef("scavenger_errors")
 	HistoryScavengerSkipCount                                 = NewCounterDef("scavenger_skips")

@@ -111,27 +111,39 @@ func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, requ
 	}
 	var recordHash string
 	if featureCatalog.VisibilityArchivalRecordDeduplication {
-		recordHash = archiver.VisibilityArchivalRecordHash(encodedVisibilityRecord)
+		recordHash, err = archiver.VisibilityArchivalRecordHash(request)
+		if err != nil {
+			logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(errEncodeVisibilityRecord), tag.Error(err))
+			return err
+		}
 	}
-	upload := func(filename string) error {
+	upload := func(filename string) (bool, error) {
 		if featureCatalog.VisibilityArchivalRecordDeduplication {
 			return v.gcloudStorage.UploadIfHashChanged(ctx, URI, filename, encodedVisibilityRecord, recordHash)
 		}
-		return v.gcloudStorage.Upload(ctx, URI, filename, encodedVisibilityRecord)
+		return true, v.gcloudStorage.Upload(ctx, URI, filename, encodedVisibilityRecord)
 	}
 
 	// The filename has the format: closeTimestamp_hash(runID).visibility
 	// This format allows the archiver to sort all records without reading the file contents
 	filename := constructVisibilityFilename(request.GetNamespaceId(), request.WorkflowTypeName, request.GetWorkflowId(), request.GetRunId(), indexKeyCloseTimeout, request.CloseTime.AsTime())
-	if err := upload(filename); err != nil {
+	uploaded, err := upload(filename)
+	if err != nil {
 		logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
 		return errRetryable
 	}
+	if !uploaded {
+		metrics.VisibilityArchiverBlobExistsCount.With(handler).Record(1)
+	}
 
 	filename = constructVisibilityFilename(request.GetNamespaceId(), request.WorkflowTypeName, request.GetWorkflowId(), request.GetRunId(), indexKeyStartTimeout, request.StartTime.AsTime())
-	if err := upload(filename); err != nil {
+	uploaded, err = upload(filename)
+	if err != nil {
 		logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
 		return errRetryable
+	}
+	if !uploaded {
+		metrics.VisibilityArchiverBlobExistsCount.With(handler).Record(1)
 	}
 
 	metrics.VisibilityArchiveSuccessCount.With(handler).Record(1)

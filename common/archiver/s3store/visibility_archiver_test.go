@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
@@ -209,6 +210,10 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 
 func (s *visibilityArchiverSuite) TestArchive_ContentAwareDeduplication() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	visibilityArchiver.metricsHandler = metricsHandler
 	closeTimestamp := timestamp.TimeNowPtrUtc()
 	request := &archiverspb.VisibilityRecord{
 		NamespaceId:      testNamespaceID,
@@ -242,6 +247,7 @@ func (s *visibilityArchiverSuite) TestArchive_ContentAwareDeduplication() {
 	err = visibilityArchiver.Archive(context.Background(), URI, request, deduplicationOption)
 	s.Require().NoError(err)
 	s.Equal(initialPutCount+12, s.fsEmulation.putCount)
+	s.Require().Len(capture.Snapshot()[metrics.VisibilityArchiverBlobExistsCount.Name()], 4)
 }
 
 func (s *visibilityArchiverSuite) TestUploadIfHashChangedFailsWhenMetadataCannotBeRead() {
@@ -252,8 +258,9 @@ func (s *visibilityArchiverSuite) TestUploadIfHashChangedFailsWhenMetadataCannot
 
 	s3cli.EXPECT().HeadObject(gomock.Any(), gomock.Any()).Return(nil, accessErr)
 
-	err = UploadIfHashChanged(context.Background(), s3cli, URI, "test-key", []byte("{}"), "test-hash")
+	uploaded, err := UploadIfHashChanged(context.Background(), s3cli, URI, "test-key", []byte("{}"), "test-hash")
 	s.Require().ErrorIs(err, accessErr)
+	s.Require().False(uploaded)
 }
 
 func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidURI() {

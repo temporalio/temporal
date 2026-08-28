@@ -192,7 +192,8 @@ func Upload(ctx context.Context, s3cli S3API, URI archiver.URI, key string, data
 }
 
 // UploadIfHashChanged is best-effort because the metadata check and upload are not atomic.
-func UploadIfHashChanged(ctx context.Context, s3cli S3API, URI archiver.URI, key string, data []byte, recordHash string) error {
+// It returns whether an upload was performed.
+func UploadIfHashChanged(ctx context.Context, s3cli S3API, URI archiver.URI, key string, data []byte, recordHash string) (bool, error) {
 	ctx, cancel := ensureContextTimeout(ctx)
 	defer cancel()
 
@@ -201,15 +202,16 @@ func UploadIfHashChanged(ctx context.Context, s3cli S3API, URI archiver.URI, key
 		Key:    aws.String(key),
 	})
 	if err == nil && result.Metadata[archiver.VisibilityArchivalRecordHashMetadataKey] == recordHash {
-		return nil
+		return false, nil
 	}
 	if err != nil && !IsNotFoundError(err) {
-		return err
+		return false, err
 	}
 
-	return upload(ctx, s3cli, URI, key, data, map[string]string{
+	err = upload(ctx, s3cli, URI, key, data, map[string]string{
 		archiver.VisibilityArchivalRecordHashMetadataKey: recordHash,
 	})
+	return err == nil, err
 }
 
 func upload(ctx context.Context, s3cli S3API, URI archiver.URI, key string, data []byte, metadata map[string]string) error {
