@@ -3602,7 +3602,7 @@ is non-fatal: the search continues past this threshold.`,
 		"worker.schedulerV1VersionCeiling",
 		-1,
 		`SchedulerV1VersionCeiling caps the workflow version the V1 scheduler records into history, so histories written on this cluster stay replayable on peer clusters that do not support newer versions. Set it to the highest scheduler version supported by the lowest peer. Intended for multi-cluster failover and rollback. The supported floor is version 1 (OSS v1.20). A negative value (the default) disables the cap.
-The ceiling is reread on every tweakables evaluation but only ratchets tighter within a run (one execution between start and Continue-As-New): a looser or unset value never raises it, and it never lowers a version already recorded for the run. Lowering the ceiling therefore takes effect on the next run, when Continue-As-New rereads dynamic config. A run is one execution between start and Continue-As-New.
+The ceiling is reread on every tweakables evaluation. The version never decreases within a run, but raising or removing a ceiling can advance it on the next evaluation. A lower ceiling is recorded immediately; if it is below the version already recorded for the run, that version is retained.
 Operational notes: (1) A ceiling below 12 holds the version below CHASM migration support, so it pauses all V1->V2 CHASM migrations for the namespace until the ceiling is lifted (deferred, not dropped). (2) A ceiling below 6 skips custom search-attribute updates on schedule edits. (3) This caps V1 scheduler histories only; schedules already migrated to CHASM V2 are not made rollback-safe by it.`,
 	)
 	WorkerDeleteNamespaceActivityLimits = NewGlobalTypedSetting(

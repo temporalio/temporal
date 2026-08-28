@@ -16,107 +16,67 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func TestClampVersion(t *testing.T) {
-	for _, c := range []struct {
-		name    string
-		ceiling int
-		want    SchedulerWorkflowVersion
-	}{
-		{"negative is unset, no clamp", -1, TriggerImmediatelyTimestamp},
-		{"zero clamps to InitialVersion", 0, InitialVersion},
-		{"below current clamps down", 1, 1},
-		{"equal to current is a no-op", int(TriggerImmediatelyTimestamp), TriggerImmediatelyTimestamp},
-		{"above current is a no-op", int(TriggerImmediatelyTimestamp) + 1, TriggerImmediatelyTimestamp},
-	} {
-		require.Equalf(t, c.want, clampVersion(TriggerImmediatelyTimestamp, c.ceiling), "%s (ceiling=%d)", c.name, c.ceiling)
-	}
-}
-
 func TestDetermineVersionTransitions(t *testing.T) {
 	for _, tc := range []struct {
-		name     string
-		ceiling  int
-		defaults []SchedulerWorkflowVersion
-		versions []SchedulerWorkflowVersion
+		name            string
+		defaultVersion  SchedulerWorkflowVersion
+		recordedVersion SchedulerWorkflowVersion
+		ceiling         int
+		wantVersion     SchedulerWorkflowVersion
+		wantCeiling     int
 	}{
 		{
-			name:     "stays at ceiling",
-			ceiling:  oldPeerCeiling,
-			defaults: []SchedulerWorkflowVersion{oldPeerCeiling, oldPeerCeiling + 1, oldPeerCeiling + 2},
-			versions: []SchedulerWorkflowVersion{oldPeerCeiling, oldPeerCeiling, oldPeerCeiling},
+			name:           "no ceiling uses the default",
+			defaultVersion: TriggerImmediatelyTimestamp,
+			ceiling:        -1,
+			wantVersion:    TriggerImmediatelyTimestamp,
+			wantCeiling:    -1,
 		},
 		{
-			name:     "current version below dynamic config ceiling",
-			ceiling:  oldPeerCeiling,
-			defaults: []SchedulerWorkflowVersion{oldPeerCeiling - 1, oldPeerCeiling, oldPeerCeiling + 1},
-			versions: []SchedulerWorkflowVersion{oldPeerCeiling - 1, oldPeerCeiling, oldPeerCeiling},
+			name:           "zero is a ceiling",
+			defaultVersion: TriggerImmediatelyTimestamp,
+			ceiling:        0,
+			wantVersion:    InitialVersion,
+			wantCeiling:    0,
 		},
 		{
-			name:     "advances without ceiling",
-			ceiling:  -1,
-			defaults: []SchedulerWorkflowVersion{TriggerImmediatelyTimestamp - 1, TriggerImmediatelyTimestamp, TriggerImmediatelyTimestamp + 1},
-			versions: []SchedulerWorkflowVersion{TriggerImmediatelyTimestamp - 1, TriggerImmediatelyTimestamp, TriggerImmediatelyTimestamp + 1},
+			name:           "ceiling caps the default",
+			defaultVersion: oldPeerCeiling + 1,
+			ceiling:        oldPeerCeiling,
+			wantVersion:    oldPeerCeiling,
+			wantCeiling:    oldPeerCeiling,
+		},
+		{
+			name:            "recorded version is retained below a lower ceiling",
+			defaultVersion:  oldPeerCeiling,
+			recordedVersion: oldPeerCeiling + 1,
+			ceiling:         oldPeerCeiling,
+			wantVersion:     oldPeerCeiling + 1,
+			wantCeiling:     oldPeerCeiling,
+		},
+		{
+			name:            "raising the ceiling advances on the next iteration",
+			defaultVersion:  MigrationHandoffFixes,
+			recordedVersion: oldPeerCeiling,
+			ceiling:         int(MigrationHandoffFixes),
+			wantVersion:     MigrationHandoffFixes,
+			wantCeiling:     int(MigrationHandoffFixes),
+		},
+		{
+			name:            "removing the ceiling advances on the next iteration",
+			defaultVersion:  MigrationHandoffFixes,
+			recordedVersion: oldPeerCeiling,
+			ceiling:         -1,
+			wantVersion:     MigrationHandoffFixes,
+			wantCeiling:     -1,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			calls := 0
-			s := &scheduler{
-				logger: log.NewSdkLogger(log.NewNoopLogger()),
-				versionCeiling: func() int {
-					calls++
-					return tc.ceiling
-				},
-			}
-			for i, defaultVersion := range tc.defaults {
-				version, ceiling := s.determineVersion(defaultVersion)
-				require.Equal(t, tc.versions[i], version)
-				require.Equal(t, tc.ceiling, ceiling)
-
-				// MutableSideEffect stores this value for the next workflow task.
-				s.tweakables = CurrentTweakablePolicies
-				s.tweakables.Version = version
-				s.tweakables.VersionCeiling = ceiling
-				s.tweakables.VersionCeilingSet = true
-			}
-			require.Equal(t, len(tc.defaults), calls, "ceiling is re-read each iteration so it can ratchet tighter")
+			version, ceiling := determineVersionTransition(tc.defaultVersion, tc.recordedVersion, tc.ceiling)
+			require.Equal(t, tc.wantVersion, version)
+			require.Equal(t, tc.wantCeiling, ceiling)
 		})
 	}
-}
-
-// TestDetermineVersionDowngradeOnNextRun verifies that after a run kept v13 as a floor while the
-// ceiling was tightened to 12, the following run (fresh tweakables after continue-as-new) reads
-// dynamic config and starts capped at 12.
-func TestDetermineVersionDowngradeOnNextRun(t *testing.T) {
-	ceiling := int(TriggerImmediatelyTimestamp)
-	s := &scheduler{
-		logger:         log.NewSdkLogger(log.NewNoopLogger()),
-		versionCeiling: func() int { return ceiling },
-	}
-	version, recordedCeiling := s.determineVersion(TriggerImmediatelyTimestamp)
-	require.Equal(t, SchedulerWorkflowVersion(TriggerImmediatelyTimestamp), version)
-	require.Equal(t, int(TriggerImmediatelyTimestamp), recordedCeiling)
-}
-
-// TestDetermineVersionLocksAtZeroCeiling verifies that zero is recorded as a real ceiling rather
-// than treated as an unset value.
-func TestDetermineVersionLocksAtZeroCeiling(t *testing.T) {
-	ceiling := 0
-	s := &scheduler{versionCeiling: func() int { return ceiling }}
-
-	// First evaluation clamps to InitialVersion (0) and records it.
-	version, recordedCeiling := s.determineVersion(TriggerImmediatelyTimestamp)
-	require.Equal(t, InitialVersion, version)
-	require.Equal(t, 0, recordedCeiling)
-	s.tweakables = CurrentTweakablePolicies
-	s.tweakables.Version = version
-	s.tweakables.VersionCeiling = recordedCeiling
-	s.tweakables.VersionCeilingSet = true
-
-	// The configured ceiling is lifted mid-run, but the recorded ceiling stays at InitialVersion.
-	ceiling = -1
-	version, recordedCeiling = s.determineVersion(TriggerImmediatelyTimestamp)
-	require.Equal(t, InitialVersion, version)
-	require.Equal(t, 0, recordedCeiling)
 }
 
 func TestDetermineVersionPreservesLegacyRecordedVersion(t *testing.T) {
