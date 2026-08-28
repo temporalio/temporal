@@ -24,27 +24,27 @@ func TestOnStateChangeNexusStage(t *testing.T) {
 		{
 			name:      "HSM caller invocation",
 			taskGroup: hsmnexus.TaskTypeInvocation,
-			stage:     "caller-queue",
+			stage:     "caller-outbound",
 		},
 		{
 			name:      "HSM caller cancellation",
 			taskGroup: hsmnexus.TaskTypeCancelation,
-			stage:     "caller-queue",
+			stage:     "caller-outbound",
 		},
 		{
-			name:      "CHASM caller queue",
+			name:      "CHASM caller outbound",
 			taskGroup: chasmnexus.TaskGroupName,
-			stage:     "caller-queue",
+			stage:     "caller-outbound",
 		},
 		{
-			name:      "CHASM handler queue",
+			name:      "CHASM handler outbound",
 			taskGroup: chasmcallback.InvocationTaskGroup,
-			stage:     "handler-queue",
+			stage:     "handler-outbound",
 		},
 		{
-			name:      "HSM handler queue",
+			name:      "HSM handler outbound",
 			taskGroup: hsmcallbacks.TaskTypeInvocation,
-			stage:     "handler-queue",
+			stage:     "handler-outbound",
 		},
 		{
 			name:      "non-Nexus task group",
