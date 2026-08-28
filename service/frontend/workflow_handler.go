@@ -2368,10 +2368,6 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, errRequestNotSet
 	}
 
-	if err := backoff.ValidateSchedule(request.GetCronSchedule()); err != nil {
-		return nil, err
-	}
-
 	// The validator will modify the request proto if there are any search attributes to validate.
 	// To avoid modifying the caller's object, which may be reused on retry, we clone the request here if needed.
 	if len(request.GetSearchAttributes().GetIndexedFields()) > 0 {
