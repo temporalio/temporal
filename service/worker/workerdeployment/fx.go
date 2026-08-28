@@ -80,25 +80,35 @@ func ClientProvider(
 	metricsHandler metrics.Handler,
 ) Client {
 	highestRevSignaledToVersionWf := cache.New(dynamicconfig.ReactivationSignalDedupCacheMaxSize.Get(dc)(), nil)
+	registerTaskQueueWorkerErrorCacheTTL := dynamicconfig.WorkerDeploymentRegisterTaskQueueErrorCacheTTL.Get(dc)()
+	registerTaskQueueWorkerErrorCacheSize := registerTaskQueueWorkerErrorCacheMaxSize
+	if registerTaskQueueWorkerErrorCacheTTL <= 0 {
+		registerTaskQueueWorkerErrorCacheSize = 0
+	}
+	registerTaskQueueWorkerErrorCache := cache.New(registerTaskQueueWorkerErrorCacheSize, &cache.Options{
+		TTL: registerTaskQueueWorkerErrorCacheTTL,
+	})
 	lc.Append(fx.Hook{
 		OnStop: func(context.Context) error {
 			highestRevSignaledToVersionWf.Stop()
+			registerTaskQueueWorkerErrorCache.Stop()
 			return nil
 		},
 	})
 	return &ClientImpl{
-		logger:                           logger,
-		historyClient:                    historyClient,
-		visibilityManager:                visibilityManager,
-		matchingClient:                   matchingClient,
-		workerControllerInstanceClient:   workerControllerInstanceClient,
-		maxIDLengthLimit:                 dynamicconfig.MaxIDLengthLimit.Get(dc),
-		visibilityMaxPageSize:            dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
-		maxTaskQueuesInDeploymentVersion: dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion.Get(dc),
-		maxDeployments:                   dynamicconfig.MatchingMaxDeployments.Get(dc),
-		testHooks:                        testHooks,
-		metricsHandler:                   metricsHandler,
-		highestRevSignaledToVersionWf:    highestRevSignaledToVersionWf,
+		logger:                            logger,
+		historyClient:                     historyClient,
+		visibilityManager:                 visibilityManager,
+		matchingClient:                    matchingClient,
+		workerControllerInstanceClient:    workerControllerInstanceClient,
+		maxIDLengthLimit:                  dynamicconfig.MaxIDLengthLimit.Get(dc),
+		visibilityMaxPageSize:             dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
+		maxTaskQueuesInDeploymentVersion:  dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion.Get(dc),
+		maxDeployments:                    dynamicconfig.MatchingMaxDeployments.Get(dc),
+		testHooks:                         testHooks,
+		metricsHandler:                    metricsHandler,
+		highestRevSignaledToVersionWf:     highestRevSignaledToVersionWf,
+		registerTaskQueueWorkerErrorCache: registerTaskQueueWorkerErrorCache,
 	}
 }
 

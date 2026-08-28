@@ -467,6 +467,14 @@ func CacheTypeTag(value string) Tag {
 	return Tag{Key: CacheTypeTagName, Value: value}
 }
 
+func CacheHitTag(cacheHit bool) Tag {
+	value := falseValue
+	if cacheHit {
+		value = trueValue
+	}
+	return Tag{Key: CacheHitTagName, Value: value}
+}
+
 func PriorityTag(value locks.Priority) Tag {
 	return Tag{Key: PriorityTagName, Value: strconv.Itoa(int(value))}
 }

@@ -232,6 +232,29 @@ type ErrRegister struct{ error }
 
 var retryPolicy = backoff.NewExponentialRetryPolicy(100 * time.Millisecond).WithExpirationInterval(1 * time.Minute)
 
+const registerTaskQueueWorkerErrorCacheMaxSize = 10000
+
+type registerTaskQueueWorkerErrorCacheScope int
+
+const (
+	registerTaskQueueWorkerErrorCacheScopeNamespace registerTaskQueueWorkerErrorCacheScope = iota
+	registerTaskQueueWorkerErrorCacheScopeDeployment
+	registerTaskQueueWorkerErrorCacheScopeVersion
+	registerTaskQueueWorkerErrorCacheScopeOther
+)
+
+type registerTaskQueueWorkerErrorCacheKey struct {
+	scope          registerTaskQueueWorkerErrorCacheScope
+	namespaceID    string
+	deploymentName string
+	buildID        string
+}
+
+type registerTaskQueueWorkerCachedError struct {
+	err       error
+	errorType string
+}
+
 // ClientImpl implements Client
 // reactivationVersionKey identifies one target version workflow for reactivation-signal dedup.
 type reactivationVersionKey struct {
@@ -260,6 +283,8 @@ type ClientImpl struct {
 	// hygiene, not part of the dedup contract. Cross-pod deduplication is handled
 	// separately by the deterministic UUID RequestId on each signal.
 	highestRevSignaledToVersionWf cache.Cache
+
+	registerTaskQueueWorkerErrorCache cache.Cache
 }
 
 func (d *ClientImpl) SetManager(
@@ -350,6 +375,19 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 	//revive:disable-next-line:defer
 	defer d.convertAndRecordError("RegisterTaskQueueWorker", deploymentName, &retErr, taskQueueName, taskQueueType, identity)()
 
+	if cachedErrorType, cachedErr := d.getRegisterTaskQueueWorkerError(namespaceEntry.ID().String(), deploymentName, buildId); cachedErr != nil {
+		d.recordRegisterTaskQueueWorkerError(namespaceEntry.Name().String(), cachedErrorType, cachedErr, true)
+		return cachedErr
+	}
+
+	errorType := ""
+	defer func() {
+		d.cacheRegisterTaskQueueWorkerError(namespaceEntry.ID().String(), deploymentName, buildId, errorType, retErr)
+		if retErr != nil {
+			d.recordRegisterTaskQueueWorkerError(namespaceEntry.Name().String(), errorType, retErr, false)
+		}
+	}()
+
 	// Creating request ID out of build ID + TQ name + TQ type. Many updates may come from multiple
 	// matching partitions, we do not want them to create new update requests.
 	requestID := fmt.Sprintf("%s%v-%v-%d", AutoCreateRequestIDPrefix, farm.Fingerprint64([]byte(buildId)), farm.Fingerprint64([]byte(taskQueueName)), taskQueueType)
@@ -378,9 +416,91 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
 	}, identity, requestID, d.getSyncBatchSize())
 	if err != nil {
+		var resourceExhausted *serviceerror.ResourceExhausted
+		if errors.As(err, &resourceExhausted) && resourceExhausted.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS {
+			errorType = errTooManyDeployments
+		}
 		return err
 	}
+	if failure := outcome.GetFailure(); failure != nil {
+		errorType = failure.GetApplicationFailureInfo().GetType()
+	}
 	return d.handleRegisterVersionFailures(outcome)
+}
+
+func (d *ClientImpl) getRegisterTaskQueueWorkerError(namespaceID, deploymentName, buildID string) (string, error) {
+	if d.registerTaskQueueWorkerErrorCache == nil {
+		return "", nil
+	}
+
+	keys := []registerTaskQueueWorkerErrorCacheKey{
+		{
+			scope:       registerTaskQueueWorkerErrorCacheScopeNamespace,
+			namespaceID: namespaceID,
+		},
+		{
+			scope:          registerTaskQueueWorkerErrorCacheScopeVersion,
+			namespaceID:    namespaceID,
+			deploymentName: deploymentName,
+			buildID:        buildID,
+		},
+		{
+			scope:          registerTaskQueueWorkerErrorCacheScopeDeployment,
+			namespaceID:    namespaceID,
+			deploymentName: deploymentName,
+		},
+		{
+			scope:          registerTaskQueueWorkerErrorCacheScopeOther,
+			namespaceID:    namespaceID,
+			deploymentName: deploymentName,
+		},
+	}
+	for _, key := range keys {
+		if cachedErr, ok := d.registerTaskQueueWorkerErrorCache.Get(key).(registerTaskQueueWorkerCachedError); ok {
+			return cachedErr.errorType, cachedErr.err
+		}
+	}
+	return "", nil
+}
+
+func (d *ClientImpl) cacheRegisterTaskQueueWorkerError(namespaceID, deploymentName, buildID, errorType string, err error) {
+	if err == nil || d.registerTaskQueueWorkerErrorCache == nil {
+		return
+	}
+
+	key := registerTaskQueueWorkerErrorCacheKey{
+		namespaceID:    namespaceID,
+		deploymentName: deploymentName,
+	}
+	switch errorType {
+	case errTooManyDeployments:
+		key.scope = registerTaskQueueWorkerErrorCacheScopeNamespace
+		key.deploymentName = ""
+	case errTooManyVersions:
+		key.scope = registerTaskQueueWorkerErrorCacheScopeDeployment
+	case errMaxTaskQueuesInVersionType:
+		key.scope = registerTaskQueueWorkerErrorCacheScopeVersion
+		key.buildID = buildID
+	default:
+		key.scope = registerTaskQueueWorkerErrorCacheScopeOther
+	}
+	d.registerTaskQueueWorkerErrorCache.Put(key, registerTaskQueueWorkerCachedError{
+		err:       err,
+		errorType: errorType,
+	})
+}
+
+func (d *ClientImpl) recordRegisterTaskQueueWorkerError(namespaceName, errorType string, err error, cacheHit bool) {
+	errorTypeTag := metrics.StringTag(metrics.ErrorTypeTagName, errorType)
+	if errorType == "" {
+		errorTypeTag = metrics.ServiceErrorTypeTag(err)
+	}
+	metrics.WorkerDeploymentRegisterTaskQueueErrors.With(d.metricsHandler).Record(
+		1,
+		metrics.NamespaceTag(namespaceName),
+		errorTypeTag,
+		metrics.CacheHitTag(cacheHit),
+	)
 }
 
 func (d *ClientImpl) handleRegisterVersionFailures(outcome *updatepb.Outcome) error {

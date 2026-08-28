@@ -3336,6 +3336,12 @@ but existing callbacks will still be processed and fired.`,
 		target version workflow.`,
 	)
 
+	WorkerDeploymentRegisterTaskQueueErrorCacheTTL = NewGlobalDurationSetting(
+		"matching.registerTaskQueueErrorCacheTTL",
+		30*time.Second,
+		`TTL for errors cached by RegisterTaskQueueWorker. Set to zero to disable caching.`,
+	)
+
 	EnableVersionReactivationSignals = NewGlobalBoolSetting(
 		"history.enableVersionReactivationSignals",
 		true,
