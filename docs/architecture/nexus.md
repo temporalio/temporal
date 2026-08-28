@@ -342,14 +342,15 @@ The workflow closed trigger will trigger a callback when a workflow completes su
 cancellation, or termination, as well as carry over the callbacks to the next execution in a chain when a workflow is
 retried or continues-as-new.
 
-Similarly to Nexus Operations, legacy callbacks are implemented via a hierarchical state machine and a set of
-executors in the [callbacks package](../../service/history/hsm/callbacks).
+Callbacks are implemented as CHASM components and task handlers in the
+[callback library](../../chasm/lib/callback). The
+[legacy HSM callbacks package](../../service/history/hsm/callbacks) remains for persisted HSM state.
 
 Callbacks are continously retried using a [configurable retry policy][callback-retry-policy] until they succeed,
 permanently fail, or the workflow's retention period expires.
 
-The timeout for making a single callback HTTP call is configurable via: `component.callbacks.request.timeout`
-(default is 10 seconds).
+The timeout for making a single callback HTTP call is configurable via: `callback.request.timeout`
+(default is 10 seconds). The legacy HSM implementation uses `component.callbacks.request.timeout`.
 
 ### `Callback` State Machine
 
@@ -443,4 +444,4 @@ sequenceDiagram
 ```
 
 [nexus-retry-policy]: https://github.com/temporalio/temporal/blob/f0f5539c8de71f7f9dec22e4e30a5cb9ded7b945/components/nexusoperations/config.go#L77-L87
-[callback-retry-policy]: https://github.com/temporalio/temporal/blob/f0f5539c8de71f7f9dec22e4e30a5cb9ded7b945/components/callbacks/config.go#L40-L50
+[callback-retry-policy]: ../../chasm/lib/callback/config.go
