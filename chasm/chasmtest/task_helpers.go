@@ -11,8 +11,10 @@ import (
 // ExecutePureTask validates and executes a pure task atomically via [Engine.UpdateComponent].
 // It returns taskDropped set to true if [chasm.PureTaskHandler.Validate] returns (false, nil),
 // indicating the task is no longer relevant and was not executed.
-// After a successful execution, Validate must return (false, nil), otherwise
-// the helper returns an error because the task would remain runnable.
+// After a successful execution of a scheduled task, Validate must return (false, nil),
+// otherwise the helper returns an error because the task would remain runnable.
+// Immediate tasks are exempt from this post-execution check, since they are always
+// reported valid by design (matching Node.ExecutePureTask's !IsImmediate() guard).
 //
 // The component ref is resolved automatically — no separate [Engine.ReadComponent] call to
 // obtain a ref is needed. Pass the component pointer directly.
@@ -55,15 +57,20 @@ func ExecutePureTask[C chasm.Component, T any](
 				return err
 			}
 
-			valid, err = handler.Validate(mutableCtx, typedC, chasm.TaskInvocation{TaskAttributes: attrs}, task)
-			if err != nil {
-				return err
-			}
-			if valid {
-				return chasm.NewTaskNotInvalidatedErrorWithDetails("pure", chasm.TaskNotInvalidatedDetails{
-					TaskType:       fmt.Sprintf("%T", task),
-					TaskAttributes: attrs,
-				})
+			// Immediate tasks execute inline and are reported valid by design, so
+			// only scheduled tasks are re-validated after execution. This mirrors
+			// Node.ExecutePureTask, which guards the same check with !IsImmediate().
+			if !attrs.IsImmediate() {
+				valid, err = handler.Validate(mutableCtx, typedC, chasm.TaskInvocation{TaskAttributes: attrs}, task)
+				if err != nil {
+					return err
+				}
+				if valid {
+					return chasm.NewTaskNotInvalidatedErrorWithDetails("pure", chasm.TaskNotInvalidatedDetails{
+						TaskType:       fmt.Sprintf("%T", task),
+						TaskAttributes: attrs,
+					})
+				}
 			}
 			return nil
 		},
