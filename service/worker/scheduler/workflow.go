@@ -76,6 +76,8 @@ const (
 	//     from CHASM, preserving idempotency identity across the migration
 	//     handoff.
 	MigrationHandoffFixes = 13
+	// update the desired time for a buffered start when refresh discovers the prior action completed
+	RefreshCompletionDesiredTime = 14
 )
 
 const (
@@ -1017,8 +1019,22 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future, long bool
 	// starting the next). The legacy path doesn't use deferred starts
 	// (Attempt == -1) like CHASM, so BufferedStarts[0] is always the next
 	// pending start.
-	if long && len(s.State.BufferedStarts) > 0 {
-		s.State.BufferedStarts[0].DesiredTime = res.CloseTime
+	//
+	// Branched by version explicitly (rather than folding hasMinVersion into
+	// shouldBackdateDesiredTime) so replay of histories recorded below
+	// RefreshCompletionDesiredTime keeps taking the old, unconditional-on-long-poll-only path
+	// byte-for-byte -- a mixed-fleet rolling deploy of this very change must not let a
+	// newer binary recompute a different DesiredTime, and therefore a different
+	// continue-as-new Input, than what an older binary already recorded for the same history.
+	if len(s.State.BufferedStarts) > 0 {
+		next := s.State.BufferedStarts[0]
+		if s.hasMinVersion(RefreshCompletionDesiredTime) {
+			if shouldBackdateDesiredTime(long, res.CloseTime, next.DesiredTime, next.ActualTime, s.resolveOverlapPolicy(next.OverlapPolicy)) {
+				next.DesiredTime = res.CloseTime
+			}
+		} else if long {
+			next.DesiredTime = res.CloseTime
+		}
 	}
 
 	s.logger.Debug("started workflow finished", "workflow", id, "status", res.Status, "pause-after-failure", pauseOnFailure, "long", long)
@@ -1413,6 +1429,45 @@ func (s *scheduler) resolveOverlapPolicy(overlapPolicy enumspb.ScheduleOverlapPo
 		overlapPolicy = enumspb.SCHEDULE_OVERLAP_POLICY_SKIP
 	}
 	return overlapPolicy
+}
+
+// shouldBackdateDesiredTime reports whether a watcher result discovering a workflow's completion
+// should backdate the next buffered start's DesiredTime to that completion's CloseTime, for the
+// purpose of computing ScheduleActionDelay.
+//
+// The long-poll path predates this check and stays unconditional: it always backdates, since a
+// long-poll watcher is only ever installed to wait for the exact workflow the next buffered start
+// is blocked on.
+//
+// The refresh path is conditional: a refresh can discover a completion long after the fact, once
+// an unrelated, later buffered start already exists. Only backdate when the close genuinely came
+// after the next start's own due time (i.e. it was actually blocked waiting on this workflow,
+// e.g. under BUFFER_ONE/BUFFER_ALL/CANCEL_OTHER/TERMINATE_OTHER) and the next start's own resolved
+// overlap policy actually waits for a running workflow to finish. A start whose resolved policy
+// ignores running workflows (ALLOW_ALL, see IgnoresRunningWorkflow) is never blocked by this
+// close, no matter the timing, since processBuffer starts it regardless of isRunning -- and
+// backdating would understate its real delay.
+//
+// refreshWorkflows calls this once per tracked execution, so a run with multiple RunningWorkflows
+// (e.g. ALLOW_ALL runs inherited from before a pre-DontTrackOverlapping version ceiling was
+// lifted) can process several results against the same buffered start in one pass. On the refresh
+// path, only move currentDesiredTime forward -- never let a later-processed but earlier-closing
+// execution overwrite a genuinely later close already recorded this pass, or the start's real
+// blocked duration would be understated.
+func shouldBackdateDesiredTime(
+	long bool,
+	closeTime *timestamppb.Timestamp,
+	currentDesiredTime *timestamppb.Timestamp,
+	nextActualTime *timestamppb.Timestamp,
+	nextResolvedOverlapPolicy enumspb.ScheduleOverlapPolicy,
+) bool {
+	if long {
+		return true
+	}
+	return closeTime != nil &&
+		closeTime.AsTime().After(nextActualTime.AsTime()) &&
+		!IgnoresRunningWorkflow(nextResolvedOverlapPolicy) &&
+		(currentDesiredTime == nil || closeTime.AsTime().After(currentDesiredTime.AsTime()))
 }
 
 func (s *scheduler) addStart(nominalTime, actualTime time.Time, overlapPolicy enumspb.ScheduleOverlapPolicy, manual bool) {
