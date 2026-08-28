@@ -86,7 +86,6 @@ type (
 		NewMutableState                 historyi.MutableState
 		UpdateWorkflowTransactionPolicy historyi.TransactionPolicy
 		NewWorkflowTransactionPolicy    *historyi.TransactionPolicy
-		HasInFlightUpdates              bool
 		PrepareMutableStateTransaction  func() error
 		CloseMutableStateTransaction    func() (*WorkflowTransactionPayload, error)
 		ExecuteWorkflowTransaction      func(*WorkflowTransactionPayload) error
@@ -831,7 +830,6 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 			NewMutableState:                 newMutableState,
 			UpdateWorkflowTransactionPolicy: updateWorkflowTransactionPolicy,
 			NewWorkflowTransactionPolicy:    newWorkflowTransactionPolicy,
-			HasInFlightUpdates:              c.updateRegistry != nil && c.updateRegistry.Len() != 0,
 			PrepareMutableStateTransaction: func() error {
 				return c.prepareMutableStateTransaction(
 					shardContext,

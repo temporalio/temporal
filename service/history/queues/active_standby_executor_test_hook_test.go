@@ -27,8 +27,8 @@ func (activeStandbyPassiveReplicationTestHook) InterceptUpdate(
 	return next()
 }
 
-func (activeStandbyPassiveReplicationTestHook) WorkflowContextForReplication(context.Context) (any, bool) {
-	return nil, false
+func (activeStandbyPassiveReplicationTestHook) UseTransientWorkflowContextForReplication(context.Context) bool {
+	return false
 }
 
 func (activeStandbyPassiveReplicationTestHook) ShouldExecuteTaskAsPassive(historytasks.Task) bool {

@@ -18,7 +18,7 @@ import (
 // service/history/workflow and is intentionally opaque here.
 type HistoryPassiveReplicationTestHook interface {
 	InterceptUpdate(context.Context, any, func() error) error
-	WorkflowContextForReplication(context.Context) (any, bool)
+	UseTransientWorkflowContextForReplication(context.Context) bool
 	ShouldExecuteTaskAsPassive(historytasks.Task) bool
 }
 

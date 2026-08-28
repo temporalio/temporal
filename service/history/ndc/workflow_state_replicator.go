@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -243,21 +244,27 @@ func (r *WorkflowStateReplicatorImpl) getWorkflowContext(
 		testhooks.HistoryPassiveReplicationTest,
 		namespaceID,
 	)
-	if ok {
-		value, provided := hook.WorkflowContextForReplication(ctx)
-		if provided {
-			wfCtx, valid := value.(historyi.WorkflowContext)
-			if !valid {
-				return nil, nil, serviceerror.NewInternal("test hook returned an invalid workflow context")
-			}
-			workflowKey := wfCtx.GetWorkflowKey()
-			if workflowKey.NamespaceID != namespaceID.String() ||
-				workflowKey.WorkflowID != execution.GetWorkflowId() ||
-				workflowKey.RunID != execution.GetRunId() {
-				return nil, nil, serviceerror.NewInvalidArgument("test hook returned a workflow context that does not match the replication artifact")
-			}
-			return wfCtx, wcache.NoopReleaseFn, nil
+	if ok && hook.UseTransientWorkflowContextForReplication(ctx) {
+		wfCtx := workflow.NewContext(
+			r.shardContext.GetConfig(),
+			definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
+			archetypeID,
+			r.logger,
+			r.shardContext.GetThrottledLogger(),
+			r.shardContext.GetMetricsHandler(),
+			nil,
+			r.testHooks,
+		)
+		if err := wfCtx.Lock(ctx, locks.PriorityHigh); err != nil {
+			return nil, nil, err
 		}
+		var releaseOnce sync.Once
+		return wfCtx, func(error) {
+			releaseOnce.Do(func() {
+				wfCtx.Clear()
+				wfCtx.Unlock()
+			})
+		}, nil
 	}
 	return r.workflowCache.GetOrCreateChasmExecution(
 		ctx,
