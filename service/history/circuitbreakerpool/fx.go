@@ -68,6 +68,7 @@ func onStateChange(
 ) func(name string, from gobreaker.State, to gobreaker.State) {
 	logger = log.With(
 		logger,
+		tag.ComponentOutboundQueue,
 		tag.WorkflowNamespace(nsName),
 		tag.WorkflowNamespaceID(key.NamespaceID),
 		tag.Destination(key.Destination),

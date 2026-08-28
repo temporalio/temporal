@@ -7,8 +7,6 @@ import (
 	"github.com/stretchr/testify/require"
 	chasmcallback "go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/testlogger"
 	hsmcallbacks "go.temporal.io/server/components/callbacks"
 	hsmnexus "go.temporal.io/server/components/nexusoperations"
@@ -57,7 +55,7 @@ func TestOnStateChangeNexusStage(t *testing.T) {
 			onStateChange(
 				tasks.TaskGroupNamespaceIDAndDestination{TaskGroup: testCase.taskGroup},
 				"namespace",
-				log.With(logger, tag.ComponentOutboundQueue),
+				logger,
 			)("", gobreaker.StateClosed, gobreaker.StateOpen)
 
 			records := capture.Snapshot()
