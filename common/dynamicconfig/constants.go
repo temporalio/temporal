@@ -2120,36 +2120,12 @@ depend on the enforcer's background rejection probability rather than on its own
 		`TaskThrottleControllerWindow is the control window. At most one multiplicative decrease
 and one additive increase are applied per window per key.`,
 	)
-	TaskThrottleControllerMinRate = NewGlobalFloatSetting(
-		"history.taskThrottleControllerMinRate",
-		1.0,
-		`TaskThrottleControllerMinRate is the floor, in task releases per second, for a class's
-admitted rate. It guarantees forward progress and lets a class rediscover recovery.`,
-	)
-	TaskThrottleControllerMaxRate = NewGlobalFloatSetting(
-		"history.taskThrottleControllerMaxRate",
-		10000.0,
-		`TaskThrottleControllerMaxRate is the ceiling, in task releases per second, for a class's
-admitted rate. It stops a long idle period from letting additive increase climb without bound.`,
-	)
-	TaskThrottleControllerInitialRate = NewGlobalFloatSetting(
-		"history.taskThrottleControllerInitialRate",
-		1000.0,
-		`TaskThrottleControllerInitialRate is the admitted rate a newly tracked class starts at.`,
-	)
 	TaskThrottleControllerMaxKeys = NewGlobalIntSetting(
 		"history.taskThrottleControllerMaxKeys",
 		1024,
-		`TaskThrottleControllerMaxKeys caps the number of tracked keys per throttle scope map.
+		`TaskThrottleControllerMaxKeys caps the number of tracked throttle classes on a host.
 Past the cap the controller fails open and lets the real limiter reject.`,
 	)
-	TaskThrottleControllerKeyTTL = NewGlobalDurationSetting(
-		"history.taskThrottleControllerKeyTTL",
-		5*time.Minute,
-		`TaskThrottleControllerKeyTTL is how long an idle throttle controller key is retained
-before the sweep evicts it.`,
-	)
-
 	TaskReschedulerMaxThrottledReleasesPerPass = NewGlobalIntSetting(
 		"history.taskReschedulerMaxThrottledReleasesPerPass",
 		1000,

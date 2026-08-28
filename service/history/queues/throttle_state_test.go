@@ -60,11 +60,11 @@ func newTestThrottleStateWithWindow(
 			IncreaseRatio: dynamicconfig.GetFloatPropertyFn(o.increase),
 			LossThreshold: dynamicconfig.GetFloatPropertyFn(o.lossThresh),
 			Window:        dynamicconfig.GetDurationPropertyFn(window),
-			MinRate:       dynamicconfig.GetFloatPropertyFn(o.minRate),
-			MaxRate:       dynamicconfig.GetFloatPropertyFn(o.maxRate),
-			InitialRate:   dynamicconfig.GetFloatPropertyFn(o.initialRate),
+			MinRate:       o.minRate,
+			MaxRate:       o.maxRate,
+			InitialRate:   o.initialRate,
 			MaxKeys:       dynamicconfig.GetIntPropertyFn(o.maxKeys),
-			KeyTTL:        dynamicconfig.GetDurationPropertyFn(o.keyTTL),
+			KeyTTL:        o.keyTTL,
 		},
 		timeSource,
 		log.NewTestLogger(),
@@ -132,10 +132,8 @@ func TestIsControllerInput(t *testing.T) {
 func TestNewThrottleKey_OneClassPerNamespaceAndCause(t *testing.T) {
 	aps := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
 
-	require.Equal(t, ThrottleScopeNamespace, aps.Scope)
 	require.Equal(t, "ns-1", aps.NamespaceID)
-	require.Empty(t, aps.Category, "a namespace budget is not split per task category")
-	require.Zero(t, aps.ShardID, "nor per shard")
+	require.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, aps.Cause)
 
 	require.Equal(t, aps, NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1"))
 	require.NotEqual(t, aps, NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-2"),

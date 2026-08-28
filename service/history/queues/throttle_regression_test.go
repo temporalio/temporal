@@ -489,21 +489,21 @@ func TestThrottleState_RefillCreditsTheWindowAtTheRateThatGovernedIt(t *testing.
 func TestThrottleState_NaNInitialRateDoesNotOpenTheGate(t *testing.T) {
 	o := defaultThrottleOverrides()
 	o.initialRate = math.NaN()
-	o.minRate = 2
 	state, _ := newTestThrottleState(o)
 
 	key := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
 
-	// MinRate is 2 and the window is a second, so the burst is 2. A gate that has fallen open
-	// would admit indefinitely instead of stopping there.
+	// NaN is rejected at construction, so the class starts at the documented default and its
+	// burst is that rate over one window. A gate that let NaN reach the bucket would admit
+	// every one of these instead of stopping there.
 	admitted := 0
-	for i := 0; i < 50; i++ {
+	for i := 0; i < 2*int(defaultThrottleInitialRate); i++ {
 		if allowed, _, _ := state.admit(key); allowed {
 			admitted++
 		}
 	}
-	require.Equal(t, 2, admitted,
-		"a NaN initial rate must fall back to the floor, not disable the gate")
+	require.Equal(t, int(defaultThrottleInitialRate), admitted,
+		"a NaN initial rate must fall back to the default, not disable the gate")
 	require.False(t, math.IsNaN(state.AdmittedRate(key)), "the learned rate must not be NaN")
 }
 

@@ -3,7 +3,6 @@ package queues
 import (
 	"errors"
 	"math"
-	"strconv"
 	"sync"
 	"time"
 
@@ -16,78 +15,75 @@ import (
 	"go.temporal.io/server/service/history/consts"
 )
 
-type (
-	// ThrottleScope identifies which population a throttle applies to, and therefore
-	// which of the ThrottleState maps holds its control state.
-	ThrottleScope int
-)
-
-// Only ThrottleScopeNamespace is produced today, because every governed cause is enforced
-// against the namespace's own budget. The other two are the shapes a widened controller would
-// need, and they exist so that adding one is a routing decision in NewThrottleKey rather than a
-// change to the key, the maps and the sweep.
-const (
-	// ThrottleScopeHost is for causes enforced for the whole process: system overload,
-	// system wide persistence budgets, storage limits. Reserved, not currently produced.
-	ThrottleScopeHost ThrottleScope = iota
-	// ThrottleScopeNamespace is for budgets enforced identically on every host and shard.
-	ThrottleScopeNamespace
-	// ThrottleScopeNamespaceShard is for namespace budgets whose enforcement point is the shard
-	// owner, so two shards for one namespace converge independently. Reserved.
-	ThrottleScopeNamespaceShard
-)
-
-const numThrottleScopes = 3
-
-// throttleSweepDivisor makes the lazy TTL sweep run a few times per TTL rather than once,
-// so eviction keeps up with churn without a dedicated goroutine.
+// Sweep a few times per TTL so eviction keeps up with churn without a dedicated goroutine.
 const throttleSweepDivisor = 4
 
-// defaultThrottleMaxKeys is the fallback cap when the configured one is not usable. It matches
-// the dynamic config default so a bad push lands on the documented value rather than a new one.
+// Matches the dynamic config default, so a bad push lands on the documented value.
 const defaultThrottleMaxKeys = 1024
 
+// Guardrails rather than tuning knobs: none has a production story that would justify the
+// dynamic config surface, and a pushed MinRate of 0 would stall every class. Tests override
+// them through ThrottleStateOptions.
+const (
+	defaultThrottleMinRate     = 1.0
+	defaultThrottleMaxRate     = 10000.0
+	defaultThrottleInitialRate = 1000.0
+	defaultThrottleKeyTTL      = 5 * time.Minute
+)
+
 type (
-	// ThrottleKey identifies one controlled class. Only Scope, Cause and NamespaceID are
-	// populated today, because every governed cause is a namespace budget and one budget is one
-	// class however the traffic is spread. ShardID and Category are the room a shard scoped or
-	// dependency scoped budget would need, so adding one does not reshape the key.
+	// ThrottleKey identifies one controlled class. Every governed cause is a namespace budget,
+	// so one budget is one class however the traffic is spread.
 	ThrottleKey struct {
-		Scope       ThrottleScope
 		Cause       enumspb.ResourceExhaustedCause
 		NamespaceID string
-		ShardID     int32
-		Category    string
 	}
 
-	// ThrottleStateOptions are the AIMD control law parameters.
+	// controlLaw is the part of the configuration a rate decision needs. It is read only when
+	// a window actually closes, which is once per window per class rather than once per admit.
+	controlLaw struct {
+		beta          float64
+		increaseRatio float64
+		lossThreshold float64
+	}
+
+	// ThrottleStateOptions are the AIMD control law parameters. The property functions are live
+	// dynamic config; the plain fields are fixed guardrails that only tests set, and zero means
+	// take the default.
 	ThrottleStateOptions struct {
 		Enabled       dynamicconfig.BoolPropertyFn
 		Beta          dynamicconfig.FloatPropertyFn
 		IncreaseRatio dynamicconfig.FloatPropertyFn
 		LossThreshold dynamicconfig.FloatPropertyFn
 		Window        dynamicconfig.DurationPropertyFn
-		MinRate       dynamicconfig.FloatPropertyFn
-		MaxRate       dynamicconfig.FloatPropertyFn
-		InitialRate   dynamicconfig.FloatPropertyFn
 		MaxKeys       dynamicconfig.IntPropertyFn
-		KeyTTL        dynamicconfig.DurationPropertyFn
+
+		MinRate     float64
+		MaxRate     float64
+		InitialRate float64
+		KeyTTL      time.Duration
 	}
 
-	// ThrottleState is the host level throttle controller. It converts per-task throttle
-	// rejections into a per-class admitted rate using AIMD, and hands that rate back to the
-	// rescheduler as a release budget so that N parked tasks stop rediscovering the same
-	// constraint N times per backoff round.
+	// ThrottleState is the host level throttle controller. It turns per-task throttle
+	// rejections into a per-class admitted rate, which the rescheduler spends as a release
+	// budget instead of letting every parked task rediscover the same constraint.
 	ThrottleState struct {
 		options        ThrottleStateOptions
 		timeSource     clock.TimeSource
 		logger         log.Logger
 		metricsHandler metrics.Handler
 
+		// Resolved once at construction. Reading them per call would cost a branch on a path
+		// that runs thousands of times a second for no benefit; they cannot change at runtime.
+		minRate     float64
+		maxRate     float64
+		initialRate float64
+		keyTTL      time.Duration
+
 		mu         sync.RWMutex
-		maps       [numThrottleScopes]map[ThrottleKey]*throttleEntry
+		entries    map[ThrottleKey]*throttleEntry
 		lastSweep  time.Time
-		lastCapLog [numThrottleScopes]time.Time
+		lastCapLog time.Time
 	}
 
 	throttleEntry struct {
@@ -99,11 +95,9 @@ type (
 		lastRefill  time.Time
 		windowStart time.Time
 		lastAccess  time.Time
-		// releases and rejections are the evidence for the window that is currently open.
-		// Both scale with how much the class released, which is what keeps the control law
-		// independent of class size: a rule that decreased on any single rejection but only
-		// increased on a perfectly clean window would settle at a rate set by the enforcer's
-		// background rejection probability rather than by this class's own demand.
+		// Evidence for the open window. Both scale with what the class released, which is what
+		// keeps the settling rate a function of its own demand rather than of the enforcer's
+		// background rejection probability.
 		releases   int64
 		rejections int64
 		decreases  int64
@@ -111,24 +105,12 @@ type (
 	}
 )
 
-// controlledCauses are the throttles the controller governs. It is deliberately a short list:
-// a class only benefits from being paced if the budget it is waiting on is shared across tasks
-// and its holder can tell when it frees up. Widening it is a line here plus a scope decision in
-// NewThrottleKey, and the ThrottleKey shape already carries shard and category for that.
+// The causes the controller governs. Pacing only helps when the budget is shared across tasks
+// and this namespace owns it, which is why system scoped instances are excluded.
 //
-// System scoped instances of these same causes are excluded for now. They are enforced against
-// a budget this namespace only partly owns, so one namespace's class cannot learn the shape of
-// it from its own rejections.
-//
-// PERSISTENCE_LIMIT collapses two enforcement points. The per (namespace, shard) limiter and
-// the per namespace one report the same cause and scope, so they cannot be told apart here and
-// share a class: one hot shard's rejections pace every other shard of that namespace on this
-// host. Telling them apart needs a distinguishable error, not a change here.
-//
-// Adding RPS_LIMIT here would re-expose ErrBusinessIDRateLimitExceeded, which reports that
-// cause at namespace scope but is enforced per (namespace, businessID, archetype). The guard
-// for it in IsControllerInput is unreachable while RPS_LIMIT is absent, and is kept for that
-// day rather than because it fires today.
+// PERSISTENCE_LIMIT covers two enforcement points that report identically, so a per shard
+// limiter's rejections pace the whole namespace on this host. Telling them apart needs a
+// distinguishable error.
 var controlledCauses = map[enumspb.ResourceExhaustedCause]struct{}{
 	enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT:         {},
 	enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT: {},
@@ -145,22 +127,35 @@ func NewThrottleState(
 		timeSource:     timeSource,
 		logger:         logger,
 		metricsHandler: metricsHandler,
+		minRate:        defaultThrottleMinRate,
+		maxRate:        defaultThrottleMaxRate,
+		initialRate:    defaultThrottleInitialRate,
+		keyTTL:         defaultThrottleKeyTTL,
 		lastSweep:      timeSource.Now(),
+		entries:        make(map[ThrottleKey]*throttleEntry),
 	}
-	for i := range s.maps {
-		s.maps[i] = make(map[ThrottleKey]*throttleEntry)
+	if options.MinRate > 0 {
+		s.minRate = options.MinRate
+	}
+	if options.MaxRate >= s.minRate {
+		s.maxRate = options.MaxRate
+	}
+	if s.maxRate < s.minRate {
+		s.maxRate = s.minRate
+	}
+	if options.InitialRate > 0 {
+		s.initialRate = options.InitialRate
+	}
+	if options.KeyTTL > 0 {
+		s.keyTTL = options.KeyTTL
 	}
 	return s
 }
 
-// IsControllerInput reports whether a rejection should drive the controller. It must come from
-// a budget that is shared across tasks and owned by this namespace, because the control law
-// reacts by pacing a whole class: pacing helps nothing when the contended resource belongs to
-// one workflow, and it cannot converge on a budget the namespace only partly owns.
+// IsControllerInput reports whether a rejection should drive the controller.
 //
-// ErrBusinessIDRateLimitExceeded reports a namespace scope but is enforced per
-// (namespace, businessID, archetype), so one hot workflow ID would otherwise ratchet the whole
-// namespace down and gate every unrelated task in it on this host.
+// ErrBusinessIDRateLimitExceeded claims namespace scope but is enforced per business ID, so one
+// hot workflow would ratchet the whole namespace down.
 func IsControllerInput(
 	err error,
 	cause enumspb.ResourceExhaustedCause,
@@ -176,57 +171,25 @@ func IsControllerInput(
 	return ok
 }
 
-// NewThrottleKey builds the class a rejection belongs to. Every cause the controller currently
-// governs is enforced against the namespace's own budget, so there is one shape of key today.
-// The scope field distinguishes classes that share a map, and ShardID and Category are the room
-// left for a shard scoped or dependency scoped budget to be added without reshaping the key.
 func NewThrottleKey(cause enumspb.ResourceExhaustedCause, namespaceID string) ThrottleKey {
 	return ThrottleKey{
-		Scope:       ThrottleScopeNamespace,
 		Cause:       cause,
 		NamespaceID: namespaceID,
 	}
 }
 
 func (k ThrottleKey) metricsTags() []metrics.Tag {
-	tags := []metrics.Tag{
-		metrics.ResourceExhaustedCauseTag(k.Cause),
-		metrics.StringTag("throttle_scope", k.Scope.String()),
-	}
+	tags := []metrics.Tag{metrics.ResourceExhaustedCauseTag(k.Cause)}
 	if k.NamespaceID != "" {
 		tags = append(tags, metrics.NamespaceIDTag(k.NamespaceID))
-	}
-	if k.Category != "" {
-		tags = append(tags, metrics.TaskCategoryTag(k.Category))
-	}
-	if k.Scope == ThrottleScopeNamespaceShard {
-		tags = append(tags, metrics.StringTag("shard_id", strconv.Itoa(int(k.ShardID))))
 	}
 	return tags
 }
 
-// cappedTags describes a key the controller declined to track. It deliberately omits the
-// namespace: past the key cap the population is every namespace the host has ever seen, which
-// is the unbounded set the cap exists to stop holding. Tagging by namespace here would move
-// that cardinality out of the map and into the metrics pipeline instead of removing it.
+// cappedTags omits the namespace: past the cap that population is unbounded, and tagging by it
+// would move the cardinality the cap exists to prevent into the metrics pipeline.
 func (k ThrottleKey) cappedTags() []metrics.Tag {
-	return []metrics.Tag{
-		metrics.ResourceExhaustedCauseTag(k.Cause),
-		metrics.StringTag("throttle_scope", k.Scope.String()),
-	}
-}
-
-func (s ThrottleScope) String() string {
-	switch s {
-	case ThrottleScopeHost:
-		return "host"
-	case ThrottleScopeNamespace:
-		return "namespace"
-	case ThrottleScopeNamespaceShard:
-		return "namespace_shard"
-	default:
-		return "unknown"
-	}
+	return []metrics.Tag{metrics.ResourceExhaustedCauseTag(k.Cause)}
 }
 
 // Enabled reports whether the controller is gating releases at all.
@@ -234,23 +197,18 @@ func (s *ThrottleState) Enabled() bool {
 	return s.options.Enabled()
 }
 
-// Admit consumes one release token for the class. It returns true when the rescheduler may
-// release a task for this class, and false when the class is over its currently admitted rate.
-// It always returns true when the controller is disabled, and when the key cap has been hit,
-// so that the real limiter, not this cache, stays the enforcement point.
+// Admit consumes one release token, returning false when the class is over its admitted rate.
+// It fails open when disabled or past the key cap, leaving the real limiter as the enforcer.
 func (s *ThrottleState) Admit(key ThrottleKey) bool {
 	allowed, _, _ := s.admit(key)
 	return allowed
 }
 
-// admit reports whether the class may release, and whether the gate actually metered that
-// release. The two differ past the key cap and while disabled, where the gate lets the task
-// through without tracking it: a rejection from an unmetered release is loss on a packet the
-// controller never sent, and counting it would move a rate on evidence it did not produce.
+// admit also reports whether the gate metered the release. An unmetered one is loss on a packet
+// the controller never sent, so its rejection must not move the rate.
 //
-// retryAfter is set only on denial, and reports how long until the bucket holds a whole token.
-// It lets a denied caller wait exactly that long instead of re-asking on a fixed interval. It
-// is zero when the wait cannot be derived, which leaves the choice of interval to the caller.
+// retryAfter, set only on denial, is how long until the bucket holds a whole token. Zero means
+// it could not be derived and the caller should pick its own interval.
 func (s *ThrottleState) admit(key ThrottleKey) (allowed, metered bool, retryAfter time.Duration) {
 	if !s.options.Enabled() {
 		return true, false, 0
@@ -281,17 +239,11 @@ func (s *ThrottleState) admit(key ThrottleKey) (allowed, metered bool, retryAfte
 	return true, true, 0
 }
 
-// ReportThrottled feeds one observed throttle rejection into the controller.
+// ReportThrottled feeds one observed rejection into the controller.
 //
-// admitted says whether the attempt came from a release this gate issued. Only those close the
-// loop. A rejection from an attempt the gate never metered - a task on its first dispatch
-// straight from the queue reader - would otherwise decrease the rate every window forever and
-// block every increase, ratcheting a busy namespace's parked tasks down to the floor while the
-// traffic actually consuming the budget flows past untouched. This is TCP reacting to loss on
-// packets it sent, not to loss it merely witnessed.
-//
-// At most one multiplicative decrease is applied per window: a namespace running at its budget
-// rejects routinely, and reacting to every rejection ratchets the rate down to the floor.
+// admitted says the attempt came from a release this gate issued. Only those close the loop:
+// reacting to traffic it never sent would ratchet parked tasks to the floor while the traffic
+// actually consuming the budget flows past untouched.
 func (s *ThrottleState) ReportThrottled(key ThrottleKey, admitted bool) {
 	if !s.options.Enabled() {
 		return
@@ -313,8 +265,8 @@ func (s *ThrottleState) ReportThrottled(key ThrottleKey, admitted bool) {
 	if !admitted {
 		return
 	}
-	// Only recorded here. The rate moves once per window, in advanceWindowLocked, so that a
-	// class running at its budget cannot ratchet itself down by rejecting routinely.
+	// Recorded only. The rate moves once per window, so a class at its budget cannot ratchet
+	// itself down by rejecting routinely.
 	entry.rejections++
 	s.advanceWindowLocked(entry, now, window)
 }
@@ -334,17 +286,16 @@ func (s *ThrottleState) Return(key ThrottleKey) {
 	defer entry.Unlock()
 
 	entry.tokens = min(entry.tokens+1, entry.burstLocked(s.window()))
-	// The release is leaving the denominator as well as the bucket. A dispatch that never
-	// happened cannot be rejected, so counting it would enter the loss ratio as a guaranteed
-	// success: a saturated scheduler would then read as a run of clean windows and climb to
-	// MaxRate with nothing dispatched at all.
+	// Leaves the loss denominator too. A dispatch that never happened cannot be rejected, so
+	// keeping it would read as a guaranteed success and climb the rate on nothing.
 	if entry.releases > 0 {
 		entry.releases--
 	}
 }
 
-// ReportSuccess records a completion for the class. It advances the window bookkeeping so a
-// class that has stopped being throttled climbs back even while the rescheduler is idle.
+// ReportSuccess keeps a class that is completing work from being swept as idle, and closes an
+// elapsed window. It cannot raise an idle class, since a window with no releases is left alone;
+// what it does reach is the last window of a drain, after admit stops being called.
 func (s *ThrottleState) ReportSuccess(key ThrottleKey) {
 	if !s.options.Enabled() {
 		return
@@ -361,8 +312,6 @@ func (s *ThrottleState) ReportSuccess(key ThrottleKey) {
 	defer entry.Unlock()
 
 	s.touchLocked(entry, now, window)
-	// Completion is not evidence the law weighs, but it is the moment a healthy class is most
-	// likely to be observed, so let it close a window that has already elapsed.
 	s.advanceWindowLocked(entry, now, window)
 }
 
@@ -388,32 +337,22 @@ func (s *ThrottleState) Counters(key ThrottleKey) (decreases int64, increases in
 	return entry.decreases, entry.increases
 }
 
-// Len returns the number of tracked keys across all scopes.
+// Len returns the number of tracked keys.
 func (s *ThrottleState) Len() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	total := 0
-	for i := range s.maps {
-		total += len(s.maps[i])
-	}
-	return total
+	return len(s.entries)
 }
 
-// advanceWindowLocked closes the window that has elapsed and applies one rate change for it.
-// The decision is the observed loss ratio, not the presence of a single rejection: releases and
-// rejections both grow with class size, so the rate a class settles at follows its own demand
-// rather than the enforcer's background rejection probability.
-//
-// A class that released nothing is left alone. Increasing an idle class only builds credit it
-// will dump the moment it becomes due, which is the burst the burst cap exists to prevent.
+// advanceWindowLocked closes an elapsed window and applies one rate change for it. The decision
+// is the loss ratio rather than any single rejection, which is what keeps the settling rate
+// independent of class size. A class that released nothing is left alone.
 func (s *ThrottleState) advanceWindowLocked(entry *throttleEntry, now time.Time, window time.Duration) {
 	if now.Sub(entry.windowStart) < window {
 		return
 	}
-	// Credit the elapsed time at the rate that was in force for it, before any decision changes
-	// that rate. A change decided now governs the time after now; crediting the window that is
-	// closing at the new rate would hand the class tokens it never earned and bring every
-	// increase forward by a whole window.
+	// Credit the elapsed window at the rate that governed it. A decision made now applies to
+	// the time after now; crediting at the new rate hands out tokens the class never earned.
 	entry.refillLocked(now, window)
 	defer func() {
 		entry.windowStart = now
@@ -424,30 +363,29 @@ func (s *ThrottleState) advanceWindowLocked(entry *throttleEntry, now time.Time,
 		return
 	}
 
-	// Rejections are observed after their release, so a rejection can land in the window after
-	// the one that released it. Bounding the ratio at 1 keeps that skew from reading as a loss
-	// rate above 100%.
+	// A rejection can land in the window after the one that released it, so bound the ratio at
+	// 1 rather than letting the skew read as loss above 100%.
 	loss := 1.0
 	if entry.releases > entry.rejections {
 		loss = float64(entry.rejections) / float64(entry.releases)
 	}
 
-	if loss > s.lossThreshold() {
-		entry.rate = s.clamp(entry.rate * s.beta())
+	law := s.controlLaw()
+	if loss > law.lossThreshold {
+		entry.rate = s.clamp(entry.rate * law.beta)
 		entry.decreases++
-		// Tokens accumulated at the old rate would otherwise let the class overshoot the new one.
+		// Tokens banked at the old rate would let the class overshoot the new one.
 		entry.tokens = min(entry.tokens, entry.burstLocked(window))
 		metrics.TaskThrottleRateDecreases.With(s.metricsHandler).Record(1, entry.key.metricsTags()...)
 	} else {
-		entry.rate = s.clamp(entry.rate * (1 + s.increaseRatio()))
+		entry.rate = s.clamp(entry.rate * (1 + law.increaseRatio))
 		entry.increases++
 		metrics.TaskThrottleRateIncreases.With(s.metricsHandler).Record(1, entry.key.metricsTags()...)
 	}
 	metrics.TaskThrottleAdmittedRate.With(s.metricsHandler).Record(entry.rate, entry.key.metricsTags()...)
 }
 
-// resetLocked returns the entry to its freshly created state, keeping the identity but
-// discarding everything the control law had learned.
+// resetLocked discards everything the control law learned, keeping the entry's identity.
 func (e *throttleEntry) resetLocked(rate float64, now time.Time, window time.Duration) {
 	e.rate = rate
 	e.lastRefill = now
@@ -456,17 +394,15 @@ func (e *throttleEntry) resetLocked(rate float64, now time.Time, window time.Dur
 	e.tokens = e.burstLocked(window)
 }
 
-// touchLocked marks the entry live, resetting it first if it has been idle longer than the
-// retention period. The sweep only runs when a new key is inserted and a host's key set goes
-// stable within minutes of start up, so without this a class driven to the floor by an incident
-// would climb back from MinRate instead of restarting at InitialRate.
+// touchLocked marks the entry live, resetting it first if it has been idle past the TTL. The
+// sweep only runs on insert, and a host's key set goes stable early, so without this a class
+// driven to the floor by an incident would climb back from MinRate rather than restart.
 func (s *ThrottleState) touchLocked(entry *throttleEntry, now time.Time, window time.Duration) {
-	if !entry.lastAccess.IsZero() && now.Sub(entry.lastAccess) > s.keyTTL() {
-		entry.resetLocked(s.clamp(s.options.InitialRate()), now, window)
+	if !entry.lastAccess.IsZero() && now.Sub(entry.lastAccess) > s.keyTTL {
+		entry.resetLocked(s.clamp(s.initialRate), now, window)
 	}
-	// Only ever move liveness forward. A wall clock stepped backwards would otherwise stamp an
-	// older time here, and the recovery step would then read as a full TTL of inactivity and
-	// reset a continuously busy class back to InitialRate.
+	// Forward only: a clock stepped backwards would make the recovery look like a full TTL of
+	// inactivity and reset a busy class.
 	if now.After(entry.lastAccess) {
 		entry.lastAccess = now
 	}
@@ -481,18 +417,15 @@ func (e *throttleEntry) refillLocked(now time.Time, window time.Duration) {
 	e.tokens = min(e.tokens+e.rate*elapsed.Seconds(), e.burstLocked(window))
 }
 
-// burstLocked caps accumulated credit at one window of the current rate so a class that was
-// idle cannot dump its whole backlog the moment it becomes due.
+// burstLocked caps credit at one window's worth, so an idle class cannot dump its backlog the
+// moment it becomes due.
 func (e *throttleEntry) burstLocked(window time.Duration) float64 {
 	return max(1, e.rate*window.Seconds())
 }
 
-// tokenETALocked reports how long until the bucket holds a whole token at the current rate.
-// A non-positive rate never refills on its own, so it reports zero rather than a wait no
-// refill will satisfy; the caller decides what to do with that.
-//
-// The estimate is only good until the next window closes, because the rate moves there. The
-// caller is expected to cap it at one window rather than sleeping through a rate increase.
+// tokenETALocked is how long until the bucket holds a whole token. Zero means no refill will
+// satisfy it. The estimate expires at the next window close, where the rate moves, so callers
+// are expected to cap it there.
 func (e *throttleEntry) tokenETALocked() time.Duration {
 	deficit := 1 - e.tokens
 	if deficit <= 0 || e.rate <= 0 {
@@ -505,35 +438,8 @@ func (e *throttleEntry) tokenETALocked() time.Duration {
 	return time.Duration(seconds * float64(time.Second))
 }
 
-func (s *ThrottleState) clamp(rate float64) float64 {
-	lo, hi := s.options.MinRate(), s.options.MaxRate()
-	if !(lo > 0) {
-		lo = 1
-	}
-	if !(hi >= lo) {
-		hi = lo
-	}
-	// NaN survives both min and max, and a NaN rate makes tokens NaN, which makes the
-	// tokens < 1 admission test false forever: one bad config value would open the gate
-	// permanently. Treat it as unset rather than letting it through.
-	if math.IsNaN(rate) {
-		return lo
-	}
-	return min(max(rate, lo), hi)
-}
-
-// maxKeys is the per scope key cap, floored at a positive value. At zero or below the cap is
-// already met by an empty map, so every class would fail open and the controller would gate
-// nothing at all while still reporting that it was enabled.
-func (s *ThrottleState) maxKeys() int {
-	if n := s.options.MaxKeys(); n > 0 {
-		return n
-	}
-	return defaultThrottleMaxKeys
-}
-
-// window is the control window, floored at a positive value. A non positive window would close
-// on every call and let a single release and its rejection be decided twice.
+// window is read on every admit, so it stays a single lookup. A non positive window would close
+// on every call and let one release and its rejection be decided twice.
 func (s *ThrottleState) window() time.Duration {
 	if w := s.options.Window(); w > 0 {
 		return w
@@ -541,84 +447,79 @@ func (s *ThrottleState) window() time.Duration {
 	return time.Second
 }
 
-// keyTTL is the retention period, floored at a positive value. At zero every access would look
-// idle, so the bucket would be refilled to its burst on every call and enforce nothing.
-func (s *ThrottleState) keyTTL() time.Duration {
-	if ttl := s.options.KeyTTL(); ttl > 0 {
-		return ttl
+// controlLaw is read only when a window closes. Each floor exists so a bad config push stalls
+// the controller rather than inverting it: a beta at or above 1 would raise the rate on loss,
+// and an increase ratio at or below 0 would lower it on success.
+//
+// The guards are negated on purpose: NaN compares false against every bound, so !(x > 0) catches
+// it where x <= 0 would let it through.
+func (s *ThrottleState) controlLaw() controlLaw {
+	c := controlLaw{
+		beta:          s.options.Beta(),
+		increaseRatio: s.options.IncreaseRatio(),
+		lossThreshold: s.options.LossThreshold(),
 	}
-	return 5 * time.Minute
+	if !(c.beta > 0 && c.beta < 1) {
+		c.beta = 1
+	}
+	if !(c.increaseRatio > 0) {
+		c.increaseRatio = 0
+	}
+	if !(c.lossThreshold >= 0) {
+		c.lossThreshold = 0
+	}
+	c.lossThreshold = min(c.lossThreshold, 1)
+	return c
 }
 
-// lossThreshold is read on every window close, so a value outside [0,1] is one bad config push
-// away. Negative would decrease on a window with no loss at all; above one would never decrease.
-func (s *ThrottleState) lossThreshold() float64 {
-	t := s.options.LossThreshold()
-	if !(t >= 0) {
-		return 0
+// maxKeys is read only when a key is created. At zero the cap is already met by an empty map,
+// so every class would fail open while the controller still reported itself enabled.
+func (s *ThrottleState) maxKeys() int {
+	if n := s.options.MaxKeys(); n > 0 {
+		return n
 	}
-	return min(t, 1)
+	return defaultThrottleMaxKeys
 }
 
-// beta and increaseRatio are read from dynamic config on every window close, so a value that
-// inverts the control law is one bad config push away. A beta at or above 1 would raise the
-// rate on loss and an increase ratio at or below 0 would lower it on success; both are pinned
-// to a no-op instead, which stalls the controller rather than reversing it.
-func (s *ThrottleState) beta() float64 {
-	if b := s.options.Beta(); b > 0 && b < 1 {
-		return b
+// clamp holds a rate inside the fixed band. NaN survives min and max, and NaN tokens make the
+// tokens < 1 test false forever, so one bad value would open the gate permanently.
+func (s *ThrottleState) clamp(rate float64) float64 {
+	if math.IsNaN(rate) {
+		return s.minRate
 	}
-	return 1
-}
-
-func (s *ThrottleState) increaseRatio() float64 {
-	if r := s.options.IncreaseRatio(); r > 0 {
-		return r
-	}
-	return 0
+	return min(max(rate, s.minRate), s.maxRate)
 }
 
 func (s *ThrottleState) peek(key ThrottleKey) *throttleEntry {
-	if key.Scope < 0 || int(key.Scope) >= numThrottleScopes {
-		return nil
-	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.maps[key.Scope][key]
+	return s.entries[key]
 }
 
-// getOrCreate returns the entry for a key, creating it lazily. It returns nil when the per map
-// key cap is reached, which the callers treat as fail open: admit, and let the real limiter reject.
-// The returned entry is not pinned: a concurrent sweep can drop it from the map between this
-// call and the caller taking its lock, leaving that caller to work on an orphan while a fresh
-// entry serves everyone else. The cost is bounded at one extra release, because the sweep only
-// evicts a key idle past its TTL and the orphan's own touchLocked would have refilled it to the
-// same burst anyway. A class idle that long is under no pressure, so pinning is not worth the
-// contention it would add to every lookup.
+// getOrCreate creates entries lazily, returning nil at the key cap for callers to fail open on.
+//
+// The entry is not pinned, so a concurrent sweep can orphan it. That costs at most one extra
+// release, and only for a key idle past its TTL, which is a class under no pressure.
 func (s *ThrottleState) getOrCreate(key ThrottleKey) *throttleEntry {
 	if entry := s.peek(key); entry != nil {
 		return entry
-	}
-	if key.Scope < 0 || int(key.Scope) >= numThrottleScopes {
-		return nil
 	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if entry, ok := s.maps[key.Scope][key]; ok {
+	if entry, ok := s.entries[key]; ok {
 		return entry
 	}
 
 	now := s.timeSource.Now()
-	s.maybeSweepLocked(now)
+	s.maybeSweepLocked(now, s.keyTTL)
 
-	if len(s.maps[key.Scope]) >= s.maxKeys() {
+	if len(s.entries) >= s.maxKeys() {
 		metrics.TaskThrottleKeysDropped.With(s.metricsHandler).Record(1, key.cappedTags()...)
-		if now.Sub(s.lastCapLog[key.Scope]) >= s.keyTTL() {
-			s.lastCapLog[key.Scope] = now
+		if now.Sub(s.lastCapLog) >= s.keyTTL {
+			s.lastCapLog = now
 			s.logger.Warn("Throttle controller key cap reached, failing open.",
-				tag.NewStringTag("throttle-scope", key.Scope.String()),
 				tag.NewStringTag("throttle-cause", key.Cause.String()),
 			)
 		}
@@ -627,37 +528,30 @@ func (s *ThrottleState) getOrCreate(key ThrottleKey) *throttleEntry {
 
 	entry := &throttleEntry{
 		key:         key,
-		rate:        s.clamp(s.options.InitialRate()),
+		rate:        s.clamp(s.initialRate),
 		lastRefill:  now,
 		windowStart: now,
 		lastAccess:  now,
 	}
 	entry.tokens = entry.burstLocked(s.window())
-	s.maps[key.Scope][key] = entry
-	metrics.TaskThrottleKeysTracked.With(s.metricsHandler).Record(
-		float64(len(s.maps[key.Scope])),
-		metrics.StringTag("throttle_scope", key.Scope.String()),
-	)
+	s.entries[key] = entry
+	metrics.TaskThrottleKeysTracked.With(s.metricsHandler).Record(float64(len(s.entries)))
 	return entry
 }
 
-// maybeSweepLocked evicts idle keys. It runs inline on insert instead of from a goroutine so
-// ThrottleState needs no lifecycle of its own.
-func (s *ThrottleState) maybeSweepLocked(now time.Time) {
-	ttl := s.keyTTL()
+// maybeSweepLocked evicts idle keys inline on insert, so ThrottleState needs no lifecycle.
+func (s *ThrottleState) maybeSweepLocked(now time.Time, ttl time.Duration) {
 	if now.Sub(s.lastSweep) < ttl/throttleSweepDivisor {
 		return
 	}
 	s.lastSweep = now
-	for i := range s.maps {
-		for key, entry := range s.maps[i] {
-			entry.Lock()
-			idle := now.Sub(entry.lastAccess) > ttl
-			entry.Unlock()
-			if idle {
-				delete(s.maps[i], key)
-				metrics.TaskThrottleKeysEvicted.With(s.metricsHandler).Record(1, key.metricsTags()...)
-			}
+	for key, entry := range s.entries {
+		entry.Lock()
+		idle := now.Sub(entry.lastAccess) > ttl
+		entry.Unlock()
+		if idle {
+			delete(s.entries, key)
+			metrics.TaskThrottleKeysEvicted.With(s.metricsHandler).Record(1, key.metricsTags()...)
 		}
 	}
 }

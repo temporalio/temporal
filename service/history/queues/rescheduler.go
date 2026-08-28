@@ -54,10 +54,8 @@ type (
 
 	// reschedulerKey partitions parked tasks by the throttle class that governs them as well as
 	// by namespace and priority, so a class that is waiting on a budget cannot head of line
-	// block a class that failed for an unrelated reason and is ready to run now. The whole
-	// ThrottleKey is part of the key, not just its cause: the same cause reported at namespace
-	// scope and at system scope is governed by two different budgets, and sharing one class
-	// between them would let whichever arrived last decide how the other drains.
+	// block a class that failed for an unrelated reason and is ready to run now. The zero
+	// ThrottleKey is what marks a class ungated.
 	reschedulerKey struct {
 		TaskChannelKey
 		Throttle ThrottleKey
@@ -420,21 +418,12 @@ func (r *reschedulerImpl) rescheduleUngatedLocked(now time.Time) {
 	}
 }
 
-// budgetRetryInterval is how long a budget denied class waits before the next release attempt.
+// budgetRetryInterval is how long a budget denied class waits before retrying.
 //
-// eta is the gate's estimate of when it will next hold a token. It can only push the wait out,
-// never pull it in: a class at a low rate is told to wait the whole second its next token needs
-// instead of re-asking ten times to learn nothing, while a class at a high rate keeps the window
-// fraction.
-//
-// The fraction has to stay a floor rather than become a fallback. The bucket is shared by every
-// shard's rescheduler on the host, so a per-shard estimate is computed as though this shard were
-// the only consumer and is wrong by that factor. Letting it shorten the wait makes each shard
-// poll at the whole class's refill rate: at 200/s that is a 5ms wake per shard, twenty times the
-// current cost, to release the same tasks.
-//
-// The result is capped at one window because the rate moves at window close, so a longer wait
-// could sleep through an increase that would have released sooner.
+// eta can only push the wait out, never pull it in. The bucket is shared by every shard's
+// rescheduler on the host, so a per-shard estimate assumes a consumer it does not have; honouring
+// a shorter one would make each shard poll at the whole class's refill rate. Capped at one window
+// because the rate moves there.
 func (r *reschedulerImpl) budgetRetryInterval(eta time.Duration) time.Duration {
 	const budgetRetryDivisor = 10
 
