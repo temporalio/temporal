@@ -376,6 +376,50 @@ func TestCHASMToLegacyStartScheduleArgs_BufferedStartsSortedByActualTime(t *test
 		args.State.BufferedStarts[0].GetActualTime().AsTime().Before(args.State.BufferedStarts[1].GetActualTime().AsTime()))
 }
 
+// TestCHASMToLegacyStartScheduleArgs_PreservesInvokerBufferedOrder verifies that two
+// already-enqueued invoker BufferedStarts keep their original relative order even when the
+// later-enqueued one has an OLDER ActualTime -- exactly what a backfill (processing a
+// historical time range) can produce when it enqueues after a regular tick. A plain sort of
+// the combined list by ActualTime would put the backfill-derived entry first, and since V1's
+// BUFFER_ONE (and "nothing running") always keeps whichever entry is first in the list, that
+// would make the rolled-back scheduler execute the backfill and permanently discard the
+// already-deferred regular start instead.
+func TestCHASMToLegacyStartScheduleArgs_PreservesInvokerBufferedOrder(t *testing.T) {
+	now := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+	scheduler := &schedulerpb.SchedulerState{
+		Namespace:     "ns",
+		NamespaceId:   "ns-id",
+		ScheduleId:    "sched-id",
+		ConflictToken: 1,
+		Schedule:      newTestSchedule(),
+		Info:          &schedulepb.ScheduleInfo{},
+	}
+	invoker := &schedulerpb.InvokerState{
+		BufferedStarts: []*schedulespb.BufferedStart{
+			{
+				// Enqueued first: a regular deferred BUFFER_ONE start, due "now".
+				NominalTime:   timestamppb.New(now),
+				ActualTime:    timestamppb.New(now),
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
+			},
+			{
+				// Enqueued second, e.g. by a backfill processing a historical window --
+				// its own due time is OLDER than the entry already ahead of it.
+				NominalTime:   timestamppb.New(now.Add(-time.Hour)),
+				ActualTime:    timestamppb.New(now.Add(-time.Hour)),
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
+			},
+		},
+	}
+
+	args := CHASMToLegacyStartScheduleArgs(scheduler, nil, invoker, nil, nil, nil, nil, now)
+
+	require.Len(t, args.State.BufferedStarts, 2)
+	require.True(t, args.State.BufferedStarts[0].GetActualTime().AsTime().Equal(now),
+		"the first-enqueued entry must stay first even though its own ActualTime is later")
+	require.True(t, args.State.BufferedStarts[1].GetActualTime().AsTime().Equal(now.Add(-time.Hour)))
+}
+
 func TestCHASMToLegacyStartScheduleArgs_ExcludesAllowAllFromRunningWorkflows(t *testing.T) {
 	// Regression test: workflows started under ALLOW_ALL are tracked in V2 as
 	// BufferedStarts with a RunId (and no Completed) while they run. Modern V1

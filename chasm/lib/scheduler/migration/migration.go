@@ -178,23 +178,29 @@ func CHASMToLegacyStartScheduleArgs(
 		recent = append(storedRecent, recent...)
 	}
 	ongoingBackfills, triggerStarts := convertBackfillersCHASMToLegacy(backfillers, migrationTime)
-	bufferedStarts = append(bufferedStarts, triggerStarts...)
 
-	// Sort phase: each list above is a concatenation of independently-ordered sources
-	// (stored info + invoker-derived for recent; invoker-derived + map-iteration-ordered
-	// triggers for bufferedStarts), so both need re-sorting by due/actual time. V1's
-	// processWatcherResult assumes BufferedStarts[0] is always the earliest-due pending start --
-	// it has no equivalent of CHASM's Attempt field to reorder around -- so an unsorted
-	// bufferedStarts would silently break that assumption on rollback.
+	// recent is a concatenation of independently-ordered sources (stored info + invoker-derived),
+	// and RecentActions has no order-sensitive consumer -- it's just a display/history list -- so
+	// a plain re-sort by ActualTime is correct.
 	if recentFromInfo {
 		slices.SortFunc(recent, func(a, b *schedulepb.ScheduleActionResult) int {
 			return a.GetActualTime().AsTime().Compare(b.GetActualTime().AsTime())
 		})
 		recent = util.SliceTail(recent, legacyRecentActionCount)
 	}
-	slices.SortFunc(bufferedStarts, func(a, b *schedulespb.BufferedStart) int {
-		return a.GetActualTime().AsTime().Compare(b.GetActualTime().AsTime())
-	})
+
+	// bufferedStarts is different: it's already in invoker enqueue order, and that order is
+	// load-bearing -- it's fed into the same ProcessBuffer V1 uses, where BUFFER_ONE and
+	// "nothing running" both take whichever entry comes first in iteration order, never
+	// comparing ActualTime. Backfills can legitimately enqueue an older-ActualTime start after a
+	// newer one (they process historical time ranges out of band from regular ticks), so a plain
+	// sort of the combined list would silently reorder two already-correctly-enqueued invoker
+	// entries relative to each other -- exactly the "BufferedStarts[0] is always the earliest-due
+	// pending start" assumption this is meant to protect, broken a different way. Only
+	// triggerStarts (built from a randomized map iteration over pending backfillers, so they have
+	// no meaningful relative order of their own) need positioning; merge them into the existing
+	// sequence by ActualTime without disturbing bufferedStarts' own relative order.
+	bufferedStarts = mergeTriggerStartsByActualTime(bufferedStarts, triggerStarts)
 
 	var generatorLastProcessed *timestamppb.Timestamp
 	if generator != nil {
@@ -228,6 +234,36 @@ func CHASMToLegacyStartScheduleArgs(
 		Info:     info,
 		State:    state,
 	}
+}
+
+// mergeTriggerStartsByActualTime inserts triggerStarts into bufferedStarts by ActualTime,
+// without disturbing bufferedStarts' own existing relative order. See the comment at the call
+// site for why that order must be preserved rather than re-sorting the combined list from
+// scratch. triggerStarts have no meaningful relative order of their own, so they're sorted
+// first and then threaded into the existing sequence: walking bufferedStarts in its original
+// order, any remaining triggerStarts that are due at or before the current entry are spliced in
+// ahead of it.
+func mergeTriggerStartsByActualTime(
+	bufferedStarts []*schedulespb.BufferedStart,
+	triggerStarts []*schedulespb.BufferedStart,
+) []*schedulespb.BufferedStart {
+	if len(triggerStarts) == 0 {
+		return bufferedStarts
+	}
+	slices.SortFunc(triggerStarts, func(a, b *schedulespb.BufferedStart) int {
+		return a.GetActualTime().AsTime().Compare(b.GetActualTime().AsTime())
+	})
+
+	merged := make([]*schedulespb.BufferedStart, 0, len(bufferedStarts)+len(triggerStarts))
+	next := 0
+	for _, existing := range bufferedStarts {
+		for next < len(triggerStarts) && !triggerStarts[next].GetActualTime().AsTime().After(existing.GetActualTime().AsTime()) {
+			merged = append(merged, triggerStarts[next])
+			next++
+		}
+		merged = append(merged, existing)
+	}
+	return append(merged, triggerStarts[next:]...)
 }
 
 // convertBufferedStartsLegacyToCHASM transforms V1 buffered starts to V2 format.
