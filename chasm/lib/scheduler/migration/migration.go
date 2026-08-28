@@ -250,7 +250,9 @@ func appendSortedTriggerStarts(
 	if len(triggerStarts) == 0 {
 		return bufferedStarts
 	}
-	slices.SortFunc(triggerStarts, func(a, b *schedulespb.BufferedStart) int {
+	// Stable: preserves convertBackfillersCHASMToLegacy's deterministic (by-ID) order as the
+	// tie-break when multiple triggers share the same ActualTime.
+	slices.SortStableFunc(triggerStarts, func(a, b *schedulespb.BufferedStart) int {
 		return a.GetActualTime().AsTime().Compare(b.GetActualTime().AsTime())
 	})
 	return append(bufferedStarts, triggerStarts...)
@@ -548,7 +550,11 @@ func convertBackfillersCHASMToLegacy(
 	var ongoing []*schedulepb.BackfillRequest
 	var triggerStarts []*schedulespb.BufferedStart
 
-	for _, backfiller := range backfillers {
+	// Sorted, not raw map order: gives triggerStarts a deterministic starting order, since the
+	// backfiller ID is discarded once BufferedStart is built and can't break ties later.
+	ids := slices.Sorted(maps.Keys(backfillers))
+	for _, id := range ids {
+		backfiller := backfillers[id]
 		if request := backfiller.GetBackfillRequest(); request != nil {
 			backfill := common.CloneProto(request)
 			if backfiller.GetAttempt() > 0 && backfiller.GetLastProcessedTime() != nil {

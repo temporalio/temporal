@@ -424,6 +424,61 @@ func TestCHASMToLegacyStartScheduleArgs_MultipleTriggersDeterministicOrder(t *te
 	}
 }
 
+// TestCHASMToLegacyStartScheduleArgs_MultipleTriggersEqualTimeDeterministicOrder verifies that
+// when multiple pending triggers share the same ActualTime -- e.g. all fall back to
+// migrationTime because LastProcessedTime is nil -- the resulting order is still deterministic
+// across runs, rather than depending on map iteration order. ActualTime comparisons alone can't
+// break this tie (they're equal); the fix sorts by backfiller ID before it's discarded during
+// conversion, and appendSortedTriggerStarts's stable sort preserves that as the tie-break.
+func TestCHASMToLegacyStartScheduleArgs_MultipleTriggersEqualTimeDeterministicOrder(t *testing.T) {
+	scheduler := &schedulerpb.SchedulerState{
+		Namespace:     "ns",
+		NamespaceId:   "ns-id",
+		ScheduleId:    "sched-id",
+		ConflictToken: 1,
+		Schedule:      newTestSchedule(),
+		Info:          &schedulepb.ScheduleInfo{},
+	}
+	migrationTime := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+	// Converted trigger BufferedStarts carry no field identifying which backfiller they came
+	// from (that's exactly the gap this test guards), so distinguish the two via OverlapPolicy
+	// instead -- it's the only field that varies between them here.
+	backfillers := map[string]*schedulerpb.BackfillerState{
+		"trigger-b": {
+			BackfillId: "trigger-b",
+			// nil LastProcessedTime: both triggers fall back to the same migrationTime.
+			Request: &schedulerpb.BackfillerState_TriggerRequest{
+				TriggerRequest: &schedulepb.TriggerImmediatelyRequest{
+					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+				},
+			},
+		},
+		"trigger-a": {
+			BackfillId: "trigger-a",
+			Request: &schedulerpb.BackfillerState_TriggerRequest{
+				TriggerRequest: &schedulepb.TriggerImmediatelyRequest{
+					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
+				},
+			},
+		},
+	}
+
+	var first []enumspb.ScheduleOverlapPolicy
+	for i := range 20 {
+		args := CHASMToLegacyStartScheduleArgs(scheduler, nil, nil, backfillers, nil, nil, nil, migrationTime)
+		require.Len(t, args.State.BufferedStarts, 2)
+		policies := []enumspb.ScheduleOverlapPolicy{
+			args.State.BufferedStarts[0].GetOverlapPolicy(),
+			args.State.BufferedStarts[1].GetOverlapPolicy(),
+		}
+		if i == 0 {
+			first = policies
+			continue
+		}
+		require.Equal(t, first, policies, "order of equal-ActualTime triggers must be deterministic across runs")
+	}
+}
+
 // TestCHASMToLegacyStartScheduleArgs_PreservesInvokerBufferedOrder verifies that two
 // already-enqueued invoker BufferedStarts keep their original relative order even when the
 // later-enqueued one has an OLDER ActualTime -- exactly what a backfill (processing a
