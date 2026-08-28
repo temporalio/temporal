@@ -763,6 +763,9 @@ func getFieldNameFromStruct(structPtr any, fieldPtr any) (string, error) {
 }
 
 // IsRetryableRPCError checks if the error is a retryable gRPC error.
+//
+// This does not unwrap err: If err may be wrapped (e.g. by an HTTP client, which wraps
+// RoundTripper errors in *url.Error), unwrap it yourself and pass the unwrapped error here.
 func IsRetryableRPCError(err error) bool {
 	var st *status.Status
 	stGetter, ok := err.(interface{ Status() *status.Status })

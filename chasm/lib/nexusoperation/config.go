@@ -236,7 +236,7 @@ Uses Go's len() function to determine the length.`,
 var UseNewFailureWireFormat = dynamicconfig.NewNamespaceBoolSetting(
 	"nexusoperation.useNewFailureWireFormat",
 	true,
-	`Controls whether to use the new failure wire format via an HTTP header that is attached to StartOperation requests.
+	`Controls whether to use the new failure wire format via an HTTP header that is attached to Nexus operation requests.
 Added for safety. Defaults to true. Likely to be removed in future server versions.`,
 )
 

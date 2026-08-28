@@ -535,7 +535,7 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 
 	switch {
 	case errors.As(callErr, &serviceErr):
-		if !common.IsRetryableRPCError(callErr) {
+		if !common.IsRetryableRPCError(serviceErr) {
 			return handleNonRetryableStartOperationError(node, operation, callErr)
 		}
 		// Fall through all uncaught errors to retryable
@@ -773,8 +773,15 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 			}
 		}
 
+		header := nexus.Header(args.headers)
+		if e.Config.UseNewFailureWireFormat(ns.Name().String()) {
+			if header == nil {
+				header = make(nexus.Header, 1)
+			}
+			header.Set(nexusrpc.HeaderTemporalNexusFailureSupport, "true")
+		}
 		startTime = time.Now()
-		callErr = handle.Cancel(callCtx, nexus.CancelOperationOptions{Header: nexus.Header(args.headers)})
+		callErr = handle.Cancel(callCtx, nexus.CancelOperationOptions{Header: header})
 	}
 	failureSource := failureSourceFromContext(callCtx)
 	methodTag := metrics.NexusMethodTag("CancelOperation")

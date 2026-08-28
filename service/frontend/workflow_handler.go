@@ -2518,13 +2518,17 @@ func (wh *WorkflowHandler) DeleteWorkflowExecution(ctx context.Context, request 
 		return nil, err
 	}
 
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	namespaceEntry, err := wh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
 	if err != nil {
 		return nil, err
 	}
 
+	if err := wh.validateWorkflowDeletionCluster(namespaceEntry, request.GetWorkflowExecution().GetWorkflowId()); err != nil {
+		return nil, err
+	}
+
 	_, err = wh.historyClient.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
-		NamespaceId:        namespaceID.String(),
+		NamespaceId:        namespaceEntry.ID().String(),
 		WorkflowExecution:  request.GetWorkflowExecution(),
 		ClosedWorkflowOnly: false,
 	})
@@ -2533,6 +2537,35 @@ func (wh *WorkflowHandler) DeleteWorkflowExecution(ctx context.Context, request 
 	}
 
 	return &workflowservice.DeleteWorkflowExecutionResponse{}, nil
+}
+
+// validateWorkflowDeletionCluster rejects a deletion that targets a cluster which is passive for the
+// workflow. A deletion performed on a passive cluster is not replicated: it only drops the local copy
+// while the active cluster still holds the execution and keeps replicating it back, so the two
+// clusters diverge (and the local copy can even be resurrected by a later replication task). The
+// caller must delete on the active cluster, which replicates the deletion to every other cluster.
+//
+// When XDC redirection is enabled the request is forwarded to the active cluster before it gets here,
+// so this only rejects requests that would otherwise be served locally on a passive cluster. Deleting
+// local state on a passive cluster is still possible through the admin ForceDeleteWorkflowExecution
+// API, which does not go through this handler.
+func (wh *WorkflowHandler) validateWorkflowDeletionCluster(
+	namespaceEntry *namespace.Namespace,
+	workflowID string,
+) error {
+	if !namespaceEntry.IsGlobalNamespace() {
+		return nil
+	}
+	currentCluster := wh.clusterMetadata.GetCurrentClusterName()
+	activeCluster := namespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: workflowID})
+	if activeCluster == currentCluster {
+		return nil
+	}
+	return serviceerror.NewNamespaceNotActive(
+		namespaceEntry.Name().String(),
+		currentCluster,
+		activeCluster,
+	)
 }
 
 // ListOpenWorkflowExecutions is a visibility API to list the open executions in a specific namespace.
@@ -5143,17 +5176,23 @@ func (wh *WorkflowHandler) ListSchedules(
 		return nil, errListNotAllowed
 	}
 
+	metricsHandler := wh.metricsScope(ctx).WithTags(metrics.HeaderCallsiteTag("ListSchedules"))
 	chasmEnabled := wh.chasmSchedulerEnabled(ctx, namespaceName.String())
-	query, err := wh.prepareSchedulerQuery(chasmEnabled, request.Query, namespaceName)
+	schedulerQuery, err := wh.prepareSchedulerQuery(
+		chasmEnabled,
+		request.Query,
+		namespaceName,
+		metricsHandler,
+	)
 	if err != nil {
 		return nil, err
 	}
 
 	if chasmEnabled {
 		// CHASM ListSchedules will include schedules created in the V1/workflow stack.
-		return wh.listSchedulesChasm(ctx, request, namespaceName, namespaceID, query)
+		return wh.listSchedulesChasm(ctx, request, namespaceName, namespaceID, schedulerQuery)
 	}
-	return wh.listSchedulesWorkflow(ctx, request, namespaceName, namespaceID, query)
+	return wh.listSchedulesWorkflow(ctx, request, namespaceName, namespaceID, schedulerQuery)
 }
 
 // prepareSchedulerQuery validates a scheduler RPC's query argument, and wraps it
@@ -5162,6 +5201,7 @@ func (wh *WorkflowHandler) prepareSchedulerQuery(
 	chasmEnabled bool,
 	query string,
 	namespaceName namespace.Name,
+	metricsHandler metrics.Handler,
 ) (string, error) {
 	// Use different base queries based on code path:
 	// - CHASM path uses TemporalSystemExecutionStatus (translated via archetype ID)
@@ -5196,6 +5236,8 @@ func (wh *WorkflowHandler) prepareSchedulerQuery(
 			chasmMapper,
 			wh.config.VisibilityEnableUnifiedQueryConverter,
 			query,
+			metricsHandler,
+			wh.logger,
 		); err != nil {
 			return "", err
 		}
@@ -5332,17 +5374,23 @@ func (wh *WorkflowHandler) CountSchedules(
 		return nil, errListNotAllowed
 	}
 
+	metricsHandler := wh.metricsScope(ctx).WithTags(metrics.HeaderCallsiteTag("CountSchedules"))
 	chasmEnabled := wh.chasmSchedulerEnabled(ctx, namespaceName.String())
-	query, err := wh.prepareSchedulerQuery(chasmEnabled, request.Query, namespaceName)
+	schedulerQuery, err := wh.prepareSchedulerQuery(
+		chasmEnabled,
+		request.Query,
+		namespaceName,
+		metricsHandler,
+	)
 	if err != nil {
 		return nil, err
 	}
 
 	// Route to CHASM or V1 based on config (same pattern as ListSchedules)
 	if chasmEnabled {
-		return wh.countSchedulesChasm(ctx, namespaceID, namespaceName, query)
+		return wh.countSchedulesChasm(ctx, namespaceID, namespaceName, schedulerQuery)
 	}
-	return wh.countSchedulesWorkflow(ctx, namespaceID, namespaceName, query)
+	return wh.countSchedulesWorkflow(ctx, namespaceID, namespaceName, schedulerQuery)
 }
 
 // countSchedulesChasm counts schedules using CHASM APIs

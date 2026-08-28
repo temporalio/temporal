@@ -463,7 +463,7 @@ func (a *Activity) HandleCompleted(
 	}
 
 	baseHandler := a.baseMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCompletedScope)
-	enrichedHandler := a.enrichedMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCompletedScope)
+	enrichedHandler := a.completionMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCompletedScope)
 
 	if err := TransitionCompleted.Apply(a, ctx, completeEvent{
 		req:             event.Request,
@@ -487,7 +487,7 @@ func (a *Activity) HandleFailed(
 	}
 
 	baseHandler := a.baseMetricsHandler(ctx, metrics.HistoryRespondActivityTaskFailedScope)
-	enrichedHandler := a.enrichedMetricsHandler(ctx, metrics.HistoryRespondActivityTaskFailedScope)
+	enrichedHandler := a.completionMetricsHandler(ctx, metrics.HistoryRespondActivityTaskFailedScope)
 	failedRequest := event.Request.GetFailedRequest()
 	failure := failedRequest.GetFailure()
 
@@ -539,7 +539,7 @@ func (a *Activity) HandleCanceled(
 		return nil, consts.ErrActivityTaskNotCancelRequested
 	}
 
-	metricsHandler := a.enrichedMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCanceledScope)
+	metricsHandler := a.completionMetricsHandler(ctx, metrics.HistoryRespondActivityTaskCanceledScope)
 
 	if err := TransitionCanceled.Apply(a, ctx, cancelEvent{
 		details:        event.Request.GetCancelRequest().GetDetails(),
