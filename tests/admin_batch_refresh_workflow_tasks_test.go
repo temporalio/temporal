@@ -41,7 +41,7 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) newTestEnv(opts ...testcore.Te
 	// that haven't completed yet. The isolation test (A_SeparateLimitFromFrontendBatchOperation)
 	// explicitly sets limit to 1 to verify frontend and admin batch ops use separate limits.
 	baseOpts := []testcore.TestOption{
-		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentAdminBatchOperationPerNamespace, 10),
+		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentAdminBatchOperation, 10),
 	}
 	return testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
 }
@@ -258,7 +258,7 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_I
 func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_0_SeparateLimitFromFrontendBatchOperation() {
 	env := s.newTestEnv(
 		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, 1),
-		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentAdminBatchOperationPerNamespace, 1),
+		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentAdminBatchOperation, 1),
 	)
 
 	env.SdkWorker().RegisterWorkflow(s.simpleWorkflow)

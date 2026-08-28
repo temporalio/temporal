@@ -1286,8 +1286,8 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 	operateJobID := request.JobId
 	sysNS, sysNSID := primitives.SystemLocalNamespace, primitives.SystemNamespaceID
 
-	// concurrency control of the overal admin batch ops in the system namespace
-	maxConcurrentBatchOperation := adh.config.MaxConcurrentAdminBatchOperation(sysNS)
+	// Admin batch operations only run in the system namespace, so the concurrency limit is global.
+	maxConcurrentBatchOperation := adh.config.MaxConcurrentAdminBatchOperation()
 	countResp, err := adh.visibilityMgr.CountWorkflowExecutions(ctx, &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: namespace.ID(sysNSID),
 		Namespace:   namespace.Name(sysNS),

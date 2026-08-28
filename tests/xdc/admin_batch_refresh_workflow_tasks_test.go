@@ -40,7 +40,7 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) SetupSuite() {
 	if s.dynamicConfigOverrides == nil {
 		s.dynamicConfigOverrides = make(map[dynamicconfig.Key]any)
 	}
-	s.dynamicConfigOverrides[dynamicconfig.FrontendMaxConcurrentAdminBatchOperationPerNamespace.Key()] = 10
+	s.dynamicConfigOverrides[dynamicconfig.FrontendMaxConcurrentAdminBatchOperation.Key()] = 10
 	s.setupSuite()
 }
 
