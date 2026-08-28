@@ -20,7 +20,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/parallelsuite"
-	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/worker_versioning"
@@ -326,18 +325,16 @@ func (s *WorkerDeploymentSuite) TestDeploymentVersionTaskQueueFamilyLimitAllowsN
 	s.ensureCreateVersionWithExpectedTaskQueues(env, tv, 1)
 
 	go pollActivityFromDeployment(s.Context(), env.TestEnv, tv)
-	s.EventuallyWithT(func(t *assert.CollectT) {
-		a := require.New(t)
+	s.Await(func(s *WorkerDeploymentSuite) {
 		resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(
 			s.Context(),
 			&workflowservice.DescribeWorkerDeploymentVersionRequest{
-				Namespace: env.Namespace().String(),
-				Version:   tv.DeploymentVersionString(),
+				Namespace:         env.Namespace().String(),
+				DeploymentVersion: tv.ExternalDeploymentVersion(),
 			},
 		)
-		a.NoError(err)
-		protorequire.ProtoElementsMatch(
-			t,
+		s.NoError(err)
+		s.ProtoElementsMatch(
 			[]*deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo{
 				{Name: tv.TaskQueue().GetName(), Type: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
 				{Name: tv.TaskQueue().GetName(), Type: enumspb.TASK_QUEUE_TYPE_ACTIVITY},
