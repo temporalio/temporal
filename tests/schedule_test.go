@@ -2017,6 +2017,7 @@ func testListScheduleMatchingTimes(t *testing.T, newContext contextFactory) {
 
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
+			StartTime: &timestamppb.Timestamp{},
 			Interval: []*schedulepb.IntervalSpec{
 				{Interval: durationpb.New(1 * time.Hour)},
 			},
@@ -2048,15 +2049,49 @@ func testListScheduleMatchingTimes(t *testing.T, newContext contextFactory) {
 	startTime := timestamppb.New(now)
 	endTime := timestamppb.New(now.Add(5 * time.Hour))
 
-	resp, err := s.FrontendClient().ListScheduleMatchingTimes(ctx, &workflowservice.ListScheduleMatchingTimesRequest{
-		Namespace:  s.Namespace().String(),
-		ScheduleId: sid,
-		StartTime:  startTime,
-		EndTime:    endTime,
-	})
-	s.NoError(err)
-	// With 1-hour interval over 5 hours, we expect 5 matching times.
-	s.Len(resp.GetStartTime(), 5)
+	for _, tc := range []struct {
+		name          string
+		startTime     *timestamppb.Timestamp
+		endTime       *timestamppb.Timestamp
+		expectedTimes int
+		errorMessage  string
+	}{
+		{
+			name:          "valid range",
+			startTime:     startTime,
+			endTime:       endTime,
+			expectedTimes: 5,
+		},
+		{
+			name:      "epoch range",
+			startTime: &timestamppb.Timestamp{},
+			endTime:   &timestamppb.Timestamp{},
+		},
+		{
+			name:         "invalid start time",
+			startTime:    &timestamppb.Timestamp{Nanos: 1_000_000_000},
+			endTime:      endTime,
+			errorMessage: "start time is not a valid timestamp",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := s.FrontendClient().ListScheduleMatchingTimes(ctx, &workflowservice.ListScheduleMatchingTimesRequest{
+				Namespace:  s.Namespace().String(),
+				ScheduleId: sid,
+				StartTime:  tc.startTime,
+				EndTime:    tc.endTime,
+			})
+			if tc.errorMessage != "" {
+				var invalidArgument *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgument)
+				require.ErrorContains(t, err, tc.errorMessage)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Len(t, resp.GetStartTime(), tc.expectedTimes)
+		})
+	}
 }
 
 func testLimitMemoSpecSize(t *testing.T, newContext contextFactory) {
