@@ -71,7 +71,7 @@ func NewVisibilityArchiver(logger log.Logger, metricsHandler metrics.Handler, cf
 // Please make sure your implementation is lossless. If any in-memory batching mechanism is used, then those batched records will be lost during server restarts.
 // This method will be invoked when workflow closes. Note that because of conflict resolution, it is possible for a workflow to through the closing process multiple times, which means that this method can be invoked more than once after a workflow closes.
 func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, request *archiverspb.VisibilityRecord, opts ...archiver.ArchiveOption) (err error) {
-	handler := v.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryArchiverScope), metrics.NamespaceTag(request.Namespace))
+	handler := v.metricsHandler.WithTags(metrics.OperationTag(metrics.VisibilityArchiverScope), metrics.NamespaceTag(request.Namespace))
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
 	startTime := time.Now().UTC()
 	defer func() {

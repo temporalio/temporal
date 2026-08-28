@@ -206,7 +206,10 @@ func (s *visibilityArchiverSuite) TestVisibilityArchive_ContentAwareDeduplicatio
 
 	err = visibilityArchiver.Archive(ctx, URI, request, archiver.GetVisibilityArchivalRecordDeduplicationOption())
 	s.Require().NoError(err)
-	s.Require().Len(capture.Snapshot()[metrics.VisibilityArchiverBlobExistsCount.Name()], 2)
+	blobExistsRecordings := capture.Snapshot()[metrics.VisibilityArchiverBlobExistsCount.Name()]
+	s.Require().Len(blobExistsRecordings, 2)
+	// Guard against mislabeling visibility archival metrics with the history archiver's operation scope.
+	s.Require().Equal(metrics.VisibilityArchiverScope, blobExistsRecordings[0].Tags[metrics.OperationTagName])
 }
 
 func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidQuery() {
