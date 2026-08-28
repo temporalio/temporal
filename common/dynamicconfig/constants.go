@@ -2796,15 +2796,8 @@ the number of children greater than or equal to this threshold`,
 	ReplicationTaskApplyTimeout = NewGlobalDurationSetting(
 		"history.ReplicationTaskApplyTimeout",
 		20*time.Second,
-		`ReplicationTaskApplyTimeout is the context timeout for replication task apply, and for the
-standby CloseExecutionTask's child-to-parent completion verification`,
-	)
-	ParentWorkflowResendMaxInFlight = NewGlobalIntSetting(
-		"history.parentWorkflowResendMaxInFlight",
-		8,
-		`ParentWorkflowResendMaxInFlight caps how many parent workflow resends a shard may run
-concurrently when EnableAsyncParentWorkflowResend is on. Attempts beyond the cap are dropped; the
-verifying task retries. This bounds the goroutines this path can create per shard.`,
+		`ReplicationTaskApplyTimeout is the context timeout for replication task apply, and for
+standby parent-child verification resends`,
 	)
 	EnableAsyncParentWorkflowResend = NewGlobalBoolSetting(
 		"history.enableAsyncParentWorkflowResend",
@@ -2812,6 +2805,21 @@ verifying task retries. This bounds the goroutines this path can create per shar
 		`EnableAsyncParentWorkflowResend controls whether the standby child-to-parent completion
 verification resends the parent workflow in the background rather than inline, so the verifying task
 is not held for the duration of the cross-cluster sync.`,
+	)
+	EnableChildWorkflowResend = NewGlobalBoolSetting(
+		"history.enableChildWorkflowResend",
+		false,
+		`EnableChildWorkflowResend controls whether standby parent-to-child first workflow task
+verification may resend a missing child workflow in the background from the active cluster. When
+disabled, verification remains local-only. StandbyTaskMissingEventsResendDelay plus
+ReplicationTaskApplyTimeout should remain below StandbyTaskMissingEventsDiscardDelay.`,
+	)
+	WorkflowResendHostMaxInFlight = NewGlobalIntSetting(
+		"history.workflowResendHostMaxInFlight",
+		16,
+		`WorkflowResendHostMaxInFlight caps the total number of asynchronous parent and child workflow
+resends that may run concurrently on a history host. Values less than one reject all asynchronous
+workflow resends.`,
 	)
 	ReplicationTaskFetcherParallelism = NewGlobalIntSetting(
 		"history.ReplicationTaskFetcherParallelism",
