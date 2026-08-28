@@ -81,17 +81,19 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 	}
 
 	if currentRunID == "" {
-		// A zombie must never own the current execution record. Persistence rejects that invariant
-		// violation, so keep an already-zombie snapshot off the current record even when its successor
-		// metadata is unavailable. A non-running run with a known successor must also bypass current;
-		// otherwise a deleted successor could cause the older run to be resurrected as current.
-		targetIsZombie := targetExecutionState.GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
+		// Preserve non-current snapshots without promoting them to current. A zombie must never own the
+		// current execution record. A completed or corrupted run with a known successor must also remain
+		// non-current; otherwise a deleted successor could cause the older run to be resurrected.
+		targetState := targetExecutionState.GetState()
 		targetHasSuccessor := targetExecutionInfo.GetNewExecutionRunId() != "" ||
 			targetExecutionInfo.GetSuccessorRunId() != ""
-		if targetIsZombie || (targetHasSuccessor && !targetMutableState.IsWorkflowExecutionRunning()) {
+		switch {
+		case targetState == enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+			targetState == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED && targetHasSuccessor,
+			targetState == enumsspb.WORKFLOW_EXECUTION_STATE_CORRUPTED && targetHasSuccessor:
 			return r.executeTransaction(
 				ctx,
-				nDCTransactionPolicyCreateAsZombie,
+				nDCTransactionPolicyCreateBypassCurrent,
 				nil, // no current workflow: the current record was deleted
 				targetWorkflow,
 			)
@@ -212,16 +214,9 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	targetWorkflow Workflow,
 ) error {
 
-	// currentWorkflow is nil when dispatchForNewWorkflow determines that the target must not own the
-	// current record. There is nothing to suppress against, and the target is already non-running, so
-	// it stays passive. Do not call SuppressBy with a nil current.
-	targetWorkflowPolicy := historyi.TransactionPolicyPassive
-	if currentWorkflow != nil {
-		var err error
-		targetWorkflowPolicy, err = targetWorkflow.SuppressBy(currentWorkflow)
-		if err != nil {
-			return err
-		}
+	targetWorkflowPolicy, err := targetWorkflow.SuppressBy(currentWorkflow)
+	if err != nil {
+		return err
 	}
 	if !r.bypassVersionSemanticsCheck && targetWorkflowPolicy != historyi.TransactionPolicyPassive {
 		return serviceerror.NewInternal("transactionMgrForNewWorkflow createAsZombie encountered target workflow policy not being passive")
@@ -229,10 +224,26 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 
 	// release lock on current workflow, since current cluster maybe the active cluster
 	// and events maybe reapplied to current workflow
-	if currentWorkflow != nil {
-		currentWorkflow.GetReleaseFn()(nil)
-		currentWorkflow = nil
-	}
+	currentWorkflow.GetReleaseFn()(nil)
+
+	return r.persistBypassCurrent(ctx, targetWorkflow, targetWorkflowPolicy)
+}
+
+// createBypassCurrent persists the incoming execution state as-is without creating or updating the
+// current execution record. Unlike createAsZombie, it deliberately performs no suppression and no
+// workflow state transition.
+func (r *nDCTransactionMgrForNewWorkflowImpl) createBypassCurrent(
+	ctx context.Context,
+	targetWorkflow Workflow,
+) error {
+	return r.persistBypassCurrent(ctx, targetWorkflow, historyi.TransactionPolicyPassive)
+}
+
+func (r *nDCTransactionMgrForNewWorkflowImpl) persistBypassCurrent(
+	ctx context.Context,
+	targetWorkflow Workflow,
+	targetWorkflowPolicy historyi.TransactionPolicy,
+) error {
 
 	ms := targetWorkflow.GetMutableState()
 
@@ -271,7 +282,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 		}
 	}
 
-	// target workflow is in zombie state, no need to update current record.
+	// The target workflow is non-current, so do not create or update the current record.
 	createMode := persistence.CreateWorkflowModeBypassCurrent
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
@@ -352,6 +363,12 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) executeTransaction(
 		return r.createAsZombie(
 			ctx,
 			currentWorkflow,
+			targetWorkflow,
+		)
+
+	case nDCTransactionPolicyCreateBypassCurrent:
+		return r.createBypassCurrent(
+			ctx,
 			targetWorkflow,
 		)
 

@@ -134,20 +134,27 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandNew(
 	s.True(releaseCalled)
 }
 
-func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_NoCurrentRecord_ClosedWithNewExecutionRunID_CreatesAsZombie() {
-	s.testDispatchForNewWorkflowNoCurrentRecordClosedWithSuccessor(&persistencespb.WorkflowExecutionInfo{
+func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_NoCurrentRecord_CompletedWithNewExecutionRunID_CreatesBypassCurrentPreservingState() {
+	s.testDispatchForNewWorkflowNoCurrentRecordPreservesState(&persistencespb.WorkflowExecutionInfo{
 		NewExecutionRunId: "successor run ID",
-	})
+	}, enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED)
 }
 
-func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_NoCurrentRecord_ClosedWithSuccessorRunID_CreatesAsZombie() {
-	s.testDispatchForNewWorkflowNoCurrentRecordClosedWithSuccessor(&persistencespb.WorkflowExecutionInfo{
+func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_NoCurrentRecord_CompletedWithSuccessorRunID_CreatesBypassCurrentPreservingState() {
+	s.testDispatchForNewWorkflowNoCurrentRecordPreservesState(&persistencespb.WorkflowExecutionInfo{
 		SuccessorRunId: "successor run ID",
-	})
+	}, enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED)
 }
 
-func (s *transactionMgrForNewWorkflowSuite) testDispatchForNewWorkflowNoCurrentRecordClosedWithSuccessor(
+func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_NoCurrentRecord_CorruptedWithSuccessorRunID_CreatesBypassCurrentPreservingState() {
+	s.testDispatchForNewWorkflowNoCurrentRecordPreservesState(&persistencespb.WorkflowExecutionInfo{
+		SuccessorRunId: "successor run ID",
+	}, enumsspb.WORKFLOW_EXECUTION_STATE_CORRUPTED)
+}
+
+func (s *transactionMgrForNewWorkflowSuite) testDispatchForNewWorkflowNoCurrentRecordPreservesState(
 	executionInfo *persistencespb.WorkflowExecutionInfo,
+	executionStateValue enumsspb.WorkflowExecutionState,
 ) {
 	ctx := context.Background()
 
@@ -167,8 +174,14 @@ func (s *transactionMgrForNewWorkflowSuite) testDispatchForNewWorkflowNoCurrentR
 	targetWorkflow.EXPECT().GetMutableState().Return(mutableState).AnyTimes()
 	targetWorkflow.EXPECT().GetReleaseFn().Return(releaseFn).AnyTimes()
 
-	workflowSnapshot := &persistence.WorkflowSnapshot{}
-	// Non-empty event sequence so the reapply branch of createAsZombie is exercised (rather than
+	executionState := &persistencespb.WorkflowExecutionState{
+		RunId: runID,
+		State: executionStateValue,
+	}
+	workflowSnapshot := &persistence.WorkflowSnapshot{
+		ExecutionState: executionState,
+	}
+	// Non-empty event sequence so the reapply branch of createBypassCurrent is exercised (rather than
 	// short-circuited by empty lists). On the passive apply path reapply is forwarded to the active
 	// cluster; here the mock stands in for a successful reapply.
 	workflowEventsSeq := []*persistence.WorkflowEvents{{
@@ -177,10 +190,7 @@ func (s *transactionMgrForNewWorkflowSuite) testDispatchForNewWorkflowNoCurrentR
 		}},
 	}}
 	mutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
-	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
-		RunId: runID,
-	}).AnyTimes()
-	mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
+	mutableState.EXPECT().GetExecutionState().Return(executionState).AnyTimes()
 	mutableState.EXPECT().GetReapplyCandidateEvents().Return(nil)
 	mutableState.EXPECT().CloseTransactionAsSnapshot(context.Background(), historyi.TransactionPolicyPassive).Return(
 		workflowSnapshot, workflowEventsSeq, nil,
@@ -190,9 +200,9 @@ func (s *transactionMgrForNewWorkflowSuite) testDispatchForNewWorkflowNoCurrentR
 		ctx, namespaceID, workflowID, chasm.WorkflowArchetypeID,
 	).Return("", nil)
 
-	// A closed run with a successor and no current record must not resurrect as current: even with
-	// events to reapply, it is persisted via bypass-current without touching the (absent) current
-	// record. SuppressBy is never called since there is no current workflow to suppress against.
+	// A non-current run with a successor and no current record must not resurrect as current: even
+	// with events to reapply, it is persisted via bypass-current without touching the (absent)
+	// current record. SuppressBy is never called since there is no current workflow to suppress against.
 	weContext.EXPECT().ReapplyEvents(gomock.Any(), s.mockShard, workflowEventsSeq).Return(nil)
 	weContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
@@ -203,15 +213,30 @@ func (s *transactionMgrForNewWorkflowSuite) testDispatchForNewWorkflowNoCurrentR
 		mutableState,
 		workflowSnapshot,
 		workflowEventsSeq,
-		gomock.Any(),
-	).Return(nil)
+		historyi.TransactionPolicyPassive,
+	).DoAndReturn(func(
+		_ context.Context,
+		_ historyi.ShardContext,
+		createMode persistence.CreateWorkflowMode,
+		_ string,
+		_ int64,
+		_ historyi.MutableState,
+		workflowSnapshot *persistence.WorkflowSnapshot,
+		_ []*persistence.WorkflowEvents,
+		_ historyi.TransactionPolicy,
+	) error {
+		s.Equal(persistence.CreateWorkflowModeBypassCurrent, createMode)
+		s.Equal(executionStateValue, workflowSnapshot.ExecutionState.State)
+		return persistence.ValidateCreateWorkflowModeState(createMode, *workflowSnapshot)
+	})
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, chasm.WorkflowArchetypeID, targetWorkflow)
 	s.NoError(err)
+	s.Equal(executionStateValue, executionState.State)
 	s.True(releaseCalled)
 }
 
-func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_NoCurrentRecord_ZombieWithoutSuccessor_CreatesAsZombie() {
+func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_NoCurrentRecord_ZombieWithoutSuccessor_CreatesBypassCurrentPreservingState() {
 	ctx := context.Background()
 
 	namespaceID := namespace.ID("some random namespace ID")
@@ -276,11 +301,14 @@ func (s *transactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_NoCurrent
 		_ []*persistence.WorkflowEvents,
 		_ historyi.TransactionPolicy,
 	) error {
+		s.Equal(persistence.CreateWorkflowModeBypassCurrent, createMode)
+		s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, workflowSnapshot.ExecutionState.State)
 		return persistence.ValidateCreateWorkflowModeState(createMode, *workflowSnapshot)
 	})
 
 	err := s.createMgr.dispatchForNewWorkflow(ctx, chasm.WorkflowArchetypeID, targetWorkflow)
 	s.Require().NoError(err)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, executionState.State)
 	s.True(releaseCalled)
 }
 
