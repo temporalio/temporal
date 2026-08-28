@@ -1323,7 +1323,7 @@ func (s *taskRefresherSuite) TestRefreshWorkflowSearchAttributesTasks() {
 			NamespaceId: tests.NamespaceID.String(),
 			WorkflowId:  tests.WorkflowID,
 			VisibilityLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
-				TransitionCount:          3,
+				TransitionCount:          1,
 				NamespaceFailoverVersion: common.EmptyVersion,
 			},
 		},
@@ -1346,6 +1346,14 @@ func (s *taskRefresherSuite) TestRefreshWorkflowSearchAttributesTasks() {
 
 	s.mockTaskGenerator.EXPECT().GenerateUpsertVisibilityTask().Return(nil).Times(1)
 
+	// Workflow start uses StartExecutionVisibilityTask and must not also produce an upsert.
+	err = s.taskRefresher.refreshTasksForWorkflowSearchAttr(mutableState, s.mockTaskGenerator, EmptyVersionedTransition)
+	s.NoError(err)
+
+	mutableState.GetExecutionInfo().VisibilityLastUpdateVersionedTransition = &persistencespb.VersionedTransition{
+		TransitionCount:          3,
+		NamespaceFailoverVersion: common.EmptyVersion,
+	}
 	err = s.taskRefresher.refreshTasksForWorkflowSearchAttr(mutableState, s.mockTaskGenerator, &persistencespb.VersionedTransition{
 		TransitionCount:          2,
 		NamespaceFailoverVersion: common.EmptyVersion,
