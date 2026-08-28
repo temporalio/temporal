@@ -66,6 +66,10 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 		return nil
 	case *adminservice.DescribeTaskQueuePartitionResponse:
 		return nil
+	case *adminservice.DumpDynamicConfigValuesRequest:
+		return nil
+	case *adminservice.DumpDynamicConfigValuesResponse:
+		return nil
 	case *adminservice.ForceUnloadTaskQueuePartitionRequest:
 		return nil
 	case *adminservice.ForceUnloadTaskQueuePartitionResponse:

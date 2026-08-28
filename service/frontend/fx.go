@@ -807,6 +807,7 @@ func AdminHandlerProvider(
 	namespaceDataMerger nsreplication.NamespaceDataMerger,
 	schedulerClient schedulerpb.SchedulerServiceClient,
 	namespaceDLQHandler nsreplication.DLQMessageHandler,
+	dynamicConfig *dynamicconfig.Collection,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
@@ -836,6 +837,7 @@ func AdminHandlerProvider(
 		chasmRegistry,
 		namespaceDataMerger,
 		schedulerClient,
+		dynamicConfig,
 		taskCategoryRegistry,
 		matchingClient,
 	}

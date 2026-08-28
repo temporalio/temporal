@@ -124,6 +124,15 @@ func NewCollection(client Client, logger log.Logger) *Collection {
 	}
 }
 
+// DumpConfiguredValues returns all configured values currently held by the Client.
+func (c *Collection) DumpConfiguredValues() (ConfigValueMap, error) {
+	provider, ok := c.client.(ConfigValueMapProvider)
+	if !ok {
+		return nil, errors.New("dynamic config client does not support dumping configured values")
+	}
+	return provider.Dump(), nil
+}
+
 func (c *Collection) Start() {
 	c.subscriptionLock.Lock()
 	defer c.subscriptionLock.Unlock()

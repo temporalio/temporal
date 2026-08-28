@@ -2,6 +2,7 @@ package frontend
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -46,6 +47,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -89,6 +91,7 @@ type (
 		eventLogger                otellog.Logger
 		numberOfHistoryShards      int32
 		config                     *Config
+		dynamicConfig              *dynamicconfig.Collection
 		namespaceDLQHandler        nsreplication.DLQMessageHandler
 		eventSerializer            serialization.Serializer
 		visibilityMgr              manager.VisibilityManager
@@ -146,6 +149,7 @@ type (
 		ChasmRegistry                       *chasm.Registry
 		NamespaceDataMerger                 nsreplication.NamespaceDataMerger
 		SchedulerClient                     schedulerpb.SchedulerServiceClient
+		DynamicConfig                       *dynamicconfig.Collection
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -180,6 +184,7 @@ func NewAdminHandler(
 		status:                     common.DaemonStatusInitialized,
 		numberOfHistoryShards:      args.PersistenceConfig.NumHistoryShards,
 		config:                     args.Config,
+		dynamicConfig:              args.DynamicConfig,
 		namespaceDLQHandler:        namespaceDLQHandler,
 		eventSerializer:            args.EventSerializer,
 		visibilityMgr:              args.visibilityMgr,
@@ -2232,6 +2237,30 @@ func convertFailoverHistoryToReplicationProto(
 	}
 
 	return replicationProto
+}
+
+func (adh *AdminHandler) DumpDynamicConfigValues(
+	_ context.Context,
+	request *adminservice.DumpDynamicConfigValuesRequest,
+) (_ *adminservice.DumpDynamicConfigValuesResponse, retErr error) {
+	defer log.CapturePanic(adh.logger, &retErr)
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	values, err := adh.dynamicConfig.DumpConfiguredValues()
+	if err != nil {
+		return nil, serviceerror.NewUnimplemented(err.Error())
+	}
+	valuesByKey := make(map[string][]dynamicconfig.ConstrainedValue, len(values))
+	for key, constrainedValues := range values {
+		valuesByKey[key.String()] = constrainedValues
+	}
+	encodedValues, err := json.Marshal(valuesByKey)
+	if err != nil {
+		return nil, serviceerror.NewInternalf("unable to encode dynamic config values: %v", err)
+	}
+	return &adminservice.DumpDynamicConfigValuesResponse{Values: encodedValues}, nil
 }
 
 func (adh *AdminHandler) MigrateSchedule(ctx context.Context, request *adminservice.MigrateScheduleRequest) (_ *adminservice.MigrateScheduleResponse, retErr error) {

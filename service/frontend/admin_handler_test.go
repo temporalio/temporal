@@ -205,6 +205,17 @@ func (s *adminHandlerSuite) SetupTest() {
 		chasmRegistry,
 		nsreplication.NewNoopDataMerger(),
 		nil, // schedulerClient - not needed for most admin handler tests
+		dynamicconfig.NewCollection(
+			dynamicconfig.StaticClient{
+				dynamicconfig.WorkflowTimeSkippingEnabled.Key(): []dynamicconfig.ConstrainedValue{
+					{
+						Constraints: dynamicconfig.Constraints{Namespace: s.namespace.String()},
+						Value:       true,
+					},
+				},
+			},
+			s.mockResource.GetLogger(),
+		),
 		tasks.NewDefaultTaskCategoryRegistry(),
 		s.mockResource.GetMatchingClient(),
 	}
@@ -228,6 +239,20 @@ func (s *adminHandlerSuite) SetupTest() {
 func (s *adminHandlerSuite) TearDownTest() {
 	s.controller.Finish()
 	s.handler.Stop()
+}
+
+func (s *adminHandlerSuite) TestDumpDynamicConfigValues() {
+	response, err := s.handler.DumpDynamicConfigValues(
+		s.T().Context(),
+		&adminservice.DumpDynamicConfigValuesRequest{},
+	)
+	s.Require().NoError(err)
+	s.JSONEq(fmt.Sprintf(`{
+		"frontend.workflowtimeskippingenabled": [{
+			"constraints": {"namespace": %q},
+			"value": true
+		}]
+	}`, s.namespace), string(response.GetValues()))
 }
 
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Success() {
