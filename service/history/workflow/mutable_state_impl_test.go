@@ -1937,6 +1937,27 @@ func (s *mutableStateSuite) TestUpdateWorkflowStateStatus_Table() {
 	}
 }
 
+func (s *mutableStateSuite) TestUpdateWorkflowStateStatus_VisibilityTracking() {
+	s.SetupSubTest()
+	s.mutableState.executionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
+	s.mutableState.executionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+
+	_, err := s.mutableState.UpdateWorkflowStateStatus(
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	)
+	s.NoError(err)
+	s.True(s.mutableState.executionStateUpdated)
+	s.False(s.mutableState.visibilityUpdated)
+
+	_, err = s.mutableState.UpdateWorkflowStateStatus(
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
+	)
+	s.NoError(err)
+	s.True(s.mutableState.visibilityUpdated)
+}
+
 func (s *mutableStateSuite) TestAddWorkflowExecutionPausedEvent() {
 	s.SetupSubTest()
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
