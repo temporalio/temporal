@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -533,10 +534,6 @@ func (s *workflowSuite) TestInitialPatch() {
 		return nil, nil
 	})
 
-	prevVersion := CurrentTweakablePolicies.Version
-	CurrentTweakablePolicies.Version = RefreshCompletionDesiredTime
-	defer func() { CurrentTweakablePolicies.Version = prevVersion }()
-
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 2
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
@@ -661,12 +658,15 @@ func (s *workflowSuite) TestRefreshCompletionDesiredTimeBacklog() {
 	s.Equal([]time.Duration{5 * time.Minute}, s.metrics.timerValues(metrics.ScheduleActionDelay.Name()))
 }
 
-// TestInitialPatchRefreshCompletionAtOldVersion pins the pre-fix behavior for histories recorded
-// below RefreshCompletionDesiredTime: a refresh (non-long-poll) discovering the prior action's
-// completion must NOT populate BufferedStarts[0].DesiredTime, since that value flows into the
-// continue-as-new Input and any divergence there would be a replay nondeterminism break for
-// already-recorded histories, version-ceiling peers, or a rollback to older code.
-func (s *workflowSuite) TestInitialPatchRefreshCompletionAtOldVersion() {
+// TestRefreshCompletionDesiredTimeBacklogAtOldVersion pins the pre-fix behavior for histories
+// recorded below RefreshCompletionDesiredTime: it runs the exact same genuinely-blocked scenario
+// as TestRefreshCompletionDesiredTimeBacklog above (refresh discovers a close after the buffered
+// start's own due time), but at the old version, where the refresh path must stay a no-op even
+// though the close time would otherwise qualify for backdating. This is the case the version gate
+// exists to protect: without it, a mixed-fleet rolling deploy of this fix could have an old binary
+// record a continue-as-new Input with DesiredTime unset, and a new binary later replay that same
+// history and compute DesiredTime differently, breaking determinism.
+func (s *workflowSuite) TestRefreshCompletionDesiredTimeBacklogAtOldVersion() {
 	prevVersion := CurrentTweakablePolicies.Version
 	CurrentTweakablePolicies.Version = TriggerImmediatelyTimestamp
 	defer func() { CurrentTweakablePolicies.Version = prevVersion }()
@@ -680,27 +680,49 @@ func (s *workflowSuite) TestInitialPatchRefreshCompletionAtOldVersion() {
 		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
 		s.Equal("myid-2022-06-01T00:00:00Z", req.Execution.WorkflowId)
 		s.False(req.LongPoll)
+		return &schedulespb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}, nil
+	})
+	s.env.OnActivity(new(activities).WatchWorkflow, mock.Anything, mock.MatchedBy(func(req *schedulespb.WatchWorkflowRequest) bool {
+		return req.LongPoll
+	})).Once().AfterFn(func() time.Duration {
+		return 20 * time.Minute
+	}).Return(func(ctx context.Context, req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
 		return &schedulespb.WatchWorkflowResponse{
 			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-			CloseTime: timestamppb.New(baseStartTime.Add(10 * time.Minute)),
+			CloseTime: timestamppb.New(baseStartTime.Add(20 * time.Minute)),
+		}, nil
+	})
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SignalWorkflow(SignalNameRefresh, nil)
+	}, 25*time.Minute)
+	s.expectWatch(func(req *schedulespb.WatchWorkflowRequest) (*schedulespb.WatchWorkflowResponse, error) {
+		s.True(time.Date(2022, 6, 1, 0, 25, 0, 0, time.UTC).Equal(s.now()))
+		s.Equal("myid-2022-06-01T00:00:00Z", req.Execution.WorkflowId)
+		s.False(req.LongPoll)
+		return &schedulespb.WatchWorkflowResponse{
+			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			CloseTime: timestamppb.New(baseStartTime.Add(20 * time.Minute)),
 		}, nil
 	})
 	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
-		s.True(time.Date(2022, 6, 1, 0, 15, 0, 0, time.UTC).Equal(s.now()))
+		s.True(time.Date(2022, 6, 1, 0, 25, 0, 0, time.UTC).Equal(s.now()))
 		s.Equal("myid-2022-06-01T00:15:00Z", req.Request.WorkflowId)
 		return nil, nil
 	})
 
-	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 2
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 3
 	s.env.SetStartTime(baseStartTime)
 	s.env.ExecuteWorkflow(SchedulerWorkflow, &schedulespb.StartScheduleArgs{
 		Schedule: &schedulepb.Schedule{
 			Spec: &schedulepb.ScheduleSpec{
 				Interval: []*schedulepb.IntervalSpec{{
-					Interval: durationpb.New(55 * time.Minute),
+					Interval: durationpb.New(15 * time.Minute),
 				}},
 			},
 			Action: s.defaultAction("myid"),
+			Policies: &schedulepb.SchedulePolicies{
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
+			},
 		},
 		State: &schedulespb.InternalState{
 			Namespace:     "myns",
@@ -714,9 +736,114 @@ func (s *workflowSuite) TestInitialPatchRefreshCompletionAtOldVersion() {
 	})
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
-	// Falls back to the scheduled (actual) time, not the prior action's close time: the pre-fix
-	// baseline, unchanged for histories below the version gate.
-	s.Equal([]time.Duration{0}, s.metrics.timerValues(metrics.ScheduleActionDelay.Name()))
+	// Falls back to the scheduled (actual) time, not the prior action's close time: due at :15,
+	// started at :25, a 10 minute delay -- the pre-fix baseline. If this ever comes back 5 minutes
+	// (the fixed value from the sibling test above), the version gate has stopped doing its job.
+	s.Equal([]time.Duration{10 * time.Minute}, s.metrics.timerValues(metrics.ScheduleActionDelay.Name()))
+}
+
+func TestShouldBackdateDesiredTime(t *testing.T) {
+	base := baseStartTime
+	dueAt15 := timestamppb.New(base.Add(15 * time.Minute))
+
+	testCases := []struct {
+		name                      string
+		long                      bool
+		closeTime                 *timestamppb.Timestamp
+		nextActualTime            *timestamppb.Timestamp
+		nextResolvedOverlapPolicy enumspb.ScheduleOverlapPolicy
+		want                      bool
+	}{
+		{
+			name: "long poll always backdates regardless of policy or timing",
+			long: true,
+			// close before due and ALLOW_ALL would both independently forbid backdating on the
+			// refresh path; the long-poll path predates and ignores both.
+			closeTime:                 timestamppb.New(base.Add(10 * time.Minute)),
+			nextActualTime:            dueAt15,
+			nextResolvedOverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			want:                      true,
+		},
+		{
+			name:                      "refresh with nil close time never backdates",
+			long:                      false,
+			closeTime:                 nil,
+			nextActualTime:            dueAt15,
+			nextResolvedOverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
+			want:                      false,
+		},
+		{
+			name:                      "refresh with close before due time does not backdate: start ran on time",
+			long:                      false,
+			closeTime:                 timestamppb.New(base.Add(10 * time.Minute)),
+			nextActualTime:            dueAt15,
+			nextResolvedOverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
+			want:                      false,
+		},
+		{
+			name:                      "refresh with close after due time backdates under BUFFER_ONE: genuinely blocked",
+			long:                      false,
+			closeTime:                 timestamppb.New(base.Add(20 * time.Minute)),
+			nextActualTime:            dueAt15,
+			nextResolvedOverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
+			want:                      true,
+		},
+		{
+			name:                      "refresh with close after due time backdates under BUFFER_ALL",
+			long:                      false,
+			closeTime:                 timestamppb.New(base.Add(20 * time.Minute)),
+			nextActualTime:            dueAt15,
+			nextResolvedOverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+			want:                      true,
+		},
+		{
+			name:                      "refresh with close after due time backdates under CANCEL_OTHER",
+			long:                      false,
+			closeTime:                 timestamppb.New(base.Add(20 * time.Minute)),
+			nextActualTime:            dueAt15,
+			nextResolvedOverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_CANCEL_OTHER,
+			want:                      true,
+		},
+		{
+			name:                      "refresh with close after due time backdates under TERMINATE_OTHER",
+			long:                      false,
+			closeTime:                 timestamppb.New(base.Add(20 * time.Minute)),
+			nextActualTime:            dueAt15,
+			nextResolvedOverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_TERMINATE_OTHER,
+			want:                      true,
+		},
+		{
+			name:                      "refresh with close after due time backdates under SKIP",
+			long:                      false,
+			closeTime:                 timestamppb.New(base.Add(20 * time.Minute)),
+			nextActualTime:            dueAt15,
+			nextResolvedOverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+			want:                      true,
+		},
+		{
+			// The regression this test guards against: a schedule policy change to ALLOW_ALL
+			// means processBuffer starts this entry regardless of isRunning, so it was never
+			// blocked on the workflow whose close the refresh just discovered. Backdating here
+			// would understate schedule_action_delay by attributing an unrelated close time.
+			name:                      "refresh with close after due time does NOT backdate under ALLOW_ALL",
+			long:                      false,
+			closeTime:                 timestamppb.New(base.Add(20 * time.Minute)),
+			nextActualTime:            dueAt15,
+			nextResolvedOverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			want:                      false,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := shouldBackdateDesiredTime(
+				tc.long,
+				tc.closeTime,
+				tc.nextActualTime,
+				tc.nextResolvedOverlapPolicy,
+			)
+			require.Equal(t, tc.want, got)
+		})
+	}
 }
 
 func (s *workflowSuite) TestCatchupWindow() {
