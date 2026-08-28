@@ -90,9 +90,10 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() (retErr error) {
 	// inspectedMS is the mutable-state snapshot examined during verification, captured for the
 	// best-effort "applied" lifecycle event emitted below.
 	var inspectedMS *persistencespb.WorkflowMutableState
+	var backfillDetails map[string]any
 	defer func() {
 		if emitLifecycle {
-			e.emitReplicationVerifyApplied(inspectedMS, retErr)
+			e.emitReplicationVerifyApplied(inspectedMS, retErr, backfillDetails)
 		}
 	}()
 
@@ -206,6 +207,13 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() (retErr error) {
 	startEventVersion, err := versionhistory.GetVersionHistoryEventVersion(targetHistory, lcaItem.EventId+1)
 	if err != nil {
 		return err
+	}
+	backfillDetails = map[string]any{
+		"recovery_action":     wideevents.ReplRecoveryActionResendHistory,
+		"first_event_id":      lcaItem.EventId + 1,
+		"first_event_version": startEventVersion,
+		"last_event_id":       lastItem.EventId,
+		"last_event_version":  lastItem.Version,
 	}
 	return e.BackFillEvents(
 		ctx,

@@ -88,6 +88,9 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationQueue() {
 	s.Nil(err, "GetReplicationMessages failed.")
 	s.Len(result, numMessages)
 	s.Equal(int64(numMessages-1), lastRetrievedMessageID)
+	for i, task := range result {
+		s.Equal(int64(i), task.SourceTaskId)
+	}
 }
 
 // TestQueueMetadataOperations tests queue metadata operations

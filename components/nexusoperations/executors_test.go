@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -99,6 +101,9 @@ func TestProcessInvocationTask(t *testing.T) {
 		startToCloseTimeout        time.Duration
 		schedToStartTimeout        time.Duration
 		destinationDown            bool
+		// httpCallerErr, when set, fails the outbound HTTP call with this error instead of
+		// performing a real request.
+		httpCallerErr error
 	}{
 		{
 			name:            "async start",
@@ -380,6 +385,22 @@ func TestProcessInvocationTask(t *testing.T) {
 			},
 		},
 		{
+			name:           "transient service error wrapped by HTTP caller",
+			requestTimeout: time.Hour,
+			httpCallerErr: &url.Error{
+				Op:  "Post",
+				URL: "http://unavailable",
+				Err: serviceerror.NewUnavailable("no frontend host to route request to"),
+			},
+			expectedMetricOutcome: "service-error:Unavailable",
+			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
+				require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
+				require.False(t, op.LastAttemptFailure.GetServerFailureInfo().GetNonRetryable())
+				require.Contains(t, op.LastAttemptFailure.Message, "Unavailable")
+				require.Empty(t, events)
+			},
+		},
+		{
 			name:                  "invocation timeout by request timeout",
 			requestTimeout:        2 * time.Millisecond,
 			schedToCloseTimeout:   time.Hour,
@@ -655,11 +676,17 @@ func TestProcessInvocationTask(t *testing.T) {
 				Logger:                 log.NewNoopLogger(),
 				EndpointRegistry:       endpointReg,
 				ClientProvider: func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexusrpc.HTTPClient, error) {
-					return nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
+					options := nexusrpc.HTTPClientOptions{
 						BaseURL:    "http://" + listenAddr,
 						Service:    service,
 						Serializer: commonnexus.PayloadSerializer,
-					})
+					}
+					if tc.httpCallerErr != nil {
+						options.HTTPCaller = func(*http.Request) (*http.Response, error) {
+							return nil, tc.httpCallerErr
+						}
+					}
+					return nexusrpc.NewHTTPClient(options)
 				},
 			}))
 
@@ -973,16 +1000,17 @@ func TestProcessStartToCloseTimeoutTask(t *testing.T) {
 
 func TestProcessCancelationTask(t *testing.T) {
 	cases := []struct {
-		name                  string
-		endpointNotFound      bool
-		onCancelOperation     func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error
-		expectedMetricOutcome string
-		checkOutcome          func(t *testing.T, op nexusoperations.Cancelation)
-		requestTimeout        time.Duration
-		schedToCloseTimeout   time.Duration
-		startToCloseTimeout   time.Duration
-		destinationDown       bool
-		header                map[string]string
+		name                        string
+		endpointNotFound            bool
+		onCancelOperation           func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error
+		expectedMetricOutcome       string
+		checkOutcome                func(t *testing.T, op nexusoperations.Cancelation)
+		requestTimeout              time.Duration
+		schedToCloseTimeout         time.Duration
+		startToCloseTimeout         time.Duration
+		destinationDown             bool
+		header                      map[string]string
+		disableNewFailureWireFormat bool
 	}{
 		{
 			name:            "failure",
@@ -1017,13 +1045,36 @@ func TestProcessCancelationTask(t *testing.T) {
 			},
 		},
 		{
-			name:            "success with headers",
+			name:            "success with temporal failure capability and user headers",
 			requestTimeout:  time.Hour,
 			destinationDown: false,
 			header:          map[string]string{"key": "value"},
 			onCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
 				if options.Header["key"] != "value" {
 					return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, `"key" header is not equal to "value"`)
+				}
+				if options.Header.Get(nexusrpc.HeaderTemporalNexusFailureSupport) != "true" {
+					return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "temporal failure capability is not enabled")
+				}
+				return nil
+			},
+			expectedMetricOutcome: "successful",
+			checkOutcome: func(t *testing.T, c nexusoperations.Cancelation) {
+				require.Equal(t, enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SUCCEEDED, c.State())
+				require.Nil(t, c.LastAttemptFailure.GetApplicationFailureInfo())
+			},
+		},
+		{
+			name:                        "success without temporal failure capability",
+			requestTimeout:              time.Hour,
+			header:                      map[string]string{"key": "value"},
+			disableNewFailureWireFormat: true,
+			onCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
+				if options.Header["key"] != "value" {
+					return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, `"key" header is not equal to "value"`)
+				}
+				if options.Header.Get(nexusrpc.HeaderTemporalNexusFailureSupport) != "" {
+					return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "temporal failure capability is enabled")
 				}
 				return nil
 			},
@@ -1182,7 +1233,7 @@ func TestProcessCancelationTask(t *testing.T) {
 					RequestTimeout:                      dynamicconfig.GetDurationPropertyFnFilteredByDestination(tc.requestTimeout),
 					MinRequestTimeout:                   dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
 					RecordCancelRequestCompletionEvents: dynamicconfig.GetBoolPropertyFn(true),
-					UseNewFailureWireFormat:             dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+					UseNewFailureWireFormat:             dynamicconfig.GetBoolPropertyFnFilteredByNamespace(!tc.disableNewFailureWireFormat),
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},

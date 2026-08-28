@@ -104,6 +104,28 @@ const (
 	ReplOperationDLQWrite                         = "dlq_write"
 )
 
+// Parent-child diagnostics reuse the ReplicationLifecycle event and store this vocabulary in
+// details. Keeping the values here gives producers a shared contract without adding an event table.
+const (
+	ParentChildLifecycleEventType = "parent_child_lifecycle"
+
+	ParentChildPhaseVerifyChildCompletion = "verify_child_completion"
+	ParentChildPhaseParentResend          = "parent_resend"
+	ParentChildPhaseChildResend           = "child_resend"
+
+	ParentChildOutcomeNotFound          = "not_found"
+	ParentChildOutcomeCompletionMissing = "completion_missing"
+	ParentChildOutcomeScheduled         = "scheduled"
+	ParentChildOutcomeStarted           = "started"
+	ParentChildOutcomeVerified          = "verified"
+	ParentChildOutcomeIgnored           = "ignored"
+	ParentChildOutcomeSucceeded         = "succeeded"
+	ParentChildOutcomeSourceNotFound    = "source_not_found"
+	ParentChildOutcomeDeduplicated      = "deduplicated"
+	ParentChildOutcomeLimited           = "limited"
+	ParentChildOutcomeFailed            = "failed"
+)
+
 // EmitReplicationError normalizes the common error envelope and emits it into the existing
 // replication_lifecycle event, not a separate event table.
 func EmitReplicationError(
@@ -361,6 +383,9 @@ func (p ReplicationLifecyclePayload) appendApplied(attrs []log.KeyValue) []log.K
 	attrs = append(attrs, log.String("outcome", p.Outcome))
 	if p.Error != "" {
 		attrs = append(attrs, log.String("error", p.Error))
+	}
+	if p.NewRunID != "" {
+		attrs = append(attrs, log.String("new_run_id", p.NewRunID))
 	}
 	if p.State == "" {
 		return attrs

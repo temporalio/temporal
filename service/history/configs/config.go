@@ -288,7 +288,8 @@ type Config struct {
 	// The following is used by the new RPC replication stack
 	ReplicationTaskApplyTimeout                          dynamicconfig.DurationPropertyFn
 	EnableAsyncParentWorkflowResend                      dynamicconfig.BoolPropertyFn
-	ParentWorkflowResendMaxInFlight                      dynamicconfig.IntPropertyFn
+	EnableChildWorkflowResend                            dynamicconfig.BoolPropertyFn
+	WorkflowResendHostMaxInFlight                        dynamicconfig.IntPropertyFn
 	ReplicationTaskFetcherParallelism                    dynamicconfig.IntPropertyFn
 	ReplicationTaskFetcherAggregationInterval            dynamicconfig.DurationPropertyFn
 	ReplicationTaskFetcherTimerJitterCoefficient         dynamicconfig.FloatPropertyFn
@@ -424,6 +425,9 @@ type Config struct {
 	SendRawHistoryBytesToMatchingService  dynamicconfig.BoolPropertyFn
 	SendRawWorkflowHistory                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
+	EnablePaginationTokenBranchValidation           dynamicconfig.BoolPropertyFn
+	EnablePaginationTokenBranchValidationShadowMode dynamicconfig.BoolPropertyFn
+
 	WorkflowIdReuseMinimalInterval           dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	EnableWorkflowIdReuseStartTimeValidation dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	BusinessIDReuseRate                      dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -440,6 +444,7 @@ type Config struct {
 	HealthRPCErrorRatio                 dynamicconfig.FloatPropertyFn
 	HealthHistoryInitializationTime     dynamicconfig.DurationPropertyFn
 	BreakdownMetricsByTaskQueue         dynamicconfig.BoolPropertyFnWithTaskQueueFilter
+	BreakdownMetricsByBuildID           dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -727,7 +732,8 @@ func NewConfig(
 
 		ReplicationTaskApplyTimeout:                  dynamicconfig.ReplicationTaskApplyTimeout.Get(dc),
 		EnableAsyncParentWorkflowResend:              dynamicconfig.EnableAsyncParentWorkflowResend.Get(dc),
-		ParentWorkflowResendMaxInFlight:              dynamicconfig.ParentWorkflowResendMaxInFlight.Get(dc),
+		EnableChildWorkflowResend:                    dynamicconfig.EnableChildWorkflowResend.Get(dc),
+		WorkflowResendHostMaxInFlight:                dynamicconfig.WorkflowResendHostMaxInFlight.Get(dc),
 		ReplicationTaskFetcherParallelism:            dynamicconfig.ReplicationTaskFetcherParallelism.Get(dc),
 		ReplicationTaskFetcherAggregationInterval:    dynamicconfig.ReplicationTaskFetcherAggregationInterval.Get(dc),
 		ReplicationTaskFetcherTimerJitterCoefficient: dynamicconfig.ReplicationTaskFetcherTimerJitterCoefficient.Get(dc),
@@ -827,9 +833,13 @@ func NewConfig(
 		EnableUpdateWithStartRetryOnClosedWorkflowAbort:               dynamicconfig.EnableUpdateWithStartRetryOnClosedWorkflowAbort.Get(dc),
 		EnableUpdateWithStartRetryableErrorOnClosedWorkflowAbort:      dynamicconfig.EnableUpdateWithStartRetryableErrorOnClosedWorkflowAbort.Get(dc),
 
-		SendRawHistoryBetweenInternalServices:    dynamicconfig.SendRawHistoryBetweenInternalServices.Get(dc),
-		SendRawHistoryBytesToMatchingService:     dynamicconfig.SendRawHistoryBytesToMatchingService.Get(dc),
-		SendRawWorkflowHistory:                   dynamicconfig.SendRawWorkflowHistory.Get(dc),
+		SendRawHistoryBetweenInternalServices: dynamicconfig.SendRawHistoryBetweenInternalServices.Get(dc),
+		SendRawHistoryBytesToMatchingService:  dynamicconfig.SendRawHistoryBytesToMatchingService.Get(dc),
+		SendRawWorkflowHistory:                dynamicconfig.SendRawWorkflowHistory.Get(dc),
+
+		EnablePaginationTokenBranchValidation:           dynamicconfig.EnablePaginationTokenBranchValidation.Get(dc),
+		EnablePaginationTokenBranchValidationShadowMode: dynamicconfig.EnablePaginationTokenBranchValidationShadowMode.Get(dc),
+
 		WorkflowIdReuseMinimalInterval:           dynamicconfig.WorkflowIdReuseMinimalInterval.Get(dc),
 		EnableWorkflowIdReuseStartTimeValidation: dynamicconfig.EnableWorkflowIdReuseStartTimeValidation.Get(dc),
 		BusinessIDReuseRate:                      dynamicconfig.BusinessIDReuseRate.Get(dc),
@@ -847,6 +857,7 @@ func NewConfig(
 		HealthHistoryInitializationTime:     dynamicconfig.HealthHistoryInitializationTime.Get(dc),
 
 		BreakdownMetricsByTaskQueue: dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
+		BreakdownMetricsByBuildID:   dynamicconfig.MetricsBreakdownByBuildID.Get(dc),
 
 		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
 
