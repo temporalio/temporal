@@ -6313,6 +6313,21 @@ func (s *mutableStateSuite) TestNextActivityTimerTaskMask_ClearsOnlyMovedDeadlin
 	)
 }
 
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_HeartbeatProgressKeepsPendingWakeup() {
+	version := int64(99)
+	current := startedActivityInfoForMask(version, 1, 1)
+	incoming := startedActivityInfoForMask(version, 1, 1)
+	incoming.LastHeartbeatUpdateTime = timestamppb.New(
+		incoming.StartedTime.AsTime().Add(30 * time.Second),
+	)
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
+
+	// Recording heartbeat progress moves its timeout deadline, but the active path
+	// deliberately relies on the already-pending earlier task as the next wake-up.
+	s.Equal(current.TimerTaskStatus, s.mutableState.getActivityTimerTaskStatus(current, incoming))
+}
+
 func (s *mutableStateSuite) TestNextActivityTimerTaskMask_UnrelatedOptionChanged_KeepsMask() {
 	version := int64(99)
 	current := startedActivityInfoForMask(version, 1, 1)
