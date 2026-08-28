@@ -1,7 +1,7 @@
 package callbacks_test
 
 import (
-	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -32,7 +32,7 @@ func TestValidTransitions(t *testing.T) {
 	// AttemptFailed
 	out, err := callbacks.TransitionAttemptFailed.Apply(callback, callbacks.EventAttemptFailed{
 		Time:        currentTime,
-		Err:         errors.New("test"),
+		Err:         fmt.Errorf("test"),
 		RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 	})
 	require.NoError(t, err)
@@ -92,7 +92,7 @@ func TestValidTransitions(t *testing.T) {
 	currentTime = currentTime.Add(time.Second)
 
 	// failed
-	out, err = callbacks.TransitionFailed.Apply(callback, callbacks.EventFailed{Time: currentTime, Err: errors.New("failed")})
+	out, err = callbacks.TransitionFailed.Apply(callback, callbacks.EventFailed{Time: currentTime, Err: fmt.Errorf("failed")})
 	require.NoError(t, err)
 
 	// Assert info object is updated only where needed

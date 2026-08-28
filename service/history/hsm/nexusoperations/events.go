@@ -329,14 +329,14 @@ func findOperationNode(root *hsm.Node, event *historypb.HistoryEvent) (*hsm.Node
 
 	// Attributes is always a struct with a single field (e.g: HistoryEvent_NexusOperationScheduledEventAttributes)
 	if attrs.Kind() != reflect.Struct || attrs.NumField() != 1 {
-		panic("invalid event, expected Attributes field with a single field struct") //nolint:forbidigo // The history event shape is an HSM invariant.
+		panic("invalid event, expected Attributes field with a single field struct")
 	}
 
 	f := attrs.Field(0).Interface()
 
 	eventIDGetter, ok := f.(interface{ GetScheduledEventId() int64 })
 	if !ok {
-		panic("Event does not have a ScheduledEventId field") //nolint:forbidigo // The history event shape is an HSM invariant.
+		panic("Event does not have a ScheduledEventId field")
 	}
 	coll := MachineCollection(root)
 	nodeID := strconv.FormatInt(eventIDGetter.GetScheduledEventId(), 10)
