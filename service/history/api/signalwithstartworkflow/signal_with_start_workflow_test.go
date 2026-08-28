@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/testing/fakedata"
 	"go.temporal.io/server/service/history/api"
@@ -218,6 +219,8 @@ func (s *signalWithStartWorkflowSuite) assertWorkflowTaskScheduledAtExecutionTim
 	s.currentMutableState.EXPECT().AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL).Return(&historyi.WorkflowTaskInfo{}, nil)
 	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
 
+	capture := s.metricsHandler.StartCapture()
+	defer s.metricsHandler.StopCapture(capture)
 	err := signalWorkflow(
 		ctx,
 		s.shardContext,
@@ -225,6 +228,7 @@ func (s *signalWithStartWorkflowSuite) assertWorkflowTaskScheduledAtExecutionTim
 		request,
 	)
 	s.NoError(err)
+	s.assertSkipDelayMetric(capture, request, executionTime.After(s.timeSource.Now()))
 }
 
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_ContinuedAsNewWorkflowTaskBackoff() {
@@ -244,6 +248,8 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_ContinuedAsNewWorkflow
 	s.currentMutableState.EXPECT().GetStartEvent(ctx).Return(signalWorkflowStartEvent(enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW, uuid.NewString()), nil)
 	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
 
+	capture := s.metricsHandler.StartCapture()
+	defer s.metricsHandler.StopCapture(capture)
 	err := signalWorkflow(
 		ctx,
 		s.shardContext,
@@ -251,6 +257,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_ContinuedAsNewWorkflow
 		request,
 	)
 	s.NoError(err)
+	s.assertSkipDelayMetric(capture, request, false)
 }
 
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_RetryInitiatorDuringBackoff() {
@@ -304,6 +311,8 @@ func (s *signalWithStartWorkflowSuite) assertWorkflowTaskScheduledDuringBackoff(
 	s.currentMutableState.EXPECT().AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL).Return(&historyi.WorkflowTaskInfo{}, nil)
 	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
 
+	capture := s.metricsHandler.StartCapture()
+	defer s.metricsHandler.StopCapture(capture)
 	err := signalWorkflow(
 		ctx,
 		s.shardContext,
@@ -311,6 +320,7 @@ func (s *signalWithStartWorkflowSuite) assertWorkflowTaskScheduledDuringBackoff(
 		request,
 	)
 	s.NoError(err)
+	s.assertSkipDelayMetric(capture, request, true)
 }
 
 func (s *signalWithStartWorkflowSuite) expectSignalWorkflowEvent(request *workflowservice.SignalWithStartWorkflowExecutionRequest) {
@@ -325,6 +335,21 @@ func (s *signalWithStartWorkflowSuite) expectSignalWorkflowEvent(request *workfl
 		request.GetRequestId(),
 		request.GetLinks(),
 	).Return(&historypb.HistoryEvent{}, nil)
+}
+
+func (s *signalWithStartWorkflowSuite) assertSkipDelayMetric(
+	capture *metricstest.Capture,
+	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
+	expected bool,
+) {
+	recordings := capture.Snapshot()[metrics.SignalWithStartSkipDelayCounter.Name()]
+	if !expected {
+		s.Empty(recordings)
+		return
+	}
+	s.Require().Len(recordings, 1)
+	s.Equal(int64(1), recordings[0].Value)
+	s.Equal(request.GetNamespace(), recordings[0].Tags[metrics.NamespaceTag("").Key])
 }
 
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NoNewWorkflowTask() {
