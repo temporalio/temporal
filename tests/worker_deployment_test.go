@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/worker_versioning"
@@ -335,13 +336,13 @@ func (s *WorkerDeploymentSuite) TestDeploymentVersionTaskQueueFamilyLimitAllowsN
 			},
 		)
 		a.NoError(err)
-		taskQueues := resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos()
-		a.ElementsMatch(
+		protorequire.ProtoElementsMatch(
+			t,
 			[]*deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo{
 				{Name: tv.TaskQueue().GetName(), Type: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
 				{Name: tv.TaskQueue().GetName(), Type: enumspb.TASK_QUEUE_TYPE_ACTIVITY},
 			},
-			taskQueues,
+			resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos(),
 		)
 	}, 10*time.Second, 200*time.Millisecond)
 
