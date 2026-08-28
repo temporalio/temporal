@@ -16,202 +16,133 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func TestClampVersion(t *testing.T) {
-	for _, c := range []struct {
-		name    string
-		ceiling int
-		want    SchedulerWorkflowVersion
-	}{
-		{"negative is unset, no clamp", -1, TriggerImmediatelyTimestamp},
-		{"zero clamps to InitialVersion", 0, InitialVersion},
-		{"below current clamps down", 1, 1},
-		{"equal to current is a no-op", int(TriggerImmediatelyTimestamp), TriggerImmediatelyTimestamp},
-		{"above current is a no-op", int(TriggerImmediatelyTimestamp) + 1, TriggerImmediatelyTimestamp},
-	} {
-		require.Equalf(t, c.want, clampVersion(TriggerImmediatelyTimestamp, c.ceiling), "%s (ceiling=%d)", c.name, c.ceiling)
-	}
-}
-
-func TestVersionWithOverride(t *testing.T) {
-	for _, tc := range []struct {
-		name     string
-		ceiling  int
-		override int
-		want     SchedulerWorkflowVersion
-	}{
-		{name: "default version", ceiling: -1, override: -1, want: TriggerImmediatelyTimestamp},
-		{name: "override latest", ceiling: -1, override: int(LatestSchedulerWorkflowVersion), want: LatestSchedulerWorkflowVersion},
-		{name: "ceiling caps override", ceiling: int(TriggerImmediatelyTimestamp) - 1, override: int(LatestSchedulerWorkflowVersion), want: TriggerImmediatelyTimestamp - 1},
-		{name: "override below current ignored", ceiling: -1, override: int(TriggerImmediatelyTimestamp) - 1, want: TriggerImmediatelyTimestamp},
-		{name: "override above latest ignored", ceiling: -1, override: int(LatestSchedulerWorkflowVersion) + 1, want: TriggerImmediatelyTimestamp},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			version := versionWithOverride(TriggerImmediatelyTimestamp, tc.ceiling, tc.override)
-			require.Equal(t, tc.want, version)
-		})
-	}
-}
-
 func TestDetermineVersionTransitions(t *testing.T) {
 	for _, tc := range []struct {
-		name     string
-		ceiling  int
-		defaults []SchedulerWorkflowVersion
-		versions []SchedulerWorkflowVersion
+		name              string
+		defaultVersion    SchedulerWorkflowVersion
+		recordedVersion   SchedulerWorkflowVersion
+		recordedCeiling   int
+		configuredCeiling int
+		override          int
+		wantVersion       SchedulerWorkflowVersion
+		wantCeiling       int
 	}{
 		{
-			name:     "stays at ceiling",
-			ceiling:  oldPeerCeiling,
-			defaults: []SchedulerWorkflowVersion{oldPeerCeiling, oldPeerCeiling + 1, oldPeerCeiling + 2},
-			versions: []SchedulerWorkflowVersion{oldPeerCeiling, oldPeerCeiling, oldPeerCeiling},
+			name:              "no ceiling or override uses the default",
+			defaultVersion:    TriggerImmediatelyTimestamp,
+			recordedCeiling:   -1,
+			configuredCeiling: -1,
+			override:          -1,
+			wantVersion:       TriggerImmediatelyTimestamp,
+			wantCeiling:       -1,
 		},
 		{
-			name:     "current version below dynamic config ceiling",
-			ceiling:  oldPeerCeiling,
-			defaults: []SchedulerWorkflowVersion{oldPeerCeiling - 1, oldPeerCeiling, oldPeerCeiling + 1},
-			versions: []SchedulerWorkflowVersion{oldPeerCeiling - 1, oldPeerCeiling, oldPeerCeiling},
+			name:              "zero is a ceiling",
+			defaultVersion:    TriggerImmediatelyTimestamp,
+			recordedCeiling:   -1,
+			configuredCeiling: 0,
+			override:          -1,
+			wantVersion:       InitialVersion,
+			wantCeiling:       0,
 		},
 		{
-			name:     "advances without ceiling",
-			ceiling:  -1,
-			defaults: []SchedulerWorkflowVersion{TriggerImmediatelyTimestamp - 1, TriggerImmediatelyTimestamp, TriggerImmediatelyTimestamp + 1},
-			versions: []SchedulerWorkflowVersion{TriggerImmediatelyTimestamp - 1, TriggerImmediatelyTimestamp, TriggerImmediatelyTimestamp + 1},
+			name:              "configured ceiling caps the default",
+			defaultVersion:    oldPeerCeiling + 1,
+			recordedCeiling:   -1,
+			configuredCeiling: oldPeerCeiling,
+			override:          -1,
+			wantVersion:       oldPeerCeiling,
+			wantCeiling:       oldPeerCeiling,
+		},
+		{
+			name:              "default can advance up to the configured ceiling",
+			defaultVersion:    oldPeerCeiling,
+			recordedVersion:   oldPeerCeiling - 1,
+			recordedCeiling:   -1,
+			configuredCeiling: oldPeerCeiling,
+			override:          -1,
+			wantVersion:       oldPeerCeiling,
+			wantCeiling:       oldPeerCeiling,
+		},
+		{
+			name:              "recorded version is retained below a newly lowered ceiling",
+			defaultVersion:    oldPeerCeiling,
+			recordedVersion:   oldPeerCeiling + 1,
+			recordedCeiling:   -1,
+			configuredCeiling: oldPeerCeiling,
+			override:          -1,
+			wantVersion:       oldPeerCeiling + 1,
+			wantCeiling:       oldPeerCeiling,
+		},
+		{
+			name:              "recorded ceiling cannot increase",
+			defaultVersion:    MigrationHandoffFixes,
+			recordedVersion:   oldPeerCeiling,
+			recordedCeiling:   oldPeerCeiling,
+			configuredCeiling: int(MigrationHandoffFixes),
+			override:          int(MigrationHandoffFixes),
+			wantVersion:       oldPeerCeiling,
+			wantCeiling:       oldPeerCeiling,
+		},
+		{
+			name:              "unset config cannot increase the recorded ceiling",
+			defaultVersion:    MigrationHandoffFixes,
+			recordedVersion:   oldPeerCeiling,
+			recordedCeiling:   oldPeerCeiling,
+			configuredCeiling: -1,
+			override:          int(MigrationHandoffFixes),
+			wantVersion:       oldPeerCeiling,
+			wantCeiling:       oldPeerCeiling,
+		},
+		{
+			name:              "valid override advances the version",
+			defaultVersion:    TriggerImmediatelyTimestamp,
+			recordedCeiling:   -1,
+			configuredCeiling: -1,
+			override:          int(LatestSchedulerWorkflowVersion),
+			wantVersion:       LatestSchedulerWorkflowVersion,
+			wantCeiling:       -1,
+		},
+		{
+			name:              "ceiling caps an override",
+			defaultVersion:    TriggerImmediatelyTimestamp,
+			recordedCeiling:   -1,
+			configuredCeiling: oldPeerCeiling,
+			override:          int(LatestSchedulerWorkflowVersion),
+			wantVersion:       oldPeerCeiling,
+			wantCeiling:       oldPeerCeiling,
+		},
+		{
+			name:              "override below the default is ignored",
+			defaultVersion:    TriggerImmediatelyTimestamp,
+			recordedCeiling:   -1,
+			configuredCeiling: -1,
+			override:          oldPeerCeiling,
+			wantVersion:       TriggerImmediatelyTimestamp,
+			wantCeiling:       -1,
+		},
+		{
+			name:              "override above the latest supported version is ignored",
+			defaultVersion:    TriggerImmediatelyTimestamp,
+			recordedCeiling:   -1,
+			configuredCeiling: -1,
+			override:          int(LatestSchedulerWorkflowVersion) + 1,
+			wantVersion:       TriggerImmediatelyTimestamp,
+			wantCeiling:       -1,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			calls := 0
-			s := &scheduler{
-				logger: log.NewSdkLogger(log.NewNoopLogger()),
-				versionCeiling: func() int {
-					calls++
-					return tc.ceiling
-				},
-			}
-			for i, defaultVersion := range tc.defaults {
-				version, ceiling := s.determineVersion(defaultVersion)
-				require.Equal(t, tc.versions[i], version)
-				require.Equal(t, tc.ceiling, ceiling)
-
-				// MutableSideEffect stores this value for the next workflow task.
-				s.tweakables = CurrentTweakablePolicies
-				s.tweakables.Version = version
-				s.tweakables.VersionCeiling = ceiling
-				s.tweakables.VersionCeilingSet = true
-			}
-			require.Equal(t, len(tc.defaults), calls, "ceiling is re-read each iteration so it can ratchet tighter")
+			version, ceiling := determineVersionTransition(
+				tc.defaultVersion,
+				tc.recordedVersion,
+				tc.recordedCeiling,
+				tc.configuredCeiling,
+				tc.override,
+			)
+			require.Equal(t, tc.wantVersion, version)
+			require.Equal(t, tc.wantCeiling, ceiling)
 		})
 	}
-}
-
-// TestDetermineVersionTightenOnly drives multi-iteration runs where the configured ceiling and
-// override change between iterations, asserting the two run-scoped invariants: the effective
-// ceiling only ratchets tighter, and the version never decreases within a run (a lowered ceiling
-// is retained as a recorded floor and only downgrades on the next run).
-func TestDetermineVersionTightenOnly(t *testing.T) {
-	const v12 = TriggerImmediatelyTimestamp
-	const v13 = MigrationHandoffFixes
-	type step struct {
-		def      SchedulerWorkflowVersion
-		ceiling  int
-		override int
-		wantVer  SchedulerWorkflowVersion
-		wantCeil int
-	}
-	for _, tc := range []struct {
-		name  string
-		steps []step
-	}{
-		{
-			name: "tighten to 12 blocks a simultaneous override to 13",
-			steps: []step{
-				{def: v12, ceiling: -1, override: -1, wantVer: v12, wantCeil: -1},
-				{def: v12, ceiling: int(v12), override: int(v13), wantVer: v12, wantCeil: int(v12)},
-			},
-		},
-		{
-			name: "default advance to 13 is blocked by a tightened ceiling",
-			steps: []step{
-				{def: v12, ceiling: int(v12), override: -1, wantVer: v12, wantCeil: int(v12)},
-				{def: v13, ceiling: int(v12), override: -1, wantVer: v12, wantCeil: int(v12)},
-			},
-		},
-		{
-			name: "ceiling cannot loosen to 13 or unset within a run",
-			steps: []step{
-				{def: v12, ceiling: int(v12), override: -1, wantVer: v12, wantCeil: int(v12)},
-				{def: v13, ceiling: int(v13), override: int(v13), wantVer: v12, wantCeil: int(v12)},
-				{def: v13, ceiling: -1, override: int(v13), wantVer: v12, wantCeil: int(v12)},
-			},
-		},
-		{
-			name: "tightening below a recorded v13 keeps the version and records the tighter ceiling",
-			steps: []step{
-				{def: v12, ceiling: -1, override: int(v13), wantVer: v13, wantCeil: -1},
-				{def: v12, ceiling: int(v12), override: int(v13), wantVer: v13, wantCeil: int(v12)},
-			},
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			var ceiling, override int
-			s := &scheduler{
-				logger:          log.NewSdkLogger(log.NewNoopLogger()),
-				versionCeiling:  func() int { return ceiling },
-				versionOverride: func() int { return override },
-			}
-			for i, st := range tc.steps {
-				ceiling, override = st.ceiling, st.override
-				version, recordedCeiling := s.determineVersion(st.def)
-				require.Equalf(t, st.wantVer, version, "step %d version", i)
-				require.Equalf(t, st.wantCeil, recordedCeiling, "step %d recorded ceiling", i)
-				// A version above the effective ceiling is only ever the retained recorded floor.
-				if recordedCeiling >= 0 && version > SchedulerWorkflowVersion(recordedCeiling) {
-					require.GreaterOrEqualf(t, s.tweakables.Version, version,
-						"step %d: version above ceiling must be the retained recorded floor", i)
-				}
-				// MutableSideEffect stores this value for the next workflow task.
-				s.tweakables = CurrentTweakablePolicies
-				s.tweakables.Version = version
-				s.tweakables.VersionCeiling = recordedCeiling
-				s.tweakables.VersionCeilingSet = true
-			}
-		})
-	}
-}
-
-// TestDetermineVersionDowngradeOnNextRun verifies that after a run kept v13 as a floor while the
-// ceiling was tightened to 12, the following run (fresh tweakables after continue-as-new) reads
-// dynamic config and starts capped at 12.
-func TestDetermineVersionDowngradeOnNextRun(t *testing.T) {
-	ceiling := int(TriggerImmediatelyTimestamp)
-	s := &scheduler{
-		logger:         log.NewSdkLogger(log.NewNoopLogger()),
-		versionCeiling: func() int { return ceiling },
-	}
-	version, recordedCeiling := s.determineVersion(TriggerImmediatelyTimestamp)
-	require.Equal(t, SchedulerWorkflowVersion(TriggerImmediatelyTimestamp), version)
-	require.Equal(t, int(TriggerImmediatelyTimestamp), recordedCeiling)
-}
-
-// TestDetermineVersionLocksAtZeroCeiling verifies that zero is recorded as a real ceiling rather
-// than treated as an unset value.
-func TestDetermineVersionLocksAtZeroCeiling(t *testing.T) {
-	ceiling := 0
-	s := &scheduler{versionCeiling: func() int { return ceiling }}
-
-	// First evaluation clamps to InitialVersion (0) and records it.
-	version, recordedCeiling := s.determineVersion(TriggerImmediatelyTimestamp)
-	require.Equal(t, InitialVersion, version)
-	require.Equal(t, 0, recordedCeiling)
-	s.tweakables = CurrentTweakablePolicies
-	s.tweakables.Version = version
-	s.tweakables.VersionCeiling = recordedCeiling
-	s.tweakables.VersionCeilingSet = true
-
-	// The configured ceiling is lifted mid-run, but the recorded ceiling stays at InitialVersion.
-	ceiling = -1
-	version, recordedCeiling = s.determineVersion(TriggerImmediatelyTimestamp)
-	require.Equal(t, InitialVersion, version)
-	require.Equal(t, 0, recordedCeiling)
 }
 
 func TestDetermineVersionPreservesLegacyRecordedVersion(t *testing.T) {
@@ -241,51 +172,6 @@ func TestDetermineVersionPreservesLegacyRecordedVersion(t *testing.T) {
 			require.Zero(t, calls, "legacy histories must not read the current version ceiling")
 		})
 	}
-}
-
-func TestDetermineVersionAdvancesWithOverride(t *testing.T) {
-	override := -1
-	s := &scheduler{
-		logger:          log.NewSdkLogger(log.NewNoopLogger()),
-		versionCeiling:  func() int { return -1 },
-		versionOverride: func() int { return override },
-	}
-
-	version, ceiling := s.determineVersion(TriggerImmediatelyTimestamp)
-	require.Equal(t, SchedulerWorkflowVersion(TriggerImmediatelyTimestamp), version)
-	require.Equal(t, -1, ceiling)
-	s.tweakables = CurrentTweakablePolicies
-	s.tweakables.Version = version
-	s.tweakables.VersionCeiling = ceiling
-	s.tweakables.VersionCeilingSet = true
-
-	override = int(LatestSchedulerWorkflowVersion)
-	version, ceiling = s.determineVersion(TriggerImmediatelyTimestamp)
-	require.Equal(t, SchedulerWorkflowVersion(LatestSchedulerWorkflowVersion), version)
-	require.Equal(t, -1, ceiling)
-	s.tweakables.Version = version
-
-	override = -1
-	version, ceiling = s.determineVersion(TriggerImmediatelyTimestamp)
-	require.Equal(t, SchedulerWorkflowVersion(LatestSchedulerWorkflowVersion), version)
-	require.Equal(t, -1, ceiling)
-}
-
-func TestDetermineVersionOverrideRespectsRecordedCeiling(t *testing.T) {
-	s := &scheduler{
-		logger:          log.NewSdkLogger(log.NewNoopLogger()),
-		versionCeiling:  func() int { return oldPeerCeiling },
-		versionOverride: func() int { return int(LatestSchedulerWorkflowVersion) },
-		tweakables: TweakablePolicies{
-			Version:           oldPeerCeiling,
-			VersionCeiling:    oldPeerCeiling,
-			VersionCeilingSet: true,
-		},
-	}
-
-	version, ceiling := s.determineVersion(TriggerImmediatelyTimestamp)
-	require.Equal(t, SchedulerWorkflowVersion(oldPeerCeiling), version)
-	require.Equal(t, int(oldPeerCeiling), ceiling)
 }
 
 // TestVersionCeilingWithCHASMMigration verifies that a clamp below the CHASM gate keeps migration

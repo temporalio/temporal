@@ -131,11 +131,8 @@ type (
 		// inside the "tweakables" MutableSideEffect.
 		enableCHASMMigration        func() bool
 		migrateWithRunningWorkflows func() bool
-		// versionCeiling and versionOverride are re-evaluated every iteration inside the
-		// "tweakables" MutableSideEffect, alongside the migration knobs above. The ceiling only
-		// ratchets tighter within a run (a looser or unset value never raises it); the override
-		// only advances the version. Neither can lower an already-recorded version mid-run --
-		// a lowered ceiling takes effect on the next run. See determineVersion.
+		// versionCeiling and versionOverride are re-evaluated in the "tweakables" MutableSideEffect.
+		// A run can only lower its ceiling and raise its version.
 		versionCeiling  func() int
 		versionOverride func() int
 
@@ -1815,23 +1812,13 @@ func (s *scheduler) hasMinVersion(version SchedulerWorkflowVersion) bool {
 	return s.tweakables.Version >= version
 }
 
-// determineVersion returns the scheduler workflow version to run for this iteration and the
-// ceiling to record alongside it. Two invariants hold within a single run (i.e. until the next
-// continue-as-new): the effective ceiling only ratchets tighter (a looser or unset configured
-// value never raises it), and the version never decreases. If a newly-lowered ceiling sits below
-// the version already recorded for this run, the recorded version is retained as a floor and the
-// downgrade takes effect on the next run, when continue-as-new re-reads dynamic config. See the
-// versionCeiling/versionOverride field comments.
+// determineVersion returns this iteration's version and the ceiling to record for the run.
 func (s *scheduler) determineVersion(defaultVersion SchedulerWorkflowVersion) (SchedulerWorkflowVersion, int) {
-	// A marker written before the VersionCeiling fields existed has already selected this run's
-	// version. Seed the ceiling from that recorded version; do not read dynamic config or apply a
-	// newly configured clamp retroactively to a run that predates the field.
+	// Preserve the version selected by histories that predate VersionCeiling.
 	if !s.tweakables.VersionCeilingSet && s.tweakables != (TweakablePolicies{}) {
 		return s.tweakables.Version, int(s.tweakables.Version)
 	}
 
-	// Ceiling recorded so far this run (-1 until first set). Combined tighten-only with the live
-	// configured value so the effective ceiling is monotonically non-increasing across iterations.
 	recordedCeiling := -1
 	if s.tweakables.VersionCeilingSet {
 		recordedCeiling = s.tweakables.VersionCeiling
@@ -1844,8 +1831,6 @@ func (s *scheduler) determineVersion(defaultVersion SchedulerWorkflowVersion) (S
 		s.logger.Warn("worker.schedulerV1VersionCeiling above the latest supported version; no effect in this binary",
 			"ceiling", configured, "latestSupportedVersion", LatestSchedulerWorkflowVersion)
 	}
-	ceiling := tightenCeiling(recordedCeiling, configured)
-
 	override := -1
 	if s.versionOverride != nil {
 		override = s.versionOverride()
@@ -1855,19 +1840,18 @@ func (s *scheduler) determineVersion(defaultVersion SchedulerWorkflowVersion) (S
 			"override", override, "latestSupportedVersion", LatestSchedulerWorkflowVersion)
 	}
 
-	// Never regress below the version already recorded for this run. Apply the advancing-only
-	// override and the effective ceiling, then re-floor at the recorded version so a lowered
-	// ceiling cannot downgrade a running workflow mid-run.
-	candidate := max(defaultVersion, s.tweakables.Version)
-	version := max(versionWithOverride(candidate, ceiling, override), s.tweakables.Version)
+	return determineVersionTransition(defaultVersion, s.tweakables.Version, recordedCeiling, configured, override)
+}
+
+// determineVersionTransition applies the run's recorded version and ceiling to the current config.
+// The version cannot decrease and the ceiling cannot increase until the next run.
+func determineVersionTransition(defaultVersion, recordedVersion SchedulerWorkflowVersion, recordedCeiling, configuredCeiling, override int) (SchedulerWorkflowVersion, int) {
+	ceiling := tightenCeiling(recordedCeiling, configuredCeiling)
+	version := max(versionWithOverride(max(defaultVersion, recordedVersion), ceiling, override), recordedVersion)
 	return version, ceiling
 }
 
-// tightenCeiling combines the ceiling recorded so far this run with a freshly configured value,
-// keeping whichever is tighter. A negative value means "no constraint": a negative configured
-// value never loosens an already-recorded ceiling, and a negative recorded ceiling adopts the
-// configured one. This makes the effective ceiling monotonically non-increasing within a run;
-// loosening only takes effect on the next run, when continue-as-new re-reads dynamic config.
+// tightenCeiling keeps the lower of the recorded and configured ceilings. A negative ceiling is unset.
 func tightenCeiling(recorded, configured int) int {
 	if configured < 0 {
 		return recorded
