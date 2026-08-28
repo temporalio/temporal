@@ -347,7 +347,7 @@ const (
 	HistoryRespondActivityTaskFailedScope = "RespondActivityTaskFailed"
 	// HistoryRespondActivityTaskCanceledScope tracks RespondActivityTaskCanceled API calls received by service
 	HistoryRespondActivityTaskCanceledScope = "RespondActivityTaskCanceled"
-	// ActivityTerminatedScope tracks TerminateActivityExecution API calls received by service
+	// ActivityTerminatedScope identifies applied activity termination mutations.
 	ActivityTerminatedScope = "ActivityTerminated"
 	// ActivityPausedScope identifies applied activity pause mutations.
 	ActivityPausedScope = "ActivityPaused"

@@ -1,7 +1,6 @@
 package metrics
 
 import (
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/tqid"
 )
 
@@ -25,29 +24,6 @@ func GetPerTaskQueueFamilyScope(
 
 	tags = append(tags, NamespaceTag(namespaceName), UnsafeTaskQueueTag(metricTaskQueueName))
 	return handler.WithTags(tags...)
-}
-
-// GetPerActivityScope returns the standard tags for metrics associated with an activity.
-func GetPerActivityScope(
-	handler Handler,
-	namespaceName string,
-	taskQueueFamily *tqid.TaskQueueFamily,
-	taskQueueBreakdown bool,
-	operation string,
-	activityType string,
-	workflowType string,
-	versioningBehavior enumspb.VersioningBehavior,
-) Handler {
-	return GetPerTaskQueueFamilyScope(
-		handler,
-		namespaceName,
-		taskQueueFamily,
-		taskQueueBreakdown,
-		OperationTag(operation),
-		ActivityTypeTag(activityType),
-		VersioningBehaviorTag(versioningBehavior),
-		WorkflowTypeTag(workflowType),
-	)
 }
 
 // GetPerTaskQueueScope returns GetPerTaskQueueFamilyScope plus the "task_type" tag.
