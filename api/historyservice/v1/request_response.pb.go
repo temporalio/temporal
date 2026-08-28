@@ -3718,6 +3718,7 @@ type VerifyFirstWorkflowTaskScheduledRequest struct {
 	NamespaceId       string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	WorkflowExecution *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=workflow_execution,json=workflowExecution,proto3" json:"workflow_execution,omitempty"`
 	Clock             *v18.VectorClock       `protobuf:"bytes,3,opt,name=clock,proto3" json:"clock,omitempty"`
+	ResendChild       bool                   `protobuf:"varint,4,opt,name=resend_child,json=resendChild,proto3" json:"resend_child,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -3771,6 +3772,13 @@ func (x *VerifyFirstWorkflowTaskScheduledRequest) GetClock() *v18.VectorClock {
 		return x.Clock
 	}
 	return nil
+}
+
+func (x *VerifyFirstWorkflowTaskScheduledRequest) GetResendChild() bool {
+	if x != nil {
+		return x.ResendChild
+	}
+	return false
 }
 
 type VerifyFirstWorkflowTaskScheduledResponse struct {
@@ -11018,11 +11026,12 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\vchild_clock\x18\x04 \x01(\v2).temporal.server.api.clock.v1.VectorClockR\n" +
 	"childClock\x12L\n" +
 	"\fparent_clock\x18\x05 \x01(\v2).temporal.server.api.clock.v1.VectorClockR\vparentClock:$\x92\xc4\x03 *\x1eworkflow_execution.workflow_id\"\x1e\n" +
-	"\x1cScheduleWorkflowTaskResponse\"\x8d\x02\n" +
+	"\x1cScheduleWorkflowTaskResponse\"\xb0\x02\n" +
 	"'VerifyFirstWorkflowTaskScheduledRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12X\n" +
 	"\x12workflow_execution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\x11workflowExecution\x12?\n" +
-	"\x05clock\x18\x03 \x01(\v2).temporal.server.api.clock.v1.VectorClockR\x05clock:$\x92\xc4\x03 *\x1eworkflow_execution.workflow_id\"*\n" +
+	"\x05clock\x18\x03 \x01(\v2).temporal.server.api.clock.v1.VectorClockR\x05clock\x12!\n" +
+	"\fresend_child\x18\x04 \x01(\bR\vresendChild:$\x92\xc4\x03 *\x1eworkflow_execution.workflow_id\"*\n" +
 	"(VerifyFirstWorkflowTaskScheduledResponse\"\xd4\x04\n" +
 	"$RecordChildExecutionCompletedRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12T\n" +
