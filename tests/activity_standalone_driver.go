@@ -55,6 +55,7 @@ func (d *saaDriver) testContext() context.Context {
 // saaHandle is a handle to an activity instance.
 type saaHandle struct {
 	activityDriverState
+	cursor     *activityModelCursor // the model state reached, so driveEvent can check each event
 	d          *saaDriver
 	activityID string
 	runID      string
@@ -64,7 +65,6 @@ type saaHandle struct {
 // driveTrace schedules an activity, and then advances that activity through a sequence of events (a
 // 'trace'). Returns a handle to the activity at the reached state.
 func (d *saaDriver) driveTrace(t testing.TB, trace []model.Event) *saaHandle {
-	validateTrace(t, trace)
 	a := d.start(t, d.cfg.forTrace(trace))
 	for _, e := range trace {
 		a.driveEvent(t, e)
@@ -73,7 +73,7 @@ func (d *saaDriver) driveTrace(t testing.TB, trace []model.Event) *saaHandle {
 }
 
 func (a *saaHandle) driveEvent(t testing.TB, e model.Event) {
-	driveActivityEvent(t, a, e)
+	driveActivityEvent(t, a, e, a.cursor)
 }
 
 func (a *saaHandle) testContext() context.Context {
@@ -120,6 +120,7 @@ func (d *saaDriver) start(t require.TestingT, cfg activityConfig) *saaHandle {
 	require.NoError(t, err)
 	return &saaHandle{
 		activityDriverState: activityDriverState{cfg: cfg},
+		cursor:              newActivityModelCursor(cfg),
 		d:                   d,
 		activityID:          id,
 		runID:               resp.RunId,
@@ -213,6 +214,17 @@ func (a *saaHandle) terminalOutcome(t require.TestingT) activityTerminalOutcome 
 		a.activityInfo(t),
 	)
 	return activityTerminalOutcome{}
+}
+
+// observedState is the activity's state as DescribeActivityExecution reports it.
+func (a *saaHandle) observedState(t require.TestingT) activityState {
+	info := a.describe(t).GetInfo()
+	switch info.GetStatus() {
+	case enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, enumspb.ACTIVITY_EXECUTION_STATUS_PAUSED:
+		return activityState{runState: info.GetRunState(), attempt: info.GetAttempt()}
+	default:
+		return activityState{closed: true}
+	}
 }
 
 func saaActivityInfo(i *activitypb.ActivityExecutionInfo) activityInfo {
