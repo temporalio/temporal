@@ -35,7 +35,7 @@ func (s *AdminBatchDelegationTestSuite) newTestEnv(opts ...testcore.TestOption) 
 	baseOpts := []testcore.TestOption{
 		// The batch workflow runs on the system namespace's per-namespace worker.
 		testcore.WithWorkerService("batch operations"),
-		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentAdminBatchOperationPerNamespace, 10),
+		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentAdminBatchOperation, 10),
 	}
 	return testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
 }
