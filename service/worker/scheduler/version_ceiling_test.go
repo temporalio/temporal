@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	schedulepb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/workflow"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
@@ -15,171 +16,18 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-||||||| parent of 37008c1563 (feat: [Scheduler] add worker.schedulerV1VersionOverride)
-func TestDetermineVersionTransitions(t *testing.T) {
-	for _, tc := range []struct {
-		name            string
-		defaultVersion  SchedulerWorkflowVersion
-		recordedVersion SchedulerWorkflowVersion
-		ceiling         int
-		wantVersion     SchedulerWorkflowVersion
-		wantCeiling     int
-	}{
-		{
-			name:           "no ceiling uses the default",
-			defaultVersion: TriggerImmediatelyTimestamp,
-			ceiling:        -1,
-			wantVersion:    TriggerImmediatelyTimestamp,
-			wantCeiling:    -1,
-		},
-		{
-			name:           "zero is a ceiling",
-			defaultVersion: TriggerImmediatelyTimestamp,
-			ceiling:        0,
-			wantVersion:    InitialVersion,
-			wantCeiling:    0,
-		},
-		{
-			name:           "ceiling caps the default",
-			defaultVersion: oldPeerCeiling + 1,
-			ceiling:        oldPeerCeiling,
-			wantVersion:    oldPeerCeiling,
-			wantCeiling:    oldPeerCeiling,
-		},
-		{
-			name:            "recorded version is retained below a lower ceiling",
-			defaultVersion:  oldPeerCeiling,
-			recordedVersion: oldPeerCeiling + 1,
-			ceiling:         oldPeerCeiling,
-			wantVersion:     oldPeerCeiling + 1,
-			wantCeiling:     oldPeerCeiling,
-		},
-		{
-			name:            "raising the ceiling advances on the next iteration",
-			defaultVersion:  MigrationHandoffFixes,
-			recordedVersion: oldPeerCeiling,
-			ceiling:         int(MigrationHandoffFixes),
-			wantVersion:     MigrationHandoffFixes,
-			wantCeiling:     int(MigrationHandoffFixes),
-		},
-		{
-			name:            "removing the ceiling advances on the next iteration",
-			defaultVersion:  MigrationHandoffFixes,
-			recordedVersion: oldPeerCeiling,
-			ceiling:         -1,
-			wantVersion:     MigrationHandoffFixes,
-			wantCeiling:     -1,
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			version, ceiling := determineVersionTransition(tc.defaultVersion, tc.recordedVersion, tc.ceiling)
-			require.Equal(t, tc.wantVersion, version)
-			require.Equal(t, tc.wantCeiling, ceiling)
-		})
-	}
+type warningLogger struct {
+	warnings []string
 }
 
-func TestDetermineVersionTransitions(t *testing.T) {
-	for _, tc := range []struct {
-		name            string
-		defaultVersion  SchedulerWorkflowVersion
-		recordedVersion SchedulerWorkflowVersion
-		ceiling         int
-		override        int
-		wantVersion     SchedulerWorkflowVersion
-		wantCeiling     int
-	}{
-		{
-			name:           "no ceiling or override uses the default",
-			defaultVersion: TriggerImmediatelyTimestamp,
-			ceiling:        -1,
-			override:       -1,
-			wantVersion:    TriggerImmediatelyTimestamp,
-			wantCeiling:    -1,
-		},
-		{
-			name:           "zero is a ceiling",
-			defaultVersion: TriggerImmediatelyTimestamp,
-			ceiling:        0,
-			override:       -1,
-			wantVersion:    InitialVersion,
-			wantCeiling:    0,
-		},
-		{
-			name:           "ceiling caps the default",
-			defaultVersion: oldPeerCeiling + 1,
-			ceiling:        oldPeerCeiling,
-			override:       -1,
-			wantVersion:    oldPeerCeiling,
-			wantCeiling:    oldPeerCeiling,
-		},
-		{
-			name:            "recorded version is retained below a lower ceiling",
-			defaultVersion:  oldPeerCeiling,
-			recordedVersion: oldPeerCeiling + 1,
-			ceiling:         oldPeerCeiling,
-			override:        -1,
-			wantVersion:     oldPeerCeiling + 1,
-			wantCeiling:     oldPeerCeiling,
-		},
-		{
-			name:            "raising the ceiling advances on the next iteration",
-			defaultVersion:  MigrationHandoffFixes,
-			recordedVersion: oldPeerCeiling,
-			ceiling:         int(MigrationHandoffFixes),
-			override:        -1,
-			wantVersion:     MigrationHandoffFixes,
-			wantCeiling:     int(MigrationHandoffFixes),
-		},
-		{
-			name:            "removing the ceiling advances on the next iteration",
-			defaultVersion:  MigrationHandoffFixes,
-			recordedVersion: oldPeerCeiling,
-			ceiling:         -1,
-			override:        -1,
-			wantVersion:     MigrationHandoffFixes,
-			wantCeiling:     -1,
-		},
-		{
-			name:           "valid override advances the version",
-			defaultVersion: TriggerImmediatelyTimestamp,
-			ceiling:        -1,
-			override:       int(LatestSchedulerWorkflowVersion),
-			wantVersion:    LatestSchedulerWorkflowVersion,
-			wantCeiling:    -1,
-		},
-		{
-			name:           "ceiling caps an override",
-			defaultVersion: TriggerImmediatelyTimestamp,
-			ceiling:        int(MigrationHandoffFixes),
-			override:       int(LatestSchedulerWorkflowVersion),
-			wantVersion:    MigrationHandoffFixes,
-			wantCeiling:    int(MigrationHandoffFixes),
-		},
-		{
-			name:           "override below the default is ignored",
-			defaultVersion: TriggerImmediatelyTimestamp,
-			ceiling:        -1,
-			override:       int(TriggerImmediatelyTimestamp) - 1,
-			wantVersion:    TriggerImmediatelyTimestamp,
-			wantCeiling:    -1,
-		},
-		{
-			name:           "override above the latest supported version is ignored",
-			defaultVersion: TriggerImmediatelyTimestamp,
-			ceiling:        -1,
-			override:       int(LatestSchedulerWorkflowVersion) + 1,
-			wantVersion:    TriggerImmediatelyTimestamp,
-			wantCeiling:    -1,
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			version, ceiling := determineVersionTransition(tc.defaultVersion, tc.recordedVersion, tc.ceiling, tc.override)
-			require.Equal(t, tc.wantVersion, version)
-			require.Equal(t, tc.wantCeiling, ceiling)
-		})
-	}
+var _ log.Logger = (*warningLogger)(nil)
+
+func (*warningLogger) Debug(string, ...any) {}
+func (*warningLogger) Info(string, ...any)  {}
+func (l *warningLogger) Warn(msg string, _ ...any) {
+	l.warnings = append(l.warnings, msg)
 }
+func (*warningLogger) Error(string, ...any) {}
 
 func TestShouldWarnForVersionCeiling(t *testing.T) {
 	unsupportedCeiling := int(TriggerImmediatelyTimestamp) + 1
@@ -228,23 +76,61 @@ func TestShouldWarnForVersionCeiling(t *testing.T) {
 }
 
 func TestDetermineVersionTransition(t *testing.T) {
-	for defaultVersion := InitialVersion; defaultVersion <= RefreshCompletionDesiredTime; defaultVersion++ {
-		for recordedVersion := InitialVersion; recordedVersion <= RefreshCompletionDesiredTime; recordedVersion++ {
-			for ceiling := -1; ceiling <= int(RefreshCompletionDesiredTime)+1; ceiling++ {
-				wantVersion := defaultVersion
-				if ceiling >= 0 && ceiling < int(wantVersion) {
-					wantVersion = SchedulerWorkflowVersion(ceiling)
-				}
-				if recordedVersion > wantVersion {
-					wantVersion = recordedVersion
-				}
+	for defaultVersion := InitialVersion; defaultVersion <= LatestSchedulerWorkflowVersion; defaultVersion++ {
+		for recordedVersion := InitialVersion; recordedVersion <= LatestSchedulerWorkflowVersion; recordedVersion++ {
+			for ceiling := -1; ceiling <= int(LatestSchedulerWorkflowVersion)+1; ceiling++ {
+				for override := -1; override <= int(LatestSchedulerWorkflowVersion)+1; override++ {
+					wantVersion := defaultVersion
+					if override >= int(wantVersion) && override <= int(LatestSchedulerWorkflowVersion) {
+						wantVersion = SchedulerWorkflowVersion(override)
+					}
+					if ceiling >= 0 && ceiling < int(wantVersion) {
+						wantVersion = SchedulerWorkflowVersion(ceiling)
+					}
+					if recordedVersion > wantVersion {
+						wantVersion = recordedVersion
+					}
 
-				version, capturedCeiling := determineVersionTransition(defaultVersion, recordedVersion, ceiling)
-				require.Equalf(t, wantVersion, version, "default=%d recorded=%d ceiling=%d", defaultVersion, recordedVersion, ceiling)
-				require.Equalf(t, ceiling, capturedCeiling, "default=%d recorded=%d ceiling=%d", defaultVersion, recordedVersion, ceiling)
+					version, capturedCeiling := determineVersionTransition(defaultVersion, recordedVersion, ceiling, override)
+					require.Equalf(t, wantVersion, version, "default=%d recorded=%d ceiling=%d override=%d", defaultVersion, recordedVersion, ceiling, override)
+					require.Equalf(t, ceiling, capturedCeiling, "default=%d recorded=%d ceiling=%d override=%d", defaultVersion, recordedVersion, ceiling, override)
+				}
 			}
 		}
 	}
+}
+
+func TestDetermineVersionDiagnostics(t *testing.T) {
+	t.Run("reports invalid override warnings", func(t *testing.T) {
+		logger := &warningLogger{}
+		s := &scheduler{
+			logger:          logger,
+			versionCeiling:  func() int { return -1 },
+			versionOverride: func() int { return int(LatestSchedulerWorkflowVersion) + 1 },
+		}
+
+		s.determineVersion(TriggerImmediatelyTimestamp)
+		s.determineVersion(TriggerImmediatelyTimestamp)
+
+		require.Equal(t, []string{
+			"worker.schedulerV1VersionOverride is outside the supported range; ignored",
+			"worker.schedulerV1VersionOverride is outside the supported range; ignored",
+		}, logger.warnings)
+	})
+
+	t.Run("does not report a ceiling that caps an override as ineffective", func(t *testing.T) {
+		logger := &warningLogger{}
+		s := &scheduler{
+			logger:          logger,
+			versionCeiling:  func() int { return int(MigrationHandoffFixes) },
+			versionOverride: func() int { return int(LatestSchedulerWorkflowVersion) },
+		}
+
+		version, _ := s.determineVersion(TriggerImmediatelyTimestamp)
+
+		require.Equal(t, SchedulerWorkflowVersion(MigrationHandoffFixes), version)
+		require.Empty(t, logger.warnings)
+	})
 }
 
 // TestVersionCeilingDefersCHASMMigration verifies that a clamp below the CHASM gate keeps
