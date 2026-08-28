@@ -478,6 +478,9 @@ type ReasonString string
 // ReasonTag is a generic tag can be used anywhere a reason is needed.
 // Make sure that the value is of limited cardinality.
 func ReasonTag(value ReasonString) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
 	return Tag{Key: reason, Value: string(value)}
 }
 
