@@ -746,10 +746,15 @@ func TestShouldBackdateDesiredTime(t *testing.T) {
 	base := baseStartTime
 	dueAt15 := timestamppb.New(base.Add(15 * time.Minute))
 
+	dueAt10 := timestamppb.New(base.Add(10 * time.Minute))
+	dueAt20 := timestamppb.New(base.Add(20 * time.Minute))
+	dueAt25 := timestamppb.New(base.Add(25 * time.Minute))
+
 	testCases := []struct {
 		name                      string
 		long                      bool
 		closeTime                 *timestamppb.Timestamp
+		currentDesiredTime        *timestamppb.Timestamp
 		nextActualTime            *timestamppb.Timestamp
 		nextResolvedOverlapPolicy enumspb.ScheduleOverlapPolicy
 		want                      bool
@@ -832,12 +837,43 @@ func TestShouldBackdateDesiredTime(t *testing.T) {
 			nextResolvedOverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 			want:                      false,
 		},
+		{
+			// refreshWorkflows calls this once per tracked RunningWorkflows execution. If a
+			// later-processed result closed earlier than one already recorded this pass, it must
+			// not overwrite the later (maximum) close time with an earlier one.
+			name:                      "refresh does NOT overwrite a later already-recorded close time with an earlier one",
+			long:                      false,
+			closeTime:                 dueAt20,
+			currentDesiredTime:        dueAt25,
+			nextActualTime:            dueAt10,
+			nextResolvedOverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+			want:                      false,
+		},
+		{
+			name:                      "refresh DOES move the close time forward when the new one is later",
+			long:                      false,
+			closeTime:                 dueAt25,
+			currentDesiredTime:        dueAt20,
+			nextActualTime:            dueAt10,
+			nextResolvedOverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+			want:                      true,
+		},
+		{
+			name:                      "refresh with no prior desired time set backdates normally",
+			long:                      false,
+			closeTime:                 dueAt20,
+			currentDesiredTime:        nil,
+			nextActualTime:            dueAt10,
+			nextResolvedOverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+			want:                      true,
+		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := shouldBackdateDesiredTime(
 				tc.long,
 				tc.closeTime,
+				tc.currentDesiredTime,
 				tc.nextActualTime,
 				tc.nextResolvedOverlapPolicy,
 			)

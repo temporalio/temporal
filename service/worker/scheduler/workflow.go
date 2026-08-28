@@ -1029,7 +1029,7 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future, long bool
 	if len(s.State.BufferedStarts) > 0 {
 		next := s.State.BufferedStarts[0]
 		if s.hasMinVersion(RefreshCompletionDesiredTime) {
-			if shouldBackdateDesiredTime(long, res.CloseTime, next.ActualTime, s.resolveOverlapPolicy(next.OverlapPolicy)) {
+			if shouldBackdateDesiredTime(long, res.CloseTime, next.DesiredTime, next.ActualTime, s.resolveOverlapPolicy(next.OverlapPolicy)) {
 				next.DesiredTime = res.CloseTime
 			}
 		} else if long {
@@ -1447,9 +1447,17 @@ func (s *scheduler) resolveOverlapPolicy(overlapPolicy enumspb.ScheduleOverlapPo
 // ignores running workflows (ALLOW_ALL, see IgnoresRunningWorkflow) is never blocked by this
 // close, no matter the timing, since processBuffer starts it regardless of isRunning -- and
 // backdating would understate its real delay.
+//
+// refreshWorkflows calls this once per tracked execution, so a run with multiple RunningWorkflows
+// (e.g. ALLOW_ALL runs inherited from before a pre-DontTrackOverlapping version ceiling was
+// lifted) can process several results against the same buffered start in one pass. On the refresh
+// path, only move currentDesiredTime forward -- never let a later-processed but earlier-closing
+// execution overwrite a genuinely later close already recorded this pass, or the start's real
+// blocked duration would be understated.
 func shouldBackdateDesiredTime(
 	long bool,
 	closeTime *timestamppb.Timestamp,
+	currentDesiredTime *timestamppb.Timestamp,
 	nextActualTime *timestamppb.Timestamp,
 	nextResolvedOverlapPolicy enumspb.ScheduleOverlapPolicy,
 ) bool {
@@ -1458,7 +1466,8 @@ func shouldBackdateDesiredTime(
 	}
 	return closeTime != nil &&
 		closeTime.AsTime().After(nextActualTime.AsTime()) &&
-		!IgnoresRunningWorkflow(nextResolvedOverlapPolicy)
+		!IgnoresRunningWorkflow(nextResolvedOverlapPolicy) &&
+		(currentDesiredTime == nil || closeTime.AsTime().After(currentDesiredTime.AsTime()))
 }
 
 func (s *scheduler) addStart(nominalTime, actualTime time.Time, overlapPolicy enumspb.ScheduleOverlapPolicy, manual bool) {
