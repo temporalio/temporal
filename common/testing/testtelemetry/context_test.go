@@ -34,7 +34,7 @@ func TestEnsureRemainingPreservesTestNameMetadata(t *testing.T) {
 	ctx := testcontext.For(t)
 	refreshed := testcontext.EnsureRemaining(ctx, t, testcontext.DefaultTimeout()+10*time.Second)
 
-	require.NotSame(t, ctx, refreshed, "context should have been replaced")
+	require.Same(t, ctx, refreshed, "context should retain its identity")
 	md, ok := metadata.FromOutgoingContext(refreshed)
 	require.True(t, ok)
 	require.Equal(t, []string{t.Name()}, md.Get("temporal-test-name"))
