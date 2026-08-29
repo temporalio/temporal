@@ -5,6 +5,7 @@ package temporal.server.api.adminservice.v1;
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/common/v1/message.proto";
+import "temporal/api/enums/v1/batch_operation.proto";
 import "temporal/api/enums/v1/common.proto";
 import "temporal/api/enums/v1/task_queue.proto";
 import "temporal/api/namespace/v1/message.proto";
@@ -644,6 +645,7 @@ message StartAdminBatchOperationRequest {
   // The admin batch operation to perform.
   oneof operation {
     BatchOperationRefreshTasks refresh_tasks_operation = 10;
+    BatchOperationDelegation delegation_operation = 11;
   }
 }
 
@@ -652,6 +654,12 @@ message StartAdminBatchOperationResponse {}
 // BatchOperationRefreshTasks refreshes tasks for batch executions.
 // This regenerates all pending tasks for each execution.
 message BatchOperationRefreshTasks {}
+
+// BatchOperationDelegation delegates an ordinary customer-facing batch operation to the admin batcher.
+message BatchOperationDelegation {
+  // Supported types are workflow and activity termination and deletion.
+  temporal.api.enums.v1.BatchOperationType batch_type = 1;
+}
 
 message MigrateScheduleRequest {
   // Target scheduler implementation for migration.
