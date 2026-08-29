@@ -2527,6 +2527,23 @@ func TestCreateDelegatedBatchRequest(t *testing.T) {
 			},
 		},
 		{
+			name:      "delete workflows",
+			batchType: enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW,
+			validate: func(t *testing.T, request *workflowservice.StartBatchOperationRequest) {
+				op, ok := request.GetOperation().(*workflowservice.StartBatchOperationRequest_DeletionOperation)
+				require.True(t, ok)
+				require.Equal(t, adminRequest.GetIdentity(), op.DeletionOperation.GetIdentity())
+			},
+		},
+		{
+			name:      "delete activities",
+			batchType: enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY,
+			validate: func(t *testing.T, request *workflowservice.StartBatchOperationRequest) {
+				_, ok := request.GetOperation().(*workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation)
+				require.True(t, ok)
+			},
+		},
+		{
 			name:      "unsupported operation",
 			batchType: enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW,
 			wantError: true,

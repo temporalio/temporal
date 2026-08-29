@@ -5706,7 +5706,7 @@ func (*BatchOperationRefreshTasks) Descriptor() ([]byte, []int) {
 // BatchOperationDelegation delegates an ordinary customer-facing batch operation to the admin batcher.
 type BatchOperationDelegation struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// only temmination operations are supported
+	// Supported types are workflow and activity termination and deletion.
 	BatchType     v16.BatchOperationType `protobuf:"varint,1,opt,name=batch_type,json=batchType,proto3,enum=temporal.api.enums.v1.BatchOperationType" json:"batch_type,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

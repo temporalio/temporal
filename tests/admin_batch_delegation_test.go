@@ -93,6 +93,22 @@ func (s *AdminBatchDelegationTestSuite) awaitVisibilityCount(
 	}, 20*time.Second, 500*time.Millisecond)
 }
 
+func (s *AdminBatchDelegationTestSuite) awaitActivityVisibilityCount(
+	env *testcore.TestEnv,
+	namespace string,
+	query string,
+	expected int64,
+) {
+	s.Await(func(s *AdminBatchDelegationTestSuite) {
+		resp, err := env.FrontendClient().CountActivityExecutions(s.Context(), &workflowservice.CountActivityExecutionsRequest{
+			Namespace: namespace,
+			Query:     query,
+		})
+		s.NoError(err)
+		s.Equal(expected, resp.GetCount())
+	}, 20*time.Second, 500*time.Millisecond)
+}
+
 // TestTdbgBatchTerminate_RunsInSystemNamespaceAgainstTargetNamespace is the case the feature
 // exists for: the batch workflow runs on the system namespace's per-namespace worker, and its
 // per-execution calls target another namespace.
@@ -181,4 +197,148 @@ func (s *AdminBatchDelegationTestSuite) TestTdbgBatchTerminate_RunsInSystemNames
 		s.Equal(2, hbd.SuccessCount)
 		s.Equal(0, hbd.ErrorCount)
 	}
+}
+
+func (s *AdminBatchDelegationTestSuite) TestTdbgBatchDelete_RunsInSystemNamespaceAgainstTargetNamespace() {
+	env := s.newTestEnv()
+
+	ns := env.Namespace().String()
+	workflowTypeName := "admin-batch-delete-wf-" + uuid.NewString()
+	query := fmt.Sprintf("WorkflowType = '%s'", workflowTypeName)
+
+	executions := s.startUnworkedWorkflows(env, ns, workflowTypeName, 2)
+	nonMatchingExecution := s.startUnworkedWorkflows(env, ns, workflowTypeName+"-non-matching", 1)[0]
+	systemExecution := s.startUnworkedWorkflows(env, primitives.SystemLocalNamespace, workflowTypeName, 1)[0]
+	s.awaitVisibilityCount(env, ns, query, 2)
+	s.awaitVisibilityCount(env, primitives.SystemLocalNamespace, query, 1)
+
+	jobID := uuid.NewString()
+	s.NoError(s.runTdbg(env,
+		"--"+tdbg.FlagYes,
+		"--"+tdbg.FlagNamespace, ns,
+		"delegated-batch", "start",
+		"--"+tdbg.FlagBatchType, "delete-workflows",
+		"--"+tdbg.FlagVisibilityQuery, query,
+		"--"+tdbg.FlagReason, "test batch delete from the system namespace",
+		"--"+tdbg.FlagJobID, jobID,
+	))
+
+	batchWorkflowID := jobID + ":" + ns
+	s.Await(func(s *AdminBatchDelegationTestSuite) {
+		resp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: primitives.SystemLocalNamespace,
+			Execution: &commonpb.WorkflowExecution{WorkflowId: batchWorkflowID},
+		})
+		s.NoError(err)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, resp.GetWorkflowExecutionInfo().GetStatus())
+	}, 60*time.Second, time.Second)
+
+	for _, execution := range executions {
+		s.Await(func(s *AdminBatchDelegationTestSuite) {
+			_, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: ns,
+				Execution: execution,
+			})
+			var notFound *serviceerror.NotFound
+			s.ErrorAs(err, &notFound)
+		}, 20*time.Second, 500*time.Millisecond)
+	}
+	s.awaitVisibilityCount(env, ns, query, 0)
+
+	resp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: ns,
+		Execution: nonMatchingExecution,
+	})
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, resp.GetWorkflowExecutionInfo().GetStatus())
+
+	resp, err = env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: primitives.SystemLocalNamespace,
+		Execution: systemExecution,
+	})
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, resp.GetWorkflowExecutionInfo().GetStatus())
+	s.awaitVisibilityCount(env, primitives.SystemLocalNamespace, query, 1)
+}
+
+func (s *AdminBatchDelegationTestSuite) TestTdbgBatchDeleteActivities_RunsInSystemNamespaceAgainstTargetNamespace() {
+	env := newStandaloneActivityBatchEnv(s.T())
+
+	ns := env.Namespace().String()
+	activityIDPrefix := "admin-batch-delete-activity-" + uuid.NewString()
+	query := fmt.Sprintf("ActivityId STARTS_WITH '%s'", activityIDPrefix)
+
+	activities := make([]startedActivity, 0, 2)
+	for i := range 2 {
+		activityID := fmt.Sprintf("%s-%d", activityIDPrefix, i)
+		resp := env.startAndValidateActivity(s.Context(), s.T(), activityID, testcore.RandomizeStr(s.T().Name()))
+		activities = append(activities, startedActivity{activityID: activityID, runID: resp.GetRunId()})
+	}
+	nonMatchingActivityID := "non-matching-" + uuid.NewString()
+	nonMatchingResp := env.startAndValidateActivity(
+		s.Context(),
+		s.T(),
+		nonMatchingActivityID,
+		testcore.RandomizeStr(s.T().Name()+"-non-matching"),
+	)
+	externalNS := env.ExternalNamespace().String()
+	externalActivityID := activityIDPrefix + "-external-namespace"
+	externalActivityResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+		Namespace:    externalNS,
+		ActivityId:   externalActivityID,
+		ActivityType: env.Tv().ActivityType(),
+		Identity:     env.Tv().WorkerIdentity(),
+		Input:        defaultInput,
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: testcore.RandomizeStr(s.T().Name() + "-external-namespace"),
+		},
+		StartToCloseTimeout: durationpb.New(time.Hour),
+		RequestId:           uuid.NewString(),
+	})
+	s.NoError(err)
+	s.awaitActivityVisibilityCount(env.TestEnv, ns, query, 2)
+	s.awaitActivityVisibilityCount(env.TestEnv, externalNS, query, 1)
+
+	jobID := uuid.NewString()
+	s.NoError(s.runTdbg(env.TestEnv,
+		"--"+tdbg.FlagYes,
+		"--"+tdbg.FlagNamespace, ns,
+		"delegated-batch", "start",
+		"--"+tdbg.FlagBatchType, "delete-activities",
+		"--"+tdbg.FlagVisibilityQuery, query,
+		"--"+tdbg.FlagReason, "test batch activity delete from the system namespace",
+		"--"+tdbg.FlagJobID, jobID,
+	))
+
+	batchWorkflowID := jobID + ":" + ns
+	s.Await(func(s *AdminBatchDelegationTestSuite) {
+		resp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: primitives.SystemLocalNamespace,
+			Execution: &commonpb.WorkflowExecution{WorkflowId: batchWorkflowID},
+		})
+		s.NoError(err)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, resp.GetWorkflowExecutionInfo().GetStatus())
+	}, 60*time.Second, time.Second)
+
+	for _, activity := range activities {
+		env.eventuallyDeleted(s.Context(), s.T(), activity.activityID, activity.runID)
+	}
+	s.awaitActivityVisibilityCount(env.TestEnv, ns, query, 0)
+
+	resp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+		Namespace:  ns,
+		ActivityId: nonMatchingActivityID,
+		RunId:      nonMatchingResp.GetRunId(),
+	})
+	s.NoError(err)
+	s.Equal(enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, resp.GetInfo().GetStatus())
+
+	resp, err = env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+		Namespace:  externalNS,
+		ActivityId: externalActivityID,
+		RunId:      externalActivityResp.GetRunId(),
+	})
+	s.NoError(err)
+	s.Equal(enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING, resp.GetInfo().GetStatus())
+	s.awaitActivityVisibilityCount(env.TestEnv, externalNS, query, 1)
 }

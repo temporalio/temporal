@@ -163,6 +163,32 @@ func (s *batchCommandTestSuite) TestAdminBatchStart() {
 		s.Contains(s.output.String(), "Currently matching: 5 activities")
 	})
 
+	s.Run("Delete workflows delegates the workflow delete batch type", func() {
+		s.NoError(s.run(
+			"--batch-type", batchTypeDeleteWorkflows,
+			"--query", "WorkflowType='ExpiredWorkflow'",
+			"--reason", "retention cleanup",
+		))
+
+		request := s.client.admin.lastRequest
+		s.Equal(enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW, request.GetDelegationOperation().GetBatchType())
+		s.Contains(s.output.String(), "Operation: delete-workflows")
+		s.Contains(s.output.String(), "Currently matching: 3 workflows")
+	})
+
+	s.Run("Delete activities delegates the activity delete batch type", func() {
+		s.NoError(s.run(
+			"--batch-type", batchTypeDeleteActivities,
+			"--query", "ActivityType='ExpiredActivity'",
+			"--reason", "retention cleanup",
+		))
+
+		request := s.client.admin.lastRequest
+		s.Equal(enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY, request.GetDelegationOperation().GetBatchType())
+		s.Contains(s.output.String(), "Operation: delete-activities")
+		s.Contains(s.output.String(), "Currently matching: 5 activities")
+	})
+
 	s.Run("Unknown batch type is rejected", func() {
 		s.ErrorContains(s.run("--batch-type", "nonsense", "--query", "A=B", "--reason", "r"), "unknown batch type")
 	})

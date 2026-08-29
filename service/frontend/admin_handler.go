@@ -1439,7 +1439,7 @@ func createDelegatedBatchRequest(
 		VisibilityQuery: adminRequest.GetVisibilityQuery(),
 		Executions:      adminRequest.GetExecutions(),
 	}
-	// only delegate termination to admin batch
+	// Only delegate destructive operations whose fields can be derived from the admin envelope.
 	switch batchType {
 	case enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW:
 		delegatedBatchRequest.Operation = &workflowservice.StartBatchOperationRequest_TerminationOperation{
@@ -1451,6 +1451,14 @@ func createDelegatedBatchRequest(
 				Identity: adminRequest.GetIdentity(),
 				Reason:   adminRequest.GetReason(),
 			},
+		}
+	case enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW:
+		delegatedBatchRequest.Operation = &workflowservice.StartBatchOperationRequest_DeletionOperation{
+			DeletionOperation: &batchpb.BatchOperationDeletion{Identity: adminRequest.GetIdentity()},
+		}
+	case enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY:
+		delegatedBatchRequest.Operation = &workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation{
+			DeleteActivitiesOperation: &batchpb.BatchOperationDeleteActivities{},
 		}
 	default:
 		return nil, serviceerror.NewInvalidArgumentf(

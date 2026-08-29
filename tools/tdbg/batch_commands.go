@@ -15,19 +15,23 @@ import (
 
 const (
 	batchTypeTerminateWorkflows  = "terminate-workflows"
+	batchTypeDeleteWorkflows     = "delete-workflows"
 	batchTypeTerminateActivities = "terminate-activities"
+	batchTypeDeleteActivities    = "delete-activities"
 )
 
 var batchTypes = []string{
 	batchTypeTerminateWorkflows,
+	batchTypeDeleteWorkflows,
 	batchTypeTerminateActivities,
+	batchTypeDeleteActivities,
 }
 
 func newAdminBatchCommands(clientFactory ClientFactory, prompterFactory PrompterFactory) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:  "start",
-			Usage: "Delegate termination in a user namespace to a batch workflow in temporal-system",
+			Usage: "Delegate a destructive operation in a user namespace to a batch workflow in temporal-system",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
 					Name:     FlagBatchType,
@@ -114,9 +118,9 @@ func AdminBatchStart(c *cli.Context, clientFactory ClientFactory, prompter *Prom
 			"Operation: %s\n"+
 			"Visibility query: %q\n"+
 			"Currently matching: %d %s\n\n"+
-			"This delegates termination of matching %s in user namespace %q to a batch workflow running in %q.\n"+
+			"This delegates the %s operation on matching %s in user namespace %q to a batch workflow running in %q.\n"+
 			"For a global namespace, this operation must be submitted through its active cluster.\n"+
-			"Supported operations are limited to %s and %s.\n\n"+
+			"Supported operations are limited to: %s.\n\n"+
 			"Review the user namespace, visibility query, and current match count carefully.\n"+
 			"Visibility results can change while the batch is running.",
 		nsName,
@@ -125,16 +129,16 @@ func AdminBatchStart(c *cli.Context, clientFactory ClientFactory, prompter *Prom
 		query,
 		matchCount,
 		targetKind,
+		batchType,
 		targetKind,
 		nsName,
 		primitives.SystemLocalNamespace,
-		batchTypeTerminateWorkflows,
-		batchTypeTerminateActivities,
+		strings.Join(batchTypes, ", "),
 	)
 	if _, err := fmt.Fprintln(c.App.Writer, summary); err != nil {
 		return fmt.Errorf("unable to write batch operation summary: %w", err)
 	}
-	prompter.Prompt(fmt.Sprintf("Proceed with terminating the currently matching %d %s?", matchCount, targetKind))
+	prompter.Prompt(fmt.Sprintf("Proceed with %s on the currently matching %d %s?", batchType, matchCount, targetKind))
 
 	_, err = adminClient.StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
 		Namespace:       nsName,
@@ -165,7 +169,8 @@ func countDelegatedBatchExecutions(
 	batchType enumspb.BatchOperationType,
 ) (int64, string, error) {
 	switch batchType {
-	case enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW:
+	case enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
+		enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW:
 		resp, err := workflowClient.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
 			Namespace: nsName,
 			Query:     query,
@@ -174,7 +179,8 @@ func countDelegatedBatchExecutions(
 			return 0, "", fmt.Errorf("unable to count workflow executions: %w", err)
 		}
 		return resp.GetCount(), "workflows", nil
-	case enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY:
+	case enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
+		enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY:
 		resp, err := workflowClient.CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
 			Namespace: nsName,
 			Query:     query,
@@ -228,8 +234,12 @@ func delegatedBatchType(batchType string) (enumspb.BatchOperationType, error) {
 	switch batchType {
 	case batchTypeTerminateWorkflows:
 		return enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, nil
+	case batchTypeDeleteWorkflows:
+		return enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW, nil
 	case batchTypeTerminateActivities:
 		return enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY, nil
+	case batchTypeDeleteActivities:
+		return enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY, nil
 	default:
 		return enumspb.BATCH_OPERATION_TYPE_UNSPECIFIED,
 			fmt.Errorf("unknown batch type %q, expected one of: %s", batchType, strings.Join(batchTypes, ", "))

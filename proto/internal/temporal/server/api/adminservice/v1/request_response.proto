@@ -657,7 +657,7 @@ message BatchOperationRefreshTasks {}
 
 // BatchOperationDelegation delegates an ordinary customer-facing batch operation to the admin batcher.
 message BatchOperationDelegation {
-  // only temmination operations are supported
+  // Supported types are workflow and activity termination and deletion.
   temporal.api.enums.v1.BatchOperationType batch_type = 1;
 }
 
