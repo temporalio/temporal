@@ -315,7 +315,8 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		tv = options.testVars(tv)
 	}
 
-	// Attach version headers decorator to the test context.
+	// Attach version headers decorator to the test context, then re-read it:
+	// AttachDecorator replaces the context that For returns.
 	testcontext.AttachDecorator(t, versionHeadersContextKey{}, headers.SetVersions)
 	ctx = testcontext.For(t)
 

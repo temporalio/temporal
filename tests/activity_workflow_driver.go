@@ -42,7 +42,13 @@ type wfaDriver struct {
 // newWFADriver builds a driver. cfg.StartDelay is ignored: a workflow activity has no per-activity
 // start delay.
 func newWFADriver(t *testing.T, env *testcore.TestEnv, cfg activityConfig) *wfaDriver {
-	return &wfaDriver{env: env, ctx: testcontext.For(t), cfg: cfg}
+	// Snapshot only after all decorators are attached: AttachDecorator replaces
+	// the context, while EnsureRemaining preserves its identity.
+	return &wfaDriver{
+		env: env,
+		ctx: testcontext.For(t),
+		cfg: cfg,
+	}
 }
 
 // wfaHandle is a handle to a workflow-scheduled activity.

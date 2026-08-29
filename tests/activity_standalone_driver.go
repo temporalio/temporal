@@ -38,6 +38,8 @@ type saaDriver struct {
 
 // newSAADriver builds a driver.
 func newSAADriver(t *testing.T, env *testcore.TestEnv, cfg activityConfig) *saaDriver {
+	// Snapshot only after all decorators are attached: AttachDecorator replaces
+	// the context, while EnsureRemaining preserves its identity.
 	return &saaDriver{
 		env:              env,
 		ctx:              testcontext.For(t),
