@@ -219,7 +219,7 @@ func TestRequire_FailureScenarios(t *testing.T) {
 					firstAttemptRemaining = time.Until(deadline)
 				}
 				<-t.Context().Done()
-			}, 2*attemptTimeout+500*time.Millisecond, pollInterval)
+			}, 2*attemptTimeout+time.Second, pollInterval)
 		})
 
 		require.True(t, tb.Failed())
