@@ -15,12 +15,14 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
+	commonfailure "go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -46,6 +48,7 @@ type nexusCompletionHandler struct {
 	ClusterMetadata                      cluster.Metadata
 	NamespaceRegistry                    namespace.Registry
 	Logger                               log.Logger
+	ThrottledLogger                      log.Logger
 	MetricsHandler                       metrics.Handler
 	Config                               *Config
 	CallbackTokenGenerator               *commonnexus.CallbackTokenGenerator
@@ -72,6 +75,7 @@ func newNexusCompletionHandler(
 	clusterMetadata cluster.Metadata,
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
+	throttledLogger log.ThrottledLogger,
 	metricsHandler metrics.Handler,
 	serviceConfig *Config,
 	callbackTokenGenerator *commonnexus.CallbackTokenGenerator,
@@ -91,6 +95,7 @@ func newNexusCompletionHandler(
 		ClusterMetadata:                      clusterMetadata,
 		NamespaceRegistry:                    namespaceRegistry,
 		Logger:                               logger,
+		ThrottledLogger:                      throttledLogger,
 		MetricsHandler:                       metricsHandler,
 		Config:                               serviceConfig,
 		CallbackTokenGenerator:               callbackTokenGenerator,
@@ -210,18 +215,28 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 	}
 
 	links := commonnexus.ConvertNexusLinksToProtoLinks(r.Links, logger)
+	blobSizeLimitError := h.Config.BlobSizeLimitError(ns.Name().String())
+	blobSizeLimitWarn := h.Config.BlobSizeLimitWarn(ns.Name().String())
 
 	var successPayload *commonpb.Payload
+	var failure *failurepb.Failure
+	var failureTruncated bool
 	switch r.State { // nolint:exhaustive
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
-		// no validation needed
+		failure, failureTruncated, err = h.resolveFailureForCompletion(
+			r, targetNamespaceID, targetBusinessID, targetRunID, blobSizeLimitError, blobSizeLimitWarn, rCtx.metricsHandler,
+		)
+		if err != nil {
+			logger.Error("cannot convert nexus failure from completion request", tag.Error(err))
+			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid failure content")
+		}
 	case nexus.OperationStateSucceeded:
 		var result *commonpb.Payload
 		if err := r.Result.Consume(&result); err != nil {
 			logger.Error("cannot deserialize payload from completion result", tag.Error(err))
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid result content")
 		}
-		if result.Size() > h.Config.BlobSizeLimitError(ns.Name().String()) {
+		if result.Size() > blobSizeLimitError {
 			logger.Error("payload size exceeds error limit for Nexus CompleteOperation request")
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "result exceeds size limit")
 		}
@@ -232,7 +247,17 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid completion state")
 	}
 
-	err = h.completeOperation(ctx, logger, completion, successPayload, r, links, h.Config.EnableChasm(ns.Name().String()))
+	err = h.completeOperation(
+		ctx,
+		logger,
+		completion,
+		successPayload,
+		failure,
+		failureTruncated,
+		r,
+		links,
+		h.Config.EnableChasm(ns.Name().String()),
+	)
 	if err == nil {
 		return nil
 	}
@@ -246,6 +271,41 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 	return commonnexus.ConvertGRPCError(err, false)
 }
 
+// resolveFailureForCompletion converts a failed/canceled completion's failure to its canonical Temporal
+// form and truncates it if it exceeds blobSizeLimitError, returning the failure to persist and whether it
+// was truncated.
+func (h *nexusCompletionHandler) resolveFailureForCompletion(
+	r *nexusrpc.CompletionRequest,
+	targetNamespaceID, targetBusinessID, targetRunID string,
+	blobSizeLimitError, blobSizeLimitWarn int,
+	metricsHandler metrics.Handler,
+) (*failurepb.Failure, bool, error) {
+	// Temporal->Temporal calls transmit the real failure as the wrapper OperationError's cause.
+	// Unwrap it so the caller sees the handler's original error rather than the generic wrapper.
+	nexusFailure := nexusrpc.UnwrapFailure(r.Error.OriginalFailure)
+	failure, err := commonnexus.NexusFailureToTemporalFailure(*nexusFailure)
+	if err != nil {
+		return nil, false, err
+	}
+	// CheckEventBlobSizeLimit only enforces errorLimit once actualSize also exceeds warnLimit, so
+	// without clamping warnLimit to at most errorLimit, a namespace misconfigured this way would
+	// let the oversized failure through unenforced instead of truncating it.
+	if err := common.CheckEventBlobSizeLimit(
+		failure.Size(),
+		min(blobSizeLimitWarn, blobSizeLimitError),
+		blobSizeLimitError,
+		targetNamespaceID,
+		targetBusinessID,
+		targetRunID,
+		metricsHandler,
+		h.ThrottledLogger,
+		nexusCompletionMethodName,
+	); err != nil {
+		return truncateOversizedFailure(failure, blobSizeLimitError, blobSizeLimitWarn), true, nil
+	}
+	return failure, false, nil
+}
+
 // completeOperation dispatches the completion to the framework named by its
 // token. If that framework no longer has the operation, the token is converted
 // to the other framework and retried once.
@@ -254,6 +314,8 @@ func (h *nexusCompletionHandler) completeOperation(
 	logger log.Logger,
 	completion *tokenspb.NexusOperationCompletion,
 	successPayload *commonpb.Payload,
+	failure *failurepb.Failure,
+	failureTruncated bool,
 	req *nexusrpc.CompletionRequest,
 	links []*commonpb.Link,
 	chasmEnabled bool,
@@ -261,9 +323,9 @@ func (h *nexusCompletionHandler) completeOperation(
 	isChasm := len(completion.GetComponentRef()) > 0
 	var err error
 	if isChasm {
-		err = h.completeChasmOperation(ctx, logger, completion, successPayload, req, links)
+		err = h.completeChasmOperation(ctx, logger, completion, successPayload, failure, req, links)
 	} else {
-		err = h.completeHSMOperation(ctx, completion, successPayload, req, links)
+		err = h.completeHSMOperation(ctx, logger, completion, successPayload, failure, failureTruncated, req, links)
 	}
 	if _, notFound := errors.AsType[*serviceerror.NotFound](err); !notFound || completion.GetRequestId() == "" {
 		return err
@@ -283,9 +345,9 @@ func (h *nexusCompletionHandler) completeOperation(
 	}
 	var fallbackErr error
 	if isChasm {
-		fallbackErr = h.completeHSMOperation(ctx, converted, successPayload, req, links)
+		fallbackErr = h.completeHSMOperation(ctx, logger, converted, successPayload, failure, failureTruncated, req, links)
 	} else {
-		fallbackErr = h.completeChasmOperation(ctx, logger, converted, successPayload, req, links)
+		fallbackErr = h.completeChasmOperation(ctx, logger, converted, successPayload, failure, req, links)
 	}
 	// If the fallback also reports NotFound, the operation is gone in both frameworks.
 	// Return the error from the initial attempt.
@@ -315,10 +377,38 @@ func convertCompletionToOtherFramework(completion *tokenspb.NexusOperationComple
 	return nexusworkflowref.HSMRefToCHASMRef(completion)
 }
 
+// truncateOversizedFailure returns a truncated Failure if larger than blobSizeLimitError, otherwise
+// returns failure unchanged. Guarantees the result fits within blobSizeLimitError, provided
+// blobSizeLimitError is at least the size of a bare ServerFailure marker with no cause.
+func truncateOversizedFailure(failure *failurepb.Failure, blobSizeLimitError, blobSizeLimitWarn int) *failurepb.Failure {
+	if failure.Size() <= blobSizeLimitError {
+		return failure
+	}
+	wrapper := commonfailure.NewServerFailure(common.FailureReasonFailureExceedsLimit, true)
+	if failure.GetCanceledFailureInfo() != nil {
+		// CHASM derives canceled vs. failed from the top-level CanceledFailureInfo alone (it has no
+		// separate state field), so this must survive truncation.
+		wrapper.FailureInfo = &failurepb.Failure_CanceledFailureInfo{CanceledFailureInfo: &failurepb.CanceledFailureInfo{}}
+	}
+	budget := min(blobSizeLimitWarn, blobSizeLimitError)
+	// Leave room for the wrapper itself plus the tag/length prefix embedding the cause adds.
+	const causeEmbeddingOverhead = 8
+	budget = max(budget-wrapper.Size()-causeEmbeddingOverhead, 0)
+	// Retain a truncated cause when it fits; otherwise send the size-limit marker.
+	wrapper.Cause = commonfailure.Truncate(failure, budget)
+	if wrapper.Size() > blobSizeLimitError {
+		wrapper.Cause = nil
+	}
+	return wrapper
+}
+
 func (h *nexusCompletionHandler) completeHSMOperation(
 	ctx context.Context,
+	logger log.Logger,
 	completion *tokenspb.NexusOperationCompletion,
 	successPayload *commonpb.Payload,
+	failure *failurepb.Failure,
+	failureTruncated bool,
 	req *nexusrpc.CompletionRequest,
 	links []*commonpb.Link,
 ) error {
@@ -332,8 +422,17 @@ func (h *nexusCompletionHandler) completeHSMOperation(
 
 	switch req.State { // nolint:exhaustive
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
+		failureToSend := *req.Error.OriginalFailure
+		if failureTruncated {
+			var err error
+			failureToSend, err = commonnexus.TemporalFailureToNexusFailure(failure)
+			if err != nil {
+				logger.Error("cannot convert truncated failure back to nexus failure", tag.Error(err))
+				return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
+			}
+		}
 		hr.Outcome = &historyservice.CompleteNexusOperationRequest_Failure{
-			Failure: commonnexus.NexusFailureToProtoFailure(*req.Error.OriginalFailure),
+			Failure: commonnexus.NexusFailureToProtoFailure(failureToSend),
 		}
 	case nexus.OperationStateSucceeded:
 		hr.Outcome = &historyservice.CompleteNexusOperationRequest_Success{
@@ -353,6 +452,7 @@ func (h *nexusCompletionHandler) completeChasmOperation(
 	logger log.Logger,
 	completion *tokenspb.NexusOperationCompletion,
 	successPayload *commonpb.Payload,
+	failure *failurepb.Failure,
 	req *nexusrpc.CompletionRequest,
 	links []*commonpb.Link,
 ) error {
@@ -373,15 +473,6 @@ func (h *nexusCompletionHandler) completeChasmOperation(
 
 	switch req.State { // nolint:exhaustive
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
-		// Temporal->Temporal calls transmit the real failure as the wrapper OperationError's cause.
-		// Unwrap it so the caller sees the handler's original error (message, type, details, and
-		// canceled/terminated info) rather than the generic wrapper.
-		nexusFailure := nexusrpc.UnwrapFailure(req.Error.OriginalFailure)
-		failure, err := commonnexus.NexusFailureToTemporalFailure(*nexusFailure)
-		if err != nil {
-			logger.Error("cannot convert nexus failure from completion request", tag.Error(err))
-			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid failure content")
-		}
 		hr.Outcome = &historyservice.CompleteNexusOperationChasmRequest_Failure{
 			Failure: failure,
 		}
