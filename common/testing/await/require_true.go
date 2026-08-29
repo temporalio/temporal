@@ -16,23 +16,23 @@ const requireTrueMisuseHint = "do not use test assertions inside the predicate -
 //
 // Use [RequireTrue] for simple local predicates only. Do not use assertions or
 // side effects in the predicate - use [Require] for these.
-func RequireTrue(tb testing.TB, condition func() bool, timeout, pollInterval time.Duration) {
+func RequireTrue(tb testing.TB, condition func() bool, timeout, _ time.Duration) {
 	tb.Helper()
 	run(testcontext.For(tb), tb, func(t *T) {
 		if !condition() {
 			t.Fail()
 		}
-	}, legacyConfig(timeout, pollInterval, ""), "RequireTrue", requireTrueMisuseHint, false)
+	}, legacyConfig(timeout, ""), "RequireTrue", requireTrueMisuseHint, false)
 }
 
 // RequireTruef is like [RequireTrue] but accepts a format string that is included
 // in the failure message when the condition is not satisfied before the timeout.
 // Its poll interval argument is also ignored.
-func RequireTruef(tb testing.TB, condition func() bool, timeout, pollInterval time.Duration, msg string, args ...any) {
+func RequireTruef(tb testing.TB, condition func() bool, timeout, _ time.Duration, msg string, args ...any) {
 	tb.Helper()
 	run(testcontext.For(tb), tb, func(t *T) {
 		if !condition() {
 			t.Fail()
 		}
-	}, legacyConfig(timeout, pollInterval, fmt.Sprintf(msg, args...)), "RequireTruef", requireTrueMisuseHint, false)
+	}, legacyConfig(timeout, fmt.Sprintf(msg, args...)), "RequireTruef", requireTrueMisuseHint, false)
 }

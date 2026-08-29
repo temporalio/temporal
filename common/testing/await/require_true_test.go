@@ -3,6 +3,7 @@ package await_test
 import (
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -35,6 +36,20 @@ func TestRequireTrue_RetriesFalseUntilTrue(t *testing.T) {
 	}, 2*time.Second, 100*time.Millisecond)
 
 	require.Equal(t, int32(3), attempts.Load())
+}
+
+func TestRequireTrue_RetriesWithinShortTimeout(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		readyAt := time.Now().Add(10 * time.Millisecond)
+		var attempts int
+
+		await.RequireTrue(t, func() bool {
+			attempts++
+			return !time.Now().Before(readyAt)
+		}, 20*time.Millisecond, time.Nanosecond)
+
+		require.Greater(t, attempts, 1)
+	})
 }
 
 func TestRequireTrue_FailureScenarios(t *testing.T) {
