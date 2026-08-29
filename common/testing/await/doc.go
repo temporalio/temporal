@@ -5,6 +5,9 @@
 // their formatted variants. By default, they enforce a 10s timeout for each
 // await attempt.
 //
+// Polling backs off from 500ms to 2s. The poll interval arguments remain for
+// source compatibility and are ignored.
+//
 // Improvements over testify's eventually functions:
 //
 //   - Misuse detection: accidentally using the real *testing.T (e.g. s.T() or

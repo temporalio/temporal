@@ -77,7 +77,7 @@ func TestRequire_RetriesUntilAttemptPasses(t *testing.T) {
 					tc.fail(t, attempt)
 					continuedAfterFailure.Store(true)
 				}
-			}, time.Second, 100*time.Millisecond)
+			}, 2*time.Second, 100*time.Millisecond)
 
 			require.Equal(t, int32(3), attempts.Load())
 			require.Equal(t, !tc.stops, continuedAfterFailure.Load())
@@ -141,34 +141,32 @@ func TestRequire_ExtendsCachedTestContextPastActiveExpiration(t *testing.T) {
 	})
 }
 
-func TestRequire_PollIntervalStartsAfterAttemptFinishes(t *testing.T) {
+func TestRequire_UsesAdaptivePollIntervalAfterAttemptFinishes(t *testing.T) {
 	t.Parallel()
 
-	var attempts atomic.Int32
-	var attemptStarts []time.Time
-	var attemptEnds []time.Time
-	attemptDuration := 60 * time.Millisecond
-	pollInterval := 100 * time.Millisecond
+	synctest.Test(t, func(t *testing.T) {
+		var attempts atomic.Int32
+		var attemptStarts []time.Time
+		var attemptEnds []time.Time
+		attemptDuration := 60 * time.Millisecond
 
-	await.Require(t.Context(), t, func(t *await.T) {
-		attemptStarts = append(attemptStarts, time.Now())
-		defer func() { attemptEnds = append(attemptEnds, time.Now()) }()
+		await.Require(t.Context(), t, func(t *await.T) {
+			attemptStarts = append(attemptStarts, time.Now())
+			defer func() { attemptEnds = append(attemptEnds, time.Now()) }()
 
-		time.Sleep(attemptDuration) //nolint:forbidigo // simulate attempt work to distinguish poll-after-start vs poll-after-end
+			time.Sleep(attemptDuration) //nolint:forbidigo // simulate attempt work to distinguish poll-after-start vs poll-after-end
 
-		if attempts.Add(1) < 3 {
-			t.Error("not ready")
-		}
-	}, time.Second, pollInterval)
+			if attempts.Add(1) < 3 {
+				t.Error("not ready")
+			}
+		}, 3*time.Second, time.Nanosecond)
 
-	require.Equal(t, int32(3), attempts.Load())
-	require.Len(t, attemptStarts, 3)
-	require.Len(t, attemptEnds, 3)
-	for i := 1; i < len(attemptStarts); i++ {
-		gap := attemptStarts[i].Sub(attemptEnds[i-1])
-		require.GreaterOrEqual(t, gap, pollInterval,
-			"poll interval should run after attempt finishes (gap=%v < %v)", gap, pollInterval)
-	}
+		require.Equal(t, int32(3), attempts.Load())
+		require.Len(t, attemptStarts, 3)
+		require.Len(t, attemptEnds, 3)
+		require.Equal(t, 500*time.Millisecond, attemptStarts[1].Sub(attemptEnds[0]))
+		require.Equal(t, time.Second, attemptStarts[2].Sub(attemptEnds[1]))
+	})
 }
 
 func TestRequire_FailureScenarios(t *testing.T) {
@@ -221,7 +219,7 @@ func TestRequire_FailureScenarios(t *testing.T) {
 					firstAttemptRemaining = time.Until(deadline)
 				}
 				<-t.Context().Done()
-			}, attemptTimeout+2*pollInterval, pollInterval)
+			}, 2*attemptTimeout+500*time.Millisecond, pollInterval)
 		})
 
 		require.True(t, tb.Failed())
@@ -320,31 +318,31 @@ func TestRequire_FailureScenarios(t *testing.T) {
 	})
 
 	t.Run("truncates middle attempts when many fail", func(t *testing.T) {
-		t.Parallel()
+		synctest.Test(t, func(t *testing.T) {
+			ctx := testcontext.For(t)
+			var attempts atomic.Int32
+			tb := newRecordingTB()
+			tb.run(func() {
+				await.Require(ctx, tb, func(t *await.T) {
+					n := attempts.Add(1)
+					t.Errorf("attempt %d failed", n)
+				}, 6*time.Second, 50*time.Millisecond)
+			})
+			require.True(t, tb.Failed())
+			require.Contains(t, tb.fatals(), "not satisfied after")
 
-		ctx := testcontext.For(t)
-		var attempts atomic.Int32
-		tb := newRecordingTB()
-		tb.run(func() {
-			await.Require(ctx, tb, func(t *await.T) {
-				n := attempts.Add(1)
-				t.Errorf("attempt %d failed", n)
-			}, 400*time.Millisecond, 50*time.Millisecond)
+			n := attempts.Load()
+			require.Greater(t, n, int32(4), "need >4 attempts to exercise truncation")
+
+			fatals := tb.fatals()
+			require.Contains(t, fatals, "attempt errors:\n\n    --- attempt 1 ---\n      attempt 1 failed\n")
+			require.Contains(t, fatals, fmt.Sprintf("... %d attempts omitted ...", n-4))
+			// Last three attempts present in order.
+			for i := n - 2; i <= n; i++ {
+				require.Contains(t, fatals, fmt.Sprintf("--- attempt %d ---\n      attempt %d failed", i, i))
+			}
+			require.Empty(t, tb.errors())
 		})
-		require.True(t, tb.Failed())
-		require.Contains(t, tb.fatals(), "not satisfied after")
-
-		n := attempts.Load()
-		require.Greater(t, n, int32(4), "need >4 attempts to exercise truncation")
-
-		fatals := tb.fatals()
-		require.Contains(t, fatals, "attempt errors:\n\n    --- attempt 1 ---\n      attempt 1 failed\n")
-		require.Contains(t, fatals, fmt.Sprintf("... %d attempts omitted ...", n-4))
-		// Last three attempts present in order.
-		for i := n - 2; i <= n; i++ {
-			require.Contains(t, fatals, fmt.Sprintf("--- attempt %d ---\n      attempt %d failed", i, i))
-		}
-		require.Empty(t, tb.errors())
 	})
 
 	t.Run("Requiref includes message on timeout", func(t *testing.T) {
