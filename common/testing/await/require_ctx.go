@@ -43,21 +43,24 @@ func hardDeadlockTimeout() time.Duration {
 const postAwaitTimeoutReserve = 10 * time.Second
 
 // Require polls condition until it returns without assertion failures, or
-// until ctx is canceled or timeout expires (whichever is earliest).
+// until ctx is canceled or the test context timeout expires (whichever is
+// earliest).
 //
 // Pass the *await.T to require.*/assert.* — failures cause a retry, not a
 // test failure. Use t.Context() inside the callback to honor the timeout.
-// The poll interval is the base for exponential backoff capped at 2s.
-func Require(ctx context.Context, tb testing.TB, condition func(*T), timeout, pollInterval time.Duration) {
+// The timeout argument is retained for source compatibility and ignored. The
+// poll interval is the base for exponential backoff capped at 2s.
+func Require(ctx context.Context, tb testing.TB, condition func(*T), _, pollInterval time.Duration) {
 	tb.Helper()
-	run(ctx, tb, condition, legacyConfig(timeout, pollInterval, ""), "Require", requireMisuseHint, true)
+	run(ctx, tb, condition, legacyConfig(pollInterval, ""), "Require", requireMisuseHint, true)
 }
 
 // Requiref is like [Require] but adds a formatted message to the timeout
-// failure. Its poll interval is also used as the base for exponential backoff.
-func Requiref(ctx context.Context, tb testing.TB, condition func(*T), timeout, pollInterval time.Duration, msg string, args ...any) {
+// failure. Its timeout argument is also ignored, and its poll interval is used
+// as the base for exponential backoff.
+func Requiref(ctx context.Context, tb testing.TB, condition func(*T), _, pollInterval time.Duration, msg string, args ...any) {
 	tb.Helper()
-	run(ctx, tb, condition, legacyConfig(timeout, pollInterval, fmt.Sprintf(msg, args...)), "Requiref", requireMisuseHint, true)
+	run(ctx, tb, condition, legacyConfig(pollInterval, fmt.Sprintf(msg, args...)), "Requiref", requireMisuseHint, true)
 }
 
 func run(
