@@ -99,28 +99,28 @@ func TestRequire_PropagatesParentContextValues(t *testing.T) {
 	require.Equal(t, "value", got)
 }
 
-func TestRequire_SetsTimeoutContextDeadline(t *testing.T) {
+func TestRequire_IgnoresLegacyTimeoutArgument(t *testing.T) {
 	t.Parallel()
 
 	longCtx := testcontext.For(t)
 	longDeadline, ok := longCtx.Deadline()
 	require.True(t, ok)
 
-	shortTimeout := 1 * time.Second
+	attemptTimeout := 10 * time.Second * debug.TimeoutMultiplier
 
-	var shortCtx context.Context
+	var attemptCtx context.Context
 	await.Require(longCtx, t, func(t *await.T) {
-		shortCtx = t.Context()
-	}, shortTimeout, 100*time.Millisecond)
+		attemptCtx = t.Context()
+	}, time.Nanosecond, time.Hour)
 
-	require.NotNil(t, shortCtx)
-	require.NotSame(t, longCtx, shortCtx)
+	require.NotNil(t, attemptCtx)
+	require.NotSame(t, longCtx, attemptCtx)
 
-	shortDeadline, ok := shortCtx.Deadline()
+	attemptDeadline, ok := attemptCtx.Deadline()
 	require.True(t, ok)
-	require.True(t, shortDeadline.Before(longDeadline))
-	require.LessOrEqual(t, time.Until(shortDeadline), shortTimeout)
-	require.Greater(t, time.Until(shortDeadline), shortTimeout-200*time.Millisecond)
+	require.True(t, attemptDeadline.Before(longDeadline))
+	require.LessOrEqual(t, time.Until(attemptDeadline), attemptTimeout)
+	require.Greater(t, time.Until(attemptDeadline), attemptTimeout-200*time.Millisecond)
 }
 
 func TestRequire_ExtendsCachedTestContextPastActiveExpiration(t *testing.T) {
@@ -128,13 +128,9 @@ func TestRequire_ExtendsCachedTestContextPastActiveExpiration(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		ctx := testcontext.For(t)
-		completeAt := time.Now().Add(testcontext.DefaultTimeout() + time.Second)
 
-		await.Require(ctx, t, func(t *await.T) {
-			if time.Now().Before(completeAt) {
-				t.Error("not ready")
-			}
-		}, testcontext.DefaultTimeout()+5*time.Second, testcontext.DefaultTimeout()+time.Second)
+		await.Require(ctx, t, func(*await.T) {}, testcontext.DefaultTimeout()+5*time.Second, testcontext.DefaultTimeout()+time.Second)
+		time.Sleep(testcontext.DefaultTimeout() + time.Second) //nolint:forbidigo // advance past the original active expiration
 
 		require.Same(t, ctx, testcontext.For(t))
 		require.NoError(t, ctx.Err())
@@ -188,7 +184,8 @@ func TestRequire_FailureScenarios(t *testing.T) {
 	t.Run("reports timeout", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := testcontext.For(t)
+		ctx, cancel := context.WithTimeout(testcontext.For(t), time.Second)
+		defer cancel()
 		tb := newRecordingTB()
 		tb.run(func() {
 			await.Require(ctx, tb, func(t *await.T) {
@@ -202,7 +199,8 @@ func TestRequire_FailureScenarios(t *testing.T) {
 	t.Run("cancels attempt context on timeout", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := testcontext.For(t)
+		ctx, cancel := context.WithTimeout(testcontext.For(t), 2*time.Second)
+		defer cancel()
 		tb := newRecordingTB()
 		tb.run(func() {
 			await.Require(ctx, tb, func(t *await.T) {
@@ -222,7 +220,9 @@ func TestRequire_FailureScenarios(t *testing.T) {
 		pollInterval := 100 * time.Millisecond
 		t.Setenv("TEMPORAL_AWAIT_ATTEMPT_TIMEOUT", attemptTimeoutEnv.String())
 
-		ctx := testcontext.For(t)
+		awaitTimeout := 2*attemptTimeout + time.Second
+		ctx, cancel := context.WithTimeout(testcontext.For(t), awaitTimeout)
+		defer cancel()
 		var attempts atomic.Int32
 		var firstAttemptRemaining time.Duration
 
@@ -234,7 +234,7 @@ func TestRequire_FailureScenarios(t *testing.T) {
 					firstAttemptRemaining = time.Until(deadline)
 				}
 				<-t.Context().Done()
-			}, 2*attemptTimeout+time.Second, pollInterval)
+			}, awaitTimeout, pollInterval)
 		})
 
 		require.True(t, tb.Failed())
@@ -247,7 +247,8 @@ func TestRequire_FailureScenarios(t *testing.T) {
 	t.Run("does not poll again after attempt consumes timeout", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := testcontext.For(t)
+		ctx, cancel := context.WithTimeout(testcontext.For(t), time.Second)
+		defer cancel()
 		var attempts atomic.Int32
 
 		tb := newRecordingTB()
@@ -312,7 +313,8 @@ func TestRequire_FailureScenarios(t *testing.T) {
 	t.Run("reports all attempt errors on timeout", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := testcontext.For(t)
+		ctx, cancel := context.WithTimeout(testcontext.For(t), time.Second)
+		defer cancel()
 		var attempts atomic.Int32
 		tb := newRecordingTB()
 		tb.run(func() {
@@ -334,7 +336,8 @@ func TestRequire_FailureScenarios(t *testing.T) {
 
 	t.Run("truncates middle attempts when many fail", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
-			ctx := testcontext.For(t)
+			ctx, cancel := context.WithTimeout(testcontext.For(t), 6*time.Second)
+			defer cancel()
 			var attempts atomic.Int32
 			tb := newRecordingTB()
 			tb.run(func() {
@@ -363,7 +366,8 @@ func TestRequire_FailureScenarios(t *testing.T) {
 	t.Run("Requiref includes message on timeout", func(t *testing.T) {
 		t.Parallel()
 
-		ctx := testcontext.For(t)
+		ctx, cancel := context.WithTimeout(testcontext.For(t), time.Second)
+		defer cancel()
 		tb := newRecordingTB()
 		tb.run(func() {
 			await.Requiref(ctx, tb, func(t *await.T) {
@@ -482,7 +486,8 @@ func TestRequire_WaitsForInFlightAttemptOnTimeout(t *testing.T) {
 	t.Parallel()
 
 	var finished atomic.Bool
-	ctx := testcontext.For(t)
+	ctx, cancel := context.WithTimeout(testcontext.For(t), time.Second)
+	defer cancel()
 	tb := newRecordingTB()
 	tb.run(func() {
 		await.Require(ctx, tb, func(t *await.T) {
@@ -498,6 +503,7 @@ func TestRequire_WaitsForInFlightAttemptOnTimeout(t *testing.T) {
 // recordingTB is a minimal testing.TB implementation for testing failure scenarios.
 type recordingTB struct {
 	testing.TB    // embed for interface satisfaction
+	ctx           context.Context
 	mu            sync.Mutex
 	failed        atomic.Bool
 	errorMessages []string
@@ -507,7 +513,14 @@ type recordingTB struct {
 }
 
 func newRecordingTB() *recordingTB {
-	return &recordingTB{}
+	return &recordingTB{ctx: context.Background()}
+}
+
+func newRecordingTBWithTimeout(timeout time.Duration) *recordingTB {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	tb := &recordingTB{ctx: ctx}
+	tb.Cleanup(cancel)
+	return tb
 }
 
 func (r *recordingTB) Helper()      {}
@@ -519,7 +532,7 @@ func (r *recordingTB) Logf(format string, args ...any) {
 	r.logMessages = append(r.logMessages, fmt.Sprintf(format, args...))
 }
 func (r *recordingTB) Context() context.Context {
-	return context.Background()
+	return r.ctx
 }
 
 func (r *recordingTB) Cleanup(fn func()) {
