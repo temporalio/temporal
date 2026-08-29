@@ -58,7 +58,7 @@ func TestRequireTrue_FailureScenarios(t *testing.T) {
 	t.Run("reports timeout", func(t *testing.T) {
 		t.Parallel()
 
-		tb := newRecordingTB()
+		tb := newRecordingTBWithTimeout(time.Second)
 		tb.run(func() {
 			await.RequireTrue(tb, func() bool {
 				return false
@@ -71,7 +71,7 @@ func TestRequireTrue_FailureScenarios(t *testing.T) {
 	t.Run("RequireTruef includes message on timeout", func(t *testing.T) {
 		t.Parallel()
 
-		tb := newRecordingTB()
+		tb := newRecordingTBWithTimeout(time.Second)
 		tb.run(func() {
 			await.RequireTruef(tb, func() bool {
 				return false

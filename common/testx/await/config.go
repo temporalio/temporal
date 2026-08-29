@@ -3,6 +3,8 @@ package await
 import (
 	"os"
 	"time"
+
+	"go.temporal.io/testx/testcontext"
 )
 
 const attemptTimeoutEnvVar = "TEMPORAL_AWAIT_ATTEMPT_TIMEOUT"
@@ -16,13 +18,13 @@ type config struct {
 
 func newConfig() config {
 	return config{
+		totalTimeout:   testcontext.DefaultTimeout(),
 		attemptTimeout: envDuration(attemptTimeoutEnvVar, 10*time.Second),
 	}
 }
 
-func legacyConfig(timeout, pollInterval time.Duration, timeoutMsg string) config {
+func legacyConfig(pollInterval time.Duration, timeoutMsg string) config {
 	cfg := newConfig()
-	cfg.totalTimeout = timeout
 	cfg.pollInterval = pollInterval
 	cfg.timeoutMsg = timeoutMsg
 	return cfg
