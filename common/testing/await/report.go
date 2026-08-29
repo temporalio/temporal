@@ -1,10 +1,13 @@
 package await
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"testing"
 	"time"
+
+	"go.temporal.io/server/common/testing/testcontext"
 )
 
 // reportAttemptErrors emits the collected attempt failures. When there are
@@ -21,10 +24,16 @@ type attemptFailure struct {
 }
 
 type timeoutReport struct {
-	effectiveTimeout time.Duration
-	attempts         int
-	attemptTimeouts  int
-	failures         []attemptFailure
+	effectiveTimeout   time.Duration
+	configuredTimeout  time.Duration
+	attemptTimeout     time.Duration
+	testContext        context.Context
+	deadlineCause      string
+	attempts           int
+	attemptTimeouts    int
+	attemptDurationSum time.Duration
+	attemptDurationMax time.Duration
+	failures           []attemptFailure
 }
 
 func (r *timeoutReport) nextPoll() {
@@ -41,18 +50,64 @@ func (r *timeoutReport) recordAttemptTimeout() {
 	r.attemptTimeouts++
 }
 
+func (r *timeoutReport) recordAttemptDuration(d time.Duration) {
+	r.attemptDurationSum += d
+	r.attemptDurationMax = max(r.attemptDurationMax, d)
+}
+
 func (r timeoutReport) reportAttemptErrors(tb testing.TB) {
 	reportAttemptErrors(tb, r.failures)
 }
 
 func (r timeoutReport) reportTimeout(tb testing.TB, funcName, timeoutMsg string) {
 	r.reportAttemptErrors(tb)
-	message := fmt.Sprintf("condition not satisfied after %v", r.effectiveTimeout)
+	message := fmt.Sprintf("condition not satisfied after %v", reportDuration(r.effectiveTimeout))
 	if timeoutMsg != "" {
-		message = fmt.Sprintf("%s (not satisfied after %v)", timeoutMsg, r.effectiveTimeout)
+		message = fmt.Sprintf("%s (not satisfied after %v)", timeoutMsg, reportDuration(r.effectiveTimeout))
 	}
-	tb.Fatalf("%s: %s\ndetails:\n  attempts         = %d\n  attempt timeouts = %d",
-		funcName, message, r.attempts, r.attemptTimeouts)
+	var details strings.Builder
+	// Keep the 16-character label column aligned with the testcontext audit appended below.
+	writeDetail := func(label, value string) {
+		fmt.Fprintf(&details, "  %-16s = %s\n", label, value)
+	}
+
+	if r.deadlineCause != "" && r.configuredTimeout > 0 {
+		writeDetail("await timeout", fmt.Sprintf(
+			"%v (configured %v; limited by %s)",
+			reportDuration(r.effectiveTimeout), reportDuration(r.configuredTimeout), r.deadlineCause,
+		))
+	}
+	writeDetail("attempts", fmt.Sprintf("%d", r.attempts))
+	if r.attemptTimeouts > 0 {
+		writeDetail("attempt timeouts", fmt.Sprintf("%d (attempt timeout %v)", r.attemptTimeouts, reportDuration(r.attemptTimeout)))
+	}
+	if r.attempts > 0 {
+		writeDetail(
+			"attempt duration",
+			fmt.Sprintf(
+				"avg %v, max %v",
+				reportDuration(r.attemptDurationSum/time.Duration(r.attempts)),
+				reportDuration(r.attemptDurationMax),
+			),
+		)
+	}
+	if audit := testcontext.ExtensionAudit(r.testContext); audit != "" {
+		details.WriteString("  ")
+		details.WriteString(strings.ReplaceAll(audit, "\n", "\n  "))
+		details.WriteByte('\n')
+	}
+	tb.Fatalf("%s: %s\ndetails:\n%s", funcName, message, strings.TrimSuffix(details.String(), "\n"))
+}
+
+// Keep this formatting consistent with testcontext reports embedded above.
+func reportDuration(d time.Duration) string {
+	if d > -time.Millisecond && d < time.Millisecond {
+		rounded := d.Round(time.Microsecond)
+		if rounded != 0 {
+			return rounded.String()
+		}
+	}
+	return d.Round(time.Millisecond).String()
 }
 
 func reportAttemptErrors(tb testing.TB, failures []attemptFailure) {
