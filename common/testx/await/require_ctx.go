@@ -82,32 +82,47 @@ func run(
 		return
 	}
 
+	start := time.Now()
 	// Ensure enough context time for the await itself plus post-await reserve.
 	// This only works for [testcontext]s; other contexts will be left unchanged.
 	parentCtx = testcontext.EnsureRemaining(parentCtx, tb, cfg.totalTimeout+postAwaitTimeoutReserve)
 
-	deadline := time.Now().Add(cfg.totalTimeout)
-	if parentDeadline, hasDeadline := parentCtx.Deadline(); hasDeadline {
+	deadline := start.Add(cfg.totalTimeout)
+	deadlineCause := ""
+	if parentDeadline, hasDeadline := parentCtx.Deadline(); hasDeadline && parentDeadline.Before(deadline) {
 		// Cap at the parent context's deadline if it's earlier than our timeout.
-		deadline = minTime(deadline, parentDeadline)
+		deadline = parentDeadline
+		deadlineCause = "parent context deadline"
 	}
 
 	// Cap at the test's deadline if it's earlier than our deadline.
 	// Ideally, the parent context already accounts for the test's deadline - but we are being defensive.
-	if testDeadline, hasDeadline := testcontext.GoTestDeadline(tb); hasDeadline {
-		deadline = minTime(deadline, testDeadline)
+	if testDeadline, hasDeadline := testcontext.GoTestDeadline(tb); hasDeadline && testDeadline.Before(deadline) {
+		deadline = testDeadline
+		deadlineCause = "go test timeout"
 	}
 
+	effectiveTimeout := max(0, time.Until(deadline))
 	awaitCtx, awaitCancel := context.WithDeadline(parentCtx, deadline)
 	defer awaitCancel()
 
-	report := timeoutReport{effectiveTimeout: max(0, time.Until(deadline))}
+	report := timeoutReport{
+		effectiveTimeout:  effectiveTimeout,
+		configuredTimeout: cfg.totalTimeout,
+		attemptTimeout:    cfg.attemptTimeout,
+		testContext:       parentCtx,
+		deadlineCause:     deadlineCause,
+	}
 
 	for {
 		// Parent context was canceled while we were sleeping (not our deadline).
 		if err := awaitCtx.Err(); err != nil && !deadlineReached(deadline) {
-			report.reportAttemptErrors(tb)
-			tb.Fatalf("%s: context canceled before condition was satisfied: %v", funcName, err)
+			failContextCanceled(tb, report, funcName, err)
+			return
+		}
+		// Sleep can return at the deadline; do not start another attempt then.
+		if deadlineReached(deadline) {
+			report.reportTimeout(tb, funcName, cfg.timeoutMsg)
 			return
 		}
 
@@ -119,9 +134,11 @@ func run(
 		t := &T{tb: tb, ctx: attemptCtx}
 
 		// Run attempt.
+		attemptStart := time.Now()
 		res := runAttempt(t, condition, attemptCancel, funcName, cancellable)
 		// Capture the error before cleanup; attemptCancel marks every attempt canceled.
 		attemptErr := attemptCtx.Err()
+		report.recordAttemptDuration(time.Since(attemptStart))
 		attemptCancel()
 		if res.panicVal != nil {
 			//nolint:forbidigo // Preserve panics from the caller's condition.
@@ -156,8 +173,7 @@ func run(
 
 		// Parent context was canceled during the attempt (not our deadline).
 		if err := awaitCtx.Err(); err != nil && !deadlineReached(deadline) {
-			report.reportAttemptErrors(tb)
-			tb.Fatalf("%s: context canceled before condition was satisfied: %v", funcName, err)
+			failContextCanceled(tb, report, funcName, err)
 			return
 		}
 
@@ -175,6 +191,12 @@ func run(
 		// Wait for pollInterval, or context is canceled or deadline is reached.
 		sleep(awaitCtx, deadline, cfg.pollInterval)
 	}
+}
+
+func failContextCanceled(tb testing.TB, report timeoutReport, funcName string, err error) {
+	tb.Helper()
+	report.reportAttemptErrors(tb)
+	tb.Fatalf("%s: context canceled before condition was satisfied: %v", funcName, err)
 }
 
 // attemptResult describes how an attempt terminated. Exactly one of the
