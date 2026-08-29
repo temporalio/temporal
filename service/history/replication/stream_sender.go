@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -20,7 +21,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/channel"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -63,9 +63,24 @@ type (
 		config                  *configs.Config
 		isTieredStackEnabled    bool
 		readerGroup             *replicationReaderGroup
-		flowController          SenderFlowController
-		sendLock                sync.Mutex
-		ssRateLimiter           ServerSchedulerRateLimiter
+		isolation               *isolationManager
+		// isolationConfirmed is set once the receiver advertises support for
+		// per-namespace lane isolation. Until then the sender keeps all HIGH traffic
+		// on the shared lane and emits no lane-tagged messages, so an old receiver is
+		// never sent lanes it would misroute.
+		isolationConfirmed atomic.Bool
+		tierRateLimiters   []quotas.RateLimiter // index t-1 limits throttled tier t
+		// laneSendMu guards activeLaneSends and pendingRetires. A lane-retirement
+		// marker must be the LAST message the receiver sees for a lane: emitting one
+		// while a tier loop still has an in-flight (or stale-snapshot, about-to-start)
+		// send for the member would let a straggler batch re-create the receiver lane
+		// after the marker, freezing its watermark in the ack fold forever.
+		laneSendMu      sync.Mutex
+		activeLaneSends map[string]int // member namespace -> in-flight tier sends
+		pendingRetires  []string       // graduated members awaiting a safe marker send
+		flowController  SenderFlowController
+		sendLock        sync.Mutex
+		ssRateLimiter   ServerSchedulerRateLimiter
 	}
 )
 
@@ -89,9 +104,12 @@ func NewStreamSender(
 		tag.Operation("replication-stream-sender"),
 	)
 	// Read the dynamic config once so every derived field sees the same snapshot: a
-	// flip between two reads would leave the sender half in each mode until the recv
-	// loop's config guard restarts the stream.
+	// flip between two reads would leave the sender half in each mode — e.g. an
+	// isolation manager whose TierCount exceeds len(tierRateLimiters), panicking the
+	// tier loops — until the recv loop's config guard restarts the stream.
 	tieredStackEnabled := config.EnableReplicationTaskTieredProcessing()
+	isolationEnabled := tieredStackEnabled && config.EnableReplicationNamespaceIsolation()
+	throttledTierCount := normalizedThrottledTierCount(config.ReplicationStreamSenderThrottledTierCount())
 	return &StreamSenderImpl{
 		server:                  server,
 		shardContext:            shardContext,
@@ -108,7 +126,10 @@ func NewStreamSender(
 		shutdownChan:            channel.NewShutdownOnce(),
 		config:                  config,
 		isTieredStackEnabled:    tieredStackEnabled,
-		readerGroup:             newReaderGroupIfEnabled(config.EnableReplicationReaderGroup, shardContext, clientShardKey, tieredStackEnabled, logger),
+		readerGroup:             newReaderGroupIfEnabled(config, shardContext, clientShardKey, tieredStackEnabled, isolationEnabled, logger),
+		isolation:               newIsolationManagerIfEnabled(config, shardContext, clientShardKey, isolationEnabled, throttledTierCount, logger),
+		tierRateLimiters:        newTierRateLimiters(config, isolationEnabled, throttledTierCount),
+		activeLaneSends:         make(map[string]int),
 		flowController:          NewSenderFlowController(config, logger),
 		ssRateLimiter:           ssRateLimiter,
 	}
@@ -133,6 +154,13 @@ func (s *StreamSenderImpl) Start() {
 		// Low Priority sender is used for force replication closed workflow
 		go WrapEventLoop(s.server.Context(), getSenderEventLoop(enumsspb.TASK_PRIORITY_HIGH), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, s.config)
 		go WrapEventLoop(s.server.Context(), getSenderEventLoop(enumsspb.TASK_PRIORITY_LOW), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, s.config)
+		if s.isolation != nil {
+			// One send loop per severity tier; each drains its members' dedicated
+			// lanes at the tier's (rate-limited) pace.
+			for tier := 1; tier <= s.isolation.TierCount(); tier++ {
+				go WrapEventLoop(s.server.Context(), func() error { return s.sendTierEventLoop(tier) }, s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, s.config)
+			}
+		}
 	} else {
 		go WrapEventLoop(s.server.Context(), getSenderEventLoop(enumsspb.TASK_PRIORITY_UNSPECIFIED), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, s.config)
 	}
@@ -195,6 +223,12 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 		if (s.readerGroup != nil) != s.config.EnableReplicationReaderGroup() {
 			return NewStreamError("StreamSender detected reader group config change, restart the stream", nil)
 		}
+		if (s.isolation != nil) != (s.config.EnableReplicationNamespaceIsolation() && s.isTieredStackEnabled) {
+			return NewStreamError("StreamSender detected namespace isolation config change, restart the stream", nil)
+		}
+		if s.isolation != nil && s.isolation.TierCount() != normalizedThrottledTierCount(s.config.ReplicationStreamSenderThrottledTierCount()) {
+			return NewStreamError("StreamSender detected throttled tier count change, restart the stream", nil)
+		}
 
 		req, err := s.server.Recv()
 		if err != nil {
@@ -255,6 +289,53 @@ func (s *StreamSenderImpl) sendEventLoop(priority enumsspb.TaskPriority) (retErr
 func (s *StreamSenderImpl) recvSyncReplicationState(
 	attr *replicationspb.SyncReplicationState,
 ) error {
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	if attr.GetSupportsNamespaceIsolation() {
+		s.isolationConfirmed.Store(true)
+	}
+
+	if s.isolation != nil {
+		if attr.HighPriorityState == nil || attr.LowPriorityState == nil {
+			return NewStreamError("streamSender: missing priority state with namespace isolation", nil)
+		}
+		if s.isTieredStackEnabled {
+			s.flowController.RefreshReceiverFlowControlInfo(attr)
+		}
+		highAcked := attr.GetHighPriorityState().GetInclusiveLowWatermark()
+		if s.isolationConfirmed.Load() {
+			// Reconcile lane membership against the receiver's throttled set, then persist
+			// one scope per member lane (namespace predicate + applied watermark), so a
+			// reconnect reconstructs the lanes instead of re-sending the whole HIGH lane.
+			// Split floors and the merge-back gate anchor on applied (acked) watermarks so
+			// ordered HIGH events never straddle a hand-off with a gap. Scopes[0] is the
+			// receiver's overall min clamped to the member lanes' resume positions —
+			// replication task cleanup reads only Scopes[0], and the receiver's fold
+			// cannot vouch for windows its connection has never seen.
+			s.isolation.Reconcile(
+				attr.GetThrottleHighNamespaceIds(),
+				highAcked,
+				memberAckedWatermarks(attr.GetIsolatedLaneStates()),
+			)
+			if err := s.sendPendingRetirements(); err != nil {
+				return err
+			}
+		} else {
+			// The shared lane is unfiltered until the receiver advertises support. Once
+			// it has applied through the shared cursor, restored member windows have been
+			// re-covered and their scopes can be collapsed instead of pinning cleanup for
+			// the lifetime of an older receiver connection.
+			s.isolation.CollapseToDefaultLane(highAcked)
+		}
+		s.emitTierMetrics()
+		if err := s.shardContext.UpdateReplicationQueueReaderState(readerID, s.isolation.BuildReaderState(attr)); err != nil {
+			return err
+		}
+		taskID, ts := s.isolationFailoverWatermark(attr)
+		return s.shardContext.UpdateRemoteReaderInfo(readerID, taskID, ts)
+	}
 	if s.readerGroup != nil {
 		readerState, err := s.readerGroup.BuildReaderState(attr)
 		if err != nil {
@@ -267,7 +348,6 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 		if s.isTieredStackEnabled {
 			s.flowController.RefreshReceiverFlowControlInfo(attr)
 		}
-		readerID := s.readerGroup.ReaderID()
 		if err := s.shardContext.UpdateReplicationQueueReaderState(readerID, readerState); err != nil {
 			return err
 		}
@@ -361,11 +441,6 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 		s.flowController.RefreshReceiverFlowControlInfo(attr)
 	}
 
-	readerID := shard.ReplicationReaderIDFromClusterShardID(
-		int64(s.clientShardKey.ClusterID),
-		s.clientShardKey.ShardID,
-	)
-
 	if err := s.shardContext.UpdateReplicationQueueReaderState(
 		readerID,
 		readerState,
@@ -394,12 +469,44 @@ func (s *StreamSenderImpl) sendCatchUp(priority enumsspb.TaskPriority) (int64, e
 	catchupEndExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
 
 	catchupBeginInclusiveWatermark := s.catchupBeginWatermark(priority, catchupEndExclusiveWatermark)
+	var defaultFilter func(task tasks.Task) bool
+	recordDefaultCoverage := false
+	if s.isolation != nil && priority == enumsspb.TASK_PRIORITY_HIGH {
+		isolationConfirmed := s.isolationConfirmed.Load()
+		if !isolationConfirmed {
+			// Restored member lanes exist but the receiver has not (or will never —
+			// e.g. a version rollback) confirmed isolation support, so the tier
+			// loops may never run. Their unsent windows must ride the shared lane
+			// instead: start catch-up no higher than the lowest member resume
+			// position (the shared filter admits members while unconfirmed). If the
+			// receiver confirms later, tier lanes re-cover the same window —
+			// duplicates, applied idempotently, never a gap.
+			if memberFloor, ok := s.isolation.MemberResumeFloor(); ok {
+				catchupBeginInclusiveWatermark = min(catchupBeginInclusiveWatermark, memberFloor)
+				recordDefaultCoverage = true
+			}
+		} else {
+			defaultFilter = s.isolation.DefaultFilter()
+		}
+		// Advance the default cursor BEFORE sending: the merge-back gate compares tier
+		// acked watermarks against it, so advancing first guarantees a namespace can
+		// never graduate while a batch that excludes it is still in flight (which would
+		// leave its tasks in that batch's window unsent on every lane).
+		s.isolation.AdvanceDefaultCursor(catchupEndExclusiveWatermark)
+	}
 	if err := s.sendTasks(
 		priority,
 		catchupBeginInclusiveWatermark,
 		catchupEndExclusiveWatermark,
+		defaultFilter,
+		"", // shared HIGH / LOW lane, not an isolated member lane
+		sharedLaneTag,
+		nil,
 	); err != nil {
 		return 0, err
+	}
+	if recordDefaultCoverage {
+		s.isolation.RecordDefaultLaneCoverage(catchupBeginInclusiveWatermark, catchupEndExclusiveWatermark)
 	}
 	return catchupEndExclusiveWatermark, nil
 }
@@ -411,21 +518,30 @@ func (s *StreamSenderImpl) catchupBeginWatermark(priority enumsspb.TaskPriority,
 	if s.readerGroup != nil {
 		return s.readerGroup.CatchupBeginWatermark(end, priority)
 	}
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
 	queueState, ok := s.shardContext.GetQueueState(tasks.CategoryReplication)
 	if !ok {
 		s.logger.Debug("StreamSender queueState not found")
 		return end
 	}
-	readerID := shard.ReplicationReaderIDFromClusterShardID(
-		int64(s.clientShardKey.ClusterID),
-		s.clientShardKey.ShardID,
-	)
 	readerState, ok := queueState.ReaderStates[readerID]
 	if !ok {
 		s.logger.Debug(fmt.Sprintf("StreamSender readerState not found, readerID %v", readerID))
 		return end
 	}
-	return s.getSendCatchupBeginInclusiveWatermark(readerState, priority)
+	scopePriority := priority
+	// Isolation OFF but leftover tier scopes persisted (isolation was disabled while a
+	// tier lagged): resume default-HIGH from the overall min (scope 0) so the undrained
+	// tier windows are re-covered once — a rare, bounded, idempotent re-send. With
+	// isolation ON the tiers are reconstructed instead, so default-HIGH resumes
+	// normally from its own scope.
+	if s.isolation == nil && priority == enumsspb.TASK_PRIORITY_HIGH && len(readerState.Scopes) > 3 {
+		scopePriority = enumsspb.TASK_PRIORITY_UNSPECIFIED
+	}
+	return s.getSendCatchupBeginInclusiveWatermark(readerState, scopePriority)
 }
 
 func (s *StreamSenderImpl) getSendCatchupBeginInclusiveWatermark(readerState *persistencespb.QueueReaderState, priority enumsspb.TaskPriority) int64 {
@@ -434,20 +550,327 @@ func (s *StreamSenderImpl) getSendCatchupBeginInclusiveWatermark(readerState *pe
 	// stack the reader state is still in the old format, in which case using the overall
 	// low watermark (scope 0) is safe as long as we always guarantee the overall low
 	// watermark is Min(lowPriorityLowWatermark, highPriorityLowWatermark).
-	return readerState.Scopes[priorityScopeIndex(priority, len(readerState.Scopes), s.readerGroup != nil)].Range.InclusiveMin.TaskId
+	// Extended states (>3 scopes) only exist when isolation wrote member-lane scopes,
+	// so the isolation manager's presence is what allows reading priority scopes out of
+	// them: without it HIGH has already been mapped to the overall min by the orphaned
+	// scope guard in catchupBeginWatermark.
+	return readerState.Scopes[priorityScopeIndex(priority, len(readerState.Scopes), s.isolation != nil)].Range.InclusiveMin.TaskId
 }
 
 func newReaderGroupIfEnabled(
-	enableReplicationReaderGroup dynamicconfig.BoolPropertyFn,
+	config *configs.Config,
 	shardContext historyi.ShardContext,
 	clientShardKey ClusterShardKey,
 	tieredStackEnabled bool,
+	isolationEnabled bool,
 	logger log.Logger,
 ) *replicationReaderGroup {
-	if !enableReplicationReaderGroup() {
+	if !config.EnableReplicationReaderGroup() {
 		return nil
 	}
-	return newReplicationReaderGroup(shardContext, clientShardKey, tieredStackEnabled, logger)
+	return newReplicationReaderGroup(shardContext, clientShardKey, tieredStackEnabled, isolationEnabled, logger)
+}
+
+// newIsolationManagerIfEnabled builds the namespace isolation manager when enabled.
+// Isolation only exists in the tiered stack, so both flags are required. On a stream
+// (re)start it reconstructs member lanes from the persisted reader state, so
+// throttled namespaces stay isolated across reconnects (e.g. history deploys)
+// instead of bursting back onto the shared lane.
+func newIsolationManagerIfEnabled(config *configs.Config, shardContext historyi.ShardContext, clientShardKey ClusterShardKey, enabled bool, tierCount int, logger log.Logger) *isolationManager {
+	if !enabled {
+		return nil
+	}
+	defaultCursor, restored, err := reconstructIsolationState(shardContext, clientShardKey)
+	if err != nil {
+		// Fall back to zero state: throttled namespaces burst back onto the shared
+		// lane (the reconnect backstop) rather than blocking stream startup.
+		logger.Error("Failed to parse isolation state, starting with no restored lanes", tag.Error(err))
+	}
+	return newIsolationManagerWithState(
+		tierCount,
+		config.ReplicationStreamSenderTierDemotionCycles(),
+		config.ReplicationStreamSenderUnthrottleCooldownCycles(),
+		config.ReplicationStreamSenderMaxIsolatedNamespaces(),
+		defaultCursor,
+		restored,
+	)
+}
+
+// reconstructIsolationState reads the persisted replication reader state and
+// extracts the shared-HIGH resume cursor and the member lanes. Returns zero state
+// when nothing is persisted (fresh shard).
+func reconstructIsolationState(shardContext historyi.ShardContext, clientShardKey ClusterShardKey) (int64, []restoredMember, error) {
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(clientShardKey.ClusterID),
+		clientShardKey.ShardID,
+	)
+	queueState, ok := shardContext.GetQueueState(tasks.CategoryReplication)
+	if !ok {
+		return 0, nil, nil
+	}
+	readerState, ok := queueState.ReaderStates[readerID]
+	if !ok {
+		return 0, nil, nil
+	}
+	return parseIsolationState(readerState)
+}
+
+// newTierRateLimiters builds one outgoing rate limiter per severity tier; deeper
+// tiers run slower at LowPriorityQPS * ThrottledTierQPSRatio^tier. A tier's budget is
+// shared by its members' lanes. Returns nil when isolation is off.
+func newTierRateLimiters(config *configs.Config, enabled bool, tierCount int) []quotas.RateLimiter {
+	if !enabled {
+		return nil
+	}
+	// Clamped exactly like newIsolationManager's tierCount, so len(tierRateLimiters)
+	// always equals TierCount().
+	count := normalizedThrottledTierCount(tierCount)
+	limiters := make([]quotas.RateLimiter, count)
+	for i := range limiters {
+		depth := i + 1 // tier number (1-based)
+		rateFn := func() float64 {
+			ratio := math.Pow(config.ReplicationStreamSenderThrottledTierQPSRatio(), float64(depth))
+			return float64(config.ReplicationStreamSenderLowPriorityQPS()) * ratio
+		}
+		// Burst 1: a throttled lane is a strict trickle. The default burst (one
+		// second of rate) would let an idle lane catch up at line speed, momentarily
+		// competing with healthy namespaces for receiver apply capacity — the exact
+		// resource isolation protects.
+		limiters[i] = quotas.NewDynamicRateLimiter(
+			quotas.NewRateBurst(rateFn, func() int { return 1 }),
+			time.Minute,
+		)
+	}
+	return limiters
+}
+
+func normalizedThrottledTierCount(configured int) int {
+	return max(1, configured)
+}
+
+// defaultLaneFilter returns the task filter for the shared HIGH lane: it excludes
+// namespaces currently owning an isolated lane. Returns nil (admit all) when
+// isolation is disabled or for non-HIGH priorities.
+func (s *StreamSenderImpl) defaultLaneFilter(priority enumsspb.TaskPriority) func(task tasks.Task) bool {
+	// Until the receiver confirms isolation support, admit everything on the shared
+	// lane (no exclusion, no lane traffic) — otherwise an old receiver would never
+	// receive the excluded namespaces' tasks.
+	if s.isolation == nil || priority != enumsspb.TASK_PRIORITY_HIGH || !s.isolationConfirmed.Load() {
+		return nil
+	}
+	return s.isolation.DefaultFilter()
+}
+
+// memberAckedWatermarks extracts each isolated lane's applied watermark from the
+// receiver's per-lane report.
+func memberAckedWatermarks(laneStates map[string]*replicationspb.ReplicationState) map[string]int64 {
+	if len(laneStates) == 0 {
+		return nil
+	}
+	out := make(map[string]int64, len(laneStates))
+	for ns, state := range laneStates {
+		out[ns] = state.GetInclusiveLowWatermark()
+	}
+	return out
+}
+
+// sharedLaneTag is the replicationStreamLane metric value for the shared priority
+// lanes; isolated member lanes are tagged by their severity tier ("tier-N"), keeping
+// metric cardinality bounded by the tier count rather than the namespace count.
+const sharedLaneTag = "default"
+
+// tierLaneTagValue is the replicationStreamLane metric value for a severity tier.
+func tierLaneTagValue(tier int) string {
+	return "tier-" + strconv.Itoa(tier)
+}
+
+// emitTierMetrics reports how many namespaces are isolated in each severity tier, so
+// isolation usage can be observed and the cap sized.
+func (s *StreamSenderImpl) emitTierMetrics() {
+	for tier := 1; tier <= s.isolation.TierCount(); tier++ {
+		metrics.ReplicationStreamSenderThrottledNamespaceCount.With(s.metrics).Record(
+			float64(s.isolation.TierMemberCount(tier)),
+			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
+			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
+			metrics.ReplicationStreamLaneTag(tierLaneTagValue(tier)),
+		)
+	}
+}
+
+// sendTierEventLoop runs the send loop for one severity tier (1..K): each wake-up it
+// walks the tier's members and streams each member's dedicated lane from that lane's
+// own cursor, pacing every task through the tier's shared rate limiter. Members never
+// interact — a member joining, demoting, or graduating moves no other member's
+// cursor, and no cursor ever rewinds. An idle member lane sends a watermark-only
+// keepalive so its receiver-side watermark keeps advancing and never pins the overall
+// ack minimum. The loop runs for the life of the stream; a tier with no members idles.
+// sendTierMember streams one member's lane for one tier-loop wake-up: a
+// watermark-only keepalive when the lane is idle, otherwise the lane's tasks in
+// [cursor, end) at the tier's pace. All lane traffic runs under a send lease
+// (beginMemberLaneSend) so retirement markers can be ordered strictly after the
+// lane's final batch.
+func (s *StreamSenderImpl) sendTierMember(tier int, member memberSnapshot, end int64) error {
+	if !s.beginMemberLaneSend(member.namespaceID, member.generation) {
+		// The member graduated (or re-split into a new incarnation) after this
+		// tier-loop snapshot was taken: this incarnation must send nothing more.
+		return nil
+	}
+	defer s.endMemberLaneSend(member.namespaceID)
+	if member.cursor >= end {
+		// Idle (or briefly ahead of the read watermark): watermark-only keepalive at
+		// the lane's own cursor.
+		return s.sendTasks(enumsspb.TASK_PRIORITY_HIGH, member.cursor, member.cursor, nil, member.namespaceID, tierLaneTagValue(tier), nil)
+	}
+	if err := s.sendTasks(enumsspb.TASK_PRIORITY_HIGH, member.cursor, end, member.scope.Contains, member.namespaceID, tierLaneTagValue(tier), s.tierRateLimiters[tier-1]); err != nil {
+		return err
+	}
+	s.isolation.AdvanceMemberCursor(member.namespaceID, member.generation, end)
+	return nil
+}
+
+// beginMemberLaneSend takes a send lease on a member's lane, verifying the snapshot
+// is still current. The double-check after registering closes the race with marker
+// emission: any lane send that proceeds either registered before the marker path
+// checked activity (so the marker was deferred), or re-verified membership after —
+// and a member is removed from the manager before its marker becomes pending, so a
+// send that passes the re-check strictly precedes its marker.
+func (s *StreamSenderImpl) beginMemberLaneSend(namespaceID string, generation int64) bool {
+	if !s.isolation.IsMemberGeneration(namespaceID, generation) {
+		return false
+	}
+	s.laneSendMu.Lock()
+	s.activeLaneSends[namespaceID]++
+	s.laneSendMu.Unlock()
+	if !s.isolation.IsMemberGeneration(namespaceID, generation) {
+		s.endMemberLaneSend(namespaceID)
+		return false
+	}
+	return true
+}
+
+func (s *StreamSenderImpl) endMemberLaneSend(namespaceID string) {
+	s.laneSendMu.Lock()
+	if s.activeLaneSends[namespaceID]--; s.activeLaneSends[namespaceID] <= 0 {
+		delete(s.activeLaneSends, namespaceID)
+	}
+	s.laneSendMu.Unlock()
+}
+
+// sendPendingRetirements emits lane-retirement markers for graduated members whose
+// lanes are quiescent. A marker for a member with an in-flight tier send stays
+// pending until a later ack (the marker must be the lane's last message); a marker
+// for a namespace that re-split in the meantime is dropped (it would retire the NEW
+// lane). Called on the recv loop, once per ack.
+func (s *StreamSenderImpl) sendPendingRetirements() error {
+	s.laneSendMu.Lock()
+	s.pendingRetires = append(s.pendingRetires, s.isolation.PopRetired()...)
+	var toSend []string
+	remaining := s.pendingRetires[:0]
+	for _, ns := range s.pendingRetires {
+		switch {
+		case s.isolation.IsMember(ns):
+			// Re-split before the marker went out: the retirement is obsolete.
+		case s.activeLaneSends[ns] > 0:
+			remaining = append(remaining, ns)
+		default:
+			toSend = append(toSend, ns)
+		}
+	}
+	s.pendingRetires = remaining
+	s.laneSendMu.Unlock()
+
+	// The marker is the lane's final message, letting the receiver drop the lane's
+	// tracking once drained.
+	for _, ns := range toSend {
+		if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
+			Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
+				Messages: &replicationspb.WorkflowReplicationMessages{
+					ExclusiveHighWatermark:     s.isolation.DefaultCursor(),
+					ExclusiveHighWatermarkTime: timestamp.TimeNowPtrUtc(),
+					Priority:                   enumsspb.TASK_PRIORITY_HIGH,
+					IsolatedNamespaceId:        ns,
+					RetireIsolatedLane:         true,
+				},
+			},
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// isolationFailoverWatermark returns the watermark for UpdateRemoteReaderInfo with
+// isolation active. The HIGH lane alone no longer bounds all live traffic — an
+// isolated lane can lag hours behind at deep-tier pacing — so failover readiness
+// must fold every isolated lane's applied watermark into the bound. Once the
+// receiver has confirmed isolation support it also folds in the member lanes' resume
+// floor: receiver lane trackers are per-connection and lazily created on lane
+// traffic, so a restored lane is invisible in the receiver's report until its first
+// post-reconnect batch lands, and the floor is the only bound for its unsent window
+// until then. Before confirmation the shared lane honestly covers those windows
+// (catch-up clamps to the floor and admits members), so HIGH alone is correct.
+func (s *StreamSenderImpl) isolationFailoverWatermark(attr *replicationspb.SyncReplicationState) (int64, time.Time) {
+	watermark := attr.HighPriorityState.InclusiveLowWatermark
+	watermarkTime := attr.HighPriorityState.InclusiveLowWatermarkTime.AsTime()
+	for _, laneState := range attr.GetIsolatedLaneStates() {
+		if laneState.GetInclusiveLowWatermark() < watermark {
+			watermark = laneState.GetInclusiveLowWatermark()
+			watermarkTime = laneState.GetInclusiveLowWatermarkTime().AsTime()
+		}
+	}
+	if s.isolationConfirmed.Load() {
+		if floor, ok := s.isolation.MemberResumeFloor(); ok && floor < watermark {
+			// The floor has no receiver-reported visibility time; pair the
+			// conservative task ID with an unknown (zero) timestamp rather than a
+			// fresher lane's time.
+			return floor - 1, time.Time{}
+		}
+	}
+	return watermark - 1, watermarkTime
+}
+
+func (s *StreamSenderImpl) sendTierEventLoop(tier int) (retErr error) {
+	var panicErr error
+	defer func() {
+		if panicErr != nil {
+			retErr = panicErr
+			metrics.ReplicationStreamPanic.With(s.metrics).Record(1)
+		}
+	}()
+	defer log.CapturePanic(s.logger, &panicErr)
+
+	newTaskNotificationChan, subscriberID := s.historyEngine.SubscribeReplicationNotification(s.clientClusterName)
+	defer s.historyEngine.UnsubscribeReplicationNotification(subscriberID)
+
+	timer := time.NewTimer(s.config.ReplicationStreamSendEmptyTaskDuration())
+	defer timer.Stop()
+
+	for {
+		// Only emit lane-tagged traffic once the receiver has confirmed it routes lanes.
+		if s.isolationConfirmed.Load() {
+			end := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
+			for _, member := range s.isolation.TierMemberSnapshots(tier) {
+				if err := s.sendTierMember(tier, member, end); err != nil {
+					return err
+				}
+			}
+		}
+
+		if !timer.Stop() {
+			select {
+			case <-timer.C:
+			default:
+			}
+		}
+		timer.Reset(s.config.ReplicationStreamSendEmptyTaskDuration())
+
+		select {
+		case <-s.shutdownChan.Channel():
+			return nil
+		case <-newTaskNotificationChan:
+		case <-timer.C:
+		}
+	}
 }
 
 func (s *StreamSenderImpl) sendLive(
@@ -459,10 +882,18 @@ func (s *StreamSenderImpl) sendLive(
 	defer syncStatusTimer.Stop()
 	sendTasks := func() error {
 		endExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
+		if s.isolation != nil && priority == enumsspb.TASK_PRIORITY_HIGH {
+			// Advance BEFORE sending (and before snapshotting the filter): see sendCatchUp.
+			s.isolation.AdvanceDefaultCursor(endExclusiveWatermark)
+		}
 		if err := s.sendTasks(
 			priority,
 			beginInclusiveWatermark,
 			endExclusiveWatermark,
+			s.defaultLaneFilter(priority), // re-snapshot per batch: membership changes
+			"",
+			sharedLaneTag,
+			nil,
 		); err != nil {
 			return err
 		}
@@ -497,6 +928,10 @@ func (s *StreamSenderImpl) sendTasks(
 	priority enumsspb.TaskPriority,
 	beginInclusiveWatermark int64,
 	endExclusiveWatermark int64,
+	nsFilter func(task tasks.Task) bool,
+	isolatedNamespaceID string,
+	laneTag string,
+	laneRateLimiter quotas.RateLimiter,
 ) error {
 	if beginInclusiveWatermark > endExclusiveWatermark {
 		err := serviceerror.NewInternalf("StreamWorkflowReplication encountered invalid task range [%v, %v)",
@@ -513,6 +948,7 @@ func (s *StreamSenderImpl) sendTasks(
 					ExclusiveHighWatermark:     endExclusiveWatermark,
 					ExclusiveHighWatermarkTime: timestamp.TimeNowPtrUtc(),
 					Priority:                   priority,
+					IsolatedNamespaceId:        isolatedNamespaceID,
 				},
 			},
 		})
@@ -529,6 +965,20 @@ func (s *StreamSenderImpl) sendTasks(
 	if err != nil {
 		return err
 	}
+	// Rows examined pre-filter, batched per call: with replication_tasks_send this
+	// gives the lane's scan amplification (rows examined per task sent).
+	scannedCount := int64(0)
+	defer func() {
+		if scannedCount > 0 {
+			metrics.ReplicationTasksScanned.With(s.metrics).Record(
+				scannedCount,
+				metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
+				metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
+				metrics.ReplicationTaskPriorityTag(priority),
+				metrics.ReplicationStreamLaneTag(laneTag),
+			)
+		}
+	}()
 	skipCount := 0
 Loop:
 	for iter.HasNext() {
@@ -541,6 +991,7 @@ Loop:
 			return fmt.Errorf("streamSender unable to get next replication task: %w", err)
 		}
 
+		scannedCount++
 		skipCount++
 		// To avoid a situation: we are skipping a lot of tasks and never send any task, receiver side will not have updated high watermark,
 		// so it will not ACK back to sender, sender will not update the ACK level.
@@ -552,6 +1003,7 @@ Loop:
 						ExclusiveHighWatermark:     item.GetTaskID(),
 						ExclusiveHighWatermarkTime: timestamppb.New(item.GetVisibilityTime()),
 						Priority:                   priority,
+						IsolatedNamespaceId:        isolatedNamespaceID,
 					},
 				},
 			}); err != nil {
@@ -563,6 +1015,9 @@ Loop:
 			priority != s.getTaskPriority(item) { // case: skip task with different priority than this loop
 			continue Loop
 		}
+		if nsFilter != nil && !nsFilter(item) { // case: task owned by a different lane
+			continue Loop
+		}
 		if !s.shouldProcessTask(item) {
 			continue Loop
 		}
@@ -572,6 +1027,7 @@ Loop:
 			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
 			metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
 			metrics.ReplicationTaskPriorityTag(priority),
+			metrics.ReplicationStreamLaneTag(laneTag),
 		)
 
 		var attempt int64
@@ -634,6 +1090,16 @@ Loop:
 				}
 				metrics.ReplicationRateLimitLatency.With(s.metrics).Record(time.Since(rlStartTime), metrics.OperationTag(TaskOperationTag(task)))
 			}
+			if laneRateLimiter != nil {
+				// Per-task pacing for a throttled tier: this is what actually slows an
+				// isolated namespace down (a per-batch wait would let unbounded batches
+				// through at full speed).
+				rlStartTime := time.Now().UTC()
+				if err := laneRateLimiter.Wait(s.server.Context()); err != nil {
+					return s.recordRetry(item, task.GetTaskType(), priority, attempt, wideevents.ReplOperationRateLimit, fmt.Errorf("tier_rate_limit: %w", err))
+				}
+				metrics.ReplicationRateLimitLatency.With(s.metrics).Record(time.Since(rlStartTime), metrics.OperationTag(TaskOperationTag(task)), metrics.ReplicationStreamLaneTag(laneTag))
+			}
 			if s.config.EmitReplicationLifecycleEvents() {
 				s.emitReplicationSent(task, item)
 			}
@@ -644,6 +1110,7 @@ Loop:
 						ExclusiveHighWatermark:     task.SourceTaskId + 1,
 						ExclusiveHighWatermarkTime: task.VisibilityTime,
 						Priority:                   priority,
+						IsolatedNamespaceId:        isolatedNamespaceID,
 					},
 				},
 			}); err != nil {
@@ -655,6 +1122,8 @@ Loop:
 				metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
 				metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
 				metrics.OperationTag(TaskOperationTag(task)),
+				metrics.ReplicationTaskPriorityTag(priority),
+				metrics.ReplicationStreamLaneTag(laneTag),
 			)
 			return nil
 		}
@@ -672,6 +1141,7 @@ Loop:
 			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
 			metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
 			metrics.ReplicationTaskPriorityTag(priority),
+			metrics.ReplicationStreamLaneTag(laneTag),
 		)
 		metrics.ReplicationTaskSendLatency.With(s.metrics).Record(
 			time.Since(item.GetVisibilityTime()),
@@ -679,6 +1149,7 @@ Loop:
 			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
 			metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
 			metrics.ReplicationTaskPriorityTag(priority),
+			metrics.ReplicationStreamLaneTag(laneTag),
 		)
 		if err != nil {
 			metrics.ReplicationTaskSendError.With(s.metrics).Record(
@@ -687,6 +1158,7 @@ Loop:
 				metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
 				metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
 				metrics.ReplicationTaskPriorityTag(priority),
+				metrics.ReplicationStreamLaneTag(laneTag),
 			)
 			// Only skip a task that could not be *built* after exhausting retries (isSkippable):
 			// its source info is corrupt/unusable, so retrying or reconnecting will never make it
@@ -721,6 +1193,7 @@ Loop:
 				ExclusiveHighWatermark:     endExclusiveWatermark,
 				ExclusiveHighWatermarkTime: timestamp.TimeNowPtrUtc(),
 				Priority:                   priority,
+				IsolatedNamespaceId:        isolatedNamespaceID,
 			},
 		},
 	})

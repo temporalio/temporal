@@ -146,6 +146,195 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_SingleStack_Success() {
 	s.NoError(err)
 }
 
+// TestSendPendingRetirements_OrderedAfterLaneSends pins the marker-ordering rules: a
+// retirement marker is deferred while the member's lane has an in-flight tier send
+// (the marker must be the lane's last message), and dropped entirely when the
+// namespace re-split before the marker went out (it would retire the NEW lane).
+func (s *streamSenderSuite) TestSendPendingRetirements_OrderedAfterLaneSends() {
+	m := newIsolationManager(2, 5, 1, 0)
+	m.AdvanceDefaultCursor(100)
+	s.streamSender.isolation = m
+
+	// Two members graduate in the same reconcile; "a" still has a tier send in
+	// flight, "b" is quiescent.
+	m.Reconcile([]string{"a", "b"}, 100, nil)
+	m.Reconcile(nil, 100, map[string]int64{"a": 100, "b": 100})
+	s.False(s.streamSender.beginMemberLaneSend("a", 0)) // graduated: no lease
+	s.streamSender.laneSendMu.Lock()
+	s.streamSender.activeLaneSends["a"] = 1 // a send that leased before graduation
+	s.streamSender.laneSendMu.Unlock()
+
+	var sentMarkers []string
+	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(
+		func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+			msgs := resp.GetMessages()
+			s.True(msgs.GetRetireIsolatedLane())
+			sentMarkers = append(sentMarkers, msgs.GetIsolatedNamespaceId())
+			return nil
+		}).Times(2)
+
+	s.NoError(s.streamSender.sendPendingRetirements())
+	s.Equal([]string{"b"}, sentMarkers, "marker for a lane with an in-flight send must wait")
+	s.Equal([]string{"a"}, s.streamSender.pendingRetires)
+
+	// The in-flight send finishes: the deferred marker goes out on the next ack.
+	s.streamSender.endMemberLaneSend("a")
+	s.NoError(s.streamSender.sendPendingRetirements())
+	s.Equal([]string{"b", "a"}, sentMarkers)
+	s.Empty(s.streamSender.pendingRetires)
+
+	// A pending marker for a namespace that re-split is obsolete: dropped unsent.
+	s.streamSender.pendingRetires = []string{"c"}
+	m.Reconcile([]string{"c"}, 100, nil)
+	s.NoError(s.streamSender.sendPendingRetirements())
+	s.Equal([]string{"b", "a"}, sentMarkers)
+	s.Empty(s.streamSender.pendingRetires)
+
+	s.streamSender.isolation = nil
+}
+
+// TestCatchupBeginWatermark_IsolationScopeMapping pins the scope-index mapping for
+// extended reader states (>3 scopes, written by isolation) on the legacy
+// (reader-group-less) path: with an isolation manager present HIGH/LOW resume from
+// their own scopes (the manager reconstructs the member lanes); without one the
+// member scopes are orphaned and HIGH resumes from the overall min to re-cover the
+// undrained tier windows.
+func (s *streamSenderSuite) TestCatchupBeginWatermark_IsolationScopeMapping() {
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	makeScope := func(taskID int64) *persistencespb.QueueSliceScope {
+		return &persistencespb.QueueSliceScope{
+			Range: &persistencespb.QueueSliceRange{
+				InclusiveMin: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(taskID)),
+				ExclusiveMax: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(math.MaxInt64)),
+			},
+			Predicate: &persistencespb.Predicate{
+				PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+				Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+			},
+		}
+	}
+	state := &persistencespb.QueueState{
+		ReaderStates: map[int64]*persistencespb.QueueReaderState{
+			readerID: {Scopes: []*persistencespb.QueueSliceScope{
+				makeScope(100), makeScope(200), makeScope(300), makeScope(150), makeScope(160),
+			}},
+		},
+	}
+	s.shardContext.EXPECT().GetQueueState(tasks.CategoryReplication).Return(state, true).Times(3)
+
+	s.streamSender.isolation = newIsolationManager(2, 3, 3, 0)
+	s.Equal(int64(200), s.streamSender.catchupBeginWatermark(enumsspb.TASK_PRIORITY_HIGH, 999))
+	s.Equal(int64(300), s.streamSender.catchupBeginWatermark(enumsspb.TASK_PRIORITY_LOW, 999))
+
+	s.streamSender.isolation = nil
+	s.Equal(int64(100), s.streamSender.catchupBeginWatermark(enumsspb.TASK_PRIORITY_HIGH, 999))
+}
+
+// TestIsolationFailoverWatermark_RestoredLaneFloor pins the post-reconnect blind
+// window: receiver lane trackers are per-connection, so a restored member lane is
+// absent from the receiver's report until its first batch lands. Once the receiver
+// has confirmed isolation support, the lane's resume floor must bound failover
+// readiness instead of the HIGH watermark alone.
+func (s *streamSenderSuite) TestIsolationFailoverWatermark_RestoredLaneFloor() {
+	m := newIsolationManagerWithState(2, 3, 3, 0, 200, []restoredMember{{namespaceID: "ns", cursor: 50}})
+	s.streamSender.isolation = m
+	highTime := time.Unix(0, 42).UTC()
+	attr := &replicationspb.SyncReplicationState{
+		HighPriorityState: &replicationspb.ReplicationState{
+			InclusiveLowWatermark:     300,
+			InclusiveLowWatermarkTime: timestamppb.New(highTime),
+		},
+		LowPriorityState: &replicationspb.ReplicationState{InclusiveLowWatermark: 400},
+	}
+
+	// Not confirmed: the shared lane covers the restored lane's window, so HIGH
+	// alone bounds failover readiness.
+	taskID, ts := s.streamSender.isolationFailoverWatermark(attr)
+	s.Equal(int64(299), taskID)
+	s.Equal(highTime, ts)
+
+	// Confirmed but the restored lane has not reported yet: fold its resume floor
+	// (task 50), with an unknown visibility time.
+	s.streamSender.isolationConfirmed.Store(true)
+	taskID, ts = s.streamSender.isolationFailoverWatermark(attr)
+	s.Equal(int64(49), taskID)
+	s.True(ts.IsZero())
+
+	// Once the receiver reports the lane (Reconcile records it first, as on the recv
+	// loop), the lane's own watermark and time drive the fold.
+	laneTime := time.Unix(0, 24).UTC()
+	attr.IsolatedLaneStates = map[string]*replicationspb.ReplicationState{
+		"ns": {InclusiveLowWatermark: 60, InclusiveLowWatermarkTime: timestamppb.New(laneTime)},
+	}
+	m.Reconcile(nil, 300, map[string]int64{"ns": 60})
+	taskID, ts = s.streamSender.isolationFailoverWatermark(attr)
+	s.Equal(int64(59), taskID)
+	s.Equal(laneTime, ts)
+}
+
+func (s *streamSenderSuite) TestRecvSyncReplicationState_UnsupportedReceiverCollapsesRestoredMembersAfterCatchup() {
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	s.streamSender.isTieredStackEnabled = true
+	s.streamSender.isolation = newIsolationManagerWithState(
+		2,
+		3,
+		3,
+		0,
+		200,
+		[]restoredMember{{namespaceID: "ns", cursor: 50}},
+	)
+	timestamp := timestamppb.New(time.Unix(0, 42).UTC())
+	state := func(highAcked int64) *replicationspb.SyncReplicationState {
+		return &replicationspb.SyncReplicationState{
+			InclusiveLowWatermark:     highAcked,
+			InclusiveLowWatermarkTime: timestamp,
+			HighPriorityState: &replicationspb.ReplicationState{
+				InclusiveLowWatermark:     highAcked,
+				InclusiveLowWatermarkTime: timestamp,
+			},
+			LowPriorityState: &replicationspb.ReplicationState{
+				InclusiveLowWatermark:     300,
+				InclusiveLowWatermarkTime: timestamp,
+			},
+		}
+	}
+	beforeReplay := state(200)
+	beforeReplayAcked := state(249)
+	afterReplayAcked := state(250)
+	s.senderFlowController.EXPECT().RefreshReceiverFlowControlInfo(beforeReplay)
+	s.senderFlowController.EXPECT().RefreshReceiverFlowControlInfo(beforeReplayAcked)
+	s.senderFlowController.EXPECT().RefreshReceiverFlowControlInfo(afterReplayAcked)
+
+	var persistedScopeCounts []int
+	s.shardContext.EXPECT().UpdateReplicationQueueReaderState(readerID, gomock.Any()).DoAndReturn(
+		func(_ int64, state *persistencespb.QueueReaderState) error {
+			persistedScopeCounts = append(persistedScopeCounts, len(state.Scopes))
+			return nil
+		},
+	).Times(3)
+	s.shardContext.EXPECT().UpdateRemoteReaderInfo(readerID, int64(199), timestamp.AsTime()).Return(nil)
+	s.shardContext.EXPECT().UpdateRemoteReaderInfo(readerID, int64(248), timestamp.AsTime()).Return(nil)
+	s.shardContext.EXPECT().UpdateRemoteReaderInfo(readerID, int64(249), timestamp.AsTime()).Return(nil)
+
+	// The receiver may already report the persisted shared cursor before this sender
+	// has replayed the lower restored-member window. That is not collapse evidence.
+	s.NoError(s.streamSender.recvSyncReplicationState(beforeReplay))
+	s.Equal(1, s.streamSender.isolation.NamespaceTier("ns"))
+	s.streamSender.isolation.AdvanceDefaultCursor(250)
+	s.True(s.streamSender.isolation.RecordDefaultLaneCoverage(50, 250))
+	s.NoError(s.streamSender.recvSyncReplicationState(beforeReplayAcked))
+	s.Equal(1, s.streamSender.isolation.NamespaceTier("ns"))
+	s.NoError(s.streamSender.recvSyncReplicationState(afterReplayAcked))
+	s.Equal(0, s.streamSender.isolation.NamespaceTier("ns"))
+	s.Equal([]int{4, 4, 3}, persistedScopeCounts)
+}
+
 // TestRecvSyncReplicationState_ReaderGroupEquivalence pins the PR's core claim: for
 // every ack shape, the reader-group path persists exactly the QueueReaderState and
 // failover watermark the legacy path does.
@@ -193,7 +382,7 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_ReaderGroupEquivalence(
 		}
 
 		legacyState, legacyTaskID := run(nil)
-		groupState, groupTaskID := run(newReplicationReaderGroup(s.shardContext, s.clientShardKey, tiered, log.NewNoopLogger()))
+		groupState, groupTaskID := run(newReplicationReaderGroup(s.shardContext, s.clientShardKey, tiered, false, log.NewNoopLogger()))
 		s.True(proto.Equal(legacyState, groupState),
 			"tiered=%v: reader group persisted %v, legacy persisted %v", tiered, groupState, legacyState)
 		s.Equal(legacyTaskID, groupTaskID)
@@ -465,6 +654,61 @@ func (s *streamSenderSuite) TestSendCatchUp_SingleStack() {
 	taskID, err := s.streamSender.sendCatchUp(enumsspb.TASK_PRIORITY_UNSPECIFIED)
 	s.NoError(err)
 	s.Equal(endExclusiveWatermark, taskID)
+}
+
+func (s *streamSenderSuite) TestSendCatchUp_UnsupportedReceiverRecordsDefaultCoverage() {
+	s.streamSender.isTieredStackEnabled = true
+	s.streamSender.isolation = newIsolationManagerWithState(
+		2,
+		3,
+		3,
+		0,
+		200,
+		[]restoredMember{{namespaceID: "ns", cursor: 0}},
+	)
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	makeScope := func(taskID int64) *persistencespb.QueueSliceScope {
+		return &persistencespb.QueueSliceScope{
+			Range: &persistencespb.QueueSliceRange{
+				InclusiveMin: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(taskID)),
+				ExclusiveMax: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(math.MaxInt64)),
+			},
+			Predicate: &persistencespb.Predicate{
+				PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+				Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+			},
+		}
+	}
+	s.shardContext.EXPECT().GetQueueState(tasks.CategoryReplication).Return(
+		&persistencespb.QueueState{ReaderStates: map[int64]*persistencespb.QueueReaderState{
+			readerID: {Scopes: []*persistencespb.QueueSliceScope{
+				makeScope(0), makeScope(200), makeScope(200), makeScope(0),
+			}},
+		}},
+		true,
+	)
+	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(
+		tasks.NewImmediateKey(250),
+	)
+	iter := collection.NewPagingIterator[tasks.Task](
+		func([]byte) ([]tasks.Task, []byte, error) { return nil, nil, nil },
+	)
+	s.historyEngine.EXPECT().GetReplicationTasksIter(
+		gomock.Any(),
+		string(s.clientShardKey.ClusterID),
+		int64(0),
+		int64(250),
+	).Return(iter, nil)
+	s.server.EXPECT().Send(gomock.Any()).Return(nil)
+
+	taskID, err := s.streamSender.sendCatchUp(enumsspb.TASK_PRIORITY_HIGH)
+	s.NoError(err)
+	s.Equal(int64(250), taskID)
+	s.False(s.streamSender.isolation.CollapseToDefaultLane(249))
+	s.True(s.streamSender.isolation.CollapseToDefaultLane(250))
 }
 
 func (s *streamSenderSuite) TestSendCatchUp_TieredStack_SingleReaderScope() {
@@ -770,6 +1014,10 @@ func (s *streamSenderSuite) TestSendTasks_Noop() {
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
+		"",
+		sharedLaneTag,
+		nil,
 	)
 	s.NoError(err)
 }
@@ -799,6 +1047,10 @@ func (s *streamSenderSuite) TestSendTasks_WithoutTasks() {
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
+		"",
+		sharedLaneTag,
+		nil,
 	)
 	s.NoError(err)
 }
@@ -891,6 +1143,10 @@ func (s *streamSenderSuite) TestSendTasks_WithTasks() {
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
+		"",
+		sharedLaneTag,
+		nil,
 	)
 	s.NoError(err)
 }
@@ -969,6 +1225,10 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_HighPriority() {
 		enumsspb.TASK_PRIORITY_HIGH,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
+		"",
+		sharedLaneTag,
+		nil,
 	)
 	s.NoError(err)
 }
@@ -1064,6 +1324,10 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_LowPriority() {
 		enumsspb.TASK_PRIORITY_LOW,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
+		"",
+		sharedLaneTag,
+		nil,
 	)
 	s.NoError(err)
 }
@@ -1096,6 +1360,10 @@ func (s *streamSenderSuite) TestSendEventLoop_StreamSendError_ShouldReturnStream
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
+		"",
+		sharedLaneTag,
+		nil,
 	)
 	s.Error(err, "rpc error")
 	s.ErrorAs(err, new(*StreamError))
@@ -1107,6 +1375,18 @@ func (s *streamSenderSuite) TestRecvEventLoop_RpcError_ShouldReturnStreamError()
 	s.Error(err)
 	s.Error(err, "rpc error")
 	s.ErrorAs(err, new(*StreamError))
+}
+
+func (s *streamSenderSuite) TestRecvEventLoop_ClampedTierCountDoesNotRestartStream() {
+	s.streamSender.isTieredStackEnabled = true
+	s.streamSender.isolation = newIsolationManager(0, 1, 1, 0)
+	s.config.EnableReplicationTaskTieredProcessing = dynamicconfig.GetBoolPropertyFn(true)
+	s.config.EnableReplicationNamespaceIsolation = dynamicconfig.GetBoolPropertyFn(true)
+	s.config.ReplicationStreamSenderThrottledTierCount = dynamicconfig.GetIntPropertyFn(0)
+	s.server.EXPECT().Recv().Return(nil, errors.New("rpc error"))
+
+	err := s.streamSender.recvEventLoop()
+	s.ErrorContains(err, "StreamSender failed to receive")
 }
 
 func (s *streamSenderSuite) TestLivenessMonitor() {
@@ -1183,6 +1463,10 @@ func (s *streamSenderSuite) TestSendTasks_SkipStuckTask_Enabled() {
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
+		"",
+		sharedLaneTag,
+		nil,
 	)
 	s.NoError(err)
 }
@@ -1203,6 +1487,10 @@ func (s *streamSenderSuite) TestSendTasks_SkipStuckTask_EmitsWideEvent() {
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		beginInclusiveWatermark,
 		beginInclusiveWatermark+100,
+		nil,
+		"",
+		sharedLaneTag,
+		nil,
 	)
 	s.NoError(err)
 
@@ -1234,6 +1522,10 @@ func (s *streamSenderSuite) TestSendTasks_SkipStuckTask_Disabled() {
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
+		"",
+		sharedLaneTag,
+		nil,
 	)
 	s.Error(err)
 }
@@ -1268,6 +1560,10 @@ func (s *streamSenderSuite) TestSendTasks_SkipStuckTask_NonRetryableNotSkipped()
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
+		"",
+		sharedLaneTag,
+		nil,
 	)
 	s.Error(err)
 }
@@ -1352,6 +1648,10 @@ func (s *streamSenderSuite) TestSendTasks_SkipStuckTask_StreamKeepsFlowingPastSk
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
+		"",
+		sharedLaneTag,
+		nil,
 	)
 	s.NoError(err)
 }
@@ -1406,6 +1706,10 @@ func (s *streamSenderSuite) TestSendTasks_SkipStuckTask_SendFailureNotSkipped() 
 		enumsspb.TASK_PRIORITY_UNSPECIFIED,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
+		nil,
+		"",
+		sharedLaneTag,
+		nil,
 	)
 	s.Error(err)
 }

@@ -52,7 +52,11 @@ func (s *replicationReaderGroupSuite) TearDownTest() {
 }
 
 func (s *replicationReaderGroupSuite) newGroup(tiered bool) *replicationReaderGroup {
-	return newReplicationReaderGroup(s.shardContext, s.clientShardKey, tiered, log.NewNoopLogger())
+	return newReplicationReaderGroup(s.shardContext, s.clientShardKey, tiered, false, log.NewNoopLogger())
+}
+
+func (s *replicationReaderGroupSuite) newGroupWithIsolation(tiered, hasIsolation bool) *replicationReaderGroup {
+	return newReplicationReaderGroup(s.shardContext, s.clientShardKey, tiered, hasIsolation, log.NewNoopLogger())
 }
 
 // ReaderID
@@ -96,6 +100,30 @@ func (s *replicationReaderGroupSuite) TestCatchupBeginWatermark_ThreeScopes_Uses
 	s.Equal(int64(200), g.CatchupBeginWatermark(999, enumsspb.TASK_PRIORITY_HIGH))
 	s.Equal(int64(300), g.CatchupBeginWatermark(999, enumsspb.TASK_PRIORITY_LOW))
 	s.Equal(int64(100), g.CatchupBeginWatermark(999, enumsspb.TASK_PRIORITY_UNSPECIFIED))
+}
+
+func (s *replicationReaderGroupSuite) TestCatchupBeginWatermark_OrphanedMemberScopes_HighResumesFromOverallMin() {
+	// Isolation was disabled while a member lane lagged (member scopes at 150/160
+	// remain): no isolation manager will drain those windows, so HIGH must resume
+	// from the overall min to re-cover them. LOW was never isolated and keeps its
+	// own scope.
+	g := s.newGroupWithIsolation(true, false)
+	state := s.makeQueueStateWithMembers(100, 200, 300, 150, 160)
+	s.shardContext.EXPECT().GetQueueState(tasks.CategoryReplication).Return(state, true).Times(3)
+
+	s.Equal(int64(100), g.CatchupBeginWatermark(999, enumsspb.TASK_PRIORITY_HIGH))
+	s.Equal(int64(300), g.CatchupBeginWatermark(999, enumsspb.TASK_PRIORITY_LOW))
+	s.Equal(int64(100), g.CatchupBeginWatermark(999, enumsspb.TASK_PRIORITY_UNSPECIFIED))
+}
+
+func (s *replicationReaderGroupSuite) TestCatchupBeginWatermark_MemberScopesWithIsolation_HighResumesFromOwnScope() {
+	// Isolation active: the manager reconstructs the member lanes from scopes 3+,
+	// so HIGH resumes from its own scope.
+	g := s.newGroupWithIsolation(true, true)
+	state := s.makeQueueStateWithMembers(100, 200, 300, 150, 160)
+	s.shardContext.EXPECT().GetQueueState(tasks.CategoryReplication).Return(state, true)
+
+	s.Equal(int64(200), g.CatchupBeginWatermark(999, enumsspb.TASK_PRIORITY_HIGH))
 }
 
 // BuildReaderState — tiered mode
@@ -234,6 +262,30 @@ func (s *replicationReaderGroupSuite) TestPriorityScopeIndex() {
 
 // helpers
 
+func (s *replicationReaderGroupSuite) makeQueueStateWithMembers(overall, high, low int64, memberMins ...int64) *persistencespb.QueueState {
+	makeScope := func(taskID int64) *persistencespb.QueueSliceScope {
+		return &persistencespb.QueueSliceScope{
+			Range: &persistencespb.QueueSliceRange{
+				InclusiveMin: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(taskID)),
+				ExclusiveMax: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(math.MaxInt64)),
+			},
+			Predicate: &persistencespb.Predicate{
+				PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+				Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+			},
+		}
+	}
+
+	scopes := []*persistencespb.QueueSliceScope{makeScope(overall), makeScope(high), makeScope(low)}
+	for _, min := range memberMins {
+		scopes = append(scopes, makeScope(min))
+	}
+	return &persistencespb.QueueState{
+		ReaderStates: map[int64]*persistencespb.QueueReaderState{
+			s.readerID: {Scopes: scopes},
+		},
+	}
+}
 func (s *replicationReaderGroupSuite) makeQueueState(overall, high, low int64) *persistencespb.QueueState {
 	makeScope := func(taskID int64) *persistencespb.QueueSliceScope {
 		return &persistencespb.QueueSliceScope{

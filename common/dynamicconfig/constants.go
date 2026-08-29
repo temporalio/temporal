@@ -2991,6 +2991,49 @@ scans share one persistence read, with only readers below the buffered range fal
 to persistence. The buffer holds slim queue rows (task metadata, not event payloads).
 0 disables the buffer.`,
 	)
+	EnableReplicationNamespaceIsolation = NewGlobalBoolSetting(
+		"history.EnableReplicationNamespaceIsolation",
+		false,
+		`EnableReplicationNamespaceIsolation enables per-namespace isolation for the replication
+stream's HIGH priority (live) lane: namespaces the receiver reports as overwhelming the lane
+are peeled onto their own dedicated lanes, paced by rate-limited severity tiers, so they
+cannot stall other namespaces' live replication. Requires
+EnableReplicationTaskTieredProcessing. Changing it restarts replication streams.`,
+	)
+	ReplicationStreamSenderThrottledTierQPSRatio = NewGlobalFloatSetting(
+		"history.ReplicationStreamSenderThrottledTierQPSRatio",
+		0.1,
+		`Per-tier send rate multiplier for replication namespace isolation: throttled tier N sends
+at ReplicationStreamSenderLowPriorityQPS * ratio^N tasks per second, so deeper tiers run
+progressively slower`,
+	)
+	ReplicationStreamSenderThrottledTierCount = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderThrottledTierCount",
+		4,
+		`Number of throttled severity tiers (rate classes) used for replication namespace
+isolation; isolated namespaces' lanes are paced by their tier's shared budget. Changing it
+restarts replication streams.`,
+	)
+	ReplicationStreamSenderTierDemotionCycles = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderTierDemotionCycles",
+		3,
+		`Consecutive throttled ack cycles a namespace must remain throttled in a tier before it is
+demoted one tier deeper`,
+	)
+	ReplicationStreamSenderUnthrottleCooldownCycles = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderUnthrottleCooldownCycles",
+		3,
+		`Calm ack cycles a namespace must stay un-throttled before it is returned from a throttled
+tier to the default HIGH lane`,
+	)
+	ReplicationStreamSenderMaxIsolatedNamespaces = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderMaxIsolatedNamespaces",
+		100,
+		`Maximum number of namespaces the replication stream sender isolates onto throttled tiers
+at once, bounding per-namespace membership metadata (persisted tier predicates, per-ack state,
+lane filters). Beyond the cap, newly-throttled namespaces stay on the default HIGH lane.
+0 means no limit.`,
+	)
 	ReplicationStreamSenderHighPriorityQPS = NewGlobalIntSetting(
 		"history.ReplicationStreamSenderHighPriorityQPS",
 		100,

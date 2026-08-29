@@ -1107,6 +1107,12 @@ var (
 	ReplicationStreamStuck                = NewCounterDef("replication_stream_stuck")
 	ReplicationStreamChannelFull          = NewCounterDef("replication_stream_channel_full")
 	ReplicationTasksSend                  = NewCounterDef("replication_tasks_send")
+	// ReplicationTasksScanned counts replication queue rows a sender lane examined,
+	// including rows filtered out by priority or namespace (tagged by
+	// replicationStreamLane). Compare with replication_tasks_send on the same lane for
+	// scan amplification: a high scanned:sent ratio on a tier lane means a sparse
+	// namespace paging through the shared queue's interleaved backlog.
+	ReplicationTasksScanned = NewCounterDef("replication_tasks_scanned")
 	// ReplicationStreamReadBufferHits counts replication queue read pages served from the
 	// shard's read-through buffer; ReplicationStreamReadBufferMisses counts pages that fell
 	// through to persistence while the buffer was enabled. With N streams/lanes scanning the
@@ -1118,21 +1124,25 @@ var (
 	// buffer would convert these misses to hits; large values mean the reader is deep in
 	// backlog, where no tip buffer helps and reads are paced by the reader itself.
 	ReplicationStreamReadBufferMissLag = NewDimensionlessHistogramDef("replication_stream_read_buffer_miss_lag")
-	ReplicationTaskSendAttempt         = NewDimensionlessHistogramDef("replication_task_send_attempt")
-	ReplicationTaskSendError           = NewCounterDef("replication_task_send_error")
-	ReplicationTaskSendSkipped         = NewCounterDef("replication_task_send_skipped")
-	ReplicationTaskGenerationLatency   = NewTimerDef("replication_task_generation_latency")
-	ReplicationTaskLoadLatency         = NewTimerDef("replication_task_load_latency")
-	ReplicationTaskLoadSize            = NewDimensionlessHistogramDef("replication_task_load_size")
-	ReplicationTaskSendLatency         = NewTimerDef("replication_task_send_latency")
-	ReplicationTaskSendBacklog         = NewDimensionlessHistogramDef("replication_task_send_backlog")
-	ReplicationTasksRecv               = NewCounterDef("replication_tasks_recv")
-	ReplicationTasksRecvBacklog        = NewDimensionlessHistogramDef("replication_tasks_recv_backlog")
-	ReplicationTasksSkipped            = NewCounterDef("replication_tasks_skipped")
-	ReplicationTasksApplied            = NewCounterDef("replication_tasks_applied")
-	ReplicationTasksFailed             = NewCounterDef("replication_tasks_failed")
-	ReplicationTasksBackFill           = NewCounterDef("replication_tasks_back_fill")
-	ReplicationTasksBackFillLatency    = NewTimerDef("replication_tasks_back_fill_latency")
+	// ReplicationStreamSenderThrottledNamespaceCount is the number of namespaces currently
+	// isolated in each throttled tier (tagged by replicationStreamLane). Use it to size the
+	// throttled lane count and to see how much namespace isolation is in use.
+	ReplicationStreamSenderThrottledNamespaceCount = NewGaugeDef("replication_stream_sender_throttled_namespace_count")
+	ReplicationTaskSendAttempt                     = NewDimensionlessHistogramDef("replication_task_send_attempt")
+	ReplicationTaskSendError                       = NewCounterDef("replication_task_send_error")
+	ReplicationTaskSendSkipped                     = NewCounterDef("replication_task_send_skipped")
+	ReplicationTaskGenerationLatency               = NewTimerDef("replication_task_generation_latency")
+	ReplicationTaskLoadLatency                     = NewTimerDef("replication_task_load_latency")
+	ReplicationTaskLoadSize                        = NewDimensionlessHistogramDef("replication_task_load_size")
+	ReplicationTaskSendLatency                     = NewTimerDef("replication_task_send_latency")
+	ReplicationTaskSendBacklog                     = NewDimensionlessHistogramDef("replication_task_send_backlog")
+	ReplicationTasksRecv                           = NewCounterDef("replication_tasks_recv")
+	ReplicationTasksRecvBacklog                    = NewDimensionlessHistogramDef("replication_tasks_recv_backlog")
+	ReplicationTasksSkipped                        = NewCounterDef("replication_tasks_skipped")
+	ReplicationTasksApplied                        = NewCounterDef("replication_tasks_applied")
+	ReplicationTasksFailed                         = NewCounterDef("replication_tasks_failed")
+	ReplicationTasksBackFill                       = NewCounterDef("replication_tasks_back_fill")
+	ReplicationTasksBackFillLatency                = NewTimerDef("replication_tasks_back_fill_latency")
 	// ParentWorkflowResendAttempts counts parent resends started by standby completion verification.
 	ParentWorkflowResendAttempts = NewCounterDef("parent_workflow_resend_attempts")
 	// ParentWorkflowResendSkipped counts attempts that found a resend for the same parent in flight.

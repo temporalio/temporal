@@ -356,6 +356,9 @@ func (r *StreamReceiverImpl) ackMessage(
 	var throttleHighNamespaceIDs []string
 	if receiverMode == ReceiverModeTieredStack {
 		throttleHighNamespaceIDs = r.NamespaceThrottler.ThrottledNamespaceIDs(r.clientShardKey.ShardID)
+		if hook, ok := testhooks.Get(r.TestHooks, testhooks.HistoryReplicationThrottledNamespaces, testhooks.GlobalScope); ok {
+			throttleHighNamespaceIDs = append(throttleHighNamespaceIDs, hook()...)
+		}
 	}
 	if err := stream.Send(&adminservice.StreamWorkflowReplicationMessagesRequest{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
