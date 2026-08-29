@@ -46,23 +46,10 @@ type config struct {
 	timeout time.Duration
 }
 
-// contextDecorator records a keyed transformation to replay on replacement contexts.
-type contextDecorator struct {
-	key      any
-	decorate func(context.Context) context.Context
-}
-
 // ownerKey marks a context as belonging to a test's context chain. Context
-// values are inherited, so any context derived from a test context - including
-// an outdated one - carries the mark too.
+// values are inherited, so any context derived from a test context carries the
+// mark too.
 type ownerKey struct{}
-
-// testContext wraps every context this package hands out, so [EnsureRemaining]
-// can tell one apart from a context the caller derived further (adding its own
-// deadline, cancellation, or values), which is not safe to replace.
-type testContext struct {
-	context.Context
-}
 
 // GoTestDeadline returns the deadline imposed by `go test -timeout`, if any.
 //
@@ -83,27 +70,6 @@ func GoTestDeadline(tb testing.TB) (deadline time.Time, ok bool) {
 	return d.Deadline()
 }
 
-// newTestContext creates a context for st that expires at deadline, capped by
-// the `go test -timeout` deadline.
-func newTestContext(tb testing.TB, st *contextState, deadline time.Time) (context.Context, context.CancelFunc) {
-	if goTestDeadline, ok := GoTestDeadline(tb); ok {
-		deadline = util.MinTime(deadline, goTestDeadline)
-	}
-
-	ctx, cancel := context.WithDeadline(tb.Context(), deadline)
-	ctx = context.WithValue(ctx, ownerKey{}, st)
-
-	// Annotate gRPC requests with the test name for OTEL tracing.
-	ctx = metadata.AppendToOutgoingContext(ctx, testNameMetadataKey, tb.Name())
-
-	// Apply context decorators, in order.
-	for _, decorator := range st.decorators {
-		ctx = decorator.decorate(ctx)
-	}
-
-	return &testContext{Context: ctx}, cancel
-}
-
 // DefaultTimeout returns the effective default timeout for test contexts.
 func DefaultTimeout() time.Duration {
 	timeout, _ := effectiveTimeout(0)
@@ -117,8 +83,10 @@ func DefaultTimeout() time.Duration {
 // return the current context, but an explicit different timeout fails instead
 // of being silently ignored.
 //
-// The result is not worth caching: [EnsureRemaining] replaces the context when
-// it extends the deadline, so a stored copy keeps the old, shorter one.
+// After decorators are attached, the result may be cached: [EnsureRemaining]
+// extends its active timeout without changing the context or its reported
+// deadline. Deadline reports the latest possible expiration. Done closes at
+// the current active expiration, initially the configured timeout.
 func For(tb testing.TB, opts ...Option) context.Context {
 	tb.Helper()
 
@@ -170,51 +138,40 @@ func AttachDecorator[K comparable](tb testing.TB, key K, decorator func(context.
 	st.mu.Lock()
 	defer st.mu.Unlock()
 
-	for _, existing := range st.decorators {
-		if existing.key == key {
-			return
-		}
+	if slices.Contains(st.decoratorKeys, any(key)) {
+		return
 	}
-	next := contextDecorator{
-		key:      key,
-		decorate: decorator,
-	}
-	st.current = &testContext{Context: next.decorate(st.current)}
-	st.decorators = append(st.decorators, next)
+	st.current = decorator(st.current)
+	st.decoratorKeys = append(st.decoratorKeys, key)
 }
 
 // EnsureRemaining extends the test context so at least minRemaining remains
-// from now, and returns the context to use.
+// from now.
 //
 // A context created with [WithTimeout] is never extended past that timeout;
 // one using the default or a TEMPORAL_TEST_TIMEOUT-configured timeout may
-// grow to a total lifetime of max(timeout, [maxTimeout]).
-//
-// Only the returned context - and later [For] calls - see the extension: a
-// context captured earlier keeps its original, shorter deadline, since a
-// context's effective deadline can only shrink as it is derived further, never
-// grow.
+// grow to a total lifetime of max(timeout, [maxTimeout]). A context that has
+// already expired is not revived.
 //
 // The context to extend is resolved from ctx, not tb, so a subtest's tb can
 // extend a context owned by its parent test - the dominant pattern in tests/,
 // e.g. await.Require(s.Context(), t, ...) inside a t.Run started from suite
 // method s.
 //
-// ctx comes back unchanged if it is not a test context at all (extension is an
-// optimization, so a foreign context is left alone rather than failing the
-// caller), or if the caller derived it further - e.g.
-// context.WithTimeout(env.Context(), ...) - because swapping it out would
-// silently discard that wrapping. The underlying test context is still
-// extended for later callers.
-func EnsureRemaining(ctx context.Context, tb testing.TB, minRemaining time.Duration) context.Context {
+// If ctx is not a test context at all, extension is an optimization, so a
+// foreign context is left alone rather than failing the caller. If the caller
+// derived it further - e.g. context.WithTimeout(env.Context(), ...) - its own
+// tighter deadline remains intact while the underlying test context is
+// extended.
+func EnsureRemaining(ctx context.Context, tb testing.TB, minRemaining time.Duration) {
 	tb.Helper()
 	if ctx == nil {
 		tb.Fatal("testcontext: nil context")
-		return nil
+		return
 	}
 	if minRemaining <= 0 {
 		tb.Fatalf("testcontext: min remaining must be positive: %v", minRemaining)
-		return ctx
+		return
 	}
 
 	st, _ := ctx.Value(ownerKey{}).(*contextState)
@@ -222,68 +179,48 @@ func EnsureRemaining(ctx context.Context, tb testing.TB, minRemaining time.Durat
 		// ctx isn't derived from any test context - e.g. one built directly
 		// from context.Background(), or tb.Context() itself - so there is
 		// nothing to extend.
-		return ctx
+		return
 	}
 
-	st.mu.Lock()
-	defer st.mu.Unlock()
-
-	testDeadline, ok := st.current.Deadline()
-	if !ok {
-		tb.Fatal("testcontext: current context has no deadline")
-		return ctx
-	}
-
-	// Cap the requested deadline at the context's ceiling.
-	requestedDeadline := util.MinTime(time.Now().Add(minRemaining), st.maxDeadline())
-
-	// Only a context this package handed out can be swapped for the extended
-	// one without dropping state the caller derived onto it.
-	_, bare := ctx.(*testContext)
-
-	// Extend the test context if the requested deadline is after the current deadline.
-	if requestedDeadline.After(testDeadline) {
-		st.push(newTestContext(st.owner, st, requestedDeadline))
-	}
-
-	if bare {
-		return st.current
-	}
-	return ctx
+	st.timeoutContext.extend(time.Now().Add(minRemaining))
 }
 
 // contextState is the mutable test context state shared by test helpers.
 type contextState struct {
-	// owner is the testing.TB this state was created for; immutable. Used to
-	// derive replacement contexts even when [EnsureRemaining] is reached
-	// through a different tb (e.g. a subtest given a parent's context).
-	owner     testing.TB
 	createdAt time.Time
 	// timeout is the timeout the context was created with; immutable.
-	timeout time.Duration
-	// explicitTimeout records whether timeout was pinned via [WithTimeout],
-	// making it a hard ceiling. TEMPORAL_TEST_TIMEOUT only raises the
-	// baseline and remains extendable, like the default. Immutable.
-	explicitTimeout bool
+	timeout        time.Duration
+	timeoutContext *timeoutContext
 
 	mu sync.Mutex
-	// current is the newest context; [EnsureRemaining] replaces it when the
-	// deadline is extended. Never nil, so late callers see a canceled context
-	// instead of a panic.
-	current context.Context
-	// cancels tracks every context created for this test so cleanup can release them all.
-	cancels    []context.CancelFunc
-	decorators []contextDecorator
+	// current is the context with every decorator attached. Never nil, so late
+	// callers see a canceled context instead of a panic.
+	current       context.Context
+	decoratorKeys []any
 }
 
 func newContextState(tb testing.TB, timeout time.Duration, explicitTimeout bool) *contextState {
-	st := &contextState{
-		owner:           tb,
-		createdAt:       time.Now(),
-		timeout:         timeout,
-		explicitTimeout: explicitTimeout,
+	createdAt := time.Now()
+	limit := timeout
+	if !explicitTimeout {
+		// A defaulted or TEMPORAL_TEST_TIMEOUT-configured timeout may grow,
+		// up to whichever of the two is larger; see [maxTimeout].
+		limit = max(limit, maxTimeout*debug.TimeoutMultiplier)
 	}
-	st.push(newTestContext(tb, st, st.createdAt.Add(timeout)))
+	ceiling := createdAt.Add(limit)
+	if goTestDeadline, ok := GoTestDeadline(tb); ok {
+		ceiling = util.MinTime(ceiling, goTestDeadline)
+	}
+
+	st := &contextState{
+		createdAt: createdAt,
+		timeout:   timeout,
+	}
+	st.timeoutContext = newTimeoutContext(tb.Context(), ceiling, createdAt.Add(timeout))
+	ctx := context.WithValue(st.timeoutContext, ownerKey{}, st)
+
+	// Annotate gRPC requests with the test name for OTEL tracing.
+	st.current = metadata.AppendToOutgoingContext(ctx, testNameMetadataKey, tb.Name())
 	return st
 }
 
@@ -320,43 +257,17 @@ func getOrCreateContextState(tb testing.TB, cfg config) *contextState {
 	return st
 }
 
-// maxDeadline is the furthest deadline [EnsureRemaining] may extend to.
-func (s *contextState) maxDeadline() time.Time {
-	limit := s.timeout
-	if !s.explicitTimeout {
-		// A defaulted or TEMPORAL_TEST_TIMEOUT-configured timeout may grow,
-		// up to whichever of the two is larger; see [maxTimeout].
-		limit = max(limit, maxTimeout*debug.TimeoutMultiplier)
-	}
-	return s.createdAt.Add(limit)
-}
-
-func (s *contextState) push(ctx context.Context, cancel context.CancelFunc) {
-	s.current = ctx
-	s.cancels = append(s.cancels, cancel)
-}
-
-// cleanup cancels every context created for the test and reports whether the
-// test's context deadline had already fired, and how long after createdAt that was.
+// cleanup cancels the test context and reports whether its active timeout had
+// already fired, and how long after createdAt that was.
 func (s *contextState) cleanup() (timedOut bool, timeout time.Duration) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	timedOut = s.current.Err() == context.DeadlineExceeded
-	timeout = s.timeout
-
-	if deadline, ok := s.current.Deadline(); ok {
-		timeout = deadline.Sub(s.createdAt)
-	}
-
-	for _, cancel := range slices.Backward(s.cancels) {
-		cancel()
-	}
+	s.timeoutContext.cancel()
+	err := s.timeoutContext.Err()
+	effectiveExpiration := s.timeoutContext.effectiveExpiration()
+	timedOut = err == context.DeadlineExceeded
+	timeout = effectiveExpiration.Sub(s.createdAt)
 
 	// Keep current: it is canceled now, but callers still racing with cleanup
-	// must get a context, not a panic. Clearing cancels makes cleanup idempotent.
-	s.cancels = nil
-	s.decorators = nil
+	// must get a context, not a panic.
 	return timedOut, timeout
 }
 
