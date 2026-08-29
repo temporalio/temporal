@@ -1,6 +1,8 @@
 # Worker Commands
 
-Worker commands are server-initiated instructions sent to workers via Nexus. Each worker process has a dedicated control task queue that it polls via Nexus RPC. A single control queue serves one or more workers running within the same process. This enables the server to push actions to workers without relying on heartbeats or long-poll cycles.
+Worker commands are server-initiated commands sent to workers via Nexus. Each worker process has a dedicated task queue that it polls via Nexus RPC. This dedicated queue serves one or more workers running within the same process. This enables the server to push commands to workers without relying on activity heartbeats. For example, if user cancels an activity, server will send a cancel command to the worker that was running the activity.
+
+The dedicated queue (aka control queue in the code) uses a task queue kind: `TASK_QUEUE_KIND_WORKER_COMMANDS`. This distinguishes it from normal and sticky task queues in matching. The SDK sets this kind when polling for worker commands, and the dispatcher sets it when dispatching commands to matching. The server treats it as an internal task queue kind, meaning it is not directly accessible to users via standard task queue APIs.
 
 To route a command, the server needs to know the target worker's control queue. For commands that target activities, this information is stored directly in the mutable state (`ActivityInfo`) when the activity was dispatched to the worker.
 
