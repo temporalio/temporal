@@ -74,6 +74,7 @@ type TestEnv struct {
 	Logger log.Logger
 
 	cluster        *TestCluster
+	ctx            context.Context
 	nsName         namespace.Name
 	nsID           namespace.ID
 	taskPoller     *taskpoller.TaskPoller
@@ -316,15 +317,17 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 
 	// Attach version headers decorator to the test context.
 	testcontext.AttachDecorator(t, versionHeadersContextKey{}, headers.SetVersions)
+	ctx = testcontext.For(t)
 
 	// Restore as much of the test's timeout budget as the context's ceiling
 	// allows, now that setup is done.
-	testcontext.EnsureRemaining(testcontext.For(t), t, testcontext.DefaultTimeout())
+	testcontext.EnsureRemaining(ctx, t, testcontext.DefaultTimeout())
 
 	env := &TestEnv{
 		FunctionalTestBase: base,
 		Assertions:         require.New(t),
 		cluster:            cluster,
+		ctx:                ctx,
 		nsName:             ns,
 		nsID:               nsID,
 		Logger:             base.Logger,
@@ -509,11 +512,9 @@ func (e *TestEnv) InjectResponseFault(fault ResponseFault) func() {
 //	ctx, cancel := context.WithTimeout(env.Context(), 10*time.Second)
 //	defer cancel()
 //
-// The context is deliberately not cached; see [testcontext.EnsureRemaining].
-//
 // Deprecated: use the suite's Context() method instead.
 func (e *TestEnv) Context() context.Context {
-	return testcontext.For(e.t)
+	return e.ctx
 }
 
 // SdkClient returns the SDK client. It is lazily initialized on the first call.

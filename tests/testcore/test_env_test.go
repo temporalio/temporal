@@ -3,11 +3,15 @@ package testcore
 import (
 	"sync"
 	"testing"
+	"time"
 
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/common/testing/testlogger"
+	"google.golang.org/grpc/metadata"
 )
 
 type TestEnvSuite struct {
@@ -83,4 +87,16 @@ func (s *TestEnvSuite) TestStartNamespaceLogCapture() {
 			Tags:    []tag.Tag{tag.WorkflowNamespaceID("primary-id")},
 		},
 	}, capture.Snapshot())
+}
+
+func (s *TestEnvSuite) TestContextCachesVersionHeadersAcrossExtension() {
+	env := NewEnv(s.T())
+	ctx := env.Context()
+	md, ok := metadata.FromOutgoingContext(ctx)
+	s.Require().True(ok)
+	s.Require().Equal([]string{headers.ClientNameServer}, md.Get(headers.ClientNameHeaderName))
+	s.Require().Equal([]string{headers.ServerVersion}, md.Get(headers.ClientVersionHeaderName))
+
+	testcontext.EnsureRemaining(ctx, s.T(), testcontext.DefaultTimeout()+time.Second)
+	s.Require().Same(ctx, env.Context())
 }
