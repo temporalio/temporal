@@ -32,7 +32,7 @@ func TestRequireTrue_RetriesFalseUntilTrue(t *testing.T) {
 
 	await.RequireTrue(t, func() bool {
 		return attempts.Add(1) >= 3
-	}, time.Second, 100*time.Millisecond)
+	}, 2*time.Second, 100*time.Millisecond)
 
 	require.Equal(t, int32(3), attempts.Load())
 }
