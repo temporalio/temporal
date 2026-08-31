@@ -28,6 +28,8 @@ const (
 	resetChildRun
 )
 
+const parentChildClusterMetadataRefreshInterval = 100 * time.Millisecond
+
 func TestParentChildXDCTestSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, new(parentChildXDCTestSuite))
@@ -37,6 +39,7 @@ func (s *parentChildXDCTestSuite) SetupSuite() {
 	s.enableTransitionHistory = true
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.EnableSeparateReplicationEnableFlag.Key(): true,
+		dynamicconfig.ClusterMetadataRefreshInterval.Key():      parentChildClusterMetadataRefreshInterval,
 	}
 	s.setupSuite(testcore.WithNumHistoryShards(2))
 }
@@ -269,7 +272,7 @@ func (s *parentChildXDCTestSuite) TestActiveRecoversChildCompletionWhenParentRep
 //	refresh current run      | ChildWorkflowExecutionCompleted  | run 2 COMPLETED                             | initial standby | recreated run 2 CloseExecution records completion
 //
 // Both child CloseExecution tasks are processed before the parent snapshot is applied. Scheduling
-// the first task on run 1 reports that it is closed; describing the workflow ID finds terminal run 2
+// the first task on run 1 reports that it is closed; loading current mutable state finds terminal run 2
 // with the same first-run ID, so recovery refreshes run 2. The parent snapshot is delayed, not lost.
 func (s *parentChildXDCTestSuite) TestActiveRecoversContinuedAsNewChildCompletionWhenParentReplicationArrivesLate() {
 	s.runParentChildScenario(parentChildScenario{

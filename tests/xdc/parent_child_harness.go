@@ -379,8 +379,7 @@ func setWorkflowReplication(
 }
 
 func waitForClusterMetadataRefresh(ctx context.Context) error {
-	// xdcBaseSuite configures the cluster metadata refresh interval to five seconds.
-	timer := time.NewTimer(6 * time.Second)
+	timer := time.NewTimer(2 * parentChildClusterMetadataRefreshInterval)
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():

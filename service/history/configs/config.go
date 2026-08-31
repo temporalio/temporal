@@ -289,6 +289,7 @@ type Config struct {
 	ReplicationTaskApplyTimeout                          dynamicconfig.DurationPropertyFn
 	EnableAsyncParentWorkflowResend                      dynamicconfig.BoolPropertyFn
 	EnableChildWorkflowResend                            dynamicconfig.BoolPropertyFn
+	EnableChildWorkflowCompletionRecovery                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	WorkflowResendHostMaxInFlight                        dynamicconfig.IntPropertyFn
 	ReplicationTaskFetcherParallelism                    dynamicconfig.IntPropertyFn
 	ReplicationTaskFetcherAggregationInterval            dynamicconfig.DurationPropertyFn
@@ -733,6 +734,7 @@ func NewConfig(
 		ReplicationTaskApplyTimeout:                  dynamicconfig.ReplicationTaskApplyTimeout.Get(dc),
 		EnableAsyncParentWorkflowResend:              dynamicconfig.EnableAsyncParentWorkflowResend.Get(dc),
 		EnableChildWorkflowResend:                    dynamicconfig.EnableChildWorkflowResend.Get(dc),
+		EnableChildWorkflowCompletionRecovery:        dynamicconfig.EnableChildWorkflowCompletionRecovery.Get(dc),
 		WorkflowResendHostMaxInFlight:                dynamicconfig.WorkflowResendHostMaxInFlight.Get(dc),
 		ReplicationTaskFetcherParallelism:            dynamicconfig.ReplicationTaskFetcherParallelism.Get(dc),
 		ReplicationTaskFetcherAggregationInterval:    dynamicconfig.ReplicationTaskFetcherAggregationInterval.Get(dc),

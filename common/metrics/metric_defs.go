@@ -1153,6 +1153,8 @@ var (
 	ChildWorkflowResendLimited = NewCounterDef("child_workflow_resend_limited")
 	// ChildWorkflowResendLatency measures a child resend and subsequent verification.
 	ChildWorkflowResendLatency = NewTimerDef("child_workflow_resend_latency")
+	// ChildWorkflowCompletionRecoveryAttempts counts terminal child refreshes triggered by a late parent.
+	ChildWorkflowCompletionRecoveryAttempts = NewCounterDef("child_workflow_completion_recovery_attempts")
 	// WorkflowResendSchedulerAtCapacity counts host-level workflow resends rejected at the concurrency limit.
 	WorkflowResendSchedulerAtCapacity = NewCounterDef("workflow_resend_scheduler_at_capacity")
 	// ReplicationOrphanedHistoryBranch tracks cases where history branch cleanup was skipped on error

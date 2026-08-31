@@ -914,7 +914,22 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 			return serviceerror.NewNamespaceNotFound(childInfo.Namespace)
 		}
 
-		return t.createFirstWorkflowTask(ctx, targetNamespaceID.String(), childExecution, parentClock, childClock)
+		scheduleErr := t.createFirstWorkflowTask(ctx, targetNamespaceID.String(), childExecution, parentClock, childClock)
+		if scheduleErr == nil || !common.IsNotFoundError(scheduleErr) {
+			return scheduleErr
+		}
+
+		// Child completion removes ChildExecutionInfo, so reaching this point means the parent still
+		// needs a completion event for this child execution chain.
+		return t.recoverClosedChildCompletion(
+			ctx,
+			task,
+			targetNamespaceName,
+			targetNamespaceID.String(),
+			childExecution.GetWorkflowId(),
+			childExecution.GetRunId(),
+			scheduleErr,
+		)
 	}
 
 	// remaining 2 cases:
@@ -1449,36 +1464,56 @@ func (t *transferQueueActiveTaskExecutor) createFirstWorkflowTask(
 		ParentClock:         parentClock,
 		ChildClock:          childClock,
 	})
-	if err == nil || !common.IsNotFoundError(err) {
-		return err
+	return err
+}
+
+func (t *transferQueueActiveTaskExecutor) recoverClosedChildCompletion(
+	ctx context.Context,
+	parentTask *tasks.StartChildExecutionTask,
+	childNamespaceName namespace.Name,
+	childNamespaceID string,
+	childWorkflowID string,
+	childFirstRunID string,
+	scheduleErr error,
+) error {
+	if !t.config.EnableChildWorkflowCompletionRecovery(childNamespaceName.String()) {
+		return scheduleErr
 	}
 
 	// Parent replication can regenerate this task after the child's original close task was
 	// acknowledged while the parent was missing.
-	describeResponse, describeErr := t.historyRawClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
-		NamespaceId: namespaceID,
-		Request: &workflowservice.DescribeWorkflowExecutionRequest{
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: execution.GetWorkflowId(),
-			},
+	mutableStateResponse, mutableStateErr := t.historyRawClient.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
+		NamespaceId: childNamespaceID,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: childWorkflowID,
 		},
 	})
-	if describeErr != nil {
-		if common.IsNotFoundError(describeErr) {
+	if mutableStateErr != nil {
+		if common.IsNotFoundError(mutableStateErr) {
 			// TODO: Revisit this recovery gap. If the current run is deleted before parent
 			// replication arrives, there is no execution to refresh and completion cannot be recovered.
 			return nil
 		}
-		return describeErr
+		return mutableStateErr
 	}
 
-	executionInfo := describeResponse.GetWorkflowExecutionInfo()
-	if executionInfo.GetFirstRunId() != execution.GetRunId() {
+	if mutableStateResponse.GetFirstExecutionRunId() != childFirstRunID {
+		t.logger.Warn(
+			"Unable to recover child completion because the workflow ID points to a different execution chain",
+			tag.NewStringTag("parent-namespace-id", parentTask.GetNamespaceID()),
+			tag.NewStringTag("parent-workflow-id", parentTask.GetWorkflowID()),
+			tag.NewStringTag("parent-run-id", parentTask.GetRunID()),
+			tag.NewStringTag("child-namespace-id", childNamespaceID),
+			tag.NewStringTag("child-workflow-id", childWorkflowID),
+			tag.NewStringTag("expected-child-first-run-id", childFirstRunID),
+			tag.NewStringTag("current-child-first-run-id", mutableStateResponse.GetFirstExecutionRunId()),
+			tag.NewStringTag("current-child-run-id", mutableStateResponse.GetExecution().GetRunId()),
+		)
 		return nil
 	}
-	// The parent observes the child execution chain as one execution. Only refresh a terminal
-	// current run; intermediate and future non-terminal statuses must not report completion.
-	switch executionInfo.GetStatus() {
+	// A running successor will generate its own CloseExecution task after the parent is present.
+	// Only a terminal current run needs recovery for the completion notification that was lost.
+	switch mutableStateResponse.GetWorkflowStatus() {
 	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
@@ -1488,13 +1523,26 @@ func (t *transferQueueActiveTaskExecutor) createFirstWorkflowTask(
 		return nil
 	}
 
-	_, err = t.historyRawClient.RefreshWorkflowTasks(ctx, &historyservice.RefreshWorkflowTasksRequest{
-		NamespaceId: namespaceID,
+	currentExecution := mutableStateResponse.GetExecution()
+	metrics.ChildWorkflowCompletionRecoveryAttempts.With(
+		t.metricHandler.WithTags(metrics.NamespaceTag(childNamespaceName.String())),
+	).Record(1)
+	t.logger.Info(
+		"Refreshing terminal child workflow to recover completion notification",
+		tag.NewStringTag("parent-namespace-id", parentTask.GetNamespaceID()),
+		tag.NewStringTag("parent-workflow-id", parentTask.GetWorkflowID()),
+		tag.NewStringTag("parent-run-id", parentTask.GetRunID()),
+		tag.NewStringTag("child-namespace-id", childNamespaceID),
+		tag.NewStringTag("child-workflow-id", childWorkflowID),
+		tag.NewStringTag("child-first-run-id", childFirstRunID),
+		tag.NewStringTag("child-terminal-run-id", currentExecution.GetRunId()),
+	)
+
+	_, err := t.historyRawClient.RefreshWorkflowTasks(ctx, &historyservice.RefreshWorkflowTasksRequest{
+		NamespaceId: childNamespaceID,
 		ArchetypeId: chasm.WorkflowArchetypeID,
 		Request: &adminservice.RefreshWorkflowTasksRequest{
-			NamespaceId: namespaceID,
-			Execution:   executionInfo.GetExecution(),
-			ArchetypeId: chasm.WorkflowArchetypeID,
+			Execution: currentExecution,
 		},
 	})
 	return err

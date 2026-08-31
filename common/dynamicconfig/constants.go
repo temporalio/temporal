@@ -2814,6 +2814,12 @@ verification may resend a missing child workflow in the background from the acti
 disabled, verification remains local-only. StandbyTaskMissingEventsResendDelay plus
 ReplicationTaskApplyTimeout should remain below StandbyTaskMissingEventsDiscardDelay.`,
 	)
+	EnableChildWorkflowCompletionRecovery = NewNamespaceBoolSetting(
+		"history.enableChildWorkflowCompletionRecovery",
+		true,
+		`EnableChildWorkflowCompletionRecovery controls whether an active StartChildExecution task may
+refresh a terminal child workflow to recover a completion notification lost while the parent was missing.`,
+	)
 	WorkflowResendHostMaxInFlight = NewGlobalIntSetting(
 		"history.workflowResendHostMaxInFlight",
 		16,
