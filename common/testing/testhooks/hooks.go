@@ -9,6 +9,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/rpc/grpcfaults"
 	historytasks "go.temporal.io/server/service/history/tasks"
 )
 
@@ -31,6 +32,10 @@ var (
 	HistoryTransferTaskInterceptor              = newKey[func(historytasks.Task, func()), namespace.ID]()
 	HistoryDLQTaskDeleteInterceptor             = newKey[func(context.Context, *historyservice.DeleteDLQTasksRequest, func(context.Context, *historyservice.DeleteDLQTasksRequest) (*historyservice.DeleteDLQTasksResponse, error)) (*historyservice.DeleteDLQTasksResponse, error), global]()
 	NamespaceReplicationTaskInterceptor         = newKey[func(context.Context, *replicationspb.NamespaceTaskAttributes, func() error) error, namespace.Name]()
+	GRPCRequestFaultGeneratorByNamespaceID      = newKey[grpcfaults.RequestCallback, namespace.ID]()
+	GRPCRequestFaultGeneratorByNamespaceName    = newKey[grpcfaults.RequestCallback, namespace.Name]()
+	GRPCResponseFaultGeneratorByNamespaceID     = newKey[grpcfaults.ResponseCallback, namespace.ID]()
+	GRPCResponseFaultGeneratorByNamespaceName   = newKey[grpcfaults.ResponseCallback, namespace.Name]()
 )
 
 // keyID is a unique identifier for a key, used as a map key.

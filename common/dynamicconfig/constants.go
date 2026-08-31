@@ -679,7 +679,7 @@ ScheduleInvariantsScannerParams comments for details.`,
 	FrontendDisabledScheduleValidations = NewNamespaceTypedSetting(
 		"frontend.disabledScheduleValidations",
 		[]string(nil),
-		`FrontendDisabledScheduleValidations is a list of schedule validation names that should log and continue instead of rejecting the request for a specific namespace. Valid values: versioning-override, scheduler-duration.`,
+		`FrontendDisabledScheduleValidations is a list of schedule validation names that should log and continue instead of rejecting the request for a specific namespace. Valid values: versioning-override, scheduler-duration, scheduler-overlap-policy, scheduler-timestamp, scheduler-remaining-actions.`,
 	)
 	FrontendHTTPAllowedHosts = NewGlobalTypedSettingWithConverter(
 		"frontend.httpAllowedHosts",

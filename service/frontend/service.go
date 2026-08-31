@@ -31,6 +31,9 @@ import (
 const (
 	scheduleValidationVersioningOverride = "versioning-override"
 	scheduleValidationScheduleDuration   = "scheduler-duration"
+	scheduleValidationOverlapPolicy      = "scheduler-overlap-policy"
+	scheduleValidationRemainingActions   = "scheduler-remaining-actions"
+	scheduleValidationTimestamp          = "scheduler-timestamp"
 )
 
 // Config represents configuration for frontend service
