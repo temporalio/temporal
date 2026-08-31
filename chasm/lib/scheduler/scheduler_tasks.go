@@ -223,20 +223,16 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 				}
 			}
 			for _, requestID := range completedRequestIDs {
-				s.completeAction(ctx, requestID, results[requestID].completed, nil, false)
+				s.completeAction(ctx, requestID, results[requestID].completed, nil)
 			}
 
 			s.getOrCreateEventLog(ctx).LogEvent(ctx,
 				fmt.Sprintf("attached callbacks to %d already-running workflow(s)", len(results)))
 
-			if len(completedRequestIDs) > 0 {
-				s.armCompletionTasks(ctx)
-			} else {
-				// Now that running workflow state has been refreshed, scheduler tasks can be
-				// fired.
-				invoker.addTasks(ctx)
-				generator.Generate(ctx)
-			}
+			// Now that running workflow state has been refreshed, scheduler tasks can be
+			// fired.
+			invoker.addTasks(ctx)
+			generator.Generate(ctx)
 
 			return nil, nil
 		},
@@ -323,11 +319,8 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 		},
 	})
 	if err != nil {
-		// Do not infer a successful completion here: this is an attachment race,
-		// and reconciliation must be run/chain-fenced before recording it.
-		if isAlreadyStartedError(err) {
-			return nil, err
-		}
+		// An already-started error means the workflow closed between the describe and
+		// this call. Retry so the next describe reports the real terminal status.
 		return nil, err
 	}
 

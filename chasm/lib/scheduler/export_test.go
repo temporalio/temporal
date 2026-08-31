@@ -41,7 +41,7 @@ func (s *Scheduler) RecordCompletedAction(
 }
 
 func (s *Scheduler) RecordMigrationCompletion(ctx chasm.MutableContext, completed *schedulespb.CompletedResult, requestID string) bool {
-	return s.completeAction(ctx, requestID, completed, nil, true)
+	return s.completeAction(ctx, requestID, completed, nil)
 }
 
 func (i *Invoker) RunningWorkflowID(requestID string) string {

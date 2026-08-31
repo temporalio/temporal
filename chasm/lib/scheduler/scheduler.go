@@ -761,7 +761,8 @@ func (s *Scheduler) HandleNexusCompletion(
 		Status:    wfStatus,
 		CloseTime: info.CloseTime,
 	}
-	s.completeAction(ctx, info.RequestId, completed, info, true)
+	s.completeAction(ctx, info.RequestId, completed, info)
+	s.Generator.Get(ctx).Generate(ctx)
 
 	return nil
 }
@@ -774,16 +775,11 @@ func (s *Scheduler) completeAction(
 	requestID string,
 	completed *schedulespb.CompletedResult,
 	outcome *persistencespb.ChasmNexusCompletion,
-	armTasks bool,
 ) bool {
 	invoker := s.Invoker.Get(ctx)
-	workflowID := invoker.runningWorkflowID(requestID)
-	if workflowID == "" {
-		return false
-	}
 	var start *schedulespb.BufferedStart
 	for _, bufferedStart := range invoker.BufferedStarts {
-		if bufferedStart.RequestId == requestID {
+		if bufferedStart.RequestId == requestID && bufferedStart.Completed == nil {
 			start = bufferedStart
 			break
 		}
@@ -791,6 +787,7 @@ func (s *Scheduler) completeAction(
 	if start == nil {
 		return false
 	}
+	workflowID := start.GetWorkflowId()
 	tracksCompletionResult := internal.TracksCompletionResult(start.GetOverlapPolicy())
 
 	// TODO - also record payload sizes once we have metrics wired into CHASM context.
@@ -801,6 +798,7 @@ func (s *Scheduler) completeAction(
 			s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{Failure: outcome.Failure, Success: previousResult.Success})
 		case *persistencespb.ChasmNexusCompletion_Success:
 			s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{Success: outcome.Success})
+		default:
 		}
 	}
 	if tracksCompletionResult && countsAsFailureForPause(completed.Status) && s.Schedule.Policies.PauseOnFailure && !s.Schedule.State.Paused {
@@ -810,14 +808,7 @@ func (s *Scheduler) completeAction(
 	}
 	start.HasCallback = true
 	invoker.recordCompletedAction(ctx, completed, requestID)
-	if armTasks {
-		s.armCompletionTasks(ctx)
-	}
 	return true
-}
-
-func (s *Scheduler) armCompletionTasks(ctx chasm.MutableContext) {
-	s.Generator.Get(ctx).Generate(ctx)
 }
 
 // Describe returns the current state of the Scheduler for DescribeSchedule requests.

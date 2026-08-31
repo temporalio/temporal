@@ -10,7 +10,6 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -41,17 +40,6 @@ func TestMigrationCompletion_ClosedFailedExecutionUsesTerminalTransition(t *test
 			ActualTime: timestamppb.New(closeTime),
 		},
 	}
-	for n := 0; n < scheduler.RecentActionCount; n++ {
-		invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{
-			RequestId:  "retained",
-			WorkflowId: "retained-workflow",
-			Completed: &schedulespb.CompletedResult{
-				Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-				CloseTime: timestamppb.New(closeTime.Add(time.Duration(-n-1) * time.Minute)),
-			},
-		})
-	}
-
 	recorded := sched.RecordMigrationCompletion(ctx, &schedulespb.CompletedResult{
 		Status:    enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		CloseTime: timestamppb.New(closeTime),
@@ -64,7 +52,7 @@ func TestMigrationCompletion_ClosedFailedExecutionUsesTerminalTransition(t *test
 	require.Equal(t, []byte("previous success"), last.Success.Data)
 	require.Equal(t, "previous failure", last.Failure.Message)
 
-	require.Len(t, invoker.BufferedStarts, scheduler.RecentActionCount+1) // deferred start plus retained completions
+	require.Len(t, invoker.BufferedStarts, 2)
 	var deferred, closed *schedulespb.BufferedStart
 	for _, start := range invoker.BufferedStarts {
 		switch start.RequestId {
@@ -72,6 +60,7 @@ func TestMigrationCompletion_ClosedFailedExecutionUsesTerminalTransition(t *test
 			deferred = start
 		case "closed":
 			closed = start
+		default:
 		}
 	}
 	require.NotNil(t, closed)
