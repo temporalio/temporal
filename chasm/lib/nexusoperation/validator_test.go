@@ -45,14 +45,14 @@ func mustNewCallbackValidator() callbacks.Validator {
 		},
 	}
 	cfg := callbacks.ValidatorConfig{
-		MaxCallbacksPerExecution:   func(string) int { return 10 },
-		MaxIDLengthLimit:           func() int { return 10 },
-		URLMaxLength:               func(string) int { return 1000 },
-		HeaderMaxSize:              func(string) int { return 4096 },
-		EndpointRules:              func(string) callbacks.AddressMatchRules { return allowAllAddresses },
-		MaxServiceNameLength:       func(string) int { return 10 },
-		MaxOperationNameLength:     func(string) int { return 10 },
-		WorkerSourceContextMaxSize: func(string) int { return 1000 },
+		MaxCallbacksPerExecution:         func(string) int { return 10 },
+		MaxIDLengthLimit:                 func() int { return 10 },
+		URLMaxLength:                     func(string) int { return 1000 },
+		HeaderMaxSize:                    func(string) int { return 4096 },
+		EndpointRules:                    func(string) callbacks.AddressMatchRules { return allowAllAddresses },
+		MaxServiceNameLength:             func(string) int { return 10 },
+		MaxOperationNameLength:           func(string) int { return 10 },
+		NexusHandlerSourceContextMaxSize: func(string) int { return 1000 },
 	}
 
 	v, err := callbacks.NewValidator(cfg)

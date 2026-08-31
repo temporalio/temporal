@@ -323,22 +323,28 @@ func (s *NexusStandaloneCallbacksTestSuite) TestCompletionCallbacks() {
 		for _, tc := range []struct {
 			name     string
 			callback *commonpb.Callback
-			errMsg   string
+			// errTarget is a pointer to a serviceerror pointer, as ErrorAs expects.
+			errTarget any
+			errMsg    string
 		}{
 			{
-				name: "worker",
-				callback: &commonpb.Callback{Variant: &commonpb.Callback_Worker_{Worker: &commonpb.Callback_Worker{
+				name: "nexus handler",
+				callback: &commonpb.Callback{Variant: &commonpb.Callback_NexusHandler_{NexusHandler: &commonpb.Callback_NexusHandler{
 					TaskQueueName: "completions-task-queue",
 					Service:       "HTTPAdapter",
 					Operation:     "DeliverAsWebhook",
 				}}},
-				// The callback is well-formed, but the Worker kind is not enabled. (See newTestEnv.)
-				errMsg: "worker callbacks are not enabled for this execution type",
+				// The callback is well-formed, but the NexusHandler kind is not enabled (see
+				// newTestEnv). A disabled kind is an InvalidArgument, not the Unimplemented that
+				// a variant the server does not recognize at all gets.
+				errTarget: new(*serviceerror.InvalidArgument),
+				errMsg:    "nexusHandler callbacks are not enabled for this execution type",
 			},
 			{
-				name:     "unset",
-				callback: &commonpb.Callback{},
-				errMsg:   "unknown callback variant",
+				name:      "unset",
+				callback:  &commonpb.Callback{},
+				errTarget: new(*serviceerror.Unimplemented),
+				errMsg:    "unknown callback variant",
 			},
 		} {
 			s.Run(tc.name, func(s *NexusStandaloneCallbacksTestSuite) {
@@ -349,8 +355,7 @@ func (s *NexusStandaloneCallbacksTestSuite) TestCompletionCallbacks() {
 				})
 				s.Nil(resp)
 
-				var unimplementedErr *serviceerror.Unimplemented
-				s.ErrorAs(err, &unimplementedErr)
+				s.ErrorAs(err, tc.errTarget)
 				s.ErrorContains(err, tc.errMsg)
 			})
 		}
@@ -414,8 +419,8 @@ func (s *NexusStandaloneCallbacksTestSuite) TestCompletionCallbacks() {
 	})
 }
 
-// TestCallbacksDisabled confirms the per-namespace feature flag gates the whole surface, including
-// the on-conflict attach path.
+// TestCallbacksDisabled confirms that an empty nexusoperation.enabledCallbackKinds gates the whole
+// surface, including the on-conflict attach path.
 func (s *NexusStandaloneCallbacksTestSuite) TestCallbacksDisabled() {
 	// Test environment with SANO not supporting completion callbacks.
 	env := s.newTestEnv(false)
@@ -428,7 +433,7 @@ func (s *NexusStandaloneCallbacksTestSuite) TestCallbacksDisabled() {
 			Endpoint:            endpointName,
 			CompletionCallbacks: cbs,
 		})
-		s.ErrorContains(err, "completion callbacks are not enabled for this namespace")
+		s.ErrorContains(err, "nexus callbacks are not enabled for this execution type")
 	})
 
 	s.Run("OnConflictAttachCallbacksFails", func(s *NexusStandaloneCallbacksTestSuite) {
@@ -442,6 +447,6 @@ func (s *NexusStandaloneCallbacksTestSuite) TestCallbacksDisabled() {
 				AttachCompletionCallbacks: true,
 			},
 		})
-		s.ErrorContains(err, "completion callbacks are not enabled for this namespace")
+		s.ErrorContains(err, "nexus callbacks are not enabled for this execution type")
 	})
 }
