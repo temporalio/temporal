@@ -1596,4 +1596,57 @@ func TestAttachCallbacks(t *testing.T) {
 		require.Equal(t, tv.UpdateID(), (*capturedOptions)[0].UpdateId)
 		require.Equal(t, tv.RequestID(), (*capturedOptions)[0].AttachedRequestId)
 	})
+
+	t.Run("missing request_id with completion callbacks returns invalid argument", func(t *testing.T) {
+		effects := &effect.Buffer{}
+		store := mockEventStore{Controller: effects}
+		upd := update.NewAccepted(tv.UpdateID(), testAcceptedEventID)
+		reqNoRequestID := &updatepb.Request{
+			Meta:                &updatepb.Meta{UpdateId: tv.UpdateID()},
+			Input:               &updatepb.Input{Name: "not_empty"},
+			CompletionCallbacks: testCallbacks,
+		}
+
+		fired, err := upd.AttachCallbacks(reqNoRequestID, store)
+		require.False(t, fired)
+		require.Error(t, err)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.ErrorContains(t, err, "request_id is required")
+	})
+
+	t.Run("reused requestID with different callback target keeps the first, no new event", func(t *testing.T) {
+		effects := &effect.Buffer{}
+		eventCreated := false
+		store := mockEventStore{
+			Controller: effects,
+			HasRequestIDFunc: func(requestID string) bool {
+				return requestID == tv.RequestID()
+			},
+			AddWorkflowExecutionOptionsUpdatedEventFunc: func(
+				_ *workflowpb.VersioningOverride, _ bool, _ string, _ []*commonpb.Callback, _ []*commonpb.Link, _ string, _ *commonpb.Priority,
+				_ *commonpb.TimeSkippingConfig, _ bool, _ []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
+			) (*historypb.HistoryEvent, error) {
+				eventCreated = true
+				return &historypb.HistoryEvent{}, nil
+			},
+		}
+		upd := update.NewAccepted(tv.UpdateID(), testAcceptedEventID)
+
+		reqDifferentCallback := &updatepb.Request{
+			Meta:      &updatepb.Meta{UpdateId: tv.UpdateID()},
+			Input:     &updatepb.Input{Name: "not_empty"},
+			RequestId: tv.RequestID(),
+			CompletionCallbacks: []*commonpb.Callback{{
+				Variant: &commonpb.Callback_Nexus_{
+					Nexus: &commonpb.Callback_Nexus{Url: "http://localhost:9999/different-callback"},
+				},
+			}},
+		}
+
+		fired, err := upd.AttachCallbacks(reqDifferentCallback, store)
+		require.NoError(t, err)
+		require.True(t, fired, "caller should still be told to wait on the existing update")
+		require.False(t, eventCreated, "the first callback wins: dedup is keyed only on request_id, so the second request's different target is dropped silently")
+	})
 }
