@@ -497,8 +497,7 @@ func (*BackfillerState_BackfillRequest) isBackfillerState_Request() {}
 func (*BackfillerState_TriggerRequest) isBackfillerState_Request() {}
 
 // CHASM scheduler retains the payload data for the last completed workflow. Both
-// last success and failure are stored simultaneously. Nexus callbacks carry one
-// success payload, so migrated V1 results retain their first payload.
+// last success and failure are stored simultaneously.
 type LastCompletionResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Success       *v12.Payload           `protobuf:"bytes,1,opt,name=success,proto3" json:"success,omitempty"`
