@@ -121,6 +121,8 @@ type (
 		TokenProvider                auth.TokenProvider
 		ServiceHosts                 map[primitives.ServiceName]static.Hosts
 
+		CustomFrontendUnifiedInterceptors []frontend.Interceptor
+
 		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
 		Logger                     log.Logger
 		ClientFactoryProvider      client.FactoryProvider
@@ -318,11 +320,12 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		ServiceHosts:    so.hostsByService,
 		NamespaceLogger: so.namespaceLogger,
 
-		ServiceResolver:                 so.persistenceServiceResolver,
-		CustomDataStoreFactory:          so.customDataStoreFactory,
-		CustomVisibilityStore:           so.customVisibilityStoreFactory,
-		CustomHistoryArchiverFactory:    so.customHistoryArchiverFactory,
-		CustomVisibilityArchiverFactory: so.customVisibilityArchiverFactory,
+		ServiceResolver:                   so.persistenceServiceResolver,
+		CustomDataStoreFactory:            so.customDataStoreFactory,
+		CustomVisibilityStore:             so.customVisibilityStoreFactory,
+		CustomHistoryArchiverFactory:      so.customHistoryArchiverFactory,
+		CustomVisibilityArchiverFactory:   so.customVisibilityArchiverFactory,
+		CustomFrontendUnifiedInterceptors: so.customFrontendUnifiedInterceptors,
 
 		SearchAttributesMapper:       so.searchAttributesMapper,
 		CustomFrontendInterceptors:   so.customFrontendInterceptors,
@@ -380,36 +383,37 @@ type (
 	ServiceProviderParamsCommon struct {
 		fx.In
 
-		Cfg                             *config.Config
-		ServiceNames                    resource.ServiceNames
-		Logger                          log.Logger
-		NamespaceLogger                 resource.NamespaceLogger
-		DynamicConfigClient             dynamicconfig.Client
-		MetricsHandler                  metrics.Handler
-		EventLoggerProvider             otellog.LoggerProvider
-		EsClient                        esclient.Client
-		TlsConfigProvider               encryption.TLSConfigProvider //nolint:staticcheck // should be TLSConfigProvider
-		PersistenceConfig               config.Persistence
-		ClusterMetadata                 *cluster.Config
-		ClientFactoryProvider           client.FactoryProvider
-		AudienceGetter                  authorization.JWTAudienceMapper
-		PersistenceServiceResolver      resolver.ServiceResolver
-		PersistenceFactoryProvider      persistenceClient.FactoryProviderFn
-		SearchAttributesMapper          searchattribute.Mapper
-		CustomFrontendInterceptors      []grpc.UnaryServerInterceptor
-		AdditionalStreamInterceptors    []grpc.StreamServerInterceptor
-		Authorizer                      authorization.Authorizer
-		ClaimMapper                     authorization.ClaimMapper
-		TokenProvider                   auth.TokenProvider
-		DataStoreFactory                persistenceClient.AbstractDataStoreFactory
-		VisibilityStoreFactory          visibility.VisibilityStoreFactory
-		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
-		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
-		SpanExporters                   []otelsdktrace.SpanExporter
-		InstanceID                      resource.InstanceID                     `optional:"true"`
-		StaticServiceHosts              map[primitives.ServiceName]static.Hosts `optional:"true"`
-		TaskCategoryRegistry            tasks.TaskCategoryRegistry
-		TestHooks                       testhooks.TestHooks
+		Cfg                               *config.Config
+		ServiceNames                      resource.ServiceNames
+		Logger                            log.Logger
+		NamespaceLogger                   resource.NamespaceLogger
+		DynamicConfigClient               dynamicconfig.Client
+		MetricsHandler                    metrics.Handler
+		EventLoggerProvider               otellog.LoggerProvider
+		EsClient                          esclient.Client
+		TlsConfigProvider                 encryption.TLSConfigProvider //nolint:staticcheck // should be TLSConfigProvider
+		PersistenceConfig                 config.Persistence
+		ClusterMetadata                   *cluster.Config
+		ClientFactoryProvider             client.FactoryProvider
+		AudienceGetter                    authorization.JWTAudienceMapper
+		PersistenceServiceResolver        resolver.ServiceResolver
+		PersistenceFactoryProvider        persistenceClient.FactoryProviderFn
+		SearchAttributesMapper            searchattribute.Mapper
+		CustomFrontendInterceptors        []grpc.UnaryServerInterceptor
+		CustomFrontendUnifiedInterceptors []frontend.Interceptor
+		AdditionalStreamInterceptors      []grpc.StreamServerInterceptor
+		Authorizer                        authorization.Authorizer
+		ClaimMapper                       authorization.ClaimMapper
+		TokenProvider                     auth.TokenProvider
+		DataStoreFactory                  persistenceClient.AbstractDataStoreFactory
+		VisibilityStoreFactory            visibility.VisibilityStoreFactory
+		CustomHistoryArchiverFactory      provider.CustomHistoryArchiverFactory
+		CustomVisibilityArchiverFactory   provider.CustomVisibilityArchiverFactory
+		SpanExporters                     []otelsdktrace.SpanExporter
+		InstanceID                        resource.InstanceID                     `optional:"true"`
+		StaticServiceHosts                map[primitives.ServiceName]static.Hosts `optional:"true"`
+		TaskCategoryRegistry              tasks.TaskCategoryRegistry
+		TestHooks                         testhooks.TestHooks
 	}
 )
 
@@ -594,6 +598,7 @@ func genericFrontendServiceProvider(
 	app := fx.New(
 		params.GetCommonServiceOptions(serviceName),
 		fx.Supply(params.CustomFrontendInterceptors),
+		fx.Supply(params.CustomFrontendUnifiedInterceptors),
 		fx.Decorate(func() authorization.ClaimMapper {
 			switch serviceName {
 			case primitives.FrontendService:

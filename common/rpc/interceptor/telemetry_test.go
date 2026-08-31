@@ -2,9 +2,12 @@ package interceptor
 
 import (
 	"context"
+	"errors"
 	"testing"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -19,12 +22,133 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
+	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+func TestTelemetryInterceptNexusOutermost(t *testing.T) {
+	extraTag := metrics.StringTag("configured", "tag")
+	input := interceptornexus.NewStartOpInput(
+		"s", "o", testNamespace, nexus.StartOperationOptions{}, nil,
+		interceptornexus.ForwardingInfo{},
+		interceptornexus.RequestMetadata{MetricTags: []metrics.Tag{extraTag}},
+	)
+	for _, tc := range []struct {
+		name            string
+		handlerOut      any
+		handlerErr      error
+		setOverride     string
+		expectedOutcome string
+		expectedErrors  int
+	}{
+		{
+			name:            "sync success is derived from the result type",
+			handlerOut:      &nexus.HandlerStartOperationResultSync[any]{},
+			expectedOutcome: "sync_success",
+		},
+		{
+			name:            "async success is derived from the result type",
+			handlerOut:      &nexus.HandlerStartOperationResultAsync{},
+			expectedOutcome: "async_success",
+		},
+		{
+			name:            "an interceptor's outcome rides on its error",
+			handlerErr:      &interceptornexus.InterceptorError{Err: errors.New("rejected"), Outcome: "rejected"},
+			expectedOutcome: "rejected",
+			expectedErrors:  1,
+		},
+		{
+			name:            "an unclassified error counts as internal",
+			handlerErr:      errors.New("boom"),
+			expectedOutcome: "internal_error",
+			expectedErrors:  1,
+		},
+		{
+			name:            "a short-circuiting interceptor overrides the success outcome",
+			handlerOut:      &nexus.HandlerStartOperationResultSync[any]{},
+			setOverride:     interceptornexus.OutcomeRequestForwarded,
+			expectedOutcome: "request_forwarded",
+		},
+		{
+			name:            "an error outcome wins over the override",
+			handlerErr:      &interceptornexus.InterceptorError{Err: errors.New("forward failed"), Outcome: "forwarded_request_error"},
+			setOverride:     interceptornexus.OutcomeRequestForwarded,
+			expectedOutcome: "forwarded_request_error",
+			expectedErrors:  1,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+
+			telemetry := NewTelemetryInterceptor(nil, metricsHandler, log.NewNoopLogger(), nil, nil)
+			nextCalled := false
+			out, err := telemetry.InterceptNexusOutermost(
+				context.Background(),
+				input,
+				func(ctx context.Context, _ interceptornexus.InterceptorInput) (any, error) {
+					nextCalled = true
+					// Downstream interceptors read the published handler from the context.
+					require.NotNil(t, GetMetricsHandlerFromContext(ctx, log.NewNoopLogger()))
+					if tc.setOverride != "" {
+						interceptornexus.SetOutcomeOverride(ctx, tc.setOverride)
+					}
+					return tc.handlerOut, tc.handlerErr
+				},
+			)
+			require.True(t, nextCalled)
+			require.Equal(t, tc.handlerOut, out)
+			require.Equal(t, tc.handlerErr, err)
+
+			snapshot := capture.Snapshot()
+			namespaceTag := metrics.NamespaceTag(testNamespace)
+
+			outcomeTag := metrics.OutcomeTag(tc.expectedOutcome)
+			methodTag := metrics.NexusMethodTag("StartNexusOperation")
+			nexusRequests := snapshot[metrics.NexusRequests.Name()]
+			require.Len(t, nexusRequests, 1)
+			require.Equal(t, outcomeTag.Value, nexusRequests[0].Tags[outcomeTag.Key])
+			require.Equal(t, methodTag.Value, nexusRequests[0].Tags[methodTag.Key])
+			require.Equal(t, namespaceTag.Value, nexusRequests[0].Tags[namespaceTag.Key])
+			require.Equal(t, extraTag.Value, nexusRequests[0].Tags[extraTag.Key])
+			require.Len(t, snapshot[metrics.NexusLatency.Name()], 1)
+			require.Len(t, snapshot[metrics.NexusRequestErrors.Name()], tc.expectedErrors)
+
+			requests := snapshot[metrics.ServiceRequests.Name()]
+			require.Len(t, requests, 1)
+			require.Equal(t, "StartNexusOperation", requests[0].Tags[metrics.OperationTagName])
+			require.Equal(t, namespaceTag.Value, requests[0].Tags[namespaceTag.Key])
+			require.Len(t, snapshot[metrics.ServiceLatency.Name()], 1)
+		})
+	}
+}
+
+// The shared chain position records nothing; InterceptNexusOutermost is the only recorder.
+func TestTelemetryInterceptNexusRecordsNothing(t *testing.T) {
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
+	telemetry := NewTelemetryInterceptor(nil, metricsHandler, log.NewNoopLogger(), nil, nil)
+	nextCalled := false
+	_, err := telemetry.InterceptNexus(
+		context.Background(),
+		interceptornexus.NewStartOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil, interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{}),
+		func(context.Context, interceptornexus.InterceptorInput) (any, error) {
+			nextCalled = true
+			return nil, nil
+		},
+	)
+	require.NoError(t, err)
+	require.True(t, nextCalled)
+	require.Empty(t, capture.Snapshot())
+}
 
 const (
 	startWorkflow   = "StartWorkflowExecution"

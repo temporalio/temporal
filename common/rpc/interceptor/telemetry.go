@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/interceptor/logtags"
+	"go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/frontend/configs"
 	"google.golang.org/grpc"
@@ -47,7 +48,7 @@ var (
 	updateResponseMessageBody anypb.Any
 	_                         = updateResponseMessageBody.MarshalFrom(&updatepb.Response{})
 
-	_ grpc.UnaryServerInterceptor  = (*TelemetryInterceptor)(nil).UnaryIntercept
+	_ grpc.UnaryServerInterceptor  = (*TelemetryInterceptor)(nil).Intercept
 	_ grpc.StreamServerInterceptor = (*TelemetryInterceptor)(nil).StreamIntercept
 )
 
@@ -162,7 +163,7 @@ func telemetryOverrideOperationTag(fullName, operation string) string {
 	return operation
 }
 
-func (ti *TelemetryInterceptor) UnaryIntercept(
+func (ti *TelemetryInterceptor) Intercept(
 	ctx context.Context,
 	req any,
 	info *grpc.UnaryServerInfo,
@@ -202,6 +203,85 @@ func (ti *TelemetryInterceptor) UnaryIntercept(
 
 func AddTelemetryContext(ctx context.Context, metricsHandler metrics.Handler) context.Context {
 	return context.WithValue(ctx, metricsCtxKey, metricsHandler)
+}
+
+// InterceptNexus is a no-op as Nexus request telemetry is recorded by
+// [*TelemetryInterceptor.InterceptNexusOutermost]
+func (ti *TelemetryInterceptor) InterceptNexus(
+	ctx context.Context,
+	in nexus.InterceptorInput,
+	next nexus.HandlerFunc,
+) (any, error) {
+	return next(ctx, in)
+}
+
+func (ti *TelemetryInterceptor) InterceptNexusOutermost(
+	ctx context.Context,
+	in nexus.InterceptorInput,
+	next nexus.HandlerFunc,
+) (any, error) {
+	serviceHandler := ti.metricsHandler.WithTags(
+		metrics.OperationTag(in.MethodName()),
+		metrics.NamespaceTag(in.NamespaceName()),
+	)
+	ctx = AddTelemetryContext(ctx, serviceHandler)
+	metrics.ServiceRequests.With(serviceHandler).Record(1)
+
+	// Installed before calling next so that an inner interceptor that short-circuits the
+	// chain (e.g. request forwarding) can still override the derived success outcome.
+	ctx, outcomeOverride := nexus.NewOutcomeOverrideContext(ctx)
+
+	startTime := time.Now().UTC()
+	outcome, failed := nexus.OutcomeInternalError, true
+	defer func() {
+		ti.RecordLatencyMetrics(ctx, startTime, serviceHandler)
+		ti.recordNexusRequest(in, startTime, outcome, failed)
+	}()
+
+	out, err := next(ctx, in)
+	outcome, failed = nexus.Outcome(in, out, err), err != nil
+
+	// override outcome if its set - for request forwarding cases.
+	// error cases are captured by the wrapped InterceptorError
+	if err == nil {
+		if override := outcomeOverride.Get(); override != "" {
+			outcome = override
+		}
+	}
+	return out, err
+}
+
+func (ti *TelemetryInterceptor) recordNexusRequest(
+	in nexus.InterceptorInput,
+	startTime time.Time,
+	outcome string,
+	failed bool,
+) {
+	if _, ok := in.(nexus.CompleteOpInput); ok {
+		handler := ti.metricsHandler.WithTags(
+			metrics.NamespaceTag(in.NamespaceName()),
+			metrics.OutcomeTag(outcome),
+		)
+		handler.Counter(metrics.NexusCompletionRequests.Name()).Record(1)
+		handler.Histogram(metrics.NexusCompletionLatencyHistogram.Name(), metrics.Milliseconds).
+			Record(time.Since(startTime).Milliseconds())
+		return
+	}
+
+	handler := ti.metricsHandler.WithTags(
+		metrics.NamespaceTag(in.NamespaceName()),
+		metrics.NexusEndpointTag(in.EndpointName()),
+		metrics.NexusMethodTag(in.MethodName()),
+	)
+	handler = handler.WithTags(in.MetricTags()...)
+	// applied last so that a configured tag doesnt shadow the outcome
+	handler = handler.WithTags(metrics.OutcomeTag(outcome))
+
+	metrics.NexusRequests.With(handler).Record(1)
+	metrics.NexusLatency.With(handler).Record(time.Since(startTime))
+	if failed {
+		metrics.NexusRequestErrors.With(handler).Record(1)
+	}
 }
 
 func (ti *TelemetryInterceptor) RecordLatencyMetrics(ctx context.Context, startTime time.Time, metricsHandler metrics.Handler) {

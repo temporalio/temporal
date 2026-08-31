@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.temporal.io/server/service/frontend/configs"
 	"google.golang.org/grpc"
 )
@@ -89,6 +90,41 @@ type (
 
 var _ grpc.UnaryServerInterceptor = (*NamespaceRateLimitInterceptorImpl)(nil).Intercept
 var _ NamespaceRateLimitInterceptor = (*NamespaceRateLimitInterceptorImpl)(nil)
+
+func NewNamespaceRateLimitInterceptorWrapper(ni NamespaceRateLimitInterceptor) *NamespaceRateLimitInterceptorWrapper {
+	return &NamespaceRateLimitInterceptorWrapper{
+		ni: ni,
+	}
+}
+
+// NamespaceRateLimitInterceptorWrapper is a wrapper on namespace rate limiter
+// draft-review: should this interim be removed in favor of a lock step impl w/ deps
+type NamespaceRateLimitInterceptorWrapper struct {
+	ni NamespaceRateLimitInterceptor
+}
+
+func (n *NamespaceRateLimitInterceptorWrapper) Intercept(
+	ctx context.Context,
+	req any,
+	info *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
+) (resp any, err error) {
+	return n.ni.Intercept(ctx, req, info, handler)
+}
+
+func (n *NamespaceRateLimitInterceptorWrapper) InterceptNexus(
+	ctx context.Context,
+	in nexus.InterceptorInput,
+	next nexus.HandlerFunc,
+) (out any, retErr error) {
+	if err := n.ni.Allow(ctx, namespace.Name(in.NamespaceName()), in.APIName(), in.Header()); err != nil {
+		return nil, &nexus.InterceptorError{
+			Err:     err,
+			Outcome: "namespace_rate_limited",
+		}
+	}
+	return next(ctx, in)
+}
 
 func NewNamespaceRateLimitInterceptor(
 	namespaceRegistry namespace.Registry,
