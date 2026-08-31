@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -100,6 +101,14 @@ func (r *workflowRebuilderImpl) rebuild(
 		rebuildSpec.mutableState,
 	)
 	if err != nil {
+		return err
+	}
+	rebuildMutableState.GetExecutionInfo().MutableStateRebuildTime = timestamppb.New(r.shard.GetTimeSource().Now())
+	// The run deadline is recomputed from the original start time and the execution deadline is
+	// copied from the started event, so either can already be in the past and its refreshed
+	// timer task would fire at once. Re-anchor both deadlines at the current time and regenerate
+	// the timeout timer tasks from them, similarly to what reset does.
+	if err := rebuildMutableState.RefreshExpirationTimeoutTask(ctx); err != nil {
 		return err
 	}
 	return r.overwriteToDB(ctx, rebuildMutableState)
