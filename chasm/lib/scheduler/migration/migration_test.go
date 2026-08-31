@@ -58,7 +58,7 @@ func TestLegacyToCreateFromMigrationStateRequest(t *testing.T) {
 			},
 		},
 		LastCompletionResult: &commonpb.Payloads{
-			Payloads: []*commonpb.Payload{{Data: []byte("result")}},
+			Payloads: []*commonpb.Payload{{Data: []byte("result-1")}, {Data: []byte("result-2")}},
 		},
 		ContinuedFailure: &failurepb.Failure{Message: "last failure"},
 	}
@@ -77,7 +77,10 @@ func TestLegacyToCreateFromMigrationStateRequest(t *testing.T) {
 		},
 	}
 	searchAttrs := &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{"Attr": {Data: []byte("value")}}}
-	memo := &commonpb.Memo{Fields: map[string]*commonpb.Payload{"Memo": {Data: []byte("memo")}}}
+	memo := &commonpb.Memo{Fields: map[string]*commonpb.Payload{
+		"Memo":         {Data: []byte("memo")},
+		"ScheduleInfo": {Data: []byte("reserved")},
+	}}
 
 	req := LegacyToCreateFromMigrationStateRequest(newTestSchedule(), info, state, searchAttrs, memo, now)
 
@@ -120,6 +123,9 @@ func TestLegacyToCreateFromMigrationStateRequest(t *testing.T) {
 			require.Equal(t, "wf-2", start.WorkflowId)
 			require.Equal(t, "run-2", start.RunId)
 			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, start.Completed.Status)
+			require.Nil(t, start.NominalTime, "V1 recent actions do not retain pre-jitter time")
+			require.Equal(t, now.Add(-time.Hour), start.ActualTime.AsTime(), "schedule time is post-jitter")
+			require.Equal(t, now.Add(-time.Millisecond), start.StartTime.AsTime(), "actual time is the real start time")
 		default:
 			t.Fatalf("unexpected buffered start state: RunId=%q, Completed=%v", start.RunId, start.Completed)
 		}
@@ -138,12 +144,14 @@ func TestLegacyToCreateFromMigrationStateRequest(t *testing.T) {
 
 	// Last completion result
 	require.NotNil(t, migrationState.LastCompletionResult)
-	require.Equal(t, []byte("result"), migrationState.LastCompletionResult.Success.Data)
+	require.Equal(t, []byte("result-1"), migrationState.LastCompletionResult.Success.Data)
 	require.Equal(t, "last failure", migrationState.LastCompletionResult.Failure.Message)
 
-	// Search attributes and memo: user-defined SAs are preserved as-is.
+	// Search attributes and user memo are preserved, while V1's reserved memo is excluded.
 	require.Equal(t, searchAttrs.GetIndexedFields(), migrationState.SearchAttributes)
-	require.Equal(t, memo.GetFields(), migrationState.Memo)
+	require.Equal(t, memo.GetFields()["Memo"], migrationState.Memo["Memo"])
+	require.NotContains(t, migrationState.Memo, "ScheduleInfo")
+	require.Contains(t, memo.GetFields(), "ScheduleInfo", "migration must not mutate V1 memo")
 }
 
 func TestLegacyToCreateFromMigrationStateRequest_StripsSystemSearchAttributes(t *testing.T) {
@@ -325,6 +333,35 @@ func TestCHASMToLegacyStartScheduleArgs(t *testing.T) {
 		}
 	}
 	require.True(t, triggerFound)
+}
+
+func TestLastCompletionResultSelectsFirstPayload(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		payloads []*commonpb.Payload
+	}{
+		{name: "nil"},
+		{name: "empty", payloads: []*commonpb.Payload{}},
+		{name: "one", payloads: []*commonpb.Payload{{Data: []byte("one")}}},
+		{name: "multiple", payloads: []*commonpb.Payload{{Data: []byte("first")}, {Data: []byte("discarded")}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var legacy *commonpb.Payloads
+			if tc.name != "nil" {
+				legacy = &commonpb.Payloads{Payloads: tc.payloads}
+			}
+			v2 := convertLastCompletionLegacyToCHASM(legacy, nil)
+			v1, failure := convertLastCompletionCHASMToLegacy(v2)
+			require.Nil(t, failure)
+			if len(tc.payloads) == 0 {
+				require.Nil(t, v1)
+				return
+			}
+			require.Equal(t, tc.payloads[0], v2.Success)
+			require.Equal(t, []*commonpb.Payload{tc.payloads[0]}, v1.GetPayloads())
+			require.NotSame(t, tc.payloads[0], v1.GetPayloads()[0])
+		})
+	}
 }
 
 func TestCHASMToLegacyStartScheduleArgs_ExcludesAllowAllFromRunningWorkflows(t *testing.T) {

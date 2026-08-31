@@ -131,7 +131,8 @@ message BackfillerState {
 }
 
 // CHASM scheduler retains the payload data for the last completed workflow. Both
-// last success and failure are stored simultaneously.
+// last success and failure are stored simultaneously. Nexus callbacks carry one
+// success payload, so migrated V1 results retain their first payload.
 message LastCompletionResult {
   temporal.api.common.v1.Payload success = 1;
   temporal.api.failure.v1.Failure failure = 2;

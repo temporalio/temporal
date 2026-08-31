@@ -22,6 +22,11 @@ import (
 
 const legacyRecentActionCount = 10
 
+// legacyScheduleInfoMemoKey is populated by the V1 scheduler for its own
+// visibility data. CHASM manages that data independently, so it must not be
+// copied into the custom memo map during migration.
+const legacyScheduleInfoMemoKey = "ScheduleInfo"
+
 // LegacyToCreateFromMigrationStateRequest converts legacy (workflow-backed) scheduler
 // state to a CreateFromMigrationStateRequest proto. This is the primary V1-to-V2
 // migration function.
@@ -117,9 +122,22 @@ func LegacyToCreateFromMigrationStateRequest(
 			Backfillers:          backfillers,
 			LastCompletionResult: lastCompletion,
 			SearchAttributes:     customSearchAttributesForMigration(searchAttributes),
-			Memo:                 memo.GetFields(),
+			Memo:                 customMemoForMigration(memo),
 		},
 	}
+}
+
+// customMemoForMigration returns a cloned custom memo map without V1's reserved
+// ScheduleInfo entry. Keeping this local to migration avoids mutating the V1
+// workflow memo while preserving every user-provided key.
+func customMemoForMigration(memo *commonpb.Memo) map[string]*commonpb.Payload {
+	fields := memo.GetFields()
+	if len(fields) == 0 {
+		return nil
+	}
+	out := maps.Clone(fields)
+	delete(out, legacyScheduleInfoMemoKey)
+	return out
 }
 
 // customSearchAttributesForMigration returns only the user-defined search attributes
@@ -363,11 +381,12 @@ func convertRecentActionsToBufferedStarts(
 		}
 
 		bufferedStarts = append(bufferedStarts, &schedulespb.BufferedStart{
-			NominalTime: action.ScheduleTime,
-			ActualTime:  action.ActualTime,
-			StartTime:   action.ActualTime,
-			WorkflowId:  action.StartWorkflowResult.WorkflowId,
-			RunId:       action.StartWorkflowResult.RunId,
+			// V1 only retains the post-jitter scheduled time and the real start
+			// time. The pre-jitter nominal time cannot be reconstructed.
+			ActualTime: action.ScheduleTime,
+			StartTime:  action.ActualTime,
+			WorkflowId: action.StartWorkflowResult.WorkflowId,
+			RunId:      action.StartWorkflowResult.RunId,
 			RequestId: schedulerinternal.GenerateRequestID(
 				namespaceID,
 				scheduleID,
@@ -411,7 +430,10 @@ func convertBackfillsLegacyToCHASM(
 }
 
 // convertLastCompletionLegacyToCHASM transforms V1 completion result to V2 format.
-// V1 uses Payloads (plural), V2 uses single Payload.
+// V1 uses Payloads while CHASM callbacks carry one payload. Preserve the first
+// payload, which is the legacy migration behavior and the value normal workflow
+// callers decode as their single completion result. Any later V1 payloads are
+// intentionally discarded because CHASM/Nexus has no representation for them.
 func convertLastCompletionLegacyToCHASM(
 	result *commonpb.Payloads,
 	failure *failurepb.Failure,
