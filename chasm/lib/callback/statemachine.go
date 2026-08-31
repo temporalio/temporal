@@ -24,9 +24,9 @@ func callbackDestination(cb *callbackspb.Callback) (string, error) {
 			return "", fmt.Errorf("failed to parse URL: %v: %w", cb, err)
 		}
 		return u.Scheme + "://" + u.Host, nil
-	case *callbackspb.Callback_Worker_:
-		// Use a new "worker" scheme to avoid colliding with any other type of callback variant.
-		return "worker://" + variant.Worker.GetTaskQueueName(), nil
+	case *callbackspb.Callback_NexusHandler_:
+		// Use a new "nexus-handler" scheme to avoid colliding with any other type of callback variant.
+		return "nexus-handler://" + variant.NexusHandler.GetTaskQueueName(), nil
 	default:
 		// Only reachable if a newer server persisted a variant this build doesn't know about.
 		// Returning an error would fail the whole transaction that completed the execution,

@@ -1185,19 +1185,19 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_NonNexusCallbac
 		ErrMsg string
 	}{
 		{
-			Name: "worker",
+			Name: "nexus handler",
 			Callback: &commonpb.Callback{
-				Variant: &commonpb.Callback_Worker_{
-					Worker: &commonpb.Callback_Worker{
+				Variant: &commonpb.Callback_NexusHandler_{
+					NexusHandler: &commonpb.Callback_NexusHandler{
 						TaskQueueName: "completions-task-queue",
 						Service:       "HTTPAdapter",
 						Operation:     "DeliverAsWebhook",
 					},
 				},
 			},
-			// The validator rejects the Worker variant explicitly, before it reaches
+			// The validator rejects the NexusHandler variant explicitly, before it reaches
 			// the unknown-variant fallback.
-			ErrMsg: "worker callbacks are not enabled for this execution type",
+			ErrMsg: "NexusHandler callbacks are not enabled for this execution type",
 		},
 		{
 			Name:     "nil variant",

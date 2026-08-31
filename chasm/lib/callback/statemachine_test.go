@@ -34,11 +34,11 @@ func TestCallbackDestination(t *testing.T) {
 			wantErr: "failed to parse URL:",
 		},
 		{
-			name: "worker",
-			cb: &callbackspb.Callback{Variant: &callbackspb.Callback_Worker_{
-				Worker: &callbackspb.Callback_Worker{TaskQueueName: "completions-task-queue"},
+			name: "nexus handler",
+			cb: &callbackspb.Callback{Variant: &callbackspb.Callback_NexusHandler_{
+				NexusHandler: &callbackspb.Callback_NexusHandler{TaskQueueName: "completions-task-queue"},
 			}},
-			want: "worker://completions-task-queue",
+			want: "nexus-handler://completions-task-queue",
 		},
 		{
 			// A variant this server does not recognize, e.g. one persisted by a newer server.
@@ -60,15 +60,15 @@ func TestCallbackDestination(t *testing.T) {
 	}
 }
 
-// Scheduling a Worker callback succeeds and routes its invocation task to the target task queue.
-// Invoking it is not implemented yet, so the invocation task itself fails; scheduling must not,
-// since it runs as part of the execution's close transaction.
-func TestTransitionScheduled_Worker(t *testing.T) {
+// Scheduling a NexusHandler callback succeeds and routes its invocation task to the target task
+// queue. Invoking it is not implemented yet, so the invocation task itself fails; scheduling must
+// not, since it runs as part of the execution's close transaction.
+func TestTransitionScheduled_NexusHandler(t *testing.T) {
 	cb := &Callback{
 		CallbackState: &callbackspb.CallbackState{
 			Callback: &callbackspb.Callback{
-				Variant: &callbackspb.Callback_Worker_{
-					Worker: &callbackspb.Callback_Worker{TaskQueueName: "completions-task-queue"},
+				Variant: &callbackspb.Callback_NexusHandler_{
+					NexusHandler: &callbackspb.Callback_NexusHandler{TaskQueueName: "completions-task-queue"},
 				},
 			},
 		},
@@ -81,7 +81,7 @@ func TestTransitionScheduled_Worker(t *testing.T) {
 	require.Equal(t, callbackspb.CALLBACK_STATUS_SCHEDULED, cb.StateMachineState())
 	require.Len(t, mctx.Tasks, 1)
 	require.IsType(t, &callbackspb.InvocationTask{}, mctx.Tasks[0].Payload)
-	require.Equal(t, "worker://completions-task-queue", mctx.Tasks[0].Attributes.Destination)
+	require.Equal(t, "nexus-handler://completions-task-queue", mctx.Tasks[0].Attributes.Destination)
 }
 
 func TestValidTransitions(t *testing.T) {

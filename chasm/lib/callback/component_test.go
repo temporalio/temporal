@@ -32,10 +32,10 @@ func TestFromAPICallback(t *testing.T) {
 			},
 			persistable: true,
 		},
-		"worker": {
+		"nexus handler": {
 			callback: &commonpb.Callback{
-				Variant: &commonpb.Callback_Worker_{
-					Worker: &commonpb.Callback_Worker{
+				Variant: &commonpb.Callback_NexusHandler_{
+					NexusHandler: &commonpb.Callback_NexusHandler{
 						TaskQueueName: "completions-task-queue",
 						Service:       "HTTPAdapter",
 						Operation:     "DeliverAsWebhook",
@@ -130,11 +130,11 @@ func TestFromAPICallback(t *testing.T) {
 	})
 }
 
-// Asserts that CHASM Callbacks do not support the new Worker callback variant.
-func TestWorkerCallbacksNotSupported(t *testing.T) {
+// Asserts that CHASM Callbacks do not support the new NexusHandler callback variant.
+func TestNexusHandlerCallbacksNotSupported(t *testing.T) {
 	apiCb := &commonpb.Callback{
-		Variant: &commonpb.Callback_Worker_{
-			Worker: &commonpb.Callback_Worker{},
+		Variant: &commonpb.Callback_NexusHandler_{
+			NexusHandler: &commonpb.Callback_NexusHandler{},
 		},
 	}
 	chasmCB, err := FromAPICallback(apiCb)
@@ -150,5 +150,5 @@ func TestWorkerCallbacksNotSupported(t *testing.T) {
 	var unprocessableErr *queueserrors.UnprocessableTaskError
 	require.ErrorAs(t, err, &unprocessableErr)
 	require.ErrorContains(t, err, "unprocessable callback variant")
-	require.ErrorContains(t, err, "Callback_Worker_")
+	require.ErrorContains(t, err, "Callback_NexusHandler_")
 }

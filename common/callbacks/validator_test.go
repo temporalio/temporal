@@ -174,12 +174,12 @@ func TestValidateCallbacks(t *testing.T) {
 		require.Contains(t, err.Error(), "unknown callback variant")
 	})
 
-	// Confirm that Worker-variant callbacks are rejected by the callback.Validator,
+	// Confirm that NexusHandler-variant callbacks are rejected by the callback.Validator,
 	// preventing them from being accepted.
-	t.Run("WorkerVariantNotSupported", func(t *testing.T) {
+	t.Run("NexusHandlerVariantNotSupported", func(t *testing.T) {
 		cbs := []*commonpb.Callback{
-			{Variant: &commonpb.Callback_Worker_{
-				Worker: &commonpb.Callback_Worker{
+			{Variant: &commonpb.Callback_NexusHandler_{
+				NexusHandler: &commonpb.Callback_NexusHandler{
 					TaskQueueName: "completions-task-queue",
 					Service:       "HTTPAdapter",
 					Operation:     "DeliverAsWebhook",
@@ -189,7 +189,7 @@ func TestValidateCallbacks(t *testing.T) {
 		err := v.Validate(context.Background(), "ns", cbs)
 		var argError *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &argError)
-		require.ErrorContains(t, err, "worker callbacks are not enabled for this execution type")
+		require.ErrorContains(t, err, "NexusHandler callbacks are not enabled for this execution type")
 	})
 
 	t.Run("EmptyCallbacksNoError", func(t *testing.T) {

@@ -160,13 +160,13 @@ func (c *Callback) ToAPICallback() (*commonpb.Callback, error) {
 			},
 		}
 		return res, nil
-	case *callbackspb.Callback_Worker_:
-		res.Variant = &commonpb.Callback_Worker_{
-			Worker: &commonpb.Callback_Worker{
-				TaskQueueName: variant.Worker.GetTaskQueueName(),
-				Service:       variant.Worker.GetService(),
-				Operation:     variant.Worker.GetOperation(),
-				SourceContext: common.CloneProto(variant.Worker.GetSourceContext()),
+	case *callbackspb.Callback_NexusHandler_:
+		res.Variant = &commonpb.Callback_NexusHandler_{
+			NexusHandler: &commonpb.Callback_NexusHandler{
+				TaskQueueName: variant.NexusHandler.GetTaskQueueName(),
+				Service:       variant.NexusHandler.GetService(),
+				Operation:     variant.NexusHandler.GetOperation(),
+				SourceContext: common.CloneProto(variant.NexusHandler.GetSourceContext()),
 			},
 		}
 		return res, nil
@@ -190,16 +190,16 @@ func FromAPICallback(cb *commonpb.Callback) (*callbackspb.Callback, error) {
 			},
 		}
 		return res, nil
-	case *commonpb.Callback_Worker_:
+	case *commonpb.Callback_NexusHandler_:
 		// Conversion is implemented ahead of the rest of the feature, but is currently
 		// unreachable. If somehow this gets persisted, executing the callback will
 		// fail with an UnprocessableTaskError and retried until it is DLQ'd.
-		res.Variant = &callbackspb.Callback_Worker_{
-			Worker: &callbackspb.Callback_Worker{
-				TaskQueueName: variant.Worker.GetTaskQueueName(),
-				Service:       variant.Worker.GetService(),
-				Operation:     variant.Worker.GetOperation(),
-				SourceContext: common.CloneProto(variant.Worker.GetSourceContext()),
+		res.Variant = &callbackspb.Callback_NexusHandler_{
+			NexusHandler: &callbackspb.Callback_NexusHandler{
+				TaskQueueName: variant.NexusHandler.GetTaskQueueName(),
+				Service:       variant.NexusHandler.GetService(),
+				Operation:     variant.NexusHandler.GetOperation(),
+				SourceContext: common.CloneProto(variant.NexusHandler.GetSourceContext()),
 			},
 		}
 		return res, nil

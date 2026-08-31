@@ -96,10 +96,10 @@ func (v *validator) Validate(_ context.Context, namespaceName string, cbs []*com
 				)
 			}
 			variant.Nexus.Header = lowerCaseHeaders
-		case *commonpb.Callback_Worker_:
-			// Worker callbacks aren't supported anywhere. Later, we will refactor this validator
+		case *commonpb.Callback_NexusHandler_:
+			// NexusHandler callbacks aren't supported anywhere. Later, we will refactor this validator
 			// to make which callback kinds are supported configurable.
-			return serviceerror.NewInvalidArgument("worker callbacks are not enabled for this execution type")
+			return serviceerror.NewInvalidArgument("NexusHandler callbacks are not enabled for this execution type")
 		case *commonpb.Callback_Internal_:
 			// Internal callbacks are server-generated, so there is nothing to validate.
 			// CHASM has no Internal variant, so FromAPICallback rejects them with
