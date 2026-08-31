@@ -45,10 +45,11 @@ type (
 		// taskQueueType is the task queue type of the partition to route to. It can't be
 		// inferred from the request since these requests don't carry a task queue type.
 		taskQueueType string
-		// poll marks a long-poll read: the read partition is picked (which may hold a
-		// lease that has to be released afterwards) and the long poll timeout is used.
-		// Otherwise the write partition is picked with the regular timeout.
-		poll bool
+		// read picks the read partition, which may hold a lease that has to be released
+		// after the call, instead of the write partition.
+		read bool
+		// longPoll uses the long poll timeout instead of the regular one.
+		longPoll bool
 	}
 )
 
@@ -128,9 +129,9 @@ var (
 		"matching.AddWorkflowTask":       {taskQueueType: "WORKFLOW"},
 		"matching.QueryWorkflow":         {taskQueueType: "WORKFLOW"},
 		"matching.DispatchNexusTask":     {taskQueueType: "NEXUS"},
-		"matching.PollActivityTaskQueue": {taskQueueType: "ACTIVITY", poll: true},
-		"matching.PollWorkflowTaskQueue": {taskQueueType: "WORKFLOW", poll: true},
-		"matching.PollNexusTaskQueue":    {taskQueueType: "NEXUS", poll: true},
+		"matching.PollActivityTaskQueue": {taskQueueType: "ACTIVITY", read: true, longPoll: true},
+		"matching.PollWorkflowTaskQueue": {taskQueueType: "WORKFLOW", read: true, longPoll: true},
+		"matching.PollNexusTaskQueue":    {taskQueueType: "NEXUS", read: true, longPoll: true},
 	}
 	// Fields to ignore when looking for the routing fields in a request object.
 	ignoreField = map[string]bool{
@@ -447,8 +448,10 @@ func makeLoadBalancedFields(reqType reflect.Type, lb loadBalancedMethod, fields 
 	fields["ForwardedSource"] = forwardedSource.path
 	fields["CopyRequest"] = makeCopyRequest(reqType, tq.path)
 
-	if lb.poll {
+	if lb.longPoll {
 		fields["LongPoll"] = "LongPoll"
+	}
+	if lb.read {
 		fields["PickClient"] = fmt.Sprintf(`client, release, err := c.pickClientForRead(%s, p, loadBalance, pc)
 	if err != nil {
 		return nil, err
