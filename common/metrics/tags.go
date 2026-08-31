@@ -64,7 +64,6 @@ const (
 	namespaceAllValue                              = "all"
 	clientName                                     = "client_name"
 	isInternal                                     = "is_internal"
-	activityTargetingMethod                        = "activity_targeting_method"
 	unknownValue                                   = "_unknown_"
 	totalMetricSuffix                              = "_total"
 	tagExcludedValue                               = "_tag_excluded_"
@@ -225,11 +224,6 @@ func ActivityTypeTag(value string) Tag {
 		value = unknownValue
 	}
 	return Tag{Key: activityType, Value: value}
-}
-
-// ActivityTargetingMethodTag returns a tag indicating how the activity was targeted: "id" or "type".
-func ActivityTargetingMethodTag(value string) Tag {
-	return Tag{Key: activityTargetingMethod, Value: value}
 }
 
 // CommandTypeTag returns a new command type tag.
