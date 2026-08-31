@@ -513,7 +513,7 @@ func convertBackfillersCHASMToLegacy(
 		if request := backfiller.GetBackfillRequest(); request != nil {
 			backfill := common.CloneProto(request)
 			lastProcessed := backfiller.GetLastProcessedTime()
-			if lastProcessed != nil && (lastProcessed.GetSeconds() != 0 || lastProcessed.GetNanos() != 0) {
+			if lastProcessed != nil {
 				backfill.StartTime = common.CloneProto(lastProcessed)
 			} else {
 				backfill.StartTime = timestamppb.New(request.GetStartTime().AsTime().Add(-time.Millisecond))
