@@ -179,6 +179,9 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			handler := &invocationTaskHandler{
 				config: &Config{
 					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
+					InternalCallbackSameNamespaceArchetypes: func() []string {
+						return []string{chasm.SchedulerArchetype}
+					},
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
@@ -335,16 +338,33 @@ func TestProcessBackoffTask(t *testing.T) {
 }
 
 func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
-	dummyRef := persistencespb.ChasmComponentRef{
-		NamespaceId: "namespace-id",
-		BusinessId:  "business-id",
-		RunId:       "run-id",
-		ArchetypeId: 1234,
+	newRef := func(namespaceID, businessID string, archetypeID chasm.ArchetypeID) *persistencespb.ChasmComponentRef {
+		return &persistencespb.ChasmComponentRef{
+			NamespaceId: namespaceID,
+			BusinessId:  businessID,
+			RunId:       "run-id",
+			ArchetypeId: archetypeID,
+		}
 	}
+	dummyRef := newRef("namespace-id", "business-id", 1234)
 
 	serializedRef, err := dummyRef.Marshal()
 	require.NoError(t, err)
 	encodedRef := base64.RawURLEncoding.EncodeToString(serializedRef)
+	crossNamespaceRef := newRef("other-namespace-id", "business-id", 1234)
+	serializedCrossNamespaceRef, err := crossNamespaceRef.Marshal()
+	require.NoError(t, err)
+	encodedCrossNamespaceRef := base64.RawURLEncoding.EncodeToString(serializedCrossNamespaceRef)
+	crossNamespaceSchedulerRef := newRef("other-namespace-id", "business-id", chasm.SchedulerArchetypeID)
+	serializedCrossNamespaceSchedulerRef, err := crossNamespaceSchedulerRef.Marshal()
+	require.NoError(t, err)
+	encodedCrossNamespaceSchedulerRef := base64.RawURLEncoding.EncodeToString(serializedCrossNamespaceSchedulerRef)
+	crossNamespaceSchedulerEnvelope, err := chasm.GenerateNexusCallback(serializedCrossNamespaceSchedulerRef, "request-id", true)
+	require.NoError(t, err)
+	encodedCrossNamespaceSchedulerEnvelope := crossNamespaceSchedulerEnvelope.GetNexus().GetHeader()[commonnexus.CallbackTokenHeader]
+	invalidRef := newRef("namespace-id", "", 1234)
+	serializedInvalidRef, err := invalidRef.Marshal()
+	require.NoError(t, err)
 	dummyTime := time.Now().UTC()
 
 	createPayloadBytes := func(data []byte) *commonpb.Payload {
@@ -499,6 +519,65 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
 			},
 		},
+		{
+			name: "invalid-component-ref",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) resource.HistoryClient {
+				return historyservicemock.NewMockHistoryServiceClient(ctrl)
+			},
+			completion: nexusrpc.CompleteOperationOptions{
+				Result: createPayloadBytes([]byte("result-data")),
+			},
+			headerValue: base64.RawURLEncoding.EncodeToString(serializedInvalidRef),
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				require.ErrorContains(t, err, "internal error, reference-id:")
+				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
+			},
+		},
+		{
+			name: "cross-namespace-non-scheduler-token",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) resource.HistoryClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().CompleteNexusOperationChasm(gomock.Any(), gomock.Any()).
+					Return(&historyservice.CompleteNexusOperationChasmResponse{}, nil)
+				return client
+			},
+			completion: nexusrpc.CompleteOperationOptions{
+				Result: createPayloadBytes([]byte("result-data")),
+			},
+			headerValue: encodedCrossNamespaceRef,
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				require.NoError(t, err)
+				require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, cb.Status)
+			},
+		},
+		{
+			name: "cross-namespace-scheduler-legacy-token",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) resource.HistoryClient {
+				return historyservicemock.NewMockHistoryServiceClient(ctrl)
+			},
+			completion: nexusrpc.CompleteOperationOptions{
+				Result: createPayloadBytes([]byte("result-data")),
+			},
+			headerValue: encodedCrossNamespaceSchedulerRef,
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				require.ErrorContains(t, err, "internal error, reference-id:")
+				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
+			},
+		},
+		{
+			name: "cross-namespace-scheduler-enveloped-token",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) resource.HistoryClient {
+				return historyservicemock.NewMockHistoryServiceClient(ctrl)
+			},
+			completion: nexusrpc.CompleteOperationOptions{
+				Result: createPayloadBytes([]byte("result-data")),
+			},
+			headerValue: encodedCrossNamespaceSchedulerEnvelope,
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				require.ErrorContains(t, err, "internal error, reference-id:")
+				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
+			},
+		},
 	}
 
 	for _, tc := range cases {
@@ -536,6 +615,9 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			handler := &invocationTaskHandler{
 				config: &Config{
 					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
+					InternalCallbackSameNamespaceArchetypes: func() []string {
+						return []string{chasm.SchedulerArchetype}
+					},
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
