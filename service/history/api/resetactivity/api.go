@@ -7,7 +7,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -21,6 +20,7 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 ) (resp *historyservice.ResetActivityResponse, retError error) {
 	request := req.GetFrontendRequest()
+	var activityMetrics []workflow.ActivityMetricsInfo
 
 	workflowKey := definition.NewWorkflowKey(
 		req.NamespaceId,
@@ -34,6 +34,10 @@ func Invoke(
 		workflowKey,
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
+			if !mutableState.IsWorkflowExecutionRunning() {
+				return nil, consts.ErrWorkflowCompleted
+			}
+
 			var activityIDs []string
 			switch a := request.GetActivity().(type) {
 			case *workflowservice.ResetActivityRequest_Id:
@@ -56,6 +60,10 @@ func Invoke(
 			}
 
 			for _, activityId := range activityIDs {
+				activityInfo, activityFound := mutableState.GetActivityByActivityID(activityId)
+				if !activityFound {
+					return nil, consts.ErrActivityNotFound
+				}
 				if err := workflow.ResetActivity(
 					ctx,
 					shardContext, mutableState, activityId,
@@ -64,6 +72,7 @@ func Invoke(
 				); err != nil {
 					return nil, err
 				}
+				activityMetrics = append(activityMetrics, workflow.NewActivityMetricsInfo(mutableState, activityInfo))
 			}
 			return &api.UpdateWorkflowAction{
 				Noop:               false,
@@ -79,17 +88,8 @@ func Invoke(
 		return nil, err
 	}
 
-	targetingMethod := "type"
-	if _, ok := req.GetFrontendRequest().GetActivity().(*workflowservice.ResetActivityRequest_Id); ok {
-		targetingMethod = "id"
-	} else if _, ok := req.GetFrontendRequest().GetActivity().(*workflowservice.ResetActivityRequest_MatchAll); ok {
-		targetingMethod = "match_all"
-	}
-	if ns, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(req.NamespaceId)); err == nil {
-		metrics.ActivityReset.With(shardContext.GetMetricsHandler().WithTags(
-			metrics.NamespaceTag(ns.Name().String()),
-			metrics.ActivityTargetingMethodTag(targetingMethod),
-		)).Record(1)
+	for _, info := range activityMetrics {
+		metrics.ActivityReset.With(info.MetricsHandler(shardContext, metrics.ActivityResetScope)).Record(1)
 	}
 
 	return &historyservice.ResetActivityResponse{}, nil
