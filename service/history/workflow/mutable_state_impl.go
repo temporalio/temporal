@@ -119,6 +119,9 @@ var (
 	// ErrPinnedWorkflowCannotTransition indicates attempt to start a transition on a pinned workflow
 	ErrPinnedWorkflowCannotTransition = serviceerror.NewInternal("unable to start transition on pinned workflows")
 
+	errUpdateNotFound    = serviceerror.NewNotFound("update not found")
+	errUpdateNotComplete = serviceerror.NewInternal("update has not completed")
+
 	timeZeroUTC = time.Unix(0, 0).UTC()
 )
 
@@ -778,6 +781,13 @@ func (ms *MutableStateImpl) GetNexusUpdateCompletion(
 	cevent, err := ms.getUpdateOutcomeEvent(ctx, updateID)
 	var outcome *updatepb.Outcome
 	if err != nil {
+		// If the completion event ID is recorded but the read failed for a reason other than the
+		// event being absent, the failure is likely transient. Return it so the caller can retry.
+		if !errors.Is(err, errUpdateNotFound) &&
+			!errors.Is(err, errUpdateNotComplete) &&
+			!common.IsNotFoundError(err) {
+			return nexusrpc.CompleteOperationOptions{}, err
+		}
 		// If the workflow is complete but the update outcome is missing we need to respond to all callbacks
 		ce, errCE := ms.GetCompletionEvent(ctx)
 		if errors.Is(errCE, ErrMissingWorkflowCompletionEvent) {
@@ -1557,16 +1567,17 @@ func (ms *MutableStateImpl) getUpdateOutcomeEvent(
 	updateID string,
 ) (*historypb.HistoryEvent, error) {
 	if ms.executionInfo.UpdateInfos == nil {
-		return nil, serviceerror.NewNotFound("update not found")
+		return nil, errUpdateNotFound
 	}
 	ui, ok := ms.executionInfo.UpdateInfos[updateID]
 	if !ok {
-		return nil, serviceerror.NewNotFound("update not found")
+		return nil, errUpdateNotFound
 	}
 	completion := ui.GetCompletion()
 	if completion == nil {
-		return nil, serviceerror.NewInternal("update has not completed")
+		return nil, errUpdateNotComplete
 	}
+
 	currentBranchToken, version, err := ms.getCurrentBranchTokenAndEventVersion(completion.EventId)
 	if err != nil {
 		return nil, err
