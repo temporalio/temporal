@@ -87,6 +87,7 @@ func LegacyToCreateFromMigrationStateRequest(
 
 	runningBufferedStarts := convertRunningWorkflowsToBufferedStarts(
 		info.RunningWorkflows,
+		info.RecentActions,
 		state.NamespaceId,
 		state.ScheduleId,
 		state.ConflictToken,
@@ -301,6 +302,7 @@ func convertBufferedStartsLegacyToCHASM(
 // RunId and StartTime populated, and Completed field empty.
 func convertRunningWorkflowsToBufferedStarts(
 	runningWorkflows []*commonpb.WorkflowExecution,
+	recentActions []*schedulepb.ScheduleActionResult,
 	namespaceID, scheduleID string,
 	conflictToken int64,
 	migrationTime time.Time,
@@ -309,14 +311,33 @@ func convertRunningWorkflowsToBufferedStarts(
 		return nil
 	}
 
+	// V1 RunningWorkflows carries only identifiers. Use the matching RecentAction
+	// when it is still retained; otherwise migration time is the only fallback.
+	recentActionsByRunID := make(map[string]*schedulepb.ScheduleActionResult, len(recentActions))
+	for _, action := range recentActions {
+		if runID := action.GetStartWorkflowResult().GetRunId(); runID != "" {
+			recentActionsByRunID[runID] = action
+		}
+	}
+
 	bufferedStarts := make([]*schedulespb.BufferedStart, len(runningWorkflows))
 	for i, wf := range runningWorkflows {
+		actualTime := timestamppb.New(migrationTime)
+		startTime := timestamppb.New(migrationTime)
+		if action := recentActionsByRunID[wf.GetRunId()]; action != nil {
+			if action.GetScheduleTime() != nil {
+				actualTime = common.CloneProto(action.GetScheduleTime())
+			}
+			if action.GetActualTime() != nil {
+				startTime = common.CloneProto(action.GetActualTime())
+			}
+		}
+
 		bufferedStarts[i] = &schedulespb.BufferedStart{
-			NominalTime: timestamppb.New(migrationTime),
-			ActualTime:  timestamppb.New(migrationTime),
-			StartTime:   timestamppb.New(migrationTime),
-			WorkflowId:  wf.WorkflowId,
-			RunId:       wf.RunId,
+			ActualTime: actualTime,
+			StartTime:  startTime,
+			WorkflowId: wf.WorkflowId,
+			RunId:      wf.RunId,
 			// RequestId will be used with AttachRequestID to register Nexus
 			// callbacks for tracking workflow completion after migration.
 			// Include the RunId in the tag to ensure each running workflow
@@ -430,10 +451,8 @@ func convertBackfillsLegacyToCHASM(
 }
 
 // convertLastCompletionLegacyToCHASM transforms V1 completion result to V2 format.
-// V1 uses Payloads while CHASM callbacks carry one payload. Preserve the first
-// payload, which is the legacy migration behavior and the value normal workflow
-// callers decode as their single completion result. Any later V1 payloads are
-// intentionally discarded because CHASM/Nexus has no representation for them.
+// V1 stores a list of payloads. CHASM stores the single payload a Nexus callback
+// carries, so only the first V1 payload survives.
 func convertLastCompletionLegacyToCHASM(
 	result *commonpb.Payloads,
 	failure *failurepb.Failure,

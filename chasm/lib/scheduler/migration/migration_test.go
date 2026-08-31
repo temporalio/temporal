@@ -337,31 +337,54 @@ func TestCHASMToLegacyStartScheduleArgs(t *testing.T) {
 
 func TestLastCompletionResultSelectsFirstPayload(t *testing.T) {
 	for _, tc := range []struct {
-		name     string
-		payloads []*commonpb.Payload
+		name   string
+		legacy *commonpb.Payloads
 	}{
 		{name: "nil"},
-		{name: "empty", payloads: []*commonpb.Payload{}},
-		{name: "one", payloads: []*commonpb.Payload{{Data: []byte("one")}}},
-		{name: "multiple", payloads: []*commonpb.Payload{{Data: []byte("first")}, {Data: []byte("discarded")}}},
+		{name: "empty", legacy: &commonpb.Payloads{}},
+		{name: "one", legacy: &commonpb.Payloads{Payloads: []*commonpb.Payload{{Data: []byte("one")}}}},
+		{name: "multiple", legacy: &commonpb.Payloads{Payloads: []*commonpb.Payload{{Data: []byte("first")}, {Data: []byte("discarded")}}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			var legacy *commonpb.Payloads
-			if tc.name != "nil" {
-				legacy = &commonpb.Payloads{Payloads: tc.payloads}
-			}
-			v2 := convertLastCompletionLegacyToCHASM(legacy, nil)
+			v2 := convertLastCompletionLegacyToCHASM(tc.legacy, nil)
 			v1, failure := convertLastCompletionCHASMToLegacy(v2)
 			require.Nil(t, failure)
-			if len(tc.payloads) == 0 {
+			if len(tc.legacy.GetPayloads()) == 0 {
 				require.Nil(t, v1)
 				return
 			}
-			require.Equal(t, tc.payloads[0], v2.Success)
-			require.Equal(t, []*commonpb.Payload{tc.payloads[0]}, v1.GetPayloads())
-			require.NotSame(t, tc.payloads[0], v1.GetPayloads()[0])
+			first := tc.legacy.GetPayloads()[0]
+			require.Equal(t, first, v2.Success)
+			require.Equal(t, []*commonpb.Payload{first}, v1.GetPayloads())
+			require.NotSame(t, first, v1.GetPayloads()[0])
 		})
 	}
+}
+
+func TestConvertRunningWorkflowsToBufferedStarts_UsesRecentActionTimes(t *testing.T) {
+	migrationTime := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+	scheduleTime := timestamppb.New(migrationTime.Add(-time.Minute))
+	startTime := timestamppb.New(migrationTime.Add(-30 * time.Second))
+	starts := convertRunningWorkflowsToBufferedStarts(
+		[]*commonpb.WorkflowExecution{
+			{WorkflowId: "matched", RunId: "matched-run"},
+			{WorkflowId: "unmatched", RunId: "unmatched-run"},
+		},
+		[]*schedulepb.ScheduleActionResult{{
+			ScheduleTime:        scheduleTime,
+			ActualTime:          startTime,
+			StartWorkflowResult: &commonpb.WorkflowExecution{WorkflowId: "matched", RunId: "matched-run"},
+		}},
+		"namespace-id", "schedule-id", 1, migrationTime,
+	)
+
+	require.Len(t, starts, 2)
+	require.Nil(t, starts[0].NominalTime)
+	require.Equal(t, scheduleTime, starts[0].ActualTime)
+	require.Equal(t, startTime, starts[0].StartTime)
+	require.Nil(t, starts[1].NominalTime)
+	require.Equal(t, migrationTime, starts[1].ActualTime.AsTime())
+	require.Equal(t, migrationTime, starts[1].StartTime.AsTime())
 }
 
 func TestCHASMToLegacyStartScheduleArgs_ExcludesAllowAllFromRunningWorkflows(t *testing.T) {
@@ -524,7 +547,7 @@ func TestConvertRunningWorkflowsToBufferedStarts_UniqueRequestIDs(t *testing.T) 
 	}
 
 	starts := convertRunningWorkflowsToBufferedStarts(
-		running, "ns-id", "sched-id", 1, now,
+		running, nil, "ns-id", "sched-id", 1, now,
 	)
 	require.Len(t, starts, 3)
 
