@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/consts"
@@ -19,6 +20,7 @@ type (
 		activeExecutor     Executor
 		standbyExecutor    Executor
 		logger             log.Logger
+		metricsHandler     metrics.Handler
 		testHooks          testhooks.TestHooks
 	}
 )
@@ -29,6 +31,7 @@ func NewActiveStandbyExecutor(
 	activeExecutor Executor,
 	standbyExecutor Executor,
 	logger log.Logger,
+	metricsHandler metrics.Handler,
 	testHooks testhooks.TestHooks,
 ) Executor {
 	return &activeStandbyExecutor{
@@ -37,6 +40,7 @@ func NewActiveStandbyExecutor(
 		activeExecutor:     activeExecutor,
 		standbyExecutor:    standbyExecutor,
 		logger:             logger,
+		metricsHandler:     metricsHandler,
 		testHooks:          testHooks,
 	}
 }
@@ -51,6 +55,10 @@ func (e *activeStandbyExecutor) Execute(
 		testhooks.HistoryPassiveReplicationTest,
 		namespaceID,
 	); ok && testHook.ShouldExecuteTaskAsPassive(executable.GetTask()) {
+		metrics.HistoryPassiveReplicationTestHookCounter.With(e.metricsHandler).Record(
+			1,
+			metrics.OperationTag("ActiveStandbyExecutor"),
+		)
 		return e.executeForPassiveReplicationTest(ctx, executable)
 	}
 	return e.executeNormally(ctx, executable, namespaceID)
@@ -75,7 +83,11 @@ func (e *activeStandbyExecutor) executeForPassiveReplicationTest(
 	if !errors.Is(response.ExecutionErr, consts.ErrTaskRetry) {
 		return response
 	}
-	return e.activeExecutor.Execute(ctx, executable)
+	response = e.activeExecutor.Execute(ctx, executable)
+	if response.ExecutionErr != nil {
+		return response
+	}
+	return e.executeStandby(ctx, executable)
 }
 
 func (e *activeStandbyExecutor) executeStandby(

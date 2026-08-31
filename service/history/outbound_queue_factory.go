@@ -251,6 +251,7 @@ func (f *outboundQueueFactory) CreateQueue(
 		activeExecutor,
 		standbyExecutor,
 		logger,
+		metricsHandler,
 		f.TestHooks,
 	)
 

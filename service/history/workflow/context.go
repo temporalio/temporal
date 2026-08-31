@@ -822,6 +822,10 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		testhooks.HistoryPassiveReplicationTest,
 		namespace.ID(c.workflowKey.NamespaceID),
 	); ok {
+		metrics.HistoryPassiveReplicationTestHookCounter.With(c.metricsHandler).Record(
+			1,
+			metrics.OperationTag("WorkflowContext"),
+		)
 		request := &TestHookUpdateWorkflowExecutionRequest{
 			WorkflowContext:                 c,
 			ShardContext:                    shardContext,

@@ -148,6 +148,7 @@ func (f *transferQueueFactory) CreateQueue(
 		activeExecutor,
 		standbyExecutor,
 		logger,
+		metricsHandler,
 		f.TestHooks,
 	)
 	if f.ExecutorWrapper != nil {

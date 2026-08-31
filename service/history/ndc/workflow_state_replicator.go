@@ -245,6 +245,10 @@ func (r *WorkflowStateReplicatorImpl) getWorkflowContext(
 		namespaceID,
 	)
 	if ok && hook.UseTransientWorkflowContextForReplication(ctx) {
+		metrics.HistoryPassiveReplicationTestHookCounter.With(r.shardContext.GetMetricsHandler()).Record(
+			1,
+			metrics.OperationTag("ReplicateVersionedTransition"),
+		)
 		wfCtx := workflow.NewContext(
 			r.shardContext.GetConfig(),
 			definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
