@@ -13,7 +13,9 @@ import "temporal/api/workflowservice/v1/request_response.proto";
 option go_package = "go.temporal.io/server/api/schedule/v1;schedule";
 
 message BufferedStart {
-  // Nominal (pre-jitter) and Actual (post-jitter) time of action
+  // Nominal (pre-jitter) and Actual (post-jitter) time of action. NominalTime
+  // may be unset for a completed action migrated from V1, because V1 recent
+  // actions retain only the post-jitter schedule time and real start time.
   google.protobuf.Timestamp nominal_time = 1;
   google.protobuf.Timestamp actual_time = 2;
   // Desired time is usually nil, which should be interpreted as == actual time, but for starts
