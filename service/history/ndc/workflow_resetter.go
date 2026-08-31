@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/api/nexusclose"
 	"go.temporal.io/server/service/history/api/updateworkflowoptions"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
@@ -160,6 +161,12 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		}
 	} else if currentMutableState := currentWorkflow.GetMutableState(); currentMutableState.IsWorkflowExecutionRunning() {
 		currentMutableState.GetExecutionInfo().WorkflowWasReset = true
+		// Apply the Nexus auto-close policy before the terminate event is added: reset's termination
+		// goes through workflow.TerminateWorkflow rather than the terminate API, so this is the only
+		// close hook the superseded run gets.
+		if err := r.applyNexusResetPolicy(ctx, currentWorkflow, baseRunID, baseRebuildLastEventID); err != nil {
+			return err
+		}
 		if err := r.terminateWorkflow(
 			currentMutableState,
 			resetReason,
@@ -204,6 +211,12 @@ func (r *workflowResetterImpl) ResetWorkflow(
 			return nil
 		}
 	} else {
+		// The superseded run is already closed, so its own close hook has applied the policy. Only the
+		// abort half is left: a detached auto-close cancellation from that close keeps retrying, and
+		// must not outlive the reset for an operation the reset run re-adopts.
+		if err := r.applyNexusResetPolicy(ctx, currentWorkflow, baseRunID, baseRebuildLastEventID); err != nil {
+			return err
+		}
 		reapplyEventsFn = func(ctx context.Context, resetMutableState historyi.MutableState) error {
 			_, err := r.reapplyContinueAsNewWorkflowEvents(
 				ctx,
@@ -707,6 +720,29 @@ func (r *workflowResetterImpl) terminateWorkflow(
 		consts.IdentityResetter,
 		false,
 		nil, // No links necessary.
+	)
+}
+
+// applyNexusResetPolicy applies the Nexus auto-close policy to a run that the reset supersedes.
+// Only the base run's operations can be adopted by the reset run (the rebuild replays the base
+// branch), so any other run in the chain gets an adoption cutoff of 0, i.e. all of its operations
+// count as dropped.
+func (r *workflowResetterImpl) applyNexusResetPolicy(
+	ctx context.Context,
+	supersededWorkflow Workflow,
+	baseRunID string,
+	baseRebuildLastEventID int64,
+) error {
+	ms := supersededWorkflow.GetMutableState()
+	adoptedThroughEventID := int64(0)
+	if ms.GetExecutionState().GetRunId() == baseRunID {
+		adoptedThroughEventID = baseRebuildLastEventID
+	}
+	return nexusclose.OnWorkflowReset(
+		ctx,
+		ms,
+		nexusclose.NexusOperationAutoClosePolicy(r.shardContext.GetConfig().NexusOperationAutoClosePolicy()),
+		adoptedThroughEventID,
 	)
 }
 

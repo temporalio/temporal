@@ -249,6 +249,52 @@ func (s *NexusCancelPolicyTestSuite) TestOperationScheduleToCloseTimeout_Deliver
 	}, 20*time.Second, 200*time.Millisecond)
 }
 
+// --- Workflow reset ------------------------------------------------------------------------------
+
+// Reset to a point before the operation was scheduled. NexusOperationScheduled is never
+// cherry-picked, so the reset run never rebuilds the operation and its handler is left with no
+// caller — the same orphan the policy exists to clean up, so the cancel is delivered.
+func (s *NexusCancelPolicyTestSuite) TestResetDropsOperation_Delivered() {
+	cancelCh := make(chan struct{}, 1)
+	env, taskQueue, endpointName := s.nexusCancelEnv(cancelCh)
+
+	run := nexusCancelStartSchedule(s.T(), env, endpointName, client.StartWorkflowOptions{
+		TaskQueue:           taskQueue,
+		WorkflowTaskTimeout: 10 * time.Second,
+	}, 0)
+	nexusCancelAwaitOpState(s.T(), env, run, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED)
+
+	// The first WorkflowTaskCompleted is the one that scheduled the operation, so rebuilding through
+	// its predecessor drops the operation.
+	nexusCancelReset(s.T(), env, run, nexusCancelWFTCompletedEventID(s.T(), env, run, true))
+
+	requireCancelDelivered(s.T(), cancelCh)
+}
+
+// Reset to a point after the operation started. The reset run rebuilds it with the same request ID
+// and operation token (the handler's callback token still resolves to the new run), so the handler
+// is not orphaned and the policy must not fire.
+func (s *NexusCancelPolicyTestSuite) TestResetAdoptsOperation_NotDelivered() {
+	cancelCh := make(chan struct{}, 1)
+	env, taskQueue, endpointName := s.nexusCancelEnv(cancelCh)
+
+	run := nexusCancelStartSchedule(s.T(), env, endpointName, client.StartWorkflowOptions{
+		TaskQueue:           taskQueue,
+		WorkflowTaskTimeout: 10 * time.Second,
+	}, 0)
+	nexusCancelAwaitOpState(s.T(), env, run, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED)
+
+	// NexusOperationStarted schedules a workflow task; completing it with no commands gives a reset
+	// point that sits after the operation started.
+	nexusCancelPollAndRespondEmpty(s.T(), env, taskQueue)
+	nexusCancelReset(s.T(), env, run, nexusCancelWFTCompletedEventID(s.T(), env, run, false))
+
+	requireCancelNotDelivered(s.T(), cancelCh, 3*time.Second)
+
+	// The operation is carried into the reset run rather than abandoned.
+	nexusCancelAwaitOpState(s.T(), env, run, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED)
+}
+
 // --- Standalone (SANO) under REQUEST_CANCEL -------------------------------------------------------
 
 // Standalone op terminated — per the design this should notify the handler.

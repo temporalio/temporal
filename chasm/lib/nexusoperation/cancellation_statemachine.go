@@ -122,3 +122,32 @@ var TransitionCancellationSucceeded = chasm.NewTransition(
 		return nil
 	},
 )
+
+// EventCancellationAborted is triggered when a pending cancellation is called off before it
+// resolved. Used by workflow reset: a system-initiated (auto-close) cancellation only exists
+// because the caller was force-closed, so if the reset run adopts the operation the close is being
+// undone and the cancellation must stop before it kills a handler the new run depends on.
+type EventCancellationAborted struct {
+	Failure *failurepb.Failure
+}
+
+// TransitionCancellationAborted moves a still-pending cancellation to a terminal state. FAILED is
+// reused rather than adding a status: the outcome the caller cares about is "no further attempts",
+// and the task validators gate on SCHEDULED/BACKING_OFF, so any terminal status invalidates the
+// in-flight invocation and backoff tasks alike.
+var TransitionCancellationAborted = chasm.NewTransition(
+	[]nexusoperationpb.CancellationStatus{
+		nexusoperationpb.CANCELLATION_STATUS_UNSPECIFIED,
+		nexusoperationpb.CANCELLATION_STATUS_SCHEDULED,
+		nexusoperationpb.CANCELLATION_STATUS_BACKING_OFF,
+	},
+	nexusoperationpb.CANCELLATION_STATUS_FAILED,
+	func(c *Cancellation, ctx chasm.MutableContext, event EventCancellationAborted) error {
+		currentTime := ctx.Now(c)
+		c.LastAttemptCompleteTime = timestamppb.New(currentTime)
+		c.LastAttemptFailure = event.Failure
+		c.NextAttemptScheduleTime = nil
+		// Terminal state - no tasks to emit.
+		return nil
+	},
+)

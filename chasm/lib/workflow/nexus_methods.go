@@ -299,6 +299,77 @@ func (w *Workflow) RequestCancelPendingNexusOperations(ctx chasm.MutableContext)
 	return nil
 }
 
+// OnWorkflowReset applies the Nexus auto-close policy to a run that a workflow reset is superseding.
+//
+// A reset is a force-close for exactly the operations the reset run does not adopt, and a no-op for
+// the ones it does. Adoption is decided by the reset point alone: the reset run is rebuilt by
+// replaying history up to adoptedThroughEventID, so an operation whose NexusOperationScheduled event
+// falls at or before it comes back on the new run (same request ID, same operation token, and the
+// handler's callback token still resolves to the new run). NexusOperationScheduled is never
+// cherry-pickable, so an operation scheduled after the reset point is dropped for good — its handler
+// has no caller left, which is precisely what the policy exists to clean up.
+//
+// Two things follow, and both are needed:
+//
+//   - Dropped and STARTED (scheduledEventID > adoptedThroughEventID): request the cancel, exactly as
+//     any other force-close would. Reset's own termination goes through workflow.TerminateWorkflow
+//     rather than the terminate API, so no other close hook covers this run.
+//   - Adopted with a pending system-initiated cancellation: abort it. Such a cancellation only
+//     exists because the caller was force-closed earlier (terminate-then-reset is the common shape),
+//     and it is detached, so it keeps retrying on the closed run long after the reset. Left running
+//     it would cancel the handler that the reset run has just re-adopted. A user-initiated
+//     cancellation needs no handling — it is attached and stops with the run.
+//
+// Pass adoptedThroughEventID = 0 for a run that is not the reset's base run: the reset run is
+// rebuilt from the base branch, so none of its operations are adopted.
+//
+// Must be called while mutable state is still writable and before the close event is added. On an
+// already-closed run only the abort half runs; there is no history to append to, and that run's own
+// close hook already applied the policy.
+func (w *Workflow) OnWorkflowReset(ctx chasm.MutableContext, adoptedThroughEventID int64, policyRequestCancel bool) error {
+	for scheduledEventID, field := range w.Operations {
+		op := field.Get(ctx)
+		if scheduledEventID <= adoptedThroughEventID {
+			if _, err := op.AbortAutoCloseCancellation(ctx); err != nil {
+				return err
+			}
+			continue
+		}
+		// Dropped by the reset. Same rule as any force-close: only STARTED operations have a handler
+		// (and a token) to cancel.
+		if !policyRequestCancel || !w.IsRunning() {
+			continue
+		}
+		if op.GetStatus() != nexusoperationpb.OPERATION_STATUS_STARTED {
+			continue
+		}
+		if err := w.requestAutoCloseCancel(ctx, scheduledEventID, op); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// NeedsResetHandling reports whether OnWorkflowReset would do anything, using a read-only context.
+// Callers must probe with this first: a reset walks runs it does not otherwise touch (the
+// continue-as-new chain), and taking a mutable context on one of those leaves its mutable state
+// dirty for a transaction that never commits it.
+func (w *Workflow) NeedsResetHandling(ctx chasm.Context, adoptedThroughEventID int64, policyRequestCancel bool) bool {
+	for scheduledEventID, field := range w.Operations {
+		op := field.Get(ctx)
+		if scheduledEventID <= adoptedThroughEventID {
+			if cancellation, ok := op.Cancellation.TryGet(ctx); ok && nexusoperation.IsAbortableAutoCloseCancellation(cancellation) {
+				return true
+			}
+			continue
+		}
+		if policyRequestCancel && w.IsRunning() && op.GetStatus() == nexusoperationpb.OPERATION_STATUS_STARTED {
+			return true
+		}
+	}
+	return false
+}
+
 // OnNexusOperationAutoCloseCancelRequested event-sources an auto-close cancel request for a single
 // operation. Used by the operation's own schedule-to-close timeout, where the operation (not the
 // workflow) is closing while the caller keeps running.
@@ -314,8 +385,18 @@ func (w *Workflow) OnNexusOperationAutoCloseCancelRequested(ctx chasm.MutableCon
 // principal; the event's Apply reads it to flag the cancellation as auto-close. Event-sourcing the
 // flag (vs. a post-hoc component write) keeps it correct across reset. No-op if one already exists.
 func (w *Workflow) requestAutoCloseCancel(ctx chasm.MutableContext, scheduledEventID int64, op *nexusoperation.Operation) error {
-	if _, ok := op.Cancellation.TryGet(ctx); ok {
-		return nil // cancellation already requested (e.g. by the workflow itself)
+	if existing, ok := op.Cancellation.TryGet(ctx); ok {
+		if nexusoperation.IsSystemCancellation(existing) {
+			return nil // already system-initiated; nothing to supersede
+		}
+		// A pending user-initiated cancellation is attached and would be aborted along with the closing
+		// run. Abort it explicitly first — event-sourced, so a reset rebuilds the same sequence — which
+		// leaves it terminal and lets the system-initiated request below supersede it.
+		if err := w.OnNexusOperationCancellationFailed(ctx, op, &failurepb.Failure{
+			Message: "cancellation superseded by the caller-close policy",
+		}); err != nil {
+			return err
+		}
 	}
 
 	_, err := addAndApplyHistoryEvent[CancelRequestedEventDefinition](w, ctx, func(e *historypb.HistoryEvent) {

@@ -151,6 +151,49 @@ func newScheduledTestOperation(t *testing.T, ctx *chasm.MockMutableContext) *Ope
 	return op
 }
 
+// A pending user-initiated cancellation is aborted and superseded by a detached system-initiated one
+// when the caller-close policy fires, so the user's cancel intent is not lost with the closing run.
+func TestRequestCancelOnAutoCloseSupersedesUserCancellation(t *testing.T) {
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(chasm.Component) time.Time { return defaultTime },
+			HandleExecutionKey: func() chasm.ExecutionKey {
+				return chasm.ExecutionKey{NamespaceID: "ns-id"}
+			},
+			HandleNamespaceEntry: func() *namespace.Namespace {
+				return namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0)
+			},
+			GoCtx: context.WithValue(context.Background(), OperationContextKey, &OperationContext{
+				MetricTagConfig: dynamicconfig.GetTypedPropertyFn(NexusMetricTagConfig{}),
+			}),
+		},
+	}
+	op := newScheduledTestOperation(t, ctx)
+	require.NoError(t, TransitionStarted.Apply(op, ctx, EventStarted{OperationToken: "tok"}))
+
+	// A user requests the cancel first.
+	require.NoError(t, op.RequestCancel(ctx, &nexusoperationpb.CancellationState{RequestId: "user-req"}))
+	userCancel, ok := op.Cancellation.TryGet(ctx)
+	require.True(t, ok)
+	require.False(t, IsSystemCancellation(userCancel))
+
+	// The caller-close policy then fires.
+	require.NoError(t, op.RequestCancelOnAutoClose(ctx))
+
+	// The user cancellation was aborted, and a system-initiated one took its place.
+	require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_FAILED, userCancel.GetStatus())
+	sysCancel, ok := op.Cancellation.TryGet(ctx)
+	require.True(t, ok)
+	require.NotSame(t, userCancel, sysCancel, "expected the cancellation to be replaced, not mutated")
+	require.True(t, IsSystemCancellation(sysCancel))
+
+	// Firing again is a no-op: it is already system-initiated.
+	require.NoError(t, op.RequestCancelOnAutoClose(ctx))
+	again, ok := op.Cancellation.TryGet(ctx)
+	require.True(t, ok)
+	require.Same(t, sysCancel, again)
+}
+
 func TestHandleNexusCompletion(t *testing.T) {
 	newStartedOp := func(t *testing.T, ctx *chasm.MockMutableContext) *Operation {
 		t.Helper()

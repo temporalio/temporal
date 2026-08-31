@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
@@ -232,6 +233,65 @@ func nexusCancelPollAndRespondClose(t *testing.T, env *NexusTestEnv, taskQueue s
 		})
 		require.NoError(c, err)
 	}, 20*time.Second, 200*time.Millisecond)
+}
+
+// nexusCancelPollAndRespondEmpty polls for a workflow task and completes it with no commands, which
+// records a WorkflowTaskCompleted event usable as a reset point.
+func nexusCancelPollAndRespondEmpty(t *testing.T, env *NexusTestEnv, taskQueue string) {
+	t.Helper()
+	ctx := testcore.NewContext()
+	await.Require(t.Context(), t, func(c *await.T) {
+		pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  "test",
+		})
+		require.NoError(c, err)
+		if len(pollResp.TaskToken) == 0 {
+			require.Fail(c, "no workflow task available yet")
+			return
+		}
+		_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Identity:  "test",
+			TaskToken: pollResp.TaskToken,
+		})
+		require.NoError(c, err)
+	}, 20*time.Second, 200*time.Millisecond)
+}
+
+// nexusCancelWFTCompletedEventID returns the first or last WorkflowTaskCompleted event ID of run's
+// history. Passed to reset as WorkflowTaskFinishEventId, it rebuilds through the preceding event —
+// so the first one drops an operation scheduled by that very task, and the last one adopts it.
+func nexusCancelWFTCompletedEventID(t *testing.T, env *NexusTestEnv, run client.WorkflowRun, first bool) int64 {
+	t.Helper()
+	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		WorkflowId: run.GetID(), RunId: run.GetRunID(),
+	})
+	var eventID int64
+	for _, e := range hist {
+		if e.GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+			continue
+		}
+		eventID = e.GetEventId()
+		if first {
+			break
+		}
+	}
+	require.NotZero(t, eventID, "no WorkflowTaskCompleted event to reset to")
+	return eventID
+}
+
+// nexusCancelReset resets run to the given WorkflowTaskCompleted event.
+func nexusCancelReset(t *testing.T, env *NexusTestEnv, run client.WorkflowRun, wftCompletedEventID int64) {
+	t.Helper()
+	_, err := env.FrontendClient().ResetWorkflowExecution(testcore.NewContext(), &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 env.Namespace().String(),
+		WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()},
+		Reason:                    "nexus auto-close reset test",
+		RequestId:                 uuid.NewString(),
+		WorkflowTaskFinishEventId: wftCompletedEventID,
+	})
+	require.NoError(t, err)
 }
 
 // nexusCancelEnv builds a CHASM env with the external cancel-observing handler and returns the env,

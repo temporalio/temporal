@@ -189,7 +189,9 @@ func (o *Operation) RequestCancel(
 		return ErrOperationAlreadyCompleted
 	}
 
-	if hasCanceled {
+	// A terminal cancellation may be superseded by a new one; that is how the caller-close policy
+	// replaces a user-initiated cancellation it has just aborted.
+	if hasCanceled && cancellationPending(existingCancellation) {
 		existingReqID := existingCancellation.GetRequestId()
 		return fmt.Errorf("%w with request ID %s", ErrCancellationAlreadyRequested, existingReqID)
 	}
@@ -219,13 +221,18 @@ func (o *Operation) RequestCancelOnAutoClose(ctx chasm.MutableContext) error {
 	if o.Status != nexusoperationpb.OPERATION_STATUS_STARTED {
 		return nil
 	}
-	if _, ok := o.Cancellation.TryGet(ctx); ok {
-		return nil
+	if existing, ok := o.Cancellation.TryGet(ctx); ok && IsSystemCancellation(existing) {
+		return nil // already system-initiated
 	}
 	// Workflow-backed ops event-source the request (so a reset can rebuild it); standalone ops have no
 	// store and just carry the detached cancellation on their close snapshot.
 	if store, ok := o.Store.TryGet(ctx); ok {
 		return store.OnNexusOperationAutoCloseCancelRequested(ctx, o)
+	}
+	// A pending user-initiated cancellation is attached and would be aborted along with the closing
+	// operation; abort it explicitly so the detached system-initiated one below supersedes it.
+	if _, err := o.AbortUserCancellationForAutoClose(ctx); err != nil {
+		return err
 	}
 	if err := o.RequestCancel(ctx, &nexusoperationpb.CancellationState{Principal: SystemPrincipal()}); err != nil {
 		if errors.Is(err, ErrCancellationAlreadyRequested) || errors.Is(err, ErrOperationAlreadyCompleted) {
@@ -234,6 +241,75 @@ func (o *Operation) RequestCancelOnAutoClose(ctx chasm.MutableContext) error {
 		return err
 	}
 	return nil
+}
+
+// AbortAutoCloseCancellation calls off a still-pending system-initiated (auto-close) cancellation
+// and reports whether it did. Used by workflow reset when the reset run adopts this operation: the
+// cancellation exists only because the caller was force-closed, and the reset undoes that close, so
+// letting it keep retrying would kill the handler the new run now depends on.
+//
+// User-initiated cancellations are deliberately left alone: they are attached (see RequestCancel),
+// so they stop with the closing run on their own, and the reset run rebuilds one iff the
+// NexusOperationCancelRequested event falls at or before the reset point.
+func (o *Operation) AbortAutoCloseCancellation(ctx chasm.MutableContext) (bool, error) {
+	cancellation, ok := o.Cancellation.TryGet(ctx)
+	if !ok {
+		return false, nil
+	}
+	if !IsAbortableAutoCloseCancellation(cancellation) {
+		return false, nil
+	}
+	if err := TransitionCancellationAborted.Apply(cancellation, ctx, EventCancellationAborted{
+		Failure: &failurepb.Failure{
+			Message: "auto-close cancellation aborted: caller workflow was reset and re-adopted the operation",
+		},
+	}); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// IsAbortableAutoCloseCancellation reports whether c is a system-initiated (auto-close) cancellation
+// that has not resolved yet, i.e. whether AbortAutoCloseCancellation would act on it.
+func IsAbortableAutoCloseCancellation(c *Cancellation) bool {
+	return isSystemPrincipal(c.GetPrincipal()) && TransitionCancellationAborted.Possible(c)
+}
+
+// IsSystemCancellation reports whether the cancellation was initiated by the system (caller-close
+// policy) rather than by an explicit user request.
+func IsSystemCancellation(c *Cancellation) bool {
+	return isSystemPrincipal(c.GetPrincipal())
+}
+
+// cancellationPending reports whether the cancellation is still active, i.e. not in a terminal state.
+func cancellationPending(c *Cancellation) bool {
+	switch c.GetStatus() {
+	case nexusoperationpb.CANCELLATION_STATUS_SUCCEEDED,
+		nexusoperationpb.CANCELLATION_STATUS_FAILED,
+		nexusoperationpb.CANCELLATION_STATUS_TIMED_OUT:
+		return false
+	default:
+		return true
+	}
+}
+
+// AbortUserCancellationForAutoClose aborts a pending user-initiated cancellation so the caller-close
+// policy can supersede it with a detached system-initiated one. Without this the cancellation would
+// be aborted along with the closing run anyway (being attached), losing the user's cancel intent.
+// Reports whether anything was aborted.
+func (o *Operation) AbortUserCancellationForAutoClose(ctx chasm.MutableContext) (bool, error) {
+	cancellation, ok := o.Cancellation.TryGet(ctx)
+	if !ok || IsSystemCancellation(cancellation) || !TransitionCancellationAborted.Possible(cancellation) {
+		return false, nil
+	}
+	if err := TransitionCancellationAborted.Apply(cancellation, ctx, EventCancellationAborted{
+		Failure: &failurepb.Failure{
+			Message: "cancellation superseded by the caller-close policy",
+		},
+	}); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // onStarted applies the started transition or delegates to the store if one is present.
