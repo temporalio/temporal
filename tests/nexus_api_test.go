@@ -166,32 +166,33 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes(useTemporalFailures
 				var operationError *nexus.OperationError
 				s.ErrorAs(err, &operationError)
 				s.Equal(nexus.OperationStateFailed, operationError.State)
-				if useTemporalFailures {
-					// Through the Temporal failure round-trip, the cause chain has an extra wrapper
-					// for the OperationError's ApplicationFailureInfo.
-					var failureErr *nexus.FailureError
-					s.ErrorAs(operationError.Cause, &failureErr)
-					var innerErr *nexus.FailureError
-					s.ErrorAs(failureErr.Cause, &innerErr)
-					tFailure, err := commonnexus.NexusFailureToTemporalFailure(innerErr.Failure)
-					s.NoError(err)
-					convErr := temporal.GetDefaultFailureConverter().FailureToError(tFailure)
-					var appErr *temporal.ApplicationError
-					s.ErrorAs(convErr, &appErr)
-					s.Equal("deliberate test failure", appErr.Message())
-					var details nexus.Failure
-					s.NoError(appErr.Details(&details))
-					s.Equal("v", details.Metadata["k"])
-				} else {
+
+				if !useTemporalFailures {
+					// The deprecated variant carries no message of its own, so the wrapper the server
+					// rebuilds from it repeats the worker's message.
 					s.Equal("deliberate test failure", operationError.Cause.Error())
-					var failureErr *nexus.FailureError
-					s.ErrorAs(operationError.Cause, &failureErr)
-					s.Equal(map[string]string{"k": "v"}, failureErr.Failure.Metadata)
-					var details string
-					err = json.Unmarshal(failureErr.Failure.Details, &details)
-					s.NoError(err)
-					s.Equal("details", details)
 				}
+
+				// Both response formats reach the caller as the same failure: an operation-error
+				// wrapper whose cause is the worker's own failure. The legacy variant reports the state
+				// in a field of its own, and the server rebuilds the wrapper from it.
+				var wrapper *nexus.FailureError
+				s.ErrorAs(operationError.Cause, &wrapper)
+				var workerErr *nexus.FailureError
+				s.ErrorAs(wrapper.Cause, &workerErr)
+				tFailure, err := commonnexus.NexusFailureToTemporalFailure(workerErr.Failure)
+				s.NoError(err)
+				convErr := temporal.GetDefaultFailureConverter().FailureToError(tFailure)
+				var appErr *temporal.ApplicationError
+				s.ErrorAs(convErr, &appErr)
+				s.Equal("deliberate test failure", appErr.Message())
+				// The worker's own metadata and details survive the re-encoding.
+				var workerFailure nexus.Failure
+				s.NoError(appErr.Details(&workerFailure))
+				s.Equal(map[string]string{"k": "v"}, workerFailure.Metadata)
+				var details string
+				s.NoError(json.Unmarshal(workerFailure.Details, &details))
+				s.Equal("details", details)
 			},
 		},
 		{

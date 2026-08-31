@@ -18,8 +18,8 @@ import (
 // These tests pin down how the frontend turns matching's DispatchNexusTaskResponse into the result the
 // Nexus SDK serializes back to the caller. Every arm of the response oneof is wire-visible: the error
 // type decides the HTTP status, and the outcome tag and failure-source header are consumed by
-// dashboards and by interceptRequest's error-reporting cleanup. They are asserted here so that moving
-// this logic out of the handler methods cannot silently change any of it.
+// dashboards and by interceptRequest's error-reporting cleanup. They are asserted here so the shared
+// classifier introduced alongside them cannot silently change any of it.
 
 // outcomeTagOf reads the outcome tag accumulated on the context's metrics handler.
 func outcomeTagOf(t *testing.T, oc *operationContext) string {
@@ -386,9 +386,10 @@ func TestStartOperationOutcome_DeprecatedOperationError(t *testing.T) {
 }
 
 // The deprecated operation error carries the worker's failure in the Nexus encoding, and reports the
-// operation state in a field of its own. Today both are passed through untouched: the state becomes the
-// operation error's state, and the worker's failure becomes its cause verbatim.
-func TestStartOperationOutcome_DeprecatedOperationErrorPassesTheWorkerFailureThrough(t *testing.T) {
+// operation state in a field of its own. The classifier re-encodes both, so the caller receives what a
+// current-format worker would have sent: the state as the wrapping failure, and the worker's metadata
+// and details underneath it as the details of a NexusFailure application failure.
+func TestStartOperationOutcome_DeprecatedOperationErrorReEncodesWorkerFailure(t *testing.T) {
 	oc := testOperationContext()
 	resp := startOperationResponse(&nexuspb.StartOperationResponse{
 		//nolint:staticcheck // Exercising the deprecated variant on purpose.
@@ -411,9 +412,18 @@ func TestStartOperationOutcome_DeprecatedOperationErrorPassesTheWorkerFailureThr
 	cause, ok := opErr.Cause.(*nexus.FailureError)
 	require.True(t, ok, "expected a FailureError cause, got %T", opErr.Cause)
 	require.Equal(t, "deliberate test failure", cause.Failure.Message)
-	// The worker's failure reaches the caller exactly as the worker encoded it.
-	require.Equal(t, map[string]string{"k": "v"}, cause.Failure.Metadata)
-	require.JSONEq(t, `"details"`, string(cause.Failure.Details))
+
+	// Decoding the wire failure the way a Temporal caller does recovers the wrapper the current format
+	// sends for a failed operation, with the worker's failure whole underneath it.
+	tFailure, convErr := commonnexus.NexusFailureToTemporalFailure(cause.Failure)
+	require.NoError(t, convErr)
+	require.Equal(t, "OperationError", tFailure.GetApplicationFailureInfo().GetType())
+	details := tFailure.GetCause().GetApplicationFailureInfo().GetDetails().GetPayloads()
+	require.Len(t, details, 1)
+	var workerFailure nexus.Failure
+	require.NoError(t, json.Unmarshal(details[0].GetData(), &workerFailure))
+	require.Equal(t, map[string]string{"k": "v"}, workerFailure.Metadata)
+	require.JSONEq(t, `"details"`, string(workerFailure.Details))
 	require.Equal(t, "operation_error", outcomeTagOf(t, oc))
 }
 

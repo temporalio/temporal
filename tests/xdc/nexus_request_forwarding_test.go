@@ -23,6 +23,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -158,12 +159,23 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 				require.ErrorAs(t, retErr, &operationError)
 				require.Equal(t, nexus.OperationStateFailed, operationError.State)
 				require.Equal(t, "deliberate test failure", operationError.Cause.Error())
-				var failureError *nexus.FailureError
-				require.ErrorAs(t, operationError.Cause, &failureError)
-				require.Equal(t, map[string]string{"k": "v"}, failureError.Failure.Metadata)
-				var details string
-				err := json.Unmarshal(failureError.Failure.Details, &details)
+				// The server rebuilds the failure a current-format worker would have sent: an
+				// operation-error wrapper carrying the worker's own failure as its cause.
+				var wrapper *nexus.FailureError
+				require.ErrorAs(t, operationError.Cause, &wrapper)
+				var workerErr *nexus.FailureError
+				require.ErrorAs(t, wrapper.Cause, &workerErr)
+				tFailure, err := cnexus.NexusFailureToTemporalFailure(workerErr.Failure)
 				require.NoError(t, err)
+				convErr := temporal.GetDefaultFailureConverter().FailureToError(tFailure)
+				var appErr *temporal.ApplicationError
+				require.ErrorAs(t, convErr, &appErr)
+				require.Equal(t, "deliberate test failure", appErr.Message())
+				var workerFailure nexus.Failure
+				require.NoError(t, appErr.Details(&workerFailure))
+				require.Equal(t, map[string]string{"k": "v"}, workerFailure.Metadata)
+				var details string
+				require.NoError(t, json.Unmarshal(workerFailure.Details, &details))
 				require.Equal(t, "details", details)
 				requireExpectedMetricsCaptured(t, activeSnap, ns, "StartNexusOperation", "operation_error")
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "StartNexusOperation", "forwarded_request_error")
