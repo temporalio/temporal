@@ -254,8 +254,8 @@ func TestStartOperationOutcome_WorkerFailure_NotAHandlerError(t *testing.T) {
 	require.Equal(t, "worker exploded", failureErr.Failure.Message)
 	var handlerErr *nexus.HandlerError
 	require.NotErrorAs(t, err, &handlerErr, "not reported as a handler error today")
-	// There is no handler error type to report, so the tag's suffix is empty.
-	require.Equal(t, "handler_error:", outcomeTagOf(t, oc))
+	// There is no handler error type to report, so the tag bounds to UNKNOWN.
+	require.Equal(t, "handler_error:UNKNOWN", outcomeTagOf(t, oc))
 	require.Equal(t, commonnexus.FailureSourceWorker, failureSourceOf(oc))
 }
 
@@ -598,28 +598,28 @@ func TestStartOperationOutcome_HandlerFailureDetailsAreWellFormed(t *testing.T) 
 	require.Equal(t, "BAD_REQUEST", details["type"])
 }
 
-// The handler error type in the outcome tag is whatever string the worker chose, so today every
-// distinct value a worker sends becomes its own time series.
-func TestStartOperationOutcome_HandlerErrorTypeTagUsesTheWorkersType(t *testing.T) {
+// The handler error type in the outcome tag is a string the worker chose, so it must not be able to
+// mint new time series.
+func TestStartOperationOutcome_HandlerErrorTypeTagIsBounded(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		errType string
 		wantTag string
 	}{
 		{
-			name:    "a spec type",
+			name:    "a spec type passes through",
 			errType: string(nexus.HandlerErrorTypeUnavailable),
 			wantTag: "handler_error:UNAVAILABLE",
 		},
 		{
-			name:    "an arbitrary worker string",
+			name:    "an arbitrary worker string is collapsed",
 			errType: "MY_CUSTOM_ERROR_a1b2c3",
-			wantTag: "handler_error:MY_CUSTOM_ERROR_a1b2c3",
+			wantTag: "handler_error:UNKNOWN",
 		},
 		{
-			name:    "an empty type",
+			name:    "an empty type is collapsed",
 			errType: "",
-			wantTag: "handler_error:",
+			wantTag: "handler_error:UNKNOWN",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -638,6 +638,7 @@ func TestStartOperationOutcome_HandlerErrorTypeTagUsesTheWorkersType(t *testing.
 			_, _, err := oc.startOperationOutcome(resp, "op")
 			require.Error(t, err)
 			require.Equal(t, tc.wantTag, outcomeTagOf(t, oc))
+			// The error itself still carries the worker's real type; only the metric is bounded.
 			var handlerErr *nexus.HandlerError
 			require.ErrorAs(t, err, &handlerErr)
 			require.Equal(t, nexus.HandlerErrorType(tc.errType), handlerErr.Type)
@@ -645,8 +646,8 @@ func TestStartOperationOutcome_HandlerErrorTypeTagUsesTheWorkersType(t *testing.
 	}
 }
 
-// The deprecated handler error variant reports the worker's type the same way.
-func TestCancelOperationOutcome_DeprecatedHandlerErrorTypeTagUsesTheWorkersType(t *testing.T) {
+// The deprecated handler error variant is bounded the same way.
+func TestCancelOperationOutcome_DeprecatedHandlerErrorTypeTagIsBounded(t *testing.T) {
 	oc := testOperationContext()
 	resp := &matchingservice.DispatchNexusTaskResponse{
 		//nolint:staticcheck // Exercising the deprecated variant on purpose.
@@ -656,5 +657,5 @@ func TestCancelOperationOutcome_DeprecatedHandlerErrorTypeTagUsesTheWorkersType(
 	}
 
 	require.Error(t, oc.cancelOperationOutcome(resp, "op"))
-	require.Equal(t, "handler_error:something-a-worker-made-up", outcomeTagOf(t, oc))
+	require.Equal(t, "handler_error:UNKNOWN", outcomeTagOf(t, oc))
 }

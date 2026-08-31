@@ -7,7 +7,6 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 )
@@ -22,13 +21,12 @@ func (c *operationContext) startOperationOutcome(
 	resp *matchingservice.DispatchNexusTaskResponse,
 	operation string,
 ) (nexus.HandlerStartOperationResult[any], []nexus.Link, error) {
+	c.recordDispatchOutcome(commonnexus.ClassifyStartOperationDispatch(resp))
+
 	switch t := resp.GetOutcome().(type) {
 	case *matchingservice.DispatchNexusTaskResponse_Failure:
-		// Set the failure source to "worker" if we've reached this case.
-		// Failure conversions errors below are the user's fault, as it implies that malformed completions were sent from
-		// the worker.
-		c.setFailureSource(commonnexus.FailureSourceWorker)
-		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.Failure.GetNexusHandlerFailureInfo().GetType()))
+		// A failure conversion error below is the worker's fault: it implies a malformed completion
+		// was sent from the worker.
 		he, internalErr := c.convertWorkerFailure(t.Failure, operation)
 		if internalErr != nil {
 			return nil, nil, internalErr
@@ -37,26 +35,19 @@ func (c *operationContext) startOperationOutcome(
 
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError: //nolint:staticcheck // Deprecated, still sent by older workers.
 		// Deprecated case. Replaced with DispatchNexusTaskResponse_Failure
-		//nolint:staticcheck // Deprecated field on a deprecated variant.
-		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.HandlerError.GetErrorType()))
-		c.setFailureSource(commonnexus.FailureSourceWorker)
 		return nil, nil, convertOutcomeToNexusHandlerError(t)
 
 	case *matchingservice.DispatchNexusTaskResponse_RequestTimeout:
-		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("handler_timeout"))
-		c.setFailureSource(commonnexus.FailureSourceWorker)
 		return nil, nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
 
 	case *matchingservice.DispatchNexusTaskResponse_Response:
 		switch t := t.Response.GetStartOperation().GetVariant().(type) {
 		case *nexuspb.StartOperationResponse_SyncSuccess:
-			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("sync_success"))
 			return &nexus.HandlerStartOperationResultSync[any]{
 				Value: t.SyncSuccess.GetPayload(),
 			}, parseLinks(t.SyncSuccess.GetLinks(), c.logger), nil
 
 		case *nexuspb.StartOperationResponse_AsyncSuccess:
-			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("async_success"))
 			token := t.AsyncSuccess.GetOperationToken()
 			if token == "" {
 				// Workers predating the operation-token rename only set the operation ID.
@@ -68,8 +59,6 @@ func (c *operationContext) startOperationOutcome(
 			}, parseLinks(t.AsyncSuccess.GetLinks(), c.logger), nil
 
 		case *nexuspb.StartOperationResponse_OperationError: //nolint:staticcheck // Deprecated, still sent by older workers.
-			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("operation_error"))
-			c.setFailureSource(commonnexus.FailureSourceWorker)
 			cause := &nexus.FailureError{
 				//nolint:staticcheck // Deprecated function still in use for backward compatibility.
 				Failure: commonnexus.ProtoFailureToNexusFailure(t.OperationError.GetFailure()),
@@ -79,11 +68,8 @@ func (c *operationContext) startOperationOutcome(
 			return nil, nil, c.operationError(state, cause, operation)
 
 		case *nexuspb.StartOperationResponse_Failure:
-			// Set the failure source to "worker" if we've reached this case.
-			// Failure conversions errors below are the user's fault, as it implies that malformed completions were sent from
-			// the worker.
-			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("failure"))
-			c.setFailureSource(commonnexus.FailureSourceWorker)
+			// A failure conversion error below is the worker's fault: it implies a malformed completion
+			// was sent from the worker.
 			cause, internalErr := c.convertWorkerFailure(t.Failure, operation)
 			if internalErr != nil {
 				return nil, nil, internalErr
@@ -95,10 +81,6 @@ func (c *operationContext) startOperationOutcome(
 			return nil, nil, c.operationError(state, cause, operation)
 		}
 	}
-	// This is the worker's fault.
-	c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:EMPTY_OUTCOME"))
-	c.setFailureSource(commonnexus.FailureSourceWorker)
-
 	return nil, nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "empty outcome")
 }
 
@@ -109,13 +91,12 @@ func (c *operationContext) cancelOperationOutcome(
 	resp *matchingservice.DispatchNexusTaskResponse,
 	operation string,
 ) error {
+	c.recordDispatchOutcome(commonnexus.ClassifyCancelOperationDispatch(resp))
+
 	switch t := resp.GetOutcome().(type) {
 	case *matchingservice.DispatchNexusTaskResponse_Failure:
-		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.Failure.GetNexusHandlerFailureInfo().GetType()))
-		// Set the failure source to "worker" if we've reached this case.
-		// Failure conversions errors below are the user's fault, as it implies that malformed completions were sent from
-		// the worker.
-		c.setFailureSource(commonnexus.FailureSourceWorker)
+		// A failure conversion error below is the worker's fault: it implies a malformed completion
+		// was sent from the worker.
 		he, internalErr := c.convertWorkerFailure(t.Failure, operation)
 		if internalErr != nil {
 			return internalErr
@@ -124,25 +105,15 @@ func (c *operationContext) cancelOperationOutcome(
 
 	case *matchingservice.DispatchNexusTaskResponse_HandlerError: //nolint:staticcheck // Deprecated, still sent by older workers.
 		// Deprecated case. Replaced with DispatchNexusTaskResponse_Failure
-		//nolint:staticcheck // Deprecated field on a deprecated variant.
-		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.HandlerError.GetErrorType()))
-		c.setFailureSource(commonnexus.FailureSourceWorker)
 		return convertOutcomeToNexusHandlerError(t)
 
 	case *matchingservice.DispatchNexusTaskResponse_RequestTimeout:
-		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("handler_timeout"))
-		c.setFailureSource(commonnexus.FailureSourceWorker)
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
 
 	case *matchingservice.DispatchNexusTaskResponse_Response:
 		// A cancel response carries no fields, so any response means the worker accepted.
-		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("success"))
 		return nil
 	}
-	// This is the worker's fault.
-	c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:EMPTY_OUTCOME"))
-	c.setFailureSource(commonnexus.FailureSourceWorker)
-
 	return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "empty outcome")
 }
 
@@ -191,6 +162,15 @@ func (c *operationContext) operationError(
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
 	}
 	return opErr
+}
+
+// recordDispatchOutcome tags the request's metrics with the dispatch outcome and, when the dispatch
+// did not succeed, attributes the failure to the worker in the response header.
+func (c *operationContext) recordDispatchOutcome(result commonnexus.DispatchResult) {
+	c.metricsHandler = c.metricsHandler.WithTags(result.OutcomeTag())
+	if !result.Outcome.Succeeded() {
+		c.setFailureSource(commonnexus.FailureSourceWorker)
+	}
 }
 
 // convertOutcomeToNexusHandlerError converts the deprecated handler error outcome into the Nexus
