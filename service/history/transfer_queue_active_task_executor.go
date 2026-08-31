@@ -1473,10 +1473,18 @@ func (t *transferQueueActiveTaskExecutor) createFirstWorkflowTask(
 	}
 
 	executionInfo := describeResponse.GetWorkflowExecutionInfo()
-	if executionInfo.GetFirstRunId() != execution.GetRunId() ||
-		executionInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED ||
-		executionInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING ||
-		executionInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW {
+	if executionInfo.GetFirstRunId() != execution.GetRunId() {
+		return nil
+	}
+	// The parent observes the child execution chain as one execution. Only refresh a terminal
+	// current run; intermediate and future non-terminal statuses must not report completion.
+	switch executionInfo.GetStatus() {
+	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
+	default:
 		return nil
 	}
 

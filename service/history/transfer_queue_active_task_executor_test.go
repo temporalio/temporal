@@ -3012,6 +3012,33 @@ func (s *transferQueueActiveTaskExecutorSuite) TestCreateFirstWorkflowTask_Runni
 	s.Require().NoError(err)
 }
 
+func (s *transferQueueActiveTaskExecutorSuite) TestCreateFirstWorkflowTask_PausedSuccessorIsNotRefreshed() {
+	childExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "child-workflow-id",
+		RunId:      uuid.NewString(),
+	}
+
+	s.mockHistoryClient.EXPECT().ScheduleWorkflowTask(gomock.Any(), gomock.Any()).
+		Return(nil, consts.ErrWorkflowCompleted)
+	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&historyservice.DescribeWorkflowExecutionResponse{
+			WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+				Execution:  &commonpb.WorkflowExecution{WorkflowId: childExecution.WorkflowId, RunId: uuid.NewString()},
+				Status:     enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
+				FirstRunId: childExecution.RunId,
+			},
+		}, nil)
+
+	err := s.transferQueueActiveTaskExecutor.createFirstWorkflowTask(
+		context.Background(),
+		s.childNamespaceID.String(),
+		childExecution,
+		nil,
+		nil,
+	)
+	s.Require().NoError(err)
+}
+
 func (s *transferQueueActiveTaskExecutorSuite) TestCreateFirstWorkflowTask_WorkflowIDReused() {
 	childExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "child-workflow-id",
