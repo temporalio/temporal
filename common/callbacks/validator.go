@@ -36,10 +36,10 @@ type ValidatorConfig struct {
 	HeaderMaxSize dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EndpointRules dynamicconfig.TypedPropertyFnWithNamespaceFilter[AddressMatchRules]
 
-	// Worker-variant limits.
-	MaxServiceNameLength       dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxOperationNameLength     dynamicconfig.IntPropertyFnWithNamespaceFilter
-	WorkerSourceContextMaxSize dynamicconfig.IntPropertyFnWithNamespaceFilter
+	// NexusHandler-variant limits.
+	MaxServiceNameLength             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxOperationNameLength           dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NexusHandlerSourceContextMaxSize dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
 func (vc *ValidatorConfig) Validate() error {
@@ -108,8 +108,8 @@ func (v *validator) validateCallback(cb *commonpb.Callback, namespaceName string
 	switch kind {
 	case KindNexus:
 		return v.validateNexus(namespaceName, cb.GetNexus())
-	case KindWorker:
-		return v.validateWorker(namespaceName, cb.GetWorker())
+	case KindNexusHandler:
+		return v.validateNexusHandler(namespaceName, cb.GetNexusHandler())
 	case KindUnknown:
 		fallthrough
 	default:
@@ -150,7 +150,7 @@ func (v *validator) validateNexus(namespaceName string, cb *commonpb.Callback_Ne
 	return nil
 }
 
-func (v *validator) validateWorker(namespaceName string, cb *commonpb.Callback_Worker) error {
+func (v *validator) validateNexusHandler(namespaceName string, cb *commonpb.Callback_NexusHandler) error {
 	// Task Queue
 	if err := tqid.Validate(cb.GetTaskQueueName(), v.config.MaxIDLengthLimit()); err != nil {
 		return err
@@ -176,11 +176,11 @@ func (v *validator) validateWorker(namespaceName string, cb *commonpb.Callback_W
 	}
 
 	// Source Context blob
-	maxSize := v.config.WorkerSourceContextMaxSize(namespaceName)
+	maxSize := v.config.NexusHandlerSourceContextMaxSize(namespaceName)
 	if size := cb.GetSourceContext().Size(); size > maxSize {
 		return serviceerror.NewInvalidArgumentf(
 			"source_context exceeds size limit. Length=%d Limit=%d",
-			size, v.config.WorkerSourceContextMaxSize(namespaceName))
+			size, v.config.NexusHandlerSourceContextMaxSize(namespaceName))
 	}
 
 	return nil

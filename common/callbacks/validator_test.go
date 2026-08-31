@@ -27,10 +27,10 @@ func newNexusCallback() *commonpb.Callback {
 	}
 }
 
-func newWorkerCallback() *commonpb.Callback {
+func newNexusHandlerCallback() *commonpb.Callback {
 	return &commonpb.Callback{
-		Variant: &commonpb.Callback_Worker_{
-			Worker: &commonpb.Callback_Worker{
+		Variant: &commonpb.Callback_NexusHandler_{
+			NexusHandler: &commonpb.Callback_NexusHandler{
 				TaskQueueName: "wc-queue",
 				Service:       "CompletionService",
 				Operation:     "DeliverAsWebhook",
@@ -47,14 +47,14 @@ func newValidatorConfig() ValidatorConfig {
 		},
 	}
 	return ValidatorConfig{
-		MaxCallbacksPerExecution:   func(string) int { return 10 },
-		MaxIDLengthLimit:           func() int { return 10 },
-		URLMaxLength:               func(string) int { return 1000 },
-		HeaderMaxSize:              func(string) int { return 4096 },
-		EndpointRules:              func(string) AddressMatchRules { return allowAllAddresses },
-		MaxServiceNameLength:       func(string) int { return 40 },
-		MaxOperationNameLength:     func(string) int { return 40 },
-		WorkerSourceContextMaxSize: func(string) int { return 1000 },
+		MaxCallbacksPerExecution:         func(string) int { return 10 },
+		MaxIDLengthLimit:                 func() int { return 10 },
+		URLMaxLength:                     func(string) int { return 1000 },
+		HeaderMaxSize:                    func(string) int { return 4096 },
+		EndpointRules:                    func(string) AddressMatchRules { return allowAllAddresses },
+		MaxServiceNameLength:             func(string) int { return 40 },
+		MaxOperationNameLength:           func(string) int { return 40 },
+		NexusHandlerSourceContextMaxSize: func(string) int { return 1000 },
 	}
 
 }
@@ -92,7 +92,7 @@ func TestValidateCallbacks(t *testing.T) {
 	ctx := context.Background()
 
 	opts := ValidatorOptions{
-		EnabledKinds: []Kind{KindNexus, KindWorker},
+		EnabledKinds: []Kind{KindNexus, KindNexusHandler},
 	}
 	v := mustNewValidator(t, newValidatorConfig())
 
@@ -110,9 +110,9 @@ func TestValidateCallbacks(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("ValidWorkerCallback", func(t *testing.T) {
+	t.Run("ValidNexusHandlerCallback", func(t *testing.T) {
 		cbs := []*commonpb.Callback{
-			newWorkerCallback(),
+			newNexusHandlerCallback(),
 		}
 		require.NoError(t, v.Validate(ctx, "ns", cbs, opts))
 	})
@@ -231,66 +231,66 @@ func TestValidateCallbacks(t *testing.T) {
 	})
 }
 
-func TestValidateWorkerCallback(t *testing.T) {
+func TestValidateNexusHandlerCallback(t *testing.T) {
 	ctx := context.Background()
 
 	cfg := newValidatorConfig()
 	v := mustNewValidator(t, cfg)
 	opts := ValidatorOptions{
-		EnabledKinds: []Kind{KindNexus, KindWorker},
+		EnabledKinds: []Kind{KindNexus, KindNexusHandler},
 	}
 
 	for _, tc := range []struct {
 		name   string
-		mutate func(*commonpb.Callback_Worker)
+		mutate func(*commonpb.Callback_NexusHandler)
 		errMsg string
 	}{
 		{
 			name:   "task_queue is not set",
-			mutate: func(w *commonpb.Callback_Worker) { w.TaskQueueName = "" },
+			mutate: func(nh *commonpb.Callback_NexusHandler) { nh.TaskQueueName = "" },
 			errMsg: "taskQueue is not set",
 		},
 		{
 			name:   "task_queue length exceeds limit",
-			mutate: func(w *commonpb.Callback_Worker) { w.TaskQueueName = strings.Repeat("x", 11) },
+			mutate: func(nh *commonpb.Callback_NexusHandler) { nh.TaskQueueName = strings.Repeat("x", 11) },
 			errMsg: "taskQueue length exceeds limit",
 		},
 		{
 			name:   "task_queue uses reserved prefix",
-			mutate: func(w *commonpb.Callback_Worker) { w.TaskQueueName = "/_sys/tq" },
+			mutate: func(nh *commonpb.Callback_NexusHandler) { nh.TaskQueueName = "/_sys/tq" },
 			errMsg: "task queue name cannot start with reserved prefix /_sys/",
 		},
 		{
 			name:   "service is required",
-			mutate: func(w *commonpb.Callback_Worker) { w.Service = "" },
+			mutate: func(nh *commonpb.Callback_NexusHandler) { nh.Service = "" },
 			errMsg: "service is required",
 		},
 		{
 			name:   "service length",
-			mutate: func(w *commonpb.Callback_Worker) { w.Service = strings.Repeat("x", 41) },
+			mutate: func(nh *commonpb.Callback_NexusHandler) { nh.Service = strings.Repeat("x", 41) },
 			errMsg: "service exceeds length limit",
 		},
 		{
 			name:   "operation is required",
-			mutate: func(w *commonpb.Callback_Worker) { w.Operation = "" },
+			mutate: func(nh *commonpb.Callback_NexusHandler) { nh.Operation = "" },
 			errMsg: "operation is required",
 		},
 		{
 			name:   "operation length",
-			mutate: func(w *commonpb.Callback_Worker) { w.Operation = strings.Repeat("x", 41) },
+			mutate: func(nh *commonpb.Callback_NexusHandler) { nh.Operation = strings.Repeat("x", 41) },
 			errMsg: "operation exceeds length limit",
 		},
 		{
 			name: "source_context size",
-			mutate: func(w *commonpb.Callback_Worker) {
-				w.SourceContext = &commonpb.Payload{Data: []byte(strings.Repeat("x", 1001))}
+			mutate: func(nh *commonpb.Callback_NexusHandler) {
+				nh.SourceContext = &commonpb.Payload{Data: []byte(strings.Repeat("x", 1001))}
 			},
 			errMsg: "source_context exceeds size limit",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			cb := newWorkerCallback()
-			tc.mutate(cb.GetWorker())
+			cb := newNexusHandlerCallback()
+			tc.mutate(cb.GetNexusHandler())
 
 			cbs := []*commonpb.Callback{
 				cb,
@@ -308,10 +308,10 @@ func TestValidateEnabledKinds(t *testing.T) {
 	ctx := context.Background()
 	v := mustNewValidator(t, newValidatorConfig())
 	nexusCb := newNexusCallback()
-	workerCb := newWorkerCallback()
+	nexusHandlerCb := newNexusHandlerCallback()
 
 	allowAllKindsOpts := ValidatorOptions{
-		EnabledKinds: []Kind{KindNexus, KindWorker},
+		EnabledKinds: []Kind{KindNexus, KindNexusHandler},
 	}
 	nexusOnlyOpts := ValidatorOptions{
 		EnabledKinds: []Kind{KindNexus},
@@ -323,7 +323,7 @@ func TestValidateEnabledKinds(t *testing.T) {
 
 	t.Run("AllSupported", func(t *testing.T) {
 		require.NoError(t, v.Validate(ctx, "ns",
-			[]*commonpb.Callback{nexusCb, workerCb},
+			[]*commonpb.Callback{nexusCb, nexusHandlerCb},
 			allowAllKindsOpts,
 		))
 	})
@@ -338,21 +338,21 @@ func TestValidateEnabledKinds(t *testing.T) {
 
 	t.Run("DisabledKind", func(t *testing.T) {
 		err := v.Validate(ctx, "ns",
-			[]*commonpb.Callback{nexusCb, workerCb},
+			[]*commonpb.Callback{nexusCb, nexusHandlerCb},
 			ValidatorOptions{EnabledKinds: []Kind{KindNexus}},
 		)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
-		require.ErrorContains(t, err, "worker callbacks are not enabled for this execution type")
+		require.ErrorContains(t, err, "nexusHandler callbacks are not enabled for this execution type")
 	})
 
 	t.Run("CheckEnabledBeforeValidation", func(t *testing.T) {
-		invalidWorkerCb := newWorkerCallback()
-		invalidWorkerCb.GetWorker().TaskQueueName = ""
-		err := v.Validate(ctx, "ns", []*commonpb.Callback{invalidWorkerCb}, nexusOnlyOpts)
+		invalidNexusHandlerCb := newNexusHandlerCallback()
+		invalidNexusHandlerCb.GetNexusHandler().TaskQueueName = ""
+		err := v.Validate(ctx, "ns", []*commonpb.Callback{invalidNexusHandlerCb}, nexusOnlyOpts)
 
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
-		require.ErrorContains(t, err, "completion_callbacks[0]: worker callbacks are not enabled for this execution type")
+		require.ErrorContains(t, err, "completion_callbacks[0]: nexusHandler callbacks are not enabled for this execution type")
 	})
 }

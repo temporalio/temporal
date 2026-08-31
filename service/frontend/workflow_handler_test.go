@@ -1195,7 +1195,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_NonNexusCallbac
 			},
 			// The validator rejects the NexusHandler variant explicitly, before it reaches
 			// the unknown-variant fallback.
-			ErrMsg: "NexusHandler callbacks are not enabled for this execution type",
+			ErrMsg: "nexusHandler callbacks are not enabled for this execution type",
 		},
 		{
 			Name:     "nil variant",

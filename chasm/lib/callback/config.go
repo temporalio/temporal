@@ -16,13 +16,13 @@ var MaxPerExecution = dynamicconfig.NewNamespaceIntSetting(
 
 // TODO(chrsmith): This just caps the size of an individual source context payload.
 // We also need to wire through an aggregate max size, for all callbacks in an execution.
-// (We expect that users will want fewer worker callbacks with larger payloads than the
+// (We expect that users will want fewer NexusHandler callbacks with larger payloads than the
 // full 2k execution callbacks, with a much smaller per-callback payload size.)
 
-var WorkerSourceContextMaxSize = dynamicconfig.NewNamespaceIntSetting(
-	"callback.worker.sourceContextMaxSize",
+var NexusHandlerSourceContextMaxSize = dynamicconfig.NewNamespaceIntSetting(
+	"callback.nexusHandler.sourceContextMaxSize",
 	64*1024,
-	`The maximum allowed size, in bytes, of the opaque source context attached to a Worker completion
+	`The maximum allowed size, in bytes, of the opaque source context attached to a NexusHandler completion
 callback. The server carries this payload to the callback's handler untouched.`,
 )
 

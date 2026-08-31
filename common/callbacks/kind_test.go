@@ -19,9 +19,9 @@ func TestKindOf(t *testing.T) {
 			wantName: "nexus",
 		},
 		{
-			callback: newWorkerCallback(),
-			want:     KindWorker,
-			wantName: "worker",
+			callback: newNexusHandlerCallback(),
+			want:     KindNexusHandler,
+			wantName: "nexusHandler",
 		},
 		{
 			// Internal-variant callbacks should be removed; treated as Unknown.
@@ -62,16 +62,16 @@ func TestConvertEnabledKinds(t *testing.T) {
 		{name: "Nil", val: nil, want: []Kind{}},
 
 		{name: "NexusOnly", val: []string{"nexus"}, want: []Kind{KindNexus}},
-		{name: "WorkerOnly", val: []string{"worker"}, want: []Kind{KindWorker}},
+		{name: "NexusHandlerOnly", val: []string{"nexusHandler"}, want: []Kind{KindNexusHandler}},
 		{
 			name: "Both",
-			val:  []string{"nexus", "worker"},
-			want: []Kind{KindNexus, KindWorker},
+			val:  []string{"nexus", "nexusHandler"},
+			want: []Kind{KindNexus, KindNexusHandler},
 		},
 		{
 			name: "OrderPreserved",
-			val:  []string{"worker", "nexus"},
-			want: []Kind{KindWorker, KindNexus},
+			val:  []string{"nexusHandler", "nexus"},
+			want: []Kind{KindNexusHandler, KindNexus},
 		},
 		{
 			name: "DuplicatesDropped",
@@ -101,7 +101,7 @@ func TestConvertEnabledKinds(t *testing.T) {
 		},
 		{
 			name:   "UnknownNameBesideKnownName",
-			val:    []string{"nexsus", "worker"},
+			val:    []string{"nexsus", "nexusHandler"},
 			errMsg: `[nexsus] does not match a known callback kind`,
 		},
 		{
@@ -112,8 +112,8 @@ func TestConvertEnabledKinds(t *testing.T) {
 		},
 		{
 			name:   "NotNormalizedOrTrimmed",
-			val:    []any{" Nexus", "WORKER", "   nexus", "worker "},
-			errMsg: "[ Nexus WORKER    nexus worker ] does not match a known callback kind",
+			val:    []any{" Nexus", "NEXUSHANDLER", "   nexus", "nexusHandler "},
+			errMsg: "[ Nexus NEXUSHANDLER    nexus nexusHandler ] does not match a known callback kind",
 		},
 		{
 			name:   "AllUnknownNamesReported",

@@ -13,14 +13,14 @@ type Kind string
 
 const (
 	// KindUnknown is the kind of a callback with an unset or unrecognized variant.
-	KindUnknown Kind = "unknown"
-	KindNexus   Kind = "nexus"
-	KindWorker  Kind = "worker"
+	KindUnknown      Kind = "unknown"
+	KindNexus        Kind = "nexus"
+	KindNexusHandler Kind = "nexusHandler"
 )
 
 func (k Kind) String() string {
 	switch k {
-	case KindUnknown, KindNexus, KindWorker:
+	case KindUnknown, KindNexus, KindNexusHandler:
 		return string(k)
 	default:
 		return string(KindUnknown)
@@ -32,8 +32,8 @@ func KindOf(cb *commonpb.Callback) Kind {
 	switch cb.GetVariant().(type) {
 	case *commonpb.Callback_Nexus_:
 		return KindNexus
-	case *commonpb.Callback_Worker_:
-		return KindWorker
+	case *commonpb.Callback_NexusHandler_:
+		return KindNexusHandler
 	case *commonpb.Callback_Internal_:
 		// Internal-variant callbacks are not used and should be removed entirely.
 		return KindUnknown
@@ -54,8 +54,8 @@ func ConvertEnabledKinds(val any) ([]Kind, error) {
 
 	enabledKinds := make([]Kind, 0, 2)
 	configurableKinds := map[string]Kind{
-		KindNexus.String():  KindNexus,
-		KindWorker.String(): KindWorker,
+		KindNexus.String():        KindNexus,
+		KindNexusHandler.String(): KindNexusHandler,
 	}
 	var unknownNames []string
 	for _, name := range names {
@@ -70,7 +70,7 @@ func ConvertEnabledKinds(val any) ([]Kind, error) {
 	}
 	if len(unknownNames) > 0 {
 		return nil, fmt.Errorf(
-			"%v does not match a known callback kind [nexus, worker]",
+			"%v does not match a known callback kind [nexus, nexusHandler]",
 			unknownNames)
 	}
 	return enabledKinds, nil
