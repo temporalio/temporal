@@ -179,7 +179,7 @@ func (b *BackfillerTaskHandler) processBackfill(
 	// so a fresh or capacity-stalled backfiller starts from the range start.
 	var startTime time.Time
 	lastProcessed := backfiller.GetLastProcessedTime()
-	if lastProcessed != nil {
+	if schedulerinternal.HasRecordedBackfillProgress(lastProcessed) {
 		startTime = lastProcessed.AsTime()
 	} else {
 		// On the first attempt, start slightly behind to make the range inclusive.
