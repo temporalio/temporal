@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/telemetry"
 	queuescommon "go.temporal.io/server/service/history/queues/common"
 	"go.uber.org/fx"
 )
@@ -29,12 +30,19 @@ func httpCallerProviderProvider(
 	rpcFactory common.RPCFactory,
 	httpClientCache *cluster.FrontendHTTPClientCache,
 	logger log.Logger,
+	httpClientTransportInstrumenter telemetry.HTTPClientTransportInstrumenter,
 ) (HTTPCallerProvider, error) {
 	localClient, err := rpcFactory.CreateLocalFrontendHTTPClient()
 	if err != nil {
 		return nil, fmt.Errorf("cannot create local frontend HTTP client: %w", err)
 	}
-	defaultClient := &http.Client{}
+	externalTransport, err := common.NewHTTPTransport(nil)
+	if err != nil {
+		return nil, err
+	}
+	externalClient := &http.Client{
+		Transport: httpClientTransportInstrumenter.Instrument(externalTransport),
+	}
 	callbackTokenGenerator := commonnexus.NewCallbackTokenGenerator()
 
 	m := collection.NewOnceMap(func(queuescommon.NamespaceIDAndDestination) HTTPCaller {
@@ -44,7 +52,7 @@ func httpCallerProviderProvider(
 				namespaceRegistry,
 				httpClientCache,
 				callbackTokenGenerator,
-				defaultClient,
+				externalClient,
 				localClient,
 				logger,
 			)

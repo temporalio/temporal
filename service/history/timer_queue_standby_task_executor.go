@@ -115,6 +115,7 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 	default:
 		err = queueserrors.NewUnprocessableTaskError("unknown task type")
 	}
+	emitStandbyTaskError(t.shardContext, executable, taskTypeTagValue, err)
 
 	return queues.ExecuteResponse{
 		ExecutionMetricTags: metricsTags,

@@ -13,6 +13,8 @@
 
 /chasm/lib/nexusoperation/ @temporalio/act @temporalio/nexus
 /chasm/lib/callback/ @temporalio/act @temporalio/nexus
+/chasm/lib/workflow/nexus_* @temporalio/act @temporalio/nexus
+/chasm/nexus_* @temporalio/oss-foundations @temporalio/act @temporalio/nexus
 
 # Service Clients
 
@@ -31,6 +33,7 @@
 
 /common/tasks/ @temporalio/oss-foundations @temporalio/cgs
 /common/persistence/ @temporalio/oss-foundations @temporalio/oss-matching @temporalio/cgs
+/common/persistence/**/nexus_endpoint* @temporalio/oss-foundations @temporalio/oss-matching @temporalio/nexus
 
 # Components
 
@@ -50,6 +53,10 @@
 
 # DB Schema
 /schema/**/visibility/ @temporalio/oss-foundations
+
+# Frontend Service
+
+/service/frontend/nexus_* @temporalio/nexus
 
 # History Service
 
@@ -82,7 +89,7 @@
 /service/worker/dlq/ @temporalio/oss-foundations
 
 /service/worker/scanner/ @temporalio/oss-foundations @temporalio/oss-matching
-/service/worker/scanner/executions/ @temporalio/oss-foundations 
+/service/worker/scanner/executions/ @temporalio/oss-foundations
 /service/worker/scanner/history/ @temporalio/oss-foundations
 /service/worker/scanner/build_ids/ @temporalio/oss-matching
 /service/worker/scanner/taskqueue/ @temporalio/oss-matching
@@ -100,3 +107,6 @@
 *_mock.go      @temporalio/server @temporalio/cgs @temporalio/nexus
 *_gen.go       @temporalio/server @temporalio/cgs @temporalio/nexus
 *.gen.go       @temporalio/server @temporalio/cgs @temporalio/nexus
+
+# This generated file has no code owner to allow automated updates by CI.
+/tests/testcore/shard_salt.txt
