@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
@@ -2940,6 +2941,13 @@ func (s *transferQueueActiveTaskExecutorSuite) TestRecoverClosedChildCompletion_
 	s.Require().NoError(err)
 }
 
+func (s *transferQueueActiveTaskExecutorSuite) TestIsWorkflowCompletedError() {
+	s.True(isWorkflowCompletedError(consts.ErrWorkflowCompleted))
+	s.True(isWorkflowCompletedError(serviceerror.NewNotFound(consts.ErrWorkflowCompleted.Error())))
+	s.False(isWorkflowCompletedError(serviceerror.NewNotFound("workflow execution not found")))
+	s.False(isWorkflowCompletedError(serviceerror.NewUnavailable("history unavailable")))
+}
+
 func (s *transferQueueActiveTaskExecutorSuite) TestRecoverClosedChildCompletion_RefreshFailureIsRetried() {
 	childExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "child-workflow-id",
@@ -3000,6 +3008,10 @@ func (s *transferQueueActiveTaskExecutorSuite) TestRecoverClosedChildCompletion_
 		WorkflowId: "child-workflow-id",
 		RunId:      uuid.NewString(),
 	}
+	metricHandler := metricstest.NewCaptureHandler()
+	metricCapture := metricHandler.StartCapture()
+	defer metricHandler.StopCapture(metricCapture)
+	s.transferQueueActiveTaskExecutor.metricHandler = metricHandler
 
 	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).
 		Return(&historyservice.GetMutableStateResponse{
@@ -3010,6 +3022,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestRecoverClosedChildCompletion_
 
 	err := s.recoverClosedChildCompletion(childExecution, consts.ErrWorkflowCompleted)
 	s.Require().NoError(err)
+	s.Require().Len(metricCapture.Snapshot()[metrics.ChildWorkflowCompletionRecoveryChainMismatch.Name()], 1)
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) TestRecoverClosedChildCompletion_CurrentRunNotFound() {

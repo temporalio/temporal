@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -914,8 +915,11 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 			return serviceerror.NewNamespaceNotFound(childInfo.Namespace)
 		}
 
+		// Recovery depends on this separate scheduling request returning ErrWorkflowCompleted. If
+		// child start and first Workflow Task scheduling are combined into one transaction, this
+		// path cannot detect a completion that happened before parent replication arrived.
 		scheduleErr := t.createFirstWorkflowTask(ctx, targetNamespaceID.String(), childExecution, parentClock, childClock)
-		if scheduleErr == nil || !common.IsNotFoundError(scheduleErr) {
+		if scheduleErr == nil || !isWorkflowCompletedError(scheduleErr) {
 			return scheduleErr
 		}
 
@@ -1467,6 +1471,13 @@ func (t *transferQueueActiveTaskExecutor) createFirstWorkflowTask(
 	return err
 }
 
+func isWorkflowCompletedError(err error) bool {
+	var notFoundErr *serviceerror.NotFound
+	// ScheduleWorkflowTask is a gRPC call, so errors.Is cannot identify the local sentinel after
+	// it has been serialized. Match both the service error type and the sentinel message instead.
+	return errors.As(err, &notFoundErr) && notFoundErr.Error() == consts.ErrWorkflowCompleted.Error()
+}
+
 func (t *transferQueueActiveTaskExecutor) recoverClosedChildCompletion(
 	ctx context.Context,
 	parentTask *tasks.StartChildExecutionTask,
@@ -1498,6 +1509,9 @@ func (t *transferQueueActiveTaskExecutor) recoverClosedChildCompletion(
 	}
 
 	if mutableStateResponse.GetFirstExecutionRunId() != childFirstRunID {
+		metrics.ChildWorkflowCompletionRecoveryChainMismatch.With(
+			t.metricHandler.WithTags(metrics.NamespaceTag(childNamespaceName.String())),
+		).Record(1)
 		t.logger.Warn(
 			"Unable to recover child completion because the workflow ID points to a different execution chain",
 			tag.NewStringTag("parent-namespace-id", parentTask.GetNamespaceID()),
