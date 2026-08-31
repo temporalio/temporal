@@ -159,13 +159,28 @@ func TestRequire_UsesAdaptivePollIntervalAfterAttemptFinishes(t *testing.T) {
 			if attempts.Add(1) < 3 {
 				t.Error("not ready")
 			}
-		}, 3*time.Second, time.Nanosecond)
+		}, 3*time.Second, 500*time.Millisecond)
 
 		require.Equal(t, int32(3), attempts.Load())
 		require.Len(t, attemptStarts, 3)
 		require.Len(t, attemptEnds, 3)
 		require.Equal(t, 500*time.Millisecond, attemptStarts[1].Sub(attemptEnds[0]))
 		require.Equal(t, time.Second, attemptStarts[2].Sub(attemptEnds[1]))
+	})
+}
+
+func TestRequire_UsesRequestedPollIntervalAsAdaptiveBase(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var attempts atomic.Int32
+
+		await.Require(t.Context(), t, func(t *await.T) {
+			time.Sleep(60 * time.Millisecond) //nolint:forbidigo // simulate a condition with non-trivial work per attempt
+			if attempts.Add(1) < 9 {
+				t.Error("not ready")
+			}
+		}, 5*time.Second, 100*time.Millisecond)
+
+		require.Equal(t, int32(9), attempts.Load())
 	})
 }
 

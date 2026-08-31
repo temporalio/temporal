@@ -11,6 +11,7 @@ const attemptTimeoutEnvVar = "TEMPORAL_AWAIT_ATTEMPT_TIMEOUT"
 
 type config struct {
 	totalTimeout   time.Duration
+	pollInterval   time.Duration
 	attemptTimeout time.Duration
 	timeoutMsg     string
 }
@@ -21,22 +22,26 @@ func newConfig() config {
 	}
 }
 
-func legacyConfig(timeout time.Duration, timeoutMsg string) config {
+func legacyConfig(timeout, pollInterval time.Duration, timeoutMsg string) config {
 	cfg := newConfig()
 	cfg.totalTimeout = timeout
+	cfg.pollInterval = pollInterval
 	cfg.timeoutMsg = timeoutMsg
 	return cfg
 }
 
-func nextPollInterval(attempt int) time.Duration {
-	switch attempt {
-	case 1:
-		return 500 * time.Millisecond
-	case 2:
-		return time.Second
-	default:
-		return 2 * time.Second
+func nextPollInterval(base time.Duration, attempt int) time.Duration {
+	interval := min(base, 2*time.Second)
+	if interval <= 0 {
+		return interval
 	}
+	for range attempt - 1 {
+		if interval >= time.Second {
+			return 2 * time.Second
+		}
+		interval *= 2
+	}
+	return min(interval, 2*time.Second)
 }
 
 func envDuration(name string, fallback time.Duration) time.Duration {
