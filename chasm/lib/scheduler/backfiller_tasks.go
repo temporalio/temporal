@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/schedules"
 	queueerrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -183,7 +184,7 @@ func (b *BackfillerTaskHandler) processBackfill(
 		startTime = lastProcessed.AsTime()
 	} else {
 		// On the first attempt, start slightly behind to make the range inclusive.
-		startTime = request.GetStartTime().AsTime().Add(-1 * time.Millisecond)
+		startTime = schedules.InclusiveBackfillCursor(request.GetStartTime().AsTime())
 	}
 	specResult, err := b.specProcessor.ProcessTimeRange(
 		scheduler,

@@ -346,10 +346,10 @@ func TestConvertBackfillersCHASMToLegacy_BackfillCursor(t *testing.T) {
 			wantStartTime: startTime.Add(-time.Millisecond),
 		},
 		{
-			name:          "epoch watermark",
+			name:          "zero watermark",
 			attempt:       1,
 			lastProcessed: timestamppb.New(time.Unix(0, 0)),
-			wantStartTime: time.Unix(0, 0).UTC(),
+			wantStartTime: startTime.Add(-time.Millisecond),
 		},
 		{
 			name:          "progressed",
