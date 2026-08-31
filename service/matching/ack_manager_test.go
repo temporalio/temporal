@@ -227,7 +227,7 @@ func BenchmarkAckManager_CompleteTask(b *testing.B) {
 func newTestAckMgr(logger log.Logger) *ackManager {
 	tm := newTestTaskManager(logger)
 	cfg := NewConfig(dynamicconfig.NewNoopCollection())
-	f, _ := tqid.NewTaskQueueFamily("", "test-queue")
+	f, _ := tqid.NewTaskQueueFamily(defaultNamespaceId, "test-queue")
 	prtn := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0)
 	tlCfg := newTaskQueueConfig(prtn.TaskQueue(), cfg, "test-namespace")
 	db := newTaskQueueDB(tlCfg, tm, UnversionedQueueKey(prtn), logger, metrics.NoopMetricsHandler, false)
