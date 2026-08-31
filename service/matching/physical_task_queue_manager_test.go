@@ -75,7 +75,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) SetupTest() {
 	nsName := namespace.Name("ns-name")
 	ns, registry := createMockNamespaceCache(s.controller, nsName)
 
-	engine := createTestMatchingEngine(logger, s.controller, s.config, nil, registry)
+	engine := createTestMatchingEngine(s.T(), logger, s.controller, s.config, nil, registry)
 	engine.metricsHandler = metricstest.NewCaptureHandler()
 
 	s.physicalTaskQueueKey = defaultTqId()
@@ -747,7 +747,7 @@ func TestDrainCompletionNoReloadDraining(t *testing.T) {
 	nsName := namespace.Name("ns-name")
 	ns, registry := createMockNamespaceCache(controller, nsName)
 
-	engine := createTestMatchingEngine(logger, controller, config, nil, registry)
+	engine := createTestMatchingEngine(t, logger, controller, config, nil, registry)
 	engine.metricsHandler = metricstest.NewCaptureHandler()
 
 	// Get the test task managers
@@ -793,7 +793,7 @@ func TestDrainCompletionNoReloadDraining(t *testing.T) {
 	// otherhastasks is false in persistence
 	require.Eventually(t, func() bool {
 		fairQueueData.Lock()
-		otherHasTasks := fairQueueData.info.OtherHasTasks
+		otherHasTasks := fairQueueData.info.GetOtherHasTasks()
 		fairQueueData.Unlock()
 		return tqMgr.getDrainBacklogMgr() == nil && !otherHasTasks
 	}, 5*time.Second, 50*time.Millisecond, "drain should complete")

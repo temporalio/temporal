@@ -78,6 +78,7 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 	} else {
 		s.taskMgr = newTestTaskManager(s.logger)
 	}
+	s.T().Cleanup(s.taskMgr.Close)
 
 	// A capture handler discards recordings while no capture is active (see
 	// CaptureHandler.record), so it behaves like a noop handler for tests that
@@ -87,7 +88,7 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 	s.cfgcli = dynamicconfig.NewMemoryClient()
 	s.cfgcol = dynamicconfig.NewCollection(s.cfgcli, s.logger)
 
-	f, _ := tqid.NewTaskQueueFamily("", "test-queue")
+	f, _ := tqid.NewTaskQueueFamily(defaultNamespaceId, "test-queue")
 	prtn := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0)
 	queue := UnversionedQueueKey(prtn)
 	tlCfg := newTaskQueueConfig(prtn.TaskQueue(), NewConfig(s.cfgcol), "test-namespace")

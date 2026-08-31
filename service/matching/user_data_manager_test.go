@@ -50,6 +50,7 @@ func createUserDataManager(
 	logger := log.NewTestLogger()
 	ns := namespace.Name("ns-name")
 	tm := newTestTaskManager(logger)
+	t.Cleanup(tm.Close)
 	mockNamespaceCache := namespace.NewMockRegistry(controller)
 	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
 	mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(ns, nil).AnyTimes()
@@ -93,7 +94,7 @@ func TestUserData_LoadOnInit(t *testing.T) {
 	tqCfg.dbq = dbq
 
 	data1 := &persistencespb.VersionedTaskQueueUserData{
-		Version: 1,
+		Version: 0,
 		Data:    mkUserData(1),
 	}
 
@@ -114,7 +115,7 @@ func TestUserData_LoadOnInit(t *testing.T) {
 	require.NoError(t, m.WaitUntilInitialized(ctx))
 	userData, _, err := m.GetUserData()
 	require.NoError(t, err)
-	require.Equal(t, data1, userData)
+	require.True(t, proto.Equal(data1, userData))
 	m.Stop()
 	m.goroGroup.Wait() // ensure gomock doesn't complain about calls after the test returns
 }
@@ -130,7 +131,7 @@ func TestUserData_LoadOnInit_Refresh(t *testing.T) {
 	tqCfg.expectUserDataError = false
 
 	data1 := &persistencespb.VersionedTaskQueueUserData{
-		Version: 1,
+		Version: 0,
 		Data:    mkUserData(1),
 	}
 
@@ -159,14 +160,14 @@ func TestUserData_LoadOnInit_Refresh(t *testing.T) {
 		return tm.getGetUserDataCount(dbq) >= 5
 	}, time.Second, time.Millisecond)
 
-	// should still have version 2
+	// should still have version 1
 	userData, _, err := m.GetUserData()
 	require.NoError(t, err)
-	require.Equal(t, data1, userData)
+	require.True(t, proto.Equal(data1, userData))
 
 	// pretend someone else managed to update data
 	data2 := &persistencespb.VersionedTaskQueueUserData{
-		Version: 2,
+		Version: 1,
 		Data:    mkUserData(2),
 	}
 	require.NoError(t, m.store.UpdateTaskQueueUserData(context.Background(),
@@ -201,7 +202,7 @@ func TestUserData_LoadOnInit_Refresh_Backwards(t *testing.T) {
 	tqCfg.expectUserDataError = true
 
 	data5 := &persistencespb.VersionedTaskQueueUserData{
-		Version: 5,
+		Version: 0,
 		Data:    mkUserData(5),
 	}
 
@@ -230,26 +231,15 @@ func TestUserData_LoadOnInit_Refresh_Backwards(t *testing.T) {
 		return tm.getGetUserDataCount(dbq) >= 5
 	}, time.Second, time.Millisecond)
 
-	// should still have version 6
 	userData, _, err := m.GetUserData()
 	require.NoError(t, err)
-	require.Equal(t, data5, userData)
+	require.True(t, proto.Equal(data5, userData))
 
-	// data in db has older version
-	data4 := &persistencespb.VersionedTaskQueueUserData{
-		Version: 4,
+	// Simulate the db going backwards in version (not possible via SQL CAS).
+	tm.forceUserData(defaultNamespaceId, defaultRootTqID, &persistencespb.VersionedTaskQueueUserData{
+		Version: 0,
 		Data:    mkUserData(4),
-	}
-	require.NoError(t, m.store.UpdateTaskQueueUserData(context.Background(),
-		&persistence.UpdateTaskQueueUserDataRequest{
-			NamespaceID: defaultNamespaceId,
-			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
-				defaultRootTqID: &persistence.SingleTaskQueueUserDataUpdate{
-					UserData: data4,
-				},
-			},
-		}))
-	data4.Version++
+	})
 
 	// it should unload the task queue
 	require.Eventually(t, func() bool {
