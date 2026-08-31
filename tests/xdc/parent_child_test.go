@@ -12,7 +12,6 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -28,8 +27,6 @@ const (
 	resetChildRun
 )
 
-const parentChildClusterMetadataRefreshInterval = 100 * time.Millisecond
-
 func TestParentChildXDCTestSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, new(parentChildXDCTestSuite))
@@ -37,10 +34,6 @@ func TestParentChildXDCTestSuite(t *testing.T) {
 
 func (s *parentChildXDCTestSuite) SetupSuite() {
 	s.enableTransitionHistory = true
-	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
-		dynamicconfig.EnableSeparateReplicationEnableFlag.Key(): true,
-		dynamicconfig.ClusterMetadataRefreshInterval.Key():      parentChildClusterMetadataRefreshInterval,
-	}
 	s.setupSuite(testcore.WithNumHistoryShards(2))
 }
 
@@ -210,38 +203,32 @@ func (s *parentChildXDCTestSuite) TestReproOrphanedChildAfterForceFailover() {
 }
 
 // TestActiveRecoversChildCompletionWhenParentReplicationArrivesLate covers the cross-shard ordering
-// where the first parent replication snapshot contains the child-start relationship but remains
-// delayed until after the child closes on the new active cluster.
+// where parent replication remains delayed until after the child closes on the new active cluster.
 //
-//	                         | parent on target                 | child on target   | active          | outcome
-//	-------------------------+---------------------------------+------------------+----------------+-----------------------------------------------
-//	parent snapshot delayed  | does not exist                   | does not exist    | initial active  | snapshot contains ChildWorkflowExecutionStarted
-//	child start arrives      | does not exist                   | RUNNING           | initial active  | child points to the missing parent
-//	force failover           | does not exist                   | RUNNING           | initial standby | target becomes active with partial state
-//	child closes             | does not exist                   | COMPLETED         | initial standby | CloseExecution cannot notify the missing parent
-//	parent snapshot arrives  | child relationship restored      | COMPLETED         | initial standby | regenerated StartChild finds the child closed
-//	refresh child tasks      | ChildWorkflowExecutionCompleted  | COMPLETED         | initial standby | recreated CloseExecution records completion
+//	                    | parent on target                | child on target   | active          | outcome
+//	--------------------+---------------------------------+-------------------+-----------------+-----------------------------------------------
+//	conversion paused   | does not exist                  | does not exist    | initial active  | source cannot emit the parent snapshot
+//	child start arrives | does not exist                  | RUNNING           | initial active  | child points to the missing parent
+//	force failover      | does not exist                  | RUNNING           | initial standby | target becomes active with partial state
+//	child closes        | does not exist                  | COMPLETED         | initial standby | CloseExecution cannot notify the missing parent
+//	parent tasks arrive | child relationship restored     | COMPLETED         | initial standby | regenerated StartChild finds the child closed
+//	refresh child tasks | ChildWorkflowExecutionCompleted | COMPLETED         | initial standby | recreated CloseExecution records completion
 //
-// Source-to-target workflow replication is re-enabled only after the source records
-// ChildWorkflowExecutionStarted, so the first parent task converts to a complete initial snapshot.
-// It is delayed rather than acknowledged or dropped. Event checkpoints select an entire task.
+// Parent task conversion is paused before the first task is emitted. After the child closes, the
+// first raw task is converted against the latest source state, producing a complete initial snapshot
+// that includes ChildWorkflowExecutionStarted. No task is acknowledged or dropped. Event checkpoints
+// select an entire replication task, not an individual event.
 func (s *parentChildXDCTestSuite) TestActiveRecoversChildCompletionWhenParentReplicationArrivesLate() {
 	s.runParentChildScenario(parentChildScenario{
 		steps: []parentChildScenarioStep{
 			setStandbyClusterDelay(initialStandbyCluster, 0),
-			setWorkflowReplication(initialActiveCluster, initialStandbyCluster, false),
+			delayParentReplicationTaskConversion(initialActiveCluster),
 			startParentWorkflow(),
 			completeParentWorkflowTaskWithStartChildCommand(),
 			waitForWorkflowEventOnCluster(
 				initialActiveCluster,
 				parentWorkflow,
 				enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED,
-			),
-			setWorkflowReplication(initialActiveCluster, initialStandbyCluster, true),
-			delayReplicationAtTaskContainingEvent(
-				initialStandbyCluster,
-				parentWorkflow,
-				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 			),
 			applyReplicationThroughTaskContainingEvent(
 				initialStandbyCluster,
@@ -261,36 +248,30 @@ func (s *parentChildXDCTestSuite) TestActiveRecoversChildCompletionWhenParentRep
 // TestActiveRecoversContinuedAsNewChildCompletionWhenParentReplicationArrivesLate covers the same
 // delayed-parent ordering when the child continues as new before its terminal run closes.
 //
-//	                         | parent on target                 | child on target                             | active          | outcome
-//	-------------------------+---------------------------------+--------------------------------------------+----------------+-----------------------------------------------
-//	parent snapshot delayed  | does not exist                   | does not exist                              | initial active  | snapshot contains the initial child run
-//	child start arrives      | does not exist                   | run 1 RUNNING                               | initial active  | child points to the missing parent
-//	force failover           | does not exist                   | run 1 RUNNING                               | initial standby | target becomes active with partial state
-//	child continues as new   | does not exist                   | run 1 CONTINUED_AS_NEW; run 2 RUNNING       | initial standby | run 1 CloseExecution processes without replying
-//	terminal run closes      | does not exist                   | run 1 CONTINUED_AS_NEW; run 2 COMPLETED     | initial standby | run 2 cannot notify the missing parent
-//	parent snapshot arrives  | child relationship restored      | run 2 COMPLETED                             | initial standby | StartChild resolves the current chain member
-//	refresh current run      | ChildWorkflowExecutionCompleted  | run 2 COMPLETED                             | initial standby | recreated run 2 CloseExecution records completion
+//	                       | parent on target                 | child on target                         | active          | outcome
+//	-----------------------+----------------------------------+-----------------------------------------+-----------------+-----------------------------------------------
+//	conversion paused      | does not exist                   | does not exist                          | initial active  | source cannot emit the parent snapshot
+//	child start arrives    | does not exist                   | run 1 RUNNING                           | initial active  | child points to the missing parent
+//	force failover         | does not exist                   | run 1 RUNNING                           | initial standby | target becomes active with partial state
+//	child continues as new | does not exist                   | run 1 CONTINUED_AS_NEW; run 2 RUNNING   | initial standby | run 1 CloseExecution processes without replying
+//	terminal run closes    | does not exist                   | run 1 CONTINUED_AS_NEW; run 2 COMPLETED | initial standby | run 2 cannot notify the missing parent
+//	parent tasks arrive    | child relationship restored      | run 2 COMPLETED                         | initial standby | StartChild resolves the current chain member
+//	refresh current run    | ChildWorkflowExecutionCompleted  | run 2 COMPLETED                         | initial standby | recreated run 2 CloseExecution records completion
 //
 // Both child CloseExecution tasks are processed before the parent snapshot is applied. Scheduling
 // the first task on run 1 reports that it is closed; loading current mutable state finds terminal run 2
-// with the same first-run ID, so recovery refreshes run 2. The parent snapshot is delayed, not lost.
+// with the same first-run ID, so recovery refreshes run 2. Parent replication is delayed, not lost.
 func (s *parentChildXDCTestSuite) TestActiveRecoversContinuedAsNewChildCompletionWhenParentReplicationArrivesLate() {
 	s.runParentChildScenario(parentChildScenario{
 		steps: []parentChildScenarioStep{
 			setStandbyClusterDelay(initialStandbyCluster, 0),
-			setWorkflowReplication(initialActiveCluster, initialStandbyCluster, false),
+			delayParentReplicationTaskConversion(initialActiveCluster),
 			startParentWorkflow(),
 			completeParentWorkflowTaskWithStartChildCommand(),
 			waitForWorkflowEventOnCluster(
 				initialActiveCluster,
 				parentWorkflow,
 				enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED,
-			),
-			setWorkflowReplication(initialActiveCluster, initialStandbyCluster, true),
-			delayReplicationAtTaskContainingEvent(
-				initialStandbyCluster,
-				parentWorkflow,
-				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 			),
 			applyReplicationThroughTaskContainingEvent(
 				initialStandbyCluster,
@@ -313,37 +294,31 @@ func (s *parentChildXDCTestSuite) TestActiveRecoversContinuedAsNewChildCompletio
 // TestActiveRecoversResetChildCompletionWhenParentReplicationArrivesLate covers the same
 // delayed-parent ordering when a completed child is reset and its reset run also closes.
 //
-//	                         | parent on target                 | child on target                              | active          | outcome
-//	-------------------------+---------------------------------+---------------------------------------------+----------------+-----------------------------------------------
-//	parent snapshot delayed  | does not exist                   | does not exist                               | initial active  | snapshot contains the original child run
-//	child start arrives      | does not exist                   | original run RUNNING                         | initial active  | child points to the missing parent
-//	force failover           | does not exist                   | original run RUNNING                         | initial standby | target becomes active with partial state
-//	original run closes      | does not exist                   | original run COMPLETED                       | initial standby | completion cannot reach the missing parent
-//	child is reset           | does not exist                   | original COMPLETED; reset run RUNNING        | initial standby | reset run preserves the original first-run ID
-//	reset run closes         | does not exist                   | original COMPLETED; reset run COMPLETED      | initial standby | reset completion cannot reach the missing parent
-//	parent snapshot arrives  | child relationship restored      | reset run COMPLETED                          | initial standby | StartChild resolves the current reset run
-//	refresh reset run        | ChildWorkflowExecutionCompleted  | reset run COMPLETED                          | initial standby | recreated reset-run CloseExecution records completion
+//	                    | parent on target                 | child on target                         | active          | outcome
+//	--------------------+----------------------------------+-----------------------------------------+-----------------+-----------------------------------------------
+//	conversion paused   | does not exist                   | does not exist                          | initial active  | source cannot emit the parent snapshot
+//	child start arrives | does not exist                   | original run RUNNING                    | initial active  | child points to the missing parent
+//	force failover      | does not exist                   | original run RUNNING                    | initial standby | target becomes active with partial state
+//	original run closes | does not exist                   | original run COMPLETED                  | initial standby | completion cannot reach the missing parent
+//	child is reset      | does not exist                   | original COMPLETED; reset run RUNNING   | initial standby | reset run preserves the original first-run ID
+//	reset run closes    | does not exist                   | original COMPLETED; reset run COMPLETED | initial standby | reset completion cannot reach the missing parent
+//	parent tasks arrive | child relationship restored      | reset run COMPLETED                     | initial standby | StartChild resolves the current reset run
+//	refresh reset run   | ChildWorkflowExecutionCompleted  | reset run COMPLETED                     | initial standby | recreated reset-run CloseExecution records completion
 //
 // The original and reset-run CloseExecution tasks are processed before the parent snapshot is
 // applied. Because the reset run inherits the original first-run ID, recovery recognizes it as the
-// same child chain and refreshes the terminal reset run. The parent snapshot is delayed, not lost.
+// same child chain and refreshes the terminal reset run. Parent replication is delayed, not lost.
 func (s *parentChildXDCTestSuite) TestActiveRecoversResetChildCompletionWhenParentReplicationArrivesLate() {
 	s.runParentChildScenario(parentChildScenario{
 		steps: []parentChildScenarioStep{
 			setStandbyClusterDelay(initialStandbyCluster, 0),
-			setWorkflowReplication(initialActiveCluster, initialStandbyCluster, false),
+			delayParentReplicationTaskConversion(initialActiveCluster),
 			startParentWorkflow(),
 			completeParentWorkflowTaskWithStartChildCommand(),
 			waitForWorkflowEventOnCluster(
 				initialActiveCluster,
 				parentWorkflow,
 				enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED,
-			),
-			setWorkflowReplication(initialActiveCluster, initialStandbyCluster, true),
-			delayReplicationAtTaskContainingEvent(
-				initialStandbyCluster,
-				parentWorkflow,
-				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 			),
 			applyReplicationThroughTaskContainingEvent(
 				initialStandbyCluster,
@@ -446,7 +421,17 @@ func closeChildRunsBeforeApplyingParent(actions ...childRunAction) parentChildSc
 					return fmt.Errorf("unknown child run action %d", action)
 				}
 			}
-			return runtime.resolveDelayedReplication(initialStandbyCluster, parentWorkflow, true)
+			if runtime.resumeParentConversion == nil {
+				return errors.New("parent replication task conversion is not delayed")
+			}
+			runtime.resumeParentConversion()
+			return runtime.processReplicationThroughTaskContainingEvent(
+				ctx,
+				initialStandbyCluster,
+				parentWorkflow,
+				enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED,
+				applyReplicationTask,
+			)
 		},
 	}
 }

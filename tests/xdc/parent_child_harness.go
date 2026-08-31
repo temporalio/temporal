@@ -17,7 +17,6 @@ import (
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -27,11 +26,13 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
+	historytasks "go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -85,6 +86,7 @@ type (
 		delayedTasks              map[parentChildReplicationLane]*parentChildReplicationTask
 		metricCaptures            [2]parentChildMetricCapture
 		trace                     []string
+		resumeParentConversion    func()
 	}
 
 	parentChildMetricCapture struct {
@@ -227,6 +229,9 @@ func (r *parentChildScenarioRuntime) initialize(ctx context.Context) error {
 }
 
 func (r *parentChildScenarioRuntime) close() {
+	if r.resumeParentConversion != nil {
+		r.resumeParentConversion()
+	}
 	for _, gate := range r.gates {
 		if gate != nil {
 			gate.close()
@@ -318,74 +323,39 @@ func setStandbyClusterDelay(
 	}
 }
 
-func setWorkflowReplication(
-	cluster1 parentChildCluster,
-	cluster2 parentChildCluster,
-	enabled bool,
-) parentChildScenarioStep {
+func delayParentReplicationTaskConversion(cluster parentChildCluster) parentChildScenarioStep {
 	return parentChildScenarioStep{
-		name: fmt.Sprintf("set workflow replication between %s and %s to %t", cluster1, cluster2, enabled),
-		run: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
-			clusterIndex1 := int(cluster1)
-			clusterIndex2 := int(cluster2)
-			if clusterIndex1 < 0 || clusterIndex1 >= len(runtime.suite.clusters) {
-				return fmt.Errorf("unknown parent-child cluster %d", cluster1)
+		name: fmt.Sprintf("delay parent replication task conversion on %s", cluster),
+		run: func(_ context.Context, runtime *parentChildScenarioRuntime) error {
+			clusterIndex := int(cluster)
+			if clusterIndex < 0 || clusterIndex >= len(runtime.suite.clusters) {
+				return fmt.Errorf("unknown parent-child cluster %d", cluster)
 			}
-			if clusterIndex2 < 0 || clusterIndex2 >= len(runtime.suite.clusters) {
-				return fmt.Errorf("unknown parent-child cluster %d", cluster2)
-			}
-			if clusterIndex1 == clusterIndex2 {
-				return errors.New("workflow replication requires two distinct clusters")
+			if runtime.resumeParentConversion != nil {
+				return errors.New("parent replication task conversion is already delayed")
 			}
 
-			setReplication := func(ctx context.Context, enabled bool) error {
-				for _, pair := range [][2]int{{clusterIndex1, clusterIndex2}, {clusterIndex2, clusterIndex1}} {
-					localCluster := runtime.suite.clusters[pair[0]]
-					remoteCluster := runtime.suite.clusters[pair[1]]
-					_, err := localCluster.AdminClient().AddOrUpdateRemoteCluster(
-						ctx,
-						&adminservice.AddOrUpdateRemoteClusterRequest{
-							FrontendAddress:               remoteCluster.Host().RemoteFrontendGRPCAddress(),
-							EnableRemoteClusterConnection: true,
-							EnableReplication:             enabled,
-						},
-					)
-					if err != nil {
-						return err
-					}
-				}
-				return nil
+			release := make(chan struct{})
+			var releaseOnce sync.Once
+			runtime.resumeParentConversion = func() {
+				releaseOnce.Do(func() { close(release) })
 			}
-
-			if !enabled {
-				runtime.cleanups = append(runtime.cleanups, func() {
-					cleanupCtx := testcore.NewContext()
-					err := setReplication(cleanupCtx, true)
-					runtime.suite.Require().NoError(err)
-					if err == nil {
-						runtime.suite.Require().NoError(waitForClusterMetadataRefresh(cleanupCtx))
-					}
-				})
-			}
-			if err := setReplication(ctx, enabled); err != nil {
-				return err
-			}
-			if !enabled {
-				return waitForClusterMetadataRefresh(ctx)
-			}
+			runtime.removeHooks = append(runtime.removeHooks, runtime.suite.clusters[clusterIndex].InjectHook(
+				runtime.suite.T(),
+				testhooks.NewHook(
+					testhooks.HistoryReplicationTaskConversionInterceptor,
+					func(task historytasks.Task, convert func() (*replicationspb.ReplicationTask, error)) (*replicationspb.ReplicationTask, error) {
+						if task.GetWorkflowID() != runtime.parentID {
+							return convert()
+						}
+						<-release
+						return convert()
+					},
+				),
+				namespace.ID(runtime.namespaceID),
+			))
 			return nil
 		},
-	}
-}
-
-func waitForClusterMetadataRefresh(ctx context.Context) error {
-	timer := time.NewTimer(2 * parentChildClusterMetadataRefreshInterval)
-	defer timer.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
 	}
 }
 
