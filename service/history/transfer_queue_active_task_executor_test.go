@@ -19,6 +19,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -2910,6 +2911,132 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 
 	resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.NoError(resp.ExecutionErr)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestCreateFirstWorkflowTask_ClosedChildRefreshesTerminalCurrentRun() {
+	childExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "child-workflow-id",
+		RunId:      uuid.NewString(),
+	}
+	terminalRunID := uuid.NewString()
+
+	s.mockHistoryClient.EXPECT().ScheduleWorkflowTask(gomock.Any(), gomock.Any()).
+		Return(nil, consts.ErrWorkflowCompleted)
+	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), protomock.Eq(&historyservice.DescribeWorkflowExecutionRequest{
+		NamespaceId: s.childNamespaceID.String(),
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Execution: &commonpb.WorkflowExecution{WorkflowId: childExecution.WorkflowId},
+		},
+	})).Return(&historyservice.DescribeWorkflowExecutionResponse{
+		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+			Execution:  &commonpb.WorkflowExecution{WorkflowId: childExecution.WorkflowId, RunId: terminalRunID},
+			Status:     enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			FirstRunId: childExecution.RunId,
+		},
+	}, nil)
+	s.mockHistoryClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), protomock.Eq(&historyservice.RefreshWorkflowTasksRequest{
+		NamespaceId: s.childNamespaceID.String(),
+		ArchetypeId: chasm.WorkflowArchetypeID,
+		Request: &adminservice.RefreshWorkflowTasksRequest{
+			NamespaceId: s.childNamespaceID.String(),
+			Execution:   &commonpb.WorkflowExecution{WorkflowId: childExecution.WorkflowId, RunId: terminalRunID},
+			ArchetypeId: chasm.WorkflowArchetypeID,
+		},
+	})).Return(&historyservice.RefreshWorkflowTasksResponse{}, nil)
+
+	err := s.transferQueueActiveTaskExecutor.createFirstWorkflowTask(
+		context.Background(),
+		s.childNamespaceID.String(),
+		childExecution,
+		nil,
+		nil,
+	)
+	s.Require().NoError(err)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestCreateFirstWorkflowTask_RefreshFailureIsRetried() {
+	childExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "child-workflow-id",
+		RunId:      uuid.NewString(),
+	}
+	terminalRunID := uuid.NewString()
+	refreshErr := serviceerror.NewUnavailable("refresh failed")
+
+	s.mockHistoryClient.EXPECT().ScheduleWorkflowTask(gomock.Any(), gomock.Any()).
+		Return(nil, consts.ErrWorkflowCompleted)
+	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&historyservice.DescribeWorkflowExecutionResponse{
+			WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+				Execution:  &commonpb.WorkflowExecution{WorkflowId: childExecution.WorkflowId, RunId: terminalRunID},
+				Status:     enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				FirstRunId: childExecution.RunId,
+			},
+		}, nil)
+	s.mockHistoryClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), gomock.Any()).
+		Return(nil, refreshErr)
+
+	err := s.transferQueueActiveTaskExecutor.createFirstWorkflowTask(
+		context.Background(),
+		s.childNamespaceID.String(),
+		childExecution,
+		nil,
+		nil,
+	)
+	s.Require().ErrorIs(err, refreshErr)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestCreateFirstWorkflowTask_RunningSuccessorIsNotRefreshed() {
+	childExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "child-workflow-id",
+		RunId:      uuid.NewString(),
+	}
+
+	s.mockHistoryClient.EXPECT().ScheduleWorkflowTask(gomock.Any(), gomock.Any()).
+		Return(nil, consts.ErrWorkflowCompleted)
+	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&historyservice.DescribeWorkflowExecutionResponse{
+			WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+				Execution:  &commonpb.WorkflowExecution{WorkflowId: childExecution.WorkflowId, RunId: uuid.NewString()},
+				Status:     enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				FirstRunId: childExecution.RunId,
+			},
+		}, nil)
+
+	err := s.transferQueueActiveTaskExecutor.createFirstWorkflowTask(
+		context.Background(),
+		s.childNamespaceID.String(),
+		childExecution,
+		nil,
+		nil,
+	)
+	s.Require().NoError(err)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestCreateFirstWorkflowTask_WorkflowIDReused() {
+	childExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "child-workflow-id",
+		RunId:      uuid.NewString(),
+	}
+
+	s.mockHistoryClient.EXPECT().ScheduleWorkflowTask(gomock.Any(), gomock.Any()).
+		Return(nil, consts.ErrWorkflowCompleted)
+	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&historyservice.DescribeWorkflowExecutionResponse{
+			WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+				Execution:  &commonpb.WorkflowExecution{WorkflowId: childExecution.WorkflowId, RunId: uuid.NewString()},
+				Status:     enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				FirstRunId: uuid.NewString(),
+			},
+		}, nil)
+
+	err := s.transferQueueActiveTaskExecutor.createFirstWorkflowTask(
+		context.Background(),
+		s.childNamespaceID.String(),
+		childExecution,
+		nil,
+		nil,
+	)
+	s.Require().NoError(err)
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Duplication() {

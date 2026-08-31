@@ -14,6 +14,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -1447,6 +1448,46 @@ func (t *transferQueueActiveTaskExecutor) createFirstWorkflowTask(
 		IsFirstWorkflowTask: true,
 		ParentClock:         parentClock,
 		ChildClock:          childClock,
+	})
+	if err == nil || !common.IsNotFoundError(err) {
+		return err
+	}
+
+	// Parent replication can regenerate this task after the child's original close task was
+	// acknowledged while the parent was missing.
+	describeResponse, describeErr := t.historyRawClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
+		NamespaceId: namespaceID,
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: execution.GetWorkflowId(),
+			},
+		},
+	})
+	if describeErr != nil {
+		if common.IsNotFoundError(describeErr) {
+			// TODO: Revisit this recovery gap. If the current run is deleted before parent
+			// replication arrives, there is no execution to refresh and completion cannot be recovered.
+			return nil
+		}
+		return describeErr
+	}
+
+	executionInfo := describeResponse.GetWorkflowExecutionInfo()
+	if executionInfo.GetFirstRunId() != execution.GetRunId() ||
+		executionInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED ||
+		executionInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING ||
+		executionInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW {
+		return nil
+	}
+
+	_, err = t.historyRawClient.RefreshWorkflowTasks(ctx, &historyservice.RefreshWorkflowTasksRequest{
+		NamespaceId: namespaceID,
+		ArchetypeId: chasm.WorkflowArchetypeID,
+		Request: &adminservice.RefreshWorkflowTasksRequest{
+			NamespaceId: namespaceID,
+			Execution:   executionInfo.GetExecution(),
+			ArchetypeId: chasm.WorkflowArchetypeID,
+		},
 	})
 	return err
 }
