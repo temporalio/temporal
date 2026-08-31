@@ -6313,6 +6313,21 @@ func (s *mutableStateSuite) TestNextActivityTimerTaskMask_ClearsOnlyMovedDeadlin
 	)
 }
 
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_HeartbeatProgressKeepsPendingWakeup() {
+	version := int64(99)
+	current := startedActivityInfoForMask(version, 1, 1)
+	incoming := startedActivityInfoForMask(version, 1, 1)
+	incoming.LastHeartbeatUpdateTime = timestamppb.New(
+		incoming.StartedTime.AsTime().Add(30 * time.Second),
+	)
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
+
+	// Recording heartbeat progress moves its timeout deadline, but the active path
+	// deliberately relies on the already-pending earlier task as the next wake-up.
+	s.Equal(current.TimerTaskStatus, s.mutableState.getActivityTimerTaskStatus(current, incoming))
+}
+
 func (s *mutableStateSuite) TestNextActivityTimerTaskMask_UnrelatedOptionChanged_KeepsMask() {
 	version := int64(99)
 	current := startedActivityInfoForMask(version, 1, 1)
@@ -7197,7 +7212,7 @@ func (s *mutableStateSuite) TestSetContextMetadata_ActivityNotFound() {
 	s.False(ok)
 }
 
-func (s *mutableStateSuite) TestAddActivityTaskStartedEventStoresWorkerControlTaskQueue() {
+func (s *mutableStateSuite) TestAddActivityTaskStartedEventStoresWorkerControlTaskQueueAndClearsUnversionedDeployment() {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 
 	// Setup workflow execution
@@ -7250,6 +7265,11 @@ func (s *mutableStateSuite) TestAddActivityTaskStartedEventStoresWorkerControlTa
 	)
 	s.NoError(err)
 	s.Empty(activityInfo.WorkerControlTaskQueue, "WorkerControlTaskQueue should be empty before activity starts")
+	activityInfo.LastWorkerDeploymentVersion = "previous-deployment:previous-build"
+	activityInfo.LastDeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: "previous-deployment",
+		BuildId:        "previous-build",
+	}
 
 	// Start activity with workerControlTaskQueue
 	expectedWorkerControlTaskQueue := "test-control-queue"
@@ -7270,6 +7290,8 @@ func (s *mutableStateSuite) TestAddActivityTaskStartedEventStoresWorkerControlTa
 	updatedActivityInfo, ok := s.mutableState.GetActivityInfo(activityInfo.ScheduledEventId)
 	s.True(ok)
 	s.Equal(expectedWorkerControlTaskQueue, updatedActivityInfo.WorkerControlTaskQueue)
+	s.Empty(updatedActivityInfo.LastWorkerDeploymentVersion)
+	s.Nil(updatedActivityInfo.LastDeploymentVersion)
 }
 
 func (s *mutableStateSuite) TestAddActivityTaskStartedEventApproximateSize() {

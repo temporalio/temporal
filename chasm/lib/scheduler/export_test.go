@@ -54,6 +54,30 @@ func ContextWithTweakables(ctx chasm.Context, tweakables Tweakables) chasm.Conte
 // RecentActionCount exposes the completed-retention limit for tests.
 const RecentActionCount = recentActionCount
 
+// ComputeLastEventTime exposes the non-monotonic, recompute-from-state value so
+// tests can pin the regression it is subject to.
+func (s *Scheduler) ComputeLastEventTime(ctx chasm.Context) time.Time {
+	return s.computeLastEventTime(ctx)
+}
+
+// GetLastEventTimeFloored exposes the monotonic read path (recomputed value
+// floored at the persisted high water mark).
+func (s *Scheduler) GetLastEventTimeFloored(ctx chasm.Context) time.Time {
+	return s.getLastEventTime(ctx)
+}
+
+// AdvanceLastEventTime exposes the high-water-mark write performed by the
+// Generator tick.
+func (s *Scheduler) AdvanceLastEventTime(ctx chasm.MutableContext) time.Time {
+	return s.advanceLastEventTime(ctx)
+}
+
+// IdleDeadline exposes the deadline the idle task is armed against and that
+// SchedulerIdleTaskHandler.Validate recomputes.
+func (s *Scheduler) IdleDeadline(ctx chasm.Context, idleTime time.Duration) time.Time {
+	return s.idleDeadline(ctx, idleTime)
+}
+
 // ApplyCompletedRetention exposes applyCompletedRetention for tests.
 func (i *Invoker) ApplyCompletedRetention() {
 	i.applyCompletedRetention()
@@ -66,10 +90,12 @@ func (i *Invoker) RecordExecuteResult(
 	completed []*schedulespb.BufferedStart,
 	retryable []*schedulespb.BufferedStart,
 ) (newlyStarted, droppedDuplicates int, startOnlyActions []*schedulespb.BufferedStart) {
-	return i.recordExecuteResult(ctx, &executeResult{
+	newlyStarted, droppedDuplicates, latestStartTime, startOnlyActions := i.recordExecuteResult(ctx, &executeResult{
 		CompletedStarts: completed,
 		RetryableStarts: retryable,
 	})
+	i.Scheduler.Get(ctx).advanceLastEventTimeTo(latestStartTime)
+	return newlyStarted, droppedDuplicates, startOnlyActions
 }
 
 func (s *Scheduler) RecordStartOnlyActions(
