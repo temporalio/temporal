@@ -187,7 +187,7 @@ func (s *historyHistoryTimerTaskSuite) TestInsertSelect_Multiple() {
 	s.Equal(tasks, rows)
 }
 
-func (s *historyHistoryTimerTaskSuite) TestInsertSelect_MultipleAtSameTimestamp() {
+func (s *historyHistoryTimerTaskSuite) TestInsertSelectMultipleAtSameTimestamp() {
 	shardID := rand.Int31()
 	timestamp := s.now()
 	laterTimestamp := timestamp.Add(time.Millisecond)
