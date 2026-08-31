@@ -401,6 +401,23 @@ func (c *clientImpl) GetWorkerVersioningRules(
 	return client.GetWorkerVersioningRules(ctx, request, opts...)
 }
 
+func (c *clientImpl) GrantEagerDispatch(
+	ctx context.Context,
+	request *matchingservice.GrantEagerDispatchRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.GrantEagerDispatchResponse, error) {
+
+	p := tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId())
+
+	client, err := c.getClientForTaskQueuePartition(p)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.GrantEagerDispatch(ctx, request, opts...)
+}
+
 func (c *clientImpl) ListNexusEndpoints(
 	ctx context.Context,
 	request *matchingservice.ListNexusEndpointsRequest,
