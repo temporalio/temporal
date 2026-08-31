@@ -468,6 +468,35 @@ func TestCHASMToLegacyStartScheduleArgs_PreservesInvokerBufferedOrder(t *testing
 	require.True(t, args.State.BufferedStarts[1].GetActualTime().AsTime().Equal(now.Add(-time.Hour)))
 }
 
+func TestLastCompletionResultSelectsFirstPayload(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		payloads []*commonpb.Payload
+	}{
+		{name: "nil"},
+		{name: "empty", payloads: []*commonpb.Payload{}},
+		{name: "one", payloads: []*commonpb.Payload{{Data: []byte("one")}}},
+		{name: "multiple", payloads: []*commonpb.Payload{{Data: []byte("first")}, {Data: []byte("discarded")}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var legacy *commonpb.Payloads
+			if tc.name != "nil" {
+				legacy = &commonpb.Payloads{Payloads: tc.payloads}
+			}
+			v2 := convertLastCompletionLegacyToCHASM(legacy, nil)
+			v1, failure := convertLastCompletionCHASMToLegacy(v2)
+			require.Nil(t, failure)
+			if len(tc.payloads) == 0 {
+				require.Nil(t, v1)
+				return
+			}
+			require.Equal(t, tc.payloads[0], v2.Success)
+			require.Equal(t, []*commonpb.Payload{tc.payloads[0]}, v1.GetPayloads())
+			require.NotSame(t, tc.payloads[0], v1.GetPayloads()[0])
+		})
+	}
+}
+
 func TestCHASMToLegacyStartScheduleArgs_ExcludesAllowAllFromRunningWorkflows(t *testing.T) {
 	// Regression test: workflows started under ALLOW_ALL are tracked in V2 as
 	// BufferedStarts with a RunId (and no Completed) while they run. Modern V1

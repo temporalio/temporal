@@ -70,7 +70,7 @@ func executeNexusCompletion(t *testing.T, tc nexusCompletionTestCase) {
 	require.NotNil(t, lastCompletion)
 
 	if tc.completion.GetSuccess() != nil {
-		require.NotNil(t, lastCompletion.GetSuccess())
+		require.Equal(t, tc.completion.GetSuccess(), lastCompletion.GetSuccess())
 	} else if tc.completion.GetFailure() != nil {
 		require.NotNil(t, lastCompletion.GetFailure())
 	}
@@ -160,6 +160,31 @@ func TestHandleNexusCompletion_InvalidOutcome(t *testing.T) {
 	var invalidArgument *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArgument)
 	require.Nil(t, start.GetCompleted())
+}
+
+func TestHandleNexusCompletion_FailureRetainsSuccessfulPayload(t *testing.T) {
+	sched, ctx, node := setupSchedulerForTest(t)
+	sched.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{
+		Success: &commonpb.Payload{Data: []byte("success")},
+	})
+	sched.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{{
+		RequestId: "req-1", WorkflowId: "wf-1", RunId: "run-1", Attempt: 1,
+		ActualTime: timestamppb.New(time.Now().Add(-time.Minute)),
+		StartTime:  timestamppb.New(time.Now().Add(-30 * time.Second)),
+	}}
+
+	err := sched.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+		RequestId: "req-1",
+		Outcome:   &persistencespb.ChasmNexusCompletion_Failure{Failure: &failurepb.Failure{Message: "failed"}},
+		CloseTime: timestamppb.Now(),
+	})
+	require.NoError(t, err)
+	_, err = node.CloseTransaction(context.Background(), true)
+	require.NoError(t, err)
+
+	lastCompletion := sched.LastCompletionResult.Get(chasm.NewContext(context.Background(), node))
+	require.Equal(t, []byte("success"), lastCompletion.Success.Data)
+	require.Equal(t, "failed", lastCompletion.Failure.Message)
 }
 
 func TestHandleNexusCompletion_ExistingAllowAllDoesNotUpdateCompletionState(t *testing.T) {
