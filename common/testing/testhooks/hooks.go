@@ -42,13 +42,13 @@ var (
 	HistoryTransferTaskInterceptor              = newKey[func(historytasks.Task, func()), namespace.ID]()
 	// HistoryPassiveReplicationTest enables the single-cluster passive replication
 	// test stack for one namespace. Production builds always report it as unset.
-	HistoryPassiveReplicationTest               = newKey[HistoryPassiveReplicationTestHook, namespace.ID]()
-	HistoryDLQTaskDeleteInterceptor             = newKey[func(context.Context, *historyservice.DeleteDLQTasksRequest, func(context.Context, *historyservice.DeleteDLQTasksRequest) (*historyservice.DeleteDLQTasksResponse, error)) (*historyservice.DeleteDLQTasksResponse, error), global]()
-	NamespaceReplicationTaskInterceptor         = newKey[func(context.Context, *replicationspb.NamespaceTaskAttributes, func() error) error, namespace.Name]()
-	GRPCRequestFaultGeneratorByNamespaceID      = newKey[grpcfaults.RequestCallback, namespace.ID]()
-	GRPCRequestFaultGeneratorByNamespaceName    = newKey[grpcfaults.RequestCallback, namespace.Name]()
-	GRPCResponseFaultGeneratorByNamespaceID     = newKey[grpcfaults.ResponseCallback, namespace.ID]()
-	GRPCResponseFaultGeneratorByNamespaceName   = newKey[grpcfaults.ResponseCallback, namespace.Name]()
+	HistoryPassiveReplicationTest             = newKey[HistoryPassiveReplicationTestHook, namespace.ID]()
+	HistoryDLQTaskDeleteInterceptor           = newKey[func(context.Context, *historyservice.DeleteDLQTasksRequest, func(context.Context, *historyservice.DeleteDLQTasksRequest) (*historyservice.DeleteDLQTasksResponse, error)) (*historyservice.DeleteDLQTasksResponse, error), global]()
+	NamespaceReplicationTaskInterceptor       = newKey[func(context.Context, *replicationspb.NamespaceTaskAttributes, func() error) error, namespace.Name]()
+	GRPCRequestFaultGeneratorByNamespaceID    = newKey[grpcfaults.RequestCallback, namespace.ID]()
+	GRPCRequestFaultGeneratorByNamespaceName  = newKey[grpcfaults.RequestCallback, namespace.Name]()
+	GRPCResponseFaultGeneratorByNamespaceID   = newKey[grpcfaults.ResponseCallback, namespace.ID]()
+	GRPCResponseFaultGeneratorByNamespaceName = newKey[grpcfaults.ResponseCallback, namespace.Name]()
 )
 
 // keyID is a unique identifier for a key, used as a map key.
