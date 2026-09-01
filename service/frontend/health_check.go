@@ -27,12 +27,11 @@ type (
 	}
 
 	healthCheckerImpl struct {
-		serviceName                   primitives.ServiceName
-		membershipMonitor             membership.Monitor
-		hostFailurePercentage         dynamicconfig.FloatPropertyFn
-		hostDeclinedServingProportion dynamicconfig.FloatPropertyFn
-		healthCheckFn                 func(ctx context.Context, hostAddress string) (*historyservice.DeepHealthCheckResponse, error)
-		logger                        log.Logger
+		historyServiceName    primitives.ServiceName
+		membershipMonitor     membership.Monitor
+		hostFailurePercentage dynamicconfig.FloatPropertyFn
+		healthCheckFn         func(ctx context.Context, hostAddress string) (*historyservice.DeepHealthCheckResponse, error)
+		logger                log.Logger
 	}
 
 	hostResult struct {
@@ -45,17 +44,15 @@ func NewHealthChecker(
 	serviceName primitives.ServiceName,
 	membershipMonitor membership.Monitor,
 	hostFailurePercentage dynamicconfig.FloatPropertyFn,
-	hostDeclinedServingProportion dynamicconfig.FloatPropertyFn,
 	healthCheckFn func(ctx context.Context, hostAddress string) (*historyservice.DeepHealthCheckResponse, error),
 	logger log.Logger,
 ) HealthChecker {
 	return &healthCheckerImpl{
-		serviceName:                   serviceName,
-		membershipMonitor:             membershipMonitor,
-		hostFailurePercentage:         hostFailurePercentage,
-		hostDeclinedServingProportion: hostDeclinedServingProportion,
-		healthCheckFn:                 healthCheckFn,
-		logger:                        logger,
+		historyServiceName:    historyServiceName,
+		membershipMonitor:     membershipMonitor,
+		hostFailurePercentage: hostFailurePercentage,
+		healthCheckFn:         healthCheckFn,
+		logger:                logger,
 	}
 }
 

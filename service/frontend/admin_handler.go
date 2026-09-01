@@ -154,9 +154,7 @@ type (
 	}
 )
 
-var (
-	_ adminservice.AdminServiceServer = (*AdminHandler)(nil)
-)
+var _ adminservice.AdminServiceServer = (*AdminHandler)(nil)
 
 // NewAdminHandler creates a gRPC handler for the adminservice
 func NewAdminHandler(
@@ -167,7 +165,6 @@ func NewAdminHandler(
 		primitives.HistoryService,
 		args.MembershipMonitor,
 		args.Config.HistoryHostErrorPercentage,
-		args.Config.HistoryHostSelfErrorProportion,
 		func(ctx context.Context, hostAddress string) (*historyservice.DeepHealthCheckResponse, error) {
 			return args.HistoryClient.DeepHealthCheck(ctx, &historyservice.DeepHealthCheckRequest{HostAddress: hostAddress})
 		},
@@ -474,7 +471,6 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 		SkipForceReload: request.GetSkipForceReload(),
 		ArchetypeId:     archetypeID,
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -649,7 +645,6 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
 	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
 ) error {
-
 	execution := request.Execution
 	if execution.GetWorkflowId() == "" {
 		return workflow.ErrWorkflowIDNotSet
@@ -1527,7 +1522,6 @@ func (adh *AdminHandler) DescribeTaskQueuePartition(
 		ReportPollers:                 true,
 		ReportInternalTaskQueueStatus: true,
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -1562,7 +1556,6 @@ func (adh *AdminHandler) ForceUnloadTaskQueuePartition(
 		NamespaceId:        namespaceID.String(),
 		TaskQueuePartition: request.GetTaskQueuePartition(),
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -1734,7 +1727,6 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 			if err != nil {
 				logger.Error("Failed to close AdminStreamReplicationMessages server", tag.Error(err))
 			}
-
 		}()
 
 		for !shutdownChan.IsShutdown() {
@@ -1790,7 +1782,6 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 				}); err != nil {
 					if err != io.EOF {
 						logger.Info("AdminStreamReplicationMessages server -> client encountered error", tag.Error(err))
-
 					}
 					return
 				}

@@ -896,11 +896,6 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		0.5,
 		`HistoryHostErrorPercentage is the proportion of hosts that are unhealthy through observation external to the host and internal host health checks`,
 	)
-	HistoryHostSelfErrorProportion = NewGlobalFloatSetting(
-		"frontend.historyHostSelfErrorProportion",
-		0.05,
-		`HistoryHostStartingProportion is the proportion of hosts that have marked themselves as not ready -- this could due to waiting to acquire all shards on startup, or an internal health check failure`,
-	)
 	SendRawWorkflowHistory = NewNamespaceBoolSetting(
 		"frontend.sendRawWorkflowHistory",
 		false,
