@@ -190,19 +190,26 @@ func (h *deepHealthCheckHandler) DeepHealthCheck(
 	))
 
 	overallState := enumsspb.HEALTH_STATE_SERVING
+	unenforcedState := enumsspb.HEALTH_STATE_SERVING
 
 	for _, check := range checks {
 		if check.State == enumsspb.HEALTH_STATE_NOT_SERVING {
-			overallState = check.State
-			break
+			overallState = enumsspb.HEALTH_STATE_NOT_SERVING
+		}
+
+		// we have to check this way because unenforced checks always
+		// set state to SERVING
+		if !check.Enforced && check.Value > check.Threshold {
+			unenforcedState = enumsspb.HEALTH_STATE_NOT_SERVING
 		}
 	}
 
 	metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(overallState))
 
 	return &historyservice.DeepHealthCheckResponse{
-		State:  overallState,
-		Checks: checks,
+		State:           overallState,
+		Checks:          checks,
+		UnenforcedState: unenforcedState,
 	}, nil
 }
 
