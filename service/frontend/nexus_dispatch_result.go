@@ -9,13 +9,13 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 )
 
-// startOperationOutcome converts matching's response to a StartOperation dispatch into the result the
+// handleStartOperationResponse converts matching's response to a StartOperation dispatch into the result the
 // Nexus SDK expects, recording the metrics outcome tag and the failure-source response header along
 // the way.
 //
 // Links are returned to the caller instead of being attached here: nexus.AddHandlerLinks requires the
 // SDK's handler context.
-func (c *operationContext) startOperationOutcome(
+func (c *operationContext) handleStartOperationResponse(
 	resp *matchingservice.DispatchNexusTaskResponse,
 	operation string,
 ) (nexus.HandlerStartOperationResult[any], []nexus.Link, error) {
@@ -25,7 +25,7 @@ func (c *operationContext) startOperationOutcome(
 	switch result.Outcome {
 	case commonnexus.DispatchOutcomeSyncSuccess:
 		return &nexus.HandlerStartOperationResultSync[any]{
-			Value: result.SyncPayload,
+			Value: result.OperationResult,
 		}, parseLinks(result.Links, c.logger), nil
 
 	case commonnexus.DispatchOutcomeAsyncSuccess:
@@ -47,14 +47,14 @@ func (c *operationContext) startOperationOutcome(
 		return nil, nil, c.operationError(state, cause, operation)
 
 	default:
-		return nil, nil, c.dispatchFailureToNexusError(result, operation)
+		return nil, nil, c.failedDispatchToNexusError(result, operation)
 	}
 }
 
-// cancelOperationOutcome converts matching's response to a CancelOperation dispatch into the error the
+// handleCancelOperationResponse converts matching's response to a CancelOperation dispatch into the error the
 // Nexus SDK expects, recording the metrics outcome tag and the failure-source response header along
 // the way. A nil error means the cancel was accepted.
-func (c *operationContext) cancelOperationOutcome(
+func (c *operationContext) handleCancelOperationResponse(
 	resp *matchingservice.DispatchNexusTaskResponse,
 	operation string,
 ) error {
@@ -64,13 +64,13 @@ func (c *operationContext) cancelOperationOutcome(
 	if result.Outcome == commonnexus.DispatchOutcomeCancelAccepted {
 		return nil
 	}
-	return c.dispatchFailureToNexusError(result, operation)
+	return c.failedDispatchToNexusError(result, operation)
 }
 
-// dispatchFailureToNexusError converts the outcomes that mean the task was never handled, or was
+// failedDispatchToNexusError converts the outcomes that mean the task was never handled, or was
 // refused outright, into the error to report to the caller. These arms are identical for every kind of
 // dispatched request, so both handler methods share them.
-func (c *operationContext) dispatchFailureToNexusError(
+func (c *operationContext) failedDispatchToNexusError(
 	result commonnexus.DispatchResult,
 	operation string,
 ) error {

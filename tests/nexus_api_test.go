@@ -178,20 +178,23 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes(useTemporalFailures
 				// in a field of its own, and the server rebuilds the wrapper from it.
 				var wrapper *nexus.FailureError
 				s.ErrorAs(operationError.Cause, &wrapper)
-				var workerErr *nexus.FailureError
-				s.ErrorAs(wrapper.Cause, &workerErr)
-				tFailure, err := commonnexus.NexusFailureToTemporalFailure(workerErr.Failure)
+
+				var wrapperCause *nexus.FailureError
+				s.ErrorAs(wrapper.Cause, &wrapperCause)
+				wrapperCauseTFailure, err := commonnexus.NexusFailureToTemporalFailure(wrapperCause.Failure)
 				s.NoError(err)
-				convErr := temporal.GetDefaultFailureConverter().FailureToError(tFailure)
+				wrapperCauseErr := temporal.GetDefaultFailureConverter().FailureToError(wrapperCauseTFailure)
+
 				var appErr *temporal.ApplicationError
-				s.ErrorAs(convErr, &appErr)
+				s.ErrorAs(wrapperCauseErr, &appErr)
 				s.Equal("deliberate test failure", appErr.Message())
+
 				// The worker's own metadata and details survive the re-encoding.
-				var workerFailure nexus.Failure
-				s.NoError(appErr.Details(&workerFailure))
-				s.Equal(map[string]string{"k": "v"}, workerFailure.Metadata)
+				var appErrDetails nexus.Failure
+				s.NoError(appErr.Details(&appErrDetails))
+				s.Equal(map[string]string{"k": "v"}, appErrDetails.Metadata)
 				var details string
-				s.NoError(json.Unmarshal(workerFailure.Details, &details))
+				s.NoError(json.Unmarshal(appErrDetails.Details, &details))
 				s.Equal("details", details)
 			},
 		},

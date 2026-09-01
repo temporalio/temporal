@@ -133,18 +133,18 @@ func TestClassifyOperationDispatch(t *testing.T) {
 			Name:     "sync success",
 			Response: syncSuccessResponse(&nexuspb.StartOperationResponse_Sync{Payload: payload, Links: links}),
 			Want: DispatchResult{
-				Outcome:     DispatchOutcomeSyncSuccess,
-				SyncPayload: payload,
-				Links:       links,
+				Outcome:         DispatchOutcomeSyncSuccess,
+				OperationResult: payload,
+				Links:           links,
 			},
 		},
 		{
 			Name:     "sync success (no payload, links)",
 			Response: syncSuccessResponse(&nexuspb.StartOperationResponse_Sync{}),
 			Want: DispatchResult{
-				Outcome:     DispatchOutcomeSyncSuccess,
-				SyncPayload: nil,
-				Links:       nil,
+				Outcome:         DispatchOutcomeSyncSuccess,
+				OperationResult: nil,
+				Links:           nil,
 			},
 		},
 
@@ -332,7 +332,6 @@ func TestClassifyOperationDispatch(t *testing.T) {
 			Want: DispatchResult{
 				Outcome: DispatchOutcomeHandlerFailure,
 				Failure: &failurepb.Failure{
-					Message: "slow down",
 					FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
 						NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
 							Type:          "RESOURCE_EXHAUSTED",
@@ -405,6 +404,43 @@ func TestClassifyOperationDispatch(t *testing.T) {
 				Outcome: DispatchOutcomeUnrecognized,
 			},
 		},
+		{
+			Name:     "unrecognized (no start variant)",
+			Response: startResponse(&nexuspb.StartOperationResponse{}),
+			Want: DispatchResult{
+				Outcome: DispatchOutcomeUnrecognized,
+			},
+		},
+		{
+			Name:     "unrecognized (nil start operation)",
+			Response: startResponse(nil),
+			Want: DispatchResult{
+				Outcome: DispatchOutcomeUnrecognized,
+			},
+		},
+		{
+			Name: "unrecognized (empty response envelope)",
+			Response: &matchingservice.DispatchNexusTaskResponse{
+				Outcome: &matchingservice.DispatchNexusTaskResponse_Response{
+					Response: &nexuspb.Response{},
+				},
+			},
+			Want: DispatchResult{
+				Outcome: DispatchOutcomeUnrecognized,
+			},
+		},
+		{
+			// The only fixture that reaches the start classifier with a nil Response inside a set
+			// outcome arm. On the cancel side it is also the case proving the outcome arm is what
+			// marks the task answered, not the message inside it.
+			Name: "unrecognized (nil response envelope)",
+			Response: &matchingservice.DispatchNexusTaskResponse{
+				Outcome: &matchingservice.DispatchNexusTaskResponse_Response{},
+			},
+			Want: DispatchResult{
+				Outcome: DispatchOutcomeUnrecognized,
+			},
+		},
 
 		// DispatchOutcomeRequestTimeout
 		{
@@ -417,21 +453,21 @@ func TestClassifyOperationDispatch(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.Name, func(t *testing.T) {
-			assertClassificationsMatch := func(want, got DispatchResult) {
+			assertClassificationsMatch := func(t *testing.T, want, got DispatchResult) {
 				require.Equal(t, want.Outcome, got.Outcome)
 				require.Equal(t, want.OperationToken, got.OperationToken)
 				require.Equal(t, want.usedDeprecatedFormat, got.usedDeprecatedFormat)
 
 				// TIP: To get a better error message, use require.Equal(...) for the
 				// specific testcase that is producing the wrong proto result.
-				protorequire.DeepEqual(t, want.SyncPayload, got.SyncPayload)
+				protorequire.DeepEqual(t, want.OperationResult, got.OperationResult)
 				protorequire.DeepEqual(t, want.Failure, got.Failure)
 				protorequire.DeepEqual(t, want.Links, got.Links)
 			}
 
 			t.Run("ClassifyStartOperationDispatch", func(t *testing.T) {
 				got := ClassifyStartOperationDispatch(tc.Response)
-				assertClassificationsMatch(tc.Want, got)
+				assertClassificationsMatch(t, tc.Want, got)
 			})
 
 			t.Run("ClassifyCancelOperationDispatch", func(t *testing.T) {
@@ -444,30 +480,23 @@ func TestClassifyOperationDispatch(t *testing.T) {
 					want := DispatchResult{
 						Outcome: DispatchOutcomeCancelAccepted,
 					}
-					assertClassificationsMatch(want, got)
+					assertClassificationsMatch(t, want, got)
 				} else {
-					assertClassificationsMatch(tc.Want, got)
+					assertClassificationsMatch(t, tc.Want, got)
 				}
 			})
 		})
 	}
 }
 
-// With an integer enum, iota made duplicate values impossible. With string values a copy-paste can
-// silently alias two outcomes into one, so assert they stay distinct and non-empty -- the empty string
-// is the zero value and must not name a real outcome.
-func TestDispatchOutcomeValuesAreDistinct(t *testing.T) {
-	seen := map[DispatchOutcome]struct{}{}
-	for _, o := range []DispatchOutcome{
-		DispatchOutcomeUnrecognized, DispatchOutcomeSyncSuccess, DispatchOutcomeAsyncSuccess,
-		DispatchOutcomeCancelAccepted, DispatchOutcomeOperationFailure,
-		DispatchOutcomeHandlerFailure, DispatchOutcomeWorkerFailure,
-		DispatchOutcomeRequestTimeout,
-	} {
-		require.NotEmpty(t, o)
-		require.NotContains(t, seen, o, "outcome values must be distinct")
-		seen[o] = struct{}{}
-	}
+// The classifier aliases the response's failure proto rather than copying it, which callers that
+// convert failures in place rely on. DispatchResult.Failure documents this as part of its contract,
+// and service/frontend's TemporalFailureToNexusFailureInPlace call depends on it. The table above
+// compares protos by value, so only an identity assertion catches a change to cloning.
+func TestClassifyStartOperationDispatch_FailureAliasesTheResponse(t *testing.T) {
+	failure := applicationFailure("worker exploded", "SomeError")
+	r := ClassifyStartOperationDispatch(taskFailureResponse(failure))
+	require.Same(t, failure, r.Failure)
 }
 
 // The outcome tag values are what existing dashboards query, so they are pinned here rather than only

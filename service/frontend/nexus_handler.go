@@ -484,7 +484,7 @@ func (h *nexusHandler) StartOperation(
 		return nil, commonnexus.ConvertGRPCError(err, false)
 	}
 	// Convert to standard Nexus SDK response.
-	result, handlerLinks, err := oc.startOperationOutcome(response, operation)
+	result, handlerLinks, err := oc.handleStartOperationResponse(response, operation)
 	if err != nil {
 		return nil, err
 	}
@@ -602,7 +602,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 	// Convert to standard Nexus SDK response.
-	return oc.cancelOperationOutcome(response, operation)
+	return oc.handleCancelOperationResponse(response, operation)
 }
 
 func (h *nexusHandler) forwardCancelOperation(

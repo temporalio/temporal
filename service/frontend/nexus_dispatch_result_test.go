@@ -59,7 +59,7 @@ func startOperationResponse(sor *nexuspb.StartOperationResponse) *matchingservic
 	}
 }
 
-func TestStartOperationOutcome_SyncSuccess(t *testing.T) {
+func TestHandleStartOperationResponse_SyncSuccess(t *testing.T) {
 	oc := testOperationContext()
 	payload := &commonpb.Payload{Data: []byte("hello")}
 	resp := startOperationResponse(&nexuspb.StartOperationResponse{
@@ -74,7 +74,7 @@ func TestStartOperationOutcome_SyncSuccess(t *testing.T) {
 		},
 	})
 
-	result, links, err := oc.startOperationOutcome(resp, "op")
+	result, links, err := oc.handleStartOperationResponse(resp, "op")
 	require.NoError(t, err)
 	sync, ok := result.(*nexus.HandlerStartOperationResultSync[any])
 	require.True(t, ok, "expected a sync result, got %T", result)
@@ -86,7 +86,7 @@ func TestStartOperationOutcome_SyncSuccess(t *testing.T) {
 	require.Empty(t, failureSourceOf(oc), "success must not be attributed to the worker")
 }
 
-func TestStartOperationOutcome_SyncSuccess_NoPayloadNoLinks(t *testing.T) {
+func TestHandleStartOperationResponse_SyncSuccess_NoPayloadNoLinks(t *testing.T) {
 	oc := testOperationContext()
 	resp := startOperationResponse(&nexuspb.StartOperationResponse{
 		Variant: &nexuspb.StartOperationResponse_SyncSuccess{
@@ -94,7 +94,7 @@ func TestStartOperationOutcome_SyncSuccess_NoPayloadNoLinks(t *testing.T) {
 		},
 	})
 
-	result, links, err := oc.startOperationOutcome(resp, "op")
+	result, links, err := oc.handleStartOperationResponse(resp, "op")
 	require.NoError(t, err)
 	sync, ok := result.(*nexus.HandlerStartOperationResultSync[any])
 	require.True(t, ok)
@@ -103,7 +103,7 @@ func TestStartOperationOutcome_SyncSuccess_NoPayloadNoLinks(t *testing.T) {
 	require.Equal(t, "sync_success", outcomeTagOf(t, oc))
 }
 
-func TestStartOperationOutcome_AsyncSuccess_PrefersOperationToken(t *testing.T) {
+func TestHandleStartOperationResponse_AsyncSuccess_PrefersOperationToken(t *testing.T) {
 	oc := testOperationContext()
 	resp := startOperationResponse(&nexuspb.StartOperationResponse{
 		Variant: &nexuspb.StartOperationResponse_AsyncSuccess{
@@ -116,7 +116,7 @@ func TestStartOperationOutcome_AsyncSuccess_PrefersOperationToken(t *testing.T) 
 		},
 	})
 
-	result, links, err := oc.startOperationOutcome(resp, "op")
+	result, links, err := oc.handleStartOperationResponse(resp, "op")
 	require.NoError(t, err)
 	async, ok := result.(*nexus.HandlerStartOperationResultAsync)
 	require.True(t, ok, "expected an async result, got %T", result)
@@ -127,7 +127,7 @@ func TestStartOperationOutcome_AsyncSuccess_PrefersOperationToken(t *testing.T) 
 }
 
 // Workers older than the operation-token rename only set the deprecated operation ID.
-func TestStartOperationOutcome_AsyncSuccess_FallsBackToOperationID(t *testing.T) {
+func TestHandleStartOperationResponse_AsyncSuccess_FallsBackToOperationID(t *testing.T) {
 	oc := testOperationContext()
 	resp := startOperationResponse(&nexuspb.StartOperationResponse{
 		Variant: &nexuspb.StartOperationResponse_AsyncSuccess{
@@ -136,14 +136,14 @@ func TestStartOperationOutcome_AsyncSuccess_FallsBackToOperationID(t *testing.T)
 		},
 	})
 
-	result, _, err := oc.startOperationOutcome(resp, "op")
+	result, _, err := oc.handleStartOperationResponse(resp, "op")
 	require.NoError(t, err)
 	async, ok := result.(*nexus.HandlerStartOperationResultAsync)
 	require.True(t, ok)
 	require.Equal(t, "id-only", async.OperationToken)
 }
 
-func TestStartOperationOutcome_HandlerFailure(t *testing.T) {
+func TestHandleStartOperationResponse_HandlerFailure(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
 		retryBehavior enumspb.NexusHandlerErrorRetryBehavior
@@ -182,7 +182,7 @@ func TestStartOperationOutcome_HandlerFailure(t *testing.T) {
 				},
 			}
 
-			result, links, err := oc.startOperationOutcome(resp, "op")
+			result, links, err := oc.handleStartOperationResponse(resp, "op")
 			require.Nil(t, result)
 			require.Nil(t, links)
 			var handlerErr *nexus.HandlerError
@@ -199,7 +199,7 @@ func TestStartOperationOutcome_HandlerFailure(t *testing.T) {
 
 // The cause chain must stay Nexus-shaped all the way down: the HTTP layer re-serializes this error
 // with the same failure converter, and an SDK-shaped cause would be flattened to just its message.
-func TestStartOperationOutcome_HandlerFailure_CauseChainStaysNexusShaped(t *testing.T) {
+func TestHandleStartOperationResponse_HandlerFailure_CauseChainStaysNexusShaped(t *testing.T) {
 	oc := testOperationContext()
 	resp := &matchingservice.DispatchNexusTaskResponse{
 		Outcome: &matchingservice.DispatchNexusTaskResponse_Failure{
@@ -220,7 +220,7 @@ func TestStartOperationOutcome_HandlerFailure_CauseChainStaysNexusShaped(t *test
 		},
 	}
 
-	_, _, err := oc.startOperationOutcome(resp, "op")
+	_, _, err := oc.handleStartOperationResponse(resp, "op")
 	var handlerErr *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerErr)
 	cause, ok := handlerErr.Cause.(*nexus.FailureError)
@@ -234,7 +234,7 @@ func TestStartOperationOutcome_HandlerFailure_CauseChainStaysNexusShaped(t *test
 // A worker that fails the task with something other than a handler error (a plain
 // RespondNexusTaskFailed) produces an opaque FailureError, which the SDK reports to the caller as an
 // internal error. Documented here because it is current behavior, not because it is desirable.
-func TestStartOperationOutcome_WorkerFailure_NotAHandlerError(t *testing.T) {
+func TestHandleStartOperationResponse_WorkerFailure_NotAHandlerError(t *testing.T) {
 	oc := testOperationContext()
 	resp := &matchingservice.DispatchNexusTaskResponse{
 		Outcome: &matchingservice.DispatchNexusTaskResponse_Failure{
@@ -247,7 +247,7 @@ func TestStartOperationOutcome_WorkerFailure_NotAHandlerError(t *testing.T) {
 		},
 	}
 
-	_, _, err := oc.startOperationOutcome(resp, "op")
+	_, _, err := oc.handleStartOperationResponse(resp, "op")
 	require.Error(t, err)
 	var failureErr *nexus.FailureError
 	require.ErrorAs(t, err, &failureErr)
@@ -259,7 +259,7 @@ func TestStartOperationOutcome_WorkerFailure_NotAHandlerError(t *testing.T) {
 	require.Equal(t, commonnexus.FailureSourceWorker, failureSourceOf(oc))
 }
 
-func TestStartOperationOutcome_DeprecatedHandlerError(t *testing.T) {
+func TestHandleStartOperationResponse_DeprecatedHandlerError(t *testing.T) {
 	oc := testOperationContext()
 	resp := &matchingservice.DispatchNexusTaskResponse{
 		//nolint:staticcheck // Exercising the deprecated variant on purpose.
@@ -272,7 +272,7 @@ func TestStartOperationOutcome_DeprecatedHandlerError(t *testing.T) {
 		},
 	}
 
-	result, links, err := oc.startOperationOutcome(resp, "op")
+	result, links, err := oc.handleStartOperationResponse(resp, "op")
 	require.Nil(t, result)
 	require.Nil(t, links)
 	var handlerErr *nexus.HandlerError
@@ -286,7 +286,7 @@ func TestStartOperationOutcome_DeprecatedHandlerError(t *testing.T) {
 	require.Equal(t, commonnexus.FailureSourceWorker, failureSourceOf(oc))
 }
 
-func TestStartOperationOutcome_RequestTimeout(t *testing.T) {
+func TestHandleStartOperationResponse_RequestTimeout(t *testing.T) {
 	oc := testOperationContext()
 	resp := &matchingservice.DispatchNexusTaskResponse{
 		Outcome: &matchingservice.DispatchNexusTaskResponse_RequestTimeout{
@@ -294,7 +294,7 @@ func TestStartOperationOutcome_RequestTimeout(t *testing.T) {
 		},
 	}
 
-	result, links, err := oc.startOperationOutcome(resp, "op")
+	result, links, err := oc.handleStartOperationResponse(resp, "op")
 	require.Nil(t, result)
 	require.Nil(t, links)
 	var handlerErr *nexus.HandlerError
@@ -305,7 +305,7 @@ func TestStartOperationOutcome_RequestTimeout(t *testing.T) {
 	require.Equal(t, commonnexus.FailureSourceWorker, failureSourceOf(oc))
 }
 
-func TestStartOperationOutcome_OperationFailure(t *testing.T) {
+func TestHandleStartOperationResponse_OperationFailure(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		info      *failurepb.Failure
@@ -338,7 +338,7 @@ func TestStartOperationOutcome_OperationFailure(t *testing.T) {
 				Variant: &nexuspb.StartOperationResponse_Failure{Failure: tc.info},
 			})
 
-			result, links, err := oc.startOperationOutcome(resp, "op")
+			result, links, err := oc.handleStartOperationResponse(resp, "op")
 			require.Nil(t, result)
 			require.Nil(t, links)
 			var opErr *nexus.OperationError
@@ -357,7 +357,85 @@ func TestStartOperationOutcome_OperationFailure(t *testing.T) {
 	}
 }
 
-func TestStartOperationOutcome_DeprecatedOperationError(t *testing.T) {
+// unconvertibleFailure is a Temporal failure the server cannot put on the wire: protojson rejects the
+// invalid UTF-8 in Type, so TemporalFailureToNexusFailureInPlace fails while serializing it. Used to
+// reach the conversion-error arms below without stubbing the failure converter.
+func unconvertibleFailure() *failurepb.Failure {
+	return &failurepb.Failure{
+		Message: "worker sent something unserializable",
+		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+			ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: string([]byte{0xff})},
+		},
+	}
+}
+
+// A failure the server cannot convert means the operation's real outcome is unknown, so it must not be
+// reported as a legitimate operation error with a missing cause.
+func TestHandleStartOperationResponse_OperationFailure_UnconvertibleFailureIsInternal(t *testing.T) {
+	oc := testOperationContext()
+	resp := startOperationResponse(&nexuspb.StartOperationResponse{
+		Variant: &nexuspb.StartOperationResponse_Failure{Failure: unconvertibleFailure()},
+	})
+
+	result, links, err := oc.handleStartOperationResponse(resp, "op")
+	require.Nil(t, result)
+	require.Nil(t, links)
+	var handlerErr *nexus.HandlerError
+	require.ErrorAs(t, err, &handlerErr)
+	require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
+	var opErr *nexus.OperationError
+	require.NotErrorAs(t, err, &opErr, "an unreadable failure is not a legitimate operation error")
+	// The outcome was still classified as an operation failure, so the tag and header stand.
+	require.Equal(t, "failure", outcomeTagOf(t, oc))
+	require.Equal(t, commonnexus.FailureSourceWorker, failureSourceOf(oc))
+}
+
+// The cause is converted before the handler error wrapping it, so an unconvertible cause fails the
+// whole conversion. The caller gets the internal error rather than a handler error with no cause.
+func TestHandleStartOperationResponse_HandlerFailure_UnconvertibleCauseIsInternal(t *testing.T) {
+	oc := testOperationContext()
+	resp := &matchingservice.DispatchNexusTaskResponse{
+		Outcome: &matchingservice.DispatchNexusTaskResponse_Failure{
+			Failure: &failurepb.Failure{
+				Message: "handler said no",
+				FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
+					NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
+						Type: string(nexus.HandlerErrorTypeBadRequest),
+					},
+				},
+				Cause: unconvertibleFailure(),
+			},
+		},
+	}
+
+	result, links, err := oc.handleStartOperationResponse(resp, "op")
+	require.Nil(t, result)
+	require.Nil(t, links)
+	var handlerErr *nexus.HandlerError
+	require.ErrorAs(t, err, &handlerErr)
+	require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type,
+		"the worker's own BAD_REQUEST must not survive a failed conversion")
+	require.Equal(t, "handler_error:BAD_REQUEST", outcomeTagOf(t, oc))
+	require.Equal(t, commonnexus.FailureSourceWorker, failureSourceOf(oc))
+}
+
+// The conversion arm is shared with the start path, but cancel returns a bare error, where a dropped
+// internal error would surface as a nil error, i.e. an accepted cancel.
+func TestHandleCancelOperationResponse_UnconvertibleFailureIsInternal(t *testing.T) {
+	oc := testOperationContext()
+	resp := &matchingservice.DispatchNexusTaskResponse{
+		Outcome: &matchingservice.DispatchNexusTaskResponse_Failure{
+			Failure: unconvertibleFailure(),
+		},
+	}
+
+	err := oc.handleCancelOperationResponse(resp, "op")
+	var handlerErr *nexus.HandlerError
+	require.ErrorAs(t, err, &handlerErr)
+	require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
+}
+
+func TestHandleStartOperationResponse_DeprecatedOperationError(t *testing.T) {
 	oc := testOperationContext()
 	resp := startOperationResponse(&nexuspb.StartOperationResponse{
 		//nolint:staticcheck // Exercising the deprecated variant on purpose.
@@ -369,7 +447,7 @@ func TestStartOperationOutcome_DeprecatedOperationError(t *testing.T) {
 		},
 	})
 
-	result, links, err := oc.startOperationOutcome(resp, "op")
+	result, links, err := oc.handleStartOperationResponse(resp, "op")
 	require.Nil(t, result)
 	require.Nil(t, links)
 	var opErr *nexus.OperationError
@@ -389,7 +467,7 @@ func TestStartOperationOutcome_DeprecatedOperationError(t *testing.T) {
 // operation state in a field of its own. The classifier re-encodes both, so the caller receives what a
 // current-format worker would have sent: the state as the wrapping failure, and the worker's metadata
 // and details underneath it as the details of a NexusFailure application failure.
-func TestStartOperationOutcome_DeprecatedOperationErrorReEncodesWorkerFailure(t *testing.T) {
+func TestHandleStartOperationResponse_DeprecatedOperationErrorReEncodesWorkerFailure(t *testing.T) {
 	oc := testOperationContext()
 	resp := startOperationResponse(&nexuspb.StartOperationResponse{
 		//nolint:staticcheck // Exercising the deprecated variant on purpose.
@@ -405,7 +483,7 @@ func TestStartOperationOutcome_DeprecatedOperationErrorReEncodesWorkerFailure(t 
 		},
 	})
 
-	_, _, err := oc.startOperationOutcome(resp, "op")
+	_, _, err := oc.handleStartOperationResponse(resp, "op")
 	var opErr *nexus.OperationError
 	require.ErrorAs(t, err, &opErr)
 	require.Equal(t, nexus.OperationStateFailed, opErr.State)
@@ -428,7 +506,7 @@ func TestStartOperationOutcome_DeprecatedOperationErrorReEncodesWorkerFailure(t 
 }
 
 // Anything the frontend cannot interpret is blamed on the worker and reported as an internal error.
-func TestStartOperationOutcome_UnrecognizedOutcomes(t *testing.T) {
+func TestHandleStartOperationResponse_UnrecognizedOutcomes(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		resp *matchingservice.DispatchNexusTaskResponse
@@ -460,7 +538,7 @@ func TestStartOperationOutcome_UnrecognizedOutcomes(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			oc := testOperationContext()
-			result, links, err := oc.startOperationOutcome(tc.resp, "op")
+			result, links, err := oc.handleStartOperationResponse(tc.resp, "op")
 			require.Nil(t, result)
 			require.Nil(t, links)
 			var handlerErr *nexus.HandlerError
@@ -474,7 +552,7 @@ func TestStartOperationOutcome_UnrecognizedOutcomes(t *testing.T) {
 }
 
 // CancelOperation accepts any Response outcome without inspecting its variant.
-func TestCancelOperationOutcome_Success(t *testing.T) {
+func TestHandleCancelOperationResponse_Success(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		resp *matchingservice.DispatchNexusTaskResponse
@@ -502,14 +580,14 @@ func TestCancelOperationOutcome_Success(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			oc := testOperationContext()
-			require.NoError(t, oc.cancelOperationOutcome(tc.resp, "op"))
+			require.NoError(t, oc.handleCancelOperationResponse(tc.resp, "op"))
 			require.Equal(t, "success", outcomeTagOf(t, oc))
 			require.Empty(t, failureSourceOf(oc))
 		})
 	}
 }
 
-func TestCancelOperationOutcome_HandlerFailure(t *testing.T) {
+func TestHandleCancelOperationResponse_HandlerFailure(t *testing.T) {
 	oc := testOperationContext()
 	resp := &matchingservice.DispatchNexusTaskResponse{
 		Outcome: &matchingservice.DispatchNexusTaskResponse_Failure{
@@ -524,7 +602,7 @@ func TestCancelOperationOutcome_HandlerFailure(t *testing.T) {
 		},
 	}
 
-	err := oc.cancelOperationOutcome(resp, "op")
+	err := oc.handleCancelOperationResponse(resp, "op")
 	var handlerErr *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerErr)
 	require.Equal(t, nexus.HandlerErrorTypeNotFound, handlerErr.Type)
@@ -533,7 +611,7 @@ func TestCancelOperationOutcome_HandlerFailure(t *testing.T) {
 	require.Equal(t, commonnexus.FailureSourceWorker, failureSourceOf(oc))
 }
 
-func TestCancelOperationOutcome_DeprecatedHandlerError(t *testing.T) {
+func TestHandleCancelOperationResponse_DeprecatedHandlerError(t *testing.T) {
 	oc := testOperationContext()
 	resp := &matchingservice.DispatchNexusTaskResponse{
 		//nolint:staticcheck // Exercising the deprecated variant on purpose.
@@ -545,7 +623,7 @@ func TestCancelOperationOutcome_DeprecatedHandlerError(t *testing.T) {
 		},
 	}
 
-	err := oc.cancelOperationOutcome(resp, "op")
+	err := oc.handleCancelOperationResponse(resp, "op")
 	var handlerErr *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerErr)
 	require.Equal(t, nexus.HandlerErrorTypeNotImplemented, handlerErr.Type)
@@ -553,7 +631,7 @@ func TestCancelOperationOutcome_DeprecatedHandlerError(t *testing.T) {
 	require.Equal(t, commonnexus.FailureSourceWorker, failureSourceOf(oc))
 }
 
-func TestCancelOperationOutcome_RequestTimeout(t *testing.T) {
+func TestHandleCancelOperationResponse_RequestTimeout(t *testing.T) {
 	oc := testOperationContext()
 	resp := &matchingservice.DispatchNexusTaskResponse{
 		Outcome: &matchingservice.DispatchNexusTaskResponse_RequestTimeout{
@@ -561,7 +639,7 @@ func TestCancelOperationOutcome_RequestTimeout(t *testing.T) {
 		},
 	}
 
-	err := oc.cancelOperationOutcome(resp, "op")
+	err := oc.handleCancelOperationResponse(resp, "op")
 	var handlerErr *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerErr)
 	require.Equal(t, nexus.HandlerErrorTypeUpstreamTimeout, handlerErr.Type)
@@ -570,9 +648,9 @@ func TestCancelOperationOutcome_RequestTimeout(t *testing.T) {
 	require.Equal(t, commonnexus.FailureSourceWorker, failureSourceOf(oc))
 }
 
-func TestCancelOperationOutcome_UnrecognizedOutcome(t *testing.T) {
+func TestHandleCancelOperationResponse_UnrecognizedOutcome(t *testing.T) {
 	oc := testOperationContext()
-	err := oc.cancelOperationOutcome(&matchingservice.DispatchNexusTaskResponse{}, "op")
+	err := oc.handleCancelOperationResponse(&matchingservice.DispatchNexusTaskResponse{}, "op")
 	var handlerErr *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerErr)
 	require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
@@ -583,7 +661,7 @@ func TestCancelOperationOutcome_UnrecognizedOutcome(t *testing.T) {
 
 // The details blob of a converted handler failure has to stay parseable by the Nexus failure
 // converter on the other side of the wire.
-func TestStartOperationOutcome_HandlerFailureDetailsAreWellFormed(t *testing.T) {
+func TestHandleStartOperationResponse_HandlerFailureDetailsAreWellFormed(t *testing.T) {
 	oc := testOperationContext()
 	resp := &matchingservice.DispatchNexusTaskResponse{
 		Outcome: &matchingservice.DispatchNexusTaskResponse_Failure{
@@ -598,7 +676,7 @@ func TestStartOperationOutcome_HandlerFailureDetailsAreWellFormed(t *testing.T) 
 		},
 	}
 
-	_, _, err := oc.startOperationOutcome(resp, "op")
+	_, _, err := oc.handleStartOperationResponse(resp, "op")
 	var handlerErr *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerErr)
 	require.NotNil(t, handlerErr.OriginalFailure)
@@ -610,7 +688,7 @@ func TestStartOperationOutcome_HandlerFailureDetailsAreWellFormed(t *testing.T) 
 
 // The handler error type in the outcome tag is a string the worker chose, so it must not be able to
 // mint new time series.
-func TestStartOperationOutcome_HandlerErrorTypeTagIsBounded(t *testing.T) {
+func TestHandleStartOperationResponse_HandlerErrorTypeTagIsBounded(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		errType string
@@ -645,7 +723,7 @@ func TestStartOperationOutcome_HandlerErrorTypeTagIsBounded(t *testing.T) {
 				},
 			}
 
-			_, _, err := oc.startOperationOutcome(resp, "op")
+			_, _, err := oc.handleStartOperationResponse(resp, "op")
 			require.Error(t, err)
 			require.Equal(t, tc.wantTag, outcomeTagOf(t, oc))
 			// The error itself still carries the worker's real type; only the metric is bounded.
@@ -657,7 +735,7 @@ func TestStartOperationOutcome_HandlerErrorTypeTagIsBounded(t *testing.T) {
 }
 
 // The deprecated handler error variant is bounded the same way.
-func TestCancelOperationOutcome_DeprecatedHandlerErrorTypeTagIsBounded(t *testing.T) {
+func TestHandleCancelOperationResponse_DeprecatedHandlerErrorTypeTagIsBounded(t *testing.T) {
 	oc := testOperationContext()
 	resp := &matchingservice.DispatchNexusTaskResponse{
 		//nolint:staticcheck // Exercising the deprecated variant on purpose.
@@ -666,6 +744,6 @@ func TestCancelOperationOutcome_DeprecatedHandlerErrorTypeTagIsBounded(t *testin
 		},
 	}
 
-	require.Error(t, oc.cancelOperationOutcome(resp, "op"))
+	require.Error(t, oc.handleCancelOperationResponse(resp, "op"))
 	require.Equal(t, "handler_error:UNKNOWN", outcomeTagOf(t, oc))
 }

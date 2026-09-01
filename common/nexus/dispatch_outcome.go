@@ -77,9 +77,9 @@ func (o DispatchOutcome) Succeeded() bool {
 type DispatchResult struct {
 	Outcome DispatchOutcome
 
-	// SyncPayload is the operation's result. Set for DispatchOutcomeSyncSuccess, where it may still
+	// OperationResult is the operation's result. Set for DispatchOutcomeSyncSuccess, where it may still
 	// be nil: an operation is allowed to succeed with no value.
-	SyncPayload *commonpb.Payload
+	OperationResult *commonpb.Payload
 
 	// OperationToken is set for DispatchOutcomeAsyncSuccess.
 	OperationToken string
@@ -143,9 +143,9 @@ func classifyStartOperationResponse(resp *nexuspb.StartOperationResponse) Dispat
 	switch t := resp.GetVariant().(type) {
 	case *nexuspb.StartOperationResponse_SyncSuccess:
 		return DispatchResult{
-			Outcome:     DispatchOutcomeSyncSuccess,
-			SyncPayload: t.SyncSuccess.GetPayload(),
-			Links:       t.SyncSuccess.GetLinks(),
+			Outcome:         DispatchOutcomeSyncSuccess,
+			OperationResult: t.SyncSuccess.GetPayload(),
+			Links:           t.SyncSuccess.GetLinks(),
 		}
 
 	case *nexuspb.StartOperationResponse_AsyncSuccess:
@@ -199,7 +199,6 @@ func ClassifyCancelOperationDispatch(resp *matchingservice.DispatchNexusTaskResp
 // a Temporal failurepb.Failure.
 func deprecatedHandlerErrorToFailure(handlerErr *nexuspb.HandlerError) *failurepb.Failure {
 	failure := &failurepb.Failure{
-		Message: handlerErr.GetFailure().GetMessage(),
 		FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
 			NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
 				Type:          handlerErr.GetErrorType(),

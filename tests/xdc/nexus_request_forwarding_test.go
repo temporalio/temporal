@@ -159,23 +159,25 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 				require.ErrorAs(t, retErr, &operationError)
 				require.Equal(t, nexus.OperationStateFailed, operationError.State)
 				require.Equal(t, "deliberate test failure", operationError.Cause.Error())
+
 				// The server rebuilds the failure a current-format worker would have sent: an
 				// operation-error wrapper carrying the worker's own failure as its cause.
-				var wrapper *nexus.FailureError
-				require.ErrorAs(t, operationError.Cause, &wrapper)
-				var workerErr *nexus.FailureError
-				require.ErrorAs(t, wrapper.Cause, &workerErr)
-				tFailure, err := cnexus.NexusFailureToTemporalFailure(workerErr.Failure)
+				var wrapperErr *nexus.FailureError
+				require.ErrorAs(t, operationError.Cause, &wrapperErr)
+				var wrapperErrCause *nexus.FailureError
+				require.ErrorAs(t, wrapperErr.Cause, &wrapperErrCause)
+				tFailure, err := cnexus.NexusFailureToTemporalFailure(wrapperErrCause.Failure)
 				require.NoError(t, err)
 				convErr := temporal.GetDefaultFailureConverter().FailureToError(tFailure)
+
 				var appErr *temporal.ApplicationError
 				require.ErrorAs(t, convErr, &appErr)
 				require.Equal(t, "deliberate test failure", appErr.Message())
-				var workerFailure nexus.Failure
-				require.NoError(t, appErr.Details(&workerFailure))
-				require.Equal(t, map[string]string{"k": "v"}, workerFailure.Metadata)
+				var appErrDetails nexus.Failure
+				require.NoError(t, appErr.Details(&appErrDetails))
+				require.Equal(t, map[string]string{"k": "v"}, appErrDetails.Metadata)
 				var details string
-				require.NoError(t, json.Unmarshal(workerFailure.Details, &details))
+				require.NoError(t, json.Unmarshal(appErrDetails.Details, &details))
 				require.Equal(t, "details", details)
 				requireExpectedMetricsCaptured(t, activeSnap, ns, "StartNexusOperation", "operation_error")
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "StartNexusOperation", "forwarded_request_error")
