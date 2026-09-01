@@ -15,22 +15,29 @@ type FailureReport struct {
 	TotalJobs  int
 }
 
-// DigestReport aggregates success metrics for a time period
-type DigestReport struct {
-	Branch                string
-	WorkflowName          string
-	StartDate             time.Time
-	EndDate               time.Time
+// DigestPeriod aggregates success metrics for a time period
+type DigestPeriod struct {
 	TotalRuns             int
 	SuccessfulRuns        int
 	FailedRuns            int
 	SuccessRate           float64
+	DurationSamples       int
 	AverageDuration       time.Duration
 	MedianDuration        time.Duration
 	Under20MinutesPercent float64
 	Under25MinutesPercent float64
 	Under30MinutesPercent float64
 	Runs                  []github.Run
+}
+
+// DigestReport aggregates success metrics for a time period
+type DigestReport struct {
+	Branch       string
+	WorkflowName string
+	StartDate    time.Time
+	EndDate      time.Time
+	DigestPeriod
+	Previous DigestPeriod
 }
 
 func (r *DigestReport) slowestRuns(limit int) []github.Run {

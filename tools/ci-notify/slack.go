@@ -1,9 +1,12 @@
 package cinotify
 
 import (
+	"cmp"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
+	"time"
 
 	"go.temporal.io/server/tools/common/github"
 	"go.temporal.io/server/tools/common/slack"
@@ -118,6 +121,36 @@ func raceLink(runID string, race DataRace) string {
 	return github.RunURL(temporalRepository, runID)
 }
 
+func formatComparison(direction int, difference string) string {
+	switch {
+	case direction > 0:
+		return fmt.Sprintf("↑ %s", difference)
+	case direction < 0:
+		return fmt.Sprintf("↓ %s", difference)
+	default:
+		return "— no change"
+	}
+}
+
+func formatPercentagePointComparison(current, previous float64, available bool) string {
+	if !available {
+		return "N/A"
+	}
+	difference := math.Abs(current - previous)
+	return formatComparison(cmp.Compare(current, previous), fmt.Sprintf("%.1f pp", difference))
+}
+
+func formatDurationComparison(current, previous time.Duration, available bool) string {
+	if !available {
+		return "N/A"
+	}
+	difference := current - previous
+	if difference < 0 {
+		difference = -difference
+	}
+	return formatComparison(cmp.Compare(current, previous), formatDuration(difference))
+}
+
 // BuildSuccessReportMessage creates a Slack message for success report
 func BuildSuccessReportMessage(report *DigestReport) *slack.Message {
 	message := slack.NewMessage(fmt.Sprintf("Weekly CI Report - %s Branch", report.Branch))
@@ -128,12 +161,16 @@ func BuildSuccessReportMessage(report *DigestReport) *slack.Message {
 		report.EndDate.Format("Jan 2, 2006"),
 	))
 	message.AddFields(
-		fmt.Sprintf("*Success Rate:*\n%.1f%%", report.SuccessRate),
-		fmt.Sprintf("*Total Runs:*\n%d", report.TotalRuns),
-		fmt.Sprintf("*Failed Runs:*\n%d", report.FailedRuns),
-		fmt.Sprintf("*Successful Runs:*\n%d", report.SuccessfulRuns),
-		fmt.Sprintf("*Average Duration:*\n%s", formatDuration(report.AverageDuration)),
-		fmt.Sprintf("*Median Duration:*\n%s", formatDuration(report.MedianDuration)),
+		fmt.Sprintf("*Success Rate:*\n%.1f%% (%s)", report.SuccessRate,
+			formatPercentagePointComparison(report.SuccessRate, report.Previous.SuccessRate,
+				report.TotalRuns > 0 && report.Previous.TotalRuns > 0)),
+		fmt.Sprintf("*Failed Runs:*\n%d/%d", report.FailedRuns, report.TotalRuns),
+		fmt.Sprintf("*Average Duration:*\n%s (%s)", formatDuration(report.AverageDuration),
+			formatDurationComparison(report.AverageDuration, report.Previous.AverageDuration,
+				report.DurationSamples > 0 && report.Previous.DurationSamples > 0)),
+		fmt.Sprintf("*Median Duration:*\n%s (%s)", formatDuration(report.MedianDuration),
+			formatDurationComparison(report.MedianDuration, report.Previous.MedianDuration,
+				report.DurationSamples > 0 && report.Previous.DurationSamples > 0)),
 	)
 	message.AddSection(fmt.Sprintf(
 		"*Run Duration Distribution:*\n"+
@@ -170,12 +207,16 @@ func FormatReportForDebug(report *DigestReport) string {
 		report.StartDate.Format("Jan 2, 2006"),
 		report.EndDate.Format("Jan 2, 2006"))
 	fmt.Fprintln(&sb, "Metrics:")
-	fmt.Fprintf(&sb, "  Success Rate: %.1f%%\n", report.SuccessRate)
-	fmt.Fprintf(&sb, "  Total Runs: %d\n", report.TotalRuns)
-	fmt.Fprintf(&sb, "  Successful Runs: %d\n", report.SuccessfulRuns)
-	fmt.Fprintf(&sb, "  Failed Runs: %d\n", report.FailedRuns)
-	fmt.Fprintf(&sb, "  Average Duration: %s\n", formatDuration(report.AverageDuration))
-	fmt.Fprintf(&sb, "  Median Duration: %s\n", formatDuration(report.MedianDuration))
+	fmt.Fprintf(&sb, "  Success Rate: %.1f%% (%s)\n", report.SuccessRate,
+		formatPercentagePointComparison(report.SuccessRate, report.Previous.SuccessRate,
+			report.TotalRuns > 0 && report.Previous.TotalRuns > 0))
+	fmt.Fprintf(&sb, "  Failed Runs: %d/%d\n", report.FailedRuns, report.TotalRuns)
+	fmt.Fprintf(&sb, "  Average Duration: %s (%s)\n", formatDuration(report.AverageDuration),
+		formatDurationComparison(report.AverageDuration, report.Previous.AverageDuration,
+			report.DurationSamples > 0 && report.Previous.DurationSamples > 0))
+	fmt.Fprintf(&sb, "  Median Duration: %s (%s)\n", formatDuration(report.MedianDuration),
+		formatDurationComparison(report.MedianDuration, report.Previous.MedianDuration,
+			report.DurationSamples > 0 && report.Previous.DurationSamples > 0))
 
 	fmt.Fprintln(&sb, "\nRun Duration Distribution:")
 	fmt.Fprintf(&sb, "  Under 20 minutes: %.1f%%\n", report.Under20MinutesPercent)
