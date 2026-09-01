@@ -2571,8 +2571,7 @@ func (h *Handler) StartNexusOperation(
 	}
 	result, err := h.nexusHandler.StartOperation(ctx, req.GetRequest().GetService(), req.GetRequest().GetOperation(), input, options)
 	if err != nil {
-		var opErr *nexus.OperationError
-		if errors.As(err, &opErr) {
+		if opErr, ok := errors.AsType[*nexus.OperationError](err); ok {
 			nexusFailure, convErr := nexusrpc.DefaultFailureConverter().ErrorToFailure(opErr)
 			if convErr != nil {
 				return nil, convErr
@@ -2607,6 +2606,12 @@ func (h *Handler) StartNexusOperation(
 		if len(ps.GetPayloads()) == 1 {
 			payload = ps.GetPayloads()[0]
 		}
+		if payload != nil {
+			if payload.Metadata == nil {
+				payload.Metadata = make(map[string][]byte, 1)
+			}
+			payload.Metadata[commonnexus.SystemPayloadMetadataKey] = []byte("true")
+		}
 		response.Variant = &nexuspb.StartOperationResponse_SyncSuccess{
 			SyncSuccess: &nexuspb.StartOperationResponse_Sync{
 				Payload: payload,
@@ -2629,7 +2634,6 @@ func (h *Handler) StartNexusOperation(
 		Response: response,
 	}, nil
 }
-
 func (h *Handler) CancelNexusOperation(
 	ctx context.Context,
 	req *historyservice.CancelNexusOperationRequest,

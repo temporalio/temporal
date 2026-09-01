@@ -14,6 +14,7 @@ type (
 		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
+		Priority            enumsspb.TaskPriority
 		TargetClusters      []string
 		IsForceReplication  bool
 	}

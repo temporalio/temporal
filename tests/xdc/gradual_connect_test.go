@@ -10,6 +10,7 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	replicationpb "go.temporal.io/api/replication/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
@@ -68,14 +69,24 @@ func (s *gradualConnectTestSuite) TestNewlyConnectedClusterRampsAdmission() {
 	}{
 		{dynamicconfig.EnableReplicationGradualConnect, true},
 		{dynamicconfig.ReplicationGradualConnectInitialPercent, 0},
-		{dynamicconfig.ReplicationGradualConnectDuration, rampDuration},
 	} {
 		s.T().Cleanup(active.OverrideDynamicConfig(s.T(), override.setting, override.value))
 	}
 
 	// Add standby to the namespace's cluster list.
 	connectedAt := time.Now()
-	s.updateNamespaceClusters(ns, 0, s.clusters)
+	s.updateNamespaceClustersWithReplicationConfigs(
+		ns,
+		0,
+		s.clusters,
+		[]*replicationpb.ClusterReplicationConfig{
+			{ClusterName: active.ClusterName()},
+			{
+				ClusterName:             standby.ClusterName(),
+				ReplicationRampDuration: durationpb.New(rampDuration),
+			},
+		},
+	)
 
 	// Diagnostic: standby's own connect time, read directly from persisted state (not the
 	// namespace cache, to rule out a cache-refresh delay).

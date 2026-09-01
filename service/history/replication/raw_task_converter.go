@@ -977,5 +977,6 @@ func setTaskForceReplication(task tasks.Task) {
 		task.IsForceReplication = true
 	case *tasks.SyncVersionedTransitionTask:
 		task.IsForceReplication = true
+	default:
 	}
 }

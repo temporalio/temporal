@@ -2,12 +2,15 @@ package frontend
 
 import (
 	"context"
+	"encoding/json"
 	"slices"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/suite"
+	otellog "go.opentelemetry.io/otel/log"
+	"go.opentelemetry.io/otel/log/embedded"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
@@ -26,12 +29,18 @@ import (
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/protoassert"
+	"go.temporal.io/server/common/wideevents"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
+	captureNamespaceEventLogger struct {
+		embedded.Logger
+		records []otellog.Record
+	}
+
 	namespaceHandlerCommonSuite struct {
 		suite.Suite
 
@@ -50,6 +59,14 @@ type (
 		handler *namespaceHandler
 	}
 )
+
+func (l *captureNamespaceEventLogger) Emit(_ context.Context, record otellog.Record) {
+	l.records = append(l.records, record)
+}
+
+func (l *captureNamespaceEventLogger) Enabled(context.Context, otellog.EnabledParameters) bool {
+	return true
+}
 
 var now = time.Date(2020, 8, 22, 1, 2, 3, 4, time.UTC)
 
@@ -72,7 +89,13 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 	s.mockMetadataMgr = persistence.NewMockMetadataManager(s.controller)
 	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
 	s.mockProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
-	s.mockNamespaceReplicator = nsreplication.NewReplicator(s.mockProducer, logger)
+	s.mockNamespaceReplicator = nsreplication.NewReplicator(
+		s.mockProducer,
+		logger,
+		nil,
+		dc.GetBoolPropertyFn(false),
+		"cluster-a",
+	)
 	s.archivalMetadata = archiver.NewArchivalMetadata(
 		dcCollection,
 		"",
@@ -86,6 +109,7 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 	s.config = NewConfig(dc.NewNoopCollection(), 1024)
 	s.handler = newNamespaceHandler(
 		logger,
+		wideevents.NoopLogger(),
 		s.mockMetadataMgr,
 		namespace.NewMockRegistry(s.controller),
 		s.mockClusterMetadata,
@@ -102,19 +126,37 @@ func (s *namespaceHandlerCommonSuite) TearDownTest() {
 }
 
 func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsDisabledByDefault() {
-	s.config.ReplicationGradualConnectDuration = dc.GetDurationPropertyFnFilteredByNamespace(time.Hour)
-	ramps := s.handler.updateReplicationRamps("test-ns", nil, []string{"active"}, []string{"active", "standby"}, "active")
+	ramps, err := s.handler.updateReplicationRamps(
+		"test-ns",
+		nil,
+		[]string{"active"},
+		[]*replicationpb.ClusterReplicationConfig{
+			{ClusterName: "active"},
+			{ClusterName: "standby", ReplicationRampDuration: durationpb.New(time.Hour)},
+		},
+		"active",
+	)
+	s.Require().NoError(err)
 	s.Empty(ramps)
 }
 
 func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsSnapshotsAndRestartsAfterReconnect() {
 	const namespaceName = "test-ns"
 	s.config.EnableReplicationGradualConnect = dc.GetBoolPropertyFn(true)
-	s.config.ReplicationGradualConnectDuration = dc.GetDurationPropertyFnFilteredByNamespace(time.Hour)
 	s.config.ReplicationGradualConnectInitialPercent = dc.GetIntPropertyFnFilteredByNamespace(10)
 	s.fakeClock.Update(now)
 
-	ramps := s.handler.updateReplicationRamps(namespaceName, nil, []string{"active"}, []string{"active", "standby"}, "active")
+	ramps, err := s.handler.updateReplicationRamps(
+		namespaceName,
+		nil,
+		[]string{"active"},
+		[]*replicationpb.ClusterReplicationConfig{
+			{ClusterName: "active"},
+			{ClusterName: "standby", ReplicationRampDuration: durationpb.New(time.Hour)},
+		},
+		"active",
+	)
+	s.Require().NoError(err)
 	ramp := ramps["standby"]
 	s.Require().NotNil(ramp)
 	s.Equal(now, ramp.GetStartTime().AsTime())
@@ -123,37 +165,169 @@ func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsSnapshotsAndRest
 
 	// Disabling creation and changing defaults cannot alter an in-flight connection generation.
 	s.config.EnableReplicationGradualConnect = dc.GetBoolPropertyFn(false)
-	s.config.ReplicationGradualConnectDuration = dc.GetDurationPropertyFnFilteredByNamespace(2 * time.Hour)
 	s.config.ReplicationGradualConnectInitialPercent = dc.GetIntPropertyFnFilteredByNamespace(25)
-	unchanged := s.handler.updateReplicationRamps(namespaceName, ramps, []string{"active", "standby"}, []string{"active", "standby"}, "active")
+	unchanged, err := s.handler.updateReplicationRamps(
+		namespaceName,
+		ramps,
+		[]string{"active", "standby"},
+		[]*replicationpb.ClusterReplicationConfig{
+			{ClusterName: "active"},
+			{ClusterName: "standby", ReplicationRampDuration: durationpb.New(2 * time.Hour)},
+		},
+		"active",
+	)
+	s.Require().NoError(err)
 	s.Equal(ramp, unchanged["standby"])
 
-	removed := s.handler.updateReplicationRamps(namespaceName, unchanged, []string{"active", "standby"}, []string{"active"}, "active")
+	removed, err := s.handler.updateReplicationRamps(
+		namespaceName,
+		unchanged,
+		[]string{"active", "standby"},
+		[]*replicationpb.ClusterReplicationConfig{{ClusterName: "active"}},
+		"active",
+	)
+	s.Require().NoError(err)
 	s.NotContains(removed, "standby")
 
 	s.config.EnableReplicationGradualConnect = dc.GetBoolPropertyFn(true)
 	reconnectedAt := now.Add(3 * time.Hour)
 	s.fakeClock.Update(reconnectedAt)
-	reconnected := s.handler.updateReplicationRamps(namespaceName, removed, []string{"active"}, []string{"active", "standby"}, "active")
+	reconnected, err := s.handler.updateReplicationRamps(
+		namespaceName,
+		removed,
+		[]string{"active"},
+		[]*replicationpb.ClusterReplicationConfig{
+			{ClusterName: "active"},
+			{ClusterName: "standby", ReplicationRampDuration: durationpb.New(2 * time.Hour)},
+		},
+		"active",
+	)
+	s.Require().NoError(err)
 	s.Equal(reconnectedAt, reconnected["standby"].GetStartTime().AsTime())
 	s.Equal(2*time.Hour, reconnected["standby"].GetDuration().AsDuration())
 	s.Equal(int32(25), reconnected["standby"].GetInitialPercentage())
 }
 
-func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsSkipsEffectiveActiveCluster() {
+func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsUsesPerClusterDuration() {
 	s.config.EnableReplicationGradualConnect = dc.GetBoolPropertyFn(true)
-	s.config.ReplicationGradualConnectDuration = dc.GetDurationPropertyFnFilteredByNamespace(time.Hour)
 	s.config.ReplicationGradualConnectInitialPercent = dc.GetIntPropertyFnFilteredByNamespace(10)
 
-	ramps := s.handler.updateReplicationRamps(
+	ramps, err := s.handler.updateReplicationRamps(
+		"test-ns",
+		nil,
+		[]string{"active"},
+		[]*replicationpb.ClusterReplicationConfig{
+			{ClusterName: "active"},
+			{ClusterName: "standby-1", ReplicationRampDuration: durationpb.New(time.Hour)},
+			{ClusterName: "standby-2", ReplicationRampDuration: durationpb.New(2 * time.Hour)},
+			{ClusterName: "standby-without-ramp"},
+			{ClusterName: "standby-zero-ramp", ReplicationRampDuration: durationpb.New(0)},
+			{ClusterName: "standby-negative-ramp", ReplicationRampDuration: durationpb.New(-time.Hour)},
+		},
+		"active",
+	)
+	s.Require().NoError(err)
+	s.Equal(time.Hour, ramps["standby-1"].GetDuration().AsDuration())
+	s.Equal(2*time.Hour, ramps["standby-2"].GetDuration().AsDuration())
+	s.NotContains(ramps, "standby-without-ramp")
+	s.NotContains(ramps, "standby-zero-ramp")
+	s.NotContains(ramps, "standby-negative-ramp")
+}
+
+func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsSkipsEffectiveActiveCluster() {
+	s.config.EnableReplicationGradualConnect = dc.GetBoolPropertyFn(true)
+	s.config.ReplicationGradualConnectInitialPercent = dc.GetIntPropertyFnFilteredByNamespace(10)
+
+	ramps, err := s.handler.updateReplicationRamps(
 		"test-ns",
 		nil,
 		[]string{"old-active"},
-		[]string{"old-active", "new-active", "new-standby"},
+		[]*replicationpb.ClusterReplicationConfig{
+			{ClusterName: "old-active"},
+			{ClusterName: "new-active", ReplicationRampDuration: durationpb.New(time.Hour)},
+			{ClusterName: "new-standby", ReplicationRampDuration: durationpb.New(time.Hour)},
+		},
 		"new-active",
 	)
+	s.Require().NoError(err)
 	s.NotContains(ramps, "new-active")
 	s.Contains(ramps, "new-standby")
+}
+
+func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsRejectsInvalidDuration() {
+	s.config.EnableReplicationGradualConnect = dc.GetBoolPropertyFn(true)
+	s.config.ReplicationGradualConnectInitialPercent = dc.GetIntPropertyFnFilteredByNamespace(10)
+
+	_, err := s.handler.updateReplicationRamps(
+		"test-ns",
+		nil,
+		[]string{"active"},
+		[]*replicationpb.ClusterReplicationConfig{
+			{ClusterName: "active"},
+			{
+				ClusterName:             "standby",
+				ReplicationRampDuration: &durationpb.Duration{Seconds: 1, Nanos: -1},
+			},
+		},
+		"active",
+	)
+	s.Require().Error(err)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.Require().ErrorAs(err, &invalidArgument)
+}
+
+func (s *namespaceHandlerCommonSuite) TestDeprecateNamespaceEventUsesPersistedAfterState() {
+	eventLogger := &captureNamespaceEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dc.GetBoolPropertyFn(true)
+
+	failoverEndTime := timestamppb.New(now)
+	detail := &persistencespb.NamespaceDetail{
+		Info: &persistencespb.NamespaceInfo{
+			Id:    "namespace-id",
+			Name:  "namespace",
+			State: enumspb.NAMESPACE_STATE_REGISTERED,
+		},
+		Config:          &persistencespb.NamespaceConfig{},
+		FailoverEndTime: failoverEndTime,
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestCurrentClusterName,
+			Clusters:          []string{cluster.TestCurrentClusterName},
+		},
+	}
+
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{NotificationVersion: 7}, nil)
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{Name: "namespace"}).Return(
+		&persistence.GetNamespaceResponse{Namespace: detail},
+		nil,
+	)
+
+	var persistedAfter wideevents.NamespaceStateFields
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateNamespaceRequest) error {
+			persistedAfter = namespaceStateFields(request.Namespace, request.IsGlobalNamespace)
+			return nil
+		},
+	)
+
+	_, err := s.handler.DeprecateNamespace(context.Background(), &workflowservice.DeprecateNamespaceRequest{Namespace: "namespace"})
+	s.Require().NoError(err)
+	s.Require().Len(eventLogger.records, 1)
+
+	var detailsJSON string
+	eventLogger.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+		if kv.Key == "details" {
+			detailsJSON = kv.Value.AsString()
+		}
+		return true
+	})
+	var details map[string]any
+	s.Require().NoError(json.Unmarshal([]byte(detailsJSON), &details))
+	after, ok := details["after"].(map[string]any)
+	s.Require().True(ok)
+	s.Require().Equal(persistedAfter.FailoverEndTime, after["failover_end_time"])
+	s.Require().NotEqual(failoverEndTime.AsTime().Format(time.RFC3339), after["failover_end_time"])
 }
 
 func (s *namespaceHandlerCommonSuite) TestMergeNamespaceData_Overriding() {
@@ -1797,6 +1971,10 @@ func (s *namespaceHandlerCommonSuite) TestFailoverGlobalNamespace_NotMaster() {
 }
 
 func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Acceptance() {
+	eventLogger := &captureNamespaceEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dc.GetBoolPropertyFn(true)
+
 	namespaceName := "test-namespace"
 	identity := "identity"
 	description := "description"
@@ -1806,7 +1984,7 @@ func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Acceptance() {
 	version := int64(100)
 
 	// first call returns error, because ID is not set
-	_, err := s.handler.CreateWorkflowRule(context.Background(), spec, identity, description, namespaceName)
+	_, err := s.handler.CreateWorkflowRule(context.Background(), spec, identity, description, namespaceName, false, "")
 	s.Error(err)
 
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
@@ -1825,13 +2003,26 @@ func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Acceptance() {
 	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(nil)
 
 	spec.Id = "test-id"
-	rule, err := s.handler.CreateWorkflowRule(context.Background(), spec, identity, description, namespaceName)
+	rule, err := s.handler.CreateWorkflowRule(context.Background(), spec, identity, description, namespaceName, true, "request-id")
 	s.NoError(err)
 	s.NotNil(rule)
 	s.NotNil(rule.Spec)
 	s.NotNil(rule.CreateTime)
 	s.Equal(identity, rule.CreatedByIdentity)
 	s.Equal(description, rule.Description)
+	s.Require().Len(eventLogger.records, 1)
+
+	var detailsJSON string
+	eventLogger.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+		if kv.Key == "details" {
+			detailsJSON = kv.Value.AsString()
+		}
+		return true
+	})
+	var details map[string]any
+	s.Require().NoError(json.Unmarshal([]byte(detailsJSON), &details))
+	s.Require().Equal(true, details["workflow_rule_force_scan"])
+	s.Require().Equal("request-id", details["workflow_rule_request_id"])
 }
 
 func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Duplicate() {
@@ -1864,7 +2055,7 @@ func (s *namespaceHandlerCommonSuite) TestCreateWorkflowRule_Duplicate() {
 		},
 	}, nil)
 
-	_, err := s.handler.CreateWorkflowRule(context.Background(), spec, identity, description, namespaceName)
+	_, err := s.handler.CreateWorkflowRule(context.Background(), spec, identity, description, namespaceName, false, "")
 	s.Error(err)
 	var invalidArgument *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgument)

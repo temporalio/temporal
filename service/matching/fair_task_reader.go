@@ -25,9 +25,10 @@ import (
 
 type (
 	fairTaskReader struct {
-		backlogMgr *fairBacklogManagerImpl
-		subqueue   subqueueIndex
-		logger     log.Logger
+		backlogMgr      *fairBacklogManagerImpl
+		subqueue        subqueueIndex
+		logger          log.Logger
+		throttledLogger log.ThrottledLogger
 
 		lock sync.Mutex
 
@@ -105,10 +106,12 @@ func newFairTaskReader(
 	subqueue subqueueIndex,
 	initialAckLevel fairLevel,
 ) *fairTaskReader {
+	subqueueTag := tag.Int("subqueue-id", int(subqueue))
 	return &fairTaskReader{
-		backlogMgr: backlogMgr,
-		subqueue:   subqueue,
-		logger:     backlogMgr.logger,
+		backlogMgr:      backlogMgr,
+		subqueue:        subqueue,
+		logger:          log.With(backlogMgr.logger, subqueueTag),
+		throttledLogger: log.With(backlogMgr.throttledLogger, subqueueTag),
 		retrier: backoff.NewRetrier(
 			backoff.NewExponentialRetryPolicy(50*time.Millisecond).
 				WithMaximumInterval(10*time.Second).
@@ -346,18 +349,17 @@ func (tr *fairTaskReader) addErrorBehavior(err error) (drop, retry bool) {
 		// retry here. if tqCtx is closing, addTaskToMatcher will give up.
 		return false, true
 	}
-	var stickyUnavailable *serviceerrors.StickyWorkerUnavailable
-	if errors.As(err, &stickyUnavailable) {
+	if _, ok := errors.AsType[*serviceerrors.StickyWorkerUnavailable](err); ok {
 		return true, false // drop the task
 	}
 	var invalid *serviceerror.InvalidArgument
 	var internal *serviceerror.Internal
 	if errors.As(err, &invalid) || errors.As(err, &internal) {
-		tr.backlogMgr.throttledLogger.Error("nonretryable error processing spooled task", tag.Error(err))
+		tr.throttledLogger.Error("nonretryable error processing spooled task", tag.Error(err))
 		return true, false // drop the task
 	}
 	// For any other error (this should be very rare), we can retry.
-	tr.backlogMgr.throttledLogger.Error("retryable error processing spooled task", tag.Error(err))
+	tr.throttledLogger.Error("retryable error processing spooled task", tag.Error(err))
 	return false, true
 }
 

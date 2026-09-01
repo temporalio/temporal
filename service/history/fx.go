@@ -42,6 +42,7 @@ import (
 	hsmnexusworkflow "go.temporal.io/server/components/nexusoperations/workflow"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/workflowresend"
 	"go.temporal.io/server/service/history/archival"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -92,6 +93,7 @@ var Module = fx.Options(
 	service.PersistenceLazyLoadedServiceResolverModule,
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(EventNotifierProvider),
+	fx.Provide(WorkflowResendSchedulerProvider),
 	fx.Provide(HistoryEngineFactoryProvider),
 	fx.Provide(HandlerProvider),
 	fx.Provide(HistoryServiceServerProvider),
@@ -247,9 +249,13 @@ func ConfigProvider(
 
 func ServiceErrorInterceptorProvider(
 	dc *dynamicconfig.Collection,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
 ) *interceptor.ServiceErrorInterceptor {
 	return interceptor.NewServiceErrorInterceptor(
 		dynamicconfig.MaxServiceErrorMessageLength.Get(dc),
+		metricsHandler,
+		logger,
 	)
 }
 
@@ -352,7 +358,6 @@ func NamespaceRateLimitInterceptorProvider(
 			namespaceRateFn,
 			serviceConfig.OperatorRPSRatio,
 		),
-		map[string]int{},      // no token overrides
 		map[string]struct{}{}, // no long polls on history service
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // no long poll methods
 		metricsHandler,
@@ -487,6 +492,46 @@ func EventNotifierProvider(
 
 func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
 	lc.Append(fx.StartStopHook(svc.Start, svc.Stop))
+}
+
+func WorkflowResendSchedulerProvider(
+	lc fx.Lifecycle,
+	serviceConfig *configs.Config,
+	metricsHandler metrics.Handler,
+	logger log.ThrottledLogger,
+) workflowresend.Scheduler {
+	schedulerLogger := log.With(
+		logger,
+		tag.ComponentTaskScheduler,
+		tag.ScopeHost,
+		tag.Operation(workflowresend.OperationName),
+	)
+	workflowResendScheduler := workflowresend.NewBoundedWorkflowScheduler(
+		serviceConfig.WorkflowResendHostMaxInFlight,
+		schedulerLogger,
+		metricsHandler,
+	)
+	lc.Append(fx.Hook{
+		OnStop: func(ctx context.Context) error {
+			workflowResendScheduler.InitiateShutdown()
+
+			shutdownCtx, cancel := context.WithTimeout(ctx, time.Minute)
+			defer cancel()
+			stopped := make(chan struct{})
+			go func() {
+				workflowResendScheduler.WaitShutdown()
+				close(stopped)
+			}()
+			select {
+			case <-stopped:
+				return nil
+			case <-shutdownCtx.Done():
+				schedulerLogger.Warn("Workflow resend scheduler timed out during shutdown", tag.Error(shutdownCtx.Err()))
+				return shutdownCtx.Err()
+			}
+		},
+	})
+	return workflowResendScheduler
 }
 
 func ReplicationProgressCacheProvider(

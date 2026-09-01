@@ -18,6 +18,7 @@ type (
 		NextEventID         int64
 		Version             int64
 		NewRunID            string
+		Priority            enumsspb.TaskPriority
 		TargetClusters      []string
 		IsForceReplication  bool
 

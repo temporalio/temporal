@@ -372,6 +372,7 @@ func (s *taskSerializerSuite) TestSyncActivityTask() {
 		Version:             rand.Int63(),
 		ScheduledEventID:    rand.Int63(),
 		IsForceReplication:  true,
+		Priority:            enumsspb.TASK_PRIORITY_LOW,
 	}
 
 	s.assertEqualTasks(syncActivityTask)
@@ -388,6 +389,7 @@ func (s *taskSerializerSuite) TestHistoryReplicationTask() {
 		BranchToken:         shuffle.Bytes([]byte("random branch token")),
 		NewRunBranchToken:   shuffle.Bytes([]byte("random new branch token")),
 		IsForceReplication:  true,
+		Priority:            enumsspb.TASK_PRIORITY_LOW,
 	}
 
 	s.assertEqualTasks(historyReplicationTask)
@@ -399,6 +401,7 @@ func (s *taskSerializerSuite) TestSyncHSMTask() {
 		VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
 		TaskID:              rand.Int63(),
 		IsForceReplication:  true,
+		Priority:            enumsspb.TASK_PRIORITY_LOW,
 	}
 
 	s.assertEqualTasks(syncHSMTask)
@@ -413,6 +416,7 @@ func (s *taskSerializerSuite) TestSyncVersionedTransitionTask() {
 		FirstEventID:        rand.Int63(),
 		NextEventID:         rand.Int63(),
 		NewRunID:            uuid.New().String(),
+		Priority:            enumsspb.TASK_PRIORITY_LOW,
 		VersionedTransition: &persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: rand.Int63(),
 			TransitionCount:          rand.Int63(),
@@ -425,6 +429,7 @@ func (s *taskSerializerSuite) TestSyncVersionedTransitionTask() {
 				NextEventID:         rand.Int63(),
 				Version:             rand.Int63(),
 				NewRunID:            uuid.New().String(),
+				Priority:            enumsspb.TASK_PRIORITY_LOW,
 			},
 		},
 	}
@@ -468,6 +473,7 @@ func (s *taskSerializerSuite) TestDeleteExecutionReplicationTask() {
 		VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
 		TaskID:              rand.Int63(),
 		ArchetypeID:         rand.Uint32(),
+		Version:             rand.Int63(),
 	}
 
 	s.assertEqualTasks(deleteExecutionReplicationTask)

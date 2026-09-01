@@ -18,14 +18,8 @@ const (
 	DCRedirectionPolicyDefault = ""
 	// DCRedirectionPolicyNoop means no redirection
 	DCRedirectionPolicyNoop = "noop"
-	// DCRedirectionPolicySelectedAPIsForwarding means forwarding the following APIs based namespace
-	// 1. StartWorkflowExecution
-	// 2. SignalWithStartWorkflowExecution
-	// 3. SignalWorkflowExecution
-	// 4. RequestCancelWorkflowExecution
-	// 5. TerminateWorkflowExecution
-	// 6. QueryWorkflow
-	// please also reference selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs
+	// DCRedirectionPolicySelectedAPIsForwarding means forwarding state-effecting APIs based on namespace
+	// See selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs for the list of APIs
 	DCRedirectionPolicySelectedAPIsForwarding = "selected-apis-forwarding"
 
 	// DCRedirectionPolicyAllAPIsForwarding means forwarding all APIs based on namespace active cluster
@@ -61,10 +55,15 @@ var selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs = map[string]struct{}
 	"StartWorkflowExecution":           {},
 	"SignalWithStartWorkflowExecution": {},
 	"SignalWorkflowExecution":          {},
+	"UpdateWorkflowExecution":          {},
 	"RequestCancelWorkflowExecution":   {},
 	"TerminateWorkflowExecution":       {},
+	"PauseWorkflowExecution":           {},
+	"UnpauseWorkflowExecution":         {},
+	"ResetWorkflowExecution":           {},
 	"DeleteWorkflowExecution":          {},
 	"QueryWorkflow":                    {},
+	"ExecuteMultiOperation":            {},
 
 	// Standalone Activity APIs
 	"StartActivityExecution":         {},

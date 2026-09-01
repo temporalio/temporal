@@ -47,6 +47,7 @@ func (o *operationTimeoutBelowMinError) Error() string {
 }
 
 var ErrInvalidOperationToken = errors.New("invalid operation token")
+var ErrResponseBodyTooLarge = errors.New("http: response body too large")
 var errRequestTimedOut = errors.New("request timed out")
 var errOpProcessorFailed = errors.New("nexus operation processor failed")
 
@@ -269,6 +270,19 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		Links: []nexus.Link{args.nexusLink},
 	}
 
+	traceCtx := invocationTraceContext{
+		operationTag:      "StartOperation",
+		namespaceName:     ns.Name().String(),
+		targetNamespaceID: endpoint.GetEndpoint().GetSpec().GetTarget().GetWorker().GetNamespaceId(),
+		requestID:         args.requestID,
+		operation:         args.operation,
+		endpointName:      args.endpointName,
+		workflowID:        ref.WorkflowKey.WorkflowID,
+		runID:             ref.WorkflowKey.RunID,
+		attemptStart:      time.Now().UTC(),
+		attempt:           task.Attempt,
+	}
+
 	var result *nexusrpc.ClientStartOperationResponse[*commonpb.Payload]
 	var callErr error
 	var startTime time.Time
@@ -290,18 +304,8 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 		}
 
 		if e.HTTPTraceProvider != nil {
-			traceLogger := log.With(e.Logger,
-				tag.Operation("StartOperation"),
-				tag.WorkflowNamespace(ns.Name().String()),
-				tag.RequestID(args.requestID),
-				tag.NexusOperation(args.operation),
-				tag.Endpoint(args.endpointName),
-				tag.WorkflowID(ref.WorkflowKey.WorkflowID),
-				tag.WorkflowRunID(ref.WorkflowKey.RunID),
-				tag.AttemptStart(time.Now().UTC()),
-				tag.Attempt(task.Attempt),
-			)
-			if trace := e.HTTPTraceProvider.NewTrace(task.Attempt, traceLogger); trace != nil {
+			traceLogger := log.With(e.Logger, traceCtx.tags()...)
+			if trace := e.HTTPTraceProvider.NewTrace(traceCtx.attempt, traceLogger); trace != nil {
 				callCtx = httptrace.WithClientTrace(callCtx, trace)
 			}
 		}
@@ -332,13 +336,7 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 	chasmnexus.OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
 	chasmnexus.OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
 
-	if callErr != nil {
-		if failureSource == commonnexus.FailureSourceWorker || errors.As(callErr, new(*operationTimeoutBelowMinError)) {
-			e.Logger.Debug("Nexus StartOperation request failed", tag.Error(callErr))
-		} else {
-			e.Logger.Error("Nexus StartOperation request failed", tag.Error(callErr))
-		}
-	}
+	e.logCallFailure(traceCtx, callErr, failureSource)
 
 	err = e.saveResult(ctx, env, ref, result, callErr)
 
@@ -505,8 +503,7 @@ func (e taskExecutor) deferredOperationMetric(op Operation, callErr error, names
 		}
 	case enumsspb.NEXUS_OPERATION_STATE_TIMED_OUT:
 		timeoutType := enumspb.TIMEOUT_TYPE_UNSPECIFIED
-		var belowMin *operationTimeoutBelowMinError
-		if errors.As(callErr, &belowMin) {
+		if belowMin, ok := errors.AsType[*operationTimeoutBelowMinError](callErr); ok {
 			timeoutType = belowMin.timeoutType
 		}
 		return func() {
@@ -538,7 +535,7 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 
 	switch {
 	case errors.As(callErr, &serviceErr):
-		if !common.IsRetryableRPCError(callErr) {
+		if !common.IsRetryableRPCError(serviceErr) {
 			return handleNonRetryableStartOperationError(node, operation, callErr)
 		}
 		// Fall through all uncaught errors to retryable
@@ -733,6 +730,19 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	// Set this value on the parent context so that our custom HTTP caller can mutate it since we cannot access response headers directly.
 	callCtx = context.WithValue(callCtx, commonnexus.FailureSourceContextKey, &atomic.Value{})
 
+	traceCtx := invocationTraceContext{
+		operationTag:      "CancelOperation",
+		namespaceName:     ns.Name().String(),
+		targetNamespaceID: endpoint.GetEndpoint().GetSpec().GetTarget().GetWorker().GetNamespaceId(),
+		requestID:         args.requestID,
+		operation:         args.operation,
+		endpointName:      args.endpointName,
+		workflowID:        ref.WorkflowKey.WorkflowID,
+		runID:             ref.WorkflowKey.RunID,
+		attemptStart:      time.Now().UTC(),
+		attempt:           task.Attempt,
+	}
+
 	var callErr error
 	var startTime time.Time
 	if callTimeout < e.Config.MinRequestTimeout(ns.Name().String()) {
@@ -757,24 +767,21 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 		}
 
 		if e.HTTPTraceProvider != nil {
-			traceLogger := log.With(e.Logger,
-				tag.Operation("CancelOperation"),
-				tag.WorkflowNamespace(ns.Name().String()),
-				tag.RequestID(args.requestID),
-				tag.NexusOperation(args.operation),
-				tag.Endpoint(args.endpointName),
-				tag.WorkflowID(ref.WorkflowKey.WorkflowID),
-				tag.WorkflowRunID(ref.WorkflowKey.RunID),
-				tag.AttemptStart(time.Now().UTC()),
-				tag.Attempt(task.Attempt),
-			)
-			if trace := e.HTTPTraceProvider.NewTrace(task.Attempt, traceLogger); trace != nil {
+			traceLogger := log.With(e.Logger, traceCtx.tags()...)
+			if trace := e.HTTPTraceProvider.NewTrace(traceCtx.attempt, traceLogger); trace != nil {
 				callCtx = httptrace.WithClientTrace(callCtx, trace)
 			}
 		}
 
+		header := nexus.Header(args.headers)
+		if e.Config.UseNewFailureWireFormat(ns.Name().String()) {
+			if header == nil {
+				header = make(nexus.Header, 1)
+			}
+			header.Set(nexusrpc.HeaderTemporalNexusFailureSupport, "true")
+		}
 		startTime = time.Now()
-		callErr = handle.Cancel(callCtx, nexus.CancelOperationOptions{Header: nexus.Header(args.headers)})
+		callErr = handle.Cancel(callCtx, nexus.CancelOperationOptions{Header: header})
 	}
 	failureSource := failureSourceFromContext(callCtx)
 	methodTag := metrics.NexusMethodTag("CancelOperation")
@@ -790,13 +797,7 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	chasmnexus.OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, statusCodeTag, failureSourceTag)
 	chasmnexus.OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, statusCodeTag, failureSourceTag)
 
-	if callErr != nil {
-		if failureSource == commonnexus.FailureSourceWorker || errors.As(callErr, new(*operationTimeoutBelowMinError)) {
-			e.Logger.Debug("Nexus CancelOperation request failed", tag.Error(callErr))
-		} else {
-			e.Logger.Error("Nexus CancelOperation request failed", tag.Error(callErr))
-		}
-	}
+	e.logCallFailure(traceCtx, callErr, failureSource)
 
 	err = e.saveCancelationResult(ctx, env, ref, callErr, args.scheduledEventID)
 
@@ -966,8 +967,7 @@ func createNexusOperationFailure(operation Operation, scheduledEventID int64, ca
 func startCallOutcomeTag(callCtx context.Context, result *nexusrpc.ClientStartOperationResponse[*commonpb.Payload], callErr error) string {
 
 	if callErr != nil {
-		var opTimeoutBelowMinErr *operationTimeoutBelowMinError
-		if errors.As(callErr, &opTimeoutBelowMinErr) {
+		if _, ok := errors.AsType[*operationTimeoutBelowMinError](callErr); ok {
 			return "operation-timeout"
 		}
 		if errors.Is(callErr, ErrInvalidOperationToken) {
@@ -979,16 +979,13 @@ func startCallOutcomeTag(callCtx context.Context, result *nexusrpc.ClientStartOp
 		if callCtx.Err() != nil {
 			return "request-timeout"
 		}
-		var serviceErr serviceerror.ServiceError
-		if errors.As(callErr, &serviceErr) {
+		if serviceErr, ok := errors.AsType[serviceerror.ServiceError](callErr); ok {
 			return "service-error:" + strings.Replace(fmt.Sprintf("%T", serviceErr), "*serviceerror.", "", 1)
 		}
-		var opFailedError *nexus.OperationError
-		if errors.As(callErr, &opFailedError) {
+		if opFailedError, ok := errors.AsType[*nexus.OperationError](callErr); ok {
 			return "operation-unsuccessful:" + string(opFailedError.State)
 		}
-		var handlerError *nexus.HandlerError
-		if errors.As(callErr, &handlerError) {
+		if handlerError, ok := errors.AsType[*nexus.HandlerError](callErr); ok {
 			return "handler-error:" + string(handlerError.Type)
 		}
 		return "unknown-error"
@@ -1004,19 +1001,16 @@ func cancelCallOutcomeTag(callCtx context.Context, callErr error) string {
 		if errors.Is(callErr, errOpProcessorFailed) {
 			return "operation-processor-failed"
 		}
-		var opTimeoutBelowMinErr *operationTimeoutBelowMinError
-		if errors.As(callErr, &opTimeoutBelowMinErr) {
+		if _, ok := errors.AsType[*operationTimeoutBelowMinError](callErr); ok {
 			return "operation-timeout"
 		}
 		if callCtx.Err() != nil {
 			return "request-timeout"
 		}
-		var handlerErr *nexus.HandlerError
-		if errors.As(callErr, &handlerErr) {
+		if handlerErr, ok := errors.AsType[*nexus.HandlerError](callErr); ok {
 			return "handler-error:" + string(handlerErr.Type)
 		}
-		var serviceErr serviceerror.ServiceError
-		if errors.As(callErr, &serviceErr) {
+		if serviceErr, ok := errors.AsType[serviceerror.ServiceError](callErr); ok {
 			return "service-error:" + strings.Replace(fmt.Sprintf("%T", serviceErr), "*serviceerror.", "", 1)
 		}
 		return "unknown-error"
@@ -1024,18 +1018,60 @@ func cancelCallOutcomeTag(callCtx context.Context, callErr error) string {
 	return "successful"
 }
 
+// invocationTraceContext captures per-call contextual information used for HTTP tracing and failure logging.
+type invocationTraceContext struct {
+	operationTag      string // "StartOperation" or "CancelOperation"
+	namespaceName     string // source (caller) namespace
+	targetNamespaceID string
+	requestID         string
+	operation         string
+	endpointName      string
+	workflowID        string
+	runID             string
+	attemptStart      time.Time
+	attempt           int32
+}
+
+// tags returns the structured log tags describing the call.
+func (c invocationTraceContext) tags() []tag.Tag {
+	return []tag.Tag{
+		tag.Operation(c.operationTag),
+		tag.WorkflowNamespace(c.namespaceName),
+		tag.NexusEndpointTargetNamespaceID(c.targetNamespaceID),
+		tag.RequestID(c.requestID),
+		tag.NexusOperation(c.operation),
+		tag.Endpoint(c.endpointName),
+		tag.WorkflowID(c.workflowID),
+		tag.WorkflowRunID(c.runID),
+		tag.AttemptStart(c.attemptStart),
+		tag.Attempt(c.attempt),
+	}
+}
+
+// logCallFailure logs a failed outbound Nexus call.
+func (e taskExecutor) logCallFailure(traceCtx invocationTraceContext, callErr error, failureSource string) {
+	if callErr == nil {
+		return
+	}
+	tags := append(traceCtx.tags(), tag.Error(callErr))
+	msg := fmt.Sprintf("Nexus %s request failed", traceCtx.operationTag)
+	_, isTimeoutBelowMin := errors.AsType[*operationTimeoutBelowMinError](callErr)
+	if failureSource == commonnexus.FailureSourceWorker || isTimeoutBelowMin {
+		e.Logger.Debug(msg, tags...)
+	} else {
+		e.Logger.Error(msg, tags...)
+	}
+}
+
 func isDestinationDown(err error) bool {
-	var serviceErr serviceerror.ServiceError
 	// For the system endpoint, we don't even consider the destination down since it's internal.
-	if errors.As(err, &serviceErr) {
+	if _, ok := errors.AsType[serviceerror.ServiceError](err); ok {
 		return false
 	}
-	var opFailedErr *nexus.OperationError
-	if errors.As(err, &opFailedErr) {
+	if _, ok := errors.AsType[*nexus.OperationError](err); ok {
 		return false
 	}
-	var handlerError *nexus.HandlerError
-	if errors.As(err, &handlerError) {
+	if handlerError, ok := errors.AsType[*nexus.HandlerError](err); ok {
 		return handlerError.Retryable()
 	}
 	if errors.Is(err, errOpProcessorFailed) {
@@ -1052,8 +1088,7 @@ func isDestinationDown(err error) bool {
 }
 
 func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error) {
-	var serviceErr serviceerror.ServiceError
-	if errors.As(callErr, &serviceErr) {
+	if serviceErr, ok := errors.AsType[serviceerror.ServiceError](callErr); ok {
 		return &failurepb.Failure{
 			Message: fmt.Sprintf("%s: %s", strings.Replace(fmt.Sprintf("%T", serviceErr), "*serviceerror.", "", 1), serviceErr.Error()),
 			FailureInfo: &failurepb.Failure_ServerFailureInfo{
@@ -1063,8 +1098,7 @@ func callErrToFailure(callErr error, retryable bool) (*failurepb.Failure, error)
 			},
 		}, nil
 	}
-	var handlerErr *nexus.HandlerError
-	if errors.As(callErr, &handlerErr) {
+	if handlerErr, ok := errors.AsType[*nexus.HandlerError](callErr); ok {
 		var nf nexus.Failure
 		if handlerErr.OriginalFailure != nil {
 			nf = *handlerErr.OriginalFailure

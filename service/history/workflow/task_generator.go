@@ -80,13 +80,15 @@ type (
 		GenerateActivityTimerTasks() error
 		GenerateUserTimerTasks() error
 
-		// time skipping tasks
 		RegenerateTimerTasksForTimeSkipping() error
+		GenerateTimeSkippingFastForwardTimerTask() error
 
 		// replication tasks
 		GenerateHistoryReplicationTasks(
 			eventBatches [][]*historypb.HistoryEvent,
 		) ([]tasks.Task, error)
+		// GenerateMigrationTasks generates low priority replication tasks and is
+		// for the force replication path only. Do not call it for live replication.
 		GenerateMigrationTasks(targetClusters []string) ([]tasks.Task, int64, error)
 
 		// Generate tasks for any updated state machines on mutable state.
@@ -767,6 +769,11 @@ func (r *TaskGeneratorImpl) GenerateHistoryReplicationTasks(
 	}, nil
 }
 
+// GenerateMigrationTasks must only be called from the force replication path
+// (i.e. GenerateLastHistoryReplicationTasks), never from live replication.
+// Every task it returns is marked TASK_PRIORITY_LOW so that bulk backfill does
+// not compete with live replication traffic; using it for live replication
+// would silently demote those tasks.
 func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]tasks.Task, int64, error) {
 	executionInfo := r.mutableState.GetExecutionInfo()
 	versionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.GetVersionHistories())
@@ -843,6 +850,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 			FirstEventID:       executionInfo.LastFirstEventId,
 			NextEventID:        nextEventID,
 			Version:            lastItem.GetVersion(),
+			Priority:           enumsspb.TASK_PRIORITY_LOW,
 			TargetClusters:     targetClusters,
 			IsForceReplication: true,
 		})
@@ -850,17 +858,21 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 		for activityID := range r.mutableState.GetPendingActivityInfos() {
 			activityIDs[activityID] = struct{}{}
 		}
-		taskEquivalents = append(taskEquivalents, convertSyncActivityInfos(
+		for _, syncActivityTask := range convertSyncActivityInfos(
 			now,
 			workflowKey,
 			r.mutableState.GetPendingActivityInfos(),
 			activityIDs,
 			targetClusters,
 			true,
-		)...)
+		) {
+			syncActivityTask.(*tasks.SyncActivityTask).Priority = enumsspb.TASK_PRIORITY_LOW
+			taskEquivalents = append(taskEquivalents, syncActivityTask)
+		}
 		taskEquivalents = append(taskEquivalents, &tasks.SyncHSMTask{
 			WorkflowKey: workflowKey,
 			// TaskID and VisibilityTimestamp are set by shard
+			Priority:           enumsspb.TASK_PRIORITY_LOW,
 			TargetClusters:     targetClusters,
 			IsForceReplication: true,
 		})
@@ -1069,18 +1081,20 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 		})
 	}
 
-	// (2) execution and run timeout timers
-	executionTimeoutTimer := r.mutableState.GetExecutionInfo().WorkflowExecutionExpirationTime
-	if !timeNotSet(executionTimeoutTimer) {
+	// (2) execution and run timeout timers.
+	executionInfo := r.mutableState.GetExecutionInfo()
+	executionTimeoutTimer := executionInfo.WorkflowExecutionExpirationTime
+	if !timeNotSet(executionTimeoutTimer) &&
+		executionInfo.WorkflowExecutionTimerTaskStatus == TimerTaskStatusCreated {
 		r.mutableState.AddTasks(&tasks.WorkflowExecutionTimeoutTask{
 			// TaskID is set by shard
-			NamespaceID:         r.mutableState.GetExecutionInfo().NamespaceId,
-			WorkflowID:          r.mutableState.GetExecutionInfo().WorkflowId,
-			FirstRunID:          r.mutableState.GetExecutionInfo().FirstExecutionRunId,
+			NamespaceID:         executionInfo.NamespaceId,
+			WorkflowID:          executionInfo.WorkflowId,
+			FirstRunID:          executionInfo.FirstExecutionRunId,
 			VisibilityTimestamp: timestamp.TimeValue(executionTimeoutTimer),
 		})
 	}
-	runTimeoutTimer := r.mutableState.GetExecutionInfo().WorkflowRunExpirationTime
+	runTimeoutTimer := executionInfo.WorkflowRunExpirationTime
 	if !timeNotSet(runTimeoutTimer) {
 		// Version must match the workflow's start version so the executor's
 		// CheckTaskVersion passes for global namespaces (see timer_queue_active_task_executor.go).
@@ -1096,20 +1110,9 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 		})
 	}
 
-	// (3) fast-forward timer — regenerate when configured so its real-time
-	// VisibilityTimestamp tracks the new accumulated skip.
-	tsi := r.mutableState.GetExecutionInfo().GetTimeSkippingInfo()
-	if tsi.GetConfig().GetEnabled() {
-		fastForward := tsi.GetFastForwardInfo()
-		if fastForward != nil && !fastForward.GetHasReached() {
-			r.mutableState.AddTasks(&tasks.TimeSkippingTimerTask{
-				// TaskID is set by shard
-				WorkflowKey:         r.mutableState.GetWorkflowKey(),
-				VisibilityTimestamp: fastForward.GetTargetTime().AsTime(),
-				VersionedTransition: tsi.GetFastForwardInfoLastUpdateVersionedTransition(),
-				ArchetypeID:         r.mutableState.ChasmTree().ArchetypeID(),
-			})
-		}
+	// (3) fast-forward timer
+	if err := r.GenerateTimeSkippingFastForwardTimerTask(); err != nil {
+		return err
 	}
 
 	// (4) start delays (start-with-delay, cron, retry in CAN, etc).
@@ -1155,6 +1158,23 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 		}
 	}
 
-	// todo@time-skipping: ChasmTaskPure is not supported yet.
+	// Generic StateMachineTimerTask (nexus HSM), WorkflowTaskTimeoutTask, and ActivityTimeoutTask
+	// are treated as a part of in-flight nexus operation and won't be regenerated.
+	// DeleteHistoryEventTask is not impacted by time skipping, and doesn't need regeneration.
+	return nil
+}
+
+func (r *TaskGeneratorImpl) GenerateTimeSkippingFastForwardTimerTask() error {
+	tsi := r.mutableState.GetExecutionInfo().GetTimeSkippingInfo()
+	if !NewTimeSkippingInfoUtil(tsi).HasPendingFastForward() {
+		return nil
+	}
+	r.mutableState.AddTasks(&tasks.TimeSkippingTimerTask{
+		// TaskID is set by shard
+		WorkflowKey:         r.mutableState.GetWorkflowKey(),
+		VisibilityTimestamp: tsi.GetFastForwardInfo().GetTargetTime().AsTime(),
+		VersionedTransition: tsi.GetFastForwardInfoLastUpdateVersionedTransition(),
+		ArchetypeID:         r.mutableState.ChasmTree().ArchetypeID(),
+	})
 	return nil
 }
