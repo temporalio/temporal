@@ -224,6 +224,28 @@ Only unary RPCs are intercepted; streaming RPCs are unaffected.
 
 The `env` methods scope faults to the test's namespace.
 
+### HTTP fault injection
+
+`InjectHTTPRequestFault` and `InjectHTTPResponseFault` inject faults into HTTP clients that install
+the test fault generator. Callback delivery and Nexus operation clients support these faults. The
+faults are scoped to the test namespace and are unavailable in builds without `test_dep`.
+
+Return an `httpfaults.Outcome` with one action:
+
+- `Response` returns a synthetic HTTP response.
+- `Error` returns a transport error.
+
+```go
+env.InjectHTTPRequestFault(func(ctx context.Context, req *http.Request) *httpfaults.Outcome {
+    if req.URL.Path != "/callback" {
+        return nil
+    }
+    return &httpfaults.Outcome{
+        Response: httpfaults.NewResponse(http.StatusServiceUnavailable, "injected"),
+    }
+})
+```
+
 ### testhooks package
 
 The `testhooks` package injects test-specific behavior into production code paths that are otherwise

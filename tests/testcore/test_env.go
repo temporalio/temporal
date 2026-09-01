@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -29,6 +30,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/grpcfaults"
+	"go.temporal.io/server/common/rpc/httpfaults"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -494,6 +496,40 @@ func (e *TestEnv) InjectResponseFault(fault ResponseFault) func() {
 		if injectedErr := fault(req, resp, err); injectedErr != nil {
 			tracker.markFired(req)
 			return &grpcfaults.Outcome{Error: injectedErr}
+		}
+		return nil
+	})
+	return tracker.attach(unregister)
+}
+
+// InjectHTTPRequestFault registers a fault for HTTP requests in this namespace.
+func (e *TestEnv) InjectHTTPRequestFault(fault HTTPRequestFault) func() {
+	scope := httpfaults.Scope{
+		NamespaceID:   e.nsID,
+		NamespaceName: e.nsName,
+	}
+	tracker := newFaultTracker(e.t)
+	unregister := e.GetTestCluster().Host().GetHTTPFaultGenerator().RegisterRequestCallback(scope, func(ctx context.Context, _ string, req *httpfaults.Request) *httpfaults.Outcome {
+		if outcome := fault(ctx, req.Raw); outcome != nil {
+			tracker.markFired(req.Raw)
+			return outcome
+		}
+		return nil
+	})
+	return tracker.attach(unregister)
+}
+
+// InjectHTTPResponseFault registers a fault for HTTP results in this namespace.
+func (e *TestEnv) InjectHTTPResponseFault(fault HTTPResponseFault) func() {
+	scope := httpfaults.Scope{
+		NamespaceID:   e.nsID,
+		NamespaceName: e.nsName,
+	}
+	tracker := newFaultTracker(e.t)
+	unregister := e.GetTestCluster().Host().GetHTTPFaultGenerator().RegisterResponseCallback(scope, func(ctx context.Context, _ string, req *httpfaults.Request, resp *http.Response, callErr error) *httpfaults.Outcome {
+		if outcome := fault(ctx, req.Raw, resp, callErr); outcome != nil {
+			tracker.markFired(req.Raw)
+			return outcome
 		}
 		return nil
 	})
