@@ -12,6 +12,8 @@ import (
 
 // DeadlineExceeded identifies a deadline owned by testcontext. It wraps
 // context.DeadlineExceeded, so either error matches through errors.Is.
+//
+//nolint:staticcheck // Match context.DeadlineExceeded at testcontext call sites.
 var DeadlineExceeded = fmt.Errorf("testcontext deadline exceeded: %w", context.DeadlineExceeded)
 
 type deadlineExceededCause struct {

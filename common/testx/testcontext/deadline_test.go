@@ -2,7 +2,6 @@ package testcontext
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -43,7 +42,7 @@ func TestWithDeadline(t *testing.T) {
 			<-ctx.Done()
 
 			require.Equal(t, context.DeadlineExceeded, ctx.Err())
-			require.False(t, errors.Is(context.Cause(ctx), DeadlineExceeded))
+			require.NotErrorIs(t, context.Cause(ctx), DeadlineExceeded)
 			require.ErrorIs(t, context.Cause(ctx), context.DeadlineExceeded)
 		})
 	})
@@ -64,7 +63,7 @@ func TestWithDeadline(t *testing.T) {
 			<-ctx.Done()
 
 			require.Equal(t, context.DeadlineExceeded, ctx.Err())
-			require.False(t, errors.Is(context.Cause(ctx), DeadlineExceeded))
+			require.NotErrorIs(t, context.Cause(ctx), DeadlineExceeded)
 			require.ErrorIs(t, context.Cause(ctx), context.DeadlineExceeded)
 		})
 	})
@@ -89,7 +88,7 @@ func TestWithDeadline(t *testing.T) {
 			<-ctx.Done()
 
 			require.Equal(t, context.DeadlineExceeded, ctx.Err())
-			require.False(t, errors.Is(context.Cause(ctx), DeadlineExceeded))
+			require.NotErrorIs(t, context.Cause(ctx), DeadlineExceeded)
 			require.ErrorIs(t, context.Cause(ctx), context.DeadlineExceeded)
 			ownerTB.runCleanups()
 		})
