@@ -206,6 +206,11 @@ var queryConverterTestCases = []queryConverterTestCase{
 		err:  `invalid expression: unary operator not supported in "-'foo'"`,
 	},
 	{
+		name: "Keyword with positive value",
+		in:   "AliasForKeyword01 = +'foo'",
+		err:  `invalid expression: unary operator not supported in "+'foo'"`,
+	},
+	{
 		name: "Keyword unsupported operator",
 		in:   "AliasForKeyword01 LIKE 'foo%'",
 		err:  "operation is not supported: operator 'LIKE' not supported for Keyword type search attribute 'AliasForKeyword01'",
@@ -247,10 +252,16 @@ var queryConverterTestCases = []queryConverterTestCase{
 		es:   `{"bool":{"filter":{"term":{"Int01":-10}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
+		name: "Int positive sign value",
+		in:   "AliasForInt01 = +10",
+		sql:  "TemporalNamespaceDivision is null and Int01 = 10",
+		es:   `{"bool":{"filter":{"term":{"Int01":10}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
 		// Only a literal value can be negated, not an arbitrary expression.
 		name: "Int negative parenthesized value",
 		in:   "AliasForInt01 = -(10)",
-		err:  "invalid expression: unexpected value type *sqlparser.ParenExpr",
+		err:  `invalid expression: unary operator not supported in "-(10)"`,
 	},
 	{
 		name: "Int greater than",
@@ -301,6 +312,31 @@ var queryConverterTestCases = []queryConverterTestCase{
 		es:   `{"bool":{"filter":{"term":{"Int01":1.5}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
+		name: "Int with negative float value",
+		in:   "AliasForInt01 = -1.5",
+		sql:  "TemporalNamespaceDivision is null and Int01 = -1.5",
+		es:   `{"bool":{"filter":{"term":{"Int01":-1.5}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		name: "Int with positive sign float value",
+		in:   "AliasForInt01 = +1.5",
+		sql:  "TemporalNamespaceDivision is null and Int01 = 1.5",
+		es:   `{"bool":{"filter":{"term":{"Int01":1.5}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		// negative int is parsed as SQLVal, and sqlparser reduces inline
+		name: "Int negative negative int value",
+		in:   "AliasForInt01 = - -10",
+		sql:  "TemporalNamespaceDivision is null and Int01 = 10",
+		es:   `{"bool":{"filter":{"term":{"Int01":10}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		// negative float is parsed as UnaryExpr, and nested unary expressions is not allowed
+		name: "Int negative negative float value",
+		in:   "AliasForInt01 = - -1.0",
+		err:  `invalid expression: unary operator not supported in "- -1.0"`,
+	},
+	{
 		name: "Int invalid value type",
 		in:   "HistoryLength = 'foo'",
 		err:  `invalid expression: invalid value type for search attribute HistoryLength of type Int: "foo" (type: string)`,
@@ -324,12 +360,6 @@ var queryConverterTestCases = []queryConverterTestCase{
 		es:   `{"bool":{"filter":{"term":{"Double01":1.5}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
-		name: "Double with int value",
-		in:   "AliasForDouble01 = 1",
-		sql:  "TemporalNamespaceDivision is null and Double01 = 1",
-		es:   `{"bool":{"filter":{"term":{"Double01":1}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
-	},
-	{
 		// Unlike negative integers, negative floats are parsed as an unary expression.
 		name: "Double negative value",
 		in:   "AliasForDouble01 >= -1.5",
@@ -341,6 +371,37 @@ var queryConverterTestCases = []queryConverterTestCase{
 		in:   "AliasForDouble01 = +1.5",
 		sql:  "TemporalNamespaceDivision is null and Double01 = 1.5",
 		es:   `{"bool":{"filter":{"term":{"Double01":1.5}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		name: "Double with int value",
+		in:   "AliasForDouble01 = 1",
+		sql:  "TemporalNamespaceDivision is null and Double01 = 1",
+		es:   `{"bool":{"filter":{"term":{"Double01":1}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		name: "Double with negative int value",
+		in:   "AliasForDouble01 = -1",
+		sql:  "TemporalNamespaceDivision is null and Double01 = -1",
+		es:   `{"bool":{"filter":{"term":{"Double01":-1}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		name: "Double with positive sign int value",
+		in:   "AliasForDouble01 = +1",
+		sql:  "TemporalNamespaceDivision is null and Double01 = 1",
+		es:   `{"bool":{"filter":{"term":{"Double01":1}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		// negative int is parsed as SQLVal, and sqlparser reduces inline
+		name: "Double negative negative int value",
+		in:   "AliasForDouble01 = - -10",
+		sql:  "TemporalNamespaceDivision is null and Double01 = 10",
+		es:   `{"bool":{"filter":{"term":{"Double01":10}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		// negative float is parsed as UnaryExpr, and nested unary expressions is not allowed
+		name: "Double negative negative float value",
+		in:   "AliasForDouble01 = - -1.0",
+		err:  `invalid expression: unary operator not supported in "- -1.0"`,
 	},
 	{
 		name: "Double invalid value type",
@@ -376,6 +437,16 @@ var queryConverterTestCases = []queryConverterTestCase{
 		name: "Bool range condition not supported",
 		in:   "AliasForBool01 BETWEEN false AND true",
 		err:  "invalid expression: cannot do range condition on search attribute 'AliasForBool01' of type Bool",
+	},
+	{
+		name: "Bool invalid unary negative value type",
+		in:   "AliasForBool01 = -true",
+		err:  `invalid expression: unary operator not supported in "-true"`,
+	},
+	{
+		name: "Bool invalid unary positive value type",
+		in:   "AliasForBool01 = +true",
+		err:  `invalid expression: unary operator not supported in "+true"`,
 	},
 
 	// Datetime type search attributes.
@@ -440,6 +511,16 @@ var queryConverterTestCases = []queryConverterTestCase{
 		name: "Datetime with bool value",
 		in:   "StartTime = true",
 		err:  "invalid expression: invalid value type for search attribute StartTime of type Datetime: true (type: bool)",
+	},
+	{
+		name: "Datetime invalid unary negative value type",
+		in:   "StartTime = -'2020-01-02T15:04:05Z'",
+		err:  `invalid expression: unary operator not supported in "-'2020-01-02T15:04:05Z'"`,
+	},
+	{
+		name: "Datetime invalid unary positive value type",
+		in:   "StartTime = +'2020-01-02T15:04:05Z'",
+		err:  `invalid expression: unary operator not supported in "+'2020-01-02T15:04:05Z'"`,
 	},
 
 	// ExecutionStatus search attribute.
@@ -546,6 +627,13 @@ var queryConverterTestCases = []queryConverterTestCase{
 		es:   `{"bool":{"filter":{"range":{"ExecutionDuration":{"from":630000000000,"include_lower":false,"include_upper":true,"to":null}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
+		// negative zero hours works because -0 = 0, it does not negate the duration (bug?)
+		name: "ExecutionDuration negative 00:mm:ss",
+		in:   "ExecutionDuration > '-00:10:30'",
+		sql:  "TemporalNamespaceDivision is null and execution_duration > 630000000000",
+		es:   `{"bool":{"filter":{"range":{"ExecutionDuration":{"from":630000000000,"include_lower":false,"include_upper":true,"to":null}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
 		name: "ExecutionDuration between",
 		in:   "ExecutionDuration BETWEEN '1s' AND '1m'",
 		sql:  "TemporalNamespaceDivision is null and execution_duration between 1000000000 and 60000000000",
@@ -561,6 +649,49 @@ var queryConverterTestCases = []queryConverterTestCase{
 		in:   "ExecutionDuration > -1000",
 		sql:  "TemporalNamespaceDivision is null and execution_duration > -1000",
 		es:   `{"bool":{"filter":{"range":{"ExecutionDuration":{"from":-1000,"include_lower":false,"include_upper":true,"to":null}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		name: "ExecutionDuration positive sign value",
+		in:   "ExecutionDuration > +1000",
+		sql:  "TemporalNamespaceDivision is null and execution_duration > 1000",
+		es:   `{"bool":{"filter":{"range":{"ExecutionDuration":{"from":1000,"include_lower":false,"include_upper":true,"to":null}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		name: "ExecutionDuration golang negative duration",
+		in:   "ExecutionDuration > '-10s'",
+		sql:  "TemporalNamespaceDivision is null and execution_duration > -10000000000",
+		es:   `{"bool":{"filter":{"range":{"ExecutionDuration":{"from":-10000000000,"include_lower":false,"include_upper":true,"to":null}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		name: "ExecutionDuration golang positive sign duration",
+		in:   "ExecutionDuration > '+10s'",
+		sql:  "TemporalNamespaceDivision is null and execution_duration > 10000000000",
+		es:   `{"bool":{"filter":{"range":{"ExecutionDuration":{"from":10000000000,"include_lower":false,"include_upper":true,"to":null}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		name: "ExecutionDuration negative golang duration",
+		in:   "ExecutionDuration > -'10s'",
+		err:  `invalid expression: unary operator not supported in "-'10s'"`,
+	},
+	{
+		name: "ExecutionDuration positive sign golang duration",
+		in:   "ExecutionDuration > +'10s'",
+		err:  `invalid expression: unary operator not supported in "+'10s'"`,
+	},
+	{
+		name: "ExecutionDuration negative hh:mm:ss",
+		in:   "ExecutionDuration > '-01:10:30'",
+		err:  "invalid expression: invalid duration value for search attribute ExecutionDuration: -01:10:30",
+	},
+	{
+		name: "ExecutionDuration unary negative hh:mm:ss",
+		in:   "ExecutionDuration > -'00:10:30'",
+		err:  `invalid expression: unary operator not supported in "-'00:10:30'"`,
+	},
+	{
+		name: "ExecutionDuration unary positive hh:mm:ss",
+		in:   "ExecutionDuration > +'00:10:30'",
+		err:  `invalid expression: unary operator not supported in "+'00:10:30'"`,
 	},
 	{
 		name: "ExecutionDuration with bool value",
@@ -630,6 +761,36 @@ var queryConverterTestCases = []queryConverterTestCase{
 		in:   "AliasForKeywordList01 = 123",
 		err:  "invalid expression: invalid value type for search attribute AliasForKeywordList01 of type KeywordList: 123 (type: int64)",
 	},
+	{
+		name: "KeywordList with negative value",
+		in:   "AliasForKeywordList01 = -'foo'",
+		err:  `invalid expression: unary operator not supported in "-'foo'"`,
+	},
+	{
+		name: "KeywordList with positive value",
+		in:   "AliasForKeywordList01 = +'foo'",
+		err:  `invalid expression: unary operator not supported in "+'foo'"`,
+	},
+	{
+		name: "KeywordList in with negative value",
+		in:   "AliasForKeywordList01 IN ('foo', -'bar')",
+		err:  `invalid expression: unary operator not supported in "-'bar'"`,
+	},
+	{
+		name: "KeywordList in with positive value",
+		in:   "AliasForKeywordList01 IN ('foo', +'bar')",
+		err:  `invalid expression: unary operator not supported in "+'bar'"`,
+	},
+	{
+		name: "KeywordList not in with negative value",
+		in:   "AliasForKeywordList01 NOT IN ('foo', -'bar')",
+		err:  `invalid expression: unary operator not supported in "-'bar'"`,
+	},
+	{
+		name: "KeywordList not in with positive value",
+		in:   "AliasForKeywordList01 NOT IN ('foo', +'bar')",
+		err:  `invalid expression: unary operator not supported in "+'bar'"`,
+	},
 
 	// Text type search attributes.
 	{
@@ -687,6 +848,16 @@ var queryConverterTestCases = []queryConverterTestCase{
 		name: "Text invalid value type",
 		in:   "AliasForText01 = 123",
 		err:  "invalid expression: invalid value type for search attribute AliasForText01 of type Text: 123 (type: int64)",
+	},
+	{
+		name: "Text with negative value",
+		in:   "AliasForText01 = -'foo'",
+		err:  `invalid expression: unary operator not supported in "-'foo'"`,
+	},
+	{
+		name: "Text with positive value",
+		in:   "AliasForText01 = +'foo'",
+		err:  `invalid expression: unary operator not supported in "+'foo'"`,
 	},
 
 	// Search attribute name resolution.

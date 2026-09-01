@@ -616,24 +616,33 @@ func (c *QueryConverter[ExprT]) parseValueExpr(
 				e.Operator,
 			)
 		}
+		if value, ok := e.Expr.(*sqlparser.SQLVal); !ok || value.Type == sqlparser.StrVal {
+			return nil, NewConverterError(
+				"%s: unary operator not supported in %q",
+				InvalidExpressionErrMessage,
+				sqlparser.String(expr),
+			)
+		}
 		value, err := c.parseValueExpr(e.Expr, saName, saFieldName, saType)
 		if err != nil {
 			return nil, err
 		}
-		if e.Operator == sqlparser.UMinusStr {
-			switch v := value.(type) {
-			case int64:
+		switch v := value.(type) {
+		case int64:
+			if e.Operator == sqlparser.UMinusStr {
 				value = -v
-			case float64:
-				value = -v
-			default:
-				// This catches some weird cases like `CustomKeyword = -'foo'`
-				return nil, NewConverterError(
-					"%s: unary operator not supported in %q",
-					InvalidExpressionErrMessage,
-					sqlparser.String(expr),
-				)
 			}
+		case float64:
+			if e.Operator == sqlparser.UMinusStr {
+				value = -v
+			}
+		default:
+			// This should never happen, but here to catch any unexpected case.
+			return nil, NewConverterError(
+				"%s: unary expression %q",
+				InvalidExpressionErrMessage,
+				sqlparser.String(expr),
+			)
 		}
 		return value, nil
 	case *sqlparser.GroupConcatExpr:
@@ -694,6 +703,16 @@ func (c *QueryConverter[ExprT]) parseSQLVal(
 	}
 }
 
+// validateValueType validates a single value type against the search attribute type,
+// and returns the value formatted if needed.
+// If search attribute type is:
+//   - Int, Double: value type must be int64 or float64 and returns the input value;
+//   - Bool: value type must be bool and returns the input value;
+//   - Keyword, KeywordList: value type must be string and returns the input value;
+//   - Text: value type must be string with a valid token (empty string or string
+//     with only spaces are not valid) and returns the input value;
+//   - Datetime: value type must be int64 (Unix nanos) or string and returns datetime
+//     formated based on storeQC.GetDatetimeFormat() value.
 func (c *QueryConverter[ExprT]) validateValueType(
 	saName string,
 	saType enumspb.IndexedValueType,
