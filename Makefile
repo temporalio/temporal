@@ -586,7 +586,7 @@ test: unit-test integration-test functional-test
 MUTATION_TIMEOUT ?= 3m
 MUTATION_RUN_TIMEOUT ?= 0
 MUTATIONTEST := $(LOCALBIN)/mutationtest
-MUTATIONTEST_SOURCES := $(wildcard cmd/tools/mutationtest/*.go tools/mutationtest/*.go)
+MUTATIONTEST_SOURCES := $(wildcard cmd/tools/mutationtest/*.go tools/mutationtest/*.go tools/mutationtest/operators/*.go tools/mutationtest/operators/custom/*.go)
 $(MUTATIONTEST): $(MUTATIONTEST_SOURCES) go.mod go.sum | $(LOCALBIN)
 	@go build -o $@ ./cmd/tools/mutationtest
 

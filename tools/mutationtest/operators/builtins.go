@@ -1,4 +1,4 @@
-package mutationtest
+package operators
 
 import (
 	"fmt"
@@ -12,12 +12,7 @@ import (
 	_ "github.com/avito-tech/go-mutesting/mutator/numbers"     // Register number operators.
 )
 
-type mutationOperator struct {
-	name   string
-	mutate mutator.Mutator
-}
-
-var selectedOperatorNames = []string{
+var builtinOperatorNames = []string{
 	"arithmetic/assign_invert",
 	"arithmetic/assignment",
 	"arithmetic/base",
@@ -34,14 +29,19 @@ var selectedOperatorNames = []string{
 	"numbers/incrementer",
 }
 
-func selectedOperators() ([]mutationOperator, error) {
-	operators := make([]mutationOperator, 0, len(selectedOperatorNames))
-	for _, name := range selectedOperatorNames {
+func builtinDefinitions() ([]definition, error) {
+	definitions := make([]definition, 0, len(builtinOperatorNames))
+	for _, name := range builtinOperatorNames {
 		operator, err := mutator.New(name)
 		if err != nil {
 			return nil, fmt.Errorf("load mutation operator %s: %w", name, err)
 		}
-		operators = append(operators, mutationOperator{name: name, mutate: operator})
+		definitions = append(definitions, definition{
+			name:           name,
+			defaultEnabled: true,
+			implementation: implementationUpstream,
+			mutate:         operator,
+		})
 	}
-	return operators, nil
+	return definitions, nil
 }

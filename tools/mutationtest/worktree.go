@@ -231,7 +231,7 @@ func removeMutationOutputEntry(ctx context.Context, runDir string, entry os.DirE
 
 func isMutationOutputFile(name string) bool {
 	switch name {
-	case "source-files.txt", "test-files.txt", "summary.txt", "survivors.diff", "uncovered.txt", "coverage.out":
+	case "operators.txt", "source-files.txt", "test-files.txt", "summary.txt", "survivors.diff", "uncovered.txt", "coverage.out":
 		return true
 	default:
 		return isNumberedArtifact(name, "shard-", ".log") ||

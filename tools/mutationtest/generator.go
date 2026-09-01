@@ -9,6 +9,8 @@ import (
 	"go/ast"
 	"go/format"
 	"go/token"
+
+	"go.temporal.io/server/tools/mutationtest/operators"
 )
 
 type mutantRecord struct {
@@ -38,7 +40,7 @@ func generateMutantsWithOperators(
 	ctx context.Context,
 	targets []targetFile,
 	coverage coverageIndex,
-	operators []mutationOperator,
+	selectedOperators []operators.Operator,
 	emit func(mutantRecord) error,
 ) (generatorStats, error) {
 	generator := mutationGenerator{
@@ -48,19 +50,19 @@ func generateMutantsWithOperators(
 		seen:     make(map[[32]byte]struct{}),
 	}
 	for _, target := range targets {
-		if err := generator.generateTarget(target, operators); err != nil {
+		if err := generator.generateTarget(target, selectedOperators); err != nil {
 			return generator.stats, err
 		}
 	}
 	return generator.stats, nil
 }
 
-func (generator *mutationGenerator) generateTarget(target targetFile, operators []mutationOperator) error {
+func (generator *mutationGenerator) generateTarget(target targetFile, selectedOperators []operators.Operator) error {
 	baseline, err := formatNode(target.fileSet, target.syntax)
 	if err != nil {
 		return fmt.Errorf("format mutation target %s: %w", target.relativePath, err)
 	}
-	for _, operator := range operators {
+	for _, operator := range selectedOperators {
 		if err := generator.generateOperator(target, baseline, operator); err != nil {
 			return err
 		}
@@ -68,7 +70,7 @@ func (generator *mutationGenerator) generateTarget(target targetFile, operators 
 	return nil
 }
 
-func (generator *mutationGenerator) generateOperator(target targetFile, baseline []byte, operator mutationOperator) error {
+func (generator *mutationGenerator) generateOperator(target targetFile, baseline []byte, operator operators.Operator) error {
 	var walkErr error
 	ast.Inspect(target.syntax, func(node ast.Node) bool {
 		if walkErr != nil || node == nil {
@@ -90,14 +92,14 @@ func (generator *mutationGenerator) generateOperator(target targetFile, baseline
 func (generator *mutationGenerator) generateNodeMutations(
 	target targetFile,
 	baseline []byte,
-	operator mutationOperator,
+	operator operators.Operator,
 	node ast.Node,
 ) error {
 	location := target.fileSet.Position(node.Pos())
-	for _, mutation := range operator.mutate(target.types, target.typesInfo, node) {
+	for _, mutation := range operator.Mutate(target.types, target.typesInfo, node) {
 		source, err := renderMutation(target.fileSet, target.syntax, baseline, mutation.Change, mutation.Reset)
 		if err != nil {
-			return fmt.Errorf("generate %s mutation for %s:%d:%d: %w", operator.name, target.relativePath, location.Line, location.Column, err)
+			return fmt.Errorf("generate %s mutation for %s:%d:%d: %w", operator.Name(), target.relativePath, location.Line, location.Column, err)
 		}
 		if bytes.Equal(source, baseline) {
 			generator.stats.duplicates++
@@ -112,7 +114,7 @@ func (generator *mutationGenerator) generateNodeMutations(
 		generator.stats.generated++
 		record := mutantRecord{
 			id:       generator.stats.generated,
-			operator: operator.name,
+			operator: operator.Name(),
 			file:     target.relativePath,
 			line:     location.Line,
 			column:   location.Column,

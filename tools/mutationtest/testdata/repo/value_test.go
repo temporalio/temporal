@@ -9,4 +9,7 @@ func TestValue(t *testing.T) {
 	if !other(1) {
 		t.Fatal("other is false")
 	}
+	if !booleanLiteral() {
+		t.Fatal("boolean literal is false")
+	}
 }

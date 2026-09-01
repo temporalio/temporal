@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"go.temporal.io/server/tools/mutationtest/operators"
 )
 
 type mutationCampaignVerdict string
@@ -20,7 +22,7 @@ type mutationCampaignResult struct {
 	verdict mutationCampaignVerdict
 }
 
-func runMutationCampaign(ctx context.Context, cfg config) (_ mutationCampaignResult, retErr error) {
+func runMutationCampaign(ctx context.Context, cfg config, selectedOperators []operators.Operator) (_ mutationCampaignResult, retErr error) {
 	runCtx := ctx
 	cancel := func() {}
 	if cfg.runTimeout > 0 {
@@ -28,7 +30,7 @@ func runMutationCampaign(ctx context.Context, cfg config) (_ mutationCampaignRes
 	}
 	defer cancel()
 
-	prepared, err := prepareMutationRun(runCtx, cfg)
+	prepared, err := prepareMutationRun(runCtx, cfg, selectedOperators)
 	if err != nil {
 		return mutationCampaignResult{}, err
 	}
@@ -49,7 +51,7 @@ type preparedMutationRun struct {
 	shardCount int
 }
 
-func prepareMutationRun(ctx context.Context, cfg config) (_ preparedMutationRun, retErr error) {
+func prepareMutationRun(ctx context.Context, cfg config, selectedOperators []operators.Operator) (_ preparedMutationRun, retErr error) {
 	workspaces, err := openExecutionWorkspaces(ctx, cfg.outputRoot, cfg.ref)
 	if err != nil {
 		return preparedMutationRun{}, err
@@ -77,7 +79,14 @@ func prepareMutationRun(ctx context.Context, cfg config) (_ preparedMutationRun,
 		return preparedMutationRun{}, errors.New("no test files matched -test-files")
 	}
 	shardCount := cfg.shardLevel
-	cfg.print(workspaces.repoRoot, shardCount, mutationFiles, selectedTestFiles)
+	operatorNames := make([]string, 0, len(selectedOperators))
+	for _, operator := range selectedOperators {
+		operatorNames = append(operatorNames, operator.Name())
+	}
+	cfg.print(workspaces.repoRoot, shardCount, operatorNames, mutationFiles, selectedTestFiles)
+	if err := writeLines(filepath.Join(workspaces.runDir, "operators.txt"), operatorNames); err != nil {
+		return preparedMutationRun{}, err
+	}
 	if err := writeLines(filepath.Join(workspaces.runDir, "source-files.txt"), mutationFiles); err != nil {
 		return preparedMutationRun{}, err
 	}
@@ -89,7 +98,7 @@ func prepareMutationRun(ctx context.Context, cfg config) (_ preparedMutationRun,
 	}
 
 	fmt.Fprintln(os.Stderr, "[run] loading mutation targets and collecting baseline coverage")
-	discovery, err := prepareMutationDiscovery(ctx, firstWorktreeDir, mutationFiles, cfg, filepath.Join(workspaces.runDir, "coverage.out"))
+	discovery, err := prepareMutationDiscovery(ctx, firstWorktreeDir, mutationFiles, cfg, filepath.Join(workspaces.runDir, "coverage.out"), selectedOperators)
 	if err != nil {
 		return preparedMutationRun{}, err
 	}

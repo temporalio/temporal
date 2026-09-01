@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"os"
+
+	"go.temporal.io/server/tools/mutationtest/operators"
 )
 
 type mutationDiscovery struct {
 	targets   []targetFile
 	coverage  coverageIndex
-	operators []mutationOperator
+	operators []operators.Operator
 	uncovered []uncoveredFinding
 }
 
@@ -19,6 +21,7 @@ func prepareMutationDiscovery(
 	mutationFiles []string,
 	cfg config,
 	profilePath string,
+	selectedOperators []operators.Operator,
 ) (_ mutationDiscovery, retErr error) {
 	defer func() {
 		if err := os.Remove(profilePath); err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -34,14 +37,10 @@ func prepareMutationDiscovery(
 	if err != nil {
 		return mutationDiscovery{}, err
 	}
-	operators, err := selectedOperators()
-	if err != nil {
-		return mutationDiscovery{}, err
-	}
 	return mutationDiscovery{
 		targets:   targets,
 		coverage:  coverage,
-		operators: operators,
+		operators: selectedOperators,
 		uncovered: uncovered,
 	}, nil
 }

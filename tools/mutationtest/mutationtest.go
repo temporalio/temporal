@@ -8,8 +8,11 @@ import (
 	"os/signal"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"syscall"
+
+	"go.temporal.io/server/tools/mutationtest/operators"
 )
 
 const (
@@ -29,12 +32,49 @@ func run(ctx context.Context) int {
 	if !ok {
 		return exitCode
 	}
-	result, err := runMutationCampaign(ctx, cfg)
+	if cfg.listMutations {
+		descriptors, err := operators.List()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return exitMutationSkipped
+		}
+		printMutationOperators(descriptors)
+		return exitMutationKilled
+	}
+	selectedOperators, err := operators.Resolve(cfg.mutations, cfg.excludeMutations)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return exitMutationSkipped
+	}
+	result, err := runMutationCampaign(ctx, cfg, selectedOperators)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return exitMutationSkipped
 	}
 	return campaignExitCode(result.verdict)
+}
+
+func printMutationOperators(descriptors []operators.Descriptor) {
+	fmt.Println("Mutation Operators")
+	category := ""
+	for _, descriptor := range descriptors {
+		if descriptor.Category != category {
+			category = descriptor.Category
+			fmt.Println(category)
+		}
+		markers := make([]string, 0, 2)
+		if descriptor.Default {
+			markers = append(markers, "default")
+		}
+		if descriptor.Implementation == "local" {
+			markers = append(markers, "local")
+		}
+		suffix := ""
+		if len(markers) > 0 {
+			suffix = " [" + strings.Join(markers, ", ") + "]"
+		}
+		fmt.Printf("  %s%s\n", descriptor.Name, suffix)
+	}
 }
 
 type shardResult struct {

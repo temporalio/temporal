@@ -12,9 +12,10 @@ Use this skill from the repository root.
 
 1. Ask what behavior or feature the user wants to mutation test unless it is already clear.
 2. Inspect the codebase to propose source files to mutate and tests to keep.
-3. Present the exact CLI command and wait for explicit confirmation before running it.
-4. Run the command, monitor it for a reasonable time, then analyze `.testoutput/mutations/summary.txt`, `.testoutput/mutations/survivors.diff`, and `.testoutput/mutations/uncovered.txt`.
-5. Summarize survivors with concrete next actions.
+3. Use `.bin/mutationtest -list-mutations` when operator selection is relevant.
+4. Present the exact CLI command and wait for explicit confirmation before running it.
+5. Run the command, monitor it for a reasonable time, then analyze `.testoutput/mutations/summary.txt`, `.testoutput/mutations/survivors.diff`, `.testoutput/mutations/uncovered.txt`, and `.testoutput/mutations/operators.txt`.
+6. Summarize survivors with concrete next actions.
 
 Do not commit changes for the user. If the relevant feature changes are uncommitted, explain that the mutation runner creates temporary git worktrees at `MUTATION_REF` (default `HEAD`), so uncommitted source and test edits will not be included. Ask the user to provide a committed ref or confirm they want to run against the current `HEAD`.
 
@@ -56,10 +57,15 @@ make .bin/mutationtest
   -exclude-files '<exclude file/dir/glob list>' \
   -test-files '<test file/dir/glob list>' \
   -test-tags test_dep \
+  -mutations 'default' \
   -shard-level 4 \
   -timeout 3m \
   -run-timeout 30m
 ```
+
+`-mutations` accepts space-separated exact `category/name` operators, categories, `default`, or `all`. A nonempty selection replaces the defaults. `-exclude-mutations` accepts the same grammar and always wins. Omit both flags to retain the curated defaults. Use `-list-mutations` to inspect the supported catalog and its default/local markers.
+
+Temporal-owned operators live in `tools/mutationtest/operators/custom`. Each needs focused tests and one explicit catalog entry; `boolean/literal` is the opt-in reference implementation.
 
 Use `-ref '<ref>'` only when the user wants a ref other than `HEAD`. Increase `-shard-level` when the machine can handle more concurrent test processes. `-timeout` limits each mutant's tests; `-run-timeout` limits the whole run and defaults to unlimited (`0`). `make mutation-test` remains available as a convenience, but Make collapses the binary's distinct nonzero statuses.
 

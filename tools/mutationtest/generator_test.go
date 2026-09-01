@@ -7,34 +7,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/tools/mutationtest/operators"
 )
-
-func TestSelectedOperatorsAreExplicitAndCompileOriented(t *testing.T) {
-	t.Parallel()
-
-	operators, err := selectedOperators()
-	require.NoError(t, err)
-	names := make([]string, 0, len(operators))
-	for _, operator := range operators {
-		names = append(names, operator.name)
-	}
-	require.Equal(t, []string{
-		"arithmetic/assign_invert",
-		"arithmetic/assignment",
-		"arithmetic/base",
-		"arithmetic/bitwise",
-		"branch/case",
-		"branch/else",
-		"branch/if",
-		"conditional/negated",
-		"expression/comparison",
-		"loop/break",
-		"loop/condition",
-		"loop/range_break",
-		"numbers/decrementer",
-		"numbers/incrementer",
-	}, names)
-}
 
 func TestGenerateMutantsOnlyEmitsCoveredUniqueMutations(t *testing.T) {
 	t.Parallel()
@@ -42,10 +16,12 @@ func TestGenerateMutantsOnlyEmitsCoveredUniqueMutations(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	repoDir := copySmokeFixture(t)
+	selectedOperators, err := operators.Resolve("", "")
+	require.NoError(t, err)
 	discovery, err := prepareMutationDiscovery(ctx, repoDir, []string{"value.go"}, config{
 		testTags: "test_dep",
 		timeout:  5 * time.Second,
-	}, filepath.Join(t.TempDir(), "coverage.out"))
+	}, filepath.Join(t.TempDir(), "coverage.out"), selectedOperators)
 	require.NoError(t, err)
 
 	var records []mutantRecord
@@ -76,22 +52,13 @@ func TestGenerateMutantsDeduplicatesEquivalentOutput(t *testing.T) {
 		timeout:  5 * time.Second,
 	}, filepath.Join(t.TempDir(), "coverage.out"))
 	require.NoError(t, err)
-	operators, err := selectedOperators()
+	selectedOperators, err := operators.Resolve("expression/comparison", "")
 	require.NoError(t, err)
-
-	var comparison mutationOperator
-	for _, operator := range operators {
-		if operator.name == "expression/comparison" {
-			comparison = operator
-			break
-		}
-	}
-	require.NotNil(t, comparison.mutate)
 	stats, err := generateMutantsWithOperators(
 		ctx,
 		targets,
 		coverage,
-		[]mutationOperator{comparison, comparison},
+		[]operators.Operator{selectedOperators[0], selectedOperators[0]},
 		func(mutantRecord) error { return nil },
 	)
 	require.NoError(t, err)

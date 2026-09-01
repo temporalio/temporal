@@ -47,6 +47,92 @@ func TestParseConfigRejectsNegativeRunTimeout(t *testing.T) {
 	require.Equal(t, exitMutationSkipped, exitCode)
 }
 
+func TestParseConfigAcceptsListMutationsWithoutRunArguments(t *testing.T) {
+	t.Parallel()
+
+	cfg, exitCode, ok := parseConfig([]string{"-list-mutations"})
+	require.True(t, ok)
+	require.Zero(t, exitCode)
+	require.True(t, cfg.listMutations)
+}
+
+func TestMainListsMutationsWithoutRunArguments(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestMainFixtureHelper$")
+	cmd.Env = append(os.Environ(),
+		"MUTATION_TEST_MAIN_HELPER=true",
+		"MUTATION_TEST_LIST=true",
+		"MUTATION_TEST_EXPECTED_EXIT=0",
+	)
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+	output = []byte(strings.TrimSuffix(string(output), "PASS\n"))
+	require.Equal(t, `Mutation Operators
+arithmetic
+  arithmetic/assign_invert [default]
+  arithmetic/assignment [default]
+  arithmetic/base [default]
+  arithmetic/bitwise [default]
+boolean
+  boolean/literal [local]
+branch
+  branch/case [default]
+  branch/else [default]
+  branch/if [default]
+conditional
+  conditional/negated [default]
+expression
+  expression/comparison [default]
+loop
+  loop/break [default]
+  loop/condition [default]
+  loop/range_break [default]
+numbers
+  numbers/decrementer [default]
+  numbers/incrementer [default]
+`, string(output))
+}
+
+func TestMainRejectsMutationSelectionBeforeSideEffects(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name       string
+		mutations  string
+		exclusions string
+		wantErr    string
+	}{
+		{name: "unknown", mutations: "missing", wantErr: `unknown mutation selector "missing"`},
+		{name: "fully excluded", mutations: "branch", exclusions: "branch", wantErr: "mutation selection is empty"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+			defer cancel()
+			repoDir := t.TempDir()
+			cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestMainFixtureHelper$")
+			cmd.Dir = repoDir
+			cmd.Env = append(os.Environ(),
+				"MUTATION_TEST_MAIN_HELPER=true",
+				"MUTATION_TEST_MUTATIONS="+tc.mutations,
+				"MUTATION_TEST_EXCLUDE_MUTATIONS="+tc.exclusions,
+				"MUTATION_TEST_EXPECTED_EXIT=2",
+			)
+			output, err := cmd.CombinedOutput()
+			require.NoError(t, err, string(output))
+			require.Contains(t, string(output), tc.wantErr)
+			_, err = os.Stat(filepath.Join(repoDir, "output"))
+			require.ErrorIs(t, err, os.ErrNotExist)
+		})
+	}
+}
+
 func TestMainRunsDeterministicMutationSuite(t *testing.T) {
 	t.Parallel()
 
@@ -63,11 +149,35 @@ func TestMainRunsDeterministicMutationSuite(t *testing.T) {
 	require.Equal(t, 4, strings.Count(first["shard-01.log"], "diff --git"))
 	require.Equal(t, 3, strings.Count(first["shard-02.log"], "diff --git"))
 	require.Equal(t, 2, strings.Count(first["survivors.diff"], "diff --git"))
-	for _, name := range []string{"summary.txt", "uncovered.txt"} {
+	for _, name := range []string{"operators.txt", "summary.txt", "uncovered.txt"} {
 		want, err := os.ReadFile(filepath.Join("testdata", "want", name))
 		require.NoError(t, err)
 		require.Equal(t, string(want), first[name], "unexpected %s", name)
 	}
+}
+
+func TestMainRunsBooleanLiteralOperatorDeterministically(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	repoDir := copySmokeFixture(t)
+	runGitCommand(t, repoDir, "init", "--quiet")
+	runGitCommand(t, repoDir, "add", ".")
+	runGitCommand(t, repoDir, "-c", "user.name=Mutation Test", "-c", "user.email=mutation@example.com", "commit", "--quiet", "-m", "fixture")
+
+	env := []string{
+		"MUTATION_TEST_MUTATIONS=boolean/literal",
+		"MUTATION_TEST_INCLUDE_FILES=boolean.go",
+		"MUTATION_TEST_EXPECTED_EXIT=0",
+	}
+	first := runMainFixture(ctx, t, repoDir, env...)
+	second := runMainFixture(ctx, t, repoDir, env...)
+	require.Equal(t, first, second)
+	require.Equal(t, "boolean/literal\n", first["operators.txt"])
+	logs := first["shard-01.log"] + first["shard-02.log"]
+	require.Equal(t, 1, strings.Count(logs, "diff --git"))
+	require.Contains(t, logs, "operator: boolean/literal")
 }
 
 func TestMainUsesRequestedShardsForSingleSourceFile(t *testing.T) {
@@ -130,15 +240,25 @@ func TestMainFixtureHelper(t *testing.T) {
 	if configured := os.Getenv("MUTATION_TEST_INCLUDE_FILES"); configured != "" {
 		includeFiles = configured
 	}
-	os.Args = []string{
-		"mutationtest",
-		"-output-root", "output",
-		"-include-files", includeFiles,
-		"-test-files", "value_test.go",
-		"-test-tags", "test_dep",
-		"-timeout", "5s",
-		"-run-timeout", runTimeout,
-		"-shard-level", "2",
+	if os.Getenv("MUTATION_TEST_LIST") != "" {
+		os.Args = []string{"mutationtest", "-list-mutations"}
+	} else {
+		os.Args = []string{
+			"mutationtest",
+			"-output-root", "output",
+			"-include-files", includeFiles,
+			"-test-files", "value_test.go",
+			"-test-tags", "test_dep",
+			"-timeout", "5s",
+			"-run-timeout", runTimeout,
+			"-shard-level", "2",
+		}
+		if configured := os.Getenv("MUTATION_TEST_MUTATIONS"); configured != "" {
+			os.Args = append(os.Args, "-mutations", configured)
+		}
+		if configured := os.Getenv("MUTATION_TEST_EXCLUDE_MUTATIONS"); configured != "" {
+			os.Args = append(os.Args, "-exclude-mutations", configured)
+		}
 	}
 	expectedExit := exitMutationSurvived
 	if configured := os.Getenv("MUTATION_TEST_EXPECTED_EXIT"); configured != "" {
@@ -149,11 +269,12 @@ func TestMainFixtureHelper(t *testing.T) {
 	require.Equal(t, expectedExit, Main())
 }
 
-func runMainFixture(ctx context.Context, t *testing.T, repoDir string) map[string]string {
+func runMainFixture(ctx context.Context, t *testing.T, repoDir string, env ...string) map[string]string {
 	t.Helper()
 	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestMainFixtureHelper$")
 	cmd.Dir = repoDir
 	cmd.Env = append(os.Environ(), "MUTATION_TEST_MAIN_HELPER=true")
+	cmd.Env = append(cmd.Env, env...)
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err, string(output))
 	_, err = os.Stat(filepath.Join(repoDir, "output", "worktree-01"))
@@ -161,6 +282,7 @@ func runMainFixture(ctx context.Context, t *testing.T, repoDir string) map[strin
 
 	artifacts := make(map[string]string)
 	for _, name := range []string{
+		"operators.txt",
 		"summary.txt",
 		"uncovered.txt",
 		"shard-01.log",
