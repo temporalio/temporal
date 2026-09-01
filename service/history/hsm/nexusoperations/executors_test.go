@@ -39,10 +39,10 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/testing/protorequire"
-	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
@@ -153,7 +153,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				protorequire.ProtoEqual(t, &historypb.NexusOperationStartedEventAttributes{
 					ScheduledEventId: 1,
 					OperationToken:   "op-token",
-					OperationId:      "op-token",
+					OperationId:      "op-token", //nolint:staticcheck // Verify compatibility with older servers.
 					RequestId:        op.RequestId,
 				}, events[0].GetNexusOperationStartedEventAttributes())
 				require.Len(t, events[0].Links, 1)
@@ -407,7 +407,7 @@ func TestProcessInvocationTask(t *testing.T) {
 			destinationDown:       true,
 			expectedMetricOutcome: "request-timeout",
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-				time.Sleep(time.Millisecond * 100)
+				time.Sleep(time.Millisecond * 100) //nolint:forbidigo // Allow time.Sleep for timeout tests
 				return &nexus.HandlerStartOperationResultAsync{OperationToken: "op-token"}, nil
 			},
 			checkOutcome: func(t *testing.T, op nexusoperations.Operation, events []*historypb.HistoryEvent) {
@@ -1701,7 +1701,7 @@ func TestProcessInvocationTask_SystemEndpoint(t *testing.T) {
 				protorequire.ProtoEqual(t, &historypb.NexusOperationStartedEventAttributes{
 					ScheduledEventId: 1,
 					OperationToken:   "system-op-token",
-					OperationId:      "system-op-token",
+					OperationId:      "system-op-token", //nolint:staticcheck // Verify compatibility with older servers.
 					RequestId:        op.RequestId,
 				}, events[0].GetNexusOperationStartedEventAttributes())
 				require.Len(t, events[0].Links, 1)

@@ -35,9 +35,9 @@
 /common/persistence/ @temporalio/oss-foundations @temporalio/oss-matching @temporalio/cgs
 /common/persistence/**/nexus_endpoint* @temporalio/oss-foundations @temporalio/oss-matching @temporalio/nexus
 
-# Components
+# Legacy HSM implementations
 
-/components/ @temporalio/act @temporalio/nexus
+/service/history/hsm/ @temporalio/act @temporalio/nexus
 
 # Proto Definitions
 

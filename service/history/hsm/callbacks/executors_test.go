@@ -26,8 +26,9 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/callbacks"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
 	queuescommon "go.temporal.io/server/service/history/queues/common"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
@@ -317,6 +318,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 		completion           nexusrpc.CompleteOperationOptions
 		headerValue          string
 		expectsInternalError bool
+		expectedLogMessage   string
 		assertOutcome        func(*testing.T, callbacks.Callback)
 	}{
 		{
@@ -405,6 +407,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 			}(),
 			headerValue:          encodedRef,
 			expectsInternalError: true,
+			expectedLogMessage:   "failed to complete Nexus operation",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_BACKING_OFF, cb.State())
 			},
@@ -426,6 +429,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 			}(),
 			headerValue:          encodedRef,
 			expectsInternalError: true,
+			expectedLogMessage:   "failed to complete Nexus operation",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
 			},
@@ -443,6 +447,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 			}(),
 			headerValue:          "invalid-base64!!!",
 			expectsInternalError: true,
+			expectedLogMessage:   "failed to decode CHASM callback token",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
 			},
@@ -451,6 +456,8 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+			capture := logger.StartCapture()
 			ctrl := gomock.NewController(t)
 			namespaceRegistryMock := namespace.NewMockRegistry(ctrl)
 			factory := namespace.NewDefaultReplicationResolverFactory()
@@ -503,7 +510,7 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 				NamespaceRegistry: namespaceRegistryMock,
 				MetricsHandler:    metrics.NoopMetricsHandler,
 				HistoryClient:     historyClient,
-				Logger:            log.NewNoopLogger(),
+				Logger:            logger,
 				Config: &callbacks.Config{
 					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
 					RetryPolicy: func() backoff.RetryPolicy {
@@ -536,6 +543,13 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 
 			if tc.expectsInternalError {
 				require.ErrorContains(t, err, "internal error, reference-id:")
+				capture.RequireContains(t, testlogger.CapturedLogPattern{
+					Level:   testlogger.Error,
+					Message: tc.expectedLogMessage,
+					Tags: map[string]any{
+						"nexus-stage": "handler-outbound",
+					},
+				})
 			} else {
 				require.NoError(t, err)
 			}

@@ -12,9 +12,9 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -297,7 +297,8 @@ func TestRegenerateTasks(t *testing.T) {
 			}
 			node := newOperationNode(t, &hsmtest.NodeBackend{}, event)
 
-			if tc.state == enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF {
+			switch tc.state {
+			case enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF:
 				require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 					return nexusoperations.TransitionAttemptFailed.Apply(op, nexusoperations.EventAttemptFailed{
 						Time:        time.Now(),
@@ -306,7 +307,7 @@ func TestRegenerateTasks(t *testing.T) {
 						RetryPolicy: backoff.NewExponentialRetryPolicy(time.Second),
 					})
 				}))
-			} else if tc.state == enumsspb.NEXUS_OPERATION_STATE_STARTED {
+			case enumsspb.NEXUS_OPERATION_STATE_STARTED:
 				require.NoError(t, hsm.MachineTransition(node, func(op nexusoperations.Operation) (hsm.TransitionOutput, error) {
 					return nexusoperations.TransitionStarted.Apply(op, nexusoperations.EventStarted{
 						Time: time.Now(),
@@ -316,6 +317,9 @@ func TestRegenerateTasks(t *testing.T) {
 						},
 					})
 				}))
+			case enumsspb.NEXUS_OPERATION_STATE_SCHEDULED:
+			default:
+				require.FailNowf(t, "unexpected operation state", "%v", tc.state)
 			}
 
 			op, err := hsm.MachineData[nexusoperations.Operation](node)
