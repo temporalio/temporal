@@ -292,7 +292,7 @@ func (r DispatchResult) metricOutcome() string {
 	case DispatchOutcomeRequestTimeout:
 		return "handler_timeout"
 	case DispatchOutcomeUnrecognized:
-		return "handler_error:EMPTY_OUTCOME"
+		fallthrough
 	default:
 		return "handler_error:EMPTY_OUTCOME"
 	}
