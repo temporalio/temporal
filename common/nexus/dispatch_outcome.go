@@ -199,6 +199,7 @@ func ClassifyCancelOperationDispatch(resp *matchingservice.DispatchNexusTaskResp
 // a Temporal failurepb.Failure.
 func deprecatedHandlerErrorToFailure(handlerErr *nexuspb.HandlerError) *failurepb.Failure {
 	failure := &failurepb.Failure{
+		Message: handlerErr.GetFailure().GetMessage(),
 		FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
 			NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
 				Type:          handlerErr.GetErrorType(),

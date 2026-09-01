@@ -10,6 +10,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/testing/protorequire"
 )
 
 // Response fixtures, shared with dispatch_response_test.go.
@@ -27,6 +28,12 @@ func startResponse(sor *nexuspb.StartOperationResponse) *matchingservice.Dispatc
 func syncSuccessResponse(sync *nexuspb.StartOperationResponse_Sync) *matchingservice.DispatchNexusTaskResponse {
 	return startResponse(&nexuspb.StartOperationResponse{
 		Variant: &nexuspb.StartOperationResponse_SyncSuccess{SyncSuccess: sync},
+	})
+}
+
+func asyncSuccessResponse(async *nexuspb.StartOperationResponse_Async) *matchingservice.DispatchNexusTaskResponse {
+	return startResponse(&nexuspb.StartOperationResponse{
+		Variant: &nexuspb.StartOperationResponse_AsyncSuccess{AsyncSuccess: async},
 	})
 }
 
@@ -107,303 +114,343 @@ func deprecatedOperationErrorResponse(opErr *nexuspb.UnsuccessfulOperationError)
 	})
 }
 
-func TestClassifyStartOperationDispatch_SyncSuccess(t *testing.T) {
-	payload := &commonpb.Payload{Data: []byte("v")}
-	links := []*nexuspb.Link{{Url: "http://a.test/l", Type: "t"}}
-	r := ClassifyStartOperationDispatch(syncSuccessResponse(
-		&nexuspb.StartOperationResponse_Sync{Payload: payload, Links: links}))
-
-	require.Equal(t, DispatchOutcomeSyncSuccess, r.Outcome)
-	require.True(t, r.Outcome.Succeeded())
-	require.Same(t, payload, r.SyncPayload)
-	require.Equal(t, links, r.Links)
-}
-
-// An operation is allowed to succeed with no value.
-func TestClassifyStartOperationDispatch_SyncSuccess_NoPayload(t *testing.T) {
-	r := ClassifyStartOperationDispatch(syncSuccessResponse(&nexuspb.StartOperationResponse_Sync{}))
-
-	require.Equal(t, DispatchOutcomeSyncSuccess, r.Outcome)
-	require.True(t, r.Outcome.Succeeded())
-	require.Nil(t, r.SyncPayload)
-	require.Empty(t, r.Links)
-}
-
-func TestClassifyStartOperationDispatch_AsyncSuccess(t *testing.T) {
-	for _, tc := range []struct {
-		name      string
-		async     *nexuspb.StartOperationResponse_Async
-		wantToken string
-	}{
-		{
-			name: "operation token wins over the deprecated id",
-			//nolint:staticcheck // Exercising the deprecated field on purpose.
-			async:     &nexuspb.StartOperationResponse_Async{OperationToken: "tok", OperationId: "id"},
-			wantToken: "tok",
-		},
-		{
-			name: "falls back to the deprecated id",
-			//nolint:staticcheck // Exercising the deprecated field on purpose.
-			async:     &nexuspb.StartOperationResponse_Async{OperationId: "id"},
-			wantToken: "id",
-		},
-		{
-			name:      "neither set",
-			async:     &nexuspb.StartOperationResponse_Async{},
-			wantToken: "",
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			r := ClassifyStartOperationDispatch(startResponse(&nexuspb.StartOperationResponse{
-				Variant: &nexuspb.StartOperationResponse_AsyncSuccess{AsyncSuccess: tc.async},
-			}))
-			require.Equal(t, DispatchOutcomeAsyncSuccess, r.Outcome)
-			require.True(t, r.Outcome.Succeeded())
-			require.Equal(t, tc.wantToken, r.OperationToken)
-		})
-	}
-}
-
-func TestClassifyStartOperationDispatch_OperationFailure(t *testing.T) {
+// Tests for *BOTH* ClassifyStartOperationDispatch and ClassifyCancelOperationDispatch.
+func TestClassifyOperationDispatch(t *testing.T) {
 	failure := &failurepb.Failure{Message: "op failed"}
-	r := ClassifyStartOperationDispatch(operationFailureResponse(failure))
+	links := []*nexuspb.Link{{Url: "http://a.test/l", Type: "t"}}
+	payload := &commonpb.Payload{Data: []byte("xxx")}
 
-	require.Equal(t, DispatchOutcomeOperationFailure, r.Outcome)
-	require.False(t, r.Outcome.Succeeded())
-	require.Same(t, failure, r.Failure)
-}
-
-// A worker predating Temporal failure responses answers with the deprecated operation error. The
-// classifier re-encodes it so that callers see the same outcome and failure as the current variant,
-// with the state the deprecated variant reports separately rebuilt as the wrapping failure.
-func TestClassifyStartOperationDispatch_DeprecatedOperationError(t *testing.T) {
-	r := ClassifyStartOperationDispatch(deprecatedOperationErrorResponse(
-		&nexuspb.UnsuccessfulOperationError{
-			OperationState: string(nexus.OperationStateCanceled),
-			Failure:        &nexuspb.Failure{Message: "canceled"},
-		}))
-
-	require.Equal(t, DispatchOutcomeOperationFailure, r.Outcome)
-	require.False(t, r.Outcome.Succeeded())
-	require.Equal(t, "canceled", r.Failure.GetMessage())
-	require.NotNil(t, r.Failure.GetCanceledFailureInfo(),
-		"the deprecated state field must become a canceled failure")
-	// The worker's own failure is kept underneath the state the response reported.
-	require.Equal(t, "canceled", r.Failure.GetCause().GetMessage())
-}
-
-// A failed state becomes the non-retryable application failure the current format wraps a failed
-// operation in.
-func TestClassifyStartOperationDispatch_DeprecatedOperationErrorFailedState(t *testing.T) {
-	r := ClassifyStartOperationDispatch(deprecatedOperationErrorResponse(
-		&nexuspb.UnsuccessfulOperationError{
-			OperationState: string(nexus.OperationStateFailed),
-			Failure:        &nexuspb.Failure{Message: "op failed"},
-		}))
-
-	require.Equal(t, DispatchOutcomeOperationFailure, r.Outcome)
-	require.Equal(t, "op failed", r.Failure.GetMessage())
-	require.Nil(t, r.Failure.GetCanceledFailureInfo())
-	info := r.Failure.GetApplicationFailureInfo()
-	require.NotNil(t, info)
-	require.Equal(t, "OperationError", info.GetType())
-	require.True(t, info.GetNonRetryable())
-	require.Equal(t, "op failed", r.Failure.GetCause().GetMessage())
-}
-
-// The state field is the only thing that decides whether the operation failed or was canceled. A
-// worker that failed the operation with a canceled error underneath must not be reported as canceled:
-// the caller would record a cancellation the worker never claimed.
-func TestClassifyStartOperationDispatch_DeprecatedOperationErrorFailedStateWithCanceledCause(t *testing.T) {
-	nf, err := TemporalFailureToNexusFailure(canceledFailure("canceled underneath"))
+	nexusCanceledFailure, err := TemporalFailureToNexusFailure(canceledFailure("canceled within Nexus"))
 	require.NoError(t, err)
 
-	r := ClassifyStartOperationDispatch(deprecatedOperationErrorResponse(
-		&nexuspb.UnsuccessfulOperationError{
-			OperationState: string(nexus.OperationStateFailed),
-			Failure:        NexusFailureToProtoFailure(nf),
-		}))
-
-	require.Equal(t, DispatchOutcomeOperationFailure, r.Outcome)
-	require.Nil(t, r.Failure.GetCanceledFailureInfo(), "a failed operation must not report as canceled")
-	require.Equal(t, "OperationError", r.Failure.GetApplicationFailureInfo().GetType())
-	require.NotNil(t, r.Failure.GetCause().GetCanceledFailureInfo(),
-		"the worker's canceled failure is kept as the cause")
-}
-
-// A worker can send a failure the server cannot re-encode. The dispatch is still classified by what
-// happened to the operation -- calling the whole response unrecognized would turn a settled operation
-// into a retryable internal error -- so the failure degrades to its message.
-func TestClassifyStartOperationDispatch_DeprecatedOperationErrorMalformedFailure(t *testing.T) {
-	r := ClassifyStartOperationDispatch(deprecatedOperationErrorResponse(
-		&nexuspb.UnsuccessfulOperationError{
-			OperationState: string(nexus.OperationStateFailed),
-			Failure: &nexuspb.Failure{
-				Message:  "boom",
-				Metadata: map[string]string{"type": failureTypeString},
-				Details:  []byte("not-json"),
-			},
-		}))
-
-	require.Equal(t, DispatchOutcomeOperationFailure, r.Outcome)
-	require.Equal(t, "boom", r.Failure.GetMessage())
-	require.Equal(t, "NexusFailure", r.Failure.GetCause().GetApplicationFailureInfo().GetType())
-}
-
-// A handler failure and a plain worker failure arrive in the same response arm and have to be told
-// apart by whether the failure carries Nexus handler failure info.
-func TestClassifyStartOperationDispatch_HandlerFailureVsWorkerFailure(t *testing.T) {
-	t.Run("handler failure", func(t *testing.T) {
-		resp := handlerFailureResponse(string(nexus.HandlerErrorTypeBadRequest), enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_UNSPECIFIED)
-		r := ClassifyStartOperationDispatch(resp)
-		require.Equal(t, DispatchOutcomeHandlerFailure, r.Outcome)
-		require.False(t, r.Outcome.Succeeded())
-		require.NotNil(t, r.Failure)
-	})
-
-	t.Run("worker failure", func(t *testing.T) {
-		r := ClassifyStartOperationDispatch(
-			taskFailureResponse(applicationFailure("worker exploded", "SomeError")))
-		require.Equal(t, DispatchOutcomeWorkerFailure, r.Outcome)
-		require.False(t, r.Outcome.Succeeded())
-		require.NotNil(t, r.Failure)
-	})
-}
-
-// A worker predating Temporal failure responses answers with the deprecated handler error. The
-// classifier re-encodes it as the Nexus handler failure the current variant carries, keeping the type
-// and retry behavior callers act on and nesting the worker's failure as the cause.
-func TestClassifyStartOperationDispatch_DeprecatedHandlerError(t *testing.T) {
-	r := ClassifyStartOperationDispatch(deprecatedHandlerErrorResponse(&nexuspb.HandlerError{
-		ErrorType:     string(nexus.HandlerErrorTypeResourceExhausted),
-		RetryBehavior: enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_RETRYABLE,
-		Failure:       &nexuspb.Failure{Message: "slow down"},
-	}))
-
-	require.Equal(t, DispatchOutcomeHandlerFailure, r.Outcome)
-	require.False(t, r.Outcome.Succeeded())
-	info := r.Failure.GetNexusHandlerFailureInfo()
-	require.NotNil(t, info)
-	require.Equal(t, string(nexus.HandlerErrorTypeResourceExhausted), info.GetType())
-	require.Equal(t, enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_RETRYABLE, info.GetRetryBehavior())
-	require.Equal(t, "slow down", r.Failure.GetCause().GetMessage())
-}
-
-// A handler error with no failure of its own still classifies, and fabricates no empty cause.
-func TestClassifyStartOperationDispatch_DeprecatedHandlerErrorWithoutFailure(t *testing.T) {
-	r := ClassifyStartOperationDispatch(deprecatedHandlerErrorResponse(&nexuspb.HandlerError{
-		ErrorType: string(nexus.HandlerErrorTypeNotFound),
-	}))
-
-	require.Equal(t, DispatchOutcomeHandlerFailure, r.Outcome)
-	require.Equal(t, string(nexus.HandlerErrorTypeNotFound),
-		r.Failure.GetNexusHandlerFailureInfo().GetType())
-	require.Nil(t, r.Failure.GetCause())
-}
-
-func TestClassifyStartOperationDispatch_RequestTimeout(t *testing.T) {
-	r := ClassifyStartOperationDispatch(requestTimeoutResponse())
-
-	require.Equal(t, DispatchOutcomeRequestTimeout, r.Outcome)
-	require.False(t, r.Outcome.Succeeded())
-}
-
-func TestClassifyStartOperationDispatch_Unrecognized(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		resp *matchingservice.DispatchNexusTaskResponse
+	cases := []struct {
+		Name     string
+		Response *matchingservice.DispatchNexusTaskResponse
+		Want     DispatchResult
 	}{
-		{name: "nil response", resp: nil},
-		{name: "no outcome", resp: &matchingservice.DispatchNexusTaskResponse{}},
-		{name: "no start variant", resp: startResponse(&nexuspb.StartOperationResponse{})},
-		{name: "nil start operation", resp: startResponse(nil)},
-		{name: "a cancel answer to a start request", resp: cancelResponse()},
+		// DispatchOutcomeSyncSuccess
 		{
-			name: "an empty response envelope",
-			resp: &matchingservice.DispatchNexusTaskResponse{
-				Outcome: &matchingservice.DispatchNexusTaskResponse_Response{
-					Response: &nexuspb.Response{},
-				},
+			Name:     "sync success",
+			Response: syncSuccessResponse(&nexuspb.StartOperationResponse_Sync{Payload: payload, Links: links}),
+			Want: DispatchResult{
+				Outcome:     DispatchOutcomeSyncSuccess,
+				SyncPayload: payload,
+				Links:       links,
 			},
 		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			r := ClassifyStartOperationDispatch(tc.resp)
-			require.Equal(t, DispatchOutcomeUnrecognized, r.Outcome)
-			require.False(t, r.Outcome.Succeeded())
-		})
-	}
-}
+		{
+			Name:     "sync success (no payload, links)",
+			Response: syncSuccessResponse(&nexuspb.StartOperationResponse_Sync{}),
+			Want: DispatchResult{
+				Outcome:     DispatchOutcomeSyncSuccess,
+				SyncPayload: nil,
+				Links:       nil,
+			},
+		},
 
-// A cancel dispatch shares every failure arm with a start dispatch, and differs only in that any
-// response at all means the cancel was accepted.
-func TestClassifyCancelOperationDispatch(t *testing.T) {
-	t.Run("any response is accepted", func(t *testing.T) {
-		for _, tc := range []struct {
-			name string
-			resp *matchingservice.DispatchNexusTaskResponse
-		}{
-			{name: "cancel variant", resp: cancelResponse()},
-			{
-				name: "empty envelope",
-				resp: &matchingservice.DispatchNexusTaskResponse{
-					Outcome: &matchingservice.DispatchNexusTaskResponse_Response{
-						Response: &nexuspb.Response{},
+		// DispatchOutcomeAsyncSuccess
+		{
+			Name: "async (pick op token over token id)",
+			//nolint:staticcheck // Exercising the deprecated field on purpose.
+			Response: asyncSuccessResponse(&nexuspb.StartOperationResponse_Async{OperationToken: "op-token", OperationId: "old-and-busted"}),
+			Want: DispatchResult{
+				Outcome:        DispatchOutcomeAsyncSuccess,
+				OperationToken: "op-token",
+			},
+		},
+		{
+			Name: "async (falls back to deprecated ID)",
+			//nolint:staticcheck // Exercising the deprecated field on purpose.
+			Response: asyncSuccessResponse(&nexuspb.StartOperationResponse_Async{OperationId: "operation-id"}),
+			Want: DispatchResult{
+				Outcome:        DispatchOutcomeAsyncSuccess,
+				OperationToken: "operation-id",
+			},
+		},
+		{
+			Name:     "async (no token set)",
+			Response: asyncSuccessResponse(&nexuspb.StartOperationResponse_Async{}),
+			Want: DispatchResult{
+				Outcome:        DispatchOutcomeAsyncSuccess,
+				OperationToken: "",
+			},
+		},
+
+		// DispatchOutcomeOperationFailure
+		{
+			Name:     "failure",
+			Response: operationFailureResponse(failure),
+			Want: DispatchResult{
+				Outcome: DispatchOutcomeOperationFailure,
+				Failure: failure,
+			},
+		},
+
+		// DispatchOutcomeOperationFailure (using deprecated proto)
+		{
+			// The deprecated error response does some extra work in the conversion,
+			// setting the ApplicationFailureInfo to Canceled based on the OperationState.
+			Name: "failure (deprecated proto, canceled)",
+			Response: deprecatedOperationErrorResponse(
+				&nexuspb.UnsuccessfulOperationError{
+					OperationState: string(nexus.OperationStateCanceled),
+					Failure:        &nexuspb.Failure{Message: "operation canceled"},
+				}),
+			Want: DispatchResult{
+				Outcome: DispatchOutcomeOperationFailure,
+				Failure: &failurepb.Failure{
+					Message: "operation canceled",
+					Cause: &failurepb.Failure{
+						Message: "operation canceled",
+					},
+					FailureInfo: &failurepb.Failure_CanceledFailureInfo{
+						CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
+					},
+				},
+				usedDeprecatedFormat: true,
+			},
+		},
+		{
+			// The OperationStateFailed becomes an unretryable "OperationError".
+			Name: "failure (deprecated proto, failed)",
+			Response: deprecatedOperationErrorResponse(
+				&nexuspb.UnsuccessfulOperationError{
+					OperationState: string(nexus.OperationStateFailed),
+					Failure:        &nexuspb.Failure{Message: "operation failed"},
+				}),
+			Want: DispatchResult{
+				Outcome: DispatchOutcomeOperationFailure,
+				Failure: &failurepb.Failure{
+					Message: "operation failed",
+					Cause: &failurepb.Failure{
+						Message: "operation failed",
+					},
+					FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+						ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+							Type:         "OperationError",
+							NonRetryable: true,
+						},
+					},
+				},
+				usedDeprecatedFormat: true,
+			},
+		},
+		{
+			// The operation state is failed, but the cause is due to a cancellation.
+			// Set both ApplicationFailureInfos, for both levels of the failurepb.Failure.
+			Name: "failure (deprecated proto, failed surfaces canceled info)",
+			Response: deprecatedOperationErrorResponse(
+				&nexuspb.UnsuccessfulOperationError{
+					OperationState: string(nexus.OperationStateFailed),
+					Failure:        NexusFailureToProtoFailure(nexusCanceledFailure),
+				}),
+			Want: DispatchResult{
+				Outcome: DispatchOutcomeOperationFailure,
+				Failure: &failurepb.Failure{
+					Message: "canceled within Nexus",
+					Cause: &failurepb.Failure{
+						Message: "canceled within Nexus",
+						FailureInfo: &failurepb.Failure_CanceledFailureInfo{
+							CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
+						},
+					},
+					FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+						ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+							Type:         "OperationError",
+							NonRetryable: true,
+						},
+					},
+				},
+				usedDeprecatedFormat: true,
+			},
+		},
+		{
+			// A worker can send a failure the server cannot re-encode. The dispatch is still classified by what
+			// happened to the operation -- calling the whole response unrecognized would turn a settled operation
+			// into a retryable internal error -- so the failure degrades to its message.
+			Name: "failure (deprecated proto, unrecognized)",
+			Response: deprecatedOperationErrorResponse(
+				&nexuspb.UnsuccessfulOperationError{
+					OperationState: string(nexus.OperationStateFailed),
+					Failure: &nexuspb.Failure{
+						Message:  "unrecognized error message",
+						Metadata: map[string]string{"type": failureTypeString},
+						Details:  []byte("clearly not a JSON blob!"),
+					},
+				}),
+			Want: DispatchResult{
+				Outcome: DispatchOutcomeOperationFailure,
+				Failure: &failurepb.Failure{
+					Message: "unrecognized error message",
+					Cause: &failurepb.Failure{
+						Message: "unrecognized error message",
+						FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+							ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+								Type: "NexusFailure",
+							},
+						},
+					},
+					FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+						ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+							Type:         "OperationError",
+							NonRetryable: true,
+						},
+					},
+				},
+				usedDeprecatedFormat: true,
+			},
+		},
+
+		// DispatchOutcomeHandlerFailure
+		{
+			Name:     "handler failure",
+			Response: handlerFailureResponse(string(nexus.HandlerErrorTypeBadRequest), enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_UNSPECIFIED),
+			Want: DispatchResult{
+				Outcome: DispatchOutcomeHandlerFailure,
+				Failure: &failurepb.Failure{
+					Message: "handler said no",
+					FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
+						NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
+							Type: "BAD_REQUEST",
+						},
 					},
 				},
 			},
-			{
-				// The outcome arm is what marks the task as answered, not the message inside it.
-				name: "nil envelope",
-				resp: &matchingservice.DispatchNexusTaskResponse{
-					Outcome: &matchingservice.DispatchNexusTaskResponse_Response{},
+		},
+
+		// DispatchOutcomeHandlerFailure (using deprecated protos)
+		{
+			// A worker predating Temporal failure responses answers with the deprecated handler error. The
+			// classifier re-encodes it as the Nexus handler failure the current variant carries, keeping the type
+			// and retry behavior callers act on and nesting the worker's failure as the cause.
+			Name: "handler failure (deprecated proto, custom retry behavior)",
+			Response: deprecatedHandlerErrorResponse(&nexuspb.HandlerError{
+				ErrorType:     string(nexus.HandlerErrorTypeResourceExhausted),
+				RetryBehavior: enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_RETRYABLE,
+				Failure:       &nexuspb.Failure{Message: "slow down"},
+			}),
+			Want: DispatchResult{
+				Outcome: DispatchOutcomeHandlerFailure,
+				Failure: &failurepb.Failure{
+					Message: "slow down",
+					FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
+						NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
+							Type:          "RESOURCE_EXHAUSTED",
+							RetryBehavior: enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_RETRYABLE,
+						},
+					},
+					Cause: &failurepb.Failure{
+						Message: "slow down",
+					},
+				},
+				usedDeprecatedFormat: true,
+			},
+		},
+		{
+			// A handler error with no failure of its own still classifies correctly.
+			Name: "handler failure (deprecated proto, no message)",
+			Response: deprecatedHandlerErrorResponse(&nexuspb.HandlerError{
+				ErrorType: string(nexus.HandlerErrorTypeNotFound),
+			}),
+			Want: DispatchResult{
+				Outcome: DispatchOutcomeHandlerFailure,
+				Failure: &failurepb.Failure{
+					Message: "",
+					FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
+						NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
+							Type: "NOT_FOUND",
+						},
+					},
+				},
+				usedDeprecatedFormat: true,
+			},
+		},
+
+		// DispatchOutcomeWorkerFailure
+		{
+			Name:     "worker error",
+			Response: taskFailureResponse(applicationFailure("worker exploded", "ErrTypeStr")),
+			Want: DispatchResult{
+				Outcome: DispatchOutcomeWorkerFailure,
+				Failure: &failurepb.Failure{
+					Message: "worker exploded",
+					FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+						ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+							Type: "ErrTypeStr",
+						},
+					},
 				},
 			},
-			{
-				name: "a start answer to a cancel request is still accepted",
-				resp: syncSuccessResponse(&nexuspb.StartOperationResponse_Sync{}),
+		},
+
+		// DispatchOutcomeUnrecognized
+		{
+			Name:     "unrecognized (no outcome)",
+			Response: &matchingservice.DispatchNexusTaskResponse{},
+			Want: DispatchResult{
+				Outcome: DispatchOutcomeUnrecognized,
 			},
-		} {
-			t.Run(tc.name, func(t *testing.T) {
-				r := ClassifyCancelOperationDispatch(tc.resp)
-				require.Equal(t, DispatchOutcomeCancelAccepted, r.Outcome)
-				require.True(t, r.Outcome.Succeeded())
+		},
+		{
+			Name:     "unrecognized (nil)",
+			Response: nil,
+			Want: DispatchResult{
+				Outcome: DispatchOutcomeUnrecognized,
+			},
+		},
+		{
+			Name:     "unrecognized (cancel answer to start request)",
+			Response: cancelResponse(),
+			Want: DispatchResult{
+				Outcome: DispatchOutcomeUnrecognized,
+			},
+		},
+
+		// DispatchOutcomeRequestTimeout
+		{
+			Name:     "request-timeout",
+			Response: requestTimeoutResponse(),
+			Want: DispatchResult{
+				Outcome: DispatchOutcomeRequestTimeout,
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.Name, func(t *testing.T) {
+			assertClassificationsMatch := func(want, got DispatchResult) {
+				require.Equal(t, want.Outcome, got.Outcome)
+				require.Equal(t, want.OperationToken, got.OperationToken)
+				require.Equal(t, want.usedDeprecatedFormat, got.usedDeprecatedFormat)
+
+				// TIP: To get a better error message, use require.Equal(...) for the
+				// specific testcase that is producing the wrong proto result.
+				protorequire.DeepEqual(t, want.SyncPayload, got.SyncPayload)
+				protorequire.DeepEqual(t, want.Failure, got.Failure)
+				protorequire.DeepEqual(t, want.Links, got.Links)
+			}
+
+			t.Run("ClassifyStartOperationDispatch", func(t *testing.T) {
+				got := ClassifyStartOperationDispatch(tc.Response)
+				assertClassificationsMatch(tc.Want, got)
 			})
-		}
-	})
 
-	t.Run("failure arms match the start path", func(t *testing.T) {
-		resp := handlerFailureResponse(string(nexus.HandlerErrorTypeNotFound), enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_UNSPECIFIED)
-		r := ClassifyCancelOperationDispatch(resp)
-		require.Equal(t, DispatchOutcomeHandlerFailure, r.Outcome)
-	})
-
-	t.Run("deprecated handler error", func(t *testing.T) {
-		r := ClassifyCancelOperationDispatch(deprecatedHandlerErrorResponse(&nexuspb.HandlerError{
-			ErrorType: string(nexus.HandlerErrorTypeNotImplemented),
-		}))
-		require.Equal(t, DispatchOutcomeHandlerFailure, r.Outcome)
-		require.Equal(t, string(nexus.HandlerErrorTypeNotImplemented),
-			r.Failure.GetNexusHandlerFailureInfo().GetType())
-	})
-
-	t.Run("request timeout", func(t *testing.T) {
-		r := ClassifyCancelOperationDispatch(requestTimeoutResponse())
-		require.Equal(t, DispatchOutcomeRequestTimeout, r.Outcome)
-	})
-
-	t.Run("unrecognized", func(t *testing.T) {
-		r := ClassifyCancelOperationDispatch(&matchingservice.DispatchNexusTaskResponse{})
-		require.Equal(t, DispatchOutcomeUnrecognized, r.Outcome)
-	})
-}
-
-// The classifier aliases the response's failure proto rather than copying it, which callers that
-// convert failures in place rely on.
-func TestClassifyStartOperationDispatch_FailureAliasesTheResponse(t *testing.T) {
-	failure := applicationFailure("worker exploded", "SomeError")
-	r := ClassifyStartOperationDispatch(taskFailureResponse(failure))
-	require.Same(t, failure, r.Failure)
+			t.Run("ClassifyCancelOperationDispatch", func(t *testing.T) {
+				// Testing the Cancel- variant is simple. Any response that sets the
+				// successful Outcome variant is considered success.
+				//
+				// Any other type of response uses the same error handling as before.
+				got := ClassifyCancelOperationDispatch(tc.Response)
+				if _, ok := tc.Response.GetOutcome().(*matchingservice.DispatchNexusTaskResponse_Response); ok {
+					want := DispatchResult{
+						Outcome: DispatchOutcomeCancelAccepted,
+					}
+					assertClassificationsMatch(want, got)
+				} else {
+					assertClassificationsMatch(tc.Want, got)
+				}
+			})
+		})
+	}
 }
 
 // With an integer enum, iota made duplicate values impossible. With string values a copy-paste can
