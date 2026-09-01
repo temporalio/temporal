@@ -10,9 +10,9 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
-	hsmcallbacks "go.temporal.io/server/components/callbacks"
-	hsmnexus "go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/configs"
+	hsmcallbacks "go.temporal.io/server/service/history/hsm/callbacks"
+	hsmnexus "go.temporal.io/server/service/history/hsm/nexusoperations"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/fx"
 )
