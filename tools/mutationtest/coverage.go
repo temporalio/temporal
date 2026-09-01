@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"go/token"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -46,7 +45,7 @@ func collectCoverage(
 		"-coverprofile", profilePath,
 		"-coverpkg", strings.Join(packagePaths, ","),
 	)
-	cmd := exec.CommandContext(ctx, "go", args...)
+	cmd := newCommand(ctx, "go", args...)
 	cmd.Dir = worktreeDir
 	cmd.Env = append(os.Environ(), "GOFLAGS=")
 	output, err := cmd.CombinedOutput()

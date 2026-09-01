@@ -354,3 +354,20 @@ make mutation-test \
 ```
 
 `MUTATION_TIMEOUT` limits each mutant's test command. `MUTATION_RUN_TIMEOUT` limits the entire run; its default of `0` is unlimited. The runner writes uncovered target blocks to `uncovered.txt` and returns exit code `1` when it finds uncovered code or surviving mutants.
+
+Make reports recipe failures as a generic nonzero status. When automation needs the runner's exact exit code, build and invoke the binary directly:
+
+```bash
+make .bin/mutationtest
+.bin/mutationtest \
+  -output-root "$PWD/.testoutput/mutations" \
+  -include-files 'chasm/lib/nexusoperation' \
+  -exclude-files 'chasm/lib/nexusoperation/gen fx.go' \
+  -test-files 'chasm/lib/nexusoperation service/frontend/nexus_* tests/nexus_*' \
+  -test-tags test_dep \
+  -shard-level 4 \
+  -timeout 3m \
+  -run-timeout 30m
+```
+
+The binary returns `0` when all covered mutants are killed, `1` for survivors or uncovered target blocks, and `2` for an incomplete run or infrastructure failure.

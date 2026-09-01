@@ -13,6 +13,7 @@ type executionWorkspaces struct {
 	repoRoot          string
 	runDir            string
 	ref               string
+	commit            string
 	dirs              []string
 	selectedTestFiles []string
 	testsPrepared     bool
@@ -77,13 +78,20 @@ func (workspaces *executionWorkspaces) prepareWorkers(ctx context.Context, count
 }
 
 func (workspaces *executionWorkspaces) add(ctx context.Context) error {
+	if workspaces.commit == "" {
+		commit, err := gitResolveRef(ctx, workspaces.repoRoot, workspaces.ref)
+		if err != nil {
+			return err
+		}
+		workspaces.commit = commit
+	}
 	worktreeDir := filepath.Join(workspaces.runDir, fmt.Sprintf("worktree-%02d", len(workspaces.dirs)+1))
 	workspaces.dirs = append(workspaces.dirs, worktreeDir)
 	fmt.Fprintf(os.Stderr, "[run] creating worktree %s at %s\n", displayPath(workspaces.repoRoot, worktreeDir), workspaces.ref)
 	if err := os.RemoveAll(worktreeDir); err != nil {
 		return err
 	}
-	return gitWorktreeAdd(ctx, workspaces.repoRoot, worktreeDir, workspaces.ref)
+	return gitWorktreeAdd(ctx, workspaces.repoRoot, worktreeDir, workspaces.commit)
 }
 
 func (workspaces *executionWorkspaces) close(ctx context.Context) error {

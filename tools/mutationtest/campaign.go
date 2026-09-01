@@ -76,7 +76,7 @@ func prepareMutationRun(ctx context.Context, cfg config) (_ preparedMutationRun,
 	if len(selectedTestFiles) == 0 {
 		return preparedMutationRun{}, errors.New("no test files matched -test-files")
 	}
-	shardCount := min(cfg.shardLevel, len(mutationFiles))
+	shardCount := cfg.shardLevel
 	cfg.print(workspaces.repoRoot, shardCount, mutationFiles, selectedTestFiles)
 	if err := writeLines(filepath.Join(workspaces.runDir, "source-files.txt"), mutationFiles); err != nil {
 		return preparedMutationRun{}, err

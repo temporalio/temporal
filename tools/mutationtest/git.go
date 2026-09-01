@@ -3,15 +3,23 @@ package mutationtest
 import (
 	"context"
 	"fmt"
-	"os/exec"
 	"strings"
 )
 
 func gitRepoRoot(ctx context.Context) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", "rev-parse", "--show-toplevel")
+	cmd := newCommand(ctx, "git", "rev-parse", "--show-toplevel")
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("failed to determine git repo root: %w", err)
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+func gitResolveRef(ctx context.Context, repoRoot string, ref string) (string, error) {
+	cmd := newCommand(ctx, "git", "-C", repoRoot, "rev-parse", "--verify", ref+"^{commit}")
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve git ref %q: %w: %s", ref, err, strings.TrimSpace(string(output)))
 	}
 	return strings.TrimSpace(string(output)), nil
 }

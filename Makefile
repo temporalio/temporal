@@ -585,9 +585,15 @@ test: unit-test integration-test functional-test
 
 MUTATION_TIMEOUT ?= 3m
 MUTATION_RUN_TIMEOUT ?= 0
-mutation-test:
+MUTATIONTEST := $(LOCALBIN)/mutationtest
+MUTATIONTEST_SOURCES := $(wildcard cmd/tools/mutationtest/*.go tools/mutationtest/*.go)
+$(MUTATIONTEST): $(MUTATIONTEST_SOURCES) go.mod go.sum | $(LOCALBIN)
+	@go build -o $@ ./cmd/tools/mutationtest
+
+.PHONY: mutation-test
+mutation-test: $(MUTATIONTEST)
 	@printf $(COLOR) "Run mutation tests..."
-	@go run ./cmd/tools/mutationtest \
+	@$(MUTATIONTEST) \
 		-output-root "$(CURDIR)/$(TEST_OUTPUT_ROOT)/mutations" \
 		-ref "$(MUTATION_REF)" \
 		-include-files "$(MUTATION_SOURCE_FILES)" \

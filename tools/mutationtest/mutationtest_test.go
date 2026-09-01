@@ -71,6 +71,31 @@ func TestMainRunsDeterministicMutationSuite(t *testing.T) {
 	}
 }
 
+func TestMainUsesRequestedShardsForSingleSourceFile(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
+	defer cancel()
+	repoDir := copySmokeFixture(t)
+	runGitCommand(t, repoDir, "init", "--quiet")
+	runGitCommand(t, repoDir, "add", ".")
+	runGitCommand(t, repoDir, "-c", "user.name=Mutation Test", "-c", "user.email=mutation@example.com", "commit", "--quiet", "-m", "fixture")
+
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^TestMainFixtureHelper$")
+	cmd.Dir = repoDir
+	cmd.Env = append(os.Environ(),
+		"MUTATION_TEST_MAIN_HELPER=true",
+		"MUTATION_TEST_INCLUDE_FILES=value.go",
+	)
+	output, err := cmd.CombinedOutput()
+	require.NoError(t, err, string(output))
+	for _, name := range []string{"shard-01.log", "shard-02.log"} {
+		contents, err := os.ReadFile(filepath.Join(repoDir, "output", name))
+		require.NoError(t, err)
+		require.Contains(t, string(contents), "diff --git", "%s did not execute any mutants", name)
+	}
+}
+
 func TestMainHonorsWholeRunTimeout(t *testing.T) {
 	t.Parallel()
 
@@ -102,10 +127,14 @@ func TestMainFixtureHelper(t *testing.T) {
 	if configured := os.Getenv("MUTATION_TEST_RUN_TIMEOUT"); configured != "" {
 		runTimeout = configured
 	}
+	includeFiles := "."
+	if configured := os.Getenv("MUTATION_TEST_INCLUDE_FILES"); configured != "" {
+		includeFiles = configured
+	}
 	os.Args = []string{
 		"mutationtest",
 		"-output-root", "output",
-		"-include-files", ".",
+		"-include-files", includeFiles,
 		"-test-files", "value_test.go",
 		"-test-tags", "test_dep",
 		"-timeout", "5s",

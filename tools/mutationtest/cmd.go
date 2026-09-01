@@ -10,7 +10,10 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
 )
+
+const commandWaitDelay = time.Second
 
 var (
 	stdoutLogger = log.New(os.Stdout, "", log.Ltime)
@@ -18,7 +21,7 @@ var (
 )
 
 func labeledCommand(ctx context.Context, prefix string, name string, args ...string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, name, args...)
+	cmd := newCommand(ctx, name, args...)
 	if strings.TrimSpace(prefix) == "" {
 		prefix = os.Getenv("MUTATION_OUTPUT_PREFIX")
 	}
@@ -27,6 +30,13 @@ func labeledCommand(ctx context.Context, prefix string, name string, args ...str
 	}
 	cmd.Stdout = newOutputWriter(os.Stdout, prefix+" ")
 	cmd.Stderr = newOutputWriter(os.Stderr, prefix+" ")
+	return cmd
+}
+
+func newCommand(ctx context.Context, name string, args ...string) *exec.Cmd {
+	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.WaitDelay = commandWaitDelay
+	configureCommandCancellation(cmd)
 	return cmd
 }
 

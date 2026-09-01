@@ -56,7 +56,7 @@ func executeMutant(ctx context.Context, worktreeDir string, cfg config, record m
 	}
 	mutationCtx, cancel := context.WithTimeout(ctx, cfg.timeout)
 	defer cancel()
-	cmd := exec.CommandContext(mutationCtx, "go", testCommandArgs(cfg)...)
+	cmd := newCommand(mutationCtx, "go", testCommandArgs(cfg)...)
 	cmd.Dir = worktreeDir
 	cmd.Env = append(os.Environ(), "GOFLAGS=")
 	output, err := cmd.CombinedOutput()
@@ -86,7 +86,7 @@ func executeMutant(ctx context.Context, worktreeDir string, cfg config, record m
 }
 
 func mutationDiff(ctx context.Context, worktreeDir string, relativePath string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", "-C", worktreeDir, "diff", "--no-ext-diff", "--", filepath.FromSlash(relativePath))
+	cmd := newCommand(ctx, "git", "-C", worktreeDir, "diff", "--no-ext-diff", "--", filepath.FromSlash(relativePath))
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("git diff: %w: %s", err, strings.TrimSpace(string(output)))

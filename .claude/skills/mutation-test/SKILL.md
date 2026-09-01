@@ -1,6 +1,6 @@
 ---
 name: mutation-test
-description: Help plan, run, and analyze Temporal mutation-testing runs. Use when the user wants to mutation test a feature, choose source files and test files, build the make mutation-test command, run it after confirmation, or triage surviving mutants into test-worthy gaps, equivalent mutants, and low-value skips.
+description: Help plan, run, and analyze Temporal mutation-testing runs. Use when the user wants to mutation test a feature, choose source files and test files, build the mutationtest command, run it after confirmation, or triage surviving mutants into test-worthy gaps, equivalent mutants, and low-value skips.
 allowed-tools: Bash, Read, Grep, Glob, LS
 ---
 
@@ -46,20 +46,22 @@ Select test files based on observable behavior:
 
 ## Command
 
-Build commands in this form:
+Build and run the binary directly so its exact exit status is preserved:
 
 ```bash
-make mutation-test \
-  MUTATION_SOURCE_FILES='<source file/dir/glob list>' \
-  MUTATION_SOURCE_EXCLUDE_FILES='<exclude file/dir/glob list>' \
-  MUTATION_TEST_FILES='<test file/dir/glob list>' \
-  MUTATION_TEST_TAGS='test_dep' \
-  MUTATION_SHARD_LEVEL=4 \
-  MUTATION_TIMEOUT=3m \
-  MUTATION_RUN_TIMEOUT=30m
+make .bin/mutationtest
+.bin/mutationtest \
+  -output-root "$PWD/.testoutput/mutations" \
+  -include-files '<source file/dir/glob list>' \
+  -exclude-files '<exclude file/dir/glob list>' \
+  -test-files '<test file/dir/glob list>' \
+  -test-tags test_dep \
+  -shard-level 4 \
+  -timeout 3m \
+  -run-timeout 30m
 ```
 
-Use `MUTATION_REF='<ref>'` only when the user wants a ref other than `HEAD`. Increase `MUTATION_SHARD_LEVEL` for many source files if the machine can handle it. `MUTATION_TIMEOUT` limits each mutant's tests; `MUTATION_RUN_TIMEOUT` limits the whole run and defaults to unlimited (`0`).
+Use `-ref '<ref>'` only when the user wants a ref other than `HEAD`. Increase `-shard-level` when the machine can handle more concurrent test processes. `-timeout` limits each mutant's tests; `-run-timeout` limits the whole run and defaults to unlimited (`0`). `make mutation-test` remains available as a convenience, but Make collapses the binary's distinct nonzero statuses.
 
 Before running, show:
 
