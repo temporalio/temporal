@@ -32,9 +32,11 @@ func WithDeadline(parent context.Context, deadline time.Time) (context.Context, 
 	if owner == nil {
 		return context.WithDeadline(parent, deadline)
 	}
+	activeExpiration, testcontextOwnsExpiration := owner.timeoutContext.activeExpirationOwnership()
 	if parentDeadline, ok := parent.Deadline(); ok &&
 		!deadline.Before(parentDeadline) &&
-		parentDeadline.Before(owner.timeoutContext.effectiveExpiration()) {
+		(parentDeadline.Before(activeExpiration) ||
+			(parentDeadline.Equal(activeExpiration) && !testcontextOwnsExpiration)) {
 		// A tighter deadline added by the caller remains caller-owned even
 		// when this derived context requests that exact deadline.
 		return context.WithDeadline(parent, deadline)

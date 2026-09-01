@@ -68,6 +68,32 @@ func TestWithDeadline(t *testing.T) {
 			require.ErrorIs(t, context.Cause(ctx), context.DeadlineExceeded)
 		})
 	})
+
+	t.Run("preserves a parent-capped testcontext deadline", func(t *testing.T) {
+		t.Parallel()
+
+		synctest.Test(t, func(t *testing.T) {
+			ownerTB := newRecordingTB()
+			deadline := time.Now().Add(time.Second)
+			ownerTB.ctx = reportedDeadlineContext{
+				Context:  ownerTB.ctx,
+				deadline: deadline,
+			}
+			parent := For(ownerTB, WithTimeout(10*time.Second))
+			owner := parent.Value(ownerKey{}).(*contextState)
+			owner.timeoutContext.timer.Stop() // simulate the testcontext timer lagging at the shared deadline
+
+			ctx, cancel := WithDeadline(parent, deadline)
+			defer cancel()
+			time.Sleep(time.Second) //nolint:forbidigo // advance to the parent-owned deadline
+			<-ctx.Done()
+
+			require.Equal(t, context.DeadlineExceeded, ctx.Err())
+			require.False(t, errors.Is(context.Cause(ctx), DeadlineExceeded))
+			require.ErrorIs(t, context.Cause(ctx), context.DeadlineExceeded)
+			ownerTB.runCleanups()
+		})
+	})
 }
 
 type reportedDeadlineContext struct {
