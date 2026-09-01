@@ -93,6 +93,7 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (HealthCheckResult, error
 							CheckType: health.CheckTypeHostAvailability,
 							State:     enumsspb.HEALTH_STATE_NOT_SERVING,
 							Message:   fmt.Sprintf("failed to reach host for health check: %v", err),
+							Enforced:  true,
 						},
 					},
 				}
@@ -148,6 +149,7 @@ func (h *healthCheckerImpl) checkHost(ctx context.Context, hostAddress string) (
 					CheckType: health.CheckTypeHostAvailability,
 					State:     enumsspb.HEALTH_STATE_NOT_SERVING,
 					Message:   "no response received from health check",
+					Enforced:  true,
 				},
 			},
 		}
