@@ -195,6 +195,8 @@ func (h *deepHealthCheckHandler) DeepHealthCheck(
 	for _, check := range checks {
 		if check.State == enumsspb.HEALTH_STATE_NOT_SERVING {
 			overallState = enumsspb.HEALTH_STATE_NOT_SERVING
+			unenforcedState = enumsspb.HEALTH_STATE_NOT_SERVING
+			continue
 		}
 
 		// we have to check this way because unenforced checks always

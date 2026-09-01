@@ -162,6 +162,8 @@ func calculateStateAndUnenforcedState(hostDetails []*healthspb.HostHealthDetail,
 	for _, hostDetail := range hostDetails {
 		if hostDetail.State != enumsspb.HEALTH_STATE_SERVING {
 			hostsNotHealthy++
+			hostsNotHealthyUnenforced++
+			continue
 		}
 
 		if hostDetail.UnenforcedState != enumsspb.HEALTH_STATE_SERVING {
@@ -176,6 +178,7 @@ func calculateStateAndUnenforcedState(hostDetails []*healthspb.HostHealthDetail,
 
 	if hostsNotHealthy/hostCount >= failureProportionThreshold {
 		overallState = enumsspb.HEALTH_STATE_NOT_SERVING
+		unenforcedState = enumsspb.HEALTH_STATE_NOT_SERVING
 	}
 
 	if hostsNotHealthyUnenforced/hostCount >= failureProportionThreshold {
