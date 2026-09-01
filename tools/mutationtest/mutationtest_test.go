@@ -23,7 +23,6 @@ func TestParseConfigAcceptsUnlimitedOrPositiveRunTimeout(t *testing.T) {
 		"-test-files", "value_test.go",
 	}
 	for _, value := range []string{"0", "30s", "20m"} {
-		value := value
 		t.Run(value, func(t *testing.T) {
 			t.Parallel()
 			cfg, _, ok := parseConfig(append(slices.Clone(baseArgs), "-run-timeout", value))
