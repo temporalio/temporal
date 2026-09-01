@@ -243,8 +243,9 @@ func (adh *AdminHandler) DeepHealthCheck(
 	}
 
 	return &adminservice.DeepHealthCheckResponse{
-		State:    result.State,
-		Services: services,
+		State:           result.State,
+		Services:        services,
+		UnenforcedState: result.ServiceDetail.GetUnenforcedState(),
 	}, nil
 }
 
