@@ -12,7 +12,11 @@ import (
 	"go.temporal.io/server/tools/common/slack"
 )
 
-const maxFailures = 5
+const (
+	maxFailures                    = 5
+	successRateComparisonTolerance = 0.1
+	durationComparisonTolerance    = 30 * time.Second
+)
 
 // BuildFailureMessage creates a Slack message for CI failure
 func BuildFailureMessage(report *FailureReport) *slack.Message {
@@ -137,6 +141,9 @@ func formatPercentagePointComparison(current, previous float64, available bool) 
 		return "N/A"
 	}
 	difference := math.Abs(current - previous)
+	if difference <= successRateComparisonTolerance {
+		return formatComparison(0, "")
+	}
 	return formatComparison(cmp.Compare(current, previous), fmt.Sprintf("%.1f pp", difference))
 }
 
@@ -147,6 +154,9 @@ func formatDurationComparison(current, previous time.Duration, available bool) s
 	difference := current - previous
 	if difference < 0 {
 		difference = -difference
+	}
+	if difference <= durationComparisonTolerance {
+		return formatComparison(0, "")
 	}
 	return formatComparison(cmp.Compare(current, previous), formatDuration(difference))
 }
@@ -162,14 +172,17 @@ func BuildSuccessReportMessage(report *DigestReport) *slack.Message {
 	))
 	message.AddFields(
 		fmt.Sprintf("*Success Rate:*\n%.1f%% (%s)", report.SuccessRate,
-			formatPercentagePointComparison(report.SuccessRate, report.Previous.SuccessRate,
+			formatPercentagePointComparison(
+				report.SuccessRate, report.Previous.SuccessRate,
 				report.TotalRuns > 0 && report.Previous.TotalRuns > 0)),
 		fmt.Sprintf("*Failed Runs:*\n%d/%d", report.FailedRuns, report.TotalRuns),
 		fmt.Sprintf("*Average Duration:*\n%s (%s)", formatDuration(report.AverageDuration),
-			formatDurationComparison(report.AverageDuration, report.Previous.AverageDuration,
+			formatDurationComparison(
+				report.AverageDuration, report.Previous.AverageDuration,
 				report.DurationSamples > 0 && report.Previous.DurationSamples > 0)),
 		fmt.Sprintf("*Median Duration:*\n%s (%s)", formatDuration(report.MedianDuration),
-			formatDurationComparison(report.MedianDuration, report.Previous.MedianDuration,
+			formatDurationComparison(
+				report.MedianDuration, report.Previous.MedianDuration,
 				report.DurationSamples > 0 && report.Previous.DurationSamples > 0)),
 	)
 	message.AddSection(fmt.Sprintf(

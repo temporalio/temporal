@@ -7,7 +7,7 @@ import (
 	"go.temporal.io/server/tools/common/github"
 )
 
-// FailureReport aggregates all failure information
+// FailureReport aggregates all failure information.
 type FailureReport struct {
 	Run        github.Run
 	FailedJobs []github.Job
@@ -15,7 +15,7 @@ type FailureReport struct {
 	TotalJobs  int
 }
 
-// DigestPeriod aggregates success metrics for a time period
+// DigestPeriod aggregates success metrics for a time period.
 type DigestPeriod struct {
 	TotalRuns             int
 	SuccessfulRuns        int
@@ -30,7 +30,7 @@ type DigestPeriod struct {
 	Runs                  []github.Run
 }
 
-// DigestReport aggregates success metrics for a time period
+// DigestReport aggregates success metrics for a time period.
 type DigestReport struct {
 	Branch       string
 	WorkflowName string
