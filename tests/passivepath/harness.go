@@ -20,6 +20,7 @@ package passivepath
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -430,9 +431,7 @@ func (h *Harness) AllBailouts() map[BailReason]int {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	out := make(map[BailReason]int, len(h.bailouts))
-	for reason, count := range h.bailouts {
-		out[reason] = count
-	}
+	maps.Copy(out, h.bailouts)
 	return out
 }
 
