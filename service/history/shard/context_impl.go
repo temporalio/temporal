@@ -911,6 +911,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	ctx context.Context,
 	key definition.WorkflowKey,
 	archetypeID chasm.ArchetypeID,
+	lastWriteVersion int64,
 	branchToken []byte,
 	closeVisibilityTaskId int64,
 	workflowCloseTime time.Time,
@@ -1010,6 +1011,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 							&tasks.DeleteExecutionReplicationTask{
 								WorkflowKey: key,
 								ArchetypeID: archetypeID,
+								Version:     lastWriteVersion,
 							},
 						}
 					}

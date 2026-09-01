@@ -3114,7 +3114,9 @@ func (e *matchingEngineImpl) emitTaskDispatchLatency(
 		} // else ignore the error and use the current partition
 	}
 
-	workerVersion := worker_versioning.WorkerDeploymentVersionToStringV32(worker_versioning.DeploymentVersionFromOptions(pollMetadata.deploymentOptions))
+	deploymentVersion := worker_versioning.DeploymentVersionFromOptions(pollMetadata.deploymentOptions)
+	workerVersion := worker_versioning.WorkerDeploymentVersionToStringV32(deploymentVersion)
+	breakdownMetricsByBuildID := e.config.BreakdownMetricsByBuildID(namespaceName, tqName, taskType)
 
 	handler := metrics.GetPerTaskQueuePartitionIDScope(
 		e.metricsHandler,
@@ -3129,7 +3131,9 @@ func (e *matchingEngineImpl) emitTaskDispatchLatency(
 		metrics.TaskSourceTag(task.source),
 		metrics.ForwardedTag(task.isForwarded()),
 		metrics.MatchingTaskPriorityTag(task.getPriority().GetPriorityKey()),
-		metrics.WorkerVersionTag(workerVersion, e.config.BreakdownMetricsByBuildID(namespaceName, tqName, taskType)),
+		metrics.WorkerVersionTag(workerVersion, breakdownMetricsByBuildID),
+		metrics.WorkerDeploymentNameTag(deploymentVersion.GetDeploymentName(), breakdownMetricsByBuildID),
+		metrics.WorkerDeploymentBuildIDTag(deploymentVersion.GetBuildId(), breakdownMetricsByBuildID),
 	)
 }
 

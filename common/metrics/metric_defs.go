@@ -347,15 +347,15 @@ const (
 	HistoryRespondActivityTaskFailedScope = "RespondActivityTaskFailed"
 	// HistoryRespondActivityTaskCanceledScope tracks RespondActivityTaskCanceled API calls received by service
 	HistoryRespondActivityTaskCanceledScope = "RespondActivityTaskCanceled"
-	// ActivityTerminatedScope tracks TerminateActivityExecution API calls received by service
+	// ActivityTerminatedScope identifies applied activity termination mutations.
 	ActivityTerminatedScope = "ActivityTerminated"
-	// ActivityPausedScope tracks PauseActivityExecution API calls received by service
+	// ActivityPausedScope identifies applied activity pause mutations.
 	ActivityPausedScope = "ActivityPaused"
-	// ActivityUnpausedScope tracks UnpauseActivityExecution API calls received by service
+	// ActivityUnpausedScope identifies applied activity unpause mutations.
 	ActivityUnpausedScope = "ActivityUnpaused"
-	// ActivityResetScope tracks ResetActivityExecution API calls received by service
+	// ActivityResetScope identifies applied activity reset mutations.
 	ActivityResetScope = "ActivityReset"
-	// ActivityUpdateOptionsScope tracks UpdateActivityExecutionOptions API calls received by service
+	// ActivityUpdateOptionsScope identifies applied activity option mutations.
 	ActivityUpdateOptionsScope = "ActivityUpdateOptions"
 	// HistoryGetWorkflowExecutionHistoryScope is the metric scope for non-long-poll frontend.GetWorkflowExecutionHistory
 	HistoryGetWorkflowExecutionHistoryScope = "GetWorkflowExecutionHistory"
@@ -1137,12 +1137,24 @@ var (
 	ParentWorkflowResendAttempts = NewCounterDef("parent_workflow_resend_attempts")
 	// ParentWorkflowResendSkipped counts attempts that found a resend for the same parent in flight.
 	ParentWorkflowResendSkipped = NewCounterDef("parent_workflow_resend_skipped")
-	// ParentWorkflowResendFailures counts failed resends. Async resends report failure nowhere else.
+	// ParentWorkflowResendFailures counts unexpected parent resend failures.
 	ParentWorkflowResendFailures = NewCounterDef("parent_workflow_resend_failures")
-	// ParentWorkflowResendLimited counts resends dropped because the shard was at its in-flight cap.
+	// ParentWorkflowResendLimited counts parent resends rejected at the host-level concurrency limit.
 	ParentWorkflowResendLimited = NewCounterDef("parent_workflow_resend_limited")
-	// ParentWorkflowResendLatency measures a resend: cross-cluster state fetch plus local apply.
+	// ParentWorkflowResendLatency measures a parent resend and subsequent verification.
 	ParentWorkflowResendLatency = NewTimerDef("parent_workflow_resend_latency")
+	// ChildWorkflowResendAttempts counts child resends started by standby first-task verification.
+	ChildWorkflowResendAttempts = NewCounterDef("child_workflow_resend_attempts")
+	// ChildWorkflowResendSkipped counts attempts that found a resend for the same child in flight.
+	ChildWorkflowResendSkipped = NewCounterDef("child_workflow_resend_skipped")
+	// ChildWorkflowResendFailures counts unexpected child resend failures.
+	ChildWorkflowResendFailures = NewCounterDef("child_workflow_resend_failures")
+	// ChildWorkflowResendLimited counts child resends rejected at the host-level concurrency limit.
+	ChildWorkflowResendLimited = NewCounterDef("child_workflow_resend_limited")
+	// ChildWorkflowResendLatency measures a child resend and subsequent verification.
+	ChildWorkflowResendLatency = NewTimerDef("child_workflow_resend_latency")
+	// WorkflowResendSchedulerAtCapacity counts host-level workflow resends rejected at the concurrency limit.
+	WorkflowResendSchedulerAtCapacity = NewCounterDef("workflow_resend_scheduler_at_capacity")
 	// ReplicationOrphanedHistoryBranch tracks cases where history branch cleanup was skipped on error
 	// to avoid deleting successfully written history. These orphaned branches will be cleaned up by GC.
 	ReplicationOrphanedHistoryBranch = NewCounterDef("replication_orphaned_history_branch")
@@ -1437,22 +1449,23 @@ var (
 	HistoryWorkflowExecutionCacheLatency          = NewTimerDef("history_workflow_execution_cache_latency")
 	HistoryWorkflowExecutionCacheLockHoldDuration = NewTimerDef("history_workflow_execution_cache_lock_hold_duration")
 
-	VisibilityArchiverArchiveNonRetryableErrorCount           = NewCounterDef("visibility_archiver_archive_non_retryable_error")
-	VisibilityArchiverArchiveTransientErrorCount              = NewCounterDef("visibility_archiver_archive_transient_error")
-	VisibilityArchiveSuccessCount                             = NewCounterDef("visibility_archiver_archive_success")
-	HistoryScavengerSuccessCount                              = NewCounterDef("scavenger_success")
-	HistoryScavengerErrorCount                                = NewCounterDef("scavenger_errors")
-	HistoryScavengerSkipCount                                 = NewCounterDef("scavenger_skips")
-	ScheduleInvariantsScannerOverdueNextActionTimeCount       = NewCounterDef("schedule_invariants_scanner_overdue_next_action_time")
-	ScheduleInvariantsScannerOverdueNextActionTimeCapHitCount = NewCounterDef("schedule_invariants_scanner_overdue_next_action_time_cap_hit")
-	ScheduleInvariantsScannerStuckOpenCount                   = NewCounterDef("schedule_invariants_scanner_stuck_open")
-	ScheduleInvariantsScannerUnknownStateCount                = NewCounterDef("schedule_invariants_scanner_unknown_state")
-	ScheduleInvariantsScannerErrorCount                       = NewCounterDef("schedule_invariants_scanner_errors")
-	ExecutionsOutstandingCount                                = NewGaugeDef("executions_outstanding")
-	ScavengerValidationRequestsCount                          = NewCounterDef("scavenger_validation_requests")
-	ScavengerValidationFailuresCount                          = NewCounterDef("scavenger_validation_failures")
-	ScavengerValidationSkipsCount                             = NewCounterDef("scavenger_validation_skips")
-	AddSearchAttributesFailuresCount                          = NewCounterDef("add_search_attributes_failures")
+	VisibilityArchiverArchiveNonRetryableErrorCount                   = NewCounterDef("visibility_archiver_archive_non_retryable_error")
+	VisibilityArchiverArchiveTransientErrorCount                      = NewCounterDef("visibility_archiver_archive_transient_error")
+	VisibilityArchiveSuccessCount                                     = NewCounterDef("visibility_archiver_archive_success")
+	HistoryScavengerSuccessCount                                      = NewCounterDef("scavenger_success")
+	HistoryScavengerErrorCount                                        = NewCounterDef("scavenger_errors")
+	HistoryScavengerSkipCount                                         = NewCounterDef("scavenger_skips")
+	ScheduleInvariantsScannerOverdueNextActionTimeCount               = NewCounterDef("schedule_invariants_scanner_overdue_next_action_time")
+	ScheduleInvariantsScannerOverdueNextActionTimeCapHitCount         = NewCounterDef("schedule_invariants_scanner_overdue_next_action_time_cap_hit")
+	ScheduleInvariantsScannerOverdueNextActionTimeStaleCandidateCount = NewCounterDef("schedule_invariants_scanner_overdue_next_action_time_stale_candidate")
+	ScheduleInvariantsScannerStuckOpenCount                           = NewCounterDef("schedule_invariants_scanner_stuck_open")
+	ScheduleInvariantsScannerUnknownStateCount                        = NewCounterDef("schedule_invariants_scanner_unknown_state")
+	ScheduleInvariantsScannerErrorCount                               = NewCounterDef("schedule_invariants_scanner_errors")
+	ExecutionsOutstandingCount                                        = NewGaugeDef("executions_outstanding")
+	ScavengerValidationRequestsCount                                  = NewCounterDef("scavenger_validation_requests")
+	ScavengerValidationFailuresCount                                  = NewCounterDef("scavenger_validation_failures")
+	ScavengerValidationSkipsCount                                     = NewCounterDef("scavenger_validation_skips")
+	AddSearchAttributesFailuresCount                                  = NewCounterDef("add_search_attributes_failures")
 
 	// Delete Namespace metrics.
 	ReclaimResourcesNamespaceDeleteSuccessCount = NewCounterDef(
@@ -1641,6 +1654,7 @@ var (
 	WorkerDeploymentVersionVisibilityQueryCount       = NewCounterDef("worker_deployment_version_visibility_query_count")
 	WorkerDeploymentVersioningOverrideCounter         = NewCounterDef("worker_deployment_versioning_override_count")
 	WorkerDeploymentVersioningOneTimeOverrideCounter  = NewCounterDef("worker_deployment_versioning_one_time_override_count")
+	WorkerDeploymentVersionDeletePropagationFailure   = NewCounterDef("worker_deployment_version_delete_propagation_failure")
 	StartDeploymentTransitionCounter                  = NewCounterDef("start_deployment_transition_count")
 	VersioningDataPropagationLatency                  = NewTimerDef("versioning_data_propagation_latency")
 	SlowVersioningDataPropagationCounter              = NewCounterDef("slow_versioning_data_propagation")

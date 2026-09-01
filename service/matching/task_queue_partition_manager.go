@@ -3,7 +3,6 @@ package matching
 import (
 	"context"
 	"errors"
-	"fmt"
 	"maps"
 	"math"
 	"math/bits"
@@ -701,8 +700,7 @@ func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(ctx context.Context
 }
 
 func taskAddErrResult(err error) string {
-	var resourceExhausted *serviceerror.ResourceExhausted
-	if errors.As(err, &resourceExhausted) {
+	if _, ok := errors.AsType[*serviceerror.ResourceExhausted](err); ok {
 		return metrics.TaskAddResultThrottled
 	}
 	return metrics.TaskAddResultFailure
@@ -1105,7 +1103,12 @@ func (pm *taskQueuePartitionManagerImpl) DispatchNexusTask(
 			opTimeout, err := time.ParseDuration(opTimeoutHeader)
 			if err != nil {
 				// Operation-Timeout header is not required so don't fail request on parsing errors.
-				pm.logger.Warn(fmt.Sprintf("unable to parse %v header: %v", nexus.HeaderOperationTimeout, opTimeoutHeader), tag.Error(err), tag.WorkflowNamespaceID(request.NamespaceId))
+				pm.logger.Warn(
+					"unable to parse operation-timeout header",
+					tag.Error(err),
+					tag.NewStringTag(nexus.HeaderOperationTimeout, opTimeoutHeader),
+					tag.WorkflowNamespaceID(request.NamespaceId),
+				)
 			} else {
 				opDeadline = time.Now().Add(opTimeout)
 			}
