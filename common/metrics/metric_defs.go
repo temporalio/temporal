@@ -933,6 +933,10 @@ var (
 		"chasm_pure_task_errors",
 		WithDescription("The number of errors during CHASM pure task execution."),
 	)
+	ExecutionTerminate = NewCounterDef(
+		"execution_terminate",
+		WithDescription("The number of CHASM executions that were terminated."),
+	)
 	ChasmIncomingSignalWritten = NewCounterDef(
 		"chasm_incoming_signal_written",
 		WithDescription("The number of signal backlinks written to the CHASM IncomingSignals map."),

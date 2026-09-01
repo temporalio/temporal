@@ -3104,6 +3104,15 @@ func (n *Node) Terminate(
 	}
 
 	n.terminated = true
+	archetypeID := n.ArchetypeID()
+	archetype := strconv.FormatUint(uint64(archetypeID), 10)
+	if archetypeFQN, ok := n.registry.ComponentFqnByID(archetypeID); ok {
+		archetype = archetypeFQN
+	}
+	metrics.ExecutionTerminate.With(n.metricsHandler).Record(
+		1,
+		metrics.ArchetypeTag(archetype),
+	)
 	return nil
 }
 

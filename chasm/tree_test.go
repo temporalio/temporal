@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -3626,6 +3627,11 @@ func (s *nodeSuite) TestCloseTransaction_ApplyMutation_PureTasks() {
 }
 
 func (s *nodeSuite) TestTerminate() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.metricsHandler = metricsHandler
+
 	node := s.testComponentTree()
 
 	// First closeTransaction once to make the tree clean.
@@ -3639,6 +3645,10 @@ func (s *nodeSuite) TestTerminate() {
 	err = node.Terminate(TerminateComponentRequest{})
 	s.NoError(err)
 	s.True(node.terminated)
+	recordings := capture.Snapshot()[metrics.ExecutionTerminate.Name()]
+	s.Len(recordings, 1)
+	s.Equal(int64(1), recordings[0].Value)
+	s.Equal(testComponentFQN, recordings[0].Tags[metrics.ArchetypeTagName])
 
 	mutations, err := node.CloseTransaction()
 	s.NoError(err)
