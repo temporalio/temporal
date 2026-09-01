@@ -3916,8 +3916,8 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 	s.Equal(maxTaskId, pqMgr.backlogMgr.getDB().GetMaxReadLevel(0))
 
 	// validate the approximateBacklogCounter
-	s.EventuallyWithT(func(collect *assert.CollectT) {
-		require.Equal(collect, int64(taskCount*numWorkers), totalApproximateBacklogCount(pqMgr.backlogMgr))
+	await.Requiref(s.T().Context(), s.T(), func(t *await.T) {
+		require.Equal(t, int64(taskCount*numWorkers), totalApproximateBacklogCount(pqMgr.backlogMgr))
 	}, 5*time.Second, 10*time.Millisecond, "backlog counter should be total task count")
 
 	// Unload the PQM
@@ -3948,8 +3948,8 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 	// stopped (which would not result in resetting).
 	pqMgr.backlogMgr.getDB().setMaxReadLevelForTesting(subqueueZero, maxTaskId)
 
-	s.EventuallyWithT(func(collect *assert.CollectT) {
-		require.Equal(collect, int64(0), totalApproximateBacklogCount(pqMgr.backlogMgr))
+	await.Requiref(s.T().Context(), s.T(), func(t *await.T) {
+		require.Equal(t, int64(0), totalApproximateBacklogCount(pqMgr.backlogMgr))
 	}, 4*time.Second, 10*time.Millisecond, "backlog counter should have been reset")
 
 	s.Equal(maxTaskId, pqMgr.backlogMgr.InternalStatus()[0].AckLevel)
