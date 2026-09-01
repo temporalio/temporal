@@ -45,17 +45,12 @@ func (s *healthCheckerSuite) SetupTest() {
 		func() float64 {
 			return 0.25
 		},
-		func() float64 {
-			return 0.15
-		},
 		func(ctx context.Context, hostAddress string) (*historyservice.DeepHealthCheckResponse, error) {
 			switch hostAddress {
 			case "1", "3":
 				return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_SERVING}, nil
 			case "2":
 				return nil, errors.New("test")
-			case "4":
-				return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_DECLINED_SERVING}, nil
 			default:
 				return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}, nil
 			}
@@ -100,22 +95,6 @@ func (s *healthCheckerSuite) Test_Check_Not_Serving() {
 	s.Equal(enumsspb.HEALTH_STATE_NOT_SERVING, result.State)
 }
 
-func (s *healthCheckerSuite) Test_Check_Declined_Serving() {
-	s.resolver.EXPECT().AvailableMembers().Return([]membership.HostInfo{
-		membership.NewHostInfoFromAddress("1"),
-		membership.NewHostInfoFromAddress("2"),
-		membership.NewHostInfoFromAddress("4"),
-		membership.NewHostInfoFromAddress("4"),
-		membership.NewHostInfoFromAddress("4"),
-		membership.NewHostInfoFromAddress("4"),
-		membership.NewHostInfoFromAddress("7"),
-	})
-
-	result, err := s.checker.Check(context.Background())
-	s.Require().NoError(err)
-	s.Equal(enumsspb.HEALTH_STATE_DECLINED_SERVING, result.State)
-}
-
 func (s *healthCheckerSuite) Test_Check_No_Available_Hosts() {
 	s.resolver.EXPECT().AvailableMembers().Return([]membership.HostInfo{})
 
@@ -135,7 +114,6 @@ func (s *healthCheckerSuite) Test_Check_GetResolver_Error() {
 		primitives.HistoryService,
 		membershipMonitor,
 		func() float64 { return 0.25 },
-		func() float64 { return 0.15 },
 		func(ctx context.Context, hostAddress string) (*historyservice.DeepHealthCheckResponse, error) {
 			return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_SERVING}, nil
 		},
@@ -222,7 +200,6 @@ func (s *healthCheckerSuite) Test_Check_Context_Cancellation() {
 		primitives.HistoryService,
 		s.membershipMonitor,
 		func() float64 { return 0.25 },
-		func() float64 { return 0.15 },
 		func(ctx context.Context, hostAddress string) (*historyservice.DeepHealthCheckResponse, error) {
 			select {
 			case <-ctx.Done():
@@ -253,28 +230,10 @@ func (s *healthCheckerSuite) Test_Check_Mixed_Host_States_Edge_Cases() {
 			description:   "50% declined serving triggers combined failure threshold, returns NOT_SERVING",
 		},
 		{
-			name:          "edge case: 60% declined serving exceeds minimum threshold",
-			hosts:         []string{"4", "4", "4", "1", "1"},      // 3 declined, 2 serving out of 5
-			expectedState: enumsspb.HEALTH_STATE_DECLINED_SERVING, // 60% > 40% minimum threshold
-			description:   "60% declined serving should trigger DECLINED_SERVING response",
-		},
-		{
 			name:          "edge case: mixed failures just under threshold",
 			hosts:         []string{"2", "1", "1", "1", "1"}, // 1 failed (20%), 4 serving (80%) out of 5
 			expectedState: enumsspb.HEALTH_STATE_SERVING,     // 20% < 25% threshold
 			description:   "20% failures should still return SERVING",
-		},
-		{
-			name:          "edge case: combined failures and declined just over threshold",
-			hosts:         []string{"2", "4", "1", "1"}, // 1 failed (25%) + 1 declined (25%) = 50% > 25% threshold
-			expectedState: enumsspb.HEALTH_STATE_NOT_SERVING,
-			description:   "Combined 50% failures and declined serving should trigger NOT_SERVING",
-		},
-		{
-			name:          "edge case: all declined serving with many hosts",
-			hosts:         []string{"4", "4", "4", "4", "4"}, // All declined serving
-			expectedState: enumsspb.HEALTH_STATE_DECLINED_SERVING,
-			description:   "100% declined serving should return DECLINED_SERVING",
 		},
 	}
 
@@ -329,7 +288,6 @@ func (s *healthCheckerSuite) Test_Check_HostChecks_Propagated() {
 		primitives.HistoryService,
 		membershipMonitor,
 		func() float64 { return 0.25 },
-		func() float64 { return 0.15 },
 		func(ctx context.Context, hostAddress string) (*historyservice.DeepHealthCheckResponse, error) {
 			return &historyservice.DeepHealthCheckResponse{
 				State:  enumsspb.HEALTH_STATE_NOT_SERVING,
@@ -350,45 +308,4 @@ func (s *healthCheckerSuite) Test_Check_HostChecks_Propagated() {
 	s.Equal(health.CheckTypeRPCLatency, host.Checks[0].CheckType)
 	s.InDelta(850.0, host.Checks[0].Value, 0.01)
 	s.InDelta(500.0, host.Checks[0].Threshold, 0.01)
-}
-
-func (s *healthCheckerSuite) Test_GetProportionOfNotReadyHosts() {
-	testCases := []struct {
-		name                             string
-		proportionOfDeclinedServingHosts float64
-		totalHosts                       int
-		expectedProportion               float64
-	}{
-		{
-			name:                             "zero proportion",
-			proportionOfDeclinedServingHosts: 0.0,
-			totalHosts:                       10,
-			expectedProportion:               0.2,
-		},
-		{
-			name:                             "small proportion with few hosts",
-			proportionOfDeclinedServingHosts: 0.1,
-			totalHosts:                       10,
-			expectedProportion:               0.2, // 2/10 = 0.2 since numHostsToFail < 2
-		},
-		{
-			name:                             "small proportion with many hosts",
-			proportionOfDeclinedServingHosts: 0.1,
-			totalHosts:                       100,
-			expectedProportion:               0.1, // 10 hosts > 2, so use original proportion
-		},
-		{
-			name:                             "large proportion",
-			proportionOfDeclinedServingHosts: 0.8,
-			totalHosts:                       10,
-			expectedProportion:               0.8, // 8 hosts > 2, so use original proportion
-		},
-	}
-
-	for _, tc := range testCases {
-		s.Run(tc.name, func() {
-			proportion := ensureMinimumProportionOfHosts(tc.proportionOfDeclinedServingHosts, tc.totalHosts)
-			s.InDelta(tc.expectedProportion, proportion, 0.01)
-		})
-	}
 }
