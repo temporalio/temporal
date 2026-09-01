@@ -9,8 +9,19 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/rpc/grpcfaults"
 	historytasks "go.temporal.io/server/service/history/tasks"
 )
+
+// HistoryPassiveReplicationTestHook defines the test-only seams used to replace an
+// active workflow update with a passive replication apply and exercise the resulting
+// history tasks through standby execution. InterceptUpdate's payload is owned by
+// service/history/workflow and is intentionally opaque here.
+type HistoryPassiveReplicationTestHook interface {
+	InterceptUpdate(context.Context, any, func() error) error
+	UseTransientWorkflowContextForReplication(context.Context) bool
+	ShouldExecuteTaskAsPassive(historytasks.Task) bool
+}
 
 // Test hook keys with their return type and scope.
 // Try to avoid global scope as it requires a dedicated test cluster.
@@ -28,8 +39,15 @@ var (
 	HistoryReplicationDLQWriteInterceptor    = newKey[func(*persistencespb.ReplicationTaskInfo, func() error) error, global]()
 	HistoryChasmRuntimeProvider              = newKey[func(chasm.Engine, chasm.VisibilityManager, *chasm.Registry), global]()
 	HistoryTransferTaskInterceptor           = newKey[func(historytasks.Task, func()), namespace.ID]()
-	HistoryDLQTaskDeleteInterceptor          = newKey[func(context.Context, *historyservice.DeleteDLQTasksRequest, func(context.Context, *historyservice.DeleteDLQTasksRequest) (*historyservice.DeleteDLQTasksResponse, error)) (*historyservice.DeleteDLQTasksResponse, error), global]()
-	NamespaceReplicationTaskInterceptor      = newKey[func(context.Context, *replicationspb.NamespaceTaskAttributes, func() error) error, namespace.Name]()
+	// HistoryPassiveReplicationTest enables the single-cluster passive replication
+	// test stack for one namespace. Production builds always report it as unset.
+	HistoryPassiveReplicationTest             = newKey[HistoryPassiveReplicationTestHook, namespace.ID]()
+	HistoryDLQTaskDeleteInterceptor           = newKey[func(context.Context, *historyservice.DeleteDLQTasksRequest, func(context.Context, *historyservice.DeleteDLQTasksRequest) (*historyservice.DeleteDLQTasksResponse, error)) (*historyservice.DeleteDLQTasksResponse, error), global]()
+	NamespaceReplicationTaskInterceptor       = newKey[func(context.Context, *replicationspb.NamespaceTaskAttributes, func() error) error, namespace.Name]()
+	GRPCRequestFaultGeneratorByNamespaceID    = newKey[grpcfaults.RequestCallback, namespace.ID]()
+	GRPCRequestFaultGeneratorByNamespaceName  = newKey[grpcfaults.RequestCallback, namespace.Name]()
+	GRPCResponseFaultGeneratorByNamespaceID   = newKey[grpcfaults.ResponseCallback, namespace.ID]()
+	GRPCResponseFaultGeneratorByNamespaceName = newKey[grpcfaults.ResponseCallback, namespace.Name]()
 )
 
 // keyID is a unique identifier for a key, used as a map key.
