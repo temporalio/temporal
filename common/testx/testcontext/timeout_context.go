@@ -11,9 +11,12 @@ import (
 // when Done closes and only moves forward through extend.
 type timeoutContext struct {
 	context.Context
-	ceiling time.Time
-	done    chan struct{}
-	owner   *contextState
+	parent            context.Context
+	parentDeadline    time.Time
+	hasParentDeadline bool
+	ceiling           time.Time
+	done              chan struct{}
+	owner             *contextState
 
 	mu                 sync.Mutex
 	activeExpiration   time.Time
@@ -24,7 +27,8 @@ type timeoutContext struct {
 }
 
 func newTimeoutContext(parent context.Context, ceiling, activeExpiration time.Time, owner *contextState) *timeoutContext {
-	if parentDeadline, ok := parent.Deadline(); ok && parentDeadline.Before(ceiling) {
+	parentDeadline, hasParentDeadline := parent.Deadline()
+	if hasParentDeadline && parentDeadline.Before(ceiling) {
 		ceiling = parentDeadline
 	}
 	if ceiling.Before(activeExpiration) {
@@ -32,12 +36,15 @@ func newTimeoutContext(parent context.Context, ceiling, activeExpiration time.Ti
 	}
 	causeContext, cancelCause := context.WithCancelCause(context.WithoutCancel(parent))
 	ctx := &timeoutContext{
-		Context:          causeContext,
-		ceiling:          ceiling,
-		done:             make(chan struct{}),
-		owner:            owner,
-		activeExpiration: activeExpiration,
-		cancelCause:      cancelCause,
+		Context:           causeContext,
+		parent:            parent,
+		parentDeadline:    parentDeadline,
+		hasParentDeadline: hasParentDeadline,
+		ceiling:           ceiling,
+		done:              make(chan struct{}),
+		owner:             owner,
+		activeExpiration:  activeExpiration,
+		cancelCause:       cancelCause,
 	}
 
 	// Either callback may run immediately, and finishLocked needs both handles
@@ -117,10 +124,15 @@ func (c *timeoutContext) expire() {
 		c.timer.Reset(remaining)
 		return
 	}
-	c.finishLocked(
-		context.DeadlineExceeded,
-		newDeadlineExceededCause(c.activeExpiration, c.owner),
-	)
+	err := error(context.DeadlineExceeded)
+	cause := err
+	if !c.hasParentDeadline || c.activeExpiration.Before(c.parentDeadline) {
+		cause = newDeadlineExceededCause(c.activeExpiration, c.owner)
+	} else if parentErr := c.parent.Err(); parentErr != nil {
+		err = parentErr
+		cause = context.Cause(c.parent)
+	}
+	c.finishLocked(err, cause)
 }
 
 func (c *timeoutContext) finishLocked(err, cause error) {
