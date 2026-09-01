@@ -75,6 +75,7 @@ func RegisterExecutor(
 	registry *hsm.Registry,
 	options TaskExecutorOptions,
 ) error {
+	options.Logger = log.With(options.Logger, tag.NexusStageCallerOutbound)
 	exec := taskExecutor{options}
 	if err := hsm.RegisterImmediateExecutor(
 		registry,
@@ -535,7 +536,7 @@ func (e taskExecutor) handleStartOperationError(env hsm.Environment, node *hsm.N
 
 	switch {
 	case errors.As(callErr, &serviceErr):
-		if !common.IsRetryableRPCError(callErr) {
+		if !common.IsRetryableRPCError(serviceErr) {
 			return handleNonRetryableStartOperationError(node, operation, callErr)
 		}
 		// Fall through all uncaught errors to retryable

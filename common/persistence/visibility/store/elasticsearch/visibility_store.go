@@ -763,8 +763,14 @@ func (s *VisibilityStore) convertQuery(
 		return nil, err
 	}
 
-	c := query.NewQueryConverter(&queryConverter{}, namespaceName, saTypeMap, saMapper).
-		WithChasmMapper(chasmMapper).
+	c := query.NewQueryConverter(
+		&queryConverter{},
+		namespaceName,
+		saTypeMap,
+		saMapper,
+		s.metricsHandler,
+		s.logger,
+	).WithChasmMapper(chasmMapper).
 		WithArchetypeID(archetypeID)
 
 	queryParams, err := c.Convert(queryString)
@@ -902,7 +908,7 @@ func (s *VisibilityStore) GetListWorkflowExecutionsResponse(
 		lastHitSort = hit.Sort
 	}
 
-	if len(searchResult.Hits.Hits) > 0 { // this means the response might not the last page
+	if len(searchResult.Hits.Hits) == pageSize { // this means the response might not the last page
 		response.NextPageToken, err = s.serializePageToken(&visibilityPageToken{
 			SearchAfter: lastHitSort,
 		})

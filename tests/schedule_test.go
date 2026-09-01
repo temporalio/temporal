@@ -417,7 +417,6 @@ func TestScheduleCHASM(t *testing.T) {
 	t.Run("TestSkipsWorkflowSentinelWhenDisabled", func(t *testing.T) { t.Parallel(); testSkipsWorkflowSentinelWhenDisabled(t, newContext) })
 	t.Run("TestLargeScheduleID", func(t *testing.T) { t.Parallel(); testLargeScheduleID(t, newContext) })
 	t.Run("TestUpdateScheduleMemo", func(t *testing.T) { t.Parallel(); testUpdateScheduleMemo(t, newContext) })
-	t.Run("TestUpdateScheduleMemoOnly", func(t *testing.T) { t.Parallel(); testUpdateScheduleMemoOnly(t, newContext) })
 	t.Run("TestStateSizeBytesReported", func(t *testing.T) { t.Parallel(); testStateSizeBytesReported(t, newContext) })
 	t.Run("TestBufferOverrunDropsActions", func(t *testing.T) { t.Parallel(); testBufferOverrunDropsActions(t, newContext) })
 	t.Run("TestDescribeCatchupWindowAfterCreateAndUpdate", func(t *testing.T) {
@@ -2017,6 +2016,7 @@ func testListScheduleMatchingTimes(t *testing.T, newContext contextFactory) {
 
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
+			StartTime: &timestamppb.Timestamp{},
 			Interval: []*schedulepb.IntervalSpec{
 				{Interval: durationpb.New(1 * time.Hour)},
 			},
@@ -2048,15 +2048,49 @@ func testListScheduleMatchingTimes(t *testing.T, newContext contextFactory) {
 	startTime := timestamppb.New(now)
 	endTime := timestamppb.New(now.Add(5 * time.Hour))
 
-	resp, err := s.FrontendClient().ListScheduleMatchingTimes(ctx, &workflowservice.ListScheduleMatchingTimesRequest{
-		Namespace:  s.Namespace().String(),
-		ScheduleId: sid,
-		StartTime:  startTime,
-		EndTime:    endTime,
-	})
-	s.NoError(err)
-	// With 1-hour interval over 5 hours, we expect 5 matching times.
-	s.Len(resp.GetStartTime(), 5)
+	for _, tc := range []struct {
+		name          string
+		startTime     *timestamppb.Timestamp
+		endTime       *timestamppb.Timestamp
+		expectedTimes int
+		errorMessage  string
+	}{
+		{
+			name:          "valid range",
+			startTime:     startTime,
+			endTime:       endTime,
+			expectedTimes: 5,
+		},
+		{
+			name:      "epoch range",
+			startTime: &timestamppb.Timestamp{},
+			endTime:   &timestamppb.Timestamp{},
+		},
+		{
+			name:         "invalid start time",
+			startTime:    &timestamppb.Timestamp{Nanos: 1_000_000_000},
+			endTime:      endTime,
+			errorMessage: "start time is not a valid timestamp",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := s.FrontendClient().ListScheduleMatchingTimes(ctx, &workflowservice.ListScheduleMatchingTimesRequest{
+				Namespace:  s.Namespace().String(),
+				ScheduleId: sid,
+				StartTime:  tc.startTime,
+				EndTime:    tc.endTime,
+			})
+			if tc.errorMessage != "" {
+				var invalidArgument *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgument)
+				require.ErrorContains(t, err, tc.errorMessage)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Len(t, resp.GetStartTime(), tc.expectedTimes)
+		})
+	}
 }
 
 func testLimitMemoSpecSize(t *testing.T, newContext contextFactory) {
@@ -4131,80 +4165,6 @@ func testUpdateScheduleMemoRejected(t *testing.T, newContext contextFactory) {
 	require.Contains(t, err.Error(), "memo updates are not supported on workflow-backed schedules")
 }
 
-func testUpdateScheduleMemoOnly(t *testing.T, newContext contextFactory) {
-	// UpdateScheduleRequest uses replace semantics for the schedule field, so omitting it
-	// causes the schedule to be unset. Memo-only updates require the server to skip replacing
-	// the schedule when the field is nil, similar to how memo and search_attributes are handled.
-	t.Skip("memo-only updates not yet supported: omitting the schedule field unsets the schedule")
-
-	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
-
-	sid := "sched-test-update-memo-only"
-	wid := "sched-test-update-memo-only-wf"
-	wt := "sched-test-update-memo-only-wt"
-
-	s.SdkWorker().RegisterWorkflowWithOptions(
-		func(ctx workflow.Context) error { return nil },
-		workflow.RegisterOptions{Name: wt},
-	)
-
-	schedule := &schedulepb.Schedule{
-		Spec: &schedulepb.ScheduleSpec{
-			Interval: []*schedulepb.IntervalSpec{
-				{Interval: durationpb.New(1 * time.Hour)},
-			},
-		},
-		Action: &schedulepb.ScheduleAction{
-			Action: &schedulepb.ScheduleAction_StartWorkflow{
-				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
-					WorkflowId:   wid,
-					WorkflowType: &commonpb.WorkflowType{Name: wt},
-					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-				},
-			},
-		},
-	}
-
-	// Create schedule with initial memo.
-	memo1 := payload.EncodeString("val1")
-	ctx := newContext(s.Context())
-	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
-		Namespace:  s.Namespace().String(),
-		ScheduleId: sid,
-		Schedule:   schedule,
-		Identity:   "test",
-		RequestId:  uuid.NewString(),
-		Memo: &commonpb.Memo{
-			Fields: map[string]*commonpb.Payload{"key1": memo1},
-		},
-	})
-	require.NoError(t, err)
-
-	// Update only memo, without setting the schedule field.
-	memo2 := payload.EncodeString("val2")
-	_, err = s.FrontendClient().UpdateSchedule(newContext(s.Context()), &workflowservice.UpdateScheduleRequest{
-		Namespace:  s.Namespace().String(),
-		ScheduleId: sid,
-		Identity:   "test",
-		RequestId:  uuid.NewString(),
-		Memo: &commonpb.Memo{
-			Fields: map[string]*commonpb.Payload{"key1": memo2},
-		},
-	})
-	require.NoError(t, err)
-
-	// Verify memo was updated and schedule is still intact.
-	describeResp, err := s.FrontendClient().DescribeSchedule(newContext(s.Context()), &workflowservice.DescribeScheduleRequest{
-		Namespace:  s.Namespace().String(),
-		ScheduleId: sid,
-	})
-	require.NoError(t, err)
-	require.Equal(t, memo2.Data, describeResp.Memo.Fields["key1"].Data, "memo should be updated")
-	require.NotNil(t, describeResp.Schedule.Spec, "schedule spec should not be nil")
-	require.NotEmpty(t, describeResp.Schedule.Spec.Interval, "schedule spec intervals should be preserved")
-	require.NotNil(t, describeResp.Schedule.Action, "schedule action should be preserved")
-}
-
 func testCHASMUnpauseResumesProcessing(t *testing.T, newContext contextFactory) {
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
@@ -4637,18 +4597,8 @@ func testBackfillReprocessesCompletedAction(
 // testBackfillWithBufferOneOverlap pins the expected behavior of BUFFER_ONE
 // over a multi-tick backfill: the first start runs immediately, exactly one
 // follow-up is buffered (Attempt=-1 deferred), the rest are dropped, and the
-// deferred one runs once the first completes. Currently SKIPPED: fails on
-// both V1 and CHASM because the deferred start never gets re-enabled after
-// the running workflow completes. The first start fires, the rest never run.
-// Likely a real bug in the BUFFER_ONE + backfill (Manual=true) interaction -
-// recordCompletedAction's re-enable loop on Attempt==-1 may not be running
-// against backfill-buffered starts. Worth a separate investigation.
+// deferred one runs once the first completes.
 func testBackfillWithBufferOneOverlap(t *testing.T, newContext contextFactory) {
-	// TODO(temporalio/temporal): track removing this skip once the BUFFER_ONE
-	// backfill deferred re-enable path is fixed. Verify by running:
-	//   go test ./tests/ -run 'TestScheduleCHASM/Backfill/BufferOneOverlap' -v
-	t.Skip("BUFFER_ONE backfill deferred re-enable is broken on both V1 and CHASM; see test doc")
-
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := testcore.RandomizeStr("sched-backfill-buffer-one")
@@ -5363,6 +5313,285 @@ func TestScheduleNextActionTimeVisibility(t *testing.T) {
 	}, 15*time.Second, 1*time.Second,
 		"schedule %q must be returned by query %q (next action time published to visibility and in the future)",
 		v2Sid, query)
+}
+
+func TestListSchedulesPreservesV2ScheduleIDWithV1Prefix(t *testing.T) {
+	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+	ctx := chasmContextFactory(testcontext.For(t))
+
+	suffix := testcore.RandomizeStr("sched-list-v2-prefix")
+	plainID := "foo-" + suffix
+	prefixedID := scheduler.WorkflowIDPrefix + plainID
+	for _, scheduleID := range []string{plainID, prefixedID} {
+		createSchedule(ctx, t, s, scheduleID, &schedulepb.Schedule{
+			Spec:   intervalSpec(noOpInterval),
+			State:  &schedulepb.ScheduleState{Paused: true},
+			Action: startWorkflowAction(s, "wf-"+scheduleID, "wt-"+scheduleID),
+		})
+	}
+
+	require.Eventually(t, func() bool {
+		response, err := s.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
+			Namespace:       s.Namespace().String(),
+			MaximumPageSize: 10,
+		})
+		if err != nil {
+			return false
+		}
+		ids := make(map[string]struct{}, len(response.Schedules))
+		for _, schedule := range response.Schedules {
+			ids[schedule.GetScheduleId()] = struct{}{}
+		}
+		_, foundPlainID := ids[plainID]
+		_, foundPrefixedID := ids[prefixedID]
+		return foundPlainID && foundPrefixedID
+	}, awaitTimeout, pollInterval,
+		"ListSchedules must preserve both V2 IDs %q and %q", plainID, prefixedID)
+}
+
+func TestScheduleRejectsInvalidRequests(t *testing.T) {
+	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+	ctx := chasmContextFactory(testcontext.For(t))
+	invalidPolicy := enumspb.ScheduleOverlapPolicy(99)
+
+	validSchedule := func(scheduleID string) *schedulepb.Schedule {
+		return &schedulepb.Schedule{
+			Spec:   intervalSpec(noOpInterval),
+			State:  &schedulepb.ScheduleState{Paused: true},
+			Action: startWorkflowAction(s, "wf-"+scheduleID, "wt-"+scheduleID),
+		}
+	}
+
+	testCases := []struct {
+		name             string
+		requiresExisting bool
+		errorMessage     string
+		request          func(scheduleID string) error
+	}{
+		{
+			name:         "CreateSchedule schedule policy",
+			errorMessage: "unsupported overlap policy",
+			request: func(scheduleID string) error {
+				_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+					Namespace:  s.Namespace().String(),
+					ScheduleId: scheduleID,
+					Schedule: &schedulepb.Schedule{Policies: &schedulepb.SchedulePolicies{
+						OverlapPolicy: invalidPolicy,
+					}},
+					RequestId: uuid.NewString(),
+					Identity:  "test",
+				})
+				return err
+			},
+		},
+		{
+			name:         "CreateSchedule initial patch",
+			errorMessage: "unsupported overlap policy",
+			request: func(scheduleID string) error {
+				_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+					Namespace:  s.Namespace().String(),
+					ScheduleId: scheduleID,
+					Schedule:   &schedulepb.Schedule{},
+					InitialPatch: &schedulepb.SchedulePatch{BackfillRequest: []*schedulepb.BackfillRequest{{
+						OverlapPolicy: invalidPolicy,
+					}}},
+					RequestId: uuid.NewString(),
+					Identity:  "test",
+				})
+				return err
+			},
+		},
+		{
+			name:         "CreateSchedule initial patch timestamp",
+			errorMessage: "backfill request 0 start time is not a valid timestamp",
+			request: func(scheduleID string) error {
+				_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+					Namespace:  s.Namespace().String(),
+					ScheduleId: scheduleID,
+					Schedule:   &schedulepb.Schedule{},
+					InitialPatch: &schedulepb.SchedulePatch{BackfillRequest: []*schedulepb.BackfillRequest{{
+						StartTime: &timestamppb.Timestamp{Nanos: 1_000_000_000},
+					}}},
+					RequestId: uuid.NewString(),
+					Identity:  "test",
+				})
+				return err
+			},
+		},
+		{
+			name:         "CreateSchedule timestamp",
+			errorMessage: "start time is not a valid timestamp",
+			request: func(scheduleID string) error {
+				_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+					Namespace:  s.Namespace().String(),
+					ScheduleId: scheduleID,
+					Schedule: &schedulepb.Schedule{Spec: &schedulepb.ScheduleSpec{
+						StartTime: &timestamppb.Timestamp{Nanos: 1_000_000_000},
+					}},
+					RequestId: uuid.NewString(),
+					Identity:  "test",
+				})
+				return err
+			},
+		},
+		{
+			name:         "CreateSchedule remaining actions",
+			errorMessage: "remaining actions cannot be negative",
+			request: func(scheduleID string) error {
+				_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+					Namespace:  s.Namespace().String(),
+					ScheduleId: scheduleID,
+					Schedule:   &schedulepb.Schedule{State: &schedulepb.ScheduleState{RemainingActions: -1}},
+					RequestId:  uuid.NewString(),
+					Identity:   "test",
+				})
+				return err
+			},
+		},
+		{
+			name:             "UpdateSchedule schedule policy",
+			requiresExisting: true,
+			errorMessage:     "unsupported overlap policy",
+			request: func(scheduleID string) error {
+				_, err := s.FrontendClient().UpdateSchedule(ctx, &workflowservice.UpdateScheduleRequest{
+					Namespace:  s.Namespace().String(),
+					ScheduleId: scheduleID,
+					Schedule: &schedulepb.Schedule{Policies: &schedulepb.SchedulePolicies{
+						OverlapPolicy: invalidPolicy,
+					}},
+					RequestId: uuid.NewString(),
+					Identity:  "test",
+				})
+				return err
+			},
+		},
+		{
+			name:             "UpdateSchedule timestamp",
+			requiresExisting: true,
+			errorMessage:     "start time is not a valid timestamp",
+			request: func(scheduleID string) error {
+				_, err := s.FrontendClient().UpdateSchedule(ctx, &workflowservice.UpdateScheduleRequest{
+					Namespace:  s.Namespace().String(),
+					ScheduleId: scheduleID,
+					Schedule: &schedulepb.Schedule{Spec: &schedulepb.ScheduleSpec{
+						StartTime: &timestamppb.Timestamp{Nanos: 1_000_000_000},
+					}},
+					RequestId: uuid.NewString(),
+					Identity:  "test",
+				})
+				return err
+			},
+		},
+		{
+			name:             "UpdateSchedule remaining actions",
+			requiresExisting: true,
+			errorMessage:     "remaining actions cannot be negative",
+			request: func(scheduleID string) error {
+				_, err := s.FrontendClient().UpdateSchedule(ctx, &workflowservice.UpdateScheduleRequest{
+					Namespace:  s.Namespace().String(),
+					ScheduleId: scheduleID,
+					Schedule:   &schedulepb.Schedule{State: &schedulepb.ScheduleState{RemainingActions: -1}},
+					RequestId:  uuid.NewString(),
+					Identity:   "test",
+				})
+				return err
+			},
+		},
+		{
+			name:             "PatchSchedule trigger",
+			requiresExisting: true,
+			errorMessage:     "unsupported overlap policy",
+			request: func(scheduleID string) error {
+				_, err := s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+					Namespace:  s.Namespace().String(),
+					ScheduleId: scheduleID,
+					Patch: &schedulepb.SchedulePatch{TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{
+						OverlapPolicy: invalidPolicy,
+					}},
+					RequestId: uuid.NewString(),
+					Identity:  "test",
+				})
+				return err
+			},
+		},
+		{
+			name:             "PatchSchedule backfill",
+			requiresExisting: true,
+			errorMessage:     "unsupported overlap policy",
+			request: func(scheduleID string) error {
+				_, err := s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+					Namespace:  s.Namespace().String(),
+					ScheduleId: scheduleID,
+					Patch: &schedulepb.SchedulePatch{BackfillRequest: []*schedulepb.BackfillRequest{{
+						OverlapPolicy: invalidPolicy,
+					}}},
+					RequestId: uuid.NewString(),
+					Identity:  "test",
+				})
+				return err
+			},
+		},
+		{
+			name:             "PatchSchedule trigger timestamp",
+			requiresExisting: true,
+			errorMessage:     "trigger immediately request scheduled time is not a valid timestamp",
+			request: func(scheduleID string) error {
+				_, err := s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+					Namespace:  s.Namespace().String(),
+					ScheduleId: scheduleID,
+					Patch: &schedulepb.SchedulePatch{TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{
+						ScheduledTime: &timestamppb.Timestamp{Nanos: 1_000_000_000},
+					}},
+					RequestId: uuid.NewString(),
+					Identity:  "test",
+				})
+				return err
+			},
+		},
+		{
+			name:             "PatchSchedule backfill timestamp",
+			requiresExisting: true,
+			errorMessage:     "backfill request 0 end time is not a valid timestamp",
+			request: func(scheduleID string) error {
+				_, err := s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+					Namespace:  s.Namespace().String(),
+					ScheduleId: scheduleID,
+					Patch: &schedulepb.SchedulePatch{BackfillRequest: []*schedulepb.BackfillRequest{{
+						EndTime: &timestamppb.Timestamp{Nanos: 1_000_000_000},
+					}}},
+					RequestId: uuid.NewString(),
+					Identity:  "test",
+				})
+				return err
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			scheduleID := testcore.RandomizeStr("sched-invalid-request")
+			if tc.requiresExisting {
+				createSchedule(ctx, t, s, scheduleID, validSchedule(scheduleID))
+			}
+
+			var invalidArgument *serviceerror.InvalidArgument
+			err := tc.request(scheduleID)
+			require.ErrorAs(t, err, &invalidArgument)
+			require.ErrorContains(t, err, tc.errorMessage)
+
+			describeResponse, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+				Namespace:  s.Namespace().String(),
+				ScheduleId: scheduleID,
+			})
+			if tc.requiresExisting {
+				require.NoError(t, err)
+				require.NotNil(t, describeResponse)
+				return
+			}
+			var notFound *serviceerror.NotFound
+			require.ErrorAs(t, err, &notFound)
+		})
+	}
 }
 
 // TestMirroredIncludeExcludeSpec sets identical interval and exclusion
