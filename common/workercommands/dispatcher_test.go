@@ -47,7 +47,7 @@ func requireMetricValue(t *testing.T, snap map[string][]*metricstest.CapturedRec
 func TestExecute_FeatureFlagOff_DropsTask(t *testing.T) {
 	d := &Dispatcher{
 		config: &configs.Config{
-			EnableCancelActivityWorkerCommand:  func(string) bool { return false },
+			EnableCancelActivityWorkerCommand: func(string) bool { return false },
 			WorkerCommandsDispatchTimeout:     func() time.Duration { return 10 * time.Second },
 		},
 		logger: log.NewNoopLogger(),
@@ -61,7 +61,7 @@ func TestExecute_FeatureFlagOff_DropsTask(t *testing.T) {
 func TestExecute_EmptyCommands_DropsTask(t *testing.T) {
 	d := &Dispatcher{
 		config: &configs.Config{
-			EnableCancelActivityWorkerCommand:  func(string) bool { return true },
+			EnableCancelActivityWorkerCommand: func(string) bool { return true },
 			WorkerCommandsDispatchTimeout:     func() time.Duration { return 10 * time.Second },
 		},
 		logger: log.NewNoopLogger(),
@@ -83,7 +83,7 @@ func TestExecute_DispatchSuccess(t *testing.T) {
 	d := &Dispatcher{
 		matchingClient: mockClient,
 		config: &configs.Config{
-			EnableCancelActivityWorkerCommand:  func(string) bool { return true },
+			EnableCancelActivityWorkerCommand: func(string) bool { return true },
 			WorkerCommandsDispatchTimeout:     func() time.Duration { return 10 * time.Second },
 		},
 		metricsHandler: metricsHandler,
@@ -131,7 +131,7 @@ func TestExecute_DispatchRPCError(t *testing.T) {
 	d := &Dispatcher{
 		matchingClient: mockClient,
 		config: &configs.Config{
-			EnableCancelActivityWorkerCommand:  func(string) bool { return true },
+			EnableCancelActivityWorkerCommand: func(string) bool { return true },
 			WorkerCommandsDispatchTimeout:     func() time.Duration { return 10 * time.Second },
 		},
 		metricsHandler: metricsHandler,
@@ -159,7 +159,7 @@ func TestExecute_UpstreamTimeout(t *testing.T) {
 	d := &Dispatcher{
 		matchingClient: mockClient,
 		config: &configs.Config{
-			EnableCancelActivityWorkerCommand:  func(string) bool { return true },
+			EnableCancelActivityWorkerCommand: func(string) bool { return true },
 			WorkerCommandsDispatchTimeout:     func() time.Duration { return 10 * time.Second },
 		},
 		metricsHandler: metricsHandler,
