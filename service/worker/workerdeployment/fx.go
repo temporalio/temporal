@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -80,35 +81,39 @@ func ClientProvider(
 	metricsHandler metrics.Handler,
 ) Client {
 	highestRevSignaledToVersionWf := cache.New(dynamicconfig.ReactivationSignalDedupCacheMaxSize.Get(dc)(), nil)
-	registerTaskQueueWorkerErrorCacheTTL := dynamicconfig.WorkerDeploymentRegisterTaskQueueErrorCacheTTL.Get(dc)()
-	registerTaskQueueWorkerErrorCacheSize := registerTaskQueueWorkerErrorCacheMaxSize
-	if registerTaskQueueWorkerErrorCacheTTL <= 0 {
-		registerTaskQueueWorkerErrorCacheSize = 0
+	workerDeploymentRegistrationErrorCacheTTL := dynamicconfig.WorkerDeploymentRegistrationErrorCacheTTL.Get(dc)()
+	registrationErrorCacheSize := dynamicconfig.WorkerDeploymentRegistrationErrorCacheMaxSize.Get(dc)()
+	if workerDeploymentRegistrationErrorCacheTTL <= 0 {
+		registrationErrorCacheSize = 0
 	}
-	registerTaskQueueWorkerErrorCache := cache.New(registerTaskQueueWorkerErrorCacheSize, &cache.Options{
-		TTL: registerTaskQueueWorkerErrorCacheTTL,
+	registrationErrorCacheTimeSource := clock.NewRealTimeSource()
+	registrationErrorCache := cache.New(registrationErrorCacheSize, &cache.Options{
+		TTL:        workerDeploymentRegistrationErrorCacheTTL,
+		TimeSource: registrationErrorCacheTimeSource,
 	})
 	lc.Append(fx.Hook{
 		OnStop: func(context.Context) error {
 			highestRevSignaledToVersionWf.Stop()
-			registerTaskQueueWorkerErrorCache.Stop()
+			registrationErrorCache.Stop()
 			return nil
 		},
 	})
 	return &ClientImpl{
-		logger:                            logger,
-		historyClient:                     historyClient,
-		visibilityManager:                 visibilityManager,
-		matchingClient:                    matchingClient,
-		workerControllerInstanceClient:    workerControllerInstanceClient,
-		maxIDLengthLimit:                  dynamicconfig.MaxIDLengthLimit.Get(dc),
-		visibilityMaxPageSize:             dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
-		maxTaskQueuesInDeploymentVersion:  dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion.Get(dc),
-		maxDeployments:                    dynamicconfig.MatchingMaxDeployments.Get(dc),
-		testHooks:                         testHooks,
-		metricsHandler:                    metricsHandler,
-		highestRevSignaledToVersionWf:     highestRevSignaledToVersionWf,
-		registerTaskQueueWorkerErrorCache: registerTaskQueueWorkerErrorCache,
+		logger:                                    logger,
+		historyClient:                             historyClient,
+		visibilityManager:                         visibilityManager,
+		matchingClient:                            matchingClient,
+		workerControllerInstanceClient:            workerControllerInstanceClient,
+		maxIDLengthLimit:                          dynamicconfig.MaxIDLengthLimit.Get(dc),
+		visibilityMaxPageSize:                     dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
+		maxTaskQueuesInDeploymentVersion:          dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion.Get(dc),
+		maxDeployments:                            dynamicconfig.MatchingMaxDeployments.Get(dc),
+		testHooks:                                 testHooks,
+		metricsHandler:                            metricsHandler,
+		highestRevSignaledToVersionWf:             highestRevSignaledToVersionWf,
+		registrationErrorCache:                    registrationErrorCache,
+		workerDeploymentRegistrationErrorCacheTTL: workerDeploymentRegistrationErrorCacheTTL,
+		registrationErrorCacheTimeSource:          registrationErrorCacheTimeSource,
 	}
 }
 

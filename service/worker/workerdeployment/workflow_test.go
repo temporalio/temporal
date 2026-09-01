@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -35,6 +36,31 @@ type WorkerDeploymentSuite struct {
 func TestWorkerDeploymentSuite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, &WorkerDeploymentSuite{workflowVersion: VersionDataRevisionNumber})
+}
+
+func TestTooManyVersionsFailureDetails(t *testing.T) {
+	t.Parallel()
+
+	versions := map[string]*deploymentspb.WorkerDeploymentVersionSummary{
+		"deployment-a.build-a": {},
+		"deployment-a.build-b": {},
+	}
+	runner := &WorkflowRunner{
+		WorkerDeploymentWorkflowArgs: &deploymentspb.WorkerDeploymentWorkflowArgs{
+			State: &deploymentspb.WorkerDeploymentLocalState{Versions: versions},
+		},
+	}
+
+	err := runner.newTooManyVersionsError("too many versions")
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	require.True(t, appErr.HasDetails())
+	var details *deploymentspb.TooManyVersionsFailureDetails
+	require.NoError(t, appErr.Details(&details))
+	require.ElementsMatch(t, []uint64{
+		workerDeploymentVersionFingerprint("deployment-a", "build-a"),
+		workerDeploymentVersionFingerprint("deployment-a", "build-b"),
+	}, details.GetVersionFingerprints())
 }
 
 func (s *WorkerDeploymentSuite) SetupTest() {
