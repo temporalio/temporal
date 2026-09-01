@@ -49,6 +49,7 @@ type (
 		chasmRegistry                  *chasm.Registry
 		processor                      Processor
 		processorAckTimeout            dynamicconfig.DurationPropertyFn
+		serverless                     bool
 		disableOrderByClause           dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		enableManualPagination         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		enableUnifiedQueryConverter    dynamicconfig.BoolPropertyFn
@@ -165,6 +166,7 @@ func NewVisibilityStore(
 		chasmRegistry:                  chasmRegistry,
 		processor:                      processor,
 		processorAckTimeout:            processorAckTimeout,
+		serverless:                     cfg.Serverless,
 		disableOrderByClause:           disableOrderByClause,
 		enableManualPagination:         enableManualPagination,
 		enableUnifiedQueryConverter:    enableUnifiedQueryConverter,
@@ -1518,6 +1520,50 @@ func (s *VisibilityStore) AddSearchAttributes(
 	if err != nil {
 		return err
 	}
+	if s.serverless {
+		// Serverless collections expose no _cluster/health to wait on, so confirm
+		// the new fields are queryable in the mapping instead.
+		return s.waitForSearchAttributesMapping(ctx, request.SearchAttributes)
+	}
 	_, err = s.esClient.WaitForYellowStatus(ctx, s.GetIndexName())
 	return err
+}
+
+const (
+	serverlessMappingPollInterval = 500 * time.Millisecond
+	serverlessMappingPollTimeout  = 30 * time.Second
+)
+
+// waitForSearchAttributesMapping is the serverless replacement for WaitForYellowStatus:
+// it reads the index mapping back until every added search attribute is present, so the
+// caller only proceeds to the registry write once the mapping change is queryable.
+func (s *VisibilityStore) waitForSearchAttributesMapping(
+	ctx context.Context,
+	searchAttributes map[string]enumspb.IndexedValueType,
+) error {
+	ctx, cancel := context.WithTimeout(ctx, serverlessMappingPollTimeout)
+	defer cancel()
+	for {
+		mapping, err := s.esClient.GetMapping(ctx, s.GetIndexName())
+		if err != nil {
+			return err
+		}
+		missing := ""
+		for name := range searchAttributes {
+			if _, ok := mapping[name]; !ok {
+				missing = name
+				break
+			}
+		}
+		if missing == "" {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return serviceerror.NewUnavailablef(
+				"search attribute %q did not appear in the mapping for index %q within %v",
+				missing, s.GetIndexName(), serverlessMappingPollTimeout)
+		case <-time.After(serverlessMappingPollInterval):
+		}
+	}
 }
