@@ -238,6 +238,13 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		}
 	}
 
+	// PROTOTYPE: optional constraint-expression layer over the dynamic config client. A
+	// no-op unless expressionFilepath is set.
+	dcClient, err = withExpressionConfig(so.config, dcClient, so.serviceNames, logger, stopChan)
+	if err != nil {
+		return serverOptionsProvider{}, err
+	}
+
 	testHooks := testhooks.NewTestHooks()
 	if so.testHooks != nil {
 		testHooks = *so.testHooks

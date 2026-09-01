@@ -1,0 +1,96 @@
+# PROTOTYPE: constraint-expression dynamic config.
+#
+# Point at this file with:
+#
+#   dynamicConfigClient:
+#     filepath: "config/dynamicconfig/development-cass.yaml"
+#     pollInterval: "10s"
+#     expressionFilepath: "config/dynamicconfig/expressions-demo.yaml"
+#     expressionConstraints:
+#       env: "staging"
+#       zone: "us-west-2"
+#       deployRing: 2
+#
+# Each key here is resolved by evaluating its overrides in order and taking the first
+# match, falling back to defaultValue. A key present here is served entirely from this
+# file; a key absent from it comes from the ordinary dynamic config file as usual; a key
+# in neither uses its compiled-in default.
+#
+# Two kinds of constraint key are available.
+#
+# Always present, describing *where this server is*. Held by the client and merged into
+# every evaluation, so they work even for a call site that supplies nothing:
+#
+#   env, zone, cluster, service, host, serverVersion, plus any key you put in
+#   expressionConstraints.
+#
+# Supplied per call, describing *what is being asked of it*. Only reach expressions at call
+# sites that have been migrated to the GetC accessor and build a ConstraintsMap:
+#
+#   namespace, namespaceID, taskQueueName, taskQueueType, shardID, destination,
+#   sdkName, sdkVersion, sdkMajor, sdkMinor, sdkPatch, callerName, callerType, callOrigin,
+#   plus anything the call site invents and declares under constraintKeys below.
+#
+# An entry whose expressions only use the first kind is resolved once at startup; one that
+# uses the second is evaluated per read. Either way, a key that is not supplied at a given
+# call site simply never matches, so the default applies.
+#
+# Operators: = != > < and or, with parentheses. Keys are quoted; values are quoted strings
+# or bare numbers. Write numbers bare: a quoted "2" is compared as a string and will not
+# equal the number 2. There is no semver comparison either, which is why the SDK version is
+# also exposed as sdkMajor/sdkMinor/sdkPatch.
+
+# Dimensions these expressions are allowed to use beyond the built-in ones. Anything an
+# expression references that is neither built in nor listed here is rejected at load, so a
+# typo fails loudly instead of silently resolving to the default.
+constraintKeys:
+  - deployRing
+  - workflowID
+
+# --- 1. Boolean logic over deployment dimensions -----------------------------
+# Not expressible in the dynamic config file: it can only match a value against an exact
+# Constraints struct, and has no field for env or zone at all.
+matching.getTasksBatchSize:
+  defaultValue: 1000
+  overrides:
+    - matchString: '"env" = "staging" and ("zone" = "us-west-1" or "zone" = "us-west-2")'
+      matchResult: 250
+
+# --- 2. Roll out by deployment ring ------------------------------------------
+# Adding "deployRing" to the current system would mean a new field on Constraints, a new
+# precedence order in cmd/tools/gendynamicconfig, and regenerating setting_gen.go. Here it
+# is one YAML key that the operator invented.
+system.visibilityAllowList:
+  defaultValue: false
+  overrides:
+    - matchString: '"deployRing" > 1'
+      matchResult: true
+
+# --- 3. Target one service, or one cluster -----------------------------------
+history.persistenceMaxQPS:
+  defaultValue: 9000
+  overrides:
+    - matchString: '"service" = "history" and "zone" = "us-west-2"'
+      matchResult: 18000
+
+matching.longPollExpirationInterval:
+  defaultValue: 1m
+  overrides:
+    - matchString: '"cluster" = "standby"'
+      matchResult: 20s
+
+# --- 4. Per-caller dimensions --------------------------------------------------
+# This one is read through the GetC accessor at
+# service/history/api/startworkflow/api.go, which passes the namespace, the calling SDK
+# (from the gRPC metadata the frontend propagated) and the workflow id. None of these has a
+# field on the Constraints struct, and the first two cannot be seen at startup at all.
+#
+# Note the version comparison is on sdkMajor/sdkMinor rather than on the sdkVersion string:
+# lexicographically "1.9.0" sorts after "1.28.0", so a string comparison would be wrong.
+system.enableEagerWorkflowStart:
+  defaultValue: true
+  overrides:
+    - matchString: '"sdkName" = "temporal-go" and "sdkMajor" = 1 and "sdkMinor" < 28'
+      matchResult: false
+    - matchString: '"namespace" = "canary" and "zone" = "us-west-2"'
+      matchResult: false
