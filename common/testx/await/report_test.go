@@ -73,12 +73,65 @@ func TestReportTimeout(t *testing.T) {
 			}, "\n"), tb.fatals())
 		})
 	})
+
+	t.Run("includes attempt failures in one report", func(t *testing.T) {
+		tb := newReportRecordingTB()
+
+		timeoutReport{
+			effectiveTimeout: time.Second,
+			attempts:         2,
+			failures: []attemptFailure{
+				{attempt: 1, errors: []string{"backlog count was 0"}},
+				{attempt: 2, errors: []string{"backlog count was 1"}},
+			},
+		}.reportTimeout(tb, "Require", "")
+
+		require.Equal(t, strings.Join([]string{
+			"Require: condition not satisfied after 1s",
+			"details:",
+			"  attempts         = 2",
+			"  attempt duration = avg 0s, max 0s",
+			"  attempt errors:",
+			"",
+			"    --- attempt 1 ---",
+			"      backlog count was 0",
+			"",
+			"    --- attempt 2 ---",
+			"      backlog count was 1",
+		}, "\n"), tb.fatals())
+		require.Empty(t, tb.errors())
+	})
+}
+
+func TestRenderSupplementalDetails(t *testing.T) {
+	t.Parallel()
+
+	report := timeoutReport{
+		attempts:           2,
+		attemptDurationSum: 40 * time.Millisecond,
+		attemptDurationMax: 30 * time.Millisecond,
+		failures: []attemptFailure{
+			{attempt: 1, errors: []string{"backlog count was 0"}},
+		},
+	}
+
+	require.Equal(t, strings.Join([]string{
+		"operation        = Requiref",
+		"condition        = workflow wf-123 not ready",
+		"attempts         = 2",
+		"attempt duration = avg 20ms, max 30ms",
+		"attempt errors:",
+		"",
+		"  --- attempt 1 ---",
+		"    backlog count was 0",
+	}, "\n"), report.renderSupplementalDetails("Requiref", "workflow wf-123 not ready"))
 }
 
 type reportRecordingTB struct {
 	testing.TB
 	mu            sync.Mutex
 	fatalMessages []string
+	errorMessages []string
 }
 
 func newReportRecordingTB() *reportRecordingTB {
@@ -93,8 +146,20 @@ func (r *reportRecordingTB) Fatalf(format string, args ...any) {
 	r.fatalMessages = append(r.fatalMessages, fmt.Sprintf(format, args...))
 }
 
+func (r *reportRecordingTB) Errorf(format string, args ...any) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.errorMessages = append(r.errorMessages, fmt.Sprintf(format, args...))
+}
+
 func (r *reportRecordingTB) fatals() string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return strings.Join(r.fatalMessages, "\n")
+}
+
+func (r *reportRecordingTB) errors() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return strings.Join(r.errorMessages, "\n")
 }
