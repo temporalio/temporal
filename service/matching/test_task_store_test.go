@@ -336,7 +336,7 @@ func (m *testTaskManager) UpdateTaskQueueUserData(
 	}
 	// Matching tests seed user data with arbitrary versions. SQL requires version 0 to
 	// insert and CAS on later writes. Retry as upsert so seeds behave like the old fake.
-	for attempt := 0; attempt < 5; attempt++ {
+	for range 5 {
 		err := m.TaskManager.UpdateTaskQueueUserData(ctx, request)
 		if err == nil {
 			return nil
@@ -486,7 +486,7 @@ func (q *testQueueData) persistenceStats() testQueuePersistenceStats {
 
 func (m *testTaskManager) getAllTasks(q *PhysicalTaskQueueKey) []*persistencespb.AllocatedTaskInfo {
 	var all []*persistencespb.AllocatedTaskInfo
-	for subqueue := 0; subqueue < testMaxSubqueues; subqueue++ {
+	for subqueue := range testMaxSubqueues {
 		minPass := int64(0)
 		minID := int64(0)
 		if m.fairness {
