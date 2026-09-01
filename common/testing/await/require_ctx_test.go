@@ -181,6 +181,29 @@ func TestRequire_UsesRequestedPollIntervalAsAdaptiveBase(t *testing.T) {
 }
 
 func TestRequire_FailureScenarios(t *testing.T) {
+	t.Run("delegates test context deadline report", func(t *testing.T) {
+		t.Setenv("TEMPORAL_TEST_TIMEOUT", "1s")
+
+		synctest.Test(t, func(t *testing.T) {
+			tb := newRecordingTB()
+			tb.run(func() {
+				ctx := testcontext.For(tb)
+				await.Require(ctx, tb, func(t *await.T) {
+					t.Error("backlog count was 0, expected at least 24")
+					<-t.Context().Done()
+				}, time.Hour, 100*time.Millisecond)
+			})
+
+			require.Contains(t, tb.fatals(), "testcontext deadline exceeded after 1s")
+			require.Contains(t, tb.fatals(), "ctx extensions   = 1 (+10s total)")
+			require.Contains(t, tb.fatals(), "operation        = Require")
+			require.Contains(t, tb.fatals(), "attempts         = 1")
+			require.Contains(t, tb.fatals(), "attempt errors:")
+			require.Contains(t, tb.fatals(), "backlog count was 0, expected at least 24")
+			require.Empty(t, tb.errors())
+		})
+	})
+
 	t.Run("reports timeout", func(t *testing.T) {
 		t.Parallel()
 
