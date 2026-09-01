@@ -103,6 +103,41 @@ func getWorkflowRuns(branch, workflowName string, since time.Time) ([]github.Run
 	return runs, nil
 }
 
+// BuildDigest builds a digest report for the specified time range.
+func BuildDigest(branch, workflowName string, days int) (*DigestReport, error) {
+	// Calculate the start date
+	endDate := time.Now()
+	startDate := endDate.AddDate(0, 0, -days)
+	previousStartDate := startDate.AddDate(0, 0, -days)
+
+	// Fetch workflow runs
+	runs, err := getWorkflowRuns(branch, workflowName, previousStartDate)
+	if err != nil {
+		return nil, err
+	}
+
+	var currentRuns, previousRuns []github.Run
+	for _, run := range runs {
+		switch {
+		case !run.CreatedAt.Before(startDate) && run.CreatedAt.Before(endDate):
+			currentRuns = append(currentRuns, run)
+		case !run.CreatedAt.Before(previousStartDate) && run.CreatedAt.Before(startDate):
+			previousRuns = append(previousRuns, run)
+		default:
+			continue
+		}
+	}
+
+	return &DigestReport{
+		Branch:       branch,
+		WorkflowName: workflowName,
+		StartDate:    startDate,
+		EndDate:      endDate,
+		DigestPeriod: summarizeDigestPeriod(currentRuns),
+		Previous:     summarizeDigestPeriod(previousRuns),
+	}, nil
+}
+
 func summarizeDigestPeriod(runs []github.Run) DigestPeriod {
 	// Filter to only completed runs
 	completedRuns := filterCompleted(runs)
@@ -148,48 +183,4 @@ func summarizeDigestPeriod(runs []github.Run) DigestPeriod {
 		Under30MinutesPercent: under30,
 		Runs:                  completedRuns,
 	}
-}
-
-// BuildDigest builds a digest report for the specified time range
-func BuildDigest(branch, workflowName string, days int) (*DigestReport, error) {
-	return buildDigestAt(branch, workflowName, days, time.Now(), getWorkflowRuns)
-}
-
-func buildDigestAt(
-	branch string,
-	workflowName string,
-	days int,
-	endDate time.Time,
-	fetchRuns func(string, string, time.Time) ([]github.Run, error),
-) (*DigestReport, error) {
-	// Calculate the start date
-	startDate := endDate.AddDate(0, 0, -days)
-	previousStartDate := startDate.AddDate(0, 0, -days)
-
-	// Fetch workflow runs
-	runs, err := fetchRuns(branch, workflowName, previousStartDate)
-	if err != nil {
-		return nil, err
-	}
-
-	var currentRuns, previousRuns []github.Run
-	for _, run := range runs {
-		switch {
-		case !run.CreatedAt.Before(startDate) && run.CreatedAt.Before(endDate):
-			currentRuns = append(currentRuns, run)
-		case !run.CreatedAt.Before(previousStartDate) && run.CreatedAt.Before(startDate):
-			previousRuns = append(previousRuns, run)
-		default:
-			continue
-		}
-	}
-
-	return &DigestReport{
-		Branch:       branch,
-		WorkflowName: workflowName,
-		StartDate:    startDate,
-		EndDate:      endDate,
-		DigestPeriod: summarizeDigestPeriod(currentRuns),
-		Previous:     summarizeDigestPeriod(previousRuns),
-	}, nil
 }
