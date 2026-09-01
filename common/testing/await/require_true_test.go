@@ -66,6 +66,7 @@ func TestRequireTrue_FailureScenarios(t *testing.T) {
 		})
 		require.True(t, tb.Failed())
 		require.Contains(t, tb.fatals(), "not satisfied after")
+		require.Empty(t, tb.errors())
 	})
 
 	t.Run("RequireTruef includes message on timeout", func(t *testing.T) {

@@ -79,7 +79,7 @@ func run(
 		tb.Logf("%s: skipping (test already failed)", funcName)
 		return
 	}
-	// Guard: context.WithDeadline panics on a nil parent.
+	// Guard: context.WithDeadline and testcontext.WithDeadline panic on a nil parent.
 	if parentCtx == nil {
 		tb.Fatalf("%s: nil context", funcName)
 		return
@@ -106,7 +106,7 @@ func run(
 	}
 
 	effectiveTimeout := max(0, time.Until(deadline))
-	awaitCtx, awaitCancel := context.WithDeadline(parentCtx, deadline)
+	awaitCtx, awaitCancel := testcontext.WithDeadline(parentCtx, deadline)
 	defer awaitCancel()
 
 	report := timeoutReport{
@@ -118,14 +118,9 @@ func run(
 	}
 
 	for {
-		// Parent context was canceled while we were sleeping (not our deadline).
-		if err := awaitCtx.Err(); err != nil && !deadlineReached(deadline) {
-			failContextCanceled(tb, report, funcName, err)
-			return
-		}
-		// Sleep can return at the deadline; do not start another attempt then.
-		if deadlineReached(deadline) {
-			report.reportTimeout(tb, funcName, cfg.timeoutMsg)
+		// Parent context may have been canceled while we were sleeping, or sleep
+		// may have returned at the deadline. Do not start another attempt then.
+		if failIfAwaitDone(awaitCtx, deadline, tb, report, funcName, cfg.timeoutMsg) {
 			return
 		}
 
@@ -171,15 +166,9 @@ func run(
 			return
 		}
 
-		// Parent context was canceled during the attempt (not our deadline).
-		if err := awaitCtx.Err(); err != nil && !deadlineReached(deadline) {
-			failContextCanceled(tb, report, funcName, err)
-			return
-		}
-
-		// Our deadline expired.
-		if deadlineReached(deadline) {
-			report.reportTimeout(tb, funcName, cfg.timeoutMsg)
+		// Parent context may have been canceled during the attempt, or our
+		// deadline may have expired.
+		if failIfAwaitDone(awaitCtx, deadline, tb, report, funcName, cfg.timeoutMsg) {
 			return
 		}
 
@@ -195,6 +184,42 @@ func run(
 		)
 		sleep(awaitCtx, deadline, pollInterval)
 	}
+}
+
+func failIfAwaitDone(
+	ctx context.Context,
+	deadline time.Time,
+	tb testing.TB,
+	report timeoutReport,
+	funcName string,
+	timeoutMsg string,
+) bool {
+	tb.Helper()
+	err := ctx.Err()
+	if err == nil {
+		if !deadlineReached(deadline) {
+			return false
+		}
+		// The wall clock can reach deadline just before the context timer
+		// publishes its terminal error and cause. Wait for that state so the
+		// reporter can classify the deadline by its actual owner.
+		<-ctx.Done()
+		err = ctx.Err()
+	}
+
+	if testcontext.FailIfDeadlineExceeded(
+		ctx,
+		tb,
+		report.renderSupplementalDetails(funcName, timeoutMsg),
+	) {
+		return true
+	}
+	if err == context.DeadlineExceeded {
+		report.reportTimeout(tb, funcName, timeoutMsg)
+		return true
+	}
+	failContextCanceled(tb, report, funcName, err)
+	return true
 }
 
 func failContextCanceled(tb testing.TB, report timeoutReport, funcName string, err error) {
