@@ -1272,6 +1272,7 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
 	}
 	// TODO: Delete this code path after EnableMatchingFanOutForPollCancellation is rolled out.
 	if request.WorkerInstanceKey != "" {
+		// Keep Put before CancelAll; poll registration uses the inverse order to avoid missed polls.
 		e.shutdownWorkers.Put(request.WorkerInstanceKey, struct{}{})
 	}
 	cancelledCount := e.workerInstancePollers.CancelAll(request.WorkerInstanceKey)
@@ -1416,6 +1417,7 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPollsPartition(
 	var cancelledCount int32
 	for _, worker := range request.GetWorkers() {
 		if worker.GetWorkerInstanceKey() != "" {
+			// Keep Put before CancelAll; poll registration uses the inverse order to avoid missed polls.
 			e.shutdownWorkers.Put(worker.GetWorkerInstanceKey(), struct{}{})
 		}
 		cancelledCount += e.workerInstancePollers.CancelAll(worker.GetWorkerInstanceKey())
@@ -3058,7 +3060,6 @@ func (e *matchingEngineImpl) pollTask(
 	// reached, instead of emptyTask, context timeout error is returned to the frontend by the rpc stack,
 	// which counts against our SLO. By shortening the timeout by a very small amount, the emptyTask can be
 	// returned to the handler before a context timeout error is generated.
-	workerInstanceKey := pollMetadata.workerInstanceKey
 	// For non-forwarded polls, subtract a proportional random jitter to spread expiration
 	// times across pollers and prevent thundering herd reconnects. Jitter is capped so the
 	// interval never falls below forwardedPollMinInterval.
@@ -3075,11 +3076,10 @@ func (e *matchingEngineImpl) pollTask(
 	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, longPollInterval, returnEmptyTaskTimeBudget)
 	defer cancel()
 
-	if workerInstanceKey != "" {
-		// Registration must happen before the shutdown-cache check:
-		//   - If shutdown happens before registration, the cache check rejects the poll.
-		//   - If shutdown happens after registration, the shutdown logic cancels the registered poll.
-		// Use UUID because pollerID is reused when forwarded.
+	if workerInstanceKey := pollMetadata.workerInstanceKey; workerInstanceKey != "" {
+		// Register before checking shutdownWorkers. The shutdown path does the reverse:
+		// it populates shutdownWorkers before calling CancelAll. So either the check
+		// sees the shutdown, or CancelAll sees the registration.
 		pollerTrackerKey := uuid.NewString()
 		e.workerInstancePollers.Add(workerInstanceKey, pollerTrackerKey, cancel)
 		defer e.workerInstancePollers.Remove(workerInstanceKey, pollerTrackerKey)
