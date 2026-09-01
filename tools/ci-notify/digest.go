@@ -87,7 +87,7 @@ func getWorkflowRuns(branch, workflowName string, since time.Time) ([]github.Run
 		Branch:   branch,
 		Workflow: workflowName,
 		Created:  ">=" + sinceDate,
-		Limit:    1000,
+		Limit:    2000,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get workflow runs: %w", err)

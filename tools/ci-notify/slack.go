@@ -151,10 +151,7 @@ func formatDurationComparison(current, previous time.Duration, available bool) s
 	if !available {
 		return "N/A"
 	}
-	difference := current - previous
-	if difference < 0 {
-		difference = -difference
-	}
+	difference := (current - previous).Abs()
 	if difference <= durationComparisonTolerance {
 		return formatComparison(0, "")
 	}
@@ -170,6 +167,7 @@ func BuildSuccessReportMessage(report *DigestReport) *slack.Message {
 		report.StartDate.Format("Jan 2, 2006"),
 		report.EndDate.Format("Jan 2, 2006"),
 	))
+	durationsComparable := report.DurationSamples > 0 && report.Previous.DurationSamples > 0
 	message.AddFields(
 		fmt.Sprintf("*Success Rate:*\n%.1f%% (%s)", report.SuccessRate,
 			formatPercentagePointComparison(
@@ -179,11 +177,11 @@ func BuildSuccessReportMessage(report *DigestReport) *slack.Message {
 		fmt.Sprintf("*Average Duration:*\n%s (%s)", formatDuration(report.AverageDuration),
 			formatDurationComparison(
 				report.AverageDuration, report.Previous.AverageDuration,
-				report.DurationSamples > 0 && report.Previous.DurationSamples > 0)),
+				durationsComparable)),
 		fmt.Sprintf("*Median Duration:*\n%s (%s)", formatDuration(report.MedianDuration),
 			formatDurationComparison(
 				report.MedianDuration, report.Previous.MedianDuration,
-				report.DurationSamples > 0 && report.Previous.DurationSamples > 0)),
+				durationsComparable)),
 	)
 	message.AddSection(fmt.Sprintf(
 		"*Run Duration Distribution:*\n"+
