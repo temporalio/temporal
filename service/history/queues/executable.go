@@ -141,6 +141,8 @@ type (
 		dlqEnabled                 dynamicconfig.BoolPropertyFn
 		terminalFailureCause       error
 		unexpectedErrorAttempts    int
+		alertableAttempts          int
+		alertableErrorCauseTag     metrics.Tag
 		maxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
 		dlqInternalErrors          dynamicconfig.BoolPropertyFn
 		dlqErrorPattern            dynamicconfig.StringPropertyFn
@@ -467,6 +469,28 @@ func (e *executableImpl) isSafeToDropError(err error) bool {
 	return false
 }
 
+// classifyAlertableError answers both whether err should count toward alertableAttempts and,
+// if so, what cause tag it should carry.
+func classifyAlertableError(err error) (alertable bool, causeTag metrics.Tag) {
+	if resourceExhaustedErr, ok := errors.AsType[*serviceerror.ResourceExhausted](err); ok {
+		alertable = resourceExhaustedErr.Scope != enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE ||
+			resourceExhaustedErr.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW
+		if alertable {
+			causeTag = metrics.LastAttemptCauseTag(resourceExhaustedErr.Cause.String())
+		}
+		return alertable, causeTag
+	}
+	if _, ok := err.(*serviceerror.NamespaceNotActive); ok {
+		return false, causeTag
+	}
+	if err == consts.ErrDependencyTaskNotCompleted ||
+		err == consts.ErrTaskRetry ||
+		err.Error() == consts.ErrNamespaceHandover.Error() {
+		return false, causeTag
+	}
+	return true, metrics.LastAttemptCauseTag(metrics.ServiceErrorTypeTag(err).Value)
+}
+
 // Returns true when the error is expected and should be retried. You're expected to return
 // an error in this case, as that possible-rewritten-error is what we'll return
 func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, retErr error) {
@@ -571,6 +595,15 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	}
 
 	e.incAttempt()
+
+	if alertable, causeTag := classifyAlertableError(err); alertable {
+		e.alertableAttempts++
+		e.alertableErrorCauseTag = causeTag
+		if e.attempt.Load() > taskCriticalLogMetricAttempts {
+			metrics.TaskAlertableAttempt.With(e.chasmMetricsHandler).Record(
+				int64(e.alertableAttempts), causeTag, metrics.StageTag("in_flight"))
+		}
+	}
 
 	if ok, rewrittenErr := e.isExpectedRetryableError(err); ok {
 		return rewrittenErr
@@ -695,6 +728,8 @@ func (e *executableImpl) Ack() {
 	}
 
 	metrics.TaskAttempt.With(e.chasmMetricsHandler).Record(e.attempt.Load())
+	metrics.TaskAlertableAttempt.With(e.chasmMetricsHandler).Record(
+		int64(e.alertableAttempts), e.alertableErrorCauseTag, metrics.StageTag("terminal"))
 
 	priorityTaggedProvider := e.chasmMetricsHandler.WithTags(metrics.TaskPriorityTag(e.priority.String()))
 	metrics.TaskLatency.With(priorityTaggedProvider).Record(e.inMemoryNoUserLatency)

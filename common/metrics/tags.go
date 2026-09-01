@@ -441,6 +441,14 @@ func ResourceExhaustedScopeTag(scope enumspb.ResourceExhaustedScope) Tag {
 	return Tag{Key: resourceExhaustedScopeTag, Value: scope.String()}
 }
 
+func LastAttemptCauseTag(value string) Tag {
+	return Tag{Key: LastAttemptCauseTagName, Value: value}
+}
+
+func StageTag(value string) Tag {
+	return Tag{Key: StageTagName, Value: value}
+}
+
 func ServiceNameTag(value primitives.ServiceName) Tag {
 	return Tag{Key: serviceName, Value: string(value)}
 }

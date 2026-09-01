@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/queues/queuestest"
@@ -541,6 +542,209 @@ func (s *executableSuite) TestExecuteHandleErr_ResetAttempt() {
 			s.metricsHandler.StopCapture(capture)
 		})
 	}
+}
+
+// Expected-retryable errors skip the DLQ threshold entirely, but should still behave like any
+// other attempt otherwise.
+func (s *executableSuite) TestHandleErr_ExpectedRetryableError_AttemptAndMetricsUnaffected() {
+	testCases := []struct {
+		name    string
+		taskErr error
+	}{
+		{
+			name: "SystemScopedResourceExhausted",
+			taskErr: &serviceerror.ResourceExhausted{
+				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
+				Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+				Message: "test",
+			},
+		},
+		{
+			name:    "BusyWorkflow",
+			taskErr: consts.ErrResourceExhaustedBusyWorkflow,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			// attempt starts at 1, so 30 HandleErr calls land it at exactly 31 - one past
+			// taskCriticalLogMetricAttempts (30).
+			const numAttempts = 30
+			const finalAttempt = numAttempts + 1
+
+			queueWriter := &queuestest.FakeQueueWriter{}
+			executable := s.newTestExecutable(func(p *params) {
+				p.dlqWriter = queues.NewDLQWriter(queueWriter, metrics.NoopMetricsHandler, log.NewTestLogger(), s.mockNamespaceRegistry, s.chasmRegistry)
+				p.dlqEnabled = func() bool { return true }
+				p.maxUnexpectedErrorAttempts = func() int { return 1 }
+			})
+			s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
+				ExecutionMetricTags: nil,
+				ExecutedAsActive:    true,
+				ExecutionErr:        tc.taskErr,
+			}).Times(numAttempts)
+
+			capture := s.metricsHandler.StartCapture()
+			for range numAttempts {
+				err := executable.Execute()
+				s.Error(err)
+				handledErr := executable.HandleErr(err)
+				s.Error(handledErr)
+				s.NotErrorIs(handledErr, queues.ErrTerminalTaskFailure)
+			}
+
+			// unexpectedErrorAttempts never climbed: no DLQ write despite maxUnexpectedErrorAttempts == 1.
+			s.Empty(queueWriter.EnqueueTaskRequests)
+
+			// attempt still climbs, and TaskAttempt still records once it crosses the floor.
+			inFlight := capture.Snapshot()[metrics.TaskAttempt.Name()]
+			s.Len(inFlight, 1)
+			s.EqualValues(finalAttempt, inFlight[0].Value)
+
+			executable.Ack()
+			snapshot := capture.Snapshot()
+			s.metricsHandler.StopCapture(capture)
+			terminal := snapshot[metrics.TaskAttempt.Name()]
+			s.Len(terminal, 2)
+			s.EqualValues(finalAttempt, terminal[1].Value)
+		})
+	}
+}
+
+func (s *executableSuite) TestHandleErr_IsAlertableError() {
+	testCases := []struct {
+		name                  string
+		taskErr               error
+		expectedAlertable     bool
+		expectedCauseTagValue string
+	}{
+		{
+			name:              "ResourceExhausted_NamespaceScoped_NotBusyWorkflow",
+			taskErr:           consts.ErrResourceExhaustedAPSLimit,
+			expectedAlertable: false,
+		},
+		{
+			name:                  "ResourceExhausted_BusyWorkflow",
+			taskErr:               consts.ErrResourceExhaustedBusyWorkflow,
+			expectedAlertable:     true,
+			expectedCauseTagValue: enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW.String(),
+		},
+		{
+			name: "ResourceExhausted_SystemScoped",
+			taskErr: &serviceerror.ResourceExhausted{
+				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
+				Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+				Message: "test",
+			},
+			expectedAlertable:     true,
+			expectedCauseTagValue: enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED.String(),
+		},
+		{
+			name: "ResourceExhausted_ScopeUnspecified",
+			taskErr: &serviceerror.ResourceExhausted{
+				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CIRCUIT_BREAKER_OPEN,
+				Message: "test",
+			},
+			expectedAlertable:     true,
+			expectedCauseTagValue: enumspb.RESOURCE_EXHAUSTED_CAUSE_CIRCUIT_BREAKER_OPEN.String(),
+		},
+		{
+			name:                  "UnclassifiedCatchall",
+			taskErr:               errors.New("some random error"),
+			expectedAlertable:     true,
+			expectedCauseTagValue: util.ErrorType(errors.New("some random error")),
+		},
+		{
+			name:              "NamespaceNotActive",
+			taskErr:           serviceerror.NewNamespaceNotActive("", "", ""),
+			expectedAlertable: false,
+		},
+		{
+			name:              "ErrDependencyTaskNotCompleted",
+			taskErr:           consts.ErrDependencyTaskNotCompleted,
+			expectedAlertable: false,
+		},
+		{
+			name:              "ErrTaskRetry",
+			taskErr:           consts.ErrTaskRetry,
+			expectedAlertable: false,
+		},
+		{
+			name:              "ErrNamespaceHandover",
+			taskErr:           consts.ErrNamespaceHandover,
+			expectedAlertable: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			executable := s.newTestExecutable()
+			s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
+				ExecutionMetricTags: nil,
+				ExecutedAsActive:    true,
+				ExecutionErr:        tc.taskErr,
+			})
+
+			err := executable.Execute()
+			s.Error(err)
+			s.Error(executable.HandleErr(err))
+
+			capture := s.metricsHandler.StartCapture()
+			executable.Ack()
+			snapshot := capture.Snapshot()
+			s.metricsHandler.StopCapture(capture)
+			recording := snapshot[metrics.TaskAlertableAttempt.Name()][0]
+			isAlertable := recording.Value == int64(1)
+			s.Equal(tc.expectedAlertable, isAlertable, "isAlertableError(%v)", tc.taskErr)
+			if tc.expectedAlertable {
+				s.Equal(tc.expectedCauseTagValue, recording.Tags[metrics.LastAttemptCauseTagName], "cause tag for %v", tc.taskErr)
+			}
+		})
+	}
+}
+
+func (s *executableSuite) TestAck_AlertableAttemptStageTag_Terminal() {
+	executable := s.newTestExecutable()
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    true,
+		ExecutionErr:        consts.ErrResourceExhaustedBusyWorkflow,
+	})
+
+	err := executable.Execute()
+	s.Error(err)
+	s.Error(executable.HandleErr(err))
+
+	capture := s.metricsHandler.StartCapture()
+	executable.Ack()
+	snapshot := capture.Snapshot()
+	s.metricsHandler.StopCapture(capture)
+
+	recording := snapshot[metrics.TaskAlertableAttempt.Name()][0]
+	s.Equal("terminal", recording.Tags[metrics.StageTagName])
+}
+
+func (s *executableSuite) TestHandleErr_AlertableAttemptStageTag_InFlight() {
+	executable := s.newTestExecutable()
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
+		ExecutionMetricTags: nil,
+		ExecutedAsActive:    true,
+		ExecutionErr:        consts.ErrResourceExhaustedBusyWorkflow,
+	}).Times(30) // attempt starts at 1; 30 HandleErr calls land it at 31, crossing the floor (30) once.
+
+	capture := s.metricsHandler.StartCapture()
+	for range 30 {
+		err := executable.Execute()
+		s.Error(err)
+		s.Error(executable.HandleErr(err))
+	}
+	snapshot := capture.Snapshot()
+	s.metricsHandler.StopCapture(capture)
+
+	recordings := snapshot[metrics.TaskAlertableAttempt.Name()]
+	s.Len(recordings, 1)
+	s.Equal("in_flight", recordings[0].Tags[metrics.StageTagName])
+	s.Equal(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW.String(), recordings[0].Tags[metrics.LastAttemptCauseTagName])
 }
 
 func (s *executableSuite) TestExecuteHandleErr_Corrupted() {
