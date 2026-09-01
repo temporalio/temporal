@@ -2,6 +2,7 @@ package testcontext
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"testing/synctest"
@@ -15,7 +16,7 @@ func TestTimeoutContextReportsCeilingAndExpiresAtActiveExpiration(t *testing.T) 
 
 	synctest.Test(t, func(t *testing.T) {
 		start := time.Now()
-		ctx := newTimeoutContext(t.Context(), start.Add(time.Minute), start.Add(10*time.Second))
+		ctx := newTimeoutContext(t.Context(), start.Add(time.Minute), start.Add(10*time.Second), nil)
 
 		deadline, ok := ctx.Deadline()
 		require.True(t, ok)
@@ -34,7 +35,7 @@ func TestTimeoutContextInheritsParentDeadline(t *testing.T) {
 		start := time.Now()
 		parent, cancel := context.WithDeadline(t.Context(), start.Add(time.Second))
 		defer cancel()
-		ctx := newTimeoutContext(parent, start.Add(time.Minute), start.Add(10*time.Second))
+		ctx := newTimeoutContext(parent, start.Add(time.Minute), start.Add(10*time.Second), nil)
 
 		deadline, ok := ctx.Deadline()
 		require.True(t, ok)
@@ -52,7 +53,7 @@ func TestTimeoutContextStartsCanceledWithCanceledParent(t *testing.T) {
 	parent, cancelParent := context.WithCancel(t.Context())
 	cancelParent()
 	start := time.Now()
-	ctx := newTimeoutContext(parent, start.Add(time.Minute), start.Add(10*time.Second))
+	ctx := newTimeoutContext(parent, start.Add(time.Minute), start.Add(10*time.Second), nil)
 
 	<-ctx.Done()
 	require.ErrorIs(t, ctx.Err(), context.Canceled)
@@ -63,7 +64,7 @@ func TestTimeoutContextExtensionKeepsIdentityAlivePastOldDeadline(t *testing.T) 
 
 	synctest.Test(t, func(t *testing.T) {
 		start := time.Now()
-		ctx := newTimeoutContext(t.Context(), start.Add(time.Minute), start.Add(10*time.Second))
+		ctx := newTimeoutContext(t.Context(), start.Add(time.Minute), start.Add(10*time.Second), nil)
 
 		ctx.extend(start.Add(20 * time.Second))
 		time.Sleep(11 * time.Second) //nolint:forbidigo // advance past the original active deadline
@@ -80,7 +81,7 @@ func TestTimeoutContextExtensionsAreMonotonic(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		start := time.Now()
-		ctx := newTimeoutContext(t.Context(), start.Add(time.Minute), start.Add(10*time.Second))
+		ctx := newTimeoutContext(t.Context(), start.Add(time.Minute), start.Add(10*time.Second), nil)
 
 		var wg sync.WaitGroup
 		for _, extension := range []time.Duration{15 * time.Second, 30 * time.Second, 20 * time.Second, 25 * time.Second} {
@@ -125,7 +126,7 @@ func TestTimeoutContextCancellationIsTerminal(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				start := time.Now()
 				parent, cancelParent := context.WithCancel(t.Context())
-				ctx := newTimeoutContext(parent, start.Add(time.Minute), start.Add(10*time.Second))
+				ctx := newTimeoutContext(parent, start.Add(time.Minute), start.Add(10*time.Second), nil)
 
 				tc.cancel(cancelParent, ctx)
 				<-ctx.Done()
@@ -142,7 +143,7 @@ func TestTimeoutContextDerivedDeadlineRemainsTighter(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		start := time.Now()
-		ctx := newTimeoutContext(t.Context(), start.Add(time.Minute), start.Add(10*time.Second))
+		ctx := newTimeoutContext(t.Context(), start.Add(time.Minute), start.Add(10*time.Second), nil)
 		derived, cancel := context.WithTimeout(ctx, 20*time.Second)
 		defer cancel()
 
@@ -164,14 +165,47 @@ func TestTimeoutContextCauseRemainsDeadlineExceededAfterParentCancellation(t *te
 	synctest.Test(t, func(t *testing.T) {
 		start := time.Now()
 		parent, cancelParent := context.WithCancel(t.Context())
-		ctx := newTimeoutContext(parent, start.Add(time.Minute), start.Add(time.Second))
+		ctx := newTimeoutContext(parent, start.Add(time.Minute), start.Add(time.Second), nil)
 
 		time.Sleep(time.Second) //nolint:forbidigo // advance to the active expiration
 		<-ctx.Done()
+		require.Equal(t, context.DeadlineExceeded, ctx.Err())
+		require.ErrorIs(t, context.Cause(ctx), DeadlineExceeded)
 		require.ErrorIs(t, context.Cause(ctx), context.DeadlineExceeded)
 
 		cancelParent()
 		require.ErrorIs(t, context.Cause(ctx), context.DeadlineExceeded)
+	})
+}
+
+func TestTimeoutContextPreservesParentCause(t *testing.T) {
+	t.Parallel()
+
+	parent, cancelParent := context.WithCancelCause(t.Context())
+	start := time.Now()
+	ctx := newTimeoutContext(parent, start.Add(time.Minute), start.Add(10*time.Second), nil)
+	parentCause := errors.New("parent stopped")
+	cancelParent(parentCause)
+
+	<-ctx.Done()
+	require.Equal(t, context.Canceled, ctx.Err())
+	require.ErrorIs(t, context.Cause(ctx), parentCause)
+}
+
+func TestTimeoutContextDerivedContextPreservesCause(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		start := time.Now()
+		ctx := newTimeoutContext(t.Context(), start.Add(time.Minute), start.Add(time.Second), nil)
+		derived, cancel := context.WithCancel(ctx)
+		defer cancel()
+
+		time.Sleep(time.Second) //nolint:forbidigo // advance to the active expiration
+		<-derived.Done()
+
+		require.Equal(t, context.DeadlineExceeded, derived.Err())
+		require.ErrorIs(t, context.Cause(derived), DeadlineExceeded)
 	})
 }
 
@@ -180,7 +214,7 @@ func TestTimeoutContextExpirationIsTerminal(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		start := time.Now()
-		ctx := newTimeoutContext(t.Context(), start.Add(time.Minute), start.Add(time.Second))
+		ctx := newTimeoutContext(t.Context(), start.Add(time.Minute), start.Add(time.Second), nil)
 
 		time.Sleep(time.Second) //nolint:forbidigo // advance to the active expiration
 		<-ctx.Done()
@@ -196,7 +230,7 @@ func TestTimeoutContextIgnoresStaleExpirationAfterExtension(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		start := time.Now()
-		ctx := newTimeoutContext(t.Context(), start.Add(time.Minute), start.Add(time.Second))
+		ctx := newTimeoutContext(t.Context(), start.Add(time.Minute), start.Add(time.Second), nil)
 
 		ctx.extend(start.Add(2 * time.Second))
 		ctx.expire() // simulate the original timer callback racing after extension

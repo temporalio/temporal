@@ -248,6 +248,7 @@ type contextState struct {
 	// timeout is the timeout the context was created with; immutable.
 	timeout        time.Duration
 	timeoutContext *timeoutContext
+	deadlineClaims sync.Map
 
 	mu sync.Mutex
 	// current is the context with every decorator attached. Never nil, so late
@@ -288,7 +289,7 @@ func newContextState(tb testing.TB, timeout time.Duration, explicitTimeout bool)
 		timeout:               timeout,
 		extensionCeilingLimit: ceilingLimit,
 	}
-	st.timeoutContext = newTimeoutContext(tb.Context(), ceiling, activeExpiration)
+	st.timeoutContext = newTimeoutContext(tb.Context(), ceiling, activeExpiration, st)
 	ctx := context.WithValue(st.timeoutContext, ownerKey{}, st)
 
 	// Annotate gRPC requests with the test name for OTEL tracing.
@@ -335,40 +336,29 @@ func getOrCreateContextState(tb testing.TB, cfg config) *contextState {
 // cleanup cancels the test context and reports whether its active timeout had
 // already fired, returning its failure message.
 func (s *contextState) cleanup() string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	s.timeoutContext.cancel()
-	var timeoutMessage string
-	if s.timeoutContext.Err() == context.DeadlineExceeded {
-		timeoutMessage = s.timeoutExceededMessageLocked()
+	cause := internalDeadlineExceededCause(s.timeoutContext)
+	if cause == nil || cause.owner != s || !cause.reported.CompareAndSwap(false, true) {
+		return ""
 	}
 
 	// Keep current: it is canceled now, but callers still racing with cleanup
 	// must get a context, not a panic.
-	return timeoutMessage
+	return s.deadlineExceededMessage(cause.deadline, "")
 }
 
-func (s *contextState) timeoutExceededMessageLocked() string {
-	currentTimeout := s.timeoutContext.effectiveExpiration().Sub(s.createdAt)
+func (s *contextState) deadlineExceededMessage(deadline time.Time, supplementalDetails string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	message := fmt.Sprintf("test exceeded timeout of %v", reportDuration(s.timeout))
-	if s.extensionLimit == extensionLimitGoTestTimeout {
-		message = fmt.Sprintf("test exceeded go test timeout before test context timeout of %v", reportDuration(s.timeout))
-	} else if currentTimeout > s.timeout && s.extensionLimit == extensionLimitTestContextCap {
-		ceiling, _ := s.timeoutContext.Deadline()
-		message = fmt.Sprintf(
-			"test exceeded test context extension cap of %v (originally %v)",
-			reportDuration(ceiling.Sub(s.createdAt)),
-			reportDuration(s.timeout),
-		)
-	} else if currentTimeout > s.timeout {
-		message = fmt.Sprintf("test exceeded extended timeout of %v (originally %v)", reportDuration(currentTimeout), reportDuration(s.timeout))
+	effectiveTimeout := deadline.Sub(s.createdAt)
+	message := fmt.Sprintf("testcontext deadline exceeded after %v", reportDuration(effectiveTimeout))
+	if effectiveTimeout > s.timeout {
+		message += fmt.Sprintf(" (originally %v)", reportDuration(s.timeout))
+	} else if s.extensionLimit == extensionLimitGoTestTimeout && effectiveTimeout < s.timeout {
+		message += fmt.Sprintf(" (configured %v; limited by go test timeout)", reportDuration(s.timeout))
 	}
-	if audit := s.extensionAuditLocked(); audit != "" {
-		message += "\n" + audit
-	}
-	return message
+	return appendDeadlineDetails(message, s.extensionAuditLocked(), supplementalDetails)
 }
 
 func (s *contextState) extensionAuditLocked() string {
