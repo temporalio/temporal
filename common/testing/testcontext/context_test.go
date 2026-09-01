@@ -137,7 +137,7 @@ func TestCleanup(t *testing.T) {
 				<-ctx.Done() // let the deadline pass
 			})
 
-			require.Equal(t, fmt.Sprintf("test exceeded timeout of %v", timeout), tb.error())
+			require.Equal(t, fmt.Sprintf("testcontext deadline exceeded after %v", timeout), tb.error())
 		})
 	})
 
@@ -153,9 +153,10 @@ func TestCleanup(t *testing.T) {
 			})
 
 			require.Equal(t, strings.Join([]string{
-				"test exceeded extended timeout of 1m40s (originally 1m30s)",
-				"ctx extensions   = 1 (+10s total)",
-				"  1. +10s after 0s",
+				"testcontext deadline exceeded after 1m40s (originally 1m30s)",
+				"details:",
+				"  ctx extensions   = 1 (+10s total)",
+				"    1. +10s after 0s",
 			}, "\n"), tb.error())
 		})
 	})
@@ -172,9 +173,10 @@ func TestCleanup(t *testing.T) {
 			})
 
 			require.Equal(t, strings.Join([]string{
-				"test exceeded test context extension cap of 2m0s (originally 1m30s)",
-				"ctx extensions   = 1 (+30s total; limited by test context extension cap)",
-				"  1. +30s after 0s",
+				"testcontext deadline exceeded after 2m0s (originally 1m30s)",
+				"details:",
+				"  ctx extensions   = 1 (+30s total; limited by test context extension cap)",
+				"    1. +30s after 0s",
 			}, "\n"), tb.error())
 		})
 	})
@@ -190,7 +192,7 @@ func TestCleanup(t *testing.T) {
 				<-ctx.Done()
 			})
 
-			require.Equal(t, "test exceeded go test timeout before test context timeout of 10s", tb.error())
+			require.Equal(t, "testcontext deadline exceeded after 5s (configured 10s; limited by go test timeout)", tb.error())
 		})
 	})
 
@@ -204,7 +206,7 @@ func TestCleanup(t *testing.T) {
 				<-For(tb).Done()
 			})
 
-			require.Equal(t, "test exceeded timeout of 1m30s", tb.error())
+			require.Equal(t, "testcontext deadline exceeded after 1m30s", tb.error())
 		})
 	})
 
@@ -232,7 +234,7 @@ func TestEnvTimeout(t *testing.T) {
 				<-For(tb).Done()
 			})
 
-			require.Equal(t, "test exceeded timeout of 10s", tb.error())
+			require.Equal(t, "testcontext deadline exceeded after 10s", tb.error())
 		})
 	})
 
