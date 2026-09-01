@@ -202,7 +202,7 @@ func (s *historyExecutionSuite) TestInsertUpdateSelect() {
 	s.Equal(&execution, row)
 }
 
-func (s *historyExecutionSuite) TestUpdateWithCondition_Fail() {
+func (s *historyExecutionSuite) TestUpdateWithConditionFail() {
 	conditionalStore := s.store.(sqlplugin.HistoryExecutionConditionalUpdater)
 	tests := []struct {
 		name                string
