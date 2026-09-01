@@ -9279,9 +9279,10 @@ type DeepHealthCheckResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	State v112.HealthState       `protobuf:"varint,1,opt,name=state,proto3,enum=temporal.server.api.enums.v1.HealthState" json:"state,omitempty"`
 	// Per-check diagnostic results. Populated for all checks regardless of state.
-	Checks        []*v122.HealthCheck `protobuf:"bytes,2,rep,name=checks,proto3" json:"checks,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Checks          []*v122.HealthCheck `protobuf:"bytes,2,rep,name=checks,proto3" json:"checks,omitempty"`
+	UnenforcedState v112.HealthState    `protobuf:"varint,3,opt,name=unenforced_state,json=unenforcedState,proto3,enum=temporal.server.api.enums.v1.HealthState" json:"unenforced_state,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *DeepHealthCheckResponse) Reset() {
@@ -9326,6 +9327,13 @@ func (x *DeepHealthCheckResponse) GetChecks() []*v122.HealthCheck {
 		return x.Checks
 	}
 	return nil
+}
+
+func (x *DeepHealthCheckResponse) GetUnenforcedState() v112.HealthState {
+	if x != nil {
+		return x.UnenforcedState
+	}
+	return v112.HealthState(0)
 }
 
 type SyncWorkflowStateRequest struct {
@@ -11482,10 +11490,11 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	" InvokeStateMachineMethodResponse\x12\x16\n" +
 	"\x06output\x18\x01 \x01(\fR\x06output\"C\n" +
 	"\x16DeepHealthCheckRequest\x12!\n" +
-	"\fhost_address\x18\x01 \x01(\tR\vhostAddress:\x06\x92\xc4\x03\x02\b\x01\"\x9e\x01\n" +
+	"\fhost_address\x18\x01 \x01(\tR\vhostAddress:\x06\x92\xc4\x03\x02\b\x01\"\xf4\x01\n" +
 	"\x17DeepHealthCheckResponse\x12?\n" +
 	"\x05state\x18\x01 \x01(\x0e2).temporal.server.api.enums.v1.HealthStateR\x05state\x12B\n" +
-	"\x06checks\x18\x02 \x03(\v2*.temporal.server.api.health.v1.HealthCheckR\x06checks\"\xbd\x03\n" +
+	"\x06checks\x18\x02 \x03(\v2*.temporal.server.api.health.v1.HealthCheckR\x06checks\x12T\n" +
+	"\x10unenforced_state\x18\x03 \x01(\x0e2).temporal.server.api.enums.v1.HealthStateR\x0funenforcedState\"\xbd\x03\n" +
 	"\x18SyncWorkflowStateRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12G\n" +
 	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12j\n" +

@@ -18,8 +18,11 @@ enum HealthState {
   HEALTH_STATE_SERVING = 1;
   // The host is unhealthy through external observation.
   HEALTH_STATE_NOT_SERVING = 2;
-  // The host has marked itself as not ready to serve traffic.
-  HEALTH_STATE_DECLINED_SERVING = 3;
+
+  // not currently using declined state anymore. could bring back at some point
+  reserved 3;
+  reserved "HEALTH_STATE_DECLINED_SERVING";
+
   // An internal error occurred while checking health (e.g. resolver failure).
   HEALTH_STATE_INTERNAL_ERROR = 4;
 }

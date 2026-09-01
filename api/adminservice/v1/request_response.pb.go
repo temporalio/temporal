@@ -4847,9 +4847,10 @@ type DeepHealthCheckResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	State v14.HealthState        `protobuf:"varint,1,opt,name=state,proto3,enum=temporal.server.api.enums.v1.HealthState" json:"state,omitempty"`
 	// Per-service diagnostic details including per-host breakdown.
-	Services      []*v113.ServiceHealthDetail `protobuf:"bytes,2,rep,name=services,proto3" json:"services,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Services        []*v113.ServiceHealthDetail `protobuf:"bytes,2,rep,name=services,proto3" json:"services,omitempty"`
+	UnenforcedState v14.HealthState             `protobuf:"varint,3,opt,name=unenforced_state,json=unenforcedState,proto3,enum=temporal.server.api.enums.v1.HealthState" json:"unenforced_state,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *DeepHealthCheckResponse) Reset() {
@@ -4894,6 +4895,13 @@ func (x *DeepHealthCheckResponse) GetServices() []*v113.ServiceHealthDetail {
 		return x.Services
 	}
 	return nil
+}
+
+func (x *DeepHealthCheckResponse) GetUnenforcedState() v14.HealthState {
+	if x != nil {
+		return x.UnenforcedState
+	}
+	return v14.HealthState(0)
 }
 
 type SyncWorkflowStateRequest struct {
@@ -6277,10 +6285,11 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"queue_name\x18\x01 \x01(\tR\tqueueName\x12#\n" +
 	"\rmessage_count\x18\x02 \x01(\x03R\fmessageCount\x12&\n" +
 	"\x0flast_message_id\x18\x03 \x01(\x03R\rlastMessageId\"\x18\n" +
-	"\x16DeepHealthCheckRequest\"\xaa\x01\n" +
+	"\x16DeepHealthCheckRequest\"\x80\x02\n" +
 	"\x17DeepHealthCheckResponse\x12?\n" +
 	"\x05state\x18\x01 \x01(\x0e2).temporal.server.api.enums.v1.HealthStateR\x05state\x12N\n" +
-	"\bservices\x18\x02 \x03(\v22.temporal.server.api.health.v1.ServiceHealthDetailR\bservices\"\xa0\x03\n" +
+	"\bservices\x18\x02 \x03(\v22.temporal.server.api.health.v1.ServiceHealthDetailR\bservices\x12T\n" +
+	"\x10unenforced_state\x18\x03 \x01(\x0e2).temporal.server.api.enums.v1.HealthStateR\x0funenforcedState\"\xa0\x03\n" +
 	"\x18SyncWorkflowStateRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12G\n" +
 	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12j\n" +
@@ -6594,32 +6603,33 @@ var file_temporal_server_api_adminservice_v1_request_response_proto_depIdxs = []
 	104, // 70: temporal.server.api.adminservice.v1.ListQueuesResponse.queues:type_name -> temporal.server.api.adminservice.v1.ListQueuesResponse.QueueInfo
 	140, // 71: temporal.server.api.adminservice.v1.DeepHealthCheckResponse.state:type_name -> temporal.server.api.enums.v1.HealthState
 	141, // 72: temporal.server.api.adminservice.v1.DeepHealthCheckResponse.services:type_name -> temporal.server.api.health.v1.ServiceHealthDetail
-	106, // 73: temporal.server.api.adminservice.v1.SyncWorkflowStateRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	142, // 74: temporal.server.api.adminservice.v1.SyncWorkflowStateRequest.versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
-	143, // 75: temporal.server.api.adminservice.v1.SyncWorkflowStateRequest.version_histories:type_name -> temporal.server.api.history.v1.VersionHistories
-	144, // 76: temporal.server.api.adminservice.v1.SyncWorkflowStateResponse.versioned_transition_artifact:type_name -> temporal.server.api.replication.v1.VersionedTransitionArtifact
-	106, // 77: temporal.server.api.adminservice.v1.GenerateLastHistoryReplicationTasksRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	145, // 78: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionRequest.task_queue_partition:type_name -> temporal.server.api.taskqueue.v1.TaskQueuePartition
-	146, // 79: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionRequest.build_ids:type_name -> temporal.api.taskqueue.v1.TaskQueueVersionSelection
-	105, // 80: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse.versions_info_internal:type_name -> temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse.VersionsInfoInternalEntry
-	147, // 81: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse.scale_info:type_name -> temporal.server.api.taskqueue.v1.PartitionScaleInfo
-	145, // 82: temporal.server.api.adminservice.v1.ForceUnloadTaskQueuePartitionRequest.task_queue_partition:type_name -> temporal.server.api.taskqueue.v1.TaskQueuePartition
-	127, // 83: temporal.server.api.adminservice.v1.GetTaskQueueUserDataRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
-	148, // 84: temporal.server.api.adminservice.v1.GetTaskQueueUserDataResponse.user_data:type_name -> temporal.server.api.persistence.v1.TaskQueueTypeUserData
-	106, // 85: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest.executions:type_name -> temporal.api.common.v1.WorkflowExecution
-	93,  // 86: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest.refresh_tasks_operation:type_name -> temporal.server.api.adminservice.v1.BatchOperationRefreshTasks
-	0,   // 87: temporal.server.api.adminservice.v1.MigrateScheduleRequest.target:type_name -> temporal.server.api.adminservice.v1.MigrateScheduleRequest.SchedulerTarget
-	116, // 88: temporal.server.api.adminservice.v1.GetReplicationMessagesResponse.ShardMessagesEntry.value:type_name -> temporal.server.api.replication.v1.ReplicationMessages
-	149, // 89: temporal.server.api.adminservice.v1.AddSearchAttributesRequest.SearchAttributesEntry.value:type_name -> temporal.api.enums.v1.IndexedValueType
-	149, // 90: temporal.server.api.adminservice.v1.GetSearchAttributesResponse.CustomAttributesEntry.value:type_name -> temporal.api.enums.v1.IndexedValueType
-	149, // 91: temporal.server.api.adminservice.v1.GetSearchAttributesResponse.SystemAttributesEntry.value:type_name -> temporal.api.enums.v1.IndexedValueType
-	107, // 92: temporal.server.api.adminservice.v1.AddTasksRequest.Task.blob:type_name -> temporal.api.common.v1.DataBlob
-	150, // 93: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse.VersionsInfoInternalEntry.value:type_name -> temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal
-	94,  // [94:94] is the sub-list for method output_type
-	94,  // [94:94] is the sub-list for method input_type
-	94,  // [94:94] is the sub-list for extension type_name
-	94,  // [94:94] is the sub-list for extension extendee
-	0,   // [0:94] is the sub-list for field type_name
+	140, // 73: temporal.server.api.adminservice.v1.DeepHealthCheckResponse.unenforced_state:type_name -> temporal.server.api.enums.v1.HealthState
+	106, // 74: temporal.server.api.adminservice.v1.SyncWorkflowStateRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	142, // 75: temporal.server.api.adminservice.v1.SyncWorkflowStateRequest.versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
+	143, // 76: temporal.server.api.adminservice.v1.SyncWorkflowStateRequest.version_histories:type_name -> temporal.server.api.history.v1.VersionHistories
+	144, // 77: temporal.server.api.adminservice.v1.SyncWorkflowStateResponse.versioned_transition_artifact:type_name -> temporal.server.api.replication.v1.VersionedTransitionArtifact
+	106, // 78: temporal.server.api.adminservice.v1.GenerateLastHistoryReplicationTasksRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
+	145, // 79: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionRequest.task_queue_partition:type_name -> temporal.server.api.taskqueue.v1.TaskQueuePartition
+	146, // 80: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionRequest.build_ids:type_name -> temporal.api.taskqueue.v1.TaskQueueVersionSelection
+	105, // 81: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse.versions_info_internal:type_name -> temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse.VersionsInfoInternalEntry
+	147, // 82: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse.scale_info:type_name -> temporal.server.api.taskqueue.v1.PartitionScaleInfo
+	145, // 83: temporal.server.api.adminservice.v1.ForceUnloadTaskQueuePartitionRequest.task_queue_partition:type_name -> temporal.server.api.taskqueue.v1.TaskQueuePartition
+	127, // 84: temporal.server.api.adminservice.v1.GetTaskQueueUserDataRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	148, // 85: temporal.server.api.adminservice.v1.GetTaskQueueUserDataResponse.user_data:type_name -> temporal.server.api.persistence.v1.TaskQueueTypeUserData
+	106, // 86: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest.executions:type_name -> temporal.api.common.v1.WorkflowExecution
+	93,  // 87: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest.refresh_tasks_operation:type_name -> temporal.server.api.adminservice.v1.BatchOperationRefreshTasks
+	0,   // 88: temporal.server.api.adminservice.v1.MigrateScheduleRequest.target:type_name -> temporal.server.api.adminservice.v1.MigrateScheduleRequest.SchedulerTarget
+	116, // 89: temporal.server.api.adminservice.v1.GetReplicationMessagesResponse.ShardMessagesEntry.value:type_name -> temporal.server.api.replication.v1.ReplicationMessages
+	149, // 90: temporal.server.api.adminservice.v1.AddSearchAttributesRequest.SearchAttributesEntry.value:type_name -> temporal.api.enums.v1.IndexedValueType
+	149, // 91: temporal.server.api.adminservice.v1.GetSearchAttributesResponse.CustomAttributesEntry.value:type_name -> temporal.api.enums.v1.IndexedValueType
+	149, // 92: temporal.server.api.adminservice.v1.GetSearchAttributesResponse.SystemAttributesEntry.value:type_name -> temporal.api.enums.v1.IndexedValueType
+	107, // 93: temporal.server.api.adminservice.v1.AddTasksRequest.Task.blob:type_name -> temporal.api.common.v1.DataBlob
+	150, // 94: temporal.server.api.adminservice.v1.DescribeTaskQueuePartitionResponse.VersionsInfoInternalEntry.value:type_name -> temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal
+	95,  // [95:95] is the sub-list for method output_type
+	95,  // [95:95] is the sub-list for method input_type
+	95,  // [95:95] is the sub-list for extension type_name
+	95,  // [95:95] is the sub-list for extension extendee
+	0,   // [0:95] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_adminservice_v1_request_response_proto_init() }

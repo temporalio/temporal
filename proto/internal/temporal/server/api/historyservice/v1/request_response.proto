@@ -603,12 +603,12 @@ message VerifyFirstWorkflowTaskScheduledRequest {
 message VerifyFirstWorkflowTaskScheduledResponse {}
 
 /**
-* RecordChildExecutionCompletedRequest is used for reporting the completion of child execution to parent workflow
-* execution which started it.  When a child execution is completed it creates this request and calls the
-* RecordChildExecutionCompleted API with the workflowExecution of parent.  It also sets the completedExecution of the
-* child as it could potentially be different than the ChildExecutionStartedEvent of parent in the situation when
-* child creates multiple runs through ContinueAsNew before finally completing.
-**/
+ * RecordChildExecutionCompletedRequest is used for reporting the completion of child execution to parent workflow
+ * execution which started it.  When a child execution is completed it creates this request and calls the
+ * RecordChildExecutionCompleted API with the workflowExecution of parent.  It also sets the completedExecution of the
+ * child as it could potentially be different than the ChildExecutionStartedEvent of parent in the situation when
+ * child creates multiple runs through ContinueAsNew before finally completing.
+ **/
 message RecordChildExecutionCompletedRequest {
   option (routing).workflow_id = "parent_execution.workflow_id";
 
@@ -1092,9 +1092,9 @@ message GetWorkflowExecutionHistoryReverseResponse {
 }
 
 /**
-  * StartEventId defines the beginning of the event to fetch. The first event is exclusive.
-  * EndEventId and EndEventVersion defines the end of the event to fetch. The end event is exclusive.
-  **/
+ * StartEventId defines the beginning of the event to fetch. The first event is exclusive.
+ * EndEventId and EndEventVersion defines the end of the event to fetch. The end event is exclusive.
+ **/
 message GetWorkflowExecutionRawHistoryV2Request {
   option (routing).workflow_id = "request.execution.workflow_id";
 
@@ -1312,6 +1312,7 @@ message DeepHealthCheckResponse {
   temporal.server.api.enums.v1.HealthState state = 1;
   // Per-check diagnostic results. Populated for all checks regardless of state.
   repeated temporal.server.api.health.v1.HealthCheck checks = 2;
+  temporal.server.api.enums.v1.HealthState unenforced_state = 3;
 }
 
 message SyncWorkflowStateRequest {
@@ -1333,6 +1334,7 @@ message SyncWorkflowStateResponse {
   reserved 4;
   replication.v1.VersionedTransitionArtifact versioned_transition_artifact = 5;
 }
+
 // (-- api-linter: core::0134::request-mask-required=disabled
 // (-- api-linter: core::0134::request-resource-required=disabled
 message UpdateActivityOptionsRequest {
