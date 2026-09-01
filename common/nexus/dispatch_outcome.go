@@ -291,6 +291,8 @@ func (r DispatchResult) metricOutcome() string {
 		return "handler_error:" + boundHandlerErrorType(hErrType)
 	case DispatchOutcomeRequestTimeout:
 		return "handler_timeout"
+	case DispatchOutcomeUnrecognized:
+		return "handler_error:EMPTY_OUTCOME"
 	default:
 		return "handler_error:EMPTY_OUTCOME"
 	}
