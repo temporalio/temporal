@@ -1527,9 +1527,17 @@ var (
 	ReplicatorLatency                                 = NewTimerDef("replicator_latency")
 	ReplicatorDLQFailures                             = NewCounterDef("replicator_dlq_enqueue_fails")
 	NamespaceReplicationEnqueueDLQCount               = NewCounterDef("namespace_replication_dlq_enqueue_requests")
-	ParentClosePolicyProcessorSuccess                 = NewCounterDef("parent_close_policy_processor_requests")
-	ParentClosePolicyProcessorFailures                = NewCounterDef("parent_close_policy_processor_errors")
-	SignalExternalWorkflowExecutionFailures           = NewCounterDef(
+	NamespaceReplicationApplyOutcomes                 = NewCounterDef(
+		"namespace_replication_apply_outcomes",
+		WithDescription("The number of terminal namespace metadata replication apply outcomes per target cluster."),
+	)
+	NamespaceReplicationApplyEndToEndLatency = NewTimerDef(
+		"namespace_replication_apply_end_to_end_latency",
+		WithDescription("Latency from source transport acceptance to a terminal namespace metadata replication apply outcome."),
+	)
+	ParentClosePolicyProcessorSuccess       = NewCounterDef("parent_close_policy_processor_requests")
+	ParentClosePolicyProcessorFailures      = NewCounterDef("parent_close_policy_processor_errors")
+	SignalExternalWorkflowExecutionFailures = NewCounterDef(
 		"signal_external_workflow_execution_failures",
 		WithDescription("The number of signal external workflow execution failures by cause."),
 	)

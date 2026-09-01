@@ -94,6 +94,7 @@ var Module = fx.Options(
 		dataMerger nsreplication.NamespaceDataMerger,
 		admitter nsreplication.NamespaceReplicationAdmitter,
 		logger log.Logger,
+		metricsHandler metrics.Handler,
 		eventLogger otellog.Logger,
 		serviceConfig *Config,
 		testHooks testhooks.TestHooks,
@@ -105,6 +106,7 @@ var Module = fx.Options(
 			admitter,
 			logger,
 			testHooks,
+			nsreplication.WithNamespaceReplicationMetrics(metricsHandler),
 			nsreplication.WithNamespaceReplicationLifecycleEvents(
 				eventLogger,
 				serviceConfig.EmitNamespaceLifecycleEvents,
