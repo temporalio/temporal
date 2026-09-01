@@ -62,7 +62,7 @@ func TestTimeoutContextDoesNotClaimParentDeadline(t *testing.T) {
 		<-ctx.Done()
 
 		require.Equal(t, context.DeadlineExceeded, ctx.Err())
-		require.False(t, errors.Is(context.Cause(ctx), DeadlineExceeded))
+		require.NotErrorIs(t, context.Cause(ctx), DeadlineExceeded)
 		require.ErrorIs(t, context.Cause(ctx), context.DeadlineExceeded)
 	})
 }
