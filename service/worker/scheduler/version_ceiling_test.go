@@ -2,6 +2,10 @@ package scheduler
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -75,6 +79,36 @@ func TestDetermineVersionTransitions(t *testing.T) {
 			require.Equal(t, tc.wantVersion, version)
 			require.Equal(t, tc.wantCeiling, ceiling)
 		})
+	}
+}
+
+func TestDetermineVersionTransitionCeilingTruthTable(t *testing.T) {
+	var table struct {
+		TestCases []struct {
+			DefaultVersion  SchedulerWorkflowVersion `json:"defaultVersion"`
+			RecordedVersion SchedulerWorkflowVersion `json:"recordedVersion"`
+			CeilingCases    []struct {
+				Name        string                   `json:"name"`
+				Ceiling     int                      `json:"ceiling"`
+				WantVersion SchedulerWorkflowVersion `json:"wantVersion"`
+				WantCeiling int                      `json:"wantCeiling"`
+			} `json:"ceilingCases"`
+		} `json:"testCases"`
+	}
+
+	data, err := os.ReadFile(filepath.Join("testdata", "version_ceiling_truth_table.json"))
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(data, &table))
+	require.NotEmpty(t, table.TestCases)
+
+	for _, versionCase := range table.TestCases {
+		for _, ceilingCase := range versionCase.CeilingCases {
+			t.Run(fmt.Sprintf("default_%d/recorded_%d/%s", versionCase.DefaultVersion, versionCase.RecordedVersion, ceilingCase.Name), func(t *testing.T) {
+				version, capturedCeiling := determineVersionTransition(versionCase.DefaultVersion, versionCase.RecordedVersion, ceilingCase.Ceiling)
+				require.Equal(t, ceilingCase.WantVersion, version)
+				require.Equal(t, ceilingCase.WantCeiling, capturedCeiling)
+			})
+		}
 	}
 }
 

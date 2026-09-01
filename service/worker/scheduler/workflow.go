@@ -127,14 +127,22 @@ type (
 		// without modifying state).
 		specBuilder *SpecBuilder
 		cspec       *CompiledSpec
-		// enableCHASMMigration and migrateWithRunningWorkflows are re-evaluated every iteration
-		// inside the "tweakables" MutableSideEffect.
-		enableCHASMMigration        func() bool
+
+		// Dynamic-config readers are injected per namespace. updateTweakables samples them inside a
+		// MutableSideEffect and records the resulting values in tweakables for deterministic replay.
+		// enableCHASMMigration reads history.enableCHASMSchedulerMigration and
+		// history.chasmSchedulerMigrationRolloutPercent to select V1 schedules for CHASM migration.
+		enableCHASMMigration func() bool
+		// migrateWithRunningWorkflows reads history.enableCHASMSchedulerMigrationWithRunningWorkflows
+		// to allow CHASM migration while schedule actions are running.
 		migrateWithRunningWorkflows func() bool
-		// versionCeiling is re-evaluated every iteration inside the "tweakables" MutableSideEffect.
-		// The version cannot decrease, but raising the ceiling can advance it on the next iteration.
-		versionCeiling        func() int
-		lastVersionCeiling    int
+		// versionCeiling reads worker.schedulerV1VersionCeiling to cap the V1 scheduler version
+		// written to history for peer-cluster replay and rollback compatibility.
+		versionCeiling func() int
+
+		// lastVersionCeiling is the last dynamic-config value checked for an unsupported-ceiling warning.
+		lastVersionCeiling int
+		// hasLastVersionCeiling distinguishes the first check from a valid zero-valued ceiling.
 		hasLastVersionCeiling bool
 
 		tweakables TweakablePolicies
@@ -160,29 +168,39 @@ type (
 	}
 
 	TweakablePolicies struct {
-		DefaultCatchupWindow              time.Duration            // Default for catchup window
-		MinCatchupWindow                  time.Duration            // Minimum for catchup window
-		RetentionTime                     time.Duration            // How long to keep schedules after they're done
-		CanceledTerminatedCountAsFailures bool                     // Whether cancelled+terminated count for pause-on-failure
-		AlwaysAppendTimestamp             bool                     // Whether to append timestamp for non-overlapping workflows too
-		FutureActionCount                 int                      // The number of future action times to include in Describe.
-		RecentActionCount                 int                      // The number of recent actual action results to include in Describe.
-		FutureActionCountForList          int                      // The number of future action times to include in List (search attr).
-		RecentActionCountForList          int                      // The number of recent actual action results to include in List (search attr).
-		IterationsBeforeContinueAsNew     int                      // Number of iterations per run, or 0 to use server-suggested
-		SleepWhilePaused                  bool                     // If true, don't set timers while paused/out of actions
-		MaxBufferSize                     int                      // MaxBufferSize limits the number of buffered starts and backfills
-		BackfillsPerIteration             int                      // How many backfilled actions to take per iteration (implies rate limit since min sleep is 1s)
-		AllowZeroSleep                    bool                     // Whether to allow a zero-length timer. Used for workflow compatibility.
-		ReuseTimer                        bool                     // Whether to reuse timer. Used for workflow compatibility.
-		NextTimeCacheV2Size               int                      // Size of next time cache (v2)
-		SpecFieldLengthLimit              int                      // item limit per spec field on the ScheduleInfo memo
-		Version                           SchedulerWorkflowVersion // Used to keep track of schedules version to release new features and for backward compatibility
-		// version 0 corresponds to the schedule version that comes before introducing the Version parameter
-		VersionCeiling int // Version ceiling captured for this iteration
+		DefaultCatchupWindow              time.Duration // Default for catchup window
+		MinCatchupWindow                  time.Duration // Minimum for catchup window
+		RetentionTime                     time.Duration // How long to keep schedules after they're done
+		CanceledTerminatedCountAsFailures bool          // Whether cancelled+terminated count for pause-on-failure
+		AlwaysAppendTimestamp             bool          // Whether to append timestamp for non-overlapping workflows too
+		FutureActionCount                 int           // The number of future action times to include in Describe.
+		RecentActionCount                 int           // The number of recent actual action results to include in Describe.
+		FutureActionCountForList          int           // The number of future action times to include in List (search attr).
+		RecentActionCountForList          int           // The number of recent actual action results to include in List (search attr).
+		IterationsBeforeContinueAsNew     int           // Number of iterations per run, or 0 to use server-suggested
+		SleepWhilePaused                  bool          // If true, don't set timers while paused/out of actions
+		MaxBufferSize                     int           // MaxBufferSize limits the number of buffered starts and backfills
+		BackfillsPerIteration             int           // How many backfilled actions to take per iteration (implies rate limit since min sleep is 1s)
+		AllowZeroSleep                    bool          // Whether to allow a zero-length timer. Used for workflow compatibility.
+		ReuseTimer                        bool          // Whether to reuse timer. Used for workflow compatibility.
+		NextTimeCacheV2Size               int           // Size of next time cache (v2)
+		SpecFieldLengthLimit              int           // item limit per spec field on the ScheduleInfo memo
 
-		EnableCHASMMigration        bool // Whether to automatically migrate this schedule to CHASM (V2)
-		MigrateWithRunningWorkflows bool // Whether to migrate this schedule to CHASM (V2) while it has running workflows
+		// Dynamic-config-derived values are captured in the "tweakables" MutableSideEffect. Replay
+		// reads the recorded values, rather than querying the current dynamic-config values.
+		// Version is the binary's default version, capped by worker.schedulerV1VersionCeiling and
+		// retained monotonically for the run to preserve backwards compatibility.
+		// Version 0 corresponds to the schedule version that came before introducing this field.
+		Version SchedulerWorkflowVersion
+		// VersionCeiling captures the raw worker.schedulerV1VersionCeiling value, even when Version
+		// is retained. This makes a ceiling change part of the recorded tweakables value.
+		VersionCeiling int
+		// EnableCHASMMigration captures history.enableCHASMSchedulerMigration and
+		// history.chasmSchedulerMigrationRolloutPercent to enable automatic CHASM migration.
+		EnableCHASMMigration bool
+		// MigrateWithRunningWorkflows captures history.enableCHASMSchedulerMigrationWithRunningWorkflows
+		// to allow CHASM migration while schedule actions are running.
+		MigrateWithRunningWorkflows bool
 	}
 
 	// this is for backwards compatibility; current code serializes cache as proto
@@ -1859,10 +1877,14 @@ func (s *scheduler) hasMinVersion(version SchedulerWorkflowVersion) bool {
 	return s.tweakables.Version >= version
 }
 
-// determineVersion returns this iteration's version and ceiling. The version cannot decrease, but
-// the latest ceiling is applied on each iteration.
+// determineVersion returns this iteration's effective version and raw ceiling. The version cannot
+// decrease, but the latest worker.schedulerV1VersionCeiling namespace dynamic-config value is
+// applied on each iteration. The raw ceiling is captured in tweakables even when the effective
+// version is retained.
 func (s *scheduler) determineVersion(defaultVersion SchedulerWorkflowVersion) (SchedulerWorkflowVersion, int) {
 	ceiling := s.versionCeiling()
+	// Warn for a newly observed ceiling or a changed value. hasLastVersionCeiling distinguishes
+	// the initial observation from a valid ceiling of zero, which is the field's zero value.
 	if ceiling != s.lastVersionCeiling || !s.hasLastVersionCeiling {
 		if ceiling > int(defaultVersion) {
 			s.logger.Warn("worker.schedulerV1VersionCeiling above the version this binary records; no effect",
@@ -1874,6 +1896,9 @@ func (s *scheduler) determineVersion(defaultVersion SchedulerWorkflowVersion) (S
 	return determineVersionTransition(defaultVersion, s.tweakables.Version, ceiling)
 }
 
+// determineVersionTransition applies ceiling to defaultVersion, then retains recordedVersion when it
+// is higher. This allows a raised ceiling to advance a run without allowing a lowered ceiling to
+// downgrade a version already recorded in history. It returns that effective version and the raw ceiling.
 func determineVersionTransition(defaultVersion, recordedVersion SchedulerWorkflowVersion, ceiling int) (SchedulerWorkflowVersion, int) {
 	return max(clampVersion(defaultVersion, ceiling), recordedVersion), ceiling
 }
