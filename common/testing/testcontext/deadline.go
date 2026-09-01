@@ -32,6 +32,13 @@ func WithDeadline(parent context.Context, deadline time.Time) (context.Context, 
 	if owner == nil {
 		return context.WithDeadline(parent, deadline)
 	}
+	if parentDeadline, ok := parent.Deadline(); ok &&
+		!deadline.Before(parentDeadline) &&
+		parentDeadline.Before(owner.timeoutContext.effectiveExpiration()) {
+		// A tighter deadline added by the caller remains caller-owned even
+		// when this derived context requests that exact deadline.
+		return context.WithDeadline(parent, deadline)
+	}
 	return context.WithDeadlineCause(parent, deadline, newDeadlineExceededCause(deadline, owner))
 }
 

@@ -52,9 +52,12 @@ func TestWithDeadline(t *testing.T) {
 		t.Parallel()
 
 		synctest.Test(t, func(t *testing.T) {
-			parent, cancelParent := context.WithTimeout(For(t), time.Second)
-			defer cancelParent()
-			ctx, cancel := WithDeadline(parent, time.Now().Add(2*time.Second))
+			parentDeadline := time.Now().Add(time.Second)
+			parent := reportedDeadlineContext{
+				Context:  For(t),
+				deadline: parentDeadline,
+			}
+			ctx, cancel := WithDeadline(parent, parentDeadline)
 			defer cancel()
 
 			time.Sleep(time.Second) //nolint:forbidigo // advance to the caller-owned deadline
@@ -65,6 +68,15 @@ func TestWithDeadline(t *testing.T) {
 			require.ErrorIs(t, context.Cause(ctx), context.DeadlineExceeded)
 		})
 	})
+}
+
+type reportedDeadlineContext struct {
+	context.Context
+	deadline time.Time
+}
+
+func (c reportedDeadlineContext) Deadline() (time.Time, bool) {
+	return c.deadline, true
 }
 
 func TestFailIfDeadlineExceeded(t *testing.T) {
