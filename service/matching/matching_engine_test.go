@@ -3916,7 +3916,9 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 	s.Equal(maxTaskId, pqMgr.backlogMgr.getDB().GetMaxReadLevel(0))
 
 	// validate the approximateBacklogCounter
-	s.EqualValues(taskCount*numWorkers, totalApproximateBacklogCount(pqMgr.backlogMgr))
+	s.EventuallyWithT(func(collect *assert.CollectT) {
+		require.Equal(collect, int64(taskCount*numWorkers), totalApproximateBacklogCount(pqMgr.backlogMgr))
+	}, 5*time.Second, 10*time.Millisecond, "backlog counter should be total task count")
 
 	// Unload the PQM
 	s.matchingEngine.unloadTaskQueuePartition(partitionManager, unloadCauseForce)
@@ -3946,10 +3948,11 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 	// stopped (which would not result in resetting).
 	pqMgr.backlogMgr.getDB().setMaxReadLevelForTesting(subqueueZero, maxTaskId)
 
-	s.Equal(0, s.taskManager.getTaskCount(ptq))
 	s.EventuallyWithT(func(collect *assert.CollectT) {
 		require.Equal(collect, int64(0), totalApproximateBacklogCount(pqMgr.backlogMgr))
 	}, 4*time.Second, 10*time.Millisecond, "backlog counter should have been reset")
+
+	s.Equal(maxTaskId, pqMgr.backlogMgr.InternalStatus()[0].AckLevel)
 }
 
 // TestResettingBacklogCounter tests the scenario where approximateBacklogCounter over-counts and resets it accordingly
@@ -3962,10 +3965,8 @@ func (s *matchingEngineSuite) TestResetBacklogCounterNoDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestResetBacklogCounterDBErrors() {
-	s.T().Skip("Skipping this as the backlog counter could under-count. Fix requires making " +
-		"UpdateState an atomic operation.")
-	if s.newMatcher {
-		s.T().Skip("test is flaky with new matcher")
+	if s.fairness {
+		s.T().Skip("test is flaky with fairness matcher")
 	}
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
