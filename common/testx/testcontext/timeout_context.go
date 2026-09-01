@@ -100,6 +100,13 @@ func (c *timeoutContext) effectiveExpiration() time.Time {
 	return c.activeExpiration
 }
 
+func (c *timeoutContext) activeExpirationOwnership() (time.Time, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	owned := !c.hasParentDeadline || c.activeExpiration.Before(c.parentDeadline)
+	return c.activeExpiration, owned
+}
+
 func (c *timeoutContext) cancel() {
 	c.finish(context.Canceled, context.Canceled)
 }
