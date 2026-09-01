@@ -3059,16 +3059,6 @@ func (e *matchingEngineImpl) pollTask(
 	// which counts against our SLO. By shortening the timeout by a very small amount, the emptyTask can be
 	// returned to the handler before a context timeout error is generated.
 	workerInstanceKey := pollMetadata.workerInstanceKey
-	if workerInstanceKey != "" && e.shutdownWorkers.Get(workerInstanceKey) != nil {
-		e.logger.Info("Rejecting poll from recently-shutdown worker",
-			tag.WorkflowNamespaceID(partition.NamespaceId()),
-			tag.WorkflowTaskQueueName(partition.TaskQueue().Name()),
-			tag.WorkflowTaskQueueType(partition.TaskType()),
-			tag.NewStringTag("worker-instance-key", workerInstanceKey),
-		)
-		return nil, false, errNoTasks
-	}
-
 	// For non-forwarded polls, subtract a proportional random jitter to spread expiration
 	// times across pollers and prevent thundering herd reconnects. Jitter is capped so the
 	// interval never falls below forwardedPollMinInterval.
@@ -3085,22 +3075,29 @@ func (e *matchingEngineImpl) pollTask(
 	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, longPollInterval, returnEmptyTaskTimeBudget)
 	defer cancel()
 
+	if workerInstanceKey != "" {
+		// Registration must happen before the shutdown-cache check:
+		//   - If shutdown happens before registration, the cache check rejects the poll.
+		//   - If shutdown happens after registration, the shutdown logic cancels the registered poll.
+		// Use UUID because pollerID is reused when forwarded.
+		pollerTrackerKey := uuid.NewString()
+		e.workerInstancePollers.Add(workerInstanceKey, pollerTrackerKey, cancel)
+		defer e.workerInstancePollers.Remove(workerInstanceKey, pollerTrackerKey)
+
+		if e.shutdownWorkers.Get(workerInstanceKey) != nil {
+			e.logger.Debug("Rejecting poll from recently-shutdown worker",
+				tag.WorkflowNamespaceID(partition.NamespaceId()),
+				tag.WorkflowTaskQueueName(partition.TaskQueue().Name()),
+				tag.WorkflowTaskQueueType(partition.TaskType()),
+				tag.NewStringTag("worker-instance-key", workerInstanceKey),
+			)
+			return nil, false, errNoTasks
+		}
+	}
+
 	if pollerID, ok := ctx.Value(pollerIDKey).(string); ok && pollerID != "" {
 		e.outstandingPollers.Set(pollerID, cancel)
-
-		// Also track by worker instance key for bulk cancellation during shutdown.
-		// Use UUID (not pollerID) because pollerID is reused when forwarded.
-		pollerTrackerKey := uuid.NewString()
-		if workerInstanceKey != "" {
-			e.workerInstancePollers.Add(workerInstanceKey, pollerTrackerKey, cancel)
-		}
-
-		defer func() {
-			e.outstandingPollers.Delete(pollerID)
-			if workerInstanceKey != "" {
-				e.workerInstancePollers.Remove(workerInstanceKey, pollerTrackerKey)
-			}
-		}()
+		defer e.outstandingPollers.Delete(pollerID)
 	}
 	return pm.PollTask(ctx, pollMetadata)
 }
