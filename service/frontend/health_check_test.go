@@ -69,11 +69,13 @@ func (s *healthCheckerSuite) TearDownTest() {
 }
 
 func (s *healthCheckerSuite) Test_Check_Serving() {
+	// 1 failed of 5 = 20%, under the 25% threshold
 	s.resolver.EXPECT().AvailableMembers().Return([]membership.HostInfo{
 		membership.NewHostInfoFromAddress("1"),
 		membership.NewHostInfoFromAddress("2"),
 		membership.NewHostInfoFromAddress("3"),
 		membership.NewHostInfoFromAddress("1"),
+		membership.NewHostInfoFromAddress("3"),
 	})
 
 	result, err := s.checker.Check(context.Background())
@@ -131,7 +133,7 @@ func (s *healthCheckerSuite) Test_Check_GetResolver_Error() {
 
 func (s *healthCheckerSuite) Test_Check_Boundary_Failure_Percentage_Equals_Threshold() {
 	// Test when failure percentage exactly equals the threshold (0.25)
-	// With 4 hosts, 1 failed = 0.25 (25%), should return SERVING since it's not > threshold
+	// With 4 hosts, 1 failed = 0.25 (25%), should return NOT_SERVING since the threshold is inclusive
 	s.resolver.EXPECT().AvailableMembers().Return([]membership.HostInfo{
 		membership.NewHostInfoFromAddress("1"), // SERVING
 		membership.NewHostInfoFromAddress("2"), // NOT_SERVING (failed)
@@ -141,7 +143,7 @@ func (s *healthCheckerSuite) Test_Check_Boundary_Failure_Percentage_Equals_Thres
 
 	result, err := s.checker.Check(context.Background())
 	s.Require().NoError(err)
-	s.Equal(enumsspb.HEALTH_STATE_SERVING, result.State)
+	s.Equal(enumsspb.HEALTH_STATE_NOT_SERVING, result.State)
 }
 
 func (s *healthCheckerSuite) Test_Check_Single_Host_Scenarios() {
