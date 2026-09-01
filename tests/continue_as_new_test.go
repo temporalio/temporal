@@ -620,7 +620,7 @@ func (s *ContinueAsNewTestSuite) TestContinueAsNewMinBackoffDoesNotAccumulate() 
 	const continueAsNewCount = 3
 	var firstWorkflowTaskBackoffs []time.Duration
 	runIDs := []string{we.RunId}
-	for i := 0; i < continueAsNewCount+1; i++ {
+	for i := range continueAsNewCount + 1 {
 		// Each task is polled after the run has been made executable. For continued runs,
 		// the admitted update below schedules a workflow task before ExecutionTime.
 		task, err := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
