@@ -76,28 +76,28 @@ type (
 		namespace string                         // namespace name
 	}
 
-	// TestHookUpdateWorkflowExecutionRequest is passed only to the test-only
+	// TestHookUpdateExecutionRequest is passed only to the test-only
 	// HistoryPassiveReplicationTest.
-	TestHookUpdateWorkflowExecutionRequest struct {
-		WorkflowContext                 *ContextImpl
-		ShardContext                    historyi.ShardContext
-		UpdateMode                      persistence.UpdateWorkflowMode
-		NewContext                      historyi.WorkflowContext
-		NewMutableState                 historyi.MutableState
-		UpdateWorkflowTransactionPolicy historyi.TransactionPolicy
-		NewWorkflowTransactionPolicy    *historyi.TransactionPolicy
-		PrepareMutableStateTransaction  func() error
-		CloseMutableStateTransaction    func() (*WorkflowTransactionPayload, error)
-		ExecuteWorkflowTransaction      func(*WorkflowTransactionPayload) error
+	TestHookUpdateExecutionRequest struct {
+		ExecutionContext                 *ContextImpl
+		ShardContext                     historyi.ShardContext
+		UpdateMode                       persistence.UpdateWorkflowMode
+		NewContext                       historyi.WorkflowContext
+		NewMutableState                  historyi.MutableState
+		UpdateExecutionTransactionPolicy historyi.TransactionPolicy
+		NewExecutionTransactionPolicy    *historyi.TransactionPolicy
+		PrepareMutableStateTransaction   func() error
+		CloseMutableStateTransaction     func() (*ExecutionTransactionPayload, error)
+		ExecuteExecutionTransaction      func(*ExecutionTransactionPayload) error
 	}
 
-	// WorkflowTransactionPayload contains the persistence payload produced by closing
+	// ExecutionTransactionPayload contains the persistence payload produced by closing
 	// an update-with-new transaction.
-	WorkflowTransactionPayload struct {
-		WorkflowMutation    *persistence.WorkflowMutation
-		WorkflowEvents      []*persistence.WorkflowEvents
-		NewWorkflowSnapshot *persistence.WorkflowSnapshot
-		NewWorkflowEvents   []*persistence.WorkflowEvents
+	ExecutionTransactionPayload struct {
+		ExecutionMutation    *persistence.WorkflowMutation
+		ExecutionEvents      []*persistence.WorkflowEvents
+		NewExecutionSnapshot *persistence.WorkflowSnapshot
+		NewExecutionEvents   []*persistence.WorkflowEvents
 	}
 )
 
@@ -826,14 +826,14 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 			1,
 			metrics.OperationTag("WorkflowContext"),
 		)
-		request := &TestHookUpdateWorkflowExecutionRequest{
-			WorkflowContext:                 c,
-			ShardContext:                    shardContext,
-			UpdateMode:                      updateMode,
-			NewContext:                      newContext,
-			NewMutableState:                 newMutableState,
-			UpdateWorkflowTransactionPolicy: updateWorkflowTransactionPolicy,
-			NewWorkflowTransactionPolicy:    newWorkflowTransactionPolicy,
+		request := &TestHookUpdateExecutionRequest{
+			ExecutionContext:                 c,
+			ShardContext:                     shardContext,
+			UpdateMode:                       updateMode,
+			NewContext:                       newContext,
+			NewMutableState:                  newMutableState,
+			UpdateExecutionTransactionPolicy: updateWorkflowTransactionPolicy,
+			NewExecutionTransactionPolicy:    newWorkflowTransactionPolicy,
 			PrepareMutableStateTransaction: func() error {
 				return c.prepareMutableStateTransaction(
 					shardContext,
@@ -842,7 +842,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 					newWorkflowTransactionPolicy,
 				)
 			},
-			CloseMutableStateTransaction: func() (*WorkflowTransactionPayload, error) {
+			CloseMutableStateTransaction: func() (*ExecutionTransactionPayload, error) {
 				return c.closeMutableStateTransaction(
 					ctx,
 					newContext,
@@ -851,7 +851,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 					newWorkflowTransactionPolicy,
 				)
 			},
-			ExecuteWorkflowTransaction: func(payload *WorkflowTransactionPayload) error {
+			ExecuteExecutionTransaction: func(payload *ExecutionTransactionPayload) error {
 				return c.executeWorkflowTransaction(
 					ctx,
 					shardContext,
@@ -976,7 +976,7 @@ func (c *ContextImpl) closeMutableStateTransaction(
 	newMutableState historyi.MutableState,
 	updateWorkflowTransactionPolicy historyi.TransactionPolicy,
 	newWorkflowTransactionPolicy *historyi.TransactionPolicy,
-) (*WorkflowTransactionPayload, error) {
+) (*ExecutionTransactionPayload, error) {
 	updateWorkflow, updateWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsMutation(
 		ctx,
 		updateWorkflowTransactionPolicy,
@@ -985,12 +985,12 @@ func (c *ContextImpl) closeMutableStateTransaction(
 		return nil, err
 	}
 
-	payload := &WorkflowTransactionPayload{
-		WorkflowMutation: updateWorkflow,
-		WorkflowEvents:   updateWorkflowEventsSeq,
+	payload := &ExecutionTransactionPayload{
+		ExecutionMutation: updateWorkflow,
+		ExecutionEvents:   updateWorkflowEventsSeq,
 	}
 	if newContext != nil && newMutableState != nil && newWorkflowTransactionPolicy != nil {
-		payload.NewWorkflowSnapshot, payload.NewWorkflowEvents, err = newMutableState.CloseTransactionAsSnapshot(
+		payload.NewExecutionSnapshot, payload.NewExecutionEvents, err = newMutableState.CloseTransactionAsSnapshot(
 			ctx,
 			*newWorkflowTransactionPolicy,
 		)
@@ -1006,17 +1006,17 @@ func (c *ContextImpl) executeWorkflowTransaction(
 	shardContext historyi.ShardContext,
 	updateMode persistence.UpdateWorkflowMode,
 	newMutableState historyi.MutableState,
-	payload *WorkflowTransactionPayload,
+	payload *ExecutionTransactionPayload,
 ) error {
 	if err := c.mergeUpdateWithNewReplicationTasks(
-		payload.WorkflowMutation,
-		payload.NewWorkflowSnapshot,
+		payload.ExecutionMutation,
+		payload.NewExecutionSnapshot,
 	); err != nil {
 		return err
 	}
 
-	eventsToReapply := payload.WorkflowEvents
-	if len(payload.WorkflowEvents) == 0 {
+	eventsToReapply := payload.ExecutionEvents
+	if len(payload.ExecutionEvents) == 0 {
 		if reapplyCandidateEvents := c.MutableState.GetReapplyCandidateEvents(); len(reapplyCandidateEvents) != 0 {
 			eventsToReapply = []*persistence.WorkflowEvents{
 				{
@@ -1036,7 +1036,7 @@ func (c *ContextImpl) executeWorkflowTransaction(
 		eventsToReapply,
 		// The new run is created by applying events so the history builder in newMutableState contains the events be re-applied.
 		// So we can use newWorkflowEventsSeq directly to reapply events.
-		payload.NewWorkflowEvents,
+		payload.NewExecutionEvents,
 	); err != nil {
 		return err
 	}
@@ -1046,11 +1046,11 @@ func (c *ContextImpl) executeWorkflowTransaction(
 		updateMode,
 		c.archetypeID,
 		c.MutableState.GetCurrentVersion(),
-		payload.WorkflowMutation,
-		payload.WorkflowEvents,
+		payload.ExecutionMutation,
+		payload.ExecutionEvents,
 		MutableStateFailoverVersion(newMutableState),
-		payload.NewWorkflowSnapshot,
-		payload.NewWorkflowEvents,
+		payload.NewExecutionSnapshot,
+		payload.NewExecutionEvents,
 		c.MutableState.IsWorkflow(),
 	); err != nil {
 		return err
