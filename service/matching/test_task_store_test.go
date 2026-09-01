@@ -428,7 +428,7 @@ type testQueueData struct {
 }
 
 func (q *testQueueData) reload() {
-	resp, err := q.mgr.TaskManager.GetTaskQueue(context.Background(), &persistence.GetTaskQueueRequest{
+	resp, err := q.mgr.GetTaskQueue(context.Background(), &persistence.GetTaskQueueRequest{
 		NamespaceID: q.key.NamespaceId(),
 		TaskQueue:   q.key.PersistenceName(),
 		TaskType:    q.key.TaskType(),
@@ -572,4 +572,3 @@ func (m *testTaskManager) getGetUserDataCount(q *PhysicalTaskQueueKey) int {
 func (m *testTaskManager) getUpdateCount(q *PhysicalTaskQueueKey) int {
 	return m.statsFor(q).updateCount
 }
-
