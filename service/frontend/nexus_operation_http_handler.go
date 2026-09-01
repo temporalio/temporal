@@ -70,6 +70,7 @@ func NewNexusOperationHTTPHandler(
 	httpTraceProvider commonnexus.HTTPClientTraceProvider,
 	httpServerHandlerInstrumenter telemetry.HTTPServerHandlerInstrumenter,
 ) *NexusOperationHTTPHandler {
+	logger = log.With(logger, tag.NexusStageHandlerInbound)
 	return &NexusOperationHTTPHandler{
 		base: nexusrpc.BaseHTTPHandler{
 			Logger:           log.NewSlogLogger(logger),
@@ -275,8 +276,7 @@ func (h *NexusOperationHTTPHandler) nexusContextFromEndpoint(
 				tag.Error(err),
 				tag.NexusEndpointTargetNamespaceID(v.Worker.GetNamespaceId()),
 			)
-			var notFoundErr *serviceerror.NamespaceNotFound
-			if errors.As(err, &notFoundErr) {
+			if _, ok := errors.AsType[*serviceerror.NamespaceNotFound](err); ok {
 				h.writeFailure(w, r, &nexus.HandlerError{
 					Type:          nexus.HandlerErrorTypeNotFound,
 					Message:       "invalid endpoint target",
