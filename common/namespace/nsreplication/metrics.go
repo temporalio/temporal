@@ -78,10 +78,7 @@ func recordOutcome(
 	if metadata.VisibilityTime == nil || metadata.VisibilityTime.CheckValid() != nil {
 		return
 	}
-	latency := time.Since(metadata.VisibilityTime.AsTime())
-	if latency < 0 {
-		latency = 0
-	}
+	latency := max(time.Since(metadata.VisibilityTime.AsTime()), 0)
 	metrics.NamespaceReplicationApplyEndToEndLatency.With(metricsHandler).Record(latency, tags...)
 }
 
