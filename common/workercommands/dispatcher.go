@@ -159,8 +159,7 @@ func (d *Dispatcher) dispatchToWorker(
 }
 
 func (d *Dispatcher) handleError(nexusErr error, task *tasks.WorkerCommandsTask, namespaceName string) error {
-	var handlerErr *nexus.HandlerError
-	if errors.As(nexusErr, &handlerErr) {
+	if handlerErr, ok := errors.AsType[*nexus.HandlerError](nexusErr); ok {
 		// Handler-level error (transport, timeout, internal). These are constructed by
 		// MatchingDispatchResponseToError for non-worker-returned failures.
 		if handlerErr.Type == nexus.HandlerErrorTypeUpstreamTimeout {

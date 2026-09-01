@@ -106,6 +106,7 @@ type (
 		context         scannerContext
 		wg              sync.WaitGroup
 		lifecycleCancel context.CancelFunc
+		workers         []worker.Worker
 	}
 )
 
@@ -209,8 +210,7 @@ func (s *Scanner) Start() error {
 		work.RegisterWorkflowWithOptions(build_ids.BuildIdScavangerWorkflow, workflow.RegisterOptions{Name: build_ids.BuildIdScavangerWorkflowName})
 		work.RegisterActivityWithOptions(buildIdsActivities.ScavengeBuildIds, activity.RegisterOptions{Name: build_ids.BuildIdScavangerActivityName})
 
-		// TODO: Nothing is gracefully stopping these workers or listening for fatal errors.
-		if err := work.Start(); err != nil {
+		if err := s.startWorker(work); err != nil {
 			return err
 		}
 	}
@@ -236,8 +236,7 @@ func (s *Scanner) Start() error {
 			work.RegisterWorkflowWithOptions(scheduleinvariants.OverdueNextActionTimeWorkflow, workflow.RegisterOptions{Name: scheduleinvariants.OverdueNextActionTimeWorkflowName})
 			work.RegisterActivityWithOptions(scheduleActivities.ScanOverdueNextActionTime, activity.RegisterOptions{Name: scheduleinvariants.OverdueNextActionTimeActivityName})
 
-			// TODO: Nothing is gracefully stopping these workers or listening for fatal errors.
-			if err := work.Start(); err != nil {
+			if err := s.startWorker(work); err != nil {
 				return err
 			}
 		}
@@ -250,7 +249,7 @@ func (s *Scanner) Start() error {
 			work.RegisterWorkflowWithOptions(scheduleinvariants.StuckOpenWorkflow, workflow.RegisterOptions{Name: scheduleinvariants.StuckOpenWorkflowName})
 			work.RegisterActivityWithOptions(scheduleActivities.ScanStuckOpen, activity.RegisterOptions{Name: scheduleinvariants.StuckOpenActivityName})
 
-			if err := work.Start(); err != nil {
+			if err := s.startWorker(work); err != nil {
 				return err
 			}
 		}
@@ -263,7 +262,7 @@ func (s *Scanner) Start() error {
 			work.RegisterWorkflowWithOptions(scheduleinvariants.UnknownStateWorkflow, workflow.RegisterOptions{Name: scheduleinvariants.UnknownStateWorkflowName})
 			work.RegisterActivityWithOptions(scheduleActivities.ScanUnknownState, activity.RegisterOptions{Name: scheduleinvariants.UnknownStateActivityName})
 
-			if err := work.Start(); err != nil {
+			if err := s.startWorker(work); err != nil {
 				return err
 			}
 		}
@@ -280,8 +279,7 @@ func (s *Scanner) Start() error {
 		work.RegisterActivityWithOptions(HistoryScavengerActivity, activity.RegisterOptions{Name: historyScavengerActivityName})
 		work.RegisterActivityWithOptions(ExecutionsScavengerActivity, activity.RegisterOptions{Name: executionsScavengerActivityName})
 
-		// TODO: Nothing is gracefully stopping these workers or listening for fatal errors.
-		if err := work.Start(); err != nil {
+		if err := s.startWorker(work); err != nil {
 			return err
 		}
 	}
@@ -292,6 +290,18 @@ func (s *Scanner) Start() error {
 func (s *Scanner) Stop() {
 	s.lifecycleCancel()
 	s.wg.Wait()
+	for _, w := range s.workers {
+		w.Stop()
+	}
+}
+
+// TODO: Nothing is listening for fatal errors from these workers.
+func (s *Scanner) startWorker(work worker.Worker) error {
+	if err := work.Start(); err != nil {
+		return err
+	}
+	s.workers = append(s.workers, work)
+	return nil
 }
 
 // startWorkflowWithRetry starts a scanner workflow, retrying until it succeeds or the

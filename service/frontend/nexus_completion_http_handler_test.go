@@ -14,8 +14,8 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/nexusworkflowref"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )

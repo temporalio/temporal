@@ -2,6 +2,7 @@ package activity
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 	"time"
 
@@ -10,9 +11,11 @@ import (
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -46,6 +49,12 @@ var (
 	}
 	defaultBlobSizeLimitWarn = func(ns string) int {
 		return 32
+	}
+	defaultMaxUserMetadataSummarySize = func(ns string) int {
+		return 400
+	}
+	defaultMaxUserMetadataDetailsSize = func(ns string) int {
+		return 20000
 	}
 	defaultMaxLinksPerRequest = func(ns string) int {
 		return 10
@@ -411,9 +420,11 @@ func newTestFrontendHandler(
 ) *frontendHandler {
 	return &frontendHandler{
 		config: &Config{
-			BlobSizeLimitError: blobSizeLimitError,
-			BlobSizeLimitWarn:  blobSizeLimitWarn,
-			MaxIDLengthLimit:   func() int { return maxIDLengthLimit },
+			BlobSizeLimitError:         blobSizeLimitError,
+			BlobSizeLimitWarn:          blobSizeLimitWarn,
+			MaxIDLengthLimit:           func() int { return maxIDLengthLimit },
+			MaxUserMetadataDetailsSize: defaultMaxUserMetadataDetailsSize,
+			MaxUserMetadataSummarySize: defaultMaxUserMetadataSummarySize,
 		},
 		logger: log.NewNoopLogger(),
 	}
@@ -434,6 +445,8 @@ func TestRequestIDGeneratedWhenMissing(t *testing.T) {
 				BlobSizeLimitWarn:          defaultBlobSizeLimitWarn,
 				MaxIDLengthLimit:           func() int { return maxIDLengthLimit },
 				DefaultActivityRetryPolicy: dynamicconfig.GetTypedPropertyFnFilteredByNamespace(getDefaultRetrySettings("")),
+				MaxUserMetadataDetailsSize: defaultMaxUserMetadataDetailsSize,
+				MaxUserMetadataSummarySize: defaultMaxUserMetadataSummarySize,
 			},
 			linkValidator: newLinkValidator(
 				defaultMaxLinksPerRequest,
@@ -517,6 +530,72 @@ func TestRequestIDGeneratedWhenMissing(t *testing.T) {
 	})
 }
 
+// TestValidateAndPopulateStartRequest_CombinesRequestAndCallbackLinks verifies that both
+// the request's own links and those embedded in its completion callbacks reach the link
+// validator. Link shape and limit semantics are covered in common/links.
+func TestValidateAndPopulateStartRequest_CombinesRequestAndCallbackLinks(t *testing.T) {
+	callbackValidator, err := callbacks.NewValidator(callbacks.ValidatorConfig{
+		MaxCallbacksPerExecution: func(string) int { return 2000 },
+		URLMaxLength:             func(string) int { return 1000 },
+		HeaderMaxSize:            func(string) int { return 2000 },
+		EndpointRules: func(string) callbacks.AddressMatchRules {
+			return callbacks.AddressMatchRules{
+				Rules: []callbacks.AddressMatchRule{
+					{Regexp: regexp.MustCompile(`.*`), AllowInsecure: true},
+				},
+			}
+		},
+	})
+	require.NoError(t, err)
+
+	h := &frontendHandler{
+		config: &Config{
+			BlobSizeLimitError:         defaultBlobSizeLimitError,
+			BlobSizeLimitWarn:          defaultBlobSizeLimitWarn,
+			DefaultActivityRetryPolicy: getDefaultRetrySettings,
+			EnableCallbacks:            func(string) bool { return true },
+			MaxIDLengthLimit:           func() int { return defaultMaxIDLengthLimit },
+			MaxUserMetadataDetailsSize: defaultMaxUserMetadataDetailsSize,
+			MaxUserMetadataSummarySize: defaultMaxUserMetadataSummarySize,
+		},
+		callbackValidator: callbackValidator,
+		linkValidator: newLinkValidator(
+			func(string) int { return 1 },
+			func(string) int { return 2000 },
+			defaultLinkMaxSize,
+		),
+		logger: log.NewNoopLogger(),
+	}
+	// The per-request limit is 1, so a single link from each source only trips the
+	// validator if both sources are forwarded.
+	req := &workflowservice.StartActivityExecutionRequest{
+		Namespace:           defaultNamespaceID,
+		ActivityId:          defaultActivityID,
+		ActivityType:        &commonpb.ActivityType{Name: defaultActivityType},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+		StartToCloseTimeout: durationpb.New(10 * time.Second),
+		Links: []*commonpb.Link{{
+			Variant: &commonpb.Link_BatchJob_{
+				BatchJob: &commonpb.Link_BatchJob{JobId: "request-job"},
+			},
+		}},
+		CompletionCallbacks: []*commonpb.Callback{{
+			Variant: &commonpb.Callback_Internal_{
+				Internal: &commonpb.Callback_Internal{},
+			},
+			Links: []*commonpb.Link{{
+				Variant: &commonpb.Link_BatchJob_{
+					BatchJob: &commonpb.Link_BatchJob{JobId: "callback-job"},
+				},
+			}},
+		}},
+	}
+
+	_, err = h.validateAndPopulateStartRequest(t.Context(), req, namespace.ID(defaultNamespaceID))
+	require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
+	require.ErrorContains(t, err, "cannot attach more than 1 links per request, got 2")
+}
+
 func validateUUID(s string) error {
 	_, err := uuid.Parse(s)
 	return err
@@ -540,7 +619,7 @@ func TestRequestIDTooLong(t *testing.T) {
 			RetryPolicy:         &commonpb.RetryPolicy{},
 			RequestId:           tooLong,
 		}
-		err := validateAndNormalizeStartRequest(req, h.config.MaxIDLengthLimit(), h.config.BlobSizeLimitError, h.config.BlobSizeLimitWarn, h.logger, h.saMapperProvider, h.saValidator)
+		err := validateAndNormalizeStartRequest(req, h.config, h.logger, h.saMapperProvider, h.saValidator)
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 	})
@@ -622,7 +701,7 @@ func TestValidateStandAloneRequestIDTooLong(t *testing.T) {
 	}
 
 	h := newTestFrontendHandler(defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, defaultMaxIDLengthLimit)
-	err := validateAndNormalizeStartRequest(req, h.config.MaxIDLengthLimit(), h.config.BlobSizeLimitError, h.config.BlobSizeLimitWarn, h.logger, h.saMapperProvider, h.saValidator)
+	err := validateAndNormalizeStartRequest(req, h.config, h.logger, h.saMapperProvider, h.saValidator)
 	var invalidArgErr *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArgErr)
 }
@@ -642,7 +721,7 @@ func TestValidateStandAloneInputTooLarge(t *testing.T) {
 	}
 
 	h := newTestFrontendHandler(defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, defaultMaxIDLengthLimit)
-	err := validateAndNormalizeStartRequest(req, h.config.MaxIDLengthLimit(), h.config.BlobSizeLimitError, h.config.BlobSizeLimitWarn, h.logger, h.saMapperProvider, h.saValidator)
+	err := validateAndNormalizeStartRequest(req, h.config, h.logger, h.saMapperProvider, h.saValidator)
 	var invalidArgErr *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArgErr)
 }
@@ -669,8 +748,79 @@ func TestValidateStandAloneInputWarningSizeShouldSucceed(t *testing.T) {
 		func(ns string) int { return payloadSize },
 		defaultMaxIDLengthLimit,
 	)
-	err := validateAndNormalizeStartRequest(req, h.config.MaxIDLengthLimit(), h.config.BlobSizeLimitError, h.config.BlobSizeLimitWarn, h.logger, h.saMapperProvider, h.saValidator)
+	err := validateAndNormalizeStartRequest(req, h.config, h.logger, h.saMapperProvider, h.saValidator)
 	require.NoError(t, err)
+}
+
+func TestValidateStandaloneUserMetadata(t *testing.T) {
+	summary := &commonpb.Payload{Data: []byte("summary")}
+	details := &commonpb.Payload{Data: []byte("details")}
+
+	tests := []struct {
+		name         string
+		metadata     *sdkpb.UserMetadata
+		summaryLimit int
+		detailsLimit int
+		errContains  string
+	}{
+		{
+			name:         "summary exceeds size limit",
+			metadata:     &sdkpb.UserMetadata{Summary: summary},
+			summaryLimit: summary.Size() - 1,
+			detailsLimit: details.Size() + 1000,
+			errContains:  "user_metadata.summary exceeds size limit",
+		},
+		{
+			name:         "details exceeds size limit",
+			metadata:     &sdkpb.UserMetadata{Details: details},
+			summaryLimit: summary.Size() + 1000,
+			detailsLimit: details.Size() - 1,
+			errContains:  "user_metadata.details exceeds size limit",
+		},
+		{
+			name:         "payloads at size limits",
+			metadata:     &sdkpb.UserMetadata{Summary: summary, Details: details},
+			summaryLimit: summary.Size(),
+			detailsLimit: details.Size(),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			h := &frontendHandler{
+				config: &Config{
+					BlobSizeLimitError:         defaultBlobSizeLimitError,
+					BlobSizeLimitWarn:          defaultBlobSizeLimitWarn,
+					DefaultActivityRetryPolicy: getDefaultRetrySettings,
+					MaxIDLengthLimit:           func() int { return defaultMaxIDLengthLimit },
+					MaxUserMetadataSummarySize: func(string) int { return test.summaryLimit },
+					MaxUserMetadataDetailsSize: func(string) int { return test.detailsLimit },
+				},
+				linkValidator: newLinkValidator(
+					defaultMaxLinksPerRequest,
+					func(string) int { return 2000 },
+					defaultLinkMaxSize,
+				),
+				logger: log.NewNoopLogger(),
+			}
+			req := &workflowservice.StartActivityExecutionRequest{
+				Namespace:           defaultNamespaceID,
+				ActivityId:          defaultActivityID,
+				ActivityType:        &commonpb.ActivityType{Name: defaultActivityType},
+				TaskQueue:           &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+				StartToCloseTimeout: durationpb.New(10 * time.Second),
+				UserMetadata:        test.metadata,
+			}
+			_, err := h.validateAndPopulateStartRequest(t.Context(), req, namespace.ID(defaultNamespaceID))
+			if test.errContains == "" {
+				require.NoError(t, err)
+				return
+			}
+			var invalidArgument *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgument)
+			require.ErrorContains(t, err, test.errContains)
+		})
+	}
 }
 
 func TestValidateStandAlone_IDPolicyShouldDefault(t *testing.T) {
@@ -687,7 +837,7 @@ func TestValidateStandAlone_IDPolicyShouldDefault(t *testing.T) {
 	}
 
 	h := newTestFrontendHandler(defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, defaultMaxIDLengthLimit)
-	err := validateAndNormalizeStartRequest(req, h.config.MaxIDLengthLimit(), h.config.BlobSizeLimitError, h.config.BlobSizeLimitWarn, h.logger, h.saMapperProvider, h.saValidator)
+	err := validateAndNormalizeStartRequest(req, h.config, h.logger, h.saMapperProvider, h.saValidator)
 
 	require.NoError(t, err)
 	require.Equal(t, enumspb.ACTIVITY_ID_REUSE_POLICY_ALLOW_DUPLICATE, req.IdReusePolicy)

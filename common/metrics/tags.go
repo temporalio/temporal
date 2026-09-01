@@ -64,7 +64,6 @@ const (
 	namespaceAllValue                              = "all"
 	clientName                                     = "client_name"
 	isInternal                                     = "is_internal"
-	activityTargetingMethod                        = "activity_targeting_method"
 	unknownValue                                   = "_unknown_"
 	totalMetricSuffix                              = "_total"
 	tagExcludedValue                               = "_tag_excluded_"
@@ -227,11 +226,6 @@ func ActivityTypeTag(value string) Tag {
 	return Tag{Key: activityType, Value: value}
 }
 
-// ActivityTargetingMethodTag returns a tag indicating how the activity was targeted: "id" or "type".
-func ActivityTargetingMethodTag(value string) Tag {
-	return Tag{Key: activityTargetingMethod, Value: value}
-}
-
 // CommandTypeTag returns a new command type tag.
 func CommandTypeTag(value string) Tag {
 	if len(value) == 0 {
@@ -341,10 +335,11 @@ const (
 )
 
 const (
-	PollerScaleReasonIdle        ReasonString = "idle"
-	PollerScaleReasonBacklog     ReasonString = "backlog"
-	PollerScaleReasonTaskRate    ReasonString = "task_rate"
-	PollerScaleReasonRateLimited ReasonString = "rate_limited"
+	PollerScaleReasonIdle                 ReasonString = "idle"
+	PollerScaleReasonBacklog              ReasonString = "backlog"
+	PollerScaleReasonTaskRate             ReasonString = "task_rate"
+	PollerScaleReasonRateLimited          ReasonString = "rate_limited"
+	PollerScaleReasonTaskQueueRateLimited ReasonString = "task_queue_rate_limited"
 )
 
 // PollerScaleDecisionTag records the direction of a poller scaling decision (scale up, scale

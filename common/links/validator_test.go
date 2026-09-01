@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/links"
 	"google.golang.org/protobuf/proto"
 )
@@ -52,6 +53,15 @@ func TestValidate(t *testing.T) {
 			},
 		},
 	}
+	validWorkflow := &commonpb.Link{
+		Variant: &commonpb.Link_Workflow_{
+			Workflow: &commonpb.Link_Workflow{
+				Namespace:  "ns",
+				WorkflowId: "wid",
+				RunId:      "rid",
+			},
+		},
+	}
 
 	t.Run("HappyPath", func(t *testing.T) {
 		err := links.Validate([]*commonpb.Link{
@@ -59,7 +69,8 @@ func TestValidate(t *testing.T) {
 			validBatchJob,
 			validNexusOperation,
 			validActivity,
-		}, maxLinks+1, maxSize)
+			validWorkflow,
+		}, maxLinks+2, maxSize)
 		require.NoError(t, err)
 	})
 
@@ -154,5 +165,122 @@ func TestValidate(t *testing.T) {
 	t.Run("UnsupportedVariant", func(t *testing.T) {
 		err := links.Validate([]*commonpb.Link{{}}, maxLinks, maxSize)
 		require.ErrorContains(t, err, "unsupported link variant")
+	})
+
+	t.Run("Workflow/EmptyNamespace", func(t *testing.T) {
+		l := proto.Clone(validWorkflow).(*commonpb.Link)
+		l.GetWorkflow().Namespace = ""
+		err := links.Validate([]*commonpb.Link{l}, maxLinks, maxSize)
+		require.EqualError(t, err, "workflow link must not have an empty namespace field")
+	})
+
+	t.Run("Workflow/EmptyWorkflowID", func(t *testing.T) {
+		l := proto.Clone(validWorkflow).(*commonpb.Link)
+		l.GetWorkflow().WorkflowId = ""
+		err := links.Validate([]*commonpb.Link{l}, maxLinks, maxSize)
+		require.EqualError(t, err, "workflow link must not have an empty workflow ID field")
+	})
+
+	t.Run("Workflow/EmptyRunID", func(t *testing.T) {
+		l := proto.Clone(validWorkflow).(*commonpb.Link)
+		l.GetWorkflow().RunId = ""
+		err := links.Validate([]*commonpb.Link{l}, maxLinks, maxSize)
+		require.EqualError(t, err, "workflow link must not have an empty run ID field")
+	})
+}
+
+func batchJobLink(jobID string) *commonpb.Link {
+	return &commonpb.Link{
+		Variant: &commonpb.Link_BatchJob_{
+			BatchJob: &commonpb.Link_BatchJob{JobId: jobID},
+		},
+	}
+}
+
+func TestValidateWithCallbacks(t *testing.T) {
+	const maxSize = 1024
+
+	t.Run("HappyPath", func(t *testing.T) {
+		err := links.ValidateWithCallbacks(
+			[]*commonpb.Link{batchJobLink("request-job")},
+			[]*commonpb.Callback{{Links: []*commonpb.Link{batchJobLink("callback-job")}}},
+			2,
+			maxSize,
+		)
+		require.NoError(t, err)
+	})
+
+	t.Run("CountsRequestAndCallbackLinksTogether", func(t *testing.T) {
+		err := links.ValidateWithCallbacks(
+			[]*commonpb.Link{batchJobLink("request-job")},
+			[]*commonpb.Callback{{Links: []*commonpb.Link{batchJobLink("callback-job")}}},
+			1,
+			maxSize,
+		)
+		require.ErrorContains(t, err, "cannot attach more than 1 links per request, got 2")
+	})
+
+	t.Run("InvalidCallbackLink", func(t *testing.T) {
+		err := links.ValidateWithCallbacks(
+			nil,
+			[]*commonpb.Callback{{Links: []*commonpb.Link{batchJobLink("")}}},
+			2,
+			maxSize,
+		)
+		require.ErrorContains(t, err, "batch job link must not have an empty job ID")
+	})
+}
+
+func TestValidator(t *testing.T) {
+	limit := func(n int) func(string) int {
+		return func(string) int { return n }
+	}
+
+	t.Run("ValidateRequest", func(t *testing.T) {
+		v := links.NewValidator("an activity", limit(1), limit(10), limit(1024))
+		require.NoError(t, v.ValidateRequest("ns", []*commonpb.Link{batchJobLink("a")}))
+		require.ErrorContains(t,
+			v.ValidateRequest("ns", []*commonpb.Link{batchJobLink("a"), batchJobLink("b")}),
+			"cannot attach more than 1 links per request, got 2")
+	})
+
+	t.Run("ValidateRequestWithCallbacks", func(t *testing.T) {
+		v := links.NewValidator("an activity", limit(1), limit(10), limit(1024))
+		err := v.ValidateRequestWithCallbacks(
+			"ns",
+			[]*commonpb.Link{batchJobLink("request-job")},
+			[]*commonpb.Callback{{Links: []*commonpb.Link{batchJobLink("callback-job")}}},
+		)
+		require.ErrorContains(t, err, "cannot attach more than 1 links per request, got 2")
+	})
+
+	t.Run("ValidateTotal", func(t *testing.T) {
+		v := links.NewValidator("an activity", limit(10), limit(3), limit(1024))
+		require.NoError(t, v.ValidateTotal("ns", 1, 2))
+
+		err := v.ValidateTotal("ns", 1, 3)
+		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
+		require.EqualError(t, err, "cannot attach more than 3 links to an activity (1 links already attached)")
+	})
+
+	t.Run("LimitsAreNamespaceScoped", func(t *testing.T) {
+		perNamespace := func(limits map[string]int) func(string) int {
+			return func(ns string) int { return limits[ns] }
+		}
+		v := links.NewValidator(
+			"an activity",
+			perNamespace(map[string]int{"strict": 1, "loose": 5}),
+			perNamespace(map[string]int{"strict": 1, "loose": 5}),
+			limit(1024),
+		)
+		twoLinks := []*commonpb.Link{batchJobLink("a"), batchJobLink("b")}
+
+		require.NoError(t, v.ValidateRequest("loose", twoLinks))
+		require.ErrorContains(t, v.ValidateRequest("strict", twoLinks),
+			"cannot attach more than 1 links per request, got 2")
+
+		require.NoError(t, v.ValidateTotal("loose", 2, 2))
+		require.ErrorContains(t, v.ValidateTotal("strict", 2, 2),
+			"cannot attach more than 1 links to an activity")
 	})
 }

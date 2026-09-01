@@ -37,7 +37,10 @@ import (
 type activityPauseAPI struct {
 	name    string
 	pause   func(ctx context.Context, s *testcore.TestEnv, wfID, actID, identity, reason, requestID string) error
-	unpause func(ctx context.Context, s *testcore.TestEnv, wfID, actID, identity string, resetAttempts bool) error
+	unpause func(ctx context.Context, s *testcore.TestEnv, wfID, actID, identity string) error
+	// unpauseResettingAttempts is nil on an API with no reset_attempts flag. Only the deprecated
+	// UnpauseActivity has one; UnpauseActivityExecution deliberately does not.
+	unpauseResettingAttempts func(ctx context.Context, s *testcore.TestEnv, wfID, actID, identity string) error
 }
 
 func pauseAPIs() []activityPauseAPI {
@@ -55,13 +58,22 @@ func pauseAPIs() []activityPauseAPI {
 				})
 				return err
 			},
-			unpause: func(ctx context.Context, s *testcore.TestEnv, wfID, actID, identity string, resetAttempts bool) error {
+			unpause: func(ctx context.Context, s *testcore.TestEnv, wfID, actID, identity string) error {
+				_, err := s.FrontendClient().UnpauseActivity(ctx, &workflowservice.UnpauseActivityRequest{
+					Namespace: s.Namespace().String(),
+					Execution: &commonpb.WorkflowExecution{WorkflowId: wfID},
+					Activity:  &workflowservice.UnpauseActivityRequest_Id{Id: actID},
+					Identity:  identity,
+				})
+				return err
+			},
+			unpauseResettingAttempts: func(ctx context.Context, s *testcore.TestEnv, wfID, actID, identity string) error {
 				_, err := s.FrontendClient().UnpauseActivity(ctx, &workflowservice.UnpauseActivityRequest{
 					Namespace:     s.Namespace().String(),
 					Execution:     &commonpb.WorkflowExecution{WorkflowId: wfID},
 					Activity:      &workflowservice.UnpauseActivityRequest_Id{Id: actID},
 					Identity:      identity,
-					ResetAttempts: resetAttempts,
+					ResetAttempts: true,
 				})
 				return err
 			},
@@ -79,13 +91,12 @@ func pauseAPIs() []activityPauseAPI {
 				})
 				return err
 			},
-			unpause: func(ctx context.Context, s *testcore.TestEnv, wfID, actID, identity string, resetAttempts bool) error {
+			unpause: func(ctx context.Context, s *testcore.TestEnv, wfID, actID, identity string) error {
 				_, err := s.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
-					Namespace:     s.Namespace().String(),
-					WorkflowId:    wfID,
-					ActivityId:    actID,
-					Identity:      identity,
-					ResetAttempts: resetAttempts,
+					Namespace:  s.Namespace().String(),
+					WorkflowId: wfID,
+					ActivityId: actID,
+					Identity:   identity,
 				})
 				return err
 			},
@@ -99,6 +110,25 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 	for _, api := range pauseAPIs() {
 		t.Run(api.name, func(t *testing.T) {
 			t.Parallel()
+
+			t.Run("TestActivityPauseApi_AfterWorkflowCompleted", func(t *testing.T) {
+				s := testcore.NewEnv(t)
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+
+				workflowFn := func(workflow.Context) error { return nil }
+				s.SdkWorker().RegisterWorkflow(workflowFn)
+
+				workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+					ID:        testcore.RandomizeStr("wf_id-" + t.Name()),
+					TaskQueue: s.WorkerTaskQueue(),
+				}, workflowFn)
+				require.NoError(t, err)
+				require.NoError(t, workflowRun.Get(ctx, nil))
+
+				err = api.pause(ctx, s, workflowRun.GetID(), "activity-id", "test-identity", "test-reason", "test-request-id")
+				require.ErrorContains(t, err, "workflow execution already completed")
+			})
 
 			t.Run("TestActivityPauseApi_WhileRunning", func(t *testing.T) {
 				s := testcore.NewEnv(t)
@@ -134,7 +164,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				activityFunction := func() (string, error) {
 					startedActivityCount.Add(1)
 					if startedActivityCount.Load() == 1 {
-						s.WaitForChannel(activityPausedCn)
+						await.Rcv(t, activityPausedCn)
 						return "", activityErr
 					}
 					return "done!", nil
@@ -211,7 +241,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				s.Equal(testReason, description.PendingActivities[0].PauseInfo.GetManual().Reason)
 
 				// unpause the activity
-				require.NoError(t, api.unpause(ctx, s, workflowRun.GetID(), "activity-id", "", false))
+				require.NoError(t, api.unpause(ctx, s, workflowRun.GetID(), "activity-id", ""))
 
 				var out string
 				err = workflowRun.Get(ctx, &out)
@@ -261,7 +291,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				activityFunction := func() (string, error) {
 					startedActivityCount.Add(1)
 					if startedActivityCount.Load() == 1 {
-						s.WaitForChannel(activityPausedCn)
+						await.Rcv(t, activityPausedCn)
 						return "", activityErr
 					}
 					if shouldSucceed.Load() {
@@ -329,7 +359,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				shouldSucceed.Store(true)
 
 				// unpause the activity
-				require.NoError(t, api.unpause(ctx, s, workflowRun.GetID(), "activity-id", "", false))
+				require.NoError(t, api.unpause(ctx, s, workflowRun.GetID(), "activity-id", ""))
 
 				// wait for activity to complete
 				await.Require(t.Context(), t, func(t *await.T) {
@@ -425,7 +455,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				s.Equal(testReason, description.PendingActivities[0].PauseInfo.GetManual().Reason)
 
 				// unpause the activity
-				require.NoError(t, api.unpause(ctx, s, workflowRun.GetID(), "activity-id", "", false))
+				require.NoError(t, api.unpause(ctx, s, workflowRun.GetID(), "activity-id", ""))
 
 				// wait for activity to complete
 				await.Require(t.Context(), t, func(t *await.T) {
@@ -505,7 +535,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				require.NoError(t, api.pause(ctx, s, workflowRun.GetID(), "activity-id", "", "", testRequestID))
 
 				// unpause the activity
-				require.NoError(t, api.unpause(ctx, s, workflowRun.GetID(), "activity-id", "", false))
+				require.NoError(t, api.unpause(ctx, s, workflowRun.GetID(), "activity-id", ""))
 
 				// wait for activity to complete. It should happen immediately since noWait is set
 				await.Require(t.Context(), t, func(t *await.T) {
@@ -520,6 +550,9 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 
 			t.Run("TestActivityPauseApi_WithReset", func(t *testing.T) {
 				// pause/unpause the activity with reset option and noWait flag
+				if api.unpauseResettingAttempts == nil {
+					t.Skip("this API has no reset_attempts flag on unpause; Reset is the operation that restarts attempts")
+				}
 				s := testcore.NewEnv(t)
 
 				initialRetryInterval := 1 * time.Second
@@ -557,7 +590,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 						activityErr := errors.New("bad-luck-please-retry")
 						return "", activityErr
 					}
-					s.WaitForChannel(activityCompleteCn)
+					await.Rcv(t, activityCompleteCn)
 					return "done!", nil
 				}
 
@@ -599,7 +632,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				activityWasReset = true
 
 				// unpause the activity with reset
-				require.NoError(t, api.unpause(ctx, s, workflowRun.GetID(), "activity-id", "", true))
+				require.NoError(t, api.unpauseResettingAttempts(ctx, s, workflowRun.GetID(), "activity-id", ""))
 
 				// wait for activity to be running
 				await.Require(t.Context(), t, func(t *await.T) {
@@ -655,7 +688,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				activityFunction := func() (string, error) {
 					startedActivityCount.Add(1)
 					if startedActivityCount.Load() == 1 {
-						s.WaitForChannel(activityPausedCn)
+						await.Rcv(t, activityPausedCn)
 						return "", activityErr
 					}
 					return "done!", nil
@@ -739,7 +772,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 				s.Equal(testReason, description.PendingActivities[0].PauseInfo.GetManual().Reason)
 
 				// unpause the activity
-				require.NoError(t, api.unpause(ctx, s, workflowRun.GetID(), "activity-id", "", false))
+				require.NoError(t, api.unpause(ctx, s, workflowRun.GetID(), "activity-id", ""))
 
 				var out string
 				err = workflowRun.Get(ctx, &out)
@@ -846,7 +879,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 					if !activityWasReset.Load() {
 						return "", errors.New("bad-luck-please-retry")
 					}
-					s.WaitForChannel(activityCompleteCh)
+					await.Rcv(t, activityCompleteCh)
 					return "done!", nil
 				}
 
@@ -920,7 +953,7 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 
 				// step 4: unpause
 				activityWasReset.Store(true)
-				require.NoError(t, api.unpause(ctx, s, wfID, "activity-id", "", false))
+				require.NoError(t, api.unpause(ctx, s, wfID, "activity-id", ""))
 
 				await.Require(t.Context(), t, func(c *await.T) {
 					desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
@@ -992,7 +1025,7 @@ func TestActivityApiPause_AttributesToActivityInContextMetadata(t *testing.T) {
 	}, workflowFn)
 	require.NoError(t, err)
 
-	s.WaitForChannel(activityStartedCn)
+	await.Rcv(t, activityStartedCn)
 
 	var trailer metadata.MD
 	_, err = s.FrontendClient().PauseActivity(ctx, &workflowservice.PauseActivityRequest{

@@ -174,17 +174,20 @@ func (o *Operation) RequestCancel(
 	ctx chasm.MutableContext,
 	req *nexusoperationpb.CancellationState,
 ) error {
+	// A cancel retry can arrive after the operation closed, so dedupe before rejecting terminal states.
+	existingCancellation, hasCanceled := o.Cancellation.TryGet(ctx)
+	if hasCanceled &&
+		existingCancellation.GetRequestId() == req.GetRequestId() {
+		return nil
+	}
+
 	if !TransitionCanceled.Possible(o) {
 		return ErrOperationAlreadyCompleted
 	}
 
-	if existingCancellation, ok := o.Cancellation.TryGet(ctx); ok {
+	if hasCanceled {
 		existingReqID := existingCancellation.GetRequestId()
-		newReqID := req.GetRequestId()
-		if existingReqID != newReqID {
-			return fmt.Errorf("%w with request ID %s", ErrCancellationAlreadyRequested, existingReqID)
-		}
-		return nil
+		return fmt.Errorf("%w with request ID %s", ErrCancellationAlreadyRequested, existingReqID)
 	}
 
 	cancel := newCancellation(req)
@@ -260,7 +263,7 @@ func (o *Operation) HandleNexusCompletion(
 	links := completion.GetLinks()
 
 	// For completion-before-start, apply the started transition first.
-	if o.GetStatus() == nexusoperationpb.OPERATION_STATUS_SCHEDULED {
+	if TransitionStarted.Possible(o) {
 		startTime := timestamp.TimeValuePtr(completion.GetStartTime())
 		if err := o.onStarted(ctx, completion.GetOperationToken(), startTime, links); err != nil {
 			return err

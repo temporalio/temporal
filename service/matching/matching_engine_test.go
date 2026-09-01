@@ -72,8 +72,8 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
-	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -280,6 +280,53 @@ func (s *matchingEngineSuite) newPartitionManager(prtn tqid.Partition, config *C
 	pm, err := newTaskQueuePartitionManager(s.matchingEngine, s.ns, prtn, tqConfig, logger, logger, metricsHandler, &mockUserDataManager{})
 	s.Require().NoError(err)
 	return pm
+}
+
+func (s *matchingEngineSuite) TestDescribeTaskQueuePartitionOnlyIfLoaded() {
+	taskQueue := testvars.New(s.T()).TaskQueue()
+	partition := tqid.MustNormalPartitionFromRpcName(
+		taskQueue.GetName(),
+		s.ns.ID().String(),
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+	)
+	request := &matchingservice.DescribeTaskQueuePartitionRequest{
+		NamespaceId: s.ns.ID().String(),
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     partition.TaskQueue().Name(),
+			TaskQueueType: partition.TaskType(),
+		},
+		Versions: &taskqueuepb.TaskQueueVersionSelection{
+			Unversioned: true,
+			AllActive:   true,
+		},
+		ReportInternalTaskQueueStatus: true,
+		OnlyIfLoaded:                  true,
+	}
+
+	_, err := s.matchingEngine.DescribeTaskQueuePartition(context.Background(), request)
+	var failedPrecondition *serviceerror.FailedPrecondition
+	s.Require().ErrorAs(err, &failedPrecondition)
+	s.matchingEngine.partitionsLock.RLock()
+	partitionCount := len(s.matchingEngine.partitions)
+	s.matchingEngine.partitionsLock.RUnlock()
+	s.Zero(partitionCount)
+
+	mockPM := NewMocktaskQueuePartitionManager(s.controller)
+	mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil)
+	mockPM.EXPECT().Describe(
+		gomock.Any(),
+		map[string]bool{"": true},
+		true,
+		false,
+		false,
+		true,
+		true,
+	).Return(&matchingservice.DescribeTaskQueuePartitionResponse{}, nil)
+	mockPM.EXPECT().Stop(gomock.Any()).AnyTimes()
+	s.matchingEngine.updateTaskQueue(partition, mockPM)
+
+	_, err = s.matchingEngine.DescribeTaskQueuePartition(context.Background(), request)
+	s.Require().NoError(err)
 }
 
 // captureNPollDeadlines injects a mock partition manager, runs n sequential polls, and returns

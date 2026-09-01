@@ -69,8 +69,7 @@ func (ch *nexusCommandHandler) handleScheduleCommand(
 			// Links are not needed for validation.
 		}, attrs.Service, attrs.Operation, attrs.Input)
 		if err != nil {
-			var handlerErr *nexus.HandlerError
-			if errors.As(err, &handlerErr) {
+			if handlerErr, ok := errors.AsType[*nexus.HandlerError](err); ok {
 				//nolint:exhaustive
 				switch handlerErr.Type {
 				case nexus.HandlerErrorTypeNotFound, nexus.HandlerErrorTypeBadRequest:

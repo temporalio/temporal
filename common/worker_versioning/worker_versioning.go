@@ -349,8 +349,7 @@ func checkVersionMembershipAndReactivationEligibility(
 	if err != nil {
 		// If matching is on an older version that doesn't have this RPC,
 		// fall back to fetching full user data and checking version membership based on the received information.
-		var unimplErr *serviceerror.Unimplemented
-		if errors.As(err, &unimplErr) {
+		if _, ok := errors.AsType[*serviceerror.Unimplemented](err); ok {
 			return checkVersionMembershipViaUserData(ctx, matchingClient, namespaceID, tq, tqType, version)
 		}
 		return false, false, 0, err
@@ -802,6 +801,28 @@ func ValidateVersioningOverrideStructure(override *workflowpb.VersioningOverride
 		return serviceerror.NewInvalidArgumentf("override behavior %s not recognized", override.GetBehavior())
 	}
 	return nil
+}
+
+// ValidateVersioningOverride validates both the override structure and its v0.32 deployment version fields.
+func ValidateVersioningOverride(override *workflowpb.VersioningOverride, maxIDLengthLimit int) error {
+	if err := ValidateVersioningOverrideStructure(override); err != nil {
+		return err
+	}
+
+	var version *deploymentpb.WorkerDeploymentVersion
+	switch o := override.GetOverride().(type) {
+	case *workflowpb.VersioningOverride_Pinned:
+		version = o.Pinned.GetVersion()
+	case *workflowpb.VersioningOverride_OneTime:
+		version = o.OneTime.GetTargetDeploymentVersion()
+	default:
+		return nil
+	}
+
+	if err := ValidateDeploymentVersionFields(WorkerDeploymentNameFieldName, version.GetDeploymentName(), maxIDLengthLimit); err != nil {
+		return err
+	}
+	return ValidateDeploymentVersionFields(WorkerDeploymentBuildIDFieldName, version.GetBuildId(), maxIDLengthLimit)
 }
 
 func ValidateVersioningOverrideAndGetReactivationEligibility(ctx context.Context,

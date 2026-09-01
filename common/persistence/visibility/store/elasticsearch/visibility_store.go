@@ -38,6 +38,11 @@ const (
 	PersistenceName = "elasticsearch"
 
 	delimiter = "~"
+
+	// paginationDatetimeFormat is a copy from time.RFC3339Nano, but always writes
+	// the nanos component.
+	// Used only for formatting time.Time in the pagination filter.
+	paginationDatetimeFormat = "2006-01-02T15:04:05.000000000Z07:00"
 )
 
 type (
@@ -499,6 +504,19 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 	return &store.InternalCountExecutionsResponse{Count: count}, nil
 }
 
+// newGroupByTermsAgg builds a terms aggregation for a GROUP BY field. For
+// TemporalNamespaceDivision, default-division workflows are indexed without the
+// field, so a plain terms aggregation would silently drop them. Missing("")
+// buckets those documents under the empty string so they are counted as the
+// default division.
+func newGroupByTermsAgg(field string) *elastic.TermsAggregation {
+	agg := elastic.NewTermsAggregation().Field(field)
+	if field == sadefs.TemporalNamespaceDivision {
+		agg = agg.Missing("")
+	}
+	return agg
+}
+
 func (s *VisibilityStore) countGroupByExecutions(
 	ctx context.Context,
 	queryParams *esQueryParams,
@@ -524,10 +542,9 @@ func (s *VisibilityStore) countGroupByExecutions(
 	//     }
 	//   }
 	// }
-	termsAgg := elastic.NewTermsAggregation().Field(groupByFields[len(groupByFields)-1])
+	termsAgg := newGroupByTermsAgg(groupByFields[len(groupByFields)-1])
 	for i := len(groupByFields) - 2; i >= 0; i-- {
-		termsAgg = elastic.NewTermsAggregation().
-			Field(groupByFields[i]).
+		termsAgg = newGroupByTermsAgg(groupByFields[i]).
 			SubAggregation(groupByFields[i+1], termsAgg)
 	}
 	esResponse, err := s.esClient.CountGroupBy(
@@ -733,8 +750,7 @@ func (s *VisibilityStore) convertQuery(
 	defer func() {
 		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be
 		// only mapper errors).
-		var converterErr *query.ConverterError
-		if errors.As(err, &converterErr) {
+		if converterErr, ok := errors.AsType[*query.ConverterError](err); ok {
 			err = converterErr.ToInvalidArgument()
 		}
 	}()
@@ -749,8 +765,14 @@ func (s *VisibilityStore) convertQuery(
 		return nil, err
 	}
 
-	c := query.NewQueryConverter(&queryConverter{}, namespaceName, saTypeMap, saMapper).
-		WithChasmMapper(chasmMapper).
+	c := query.NewQueryConverter(
+		&queryConverter{},
+		namespaceName,
+		saTypeMap,
+		saMapper,
+		s.metricsHandler,
+		s.logger,
+	).WithChasmMapper(chasmMapper).
 		WithArchetypeID(archetypeID)
 
 	queryParams, err := c.Convert(queryString)
@@ -758,10 +780,17 @@ func (s *VisibilityStore) convertQuery(
 		return nil, err
 	}
 
-	queryParams.QueryExpr = elastic.NewBoolQuery().Filter(
+	// queryParams.QueryExpr may be nil (e.g. "GROUP BY TemporalNamespaceDivision"
+	// with no other filter, which suppresses the default namespace division
+	// filter). Avoid adding a nil clause to the bool query, which would panic on
+	// serialization.
+	namespaceFilter := elastic.NewBoolQuery().Filter(
 		elastic.NewTermQuery(sadefs.NamespaceID, namespaceID.String()),
-		queryParams.QueryExpr,
 	)
+	if queryParams.QueryExpr != nil {
+		namespaceFilter.Filter(queryParams.QueryExpr)
+	}
+	queryParams.QueryExpr = namespaceFilter
 
 	orderBy := make([]elastic.Sorter, 0, len(queryParams.OrderBy))
 	for _, orderByExpr := range queryParams.OrderBy {
@@ -814,8 +843,7 @@ func (s *VisibilityStore) convertQueryLegacy(
 	queryParams, err := queryConverter.ConvertWhereOrderBy(requestQueryStr)
 	if err != nil {
 		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be only mapper errors).
-		var converterErr *query.ConverterError
-		if errors.As(err, &converterErr) {
+		if converterErr, ok := errors.AsType[*query.ConverterError](err); ok {
 			return nil, converterErr.ToInvalidArgument()
 		}
 		return nil, err
@@ -882,7 +910,7 @@ func (s *VisibilityStore) GetListWorkflowExecutionsResponse(
 		lastHitSort = hit.Sort
 	}
 
-	if len(searchResult.Hits.Hits) > 0 { // this means the response might not the last page
+	if len(searchResult.Hits.Hits) == pageSize { // this means the response might not the last page
 		response.NextPageToken, err = s.serializePageToken(&visibilityPageToken{
 			SearchAfter: lastHitSort,
 		})
@@ -1419,12 +1447,13 @@ func buildPaginationQuery(
 //   - double: "Infinity" (desc) or "-Infinity" (asc)
 //   - keyword: nil
 //
-// Furthermore, for bool and datetime, they need to be converted to boolean or the RFC3339Nano
-// formats respectively.
+// Furthermore, for bool and datetime, they need to be converted to bool or string
+// types respectively.
 //
 //nolint:revive // cyclomatic complexity
 func parsePageTokenValue(
-	fieldName string, jsonValue any,
+	fieldName string,
+	jsonValue any,
 	tp enumspb.IndexedValueType,
 ) (any, error) {
 	switch tp {
@@ -1448,7 +1477,7 @@ func parsePageTokenValue(
 			return num != 0, nil
 		}
 		if tp == enumspb.INDEXED_VALUE_TYPE_DATETIME {
-			return time.Unix(0, num).UTC().Format(time.RFC3339Nano), nil
+			return time.Unix(0, num).UTC().Format(paginationDatetimeFormat), nil
 		}
 		return num, nil
 
