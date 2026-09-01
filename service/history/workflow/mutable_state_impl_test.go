@@ -2215,6 +2215,36 @@ func (s *mutableStateSuite) TestContinueAsNewMinBackoff() {
 	s.True(minBackoff == backoff)
 }
 
+func (s *mutableStateSuite) TestContinueAsNewMinBackoffExecutionCompletesBeforeExecutionTime() {
+	s.mockConfig.WorkflowIdReuseMinimalInterval = func(namespace string) time.Duration {
+		return time.Second
+	}
+
+	now := time.Now()
+	s.mutableState.timeSource = clock.NewEventTimeSource().Update(now)
+
+	// Guard against clock skew or malformed state making StartTime later than now.
+	// The lifetime should be clamped at zero, so the full minimal interval is still applied.
+	s.mutableState.executionState.StartTime = timestamppb.New(now.Add(time.Second))
+	s.mutableState.executionInfo.ExecutionTime = nil
+
+	minBackoff := s.mutableState.ContinueAsNewMinBackoff(nil).AsDuration()
+	s.Equal(time.Second, minBackoff)
+
+	// Simulate a delayed-start run that actually executed and closed before its ExecutionTime.
+	// In that case lifetime should fall back to close - StartTime, not become negative.
+	s.mutableState.executionState.StartTime = timestamppb.New(now.Add(-100 * time.Millisecond))
+	s.mutableState.executionInfo.ExecutionTime = timestamppb.New(now.Add(time.Second))
+
+	minBackoff = s.mutableState.ContinueAsNewMinBackoff(nil).AsDuration()
+	s.Equal(900*time.Millisecond, minBackoff)
+
+	// Existing backoff already satisfies the minimal interval when combined with the fallback lifetime.
+	backoff := time.Second
+	minBackoff = s.mutableState.ContinueAsNewMinBackoff(durationpb.New(backoff)).AsDuration()
+	s.Equal(backoff, minBackoff)
+}
+
 func (s *mutableStateSuite) TestEventReapplied() {
 	runID := uuid.NewString()
 	eventID := int64(1)
