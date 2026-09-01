@@ -1533,7 +1533,7 @@ var (
 	)
 	NamespaceReplicationApplyEndToEndLatency = NewTimerDef(
 		"namespace_replication_apply_end_to_end_latency",
-		WithDescription("Latency from source transport acceptance to a terminal namespace metadata replication apply outcome."),
+		WithDescription("Latency from source publication to a terminal namespace metadata replication apply outcome."),
 	)
 	ParentClosePolicyProcessorSuccess       = NewCounterDef("parent_close_policy_processor_requests")
 	ParentClosePolicyProcessorFailures      = NewCounterDef("parent_close_policy_processor_errors")

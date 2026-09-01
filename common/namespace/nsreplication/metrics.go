@@ -66,14 +66,14 @@ func recordOutcome(
 	}
 
 	tags := []metrics.Tag{
-		metrics.NamespaceTag(task.GetInfo().GetName()),
 		metrics.SourceClusterTag(metadata.SourceCluster),
 		metrics.TargetClusterTag(metadata.TargetCluster),
 		metrics.TransportTag(metadata.Transport),
 		metrics.OperationTag(namespaceReplicationOperation(task)),
 		metrics.OutcomeTag(outcome),
 	}
-	metrics.NamespaceReplicationApplyOutcomes.With(metricsHandler).Record(1, tags...)
+	counterTags := append(tags, metrics.NamespaceTag(task.GetInfo().GetName()))
+	metrics.NamespaceReplicationApplyOutcomes.With(metricsHandler).Record(1, counterTags...)
 
 	if metadata.VisibilityTime == nil || metadata.VisibilityTime.CheckValid() != nil {
 		return

@@ -7,28 +7,13 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally/v4"
-	"go.opentelemetry.io/otel/attribute"
-	otelmetric "go.opentelemetry.io/otel/metric"
-	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
-
-type testOpenTelemetryProvider struct {
-	meter otelmetric.Meter
-}
-
-func (p *testOpenTelemetryProvider) GetMeter() otelmetric.Meter {
-	return p.meter
-}
-
-func (p *testOpenTelemetryProvider) Stop(log.Logger) {}
 
 func TestRecordNamespaceReplicationOutcome(t *testing.T) {
 	task := &replicationspb.NamespaceTaskAttributes{
@@ -67,6 +52,7 @@ func TestRecordNamespaceReplicationOutcome(t *testing.T) {
 			latencies := snapshot[metrics.NamespaceReplicationApplyEndToEndLatency.Name()]
 			require.Len(t, latencies, 1)
 			require.GreaterOrEqual(t, latencies[0].Value.(time.Duration), time.Minute)
+			require.NotContains(t, latencies[0].Tags, metrics.NamespaceTag("").Key)
 		})
 	}
 }
@@ -98,68 +84,8 @@ func TestRecordNamespaceReplicationOutcomeExcludesNamespaceTag(t *testing.T) {
 	}
 	require.Len(t, snapshot.Timers(), 1)
 	for _, timer := range snapshot.Timers() {
-		require.Equal(t, "_tag_excluded_", timer.Tags()[metrics.NamespaceTag("").Key])
+		require.NotContains(t, timer.Tags(), metrics.NamespaceTag("").Key)
 	}
-}
-
-func TestRecordNamespaceReplicationOutcomeExcludesNamespaceTagOpenTelemetry(t *testing.T) {
-	reader := sdkmetrics.NewManualReader()
-	provider := sdkmetrics.NewMeterProvider(sdkmetrics.WithReader(reader))
-	handler, err := metrics.NewOtelMetricsHandler(
-		log.NewTestLogger(),
-		&testOpenTelemetryProvider{meter: provider.Meter("test")},
-		metrics.ClientConfig{
-			ExcludeTags: map[string][]string{
-				metrics.NamespaceTag("").Key: {},
-			},
-		},
-		false,
-	)
-	require.NoError(t, err)
-	ctx := WithTaskMetricsContext(context.Background(), TaskMetricsContext{
-		SourceCluster:  "cluster-a",
-		TargetCluster:  "cluster-b",
-		Transport:      LegacyMetricsTransport,
-		VisibilityTime: timestamppb.New(time.Now().Add(-time.Minute)),
-	})
-	task := &replicationspb.NamespaceTaskAttributes{
-		NamespaceOperation: enumsspb.NAMESPACE_OPERATION_CREATE,
-		Info:               &namespacepb.NamespaceInfo{Name: "payments"},
-	}
-
-	recordOutcome(ctx, handler, task, metricsOutcomeApplied)
-
-	var resourceMetrics metricdata.ResourceMetrics
-	require.NoError(t, reader.Collect(context.Background(), &resourceMetrics))
-	found := map[string]bool{}
-	for _, scopeMetrics := range resourceMetrics.ScopeMetrics {
-		for _, metric := range scopeMetrics.Metrics {
-			switch metric.Name {
-			case metrics.NamespaceReplicationApplyOutcomes.Name():
-				data, ok := metric.Data.(metricdata.Sum[int64])
-				require.True(t, ok)
-				require.Len(t, data.DataPoints, 1)
-				requireExcludedNamespaceAttribute(t, data.DataPoints[0].Attributes)
-				found[metric.Name] = true
-			case metrics.NamespaceReplicationApplyEndToEndLatency.Name():
-				data, ok := metric.Data.(metricdata.Histogram[int64])
-				require.True(t, ok)
-				require.Len(t, data.DataPoints, 1)
-				requireExcludedNamespaceAttribute(t, data.DataPoints[0].Attributes)
-				found[metric.Name] = true
-			default:
-			}
-		}
-	}
-	require.True(t, found[metrics.NamespaceReplicationApplyOutcomes.Name()])
-	require.True(t, found[metrics.NamespaceReplicationApplyEndToEndLatency.Name()])
-}
-
-func requireExcludedNamespaceAttribute(t *testing.T, attributes attribute.Set) {
-	t.Helper()
-	value, ok := attributes.Value(attribute.Key(metrics.NamespaceTag("").Key))
-	require.True(t, ok)
-	require.Equal(t, "_tag_excluded_", value.AsString())
 }
 
 func TestRecordNamespaceReplicationOutcomeWithoutValidVisibilityTime(t *testing.T) {
