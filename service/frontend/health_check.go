@@ -73,9 +73,10 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (HealthCheckResult, error
 		return HealthCheckResult{
 			State: enumsspb.HEALTH_STATE_NOT_SERVING,
 			ServiceDetail: &healthspb.ServiceHealthDetail{
-				Service: string(h.historyServiceName),
-				State:   enumsspb.HEALTH_STATE_NOT_SERVING,
-				Message: "no available hosts in membership",
+				Service:         string(h.historyServiceName),
+				State:           enumsspb.HEALTH_STATE_NOT_SERVING,
+				UnenforcedState: enumsspb.HEALTH_STATE_NOT_SERVING,
+				Message:         "no available hosts in membership",
 			},
 		}, nil
 	}
