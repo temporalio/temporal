@@ -457,6 +457,43 @@ func (s *workflowSuite) TestMigratedBufferedStartUsesLegacyIDsAtOldVersion() {
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
 
+// TestMigratedBufferedStartLosesIdempotencyIDsUnderCeiling characterizes a known constraint of the
+// version ceiling: the v13 (MigrationHandoffFixes) preservation of a migrated start's
+// workflow/request IDs is undone if the recorded version is clamped below v13. This is the
+// failover path -- default is v13 but a rollback ceiling of v12 holds the run at v12 -- so a start
+// that was migrated from CHASM with preserved idempotency IDs is started with a freshly generated
+// request ID and the legacy generated workflow ID instead. Lowering the ceiling mid-flight can
+// therefore break migrated-start idempotency; documented rather than guarded (guarding would mean
+// refusing to clamp below the version that produced pending buffered starts).
+func (s *workflowSuite) TestMigratedBufferedStartLosesIdempotencyIDsUnderCeiling() {
+	previousTweakables := CurrentTweakablePolicies
+	defer func() { CurrentTweakablePolicies = previousTweakables }()
+	// Default is the newest version; only the ceiling holds the run down to v12.
+	CurrentTweakablePolicies.Version = MigrationHandoffFixes
+	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 1
+
+	s.expectStart(func(req *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
+		s.Equal("configured-workflow-id-2022-06-01T00:00:00Z", req.Request.WorkflowId)
+		s.NotEmpty(req.Request.RequestId)
+		s.NotEqual("migrated-request-id", req.Request.RequestId)
+		return nil, nil
+	})
+
+	wf := func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
+		return schedulerWorkflowWithSpecBuilderAndVersionOverride(
+			ctx, args, newSpecBuilderForTest(0, 0),
+			func() bool { return false },                           // enableCHASMMigration
+			func() bool { return false },                           // migrateWithRunningWorkflows
+			func() int { return int(TriggerImmediatelyTimestamp) }, // versionCeiling: rollback clamp below v13
+			func() int { return -1 },                               // versionOverride
+		)
+	}
+	s.env.SetStartTime(baseStartTime)
+	s.env.ExecuteWorkflow(wf, s.migratedStartScheduleArgs())
+	s.True(s.env.IsWorkflowCompleted())
+	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+}
+
 func (s *workflowSuite) TestNativeBufferedStartFallsBackAtNewVersion() {
 	// Complement to TestMigratedBufferedStart*: a schedule that never went through
 	// CHASM has BufferedStart.WorkflowId/RequestId empty (the common case -- see

@@ -25,13 +25,15 @@ func TestDetermineVersionTransitions(t *testing.T) {
 		defaultVersion  SchedulerWorkflowVersion
 		recordedVersion SchedulerWorkflowVersion
 		ceiling         int
+		override        int
 		wantVersion     SchedulerWorkflowVersion
 		wantCeiling     int
 	}{
 		{
-			name:           "no ceiling uses the default",
+			name:           "no ceiling or override uses the default",
 			defaultVersion: TriggerImmediatelyTimestamp,
 			ceiling:        -1,
+			override:       -1,
 			wantVersion:    TriggerImmediatelyTimestamp,
 			wantCeiling:    -1,
 		},
@@ -39,6 +41,7 @@ func TestDetermineVersionTransitions(t *testing.T) {
 			name:           "zero is a ceiling",
 			defaultVersion: TriggerImmediatelyTimestamp,
 			ceiling:        0,
+			override:       -1,
 			wantVersion:    InitialVersion,
 			wantCeiling:    0,
 		},
@@ -46,6 +49,7 @@ func TestDetermineVersionTransitions(t *testing.T) {
 			name:           "ceiling caps the default",
 			defaultVersion: oldPeerCeiling + 1,
 			ceiling:        oldPeerCeiling,
+			override:       -1,
 			wantVersion:    oldPeerCeiling,
 			wantCeiling:    oldPeerCeiling,
 		},
@@ -54,6 +58,7 @@ func TestDetermineVersionTransitions(t *testing.T) {
 			defaultVersion:  oldPeerCeiling,
 			recordedVersion: oldPeerCeiling + 1,
 			ceiling:         oldPeerCeiling,
+			override:        -1,
 			wantVersion:     oldPeerCeiling + 1,
 			wantCeiling:     oldPeerCeiling,
 		},
@@ -62,6 +67,7 @@ func TestDetermineVersionTransitions(t *testing.T) {
 			defaultVersion:  MigrationHandoffFixes,
 			recordedVersion: oldPeerCeiling,
 			ceiling:         int(MigrationHandoffFixes),
+			override:        -1,
 			wantVersion:     MigrationHandoffFixes,
 			wantCeiling:     int(MigrationHandoffFixes),
 		},
@@ -70,12 +76,45 @@ func TestDetermineVersionTransitions(t *testing.T) {
 			defaultVersion:  MigrationHandoffFixes,
 			recordedVersion: oldPeerCeiling,
 			ceiling:         -1,
+			override:        -1,
 			wantVersion:     MigrationHandoffFixes,
 			wantCeiling:     -1,
 		},
+		{
+			name:           "valid override advances the version",
+			defaultVersion: TriggerImmediatelyTimestamp,
+			ceiling:        -1,
+			override:       int(LatestSchedulerWorkflowVersion),
+			wantVersion:    LatestSchedulerWorkflowVersion,
+			wantCeiling:    -1,
+		},
+		{
+			name:           "ceiling caps an override",
+			defaultVersion: TriggerImmediatelyTimestamp,
+			ceiling:        oldPeerCeiling,
+			override:       int(LatestSchedulerWorkflowVersion),
+			wantVersion:    oldPeerCeiling,
+			wantCeiling:    oldPeerCeiling,
+		},
+		{
+			name:           "override below the default is ignored",
+			defaultVersion: TriggerImmediatelyTimestamp,
+			ceiling:        -1,
+			override:       oldPeerCeiling,
+			wantVersion:    TriggerImmediatelyTimestamp,
+			wantCeiling:    -1,
+		},
+		{
+			name:           "override above the latest supported version is ignored",
+			defaultVersion: TriggerImmediatelyTimestamp,
+			ceiling:        -1,
+			override:       int(LatestSchedulerWorkflowVersion) + 1,
+			wantVersion:    TriggerImmediatelyTimestamp,
+			wantCeiling:    -1,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			version, ceiling := determineVersionTransition(tc.defaultVersion, tc.recordedVersion, tc.ceiling)
+			version, ceiling := determineVersionTransition(tc.defaultVersion, tc.recordedVersion, tc.ceiling, tc.override)
 			require.Equal(t, tc.wantVersion, version)
 			require.Equal(t, tc.wantCeiling, ceiling)
 		})
@@ -104,10 +143,44 @@ func TestDetermineVersionTransitionCeilingTruthTable(t *testing.T) {
 	for _, versionCase := range table.TestCases {
 		for _, ceilingCase := range versionCase.CeilingCases {
 			t.Run(fmt.Sprintf("default_%d/recorded_%d/%s", versionCase.DefaultVersion, versionCase.RecordedVersion, ceilingCase.Name), func(t *testing.T) {
-				version, capturedCeiling := determineVersionTransition(versionCase.DefaultVersion, versionCase.RecordedVersion, ceilingCase.Ceiling)
+				version, capturedCeiling := determineVersionTransition(versionCase.DefaultVersion, versionCase.RecordedVersion, ceilingCase.Ceiling, -1)
 				require.Equal(t, ceilingCase.WantVersion, version)
 				require.Equal(t, ceilingCase.WantCeiling, capturedCeiling)
 			})
+		}
+	}
+}
+
+func TestDetermineVersionTransitionOverrideTruthTable(t *testing.T) {
+	var table struct {
+		TestCases []struct {
+			DefaultVersion  SchedulerWorkflowVersion `json:"defaultVersion"`
+			RecordedVersion SchedulerWorkflowVersion `json:"recordedVersion"`
+			CeilingCases    []struct {
+				Ceiling       int `json:"ceiling"`
+				OverrideCases []struct {
+					Override    int                      `json:"override"`
+					WantVersion SchedulerWorkflowVersion `json:"wantVersion"`
+					WantCeiling int                      `json:"wantCeiling"`
+				} `json:"overrideCases"`
+			} `json:"ceilingCases"`
+		} `json:"testCases"`
+	}
+
+	data, err := os.ReadFile(filepath.Join("testdata", "version_override_truth_table.json"))
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(data, &table))
+	require.NotEmpty(t, table.TestCases)
+
+	for _, versionCase := range table.TestCases {
+		for _, ceilingCase := range versionCase.CeilingCases {
+			for _, overrideCase := range ceilingCase.OverrideCases {
+				t.Run(fmt.Sprintf("default_%d/recorded_%d/ceiling_%d/override_%d", versionCase.DefaultVersion, versionCase.RecordedVersion, ceilingCase.Ceiling, overrideCase.Override), func(t *testing.T) {
+					version, capturedCeiling := determineVersionTransition(versionCase.DefaultVersion, versionCase.RecordedVersion, ceilingCase.Ceiling, overrideCase.Override)
+					require.Equal(t, overrideCase.WantVersion, version)
+					require.Equal(t, overrideCase.WantCeiling, capturedCeiling)
+				})
+			}
 		}
 	}
 }
