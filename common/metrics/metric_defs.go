@@ -347,15 +347,15 @@ const (
 	HistoryRespondActivityTaskFailedScope = "RespondActivityTaskFailed"
 	// HistoryRespondActivityTaskCanceledScope tracks RespondActivityTaskCanceled API calls received by service
 	HistoryRespondActivityTaskCanceledScope = "RespondActivityTaskCanceled"
-	// ActivityTerminatedScope tracks TerminateActivityExecution API calls received by service
+	// ActivityTerminatedScope identifies applied activity termination mutations.
 	ActivityTerminatedScope = "ActivityTerminated"
-	// ActivityPausedScope tracks PauseActivityExecution API calls received by service
+	// ActivityPausedScope identifies applied activity pause mutations.
 	ActivityPausedScope = "ActivityPaused"
-	// ActivityUnpausedScope tracks UnpauseActivityExecution API calls received by service
+	// ActivityUnpausedScope identifies applied activity unpause mutations.
 	ActivityUnpausedScope = "ActivityUnpaused"
-	// ActivityResetScope tracks ResetActivityExecution API calls received by service
+	// ActivityResetScope identifies applied activity reset mutations.
 	ActivityResetScope = "ActivityReset"
-	// ActivityUpdateOptionsScope tracks UpdateActivityExecutionOptions API calls received by service
+	// ActivityUpdateOptionsScope identifies applied activity option mutations.
 	ActivityUpdateOptionsScope = "ActivityUpdateOptions"
 	// HistoryGetWorkflowExecutionHistoryScope is the metric scope for non-long-poll frontend.GetWorkflowExecutionHistory
 	HistoryGetWorkflowExecutionHistoryScope = "GetWorkflowExecutionHistory"
