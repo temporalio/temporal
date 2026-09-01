@@ -1,0 +1,19 @@
+Mutation Summary
+
+Overall
+  killed:      5
+  survived:    2
+  skipped:     0
+  duplicated:  0
+  uncovered:   1
+  mutants:     7
+
+Logs
+  output/shard-01.log
+  output/shard-02.log
+
+Surviving Diffs
+  output/survivors.diff
+
+Uncovered Blocks
+  output/uncovered.txt

@@ -583,6 +583,21 @@ verify-test-log:
 
 test: unit-test integration-test functional-test
 
+MUTATION_TIMEOUT ?= 3m
+MUTATION_RUN_TIMEOUT ?= 0
+mutation-test:
+	@printf $(COLOR) "Run mutation tests..."
+	@go run ./cmd/tools/mutationtest \
+		-output-root "$(CURDIR)/$(TEST_OUTPUT_ROOT)/mutations" \
+		-ref "$(MUTATION_REF)" \
+		-include-files "$(MUTATION_SOURCE_FILES)" \
+		-exclude-files "$(MUTATION_SOURCE_EXCLUDE_FILES)" \
+		-test-files "$(MUTATION_TEST_FILES)" \
+		-test-tags "$(MUTATION_TEST_TAGS)" \
+		-shard-level "$(MUTATION_SHARD_LEVEL)" \
+		-timeout "$(MUTATION_TIMEOUT)" \
+		-run-timeout "$(MUTATION_RUN_TIMEOUT)"
+
 ##### Coverage & Reporting #####
 $(TEST_OUTPUT_ROOT):
 	@mkdir -p $(TEST_OUTPUT_ROOT)
