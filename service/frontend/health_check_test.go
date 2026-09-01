@@ -51,6 +51,12 @@ func (s *healthCheckerSuite) SetupTest() {
 				return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_SERVING}, nil
 			case "2":
 				return nil, errors.New("test")
+			case "6":
+				// serving, but breaching a check that is not enforced
+				return &historyservice.DeepHealthCheckResponse{
+					State:           enumsspb.HEALTH_STATE_SERVING,
+					UnenforcedState: enumsspb.HEALTH_STATE_NOT_SERVING,
+				}, nil
 			default:
 				return &historyservice.DeepHealthCheckResponse{State: enumsspb.HEALTH_STATE_NOT_SERVING}, nil
 			}
@@ -95,6 +101,22 @@ func (s *healthCheckerSuite) Test_Check_Not_Serving() {
 	result, err := s.checker.Check(context.Background())
 	s.Require().NoError(err)
 	s.Equal(enumsspb.HEALTH_STATE_NOT_SERVING, result.State)
+}
+
+func (s *healthCheckerSuite) Test_Check_Unenforced_Not_Serving() {
+	// 2 of 4 hosts breach an unenforced check, which is over the 25% threshold, but
+	// no host is failing an enforced check
+	s.resolver.EXPECT().AvailableMembers().Return([]membership.HostInfo{
+		membership.NewHostInfoFromAddress("1"),
+		membership.NewHostInfoFromAddress("3"),
+		membership.NewHostInfoFromAddress("6"),
+		membership.NewHostInfoFromAddress("6"),
+	})
+
+	result, err := s.checker.Check(context.Background())
+	s.Require().NoError(err)
+	s.Equal(enumsspb.HEALTH_STATE_SERVING, result.State)
+	s.Equal(enumsspb.HEALTH_STATE_NOT_SERVING, result.ServiceDetail.GetUnenforcedState())
 }
 
 func (s *healthCheckerSuite) Test_Check_No_Available_Hosts() {
