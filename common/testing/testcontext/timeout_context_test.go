@@ -47,6 +47,26 @@ func TestTimeoutContextInheritsParentDeadline(t *testing.T) {
 	})
 }
 
+func TestTimeoutContextDoesNotClaimParentDeadline(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		start := time.Now()
+		parent := reportedDeadlineContext{
+			Context:  t.Context(),
+			deadline: start.Add(time.Second),
+		}
+		ctx := newTimeoutContext(parent, start.Add(time.Minute), start.Add(10*time.Second), nil)
+
+		time.Sleep(time.Second) //nolint:forbidigo // advance to the parent-owned deadline
+		<-ctx.Done()
+
+		require.Equal(t, context.DeadlineExceeded, ctx.Err())
+		require.False(t, errors.Is(context.Cause(ctx), DeadlineExceeded))
+		require.ErrorIs(t, context.Cause(ctx), context.DeadlineExceeded)
+	})
+}
+
 func TestTimeoutContextStartsCanceledWithCanceledParent(t *testing.T) {
 	t.Parallel()
 
