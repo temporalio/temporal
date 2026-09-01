@@ -44,6 +44,7 @@ func (h *deepHealthCheckHandler) DeepHealthCheck(
 				Message:   fmt.Sprintf("gRPC health check failed: %v", err),
 				Enforced:  true,
 			}},
+			UnenforcedState: enumsspb.HEALTH_STATE_NOT_SERVING,
 		}, nil
 	}
 
