@@ -464,14 +464,15 @@ func (r *ReaderImpl) loadAndSubmitTasks() {
 	}
 	r.retrier.Reset()
 
+	moreTasks := loadSlice.MoreTasks()
 	if len(tasks) != 0 {
 		for _, task := range tasks {
 			r.submit(task)
 		}
-		r.monitor.SetReaderWatermark(r.readerID, tasks[len(tasks)-1].GetKey())
+		r.monitor.SetReaderWatermark(r.readerID, tasks[len(tasks)-1].GetKey(), moreTasks)
 	}
 
-	if loadSlice.MoreTasks() {
+	if moreTasks {
 		r.notify()
 		return
 	}

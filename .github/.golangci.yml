@@ -171,6 +171,7 @@ linters:
       - ^api
       - ^proto
       - ^.git
+      - ^\.\./service/history/hsm/(callbacks|dummy|nexusoperations)/
     rules:
       - path-except: _test\.go|tests/.+\.go
         text: "time.Sleep"
@@ -234,6 +235,10 @@ linters:
       - path: ^tools\/.+\.go
         linters:
           - revive
+      # These packages remain imported to read and maintain persisted HSM state.
+      - text: "SA1019: go.temporal.io/server/service/history/hsm/(callbacks|nexusoperations) is deprecated"
+        linters:
+          - staticcheck
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0

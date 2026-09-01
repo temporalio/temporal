@@ -236,6 +236,11 @@ response to a StartWorkflowExecution request and skipping the trip through match
 		2*time.Second,
 		`NamespaceCacheRefreshInterval is the key for namespace cache refresh interval dynamic config`,
 	)
+	EmitNamespaceLifecycleEvents = NewGlobalBoolSetting(
+		"system.emitNamespaceLifecycleEvents",
+		false,
+		`EmitNamespaceLifecycleEvents controls whether services emit NamespaceLifecycle and NamespaceReplicationLifecycle wide events. Cluster-level; default off.`,
+	)
 	PersistenceHealthSignalMetricsEnabled = NewGlobalBoolSetting(
 		"system.persistenceHealthSignalMetricsEnabled",
 		true,
@@ -674,7 +679,7 @@ ScheduleInvariantsScannerParams comments for details.`,
 	FrontendDisabledScheduleValidations = NewNamespaceTypedSetting(
 		"frontend.disabledScheduleValidations",
 		[]string(nil),
-		`FrontendDisabledScheduleValidations is a list of schedule validation names that should log and continue instead of rejecting the request for a specific namespace. Valid values: versioning-override, scheduler-duration.`,
+		`FrontendDisabledScheduleValidations is a list of schedule validation names that should log and continue instead of rejecting the request for a specific namespace. Valid values: versioning-override, scheduler-duration, scheduler-overlap-policy, scheduler-timestamp, scheduler-remaining-actions.`,
 	)
 	FrontendHTTPAllowedHosts = NewGlobalTypedSettingWithConverter(
 		"frontend.httpAllowedHosts",
@@ -1374,11 +1379,12 @@ observability stack. Disabling this option will disable all the per-Task Queue g
 	MetricsBreakdownByBuildID = NewTaskQueueBoolSetting(
 		"metrics.breakdownByBuildID",
 		true,
-		`MetricsBreakdownByBuildID determines if the 'worker_version' tag in Matching metrics should
-contain the actual Worker Deployment Version or a generic "__versioned__" value. Regardless of this config, the tag value for unversioned
-queues will be "__unversioned__". Disable this option if the version cardinality is too high for your
-observability stack. Disabling this option will disable all the per-Task Queue gauges such as backlog lag, count, and age
-for VERSIONED queues.`,
+		`MetricsBreakdownByBuildID determines if Worker Deployment tags in Matching and History metrics should
+contain actual deployment and build ID values. When disabled, the deployment and build ID tags are empty, and the
+'worker_version' tag in metrics contains a generic "__versioned__" value. Regardless of this config, the
+'worker_version' tag value for unversioned task queues is "__unversioned__". Disable this option if the version cardinality
+is too high for your observability stack. Disabling this option will disable all the per-Task Queue gauges such as
+backlog lag, count, and age for VERSIONED queues.`,
 	)
 	MatchingForwarderMaxOutstandingPolls = NewTaskQueueIntSetting(
 		"matching.forwarderMaxOutstandingPolls",
@@ -1712,6 +1718,20 @@ leaves the membership ring, giving in-flight long-polls time to drain before the
 
 	// keys for history
 
+	EnablePaginationTokenBranchValidation = NewGlobalBoolSetting(
+		"history.enablePaginationTokenBranchValidation",
+		true,
+		`EnablePaginationTokenBranchValidation enables checking that the branch token in a
+GetWorkflowExecutionHistory(Reverse) page token is the current branch token of the requested
+execution.`,
+	)
+	EnablePaginationTokenBranchValidationShadowMode = NewGlobalBoolSetting(
+		"history.enablePaginationTokenBranchValidationShadowMode",
+		false,
+		`EnablePaginationTokenBranchValidationShadowMode logs and emits metrics for a page token whose
+branch token is not the execution's current one, but still serves the read.`,
+	)
+
 	EnableReplicationStream = NewGlobalBoolSetting(
 		"history.enableReplicationStream",
 		true,
@@ -1720,7 +1740,7 @@ leaves the membership ring, giving in-flight long-polls time to drain before the
 	EmitReplicationLifecycleEvents = NewGlobalBoolSetting(
 		"history.emitReplicationLifecycleEvents",
 		false,
-		`EmitReplicationLifecycleEvents controls whether the history service emits ReplicationLifecycle wide events (sent/executing/applied phases). Cluster-level; default off.`,
+		`EmitReplicationLifecycleEvents controls whether the history service emits ReplicationLifecycle wide events, including parent-child diagnostics. Cluster-level; default off.`,
 	)
 	EnableCloseInboundReplicationStreamOnShutdown = NewGlobalBoolSetting(
 		"history.enableCloseInboundReplicationStreamOnShutdown",
@@ -1912,7 +1932,7 @@ This can help reduce effects of shard movement.`,
 	)
 	EnableHostLevelEventsCache = NewGlobalBoolSetting(
 		"history.enableHostLevelEventsCache",
-		false,
+		true,
 		`EnableHostLevelEventsCache controls if the events cache is host level. Requires service restart to take effect.`,
 	)
 	AcquireShardInterval = NewGlobalDurationSetting(
@@ -2017,6 +2037,11 @@ NOTE: The outbound queue has a separate configuration: outboundQueuePendingTaskC
 		`QueueReaderStuckCriticalAttempts is the max number of task loading attempts for a certain task range
 before that task range is split into a separate slice to unblock loading for later range.
 currently only work for scheduled queues and the task range is 1s.`,
+	)
+	QueueReaderStuckShadowMode = NewGlobalBoolSetting(
+		"history.queueReaderStuckShadowMode",
+		false,
+		`QueueReaderStuckShadowMode controls whether reader stuck alerts are suppressed and only logged.`,
 	)
 	QueueCriticalSlicesCount = NewGlobalIntSetting(
 		"history.queueCriticalSlicesCount",
@@ -2608,6 +2633,18 @@ system.transactionSizeLimit, since each batch is persisted within a single trans
 		10000,
 		`MaximumSignalsPerExecution is max number of signals supported by single execution`,
 	)
+	MaximumRequestIDsPerExecution = NewNamespaceIntSetting(
+		"history.maximumRequestIDsPerExecution",
+		25,
+		`MaximumRequestIDsPerExecution is the hard cap on CHASM-attached request IDs retained per
+execution for UpdateComponent idempotency; the oldest are swept beyond this limit. Set to 0 to disable the count cap.`,
+	)
+	RequestIDMaxAge = NewNamespaceDurationSetting(
+		"history.requestIDMaxAge",
+		7*24*time.Hour,
+		`RequestIDMaxAge is the maximum age of a CHASM-attached request ID retained per execution for
+UpdateComponent idempotency. Set to 0 to disable age-based sweeping.`,
+	)
 	ShardUpdateMinInterval = NewGlobalDurationSetting(
 		"history.shardUpdateMinInterval",
 		5*time.Minute,
@@ -2759,15 +2796,8 @@ the number of children greater than or equal to this threshold`,
 	ReplicationTaskApplyTimeout = NewGlobalDurationSetting(
 		"history.ReplicationTaskApplyTimeout",
 		20*time.Second,
-		`ReplicationTaskApplyTimeout is the context timeout for replication task apply, and for the
-standby CloseExecutionTask's child-to-parent completion verification`,
-	)
-	ParentWorkflowResendMaxInFlight = NewGlobalIntSetting(
-		"history.parentWorkflowResendMaxInFlight",
-		8,
-		`ParentWorkflowResendMaxInFlight caps how many parent workflow resends a shard may run
-concurrently when EnableAsyncParentWorkflowResend is on. Attempts beyond the cap are dropped; the
-verifying task retries. This bounds the goroutines this path can create per shard.`,
+		`ReplicationTaskApplyTimeout is the context timeout for replication task apply, and for
+standby parent-child verification resends`,
 	)
 	EnableAsyncParentWorkflowResend = NewGlobalBoolSetting(
 		"history.enableAsyncParentWorkflowResend",
@@ -2775,6 +2805,21 @@ verifying task retries. This bounds the goroutines this path can create per shar
 		`EnableAsyncParentWorkflowResend controls whether the standby child-to-parent completion
 verification resends the parent workflow in the background rather than inline, so the verifying task
 is not held for the duration of the cross-cluster sync.`,
+	)
+	EnableChildWorkflowResend = NewGlobalBoolSetting(
+		"history.enableChildWorkflowResend",
+		false,
+		`EnableChildWorkflowResend controls whether standby parent-to-child first workflow task
+verification may resend a missing child workflow in the background from the active cluster. When
+disabled, verification remains local-only. StandbyTaskMissingEventsResendDelay plus
+ReplicationTaskApplyTimeout should remain below StandbyTaskMissingEventsDiscardDelay.`,
+	)
+	WorkflowResendHostMaxInFlight = NewGlobalIntSetting(
+		"history.workflowResendHostMaxInFlight",
+		16,
+		`WorkflowResendHostMaxInFlight caps the total number of asynchronous parent and child workflow
+resends that may run concurrently on a history host. Values less than one reject all asynchronous
+workflow resends.`,
 	)
 	ReplicationTaskFetcherParallelism = NewGlobalIntSetting(
 		"history.ReplicationTaskFetcherParallelism",
@@ -2928,6 +2973,14 @@ that task will be sent to DLQ.`,
 		false,
 		`EnableReplicationTaskTieredProcessing is a feature flag for enabling tiered replication task processing stack`,
 	)
+	EnableReplicationReaderGroup = NewGlobalBoolSetting(
+		"history.EnableReplicationReaderGroup",
+		false,
+		`EnableReplicationReaderGroup routes replication stream reader-state handling through the
+replicationReaderGroup abstraction, a refactor of the per-priority cursor arithmetic in the
+stream sender. Behavior is unchanged; this flag exists to allow a safe rollout of the
+refactored path. Changing it restarts replication streams.`,
+	)
 	ReplicationStreamReadBufferSize = NewGlobalIntSetting(
 		"history.ReplicationStreamReadBufferSize",
 		0,
@@ -3003,6 +3056,22 @@ to persistence. The buffer holds slim queue rows (task metadata, not event paylo
 		10,
 		"ReplicationStreamSenderLivenessMultiplier is the multiplier of liveness check interval on stream sender",
 	)
+	ReplicationStreamMaxLifetime = NewGlobalDurationSetting(
+		"history.ReplicationStreamMaxLifetime",
+		0,
+		`ReplicationStreamMaxLifetime, if greater than 0, bounds how long a single replication
+stream may live before the stream receiver gracefully recycles it (stops it, after which the
+stream receiver monitor reopens a fresh stream). A jitter is applied to spread recycling across
+streams. This lets proxies (e.g. Envoy) gracefully drain connections that would otherwise be
+pinned open indefinitely by endless replication streams. 0 disables the max lifetime (default).`,
+	)
+	ReplicationStreamMaxLifetimeJitter = NewGlobalFloatSetting(
+		"history.ReplicationStreamMaxLifetimeJitter",
+		0.1,
+		`ReplicationStreamMaxLifetimeJitter is the +/- jitter coefficient applied to
+ReplicationStreamMaxLifetime so that streams sharing a connection do not all recycle at the same
+time (mirrors gRPC MaxConnectionAge's +/-10% jitter). Values outside [0, 1] are clamped.`,
+	)
 	EnableHistoryReplicationRateLimiter = NewNamespaceBoolSetting(
 		"history.EnableHistoryReplicationRateLimiter",
 		false,
@@ -3042,6 +3111,11 @@ to persistence. The buffer holds slim queue rows (task metadata, not event paylo
 		"history.ReplicationStreamSenderErrorRetryExpiration",
 		3*time.Minute,
 		`ReplicationStreamSenderErrorRetryExpiration is the max retry duration for sending replication tasks`,
+	)
+	ReplicationStreamSenderSkipStuckTask = NewGlobalBoolSetting(
+		"history.ReplicationStreamSenderSkipStuckTask",
+		false,
+		`ReplicationStreamSenderSkipStuckTask, when true, makes the replication stream sender log, emit a metric, and skip (advance the watermark past) a task that could not be built ("converted") after exhausting retries, instead of failing and wedging the whole stream. Only unbuildable tasks (corrupt/unusable source info) are skipped; transient send/rate-limit failures and infra/teardown errors (shard-ownership-lost, stream error, context canceled) are not, so they still tear the stream down. Deterministic non-retryable send failures such as an oversized gRPC message are not handled here (left to the transport-layer message-size fix).`,
 	)
 	ReplicationExecutableTaskErrorRetryWait = NewGlobalDurationSetting(
 		"history.ReplicationExecutableTaskErrorRetryWait",
