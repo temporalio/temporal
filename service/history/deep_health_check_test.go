@@ -1053,6 +1053,113 @@ func TestDeepHealthCheck(t *testing.T) {
 				},
 			},
 		},
+		{
+			desc:             "unenforced check over threshold only moves the unenforced state",
+			timeSinceStartup: 5 * time.Minute,
+			grpcHealthStatus: healthpb.HealthCheckResponse_SERVING,
+			// 600ms clears every enforced threshold but is over the unenforced P50's 500ms
+			historyRecords: []record{
+				{600 * time.Millisecond, nil},
+				{600 * time.Millisecond, nil},
+			},
+			persistRecords: []record{
+				{100 * time.Millisecond, nil},
+				{100 * time.Millisecond, nil},
+			},
+			expected: &historyservice.DeepHealthCheckResponse{
+				State:           enumsspb.HEALTH_STATE_SERVING,
+				UnenforcedState: enumsspb.HEALTH_STATE_NOT_SERVING,
+				Checks: []*healthspb.HealthCheck{
+					{
+						CheckType: health2.CheckTypeGRPCHealth,
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Message:   "historyservice gRPC health check: SERVING",
+						Enforced:  true,
+					},
+					{
+						CheckType: health2.CheckTypeRPCLatency,
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     600,
+						Threshold: 1000,
+						Message:   "historyservice latency",
+						Enforced:  true,
+					},
+					{
+						CheckType: health2.CheckTypeRPCLatency + "_P99.00",
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     600,
+						Threshold: 2000,
+						Message:   "historyservice percentile latency (P99.00 < 2000, enforced: false)",
+						Enforced:  false,
+					},
+					{
+						CheckType: health2.CheckTypeRPCLatency + "_P90.00",
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     600,
+						Threshold: 1000,
+						Message:   "historyservice percentile latency (P90.00 < 1000, enforced: false)",
+						Enforced:  false,
+					},
+					// the only breached check, and it is unenforced
+					{
+						CheckType: health2.CheckTypeRPCLatency + "_P50.00",
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     600,
+						Threshold: 500,
+						Message:   "historyservice percentile latency (P50.00 < 500, enforced: false)",
+						Enforced:  false,
+					},
+					{
+						CheckType: health2.CheckTypeRPCErrorRatio,
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     0,
+						Threshold: 0.1,
+						Message:   "historyservice error ratio",
+						Enforced:  true,
+					},
+					{
+						CheckType: health2.CheckTypePersistenceLatency,
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     100,
+						Threshold: 1000,
+						Message:   "persistenceservice latency",
+						Enforced:  true,
+					},
+					{
+						CheckType: health2.CheckTypePersistenceLatency + "_P99.00",
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     100,
+						Threshold: 2000,
+						Message:   "persistenceservice percentile latency (P99.00 < 2000, enforced: false)",
+						Enforced:  false,
+					},
+					{
+						CheckType: health2.CheckTypePersistenceLatency + "_P90.00",
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     100,
+						Threshold: 1000,
+						Message:   "persistenceservice percentile latency (P90.00 < 1000, enforced: false)",
+						Enforced:  false,
+					},
+					{
+						CheckType: health2.CheckTypePersistenceLatency + "_P50.00",
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     100,
+						Threshold: 500,
+						Message:   "persistenceservice percentile latency (P50.00 < 500, enforced: false)",
+						Enforced:  false,
+					},
+					{
+						CheckType: health2.CheckTypePersistenceErrRatio,
+						State:     enumsspb.HEALTH_STATE_SERVING,
+						Value:     0,
+						Threshold: 0.1,
+						Message:   "persistenceservice error ratio",
+						Enforced:  true,
+					},
+				},
+			},
+		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
