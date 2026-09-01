@@ -41,13 +41,7 @@ func newSingleClusterWithGlobalNamespace(t *testing.T, logger log.Logger) *testc
 		HistoryConfig: testcore.HistoryConfig{NumHistoryShards: 1},
 		Persistence:   persistenceDefaults,
 		DynamicConfigOverrides: map[dynamicconfig.Key]any{
-			dynamicconfig.EnableTransitionHistory.Key():               true,
-			dynamicconfig.NamespaceCacheRefreshInterval.Key():         testcore.NamespaceCacheRefreshInterval,
-			dynamicconfig.SendRawHistoryBetweenInternalServices.Key(): true,
-			dynamicconfig.TransferProcessorUpdateAckInterval.Key():    time.Second,
-			dynamicconfig.TimerProcessorUpdateAckInterval.Key():       time.Second,
-			dynamicconfig.TransferProcessorMaxPollInterval.Key():      time.Second,
-			dynamicconfig.TimerProcessorMaxPollInterval.Key():         time.Second,
+			dynamicconfig.EnableTransitionHistory.Key(): true,
 		},
 		EnableHistoryTaskRecorder: true,
 	}
