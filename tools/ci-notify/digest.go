@@ -103,20 +103,6 @@ func getWorkflowRuns(branch, workflowName string, since time.Time) ([]github.Run
 	return runs, nil
 }
 
-func splitRunsByPeriod(runs []github.Run, previousStart, currentStart, end time.Time) (current, previous []github.Run) {
-	for _, run := range runs {
-		switch {
-		case !run.CreatedAt.Before(currentStart) && run.CreatedAt.Before(end):
-			current = append(current, run)
-		case !run.CreatedAt.Before(previousStart) && run.CreatedAt.Before(currentStart):
-			previous = append(previous, run)
-		default:
-			continue
-		}
-	}
-	return current, previous
-}
-
 func summarizeDigestPeriod(runs []github.Run) DigestPeriod {
 	// Filter to only completed runs
 	completedRuns := filterCompleted(runs)
@@ -186,7 +172,17 @@ func buildDigestAt(
 		return nil, err
 	}
 
-	currentRuns, previousRuns := splitRunsByPeriod(runs, previousStartDate, startDate, endDate)
+	var currentRuns, previousRuns []github.Run
+	for _, run := range runs {
+		switch {
+		case !run.CreatedAt.Before(startDate) && run.CreatedAt.Before(endDate):
+			currentRuns = append(currentRuns, run)
+		case !run.CreatedAt.Before(previousStartDate) && run.CreatedAt.Before(startDate):
+			previousRuns = append(previousRuns, run)
+		default:
+			continue
+		}
+	}
 
 	return &DigestReport{
 		Branch:       branch,
