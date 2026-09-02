@@ -19,6 +19,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
@@ -36,6 +37,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
@@ -3100,6 +3102,176 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 
 	resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.NoError(resp.ExecutionErr)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestRecoverClosedChildCompletion_RefreshesTerminalCurrentRun() {
+	childExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "child-workflow-id",
+		RunId:      uuid.NewString(),
+	}
+	terminalRunID := uuid.NewString()
+
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), protomock.Eq(&historyservice.GetMutableStateRequest{
+		NamespaceId: s.childNamespaceID.String(),
+		Execution:   &commonpb.WorkflowExecution{WorkflowId: childExecution.WorkflowId},
+	})).Return(&historyservice.GetMutableStateResponse{
+		Execution:           &commonpb.WorkflowExecution{WorkflowId: childExecution.WorkflowId, RunId: terminalRunID},
+		WorkflowStatus:      enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		FirstExecutionRunId: childExecution.RunId,
+	}, nil)
+	s.mockHistoryClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), protomock.Eq(&historyservice.RefreshWorkflowTasksRequest{
+		NamespaceId: s.childNamespaceID.String(),
+		ArchetypeId: chasm.WorkflowArchetypeID,
+		Request: &adminservice.RefreshWorkflowTasksRequest{
+			Execution: &commonpb.WorkflowExecution{WorkflowId: childExecution.WorkflowId, RunId: terminalRunID},
+		},
+	})).Return(&historyservice.RefreshWorkflowTasksResponse{}, nil)
+
+	err := s.recoverClosedChildCompletion(childExecution, consts.ErrWorkflowCompleted)
+	s.Require().NoError(err)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestIsWorkflowCompletedError() {
+	s.True(isWorkflowCompletedError(consts.ErrWorkflowCompleted))
+	s.True(isWorkflowCompletedError(serviceerror.NewNotFound(consts.ErrWorkflowCompleted.Error())))
+	s.False(isWorkflowCompletedError(serviceerror.NewNotFound("workflow execution not found")))
+	s.False(isWorkflowCompletedError(serviceerror.NewUnavailable("history unavailable")))
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestRecoverClosedChildCompletion_RefreshFailureIsRetried() {
+	childExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "child-workflow-id",
+		RunId:      uuid.NewString(),
+	}
+	terminalRunID := uuid.NewString()
+	refreshErr := serviceerror.NewUnavailable("refresh failed")
+
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).
+		Return(&historyservice.GetMutableStateResponse{
+			Execution:           &commonpb.WorkflowExecution{WorkflowId: childExecution.WorkflowId, RunId: terminalRunID},
+			WorkflowStatus:      enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			FirstExecutionRunId: childExecution.RunId,
+		}, nil)
+	s.mockHistoryClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), gomock.Any()).
+		Return(nil, refreshErr)
+
+	err := s.recoverClosedChildCompletion(childExecution, consts.ErrWorkflowCompleted)
+	s.Require().ErrorIs(err, refreshErr)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestRecoverClosedChildCompletion_RunningSuccessorIsNotRefreshed() {
+	childExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "child-workflow-id",
+		RunId:      uuid.NewString(),
+	}
+
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).
+		Return(&historyservice.GetMutableStateResponse{
+			Execution:           &commonpb.WorkflowExecution{WorkflowId: childExecution.WorkflowId, RunId: uuid.NewString()},
+			WorkflowStatus:      enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			FirstExecutionRunId: childExecution.RunId,
+		}, nil)
+
+	err := s.recoverClosedChildCompletion(childExecution, consts.ErrWorkflowCompleted)
+	s.Require().NoError(err)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestRecoverClosedChildCompletion_PausedSuccessorIsNotRefreshed() {
+	childExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "child-workflow-id",
+		RunId:      uuid.NewString(),
+	}
+
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).
+		Return(&historyservice.GetMutableStateResponse{
+			Execution:           &commonpb.WorkflowExecution{WorkflowId: childExecution.WorkflowId, RunId: uuid.NewString()},
+			WorkflowStatus:      enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
+			FirstExecutionRunId: childExecution.RunId,
+		}, nil)
+
+	err := s.recoverClosedChildCompletion(childExecution, consts.ErrWorkflowCompleted)
+	s.Require().NoError(err)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestRecoverClosedChildCompletion_WorkflowIDReused() {
+	childExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "child-workflow-id",
+		RunId:      uuid.NewString(),
+	}
+	metricHandler := metricstest.NewCaptureHandler()
+	metricCapture := metricHandler.StartCapture()
+	defer metricHandler.StopCapture(metricCapture)
+	s.transferQueueActiveTaskExecutor.metricHandler = metricHandler
+
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).
+		Return(&historyservice.GetMutableStateResponse{
+			Execution:           &commonpb.WorkflowExecution{WorkflowId: childExecution.WorkflowId, RunId: uuid.NewString()},
+			WorkflowStatus:      enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			FirstExecutionRunId: uuid.NewString(),
+		}, nil)
+
+	err := s.recoverClosedChildCompletion(childExecution, consts.ErrWorkflowCompleted)
+	s.Require().NoError(err)
+	s.Require().Len(metricCapture.Snapshot()[metrics.ChildWorkflowCompletionRecoveryChainMismatch.Name()], 1)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestRecoverClosedChildCompletion_CurrentRunNotFound() {
+	childExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "child-workflow-id",
+		RunId:      uuid.NewString(),
+	}
+
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewNotFound("current run deleted"))
+
+	err := s.recoverClosedChildCompletion(childExecution, consts.ErrWorkflowCompleted)
+	s.Require().NoError(err)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestRecoverClosedChildCompletion_GetMutableStateFailureIsRetried() {
+	childExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "child-workflow-id",
+		RunId:      uuid.NewString(),
+	}
+	mutableStateErr := serviceerror.NewUnavailable("mutable state unavailable")
+
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).
+		Return(nil, mutableStateErr)
+
+	err := s.recoverClosedChildCompletion(childExecution, consts.ErrWorkflowCompleted)
+	s.Require().ErrorIs(err, mutableStateErr)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestRecoverClosedChildCompletion_Disabled() {
+	childExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "child-workflow-id",
+		RunId:      uuid.NewString(),
+	}
+	s.transferQueueActiveTaskExecutor.config.EnableChildWorkflowCompletionRecovery = func(string) bool { return false }
+
+	err := s.recoverClosedChildCompletion(childExecution, consts.ErrWorkflowCompleted)
+	s.Require().ErrorIs(err, consts.ErrWorkflowCompleted)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) recoverClosedChildCompletion(
+	childExecution *commonpb.WorkflowExecution,
+	scheduleErr error,
+) error {
+	return s.transferQueueActiveTaskExecutor.recoverClosedChildCompletion(
+		context.Background(),
+		&tasks.StartChildExecutionTask{
+			WorkflowKey: definition.NewWorkflowKey(
+				s.namespaceID.String(),
+				"parent-workflow-id",
+				uuid.NewString(),
+			),
+		},
+		s.childNamespace,
+		s.childNamespaceID.String(),
+		childExecution.GetWorkflowId(),
+		childExecution.GetRunId(),
+		scheduleErr,
+	)
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Duplication() {

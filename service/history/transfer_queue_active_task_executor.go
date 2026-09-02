@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -14,6 +15,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -913,7 +915,25 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 			return serviceerror.NewNamespaceNotFound(childInfo.Namespace)
 		}
 
-		return t.createFirstWorkflowTask(ctx, targetNamespaceID.String(), childExecution, parentClock, childClock)
+		// Recovery depends on this separate scheduling request returning ErrWorkflowCompleted. If
+		// child start and first Workflow Task scheduling are combined into one transaction, this
+		// path cannot detect a completion that happened before parent replication arrived.
+		scheduleErr := t.createFirstWorkflowTask(ctx, targetNamespaceID.String(), childExecution, parentClock, childClock)
+		if scheduleErr == nil || !isWorkflowCompletedError(scheduleErr) {
+			return scheduleErr
+		}
+
+		// Child completion removes ChildExecutionInfo, so reaching this point means the parent still
+		// needs a completion event for this child execution chain.
+		return t.recoverClosedChildCompletion(
+			ctx,
+			task,
+			targetNamespaceName,
+			targetNamespaceID.String(),
+			childExecution.GetWorkflowId(),
+			childExecution.GetRunId(),
+			scheduleErr,
+		)
 	}
 
 	// remaining 2 cases:
@@ -1506,6 +1526,97 @@ func (t *transferQueueActiveTaskExecutor) createFirstWorkflowTask(
 		IsFirstWorkflowTask: true,
 		ParentClock:         parentClock,
 		ChildClock:          childClock,
+	})
+	return err
+}
+
+func isWorkflowCompletedError(err error) bool {
+	var notFoundErr *serviceerror.NotFound
+	// ScheduleWorkflowTask is a gRPC call, so errors.Is cannot identify the local sentinel after
+	// it has been serialized. Match both the service error type and the sentinel message instead.
+	return errors.As(err, &notFoundErr) && notFoundErr.Error() == consts.ErrWorkflowCompleted.Error()
+}
+
+func (t *transferQueueActiveTaskExecutor) recoverClosedChildCompletion(
+	ctx context.Context,
+	parentTask *tasks.StartChildExecutionTask,
+	childNamespaceName namespace.Name,
+	childNamespaceID string,
+	childWorkflowID string,
+	childFirstRunID string,
+	scheduleErr error,
+) error {
+	if !t.config.EnableChildWorkflowCompletionRecovery(childNamespaceName.String()) {
+		return scheduleErr
+	}
+
+	// Parent replication can regenerate this task after the child's original close task was
+	// acknowledged while the parent was missing.
+	mutableStateResponse, mutableStateErr := t.historyRawClient.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
+		NamespaceId: childNamespaceID,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: childWorkflowID,
+		},
+	})
+	if mutableStateErr != nil {
+		if common.IsNotFoundError(mutableStateErr) {
+			// TODO: Revisit this recovery gap. If the current run is deleted before parent
+			// replication arrives, there is no execution to refresh and completion cannot be recovered.
+			return nil
+		}
+		return mutableStateErr
+	}
+
+	if mutableStateResponse.GetFirstExecutionRunId() != childFirstRunID {
+		metrics.ChildWorkflowCompletionRecoveryChainMismatch.With(
+			t.metricHandler.WithTags(metrics.NamespaceTag(childNamespaceName.String())),
+		).Record(1)
+		t.logger.Warn(
+			"Unable to recover child completion because the workflow ID points to a different execution chain",
+			tag.NewStringTag("parent-namespace-id", parentTask.GetNamespaceID()),
+			tag.NewStringTag("parent-workflow-id", parentTask.GetWorkflowID()),
+			tag.NewStringTag("parent-run-id", parentTask.GetRunID()),
+			tag.NewStringTag("child-namespace-id", childNamespaceID),
+			tag.NewStringTag("child-workflow-id", childWorkflowID),
+			tag.NewStringTag("expected-child-first-run-id", childFirstRunID),
+			tag.NewStringTag("current-child-first-run-id", mutableStateResponse.GetFirstExecutionRunId()),
+			tag.NewStringTag("current-child-run-id", mutableStateResponse.GetExecution().GetRunId()),
+		)
+		return nil
+	}
+	// A running successor will generate its own CloseExecution task after the parent is present.
+	// Only a terminal current run needs recovery for the completion notification that was lost.
+	switch mutableStateResponse.GetWorkflowStatus() {
+	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
+	default:
+		return nil
+	}
+
+	currentExecution := mutableStateResponse.GetExecution()
+	metrics.ChildWorkflowCompletionRecoveryAttempts.With(
+		t.metricHandler.WithTags(metrics.NamespaceTag(childNamespaceName.String())),
+	).Record(1)
+	t.logger.Info(
+		"Refreshing terminal child workflow to recover completion notification",
+		tag.NewStringTag("parent-namespace-id", parentTask.GetNamespaceID()),
+		tag.NewStringTag("parent-workflow-id", parentTask.GetWorkflowID()),
+		tag.NewStringTag("parent-run-id", parentTask.GetRunID()),
+		tag.NewStringTag("child-namespace-id", childNamespaceID),
+		tag.NewStringTag("child-workflow-id", childWorkflowID),
+		tag.NewStringTag("child-first-run-id", childFirstRunID),
+		tag.NewStringTag("child-terminal-run-id", currentExecution.GetRunId()),
+	)
+
+	_, err := t.historyRawClient.RefreshWorkflowTasks(ctx, &historyservice.RefreshWorkflowTasksRequest{
+		NamespaceId: childNamespaceID,
+		ArchetypeId: chasm.WorkflowArchetypeID,
+		Request: &adminservice.RefreshWorkflowTasksRequest{
+			Execution: currentExecution,
+		},
 	})
 	return err
 }
