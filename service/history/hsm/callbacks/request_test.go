@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -130,7 +129,9 @@ func TestRouteRequest_SourceHeaderUnknownCluster(t *testing.T) {
 func TestRouteSystemCallbackRequest_NilHeaders(t *testing.T) {
 	// When the request has nil headers, it should fall back to the local client.
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, commonnexus.PathCompletionCallbackNoIdentifier, r.URL.Path)
+		if r.URL.Path != commonnexus.PathCompletionCallbackNoIdentifier {
+			t.Errorf("unexpected request path: %q", r.URL.Path)
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer ts.Close()
@@ -239,7 +240,9 @@ func TestRouteSystemCallbackRequest_NamespaceNotFound(t *testing.T) {
 
 func TestRouteSystemCallbackRequest_Success(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, commonnexus.PathCompletionCallbackNoIdentifier, r.URL.Path)
+		if r.URL.Path != commonnexus.PathCompletionCallbackNoIdentifier {
+			t.Errorf("unexpected request path: %q", r.URL.Path)
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer ts.Close()
@@ -295,7 +298,9 @@ func TestRouteSystemCallbackRequest_Success(t *testing.T) {
 func TestRouteRequest_SystemCallback(t *testing.T) {
 	// Verify that routeRequest delegates to routeSystemCallbackRequest for system callback URLs.
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		assert.Equal(t, commonnexus.PathCompletionCallbackNoIdentifier, r.URL.Path)
+		if r.URL.Path != commonnexus.PathCompletionCallbackNoIdentifier {
+			t.Errorf("unexpected request path: %q", r.URL.Path)
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer ts.Close()

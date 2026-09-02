@@ -11,9 +11,9 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/metrics/metricstest"
-	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 

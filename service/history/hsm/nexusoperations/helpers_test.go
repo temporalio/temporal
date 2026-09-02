@@ -14,9 +14,9 @@ import (
 	"go.temporal.io/sdk/converter"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	"go.temporal.io/server/service/history/workflow"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
