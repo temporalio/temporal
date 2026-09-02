@@ -18,16 +18,6 @@ type (
 	}
 )
 
-func NewSequentialTaskQueue(task TrackableExecutableTask) ctasks.SequentialTaskQueue[TrackableExecutableTask] {
-	return &SequentialTaskQueue{
-		id: task.QueueID(),
-
-		taskQueue: collection.NewPriorityQueue[TrackableExecutableTask](
-			SequentialTaskQueueCompareLess,
-		),
-	}
-}
-
 func NewSequentialTaskQueueWithID(id any) ctasks.SequentialTaskQueue[TrackableExecutableTask] {
 	return &SequentialTaskQueue{
 		id: id,
