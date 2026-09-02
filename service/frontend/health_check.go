@@ -159,8 +159,7 @@ func (h *healthCheckerImpl) checkHost(ctx context.Context, hostAddress string) (
 	return resp, nil
 }
 
-// returns the overall state and the unenforced state
-func calculateStateAndUnenforcedState(hostDetails []*healthspb.HostHealthDetail, failureProportionThreshold float64) (enumsspb.HealthState, enumsspb.HealthState) {
+func calculateStateAndUnenforcedState(hostDetails []*healthspb.HostHealthDetail, failureProportionThreshold float64) (overallState enumsspb.HealthState, unenforcedState enumsspb.HealthState) {
 	var hostsNotHealthy float64
 	var hostsNotHealthyUnenforced float64
 
@@ -176,8 +175,8 @@ func calculateStateAndUnenforcedState(hostDetails []*healthspb.HostHealthDetail,
 		}
 	}
 
-	overallState := enumsspb.HEALTH_STATE_SERVING
-	unenforcedState := enumsspb.HEALTH_STATE_SERVING
+	overallState = enumsspb.HEALTH_STATE_SERVING
+	unenforcedState = enumsspb.HEALTH_STATE_SERVING
 
 	hostCount := float64(len(hostDetails))
 
