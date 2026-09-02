@@ -82,6 +82,52 @@ func TestDetermineVersionTransitions(t *testing.T) {
 	}
 }
 
+func TestShouldWarnForVersionCeiling(t *testing.T) {
+	unsupportedCeiling := int(TriggerImmediatelyTimestamp) + 1
+	for _, tc := range []struct {
+		name       string
+		tweakables TweakablePolicies
+		ceiling    int
+		want       bool
+	}{
+		{
+			name:    "first unsupported observation",
+			ceiling: unsupportedCeiling,
+			want:    true,
+		},
+		{
+			name: "restored unsupported observation",
+			tweakables: TweakablePolicies{
+				VersionCeiling:    unsupportedCeiling,
+				VersionCeilingSet: true,
+			},
+			ceiling: unsupportedCeiling,
+			want:    false,
+		},
+		{
+			name: "changed unsupported observation",
+			tweakables: TweakablePolicies{
+				VersionCeiling:    unsupportedCeiling,
+				VersionCeilingSet: true,
+			},
+			ceiling: unsupportedCeiling + 1,
+			want:    true,
+		},
+		{
+			name: "legacy marker with recorded ceiling",
+			tweakables: TweakablePolicies{
+				VersionCeiling: unsupportedCeiling,
+			},
+			ceiling: unsupportedCeiling,
+			want:    true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, shouldWarnForVersionCeiling(tc.tweakables, TriggerImmediatelyTimestamp, tc.ceiling))
+		})
+	}
+}
+
 func TestDetermineVersionTransitionCeilingTruthTable(t *testing.T) {
 	var table struct {
 		TestCases []struct {
