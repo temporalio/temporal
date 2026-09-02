@@ -20,7 +20,7 @@ Apply these patterns when reviewing PRs or suggesting code changes.
 - Don't put underscore after `Test` in test names: `TestRetry` not `Test_Retry`
 - Avoid stuttering: don't use `ActivityStatus` in package `activity`, just `Status`
 - Use `ok` boolean pattern instead of nil checks where idiomatic
-- Prefer `cmp.Or(value, fallback)` over an `if` statement when selecting the first non-zero comparable value. `cmp.Or(a, b, c)` returns the first non-zero argument, or the zero value when all arguments are zero. Use it when the zero value means "unset"; all arguments are evaluated before the call, so keep side effects and expensive fallback computations outside it.
+- Prefer `cmp.Or` for defaults when zero means "unset." It returns the first non-zero argument.
 
 ## 3. Testify Suite Correctness and Reliability
 
