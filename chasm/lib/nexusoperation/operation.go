@@ -417,7 +417,7 @@ func (o *Operation) Terminate(
 		return chasm.TerminateComponentResponse{}, nil
 	}
 
-	if o.isClosed() {
+	if !TransitionTerminated.Possible(o) {
 		return chasm.TerminateComponentResponse{}, ErrOperationAlreadyCompleted
 	}
 
