@@ -74,7 +74,7 @@ and then the extra partitions have to be empty before reducing read partitions.
 Changing batch size will cause most partitions to move between nodes.
 To avoid moving lots of partitions simultaneously on a live cluster,
 spread routing can be rolled out gradually (partition by partition)
-using wall-clock-synchronized changes. See the the `GradualChange` mechanism.
+using wall-clock-synchronized changes. See the `GradualChange` mechanism.
 
 ## Interface
 
