@@ -2615,13 +2615,14 @@ func (h *Handler) StartNexusOperation(
 			if payload.Metadata == nil {
 				payload.Metadata = make(map[string][]byte, 1)
 			}
+
 			// For now, we require all responess from the System Nexus Endpoint be protobufs.
 			encoding := string(payload.Metadata["encoding"])
 			if encoding != "binary/protobuf" {
-				return nil, serviceerror.NewInternalf("response payload was not an encoded protobuf (%s)", encoding)
+				return nil, serviceerror.NewFailedPreconditionf("system payload must be encoded as binary/protobuf but got %s", encoding)
 			}
 			if _, ok := payload.Metadata["messageType"]; !ok {
-				return nil, serviceerror.NewInternal("response payload missing messageType metadata key")
+				return nil, serviceerror.NewFailedPrecondition("system payload missing messageType metadata key")
 			}
 
 			payload.Metadata[commonnexus.SystemPayloadMetadataKey] = []byte("true")

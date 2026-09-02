@@ -56,7 +56,7 @@ import (
 )
 
 const (
-	failureMessageType  = "temporal.api.failure.v1.Failure"
+	dataBlobMessageType = "temporal.api.common.v1.DataBlob"
 	payloadsMessageType = "temporal.api.common.v1.Payloads"
 	protobufEncoding    = "binary/protobuf"
 )
@@ -3321,7 +3321,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSystemEndpoint(chasmEnabled b
 	s.NotNil(result)
 	s.Equal([]byte("true"), result.GetMetadata()[commonnexus.SystemPayloadMetadataKey])
 	// TestOperation returns a proto message, so the result must be proto encoded, not JSON.
-	s.Equal([]byte(failureMessageType), result.GetMetadata()["messageType"])
+	s.Equal([]byte(dataBlobMessageType), result.GetMetadata()["messageType"])
 	s.Equal([]byte(protobufEncoding), result.GetMetadata()["encoding"])
 
 	// Complete the workflow
@@ -3342,9 +3342,10 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSystemEndpoint(chasmEnabled b
 		},
 	})
 	s.NoError(err)
-	var response failurepb.Failure
+	var response commonpb.DataBlob
 	s.NoError(run.Get(ctx, &response))
-	s.Equal("Hello, Temporal", response.GetMessage())
+	data := response.Data
+	s.Equal("Hello, Temporal", string(data))
 }
 
 // NOTE: This test cannot use the SDK workflow package because there is a restriction that prevents setting the

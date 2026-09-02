@@ -5,16 +5,18 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
-	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/payload"
 )
 
 // TestOperation returns a failurepb.Failure so that it is a proper protobuf type. Its used for
 // testing the System Nexus Endpoint, which only accepts protobuf-encoded payloads.
-var TestOperation = nexus.NewSyncOperation("TestOperation", func(ctx context.Context, input string, options nexus.StartOperationOptions) (*failurepb.Failure, error) {
-	return &failurepb.Failure{Message: "Hello, " + input}, nil
-})
+var TestOperation = nexus.NewSyncOperation(
+	"TestOperation",
+	func(ctx context.Context, input string, options nexus.StartOperationOptions) (*commonpb.DataBlob, error) {
+		d := []byte("Hello, " + input)
+		return &commonpb.DataBlob{Data: d}, nil
+	})
 
 // TestOperationWithPayload is identical to TestOperation, except its response embeds a
 // nested *commonpb.Payload. It exists to exercise the commonnexus.SystemPayloadMetadataKey

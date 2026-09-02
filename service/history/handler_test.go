@@ -474,7 +474,7 @@ func TestStartNexusOperation_SystemNexusEndpointRejectsNonProtoResponse(t *testi
 	})
 	require.Nil(t, resp)
 
-	var internalErr *serviceerror.Internal
-	require.ErrorAs(t, err, &internalErr)
-	require.ErrorContains(t, err, "response payload was not an encoded protobuf (json/plain)")
+	var failedPrecondition *serviceerror.FailedPrecondition
+	require.ErrorAs(t, err, &failedPrecondition)
+	require.ErrorContains(t, err, "system payload must be encoded as binary/protobuf but got json/plain")
 }
