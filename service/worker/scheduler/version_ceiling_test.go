@@ -8,12 +8,26 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	schedulepb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/workflow"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/payloads"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
+
+type warningLogger struct {
+	warnings []string
+}
+
+var _ log.Logger = (*warningLogger)(nil)
+
+func (*warningLogger) Debug(string, ...any) {}
+func (*warningLogger) Info(string, ...any)  {}
+func (l *warningLogger) Warn(msg string, _ ...any) {
+	l.warnings = append(l.warnings, msg)
+}
+func (*warningLogger) Error(string, ...any) {}
 
 func TestShouldWarnForVersionCeiling(t *testing.T) {
 	unsupportedCeiling := int(TriggerImmediatelyTimestamp) + 1
@@ -62,23 +76,61 @@ func TestShouldWarnForVersionCeiling(t *testing.T) {
 }
 
 func TestDetermineVersionTransition(t *testing.T) {
-	for defaultVersion := InitialVersion; defaultVersion <= RefreshCompletionDesiredTime; defaultVersion++ {
-		for recordedVersion := InitialVersion; recordedVersion <= RefreshCompletionDesiredTime; recordedVersion++ {
-			for ceiling := -1; ceiling <= int(RefreshCompletionDesiredTime)+1; ceiling++ {
-				wantVersion := defaultVersion
-				if ceiling >= 0 && ceiling < int(wantVersion) {
-					wantVersion = SchedulerWorkflowVersion(ceiling)
-				}
-				if recordedVersion > wantVersion {
-					wantVersion = recordedVersion
-				}
+	for defaultVersion := InitialVersion; defaultVersion <= LatestSchedulerWorkflowVersion; defaultVersion++ {
+		for recordedVersion := InitialVersion; recordedVersion <= LatestSchedulerWorkflowVersion; recordedVersion++ {
+			for ceiling := -1; ceiling <= int(LatestSchedulerWorkflowVersion)+1; ceiling++ {
+				for override := -1; override <= int(LatestSchedulerWorkflowVersion)+1; override++ {
+					wantVersion := defaultVersion
+					if override >= int(wantVersion) && override <= int(LatestSchedulerWorkflowVersion) {
+						wantVersion = SchedulerWorkflowVersion(override)
+					}
+					if ceiling >= 0 && ceiling < int(wantVersion) {
+						wantVersion = SchedulerWorkflowVersion(ceiling)
+					}
+					if recordedVersion > wantVersion {
+						wantVersion = recordedVersion
+					}
 
-				version, capturedCeiling := determineVersionTransition(defaultVersion, recordedVersion, ceiling)
-				require.Equalf(t, wantVersion, version, "default=%d recorded=%d ceiling=%d", defaultVersion, recordedVersion, ceiling)
-				require.Equalf(t, ceiling, capturedCeiling, "default=%d recorded=%d ceiling=%d", defaultVersion, recordedVersion, ceiling)
+					version, capturedCeiling := determineVersionTransition(defaultVersion, recordedVersion, ceiling, override)
+					require.Equalf(t, wantVersion, version, "default=%d recorded=%d ceiling=%d override=%d", defaultVersion, recordedVersion, ceiling, override)
+					require.Equalf(t, ceiling, capturedCeiling, "default=%d recorded=%d ceiling=%d override=%d", defaultVersion, recordedVersion, ceiling, override)
+				}
 			}
 		}
 	}
+}
+
+func TestDetermineVersionDiagnostics(t *testing.T) {
+	t.Run("reports invalid override warnings", func(t *testing.T) {
+		logger := &warningLogger{}
+		s := &scheduler{
+			logger:          logger,
+			versionCeiling:  func() int { return -1 },
+			versionOverride: func() int { return int(LatestSchedulerWorkflowVersion) + 1 },
+		}
+
+		s.determineVersion(TriggerImmediatelyTimestamp)
+		s.determineVersion(TriggerImmediatelyTimestamp)
+
+		require.Equal(t, []string{
+			"worker.schedulerV1VersionOverride is outside the supported range; ignored",
+			"worker.schedulerV1VersionOverride is outside the supported range; ignored",
+		}, logger.warnings)
+	})
+
+	t.Run("does not report a ceiling that caps an override as ineffective", func(t *testing.T) {
+		logger := &warningLogger{}
+		s := &scheduler{
+			logger:          logger,
+			versionCeiling:  func() int { return int(MigrationHandoffFixes) },
+			versionOverride: func() int { return int(LatestSchedulerWorkflowVersion) },
+		}
+
+		version, _ := s.determineVersion(TriggerImmediatelyTimestamp)
+
+		require.Equal(t, SchedulerWorkflowVersion(MigrationHandoffFixes), version)
+		require.Empty(t, logger.warnings)
+	})
 }
 
 // TestVersionCeilingDefersCHASMMigration verifies that a clamp below the CHASM gate keeps
@@ -142,12 +194,40 @@ func (s *workflowSuite) TestVersionCeilingLiftAdvancesWithinRun() {
 	s.Equal(1, migrateCalls)
 }
 
+func (s *workflowSuite) TestVersionOverrideAdvancesWithinRunAfterCeilingLift() {
+	migrateCalls := 0
+	s.expectMigrate(&migrateCalls)
+
+	ceiling := int(oldPeerCeiling)
+	s.env.RegisterDelayedCallback(func() {
+		ceiling = -1
+		s.env.SignalWorkflow(SignalNameMigrateToChasm, nil)
+	}, 30*time.Minute)
+
+	s.runWorkflowFn(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
+		return schedulerWorkflowWithSpecBuilder(ctx, args, newSpecBuilderForTest(0, 0), schedulerDynamicConfig{
+			enableCHASMMigration:        func() bool { return true },
+			migrateWithRunningWorkflows: func() bool { return true },
+			versionCeiling:              func() int { return ceiling },
+			versionOverride:             func() int { return int(LatestSchedulerWorkflowVersion) },
+		})
+	}, pausedHourlySchedule(), 0)
+
+	s.True(s.env.IsWorkflowCompleted())
+	s.Require().NoError(s.env.GetWorkflowError())
+	s.Equal(1, migrateCalls)
+}
+
 // oldPeerCeiling is one below the CHASM migration gate, modeling an older rollback peer that has no CHASM scheduler.
 const oldPeerCeiling = TriggerImmediatelyTimestamp - 1
 
 func (s *workflowSuite) runWithCeiling(enableCHASMMigration, migrateWithRunningWorkflows func() bool, versionCeiling func() int, sched *schedulepb.Schedule, iterations int) {
 	s.runWorkflowFn(func(ctx workflow.Context, args *schedulespb.StartScheduleArgs) error {
-		return schedulerWorkflowWithSpecBuilder(ctx, args, newSpecBuilderForTest(0, 0), enableCHASMMigration, migrateWithRunningWorkflows, versionCeiling)
+		return schedulerWorkflowWithSpecBuilder(ctx, args, newSpecBuilderForTest(0, 0), schedulerDynamicConfig{
+			enableCHASMMigration:        enableCHASMMigration,
+			migrateWithRunningWorkflows: migrateWithRunningWorkflows,
+			versionCeiling:              versionCeiling,
+		})
 	}, sched, iterations)
 }
 

@@ -56,6 +56,7 @@ type (
 		chasmMigrationRolloutPercent dynamicconfig.IntPropertyFnWithNamespaceFilter
 		migrateWithRunningWorkflows  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		schedulerV1VersionCeiling    dynamicconfig.IntPropertyFnWithNamespaceFilter
+		schedulerV1VersionOverride   dynamicconfig.IntPropertyFnWithNamespaceFilter
 		globalNSStartWorkflowRPS     dynamicconfig.TypedSubscribableWithNamespaceFilter[float64]
 		maxBlobSize                  dynamicconfig.IntPropertyFnWithNamespaceFilter
 		localActivitySleepLimit      dynamicconfig.DurationPropertyFnWithNamespaceFilter
@@ -95,6 +96,7 @@ func NewResult(
 			chasmMigrationRolloutPercent: dynamicconfig.CHASMSchedulerMigrationRolloutPercent.Get(dc),
 			migrateWithRunningWorkflows:  dynamicconfig.EnableCHASMSchedulerMigrationWithRunningWorkflows.Get(dc),
 			schedulerV1VersionCeiling:    dynamicconfig.SchedulerV1VersionCeiling.Get(dc),
+			schedulerV1VersionOverride:   dynamicconfig.SchedulerV1VersionOverride.Get(dc),
 			globalNSStartWorkflowRPS:     dynamicconfig.SchedulerNamespaceStartWorkflowRPS.Subscribe(dc),
 			maxBlobSize:                  dynamicconfig.BlobSizeLimitError.Get(dc),
 			localActivitySleepLimit:      dynamicconfig.SchedulerLocalActivitySleepLimit.Get(dc),
@@ -122,7 +124,15 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 		versionCeiling := func() int {
 			return s.schedulerV1VersionCeiling(nsName)
 		}
-		return schedulerWorkflowWithSpecBuilder(ctx, args, s.specBuilder, enableMigration, migrateWithRunningWorkflows, versionCeiling)
+		versionOverride := func() int {
+			return s.schedulerV1VersionOverride(nsName)
+		}
+		return schedulerWorkflowWithSpecBuilder(ctx, args, s.specBuilder, schedulerDynamicConfig{
+			enableCHASMMigration:        enableMigration,
+			migrateWithRunningWorkflows: migrateWithRunningWorkflows,
+			versionCeiling:              versionCeiling,
+			versionOverride:             versionOverride,
+		})
 	}
 	registry.RegisterWorkflowWithOptions(wfFunc, workflow.RegisterOptions{Name: WorkflowType})
 
