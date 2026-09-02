@@ -64,18 +64,24 @@ func (h *activityDispatchTaskHandler) Execute(
 		return err
 	}
 
+	// Invoke the hook at the final dispatch boundary so it observes only validated
+	// active tasks and can wrap the Matching call.
 	if h.opts.DispatchTaskHook != nil {
 		return h.opts.DispatchTaskHook(
 			ctx,
 			activityRef.NamespaceID,
 			task,
 			func(ctx context.Context) error {
-				return h.sendToMatching(ctx, request)
+				_, err := h.opts.MatchingClient.AddActivityTask(ctx, request)
+
+				return err
 			},
 		)
 	}
 
-	return h.sendToMatching(ctx, request)
+	_, err = h.opts.MatchingClient.AddActivityTask(ctx, request)
+
+	return err
 }
 
 // Discard spills the task to matching instead of silently discarding it on standby clusters when the activity
@@ -91,7 +97,9 @@ func (h *activityDispatchTaskHandler) Discard(
 		return err
 	}
 
-	return h.sendToMatching(ctx, request)
+	_, err = h.opts.MatchingClient.AddActivityTask(ctx, request)
+
+	return err
 }
 
 func (h *activityDispatchTaskHandler) createMatchingRequest(
@@ -104,15 +112,6 @@ func (h *activityDispatchTaskHandler) createMatchingRequest(
 		(*Activity).createAddActivityTaskRequest,
 		activityRef.NamespaceID,
 	)
-}
-
-func (h *activityDispatchTaskHandler) sendToMatching(
-	ctx context.Context,
-	request *matchingservice.AddActivityTaskRequest,
-) error {
-	_, err := h.opts.MatchingClient.AddActivityTask(ctx, request)
-
-	return err
 }
 
 type scheduleToStartTimeoutTaskHandler struct {
