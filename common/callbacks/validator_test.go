@@ -28,8 +28,9 @@ func TestValidatorConfigValidate(t *testing.T) {
 	require.EqualError(t, err, "missing required fields: [URLMaxLength EndpointRules]")
 }
 
-// ValidatorConfig.Validate names each missing field explicitly, so a field added to the struct but
-// not to Validate silently defaults to nil and nil-panics at request time instead of at startup.
+// Every field of ValidatorConfig is required, and Validate names each missing one explicitly. A
+// field added to the struct but not to Validate stays nil and panics at request time instead of
+// failing at startup. Optional or non-nilable fields would need a different check.
 func TestValidatorConfigValidateNamesEveryField(t *testing.T) {
 	_, err := NewValidator(ValidatorConfig{})
 	require.Error(t, err)
