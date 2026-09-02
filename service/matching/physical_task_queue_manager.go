@@ -973,11 +973,12 @@ func (c *physicalTaskQueueManagerImpl) recordPollerScaleDecision(decision string
 // getBacklogSignal reports whether backlog pressure warrants scaling pollers up.
 func (c *physicalTaskQueueManagerImpl) getBacklogSignal(stats *taskqueuepb.TaskQueueStats, task *internalTask) bool {
 	maxAge := c.partitionMgr.config.PollerScalingBacklogAgeScaleUp()
-	oldSignal := stats.GetApproximateBacklogCount() > 0 && stats.GetApproximateBacklogAge().AsDuration() > maxAge
-	// The backlog age stats are read after the task left the backlog, so at low task rates they
-	// always report an empty backlog. The task's own wait time doesn't have that blind spot.
-	newSignal := c.partitionMgr.engine.timeSource.Since(task.getCreateTime().AsTime()) > maxAge
-	return c.pollerScaleSignal(metrics.PollerScaleReasonBacklog, oldSignal, newSignal)
+	if c.partitionMgr.config.UseImprovedSignalsForPollerScaling() {
+		// The backlog age stats are read after the task left the backlog, so at low task rates they
+		// always report an empty backlog. The task's own wait time doesn't have that blind spot.
+		return c.partitionMgr.engine.timeSource.Since(task.getCreateTime().AsTime()) > maxAge
+	}
+	return stats.GetApproximateBacklogCount() > 0 && stats.GetApproximateBacklogAge().AsDuration() > maxAge
 }
 
 // getRatioSignal reports whether we're adding tasks faster than we're dispatching them, which
@@ -986,34 +987,12 @@ func (c *physicalTaskQueueManagerImpl) getBacklogSignal(stats *taskqueuepb.TaskQ
 func (c *physicalTaskQueueManagerImpl) getRatioSignal(stats *taskqueuepb.TaskQueueStats) bool {
 	maxRatio := c.partitionMgr.config.PollerScalingTaskAddToDispatchRatio()
 	addRate := float64(stats.GetTasksAddRate())
-	oldSignal := addRate/float64(stats.GetTasksDispatchRate()) > maxRatio
-	// The total dispatch rate includes async backlog dispatches, which keeps it close to the add
-	// rate and so masks a poor sync match rate. Dividing by the sync match rate doesn't.
-	newSignal := addRate/float64(c.getSyncMatchedRate()) > maxRatio
-	return c.pollerScaleSignal(metrics.PollerScaleReasonTaskRate, oldSignal, newSignal)
-}
-
-// pollerScaleSignal shadow-evaluates one scale-up signal: it returns whichever of the old or new
-// variant matching.useImprovedSignalsForPollerScaling selects, and emits
-// poller_scale_signal_comparison whenever either fires, so the new variant can be validated before
-// it is turned on. The metric is tagged with the same reason as poller_scale_decision and gated by
-// the same opt-in dynamic config.
-func (c *physicalTaskQueueManagerImpl) pollerScaleSignal(reason metrics.ReasonString, oldSignal, newSignal bool) bool {
-	if (oldSignal || newSignal) && c.partitionMgr.config.EnablePollerScalingDecisionMetrics() {
-		result := metrics.PollerScaleComparisonOldOnly
-		switch {
-		case oldSignal && newSignal:
-			result = metrics.PollerScaleComparisonBoth
-		case newSignal:
-			result = metrics.PollerScaleComparisonNewOnly
-		}
-		c.metricsHandler.Counter(metrics.PollerScaleSignalComparisonCounter.Name()).
-			Record(1, metrics.ReasonTag(reason), metrics.PollerScaleComparisonResultTag(result))
-	}
 	if c.partitionMgr.config.UseImprovedSignalsForPollerScaling() {
-		return newSignal
+		// The total dispatch rate includes async backlog dispatches, which keeps it close to the
+		// add rate and so masks a poor sync match rate. Dividing by the sync match rate doesn't.
+		return addRate/float64(c.getSyncMatchedRate()) > maxRatio
 	}
-	return oldSignal
+	return addRate/float64(stats.GetTasksDispatchRate()) > maxRatio
 }
 
 // getSyncMatchedRate returns the aggregate sync match rate across all priorities. It is kept out of
