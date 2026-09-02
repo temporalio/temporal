@@ -2,10 +2,6 @@ package scheduler
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -18,69 +14,6 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
-
-func TestDetermineVersionTransitions(t *testing.T) {
-	for _, tc := range []struct {
-		name            string
-		defaultVersion  SchedulerWorkflowVersion
-		recordedVersion SchedulerWorkflowVersion
-		ceiling         int
-		wantVersion     SchedulerWorkflowVersion
-		wantCeiling     int
-	}{
-		{
-			name:           "no ceiling uses the default",
-			defaultVersion: TriggerImmediatelyTimestamp,
-			ceiling:        -1,
-			wantVersion:    TriggerImmediatelyTimestamp,
-			wantCeiling:    -1,
-		},
-		{
-			name:           "zero is a ceiling",
-			defaultVersion: TriggerImmediatelyTimestamp,
-			ceiling:        0,
-			wantVersion:    InitialVersion,
-			wantCeiling:    0,
-		},
-		{
-			name:           "ceiling caps the default",
-			defaultVersion: oldPeerCeiling + 1,
-			ceiling:        oldPeerCeiling,
-			wantVersion:    oldPeerCeiling,
-			wantCeiling:    oldPeerCeiling,
-		},
-		{
-			name:            "recorded version is retained below a lower ceiling",
-			defaultVersion:  oldPeerCeiling,
-			recordedVersion: oldPeerCeiling + 1,
-			ceiling:         oldPeerCeiling,
-			wantVersion:     oldPeerCeiling + 1,
-			wantCeiling:     oldPeerCeiling,
-		},
-		{
-			name:            "raising the ceiling advances on the next iteration",
-			defaultVersion:  MigrationHandoffFixes,
-			recordedVersion: oldPeerCeiling,
-			ceiling:         int(MigrationHandoffFixes),
-			wantVersion:     MigrationHandoffFixes,
-			wantCeiling:     int(MigrationHandoffFixes),
-		},
-		{
-			name:            "removing the ceiling advances on the next iteration",
-			defaultVersion:  MigrationHandoffFixes,
-			recordedVersion: oldPeerCeiling,
-			ceiling:         -1,
-			wantVersion:     MigrationHandoffFixes,
-			wantCeiling:     -1,
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			version, ceiling := determineVersionTransition(tc.defaultVersion, tc.recordedVersion, tc.ceiling)
-			require.Equal(t, tc.wantVersion, version)
-			require.Equal(t, tc.wantCeiling, ceiling)
-		})
-	}
-}
 
 func TestShouldWarnForVersionCeiling(t *testing.T) {
 	unsupportedCeiling := int(TriggerImmediatelyTimestamp) + 1
@@ -128,32 +61,22 @@ func TestShouldWarnForVersionCeiling(t *testing.T) {
 	}
 }
 
-func TestDetermineVersionTransitionCeilingTruthTable(t *testing.T) {
-	var table struct {
-		TestCases []struct {
-			DefaultVersion  SchedulerWorkflowVersion `json:"defaultVersion"`
-			RecordedVersion SchedulerWorkflowVersion `json:"recordedVersion"`
-			CeilingCases    []struct {
-				Name        string                   `json:"name"`
-				Ceiling     int                      `json:"ceiling"`
-				WantVersion SchedulerWorkflowVersion `json:"wantVersion"`
-				WantCeiling int                      `json:"wantCeiling"`
-			} `json:"ceilingCases"`
-		} `json:"testCases"`
-	}
+func TestDetermineVersionTransition(t *testing.T) {
+	for defaultVersion := InitialVersion; defaultVersion <= RefreshCompletionDesiredTime; defaultVersion++ {
+		for recordedVersion := InitialVersion; recordedVersion <= RefreshCompletionDesiredTime; recordedVersion++ {
+			for ceiling := -1; ceiling <= int(RefreshCompletionDesiredTime)+1; ceiling++ {
+				wantVersion := defaultVersion
+				if ceiling >= 0 && ceiling < int(wantVersion) {
+					wantVersion = SchedulerWorkflowVersion(ceiling)
+				}
+				if recordedVersion > wantVersion {
+					wantVersion = recordedVersion
+				}
 
-	data, err := os.ReadFile(filepath.Join("testdata", "version_ceiling_truth_table.json"))
-	require.NoError(t, err)
-	require.NoError(t, json.Unmarshal(data, &table))
-	require.NotEmpty(t, table.TestCases)
-
-	for _, versionCase := range table.TestCases {
-		for _, ceilingCase := range versionCase.CeilingCases {
-			t.Run(fmt.Sprintf("default_%d/recorded_%d/%s", versionCase.DefaultVersion, versionCase.RecordedVersion, ceilingCase.Name), func(t *testing.T) {
-				version, capturedCeiling := determineVersionTransition(versionCase.DefaultVersion, versionCase.RecordedVersion, ceilingCase.Ceiling)
-				require.Equal(t, ceilingCase.WantVersion, version)
-				require.Equal(t, ceilingCase.WantCeiling, capturedCeiling)
-			})
+				version, capturedCeiling := determineVersionTransition(defaultVersion, recordedVersion, ceiling)
+				require.Equalf(t, wantVersion, version, "default=%d recorded=%d ceiling=%d", defaultVersion, recordedVersion, ceiling)
+				require.Equalf(t, ceiling, capturedCeiling, "default=%d recorded=%d ceiling=%d", defaultVersion, recordedVersion, ceiling)
+			}
 		}
 	}
 }
