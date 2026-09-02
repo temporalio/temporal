@@ -450,3 +450,31 @@ func TestStartNexusOperation_SystemNexusEndpointPayloadMetadataFlag(t *testing.T
 		})
 	}
 }
+
+func TestStartNexusOperation_SystemNexusEndpointRejectsNonProtoResponse(t *testing.T) {
+	registry := nexus.NewServiceRegistry()
+	registry.MustRegister(chasmtests.NewTestServiceNexusService())
+	nexusHandler, err := registry.NewHandler()
+	require.NoError(t, err)
+
+	h := Handler{
+		logger:       log.NewNoopLogger(),
+		nexusHandler: nexusHandler,
+	}
+
+	// TestOperationStringOutput returns a string, which the data converter encodes as JSON
+	// instead of protobuf. The System Nexus Endpoint only accepts protobuf-encoded responses.
+	resp, err := h.StartNexusOperation(context.Background(), &historyservice.StartNexusOperationRequest{
+		Request: &nexuspb.StartOperationRequest{
+			Service:   "TestService",
+			Operation: "TestOperationStringOutput",
+			RequestId: "test-request-id",
+			Payload:   payload.EncodeString("Temporal"),
+		},
+	})
+	require.Nil(t, resp)
+
+	var internalErr *serviceerror.Internal
+	require.ErrorAs(t, err, &internalErr)
+	require.ErrorContains(t, err, "response payload was not an encoded protobuf (json/plain)")
+}

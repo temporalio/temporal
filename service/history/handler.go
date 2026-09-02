@@ -2540,6 +2540,9 @@ func (h *Handler) UnpauseWorkflowExecution(ctx context.Context, request *history
 	return unpauseResp, nil
 }
 
+// StartNexusOperation is the History Service's StartNexusOperation endpoint is for dispatching requests
+// to the System Nexus Endpoint, distinct from the Frontend Service's `nexus_handler.go` which
+// starts Nexus operations by sending Nexus tasks directly to workers via the Matching Service.
 func (h *Handler) StartNexusOperation(
 	ctx context.Context,
 	req *historyservice.StartNexusOperationRequest,
@@ -2602,16 +2605,28 @@ func (h *Handler) StartNexusOperation(
 			h.logger.Error("failed to encode payload", tag.Error(err), tag.RequestID(requestID))
 			return nil, serviceerror.NewInternal("internal error (request ID: " + requestID + ")")
 		}
+
 		var payload *commonpb.Payload
 		if len(ps.GetPayloads()) == 1 {
 			payload = ps.GetPayloads()[0]
 		}
+		// Responses from the System Nexus Endpoint are server generated, so we must mark them as system payloads.
 		if payload != nil {
 			if payload.Metadata == nil {
 				payload.Metadata = make(map[string][]byte, 1)
 			}
+			// For now, we require all responess from the System Nexus Endpoint be protobufs.
+			encoding := string(payload.Metadata["encoding"])
+			if encoding != "binary/protobuf" {
+				return nil, serviceerror.NewInternalf("response payload was not an encoded protobuf (%s)", encoding)
+			}
+			if _, ok := payload.Metadata["messageType"]; !ok {
+				return nil, serviceerror.NewInternal("response payload missing messageType metadata key")
+			}
+
 			payload.Metadata[commonnexus.SystemPayloadMetadataKey] = []byte("true")
 		}
+
 		response.Variant = &nexuspb.StartOperationResponse_SyncSuccess{
 			SyncSuccess: &nexuspb.StartOperationResponse_Sync{
 				Payload: payload,
