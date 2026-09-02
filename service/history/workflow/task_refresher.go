@@ -224,11 +224,9 @@ func RefreshTasksForWorkflowStart(
 		return nil
 	}
 
-	// Skip task generation if workflow state has not been updated since minVersionedTransition.
-	if transitionhistory.Compare(
-		executionState.LastUpdateVersionedTransition,
-		minVersionedTransition,
-	) < 0 {
+	// Workflow start tasks belong only to the first state transition. A transition
+	// count of zero represents a full refresh.
+	if minVersionedTransition.GetTransitionCount() > 1 {
 		return nil
 	}
 
