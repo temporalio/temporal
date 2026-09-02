@@ -20,7 +20,7 @@ Apply these patterns when reviewing PRs or suggesting code changes.
 - Don't put underscore after `Test` in test names: `TestRetry` not `Test_Retry`
 - Avoid stuttering: don't use `ActivityStatus` in package `activity`, just `Status`
 - Use `ok` boolean pattern instead of nil checks where idiomatic
-- Prefer `cmp.Or` for defaults when zero means "unset." It returns the first non-zero argument.
+- Prefer `cmp.Or` for defaults when zero means "unset." It returns the first non-zero argument. All arguments are evaluated, so keep side effects outside the call.
 
 ## 3. Testify Suite Correctness and Reliability
 
@@ -29,7 +29,7 @@ Apply these patterns when reviewing PRs or suggesting code changes.
 - Use `EventuallyWithT` when you need assertions inside eventually blocks, and use that block's `t`
 - Use `require.ErrorAs(t, err, &specificErr)` for specific error type checks
 - Prefer `require` over `assert` - it's rarely useful to continue a test after a failed assertion
-- Prefer table-driven tests over scattered `Test*` methods when the cases exercise the same behavior. Give each case a descriptive name and run it as a subtest, in parallel if possible.
+- Prefer table-driven tests over scattered `Test*` methods when the cases exercise the same behavior. Give each case a descriptive name and run it as a subtest. In parallel, if possible.
 - Prefer asserting the complete result of a function in one comparison over separate `require.Equal` calls for each field. Use field-level assertions when only part of the result is relevant to the behavior under test.
 - Add comments explaining why `Eventually` is needed (e.g., eventual consistency)
 - Do not use single-value type assertions on errors (`err.(*T)`); this panics instead of failing the test when the type doesn't match. Use `errors.As` with a guarded return.
