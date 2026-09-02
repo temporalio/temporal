@@ -724,6 +724,20 @@ func (s *executableSuite) TestAck_AlertableAttemptStageTag_Terminal() {
 	s.Equal("terminal", recording.Tags[metrics.StageTagName])
 }
 
+// Guards against a zero-value (empty) cause tag when no alertable error ever occurred.
+func (s *executableSuite) TestAck_AlertableAttemptCauseTag_NoAlertableError() {
+	executable := s.newTestExecutable()
+
+	capture := s.metricsHandler.StartCapture()
+	executable.Ack()
+	snapshot := capture.Snapshot()
+	s.metricsHandler.StopCapture(capture)
+
+	recording := snapshot[metrics.TaskAlertableAttempt.Name()][0]
+	s.Contains(recording.Tags, metrics.LastAttemptCauseTagName)
+	s.NotEmpty(recording.Tags[metrics.LastAttemptCauseTagName])
+}
+
 func (s *executableSuite) TestHandleErr_AlertableAttemptStageTag_InFlight() {
 	executable := s.newTestExecutable()
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{

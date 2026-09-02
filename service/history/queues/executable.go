@@ -242,6 +242,7 @@ func NewExecutable(
 		maxUnexpectedErrorAttempts: params.MaxUnexpectedErrorAttempts,
 		dlqInternalErrors:          params.DLQInternalErrors,
 		dlqErrorPattern:            params.DLQErrorPattern,
+		alertableErrorCauseTag:     metrics.LastAttemptCauseTag("none"),
 	}
 	e.refreshMetricsHandlers(nil)
 	e.attempt.Store(1)
