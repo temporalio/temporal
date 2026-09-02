@@ -180,6 +180,8 @@ func TestTerminalStatesDeletion(t *testing.T) {
 				a.ScheduledEventId = eventID
 			case *historypb.NexusOperationTimedOutEventAttributes:
 				a.ScheduledEventId = eventID
+			default:
+				require.FailNowf(t, "unexpected attributes type", "%T", a)
 			}
 
 			event := &historypb.HistoryEvent{

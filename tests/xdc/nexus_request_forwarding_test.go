@@ -23,6 +23,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -158,12 +159,25 @@ func (s *NexusRequestForwardingSuite) TestStartOperationForwardedFromStandbyToAc
 				require.ErrorAs(t, retErr, &operationError)
 				require.Equal(t, nexus.OperationStateFailed, operationError.State)
 				require.Equal(t, "deliberate test failure", operationError.Cause.Error())
-				var failureError *nexus.FailureError
-				require.ErrorAs(t, operationError.Cause, &failureError)
-				require.Equal(t, map[string]string{"k": "v"}, failureError.Failure.Metadata)
-				var details string
-				err := json.Unmarshal(failureError.Failure.Details, &details)
+
+				// The server rebuilds the failure a current-format worker would have sent: an
+				// operation-error wrapper carrying the worker's own failure as its cause.
+				var wrapperErr *nexus.FailureError
+				require.ErrorAs(t, operationError.Cause, &wrapperErr)
+				var wrapperErrCause *nexus.FailureError
+				require.ErrorAs(t, wrapperErr.Cause, &wrapperErrCause)
+				tFailure, err := cnexus.NexusFailureToTemporalFailure(wrapperErrCause.Failure)
 				require.NoError(t, err)
+				convErr := temporal.GetDefaultFailureConverter().FailureToError(tFailure)
+
+				var appErr *temporal.ApplicationError
+				require.ErrorAs(t, convErr, &appErr)
+				require.Equal(t, "deliberate test failure", appErr.Message())
+				var appErrDetails nexus.Failure
+				require.NoError(t, appErr.Details(&appErrDetails))
+				require.Equal(t, map[string]string{"k": "v"}, appErrDetails.Metadata)
+				var details string
+				require.NoError(t, json.Unmarshal(appErrDetails.Details, &details))
 				require.Equal(t, "details", details)
 				requireExpectedMetricsCaptured(t, activeSnap, ns, "StartNexusOperation", "operation_error")
 				requireExpectedMetricsCaptured(t, passiveSnap, ns, "StartNexusOperation", "forwarded_request_error")

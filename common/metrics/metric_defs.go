@@ -1053,7 +1053,11 @@ var (
 	DuplicateReplicationEventsCounter             = NewCounterDef("duplicate_replication_events")
 	AcquireLockFailedCounter                      = NewCounterDef("acquire_lock_failed")
 	WorkflowContextCleared                        = NewCounterDef("workflow_context_cleared")
-	MutableStateSize                              = NewBytesHistogramDef(
+	HistoryPassiveReplicationTestHookCounter      = NewCounterDef(
+		"history_passive_replication_test_hook",
+		WithDescription("Number of times the test-only passive replication hook executes. This must be zero in production."),
+	)
+	MutableStateSize = NewBytesHistogramDef(
 		"mutable_state_size",
 		WithDescription("The size of an individual Workflow Execution's state, emitted each time a workflow execution is retrieved or updated."),
 	)
