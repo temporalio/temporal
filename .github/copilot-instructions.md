@@ -29,8 +29,8 @@ Apply these patterns when reviewing PRs or suggesting code changes.
 - Use `EventuallyWithT` when you need assertions inside eventually blocks, and use that block's `t`
 - Use `require.ErrorAs(t, err, &specificErr)` for specific error type checks
 - Prefer `require` over `assert` - it's rarely useful to continue a test after a failed assertion
-- Prefer table-driven tests over scattered `Test*` methods when the cases exercise the same behavior. Give each case a descriptive name and run it as a subtest.
-- Prefer asserting the complete result of a function in one comparison over separate `require.Equal` calls for each field. Build the expected value and compare it with `require.Equal`, `require.EqualValues`, or `ProtoEqual`, as appropriate; use field-level assertions when only part of the result is relevant to the behavior under test.
+- Prefer table-driven tests over scattered `Test*` methods when the cases exercise the same behavior. Give each case a descriptive name and run it as a subtest, in parallel if possible.
+- Prefer asserting the complete result of a function in one comparison over separate `require.Equal` calls for each field. Use field-level assertions when only part of the result is relevant to the behavior under test.
 - Add comments explaining why `Eventually` is needed (e.g., eventual consistency)
 - Do not use single-value type assertions on errors (`err.(*T)`); this panics instead of failing the test when the type doesn't match. Use `errors.As` with a guarded return.
 - When launching a goroutine to maintain a precondition for later assertions (e.g., keeping pollers active so a deployment version gets registered), loop until context cancellation rather than running once. A single attempt that times out exits silently, leaving downstream Eventually/propagation waits to hang until their own deadline.
