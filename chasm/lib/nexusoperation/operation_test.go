@@ -97,8 +97,7 @@ func TestTerminate(t *testing.T) {
 		require.Equal(t, nexusoperationpb.OPERATION_STATUS_TERMINATED, op.Status)
 	})
 
-	// Terminating an operation that already reached a terminal outcome is a FailedPrecondition,
-	// not a bare ErrInvalidTransition.
+	// Terminating an operation that already reached a terminal outcome is a FailedPrecondition.
 	for _, status := range []nexusoperationpb.OperationStatus{
 		nexusoperationpb.OPERATION_STATUS_SUCCEEDED,
 		nexusoperationpb.OPERATION_STATUS_CANCELED,
