@@ -1741,6 +1741,8 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 		return NodesMutation{}, err
 	}
 
+	n.logOutstandingLogicalTasks()
+
 	// Both user & system data mutation need to be returned and persisted.
 	maps.Copy(n.mutation.UpdatedNodes, n.systemMutation.UpdatedNodes)
 	maps.Copy(n.mutation.DeletedNodes, n.systemMutation.DeletedNodes)
@@ -2111,6 +2113,39 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 		firstPureTaskNode,
 		archetypeID,
 	)
+}
+
+func (n *Node) logOutstandingLogicalTasks() {
+	workflowKey := n.backend.GetWorkflowKey()
+
+	for componentPath, node := range n.andAllChildren() {
+		componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes()
+		if componentAttr == nil {
+			continue
+		}
+
+		pureTaskCount := len(componentAttr.GetPureTasks())
+		sideEffectTaskCount := len(componentAttr.GetSideEffectTasks())
+		if pureTaskCount+sideEffectTaskCount == 0 {
+			continue
+		}
+
+		componentType, ok := n.registry.ComponentFqnByID(componentAttr.GetTypeId())
+		if !ok {
+			componentType = strconv.FormatUint(uint64(componentAttr.GetTypeId()), 10)
+		}
+
+		n.logger.Debug(
+			"CHASM component has outstanding logical tasks",
+			tag.WorkflowID(workflowKey.WorkflowID),
+			tag.WorkflowRunID(workflowKey.RunID),
+			tag.NewStringTag("component-type", componentType),
+			tag.NewStringsTag("component-path", componentPath),
+			tag.NewInt("pure-task-count", pureTaskCount),
+			tag.NewInt("side-effect-task-count", sideEffectTaskCount),
+			tag.NewInt("task-count", pureTaskCount+sideEffectTaskCount),
+		)
+	}
 }
 
 func (n *Node) deserializeComponentTask(

@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/protoassert"
@@ -3532,6 +3533,82 @@ func (s *nodeSuite) TestCloseTransaction_ApplyMutation_SideEffectTasks() {
 	}
 
 	s.NoError(err)
+}
+
+func (s *nodeSuite) TestLogOutstandingLogicalTasks() {
+	workflowKey := definition.NewWorkflowKey("namespace-id", "business-id", "run-id")
+	s.nodeBackend.HandleGetWorkflowKey = func() definition.WorkflowKey {
+		return workflowKey
+	}
+
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId:          testComponentTypeID,
+						PureTasks:       []*persistencespb.ChasmComponentAttributes_Task{{}},
+						SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{{}, {}},
+					},
+				},
+			},
+		},
+		"SubComponent1": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId: testSubComponent1TypeID,
+					},
+				},
+			},
+		},
+		"SubComponent2": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId:          testSubComponent2TypeID,
+						SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{{}},
+					},
+				},
+			},
+		},
+	}
+
+	root, err := s.newTestTree(persistenceNodes)
+	s.NoError(err)
+
+	testLogger := s.logger.(*testlogger.TestLogger)
+	rootLog := testLogger.Expect(
+		testlogger.Debug,
+		"^CHASM component has outstanding logical tasks$",
+		tag.WorkflowID(workflowKey.WorkflowID),
+		tag.WorkflowRunID(workflowKey.RunID),
+		tag.NewStringTag("component-type", testComponentFQN),
+		tag.NewInt("pure-task-count", 1),
+		tag.NewInt("side-effect-task-count", 2),
+		tag.NewInt("task-count", 3),
+	)
+	childLog := testLogger.Expect(
+		testlogger.Debug,
+		"^CHASM component has outstanding logical tasks$",
+		tag.NewStringTag("component-type", testSubComponent2FQN),
+		tag.NewStringTag("component-path", "SubComponent2"),
+		tag.NewInt("pure-task-count", 0),
+		tag.NewInt("side-effect-task-count", 1),
+		tag.NewInt("task-count", 1),
+	)
+	emptyChildLog := testLogger.Expect(
+		testlogger.Debug,
+		"^CHASM component has outstanding logical tasks$",
+		tag.NewStringTag("component-type", testSubComponent1FQN),
+	)
+
+	_, err = root.CloseTransaction()
+	s.NoError(err)
+
+	s.Equal(int64(1), rootLog.MatchCount())
+	s.Equal(int64(1), childLog.MatchCount())
+	s.False(emptyChildLog.Matched())
 }
 
 func (s *nodeSuite) TestCloseTransaction_ApplyMutation_PureTasks() {
