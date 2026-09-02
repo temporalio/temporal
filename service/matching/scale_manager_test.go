@@ -117,6 +117,28 @@ func (s *ScaleManagerSuite) startManagerWithLogger(
 	writePartitions int,
 	initial *persistencespb.PartitionScaleState,
 ) {
+	s.startManagerWithScalerAndLogger(logger, s.scaler, writePartitions, initial)
+}
+
+func (s *ScaleManagerSuite) startManagerWithScaler(
+	scaler PartitionScaler,
+	writePartitions int,
+	initial *persistencespb.PartitionScaleState,
+) {
+	s.startManagerWithScalerAndLogger(
+		testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly),
+		scaler,
+		writePartitions,
+		initial,
+	)
+}
+
+func (s *ScaleManagerSuite) startManagerWithScalerAndLogger(
+	logger log.Logger,
+	scaler PartitionScaler,
+	writePartitions int,
+	initial *persistencespb.PartitionScaleState,
+) {
 	if tl, ok := logger.(*testlogger.TestLogger); ok {
 		s.newTarget = tl.Expect(testlogger.Info, "new target")
 	}
@@ -127,7 +149,7 @@ func (s *ScaleManagerSuite) startManagerWithLogger(
 		s.metricsHandler,
 		s.userData,
 		s.matching,
-		s.scaler,
+		scaler,
 		s.timeSource,
 		dynamicconfig.GetTypedPropertyFn(s.settings),
 		dynamicconfig.GetIntPropertyFn(writePartitions),
@@ -391,22 +413,7 @@ func (s *ScaleManagerSuite) TestDisablingScalerReleasesManagedState() {
 			scaleInfos <- common.CloneProto(info)
 		}).Times(2)
 
-	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
-	s.newTarget = logger.Expect(testlogger.Info, "new target")
-	s.sm = newScaleManager(
-		context.Background(),
-		tqid.MustNormalPartitionFromRpcName("tq", "ns-id", enumspb.TASK_QUEUE_TYPE_WORKFLOW),
-		logger,
-		s.metricsHandler,
-		s.userData,
-		s.matching,
-		scaler,
-		s.timeSource,
-		dynamicconfig.GetTypedPropertyFn(s.settings),
-		dynamicconfig.GetIntPropertyFn(4),
-		func() bool { return false },
-	)
-	s.sm.Start(nil, s.scaleDB)
+	s.startManagerWithScaler(scaler, 4, nil)
 
 	s.sm.AddedTasks(1)
 	enabledState := waitRecv(s, dbWrites, "enabled state was not persisted")
@@ -429,6 +436,57 @@ func (s *ScaleManagerSuite) TestDisablingScalerReleasesManagedState() {
 	disabledInfo := waitRecv(s, scaleInfos, "disabled scale info was not pushed")
 	s.Equal(int32(6), disabledInfo.Read)
 	s.Zero(disabledInfo.Write)
+}
+
+// TestRestartRestoresManagedState verifies that a fresh manager and scaler load
+// persisted scale state, republish its partition counts, and continue scaling.
+func (s *ScaleManagerSuite) TestRestartRestoresManagedState() {
+	var minTarget atomic.Int32
+	minTarget.Store(6)
+	newScaler := func() PartitionScaler {
+		return newSimplePartitionScaler(func() dynamicconfig.SimplePartitionScalerSettings {
+			return dynamicconfig.SimplePartitionScalerSettings{Enabled: true, Min: minTarget.Load()}
+		}, s.timeSource)
+	}
+
+	dbWrites := make(chan *persistencespb.PartitionScaleState, 2)
+	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), true).
+		Do(func(state *persistencespb.PartitionScaleState, _ bool) {
+			dbWrites <- common.CloneProto(state)
+		}).
+		Return(nil).Times(2)
+
+	scaleInfos := make(chan *taskqueuespb.PartitionScaleInfo, 3)
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).
+		Do(func(info *taskqueuespb.PartitionScaleInfo) {
+			scaleInfos <- common.CloneProto(info)
+		}).Times(3)
+
+	s.startManagerWithScaler(newScaler(), 4, nil)
+	s.sm.AddedTasks(1)
+	persisted := waitRecv(s, dbWrites, "initial state was not persisted")
+	s.Equal(int32(6), persisted.Target)
+	s.NotNil(persisted.PrivateScalerState)
+	initialInfo := waitRecv(s, scaleInfos, "initial scale info was not pushed")
+	s.Equal(int32(6), initialInfo.Read)
+	s.Equal(int32(6), initialInfo.Write)
+
+	s.sm.Stop()
+	<-s.sm.background.Done()
+	s.sm = nil
+
+	s.startManagerWithScaler(newScaler(), 4, persisted)
+	reloadedInfo := waitRecv(s, scaleInfos, "reloaded scale info was not pushed")
+	s.ProtoEqual(initialInfo, reloadedInfo)
+
+	minTarget.Store(7)
+	s.sm.AddedTasks(1)
+	continued := waitRecv(s, dbWrites, "reloaded manager did not continue scaling")
+	s.Equal(int32(7), continued.Target)
+	s.ProtoEqual(persisted.PrivateScalerState, continued.PrivateScalerState)
+	continuedInfo := waitRecv(s, scaleInfos, "continued scale info was not pushed")
+	s.Equal(int32(7), continuedInfo.Read)
+	s.Equal(int32(7), continuedInfo.Write)
 }
 
 // TestEmitsGaugeMetrics verifies that when gauge emission is enabled, a scale
