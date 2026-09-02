@@ -114,6 +114,8 @@ var (
 	ErrMissingActivityScheduledEvent = serviceerror.NewInternal("unable to get activity scheduled event")
 	// ErrMissingChildWorkflowInitiatedEvent indicates missing child workflow initiated event
 	ErrMissingChildWorkflowInitiatedEvent = serviceerror.NewInternal("unable to get child workflow initiated event")
+	// ErrMissingWorkflowTaskCompletedEvent indicates missing workflow task completed event
+	ErrMissingWorkflowTaskCompletedEvent = serviceerror.NewInternal("unable to get workflow task completed event")
 	// ErrMissingSignalInitiatedEvent indicates missing workflow signal initiated event
 	ErrMissingSignalInitiatedEvent = serviceerror.NewInternal("unable to get signal initiated event")
 	// ErrPinnedWorkflowCannotTransition indicates attempt to start a transition on a pinned workflow
@@ -1712,6 +1714,42 @@ func (ms *MutableStateImpl) GetChildExecutionInitiatedEvent(
 			// since original error of type NotFound
 			// can cause task processing side to fail silently
 			return nil, ErrMissingChildWorkflowInitiatedEvent
+		}
+		return nil, err
+	}
+	return event, nil
+}
+
+// GetWorkflowTaskCompletedEvent returns the WORKFLOW_TASK_COMPLETED event identified by
+// workflowTaskCompletedEventID, e.g. to look up the identity of the worker that reported the
+// commands recorded after it (such as a StartChildWorkflowExecution command).
+func (ms *MutableStateImpl) GetWorkflowTaskCompletedEvent(
+	ctx context.Context,
+	workflowTaskCompletedEventID int64,
+) (*historypb.HistoryEvent, error) {
+	currentBranchToken, version, err := ms.getCurrentBranchTokenAndEventVersion(workflowTaskCompletedEventID)
+	if err != nil {
+		return nil, err
+	}
+	event, err := ms.eventsCache.GetEvent(
+		ctx,
+		ms.shard.GetShardID(),
+		events.EventKey{
+			NamespaceID: namespace.ID(ms.executionInfo.NamespaceId),
+			WorkflowID:  ms.executionInfo.WorkflowId,
+			RunID:       ms.executionState.RunId,
+			EventID:     workflowTaskCompletedEventID,
+			Version:     version,
+		},
+		workflowTaskCompletedEventID,
+		currentBranchToken,
+	)
+	if err != nil {
+		if common.IsNotFoundError(err) {
+			// do not return the original error
+			// since original error of type NotFound
+			// can cause task processing side to fail silently
+			return nil, ErrMissingWorkflowTaskCompletedEvent
 		}
 		return nil, err
 	}

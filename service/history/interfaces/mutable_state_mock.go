@@ -2954,6 +2954,21 @@ func (mr *MockMutableStateMockRecorder) GetWorkflowTaskByID(scheduledEventID any
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowTaskByID", reflect.TypeOf((*MockMutableState)(nil).GetWorkflowTaskByID), scheduledEventID)
 }
 
+// GetWorkflowTaskCompletedEvent mocks base method.
+func (m *MockMutableState) GetWorkflowTaskCompletedEvent(ctx context.Context, workflowTaskCompletedEventID int64) (*history.HistoryEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkflowTaskCompletedEvent", ctx, workflowTaskCompletedEventID)
+	ret0, _ := ret[0].(*history.HistoryEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkflowTaskCompletedEvent indicates an expected call of GetWorkflowTaskCompletedEvent.
+func (mr *MockMutableStateMockRecorder) GetWorkflowTaskCompletedEvent(ctx, workflowTaskCompletedEventID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowTaskCompletedEvent", reflect.TypeOf((*MockMutableState)(nil).GetWorkflowTaskCompletedEvent), ctx, workflowTaskCompletedEventID)
+}
+
 // GetWorkflowTaskScheduleToStartTimeoutTask mocks base method.
 func (m *MockMutableState) GetWorkflowTaskScheduleToStartTimeoutTask() *tasks.WorkflowTaskTimeoutTask {
 	m.ctrl.T.Helper()
