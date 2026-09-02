@@ -602,7 +602,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		e.alertableErrorCauseTag = causeTag
 		if e.attempt.Load() > taskCriticalLogMetricAttempts {
 			metrics.TaskAlertableAttempt.With(e.chasmMetricsHandler).Record(
-				int64(e.alertableAttempts), causeTag, metrics.StageTag("in_flight"))
+				int64(e.alertableAttempts), causeTag, metrics.AttemptStageInFlightTag)
 		}
 	}
 
@@ -730,7 +730,7 @@ func (e *executableImpl) Ack() {
 
 	metrics.TaskAttempt.With(e.chasmMetricsHandler).Record(e.attempt.Load())
 	metrics.TaskAlertableAttempt.With(e.chasmMetricsHandler).Record(
-		int64(e.alertableAttempts), e.alertableErrorCauseTag, metrics.StageTag("terminal"))
+		int64(e.alertableAttempts), e.alertableErrorCauseTag, metrics.AttemptStageTerminalTag)
 
 	priorityTaggedProvider := e.chasmMetricsHandler.WithTags(metrics.TaskPriorityTag(e.priority.String()))
 	metrics.TaskLatency.With(priorityTaggedProvider).Record(e.inMemoryNoUserLatency)

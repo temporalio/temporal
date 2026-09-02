@@ -721,7 +721,7 @@ func (s *executableSuite) TestAck_AlertableAttemptStageTag_Terminal() {
 	s.metricsHandler.StopCapture(capture)
 
 	recording := snapshot[metrics.TaskAlertableAttempt.Name()][0]
-	s.Equal("terminal", recording.Tags[metrics.StageTagName])
+	s.Equal(metrics.AttemptStageTerminal, recording.Tags[metrics.AttemptStageTagName])
 }
 
 // Guards against a zero-value (empty) cause tag when no alertable error ever occurred.
@@ -757,7 +757,7 @@ func (s *executableSuite) TestHandleErr_AlertableAttemptStageTag_InFlight() {
 
 	recordings := snapshot[metrics.TaskAlertableAttempt.Name()]
 	s.Len(recordings, 1)
-	s.Equal("in_flight", recordings[0].Tags[metrics.StageTagName])
+	s.Equal(metrics.AttemptStageInFlight, recordings[0].Tags[metrics.AttemptStageTagName])
 	s.Equal(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW.String(), recordings[0].Tags[metrics.LastAttemptCauseTagName])
 }
 

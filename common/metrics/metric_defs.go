@@ -35,7 +35,7 @@ const (
 	ChasmTaskTypeTagName           = "chasm_task_type"
 	timeoutTypeTagName             = "timeout_type"
 	LastAttemptCauseTagName        = "last_attempt_cause"
-	StageTagName                   = "stage"
+	AttemptStageTagName            = "attempt_stage"
 )
 
 // This package should hold all the metrics and tags for temporal
