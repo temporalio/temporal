@@ -8,10 +8,111 @@ import (
 	"math/rand"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/tqid"
 	"google.golang.org/grpc"
 )
+
+func (c *clientImpl) AddActivityTask(
+	ctx context.Context,
+	request *matchingservice.AddActivityTaskRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.AddActivityTaskResponse, error) {
+	p, loadBalance := c.resolvePartition(
+		request.GetTaskQueue(),
+		request.GetNamespaceId(),
+		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+		request.GetForwardInfo().GetSourcePartition(),
+	)
+	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, p, loadBalance, request, opts, c.doAddActivityTask)
+}
+
+func (c *clientImpl) doAddActivityTask(
+	ctx context.Context,
+	p tqid.Partition,
+	loadBalance bool,
+	pc PartitionCounts,
+	request *matchingservice.AddActivityTaskRequest,
+	opts []grpc.CallOption,
+) (*matchingservice.AddActivityTaskResponse, error) {
+	// Copy the messages on the path to the task queue, since picking a partition
+	// rewrites its name. The rest is shared with the original request.
+	request = &matchingservice.AddActivityTaskRequest{
+		NamespaceId: request.NamespaceId,
+		Execution:   request.Execution,
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name:       request.TaskQueue.Name,
+			Kind:       request.TaskQueue.Kind,
+			NormalName: request.TaskQueue.NormalName,
+		},
+		ScheduledEventId:       request.ScheduledEventId,
+		ScheduleToStartTimeout: request.ScheduleToStartTimeout,
+		Clock:                  request.Clock,
+		VersionDirective:       request.VersionDirective,
+		ForwardInfo:            request.ForwardInfo,
+		Stamp:                  request.Stamp,
+		Priority:               request.Priority,
+		ComponentRef:           request.ComponentRef,
+	}
+	client, err := c.pickClientForWrite(request.GetTaskQueue(), p, loadBalance, pc)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.AddActivityTask(ctx, request, opts...)
+}
+
+func (c *clientImpl) AddWorkflowTask(
+	ctx context.Context,
+	request *matchingservice.AddWorkflowTaskRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.AddWorkflowTaskResponse, error) {
+	p, loadBalance := c.resolvePartition(
+		request.GetTaskQueue(),
+		request.GetNamespaceId(),
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		request.GetForwardInfo().GetSourcePartition(),
+	)
+	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, p, loadBalance, request, opts, c.doAddWorkflowTask)
+}
+
+func (c *clientImpl) doAddWorkflowTask(
+	ctx context.Context,
+	p tqid.Partition,
+	loadBalance bool,
+	pc PartitionCounts,
+	request *matchingservice.AddWorkflowTaskRequest,
+	opts []grpc.CallOption,
+) (*matchingservice.AddWorkflowTaskResponse, error) {
+	// Copy the messages on the path to the task queue, since picking a partition
+	// rewrites its name. The rest is shared with the original request.
+	request = &matchingservice.AddWorkflowTaskRequest{
+		NamespaceId: request.NamespaceId,
+		Execution:   request.Execution,
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name:       request.TaskQueue.Name,
+			Kind:       request.TaskQueue.Kind,
+			NormalName: request.TaskQueue.NormalName,
+		},
+		ScheduledEventId:       request.ScheduledEventId,
+		ScheduleToStartTimeout: request.ScheduleToStartTimeout,
+		Clock:                  request.Clock,
+		VersionDirective:       request.VersionDirective,
+		ForwardInfo:            request.ForwardInfo,
+		Priority:               request.Priority,
+		Stamp:                  request.Stamp,
+	}
+	client, err := c.pickClientForWrite(request.GetTaskQueue(), p, loadBalance, pc)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.AddWorkflowTask(ctx, request, opts...)
+}
 
 func (c *clientImpl) ApplyTaskQueueUserDataReplicationEvent(
 	ctx context.Context,
@@ -267,6 +368,49 @@ func (c *clientImpl) DescribeWorker(
 	return client.DescribeWorker(ctx, request, opts...)
 }
 
+func (c *clientImpl) DispatchNexusTask(
+	ctx context.Context,
+	request *matchingservice.DispatchNexusTaskRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.DispatchNexusTaskResponse, error) {
+	p, loadBalance := c.resolvePartition(
+		request.GetTaskQueue(),
+		request.GetNamespaceId(),
+		enumspb.TASK_QUEUE_TYPE_NEXUS,
+		request.GetForwardInfo().GetSourcePartition(),
+	)
+	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, p, loadBalance, request, opts, c.doDispatchNexusTask)
+}
+
+func (c *clientImpl) doDispatchNexusTask(
+	ctx context.Context,
+	p tqid.Partition,
+	loadBalance bool,
+	pc PartitionCounts,
+	request *matchingservice.DispatchNexusTaskRequest,
+	opts []grpc.CallOption,
+) (*matchingservice.DispatchNexusTaskResponse, error) {
+	// Copy the messages on the path to the task queue, since picking a partition
+	// rewrites its name. The rest is shared with the original request.
+	request = &matchingservice.DispatchNexusTaskRequest{
+		NamespaceId: request.NamespaceId,
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name:       request.TaskQueue.Name,
+			Kind:       request.TaskQueue.Kind,
+			NormalName: request.TaskQueue.NormalName,
+		},
+		Request:     request.Request,
+		ForwardInfo: request.ForwardInfo,
+	}
+	client, err := c.pickClientForWrite(request.GetTaskQueue(), p, loadBalance, pc)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.DispatchNexusTask(ctx, request, opts...)
+}
+
 func (c *clientImpl) ForceLoadTaskQueuePartition(
 	ctx context.Context,
 	request *matchingservice.ForceLoadTaskQueuePartitionRequest,
@@ -459,6 +603,221 @@ func (c *clientImpl) ListWorkers(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.ListWorkers(ctx, request, opts...)
+}
+
+func (c *clientImpl) PollActivityTaskQueue(
+	ctx context.Context,
+	request *matchingservice.PollActivityTaskQueueRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.PollActivityTaskQueueResponse, error) {
+	p, loadBalance := c.resolvePartition(
+		request.GetPollRequest().GetTaskQueue(),
+		request.GetNamespaceId(),
+		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+		request.GetForwardedSource(),
+	)
+	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, p, loadBalance, request, opts, c.doPollActivityTaskQueue)
+}
+
+func (c *clientImpl) doPollActivityTaskQueue(
+	ctx context.Context,
+	p tqid.Partition,
+	loadBalance bool,
+	pc PartitionCounts,
+	request *matchingservice.PollActivityTaskQueueRequest,
+	opts []grpc.CallOption,
+) (*matchingservice.PollActivityTaskQueueResponse, error) {
+	// Copy the messages on the path to the task queue, since picking a partition
+	// rewrites its name. The rest is shared with the original request.
+	request = &matchingservice.PollActivityTaskQueueRequest{
+		NamespaceId: request.NamespaceId,
+		PollerId:    request.PollerId,
+		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: request.PollRequest.Namespace,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name:       request.PollRequest.TaskQueue.Name,
+				Kind:       request.PollRequest.TaskQueue.Kind,
+				NormalName: request.PollRequest.TaskQueue.NormalName,
+			},
+			PollerGroupId:             request.PollRequest.PollerGroupId,
+			Identity:                  request.PollRequest.Identity,
+			WorkerInstanceKey:         request.PollRequest.WorkerInstanceKey,
+			WorkerControlTaskQueue:    request.PollRequest.WorkerControlTaskQueue,
+			TaskQueueMetadata:         request.PollRequest.TaskQueueMetadata,
+			WorkerVersionCapabilities: request.PollRequest.WorkerVersionCapabilities,
+			DeploymentOptions:         request.PollRequest.DeploymentOptions,
+		},
+		ForwardedSource: request.ForwardedSource,
+		Conditions:      request.Conditions,
+	}
+	client, release, err := c.pickClientForRead(request.GetPollRequest().GetTaskQueue(), p, loadBalance, pc)
+	if err != nil {
+		return nil, err
+	}
+	if release != nil {
+		defer release()
+	}
+	ctx, cancel := c.createLongPollContext(ctx)
+	defer cancel()
+	return client.PollActivityTaskQueue(ctx, request, opts...)
+}
+
+func (c *clientImpl) PollNexusTaskQueue(
+	ctx context.Context,
+	request *matchingservice.PollNexusTaskQueueRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.PollNexusTaskQueueResponse, error) {
+	p, loadBalance := c.resolvePartition(
+		request.GetRequest().GetTaskQueue(),
+		request.GetNamespaceId(),
+		enumspb.TASK_QUEUE_TYPE_NEXUS,
+		request.GetForwardedSource(),
+	)
+	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, p, loadBalance, request, opts, c.doPollNexusTaskQueue)
+}
+
+func (c *clientImpl) doPollNexusTaskQueue(
+	ctx context.Context,
+	p tqid.Partition,
+	loadBalance bool,
+	pc PartitionCounts,
+	request *matchingservice.PollNexusTaskQueueRequest,
+	opts []grpc.CallOption,
+) (*matchingservice.PollNexusTaskQueueResponse, error) {
+	// Copy the messages on the path to the task queue, since picking a partition
+	// rewrites its name. The rest is shared with the original request.
+	request = &matchingservice.PollNexusTaskQueueRequest{
+		NamespaceId: request.NamespaceId,
+		PollerId:    request.PollerId,
+		Request: &workflowservice.PollNexusTaskQueueRequest{
+			Namespace: request.Request.Namespace,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name:       request.Request.TaskQueue.Name,
+				Kind:       request.Request.TaskQueue.Kind,
+				NormalName: request.Request.TaskQueue.NormalName,
+			},
+			PollerGroupId:             request.Request.PollerGroupId,
+			Identity:                  request.Request.Identity,
+			WorkerInstanceKey:         request.Request.WorkerInstanceKey,
+			WorkerVersionCapabilities: request.Request.WorkerVersionCapabilities,
+			DeploymentOptions:         request.Request.DeploymentOptions,
+			WorkerHeartbeat:           request.Request.WorkerHeartbeat,
+		},
+		ForwardedSource: request.ForwardedSource,
+		Conditions:      request.Conditions,
+	}
+	client, release, err := c.pickClientForRead(request.GetRequest().GetTaskQueue(), p, loadBalance, pc)
+	if err != nil {
+		return nil, err
+	}
+	if release != nil {
+		defer release()
+	}
+	ctx, cancel := c.createLongPollContext(ctx)
+	defer cancel()
+	return client.PollNexusTaskQueue(ctx, request, opts...)
+}
+
+func (c *clientImpl) PollWorkflowTaskQueue(
+	ctx context.Context,
+	request *matchingservice.PollWorkflowTaskQueueRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
+	p, loadBalance := c.resolvePartition(
+		request.GetPollRequest().GetTaskQueue(),
+		request.GetNamespaceId(),
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		request.GetForwardedSource(),
+	)
+	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, p, loadBalance, request, opts, c.doPollWorkflowTaskQueue)
+}
+
+func (c *clientImpl) doPollWorkflowTaskQueue(
+	ctx context.Context,
+	p tqid.Partition,
+	loadBalance bool,
+	pc PartitionCounts,
+	request *matchingservice.PollWorkflowTaskQueueRequest,
+	opts []grpc.CallOption,
+) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
+	// Copy the messages on the path to the task queue, since picking a partition
+	// rewrites its name. The rest is shared with the original request.
+	request = &matchingservice.PollWorkflowTaskQueueRequest{
+		NamespaceId: request.NamespaceId,
+		PollerId:    request.PollerId,
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: request.PollRequest.Namespace,
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name:       request.PollRequest.TaskQueue.Name,
+				Kind:       request.PollRequest.TaskQueue.Kind,
+				NormalName: request.PollRequest.TaskQueue.NormalName,
+			},
+			PollerGroupId:             request.PollRequest.PollerGroupId,
+			Identity:                  request.PollRequest.Identity,
+			WorkerInstanceKey:         request.PollRequest.WorkerInstanceKey,
+			WorkerControlTaskQueue:    request.PollRequest.WorkerControlTaskQueue,
+			BinaryChecksum:            request.PollRequest.BinaryChecksum,
+			WorkerVersionCapabilities: request.PollRequest.WorkerVersionCapabilities,
+			DeploymentOptions:         request.PollRequest.DeploymentOptions,
+		},
+		ForwardedSource: request.ForwardedSource,
+		Conditions:      request.Conditions,
+	}
+	client, release, err := c.pickClientForRead(request.GetPollRequest().GetTaskQueue(), p, loadBalance, pc)
+	if err != nil {
+		return nil, err
+	}
+	if release != nil {
+		defer release()
+	}
+	ctx, cancel := c.createLongPollContext(ctx)
+	defer cancel()
+	return client.PollWorkflowTaskQueue(ctx, request, opts...)
+}
+
+func (c *clientImpl) QueryWorkflow(
+	ctx context.Context,
+	request *matchingservice.QueryWorkflowRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.QueryWorkflowResponse, error) {
+	p, loadBalance := c.resolvePartition(
+		request.GetTaskQueue(),
+		request.GetNamespaceId(),
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		request.GetForwardInfo().GetSourcePartition(),
+	)
+	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, p, loadBalance, request, opts, c.doQueryWorkflow)
+}
+
+func (c *clientImpl) doQueryWorkflow(
+	ctx context.Context,
+	p tqid.Partition,
+	loadBalance bool,
+	pc PartitionCounts,
+	request *matchingservice.QueryWorkflowRequest,
+	opts []grpc.CallOption,
+) (*matchingservice.QueryWorkflowResponse, error) {
+	// Copy the messages on the path to the task queue, since picking a partition
+	// rewrites its name. The rest is shared with the original request.
+	request = &matchingservice.QueryWorkflowRequest{
+		NamespaceId: request.NamespaceId,
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name:       request.TaskQueue.Name,
+			Kind:       request.TaskQueue.Kind,
+			NormalName: request.TaskQueue.NormalName,
+		},
+		QueryRequest:     request.QueryRequest,
+		VersionDirective: request.VersionDirective,
+		ForwardInfo:      request.ForwardInfo,
+		Priority:         request.Priority,
+	}
+	client, err := c.pickClientForWrite(request.GetTaskQueue(), p, loadBalance, pc)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.QueryWorkflow(ctx, request, opts...)
 }
 
 func (c *clientImpl) RecordWorkerHeartbeat(
