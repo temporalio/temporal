@@ -375,8 +375,16 @@ type WorkflowExecutionInfo struct {
 	DeclinedTargetVersionUpgrade *v17.DeclinedTargetVersionUpgrade `protobuf:"bytes,114,opt,name=declined_target_version_upgrade,json=declinedTargetVersionUpgrade,proto3" json:"declined_target_version_upgrade,omitempty"`
 	// Time skipping info that contains the config and runtime history of the time skipping for the workflow.
 	TimeSkippingInfo *TimeSkippingInfo `protobuf:"bytes,115,opt,name=time_skipping_info,json=timeSkippingInfo,proto3" json:"time_skipping_info,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Most recently applied unpause and pause request ids, needed to deduplicate these.
+	// Since pause_info is no longer available in unpaused, fallback to last_pause_request_id
+	// to de-dupe a pause, which is written only on unpause, to avoid duplicate id storage.
+	// Only last_pause_request_id, not last_unpause_request_id, is carried across continue-as-new,
+	// to de-dupe retry of pause with no run id, whereas a stale retry of unpause is allowed to
+	// fail with "not paused" error, and is not worth the additional size.
+	LastUnpauseRequestId string `protobuf:"bytes,116,opt,name=last_unpause_request_id,json=lastUnpauseRequestId,proto3" json:"last_unpause_request_id,omitempty"`
+	LastPauseRequestId   string `protobuf:"bytes,117,opt,name=last_pause_request_id,json=lastPauseRequestId,proto3" json:"last_pause_request_id,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *WorkflowExecutionInfo) Reset() {
@@ -1146,6 +1154,20 @@ func (x *WorkflowExecutionInfo) GetTimeSkippingInfo() *TimeSkippingInfo {
 		return x.TimeSkippingInfo
 	}
 	return nil
+}
+
+func (x *WorkflowExecutionInfo) GetLastUnpauseRequestId() string {
+	if x != nil {
+		return x.LastUnpauseRequestId
+	}
+	return ""
+}
+
+func (x *WorkflowExecutionInfo) GetLastPauseRequestId() string {
+	if x != nil {
+		return x.LastPauseRequestId
+	}
+	return ""
 }
 
 type isWorkflowExecutionInfo_LastWorkflowTaskFailure interface {
@@ -4972,7 +4994,7 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\x05R\x03key\x12D\n" +
 	"\x05value\x18\x02 \x01(\v2..temporal.server.api.persistence.v1.QueueStateR\x05value:\x028\x01J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
 	"J\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11\"\xd3B\n" +
+	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11\"\xbdC\n" +
 	"\x15WorkflowExecutionInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -5084,7 +5106,9 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"!last_workflow_task_timed_out_type\x18l \x01(\x0e2\".temporal.api.enums.v1.TimeoutTypeH\x00R\x1clastWorkflowTaskTimedOutType\x12~\n" +
 	"\x1clast_notified_target_version\x18q \x01(\v2=.temporal.server.api.persistence.v1.LastNotifiedTargetVersionR\x19lastNotifiedTargetVersion\x12|\n" +
 	"\x1fdeclined_target_version_upgrade\x18r \x01(\v25.temporal.api.history.v1.DeclinedTargetVersionUpgradeR\x1cdeclinedTargetVersionUpgrade\x12b\n" +
-	"\x12time_skipping_info\x18s \x01(\v24.temporal.server.api.persistence.v1.TimeSkippingInfoR\x10timeSkippingInfo\x1ad\n" +
+	"\x12time_skipping_info\x18s \x01(\v24.temporal.server.api.persistence.v1.TimeSkippingInfoR\x10timeSkippingInfo\x125\n" +
+	"\x17last_unpause_request_id\x18t \x01(\tR\x14lastUnpauseRequestId\x121\n" +
+	"\x15last_pause_request_id\x18u \x01(\tR\x12lastPauseRequestId\x1ad\n" +
 	"\x15SearchAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x125\n" +
 	"\x05value\x18\x02 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x05value:\x028\x01\x1aX\n" +
