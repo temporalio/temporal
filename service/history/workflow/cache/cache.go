@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -66,7 +67,9 @@ type (
 		nonUserContextLockTimeout time.Duration
 		// paginationLimiter limits pagination buffer size across all workflow cache contexts
 		paginationLimiter *limiter.KeyedBytesLimiter
+		testHooks         testhooks.TestHooks
 	}
+
 	cacheItem struct {
 		shardId   int32
 		wfContext historyi.WorkflowContext
@@ -97,6 +100,7 @@ func NewHostLevelCache(
 	config *configs.Config,
 	logger log.Logger,
 	handler metrics.Handler,
+	testHooks testhooks.TestHooks,
 ) Cache {
 	maxSize := config.HistoryHostLevelCacheMaxSize()
 	if config.HistoryCacheLimitSizeBased {
@@ -149,11 +153,13 @@ func NewHostLevelCache(
 
 	taggedHandler := handler.WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue))
 	c := cache.NewWithMetrics(maxSize, opts, taggedHandler)
-	return &cacheImpl{
+	impl := &cacheImpl{
 		Cache:                     c,
 		nonUserContextLockTimeout: config.HistoryCacheNonUserContextLockTimeout(),
 		paginationLimiter:         limiter.NewKeyedBytesLimiter(),
+		testHooks:                 testHooks,
 	}
+	return impl
 }
 
 func (c *cacheImpl) stop() {
@@ -298,9 +304,9 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 			shardContext.GetThrottledLogger(),
 			shardContext.GetMetricsHandler(),
 			c.paginationLimiter,
+			c.testHooks,
 		)
 
-		var err error
 		value := &cacheItem{shardId: shardContext.GetShardID(), wfContext: workflowCtx, finalizer: shardContext.GetFinalizer()}
 		existing, err := c.PutIfNotExist(cacheKey, value)
 		if err != nil {
@@ -320,7 +326,6 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 	// TODO This will create a closure on every request.
 	//  Consider revisiting this if it causes too much GC activity
 	releaseFunc := c.makeReleaseFunc(cacheKey, shardContext, workflowCtx, forceClearContext, handler, time.Now())
-
 	return workflowCtx, releaseFunc, nil
 }
 
