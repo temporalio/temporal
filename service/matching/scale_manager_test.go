@@ -367,6 +367,70 @@ func (s *ScaleManagerSuite) TestDecisionPersistsAndUpdatesEphemeralData() {
 	s.Equal(int32(2), info.Write)
 }
 
+// TestDisablingScalerReleasesManagedState verifies that disabling the real scaler
+// after it has produced state clears its target and private state. Backlog state is
+// retained so read partitions can drain, while Write=0 makes clients fall back to
+// the dynamic-config partition counts.
+func (s *ScaleManagerSuite) TestDisablingScalerReleasesManagedState() {
+	var enabled atomic.Bool
+	enabled.Store(true)
+	scaler := newSimplePartitionScaler(func() dynamicconfig.SimplePartitionScalerSettings {
+		return dynamicconfig.SimplePartitionScalerSettings{Enabled: enabled.Load()}
+	}, s.timeSource)
+
+	dbWrites := make(chan *persistencespb.PartitionScaleState, 2)
+	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), true).
+		Do(func(state *persistencespb.PartitionScaleState, _ bool) {
+			dbWrites <- common.CloneProto(state)
+		}).
+		Return(nil).Times(2)
+
+	scaleInfos := make(chan *taskqueuespb.PartitionScaleInfo, 2)
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).
+		Do(func(info *taskqueuespb.PartitionScaleInfo) {
+			scaleInfos <- common.CloneProto(info)
+		}).Times(2)
+
+	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
+	s.newTarget = logger.Expect(testlogger.Info, "new target")
+	s.sm = newScaleManager(
+		context.Background(),
+		tqid.MustNormalPartitionFromRpcName("tq", "ns-id", enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+		logger,
+		s.metricsHandler,
+		s.userData,
+		s.matching,
+		scaler,
+		s.timeSource,
+		dynamicconfig.GetTypedPropertyFn(s.settings),
+		dynamicconfig.GetIntPropertyFn(4),
+		func() bool { return false },
+	)
+	s.sm.Start(nil, s.scaleDB)
+
+	s.sm.AddedTasks(1)
+	enabledState := waitRecv(s, dbWrites, "enabled state was not persisted")
+	s.Equal(int32(1), enabledState.Target)
+	s.NotNil(enabledState.PrivateScalerState)
+	s.Equal(int32(4), bitSet(enabledState.BacklogState).len())
+	enabledInfo := waitRecv(s, scaleInfos, "enabled scale info was not pushed")
+	s.Equal(int32(4), enabledInfo.Read)
+	s.Equal(int32(1), enabledInfo.Write)
+
+	s.awaitDecisionApplied(1)
+	enabled.Store(false)
+	s.timeSource.Advance(110 * time.Millisecond)
+	s.sm.AddedTasks(1)
+
+	disabledState := waitRecv(s, dbWrites, "disabled state was not persisted")
+	s.Zero(disabledState.Target)
+	s.Nil(disabledState.PrivateScalerState)
+	s.Equal(int32(4), bitSet(disabledState.BacklogState).len())
+	disabledInfo := waitRecv(s, scaleInfos, "disabled scale info was not pushed")
+	s.Equal(int32(4), disabledInfo.Read)
+	s.Zero(disabledInfo.Write)
+}
+
 // TestEmitsGaugeMetrics verifies that when gauge emission is enabled, a scale
 // decision records the read, write, and target gauges with the expected values.
 func (s *ScaleManagerSuite) TestEmitsGaugeMetrics() {
