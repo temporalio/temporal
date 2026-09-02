@@ -205,6 +205,32 @@ func TestExecuteTask_Basic(t *testing.T) {
 	})
 }
 
+func TestExecuteTask_ForwardsLastCompletionPayload(t *testing.T) {
+	env := newInvokerExecuteTestEnv(t)
+	env.Scheduler.LastCompletionResult = chasm.NewDataField(env.MutableContext(), &schedulerpb.LastCompletionResult{
+		Success: &commonpb.Payload{Data: []byte("result")},
+	})
+	startTime := timestamppb.New(env.TimeSource.Now())
+	env.mockFrontendClient.EXPECT().
+		StartWorkflowExecution(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *workflowservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*workflowservice.StartWorkflowExecutionResponse, error) {
+			payloads := req.GetLastCompletionResult().GetPayloads()
+			require.Len(t, payloads, 1)
+			require.Equal(t, []byte("result"), payloads[0].Data)
+			return &workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil
+		})
+
+	runExecuteTestCase(t, env, &executeTestCase{
+		InitialBufferedStarts: []*schedulespb.BufferedStart{{
+			NominalTime: startTime, ActualTime: startTime, DesiredTime: startTime,
+			RequestId: "req", OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, Attempt: 1,
+		}},
+		ExpectedBufferedStarts:   1,
+		ExpectedRunningWorkflows: 1,
+		ExpectedActionCount:      1,
+	})
+}
+
 func TestExecuteTask_AllowAllRemovedAcrossEngineTransaction(t *testing.T) {
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
 	engine, engineCtx := newTestEngineContext(t, logger)
