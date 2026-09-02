@@ -765,9 +765,15 @@ func getFieldNameFromStruct(structPtr any, fieldPtr any) (string, error) {
 // GetRPCStatus returns the gRPC status carried by err, or false if err is not a gRPC-induced
 // error.
 //
-// This does not unwrap err: If err may be wrapped (e.g. by an HTTP client, which wraps
-// RoundTripper errors in *url.Error), unwrap it yourself and pass the unwrapped error here.
+// Wrapped gRPC status errors are supported, but wrapped errors implementing
+// Status() must be unwrapped before calling GetRPCStatus.
 func GetRPCStatus(err error) (*status.Status, bool) {
+	// This isn't correct, but is to maintain existing behavior.
+	//
+	// Exposing gRPC errors via `Status()` was a convention that existed for several years,
+	// but the canonical way to expose error status (from google.golang.org/grpc/status) is
+	// by an `GRPCStatus() *status.Status` method. [status.FromError] below does unwrapping
+	// and checks for that.
 	if stGetter, ok := err.(interface{ Status() *status.Status }); ok {
 		return stGetter.Status(), true
 	}
