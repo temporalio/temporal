@@ -12,15 +12,15 @@ Apply these patterns when reviewing PRs or suggesting code changes.
 - Don't add assertions for things you can assume work (e.g., "You are not testing TerminateWorkflowExecution here, you can assume it works")
 - Remove redundant nil checks after you just set a value
 - Do not export anything that doesn't need to be exported
-- Prefer `cmp.Or(value, fallback)` over an `if` statement when selecting the first non-zero comparable value. `cmp.Or(a, b, c)` returns the first non-zero argument, or the zero value when all arguments are zero. Use it when the zero value means "unset"; all arguments are evaluated before the call, so keep side effects and expensive fallback computations outside it.
 
-## 2. Go Naming Conventions
+## 2. Go Conventions
 
 - Don't use `Get` prefix for getters: `func (a *Activity) Store()` not `GetStore()`
 - Don't use `Impl` suffix for implementations
 - Don't put underscore after `Test` in test names: `TestRetry` not `Test_Retry`
 - Avoid stuttering: don't use `ActivityStatus` in package `activity`, just `Status`
 - Use `ok` boolean pattern instead of nil checks where idiomatic
+- Prefer `cmp.Or(value, fallback)` over an `if` statement when selecting the first non-zero comparable value. `cmp.Or(a, b, c)` returns the first non-zero argument, or the zero value when all arguments are zero. Use it when the zero value means "unset"; all arguments are evaluated before the call, so keep side effects and expensive fallback computations outside it.
 
 ## 3. Testify Suite Correctness and Reliability
 
