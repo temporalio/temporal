@@ -29,8 +29,9 @@ Apply these patterns when reviewing PRs or suggesting code changes.
 - Use `EventuallyWithT` when you need assertions inside eventually blocks, and use that block's `t`
 - Use `require.ErrorAs(t, err, &specificErr)` for specific error type checks
 - Prefer `require` over `assert` - it's rarely useful to continue a test after a failed assertion
-- Prefer table-driven tests over separate `Test*` methods when cases exercise the same behavior. Give each case a descriptive name and run independent cases as parallel subtests.
-- Prefer comparing a function's full result with an expected value over separate `require.Equal` calls for each field. Use field-level assertions only when part of the result is relevant.
+- Prefer table-driven tests over separate `Test*` methods when cases exercise the same behavior. Give each case a descriptive name and run it as a subtest.
+- Run independent cases in parallel in plain `t.Run` tests. Testify suites do not support parallel subtests.
+- Prefer comparing a function's full result with an expected value over separate `require.Equal` calls for each field. Use `protorequire.ProtoEqual` for proto results and proto fields within non-proto results. Use other field-level assertions only when part of the result is relevant.
 - Add comments explaining why `Eventually` is needed (e.g., eventual consistency)
 - Do not use single-value type assertions on errors (`err.(*T)`); this panics instead of failing the test when the type doesn't match. Use `errors.As` with a guarded return.
 - When launching a goroutine to maintain a precondition for later assertions (e.g., keeping pollers active so a deployment version gets registered), loop until context cancellation rather than running once. A single attempt that times out exits silently, leaving downstream Eventually/propagation waits to hang until their own deadline.
@@ -72,7 +73,7 @@ Apply these patterns when reviewing PRs or suggesting code changes.
 
 ## 7. Code comments
 
-- Write standalone comments as full sentences that start with a capital letter and end with punctuation. End-of-line comments may be sentence fragments.
+- Write comments that read like sentences as full sentences, starting with a capital letter and ending with punctuation. Short labels, end-of-line fragments, directives, and `TODO` markers are exempt.
 - A comment should be removed if the behavior of the code without the comment should be apparent to a reader familiar with the codebase.
 - If the benefit of a comment can be achieved by improving variable/function names then suggest that.
 - A comment must not give unnecessary or verbose explanation.
