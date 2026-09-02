@@ -224,20 +224,9 @@ func RefreshTasksForWorkflowStart(
 		return nil
 	}
 
-	startVersion, err := mutableState.GetStartVersion()
-	if err != nil {
-		return err
-	}
-	workflowStartVersionedTransition := &persistencespb.VersionedTransition{
-		NamespaceFailoverVersion: startVersion,
-		TransitionCount:          1,
-	}
-	// Workflow start tasks belong only to the first state transition. Later execution
-	// state changes, such as unpausing a workflow, must not recreate them.
-	if transitionhistory.Compare(
-		workflowStartVersionedTransition,
-		minVersionedTransition,
-	) < 0 {
+	// Workflow start tasks belong only to the first state transition. A transition
+	// count of zero represents a full refresh.
+	if minVersionedTransition.GetTransitionCount() > 1 {
 		return nil
 	}
 
