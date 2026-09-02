@@ -14,6 +14,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -431,6 +432,27 @@ func ConvertGRPCError(err error, exposeDetails bool) error {
 	}
 	// Let the nexus SDK handle this for us (log and convert to an internal error).
 	return err
+}
+
+// OperationErrorToTemporalFailure converts a Nexus operation error into the Temporal failure that
+// gets reported to the caller of the operation.
+func OperationErrorToTemporalFailure(opErr *nexus.OperationError) (*failurepb.Failure, error) {
+	var nf nexus.Failure
+	if opErr.OriginalFailure != nil {
+		// Prefer the failure as it came off the wire, rather than round-tripping it through the
+		// converter and losing whatever the converter cannot represent.
+		nf = *opErr.OriginalFailure
+	} else {
+		var err error
+		nf, err = nexusrpc.DefaultFailureConverter().ErrorToFailure(opErr)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// The failure may be a wrapper whose metadata asks that its cause be reported instead, to avoid
+	// an unnecessary layer of indirection.
+	return NexusFailureToTemporalFailure(*nexusrpc.UnwrapFailure(&nf))
 }
 
 func AdaptAuthorizeError(permissionDeniedError *serviceerror.PermissionDenied) error {

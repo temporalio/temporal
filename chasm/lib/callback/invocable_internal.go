@@ -158,17 +158,9 @@ func (c invocableInternal) getHistoryRequest(
 			Completion: completion,
 		}
 	} else {
-		failure, err := nexusrpc.DefaultFailureConverter().ErrorToFailure(c.completion.Error)
+		apiFailure, err := commonnexus.OperationErrorToTemporalFailure(c.completion.Error)
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert error to failure: %w", err)
-		}
-		// Unwrap the operation error, the handler on the other side is expecting to receive the underlying cause.
-		if failure.Cause != nil {
-			failure = *failure.Cause
-		}
-		apiFailure, err := commonnexus.NexusFailureToTemporalFailure(failure)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert failure type: %w", err)
 		}
 
 		req = &historyservice.CompleteNexusOperationChasmRequest{
