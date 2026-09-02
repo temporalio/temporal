@@ -369,13 +369,13 @@ func (s *ScaleManagerSuite) TestDecisionPersistsAndUpdatesEphemeralData() {
 
 // TestDisablingScalerReleasesManagedState verifies that disabling the real scaler
 // after it has produced state clears its target and private state. Backlog state is
-// retained so read partitions can drain, while Write=0 makes clients fall back to
-// the dynamic-config partition counts.
+// retained for server-side tracking, while Write=0 makes clients fall back to the
+// dynamic-config partition counts even when the managed count was higher.
 func (s *ScaleManagerSuite) TestDisablingScalerReleasesManagedState() {
 	var enabled atomic.Bool
 	enabled.Store(true)
 	scaler := newSimplePartitionScaler(func() dynamicconfig.SimplePartitionScalerSettings {
-		return dynamicconfig.SimplePartitionScalerSettings{Enabled: enabled.Load()}
+		return dynamicconfig.SimplePartitionScalerSettings{Enabled: enabled.Load(), Min: 6}
 	}, s.timeSource)
 
 	dbWrites := make(chan *persistencespb.PartitionScaleState, 2)
@@ -410,12 +410,12 @@ func (s *ScaleManagerSuite) TestDisablingScalerReleasesManagedState() {
 
 	s.sm.AddedTasks(1)
 	enabledState := waitRecv(s, dbWrites, "enabled state was not persisted")
-	s.Equal(int32(1), enabledState.Target)
+	s.Equal(int32(6), enabledState.Target)
 	s.NotNil(enabledState.PrivateScalerState)
-	s.Equal(int32(4), bitSet(enabledState.BacklogState).len())
+	s.Equal(int32(6), bitSet(enabledState.BacklogState).len())
 	enabledInfo := waitRecv(s, scaleInfos, "enabled scale info was not pushed")
-	s.Equal(int32(4), enabledInfo.Read)
-	s.Equal(int32(1), enabledInfo.Write)
+	s.Equal(int32(6), enabledInfo.Read)
+	s.Equal(int32(6), enabledInfo.Write)
 
 	s.awaitDecisionApplied(1)
 	enabled.Store(false)
@@ -425,9 +425,9 @@ func (s *ScaleManagerSuite) TestDisablingScalerReleasesManagedState() {
 	disabledState := waitRecv(s, dbWrites, "disabled state was not persisted")
 	s.Zero(disabledState.Target)
 	s.Nil(disabledState.PrivateScalerState)
-	s.Equal(int32(4), bitSet(disabledState.BacklogState).len())
+	s.Equal(int32(6), bitSet(disabledState.BacklogState).len())
 	disabledInfo := waitRecv(s, scaleInfos, "disabled scale info was not pushed")
-	s.Equal(int32(4), disabledInfo.Read)
+	s.Equal(int32(6), disabledInfo.Read)
 	s.Zero(disabledInfo.Write)
 }
 
