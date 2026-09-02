@@ -26,6 +26,7 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/resource"
+	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/service/history/queues/common"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/mock/gomock"
@@ -78,6 +79,78 @@ func (l *mockNexusCompletionGetterLibrary) Components() []*chasm.RegistrableComp
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*mockNexusCompletionGetterComponent]("nexusCompletionGetter"),
 	}
+}
+
+// newInvocationTaskTest builds a CHASM tree holding cb underneath a completion source that returns the
+// given completion, and returns an engine context plus a ref to the callback to invoke task handlers with.
+func newInvocationTaskTest(
+	t *testing.T,
+	handler *invocationTaskHandler,
+	cb *Callback,
+	completion nexusrpc.CompleteOperationOptions,
+) (context.Context, chasm.ComponentRef) {
+	t.Helper()
+
+	chasmRegistry := chasm.NewRegistry(log.NewTestLogger())
+	require.NoError(t, chasmRegistry.Register(&Library{InvocationTaskHandler: handler}))
+	require.NoError(t, chasmRegistry.Register(&mockNexusCompletionGetterLibrary{}))
+
+	executionKey := chasm.ExecutionKey{
+		NamespaceID: "namespace-id",
+		BusinessID:  "workflow-id",
+		RunID:       "run-id",
+	}
+	engineCtx := chasm.NewEngineContext(context.Background(), chasmtest.NewEngine(t, chasmRegistry))
+	_, err := chasm.StartExecution(
+		engineCtx,
+		executionKey,
+		func(ctx chasm.MutableContext, _ struct{}) (*mockNexusCompletionGetterComponent, error) {
+			return &mockNexusCompletionGetterComponent{
+				completion: completion,
+				Callback:   chasm.NewComponentField(ctx, cb),
+			}, nil
+		},
+		struct{}{},
+	)
+	require.NoError(t, err)
+
+	rootRef := chasm.NewComponentRef[*mockNexusCompletionGetterComponent](executionKey)
+	callbackRef, err := chasm.ReadComponent(
+		engineCtx,
+		rootRef,
+		func(_ *mockNexusCompletionGetterComponent, chasmCtx chasm.Context, _ struct{}) (chasm.ComponentRef, error) {
+			serialized, err := chasmCtx.Ref(cb)
+			if err != nil {
+				return chasm.ComponentRef{}, err
+			}
+			return chasm.DeserializeComponentRef(serialized)
+		},
+		struct{}{},
+	)
+	require.NoError(t, err)
+	return engineCtx, callbackRef
+}
+
+// readCallbackState runs assert against the persisted callback state, so that assertions see what the task
+// handler committed rather than the in-memory component it was handed.
+func readCallbackState(
+	engineCtx context.Context,
+	t *testing.T,
+	ref chasm.ComponentRef,
+	assert func(chasm.Context, *Callback),
+) {
+	t.Helper()
+
+	_, err := chasm.ReadComponent(
+		engineCtx,
+		ref,
+		func(c *Callback, chasmCtx chasm.Context, _ struct{}) (struct{}, error) {
+			assert(chasmCtx, c)
+			return struct{}{}, nil
+		},
+		struct{}{},
+	)
+	require.NoError(t, err)
 }
 
 // Test the full executeInvocationTask flow with direct handler calls
@@ -141,17 +214,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			// Setup namespace
-			factory := namespace.NewDefaultReplicationResolverFactory()
-			detail := &persistencespb.NamespaceDetail{
-				Info: &persistencespb.NamespaceInfo{
-					Id:   "namespace-id",
-					Name: "namespace-name",
-				},
-				Config: &persistencespb.NamespaceConfig{},
-			}
-			ns, err := namespace.FromPersistentState(detail, factory(detail))
-			require.NoError(t, err)
+			ns := test.NewNamespace(t)
 
 			// Setup metrics expectations
 			metricsHandler := metrics.NewMockHandler(ctrl)
@@ -160,12 +223,12 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			timer := metrics.NewMockTimerIface(ctrl)
 			metricsHandler.EXPECT().Counter(RequestCounter.Name()).Return(counter)
 			counter.EXPECT().Record(int64(1),
-				metrics.NamespaceTag("namespace-name"),
+				metrics.NamespaceTag(ns.Name().String()),
 				metrics.DestinationTag("http://localhost"),
 				metrics.OutcomeTag(tc.expectedMetricOutcome))
 			metricsHandler.EXPECT().Timer(RequestLatencyHistogram.Name()).Return(timer)
 			timer.EXPECT().Record(gomock.Any(),
-				metrics.NamespaceTag("namespace-name"),
+				metrics.NamespaceTag(ns.Name().String()),
 				metrics.DestinationTag("http://localhost"),
 				metrics.OutcomeTag(tc.expectedMetricOutcome))
 
@@ -191,14 +254,6 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				},
 			}
 
-			chasmRegistry := chasm.NewRegistry(logger)
-			err = chasmRegistry.Register(&Library{
-				InvocationTaskHandler: handler,
-			})
-			require.NoError(t, err)
-			err = chasmRegistry.Register(&mockNexusCompletionGetterLibrary{})
-			require.NoError(t, err)
-
 			callback := &Callback{
 				CallbackState: &callbackspb.CallbackState{
 					RequestId:        "request-id",
@@ -215,43 +270,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				},
 			}
 
-			// Create completion
-			completion := nexusrpc.CompleteOperationOptions{}
-
-			executionKey := chasm.ExecutionKey{
-				NamespaceID: "namespace-id",
-				BusinessID:  "workflow-id",
-				RunID:       "run-id",
-			}
-			testEngine := chasmtest.NewEngine(t, chasmRegistry)
-			engineCtx := chasm.NewEngineContext(context.Background(), testEngine)
-			_, err = chasm.StartExecution(
-				engineCtx,
-				executionKey,
-				func(ctx chasm.MutableContext, _ struct{}) (*mockNexusCompletionGetterComponent, error) {
-					return &mockNexusCompletionGetterComponent{
-						completion: completion,
-						Callback:   chasm.NewComponentField(ctx, callback),
-					}, nil
-				},
-				struct{}{},
-			)
-			require.NoError(t, err)
-
-			rootRef := chasm.NewComponentRef[*mockNexusCompletionGetterComponent](executionKey)
-			callbackRef, err := chasm.ReadComponent(
-				engineCtx,
-				rootRef,
-				func(_ *mockNexusCompletionGetterComponent, chasmCtx chasm.Context, _ struct{}) (chasm.ComponentRef, error) {
-					serialized, err := chasmCtx.Ref(callback)
-					if err != nil {
-						return chasm.ComponentRef{}, err
-					}
-					return chasm.DeserializeComponentRef(serialized)
-				},
-				struct{}{},
-			)
-			require.NoError(t, err)
+			engineCtx, callbackRef := newInvocationTaskTest(t, handler, callback, nexusrpc.CompleteOperationOptions{})
 
 			executeErr := handler.Execute(
 				engineCtx,
@@ -260,17 +279,10 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				&callbackspb.InvocationTask{Attempt: 0},
 			)
 
-			// Verify outcome by reading component state directly.
-			resultCallback, err := chasm.ReadComponent(
-				engineCtx,
-				callbackRef,
-				func(c *Callback, _ chasm.Context, _ struct{}) (*Callback, error) {
-					return c, nil
-				},
-				struct{}{},
-			)
-			require.NoError(t, err)
-			tc.assertOutcome(t, resultCallback, executeErr)
+			// Verify outcome by reading persisted component state.
+			readCallbackState(engineCtx, t, callbackRef, func(_ chasm.Context, c *Callback) {
+				tc.assertOutcome(t, c, executeErr)
+			})
 		})
 	}
 }
@@ -506,17 +518,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			// Setup namespace
-			factory := namespace.NewDefaultReplicationResolverFactory()
-			detail := &persistencespb.NamespaceDetail{
-				Info: &persistencespb.NamespaceInfo{
-					Id:   "namespace-id",
-					Name: "namespace-name",
-				},
-				Config: &persistencespb.NamespaceConfig{},
-			}
-			ns, err := namespace.FromPersistentState(detail, factory(detail))
-			require.NoError(t, err)
+			ns := test.NewNamespace(t)
 
 			// Setup history client
 			historyClient := tc.setupHistoryClient(t, ctrl)
