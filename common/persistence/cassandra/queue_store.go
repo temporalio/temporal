@@ -92,9 +92,9 @@ func (q *QueueStore) tryEnqueue(
 	messageID int64,
 	blob *commonpb.DataBlob,
 ) (int64, error) {
-	query := q.session.Query(templateEnqueueMessageQuery, queueType, messageID, blob.Data, blob.EncodingType.String()).WithContext(ctx)
+	query := q.session.Query(templateEnqueueMessageQuery, queueType, messageID, blob.Data, blob.EncodingType.String())
 	previous := make(map[string]any)
-	applied, err := query.MapScanCAS(previous)
+	applied, err := query.MapScanCAS(ctx, previous)
 	if err != nil {
 		return persistence.EmptyQueueMessageID, gocql.ConvertError("tryEnqueue", err)
 	}
@@ -111,9 +111,9 @@ func (q *QueueStore) getLastMessageID(
 	queueType persistence.QueueType,
 ) (int64, error) {
 
-	query := q.session.Query(templateGetLastMessageIDQuery, queueType).WithContext(ctx)
+	query := q.session.Query(templateGetLastMessageIDQuery, queueType)
 	result := make(map[string]any)
-	err := query.MapScan(result)
+	err := query.MapScan(ctx, result)
 	if err != nil {
 		if gocql.IsNotFoundError(err) {
 			return persistence.EmptyQueueMessageID, nil
@@ -133,9 +133,9 @@ func (q *QueueStore) ReadMessages(
 		q.queueType,
 		lastMessageID,
 		maxCount,
-	).WithContext(ctx)
+	)
 
-	iter := query.Iter()
+	iter := query.Iter(ctx)
 
 	var result []*persistence.QueueMessage
 	message := make(map[string]any)
@@ -165,8 +165,8 @@ func (q *QueueStore) ReadMessagesFromDLQ(
 		q.getDLQTypeFromQueueType(),
 		firstMessageID,
 		lastMessageID,
-	).WithContext(ctx)
-	iter := query.PageSize(pageSize).PageState(pageToken).Iter()
+	)
+	iter := query.PageSize(pageSize).PageState(pageToken).Iter(ctx)
 
 	var result []*persistence.QueueMessage
 	message := make(map[string]any)
@@ -192,8 +192,8 @@ func (q *QueueStore) DeleteMessagesBefore(
 	messageID int64,
 ) error {
 
-	query := q.session.Query(templateDeleteMessagesBeforeQuery, q.queueType, messageID).WithContext(ctx)
-	if err := query.Exec(); err != nil {
+	query := q.session.Query(templateDeleteMessagesBeforeQuery, q.queueType, messageID)
+	if err := query.Exec(ctx); err != nil {
 		return gocql.ConvertError("DeleteMessagesBefore", err)
 	}
 	return nil
@@ -205,8 +205,8 @@ func (q *QueueStore) DeleteMessageFromDLQ(
 ) error {
 
 	// Use negative queue type as the dlq type
-	query := q.session.Query(templateDeleteMessageQuery, q.getDLQTypeFromQueueType(), messageID).WithContext(ctx)
-	if err := query.Exec(); err != nil {
+	query := q.session.Query(templateDeleteMessageQuery, q.getDLQTypeFromQueueType(), messageID)
+	if err := query.Exec(ctx); err != nil {
 		return gocql.ConvertError("DeleteMessageFromDLQ", err)
 	}
 
@@ -220,8 +220,8 @@ func (q *QueueStore) RangeDeleteMessagesFromDLQ(
 ) error {
 
 	// Use negative queue type as the dlq type
-	query := q.session.Query(templateDeleteMessagesQuery, q.getDLQTypeFromQueueType(), firstMessageID, lastMessageID).WithContext(ctx)
-	if err := query.Exec(); err != nil {
+	query := q.session.Query(templateDeleteMessagesQuery, q.getDLQTypeFromQueueType(), firstMessageID, lastMessageID)
+	if err := query.Exec(ctx); err != nil {
 		return gocql.ConvertError("RangeDeleteMessagesFromDLQ", err)
 	}
 
@@ -280,8 +280,8 @@ func (q *QueueStore) insertInitialQueueMetadataRecord(
 		blob.Data,
 		blob.EncodingType.String(),
 		version,
-	).WithContext(ctx)
-	_, err := query.MapScanCAS(make(map[string]any))
+	)
+	_, err := query.MapScanCAS(ctx, make(map[string]any))
 	if err != nil {
 		return fmt.Errorf("failed to insert initial queue metadata record: %v, Type: %v", err, queueType)
 	}
@@ -294,9 +294,9 @@ func (q *QueueStore) getQueueMetadata(
 	queueType persistence.QueueType,
 ) (*persistence.InternalQueueMetadata, error) {
 
-	query := q.session.Query(templateGetQueueMetadataQuery, queueType).WithContext(ctx)
+	query := q.session.Query(templateGetQueueMetadataQuery, queueType)
 	message := make(map[string]any)
-	err := query.MapScan(message)
+	err := query.MapScan(ctx, message)
 	if err != nil {
 		return nil, err
 	}
@@ -323,8 +323,8 @@ func (q *QueueStore) updateAckLevel(
 		metadata.Version+1, // always increase version number on update
 		queueType,
 		metadata.Version, // condition update
-	).WithContext(ctx)
-	applied, err := query.MapScanCAS(make(map[string]any))
+	)
+	applied, err := query.MapScanCAS(ctx, make(map[string]any))
 	if err != nil {
 		return gocql.ConvertError("updateAckLevel", err)
 	}

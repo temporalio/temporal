@@ -77,15 +77,15 @@ func (h *HistoryStore) AppendHistoryNodes(
 			node.TransactionID,
 			node.Events.Data,
 			node.Events.EncodingType.String(),
-		).WithContext(ctx)
-		if err := query.Exec(); err != nil {
+		)
+		if err := query.Exec(ctx); err != nil {
 			return convertTimeoutError(gocql.ConvertError("AppendHistoryNodes", err))
 		}
 		return nil
 	}
 
 	treeInfoDataBlob := request.TreeInfo
-	batch := h.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
+	batch := h.Session.NewBatch(gocql.LoggedBatch)
 	batch.Query(v2templateInsertTree,
 		branchInfo.TreeId,
 		branchInfo.BranchId,
@@ -101,7 +101,7 @@ func (h *HistoryStore) AppendHistoryNodes(
 		node.Events.Data,
 		node.Events.EncodingType.String(),
 	)
-	if err := h.Session.ExecuteBatch(batch); err != nil {
+	if err := batch.Exec(ctx); err != nil {
 		return convertTimeoutError(gocql.ConvertError("AppendHistoryNodes", err))
 	}
 	return nil
@@ -129,8 +129,8 @@ func (h *HistoryStore) DeleteHistoryNodes(
 		branchID,
 		nodeID,
 		txnID,
-	).WithContext(ctx)
-	if err := query.Exec(); err != nil {
+	)
+	if err := query.Exec(ctx); err != nil {
 		return gocql.ConvertError("DeleteHistoryNodes", err)
 	}
 	return nil
@@ -166,9 +166,9 @@ func (h *HistoryStore) ReadHistoryBranch(
 		queryString = v2templateReadHistoryNode
 	}
 
-	query := h.Session.Query(queryString, treeID, branchID, request.MinNodeID, request.MaxNodeID).WithContext(ctx)
+	query := h.Session.Query(queryString, treeID, branchID, request.MinNodeID, request.MaxNodeID)
 
-	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
+	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter(ctx)
 	var pagingToken []byte
 	if len(iter.PageState()) > 0 {
 		pagingToken = iter.PageState()
@@ -255,8 +255,8 @@ func (h *HistoryStore) ForkHistoryBranch(
 	if err != nil {
 		return serviceerror.NewInternalf("ForkHistoryBranch - Gocql NewBranchID UUID cast failed. Error: %v", err)
 	}
-	query := h.Session.Query(v2templateInsertTree, cqlTreeID, cqlNewBranchID, datablob.Data, datablob.EncodingType.String()).WithContext(ctx)
-	err = query.Exec()
+	query := h.Session.Query(v2templateInsertTree, cqlTreeID, cqlNewBranchID, datablob.Data, datablob.EncodingType.String())
+	err = query.Exec(ctx)
 	if err != nil {
 		return gocql.ConvertError("ForkHistoryBranch", err)
 	}
@@ -270,7 +270,7 @@ func (h *HistoryStore) DeleteHistoryBranch(
 	request *p.InternalDeleteHistoryBranchRequest,
 ) error {
 
-	batch := h.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
+	batch := h.Session.NewBatch(gocql.LoggedBatch)
 	batch.Query(v2templateDeleteBranch, request.BranchInfo.TreeId, request.BranchInfo.BranchId)
 
 	// delete each branch range
@@ -278,7 +278,7 @@ func (h *HistoryStore) DeleteHistoryBranch(
 		h.deleteBranchRangeNodes(batch, request.BranchInfo.TreeId, br.BranchId, br.BeginNodeId)
 	}
 
-	err := h.Session.ExecuteBatch(batch)
+	err := batch.Exec(ctx)
 	if err != nil {
 		return gocql.ConvertError("DeleteHistoryBranch", err)
 	}
@@ -303,9 +303,9 @@ func (h *HistoryStore) GetAllHistoryTreeBranches(
 	request *p.GetAllHistoryTreeBranchesRequest,
 ) (*p.InternalGetAllHistoryTreeBranchesResponse, error) {
 
-	query := h.Session.Query(v2templateScanAllTreeBranches).WithContext(ctx)
+	query := h.Session.Query(v2templateScanAllTreeBranches)
 
-	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
+	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter(ctx)
 
 	var pagingToken []byte
 	if len(iter.PageState()) > 0 {
@@ -360,7 +360,7 @@ func (h *HistoryStore) GetHistoryTreeContainingBranch(
 	if err != nil {
 		return nil, serviceerror.NewInternalf("ReadHistoryBranch. Gocql TreeId UUID cast failed. Error: %v", err)
 	}
-	query := h.Session.Query(v2templateReadAllBranches, treeID).WithContext(ctx)
+	query := h.Session.Query(v2templateReadAllBranches, treeID)
 
 	pageSize := 100
 	var pagingToken []byte
@@ -368,7 +368,7 @@ func (h *HistoryStore) GetHistoryTreeContainingBranch(
 
 	var iter gocql.Iter
 	for {
-		iter = query.PageSize(pageSize).PageState(pagingToken).Iter()
+		iter = query.PageSize(pageSize).PageState(pagingToken).Iter(ctx)
 		pagingToken = iter.PageState()
 
 		branchUUID := ""
