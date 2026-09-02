@@ -4028,8 +4028,8 @@ func (s *matchingEngineSuite) TestAddConsumeWorkflowTasksNoDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestAddConsumeWorkflowTasksDBErrors() {
-	s.T().Skip("Skipping this as the backlog counter could under-count. Fix requires making " +
-		"UpdateState an atomic operation.")
+	s.T().Skip("approximate backlog can under-count across ConditionFailed unload/reload; " +
+		"fix requires correcting count on take-over (or otherwise surviving ownership loss without a final SyncState)")
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
 	s.taskManager.addFault("CreateTasks", "ConditionFailed", 0.1)
@@ -4132,8 +4132,8 @@ func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterNoDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterDBErrors() {
-	s.T().Skip("Skipping this as the backlog counter could under-count. Fix requires making " +
-		"UpdateState an atomic operation.")
+	s.T().Skip("approximate backlog can under-count across ConditionFailed unload/reload; " +
+		"fix requires correcting count on take-over (or otherwise surviving ownership loss without a final SyncState)")
 	if s.newMatcher {
 		s.T().Skip("test is flaky with new matcher")
 	}
@@ -4181,8 +4181,8 @@ func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksNoDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksDBErrors() {
-	s.T().Skip("Skipping this as the backlog counter could under-count. Fix requires making " +
-		"UpdateState an atomic operation.")
+	s.T().Skip("approximate backlog can under-count across ConditionFailed unload/reload; " +
+		"fix requires correcting count on take-over (or otherwise surviving ownership loss without a final SyncState)")
 	s.taskManager.addFault("CreateTasks", "ConditionFailed", 0.1)
 	s.taskManager.addFault("GetTasks", "Unavailable", 0.1)
 
@@ -4197,8 +4197,8 @@ func (s *matchingEngineSuite) TestConcurrentAdd_PollWorkflowTasksNoDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestConcurrentAdd_PollWorkflowTasksDBErrors() {
-	s.T().Skip("Skipping this as the backlog counter could under-count. Fix requires making " +
-		"UpdateState an atomic operation.")
+	s.T().Skip("approximate backlog can under-count across ConditionFailed unload/reload; " +
+		"fix requires correcting count on take-over (or otherwise surviving ownership loss without a final SyncState)")
 	s.taskManager.addFault("CreateTasks", "ConditionFailed", 0.1)
 	s.taskManager.addFault("GetTasks", "Unavailable", 0.1)
 
@@ -4210,8 +4210,8 @@ func (s *matchingEngineSuite) TestLesserNumberOfPollersThanTasksNoDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestLesserNumberOfPollersThanTasksDBErrors() {
-	s.T().Skip("Skipping this as the backlog counter could under-count. Fix requires making " +
-		"UpdateState an atomic operation.")
+	s.T().Skip("approximate backlog can under-count across ConditionFailed unload/reload; " +
+		"fix requires correcting count on take-over (or otherwise surviving ownership loss without a final SyncState)")
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
 	s.taskManager.addFault("CreateTasks", "ConditionFailed", 0.1)
@@ -4225,8 +4225,8 @@ func (s *matchingEngineSuite) TestMultipleWorkersLesserNumberOfPollersThanTasksN
 }
 
 func (s *matchingEngineSuite) TestMultipleWorkersLesserNumberOfPollersThanTasksDBErrors() {
-	s.T().Skip("Skipping this as the backlog counter could under-count. Fix requires making " +
-		"UpdateState an atomic operation.")
+	s.T().Skip("approximate backlog can under-count across ConditionFailed unload/reload; " +
+		"fix requires correcting count on take-over (or otherwise surviving ownership loss without a final SyncState)")
 	s.taskManager.addFault("CreateTasks", "ConditionFailed", 0.1)
 	s.taskManager.addFault("GetTasks", "Unavailable", 0.1)
 
