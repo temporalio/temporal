@@ -762,21 +762,26 @@ func getFieldNameFromStruct(structPtr any, fieldPtr any) (string, error) {
 	return "", serviceerror.NewInternal("field not found in the struct")
 }
 
-// IsRetryableRPCError checks if the error is a retryable gRPC error.
+// GetRPCStatus returns the gRPC status carried by err, or false if err is not a gRPC-induced
+// error.
 //
 // This does not unwrap err: If err may be wrapped (e.g. by an HTTP client, which wraps
 // RoundTripper errors in *url.Error), unwrap it yourself and pass the unwrapped error here.
+func GetRPCStatus(err error) (*status.Status, bool) {
+	if stGetter, ok := err.(interface{ Status() *status.Status }); ok {
+		return stGetter.Status(), true
+	}
+	return status.FromError(err)
+}
+
+// IsRetryableRPCError checks if the error is a retryable gRPC error.
+//
+// This does not unwrap err, see [GetRPCStatus].
 func IsRetryableRPCError(err error) bool {
-	var st *status.Status
-	stGetter, ok := err.(interface{ Status() *status.Status })
-	if ok {
-		st = stGetter.Status()
-	} else {
-		st, ok = status.FromError(err)
-		if !ok {
-			// Not a gRPC induced error
-			return false
-		}
+	st, ok := GetRPCStatus(err)
+	if !ok {
+		// Not a gRPC induced error
+		return false
 	}
 	// nolint:exhaustive
 	switch st.Code() {
