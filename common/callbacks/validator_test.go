@@ -32,13 +32,13 @@ func TestValidatorConfigValidate(t *testing.T) {
 // field added to the struct but not to Validate stays nil and panics at request time instead of
 // failing at startup. Optional or non-nilable fields would need a different check.
 func TestValidatorConfigValidateNamesEveryField(t *testing.T) {
-	_, err := NewValidator(ValidatorConfig{})
-	require.Error(t, err)
-
+	var fields []string
 	for field := range reflect.TypeFor[ValidatorConfig]().Fields() {
-		require.Containsf(t, err.Error(), field.Name,
-			"ValidatorConfig.%s is not checked by Validate", field.Name)
+		fields = append(fields, field.Name)
 	}
+
+	_, err := NewValidator(ValidatorConfig{})
+	require.EqualError(t, err, fmt.Sprintf("missing required fields: %v", fields))
 }
 
 func TestValidateCallbacks(t *testing.T) {
