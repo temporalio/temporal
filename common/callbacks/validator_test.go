@@ -2,6 +2,7 @@ package callbacks
 
 import (
 	"context"
+	"reflect"
 	"regexp"
 	"testing"
 
@@ -25,6 +26,18 @@ func TestValidatorConfigValidate(t *testing.T) {
 
 	_, err := NewValidator(cfg)
 	require.EqualError(t, err, "missing required fields: [URLMaxLength EndpointRules]")
+}
+
+// ValidatorConfig.Validate names each missing field explicitly, so a field added to the struct but
+// not to Validate silently defaults to nil and nil-panics at request time instead of at startup.
+func TestValidatorConfigValidateNamesEveryField(t *testing.T) {
+	_, err := NewValidator(ValidatorConfig{})
+	require.Error(t, err)
+
+	for field := range reflect.TypeFor[ValidatorConfig]().Fields() {
+		require.Containsf(t, err.Error(), field.Name,
+			"ValidatorConfig.%s is not checked by Validate", field.Name)
+	}
 }
 
 func TestValidateCallbacks(t *testing.T) {
