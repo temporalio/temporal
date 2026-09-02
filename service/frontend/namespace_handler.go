@@ -1110,10 +1110,13 @@ func (d *namespaceHandler) validateHistoryArchivalURI(URIString string) error {
 
 	a, err := d.archiverProvider.GetHistoryArchiver(URI.Scheme())
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get history archiver for scheme %q: %w", URI.Scheme(), err)
 	}
 
-	return a.ValidateURI(URI)
+	if err := a.ValidateURI(URI); err != nil {
+		return fmt.Errorf("failed to validate history archival URI %q: %w", URIString, err)
+	}
+	return nil
 }
 
 func (d *namespaceHandler) validateVisibilityArchivalURI(URIString string) error {
@@ -1124,10 +1127,13 @@ func (d *namespaceHandler) validateVisibilityArchivalURI(URIString string) error
 
 	a, err := d.archiverProvider.GetVisibilityArchiver(URI.Scheme())
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get visibility archiver for scheme %q: %w", URI.Scheme(), err)
 	}
 
-	return a.ValidateURI(URI)
+	if err := a.ValidateURI(URI); err != nil {
+		return fmt.Errorf("failed to validate visibility archival URI %q: %w", URIString, err)
+	}
+	return nil
 }
 
 // maybeUpdateFailoverHistory adds an entry if the Namespace is becoming active in a new cluster.

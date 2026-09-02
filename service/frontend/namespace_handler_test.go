@@ -3,6 +3,7 @@ package frontend
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"slices"
 	"testing"
 	"time"
@@ -656,6 +657,48 @@ func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_InvalidRetentionPeri
 		s.Equal(errInvalidRetentionPeriod, err)
 		s.Nil(resp)
 	}
+}
+
+func (s *namespaceHandlerCommonSuite) TestRegisterNamespace_InvalidHistoryArchivalURIIncludesUnderlyingError() {
+	retention := durationpb.New(24 * time.Hour)
+	underlyingErr := errors.New("Forbidden: Forbidden\n\tstatus code: 403")
+
+	s.archivalMetadata = archiver.NewArchivalMetadata(
+		dc.NewNoopCollection(),
+		"enabled",
+		true,
+		"disabled",
+		false,
+		&config.ArchivalNamespaceDefaults{
+			History: config.HistoryArchivalNamespaceDefaults{
+				State: "disabled",
+				URI:   "s3://default",
+			},
+		},
+	)
+	s.handler.archivalMetadata = s.archivalMetadata
+
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
+	s.mockClusterMetadata.EXPECT().IsMasterCluster().Return(false).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NamespaceNotFound{})
+
+	mockHistoryArchiver := archiver.NewMockHistoryArchiver(s.controller)
+	s.mockArchiverProvider.EXPECT().GetHistoryArchiver("s3").Return(mockHistoryArchiver, nil)
+	mockHistoryArchiver.EXPECT().ValidateURI(gomock.Any()).Return(underlyingErr)
+
+	resp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        "namespace-to-register",
+		WorkflowExecutionRetentionPeriod: retention,
+		HistoryArchivalState:             enumspb.ARCHIVAL_STATE_ENABLED,
+		HistoryArchivalUri:               "s3://bucket/prefix",
+	})
+
+	s.Nil(resp)
+	s.ErrorIs(err, underlyingErr)
+	s.ErrorContains(err, `failed to validate history archival URI "s3://bucket/prefix"`)
+	s.ErrorContains(err, "status code: 403")
 }
 
 func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_InvalidRetentionPeriod() {
