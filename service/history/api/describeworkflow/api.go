@@ -282,7 +282,6 @@ func Invoke(
 			chasmCtx,
 			executionInfo,
 			executionState,
-			outboundQueueCBPool,
 			shard.GetLogger(),
 		)
 		if err != nil {
@@ -505,7 +504,6 @@ func buildCallbackInfosFromChasm(
 	chasmCtx chasm.Context,
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 	executionState *persistencespb.WorkflowExecutionState,
-	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
 	logger log.Logger,
 ) ([]*workflowpb.CallbackInfo, error) {
 	result := make([]*workflowpb.CallbackInfo, 0, len(wf.Callbacks))
@@ -516,7 +514,7 @@ func buildCallbackInfosFromChasm(
 			Variant: &workflowpb.CallbackInfo_Trigger_WorkflowClosed{},
 		}
 
-		callbackInfo, err := buildCallbackInfoFromChasm(namespaceID, callback, trigger, outboundQueueCBPool)
+		callbackInfo, err := buildChasmCallbackInfo(chasmCtx, callback, trigger)
 		if err != nil {
 			logger.Error(
 				"failed to build callback info from CHASM callback",
@@ -547,7 +545,7 @@ func buildCallbackInfosFromChasm(
 				},
 			}
 
-			callbackInfo, err := buildCallbackInfoFromChasm(namespaceID, callback, trigger, outboundQueueCBPool)
+			callbackInfo, err := buildChasmCallbackInfo(chasmCtx, callback, trigger)
 			if err != nil {
 				logger.Error(
 					"failed to build callback info from CHASM update callback",
@@ -568,32 +566,14 @@ func buildCallbackInfosFromChasm(
 	return result, nil
 }
 
-// buildCallbackInfoFromChasm converts a single CHASM callback to API format.
-func buildCallbackInfoFromChasm(
-	namespaceID namespace.ID,
-	callback *chasmcallback.Callback,
-	trigger *workflowpb.CallbackInfo_Trigger,
-	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
-) (*workflowpb.CallbackInfo, error) {
-	// Create a circuit breaker state checker function
-	circuitBreakerState := func(destination string) bool {
-		cb := outboundQueueCBPool.Get(tasks.TaskGroupNamespaceIDAndDestination{
-			TaskGroup:   callbacks.TaskTypeInvocation,
-			NamespaceID: namespaceID.String(),
-			Destination: destination,
-		})
-		return cb.State() != gobreaker.StateClosed
-	}
-
-	return buildChasmCallbackInfo(callback, trigger, circuitBreakerState)
-}
-
 // buildChasmCallbackInfo converts a single CHASM callback to API CallbackInfo format.
 // Returns nil if the callback should not be included in the response.
+//
+//nolint:revive // context.Context is an input parameter for chasm component methods, not a function parameter
 func buildChasmCallbackInfo(
+	ctx chasm.Context,
 	cb *chasmcallback.Callback,
 	trigger *workflowpb.CallbackInfo_Trigger,
-	circuitBreakerState func(destination string) bool,
 ) (*workflowpb.CallbackInfo, error) {
 	nexusVariant := cb.GetCallback().GetNexus()
 	if nexusVariant == nil {
@@ -601,25 +581,17 @@ func buildChasmCallbackInfo(
 		return nil, nil
 	}
 
-	cbSpec, err := cb.ToAPICallback()
+	apiCb, err := cb.ToAPICallback()
 	if err != nil {
 		return nil, err
 	}
-	state, err := cb.APIState()
+	state, blockedReason, err := cb.APIState(ctx)
 	if err != nil {
 		return nil, err
-	}
-
-	blockedReason := ""
-	if state == enumspb.CALLBACK_STATE_SCHEDULED {
-		if circuitBreakerState(cbSpec.GetNexus().GetUrl()) {
-			state = enumspb.CALLBACK_STATE_BLOCKED
-			blockedReason = "The circuit breaker is open."
-		}
 	}
 
 	return &workflowpb.CallbackInfo{
-		Callback:                cbSpec,
+		Callback:                apiCb,
 		Trigger:                 trigger,
 		RegistrationTime:        common.CloneProto(cb.RegistrationTime),
 		State:                   state,

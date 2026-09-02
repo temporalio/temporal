@@ -202,7 +202,7 @@ func (a *Activity) buildCallbackInfos(ctx chasm.Context) ([]*apiactivitypb.Callb
 	for _, field := range a.Callbacks {
 		cb := field.Get(ctx)
 
-		cbInfo, err := cb.ToAPICallbackInfo()
+		cbInfo, err := cb.ToAPICallbackInfo(ctx)
 		if err != nil {
 			return nil, err
 		}
