@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/schedules"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -481,7 +482,7 @@ func (s *scheduler) processPatch(patch *schedulepb.SchedulePatch) {
 		// the start time of the backfill matched the schedule's spec, it would
 		// not be executed. This new version makes it inclusive instead.
 		if s.hasMinVersion(InclusiveBackfillStartTime) {
-			startTime := timestamp.TimeValue(bfr.GetStartTime()).Add(-1 * time.Millisecond)
+			startTime := schedules.InclusiveBackfillCursor(timestamp.TimeValue(bfr.GetStartTime()))
 			bfr.StartTime = timestamppb.New(startTime)
 		}
 		if s.hasMinVersion(IncrementalBackfill) {

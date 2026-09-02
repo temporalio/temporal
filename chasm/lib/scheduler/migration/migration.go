@@ -15,6 +15,7 @@ import (
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	schedulerinternal "go.temporal.io/server/chasm/lib/scheduler/internal"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/schedules"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/util"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -512,8 +513,11 @@ func convertBackfillersCHASMToLegacy(
 	for _, backfiller := range backfillers {
 		if request := backfiller.GetBackfillRequest(); request != nil {
 			backfill := common.CloneProto(request)
-			if backfiller.GetAttempt() > 0 && backfiller.GetLastProcessedTime() != nil {
-				backfill.StartTime = common.CloneProto(backfiller.GetLastProcessedTime())
+			lastProcessed := backfiller.GetLastProcessedTime()
+			if schedulerinternal.HasRecordedBackfillProgress(lastProcessed) {
+				backfill.StartTime = common.CloneProto(lastProcessed)
+			} else {
+				backfill.StartTime = timestamppb.New(schedules.InclusiveBackfillCursor(request.GetStartTime().AsTime()))
 			}
 			ongoing = append(ongoing, backfill)
 			continue

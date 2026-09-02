@@ -327,6 +327,63 @@ func TestCHASMToLegacyStartScheduleArgs(t *testing.T) {
 	require.True(t, triggerFound)
 }
 
+func TestConvertBackfillersCHASMToLegacy_BackfillCursor(t *testing.T) {
+	startTime := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+	progressTime := startTime.Add(2 * time.Hour)
+	tests := []struct {
+		name          string
+		attempt       int64
+		lastProcessed *timestamppb.Timestamp
+		wantStartTime time.Time
+	}{
+		{
+			name:          "fresh",
+			wantStartTime: startTime.Add(-time.Millisecond),
+		},
+		{
+			name:          "stalled before progress",
+			attempt:       1,
+			wantStartTime: startTime.Add(-time.Millisecond),
+		},
+		{
+			name:          "zero watermark",
+			attempt:       1,
+			lastProcessed: timestamppb.New(time.Unix(0, 0)),
+			wantStartTime: startTime.Add(-time.Millisecond),
+		},
+		{
+			name:          "progressed",
+			attempt:       2,
+			lastProcessed: timestamppb.New(progressTime),
+			wantStartTime: progressTime,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			backfillers := map[string]*schedulerpb.BackfillerState{
+				"backfill": {
+					BackfillId:        "backfill",
+					Attempt:           tc.attempt,
+					LastProcessedTime: tc.lastProcessed,
+					Request: &schedulerpb.BackfillerState_BackfillRequest{
+						BackfillRequest: &schedulepb.BackfillRequest{
+							StartTime: timestamppb.New(startTime),
+							EndTime:   timestamppb.New(startTime.Add(4 * time.Hour)),
+						},
+					},
+				},
+			}
+
+			ongoing, triggers := convertBackfillersCHASMToLegacy(backfillers, startTime)
+
+			require.Len(t, ongoing, 1)
+			require.Empty(t, triggers)
+			require.Equal(t, tc.wantStartTime, ongoing[0].GetStartTime().AsTime())
+		})
+	}
+}
+
 func TestCHASMToLegacyStartScheduleArgs_ExcludesAllowAllFromRunningWorkflows(t *testing.T) {
 	// Regression test: workflows started under ALLOW_ALL are tracked in V2 as
 	// BufferedStarts with a RunId (and no Completed) while they run. Modern V1

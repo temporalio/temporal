@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/schedules"
 	queueerrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -175,16 +176,15 @@ func (b *BackfillerTaskHandler) processBackfill(
 	request := backfiller.GetBackfillRequest()
 
 	endTime := request.GetEndTime().AsTime()
-	// Resume from the high watermark only once genuine progress has been recorded.
-	// The watermark is left unset until a batch is actually processed (see Execute),
+	// The watermark is left nil until a batch is actually processed (see Execute),
 	// so a fresh or capacity-stalled backfiller starts from the range start.
 	var startTime time.Time
 	lastProcessed := backfiller.GetLastProcessedTime()
-	if hasRecordedProgress(lastProcessed) {
+	if schedulerinternal.HasRecordedBackfillProgress(lastProcessed) {
 		startTime = lastProcessed.AsTime()
 	} else {
 		// On the first attempt, start slightly behind to make the range inclusive.
-		startTime = request.GetStartTime().AsTime().Add(-1 * time.Millisecond)
+		startTime = schedules.InclusiveBackfillCursor(request.GetStartTime().AsTime())
 	}
 	specResult, err := b.specProcessor.ProcessTimeRange(
 		scheduler,
@@ -211,13 +211,6 @@ func (b *BackfillerTaskHandler) processBackfill(
 	result.BufferedStarts = specResult.BufferedStarts
 
 	return
-}
-
-// hasRecordedProgress reports whether a backfiller's high watermark reflects a
-// batch that was actually processed. An unset (nil or zero) watermark means no
-// progress yet - a fresh backfiller.
-func hasRecordedProgress(lastProcessed *timestamppb.Timestamp) bool {
-	return lastProcessed != nil && (lastProcessed.GetSeconds() != 0 || lastProcessed.GetNanos() != 0)
 }
 
 // backoffDelay returns the amount of delay that should be added when retrying.
