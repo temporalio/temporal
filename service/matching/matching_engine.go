@@ -3857,8 +3857,15 @@ func (e *matchingEngineImpl) UpdateFairnessState(
 	return &matchingservice.UpdateFairnessStateResponse{}, nil
 }
 
+const (
+	taskTrackerBucketSize = 5 * time.Second
+	// taskTrackerInterval is the window task add/dispatch/sync-match rates are measured over. A
+	// tracker reports itself "not full" until a whole interval has elapsed since it was created.
+	taskTrackerInterval = 30 * time.Second
+)
+
 func (e *matchingEngineImpl) newTaskTracker() *taskTracker {
-	return newTaskTracker(e.timeSource, 5*time.Second, 30*time.Second)
+	return newTaskTracker(e.timeSource, taskTrackerBucketSize, taskTrackerInterval)
 }
 
 // migrateOldFormatVersions moves versions present in the given deployment from the

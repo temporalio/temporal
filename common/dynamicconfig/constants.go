@@ -1586,7 +1586,10 @@ scoped by namespace and/or task queue.`,
 		false,
 		`MatchingUseImprovedSignalsForPollerScaling, when enabled, uses improved scaling signals for poller autoscaling:
 (1) sync match rate instead of total dispatch rate for the add-to-dispatch ratio check, and
-(2) task dispatch latency instead of backlog age stats for the backlog scale-up check.`,
+(2) task dispatch latency instead of backlog age stats for the backlog scale-up check.
+Note that (2) widens what poller_scale_decision reports as reason=backlog: dispatch latency also
+includes RecordTaskStarted and task forwarding time, not just time spent waiting in the backlog.
+(1) falls back to the total dispatch rate until the sync match rate has a full measurement interval.`,
 	)
 	MatchingUseNewMatcher = NewTaskQueueTypedSettingWithConverter(
 		"matching.useNewMatcher",
