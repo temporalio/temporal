@@ -370,6 +370,26 @@ func decodeAndValidateMemo(t *testing.T, filePath, deploymentName, buildID strin
 	require.Equal(t, buildID, result.RoutingConfig.GetCurrentDeploymentVersion().GetBuildId())
 }
 
+// TestDefaultActivityOptionsBoundScheduleToClose is a regression test for
+// #11402: defaultActivityOptions previously set only StartToCloseTimeout,
+// which bounds a *started* attempt but not one that is merely scheduled. If
+// a scheduled attempt's task is lost (e.g. DLQ'd because matching was
+// unreachable), there was no timer to fail it, so the activity (and any
+// Update awaiting it, e.g. RegisterTaskQueueWorker) could get stuck forever
+// with no way for the retry policy to advance. ScheduleToCloseTimeout must
+// be set and must leave enough headroom for the configured retry attempts to
+// actually run under normal conditions.
+func TestDefaultActivityOptionsBoundScheduleToClose(t *testing.T) {
+	t.Parallel()
+	require.Greater(t, defaultActivityOptions.ScheduleToCloseTimeout, time.Duration(0),
+		"ScheduleToCloseTimeout must be set so a lost/never-started attempt eventually times out")
+
+	maxAttempts := time.Duration(defaultActivityOptions.RetryPolicy.MaximumAttempts)
+	minBudget := maxAttempts * defaultActivityOptions.StartToCloseTimeout
+	require.GreaterOrEqual(t, defaultActivityOptions.ScheduleToCloseTimeout, minBudget,
+		"ScheduleToCloseTimeout must leave enough headroom for all retry attempts to run")
+}
+
 func TestIsRetryableUpdateError(t *testing.T) {
 	t.Run("returns true for errUpdateInProgress", func(t *testing.T) {
 		require.True(t, isRetryableUpdateError(errUpdateInProgress))

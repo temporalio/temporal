@@ -124,6 +124,15 @@ var (
 var (
 	defaultActivityOptions = workflow.ActivityOptions{
 		StartToCloseTimeout: 1 * time.Minute,
+		// ScheduleToCloseTimeout bounds a scheduled-but-not-yet-started attempt,
+		// which StartToCloseTimeout alone does not: if an attempt's task is lost
+		// before it starts (e.g. sent to the DLQ because matching was
+		// unreachable), there is otherwise no timer at all to fail it and let
+		// the retry policy advance, so the activity can get stuck in
+		// PENDING_ACTIVITY_STATE_SCHEDULED forever (#11402). 10 minutes gives
+		// ample headroom over the 5-attempt retry budget below for these
+		// short-lived worker-deployment coordination activities.
+		ScheduleToCloseTimeout: 10 * time.Minute,
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval: 100 * time.Millisecond,
 			MaximumAttempts: 5,
