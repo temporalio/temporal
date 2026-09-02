@@ -118,10 +118,9 @@ func BuildDigest(branch, workflowName string, days int) (*DigestReport, error) {
 
 	var currentRuns, previousRuns []github.Run
 	for _, run := range runs {
-		switch {
-		case !run.CreatedAt.Before(startDate):
+		if !run.CreatedAt.Before(startDate) {
 			currentRuns = append(currentRuns, run)
-		case !run.CreatedAt.Before(previousStartDate):
+		} else if !run.CreatedAt.Before(previousStartDate) {
 			previousRuns = append(previousRuns, run)
 		}
 	}
