@@ -15,65 +15,75 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func TestClampVersion(t *testing.T) {
-	for _, c := range []struct {
-		name    string
-		ceiling int
-		want    SchedulerWorkflowVersion
+func TestShouldWarnForVersionCeiling(t *testing.T) {
+	unsupportedCeiling := int(TriggerImmediatelyTimestamp) + 1
+	for _, tc := range []struct {
+		name       string
+		tweakables TweakablePolicies
+		ceiling    int
+		want       bool
 	}{
-		{"negative is unset, no clamp", -1, TriggerImmediatelyTimestamp},
-		{"zero clamps to InitialVersion", 0, InitialVersion},
-		{"below current clamps down", 1, 1},
-		{"equal to current is a no-op", int(TriggerImmediatelyTimestamp), TriggerImmediatelyTimestamp},
-		{"above current is a no-op", int(TriggerImmediatelyTimestamp) + 1, TriggerImmediatelyTimestamp},
+		{
+			name:    "first unsupported observation",
+			ceiling: unsupportedCeiling,
+			want:    true,
+		},
+		{
+			name: "restored unsupported observation",
+			tweakables: TweakablePolicies{
+				VersionCeiling:    unsupportedCeiling,
+				VersionCeilingSet: true,
+			},
+			ceiling: unsupportedCeiling,
+			want:    false,
+		},
+		{
+			name: "changed unsupported observation",
+			tweakables: TweakablePolicies{
+				VersionCeiling:    unsupportedCeiling,
+				VersionCeilingSet: true,
+			},
+			ceiling: unsupportedCeiling + 1,
+			want:    true,
+		},
+		{
+			name: "legacy marker with recorded ceiling",
+			tweakables: TweakablePolicies{
+				VersionCeiling: unsupportedCeiling,
+			},
+			ceiling: unsupportedCeiling,
+			want:    true,
+		},
 	} {
-		require.Equalf(t, c.want, clampVersion(TriggerImmediatelyTimestamp, c.ceiling), "%s (ceiling=%d)", c.name, c.ceiling)
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, shouldWarnForVersionCeiling(tc.tweakables, TriggerImmediatelyTimestamp, tc.ceiling))
+		})
 	}
 }
 
-// TestDetermineVersionLocksAfterFirstEvaluation verifies the ceiling is read once and the version is
-// then locked for the run.
-func TestDetermineVersionLocksAfterFirstEvaluation(t *testing.T) {
-	calls := 0
-	s := &scheduler{versionCeiling: func() int { calls++; return oldPeerCeiling }}
+func TestDetermineVersionTransition(t *testing.T) {
+	for defaultVersion := InitialVersion; defaultVersion <= RefreshCompletionDesiredTime; defaultVersion++ {
+		for recordedVersion := InitialVersion; recordedVersion <= RefreshCompletionDesiredTime; recordedVersion++ {
+			for ceiling := -1; ceiling <= int(RefreshCompletionDesiredTime)+1; ceiling++ {
+				wantVersion := defaultVersion
+				if ceiling >= 0 && ceiling < int(wantVersion) {
+					wantVersion = SchedulerWorkflowVersion(ceiling)
+				}
+				if recordedVersion > wantVersion {
+					wantVersion = recordedVersion
+				}
 
-	// First evaluation: tweakables not yet recorded.
-	got := s.determineVersion(TriggerImmediatelyTimestamp)
-	require.Equal(t, SchedulerWorkflowVersion(oldPeerCeiling), got)
-	require.Equal(t, 1, calls)
-
-	// Record tweakables as the MutableSideEffect would after the first evaluation.
-	s.tweakables = CurrentTweakablePolicies
-	s.tweakables.Version = got
-
-	// Later evaluations reuse the recorded version and don't re-read the ceiling.
-	require.Equal(t, got, s.determineVersion(TriggerImmediatelyTimestamp))
-	require.Equal(t, 1, calls, "ceiling read once; version locked thereafter")
+				version, capturedCeiling := determineVersionTransition(defaultVersion, recordedVersion, ceiling)
+				require.Equalf(t, wantVersion, version, "default=%d recorded=%d ceiling=%d", defaultVersion, recordedVersion, ceiling)
+				require.Equalf(t, ceiling, capturedCeiling, "default=%d recorded=%d ceiling=%d", defaultVersion, recordedVersion, ceiling)
+			}
+		}
+	}
 }
 
-// TestDetermineVersionLocksAtZeroCeiling verifies the lock holds when the run is clamped to
-// InitialVersion (0): a mid-run ceiling change must not move the recorded version. This guards the
-// whole-struct "already recorded" check, which a bare Version != 0 check would miss (0 is a valid
-// recorded version).
-func TestDetermineVersionLocksAtZeroCeiling(t *testing.T) {
-	ceiling := 0
-	s := &scheduler{versionCeiling: func() int { return ceiling }}
-
-	// First evaluation clamps to InitialVersion (0) and records it.
-	got := s.determineVersion(TriggerImmediatelyTimestamp)
-	require.Equal(t, InitialVersion, got)
-	s.tweakables = CurrentTweakablePolicies
-	s.tweakables.Version = got
-
-	// The ceiling is lifted mid-run, but the recorded version stays locked at InitialVersion.
-	ceiling = -1
-	require.Equal(t, InitialVersion, s.determineVersion(TriggerImmediatelyTimestamp))
-}
-
-// TestVersionCeilingWithCHASMMigration verifies that a clamp below the CHASM gate keeps migration
-// markers out of history, and that once the ceiling is lifted (on the next run) the deferred
-// migration runs.
-func (s *workflowSuite) TestVersionCeilingWithCHASMMigration() {
+// TestVersionCeilingDefersCHASMMigration verifies that a clamp below the CHASM gate keeps
+// migration markers out of history. The pending migration is retained for a later fresh run.
+func (s *workflowSuite) TestVersionCeilingDefersCHASMMigration() {
 	migrateCalls := 0
 	s.expectMigrate(&migrateCalls)
 
@@ -108,6 +118,27 @@ func (s *workflowSuite) TestVersionCeilingWithCHASMMigration() {
 
 	s.True(s.env.IsWorkflowCompleted())
 	s.Require().NoError(s.env.GetWorkflowError(), "second run completes via the deferred migration after the lift")
+	s.Equal(1, migrateCalls)
+}
+
+func (s *workflowSuite) TestVersionCeilingLiftAdvancesWithinRun() {
+	migrateCalls := 0
+	s.expectMigrate(&migrateCalls)
+
+	ceiling := int(oldPeerCeiling)
+	s.env.RegisterDelayedCallback(func() {
+		ceiling = -1
+		s.env.SignalWorkflow(SignalNameMigrateToChasm, nil)
+	}, 30*time.Minute)
+
+	s.runWithCeiling(
+		func() bool { return true },
+		func() bool { return true },
+		func() int { return ceiling },
+		pausedHourlySchedule(), 0)
+
+	s.True(s.env.IsWorkflowCompleted())
+	s.Require().NoError(s.env.GetWorkflowError())
 	s.Equal(1, migrateCalls)
 }
 
