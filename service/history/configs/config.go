@@ -288,7 +288,8 @@ type Config struct {
 	// The following is used by the new RPC replication stack
 	ReplicationTaskApplyTimeout                          dynamicconfig.DurationPropertyFn
 	EnableAsyncParentWorkflowResend                      dynamicconfig.BoolPropertyFn
-	ParentWorkflowResendMaxInFlight                      dynamicconfig.IntPropertyFn
+	EnableChildWorkflowResend                            dynamicconfig.BoolPropertyFn
+	WorkflowResendHostMaxInFlight                        dynamicconfig.IntPropertyFn
 	ReplicationTaskFetcherParallelism                    dynamicconfig.IntPropertyFn
 	ReplicationTaskFetcherAggregationInterval            dynamicconfig.DurationPropertyFn
 	ReplicationTaskFetcherTimerJitterCoefficient         dynamicconfig.FloatPropertyFn
@@ -396,6 +397,8 @@ type Config struct {
 	EnableActivityEagerExecution      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableActivityRetryStampIncrement dynamicconfig.BoolPropertyFn
 	EnableCancelActivityWorkerCommand dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	WorkerCommandsDispatchTimeout     dynamicconfig.DurationPropertyFn
+	WorkerCommandsMaxAttempts         dynamicconfig.IntPropertyFn
 	EnableEagerWorkflowStart          dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	NamespaceCacheRefreshInterval     dynamicconfig.DurationPropertyFn
 
@@ -443,6 +446,7 @@ type Config struct {
 	HealthRPCErrorRatio                 dynamicconfig.FloatPropertyFn
 	HealthHistoryInitializationTime     dynamicconfig.DurationPropertyFn
 	BreakdownMetricsByTaskQueue         dynamicconfig.BoolPropertyFnWithTaskQueueFilter
+	BreakdownMetricsByBuildID           dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -730,7 +734,8 @@ func NewConfig(
 
 		ReplicationTaskApplyTimeout:                  dynamicconfig.ReplicationTaskApplyTimeout.Get(dc),
 		EnableAsyncParentWorkflowResend:              dynamicconfig.EnableAsyncParentWorkflowResend.Get(dc),
-		ParentWorkflowResendMaxInFlight:              dynamicconfig.ParentWorkflowResendMaxInFlight.Get(dc),
+		EnableChildWorkflowResend:                    dynamicconfig.EnableChildWorkflowResend.Get(dc),
+		WorkflowResendHostMaxInFlight:                dynamicconfig.WorkflowResendHostMaxInFlight.Get(dc),
 		ReplicationTaskFetcherParallelism:            dynamicconfig.ReplicationTaskFetcherParallelism.Get(dc),
 		ReplicationTaskFetcherAggregationInterval:    dynamicconfig.ReplicationTaskFetcherAggregationInterval.Get(dc),
 		ReplicationTaskFetcherTimerJitterCoefficient: dynamicconfig.ReplicationTaskFetcherTimerJitterCoefficient.Get(dc),
@@ -805,6 +810,8 @@ func NewConfig(
 		EnableActivityEagerExecution:      dynamicconfig.EnableActivityEagerExecution.Get(dc),
 		EnableActivityRetryStampIncrement: dynamicconfig.EnableActivityRetryStampIncrement.Get(dc),
 		EnableCancelActivityWorkerCommand: dynamicconfig.EnableCancelActivityWorkerCommand.Get(dc),
+		WorkerCommandsDispatchTimeout:     dynamicconfig.WorkerCommandsDispatchTimeout.Get(dc),
+		WorkerCommandsMaxAttempts:         dynamicconfig.WorkerCommandsMaxAttempts.Get(dc),
 		EnableEagerWorkflowStart:          dynamicconfig.EnableEagerWorkflowStart.Get(dc),
 		NamespaceCacheRefreshInterval:     dynamicconfig.NamespaceCacheRefreshInterval.Get(dc),
 
@@ -854,6 +861,7 @@ func NewConfig(
 		HealthHistoryInitializationTime:     dynamicconfig.HealthHistoryInitializationTime.Get(dc),
 
 		BreakdownMetricsByTaskQueue: dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
+		BreakdownMetricsByBuildID:   dynamicconfig.MetricsBreakdownByBuildID.Get(dc),
 
 		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
 

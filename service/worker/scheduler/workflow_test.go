@@ -3320,7 +3320,22 @@ func (s *workflowSuite) TestMigrateDynamicConfigDisabledNoMigration() {
 	CurrentTweakablePolicies.EnableCHASMMigration = false
 	defer func() { CurrentTweakablePolicies = prevTweakables }()
 
-	// No activity mock registered -- if migration is attempted, the test will fail.
+	s.env.OnActivity(new(activities).StartWorkflow, mock.Anything, mock.Anything).Maybe().Return(
+		func(context.Context, *schedulespb.StartWorkflowRequest) (*schedulespb.StartWorkflowResponse, error) {
+			return &schedulespb.StartWorkflowResponse{
+				RunId:         uuid.NewString(),
+				RealStartTime: timestamppb.New(s.env.Now()),
+			}, nil
+		})
+	s.env.OnActivity(new(activities).WatchWorkflow, mock.Anything, mock.Anything).Maybe().Return(
+		&schedulespb.WatchWorkflowResponse{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}, nil)
+
+	migrateCalls := 0
+	s.env.OnActivity(new(activities).MigrateScheduleToChasm, mock.Anything, mock.Anything).Maybe().Return(
+		func(context.Context, *schedulerpb.CreateFromMigrationStateRequest) error {
+			migrateCalls++
+			return nil
+		})
 
 	CurrentTweakablePolicies.IterationsBeforeContinueAsNew = 3
 	s.env.SetStartTime(baseStartTime)
@@ -3344,6 +3359,7 @@ func (s *workflowSuite) TestMigrateDynamicConfigDisabledNoMigration() {
 	// Workflow should CAN normally without attempting migration.
 	s.True(s.env.IsWorkflowCompleted())
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
+	s.Zero(migrateCalls)
 }
 
 // migratedStartArgs builds StartScheduleArgs with a single BufferedStart, so tests can

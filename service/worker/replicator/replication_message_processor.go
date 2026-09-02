@@ -218,7 +218,7 @@ func (p *replicationMessageProcessor) handleReplicationTasks() {
 		}, policy, isTransientRetryableError)
 
 		if err != nil {
-			metrics.ReplicatorFailures.With(p.metricsHandler).Record(1)
+			metrics.ReplicatorFailures.With(p.metricsHandler).Record(1, metrics.ReplicationTaskTypeTag(task.TaskType))
 			p.logger.Error("Failed to apply replication tasks", tag.Error(err))
 
 			dlqErr := backoff.ThrottleRetry(func() error {
