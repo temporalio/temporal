@@ -18,8 +18,8 @@ import (
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -31,6 +31,7 @@ type commandHandler struct {
 	nexusProcessor   *chasm.NexusEndpointProcessor
 }
 
+//nolint:revive // The legacy handler is kept intact while existing HSM operations remain loadable.
 func (ch *commandHandler) HandleScheduleCommand(
 	ctx context.Context,
 	ms historyi.MutableState,
@@ -260,17 +261,16 @@ func (ch *commandHandler) HandleCancelCommand(
 	node, err := coll.Node(nodeID)
 	hasBufferedEvent := ms.HasAnyBufferedEvent(makeNexusOperationTerminalEventFilter(attrs.ScheduledEventId))
 	if err != nil {
-		if errors.Is(err, hsm.ErrStateMachineNotFound) {
-			if !hasBufferedEvent {
-				return chasmworkflow.FailWorkflowTaskError{
-					Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
-					Message: fmt.Sprintf("requested cancelation for a non-existing or already completed operation with scheduled event ID of %d", attrs.ScheduledEventId),
-				}
-			}
-			// Fallthrough and apply the event, there's special logic that will handle state machine not found below.
-		} else {
+		if !errors.Is(err, hsm.ErrStateMachineNotFound) {
 			return err
 		}
+		if !hasBufferedEvent {
+			return chasmworkflow.FailWorkflowTaskError{
+				Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
+				Message: fmt.Sprintf("requested cancelation for a non-existing or already completed operation with scheduled event ID of %d", attrs.ScheduledEventId),
+			}
+		}
+		// Fallthrough and apply the event, there's special logic that will handle state machine not found below.
 	}
 
 	if node != nil {

@@ -23,9 +23,9 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
-	"go.temporal.io/server/components/nexusoperations"
-	opsworkflow "go.temporal.io/server/components/nexusoperations/workflow"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
+	opsworkflow "go.temporal.io/server/service/history/hsm/nexusoperations/workflow"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
@@ -975,6 +975,8 @@ func TestOperationNodeDeletionOnTerminalEvents(t *testing.T) {
 				a.ScheduledEventId = scheduledEvent.EventId
 			case *historypb.NexusOperationTimedOutEventAttributes:
 				a.ScheduledEventId = scheduledEvent.EventId
+			default:
+				require.FailNowf(t, "unexpected event attributes type", "%T", a)
 			}
 
 			applyTerminalEventAndAssertDeletion(t, tcx, scheduledEvent.EventId, tc.eventType, tc.eventAttr, tc.eventDef)

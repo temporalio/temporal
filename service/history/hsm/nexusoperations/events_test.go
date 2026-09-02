@@ -8,9 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -180,6 +180,8 @@ func TestTerminalStatesDeletion(t *testing.T) {
 				a.ScheduledEventId = eventID
 			case *historypb.NexusOperationTimedOutEventAttributes:
 				a.ScheduledEventId = eventID
+			default:
+				require.FailNowf(t, "unexpected attributes type", "%T", a)
 			}
 
 			event := &historypb.HistoryEvent{

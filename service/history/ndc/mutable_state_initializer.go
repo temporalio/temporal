@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/testing/testhooks"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -162,6 +163,7 @@ func (r *MutableStateInitializerImpl) InitializeFromToken(
 		r.shardContext.GetThrottledLogger(),
 		r.shardContext.GetMetricsHandler(),
 		nil, // no pagination buffer limiter as it is a transient context
+		testhooks.TestHooks{},
 	)
 	mutableStateRow, dbRecordVersion, dbHistorySize, existsInDB, err := r.deserializeBackfillToken(token)
 	if err != nil {
