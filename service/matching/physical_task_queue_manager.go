@@ -936,7 +936,8 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 
 	if c.getBacklogSignal(stats, task) {
 		// Always increase when there is a backlog, even if we're a partition. It's also important to increase for
-		// sticky queues.
+		// sticky queues. Under UseImprovedSignalsForPollerScaling this arm also covers dispatch latency that isn't
+		// backlog delay, but it still reports reason=backlog.
 		delta = 1
 		reason = metrics.PollerScaleReasonBacklog
 	} else if c.queue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY && !c.queue.Partition().IsRoot() {
@@ -971,12 +972,18 @@ func (c *physicalTaskQueueManagerImpl) recordPollerScaleDecision(decision string
 }
 
 // getBacklogSignal reports whether backlog pressure warrants scaling pollers up.
+//
+// Note that under UseImprovedSignalsForPollerScaling this measures task dispatch latency, which is
+// wider than backlog delay alone -- see the table above emitTaskDispatchLatency. Scale-ups from it
+// are still reported as PollerScaleReasonBacklog.
 func (c *physicalTaskQueueManagerImpl) getBacklogSignal(stats *taskqueuepb.TaskQueueStats, task *internalTask) bool {
 	maxAge := c.partitionMgr.config.PollerScalingBacklogAgeScaleUp()
-	if c.partitionMgr.config.UseImprovedSignalsForPollerScaling() {
+	// A nil create time would become 1970 via AsTime() and make this unconditionally true, so fall
+	// through to the stats below instead. Same guard as emitTaskDispatchLatency.
+	if createTime := task.getCreateTime(); createTime != nil && c.partitionMgr.config.UseImprovedSignalsForPollerScaling() {
 		// The backlog age stats are read after the task left the backlog, so at low task rates they
 		// always report an empty backlog. The task's own wait time doesn't have that blind spot.
-		return c.partitionMgr.engine.timeSource.Since(task.getCreateTime().AsTime()) > maxAge
+		return c.partitionMgr.engine.timeSource.Since(createTime.AsTime()) > maxAge
 	}
 	return stats.GetApproximateBacklogCount() > 0 && stats.GetApproximateBacklogAge().AsDuration() > maxAge
 }
@@ -986,27 +993,42 @@ func (c *physicalTaskQueueManagerImpl) getBacklogSignal(stats *taskqueuepb.TaskQ
 // get backlogged.
 func (c *physicalTaskQueueManagerImpl) getRatioSignal(stats *taskqueuepb.TaskQueueStats) bool {
 	maxRatio := c.partitionMgr.config.PollerScalingTaskAddToDispatchRatio()
-	addRate := float64(stats.GetTasksAddRate())
 	if c.partitionMgr.config.UseImprovedSignalsForPollerScaling() {
-		// The total dispatch rate includes async backlog dispatches, which keeps it close to the
-		// add rate and so masks a poor sync match rate. Dividing by the sync match rate doesn't.
-		return addRate/float64(c.getSyncMatchedRate()) > maxRatio
+		syncRate, syncFull := c.aggregateRate(c.tasksSyncMatched)
+		addRate, addFull := c.aggregateRate(c.tasksAdded)
+		if syncFull && addFull && syncRate > 0 {
+			// The total dispatch rate includes async backlog dispatches, which keeps it close to
+			// the add rate and so masks a poor sync match rate. Both sides come from local trackers
+			// so they share a lock, a priority space, and versioning attribution -- unlike stats,
+			// whose rates are adjusted for worker versioning by GetPhysicalQueueAdjustedStats.
+			return float64(addRate)/float64(syncRate) > maxRatio
+		}
+		// Either a tracker is still filling its interval or nothing has sync matched yet. Dividing
+		// by a zero sync match rate would yield +Inf and make maxRatio unreachable, so fall through
+		// to the dispatch-rate comparison until there is enough data to trust.
 	}
-	return addRate/float64(stats.GetTasksDispatchRate()) > maxRatio
+	return float64(stats.GetTasksAddRate())/float64(stats.GetTasksDispatchRate()) > maxRatio
 }
 
-// getSyncMatchedRate returns the aggregate sync match rate across all priorities. It is kept out of
-// GetStatsByPriority because TaskQueueStats is a public API proto and this rate is only used
-// internally; exposing it via DescribeTaskQueue would mean moving it there and adding a proto field.
-func (c *physicalTaskQueueManagerImpl) getSyncMatchedRate() float32 {
+// aggregateRate sums a tracker map's rates across all priorities, and reports whether every tracker
+// in it has observed a full measurement interval. An empty map is never full: no data has been
+// collected yet, so a zero rate from it means nothing.
+//
+// The sync match rate is kept out of GetStatsByPriority because TaskQueueStats is a public API proto
+// and this rate is only used internally; exposing it via DescribeTaskQueue would mean moving it
+// there and adding a proto field.
+func (c *physicalTaskQueueManagerImpl) aggregateRate(trackers map[priorityKey]*taskTracker) (float32, bool) {
 	c.taskTrackerLock.Lock()
 	defer c.taskTrackerLock.Unlock()
 
 	var total float32
-	for _, tt := range c.tasksSyncMatched {
-		total += tt.rate()
+	full := len(trackers) > 0
+	for _, tt := range trackers {
+		rate, trackerFull := tt.rateAndFull()
+		total += rate
+		full = full && trackerFull
 	}
-	return total
+	return total, full
 }
 
 func (c *physicalTaskQueueManagerImpl) UpdateRemotePriorityBacklogs(backlogs remotePriorityBacklogSet) {

@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/goro"
@@ -429,11 +430,21 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMInterruptsPollOnClose() {
 // pollScalingTask builds a minimal task carrying just the source and create time that
 // makePollerScalingDecisionImpl reads off it.
 func pollScalingTask(source enumsspb.TaskSource, createTime time.Time) *internalTask {
+	return newPollScalingTask(source, timestamppb.New(createTime))
+}
+
+// pollScalingTaskNoCreateTime builds a task whose create time is absent, as a task persisted before
+// TaskInfo.create_time existed would be.
+func pollScalingTaskNoCreateTime(source enumsspb.TaskSource) *internalTask {
+	return newPollScalingTask(source, nil)
+}
+
+func newPollScalingTask(source enumsspb.TaskSource, createTime *timestamppb.Timestamp) *internalTask {
 	return &internalTask{
 		source: source,
 		event: &genericTaskInfo{
 			AllocatedTaskInfo: &persistencespb.AllocatedTaskInfo{
-				Data: &persistencespb.TaskInfo{CreateTime: timestamppb.New(createTime)},
+				Data: &persistencespb.TaskInfo{CreateTime: createTime},
 			},
 		},
 	}
@@ -859,83 +870,169 @@ func (s *PhysicalTaskQueueManagerTestSuite) useImprovedSignalsForPollerScaling(e
 	s.tqMgr.partitionMgr.config.UseImprovedSignalsForPollerScaling = func() bool { return enabled }
 }
 
+// freezePollScalingTime installs a controllable time source so poll scaling decisions don't race
+// wall time -- the backlog threshold is only 200ms, which a loaded CI box can burn between
+// statements. Call it before any task tracker is created, since newTaskTracker captures the engine
+// time source. Advance the returned clock before reading a tracker rate: rateAndFull divides by
+// elapsed time and reports "not full" until a whole measurement interval has passed.
+func (s *PhysicalTaskQueueManagerTestSuite) freezePollScalingTime() *clock.EventTimeSource {
+	ts := clock.NewEventTimeSource()
+	ts.Update(time.Now())
+	s.tqMgr.partitionMgr.engine.timeSource = ts
+	return ts
+}
+
+// warmTaskTrackers ages the task trackers past their measurement interval and then seeds them, so
+// aggregateRate reports full with the given rates. Seeding must happen after the advance: counts
+// recorded before it get rotated out of the circular buffer.
+func (s *PhysicalTaskQueueManagerTestSuite) warmTaskTrackers(ts *clock.EventTimeSource, added, syncMatched int) {
+	pri := s.tqMgr.config.DefaultPriorityKey
+	s.tqMgr.incTaskTracker(s.tqMgr.tasksAdded, pri, 0) // creates all three trackers together
+	ts.Update(ts.Now().Add(taskTrackerInterval))
+	s.tqMgr.incTaskTracker(s.tqMgr.tasksAdded, pri, added)
+	s.tqMgr.incTaskTracker(s.tqMgr.tasksSyncMatched, pri, syncMatched)
+}
+
 func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsDispatchLatencyTriggersScaleUp() {
 	s.useImprovedSignalsForPollerScaling(true)
+	ts := s.freezePollScalingTime()
+	handler := s.enablePollerScaleDecisionMetrics()
+	capture := handler.StartCapture()
+	defer handler.StopCapture(capture)
 
-	// Task created 500ms ago, above the 200ms default threshold.
-	taskCreateTime := time.Now().Add(-500 * time.Millisecond)
+	// Task created 500ms ago, above the 200ms default threshold, with no backlog reported in stats.
+	taskCreateTime := ts.Now().Add(-500 * time.Millisecond)
 	fakeStats := &taskqueuepb.TaskQueueStats{}
 
-	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_DB_BACKLOG, taskCreateTime), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	decision := s.tqMgr.makePollerScalingDecisionImpl(
+		ts.Now(), pollScalingTask(enumsspb.TASK_SOURCE_DB_BACKLOG, taskCreateTime),
+		func() *taskqueuepb.TaskQueueStats { return fakeStats },
+	)
 	s.Require().NotNil(decision)
 	s.Equal(int32(1), decision.PollRequestDeltaSuggestion)
+	// Assert the reason, not just the delta: both scale-up arms set delta = 1.
+	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonBacklog)
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsLowLatencyNoScaleUp() {
 	s.useImprovedSignalsForPollerScaling(true)
+	ts := s.freezePollScalingTime()
 
-	// Task created 50ms ago, below the 200ms default threshold.
-	// Also set add rate = dispatch rate so the ratio check doesn't trigger.
-	taskCreateTime := time.Now().Add(-50 * time.Millisecond)
-	fakeStats := &taskqueuepb.TaskQueueStats{
-		TasksAddRate: 10,
-	}
-	// Seed sync match tracker with some rate so ratio check is satisfied.
-	s.tqMgr.incTaskTracker(s.tqMgr.tasksSyncMatched, s.tqMgr.config.DefaultPriorityKey, 100)
+	// Task created 50ms ago, below the 200ms default threshold. The sync match trackers are still
+	// cold, so the ratio arm falls back to the dispatch-rate comparison -- 10/100 is well under the
+	// 1.2 default, so neither arm fires.
+	taskCreateTime := ts.Now().Add(-50 * time.Millisecond)
+	fakeStats := &taskqueuepb.TaskQueueStats{TasksAddRate: 10, TasksDispatchRate: 100}
 
-	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, taskCreateTime), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	decision := s.tqMgr.makePollerScalingDecisionImpl(
+		ts.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, taskCreateTime),
+		func() *taskqueuepb.TaskQueueStats { return fakeStats },
+	)
 	s.Nil(decision)
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsSyncMatchRatioTriggersScaleUp() {
 	s.useImprovedSignalsForPollerScaling(true)
+	ts := s.freezePollScalingTime()
+	handler := s.enablePollerScaleDecisionMetrics()
+	capture := handler.StartCapture()
+	defer handler.StopCapture(capture)
 
-	// Task created just now (no dispatch latency), but add rate > 0 with sync match rate = 0.
-	// addRate / syncMatchRate = Inf > threshold, should trigger scale-up.
-	taskCreateTime := time.Now()
-	fakeStats := &taskqueuepb.TaskQueueStats{
-		TasksAddRate: 100,
-	}
+	// 300 added vs 100 sync matched over the interval = a ratio of 3, above the 1.2 default. The
+	// stats deliberately say the opposite (1/100) so a fallback to the old comparison would fail
+	// this test rather than pass it by accident.
+	s.warmTaskTrackers(ts, 300, 100)
+	fakeStats := &taskqueuepb.TaskQueueStats{TasksAddRate: 1, TasksDispatchRate: 100}
 
-	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, taskCreateTime), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	// Created "now" on the frozen clock, so the backlog arm cannot fire and steal the scale-up.
+	decision := s.tqMgr.makePollerScalingDecisionImpl(
+		ts.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, ts.Now()),
+		func() *taskqueuepb.TaskQueueStats { return fakeStats },
+	)
 	s.Require().NotNil(decision)
 	s.Equal(int32(1), decision.PollRequestDeltaSuggestion)
+	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonTaskRate)
+}
+
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsWarmupFallsBackToDispatchRate() {
+	s.useImprovedSignalsForPollerScaling(true)
+	ts := s.freezePollScalingTime()
+	handler := s.enablePollerScaleDecisionMetrics()
+	capture := handler.StartCapture()
+	defer handler.StopCapture(capture)
+
+	// No sync matches recorded yet. Dividing by a zero sync match rate would be +Inf and scale up
+	// unconditionally, so the old dispatch-rate comparison governs until the trackers warm up.
+	fakeStats := &taskqueuepb.TaskQueueStats{TasksAddRate: 100, TasksDispatchRate: 10}
+
+	decision := s.tqMgr.makePollerScalingDecisionImpl(
+		ts.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, ts.Now()),
+		func() *taskqueuepb.TaskQueueStats { return fakeStats },
+	)
+	s.Require().NotNil(decision)
+	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonTaskRate)
+
+	// And the threshold still governs: 1.1 is below the 1.2 default, so no scale-up.
+	handler2 := s.enablePollerScaleDecisionMetrics()
+	capture2 := handler2.StartCapture()
+	defer handler2.StopCapture(capture2)
+	belowThreshold := &taskqueuepb.TaskQueueStats{TasksAddRate: 110, TasksDispatchRate: 100}
+	decision = s.tqMgr.makePollerScalingDecisionImpl(
+		ts.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, ts.Now()),
+		func() *taskqueuepb.TaskQueueStats { return belowThreshold },
+	)
+	s.Nil(decision)
+}
+
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsNilCreateTimeUsesBacklogStats() {
+	s.useImprovedSignalsForPollerScaling(true)
+	ts := s.freezePollScalingTime()
+
+	// A nil create time would become 1970 via AsTime() and scale up on every poll. With no backlog
+	// in stats and a sub-threshold dispatch ratio, the correct answer is no decision at all.
+	fakeStats := &taskqueuepb.TaskQueueStats{TasksAddRate: 10, TasksDispatchRate: 100}
+
+	decision := s.tqMgr.makePollerScalingDecisionImpl(
+		ts.Now(), pollScalingTaskNoCreateTime(enumsspb.TASK_SOURCE_DB_BACKLOG),
+		func() *taskqueuepb.TaskQueueStats { return fakeStats },
+	)
+	s.Nil(decision)
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsRateLimitSuppressesLatencyScaleUp() {
 	s.useImprovedSignalsForPollerScaling(true)
+	ts := s.freezePollScalingTime()
+	handler := s.enablePollerScaleDecisionMetrics()
+	capture := handler.StartCapture()
+	defer handler.StopCapture(capture)
 
 	// High dispatch latency (500ms > 200ms threshold) but rate limiting is active.
-	// Should hold, not scale up — adding pollers won't help when rate-limited.
-	taskCreateTime := time.Now().Add(-500 * time.Millisecond)
-	fakeStats := &taskqueuepb.TaskQueueStats{
-		RateLimitingActive: true,
-	}
+	// Should hold, not scale up -- adding pollers won't help when rate-limited.
+	taskCreateTime := ts.Now().Add(-500 * time.Millisecond)
+	fakeStats := &taskqueuepb.TaskQueueStats{RateLimitingActive: true}
 
-	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_DB_BACKLOG, taskCreateTime), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	decision := s.tqMgr.makePollerScalingDecisionImpl(
+		ts.Now(), pollScalingTask(enumsspb.TASK_SOURCE_DB_BACKLOG, taskCreateTime),
+		func() *taskqueuepb.TaskQueueStats { return fakeStats },
+	)
 	s.Nil(decision)
+	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionHold, metrics.PollerScaleReasonTaskQueueRateLimited)
 }
 
-func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsOffPreservesOriginalBehavior() {
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsOffIgnoresTaskCreateTime() {
 	// Explicitly disable improved signals (this is the default).
 	s.useImprovedSignalsForPollerScaling(false)
+	ts := s.freezePollScalingTime()
 
-	// With improved signals off, the original backlog age check is used.
-	fakeStats := &taskqueuepb.TaskQueueStats{
-		ApproximateBacklogCount: 100,
-		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
-	}
+	// The inverse of the improved backlog signal: an ancient task with no backlog in stats. The old
+	// variant reads the stats and must not scale up. (The flag-off scale-up paths are already
+	// covered by TestPollScalingUpOnBacklog and TestPollScalingUpAddRateExceedsDispatchRate.)
+	taskCreateTime := ts.Now().Add(-1 * time.Hour)
+	fakeStats := &taskqueuepb.TaskQueueStats{ApproximateBacklogCount: 0}
 
-	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return fakeStats })
-	s.Require().NotNil(decision)
-	s.Equal(int32(1), decision.PollRequestDeltaSuggestion)
-
-	// Original ratio check still works with improved signals off.
-	ratioStats := &taskqueuepb.TaskQueueStats{
-		TasksAddRate:      100,
-		TasksDispatchRate: 10,
-	}
-	decision = s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return ratioStats })
-	s.Require().NotNil(decision)
-	s.Equal(int32(1), decision.PollRequestDeltaSuggestion)
+	decision := s.tqMgr.makePollerScalingDecisionImpl(
+		ts.Now(), pollScalingTask(enumsspb.TASK_SOURCE_DB_BACKLOG, taskCreateTime),
+		func() *taskqueuepb.TaskQueueStats { return fakeStats },
+	)
+	s.Nil(decision)
 }
