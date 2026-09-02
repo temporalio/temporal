@@ -1169,12 +1169,6 @@ func (s *scheduler) handleMigrateSignal(ch workflow.ReceiveChannel, _ bool) {
 		"namespace", s.State.Namespace,
 		"schedule-id", s.State.ScheduleId,
 	)
-	if !s.tweakables.EnableCHASMMigration {
-		s.logger.Error("failed assertion: received migrate signal while CHASM migration is disabled",
-			"namespace", s.State.Namespace,
-			"schedule-id", s.State.ScheduleId,
-		)
-	}
 	s.State.PendingMigration = true
 }
 
