@@ -1424,7 +1424,7 @@ var (
 		"poller_scale_signal_comparison",
 		WithDescription(
 			"Compares old vs improved poller scaling signals for shadow-mode validation. Emitted when at least one "+
-				"signal fires. Dimensions: namespace, taskqueue, task_type, partition, signal (backlog/ratio), "+
+				"signal fires. Dimensions: namespace, taskqueue, task_type, partition, reason (backlog/task_rate), "+
 				"result (both/new_only/old_only). Gated by matching.enablePollerScalingDecisionMetrics."),
 	)
 	// ----------------------------------------------------------------------------------------------------------------

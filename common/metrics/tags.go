@@ -30,6 +30,7 @@ const (
 	forwardedTag            = "forwarded"
 	pollResultTagName       = "poll_result"
 	pollerScaleDecisionTag  = "decision"
+	pollerScaleResultTag    = "result"
 	fromCluster             = "from_cluster"
 	toCluster               = "to_cluster"
 	taskQueue               = "taskqueue"
@@ -342,10 +343,10 @@ const (
 	PollerScaleReasonTaskQueueRateLimited ReasonString = "task_queue_rate_limited"
 )
 
+// Possible outcomes of the old-vs-new signal comparison recorded by
+// metrics.PollerScaleSignalComparisonCounter. The signal being compared is tagged with the same
+// ReasonTag values as metrics.PollerScaleDecisionCounter.
 const (
-	PollerScaleSignalBacklog = "backlog"
-	PollerScaleSignalRatio   = "ratio"
-
 	PollerScaleComparisonBoth    = "both"
 	PollerScaleComparisonNewOnly = "new_only"
 	PollerScaleComparisonOldOnly = "old_only"
@@ -357,12 +358,8 @@ func PollerScaleDecisionTag(decision string) Tag {
 	return Tag{Key: pollerScaleDecisionTag, Value: decision}
 }
 
-func PollerScaleSignalTag(signal string) Tag {
-	return Tag{Key: "signal", Value: signal}
-}
-
 func PollerScaleComparisonResultTag(result string) Tag {
-	return Tag{Key: "result", Value: result}
+	return Tag{Key: pollerScaleResultTag, Value: result}
 }
 
 func MatchingTaskPriorityTag(value int32) Tag {
