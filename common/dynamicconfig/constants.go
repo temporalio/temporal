@@ -210,6 +210,16 @@ in the consistent hash ring used by ringpop. Changing it may cause service disru
 		false,
 		`EnableCancelActivityWorkerCommand enables pushing activity cancellation to workers via Nexus worker commands`,
 	)
+	WorkerCommandsDispatchTimeout = NewGlobalDurationSetting(
+		"system.workerCommandsDispatchTimeout",
+		10*time.Second*debug.TimeoutMultiplier,
+		`WorkerCommandsDispatchTimeout is the timeout for dispatching worker commands to a worker via Nexus.`,
+	)
+	WorkerCommandsMaxAttempts = NewGlobalIntSetting(
+		"system.workerCommandsMaxAttempts",
+		3,
+		`WorkerCommandsMaxAttempts is the maximum number of dispatch attempts for a worker commands task before dropping it.`,
+	)
 	NamespaceMinRetentionGlobal = NewGlobalDurationSetting(
 		"system.namespaceMinRetentionGlobal",
 		24*time.Hour,
@@ -2695,6 +2705,13 @@ where the user has set an explicit RetryPolicy, but not specified all the fields
 		"history.allowResetWithPendingChildren",
 		true,
 		`Allows resetting of workflows with pending children when set to true`,
+	)
+	EnableOrphanedChildWorkflowReplacement = NewNamespaceBoolSetting(
+		"history.enableOrphanedChildWorkflowReplacement",
+		false,
+		`Allows a parent to replace an orphaned child only while the current cluster sees its first run with no history after WorkflowExecutionStarted.
+The setting is evaluated against the parent namespace.
+Enable only after all history hosts that may process child starts in this cluster support orphaned child replacement info; an older host ignores the request field and may permanently record WORKFLOW_ALREADY_EXISTS in the parent history`,
 	)
 	HistoryMaxAutoResetPoints = NewNamespaceIntSetting(
 		"history.historyMaxAutoResetPoints",
