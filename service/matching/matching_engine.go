@@ -96,11 +96,6 @@ const (
 	versioningPollerSeenWindow        = 70 * time.Second
 	recordTaskStartedDefaultTimeout   = 10 * time.Second
 	recordTaskStartedSyncMatchTimeout = 1 * time.Second
-
-	// Bucket size and total window for task trackers created by newTaskTracker().
-	// Used for
-	taskTrackerBucketSize  = 5 * time.Second
-	taskTrackerTotalWindow = 30 * time.Second
 )
 
 type (
@@ -3863,7 +3858,7 @@ func (e *matchingEngineImpl) UpdateFairnessState(
 }
 
 func (e *matchingEngineImpl) newTaskTracker() *taskTracker {
-	return newTaskTracker(e.timeSource, taskTrackerBucketSize, taskTrackerTotalWindow)
+	return newTaskTracker(e.timeSource, 5*time.Second, 30*time.Second)
 }
 
 // migrateOldFormatVersions moves versions present in the given deployment from the
