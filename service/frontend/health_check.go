@@ -87,7 +87,8 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (HealthCheckResult, error
 			resp, err := h.checkHost(ctx, hostAddress)
 			if err != nil {
 				resp = &historyservice.DeepHealthCheckResponse{
-					State: enumsspb.HEALTH_STATE_NOT_SERVING,
+					State:           enumsspb.HEALTH_STATE_NOT_SERVING,
+					UnenforcedState: enumsspb.HEALTH_STATE_NOT_SERVING,
 					Checks: []*healthspb.HealthCheck{
 						{
 							CheckType: health.CheckTypeHostAvailability,
@@ -143,7 +144,8 @@ func (h *healthCheckerImpl) checkHost(ctx context.Context, hostAddress string) (
 
 	if resp == nil {
 		resp = &historyservice.DeepHealthCheckResponse{
-			State: enumsspb.HEALTH_STATE_NOT_SERVING,
+			State:           enumsspb.HEALTH_STATE_NOT_SERVING,
+			UnenforcedState: enumsspb.HEALTH_STATE_NOT_SERVING,
 			Checks: []*healthspb.HealthCheck{
 				{
 					CheckType: health.CheckTypeHostAvailability,
