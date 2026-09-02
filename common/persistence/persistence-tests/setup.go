@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mssql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
@@ -28,6 +29,12 @@ const (
 	testSQLiteMode      = "memory"
 	testSQLiteCache     = "private"
 	testSQLiteSchemaDir = "schema/sqlite/v3" // specify if mode is not "memory"
+
+	// SQL Server enforces password complexity for the sa login; this matches
+	// the MSSQL_SA_PASSWORD used by the dev docker-compose definitions.
+	testMSSQLUser      = "sa"
+	testMSSQLPassword  = "Temporal123!"
+	testMSSQLSchemaDir = "schema/mssql/v2019"
 )
 
 // GetTestClusterOption returns test options for the given store type and driver.
@@ -41,6 +48,8 @@ func GetTestClusterOption(storeType, driver string) *TestBaseOptions {
 			return GetPostgreSQLTestClusterOption(driver, nil)
 		case sqlite.PluginName:
 			return GetSQLiteMemoryTestClusterOption()
+		case mssql.PluginName:
+			return GetMSSQLTestClusterOption(driver, nil)
 		default:
 			panic(fmt.Sprintf("unknown sql driver: %v", driver))
 		}
@@ -100,6 +109,21 @@ func GetPostgreSQLTestClusterOption(
 		DBHost:            environment.GetPostgreSQLAddress(),
 		DBPort:            environment.GetPostgreSQLPort(),
 		SchemaDir:         testPostgreSQLSchemaDir,
+		StoreType:         config.StoreTypeSQL,
+		ConnectAttributes: connectAttributes,
+	}
+}
+
+// GetMSSQLTestClusterOption return test options
+func GetMSSQLTestClusterOption(pluginName string, connectAttributes map[string]string) *TestBaseOptions {
+	return &TestBaseOptions{
+		SQLDBPluginName:   pluginName,
+		DBName:            GenerateRandomDBName(),
+		DBUsername:        testMSSQLUser,
+		DBPassword:        testMSSQLPassword,
+		DBHost:            environment.GetMSSQLAddress(),
+		DBPort:            environment.GetMSSQLPort(),
+		SchemaDir:         testMSSQLSchemaDir,
 		StoreType:         config.StoreTypeSQL,
 		ConnectAttributes: connectAttributes,
 	}

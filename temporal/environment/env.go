@@ -36,6 +36,10 @@ const (
 	postgresSeedsEnv    = "POSTGRES_SEEDS"
 	postgresPortEnv     = "POSTGRES_PORT"
 	postgresDefaultPort = 5432
+
+	mssqlSeedsEnv    = "MSSQL_SEEDS"
+	mssqlPortEnv     = "MSSQL_PORT"
+	mssqlDefaultPort = 1433
 )
 
 func lookupLocalhostIP(domain string) string {
@@ -160,6 +164,29 @@ func GetPostgreSQLPort() int {
 	if err != nil {
 		//nolint:forbidigo // used in test code only
 		panic(fmt.Sprintf("error getting env %v", postgresPortEnv))
+	}
+	return p
+}
+
+// GetMSSQLAddress return the SQL Server address
+func GetMSSQLAddress() string {
+	addr := os.Getenv(mssqlSeedsEnv)
+	if addr == "" {
+		addr = GetLocalhostIP()
+	}
+	return addr
+}
+
+// GetMSSQLPort return the SQL Server port
+func GetMSSQLPort() int {
+	port := os.Getenv(mssqlPortEnv)
+	if port == "" {
+		return mssqlDefaultPort
+	}
+	p, err := strconv.Atoi(port)
+	if err != nil {
+		//nolint:forbidigo // used in test code only
+		panic(fmt.Sprintf("error getting env %v", mssqlPortEnv))
 	}
 	return p
 }
