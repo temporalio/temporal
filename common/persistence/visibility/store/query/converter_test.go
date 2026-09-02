@@ -11,6 +11,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -19,7 +21,6 @@ import (
 
 const (
 	testNamespaceName = namespace.Name("test-namespace")
-	testNamespaceID   = namespace.ID("test-namespace-id")
 )
 
 func TestWithSearchAttributeInterceptor(t *testing.T) {
@@ -29,31 +30,18 @@ func TestWithSearchAttributeInterceptor(t *testing.T) {
 	storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
 
 	// QueryConverter without explicit SearchAttributeInterceptor sets the nop interceptor.
-	c := NewQueryConverter(
-		storeQCMock,
-		testNamespaceName,
-		searchattribute.TestNameTypeMap(),
-		&searchattribute.TestMapper{},
-	)
+	c := newTestQueryConverter(storeQCMock)
 	r.Equal(nopSearchAttributeInterceptor, c.saInterceptor)
 
 	// Setting nil interceptor sets the nop interceptor.
-	c = NewQueryConverter(
-		storeQCMock,
-		testNamespaceName,
-		searchattribute.TestNameTypeMap(),
-		&searchattribute.TestMapper{},
-	).WithSearchAttributeInterceptor(nil)
+	c = newTestQueryConverter(storeQCMock).
+		WithSearchAttributeInterceptor(nil)
 	r.Equal(nopSearchAttributeInterceptor, c.saInterceptor)
 
 	// Setting non-nil interceptor
 	i := &testSearchAttributeInterceptor{}
-	c = NewQueryConverter(
-		storeQCMock,
-		testNamespaceName,
-		searchattribute.TestNameTypeMap(),
-		&searchattribute.TestMapper{},
-	).WithSearchAttributeInterceptor(i)
+	c = newTestQueryConverter(storeQCMock).
+		WithSearchAttributeInterceptor(i)
 	r.Equal(i, c.saInterceptor)
 }
 
@@ -247,12 +235,7 @@ func TestQueryConverter_Convert(t *testing.T) {
 			r := require.New(t)
 			ctrl := gomock.NewController(t)
 			storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
-			queryConverter := NewQueryConverter(
-				storeQCMock,
-				testNamespaceName,
-				searchattribute.TestNameTypeMap(),
-				&searchattribute.TestMapper{},
-			)
+			queryConverter := newTestQueryConverter(storeQCMock)
 
 			if tc.setupMocks != nil {
 				tc.setupMocks(storeQCMock)
@@ -381,12 +364,7 @@ func TestQueryConverter_ConvertWhereString(t *testing.T) {
 			r := require.New(t)
 			ctrl := gomock.NewController(t)
 			storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
-			queryConverter := NewQueryConverter(
-				storeQCMock,
-				testNamespaceName,
-				searchattribute.TestNameTypeMap(),
-				&searchattribute.TestMapper{},
-			)
+			queryConverter := newTestQueryConverter(storeQCMock)
 
 			if tc.setupMocks != nil {
 				tc.setupMocks(storeQCMock)
@@ -554,12 +532,7 @@ func TestQueryConverter_ConvertSelectStmt(t *testing.T) {
 			r := require.New(t)
 			ctrl := gomock.NewController(t)
 			storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
-			queryConverter := NewQueryConverter(
-				storeQCMock,
-				testNamespaceName,
-				searchattribute.TestNameTypeMap(),
-				&searchattribute.TestMapper{},
-			)
+			queryConverter := newTestQueryConverter(storeQCMock)
 
 			if tc.setupMocks != nil {
 				tc.setupMocks(storeQCMock)
@@ -824,12 +797,7 @@ func TestQueryConverter_ConvertWhereExpr(t *testing.T) {
 			r := require.New(t)
 			ctrl := gomock.NewController(t)
 			storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
-			queryConverter := NewQueryConverter(
-				storeQCMock,
-				testNamespaceName,
-				searchattribute.TestNameTypeMap(),
-				&searchattribute.TestMapper{},
-			)
+			queryConverter := newTestQueryConverter(storeQCMock)
 
 			if tc.setupMocks != nil {
 				tc.setupMocks(storeQCMock)
@@ -914,12 +882,7 @@ func TestQueryConverter_ConvertParenExpr(t *testing.T) {
 			r := require.New(t)
 			ctrl := gomock.NewController(t)
 			storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
-			queryConverter := NewQueryConverter(
-				storeQCMock,
-				testNamespaceName,
-				searchattribute.TestNameTypeMap(),
-				&searchattribute.TestMapper{},
-			)
+			queryConverter := newTestQueryConverter(storeQCMock)
 
 			if tc.setupMocks != nil {
 				tc.setupMocks(storeQCMock)
@@ -994,12 +957,7 @@ func TestQueryConverter_ConvertNotExpr(t *testing.T) {
 			r := require.New(t)
 			ctrl := gomock.NewController(t)
 			storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
-			queryConverter := NewQueryConverter(
-				storeQCMock,
-				testNamespaceName,
-				searchattribute.TestNameTypeMap(),
-				&searchattribute.TestMapper{},
-			)
+			queryConverter := newTestQueryConverter(storeQCMock)
 
 			if tc.setupMocks != nil {
 				tc.setupMocks(storeQCMock)
@@ -1103,12 +1061,7 @@ func TestQueryConverter_ConvertAndExpr(t *testing.T) {
 			r := require.New(t)
 			ctrl := gomock.NewController(t)
 			storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
-			queryConverter := NewQueryConverter(
-				storeQCMock,
-				testNamespaceName,
-				searchattribute.TestNameTypeMap(),
-				&searchattribute.TestMapper{},
-			)
+			queryConverter := newTestQueryConverter(storeQCMock)
 
 			if tc.setupMocks != nil {
 				tc.setupMocks(storeQCMock)
@@ -1212,12 +1165,7 @@ func TestQueryConverter_ConvertOrExpr(t *testing.T) {
 			r := require.New(t)
 			ctrl := gomock.NewController(t)
 			storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
-			queryConverter := NewQueryConverter(
-				storeQCMock,
-				testNamespaceName,
-				searchattribute.TestNameTypeMap(),
-				&searchattribute.TestMapper{},
-			)
+			queryConverter := newTestQueryConverter(storeQCMock)
 
 			if tc.setupMocks != nil {
 				tc.setupMocks(storeQCMock)
@@ -1334,12 +1282,7 @@ func TestQueryConverter_ConvertComparisonExprStoreQueryConverterCalled(t *testin
 			r := require.New(t)
 			ctrl := gomock.NewController(t)
 			storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
-			queryConverter := NewQueryConverter(
-				storeQCMock,
-				testNamespaceName,
-				searchattribute.TestNameTypeMap(),
-				&searchattribute.TestMapper{},
-			)
+			queryConverter := newTestQueryConverter(storeQCMock)
 			storeQCMock.EXPECT().GetDatetimeFormat().Return(time.RFC3339Nano).AnyTimes()
 
 			input := &sqlparser.ComparisonExpr{
@@ -1427,12 +1370,7 @@ func TestQueryConverter_ConvertComparisonExprFail(t *testing.T) {
 			r := require.New(t)
 			ctrl := gomock.NewController(t)
 			storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
-			queryConverter := NewQueryConverter(
-				storeQCMock,
-				testNamespaceName,
-				searchattribute.TestNameTypeMap(),
-				&searchattribute.TestMapper{},
-			)
+			queryConverter := newTestQueryConverter(storeQCMock)
 
 			inExpr := parseWhereString(tc.in).(*sqlparser.ComparisonExpr)
 			_, err := queryConverter.convertComparisonExpr(inExpr)
@@ -1522,12 +1460,7 @@ func TestQueryConverter_ConvertRangeCond(t *testing.T) {
 			r := require.New(t)
 			ctrl := gomock.NewController(t)
 			storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
-			queryConverter := NewQueryConverter(
-				storeQCMock,
-				testNamespaceName,
-				searchattribute.TestNameTypeMap(),
-				&searchattribute.TestMapper{},
-			)
+			queryConverter := newTestQueryConverter(storeQCMock)
 
 			if tc.setupMocks != nil {
 				tc.setupMocks(storeQCMock)
@@ -1659,12 +1592,7 @@ func TestQueryConverter_ConvertIsExpr(t *testing.T) {
 			r := require.New(t)
 			ctrl := gomock.NewController(t)
 			storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
-			queryConverter := NewQueryConverter(
-				storeQCMock,
-				testNamespaceName,
-				searchattribute.TestNameTypeMap(),
-				&searchattribute.TestMapper{},
-			)
+			queryConverter := newTestQueryConverter(storeQCMock)
 
 			if tc.setupMocks != nil {
 				tc.setupMocks(storeQCMock)
@@ -1764,12 +1692,7 @@ func TestQueryConverter_ConvertColName(t *testing.T) {
 			r := require.New(t)
 			ctrl := gomock.NewController(t)
 			storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
-			queryConverter := NewQueryConverter(
-				storeQCMock,
-				testNamespaceName,
-				searchattribute.TestNameTypeMap(),
-				&searchattribute.TestMapper{},
-			)
+			queryConverter := newTestQueryConverter(storeQCMock)
 
 			out, err := queryConverter.convertColName(tc.in)
 			if tc.err != "" {
@@ -1927,6 +1850,8 @@ func TestQueryConverter_ResolveSearchAttributeAlias(t *testing.T) {
 				&searchattribute.TestMapper{
 					WithCustomScheduleID: tc.withCustomScheduleID,
 				},
+				metrics.NewMockHandler(ctrl),
+				log.NewNoopLogger(),
 			)
 
 			if tc.useNoopMapper {
@@ -2065,12 +1990,7 @@ func TestQueryConverter_ParseValueExpr(t *testing.T) {
 			r := require.New(t)
 			ctrl := gomock.NewController(t)
 			storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
-			queryConverter := NewQueryConverter(
-				storeQCMock,
-				testNamespaceName,
-				searchattribute.TestNameTypeMap(),
-				&searchattribute.TestMapper{},
-			)
+			queryConverter := newTestQueryConverter(storeQCMock)
 
 			out, err := queryConverter.parseValueExpr(tc.expr, tc.alias, tc.field, tc.saType)
 			if tc.err != "" {
@@ -2188,12 +2108,7 @@ func TestQueryConverter_ParseSQLVal(t *testing.T) {
 			r := require.New(t)
 			ctrl := gomock.NewController(t)
 			storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
-			queryConverter := NewQueryConverter(
-				storeQCMock,
-				testNamespaceName,
-				searchattribute.TestNameTypeMap(),
-				&searchattribute.TestMapper{},
-			)
+			queryConverter := newTestQueryConverter(storeQCMock)
 			storeQCMock.EXPECT().GetDatetimeFormat().Return(time.RFC3339Nano).AnyTimes()
 
 			out, err := queryConverter.parseSQLVal(tc.expr, tc.saName, tc.saFieldName, tc.saType)
@@ -2405,12 +2320,7 @@ func TestQueryConverter_ValidateValueType(t *testing.T) {
 			r := require.New(t)
 			ctrl := gomock.NewController(t)
 			storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
-			queryConverter := NewQueryConverter(
-				storeQCMock,
-				testNamespaceName,
-				searchattribute.TestNameTypeMap(),
-				&searchattribute.TestMapper{},
-			)
+			queryConverter := newTestQueryConverter(storeQCMock)
 			storeQCMock.EXPECT().GetDatetimeFormat().Return(time.RFC3339Nano).AnyTimes()
 
 			out, err := queryConverter.validateValueType(tc.saName, tc.saType, tc.value)
@@ -2566,12 +2476,7 @@ func TestQueryConverter_WithChasmMapper(t *testing.T) {
 		},
 	)
 
-	c := NewQueryConverter(
-		storeQCMock,
-		testNamespaceName,
-		searchattribute.TestNameTypeMap(),
-		&searchattribute.TestMapper{},
-	)
+	c := newTestQueryConverter(storeQCMock)
 	r.Nil(c.chasmMapper)
 
 	c = c.WithChasmMapper(chasmMapper)
@@ -2587,12 +2492,7 @@ func TestQueryConverter_WithArchetypeID(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
 
-	c := NewQueryConverter(
-		storeQCMock,
-		testNamespaceName,
-		searchattribute.TestNameTypeMap(),
-		&searchattribute.TestMapper{},
-	)
+	c := newTestQueryConverter(storeQCMock)
 	r.Equal(chasm.UnspecifiedArchetypeID, c.archetypeID)
 
 	c = c.WithArchetypeID(123)
@@ -2610,12 +2510,8 @@ func TestQueryConverter_TemporalSystemExecutionStatus(t *testing.T) {
 	// Test that TemporalSystemExecutionStatus maps to ExecutionStatus only for SchedulerArchetypeID
 	t.Run("with SchedulerArchetypeID", func(t *testing.T) {
 		r := require.New(t)
-		queryConverter := NewQueryConverter(
-			storeQCMock,
-			testNamespaceName,
-			searchattribute.TestNameTypeMap(),
-			&searchattribute.TestMapper{},
-		).WithArchetypeID(chasm.SchedulerArchetypeID)
+		queryConverter := newTestQueryConverter(storeQCMock).
+			WithArchetypeID(chasm.SchedulerArchetypeID)
 
 		in := &sqlparser.ColName{
 			Name: sqlparser.NewColIdent("TemporalSystemExecutionStatus"),
@@ -2631,12 +2527,7 @@ func TestQueryConverter_TemporalSystemExecutionStatus(t *testing.T) {
 
 	t.Run("without SchedulerArchetypeID", func(t *testing.T) {
 		r := require.New(t)
-		queryConverter := NewQueryConverter(
-			storeQCMock,
-			testNamespaceName,
-			searchattribute.TestNameTypeMap(),
-			&searchattribute.TestMapper{},
-		)
+		queryConverter := newTestQueryConverter(storeQCMock)
 
 		in := &sqlparser.ColName{
 			Name: sqlparser.NewColIdent("TemporalSystemExecutionStatus"),
@@ -2663,12 +2554,8 @@ func TestQueryConverter_ResolveSearchAttributeAlias_WithChasmMapper(t *testing.T
 		},
 	)
 
-	queryConverter := NewQueryConverter(
-		storeQCMock,
-		testNamespaceName,
-		searchattribute.TestNameTypeMap(),
-		&searchattribute.TestMapper{},
-	).WithChasmMapper(chasmMapper)
+	queryConverter := newTestQueryConverter(storeQCMock).
+		WithChasmMapper(chasmMapper)
 
 	testCases := []struct {
 		name                    string
@@ -2723,4 +2610,49 @@ func TestQueryConverter_ResolveSearchAttributeAlias_WithChasmMapper(t *testing.T
 			}
 		})
 	}
+}
+
+func TestQueryConverter_CapturePanic(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+	ctrl := gomock.NewController(t)
+	metricsHandlerMock := metrics.NewMockHandler(ctrl)
+	loggerMock := log.NewMockLogger(ctrl)
+	storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
+	queryConverter := newTestQueryConverter(storeQCMock)
+	queryConverter.metricsHandler = metricsHandlerMock
+	queryConverter.logger = loggerMock
+
+	keywordCol := NewSAColumn(
+		"AliasForKeyword01",
+		"Keyword01",
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	)
+
+	counterMock := metrics.NewMockCounterIface(ctrl)
+	counterMock.EXPECT().Record(int64(1))
+	metricsHandlerMock.EXPECT().Counter(metrics.ServicePanic.Name()).Return(counterMock)
+	loggerMock.EXPECT().Error("Panic is captured", gomock.Any(), gomock.Any()).Return()
+	storeQCMock.EXPECT().ConvertKeywordComparisonExpr(sqlparser.EqualStr, keywordCol, "foo").
+		DoAndReturn(
+			func(operator string, col *SAColumn, value any) (sqlparser.Expr, error) {
+				panic("random")
+			},
+		)
+	out, err := queryConverter.Convert("AliasForKeyword01 = 'foo'")
+	r.ErrorContains(err, "panic: random")
+	r.Nil(out)
+}
+
+func newTestQueryConverter(
+	storeQC StoreQueryConverter[sqlparser.Expr],
+) *QueryConverter[sqlparser.Expr] {
+	return NewQueryConverter(
+		storeQC,
+		testNamespaceName,
+		searchattribute.TestNameTypeMap(),
+		&searchattribute.TestMapper{},
+		nil, // metricsHandler
+		log.NewNoopLogger(),
+	)
 }

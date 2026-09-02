@@ -683,7 +683,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	// test page size > number of results
 	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, 2, nil)
 	s.NoError(err)
-	s.Equal(serializedToken, resp.NextPageToken)
+	s.Empty(resp.NextPageToken)
 	s.Equal(1, len(resp.Executions))
 
 	// test for search after
@@ -704,7 +704,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	// test page size > number of results
 	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, numOfHits+1, nil)
 	s.NoError(err)
-	s.Equal(serializedToken, resp.NextPageToken)
+	s.Empty(resp.NextPageToken)
 	s.Equal(numOfHits, len(resp.Executions))
 }
 

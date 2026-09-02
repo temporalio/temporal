@@ -13,6 +13,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -63,6 +65,9 @@ type (
 		archetypeID   chasm.ArchetypeID
 
 		seenNamespaceDivision bool
+
+		metricsHandler metrics.Handler
+		logger         log.Logger
 	}
 
 	QueryConverterOptionFunc[ExprT any] func(*QueryConverter[ExprT])
@@ -136,6 +141,8 @@ func NewQueryConverter[ExprT any](
 	namespaceName namespace.Name,
 	saTypeMap searchattribute.NameTypeMap,
 	saMapper searchattribute.Mapper,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
 ) *QueryConverter[ExprT] {
 	c := &QueryConverter[ExprT]{
 		storeQC:       storeQC,
@@ -146,6 +153,9 @@ func NewQueryConverter[ExprT any](
 		saMapper:      saMapper,
 
 		seenNamespaceDivision: false,
+
+		metricsHandler: metricsHandler,
+		logger:         logger,
 	}
 	return c
 }
@@ -180,7 +190,11 @@ func (c *QueryConverter[ExprT]) SeenNamespaceDivision() bool {
 
 func (c *QueryConverter[ExprT]) Convert(
 	queryString string,
-) (*QueryParams[ExprT], error) {
+) (_ *QueryParams[ExprT], retError error) {
+	// Convert function may throw unexpected panics (eg: bugs).
+	// Capture them here to replace with an error.
+	defer metrics.CapturePanic(c.logger, c.metricsHandler, &retError)
+
 	queryParams, err := c.convertWhereString(queryString)
 	if err != nil {
 		return nil, err
