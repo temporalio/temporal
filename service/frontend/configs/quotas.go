@@ -107,6 +107,7 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/RespondQueryTaskCompleted":        1,
 		"/temporal.api.workflowservice.v1.WorkflowService/RespondNexusTaskCompleted":        1,
 		CompleteNexusOperation: 1,
+		"/temporal.api.workflowservice.v1.WorkflowService/RecordWorkerHeartbeat": 1,
 
 		// P2: Change State APIs
 		"/temporal.api.workflowservice.v1.WorkflowService/RequestCancelWorkflowExecution":             2,
@@ -193,7 +194,6 @@ var (
 		"/temporal.api.workflowservice.v1.WorkflowService/ResetStickyTaskQueue":               4,
 		"/temporal.api.workflowservice.v1.WorkflowService/ShutdownWorker":                     4,
 		"/temporal.api.workflowservice.v1.WorkflowService/GetWorkflowExecutionHistoryReverse": 4,
-		"/temporal.api.workflowservice.v1.WorkflowService/RecordWorkerHeartbeat":              4,
 		"/temporal.api.workflowservice.v1.WorkflowService/FetchWorkerConfig":                  4,
 		"/temporal.api.workflowservice.v1.WorkflowService/UpdateWorkerConfig":                 4,
 
