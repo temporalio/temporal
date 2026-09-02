@@ -536,9 +536,10 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 	// window doesn't consume a LimitedActions slot.
 	droppedCounter := newTaggedMetricsHandler(h.metricsHandler, scheduler).
 		Counter(metrics.ScheduleBufferedStartDropped.Name())
+	now := ctx.Now(invoker)
 	for _, start := range readyStarts {
 		deadline := h.startWorkflowDeadline(ctx, scheduler, start)
-		if ctx.Now(invoker).After(deadline) {
+		if now.After(deadline) {
 			// Action was buffered in time but expired before execution
 			// (e.g., due to overlap deferral, retries, or system delay).
 			// Only emit the metric if the schedule would have run this
@@ -574,6 +575,49 @@ func (h *InvokerProcessBufferTaskHandler) processBuffer(
 		_, keep := keepStarts[start.GetRequestId()]
 		return !keep
 	})
+
+	// Catch-up policy stays authoritative after the first StartWorkflowExecution
+	// attempt. Attempt-positive starts are excluded from pendingBufferedStarts
+	// above (their overlap decision is already made), so without this pass a
+	// start that failed retryably would be re-sent by the Execute task -
+	// getEligibleBufferedStarts only looks at attempt/run/backoff - potentially
+	// long after ActualTime + catchup window. Drop those instead, and account
+	// for them exactly as an initially-expired start is accounted for.
+	//
+	// This runs after discardStarts is rebuilt above, which overwrites the
+	// appends made in the readyStarts loop. Every retry wakeup routes through
+	// here first: a backed-off start isn't Execute-eligible until
+	// LastProcessedTime advances past its BackoffTime, and only
+	// recordProcessBufferResult advances that watermark.
+	//
+	// No LimitedActions refund is issued: the slot was consumed when the start
+	// was promoted, and the already-attempted RPC's outcome is uncertain (the
+	// workflow may be running). This matches the other post-promotion drop
+	// paths (non-retryable failure, attempt-limit exhaustion).
+	for _, start := range invoker.GetBufferedStarts() {
+		if start.GetAttempt() < 1 || start.GetRunId() != "" || start.GetCompleted() != nil {
+			continue
+		}
+		// startWorkflowDeadline is the single source of truth for the deadline,
+		// including the manual-start exemption: manual trigger/backfill starts
+		// get a moving one-hour-future deadline, so they never expire here.
+		deadline := h.startWorkflowDeadline(ctx, scheduler, start)
+		if !now.After(deadline) {
+			continue
+		}
+		// Unlike the attempt-zero path, this isn't gated on useScheduledAction:
+		// promotion already established that the schedule wanted this action and
+		// spent its slot, so the miss is real regardless of the schedule's
+		// current paused/limited state.
+		//
+		// A running action contributed if one is still running, or if the
+		// previous action's CloseTime (stored in DesiredTime) was already past
+		// this start's deadline.
+		actionRunning := isRunning || start.GetDesiredTime().AsTime().After(deadline)
+		result.missedCatchupByActionRunning[actionRunning]++
+		result.discardStarts = append(result.discardStarts, start)
+		droppedCounter.Record(1, metrics.ReasonTag(bufferedStartDroppedMissedCatchup))
+	}
 
 	// Terminate overrides cancel if both are requested.
 	if action.NeedTerminate {
