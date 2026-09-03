@@ -31,18 +31,14 @@ type (
 		// PickWritePartition returns the task queue partition for adding an
 		// activity or workflow task and the estimated number of tasks added
 		// across all partitions per root task. The input is the name of the
-		// original task queue (with no partition info). When forwardedFrom
-		// is non-empty, this call is forwardedFrom from a child partition
-		// to a parent partition in which case, no load balancing should be
-		// performed
+		// original task queue (with no partition info).
 		PickWritePartition(
 			taskQueue *tqid.TaskQueue,
 			pc PartitionCounts,
 		) (*tqid.NormalPartition, int)
 
 		// PickReadPartition returns the task queue partition to send a poller to.
-		// Input is name of the original task queue as specified by caller. When
-		// forwardedFrom is non-empty, no load balancing should be done.
+		// Input is name of the original task queue as specified by caller.
 		PickReadPartition(
 			taskQueue *tqid.TaskQueue,
 			pc PartitionCounts,
