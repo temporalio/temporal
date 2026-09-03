@@ -92,9 +92,12 @@ type (
 		deploymentRegistrationCh chan struct{}
 		pollerScalingRateLimiter quotas.RateLimiter
 
-		taskTrackerLock  sync.Mutex
-		tasksAdded       map[priorityKey]*taskTracker
-		tasksDispatched  map[priorityKey]*taskTracker
+		taskTrackerLock sync.Mutex
+		tasksAdded      map[priorityKey]*taskTracker
+		tasksDispatched map[priorityKey]*taskTracker
+		// tasksSyncMatched is kept out of GetStatsByPriority because TaskQueueStats is a public API
+		// proto and this rate is only used internally, for poller scaling decisions. Exposing it via
+		// DescribeTaskQueue would mean moving it there and adding a proto field.
 		tasksSyncMatched map[priorityKey]*taskTracker
 		// tasksRateLimited tracks rate-limit events in a sliding window for stats reporting.
 		tasksRateLimited *taskTracker
@@ -994,41 +997,30 @@ func (c *physicalTaskQueueManagerImpl) getBacklogSignal(stats *taskqueuepb.TaskQ
 func (c *physicalTaskQueueManagerImpl) getRatioSignal(stats *taskqueuepb.TaskQueueStats) bool {
 	maxRatio := c.partitionMgr.config.PollerScalingTaskAddToDispatchRatio()
 	if c.partitionMgr.config.UseImprovedSignalsForPollerScaling() {
-		syncRate, syncFull := c.aggregateRate(c.tasksSyncMatched)
-		addRate, addFull := c.aggregateRate(c.tasksAdded)
-		if syncFull && addFull && syncRate > 0 {
-			// The total dispatch rate includes async backlog dispatches, which keeps it close to
-			// the add rate and so masks a poor sync match rate. Both sides come from local trackers
-			// so they share a lock, a priority space, and versioning attribution -- unlike stats,
-			// whose rates are adjusted for worker versioning by GetPhysicalQueueAdjustedStats.
-			return float64(addRate)/float64(syncRate) > maxRatio
+		// The total dispatch rate includes async backlog dispatches, which keeps it close to the add
+		// rate and so masks a poor sync match rate. Both operands come from local trackers, unlike
+		// stats, whose rates are adjusted for worker versioning by GetPhysicalQueueAdjustedStats --
+		// so the measurement window and the versioning attribution both cancel in the ratio.
+		//
+		// Dividing by a zero sync match rate would yield +Inf, which clears any threshold and makes
+		// maxRatio unreachable, so fall through until something has sync matched.
+		if syncRate := c.aggregateRate(c.tasksSyncMatched); syncRate > 0 {
+			return float64(c.aggregateRate(c.tasksAdded))/float64(syncRate) > maxRatio
 		}
-		// Either a tracker is still filling its interval or nothing has sync matched yet. Dividing
-		// by a zero sync match rate would yield +Inf and make maxRatio unreachable, so fall through
-		// to the dispatch-rate comparison until there is enough data to trust.
 	}
 	return float64(stats.GetTasksAddRate())/float64(stats.GetTasksDispatchRate()) > maxRatio
 }
 
-// aggregateRate sums a tracker map's rates across all priorities, and reports whether every tracker
-// in it has observed a full measurement interval. An empty map is never full: no data has been
-// collected yet, so a zero rate from it means nothing.
-//
-// The sync match rate is kept out of GetStatsByPriority because TaskQueueStats is a public API proto
-// and this rate is only used internally; exposing it via DescribeTaskQueue would mean moving it
-// there and adding a proto field.
-func (c *physicalTaskQueueManagerImpl) aggregateRate(trackers map[priorityKey]*taskTracker) (float32, bool) {
+// aggregateRate sums a tracker map's rates across all priorities.
+func (c *physicalTaskQueueManagerImpl) aggregateRate(trackers map[priorityKey]*taskTracker) float32 {
 	c.taskTrackerLock.Lock()
 	defer c.taskTrackerLock.Unlock()
 
 	var total float32
-	full := len(trackers) > 0
 	for _, tt := range trackers {
-		rate, trackerFull := tt.rateAndFull()
-		total += rate
-		full = full && trackerFull
+		total += tt.rate()
 	}
-	return total, full
+	return total
 }
 
 func (c *physicalTaskQueueManagerImpl) UpdateRemotePriorityBacklogs(backlogs remotePriorityBacklogSet) {

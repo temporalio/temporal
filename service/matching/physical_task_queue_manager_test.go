@@ -882,15 +882,15 @@ func (s *PhysicalTaskQueueManagerTestSuite) freezePollScalingTime() *clock.Event
 	return ts
 }
 
-// warmTaskTrackers ages the task trackers past their measurement interval and then seeds them, so
-// aggregateRate reports full with the given rates. Seeding must happen after the advance: counts
-// recorded before it get rotated out of the circular buffer.
-func (s *PhysicalTaskQueueManagerTestSuite) warmTaskTrackers(ts *clock.EventTimeSource, added, syncMatched int) {
+// seedTaskTrackers records task counts and nudges the clock so the trackers report a nonzero rate
+// -- rate() divides by elapsed time, so a zero delta reads as no data at all. The advance must stay
+// under the 5s bucket size or the counts rotate out of the circular buffer. Its exact size doesn't
+// matter: both trackers share it, so it cancels in the add-to-sync-match ratio.
+func (s *PhysicalTaskQueueManagerTestSuite) seedTaskTrackers(ts *clock.EventTimeSource, added, syncMatched int) {
 	pri := s.tqMgr.config.DefaultPriorityKey
-	s.tqMgr.incTaskTracker(s.tqMgr.tasksAdded, pri, 0) // creates all three trackers together
-	ts.Update(ts.Now().Add(taskTrackerInterval))
 	s.tqMgr.incTaskTracker(s.tqMgr.tasksAdded, pri, added)
 	s.tqMgr.incTaskTracker(s.tqMgr.tasksSyncMatched, pri, syncMatched)
+	ts.Update(ts.Now().Add(time.Second))
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsDispatchLatencyTriggersScaleUp() {
@@ -918,9 +918,9 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsLowLat
 	s.useImprovedSignalsForPollerScaling(true)
 	ts := s.freezePollScalingTime()
 
-	// Task created 50ms ago, below the 200ms default threshold. The sync match trackers are still
-	// cold, so the ratio arm falls back to the dispatch-rate comparison -- 10/100 is well under the
-	// 1.2 default, so neither arm fires.
+	// Task created 50ms ago, below the 200ms default threshold. Nothing has sync matched, so the
+	// ratio arm falls back to the dispatch-rate comparison -- 10/100 is well under the 1.2 default,
+	// so neither arm fires.
 	taskCreateTime := ts.Now().Add(-50 * time.Millisecond)
 	fakeStats := &taskqueuepb.TaskQueueStats{TasksAddRate: 10, TasksDispatchRate: 100}
 
@@ -938,10 +938,10 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsSyncMa
 	capture := handler.StartCapture()
 	defer handler.StopCapture(capture)
 
-	// 300 added vs 100 sync matched over the interval = a ratio of 3, above the 1.2 default. The
-	// stats deliberately say the opposite (1/100) so a fallback to the old comparison would fail
-	// this test rather than pass it by accident.
-	s.warmTaskTrackers(ts, 300, 100)
+	// 300 added vs 100 sync matched = a ratio of 3, above the 1.2 default. The stats deliberately
+	// say the opposite (1/100) so a fallback to the old comparison would fail this test rather than
+	// pass it by accident.
+	s.seedTaskTrackers(ts, 300, 100)
 	fakeStats := &taskqueuepb.TaskQueueStats{TasksAddRate: 1, TasksDispatchRate: 100}
 
 	// Created "now" on the frozen clock, so the backlog arm cannot fire and steal the scale-up.
@@ -954,15 +954,15 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsSyncMa
 	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonTaskRate)
 }
 
-func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsWarmupFallsBackToDispatchRate() {
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsNoSyncMatchesFallsBackToDispatchRate() {
 	s.useImprovedSignalsForPollerScaling(true)
 	ts := s.freezePollScalingTime()
 	handler := s.enablePollerScaleDecisionMetrics()
 	capture := handler.StartCapture()
 	defer handler.StopCapture(capture)
 
-	// No sync matches recorded yet. Dividing by a zero sync match rate would be +Inf and scale up
-	// unconditionally, so the old dispatch-rate comparison governs until the trackers warm up.
+	// Nothing has sync matched. Dividing by a zero sync match rate would be +Inf and scale up
+	// unconditionally, so the old dispatch-rate comparison governs instead.
 	fakeStats := &taskqueuepb.TaskQueueStats{TasksAddRate: 100, TasksDispatchRate: 10}
 
 	decision := s.tqMgr.makePollerScalingDecisionImpl(
@@ -973,9 +973,6 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsWarmup
 	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonTaskRate)
 
 	// And the threshold still governs: 1.1 is below the 1.2 default, so no scale-up.
-	handler2 := s.enablePollerScaleDecisionMetrics()
-	capture2 := handler2.StartCapture()
-	defer handler2.StopCapture(capture2)
 	belowThreshold := &taskqueuepb.TaskQueueStats{TasksAddRate: 110, TasksDispatchRate: 100}
 	decision = s.tqMgr.makePollerScalingDecisionImpl(
 		ts.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, ts.Now()),

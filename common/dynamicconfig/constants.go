@@ -1589,7 +1589,7 @@ scoped by namespace and/or task queue.`,
 (2) task dispatch latency instead of backlog age stats for the backlog scale-up check.
 Note that (2) widens what poller_scale_decision reports as reason=backlog: dispatch latency also
 includes RecordTaskStarted and task forwarding time, not just time spent waiting in the backlog.
-(1) falls back to the total dispatch rate until the sync match rate has a full measurement interval.`,
+(1) falls back to the total dispatch rate until at least one task has sync matched.`,
 	)
 	MatchingUseNewMatcher = NewTaskQueueTypedSettingWithConverter(
 		"matching.useNewMatcher",
