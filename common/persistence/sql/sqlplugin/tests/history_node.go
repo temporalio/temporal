@@ -352,10 +352,10 @@ func (s *historyNodeSuite) TestInsertDeleteSelect_Multiple() {
 	s.Equal([]sqlplugin.HistoryNodeRow(nil), rows)
 }
 
-// TestInsertSelectReverse_CursorBoundary verifies that the reverse cursor uses
+// TestInsertSelectReverseCursorBoundary verifies that the reverse cursor uses
 // strict < semantics: the cursor row is excluded and all rows before it at the
 // same node_id are included.
-func (s *historyNodeSuite) TestInsertSelectReverse_CursorBoundary() {
+func (s *historyNodeSuite) TestInsertSelectReverseCursorBoundary() {
 	shardID := rand.Int31()
 	treeID := primitives.NewUUID()
 	branchID := primitives.NewUUID()
@@ -387,15 +387,15 @@ func (s *historyNodeSuite) TestInsertSelectReverse_CursorBoundary() {
 	rows, err := s.store.RangeSelectFromHistoryNode(newExecutionContext(), selectFilter)
 	s.NoError(err)
 	// Only txn_id=3 (stored as -3, which is < -2)
-	s.Equal(1, len(rows), "only rows before cursor should be returned")
+	s.Len(rows, 1, "only rows before cursor should be returned")
 	s.Equal(nodeID, rows[0].NodeID)
 	s.Equal(int64(3), rows[0].TxnID) // negated back on read
 }
 
-// TestInsertSelectReverse_MultiPageSameNode verifies that reverse pagination
+// TestInsertSelectReverseMultiPageSameNode verifies that reverse pagination
 // across multiple pages within a single node_id produces no duplicates or gaps,
 // and that the page boundary correctly splits within the same node's txn_ids.
-func (s *historyNodeSuite) TestInsertSelectReverse_MultiPageSameNode() {
+func (s *historyNodeSuite) TestInsertSelectReverseMultiPageSameNode() {
 	shardID := rand.Int31()
 	treeID := primitives.NewUUID()
 	branchID := primitives.NewUUID()
@@ -434,14 +434,14 @@ func (s *historyNodeSuite) TestInsertSelectReverse_MultiPageSameNode() {
 		selectFilter.MaxNodeID = lastRow.NodeID
 		selectFilter.MaxTxnID = lastRow.TxnID
 	}
-	s.Equal(5, len(allRows), "reverse pagination must return all rows exactly once")
+	s.Len(allRows, 5, "reverse pagination must return all rows exactly once")
 	s.assertUniqueAndExpectedKeys(allRows, nodeID, nodeID, 1, 5)
 }
 
-// TestInsertSelectReverse_AcrossNodes verifies reverse pagination across
+// TestInsertSelectReverseAcrossNodes verifies reverse pagination across
 // multiple node_ids, each with multiple txn_ids. Earlier nodes must return
 // ALL their txn_ids regardless of the cursor's txn_id value.
-func (s *historyNodeSuite) TestInsertSelectReverse_AcrossNodes() {
+func (s *historyNodeSuite) TestInsertSelectReverseAcrossNodes() {
 	shardID := rand.Int31()
 	treeID := primitives.NewUUID()
 	branchID := primitives.NewUUID()
@@ -485,7 +485,7 @@ func (s *historyNodeSuite) TestInsertSelectReverse_AcrossNodes() {
 		selectFilter.MaxTxnID = lastRow.TxnID
 	}
 	// Must get all 9 rows — no gaps, no duplicates
-	s.Equal(9, len(allRows), "reverse pagination across nodes must return all rows")
+	s.Len(allRows, 9, "reverse pagination across nodes must return all rows")
 	s.assertUniqueAndExpectedKeys(allRows, 1, 3, 1, 3)
 }
 
