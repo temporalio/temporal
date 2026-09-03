@@ -939,8 +939,7 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 
 	if c.getBacklogSignal(stats, task) {
 		// Always increase when there is a backlog, even if we're a partition. It's also important to increase for
-		// sticky queues. Under UseImprovedSignalsForPollerScaling this arm also covers dispatch latency that isn't
-		// backlog delay, but it still reports reason=backlog.
+		// sticky queues.
 		delta = 1
 		reason = metrics.PollerScaleReasonBacklog
 	} else if c.queue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY && !c.queue.Partition().IsRoot() {
@@ -975,18 +974,19 @@ func (c *physicalTaskQueueManagerImpl) recordPollerScaleDecision(decision string
 }
 
 // getBacklogSignal reports whether backlog pressure warrants scaling pollers up. Under
-// UseImprovedSignalsForPollerScaling this measures task dispatch latency, which is wider than
-// backlog delay alone (see the table above emitTaskDispatchLatency), but scale-ups from it are
-// still reported as PollerScaleReasonBacklog.
+// UseImprovedSignalsForPollerScaling, this measures task dispatch latency, which is wider than
+// backlog delay alone.
 func (c *physicalTaskQueueManagerImpl) getBacklogSignal(stats *taskqueuepb.TaskQueueStats, task *internalTask) bool {
 	maxAge := c.partitionMgr.config.PollerScalingBacklogAgeScaleUp()
+
 	oldSignal := stats.GetApproximateBacklogCount() > 0 && stats.GetApproximateBacklogAge().AsDuration() > maxAge
-	if !c.partitionMgr.config.UseImprovedSignalsForPollerScaling() {
-		return oldSignal
+	newSignal := c.partitionMgr.engine.timeSource.Since(task.getCreateTime().AsTime()) > maxAge
+
+	if c.partitionMgr.config.UseImprovedSignalsForPollerScaling() {
+		return newSignal
 	}
-	// The backlog age stats are read after the task left the backlog, so at low task rates they
-	// always report an empty backlog. The task's own wait time doesn't have that blind spot.
-	return c.partitionMgr.engine.timeSource.Since(task.getCreateTime().AsTime()) > maxAge
+
+	return oldSignal
 }
 
 // getRatioSignal reports whether we're adding tasks faster than we're dispatching them, which
@@ -994,19 +994,19 @@ func (c *physicalTaskQueueManagerImpl) getBacklogSignal(stats *taskqueuepb.TaskQ
 // get backlogged.
 func (c *physicalTaskQueueManagerImpl) getRatioSignal(stats *taskqueuepb.TaskQueueStats) bool {
 	maxRatio := c.partitionMgr.config.PollerScalingTaskAddToDispatchRatio()
+
 	oldSignal := float64(stats.GetTasksAddRate())/float64(stats.GetTasksDispatchRate()) > maxRatio
-	if !c.partitionMgr.config.UseImprovedSignalsForPollerScaling() {
-		return oldSignal
+
+	// If the syncMatch rate is 0 while tasks are being added, the division is +Inf and the new
+	// signal always fires -- this is intentional. Note that when neither tracker has recorded
+	// anything the division is 0/0 = NaN instead, and NaN > maxRatio is false, so it does not fire.
+	newSignal := float64(c.aggregateRate(c.tasksAdded))/float64(c.aggregateRate(c.tasksSyncMatched)) > maxRatio
+
+	if c.partitionMgr.config.UseImprovedSignalsForPollerScaling() {
+		return newSignal
 	}
-	// The total dispatch rate includes async backlog dispatches, so it stays close to the add rate
-	// even when sync matching is poor. Both operands here are local trackers, so worker-versioning
-	// attribution can't skew one side against the other the way it would with stats, whose rates
-	// GetPhysicalQueueAdjustedStats adjusts.
-	syncRate := c.aggregateRate(c.tasksSyncMatched)
-	if syncRate <= 0 {
-		return oldSignal // dividing by zero would be +Inf and make maxRatio unreachable
-	}
-	return float64(c.aggregateRate(c.tasksAdded))/float64(syncRate) > maxRatio
+
+	return oldSignal
 }
 
 // aggregateRate sums a tracker map's rates across all priorities.
