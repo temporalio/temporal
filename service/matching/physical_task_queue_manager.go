@@ -975,14 +975,11 @@ func (c *physicalTaskQueueManagerImpl) recordPollerScaleDecision(decision string
 func (c *physicalTaskQueueManagerImpl) getBacklogSignal(stats *taskqueuepb.TaskQueueStats, task *internalTask) bool {
 	maxAge := c.partitionMgr.config.PollerScalingBacklogAgeScaleUp()
 
-	oldSignal := stats.GetApproximateBacklogCount() > 0 && stats.GetApproximateBacklogAge().AsDuration() > maxAge
-	newSignal := c.partitionMgr.engine.timeSource.Since(task.getCreateTime().AsTime()) > maxAge
-
 	if c.partitionMgr.config.UseImprovedSignalsForPollerScaling() {
-		return newSignal
+		return c.partitionMgr.engine.timeSource.Since(task.getCreateTime().AsTime()) > maxAge
 	}
 
-	return oldSignal
+	return stats.GetApproximateBacklogCount() > 0 && stats.GetApproximateBacklogAge().AsDuration() > maxAge
 }
 
 // getRatioSignal reports whether we're adding tasks faster than we're dispatching them, which
@@ -992,18 +989,14 @@ func (c *physicalTaskQueueManagerImpl) getBacklogSignal(stats *taskqueuepb.TaskQ
 func (c *physicalTaskQueueManagerImpl) getRatioSignal(stats *taskqueuepb.TaskQueueStats) bool {
 	maxRatio := c.partitionMgr.config.PollerScalingTaskAddToDispatchRatio()
 
-	oldSignal := float64(stats.GetTasksAddRate())/float64(stats.GetTasksDispatchRate()) > maxRatio
-
-	// If the syncMatch rate is 0 while tasks are being added, the division is +Inf and the new
-	// signal always fires -- this is intentional. Note that when neither tracker has recorded
-	// anything the division is 0/0 = NaN instead, and NaN > maxRatio is false, so it does not fire.
-	newSignal := float64(c.aggregateRate(c.tasksAdded))/float64(c.aggregateRate(c.tasksSyncMatched)) > maxRatio
-
 	if c.partitionMgr.config.UseImprovedSignalsForPollerScaling() {
-		return newSignal
+		// If the syncMatch rate is 0 while tasks are being added, the division is +Inf and this
+		// always fires -- intentional. Note that when neither tracker has recorded anything the
+		// division is 0/0 = NaN instead, and NaN > maxRatio is false, so it does not fire.
+		return float64(c.aggregateRate(c.tasksAdded))/float64(c.aggregateRate(c.tasksSyncMatched)) > maxRatio
 	}
 
-	return oldSignal
+	return float64(stats.GetTasksAddRate())/float64(stats.GetTasksDispatchRate()) > maxRatio
 }
 
 // aggregateRate sums a tracker map's rates across all priorities.
