@@ -135,7 +135,5 @@ Prefer a small number of high-confidence findings.
 Keep `nit` and `small` findings proportionally shorter than `med` and `high` findings.
 Report concrete `nit` and `small` findings selectively, and consolidate related symptoms into a single comment that addresses the root issue.
 
-### Feedback style
-
 Be direct and practical, without fluff.
 Reference specific codebase patterns and utilities, suggest concrete alternatives, and explain why something should change rather than only stating that it should.
