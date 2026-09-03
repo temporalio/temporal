@@ -620,16 +620,16 @@ message GetTaskQueueUserDataResponse {
 
 message GetDynamicConfigValueRequest {
   string key = 1;
-  // JSON-encoded dynamic config constraints.
+  // YAML-encoded dynamic config constraints.
   string constraints = 2;
   // Include the configured constrained values currently held for this key.
   bool include_constrained_values = 3;
 }
 
 message GetDynamicConfigValueResponse {
-  // JSON-encoded effective value.
+  // YAML-encoded effective value.
   bytes value = 1;
-  // JSON-encoded configured constrained values. Compiled defaults are not included.
+  // YAML-encoded configured constrained values. Compiled defaults are not included.
   bytes constrained_values = 2;
   // Go expression defining the setting's constraint lookup order.
   string constraint_description = 3;
@@ -648,7 +648,7 @@ message DescribeDynamicConfigSettingResponse {
 message DumpDynamicConfigValuesRequest {}
 
 message DumpDynamicConfigValuesResponse {
-  // JSON-encoded ConfigValueMap held by the dynamic config client.
+  // YAML-encoded ConfigValueMap held by the dynamic config client.
   bytes values = 1;
 }
 

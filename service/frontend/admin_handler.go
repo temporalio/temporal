@@ -2249,7 +2249,7 @@ func (adh *AdminHandler) GetDynamicConfigValue(
 	if request.GetKey() == "" {
 		return nil, serviceerror.NewInvalidArgument("dynamic config key is not set")
 	}
-	constraints, err := dynamicconfig.ParseConstraintsJSON(request.GetConstraints())
+	constraints, err := dynamicconfig.ParseConstraintsYAML(request.GetConstraints())
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgumentf("invalid dynamic config constraints: %v", err)
 	}
@@ -2264,7 +2264,7 @@ func (adh *AdminHandler) GetDynamicConfigValue(
 		return nil, serviceerror.NewInvalidArgument(err.Error())
 	}
 
-	encodedValue, err := dynamicconfig.MarshalValue(value)
+	encodedValue, err := dynamicconfig.MarshalValueYAML(value)
 	if err != nil {
 		return nil, serviceerror.NewInternalf("unable to encode dynamic config value: %v", err)
 	}
@@ -2273,7 +2273,7 @@ func (adh *AdminHandler) GetDynamicConfigValue(
 		ConstraintDescription: constraintDescription,
 	}
 	if request.GetIncludeConstrainedValues() {
-		response.ConstrainedValues, err = dynamicconfig.MarshalConstrainedValues(
+		response.ConstrainedValues, err = dynamicconfig.MarshalConstrainedValuesYAML(
 			key,
 			adh.dynamicConfig.GetConfiguredValues(key),
 		)
@@ -2320,7 +2320,7 @@ func (adh *AdminHandler) DumpDynamicConfigValues(
 	if err != nil {
 		return nil, serviceerror.NewUnimplemented(err.Error())
 	}
-	encodedValues, err := dynamicconfig.MarshalConfigValueMap(values)
+	encodedValues, err := dynamicconfig.MarshalConfigValueMapYAML(values)
 	if err != nil {
 		return nil, serviceerror.NewInternalf("unable to encode dynamic config values: %v", err)
 	}

@@ -73,6 +73,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/metadata"
+	"gopkg.in/yaml.v3"
 )
 
 type (
@@ -246,34 +247,33 @@ func (s *adminHandlerSuite) TestGetDynamicConfigValue() {
 	s.Run("returns effective and configured values", func() {
 		response, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
 			Key:                      dynamicconfig.WorkflowTimeSkippingEnabled.Key().String(),
-			Constraints:              fmt.Sprintf(`{"namespace":%q}`, s.namespace),
+			Constraints:              fmt.Sprintf("namespace: %q", s.namespace),
 			IncludeConstrainedValues: true,
 		})
 		s.Require().NoError(err)
-		s.Equal([]byte("true"), response.GetValue())
+		s.Equal([]byte("true\n"), response.GetValue())
 		s.Equal("[]Constraints{{Namespace: namespace}, {}}", response.GetConstraintDescription())
-		s.JSONEq(fmt.Sprintf(`[
-			{
-				"constraints": {"namespace": %q},
-				"value": true
-			}
-		]`, s.namespace), string(response.GetConstrainedValues()))
+		requireYAMLEqual(s.T(), fmt.Sprintf(`
+			- constraints:
+			    namespace: %q
+			  value: true
+		`, s.namespace), response.GetConstrainedValues())
 	})
 
 	s.Run("returns compiled default", func() {
 		response, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
 			Key:         dynamicconfig.WorkflowTimeSkippingEnabled.Key().String(),
-			Constraints: `{"namespace":"other-namespace"}`,
+			Constraints: `namespace: other-namespace`,
 		})
 		s.Require().NoError(err)
-		s.Equal([]byte("false"), response.GetValue())
+		s.Equal([]byte("false\n"), response.GetValue())
 		s.Empty(response.GetConstrainedValues())
 	})
 
 	s.Run("rejects invalid constraints", func() {
 		_, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
 			Key:         dynamicconfig.WorkflowTimeSkippingEnabled.Key().String(),
-			Constraints: `{"unknown":"value"}`,
+			Constraints: `unknown: value`,
 		})
 		s.Require().Error(err)
 		var invalidArgument *serviceerror.InvalidArgument
@@ -283,10 +283,10 @@ func (s *adminHandlerSuite) TestGetDynamicConfigValue() {
 	s.Run("ignores unused constraints", func() {
 		response, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
 			Key:         "frontend.WorkflowTimeSkippingEnabled",
-			Constraints: fmt.Sprintf(`{"namespace":%q,"taskQueueName":"queue-a"}`, s.namespace),
+			Constraints: fmt.Sprintf("namespace: %q\ntaskQueueName: queue-a", s.namespace),
 		})
 		s.Require().NoError(err)
-		s.Equal([]byte("true"), response.GetValue())
+		s.Equal([]byte("true\n"), response.GetValue())
 	})
 
 	s.Run("rejects unknown key", func() {
@@ -310,14 +310,21 @@ func (s *adminHandlerSuite) TestGetDynamicConfigValue() {
 			IncludeConstrainedValues: true,
 		})
 		s.Require().NoError(err)
-		s.JSONEq(`"1m30s"`, string(response.GetValue()))
-		s.JSONEq(`[
-			{
-				"constraints": {},
-				"value": "1m30s"
-			}
-		]`, string(response.GetConstrainedValues()))
+		s.Equal("1m30s\n", string(response.GetValue()))
+		requireYAMLEqual(s.T(), `
+			- constraints: {}
+			  value: 1m30s
+		`, response.GetConstrainedValues())
 	})
+}
+
+func requireYAMLEqual(t *testing.T, expected string, actual []byte) {
+	t.Helper()
+	var expectedValue any
+	require.NoError(t, yaml.Unmarshal([]byte(strings.ReplaceAll(expected, "\t", "")), &expectedValue))
+	var actualValue any
+	require.NoError(t, yaml.Unmarshal(actual, &actualValue))
+	require.Equal(t, expectedValue, actualValue)
 }
 
 func (s *adminHandlerSuite) TestDescribeDynamicConfigSetting() {
@@ -345,12 +352,12 @@ func (s *adminHandlerSuite) TestDumpDynamicConfigValues() {
 			&adminservice.DumpDynamicConfigValuesRequest{},
 		)
 		s.Require().NoError(err)
-		s.JSONEq(fmt.Sprintf(`{
-			"frontend.workflowtimeskippingenabled": [{
-				"constraints": {"namespace": %q},
-				"value": true
-			}]
-		}`, s.namespace), string(response.GetValues()))
+		loadedValues := dynamicconfig.LoadYamlFile(response.GetValues())
+		s.Empty(loadedValues.Errors)
+		s.Equal([]dynamicconfig.ConstrainedValue{{
+			Constraints: dynamicconfig.Constraints{Namespace: s.namespace.String()},
+			Value:       true,
+		}}, loadedValues.Map[dynamicconfig.WorkflowTimeSkippingEnabled.Key()])
 	})
 
 	s.Run("returns marshal error", func() {
@@ -365,7 +372,7 @@ func (s *adminHandlerSuite) TestDumpDynamicConfigValues() {
 		)
 		s.Require().EqualError(
 			err,
-			`unable to encode dynamic config values: dynamic config key "invalid" constrained value at index 0: json: unsupported type: chan struct {}`,
+			`unable to encode dynamic config values: dynamic config key "invalid" constrained value at index 0: cannot marshal type: chan struct {}`,
 		)
 		var internal *serviceerror.Internal
 		s.ErrorAs(err, &internal)

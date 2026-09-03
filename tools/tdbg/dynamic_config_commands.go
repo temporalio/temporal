@@ -1,8 +1,6 @@
 package tdbg
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -12,12 +10,13 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"google.golang.org/grpc"
+	"gopkg.in/yaml.v3"
 )
 
 const dynamicConfigDumpMaxReceiveSize = 16 << 20
 
 var dynamicConfigDumpNote = fmt.Sprintf(
-	"Note: This dump contains configured ConstrainedValues only. It does not include registered setting defaults or resolved effective values. Use `tdbg dc get` to query the effective value used by the server. Dump responses are limited to %d MiB; larger responses cause the command to fail without writing a file.",
+	"Note: This YAML dump contains configured ConstrainedValues only and can be read by the file-based dynamic config client. It does not include registered setting defaults or resolved effective values. Use `tdbg dc get` to query the effective value used by the server. Dump responses are limited to %d MiB; larger responses cause the command to fail without writing a file.",
 	dynamicConfigDumpMaxReceiveSize/(1<<20),
 )
 
@@ -39,12 +38,12 @@ func newDynamicConfigCommands(clientFactory ClientFactory) []*cli.Command {
 				&cli.StringFlag{
 					Name:    FlagDynamicConfigConstraints,
 					Aliases: []string{"c"},
-					Usage:   `JSON object of dynamic config constraints, for example: '{"namespace":"my-namespace"}'`,
+					Usage:   `YAML mapping of dynamic config constraints, for example: '{namespace: my-namespace}'`,
 				},
 				&cli.BoolFlag{
 					Name:    FlagVerbose,
 					Aliases: []string{"v"},
-					Usage:   "Show the key, effective value, query constraints, and configured constrained values as JSON",
+					Usage:   "Show the key, effective value, query constraints, and configured constrained values as YAML",
 				},
 			},
 			Action: func(c *cli.Context) error {
@@ -89,25 +88,25 @@ func describeDynamicConfigSetting(c *cli.Context, clientFactory ClientFactory) e
 		return fmt.Errorf("unable to describe dynamic config setting: %w", err)
 	}
 
-	output, err := json.MarshalIndent(struct {
-		Key                   string `json:"key"`
-		ValueType             string `json:"valueType"`
-		ConstraintDescription string `json:"constraintDescription"`
+	output, err := yaml.Marshal(struct {
+		Key                   string `yaml:"key"`
+		ValueType             string `yaml:"valueType"`
+		ConstraintDescription string `yaml:"constraintDescription"`
 	}{
 		Key:                   response.GetKey(),
 		ValueType:             response.GetValueType(),
 		ConstraintDescription: response.GetConstraintDescription(),
-	}, "", "  ")
+	})
 	if err != nil {
 		return fmt.Errorf("unable to format dynamic config setting description: %w", err)
 	}
-	_, err = fmt.Fprintln(c.App.Writer, string(output))
+	_, err = c.App.Writer.Write(output)
 	return err
 }
 
 func getDynamicConfigValue(c *cli.Context, clientFactory ClientFactory) error {
-	constraintsJSON := c.String(FlagDynamicConfigConstraints)
-	constraints, err := dynamicconfig.ParseConstraintsJSON(constraintsJSON)
+	constraintsYAML := c.String(FlagDynamicConfigConstraints)
+	_, err := dynamicconfig.ParseConstraintsYAML(constraintsYAML)
 	if err != nil {
 		return fmt.Errorf("invalid dynamic config constraints: %w", err)
 	}
@@ -118,40 +117,67 @@ func getDynamicConfigValue(c *cli.Context, clientFactory ClientFactory) error {
 		ctx,
 		&adminservice.GetDynamicConfigValueRequest{
 			Key:                      c.String(FlagDynamicConfigKey),
-			Constraints:              constraintsJSON,
+			Constraints:              constraintsYAML,
 			IncludeConstrainedValues: c.Bool(FlagVerbose),
 		},
 	)
 	if err != nil {
 		return fmt.Errorf("unable to get dynamic config value: %w", err)
 	}
-	if strings.TrimSpace(constraintsJSON) != "" {
+	if strings.TrimSpace(constraintsYAML) != "" {
 		if _, err := fmt.Fprintln(c.App.ErrWriter, dynamicConfigGetNote); err != nil {
 			return fmt.Errorf("unable to print dynamic config get note: %w", err)
 		}
 	}
 	if c.Bool(FlagVerbose) {
-		output, err := json.MarshalIndent(struct {
-			Key                   string                    `json:"key"`
-			EffectiveValue        json.RawMessage           `json:"effectiveValue"`
-			QueryConstraints      dynamicconfig.Constraints `json:"queryConstraints"`
-			ConstraintDescription string                    `json:"constraintDescription"`
-			ConstrainedValues     json.RawMessage           `json:"constrainedValues"`
+		queryConstraints := any(map[string]any{})
+		if strings.TrimSpace(constraintsYAML) != "" {
+			if err := yaml.Unmarshal([]byte(constraintsYAML), &queryConstraints); err != nil {
+				return fmt.Errorf("unable to format dynamic config constraints: %w", err)
+			}
+		}
+		effectiveValue, err := unmarshalDynamicConfigYAML(response.GetValue())
+		if err != nil {
+			return fmt.Errorf("unable to format effective dynamic config value: %w", err)
+		}
+		constrainedValues, err := unmarshalDynamicConfigYAML(response.GetConstrainedValues())
+		if err != nil {
+			return fmt.Errorf("unable to format constrained dynamic config values: %w", err)
+		}
+		output, err := yaml.Marshal(struct {
+			Key                   string `yaml:"key"`
+			QueryConstraints      any    `yaml:"queryConstraints"`
+			ConstraintDescription string `yaml:"constraintDescription"`
+			EffectiveValue        any    `yaml:"effectiveValue"`
+			ConstrainedValues     any    `yaml:"constrainedValues"`
 		}{
 			Key:                   c.String(FlagDynamicConfigKey),
-			EffectiveValue:        response.GetValue(),
-			QueryConstraints:      constraints,
+			QueryConstraints:      queryConstraints,
 			ConstraintDescription: response.GetConstraintDescription(),
-			ConstrainedValues:     response.GetConstrainedValues(),
-		}, "", "  ")
+			EffectiveValue:        effectiveValue,
+			ConstrainedValues:     constrainedValues,
+		})
 		if err != nil {
 			return fmt.Errorf("unable to format dynamic config value: %w", err)
 		}
-		_, err = fmt.Fprintln(c.App.Writer, string(output))
+		_, err = c.App.Writer.Write(output)
 		return err
 	}
-	_, err = fmt.Fprintln(c.App.Writer, string(response.GetValue()))
+	if _, err := c.App.Writer.Write(response.GetValue()); err != nil {
+		return err
+	}
+	if !strings.HasSuffix(string(response.GetValue()), "\n") {
+		_, err = fmt.Fprintln(c.App.Writer)
+	}
 	return err
+}
+
+func unmarshalDynamicConfigYAML(encodedValue []byte) (any, error) {
+	var value any
+	if err := yaml.Unmarshal(encodedValue, &value); err != nil {
+		return nil, err
+	}
+	return value, nil
 }
 
 func dumpDynamicConfigValues(c *cli.Context, clientFactory ClientFactory) error {
@@ -170,16 +196,8 @@ func dumpDynamicConfigValues(c *cli.Context, clientFactory ClientFactory) error 
 		return fmt.Errorf("unable to dump dynamic config values: %w", err)
 	}
 
-	var output bytes.Buffer
-	if err := json.Indent(&output, response.GetValues(), "", "  "); err != nil {
-		return fmt.Errorf("unable to format dynamic config values: %w", err)
-	}
-	if err := output.WriteByte('\n'); err != nil {
-		return fmt.Errorf("unable to format dynamic config values: %w", err)
-	}
-
-	filename := fmt.Sprintf("tmp_dc_cvs_%s.json", time.Now().UTC().Format("20060102T150405Z"))
-	if err := os.WriteFile(filename, output.Bytes(), 0o644); err != nil {
+	filename := fmt.Sprintf("tmp_dc_cvs_%s.yaml", time.Now().UTC().Format("20060102T150405Z"))
+	if err := os.WriteFile(filename, response.GetValues(), 0o644); err != nil {
 		return fmt.Errorf("unable to write dynamic config values to %q: %w", filename, err)
 	}
 	_, err = fmt.Fprintln(c.App.Writer, filename)

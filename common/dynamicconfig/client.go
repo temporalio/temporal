@@ -91,13 +91,15 @@ type (
 	// each.) If you return a ConstrainedValue with Namespace and ShardID set, for example,
 	// that value will never be used, even if the Namespace matches.
 	Constraints struct {
-		Namespace     string                `json:"namespace,omitempty"`
-		NamespaceID   string                `json:"namespaceId,omitempty"`
-		TaskQueueName string                `json:"taskQueueName,omitempty"`
-		Destination   string                `json:"destination,omitempty"`
-		ChasmTaskType string                `json:"chasmTaskType,omitempty"`
-		TaskQueueType enumspb.TaskQueueType `json:"taskQueueType,omitempty"`
-		ShardID       int32                 `json:"shardId,omitempty"`
-		TaskType      enumsspb.TaskType     `json:"taskType,omitempty"`
+		Namespace     string
+		NamespaceID   string
+		TaskQueueName string
+		Destination   string
+		ChasmTaskType string
+		// File-based dynamic config calls this constraint "taskType".
+		TaskQueueType enumspb.TaskQueueType
+		ShardID       int32
+		// File-based dynamic config calls this constraint "historyTaskType".
+		TaskType      enumsspb.TaskType
 	}
 )

@@ -5488,7 +5488,7 @@ func (x *GetTaskQueueUserDataResponse) GetVersion() int64 {
 type GetDynamicConfigValueRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Key   string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	// JSON-encoded dynamic config constraints.
+	// YAML-encoded dynamic config constraints.
 	Constraints string `protobuf:"bytes,2,opt,name=constraints,proto3" json:"constraints,omitempty"`
 	// Include the configured constrained values currently held for this key.
 	IncludeConstrainedValues bool `protobuf:"varint,3,opt,name=include_constrained_values,json=includeConstrainedValues,proto3" json:"include_constrained_values,omitempty"`
@@ -5549,9 +5549,9 @@ func (x *GetDynamicConfigValueRequest) GetIncludeConstrainedValues() bool {
 
 type GetDynamicConfigValueResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// JSON-encoded effective value.
+	// YAML-encoded effective value.
 	Value []byte `protobuf:"bytes,1,opt,name=value,proto3" json:"value,omitempty"`
-	// JSON-encoded configured constrained values. Compiled defaults are not included.
+	// YAML-encoded configured constrained values. Compiled defaults are not included.
 	ConstrainedValues []byte `protobuf:"bytes,2,opt,name=constrained_values,json=constrainedValues,proto3" json:"constrained_values,omitempty"`
 	// Go expression defining the setting's constraint lookup order.
 	ConstraintDescription string `protobuf:"bytes,3,opt,name=constraint_description,json=constraintDescription,proto3" json:"constraint_description,omitempty"`
@@ -5752,7 +5752,7 @@ func (*DumpDynamicConfigValuesRequest) Descriptor() ([]byte, []int) {
 
 type DumpDynamicConfigValuesResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// JSON-encoded ConfigValueMap held by the dynamic config client.
+	// YAML-encoded ConfigValueMap held by the dynamic config client.
 	Values        []byte `protobuf:"bytes,1,opt,name=values,proto3" json:"values,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
