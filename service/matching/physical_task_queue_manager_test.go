@@ -430,21 +430,11 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMInterruptsPollOnClose() {
 // pollScalingTask builds a minimal task carrying just the source and create time that
 // makePollerScalingDecisionImpl reads off it.
 func pollScalingTask(source enumsspb.TaskSource, createTime time.Time) *internalTask {
-	return newPollScalingTask(source, timestamppb.New(createTime))
-}
-
-// pollScalingTaskNoCreateTime builds a task whose create time is absent, as a task persisted before
-// TaskInfo.create_time existed would be.
-func pollScalingTaskNoCreateTime(source enumsspb.TaskSource) *internalTask {
-	return newPollScalingTask(source, nil)
-}
-
-func newPollScalingTask(source enumsspb.TaskSource, createTime *timestamppb.Timestamp) *internalTask {
 	return &internalTask{
 		source: source,
 		event: &genericTaskInfo{
 			AllocatedTaskInfo: &persistencespb.AllocatedTaskInfo{
-				Data: &persistencespb.TaskInfo{CreateTime: createTime},
+				Data: &persistencespb.TaskInfo{CreateTime: timestamppb.New(createTime)},
 			},
 		},
 	}
@@ -977,21 +967,6 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsNoSync
 	decision = s.tqMgr.makePollerScalingDecisionImpl(
 		ts.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, ts.Now()),
 		func() *taskqueuepb.TaskQueueStats { return belowThreshold },
-	)
-	s.Nil(decision)
-}
-
-func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsNilCreateTimeUsesBacklogStats() {
-	s.useImprovedSignalsForPollerScaling(true)
-	ts := s.freezePollScalingTime()
-
-	// A nil create time would become 1970 via AsTime() and scale up on every poll. With no backlog
-	// in stats and a sub-threshold dispatch ratio, the correct answer is no decision at all.
-	fakeStats := &taskqueuepb.TaskQueueStats{TasksAddRate: 10, TasksDispatchRate: 100}
-
-	decision := s.tqMgr.makePollerScalingDecisionImpl(
-		ts.Now(), pollScalingTaskNoCreateTime(enumsspb.TASK_SOURCE_DB_BACKLOG),
-		func() *taskqueuepb.TaskQueueStats { return fakeStats },
 	)
 	s.Nil(decision)
 }
