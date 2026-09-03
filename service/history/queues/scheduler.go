@@ -3,6 +3,7 @@
 package queues
 
 import (
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
@@ -89,6 +90,14 @@ type (
 		tasks.Scheduler[Executable]
 
 		baseScheduler Scheduler
+	}
+
+	namespaceStateFilterScheduler struct {
+		Scheduler
+
+		namespaceRegistry namespace.Registry
+		metricsHandler    metrics.Handler
+		metricTagsFn      func(Executable) []metrics.Tag
 	}
 )
 
@@ -285,10 +294,55 @@ func NewRateLimitedScheduler(
 		metricsHandler,
 	)
 
-	return &rateLimitedSchedulerImpl{
+	wrappedRateLimitedScheduler := &rateLimitedSchedulerImpl{
 		Scheduler:     rateLimitedScheduler,
 		baseScheduler: baseScheduler,
 	}
+
+	return &namespaceStateFilterScheduler{
+		Scheduler:         wrappedRateLimitedScheduler,
+		namespaceRegistry: namespaceRegistry,
+		metricsHandler:    metricsHandler,
+		metricTagsFn:      taskMetricsTagsFn,
+	}
+}
+
+func (s *namespaceStateFilterScheduler) Submit(executable Executable) {
+	if s.discardTask(executable) {
+		return
+	}
+	s.Scheduler.Submit(executable)
+}
+
+func (s *namespaceStateFilterScheduler) TrySubmit(executable Executable) bool {
+	if s.discardTask(executable) {
+		return true
+	}
+	return s.Scheduler.TrySubmit(executable)
+}
+
+func (s *namespaceStateFilterScheduler) discardTask(executable Executable) bool {
+	if !isNamespaceDeleted(s.namespaceRegistry, executable.GetNamespaceID()) {
+		return false
+	}
+
+	metrics.TaskDiscarded.With(s.metricsHandler).Record(1, s.metricTagsFn(executable)...)
+	executable.Ack()
+	return true
+}
+
+func isNamespaceDeleted(namespaceRegistry namespace.Registry, namespaceID string) bool {
+	ns, err := namespaceRegistry.GetNamespaceByID(namespace.ID(namespaceID))
+	return err == nil && ns.State() == enumspb.NAMESPACE_STATE_DELETED
+}
+
+// HandleBusyWorkflow implements BusyWorkflowHandler by delegating to the
+// wrapped scheduler.
+func (s *namespaceStateFilterScheduler) HandleBusyWorkflow(executable Executable) bool {
+	if handler, ok := s.Scheduler.(BusyWorkflowHandler); ok {
+		return handler.HandleBusyWorkflow(executable)
+	}
+	return false
 }
 
 func (s *rateLimitedSchedulerImpl) Start() {

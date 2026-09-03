@@ -344,6 +344,12 @@ func (e *executableImpl) Execute() (retErr error) {
 		e.terminalFailureCause = nil
 	}
 
+	// The namespace may have been deleted after this task was admitted to the
+	// scheduler. Close that race before invoking the task executor.
+	if isNamespaceDeleted(e.namespaceRegistry, e.GetNamespaceID()) {
+		return consts.ErrTaskDiscarded
+	}
+
 	resp := e.executor.Execute(ctx, e)
 	e.refreshMetricsHandlers(resp.ExecutionMetricTags)
 

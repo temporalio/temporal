@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -47,6 +48,7 @@ type (
 		mockClusterMetadata   *cluster.MockMetadata
 		chasmRegistry         *chasm.Registry
 		metricsHandler        *metricstest.CaptureHandler
+		namespaceEntry        *namespace.Namespace
 
 		timeSource *clock.EventTimeSource
 	}
@@ -78,7 +80,12 @@ func (s *executableSuite) SetupTest() {
 	s.metricsHandler = metricstest.NewCaptureHandler()
 
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil).AnyTimes()
-	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
+	s.namespaceEntry = tests.GlobalNamespaceEntry
+	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).DoAndReturn(
+		func(namespace.ID) (*namespace.Namespace, error) {
+			return s.namespaceEntry, nil
+		},
+	).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
 		cluster.TestCurrentClusterName: {
@@ -110,6 +117,19 @@ func (s *executableSuite) TestExecute_TaskExecuted() {
 		ExecutionErr:        nil,
 	})
 	s.NoError(executable.Execute())
+}
+
+func (s *executableSuite) TestExecute_DeletedNamespaceTaskDiscarded() {
+	executable := s.newTestExecutable()
+	s.namespaceEntry = namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{State: enumspb.NAMESPACE_STATE_DELETED},
+		nil,
+		cluster.TestCurrentClusterName,
+	)
+
+	err := executable.Execute()
+	s.ErrorIs(err, consts.ErrTaskDiscarded)
+	s.NoError(executable.HandleErr(err))
 }
 
 func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
