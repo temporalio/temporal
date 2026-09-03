@@ -89,15 +89,14 @@ func (lb *defaultLoadBalancer) PickWritePartition(
 	taskQueue *tqid.TaskQueue,
 	pc PartitionCounts,
 ) (*tqid.NormalPartition, int) {
-	nsName, err := lb.namespaceIDToName(namespace.ID(taskQueue.NamespaceId()))
-	if err != nil {
-		return taskQueue.RootPartition(), 1
-	}
-
 	var partitionCount int
 	if pc.Write > 0 {
 		partitionCount = int(pc.Write)
 	} else {
+		nsName, err := lb.namespaceIDToName(namespace.ID(taskQueue.NamespaceId()))
+		if err != nil {
+			return taskQueue.RootPartition(), 1
+		}
 		partitionCount = max(1, lb.nWritePartitions(nsName.String(), taskQueue.Name(), taskQueue.TaskType()))
 	}
 
