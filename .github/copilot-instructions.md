@@ -1,10 +1,9 @@
-# Code Review Guidelines
+# Code Guidelines
 
-These rules apply when authoring or reviewing code; the Review Feedback section applies only when reviewing code.
+These rules apply when authoring or reviewing code; the Review Feedback Style section applies only when reviewing code.
 
 ## 1. Structural Simplicity (Highest Priority)
 
-- Review changes holistically as well as line by line.
 - Designs minimize branches, special cases, indirection, and moving parts.
 - Every line contributes to the implementation or verifies behavior in a test.
 - Tests contain only the activities and complexity needed to exercise the behavior in scope.
@@ -25,7 +24,6 @@ These rules apply when authoring or reviewing code; the Review Feedback section 
 ## 3. Testing Correctness and Reliability
 
 - Subtests use their `t` parameter rather than `s.T()`.
-- Testify suite assertion methods run in the test goroutine rather than worker goroutines.
 - Eventually blocks containing assertions use `EventuallyWithT` and its block-local `t`.
 - Specific error type assertions use `require.ErrorAs(t, err, &specificErr)`.
 - Test assertions use `require` rather than `assert`, so a failed assertion stops the test before later checks run on an invalid state.
@@ -34,14 +32,13 @@ These rules apply when authoring or reviewing code; the Review Feedback section 
 - Tests compare a function's complete result with an expected value rather than asserting each field separately. Proto results and proto fields within non-proto results use `protorequire.ProtoEqual`; field-level assertions are reserved for cases where only part of the result is relevant.
 - Every use of `Eventually` has a comment explaining why polling is required, such as eventual consistency.
 - Error type checks use a guarded API such as `errors.AsType`; single-value assertions such as `err.(*T)` are avoided because they panic when the type does not match.
-- A goroutine that maintains a precondition for later assertions loops until context cancellation. This prevents a transiently failed attempt from exiting silently and leaving downstream eventual-consistency waits unable to succeed.
-- Testify assertions run in the test goroutine. Worker goroutines return results or errors through buffered channels so an assertion cannot panic the binary after the test has completed.
+- A goroutine that maintains a precondition for later assertions, such as `go s.someHelper(ctx, ...)`, loops until context cancellation or reports success before the test waits for its effect. This prevents a transiently failed attempt from exiting silently and leaving downstream eventual-consistency waits unable to succeed.
+- Testify assertions such as `s.NoError`, `s.Equal`, `require.NoError`, and `assert.NoError` run in the test goroutine. Worker goroutines return results or errors through buffered channels so an assertion cannot panic the binary after the test has completed.
 - Blocking channel operations in tests use `await.Rcv` and `await.Snd` so they fail on timeout instead of hanging indefinitely.
-- Package-level and global variables remain immutable during tests. Values are threaded through function parameters because parallel tests share the same process.
+- Tests do not write to package-level or global variables. Values are threaded through function parameters because parallel tests share the same process.
 - Tests coordinate ordering with channels, `sync.WaitGroup`, or `EventuallyWithT` rather than `time.Sleep` or elapsed-time thresholds.
 - A background operation that drives an `EventuallyWithT` condition has a longer timeout than the waiting deadline, so it remains capable of satisfying the condition for the entire wait.
 - Errors from precondition operations are surfaced or retried until success when failure would invalidate the rest of the test; they are not discarded with `_, _ = f()`.
-- A goroutine responsible for a transiently fallible precondition loops until `ctx.Done()` or reports success before the test waits for its effect; a single unverified attempt is insufficient.
 
 ## 4. Inline Code / Avoid Abstractions
 
@@ -64,7 +61,7 @@ These rules apply when authoring or reviewing code; the Review Feedback section 
 
 ## 6. Consistency with Codebase
 
-- Nexus libraries pass through frontend requests consistently with the established pattern.
+- Code follows the patterns already established in the codebase. For example, libraries pass the frontend request through as other libraries do.
 - Existing utilities are reused before new ones are created.
 - Logger messages are static, and dynamic content is recorded in structured tags.
 - CLI documentation follows the codebase's conventions, including capitalization of proper nouns.
@@ -81,7 +78,6 @@ These rules apply when authoring or reviewing code; the Review Feedback section 
 - Comments use simple sentence structures, with several plain statements rather than one sentence built from subordinate clauses, parentheticals, or stacked qualifications.
 - Comments ordinarily describe the current code without referring to counterfactuals, prior discussions, or the decision process from when the code was written.
 - Comments ordinarily describe the code itself rather than how upstream callers use it.
-- Give concrete replacement text as a code suggestion. If restructuring the code is clearer and shorter than rewording the comment, suggest that code instead.
 
 ## 8. API and Proto Design
 
@@ -101,6 +97,11 @@ These rules apply when authoring or reviewing code; the Review Feedback section 
 - Proto message fields accessed outside the workflow lock are cloned with `common.CloneProto(...)` rather than aliased by returning their pointers directly.
 
 ## 10. Review Feedback Style
+
+- Review changes holistically as well as line by line.
+- Give concrete replacement text as a code suggestion. If restructuring the code is clearer and shorter than rewording the comment, suggest that code instead.
+- Be direct and practical, without fluff.
+- Reference specific codebase patterns and utilities, suggest concrete alternatives, and explain why something should change rather than only stating that it should.
 
 ### Comment format
 
@@ -134,6 +135,3 @@ Report concrete findings at all four severity levels: `nit`, `small`, `med`, and
 Prefer a small number of high-confidence findings.
 Keep `nit` and `small` findings proportionally shorter than `med` and `high` findings.
 Report concrete `nit` and `small` findings selectively, and consolidate related symptoms into a single comment that addresses the root issue.
-
-Be direct and practical, without fluff.
-Reference specific codebase patterns and utilities, suggest concrete alternatives, and explain why something should change rather than only stating that it should.
