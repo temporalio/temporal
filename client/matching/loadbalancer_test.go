@@ -346,6 +346,42 @@ func TestPickReadPartition_IncompleteBacklogFallsBack(t *testing.T) {
 	require.Equal(t, []int{2, 2, 2, 2}, tqlb.pollerCounts)
 }
 
+func TestPickWritePartitionRootFloorPreservesNonRootWeights(t *testing.T) {
+	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
+	require.NoError(t, err)
+	taskQueue := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	lb := &defaultLoadBalancer{}
+
+	const partitionCount = 32
+	backlogCap := number.EncodeCompact8(1000)
+	backlogCounts := make([]number.Compact8, partitionCount)
+	backlogCounts[0] = backlogCap
+	backlogCounts[partitionCount-1] = number.EncodeCompact8(number.DecodeCompact8(backlogCap) - 100)
+	pc := PartitionCounts{
+		Write:        partitionCount,
+		BacklogCap:   backlogCap,
+		BacklogCount: backlogCounts,
+	}
+
+	decodedCap := number.DecodeCompact8(backlogCap)
+	lastGap := decodedCap - number.DecodeCompact8(backlogCounts[partitionCount-1])
+	nonRootTotal := int64(partitionCount-2)*decodedCap + lastGap
+	rootGap := int64(math.Ceil(float64(nonRootTotal) * writePartitionRootProbabilityFloor /
+		(1 - writePartitionRootProbabilityFloor)))
+	require.Less(t, lastGap, rootGap)
+
+	const attempts = 100_000
+	picks := 0
+	for range attempts {
+		partition, _ := lb.PickWritePartition(taskQueue, pc)
+		if partition.PartitionId() == partitionCount-1 {
+			picks++
+		}
+	}
+	expectedPicks := float64(attempts) * float64(lastGap) / float64(nonRootTotal+rootGap)
+	require.InDelta(t, expectedPicks, picks, expectedPicks*0.3)
+}
+
 func TestPickWritePartition_BacklogAware(t *testing.T) {
 	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
 	require.NoError(t, err)
