@@ -908,9 +908,8 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsLowLat
 	s.useImprovedSignalsForPollerScaling(true)
 	ts := s.freezePollScalingTime()
 
-	// Task created 50ms ago, below the 200ms default threshold. Nothing has sync matched, so the
-	// ratio arm falls back to the dispatch-rate comparison -- 10/100 is well under the 1.2 default,
-	// so neither arm fires.
+	// Task created 50ms ago, below the 200ms default threshold, and no local tracker data, so the
+	// ratio is 0/0 = NaN. Neither arm fires.
 	taskCreateTime := ts.Now().Add(-50 * time.Millisecond)
 	fakeStats := &taskqueuepb.TaskQueueStats{TasksAddRate: 10, TasksDispatchRate: 100}
 
@@ -929,7 +928,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsSyncMa
 	defer handler.StopCapture(capture)
 
 	// 300 added vs 100 sync matched = a ratio of 3, above the 1.2 default. The stats deliberately
-	// say the opposite (1/100) so a fallback to the old comparison would fail this test rather than
+	// say the opposite (1/100), so reading the old signal here would fail this test rather than
 	// pass it by accident.
 	s.seedTaskTrackers(ts, 300, 100)
 	fakeStats := &taskqueuepb.TaskQueueStats{TasksAddRate: 1, TasksDispatchRate: 100}
@@ -944,16 +943,18 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsSyncMa
 	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonTaskRate)
 }
 
-func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsNoSyncMatchesFallsBackToDispatchRate() {
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsZeroSyncMatchRateAlwaysFires() {
 	s.useImprovedSignalsForPollerScaling(true)
 	ts := s.freezePollScalingTime()
 	handler := s.enablePollerScaleDecisionMetrics()
 	capture := handler.StartCapture()
 	defer handler.StopCapture(capture)
 
-	// Nothing has sync matched. Dividing by a zero sync match rate would be +Inf and scale up
-	// unconditionally, so the old dispatch-rate comparison governs instead.
-	fakeStats := &taskqueuepb.TaskQueueStats{TasksAddRate: 100, TasksDispatchRate: 10}
+	// Tasks are being added but nothing is sync matching, so addRate/syncRate is +Inf and the ratio
+	// arm fires no matter what maxRatio is. The stats deliberately say the opposite (10/100), which
+	// proves the decision came from the local trackers.
+	s.seedTaskTrackers(ts, 100, 0)
+	fakeStats := &taskqueuepb.TaskQueueStats{TasksAddRate: 10, TasksDispatchRate: 100}
 
 	decision := s.tqMgr.makePollerScalingDecisionImpl(
 		ts.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, ts.Now()),
@@ -961,12 +962,20 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsNoSync
 	)
 	s.Require().NotNil(decision)
 	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonTaskRate)
+}
 
-	// And the threshold still governs: 1.1 is below the 1.2 default, so no scale-up.
-	belowThreshold := &taskqueuepb.TaskQueueStats{TasksAddRate: 110, TasksDispatchRate: 100}
-	decision = s.tqMgr.makePollerScalingDecisionImpl(
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsNoLocalRatesDoesNotFire() {
+	s.useImprovedSignalsForPollerScaling(true)
+	ts := s.freezePollScalingTime()
+
+	// Neither local tracker has recorded anything, so the ratio is 0/0 = NaN and NaN > maxRatio is
+	// false -- unlike the +Inf case above, this does not fire. The stats show a ratio far above the
+	// threshold, which the improved signal ignores entirely.
+	fakeStats := &taskqueuepb.TaskQueueStats{TasksAddRate: 100, TasksDispatchRate: 10}
+
+	decision := s.tqMgr.makePollerScalingDecisionImpl(
 		ts.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, ts.Now()),
-		func() *taskqueuepb.TaskQueueStats { return belowThreshold },
+		func() *taskqueuepb.TaskQueueStats { return fakeStats },
 	)
 	s.Nil(decision)
 }
