@@ -935,9 +935,9 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 		return nil
 	}
 
-	if c.getBacklogSignal(stats, task) {
+	if c.getDelaySignal(stats, task) {
 		delta = 1
-		reason = metrics.PollerScaleReasonBacklog
+		reason = metrics.PollerScaleReasonDelay
 	} else if c.queue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY && !c.queue.Partition().IsRoot() {
 		// Non-root partitions don't have an appropriate view of the data to make decisions beyond backlog.
 		// Sticky queues are exempt: they aren't considered root but do have a complete view of their data,
@@ -945,7 +945,7 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 		return nil
 	} else if c.getRatioSignal(stats) {
 		delta = 1
-		reason = metrics.PollerScaleReasonTaskRate
+		reason = metrics.PollerScaleReasonRatio
 	}
 
 	if delta == 0 {
@@ -969,10 +969,10 @@ func (c *physicalTaskQueueManagerImpl) recordPollerScaleDecision(decision string
 		Record(1, metrics.PollerScaleDecisionTag(decision), metrics.ReasonTag(reason))
 }
 
-// getBacklogSignal reports whether backlog pressure warrants scaling pollers up. Under
-// UseImprovedSignalsForPollerScaling, this measures task dispatch latency, which is wider than
-// backlog delay alone.
-func (c *physicalTaskQueueManagerImpl) getBacklogSignal(stats *taskqueuepb.TaskQueueStats, task *internalTask) bool {
+// getDelaySignal reports whether tasks are taking too long to reach a worker, which warrants
+// scaling pollers up. Under UseImprovedSignalsForPollerScaling, this measures task dispatch
+// latency, which is wider than backlog delay alone.
+func (c *physicalTaskQueueManagerImpl) getDelaySignal(stats *taskqueuepb.TaskQueueStats, task *internalTask) bool {
 	maxAge := c.partitionMgr.config.PollerScalingBacklogAgeScaleUp()
 
 	if c.partitionMgr.config.UseImprovedSignalsForPollerScaling() {

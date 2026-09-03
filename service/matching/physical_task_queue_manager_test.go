@@ -666,7 +666,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricScaleDo
 	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionDown, metrics.PollerScaleReasonIdle)
 }
 
-func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricScaleUpBacklog() {
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricScaleUpDelay() {
 	rl := quotas.NewMockRateLimiter(s.controller)
 	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 	s.tqMgr.pollerScalingRateLimiter = rl
@@ -679,10 +679,10 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricScaleUp
 		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
 	}
 	s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return fakeStats })
-	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonBacklog)
+	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonDelay)
 }
 
-func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricScaleUpTaskRate() {
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricScaleUpRatio() {
 	rl := quotas.NewMockRateLimiter(s.controller)
 	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 	s.tqMgr.pollerScalingRateLimiter = rl
@@ -695,7 +695,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricScaleUp
 		TasksDispatchRate: 10,
 	}
 	s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return fakeStats })
-	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonTaskRate)
+	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonRatio)
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricHoldRateLimited() {
@@ -901,7 +901,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsDispat
 	s.Require().NotNil(decision)
 	s.Equal(int32(1), decision.PollRequestDeltaSuggestion)
 	// Assert the reason, not just the delta: both scale-up arms set delta = 1.
-	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonBacklog)
+	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonDelay)
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsLowLatencyNoScaleUp() {
@@ -940,7 +940,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsSyncMa
 	)
 	s.Require().NotNil(decision)
 	s.Equal(int32(1), decision.PollRequestDeltaSuggestion)
-	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonTaskRate)
+	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonRatio)
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsZeroSyncMatchRateAlwaysFires() {
@@ -961,7 +961,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsZeroSy
 		func() *taskqueuepb.TaskQueueStats { return fakeStats },
 	)
 	s.Require().NotNil(decision)
-	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonTaskRate)
+	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonRatio)
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsNoLocalRatesDoesNotFire() {
