@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protomock"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/wideevents"
@@ -201,7 +202,7 @@ func (s *engine2Suite) SetupTest() {
 			},
 		).
 		AnyTimes()
-	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
 	s.logger = log.NewMockLogger(s.controller)
 	s.logger.EXPECT().Debug(gomock.Any(), gomock.Any()).AnyTimes()
 	s.logger.EXPECT().Info(gomock.Any(), gomock.Any()).AnyTimes()
@@ -1581,7 +1582,7 @@ func makeMockStartRequest(
 func makeCurrentWorkflowConditionFailedError(
 	tv *testvars.TestVars,
 	startTime *timestamppb.Timestamp,
-) error {
+) *persistence.CurrentWorkflowConditionFailedError {
 	lastWriteVersion := common.EmptyVersion
 	tv1 := tv.WithRequestID("AttachedRequestID1")
 	tv2 := tv.WithRequestID("AttachedRequestID2")
@@ -1610,11 +1611,17 @@ func makeCurrentWorkflowConditionFailedError(
 	}
 }
 
-func (s *engine2Suite) setupStartWorkflowExecutionDedup(startTime *timestamppb.Timestamp) *workflow.MutableStateImpl {
+func (s *engine2Suite) setupStartWorkflowExecutionDedup(
+	startTime *timestamppb.Timestamp,
+	currentState ...enumsspb.WorkflowExecutionState,
+) *workflow.MutableStateImpl {
 	brandNewExecutionRequest := mock.MatchedBy(func(request *persistence.CreateWorkflowExecutionRequest) bool {
 		return request.Mode == persistence.CreateWorkflowModeBrandNew
 	})
 	currentWorkflowConditionFailedError := makeCurrentWorkflowConditionFailedError(s.tv, startTime)
+	if len(currentState) != 0 {
+		currentWorkflowConditionFailedError.State = currentState[0]
+	}
 	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), brandNewExecutionRequest).
 		Return(nil, currentWorkflowConditionFailedError).AnyTimes()
 
@@ -1683,6 +1690,168 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup_Running_SameRequestID() 
 	s.Equal(s.tv.RunID(), resp.GetRunId())
 }
 
+func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_RequestDedup() {
+	s.setupStartWorkflowExecutionForRunning()
+	startRequest := makeMockStartRequest(
+		s.tv,
+		enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED,
+		enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+	)
+	startRequest.StartRequest.RequestId = s.tv.RequestID()
+	startRequest.OrphanedChildReplacementInfo = &historyservice.OrphanedChildReplacementInfo{}
+
+	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
+
+	s.NoError(err)
+	s.True(resp.Started)
+	s.Equal(s.tv.RunID(), resp.GetRunId())
+}
+
+func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_PostCommitObservability() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.mockShard.SetMetricsHandler(metricsHandler)
+
+	now := s.historyEngine.shardContext.GetTimeSource().Now()
+	ms := s.setupStartWorkflowExecutionDedup(
+		timestamppb.New(now.Add(-100*time.Millisecond)),
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+	)
+	parentExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "parent-workflow-id",
+		RunId:      uuid.NewString(),
+	}
+	addWorkflowExecutionStartedEventWithParent(
+		ms,
+		s.tv.WorkflowExecution(),
+		s.tv.WorkflowType().GetName(),
+		s.tv.TaskQueue().GetName(),
+		nil,
+		time.Second,
+		time.Second,
+		time.Second,
+		&workflowspb.ParentExecutionInfo{
+			NamespaceId:      tests.ParentNamespaceID.String(),
+			Execution:        parentExecution,
+			InitiatedId:      72,
+			InitiatedVersion: 892,
+		},
+		s.tv.WorkerIdentity(),
+	)
+	persistedState := workflow.TestCloneToProto(context.Background(), ms)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(context.Context, *persistence.GetWorkflowExecutionRequest) (*persistence.GetWorkflowExecutionResponse, error) {
+			return &persistence.GetWorkflowExecutionResponse{State: common.CloneProto(persistedState)}, nil
+		},
+	).Times(2)
+
+	replacementUpdate := mock.MatchedBy(func(request *persistence.UpdateWorkflowExecutionRequest) bool {
+		return request.UpdateWorkflowMutation.ExecutionState.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED &&
+			request.NewWorkflowSnapshot != nil &&
+			request.NewWorkflowSnapshot.ExecutionState.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	})
+	persistenceErr := &persistence.WorkflowConditionFailedError{Msg: "replace orphaned child persistence failed"}
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), replacementUpdate).Return(nil, persistenceErr)
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), replacementUpdate).Return(tests.UpdateWorkflowExecutionResponse, nil)
+
+	startRequest := makeMockStartRequest(
+		s.tv,
+		enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+	)
+	startRequest.ParentExecutionInfo = &workflowspb.ParentExecutionInfo{
+		NamespaceId:      tests.ParentNamespaceID.String(),
+		Execution:        parentExecution,
+		InitiatedId:      75,
+		InitiatedVersion: 925,
+	}
+	startRequest.OrphanedChildReplacementInfo = &historyservice.OrphanedChildReplacementInfo{
+		ParentCurrentVersionHistoryItems: []*historyspb.VersionHistoryItem{{EventId: 100, Version: 925}},
+	}
+
+	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
+	s.ErrorIs(err, persistenceErr)
+	s.Nil(resp)
+	s.Empty(capture.Snapshot()[metrics.OrphanedChildWorkflowReplacement.Name()])
+
+	resp, err = s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
+	s.NoError(err)
+	s.True(resp.GetStarted())
+	s.NotEqual(s.tv.RunID(), resp.GetRunId())
+	recordings := capture.Snapshot()[metrics.OrphanedChildWorkflowReplacement.Name()]
+	s.Len(recordings, 1)
+	s.Equal(int64(1), recordings[0].Value)
+	s.Equal("replaced", recordings[0].Tags["outcome"])
+}
+
+func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_ClosedAfterSnapshot() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.mockShard.SetMetricsHandler(metricsHandler)
+
+	now := s.historyEngine.shardContext.GetTimeSource().Now()
+	ms := s.setupStartWorkflowExecutionDedup(
+		timestamppb.New(now.Add(-100*time.Millisecond)),
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+	)
+	parentExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "parent-workflow-id",
+		RunId:      uuid.NewString(),
+	}
+	addWorkflowExecutionStartedEventWithParent(
+		ms,
+		s.tv.WorkflowExecution(),
+		s.tv.WorkflowType().GetName(),
+		s.tv.TaskQueue().GetName(),
+		nil,
+		time.Second,
+		time.Second,
+		time.Second,
+		&workflowspb.ParentExecutionInfo{
+			NamespaceId:      tests.ParentNamespaceID.String(),
+			Execution:        parentExecution,
+			InitiatedId:      72,
+			InitiatedVersion: 892,
+		},
+		s.tv.WorkerIdentity(),
+	)
+	persistedState := workflow.TestCloneToProto(context.Background(), ms)
+	persistedState.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	persistedState.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		&persistence.GetWorkflowExecutionResponse{State: persistedState},
+		nil,
+	)
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Times(0)
+
+	startRequest := makeMockStartRequest(
+		s.tv,
+		enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+	)
+	startRequest.ParentExecutionInfo = &workflowspb.ParentExecutionInfo{
+		NamespaceId:      tests.ParentNamespaceID.String(),
+		Execution:        parentExecution,
+		InitiatedId:      75,
+		InitiatedVersion: 925,
+	}
+	startRequest.OrphanedChildReplacementInfo = &historyservice.OrphanedChildReplacementInfo{
+		ParentCurrentVersionHistoryItems: []*historyspb.VersionHistoryItem{{EventId: 100, Version: 925}},
+	}
+
+	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
+	var unavailable *serviceerror.Unavailable
+	s.ErrorAs(err, &unavailable)
+	s.Contains(err.Error(), "Termination failed")
+	s.Nil(resp)
+	recordings := capture.Snapshot()[metrics.OrphanedChildWorkflowReplacement.Name()]
+	s.Len(recordings, 1)
+	s.Equal(int64(1), recordings[0].Value)
+	s.Equal("rejected_race_closed", recordings[0].Tags["outcome"])
+}
+
 func (s *engine2Suite) TestStartWorkflowExecution_Dedup_Running_SameAttachedRequestID() {
 	// no error when request ID is the same
 	s.setupStartWorkflowExecutionForRunning()
@@ -1708,7 +1877,6 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup_Running_SameAttachedRequ
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_Dedup_Running_PolicyFail() {
-	// error when id conflict policy is POLICY_FAIL
 	s.setupStartWorkflowExecutionForRunning()
 
 	startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL)
@@ -1718,6 +1886,52 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup_Running_PolicyFail() {
 	var expectedErr *serviceerror.WorkflowExecutionAlreadyStarted
 	s.ErrorAs(err, &expectedErr)
 	s.Nil(resp)
+}
+
+func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_RejectsCompletedSnapshot() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.mockShard.SetMetricsHandler(metricsHandler)
+
+	now := s.historyEngine.shardContext.GetTimeSource().Now()
+	s.setupStartWorkflowExecutionDedup(
+		timestamppb.New(now.Add(-100*time.Millisecond)),
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+	)
+	startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL)
+	startRequest.OrphanedChildReplacementInfo = &historyservice.OrphanedChildReplacementInfo{}
+
+	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
+
+	var expectedErr *serviceerror.WorkflowExecutionAlreadyStarted
+	s.ErrorAs(err, &expectedErr)
+	s.Nil(resp)
+	recordings := capture.Snapshot()[metrics.OrphanedChildWorkflowReplacement.Name()]
+	s.Len(recordings, 1)
+	s.Equal("rejected_unsupported_state", recordings[0].Tags["outcome"])
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED.String(), recordings[0].Tags["workflow_state"])
+}
+
+func (s *engine2Suite) TestStartWorkflowExecution_ReplaceOrphanedChild_RejectsRunningSnapshot() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.mockShard.SetMetricsHandler(metricsHandler)
+
+	s.setupStartWorkflowExecutionForRunning()
+	startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL)
+	startRequest.OrphanedChildReplacementInfo = &historyservice.OrphanedChildReplacementInfo{}
+
+	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
+
+	var expectedErr *serviceerror.WorkflowExecutionAlreadyStarted
+	s.ErrorAs(err, &expectedErr)
+	s.Nil(resp)
+	recordings := capture.Snapshot()[metrics.OrphanedChildWorkflowReplacement.Name()]
+	s.Len(recordings, 1)
+	s.Equal("rejected_unsupported_state", recordings[0].Tags["outcome"])
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING.String(), recordings[0].Tags["workflow_state"])
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_Dedup_Running_UseExisting() {
@@ -1873,7 +2087,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup() {
 
 				resp, err := s.historyEngine.StartWorkflowExecution(
 					metrics.AddMetricsContext(context.Background()),
-					makeStartRequest(enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL))
+					makeStartRequest(enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL),
+				)
 
 				s.NoError(err)
 				s.True(resp.Started)

@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
@@ -132,6 +133,7 @@ func (s *workflowReplicatorSuite) SetupTest() {
 		quotas.NoopRequestRateLimiter,
 		s.logger,
 		nil,
+		testhooks.NewTestHooks(),
 	)
 }
 
@@ -723,6 +725,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 		quotas.NoopRequestRateLimiter,
 		s.logger,
 		nil,
+		testhooks.NewTestHooks(),
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -816,6 +819,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_DifferentBra
 		quotas.NoopRequestRateLimiter,
 		s.logger,
 		nil,
+		testhooks.NewTestHooks(),
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -903,6 +907,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 		quotas.NoopRequestRateLimiter,
 		s.logger,
 		nil,
+		testhooks.NewTestHooks(),
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -1001,6 +1006,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_FirstTask_Ca
 		quotas.NoopRequestRateLimiter,
 		s.logger,
 		eventCapture,
+		testhooks.NewTestHooks(),
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -1088,6 +1094,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_MutationProv
 		quotas.NoopRequestRateLimiter,
 		s.logger,
 		nil,
+		testhooks.NewTestHooks(),
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -1720,6 +1727,7 @@ func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_WithSnapshot_S
 		quotas.NoopRequestRateLimiter,
 		s.logger,
 		nil,
+		testhooks.NewTestHooks(),
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -1800,6 +1808,7 @@ func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_WithMutation_S
 		quotas.NoopRequestRateLimiter,
 		s.logger,
 		nil,
+		testhooks.NewTestHooks(),
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -1875,6 +1884,7 @@ func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_InvalidArtifac
 		quotas.NoopRequestRateLimiter,
 		s.logger,
 		nil,
+		testhooks.NewTestHooks(),
 	)
 
 	versionedTransitionArtifact := &replicationspb.VersionedTransitionArtifact{}
@@ -1902,6 +1912,7 @@ func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_CreateWorkflow
 		quotas.NoopRequestRateLimiter,
 		s.logger,
 		nil,
+		testhooks.NewTestHooks(),
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)

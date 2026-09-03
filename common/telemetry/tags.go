@@ -19,4 +19,6 @@ const (
 	NexusOperationKey = "nexus.operation"
 	NexusRequestIDKey = "nexus.request_id"
 	NexusServiceKey   = "nexus.service"
+
+	WorkerTaskIDKey = "worker_task.id"
 )

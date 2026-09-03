@@ -2,6 +2,8 @@ package callbacks
 
 import (
 	"context"
+	"fmt"
+	"reflect"
 	"regexp"
 	"testing"
 
@@ -25,6 +27,19 @@ func TestValidatorConfigValidate(t *testing.T) {
 
 	_, err := NewValidator(cfg)
 	require.EqualError(t, err, "missing required fields: [URLMaxLength EndpointRules]")
+}
+
+// Every field of ValidatorConfig is required, and Validate names each missing one explicitly. A
+// field added to the struct but not to Validate stays nil and panics at request time instead of
+// failing at startup. Optional or non-nilable fields would need a different check.
+func TestValidatorConfigValidateNamesEveryField(t *testing.T) {
+	var fields []string
+	for field := range reflect.TypeFor[ValidatorConfig]().Fields() {
+		fields = append(fields, field.Name)
+	}
+
+	_, err := NewValidator(ValidatorConfig{})
+	require.EqualError(t, err, fmt.Sprintf("missing required fields: %v", fields))
 }
 
 func TestValidateCallbacks(t *testing.T) {
