@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -357,6 +358,7 @@ func signalWorkflow(
 		now := shardContext.GetTimeSource().Now()
 		executionTime := mutableState.GetExecutionInfo().GetExecutionTime().AsTime()
 		beforeExecutionTime := now.Before(executionTime)
+		continueAsNewBackoff := false
 
 		// Only runs still inside their backoff window can have the delay bypassed, so the start
 		// event is loaded lazily to keep it off the hot path.
@@ -366,20 +368,20 @@ func signalWorkflow(
 				return err
 			}
 			startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
-			createWorkflowTask = startAttr.GetContinuedExecutionRunId() == "" ||
-				startAttr.GetInitiator() != enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW
+			backoffType := signalWithStartBackoffType(startAttr)
+			metrics.SignalWithStartSkipDelayCounter.With(shardContext.GetMetricsHandler()).Record(
+				1,
+				metrics.NamespaceTag(request.GetNamespace()),
+				metrics.StringTag("backoff_type", backoffType),
+			)
+			continueAsNewBackoff = startAttr.GetContinuedExecutionRunId() != "" &&
+				startAttr.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW
+			createWorkflowTask = !continueAsNewBackoff || !shardContext.GetConfig().EnableSignalWithStartContinueAsNewBackoff(request.GetNamespace())
 		}
 
 		if beforeExecutionTime {
-			if createWorkflowTask {
-				metrics.SignalWithStartSkipDelayCounter.With(shardContext.GetMetricsHandler()).Record(
-					1,
-					metrics.NamespaceTag(request.GetNamespace()),
-				)
-			}
-
 			message := "Skipped workflow start delay for signalWithStart request"
-			if !createWorkflowTask {
+			if continueAsNewBackoff && !createWorkflowTask {
 				message = "Honored continue-as-new backoff for signalWithStart request"
 			}
 
@@ -406,4 +408,20 @@ func signalWorkflow(
 		ctx,
 		shardContext,
 	)
+}
+
+func signalWithStartBackoffType(startAttr *historypb.WorkflowExecutionStartedEventAttributes) string {
+	switch startAttr.GetInitiator() {
+	case enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW:
+		if startAttr.GetContinuedExecutionRunId() != "" {
+			return "CONTINUE_AS_NEW"
+		}
+		return "DELAY_START"
+	case enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY:
+		return "RETRY"
+	case enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE:
+		return "CRON"
+	default:
+		return "DELAY_START"
+	}
 }
