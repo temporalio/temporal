@@ -121,13 +121,6 @@ func (sm *scaleManager) Start(scaleState *persistencespb.PartitionScaleState, sc
 	sm.background.Go(sm.backgroundWork)
 }
 
-func (sm *scaleManager) getLatestWritePartitions() int32 {
-	if n := sm.currentWrite.Load(); n > 0 {
-		return n
-	}
-	return int32(sm.getWritePartitions())
-}
-
 // AddedTasks records one root sample representing estimated queue-wide task additions.
 // This is called in the task add path, so it shouldn't block.
 func (sm *scaleManager) AddedTasks(estimatedTasksAllPartitions int) {
@@ -135,8 +128,11 @@ func (sm *scaleManager) AddedTasks(estimatedTasksAllPartitions int) {
 		return
 	}
 
-	// wait until the batch has accumulated ~batchSize tasks per partition
-	if sm.batch.Add(int64(estimatedTasksAllPartitions)) < sm.batchSize*int64(sm.getLatestWritePartitions()) {
+	batchSize := int64(estimatedTasksAllPartitions) * sm.batchSize
+	if currentWrite := sm.currentWrite.Load(); currentWrite > 0 {
+		batchSize = int64(currentWrite) * sm.batchSize
+	}
+	if sm.batch.Add(int64(estimatedTasksAllPartitions)) < batchSize {
 		return // not enough for a batch yet
 	}
 

@@ -66,6 +66,29 @@ func TestScaleManagerSuite(t *testing.T) {
 	suite.Run(t, new(ScaleManagerSuite))
 }
 
+func TestScaleManagerAddedTasksBatchThreshold(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		currentWrite    int32
+		callsBeforeWake int
+	}{
+		{name: "current write", currentWrite: 2, callsBeforeWake: 3},
+		{name: "estimate fallback", callsBeforeWake: 4},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sm := &scaleManager{batchSize: 5, wakeup: make(chan struct{}, 1)}
+			sm.currentWrite.Store(tc.currentWrite)
+			for range tc.callsBeforeWake {
+				sm.AddedTasks(3)
+			}
+			require.Empty(t, sm.wakeup)
+
+			sm.AddedTasks(3)
+			require.Len(t, sm.wakeup, 1)
+		})
+	}
+}
+
 func (s *ScaleManagerSuite) SetupTest() {
 	s.ProtoAssertions = protorequire.New(s.T())
 	s.userDataValue = nil
