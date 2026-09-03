@@ -8,6 +8,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/callback"
+	"go.temporal.io/server/chasm/lib/nexusoperation"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
@@ -41,6 +43,10 @@ func (s *CallbacksCircuitBreakerSuite) newCircuitBreakerEnv(extra ...testcore.Te
 		// Standalone Activities
 		testcore.WithDynamicConfig(activity.Enabled, true),
 		testcore.WithDynamicConfig(activity.EnableCallbacks, true),
+		testcore.WithDynamicConfig(activity.EnabledCallbackKinds, []callbacks.Kind{callbacks.KindNexus}),
+		// Standalone Nexus operations
+		testcore.WithDynamicConfig(nexusoperation.Enabled, true),
+		testcore.WithDynamicConfig(nexusoperation.EnabledCallbackKinds, []callbacks.Kind{callbacks.KindNexus}),
 		// All Callbacks and Retry policy
 		testcore.WithDynamicConfig(callback.AllowedAddresses,
 			[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}}),
@@ -67,6 +73,7 @@ type executionType struct {
 
 var executionTypes = []executionType{
 	{name: "standalone Activity", execution: &standaloneActivityExecutionType{}},
+	{name: "standalone Nexus operation", execution: &standaloneNexusOperationExecutionType{}},
 }
 
 type newTargetFn = func(t *testing.T, env *NexusTestEnv, failing bool) callbackTarget
