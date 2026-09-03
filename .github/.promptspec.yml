@@ -1,0 +1,10 @@
+version: 1
+
+specs:
+  review:
+    rules:
+      include:
+        - "@default"
+        - temporal/*
+    output:
+      path: copilot-instructions.md
