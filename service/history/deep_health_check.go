@@ -194,16 +194,15 @@ func (h *deepHealthCheckHandler) DeepHealthCheck(
 	unenforcedState := enumsspb.HEALTH_STATE_SERVING
 
 	for _, check := range checks {
-		if check.State == enumsspb.HEALTH_STATE_NOT_SERVING {
-			overallState = enumsspb.HEALTH_STATE_NOT_SERVING
-			unenforcedState = enumsspb.HEALTH_STATE_NOT_SERVING
+		if check.State == enumsspb.HEALTH_STATE_SERVING {
 			continue
 		}
 
-		// we have to check this way because unenforced checks always
-		// set state to SERVING
-		if !check.Enforced && check.Value > check.Threshold {
-			unenforcedState = enumsspb.HEALTH_STATE_NOT_SERVING
+		// an unhealthy check always counts towards the unenforced state
+		unenforcedState = enumsspb.HEALTH_STATE_NOT_SERVING
+
+		if check.Enforced {
+			overallState = enumsspb.HEALTH_STATE_NOT_SERVING
 		}
 	}
 
@@ -227,9 +226,10 @@ func suppressStartupErrors(status grpchealthspb.HealthCheckResponse_ServingStatu
 
 func errorIfOverThreshold(checkType string, value float64, threshold float64, message string, enforced bool) *healthspb.HealthCheck {
 	state := enumsspb.HEALTH_STATE_SERVING
-	if value > threshold && enforced {
+	if value > threshold {
 		state = enumsspb.HEALTH_STATE_NOT_SERVING
 	}
+
 	return &healthspb.HealthCheck{
 		CheckType: checkType,
 		State:     state,

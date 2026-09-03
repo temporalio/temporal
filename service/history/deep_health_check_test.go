@@ -346,7 +346,7 @@ func TestDeepHealthCheck(t *testing.T) {
 					// over the 500ms threshold, but the legacy percentiles are not enforced
 					{
 						CheckType: health2.CheckTypeRPCLatency + "_P50.00",
-						State:     enumsspb.HEALTH_STATE_SERVING,
+						State:     enumsspb.HEALTH_STATE_NOT_SERVING,
 						Value:     900,
 						Threshold: 500,
 						Message:   "historyservice percentile latency (P50.00 < 500, enforced: false)",
@@ -573,7 +573,7 @@ func TestDeepHealthCheck(t *testing.T) {
 					},
 					{
 						CheckType: health2.CheckTypeRPCLatency + "_P90.00",
-						State:     enumsspb.HEALTH_STATE_SERVING,
+						State:     enumsspb.HEALTH_STATE_NOT_SERVING,
 						Value:     1500,
 						Threshold: 1000,
 						Message:   "historyservice percentile latency (P90.00 < 1000, enforced: false)",
@@ -581,7 +581,7 @@ func TestDeepHealthCheck(t *testing.T) {
 					},
 					{
 						CheckType: health2.CheckTypeRPCLatency + "_P50.00",
-						State:     enumsspb.HEALTH_STATE_SERVING,
+						State:     enumsspb.HEALTH_STATE_NOT_SERVING,
 						Value:     1500,
 						Threshold: 500,
 						Message:   "historyservice percentile latency (P50.00 < 500, enforced: false)",
@@ -621,7 +621,7 @@ func TestDeepHealthCheck(t *testing.T) {
 					},
 					{
 						CheckType: health2.CheckTypePersistenceLatency + "_P50.00",
-						State:     enumsspb.HEALTH_STATE_SERVING,
+						State:     enumsspb.HEALTH_STATE_NOT_SERVING,
 						Value:     800,
 						Threshold: 500,
 						Message:   "persistenceservice percentile latency (P50.00 < 500, enforced: false)",
@@ -889,7 +889,7 @@ func TestDeepHealthCheck(t *testing.T) {
 					},
 					{
 						CheckType: health2.CheckTypeRPCLatency + "_P90.00",
-						State:     enumsspb.HEALTH_STATE_SERVING,
+						State:     enumsspb.HEALTH_STATE_NOT_SERVING,
 						Value:     2000,
 						Threshold: 1000,
 						Message:   "historyservice percentile latency (P90.00 < 1000, enforced: false)",
@@ -897,7 +897,7 @@ func TestDeepHealthCheck(t *testing.T) {
 					},
 					{
 						CheckType: health2.CheckTypeRPCLatency + "_P50.00",
-						State:     enumsspb.HEALTH_STATE_SERVING,
+						State:     enumsspb.HEALTH_STATE_NOT_SERVING,
 						Value:     2000,
 						Threshold: 500,
 						Message:   "historyservice percentile latency (P50.00 < 500, enforced: false)",
@@ -1103,7 +1103,7 @@ func TestDeepHealthCheck(t *testing.T) {
 					// the only breached check, and it is unenforced
 					{
 						CheckType: health2.CheckTypeRPCLatency + "_P50.00",
-						State:     enumsspb.HEALTH_STATE_SERVING,
+						State:     enumsspb.HEALTH_STATE_NOT_SERVING,
 						Value:     600,
 						Threshold: 500,
 						Message:   "historyservice percentile latency (P50.00 < 500, enforced: false)",
