@@ -89,15 +89,6 @@ func (lb *defaultLoadBalancer) PickWritePartition(
 	taskQueue *tqid.TaskQueue,
 	pc PartitionCounts,
 ) (*tqid.NormalPartition, int) {
-	if n, ok := testhooks.Get(lb.testHooks, testhooks.MatchingLBForceWritePartition, namespace.ID(taskQueue.NamespaceId())); ok {
-		partition := taskQueue.NormalPartition(n)
-		if partition.IsRoot() {
-			return partition, 1
-		}
-		// probability of reaching root is 0, so root can't know how many tasks were added overall
-		return partition, 0
-	}
-
 	nsName, err := lb.namespaceIDToName(namespace.ID(taskQueue.NamespaceId()))
 	if err != nil {
 		return taskQueue.RootPartition(), 1
@@ -108,6 +99,14 @@ func (lb *defaultLoadBalancer) PickWritePartition(
 		partitionCount = int(pc.Write)
 	} else {
 		partitionCount = max(1, lb.nWritePartitions(nsName.String(), taskQueue.Name(), taskQueue.TaskType()))
+	}
+
+	if n, ok := testhooks.Get(lb.testHooks, testhooks.MatchingLBForceWritePartition, namespace.ID(taskQueue.NamespaceId())); ok {
+		partition := taskQueue.NormalPartition(n)
+		if partition.IsRoot() {
+			return partition, partitionCount
+		}
+		return partition, 0
 	}
 
 	partitionID, estimatedTasksAllPartitions := pickWritePartitionByGap(

@@ -11,6 +11,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/number"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 )
 
@@ -464,6 +465,27 @@ func TestPickWritePartition_NoBacklogUniform(t *testing.T) {
 	}
 	for i := range counts {
 		require.InDelta(t, n/4, counts[i], float64(n)*0.1, "partition %d roughly uniform", i)
+	}
+}
+
+func TestPickWritePartition_Forced(t *testing.T) {
+	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
+	require.NoError(t, err)
+	taskQueue := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	testHooks := testhooks.NewTestHooks()
+	lb := &defaultLoadBalancer{
+		namespaceIDToName: func(namespace.ID) (namespace.Name, error) { return "fake-namespace", nil },
+		testHooks:         testHooks,
+	}
+	pc := PartitionCounts{Write: 4}
+
+	for partitionID, expectedEstimate := range map[int]int{0: 4, 1: 0} {
+		cleanup := testhooks.Set(testHooks, testhooks.MatchingLBForceWritePartition, partitionID, namespace.ID(taskQueue.NamespaceId()))
+		partition, estimatedTasksAllPartitions := lb.PickWritePartition(taskQueue, pc)
+		cleanup()
+
+		require.Equal(t, partitionID, partition.PartitionId())
+		require.Equal(t, expectedEstimate, estimatedTasksAllPartitions)
 	}
 }
 
