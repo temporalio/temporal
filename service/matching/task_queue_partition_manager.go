@@ -440,14 +440,13 @@ func (pm *taskQueuePartitionManagerImpl) signalPartitionScaler(ctx context.Conte
 	if pm.scaleManager == nil {
 		return // only run on root partition
 	}
-	scaleInfo := pm.userDataManager.PartitionScale()
-	effectiveWrite := int(scaleInfo.GetWrite())
-	// if no target is set yet, get effective count from dynamic config (matches client behavior)
-	if effectiveWrite == 0 {
-		effectiveWrite = max(1, pm.config.NumWritePartitions())
-	}
 	estimatedTasksAllPartitions := matching.ParseEstimatedTasksAllPartitions(ctx)
 	if estimatedTasksAllPartitions == 0 {
+		scaleInfo := pm.userDataManager.PartitionScale()
+		effectiveWrite := int(scaleInfo.GetWrite())
+		if effectiveWrite == 0 {
+			effectiveWrite = max(1, pm.config.NumWritePartitions())
+		}
 		estimatedTasksAllPartitions = effectiveWrite
 	}
 	pm.scaleManager.AddedTasks(estimatedTasksAllPartitions)
