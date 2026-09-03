@@ -100,18 +100,17 @@ func appendEstimatedTasksAllPartitions(ctx context.Context, estimatedTasksAllPar
 	if estimatedTasksAllPartitions <= 0 {
 		return ctx
 	}
-	b := make([]byte, 8)
-	binary.LittleEndian.PutUint64(b, uint64(estimatedTasksAllPartitions))
+	b := binary.AppendUvarint(nil, uint64(estimatedTasksAllPartitions))
 	return metadata.AppendToOutgoingContext(ctx, estimatedTasksAllPartitionsHeaderName, string(b))
 }
 
 func ParseEstimatedTasksAllPartitions(ctx context.Context) int {
 	vals := metadata.ValueFromIncomingContext(ctx, estimatedTasksAllPartitionsHeaderName)
-	if len(vals) == 0 || len(vals[0]) != 8 {
+	if len(vals) == 0 {
 		return 0
 	}
-	estimatedTasksAllPartitions := binary.LittleEndian.Uint64([]byte(vals[0]))
-	if estimatedTasksAllPartitions == 0 || estimatedTasksAllPartitions > uint64(^uint(0)>>1) {
+	estimatedTasksAllPartitions, n := binary.Uvarint([]byte(vals[0]))
+	if n <= 0 || n != len(vals[0]) || estimatedTasksAllPartitions == 0 || estimatedTasksAllPartitions > uint64(^uint(0)>>1) {
 		return 0
 	}
 	return int(estimatedTasksAllPartitions)
