@@ -974,21 +974,19 @@ func (c *physicalTaskQueueManagerImpl) recordPollerScaleDecision(decision string
 		Record(1, metrics.PollerScaleDecisionTag(decision), metrics.ReasonTag(reason))
 }
 
-// getBacklogSignal reports whether backlog pressure warrants scaling pollers up.
-//
-// Note that under UseImprovedSignalsForPollerScaling this measures task dispatch latency, which is
-// wider than backlog delay alone -- see the table above emitTaskDispatchLatency. Scale-ups from it
-// are still reported as PollerScaleReasonBacklog.
+// getBacklogSignal reports whether backlog pressure warrants scaling pollers up. Under
+// UseImprovedSignalsForPollerScaling this measures task dispatch latency, which is wider than
+// backlog delay alone (see the table above emitTaskDispatchLatency), but scale-ups from it are
+// still reported as PollerScaleReasonBacklog.
 func (c *physicalTaskQueueManagerImpl) getBacklogSignal(stats *taskqueuepb.TaskQueueStats, task *internalTask) bool {
 	maxAge := c.partitionMgr.config.PollerScalingBacklogAgeScaleUp()
-	// A nil create time would become 1970 via AsTime() and make this unconditionally true, so fall
-	// through to the stats below instead. Same guard as emitTaskDispatchLatency.
-	if createTime := task.getCreateTime(); createTime != nil && c.partitionMgr.config.UseImprovedSignalsForPollerScaling() {
-		// The backlog age stats are read after the task left the backlog, so at low task rates they
-		// always report an empty backlog. The task's own wait time doesn't have that blind spot.
-		return c.partitionMgr.engine.timeSource.Since(createTime.AsTime()) > maxAge
+	oldSignal := stats.GetApproximateBacklogCount() > 0 && stats.GetApproximateBacklogAge().AsDuration() > maxAge
+	if !c.partitionMgr.config.UseImprovedSignalsForPollerScaling() {
+		return oldSignal
 	}
-	return stats.GetApproximateBacklogCount() > 0 && stats.GetApproximateBacklogAge().AsDuration() > maxAge
+	// The backlog age stats are read after the task left the backlog, so at low task rates they
+	// always report an empty backlog. The task's own wait time doesn't have that blind spot.
+	return c.partitionMgr.engine.timeSource.Since(task.getCreateTime().AsTime()) > maxAge
 }
 
 // getRatioSignal reports whether we're adding tasks faster than we're dispatching them, which
@@ -996,19 +994,19 @@ func (c *physicalTaskQueueManagerImpl) getBacklogSignal(stats *taskqueuepb.TaskQ
 // get backlogged.
 func (c *physicalTaskQueueManagerImpl) getRatioSignal(stats *taskqueuepb.TaskQueueStats) bool {
 	maxRatio := c.partitionMgr.config.PollerScalingTaskAddToDispatchRatio()
-	if c.partitionMgr.config.UseImprovedSignalsForPollerScaling() {
-		// The total dispatch rate includes async backlog dispatches, which keeps it close to the add
-		// rate and so masks a poor sync match rate. Both operands come from local trackers, unlike
-		// stats, whose rates are adjusted for worker versioning by GetPhysicalQueueAdjustedStats --
-		// so the measurement window and the versioning attribution both cancel in the ratio.
-		//
-		// Dividing by a zero sync match rate would yield +Inf, which clears any threshold and makes
-		// maxRatio unreachable, so fall through until something has sync matched.
-		if syncRate := c.aggregateRate(c.tasksSyncMatched); syncRate > 0 {
-			return float64(c.aggregateRate(c.tasksAdded))/float64(syncRate) > maxRatio
-		}
+	oldSignal := float64(stats.GetTasksAddRate())/float64(stats.GetTasksDispatchRate()) > maxRatio
+	if !c.partitionMgr.config.UseImprovedSignalsForPollerScaling() {
+		return oldSignal
 	}
-	return float64(stats.GetTasksAddRate())/float64(stats.GetTasksDispatchRate()) > maxRatio
+	// The total dispatch rate includes async backlog dispatches, so it stays close to the add rate
+	// even when sync matching is poor. Both operands here are local trackers, so worker-versioning
+	// attribution can't skew one side against the other the way it would with stats, whose rates
+	// GetPhysicalQueueAdjustedStats adjusts.
+	syncRate := c.aggregateRate(c.tasksSyncMatched)
+	if syncRate <= 0 {
+		return oldSignal // dividing by zero would be +Inf and make maxRatio unreachable
+	}
+	return float64(c.aggregateRate(c.tasksAdded))/float64(syncRate) > maxRatio
 }
 
 // aggregateRate sums a tracker map's rates across all priorities.
