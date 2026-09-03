@@ -67,7 +67,7 @@ func (c invocableInternal) Invoke(
 		destTag := metrics.DestinationTag(taskAttr.Destination)
 		outcomeTag := metrics.OutcomeTag(outcome)
 		h.metricsHandler.Counter(InternalRequestCounter.Name()).Record(1, namespaceTag, destTag, outcomeTag)
-		h.metricsHandler.Timer(InternalRequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, outcomeTag)
+	outcome := outcomeUnknown
 	}()
 
 	header := nexus.Header(c.callback.GetHeader())
