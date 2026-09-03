@@ -595,8 +595,7 @@ func (c *QueryConverter[ExprT]) parseValueExpr(
 		}
 		return value, nil
 	case sqlparser.BoolVal:
-		// no-op: no validation needed
-		return bool(e), nil
+		return c.validateValueType(saName, saType, bool(e))
 	case sqlparser.ValTuple:
 		// This is "in (1,2,3)" case.
 		values := make([]any, 0, len(e))
@@ -608,6 +607,44 @@ func (c *QueryConverter[ExprT]) parseValueExpr(
 			values = append(values, item)
 		}
 		return values, nil
+	case *sqlparser.UnaryExpr:
+		// Negative value may be parsed as UnaryExpr
+		if e.Operator != sqlparser.UPlusStr && e.Operator != sqlparser.UMinusStr {
+			return nil, NewConverterError(
+				"%s: unary operator %q",
+				NotSupportedErrMessage,
+				e.Operator,
+			)
+		}
+		if value, ok := e.Expr.(*sqlparser.SQLVal); !ok || value.Type == sqlparser.StrVal {
+			return nil, NewConverterError(
+				"%s: unary operator not supported in %q",
+				InvalidExpressionErrMessage,
+				sqlparser.String(expr),
+			)
+		}
+		value, err := c.parseValueExpr(e.Expr, saName, saFieldName, saType)
+		if err != nil {
+			return nil, err
+		}
+		switch v := value.(type) {
+		case int64:
+			if e.Operator == sqlparser.UMinusStr {
+				value = -v
+			}
+		case float64:
+			if e.Operator == sqlparser.UMinusStr {
+				value = -v
+			}
+		default:
+			// This should never happen, but here to catch any unexpected case.
+			return nil, NewConverterError(
+				"%s: unary expression %q",
+				InvalidExpressionErrMessage,
+				sqlparser.String(expr),
+			)
+		}
+		return value, nil
 	case *sqlparser.GroupConcatExpr:
 		return nil, NewConverterError("%s: 'group_concat'", NotSupportedErrMessage)
 	case *sqlparser.FuncExpr:
@@ -666,6 +703,16 @@ func (c *QueryConverter[ExprT]) parseSQLVal(
 	}
 }
 
+// validateValueType validates a single value type against the search attribute type,
+// and returns the value formatted if needed.
+// If search attribute type is:
+//   - Int, Double: value type must be int64 or float64 and returns the input value;
+//   - Bool: value type must be bool and returns the input value;
+//   - Keyword, KeywordList: value type must be string and returns the input value;
+//   - Text: value type must be string with a valid token (empty string or string
+//     with only spaces are not valid) and returns the input value;
+//   - Datetime: value type must be int64 (Unix nanos) or string and returns datetime
+//     formated based on storeQC.GetDatetimeFormat() value.
 func (c *QueryConverter[ExprT]) validateValueType(
 	saName string,
 	saType enumspb.IndexedValueType,
@@ -713,10 +760,20 @@ func (c *QueryConverter[ExprT]) validateValueType(
 		}
 		return tm.UTC().Format(c.storeQC.GetDatetimeFormat()), nil
 	case enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		enumspb.INDEXED_VALUE_TYPE_TEXT:
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST:
 		if _, ok := value.(string); !ok {
 			return nil, valueTypeErr
+		}
+		return value, nil
+	case enumspb.INDEXED_VALUE_TYPE_TEXT:
+		if v, ok := value.(string); !ok {
+			return nil, valueTypeErr
+		} else if strings.TrimSpace(v) == "" {
+			return nil, NewConverterError(
+				"%s: no tokens found filtering on Text type search attribute %s",
+				InvalidExpressionErrMessage,
+				saName,
+			)
 		}
 		return value, nil
 	default:

@@ -14,8 +14,8 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -323,16 +323,10 @@ func nexusFailureMetadataToApplicationFailureInfo(failure nexus.Failure) (*failu
 // and
 // https://github.com/grpc-ecosystem/grpc-gateway/blob/a7cf811e6ffabeaddcfb4ff65602c12671ff326e/runtime/errors.go#L56.
 func ConvertGRPCError(err error, exposeDetails bool) error {
-	var st *status.Status
-	stGetter, ok := err.(interface{ Status() *status.Status })
-	if ok {
-		st = stGetter.Status()
-	} else {
-		st, ok = status.FromError(err)
-		if !ok {
-			// The Nexus SDK will translate this into an internal server error and will not expose the error details.
-			return err
-		}
+	st, ok := common.GetRPCStatus(err)
+	if !ok {
+		// The Nexus SDK will translate this into an internal server error and will not expose the error details.
+		return err
 	}
 
 	errMessage := err.Error()
