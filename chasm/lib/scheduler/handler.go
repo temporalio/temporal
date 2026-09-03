@@ -96,7 +96,7 @@ func (h *handler) CreateFromMigrationState(ctx context.Context, req *schedulerpb
 		// Check if the existing schedule is a sentinel. Sentinels are
 		// auto-deleted SentinelIdleTime after schedule creation; the
 		// V1 schedule will keep retrying migration until it expires.
-		_, readErr := chasm.ReadComponent(
+		isSentinel, readErr := chasm.ReadComponent(
 			ctx,
 			chasm.NewComponentRef[*Scheduler](
 				chasm.ExecutionKey{
@@ -104,23 +104,20 @@ func (h *handler) CreateFromMigrationState(ctx context.Context, req *schedulerpb
 					BusinessID:  scheduleID,
 				},
 			),
-			func(s *Scheduler, ctx chasm.Context, _ *struct{}) (*struct{}, error) {
-				if s.IsSentinel() {
-					return nil, ErrSentinel
-				}
-				return nil, nil
+			func(s *Scheduler, _ chasm.Context, _ *struct{}) (bool, error) {
+				return s.IsSentinel(), nil
 			},
 			(*struct{})(nil),
 		)
 		if readErr != nil {
-			if errors.Is(readErr, ErrSentinel) {
-				h.logger.Warn(
-					fmt.Sprintf("Migration blocked by sentinel schedule; sentinel will auto-delete %v after schedule creation", SentinelIdleTime),
-					tag.NewStringTag("schedule-id", scheduleID),
-				)
-				return nil, ErrSentinelBlocked
-			}
 			return nil, readErr
+		}
+		if isSentinel {
+			h.logger.Warn(
+				fmt.Sprintf("Migration blocked by sentinel schedule; sentinel will auto-delete %v after schedule creation", SentinelIdleTime),
+				tag.NewStringTag("schedule-id", scheduleID),
+			)
+			return nil, ErrSentinelBlocked
 		}
 		return nil, serviceerror.NewAlreadyExistsf("schedule %q is already registered", scheduleID)
 	}
