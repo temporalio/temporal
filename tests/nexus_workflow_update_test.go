@@ -41,6 +41,8 @@ type updateNexusTestConfig struct {
 	taskQueue string
 	childWfID string
 	updateID  string
+	// helper to assert on the expected event type for repeated update cases
+	nextExpectedEventType func() enumspb.EventType
 }
 
 // newUpdateNexusTestConfig creates a config with randomized names to avoid collisions.
@@ -63,6 +65,12 @@ func makeUpdateWithCallbackHandler(
 	cfg updateNexusTestConfig,
 	onStart func(),
 ) nexustest.Handler {
+	if cfg.nextExpectedEventType == nil {
+		// by default, always return an accepted event for verifications.
+		cfg.nextExpectedEventType = func() enumspb.EventType {
+			return enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED
+		}
+	}
 	return nexustest.Handler{
 		OnStartOperation: func(
 			ctx context.Context,
@@ -114,9 +122,14 @@ func makeUpdateWithCallbackHandler(
 			link := resp.GetLink()
 			require.NotNil(t, link, "update response should contain a link")
 			if workflowEvent := link.GetWorkflowEvent(); workflowEvent != nil {
-				// Accepted/completed update: link points to the accepted event.
 				require.Equal(t, cfg.childWfID, workflowEvent.GetWorkflowId())
-				require.Equal(t, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED, workflowEvent.GetRequestIdRef().GetEventType())
+				if workflowEvent.GetRequestIdRef() != nil {
+					// Accepted update: link points to either the accepted event or the options updated event.
+					require.Equal(t, cfg.nextExpectedEventType(), workflowEvent.GetRequestIdRef().GetEventType())
+				} else {
+					// Completed update: link points to the completed event.
+					require.Equal(t, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED, workflowEvent.GetEventRef().GetEventType())
+				}
 			} else if wfLink := link.GetWorkflow(); wfLink != nil {
 				// Rejected update: link points to the workflow with a reason.
 				require.Equal(t, cfg.childWfID, wfLink.GetWorkflowId())
@@ -334,7 +347,15 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateAsyncAttachedNexusOpera
 	ctx := s.Context()
 	cfg := newUpdateNexusTestConfig(s.T())
 
-	h := makeUpdateWithCallbackHandler(env, s.T(), cfg, nil)
+	var operationCount atomic.Int32
+	cfg.nextExpectedEventType = func() enumspb.EventType {
+		if operationCount.Load() > 1 { // for all duplicates
+			return enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED
+		}
+		return enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED
+	}
+
+	h := makeUpdateWithCallbackHandler(env, s.T(), cfg, func() { operationCount.Add(1) })
 	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
 
 	childWF := newUpdateChildWorkflow(true)
@@ -1358,6 +1379,99 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateRequestIDInAcceptedEven
 		}
 	}
 	s.True(foundAccepted, "expected to find WorkflowExecutionUpdateAccepted event")
+
+	// Clean up.
+	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "stop", nil))
+}
+
+func (s *NexusWorkflowUpdateTestSuite) TestLinksOnRepeatedUpdates() {
+	env := newNexusTestEnv(s.T(), true, enableUpdateCallbacksOpts()...)
+	ctx := s.Context()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	updateID := "repeated-update-links-test"
+
+	// blockOnSignal keeps the update Accepted-but-not-Completed, so the first
+	// duplicate arrives while it's accepted.
+	wf := newUpdateChildWorkflow(true)
+	s.startWorker(env, taskQueue, wf)
+
+	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue: taskQueue,
+	}, wf, "initial input")
+	s.Require().NoError(err)
+
+	sendUpdate := func(requestID string) (*workflowservice.UpdateWorkflowExecutionResponse, error) {
+		return env.FrontendClient().UpdateWorkflowExecution(ctx, &workflowservice.UpdateWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: run.GetID(),
+				RunId:      run.GetRunID(),
+			},
+			WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED},
+			Request: &updatepb.Request{
+				Meta: &updatepb.Meta{UpdateId: updateID},
+				Input: &updatepb.Input{
+					Name: "update",
+					Args: &commonpb.Payloads{Payloads: []*commonpb.Payload{testcore.MustToPayload(s.T(), "test")}},
+				},
+				RequestId: requestID,
+				CompletionCallbacks: []*commonpb.Callback{{
+					Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost:9999/callback"}},
+				}},
+			},
+		})
+	}
+
+	firstRequestID := uuid.NewString()
+	firstResp, err := sendUpdate(firstRequestID)
+	s.Require().NoError(err)
+
+	// Second call reuses the same update ID once the first is already accepted, so
+	// it resolves immediately as a duplicate rather than waiting on a new WFT.
+	secondRequestID := uuid.NewString()
+	secondResp, err := sendUpdate(secondRequestID)
+	s.Require().NoError(err)
+
+	requireRequestIDLink := func(resp *workflowservice.UpdateWorkflowExecutionResponse, requestID string, eventType enumspb.EventType) {
+		requestIDRef := resp.GetLink().GetWorkflowEvent().GetRequestIdRef()
+		s.Require().NotNil(requestIDRef, "link should be a RequestIdReference")
+		s.Require().Equal(requestID, requestIDRef.GetRequestId())
+		s.Require().Equal(eventType, requestIDRef.GetEventType())
+	}
+	requireRequestIDLink(firstResp, firstRequestID, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
+	requireRequestIDLink(secondResp, secondRequestID, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED)
+
+	// Complete the update before sending another update to verify completed updates getting Completed links.
+	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "complete-update", nil))
+	_, err = env.FrontendClient().PollWorkflowExecutionUpdate(ctx, &workflowservice.PollWorkflowExecutionUpdateRequest{
+		Namespace: env.Namespace().String(),
+		UpdateRef: &updatepb.UpdateRef{
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: run.GetID(),
+				RunId:      run.GetRunID(),
+			},
+			UpdateId: updateID,
+		},
+		WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
+	})
+	s.Require().NoError(err)
+
+	// Verify history has the OptionsUpdated event with the second requestID attached.
+	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
+	updatedEvent := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED)
+	updateOptions := updatedEvent.GetWorkflowExecutionOptionsUpdatedEventAttributes().GetWorkflowUpdateOptions()
+	s.Require().Len(updateOptions, 1)
+	s.Require().Equal(secondRequestID, updateOptions[0].GetAttachedRequestId())
+
+	thirdRequestID := uuid.NewString()
+	thirdResp, err := sendUpdate(thirdRequestID)
+	s.Require().NoError(err)
+	eventRef := thirdResp.GetLink().GetWorkflowEvent().GetEventRef()
+	s.Require().NotNil(eventRef, "link should be an EventReference")
+
+	updateCompletedEvent := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED)
+	s.Require().Equal(updateCompletedEvent.EventId, eventRef.EventId, "eventID should match the Completed eventID of the original request")
+	s.Require().Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED, eventRef.EventType)
 
 	// Clean up.
 	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "stop", nil))
