@@ -151,7 +151,7 @@ func pickWritePartitionByGap(
 	// we want to force p(root) >= writePartitionRootProbabilityFloor
 	// so, gap_root / total >= writePartitionRootProbabilityFloor
 	// => gap_root >= total * writePartitionRootProbabilityFloor
-	gap0 := max(backlogCap-count0, int64(float64(total)*writePartitionRootProbabilityFloor))
+	gap0 := max(backlogCap-count0, int64(math.Ceil(float64(total)*writePartitionRootProbabilityFloor)))
 	expectedRoot := float64(total) / float64(gap0)
 	return pickPartitionByGap(counts, gap0, backlogCap, total), randomRound(expectedRoot)
 }

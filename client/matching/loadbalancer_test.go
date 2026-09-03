@@ -1,6 +1,7 @@
 package matching
 
 import (
+	"math"
 	"math/rand"
 	"sync"
 	"testing"
@@ -420,15 +421,15 @@ func TestPickWritePartition_RootProbabilityFloor(t *testing.T) {
 	pc := PartitionCounts{
 		Read:         2,
 		Write:        2,
-		BacklogCap:   number.EncodeCompact8(1000),
-		BacklogCount: []number.Compact8{number.EncodeCompact8(1000), 0},
+		BacklogCap:   number.EncodeCompact8(50),
+		BacklogCount: []number.Compact8{number.EncodeCompact8(50), 0},
 	}
 	const attempts = 100_000
 	rootPicks := 0
 	estimatedTasks := 0
 	backlogCap := number.DecodeCompact8(pc.BacklogCap)
 	total := backlogCap - number.DecodeCompact8(pc.BacklogCount[1])
-	gap0 := int64(float64(total) * writePartitionRootProbabilityFloor)
+	gap0 := int64(math.Ceil(float64(total) * writePartitionRootProbabilityFloor))
 	expectedProbability := float64(gap0) / float64(total)
 	expectedTasksAllPartitions := float64(total) / float64(gap0)
 	for range attempts {
