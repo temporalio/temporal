@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/testing/testhooks"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -94,6 +95,7 @@ func (s *resetterSuite) SetupTest() {
 		s.mockShard.GetThrottledLogger(),
 		s.mockShard.GetMetricsHandler(),
 		nil,
+		testhooks.TestHooks{},
 	)
 	s.newRunID = uuid.NewString()
 

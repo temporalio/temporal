@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/recordworkflowtaskstarted"
@@ -667,6 +668,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				handler.shardContext.GetThrottledLogger(),
 				handler.shardContext.GetMetricsHandler(),
 				nil, // no pagination buffer limiter as it is a transient context
+				testhooks.TestHooks{},
 			),
 			newMutableState,
 		)

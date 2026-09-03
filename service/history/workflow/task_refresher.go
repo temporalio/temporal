@@ -224,11 +224,9 @@ func RefreshTasksForWorkflowStart(
 		return nil
 	}
 
-	// Skip task generation if workflow state has not been updated since minVersionedTransition.
-	if transitionhistory.Compare(
-		executionState.LastUpdateVersionedTransition,
-		minVersionedTransition,
-	) < 0 {
+	// Workflow start tasks belong only to the first state transition. A transition
+	// count of zero represents a full refresh.
+	if minVersionedTransition.GetTransitionCount() > 1 {
 		return nil
 	}
 
@@ -634,10 +632,16 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowSearchAttr(
 		return nil
 	}
 
+	visibilityVersionedTransition := mutableState.GetExecutionInfo().VisibilityLastUpdateVersionedTransition
+	// The first visibility transition is handled by StartExecutionVisibilityTask.
+	// Generating an upsert for it would create a redundant visibility task.
+	if visibilityVersionedTransition.GetTransitionCount() == 1 {
+		return nil
+	}
 	// Skip task generation if no transition since minVersionedTransition requires
 	// an update in the visibility record.
 	if transitionhistory.Compare(
-		mutableState.GetExecutionInfo().VisibilityLastUpdateVersionedTransition,
+		visibilityVersionedTransition,
 		minVersionedTransition,
 	) < 0 {
 		return nil
