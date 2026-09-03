@@ -18,6 +18,7 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	commoncallbacks "go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
@@ -1112,4 +1113,78 @@ func TestEffectiveUserMetadata_FallsBackToLegacy(t *testing.T) {
 
 	got := activity.effectiveUserMetadata(ctx)
 	require.Same(t, legacyMD, got)
+}
+
+// nexusHandlerCallback returns a NexusHandler-variant callback whose source context serializes to
+// roughly sourceCtxSize bytes.
+func nexusHandlerCallback(sourceCtxSize int) *commonpb.Callback {
+	return &commonpb.Callback{
+		Variant: &commonpb.Callback_NexusHandler_{NexusHandler: &commonpb.Callback_NexusHandler{
+			TaskQueueName: "completions",
+			Service:       "Adapter",
+			Operation:     "Deliver",
+			SourceContext: &commonpb.Payload{Data: make([]byte, sourceCtxSize)},
+		}},
+	}
+}
+
+func newActivityForCallbacks(t *testing.T, ctx chasm.MutableContext) *Activity {
+	t.Helper()
+
+	activity, err := NewStandaloneActivity(ctx, &workflowservice.StartActivityExecutionRequest{
+		Namespace:           "ns",
+		ActivityId:          "act",
+		ActivityType:        &commonpb.ActivityType{Name: "T"},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: "tq"},
+		StartToCloseTimeout: durationpb.New(10 * time.Second),
+	})
+	require.NoError(t, err)
+	return activity
+}
+
+// The frontend bounds the source context carried by one request. Only this check bounds what
+// accumulates across the several requests an on-conflict attach can make.
+func TestAddCompletionCallbacksSourceContextLimit(t *testing.T) {
+	limits := commoncallbacks.Limits{MaxCount: 10, MaxSourceContextSize: 1500}
+
+	t.Run("RejectsASingleOversizedRequest", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		activity := newActivityForCallbacks(t, ctx)
+
+		err := activity.addCompletionCallbacks(ctx, "req-1", []*commonpb.Callback{
+			nexusHandlerCallback(1600),
+		}, limits)
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPreconditionErr)
+		require.ErrorContains(t, err, "cannot attach more than 1500 bytes of callback source_context")
+		require.Empty(t, activity.Callbacks)
+	})
+
+	t.Run("RejectsExceedingTheLimitWithAlreadyAttachedCallbacks", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		activity := newActivityForCallbacks(t, ctx)
+
+		require.NoError(t, activity.addCompletionCallbacks(ctx, "req-1", []*commonpb.Callback{
+			nexusHandlerCallback(900),
+		}, limits))
+
+		err := activity.addCompletionCallbacks(ctx, "req-2", []*commonpb.Callback{
+			nexusHandlerCallback(900),
+		}, limits)
+		// req-2 is within the limit on its own, so only the accumulated total can have rejected it.
+		require.ErrorContains(t, err, "cannot attach more than 1500 bytes of callback source_context")
+		// The rejected request attached nothing.
+		require.Len(t, activity.Callbacks, 1)
+	})
+
+	t.Run("AllowsCallbacksWithinTheLimit", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		activity := newActivityForCallbacks(t, ctx)
+
+		require.NoError(t, activity.addCompletionCallbacks(ctx, "req-1", []*commonpb.Callback{
+			nexusHandlerCallback(700),
+			nexusHandlerCallback(700),
+		}, limits))
+		require.Len(t, activity.Callbacks, 2)
+	})
 }

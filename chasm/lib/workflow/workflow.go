@@ -12,6 +12,7 @@ import (
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmworkflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
+	commoncallbacks "go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/service/history/historybuilder"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -129,18 +130,41 @@ func (w *Workflow) totalCallbackCount(ctx chasm.Context) int {
 	return count
 }
 
-// checkWorkflowCallbackLimit returns an error if adding newCount callbacks would
-// exceed the per-workflow maximum.
-func (w *Workflow) checkWorkflowCallbackLimit(ctx chasm.Context, newCount, maxCallbacksPerWorkflow int) error {
+// checkWorkflowCallbackLimits returns an error if attaching completionCallbacks would take the
+// workflow past either the callback count or the aggregate source context size it is allowed.
+// The size is re-checked here because the frontend bounds only the callbacks on one request; it
+// cannot see what a running workflow already carries.
+func (w *Workflow) checkWorkflowCallbackLimits(
+	ctx chasm.Context,
+	completionCallbacks []*commonpb.Callback,
+	limits commoncallbacks.Limits,
+) error {
 	current := w.totalCallbackCount(ctx)
-	if newCount+current > maxCallbacksPerWorkflow {
+	if len(completionCallbacks)+current > limits.MaxCount {
 		return serviceerror.NewFailedPreconditionf(
 			"cannot attach more than %d callbacks to a workflow (%d callbacks already attached)",
-			maxCallbacksPerWorkflow,
+			limits.MaxCount,
 			current,
 		)
 	}
-	return nil
+
+	totalBytes := commoncallbacks.SourceContextSize(completionCallbacks) + w.totalSourceContextSize(ctx)
+	return commoncallbacks.ValidateSourceContextSize(limits.MaxSourceContextSize, totalBytes)
+}
+
+// totalSourceContextSize returns the bytes of NexusHandler source context carried by every callback
+// attached to the workflow, including those on its updates.
+func (w *Workflow) totalSourceContextSize(ctx chasm.Context) int {
+	total := 0
+	for _, cbField := range w.Callbacks {
+		total += cbField.Get(ctx).SourceContextSize()
+	}
+	for _, updateField := range w.Updates {
+		for _, cbField := range updateField.Get(ctx).Callbacks {
+			total += cbField.Get(ctx).SourceContextSize()
+		}
+	}
+	return total
 }
 
 // addCallbacksToMap converts common callbacks to CHASM callback components and
@@ -180,15 +204,14 @@ func addCallbacksToMap(
 }
 
 // AddCompletionCallbacks creates completion callbacks using the CHASM implementation.
-// maxCallbacksPerWorkflow is the configured maximum number of callbacks allowed per workflow.
 func (w *Workflow) AddCompletionCallbacks(
 	ctx chasm.MutableContext,
 	eventTime *timestamppb.Timestamp,
 	requestID string,
 	completionCallbacks []*commonpb.Callback,
-	maxCallbacksPerWorkflow int,
+	limits commoncallbacks.Limits,
 ) error {
-	if err := w.checkWorkflowCallbackLimit(ctx, len(completionCallbacks), maxCallbacksPerWorkflow); err != nil {
+	if err := w.checkWorkflowCallbackLimits(ctx, completionCallbacks, limits); err != nil {
 		return err
 	}
 
@@ -200,7 +223,6 @@ func (w *Workflow) AddCompletionCallbacks(
 }
 
 // AddUpdateCompletionCallbacks creates completion callbacks using the CHASM implementation.
-// maxCallbacksPerWorkflow is the configured maximum number of callbacks allowed per workflow.
 // maxCallbacksPerUpdateID is the configured maximum number of callbacks allowed per update ID.
 func (w *Workflow) AddUpdateCompletionCallbacks(
 	ctx chasm.MutableContext,
@@ -208,10 +230,10 @@ func (w *Workflow) AddUpdateCompletionCallbacks(
 	updateID string,
 	requestID string,
 	completionCallbacks []*commonpb.Callback,
-	maxCallbacksPerWorkflow int,
+	limits commoncallbacks.Limits,
 	maxCallbacksPerUpdateID int,
 ) error {
-	if err := w.checkWorkflowCallbackLimit(ctx, len(completionCallbacks), maxCallbacksPerWorkflow); err != nil {
+	if err := w.checkWorkflowCallbackLimits(ctx, completionCallbacks, limits); err != nil {
 		return err
 	}
 

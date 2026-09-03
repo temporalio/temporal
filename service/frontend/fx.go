@@ -917,14 +917,15 @@ func OperatorHandlerProvider(
 // so that existing operator configurations (callback.allowedAddresses) are honored.
 func callbackValidatorProvider(dc *dynamicconfig.Collection) (callbacks.Validator, error) {
 	cfg := callbacks.ValidatorConfig{
-		MaxCallbacksPerExecution:         chasmcallback.MaxPerExecution.Get(dc),
-		MaxIDLengthLimit:                 dynamicconfig.MaxIDLengthLimit.Get(dc),
-		URLMaxLength:                     dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
-		HeaderMaxSize:                    dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
-		EndpointRules:                    chasmcallback.AllowedAddresses.Get(dc),
-		MaxServiceNameLength:             chasmnexus.MaxServiceNameLength.Get(dc),
-		MaxOperationNameLength:           chasmnexus.MaxOperationNameLength.Get(dc),
-		NexusHandlerSourceContextMaxSize: chasmcallback.NexusHandlerSourceContextMaxSize.Get(dc),
+		MaxCallbacksPerExecution:                  chasmcallback.MaxPerExecution.Get(dc),
+		MaxIDLengthLimit:                          dynamicconfig.MaxIDLengthLimit.Get(dc),
+		URLMaxLength:                              dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
+		HeaderMaxSize:                             dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
+		EndpointRules:                             chasmcallback.AllowedAddresses.Get(dc),
+		MaxServiceNameLength:                      chasmnexus.MaxServiceNameLength.Get(dc),
+		MaxOperationNameLength:                    chasmnexus.MaxOperationNameLength.Get(dc),
+		NexusHandlerSourceContextMaxSize:          chasmcallback.NexusHandlerSourceContextMaxSize.Get(dc),
+		NexusHandlerSourceContextAggregateMaxSize: chasmcallback.NexusHandlerSourceContextAggregateMaxSize.Get(dc),
 	}
 	return callbacks.NewValidator(cfg)
 }

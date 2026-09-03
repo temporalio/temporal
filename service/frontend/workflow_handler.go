@@ -696,6 +696,14 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		if err := wh.callbackValidator.Validate(ctx, namespaceName.String(), cbs, opts); err != nil {
 			return nil, err
 		}
+		// Validate checks each callback's source context individually; this bounds their total.
+		// Workflow.AddCompletionCallbacks re-checks it against the callbacks already attached to a
+		// running workflow, which the frontend cannot see.
+		if err := wh.callbackValidator.ValidateSourceContextSize(
+			namespaceName.String(), callbacks.SourceContextSize(cbs),
+		); err != nil {
+			return nil, err
+		}
 	}
 
 	request.Links = dedupLinksFromCallbacks(request.GetLinks(), request.GetCompletionCallbacks())
@@ -5569,6 +5577,14 @@ func (wh *WorkflowHandler) prepareUpdateWorkflowRequest(
 			EnabledKinds: wh.config.WorkflowEnabledCallbackKinds(namespaceName.String()),
 		}
 		if err := wh.callbackValidator.Validate(ctx, namespaceName.String(), cbs, opts); err != nil {
+			return err
+		}
+		// Validate checks each callback's source context individually; this bounds their total.
+		// Workflow.AddUpdateCompletionCallbacks re-checks it against the callbacks already attached
+		// to a running workflow, which the frontend cannot see.
+		if err := wh.callbackValidator.ValidateSourceContextSize(
+			namespaceName.String(), callbacks.SourceContextSize(cbs),
+		); err != nil {
 			return err
 		}
 	}

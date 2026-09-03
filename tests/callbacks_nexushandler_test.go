@@ -2,66 +2,69 @@ package tests
 
 import (
 	"context"
+	"slices"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/api/notificationservice/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	chasmactivity "go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// NexusHandler-variant completion callbacks are gated per execution type by an
-// "enabledCallbackKinds" dynamic config setting, which never enables the NexusHandler kind by
-// default. These tests exercise both sides of that gate for every execution type that accepts
-// completion callbacks:
+// NexusHandler-variant completion callbacks deliver an execution's outcome to a Nexus service on a worker
+// polling within the same namespace, rather than round tripping through the frontend's Nexus HTTP
+// endpoint. They are gated per execution type by an "enabledCallbackKinds" dynamic config setting,
+// which never enables the NexusHandler kind by default.
+//
+// These tests exercise both sides of that gate, and then the delivery itself, for every execution
+// type that accepts completion callbacks:
 //
 //   - without "nexusHandler" in the setting, attaching a NexusHandler callback is rejected up front;
-//   - with "nexusHandler" added to the setting, the callback is accepted and registered on the
-//     execution, is triggered when the execution closes, and then fails to be delivered.
+//   - with "nexusHandler" added to the setting, the callback is accepted and registered on the execution,
+//     and is delivered to the handler its task queue, service, and operation name.
 //
-// The delivery failure is expected: the server recognizes and persists the NexusHandler variant, but
-// the invocation path that hands a completion to a Nexus handler is not implemented yet. Today
-// that path rejects the NexusHandler variant before it can record an attempt, so the callback sits in
-// SCHEDULED while its invocation task fails and is retried, until it is eventually DLQ'd.
-// Once delivery is implemented, requireNexusHandlerCallbackRetriedWithoutDelivery becomes the place to
-// assert real delivery.
+// Every case attaches two callbacks routed to two different handlers, so that the outcomes of
+// concurrent deliveries off the same execution stay independent: one handler takes the completion
+// on the first try, the other rejects it once retryably and then for good.
 
 const (
 	nexusHandlerCallbackNotEnabledErr = "nexusHandler callbacks are not enabled for this execution type"
 
-	nexusHandlerCallbackService   = "HTTPAdapter"
-	nexusHandlerCallbackOperation = "DeliverAsWebhook"
+	// The messages the retry-then-fail handler answers its first and second deliveries with.
+	firstDeliveryFailure  = "delivery #1"
+	secondDeliveryFailure = "delivery #2"
 
-	// nexusHandlerCallbackInvocationTaskType is the history task type the CHASM callback invocation task
-	// reports itself as, used to pick its failures out of the task_errors metric.
-	nexusHandlerCallbackInvocationTaskType = "OutboundActive.callback.invoke"
-
-	// Number of failed invocation attempts that count as evidence the callback is being retried
-	// rather than merely having been scheduled once.
-	minNexusHandlerCallbackInvocationFailures = 2
+	// The message the retried callback comes to rest on: the Nexus SDK's rendering of the
+	// non-retryable handler error the second delivery is answered with.
+	terminalDeliveryFailureMessage = "handler error (BAD_REQUEST): " + secondDeliveryFailure
 )
 
-// observedCallback normalizes the callback info reported by DescribeWorkflowExecution and
-// DescribeActivityExecution, which use different (though near-identical) protos.
+// observedCallback normalizes the callback info reported by DescribeWorkflowExecution,
+// DescribeActivityExecution, and DescribeNexusOperationExecution, which use different (though
+// near-identical) protos.
 type observedCallback struct {
 	callback *commonpb.Callback
 	state    enumspb.CallbackState
@@ -71,88 +74,222 @@ type observedCallback struct {
 	lastAttemptFailure      *failurepb.Failure
 	lastAttemptCompleteTime *timestamppb.Timestamp
 	nextAttemptScheduleTime *timestamppb.Timestamp
+	// blockedReason is set while the callback is held back by the outbound queue, e.g. by an open
+	// circuit breaker for its destination.
+	blockedReason string
 }
 
 // describeCallbacksFn reads the callbacks currently attached to an execution.
 type describeCallbacksFn func() ([]observedCallback, error)
 
-func nexusHandlerCallback(taskQueue string) *commonpb.Callback {
+// nexusHandlerCallbackHandler is a Nexus service on a worker in the test's namespace that receives
+// NexusHandler-variant completion callbacks. Every delivery is recorded, and answered by respond, so a
+// test can drive the delivery outcome the server observes.
+type nexusHandlerCallbackHandler struct {
+	taskQueue string
+	service   string
+	operation string
+	// sourceContext is the opaque payload the callback is registered with, which the server carries
+	// to the handler untouched.
+	sourceContext *commonpb.Payload
+
+	// respond decides what the handler answers the nth (1-based) delivery with. A nil error reports
+	// a successful delivery.
+	respond func(delivery int) error
+
+	mu       sync.Mutex
+	received []*notificationservice.OnCompleteRequest
+}
+
+// newNexusHandlerCallbackHandler starts a worker polling its own task queue, so a delivery has to be
+// routed by the callback rather than by the task queue the source execution used. The worker stops
+// when t cleans up.
+func newNexusHandlerCallbackHandler(
+	t *testing.T,
+	client sdkclient.Client,
+	name string,
+	respond func(delivery int) error,
+) *nexusHandlerCallbackHandler {
+	t.Helper()
+
+	h := &nexusHandlerCallbackHandler{
+		taskQueue:     testcore.RandomizeStr(t.Name() + "-" + name),
+		service:       "completion-service",
+		operation:     "on-complete",
+		sourceContext: payload.EncodeString("source-context-" + name),
+		respond:       respond,
+	}
+
+	service := nexus.NewService(h.service)
+	require.NoError(t, service.Register(nexus.NewSyncOperation(h.operation, h.handle)))
+
+	worker := sdkworker.New(client, h.taskQueue, sdkworker.Options{})
+	worker.RegisterNexusService(service)
+	require.NoError(t, worker.Start())
+	t.Cleanup(worker.Stop)
+	return h
+}
+
+// newSucceedingNexusHandlerCallbackHandler returns a handler that accepts every delivery.
+func newSucceedingNexusHandlerCallbackHandler(t *testing.T, client sdkclient.Client, name string) *nexusHandlerCallbackHandler {
+	return newNexusHandlerCallbackHandler(t, client, name, func(int) error { return nil })
+}
+
+// newRetryThenFailNexusHandlerCallbackHandler returns a handler that answers its first delivery with a
+// retryable handler error and every delivery after that with a non-retryable one, so the callback
+// is retried exactly once and then fails for good.
+//
+// The retryable answer counts against the outbound queue's circuit breaker for this task queue, as
+// every retryable delivery failure does, but a single one stays well clear of the threshold that
+// opens it. See [CallbacksCircuitBreakerSuite].
+func newRetryThenFailNexusHandlerCallbackHandler(t *testing.T, client sdkclient.Client, name string) *nexusHandlerCallbackHandler {
+	return newNexusHandlerCallbackHandler(t, client, name, func(delivery int) error {
+		if delivery == 1 {
+			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, firstDeliveryFailure)
+		}
+		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, secondDeliveryFailure)
+	})
+}
+
+func (h *nexusHandlerCallbackHandler) handle(
+	_ context.Context,
+	req *notificationservice.OnCompleteRequest,
+	_ nexus.StartOperationOptions,
+) (*notificationservice.OnCompleteResponse, error) {
+	h.mu.Lock()
+	h.received = append(h.received, req)
+	delivery := len(h.received)
+	h.mu.Unlock()
+
+	if err := h.respond(delivery); err != nil {
+		return nil, err
+	}
+	return &notificationservice.OnCompleteResponse{}, nil
+}
+
+// callback returns a NexusHandler-variant callback addressed to this handler.
+func (h *nexusHandlerCallbackHandler) callback() *commonpb.Callback {
 	return &commonpb.Callback{
 		Variant: &commonpb.Callback_NexusHandler_{
 			NexusHandler: &commonpb.Callback_NexusHandler{
-				TaskQueueName: taskQueue,
-				Service:       nexusHandlerCallbackService,
-				Operation:     nexusHandlerCallbackOperation,
+				TaskQueueName: h.taskQueue,
+				Service:       h.service,
+				Operation:     h.operation,
+				SourceContext: h.sourceContext,
 			},
 		},
 	}
 }
 
-// requireNexusHandlerCallbackRegistered asserts that the execution carries exactly the one NexusHandler
-// callback that was attached to it.
-func requireNexusHandlerCallbackRegistered(t require.TestingT, cbs []observedCallback, taskQueue string) {
-	require.Len(t, cbs, 1)
-	nexusHandler := cbs[0].callback.GetNexusHandler()
-	require.NotNil(t, nexusHandler, "callback should round-trip as the NexusHandler variant")
-	require.Equal(t, taskQueue, nexusHandler.GetTaskQueueName())
-	require.Equal(t, nexusHandlerCallbackService, nexusHandler.GetService())
-	require.Equal(t, nexusHandlerCallbackOperation, nexusHandler.GetOperation())
+// deliveries returns the completions the handler has received so far.
+func (h *nexusHandlerCallbackHandler) deliveries() []*notificationservice.OnCompleteRequest {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return slices.Clone(h.received)
 }
 
-// requireNexusHandlerCallbackTriggered waits for the callback to leave STANDBY, which happens once the
-// execution it is attached to reaches its terminal state.
-func requireNexusHandlerCallbackTriggered(t *testing.T, describe describeCallbacksFn, taskQueue string) {
+// nexusHandlerCallbackHandlers is the pair of handlers every execution type attaches a callback to: one
+// that takes the completion on the first try, and one that has to be retried before it rejects it
+// for good.
+type nexusHandlerCallbackHandlers struct {
+	succeeding *nexusHandlerCallbackHandler
+	failing    *nexusHandlerCallbackHandler
+}
+
+func newNexusHandlerCallbackHandlers(t *testing.T, client sdkclient.Client) nexusHandlerCallbackHandlers {
+	t.Helper()
+	return nexusHandlerCallbackHandlers{
+		succeeding: newSucceedingNexusHandlerCallbackHandler(t, client, "succeeding"),
+		failing:    newRetryThenFailNexusHandlerCallbackHandler(t, client, "failing"),
+	}
+}
+
+// callbacks returns the two callbacks to attach to an execution, in the order they are asserted on.
+func (hs nexusHandlerCallbackHandlers) callbacks() []*commonpb.Callback {
+	return []*commonpb.Callback{hs.succeeding.callback(), hs.failing.callback()}
+}
+
+// requireRegistered asserts that the execution carries exactly the two NexusHandler callbacks that were
+// attached to it, keyed by the task queue each is addressed to.
+func (hs nexusHandlerCallbackHandlers) requireRegistered(
+	t require.TestingT,
+	cbs []observedCallback,
+) map[string]observedCallback {
+	require.Len(t, cbs, 2)
+
+	byTaskQueue := make(map[string]observedCallback, len(cbs))
+	for _, cb := range cbs {
+		nexusHandler := cb.callback.GetNexusHandler()
+		require.NotNil(t, nexusHandler, "callback should round-trip as the NexusHandler variant")
+		byTaskQueue[nexusHandler.GetTaskQueueName()] = cb
+	}
+	require.Contains(t, byTaskQueue, hs.succeeding.taskQueue)
+	require.Contains(t, byTaskQueue, hs.failing.taskQueue)
+	return byTaskQueue
+}
+
+// requireStandby asserts that both callbacks are registered on an execution that has not closed
+// yet, so neither has been triggered.
+func (hs nexusHandlerCallbackHandlers) requireStandby(t *testing.T, describe describeCallbacksFn) {
 	t.Helper()
 	await.Require(testcontext.For(t), t, func(c *await.T) {
 		cbs, err := describe()
 		require.NoError(c, err)
-		requireNexusHandlerCallbackRegistered(c, cbs, taskQueue)
-		require.NotEqual(c, enumspb.CALLBACK_STATE_STANDBY, cbs[0].state,
-			"callback should be triggered once the execution closes")
+		for _, cb := range hs.requireRegistered(c, cbs) {
+			require.Equal(c, enumspb.CALLBACK_STATE_STANDBY, cb.state)
+		}
 	}, 15*time.Second, 200*time.Millisecond)
 }
 
-// countCallbackInvocationFailures reports how many times the callback invocation task has failed
-// in the test's namespace.
-func countCallbackInvocationFailures(capture *testcore.NamespaceMetricCapture) int {
-	return len(capture.CollectMetric("task_errors", func(rec *metricstest.CapturedRecording) bool {
-		return rec.Tags[metrics.TaskTypeTagName] == nexusHandlerCallbackInvocationTaskType
-	}))
-}
-
-// requireNexusHandlerCallbackRetriedWithoutDelivery waits for positive evidence that the callback's
-// invocation task ran and was retried, then asserts the callback still has not been delivered.
+// requireExecuted waits for both callbacks to be delivered and reach a terminal state, then asserts
+// the outcome each handler drove: the succeeding one is done after a single attempt, and the
+// retry-then-fail one is failed after exactly one retry, carrying the handler's own message.
 //
-// The retry evidence comes from the task_errors metric rather than from the callback itself:
-// invocation rejects the NexusHandler variant before an attempt is recorded, so the callback's attempt,
-// last_attempt_failure, and next_attempt_schedule_time all stay empty no matter how many times
-// the task is retried.
-func requireNexusHandlerCallbackRetriedWithoutDelivery(
+// It returns the observed callbacks keyed by task queue, for assertions specific to an execution
+// type.
+func (hs nexusHandlerCallbackHandlers) requireExecuted(
 	t *testing.T,
-	capture *testcore.NamespaceMetricCapture,
 	describe describeCallbacksFn,
-) observedCallback {
+) map[string]observedCallback {
 	t.Helper()
 
-	var last observedCallback
+	var byTaskQueue map[string]observedCallback
 	await.Require(testcontext.For(t), t, func(c *await.T) {
 		cbs, err := describe()
 		require.NoError(c, err)
-		require.Len(c, cbs, 1)
-		last = cbs[0]
-		require.GreaterOrEqual(c, countCallbackInvocationFailures(capture), minNexusHandlerCallbackInvocationFailures,
-			"the callback's invocation task should run and be retried")
+		byTaskQueue = hs.requireRegistered(c, cbs)
+		require.Equal(c, enumspb.CALLBACK_STATE_SUCCEEDED, byTaskQueue[hs.succeeding.taskQueue].state)
+		require.Equal(c, enumspb.CALLBACK_STATE_FAILED, byTaskQueue[hs.failing.taskQueue].state)
 	}, 30*time.Second, 200*time.Millisecond)
 
-	require.NotEqual(t, enumspb.CALLBACK_STATE_SUCCEEDED, last.state,
-		"NexusHandler callback delivery is not implemented; the callback must not report success")
-	// Logged rather than asserted: exactly where a callback whose invocation never starts comes to
-	// rest is an implementation detail of the unimplemented delivery path. The empty per-attempt
-	// fields here are why the retry assertion above reads the task_errors metric instead.
-	t.Logf("NexusHandler callback retried without delivery. "+
-		"state=%s attempt=%d last_attempt_complete_time=%v last_attempt_failure=%v next_attempt_schedule_time=%v",
-		last.state, last.attempt, last.lastAttemptCompleteTime, last.lastAttemptFailure, last.nextAttemptScheduleTime)
-	return last
+	// The first handler took the completion on the first try, so there was nothing to retry.
+	succeeded := byTaskQueue[hs.succeeding.taskQueue]
+	require.EqualValues(t, 1, succeeded.attempt)
+	require.Nil(t, succeeded.lastAttemptFailure)
+	require.NotNil(t, succeeded.lastAttemptCompleteTime)
+	require.Len(t, hs.succeeding.deliveries(), 1)
+
+	// The second handler rejected the first delivery retryably and the second permanently, so the
+	// callback was retried exactly once and then came to rest on the second answer.
+	failed := byTaskQueue[hs.failing.taskQueue]
+	require.EqualValues(t, 2, failed.attempt, "the callback should be retried exactly once")
+	require.Len(t, hs.failing.deliveries(), 2)
+	require.Equal(t, terminalDeliveryFailureMessage, failed.lastAttemptFailure.GetMessage())
+	require.True(t, failed.lastAttemptFailure.GetApplicationFailureInfo().GetNonRetryable())
+	require.NotNil(t, failed.lastAttemptCompleteTime)
+	require.Nil(t, failed.nextAttemptScheduleTime, "a failed callback is not scheduled for another attempt")
+
+	// Every delivery carried the execution's outcome and the context its own callback was
+	// registered with.
+	for _, h := range []*nexusHandlerCallbackHandler{hs.succeeding, hs.failing} {
+		for i, delivered := range h.deliveries() {
+			require.NotNil(t, delivered.GetSuccess(), "delivery %d to %s", i+1, h.taskQueue)
+			require.Nil(t, delivered.GetFailure(), "delivery %d to %s", i+1, h.taskQueue)
+			protorequire.ProtoEqual(t, h.sourceContext, delivered.GetSourceContext())
+		}
+	}
+
+	return byTaskQueue
 }
 
 func TestNexusHandlerCallbacks(t *testing.T) {
@@ -164,7 +301,7 @@ func TestNexusHandlerCallbacks(t *testing.T) {
 	t.Run("StandaloneNexusOperation", testNexusHandlerCallbackOnStandaloneNexusOperation)
 }
 
-// testNexusHandlerCallbackOnWorkflow attaches a NexusHandler callback to a workflow execution via
+// testNexusHandlerCallbackOnWorkflow attaches NexusHandler callbacks to a workflow execution via
 // StartWorkflowExecution.
 func testNexusHandlerCallbackOnWorkflow(t *testing.T) {
 	t.Parallel()
@@ -174,7 +311,6 @@ func testNexusHandlerCallbackOnWorkflow(t *testing.T) {
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
 	)
 	ctx := testcontext.For(t)
-	capture := env.StartNamespaceMetricCapture()
 
 	workflowType := "nexushandler-callback-workflow"
 	env.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
@@ -182,7 +318,7 @@ func testNexusHandlerCallbackOnWorkflow(t *testing.T) {
 		return nil
 	}, workflow.RegisterOptions{Name: workflowType})
 
-	cbTaskQueue := testcore.RandomizeStr("nexushandler-callback-workflow-completions")
+	handlers := newNexusHandlerCallbackHandlers(t, env.SdkClient())
 	newStartRequest := func() *workflowservice.StartWorkflowExecutionRequest {
 		return &workflowservice.StartWorkflowExecutionRequest{
 			RequestId:           uuid.NewString(),
@@ -192,11 +328,11 @@ func testNexusHandlerCallbackOnWorkflow(t *testing.T) {
 			TaskQueue:           &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 			Identity:            t.Name(),
-			CompletionCallbacks: []*commonpb.Callback{nexusHandlerCallback(cbTaskQueue)},
+			CompletionCallbacks: handlers.callbacks(),
 		}
 	}
 
-	// With the setting at its Nexus-only default, the callback is rejected before the workflow is
+	// With the setting at its Nexus-only default, the callbacks are rejected before the workflow is
 	// created.
 	_, err := env.FrontendClient().StartWorkflowExecution(ctx, newStartRequest())
 	require.ErrorContains(t, err, nexusHandlerCallbackNotEnabledErr)
@@ -209,26 +345,20 @@ func testNexusHandlerCallbackOnWorkflow(t *testing.T) {
 
 	describe := describeWorkflowCallbacks(ctx, env, req.WorkflowId, "")
 
-	// The callback is registered on the running workflow, and has not been triggered yet.
-	await.Require(ctx, t, func(c *await.T) {
-		cbs, err := describe()
-		require.NoError(c, err)
-		requireNexusHandlerCallbackRegistered(c, cbs, cbTaskQueue)
-		require.Equal(c, enumspb.CALLBACK_STATE_STANDBY, cbs[0].state)
-	}, 15*time.Second, 200*time.Millisecond)
+	// Both callbacks are registered on the running workflow, and neither has been triggered yet.
+	handlers.requireStandby(t, describe)
 
-	// Close the workflow, which triggers the callback.
+	// Close the workflow, which triggers the callbacks.
 	require.NoError(t, env.SdkClient().SignalWorkflow(ctx, req.WorkflowId, "", "continue", nil))
 	require.NoError(t, env.SdkClient().GetWorkflow(ctx, req.WorkflowId, "").Get(ctx, nil))
 
-	requireNexusHandlerCallbackTriggered(t, describe, cbTaskQueue)
-
-	cbInfo := requireNexusHandlerCallbackRetriedWithoutDelivery(t, capture, describe)
-	require.NotNil(t, cbInfo.trigger.GetWorkflowClosed(),
-		"callback should be triggered by the workflow closing")
+	for _, cb := range handlers.requireExecuted(t, describe) {
+		require.NotNil(t, cb.trigger.GetWorkflowClosed(),
+			"callback should be triggered by the workflow closing")
+	}
 }
 
-// testNexusHandlerCallbackOnWorkflowUpdate attaches a NexusHandler callback to a workflow update via
+// testNexusHandlerCallbackOnWorkflowUpdate attaches NexusHandler callbacks to a workflow update via
 // UpdateWorkflowExecution.
 func testNexusHandlerCallbackOnWorkflowUpdate(t *testing.T) {
 	t.Parallel()
@@ -239,7 +369,6 @@ func testNexusHandlerCallbackOnWorkflowUpdate(t *testing.T) {
 		testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowUpdateCallbacks, true),
 	)
 	ctx := testcontext.For(t)
-	capture := env.StartNamespaceMetricCapture()
 
 	const updateName = "update"
 	const workflowType = "nexushandler-callback-update-workflow"
@@ -258,7 +387,7 @@ func testNexusHandlerCallbackOnWorkflowUpdate(t *testing.T) {
 	}, workflowType)
 	require.NoError(t, err)
 
-	cbTaskQueue := testcore.RandomizeStr("nexushandler-callback-update-completions")
+	handlers := newNexusHandlerCallbackHandlers(t, env.SdkClient())
 	newUpdateRequest := func() *workflowservice.UpdateWorkflowExecutionRequest {
 		return &workflowservice.UpdateWorkflowExecutionRequest{
 			Namespace: env.Namespace().String(),
@@ -273,19 +402,19 @@ func testNexusHandlerCallbackOnWorkflowUpdate(t *testing.T) {
 				Meta:                &updatepb.Meta{UpdateId: uuid.NewString()},
 				Input:               &updatepb.Input{Name: updateName},
 				RequestId:           uuid.NewString(),
-				CompletionCallbacks: []*commonpb.Callback{nexusHandlerCallback(cbTaskQueue)},
+				CompletionCallbacks: handlers.callbacks(),
 			},
 		}
 	}
 
-	// With the setting at its Nexus-only default, the callback is rejected before the update is
+	// With the setting at its Nexus-only default, the callbacks are rejected before the update is
 	// admitted.
 	_, err = env.FrontendClient().UpdateWorkflowExecution(ctx, newUpdateRequest())
 	require.ErrorContains(t, err, nexusHandlerCallbackNotEnabledErr)
 
 	env.OverrideDynamicConfig(chasmworkflow.EnabledCallbackKinds, []string{"nexus", "nexusHandler"})
 
-	// The update runs to completion, which triggers the callback.
+	// The update runs to completion, which triggers the callbacks.
 	updateResp, err := env.FrontendClient().UpdateWorkflowExecution(ctx, newUpdateRequest())
 	require.NoError(t, err)
 	require.Equal(t,
@@ -294,16 +423,15 @@ func testNexusHandlerCallbackOnWorkflowUpdate(t *testing.T) {
 
 	describe := describeWorkflowCallbacks(ctx, env, run.GetID(), run.GetRunID())
 
-	requireNexusHandlerCallbackTriggered(t, describe, cbTaskQueue)
-
-	cbInfo := requireNexusHandlerCallbackRetriedWithoutDelivery(t, capture, describe)
-	require.NotNil(t, cbInfo.trigger.GetUpdateWorkflowExecutionCompleted(),
-		"callback should be triggered by the update completing")
+	for _, cb := range handlers.requireExecuted(t, describe) {
+		require.NotNil(t, cb.trigger.GetUpdateWorkflowExecutionCompleted(),
+			"callback should be triggered by the update completing")
+	}
 
 	require.NoError(t, env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "stop", nil))
 }
 
-// testNexusHandlerCallbackOnStandaloneActivity attaches a NexusHandler callback to a standalone activity via
+// testNexusHandlerCallbackOnStandaloneActivity attaches NexusHandler callbacks to a standalone activity via
 // StartActivityExecution.
 func testNexusHandlerCallbackOnStandaloneActivity(t *testing.T) {
 	t.Parallel()
@@ -314,12 +442,11 @@ func testNexusHandlerCallbackOnStandaloneActivity(t *testing.T) {
 		testcore.WithDynamicConfig(chasmactivity.EnableCallbacks, true),
 	)
 	ctx := testcontext.For(t)
-	capture := env.StartNamespaceMetricCapture()
 
 	activityID := testcore.RandomizeStr("nexushandler-callback-activity")
 	taskQueue := testcore.RandomizeStr("nexushandler-callback-activity-tq")
-	cbTaskQueue := testcore.RandomizeStr("nexushandler-callback-activity-completions")
 
+	handlers := newNexusHandlerCallbackHandlers(t, env.SdkClient())
 	newStartRequest := func() *workflowservice.StartActivityExecutionRequest {
 		return &workflowservice.StartActivityExecutionRequest{
 			Namespace:           env.Namespace().String(),
@@ -330,11 +457,11 @@ func testNexusHandlerCallbackOnStandaloneActivity(t *testing.T) {
 			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
 			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
 			RequestId:           uuid.NewString(),
-			CompletionCallbacks: []*commonpb.Callback{nexusHandlerCallback(cbTaskQueue)},
+			CompletionCallbacks: handlers.callbacks(),
 		}
 	}
 
-	// With the setting at its Nexus-only default, the callback is rejected before the activity is
+	// With the setting at its Nexus-only default, the callbacks are rejected before the activity is
 	// created.
 	_, err := env.FrontendClient().StartActivityExecution(ctx, newStartRequest())
 	require.ErrorContains(t, err, nexusHandlerCallbackNotEnabledErr)
@@ -347,14 +474,9 @@ func testNexusHandlerCallbackOnStandaloneActivity(t *testing.T) {
 
 	describe := describeActivityCallbacks(ctx, env, activityID, startResp.GetRunId())
 
-	await.Require(ctx, t, func(c *await.T) {
-		cbs, err := describe()
-		require.NoError(c, err)
-		requireNexusHandlerCallbackRegistered(c, cbs, cbTaskQueue)
-		require.Equal(c, enumspb.CALLBACK_STATE_STANDBY, cbs[0].state)
-	}, 15*time.Second, 200*time.Millisecond)
+	handlers.requireStandby(t, describe)
 
-	// Close the activity, which triggers the callback.
+	// Close the activity, which triggers the callbacks.
 	pollResp, err := env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
 		Namespace: env.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue},
@@ -371,12 +493,11 @@ func testNexusHandlerCallbackOnStandaloneActivity(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	requireNexusHandlerCallbackTriggered(t, describe, cbTaskQueue)
-	requireNexusHandlerCallbackRetriedWithoutDelivery(t, capture, describe)
+	handlers.requireExecuted(t, describe)
 }
 
-// testNexusHandlerCallbackOnStandaloneNexusOperation attaches a NexusHandler callback to a
-// standalone Nexus operation via StartNexusOperationExecution.
+// testNexusHandlerCallbackOnStandaloneNexusOperation attaches NexusHandler callbacks to a standalone Nexus
+// operation via StartNexusOperationExecution.
 func testNexusHandlerCallbackOnStandaloneNexusOperation(t *testing.T) {
 	t.Parallel()
 
@@ -384,28 +505,29 @@ func testNexusHandlerCallbackOnStandaloneNexusOperation(t *testing.T) {
 	// default, so the Nexus-only baseline the rejection below exercises has to be set explicitly.
 	env := newNexusTestEnv(t, true,
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
 		testcore.WithDynamicConfig(nexusoperation.Enabled, true),
 		testcore.WithDynamicConfig(nexusoperation.EnabledCallbackKinds, []string{"nexus"}),
 	)
 	ctx := testcontext.For(t)
-	capture := env.StartNamespaceMetricCapture()
 
-	// A worker-target Nexus endpoint whose task queue nobody polls: the operation starts and then stays
-	// open until the test terminates it.
-	endpointName := env.createRandomNexusEndpoint(ctx, t).GetSpec().GetName()
+	// The endpoint the operation itself runs against. Its result is what the callbacks carry to the
+	// handlers, and it completes the operation immediately, so the callbacks are triggered as soon
+	// as the operation is started.
+	endpointName := env.createSyncSuccessEndpoint(ctx, t, "operation-result")
 
 	operationID := testcore.RandomizeStr("nexushandler-callback-nexus-operation")
-	cbTaskQueue := testcore.RandomizeStr("nexushandler-callback-nexus-operation-completions")
+	handlers := newNexusHandlerCallbackHandlers(t, env.SdkClient())
 	newStartRequest := func() *workflowservice.StartNexusOperationExecutionRequest {
 		return &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId:         operationID,
 			Endpoint:            endpointName,
 			RequestId:           uuid.NewString(),
-			CompletionCallbacks: []*commonpb.Callback{nexusHandlerCallback(cbTaskQueue)},
+			CompletionCallbacks: handlers.callbacks(),
 		}
 	}
 
-	// With only the Nexus kind enabled, the callback is rejected before the operation is created.
+	// With only the Nexus kind enabled, the callbacks are rejected before the operation is created.
 	_, err := env.startNexusOperation(ctx, newStartRequest())
 	require.ErrorContains(t, err, nexusHandlerCallbackNotEnabledErr)
 
@@ -417,34 +539,59 @@ func testNexusHandlerCallbackOnStandaloneNexusOperation(t *testing.T) {
 
 	describe := describeNexusOperationCallbacks(ctx, env, operationID, startResp.GetRunId())
 
-	// The callback is registered on the open operation, and has not been triggered yet.
-	await.Require(ctx, t, func(c *await.T) {
-		cbs, err := describe()
-		require.NoError(c, err)
-		requireNexusHandlerCallbackRegistered(c, cbs, cbTaskQueue)
-		require.Equal(c, enumspb.CALLBACK_STATE_STANDBY, cbs[0].state)
-	}, 15*time.Second, 200*time.Millisecond)
+	handlers.requireExecuted(t, describe)
 
 	// Every callback on a standalone operation is triggered by the operation completing. The trigger
 	// is reported by a Nexus-operation-specific proto, so it is read here rather than through
 	// observedCallback.
 	cbInfos := env.describeNexusOperation(ctx, t, operationID).GetCompletionCallbacks()
-	require.Len(t, cbInfos, 1)
-	require.NotNil(t, cbInfos[0].GetTrigger().GetOperationCompleted())
+	require.Len(t, cbInfos, 2)
+	for _, cbInfo := range cbInfos {
+		require.NotNil(t, cbInfo.GetTrigger().GetOperationCompleted())
+	}
+}
 
-	// Close the operation, which triggers the callback.
-	_, err = env.FrontendClient().TerminateNexusOperationExecution(ctx, &workflowservice.TerminateNexusOperationExecutionRequest{
-		Namespace:   env.Namespace().String(),
-		OperationId: operationID,
-		RunId:       startResp.GetRunId(),
-		RequestId:   uuid.NewString(),
-		Identity:    t.Name(),
-		Reason:      "close the operation to trigger its completion callback",
+// TestNexusHandlerCallbackDeliversFailedOutcome covers a failed execution: the failure reaches the handler
+// in place of a result, and the callback carrying it still succeeds, since reporting a failure is a
+// successful delivery.
+func TestNexusHandlerCallbackDeliversFailedOutcome(t *testing.T) {
+	t.Parallel()
+
+	env := newNexusTestEnv(t, true,
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
+		testcore.WithDynamicConfig(nexusoperation.Enabled, true),
+		testcore.WithDynamicConfig(nexusoperation.EnabledCallbackKinds, []string{"nexusHandler"}),
+	)
+	ctx := testcontext.For(t)
+
+	const operationFailure = "deliberate failure"
+	endpointName := env.createSyncFailureEndpoint(ctx, t, operationFailure)
+
+	handler := newSucceedingNexusHandlerCallbackHandler(t, env.SdkClient(), "succeeding")
+	operationID := testcore.RandomizeStr(t.Name())
+	_, err := env.startNexusOperation(ctx, &workflowservice.StartNexusOperationExecutionRequest{
+		OperationId:         operationID,
+		Endpoint:            endpointName,
+		CompletionCallbacks: []*commonpb.Callback{handler.callback()},
 	})
 	require.NoError(t, err)
 
-	requireNexusHandlerCallbackTriggered(t, describe, cbTaskQueue)
-	requireNexusHandlerCallbackRetriedWithoutDelivery(t, capture, describe)
+	// A failed operation does not make for a failed callback.
+	cbInfo := env.awaitCallbackInfo(ctx, t, operationID, enumspb.CALLBACK_STATE_SUCCEEDED)
+	require.NotNil(t, cbInfo.GetSuccess())
+
+	deliveries := handler.deliveries()
+	require.Len(t, deliveries, 1)
+	require.Nil(t, deliveries[0].GetSuccess())
+	// The OperationError the server wraps the outcome in for transport is unwrapped before the
+	// handler sees it, so the endpoint's own failure is what arrives.
+	require.Equal(t, operationFailure, deliveries[0].GetFailure().GetCause().GetMessage())
+
+	// The operation itself is failed, and its outcome is the same failure the callback carried.
+	descResp := env.describeNexusOperation(ctx, t, operationID)
+	require.Equal(t, enumspb.NEXUS_OPERATION_EXECUTION_STATUS_FAILED, descResp.GetInfo().GetStatus())
+	require.Equal(t, operationFailure, descResp.GetFailure().GetCause().GetMessage())
 }
 
 func describeWorkflowCallbacks(ctx context.Context, env *testcore.TestEnv, workflowID, runID string) describeCallbacksFn {
@@ -463,6 +610,7 @@ func describeWorkflowCallbacks(ctx context.Context, env *testcore.TestEnv, workf
 				lastAttemptFailure:      cb.GetLastAttemptFailure(),
 				lastAttemptCompleteTime: cb.GetLastAttemptCompleteTime(),
 				nextAttemptScheduleTime: cb.GetNextAttemptScheduleTime(),
+				blockedReason:           cb.GetBlockedReason(),
 			})
 		}
 		return cbs, nil
@@ -490,6 +638,7 @@ func describeActivityCallbacks(ctx context.Context, env *testcore.TestEnv, activ
 				lastAttemptFailure:      cb.GetInfo().GetLastAttemptFailure(),
 				lastAttemptCompleteTime: cb.GetInfo().GetLastAttemptCompleteTime(),
 				nextAttemptScheduleTime: cb.GetInfo().GetNextAttemptScheduleTime(),
+				blockedReason:           cb.GetInfo().GetBlockedReason(),
 			})
 		}
 		return cbs, nil
@@ -517,6 +666,7 @@ func describeNexusOperationCallbacks(ctx context.Context, env *NexusTestEnv, ope
 				lastAttemptFailure:      cb.GetInfo().GetLastAttemptFailure(),
 				lastAttemptCompleteTime: cb.GetInfo().GetLastAttemptCompleteTime(),
 				nextAttemptScheduleTime: cb.GetInfo().GetNextAttemptScheduleTime(),
+				blockedReason:           cb.GetInfo().GetBlockedReason(),
 			})
 		}
 		return cbs, nil

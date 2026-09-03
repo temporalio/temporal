@@ -39,6 +39,7 @@ import (
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	commoncallbacks "go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/contextutil"
@@ -3490,9 +3491,12 @@ func (ms *MutableStateImpl) addUpdateCallbacksChasm(
 	}
 
 	nsName := ms.GetNamespaceEntry().Name().String()
-	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerWorkflow(nsName)
+	limits := commoncallbacks.Limits{
+		MaxCount:             ms.config.MaxCallbacksPerWorkflow(nsName),
+		MaxSourceContextSize: ms.config.CallbackSourceContextAggregateMaxSize(nsName),
+	}
 	maxCallbacksPerUpdateID := ms.config.MaxCallbacksPerUpdateID(nsName)
-	return wf.AddUpdateCompletionCallbacks(ctx, event.EventTime, updateID, requestID, updateCallbacks, maxCallbacksPerWorkflow, maxCallbacksPerUpdateID)
+	return wf.AddUpdateCompletionCallbacks(ctx, event.EventTime, updateID, requestID, updateCallbacks, limits, maxCallbacksPerUpdateID)
 }
 
 func (ms *MutableStateImpl) addCompletionCallbacks(
@@ -3573,8 +3577,12 @@ func (ms *MutableStateImpl) addCompletionCallbacksChasm(
 		return err
 	}
 
-	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerExecution(ms.GetNamespaceEntry().Name().String())
-	return wf.AddCompletionCallbacks(ctx, event.EventTime, requestID, completionCallbacks, maxCallbacksPerWorkflow)
+	nsName := ms.GetNamespaceEntry().Name().String()
+	limits := commoncallbacks.Limits{
+		MaxCount:             ms.config.MaxCallbacksPerExecution(nsName),
+		MaxSourceContextSize: ms.config.CallbackSourceContextAggregateMaxSize(nsName),
+	}
+	return wf.AddCompletionCallbacks(ctx, event.EventTime, requestID, completionCallbacks, limits)
 }
 
 // AddFirstWorkflowTaskScheduled adds the first workflow task scheduled event unless it should be delayed as indicated

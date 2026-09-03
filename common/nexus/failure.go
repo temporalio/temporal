@@ -15,6 +15,7 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -432,4 +433,22 @@ func AdaptAuthorizeError(permissionDeniedError *serviceerror.PermissionDenied) e
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnauthorized, "permission denied: %s", permissionDeniedError.Reason)
 	}
 	return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnauthorized, "permission denied")
+}
+
+func OperationErrorToTemporalFailure(opErr *nexus.OperationError) (*failurepb.Failure, error) {
+	var nf nexus.Failure
+	if opErr.OriginalFailure != nil {
+		nf = *opErr.OriginalFailure
+	} else {
+		var err error
+		nf, err = nexusrpc.DefaultFailureConverter().ErrorToFailure(opErr)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// The Nexus failure may contain a metadata key requesting that the unwrapped
+	// (Cause) of the failure is sent, to avoid an unnecessary layer of indirection.
+	unwrappedFailure := nexusrpc.UnwrapFailure(&nf)
+	return NexusFailureToTemporalFailure(*unwrappedFailure)
 }

@@ -52,8 +52,8 @@ type libraryParams struct {
 
 	InvocationTaskHandler *invocationTaskHandler
 	BackoffTaskHandler    *backoffTaskHandler
-	// Only the history service runs the outbound queue, so only it provides this. Elsewhere it is
-	// absent and callbacks are simply never reported as blocked.
+	// Only the history service runs the outbound queue, so only it can report whether a
+	// destination is blocked. Elsewhere callbacks are simply never reported as blocked.
 	DestinationBlocked DestinationBlockedFn `optional:"true"`
 }
 

@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
+	commoncallbacks "go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -300,7 +301,7 @@ func (a *Activity) addCompletionCallbacks(
 	ctx chasm.MutableContext,
 	requestID string,
 	completionCallbacks []*commonpb.Callback,
-	maxCallbacks int,
+	limits commoncallbacks.Limits,
 ) error {
 	if len(completionCallbacks) == 0 {
 		return nil
@@ -310,12 +311,22 @@ func (a *Activity) addCompletionCallbacks(
 	}
 
 	currentCount := len(a.Callbacks)
-	if len(completionCallbacks)+currentCount > maxCallbacks {
+	if len(completionCallbacks)+currentCount > limits.MaxCount {
 		return serviceerror.NewFailedPreconditionf(
 			"cannot attach more than %d callbacks to an activity (%d callbacks already attached)",
-			maxCallbacks,
+			limits.MaxCount,
 			currentCount,
 		)
+	}
+
+	// Re-check the aggregate source context size against what is already attached, which the
+	// frontend cannot see.
+	totalBytes := commoncallbacks.SourceContextSize(completionCallbacks)
+	for _, cb := range a.Callbacks {
+		totalBytes += cb.Get(ctx).SourceContextSize()
+	}
+	if err := commoncallbacks.ValidateSourceContextSize(limits.MaxSourceContextSize, totalBytes); err != nil {
+		return err
 	}
 
 	if a.Callbacks == nil {

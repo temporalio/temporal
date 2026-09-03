@@ -11,7 +11,6 @@ import (
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
@@ -70,11 +69,8 @@ func (n invocableOutbound) Invoke(
 	n.completion.Header = n.callback.Header
 	err := client.CompleteOperation(ctx, n.callback.Url, n.completion)
 
-	namespaceTag := metrics.NamespaceTag(ns.Name().String())
-	destTag := metrics.DestinationTag(taskAttr.Destination)
-	outcomeTag := metrics.OutcomeTag(outcomeTag(ctx, err))
-	h.metricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, outcomeTag)
-	h.metricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, outcomeTag)
+	outcomeTag := outcomeTag(ctx, err)
+	h.emitMetrics(startTime, ns, taskAttr.Destination, outcomeTag)
 
 	if err != nil {
 		retryable := isRetryableCallError(err)

@@ -2,7 +2,6 @@ package callbacks
 
 import (
 	"context"
-	"fmt"
 	"reflect"
 	"regexp"
 	"strings"
@@ -47,14 +46,15 @@ func newValidatorConfig() ValidatorConfig {
 		},
 	}
 	return ValidatorConfig{
-		MaxCallbacksPerExecution:         func(string) int { return 10 },
-		MaxIDLengthLimit:                 func() int { return 10 },
-		URLMaxLength:                     func(string) int { return 1000 },
-		HeaderMaxSize:                    func(string) int { return 4096 },
-		EndpointRules:                    func(string) AddressMatchRules { return allowAllAddresses },
-		MaxServiceNameLength:             func(string) int { return 40 },
-		MaxOperationNameLength:           func(string) int { return 40 },
-		NexusHandlerSourceContextMaxSize: func(string) int { return 1000 },
+		MaxCallbacksPerExecution:                  func(string) int { return 10 },
+		MaxIDLengthLimit:                          func() int { return 10 },
+		URLMaxLength:                              func(string) int { return 1000 },
+		HeaderMaxSize:                             func(string) int { return 4096 },
+		EndpointRules:                             func(string) AddressMatchRules { return allowAllAddresses },
+		MaxServiceNameLength:                      func(string) int { return 40 },
+		MaxOperationNameLength:                    func(string) int { return 40 },
+		NexusHandlerSourceContextMaxSize:          func(string) int { return 1000 },
+		NexusHandlerSourceContextAggregateMaxSize: func(string) int { return 4000 },
 	}
 }
 
@@ -74,17 +74,15 @@ func TestValidatorConfigValidate(t *testing.T) {
 	require.EqualError(t, err, "missing required fields: [URLMaxLength EndpointRules]")
 }
 
-// Every field of ValidatorConfig is required, and Validate names each missing one explicitly. A
-// field added to the struct but not to Validate stays nil and panics at request time instead of
-// failing at startup. Optional or non-nilable fields would need a different check.
+// Catch when a new field is added to ValidatorConfig but not checked in Validate().
 func TestValidatorConfigValidateNamesEveryField(t *testing.T) {
-	var fields []string
-	for field := range reflect.TypeFor[ValidatorConfig]().Fields() {
-		fields = append(fields, field.Name)
-	}
-
 	_, err := NewValidator(ValidatorConfig{})
-	require.EqualError(t, err, fmt.Sprintf("missing required fields: %v", fields))
+	require.Error(t, err)
+
+	for field := range reflect.TypeFor[ValidatorConfig]().Fields() {
+		require.Containsf(t, err.Error(), field.Name,
+			"ValidatorConfig.%s is not checked by Validate", field.Name)
+	}
 }
 
 func TestValidateCallbacks(t *testing.T) {

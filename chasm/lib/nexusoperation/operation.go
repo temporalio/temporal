@@ -20,7 +20,9 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	commoncallbacks "go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
@@ -118,7 +120,7 @@ func NewOperation(state *nexusoperationpb.OperationState) *Operation {
 func newStandaloneOperation(
 	ctx chasm.MutableContext,
 	req *nexusoperationpb.StartNexusOperationRequest,
-	maxCallbacks int,
+	limits commoncallbacks.Limits,
 	linkValidator *linkValidator,
 ) (*Operation, error) {
 	frontendReq := req.GetFrontendRequest()
@@ -148,7 +150,7 @@ func newStandaloneOperation(
 		ctx,
 		frontendReq.GetRequestId(),
 		frontendReq.GetCompletionCallbacks(),
-		maxCallbacks,
+		limits,
 	); err != nil {
 		return nil, err
 	}
@@ -446,13 +448,13 @@ func (o *Operation) getOrCreateOutcome(ctx chasm.MutableContext) *nexusoperation
 // request is a no-op rather than a duplicate. The idempotency probe runs before the closed check, so a
 // retry still succeeds if the operation closed after the first attach.
 //
-// maxCallbacks is re-checked here because callback.Validator only bounds the callbacks on the start
+// The limits are re-checked here because callback.Validator only bounds the callbacks on the start
 // request; callbacks added later via on_conflict_options bypass it.
 func (o *Operation) addCompletionCallbacks(
 	ctx chasm.MutableContext,
 	requestID string,
 	completionCallbacks []*commonpb.Callback,
-	maxCallbacks int,
+	limits commoncallbacks.Limits,
 ) error {
 	if len(completionCallbacks) == 0 {
 		return nil
@@ -470,12 +472,22 @@ func (o *Operation) addCompletionCallbacks(
 	}
 
 	currentCount := len(o.Callbacks)
-	if len(completionCallbacks)+currentCount > maxCallbacks {
+	if len(completionCallbacks)+currentCount > limits.MaxCount {
 		return serviceerror.NewFailedPreconditionf(
 			"cannot attach more than %d callbacks to a nexus operation (%d callbacks already attached)",
-			maxCallbacks,
+			limits.MaxCount,
 			currentCount,
 		)
+	}
+
+	// Re-check the aggregate source context size against what is already attached, which the
+	// frontend cannot see.
+	totalBytes := commoncallbacks.SourceContextSize(completionCallbacks)
+	for _, cb := range o.Callbacks {
+		totalBytes += cb.Get(ctx).SourceContextSize()
+	}
+	if err := commoncallbacks.ValidateSourceContextSize(limits.MaxSourceContextSize, totalBytes); err != nil {
+		return err
 	}
 
 	if o.Callbacks == nil {
@@ -544,8 +556,8 @@ func (o *Operation) attachLinks(
 func (o *Operation) allLinks(ctx chasm.Context) []*commonpb.Link {
 	requestLinks := ctx.Links(o)
 	all := make([]*commonpb.Link, 0, len(requestLinks)+len(o.Links))
-	all = append(all, requestLinks...)
-	all = append(all, o.Links...)
+	all = append(all, common.CloneProtoSlice(requestLinks)...)
+	all = append(all, common.CloneProtoSlice(o.Links)...)
 	return all
 }
 
@@ -654,6 +666,9 @@ func (o *Operation) Terminate(
 				serviceerror.NewFailedPreconditionf("already terminated with request ID %s", existingReqID)
 		}
 		return chasm.TerminateComponentResponse{}, nil
+	}
+	if o.isClosed() {
+		return chasm.TerminateComponentResponse{}, ErrOperationAlreadyCompleted
 	}
 
 	if !TransitionTerminated.Possible(o) {

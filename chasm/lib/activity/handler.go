@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -74,7 +75,11 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		return nil, serviceerror.NewInvalidArgumentf("unsupported ID conflict policy: %v", frontendReq.GetIdConflictPolicy())
 	}
 
-	maxCallbacks := h.config.MaxCallbacksPerExecution(frontendReq.GetNamespace())
+	// Read once, so it's consistent for both the creation and on-conflict paths.
+	limits := callbacks.Limits{
+		MaxCount:             h.config.MaxCallbacksPerExecution(frontendReq.GetNamespace()),
+		MaxSourceContextSize: h.config.NexusHandlerSourceContextAggregateMaxSize(frontendReq.GetNamespace()),
+	}
 
 	result, err := chasm.StartExecution(
 		ctx,
@@ -89,7 +94,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 			}
 
 			if cbs := request.GetCompletionCallbacks(); len(cbs) > 0 {
-				if err := newActivity.addCompletionCallbacks(mutableContext, request.GetRequestId(), cbs, maxCallbacks); err != nil {
+				if err := newActivity.addCompletionCallbacks(mutableContext, request.GetRequestId(), cbs, limits); err != nil {
 					return nil, err
 				}
 			}
@@ -144,7 +149,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 			ref,
 			func(a *Activity, ctx chasm.MutableContext, _ any) (any, error) {
 				if attachCallbacks {
-					if err := a.addCompletionCallbacks(ctx, requestID, cbs, maxCallbacks); err != nil {
+					if err := a.addCompletionCallbacks(ctx, requestID, cbs, limits); err != nil {
 						return nil, err
 					}
 				}

@@ -37,16 +37,17 @@ func TestCallbacksCircuitBreakerSuite(t *testing.T) {
 // retry policy dialed down so that failures accumulate within a test's lifetime. The retry policy
 // is a global setting, hence the dedicated cluster.
 func (s *CallbacksCircuitBreakerSuite) newCircuitBreakerEnv(extra ...testcore.TestOption) *NexusTestEnv {
+	allCallbackKinds := []callbacks.Kind{callbacks.KindNexus, callbacks.KindNexusHandler}
 	opts := []testcore.TestOption{
 		testcore.WithDedicatedCluster(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		// Standalone Activities
 		testcore.WithDynamicConfig(activity.Enabled, true),
 		testcore.WithDynamicConfig(activity.EnableCallbacks, true),
-		testcore.WithDynamicConfig(activity.EnabledCallbackKinds, []callbacks.Kind{callbacks.KindNexus}),
+		testcore.WithDynamicConfig(activity.EnabledCallbackKinds, allCallbackKinds),
 		// Standalone Nexus operations
 		testcore.WithDynamicConfig(nexusoperation.Enabled, true),
-		testcore.WithDynamicConfig(nexusoperation.EnabledCallbackKinds, []callbacks.Kind{callbacks.KindNexus}),
+		testcore.WithDynamicConfig(nexusoperation.EnabledCallbackKinds, allCallbackKinds),
 		// All Callbacks and Retry policy
 		testcore.WithDynamicConfig(callback.AllowedAddresses,
 			[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}}),
@@ -79,8 +80,6 @@ var executionTypes = []executionType{
 type newTargetFn = func(t *testing.T, env *NexusTestEnv, failing bool) callbackTarget
 
 // callbackVariant is one of the ways a completion callback can address a destination.
-// Currently, the only callback variant is for Nexus callbacks. (NexusHandler callbacks are
-// not yet implemented.)
 type callbackVariant struct {
 	name string
 	// newTarget starts a destination of this variant. If [failing] is set, will
@@ -90,6 +89,7 @@ type callbackVariant struct {
 
 var callbackVariants = []callbackVariant{
 	{name: "Nexus", newTarget: newNexusCallbackTarget},
+	{name: "NexusHandler", newTarget: newNexusHandlerCallbackTarget},
 }
 
 type circuitbreakerTestSuiteTest func(*CallbacksCircuitBreakerSuite, callbackExecutionType, newTargetFn)

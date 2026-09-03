@@ -46,6 +46,16 @@ type MockContext struct {
 	registeredContextValues map[any]any
 }
 
+// RegisterLibrary copies the context values that lib's components declare via
+// [WithContextValues] into the mock, mirroring what [Registry] does in production. Use this in
+// tests that reach into another library's component methods, so that library can keep its context
+// keys unexported.
+func (c *MockContext) RegisterLibrary(lib Library) {
+	for _, rc := range lib.Components() {
+		c.RegisterComponentContextValues(rc.contextValues)
+	}
+}
+
 func (c *MockContext) RegisterComponentContextValues(
 	keyValues map[any]any,
 ) {
@@ -138,7 +148,11 @@ func (c *MockContext) MetricsHandler() metrics.Handler {
 }
 
 func (c *MockContext) Value(key any) any {
-	return c.goContext().Value(key)
+	if v := c.goContext().Value(key); v != nil {
+		return v
+	}
+
+	return c.registeredContextValues[key]
 }
 
 func (c *MockContext) Links(component Component) []*commonpb.Link {
@@ -175,6 +189,8 @@ func (c *MockContext) withValue(key any, value any) Context {
 		HandleLinks:          c.HandleLinks,
 		HandleRequestLinks:   c.HandleRequestLinks,
 		HandleUserMetadata:   c.HandleUserMetadata,
+
+		registeredContextValues: c.registeredContextValues,
 	}
 }
 

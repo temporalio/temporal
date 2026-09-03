@@ -101,18 +101,25 @@ func (v *validator) validateAndNormalizeStartRequest(
 	// Callbacks
 	cbs := req.GetCompletionCallbacks()
 	if len(cbs) > 0 {
-		opts := callbacks.ValidatorOptions{
-			EnabledKinds: v.config.EnabledCallbackKinds(ns),
+		enabledKinds := v.config.EnabledCallbackKinds(ns)
+		if len(enabledKinds) == 0 {
+			return serviceerror.NewInvalidArgument("completion callbacks are not enabled for this namespace")
 		}
+		opts := callbacks.ValidatorOptions{EnabledKinds: enabledKinds}
 		if err := v.callbackValidator.Validate(ctx, ns, cbs, opts); err != nil {
 			return err
 		}
-	}
-	// Links
-	if links := req.GetLinks(); len(links) > 0 {
-		if err := v.linkValidator.ValidateRequestWithCallbacks(ns, links, cbs); err != nil {
+		// Validate checks each callback's source context individually; this bounds their total.
+		// Operation.addCompletionCallbacks re-checks it against the callbacks already attached to a
+		// running operation, which the frontend cannot see.
+		if err := v.callbackValidator.ValidateSourceContextSize(ns, callbacks.SourceContextSize(cbs)); err != nil {
 			return err
 		}
+	}
+	// Links, including those carried by the request's callbacks.
+	links := req.GetLinks()
+	if err := v.linkValidator.ValidateRequestWithCallbacks(ns, links, cbs); err != nil {
+		return err
 	}
 	if err := v.validateOnConflictOptions(req); err != nil {
 		return err

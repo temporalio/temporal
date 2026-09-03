@@ -138,29 +138,54 @@ func TestFromAPICallback(t *testing.T) {
 			})
 		}
 	})
+
+	// Confirm a malformed CHASM Callback fails to be converted into the api proto.
+	t.Run("UnsupportedVariant", func(t *testing.T) {
+		cb := &Callback{CallbackState: &callbackspb.CallbackState{
+			Callback: &callbackspb.Callback{},
+		}}
+		_, err := cb.ToAPICallback()
+		var internalErr *serviceerror.Internal
+		require.ErrorAs(t, err, &internalErr)
+		require.ErrorContains(t, err, "unsupported CHASM callback type")
+	})
 }
 
-// Asserts that CHASM Callbacks do not support the new NexusHandler callback variant.
-func TestNexusHandlerCallbacksNotSupported(t *testing.T) {
-	apiCb := &commonpb.Callback{
-		Variant: &commonpb.Callback_NexusHandler_{
-			NexusHandler: &commonpb.Callback_NexusHandler{},
-		},
-	}
-	chasmCB, err := FromAPICallback(apiCb)
-	require.NoError(t, err)
-
+// A callback whose variant this server doesn't know how to invoke can still be persisted (by a server that
+// does, or by a future version), so its invocation task has to be rejected rather than crash.
+func TestLoadInvocationArgsUnsupportedVariant(t *testing.T) {
 	cb := &Callback{
 		CallbackState: &callbackspb.CallbackState{
-			Callback: chasmCB,
+			Callback: &callbackspb.Callback{},
 		},
 	}
-	_, err = cb.loadInvocationArgs(&chasm.MockMutableContext{}, nil)
+	_, err := cb.loadInvocationArgs(&chasm.MockMutableContext{}, nil)
 
 	var unprocessableErr *queueserrors.UnprocessableTaskError
 	require.ErrorAs(t, err, &unprocessableErr)
 	require.ErrorContains(t, err, "unprocessable callback variant")
-	require.ErrorContains(t, err, "Callback_NexusHandler_")
+}
+
+// Confirm the request ID passed to NewCallback is perssited, and set in ToAPICallbackInfo.
+func TestToAPICallbackInfoCarriesTheRequestID(t *testing.T) {
+	ctx := &chasm.MockContext{}
+	ctx.RegisterLibrary(NewNilLibrary())
+
+	cb := NewCallback(
+		"callback-request-id",
+		timestamppb.New(time.Unix(1, 0)),
+		&callbackspb.Callback{Variant: &callbackspb.Callback_NexusHandler_{
+			NexusHandler: &callbackspb.Callback_NexusHandler{
+				TaskQueueName: "completions-task-queue",
+				Service:       "HTTPAdapter",
+				Operation:     "DeliverAsWebhook",
+			},
+		}},
+	)
+
+	info, err := cb.ToAPICallbackInfo(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "callback-request-id", info.GetRequestId())
 }
 
 // Verify the setResult method sets the "result" field based on the Callback state.

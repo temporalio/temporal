@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
+	callbackpb "go.temporal.io/api/callback/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
@@ -21,6 +22,7 @@ import (
 	cnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -163,6 +165,45 @@ func (env *NexusTestEnv) createSyncSuccessEndpoint(ctx context.Context, t *testi
 			return &nexus.HandlerStartOperationResultSync[any]{Value: result}, nil
 		},
 	})
+}
+
+// createSyncFailureEndpoint registers an endpoint whose handler fails every operation
+// synchronously with the supplied message. Shutdown as part with the test's Cleanup.
+func (env *NexusTestEnv) createSyncFailureEndpoint(ctx context.Context, t *testing.T, message string) string {
+	return env.createRandomExternalNexusServer(ctx, t, nexustest.Handler{
+		OnStartOperation: func(
+			ctx context.Context,
+			service, operation string,
+			input *nexus.LazyValue,
+			options nexus.StartOperationOptions,
+		) (nexus.HandlerStartOperationResult[any], error) {
+			return nil, &nexus.OperationError{
+				State: nexus.OperationStateFailed,
+				Cause: &nexus.FailureError{Failure: nexus.Failure{Message: message}},
+			}
+		},
+	})
+}
+
+// awaitCallbackInfo polls DescribeNexusOperationExecution until the operation's single completion
+// callback reaches wantState, then returns it.
+func (env *NexusTestEnv) awaitCallbackInfo(
+	ctx context.Context,
+	t testing.TB,
+	operationID string,
+	wantState enumspb.CallbackState,
+) *callbackpb.CallbackInfo {
+	t.Helper()
+
+	var cbInfo *callbackpb.CallbackInfo
+	await.Require(ctx, t, func(c *await.T) {
+		cbs := env.describeNexusOperation(c.Context(), c, operationID).GetCompletionCallbacks()
+		require.Len(c, cbs, 1)
+		cbInfo = cbs[0].GetInfo()
+		require.NotNil(c, cbInfo)
+		require.Equal(c, wantState, cbInfo.GetState())
+	}, 10*time.Second, 100*time.Millisecond)
+	return cbInfo
 }
 
 // createAsyncEndpoint registers an endpoint whose handler leaves every operation running async,

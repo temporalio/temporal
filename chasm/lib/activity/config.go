@@ -68,6 +68,7 @@ type Config struct {
 	LongPollTimeout                           dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaxIDLengthLimit                          dynamicconfig.IntPropertyFn
 	MaxCallbacksPerExecution                  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NexusHandlerSourceContextAggregateMaxSize dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MutableStateActivityFailureSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
 	DefaultActivityRetryPolicy                dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
 	MaxUserMetadataDetailsSize                dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -91,6 +92,7 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		MaxIDLengthLimit:                          dynamicconfig.MaxIDLengthLimit.Get(dc),
 		StartDelayEnabled:                         StartDelayEnabled.Get(dc),
 		MaxCallbacksPerExecution:                  callback.MaxPerExecution.Get(dc),
+		NexusHandlerSourceContextAggregateMaxSize: callback.NexusHandlerSourceContextAggregateMaxSize.Get(dc),
 		MutableStateActivityFailureSizeLimitError: dynamicconfig.MutableStateActivityFailureSizeLimitError.Get(dc),
 		MaxUserMetadataDetailsSize:                dynamicconfig.MaxUserMetadataDetailsSize.Get(dc),
 		MaxUserMetadataSummarySize:                dynamicconfig.MaxUserMetadataSummarySize.Get(dc),

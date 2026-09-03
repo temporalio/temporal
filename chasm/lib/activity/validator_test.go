@@ -2,6 +2,7 @@ package activity
 
 import (
 	"fmt"
+	"regexp"
 	"testing"
 	"time"
 
@@ -588,6 +589,82 @@ func TestValidateAndPopulateStartRequest_CombinesRequestAndCallbackLinks(t *test
 	_, err = h.validateAndPopulateStartRequest(t.Context(), req, namespace.ID(defaultNamespaceID))
 	require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
 	require.ErrorContains(t, err, "cannot attach more than 1 links per request, got 2")
+}
+
+// Tests the aggregate cap on NexusHandler-callback source context payloads. The per-callback cap is
+// covered in common/callbacks; this asserts the frontend also bounds their total.
+func TestValidateStartRequestSourceContextAggregate(t *testing.T) {
+	newHandler := func(t *testing.T) *frontendHandler {
+		t.Helper()
+
+		callbackValidator, err := callbacks.NewValidator(callbacks.ValidatorConfig{
+			MaxCallbacksPerExecution: func(string) int { return 2000 },
+			MaxIDLengthLimit:         func() int { return 1000 },
+			URLMaxLength:             func(string) int { return 1000 },
+			HeaderMaxSize:            func(string) int { return 2000 },
+			EndpointRules: func(string) callbacks.AddressMatchRules {
+				return callbacks.AddressMatchRules{
+					Rules: []callbacks.AddressMatchRule{
+						{Regexp: regexp.MustCompile(`.*`), AllowInsecure: true},
+					},
+				}
+			},
+			MaxServiceNameLength:                      func(string) int { return 1000 },
+			MaxOperationNameLength:                    func(string) int { return 1000 },
+			NexusHandlerSourceContextMaxSize:          func(string) int { return 64 * 1024 },
+			NexusHandlerSourceContextAggregateMaxSize: func(string) int { return 1500 },
+		})
+		require.NoError(t, err)
+
+		return &frontendHandler{
+			config: &Config{
+				BlobSizeLimitError:         defaultBlobSizeLimitError,
+				BlobSizeLimitWarn:          defaultBlobSizeLimitWarn,
+				DefaultActivityRetryPolicy: getDefaultRetrySettings,
+				EnableCallbacks:            func(string) bool { return true },
+				EnabledCallbackKinds: func(string) []callbacks.Kind {
+					return []callbacks.Kind{callbacks.KindNexusHandler}
+				},
+				MaxIDLengthLimit:           func() int { return defaultMaxIDLengthLimit },
+				MaxUserMetadataDetailsSize: defaultMaxUserMetadataDetailsSize,
+				MaxUserMetadataSummarySize: defaultMaxUserMetadataSummarySize,
+			},
+			callbackValidator: callbackValidator,
+			linkValidator: newLinkValidator(
+				func(string) int { return 10 },
+				func(string) int { return 2000 },
+				defaultLinkMaxSize,
+			),
+			logger: log.NewNoopLogger(),
+		}
+	}
+
+	newRequest := func(cbs ...*commonpb.Callback) *workflowservice.StartActivityExecutionRequest {
+		return &workflowservice.StartActivityExecutionRequest{
+			Namespace:           defaultNamespaceID,
+			ActivityId:          defaultActivityID,
+			ActivityType:        &commonpb.ActivityType{Name: defaultActivityType},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+			StartToCloseTimeout: durationpb.New(10 * time.Second),
+			CompletionCallbacks: cbs,
+		}
+	}
+
+	t.Run("AcceptsCallbacksWithinTheAggregateLimit", func(t *testing.T) {
+		h := newHandler(t)
+		req := newRequest(nexusHandlerCallback(700), nexusHandlerCallback(700))
+		_, err := h.validateAndPopulateStartRequest(t.Context(), req, namespace.ID(defaultNamespaceID))
+		require.NoError(t, err)
+	})
+
+	// Each callback is within the per-callback cap; only their total is over.
+	t.Run("RejectsCallbacksOverTheAggregateLimitTogether", func(t *testing.T) {
+		h := newHandler(t)
+		req := newRequest(nexusHandlerCallback(900), nexusHandlerCallback(900))
+		_, err := h.validateAndPopulateStartRequest(t.Context(), req, namespace.ID(defaultNamespaceID))
+		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
+		require.ErrorContains(t, err, "cannot attach more than 1500 bytes of callback source_context")
+	})
 }
 
 func validateUUID(s string) error {

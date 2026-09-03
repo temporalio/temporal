@@ -4,11 +4,8 @@ import (
 	"context"
 	"io"
 	"testing"
-	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/stretchr/testify/require"
-	callbackpb "go.temporal.io/api/callback/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexusoperationpb "go.temporal.io/api/nexusoperation/v1"
@@ -20,7 +17,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
@@ -55,26 +51,6 @@ func (s *NexusStandaloneCallbacksTestSuite) newTestEnv(enableCallbacks bool) *Ne
 		)
 	}
 	return env
-}
-
-// awaitCallbackInfo polls DescribeNexusOperationExecution until the operation's single completion
-// callback reaches wantState, then returns it.
-func (s *NexusStandaloneCallbacksTestSuite) awaitCallbackInfo(
-	env *NexusTestEnv,
-	operationID string,
-	wantState enumspb.CallbackState,
-) *callbackpb.CallbackInfo {
-	s.T().Helper()
-
-	var cbInfo *callbackpb.CallbackInfo
-	await.Require(s.Context(), s.T(), func(c *await.T) {
-		cbs := env.describeNexusOperation(c.Context(), c, operationID).GetCompletionCallbacks()
-		require.Len(c, cbs, 1)
-		cbInfo = cbs[0].GetInfo()
-		require.NotNil(c, cbInfo)
-		require.Equal(c, wantState, cbInfo.GetState())
-	}, 10*time.Second, 100*time.Millisecond)
-	return cbInfo
 }
 
 func (s *NexusStandaloneCallbacksTestSuite) TestCompletionCallbacks() {
@@ -129,7 +105,7 @@ func (s *NexusStandaloneCallbacksTestSuite) TestCompletionCallbacks() {
 		s.Equal(string(descResp.GetResult().GetData()), string(completionBody))
 
 		// Wait for the callback to complete and confirm it has a Success result.
-		cbInfo := s.awaitCallbackInfo(env, operationID, enumspb.CALLBACK_STATE_SUCCEEDED)
+		cbInfo := env.awaitCallbackInfo(s.Context(), s.T(), operationID, enumspb.CALLBACK_STATE_SUCCEEDED)
 		s.NotNil(cbInfo.GetSuccess())
 		s.Equal(callbackAddress, cbInfo.GetCallback().GetNexus().GetUrl())
 	})
@@ -184,7 +160,7 @@ func (s *NexusStandaloneCallbacksTestSuite) TestCompletionCallbacks() {
 		s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_FAILED, descResp.GetInfo().GetStatus())
 
 		// The operation may have failed, but the callback reporting that failure was successful.
-		cbInfo := s.awaitCallbackInfo(env, operationID, enumspb.CALLBACK_STATE_SUCCEEDED)
+		cbInfo := env.awaitCallbackInfo(s.Context(), s.T(), operationID, enumspb.CALLBACK_STATE_SUCCEEDED)
 		s.NotNil(cbInfo.GetSuccess())
 	})
 
@@ -211,7 +187,7 @@ func (s *NexusStandaloneCallbacksTestSuite) TestCompletionCallbacks() {
 				if deliveryAttempt == 1 {
 					// While the handler is blocked here the callback is in flight: Describe reports
 					// it as scheduled, with no attempts recorded yet.
-					cbInfo := s.awaitCallbackInfo(env, operationID, enumspb.CALLBACK_STATE_SCHEDULED)
+					cbInfo := env.awaitCallbackInfo(s.Context(), s.T(), operationID, enumspb.CALLBACK_STATE_SCHEDULED)
 					s.EqualValues(0, cbInfo.GetAttempt())
 					s.Nil(cbInfo.GetLastAttemptFailure())
 					s.Nil(cbInfo.GetResult())
@@ -220,7 +196,7 @@ func (s *NexusStandaloneCallbacksTestSuite) TestCompletionCallbacks() {
 					ch.requestCompleteCh <- nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "delivery #1")
 				} else {
 					// The second delivery attempt: Describe now describes the previous attempt.
-					cbInfo := s.awaitCallbackInfo(env, operationID, enumspb.CALLBACK_STATE_SCHEDULED)
+					cbInfo := env.awaitCallbackInfo(s.Context(), s.T(), operationID, enumspb.CALLBACK_STATE_SCHEDULED)
 					s.EqualValues(1, cbInfo.GetAttempt()) // 1 attempt so far, the 2nd is in-progress.
 					s.NotNil(cbInfo.GetLastAttemptFailure())
 					s.Contains(cbInfo.GetLastAttemptFailure().GetMessage(), "delivery #1")
@@ -239,7 +215,7 @@ func (s *NexusStandaloneCallbacksTestSuite) TestCompletionCallbacks() {
 		s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_COMPLETED, gotStatus)
 
 		// Verify the completion callback delivery has failed.
-		cbInfo := s.awaitCallbackInfo(env, operationID, enumspb.CALLBACK_STATE_FAILED)
+		cbInfo := env.awaitCallbackInfo(s.Context(), s.T(), operationID, enumspb.CALLBACK_STATE_FAILED)
 		// Both the last delivery failure and the terminal failure come from delivery #2.
 		const lastDeliveryFailureMessage = "handler error (BAD_REQUEST): delivery #2"
 		s.NotNil(cbInfo.GetFailure())
@@ -252,9 +228,11 @@ func (s *NexusStandaloneCallbacksTestSuite) TestCompletionCallbacks() {
 		endpointName := env.createAsyncEndpoint(ctx, s.T())
 
 		operationID := testvars.New(s.T()).Any().String()
+		const startRequestID = "start-request-id"
 		_, err := env.startNexusOperation(ctx, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: operationID,
 			Endpoint:    endpointName,
+			RequestId:   startRequestID,
 			CompletionCallbacks: []*commonpb.Callback{
 				nexusCompletionCallback("http://localhost/cb1"),
 				nexusCompletionCallback("http://localhost/cb2"),
@@ -265,13 +243,22 @@ func (s *NexusStandaloneCallbacksTestSuite) TestCompletionCallbacks() {
 		// The operation stays STARTED, so its callbacks stay in STANDBY with no result.
 		infos := env.describeNexusOperation(ctx, s.T(), operationID).GetCompletionCallbacks()
 		s.Len(infos, 2)
+		requestIDs := make(map[string]struct{}, len(infos))
 		for _, info := range infos {
 			// Every callback on a standalone operation is triggered by the operation completing.
 			s.NotNil(info.GetTrigger().GetOperationCompleted())
 			s.Equal(enumspb.CALLBACK_STATE_STANDBY, info.GetInfo().GetState())
 			s.NotNil(info.GetInfo().GetRegistrationTime())
 			s.Nil(info.GetInfo().GetResult())
+
+			// The idempotency token each delivery will carry. Server-generated per callback, so it
+			// is neither empty nor the request ID that attached them.
+			requestID := info.GetInfo().GetRequestId()
+			s.NotEmpty(requestID)
+			s.NotEqual(startRequestID, requestID)
+			requestIDs[requestID] = struct{}{}
 		}
+		s.Len(requestIDs, 2, "each callback must get its own request ID")
 	})
 
 	s.Run("AttachOnConflict", func(s *NexusStandaloneCallbacksTestSuite) {
@@ -361,6 +348,27 @@ func (s *NexusStandaloneCallbacksTestSuite) TestCompletionCallbacks() {
 		}
 	})
 
+	// A link riding on a completion callback is validated like one attached to the request itself,
+	// including when the request carries no links of its own.
+	s.Run("RejectInvalidCallbackLinks", func(s *NexusStandaloneCallbacksTestSuite) {
+		cb := nexusCompletionCallback("http://localhost/cb")
+		cb.Links = []*commonpb.Link{{
+			// A workflow_event link with none of its required fields set.
+			Variant: &commonpb.Link_WorkflowEvent_{WorkflowEvent: &commonpb.Link_WorkflowEvent{}},
+		}}
+
+		resp, err := env.startNexusOperation(s.Context(), &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId:         testvars.New(s.T()).Any().String(),
+			Endpoint:            alwaysSuccessEndpointName,
+			CompletionCallbacks: []*commonpb.Callback{cb},
+		})
+		s.Nil(resp)
+
+		var invalidArgErr *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgErr)
+		s.ErrorContains(err, "workflow event link must not have an empty namespace field")
+	})
+
 	// Links and callbacks are attached by independent options, so a single request may carry both.
 	s.Run("AttachLinksAndCallbacksOnConflict", func(s *NexusStandaloneCallbacksTestSuite) {
 		ctx := s.Context()
@@ -433,7 +441,7 @@ func (s *NexusStandaloneCallbacksTestSuite) TestCallbacksDisabled() {
 			Endpoint:            endpointName,
 			CompletionCallbacks: cbs,
 		})
-		s.ErrorContains(err, "nexus callbacks are not enabled for this execution type")
+		s.ErrorContains(err, "completion callbacks are not enabled for this namespace")
 	})
 
 	s.Run("OnConflictAttachCallbacksFails", func(s *NexusStandaloneCallbacksTestSuite) {
@@ -447,6 +455,6 @@ func (s *NexusStandaloneCallbacksTestSuite) TestCallbacksDisabled() {
 				AttachCompletionCallbacks: true,
 			},
 		})
-		s.ErrorContains(err, "nexus callbacks are not enabled for this execution type")
+		s.ErrorContains(err, "completion callbacks are not enabled for this namespace")
 	})
 }

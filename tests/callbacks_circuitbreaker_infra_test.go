@@ -88,6 +88,43 @@ func newNexusCallbackTarget(t *testing.T, _ *NexusTestEnv, failing bool) callbac
 	return target
 }
 
+// nexusHandlerCallbackTarget provides an implementation of callbackTarget for receiving
+// NexusHandler-variant callbacks.
+//
+// Unlike the Nexus variant, there is no HTTP address to point at: a NexusHandler callback is
+// delivered as a Nexus task to a worker polling within the source execution's own namespace. So the
+// target here is a Nexus service registered on a worker of its own, in the test's namespace, polling
+// a task queue nothing else uses. See [newNexusHandlerCallbackHandler].
+type nexusHandlerCallbackTarget struct {
+	commonTarget
+	handler *nexusHandlerCallbackHandler
+}
+
+func (nct *nexusHandlerCallbackTarget) newCallback() *commonpb.Callback {
+	return nct.handler.callback()
+}
+
+// newNexusHandlerCallbackTarget creates a new NexusHandler-variant callback target. Optionally failing each request until
+// [callbackTarget.stopFailing] is called. The worker shuts down when t cleans up.
+func newNexusHandlerCallbackTarget(t *testing.T, env *NexusTestEnv, failing bool) callbackTarget {
+	target := &nexusHandlerCallbackTarget{}
+	target.failing.Store(failing)
+
+	// The handler's respond hook is consulted per delivery, so the target's failing/succeeding
+	// behavior can be flipped mid-test.
+	target.handler = newNexusHandlerCallbackHandler(t, env.SdkClient(), "circuitbreaker", func(int) error {
+		target.deliveryCount.Add(1)
+		if target.failing.Load() {
+			// A retryable handler error, so the delivery is reported as a DestinationDownError and
+			// counts against the destination's circuit breaker.
+			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "intentional failure")
+		}
+		return nil
+	})
+
+	return target
+}
+
 // callbackExecutionType abstracts a Temporal execution type for testling completion callbacks.
 type callbackExecutionType interface {
 	// startAndCompleteEx starts a new execution and has it complete successfully.
