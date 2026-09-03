@@ -1272,6 +1272,7 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
 	}
 	// TODO: Delete this code path after EnableMatchingFanOutForPollCancellation is rolled out.
 	if request.WorkerInstanceKey != "" {
+		// Keep Put before CancelAll; poll registration uses the inverse order to avoid missed polls.
 		e.shutdownWorkers.Put(request.WorkerInstanceKey, struct{}{})
 	}
 	cancelledCount := e.workerInstancePollers.CancelAll(request.WorkerInstanceKey)
@@ -1416,6 +1417,7 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPollsPartition(
 	var cancelledCount int32
 	for _, worker := range request.GetWorkers() {
 		if worker.GetWorkerInstanceKey() != "" {
+			// Keep Put before CancelAll; poll registration uses the inverse order to avoid missed polls.
 			e.shutdownWorkers.Put(worker.GetWorkerInstanceKey(), struct{}{})
 		}
 		cancelledCount += e.workerInstancePollers.CancelAll(worker.GetWorkerInstanceKey())
@@ -3058,17 +3060,6 @@ func (e *matchingEngineImpl) pollTask(
 	// reached, instead of emptyTask, context timeout error is returned to the frontend by the rpc stack,
 	// which counts against our SLO. By shortening the timeout by a very small amount, the emptyTask can be
 	// returned to the handler before a context timeout error is generated.
-	workerInstanceKey := pollMetadata.workerInstanceKey
-	if workerInstanceKey != "" && e.shutdownWorkers.Get(workerInstanceKey) != nil {
-		e.logger.Info("Rejecting poll from recently-shutdown worker",
-			tag.WorkflowNamespaceID(partition.NamespaceId()),
-			tag.WorkflowTaskQueueName(partition.TaskQueue().Name()),
-			tag.WorkflowTaskQueueType(partition.TaskType()),
-			tag.NewStringTag("worker-instance-key", workerInstanceKey),
-		)
-		return nil, false, errNoTasks
-	}
-
 	// For non-forwarded polls, subtract a proportional random jitter to spread expiration
 	// times across pollers and prevent thundering herd reconnects. Jitter is capped so the
 	// interval never falls below forwardedPollMinInterval.
@@ -3085,22 +3076,28 @@ func (e *matchingEngineImpl) pollTask(
 	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, longPollInterval, returnEmptyTaskTimeBudget)
 	defer cancel()
 
+	if workerInstanceKey := pollMetadata.workerInstanceKey; workerInstanceKey != "" {
+		// Register before checking shutdownWorkers. The shutdown path does the reverse:
+		// it populates shutdownWorkers before calling CancelAll. So either the check
+		// sees the shutdown, or CancelAll sees the registration.
+		pollerTrackerKey := uuid.NewString()
+		e.workerInstancePollers.Add(workerInstanceKey, pollerTrackerKey, cancel)
+		defer e.workerInstancePollers.Remove(workerInstanceKey, pollerTrackerKey)
+
+		if e.shutdownWorkers.Get(workerInstanceKey) != nil {
+			e.logger.Debug("Rejecting poll from recently-shutdown worker",
+				tag.WorkflowNamespaceID(partition.NamespaceId()),
+				tag.WorkflowTaskQueueName(partition.TaskQueue().Name()),
+				tag.WorkflowTaskQueueType(partition.TaskType()),
+				tag.NewStringTag("worker-instance-key", workerInstanceKey),
+			)
+			return nil, false, errNoTasks
+		}
+	}
+
 	if pollerID, ok := ctx.Value(pollerIDKey).(string); ok && pollerID != "" {
 		e.outstandingPollers.Set(pollerID, cancel)
-
-		// Also track by worker instance key for bulk cancellation during shutdown.
-		// Use UUID (not pollerID) because pollerID is reused when forwarded.
-		pollerTrackerKey := uuid.NewString()
-		if workerInstanceKey != "" {
-			e.workerInstancePollers.Add(workerInstanceKey, pollerTrackerKey, cancel)
-		}
-
-		defer func() {
-			e.outstandingPollers.Delete(pollerID)
-			if workerInstanceKey != "" {
-				e.workerInstancePollers.Remove(workerInstanceKey, pollerTrackerKey)
-			}
-		}()
+		defer e.outstandingPollers.Delete(pollerID)
 	}
 	return pm.PollTask(ctx, pollMetadata)
 }
