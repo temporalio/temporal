@@ -146,19 +146,14 @@ func pickWritePartitionByGap(
 		return rand.Intn(partitionCount), partitionCount
 	}
 
-	// if rootProbability < 0.01, choose the root with p=0.01
-	rootGap := max(int64(0), backlogCap-number.DecodeCompact8(counts[0]))
-	rootProbability := float64(rootGap) / float64(total)
-	if rootProbability < writePartitionRootProbabilityFloor {
-		if rand.Float64() < writePartitionRootProbabilityFloor {
-			return 0, int(math.Round(1 / writePartitionRootProbabilityFloor))
-		}
-		// choose between non-root partitions according to gap from backlog cap
-		partitionID := pickPartitionByGap(counts[1:partitionCount], backlogCap, total-rootGap) + 1
-		return partitionID, int(math.Round(1 / writePartitionRootProbabilityFloor))
-	}
-
-	return pickPartitionByGap(counts[:partitionCount], backlogCap, total), randomRound(1 / rootProbability)
+	count0 := number.DecodeCompact8(counts[0])
+	// p(root) = gap_root / total
+	// we want to force p(root) >= writePartitionRootProbabilityFloor
+	// so, gap_root / total >= writePartitionRootProbabilityFloor
+	// => gap_root >= total * writePartitionRootProbabilityFloor
+	gap0 := max(backlogCap-count0, int64(float64(total)*writePartitionRootProbabilityFloor))
+	expectedRoot := float64(total) / float64(gap0)
+	return pickPartitionByGap(counts, gap0, backlogCap, total), randomRound(expectedRoot)
 }
 
 // randomRound rounds without biasing the expected value.
@@ -170,10 +165,15 @@ func randomRound(x float64) int {
 	return int(n)
 }
 
-func pickPartitionByGap(counts []number.Compact8, backlogCap int64, total int64) int {
+func pickPartitionByGap(counts []number.Compact8, gap0, backlogCap, total int64) int {
 	r := rand.Int63n(total)
 	for i, count := range counts {
-		gap := max(int64(0), backlogCap-number.DecodeCompact8(count))
+		var gap int64
+		if i == 0 {
+			gap = gap0
+		} else {
+			gap = max(int64(0), backlogCap-number.DecodeCompact8(count))
+		}
 		if r < gap { // more likely to be true the bigger this partition's gap is
 			return i
 		}

@@ -1,7 +1,6 @@
 package matching
 
 import (
-	"math"
 	"math/rand"
 	"sync"
 	"testing"
@@ -426,18 +425,24 @@ func TestPickWritePartition_RootProbabilityFloor(t *testing.T) {
 	}
 	const attempts = 100_000
 	rootPicks := 0
-	expectedProbability := writePartitionRootProbabilityFloor
-	expectedTasksAllPartitions := int(math.Round(1 / expectedProbability))
+	estimatedTasks := 0
+	backlogCap := number.DecodeCompact8(pc.BacklogCap)
+	total := backlogCap - number.DecodeCompact8(pc.BacklogCount[1])
+	gap0 := int64(float64(total) * writePartitionRootProbabilityFloor)
+	expectedProbability := float64(gap0) / float64(total)
+	expectedTasksAllPartitions := float64(total) / float64(gap0)
 	for range attempts {
 		partition, estimatedTasksAllPartitions := lb.PickWritePartition(taskQueue, pc)
 		if partition.IsRoot() {
 			rootPicks++
-			require.Equal(t, expectedTasksAllPartitions, estimatedTasksAllPartitions)
+			require.InDelta(t, expectedTasksAllPartitions, estimatedTasksAllPartitions, 1)
+			estimatedTasks += estimatedTasksAllPartitions
 		} else {
 			require.Zero(t, estimatedTasksAllPartitions)
 		}
 	}
 	require.InDelta(t, attempts*expectedProbability, rootPicks, attempts*expectedProbability*0.2)
+	require.InDelta(t, attempts, estimatedTasks, attempts*0.1)
 }
 
 func TestPickWritePartition_NoBacklogUniform(t *testing.T) {
