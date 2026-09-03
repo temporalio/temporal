@@ -350,29 +350,18 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2RetriesAfterSent
 
 	ctx := s.Context()
 	sid := testcore.RandomizeStr("sched-migrate-v1-to-v2-sentinel-retry")
+	wid := testcore.RandomizeStr("sched-migrate-v1-to-v2-sentinel-retry-wf")
+	wt := testcore.RandomizeStr("sched-migrate-v1-to-v2-sentinel-retry-wt")
 	nsName := env.Namespace().String()
 	nsID := env.NamespaceID().String()
 	v1WorkflowID := scheduler.WorkflowIDPrefix + sid
 
 	// Keep the scheduler timerless so it cannot retry migration until the test wakes it.
-	_, err := env.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
-		Namespace:  nsName,
-		ScheduleId: sid,
-		Schedule: &schedulepb.Schedule{
-			Spec: &schedulepb.ScheduleSpec{
-				Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(time.Hour)}},
-			},
-			Action: startWorkflowAction(
-				env,
-				testcore.RandomizeStr("sched-migrate-v1-to-v2-sentinel-retry-wf"),
-				testcore.RandomizeStr("sched-migrate-v1-to-v2-sentinel-retry-wt"),
-			),
-			State: &schedulepb.ScheduleState{Paused: true},
-		},
-		Identity:  "test",
-		RequestId: uuid.NewString(),
+	createSchedule(ctx, s.T(), env, sid, &schedulepb.Schedule{
+		Spec:   intervalSpec(noOpInterval),
+		Action: startWorkflowAction(env, wid, wt),
+		State:  &schedulepb.ScheduleState{Paused: true},
 	})
-	s.Require().NoError(err)
 
 	// Wait for the V1 scheduler to process its first workflow task and go to sleep.
 	s.Eventually(func() bool {
@@ -387,7 +376,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2RetriesAfterSent
 			},
 		)
 		return err == nil && desc.GetWorkflowExecutionInfo().GetHistoryLength() > 3
-	}, 10*time.Second, 100*time.Millisecond)
+	}, awaitTimeout, pollInterval)
 
 	sentinelResp, err := env.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
 		Namespace: nsName,
@@ -440,20 +429,9 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2RetriesAfterSent
 		return failureTypes, succeeded, nil
 	}
 
-	// A patch signal wakes the paused V1 scheduler without starting an action.
-	wakeV1Scheduler := func(note string) {
-		_, err := env.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
-			Namespace:  nsName,
-			ScheduleId: sid,
-			Patch:      &schedulepb.SchedulePatch{Pause: note},
-			Identity:   "test",
-			RequestId:  uuid.NewString(),
-		})
-		s.Require().NoError(err)
-	}
-
 	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, true)
-	wakeV1Scheduler("wake migration blocked by sentinel")
+	// A patch signal wakes the paused V1 scheduler without starting an action.
+	patchSchedule(ctx, s.T(), env, sid, &schedulepb.SchedulePatch{Pause: "wake migration blocked by sentinel"})
 
 	var failureTypes []string
 	var succeededMarkers int
@@ -461,7 +439,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2RetriesAfterSent
 	s.Eventually(func() bool {
 		failureTypes, succeededMarkers, markerErr = migrationMarkerOutcomes()
 		return markerErr == nil && len(failureTypes) == 1
-	}, 10*time.Second, 100*time.Millisecond)
+	}, awaitTimeout, pollInterval)
 	s.Require().NoError(markerErr)
 	s.Require().Equal([]string{util.ErrorType(serviceerror.NewUnavailable(""))}, failureTypes)
 	s.Require().Zero(succeededMarkers)
@@ -476,7 +454,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2RetriesAfterSent
 	})
 	s.Require().NoError(err)
 
-	wakeV1Scheduler("wake migration after sentinel deletion")
+	patchSchedule(ctx, s.T(), env, sid, &schedulepb.SchedulePatch{Pause: "wake migration after sentinel deletion"})
 	awaitV1SchedulerCompleted(ctx, s.T(), env, sid)
 
 	failureTypes, succeededMarkers, err = migrationMarkerOutcomes()
