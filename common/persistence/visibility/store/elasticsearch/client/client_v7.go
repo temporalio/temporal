@@ -17,17 +17,17 @@ import (
 )
 
 type (
-	// clientImpl implements Client
-	clientImpl struct {
-		esClient *elastic.Client
+	// ClientV7 implements Client
+	ClientV7 struct {
+		EsClient *elastic.Client
 		url      url.URL
 	}
 )
 
-var _ Client = (*clientImpl)(nil)
+var _ Client = (*ClientV7)(nil)
 
-// newClient create a ES client
-func newClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*clientImpl, error) {
+// NewClientV7 create a ES client
+func NewClientV7(cfg *Config, httpClient *http.Client, logger log.Logger) (*ClientV7, error) {
 	var urls []string
 	if len(cfg.URLs) > 0 {
 		urls = make([]string, len(cfg.URLs))
@@ -99,8 +99,8 @@ func newClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*client
 		client.Start()
 	}
 
-	return &clientImpl{
-		esClient: client,
+	return &ClientV7{
+		EsClient: client,
 		url:      cfg.URL,
 	}, nil
 }
@@ -118,11 +118,11 @@ func buildTLSHTTPClient(config *auth.TLS) (*http.Client, error) {
 	return tlsClient, nil
 }
 
-func (c *clientImpl) Get(ctx context.Context, index string, docID string) (*elastic.GetResult, error) {
-	return c.esClient.Get().Index(index).Id(docID).Do(ctx)
+func (c *ClientV7) Get(ctx context.Context, index string, docID string) (*elastic.GetResult, error) {
+	return c.EsClient.Get().Index(index).Id(docID).Do(ctx)
 }
 
-func (c *clientImpl) Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error) {
+func (c *ClientV7) Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error) {
 	searchSource := elastic.NewSearchSource().
 		Query(p.Query).
 		SortBy(p.Sorter...).
@@ -136,17 +136,25 @@ func (c *clientImpl) Search(ctx context.Context, p *SearchParameters) (*elastic.
 		searchSource.SearchAfter(p.SearchAfter...)
 	}
 
-	return c.esClient.Search(p.Index).
+	{
+		if src, err := searchSource.Source(); err == nil {
+			if srcJson, err := json.Marshal(src); err == nil {
+				fmt.Printf("[FOO] %s\n", srcJson)
+			}
+		}
+	}
+
+	return c.EsClient.Search(p.Index).
 		AllowPartialSearchResults(false).
 		SearchSource(searchSource).
 		Do(ctx)
 }
 
-func (c *clientImpl) Count(ctx context.Context, index string, query elastic.Query) (int64, error) {
-	return c.esClient.Count(index).Query(query).Do(ctx)
+func (c *ClientV7) Count(ctx context.Context, index string, query elastic.Query) (int64, error) {
+	return c.EsClient.Count(index).Query(query).Do(ctx)
 }
 
-func (c *clientImpl) CountGroupBy(
+func (c *ClientV7) CountGroupBy(
 	ctx context.Context,
 	index string,
 	query elastic.Query,
@@ -158,14 +166,14 @@ func (c *clientImpl) CountGroupBy(
 		Size(0).
 		TrackTotalHits(false).
 		Aggregation(aggName, agg)
-	return c.esClient.Search(index).
+	return c.EsClient.Search(index).
 		AllowPartialSearchResults(false).
 		SearchSource(searchSource).
 		Do(ctx)
 }
 
-func (c *clientImpl) RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error) {
-	esBulkProcessor, err := c.esClient.BulkProcessor().
+func (c *ClientV7) RunBulkProcessor(ctx context.Context, p *BulkProcessorParameters) (BulkProcessor, error) {
+	esBulkProcessor, err := c.EsClient.BulkProcessor().
 		Name(p.Name).
 		Workers(p.NumOfWorkers).
 		BulkActions(p.BulkActions).
@@ -180,24 +188,24 @@ func (c *clientImpl) RunBulkProcessor(ctx context.Context, p *BulkProcessorParam
 	return newBulkProcessor(esBulkProcessor), err
 }
 
-func (c *clientImpl) PutMapping(ctx context.Context, index string, mapping map[string]enumspb.IndexedValueType) (bool, error) {
+func (c *ClientV7) PutMapping(ctx context.Context, index string, mapping map[string]enumspb.IndexedValueType) (bool, error) {
 	body := buildMappingBody(mapping)
-	resp, err := c.esClient.PutMapping().Index(index).BodyJson(body).Do(ctx)
+	resp, err := c.EsClient.PutMapping().Index(index).BodyJson(body).Do(ctx)
 	if err != nil {
 		return false, err
 	}
 	return resp.Acknowledged, err
 }
 
-func (c *clientImpl) WaitForYellowStatus(ctx context.Context, index string) (string, error) {
-	resp, err := c.esClient.ClusterHealth().Index(index).WaitForYellowStatus().Do(ctx)
+func (c *ClientV7) WaitForYellowStatus(ctx context.Context, index string) (string, error) {
+	resp, err := c.EsClient.ClusterHealth().Index(index).WaitForYellowStatus().Do(ctx)
 	if err != nil {
 		return "", err
 	}
 	return resp.Status, err
 }
 
-func (c *clientImpl) GetMapping(ctx context.Context, index string) (map[string]string, error) {
+func (c *ClientV7) GetMapping(ctx context.Context, index string) (map[string]string, error) {
 	// Manually build mapping request because olivere/elastic/v7 client doesn't work with ES8
 	path, err := uritemplates.Expand("/{index}/_mapping", map[string]string{
 		"index": index,
@@ -207,7 +215,7 @@ func (c *clientImpl) GetMapping(ctx context.Context, index string) (map[string]s
 	}
 
 	// Get HTTP response
-	res, err := c.esClient.PerformRequest(ctx, elastic.PerformRequestOptions{
+	res, err := c.EsClient.PerformRequest(ctx, elastic.PerformRequestOptions{
 		Method:  "GET",
 		Path:    path,
 		Params:  url.Values{},
@@ -226,46 +234,46 @@ func (c *clientImpl) GetMapping(ctx context.Context, index string) (map[string]s
 	return convertMappingBody(body, index), nil
 }
 
-func (c *clientImpl) GetDateFieldType() string {
+func (c *ClientV7) GetDateFieldType() string {
 	return "date_nanos"
 }
 
-func (c *clientImpl) CreateIndex(ctx context.Context, index string, body map[string]any) (bool, error) {
+func (c *ClientV7) CreateIndex(ctx context.Context, index string, body map[string]any) (bool, error) {
 	if body == nil {
 		body = make(map[string]any)
 	}
-	resp, err := c.esClient.CreateIndex(index).BodyJson(body).Do(ctx)
+	resp, err := c.EsClient.CreateIndex(index).BodyJson(body).Do(ctx)
 	if err != nil {
 		return false, err
 	}
 	return resp.Acknowledged, nil
 }
 
-func (c *clientImpl) IsNotFoundError(err error) bool {
+func (c *ClientV7) IsNotFoundError(err error) bool {
 	return elastic.IsNotFound(err)
 }
 
-func (c *clientImpl) CatIndices(ctx context.Context, target string) (elastic.CatIndicesResponse, error) {
-	return c.esClient.CatIndices().Index(target).Do(ctx)
+func (c *ClientV7) CatIndices(ctx context.Context, target string) (elastic.CatIndicesResponse, error) {
+	return c.EsClient.CatIndices().Index(target).Do(ctx)
 }
 
-func (c *clientImpl) Bulk() BulkService {
-	return newBulkService(c.esClient.Bulk())
+func (c *ClientV7) Bulk() BulkService {
+	return newBulkService(c.EsClient.Bulk())
 }
 
-func (c *clientImpl) IndexPutTemplate(ctx context.Context, templateName string, bodyString string) (bool, error) {
+func (c *ClientV7) IndexPutTemplate(ctx context.Context, templateName string, bodyString string) (bool, error) {
 	//lint:ignore SA1019 Changing to IndexPutIndexTemplate requires template changes and will be done separately.
-	resp, err := c.esClient.IndexPutTemplate(templateName).BodyString(bodyString).Do(ctx)
+	resp, err := c.EsClient.IndexPutTemplate(templateName).BodyString(bodyString).Do(ctx)
 	if err != nil {
 		return false, err
 	}
 	return resp.Acknowledged, nil
 }
 
-func (c *clientImpl) IndexPutMapping(ctx context.Context, indexName string, bodyString string) (bool, error) {
+func (c *ClientV7) IndexPutMapping(ctx context.Context, indexName string, bodyString string) (bool, error) {
 	// Use raw HTTP request to update index mappings
 	path := fmt.Sprintf("/%s/_mapping", indexName)
-	resp, err := c.esClient.PerformRequest(ctx, elastic.PerformRequestOptions{
+	resp, err := c.EsClient.PerformRequest(ctx, elastic.PerformRequestOptions{
 		Method:      "PUT",
 		Path:        path,
 		Body:        bodyString,
@@ -286,9 +294,9 @@ func (c *clientImpl) IndexPutMapping(ctx context.Context, indexName string, body
 	return result.Acknowledged, nil
 }
 
-func (c *clientImpl) ClusterPutSettings(ctx context.Context, bodyString string) (bool, error) {
+func (c *ClientV7) ClusterPutSettings(ctx context.Context, bodyString string) (bool, error) {
 	// Use raw HTTP request since ClusterPutSettings is not available in olivere/elastic v7
-	resp, err := c.esClient.PerformRequest(ctx, elastic.PerformRequestOptions{
+	resp, err := c.EsClient.PerformRequest(ctx, elastic.PerformRequestOptions{
 		Method:      "PUT",
 		Path:        "/_cluster/settings",
 		Body:        bodyString,
@@ -309,32 +317,32 @@ func (c *clientImpl) ClusterPutSettings(ctx context.Context, bodyString string) 
 	return result.Acknowledged, nil
 }
 
-func (c *clientImpl) IndexExists(ctx context.Context, indexName string) (bool, error) {
-	return c.esClient.IndexExists(indexName).Do(ctx)
+func (c *ClientV7) IndexExists(ctx context.Context, indexName string) (bool, error) {
+	return c.EsClient.IndexExists(indexName).Do(ctx)
 }
 
-func (c *clientImpl) DeleteIndex(ctx context.Context, indexName string) (bool, error) {
-	resp, err := c.esClient.DeleteIndex(indexName).Do(ctx)
+func (c *ClientV7) DeleteIndex(ctx context.Context, indexName string) (bool, error) {
+	resp, err := c.EsClient.DeleteIndex(indexName).Do(ctx)
 	if err != nil {
 		return false, err
 	}
 	return resp.Acknowledged, nil
 }
 
-func (c *clientImpl) IndexPutSettings(ctx context.Context, indexName string, bodyString string) (bool, error) {
-	resp, err := c.esClient.IndexPutSettings(indexName).BodyString(bodyString).Do(ctx)
+func (c *ClientV7) IndexPutSettings(ctx context.Context, indexName string, bodyString string) (bool, error) {
+	resp, err := c.EsClient.IndexPutSettings(indexName).BodyString(bodyString).Do(ctx)
 	if err != nil {
 		return false, err
 	}
 	return resp.Acknowledged, nil
 }
 
-func (c *clientImpl) IndexGetSettings(ctx context.Context, indexName string) (map[string]*elastic.IndicesGetSettingsResponse, error) {
-	return c.esClient.IndexGetSettings(indexName).Do(ctx)
+func (c *ClientV7) IndexGetSettings(ctx context.Context, indexName string) (map[string]*elastic.IndicesGetSettingsResponse, error) {
+	return c.EsClient.IndexGetSettings(indexName).Do(ctx)
 }
 
-func (c *clientImpl) Delete(ctx context.Context, indexName string, docID string, version int64) error {
-	_, err := c.esClient.Delete().
+func (c *ClientV7) Delete(ctx context.Context, indexName string, docID string, version int64) error {
+	_, err := c.EsClient.Delete().
 		Index(indexName).
 		Id(docID).
 		Version(version).
@@ -344,8 +352,8 @@ func (c *clientImpl) Delete(ctx context.Context, indexName string, docID string,
 }
 
 // Ping returns whether or not the elastic search cluster is available
-func (c *clientImpl) Ping(ctx context.Context) error {
-	_, _, err := c.esClient.Ping(c.url.String()).Do(ctx)
+func (c *ClientV7) Ping(ctx context.Context) error {
+	_, _, err := c.EsClient.Ping(c.url.String()).Do(ctx)
 	return err
 }
 
