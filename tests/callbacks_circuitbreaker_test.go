@@ -40,6 +40,7 @@ func (s *CallbacksCircuitBreakerSuite) newCircuitBreakerEnv(extra ...testcore.Te
 	allCallbackKinds := []callbacks.Kind{callbacks.KindNexus, callbacks.KindNexusHandler}
 	opts := []testcore.TestOption{
 		testcore.WithDedicatedCluster(),
+		// Workflows
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
 		// Standalone Activities
 		testcore.WithDynamicConfig(activity.Enabled, true),
@@ -51,6 +52,7 @@ func (s *CallbacksCircuitBreakerSuite) newCircuitBreakerEnv(extra ...testcore.Te
 		// All Callbacks and Retry policy
 		testcore.WithDynamicConfig(callback.AllowedAddresses,
 			[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}}),
+		// Retry Policy
 		testcore.WithDynamicConfig(callback.RetryPolicyInitialInterval, 10*time.Millisecond),
 		testcore.WithDynamicConfig(callback.RetryPolicyMaximumInterval, 10*time.Millisecond),
 		// Shorten the open period so the breaker half-opens within the test rather than after the

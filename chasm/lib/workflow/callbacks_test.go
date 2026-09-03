@@ -18,15 +18,15 @@ import (
 func testCallbackValidator(t *testing.T, maxCount, maxSourceContextSize int) commoncallbacks.Validator {
 	t.Helper()
 	v, err := commoncallbacks.NewValidator(commoncallbacks.ValidatorConfig{
-		MaxCallbacksPerExecution:                  func(string) int { return maxCount },
-		MaxIDLengthLimit:                          func() int { return 1000 },
-		URLMaxLength:                              func(string) int { return 1000 },
-		HeaderMaxSize:                             func(string) int { return 1000 },
-		EndpointRules:                             func(string) commoncallbacks.AddressMatchRules { return commoncallbacks.AddressMatchRules{} },
-		MaxServiceNameLength:                      func(string) int { return 1000 },
-		MaxOperationNameLength:                    func(string) int { return 1000 },
-		NexusHandlerSourceContextMaxSize:          func(string) int { return 1024 * 1024 },
-		NexusHandlerSourceContextAggregateMaxSize: func(string) int { return maxSourceContextSize },
+		MaxCallbacksPerExecution:              func(string) int { return maxCount },
+		MaxIDLengthLimit:                      func() int { return 1000 },
+		URLMaxLength:                          func(string) int { return 1000 },
+		HeaderMaxSize:                         func(string) int { return 1000 },
+		EndpointRules:                         func(string) commoncallbacks.AddressMatchRules { return commoncallbacks.AddressMatchRules{} },
+		MaxServiceNameLength:                  func(string) int { return 1000 },
+		MaxOperationNameLength:                func(string) int { return 1000 },
+		NexusHandlerSourceContextMaxSize:      func(string) int { return 1024 * 1024 },
+		TotalNexusHandlerSourceContextMaxSize: func(string) int { return maxSourceContextSize },
 	})
 	require.NoError(t, err)
 	return v

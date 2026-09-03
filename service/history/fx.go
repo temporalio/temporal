@@ -143,15 +143,15 @@ var Module = fx.Options(
 // the limits a request is admitted under are the ones re-applied against the execution's state.
 func callbackValidatorProvider(dc *dynamicconfig.Collection) (commoncallbacks.Validator, error) {
 	return commoncallbacks.NewValidator(commoncallbacks.ValidatorConfig{
-		MaxCallbacksPerExecution:                  callback.MaxPerExecution.Get(dc),
-		MaxIDLengthLimit:                          dynamicconfig.MaxIDLengthLimit.Get(dc),
-		URLMaxLength:                              dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
-		HeaderMaxSize:                             dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
-		EndpointRules:                             callback.AllowedAddresses.Get(dc),
-		MaxServiceNameLength:                      chasmnexus.MaxServiceNameLength.Get(dc),
-		MaxOperationNameLength:                    chasmnexus.MaxOperationNameLength.Get(dc),
-		NexusHandlerSourceContextMaxSize:          callback.NexusHandlerSourceContextMaxSize.Get(dc),
-		NexusHandlerSourceContextAggregateMaxSize: callback.NexusHandlerSourceContextAggregateMaxSize.Get(dc),
+		MaxCallbacksPerExecution:              callback.MaxPerExecution.Get(dc),
+		MaxIDLengthLimit:                      dynamicconfig.MaxIDLengthLimit.Get(dc),
+		URLMaxLength:                          dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
+		HeaderMaxSize:                         dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
+		EndpointRules:                         callback.AllowedAddresses.Get(dc),
+		MaxServiceNameLength:                  chasmnexus.MaxServiceNameLength.Get(dc),
+		MaxOperationNameLength:                chasmnexus.MaxOperationNameLength.Get(dc),
+		NexusHandlerSourceContextMaxSize:      callback.NexusHandlerSourceContextMaxSize.Get(dc),
+		TotalNexusHandlerSourceContextMaxSize: callback.TotalNexusHandlerSourceContextMaxSize.Get(dc),
 	})
 }
 

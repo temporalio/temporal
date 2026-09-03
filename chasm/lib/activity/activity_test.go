@@ -18,13 +18,14 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
-	commoncallbacks "go.temporal.io/server/common/callbacks"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	test "go.temporal.io/server/common/testing"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -1142,29 +1143,16 @@ func newActivityForCallbacks(t *testing.T, ctx chasm.MutableContext) *Activity {
 	return activity
 }
 
-// testCallbackValidator returns a Validator enforcing the aggregate limits these tests exercise.
-// The per-callback limits are set out of the way, since only the aggregate checks are under test.
-func testCallbackValidator(t *testing.T, maxCount, maxSourceContextSize int) commoncallbacks.Validator {
-	t.Helper()
-	v, err := commoncallbacks.NewValidator(commoncallbacks.ValidatorConfig{
-		MaxCallbacksPerExecution:                  func(string) int { return maxCount },
-		MaxIDLengthLimit:                          func() int { return 1000 },
-		URLMaxLength:                              func(string) int { return 1000 },
-		HeaderMaxSize:                             func(string) int { return 1000 },
-		EndpointRules:                             func(string) commoncallbacks.AddressMatchRules { return commoncallbacks.AddressMatchRules{} },
-		MaxServiceNameLength:                      func(string) int { return 1000 },
-		MaxOperationNameLength:                    func(string) int { return 1000 },
-		NexusHandlerSourceContextMaxSize:          func(string) int { return 1024 * 1024 },
-		NexusHandlerSourceContextAggregateMaxSize: func(string) int { return maxSourceContextSize },
-	})
-	require.NoError(t, err)
-	return v
-}
-
 // The frontend bounds the source context carried by one request. Only this check bounds what
 // accumulates across the several requests an on-conflict attach can make.
 func TestAddCompletionCallbacksSourceContextLimit(t *testing.T) {
-	callbackValidator := testCallbackValidator(t, 10, 1500)
+	// Create a callbaclk Validator with specific max callbacks and max source context sizes.
+	validatorConfig := test.NewCallbacksValidatorConfig()
+	validatorConfig.MaxCallbacksPerExecution = func(string) int { return 10 }
+	validatorConfig.TotalNexusHandlerSourceContextMaxSize = func(string) int { return 1500 }
+
+	callbackValidator, err := callbacks.NewValidator(validatorConfig)
+	require.NoError(t, err)
 
 	t.Run("RejectsASingleOversizedRequest", func(t *testing.T) {
 		ctx := &chasm.MockMutableContext{MockContext: chasm.MockContext{HandleNamespaceEntry: testNamespaceEntry}}

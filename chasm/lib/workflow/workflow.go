@@ -120,16 +120,6 @@ func (w *Workflow) RejectUpdate(ctx chasm.MutableContext, updateID string, rejec
 	return callback.ScheduleStandbyCallbacks(ctx, upd.Callbacks)
 }
 
-// totalCallbackCount returns the total number of callbacks across workflow-level
-// and all update-level callback maps.
-func (w *Workflow) totalCallbackCount(ctx chasm.Context) int {
-	count := len(w.Callbacks)
-	for _, updateField := range w.Updates {
-		count += len(updateField.Get(ctx).Callbacks)
-	}
-	return count
-}
-
 // checkWorkflowCallbackLimits returns an error if attaching completionCallbacks would take the
 // workflow past either the callback count or the aggregate source context size it is allowed.
 // These are re-checked here because the frontend bounds only the callbacks on one request; it
@@ -139,29 +129,37 @@ func (w *Workflow) checkWorkflowCallbackLimits(
 	completionCallbacks []*commonpb.Callback,
 	callbackValidator commoncallbacks.Validator,
 ) error {
+	// Compute aggregate stats for all callbacks associated with the Workflow.
+	var (
+		callbackCount          int
+		totalSourceContextSize int
+	)
+	getSourceContextSize := func(c *callback.Callback) int {
+		return c.GetCallback().GetNexusHandler().GetSourceContext().Size()
+	}
+	callbackCount += len(w.Callbacks)
+	for _, cbField := range w.Callbacks {
+		cb := cbField.Get(ctx)
+		totalSourceContextSize += getSourceContextSize(cb)
+	}
+	for _, updateField := range w.Updates {
+		updateCallbacks := updateField.Get(ctx).Callbacks
+
+		callbackCount += len(updateCallbacks)
+		for _, cbField := range updateCallbacks {
+			cb := cbField.Get(ctx)
+			totalSourceContextSize += getSourceContextSize(cb)
+		}
+	}
+
 	return callbackValidator.ValidateAdditions(
 		ctx.NamespaceEntry().Name().String(),
 		completionCallbacks,
 		commoncallbacks.AdditionOptions{
-			CurrentCallbacksAttached:                          w.totalCallbackCount(ctx),
-			CurrentTotalNexusHandlerCallbackSourceContextSize: w.totalSourceContextSize(ctx),
+			CurrentCallbacksAttached:                          callbackCount,
+			CurrentTotalNexusHandlerCallbackSourceContextSize: totalSourceContextSize,
 		},
 	)
-}
-
-// totalSourceContextSize returns the bytes of NexusHandler source context carried by every callback
-// attached to the workflow, including those on its updates.
-func (w *Workflow) totalSourceContextSize(ctx chasm.Context) int {
-	total := 0
-	for _, cbField := range w.Callbacks {
-		total += cbField.Get(ctx).SourceContextSize()
-	}
-	for _, updateField := range w.Updates {
-		for _, cbField := range updateField.Get(ctx).Callbacks {
-			total += cbField.Get(ctx).SourceContextSize()
-		}
-	}
-	return total
 }
 
 // addCallbacksToMap converts common callbacks to CHASM callback components and

@@ -46,15 +46,15 @@ func newValidatorConfig() ValidatorConfig {
 		},
 	}
 	return ValidatorConfig{
-		MaxCallbacksPerExecution:                  func(string) int { return 10 },
-		MaxIDLengthLimit:                          func() int { return 10 },
-		URLMaxLength:                              func(string) int { return 1000 },
-		HeaderMaxSize:                             func(string) int { return 4096 },
-		EndpointRules:                             func(string) AddressMatchRules { return allowAllAddresses },
-		MaxServiceNameLength:                      func(string) int { return 40 },
-		MaxOperationNameLength:                    func(string) int { return 40 },
-		NexusHandlerSourceContextMaxSize:          func(string) int { return 1000 },
-		NexusHandlerSourceContextAggregateMaxSize: func(string) int { return 4000 },
+		MaxCallbacksPerExecution:              func(string) int { return 10 },
+		MaxIDLengthLimit:                      func() int { return 10 },
+		URLMaxLength:                          func(string) int { return 1000 },
+		HeaderMaxSize:                         func(string) int { return 4096 },
+		EndpointRules:                         func(string) AddressMatchRules { return allowAllAddresses },
+		MaxServiceNameLength:                  func(string) int { return 40 },
+		MaxOperationNameLength:                func(string) int { return 40 },
+		NexusHandlerSourceContextMaxSize:      func(string) int { return 1000 },
+		TotalNexusHandlerSourceContextMaxSize: func(string) int { return 4000 },
 	}
 }
 

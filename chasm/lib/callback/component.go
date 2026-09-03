@@ -2,6 +2,7 @@ package callback
 
 import (
 	"fmt"
+	"iter"
 	"maps"
 	"time"
 
@@ -98,6 +99,8 @@ func (c *Callback) loadInvocationArgs(
 		return nil, err
 	}
 
+	// NexusHandler callbacks, deliver the result directly to a waiting Temporal worker by
+	// invoking a Nexus handler.
 	if nexusHandler := c.GetCallback().GetNexusHandler(); nexusHandler != nil {
 		return invocableNexusHandler{
 			callback:   nexusHandler,
@@ -108,6 +111,8 @@ func (c *Callback) loadInvocationArgs(
 		}, nil
 	}
 
+	// Nexus callbacks deliver results by also invoking a Nexus handler, but using HTTP
+	// (typically a Frontend service).
 	callback := c.GetCallback().GetNexus()
 	if callback.GetUrl() == chasm.NexusCompletionHandlerURL {
 		return invocableInternal{
@@ -157,12 +162,6 @@ func (c *Callback) saveResult(
 			fmt.Sprintf("unrecognized callback result %v", input.result),
 		)
 	}
-}
-
-// SourceContextSize returns the size in bytes of the NexusHandler source context this callback carries,
-// or 0 for any other variant. Used to enforce an aggregate cap for an execution's callbacks.
-func (c *Callback) SourceContextSize() int {
-	return c.GetCallback().GetNexusHandler().GetSourceContext().Size()
 }
 
 // ToAPICallback converts a CHASM callback to API callback proto.
@@ -328,4 +327,15 @@ func ScheduleStandbyCallbacks(ctx chasm.MutableContext, callbacks chasm.Map[stri
 		}
 	}
 	return nil
+}
+
+// SumNexusHandlerSourceContextSize returns the approximage size, in bytes, of the source context payloads for
+// any NexusHandler-variant callbacks in the sequence.
+func SumNexusHandlerSourceContextSize(ctx chasm.Context, cbFields iter.Seq[chasm.Field[*Callback]]) int {
+	var totalSize int
+	for cbField := range cbFields {
+		cb := cbField.Get(ctx)
+		totalSize += cb.GetCallback().GetNexusHandler().GetSourceContext().Size()
+	}
+	return totalSize
 }

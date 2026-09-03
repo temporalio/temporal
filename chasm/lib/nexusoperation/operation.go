@@ -471,17 +471,15 @@ func (o *Operation) addCompletionCallbacks(
 		return serviceerror.NewFailedPrecondition("cannot attach callbacks to a closed nexus operation")
 	}
 
-	// Re-check the aggregate limits against what is already attached, which the frontend cannot see.
-	currentSourceContextSize := 0
-	for _, cb := range o.Callbacks {
-		currentSourceContextSize += cb.Get(ctx).SourceContextSize()
-	}
+	// Re-check the aggregate limits against what is already attached, since frontend's validation
+	// doesn't know the current state of the execution.
+	totalSourceContextSize := callback.SumNexusHandlerSourceContextSize(ctx, maps.Values(o.Callbacks))
 	if err := callbackValidator.ValidateAdditions(
 		ctx.NamespaceEntry().Name().String(),
 		completionCallbacks,
 		commoncallbacks.AdditionOptions{
 			CurrentCallbacksAttached:                          len(o.Callbacks),
-			CurrentTotalNexusHandlerCallbackSourceContextSize: currentSourceContextSize,
+			CurrentTotalNexusHandlerCallbackSourceContextSize: totalSourceContextSize,
 		},
 	); err != nil {
 		return err

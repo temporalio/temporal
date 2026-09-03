@@ -21,7 +21,7 @@ var NexusHandlerSourceContextMaxSize = dynamicconfig.NewNamespaceIntSetting(
 completion callback. The server carries this payload to the callback's handler untouched.`,
 )
 
-var NexusHandlerSourceContextAggregateMaxSize = dynamicconfig.NewNamespaceIntSetting(
+var TotalNexusHandlerSourceContextMaxSize = dynamicconfig.NewNamespaceIntSetting(
 	"callback.nexusHandler.sourceContext.aggregateMaxSize",
 	2*1024*1024,
 	`The maximum allowed total size, in bytes, of the source context payloads carried by all NexusHandler

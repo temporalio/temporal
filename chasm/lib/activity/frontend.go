@@ -421,8 +421,6 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		opts := callbacks.ValidatorOptions{
 			EnabledKinds: h.config.EnabledCallbackKinds(req.GetNamespace()),
 		}
-		// Activity.addCompletionCallbacks re-checks the aggregate limits against the callbacks
-		// already attached to a running activity, which the frontend cannot see.
 		if err := h.callbackValidator.Validate(ctx, req.GetNamespace(), cbs, opts); err != nil {
 			return nil, err
 		}

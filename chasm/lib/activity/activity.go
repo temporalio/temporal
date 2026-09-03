@@ -3,6 +3,7 @@ package activity
 import (
 	"errors"
 	"fmt"
+	"maps"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
@@ -310,17 +311,15 @@ func (a *Activity) addCompletionCallbacks(
 		return serviceerror.NewFailedPrecondition("cannot attach callbacks to a closed activity")
 	}
 
-	// Re-check the aggregate limits against what is already attached, which the frontend cannot see.
-	currentSourceContextSize := 0
-	for _, cb := range a.Callbacks {
-		currentSourceContextSize += cb.Get(ctx).SourceContextSize()
-	}
+	// Re-check the aggregate limits against what is already attached, since frontend's validation
+	// doesn't know the current state of the execution.
+	totalSourceContextSize := callback.SumNexusHandlerSourceContextSize(ctx, maps.Values(a.Callbacks))
 	if err := callbackValidator.ValidateAdditions(
 		ctx.NamespaceEntry().Name().String(),
 		completionCallbacks,
 		commoncallbacks.AdditionOptions{
 			CurrentCallbacksAttached:                          len(a.Callbacks),
-			CurrentTotalNexusHandlerCallbackSourceContextSize: currentSourceContextSize,
+			CurrentTotalNexusHandlerCallbackSourceContextSize: totalSourceContextSize,
 		},
 	); err != nil {
 		return err

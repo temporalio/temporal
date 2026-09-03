@@ -2,7 +2,6 @@ package activity
 
 import (
 	"fmt"
-	"regexp"
 	"testing"
 	"time"
 
@@ -597,23 +596,9 @@ func TestValidateStartRequestSourceContextAggregate(t *testing.T) {
 	newHandler := func(t *testing.T) *frontendHandler {
 		t.Helper()
 
-		callbackValidator, err := callbacks.NewValidator(callbacks.ValidatorConfig{
-			MaxCallbacksPerExecution: func(string) int { return 2000 },
-			MaxIDLengthLimit:         func() int { return 1000 },
-			URLMaxLength:             func(string) int { return 1000 },
-			HeaderMaxSize:            func(string) int { return 2000 },
-			EndpointRules: func(string) callbacks.AddressMatchRules {
-				return callbacks.AddressMatchRules{
-					Rules: []callbacks.AddressMatchRule{
-						{Regexp: regexp.MustCompile(`.*`), AllowInsecure: true},
-					},
-				}
-			},
-			MaxServiceNameLength:                      func(string) int { return 1000 },
-			MaxOperationNameLength:                    func(string) int { return 1000 },
-			NexusHandlerSourceContextMaxSize:          func(string) int { return 64 * 1024 },
-			NexusHandlerSourceContextAggregateMaxSize: func(string) int { return 1500 },
-		})
+		validatorCfg := test.NewCallbacksValidatorConfig()
+		validatorCfg.TotalNexusHandlerSourceContextMaxSize = func(string) int { return 1500 }
+		callbackValidator, err := callbacks.NewValidator(validatorCfg)
 		require.NoError(t, err)
 
 		return &frontendHandler{

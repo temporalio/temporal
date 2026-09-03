@@ -3526,10 +3526,9 @@ func (ms *MutableStateImpl) addCompletionCallbacksHsm(
 	coll := callbacks.MachineCollection(ms.HSM())
 	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerWorkflow(ms.GetNamespaceEntry().Name().String())
 	if len(completionCallbacks)+coll.Size() > maxCallbacksPerWorkflow {
-		// Kept identical to the CHASM path's message (callbacks.Validator.ValidateAdditions), so
-		// callers see the same error whichever implementation is active.
+		// Diverted from the CHASM validation path, so the user error depends on the state machine used.
 		return serviceerror.NewFailedPreconditionf(
-			"cannot attach more than %d callbacks to an execution (%d callbacks already attached)",
+			"cannot attach more than %d callbacks to a workflow (%d callbacks already attached)",
 			maxCallbacksPerWorkflow,
 			coll.Size(),
 		)

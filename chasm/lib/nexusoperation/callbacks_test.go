@@ -16,12 +16,14 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	"go.temporal.io/server/common/callbacks"
 	commoncallbacks "go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -51,29 +53,22 @@ func newCallbackTestContext() *chasm.MockMutableContext {
 	return ctx
 }
 
-// testCallbackValidator returns a Validator enforcing the aggregate callback limits. The
-// per-callback limits are set out of the way, since only the aggregate checks are under test.
-func testCallbackValidator(t *testing.T, maxCount, maxSourceContextSize int) commoncallbacks.Validator {
-	t.Helper()
-	v, err := commoncallbacks.NewValidator(commoncallbacks.ValidatorConfig{
-		MaxCallbacksPerExecution:         func(string) int { return maxCount },
-		MaxIDLengthLimit:                 func() int { return 1000 },
-		URLMaxLength:                     func(string) int { return 1000 },
-		HeaderMaxSize:                    func(string) int { return 1000 },
-		EndpointRules:                    func(string) commoncallbacks.AddressMatchRules { return commoncallbacks.AddressMatchRules{} },
-		MaxServiceNameLength:             func(string) int { return 1000 },
-		MaxOperationNameLength:           func(string) int { return 1000 },
-		NexusHandlerSourceContextMaxSize: func(string) int { return 1024 * 1024 },
-	})
-	require.NoError(t, err)
-	return v
-}
-
 // defaultCallbackValidator returns a Validator whose limits are generous enough not to interfere
 // with tests that are not exercising them.
 func defaultCallbackValidator(t *testing.T) commoncallbacks.Validator {
 	t.Helper()
-	return testCallbackValidator(t, 10, 2*1024*1024)
+	cfg := test.NewCallbacksValidatorConfig()
+	v, err := callbacks.NewValidator(cfg)
+	require.NoError(t, err)
+	return v
+}
+
+func validatorWithMaxExecutions(t *testing.T, maxExecutionCallbacks int) callbacks.Validator {
+	cfg := test.NewCallbacksValidatorConfig()
+	cfg.MaxCallbacksPerExecution = func(string) int { return maxExecutionCallbacks }
+	v, err := callbacks.NewValidator(cfg)
+	require.NoError(t, err)
+	return v
 }
 
 func TestNewStandaloneOperationAttachesCompletionCallbacks(t *testing.T) {
@@ -122,7 +117,7 @@ func TestNewStandaloneOperationAttachesCompletionCallbacks(t *testing.T) {
 		_, err := newStandaloneOperation(ctx, newStartReq(
 			newNexusCallback(),
 			newNexusCallback(),
-		), testCallbackValidator(t, 1, 2*1024*1024), newTestLinkValidator(10, 10))
+		), validatorWithMaxExecutions(t, 1), newTestLinkValidator(10, 10))
 		var failedPreconditionErr *serviceerror.FailedPrecondition
 		require.ErrorAs(t, err, &failedPreconditionErr)
 		require.ErrorContains(t, err, "cannot attach more than 1 callbacks")
@@ -241,7 +236,9 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		op := newScheduledTestOperation(t, ctx)
 		cbs := []*commonpb.Callback{newNexusCallback(), newNexusCallback()}
 
-		err := op.addCompletionCallbacks(ctx, "req-id", cbs, testCallbackValidator(t, 1, 2*1024*1024))
+		callbackValidator := validatorWithMaxExecutions(t, 1)
+
+		err := op.addCompletionCallbacks(ctx, "req-id", cbs, callbackValidator)
 		var failedPreconditionErr *serviceerror.FailedPrecondition
 		require.ErrorAs(t, err, &failedPreconditionErr)
 		require.Contains(t, err.Error(), "cannot attach more than 1 callbacks")
@@ -252,7 +249,7 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		ctx := newCallbackTestContext()
 		op := newScheduledTestOperation(t, ctx)
 
-		callbackValidator := testCallbackValidator(t, 2, 2*1024*1024)
+		callbackValidator := validatorWithMaxExecutions(t, 2)
 
 		require.NoError(t, op.addCompletionCallbacks(ctx, "req-1", []*commonpb.Callback{
 			newNexusCallback(),
@@ -273,14 +270,19 @@ func TestAddCompletionCallbacks(t *testing.T) {
 	t.Run("RejectsExceedingTheSourceContextLimitWithAlreadyAttachedCallbacks", func(t *testing.T) {
 		ctx := newCallbackTestContext()
 		op := newScheduledTestOperation(t, ctx)
-		callbackValidator := testCallbackValidator(t, 10, 1500)
+
+		// Callback validator capping the aggregate source context payload size to ~1,500 bytes.
+		cfg := test.NewCallbacksValidatorConfig()
+		cfg.TotalNexusHandlerSourceContextMaxSize = func(string) int { return 1500 }
+		callbackValidator, err := callbacks.NewValidator(cfg)
+		require.NoError(t, err)
 
 		// Each request is within the limit on its own.
 		require.NoError(t, op.addCompletionCallbacks(ctx, "req-1", []*commonpb.Callback{
 			newNexusHandlerCallback(900),
 		}, callbackValidator))
 
-		err := op.addCompletionCallbacks(ctx, "req-2", []*commonpb.Callback{
+		err = op.addCompletionCallbacks(ctx, "req-2", []*commonpb.Callback{
 			newNexusHandlerCallback(900),
 		}, callbackValidator)
 		var failedPreconditionErr *serviceerror.FailedPrecondition
