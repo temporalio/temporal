@@ -8,8 +8,8 @@ import (
 	chasmcallback "go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/testing/testlogger"
-	hsmcallbacks "go.temporal.io/server/components/callbacks"
-	hsmnexus "go.temporal.io/server/components/nexusoperations"
+	hsmcallbacks "go.temporal.io/server/service/history/hsm/callbacks"
+	hsmnexus "go.temporal.io/server/service/history/hsm/nexusoperations"
 	"go.temporal.io/server/service/history/tasks"
 )
 

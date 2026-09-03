@@ -763,14 +763,8 @@ func (s *VisibilityStore) convertQuery(
 		return nil, err
 	}
 
-	c := query.NewQueryConverter(
-		&queryConverter{},
-		namespaceName,
-		saTypeMap,
-		saMapper,
-		s.metricsHandler,
-		s.logger,
-	).WithChasmMapper(chasmMapper).
+	c := NewQueryConverter(namespaceName, saTypeMap, saMapper, s.metricsHandler, s.logger).
+		WithChasmMapper(chasmMapper).
 		WithArchetypeID(archetypeID)
 
 	queryParams, err := c.Convert(queryString)

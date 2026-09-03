@@ -19,6 +19,8 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -35,6 +37,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
@@ -201,7 +204,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 	s.mockArchivalMetadata.SetVisibilityEnabledByDefault()
 	s.mockChasmEngine = chasm.NewMockEngine(s.controller)
 
-	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
 	s.logger = s.mockShard.GetLogger()
 
 	h := &historyEngineImpl{
@@ -2070,6 +2073,18 @@ func (s *transferQueueActiveTaskExecutorSuite) validateUpdateExecutionRequestWit
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Success() {
+	s.testProcessStartChildExecutionSuccess(false)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Success_OrphanedChildReplacementEnabled() {
+	s.testProcessStartChildExecutionSuccess(true)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) testProcessStartChildExecutionSuccess(replacementEnabled bool) {
+	if replacementEnabled {
+		s.mockShard.GetConfig().EnableOrphanedChildWorkflowReplacement = func(string) bool { return true }
+	}
+
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
@@ -2153,15 +2168,28 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 
 	childClock := vclock.NewVectorClock(rand.Int63(), rand.Int31(), rand.Int63())
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), s.createChildWorkflowExecutionRequest(
+	expectedStartRequest := s.createChildWorkflowExecutionRequest(
 		s.childNamespace,
 		transferTask,
 		mutableState,
 		ci,
 		rootExecutionInfo,
 		userMetadata,
-	)).Return(&historyservice.StartWorkflowExecutionResponse{RunId: childRunID, Clock: childClock}, nil)
+	)
+	if replacementEnabled {
+		parentCurrentVersionHistory, err := versionhistory.GetCurrentVersionHistory(
+			persistenceMutableState.GetExecutionInfo().GetVersionHistories(),
+		)
+		s.NoError(err)
+		expectedStartRequest.OrphanedChildReplacementInfo = &historyservice.OrphanedChildReplacementInfo{
+			ParentCurrentVersionHistoryItems: versionhistory.CopyVersionHistoryItems(parentCurrentVersionHistory.GetItems()),
+		}
+	}
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), protomock.Eq(expectedStartRequest)).Return(
+		&historyservice.StartWorkflowExecutionResponse{RunId: childRunID, Clock: childClock},
+		nil,
+	)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
 	currentShardClock := s.mockShard.CurrentVectorClock()
@@ -2620,11 +2648,175 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 		rootExecutionInfo,
 		nil,
 	)).Return(nil, serviceerror.NewWorkflowExecutionAlreadyStarted("msg", "", ""))
+	// Orphaned-child replacement is opt-in, so this request carries no replacement intent and records
+	// StartChildExecutionFailed(WORKFLOW_ALREADY_EXISTS) exactly as it did before that feature.
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.NoError(resp.ExecutionErr)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestGetOrphanedChildReplacementInfo() {
+	const childWorkflowID = "child-workflow"
+	parentVersionHistoryItems := []*historyspb.VersionHistoryItem{{EventId: 100, Version: 925}}
+	childInfo := &persistencespb.ChildExecutionInfo{
+		InitiatedEventId:  75,
+		StartedWorkflowId: childWorkflowID,
+		NamespaceId:       tests.ChildNamespaceID.String(),
+		Namespace:         tests.ChildNamespace.String(),
+	}
+
+	// The parent supplies only branch evidence. ReplaceOrphanedChildAction applies child-local policy
+	// while holding the conflicting run's lock.
+	testCases := []struct {
+		name            string
+		enabled         bool
+		pendingChildren map[int64]*persistencespb.ChildExecutionInfo
+		expected        bool
+	}{
+		{
+			name:            "disabled",
+			pendingChildren: map[int64]*persistencespb.ChildExecutionInfo{75: childInfo},
+		},
+		{
+			name:            "only this initiation holds the workflow ID",
+			enabled:         true,
+			pendingChildren: map[int64]*persistencespb.ChildExecutionInfo{75: childInfo},
+			expected:        true,
+		},
+		{
+			name:    "another accepted child uses the workflow ID",
+			enabled: true,
+			pendingChildren: map[int64]*persistencespb.ChildExecutionInfo{
+				72: {
+					InitiatedEventId:  72,
+					StartedWorkflowId: childWorkflowID,
+					NamespaceId:       tests.ChildNamespaceID.String(),
+				},
+				75: childInfo,
+			},
+		},
+		{
+			name:    "three accepted initiations use the workflow ID",
+			enabled: true,
+			pendingChildren: map[int64]*persistencespb.ChildExecutionInfo{
+				70: {
+					InitiatedEventId:  70,
+					StartedWorkflowId: childWorkflowID,
+					NamespaceId:       tests.ChildNamespaceID.String(),
+				},
+				72: {
+					InitiatedEventId:  72,
+					StartedWorkflowId: childWorkflowID,
+					NamespaceId:       tests.ChildNamespaceID.String(),
+				},
+				75: childInfo,
+			},
+		},
+		{
+			name:    "another namespace uses the workflow ID",
+			enabled: true,
+			pendingChildren: map[int64]*persistencespb.ChildExecutionInfo{
+				72: {
+					InitiatedEventId:  72,
+					StartedWorkflowId: childWorkflowID,
+					NamespaceId:       tests.NamespaceID.String(),
+				},
+				75: childInfo,
+			},
+			expected: true,
+		},
+		{
+			name:    "other accepted children use different workflow IDs",
+			enabled: true,
+			pendingChildren: map[int64]*persistencespb.ChildExecutionInfo{
+				72: {InitiatedEventId: 72, StartedWorkflowId: "other-child"},
+				75: childInfo,
+			},
+			expected: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			s.mockShard.GetConfig().EnableOrphanedChildWorkflowReplacement = func(string) bool {
+				return tc.enabled
+			}
+			mutableState := historyi.NewMockMutableState(gomock.NewController(s.T()))
+			mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+				NamespaceId: "parent-namespace",
+				WorkflowId:  "parent-workflow",
+				VersionHistories: versionhistory.NewVersionHistories(versionhistory.NewVersionHistory(
+					nil,
+					parentVersionHistoryItems,
+				)),
+			}).AnyTimes()
+			mutableState.EXPECT().GetPendingChildExecutionInfos().Return(tc.pendingChildren).AnyTimes()
+
+			replacementInfo := s.transferQueueActiveTaskExecutor.getOrphanedChildReplacementInfo(
+				mutableState,
+				childInfo,
+				tests.Namespace,
+			)
+			if tc.expected {
+				s.NotNil(replacementInfo)
+				s.Equal(parentVersionHistoryItems, replacementInfo.GetParentCurrentVersionHistoryItems())
+				s.NotSame(parentVersionHistoryItems[0], replacementInfo.GetParentCurrentVersionHistoryItems()[0])
+			} else {
+				s.Nil(replacementInfo)
+			}
+		})
+	}
+
+	s.Run("same workflow ID in another namespace", func() {
+		s.mockShard.GetConfig().EnableOrphanedChildWorkflowReplacement = func(string) bool { return true }
+		mutableState := historyi.NewMockMutableState(gomock.NewController(s.T()))
+		mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+			NamespaceId: tests.NamespaceID.String(),
+			WorkflowId:  "same-workflow",
+			VersionHistories: versionhistory.NewVersionHistories(versionhistory.NewVersionHistory(
+				nil,
+				parentVersionHistoryItems,
+			)),
+		})
+		mutableState.EXPECT().GetPendingChildExecutionInfos().Return(map[int64]*persistencespb.ChildExecutionInfo{
+			75: childInfo,
+		})
+		crossNamespaceChild := &persistencespb.ChildExecutionInfo{
+			InitiatedEventId:  75,
+			StartedWorkflowId: "same-workflow",
+			NamespaceId:       tests.ChildNamespaceID.String(),
+		}
+
+		s.NotNil(s.transferQueueActiveTaskExecutor.getOrphanedChildReplacementInfo(
+			mutableState,
+			crossNamespaceChild,
+			tests.Namespace,
+		))
+	})
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestOrphanedChildReplacementDoesNotDeadlockOnSelfWorkflowID() {
+	s.mockShard.GetConfig().EnableOrphanedChildWorkflowReplacement = func(string) bool { return true }
+	mutableState := historyi.NewMockMutableState(gomock.NewController(s.T()))
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId: "same-namespace",
+		WorkflowId:  "same-workflow",
+	})
+	selfChild := &persistencespb.ChildExecutionInfo{
+		InitiatedEventId:  75,
+		Namespace:         tests.Namespace.String(),
+		StartedWorkflowId: "same-workflow",
+	}
+
+	// The parent lock spans startChildWorkflow, so targeting the parent itself would recursively
+	// acquire that lock. Omitting replacement info keeps the request on ordinary conflict handling.
+	s.Nil(s.transferQueueActiveTaskExecutor.getOrphanedChildReplacementInfo(
+		mutableState,
+		selfChild,
+		tests.Namespace,
+	))
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Failure_InvalidVersioningOverride() {
@@ -2910,6 +3102,176 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 
 	resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.NoError(resp.ExecutionErr)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestRecoverClosedChildCompletion_RefreshesTerminalCurrentRun() {
+	childExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "child-workflow-id",
+		RunId:      uuid.NewString(),
+	}
+	terminalRunID := uuid.NewString()
+
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), protomock.Eq(&historyservice.GetMutableStateRequest{
+		NamespaceId: s.childNamespaceID.String(),
+		Execution:   &commonpb.WorkflowExecution{WorkflowId: childExecution.WorkflowId},
+	})).Return(&historyservice.GetMutableStateResponse{
+		Execution:           &commonpb.WorkflowExecution{WorkflowId: childExecution.WorkflowId, RunId: terminalRunID},
+		WorkflowStatus:      enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		FirstExecutionRunId: childExecution.RunId,
+	}, nil)
+	s.mockHistoryClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), protomock.Eq(&historyservice.RefreshWorkflowTasksRequest{
+		NamespaceId: s.childNamespaceID.String(),
+		ArchetypeId: chasm.WorkflowArchetypeID,
+		Request: &adminservice.RefreshWorkflowTasksRequest{
+			Execution: &commonpb.WorkflowExecution{WorkflowId: childExecution.WorkflowId, RunId: terminalRunID},
+		},
+	})).Return(&historyservice.RefreshWorkflowTasksResponse{}, nil)
+
+	err := s.recoverClosedChildCompletion(childExecution, consts.ErrWorkflowCompleted)
+	s.Require().NoError(err)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestIsWorkflowCompletedError() {
+	s.True(isWorkflowCompletedError(consts.ErrWorkflowCompleted))
+	s.True(isWorkflowCompletedError(serviceerror.NewNotFound(consts.ErrWorkflowCompleted.Error())))
+	s.False(isWorkflowCompletedError(serviceerror.NewNotFound("workflow execution not found")))
+	s.False(isWorkflowCompletedError(serviceerror.NewUnavailable("history unavailable")))
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestRecoverClosedChildCompletion_RefreshFailureIsRetried() {
+	childExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "child-workflow-id",
+		RunId:      uuid.NewString(),
+	}
+	terminalRunID := uuid.NewString()
+	refreshErr := serviceerror.NewUnavailable("refresh failed")
+
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).
+		Return(&historyservice.GetMutableStateResponse{
+			Execution:           &commonpb.WorkflowExecution{WorkflowId: childExecution.WorkflowId, RunId: terminalRunID},
+			WorkflowStatus:      enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			FirstExecutionRunId: childExecution.RunId,
+		}, nil)
+	s.mockHistoryClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), gomock.Any()).
+		Return(nil, refreshErr)
+
+	err := s.recoverClosedChildCompletion(childExecution, consts.ErrWorkflowCompleted)
+	s.Require().ErrorIs(err, refreshErr)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestRecoverClosedChildCompletion_RunningSuccessorIsNotRefreshed() {
+	childExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "child-workflow-id",
+		RunId:      uuid.NewString(),
+	}
+
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).
+		Return(&historyservice.GetMutableStateResponse{
+			Execution:           &commonpb.WorkflowExecution{WorkflowId: childExecution.WorkflowId, RunId: uuid.NewString()},
+			WorkflowStatus:      enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			FirstExecutionRunId: childExecution.RunId,
+		}, nil)
+
+	err := s.recoverClosedChildCompletion(childExecution, consts.ErrWorkflowCompleted)
+	s.Require().NoError(err)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestRecoverClosedChildCompletion_PausedSuccessorIsNotRefreshed() {
+	childExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "child-workflow-id",
+		RunId:      uuid.NewString(),
+	}
+
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).
+		Return(&historyservice.GetMutableStateResponse{
+			Execution:           &commonpb.WorkflowExecution{WorkflowId: childExecution.WorkflowId, RunId: uuid.NewString()},
+			WorkflowStatus:      enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
+			FirstExecutionRunId: childExecution.RunId,
+		}, nil)
+
+	err := s.recoverClosedChildCompletion(childExecution, consts.ErrWorkflowCompleted)
+	s.Require().NoError(err)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestRecoverClosedChildCompletion_WorkflowIDReused() {
+	childExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "child-workflow-id",
+		RunId:      uuid.NewString(),
+	}
+	metricHandler := metricstest.NewCaptureHandler()
+	metricCapture := metricHandler.StartCapture()
+	defer metricHandler.StopCapture(metricCapture)
+	s.transferQueueActiveTaskExecutor.metricHandler = metricHandler
+
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).
+		Return(&historyservice.GetMutableStateResponse{
+			Execution:           &commonpb.WorkflowExecution{WorkflowId: childExecution.WorkflowId, RunId: uuid.NewString()},
+			WorkflowStatus:      enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			FirstExecutionRunId: uuid.NewString(),
+		}, nil)
+
+	err := s.recoverClosedChildCompletion(childExecution, consts.ErrWorkflowCompleted)
+	s.Require().NoError(err)
+	s.Require().Len(metricCapture.Snapshot()[metrics.ChildWorkflowCompletionRecoveryChainMismatch.Name()], 1)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestRecoverClosedChildCompletion_CurrentRunNotFound() {
+	childExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "child-workflow-id",
+		RunId:      uuid.NewString(),
+	}
+
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewNotFound("current run deleted"))
+
+	err := s.recoverClosedChildCompletion(childExecution, consts.ErrWorkflowCompleted)
+	s.Require().NoError(err)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestRecoverClosedChildCompletion_GetMutableStateFailureIsRetried() {
+	childExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "child-workflow-id",
+		RunId:      uuid.NewString(),
+	}
+	mutableStateErr := serviceerror.NewUnavailable("mutable state unavailable")
+
+	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).
+		Return(nil, mutableStateErr)
+
+	err := s.recoverClosedChildCompletion(childExecution, consts.ErrWorkflowCompleted)
+	s.Require().ErrorIs(err, mutableStateErr)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestRecoverClosedChildCompletion_Disabled() {
+	childExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "child-workflow-id",
+		RunId:      uuid.NewString(),
+	}
+	s.transferQueueActiveTaskExecutor.config.EnableChildWorkflowCompletionRecovery = func(string) bool { return false }
+
+	err := s.recoverClosedChildCompletion(childExecution, consts.ErrWorkflowCompleted)
+	s.Require().ErrorIs(err, consts.ErrWorkflowCompleted)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) recoverClosedChildCompletion(
+	childExecution *commonpb.WorkflowExecution,
+	scheduleErr error,
+) error {
+	return s.transferQueueActiveTaskExecutor.recoverClosedChildCompletion(
+		context.Background(),
+		&tasks.StartChildExecutionTask{
+			WorkflowKey: definition.NewWorkflowKey(
+				s.namespaceID.String(),
+				"parent-workflow-id",
+				uuid.NewString(),
+			),
+		},
+		s.childNamespace,
+		s.childNamespaceID.String(),
+		childExecution.GetWorkflowId(),
+		childExecution.GetRunId(),
+		scheduleErr,
+	)
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Duplication() {
