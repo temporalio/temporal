@@ -196,7 +196,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.logger,
 			pqMgr.throttledLogger,
 			e.matchingRawClient,
-			newFairMetricsHandler(taggedMetricsHandler),
+			taggedMetricsHandler,
 			pqMgr.counterFactory,
 			false,
 		)
@@ -217,7 +217,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.matchingClient,
 			pqMgr.taskValidator,
 			pqMgr.logger,
-			newFairMetricsHandler(taggedMetricsHandler),
+			taggedMetricsHandler,
 			partitionMgr.rateLimitManager,
 			pqMgr.onRateLimited,
 			pqMgr.MarkAlive,
@@ -237,7 +237,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.logger,
 			pqMgr.throttledLogger,
 			e.matchingRawClient,
-			newPriMetricsHandler(taggedMetricsHandler),
+			taggedMetricsHandler,
 			false,
 		)
 		var fwdr *priForwarder
@@ -257,7 +257,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.matchingClient,
 			pqMgr.taskValidator,
 			pqMgr.logger,
-			newPriMetricsHandler(taggedMetricsHandler),
+			taggedMetricsHandler,
 			partitionMgr.rateLimitManager,
 			pqMgr.onRateLimited,
 			pqMgr.MarkAlive,
@@ -393,7 +393,7 @@ func (c *physicalTaskQueueManagerImpl) SetupDraining() {
 			logger,
 			log.With(c.throttledLogger, backlogTagPriorityDrain),
 			c.partitionMgr.engine.matchingRawClient,
-			newPriMetricsHandler(c.metricsHandler),
+			c.metricsHandler,
 			true,
 		)
 	case *priBacklogManagerImpl:
@@ -406,7 +406,7 @@ func (c *physicalTaskQueueManagerImpl) SetupDraining() {
 			logger,
 			log.With(c.throttledLogger, backlogTagFairnessDrain),
 			c.partitionMgr.engine.matchingRawClient,
-			newFairMetricsHandler(c.metricsHandler),
+			c.metricsHandler,
 			c.counterFactory,
 			true,
 		)

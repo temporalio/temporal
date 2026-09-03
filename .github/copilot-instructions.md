@@ -13,26 +13,30 @@ Apply these patterns when reviewing PRs or suggesting code changes.
 - Remove redundant nil checks after you just set a value
 - Do not export anything that doesn't need to be exported
 
-## 2. Go Naming Conventions
+## 2. Go Conventions
 
 - Don't use `Get` prefix for getters: `func (a *Activity) Store()` not `GetStore()`
 - Don't use `Impl` suffix for implementations
 - Don't put underscore after `Test` in test names: `TestRetry` not `Test_Retry`
 - Avoid stuttering: don't use `ActivityStatus` in package `activity`, just `Status`
 - Use `ok` boolean pattern instead of nil checks where idiomatic
+- Prefer `cmp.Or` for defaults when zero means "unset"; it returns the first non-zero argument. Use an `if` statement for side-effecting or expensive fallbacks because all arguments are evaluated.
 
-## 3. Testify Suite Correctness and Reliability
+## 3. Testing Correctness and Reliability
 
 - Never use `s.T()` in subtests - use the subtest's `t` parameter
 - Never use suite assertion methods (`s.NoError`, `s.Equal`) from goroutines - causes panics
 - Use `EventuallyWithT` when you need assertions inside eventually blocks, and use that block's `t`
 - Use `require.ErrorAs(t, err, &specificErr)` for specific error type checks
 - Prefer `require` over `assert` - it's rarely useful to continue a test after a failed assertion
+- Prefer table-driven tests over separate `Test*` methods when cases exercise the same behavior. Give each case a descriptive name and run it as a subtest.
+- Run independent cases in parallel in plain `t.Run` tests. Testify suites do not support parallel subtests.
+- Prefer comparing a function's full result with an expected value over separate `require.Equal` calls for each field. Use `protorequire.ProtoEqual` for proto results and proto fields within non-proto results. Use other field-level assertions only when part of the result is relevant.
 - Add comments explaining why `Eventually` is needed (e.g., eventual consistency)
 - Do not use single-value type assertions on errors (`err.(*T)`); this panics instead of failing the test when the type doesn't match. Use `errors.As` with a guarded return.
 - When launching a goroutine to maintain a precondition for later assertions (e.g., keeping pollers active so a deployment version gets registered), loop until context cancellation rather than running once. A single attempt that times out exits silently, leaving downstream Eventually/propagation waits to hang until their own deadline.
 - Never call testify assertions (`s.NoError`, `s.Equal`, `require.NoError`, even `assert.NoError`) inside a `go func()` — if the goroutine outlives the test, the assertion panics the binary with `panic: Fail in goroutine after TestXxx has completed`. Move assertions to the test goroutine or use a buffered error channel.
-- Any `<-ch` that isn't inside a `select` with `ctx.Done()` will hang indefinitely if the sender never sends. Always provide a context cancellation fallback.
+- Prefer `await.Rcv` and `await.Snd` for blocking channel operations so tests fail on timeout instead of hanging indefinitely.
 - Never write to package-level or global variables in tests — parallel tests share the same process; thread values through function parameters instead.
 - Never use `time.Sleep` or `time.Since(start) > threshold` to enforce ordering — use channels, `sync.WaitGroup`, or `EventuallyWithT` instead.
 - When using `EventuallyWithT` (or similar) to wait for a condition driven by a background goroutine, ensure the goroutine's timeout is longer than the `EventuallyWithT` deadline — if the background op times out first, the condition will never be satisfied and the wait will hang until its own deadline.
@@ -62,12 +66,14 @@ Apply these patterns when reviewing PRs or suggesting code changes.
 
 - Follow existing patterns: "We have been passing through the frontend request in other libraries. Let's keep the same pattern here"
 - Use existing utilities before creating new ones
+- Use static logger messages and record all dynamic content in structured tags
 - Follow CLI documentation conventions (capitalize proper nouns)
 - Match existing metric tag formats (CONSTANT_CASE for enum values)
 - Use the same error message style (no punctuation for single sentences)
 
 ## 7. Code comments
 
+- Write comments that read like sentences as full sentences, starting with a capital letter and ending with punctuation. Short labels, end-of-line fragments, directives, and `TODO` markers are exempt.
 - A comment should be removed if the behavior of the code without the comment should be apparent to a reader familiar with the codebase.
 - If the benefit of a comment can be achieved by improving variable/function names then suggest that.
 - A comment must not give unnecessary or verbose explanation.

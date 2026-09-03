@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
@@ -61,6 +62,7 @@ type (
 
 		startTime          time.Time
 		onceClusterConnect sync.Once
+		numHistoryShards   int32
 
 		enableTransitionHistory bool
 
@@ -82,6 +84,7 @@ func (s *xdcBaseSuite) clusterReplicationConfig() []*replicationpb.ClusterReplic
 func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 
 	params := testcore.ApplyTestClusterOptions(opts)
+	s.numHistoryShards = cmp.Or(params.NumHistoryShards, int32(1))
 
 	if s.logger == nil {
 		s.logger = log.NewTestLogger()
@@ -89,7 +92,9 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 	if s.dynamicConfigOverrides == nil {
 		s.dynamicConfigOverrides = make(map[dynamicconfig.Key]any)
 	}
-	s.dynamicConfigOverrides[dynamicconfig.ClusterMetadataRefreshInterval.Key()] = time.Second * 5
+	if _, ok := s.dynamicConfigOverrides[dynamicconfig.ClusterMetadataRefreshInterval.Key()]; !ok {
+		s.dynamicConfigOverrides[dynamicconfig.ClusterMetadataRefreshInterval.Key()] = time.Second * 5
+	}
 	s.dynamicConfigOverrides[dynamicconfig.NamespaceCacheRefreshInterval.Key()] = testcore.NamespaceCacheRefreshInterval
 	s.dynamicConfigOverrides[dynamicconfig.EnableTransitionHistory.Key()] = s.enableTransitionHistory
 	// TODO (prathyush): remove this after setting it to true by default.
@@ -139,7 +144,7 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 				},
 			},
 			HistoryConfig: testcore.HistoryConfig{
-				NumHistoryShards: cmp.Or(params.NumHistoryShards, 1),
+				NumHistoryShards: s.numHistoryShards,
 			},
 			Persistence:               persistenceDefaults,
 			DynamicConfigOverrides:    s.dynamicConfigOverrides,
@@ -184,27 +189,29 @@ func (s *xdcBaseSuite) waitForClusterConnected(
 	sourceCluster *testcore.TestCluster,
 	targetClusterName string,
 ) {
+	expectedNumHistoryShards := cmp.Or(s.numHistoryShards, int32(1))
 	s.logger.Info("wait for clusters to be synced", tag.SourceCluster(sourceCluster.ClusterName()), tag.TargetCluster(targetClusterName))
-	s.EventuallyWithT(func(c *assert.CollectT) {
+	await.Require(context.Background(), s.T(), func(c *await.T) {
 		s.logger.Info("check if clusters are synced", tag.SourceCluster(sourceCluster.ClusterName()), tag.TargetCluster(targetClusterName))
-		resp, err := sourceCluster.HistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
+		resp, err := sourceCluster.HistoryClient().GetReplicationStatus(c.Context(), &historyservice.GetReplicationStatusRequest{})
 		require.NoError(c, err)
-		require.Lenf(c, resp.Shards, 1, "test cluster has only one history shard")
+		require.Lenf(c, resp.Shards, int(expectedNumHistoryShards), "unexpected history shard count")
 
-		shard := resp.Shards[0]
-		require.NotNil(c, shard)
-		require.Positive(c, shard.MaxReplicationTaskId)
-		require.NotNil(c, shard.ShardLocalTime)
-		require.WithinRange(c, shard.ShardLocalTime.AsTime(), s.startTime, time.Now())
-		require.NotNil(c, shard.RemoteClusters)
+		for _, shard := range resp.Shards {
+			require.NotNil(c, shard)
+			require.Positive(c, shard.MaxReplicationTaskId)
+			require.NotNil(c, shard.ShardLocalTime)
+			require.WithinRange(c, shard.ShardLocalTime.AsTime(), s.startTime, time.Now())
+			require.NotNil(c, shard.RemoteClusters)
 
-		standbyAckInfo, ok := shard.RemoteClusters[targetClusterName]
-		require.True(c, ok)
-		require.NotNil(c, standbyAckInfo)
-		require.LessOrEqual(c, shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId)
-		require.NotNil(c, standbyAckInfo.AckedTaskVisibilityTime)
-		require.WithinRange(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime(), s.startTime, time.Now())
-	}, 90*time.Second, 1*time.Second)
+			standbyAckInfo, ok := shard.RemoteClusters[targetClusterName]
+			require.True(c, ok)
+			require.NotNil(c, standbyAckInfo)
+			require.LessOrEqual(c, shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId)
+			require.NotNil(c, standbyAckInfo.AckedTaskVisibilityTime)
+			require.WithinRange(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime(), s.startTime, time.Now())
+		}
+	}, 90*time.Second, time.Second)
 	s.logger.Info("clusters synced", tag.SourceCluster(sourceCluster.ClusterName()), tag.TargetCluster(targetClusterName))
 }
 

@@ -11,8 +11,9 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm/lib/activity"
-	"go.temporal.io/server/chasm/lib/callback"
+	chasmcallback "go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -20,7 +21,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/retrypolicy"
-	"go.temporal.io/server/components/nexusoperations"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -30,6 +31,9 @@ import (
 const (
 	scheduleValidationVersioningOverride = "versioning-override"
 	scheduleValidationScheduleDuration   = "scheduler-duration"
+	scheduleValidationOverlapPolicy      = "scheduler-overlap-policy"
+	scheduleValidationRemainingActions   = "scheduler-remaining-actions"
+	scheduleValidationTimestamp          = "scheduler-timestamp"
 )
 
 // Config represents configuration for frontend service
@@ -172,6 +176,10 @@ type Config struct {
 
 	// Enable schedule-related RPCs
 	EnableSchedules dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	// Ceiling on the V1 scheduler workflow's recorded version.
+	SchedulerV1VersionCeiling dynamicconfig.IntPropertyFnWithNamespaceFilter
+	// Requested V1 scheduler workflow version.
+	SchedulerV1VersionOverride dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	// Enable CHASM tree infrastructure
 	EnableChasm dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -214,7 +222,7 @@ type Config struct {
 	CallbackURLMaxLength    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackHeaderMaxSize   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxCallbacksPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
-	CallbackEndpointConfigs dynamicconfig.TypedPropertyFnWithNamespaceFilter[callback.AddressMatchRules]
+	CallbackEndpointConfigs dynamicconfig.TypedPropertyFnWithNamespaceFilter[callbacks.AddressMatchRules]
 
 	MaxNexusOperationTokenLength   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	NexusRequestHeadersBlacklist   dynamicconfig.TypedPropertyFn[*regexp.Regexp]
@@ -381,6 +389,8 @@ func NewConfig(
 		MaxFairnessWeightOverrideConfigLimit: dynamicconfig.MatchingMaxFairnessKeyWeightOverrides.Get(dc),
 
 		EnableSchedules:                      dynamicconfig.FrontendEnableSchedules.Get(dc),
+		SchedulerV1VersionCeiling:            dynamicconfig.SchedulerV1VersionCeiling.Get(dc),
+		SchedulerV1VersionOverride:           dynamicconfig.SchedulerV1VersionOverride.Get(dc),
 		EnableChasm:                          dynamicconfig.EnableChasm.Get(dc),
 		EnableCHASMSchedulerCreation:         dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
 		CHASMSchedulerCreationRolloutPercent: dynamicconfig.CHASMSchedulerCreationRolloutPercent.Get(dc),
@@ -418,7 +428,7 @@ func NewConfig(
 		LinkMaxSize:        dynamicconfig.FrontendLinkMaxSize.Get(dc),
 		MaxLinksPerRequest: dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
 
-		CallbackEndpointConfigs:     callback.AllowedAddresses.Get(dc),
+		CallbackEndpointConfigs:     chasmcallback.AllowedAddresses.Get(dc),
 		AdminEnableListHistoryTasks: dynamicconfig.AdminEnableListHistoryTasks.Get(dc),
 
 		MaskInternalErrorDetails: dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc),

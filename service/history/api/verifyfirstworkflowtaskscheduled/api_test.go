@@ -20,12 +20,16 @@ import (
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/workflowresend"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -49,6 +53,7 @@ type (
 		mockExecutionMgr           *persistence.MockExecutionManager
 		shardContext               *shard.ContextTest
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
+		resendScheduler            *workflowresend.BoundedWorkflowScheduler
 
 		logger log.Logger
 	}
@@ -63,6 +68,12 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	config := tests.NewDynamicConfig()
+	config.WorkflowResendHostMaxInFlight = func() int { return 1 }
+	s.resendScheduler = workflowresend.NewBoundedWorkflowScheduler(
+		config.WorkflowResendHostMaxInFlight,
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+	)
 	s.shardContext = shard.NewTestContext(
 		s.controller,
 		&persistencespb.ShardInfo{
@@ -88,29 +99,100 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) SetupTest() {
 
 	s.workflowConsistencyChecker = api.NewWorkflowConsistencyChecker(
 		s.shardContext,
-		wcache.NewHostLevelCache(s.shardContext.GetConfig(), s.shardContext.GetLogger(), metrics.NoopMetricsHandler))
+		wcache.NewHostLevelCache(s.shardContext.GetConfig(), s.shardContext.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{}))
 	s.mockEventsCache = s.shardContext.MockEventsCache
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 	s.logger = s.shardContext.GetLogger()
 }
 
 func (s *VerifyFirstWorkflowTaskScheduledSuite) TearDownTest() {
+	s.resendScheduler.InitiateShutdown()
+	s.resendScheduler.WaitShutdown()
 	s.controller.Finish()
 }
 
-func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskScheduled_WorkflowNotFound() {
+func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskScheduled_WorkflowNotFound_ResendDisabled() {
 	request := &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
 		NamespaceId: tests.NamespaceID.String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: tests.WorkflowID,
 			RunId:      tests.RunID,
 		},
+		ResendChild: true,
 	}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{})
 
-	err := Invoke(context.Background(), request, s.workflowConsistencyChecker)
+	err := Invoke(s.T().Context(), request, s.workflowConsistencyChecker, s.shardContext, s.resendScheduler)
 	s.IsType(&serviceerror.NotFound{}, err)
+}
+
+func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskScheduled_DoesNotResendUnrelatedWorkflowNotReady() {
+	s.shardContext.GetConfig().EnableChildWorkflowResend = func() bool { return true }
+	request := &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowID,
+			RunId:      tests.RunID,
+		},
+		ResendChild: true,
+	}
+	workflowNotReadyErr := serviceerror.NewWorkflowNotReady("unrelated workflow state")
+	workflowConsistencyChecker := api.NewMockWorkflowConsistencyChecker(s.controller)
+	workflowConsistencyChecker.EXPECT().GetWorkflowLease(
+		gomock.Any(),
+		gomock.Any(),
+		definition.NewWorkflowKey(tests.NamespaceID.String(), tests.WorkflowID, tests.RunID),
+		gomock.Any(),
+	).Return(nil, workflowNotReadyErr)
+
+	err := Invoke(s.T().Context(), request, workflowConsistencyChecker, s.shardContext, s.resendScheduler)
+	s.Same(workflowNotReadyErr, err)
+}
+
+func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskScheduled_HostAtCapacity() {
+	s.shardContext.GetConfig().EnableChildWorkflowResend = func() bool { return true }
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.shardContext.SetMetricsHandler(metricsHandler)
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	defer close(release)
+	s.Require().Equal(workflowresend.SubmitResultAccepted, s.resendScheduler.TrySubmit(
+		s.T().Context(),
+		definition.NewWorkflowKey("blocker namespace", "blocker workflow", "blocker run"),
+		time.Minute,
+		func(ctx context.Context) {
+			close(started)
+			select {
+			case <-release:
+			case <-ctx.Done():
+			}
+		},
+	))
+	waitCtx, cancel := context.WithTimeout(s.T().Context(), 5*time.Second)
+	defer cancel()
+	select {
+	case <-started:
+	case <-waitCtx.Done():
+		s.T().Fatal("timed out waiting for host scheduler worker")
+	}
+
+	request := &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowID,
+			RunId:      tests.RunID,
+		},
+		ResendChild: true,
+	}
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{})
+
+	err := Invoke(s.T().Context(), request, s.workflowConsistencyChecker, s.shardContext, s.resendScheduler)
+	s.Require().ErrorAs(err, new(*serviceerror.NotFound))
+	s.Require().Len(capture.Snapshot()[metrics.ChildWorkflowResendLimited.Name()], 1)
 }
 
 func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskScheduled_WorkflowCompleted() {
@@ -137,11 +219,11 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 	)
 	s.NoError(err)
 
-	wfMs := workflow.TestCloneToProto(context.Background(), ms)
+	wfMs := workflow.TestCloneToProto(s.T().Context(), ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
-	err = Invoke(context.Background(), request, s.workflowConsistencyChecker)
+	err = Invoke(s.T().Context(), request, s.workflowConsistencyChecker, s.shardContext, s.resendScheduler)
 	s.NoError(err)
 }
 
@@ -170,11 +252,11 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 	)
 	s.NoError(err)
 
-	wfMs := workflow.TestCloneToProto(context.Background(), ms)
+	wfMs := workflow.TestCloneToProto(s.T().Context(), ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
-	err = Invoke(context.Background(), request, s.workflowConsistencyChecker)
+	err = Invoke(s.T().Context(), request, s.workflowConsistencyChecker, s.shardContext, s.resendScheduler)
 	s.IsType(&serviceerror.WorkflowNotReady{}, err)
 }
 
@@ -197,11 +279,11 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 		25*time.Second, 20*time.Second, 200*time.Second, nil, "identity")
 	_, _ = ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 
-	wfMs := workflow.TestCloneToProto(context.Background(), ms)
+	wfMs := workflow.TestCloneToProto(s.T().Context(), ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
-	err := Invoke(context.Background(), request, s.workflowConsistencyChecker)
+	err := Invoke(s.T().Context(), request, s.workflowConsistencyChecker, s.shardContext, s.resendScheduler)
 	s.NoError(err)
 }
 
@@ -249,11 +331,11 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 		&workflowservice.RespondWorkflowTaskCompletedRequest{Identity: "some random identity"}, defaultWorkflowTaskCompletionLimits)
 	ms.FlushBufferedEvents()
 
-	wfMs := workflow.TestCloneToProto(context.Background(), ms)
+	wfMs := workflow.TestCloneToProto(s.T().Context(), ms)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: wfMs}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
-	err := Invoke(context.Background(), request, s.workflowConsistencyChecker)
+	err := Invoke(s.T().Context(), request, s.workflowConsistencyChecker, s.shardContext, s.resendScheduler)
 	s.NoError(err)
 }
 

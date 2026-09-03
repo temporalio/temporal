@@ -24,12 +24,14 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -41,6 +43,9 @@ import (
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
 	"go.temporal.io/server/common/testing/protomock"
+	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
@@ -76,9 +81,10 @@ type (
 		mockRemoteAdminClient *adminservicemock.MockAdminServiceClient
 		mockChasmEngine       chasm.Engine
 
-		mockExecutionMgr     *persistence.MockExecutionManager
-		mockArchivalMetadata archiver.MetadataMock
-		mockArchiverProvider *provider.MockArchiverProvider
+		mockExecutionMgr        *persistence.MockExecutionManager
+		mockArchivalMetadata    archiver.MetadataMock
+		mockArchiverProvider    *provider.MockArchiverProvider
+		parentChildEventCapture *parentChildEventCapture
 
 		workflowCache             wcache.Cache
 		logger                    log.Logger
@@ -124,6 +130,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.chasmDiscardDuration = config.ChasmStandbyTaskDiscardDelay("")
 
 	s.controller = gomock.NewController(s.T())
+	s.parentChildEventCapture = &parentChildEventCapture{}
 	s.mockShard = shard.NewTestContextWithTimeSource(
 		s.controller,
 		&persistencespb.ShardInfo{
@@ -131,12 +138,15 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 		},
 		config,
 		s.timeSource,
+		s.parentChildEventCapture,
 	)
 
 	reg := hsm.NewRegistry()
 	err := workflow.RegisterStateMachine(reg)
 	s.NoError(err)
 	s.mockShard.SetStateMachineRegistry(reg)
+	err = s.mockShard.ChasmRegistry().Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry()))
+	s.NoError(err)
 
 	s.mockShard.SetEventsCacheForTesting(events.NewHostLevelEventsCache(
 		s.mockShard.GetExecutionManager(),
@@ -179,7 +189,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(s.clusterName).AnyTimes()
 	s.clientBean = client.NewMockBean(s.controller)
-	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
 	s.logger = s.mockShard.GetLogger()
 	s.mockFrontendClient = s.mockShard.Resource.FrontendClient
 	s.mockChasmEngine = chasm.NewMockEngine(s.controller)
@@ -725,6 +735,9 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_StampMis
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
+	capture := s.parentChildEventCapture
+	s.mockShard.GetConfig().EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
@@ -841,8 +854,17 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	s.ErrorAs(resp.ExecutionErr, &verificationErr)
 	var resourceExhaustedErr *serviceerror.ResourceExhausted
 	s.ErrorAs(resp.ExecutionErr, &resourceExhaustedErr)
+	s.Require().Empty(parentChildRecords(capture))
 
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.localVerificationDuration))
+	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationWithResendParentRequest).Return(nil, nil)
+	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.NoError(resp.ExecutionErr)
+
+	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationWithResendParentRequest).Return(nil, serviceerror.NewUnimplemented("not implemented"))
+	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.NoError(resp.ExecutionErr)
+
 	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationWithResendParentRequest).Return(nil, consts.ErrWorkflowNotReady)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
@@ -862,6 +884,75 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.ErrorAs(resp.ExecutionErr, &verificationErr)
 	s.Equal(randomErr, verificationErr.Unwrap())
+
+	s.Equal([]string{
+		string(wideevents.ParentChildOutcomeStarted),
+		string(wideevents.ParentChildOutcomeVerified),
+		string(wideevents.ParentChildOutcomeStarted),
+		string(wideevents.ParentChildOutcomeIgnored),
+		string(wideevents.ParentChildOutcomeStarted),
+		string(wideevents.ParentChildOutcomeCompletionMissing),
+		string(wideevents.ParentChildOutcomeStarted),
+		string(wideevents.ParentChildOutcomeCompletionMissing),
+		string(wideevents.ParentChildOutcomeStarted),
+		string(wideevents.ParentChildOutcomeCompletionMissing),
+		string(wideevents.ParentChildOutcomeStarted),
+		string(wideevents.ParentChildOutcomeFailed),
+	}, parentChildOutcomes(capture))
+	records := parentChildRecords(capture)
+	s.Require().Len(records, 12)
+	attributes := wideEventAttributes(records[0])
+	details := wideEventDetails(records[0])
+	s.Equal(string(wideevents.ReplicationExecuting), attributes["phase"].AsString())
+	s.Equal(wideevents.ParentChildPhaseVerifyChildCompletion, details["phase"])
+	s.Equal(wideevents.ParentChildOutcomeStarted, details["outcome"])
+	s.Equal(s.namespaceID.String(), attributes["namespace_id"].AsString())
+	s.Equal(parentExecution.GetWorkflowId(), attributes["parent_workflow_id"].AsString())
+	s.Equal(parentExecution.GetRunId(), attributes["parent_run_id"].AsString())
+	s.Equal(execution.GetWorkflowId(), attributes["workflow_id"].AsString())
+	s.Equal(execution.GetRunId(), attributes["run_id"].AsString())
+	s.Equal(transferTask.GetType().String(), attributes["task_type"].AsString())
+	s.Equal(int64(1), attributes["attempt"].AsInt64())
+	s.Equal("Completed", details["child_workflow_state"])
+	s.Equal(parentInitiatedID, attributes["parent_initiated_id"].AsInt64())
+	s.Equal(parentNamespaceID, details["parent_namespace_id"])
+	s.InDelta(float64(parentInitiatedVersion), details["parent_initiated_version"], 0)
+	s.InDelta(float64(taskID), details["local_task_id"], 0)
+	s.InDelta(float64(transferTask.GetVersion()), details["version"], 0)
+	s.Require().NotContains(details, "attempt")
+	for _, key := range []string{
+		"child_namespace_id",
+		"child_workflow_id",
+		"child_run_id",
+		"local_cluster",
+		"local_task_type",
+		"parent_initiated_id",
+		"parent_run_id",
+		"parent_workflow_id",
+		"resend_parent_requested",
+		"verification_scope",
+	} {
+		for _, record := range records {
+			s.Require().NotContains(wideEventDetails(record), key)
+		}
+	}
+	missingDetails := wideEventDetails(records[5])
+	s.Equal(wideevents.ParentChildOutcomeCompletionMissing, missingDetails["outcome"])
+	s.Equal(util.ErrorType(consts.ErrWorkflowNotReady), missingDetails["error_type"])
+	s.InDelta(1, missingDetails["attempt"], 0)
+	verifiedAttributes := wideEventAttributes(records[1])
+	s.Require().NotContains(verifiedAttributes, "attempt")
+	s.InDelta(1, wideEventDetails(records[1])["attempt"], 0)
+	ignoredAttributes := wideEventAttributes(records[3])
+	s.Equal(string(wideevents.ReplicationApplied), ignoredAttributes["phase"].AsString())
+	s.Equal(wideevents.ParentChildOutcomeVerified, ignoredAttributes["outcome"].AsString())
+
+	persistenceMutableState.ExecutionInfo.TransitionHistory = nil
+	s.transferQueueStandbyTaskExecutor.cache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), expectedVerificationWithResendParentRequest).Return(nil, nil)
+	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.NoError(resp.ExecutionErr)
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pending() {
@@ -1125,6 +1216,9 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Succe
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_Pending() {
+	capture := s.parentChildEventCapture
+	s.mockShard.GetConfig().EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
@@ -1158,7 +1252,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
 
 	taskID := s.mustGenerateTaskID()
-	event, _ = addStartChildWorkflowExecutionInitiatedEvent(mutableState, event.GetEventId(),
+	event, childInfo := addStartChildWorkflowExecutionInitiatedEvent(mutableState, event.GetEventId(),
 		tests.ChildNamespace, tests.ChildNamespaceID, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second, enumspb.PARENT_CLOSE_POLICY_ABANDON)
 
 	now := time.Now().UTC()
@@ -1181,55 +1275,116 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 	resp := s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
-	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
+	s.mockShard.SetCurrentTime(s.clusterName, now.Add(time.Minute))
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
-	event = addChildWorkflowExecutionStartedEvent(mutableState, event.GetEventId(), childWorkflowID, uuid.NewString(), childWorkflowType, nil)
+	childRunID := uuid.NewString()
+	event = addChildWorkflowExecutionStartedEvent(mutableState, event.GetEventId(), childWorkflowID, childRunID, childWorkflowType, nil)
 	mutableState.FlushBufferedEvents()
 
 	// clear the cache
-	s.transferQueueStandbyTaskExecutor.cache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+	s.transferQueueStandbyTaskExecutor.cache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
 	persistenceMutableState = s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
-	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, nil)
+	expectedVerificationRequest := protomock.Eq(&historyservice.VerifyFirstWorkflowTaskScheduledRequest{
+		NamespaceId: tests.ChildNamespaceID.String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: childWorkflowID,
+			RunId:      childRunID,
+		},
+		Clock: childInfo.Clock,
+	})
+	expectedVerificationWithResendChildRequest := protomock.Eq(&historyservice.VerifyFirstWorkflowTaskScheduledRequest{
+		NamespaceId: tests.ChildNamespaceID.String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: childWorkflowID,
+			RunId:      childRunID,
+		},
+		Clock:       childInfo.Clock,
+		ResendChild: true,
+	})
+
+	s.mockShard.SetCurrentTime(s.clusterName, now)
+	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), expectedVerificationRequest).Return(nil, nil)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.NoError(resp.ExecutionErr)
 
-	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, consts.ErrWorkflowNotReady)
+	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), expectedVerificationRequest).Return(nil, consts.ErrWorkflowNotReady)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
-	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, consts.ErrWorkflowExecutionNotFound)
+	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), expectedVerificationRequest).Return(nil, consts.ErrWorkflowExecutionNotFound)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
 
-	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.Unimplemented{})
+	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), expectedVerificationRequest).Return(nil, &serviceerror.Unimplemented{})
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.NoError(resp.ExecutionErr)
 
-	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, consts.ErrResourceExhaustedBusyWorkflow)
+	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), expectedVerificationRequest).Return(nil, consts.ErrResourceExhaustedBusyWorkflow)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	var verificationErr *verificationErr
 	s.ErrorAs(resp.ExecutionErr, &verificationErr)
 	var resourceExhaustedErr *serviceerror.ResourceExhausted
 	s.ErrorAs(resp.ExecutionErr, &resourceExhaustedErr)
 
+	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
+	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), expectedVerificationWithResendChildRequest).Return(nil, consts.ErrWorkflowNotReady)
+	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr)
+
+	childExecution := &commonpb.WorkflowExecution{
+		WorkflowId: childWorkflowID,
+		RunId:      childRunID,
+	}
+	expectedDescribeChildMutableStateRequest := protomock.Eq(&adminservice.DescribeMutableStateRequest{
+		Namespace:       tests.ChildNamespace.String(),
+		Execution:       childExecution,
+		Archetype:       chasm.WorkflowArchetype,
+		SkipForceReload: true,
+	})
+	s.clientBean.EXPECT().GetRemoteAdminClient(
+		tests.GlobalChildNamespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: childWorkflowID}),
+	).Return(s.mockRemoteAdminClient, nil).AnyTimes()
+
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
-	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.WorkflowNotReady{})
+	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), expectedVerificationWithResendChildRequest).Return(nil, &serviceerror.WorkflowNotReady{})
+	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), expectedDescribeChildMutableStateRequest).Return(nil, nil)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskDiscarded, resp.ExecutionErr)
 
+	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), expectedVerificationWithResendChildRequest).Return(nil, &serviceerror.WorkflowNotReady{})
+	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), expectedDescribeChildMutableStateRequest).Return(nil, &serviceerror.NotFound{})
+	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.NoError(resp.ExecutionErr)
+
 	randomErr := errors.New("some random error")
-	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, randomErr)
+	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), expectedVerificationWithResendChildRequest).Return(nil, randomErr)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.ErrorAs(resp.ExecutionErr, &verificationErr)
 	s.Equal(randomErr, verificationErr.Unwrap())
 
-	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, nil)
+	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), expectedVerificationWithResendChildRequest).Return(nil, nil)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.NoError(resp.ExecutionErr)
+
+	persistenceMutableState.ExecutionInfo.TransitionHistory = nil
+	s.transferQueueStandbyTaskExecutor.cache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), expectedVerificationWithResendChildRequest).Return(nil, nil)
+	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.NoError(resp.ExecutionErr)
+
+	s.mockShard.GetConfig().EnableTransitionHistory = func(namespaceName string) bool {
+		return namespaceName != tests.ChildNamespace.String()
+	}
+	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), expectedVerificationRequest).Return(nil, nil)
+	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.NoError(resp.ExecutionErr)
+
+	s.Require().Empty(parentChildRecords(capture))
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_Success() {
@@ -1302,7 +1457,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 	)
 	s.NoError(err)
 
-	s.transferQueueStandbyTaskExecutor.cache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+	s.transferQueueStandbyTaskExecutor.cache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
 	persistenceMutableState = s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, nil)

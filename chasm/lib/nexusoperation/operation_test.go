@@ -67,6 +67,62 @@ func TestRequestCancelDeduplicationAfterTerminalState(t *testing.T) {
 	})
 }
 
+func TestTerminate(t *testing.T) {
+	t.Parallel()
+
+	newOpWithStatus := func(status nexusoperationpb.OperationStatus) (*Operation, *chasm.MockMutableContext) {
+		ctx := &chasm.MockMutableContext{
+			MockContext: chasm.MockContext{
+				HandleNow: func(chasm.Component) time.Time { return defaultTime },
+				HandleNamespaceEntry: func() *namespace.Namespace {
+					return namespace.NewNamespaceForTest(
+						&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0,
+					)
+				},
+				GoCtx: context.WithValue(context.Background(), OperationContextKey, &OperationContext{
+					MetricTagConfig: dynamicconfig.GetTypedPropertyFn(NexusMetricTagConfig{}),
+				}),
+			},
+		}
+		op := newTestOperation()
+		op.Status = status
+		return op, ctx
+	}
+
+	t.Run("TerminatesARunningOperation", func(t *testing.T) {
+		op, ctx := newOpWithStatus(nexusoperationpb.OPERATION_STATUS_STARTED)
+
+		_, err := op.Terminate(ctx, chasm.TerminateComponentRequest{RequestID: "req-id"})
+		require.NoError(t, err)
+		require.Equal(t, nexusoperationpb.OPERATION_STATUS_TERMINATED, op.Status)
+	})
+
+	// Terminating an operation that already reached a terminal outcome is a FailedPrecondition.
+	for _, status := range []nexusoperationpb.OperationStatus{
+		nexusoperationpb.OPERATION_STATUS_SUCCEEDED,
+		nexusoperationpb.OPERATION_STATUS_CANCELED,
+		nexusoperationpb.OPERATION_STATUS_FAILED,
+		nexusoperationpb.OPERATION_STATUS_TIMED_OUT,
+	} {
+		t.Run("Rejects"+status.String(), func(t *testing.T) {
+			op, ctx := newOpWithStatus(status)
+
+			_, err := op.Terminate(ctx, chasm.TerminateComponentRequest{RequestID: "req-id"})
+			require.ErrorIs(t, err, ErrOperationAlreadyCompleted)
+			require.Equal(t, status, op.Status)
+		})
+	}
+
+	t.Run("IsIdempotentForTheSameRequestID", func(t *testing.T) {
+		op, ctx := newOpWithStatus(nexusoperationpb.OPERATION_STATUS_STARTED)
+
+		_, err := op.Terminate(ctx, chasm.TerminateComponentRequest{RequestID: "req-id"})
+		require.NoError(t, err)
+		_, err = op.Terminate(ctx, chasm.TerminateComponentRequest{RequestID: "req-id"})
+		require.NoError(t, err)
+	})
+}
+
 func TestIsWaitStageReached(t *testing.T) {
 	t.Parallel()
 

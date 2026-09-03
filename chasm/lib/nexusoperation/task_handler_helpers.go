@@ -141,7 +141,7 @@ func cancelCallOutcomeTag(callCtx context.Context, callErr error) string {
 // Always returns a non-nil failure.
 func callErrorToFailure(callErr error) (*failurepb.Failure, bool, error) {
 	if serviceErr, ok := errors.AsType[serviceerror.ServiceError](callErr); ok {
-		retryable := common.IsRetryableRPCError(callErr)
+		retryable := common.IsRetryableRPCError(serviceErr)
 		failure := &failurepb.Failure{
 			Message: fmt.Sprintf("%s: %s", strings.Replace(fmt.Sprintf("%T", serviceErr), "*serviceerror.", "", 1), serviceErr.Error()),
 			FailureInfo: &failurepb.Failure_ServerFailureInfo{
@@ -233,7 +233,7 @@ func newInvocationResult(
 	}
 
 	if serviceErr, ok := errors.AsType[serviceerror.ServiceError](callErr); ok {
-		retryable := common.IsRetryableRPCError(callErr)
+		retryable := common.IsRetryableRPCError(serviceErr)
 		failure := &failurepb.Failure{
 			Message: fmt.Sprintf("%s: %s", strings.Replace(fmt.Sprintf("%T", serviceErr), "*serviceerror.", "", 1), serviceErr.Error()),
 			FailureInfo: &failurepb.Failure_ServerFailureInfo{

@@ -38,6 +38,7 @@ type (
 		startWorkflowRateLimiter quotas.RateLimiter
 		maxBlobSize              dynamicconfig.IntPropertyFn
 		localActivitySleepLimit  dynamicconfig.DurationPropertyFn
+		migrationEnabled         dynamicconfig.BoolPropertyFn
 	}
 
 	errFollow string
@@ -394,16 +395,23 @@ func (a *activities) MigrateScheduleToChasm(ctx context.Context, req *schedulerp
 			nil,
 		)
 	}
+	if a.migrationEnabled != nil && !a.migrationEnabled() {
+		// A live (uncached) check, deliberately re-read here rather than
+		// trusting the caller's possibly-stale view: this is what stops a
+		// pending migration from completing after EnableCHASMSchedulerMigration
+		// has been rolled back, even if the workflow retrying it has been
+		// asleep since well before the rollback. The caller just logs this
+		// like any other failure and keeps retrying at its normal cadence.
+		return errors.New("MigrateScheduleToChasm: migration is currently disabled")
+	}
 	_, err := a.SchedulerClient.CreateFromMigrationState(ctx, req)
 	if err != nil {
 		// Treat "already exists" as success (idempotency).
-		var alreadyExists *serviceerror.AlreadyExists
-		if errors.As(err, &alreadyExists) {
+		if _, ok := errors.AsType[*serviceerror.AlreadyExists](err); ok {
 			return nil
 		}
 		// Sentinel blocking migration is transient; will retry on next workflow wake-up.
-		var unavailableErr *serviceerror.Unavailable
-		if errors.As(err, &unavailableErr) {
+		if _, ok := errors.AsType[*serviceerror.Unavailable](err); ok {
 			return translateError(err, "MigrateScheduleToChasm: blocked by sentinel, will retry")
 		}
 		return translateError(err, "MigrateScheduleToChasm")

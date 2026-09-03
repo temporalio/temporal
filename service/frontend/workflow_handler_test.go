@@ -39,12 +39,12 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
-	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	dc "go.temporal.io/server/common/dynamicconfig"
@@ -66,7 +66,6 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tasktoken"
-	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/wideevents"
@@ -77,6 +76,7 @@ import (
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -176,18 +176,21 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return(esIndexName).AnyTimes()
 	healthInterceptor := interceptor.NewHealthInterceptor()
 	healthInterceptor.SetHealthy(true)
-	cbValidator := callback.NewValidator(
-		func(string) int { return 2000 },
-		config.CallbackURLMaxLength,
-		config.CallbackHeaderMaxSize,
-		func(string) callback.AddressMatchRules {
-			return callback.AddressMatchRules{
-				Rules: []callback.AddressMatchRule{
+
+	cbValidator, err := callbacks.NewValidator(callbacks.ValidatorConfig{
+		MaxCallbacksPerExecution: func(string) int { return 2000 },
+		URLMaxLength:             config.CallbackURLMaxLength,
+		HeaderMaxSize:            config.CallbackHeaderMaxSize,
+		EndpointRules: func(string) callbacks.AddressMatchRules {
+			return callbacks.AddressMatchRules{
+				Rules: []callbacks.AddressMatchRule{
 					{Regexp: regexp.MustCompile(`.*`), AllowInsecure: true},
 				},
 			}
 		},
-	)
+	})
+	s.NoError(err)
+
 	saValidator := searchattribute.NewValidator(
 		s.mockResource.GetSearchAttributesProvider(),
 		s.mockResource.GetSearchAttributesMapperProvider(),
@@ -1143,9 +1146,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidCallback
 		RequestId: uuid.NewString(),
 		CompletionCallbacks: []*commonpb.Callback{
 			{
-				Variant: &commonpb.Callback_Internal_{
-					Internal: &commonpb.Callback_Internal{},
-				},
+				Variant: nexusCallbackVariant(),
 				Links: []*commonpb.Link{
 					{
 						Variant: &commonpb.Link_WorkflowEvent_{
@@ -1167,8 +1168,8 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidAggregat
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()
 	config.MaxLinksPerRequest = dc.GetIntPropertyFnFilteredByNamespace(10)
-	config.CallbackEndpointConfigs = dc.GetTypedPropertyFnFilteredByNamespace(callback.AddressMatchRules{
-		Rules: []callback.AddressMatchRule{
+	config.CallbackEndpointConfigs = dc.GetTypedPropertyFnFilteredByNamespace(callbacks.AddressMatchRules{
+		Rules: []callbacks.AddressMatchRule{
 			{
 				Regexp:        regexp.MustCompile(`.*`),
 				AllowInsecure: true,
@@ -1189,11 +1190,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidAggregat
 		RequestId: uuid.NewString(),
 		CompletionCallbacks: []*commonpb.Callback{
 			{
-				Variant: &commonpb.Callback_Nexus_{
-					Nexus: &commonpb.Callback_Nexus{
-						Url: "http://localhost/test",
-					},
-				},
+				Variant: nexusCallbackVariant(),
 				Links: []*commonpb.Link{
 					{
 						Variant: &commonpb.Link_WorkflowEvent_{
@@ -2872,6 +2869,140 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_Signal() {
 	s.NoError(err)
 }
 
+func TestBuildUnpauseActivityVisibilityQuery(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name         string
+		query        string
+		activityType string
+		want         string
+		wantErr      bool
+	}{
+		{
+			name:         "explicit targets",
+			activityType: "ActivityFunc",
+		},
+		{
+			name:         "scoped query",
+			query:        "WorkflowType='ScopedWorkflow'",
+			activityType: "ActivityFunc",
+			want:         "TemporalPauseInfo = 'property:activityType=ActivityFunc' and (WorkflowType = 'ScopedWorkflow')",
+		},
+		{
+			name:         "boolean query preserves precedence and escapes activity type",
+			query:        "WorkflowType='ScopedWorkflow' OR WorkflowType='OtherWorkflow'",
+			activityType: "Activity'Func",
+			want:         "TemporalPauseInfo = 'property:activityType=Activity\\'Func' and (WorkflowType = 'ScopedWorkflow' or WorkflowType = 'OtherWorkflow')",
+		},
+		{
+			name:         "order by is dropped",
+			query:        "WorkflowType='ScopedWorkflow' ORDER BY StartTime DESC",
+			activityType: "ActivityFunc",
+			want:         "TemporalPauseInfo = 'property:activityType=ActivityFunc' and (WorkflowType = 'ScopedWorkflow')",
+		},
+		{
+			name:         "set operation",
+			query:        "WorkflowId='test' UNION SELECT * FROM other",
+			activityType: "ActivityFunc",
+			wantErr:      true,
+		},
+	}
+
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			got, err := buildUnpauseActivityVisibilityQuery(tt.query, tt.activityType)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func (s *WorkflowHandlerSuite) TestStartBatchOperation_UnpauseActivitiesPreservesTargetScope() {
+	testNamespace := namespace.Name("test-namespace")
+	targetExecution := &commonpb.Execution{
+		Type:       enumspb.EXECUTION_TYPE_WORKFLOW,
+		BusinessId: uuid.NewString(),
+		RunId:      uuid.NewString(),
+	}
+	testCases := []struct {
+		name       string
+		request    *workflowservice.StartBatchOperationRequest
+		wantQuery  string
+		wantTarget *commonpb.Execution
+	}{
+		{
+			name: "visibility query",
+			request: &workflowservice.StartBatchOperationRequest{
+				Namespace:       testNamespace.String(),
+				VisibilityQuery: "WorkflowType='ScopedWorkflow'",
+				JobId:           uuid.NewString(),
+				Reason:          "test",
+				Operation: &workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation{
+					UnpauseActivitiesOperation: &batchpb.BatchOperationUnpauseActivities{
+						Activity: &batchpb.BatchOperationUnpauseActivities_Type{Type: "ActivityFunc"},
+					},
+				},
+			},
+			wantQuery: "TemporalPauseInfo = 'property:activityType=ActivityFunc' and (WorkflowType = 'ScopedWorkflow')",
+		},
+		{
+			name: "explicit target",
+			request: &workflowservice.StartBatchOperationRequest{
+				Namespace:        testNamespace.String(),
+				TargetExecutions: []*commonpb.Execution{targetExecution},
+				JobId:            uuid.NewString(),
+				Reason:           "test",
+				Operation: &workflowservice.StartBatchOperationRequest_UnpauseActivitiesOperation{
+					UnpauseActivitiesOperation: &batchpb.BatchOperationUnpauseActivities{
+						Activity: &batchpb.BatchOperationUnpauseActivities_Type{Type: "ActivityFunc"},
+					},
+				},
+			},
+			wantTarget: targetExecution,
+		},
+	}
+
+	for _, tt := range testCases {
+		s.Run(tt.name, func() {
+			namespaceID := namespace.ID(uuid.NewString())
+			wh := s.getWorkflowHandler(s.newConfig())
+			originalRequest := proto.Clone(tt.request).(*workflowservice.StartBatchOperationRequest)
+			var input batchspb.BatchOperationInput
+
+			s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespaceID, nil).AnyTimes()
+			s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 0}, nil)
+			s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(
+					_ context.Context,
+					request *historyservice.StartWorkflowExecutionRequest,
+					_ ...grpc.CallOption,
+				) (*historyservice.StartWorkflowExecutionResponse, error) {
+					s.Require().NoError(payloads.Decode(request.StartRequest.Input, &input))
+					return &historyservice.StartWorkflowExecutionResponse{}, nil
+				},
+			)
+
+			_, err := wh.StartBatchOperation(context.Background(), tt.request)
+			s.Require().NoError(err)
+			s.ProtoEqual(originalRequest, tt.request)
+			s.Equal(tt.wantQuery, input.Request.GetVisibilityQuery())
+			if tt.wantTarget == nil {
+				s.Empty(input.Request.GetTargetExecutions())
+			} else {
+				s.Require().Len(input.Request.GetTargetExecutions(), 1)
+				s.ProtoEqual(tt.wantTarget, input.Request.GetTargetExecutions()[0])
+			}
+		})
+	}
+}
+
 func (s *WorkflowHandlerSuite) TestStartBatchOperation_WorkflowExecutions_Signal() {
 	testNamespace := namespace.Name("test-namespace")
 	namespaceID := namespace.ID(uuid.NewString())
@@ -4467,89 +4598,59 @@ func TestDedupLinksFromCallbacks(t *testing.T) {
 			},
 		},
 	}
-	callbacks := []*commonpb.Callback{
-		{
-			Variant: &commonpb.Callback_Nexus_{
-				Nexus: &commonpb.Callback_Nexus{},
-			},
-			Links: []*commonpb.Link{
-				{
-					Variant: &commonpb.Link_WorkflowEvent_{
-						WorkflowEvent: &commonpb.Link_WorkflowEvent{
-							Namespace:  "test-ns",
-							WorkflowId: "test-workflow-id",
-							RunId:      "test-run-id",
-							Reference: &commonpb.Link_WorkflowEvent_EventRef{
-								EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-									EventId:   3,
-									EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
-								},
-							},
-						},
-					},
-				},
-				{
-					Variant: &commonpb.Link_WorkflowEvent_{
-						WorkflowEvent: &commonpb.Link_WorkflowEvent{
-							Namespace:  "test-ns",
-							WorkflowId: "test-workflow-id",
-							RunId:      "test-run-id",
-							Reference: &commonpb.Link_WorkflowEvent_EventRef{
-								EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-									EventId:   5,
-									EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
-								},
-							},
-						},
-					},
+
+	// Returns a new pair of callbacks to be mutated in tests.
+	getCallbacks := func() []*commonpb.Callback {
+		return []*commonpb.Callback{
+			{
+				Variant: nexusCallbackVariant(),
+				Links: []*commonpb.Link{
+					common.CloneProto(links[0]),
+					common.CloneProto(links[1]),
 				},
 			},
-		},
-		{
-			Variant: &commonpb.Callback_Internal_{
-				Internal: &commonpb.Callback_Internal{},
-			},
-			Links: []*commonpb.Link{
-				{
-					Variant: &commonpb.Link_WorkflowEvent_{
-						WorkflowEvent: &commonpb.Link_WorkflowEvent{
-							Namespace:  "test-ns",
-							WorkflowId: "test-workflow-id",
-							RunId:      "test-run-id",
-							Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
-								RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-									RequestId: "test-request-id",
-									EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-								},
-							},
-						},
-					},
+			{
+				Variant: &commonpb.Callback_Internal_{
+					Internal: &commonpb.Callback_Internal{},
+				},
+				Links: []*commonpb.Link{
+					common.CloneProto(links[2]),
 				},
 			},
-		},
+		}
 	}
 
-	dedupedLinks := dedupLinksFromCallbacks(links, callbacks)
-	assert.Len(t, dedupedLinks, 1)
-	protoassert.ProtoEqual(
-		t,
-		&commonpb.Link{
-			Variant: &commonpb.Link_WorkflowEvent_{
-				WorkflowEvent: &commonpb.Link_WorkflowEvent{
-					Namespace:  "test-ns",
-					WorkflowId: "test-workflow-id",
-					RunId:      "test-run-id",
-					Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
-						RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-							RequestId: "test-request-id",
-							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
-						},
-					},
-				},
-			},
-		},
-		dedupedLinks[0],
-	)
+	// Because the second Callback is the Internal-variant, the link
+	// it carries will not be considered for deduping.
+	t.Run("IgnoreNonNexusCallbackLinks", func(t *testing.T) {
+		callbacks := getCallbacks()
+		dedupedLinks := dedupLinksFromCallbacks(links, callbacks)
+		require.Len(t, dedupedLinks, 1)
+		protorequire.ProtoEqual(t, links[2], dedupedLinks[0])
+	})
+
+	// Remove links[1] from callbacks[0].Links. links[1] should then not
+	// be deduped, and be in the resulting slice.
+	t.Run("UniqueNexusLink", func(t *testing.T) {
+		callbacks := getCallbacks()
+		callbacks[0].Links = callbacks[0].Links[:1]
+
+		dedupedLinks := dedupLinksFromCallbacks(links, callbacks)
+		require.Len(t, dedupedLinks, 2)
+		protorequire.ProtoEqual(t, links[1], dedupedLinks[0])
+		protorequire.ProtoEqual(t, links[2], dedupedLinks[1]) // Same as before.
+	})
+
+	// Change the type of the second callback to be a Nexus-variant.
+	// Now all callback links will be considered for deduping, filtering
+	// everything out.
+	t.Run("AllDupes", func(t *testing.T) {
+		callbacks := getCallbacks()
+		callbacks[1].Variant = nexusCallbackVariant()
+
+		dedupedLinks := dedupLinksFromCallbacks(links, callbacks)
+		require.Empty(t, dedupedLinks)
+	})
 }
 
 func (s *WorkflowHandlerSuite) Test_DeleteWorkflowExecution() {
@@ -4595,7 +4696,8 @@ func (s *WorkflowHandlerSuite) Test_DeleteWorkflowExecution() {
 
 	// History call failed.
 	s.mockResource.HistoryClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, errors.New("random error"))
-	s.mockResource.NamespaceCache.EXPECT().GetNamespaceID(namespace.Name("test-namespace")).Return(namespace.ID("test-namespace-id"), nil)
+	s.mockResource.NamespaceCache.EXPECT().GetNamespace(namespace.Name("test-namespace")).
+		Return(s.localNamespaceEntry("test-namespace", "test-namespace-id"), nil)
 	resp, err := wh.DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
 		Namespace: "test-namespace",
 		WorkflowExecution: &commonpb.WorkflowExecution{
@@ -4609,7 +4711,8 @@ func (s *WorkflowHandlerSuite) Test_DeleteWorkflowExecution() {
 
 	// Success case.
 	s.mockResource.HistoryClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(&historyservice.DeleteWorkflowExecutionResponse{}, nil)
-	s.mockResource.NamespaceCache.EXPECT().GetNamespaceID(namespace.Name("test-namespace")).Return(namespace.ID("test-namespace-id"), nil)
+	s.mockResource.NamespaceCache.EXPECT().GetNamespace(namespace.Name("test-namespace")).
+		Return(s.localNamespaceEntry("test-namespace", "test-namespace-id"), nil)
 	resp, err = wh.DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
 		Namespace: "test-namespace",
 		WorkflowExecution: &commonpb.WorkflowExecution{
@@ -4619,6 +4722,69 @@ func (s *WorkflowHandlerSuite) Test_DeleteWorkflowExecution() {
 	})
 	s.NoError(err)
 	s.NotNil(resp)
+}
+
+// A deletion is only replicated when it happens on the active cluster, so a request that lands on a
+// passive cluster (XDC redirection disabled) must be rejected instead of deleting the local copy only.
+func (s *WorkflowHandlerSuite) Test_DeleteWorkflowExecution_PassiveCluster() {
+	wh := s.getWorkflowHandler(s.newConfig())
+
+	s.mockResource.NamespaceCache.EXPECT().GetNamespace(namespace.Name("test-namespace")).
+		Return(s.globalNamespaceEntry("test-namespace", "test-namespace-id", cluster.TestAlternativeClusterName), nil)
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	// No DeleteWorkflowExecution call is expected on the history client.
+
+	resp, err := wh.DeleteWorkflowExecution(context.Background(), &workflowservice.DeleteWorkflowExecutionRequest{
+		Namespace: "test-namespace",
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "test-workflow-id",
+		},
+	})
+	s.Nil(resp)
+	var notActiveErr *serviceerror.NamespaceNotActive
+	s.ErrorAs(err, &notActiveErr)
+}
+
+func (s *WorkflowHandlerSuite) Test_DeleteWorkflowExecution_ActiveCluster() {
+	wh := s.getWorkflowHandler(s.newConfig())
+
+	s.mockResource.NamespaceCache.EXPECT().GetNamespace(namespace.Name("test-namespace")).
+		Return(s.globalNamespaceEntry("test-namespace", "test-namespace-id", cluster.TestCurrentClusterName), nil)
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockResource.HistoryClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&historyservice.DeleteWorkflowExecutionResponse{}, nil)
+
+	resp, err := wh.DeleteWorkflowExecution(context.Background(), &workflowservice.DeleteWorkflowExecutionRequest{
+		Namespace: "test-namespace",
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "test-workflow-id",
+		},
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+}
+
+func (s *WorkflowHandlerSuite) localNamespaceEntry(nsName string, nsID string) *namespace.Namespace {
+	return namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: nsID, Name: nsName},
+		nil,
+		cluster.TestCurrentClusterName,
+	)
+}
+
+func (s *WorkflowHandlerSuite) globalNamespaceEntry(nsName string, nsID string, activeCluster string) *namespace.Namespace {
+	return namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: nsID, Name: nsName},
+		nil,
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: activeCluster,
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			},
+		},
+		cluster.TestCurrentClusterInitialFailoverVersion,
+	)
 }
 
 func (s *WorkflowHandlerSuite) TestExecuteMultiOperation() {
@@ -5613,6 +5779,168 @@ func TestCanonicalizeScheduleSpec_DurationValidationKillSwitch(t *testing.T) {
 	}
 }
 
+func TestValidateScheduleTimestamps(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		spec      *schedulepb.ScheduleSpec
+		errString string
+	}{
+		{
+			name: "start time",
+			spec: &schedulepb.ScheduleSpec{
+				StartTime: &timestamppb.Timestamp{Nanos: 1_000_000_000},
+			},
+			errString: "start time is not a valid timestamp",
+		},
+		{
+			name: "end time",
+			spec: &schedulepb.ScheduleSpec{
+				EndTime: &timestamppb.Timestamp{Nanos: 1_000_000_000},
+			},
+			errString: "end time is not a valid timestamp",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.ErrorContains(t, validateScheduleTimestamps(tc.spec), tc.errString)
+		})
+	}
+}
+
+func TestValidateScheduleMatchingTimesTimestamps(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		request   *workflowservice.ListScheduleMatchingTimesRequest
+		errString string
+	}{
+		{
+			name: "invalid start time",
+			request: &workflowservice.ListScheduleMatchingTimesRequest{
+				StartTime: &timestamppb.Timestamp{Nanos: 1_000_000_000},
+				EndTime:   timestamppb.Now(),
+			},
+			errString: "start time is not a valid timestamp",
+		},
+		{
+			name: "invalid end time",
+			request: &workflowservice.ListScheduleMatchingTimesRequest{
+				StartTime: timestamppb.Now(),
+				EndTime:   &timestamppb.Timestamp{Nanos: 1_000_000_000},
+			},
+			errString: "end time is not a valid timestamp",
+		},
+		{
+			name:    "missing range",
+			request: &workflowservice.ListScheduleMatchingTimesRequest{},
+		},
+		{
+			name: "epoch range",
+			request: &workflowservice.ListScheduleMatchingTimesRequest{
+				StartTime: &timestamppb.Timestamp{},
+				EndTime:   &timestamppb.Timestamp{},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			wh := newScheduleSpecHandler(nil)
+			err := wh.validateScheduleMatchingTimesTimestamps(tc.request)
+			if tc.errString == "" {
+				require.NoError(t, err)
+				return
+			}
+
+			var invalidArgument *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgument)
+			require.ErrorContains(t, err, tc.errString)
+		})
+	}
+}
+
+func TestScheduleValidationKillSwitches(t *testing.T) {
+	testCases := []struct {
+		name       string
+		validation string
+		errString  string
+		schedule   func() *schedulepb.Schedule
+		validate   func(*WorkflowHandler, *schedulepb.Schedule) error
+		assertOK   func(*testing.T, *schedulepb.Schedule)
+	}{
+		{
+			name:       "timestamp",
+			validation: scheduleValidationTimestamp,
+			errString:  "start time is not a valid timestamp",
+			schedule: func() *schedulepb.Schedule {
+				return &schedulepb.Schedule{Spec: &schedulepb.ScheduleSpec{
+					StartTime: &timestamppb.Timestamp{Nanos: 1_000_000_000},
+					EndTime:   &timestamppb.Timestamp{Seconds: 3600, Nanos: 1_000_000_000},
+				}}
+			},
+			validate: func(wh *WorkflowHandler, schedule *schedulepb.Schedule) error {
+				return wh.canonicalizeScheduleSpec(schedule, "test-namespace")
+			},
+			assertOK: func(t *testing.T, schedule *schedulepb.Schedule) {
+				require.Equal(t, time.Unix(1, 0).UTC(), schedule.GetSpec().GetStartTime().AsTime())
+				require.Equal(t, time.Unix(3601, 0).UTC(), schedule.GetSpec().GetEndTime().AsTime())
+			},
+		},
+		{
+			name:       "remaining actions",
+			validation: scheduleValidationRemainingActions,
+			errString:  "remaining actions cannot be negative",
+			schedule: func() *schedulepb.Schedule {
+				return &schedulepb.Schedule{State: &schedulepb.ScheduleState{RemainingActions: -1}}
+			},
+			validate: func(wh *WorkflowHandler, schedule *schedulepb.Schedule) error {
+				return wh.canonicalizeScheduleSpec(schedule, "test-namespace")
+			},
+		},
+		{
+			name:       "overlap policy",
+			validation: scheduleValidationOverlapPolicy,
+			errString:  "unsupported overlap policy",
+			schedule: func() *schedulepb.Schedule {
+				return &schedulepb.Schedule{Policies: &schedulepb.SchedulePolicies{
+					OverlapPolicy: enumspb.ScheduleOverlapPolicy(99),
+				}}
+			},
+			validate: func(wh *WorkflowHandler, schedule *schedulepb.Schedule) error {
+				return wh.validateScheduleOverlapPolicies(schedule, nil, "test-namespace")
+			},
+		},
+	}
+
+	for _, validation := range testCases {
+		for _, toggle := range []struct {
+			name      string
+			disabled  []string
+			wantError bool
+		}{
+			{name: "enforced by default", wantError: true},
+			{name: "unrelated validation disabled", disabled: []string{scheduleValidationScheduleDuration}, wantError: true},
+			{name: "validation disabled", disabled: []string{validation.validation}},
+		} {
+			t.Run(validation.name+"/"+toggle.name, func(t *testing.T) {
+				wh := newScheduleSpecHandler(func(c *Config) {
+					if toggle.disabled != nil {
+						c.DisabledScheduleValidations = dc.GetTypedPropertyFnFilteredByNamespace(toggle.disabled)
+					}
+				})
+				schedule := validation.schedule()
+				err := validation.validate(wh, schedule)
+				if toggle.wantError {
+					var invalidArgument *serviceerror.InvalidArgument
+					require.ErrorAs(t, err, &invalidArgument)
+					require.ErrorContains(t, err, validation.errString)
+					return
+				}
+				require.NoError(t, err)
+				if validation.assertOK != nil {
+					validation.assertOK(t, schedule)
+				}
+			})
+		}
+	}
+}
+
 // Regression test for SCH-057: CreateSchedule and UpdateSchedule must reject malformed
 // interval duration protobufs with InvalidArgument before either the V1 or the CHASM
 // backend is invoked.
@@ -5665,6 +5993,169 @@ func (s *WorkflowHandlerSuite) TestCreateUpdateSchedule_RejectsMalformedInterval
 		s.ErrorAs(err, &invalidArgument)
 		s.Contains(err.Error(), "not a valid duration")
 	})
+}
+
+func (s *WorkflowHandlerSuite) TestScheduleValidation() {
+	config := s.newConfig()
+	config.EnableSchedules = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
+	ctx := context.Background()
+	create := func(schedule *schedulepb.Schedule, initialPatch *schedulepb.SchedulePatch) error {
+		_, err := wh.CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+			Namespace:    s.testNamespace.String(),
+			ScheduleId:   "test-schedule",
+			RequestId:    uuid.NewString(),
+			Schedule:     schedule,
+			InitialPatch: initialPatch,
+		})
+		return err
+	}
+	update := func(schedule *schedulepb.Schedule) error {
+		_, err := wh.UpdateSchedule(ctx, &workflowservice.UpdateScheduleRequest{
+			Namespace:  s.testNamespace.String(),
+			ScheduleId: "test-schedule",
+			RequestId:  uuid.NewString(),
+			Schedule:   schedule,
+		})
+		return err
+	}
+	assertInvalidArgument := func(err error, want string) {
+		s.T().Helper()
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+		s.ErrorContains(err, want)
+	}
+
+	invalidPolicy := enumspb.ScheduleOverlapPolicy(99)
+	malformedTimestamp := func() *schedulepb.Schedule {
+		return &schedulepb.Schedule{Spec: &schedulepb.ScheduleSpec{
+			StartTime: &timestamppb.Timestamp{Nanos: 1_000_000_000},
+			EndTime:   &timestamppb.Timestamp{Seconds: 3600, Nanos: 1_000_000_000},
+		}}
+	}
+	negativeRemainingActions := func() *schedulepb.Schedule {
+		return &schedulepb.Schedule{State: &schedulepb.ScheduleState{RemainingActions: -1}}
+	}
+	invalidSchedulePolicy := func() *schedulepb.Schedule {
+		return &schedulepb.Schedule{Policies: &schedulepb.SchedulePolicies{OverlapPolicy: invalidPolicy}}
+	}
+	invalidBackfillPolicy := func() *schedulepb.SchedulePatch {
+		return &schedulepb.SchedulePatch{BackfillRequest: []*schedulepb.BackfillRequest{{
+			OverlapPolicy: invalidPolicy,
+		}}}
+	}
+	invalidBackfillTimestamp := func() *schedulepb.SchedulePatch {
+		return &schedulepb.SchedulePatch{BackfillRequest: []*schedulepb.BackfillRequest{{
+			StartTime: &timestamppb.Timestamp{Nanos: 1_000_000_000},
+		}}}
+	}
+	invalidTriggerTimestamp := func() *schedulepb.SchedulePatch {
+		return &schedulepb.SchedulePatch{TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{
+			ScheduledTime: &timestamppb.Timestamp{Nanos: 1_000_000_000},
+		}}
+	}
+
+	// No backend call is expected: every case is rejected before either schedule backend is selected.
+	for _, tc := range []struct {
+		name      string
+		errString string
+		invoke    func() error
+	}{
+		{
+			name:      "CreateSchedule timestamp",
+			errString: "start time is not a valid timestamp",
+			invoke:    func() error { return create(malformedTimestamp(), nil) },
+		},
+		{
+			name:      "UpdateSchedule timestamp",
+			errString: "start time is not a valid timestamp",
+			invoke:    func() error { return update(malformedTimestamp()) },
+		},
+		{
+			name:      "CreateSchedule remaining actions",
+			errString: "remaining actions cannot be negative",
+			invoke:    func() error { return create(negativeRemainingActions(), nil) },
+		},
+		{
+			name:      "UpdateSchedule remaining actions",
+			errString: "remaining actions cannot be negative",
+			invoke:    func() error { return update(negativeRemainingActions()) },
+		},
+		{
+			name:      "CreateSchedule schedule policy",
+			errString: "unsupported overlap policy",
+			invoke:    func() error { return create(invalidSchedulePolicy(), nil) },
+		},
+		{
+			name:      "CreateSchedule initial patch",
+			errString: "unsupported overlap policy",
+			invoke:    func() error { return create(&schedulepb.Schedule{}, invalidBackfillPolicy()) },
+		},
+		{
+			name:      "CreateSchedule initial patch timestamp",
+			errString: "backfill request 0 start time is not a valid timestamp",
+			invoke:    func() error { return create(&schedulepb.Schedule{}, invalidBackfillTimestamp()) },
+		},
+		{
+			name:      "UpdateSchedule policy",
+			errString: "unsupported overlap policy",
+			invoke:    func() error { return update(invalidSchedulePolicy()) },
+		},
+		{
+			name:      "PatchSchedule trigger",
+			errString: "unsupported overlap policy",
+			invoke: func() error {
+				_, err := wh.PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+					Namespace:  s.testNamespace.String(),
+					ScheduleId: "test-schedule",
+					Patch: &schedulepb.SchedulePatch{TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{
+						OverlapPolicy: invalidPolicy,
+					}},
+				})
+				return err
+			},
+		},
+		{
+			name:      "PatchSchedule trigger timestamp",
+			errString: "trigger immediately request scheduled time is not a valid timestamp",
+			invoke: func() error {
+				_, err := wh.PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+					Namespace:  s.testNamespace.String(),
+					ScheduleId: "test-schedule",
+					Patch:      invalidTriggerTimestamp(),
+				})
+				return err
+			},
+		},
+		{
+			name:      "PatchSchedule backfill",
+			errString: "unsupported overlap policy",
+			invoke: func() error {
+				_, err := wh.PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+					Namespace:  s.testNamespace.String(),
+					ScheduleId: "test-schedule",
+					Patch:      invalidBackfillPolicy(),
+				})
+				return err
+			},
+		},
+		{
+			name:      "PatchSchedule backfill timestamp",
+			errString: "backfill request 0 start time is not a valid timestamp",
+			invoke: func() error {
+				_, err := wh.PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+					Namespace:  s.testNamespace.String(),
+					ScheduleId: "test-schedule",
+					Patch:      invalidBackfillTimestamp(),
+				})
+				return err
+			},
+		},
+	} {
+		s.Run(tc.name, func() {
+			assertInvalidArgument(tc.invoke(), tc.errString)
+		})
+	}
 }
 
 func (s *WorkflowHandlerSuite) TestUpdateSchedule_ValidationAndErrors() {
@@ -5856,10 +6347,8 @@ func (s *WorkflowHandlerSuite) TestPrepareUpdateWorkflowRequest_ValidatesComplet
 			},
 		}
 		request := newRequest([]*commonpb.Callback{{
-			Variant: &commonpb.Callback_Nexus_{
-				Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/callback"},
-			},
-			Links: []*commonpb.Link{callbackLink},
+			Variant: nexusCallbackVariant(),
+			Links:   []*commonpb.Link{callbackLink},
 		}})
 		request.Request.Links = []*commonpb.Link{common.CloneProto(callbackLink)}
 
@@ -5874,9 +6363,7 @@ func (s *WorkflowHandlerSuite) TestPrepareUpdateWorkflowRequest_ValidatesComplet
 			context.Background(),
 			s.testNamespace,
 			newRequest([]*commonpb.Callback{{
-				Variant: &commonpb.Callback_Internal_{
-					Internal: &commonpb.Callback_Internal{},
-				},
+				Variant: nexusCallbackVariant(),
 				Links: []*commonpb.Link{{
 					Variant: &commonpb.Link_BatchJob_{
 						BatchJob: &commonpb.Link_BatchJob{},
@@ -5892,9 +6379,7 @@ func (s *WorkflowHandlerSuite) TestPrepareUpdateWorkflowRequest_ValidatesComplet
 
 	s.Run("rejects too many combined links", func() {
 		request := newRequest([]*commonpb.Callback{{
-			Variant: &commonpb.Callback_Internal_{
-				Internal: &commonpb.Callback_Internal{},
-			},
+			Variant: nexusCallbackVariant(),
 			Links: []*commonpb.Link{{
 				Variant: &commonpb.Link_BatchJob_{
 					BatchJob: &commonpb.Link_BatchJob{JobId: "callback-job"},
@@ -5950,4 +6435,12 @@ type routingMatchingClient struct {
 
 func (r *routingMatchingClient) Route(p tqid.Partition) (string, error) {
 	return r.routeFn(p)
+}
+
+func nexusCallbackVariant() *commonpb.Callback_Nexus_ {
+	return &commonpb.Callback_Nexus_{
+		Nexus: &commonpb.Callback_Nexus{
+			Url: "https://localhost/nexus-callback",
+		},
+	}
 }
