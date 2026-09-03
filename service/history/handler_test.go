@@ -422,12 +422,11 @@ func TestStartNexusOperation_SystemNexusEndpointPayloadMetadataFlag(t *testing.T
 	}
 
 	testCases := []struct {
-		name       string
-		operation  string
-		wantMarked bool
+		name      string
+		operation string
 	}{
-		{name: "ordinary response", operation: "TestOperation"},
-		{name: "protobuf response with nested payload", operation: "TestOperationWithPayload", wantMarked: true},
+		{name: "response with no nested payload", operation: "TestOperation"},
+		{name: "response with nested payload", operation: "TestOperationWithPayload"},
 	}
 
 	for _, tc := range testCases {
@@ -446,10 +445,8 @@ func TestStartNexusOperation_SystemNexusEndpointPayloadMetadataFlag(t *testing.T
 			require.NotNil(t, result)
 
 			value, ok := result.GetMetadata()[commonnexus.SystemPayloadMetadataKey]
-			require.Equal(t, tc.wantMarked, ok)
-			if tc.wantMarked {
-				require.Equal(t, "true", string(value))
-			}
+			require.True(t, ok, "expected %s metadata flag to be set", commonnexus.SystemPayloadMetadataKey)
+			require.Equal(t, "true", string(value))
 		})
 	}
 }

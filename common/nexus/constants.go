@@ -8,6 +8,6 @@ const SystemCallbackURL = "temporal://system"
 // Operation requests for this endpoint are routed internally within the history service.
 const SystemEndpoint = "__temporal_system"
 
-// SystemPayloadMetadataKey marks typed protobuf system Nexus response payloads
-// whose nested user payloads must be visited recursively.
+// SystemPayloadMetadataKey is the Payload metadata key set to "true", on every
+// Temporal-generated system Nexus response payload.
 const SystemPayloadMetadataKey = "__temporal_system_payload"

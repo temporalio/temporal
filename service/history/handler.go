@@ -19,7 +19,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
-	sdkpayloadconverter "go.temporal.io/sdk/converter"
 	"go.temporal.io/server/api/historyservice/v1"
 	namespacespb "go.temporal.io/server/api/namespace/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -2608,11 +2607,10 @@ func (h *Handler) StartNexusOperation(
 			payload = ps.GetPayloads()[0]
 		}
 		if payload != nil {
-			metadata := payload.GetMetadata()
-			if string(metadata[sdkpayloadconverter.MetadataEncoding]) == sdkpayloadconverter.MetadataEncodingProto &&
-				len(metadata[sdkpayloadconverter.MetadataMessageType]) > 0 {
-				metadata[commonnexus.SystemPayloadMetadataKey] = []byte("true")
+			if payload.Metadata == nil {
+				payload.Metadata = make(map[string][]byte, 1)
 			}
+			payload.Metadata[commonnexus.SystemPayloadMetadataKey] = []byte("true")
 		}
 		response.Variant = &nexuspb.StartOperationResponse_SyncSuccess{
 			SyncSuccess: &nexuspb.StartOperationResponse_Sync{
