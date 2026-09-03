@@ -1,0 +1,3 @@
+module example.com/baselinefailure
+
+go 1.26

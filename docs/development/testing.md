@@ -336,3 +336,51 @@ You'll find the code coverage reporting in Codecov: https://app.codecov.io/gh/te
 
 Consider installing the [Codecov Browser Extension](https://docs.codecov.com/docs/the-codecov-browser-extension)
 to see code coverage directly in GitHub PRs.
+
+## Mutation testing
+
+Use [cmd/tools/mutationtest](../../cmd/tools/mutationtest) to initiate a mutation-testing run.
+
+List the explicitly supported mutation operators without supplying run arguments:
+
+```bash
+make .bin/mutationtest
+.bin/mutationtest -list-mutations
+```
+
+Operators use canonical `category/name` identifiers. `-mutations` accepts space-separated exact names, categories, `default`, or `all`; a nonempty value replaces the default selection. `-exclude-mutations` uses the same selectors and is applied last. Omitted `-mutations` preserves the curated default set.
+
+Use `make mutation-test` to run it:
+
+```bash
+make mutation-test \
+  MUTATION_SOURCE_FILES='chasm/lib/nexusoperation' \
+  MUTATION_SOURCE_EXCLUDE_FILES='chasm/lib/nexusoperation/gen fx.go' \
+  MUTATION_TEST_FILES='chasm/lib/nexusoperation service/frontend/nexus_* tests/nexus_*' \
+  MUTATION_SHARD_LEVEL=4 \
+  MUTATION_TIMEOUT=3m \
+  MUTATION_RUN_TIMEOUT=30m
+```
+
+`MUTATION_TIMEOUT` limits each mutant's test command. `MUTATION_RUN_TIMEOUT` limits the entire run; its default of `0` is unlimited. The runner writes uncovered target blocks to `uncovered.txt` and returns exit code `1` when it finds uncovered code or surviving mutants.
+
+Make reports recipe failures as a generic nonzero status. When automation needs the runner's exact exit code, build and invoke the binary directly:
+
+```bash
+make .bin/mutationtest
+.bin/mutationtest \
+  -output-root "$PWD/.testoutput/mutations" \
+  -include-files 'chasm/lib/nexusoperation' \
+  -exclude-files 'chasm/lib/nexusoperation/gen fx.go' \
+  -test-files 'chasm/lib/nexusoperation service/frontend/nexus_* tests/nexus_*' \
+  -test-tags test_dep \
+  -mutations 'default boolean/literal' \
+  -exclude-mutations 'loop branch/else' \
+  -shard-level 4 \
+  -timeout 3m \
+  -run-timeout 30m
+```
+
+Normal runs print the resolved operators and write them in canonical order to `operators.txt`. Temporal-owned operators live under [`tools/mutationtest/operators/custom`](../../tools/mutationtest/operators/custom); each implementation requires focused tests and an explicit catalog entry. `boolean/literal` is an opt-in example and is not part of `default`.
+
+The binary returns `0` when all covered mutants are killed, `1` for survivors or uncovered target blocks, and `2` for an incomplete run or infrastructure failure.

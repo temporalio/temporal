@@ -11,6 +11,7 @@ retract (
 require (
 	cloud.google.com/go/storage v1.62.1
 	github.com/Masterminds/sprig/v3 v3.3.0
+	github.com/avito-tech/go-mutesting v0.0.0-20251226130216-48d0401f00fb
 	github.com/aws/aws-sdk-go-v2 v1.41.6
 	github.com/aws/aws-sdk-go-v2/config v1.32.16
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.15
@@ -80,6 +81,7 @@ require (
 	golang.org/x/sync v0.22.0
 	golang.org/x/text v0.40.0
 	golang.org/x/time v0.15.0
+	golang.org/x/tools v0.47.0
 	google.golang.org/api v0.276.0
 	google.golang.org/grpc v1.82.1
 	google.golang.org/protobuf v1.36.11

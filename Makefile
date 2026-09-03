@@ -128,7 +128,7 @@ DB_TOOL_INTEGRATION_TEST_ROOT := ./tools/tests
 INTEGRATION_TEST_DIRS := $(DB_INTEGRATION_TEST_ROOT) $(DB_TOOL_INTEGRATION_TEST_ROOT) ./temporaltest
 TESTCORE_UNITTESTS := ./tests/testcore
 ifeq ($(UNIT_TEST_DIRS),)
-UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_ROOT)% $(FUNCTIONAL_TEST_NDC_ROOT)% $(MIXED_BRAIN_TEST_ROOT)% $(DB_INTEGRATION_TEST_ROOT)% $(DB_TOOL_INTEGRATION_TEST_ROOT)% ./temporaltest%,$(TEST_DIRS))
+UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_ROOT)% $(FUNCTIONAL_TEST_NDC_ROOT)% $(MIXED_BRAIN_TEST_ROOT)% $(DB_INTEGRATION_TEST_ROOT)% $(DB_TOOL_INTEGRATION_TEST_ROOT)% ./temporaltest% ./tools/mutationtest/testdata/%,$(TEST_DIRS))
 
 # Testcore unit tests are filtered out by the FUNCTIONAL_TEST_ROOT pattern, need to add them back manually.
 UNIT_TEST_DIRS += $(TESTCORE_UNITTESTS)
@@ -582,6 +582,27 @@ verify-test-log:
 	@! grep -q "^--- FAIL" test.log || (echo "TEST FAILURE: failing test found in test.log" && exit 1)
 
 test: unit-test integration-test functional-test
+
+MUTATION_TIMEOUT ?= 3m
+MUTATION_RUN_TIMEOUT ?= 0
+MUTATIONTEST := $(LOCALBIN)/mutationtest
+MUTATIONTEST_SOURCES := $(wildcard cmd/tools/mutationtest/*.go tools/mutationtest/*.go tools/mutationtest/operators/*.go tools/mutationtest/operators/custom/*.go)
+$(MUTATIONTEST): $(MUTATIONTEST_SOURCES) go.mod go.sum | $(LOCALBIN)
+	@go build -o $@ ./cmd/tools/mutationtest
+
+.PHONY: mutation-test
+mutation-test: $(MUTATIONTEST)
+	@printf $(COLOR) "Run mutation tests..."
+	@$(MUTATIONTEST) \
+		-output-root "$(CURDIR)/$(TEST_OUTPUT_ROOT)/mutations" \
+		-ref "$(MUTATION_REF)" \
+		-include-files "$(MUTATION_SOURCE_FILES)" \
+		-exclude-files "$(MUTATION_SOURCE_EXCLUDE_FILES)" \
+		-test-files "$(MUTATION_TEST_FILES)" \
+		-test-tags "$(MUTATION_TEST_TAGS)" \
+		-shard-level "$(MUTATION_SHARD_LEVEL)" \
+		-timeout "$(MUTATION_TIMEOUT)" \
+		-run-timeout "$(MUTATION_RUN_TIMEOUT)"
 
 ##### Coverage & Reporting #####
 $(TEST_OUTPUT_ROOT):
