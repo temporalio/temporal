@@ -151,8 +151,8 @@ func (n *OutboundTaskGroupPredicate) Size() int {
 	return size
 }
 
-// Deprecated: superseded by NewOutboundTaskPredicate (#6445). Only called from
-// service/history/queues/convert.go to deserialize a shard checkpointed before that change.
+// Deprecated: never constructed by any queue's grouper. Only called from
+// service/history/queues/convert.go to deserialize a legacy shard.
 func NewTypePredicate(
 	types []enumsspb.TaskType,
 ) *TypePredicate {
