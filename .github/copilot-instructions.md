@@ -1,104 +1,104 @@
 # Code Review Guidelines
 
-Apply these patterns when reviewing PRs or suggesting code changes.
+These rules apply when authoring or reviewing code; the Review Feedback section applies only when reviewing code.
 
 ## 1. Structural Simplicity (Highest Priority)
 
-- Review changes holistically as well as line by line
-- Prefer simpler designs that remove branches, special cases, indirection, or moving parts
-- Remove code that doesn't add value to tests or implementation
-- Don't add unnecessary activities/complexity in tests - test only what you need
-- Question randomness in tests - test explicitly what you want
-- Don't add assertions for things you can assume work (e.g., "You are not testing TerminateWorkflowExecution here, you can assume it works")
-- Remove redundant nil checks after you just set a value
-- Do not export anything that doesn't need to be exported
+- Review changes holistically as well as line by line.
+- Designs minimize branches, special cases, indirection, and moving parts.
+- Every line contributes to the implementation or verifies behavior in a test.
+- Tests contain only the activities and complexity needed to exercise the behavior in scope.
+- Tests use deterministic inputs unless randomness is the behavior under test.
+- Tests assert the behavior in scope and rely on unrelated operations to work. For example, a test that is not about `TerminateWorkflowExecution` assumes that operation works.
+- Values assigned immediately before use are used without redundant nil checks.
+- Packages export only identifiers required by their callers.
 
 ## 2. Go Conventions
 
-- Don't use `Get` prefix for getters: `func (a *Activity) Store()` not `GetStore()`
-- Don't use `Impl` suffix for implementations
-- Don't put underscore after `Test` in test names: `TestRetry` not `Test_Retry`
-- Avoid stuttering: don't use `ActivityStatus` in package `activity`, just `Status`
-- Use `ok` boolean pattern instead of nil checks where idiomatic
-- Prefer `cmp.Or` for defaults when zero means "unset"; it returns the first non-zero argument. Use an `if` statement for side-effecting or expensive fallbacks because all arguments are evaluated.
+- Getter names omit the `Get` prefix: use `func (a *Activity) Store()` rather than `GetStore()`.
+- Implementation names omit the `Impl` suffix.
+- Test names place their descriptive name directly after `Test`: use `TestRetry` rather than `Test_Retry`.
+- Names omit package-name stuttering: package `activity` uses `Status` rather than `ActivityStatus`.
+- Map lookups and other operations that return a presence boolean use the comma-ok pattern rather than nil checks.
+- Defaults use `cmp.Or` when zero means "unset"; it returns the first non-zero argument. Side-effecting or expensive fallbacks use an `if` statement because all arguments are evaluated.
 
 ## 3. Testing Correctness and Reliability
 
-- Never use `s.T()` in subtests - use the subtest's `t` parameter
-- Never use suite assertion methods (`s.NoError`, `s.Equal`) from goroutines - causes panics
-- Use `EventuallyWithT` when you need assertions inside eventually blocks, and use that block's `t`
-- Use `require.ErrorAs(t, err, &specificErr)` for specific error type checks
-- Prefer `require` over `assert` - it's rarely useful to continue a test after a failed assertion
-- Prefer table-driven tests over separate `Test*` methods when cases exercise the same behavior. Give each case a descriptive name and run it as a subtest.
-- Run independent cases in parallel in plain `t.Run` tests. Testify suites do not support parallel subtests.
-- Prefer comparing a function's full result with an expected value over separate `require.Equal` calls for each field. Use `protorequire.ProtoEqual` for proto results and proto fields within non-proto results. Use other field-level assertions only when part of the result is relevant.
-- Add comments explaining why `Eventually` is needed (e.g., eventual consistency)
-- Do not use single-value type assertions on errors (`err.(*T)`); this panics instead of failing the test when the type doesn't match. Use `errors.As` with a guarded return.
-- When launching a goroutine to maintain a precondition for later assertions (e.g., keeping pollers active so a deployment version gets registered), loop until context cancellation rather than running once. A single attempt that times out exits silently, leaving downstream Eventually/propagation waits to hang until their own deadline.
-- Never call testify assertions (`s.NoError`, `s.Equal`, `require.NoError`, even `assert.NoError`) inside a `go func()` — if the goroutine outlives the test, the assertion panics the binary with `panic: Fail in goroutine after TestXxx has completed`. Move assertions to the test goroutine or use a buffered error channel.
-- Prefer `await.Rcv` and `await.Snd` for blocking channel operations so tests fail on timeout instead of hanging indefinitely.
-- Never write to package-level or global variables in tests — parallel tests share the same process; thread values through function parameters instead.
-- Never use `time.Sleep` or `time.Since(start) > threshold` to enforce ordering — use channels, `sync.WaitGroup`, or `EventuallyWithT` instead.
-- When using `EventuallyWithT` (or similar) to wait for a condition driven by a background goroutine, ensure the goroutine's timeout is longer than the `EventuallyWithT` deadline — if the background op times out first, the condition will never be satisfied and the wait will hang until its own deadline.
-- Do not silently discard errors from precondition operations with `_, _ = f()` — if `f()` failing invalidates the rest of the test, surface the error or loop until it succeeds.
-- Be suspicious of `go s.someHelper(ctx, ...)` calls where the goroutine runs exactly once and the test then immediately waits for something that helper was supposed to cause. If the operation can fail transiently (network, tight deadline, busy CI), the single attempt may fail silently and the wait will never succeed. Either loop the goroutine until `ctx.Done()`, or check that the operation succeeded before proceeding.
+- Subtests use their `t` parameter rather than `s.T()`.
+- Testify suite assertion methods run in the test goroutine rather than worker goroutines.
+- Eventually blocks containing assertions use `EventuallyWithT` and its block-local `t`.
+- Specific error type assertions use `require.ErrorAs(t, err, &specificErr)`.
+- Test assertions use `require` rather than `assert`, so a failed assertion stops the test before later checks run on an invalid state.
+- Tests use a table-driven structure when multiple cases exercise the same behavior. Every case has a descriptive name and runs as a subtest.
+- Independent cases in plain `t.Run` tests run in parallel. Testify suite subtests remain sequential because the suite does not support parallel subtests.
+- Tests compare a function's complete result with an expected value rather than asserting each field separately. Proto results and proto fields within non-proto results use `protorequire.ProtoEqual`; field-level assertions are reserved for cases where only part of the result is relevant.
+- Every use of `Eventually` has a comment explaining why polling is required, such as eventual consistency.
+- Error type checks use a guarded API such as `errors.AsType`; single-value assertions such as `err.(*T)` are avoided because they panic when the type does not match.
+- A goroutine that maintains a precondition for later assertions loops until context cancellation. This prevents a transiently failed attempt from exiting silently and leaving downstream eventual-consistency waits unable to succeed.
+- Testify assertions run in the test goroutine. Worker goroutines return results or errors through buffered channels so an assertion cannot panic the binary after the test has completed.
+- Blocking channel operations in tests use `await.Rcv` and `await.Snd` so they fail on timeout instead of hanging indefinitely.
+- Package-level and global variables remain immutable during tests. Values are threaded through function parameters because parallel tests share the same process.
+- Tests coordinate ordering with channels, `sync.WaitGroup`, or `EventuallyWithT` rather than `time.Sleep` or elapsed-time thresholds.
+- A background operation that drives an `EventuallyWithT` condition has a longer timeout than the waiting deadline, so it remains capable of satisfying the condition for the entire wait.
+- Errors from precondition operations are surfaced or retried until success when failure would invalidate the rest of the test; they are not discarded with `_, _ = f()`.
+- A goroutine responsible for a transiently fallible precondition loops until `ctx.Done()` or reports success before the test waits for its effect; a single unverified attempt is insufficient.
 
 ## 4. Inline Code / Avoid Abstractions
 
-- Repeat strings instead of adding constants for single use
-- Inline struct field assignments when possible
-- Avoid unnecessary wrapper types and generic structs
-- Don't add dependencies for 5 lines of code - "just write 5 lines of code instead of adding more dependency bloat"
-- Don't create testsuite-level helpers that can't be safely used in subtests
-- Prefer explicit code over reflection
+- Strings used in only one place remain inline rather than becoming constants.
+- Struct field values are assigned directly in their literals when possible.
+- Types and generic structs provide behavior or meaning beyond the values they wrap.
+- Small amounts of straightforward functionality are implemented directly rather than through a new dependency.
+- Test-suite-level helpers are safe for use from subtests; helpers that depend on subtest-local state remain local to the subtest.
+- Code uses explicit constructs rather than reflection.
 
 ## 5. Proper Error Handling
 
-- Use standard error types (`InvalidArgument`, `NotFound`, `FailedPrecondition`) over custom error types
-- Mark errors as non-retryable when task shouldn't retry in queue
-- Wrap errors with context when there's something interesting or informative to add, e.g. `fmt.Errorf("multi-operation part 2: %w", err)`
-- Don't panic in library code - return errors and let caller decide
-- Validate early in handlers, not deep in business logic
-- Use `errors.AsType` instead of `errors.As`
-- Use `require.ErrorContains` instead of two separate assertions (`require.Error` + `require.Contains`)
+- Temporal errors use standard types such as `InvalidArgument`, `NotFound`, and `FailedPrecondition` rather than custom error types.
+- Errors are non-retryable when their tasks must not retry in the queue.
+- Wrapped errors add useful context, for example `fmt.Errorf("multi-operation part 2: %w", err)`; wrappers without additional information are omitted.
+- Library code returns errors instead of panicking, leaving error handling to the caller.
+- Handlers validate inputs at their boundaries rather than deep in business logic.
+- Error type checks use `errors.AsType` rather than `errors.As`.
+- Error-message assertions use `require.ErrorContains` rather than separate `require.Error` and `require.Contains` assertions.
 
 ## 6. Consistency with Codebase
 
-- Follow existing patterns: "We have been passing through the frontend request in other libraries. Let's keep the same pattern here"
-- Use existing utilities before creating new ones
-- Use static logger messages and record all dynamic content in structured tags
-- Follow CLI documentation conventions (capitalize proper nouns)
-- Match existing metric tag formats (CONSTANT_CASE for enum values)
-- Use the same error message style (no punctuation for single sentences)
+- Nexus libraries pass through frontend requests consistently with the established pattern.
+- Existing utilities are reused before new ones are created.
+- Logger messages are static, and dynamic content is recorded in structured tags.
+- CLI documentation follows the codebase's conventions, including capitalization of proper nouns.
+- Metric tags match existing formats, including `CONSTANT_CASE` for enum values.
+- Error messages match the surrounding code's style, including omission of punctuation for single sentences.
 
 ## 7. Code comments
 
-- Write comments that read like sentences as full sentences, starting with a capital letter and ending with punctuation. Short labels, end-of-line fragments, directives, and `TODO` markers are exempt.
-- A comment should be removed if the behavior of the code without the comment should be apparent to a reader familiar with the codebase.
-- If the benefit of a comment can be achieved by improving variable/function names then suggest that.
-- A comment must not give unnecessary or verbose explanation.
-- A comment must not use language that is metaphorical or alien to the codebase.
-- Sentence structure in comments should be simple. Prefer several plain statements over one sentence built from subordinate clauses, parentheticals, or stacked qualifications.
-- A comment should typically not refer to counterfactuals, or to discussions or decision processes that occurred when the code was written.
-- A comment should typically not explain how upstream callers use the code.
-- Give the concrete replacement text as a code suggestion. If the clearer and shorter fix is to restructure the code rather than reword the comment, suggest that code instead.
+- Comments are full sentences that start with a capital letter and end with punctuation. Short labels, end-of-line fragments, directives, and `TODO` markers are exempt.
+- Comments explain behavior that is not apparent to a reader familiar with the codebase.
+- Names convey information that can be expressed clearly through naming; comments cover information that naming cannot convey.
+- Comments contain only the explanation needed to understand the code.
+- Comments use literal language and terminology established in the codebase.
+- Comments use simple sentence structures, with several plain statements rather than one sentence built from subordinate clauses, parentheticals, or stacked qualifications.
+- Comments ordinarily describe the current code without referring to counterfactuals, prior discussions, or the decision process from when the code was written.
+- Comments ordinarily describe the code itself rather than how upstream callers use it.
+- Give concrete replacement text as a code suggestion. If restructuring the code is clearer and shorter than rewording the comment, suggest that code instead.
 
 ## 8. API and Proto Design
 
-- Document all proto fields with comments
-- Use proper field names: `request_id` not `requestId`, `schedule_time` not `scheduledTime`
-- Don't expose internal concepts in user-facing errors: "LowCardinalityKeyword is not a user facing concept"
-- Accept event attributes structs instead of growing function signatures
-- Prefer enums over int/string for well-known values
+- Every proto field has a comment.
+- Protobuf fields use canonical snake-case names such as `request_id` rather than `requestId`, and `schedule_time` rather than `scheduledTime`.
+- User-facing errors describe user-facing concepts without exposing internal concepts such as `LowCardinalityKeyword`.
+- Functions accept event-attribute structs instead of continually growing parameter lists.
+- Well-known values use enums rather than integers or strings.
 
 ## 9. Concurrency and Safety
 
-- Prefer immutable data patterns (for normal structs and especially proto messages) to avoid data races and synchronization
-- Default to `sync.Mutex` for synchronization; atomics are an advanced tool for specific patterns or performance concerns
-- Prefer `sync.Mutex` over `sync.RWMutex` almost always, except when reads are much more common than writes (>1000×) or readers hold the lock for significant time
-- Don't do IO while holding locks - use side effect tasks
-- Clone data before releasing locks if it might be modified
-- Proto message fields accessed outside the workflow lock must be cloned, not aliased: use `common.CloneProto(...)` rather than returning the pointer directly.
+- Structs, especially proto messages, use immutable data patterns to avoid data races and synchronization.
+- Synchronization uses `sync.Mutex` by default. Atomics are reserved for specific patterns or demonstrated performance concerns.
+- Synchronization uses `sync.Mutex` rather than `sync.RWMutex` unless reads outnumber writes by more than 1000 to 1 or readers hold the lock for significant time.
+- I/O occurs outside critical sections, with side-effect tasks carrying work that must happen after a lock is released.
+- Data protected by a lock is cloned before the lock is released when it may be modified afterward.
+- Proto message fields accessed outside the workflow lock are cloned with `common.CloneProto(...)` rather than aliased by returning their pointers directly.
 
 ## 10. Review Feedback
 
@@ -130,7 +130,7 @@ Keep the suggestion outside the collapsible block, as a code suggestion wherever
 - `med` — Moderate issue: missing error handling, logic that is likely wrong in edge cases, test gaps, or design concerns. Affects correctness or maintainability. Blocking.
 - `high` — Serious issue: security vulnerability, data loss risk, crash/panic, race condition, broken functionality, or architectural violation. Blocking.
 
-Report findings at all four severity levels.
+Report concrete findings at all four severity levels: `nit`, `small`, `med`, and `high`.
 Prefer a small number of high-confidence findings.
 Keep `nit` and `small` findings proportionally shorter than `med` and `high` findings.
 Report concrete `nit` and `small` findings selectively, and consolidate related symptoms into a single comment that addresses the root issue.
@@ -138,4 +138,4 @@ Report concrete `nit` and `small` findings selectively, and consolidate related 
 ### Feedback style
 
 Be direct and practical, without fluff.
-Reference specific codebase patterns and utilities, suggest concrete alternatives, and explain why something should change, not just that it should.
+Reference specific codebase patterns and utilities, suggest concrete alternatives, and explain why something should change rather than only stating that it should.
