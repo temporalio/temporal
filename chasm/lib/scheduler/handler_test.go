@@ -107,6 +107,35 @@ func TestSentinelHandler_MigrateToWorkflow(t *testing.T) {
 	})
 }
 
+func TestHandler_CreateSchedule_Sentinel(t *testing.T) {
+	logger := log.NewTestLogger()
+	h := scheduler.NewTestHandler(logger)
+	_, engineCtx := newTestEngineContext(t, logger)
+	_, err := chasm.StartExecution(
+		engineCtx,
+		chasm.ExecutionKey{
+			NamespaceID: namespaceID,
+			BusinessID:  scheduleID,
+		},
+		func(ctx chasm.MutableContext, _ struct{}) (*scheduler.Scheduler, error) {
+			return scheduler.NewSentinel(ctx, namespace, namespaceID, scheduleID), nil
+		},
+		struct{}{},
+	)
+	require.NoError(t, err)
+
+	_, err = h.CreateSchedule(engineCtx, &schedulerpb.CreateScheduleRequest{
+		NamespaceId: namespaceID,
+		FrontendRequest: &workflowservice.CreateScheduleRequest{
+			ScheduleId: scheduleID,
+		},
+	})
+
+	require.ErrorIs(t, err, scheduler.ErrSentinel)
+	var notFoundErr *serviceerror.NotFound
+	require.ErrorAs(t, err, &notFoundErr)
+}
+
 func TestHandler_CreateFromMigrationState_Sentinel(t *testing.T) {
 	logger := log.NewTestLogger()
 	h := scheduler.NewTestHandler(logger)
