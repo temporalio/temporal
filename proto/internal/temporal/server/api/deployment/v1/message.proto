@@ -629,5 +629,5 @@ message DemoteVersionSignalArgs {
 // Version membership hints returned with an errTooManyVersions failure.
 message TooManyVersionsFailureDetails {
   // A match only bypasses the cached failure; the workflow remains authoritative.
-  repeated fixed64 version_fingerprints = 1;
+  repeated int64 version_fingerprints = 1;
 }

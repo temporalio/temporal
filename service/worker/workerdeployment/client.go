@@ -252,7 +252,7 @@ type maxTaskQueuesInVersionCacheKey struct {
 type registrationErrorCacheValue struct {
 	err                 error
 	expiresAt           time.Time
-	versionFingerprints map[uint64]struct{}
+	versionFingerprints map[int64]struct{}
 }
 
 // ClientImpl implements Client
@@ -429,6 +429,7 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 		d.cacheTooManyVersionsFailure(namespaceEntry.ID().String(), deploymentName, outcome.GetFailure(), retErr)
 	case errMaxTaskQueuesInVersionType:
 		d.cacheMaxTaskQueuesInVersionError(namespaceEntry.ID().String(), deploymentName, buildId, retErr)
+	default:
 	}
 	return retErr
 }
@@ -489,7 +490,7 @@ func (d *ClientImpl) cacheTooManyVersionsError(
 	namespaceID string,
 	deploymentName string,
 	err error,
-	versionFingerprints map[uint64]struct{},
+	versionFingerprints map[int64]struct{},
 ) {
 	if err == nil || versionFingerprints == nil || d.registrationErrorCache == nil {
 		return
@@ -532,7 +533,7 @@ func (d *ClientImpl) cacheTooManyDeploymentsError(namespaceID string, err error)
 	d.putRegistrationError(tooManyDeploymentsCacheKey{namespaceID: namespaceID}, err, nil)
 }
 
-func (d *ClientImpl) putRegistrationError(key any, err error, versionFingerprints map[uint64]struct{}) {
+func (d *ClientImpl) putRegistrationError(key any, err error, versionFingerprints map[int64]struct{}) {
 	cachedErr := registrationErrorCacheValue{
 		err:                 err,
 		versionFingerprints: versionFingerprints,
@@ -567,7 +568,7 @@ func (d *ClientImpl) cachedErrorRemainingTTL(cachedErr *registrationErrorCacheVa
 	return max(time.Second, ((remainingTTL+time.Second-1)/time.Second)*time.Second)
 }
 
-func (d *ClientImpl) getVersionFingerprintsFromFailure(failure *failurepb.Failure) (map[uint64]struct{}, error) {
+func (d *ClientImpl) getVersionFingerprintsFromFailure(failure *failurepb.Failure) (map[int64]struct{}, error) {
 	detailsPayloads := failure.GetApplicationFailureInfo().GetDetails()
 	if detailsPayloads == nil {
 		return nil, nil
@@ -577,7 +578,7 @@ func (d *ClientImpl) getVersionFingerprintsFromFailure(failure *failurepb.Failur
 	if err := sdk.PreferProtoDataConverter.FromPayloads(detailsPayloads, &details); err != nil {
 		return nil, err
 	}
-	fingerprints := make(map[uint64]struct{}, len(details.GetVersionFingerprints()))
+	fingerprints := make(map[int64]struct{}, len(details.GetVersionFingerprints()))
 	for _, fingerprint := range details.GetVersionFingerprints() {
 		fingerprints[fingerprint] = struct{}{}
 	}

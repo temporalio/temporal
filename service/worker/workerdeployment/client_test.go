@@ -313,7 +313,7 @@ func TestAllowNoPollersPathsRecordAndCacheTooManyVersionsError(t *testing.T) {
 				BuildId:        "build-new",
 			})
 			details, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.TooManyVersionsFailureDetails{
-				VersionFingerprints: []uint64{workerDeploymentVersionFingerprint("deployment-a", "build-existing")},
+				VersionFingerprints: []int64{workerDeploymentVersionFingerprint("deployment-a", "build-existing")},
 			})
 			require.NoError(t, err)
 			failure := &failurepb.Failure{
@@ -445,7 +445,7 @@ func TestCreateWorkerDeploymentVersionCachesVersionLimitError(t *testing.T) {
 		registrationErrorCacheTimeSource:          timeSource,
 	}
 	details, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.TooManyVersionsFailureDetails{
-		VersionFingerprints: []uint64{workerDeploymentVersionFingerprint("deployment-a", "build-existing")},
+		VersionFingerprints: []int64{workerDeploymentVersionFingerprint("deployment-a", "build-existing")},
 	})
 	require.NoError(t, err)
 	failure := &failurepb.Failure{
@@ -614,7 +614,7 @@ func TestGetVersionFingerprintsFromFailure(t *testing.T) {
 	t.Parallel()
 
 	payloads, err := sdk.PreferProtoDataConverter.ToPayloads(&deploymentspb.TooManyVersionsFailureDetails{
-		VersionFingerprints: []uint64{11, 22},
+		VersionFingerprints: []int64{11, 22},
 	})
 	require.NoError(t, err)
 	client := &ClientImpl{}
@@ -626,7 +626,7 @@ func TestGetVersionFingerprintsFromFailure(t *testing.T) {
 	})
 
 	require.NoError(t, err)
-	require.Equal(t, map[uint64]struct{}{11: {}, 22: {}}, fingerprints)
+	require.Equal(t, map[int64]struct{}{11: {}, 22: {}}, fingerprints)
 
 	fingerprints, err = client.getVersionFingerprintsFromFailure(&failurepb.Failure{
 		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
@@ -637,8 +637,8 @@ func TestGetVersionFingerprintsFromFailure(t *testing.T) {
 	require.Nil(t, fingerprints)
 }
 
-func versionFingerprintSet(deploymentName string, buildIDs ...string) map[uint64]struct{} {
-	fingerprints := make(map[uint64]struct{}, len(buildIDs))
+func versionFingerprintSet(deploymentName string, buildIDs ...string) map[int64]struct{} {
+	fingerprints := make(map[int64]struct{}, len(buildIDs))
 	for _, buildID := range buildIDs {
 		fingerprints[workerDeploymentVersionFingerprint(deploymentName, buildID)] = struct{}{}
 	}

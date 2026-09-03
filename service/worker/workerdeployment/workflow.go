@@ -694,7 +694,7 @@ func (d *WorkflowRunner) addVersionToWorkerDeployment(ctx workflow.Context, args
 
 func (d *WorkflowRunner) newTooManyVersionsError(message string) error {
 	versions := workflow.DeterministicKeys(d.State.Versions)
-	fingerprints := make([]uint64, 0, len(versions))
+	fingerprints := make([]int64, 0, len(versions))
 	for _, version := range versions {
 		versionObj, err := worker_versioning.WorkerDeploymentVersionFromStringV31(version)
 		if err != nil {

@@ -122,12 +122,12 @@ var (
 	)
 )
 
-func workerDeploymentVersionFingerprint(deploymentName, buildID string) uint64 {
+func workerDeploymentVersionFingerprint(deploymentName, buildID string) int64 {
 	version := worker_versioning.WorkerDeploymentVersionToStringV32(&deploymentspb.WorkerDeploymentVersion{
 		DeploymentName: deploymentName,
 		BuildId:        buildID,
 	})
-	return farm.Fingerprint64([]byte(version))
+	return int64(farm.Fingerprint64([]byte(version)))
 }
 
 var (

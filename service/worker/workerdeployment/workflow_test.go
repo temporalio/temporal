@@ -57,7 +57,7 @@ func TestTooManyVersionsFailureDetails(t *testing.T) {
 	require.True(t, appErr.HasDetails())
 	var details *deploymentspb.TooManyVersionsFailureDetails
 	require.NoError(t, appErr.Details(&details))
-	require.ElementsMatch(t, []uint64{
+	require.ElementsMatch(t, []int64{
 		workerDeploymentVersionFingerprint("deployment-a", "build-a"),
 		workerDeploymentVersionFingerprint("deployment-a", "build-b"),
 	}, details.GetVersionFingerprints())

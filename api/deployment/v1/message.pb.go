@@ -3941,7 +3941,7 @@ func (x *DemoteVersionSignalArgs) GetRoutingConfig() *v11.RoutingConfig {
 type TooManyVersionsFailureDetails struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// A match only bypasses the cached failure; the workflow remains authoritative.
-	VersionFingerprints []uint64 `protobuf:"fixed64,1,rep,packed,name=version_fingerprints,json=versionFingerprints,proto3" json:"version_fingerprints,omitempty"`
+	VersionFingerprints []int64 `protobuf:"varint,1,rep,packed,name=version_fingerprints,json=versionFingerprints,proto3" json:"version_fingerprints,omitempty"`
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -3976,7 +3976,7 @@ func (*TooManyVersionsFailureDetails) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_deployment_v1_message_proto_rawDescGZIP(), []int{60}
 }
 
-func (x *TooManyVersionsFailureDetails) GetVersionFingerprints() []uint64 {
+func (x *TooManyVersionsFailureDetails) GetVersionFingerprints() []int64 {
 	if x != nil {
 		return x.VersionFingerprints
 	}
@@ -4454,7 +4454,7 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\x17DemoteVersionSignalArgs\x12P\n" +
 	"\x0erouting_config\x18\x01 \x01(\v2).temporal.api.deployment.v1.RoutingConfigR\rroutingConfig\"R\n" +
 	"\x1dTooManyVersionsFailureDetails\x121\n" +
-	"\x14version_fingerprints\x18\x01 \x03(\x06R\x13versionFingerprintsB4Z2go.temporal.io/server/api/deployment/v1;deploymentb\x06proto3"
+	"\x14version_fingerprints\x18\x01 \x03(\x03R\x13versionFingerprintsB4Z2go.temporal.io/server/api/deployment/v1;deploymentb\x06proto3"
 
 var (
 	file_temporal_server_api_deployment_v1_message_proto_rawDescOnce sync.Once
