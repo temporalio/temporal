@@ -147,11 +147,13 @@ func pickWritePartitionByGap(
 	}
 
 	count0 := number.DecodeCompact8(counts[0])
-	// p(root) = gap_root / total
+	// p(root) = gap_root / (others + gap_root)
 	// we want to force p(root) >= writePartitionRootProbabilityFloor
-	// so, gap_root / total >= writePartitionRootProbabilityFloor
-	// => gap_root >= total * writePartitionRootProbabilityFloor
-	gap0 := max(backlogCap-count0, int64(math.Ceil(float64(total)*writePartitionRootProbabilityFloor)))
+	// => gap_root >= others * floor / (1 - floor)
+	others := total - max(int64(0), backlogCap-count0)
+	minRootGap := math.Ceil(float64(others) * writePartitionRootProbabilityFloor / (1 - writePartitionRootProbabilityFloor))
+	gap0 := max(backlogCap-count0, int64(minRootGap))
+	total = others + gap0
 	expectedRoot := float64(total) / float64(gap0)
 	return pickPartitionByGap(counts, gap0, backlogCap, total), randomRound(expectedRoot)
 }
