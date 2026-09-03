@@ -33,6 +33,7 @@ var (
 
 type handler struct {
 	activitypb.UnimplementedActivityServiceServer
+	callbackValidator callbacks.Validator
 	config            *Config
 	historyHandler    historyservice.HistoryServiceServer
 	linkValidator     *linkValidator
@@ -43,6 +44,7 @@ type handler struct {
 
 func newHandler(
 	config *Config,
+	callbackValidator callbacks.Validator,
 	historyHandler historyservice.HistoryServiceServer,
 	linkValidator *linkValidator,
 	metricsHandler metrics.Handler,
@@ -50,6 +52,7 @@ func newHandler(
 	namespaceRegistry namespace.Registry,
 ) *handler {
 	return &handler{
+		callbackValidator: callbackValidator,
 		config:            config,
 		historyHandler:    historyHandler,
 		linkValidator:     linkValidator,
@@ -75,12 +78,6 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		return nil, serviceerror.NewInvalidArgumentf("unsupported ID conflict policy: %v", frontendReq.GetIdConflictPolicy())
 	}
 
-	// Read once, so it's consistent for both the creation and on-conflict paths.
-	limits := callbacks.Limits{
-		MaxCount:             h.config.MaxCallbacksPerExecution(frontendReq.GetNamespace()),
-		MaxSourceContextSize: h.config.NexusHandlerSourceContextAggregateMaxSize(frontendReq.GetNamespace()),
-	}
-
 	result, err := chasm.StartExecution(
 		ctx,
 		chasm.ExecutionKey{
@@ -94,7 +91,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 			}
 
 			if cbs := request.GetCompletionCallbacks(); len(cbs) > 0 {
-				if err := newActivity.addCompletionCallbacks(mutableContext, request.GetRequestId(), cbs, limits); err != nil {
+				if err := newActivity.addCompletionCallbacks(mutableContext, request.GetRequestId(), cbs, h.callbackValidator); err != nil {
 					return nil, err
 				}
 			}
@@ -149,7 +146,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 			ref,
 			func(a *Activity, ctx chasm.MutableContext, _ any) (any, error) {
 				if attachCallbacks {
-					if err := a.addCompletionCallbacks(ctx, requestID, cbs, limits); err != nil {
+					if err := a.addCompletionCallbacks(ctx, requestID, cbs, h.callbackValidator); err != nil {
 						return nil, err
 					}
 				}

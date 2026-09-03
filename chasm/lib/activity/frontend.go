@@ -421,15 +421,9 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		opts := callbacks.ValidatorOptions{
 			EnabledKinds: h.config.EnabledCallbackKinds(req.GetNamespace()),
 		}
+		// Activity.addCompletionCallbacks re-checks the aggregate limits against the callbacks
+		// already attached to a running activity, which the frontend cannot see.
 		if err := h.callbackValidator.Validate(ctx, req.GetNamespace(), cbs, opts); err != nil {
-			return nil, err
-		}
-		// Validate checks each callback's source context individually; this bounds their total.
-		// Activity.addCompletionCallbacks re-checks it against the callbacks already attached to a
-		// running activity, which the frontend cannot see.
-		if err := h.callbackValidator.ValidateSourceContextSize(
-			req.GetNamespace(), callbacks.SourceContextSize(cbs),
-		); err != nil {
 			return nil, err
 		}
 	}

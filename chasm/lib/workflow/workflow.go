@@ -132,24 +132,21 @@ func (w *Workflow) totalCallbackCount(ctx chasm.Context) int {
 
 // checkWorkflowCallbackLimits returns an error if attaching completionCallbacks would take the
 // workflow past either the callback count or the aggregate source context size it is allowed.
-// The size is re-checked here because the frontend bounds only the callbacks on one request; it
+// These are re-checked here because the frontend bounds only the callbacks on one request; it
 // cannot see what a running workflow already carries.
 func (w *Workflow) checkWorkflowCallbackLimits(
 	ctx chasm.Context,
 	completionCallbacks []*commonpb.Callback,
-	limits commoncallbacks.Limits,
+	callbackValidator commoncallbacks.Validator,
 ) error {
-	current := w.totalCallbackCount(ctx)
-	if len(completionCallbacks)+current > limits.MaxCount {
-		return serviceerror.NewFailedPreconditionf(
-			"cannot attach more than %d callbacks to a workflow (%d callbacks already attached)",
-			limits.MaxCount,
-			current,
-		)
-	}
-
-	totalBytes := commoncallbacks.SourceContextSize(completionCallbacks) + w.totalSourceContextSize(ctx)
-	return commoncallbacks.ValidateSourceContextSize(limits.MaxSourceContextSize, totalBytes)
+	return callbackValidator.ValidateAdditions(
+		ctx.NamespaceEntry().Name().String(),
+		completionCallbacks,
+		commoncallbacks.AdditionOptions{
+			CurrentCallbacksAttached:                          w.totalCallbackCount(ctx),
+			CurrentTotalNexusHandlerCallbackSourceContextSize: w.totalSourceContextSize(ctx),
+		},
+	)
 }
 
 // totalSourceContextSize returns the bytes of NexusHandler source context carried by every callback
@@ -209,9 +206,9 @@ func (w *Workflow) AddCompletionCallbacks(
 	eventTime *timestamppb.Timestamp,
 	requestID string,
 	completionCallbacks []*commonpb.Callback,
-	limits commoncallbacks.Limits,
+	callbackValidator commoncallbacks.Validator,
 ) error {
-	if err := w.checkWorkflowCallbackLimits(ctx, completionCallbacks, limits); err != nil {
+	if err := w.checkWorkflowCallbackLimits(ctx, completionCallbacks, callbackValidator); err != nil {
 		return err
 	}
 
@@ -230,10 +227,10 @@ func (w *Workflow) AddUpdateCompletionCallbacks(
 	updateID string,
 	requestID string,
 	completionCallbacks []*commonpb.Callback,
-	limits commoncallbacks.Limits,
+	callbackValidator commoncallbacks.Validator,
 	maxCallbacksPerUpdateID int,
 ) error {
-	if err := w.checkWorkflowCallbackLimits(ctx, completionCallbacks, limits); err != nil {
+	if err := w.checkWorkflowCallbackLimits(ctx, completionCallbacks, callbackValidator); err != nil {
 		return err
 	}
 

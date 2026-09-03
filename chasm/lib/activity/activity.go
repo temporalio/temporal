@@ -301,7 +301,7 @@ func (a *Activity) addCompletionCallbacks(
 	ctx chasm.MutableContext,
 	requestID string,
 	completionCallbacks []*commonpb.Callback,
-	limits commoncallbacks.Limits,
+	callbackValidator commoncallbacks.Validator,
 ) error {
 	if len(completionCallbacks) == 0 {
 		return nil
@@ -310,22 +310,19 @@ func (a *Activity) addCompletionCallbacks(
 		return serviceerror.NewFailedPrecondition("cannot attach callbacks to a closed activity")
 	}
 
-	currentCount := len(a.Callbacks)
-	if len(completionCallbacks)+currentCount > limits.MaxCount {
-		return serviceerror.NewFailedPreconditionf(
-			"cannot attach more than %d callbacks to an activity (%d callbacks already attached)",
-			limits.MaxCount,
-			currentCount,
-		)
-	}
-
-	// Re-check the aggregate source context size against what is already attached, which the
-	// frontend cannot see.
-	totalBytes := commoncallbacks.SourceContextSize(completionCallbacks)
+	// Re-check the aggregate limits against what is already attached, which the frontend cannot see.
+	currentSourceContextSize := 0
 	for _, cb := range a.Callbacks {
-		totalBytes += cb.Get(ctx).SourceContextSize()
+		currentSourceContextSize += cb.Get(ctx).SourceContextSize()
 	}
-	if err := commoncallbacks.ValidateSourceContextSize(limits.MaxSourceContextSize, totalBytes); err != nil {
+	if err := callbackValidator.ValidateAdditions(
+		ctx.NamespaceEntry().Name().String(),
+		completionCallbacks,
+		commoncallbacks.AdditionOptions{
+			CurrentCallbacksAttached:                          len(a.Callbacks),
+			CurrentTotalNexusHandlerCallbackSourceContextSize: currentSourceContextSize,
+		},
+	); err != nil {
 		return err
 	}
 

@@ -18,16 +18,23 @@ import (
 type handler struct {
 	nexusoperationpb.UnimplementedNexusOperationServiceServer
 
-	config        *Config
-	linkValidator *linkValidator
-	logger        log.Logger
+	callbackValidator callbacks.Validator
+	config            *Config
+	linkValidator     *linkValidator
+	logger            log.Logger
 }
 
-func newHandler(config *Config, linkValidator *linkValidator, logger log.Logger) *handler {
+func newHandler(
+	config *Config,
+	callbackValidator callbacks.Validator,
+	linkValidator *linkValidator,
+	logger log.Logger,
+) *handler {
 	return &handler{
-		config:        config,
-		linkValidator: linkValidator,
-		logger:        logger,
+		callbackValidator: callbackValidator,
+		config:            config,
+		linkValidator:     linkValidator,
+		logger:            logger,
 	}
 }
 
@@ -39,12 +46,6 @@ func (h *handler) StartNexusOperation(
 	defer log.CapturePanic(h.logger, &err)
 
 	frontendReq := req.GetFrontendRequest()
-	// Read once, so it's consistent for both the creation and on-conflict paths,
-	// despite being in two transactions.
-	limits := callbacks.Limits{
-		MaxCount:             h.config.MaxCallbacksPerExecution(frontendReq.GetNamespace()),
-		MaxSourceContextSize: h.config.NexusHandlerSourceContextAggregateMaxSize(frontendReq.GetNamespace()),
-	}
 
 	result, err := chasm.StartExecution(
 		ctx,
@@ -53,7 +54,7 @@ func (h *handler) StartNexusOperation(
 			BusinessID:  frontendReq.GetOperationId(),
 		},
 		func(mutableCtx chasm.MutableContext, req *nexusoperationpb.StartNexusOperationRequest) (*Operation, error) {
-			return newStandaloneOperation(mutableCtx, req, limits, h.linkValidator)
+			return newStandaloneOperation(mutableCtx, req, h.callbackValidator, h.linkValidator)
 		},
 		req,
 		chasm.WithRequestID(frontendReq.GetRequestId()),
@@ -78,7 +79,7 @@ func (h *handler) StartNexusOperation(
 	}
 
 	if !result.Created {
-		if err := h.applyOnConflictOptions(ctx, result.ExecutionKey, frontendReq, limits); err != nil {
+		if err := h.applyOnConflictOptions(ctx, result.ExecutionKey, frontendReq); err != nil {
 			return nil, err
 		}
 	}
@@ -96,7 +97,6 @@ func (h *handler) applyOnConflictOptions(
 	ctx context.Context,
 	key chasm.ExecutionKey,
 	req *workflowservice.StartNexusOperationExecutionRequest,
-	limits callbacks.Limits,
 ) error {
 	cbs := req.GetCompletionCallbacks()
 	links := req.GetLinks()
@@ -116,7 +116,7 @@ func (h *handler) applyOnConflictOptions(
 		chasm.NewComponentRef[*Operation](key),
 		func(o *Operation, ctx chasm.MutableContext, _ any) (any, error) {
 			if attachCallbacks {
-				if err := o.addCompletionCallbacks(ctx, requestID, cbs, limits); err != nil {
+				if err := o.addCompletionCallbacks(ctx, requestID, cbs, h.callbackValidator); err != nil {
 					return nil, err
 				}
 			}

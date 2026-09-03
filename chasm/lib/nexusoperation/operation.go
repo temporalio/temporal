@@ -120,7 +120,7 @@ func NewOperation(state *nexusoperationpb.OperationState) *Operation {
 func newStandaloneOperation(
 	ctx chasm.MutableContext,
 	req *nexusoperationpb.StartNexusOperationRequest,
-	limits commoncallbacks.Limits,
+	callbackValidator commoncallbacks.Validator,
 	linkValidator *linkValidator,
 ) (*Operation, error) {
 	frontendReq := req.GetFrontendRequest()
@@ -150,7 +150,7 @@ func newStandaloneOperation(
 		ctx,
 		frontendReq.GetRequestId(),
 		frontendReq.GetCompletionCallbacks(),
-		limits,
+		callbackValidator,
 	); err != nil {
 		return nil, err
 	}
@@ -448,13 +448,13 @@ func (o *Operation) getOrCreateOutcome(ctx chasm.MutableContext) *nexusoperation
 // request is a no-op rather than a duplicate. The idempotency probe runs before the closed check, so a
 // retry still succeeds if the operation closed after the first attach.
 //
-// The limits are re-checked here because callback.Validator only bounds the callbacks on the start
-// request; callbacks added later via on_conflict_options bypass it.
+// The aggregate limits are re-checked here because the frontend only bounds the callbacks on the
+// start request; callbacks added later via on_conflict_options bypass it.
 func (o *Operation) addCompletionCallbacks(
 	ctx chasm.MutableContext,
 	requestID string,
 	completionCallbacks []*commonpb.Callback,
-	limits commoncallbacks.Limits,
+	callbackValidator commoncallbacks.Validator,
 ) error {
 	if len(completionCallbacks) == 0 {
 		return nil
@@ -471,22 +471,19 @@ func (o *Operation) addCompletionCallbacks(
 		return serviceerror.NewFailedPrecondition("cannot attach callbacks to a closed nexus operation")
 	}
 
-	currentCount := len(o.Callbacks)
-	if len(completionCallbacks)+currentCount > limits.MaxCount {
-		return serviceerror.NewFailedPreconditionf(
-			"cannot attach more than %d callbacks to a nexus operation (%d callbacks already attached)",
-			limits.MaxCount,
-			currentCount,
-		)
-	}
-
-	// Re-check the aggregate source context size against what is already attached, which the
-	// frontend cannot see.
-	totalBytes := commoncallbacks.SourceContextSize(completionCallbacks)
+	// Re-check the aggregate limits against what is already attached, which the frontend cannot see.
+	currentSourceContextSize := 0
 	for _, cb := range o.Callbacks {
-		totalBytes += cb.Get(ctx).SourceContextSize()
+		currentSourceContextSize += cb.Get(ctx).SourceContextSize()
 	}
-	if err := commoncallbacks.ValidateSourceContextSize(limits.MaxSourceContextSize, totalBytes); err != nil {
+	if err := callbackValidator.ValidateAdditions(
+		ctx.NamespaceEntry().Name().String(),
+		completionCallbacks,
+		commoncallbacks.AdditionOptions{
+			CurrentCallbacksAttached:                          len(o.Callbacks),
+			CurrentTotalNexusHandlerCallbackSourceContextSize: currentSourceContextSize,
+		},
+	); err != nil {
 		return err
 	}
 

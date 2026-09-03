@@ -19,11 +19,47 @@ type ValidatorOptions struct {
 	EnabledKinds []Kind
 }
 
+// AdditionOptions describes the completion callbacks an execution already carries, for
+// [Validator.ValidateAdditions]. Callers read it off the execution's own state.
+type AdditionOptions struct {
+	// CurrentCallbacksAttached is the number of callbacks the execution already carries.
+	CurrentCallbacksAttached int
+	// CurrentTotalNexusHandlerCallbackSourceContextSize is the total bytes of NexusHandler source
+	// context those callbacks carry between them.
+	CurrentTotalNexusHandlerCallbackSourceContextSize int
+}
+
 // Validator validates completion callbacks attached to executions (e.g. workflows and standalone activities).
 type Validator interface {
-	// Validate rejects callbacks that are not enabled for the execution, or are malformed.
+	// Validate rejects callbacks that are not enabled for the execution, or are malformed. It also
+	// bounds their count and the total bytes of NexusHandler source context they carry.
 	// Will mutate the supplied Callbacks to normalize. e.g. converting Nexus headers to lower-case.
+	//
+	// This is for a request that starts an execution, where cbs is the complete set of callbacks the
+	// execution will carry. Callbacks attached to an execution that already holds some go through
+	// [Validator.ValidateAdditions].
 	Validate(ctx context.Context, namespaceName string, cbs []*commonpb.Callback, opts ValidatorOptions) error
+
+	// ValidateAdditions applies the count and aggregate source context size limits to cbs combined
+	// with the callbacks the execution already carries. The frontend bounds only the callbacks on
+	// one request, since it cannot see what a running execution already holds.
+	//
+	// It does not re-validate the individual callbacks; Validate has already done that at the
+	// frontend. Unlike Validate, exceeding a limit here depends on execution state rather than the
+	// request alone, so failures are FailedPrecondition rather than InvalidArgument.
+	ValidateAdditions(namespaceName string, cbs []*commonpb.Callback, opts AdditionOptions) error
+}
+
+// SourceContextSize returns the total size in bytes of the NexusHandler source context payloads carried
+// by cbs. Callbacks of any other kind contribute nothing.
+func SourceContextSize(cbs []*commonpb.Callback) int {
+	total := 0
+	for _, cb := range cbs {
+		if sc := cb.GetNexusHandler().GetSourceContext(); sc != nil {
+			total += sc.Size()
+		}
+	}
+	return total
 }
 
 // ValidatorConfig holds the limits a [Validator] enforces.
@@ -83,17 +119,18 @@ func NewValidator(config ValidatorConfig) (Validator, error) {
 	return &validator{config: config}, nil
 }
 
-// Validate validates completion callbacks: their kind, their count, and the fields of each variant.
-// Nexus header keys are normalized to lowercase in place.
+// Validate validates completion callbacks: their kind, their count, the fields of each variant, and
+// the total NexusHandler source context they carry. Nexus header keys are normalized to lowercase in
+// place.
 func (v *validator) Validate(
 	_ context.Context,
 	namespaceName string,
 	cbs []*commonpb.Callback,
 	opts ValidatorOptions,
 ) error {
-	if len(cbs) > v.config.MaxCallbacksPerExecution(namespaceName) {
+	if maxCount := v.config.MaxCallbacksPerExecution(namespaceName); len(cbs) > maxCount {
 		return serviceerror.NewInvalidArgumentf(
-			"cannot attach more than %d callbacks to an execution", v.config.MaxCallbacksPerExecution(namespaceName),
+			"cannot attach more than %d callbacks to an execution", maxCount,
 		)
 	}
 
@@ -101,6 +138,38 @@ func (v *validator) Validate(
 		if err := v.validateCallback(cb, namespaceName, opts); err != nil {
 			return fmt.Errorf("completion_callbacks[%d]: %w", i, err)
 		}
+	}
+
+	// validateNexusHandler bounds each callback's source context individually; this bounds the total.
+	return v.validateSourceContextSize(namespaceName, SourceContextSize(cbs))
+}
+
+// ValidateAdditions bounds cbs against what the execution already carries. See [Validator].
+func (v *validator) ValidateAdditions(
+	namespaceName string,
+	cbs []*commonpb.Callback,
+	opts AdditionOptions,
+) error {
+	maxCount := v.config.MaxCallbacksPerExecution(namespaceName)
+	if len(cbs)+opts.CurrentCallbacksAttached > maxCount {
+		return serviceerror.NewFailedPreconditionf(
+			"cannot attach more than %d callbacks to an execution (%d callbacks already attached)",
+			maxCount, opts.CurrentCallbacksAttached,
+		)
+	}
+	return v.validateSourceContextSize(
+		namespaceName,
+		SourceContextSize(cbs)+opts.CurrentTotalNexusHandlerCallbackSourceContextSize,
+	)
+}
+
+// validateSourceContextSize bounds the total bytes of NexusHandler source context an execution would
+// carry against the per-execution limit.
+func (v *validator) validateSourceContextSize(namespaceName string, bytes int) error {
+	if maxSize := v.config.NexusHandlerSourceContextAggregateMaxSize(namespaceName); bytes > maxSize {
+		return serviceerror.NewFailedPreconditionf(
+			"cannot attach more than %d bytes of callback source_context to an execution (%d bytes requested)",
+			maxSize, bytes)
 	}
 	return nil
 }

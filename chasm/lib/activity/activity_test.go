@@ -1142,18 +1142,37 @@ func newActivityForCallbacks(t *testing.T, ctx chasm.MutableContext) *Activity {
 	return activity
 }
 
+// testCallbackValidator returns a Validator enforcing the aggregate limits these tests exercise.
+// The per-callback limits are set out of the way, since only the aggregate checks are under test.
+func testCallbackValidator(t *testing.T, maxCount, maxSourceContextSize int) commoncallbacks.Validator {
+	t.Helper()
+	v, err := commoncallbacks.NewValidator(commoncallbacks.ValidatorConfig{
+		MaxCallbacksPerExecution:                  func(string) int { return maxCount },
+		MaxIDLengthLimit:                          func() int { return 1000 },
+		URLMaxLength:                              func(string) int { return 1000 },
+		HeaderMaxSize:                             func(string) int { return 1000 },
+		EndpointRules:                             func(string) commoncallbacks.AddressMatchRules { return commoncallbacks.AddressMatchRules{} },
+		MaxServiceNameLength:                      func(string) int { return 1000 },
+		MaxOperationNameLength:                    func(string) int { return 1000 },
+		NexusHandlerSourceContextMaxSize:          func(string) int { return 1024 * 1024 },
+		NexusHandlerSourceContextAggregateMaxSize: func(string) int { return maxSourceContextSize },
+	})
+	require.NoError(t, err)
+	return v
+}
+
 // The frontend bounds the source context carried by one request. Only this check bounds what
 // accumulates across the several requests an on-conflict attach can make.
 func TestAddCompletionCallbacksSourceContextLimit(t *testing.T) {
-	limits := commoncallbacks.Limits{MaxCount: 10, MaxSourceContextSize: 1500}
+	callbackValidator := testCallbackValidator(t, 10, 1500)
 
 	t.Run("RejectsASingleOversizedRequest", func(t *testing.T) {
-		ctx := &chasm.MockMutableContext{}
+		ctx := &chasm.MockMutableContext{MockContext: chasm.MockContext{HandleNamespaceEntry: testNamespaceEntry}}
 		activity := newActivityForCallbacks(t, ctx)
 
 		err := activity.addCompletionCallbacks(ctx, "req-1", []*commonpb.Callback{
 			nexusHandlerCallback(1600),
-		}, limits)
+		}, callbackValidator)
 		var failedPreconditionErr *serviceerror.FailedPrecondition
 		require.ErrorAs(t, err, &failedPreconditionErr)
 		require.ErrorContains(t, err, "cannot attach more than 1500 bytes of callback source_context")
@@ -1161,16 +1180,16 @@ func TestAddCompletionCallbacksSourceContextLimit(t *testing.T) {
 	})
 
 	t.Run("RejectsExceedingTheLimitWithAlreadyAttachedCallbacks", func(t *testing.T) {
-		ctx := &chasm.MockMutableContext{}
+		ctx := &chasm.MockMutableContext{MockContext: chasm.MockContext{HandleNamespaceEntry: testNamespaceEntry}}
 		activity := newActivityForCallbacks(t, ctx)
 
 		require.NoError(t, activity.addCompletionCallbacks(ctx, "req-1", []*commonpb.Callback{
 			nexusHandlerCallback(900),
-		}, limits))
+		}, callbackValidator))
 
 		err := activity.addCompletionCallbacks(ctx, "req-2", []*commonpb.Callback{
 			nexusHandlerCallback(900),
-		}, limits)
+		}, callbackValidator)
 		// req-2 is within the limit on its own, so only the accumulated total can have rejected it.
 		require.ErrorContains(t, err, "cannot attach more than 1500 bytes of callback source_context")
 		// The rejected request attached nothing.
@@ -1178,13 +1197,13 @@ func TestAddCompletionCallbacksSourceContextLimit(t *testing.T) {
 	})
 
 	t.Run("AllowsCallbacksWithinTheLimit", func(t *testing.T) {
-		ctx := &chasm.MockMutableContext{}
+		ctx := &chasm.MockMutableContext{MockContext: chasm.MockContext{HandleNamespaceEntry: testNamespaceEntry}}
 		activity := newActivityForCallbacks(t, ctx)
 
 		require.NoError(t, activity.addCompletionCallbacks(ctx, "req-1", []*commonpb.Callback{
 			nexusHandlerCallback(700),
 			nexusHandlerCallback(700),
-		}, limits))
+		}, callbackValidator))
 		require.Len(t, activity.Callbacks, 2)
 	})
 }

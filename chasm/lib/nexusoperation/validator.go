@@ -106,13 +106,9 @@ func (v *validator) validateAndNormalizeStartRequest(
 			return serviceerror.NewInvalidArgument("completion callbacks are not enabled for this namespace")
 		}
 		opts := callbacks.ValidatorOptions{EnabledKinds: enabledKinds}
+		// Operation.addCompletionCallbacks re-checks the aggregate limits against the callbacks
+		// already attached to a running operation, which the frontend cannot see.
 		if err := v.callbackValidator.Validate(ctx, ns, cbs, opts); err != nil {
-			return err
-		}
-		// Validate checks each callback's source context individually; this bounds their total.
-		// Operation.addCompletionCallbacks re-checks it against the callbacks already attached to a
-		// running operation, which the frontend cannot see.
-		if err := v.callbackValidator.ValidateSourceContextSize(ns, callbacks.SourceContextSize(cbs)); err != nil {
 			return err
 		}
 	}

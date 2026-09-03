@@ -1,7 +1,6 @@
 package activity
 
 import (
-	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -67,8 +66,6 @@ type Config struct {
 	LongPollBuffer                            dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	LongPollTimeout                           dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	MaxIDLengthLimit                          dynamicconfig.IntPropertyFn
-	MaxCallbacksPerExecution                  dynamicconfig.IntPropertyFnWithNamespaceFilter
-	NexusHandlerSourceContextAggregateMaxSize dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MutableStateActivityFailureSizeLimitError dynamicconfig.IntPropertyFnWithNamespaceFilter
 	DefaultActivityRetryPolicy                dynamicconfig.TypedPropertyFnWithNamespaceFilter[retrypolicy.DefaultRetrySettings]
 	MaxUserMetadataDetailsSize                dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -91,8 +88,6 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		LongPollTimeout:                           LongPollTimeout.Get(dc),
 		MaxIDLengthLimit:                          dynamicconfig.MaxIDLengthLimit.Get(dc),
 		StartDelayEnabled:                         StartDelayEnabled.Get(dc),
-		MaxCallbacksPerExecution:                  callback.MaxPerExecution.Get(dc),
-		NexusHandlerSourceContextAggregateMaxSize: callback.NexusHandlerSourceContextAggregateMaxSize.Get(dc),
 		MutableStateActivityFailureSizeLimitError: dynamicconfig.MutableStateActivityFailureSizeLimitError.Get(dc),
 		MaxUserMetadataDetailsSize:                dynamicconfig.MaxUserMetadataDetailsSize.Get(dc),
 		MaxUserMetadataSummarySize:                dynamicconfig.MaxUserMetadataSummarySize.Get(dc),
