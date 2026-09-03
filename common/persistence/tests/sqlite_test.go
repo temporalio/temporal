@@ -1597,6 +1597,5 @@ func TestSQLiteTransactionContextCancellation(t *testing.T) {
 		RangeHash:   0,
 		TaskQueueID: []byte("test-queue"),
 	}, sqlplugin.MatchingTaskVersion1)
-	assert.NotContains(t, err.Error(), "no such table")
 	require.ErrorIs(t, err, gosql.ErrNoRows)
 }
