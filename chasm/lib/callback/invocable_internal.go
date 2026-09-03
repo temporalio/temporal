@@ -61,13 +61,14 @@ func (c invocableInternal) Invoke(
 ) invocationResult {
 	// nolint:forbidigo // Wall-clock RPC measurement, not component state; Invoke has no chasm.Context.
 	startTime := time.Now()
-	outcome := outcomeSuccess
+	// Sentinel default: a return path that forgets to set outcome must not read as a success.
+	outcome := outcomeUnknown
 	defer func() {
 		namespaceTag := metrics.NamespaceTag(ns.Name().String())
 		destTag := metrics.DestinationTag(taskAttr.Destination)
 		outcomeTag := metrics.OutcomeTag(outcome)
 		h.metricsHandler.Counter(InternalRequestCounter.Name()).Record(1, namespaceTag, destTag, outcomeTag)
-	outcome := outcomeUnknown
+		h.metricsHandler.Timer(InternalRequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, outcomeTag)
 	}()
 
 	header := nexus.Header(c.callback.GetHeader())
@@ -126,6 +127,7 @@ func (c invocableInternal) Invoke(
 		return invocationResultFail{msg}
 	}
 
+	outcome = outcomeSuccess
 	return invocationResultOK{}
 }
 

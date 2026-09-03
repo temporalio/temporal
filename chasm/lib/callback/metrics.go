@@ -46,6 +46,9 @@ const (
 // Internal-path outcomes decided before the RPC is issued. Failures after it are tagged by
 // gRPC status code.
 const (
+	// outcomeUnknown is the sentinel Invoke starts from, so a path that returns without
+	// setting an outcome shows up as unknown rather than as a success.
+	outcomeUnknown           = "unknown"
 	outcomeSuccess           = "success"
 	outcomeMissingToken      = "missing-token"
 	outcomeTokenDecodeError  = "token-decode-error"

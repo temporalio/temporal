@@ -539,6 +539,48 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			wantAttemptSample:   true,
 		},
 		{
+			// The harness only sets CallbackTokenHeader when headerValue is non-empty.
+			name: "missing-token",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) resource.HistoryClient {
+				// No RPC call expected
+				return historyservicemock.NewMockHistoryServiceClient(ctrl)
+			},
+			completion: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{
+					Result: createPayloadBytes([]byte("result-data")),
+				}
+			}(),
+			headerValue: "",
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				require.ErrorContains(t, err, "internal error, reference-id:")
+				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
+			},
+			wantDeliveryOutcome: "missing-token",
+			wantDisposition:     "failed",
+			wantAttemptSample:   true,
+		},
+		{
+			// getHistoryRequest rejects a Result that isn't a *commonpb.Payload.
+			name: "request-build-error",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) resource.HistoryClient {
+				// No RPC call expected
+				return historyservicemock.NewMockHistoryServiceClient(ctrl)
+			},
+			completion: func() nexusrpc.CompleteOperationOptions {
+				return nexusrpc.CompleteOperationOptions{
+					Result: "not-a-payload",
+				}
+			}(),
+			headerValue: encodedRef,
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				require.ErrorContains(t, err, "internal error, reference-id:")
+				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
+			},
+			wantDeliveryOutcome: "request-build-error",
+			wantDisposition:     "failed",
+			wantAttemptSample:   true,
+		},
+		{
 			name: "invalid-base64-header",
 			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) resource.HistoryClient {
 				// No RPC call expected
