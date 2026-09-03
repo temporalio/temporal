@@ -1333,17 +1333,9 @@ func (s *NexusStandaloneTestSuite) TestTerminateStandaloneNexusOperation() {
 		s.Contains(err.Error(), "already terminated")
 	})
 
-<<<<<<< HEAD
 	// A cancel request on a running operation only records the cancellation; the operation stays
 	// running, so terminate is still accepted and closes it as TERMINATED.
 	s.Run("CancelRequestedThenTerminated", func(s *NexusStandaloneTestSuite) {
-=======
-	// Covers a *pending cancellation request*, which leaves the operation open. Terminating an
-	// operation that already reached the terminal CANCELED status is rejected instead; that path
-	// requires a handler-side cancel completion, so it is covered by the unit test
-	// TestTerminateRejectedForClosedOperation.
-	s.Run("AfterCancelRequested", func(s *NexusStandaloneTestSuite) {
->>>>>>> e0d267523 (Add completion callbacks to SANOs)
 		env := s.newTestEnv()
 		endpointName := env.createRandomNexusEndpoint(s.Context(), s.T()).GetSpec().GetName()
 
