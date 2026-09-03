@@ -49,10 +49,16 @@ import (
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
-	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/frontend/configs"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
+)
+
+const (
+	dataBlobMessageType = "temporal.api.common.v1.DataBlob"
+	payloadsMessageType = "temporal.api.common.v1.Payloads"
+	protobufEncoding    = "binary/protobuf"
 )
 
 type NexusWorkflowTestSuite struct {
@@ -3314,6 +3320,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSystemEndpoint(chasmEnabled b
 	result := completedEvent.GetNexusOperationCompletedEventAttributes().Result
 	s.NotNil(result)
 	s.Equal([]byte("true"), result.GetMetadata()[commonnexus.SystemPayloadMetadataKey])
+	// TestOperation returns a proto message, so the result must be proto encoded, not JSON.
+	s.Equal([]byte(dataBlobMessageType), result.GetMetadata()["messageType"])
+	s.Equal([]byte(protobufEncoding), result.GetMetadata()["encoding"])
 
 	// Complete the workflow
 	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -3333,9 +3342,10 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSystemEndpoint(chasmEnabled b
 		},
 	})
 	s.NoError(err)
-	var response string
+	var response commonpb.DataBlob
 	s.NoError(run.Get(ctx, &response))
-	s.Equal("Hello, Temporal", response)
+	data := response.Data
+	s.Equal("Hello, Temporal", string(data))
 }
 
 // NOTE: This test cannot use the SDK workflow package because there is a restriction that prevents setting the
@@ -3392,9 +3402,10 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSystemEndpoint_PayloadMetadat
 	completedEvent := s.RequireHistoryEvent(pollResp.History.Events, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
 	result := completedEvent.GetNexusOperationCompletedEventAttributes().Result
 	s.NotNil(result)
-	// TestOperationWithPayload's response embeds a nested Payload, so the system payload metadata
-	// flag must be set.
+	// TestOperationWithPayload's response embeds a nested Payload, so the system payload metadata flag must be set.
 	s.Equal([]byte("true"), result.GetMetadata()[commonnexus.SystemPayloadMetadataKey])
+	s.Equal([]byte(payloadsMessageType), result.GetMetadata()["messageType"])
+	s.Equal([]byte(protobufEncoding), result.GetMetadata()["encoding"])
 
 	// Complete the workflow
 	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{

@@ -34,6 +34,8 @@ const (
 	ArchetypeTagName               = "archetype"
 	ChasmTaskTypeTagName           = "chasm_task_type"
 	timeoutTypeTagName             = "timeout_type"
+	LastAttemptCauseTagName        = "last_attempt_cause"
+	AttemptStageTagName            = "attempt_stage"
 )
 
 // This package should hold all the metrics and tags for temporal
@@ -891,6 +893,10 @@ var (
 		"task_attempt",
 		WithDescription("The number of attempts took to complete a history task."),
 	)
+	TaskAlertableAttempt = NewDimensionlessHistogramDef(
+		"task_alertable_attempt",
+		WithDescription("The number of attempts, among a history task's total, caused by an alertable (system-side) error."),
+	)
 	TaskFailures = NewCounterDef(
 		"task_errors",
 		WithDescription("The number of unexpected history task processing errors."),
@@ -1021,6 +1027,7 @@ var (
 	// This metric has a "reason" tag attached to it to understand why eager start was denied.
 	WorkflowEagerExecutionDeniedCounter           = NewCounterDef("workflow_eager_execution_denied")
 	StartWorkflowRequestDeduped                   = NewCounterDef("start_workflow_request_deduped")
+	OrphanedChildWorkflowReplacement              = NewCounterDef("orphaned_child_workflow_replacement")
 	EmptyCompletionCommandsCounter                = NewCounterDef("empty_completion_commands")
 	MultipleCompletionCommandsCounter             = NewCounterDef("multiple_completion_commands")
 	FailedWorkflowTasksCounter                    = NewCounterDef("failed_workflow_tasks")
@@ -1053,7 +1060,11 @@ var (
 	DuplicateReplicationEventsCounter             = NewCounterDef("duplicate_replication_events")
 	AcquireLockFailedCounter                      = NewCounterDef("acquire_lock_failed")
 	WorkflowContextCleared                        = NewCounterDef("workflow_context_cleared")
-	MutableStateSize                              = NewBytesHistogramDef(
+	HistoryPassiveReplicationTestHookCounter      = NewCounterDef(
+		"history_passive_replication_test_hook",
+		WithDescription("Number of times the test-only passive replication hook executes. This must be zero in production."),
+	)
+	MutableStateSize = NewBytesHistogramDef(
 		"mutable_state_size",
 		WithDescription("The size of an individual Workflow Execution's state, emitted each time a workflow execution is retrieved or updated."),
 	)
@@ -1159,6 +1170,10 @@ var (
 	ChildWorkflowResendLimited = NewCounterDef("child_workflow_resend_limited")
 	// ChildWorkflowResendLatency measures a child resend and subsequent verification.
 	ChildWorkflowResendLatency = NewTimerDef("child_workflow_resend_latency")
+	// ChildWorkflowCompletionRecoveryAttempts counts terminal child refreshes triggered by a late parent.
+	ChildWorkflowCompletionRecoveryAttempts = NewCounterDef("child_workflow_completion_recovery_attempts")
+	// ChildWorkflowCompletionRecoveryChainMismatch counts recoveries skipped after Workflow ID reuse.
+	ChildWorkflowCompletionRecoveryChainMismatch = NewCounterDef("child_workflow_completion_recovery_chain_mismatch")
 	// WorkflowResendSchedulerAtCapacity counts host-level workflow resends rejected at the concurrency limit.
 	WorkflowResendSchedulerAtCapacity = NewCounterDef("workflow_resend_scheduler_at_capacity")
 	// ReplicationOrphanedHistoryBranch tracks cases where history branch cleanup was skipped on error

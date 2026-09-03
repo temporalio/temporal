@@ -233,7 +233,7 @@ The circuit breaker is dynamically configurable via:
 
 ## Nexus Operations
 
-The [`nexusoperations` component](../../components/nexusoperations) holds all of the logic for scheduling Nexus
+The [`nexusoperations` component](../../service/history/hsm/nexusoperations) holds all of the logic for scheduling Nexus
 Operations from a workflow and maintaining the Operations's lifecycle.
 
 There are some other pieces of Nexus logic spread around other parts of the server (`common`, `frontend`, and
@@ -245,7 +245,7 @@ Machine framework (docs TBD).
 ### `Operation` State Machine
 
 The
-[Operation](https://github.com/temporalio/temporal/blob/a0fdea5319be5f1631d7e2b0f6f06c38dae3d413/components/nexusoperations/statemachine.go#L65)
+[Operation](../../service/history/hsm/nexusoperations/statemachine.go)
 state machine manages the lifetime of an Operation the StartOperation request.
 
 The state machine transitions between these states (as defined in code):
@@ -325,7 +325,7 @@ releases the mutable state lock while making the HTTP request, and reacquires th
 Since Nexus Operations can provide their results asynchronously, when constructing the `StartOperation` call, the
 executor adds a callback URL along with a set of headers to later correlate the operation completion with the calling
 workflow and operation state machine. The
-[component.nexusoperations.callback.endpoint.template](https://github.com/temporalio/temporal/blob/7c8025aff96af7d72a91af615f1d625817842894/components/nexusoperations/config.go#L69)
+[component.nexusoperations.callback.endpoint.template](../../service/history/hsm/nexusoperations/config.go)
 global dynamic config must be set to construct callback URLs or the executor will fail to process invocation tasks. When
 routing callbacks to external clusters and non-Temporal destinations, the URL is used and should be a value that is
 publically accessible to those external destinations. Callbacks that are routed internally within the cluster resolve
@@ -342,14 +342,15 @@ The workflow closed trigger will trigger a callback when a workflow completes su
 cancellation, or termination, as well as carry over the callbacks to the next execution in a chain when a workflow is
 retried or continues-as-new.
 
-Similarly to Nexus Operations, callbacks are implemented via a hierarchical state machine and a set of executors, which
-are located in [the components directory](../../components/callbacks).
+Callbacks are implemented as CHASM components and task handlers in the
+[callback library](../../chasm/lib/callback). The
+[legacy HSM callbacks package](../../service/history/hsm/callbacks) remains for persisted HSM state.
 
 Callbacks are continously retried using a [configurable retry policy][callback-retry-policy] until they succeed,
 permanently fail, or the workflow's retention period expires.
 
-The timeout for making a single callback HTTP call is configurable via: `component.callbacks.request.timeout`
-(default is 10 seconds).
+The timeout for making a single callback HTTP call is configurable via: `callback.request.timeout`
+(default is 10 seconds). The legacy HSM implementation uses `component.callbacks.request.timeout`.
 
 ### `Callback` State Machine
 
@@ -442,5 +443,5 @@ sequenceDiagram
     Frontend -->>- Client: Response
 ```
 
-[nexus-retry-policy]: https://github.com/temporalio/temporal/blob/f0f5539c8de71f7f9dec22e4e30a5cb9ded7b945/components/nexusoperations/config.go#L77-L87
-[callback-retry-policy]: https://github.com/temporalio/temporal/blob/f0f5539c8de71f7f9dec22e4e30a5cb9ded7b945/components/callbacks/config.go#L40-L50
+[nexus-retry-policy]: ../../service/history/hsm/nexusoperations/config.go
+[callback-retry-policy]: ../../chasm/lib/callback/config.go

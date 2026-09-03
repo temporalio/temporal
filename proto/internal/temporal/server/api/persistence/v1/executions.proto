@@ -319,6 +319,10 @@ message WorkflowExecutionInfo {
 
   // Time skipping info that contains the config and runtime history of the time skipping for the workflow.
   TimeSkippingInfo time_skipping_info = 115;
+
+  // Time of the most recent AdminRebuildMutableState call for this run, unset if the run
+  // was never rebuilt.
+  google.protobuf.Timestamp mutable_state_rebuild_time = 116;
 }
 
 message TimeSkippingInfo {
