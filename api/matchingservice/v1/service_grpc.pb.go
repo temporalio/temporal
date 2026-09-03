@@ -24,6 +24,7 @@ const (
 	MatchingService_PollActivityTaskQueue_FullMethodName                  = "/temporal.server.api.matchingservice.v1.MatchingService/PollActivityTaskQueue"
 	MatchingService_AddWorkflowTask_FullMethodName                        = "/temporal.server.api.matchingservice.v1.MatchingService/AddWorkflowTask"
 	MatchingService_AddActivityTask_FullMethodName                        = "/temporal.server.api.matchingservice.v1.MatchingService/AddActivityTask"
+	MatchingService_GrantEagerDispatch_FullMethodName                     = "/temporal.server.api.matchingservice.v1.MatchingService/GrantEagerDispatch"
 	MatchingService_QueryWorkflow_FullMethodName                          = "/temporal.server.api.matchingservice.v1.MatchingService/QueryWorkflow"
 	MatchingService_RespondQueryTaskCompleted_FullMethodName              = "/temporal.server.api.matchingservice.v1.MatchingService/RespondQueryTaskCompleted"
 	MatchingService_DispatchNexusTask_FullMethodName                      = "/temporal.server.api.matchingservice.v1.MatchingService/DispatchNexusTask"
@@ -80,6 +81,22 @@ type MatchingServiceClient interface {
 	// AddActivityTask is called by the history service when a workflow task is scheduled, so that it can be dispatched
 	// by the MatchingEngine.
 	AddActivityTask(ctx context.Context, in *AddActivityTaskRequest, opts ...grpc.CallOption) (*AddActivityTaskResponse, error)
+	// GrantEagerDispatch is called by the history service to ask a task queue partition whether tasks may be
+	// dispatched eagerly, meaning returned inline to the worker that is already making a call, instead of going
+	// through Add{Workflow,Activity}Task and matching's dispatch path. It covers activity tasks dispatched in a
+	// RespondWorkflowTaskCompleted response and the first workflow task dispatched in a StartWorkflowExecution
+	// response; task_queue_partition.task_queue_type distinguishes them.
+	//
+	// This RPC persists nothing and enqueues nothing: it reads the partition's state and answers per item. For each
+	// item it grants, the partition debits its whole-queue and per-fairness-key rate limiters, since the eagerly
+	// dispatched task will never reach matching again. Items it does not grant are not charged; history sends those
+	// through Add{Workflow,Activity}Task as usual, and they are limited normally at dispatch time.
+	//
+	// A grant is permission to dispatch, not a reservation that can be returned: capacity debited for a grant that
+	// history ends up not using is not refunded.
+	//
+	// History treats any failure, including Unimplemented from an older matching host, as "do not dispatch eagerly".
+	GrantEagerDispatch(ctx context.Context, in *GrantEagerDispatchRequest, opts ...grpc.CallOption) (*GrantEagerDispatchResponse, error)
 	// QueryWorkflow is called by frontend to query a workflow.
 	QueryWorkflow(ctx context.Context, in *QueryWorkflowRequest, opts ...grpc.CallOption) (*QueryWorkflowResponse, error)
 	// RespondQueryTaskCompleted is called by frontend to respond query completed.
@@ -292,6 +309,15 @@ func (c *matchingServiceClient) AddWorkflowTask(ctx context.Context, in *AddWork
 func (c *matchingServiceClient) AddActivityTask(ctx context.Context, in *AddActivityTaskRequest, opts ...grpc.CallOption) (*AddActivityTaskResponse, error) {
 	out := new(AddActivityTaskResponse)
 	err := c.cc.Invoke(ctx, MatchingService_AddActivityTask_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *matchingServiceClient) GrantEagerDispatch(ctx context.Context, in *GrantEagerDispatchRequest, opts ...grpc.CallOption) (*GrantEagerDispatchResponse, error) {
+	out := new(GrantEagerDispatchResponse)
+	err := c.cc.Invoke(ctx, MatchingService_GrantEagerDispatch_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -656,6 +682,22 @@ type MatchingServiceServer interface {
 	// AddActivityTask is called by the history service when a workflow task is scheduled, so that it can be dispatched
 	// by the MatchingEngine.
 	AddActivityTask(context.Context, *AddActivityTaskRequest) (*AddActivityTaskResponse, error)
+	// GrantEagerDispatch is called by the history service to ask a task queue partition whether tasks may be
+	// dispatched eagerly, meaning returned inline to the worker that is already making a call, instead of going
+	// through Add{Workflow,Activity}Task and matching's dispatch path. It covers activity tasks dispatched in a
+	// RespondWorkflowTaskCompleted response and the first workflow task dispatched in a StartWorkflowExecution
+	// response; task_queue_partition.task_queue_type distinguishes them.
+	//
+	// This RPC persists nothing and enqueues nothing: it reads the partition's state and answers per item. For each
+	// item it grants, the partition debits its whole-queue and per-fairness-key rate limiters, since the eagerly
+	// dispatched task will never reach matching again. Items it does not grant are not charged; history sends those
+	// through Add{Workflow,Activity}Task as usual, and they are limited normally at dispatch time.
+	//
+	// A grant is permission to dispatch, not a reservation that can be returned: capacity debited for a grant that
+	// history ends up not using is not refunded.
+	//
+	// History treats any failure, including Unimplemented from an older matching host, as "do not dispatch eagerly".
+	GrantEagerDispatch(context.Context, *GrantEagerDispatchRequest) (*GrantEagerDispatchResponse, error)
 	// QueryWorkflow is called by frontend to query a workflow.
 	QueryWorkflow(context.Context, *QueryWorkflowRequest) (*QueryWorkflowResponse, error)
 	// RespondQueryTaskCompleted is called by frontend to respond query completed.
@@ -846,6 +888,9 @@ func (UnimplementedMatchingServiceServer) AddWorkflowTask(context.Context, *AddW
 }
 func (UnimplementedMatchingServiceServer) AddActivityTask(context.Context, *AddActivityTaskRequest) (*AddActivityTaskResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method AddActivityTask not implemented")
+}
+func (UnimplementedMatchingServiceServer) GrantEagerDispatch(context.Context, *GrantEagerDispatchRequest) (*GrantEagerDispatchResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GrantEagerDispatch not implemented")
 }
 func (UnimplementedMatchingServiceServer) QueryWorkflow(context.Context, *QueryWorkflowRequest) (*QueryWorkflowResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method QueryWorkflow not implemented")
@@ -1042,6 +1087,24 @@ func _MatchingService_AddActivityTask_Handler(srv interface{}, ctx context.Conte
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(MatchingServiceServer).AddActivityTask(ctx, req.(*AddActivityTaskRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _MatchingService_GrantEagerDispatch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GrantEagerDispatchRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).GrantEagerDispatch(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_GrantEagerDispatch_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).GrantEagerDispatch(ctx, req.(*GrantEagerDispatchRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1752,6 +1815,10 @@ var MatchingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "AddActivityTask",
 			Handler:    _MatchingService_AddActivityTask_Handler,
+		},
+		{
+			MethodName: "GrantEagerDispatch",
+			Handler:    _MatchingService_GrantEagerDispatch_Handler,
 		},
 		{
 			MethodName: "QueryWorkflow",

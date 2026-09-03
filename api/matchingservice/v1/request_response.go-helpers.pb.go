@@ -338,6 +338,154 @@ func (this *AddActivityTaskResponse) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type GrantEagerDispatchRequest to the protobuf v3 wire format
+func (val *GrantEagerDispatchRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type GrantEagerDispatchRequest from the protobuf v3 wire format
+func (val *GrantEagerDispatchRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *GrantEagerDispatchRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two GrantEagerDispatchRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *GrantEagerDispatchRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *GrantEagerDispatchRequest
+	switch t := that.(type) {
+	case *GrantEagerDispatchRequest:
+		that1 = t
+	case GrantEagerDispatchRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type EagerDispatchRequestItem to the protobuf v3 wire format
+func (val *EagerDispatchRequestItem) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type EagerDispatchRequestItem from the protobuf v3 wire format
+func (val *EagerDispatchRequestItem) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *EagerDispatchRequestItem) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two EagerDispatchRequestItem values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *EagerDispatchRequestItem) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *EagerDispatchRequestItem
+	switch t := that.(type) {
+	case *EagerDispatchRequestItem:
+		that1 = t
+	case EagerDispatchRequestItem:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type GrantEagerDispatchResponse to the protobuf v3 wire format
+func (val *GrantEagerDispatchResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type GrantEagerDispatchResponse from the protobuf v3 wire format
+func (val *GrantEagerDispatchResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *GrantEagerDispatchResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two GrantEagerDispatchResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *GrantEagerDispatchResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *GrantEagerDispatchResponse
+	switch t := that.(type) {
+	case *GrantEagerDispatchResponse:
+		that1 = t
+	case GrantEagerDispatchResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type EagerDispatchResponseItem to the protobuf v3 wire format
+func (val *EagerDispatchResponseItem) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type EagerDispatchResponseItem from the protobuf v3 wire format
+func (val *EagerDispatchResponseItem) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *EagerDispatchResponseItem) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two EagerDispatchResponseItem values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *EagerDispatchResponseItem) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *EagerDispatchResponseItem
+	switch t := that.(type) {
+	case *EagerDispatchResponseItem:
+		that1 = t
+	case EagerDispatchResponseItem:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type QueryWorkflowRequest to the protobuf v3 wire format
 func (val *QueryWorkflowRequest) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
