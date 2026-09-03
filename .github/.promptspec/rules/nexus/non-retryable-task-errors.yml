@@ -1,4 +1,0 @@
-default: false
-
-prompt: |
-  Errors are non-retryable when their tasks must not retry in the queue.

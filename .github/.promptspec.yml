@@ -6,6 +6,5 @@ specs:
       include:
         - "@default"
         - temporal/*
-        - ./nexus/*
     output:
       path: copilot-instructions.md

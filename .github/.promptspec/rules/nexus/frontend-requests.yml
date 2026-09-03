@@ -1,4 +1,0 @@
-default: false
-
-prompt: |
-  Nexus libraries pass through frontend requests consistently with the established pattern.
