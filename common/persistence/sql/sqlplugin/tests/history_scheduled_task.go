@@ -55,9 +55,9 @@ func (s *historyHistoryScheduledTaskSuite) TearDownTest() {
 
 }
 
-// TestInsertSelect_CursorRowIncluded verifies that the cursor row itself
+// TestInsertSelectCursorRowIncluded verifies that the cursor row itself
 // is returned (>= semantics).
-func (s *historyHistoryScheduledTaskSuite) TestInsertSelect_CursorRowIncluded() {
+func (s *historyHistoryScheduledTaskSuite) TestInsertSelectCursorRowIncluded() {
 	shardID := rand.Int31()
 	categoryID := rand.Int31()
 	timestamp := s.now()
@@ -92,13 +92,13 @@ func (s *historyHistoryScheduledTaskSuite) TestInsertSelect_CursorRowIncluded() 
 		rows[index].CategoryID = categoryID
 	}
 	// Must return exactly 2 rows: taskID=2 and taskID=3
-	s.Equal(2, len(rows), "expected cursor row (taskID=2) to be included")
+	s.Len(rows, 2, "expected cursor row (taskID=2) to be included")
 	s.Equal(tasks[1:], rows)
 }
 
-// TestInsertSelect_CursorExcludesPriorRows verifies that rows before the
+// TestInsertSelectCursorExcludesPriorRows verifies that rows before the
 // cursor at the same timestamp are excluded.
-func (s *historyHistoryScheduledTaskSuite) TestInsertSelect_CursorExcludesPriorRows() {
+func (s *historyHistoryScheduledTaskSuite) TestInsertSelectCursorExcludesPriorRows() {
 	shardID := rand.Int31()
 	categoryID := rand.Int31()
 	timestamp := s.now()
@@ -130,12 +130,12 @@ func (s *historyHistoryScheduledTaskSuite) TestInsertSelect_CursorExcludesPriorR
 		rows[index].ShardID = shardID
 		rows[index].CategoryID = categoryID
 	}
-	s.Equal(1, len(rows), "expected only taskID=3, prior rows must be excluded")
+	s.Len(rows, 1, "expected only taskID=3, prior rows must be excluded")
 	s.Equal(tasks[2:], rows)
 }
 
-// TestInsertSelect_UpperBoundExclusive verifies that tasks at exactly ExclusiveMaxVisibilityTimestamp are NOT returned.
-func (s *historyHistoryScheduledTaskSuite) TestInsertSelect_UpperBoundExclusive() {
+// TestInsertSelectUpperBoundExclusive verifies that tasks at exactly ExclusiveMaxVisibilityTimestamp are NOT returned.
+func (s *historyHistoryScheduledTaskSuite) TestInsertSelectUpperBoundExclusive() {
 	shardID := rand.Int31()
 	categoryID := rand.Int31()
 	timestamp := s.now()
@@ -168,14 +168,14 @@ func (s *historyHistoryScheduledTaskSuite) TestInsertSelect_UpperBoundExclusive(
 		rows[index].ShardID = shardID
 		rows[index].CategoryID = categoryID
 	}
-	s.Equal(1, len(rows), "task at ExclusiveMaxVisibilityTimestamp must not be returned")
+	s.Len(rows, 1, "task at ExclusiveMaxVisibilityTimestamp must not be returned")
 	s.Equal(tasks[:1], rows)
 }
 
-// TestInsertSelect_CrossTimestampCursor verifies that when the cursor
+// TestInsertSelectCrossTimestampCursor verifies that when the cursor
 // points to an existing row, later timestamps return all their tasks
 // regardless of taskID — even taskIDs smaller than the cursor's.
-func (s *historyHistoryScheduledTaskSuite) TestInsertSelect_CrossTimestampCursor() {
+func (s *historyHistoryScheduledTaskSuite) TestInsertSelectCrossTimestampCursor() {
 	shardID := rand.Int31()
 	categoryID := rand.Int31()
 	timestamp := s.now()
@@ -215,12 +215,12 @@ func (s *historyHistoryScheduledTaskSuite) TestInsertSelect_CrossTimestampCursor
 		rows[index].CategoryID = categoryID
 	}
 	expected := []sqlplugin.HistoryScheduledTasksRow{tasks[1], tasks[2], tasks[3], tasks[4]}
-	s.Equal(4, len(rows), "cursor row must be included and later timestamps must include all tasks")
+	s.Len(rows, 4, "cursor row must be included and later timestamps must include all tasks")
 	s.Equal(expected, rows)
 }
 
-// TestInsertSelect_MultiplePages verifies cursor continuity across multiple pages with no rows lost or duplicated.
-func (s *historyHistoryScheduledTaskSuite) TestInsertSelect_MultiplePages() {
+// TestInsertSelectMultiplePages verifies cursor continuity across multiple pages with no rows lost or duplicated.
+func (s *historyHistoryScheduledTaskSuite) TestInsertSelectMultiplePages() {
 	shardID := rand.Int31()
 	categoryID := rand.Int31()
 	timestamp := s.now()
@@ -270,16 +270,16 @@ func (s *historyHistoryScheduledTaskSuite) TestInsertSelect_MultiplePages() {
 		filter.InclusiveMinTaskID = lastRow.TaskID + 1
 	}
 	// Must get all 9 rows, no duplicates, no gaps
-	s.Equal(9, len(allRows), "pagination must return all rows exactly once")
+	s.Len(allRows, 9, "pagination must return all rows exactly once")
 	s.Equal(tasks, allRows)
 }
 
-// TestInsertSelect_PageBoundarySplitsSameTimestamp verifies that when a page
+// TestInsertSelectPageBoundarySplitsSameTimestamp verifies that when a page
 // boundary falls in the middle of tasks sharing the same timestamp, no rows
 // are lost or duplicated. This is the critical edge case for the tuple cursor:
 // the cursor advances to (sameTimestamp, lastTaskID+1) and the next page must
 // pick up the remaining tasks at that timestamp without re-reading prior ones.
-func (s *historyHistoryScheduledTaskSuite) TestInsertSelect_PageBoundarySplitsSameTimestamp() {
+func (s *historyHistoryScheduledTaskSuite) TestInsertSelectPageBoundarySplitsSameTimestamp() {
 	shardID := rand.Int31()
 	categoryID := rand.Int31()
 	timestamp := s.now()
@@ -329,7 +329,7 @@ func (s *historyHistoryScheduledTaskSuite) TestInsertSelect_PageBoundarySplitsSa
 		filter.InclusiveMinTaskID = lastRow.TaskID + 1
 	}
 	s.Equal(3, pageCount, "expected 3 pages for 5 tasks with pageSize=2")
-	s.Equal(5, len(allRows), "all rows must be returned exactly once")
+	s.Len(allRows, 5, "all rows must be returned exactly once")
 	s.Equal(tasks, allRows)
 }
 
