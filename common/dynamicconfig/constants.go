@@ -1714,6 +1714,20 @@ leaves the membership ring, giving in-flight long-polls time to drain before the
 
 	// keys for history
 
+	EnablePaginationTokenBranchValidation = NewGlobalBoolSetting(
+		"history.enablePaginationTokenBranchValidation",
+		true,
+		`EnablePaginationTokenBranchValidation enables checking that the branch token in a
+GetWorkflowExecutionHistory(Reverse) page token is the current branch token of the requested
+execution.`,
+	)
+	EnablePaginationTokenBranchValidationShadowMode = NewGlobalBoolSetting(
+		"history.enablePaginationTokenBranchValidationShadowMode",
+		false,
+		`EnablePaginationTokenBranchValidationShadowMode logs and emits metrics for a page token whose
+branch token is not the execution's current one, but still serves the read.`,
+	)
+
 	EnableReplicationStream = NewGlobalBoolSetting(
 		"history.enableReplicationStream",
 		true,

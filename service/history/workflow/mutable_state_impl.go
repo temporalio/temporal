@@ -2869,9 +2869,13 @@ func (ms *MutableStateImpl) ContinueAsNewMinBackoff(backoffDuration *durationpb.
 	// lifetime of previous execution
 	// todo@time-skipping: time skipping is naturally supported for continue as new backoff, and need to
 	// make sure the backoff is correctly applied in the time skipping case
-	lifetime := ms.timeSource.Now().Sub(ms.executionState.StartTime.AsTime().UTC())
+	now := ms.timeSource.Now()
+	lifetime := max(time.Duration(0), now.Sub(ms.executionState.StartTime.AsTime().UTC()))
 	if ms.executionInfo.ExecutionTime != nil {
-		lifetime = ms.timeSource.Now().Sub(ms.executionInfo.ExecutionTime.AsTime().UTC())
+		executionLifetime := now.Sub(ms.executionInfo.ExecutionTime.AsTime().UTC())
+		if executionLifetime >= 0 {
+			lifetime = executionLifetime
+		}
 	}
 
 	interval := lifetime
