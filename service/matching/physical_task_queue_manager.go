@@ -537,8 +537,6 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		if pollMetadata.forwardedFrom == "" { // track the task on the child, not where a poll was forwarded to
 			pri := priorityKey(task.getPriority().GetPriorityKey())
 			c.incTaskTracker(c.tasksDispatched, pri, 1)
-			// Note: a task returned from a forwarded poll has no source set, so it is not
-			// counted here. Same known gap as the priority TODO in incTaskTracker.
 			if task.source == enumsspb.TASK_SOURCE_HISTORY {
 				c.incTaskTracker(c.tasksSyncMatched, pri, 1)
 			}
@@ -938,8 +936,6 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 	}
 
 	if c.getBacklogSignal(stats, task) {
-		// Always increase when there is a backlog, even if we're a partition. It's also important to increase for
-		// sticky queues.
 		delta = 1
 		reason = metrics.PollerScaleReasonBacklog
 	} else if c.queue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY && !c.queue.Partition().IsRoot() {
@@ -990,8 +986,9 @@ func (c *physicalTaskQueueManagerImpl) getBacklogSignal(stats *taskqueuepb.TaskQ
 }
 
 // getRatioSignal reports whether we're adding tasks faster than we're dispatching them, which
-// warrants scaling pollers up. Particularly useful for Nexus tasks, since those (currently) don't
-// get backlogged.
+// warrants scaling pollers up. Under UseImprovedSignalsForPollerScaling, this measures if we are
+// adding tasks faster than we can sync match them.
+// Particularly useful for Nexus tasks, since those (currently) don't get backlogged.
 func (c *physicalTaskQueueManagerImpl) getRatioSignal(stats *taskqueuepb.TaskQueueStats) bool {
 	maxRatio := c.partitionMgr.config.PollerScalingTaskAddToDispatchRatio()
 
