@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testcontext"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/tests/testcore"
@@ -402,14 +403,14 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2RetriesAfterSent
 	sentinelRunID := sentinelResp.GetDatabaseMutableState().GetExecutionState().GetRunId()
 	s.Require().NotEmpty(sentinelRunID)
 
-	migrationMarkerOutcomes := func() (failed, succeeded int, markerErr error) {
+	migrationMarkerOutcomes := func() (failureTypes []string, succeeded int, markerErr error) {
 		history, markerErr := env.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace:       nsName,
 			Execution:       &commonpb.WorkflowExecution{WorkflowId: v1WorkflowID},
 			MaximumPageSize: 1000,
 		})
 		if markerErr != nil {
-			return 0, 0, markerErr
+			return nil, 0, markerErr
 		}
 
 		for _, event := range history.GetHistory().GetEvents() {
@@ -425,7 +426,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2RetriesAfterSent
 				ActivityType string
 			}
 			if markerErr := sdk.PreferProtoDataConverter.FromPayloads(markerPayloads, &markerData); markerErr != nil {
-				return 0, 0, markerErr
+				return nil, 0, markerErr
 			}
 			if markerData.ActivityType != "MigrateScheduleToChasm" {
 				continue
@@ -433,10 +434,10 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2RetriesAfterSent
 			if attrs.GetFailure() == nil {
 				succeeded++
 			} else {
-				failed++
+				failureTypes = append(failureTypes, attrs.GetFailure().GetApplicationFailureInfo().GetType())
 			}
 		}
-		return failed, succeeded, nil
+		return failureTypes, succeeded, nil
 	}
 
 	// A patch signal wakes the paused V1 scheduler without starting an action.
@@ -454,14 +455,15 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2RetriesAfterSent
 	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, true)
 	wakeV1Scheduler("wake migration blocked by sentinel")
 
-	var failedMarkers, succeededMarkers int
+	var failureTypes []string
+	var succeededMarkers int
 	var markerErr error
 	s.Eventually(func() bool {
-		failedMarkers, succeededMarkers, markerErr = migrationMarkerOutcomes()
-		return markerErr == nil && failedMarkers == 1
+		failureTypes, succeededMarkers, markerErr = migrationMarkerOutcomes()
+		return markerErr == nil && len(failureTypes) == 1
 	}, 10*time.Second, 100*time.Millisecond)
 	s.Require().NoError(markerErr)
-	s.Require().Equal(1, failedMarkers)
+	s.Require().Equal([]string{util.ErrorType(serviceerror.NewUnavailable(""))}, failureTypes)
 	s.Require().Zero(succeededMarkers)
 
 	_, err = env.AdminClient().DeleteWorkflowExecution(ctx, &adminservice.DeleteWorkflowExecutionRequest{
@@ -477,9 +479,9 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2RetriesAfterSent
 	wakeV1Scheduler("wake migration after sentinel deletion")
 	awaitV1SchedulerCompleted(ctx, s.T(), env, sid)
 
-	failedMarkers, succeededMarkers, err = migrationMarkerOutcomes()
+	failureTypes, succeededMarkers, err = migrationMarkerOutcomes()
 	s.Require().NoError(err)
-	s.Require().Equal(1, failedMarkers)
+	s.Require().Equal([]string{util.ErrorType(serviceerror.NewUnavailable(""))}, failureTypes)
 	s.Require().Equal(1, succeededMarkers)
 	requireV2ScheduleExists(ctx, s.T(), env, sid)
 }
