@@ -851,13 +851,13 @@ func TestDrainCompletionNoReloadDraining(t *testing.T) {
 		"no new UpdateTaskQueue calls should be made to drained table after reload")
 }
 
-// useImprovedSignalsForPollerScaling sets matching.useImprovedSignalsForPollerScaling for the
-// manager under test and removes the decision rate limit so every call yields a decision.
-func (s *PhysicalTaskQueueManagerTestSuite) useImprovedSignalsForPollerScaling(enabled bool) {
+// useSignalsV2ForPollerScaling sets matching.useSignalsV2ForPollerScaling for the manager under
+// test and removes the decision rate limit so every call yields a decision.
+func (s *PhysicalTaskQueueManagerTestSuite) useSignalsV2ForPollerScaling(enabled bool) {
 	rl := quotas.NewMockRateLimiter(s.controller)
 	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 	s.tqMgr.pollerScalingRateLimiter = rl
-	s.tqMgr.partitionMgr.config.UseImprovedSignalsForPollerScaling = func() bool { return enabled }
+	s.tqMgr.partitionMgr.config.UseSignalsV2ForPollerScaling = func() bool { return enabled }
 }
 
 // freezePollScalingTime installs a controllable time source so poll scaling decisions don't race
@@ -883,8 +883,8 @@ func (s *PhysicalTaskQueueManagerTestSuite) seedTaskTrackers(ts *clock.EventTime
 	ts.Update(ts.Now().Add(time.Second))
 }
 
-func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsDispatchLatencyTriggersScaleUp() {
-	s.useImprovedSignalsForPollerScaling(true)
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingSignalsV2DispatchLatencyTriggersScaleUp() {
+	s.useSignalsV2ForPollerScaling(true)
 	ts := s.freezePollScalingTime()
 	handler := s.enablePollerScaleDecisionMetrics()
 	capture := handler.StartCapture()
@@ -904,8 +904,8 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsDispat
 	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonDelay)
 }
 
-func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsLowLatencyNoScaleUp() {
-	s.useImprovedSignalsForPollerScaling(true)
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingSignalsV2LowLatencyNoScaleUp() {
+	s.useSignalsV2ForPollerScaling(true)
 	ts := s.freezePollScalingTime()
 
 	// Task created 50ms ago, below the 200ms default threshold, and no local tracker data, so the
@@ -920,8 +920,8 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsLowLat
 	s.Nil(decision)
 }
 
-func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsSyncMatchRatioTriggersScaleUp() {
-	s.useImprovedSignalsForPollerScaling(true)
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingSignalsV2SyncMatchRatioTriggersScaleUp() {
+	s.useSignalsV2ForPollerScaling(true)
 	ts := s.freezePollScalingTime()
 	handler := s.enablePollerScaleDecisionMetrics()
 	capture := handler.StartCapture()
@@ -943,8 +943,8 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsSyncMa
 	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonRatio)
 }
 
-func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsZeroSyncMatchRateAlwaysFires() {
-	s.useImprovedSignalsForPollerScaling(true)
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingSignalsV2ZeroSyncMatchRateAlwaysFires() {
+	s.useSignalsV2ForPollerScaling(true)
 	ts := s.freezePollScalingTime()
 	handler := s.enablePollerScaleDecisionMetrics()
 	capture := handler.StartCapture()
@@ -964,8 +964,8 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsZeroSy
 	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonRatio)
 }
 
-func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsNoLocalRatesDoesNotFire() {
-	s.useImprovedSignalsForPollerScaling(true)
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingSignalsV2NoLocalRatesDoesNotFire() {
+	s.useSignalsV2ForPollerScaling(true)
 	ts := s.freezePollScalingTime()
 
 	// Neither local tracker has recorded anything, so the ratio is 0/0 = NaN and NaN > maxRatio is
@@ -980,8 +980,8 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsNoLoca
 	s.Nil(decision)
 }
 
-func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsRateLimitSuppressesLatencyScaleUp() {
-	s.useImprovedSignalsForPollerScaling(true)
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingSignalsV2RateLimitSuppressesLatencyScaleUp() {
+	s.useSignalsV2ForPollerScaling(true)
 	ts := s.freezePollScalingTime()
 	handler := s.enablePollerScaleDecisionMetrics()
 	capture := handler.StartCapture()
@@ -1000,9 +1000,9 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsRateLi
 	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionHold, metrics.PollerScaleReasonTaskQueueRateLimited)
 }
 
-func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingImprovedSignalsOffIgnoresTaskCreateTime() {
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingSignalsV2OffIgnoresTaskCreateTime() {
 	// Explicitly disable improved signals (this is the default).
-	s.useImprovedSignalsForPollerScaling(false)
+	s.useSignalsV2ForPollerScaling(false)
 	ts := s.freezePollScalingTime()
 
 	// The inverse of the improved backlog signal: an ancient task with no backlog in stats. The old

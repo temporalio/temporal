@@ -1562,7 +1562,7 @@ second per poller by one physical queue manager`,
 		"matching.pollerScalingTaskAddToDispatchRatio",
 		1.2,
 		`MatchingPollerScalingTaskAddToDispatchRatio is the ratio of task add rate to task
-dispatch rate above which a decision to scale up the number of pollers will be issued. If MatchingUseImprovedSignalsForPollerScaling
+dispatch rate above which a decision to scale up the number of pollers will be issued. If MatchingUseSignalsV2ForPollerScaling
 is true, this is instead the ratio of task add rate to task sync match rate.`,
 	)
 	MatchingEnablePollerScalingDecisionMetrics = NewTaskQueueBoolSetting(
@@ -1572,10 +1572,10 @@ is true, this is instead the ratio of task add rate to task sync match rate.`,
 metric describing why pollers are scaled up, down, or held for a physical task queue. This is opt-in and can be
 scoped by namespace and/or task queue.`,
 	)
-	MatchingUseImprovedSignalsForPollerScaling = NewTaskQueueBoolSetting(
-		"matching.useImprovedSignalsForPollerScaling",
+	MatchingUseSignalsV2ForPollerScaling = NewTaskQueueBoolSetting(
+		"matching.useSignalsV2ForPollerScaling",
 		false,
-		`MatchingUseImprovedSignalsForPollerScaling, when enabled, uses improved scaling signals for poller autoscaling:
+		`MatchingUseSignalsV2ForPollerScaling, when enabled, uses v2 scaling signals for poller autoscaling:
 (1) sync match rate instead of total dispatch rate for the add-to-dispatch ratio check, and
 (2) task dispatch latency instead of backlog age stats for the backlog scale-up check.`,
 	)

@@ -970,12 +970,12 @@ func (c *physicalTaskQueueManagerImpl) recordPollerScaleDecision(decision string
 }
 
 // getDelaySignal reports whether tasks are taking too long to reach a worker, which warrants
-// scaling pollers up. Under UseImprovedSignalsForPollerScaling, this measures task dispatch
-// latency, which is wider than backlog delay alone.
+// scaling pollers up. Under UseSignalsV2ForPollerScaling, this measures task dispatch latency,
+// which is wider than backlog delay alone.
 func (c *physicalTaskQueueManagerImpl) getDelaySignal(stats *taskqueuepb.TaskQueueStats, task *internalTask) bool {
 	maxAge := c.partitionMgr.config.PollerScalingBacklogAgeScaleUp()
 
-	if c.partitionMgr.config.UseImprovedSignalsForPollerScaling() {
+	if c.partitionMgr.config.UseSignalsV2ForPollerScaling() {
 		return c.partitionMgr.engine.timeSource.Since(task.getCreateTime().AsTime()) > maxAge
 	}
 
@@ -983,13 +983,13 @@ func (c *physicalTaskQueueManagerImpl) getDelaySignal(stats *taskqueuepb.TaskQue
 }
 
 // getRatioSignal reports whether we're adding tasks faster than we're dispatching them, which
-// warrants scaling pollers up. Under UseImprovedSignalsForPollerScaling, this measures if we are
-// adding tasks faster than we can sync match them.
+// warrants scaling pollers up. Under UseSignalsV2ForPollerScaling, this measures if we are adding
+// tasks faster than we can sync match them.
 // Particularly useful for Nexus tasks, since those (currently) don't get backlogged.
 func (c *physicalTaskQueueManagerImpl) getRatioSignal(stats *taskqueuepb.TaskQueueStats) bool {
 	maxRatio := c.partitionMgr.config.PollerScalingTaskAddToDispatchRatio()
 
-	if c.partitionMgr.config.UseImprovedSignalsForPollerScaling() {
+	if c.partitionMgr.config.UseSignalsV2ForPollerScaling() {
 		// If the syncMatch rate is 0 while tasks are being added, the division is +Inf and this
 		// always fires -- intentional. Note that when neither tracker has recorded anything the
 		// division is 0/0 = NaN instead, and NaN > maxRatio is false, so it does not fire.
