@@ -220,12 +220,14 @@ func (h *handler) MigrateToWorkflow(ctx context.Context, req *schedulerpb.Migrat
 				BusinessID:  req.ScheduleId,
 			},
 		),
-		(*Scheduler).MigrateToWorkflow,
+		func(s *Scheduler, ctx chasm.MutableContext, req *schedulerpb.MigrateToWorkflowRequest) (*schedulerpb.MigrateToWorkflowResponse, error) {
+			if s.IsSentinel() {
+				return nil, ErrSentinelBlocked
+			}
+			return s.MigrateToWorkflow(ctx, req)
+		},
 		req,
 	)
-	if errors.Is(err, ErrSentinel) {
-		return nil, ErrSentinelBlocked
-	}
 	return resp, err
 }
 

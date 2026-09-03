@@ -339,6 +339,39 @@ func (s *ScheduleMigrationTestSuite) TestCreateFromMigrationStateBlockedBySentin
 	s.Contains(unavailableErr.Message, "sentinel")
 }
 
+func (s *ScheduleMigrationTestSuite) TestMigrateToWorkflowBlockedByCHASMSentinel() {
+	env := newScheduleEnv(
+		s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+	)
+
+	ctx := s.Context()
+	sid := testcore.RandomizeStr("sched-migrate-v2-to-v1-chasm-sentinel")
+	nsName := env.Namespace().String()
+	nsID := env.NamespaceID().String()
+
+	_, err := env.GetTestCluster().SchedulerClient().CreateSentinel(
+		ctx,
+		&schedulerpb.CreateSentinelRequest{
+			NamespaceId: nsID,
+			Namespace:   nsName,
+			ScheduleId:  sid,
+		},
+	)
+	s.Require().NoError(err)
+
+	_, err = env.GetTestCluster().SchedulerClient().MigrateToWorkflow(
+		ctx,
+		&schedulerpb.MigrateToWorkflowRequest{
+			NamespaceId: nsID,
+			ScheduleId:  sid,
+		},
+	)
+	var unavailableErr *serviceerror.Unavailable
+	s.Require().ErrorAs(err, &unavailableErr)
+	s.Contains(unavailableErr.Message, "sentinel")
+}
+
 func (s *ScheduleMigrationTestSuite) TestScheduleMigrationDynamicConfig() {
 	env := newScheduleEnv(
 		s.T(),

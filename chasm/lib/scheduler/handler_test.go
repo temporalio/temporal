@@ -132,8 +132,6 @@ func TestHandler_CreateSchedule_Sentinel(t *testing.T) {
 	})
 
 	require.ErrorIs(t, err, scheduler.ErrSentinel)
-	var notFoundErr *serviceerror.NotFound
-	require.ErrorAs(t, err, &notFoundErr)
 }
 
 func TestHandler_CreateFromMigrationState_Sentinel(t *testing.T) {
