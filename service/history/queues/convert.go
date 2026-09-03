@@ -301,7 +301,8 @@ func FromPersistenceTaskTypePredicate(
 	attributes *persistencespb.TaskTypePredicateAttributes,
 ) tasks.Predicate {
 	//nolint:staticcheck // NewTypePredicate is deprecated for new construction; this is the one
-	// legitimate caller, deserializing a shard checkpointed before #6445 unified this predicate.
+	// legitimate caller, deserializing a shard from before any grouper stopped building this
+	// predicate type (no grouper ever has).
 	return tasks.NewTypePredicate(attributes.TaskTypes)
 }
 

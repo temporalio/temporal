@@ -209,16 +209,18 @@ type Predicate_NamespaceIdPredicateAttributes struct {
 }
 
 type Predicate_TaskTypePredicateAttributes struct {
-	// Deprecated: superseded by outbound_task_predicate_attributes (#6445), which combines
-	// task type, namespace and destination into one predicate. Kept only so a shard checkpointed
-	// before that change, and never checkpointed since, still deserializes correctly.
+	// Deprecated: never built by any queue's grouper. Kept only so a shard that still holds one
+	// from before the outbound queue existed, and hasn't recompacted since, still deserializes
+	// correctly.
 	//
 	// Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/predicates.proto.
 	TaskTypePredicateAttributes *TaskTypePredicateAttributes `protobuf:"bytes,8,opt,name=task_type_predicate_attributes,json=taskTypePredicateAttributes,proto3,oneof"`
 }
 
 type Predicate_DestinationPredicateAttributes struct {
-	// Deprecated: superseded by outbound_task_predicate_attributes (#6445); see above.
+	// Deprecated: superseded by outbound_task_predicate_attributes (#6445), which combines
+	// task group, namespace and destination into one predicate. Kept only so a shard checkpointed
+	// before that change, and never checkpointed since, still deserializes correctly.
 	//
 	// Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/predicates.proto.
 	DestinationPredicateAttributes *DestinationPredicateAttributes `protobuf:"bytes,9,opt,name=destination_predicate_attributes,json=destinationPredicateAttributes,proto3,oneof"`
