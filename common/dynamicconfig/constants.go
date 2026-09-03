@@ -2706,6 +2706,13 @@ where the user has set an explicit RetryPolicy, but not specified all the fields
 		true,
 		`Allows resetting of workflows with pending children when set to true`,
 	)
+	EnableOrphanedChildWorkflowReplacement = NewNamespaceBoolSetting(
+		"history.enableOrphanedChildWorkflowReplacement",
+		false,
+		`Allows a parent to replace an orphaned child only while the current cluster sees its first run with no history after WorkflowExecutionStarted.
+The setting is evaluated against the parent namespace.
+Enable only after all history hosts that may process child starts in this cluster support orphaned child replacement info; an older host ignores the request field and may permanently record WORKFLOW_ALREADY_EXISTS in the parent history`,
+	)
 	HistoryMaxAutoResetPoints = NewNamespaceIntSetting(
 		"history.historyMaxAutoResetPoints",
 		primitives.DefaultHistoryMaxAutoResetPoints,
@@ -2823,6 +2830,12 @@ is not held for the duration of the cross-cluster sync.`,
 verification may resend a missing child workflow in the background from the active cluster. When
 disabled, verification remains local-only. StandbyTaskMissingEventsResendDelay plus
 ReplicationTaskApplyTimeout should remain below StandbyTaskMissingEventsDiscardDelay.`,
+	)
+	EnableChildWorkflowCompletionRecovery = NewNamespaceBoolSetting(
+		"history.enableChildWorkflowCompletionRecovery",
+		true,
+		`EnableChildWorkflowCompletionRecovery controls whether an active StartChildExecution task may
+refresh a terminal child workflow to recover a completion notification lost while the parent was missing.`,
 	)
 	WorkflowResendHostMaxInFlight = NewGlobalIntSetting(
 		"history.workflowResendHostMaxInFlight",
@@ -3616,6 +3629,19 @@ error and stopping the schedule.`,
 		`SchedulerSpecWarnIterations is how many excluded candidate times the scheduler evaluates
 while searching for a schedule's next action time before emitting a warning (metric + log). It
 is non-fatal: the search continues past this threshold.`,
+	)
+	SchedulerV1VersionCeiling = NewNamespaceIntSetting(
+		"worker.schedulerV1VersionCeiling",
+		-1,
+		`SchedulerV1VersionCeiling caps the workflow version the V1 scheduler records into history, so histories written on this cluster stay replayable on peer clusters that do not support newer versions. Set it to the highest scheduler version supported by the lowest peer. Intended for multi-cluster failover and rollback. The supported floor is version 1 (OSS v1.20). A negative value (the default) disables the cap.
+The ceiling is reread on every tweakables evaluation. The version never decreases within a run, but raising or removing a ceiling can advance it on the next evaluation. A lower ceiling is recorded immediately; if it is below the version already recorded for the run, that version is retained.
+Operational notes: (1) A ceiling below 12 holds fresh or not-yet-advanced runs below CHASM migration support, so it pauses their V1->V2 CHASM migrations until the ceiling is lifted (deferred, not dropped). It cannot downgrade a version already recorded in an existing run. (2) A ceiling below 6 skips custom search-attribute updates on schedule edits in fresh or not-yet-advanced runs. (3) This caps V1 scheduler histories only; schedules already migrated to CHASM V2 are not made rollback-safe by it.`,
+	)
+	SchedulerV1VersionOverride = NewNamespaceIntSetting(
+		"worker.schedulerV1VersionOverride",
+		-1,
+		`SchedulerV1VersionOverride selects a supported V1 scheduler workflow version without waiting for a server release to change the default. Set it to a version from the current default through the latest version supported by this binary. A negative value (the default), a value below the default, or a value above the latest supported version is ignored.
+The override is reread during every scheduler tweakables evaluation through MutableSideEffect. It can advance the version in the current workflow run at the next evaluation, subject to the current SchedulerV1VersionCeiling. Neither a lower override nor a newly lower ceiling can reduce a version already recorded in that run.`,
 	)
 	WorkerDeleteNamespaceActivityLimits = NewGlobalTypedSetting(
 		"worker.deleteNamespaceActivityLimitsConfig",
