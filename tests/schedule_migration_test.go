@@ -339,6 +339,151 @@ func (s *ScheduleMigrationTestSuite) TestCreateFromMigrationStateBlockedBySentin
 	s.Contains(unavailableErr.Message, "sentinel")
 }
 
+func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV1ToV2RetriesAfterSentinelDeletion() {
+	env := newScheduleEnv(
+		s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, false),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerSentinels, true),
+	)
+
+	ctx := s.Context()
+	sid := testcore.RandomizeStr("sched-migrate-v1-to-v2-sentinel-retry")
+	nsName := env.Namespace().String()
+	nsID := env.NamespaceID().String()
+	v1WorkflowID := scheduler.WorkflowIDPrefix + sid
+
+	// Keep the scheduler timerless so it cannot retry migration until the test wakes it.
+	_, err := env.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  nsName,
+		ScheduleId: sid,
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{Interval: durationpb.New(time.Hour)}},
+			},
+			Action: startWorkflowAction(
+				env,
+				testcore.RandomizeStr("sched-migrate-v1-to-v2-sentinel-retry-wf"),
+				testcore.RandomizeStr("sched-migrate-v1-to-v2-sentinel-retry-wt"),
+			),
+			State: &schedulepb.ScheduleState{Paused: true},
+		},
+		Identity:  "test",
+		RequestId: uuid.NewString(),
+	})
+	s.Require().NoError(err)
+
+	// Wait for the V1 scheduler to process its first workflow task and go to sleep.
+	s.Eventually(func() bool {
+		desc, err := env.GetTestCluster().HistoryClient().DescribeWorkflowExecution(
+			ctx,
+			&historyservice.DescribeWorkflowExecutionRequest{
+				NamespaceId: nsID,
+				Request: &workflowservice.DescribeWorkflowExecutionRequest{
+					Namespace: nsName,
+					Execution: &commonpb.WorkflowExecution{WorkflowId: v1WorkflowID},
+				},
+			},
+		)
+		return err == nil && desc.GetWorkflowExecutionInfo().GetHistoryLength() > 3
+	}, 10*time.Second, 100*time.Millisecond)
+
+	sentinelResp, err := env.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace: nsName,
+		Execution: &commonpb.WorkflowExecution{WorkflowId: sid},
+		Archetype: string(chasm.SchedulerArchetype),
+	})
+	s.Require().NoError(err)
+	sentinelNode := sentinelResp.GetDatabaseMutableState().GetChasmNodes()[""]
+	s.Require().NotNil(sentinelNode)
+	var sentinelState schedulerpb.SchedulerState
+	s.Require().NoError(proto.Unmarshal(sentinelNode.GetData().GetData(), &sentinelState))
+	s.Require().True(sentinelState.GetSentinel())
+	sentinelRunID := sentinelResp.GetDatabaseMutableState().GetExecutionState().GetRunId()
+	s.Require().NotEmpty(sentinelRunID)
+
+	migrationMarkerOutcomes := func() (failed, succeeded int, markerErr error) {
+		history, markerErr := env.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+			Namespace:       nsName,
+			Execution:       &commonpb.WorkflowExecution{WorkflowId: v1WorkflowID},
+			MaximumPageSize: 1000,
+		})
+		if markerErr != nil {
+			return 0, 0, markerErr
+		}
+
+		for _, event := range history.GetHistory().GetEvents() {
+			attrs := event.GetMarkerRecordedEventAttributes()
+			if attrs.GetMarkerName() != "LocalActivity" {
+				continue
+			}
+			markerPayloads, ok := attrs.GetDetails()["data"]
+			if !ok {
+				continue
+			}
+			var markerData struct {
+				ActivityType string
+			}
+			if markerErr := sdk.PreferProtoDataConverter.FromPayloads(markerPayloads, &markerData); markerErr != nil {
+				return 0, 0, markerErr
+			}
+			if markerData.ActivityType != "MigrateScheduleToChasm" {
+				continue
+			}
+			if attrs.GetFailure() == nil {
+				succeeded++
+			} else {
+				failed++
+			}
+		}
+		return failed, succeeded, nil
+	}
+
+	// A patch signal wakes the paused V1 scheduler without starting an action.
+	wakeV1Scheduler := func(note string) {
+		_, err := env.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+			Namespace:  nsName,
+			ScheduleId: sid,
+			Patch:      &schedulepb.SchedulePatch{Pause: note},
+			Identity:   "test",
+			RequestId:  uuid.NewString(),
+		})
+		s.Require().NoError(err)
+	}
+
+	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerMigration, true)
+	wakeV1Scheduler("wake migration blocked by sentinel")
+
+	var failedMarkers, succeededMarkers int
+	var markerErr error
+	s.Eventually(func() bool {
+		failedMarkers, succeededMarkers, markerErr = migrationMarkerOutcomes()
+		return markerErr == nil && failedMarkers == 1
+	}, 10*time.Second, 100*time.Millisecond)
+	s.Require().NoError(markerErr)
+	s.Require().Equal(1, failedMarkers)
+	s.Require().Zero(succeededMarkers)
+
+	_, err = env.AdminClient().DeleteWorkflowExecution(ctx, &adminservice.DeleteWorkflowExecutionRequest{
+		Namespace: nsName,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: sid,
+			RunId:      sentinelRunID,
+		},
+		Archetype: string(chasm.SchedulerArchetype),
+	})
+	s.Require().NoError(err)
+
+	wakeV1Scheduler("wake migration after sentinel deletion")
+	awaitV1SchedulerCompleted(ctx, s.T(), env, sid)
+
+	failedMarkers, succeededMarkers, err = migrationMarkerOutcomes()
+	s.Require().NoError(err)
+	s.Require().Equal(1, failedMarkers)
+	s.Require().Equal(1, succeededMarkers)
+	requireV2ScheduleExists(ctx, s.T(), env, sid)
+}
+
 func (s *ScheduleMigrationTestSuite) TestMigrateToWorkflowBlockedByCHASMSentinel() {
 	env := newScheduleEnv(
 		s.T(),
