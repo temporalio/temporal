@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -852,10 +853,27 @@ func (s *WorkflowUpdateSuite) TestCompletedWorkflow() {
 		updateResult1 := <-updateResultCh
 		s.NotNil(updateResult1.GetOutcome().GetSuccess())
 
-		// Send same Update request again, receiving the same Update result.
+		completedEvent := s.RequireHistoryEvent(
+			env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution()),
+			enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED,
+		)
+		// Send same Update request again, receiving the same Update outcome
+		// and pointing to the corresponding completed event of the original.
 		updateResultCh = sendUpdateNoError(env, env.Tv())
 		updateResult2 := <-updateResultCh
-		s.Equal(updateResult1, updateResult2)
+		protorequire.ProtoEqual(s.T(), updateResult1.GetUpdateRef(), updateResult2.GetUpdateRef())
+		protorequire.ProtoEqual(s.T(), updateResult1.GetOutcome(), updateResult2.GetOutcome())
+		s.Equal(updateResult1.GetStage(), updateResult2.GetStage())
+
+		acceptedReqLink := updateResult1.GetLink().GetWorkflowEvent().GetRequestIdRef()
+		s.NotNil(acceptedReqLink)
+		s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED, acceptedReqLink.GetEventType())
+
+		completedReqLink := updateResult2.GetLink().GetWorkflowEvent().GetEventRef()
+		s.NotNil(completedReqLink)
+		s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED, completedReqLink.GetEventType())
+
+		s.Equal(completedEvent.GetEventId(), completedReqLink.GetEventId())
 	})
 
 	s.Run("receive update failure from accepted Update", func(s *WorkflowUpdateSuite) {
