@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -8,11 +9,16 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
@@ -21,6 +27,13 @@ import (
 // ErrUseCurrentExecution is a sentinel error to indicate to the caller to
 // use the current workflow execution instead of creating a new one
 var ErrUseCurrentExecution = errors.New("ErrUseCurrentExecution")
+
+const (
+	orphanedChildRaceClosed      = "rejected_race_closed"
+	orphanedChildLocalProgress   = "rejected_local_progress"
+	orphanedChildNotLosingBranch = "rejected_not_losing_branch"
+	terminateOrphanedChildReason = "Orphaned child workflow replaced by its parent"
+)
 
 // ResolveDuplicateWorkflowID determines how to resolve a workflow ID duplication upon workflow start according
 // to the WorkflowIdReusePolicy (for *completed* workflow) or WorkflowIdConflictPolicy (for *running* workflow).
@@ -81,6 +94,113 @@ func ResolveDuplicateWorkflowID(
 			fmt.Sprintf("Failed to process workflow, workflow has invalid state: %v.", currentState),
 		)
 	}
+}
+
+// ReplaceOrphanedChildAction verifies and terminates the conflicting child while holding its lock.
+func ReplaceOrphanedChildAction(
+	ctx context.Context,
+	parentExecutionInfo *workflowspb.ParentExecutionInfo,
+	orphanedChildReplacementInfo *historyservice.OrphanedChildReplacementInfo,
+	newRunID string,
+	metricsHandler metrics.Handler,
+) UpdateWorkflowActionFunc {
+	return func(workflowLease WorkflowLease) (*UpdateWorkflowAction, error) {
+		mutableState := workflowLease.GetMutableState()
+		if !mutableState.IsWorkflowExecutionRunning() {
+			recordOrphanedChildReplacementRejection(metricsHandler, orphanedChildRaceClosed)
+			return nil, consts.ErrWorkflowCompleted
+		}
+
+		executionState := mutableState.GetExecutionState()
+		reject := func(outcome string) (*UpdateWorkflowAction, error) {
+			recordOrphanedChildReplacementRejection(metricsHandler, outcome)
+			return nil, generateWorkflowAlreadyStartedError(
+				"Workflow execution is already running. WorkflowId: %v, RunId: %v.",
+				executionState.GetRequestIds(),
+				mutableState.GetWorkflowKey(),
+				executionState.GetFirstExecutionRunId(),
+			)
+		}
+
+		// The current-row snapshot only selects this path. Recheck under the child lock and accept only
+		// the first run with WorkflowExecutionStarted as its sole event. UpdateRegistry catches an
+		// admitted in-memory Update not yet present in history.
+		if executionState.GetFirstExecutionRunId() != mutableState.GetWorkflowKey().RunID ||
+			executionState.GetState() != enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
+			mutableState.GetNextEventID() != common.FirstEventID+1 ||
+			workflowLease.GetContext().UpdateRegistry(ctx).Len() != 0 {
+			return reject(orphanedChildLocalProgress)
+		}
+		if !isOrphanedChildOnLosingBranch(
+			mutableState.GetExecutionInfo(),
+			parentExecutionInfo,
+			orphanedChildReplacementInfo,
+		) {
+			return reject(orphanedChildNotLosingBranch)
+		}
+
+		if err := workflow.TerminateWorkflow(
+			mutableState,
+			terminateOrphanedChildReason,
+			payloads.EncodeString(fmt.Sprintf("terminated by new runID: %s", newRunID)),
+			consts.IdentityHistoryService,
+			false,
+			nil, // No links necessary.
+		); err != nil {
+			return nil, err
+		}
+		return UpdateWorkflowTerminate, nil
+	}
+}
+
+func isOrphanedChildOnLosingBranch(
+	executionInfo *persistencespb.WorkflowExecutionInfo,
+	parentExecutionInfo *workflowspb.ParentExecutionInfo,
+	orphanedChildReplacementInfo *historyservice.OrphanedChildReplacementInfo,
+) bool {
+	parentExecution := parentExecutionInfo.GetExecution()
+	if parentExecutionInfo.GetNamespaceId() == "" ||
+		parentExecution.GetWorkflowId() == "" ||
+		parentExecution.GetRunId() == "" ||
+		parentExecutionInfo.GetInitiatedId() < common.FirstEventID ||
+		executionInfo.GetParentInitiatedId() < common.FirstEventID {
+		return false
+	}
+	// Failover versions are required to distinguish branches; local namespaces use EmptyVersion.
+	if parentExecutionInfo.GetInitiatedVersion() <= common.EmptyVersion ||
+		executionInfo.GetParentInitiatedVersion() <= common.EmptyVersion {
+		return false
+	}
+	// Match the exact parent run. A shared workflow lineage is insufficient because a predecessor's
+	// ABANDON child may legitimately still be running.
+	if executionInfo.GetParentNamespaceId() != parentExecutionInfo.GetNamespaceId() ||
+		executionInfo.GetParentWorkflowId() != parentExecution.GetWorkflowId() ||
+		executionInfo.GetParentRunId() != parentExecution.GetRunId() {
+		return false
+	}
+
+	parentCurrentVersionHistory := &historyspb.VersionHistory{
+		Items: orphanedChildReplacementInfo.GetParentCurrentVersionHistoryItems(),
+	}
+	incomingInitiation := versionhistory.NewVersionHistoryItem(
+		parentExecutionInfo.GetInitiatedId(),
+		parentExecutionInfo.GetInitiatedVersion(),
+	)
+	existingInitiation := versionhistory.NewVersionHistoryItem(
+		executionInfo.GetParentInitiatedId(),
+		executionInfo.GetParentInitiatedVersion(),
+	)
+	// The new initiation must be on the parent's current branch while the conflicting child's
+	// initiation must not be; otherwise this is an ordinary duplicate or the evidence is ambiguous.
+	return versionhistory.ContainsVersionHistoryItem(parentCurrentVersionHistory, incomingInitiation) &&
+		!versionhistory.ContainsVersionHistoryItem(parentCurrentVersionHistory, existingInitiation)
+}
+
+func recordOrphanedChildReplacementRejection(metricsHandler metrics.Handler, outcome string) {
+	metrics.OrphanedChildWorkflowReplacement.With(metricsHandler).Record(
+		1,
+		metrics.OutcomeTag(outcome),
+	)
 }
 
 func ResolveWorkflowIDConflictPolicy(

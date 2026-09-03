@@ -463,8 +463,7 @@ func (r *registry) Find(ctx context.Context, id string) *Update {
 	updOutcome, err := r.store.GetUpdateOutcome(ctx, id)
 
 	// Swallow NotFound error because it means that Update doesn't exist.
-	var notFound *serviceerror.NotFound
-	if errors.As(err, &notFound) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 		return nil
 	}
 

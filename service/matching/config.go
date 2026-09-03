@@ -10,7 +10,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tqid"
-	"go.temporal.io/server/components/nexusoperations"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	"go.temporal.io/server/service/matching/counter"
 )
 

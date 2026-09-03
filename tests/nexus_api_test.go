@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
@@ -23,8 +24,8 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
-	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/metadata"
@@ -165,32 +166,36 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes(useTemporalFailures
 				var operationError *nexus.OperationError
 				s.ErrorAs(err, &operationError)
 				s.Equal(nexus.OperationStateFailed, operationError.State)
-				if useTemporalFailures {
-					// Through the Temporal failure round-trip, the cause chain has an extra wrapper
-					// for the OperationError's ApplicationFailureInfo.
-					var failureErr *nexus.FailureError
-					s.ErrorAs(operationError.Cause, &failureErr)
-					var innerErr *nexus.FailureError
-					s.ErrorAs(failureErr.Cause, &innerErr)
-					tFailure, err := commonnexus.NexusFailureToTemporalFailure(innerErr.Failure)
-					s.NoError(err)
-					convErr := temporal.GetDefaultFailureConverter().FailureToError(tFailure)
-					var appErr *temporal.ApplicationError
-					s.ErrorAs(convErr, &appErr)
-					s.Equal("deliberate test failure", appErr.Message())
-					var details nexus.Failure
-					s.NoError(appErr.Details(&details))
-					s.Equal("v", details.Metadata["k"])
-				} else {
+
+				if !useTemporalFailures {
+					// The deprecated variant carries no message of its own, so the wrapper the server
+					// rebuilds from it repeats the worker's message.
 					s.Equal("deliberate test failure", operationError.Cause.Error())
-					var failureErr *nexus.FailureError
-					s.ErrorAs(operationError.Cause, &failureErr)
-					s.Equal(map[string]string{"k": "v"}, failureErr.Failure.Metadata)
-					var details string
-					err = json.Unmarshal(failureErr.Failure.Details, &details)
-					s.NoError(err)
-					s.Equal("details", details)
 				}
+
+				// Both response formats reach the caller as the same failure: an operation-error
+				// wrapper whose cause is the worker's own failure. The legacy variant reports the state
+				// in a field of its own, and the server rebuilds the wrapper from it.
+				var wrapper *nexus.FailureError
+				s.ErrorAs(operationError.Cause, &wrapper)
+
+				var wrapperCause *nexus.FailureError
+				s.ErrorAs(wrapper.Cause, &wrapperCause)
+				wrapperCauseTFailure, err := commonnexus.NexusFailureToTemporalFailure(wrapperCause.Failure)
+				s.NoError(err)
+				wrapperCauseErr := temporal.GetDefaultFailureConverter().FailureToError(wrapperCauseTFailure)
+
+				var appErr *temporal.ApplicationError
+				s.ErrorAs(wrapperCauseErr, &appErr)
+				s.Equal("deliberate test failure", appErr.Message())
+
+				// The worker's own metadata and details survive the re-encoding.
+				var appErrDetails nexus.Failure
+				s.NoError(appErr.Details(&appErrDetails))
+				s.Equal(map[string]string{"k": "v"}, appErrDetails.Metadata)
+				var details string
+				s.NoError(json.Unmarshal(appErrDetails.Details, &details))
+				s.Equal("details", details)
 			},
 		},
 		{
@@ -250,7 +255,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes(useTemporalFailures
 				require.True(t, set)
 				timeout, err := time.ParseDuration(timeoutStr)
 
-				var dispatchTimeoutBuffer = nexusoperations.MinDispatchTaskTimeout.Get(dynamicconfig.NewNoopCollection())("test")
+				var dispatchTimeoutBuffer = nexusoperation.MinDispatchTaskTimeout.Get(dynamicconfig.NewNoopCollection())("test")
 				expectedMaxTimeout := 2*time.Second - dispatchTimeoutBuffer
 				require.LessOrEqual(t, timeout, expectedMaxTimeout, "timeout should be buffered")
 
@@ -301,7 +306,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes(useTemporalFailures
 		})
 
 		tc.assertion(s, result, err, headerCapture.lastHeaders)
-		s.NoError(<-pollerErrCh)
+		s.NoError(await.Rcv(s.T(), pollerErrCh))
 
 		requests := capture.Metric("nexus_requests")
 		s.Len(requests, 1)
@@ -441,7 +446,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Claims(useTemporalFailures b
 
 		tc.assertion(s, result, err, preprocessErrors)
 		if pollerErrCh != nil {
-			s.NoError(<-pollerErrCh)
+			s.NoError(await.Rcv(s.T(), pollerErrCh))
 		}
 	}
 
@@ -560,7 +565,7 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes(useTemporalFailure
 		err = handle.Cancel(s.Context(), nexus.CancelOperationOptions{Header: header})
 
 		tc.assertion(s, err, headerCapture.lastHeaders)
-		s.NoError(<-pollerErrCh)
+		s.NoError(await.Rcv(s.T(), pollerErrCh))
 
 		requests := capture.Metric("nexus_requests")
 		s.Len(requests, 1)
@@ -639,7 +644,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_Su
 	result, err := nexusrpc.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{})
 	s.NoError(err)
 	s.Equal("input", result.Successful)
-	s.NoError(<-pollerErrCh1)
+	s.NoError(await.Rcv(s.T(), pollerErrCh1))
 
 	// Unversioned poller doesn't get a task
 	pollerErrCh2 := env.nexusTaskPoller(ctx, s.T(), taskQueue, nexusEchoHandler)
@@ -657,8 +662,8 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_Su
 	}
 	// Cancel the parent context to unblock the pollers that didn't receive a task.
 	cancel()
-	s.NoError(<-pollerErrCh2)
-	s.NoError(<-pollerErrCh3)
+	s.NoError(await.Rcv(s.T(), pollerErrCh2))
+	s.NoError(await.Rcv(s.T(), pollerErrCh3))
 }
 
 // TestNexusClientNameMetricPropagation verifies that when an SDK worker polls for Nexus tasks
@@ -693,7 +698,7 @@ func (s *NexusApiTestSuite) TestNexusClientNameMetricPropagation(useTemporalFail
 
 	_, err = nexusrpc.StartOperation(s.Context(), client, op, "input", nexus.StartOperationOptions{})
 	s.NoError(err)
-	s.NoError(<-pollerErrCh)
+	s.NoError(await.Rcv(s.T(), pollerErrCh))
 
 	// Verify that the matching service emitted nexus_task_requests with client_name tag.
 	var found bool

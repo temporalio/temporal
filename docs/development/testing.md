@@ -68,6 +68,18 @@ await.RequireTrue(t, func() bool {
 
 `RequireTrue` is the wrong tool when dealing with errors or assertions; use `Require` instead.
 
+### Blocking on channels
+
+Use `await.Rcv` and `await.Snd` for blocking channel operations.
+They fail the test if its context ends or the channel closes.
+
+```go
+headers := await.Rcv(t, requestHeaders)
+await.Snd(t, responses, response)
+```
+
+Keep an explicit `select` when testing non-blocking behavior or waiting on multiple channels.
+
 ### Parallelization
 
 All tests (and subtests!) should use `t.Parallel()` to be run concurrently;
@@ -186,6 +198,31 @@ or if there's no SDK support for that API available yet.
 You'll find a fully initialized task poller in any functional test suite, look for `s.TaskPoller`.
 
 _NOTE: The previous `testcore.TaskPoller` has been deprecated and should not be used in new code._
+
+### gRPC fault injection
+
+The `testcore` package injects faults into gRPC calls by intercepting requests and responses.
+The fault function determines which RPCs trigger a fault and returns the error to inject.
+It returns a cleanup function that can be used to remove the fault again.
+
+**Example:**
+
+```go
+env.InjectRequestFault(
+    func(req any) error {
+        if _, ok := req.(*matchingservice.AddWorkflowTaskRequest); ok {
+            return serviceerror.NewNotFound("injected fault")
+        }
+        return nil
+    })
+```
+
+`InjectRequestFault` runs _before_ the handler, so an injected error prevents the operation from
+executing. `InjectResponseFault` runs _after_ the handler, so an injected error can model an
+operation that executed but whose response was lost. The test fails if the fault never triggers.
+Only unary RPCs are intercepted; streaming RPCs are unaffected.
+
+The `env` methods scope faults to the test's namespace.
 
 ### testhooks package
 

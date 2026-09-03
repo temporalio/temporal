@@ -85,6 +85,7 @@ import (
 	"go.temporal.io/server/service/history/api/updateworkflowoptions"
 	"go.temporal.io/server/service/history/api/verifychildworkflowcompletionrecorded"
 	"go.temporal.io/server/service/history/api/verifyfirstworkflowtaskscheduled"
+	"go.temporal.io/server/service/history/api/workflowresend"
 	"go.temporal.io/server/service/history/circuitbreakerpool"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -103,6 +104,13 @@ import (
 )
 
 type (
+	engineOptions struct {
+		workflowResendScheduler workflowresend.Scheduler
+	}
+
+	// EngineOption adds optional history engine dependencies without adding required parameters.
+	EngineOption func(*engineOptions)
+
 	historyEngineImpl struct {
 		status                     int32
 		currentClusterName         string
@@ -137,7 +145,7 @@ type (
 		workflowDeleteManager      deletemanager.DeleteManager
 		serializer                 serialization.Serializer
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
-		parentResends              verifychildworkflowcompletionrecorded.InFlightResends
+		workflowResendScheduler    workflowresend.Scheduler
 		chasmEngine                chasm.Engine
 		versionChecker             headers.VersionChecker
 		versionCache               worker_versioning.VersionMembershipAndReactivationStatusCache
@@ -154,6 +162,21 @@ type (
 		testHooks                  testhooks.TestHooks
 	}
 )
+
+// WithWorkflowResendScheduler configures the host-level workflow resend scheduler.
+func WithWorkflowResendScheduler(scheduler workflowresend.Scheduler) EngineOption {
+	return func(options *engineOptions) {
+		options.workflowResendScheduler = scheduler
+	}
+}
+
+func applyEngineOptions(options []EngineOption) engineOptions {
+	var result engineOptions
+	for _, option := range options {
+		option(&result)
+	}
+	return result
+}
 
 // NewEngineWithShardContext creates an instance of history engine
 func NewEngineWithShardContext(
@@ -185,7 +208,9 @@ func NewEngineWithShardContext(
 	persistenceRateLimiter quotas.RequestRateLimiter,
 	testHooks testhooks.TestHooks,
 	chasmEngine chasm.Engine,
+	options ...EngineOption,
 ) historyi.Engine {
+	engineOptions := applyEngineOptions(options)
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
 	logger := shard.GetLogger()
@@ -220,6 +245,7 @@ func NewEngineWithShardContext(
 		eventNotifier:              eventNotifier,
 		fastForwardNotifier:        notification.NewTimeSkippingFastForwardNotifier(),
 		config:                     config,
+		workflowResendScheduler:    engineOptions.workflowResendScheduler,
 		sdkClientFactory:           sdkClientFactory,
 		matchingClient:             matchingClient,
 		rawMatchingClient:          rawMatchingClient,
@@ -286,6 +312,7 @@ func NewEngineWithShardContext(
 			persistenceRateLimiter,
 			logger,
 			shard.GetEventLogger(),
+			testHooks,
 		)
 		historyEngImpl.nDCHSMStateReplicator = ndc.NewHSMStateReplicator(
 			shard,
@@ -560,7 +587,13 @@ func (e *historyEngineImpl) VerifyFirstWorkflowTaskScheduled(
 	ctx context.Context,
 	request *historyservice.VerifyFirstWorkflowTaskScheduledRequest,
 ) (retError error) {
-	return verifyfirstworkflowtaskscheduled.Invoke(ctx, request, e.workflowConsistencyChecker)
+	return verifyfirstworkflowtaskscheduled.Invoke(
+		ctx,
+		request,
+		e.workflowConsistencyChecker,
+		e.shardContext,
+		e.workflowResendScheduler,
+	)
 }
 
 // RecordWorkflowTaskStarted starts a workflow task
@@ -743,7 +776,13 @@ func (e *historyEngineImpl) VerifyChildExecutionCompletionRecorded(
 	ctx context.Context,
 	req *historyservice.VerifyChildExecutionCompletionRecordedRequest,
 ) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
-	return verifychildworkflowcompletionrecorded.Invoke(ctx, req, e.workflowConsistencyChecker, e.shardContext, &e.parentResends)
+	return verifychildworkflowcompletionrecorded.Invoke(
+		ctx,
+		req,
+		e.workflowConsistencyChecker,
+		e.shardContext,
+		e.workflowResendScheduler,
+	)
 }
 
 func (e *historyEngineImpl) ReplicateEventsV2(
@@ -965,6 +1004,15 @@ func (e *historyEngineImpl) ConvertReplicationTask(
 	task tasks.Task,
 	clusterID int32,
 ) (*replicationspb.ReplicationTask, error) {
+	if hook, ok := testhooks.Get(
+		e.testHooks,
+		testhooks.HistoryReplicationTaskConversionInterceptor,
+		namespace.ID(task.GetNamespaceID()),
+	); ok {
+		return hook(task, func() (*replicationspb.ReplicationTask, error) {
+			return e.replicationAckMgr.ConvertTaskByCluster(ctx, task, clusterID)
+		})
+	}
 	return e.replicationAckMgr.ConvertTaskByCluster(ctx, task, clusterID)
 }
 

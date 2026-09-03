@@ -10,6 +10,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -26,6 +27,7 @@ import (
 	"go.temporal.io/server/common/priorities"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
@@ -304,6 +306,7 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 
 	failureMsg := fmt.Sprintf(common.FailureReasonActivityTimeout, timerSequenceID.TimerType.String())
 	timeoutFailure := failure.NewTimeoutFailure(failureMsg, timerSequenceID.TimerType)
+	activityAttemptStarted := ai.GetStartedEventId() != common.EmptyEventID
 	retryState, err := mutableState.RetryActivity(ai, timeoutFailure)
 	if err != nil {
 		return result, nil
@@ -320,6 +323,13 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 		)
 	}
 
+	var deploymentVersion *deploymentspb.WorkerDeploymentVersion
+	if activityAttemptStarted && ai.GetLastDeploymentVersion() != nil {
+		deploymentVersion = &deploymentspb.WorkerDeploymentVersion{
+			DeploymentName: ai.GetLastDeploymentVersion().GetDeploymentName(),
+			BuildId:        ai.GetLastDeploymentVersion().GetBuildId(),
+		}
+	}
 	workflow.RecordActivityCompletionMetrics(
 		t.shardContext,
 		mutableState.GetNamespaceEntry().Name(),
@@ -330,11 +340,14 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 			FirstScheduledTime: timestamp.TimeValue(ai.FirstScheduledTime),
 			Closed:             retryState != enumspb.RETRY_STATE_IN_PROGRESS,
 			TimerType:          timerSequenceID.TimerType,
+			VersioningInfo: workflow.VersioningMetricContext{
+				Behavior:          mutableState.GetEffectiveVersioningBehavior(),
+				DeploymentVersion: deploymentVersion,
+			},
 		},
 		metrics.OperationTag(metrics.TimerActiveTaskActivityTimeoutScope),
 		metrics.WorkflowTypeTag(mutableState.GetWorkflowType().GetName()),
-		metrics.ActivityTypeTag(ai.ActivityType.GetName()),
-		metrics.VersioningBehaviorTag(mutableState.GetEffectiveVersioningBehavior()))
+		metrics.ActivityTypeTag(ai.ActivityType.GetName()))
 
 	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
 		// TODO uncommment once RETRY_STATE_PAUSED is supported
@@ -789,6 +802,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 			t.shardContext.GetThrottledLogger(),
 			t.shardContext.GetMetricsHandler(),
 			nil, // no pagination buffer limiter as it is a transient context
+			testhooks.TestHooks{},
 		),
 		newMutableState,
 	)

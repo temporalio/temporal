@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/api/updateworkflowoptions"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
@@ -538,6 +539,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		r.shardContext.GetLogger(),
 		r.shardContext.GetMetricsHandler(),
 		nil, // no pagination buffer limiter as it is a transient context
+		testhooks.TestHooks{},
 	)
 
 	resetMutableState, resetStats, err := r.stateRebuilder.Rebuild(
@@ -811,8 +813,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 		if err != nil {
 			// A deleted run truncates the chain; other errors must fail the reset so a retry
 			// can reapply the full surviving chain, since reset is one-shot.
-			var notFound *serviceerror.NotFound
-			if errors.As(err, &notFound) {
+			if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 				break
 			}
 			return "", err
