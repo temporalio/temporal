@@ -179,7 +179,7 @@ func (c *clientImpl) addActivityTask(
 	if err != nil {
 		return nil, err
 	}
-	ctx = appendEstimatedTasksAllPartitions(ctx, estimatedTasksAllPartitions, p.IsRoot())
+	ctx = appendEstimatedTasksAllPartitions(ctx, estimatedTasksAllPartitions)
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 
@@ -212,7 +212,7 @@ func (c *clientImpl) addWorkflowTask(
 	if err != nil {
 		return nil, err
 	}
-	ctx = appendEstimatedTasksAllPartitions(ctx, estimatedTasksAllPartitions, p.IsRoot())
+	ctx = appendEstimatedTasksAllPartitions(ctx, estimatedTasksAllPartitions)
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.AddWorkflowTask(ctx, request, opts...)
@@ -323,7 +323,7 @@ func (c *clientImpl) queryWorkflow(
 	if err != nil {
 		return nil, err
 	}
-	ctx = appendEstimatedTasksAllPartitions(ctx, estimatedTasksAllPartitions, p.IsRoot())
+	ctx = appendEstimatedTasksAllPartitions(ctx, estimatedTasksAllPartitions)
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.QueryWorkflow(ctx, request, opts...)
@@ -362,7 +362,7 @@ func (c *clientImpl) dispatchNexusTask(
 	if err != nil {
 		return nil, err
 	}
-	ctx = appendEstimatedTasksAllPartitions(ctx, estimatedTasksAllPartitions, p.IsRoot())
+	ctx = appendEstimatedTasksAllPartitions(ctx, estimatedTasksAllPartitions)
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.DispatchNexusTask(ctx, request, opts...)

@@ -120,6 +120,9 @@ func (lb *defaultLoadBalancer) PickWritePartition(
 		number.DecodeCompact8(pc.BacklogCap),
 	)
 	partition := taskQueue.NormalPartition(partitionID)
+	if !partition.IsRoot() {
+		estimatedTasksAllPartitions = 0
+	}
 
 	return partition, estimatedTasksAllPartitions
 }

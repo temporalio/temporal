@@ -96,8 +96,8 @@ func ParsePartitionCountsFromIncomingContext(ctx context.Context) (PartitionCoun
 	return parsePartitionCounts(vals[0])
 }
 
-func appendEstimatedTasksAllPartitions(ctx context.Context, estimatedTasksAllPartitions int, isRoot bool) context.Context {
-	if estimatedTasksAllPartitions <= 0 || !isRoot {
+func appendEstimatedTasksAllPartitions(ctx context.Context, estimatedTasksAllPartitions int) context.Context {
+	if estimatedTasksAllPartitions <= 0 {
 		return ctx
 	}
 	b := make([]byte, 8)

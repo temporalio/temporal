@@ -397,7 +397,11 @@ func TestPickWritePartition_BacklogAware(t *testing.T) {
 	for range n {
 		p, estimatedTasksAllPartitions := lb.PickWritePartition(taskQueue, pcAtCap)
 		atCap[p.PartitionId()]++
-		require.Equal(t, 2, estimatedTasksAllPartitions)
+		if p.IsRoot() {
+			require.Equal(t, 2, estimatedTasksAllPartitions)
+		} else {
+			require.Zero(t, estimatedTasksAllPartitions)
+		}
 	}
 	for i := range atCap {
 		require.InDelta(t, n/2, atCap[i], float64(n)*0.1, "at-cap partition %d roughly uniform", i)
@@ -427,8 +431,10 @@ func TestPickWritePartition_RootProbabilityFloor(t *testing.T) {
 		partition, estimatedTasksAllPartitions := lb.PickWritePartition(taskQueue, pc)
 		if partition.IsRoot() {
 			rootPicks++
+			require.Equal(t, expectedTasksAllPartitions, estimatedTasksAllPartitions)
+		} else {
+			require.Zero(t, estimatedTasksAllPartitions)
 		}
-		require.Equal(t, expectedTasksAllPartitions, estimatedTasksAllPartitions)
 	}
 	require.InDelta(t, attempts*expectedProbability, rootPicks, attempts*expectedProbability*0.2)
 }
@@ -450,7 +456,11 @@ func TestPickWritePartition_NoBacklogUniform(t *testing.T) {
 	for range n {
 		p, estimatedTasksAllPartitions := lb.PickWritePartition(taskQueue, pc)
 		counts[p.PartitionId()]++
-		require.Equal(t, 4, estimatedTasksAllPartitions)
+		if p.IsRoot() {
+			require.Equal(t, 4, estimatedTasksAllPartitions)
+		} else {
+			require.Zero(t, estimatedTasksAllPartitions)
+		}
 	}
 	for i := range counts {
 		require.InDelta(t, n/4, counts[i], float64(n)*0.1, "partition %d roughly uniform", i)
