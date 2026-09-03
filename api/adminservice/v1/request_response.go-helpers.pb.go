@@ -3519,3 +3519,77 @@ func (this *MigrateScheduleResponse) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type SyncLocalExecutionRequest to the protobuf v3 wire format
+func (val *SyncLocalExecutionRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type SyncLocalExecutionRequest from the protobuf v3 wire format
+func (val *SyncLocalExecutionRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *SyncLocalExecutionRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two SyncLocalExecutionRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *SyncLocalExecutionRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *SyncLocalExecutionRequest
+	switch t := that.(type) {
+	case *SyncLocalExecutionRequest:
+		that1 = t
+	case SyncLocalExecutionRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type SyncLocalExecutionResponse to the protobuf v3 wire format
+func (val *SyncLocalExecutionResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type SyncLocalExecutionResponse from the protobuf v3 wire format
+func (val *SyncLocalExecutionResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *SyncLocalExecutionResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two SyncLocalExecutionResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *SyncLocalExecutionResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *SyncLocalExecutionResponse
+	switch t := that.(type) {
+	case *SyncLocalExecutionResponse:
+		that1 = t
+	case SyncLocalExecutionResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

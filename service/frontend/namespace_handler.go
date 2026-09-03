@@ -969,11 +969,14 @@ func (d *namespaceHandler) createResponse(
 			PollerAutoscaling:                  true,
 			PollerAutoscalingAutoEnroll:        d.config.PollerAutoscalingAutoEnroll(info.Name),
 			WorkflowTaskCompletionPagination:   d.config.EnableWorkflowTaskCompletionPagination(info.Name),
+			LocalExecution:                     d.config.EnableLocalExecution(info.Name),
 		},
 		Limits: &namespacepb.NamespaceInfo_Limits{
 			BlobSizeLimitError:                   int64(d.config.BlobSizeLimitError(info.Name)),
 			MemoSizeLimitError:                   int64(d.config.MemoSizeLimitError(info.Name)),
 			WorkflowTaskCompletionSizeLimitError: int64(d.config.WorkflowTaskCompletionBufferSizeLimit(info.Name)),
+			MinimumLocalExecutionSyncInterval:    durationpb.New(d.config.LocalExecutionMinSyncInterval(info.Name)),
+			MaximumLocalExecutionSyncInterval:    durationpb.New(d.config.LocalExecutionMaxSyncInterval(info.Name)),
 		},
 		SupportsSchedules: d.config.EnableSchedules(info.Name),
 	}

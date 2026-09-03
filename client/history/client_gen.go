@@ -937,6 +937,26 @@ func (c *clientImpl) RemoveTask(
 	return response, nil
 }
 
+func (c *clientImpl) RenewLocalExecutionLease(
+	ctx context.Context,
+	request *historyservice.RenewLocalExecutionLeaseRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.RenewLocalExecutionLeaseResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetExecution().GetWorkflowId())
+	var response *historyservice.RenewLocalExecutionLeaseResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.RenewLocalExecutionLease(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) ReplicateEventsV2(
 	ctx context.Context,
 	request *historyservice.ReplicateEventsV2Request,

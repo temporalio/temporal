@@ -1043,6 +1043,26 @@ func (mr *MockHistoryServiceClientMockRecorder) RemoveTask(ctx, in any, opts ...
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveTask", reflect.TypeOf((*MockHistoryServiceClient)(nil).RemoveTask), varargs...)
 }
 
+// RenewLocalExecutionLease mocks base method.
+func (m *MockHistoryServiceClient) RenewLocalExecutionLease(ctx context.Context, in *historyservice.RenewLocalExecutionLeaseRequest, opts ...grpc.CallOption) (*historyservice.RenewLocalExecutionLeaseResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "RenewLocalExecutionLease", varargs...)
+	ret0, _ := ret[0].(*historyservice.RenewLocalExecutionLeaseResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RenewLocalExecutionLease indicates an expected call of RenewLocalExecutionLease.
+func (mr *MockHistoryServiceClientMockRecorder) RenewLocalExecutionLease(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RenewLocalExecutionLease", reflect.TypeOf((*MockHistoryServiceClient)(nil).RenewLocalExecutionLease), varargs...)
+}
+
 // ReplicateEventsV2 mocks base method.
 func (m *MockHistoryServiceClient) ReplicateEventsV2(ctx context.Context, in *historyservice.ReplicateEventsV2Request, opts ...grpc.CallOption) (*historyservice.ReplicateEventsV2Response, error) {
 	m.ctrl.T.Helper()
@@ -2513,6 +2533,21 @@ func (m *MockHistoryServiceServer) RemoveTask(arg0 context.Context, arg1 *histor
 func (mr *MockHistoryServiceServerMockRecorder) RemoveTask(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveTask", reflect.TypeOf((*MockHistoryServiceServer)(nil).RemoveTask), arg0, arg1)
+}
+
+// RenewLocalExecutionLease mocks base method.
+func (m *MockHistoryServiceServer) RenewLocalExecutionLease(arg0 context.Context, arg1 *historyservice.RenewLocalExecutionLeaseRequest) (*historyservice.RenewLocalExecutionLeaseResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RenewLocalExecutionLease", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.RenewLocalExecutionLeaseResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RenewLocalExecutionLease indicates an expected call of RenewLocalExecutionLease.
+func (mr *MockHistoryServiceServerMockRecorder) RenewLocalExecutionLease(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RenewLocalExecutionLease", reflect.TypeOf((*MockHistoryServiceServer)(nil).RenewLocalExecutionLease), arg0, arg1)
 }
 
 // ReplicateEventsV2 mocks base method.

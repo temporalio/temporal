@@ -255,6 +255,9 @@ type Config struct {
 	StandaloneNexusOperationsEnabled        dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkflowTaskCompletionPagination  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	WorkflowTaskCompletionBufferSizeLimit   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	EnableLocalExecution                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	LocalExecutionMinSyncInterval           dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	LocalExecutionMaxSyncInterval           dynamicconfig.DurationPropertyFnWithNamespaceFilter
 
 	HTTPAllowedHosts   dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 	AllowedExperiments dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
@@ -445,6 +448,9 @@ func NewConfig(
 		StandaloneNexusOperationsEnabled:        chasmnexus.Enabled.Get(dc),
 		EnableWorkflowTaskCompletionPagination:  dynamicconfig.EnableWorkflowTaskCompletionPagination.Get(dc),
 		WorkflowTaskCompletionBufferSizeLimit:   dynamicconfig.WorkflowTaskCompletionBufferSizeLimit.Get(dc),
+		EnableLocalExecution:                    dynamicconfig.EnableLocalExecution.Get(dc),
+		LocalExecutionMinSyncInterval:           dynamicconfig.LocalExecutionMinSyncInterval.Get(dc),
+		LocalExecutionMaxSyncInterval:           dynamicconfig.LocalExecutionMaxSyncInterval.Get(dc),
 
 		HTTPAllowedHosts:   dynamicconfig.FrontendHTTPAllowedHosts.Get(dc),
 		AllowedExperiments: dynamicconfig.FrontendAllowedExperiments.Get(dc),

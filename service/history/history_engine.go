@@ -62,6 +62,7 @@ import (
 	"go.temporal.io/server/service/history/api/recordworkflowtaskstarted"
 	"go.temporal.io/server/service/history/api/refreshworkflow"
 	"go.temporal.io/server/service/history/api/removesignalmutablestate"
+	"go.temporal.io/server/service/history/api/renewlocalexecutionlease"
 	replicationapi "go.temporal.io/server/service/history/api/replication"
 	"go.temporal.io/server/service/history/api/replicationadmin"
 	"go.temporal.io/server/service/history/api/requestcancelworkflow"
@@ -608,6 +609,18 @@ func (e *historyEngineImpl) RecordWorkflowTaskStarted(
 		e.config,
 		e.eventNotifier,
 		e.persistenceVisibilityMgr,
+		e.workflowConsistencyChecker,
+	)
+}
+
+func (e *historyEngineImpl) RenewLocalExecutionLease(
+	ctx context.Context,
+	request *historyservice.RenewLocalExecutionLeaseRequest,
+) (*historyservice.RenewLocalExecutionLeaseResponse, error) {
+	return renewlocalexecutionlease.Invoke(
+		ctx,
+		request,
+		e.shardContext,
 		e.workflowConsistencyChecker,
 	)
 }

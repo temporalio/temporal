@@ -6072,3 +6072,77 @@ func (this *PollWorkflowExecutionTimeSkippingResponse) Equal(that interface{}) b
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type RenewLocalExecutionLeaseRequest to the protobuf v3 wire format
+func (val *RenewLocalExecutionLeaseRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type RenewLocalExecutionLeaseRequest from the protobuf v3 wire format
+func (val *RenewLocalExecutionLeaseRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *RenewLocalExecutionLeaseRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two RenewLocalExecutionLeaseRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *RenewLocalExecutionLeaseRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *RenewLocalExecutionLeaseRequest
+	switch t := that.(type) {
+	case *RenewLocalExecutionLeaseRequest:
+		that1 = t
+	case RenewLocalExecutionLeaseRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type RenewLocalExecutionLeaseResponse to the protobuf v3 wire format
+func (val *RenewLocalExecutionLeaseResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type RenewLocalExecutionLeaseResponse from the protobuf v3 wire format
+func (val *RenewLocalExecutionLeaseResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *RenewLocalExecutionLeaseResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two RenewLocalExecutionLeaseResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *RenewLocalExecutionLeaseResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *RenewLocalExecutionLeaseResponse
+	switch t := that.(type) {
+	case *RenewLocalExecutionLeaseResponse:
+		that1 = t
+	case RenewLocalExecutionLeaseResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

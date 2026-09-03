@@ -1825,6 +1825,21 @@ See DynamicRateLimitingParams comments for more details.`,
 		`EnableWorkflowTaskCompletionPagination enables the pagination of RespondWorkflowTaskCompleted requests.
 		When false, paginated requests (the ones with intermediate_page set to true) are rejected.`,
 	)
+	EnableLocalExecution = NewNamespaceBoolSetting(
+		"history.enableLocalExecution",
+		false,
+		`EnableLocalExecution allows trusted bridge workers to acquire workflow executions for local processing.`,
+	)
+	LocalExecutionMinSyncInterval = NewNamespaceDurationSetting(
+		"history.localExecutionMinSyncInterval",
+		time.Second,
+		`LocalExecutionMinSyncInterval is the shortest synchronization interval a bridge may request.`,
+	)
+	LocalExecutionMaxSyncInterval = NewNamespaceDurationSetting(
+		"history.localExecutionMaxSyncInterval",
+		time.Minute,
+		`LocalExecutionMaxSyncInterval is the longest synchronization interval a bridge may request.`,
+	)
 	WorkflowTaskCompletionBufferTotalSizeLimit = NewGlobalIntSetting(
 		"history.workflowTaskCompletionBufferTotalSizeLimit",
 		1024*1024*1024,

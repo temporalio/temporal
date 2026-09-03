@@ -415,6 +415,36 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 		return consts.ErrStaleReference
 	}
 
+	localExecutionInfo := mutableState.GetExecutionInfo().GetLocalExecutionInfo()
+	if localExecutionInfo.GetState() == persistencespb.LocalExecutionInfo_STATE_OWNED {
+		leaseExpiration := localExecutionInfo.GetLeaseExpirationTime()
+		if leaseExpiration == nil || leaseExpiration.CheckValid() != nil {
+			return serviceerror.NewInternal("local execution owner has an invalid lease expiration")
+		}
+		if shardNow := t.shardContext.GetTimeSource().Now(); shardNow.Before(leaseExpiration.AsTime()) {
+			replacement := &tasks.WorkflowTaskTimeoutTask{
+				WorkflowKey:         task.WorkflowKey,
+				VisibilityTimestamp: leaseExpiration.AsTime(),
+				EventID:             task.EventID,
+				ScheduleAttempt:     task.ScheduleAttempt,
+				TimeoutType:         task.TimeoutType,
+				Version:             task.Version,
+				Stamp:               task.Stamp,
+				InMemory:            task.InMemory,
+			}
+			mutableState.AddTasks(replacement)
+			if task.TimeoutType == enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START {
+				mutableState.SetWorkflowTaskScheduleToStartTimeoutTask(replacement)
+			} else {
+				mutableState.SetWorkflowTaskStartToCloseTimeoutTask(replacement)
+			}
+			return t.updateWorkflowExecution(ctx, weContext, mutableState, false)
+		}
+		localExecutionInfo.State = persistencespb.LocalExecutionInfo_STATE_UNOWNED
+		localExecutionInfo.FencingEpoch++
+		localExecutionInfo.OwnershipTokenHash = nil
+	}
+
 	var operationMetricsTag string
 	if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
 		// Check if mutable state still points to this task.

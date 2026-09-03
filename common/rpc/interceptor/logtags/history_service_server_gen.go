@@ -315,6 +315,13 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 		return nil
 	case *historyservice.RemoveTaskResponse:
 		return nil
+	case *historyservice.RenewLocalExecutionLeaseRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetExecution().GetRunId()),
+		}
+	case *historyservice.RenewLocalExecutionLeaseResponse:
+		return nil
 	case *historyservice.ReplicateEventsV2Request:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),

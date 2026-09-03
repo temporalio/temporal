@@ -312,6 +312,33 @@ func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueuePreservesWorkerInst
 		"WorkerInstanceKey should be preserved when forwarding workflow poll")
 }
 
+func (t *ForwarderTestSuite) TestForwardPollWorkflowTaskQueuePreservesLocalExecutionOptions() {
+	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+
+	ctx := context.WithValue(context.Background(), pollerIDKey, uuid.NewString())
+	ctx = context.WithValue(ctx, identityKey, "local-server")
+	options := &workflowservice.LocalExecutionPollOptions{
+		LocalServerId:   "local-server",
+		ProtocolVersion: 1,
+	}
+	response := &matchingservice.PollWorkflowTaskQueueResponse{
+		LocalExecutionInfo: &workflowservice.LocalExecutionTaskInfo{OwnershipToken: []byte("token")},
+	}
+
+	var request *matchingservice.PollWorkflowTaskQueueRequest
+	t.client.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any(), gomock.Any()).Do(
+		func(_ context.Context, forwarded *matchingservice.PollWorkflowTaskQueueRequest, _ ...any) {
+			request = forwarded
+		},
+	).Return(response, nil)
+
+	task, err := t.fwdr.ForwardPoll(ctx, &pollMetadata{localExecutionOptions: options})
+	t.Require().NoError(err)
+	t.NotNil(task)
+	t.Equal(options, request.GetPollRequest().GetLocalExecutionOptions())
+	t.Equal(response, task.pollWorkflowTaskQueueResponse())
+}
+
 func (t *ForwarderTestSuite) TestForwardPollForActivity() {
 	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 

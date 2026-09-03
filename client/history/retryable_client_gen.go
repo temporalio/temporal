@@ -761,6 +761,21 @@ func (c *retryableClient) RemoveTask(
 	return resp, err
 }
 
+func (c *retryableClient) RenewLocalExecutionLease(
+	ctx context.Context,
+	request *historyservice.RenewLocalExecutionLeaseRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.RenewLocalExecutionLeaseResponse, error) {
+	var resp *historyservice.RenewLocalExecutionLeaseResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.RenewLocalExecutionLease(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) ReplicateEventsV2(
 	ctx context.Context,
 	request *historyservice.ReplicateEventsV2Request,

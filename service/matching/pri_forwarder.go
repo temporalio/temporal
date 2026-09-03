@@ -240,13 +240,14 @@ func ForwardPollWithTarget(
 				DeploymentOptions:         pollMetadata.deploymentOptions,
 				WorkerInstanceKey:         pollMetadata.workerInstanceKey,
 				WorkerControlTaskQueue:    pollMetadata.workerControlTaskQueue,
+				LocalExecutionOptions:     pollMetadata.localExecutionOptions,
 			},
 			ForwardedSource: source.RpcName(),
 			Conditions:      pollMetadata.conditions,
 		})
 		if err != nil {
 			return nil, err
-		} else if resp.TaskToken == nil {
+		} else if resp.TaskToken == nil && resp.GetLocalExecutionInfo() == nil {
 			return nil, errNoTasks
 		}
 		return newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: resp}), nil

@@ -680,3 +680,29 @@ message MigrateScheduleRequest {
 }
 
 message MigrateScheduleResponse {}
+
+// SyncLocalExecutionRequest is the first prototype transport for history produced by a trusted
+// local bridge. Ownership and lease fields will be added with poll-based acquisition.
+message SyncLocalExecutionRequest {
+  string namespace = 1;
+  temporal.api.common.v1.WorkflowExecution execution = 2;
+  int32 protocol_version = 3;
+  string local_server_id = 4;
+  string sync_id = 5;
+  int64 previous_event_id = 6;
+  int64 previous_event_version = 7;
+  int64 new_event_id = 8;
+  int64 new_event_version = 9;
+  repeated temporal.api.common.v1.DataBlob history_batches = 10;
+  temporal.server.api.history.v1.VersionHistory version_history = 11;
+  bool release = 12;
+  bytes ownership_token = 13;
+  int64 fencing_epoch = 14;
+}
+
+message SyncLocalExecutionResponse {
+  string sync_id = 1;
+  int64 acknowledged_event_id = 2;
+  int64 acknowledged_event_version = 3;
+  google.protobuf.Timestamp lease_expiration_time = 4;
+}

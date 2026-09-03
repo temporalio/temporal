@@ -323,6 +323,10 @@ message WorkflowExecutionInfo {
   // Time of the most recent AdminRebuildMutableState call for this run, unset if the run
   // was never rebuilt.
   google.protobuf.Timestamp mutable_state_rebuild_time = 116;
+
+  // Coordination state for bridge-owned local execution. This is never written to workflow
+  // history and must be preserved when synchronized history updates mutable state.
+  LocalExecutionInfo local_execution_info = 117;
 }
 
 message TimeSkippingInfo {
@@ -992,4 +996,23 @@ message WorkflowPauseInfo {
 
   // A unique identifier for this pause request (for idempotency checks)
   string request_id = 4;
+}
+
+message LocalExecutionInfo {
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    STATE_OWNED = 1;
+    STATE_UNOWNED = 2;
+  }
+
+  State state = 1;
+  int64 fencing_epoch = 2;
+  string local_server_id = 3;
+  bytes ownership_token_hash = 4;
+  google.protobuf.Timestamp lease_expiration_time = 5;
+  google.protobuf.Duration lease_duration = 6;
+  int64 last_synchronized_event_id = 7;
+  int64 last_synchronized_event_version = 8;
+  string last_sync_id = 9;
+  bytes last_sync_request_hash = 10;
 }

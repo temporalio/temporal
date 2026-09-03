@@ -2,6 +2,8 @@ package recordworkflowtaskstarted
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
 	"errors"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -10,13 +12,16 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
@@ -26,10 +31,13 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+const localExecutionOwnershipTokenSize = 32
 
 //nolint:revive // cyclomatic complexity
 func Invoke(
@@ -94,6 +102,22 @@ func Invoke(
 			workflowKey = mutableState.GetWorkflowKey()
 			updateAction := &api.UpdateWorkflowAction{}
 			updateRegistry := workflowLease.GetContext().UpdateRegistry(ctx)
+			localExecutionInfo := mutableState.GetExecutionInfo().GetLocalExecutionInfo()
+			if localExecutionInfo.GetState() == persistencespb.LocalExecutionInfo_STATE_OWNED {
+				leaseExpiration := localExecutionInfo.GetLeaseExpirationTime()
+				if leaseExpiration == nil || leaseExpiration.CheckValid() != nil {
+					return nil, serviceerror.NewInternal("local execution owner has an invalid lease expiration")
+				}
+				if shardContext.GetTimeSource().Now().Before(leaseExpiration.AsTime()) {
+					if req.PollRequest.GetLocalExecutionOptions() == nil {
+						return nil, serviceerrors.NewObsoleteMatchingTask("workflow execution has an active local execution owner")
+					}
+				} else {
+					localExecutionInfo.State = persistencespb.LocalExecutionInfo_STATE_UNOWNED
+					localExecutionInfo.FencingEpoch++
+					localExecutionInfo.OwnershipTokenHash = nil
+				}
+			}
 
 			if workflowTask.StartedEventID != common.EmptyEventID {
 				// If workflow task is started as part of the current request scope then return a positive response
@@ -158,6 +182,80 @@ func Invoke(
 			err = worker_versioning.ValidateTaskVersionDirective(req.GetVersionDirective(), wfBehavior, wfDeployment, req.ScheduledDeployment)
 			if err != nil {
 				return nil, err
+			}
+
+			if localOptions := req.PollRequest.GetLocalExecutionOptions(); localOptions != nil {
+				if workflowTask.Type == enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE {
+					return nil, serviceerror.NewFailedPrecondition("local execution cannot acquire a speculative workflow task")
+				}
+
+				now := shardContext.GetTimeSource().Now()
+				previousLocalInfo := mutableState.GetExecutionInfo().GetLocalExecutionInfo()
+				if previousLocalInfo.GetState() == persistencespb.LocalExecutionInfo_STATE_OWNED &&
+					previousLocalInfo.GetLeaseExpirationTime().AsTime().After(now) {
+					return nil, serviceerror.NewFailedPrecondition("workflow execution already has an active local execution owner")
+				}
+
+				ownershipToken := make([]byte, localExecutionOwnershipTokenSize)
+				if _, err := rand.Read(ownershipToken); err != nil {
+					return nil, serviceerror.NewInternal("failed to generate local execution ownership token")
+				}
+				ownershipTokenHash := sha256.Sum256(ownershipToken)
+				fencingEpoch := previousLocalInfo.GetFencingEpoch()
+				if previousLocalInfo == nil || previousLocalInfo.GetState() == persistencespb.LocalExecutionInfo_STATE_UNSPECIFIED {
+					fencingEpoch++
+				}
+				leaseExpiration := now.Add(localOptions.GetRequestedLeaseDuration().AsDuration())
+
+				currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(
+					mutableState.GetExecutionInfo().GetVersionHistories(),
+				)
+				if err != nil {
+					return nil, err
+				}
+				currentVersionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+				if err != nil {
+					return nil, err
+				}
+
+				leaseExpirationTime := timestamppb.New(leaseExpiration)
+				mutableState.GetExecutionInfo().LocalExecutionInfo = &persistencespb.LocalExecutionInfo{
+					State:                        persistencespb.LocalExecutionInfo_STATE_OWNED,
+					FencingEpoch:                 fencingEpoch,
+					LocalServerId:                localOptions.GetLocalServerId(),
+					OwnershipTokenHash:           ownershipTokenHash[:],
+					LeaseExpirationTime:          leaseExpirationTime,
+					LeaseDuration:                localOptions.GetRequestedLeaseDuration(),
+					LastSynchronizedEventId:      currentVersionHistoryItem.GetEventId(),
+					LastSynchronizedEventVersion: currentVersionHistoryItem.GetVersion(),
+				}
+				leaseTimeoutTask := &tasks.WorkflowTaskTimeoutTask{
+					WorkflowKey:         mutableState.GetWorkflowKey(),
+					VisibilityTimestamp: leaseExpiration,
+					EventID:             workflowTask.ScheduledEventID,
+					ScheduleAttempt:     workflowTask.Attempt,
+					TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+					Version:             workflowTask.Version,
+					Stamp:               workflowTask.Stamp,
+				}
+				mutableState.AddTasks(leaseTimeoutTask)
+				mutableState.SetWorkflowTaskScheduleToStartTimeoutTask(leaseTimeoutTask)
+
+				resp, err = createLocalExecutionTaskResponse(
+					mutableState,
+					workflowTask,
+					&workflowservice.LocalExecutionTaskInfo{
+						OwnershipToken:               ownershipToken,
+						FencingEpoch:                 fencingEpoch,
+						LeaseExpirationTime:          leaseExpirationTime,
+						LastSynchronizedEventId:      currentVersionHistoryItem.GetEventId(),
+						LastSynchronizedEventVersion: currentVersionHistoryItem.GetVersion(),
+					},
+				)
+				if err != nil {
+					return nil, err
+				}
+				return updateAction, nil
 			}
 
 			_, workflowTask, err = mutableState.AddWorkflowTaskStartedEvent(
@@ -265,6 +363,38 @@ func Invoke(
 		return nil, err
 	}
 	return resp, nil
+}
+
+func createLocalExecutionTaskResponse(
+	mutableState historyi.MutableState,
+	workflowTask *historyi.WorkflowTaskInfo,
+	localExecutionInfo *workflowservice.LocalExecutionTaskInfo,
+) (*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, error) {
+	executionInfo := mutableState.GetExecutionInfo()
+	response := &historyservice.RecordWorkflowTaskStartedResponseWithRawHistory{
+		WorkflowType:           mutableState.GetWorkflowType(),
+		ScheduledEventId:       workflowTask.ScheduledEventID,
+		NextEventId:            mutableState.GetNextEventID(),
+		Attempt:                workflowTask.Attempt,
+		StickyExecutionEnabled: false,
+		WorkflowExecutionTaskQueue: &taskqueuepb.TaskQueue{
+			Name: executionInfo.TaskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		ScheduledTime:      timestamppb.New(workflowTask.ScheduledTime),
+		Version:            workflowTask.Version,
+		LocalExecutionInfo: localExecutionInfo,
+	}
+	if executionInfo.LastCompletedWorkflowTaskStartedEventId != common.EmptyEventID {
+		response.PreviousStartedEventId = executionInfo.LastCompletedWorkflowTaskStartedEventId
+	}
+
+	branchToken, err := mutableState.GetCurrentBranchToken()
+	if err != nil {
+		return nil, err
+	}
+	response.BranchToken = branchToken
+	return response, nil
 }
 
 func setHistoryForRecordWfTaskStartedResp(
@@ -402,6 +532,7 @@ func CreateRecordWorkflowTaskStartedResponse(
 		Messages:                   rawResp.Messages,
 		Version:                    rawResp.Version,
 		NextPageToken:              rawResp.NextPageToken,
+		LocalExecutionInfo:         rawResp.LocalExecutionInfo,
 	}, nil
 }
 

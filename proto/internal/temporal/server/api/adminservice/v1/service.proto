@@ -21,6 +21,12 @@ service AdminService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
   }
 
+  // SyncLocalExecution appends history produced by a trusted local bridge.
+  // NOTE: this is experimental API
+  rpc SyncLocalExecution(SyncLocalExecutionRequest) returns (SyncLocalExecutionResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
+
   // DescribeWorkflowExecution returns information about the internal states of workflow execution.
   rpc DescribeMutableState(DescribeMutableStateRequest) returns (DescribeMutableStateResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;

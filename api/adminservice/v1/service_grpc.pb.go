@@ -22,6 +22,7 @@ const _ = grpc.SupportPackageIsVersion7
 const (
 	AdminService_RebuildMutableState_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/RebuildMutableState"
 	AdminService_ImportWorkflowExecution_FullMethodName             = "/temporal.server.api.adminservice.v1.AdminService/ImportWorkflowExecution"
+	AdminService_SyncLocalExecution_FullMethodName                  = "/temporal.server.api.adminservice.v1.AdminService/SyncLocalExecution"
 	AdminService_DescribeMutableState_FullMethodName                = "/temporal.server.api.adminservice.v1.AdminService/DescribeMutableState"
 	AdminService_DescribeHistoryHost_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/DescribeHistoryHost"
 	AdminService_GetShard_FullMethodName                            = "/temporal.server.api.adminservice.v1.AdminService/GetShard"
@@ -78,6 +79,9 @@ type AdminServiceClient interface {
 	// ImportWorkflowExecution attempts to import workflow according to persisted history events.
 	// NOTE: this is experimental API
 	ImportWorkflowExecution(ctx context.Context, in *ImportWorkflowExecutionRequest, opts ...grpc.CallOption) (*ImportWorkflowExecutionResponse, error)
+	// SyncLocalExecution appends history produced by a trusted local bridge.
+	// NOTE: this is experimental API
+	SyncLocalExecution(ctx context.Context, in *SyncLocalExecutionRequest, opts ...grpc.CallOption) (*SyncLocalExecutionResponse, error)
 	// DescribeWorkflowExecution returns information about the internal states of workflow execution.
 	DescribeMutableState(ctx context.Context, in *DescribeMutableStateRequest, opts ...grpc.CallOption) (*DescribeMutableStateResponse, error)
 	// DescribeHistoryHost returns information about the internal states of a history host
@@ -183,6 +187,15 @@ func (c *adminServiceClient) RebuildMutableState(ctx context.Context, in *Rebuil
 func (c *adminServiceClient) ImportWorkflowExecution(ctx context.Context, in *ImportWorkflowExecutionRequest, opts ...grpc.CallOption) (*ImportWorkflowExecutionResponse, error) {
 	out := new(ImportWorkflowExecutionResponse)
 	err := c.cc.Invoke(ctx, AdminService_ImportWorkflowExecution_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) SyncLocalExecution(ctx context.Context, in *SyncLocalExecutionRequest, opts ...grpc.CallOption) (*SyncLocalExecutionResponse, error) {
+	out := new(SyncLocalExecutionResponse)
+	err := c.cc.Invoke(ctx, AdminService_SyncLocalExecution_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -617,6 +630,9 @@ type AdminServiceServer interface {
 	// ImportWorkflowExecution attempts to import workflow according to persisted history events.
 	// NOTE: this is experimental API
 	ImportWorkflowExecution(context.Context, *ImportWorkflowExecutionRequest) (*ImportWorkflowExecutionResponse, error)
+	// SyncLocalExecution appends history produced by a trusted local bridge.
+	// NOTE: this is experimental API
+	SyncLocalExecution(context.Context, *SyncLocalExecutionRequest) (*SyncLocalExecutionResponse, error)
 	// DescribeWorkflowExecution returns information about the internal states of workflow execution.
 	DescribeMutableState(context.Context, *DescribeMutableStateRequest) (*DescribeMutableStateResponse, error)
 	// DescribeHistoryHost returns information about the internal states of a history host
@@ -712,6 +728,9 @@ func (UnimplementedAdminServiceServer) RebuildMutableState(context.Context, *Reb
 }
 func (UnimplementedAdminServiceServer) ImportWorkflowExecution(context.Context, *ImportWorkflowExecutionRequest) (*ImportWorkflowExecutionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ImportWorkflowExecution not implemented")
+}
+func (UnimplementedAdminServiceServer) SyncLocalExecution(context.Context, *SyncLocalExecutionRequest) (*SyncLocalExecutionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SyncLocalExecution not implemented")
 }
 func (UnimplementedAdminServiceServer) DescribeMutableState(context.Context, *DescribeMutableStateRequest) (*DescribeMutableStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DescribeMutableState not implemented")
@@ -890,6 +909,24 @@ func _AdminService_ImportWorkflowExecution_Handler(srv interface{}, ctx context.
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AdminServiceServer).ImportWorkflowExecution(ctx, req.(*ImportWorkflowExecutionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_SyncLocalExecution_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SyncLocalExecutionRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).SyncLocalExecution(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_SyncLocalExecution_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).SyncLocalExecution(ctx, req.(*SyncLocalExecutionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1708,6 +1745,10 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ImportWorkflowExecution",
 			Handler:    _AdminService_ImportWorkflowExecution_Handler,
+		},
+		{
+			MethodName: "SyncLocalExecution",
+			Handler:    _AdminService_SyncLocalExecution_Handler,
 		},
 		{
 			MethodName: "DescribeMutableState",

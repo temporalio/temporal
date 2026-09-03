@@ -168,6 +168,7 @@ message GetMutableStateResponse {
   // Transient or speculative workflow task events which are not yet persisted in the history.
   // These events should be appended to the history when it is returned to the worker.
   temporal.server.api.history.v1.TransientWorkflowTaskInfo transient_or_speculative_tasks = 26;
+  temporal.server.api.persistence.v1.LocalExecutionInfo local_execution_info = 27;
 }
 
 message PollMutableStateRequest {
@@ -301,6 +302,7 @@ message RecordWorkflowTaskStartedResponse {
   //          as raw_history_bytes (field 21) will be the only field used.
   temporal.api.history.v1.History raw_history = 20 [deprecated = true];
   repeated bytes raw_history_bytes = 21;
+  temporal.api.workflowservice.v1.LocalExecutionTaskInfo local_execution_info = 22;
 }
 
 // RecordWorkflowTaskStartedResponseWithRawHistory is wire-compatible with RecordWorkflowTaskStartedResponse.
@@ -345,6 +347,7 @@ message RecordWorkflowTaskStartedResponseWithRawHistory {
   // instead of a proto-decoded History. This avoids matching service having to decode history.
   repeated bytes raw_history = 20 [deprecated = true];
   repeated bytes raw_history_bytes = 21;
+  temporal.api.workflowservice.v1.LocalExecutionTaskInfo local_execution_info = 22;
 }
 
 message RecordActivityTaskStartedRequest {
@@ -1450,4 +1453,25 @@ message PollWorkflowExecutionTimeSkippingRequest {
 
 message PollWorkflowExecutionTimeSkippingResponse {
   temporal.api.workflowservice.v1.PollWorkflowExecutionTimeSkippingResponse response = 1;
+}
+
+message RenewLocalExecutionLeaseRequest {
+  option (routing).workflow_id = "execution.workflow_id";
+
+  string namespace_id = 1;
+  temporal.api.common.v1.WorkflowExecution execution = 2;
+  string local_server_id = 3;
+  bytes ownership_token = 4;
+  int64 fencing_epoch = 5;
+  int64 previous_event_id = 6;
+  int64 previous_event_version = 7;
+  int64 new_event_id = 8;
+  int64 new_event_version = 9;
+  string sync_id = 10;
+  bytes sync_request_hash = 11;
+  bool release = 12;
+}
+
+message RenewLocalExecutionLeaseResponse {
+  google.protobuf.Timestamp lease_expiration_time = 1;
 }

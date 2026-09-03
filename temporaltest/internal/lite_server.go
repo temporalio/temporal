@@ -69,6 +69,8 @@ type LiteServerConfig struct {
 	DynamicConfig dynamicconfig.StaticClient
 	// SearchAttributes adds custom search attributes to all namespaces created on Temporal start.
 	SearchAttributes map[string]enumspb.IndexedValueType
+	// EnableGlobalNamespace configures the cluster and pre-created namespaces for replication APIs.
+	EnableGlobalNamespace bool
 }
 
 func (cfg *LiteServerConfig) apply(serverConfig *config.Config) {
@@ -119,7 +121,7 @@ func (cfg *LiteServerConfig) apply(serverConfig *config.Config) {
 		},
 	}
 	serverConfig.ClusterMetadata = &cluster.Config{
-		EnableGlobalNamespace:    false,
+		EnableGlobalNamespace:    cfg.EnableGlobalNamespace,
 		FailoverVersionIncrement: 10,
 		MasterClusterName:        "active",
 		CurrentClusterName:       "active",
@@ -244,11 +246,15 @@ func NewLiteServer(liteConfig *LiteServerConfig, opts ...temporal.ServerOption) 
 		nsConfig, err := sqlite.NewNamespaceConfig(
 			liteConfig.BaseConfig.ClusterMetadata.CurrentClusterName,
 			ns,
-			false,
+			liteConfig.EnableGlobalNamespace,
 			liteConfig.SearchAttributes,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("error creating namespace config: %w", err)
+		}
+		if liteConfig.EnableGlobalNamespace {
+			clusterInfo := liteConfig.BaseConfig.ClusterMetadata.ClusterInformation[liteConfig.BaseConfig.ClusterMetadata.CurrentClusterName]
+			nsConfig.Detail.FailoverVersion = clusterInfo.InitialFailoverVersion
 		}
 		namespaces = append(namespaces, nsConfig)
 	}

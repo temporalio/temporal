@@ -943,6 +943,26 @@ func (mr *MockAdminServiceClientMockRecorder) StreamWorkflowReplicationMessages(
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StreamWorkflowReplicationMessages", reflect.TypeOf((*MockAdminServiceClient)(nil).StreamWorkflowReplicationMessages), varargs...)
 }
 
+// SyncLocalExecution mocks base method.
+func (m *MockAdminServiceClient) SyncLocalExecution(ctx context.Context, in *adminservice.SyncLocalExecutionRequest, opts ...grpc.CallOption) (*adminservice.SyncLocalExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "SyncLocalExecution", varargs...)
+	ret0, _ := ret[0].(*adminservice.SyncLocalExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncLocalExecution indicates an expected call of SyncLocalExecution.
+func (mr *MockAdminServiceClientMockRecorder) SyncLocalExecution(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncLocalExecution", reflect.TypeOf((*MockAdminServiceClient)(nil).SyncLocalExecution), varargs...)
+}
+
 // SyncWorkflowState mocks base method.
 func (m *MockAdminServiceClient) SyncWorkflowState(ctx context.Context, in *adminservice.SyncWorkflowStateRequest, opts ...grpc.CallOption) (*adminservice.SyncWorkflowStateResponse, error) {
 	m.ctrl.T.Helper()
@@ -1797,6 +1817,21 @@ func (m *MockAdminServiceServer) StreamWorkflowReplicationMessages(arg0 adminser
 func (mr *MockAdminServiceServerMockRecorder) StreamWorkflowReplicationMessages(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StreamWorkflowReplicationMessages", reflect.TypeOf((*MockAdminServiceServer)(nil).StreamWorkflowReplicationMessages), arg0)
+}
+
+// SyncLocalExecution mocks base method.
+func (m *MockAdminServiceServer) SyncLocalExecution(arg0 context.Context, arg1 *adminservice.SyncLocalExecutionRequest) (*adminservice.SyncLocalExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncLocalExecution", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.SyncLocalExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncLocalExecution indicates an expected call of SyncLocalExecution.
+func (mr *MockAdminServiceServerMockRecorder) SyncLocalExecution(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncLocalExecution", reflect.TypeOf((*MockAdminServiceServer)(nil).SyncLocalExecution), arg0, arg1)
 }
 
 // SyncWorkflowState mocks base method.

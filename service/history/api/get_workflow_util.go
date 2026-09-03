@@ -415,5 +415,6 @@ func MutableStateToGetResponse(
 		TransitionHistory:            transitionhistory.CopyVersionedTransitions(mutableState.GetExecutionInfo().TransitionHistory),
 		VersioningInfo:               common.CloneProto(mutableState.GetExecutionInfo().VersioningInfo),
 		TransientOrSpeculativeTasks:  transientOrSpeculativeTasks,
+		LocalExecutionInfo:           common.CloneProto(executionInfo.LocalExecutionInfo),
 	}, nil
 }

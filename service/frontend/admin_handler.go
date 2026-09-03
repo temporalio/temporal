@@ -63,6 +63,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/localexecution"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/dlq"
 	"go.temporal.io/server/service/worker/dummy"
@@ -383,6 +384,27 @@ func (adh *AdminHandler) ImportWorkflowExecution(
 	return &adminservice.ImportWorkflowExecutionResponse{
 		Token: resp.Token,
 	}, nil
+}
+
+func (adh *AdminHandler) SyncLocalExecution(
+	ctx context.Context,
+	request *adminservice.SyncLocalExecutionRequest,
+) (_ *adminservice.SyncLocalExecutionResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if err := validateExecution(request.GetExecution()); err != nil {
+		return nil, err
+	}
+	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	syncer := localexecution.NewUpstreamSyncer(adh.historyClient, adh.eventSerializer)
+	return syncer.Sync(ctx, namespaceID.String(), request)
 }
 
 func (adh *AdminHandler) unaliasAndValidateSearchAttributes(historyBatches []*commonpb.DataBlob, nsName namespace.Name) ([]*commonpb.DataBlob, error) {

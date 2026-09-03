@@ -86,6 +86,7 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/localexecution"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -1112,6 +1113,22 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 	namespaceID := namespaceEntry.ID()
+	if localOptions := request.GetLocalExecutionOptions(); localOptions != nil {
+		if !wh.config.EnableLocalExecution(namespaceEntry.Name().String()) {
+			return nil, serviceerror.NewFailedPrecondition("local execution is not enabled for this namespace")
+		}
+		if request.GetTaskQueue().GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
+			return nil, serviceerror.NewInvalidArgument("local execution acquisition requires a normal task queue")
+		}
+		if err := localexecution.ValidatePollOptions(
+			localOptions,
+			wh.config.LocalExecutionMinSyncInterval(namespaceEntry.Name().String()),
+			wh.config.LocalExecutionMaxSyncInterval(namespaceEntry.Name().String()),
+			wh.config.MaxIDLengthLimit(),
+		); err != nil {
+			return nil, err
+		}
+	}
 
 	wh.logger.Debug("Poll workflow task queue.", tag.WorkflowNamespace(namespaceEntry.Name().String()), tag.WorkflowNamespaceID(namespaceID.String()))
 	if err := wh.checkBadBinary(namespaceEntry, request.GetBinaryChecksum()); err != nil {
@@ -1198,6 +1215,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		Queries:                    matchingResp.Queries,
 		Messages:                   matchingResp.Messages,
 		PollerScalingDecision:      matchingResp.PollerScalingDecision,
+		LocalExecutionInfo:         matchingResp.LocalExecutionInfo,
 	}, nil
 }
 
@@ -3555,6 +3573,7 @@ func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflows
 			CountGroupByExecutionStatus:     true,
 			Nexus:                           wh.httpEnabled,
 			ServerScaledDeployments:         true,
+			LocalExecution:                  true,
 		},
 	}, nil
 }

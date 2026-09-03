@@ -252,13 +252,14 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context, pollMetadata *pollMetada
 				DeploymentOptions:         pollMetadata.deploymentOptions,
 				WorkerInstanceKey:         pollMetadata.workerInstanceKey,
 				WorkerControlTaskQueue:    pollMetadata.workerControlTaskQueue,
+				LocalExecutionOptions:     pollMetadata.localExecutionOptions,
 			},
 			ForwardedSource: fwdr.partition.RpcName(),
 			Conditions:      pollMetadata.conditions,
 		})
 		if err != nil {
 			return nil, fwdr.handleErr(err)
-		} else if resp.TaskToken == nil {
+		} else if resp.TaskToken == nil && resp.GetLocalExecutionInfo() == nil {
 			return nil, errNoTasks
 		}
 		return newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: resp}), nil

@@ -21,15 +21,17 @@ import (
 //
 // Methods on TestServer are not safe for concurrent use.
 type TestServer struct {
-	server               *temporalite.LiteServer
-	defaultTestNamespace string
-	defaultClient        client.Client
-	clients              []client.Client
-	workers              []worker.Worker
-	t                    *testing.T
-	defaultClientOptions client.Options
-	defaultWorkerOptions worker.Options
-	serverOptions        []temporal.ServerOption
+	server                *temporalite.LiteServer
+	defaultTestNamespace  string
+	defaultClient         client.Client
+	clients               []client.Client
+	workers               []worker.Worker
+	t                     *testing.T
+	defaultClientOptions  client.Options
+	defaultWorkerOptions  worker.Options
+	serverOptions         []temporal.ServerOption
+	enableGlobalNamespace bool
+	dynamicConfig         dynamicconfig.StaticClient
 }
 
 func (ts *TestServer) fatal(err error) {
@@ -145,15 +147,20 @@ func NewServer(opts ...TestServerOption) *TestServer {
 		ts.t.Cleanup(ts.Stop)
 	}
 
+	dynamicConfig := dynamicconfig.StaticClient{
+		dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Key(): []dynamicconfig.ConstrainedValue{{Value: true}},
+	}
+	for key, values := range ts.dynamicConfig {
+		dynamicConfig[key] = values
+	}
 	s, err := temporalite.NewLiteServer(&temporalite.LiteServerConfig{
-		Namespaces: []string{ts.defaultTestNamespace},
-		Ephemeral:  true,
-		Logger:     log.NewNoopLogger(),
-		DynamicConfig: dynamicconfig.StaticClient{
-			dynamicconfig.ForceSearchAttributesCacheRefreshOnRead.Key(): []dynamicconfig.ConstrainedValue{{Value: true}},
-		},
+		Namespaces:    []string{ts.defaultTestNamespace},
+		Ephemeral:     true,
+		Logger:        log.NewNoopLogger(),
+		DynamicConfig: dynamicConfig,
 		// Disable "accept incoming network connections?" prompt on macOS
-		FrontendIP: "127.0.0.1",
+		FrontendIP:            "127.0.0.1",
+		EnableGlobalNamespace: ts.enableGlobalNamespace,
 	}, ts.serverOptions...)
 	if err != nil {
 		ts.fatal(fmt.Errorf("error creating server: %w", err))

@@ -449,6 +449,16 @@ func (c *clientImpl) StartAdminBatchOperation(
 	return c.client.StartAdminBatchOperation(ctx, request, opts...)
 }
 
+func (c *clientImpl) SyncLocalExecution(
+	ctx context.Context,
+	request *adminservice.SyncLocalExecutionRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.SyncLocalExecutionResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.SyncLocalExecution(ctx, request, opts...)
+}
+
 func (c *clientImpl) SyncWorkflowState(
 	ctx context.Context,
 	request *adminservice.SyncWorkflowStateRequest,

@@ -474,9 +474,12 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.False(resp.NamespaceInfo.Capabilities.PollerAutoscalingAutoEnroll)
 	s.True(resp.NamespaceInfo.Capabilities.PollerAutoscaling)
 	s.False(resp.NamespaceInfo.Capabilities.WorkflowTaskCompletionPagination)
+	s.False(resp.NamespaceInfo.Capabilities.LocalExecution)
 	s.Equal(int64(2*1024*1024), resp.NamespaceInfo.Limits.BlobSizeLimitError)
 	s.Equal(int64(2*1024*1024), resp.NamespaceInfo.Limits.MemoSizeLimitError)
 	s.Equal(int64(40*1024*1024), resp.NamespaceInfo.Limits.WorkflowTaskCompletionSizeLimitError)
+	s.Equal(time.Second, resp.NamespaceInfo.Limits.MinimumLocalExecutionSyncInterval.AsDuration())
+	s.Equal(time.Minute, resp.NamespaceInfo.Limits.MaximumLocalExecutionSyncInterval.AsDuration())
 
 	// Second call: Override the default value of dynamic configs.
 	s.config.EnableEagerWorkflowStart = dc.GetBoolPropertyFnFilteredByNamespace(false)
@@ -495,6 +498,9 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.config.PollerAutoscalingAutoEnroll = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	s.config.EnableWorkflowTaskCompletionPagination = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	s.config.WorkflowTaskCompletionBufferSizeLimit = dc.GetIntPropertyFnFilteredByNamespace(4096)
+	s.config.EnableLocalExecution = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	s.config.LocalExecutionMinSyncInterval = dc.GetDurationPropertyFnFilteredByNamespace(2 * time.Second)
+	s.config.LocalExecutionMaxSyncInterval = dc.GetDurationPropertyFnFilteredByNamespace(30 * time.Second)
 
 	resp, err = s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
 		Namespace: "ns",
@@ -512,9 +518,12 @@ func (s *namespaceHandlerCommonSuite) TestCapabilitiesAndLimits() {
 	s.True(resp.NamespaceInfo.Capabilities.WorkerCommands)
 	s.True(resp.NamespaceInfo.Capabilities.PollerAutoscalingAutoEnroll)
 	s.True(resp.NamespaceInfo.Capabilities.WorkflowTaskCompletionPagination)
+	s.True(resp.NamespaceInfo.Capabilities.LocalExecution)
 	s.Equal(int64(1024), resp.NamespaceInfo.Limits.BlobSizeLimitError)
 	s.Equal(int64(512), resp.NamespaceInfo.Limits.MemoSizeLimitError)
 	s.Equal(int64(4096), resp.NamespaceInfo.Limits.WorkflowTaskCompletionSizeLimitError)
+	s.Equal(2*time.Second, resp.NamespaceInfo.Limits.MinimumLocalExecutionSyncInterval.AsDuration())
+	s.Equal(30*time.Second, resp.NamespaceInfo.Limits.MaximumLocalExecutionSyncInterval.AsDuration())
 
 	s.config.Activity.StartDelayEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	s.config.Activity.EnableStandaloneActivityOperatorCommands = dc.GetBoolPropertyFnFilteredByNamespace(true)

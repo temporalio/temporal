@@ -522,4 +522,8 @@ service HistoryService {
   rpc PollWorkflowExecutionTimeSkipping(PollWorkflowExecutionTimeSkippingRequest) returns (PollWorkflowExecutionTimeSkippingResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
   }
+
+  rpc RenewLocalExecutionLease(RenewLocalExecutionLeaseRequest) returns (RenewLocalExecutionLeaseResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 }

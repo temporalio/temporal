@@ -389,6 +389,32 @@ func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *histor
 	return response, nil
 }
 
+func (h *Handler) RenewLocalExecutionLease(
+	ctx context.Context,
+	request *historyservice.RenewLocalExecutionLeaseRequest,
+) (*historyservice.RenewLocalExecutionLeaseResponse, error) {
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if namespaceID == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(
+		namespaceID,
+		request.GetExecution().GetWorkflowId(),
+	)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	response, err := engine.RenewLocalExecutionLease(ctx, request)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return response, nil
+}
+
 // RespondActivityTaskCompleted - records completion of an activity task
 func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *historyservice.RespondActivityTaskCompletedRequest) (*historyservice.RespondActivityTaskCompletedResponse, error) {
 	taskToken, err := h.tokenSerializer.Deserialize(request.CompleteRequest.GetTaskToken())

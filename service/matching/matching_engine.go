@@ -119,6 +119,7 @@ type (
 		localPollStartTime        time.Time
 		workerInstanceKey         string
 		workerControlTaskQueue    string
+		localExecutionOptions     *workflowservice.LocalExecutionPollOptions
 	}
 
 	userDataUpdate struct {
@@ -734,6 +735,7 @@ pollLoop:
 			conditions:                req.Conditions,
 			workerInstanceKey:         request.WorkerInstanceKey,
 			workerControlTaskQueue:    request.WorkerControlTaskQueue,
+			localExecutionOptions:     request.LocalExecutionOptions,
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -3316,7 +3318,10 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 ) *matchingservice.PollWorkflowTaskQueueResponseWithRawHistory {
 
 	var serializedToken []byte
-	if task.isQuery() {
+	if recordStartResp.GetLocalExecutionInfo() != nil {
+		// The bridge authenticates synchronization with the ownership token rather than
+		// completing the still-pending upstream Workflow Task.
+	} else if task.isQuery() {
 		// for a query task
 		queryRequest := task.query.request
 		queryTaskToken := &tokenspb.QueryTask{
@@ -3406,6 +3411,7 @@ func (e *matchingEngineImpl) convertPollWorkflowTaskQueueResponse(
 		History:                    history,
 		NextPageToken:              resp.NextPageToken,
 		PollerScalingDecision:      resp.PollerScalingDecision,
+		LocalExecutionInfo:         resp.LocalExecutionInfo,
 	}
 	return newResp, nil
 }

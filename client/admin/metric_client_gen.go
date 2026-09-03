@@ -625,6 +625,20 @@ func (c *metricClient) StartAdminBatchOperation(
 	return c.client.StartAdminBatchOperation(ctx, request, opts...)
 }
 
+func (c *metricClient) SyncLocalExecution(
+	ctx context.Context,
+	request *adminservice.SyncLocalExecutionRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.SyncLocalExecutionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientSyncLocalExecution")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.SyncLocalExecution(ctx, request, opts...)
+}
+
 func (c *metricClient) SyncWorkflowState(
 	ctx context.Context,
 	request *adminservice.SyncWorkflowStateRequest,

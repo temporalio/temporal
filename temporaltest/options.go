@@ -5,6 +5,7 @@ import (
 
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/temporal"
 )
 
@@ -48,5 +49,22 @@ func WithBaseWorkerOptions(o worker.Options) TestServerOption {
 func WithBaseServerOptions(options ...temporal.ServerOption) TestServerOption {
 	return applyFunc(func(server *TestServer) {
 		server.serverOptions = append(server.serverOptions, options...)
+	})
+}
+
+// WithGlobalNamespace enables global namespace support for the pre-created test namespace.
+func WithGlobalNamespace() TestServerOption {
+	return applyFunc(func(server *TestServer) {
+		server.enableGlobalNamespace = true
+	})
+}
+
+// WithDynamicConfig sets one dynamic configuration value for the test server lifetime.
+func WithDynamicConfig(setting dynamicconfig.GenericSetting, value any) TestServerOption {
+	return applyFunc(func(server *TestServer) {
+		if server.dynamicConfig == nil {
+			server.dynamicConfig = dynamicconfig.StaticClient{}
+		}
+		server.dynamicConfig[setting.Key()] = []dynamicconfig.ConstrainedValue{{Value: value}}
 	})
 }

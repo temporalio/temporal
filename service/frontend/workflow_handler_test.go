@@ -2664,6 +2664,7 @@ func (s *WorkflowHandlerSuite) TestGetSystemInfo() {
 	s.True(resp.Capabilities.EncodedFailureAttributes)
 	s.True(resp.Capabilities.UpsertMemo)
 	s.True(resp.Capabilities.Nexus)
+	s.True(resp.Capabilities.LocalExecution)
 }
 
 func (s *WorkflowHandlerSuite) TestStartBatchOperation_Terminate() {
