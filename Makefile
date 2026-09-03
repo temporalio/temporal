@@ -213,7 +213,7 @@ ACTIONLINT := $(LOCALBIN)/actionlint-$(ACTIONLINT_VER)
 $(ACTIONLINT): | $(LOCALBIN)
 	$(call go-install-tool,$(ACTIONLINT),github.com/rhysd/actionlint/cmd/actionlint,$(ACTIONLINT_VER))
 
-PROMPTSPEC_VER := v0.0.0-20260903163938-5a4b6d2ffea6
+PROMPTSPEC_VER := v0.0.0-20260903173224-7b4b2bcb5bd5
 PROMPTSPEC := $(LOCALBIN)/promptspec-$(PROMPTSPEC_VER)
 $(PROMPTSPEC): export GOPRIVATE := $(shell go env GOPRIVATE),github.com/temporalio/promptspec
 $(PROMPTSPEC): | $(LOCALBIN)

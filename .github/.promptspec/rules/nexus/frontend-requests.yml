@@ -1,4 +1,4 @@
 default: false
 
 prompt: |
-  Follow existing patterns. Other libraries pass through the frontend request, so keep the same pattern.
+  Nexus libraries pass through frontend requests consistently with the established pattern.

@@ -1,4 +1,4 @@
 default: false
 
 prompt: |
-  Mark errors as non-retryable when a task should not retry in its queue.
+  Errors are non-retryable when their tasks must not retry in the queue.

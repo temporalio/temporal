@@ -1,4 +1,4 @@
 default: true
 
 prompt: |
-  Proto message fields accessed outside the workflow lock must be cloned, not aliased. Use `common.CloneProto(...)` rather than returning the pointer directly.
+  Proto message fields accessed outside the workflow lock are cloned with `common.CloneProto(...)` rather than aliased by returning their pointers directly.
