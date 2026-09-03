@@ -35,6 +35,7 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
+	chasmcallback "go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
@@ -750,6 +751,23 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationStartsStandaloneActivityBidir
 	s.Equal(run.GetRunID(), nexusOpLink.GetRunId())
 }
 
+// requireNexusCompletionSource waits for a callback_outbound_requests recording tagged with the
+// given completion source.
+func requireNexusCompletionSource(t *testing.T, capture *testcore.NamespaceMetricCapture, want string) {
+	t.Helper()
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		recordings := capture.Metric(chasmcallback.RequestCounter.Name())
+		require.NotEmpty(c, recordings, "no callback_outbound_requests recorded")
+		for _, rec := range recordings {
+			if rec.Tags["nexus_completion_source"] == want {
+				return
+			}
+		}
+		require.Fail(c, "callback_outbound_requests missing expected completion source",
+			"want %q, recorded tags: %v", want, recordings[0].Tags)
+	}, 10*time.Second, 100*time.Millisecond)
+}
+
 // TestNexusOperationAsyncStandaloneActivityCompletionBeforeStart verifies that when a standalone
 // activity completes and delivers its Nexus callback before the Nexus start request has been
 // responded to, Activity.GetNexusCompletion synthesizes a Link_Activity back-link. That link must
@@ -768,6 +786,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncStandaloneActivityComple
 	cluster.OverrideDynamicConfig(s.T(), activity.Enabled, nsValues)
 	cluster.OverrideDynamicConfig(s.T(), activity.EnableCallbacks, nsValues)
 	ctx := s.Context()
+
+	capture := env.StartNamespaceMetricCapture()
 
 	callerTQ := testcore.RandomizeStr(s.T().Name() + "-caller")
 	activityTQ := testcore.RandomizeStr(s.T().Name() + "-activity")
@@ -903,6 +923,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncStandaloneActivityComple
 	s.Len(startedEvent.GetLinks(), 1, "fabricated started event must carry exactly the SAA back-link")
 	s.ProtoEqual(expectedLink, startedEvent.GetLinks()[0].GetActivity())
 	s.Equal(activityID, startedEvent.GetNexusOperationStartedEventAttributes().GetOperationToken())
+
+	requireNexusCompletionSource(s.T(), capture, "activity.activity")
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion_LargePayload(chasmEnabled bool) {
@@ -2206,6 +2228,8 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithNilIO(chasmEnabled b
 	s.NoError(handlerWorker.Start())
 	defer handlerWorker.Stop()
 
+	capture := env.StartNamespaceMetricCapture()
+
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue: callerTaskQueue,
 	}, callerWF, nil)
@@ -2215,6 +2239,8 @@ func (s *NexusWorkflowTestSuite) TestNexusAsyncOperationWithNilIO(chasmEnabled b
 	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()})
 	completedEvent := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
 	protorequire.ProtoEqual(s.T(), testcore.MustToPayload(s.T(), nil), completedEvent.GetNexusOperationCompletedEventAttributes().GetResult())
+
+	requireNexusCompletionSource(s.T(), capture, "workflow.workflow")
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusSyncOperationErrorRehydration(chasmEnabled bool) {

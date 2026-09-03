@@ -678,6 +678,16 @@ func (n *Node) preparePointerValue() error {
 	return nil
 }
 
+// componentFqn returns the fully qualified registered name of the given component, or "" if the
+// component is not registered.
+func (n *Node) componentFqn(component Component) string {
+	rc, ok := n.registry.componentFor(component)
+	if !ok {
+		return ""
+	}
+	return rc.fqType()
+}
+
 func (n *Node) isComponent() bool {
 	return n.serializedNode.GetMetadata().GetComponentAttributes() != nil
 }

@@ -70,6 +70,8 @@ type mockNexusCompletionGetterLibrary struct {
 	chasm.UnimplementedLibrary
 }
 
+const testCompletionSourceFqn = "mock.nexusCompletionGetter"
+
 func (l *mockNexusCompletionGetterLibrary) Name() string {
 	return "mock"
 }
@@ -162,12 +164,14 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			counter.EXPECT().Record(int64(1),
 				metrics.NamespaceTag("namespace-name"),
 				metrics.DestinationTag("http://localhost"),
-				metrics.OutcomeTag(tc.expectedMetricOutcome))
+				metrics.OutcomeTag(tc.expectedMetricOutcome),
+				metrics.NexusCompletionSourceTag(testCompletionSourceFqn))
 			metricsHandler.EXPECT().Timer(RequestLatencyHistogram.Name()).Return(timer)
 			timer.EXPECT().Record(gomock.Any(),
 				metrics.NamespaceTag("namespace-name"),
 				metrics.DestinationTag("http://localhost"),
-				metrics.OutcomeTag(tc.expectedMetricOutcome))
+				metrics.OutcomeTag(tc.expectedMetricOutcome),
+				metrics.NexusCompletionSourceTag(testCompletionSourceFqn))
 
 			// Setup logger
 			logger := log.NewTestLogger()

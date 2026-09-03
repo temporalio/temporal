@@ -506,6 +506,14 @@ func DestinationTag(value string) Tag {
 	return Tag{Key: destination, Value: value}
 }
 
+// NexusCompletionSourceTag identifies the kind of component that delivered a completion callback.
+func NexusCompletionSourceTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: nexusCompletionSourceTagName, Value: value}
+}
+
 func VersioningBehaviorTag(behavior enumspb.VersioningBehavior) Tag {
 	return Tag{Key: versioningBehavior, Value: behavior.String()}
 }

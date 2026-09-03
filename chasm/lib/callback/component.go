@@ -17,6 +17,9 @@ import (
 )
 
 type CompletionSource interface {
+	// A callback's parent (completion source) is always a CHASM component, see [chasm.ParentPtr.TryGet].
+	chasm.Component
+
 	GetNexusCompletion(ctx chasm.Context, requestID string) (nexusrpc.CompleteOperationOptions, error)
 }
 
@@ -102,11 +105,12 @@ func (c *Callback) loadInvocationArgs(
 		}, nil
 	}
 	return invocableOutbound{
-		callback:   callback,
-		completion: completion,
-		workflowID: ctx.ExecutionKey().BusinessID,
-		runID:      ctx.ExecutionKey().RunID,
-		attempt:    c.Attempt,
+		callback:         callback,
+		completion:       completion,
+		completionSource: ctx.ComponentFqn(target),
+		workflowID:       ctx.ExecutionKey().BusinessID,
+		runID:            ctx.ExecutionKey().RunID,
+		attempt:          c.Attempt,
 	}, nil
 }
 
