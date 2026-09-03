@@ -100,7 +100,7 @@ These rules apply when authoring or reviewing code; the Review Feedback section 
 - Data protected by a lock is cloned before the lock is released when it may be modified afterward.
 - Proto message fields accessed outside the workflow lock are cloned with `common.CloneProto(...)` rather than aliased by returning their pointers directly.
 
-## 10. Review Feedback
+## 10. Review Feedback Style
 
 ### Comment format
 
