@@ -213,7 +213,7 @@ ACTIONLINT := $(LOCALBIN)/actionlint-$(ACTIONLINT_VER)
 $(ACTIONLINT): | $(LOCALBIN)
 	$(call go-install-tool,$(ACTIONLINT),github.com/rhysd/actionlint/cmd/actionlint,$(ACTIONLINT_VER))
 
-PROMPTSPEC_VER := v0.0.0-20260903174012-f010a810644e
+PROMPTSPEC_VER := v0.0.0-20260903210123-42aec342b2f3
 PROMPTSPEC := $(LOCALBIN)/promptspec-$(PROMPTSPEC_VER)
 $(PROMPTSPEC): export GOPRIVATE := $(shell go env GOPRIVATE),github.com/temporalio/promptspec
 $(PROMPTSPEC): | $(LOCALBIN)
@@ -812,7 +812,7 @@ go-generate: $(MOCKGEN) $(GOIMPORTS) $(STRINGER) $(GOWRAP)
 .PHONY: promptspec
 promptspec: $(PROMPTSPEC)
 	@printf $(COLOR) "Generate prompts..."
-	@$(PROMPTSPEC) --config .github/.promptspec.yml generate
+	@$(PROMPTSPEC) generate
 
 ensure-no-changes:
 	@printf $(COLOR) "Check for local changes..."
