@@ -5,9 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -44,6 +46,7 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/rpc/httpfaults"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/parallelsuite"
@@ -573,6 +576,62 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion(chasmEnabled b
 	})
 	s.NoError(err)
 	s.Empty(desc.DatabaseMutableState.GetExecutionInfo().SubStateMachinesByType)
+}
+
+func (s *NexusWorkflowTestSuite) TestNexusOperationRetriesAfterHTTPFault(chasmEnabled bool) {
+	const retryInterval = 50 * time.Millisecond
+	env := s.newTestEnv(
+		chasmEnabled,
+		testcore.WithDynamicConfig(nexusoperations.RetryPolicyInitialInterval, retryInterval),
+		testcore.WithDynamicConfig(chasmnexus.RetryPolicy, chasmnexus.RetryPolicyConfig{
+			InitialInterval: retryInterval,
+			MaxInterval:     retryInterval,
+		}),
+	)
+	ctx := s.Context()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+
+	var handlerCalls atomic.Int32
+	h := nexustest.Handler{
+		OnStartOperation: func(context.Context, string, string, *nexus.LazyValue, nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			handlerCalls.Add(1)
+			return &nexus.HandlerStartOperationResultSync[any]{Value: "result"}, nil
+		},
+	}
+	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
+
+	// The first request fails before it reaches the handler. The retry succeeds.
+	injectedErr := errors.New("simulated transport failure")
+	var attempts atomic.Int32
+	env.InjectHTTPRequestFault(func(_ context.Context, req *http.Request) *httpfaults.Outcome {
+		if !strings.HasSuffix(req.URL.Path, "/operation") {
+			return nil
+		}
+		if attempts.Add(1) == 1 {
+			return &httpfaults.Outcome{Error: injectedErr}
+		}
+		return nil
+	})
+
+	callerWF := func(ctx workflow.Context) (string, error) {
+		c := workflow.NewNexusClient(endpointName, "service")
+		var result string
+		err := c.ExecuteOperation(ctx, "operation", "input", workflow.NexusOperationOptions{}).Get(ctx, &result)
+		return result, err
+	}
+
+	w := worker.New(env.SdkClient(), taskQueue, worker.Options{})
+	w.RegisterWorkflow(callerWF)
+	s.NoError(w.Start())
+	defer w.Stop()
+
+	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{TaskQueue: taskQueue}, callerWF)
+	s.NoError(err)
+	var result string
+	s.NoError(run.Get(ctx, &result))
+	s.Equal("result", result)
+	s.EqualValues(2, attempts.Load())
+	s.EqualValues(1, handlerCalls.Load())
 }
 
 // TestNexusOperationCallerMetrics verifies that an in-workflow Nexus operation emits the

@@ -1,7 +1,11 @@
 package tests
 
 import (
+	"context"
 	"errors"
+	"net/http"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -20,6 +24,7 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
 	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/rpc/httpfaults"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protoassert"
@@ -34,7 +39,9 @@ type CallbacksSuite struct {
 }
 
 func TestCallbacksSuiteHSM(t *testing.T) {
-	parallelsuite.Run(t, &CallbacksSuite{}, []testcore.TestOption{})
+	parallelsuite.Run(t, &CallbacksSuite{}, []testcore.TestOption{
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, false),
+	})
 }
 
 func TestCallbacksSuiteCHASM(t *testing.T) {
@@ -51,6 +58,73 @@ func (s *CallbacksSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestE
 		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	)
 	return env
+}
+
+func (s *CallbacksSuite) TestHTTPFaultInjection_NexusCallbackRetriesAfterResponseFault(opts []testcore.TestOption) {
+	testOpts := append([]testcore.TestOption{}, opts...)
+	testOpts = append(testOpts, testcore.WithDynamicConfig(callback.RetryPolicyInitialInterval, 50*time.Millisecond))
+	env := s.newTestEnv(testOpts...)
+	ctx := s.Context()
+
+	workflowType := "test-http-fault-injection"
+	workflowID := env.Tv().WorkflowID()
+	env.SdkWorker().RegisterWorkflowWithOptions(
+		func(workflow.Context) (int, error) { return 666, nil },
+		workflow.RegisterOptions{Name: workflowType},
+	)
+
+	ch, callbackAddress := newNexusCompletionHandler(s.T())
+
+	var attempts atomic.Int32
+	env.InjectHTTPResponseFault(func(_ context.Context, req *http.Request, _ *http.Response, _ error) *httpfaults.Outcome {
+		if !strings.HasSuffix(req.URL.Path, "/cb1") {
+			return nil
+		}
+		if attempts.Add(1) == 1 {
+			return &httpfaults.Outcome{
+				Response: httpfaults.NewResponse(http.StatusServiceUnavailable, "injected"),
+			}
+		}
+		return nil
+	})
+
+	cb := &commonpb.Callback{
+		Variant: &commonpb.Callback_Nexus_{
+			Nexus: &commonpb.Callback_Nexus{Url: callbackAddress + "/cb1"},
+		},
+	}
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          workflowID,
+		WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		Identity:            s.T().Name(),
+		CompletionCallbacks: []*commonpb.Callback{cb},
+	}
+
+	_, err := env.FrontendClient().StartWorkflowExecution(ctx, request)
+	s.NoError(err)
+
+	await.Rcv(s.T(), ch.requestCh)
+	await.Snd(s.T(), ch.requestCompleteCh, nil)
+	await.Rcv(s.T(), ch.requestCh)
+	await.Snd(s.T(), ch.requestCompleteCh, nil)
+
+	sdkClient := env.SdkClient()
+	await.Require(ctx, s.T(), func(col *await.T) {
+		description, err := sdkClient.DescribeWorkflowExecution(ctx, workflowID, "")
+		require.NoError(col, err)
+		require.Len(col, description.Callbacks, 1)
+		callbackInfo := description.Callbacks[0]
+		require.Equal(col, enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
+		require.Nil(col, callbackInfo.LastAttemptFailure)
+		require.GreaterOrEqual(col, callbackInfo.Attempt, int32(2))
+		protorequire.ProtoEqual(col, cb, callbackInfo.Callback)
+	}, 5*time.Second, 100*time.Millisecond)
+
+	s.GreaterOrEqual(attempts.Load(), int32(2))
 }
 
 func (s *CallbacksSuite) TestScheduledCallbackTokenMigration_LegacyWriteEnvelopeRead(opts []testcore.TestOption) {
