@@ -35,6 +35,18 @@ func TestValidate(t *testing.T) {
 			BatchJob: &commonpb.Link_BatchJob{JobId: "job"},
 		},
 	}
+	validCallback := &commonpb.Link{
+		Variant: &commonpb.Link_Callback_{
+			Callback: &commonpb.Link_Callback{
+				Execution: &commonpb.Execution{
+					Type:       enumspb.EXECUTION_TYPE_NEXUS_OPERATION,
+					BusinessId: "op",
+					RunId:      "run",
+				},
+				RequestId: "req",
+			},
+		},
+	}
 	validNexusOperation := &commonpb.Link{
 		Variant: &commonpb.Link_NexusOperation_{
 			NexusOperation: &commonpb.Link_NexusOperation{
@@ -67,10 +79,11 @@ func TestValidate(t *testing.T) {
 		err := links.Validate([]*commonpb.Link{
 			validWorkflowEvent,
 			validBatchJob,
+			validCallback,
 			validNexusOperation,
 			validActivity,
 			validWorkflow,
-		}, maxLinks+2, maxSize)
+		}, maxLinks+3, maxSize)
 		require.NoError(t, err)
 	})
 
@@ -118,6 +131,20 @@ func TestValidate(t *testing.T) {
 		l.GetBatchJob().JobId = ""
 		err := links.Validate([]*commonpb.Link{l}, maxLinks, maxSize)
 		require.ErrorContains(t, err, "batch job link must not have an empty job ID")
+	})
+
+	t.Run("Callback/EmptyExecution", func(t *testing.T) {
+		l := proto.Clone(validCallback).(*commonpb.Link)
+		l.GetCallback().Execution = nil
+		err := links.Validate([]*commonpb.Link{l}, maxLinks, maxSize)
+		require.ErrorContains(t, err, "callback link must have an execution")
+	})
+
+	t.Run("Callback/RequestID", func(t *testing.T) {
+		l := proto.Clone(validCallback).(*commonpb.Link)
+		l.GetCallback().RequestId = ""
+		err := links.Validate([]*commonpb.Link{l}, maxLinks, maxSize)
+		require.ErrorContains(t, err, "callback link must have a request ID")
 	})
 
 	t.Run("NexusOperation/EmptyNamespace", func(t *testing.T) {

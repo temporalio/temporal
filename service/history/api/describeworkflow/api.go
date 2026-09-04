@@ -19,6 +19,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	chasmcallback "go.temporal.io/server/chasm/lib/callback"
+	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
@@ -573,9 +574,10 @@ func buildChasmCallbackInfo(
 	cb *chasmcallback.Callback,
 	trigger *workflowpb.CallbackInfo_Trigger,
 ) (*workflowpb.CallbackInfo, error) {
-	nexusVariant := cb.GetCallback().GetNexus()
-	if nexusVariant == nil {
-		// Only Nexus callbacks are supported
+	switch cb.GetCallback().GetVariant().(type) {
+	case *callbackspb.Callback_Nexus_, *callbackspb.Callback_NexusHandler_:
+	default:
+		// Callbacks of an unrecognized variant are omitted rather than reported as an error.
 		return nil, nil
 	}
 

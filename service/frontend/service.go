@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity"
 	chasmcallback "go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -224,6 +225,9 @@ type Config struct {
 	MaxCallbacksPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackEndpointConfigs dynamicconfig.TypedPropertyFnWithNamespaceFilter[callbacks.AddressMatchRules]
 
+	// The callback kinds a client may attach to a workflow execution.
+	WorkflowEnabledCallbackKinds dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.Kind]
+
 	MaxNexusOperationTokenLength   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	NexusRequestHeadersBlacklist   dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 	NexusForwardRequestUseEndpoint dynamicconfig.BoolPropertyFn
@@ -428,7 +432,9 @@ func NewConfig(
 		LinkMaxSize:        dynamicconfig.FrontendLinkMaxSize.Get(dc),
 		MaxLinksPerRequest: dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
 
-		CallbackEndpointConfigs:     chasmcallback.AllowedAddresses.Get(dc),
+		CallbackEndpointConfigs:      chasmcallback.AllowedAddresses.Get(dc),
+		WorkflowEnabledCallbackKinds: chasmworkflow.EnabledCallbackKinds.Get(dc),
+
 		AdminEnableListHistoryTasks: dynamicconfig.AdminEnableListHistoryTasks.Get(dc),
 
 		MaskInternalErrorDetails: dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc),
