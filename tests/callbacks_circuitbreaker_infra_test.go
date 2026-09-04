@@ -203,3 +203,87 @@ func (saa *standaloneActivityExecutionType) awaitCallbackState(
 
 	return cbInfo
 }
+
+// standaloneNexusOperationExecutionType implements the callbackExecutionType for the
+// standalone Nexus operations.
+type standaloneNexusOperationExecutionType struct{}
+
+var _ callbackExecutionType = (*standaloneNexusOperationExecutionType)(nil)
+
+func (saa *standaloneNexusOperationExecutionType) startAndCompleteEx(t *testing.T, env *NexusTestEnv, cbTarget callbackTarget) string {
+	t.Helper()
+	ctx := t.Context()
+
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	operationID := testcore.RandomizeStr(t.Name())
+
+	// The completion callback to be attached to the execution. The exact callback variant and whether or not
+	// it is expected to succeede depends on the calling testcase, and the callbackTarget's implementation.
+	compCallback := cbTarget.newCallback()
+
+	alwaysSuccessNexusEndpoint := env.createSyncSuccessEndpoint(ctx, t, "operation-result")
+	startResp, err := env.startNexusOperation(ctx, &workflowservice.StartNexusOperationExecutionRequest{
+		OperationId: operationID,
+		Endpoint:    alwaysSuccessNexusEndpoint,
+		Identity:    env.Tv().WorkerIdentity(),
+		RequestId:   env.Tv().Any().String(),
+		CompletionCallbacks: []*commonpb.Callback{
+			compCallback,
+		},
+	})
+	require.NoError(t, err)
+	require.True(t, startResp.GetStarted())
+
+	// Starting the operation only schedules the outbound invocation, so wait for the handler to
+	// have resolved it. Only then is the completion callback triggered.
+	await.Require(ctx, t, func(c *await.T) {
+		descResp := env.describeNexusOperation(c.Context(), c, operationID)
+		require.Equal(c, enumspb.NEXUS_OPERATION_EXECUTION_STATUS_COMPLETED, descResp.GetInfo().GetStatus())
+	}, 10*time.Second, 200*time.Millisecond)
+
+	return operationID
+}
+
+func (saa *standaloneNexusOperationExecutionType) awaitCallbackState(
+	t *testing.T,
+	executionID string,
+	env *NexusTestEnv,
+	wantState enumspb.CallbackState,
+	errorStates []enumspb.CallbackState,
+) *callbackpb.CallbackInfo {
+	t.Helper()
+	ctx := t.Context()
+
+	var (
+		errorStateSeen enumspb.CallbackState
+		cbInfo         *callbackpb.CallbackInfo
+	)
+	await.Require(ctx, t, func(c *await.T) {
+		ctx := c.Context()
+		descResp, err := env.FrontendClient().DescribeNexusOperationExecution(ctx, &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
+			OperationId: executionID,
+		})
+		require.NoError(c, err)
+		require.Len(c, descResp.GetCompletionCallbacks(), 1)
+
+		cbInfo = descResp.GetCompletionCallbacks()[0].GetInfo()
+		got := cbInfo.GetState()
+		if slices.Contains(errorStates, got) {
+			errorStateSeen = got
+			c.Fatalf("Callback has forbidden state %s", got)
+		}
+		require.Equal(c, wantState, got)
+	}, 10*time.Second, 200*time.Millisecond)
+
+	// Confirm we never saw the callback in one of the error states.
+	require.Equal(
+		t,
+		enumspb.CALLBACK_STATE_UNSPECIFIED,
+		errorStateSeen,
+		"Callback had error state %s", errorStateSeen)
+
+	return cbInfo
+}
