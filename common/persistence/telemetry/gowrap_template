@@ -26,13 +26,34 @@ func new{{upFirst $decorator}} (
         {{ $methodIdent := (printf "%s.%s" $.Interface.Name $method.Name) }}
         // {{$method.Name}} wraps {{ (printf "%s.%s" $.Interface.Name $method.Name) }}.
         func (d {{$decorator}}) {{$method.Declaration}} {
+            {{- if and (eq $.Interface.Name "ExecutionStore") (or
+                (eq $method.Name "ConflictResolveWorkflowExecution")
+                (eq $method.Name "CreateWorkflowExecution")
+                (eq $method.Name "DeleteCurrentWorkflowExecution")
+                (eq $method.Name "DeleteWorkflowExecution")
+                (eq $method.Name "GetCurrentExecution")
+                (eq $method.Name "GetWorkflowExecution")
+                (eq $method.Name "SetWorkflowExecution")
+                (eq $method.Name "UpdateWorkflowExecution")) }}
+            {{- $request := (index $method.Params 1) }}
             ctx, span := d.tracer.Start(
                 ctx,
                 "{{ printf "persistence.%s/%s" $.Interface.Name $method.Name }}",
                 trace.WithAttributes(
-                    attribute.Key("persistence.store").String("{{ $.Interface.Name }}"),
-                    attribute.Key("persistence.method").String("{{ $method.Name }}"),
+                    attribute.Key(telemetry.PersistenceStoreKey).String("{{ $.Interface.Name }}"),
+                    attribute.Key(telemetry.PersistenceMethodKey).String("{{ $method.Name }}"),
+                ),
+                executionSpanStartOption({{ $request.Name }}),
+            )
+            {{- else }}
+            ctx, span := d.tracer.Start(
+                ctx,
+                "{{ printf "persistence.%s/%s" $.Interface.Name $method.Name }}",
+                trace.WithAttributes(
+                    attribute.Key(telemetry.PersistenceStoreKey).String("{{ $.Interface.Name }}"),
+                    attribute.Key(telemetry.PersistenceMethodKey).String("{{ $method.Name }}"),
                 ))
+            {{- end }}
             defer span.End()
 
             if deadline, ok := ctx.Deadline(); ok {
@@ -54,7 +75,7 @@ func new{{upFirst $decorator}} (
                 if err != nil {
                     d.logger.Error("failed to serialize {{$request.Type}} for OTEL span", tag.Error(err))
                 } else {
-                    span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+                    span.SetAttributes(attribute.Key(telemetry.PersistenceRequestPayloadKey).String(string(requestPayload)))
                 }
                 {{end}}
                 {{- if (gt (len $method.Results) 1) }}
@@ -63,7 +84,7 @@ func new{{upFirst $decorator}} (
                 if err != nil {
                     d.logger.Error("failed to serialize {{$result.Type}} for OTEL span", tag.Error(err))
                 } else {
-                    span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+                    span.SetAttributes(attribute.Key(telemetry.PersistenceResponsePayloadKey).String(string(responsePayload)))
                 }
                 {{end}}
             }
