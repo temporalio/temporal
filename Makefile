@@ -470,8 +470,12 @@ fmt: fmt-gofix fmt-imports fmt-protos fmt-yaml
 # a fixed point. We check for "files updated" in the output rather than relying
 # on the exit code alone, since go fix can exit non-zero without actually
 # modifying any files (see https://github.com/golang/go/issues/77482).
+#
 # Note: go fix automatically skips generated files.
-GOFIX_FLAGS ?=
+#
+# PS: Keeping embedlit disabled for now because it rewrites
+# large parts of the codebase.
+GOFIX_FLAGS ?= -embedlit=false
 GOFIX_MAX_ITERATIONS ?= 5
 fmt-gofix:
 	@printf $(COLOR) "Run go fix..."
