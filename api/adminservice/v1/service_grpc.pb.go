@@ -23,6 +23,7 @@ const (
 	AdminService_RebuildMutableState_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/RebuildMutableState"
 	AdminService_ImportWorkflowExecution_FullMethodName             = "/temporal.server.api.adminservice.v1.AdminService/ImportWorkflowExecution"
 	AdminService_SyncLocalExecution_FullMethodName                  = "/temporal.server.api.adminservice.v1.AdminService/SyncLocalExecution"
+	AdminService_UpdateLocalExecutionState_FullMethodName           = "/temporal.server.api.adminservice.v1.AdminService/UpdateLocalExecutionState"
 	AdminService_DescribeMutableState_FullMethodName                = "/temporal.server.api.adminservice.v1.AdminService/DescribeMutableState"
 	AdminService_DescribeHistoryHost_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/DescribeHistoryHost"
 	AdminService_GetShard_FullMethodName                            = "/temporal.server.api.adminservice.v1.AdminService/GetShard"
@@ -82,6 +83,16 @@ type AdminServiceClient interface {
 	// SyncLocalExecution appends history produced by a trusted local bridge.
 	// NOTE: this is experimental API
 	SyncLocalExecution(ctx context.Context, in *SyncLocalExecutionRequest, opts ...grpc.CallOption) (*SyncLocalExecutionResponse, error)
+	// UpdateLocalExecutionState changes the execution gate maintained by a local bridge server.
+	// NOTE: this is experimental API
+	// (-- api-linter: core::0134::method-signature=disabled
+	//
+	//	aip.dev/not-precedent: This is an internal imperative state transition. --)
+	//
+	// (-- api-linter: core::0134::response-message-name=disabled
+	//
+	//	aip.dev/not-precedent: This is an internal imperative state transition. --)
+	UpdateLocalExecutionState(ctx context.Context, in *UpdateLocalExecutionStateRequest, opts ...grpc.CallOption) (*UpdateLocalExecutionStateResponse, error)
 	// DescribeWorkflowExecution returns information about the internal states of workflow execution.
 	DescribeMutableState(ctx context.Context, in *DescribeMutableStateRequest, opts ...grpc.CallOption) (*DescribeMutableStateResponse, error)
 	// DescribeHistoryHost returns information about the internal states of a history host
@@ -196,6 +207,15 @@ func (c *adminServiceClient) ImportWorkflowExecution(ctx context.Context, in *Im
 func (c *adminServiceClient) SyncLocalExecution(ctx context.Context, in *SyncLocalExecutionRequest, opts ...grpc.CallOption) (*SyncLocalExecutionResponse, error) {
 	out := new(SyncLocalExecutionResponse)
 	err := c.cc.Invoke(ctx, AdminService_SyncLocalExecution_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) UpdateLocalExecutionState(ctx context.Context, in *UpdateLocalExecutionStateRequest, opts ...grpc.CallOption) (*UpdateLocalExecutionStateResponse, error) {
+	out := new(UpdateLocalExecutionStateResponse)
+	err := c.cc.Invoke(ctx, AdminService_UpdateLocalExecutionState_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -633,6 +653,16 @@ type AdminServiceServer interface {
 	// SyncLocalExecution appends history produced by a trusted local bridge.
 	// NOTE: this is experimental API
 	SyncLocalExecution(context.Context, *SyncLocalExecutionRequest) (*SyncLocalExecutionResponse, error)
+	// UpdateLocalExecutionState changes the execution gate maintained by a local bridge server.
+	// NOTE: this is experimental API
+	// (-- api-linter: core::0134::method-signature=disabled
+	//
+	//	aip.dev/not-precedent: This is an internal imperative state transition. --)
+	//
+	// (-- api-linter: core::0134::response-message-name=disabled
+	//
+	//	aip.dev/not-precedent: This is an internal imperative state transition. --)
+	UpdateLocalExecutionState(context.Context, *UpdateLocalExecutionStateRequest) (*UpdateLocalExecutionStateResponse, error)
 	// DescribeWorkflowExecution returns information about the internal states of workflow execution.
 	DescribeMutableState(context.Context, *DescribeMutableStateRequest) (*DescribeMutableStateResponse, error)
 	// DescribeHistoryHost returns information about the internal states of a history host
@@ -731,6 +761,9 @@ func (UnimplementedAdminServiceServer) ImportWorkflowExecution(context.Context, 
 }
 func (UnimplementedAdminServiceServer) SyncLocalExecution(context.Context, *SyncLocalExecutionRequest) (*SyncLocalExecutionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method SyncLocalExecution not implemented")
+}
+func (UnimplementedAdminServiceServer) UpdateLocalExecutionState(context.Context, *UpdateLocalExecutionStateRequest) (*UpdateLocalExecutionStateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateLocalExecutionState not implemented")
 }
 func (UnimplementedAdminServiceServer) DescribeMutableState(context.Context, *DescribeMutableStateRequest) (*DescribeMutableStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DescribeMutableState not implemented")
@@ -927,6 +960,24 @@ func _AdminService_SyncLocalExecution_Handler(srv interface{}, ctx context.Conte
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AdminServiceServer).SyncLocalExecution(ctx, req.(*SyncLocalExecutionRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_UpdateLocalExecutionState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateLocalExecutionStateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).UpdateLocalExecutionState(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_UpdateLocalExecutionState_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).UpdateLocalExecutionState(ctx, req.(*UpdateLocalExecutionStateRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1749,6 +1800,10 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "SyncLocalExecution",
 			Handler:    _AdminService_SyncLocalExecution_Handler,
+		},
+		{
+			MethodName: "UpdateLocalExecutionState",
+			Handler:    _AdminService_UpdateLocalExecutionState_Handler,
 		},
 		{
 			MethodName: "DescribeMutableState",

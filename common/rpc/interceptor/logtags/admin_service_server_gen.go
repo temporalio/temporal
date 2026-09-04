@@ -232,6 +232,13 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 		}
 	case *adminservice.SyncWorkflowStateResponse:
 		return nil
+	case *adminservice.UpdateLocalExecutionStateRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetExecution().GetRunId()),
+		}
+	case *adminservice.UpdateLocalExecutionStateResponse:
+		return nil
 	default:
 		return nil
 	}

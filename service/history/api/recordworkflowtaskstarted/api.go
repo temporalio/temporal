@@ -70,6 +70,10 @@ func Invoke(
 		),
 		func(workflowLease api.WorkflowLease) (res *api.UpdateWorkflowAction, retErr error) {
 			mutableState := workflowLease.GetMutableState()
+			executionInfo := mutableState.GetExecutionInfo()
+			if err := api.ValidateLocalExecutionInfo(executionInfo); err != nil {
+				return nil, err
+			}
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
@@ -81,7 +85,7 @@ func Invoke(
 				//  - Speculative WFT is lost (ScheduleToStart timeout for speculative WFT will recreate it).
 				return nil, serviceerror.NewNotFound("Workflow task not found.")
 			}
-			if req.GetStamp() != mutableState.GetExecutionInfo().GetWorkflowTaskStamp() {
+			if req.GetStamp() != executionInfo.GetWorkflowTaskStamp() {
 				// This happens when the workflow task was rescheduled.
 				return nil, serviceerrors.NewObsoleteMatchingTask("Workflow task stamp mismatch")
 			}

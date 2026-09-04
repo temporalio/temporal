@@ -466,6 +466,13 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 		}
 	case *historyservice.UpdateActivityOptionsResponse:
 		return nil
+	case *historyservice.UpdateLocalExecutionStateRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetRequest().GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetRequest().GetExecution().GetRunId()),
+		}
+	case *historyservice.UpdateLocalExecutionStateResponse:
+		return nil
 	case *historyservice.UpdateWorkflowExecutionRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetRequest().GetWorkflowExecution().GetWorkflowId()),

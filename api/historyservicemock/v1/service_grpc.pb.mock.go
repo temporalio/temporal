@@ -1543,6 +1543,26 @@ func (mr *MockHistoryServiceClientMockRecorder) UpdateActivityOptions(ctx, in an
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateActivityOptions", reflect.TypeOf((*MockHistoryServiceClient)(nil).UpdateActivityOptions), varargs...)
 }
 
+// UpdateLocalExecutionState mocks base method.
+func (m *MockHistoryServiceClient) UpdateLocalExecutionState(ctx context.Context, in *historyservice.UpdateLocalExecutionStateRequest, opts ...grpc.CallOption) (*historyservice.UpdateLocalExecutionStateResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateLocalExecutionState", varargs...)
+	ret0, _ := ret[0].(*historyservice.UpdateLocalExecutionStateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateLocalExecutionState indicates an expected call of UpdateLocalExecutionState.
+func (mr *MockHistoryServiceClientMockRecorder) UpdateLocalExecutionState(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLocalExecutionState", reflect.TypeOf((*MockHistoryServiceClient)(nil).UpdateLocalExecutionState), varargs...)
+}
+
 // UpdateWorkflowExecution mocks base method.
 func (m *MockHistoryServiceClient) UpdateWorkflowExecution(ctx context.Context, in *historyservice.UpdateWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.UpdateWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
@@ -2907,6 +2927,21 @@ func (m *MockHistoryServiceServer) UpdateActivityOptions(arg0 context.Context, a
 func (mr *MockHistoryServiceServerMockRecorder) UpdateActivityOptions(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateActivityOptions", reflect.TypeOf((*MockHistoryServiceServer)(nil).UpdateActivityOptions), arg0, arg1)
+}
+
+// UpdateLocalExecutionState mocks base method.
+func (m *MockHistoryServiceServer) UpdateLocalExecutionState(arg0 context.Context, arg1 *historyservice.UpdateLocalExecutionStateRequest) (*historyservice.UpdateLocalExecutionStateResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateLocalExecutionState", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.UpdateLocalExecutionStateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateLocalExecutionState indicates an expected call of UpdateLocalExecutionState.
+func (mr *MockHistoryServiceServerMockRecorder) UpdateLocalExecutionState(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLocalExecutionState", reflect.TypeOf((*MockHistoryServiceServer)(nil).UpdateLocalExecutionState), arg0, arg1)
 }
 
 // UpdateWorkflowExecution mocks base method.

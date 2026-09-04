@@ -9,13 +9,18 @@ import (
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 const defaultMaximumPageSize = 100
+
+var ErrLocalExecutionOwnershipLost = errors.New("local execution ownership lost")
 
 type HistoryEndpoint struct {
 	Namespace   string
@@ -34,6 +39,7 @@ type SyncResult struct {
 	LastEventID      int64
 	LastEventVersion int64
 	Released         bool
+	LeaseExpiration  time.Time
 }
 
 type SyncCursor struct {
@@ -55,6 +61,22 @@ type HistoryReplicator struct {
 	maximumPageSize int32
 	cursor          SyncCursor
 	eventSerializer serialization.Serializer
+	pendingRequest  *adminservice.SyncLocalExecutionRequest
+}
+
+type SynchronizationLoopOptions struct {
+	Interval          time.Duration
+	LeaseExpiration   time.Time
+	StateController   *ExecutionStateController
+	RetryInitialDelay time.Duration
+	RetryMaximumDelay time.Duration
+}
+
+type ExecutionStateController struct {
+	namespace     string
+	localServerID string
+	fencingEpoch  int64
+	adminClient   adminservice.AdminServiceClient
 }
 
 func NewBaselineImporter(source HistoryEndpoint, target HistoryEndpoint) (*BaselineImporter, error) {
@@ -195,6 +217,47 @@ func NewHistoryReplicator(
 	}, nil
 }
 
+func NewExecutionStateController(
+	namespace string,
+	localServerID string,
+	fencingEpoch int64,
+	adminClient adminservice.AdminServiceClient,
+) (*ExecutionStateController, error) {
+	if namespace == "" {
+		return nil, errors.New("namespace is required")
+	}
+	if localServerID == "" {
+		return nil, errors.New("local server ID is required")
+	}
+	if fencingEpoch <= 0 {
+		return nil, errors.New("fencing epoch must be positive")
+	}
+	if adminClient == nil {
+		return nil, errors.New("admin client is required")
+	}
+	return &ExecutionStateController{
+		namespace:     namespace,
+		localServerID: localServerID,
+		fencingEpoch:  fencingEpoch,
+		adminClient:   adminClient,
+	}, nil
+}
+
+func (c *ExecutionStateController) Update(
+	ctx context.Context,
+	execution *commonpb.WorkflowExecution,
+	state adminservice.UpdateLocalExecutionStateRequest_State,
+) error {
+	_, err := c.adminClient.UpdateLocalExecutionState(ctx, &adminservice.UpdateLocalExecutionStateRequest{
+		Namespace:     c.namespace,
+		Execution:     execution,
+		LocalServerId: c.localServerID,
+		FencingEpoch:  c.fencingEpoch,
+		State:         state,
+	})
+	return err
+}
+
 func (r *HistoryReplicator) Sync(
 	ctx context.Context,
 	execution *commonpb.WorkflowExecution,
@@ -203,6 +266,48 @@ func (r *HistoryReplicator) Sync(
 		return SyncResult{}, errors.New("workflow ID and run ID are required")
 	}
 
+	if r.pendingRequest == nil {
+		request, err := r.prepareSyncRequest(ctx, execution)
+		if err != nil {
+			return SyncResult{}, err
+		}
+		r.pendingRequest = request
+	}
+	request := r.pendingRequest
+	response, err := r.target.AdminClient.SyncLocalExecution(ctx, request)
+	if err != nil {
+		return SyncResult{}, fmt.Errorf("sync local execution: %w", err)
+	}
+	if response.GetSyncId() != request.GetSyncId() ||
+		response.GetAcknowledgedEventId() != request.GetNewEventId() ||
+		response.GetAcknowledgedEventVersion() != request.GetNewEventVersion() {
+		return SyncResult{}, errors.New("sync response did not acknowledge the requested cursor")
+	}
+
+	result := SyncResult{
+		HistoryBatches:   len(request.GetHistoryBatches()),
+		LastEventID:      request.GetNewEventId(),
+		LastEventVersion: request.GetNewEventVersion(),
+		Released:         response.GetLeaseExpirationTime() == nil && request.GetRelease(),
+	}
+	if (response.GetLeaseExpirationTime() == nil) != request.GetRelease() {
+		return SyncResult{}, errors.New("sync response lease state did not match the release request")
+	}
+	if response.GetLeaseExpirationTime() != nil {
+		if err := response.GetLeaseExpirationTime().CheckValid(); err != nil {
+			return SyncResult{}, errors.New("sync response returned an invalid lease expiration")
+		}
+		result.LeaseExpiration = response.GetLeaseExpirationTime().AsTime()
+	}
+	r.cursor = SyncCursor{EventID: request.GetNewEventId(), Version: request.GetNewEventVersion()}
+	r.pendingRequest = nil
+	return result, nil
+}
+
+func (r *HistoryReplicator) prepareSyncRequest(
+	ctx context.Context,
+	execution *commonpb.WorkflowExecution,
+) (*adminservice.SyncLocalExecutionRequest, error) {
 	var sourceToken []byte
 	var historyBatches []*commonpb.DataBlob
 	var sourceVersionHistory *adminservice.GetWorkflowExecutionRawHistoryV2Response
@@ -221,7 +326,7 @@ func (r *HistoryReplicator) Sync(
 			},
 		)
 		if err != nil {
-			return SyncResult{}, fmt.Errorf("read source history delta: %w", err)
+			return nil, fmt.Errorf("read source history delta: %w", err)
 		}
 
 		historyBatches = append(historyBatches, response.GetHistoryBatches()...)
@@ -233,52 +338,33 @@ func (r *HistoryReplicator) Sync(
 	}
 
 	if sourceVersionHistory == nil || sourceVersionHistory.GetVersionHistory() == nil {
-		return SyncResult{}, errors.New("source returned no version history")
+		return nil, errors.New("source returned no version history")
 	}
 	historyBatches, err := r.historyAfterCursor(historyBatches)
 	if err != nil {
-		return SyncResult{}, err
+		return nil, err
 	}
 	lastItem, err := versionhistory.GetLastVersionHistoryItem(sourceVersionHistory.GetVersionHistory())
 	if err != nil {
-		return SyncResult{}, fmt.Errorf("read source history cursor: %w", err)
+		return nil, fmt.Errorf("read source history cursor: %w", err)
 	}
 	release := r.historyClosesWorkflow(historyBatches)
 	syncID := uuid.NewString()
-	response, err := r.target.AdminClient.SyncLocalExecution(
-		ctx,
-		&adminservice.SyncLocalExecutionRequest{
-			Namespace:            r.target.Namespace,
-			Execution:            execution,
-			ProtocolVersion:      ProtocolVersion,
-			LocalServerId:        r.target.LocalServerID,
-			SyncId:               syncID,
-			PreviousEventId:      r.cursor.EventID,
-			PreviousEventVersion: r.cursor.Version,
-			NewEventId:           lastItem.GetEventId(),
-			NewEventVersion:      lastItem.GetVersion(),
-			HistoryBatches:       historyBatches,
-			VersionHistory:       sourceVersionHistory.GetVersionHistory(),
-			OwnershipToken:       r.target.OwnershipToken,
-			FencingEpoch:         r.target.FencingEpoch,
-			Release:              release,
-		},
-	)
-	if err != nil {
-		return SyncResult{}, fmt.Errorf("sync local execution: %w", err)
-	}
-	if response.GetSyncId() != syncID ||
-		response.GetAcknowledgedEventId() != lastItem.GetEventId() ||
-		response.GetAcknowledgedEventVersion() != lastItem.GetVersion() {
-		return SyncResult{}, errors.New("sync response did not acknowledge the requested cursor")
-	}
-
-	r.cursor = SyncCursor{EventID: lastItem.GetEventId(), Version: lastItem.GetVersion()}
-	return SyncResult{
-		HistoryBatches:   len(historyBatches),
-		LastEventID:      lastItem.GetEventId(),
-		LastEventVersion: lastItem.GetVersion(),
-		Released:         response.GetLeaseExpirationTime() == nil && release,
+	return &adminservice.SyncLocalExecutionRequest{
+		Namespace:            r.target.Namespace,
+		Execution:            execution,
+		ProtocolVersion:      ProtocolVersion,
+		LocalServerId:        r.target.LocalServerID,
+		SyncId:               syncID,
+		PreviousEventId:      r.cursor.EventID,
+		PreviousEventVersion: r.cursor.Version,
+		NewEventId:           lastItem.GetEventId(),
+		NewEventVersion:      lastItem.GetVersion(),
+		HistoryBatches:       historyBatches,
+		VersionHistory:       sourceVersionHistory.GetVersionHistory(),
+		OwnershipToken:       r.target.OwnershipToken,
+		FencingEpoch:         r.target.FencingEpoch,
+		Release:              release,
 	}, nil
 }
 
@@ -366,4 +452,156 @@ func (r *HistoryReplicator) Run(
 			}
 		}
 	}
+}
+
+func (r *HistoryReplicator) RunControlled(
+	ctx context.Context,
+	execution *commonpb.WorkflowExecution,
+	options SynchronizationLoopOptions,
+	afterSync func(SyncResult),
+) error {
+	if err := normalizeSynchronizationLoopOptions(&options); err != nil {
+		return err
+	}
+
+	leaseExpiration := options.LeaseExpiration
+	for {
+		if err := waitUntil(ctx, leaseExpiration.Add(-2*options.Interval)); err != nil {
+			return nil
+		}
+		if err := options.StateController.Update(
+			ctx,
+			execution,
+			adminservice.UpdateLocalExecutionStateRequest_STATE_PAUSED,
+		); err != nil {
+			return fmt.Errorf("pause local execution: %w", err)
+		}
+
+		result, err := r.syncWhilePaused(ctx, execution, leaseExpiration, options)
+		if err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return err
+		}
+		if afterSync != nil {
+			afterSync(result)
+		}
+		if result.Released {
+			<-ctx.Done()
+			return nil
+		}
+		if result.LeaseExpiration.IsZero() {
+			return errors.New("ownership-retaining sync returned no lease expiration")
+		}
+		leaseExpiration = result.LeaseExpiration
+		if err := options.StateController.Update(
+			ctx,
+			execution,
+			adminservice.UpdateLocalExecutionStateRequest_STATE_RUNNABLE,
+		); err != nil {
+			return fmt.Errorf("resume local execution: %w", err)
+		}
+	}
+}
+
+func normalizeSynchronizationLoopOptions(options *SynchronizationLoopOptions) error {
+	if options.Interval <= 0 {
+		return errors.New("sync interval must be positive")
+	}
+	if options.LeaseExpiration.IsZero() {
+		return errors.New("lease expiration is required")
+	}
+	if options.StateController == nil {
+		return errors.New("state controller is required")
+	}
+	if options.RetryInitialDelay <= 0 {
+		options.RetryInitialDelay = 100 * time.Millisecond
+	}
+	if options.RetryMaximumDelay <= 0 {
+		options.RetryMaximumDelay = time.Second
+	}
+	return nil
+}
+
+func (r *HistoryReplicator) syncWhilePaused(
+	ctx context.Context,
+	execution *commonpb.WorkflowExecution,
+	leaseExpiration time.Time,
+	options SynchronizationLoopOptions,
+) (SyncResult, error) {
+	retryDelay := options.RetryInitialDelay
+	for {
+		if !time.Now().Before(leaseExpiration) {
+			return SyncResult{}, markOwnershipLost(ctx, options.StateController, execution, nil)
+		}
+		syncCtx, cancel := context.WithDeadline(ctx, leaseExpiration)
+		result, err := r.Sync(syncCtx, execution)
+		cancel()
+		if err == nil {
+			return result, nil
+		}
+		if ownershipLostError(err) {
+			return SyncResult{}, markOwnershipLost(ctx, options.StateController, execution, err)
+		}
+		wake := time.Now().Add(retryDelay)
+		if wake.After(leaseExpiration) {
+			wake = leaseExpiration
+		}
+		if err := waitUntil(ctx, wake); err != nil {
+			return SyncResult{}, err
+		}
+		retryDelay = min(retryDelay*2, options.RetryMaximumDelay)
+	}
+}
+
+func waitUntil(ctx context.Context, deadline time.Time) error {
+	delay := time.Until(deadline)
+	if delay <= 0 {
+		return nil
+	}
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return context.Cause(ctx)
+	case <-timer.C:
+		return nil
+	}
+}
+
+func ownershipLostError(err error) bool {
+	var failedPrecondition *serviceerror.FailedPrecondition
+	var invalidArgument *serviceerror.InvalidArgument
+	var permissionDenied *serviceerror.PermissionDenied
+	if errors.As(err, &failedPrecondition) ||
+		errors.As(err, &invalidArgument) ||
+		errors.As(err, &permissionDenied) {
+		return true
+	}
+	switch status.Code(err) {
+	case codes.FailedPrecondition, codes.InvalidArgument, codes.PermissionDenied, codes.Unauthenticated:
+		return true
+	default:
+		return false
+	}
+}
+
+func markOwnershipLost(
+	ctx context.Context,
+	controller *ExecutionStateController,
+	execution *commonpb.WorkflowExecution,
+	cause error,
+) error {
+	if err := controller.Update(
+		ctx,
+		execution,
+		adminservice.UpdateLocalExecutionStateRequest_STATE_OWNERSHIP_LOST,
+	); err != nil {
+		return fmt.Errorf("invalidate local execution after ownership loss: %w", err)
+	}
+	if cause != nil {
+		return fmt.Errorf("%w: %v", ErrLocalExecutionOwnershipLost, cause)
+	}
+	return fmt.Errorf("%w: ownership lease expired", ErrLocalExecutionOwnershipLost)
 }

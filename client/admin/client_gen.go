@@ -468,3 +468,13 @@ func (c *clientImpl) SyncWorkflowState(
 	defer cancel()
 	return c.client.SyncWorkflowState(ctx, request, opts...)
 }
+
+func (c *clientImpl) UpdateLocalExecutionState(
+	ctx context.Context,
+	request *adminservice.UpdateLocalExecutionStateRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.UpdateLocalExecutionStateResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.UpdateLocalExecutionState(ctx, request, opts...)
+}

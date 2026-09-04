@@ -3593,3 +3593,77 @@ func (this *SyncLocalExecutionResponse) Equal(that interface{}) bool {
 
 	return proto.Equal(this, that1)
 }
+
+// Marshal an object of type UpdateLocalExecutionStateRequest to the protobuf v3 wire format
+func (val *UpdateLocalExecutionStateRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type UpdateLocalExecutionStateRequest from the protobuf v3 wire format
+func (val *UpdateLocalExecutionStateRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *UpdateLocalExecutionStateRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two UpdateLocalExecutionStateRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *UpdateLocalExecutionStateRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *UpdateLocalExecutionStateRequest
+	switch t := that.(type) {
+	case *UpdateLocalExecutionStateRequest:
+		that1 = t
+	case UpdateLocalExecutionStateRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type UpdateLocalExecutionStateResponse to the protobuf v3 wire format
+func (val *UpdateLocalExecutionStateResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type UpdateLocalExecutionStateResponse from the protobuf v3 wire format
+func (val *UpdateLocalExecutionStateResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *UpdateLocalExecutionStateResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two UpdateLocalExecutionStateResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *UpdateLocalExecutionStateResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *UpdateLocalExecutionStateResponse
+	switch t := that.(type) {
+	case *UpdateLocalExecutionStateResponse:
+		that1 = t
+	case UpdateLocalExecutionStateResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}

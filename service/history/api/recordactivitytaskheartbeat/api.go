@@ -48,6 +48,9 @@ func Invoke(
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
+			if err := api.ValidateLocalExecutionTask(mutableState); err != nil {
+				return nil, err
+			}
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}

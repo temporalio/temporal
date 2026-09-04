@@ -1017,6 +1017,20 @@ func (c *metricClient) UpdateActivityOptions(
 	return c.client.UpdateActivityOptions(ctx, request, opts...)
 }
 
+func (c *metricClient) UpdateLocalExecutionState(
+	ctx context.Context,
+	request *historyservice.UpdateLocalExecutionStateRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.UpdateLocalExecutionStateResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientUpdateLocalExecutionState")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.UpdateLocalExecutionState(ctx, request, opts...)
+}
+
 func (c *metricClient) UpdateWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.UpdateWorkflowExecutionRequest,

@@ -82,6 +82,7 @@ import (
 	"go.temporal.io/server/service/history/api/unpauseactivity"
 	"go.temporal.io/server/service/history/api/unpauseworkflow"
 	"go.temporal.io/server/service/history/api/updateactivityoptions"
+	"go.temporal.io/server/service/history/api/updatelocalexecutionstate"
 	"go.temporal.io/server/service/history/api/updateworkflow"
 	"go.temporal.io/server/service/history/api/updateworkflowoptions"
 	"go.temporal.io/server/service/history/api/verifychildworkflowcompletionrecorded"
@@ -623,6 +624,18 @@ func (e *historyEngineImpl) SyncLocalExecution(
 		e.shardContext,
 		e.config,
 		e.serializer,
+		e.workflowConsistencyChecker,
+	)
+}
+
+func (e *historyEngineImpl) UpdateLocalExecutionState(
+	ctx context.Context,
+	request *historyservice.UpdateLocalExecutionStateRequest,
+) (*historyservice.UpdateLocalExecutionStateResponse, error) {
+	return updatelocalexecutionstate.Invoke(
+		ctx,
+		request,
+		e.shardContext,
 		e.workflowConsistencyChecker,
 	)
 }

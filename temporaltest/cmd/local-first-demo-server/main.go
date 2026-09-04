@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -39,18 +40,19 @@ const (
 )
 
 type options struct {
-	mode            string
-	stateDirectory  string
-	syncInterval    time.Duration
-	upstreamAddress string
-	namespace       string
-	workflowID      string
-	runID           string
-	workflowType    string
-	activityType    string
-	taskQueue       string
-	iterations      int
-	localServerID   string
+	mode             string
+	stateDirectory   string
+	syncInterval     time.Duration
+	upstreamAddress  string
+	namespace        string
+	workflowID       string
+	runID            string
+	workflowType     string
+	activityType     string
+	taskQueue        string
+	iterations       int
+	localServerID    string
+	failSyncAttempts int
 }
 
 type readyMessage struct {
@@ -79,6 +81,7 @@ func main() {
 	flag.StringVar(&opts.taskQueue, "task-queue", demoTaskQueue, "task queue used by the workflow")
 	flag.IntVar(&opts.iterations, "iterations", 3, "number of Activities the Core workflow driver will execute")
 	flag.StringVar(&opts.localServerID, "local-server-id", "local-first-core-steel-thread", "stable local bridge identifier")
+	flag.IntVar(&opts.failSyncAttempts, "fail-sync-attempts", 0, "number of synchronization attempts to fail for testing")
 	flag.Parse()
 
 	ctx, stop := signal.NotifyContext(context.TODO(), os.Interrupt, syscall.SIGTERM)
@@ -239,6 +242,22 @@ func runBridge(ctx context.Context, opts options) error {
 			acquisition.GetLocalExecutionInfo().GetLastSynchronizedEventVersion(),
 		)
 	}
+	stateController, err := localexecution.NewExecutionStateController(
+		opts.namespace,
+		opts.localServerID,
+		acquisition.GetLocalExecutionInfo().GetFencingEpoch(),
+		localAdmin,
+	)
+	if err != nil {
+		return fmt.Errorf("configure local execution state: %w", err)
+	}
+
+	syncTargetAdmin := upstreamAdmin
+	if opts.failSyncAttempts > 0 {
+		faults := &faultInjectingAdminClient{AdminServiceClient: upstreamAdmin}
+		faults.remaining.Store(int64(opts.failSyncAttempts))
+		syncTargetAdmin = faults
+	}
 
 	replicator, err := localexecution.NewHistoryReplicator(
 		localexecution.HistoryEndpoint{
@@ -250,7 +269,7 @@ func runBridge(ctx context.Context, opts options) error {
 			LocalServerID:  opts.localServerID,
 			OwnershipToken: acquisition.GetLocalExecutionInfo().GetOwnershipToken(),
 			FencingEpoch:   acquisition.GetLocalExecutionInfo().GetFencingEpoch(),
-			AdminClient:    upstreamAdmin,
+			AdminClient:    syncTargetAdmin,
 		},
 		localexecution.SyncCursor{
 			EventID: baseline.LastEventID,
@@ -261,16 +280,13 @@ func runBridge(ctx context.Context, opts options) error {
 		return fmt.Errorf("configure history synchronization: %w", err)
 	}
 
-	syncErrors := make(chan error, 1)
-	go func() {
-		syncErrors <- replicator.Run(ctx, execution, opts.syncInterval, func(result localexecution.SyncResult) {
-			if result.Released {
-				log.Printf("synchronized %d batches through event %d and released ownership", result.HistoryBatches, result.LastEventID)
-			} else {
-				log.Printf("synchronized %d batches through event %d", result.HistoryBatches, result.LastEventID)
-			}
-		})
-	}()
+	syncErrors := startHistorySynchronization(
+		ctx,
+		acquisition,
+		replicator,
+		stateController,
+		opts.syncInterval,
+	)
 
 	if err := writeReady(readyMessage{
 		UpstreamAddress: opts.upstreamAddress,
@@ -286,15 +302,71 @@ func runBridge(ctx context.Context, opts options) error {
 		return err
 	}
 
+	return waitForBridge(ctx, syncErrors)
+}
+
+func startHistorySynchronization(
+	ctx context.Context,
+	acquisition *workflowservice.PollWorkflowTaskQueueResponse,
+	replicator *localexecution.HistoryReplicator,
+	stateController *localexecution.ExecutionStateController,
+	interval time.Duration,
+) <-chan error {
+	syncErrors := make(chan error, 1)
+	go func() {
+		leaseExpiration := acquisition.GetLocalExecutionInfo().GetLeaseExpirationTime()
+		if leaseExpiration == nil || leaseExpiration.CheckValid() != nil {
+			syncErrors <- errors.New("acquisition returned an invalid lease expiration")
+			return
+		}
+		syncErrors <- replicator.RunControlled(ctx, acquisition.GetWorkflowExecution(), localexecution.SynchronizationLoopOptions{
+			Interval:        interval,
+			LeaseExpiration: leaseExpiration.AsTime(),
+			StateController: stateController,
+		}, logSynchronizationResult)
+	}()
+	return syncErrors
+}
+
+func logSynchronizationResult(result localexecution.SyncResult) {
+	if result.Released {
+		log.Printf("synchronized %d batches through event %d and released ownership", result.HistoryBatches, result.LastEventID)
+		return
+	}
+	log.Printf("synchronized %d batches through event %d", result.HistoryBatches, result.LastEventID)
+}
+
+func waitForBridge(ctx context.Context, syncErrors <-chan error) error {
 	select {
 	case <-ctx.Done():
 		return nil
 	case err := <-syncErrors:
+		if errors.Is(err, localexecution.ErrLocalExecutionOwnershipLost) {
+			log.Printf("%v; local task tokens invalidated", err)
+			<-ctx.Done()
+			return nil
+		}
 		if err != nil {
 			return fmt.Errorf("history synchronization stopped: %w", err)
 		}
 		return nil
 	}
+}
+
+type faultInjectingAdminClient struct {
+	adminservice.AdminServiceClient
+	remaining atomic.Int64
+}
+
+func (c *faultInjectingAdminClient) SyncLocalExecution(
+	ctx context.Context,
+	request *adminservice.SyncLocalExecutionRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.SyncLocalExecutionResponse, error) {
+	if c.remaining.Add(-1) >= 0 {
+		return nil, serviceerror.NewUnavailable("injected synchronization failure")
+	}
+	return c.AdminServiceClient.SyncLocalExecution(ctx, request, opts...)
 }
 
 func acquireLocalExecution(
@@ -384,6 +456,9 @@ func validateBridgeOptions(opts options) error {
 	}
 	if opts.syncInterval <= 0 {
 		return errors.New("--sync-interval must be positive")
+	}
+	if opts.failSyncAttempts < 0 {
+		return errors.New("--fail-sync-attempts must not be negative")
 	}
 	return nil
 }

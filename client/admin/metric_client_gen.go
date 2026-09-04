@@ -652,3 +652,17 @@ func (c *metricClient) SyncWorkflowState(
 
 	return c.client.SyncWorkflowState(ctx, request, opts...)
 }
+
+func (c *metricClient) UpdateLocalExecutionState(
+	ctx context.Context,
+	request *adminservice.UpdateLocalExecutionStateRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.UpdateLocalExecutionStateResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientUpdateLocalExecutionState")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.UpdateLocalExecutionState(ctx, request, opts...)
+}

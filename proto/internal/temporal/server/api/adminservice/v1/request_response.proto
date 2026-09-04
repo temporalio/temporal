@@ -706,3 +706,24 @@ message SyncLocalExecutionResponse {
   int64 acknowledged_event_version = 3;
   google.protobuf.Timestamp lease_expiration_time = 4;
 }
+
+// (-- api-linter: core::0134::request-mask-required=disabled
+//     aip.dev/not-precedent: This is an internal imperative state transition. --)
+// (-- api-linter: core::0134::request-resource-required=disabled
+//     aip.dev/not-precedent: This is an internal imperative state transition. --)
+message UpdateLocalExecutionStateRequest {
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    STATE_RUNNABLE = 1;
+    STATE_PAUSED = 2;
+    STATE_OWNERSHIP_LOST = 3;
+  }
+
+  string namespace = 1;
+  temporal.api.common.v1.WorkflowExecution execution = 2;
+  string local_server_id = 3;
+  int64 fencing_epoch = 4;
+  State state = 5;
+}
+
+message UpdateLocalExecutionStateResponse {}

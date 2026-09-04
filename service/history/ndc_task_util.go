@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/queues"
@@ -145,6 +146,16 @@ func loadMutableStateForTask(
 	mutableState, err := wfContext.LoadMutableState(ctx, shardContext)
 	if err != nil {
 		return nil, err
+	}
+	gateLocalExecution := true
+	if archetypeTask, ok := task.(tasks.HasArchetypeID); ok {
+		archetypeID := archetypeTask.GetArchetypeID()
+		gateLocalExecution = archetypeID == chasm.UnspecifiedArchetypeID || archetypeID == chasm.WorkflowArchetypeID
+	}
+	if gateLocalExecution {
+		if err := api.ValidateLocalExecutionTask(mutableState); err != nil {
+			return nil, err
+		}
 	}
 
 	if task.GetRunID() == mutableState.GetWorkflowKey().RunID {

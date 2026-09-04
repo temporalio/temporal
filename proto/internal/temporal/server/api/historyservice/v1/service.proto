@@ -526,4 +526,12 @@ service HistoryService {
   rpc SyncLocalExecution(SyncLocalExecutionRequest) returns (SyncLocalExecutionResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }
+
+  // (-- api-linter: core::0134::method-signature=disabled
+  //     aip.dev/not-precedent: This is an internal imperative state transition. --)
+  // (-- api-linter: core::0134::response-message-name=disabled
+  //     aip.dev/not-precedent: This is an internal imperative state transition. --)
+  rpc UpdateLocalExecutionState(UpdateLocalExecutionStateRequest) returns (UpdateLocalExecutionStateResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
 }

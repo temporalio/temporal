@@ -983,6 +983,26 @@ func (mr *MockAdminServiceClientMockRecorder) SyncWorkflowState(ctx, in any, opt
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncWorkflowState", reflect.TypeOf((*MockAdminServiceClient)(nil).SyncWorkflowState), varargs...)
 }
 
+// UpdateLocalExecutionState mocks base method.
+func (m *MockAdminServiceClient) UpdateLocalExecutionState(ctx context.Context, in *adminservice.UpdateLocalExecutionStateRequest, opts ...grpc.CallOption) (*adminservice.UpdateLocalExecutionStateResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateLocalExecutionState", varargs...)
+	ret0, _ := ret[0].(*adminservice.UpdateLocalExecutionStateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateLocalExecutionState indicates an expected call of UpdateLocalExecutionState.
+func (mr *MockAdminServiceClientMockRecorder) UpdateLocalExecutionState(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLocalExecutionState", reflect.TypeOf((*MockAdminServiceClient)(nil).UpdateLocalExecutionState), varargs...)
+}
+
 // MockAdminService_StreamWorkflowReplicationMessagesClient is a mock of AdminService_StreamWorkflowReplicationMessagesClient interface.
 type MockAdminService_StreamWorkflowReplicationMessagesClient struct {
 	ctrl     *gomock.Controller
@@ -1847,6 +1867,21 @@ func (m *MockAdminServiceServer) SyncWorkflowState(arg0 context.Context, arg1 *a
 func (mr *MockAdminServiceServerMockRecorder) SyncWorkflowState(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncWorkflowState", reflect.TypeOf((*MockAdminServiceServer)(nil).SyncWorkflowState), arg0, arg1)
+}
+
+// UpdateLocalExecutionState mocks base method.
+func (m *MockAdminServiceServer) UpdateLocalExecutionState(arg0 context.Context, arg1 *adminservice.UpdateLocalExecutionStateRequest) (*adminservice.UpdateLocalExecutionStateResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateLocalExecutionState", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.UpdateLocalExecutionStateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateLocalExecutionState indicates an expected call of UpdateLocalExecutionState.
+func (mr *MockAdminServiceServerMockRecorder) UpdateLocalExecutionState(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLocalExecutionState", reflect.TypeOf((*MockAdminServiceServer)(nil).UpdateLocalExecutionState), arg0, arg1)
 }
 
 // mustEmbedUnimplementedAdminServiceServer mocks base method.

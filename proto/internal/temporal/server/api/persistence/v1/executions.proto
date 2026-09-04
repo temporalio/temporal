@@ -1005,6 +1005,13 @@ message LocalExecutionInfo {
     STATE_UNOWNED = 2;
   }
 
+  enum BridgeState {
+    BRIDGE_STATE_UNSPECIFIED = 0;
+    BRIDGE_STATE_RUNNABLE = 1;
+    BRIDGE_STATE_PAUSED = 2;
+    BRIDGE_STATE_OWNERSHIP_LOST = 3;
+  }
+
   State state = 1;
   int64 fencing_epoch = 2;
   string local_server_id = 3;
@@ -1015,4 +1022,5 @@ message LocalExecutionInfo {
   int64 last_synchronized_event_version = 8;
   string last_sync_id = 9;
   bytes last_sync_request_hash = 10;
+  BridgeState bridge_state = 11;
 }

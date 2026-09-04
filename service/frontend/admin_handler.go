@@ -407,6 +407,32 @@ func (adh *AdminHandler) SyncLocalExecution(
 	return syncer.Sync(ctx, namespaceID.String(), request)
 }
 
+func (adh *AdminHandler) UpdateLocalExecutionState(
+	ctx context.Context,
+	request *adminservice.UpdateLocalExecutionStateRequest,
+) (_ *adminservice.UpdateLocalExecutionStateResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if err := validateExecution(request.GetExecution()); err != nil {
+		return nil, err
+	}
+	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	_, err = adh.historyClient.UpdateLocalExecutionState(ctx, &historyservice.UpdateLocalExecutionStateRequest{
+		NamespaceId: namespaceID.String(),
+		Request:     request,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.UpdateLocalExecutionStateResponse{}, nil
+}
+
 func (adh *AdminHandler) unaliasAndValidateSearchAttributes(historyBatches []*commonpb.DataBlob, nsName namespace.Name) ([]*commonpb.DataBlob, error) {
 	var unaliasedBatches []*commonpb.DataBlob
 	for _, historyBatch := range historyBatches {

@@ -200,6 +200,11 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		workflowLease.GetReleaseFn()(errForRelease)
 	}()
 
+	if err := api.ValidateLocalExecutionTask(ms); err != nil {
+		releaseLeaseWithError = false
+		return nil, err
+	}
+
 	if !ms.IsWorkflowExecutionRunning() ||
 		currentWorkflowTask == nil ||
 		currentWorkflowTask.StartedEventID == common.EmptyEventID ||

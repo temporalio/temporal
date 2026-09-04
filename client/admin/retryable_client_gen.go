@@ -700,3 +700,18 @@ func (c *retryableClient) SyncWorkflowState(
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
 	return resp, err
 }
+
+func (c *retryableClient) UpdateLocalExecutionState(
+	ctx context.Context,
+	request *adminservice.UpdateLocalExecutionStateRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.UpdateLocalExecutionStateResponse, error) {
+	var resp *adminservice.UpdateLocalExecutionStateResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.UpdateLocalExecutionState(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}

@@ -34,6 +34,7 @@ type (
 		DescribeWorkflowExecution(ctx context.Context, request *historyservice.DescribeWorkflowExecutionRequest) (*historyservice.DescribeWorkflowExecutionResponse, error)
 		RecordWorkflowTaskStarted(ctx context.Context, request *historyservice.RecordWorkflowTaskStartedRequest) (*historyservice.RecordWorkflowTaskStartedResponseWithRawHistory, error)
 		SyncLocalExecution(ctx context.Context, request *historyservice.SyncLocalExecutionRequest) (*historyservice.SyncLocalExecutionResponse, error)
+		UpdateLocalExecutionState(ctx context.Context, request *historyservice.UpdateLocalExecutionStateRequest) (*historyservice.UpdateLocalExecutionStateResponse, error)
 		RecordActivityTaskStarted(ctx context.Context, request *historyservice.RecordActivityTaskStartedRequest) (*historyservice.RecordActivityTaskStartedResponse, error)
 		RespondWorkflowTaskCompleted(ctx context.Context, request *historyservice.RespondWorkflowTaskCompletedRequest) (*historyservice.RespondWorkflowTaskCompletedResponse, error)
 		RespondWorkflowTaskFailed(ctx context.Context, request *historyservice.RespondWorkflowTaskFailedRequest) error
