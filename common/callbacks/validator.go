@@ -44,18 +44,26 @@ type ValidatorConfig struct {
 
 func (vc *ValidatorConfig) Validate() error {
 	var missingFields []string
-	if vc.MaxCallbacksPerExecution == nil {
-		missingFields = append(missingFields, "MaxCallbacksPerExecution")
+	assertGetterIsSet := func(name string, getter dynamicconfig.IntPropertyFnWithNamespaceFilter) {
+		if getter == nil {
+			missingFields = append(missingFields, name)
+		}
 	}
-	if vc.URLMaxLength == nil {
-		missingFields = append(missingFields, "URLMaxLength")
+
+	assertGetterIsSet("MaxCallbacksPerExecution", vc.MaxCallbacksPerExecution)
+	if vc.MaxIDLengthLimit == nil {
+		missingFields = append(missingFields, "MaxIDLengthLimit")
 	}
-	if vc.HeaderMaxSize == nil {
-		missingFields = append(missingFields, "HeaderMaxSize")
-	}
+
+	assertGetterIsSet("URLMaxLength", vc.URLMaxLength)
+	assertGetterIsSet("HeaderMaxSize", vc.HeaderMaxSize)
 	if vc.EndpointRules == nil {
 		missingFields = append(missingFields, "EndpointRules")
 	}
+
+	assertGetterIsSet("MaxServiceNameLength", vc.MaxServiceNameLength)
+	assertGetterIsSet("MaxOperationNameLength", vc.MaxOperationNameLength)
+	assertGetterIsSet("NexusHandlerSourceContextMaxSize", vc.NexusHandlerSourceContextMaxSize)
 
 	if len(missingFields) != 0 {
 		return fmt.Errorf("missing required fields: %v", missingFields)

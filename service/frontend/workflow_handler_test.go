@@ -66,6 +66,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tasktoken"
+	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/wideevents"
@@ -177,18 +178,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 	healthInterceptor := interceptor.NewHealthInterceptor()
 	healthInterceptor.SetHealthy(true)
 
-	cbValidator, err := callbacks.NewValidator(callbacks.ValidatorConfig{
-		MaxCallbacksPerExecution: func(string) int { return 2000 },
-		URLMaxLength:             config.CallbackURLMaxLength,
-		HeaderMaxSize:            config.CallbackHeaderMaxSize,
-		EndpointRules: func(string) callbacks.AddressMatchRules {
-			return callbacks.AddressMatchRules{
-				Rules: []callbacks.AddressMatchRule{
-					{Regexp: regexp.MustCompile(`.*`), AllowInsecure: true},
-				},
-			}
-		},
-	})
+	cbValidator, err := callbacks.NewValidator(test.NewCallbacksValidatorConfig())
 	s.NoError(err)
 
 	saValidator := searchattribute.NewValidator(

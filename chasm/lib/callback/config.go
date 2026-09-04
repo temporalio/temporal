@@ -20,10 +20,10 @@ var MaxPerExecution = dynamicconfig.NewNamespaceIntSetting(
 // full 2k execution callbacks, with a much smaller per-callback payload size.)
 
 var NexusHandlerSourceContextMaxSize = dynamicconfig.NewNamespaceIntSetting(
-	"callback.nexusHandler.sourceContextMaxSize",
-	64*1024,
-	`The maximum allowed size, in bytes, of the opaque source context attached to a NexusHandler completion
-callback. The server carries this payload to the callback's handler untouched.`,
+	"callback.nexusHandler.sourceContext.maxSize",
+	1024*1024,
+	`The maximum allowed size, in bytes, of the opaque source context attached to a single NexusHandler
+completion callback. The server carries this payload to the callback's handler untouched.`,
 )
 
 var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(

@@ -2,7 +2,6 @@ package activity
 
 import (
 	"fmt"
-	"regexp"
 	"testing"
 	"time"
 
@@ -22,6 +21,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
+	test "go.temporal.io/server/common/testing"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -534,18 +534,7 @@ func TestRequestIDGeneratedWhenMissing(t *testing.T) {
 // the request's own links and those embedded in its completion callbacks reach the link
 // validator. Link shape and limit semantics are covered in common/links.
 func TestValidateAndPopulateStartRequest_CombinesRequestAndCallbackLinks(t *testing.T) {
-	callbackValidator, err := callbacks.NewValidator(callbacks.ValidatorConfig{
-		MaxCallbacksPerExecution: func(string) int { return 2000 },
-		URLMaxLength:             func(string) int { return 1000 },
-		HeaderMaxSize:            func(string) int { return 2000 },
-		EndpointRules: func(string) callbacks.AddressMatchRules {
-			return callbacks.AddressMatchRules{
-				Rules: []callbacks.AddressMatchRule{
-					{Regexp: regexp.MustCompile(`.*`), AllowInsecure: true},
-				},
-			}
-		},
-	})
+	callbackValidator, err := callbacks.NewValidator(test.NewCallbacksValidatorConfig())
 	require.NoError(t, err)
 
 	h := &frontendHandler{
