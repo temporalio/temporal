@@ -534,6 +534,44 @@ func convertComparisonExprValue(expr sqlparser.Expr) (any, error) {
 			result = append(result, v)
 		}
 		return result, nil
+	case *sqlparser.UnaryExpr:
+		// Negative value may be parsed as UnaryExpr
+		if e.Operator != sqlparser.UPlusStr && e.Operator != sqlparser.UMinusStr {
+			return nil, NewConverterError(
+				"%s: unary operator %q",
+				NotSupportedErrMessage,
+				e.Operator,
+			)
+		}
+		if value, ok := e.Expr.(*sqlparser.SQLVal); !ok || value.Type == sqlparser.StrVal {
+			return nil, NewConverterError(
+				"%s: unary operator not supported in %q",
+				InvalidExpressionErrMessage,
+				sqlparser.String(expr),
+			)
+		}
+		value, err := convertComparisonExprValue(e.Expr)
+		if err != nil {
+			return nil, err
+		}
+		switch v := value.(type) {
+		case int64:
+			if e.Operator == sqlparser.UMinusStr {
+				value = -v
+			}
+		case float64:
+			if e.Operator == sqlparser.UMinusStr {
+				value = -v
+			}
+		default:
+			// This should never happen, but here to catch any unexpected case.
+			return nil, NewConverterError(
+				"%s: unary expression %q",
+				InvalidExpressionErrMessage,
+				sqlparser.String(expr),
+			)
+		}
+		return value, nil
 	case *sqlparser.GroupConcatExpr:
 		return nil, NewConverterError("%s: 'group_concat'", NotSupportedErrMessage)
 	case *sqlparser.FuncExpr:
