@@ -568,8 +568,6 @@ func buildCallbackInfosFromChasm(
 
 // buildChasmCallbackInfo converts a single CHASM callback to API CallbackInfo format.
 // Returns nil if the callback should not be included in the response.
-//
-//nolint:revive // context.Context is an input parameter for chasm component methods, not a function parameter
 func buildChasmCallbackInfo(
 	ctx chasm.Context,
 	cb *chasmcallback.Callback,

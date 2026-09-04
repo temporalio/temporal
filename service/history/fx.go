@@ -73,6 +73,7 @@ var Module = fx.Options(
 	archival.Module,
 	ChasmEngineModule,
 	chasmtests.Module,
+	fx.Provide(CallbackDestinationBlockedProvider),
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(workflow.NewCommandHandlerRegistry),
 	fx.Provide(ServiceErrorInterceptorProvider),
@@ -128,7 +129,6 @@ var Module = fx.Options(
 	activity.HistoryModule,
 	scheduler.Module,
 	callback.Module,
-	fx.Provide(CallbackDestinationBlockedProvider),
 	chasmnexus.Module,
 	chasmworkflow.Module,
 	chasmworkflow.HistoryHandlerModule,
