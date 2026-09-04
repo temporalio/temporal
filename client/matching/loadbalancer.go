@@ -154,7 +154,7 @@ func pickWritePartitionByGap(
 	minRootGap := math.Ceil(float64(others) * writePartitionRootProbabilityFloor / (1 - writePartitionRootProbabilityFloor))
 	gap0 := max(backlogCap-count0, int64(minRootGap))
 	total = others + gap0
-	if partitionID := pickPartitionByGap(counts, gap0, backlogCap, total); partitionID != 0 {
+	if partitionID := pickPartitionByGap(counts[:partitionCount], gap0, backlogCap, total); partitionID != 0 {
 		return partitionID, 0
 	}
 	return 0, randomRound(float64(total) / float64(gap0))
