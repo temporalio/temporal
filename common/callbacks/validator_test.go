@@ -174,6 +174,24 @@ func TestValidateCallbacks(t *testing.T) {
 		require.Contains(t, err.Error(), "unknown callback variant")
 	})
 
+	// Confirm that NexusHandler-variant callbacks are rejected by the callback.Validator,
+	// preventing them from being accepted.
+	t.Run("NexusHandlerVariantNotSupported", func(t *testing.T) {
+		cbs := []*commonpb.Callback{
+			{Variant: &commonpb.Callback_NexusHandler_{
+				NexusHandler: &commonpb.Callback_NexusHandler{
+					TaskQueueName: "completions-task-queue",
+					Service:       "HTTPAdapter",
+					Operation:     "DeliverAsWebhook",
+				},
+			}},
+		}
+		err := v.Validate(context.Background(), "ns", cbs)
+		var argError *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &argError)
+		require.ErrorContains(t, err, "NexusHandler callbacks are not enabled for this execution type")
+	})
+
 	t.Run("EmptyCallbacksNoError", func(t *testing.T) {
 		err := v.Validate(ctx, "ns", nil)
 		require.NoError(t, err)

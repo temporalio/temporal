@@ -10075,6 +10075,59 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 	)
 
+	// Confirm that SAA fails with unsupported callback variants.
+	t.Run("RejectNonNexusCallbacks", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		tests := []struct {
+			Name     string
+			Callback *commonpb.Callback
+			ErrMsg   string
+		}{
+			{
+				Name: "nexus handler",
+				Callback: &commonpb.Callback{
+					Variant: &commonpb.Callback_NexusHandler_{
+						NexusHandler: &commonpb.Callback_NexusHandler{
+							TaskQueueName: "completions-task-queue",
+							Service:       "HTTPAdapter",
+							Operation:     "DeliverAsWebhook",
+						},
+					},
+				},
+				// The validator rejects the NexusHandler variant explicitly, before it reaches
+				// the unknown-variant fallback.
+				ErrMsg: "NexusHandler callbacks are not enabled for this execution type",
+			},
+			{
+				Name:     "nil",
+				Callback: &commonpb.Callback{},
+				ErrMsg:   "unknown callback variant",
+			},
+		}
+		for _, test := range tests {
+			t.Run(test.Name, func(t *testing.T) {
+				resp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+					Namespace:    env.Namespace().String(),
+					ActivityId:   activityID,
+					ActivityType: env.Tv().ActivityType(),
+					Identity:     env.Tv().WorkerIdentity(),
+					Input:        defaultInput,
+					TaskQueue: &taskqueuepb.TaskQueue{
+						Name: taskQueue,
+					},
+					StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+					RequestId:           env.Tv().Any().String(),
+					CompletionCallbacks: []*commonpb.Callback{test.Callback},
+				})
+
+				require.Nil(t, resp)
+				require.ErrorContains(t, err, test.ErrMsg)
+			})
+		}
+	})
+
 	t.Run("AcceptedOnStart", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
