@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
 	"go.uber.org/mock/gomock"
@@ -49,8 +50,7 @@ func createUserDataManager(
 
 	logger := log.NewTestLogger()
 	ns := namespace.Name("ns-name")
-	tm := newTestTaskManager(logger)
-	t.Cleanup(tm.Close)
+	tm := newTestTaskManager(t, logger)
 	mockNamespaceCache := namespace.NewMockRegistry(controller)
 	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
 	mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(ns, nil).AnyTimes()
@@ -100,22 +100,14 @@ func TestUserData_LoadOnInit(t *testing.T) {
 
 	m := createUserDataManager(t, controller, tqCfg)
 
-	require.NoError(t, m.store.UpdateTaskQueueUserData(context.Background(),
-		&persistence.UpdateTaskQueueUserDataRequest{
-			NamespaceID: defaultNamespaceId,
-			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
-				defaultRootTqID: &persistence.SingleTaskQueueUserDataUpdate{
-					UserData: data1,
-				},
-			},
-		}))
+	m.store.(*testTaskManager).seedUserData(t, defaultNamespaceId, defaultRootTqID, data1)
 	data1.Version++
 
 	m.Start()
 	require.NoError(t, m.WaitUntilInitialized(ctx))
 	userData, _, err := m.GetUserData()
 	require.NoError(t, err)
-	require.True(t, proto.Equal(data1, userData))
+	protorequire.ProtoEqual(t, data1, userData)
 	m.Stop()
 	m.goroGroup.Wait() // ensure gomock doesn't complain about calls after the test returns
 }
@@ -140,15 +132,7 @@ func TestUserData_LoadOnInit_Refresh(t *testing.T) {
 	m.config.GetUserDataRefresh = dynamicconfig.GetDurationPropertyFn(time.Millisecond)
 	tm := m.store.(*testTaskManager)
 
-	require.NoError(t, m.store.UpdateTaskQueueUserData(context.Background(),
-		&persistence.UpdateTaskQueueUserDataRequest{
-			NamespaceID: defaultNamespaceId,
-			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
-				defaultRootTqID: &persistence.SingleTaskQueueUserDataUpdate{
-					UserData: data1,
-				},
-			},
-		}))
+	tm.seedUserData(t, defaultNamespaceId, defaultRootTqID, data1)
 	data1.Version++
 
 	m.Start()
@@ -163,7 +147,7 @@ func TestUserData_LoadOnInit_Refresh(t *testing.T) {
 	// should still have version 1
 	userData, _, err := m.GetUserData()
 	require.NoError(t, err)
-	require.True(t, proto.Equal(data1, userData))
+	protorequire.ProtoEqual(t, data1, userData)
 
 	// pretend someone else managed to update data
 	data2 := &persistencespb.VersionedTaskQueueUserData{
@@ -211,15 +195,7 @@ func TestUserData_LoadOnInit_Refresh_Backwards(t *testing.T) {
 	m.config.GetUserDataRefresh = dynamicconfig.GetDurationPropertyFn(time.Millisecond)
 	tm := m.store.(*testTaskManager)
 
-	require.NoError(t, m.store.UpdateTaskQueueUserData(context.Background(),
-		&persistence.UpdateTaskQueueUserDataRequest{
-			NamespaceID: defaultNamespaceId,
-			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
-				defaultRootTqID: &persistence.SingleTaskQueueUserDataUpdate{
-					UserData: data5,
-				},
-			},
-		}))
+	tm.seedUserData(t, defaultNamespaceId, defaultRootTqID, data5)
 	data5.Version++
 
 	m.Start()
@@ -233,7 +209,7 @@ func TestUserData_LoadOnInit_Refresh_Backwards(t *testing.T) {
 
 	userData, _, err := m.GetUserData()
 	require.NoError(t, err)
-	require.True(t, proto.Equal(data5, userData))
+	protorequire.ProtoEqual(t, data5, userData)
 
 	// Simulate the db going backwards in version (not possible via SQL CAS).
 	tm.forceUserData(defaultNamespaceId, defaultRootTqID, &persistencespb.VersionedTaskQueueUserData{

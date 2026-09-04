@@ -30,7 +30,7 @@ func (s *AckManagerTestSuite) SetupTest() {
 }
 
 func (s *AckManagerTestSuite) AddingTasksIncreasesBacklogCounter() {
-	ackMgr := newTestAckMgr(s.logger)
+	ackMgr := newTestAckMgr(s.T(), s.logger)
 
 	ackMgr.addTask(1)
 	s.Equal(int64(1), ackMgr.getBacklogCountHint())
@@ -40,7 +40,7 @@ func (s *AckManagerTestSuite) AddingTasksIncreasesBacklogCounter() {
 }
 
 func (s *AckManagerTestSuite) CompleteTaskMovesAckLevelUpToGap() {
-	ackMgr := newTestAckMgr(s.logger)
+	ackMgr := newTestAckMgr(s.T(), s.logger)
 
 	_, err := ackMgr.db.RenewLease(context.Background())
 	s.NoError(err)
@@ -68,7 +68,7 @@ func (s *AckManagerTestSuite) CompleteTaskMovesAckLevelUpToGap() {
 }
 
 func (s *AckManagerTestSuite) TestAckManager() {
-	ackMgr := newTestAckMgr(s.logger)
+	ackMgr := newTestAckMgr(s.T(), s.logger)
 
 	_, err := ackMgr.db.RenewLease(context.Background())
 	s.NoError(err)
@@ -135,7 +135,7 @@ func (s *AckManagerTestSuite) TestAckManager() {
 }
 
 func (s *AckManagerTestSuite) Sort() {
-	ackMgr := newTestAckMgr(s.logger)
+	ackMgr := newTestAckMgr(s.T(), s.logger)
 
 	_, err := ackMgr.db.RenewLease(context.Background())
 	s.NoError(err)
@@ -177,7 +177,7 @@ func (s *AckManagerTestSuite) Sort() {
 }
 
 func BenchmarkAckManager_AddTask(b *testing.B) {
-	ackMgr := newTestAckMgr(log.NewTestLogger())
+	ackMgr := newTestAckMgr(b, log.NewTestLogger())
 
 	tasks := make([]int, 1000)
 	for i := range tasks {
@@ -200,7 +200,7 @@ func BenchmarkAckManager_AddTask(b *testing.B) {
 }
 
 func BenchmarkAckManager_CompleteTask(b *testing.B) {
-	ackMgr := newTestAckMgr(log.NewTestLogger())
+	ackMgr := newTestAckMgr(b, log.NewTestLogger())
 
 	tasks := make([]int, 1000)
 	b.ResetTimer()
@@ -224,8 +224,8 @@ func BenchmarkAckManager_CompleteTask(b *testing.B) {
 	}
 }
 
-func newTestAckMgr(logger log.Logger) *ackManager {
-	tm := newTestTaskManager(logger)
+func newTestAckMgr(t testing.TB, logger log.Logger) *ackManager {
+	tm := newTestTaskManager(t, logger)
 	cfg := NewConfig(dynamicconfig.NewNoopCollection())
 	f, _ := tqid.NewTaskQueueFamily(defaultNamespaceId, "test-queue")
 	prtn := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0)
