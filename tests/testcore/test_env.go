@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	persistencefaults "go.temporal.io/server/common/persistence/faultinjection"
 	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/rpc/httpfaults"
 	"go.temporal.io/server/common/testing/taskpoller"
@@ -83,6 +84,8 @@ type TestEnv struct {
 	tv             *testvars.TestVars
 	dedicatedGuard *dedicatedClusterGuard
 
+	persistenceFaultRegistry *persistencefaults.FaultRegistry
+
 	sdkClientOnce sync.Once
 	sdkClient     sdkclient.Client
 	sdkWorkerOnce sync.Once
@@ -101,6 +104,7 @@ type testOptions struct {
 	clusterOptions           []TestClusterOption
 	testVars                 func(*testvars.TestVars) *testvars.TestVars
 	historyTaskRecorder      bool
+	persistenceFaultRegistry *persistencefaults.FaultRegistry
 }
 
 type dynamicConfigOverride struct {
@@ -324,17 +328,18 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	testcontext.EnsureRemaining(testcontext.For(t), t, testcontext.DefaultTimeout())
 
 	env := &TestEnv{
-		FunctionalTestBase: base,
-		Assertions:         require.New(t),
-		cluster:            cluster,
-		nsName:             ns,
-		nsID:               nsID,
-		Logger:             base.Logger,
-		taskPoller:         taskpoller.New(t, cluster.FrontendClient(), ns.String()),
-		t:                  t,
-		tv:                 tv,
-		sdkWorkerTQ:        RandomizeStr("tq-" + t.Name()),
-		dedicatedGuard:     dedicatedGuard,
+		FunctionalTestBase:       base,
+		Assertions:               require.New(t),
+		cluster:                  cluster,
+		nsName:                   ns,
+		nsID:                     nsID,
+		Logger:                   base.Logger,
+		taskPoller:               taskpoller.New(t, cluster.FrontendClient(), ns.String()),
+		t:                        t,
+		tv:                       tv,
+		sdkWorkerTQ:              RandomizeStr("tq-" + t.Name()),
+		dedicatedGuard:           dedicatedGuard,
+		persistenceFaultRegistry: options.persistenceFaultRegistry,
 	}
 	t.Cleanup(func() {
 		defer func() { dedicatedGuard = nil }()
