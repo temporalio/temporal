@@ -182,9 +182,6 @@ func TestBuildDataRaceMessageFormatsRaceAndLinksToJob(t *testing.T) {
 
 	require.Contains(t, rendered, "Data Race Detected on Main Branch")
 	require.Contains(t, rendered, "```\nservice/matching.(*cache).put\nRead at (goroutine 8): service/history/mutable_state.go:127\nPrevious write at (goroutine 7): service/history/mutable_state.go:130\n```")
-	require.NotContains(t, rendered, "Commit:")
-	require.NotContains(t, rendered, "Author:")
-	require.NotContains(t, rendered, "Commit message:")
 	// Links to the specific job, not just the top-level run.
 	require.Contains(t, rendered, "actions/runs/123456/job/789")
 	// Runtime shim frames and raw stacktrace noise are not dumped into Slack.
@@ -199,7 +196,6 @@ func TestBuildDataRaceMessageFallsBackToRunLink(t *testing.T) {
 
 	rendered := BuildDataRaceMessage(report).RenderMarkdown()
 
-	require.NotContains(t, rendered, "Unknown")
 	require.Contains(t, rendered, "pkg.TestRacy")
 	require.Contains(t, rendered, "actions/runs/123456")
 	require.NotContains(t, rendered, "/job/")

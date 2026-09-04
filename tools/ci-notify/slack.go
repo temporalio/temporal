@@ -87,15 +87,15 @@ func BuildDataRaceMessage(report *DataRaceReport) *slack.Message {
 	message.AddSection(":rotating_light: *Data Race Detected on Main Branch* :rotating_light:")
 
 	for _, race := range report.DataRaces {
-		var sb strings.Builder
-		fmt.Fprintln(&sb, "```")
+		lines := raceSites(race.Details)
 		if race.Location != "" {
-			fmt.Fprintln(&sb, race.Location)
+			lines = append([]string{race.Location}, lines...)
 		}
-		for _, site := range raceSites(race.Details) {
-			fmt.Fprintln(&sb, site)
+		var sb strings.Builder
+		if len(lines) > 0 {
+			fmt.Fprintf(&sb, "```\n%s\n```\n", strings.Join(lines, "\n"))
 		}
-		fmt.Fprintf(&sb, "```\n<%s|View job logs>", raceLink(runID, race))
+		fmt.Fprintf(&sb, "<%s|View job logs>", raceLink(runID, race))
 		message.AddSection(sb.String())
 	}
 
