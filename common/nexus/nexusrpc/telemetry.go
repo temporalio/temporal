@@ -6,7 +6,6 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/temporalnexus"
 	"go.temporal.io/server/common/telemetry"
 )
@@ -32,7 +31,7 @@ func AnnotateServerSpanLinks(
 	var handlerWorkflow handlerWorkflowIdentity
 	for _, link := range links {
 		workflowEvent, err := temporalnexus.ConvertNexusLinkToLinkWorkflowEvent(link)
-		if err != nil || workflowEvent.GetEventRef().GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+		if err != nil || workflowEvent.GetWorkflowId() == "" {
 			continue
 		}
 		identity := handlerWorkflowIdentity{
