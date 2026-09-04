@@ -619,6 +619,9 @@ func (d *VersionWorkflowRunner) deleteVersionFromTaskQueuesAsync(ctx workflow.Co
 	// Retryable failures retry indefinitely.
 	err := d.deleteVersionFromTaskQueues(ctx, workflow.WithActivityOptions(ctx, propagationActivityOptions))
 	if err != nil {
+		// Terminal failure. Task queues may retain stale version data, but we still
+		// decrement below so the workflow can complete; the log and metric support manual
+		// recovery. This matches syncTaskQueuesAsync, which also decrements on failure.
 		d.logger.Error(
 			"failed to delete worker deployment version from task queues",
 			"error", err,
