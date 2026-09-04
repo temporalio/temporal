@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	commonpb "go.temporal.io/api/common/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -16,8 +19,11 @@ import (
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
+	historytasks "go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/testing/protocmp"
 )
 
 const applyTimeout = 30 * time.Second
@@ -53,7 +59,6 @@ func (h *Harness) InterceptUpdate(
 		h.recordBailout(reason)
 		return next()
 	}
-
 	if request.UpdateExecutionTransactionPolicy != historyi.TransactionPolicyActive {
 		h.recordBailout(BailPassivePolicy)
 		if err := request.PrepareMutableStateTransaction(); err != nil {
@@ -64,6 +69,12 @@ func (h *Harness) InterceptUpdate(
 			return err
 		}
 		if request.ExecutionContext != nil {
+			if err := h.comparePassiveState(
+				request.ExecutionContext.GetWorkflowKey(),
+				request.ExecutionContext.MutableState.CloneToProto(),
+			); err != nil {
+				return err
+			}
 			if err := h.comparePassiveTasks(
 				request.ExecutionContext.GetWorkflowKey(),
 				request.ExecutionContext.MutableState,
@@ -73,6 +84,12 @@ func (h *Harness) InterceptUpdate(
 			}
 		}
 		if request.NewMutableState != nil && transactionPayload.NewExecutionSnapshot != nil {
+			if err := h.comparePassiveState(
+				request.NewMutableState.GetWorkflowKey(),
+				request.NewMutableState.CloneToProto(),
+			); err != nil {
+				return err
+			}
 			if err := h.comparePassiveTasks(
 				request.NewMutableState.GetWorkflowKey(),
 				request.NewMutableState,
@@ -89,10 +106,6 @@ func (h *Harness) InterceptUpdate(
 		*request.NewExecutionTransactionPolicy != historyi.TransactionPolicyActive) {
 		return delegate(BailNewRun)
 	}
-	if request.UpdateMode != persistence.UpdateWorkflowModeUpdateCurrent {
-		return delegate(BailUpdateMode)
-	}
-
 	mutableState := request.ExecutionContext.MutableState
 	if mutableState == nil {
 		return delegate(BailNoMutableState)
@@ -100,10 +113,7 @@ func (h *Harness) InterceptUpdate(
 	if len(mutableState.GetExecutionInfo().TransitionHistory) == 0 {
 		return delegate(BailNoTransitionHistory)
 	}
-	if mutableState.HasBufferedEvents() {
-		return delegate(BailBufferedEvents)
-	}
-
+	hasBufferedEvents := mutableState.HasBufferedEvents()
 	exclusiveStart := transitionhistory.CopyVersionedTransition(mutableState.CurrentVersionedTransition())
 	if exclusiveStart == nil {
 		return delegate(BailNoTransitionHistory)
@@ -118,8 +128,24 @@ func (h *Harness) InterceptUpdate(
 	}
 	activeMutation := transactionPayload.ExecutionMutation
 	eventsSeq := transactionPayload.ExecutionEvents
-	if mutableState.HasBufferedEvents() {
-		return errors.New("passivepath: mutable state has buffered events after close")
+	expectedState := mutableState.CloneToProto()
+	replicationTask, err := syncVersionedTransitionTask(activeMutation.Tasks)
+	if err != nil {
+		return err
+	}
+	if transitionhistory.Compare(
+		replicationTask.VersionedTransition,
+		mutableState.CurrentVersionedTransition(),
+	) != 0 {
+		return fmt.Errorf(
+			"passivepath: replication task transition %v does not match mutable state transition %v",
+			replicationTask.VersionedTransition,
+			mutableState.CurrentVersionedTransition(),
+		)
+	}
+	if hasBufferedEvents || mutableState.HasBufferedEvents() {
+		h.recordBailout(BailBufferedEvents)
+		return request.ExecuteExecutionTransaction(transactionPayload)
 	}
 	if activeMutation.ClearBufferedEvents {
 		h.recordBailout(BailClearBufferedEvents)
@@ -132,6 +158,7 @@ func (h *Harness) InterceptUpdate(
 		request.ExecutionContext.GetWorkflowKey(),
 		mutableState,
 		exclusiveStart,
+		replicationTask.VersionedTransition,
 		eventsSeq,
 	)
 	if err != nil {
@@ -149,9 +176,17 @@ func (h *Harness) InterceptUpdate(
 			RunId:      request.NewMutableState.GetExecutionState().GetRunId(),
 			EventBatch: newRunEventBatches[0],
 		}
-		h.expectPassiveTasks(request.NewMutableState.GetWorkflowKey(), transactionPayload.NewExecutionSnapshot.Tasks)
+		h.expectPassiveState(request.NewMutableState.GetWorkflowKey(), request.NewMutableState.CloneToProto(), true)
+		h.expectPassiveTasks(
+			request.NewMutableState.GetWorkflowKey(),
+			tasksWithoutReplication(transactionPayload.NewExecutionSnapshot.Tasks),
+		)
 	}
-	h.expectPassiveTasks(request.ExecutionContext.GetWorkflowKey(), activeMutation.Tasks)
+	h.expectPassiveState(request.ExecutionContext.GetWorkflowKey(), expectedState, false)
+	h.expectPassiveTasks(
+		request.ExecutionContext.GetWorkflowKey(),
+		tasksWithoutReplication(activeMutation.Tasks),
+	)
 
 	workflowKeys := []definition.WorkflowKey{request.ExecutionContext.GetWorkflowKey()}
 	if newRun {
@@ -172,8 +207,154 @@ func (h *Harness) InterceptUpdate(
 		h.recordApplyError(err)
 		return err
 	}
+	if err := h.comparePersistedMutableState(
+		ctx,
+		request.ShardContext,
+		request.ExecutionContext.GetArchetypeID(),
+		request.ExecutionContext.GetWorkflowKey(),
+		expectedState,
+	); err != nil {
+		h.recordApplyError(err)
+		return err
+	}
 	h.recordApplied()
 	return nil
+}
+
+func syncVersionedTransitionTask(
+	tasksByCategory map[historytasks.Category][]historytasks.Task,
+) (*historytasks.SyncVersionedTransitionTask, error) {
+	var result *historytasks.SyncVersionedTransitionTask
+	for _, task := range tasksByCategory[historytasks.CategoryReplication] {
+		syncTask, ok := task.(*historytasks.SyncVersionedTransitionTask)
+		if !ok {
+			continue
+		}
+		if result != nil {
+			return nil, errors.New("passivepath: active transaction generated multiple sync versioned transition tasks")
+		}
+		result = syncTask
+	}
+	if result == nil {
+		return nil, errors.New("passivepath: active transaction generated no sync versioned transition task")
+	}
+	return result, nil
+}
+
+// tasksWithoutReplication removes the active-only replication envelope before task
+// parity is checked. The passive close must regenerate every other task category.
+func tasksWithoutReplication(
+	tasksByCategory map[historytasks.Category][]historytasks.Task,
+) map[historytasks.Category][]historytasks.Task {
+	result := maps.Clone(tasksByCategory)
+	delete(result, historytasks.CategoryReplication)
+	return result
+}
+
+func (h *Harness) comparePersistedMutableState(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	archetypeID chasm.ArchetypeID,
+	workflowKey definition.WorkflowKey,
+	expected *persistencespb.WorkflowMutableState,
+) error {
+	response, err := shardContext.GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
+		ShardID:     shardContext.GetShardID(),
+		NamespaceID: workflowKey.NamespaceID,
+		WorkflowID:  workflowKey.WorkflowID,
+		RunID:       workflowKey.RunID,
+		ArchetypeID: archetypeID,
+	})
+	if err != nil {
+		return fmt.Errorf("passivepath: load passively persisted mutable state for %s: %w", workflowKey.String(), err)
+	}
+
+	if diff := mutableStateDiff(expected, response.State); diff != "" {
+		return fmt.Errorf(
+			"passivepath: active/passive mutable state differs for %s (-active +passive):\n%s",
+			workflowKey.String(), diff,
+		)
+	}
+	return nil
+}
+
+func mutableStateDiff(expected, actual *persistencespb.WorkflowMutableState) string {
+	return mutableStateDiffWithOptions(expected, actual, false)
+}
+
+func mutableStateDiffWithOptions(
+	expected *persistencespb.WorkflowMutableState,
+	actual *persistencespb.WorkflowMutableState,
+	rebuiltFromEvents bool,
+) string {
+	expected = proto.Clone(expected).(*persistencespb.WorkflowMutableState)
+	actual = proto.Clone(actual).(*persistencespb.WorkflowMutableState)
+	normalizeMutableStateForComparison(expected)
+	normalizeMutableStateForComparison(actual)
+	if rebuiltFromEvents {
+		normalizeEventRebuiltMutableStateForComparison(expected)
+		normalizeEventRebuiltMutableStateForComparison(actual)
+	}
+	return cmp.Diff(expected, actual, protocmp.Transform())
+}
+
+func normalizeEventRebuiltMutableStateForComparison(state *persistencespb.WorkflowMutableState) {
+	info := state.ExecutionInfo
+	if info != nil {
+		for _, versionHistory := range info.GetVersionHistories().GetHistories() {
+			versionHistory.BranchToken = nil
+		}
+		info.SubStateMachineTombstoneBatches = slices.DeleteFunc(
+			info.SubStateMachineTombstoneBatches,
+			func(batch *persistencespb.StateMachineTombstoneBatch) bool {
+				return len(batch.GetStateMachineTombstones()) == 0
+			},
+		)
+		// Rebuilding the first event initializes this task-refresh watermark locally.
+		info.VisibilityLastUpdateVersionedTransition = nil
+		// The active close and event rebuild derive this timestamp independently and can
+		// differ at sub-millisecond precision without changing workflow semantics.
+		info.WorkflowTaskOriginalScheduledTime = nil
+	}
+	if executionState := state.ExecutionState; executionState != nil {
+		delete(executionState.RequestIds, executionState.CreateRequestId)
+		executionState.CreateRequestId = ""
+	}
+}
+
+func normalizeMutableStateForComparison(state *persistencespb.WorkflowMutableState) {
+	// SignalRequestedIds represents a set even though persistence encodes it as a list.
+	slices.Sort(state.SignalRequestedIds)
+
+	info := state.ExecutionInfo
+	if info == nil {
+		return
+	}
+	// Reuse the production definition of cluster- and shard-local mutable state.
+	workflow.SanitizeMutableState(state)
+	for _, activityInfo := range state.ActivityInfos {
+		activityInfo.TimerTaskStatus = 0
+	}
+	for _, timerInfo := range state.TimerInfos {
+		timerInfo.TaskStatus = 0
+	}
+	// These values describe the local persistence transaction rather than replicated
+	// workflow state. Closing the passive apply necessarily assigns them again.
+	info.LastUpdateTime = nil
+	info.StateTransitionCount = 0
+	// Sticky queues are local worker routing state and are deliberately cleared when
+	// mutable state is synchronized to another cluster.
+	info.StickyTaskQueue = ""
+	info.StickyScheduleToStartTimeout = nil
+	if info.WorkflowTaskStartedEventId == 0 {
+		info.WorkflowTaskStartedTime = nil
+	}
+	if info.ExecutionStats != nil {
+		info.ExecutionStats.HistorySize = 0
+	}
+	if len(info.AutoResetPoints.GetPoints()) == 0 {
+		info.AutoResetPoints = nil
+	}
 }
 
 func (h *Harness) buildArtifact(
@@ -182,12 +363,13 @@ func (h *Harness) buildArtifact(
 	workflowKey definition.WorkflowKey,
 	mutableState historyi.MutableState,
 	exclusiveStart *persistencespb.VersionedTransition,
+	replicationTaskTransition *persistencespb.VersionedTransition,
 	eventsSeq []*persistence.WorkflowEvents,
 ) (*replicationspb.VersionedTransitionArtifact, error) {
 	// SyncStateRetriever normally loads the already-persisted successor run when this
 	// field is set. In this test hook the successor is still only in memory, and its
 	// first event batch is supplied by InterceptUpdate below instead. Hide the ID from
-	// that lookup, then restore it on both mutable state and the generated mutation.
+	// that lookup, then restore it on both mutable state and the generated artifact.
 	successorRunID := mutableState.GetExecutionInfo().GetSuccessorRunId()
 	mutableState.GetExecutionInfo().SuccessorRunId = ""
 	defer func() {
@@ -198,23 +380,41 @@ func (h *Harness) buildArtifact(
 		workflowKey.NamespaceID,
 		&commonpb.WorkflowExecution{WorkflowId: workflowKey.WorkflowID, RunId: workflowKey.RunID},
 		mutableState,
-		exclusiveStart,
+		h.artifactStartTransition(exclusiveStart),
 		nil,
 		wcache.NoopReleaseFn,
 	)
 	if err != nil {
 		return nil, err
 	}
-	artifact := result.VersionedTransitionArtifact
-	if artifact.GetSyncWorkflowStateMutationAttributes() == nil {
-		return nil, fmt.Errorf("passivepath: expected mutation artifact for %s, got snapshot", workflowKey.String())
+	if artifactTransition := transitionhistory.LastVersionedTransition(result.VersionedTransitionHistory); transitionhistory.Compare(
+		artifactTransition,
+		replicationTaskTransition,
+	) != 0 {
+		return nil, fmt.Errorf(
+			"passivepath: artifact transition %v does not match replication task transition %v",
+			artifactTransition,
+			replicationTaskTransition,
+		)
 	}
+	artifact := result.VersionedTransitionArtifact
 	if successorRunID != "" {
-		mutation := artifact.GetSyncWorkflowStateMutationAttributes().GetStateMutation()
-		if mutation.GetExecutionInfo() == nil {
-			return nil, fmt.Errorf("passivepath: mutation for %s has no execution info", workflowKey.String())
+		switch {
+		case artifact.GetSyncWorkflowStateMutationAttributes() != nil:
+			mutation := artifact.GetSyncWorkflowStateMutationAttributes().GetStateMutation()
+			if mutation.GetExecutionInfo() == nil {
+				return nil, fmt.Errorf("passivepath: mutation for %s has no execution info", workflowKey.String())
+			}
+			mutation.ExecutionInfo.SuccessorRunId = successorRunID
+		case artifact.GetSyncWorkflowStateSnapshotAttributes() != nil:
+			snapshot := artifact.GetSyncWorkflowStateSnapshotAttributes().GetState()
+			if snapshot.GetExecutionInfo() == nil {
+				return nil, fmt.Errorf("passivepath: snapshot for %s has no execution info", workflowKey.String())
+			}
+			snapshot.ExecutionInfo.SuccessorRunId = successorRunID
+		default:
+			return nil, fmt.Errorf("passivepath: artifact for %s has no state", workflowKey.String())
 		}
-		mutation.ExecutionInfo.SuccessorRunId = successorRunID
 	}
 	eventBatches, err := h.serializeEvents(eventsSeq)
 	if err != nil {

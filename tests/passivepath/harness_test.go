@@ -7,12 +7,94 @@ import (
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	historytasks "go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+func TestMutableStateDiffNormalizesOnlyLocalFields(t *testing.T) {
+	expected := &persistencespb.WorkflowMutableState{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			LastUpdateTime:               timestamppb.New(time.Unix(1, 0)),
+			LastFirstEventTxnId:          11,
+			StateTransitionCount:         12,
+			CloseTransferTaskId:          14,
+			CloseVisibilityTaskId:        15,
+			StickyTaskQueue:              "active-sticky-queue",
+			StickyScheduleToStartTimeout: durationpb.New(time.Second),
+			ExecutionStats:               &persistencespb.ExecutionStats{HistorySize: 13},
+			UpdateCount:                  1,
+			WorkflowTaskStartedTime:      timestamppb.New(time.Unix(0, 0)),
+		},
+		SignalRequestedIds: []string{"b", "a"},
+	}
+	actual := &persistencespb.WorkflowMutableState{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			LastUpdateTime:       timestamppb.New(time.Unix(2, 0)),
+			LastFirstEventTxnId:  21,
+			StateTransitionCount: 22,
+			AutoResetPoints:      &workflowpb.ResetPoints{},
+			ExecutionStats:       &persistencespb.ExecutionStats{HistorySize: 23},
+			UpdateCount:          1,
+		},
+		SignalRequestedIds: []string{"a", "b"},
+	}
+	require.Empty(t, mutableStateDiff(expected, actual))
+
+	actual.ExecutionInfo.UpdateCount = 2
+	require.Contains(t, mutableStateDiff(expected, actual), "update_count")
+}
+
+func TestForceSnapshotReplication(t *testing.T) {
+	harness := NewHarness(log.NewNoopLogger())
+	transition := &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: 1,
+		TransitionCount:          2,
+	}
+	require.Same(t, transition, harness.artifactStartTransition(transition))
+
+	harness.ForceSnapshotReplication()
+	require.Nil(t, harness.artifactStartTransition(transition))
+}
+
+func TestMutableStateDiffNormalizesEventRebuildFieldsOnlyForNewRun(t *testing.T) {
+	state := func(branchToken []byte, requestID string) *persistencespb.WorkflowMutableState {
+		return &persistencespb.WorkflowMutableState{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+				WorkflowId: "workflow",
+				VersionHistories: &historyspb.VersionHistories{
+					Histories: []*historyspb.VersionHistory{{BranchToken: branchToken}},
+				},
+				WorkflowTaskOriginalScheduledTime: timestamppb.New(time.Unix(1, 0)),
+			},
+			ExecutionState: &persistencespb.WorkflowExecutionState{
+				CreateRequestId: requestID,
+				RequestIds:      map[string]*persistencespb.RequestIDInfo{requestID: {}},
+			},
+		}
+	}
+	expected := state([]byte("active-branch"), "active-request")
+	expected.ExecutionInfo.SubStateMachineTombstoneBatches = []*persistencespb.StateMachineTombstoneBatch{{}}
+	actual := state([]byte("passive-branch"), "passive-request")
+	actual.ExecutionInfo.VisibilityLastUpdateVersionedTransition = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: 1,
+		TransitionCount:          1,
+	}
+	actual.ExecutionInfo.WorkflowTaskOriginalScheduledTime = timestamppb.New(time.Unix(2, 0))
+
+	require.NotEmpty(t, mutableStateDiff(expected, actual))
+	require.Empty(t, mutableStateDiffWithOptions(expected, actual, true))
+
+	actual.ExecutionInfo.WorkflowId = "different-workflow"
+	require.Contains(t, mutableStateDiffWithOptions(expected, actual, true), "workflow_id")
+}
 
 func TestMissingTaskFingerprints(t *testing.T) {
 	require.Empty(t, missingTaskFingerprints(
@@ -27,6 +109,47 @@ func TestMissingTaskFingerprints(t *testing.T) {
 		[]string{"activity", "activity", "passive-only"},
 		[]string{"activity", "activity"},
 	))
+}
+
+func TestSyncVersionedTransitionTask(t *testing.T) {
+	_, err := syncVersionedTransitionTask(nil)
+	require.Error(t, err)
+
+	expected := &historytasks.SyncVersionedTransitionTask{}
+	tasksByCategory := map[historytasks.Category][]historytasks.Task{
+		historytasks.CategoryReplication: {
+			&historytasks.HistoryReplicationTask{},
+			expected,
+		},
+	}
+
+	actual, err := syncVersionedTransitionTask(tasksByCategory)
+	require.NoError(t, err)
+	require.Same(t, expected, actual)
+
+	tasksByCategory[historytasks.CategoryReplication] = append(
+		tasksByCategory[historytasks.CategoryReplication],
+		&historytasks.SyncVersionedTransitionTask{},
+	)
+	_, err = syncVersionedTransitionTask(tasksByCategory)
+	require.Error(t, err)
+}
+
+func TestTasksWithoutReplication(t *testing.T) {
+	workflowKey := definition.NewWorkflowKey("namespace", "workflow", "run")
+	tasksByCategory := map[historytasks.Category][]historytasks.Task{
+		historytasks.CategoryTransfer: {
+			&historytasks.WorkflowTask{WorkflowKey: workflowKey},
+		},
+		historytasks.CategoryReplication: {
+			&historytasks.SyncVersionedTransitionTask{WorkflowKey: workflowKey},
+		},
+	}
+
+	filtered := tasksWithoutReplication(tasksByCategory)
+	require.Contains(t, filtered, historytasks.CategoryTransfer)
+	require.NotContains(t, filtered, historytasks.CategoryReplication)
+	require.Contains(t, tasksByCategory, historytasks.CategoryReplication)
 }
 
 func TestTaskFingerprintsNormalizeOnlyPersistenceAndJitterFields(t *testing.T) {
