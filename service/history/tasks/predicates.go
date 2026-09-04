@@ -69,6 +69,8 @@ func (n *NamespacePredicate) Size() int {
 	return size
 }
 
+// Deprecated: superseded by NewOutboundTaskPredicate (#6445). Only called from
+// service/history/queues/convert.go to deserialize a shard checkpointed before that change.
 func NewDestinationPredicate(
 	destinations []string,
 ) *DestinationPredicate {
@@ -108,6 +110,8 @@ func (n *DestinationPredicate) Size() int {
 	return size
 }
 
+// Deprecated: superseded by NewOutboundTaskPredicate (#6445). Only called from
+// service/history/queues/convert.go to deserialize a shard checkpointed before that change.
 func NewOutboundTaskGroupPredicate(
 	groups []string,
 ) *OutboundTaskGroupPredicate {
@@ -147,6 +151,8 @@ func (n *OutboundTaskGroupPredicate) Size() int {
 	return size
 }
 
+// Deprecated: never constructed by any queue's grouper. Only called from
+// service/history/queues/convert.go to deserialize a legacy shard.
 func NewTypePredicate(
 	types []enumsspb.TaskType,
 ) *TypePredicate {
@@ -265,69 +271,6 @@ func AndPredicates(a Predicate, b Predicate) Predicate {
 				}
 			}
 		}
-	case *TypePredicate:
-		switch b := b.(type) {
-		case *TypePredicate:
-			intersection := intersect(a.Types, b.Types)
-			if len(intersection) == 0 {
-				return predicates.Empty[Task]()
-			}
-			return &TypePredicate{
-				Types: intersection,
-			}
-		case *predicates.NotImpl[Task]:
-			if exclude, ok := b.Predicate.(*TypePredicate); ok {
-				difference := difference(a.Types, exclude.Types)
-				if len(difference) == 0 {
-					return predicates.Empty[Task]()
-				}
-				return &TypePredicate{
-					Types: difference,
-				}
-			}
-		}
-	case *DestinationPredicate:
-		switch b := b.(type) {
-		case *DestinationPredicate:
-			intersection := intersect(a.Destinations, b.Destinations)
-			if len(intersection) == 0 {
-				return predicates.Empty[Task]()
-			}
-			return &DestinationPredicate{
-				Destinations: intersection,
-			}
-		case *predicates.NotImpl[Task]:
-			if exclude, ok := b.Predicate.(*DestinationPredicate); ok {
-				difference := difference(a.Destinations, exclude.Destinations)
-				if len(difference) == 0 {
-					return predicates.Empty[Task]()
-				}
-				return &DestinationPredicate{
-					Destinations: difference,
-				}
-			}
-		}
-	case *OutboundTaskGroupPredicate:
-		switch b := b.(type) {
-		case *OutboundTaskGroupPredicate:
-			intersection := intersect(a.Groups, b.Groups)
-			if len(intersection) == 0 {
-				return predicates.Empty[Task]()
-			}
-			return &OutboundTaskGroupPredicate{
-				Groups: intersection,
-			}
-		case *predicates.NotImpl[Task]:
-			if exclude, ok := b.Predicate.(*OutboundTaskGroupPredicate); ok {
-				difference := difference(a.Groups, exclude.Groups)
-				if len(difference) == 0 {
-					return predicates.Empty[Task]()
-				}
-				return &OutboundTaskGroupPredicate{
-					Groups: difference,
-				}
-			}
-		}
 	case *OutboundTaskPredicate:
 		switch b := b.(type) {
 		case *OutboundTaskPredicate:
@@ -381,24 +324,6 @@ func OrPredicates(a Predicate, b Predicate) Predicate {
 		if b, ok := b.(*NamespacePredicate); ok {
 			return &NamespacePredicate{
 				NamespaceIDs: union(a.NamespaceIDs, b.NamespaceIDs),
-			}
-		}
-	case *TypePredicate:
-		if b, ok := b.(*TypePredicate); ok {
-			return &TypePredicate{
-				Types: union(a.Types, b.Types),
-			}
-		}
-	case *DestinationPredicate:
-		if b, ok := b.(*DestinationPredicate); ok {
-			return &DestinationPredicate{
-				Destinations: union(a.Destinations, b.Destinations),
-			}
-		}
-	case *OutboundTaskGroupPredicate:
-		if b, ok := b.(*OutboundTaskGroupPredicate); ok {
-			return &OutboundTaskGroupPredicate{
-				Groups: union(a.Groups, b.Groups),
 			}
 		}
 	case *OutboundTaskPredicate:
