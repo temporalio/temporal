@@ -100,6 +100,6 @@ type (
 		TaskQueueType enumspb.TaskQueueType
 		ShardID       int32
 		// File-based dynamic config calls this constraint "historyTaskType".
-		TaskType      enumsspb.TaskType
+		TaskType enumsspb.TaskType
 	}
 )
