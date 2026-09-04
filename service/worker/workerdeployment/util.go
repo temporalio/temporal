@@ -40,7 +40,8 @@ const (
 	WorkerDeploymentWorkflowType        = "temporal-sys-worker-deployment-workflow"
 
 	// Namespace division
-	WorkerDeploymentNamespaceDivision = "TemporalWorkerDeployment"
+	WorkerDeploymentNamespaceDivision   = "TemporalWorkerDeployment"
+	workerDeploymentWorkflowPriorityKey = 1
 
 	// Updates
 	RegisterWorkerInDeploymentVersion = "register-task-queue-worker"    // for Worker Deployment Version wf
@@ -432,6 +433,7 @@ func makeStartRequest(
 		SearchAttributes:         buildSearchAttributes(),
 		Memo:                     memo,
 		Identity:                 identity,
+		Priority:                 &commonpb.Priority{PriorityKey: workerDeploymentWorkflowPriorityKey},
 	}
 }
 
