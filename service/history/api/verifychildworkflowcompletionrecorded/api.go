@@ -72,7 +72,7 @@ func verifyChildExecution(
 
 	if !onCurrentBranch {
 		// Due to conflict resolution, the initiated event may be on a different branch of the workflow.
-		// The child is not associated with the current branch, so it cannot block the parent.
+		// The child is not associated with the current branch, so verification is complete.
 		return nil, nil, parentWorkflowState, nil
 	}
 
