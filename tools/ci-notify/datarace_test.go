@@ -167,28 +167,24 @@ func TestRaceSites(t *testing.T) {
 	require.Empty(t, raceSites("some unrelated text"))
 }
 
-func TestBuildDataRaceMessageLinksToJob(t *testing.T) {
+func TestBuildDataRaceMessageFormatsRaceAndLinksToJob(t *testing.T) {
 	report := &DataRaceReport{
 		Run: github.Run{
 			DatabaseID: 123456,
-			HeadSHA:    "abc1234567890defghijk",
 			URL:        "https://github.com/temporalio/temporal/actions/runs/123456",
 		},
-		Author: "Test Author",
-		Title:  "Some commit title",
 		DataRaces: []DataRace{
-			{Location: "service/history.TestMutableState", Details: readWriteRaceDetails, JobID: "789"},
+			{Location: "service/matching.(*cache).put", Details: readWriteRaceDetails, JobID: "789"},
 		},
 	}
 
 	rendered := BuildDataRaceMessage(report).RenderMarkdown()
 
 	require.Contains(t, rendered, "Data Race Detected on Main Branch")
-	require.Contains(t, rendered, "Test Author")
-	require.Contains(t, rendered, "service/history.TestMutableState")
-	require.Contains(t, rendered, "Read at (goroutine 8): service/history/mutable_state.go:127")
-	require.Contains(t, rendered, "Previous write at (goroutine 7): service/history/mutable_state.go:130")
-	require.Contains(t, rendered, "abc1234") // short SHA link
+	require.Contains(t, rendered, "```\nservice/matching.(*cache).put\nRead at (goroutine 8): service/history/mutable_state.go:127\nPrevious write at (goroutine 7): service/history/mutable_state.go:130\n```")
+	require.NotContains(t, rendered, "Commit:")
+	require.NotContains(t, rendered, "Author:")
+	require.NotContains(t, rendered, "Commit message:")
 	// Links to the specific job, not just the top-level run.
 	require.Contains(t, rendered, "actions/runs/123456/job/789")
 	// Runtime shim frames and raw stacktrace noise are not dumped into Slack.
@@ -197,13 +193,13 @@ func TestBuildDataRaceMessageLinksToJob(t *testing.T) {
 
 func TestBuildDataRaceMessageFallsBackToRunLink(t *testing.T) {
 	report := &DataRaceReport{
-		Run:       github.Run{DatabaseID: 123456, HeadSHA: "abc1234567890"},
+		Run:       github.Run{DatabaseID: 123456},
 		DataRaces: []DataRace{{Location: "pkg.TestRacy", Details: "unparseable"}}, // no JobID
 	}
 
 	rendered := BuildDataRaceMessage(report).RenderMarkdown()
 
-	require.Contains(t, rendered, "Unknown") // author
+	require.NotContains(t, rendered, "Unknown")
 	require.Contains(t, rendered, "pkg.TestRacy")
 	require.Contains(t, rendered, "actions/runs/123456")
 	require.NotContains(t, rendered, "/job/")
