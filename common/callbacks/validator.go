@@ -45,8 +45,7 @@ type Validator interface {
 	// one request, since it cannot see what a running execution already holds.
 	//
 	// It does not re-validate the individual callbacks; Validate has already done that at the
-	// frontend. Unlike Validate, exceeding a limit here depends on execution state rather than the
-	// request alone, so failures are FailedPrecondition rather than InvalidArgument.
+	// frontend.
 	ValidateAdditions(namespaceName string, cbs []*commonpb.Callback, opts AdditionOptions) error
 }
 
@@ -142,7 +141,7 @@ func (v *validator) ValidateAdditions(
 ) error {
 	maxCount := v.config.MaxCallbacksPerExecution(namespaceName)
 	if len(cbs)+opts.CurrentCallbacksAttached > maxCount {
-		return serviceerror.NewFailedPreconditionf(
+		return serviceerror.NewInvalidArgumentf(
 			"cannot attach more than %d callbacks to an execution (%d callbacks already attached)",
 			maxCount, opts.CurrentCallbacksAttached,
 		)
@@ -157,7 +156,7 @@ func (v *validator) ValidateAdditions(
 // carry against the per-execution limit.
 func (v *validator) validateSourceContextSize(namespaceName string, bytes int) error {
 	if maxSize := v.config.TotalNexusHandlerSourceContextMaxSize(namespaceName); bytes > maxSize {
-		return serviceerror.NewFailedPreconditionf(
+		return serviceerror.NewInvalidArgumentf(
 			"cannot attach more than %d bytes of callback source_context to an execution (%d bytes requested)",
 			maxSize, bytes)
 	}

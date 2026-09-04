@@ -1208,6 +1208,8 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_NonNexusCallbac
 // by each payload on its own. Workflow.AddCompletionCallbacks re-checks this against the callbacks a
 // running workflow already has, which the frontend cannot see.
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_CallbackSourceContextAggregate() {
+	ctx := s.T().Context()
+
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespace.NewID(), nil).AnyTimes()
 	config := s.newConfig()
@@ -1238,11 +1240,12 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_CallbackSourceC
 	}
 
 	// Each callback is within the 4096-byte per-callback cap; only their total is over.
-	_, err := wh.StartWorkflowExecution(context.Background(), newRequest(
+	_, err := wh.StartWorkflowExecution(ctx, newRequest(
 		nexusHandlerCallback(3000), nexusHandlerCallback(3000),
 	))
-	s.ErrorAs(err, new(*serviceerror.FailedPrecondition))
-	s.ErrorContains(err, "cannot attach more than 5000 bytes of callback source_context")
+	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+	s.ErrorContains(err, "source_context exceeds size limit.")
+	s.ErrorContains(err, "Limit=1000") // Size set in the result from test.NewCallbackValidatorConfig()
 }
 
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidAggregatedLinks() {
