@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
-	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -81,15 +82,16 @@ type testQueuePersistenceStats struct {
 	updateCount          int
 }
 
-func newTestTaskManager(logger log.Logger) *testTaskManager {
-	return newTestTaskManagerWithFairness(logger, false)
+func newTestTaskManager(t testing.TB, logger log.Logger) *testTaskManager {
+	return newTestTaskManagerWithFairness(t, logger, false)
 }
 
-func newTestFairTaskManager(logger log.Logger) *testTaskManager {
-	return newTestTaskManagerWithFairness(logger, true)
+func newTestFairTaskManager(t testing.TB, logger log.Logger) *testTaskManager {
+	return newTestTaskManagerWithFairness(t, logger, true)
 }
 
-func newTestTaskManagerWithFairness(logger log.Logger, fairness bool) *testTaskManager {
+func newTestTaskManagerWithFairness(t testing.TB, logger log.Logger, fairness bool) *testTaskManager {
+	t.Helper()
 	cfg := newMatchingSQLiteMemoryConfig()
 	serializer := serialization.NewSerializer()
 	factory := sql.NewFactory(
@@ -111,9 +113,9 @@ func newTestTaskManagerWithFairness(logger log.Logger, fairness bool) *testTaskM
 	}
 	if err != nil {
 		factory.Close()
-		panic(fmt.Sprintf("failed to create sqlite task store: %v", err))
+		require.NoError(t, err)
 	}
-	return &testTaskManager{
+	m := &testTaskManager{
 		TaskManager:    persistence.NewTaskManager(store, serializer),
 		factory:        factory,
 		fairness:       fairness,
@@ -121,6 +123,8 @@ func newTestTaskManagerWithFairness(logger log.Logger, fairness bool) *testTaskM
 		stats:          make(map[dbTaskQueueKey]*testQueuePersistenceStats),
 		forcedUserData: make(map[userDataKey]*persistencespb.VersionedTaskQueueUserData),
 	}
+	t.Cleanup(m.Close)
+	return m
 }
 
 func newMatchingSQLiteMemoryConfig() *config.SQL {
@@ -233,11 +237,7 @@ func (m *testTaskManager) UpdateTaskQueue(
 	m.delay()
 	defer m.delay()
 	m.incStat(m.queueKeyFromInfo(request.TaskQueueInfo), func(st *testQueuePersistenceStats) { st.updateCount++ })
-	resp, err := m.TaskManager.UpdateTaskQueue(ctx, request)
-	if err != nil && ctx.Err() != nil {
-		return &persistence.UpdateTaskQueueResponse{}, nil
-	}
-	return resp, err
+	return m.TaskManager.UpdateTaskQueue(ctx, request)
 }
 
 func (m *testTaskManager) CreateTasks(
@@ -302,29 +302,7 @@ func (m *testTaskManager) CompleteTasksLessThan(
 ) (int, error) {
 	m.delay()
 	defer m.delay()
-
-	// Matching unit tests were written against an in-memory fake that deleted every
-	// matching row and returned UnknownNumRowsAffected (same as Cassandra). SQL honors
-	// Limit and returns the row count, which leaves tasks around and changes GC.
-	// Loop until the range is empty so tests keep the old semantics.
-	const page = 10000
-	for {
-		req := *request
-		if req.Limit <= 0 {
-			req.Limit = page
-		}
-		n, err := m.TaskManager.CompleteTasksLessThan(ctx, &req)
-		if err != nil {
-			if ctx.Err() != nil {
-				return persistence.UnknownNumRowsAffected, nil
-			}
-			return 0, err
-		}
-		if n == 0 || n == persistence.UnknownNumRowsAffected || n < req.Limit {
-			break
-		}
-	}
-	return persistence.UnknownNumRowsAffected, nil
+	return m.TaskManager.CompleteTasksLessThan(ctx, request)
 }
 
 func (m *testTaskManager) UpdateTaskQueueUserData(
@@ -334,54 +312,23 @@ func (m *testTaskManager) UpdateTaskQueueUserData(
 	if m.fairness {
 		panic("userdata calls should not to go fair task manager")
 	}
-	// Matching tests seed user data with arbitrary versions. SQL requires version 0 to
-	// insert and CAS on later writes. Retry as upsert so seeds behave like the old fake.
-	for range 5 {
-		err := m.TaskManager.UpdateTaskQueueUserData(ctx, request)
-		if err == nil {
-			return nil
-		}
-		if !m.fixUserDataVersions(ctx, request, err) {
-			return err
-		}
-	}
 	return m.TaskManager.UpdateTaskQueueUserData(ctx, request)
 }
 
-func (m *testTaskManager) fixUserDataVersions(
-	ctx context.Context,
-	request *persistence.UpdateTaskQueueUserDataRequest,
-	updateErr error,
-) bool {
-	if _, ok := updateErr.(*persistence.ConditionFailedError); !ok && !persistence.IsConflictErr(updateErr) {
-		// unique constraint comes back as ConditionFailed or Unavailable wrapping sqlite 1555
-		if updateErr == nil {
-			return false
-		}
-		msg := updateErr.Error()
-		if !strings.Contains(msg, "UNIQUE constraint") && !strings.Contains(msg, "already exists") {
-			return false
-		}
-	}
-	fixed := false
-	for tq, update := range request.Updates {
-		resp, err := m.TaskManager.GetTaskQueueUserData(ctx, &persistence.GetTaskQueueUserDataRequest{
-			NamespaceID: request.NamespaceID,
-			TaskQueue:   tq,
-		})
-		if err != nil {
-			if common.IsNotFoundError(err) {
-				update.UserData.Version = 0
-				fixed = true
-			}
-			continue
-		}
-		if update.UserData.GetVersion() != resp.UserData.GetVersion() {
-			update.UserData.Version = resp.UserData.GetVersion()
-			fixed = true
-		}
-	}
-	return fixed
+func (m *testTaskManager) seedUserData(
+	t testing.TB,
+	nsID, tq string,
+	data *persistencespb.VersionedTaskQueueUserData,
+) {
+	t.Helper()
+	seed := common.CloneProto(data)
+	seed.Version = 0
+	require.NoError(t, m.UpdateTaskQueueUserData(context.Background(), &persistence.UpdateTaskQueueUserDataRequest{
+		NamespaceID: nsID,
+		Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+			tq: {UserData: seed},
+		},
+	}))
 }
 
 func (m *testTaskManager) GetTaskQueueUserData(
@@ -444,44 +391,68 @@ func (q *testQueueData) reload() {
 	q.info = common.CloneProto(resp.TaskQueueInfo)
 }
 
-func (q *testQueueData) Lock() {
-	q.Mutex.Lock()
+func (q *testQueueData) bumpRangeID(t testing.TB) {
+	t.Helper()
+	q.Lock()
+	defer q.Unlock()
 	q.reload()
-}
-
-func (q *testQueueData) Unlock() {
-	if q.rangeID != q.loadedRangeID && q.loadedRangeID != 0 {
-		info := common.CloneProto(q.info)
-		if info == nil {
-			info = &persistencespb.TaskQueueInfo{
-				NamespaceId: q.key.NamespaceId(),
-				Name:        q.key.PersistenceName(),
-				TaskType:    q.key.TaskType(),
-			}
-		}
-		if info.LastUpdateTime == nil {
-			info.LastUpdateTime = timestamp.TimeNowPtrUtc()
-		}
-		_, err := q.mgr.TaskManager.UpdateTaskQueue(context.Background(), &persistence.UpdateTaskQueueRequest{
-			RangeID:       q.rangeID,
-			TaskQueueInfo: info,
-			PrevRangeID:   q.loadedRangeID,
-		})
-		if err == nil {
-			q.loadedRangeID = q.rangeID
+	require.NotEqual(t, int64(0), q.loadedRangeID, "cannot bump range ID of a queue that has not been created")
+	info := common.CloneProto(q.info)
+	if info == nil {
+		info = &persistencespb.TaskQueueInfo{
+			NamespaceId: q.key.NamespaceId(),
+			Name:        q.key.PersistenceName(),
+			TaskType:    q.key.TaskType(),
 		}
 	}
-	q.Mutex.Unlock()
+	if info.LastUpdateTime == nil {
+		info.LastUpdateTime = timestamp.TimeNowPtrUtc()
+	}
+	newRangeID := q.rangeID + 1
+	_, err := q.mgr.TaskManager.UpdateTaskQueue(context.Background(), &persistence.UpdateTaskQueueRequest{
+		RangeID:       newRangeID,
+		TaskQueueInfo: info,
+		PrevRangeID:   q.loadedRangeID,
+	})
+	require.NoError(t, err)
+	q.rangeID = newRangeID
+	q.loadedRangeID = newRangeID
 }
 
 func (q *testQueueData) RangeID() int64 {
 	q.Lock()
 	defer q.Unlock()
+	q.reload()
 	return q.rangeID
 }
 
 func (q *testQueueData) persistenceStats() testQueuePersistenceStats {
 	return q.mgr.statsFor(q.key)
+}
+
+func (m *testTaskManager) completeAllTasksLessThan(t testing.TB, q *PhysicalTaskQueueKey) {
+	t.Helper()
+	const page = 10000
+	for subqueue := range testMaxSubqueues {
+		for {
+			req := &persistence.CompleteTasksLessThanRequest{
+				NamespaceID:        q.NamespaceId(),
+				TaskQueueName:      q.PersistenceName(),
+				TaskType:           q.TaskType(),
+				ExclusiveMaxTaskID: math.MaxInt64,
+				Subqueue:           subqueue,
+				Limit:              page,
+			}
+			if m.fairness {
+				req.ExclusiveMaxPass = math.MaxInt64
+			}
+			n, err := m.TaskManager.CompleteTasksLessThan(context.Background(), req)
+			require.NoError(t, err)
+			if n == 0 || n == persistence.UnknownNumRowsAffected || n < page {
+				break
+			}
+		}
+	}
 }
 
 func (m *testTaskManager) getAllTasks(q *PhysicalTaskQueueKey) []*persistencespb.AllocatedTaskInfo {
@@ -504,7 +475,10 @@ func (m *testTaskManager) getAllTasks(q *PhysicalTaskQueueKey) []*persistencespb
 				PageSize:           testGetTasksPage,
 			}
 			resp, err := m.TaskManager.GetTasks(context.Background(), req)
-			if err != nil || len(resp.Tasks) == 0 {
+			if err != nil {
+				panic(fmt.Sprintf("getAllTasks: GetTasks failed: %v", err))
+			}
+			if len(resp.Tasks) == 0 {
 				break
 			}
 			all = append(all, resp.Tasks...)

@@ -395,9 +395,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnersh
 
 	// simulate stolen lock
 	ptm := tm.getQueueDataByKey(s.physicalTaskQueueKey)
-	ptm.Lock()
-	ptm.rangeID++
-	ptm.Unlock()
+	ptm.bumpRangeID(s.T())
 
 	// change something to ensure it does the periodic write
 	s.tqMgr.backlogMgr.getDB().updateAckLevelAndBacklogStats(0, 123456, 10, time.Time{})
@@ -793,6 +791,7 @@ func TestDrainCompletionNoReloadDraining(t *testing.T) {
 	// otherhastasks is false in persistence
 	require.Eventually(t, func() bool {
 		fairQueueData.Lock()
+		fairQueueData.reload()
 		otherHasTasks := fairQueueData.info.GetOtherHasTasks()
 		fairQueueData.Unlock()
 		return tqMgr.getDrainBacklogMgr() == nil && !otherHasTasks

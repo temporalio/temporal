@@ -74,11 +74,10 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
 	if s.fairness {
-		s.taskMgr = newTestFairTaskManager(s.logger)
+		s.taskMgr = newTestFairTaskManager(s.T(), s.logger)
 	} else {
-		s.taskMgr = newTestTaskManager(s.logger)
+		s.taskMgr = newTestTaskManager(s.T(), s.logger)
 	}
-	s.T().Cleanup(s.taskMgr.Close)
 
 	// A capture handler discards recordings while no capture is active (see
 	// CaptureHandler.record), so it behaves like a noop handler for tests that
@@ -732,9 +731,7 @@ func (s *BacklogManagerTestSuite) TestSyncState_UnloadsOnOwnershipLoss() {
 	// simulate another partition stealing and releasing ownership
 	db := s.blm.getDB()
 	tqd := s.taskMgr.getQueueDataByKey(db.queue)
-	tqd.Lock()
-	tqd.rangeID++
-	tqd.Unlock()
+	tqd.bumpRangeID(s.T())
 
 	s.Eventually(unloadCalled.Load, time.Second, 100*time.Millisecond)
 }

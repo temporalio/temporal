@@ -120,10 +120,8 @@ func createTestMatchingEngine(
 	namespaceRegistry namespace.Registry,
 ) *matchingEngineImpl {
 	t.Helper()
-	tm := newTestTaskManager(logger)
-	ftm := newTestFairTaskManager(logger)
-	t.Cleanup(tm.Close)
-	t.Cleanup(ftm.Close)
+	tm := newTestTaskManager(t, logger)
+	ftm := newTestFairTaskManager(t, logger)
 	mockVisibilityManager := manager.NewMockVisibilityManager(controller)
 	mockVisibilityManager.EXPECT().Close().AnyTimes()
 	mockHistoryClient := historyservicemock.NewMockHistoryServiceClient(controller)
@@ -185,10 +183,8 @@ func (s *matchingEngineSuite) SetupTest() {
 
 	// create and supply two task managers, but only one is expected to be used at a time since
 	// we run tests with fairness enabled in separate suite.
-	s.classicTaskManager = newTestTaskManager(s.logger)
-	s.fairTaskManager = newTestFairTaskManager(s.logger)
-	s.T().Cleanup(s.classicTaskManager.Close)
-	s.T().Cleanup(s.fairTaskManager.Close)
+	s.classicTaskManager = newTestTaskManager(s.T(), s.logger)
+	s.fairTaskManager = newTestFairTaskManager(s.T(), s.logger)
 	if s.fairness {
 		s.taskManager = s.fairTaskManager
 	} else {
@@ -1505,6 +1501,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		s.Equal(serializedToken, result.TaskToken)
 		i++
 	}
+	s.taskManager.completeAllTasksLessThan(s.T(), tlID)
 	s.Equal(0, s.taskManager.getTaskCount(tlID))
 	expectedRange := int64((taskCount + 1) / rangeSize)
 	// Due to conflicts some ids are skipped and more real ranges are used.
@@ -1655,6 +1652,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 
 	s.EventuallyWithT(func(collect *assert.CollectT) {
 		assert.EqualValues(collect, 1, s.taskManager.getCreateTaskCount(dbq)) // Check times zero rps is set = Tasks stored in persistence
+		s.taskManager.completeAllTasksLessThan(s.T(), dbq)
 		assert.EqualValues(collect, 0, s.taskManager.getTaskCount(dbq))
 	}, 2*time.Second, 100*time.Millisecond)
 
@@ -2039,6 +2037,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	expectedRange := int64((persisted + 1) / rangeSize)
 	// Due to conflicts some ids are skipped and more real ranges are used.
 	s.LessOrEqual(expectedRange, s.taskManager.getQueueDataByKey(dbq).rangeID)
+	s.taskManager.completeAllTasksLessThan(s.T(), dbq)
 	s.Equal(0, s.taskManager.getTaskCount(dbq))
 
 	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count+namespace="+matchingTestNamespace+",operation=TaskQueueMgr,taskqueue=makeToast"]
@@ -2160,6 +2159,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 		}()
 	}
 	wg.Wait()
+	s.taskManager.completeAllTasksLessThan(s.T(), tlID)
 	s.Equal(0, s.taskManager.getTaskCount(tlID))
 	totalTasks := taskCount * workerCount
 	persisted := s.taskManager.getCreateTaskCount(tlID)
@@ -2466,6 +2466,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 		e.Stop()
 	}
 
+	s.taskManager.completeAllTasksLessThan(s.T(), tlID)
 	s.Equal(0, s.taskManager.getTaskCount(tlID))
 	totalTasks := taskCount * engineCount * iterations
 	persisted := s.taskManager.getCreateTaskCount(tlID)
@@ -2610,6 +2611,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 		e.Stop()
 	}
 
+	s.taskManager.completeAllTasksLessThan(s.T(), tlID)
 	s.Equal(0, s.taskManager.getTaskCount(tlID))
 	totalTasks := taskCount * engineCount * iterations
 	persisted := s.taskManager.getCreateTaskCount(tlID)
@@ -2658,6 +2660,7 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	s.NotEqual(task1.event.GetTaskId(), task2.event.GetTaskId(), "IDs should not match")
 
 	task2.finish(taskFinishResult{consumedToken: true})
+	s.taskManager.completeAllTasksLessThan(s.T(), dbq)
 	s.EqualValues(0, s.taskManager.getTaskCount(dbq))
 }
 
@@ -3016,15 +3019,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsData() {
 		Version: 0, // SQLite insert requires version 0
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
-	s.NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(),
-		&persistence.UpdateTaskQueueUserDataRequest{
-			NamespaceID: namespaceID.String(),
-			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
-				tq: &persistence.SingleTaskQueueUserDataUpdate{
-					UserData: userData,
-				},
-			},
-		}))
+	s.classicTaskManager.seedUserData(s.T(), namespaceID.String(), tq, userData)
 	userData.Version++
 
 	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
@@ -3045,15 +3040,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsEmpty() {
 		Version: 0, // SQLite insert requires version 0
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
-	s.NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(),
-		&persistence.UpdateTaskQueueUserDataRequest{
-			NamespaceID: namespaceID.String(),
-			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
-				tq: &persistence.SingleTaskQueueUserDataUpdate{
-					UserData: userData,
-				},
-			},
-		}))
+	s.classicTaskManager.seedUserData(s.T(), namespaceID.String(), tq, userData)
 	userData.Version++
 
 	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
@@ -3074,15 +3061,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Expires() {
 		Version: 0, // SQLite insert requires version 0
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
-	s.NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(),
-		&persistence.UpdateTaskQueueUserDataRequest{
-			NamespaceID: namespaceID.String(),
-			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
-				tq: &persistence.SingleTaskQueueUserDataUpdate{
-					UserData: userData,
-				},
-			},
-		}))
+	s.classicTaskManager.seedUserData(s.T(), namespaceID.String(), tq, userData)
 	userData.Version++
 
 	// GetTaskQueueUserData will try to return 5s with a min of 1s before the deadline, so this will block 1s
@@ -3156,15 +3135,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 		Version: 0, // SQLite insert requires version 0
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
-	s.NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(),
-		&persistence.UpdateTaskQueueUserDataRequest{
-			NamespaceID: namespaceID.String(),
-			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
-				tq: &persistence.SingleTaskQueueUserDataUpdate{
-					UserData: userData,
-				},
-			},
-		}))
+	s.classicTaskManager.seedUserData(s.T(), namespaceID.String(), tq, userData)
 	userData.Version++
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -3246,18 +3217,9 @@ func (s *matchingEngineSuite) TestUpdateUserData_FailsOnKnownVersionMismatch() {
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
 
-	err := s.classicTaskManager.UpdateTaskQueueUserData(context.Background(),
-		&persistence.UpdateTaskQueueUserDataRequest{
-			NamespaceID: namespaceID.String(),
-			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
-				tq: &persistence.SingleTaskQueueUserDataUpdate{
-					UserData: userData,
-				},
-			},
-		})
-	s.NoError(err)
+	s.classicTaskManager.seedUserData(s.T(), namespaceID.String(), tq, userData)
 
-	_, err = s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
+	_, err := s.matchingEngine.UpdateWorkerBuildIdCompatibility(context.Background(), &matchingservice.UpdateWorkerBuildIdCompatibilityRequest{
 		NamespaceId: namespaceID.String(),
 		TaskQueue:   tq,
 		Operation: &matchingservice.UpdateWorkerBuildIdCompatibilityRequest_RemoveBuildIds_{
@@ -3346,21 +3308,13 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 		},
 	}
 
-	err := s.classicTaskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
-		NamespaceID: namespaceID,
-		Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
-			tq: &persistence.SingleTaskQueueUserDataUpdate{
-				UserData: &persistencespb.VersionedTaskQueueUserData{
-					Data:    userData,
-					Version: 0,
-				},
-			},
-		},
+	s.classicTaskManager.seedUserData(s.T(), namespaceID, tq, &persistencespb.VersionedTaskQueueUserData{
+		Data:    userData,
+		Version: 0,
 	})
-	s.NoError(err)
 
 	// add a task for build0, will get spooled in its set
-	_, _, err = s.matchingEngine.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
+	_, _, err := s.matchingEngine.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
 		NamespaceId:      namespaceID,
 		Execution:        &commonpb.WorkflowExecution{RunId: "run", WorkflowId: "wf"},
 		ScheduledEventId: 123,
@@ -3405,7 +3359,7 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 			tq: &persistence.SingleTaskQueueUserDataUpdate{
 				UserData: &persistencespb.VersionedTaskQueueUserData{
 					Data:    userData,
-					Version: 0,
+					Version: 1,
 				},
 			},
 		},
@@ -3997,9 +3951,6 @@ func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterNoDBErrors() {
 func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterDBErrors() {
 	s.T().Skip("approximate backlog can under-count across ConditionFailed unload/reload; " +
 		"fix requires correcting count on take-over (or otherwise surviving ownership loss without a final SyncState)")
-	if s.newMatcher {
-		s.T().Skip("test is flaky with new matcher")
-	}
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
 	s.taskManager.addFault("CreateTasks", "ConditionFailed", 0.1)
@@ -4399,13 +4350,7 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_NewDeploymentDataRemove
 		},
 	}
 
-	// Using the lower level UpdateTaskQueueUserData to set the user data for multiple versions at once.
-	s.NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(), &persistence.UpdateTaskQueueUserDataRequest{
-		NamespaceID: namespaceID,
-		Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
-			tq: {UserData: userData},
-		},
-	}))
+	s.classicTaskManager.seedUserData(s.T(), namespaceID, tq, userData)
 	userData.Version++
 
 	// Sync new-format routing config for deployment "foo" with a newer revision to trigger cleanup
@@ -5142,12 +5087,7 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_DeletedVersionRemovesOl
 		},
 	}
 
-	s.NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(), &persistence.UpdateTaskQueueUserDataRequest{
-		NamespaceID: namespaceID,
-		Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
-			tq: {UserData: userData},
-		},
-	}))
+	s.classicTaskManager.seedUserData(s.T(), namespaceID, tq, userData)
 
 	// Verify old-format version exists
 	res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{

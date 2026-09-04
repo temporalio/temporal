@@ -752,7 +752,7 @@ func (db *taskQueueDB) CompleteTasksLessThan(
 		Subqueue:           int(subqueue),
 		Limit:              limit,
 	})
-	if err != nil {
+	if err != nil && ctx.Err() == nil {
 		db.logger.Error("Persistent store operation failure",
 			tag.StoreOperationCompleteTasksLessThan,
 			tag.Error(err),
@@ -783,7 +783,7 @@ func (db *taskQueueDB) CompleteFairTasksLessThan(
 		Subqueue:           int(subqueue),
 		Limit:              limit,
 	})
-	if err != nil {
+	if err != nil && ctx.Err() == nil {
 		db.logger.Error("Persistent store operation failure",
 			tag.StoreOperationCompleteTasksLessThan,
 			tag.Error(err),
