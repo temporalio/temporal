@@ -1560,7 +1560,9 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		"matching.pollerScalingMinimumBacklog",
 		200*time.Millisecond,
 		`MatchingPollerScalingBacklogAgeScaleUp is the minimum backlog age that must be accumulated before
-a decision to scale up the number of pollers will be issued`,
+a decision to scale up the number of pollers will be issued. If MatchingUseSignalsV2ForPollerScaling is true,
+this is instead the maximum age of a dispatched task (measured from its create time) above which a scale-up
+will be issued.`,
 	)
 	MatchingPollerScalingWaitTime = NewTaskQueueDurationSetting(
 		"matching.pollerScalingWaitTime",
@@ -1578,7 +1580,8 @@ second per poller by one physical queue manager`,
 		"matching.pollerScalingTaskAddToDispatchRatio",
 		1.2,
 		`MatchingPollerScalingTaskAddToDispatchRatio is the ratio of task add rate to task
-dispatch rate above which a decision to scale up the number of pollers will be issued`,
+dispatch rate above which a decision to scale up the number of pollers will be issued. If MatchingUseSignalsV2ForPollerScaling
+is true, this is instead the ratio of task add rate to task sync match rate.`,
 	)
 	MatchingEnablePollerScalingDecisionMetrics = NewTaskQueueBoolSetting(
 		"matching.enablePollerScalingDecisionMetrics",
@@ -1586,6 +1589,13 @@ dispatch rate above which a decision to scale up the number of pollers will be i
 		`MatchingEnablePollerScalingDecisionMetrics, when enabled, causes matching to emit the poller_scale_decision
 metric describing why pollers are scaled up, down, or held for a physical task queue. This is opt-in and can be
 scoped by namespace and/or task queue.`,
+	)
+	MatchingUseSignalsV2ForPollerScaling = NewTaskQueueBoolSetting(
+		"matching.useSignalsV2ForPollerScaling",
+		false,
+		`MatchingUseSignalsV2ForPollerScaling, when enabled, uses v2 scaling signals for poller autoscaling:
+(1) sync match rate instead of total dispatch rate for the add-to-dispatch ratio check, and
+(2) task dispatch latency instead of backlog age stats for the backlog scale-up check.`,
 	)
 	MatchingUseNewMatcher = NewTaskQueueTypedSettingWithConverter(
 		"matching.useNewMatcher",

@@ -16,7 +16,6 @@ import (
 
 	enums "go.temporal.io/api/enums/v1"
 	taskqueue "go.temporal.io/api/taskqueue/v1"
-	enums0 "go.temporal.io/server/api/enums/v1"
 	matchingservice "go.temporal.io/server/api/matchingservice/v1"
 	persistence "go.temporal.io/server/api/persistence/v1"
 	taskqueue0 "go.temporal.io/server/api/taskqueue/v1"
@@ -216,17 +215,17 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) LegacyDescribeTaskQueue(incl
 }
 
 // MakePollerScalingDecision mocks base method.
-func (m *MockphysicalTaskQueueManager) MakePollerScalingDecision(ctx context.Context, pollStartTime time.Time, taskSource enums0.TaskSource) *taskqueue.PollerScalingDecision {
+func (m *MockphysicalTaskQueueManager) MakePollerScalingDecision(ctx context.Context, pollStartTime time.Time, task *internalTask) *taskqueue.PollerScalingDecision {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MakePollerScalingDecision", ctx, pollStartTime, taskSource)
+	ret := m.ctrl.Call(m, "MakePollerScalingDecision", ctx, pollStartTime, task)
 	ret0, _ := ret[0].(*taskqueue.PollerScalingDecision)
 	return ret0
 }
 
 // MakePollerScalingDecision indicates an expected call of MakePollerScalingDecision.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) MakePollerScalingDecision(ctx, pollStartTime, taskSource any) *gomock.Call {
+func (mr *MockphysicalTaskQueueManagerMockRecorder) MakePollerScalingDecision(ctx, pollStartTime, task any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MakePollerScalingDecision", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).MakePollerScalingDecision), ctx, pollStartTime, taskSource)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MakePollerScalingDecision", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).MakePollerScalingDecision), ctx, pollStartTime, task)
 }
 
 // MarkAlive mocks base method.
