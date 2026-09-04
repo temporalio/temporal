@@ -473,8 +473,7 @@ fmt: fmt-gofix fmt-imports fmt-protos fmt-yaml
 #
 # Note: go fix automatically skips generated files.
 #
-# PS: Keeping embedlit disabled for now because it rewrites
-# large parts of the codebase.
+# embedlit is disabled because it rewrites large parts of the codebase.
 GOFIX_FLAGS ?= -embedlit=false
 GOFIX_MAX_ITERATIONS ?= 5
 fmt-gofix:

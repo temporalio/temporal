@@ -21,7 +21,8 @@ const (
 // it without sending a GOAWAY or RST) stays in the pool and stalls every request multiplexed onto
 // it until their individual deadlines expire.
 //
-// tlsConfig may be nil. If provided, it is cloned before use.
+// tlsConfig may be nil. If set, it is cloned so the transport does not alias a config that may
+// be shared with other clients.
 func NewHTTPTransport(tlsConfig *tls.Config) (*http.Transport, error) {
 	// dialer and transport field values copied from http.DefaultTransport.
 	dialer := &net.Dialer{
