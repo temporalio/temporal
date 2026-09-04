@@ -370,6 +370,18 @@ func decodeAndValidateMemo(t *testing.T, filePath, deploymentName, buildID strin
 	require.Equal(t, buildID, result.RoutingConfig.GetCurrentDeploymentVersion().GetBuildId())
 }
 
+func TestMakeStartRequestSetsHighPriority(t *testing.T) {
+	ns := namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: testNamespace},
+		nil,
+		"",
+	)
+
+	request := makeStartRequest("request-id", "workflow-id", "identity", "workflow-type", ns, nil, nil)
+
+	require.Equal(t, int32(workerDeploymentWorkflowPriorityKey), request.GetPriority().GetPriorityKey())
+}
+
 func TestIsRetryableUpdateError(t *testing.T) {
 	t.Run("returns true for errUpdateInProgress", func(t *testing.T) {
 		require.True(t, isRetryableUpdateError(errUpdateInProgress))
