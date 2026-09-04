@@ -13,8 +13,10 @@ func TestNewHTTPTransport_ConfiguresHTTP2(t *testing.T) {
 	require.NotNil(t, transport.Protocols)
 	require.True(t, transport.Protocols.HTTP1())
 	require.True(t, transport.Protocols.HTTP2())
-	// The x/net transport carries ReadIdleTimeout/PingTimeout, so assert it is the h2 handler.
-	require.Contains(t, transport.TLSNextProto, "h2")
+	// The HTTP/2 config carries ReadIdleTimeout/PingTimeout, so assert those settings are applied.
+	require.NotNil(t, transport.HTTP2)
+	require.Equal(t, http2ReadIdleTimeout, transport.HTTP2.SendPingTimeout)
+	require.Equal(t, http2PingTimeout, transport.HTTP2.PingTimeout)
 	require.NotNil(t, transport.TLSClientConfig)
 }
 

@@ -2,12 +2,9 @@ package common
 
 import (
 	"crypto/tls"
-	"fmt"
 	"net"
 	"net/http"
 	"time"
-
-	"golang.org/x/net/http2"
 )
 
 const (
@@ -29,6 +26,9 @@ func NewHTTPTransport(tlsConfig *tls.Config) (*http.Transport, error) {
 		Timeout:   30 * time.Second,
 		KeepAlive: 30 * time.Second,
 	}
+	protocols := new(http.Protocols)
+	protocols.SetHTTP1(true)
+	protocols.SetHTTP2(true)
 	t := &http.Transport{
 		Proxy:                 http.ProxyFromEnvironment,
 		DialContext:           dialer.DialContext,
@@ -37,17 +37,16 @@ func NewHTTPTransport(tlsConfig *tls.Config) (*http.Transport, error) {
 		IdleConnTimeout:       90 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: 1 * time.Second,
+		HTTP2: &http.HTTP2Config{
+			SendPingTimeout: http2ReadIdleTimeout,
+			PingTimeout:     http2PingTimeout,
+		},
+		Protocols: protocols,
 	}
 	if tlsConfig != nil {
 		t.TLSClientConfig = tlsConfig.Clone()
+	} else {
+		t.TLSClientConfig = new(tls.Config)
 	}
-	// Must come after TLSClientConfig is set: ConfigureTransports takes over the TLS config,
-	// and replacing it afterwards would discard that setup.
-	h2, err := http2.ConfigureTransports(t)
-	if err != nil {
-		return nil, fmt.Errorf("configure http2 transport: %w", err)
-	}
-	h2.ReadIdleTimeout = http2ReadIdleTimeout
-	h2.PingTimeout = http2PingTimeout
 	return t, nil
 }
