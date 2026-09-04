@@ -95,7 +95,7 @@ values in system search attributes.`,
 	)
 	VisibilityEnableUnifiedQueryConverter = NewGlobalBoolSetting(
 		"system.visibilityEnableUnifiedQueryConverter",
-		false,
+		true,
 		`VisibilityEnableUnifiedQueryConverter enables the unified query converter for parsing the
 query.`,
 	)
