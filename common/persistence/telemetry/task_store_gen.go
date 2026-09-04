@@ -46,8 +46,8 @@ func (d telemetryTaskStore) CompleteTasksLessThan(ctx context.Context, request *
 		ctx,
 		"persistence.TaskStore/CompleteTasksLessThan",
 		trace.WithAttributes(
-			attribute.Key("persistence.store").String("TaskStore"),
-			attribute.Key("persistence.method").String("CompleteTasksLessThan"),
+			attribute.Key(telemetry.PersistenceStoreKey).String("TaskStore"),
+			attribute.Key(telemetry.PersistenceMethodKey).String("CompleteTasksLessThan"),
 		))
 	defer span.End()
 
@@ -67,14 +67,14 @@ func (d telemetryTaskStore) CompleteTasksLessThan(ctx context.Context, request *
 		if err != nil {
 			d.logger.Error("failed to serialize *_sourcePersistence.CompleteTasksLessThanRequest for OTEL span", tag.Error(err))
 		} else {
-			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+			span.SetAttributes(attribute.Key(telemetry.PersistenceRequestPayloadKey).String(string(requestPayload)))
 		}
 
 		responsePayload, err := json.MarshalIndent(i1, "", "    ")
 		if err != nil {
 			d.logger.Error("failed to serialize int for OTEL span", tag.Error(err))
 		} else {
-			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+			span.SetAttributes(attribute.Key(telemetry.PersistenceResponsePayloadKey).String(string(responsePayload)))
 		}
 
 	}
@@ -88,8 +88,8 @@ func (d telemetryTaskStore) CountTaskQueuesByBuildId(ctx context.Context, reques
 		ctx,
 		"persistence.TaskStore/CountTaskQueuesByBuildId",
 		trace.WithAttributes(
-			attribute.Key("persistence.store").String("TaskStore"),
-			attribute.Key("persistence.method").String("CountTaskQueuesByBuildId"),
+			attribute.Key(telemetry.PersistenceStoreKey).String("TaskStore"),
+			attribute.Key(telemetry.PersistenceMethodKey).String("CountTaskQueuesByBuildId"),
 		))
 	defer span.End()
 
@@ -109,14 +109,14 @@ func (d telemetryTaskStore) CountTaskQueuesByBuildId(ctx context.Context, reques
 		if err != nil {
 			d.logger.Error("failed to serialize *_sourcePersistence.CountTaskQueuesByBuildIdRequest for OTEL span", tag.Error(err))
 		} else {
-			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+			span.SetAttributes(attribute.Key(telemetry.PersistenceRequestPayloadKey).String(string(requestPayload)))
 		}
 
 		responsePayload, err := json.MarshalIndent(i1, "", "    ")
 		if err != nil {
 			d.logger.Error("failed to serialize int for OTEL span", tag.Error(err))
 		} else {
-			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+			span.SetAttributes(attribute.Key(telemetry.PersistenceResponsePayloadKey).String(string(responsePayload)))
 		}
 
 	}
@@ -130,8 +130,8 @@ func (d telemetryTaskStore) CreateTaskQueue(ctx context.Context, request *_sourc
 		ctx,
 		"persistence.TaskStore/CreateTaskQueue",
 		trace.WithAttributes(
-			attribute.Key("persistence.store").String("TaskStore"),
-			attribute.Key("persistence.method").String("CreateTaskQueue"),
+			attribute.Key(telemetry.PersistenceStoreKey).String("TaskStore"),
+			attribute.Key(telemetry.PersistenceMethodKey).String("CreateTaskQueue"),
 		))
 	defer span.End()
 
@@ -151,7 +151,7 @@ func (d telemetryTaskStore) CreateTaskQueue(ctx context.Context, request *_sourc
 		if err != nil {
 			d.logger.Error("failed to serialize *_sourcePersistence.InternalCreateTaskQueueRequest for OTEL span", tag.Error(err))
 		} else {
-			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+			span.SetAttributes(attribute.Key(telemetry.PersistenceRequestPayloadKey).String(string(requestPayload)))
 		}
 
 	}
@@ -165,8 +165,8 @@ func (d telemetryTaskStore) CreateTasks(ctx context.Context, request *_sourcePer
 		ctx,
 		"persistence.TaskStore/CreateTasks",
 		trace.WithAttributes(
-			attribute.Key("persistence.store").String("TaskStore"),
-			attribute.Key("persistence.method").String("CreateTasks"),
+			attribute.Key(telemetry.PersistenceStoreKey).String("TaskStore"),
+			attribute.Key(telemetry.PersistenceMethodKey).String("CreateTasks"),
 		))
 	defer span.End()
 
@@ -186,14 +186,14 @@ func (d telemetryTaskStore) CreateTasks(ctx context.Context, request *_sourcePer
 		if err != nil {
 			d.logger.Error("failed to serialize *_sourcePersistence.InternalCreateTasksRequest for OTEL span", tag.Error(err))
 		} else {
-			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+			span.SetAttributes(attribute.Key(telemetry.PersistenceRequestPayloadKey).String(string(requestPayload)))
 		}
 
 		responsePayload, err := json.MarshalIndent(cp1, "", "    ")
 		if err != nil {
 			d.logger.Error("failed to serialize *_sourcePersistence.CreateTasksResponse for OTEL span", tag.Error(err))
 		} else {
-			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+			span.SetAttributes(attribute.Key(telemetry.PersistenceResponsePayloadKey).String(string(responsePayload)))
 		}
 
 	}
@@ -207,8 +207,8 @@ func (d telemetryTaskStore) DeleteTaskQueue(ctx context.Context, request *_sourc
 		ctx,
 		"persistence.TaskStore/DeleteTaskQueue",
 		trace.WithAttributes(
-			attribute.Key("persistence.store").String("TaskStore"),
-			attribute.Key("persistence.method").String("DeleteTaskQueue"),
+			attribute.Key(telemetry.PersistenceStoreKey).String("TaskStore"),
+			attribute.Key(telemetry.PersistenceMethodKey).String("DeleteTaskQueue"),
 		))
 	defer span.End()
 
@@ -228,7 +228,7 @@ func (d telemetryTaskStore) DeleteTaskQueue(ctx context.Context, request *_sourc
 		if err != nil {
 			d.logger.Error("failed to serialize *_sourcePersistence.DeleteTaskQueueRequest for OTEL span", tag.Error(err))
 		} else {
-			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+			span.SetAttributes(attribute.Key(telemetry.PersistenceRequestPayloadKey).String(string(requestPayload)))
 		}
 
 	}
@@ -242,8 +242,8 @@ func (d telemetryTaskStore) GetTaskQueue(ctx context.Context, request *_sourcePe
 		ctx,
 		"persistence.TaskStore/GetTaskQueue",
 		trace.WithAttributes(
-			attribute.Key("persistence.store").String("TaskStore"),
-			attribute.Key("persistence.method").String("GetTaskQueue"),
+			attribute.Key(telemetry.PersistenceStoreKey).String("TaskStore"),
+			attribute.Key(telemetry.PersistenceMethodKey).String("GetTaskQueue"),
 		))
 	defer span.End()
 
@@ -263,14 +263,14 @@ func (d telemetryTaskStore) GetTaskQueue(ctx context.Context, request *_sourcePe
 		if err != nil {
 			d.logger.Error("failed to serialize *_sourcePersistence.InternalGetTaskQueueRequest for OTEL span", tag.Error(err))
 		} else {
-			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+			span.SetAttributes(attribute.Key(telemetry.PersistenceRequestPayloadKey).String(string(requestPayload)))
 		}
 
 		responsePayload, err := json.MarshalIndent(ip1, "", "    ")
 		if err != nil {
 			d.logger.Error("failed to serialize *_sourcePersistence.InternalGetTaskQueueResponse for OTEL span", tag.Error(err))
 		} else {
-			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+			span.SetAttributes(attribute.Key(telemetry.PersistenceResponsePayloadKey).String(string(responsePayload)))
 		}
 
 	}
@@ -284,8 +284,8 @@ func (d telemetryTaskStore) GetTaskQueueUserData(ctx context.Context, request *_
 		ctx,
 		"persistence.TaskStore/GetTaskQueueUserData",
 		trace.WithAttributes(
-			attribute.Key("persistence.store").String("TaskStore"),
-			attribute.Key("persistence.method").String("GetTaskQueueUserData"),
+			attribute.Key(telemetry.PersistenceStoreKey).String("TaskStore"),
+			attribute.Key(telemetry.PersistenceMethodKey).String("GetTaskQueueUserData"),
 		))
 	defer span.End()
 
@@ -305,14 +305,14 @@ func (d telemetryTaskStore) GetTaskQueueUserData(ctx context.Context, request *_
 		if err != nil {
 			d.logger.Error("failed to serialize *_sourcePersistence.GetTaskQueueUserDataRequest for OTEL span", tag.Error(err))
 		} else {
-			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+			span.SetAttributes(attribute.Key(telemetry.PersistenceRequestPayloadKey).String(string(requestPayload)))
 		}
 
 		responsePayload, err := json.MarshalIndent(ip1, "", "    ")
 		if err != nil {
 			d.logger.Error("failed to serialize *_sourcePersistence.InternalGetTaskQueueUserDataResponse for OTEL span", tag.Error(err))
 		} else {
-			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+			span.SetAttributes(attribute.Key(telemetry.PersistenceResponsePayloadKey).String(string(responsePayload)))
 		}
 
 	}
@@ -326,8 +326,8 @@ func (d telemetryTaskStore) GetTaskQueuesByBuildId(ctx context.Context, request 
 		ctx,
 		"persistence.TaskStore/GetTaskQueuesByBuildId",
 		trace.WithAttributes(
-			attribute.Key("persistence.store").String("TaskStore"),
-			attribute.Key("persistence.method").String("GetTaskQueuesByBuildId"),
+			attribute.Key(telemetry.PersistenceStoreKey).String("TaskStore"),
+			attribute.Key(telemetry.PersistenceMethodKey).String("GetTaskQueuesByBuildId"),
 		))
 	defer span.End()
 
@@ -347,14 +347,14 @@ func (d telemetryTaskStore) GetTaskQueuesByBuildId(ctx context.Context, request 
 		if err != nil {
 			d.logger.Error("failed to serialize *_sourcePersistence.GetTaskQueuesByBuildIdRequest for OTEL span", tag.Error(err))
 		} else {
-			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+			span.SetAttributes(attribute.Key(telemetry.PersistenceRequestPayloadKey).String(string(requestPayload)))
 		}
 
 		responsePayload, err := json.MarshalIndent(sa1, "", "    ")
 		if err != nil {
 			d.logger.Error("failed to serialize []string for OTEL span", tag.Error(err))
 		} else {
-			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+			span.SetAttributes(attribute.Key(telemetry.PersistenceResponsePayloadKey).String(string(responsePayload)))
 		}
 
 	}
@@ -368,8 +368,8 @@ func (d telemetryTaskStore) GetTasks(ctx context.Context, request *_sourcePersis
 		ctx,
 		"persistence.TaskStore/GetTasks",
 		trace.WithAttributes(
-			attribute.Key("persistence.store").String("TaskStore"),
-			attribute.Key("persistence.method").String("GetTasks"),
+			attribute.Key(telemetry.PersistenceStoreKey).String("TaskStore"),
+			attribute.Key(telemetry.PersistenceMethodKey).String("GetTasks"),
 		))
 	defer span.End()
 
@@ -389,14 +389,14 @@ func (d telemetryTaskStore) GetTasks(ctx context.Context, request *_sourcePersis
 		if err != nil {
 			d.logger.Error("failed to serialize *_sourcePersistence.GetTasksRequest for OTEL span", tag.Error(err))
 		} else {
-			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+			span.SetAttributes(attribute.Key(telemetry.PersistenceRequestPayloadKey).String(string(requestPayload)))
 		}
 
 		responsePayload, err := json.MarshalIndent(ip1, "", "    ")
 		if err != nil {
 			d.logger.Error("failed to serialize *_sourcePersistence.InternalGetTasksResponse for OTEL span", tag.Error(err))
 		} else {
-			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+			span.SetAttributes(attribute.Key(telemetry.PersistenceResponsePayloadKey).String(string(responsePayload)))
 		}
 
 	}
@@ -410,8 +410,8 @@ func (d telemetryTaskStore) ListTaskQueue(ctx context.Context, request *_sourceP
 		ctx,
 		"persistence.TaskStore/ListTaskQueue",
 		trace.WithAttributes(
-			attribute.Key("persistence.store").String("TaskStore"),
-			attribute.Key("persistence.method").String("ListTaskQueue"),
+			attribute.Key(telemetry.PersistenceStoreKey).String("TaskStore"),
+			attribute.Key(telemetry.PersistenceMethodKey).String("ListTaskQueue"),
 		))
 	defer span.End()
 
@@ -431,14 +431,14 @@ func (d telemetryTaskStore) ListTaskQueue(ctx context.Context, request *_sourceP
 		if err != nil {
 			d.logger.Error("failed to serialize *_sourcePersistence.ListTaskQueueRequest for OTEL span", tag.Error(err))
 		} else {
-			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+			span.SetAttributes(attribute.Key(telemetry.PersistenceRequestPayloadKey).String(string(requestPayload)))
 		}
 
 		responsePayload, err := json.MarshalIndent(ip1, "", "    ")
 		if err != nil {
 			d.logger.Error("failed to serialize *_sourcePersistence.InternalListTaskQueueResponse for OTEL span", tag.Error(err))
 		} else {
-			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+			span.SetAttributes(attribute.Key(telemetry.PersistenceResponsePayloadKey).String(string(responsePayload)))
 		}
 
 	}
@@ -452,8 +452,8 @@ func (d telemetryTaskStore) ListTaskQueueUserDataEntries(ctx context.Context, re
 		ctx,
 		"persistence.TaskStore/ListTaskQueueUserDataEntries",
 		trace.WithAttributes(
-			attribute.Key("persistence.store").String("TaskStore"),
-			attribute.Key("persistence.method").String("ListTaskQueueUserDataEntries"),
+			attribute.Key(telemetry.PersistenceStoreKey).String("TaskStore"),
+			attribute.Key(telemetry.PersistenceMethodKey).String("ListTaskQueueUserDataEntries"),
 		))
 	defer span.End()
 
@@ -473,14 +473,14 @@ func (d telemetryTaskStore) ListTaskQueueUserDataEntries(ctx context.Context, re
 		if err != nil {
 			d.logger.Error("failed to serialize *_sourcePersistence.ListTaskQueueUserDataEntriesRequest for OTEL span", tag.Error(err))
 		} else {
-			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+			span.SetAttributes(attribute.Key(telemetry.PersistenceRequestPayloadKey).String(string(requestPayload)))
 		}
 
 		responsePayload, err := json.MarshalIndent(ip1, "", "    ")
 		if err != nil {
 			d.logger.Error("failed to serialize *_sourcePersistence.InternalListTaskQueueUserDataEntriesResponse for OTEL span", tag.Error(err))
 		} else {
-			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+			span.SetAttributes(attribute.Key(telemetry.PersistenceResponsePayloadKey).String(string(responsePayload)))
 		}
 
 	}
@@ -494,8 +494,8 @@ func (d telemetryTaskStore) UpdateTaskQueue(ctx context.Context, request *_sourc
 		ctx,
 		"persistence.TaskStore/UpdateTaskQueue",
 		trace.WithAttributes(
-			attribute.Key("persistence.store").String("TaskStore"),
-			attribute.Key("persistence.method").String("UpdateTaskQueue"),
+			attribute.Key(telemetry.PersistenceStoreKey).String("TaskStore"),
+			attribute.Key(telemetry.PersistenceMethodKey).String("UpdateTaskQueue"),
 		))
 	defer span.End()
 
@@ -515,14 +515,14 @@ func (d telemetryTaskStore) UpdateTaskQueue(ctx context.Context, request *_sourc
 		if err != nil {
 			d.logger.Error("failed to serialize *_sourcePersistence.InternalUpdateTaskQueueRequest for OTEL span", tag.Error(err))
 		} else {
-			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+			span.SetAttributes(attribute.Key(telemetry.PersistenceRequestPayloadKey).String(string(requestPayload)))
 		}
 
 		responsePayload, err := json.MarshalIndent(up1, "", "    ")
 		if err != nil {
 			d.logger.Error("failed to serialize *_sourcePersistence.UpdateTaskQueueResponse for OTEL span", tag.Error(err))
 		} else {
-			span.SetAttributes(attribute.Key("persistence.response.payload").String(string(responsePayload)))
+			span.SetAttributes(attribute.Key(telemetry.PersistenceResponsePayloadKey).String(string(responsePayload)))
 		}
 
 	}
@@ -536,8 +536,8 @@ func (d telemetryTaskStore) UpdateTaskQueueUserData(ctx context.Context, request
 		ctx,
 		"persistence.TaskStore/UpdateTaskQueueUserData",
 		trace.WithAttributes(
-			attribute.Key("persistence.store").String("TaskStore"),
-			attribute.Key("persistence.method").String("UpdateTaskQueueUserData"),
+			attribute.Key(telemetry.PersistenceStoreKey).String("TaskStore"),
+			attribute.Key(telemetry.PersistenceMethodKey).String("UpdateTaskQueueUserData"),
 		))
 	defer span.End()
 
@@ -557,7 +557,7 @@ func (d telemetryTaskStore) UpdateTaskQueueUserData(ctx context.Context, request
 		if err != nil {
 			d.logger.Error("failed to serialize *_sourcePersistence.InternalUpdateTaskQueueUserDataRequest for OTEL span", tag.Error(err))
 		} else {
-			span.SetAttributes(attribute.Key("persistence.request.payload").String(string(requestPayload)))
+			span.SetAttributes(attribute.Key(telemetry.PersistenceRequestPayloadKey).String(string(requestPayload)))
 		}
 
 	}
