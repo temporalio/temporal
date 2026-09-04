@@ -935,7 +935,7 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 		return nil
 	}
 
-	if c.getDelaySignal(stats, task) {
+	if c.delaySignalFiring(stats, task) {
 		delta = 1
 		reason = metrics.PollerScaleReasonDelay
 	} else if c.queue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY && !c.queue.Partition().IsRoot() {
@@ -943,7 +943,7 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 		// Sticky queues are exempt: they aren't considered root but do have a complete view of their data,
 		// as they have only 1 partition.
 		return nil
-	} else if c.getRatioSignal(stats) {
+	} else if c.ratioSignalFiring(stats) {
 		delta = 1
 		reason = metrics.PollerScaleReasonRatio
 	}
@@ -969,10 +969,10 @@ func (c *physicalTaskQueueManagerImpl) recordPollerScaleDecision(decision string
 		Record(1, metrics.PollerScaleDecisionTag(decision), metrics.ReasonTag(reason))
 }
 
-// getDelaySignal reports whether tasks are taking too long to reach a worker, which warrants
+// delaySignalFiring reports whether tasks are taking too long to reach a worker, which warrants
 // scaling pollers up. Under UseSignalsV2ForPollerScaling, this measures task dispatch latency,
 // which is wider than backlog delay alone.
-func (c *physicalTaskQueueManagerImpl) getDelaySignal(stats *taskqueuepb.TaskQueueStats, task *internalTask) bool {
+func (c *physicalTaskQueueManagerImpl) delaySignalFiring(stats *taskqueuepb.TaskQueueStats, task *internalTask) bool {
 	maxAge := c.partitionMgr.config.PollerScalingBacklogAgeScaleUp()
 
 	if c.partitionMgr.config.UseSignalsV2ForPollerScaling() {
@@ -982,11 +982,11 @@ func (c *physicalTaskQueueManagerImpl) getDelaySignal(stats *taskqueuepb.TaskQue
 	return stats.GetApproximateBacklogCount() > 0 && stats.GetApproximateBacklogAge().AsDuration() > maxAge
 }
 
-// getRatioSignal reports whether we're adding tasks faster than we're dispatching them, which
+// ratioSignalFiring reports whether we're adding tasks faster than we're dispatching them, which
 // warrants scaling pollers up. Under UseSignalsV2ForPollerScaling, this measures if we are adding
 // tasks faster than we can sync match them.
 // Particularly useful for Nexus tasks, since those (currently) don't get backlogged.
-func (c *physicalTaskQueueManagerImpl) getRatioSignal(stats *taskqueuepb.TaskQueueStats) bool {
+func (c *physicalTaskQueueManagerImpl) ratioSignalFiring(stats *taskqueuepb.TaskQueueStats) bool {
 	maxRatio := c.partitionMgr.config.PollerScalingTaskAddToDispatchRatio()
 
 	if c.partitionMgr.config.UseSignalsV2ForPollerScaling() {
