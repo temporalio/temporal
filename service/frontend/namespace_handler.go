@@ -705,6 +705,32 @@ func (d *namespaceHandler) updateReplicationRamps(
 			delete(ramps, clusterName)
 		}
 	}
+	for _, clusterConfig := range newClusterConfigs {
+		clusterName := clusterConfig.GetClusterName()
+		duration := clusterConfig.GetReplicationRampDuration()
+		if duration == nil || !slices.Contains(oldClusters, clusterName) {
+			continue
+		}
+		if err := duration.CheckValid(); err != nil {
+			return nil, serviceerror.NewInvalidArgumentf(
+				"Invalid replication ramp duration for cluster %q: %v",
+				clusterName,
+				err,
+			)
+		}
+		if duration.AsDuration() != 0 {
+			ramp := existing[clusterName]
+			if ramp != nil && ramp.GetDuration() != nil &&
+				duration.AsDuration() == ramp.GetDuration().AsDuration() {
+				continue
+			}
+			return nil, serviceerror.NewInvalidArgumentf(
+				"Replication ramp duration for existing cluster %q can only be set to zero",
+				clusterName,
+			)
+		}
+		delete(ramps, clusterName)
+	}
 
 	initialPercentage := d.config.ReplicationGradualConnectInitialPercent(namespaceName)
 	if !d.config.EnableReplicationGradualConnect() ||

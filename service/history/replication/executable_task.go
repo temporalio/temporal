@@ -15,6 +15,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
@@ -935,13 +936,12 @@ func (e *ExecutableTaskImpl) admittedByGradualConnect(namespaceEntry *namespace.
 	if ramp == nil || ramp.GetStartTime() == nil || ramp.GetDuration() == nil {
 		return true
 	}
-	nsName := namespaceEntry.Name().String()
-	percent := gradualConnectPercent(
-		ramp.GetStartTime().AsTime(),
+	admitted, percent := gradualConnectAdmission(
+		ramp,
 		e.TimeSource.Now(),
-		ramp.GetDuration().AsDuration(),
-		int(ramp.GetInitialPercentage()),
+		businessID,
 	)
+	nsName := namespaceEntry.Name().String()
 	metrics.ReplicationGradualConnectPercent.With(e.MetricsHandler).Record(
 		float64(percent),
 		metrics.NamespaceTag(nsName),
@@ -956,7 +956,21 @@ func (e *ExecutableTaskImpl) admittedByGradualConnect(namespaceEntry *namespace.
 		}
 		return true
 	}
-	return dynamicconfig.RolloutAccepts([]byte(businessID), percent)
+	return admitted
+}
+
+func gradualConnectAdmission(
+	ramp *persistencespb.NamespaceReplicationRamp,
+	now time.Time,
+	businessID string,
+) (bool, int) {
+	percent := gradualConnectPercent(
+		ramp.GetStartTime().AsTime(),
+		now,
+		ramp.GetDuration().AsDuration(),
+		int(ramp.GetInitialPercentage()),
+	)
+	return dynamicconfig.RolloutAccepts([]byte(businessID), percent), percent
 }
 
 // gradualConnectPercent computes the current admission percent, capped at 100. It treats a time

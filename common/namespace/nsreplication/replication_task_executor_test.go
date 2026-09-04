@@ -754,7 +754,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	s.Nil(err)
 }
 
-func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_UnrelatedConfigEditPreservesNoRamp() {
+func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_RemovesCompletedRamp() {
 	id := uuid.NewString()
 	name := "some random namespace test name"
 	updateState := enumspb.NAMESPACE_STATE_REGISTERED
@@ -792,8 +792,14 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		Info: &persistencespb.NamespaceInfo{Id: id},
 		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: updateClusterActive,
-			// updateClusterStandby has been a member all along, with no ramp.
-			Clusters: []string{updateClusterActive, updateClusterStandby},
+			Clusters:          []string{updateClusterActive, updateClusterStandby},
+			ClusterReplicationRamps: map[string]*persistencespb.NamespaceReplicationRamp{
+				updateClusterStandby: {
+					StartTime:         timestamppb.New(time.Now()),
+					Duration:          durationpb.New(time.Hour),
+					InitialPercentage: 10,
+				},
+			},
 		},
 		ConfigVersion:   existingConfigVersion,
 		FailoverVersion: updateFailoverVersion,
@@ -813,7 +819,6 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 				ActiveClusterName: updateClusterActive,
 				Clusters:          []string{updateClusterActive, updateClusterStandby},
-				// No ramp should appear -- standby was already a member.
 			},
 			ConfigVersion:               updateConfigVersion,
 			FailoverNotificationVersion: 0,
