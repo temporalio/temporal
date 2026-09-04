@@ -24,6 +24,8 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/testvars"
+	historyapi "go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -755,20 +757,31 @@ func (s *GetHistorySuite) getHistory(
 // startMultiBatchWorkflow starts a workflow and signals it repeatedly. Each signal is its own
 // transaction and therefore its own history node, so a page size of 1 yields many pages and a
 // continuation taken from an early page is far from the last page.
+// requireNoInternalErrorDetails guards against returning an error whose gRPC status carries
+// error details declared by the server protos. Callers that do not link those protos, such as
+// the HTTP gateways in front of the frontend, cannot resolve the detail and answer 500 instead
+// of the status code the error carries.
+func requireNoInternalErrorDetails(assertions *require.Assertions, err error) {
+	for _, detail := range serviceerror.ToStatus(err).Proto().GetDetails() {
+		assertions.NotContains(detail.GetTypeUrl(), "temporal.server.api.", "on error: %v", err)
+	}
+}
+
 func startMultiBatchWorkflow(
 	ctx context.Context,
 	assertions *require.Assertions,
 	env *testcore.TestEnv,
+	tv *testvars.TestVars,
 ) {
 	_, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           env.Namespace().String(),
-		WorkflowId:          env.Tv().WorkflowID(),
-		WorkflowType:        env.Tv().WorkflowType(),
-		TaskQueue:           env.Tv().TaskQueue(),
+		WorkflowId:          tv.WorkflowID(),
+		WorkflowType:        tv.WorkflowType(),
+		TaskQueue:           tv.TaskQueue(),
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-		Identity:            env.Tv().WorkerIdentity(),
+		Identity:            tv.WorkerIdentity(),
 	})
 	assertions.NoError(err)
 
@@ -777,10 +790,10 @@ func startMultiBatchWorkflow(
 			RequestId: uuid.NewString(),
 			Namespace: env.Namespace().String(),
 			WorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: env.Tv().WorkflowID(),
+				WorkflowId: tv.WorkflowID(),
 			},
 			SignalName: "signal",
-			Identity:   env.Tv().WorkerIdentity(),
+			Identity:   tv.WorkerIdentity(),
 		})
 		assertions.NoError(err)
 	}
@@ -804,7 +817,7 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_ContinuationFromAnothe
 	_, err := env.RegisterNamespace(ctx, otherNamespace, 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
 
-	startMultiBatchWorkflow(s.Context(), s.Require(), env)
+	startMultiBatchWorkflow(s.Context(), s.Require(), env, env.Tv())
 
 	// A genuine, non-final continuation obtained with legitimate access to the first namespace.
 	firstPage, err := env.FrontendClient().GetWorkflowExecutionHistory(
@@ -839,6 +852,69 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_ContinuationFromAnothe
 		errors.As(err, &invalidArgument) || errors.As(err, &notFound),
 		"expected InvalidArgument or NotFound, got %T: %v", err, err,
 	)
+	requireNoInternalErrorDetails(s.Require(), err)
+}
+
+func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_ContinuationFromAnotherExecution(
+	enableTransitionHistory bool,
+) {
+	env := s.newTestEnv(
+		enableTransitionHistory,
+		// Shadow mode reports the mismatch but still serves the page.
+		testcore.WithDynamicConfig(dynamicconfig.EnablePaginationTokenBranchValidationShadowMode, false),
+	)
+
+	startMultiBatchWorkflow(s.Context(), s.Require(), env, env.Tv())
+	otherTv := env.Tv().WithWorkflowIDNumber(2)
+	startMultiBatchWorkflow(s.Context(), s.Require(), env, otherTv)
+
+	token, err := historyapi.DeserializeHistoryToken(
+		firstHistoryPage(s.Context(), s.Require(), env, env.Tv().WorkflowID()).NextPageToken)
+	s.Require().NoError(err)
+	otherToken, err := historyapi.DeserializeHistoryToken(
+		firstHistoryPage(s.Context(), s.Require(), env, otherTv.WorkflowID()).NextPageToken)
+	s.Require().NoError(err)
+
+	// A continuation for this execution, carrying another execution's branch.
+	token.BranchToken = otherToken.BranchToken
+	nextPageToken, err := historyapi.SerializeHistoryToken(token)
+	s.Require().NoError(err)
+
+	resp, err := env.FrontendClient().GetWorkflowExecutionHistory(
+		s.Context(),
+		&workflowservice.GetWorkflowExecutionHistoryRequest{
+			Namespace:              env.Namespace().String(),
+			Execution:              &commonpb.WorkflowExecution{WorkflowId: env.Tv().WorkflowID()},
+			MaximumPageSize:        1,
+			NextPageToken:          nextPageToken,
+			HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT,
+		},
+	)
+	s.Error(err)
+	s.Empty(resp.GetHistory().GetEvents())
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
+	requireNoInternalErrorDetails(s.Require(), err)
+}
+
+func firstHistoryPage(
+	ctx context.Context,
+	assertions *require.Assertions,
+	env *testcore.TestEnv,
+	workflowID string,
+) *workflowservice.GetWorkflowExecutionHistoryResponse {
+	page, err := env.FrontendClient().GetWorkflowExecutionHistory(
+		ctx,
+		&workflowservice.GetWorkflowExecutionHistoryRequest{
+			Namespace:              env.Namespace().String(),
+			Execution:              &commonpb.WorkflowExecution{WorkflowId: workflowID},
+			MaximumPageSize:        1,
+			HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT,
+		},
+	)
+	assertions.NoError(err)
+	assertions.NotEmpty(page.NextPageToken, "need a non-final continuation for this test")
+	return page
 }
 
 func (s *RawHistorySuite) TestGetWorkflowExecutionHistoryReverse_ContinuationFromAnotherNamespace() {
@@ -853,7 +929,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistoryReverse_ContinuationFro
 	_, err := env.RegisterNamespace(ctx, otherNamespace, 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
 
-	startMultiBatchWorkflow(s.Context(), s.Require(), env)
+	startMultiBatchWorkflow(s.Context(), s.Require(), env, env.Tv())
 
 	firstPage, err := env.FrontendClient().GetWorkflowExecutionHistoryReverse(
 		s.Context(),
@@ -877,4 +953,5 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistoryReverse_ContinuationFro
 	)
 	s.Error(err)
 	s.Empty(resp.GetHistory().GetEvents())
+	requireNoInternalErrorDetails(s.Require(), err)
 }
