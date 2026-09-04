@@ -1,6 +1,7 @@
 package matching
 
 import (
+	"math"
 	"math/rand"
 	"sync"
 
@@ -18,25 +19,26 @@ import (
 // when another partition has encoded-greater-than-zero backlog. 2x feels like a good ratio.
 var readPartitionWeightFloor = number.DecodeCompact8(1)
 
+// Keep a small root sample for estimating total write rate when backlog-aware routing would
+// otherwise make the root probability too small.
+const writePartitionRootProbabilityFloor = 0.01
+
 type (
 	// LoadBalancer is the interface for implementers of
 	// component that distributes add/poll api calls across
 	// available task queue partitions when possible
 	LoadBalancer interface {
-		// PickWritePartition returns the task queue partition for adding
-		// an activity or workflow task. The input is the name of the
-		// original task queue (with no partition info). When forwardedFrom
-		// is non-empty, this call is forwardedFrom from a child partition
-		// to a parent partition in which case, no load balancing should be
-		// performed
+		// PickWritePartition returns the task queue partition for adding an
+		// activity or workflow task and the estimated number of tasks added
+		// across all partitions per root task. The input is the name of the
+		// original task queue (with no partition info).
 		PickWritePartition(
 			taskQueue *tqid.TaskQueue,
 			pc PartitionCounts,
-		) *tqid.NormalPartition
+		) (*tqid.NormalPartition, int)
 
 		// PickReadPartition returns the task queue partition to send a poller to.
-		// Input is name of the original task queue as specified by caller. When
-		// forwardedFrom is non-empty, no load balancing should be done.
+		// Input is name of the original task queue as specified by caller.
 		PickReadPartition(
 			taskQueue *tqid.TaskQueue,
 			pc PartitionCounts,
@@ -86,28 +88,37 @@ func NewLoadBalancer(
 func (lb *defaultLoadBalancer) PickWritePartition(
 	taskQueue *tqid.TaskQueue,
 	pc PartitionCounts,
-) *tqid.NormalPartition {
-	if n, ok := testhooks.Get(lb.testHooks, testhooks.MatchingLBForceWritePartition, namespace.ID(taskQueue.NamespaceId())); ok {
-		return taskQueue.NormalPartition(n)
-	}
-
-	nsName, err := lb.namespaceIDToName(namespace.ID(taskQueue.NamespaceId()))
-	if err != nil {
-		return taskQueue.RootPartition()
-	}
-
+) (*tqid.NormalPartition, int) {
 	var partitionCount int
 	if pc.Write > 0 {
 		partitionCount = int(pc.Write)
 	} else {
+		nsName, err := lb.namespaceIDToName(namespace.ID(taskQueue.NamespaceId()))
+		if err != nil {
+			return taskQueue.RootPartition(), 1
+		}
 		partitionCount = max(1, lb.nWritePartitions(nsName.String(), taskQueue.Name(), taskQueue.TaskType()))
 	}
 
-	return taskQueue.NormalPartition(pickWritePartitionByGap(
+	if n, ok := testhooks.Get(lb.testHooks, testhooks.MatchingLBForceWritePartition, namespace.ID(taskQueue.NamespaceId())); ok {
+		partition := taskQueue.NormalPartition(n)
+		if partition.IsRoot() {
+			return partition, partitionCount
+		}
+		return partition, 0
+	}
+
+	partitionID, estimatedTasksAllPartitions := pickWritePartitionByGap(
 		pc.BacklogCount,
 		partitionCount,
 		number.DecodeCompact8(pc.BacklogCap),
-	))
+	)
+	partition := taskQueue.NormalPartition(partitionID)
+	if !partition.IsRoot() {
+		estimatedTasksAllPartitions = 0
+	}
+
+	return partition, estimatedTasksAllPartitions
 }
 
 // pickWritePartitionByGap picks a partition with probability proportional to how far its backlog
@@ -115,10 +126,14 @@ func (lb *defaultLoadBalancer) PickWritePartition(
 //   - every partition is at or above the backlogCap
 //   - backlogCap is 0
 //   - when backlog data is not available for all write partitions
-func pickWritePartitionByGap(counts []number.Compact8, partitionCount int, backlogCap int64) int {
+func pickWritePartitionByGap(
+	counts []number.Compact8,
+	partitionCount int,
+	backlogCap int64,
+) (partitionID int, estimatedTasksAllPartitions int) {
 	if backlogCap == 0 ||
 		len(counts) < partitionCount {
-		return rand.Intn(partitionCount)
+		return rand.Intn(partitionCount), partitionCount
 	}
 
 	var total int64
@@ -128,20 +143,47 @@ func pickWritePartitionByGap(counts []number.Compact8, partitionCount int, backl
 		}
 	}
 	if total <= 0 { // all partitions are at or above cap
-		return rand.Intn(partitionCount)
+		return rand.Intn(partitionCount), partitionCount
 	}
+
+	count0 := number.DecodeCompact8(counts[0])
+	// p(root) = gap_root / (others + gap_root)
+	// we want to force p(root) >= writePartitionRootProbabilityFloor
+	// => gap_root >= others * floor / (1 - floor)
+	others := total - max(int64(0), backlogCap-count0)
+	minRootGap := math.Ceil(float64(others) * writePartitionRootProbabilityFloor / (1 - writePartitionRootProbabilityFloor))
+	gap0 := max(backlogCap-count0, int64(minRootGap))
+	total = others + gap0
+	if partitionID := pickPartitionByGap(counts[:partitionCount], gap0, backlogCap, total); partitionID != 0 {
+		return partitionID, 0
+	}
+	return 0, randomRound(float64(total) / float64(gap0))
+}
+
+// randomRound rounds without biasing the expected value.
+func randomRound(x float64) int {
+	n := math.Floor(x)
+	if rand.Float64() < x-n {
+		n++
+	}
+	return int(n)
+}
+
+func pickPartitionByGap(counts []number.Compact8, gap0, backlogCap, total int64) int {
 	r := rand.Int63n(total)
-	for i := range partitionCount {
-		gap := backlogCap - number.DecodeCompact8(counts[i])
-		if gap <= 0 { // this partition is at or above cap
-			continue
+	for i, count := range counts {
+		var gap int64
+		if i == 0 {
+			gap = gap0
+		} else {
+			gap = max(int64(0), backlogCap-number.DecodeCompact8(count))
 		}
 		if r < gap { // more likely to be true the bigger this partition's gap is
 			return i
 		}
 		r -= gap
 	}
-	return partitionCount - 1 // unreachable in practice; guard against compact8 rounding
+	return len(counts) - 1
 }
 
 // PickReadPartition picks a partition for poller to poll task from, and keeps load balanced between partitions.
