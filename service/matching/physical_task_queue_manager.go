@@ -993,22 +993,27 @@ func (c *physicalTaskQueueManagerImpl) getRatioSignal(stats *taskqueuepb.TaskQue
 		// If the syncMatch rate is 0 while tasks are being added, the division is +Inf and this
 		// always fires -- intentional. Note that when neither tracker has recorded anything the
 		// division is 0/0 = NaN instead, and NaN > maxRatio is false, so it does not fire.
-		return float64(c.aggregateRate(c.tasksAdded))/float64(c.aggregateRate(c.tasksSyncMatched)) > maxRatio
+		addRate, syncMatchRate := c.getAggregateRates()
+		return float64(addRate)/float64(syncMatchRate) > maxRatio
 	}
 
 	return float64(stats.GetTasksAddRate())/float64(stats.GetTasksDispatchRate()) > maxRatio
 }
 
-// aggregateRate sums a tracker map's rates across all priorities.
-func (c *physicalTaskQueueManagerImpl) aggregateRate(trackers map[priorityKey]*taskTracker) float32 {
+// getAggregateRates returns the task add and sync match rates, each summed across all priorities.
+// Both are read under one lock so they form a consistent snapshot: incTaskTracker takes the same
+// lock on every add and every dispatch, so reading them separately could mix two instants.
+func (c *physicalTaskQueueManagerImpl) getAggregateRates() (addRate, syncMatchRate float32) {
 	c.taskTrackerLock.Lock()
 	defer c.taskTrackerLock.Unlock()
 
-	var total float32
-	for _, tt := range trackers {
-		total += tt.rate()
+	for _, tt := range c.tasksAdded {
+		addRate += tt.rate()
 	}
-	return total
+	for _, tt := range c.tasksSyncMatched {
+		syncMatchRate += tt.rate()
+	}
+	return addRate, syncMatchRate
 }
 
 func (c *physicalTaskQueueManagerImpl) UpdateRemotePriorityBacklogs(backlogs remotePriorityBacklogSet) {
