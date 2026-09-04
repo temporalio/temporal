@@ -3,12 +3,18 @@ package tests
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
@@ -19,6 +25,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 var (
@@ -382,12 +389,8 @@ func (s *UpdateWorkflowSdkSuite) pollUpdate(env *testcore.TestEnv, waitPolicy *u
 	})
 }
 
-// TestUpdateSameRequestIDDeduplicatesCallbacks verifies requestID-based
-// deduplication in AttachCallbacks. The update blocks (stays in stateAccepted), then:
-//   - A second request with the same requestID is deduped (no new callback).
-//   - A third request with a different requestID creates an additional callback.
-//
-// The workflow should end up with exactly 2 update callbacks (from requestID1 and requestID2).
+// TestUpdateSameRequestIDDeduplicatesCallbacks verifies that a repeated request ID
+// does not attach another callback. A new request ID attaches a new callback.
 func (s *UpdateWorkflowSdkSuite) TestUpdateSameRequestIDDeduplicatesCallbacks() {
 	env := testcore.NewEnv(s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
@@ -395,14 +398,17 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateSameRequestIDDeduplicatesCallbacks() 
 		testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowUpdateCallbacks, true),
 		testcore.WithDynamicConfig(
 			callback.AllowedAddresses,
-			[]any{map[string]any{"Pattern": "localhost:9999", "AllowInsecure": true}},
+			[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
 		),
 	)
 
 	requestID1 := env.Tv().RequestID()
 	requestID2 := env.Tv().Sub("request-2").RequestID()
+	completionHandler, callbackAddress := newNexusCompletionHandler(s.T())
+	firstCallbackURL := callbackAddress + "/first-callback"
+	duplicateCallbackURL := callbackAddress + "/duplicate-callback"
+	secondCallbackURL := callbackAddress + "/second-callback"
 
-	// Workflow where the update handler blocks until signaled.
 	wf := func(ctx workflow.Context, input string) (string, error) {
 		if err := workflow.SetUpdateHandler(ctx, env.Tv().HandlerName(), func(ctx workflow.Context, input string) (string, error) {
 			signalCh := workflow.GetSignalChannel(ctx, "complete-update")
@@ -427,7 +433,7 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateSameRequestIDDeduplicatesCallbacks() 
 	}, wf, "input")
 	s.NoError(err)
 
-	makeRequest := func(reqID string) *workflowservice.UpdateWorkflowExecutionRequest {
+	makeRequest := func(reqID string, callbackURL string) *workflowservice.UpdateWorkflowExecutionRequest {
 		return &workflowservice.UpdateWorkflowExecutionRequest{
 			Namespace:         env.Namespace().String(),
 			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: run.GetID()},
@@ -437,42 +443,56 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateSameRequestIDDeduplicatesCallbacks() 
 				Input:     &updatepb.Input{Name: env.Tv().HandlerName(), Args: &commonpb.Payloads{Payloads: []*commonpb.Payload{testcore.MustToPayload(s.T(), "test")}}},
 				RequestId: reqID,
 				CompletionCallbacks: []*commonpb.Callback{{
-					Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost:9999/callback"}},
+					Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackURL}},
 				}},
 			},
 		}
 	}
 
-	// First request: triggers the update, waits for acceptance (update blocks in handler).
-	_, err = env.FrontendClient().UpdateWorkflowExecution(s.Context(), makeRequest(requestID1))
+	_, err = env.FrontendClient().UpdateWorkflowExecution(s.Context(), makeRequest(requestID1, firstCallbackURL))
 	s.NoError(err)
 
-	// Second request: same requestID → should be deduped by AttachCallbacks (no new callback).
-	_, err = env.FrontendClient().UpdateWorkflowExecution(s.Context(), makeRequest(requestID1))
+	_, err = env.FrontendClient().UpdateWorkflowExecution(s.Context(), makeRequest(requestID1, duplicateCallbackURL))
 	s.NoError(err)
 
-	// Third request: different requestID → should create a new callback via AttachCallbacks.
-	_, err = env.FrontendClient().UpdateWorkflowExecution(s.Context(), makeRequest(requestID2))
+	_, err = env.FrontendClient().UpdateWorkflowExecution(s.Context(), makeRequest(requestID2, secondCallbackURL))
 	s.NoError(err)
 
-	// Verify exactly 2 update callbacks: one from requestID1 (first request),
-	// one from requestID2 (third request). The second request was deduped.
 	descResp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: run.GetID()},
 	})
 	s.NoError(err)
-	updateCallbackCount := 0
+	var callbackURLs []string
 	for _, cb := range descResp.GetCallbacks() {
 		if cb.GetTrigger().GetUpdateWorkflowExecutionCompleted() != nil {
-			updateCallbackCount++
+			callbackURLs = append(callbackURLs, cb.GetCallback().GetNexus().GetUrl())
 		}
 	}
-	s.Equal(2, updateCallbackCount, "expected 2 callbacks: requestID1 (original) + requestID2 (new), with duplicate requestID1 deduped")
+	s.ElementsMatch([]string{firstCallbackURL, secondCallbackURL}, callbackURLs)
 
-	// Clean up.
-	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "complete-update", nil))
-	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "stop", nil))
+	s.Require().NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "complete-update", nil))
+	for range 2 {
+		select {
+		case completion := <-completionHandler.requestCh:
+			s.Equal(nexus.OperationStateSucceeded, completion.State)
+			var result string
+			s.Require().NoError(completion.Result.Consume(&result))
+			s.Equal("updated: test", result)
+			completionHandler.requestCompleteCh <- nil
+		case <-time.After(10 * time.Second):
+			s.FailNow("timed out waiting for an update callback")
+		}
+	}
+	select {
+	case completion := <-completionHandler.requestCh:
+		completionHandler.requestCompleteCh <- nil
+		s.Fail("received a callback for the duplicate request", "state=%s", completion.State)
+	default:
+	}
+
+	s.Require().NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "stop", nil))
+	s.Require().NoError(run.Get(s.Context(), nil))
 }
 
 func (s *UpdateWorkflowSdkSuite) TestUpdateRejectsInvalidCallbackURL() {
@@ -502,4 +522,490 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateRejectsInvalidCallbackURL() {
 	var invalidArgument *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgument)
 	s.ErrorContains(err, "invalid url: unknown scheme")
+}
+
+func (s *UpdateWorkflowSdkSuite) TestUpdateCallbackSizeLimitsApply() {
+	cases := []struct {
+		name    string
+		url     string
+		header  map[string]string
+		message string
+	}{
+		{
+			name:    "url-length-too-long",
+			url:     "http://some-very-very-very-very-very-very-very-long-url",
+			message: "invalid url: url length longer than max length allowed of 50",
+		},
+		{
+			name:    "header-size-too-large",
+			url:     "http://some-ignored-address",
+			header:  map[string]string{"too": "long"},
+			message: "invalid header: header size longer than max allowed size of 6",
+		},
+	}
+
+	for _, tc := range cases {
+		s.Run(tc.name, func(s *UpdateWorkflowSdkSuite) {
+			env := testcore.NewEnv(s.T(),
+				testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+				testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
+				testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowUpdateCallbacks, true),
+				testcore.WithDynamicConfig(dynamicconfig.FrontendCallbackURLMaxLength, 50),
+				testcore.WithDynamicConfig(dynamicconfig.FrontendCallbackHeaderMaxSize, 6),
+				testcore.WithDynamicConfig(
+					callback.AllowedAddresses,
+					[]any{map[string]any{"Pattern": "some-ignored-address", "AllowInsecure": true}},
+				),
+			)
+
+			_, err := env.FrontendClient().UpdateWorkflowExecution(s.Context(), &workflowservice.UpdateWorkflowExecutionRequest{
+				Namespace:         env.Namespace().String(),
+				WorkflowExecution: env.Tv().WorkflowExecution(),
+				WaitPolicy: &updatepb.WaitPolicy{
+					LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED,
+				},
+				Request: &updatepb.Request{
+					Meta:      &updatepb.Meta{UpdateId: env.Tv().UpdateID()},
+					Input:     &updatepb.Input{Name: env.Tv().HandlerName()},
+					RequestId: env.Tv().RequestID(),
+					CompletionCallbacks: []*commonpb.Callback{{
+						Variant: &commonpb.Callback_Nexus_{
+							Nexus: &commonpb.Callback_Nexus{Url: tc.url, Header: tc.header},
+						},
+					}},
+				},
+			})
+			var invalidArgument *serviceerror.InvalidArgument
+			s.Require().ErrorAs(err, &invalidArgument)
+			s.Equal(tc.message, err.Error())
+		})
+	}
+}
+
+func (s *UpdateWorkflowSdkSuite) TestUpdateRejectsMissingRequestIdWithCallback() {
+	env := testcore.NewEnv(s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowUpdateCallbacks, true),
+		testcore.WithDynamicConfig(
+			callback.AllowedAddresses,
+			[]any{map[string]any{"Pattern": "localhost:9999", "AllowInsecure": true}},
+		),
+	)
+
+	wf := func(ctx workflow.Context, input string) (string, error) {
+		if err := workflow.SetUpdateHandler(ctx, env.Tv().HandlerName(), func(ctx workflow.Context, input string) (string, error) {
+			return "updated: " + input, nil
+		}); err != nil {
+			return "", err
+		}
+		signalCh := workflow.GetSignalChannel(ctx, "stop")
+		signalCh.Receive(ctx, nil)
+		return "done: " + input, nil
+	}
+
+	w := worker.New(env.SdkClient(), env.WorkerTaskQueue(), worker.Options{})
+	w.RegisterWorkflow(wf)
+	s.NoError(w.Start())
+	s.T().Cleanup(w.Stop)
+
+	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{
+		ID:        env.Tv().WorkflowID(),
+		TaskQueue: env.WorkerTaskQueue(),
+	}, wf, "input")
+	s.NoError(err)
+
+	_, err = env.FrontendClient().UpdateWorkflowExecution(s.Context(), &workflowservice.UpdateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: run.GetID()},
+		WaitPolicy: &updatepb.WaitPolicy{
+			LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED,
+		},
+		Request: &updatepb.Request{
+			Meta:  &updatepb.Meta{UpdateId: env.Tv().UpdateID()},
+			Input: &updatepb.Input{Name: env.Tv().HandlerName(), Args: &commonpb.Payloads{Payloads: []*commonpb.Payload{testcore.MustToPayload(s.T(), "test")}}},
+			CompletionCallbacks: []*commonpb.Callback{{
+				Variant: &commonpb.Callback_Nexus_{
+					Nexus: &commonpb.Callback_Nexus{Url: "http://localhost:9999/callback"},
+				},
+			}},
+		},
+	})
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
+	s.ErrorContains(err, "request_id is required")
+
+	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "stop", nil))
+}
+
+func (s *UpdateWorkflowSdkSuite) TestUpdateCallbackStillFiresAfterFlagDisabledMidFlight() {
+	env := testcore.NewEnv(s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowUpdateCallbacks, true),
+	)
+
+	var received atomic.Int32
+	callbackSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		received.Add(1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer callbackSrv.Close()
+	env.OverrideDynamicConfig(
+		callback.AllowedAddresses,
+		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
+	)
+
+	wf := func(ctx workflow.Context, input string) (string, error) {
+		if err := workflow.SetUpdateHandler(ctx, env.Tv().HandlerName(), func(ctx workflow.Context, input string) (string, error) {
+			signalCh := workflow.GetSignalChannel(ctx, "complete-update")
+			signalCh.Receive(ctx, nil)
+			return "updated: " + input, nil
+		}); err != nil {
+			return "", err
+		}
+		signalCh := workflow.GetSignalChannel(ctx, "stop")
+		signalCh.Receive(ctx, nil)
+		return "done: " + input, nil
+	}
+
+	w := worker.New(env.SdkClient(), env.WorkerTaskQueue(), worker.Options{})
+	w.RegisterWorkflow(wf)
+	s.NoError(w.Start())
+	s.T().Cleanup(w.Stop)
+
+	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{
+		ID:        env.Tv().WorkflowID(),
+		TaskQueue: env.WorkerTaskQueue(),
+	}, wf, "input")
+	s.NoError(err)
+
+	_, err = env.FrontendClient().UpdateWorkflowExecution(s.Context(), &workflowservice.UpdateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: run.GetID()},
+		WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED},
+		Request: &updatepb.Request{
+			Meta:      &updatepb.Meta{UpdateId: env.Tv().UpdateID()},
+			Input:     &updatepb.Input{Name: env.Tv().HandlerName(), Args: &commonpb.Payloads{Payloads: []*commonpb.Payload{testcore.MustToPayload(s.T(), "test")}}},
+			RequestId: env.Tv().RequestID(),
+			CompletionCallbacks: []*commonpb.Callback{{
+				Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackSrv.URL}},
+			}},
+		},
+	})
+	s.NoError(err)
+
+	cleanup := env.OverrideDynamicConfig(dynamicconfig.EnableWorkflowUpdateCallbacks, false)
+	defer cleanup()
+
+	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "complete-update", nil))
+
+	s.AwaitTruef(func() bool {
+		return received.Load() == 1
+	}, 10*time.Second, 100*time.Millisecond, "callback attached before the flag was disabled must still fire")
+
+	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "stop", nil))
+}
+
+func (s *UpdateWorkflowSdkSuite) TestUpdateCallbackIsIgnoredWhenFeatureDisabledByDefault() {
+	env := testcore.NewEnv(s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
+		testcore.WithDynamicConfig(
+			callback.AllowedAddresses,
+			[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
+		),
+	)
+
+	completionHandler, callbackAddress := newNexusCompletionHandler(s.T())
+	wf := func(ctx workflow.Context) error {
+		if err := workflow.SetUpdateHandler(ctx, env.Tv().HandlerName(), func(workflow.Context) (string, error) {
+			return "update result", nil
+		}); err != nil {
+			return err
+		}
+		workflow.GetSignalChannel(ctx, "stop").Receive(ctx, nil)
+		return nil
+	}
+	env.SdkWorker().RegisterWorkflow(wf)
+
+	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{
+		ID:        env.Tv().WorkflowID(),
+		TaskQueue: env.WorkerTaskQueue(),
+	}, wf)
+	s.Require().NoError(err)
+
+	response, err := env.FrontendClient().UpdateWorkflowExecution(s.Context(), &workflowservice.UpdateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()},
+		WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED},
+		Request: &updatepb.Request{
+			Meta:      &updatepb.Meta{UpdateId: env.Tv().UpdateID()},
+			Input:     &updatepb.Input{Name: env.Tv().HandlerName()},
+			RequestId: uuid.NewString(),
+			CompletionCallbacks: []*commonpb.Callback{{
+				Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackAddress + "/update"}},
+			}},
+		},
+	})
+	s.Require().NoError(err)
+	s.NotNil(response.GetOutcome().GetSuccess())
+
+	description, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()},
+	})
+	s.Require().NoError(err)
+	s.Empty(description.GetCallbacks())
+	select {
+	case completion := <-completionHandler.requestCh:
+		completionHandler.requestCompleteCh <- nil
+		s.Fail("received a callback while the feature was disabled", "state=%s", completion.State)
+	default:
+	}
+
+	s.Require().NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "stop", nil))
+	s.Require().NoError(run.Get(s.Context(), nil))
+}
+
+func (s *UpdateWorkflowSdkSuite) TestUpdateCallbackLimitsEndToEnd() {
+	env := testcore.NewEnv(s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowUpdateCallbacks, true),
+		testcore.WithDynamicConfig(dynamicconfig.MaxCallbacksPerWorkflow, 4),
+		testcore.WithDynamicConfig(dynamicconfig.MaxCallbacksPerUpdateID, 2),
+		testcore.WithDynamicConfig(
+			callback.AllowedAddresses,
+			[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
+		),
+	)
+
+	completionHandler, callbackAddress := newNexusCompletionHandler(s.T())
+	workflowType := testcore.RandomizeStr("update-callback-limits")
+	workflowID := env.Tv().WorkflowID()
+
+	wf := func(ctx workflow.Context) (string, error) {
+		if err := workflow.SetUpdateHandler(ctx, env.Tv().HandlerName(), func(ctx workflow.Context, updateID string) (string, error) {
+			workflow.GetSignalChannel(ctx, "complete-"+updateID).Receive(ctx, nil)
+			return "updated: " + updateID, nil
+		}); err != nil {
+			return "", err
+		}
+		workflow.GetSignalChannel(ctx, "stop").Receive(ctx, nil)
+		return "workflow complete", nil
+	}
+	env.SdkWorker().RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: workflowType})
+
+	startResponse, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:          env.Namespace().String(),
+		WorkflowId:         workflowID,
+		WorkflowType:       &commonpb.WorkflowType{Name: workflowType},
+		TaskQueue:          &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowRunTimeout: durationpb.New(30 * time.Second),
+		Identity:           s.T().Name(),
+		RequestId:          uuid.NewString(),
+		CompletionCallbacks: []*commonpb.Callback{{
+			Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackAddress + "/workflow"}},
+		}},
+	})
+	s.Require().NoError(err)
+
+	makeUpdateRequest := func(updateID, requestID string, callbackURLs ...string) *workflowservice.UpdateWorkflowExecutionRequest {
+		callbacks := make([]*commonpb.Callback, 0, len(callbackURLs))
+		for _, callbackURL := range callbackURLs {
+			callbacks = append(callbacks, &commonpb.Callback{
+				Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackURL}},
+			})
+		}
+		return &workflowservice.UpdateWorkflowExecutionRequest{
+			Namespace:         env.Namespace().String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: startResponse.GetRunId()},
+			WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED},
+			Request: &updatepb.Request{
+				Meta:                &updatepb.Meta{UpdateId: updateID},
+				Input:               &updatepb.Input{Name: env.Tv().HandlerName(), Args: &commonpb.Payloads{Payloads: []*commonpb.Payload{testcore.MustToPayload(s.T(), updateID)}}},
+				RequestId:           requestID,
+				CompletionCallbacks: callbacks,
+			},
+		}
+	}
+
+	updateOneRequestID := uuid.NewString()
+	updateOneRequest := makeUpdateRequest(
+		"update-1",
+		updateOneRequestID,
+		callbackAddress+"/update-1-a",
+		callbackAddress+"/update-1-b",
+	)
+	_, err = env.FrontendClient().UpdateWorkflowExecution(s.Context(), updateOneRequest)
+	s.Require().NoError(err)
+
+	_, err = env.FrontendClient().UpdateWorkflowExecution(
+		s.Context(),
+		makeUpdateRequest("update-1", uuid.NewString(), callbackAddress+"/update-1-extra"),
+	)
+	var failedPrecondition *serviceerror.FailedPrecondition
+	s.Require().ErrorAs(err, &failedPrecondition)
+	s.ErrorContains(err, `cannot attach more than 2 callbacks to update "update-1"`)
+
+	_, err = env.FrontendClient().UpdateWorkflowExecution(
+		s.Context(),
+		makeUpdateRequest("update-2", uuid.NewString(), callbackAddress+"/update-2"),
+	)
+	s.Require().NoError(err)
+
+	_, err = env.FrontendClient().UpdateWorkflowExecution(s.Context(), updateOneRequest)
+	s.Require().NoError(err)
+
+	_, err = env.FrontendClient().UpdateWorkflowExecution(
+		s.Context(),
+		makeUpdateRequest("update-2", uuid.NewString(), callbackAddress+"/update-2-extra"),
+	)
+	failedPrecondition = nil
+	s.Require().ErrorAs(err, &failedPrecondition)
+	s.ErrorContains(err, "cannot attach more than 4 callbacks to a workflow")
+
+	description, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: startResponse.GetRunId()},
+	})
+	s.Require().NoError(err)
+	s.Len(description.GetCallbacks(), 4)
+	updateCallbackCounts := map[string]int{}
+	for _, callbackInfo := range description.GetCallbacks() {
+		if trigger := callbackInfo.GetTrigger().GetUpdateWorkflowExecutionCompleted(); trigger != nil {
+			updateCallbackCounts[trigger.GetUpdateId()]++
+		}
+	}
+	s.Equal(map[string]int{"update-1": 2, "update-2": 1}, updateCallbackCounts)
+
+	s.Require().NoError(env.SdkClient().SignalWorkflow(s.Context(), workflowID, startResponse.GetRunId(), "complete-update-1", nil))
+	s.Require().NoError(env.SdkClient().SignalWorkflow(s.Context(), workflowID, startResponse.GetRunId(), "complete-update-2", nil))
+
+	updateResults := map[string]int{}
+	for range 3 {
+		select {
+		case completion := <-completionHandler.requestCh:
+			s.Equal(nexus.OperationStateSucceeded, completion.State)
+			var result string
+			s.Require().NoError(completion.Result.Consume(&result))
+			updateResults[result]++
+			completionHandler.requestCompleteCh <- nil
+		case <-time.After(10 * time.Second):
+			s.FailNow("timed out waiting for an update callback")
+		}
+	}
+	s.Equal(map[string]int{"updated: update-1": 2, "updated: update-2": 1}, updateResults)
+
+	s.Require().NoError(env.SdkClient().SignalWorkflow(s.Context(), workflowID, startResponse.GetRunId(), "stop", nil))
+	select {
+	case completion := <-completionHandler.requestCh:
+		s.Equal(nexus.OperationStateSucceeded, completion.State)
+		var result string
+		s.Require().NoError(completion.Result.Consume(&result))
+		s.Equal("workflow complete", result)
+		completionHandler.requestCompleteCh <- nil
+	case <-time.After(10 * time.Second):
+		s.FailNow("timed out waiting for the workflow callback")
+	}
+
+	var workflowResult string
+	s.Require().NoError(env.SdkClient().GetWorkflow(s.Context(), workflowID, startResponse.GetRunId()).Get(s.Context(), &workflowResult))
+	s.Equal("workflow complete", workflowResult)
+
+	description, err = env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: startResponse.GetRunId()},
+	})
+	s.Require().NoError(err)
+	s.Len(description.GetCallbacks(), 4)
+	for _, callbackInfo := range description.GetCallbacks() {
+		s.Equal(enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.GetState())
+	}
+	select {
+	case completion := <-completionHandler.requestCh:
+		completionHandler.requestCompleteCh <- nil
+		s.Fail("received an extra callback", "state=%s", completion.State)
+	default:
+	}
+}
+
+func (s *UpdateWorkflowSdkSuite) TestUpdateCallbackUsesOutcomeWhenWorkflowClosesInSameTask() {
+	env := testcore.NewEnv(s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowUpdateCallbacks, true),
+		testcore.WithDynamicConfig(
+			callback.AllowedAddresses,
+			[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
+		),
+	)
+
+	completionHandler, callbackAddress := newNexusCompletionHandler(s.T())
+	workflowType := testcore.RandomizeStr("update-close-race")
+	wf := func(ctx workflow.Context) (string, error) {
+		updateComplete := false
+		if err := workflow.SetUpdateHandler(ctx, env.Tv().HandlerName(), func(workflow.Context, string) (string, error) {
+			updateComplete = true
+			return "update result", nil
+		}); err != nil {
+			return "", err
+		}
+		if err := workflow.Await(ctx, func() bool { return updateComplete }); err != nil {
+			return "", err
+		}
+		return "workflow result", nil
+	}
+	env.SdkWorker().RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: workflowType})
+
+	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{
+		ID:        env.Tv().WorkflowID(),
+		TaskQueue: env.WorkerTaskQueue(),
+	}, workflowType)
+	s.Require().NoError(err)
+
+	_, err = env.FrontendClient().UpdateWorkflowExecution(s.Context(), &workflowservice.UpdateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()},
+		WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED},
+		Request: &updatepb.Request{
+			Meta:      &updatepb.Meta{UpdateId: env.Tv().UpdateID()},
+			Input:     &updatepb.Input{Name: env.Tv().HandlerName(), Args: &commonpb.Payloads{Payloads: []*commonpb.Payload{testcore.MustToPayload(s.T(), "input")}}},
+			RequestId: uuid.NewString(),
+			CompletionCallbacks: []*commonpb.Callback{{
+				Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackAddress + "/update"}},
+			}},
+		},
+	})
+	s.Require().NoError(err)
+
+	select {
+	case completion := <-completionHandler.requestCh:
+		s.Equal(nexus.OperationStateSucceeded, completion.State)
+		var result string
+		s.Require().NoError(completion.Result.Consume(&result))
+		s.Equal("update result", result)
+		completionHandler.requestCompleteCh <- nil
+	case <-time.After(10 * time.Second):
+		s.FailNow("timed out waiting for the update callback")
+	}
+
+	var workflowResult string
+	s.Require().NoError(run.Get(s.Context(), &workflowResult))
+	s.Equal("workflow result", workflowResult)
+
+	description, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()},
+	})
+	s.Require().NoError(err)
+	s.Require().Len(description.GetCallbacks(), 1)
+	s.Equal(enumspb.CALLBACK_STATE_SUCCEEDED, description.GetCallbacks()[0].GetState())
+	select {
+	case completion := <-completionHandler.requestCh:
+		completionHandler.requestCompleteCh <- nil
+		s.Fail("received an extra callback", "state=%s", completion.State)
+	default:
+	}
 }

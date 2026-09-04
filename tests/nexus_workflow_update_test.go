@@ -16,6 +16,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
@@ -237,9 +238,9 @@ func (s *NexusWorkflowUpdateTestSuite) startWorker(env *NexusTestEnv, taskQueue 
 // and returns the inner NexusOperationError.
 func (s *NexusWorkflowUpdateTestSuite) requireNexusOperationError(err error) *temporal.NexusOperationError {
 	var wee *temporal.WorkflowExecutionError
-	s.ErrorAs(err, &wee)
+	s.Require().ErrorAs(err, &wee)
 	var noe *temporal.NexusOperationError
-	s.ErrorAs(wee, &noe)
+	s.Require().ErrorAs(wee, &noe)
 	return noe
 }
 
@@ -250,8 +251,9 @@ func (s *NexusWorkflowUpdateTestSuite) requireNexusOperationError(err error) *te
 func (s *NexusWorkflowUpdateTestSuite) assertAcceptedUpdateCompletedWorkflowError(err error) {
 	noe := s.requireNexusOperationError(err)
 	var appErr *temporal.ApplicationError
-	s.ErrorAs(noe, &appErr)
+	s.Require().ErrorAs(noe, &appErr)
 	s.Equal("AcceptedUpdateCompletedWorkflow", appErr.Type())
+	s.Contains(appErr.Error(), "completed before the Update completed")
 }
 
 // assertReappliedUpdateInNewRun verifies that updateID appears as an UpdateAdmitted event
@@ -921,9 +923,8 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateSyncReturnForCompletedW
 	s.Equal(int32(2), operationCount.Load(), "expected two nexus operations to be started")
 }
 
-// TestWorkflowUpdateCallbackOnFailedUpdate verifies that when an update handler returns
-// an error (update completes with a failure outcome), the completion callback fires and
-// the caller's nexus operation completes with a failure.
+// TestWorkflowUpdateCallbackOnFailedUpdate verifies that a failed update completes
+// the Nexus operation with the update failure.
 func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackOnFailedUpdate() {
 	env := newNexusTestEnv(s.T(), true, enableUpdateCallbacksOpts()...)
 	ctx := s.Context()
@@ -935,9 +936,9 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackOnFailedUpdate(
 
 	targetTaskQueue := testcore.RandomizeStr("target-" + s.T().Name())
 
-	// Target workflow: update handler returns an error after acceptance.
 	targetWF := func(ctx workflow.Context, input string) (string, error) {
 		if err := workflow.SetUpdateHandler(ctx, "update", func(ctx workflow.Context, input string) (string, error) {
+			workflow.GetSignalChannel(ctx, "fail-update").Receive(ctx, nil)
 			return "", temporal.NewApplicationError("update handler failed", "UpdateFailed", nil)
 		}); err != nil {
 			return "", err
@@ -955,7 +956,6 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackOnFailedUpdate(
 	}, targetWF, "initial input")
 	s.NoError(err)
 
-	// Caller workflow sends a nexus operation targeting the child.
 	callerWF := s.newSimpleCallerWF(endpointName, cfg.childWfID)
 
 	s.startWorker(env, cfg.taskQueue, callerWF)
@@ -966,16 +966,16 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackOnFailedUpdate(
 	}, callerWF)
 	s.NoError(err)
 
-	// The update is accepted but the handler returns an error -> update completes with
-	// failure -> callback fires -> nexus operation fails -> caller workflow fails.
+	s.awaitUpdateAccepted(ctx, env, cfg.childWfID, "")
+	s.NoError(env.SdkClient().SignalWorkflow(ctx, cfg.childWfID, "", "fail-update", nil))
+
 	var result string
 	err = callerRun.Get(ctx, &result)
 	s.Error(err, "expected caller workflow to fail because the update failed")
 
-	// Verify it's a NexusOperationError wrapping the update failure.
-	_ = s.requireNexusOperationError(err)
+	noe := s.requireNexusOperationError(err)
+	s.Contains(noe.Error(), "update handler failed")
 
-	// Clean up: stop the target workflow.
 	s.NoError(env.SdkClient().SignalWorkflow(ctx, cfg.childWfID, "", "stop", nil))
 }
 
@@ -1040,6 +1040,63 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackOnWorkflowTermi
 	var result string
 	err = callerRun.Get(ctx, &result)
 	s.Error(err, "expected caller workflow to fail because the target was terminated")
+	s.assertAcceptedUpdateCompletedWorkflowError(err)
+}
+
+func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackOnWorkflowCancel() {
+	env := newNexusTestEnv(s.T(), true, enableUpdateCallbacksOpts()...)
+	ctx := s.Context()
+	cfg := newUpdateNexusTestConfig(s.T())
+	cfg.updateID = "cancel-update-id"
+
+	h := makeUpdateWithCallbackHandler(env, s.T(), cfg, nil)
+	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
+
+	targetTaskQueue := testcore.RandomizeStr("target-" + s.T().Name())
+
+	// Keep the update pending until the workflow is canceled.
+	targetWF := func(ctx workflow.Context, input string) (string, error) {
+		if err := workflow.SetUpdateHandler(ctx, "update", func(ctx workflow.Context, input string) (string, error) {
+			signalCh := workflow.GetSignalChannel(ctx, "complete-update")
+			signalCh.Receive(ctx, nil)
+			return "updated: " + input, nil
+		}); err != nil {
+			return "", err
+		}
+		selector := workflow.NewSelector(ctx)
+		var done bool
+		selector.AddReceive(ctx.Done(), func(workflow.ReceiveChannel, bool) { done = true })
+		for !done {
+			selector.Select(ctx)
+		}
+		return "", ctx.Err()
+	}
+
+	s.startWorker(env, targetTaskQueue, targetWF)
+
+	_, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:        cfg.childWfID,
+		TaskQueue: targetTaskQueue,
+	}, targetWF, "initial input")
+	s.NoError(err)
+
+	callerWF := s.newSimpleCallerWF(endpointName, cfg.childWfID)
+
+	s.startWorker(env, cfg.taskQueue, callerWF)
+
+	callerRun, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue:                cfg.taskQueue,
+		WorkflowExecutionTimeout: 30 * time.Second,
+	}, callerWF)
+	s.NoError(err)
+
+	s.awaitUpdateAccepted(ctx, env, cfg.childWfID, "")
+
+	s.NoError(env.SdkClient().CancelWorkflow(ctx, cfg.childWfID, ""))
+
+	var result string
+	err = callerRun.Get(ctx, &result)
+	s.Error(err, "expected caller workflow to fail because the target was canceled")
 	s.assertAcceptedUpdateCompletedWorkflowError(err)
 }
 
@@ -1230,6 +1287,205 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackOnWorkflowFaile
 	err = callerRun.Get(ctx, &result)
 	s.Error(err, "expected caller workflow to fail because the target workflow failed with retry")
 	s.assertAcceptedUpdateCompletedWorkflowError(err)
+}
+
+func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackOnNexusOperationCancel() {
+	env := newNexusTestEnv(s.T(), true, enableUpdateCallbacksOpts()...)
+	ctx := s.Context()
+	cfg := newUpdateNexusTestConfig(s.T())
+	cfg.updateID = "cancel-op-update-id"
+
+	var cancelReceived atomic.Bool
+	h := makeUpdateWithCallbackHandler(env, s.T(), cfg, nil)
+	h.OnCancelOperation = func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
+		cancelReceived.Store(true)
+		return nil
+	}
+	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
+
+	targetTaskQueue := testcore.RandomizeStr("target-" + s.T().Name())
+
+	targetWF := newUpdateChildWorkflow(true)
+
+	s.startWorker(env, targetTaskQueue, targetWF)
+
+	_, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:        cfg.childWfID,
+		TaskQueue: targetTaskQueue,
+	}, targetWF, "initial input")
+	s.NoError(err)
+
+	callerWF := func(ctx workflow.Context) (string, error) {
+		nexusClient := workflow.NewNexusClient(endpointName, "test")
+		opCtx, cancelOp := workflow.WithCancel(ctx)
+		fut := nexusClient.ExecuteOperation(opCtx, "operation", cfg.childWfID, workflow.NexusOperationOptions{})
+		var exec workflow.NexusOperationExecution
+		if err := fut.GetNexusOperationExecution().Get(ctx, &exec); err != nil {
+			return "", err
+		}
+		workflow.GetSignalChannel(ctx, "cancel-op").Receive(ctx, nil)
+		cancelOp()
+		var result string
+		err := fut.Get(ctx, &result)
+		return result, err
+	}
+
+	s.startWorker(env, cfg.taskQueue, callerWF)
+
+	callerRun, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue:                cfg.taskQueue,
+		WorkflowExecutionTimeout: 30 * time.Second,
+	}, callerWF)
+	s.NoError(err)
+
+	s.awaitUpdateAccepted(ctx, env, cfg.childWfID, "")
+	s.NoError(env.SdkClient().SignalWorkflow(ctx, callerRun.GetID(), callerRun.GetRunID(), "cancel-op", nil))
+
+	s.AwaitTruef(cancelReceived.Load, 10*time.Second, 100*time.Millisecond, "cancel request was not delivered")
+
+	// Complete the update after the cancel request succeeds.
+	s.NoError(env.SdkClient().SignalWorkflow(ctx, cfg.childWfID, "", "complete-update", nil))
+	s.NoError(env.SdkClient().SignalWorkflow(ctx, cfg.childWfID, "", "stop", nil))
+
+	var result string
+	s.NoError(callerRun.Get(ctx, &result))
+	s.Equal("updated: test", result)
+
+	callerHist := env.SdkClient().GetWorkflowHistory(ctx, callerRun.GetID(), callerRun.GetRunID(), false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	for callerHist.HasNext() {
+		event, err := callerHist.Next()
+		s.Require().NoError(err)
+		s.NotEqual(enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED, event.EventType, "canceling the nexus operation must not crash the caller's workflow task")
+	}
+
+	await.Require(s.Context(), s.T(), func(t *await.T) {
+		targetHist := env.SdkClient().GetWorkflowHistory(ctx, cfg.childWfID, "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+		completedCount := 0
+		for targetHist.HasNext() {
+			event, err := targetHist.Next()
+			require.NoError(t, err)
+			if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED {
+				completedCount++
+			}
+		}
+		require.Equal(t, 1, completedCount, "the update must complete exactly once; canceling the caller's nexus operation must not duplicate delivery")
+	}, 10*time.Second, 500*time.Millisecond)
+}
+
+func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateCallbackCustomDataConverter() {
+	env := newNexusTestEnv(s.T(), true, enableUpdateCallbacksOpts()...)
+	ctx := s.Context()
+	cfg := newUpdateNexusTestConfig(s.T())
+	cfg.updateID = "custom-converter-update-id"
+
+	dataConverter := converter.NewCodecDataConverter(
+		converter.GetDefaultDataConverter(),
+		converter.NewZlibCodec(converter.ZlibCodecOptions{AlwaysEncode: true}),
+	)
+
+	inputPayload, err := dataConverter.ToPayload("custom-converter-input")
+	s.NoError(err)
+
+	h := nexustest.Handler{
+		OnStartOperation: func(
+			ctx context.Context,
+			service, operation string,
+			input *nexus.LazyValue,
+			options nexus.StartOperationOptions,
+		) (nexus.HandlerStartOperationResult[any], error) {
+			_, err := env.FrontendClient().UpdateWorkflowExecution(ctx, &workflowservice.UpdateWorkflowExecutionRequest{
+				Namespace: env.Namespace().String(),
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: cfg.childWfID,
+				},
+				WaitPolicy: &updatepb.WaitPolicy{
+					LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED,
+				},
+				Request: &updatepb.Request{
+					Meta: &updatepb.Meta{UpdateId: cfg.updateID},
+					Input: &updatepb.Input{
+						Name: "update",
+						Args: &commonpb.Payloads{Payloads: []*commonpb.Payload{inputPayload}},
+					},
+					RequestId: uuid.NewString(),
+					CompletionCallbacks: []*commonpb.Callback{
+						{
+							Variant: &commonpb.Callback_Nexus_{
+								Nexus: &commonpb.Callback_Nexus{
+									Url:    options.CallbackURL,
+									Header: options.CallbackHeader,
+								},
+							},
+						},
+					},
+				},
+			})
+			if err != nil {
+				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "update call failed: %v", err)
+			}
+			return &nexus.HandlerStartOperationResultAsync{OperationToken: "test"}, nil
+		},
+	}
+	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
+
+	targetTaskQueue := testcore.RandomizeStr("target-" + s.T().Name())
+
+	targetClient, err := client.Dial(client.Options{
+		HostPort:      env.FrontendGRPCAddress(),
+		Namespace:     env.Namespace().String(),
+		DataConverter: dataConverter,
+	})
+	s.NoError(err)
+	s.T().Cleanup(targetClient.Close)
+
+	targetWF := func(ctx workflow.Context, input string) (string, error) {
+		if err := workflow.SetUpdateHandler(ctx, "update", func(ctx workflow.Context, input string) (string, error) {
+			workflow.GetSignalChannel(ctx, "complete-update").Receive(ctx, nil)
+			return "converted: " + input, nil
+		}); err != nil {
+			return "", err
+		}
+		workflow.GetSignalChannel(ctx, "stop").Receive(ctx, nil)
+		return "done: " + input, nil
+	}
+
+	targetWorker := worker.New(targetClient, targetTaskQueue, worker.Options{})
+	targetWorker.RegisterWorkflow(targetWF)
+	s.NoError(targetWorker.Start())
+	s.T().Cleanup(targetWorker.Stop)
+
+	_, err = targetClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:        cfg.childWfID,
+		TaskQueue: targetTaskQueue,
+	}, targetWF, "initial input")
+	s.NoError(err)
+
+	callerClient, err := client.Dial(client.Options{
+		HostPort:      env.FrontendGRPCAddress(),
+		Namespace:     env.Namespace().String(),
+		DataConverter: dataConverter,
+	})
+	s.NoError(err)
+	s.T().Cleanup(callerClient.Close)
+
+	callerWF := s.newSimpleCallerWF(endpointName, cfg.childWfID)
+	callerWorker := worker.New(callerClient, cfg.taskQueue, worker.Options{})
+	callerWorker.RegisterWorkflow(callerWF)
+	s.NoError(callerWorker.Start())
+	s.T().Cleanup(callerWorker.Stop)
+
+	callerRun, err := callerClient.ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue:                cfg.taskQueue,
+		WorkflowExecutionTimeout: 30 * time.Second,
+	}, callerWF)
+	s.NoError(err)
+
+	s.awaitUpdateAccepted(ctx, env, cfg.childWfID, "")
+	s.NoError(env.SdkClient().SignalWorkflow(ctx, cfg.childWfID, "", "complete-update", nil))
+
+	var result string
+	s.NoError(callerRun.Get(ctx, &result))
+	s.Equal("converted: custom-converter-input", result)
 }
 
 // TestWorkflowUpdateCallbackOnRejectedUpdate verifies that when an update is rejected

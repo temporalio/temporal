@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -2915,6 +2916,94 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 	_, err = s.mutableState.GetUpdateOutcome(ctx, "not_an_update_id")
 	s.Error(err)
 	s.IsType((*serviceerror.NotFound)(nil), err)
+}
+
+func (s *mutableStateSuite) TestGetNexusUpdateCompletion_TransientReadErrorNotConflatedWithMissingOutcome() {
+	ctx := context.Background()
+
+	cacheStore := map[events.EventKey]*historypb.HistoryEvent{}
+	transientErr := serviceerror.NewUnavailablef("simulated transient read failure")
+	var faultedEventID int64 = -1
+
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes().Do(
+		func(k events.EventKey, event *historypb.HistoryEvent) { cacheStore[k] = event },
+	)
+	s.mockEventsCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		AnyTimes().
+		DoAndReturn(func(_ context.Context, _ int32, key events.EventKey, _ int64, _ []byte) (*historypb.HistoryEvent, error) {
+			if key.EventID == faultedEventID {
+				return nil, transientErr
+			}
+			if event, ok := cacheStore[key]; ok {
+				return event, nil
+			}
+			return nil, serviceerror.NewNotFoundf("event %#v not found", key)
+		})
+
+	_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+		&historyservice.StartWorkflowExecutionRequest{StartRequest: &workflowservice.StartWorkflowExecutionRequest{}},
+	)
+	s.NoError(err)
+	_, err = s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+
+	updateID := s.T().Name() + "-update-id"
+	acptEvent, err := s.mutableState.AddWorkflowExecutionUpdateAcceptedEvent(
+		updateID, s.T().Name()+"-msg-id", 1,
+		&updatepb.Request{Meta: &updatepb.Meta{UpdateId: updateID}},
+	)
+	s.NoError(err)
+
+	completedEvent, err := s.mutableState.AddWorkflowExecutionUpdateCompletedEvent(
+		acptEvent.EventId,
+		&updatepb.Response{
+			Meta:    &updatepb.Meta{UpdateId: updateID},
+			Outcome: &updatepb.Outcome{Value: &updatepb.Outcome_Success{Success: testPayloads}},
+		},
+	)
+	s.NoError(err)
+
+	pendingUpdateID := s.T().Name() + "-pending-update-id"
+	_, err = s.mutableState.AddWorkflowExecutionUpdateAcceptedEvent(
+		pendingUpdateID,
+		s.T().Name()+"-pending-msg-id",
+		1,
+		&updatepb.Request{Meta: &updatepb.Meta{UpdateId: pendingUpdateID}},
+	)
+	s.NoError(err)
+
+	// The fallback applies only to a closed workflow.
+	_, err = s.mutableState.AddCompletedWorkflowEvent(
+		completedEvent.GetEventId(),
+		&commandpb.CompleteWorkflowExecutionCommandAttributes{},
+		"",
+	)
+	s.NoError(err)
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().ClusterNameForFailoverVersion(
+		s.namespaceEntry.IsGlobalNamespace(),
+		s.namespaceEntry.FailoverVersion(tests.WorkflowID),
+	).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	// Closing the transaction creates the event version history.
+	_, _, err = s.mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+	s.NoError(err)
+
+	// Do not use s.Run because SetupSubTest resets mutable state.
+
+	faultedEventID = completedEvent.GetEventId()
+	opts, err := s.mutableState.GetNexusUpdateCompletion(ctx, updateID, "some-request-id")
+	var unavailableErr *serviceerror.Unavailable
+	s.ErrorAs(err, &unavailableErr, "transient error must propagate")
+	s.Equal(nexusrpc.CompleteOperationOptions{}, opts)
+	faultedEventID = -1
+
+	opts, err = s.mutableState.GetNexusUpdateCompletion(ctx, pendingUpdateID, "some-request-id")
+	s.NoError(err, "missing outcome must use the normal fallback")
+	s.NotNil(opts.Error, "expected a failure completion for the fallback case")
+	s.Contains(opts.Error.Cause.Error(), "completed before the Update completed")
 }
 
 func (s *mutableStateSuite) TestApplyActivityTaskStartedEvent() {

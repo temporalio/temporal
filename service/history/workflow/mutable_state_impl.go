@@ -773,6 +773,10 @@ func (ms *MutableStateImpl) GetNexusUpdateCompletion(
 	cevent, err := ms.getUpdateOutcomeEvent(ctx, updateID)
 	var outcome *updatepb.Outcome
 	if err != nil {
+		// A recorded completion means that the read failed. Propagate that error.
+		if ms.hasRecordedUpdateOutcome(updateID) {
+			return nexusrpc.CompleteOperationOptions{}, err
+		}
 		// If the workflow is complete but the update outcome is missing we need to respond to all callbacks
 		ce, errCE := ms.GetCompletionEvent(ctx)
 		if errors.Is(errCE, ErrMissingWorkflowCompletionEvent) {
@@ -1545,6 +1549,17 @@ func (ms *MutableStateImpl) GetUpdateOutcome(
 		return nil, err
 	}
 	return event.GetWorkflowExecutionUpdateCompletedEventAttributes().GetOutcome(), nil
+}
+
+func (ms *MutableStateImpl) hasRecordedUpdateOutcome(updateID string) bool {
+	if ms.executionInfo.UpdateInfos == nil {
+		return false
+	}
+	ui, ok := ms.executionInfo.UpdateInfos[updateID]
+	if !ok {
+		return false
+	}
+	return ui.GetCompletion() != nil
 }
 
 func (ms *MutableStateImpl) getUpdateOutcomeEvent(
