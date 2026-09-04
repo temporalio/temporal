@@ -128,17 +128,14 @@ func (sm *scaleManager) AddedTasks(estimatedTasksAllPartitions int) {
 		return
 	}
 
-	// If we don't know the latest write partitions, scale batch size by tasks_all_partitions,
-	// so we are comparing total_tasks_all_partitions < batchSize * latest_tasks_all_partitions.
-	// We scale batch size up because latest_tasks_all_partitions scales with partitions, as does total_tasks.
-	batchSize := int64(estimatedTasksAllPartitions) * sm.batchSize
-
-	// If we know the latest write partitions, scale batch size by write partitions,
-	// so we are comparing total_tasks_all_partitions / num_partitions < batchSize.
+	// Wake once ~batchSize tasks per write partition have accumulated. Before the first
+	// scaler decision we don't know the write count, so use the per-sample estimate, which
+	// scales with partitions the same way.
+	threshold := int64(estimatedTasksAllPartitions) * sm.batchSize
 	if currentWrite := sm.currentWrite.Load(); currentWrite > 0 {
-		batchSize = int64(currentWrite) * sm.batchSize
+		threshold = int64(currentWrite) * sm.batchSize
 	}
-	if sm.batch.Add(int64(estimatedTasksAllPartitions)) < batchSize {
+	if sm.batch.Add(int64(estimatedTasksAllPartitions)) < threshold {
 		return // not enough for a batch yet
 	}
 
