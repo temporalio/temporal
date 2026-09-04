@@ -508,13 +508,13 @@ func TestQueryConverter_ConvertSelectStmt(t *testing.T) {
 		{
 			name: "fail invalid group by field",
 			in:   "select * from t group by InvalidField",
-			err:  InvalidExpressionErrMessage,
+			err:  InvalidSearchAttribute,
 		},
 
 		{
 			name: "fail invalid order by field",
 			in:   "select * from t order by InvalidField",
-			err:  InvalidExpressionErrMessage,
+			err:  InvalidSearchAttribute,
 		},
 
 		{
@@ -1319,7 +1319,7 @@ func TestQueryConverter_ConvertComparisonExprFail(t *testing.T) {
 		{
 			name: "invalid col name",
 			in:   "InvalidField = 'foo'",
-			err:  InvalidExpressionErrMessage,
+			err:  InvalidSearchAttribute,
 		},
 
 		{
@@ -1430,7 +1430,7 @@ func TestQueryConverter_ConvertRangeCond(t *testing.T) {
 		{
 			name: "fail invalid col name",
 			in:   "InvalidField BETWEEN '123' AND '456'",
-			err:  InvalidExpressionErrMessage,
+			err:  InvalidSearchAttribute,
 		},
 
 		{
@@ -1537,7 +1537,7 @@ func TestQueryConverter_ConvertIsExpr(t *testing.T) {
 		{
 			name: "fail invalid col name",
 			in:   "InvalidField IS NOT NULL",
-			err:  InvalidExpressionErrMessage,
+			err:  InvalidSearchAttribute,
 		},
 
 		{
@@ -1680,10 +1680,7 @@ func TestQueryConverter_ConvertColName(t *testing.T) {
 			in: &sqlparser.ColName{
 				Name: sqlparser.NewColIdent("InvalidField"),
 			},
-			err: fmt.Sprintf(
-				"%s: column name 'InvalidField' is not a valid search attribute",
-				InvalidExpressionErrMessage,
-			),
+			err: fmt.Sprintf("%s: InvalidField", InvalidSearchAttribute),
 		},
 	}
 
@@ -1708,166 +1705,6 @@ func TestQueryConverter_ConvertColName(t *testing.T) {
 				} else {
 					r.False(queryConverter.seenNamespaceDivision)
 				}
-			}
-		})
-	}
-}
-
-func TestQueryConverter_ResolveSearchAttributeAlias(t *testing.T) {
-	t.Parallel()
-
-	testCases := []struct {
-		name                 string
-		in                   string
-		withCustomScheduleID bool
-		useNoopMapper        bool
-		outFn                string
-		outFt                enumspb.IndexedValueType
-		err                  string
-	}{
-		{
-			name:  "success system StartTime",
-			in:    "StartTime",
-			outFn: "StartTime",
-			outFt: enumspb.INDEXED_VALUE_TYPE_DATETIME,
-		},
-
-		{
-			name:  "success system WorkflowId",
-			in:    "WorkflowId",
-			outFn: "WorkflowId",
-			outFt: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		},
-
-		{
-			name:  "success reserved BuildIds",
-			in:    "BuildIds",
-			outFn: "BuildIds",
-			outFt: enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		},
-
-		{
-			name:  "success reserved TemporalBuildIds",
-			in:    "TemporalBuildIds",
-			outFn: "BuildIds",
-			outFt: enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		},
-
-		{
-			name:  "success reserved TemporalWorkerDeployment",
-			in:    "TemporalWorkerDeployment",
-			outFn: "TemporalWorkerDeployment",
-			outFt: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		},
-
-		{
-			name:  "success reserved WorkerDeployment",
-			in:    "WorkerDeployment",
-			outFn: "TemporalWorkerDeployment",
-			outFt: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		},
-
-		{
-			name:  "success custom AliasForInt01",
-			in:    "AliasForInt01",
-			outFn: "Int01",
-			outFt: enumspb.INDEXED_VALUE_TYPE_INT,
-		},
-
-		{
-			name:          "success custom noop mapper Int01",
-			in:            "Int01",
-			useNoopMapper: true,
-			outFn:         "Int01",
-			outFt:         enumspb.INDEXED_VALUE_TYPE_INT,
-		},
-
-		{
-			name:  "success special ScheduleId",
-			in:    "ScheduleId",
-			outFn: "WorkflowId",
-			outFt: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		},
-
-		{
-			name:  "success special TemporalScheduleId",
-			in:    "TemporalScheduleId",
-			outFn: "WorkflowId",
-			outFt: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		},
-
-		{
-			name:                 "success custom ScheduleId",
-			in:                   "ScheduleId",
-			withCustomScheduleID: true,
-			outFn:                searchattribute.TestScheduleIDFieldName,
-			outFt:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		},
-
-		{
-			name:                 "success custom ScheduleId reserved TemporalScheduleId",
-			in:                   "TemporalScheduleId",
-			withCustomScheduleID: true,
-			outFn:                "WorkflowId",
-			outFt:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		},
-
-		{
-			name:                 "success noop mapper ScheduleId",
-			in:                   "ScheduleId",
-			withCustomScheduleID: false,
-			outFn:                "WorkflowId",
-			outFt:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		},
-
-		{
-			name:                 "success noop mapper TemporalScheduleId",
-			in:                   "TemporalScheduleId",
-			withCustomScheduleID: false,
-			outFn:                "WorkflowId",
-			outFt:                enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		},
-
-		{
-			name: "invalid search attribute",
-			in:   "Foo",
-			err: fmt.Sprintf(
-				"%s: column name 'Foo' is not a valid search attribute",
-				InvalidExpressionErrMessage,
-			),
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			r := require.New(t)
-			ctrl := gomock.NewController(t)
-			storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
-			queryConverter := NewQueryConverter(
-				storeQCMock,
-				testNamespaceName,
-				searchattribute.TestNameTypeMap(),
-				&searchattribute.TestMapper{
-					WithCustomScheduleID: tc.withCustomScheduleID,
-				},
-				metrics.NewMockHandler(ctrl),
-				log.NewNoopLogger(),
-			)
-
-			if tc.useNoopMapper {
-				queryConverter.saMapper = &searchattribute.NoopMapper{}
-			}
-
-			fn, ft, err := queryConverter.resolveSearchAttributeAlias(tc.in)
-			if tc.err != "" {
-				r.Error(err)
-				r.ErrorContains(err, tc.err)
-				var expectedErr *ConverterError
-				r.ErrorAs(err, &expectedErr)
-			} else {
-				r.NoError(err)
-				r.Equal(tc.outFn, fn)
-				r.Equal(tc.outFt, ft)
 			}
 		})
 	}
@@ -2534,82 +2371,8 @@ func TestQueryConverter_TemporalSystemExecutionStatus(t *testing.T) {
 		}
 		_, err := queryConverter.convertColName(in)
 		r.Error(err)
-		r.ErrorContains(err, "not a valid search attribute")
+		r.ErrorContains(err, InvalidSearchAttribute)
 	})
-}
-
-func TestQueryConverter_ResolveSearchAttributeAlias_WithChasmMapper(t *testing.T) {
-	t.Parallel()
-	ctrl := gomock.NewController(t)
-	storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
-
-	chasmMapper := chasm.NewTestVisibilitySearchAttributesMapper(
-		map[string]string{
-			"TemporalBool01":    "ChasmCompleted",
-			"TemporalKeyword01": "ChasmStatus",
-		},
-		map[string]enumspb.IndexedValueType{
-			"TemporalBool01":    enumspb.INDEXED_VALUE_TYPE_BOOL,
-			"TemporalKeyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		},
-	)
-
-	queryConverter := newTestQueryConverter(storeQCMock).
-		WithChasmMapper(chasmMapper)
-
-	testCases := []struct {
-		name                    string
-		expectedFieldName       string
-		expectedFieldType       enumspb.IndexedValueType
-		expectedErr             bool
-		expectNamespaceDivision bool
-	}{
-		{
-			name:                    "ChasmCompleted",
-			expectedFieldName:       "TemporalBool01",
-			expectedFieldType:       enumspb.INDEXED_VALUE_TYPE_BOOL,
-			expectedErr:             false,
-			expectNamespaceDivision: false,
-		},
-		{
-			name:                    "ChasmStatus",
-			expectedFieldName:       "TemporalKeyword01",
-			expectedFieldType:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			expectedErr:             false,
-			expectNamespaceDivision: false,
-		},
-		{
-			name:                    "TemporalNamespaceDivision",
-			expectedFieldName:       "TemporalNamespaceDivision",
-			expectedFieldType:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-			expectedErr:             false,
-			expectNamespaceDivision: true,
-		},
-		{
-			name:                    "NonExistentChasmAlias",
-			expectedFieldName:       "",
-			expectedFieldType:       enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED,
-			expectedErr:             true,
-			expectNamespaceDivision: false,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			r := require.New(t)
-			fieldName, fieldType, err := queryConverter.resolveSearchAttributeAlias(tc.name)
-			if tc.expectedErr {
-				r.Error(err)
-				// Note: fieldName may have been set during resolution attempts
-				r.Equal(enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, fieldType)
-			} else {
-				r.NoError(err)
-				r.Equal(tc.expectedFieldName, fieldName)
-				r.Equal(tc.expectedFieldType, fieldType)
-				// Note: seenNamespaceDivision is only set in convertColName, not resolveSearchAttributeAlias
-			}
-		})
-	}
 }
 
 func TestQueryConverter_CapturePanic(t *testing.T) {
