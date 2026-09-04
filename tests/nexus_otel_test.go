@@ -149,6 +149,7 @@ func (s *NexusOTELSuite) TestOperation() {
 	handlerEnv := s.newTestEnv(exporter)
 	tv := callerEnv.Tv()
 	handlerTaskQueue := handlerEnv.Tv().TaskQueue().GetName()
+	handlerWorkflowID := handlerEnv.Tv().WorkflowID()
 
 	handlerWorkflow := func(ctx workflow.Context, _ nexus.NoValue) (nexus.NoValue, error) {
 		workflow.GetSignalChannel(ctx, "complete").Receive(ctx, nil)
@@ -164,8 +165,9 @@ func (s *NexusOTELSuite) TestOperation() {
 			default:
 			}
 			return client.StartWorkflowOptions{
-				ID:        options.RequestID,
-				TaskQueue: handlerTaskQueue,
+				ID:                       handlerWorkflowID,
+				TaskQueue:                handlerTaskQueue,
+				WorkflowIDConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 			}, nil
 		},
 	)
@@ -176,6 +178,11 @@ func (s *NexusOTELSuite) TestOperation() {
 	handlerWorker.RegisterNexusService(service)
 	s.NoError(handlerWorker.Start())
 	s.T().Cleanup(handlerWorker.Stop)
+	handlerWorkflowRun, err := handlerEnv.SdkClient().ExecuteWorkflow(s.Context(), client.StartWorkflowOptions{
+		ID:        handlerWorkflowID,
+		TaskQueue: handlerTaskQueue,
+	}, handlerWorkflow, nexus.NoValue(nil))
+	s.NoError(err)
 
 	handlerWorkerEndpoint := handlerEnv.createNexusEndpoint(s.Context(), s.T(), testcore.RandomizedNexusEndpoint(s.T().Name()), handlerTaskQueue)
 	callerExternalEndpoint := callerEnv.createExternalNexusEndpoint(s.Context(), s.T(), handlerEnv.dispatchByEndpointURL(handlerWorkerEndpoint.Id))
@@ -209,7 +216,7 @@ func (s *NexusOTELSuite) TestOperation() {
 	})
 	s.NoError(err)
 
-	handlerRunID := handlerEnv.SdkClient().GetWorkflow(s.Context(), nexusRequestID, "").GetRunID()
+	handlerRunID := handlerWorkflowRun.GetRunID()
 	operationURLPath := "/nexus/endpoints/" + handlerWorkerEndpoint.Id + "/services/" + service.Name + "/" + operation.Name()
 	s.requireNexusHTTPSpans(exporter, []nexusHTTPSpan{
 		{
@@ -235,7 +242,7 @@ func (s *NexusOTELSuite) TestOperation() {
 				"temporalNexusEndpoint":          handlerWorkerEndpoint.GetSpec().GetName(),
 				"temporalNexusHandlerNamespace":  handlerEnv.Namespace().String(),
 				"temporalNexusHandlerRunID":      handlerRunID,
-				"temporalNexusHandlerWorkflowID": nexusRequestID,
+				"temporalNexusHandlerWorkflowID": handlerWorkflowID,
 				"temporalNexusOperation":         operation.Name(),
 				"temporalNexusRequestID":         nexusRequestID,
 				"temporalNexusService":           service.Name,
@@ -244,7 +251,7 @@ func (s *NexusOTELSuite) TestOperation() {
 				Attributes: map[string]any{
 					"temporalNamespace":  handlerEnv.Namespace().String(),
 					"temporalRunID":      handlerRunID,
-					"temporalWorkflowID": nexusRequestID,
+					"temporalWorkflowID": handlerWorkflowID,
 				},
 			}},
 		},
