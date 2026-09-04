@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"go.opentelemetry.io/otel/trace"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
@@ -86,18 +85,6 @@ type operationContext struct {
 	headersBlacklist              dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 	metricTagConfig               dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
 	cleanupFunctions              []func(map[string]string, error)
-}
-
-func (c *operationContext) annotateServerSpan(
-	ctx context.Context,
-	service, operation, requestID string,
-) {
-	nexusrpc.AnnotateServerSpan(trace.SpanFromContext(ctx), nexusrpc.ServerSpanAttributes{
-		Endpoint:  c.endpointName,
-		Service:   service,
-		Operation: operation,
-		RequestID: requestID,
-	})
 }
 
 // Panic handler and metrics recording function.
@@ -488,6 +475,7 @@ func (h *nexusHandler) StartOperation(
 	if err != nil {
 		return nil, err
 	}
+	oc.annotateServerSpanLinks(ctx, handlerLinks)
 	nexus.AddHandlerLinks(ctx, handlerLinks...)
 	return result, nil
 }

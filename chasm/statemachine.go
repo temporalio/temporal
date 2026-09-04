@@ -56,11 +56,11 @@ func (t Transition[S, SM, E]) Apply(sm SM, ctx MutableContext, event E) (retErr 
 	if telemetry.DebugMode() {
 		defer func() {
 			attrs := []attribute.KeyValue{
-				attribute.String("chasm.transition.source", fmt.Sprintf("%v", prevState)),
-				attribute.String("chasm.transition.destination", fmt.Sprintf("%v", t.Destination)),
+				attribute.String(telemetry.ChasmTransitionSourceKey, fmt.Sprintf("%v", prevState)),
+				attribute.String(telemetry.ChasmTransitionDestinationKey, fmt.Sprintf("%v", t.Destination)),
 			}
 			if retErr != nil {
-				attrs = append(attrs, attribute.String("chasm.transition.error", retErr.Error()))
+				attrs = append(attrs, attribute.String(telemetry.ChasmTransitionErrorKey, retErr.Error()))
 			}
 			span := trace.SpanFromContext(ctx.goContext())
 			span.AddEvent("chasm.transition", trace.WithAttributes(attrs...))
