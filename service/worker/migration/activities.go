@@ -959,39 +959,59 @@ func (a *activities) checkSkipWorkflowExecution(
 func (a *activities) verifySingleReplicationTask(
 	ctx context.Context,
 	request *verifyReplicationTasksRequest,
-	remotAdminClient adminservice.AdminServiceClient,
+	remoteFrontendClient workflowservice.WorkflowServiceClient,
+	remoteAdminClient adminservice.AdminServiceClient,
 	ns *namespace.Namespace,
 	execution *ExecutionInfo,
 ) (verifyResult, error) {
 	s := time.Now()
+	defer func() {
+		a.forceReplicationMetricsHandler.Timer(metrics.VerifyDescribeMutableStateLatency.Name()).Record(time.Since(s))
+	}()
 	// Check if execution exists on remote cluster
 
-	archetype, err := a.archetypeIDToName(ctx, execution.ArchetypeID)
-	if err != nil {
-		return verifyResult{
-			status: notVerified,
-		}, err
-	}
+	var err error
+	if execution.ArchetypeID == chasm.UnspecifiedArchetypeID || execution.ArchetypeID == chasm.WorkflowArchetypeID {
+		_, err = remoteFrontendClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: request.Namespace,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: execution.BusinessID,
+				RunId:      execution.RunID,
+			},
+		})
+	} else {
+		var archetype chasm.Archetype
+		archetype, err = a.archetypeIDToName(ctx, execution.ArchetypeID)
+		if err != nil {
+			return verifyResult{
+				status: notVerified,
+			}, err
+		}
 
-	mu, err := remotAdminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
-		Namespace: request.Namespace,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: execution.BusinessID,
-			RunId:      execution.RunID,
-		},
-		Archetype:       archetype,
-		ArchetypeId:     execution.ArchetypeID,
-		SkipForceReload: true,
-	})
-	a.forceReplicationMetricsHandler.Timer(metrics.VerifyDescribeMutableStateLatency.Name()).Record(time.Since(s))
+		var mu *adminservice.DescribeMutableStateResponse
+		mu, err = remoteAdminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+			Namespace: request.Namespace,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: execution.BusinessID,
+				RunId:      execution.RunID,
+			},
+			Archetype:       archetype,
+			ArchetypeId:     execution.ArchetypeID,
+			SkipForceReload: true,
+		})
+		if err == nil {
+			result, err := a.workflowVerifier(ctx, request, remoteAdminClient, a.adminClient, ns, execution, mu)
+			if err == nil && result.status == verified {
+				a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskSuccess.Name()).Record(1)
+			}
+			return result, err
+		}
+	}
 
 	switch e := err.(type) {
 	case nil:
-		result, err := a.workflowVerifier(ctx, request, remotAdminClient, a.adminClient, ns, execution, mu)
-		if err == nil && result.status == verified {
-			a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskSuccess.Name()).Record(1)
-		}
-		return result, err
+		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskSuccess.Name()).Record(1)
+		return verifyResult{status: verified}, nil
 
 	case *serviceerror.NotFound:
 		a.forceReplicationMetricsHandler.WithTags(metrics.NamespaceTag(request.Namespace)).Counter(metrics.VerifyReplicationTaskNotFound.Name()).Record(1)
@@ -1030,7 +1050,8 @@ func (a *activities) verifyReplicationTasks(
 	ctx context.Context,
 	request *verifyReplicationTasksRequest,
 	details *replicationTasksHeartbeatDetails,
-	remotAdminClient adminservice.AdminServiceClient,
+	remoteFrontendClient workflowservice.WorkflowServiceClient,
+	remoteAdminClient adminservice.AdminServiceClient,
 	ns *namespace.Namespace,
 	heartbeat func(details replicationTasksHeartbeatDetails),
 ) (bool, error) {
@@ -1050,7 +1071,7 @@ func (a *activities) verifyReplicationTasks(
 
 	for ; details.NextIndex < len(request.Executions); details.NextIndex++ {
 		we := request.Executions[details.NextIndex]
-		r, err := a.verifySingleReplicationTask(ctx, request, remotAdminClient, ns, we)
+		r, err := a.verifySingleReplicationTask(ctx, request, remoteFrontendClient, remoteAdminClient, ns, we)
 		if err != nil {
 			return false, err
 		}
@@ -1084,7 +1105,12 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 		activity.RecordHeartbeat(ctx, details)
 	}
 
-	remotAdminClient, err := a.clientBean.GetRemoteAdminClient(request.TargetClusterName)
+	_, remoteFrontendClient, err := a.clientBean.GetRemoteFrontendClient(request.TargetClusterName)
+	if err != nil {
+		return response, err
+	}
+
+	remoteAdminClient, err := a.clientBean.GetRemoteAdminClient(request.TargetClusterName)
 	if err != nil {
 		return response, err
 	}
@@ -1110,7 +1136,7 @@ func (a *activities) VerifyReplicationTasks(ctx context.Context, request *verify
 		// Since replication has a lag, sleep first.
 		time.Sleep(request.VerifyInterval)
 
-		verified, err := a.verifyReplicationTasks(ctx, request, &details, remotAdminClient, nsEntry,
+		verified, err := a.verifyReplicationTasks(ctx, request, &details, remoteFrontendClient, remoteAdminClient, nsEntry,
 			func(d replicationTasksHeartbeatDetails) {
 				activity.RecordHeartbeat(ctx, d)
 			})
