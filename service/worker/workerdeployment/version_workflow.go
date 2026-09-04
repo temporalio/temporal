@@ -619,12 +619,13 @@ func (d *VersionWorkflowRunner) deleteVersionFromTaskQueuesAsync(ctx workflow.Co
 	// Retryable failures retry indefinitely.
 	err := d.deleteVersionFromTaskQueues(ctx, workflow.WithActivityOptions(ctx, propagationActivityOptions))
 	if err != nil {
-		// Don't decrement asyncPropagationsInProgress — the workflow must stay open
-		// because task queues may still have stale version data. The metric below
-		// enables alerting for manual recovery.
-		d.logger.Error("failed to delete worker deployment version from task queues", "error", err)
+		d.logger.Error(
+			"failed to delete worker deployment version from task queues",
+			"error", err,
+			"taskQueues", workflow.DeterministicKeys(d.GetVersionState().GetTaskQueueFamilies()),
+			"revision", d.GetVersionState().GetRevisionNumber(),
+		)
 		d.metrics.Counter(metrics.WorkerDeploymentVersionDeletePropagationFailure.Name()).Inc(1)
-		return
 	}
 	d.asyncPropagationsInProgress--
 }
