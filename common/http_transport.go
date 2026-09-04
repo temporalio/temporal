@@ -41,7 +41,8 @@ func NewHTTPTransport(tlsConfig *tls.Config) (*http.Transport, error) {
 	if tlsConfig != nil {
 		t.TLSClientConfig = tlsConfig.Clone()
 	}
-	// ConfigureTransports returns the HTTP/2 transport used to configure health checks.
+	// Must come after TLSClientConfig is set: ConfigureTransports takes over the TLS config,
+	// and replacing it afterwards would discard that setup.
 	h2, err := http2.ConfigureTransports(t)
 	if err != nil {
 		return nil, fmt.Errorf("configure http2 transport: %w", err)
