@@ -336,8 +336,8 @@ const (
 
 const (
 	PollerScaleReasonIdle                 ReasonString = "idle"
-	PollerScaleReasonBacklog              ReasonString = "backlog"
-	PollerScaleReasonTaskRate             ReasonString = "task_rate"
+	PollerScaleReasonDelay                ReasonString = "delay"
+	PollerScaleReasonRatio                ReasonString = "ratio"
 	PollerScaleReasonRateLimited          ReasonString = "rate_limited"
 	PollerScaleReasonTaskQueueRateLimited ReasonString = "task_queue_rate_limited"
 )
@@ -440,6 +440,22 @@ func ResourceExhaustedCauseTag(cause enumspb.ResourceExhaustedCause) Tag {
 func ResourceExhaustedScopeTag(scope enumspb.ResourceExhaustedScope) Tag {
 	return Tag{Key: resourceExhaustedScopeTag, Value: scope.String()}
 }
+
+func LastAttemptCauseTag(value string) Tag {
+	return Tag{Key: LastAttemptCauseTagName, Value: value}
+}
+
+// Values for AttemptStageTagName, identifying whether TaskAlertableAttempt was recorded
+// mid-retry or at the attempt's final resolution.
+const (
+	AttemptStageInFlight = "in_flight"
+	AttemptStageTerminal = "terminal"
+)
+
+var (
+	AttemptStageInFlightTag = Tag{Key: AttemptStageTagName, Value: AttemptStageInFlight}
+	AttemptStageTerminalTag = Tag{Key: AttemptStageTagName, Value: AttemptStageTerminal}
+)
 
 func ServiceNameTag(value primitives.ServiceName) Tag {
 	return Tag{Key: serviceName, Value: string(value)}

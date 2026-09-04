@@ -1,15 +1,22 @@
 package cinotify
 
 import (
+	"cmp"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
+	"time"
 
 	"go.temporal.io/server/tools/common/github"
 	"go.temporal.io/server/tools/common/slack"
 )
 
-const maxFailures = 5
+const (
+	maxFailures                    = 5
+	successRateComparisonTolerance = 0.1
+	durationComparisonTolerance    = 30 * time.Second
+)
 
 // BuildFailureMessage creates a Slack message for CI failure
 func BuildFailureMessage(report *FailureReport) *slack.Message {
@@ -118,6 +125,39 @@ func raceLink(runID string, race DataRace) string {
 	return github.RunURL(temporalRepository, runID)
 }
 
+func formatComparison(direction int, difference string) string {
+	switch {
+	case direction > 0:
+		return fmt.Sprintf("↑ %s", difference)
+	case direction < 0:
+		return fmt.Sprintf("↓ %s", difference)
+	default:
+		return "— no change"
+	}
+}
+
+func formatPercentagePointComparison(current, previous float64, available bool) string {
+	if !available {
+		return "N/A"
+	}
+	difference := math.Abs(current - previous)
+	if difference <= successRateComparisonTolerance {
+		return formatComparison(0, "")
+	}
+	return formatComparison(cmp.Compare(current, previous), fmt.Sprintf("%.1f pp", difference))
+}
+
+func formatDurationComparison(current, previous time.Duration, available bool) string {
+	if !available {
+		return "N/A"
+	}
+	difference := (current - previous).Abs()
+	if difference <= durationComparisonTolerance {
+		return formatComparison(0, "")
+	}
+	return formatComparison(cmp.Compare(current, previous), formatDuration(difference))
+}
+
 // BuildSuccessReportMessage creates a Slack message for success report
 func BuildSuccessReportMessage(report *DigestReport) *slack.Message {
 	message := slack.NewMessage(fmt.Sprintf("Weekly CI Report - %s Branch", report.Branch))
@@ -127,13 +167,21 @@ func BuildSuccessReportMessage(report *DigestReport) *slack.Message {
 		report.StartDate.Format("Jan 2, 2006"),
 		report.EndDate.Format("Jan 2, 2006"),
 	))
+	durationsComparable := report.DurationSamples > 0 && report.Previous.DurationSamples > 0
 	message.AddFields(
-		fmt.Sprintf("*Success Rate:*\n%.1f%%", report.SuccessRate),
-		fmt.Sprintf("*Total Runs:*\n%d", report.TotalRuns),
-		fmt.Sprintf("*Failed Runs:*\n%d", report.FailedRuns),
-		fmt.Sprintf("*Successful Runs:*\n%d", report.SuccessfulRuns),
-		fmt.Sprintf("*Average Duration:*\n%s", formatDuration(report.AverageDuration)),
-		fmt.Sprintf("*Median Duration:*\n%s", formatDuration(report.MedianDuration)),
+		fmt.Sprintf("*Success Rate:*\n%.1f%% (%s)", report.SuccessRate,
+			formatPercentagePointComparison(
+				report.SuccessRate, report.Previous.SuccessRate,
+				report.TotalRuns > 0 && report.Previous.TotalRuns > 0)),
+		fmt.Sprintf("*Failed Runs:*\n%d/%d", report.FailedRuns, report.TotalRuns),
+		fmt.Sprintf("*Average Duration:*\n%s (%s)", formatDuration(report.AverageDuration),
+			formatDurationComparison(
+				report.AverageDuration, report.Previous.AverageDuration,
+				durationsComparable)),
+		fmt.Sprintf("*Median Duration:*\n%s (%s)", formatDuration(report.MedianDuration),
+			formatDurationComparison(
+				report.MedianDuration, report.Previous.MedianDuration,
+				durationsComparable)),
 	)
 	message.AddSection(fmt.Sprintf(
 		"*Run Duration Distribution:*\n"+
@@ -160,40 +208,4 @@ func BuildSuccessReportMessage(report *DigestReport) *slack.Message {
 	}
 
 	return message
-}
-
-// FormatReportForDebug formats the success report for console output
-func FormatReportForDebug(report *DigestReport) string {
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "📊 Weekly CI Report - %s Branch\n\n", report.Branch)
-	fmt.Fprintf(&sb, "Report Period: %s to %s\n\n",
-		report.StartDate.Format("Jan 2, 2006"),
-		report.EndDate.Format("Jan 2, 2006"))
-	fmt.Fprintln(&sb, "Metrics:")
-	fmt.Fprintf(&sb, "  Success Rate: %.1f%%\n", report.SuccessRate)
-	fmt.Fprintf(&sb, "  Total Runs: %d\n", report.TotalRuns)
-	fmt.Fprintf(&sb, "  Successful Runs: %d\n", report.SuccessfulRuns)
-	fmt.Fprintf(&sb, "  Failed Runs: %d\n", report.FailedRuns)
-	fmt.Fprintf(&sb, "  Average Duration: %s\n", formatDuration(report.AverageDuration))
-	fmt.Fprintf(&sb, "  Median Duration: %s\n", formatDuration(report.MedianDuration))
-
-	fmt.Fprintln(&sb, "\nRun Duration Distribution:")
-	fmt.Fprintf(&sb, "  Under 20 minutes: %.1f%%\n", report.Under20MinutesPercent)
-	fmt.Fprintf(&sb, "  Under 25 minutes: %.1f%%\n", report.Under25MinutesPercent)
-	fmt.Fprintf(&sb, "  Under 30 minutes: %.1f%%\n", report.Under30MinutesPercent)
-
-	slowestRuns := report.slowestRuns(3)
-	if len(slowestRuns) > 0 {
-		fmt.Fprintln(&sb, "\nSlowest Runs:")
-		for _, run := range slowestRuns {
-			fmt.Fprintf(&sb, "  %s (%s): %s\n    %s\n",
-				formatDuration(run.Duration),
-				run.Conclusion,
-				run.ShortSHA(),
-				run.URL,
-			)
-		}
-	}
-
-	return sb.String()
 }

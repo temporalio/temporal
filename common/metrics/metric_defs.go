@@ -34,6 +34,8 @@ const (
 	ArchetypeTagName               = "archetype"
 	ChasmTaskTypeTagName           = "chasm_task_type"
 	timeoutTypeTagName             = "timeout_type"
+	LastAttemptCauseTagName        = "last_attempt_cause"
+	AttemptStageTagName            = "attempt_stage"
 )
 
 // This package should hold all the metrics and tags for temporal
@@ -891,6 +893,10 @@ var (
 		"task_attempt",
 		WithDescription("The number of attempts took to complete a history task."),
 	)
+	TaskAlertableAttempt = NewDimensionlessHistogramDef(
+		"task_alertable_attempt",
+		WithDescription("The number of attempts, among a history task's total, caused by an alertable (system-side) error."),
+	)
 	TaskFailures = NewCounterDef(
 		"task_errors",
 		WithDescription("The number of unexpected history task processing errors."),
@@ -1423,7 +1429,8 @@ var (
 		WithDescription(
 			"Count of poller scaling decisions made by a physical task queue manager. Emitted only when the opt-in "+
 				"dynamic config matching.enablePollerScalingDecisionMetrics is enabled. Dimensions: namespace, taskqueue, "+
-				"task_type, partition, decision (scale_up/scale_down/hold), reason (idle/backlog/task_rate/rate_limited)"),
+				"task_type, partition, decision (scale_up/scale_down/hold), "+
+				"reason (idle/delay/ratio/rate_limited/task_queue_rate_limited)"),
 	)
 	// ----------------------------------------------------------------------------------------------------------------
 
