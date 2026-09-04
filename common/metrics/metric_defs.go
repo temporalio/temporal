@@ -1661,6 +1661,10 @@ var (
 		"schedule_callback_ignored",
 		WithDescription("Scheduler received a completion callback unassociated with any known running actions"),
 	)
+	ScheduleCallbackReattach = NewCounterDef(
+		"schedule_callback_reattach",
+		WithDescription("Outcomes of re-attaching a completion callback to an already-running action, used for migration and anti-entropy. The reason tag distinguishes a genuine attach from the paths that synthesize an action result: not_found (target gone, recorded TERMINATED) and attach_race (target closed mid-attach, recorded COMPLETED)."),
+	)
 
 	// Worker Versioning
 	WorkerDeploymentCreated                           = NewCounterDef("worker_deployment_created")
