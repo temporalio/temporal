@@ -537,7 +537,10 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		if pollMetadata.forwardedFrom == "" { // track the task on the child, not where a poll was forwarded to
 			pri := priorityKey(task.getPriority().GetPriorityKey())
 			c.incTaskTracker(c.tasksDispatched, pri, 1)
-			if task.source == enumsspb.TASK_SOURCE_HISTORY {
+			// Mirror the !task.isForwarded() guard on tasksAdded in TrySyncMatch. Without it a task
+			// forwarded in from a child lands in this partition's sync match count but never in its
+			// add count, so addRate/syncMatchRate stops being 1/syncMatchRatio at a root partition.
+			if task.source == enumsspb.TASK_SOURCE_HISTORY && !task.isForwarded() {
 				c.incTaskTracker(c.tasksSyncMatched, pri, 1)
 			}
 		}

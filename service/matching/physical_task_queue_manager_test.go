@@ -17,6 +17,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -849,6 +850,47 @@ func TestDrainCompletionNoReloadDraining(t *testing.T) {
 	// verify no new persistence calls on pri queue
 	assert.Equal(t, prevPriStats.updateCount, priQueueData.persistenceStats().updateCount,
 		"no new UpdateTaskQueue calls should be made to drained table after reload")
+}
+
+// syncMatchOneTask offers a task to a waiting local poller and blocks until PollTask has returned,
+// which is when the task trackers are updated.
+func (s *PhysicalTaskQueueManagerTestSuite) syncMatchOneTask(forwardInfo *taskqueuespb.TaskForwardInfo) {
+	poller, pollResult := runOneShotPoller(context.Background(), s.tqMgr)
+	defer poller.Cancel()
+
+	task := newInternalTaskForSyncMatch(&persistencespb.TaskInfo{
+		CreateTime: timestamppb.New(time.Now()),
+	}, forwardInfo, 0, nil)
+
+	outcome, err := s.tqMgr.TrySyncMatch(context.Background(), task)
+	s.Require().NoError(err)
+	s.Require().Equal(syncMatchSuccess, outcome)
+	s.Require().IsType(&internalTask{}, <-pollResult, "poller should have received the task")
+}
+
+func (s *PhysicalTaskQueueManagerTestSuite) TestSyncMatchRateCountsLocallyAddedTasks() {
+	// Positive control for TestSyncMatchRateExcludesForwardedTasks below: proves this harness
+	// actually drives the tracker, so the forwarded case isn't passing vacuously.
+	s.syncMatchOneTask(nil)
+
+	addRate, syncMatchRate := s.tqMgr.getAggregateRates()
+	s.Positive(addRate)
+	s.Positive(syncMatchRate)
+}
+
+func (s *PhysicalTaskQueueManagerTestSuite) TestSyncMatchRateExcludesForwardedTasks() {
+	// A task forwarded in from a child partition is matched here, but TrySyncMatch does not count
+	// it as added on this partition. Counting it as a sync match would put it in the ratio's
+	// denominator with nothing in the numerator, which at a root partition is what makes
+	// addRate/syncMatchRate stop being 1/syncMatchRatio.
+	s.syncMatchOneTask(&taskqueuespb.TaskForwardInfo{
+		SourcePartition: "/_sys/" + taskQueueName + "/1",
+		TaskSource:      enumsspb.TASK_SOURCE_HISTORY,
+	})
+
+	addRate, syncMatchRate := s.tqMgr.getAggregateRates()
+	s.Zero(addRate, "a forwarded task is not an add on this partition")
+	s.Zero(syncMatchRate, "a forwarded task must not count toward the sync match rate")
 }
 
 // useSignalsV2ForPollerScaling sets matching.useSignalsV2ForPollerScaling for the manager under
