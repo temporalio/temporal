@@ -1,7 +1,6 @@
 package localexecution
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -9,9 +8,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/common/persistence/serialization"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 func TestHistoryClosesWorkflow(t *testing.T) {
@@ -40,20 +36,27 @@ func TestHistoryClosesWorkflow(t *testing.T) {
 	require.False(t, replicator.historyClosesWorkflow(nil))
 }
 
-func TestIsRetryReplicationError(t *testing.T) {
-	typed := serviceerrors.NewRetryReplication(
-		"resend",
-		"namespace-id",
-		"workflow-id",
-		"run-id",
-		1,
-		1,
-		2,
-		1,
-	)
+func TestHistoryAfterCursorTrimsReturnedPrefix(t *testing.T) {
+	serializer := serialization.NewSerializer()
+	firstBatch, err := serializer.SerializeEvents([]*historypb.HistoryEvent{
+		{EventId: 1},
+		{EventId: 2},
+	})
+	require.NoError(t, err)
+	secondBatch, err := serializer.SerializeEvents([]*historypb.HistoryEvent{
+		{EventId: 3},
+		{EventId: 4},
+	})
+	require.NoError(t, err)
+	replicator := &HistoryReplicator{
+		cursor:          SyncCursor{EventID: 3},
+		eventSerializer: serializer,
+	}
 
-	require.True(t, isRetryReplicationError(typed))
-	require.True(t, isRetryReplicationError(status.Convert(typed.(*serviceerrors.RetryReplication).Status().Err()).Err()))
-	require.False(t, isRetryReplicationError(status.Error(codes.Aborted, "unrelated conflict")))
-	require.False(t, isRetryReplicationError(errors.New("not a gRPC status")))
+	delta, err := replicator.historyAfterCursor([]*commonpb.DataBlob{firstBatch, secondBatch})
+	require.NoError(t, err)
+	require.Len(t, delta, 1)
+	events, err := serializer.DeserializeEvents(delta[0])
+	require.NoError(t, err)
+	require.Equal(t, []int64{4}, []int64{events[0].GetEventId()})
 }

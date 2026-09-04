@@ -685,21 +685,6 @@ func (mr *MockEngineMockRecorder) RemoveSignalMutableState(ctx, request any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveSignalMutableState", reflect.TypeOf((*MockEngine)(nil).RemoveSignalMutableState), ctx, request)
 }
 
-// RenewLocalExecutionLease mocks base method.
-func (m *MockEngine) RenewLocalExecutionLease(ctx context.Context, request *historyservice.RenewLocalExecutionLeaseRequest) (*historyservice.RenewLocalExecutionLeaseResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RenewLocalExecutionLease", ctx, request)
-	ret0, _ := ret[0].(*historyservice.RenewLocalExecutionLeaseResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RenewLocalExecutionLease indicates an expected call of RenewLocalExecutionLease.
-func (mr *MockEngineMockRecorder) RenewLocalExecutionLease(ctx, request any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RenewLocalExecutionLease", reflect.TypeOf((*MockEngine)(nil).RenewLocalExecutionLease), ctx, request)
-}
-
 // ReplicateEventsV2 mocks base method.
 func (m *MockEngine) ReplicateEventsV2(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
 	m.ctrl.T.Helper()
@@ -1042,6 +1027,21 @@ func (m *MockEngine) SyncHSM(ctx context.Context, request *SyncHSMRequest) error
 func (mr *MockEngineMockRecorder) SyncHSM(ctx, request any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncHSM", reflect.TypeOf((*MockEngine)(nil).SyncHSM), ctx, request)
+}
+
+// SyncLocalExecution mocks base method.
+func (m *MockEngine) SyncLocalExecution(ctx context.Context, request *historyservice.SyncLocalExecutionRequest) (*historyservice.SyncLocalExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncLocalExecution", ctx, request)
+	ret0, _ := ret[0].(*historyservice.SyncLocalExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncLocalExecution indicates an expected call of SyncLocalExecution.
+func (mr *MockEngineMockRecorder) SyncLocalExecution(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncLocalExecution", reflect.TypeOf((*MockEngine)(nil).SyncLocalExecution), ctx, request)
 }
 
 // SyncShardStatus mocks base method.

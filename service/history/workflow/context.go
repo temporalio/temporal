@@ -696,6 +696,22 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsActive(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
 ) error {
+	return c.updateWorkflowExecutionAsActive(ctx, shardContext, nil)
+}
+
+func (c *ContextImpl) UpdateWorkflowExecutionAsActiveWithTaskFilter(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	taskFilter func(tasks.Task) bool,
+) error {
+	return c.updateWorkflowExecutionAsActive(ctx, shardContext, taskFilter)
+}
+
+func (c *ContextImpl) updateWorkflowExecutionAsActive(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	taskFilter func(tasks.Task) bool,
+) error {
 
 	// We only perform this check on active cluster for the namespace
 	historySizeForceTerminate, err := c.enforceHistorySizeCheck(ctx, shardContext)
@@ -722,15 +738,28 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsActive(
 		return err
 	}
 
-	err = c.UpdateWorkflowExecutionWithNew(
-		ctx,
-		shardContext,
-		updateMode,
-		nil,
-		nil,
-		historyi.TransactionPolicyActive,
-		nil,
-	)
+	if taskFilter == nil {
+		err = c.UpdateWorkflowExecutionWithNew(
+			ctx,
+			shardContext,
+			updateMode,
+			nil,
+			nil,
+			historyi.TransactionPolicyActive,
+			nil,
+		)
+	} else {
+		err = c.updateWorkflowExecutionWithNewWithTaskFilter(
+			ctx,
+			shardContext,
+			updateMode,
+			nil,
+			nil,
+			historyi.TransactionPolicyActive,
+			nil,
+			taskFilter,
+		)
+	}
 	if err != nil {
 		return err
 	}
@@ -817,6 +846,28 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	updateWorkflowTransactionPolicy historyi.TransactionPolicy,
 	newWorkflowTransactionPolicy *historyi.TransactionPolicy,
 ) error {
+	return c.updateWorkflowExecutionWithNewWithTaskFilter(
+		ctx,
+		shardContext,
+		updateMode,
+		newContext,
+		newMutableState,
+		updateWorkflowTransactionPolicy,
+		newWorkflowTransactionPolicy,
+		nil,
+	)
+}
+
+func (c *ContextImpl) updateWorkflowExecutionWithNewWithTaskFilter(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	updateMode persistence.UpdateWorkflowMode,
+	newContext historyi.WorkflowContext,
+	newMutableState historyi.MutableState,
+	updateWorkflowTransactionPolicy historyi.TransactionPolicy,
+	newWorkflowTransactionPolicy *historyi.TransactionPolicy,
+	taskFilter func(tasks.Task) bool,
+) error {
 	if hook, ok := testhooks.Get(
 		c.testHooks,
 		testhooks.HistoryPassiveReplicationTest,
@@ -849,6 +900,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 					newMutableState,
 					updateWorkflowTransactionPolicy,
 					newWorkflowTransactionPolicy,
+					taskFilter,
 				)
 			},
 			ExecuteExecutionTransaction: func(payload *ExecutionTransactionPayload) error {
@@ -870,6 +922,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 				newMutableState,
 				updateWorkflowTransactionPolicy,
 				newWorkflowTransactionPolicy,
+				taskFilter,
 			)
 		})
 	}
@@ -882,6 +935,7 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 		newMutableState,
 		updateWorkflowTransactionPolicy,
 		newWorkflowTransactionPolicy,
+		taskFilter,
 	)
 }
 
@@ -893,6 +947,7 @@ func (c *ContextImpl) updateWorkflowExecutionWithNew(
 	newMutableState historyi.MutableState,
 	updateWorkflowTransactionPolicy historyi.TransactionPolicy,
 	newWorkflowTransactionPolicy *historyi.TransactionPolicy,
+	taskFilter func(tasks.Task) bool,
 ) (retError error) {
 
 	defer func() {
@@ -923,6 +978,7 @@ func (c *ContextImpl) updateWorkflowExecutionWithNew(
 		newMutableState,
 		updateWorkflowTransactionPolicy,
 		newWorkflowTransactionPolicy,
+		taskFilter,
 	)
 	if err != nil {
 		return err
@@ -976,6 +1032,7 @@ func (c *ContextImpl) closeMutableStateTransaction(
 	newMutableState historyi.MutableState,
 	updateWorkflowTransactionPolicy historyi.TransactionPolicy,
 	newWorkflowTransactionPolicy *historyi.TransactionPolicy,
+	taskFilter func(tasks.Task) bool,
 ) (*ExecutionTransactionPayload, error) {
 	updateWorkflow, updateWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsMutation(
 		ctx,
@@ -984,6 +1041,7 @@ func (c *ContextImpl) closeMutableStateTransaction(
 	if err != nil {
 		return nil, err
 	}
+	filterWorkflowMutationTasks(updateWorkflow, taskFilter)
 
 	payload := &ExecutionTransactionPayload{
 		ExecutionMutation: updateWorkflow,
@@ -999,6 +1057,28 @@ func (c *ContextImpl) closeMutableStateTransaction(
 		}
 	}
 	return payload, nil
+}
+
+func filterWorkflowMutationTasks(
+	mutation *persistence.WorkflowMutation,
+	taskFilter func(tasks.Task) bool,
+) {
+	if taskFilter == nil {
+		return
+	}
+	for category, categoryTasks := range mutation.Tasks {
+		kept := categoryTasks[:0]
+		for _, task := range categoryTasks {
+			if taskFilter(task) {
+				kept = append(kept, task)
+			}
+		}
+		if len(kept) == 0 {
+			delete(mutation.Tasks, category)
+		} else {
+			mutation.Tasks[category] = kept
+		}
+	}
 }
 
 func (c *ContextImpl) executeWorkflowTransaction(

@@ -59,6 +59,14 @@ func WithGlobalNamespace() TestServerOption {
 	})
 }
 
+// WithGlobalNamespaceSupport enables replication APIs while keeping the pre-created test namespace local.
+func WithGlobalNamespaceSupport() TestServerOption {
+	return applyFunc(func(server *TestServer) {
+		server.enableGlobalNamespace = true
+		server.localTestNamespace = true
+	})
+}
+
 // WithDynamicConfig sets one dynamic configuration value for the test server lifetime.
 func WithDynamicConfig(setting dynamicconfig.GenericSetting, value any) TestServerOption {
 	return applyFunc(func(server *TestServer) {

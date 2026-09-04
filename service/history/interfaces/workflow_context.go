@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow/update"
 )
 
@@ -76,6 +77,15 @@ type (
 		UpdateWorkflowExecutionAsActive(
 			ctx context.Context,
 			shardContext ShardContext,
+		) error
+		// UpdateWorkflowExecutionAsActiveWithTaskFilter is the ordinary active
+		// update path with a final filter over the tasks produced while closing
+		// the mutable-state transaction. History events and mutable state are
+		// otherwise persisted identically to UpdateWorkflowExecutionAsActive.
+		UpdateWorkflowExecutionAsActiveWithTaskFilter(
+			ctx context.Context,
+			shardContext ShardContext,
+			taskFilter func(tasks.Task) bool,
 		) error
 		UpdateWorkflowExecutionWithNewAsActive(
 			ctx context.Context,

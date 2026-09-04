@@ -25,7 +25,6 @@ import (
 func TestLocalExecutionAcquisition(t *testing.T) {
 	server := temporaltest.NewServer(
 		temporaltest.WithT(t),
-		temporaltest.WithGlobalNamespace(),
 		temporaltest.WithDynamicConfig(dynamicconfig.EnableLocalExecution, true),
 	)
 	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)

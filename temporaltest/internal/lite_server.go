@@ -71,6 +71,8 @@ type LiteServerConfig struct {
 	SearchAttributes map[string]enumspb.IndexedValueType
 	// EnableGlobalNamespace configures the cluster and pre-created namespaces for replication APIs.
 	EnableGlobalNamespace bool
+	// PrecreatedNamespacesLocal keeps pre-created namespaces local while global namespace support is enabled.
+	PrecreatedNamespacesLocal bool
 }
 
 func (cfg *LiteServerConfig) apply(serverConfig *config.Config) {
@@ -242,17 +244,18 @@ func NewLiteServer(liteConfig *LiteServerConfig, opts ...temporal.ServerOption) 
 
 	// Pre-create namespaces
 	var namespaces []*sqlite.NamespaceConfig
+	precreatedNamespacesGlobal := liteConfig.EnableGlobalNamespace && !liteConfig.PrecreatedNamespacesLocal
 	for _, ns := range liteConfig.Namespaces {
 		nsConfig, err := sqlite.NewNamespaceConfig(
 			liteConfig.BaseConfig.ClusterMetadata.CurrentClusterName,
 			ns,
-			liteConfig.EnableGlobalNamespace,
+			precreatedNamespacesGlobal,
 			liteConfig.SearchAttributes,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("error creating namespace config: %w", err)
 		}
-		if liteConfig.EnableGlobalNamespace {
+		if precreatedNamespacesGlobal {
 			clusterInfo := liteConfig.BaseConfig.ClusterMetadata.ClusterInformation[liteConfig.BaseConfig.ClusterMetadata.CurrentClusterName]
 			nsConfig.Detail.FailoverVersion = clusterInfo.InitialFailoverVersion
 		}

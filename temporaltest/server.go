@@ -31,6 +31,7 @@ type TestServer struct {
 	defaultWorkerOptions  worker.Options
 	serverOptions         []temporal.ServerOption
 	enableGlobalNamespace bool
+	localTestNamespace    bool
 	dynamicConfig         dynamicconfig.StaticClient
 }
 
@@ -159,8 +160,9 @@ func NewServer(opts ...TestServerOption) *TestServer {
 		Logger:        log.NewNoopLogger(),
 		DynamicConfig: dynamicConfig,
 		// Disable "accept incoming network connections?" prompt on macOS
-		FrontendIP:            "127.0.0.1",
-		EnableGlobalNamespace: ts.enableGlobalNamespace,
+		FrontendIP:                "127.0.0.1",
+		EnableGlobalNamespace:     ts.enableGlobalNamespace,
+		PrecreatedNamespacesLocal: ts.localTestNamespace,
 	}, ts.serverOptions...)
 	if err != nil {
 		ts.fatal(fmt.Errorf("error creating server: %w", err))

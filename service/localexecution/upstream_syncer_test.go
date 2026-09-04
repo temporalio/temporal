@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
@@ -14,111 +13,32 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func TestReleasedSyncRepeatIsIdempotentAndFingerprintProtected(t *testing.T) {
+func TestSyncDelegatesWholeDeltaToHistory(t *testing.T) {
 	serializer := serialization.NewSerializer()
 	request := validSyncRequest(t, serializer)
-	request.Release = true
 	requestBytes, err := proto.MarshalOptions{Deterministic: true}.Marshal(request)
 	require.NoError(t, err)
 	requestHash := sha256.Sum256(requestBytes)
-	localInfo := &persistencespb.LocalExecutionInfo{
-		State:               persistencespb.LocalExecutionInfo_STATE_UNOWNED,
-		LastSyncId:          request.SyncId,
-		LastSyncRequestHash: requestHash[:],
-	}
 	historyClient := historyservicemock.NewMockHistoryServiceClient(gomock.NewController(t))
-	historyClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(
-		mutableStateAtWithLocalInfo(request.NewEventId, request.NewEventVersion, localInfo), nil,
-	).Times(2)
-	syncer := NewUpstreamSyncer(historyClient, serializer)
-
-	response, err := syncer.Sync(t.Context(), "namespace-id", request)
-	require.NoError(t, err)
-	require.Equal(t, request.NewEventId, response.GetAcknowledgedEventId())
-	require.Nil(t, response.GetLeaseExpirationTime())
-
-	conflict := proto.Clone(request).(*adminservice.SyncLocalExecutionRequest)
-	conflict.LocalServerId = "different-local-server"
-	_, err = syncer.Sync(t.Context(), "namespace-id", conflict)
-	require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
-}
-
-func TestOwnedSyncRenewsBeforeAndAfterReplication(t *testing.T) {
-	serializer := serialization.NewSerializer()
-	request := validSyncRequest(t, serializer)
-	request.OwnershipToken = []byte("ownership-token")
-	request.FencingEpoch = 7
-	tokenHash := sha256.Sum256(request.OwnershipToken)
-	localInfo := &persistencespb.LocalExecutionInfo{
-		State:               persistencespb.LocalExecutionInfo_STATE_OWNED,
-		FencingEpoch:        request.FencingEpoch,
-		LocalServerId:       request.LocalServerId,
-		OwnershipTokenHash:  tokenHash[:],
-		LeaseExpirationTime: timestamppb.New(time.Now().Add(time.Minute)),
-	}
-	historyClient := historyservicemock.NewMockHistoryServiceClient(gomock.NewController(t))
-
-	gomock.InOrder(
-		historyClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(mutableStateAtWithLocalInfo(2, 1, localInfo), nil),
-		historyClient.EXPECT().RenewLocalExecutionLease(gomock.Any(), gomock.Any()).DoAndReturn(
-			func(_ context.Context, renewal *historyservice.RenewLocalExecutionLeaseRequest, _ ...grpc.CallOption) (*historyservice.RenewLocalExecutionLeaseResponse, error) {
-				require.Equal(t, int64(2), renewal.GetPreviousEventId())
-				require.Equal(t, int64(2), renewal.GetNewEventId())
-				require.Equal(t, request.SyncId+"/lease", renewal.GetSyncId())
-				require.NotEmpty(t, renewal.GetSyncRequestHash())
-				return &historyservice.RenewLocalExecutionLeaseResponse{LeaseExpirationTime: localInfo.LeaseExpirationTime}, nil
-			},
-		),
-		historyClient.EXPECT().ReplicateEventsV2(gomock.Any(), gomock.Any()).Return(&historyservice.ReplicateEventsV2Response{}, nil),
-		historyClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(mutableStateAt(3, 1), nil),
-		historyClient.EXPECT().ReplicateEventsV2(gomock.Any(), gomock.Any()).Return(&historyservice.ReplicateEventsV2Response{}, nil),
-		historyClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(mutableStateAt(4, 1), nil),
-		historyClient.EXPECT().RenewLocalExecutionLease(gomock.Any(), gomock.Any()).DoAndReturn(
-			func(_ context.Context, renewal *historyservice.RenewLocalExecutionLeaseRequest, _ ...grpc.CallOption) (*historyservice.RenewLocalExecutionLeaseResponse, error) {
-				require.Equal(t, int64(2), renewal.GetPreviousEventId())
-				require.Equal(t, int64(4), renewal.GetNewEventId())
-				require.Equal(t, request.SyncId, renewal.GetSyncId())
-				require.NotEmpty(t, renewal.GetSyncRequestHash())
-				return &historyservice.RenewLocalExecutionLeaseResponse{LeaseExpirationTime: localInfo.LeaseExpirationTime}, nil
-			},
-		),
-	)
-
-	response, err := NewUpstreamSyncer(historyClient, serializer).Sync(t.Context(), "namespace-id", request)
-	require.NoError(t, err)
-	require.Equal(t, request.NewEventId, response.GetAcknowledgedEventId())
-	require.Equal(t, localInfo.LeaseExpirationTime, response.GetLeaseExpirationTime())
-}
-
-func TestSyncWaitsForEachHistoryBatch(t *testing.T) {
-	serializer := serialization.NewSerializer()
-	request := validSyncRequest(t, serializer)
-	historyClient := historyservicemock.NewMockHistoryServiceClient(gomock.NewController(t))
-
-	gomock.InOrder(
-		historyClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(mutableStateAt(2, 1), nil),
-		historyClient.EXPECT().ReplicateEventsV2(gomock.Any(), gomock.Any()).DoAndReturn(
-			func(_ context.Context, replication *historyservice.ReplicateEventsV2Request, _ ...grpc.CallOption) (*historyservice.ReplicateEventsV2Response, error) {
-				require.Equal(t, request.HistoryBatches[0], replication.Events)
-				return &historyservice.ReplicateEventsV2Response{}, nil
-			},
-		),
-		historyClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(mutableStateAt(3, 1), nil),
-		historyClient.EXPECT().ReplicateEventsV2(gomock.Any(), gomock.Any()).DoAndReturn(
-			func(_ context.Context, replication *historyservice.ReplicateEventsV2Request, _ ...grpc.CallOption) (*historyservice.ReplicateEventsV2Response, error) {
-				require.Equal(t, request.HistoryBatches[1], replication.Events)
-				return &historyservice.ReplicateEventsV2Response{}, nil
-			},
-		),
-		historyClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(mutableStateAt(4, 1), nil),
+	historyClient.EXPECT().SyncLocalExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, historyRequest *historyservice.SyncLocalExecutionRequest, _ ...grpc.CallOption) (*historyservice.SyncLocalExecutionResponse, error) {
+			require.Equal(t, "namespace-id", historyRequest.GetNamespaceId())
+			require.Same(t, request, historyRequest.GetRequest())
+			require.Equal(t, requestHash[:], historyRequest.GetSyncRequestHash())
+			return &historyservice.SyncLocalExecutionResponse{
+				Response: &adminservice.SyncLocalExecutionResponse{
+					SyncId:                   request.GetSyncId(),
+					AcknowledgedEventId:      request.GetNewEventId(),
+					AcknowledgedEventVersion: request.GetNewEventVersion(),
+				},
+			}, nil
+		},
 	)
 
 	response, err := NewUpstreamSyncer(historyClient, serializer).Sync(t.Context(), "namespace-id", request)
@@ -241,24 +161,5 @@ func validSyncRequest(
 		VersionHistory: &historyspb.VersionHistory{
 			Items: []*historyspb.VersionHistoryItem{{EventId: 4, Version: 1}},
 		},
-	}
-}
-
-func mutableStateAt(eventID int64, version int64) *historyservice.GetMutableStateResponse {
-	return mutableStateAtWithLocalInfo(eventID, version, nil)
-}
-
-func mutableStateAtWithLocalInfo(
-	eventID int64,
-	version int64,
-	localInfo *persistencespb.LocalExecutionInfo,
-) *historyservice.GetMutableStateResponse {
-	return &historyservice.GetMutableStateResponse{
-		VersionHistories: &historyspb.VersionHistories{
-			Histories: []*historyspb.VersionHistory{
-				{Items: []*historyspb.VersionHistoryItem{{EventId: eventID, Version: version}}},
-			},
-		},
-		LocalExecutionInfo: localInfo,
 	}
 }

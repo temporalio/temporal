@@ -20,6 +20,7 @@ import (
 	definition "go.temporal.io/server/common/definition"
 	locks "go.temporal.io/server/common/locks"
 	persistence0 "go.temporal.io/server/common/persistence"
+	tasks "go.temporal.io/server/service/history/tasks"
 	update "go.temporal.io/server/service/history/workflow/update"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -317,6 +318,20 @@ func (m *MockWorkflowContext) UpdateWorkflowExecutionAsActive(ctx context.Contex
 func (mr *MockWorkflowContextMockRecorder) UpdateWorkflowExecutionAsActive(ctx, shardContext any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecutionAsActive", reflect.TypeOf((*MockWorkflowContext)(nil).UpdateWorkflowExecutionAsActive), ctx, shardContext)
+}
+
+// UpdateWorkflowExecutionAsActiveWithTaskFilter mocks base method.
+func (m *MockWorkflowContext) UpdateWorkflowExecutionAsActiveWithTaskFilter(ctx context.Context, shardContext ShardContext, taskFilter func(tasks.Task) bool) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateWorkflowExecutionAsActiveWithTaskFilter", ctx, shardContext, taskFilter)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateWorkflowExecutionAsActiveWithTaskFilter indicates an expected call of UpdateWorkflowExecutionAsActiveWithTaskFilter.
+func (mr *MockWorkflowContextMockRecorder) UpdateWorkflowExecutionAsActiveWithTaskFilter(ctx, shardContext, taskFilter any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecutionAsActiveWithTaskFilter", reflect.TypeOf((*MockWorkflowContext)(nil).UpdateWorkflowExecutionAsActiveWithTaskFilter), ctx, shardContext, taskFilter)
 }
 
 // UpdateWorkflowExecutionAsPassive mocks base method.

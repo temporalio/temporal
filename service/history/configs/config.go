@@ -52,6 +52,10 @@ type Config struct {
 	ThrottledLogRPS                            dynamicconfig.IntPropertyFn
 	EnableStickyQuery                          dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkflowTaskCompletionPagination     dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	LocalExecutionSyncMaxBytes                 dynamicconfig.IntPropertyFnWithNamespaceFilter
+	LocalExecutionSyncMaxEvents                dynamicconfig.IntPropertyFnWithNamespaceFilter
+	LocalExecutionSyncMaxBatches               dynamicconfig.IntPropertyFnWithNamespaceFilter
+	EnableLocalExecution                       dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	AlignMembershipChange                      dynamicconfig.DurationPropertyFn
 	WorkflowTaskCompletionBufferTotalSizeLimit dynamicconfig.IntPropertyFn
 	WorkflowTaskCompletionBufferSizeLimit      dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -879,6 +883,10 @@ func NewConfig(
 
 		// Workflow task completion pagination
 		EnableWorkflowTaskCompletionPagination:     dynamicconfig.EnableWorkflowTaskCompletionPagination.Get(dc),
+		LocalExecutionSyncMaxBytes:                 dynamicconfig.LocalExecutionSyncMaxBytes.Get(dc),
+		LocalExecutionSyncMaxEvents:                dynamicconfig.LocalExecutionSyncMaxEvents.Get(dc),
+		LocalExecutionSyncMaxBatches:               dynamicconfig.LocalExecutionSyncMaxBatches.Get(dc),
+		EnableLocalExecution:                       dynamicconfig.EnableLocalExecution.Get(dc),
 		WorkflowTaskCompletionBufferTotalSizeLimit: dynamicconfig.WorkflowTaskCompletionBufferTotalSizeLimit.Get(dc),
 		WorkflowTaskCompletionBufferSizeLimit:      dynamicconfig.WorkflowTaskCompletionBufferSizeLimit.Get(dc),
 		WorkflowTaskCompletionBufferNamespaceRatio: dynamicconfig.WorkflowTaskCompletionBufferNamespaceRatio.Get(dc),

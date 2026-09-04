@@ -235,6 +235,10 @@ func (r *HistoryReplicator) Sync(
 	if sourceVersionHistory == nil || sourceVersionHistory.GetVersionHistory() == nil {
 		return SyncResult{}, errors.New("source returned no version history")
 	}
+	historyBatches, err := r.historyAfterCursor(historyBatches)
+	if err != nil {
+		return SyncResult{}, err
+	}
 	lastItem, err := versionhistory.GetLastVersionHistoryItem(sourceVersionHistory.GetVersionHistory())
 	if err != nil {
 		return SyncResult{}, fmt.Errorf("read source history cursor: %w", err)
@@ -276,6 +280,38 @@ func (r *HistoryReplicator) Sync(
 		LastEventVersion: lastItem.GetVersion(),
 		Released:         response.GetLeaseExpirationTime() == nil && release,
 	}, nil
+}
+
+// historyAfterCursor removes any history prefix returned by the raw-history API.
+// In particular, a local namespace uses version zero, which that API cannot
+// distinguish from an omitted StartEventVersion field.
+func (r *HistoryReplicator) historyAfterCursor(
+	historyBatches []*commonpb.DataBlob,
+) ([]*commonpb.DataBlob, error) {
+	delta := make([]*commonpb.DataBlob, 0, len(historyBatches))
+	for _, batch := range historyBatches {
+		events, err := r.eventSerializer.DeserializeEvents(batch)
+		if err != nil {
+			return nil, fmt.Errorf("decode source history delta: %w", err)
+		}
+		firstNewEvent := 0
+		for firstNewEvent < len(events) && events[firstNewEvent].GetEventId() <= r.cursor.EventID {
+			firstNewEvent++
+		}
+		if firstNewEvent == len(events) {
+			continue
+		}
+		if firstNewEvent == 0 {
+			delta = append(delta, batch)
+			continue
+		}
+		trimmedBatch, err := r.eventSerializer.SerializeEvents(events[firstNewEvent:])
+		if err != nil {
+			return nil, fmt.Errorf("encode source history delta: %w", err)
+		}
+		delta = append(delta, trimmedBatch)
+	}
+	return delta, nil
 }
 
 func (r *HistoryReplicator) historyClosesWorkflow(historyBatches []*commonpb.DataBlob) bool {

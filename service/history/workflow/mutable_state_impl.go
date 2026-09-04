@@ -8778,6 +8778,18 @@ func (ms *MutableStateImpl) updateWithLastWriteEvent(
 	if err != nil {
 		return err
 	}
+	if len(currentVersionHistory.GetItems()) != 0 {
+		lastItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+		if err != nil {
+			return err
+		}
+		// An active history import may have advanced version history while applying
+		// the supplied events. Closing that same active transaction must not attempt
+		// to append the identical cursor a second time.
+		if lastItem.GetEventId() == lastEvent.GetEventId() && lastItem.GetVersion() == lastEvent.GetVersion() {
+			return nil
+		}
+	}
 	if err := versionhistory.AddOrUpdateVersionHistoryItem(currentVersionHistory, versionhistory.NewVersionHistoryItem(
 		lastEvent.GetEventId(), lastEvent.GetVersion(),
 	)); err != nil {

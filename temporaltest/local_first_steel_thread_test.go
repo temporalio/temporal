@@ -2,7 +2,9 @@ package temporaltest_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -11,6 +13,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
@@ -18,14 +21,21 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testhooks"
+	historytasks "go.temporal.io/server/service/history/tasks"
+	historyworkflow "go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/localexecution"
+	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/temporaltest"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (
@@ -34,14 +44,50 @@ const (
 )
 
 func TestLocalFirstSteelThread(t *testing.T) {
+	for _, test := range []struct {
+		name            string
+		globalNamespace bool
+	}{
+		{name: "local namespace"},
+		{name: "global namespace", globalNamespace: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			testLocalFirstSteelThread(t, test.globalNamespace)
+		})
+	}
+}
+
+func testLocalFirstSteelThread(t *testing.T, globalNamespace bool) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
+	testHooks := testhooks.NewTestHooks()
+	failureHook := &failAfterHistoryAppendHook{}
 
-	upstream := temporaltest.NewServer(temporaltest.WithT(t), temporaltest.WithGlobalNamespace())
-	local := temporaltest.NewServer(temporaltest.WithT(t), temporaltest.WithGlobalNamespace())
+	upstreamOptions := []temporaltest.TestServerOption{
+		temporaltest.WithT(t),
+		temporaltest.WithDynamicConfig(dynamicconfig.EnableLocalExecution, true),
+		temporaltest.WithBaseServerOptions(temporal.WithTestHooks(testHooks)),
+	}
+	if globalNamespace {
+		upstreamOptions = append(upstreamOptions, temporaltest.WithGlobalNamespace())
+	}
+	upstream := temporaltest.NewServer(upstreamOptions...)
+	localOptions := []temporaltest.TestServerOption{temporaltest.WithT(t)}
+	if globalNamespace {
+		localOptions = append(localOptions, temporaltest.WithGlobalNamespace())
+	} else {
+		localOptions = append(localOptions, temporaltest.WithGlobalNamespaceSupport())
+	}
+	local := temporaltest.NewServer(localOptions...)
 
 	upstreamAdmin, upstreamNamespaceID := localFirstAdminClient(ctx, t, upstream)
 	localAdmin, localNamespaceID := localFirstAdminClient(ctx, t, local)
+	t.Cleanup(testhooks.Set[testhooks.HistoryPassiveReplicationTestHook](
+		testHooks,
+		testhooks.HistoryPassiveReplicationTest,
+		failureHook,
+		namespace.ID(upstreamNamespaceID),
+	))
 
 	run, err := upstream.GetDefaultClient().ExecuteWorkflow(
 		ctx,
@@ -59,6 +105,24 @@ func TestLocalFirstSteelThread(t *testing.T) {
 		WorkflowId: run.GetID(),
 		RunId:      run.GetRunID(),
 	}
+	acquisition, err := upstream.GetDefaultClient().WorkflowService().PollWorkflowTaskQueue(
+		ctx,
+		&workflowservice.PollWorkflowTaskQueueRequest{
+			Namespace: upstream.GetDefaultNamespace(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: localFirstDemoTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  "local-first-steel-thread",
+			LocalExecutionOptions: &workflowservice.LocalExecutionPollOptions{
+				LocalServerId:          "local-first-steel-thread",
+				ProtocolVersion:        localexecution.ProtocolVersion,
+				SyncInterval:           durationpb.New(time.Minute),
+				RequestedLeaseDuration: durationpb.New(3 * time.Minute),
+			},
+		},
+	)
+	require.NoError(t, err)
+	require.Equal(t, execution, acquisition.GetWorkflowExecution())
+	ownership := acquisition.GetLocalExecutionInfo()
+	require.NotNil(t, ownership)
 	localFirstWaitForHistory(ctx, t, local, execution)
 	upstreamToLocal, err := localexecution.NewBaselineImporter(
 		localexecution.HistoryEndpoint{
@@ -115,9 +179,11 @@ func TestLocalFirstSteelThread(t *testing.T) {
 			AdminClient: localAdmin,
 		},
 		localexecution.ReplicationTarget{
-			Namespace:     upstream.GetDefaultNamespace(),
-			LocalServerID: "local-first-steel-thread",
-			AdminClient:   upstreamAdmin,
+			Namespace:      upstream.GetDefaultNamespace(),
+			LocalServerID:  "local-first-steel-thread",
+			OwnershipToken: ownership.GetOwnershipToken(),
+			FencingEpoch:   ownership.GetFencingEpoch(),
+			AdminClient:    upstreamAdmin,
 		},
 		localexecution.SyncCursor{
 			EventID: baseline.LastEventID,
@@ -125,6 +191,25 @@ func TestLocalFirstSteelThread(t *testing.T) {
 		},
 	)
 	require.NoError(t, err)
+
+	// Exercise the persistence failure window explicitly. History nodes may have
+	// been appended, but the cursor and mutable state must remain at the previous
+	// completed synchronization point and a retry must remain possible.
+	failureHook.enabled.Store(true)
+	_, err = localToUpstream.Sync(ctx, execution)
+	require.Error(t, err)
+	t.Logf("injected synchronization failure: %v", err)
+	require.False(t, failureHook.enabled.Load(), "failure hook was not exercised")
+	require.Len(t, localFirstHistory(ctx, t, upstream, execution), 2)
+	mutableState, err := upstreamAdmin.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace: upstream.GetDefaultNamespace(),
+		Execution: execution,
+	})
+	require.NoError(t, err)
+	localExecutionInfo := mutableState.GetDatabaseMutableState().GetExecutionInfo().GetLocalExecutionInfo()
+	require.Equal(t, baseline.LastEventID, localExecutionInfo.GetLastSynchronizedEventId())
+	require.Equal(t, baseline.LastEventVersion, localExecutionInfo.GetLastSynchronizedEventVersion())
+	require.Empty(t, localExecutionInfo.GetLastSyncId())
 
 	syncCtx, stopSync := context.WithCancel(ctx)
 	defer stopSync()
@@ -171,10 +256,8 @@ func TestLocalFirstSteelThread(t *testing.T) {
 		len(upstreamAfterSync),
 	)
 
-	repeatedSync, err := localToUpstream.Sync(ctx, execution)
-	require.NoError(t, err)
-	require.Zero(t, repeatedSync.HistoryBatches)
-	require.Equal(t, syncResult.LastEventID, repeatedSync.LastEventID)
+	_, err = localToUpstream.Sync(ctx, execution)
+	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 	protorequire.ProtoSliceEqual(t, localHistory, localFirstHistory(ctx, t, upstream, execution))
 
 	_, err = upstreamAdmin.SyncLocalExecution(ctx, &adminservice.SyncLocalExecutionRequest{
@@ -196,6 +279,54 @@ func TestLocalFirstSteelThread(t *testing.T) {
 	})
 	require.Equal(t, codes.FailedPrecondition, status.Code(err))
 	protorequire.ProtoSliceEqual(t, localHistory, localFirstHistory(ctx, t, upstream, execution))
+}
+
+type failAfterHistoryAppendHook struct {
+	enabled atomic.Bool
+}
+
+func (h *failAfterHistoryAppendHook) InterceptUpdate(
+	ctx context.Context,
+	input any,
+	next func() error,
+) error {
+	request, ok := input.(*historyworkflow.TestHookUpdateExecutionRequest)
+	if !ok {
+		return errors.New("unexpected workflow update hook request")
+	}
+	if !h.enabled.CompareAndSwap(true, false) {
+		if err := next(); err != nil {
+			return err
+		}
+		if request.ExecutionContext.IsDirty() {
+			return errors.New("successful workflow update left mutable state dirty")
+		}
+		return nil
+	}
+	if err := request.PrepareMutableStateTransaction(); err != nil {
+		return err
+	}
+	payload, err := request.CloseMutableStateTransaction()
+	if err != nil {
+		return err
+	}
+	if _, err := request.ExecutionContext.PersistWorkflowEvents(
+		ctx,
+		request.ShardContext,
+		payload.ExecutionEvents...,
+	); err != nil {
+		return err
+	}
+	request.ExecutionContext.Clear()
+	return errors.New("injected failure after history append and before mutable-state update")
+}
+
+func (*failAfterHistoryAppendHook) UseTransientWorkflowContextForReplication(context.Context) bool {
+	return false
+}
+
+func (*failAfterHistoryAppendHook) ShouldExecuteTaskAsPassive(historytasks.Task) bool {
+	return false
 }
 
 func localFirstWaitForHistory(

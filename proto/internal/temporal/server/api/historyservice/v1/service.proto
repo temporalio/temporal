@@ -523,7 +523,7 @@ service HistoryService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
   }
 
-  rpc RenewLocalExecutionLease(RenewLocalExecutionLeaseRequest) returns (RenewLocalExecutionLeaseResponse) {
+  rpc SyncLocalExecution(SyncLocalExecutionRequest) returns (SyncLocalExecutionResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }
 }

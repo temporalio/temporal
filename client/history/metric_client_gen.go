@@ -695,20 +695,6 @@ func (c *metricClient) RemoveTask(
 	return c.client.RemoveTask(ctx, request, opts...)
 }
 
-func (c *metricClient) RenewLocalExecutionLease(
-	ctx context.Context,
-	request *historyservice.RenewLocalExecutionLeaseRequest,
-	opts ...grpc.CallOption,
-) (_ *historyservice.RenewLocalExecutionLeaseResponse, retError error) {
-
-	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientRenewLocalExecutionLease")
-	defer func() {
-		c.finishMetricsRecording(metricsHandler, startTime, retError)
-	}()
-
-	return c.client.RenewLocalExecutionLease(ctx, request, opts...)
-}
-
 func (c *metricClient) ReplicateEventsV2(
 	ctx context.Context,
 	request *historyservice.ReplicateEventsV2Request,
@@ -931,6 +917,20 @@ func (c *metricClient) SyncActivity(
 	}()
 
 	return c.client.SyncActivity(ctx, request, opts...)
+}
+
+func (c *metricClient) SyncLocalExecution(
+	ctx context.Context,
+	request *historyservice.SyncLocalExecutionRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.SyncLocalExecutionResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientSyncLocalExecution")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.SyncLocalExecution(ctx, request, opts...)
 }
 
 func (c *metricClient) SyncShardStatus(

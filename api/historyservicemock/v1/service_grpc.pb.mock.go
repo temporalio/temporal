@@ -1043,26 +1043,6 @@ func (mr *MockHistoryServiceClientMockRecorder) RemoveTask(ctx, in any, opts ...
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveTask", reflect.TypeOf((*MockHistoryServiceClient)(nil).RemoveTask), varargs...)
 }
 
-// RenewLocalExecutionLease mocks base method.
-func (m *MockHistoryServiceClient) RenewLocalExecutionLease(ctx context.Context, in *historyservice.RenewLocalExecutionLeaseRequest, opts ...grpc.CallOption) (*historyservice.RenewLocalExecutionLeaseResponse, error) {
-	m.ctrl.T.Helper()
-	varargs := []any{ctx, in}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "RenewLocalExecutionLease", varargs...)
-	ret0, _ := ret[0].(*historyservice.RenewLocalExecutionLeaseResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RenewLocalExecutionLease indicates an expected call of RenewLocalExecutionLease.
-func (mr *MockHistoryServiceClientMockRecorder) RenewLocalExecutionLease(ctx, in any, opts ...any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]any{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RenewLocalExecutionLease", reflect.TypeOf((*MockHistoryServiceClient)(nil).RenewLocalExecutionLease), varargs...)
-}
-
 // ReplicateEventsV2 mocks base method.
 func (m *MockHistoryServiceClient) ReplicateEventsV2(ctx context.Context, in *historyservice.ReplicateEventsV2Request, opts ...grpc.CallOption) (*historyservice.ReplicateEventsV2Response, error) {
 	m.ctrl.T.Helper()
@@ -1421,6 +1401,26 @@ func (mr *MockHistoryServiceClientMockRecorder) SyncActivity(ctx, in any, opts .
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncActivity", reflect.TypeOf((*MockHistoryServiceClient)(nil).SyncActivity), varargs...)
+}
+
+// SyncLocalExecution mocks base method.
+func (m *MockHistoryServiceClient) SyncLocalExecution(ctx context.Context, in *historyservice.SyncLocalExecutionRequest, opts ...grpc.CallOption) (*historyservice.SyncLocalExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "SyncLocalExecution", varargs...)
+	ret0, _ := ret[0].(*historyservice.SyncLocalExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncLocalExecution indicates an expected call of SyncLocalExecution.
+func (mr *MockHistoryServiceClientMockRecorder) SyncLocalExecution(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncLocalExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).SyncLocalExecution), varargs...)
 }
 
 // SyncShardStatus mocks base method.
@@ -2535,21 +2535,6 @@ func (mr *MockHistoryServiceServerMockRecorder) RemoveTask(arg0, arg1 any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveTask", reflect.TypeOf((*MockHistoryServiceServer)(nil).RemoveTask), arg0, arg1)
 }
 
-// RenewLocalExecutionLease mocks base method.
-func (m *MockHistoryServiceServer) RenewLocalExecutionLease(arg0 context.Context, arg1 *historyservice.RenewLocalExecutionLeaseRequest) (*historyservice.RenewLocalExecutionLeaseResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RenewLocalExecutionLease", arg0, arg1)
-	ret0, _ := ret[0].(*historyservice.RenewLocalExecutionLeaseResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RenewLocalExecutionLease indicates an expected call of RenewLocalExecutionLease.
-func (mr *MockHistoryServiceServerMockRecorder) RenewLocalExecutionLease(arg0, arg1 any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RenewLocalExecutionLease", reflect.TypeOf((*MockHistoryServiceServer)(nil).RenewLocalExecutionLease), arg0, arg1)
-}
-
 // ReplicateEventsV2 mocks base method.
 func (m *MockHistoryServiceServer) ReplicateEventsV2(arg0 context.Context, arg1 *historyservice.ReplicateEventsV2Request) (*historyservice.ReplicateEventsV2Response, error) {
 	m.ctrl.T.Helper()
@@ -2817,6 +2802,21 @@ func (m *MockHistoryServiceServer) SyncActivity(arg0 context.Context, arg1 *hist
 func (mr *MockHistoryServiceServerMockRecorder) SyncActivity(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncActivity", reflect.TypeOf((*MockHistoryServiceServer)(nil).SyncActivity), arg0, arg1)
+}
+
+// SyncLocalExecution mocks base method.
+func (m *MockHistoryServiceServer) SyncLocalExecution(arg0 context.Context, arg1 *historyservice.SyncLocalExecutionRequest) (*historyservice.SyncLocalExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncLocalExecution", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.SyncLocalExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncLocalExecution indicates an expected call of SyncLocalExecution.
+func (mr *MockHistoryServiceServerMockRecorder) SyncLocalExecution(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncLocalExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).SyncLocalExecution), arg0, arg1)
 }
 
 // SyncShardStatus mocks base method.

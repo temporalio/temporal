@@ -389,17 +389,17 @@ func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *histor
 	return response, nil
 }
 
-func (h *Handler) RenewLocalExecutionLease(
+func (h *Handler) SyncLocalExecution(
 	ctx context.Context,
-	request *historyservice.RenewLocalExecutionLeaseRequest,
-) (*historyservice.RenewLocalExecutionLeaseResponse, error) {
+	request *historyservice.SyncLocalExecutionRequest,
+) (*historyservice.SyncLocalExecutionResponse, error) {
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(
 		namespaceID,
-		request.GetExecution().GetWorkflowId(),
+		request.GetRequest().GetExecution().GetWorkflowId(),
 	)
 	if err != nil {
 		return nil, h.convertError(err)
@@ -408,7 +408,7 @@ func (h *Handler) RenewLocalExecutionLease(
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	response, err := engine.RenewLocalExecutionLease(ctx, request)
+	response, err := engine.SyncLocalExecution(ctx, request)
 	if err != nil {
 		return nil, h.convertError(err)
 	}

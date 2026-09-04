@@ -10428,38 +10428,31 @@ func (x *PollWorkflowExecutionTimeSkippingResponse) GetResponse() *v1.PollWorkfl
 	return nil
 }
 
-type RenewLocalExecutionLeaseRequest struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId          string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Execution            *v14.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	LocalServerId        string                 `protobuf:"bytes,3,opt,name=local_server_id,json=localServerId,proto3" json:"local_server_id,omitempty"`
-	OwnershipToken       []byte                 `protobuf:"bytes,4,opt,name=ownership_token,json=ownershipToken,proto3" json:"ownership_token,omitempty"`
-	FencingEpoch         int64                  `protobuf:"varint,5,opt,name=fencing_epoch,json=fencingEpoch,proto3" json:"fencing_epoch,omitempty"`
-	PreviousEventId      int64                  `protobuf:"varint,6,opt,name=previous_event_id,json=previousEventId,proto3" json:"previous_event_id,omitempty"`
-	PreviousEventVersion int64                  `protobuf:"varint,7,opt,name=previous_event_version,json=previousEventVersion,proto3" json:"previous_event_version,omitempty"`
-	NewEventId           int64                  `protobuf:"varint,8,opt,name=new_event_id,json=newEventId,proto3" json:"new_event_id,omitempty"`
-	NewEventVersion      int64                  `protobuf:"varint,9,opt,name=new_event_version,json=newEventVersion,proto3" json:"new_event_version,omitempty"`
-	SyncId               string                 `protobuf:"bytes,10,opt,name=sync_id,json=syncId,proto3" json:"sync_id,omitempty"`
-	SyncRequestHash      []byte                 `protobuf:"bytes,11,opt,name=sync_request_hash,json=syncRequestHash,proto3" json:"sync_request_hash,omitempty"`
-	Release              bool                   `protobuf:"varint,12,opt,name=release,proto3" json:"release,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+type SyncLocalExecutionRequest struct {
+	state       protoimpl.MessageState          `protogen:"open.v1"`
+	NamespaceId string                          `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	Request     *v118.SyncLocalExecutionRequest `protobuf:"bytes,2,opt,name=request,proto3" json:"request,omitempty"`
+	// SHA-256 of the deterministic serialization of request. History stores this
+	// fingerprint with the committed cursor to make retries idempotent.
+	SyncRequestHash []byte `protobuf:"bytes,3,opt,name=sync_request_hash,json=syncRequestHash,proto3" json:"sync_request_hash,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
-func (x *RenewLocalExecutionLeaseRequest) Reset() {
-	*x = RenewLocalExecutionLeaseRequest{}
+func (x *SyncLocalExecutionRequest) Reset() {
+	*x = SyncLocalExecutionRequest{}
 	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[164]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RenewLocalExecutionLeaseRequest) String() string {
+func (x *SyncLocalExecutionRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RenewLocalExecutionLeaseRequest) ProtoMessage() {}
+func (*SyncLocalExecutionRequest) ProtoMessage() {}
 
-func (x *RenewLocalExecutionLeaseRequest) ProtoReflect() protoreflect.Message {
+func (x *SyncLocalExecutionRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[164]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -10471,116 +10464,53 @@ func (x *RenewLocalExecutionLeaseRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RenewLocalExecutionLeaseRequest.ProtoReflect.Descriptor instead.
-func (*RenewLocalExecutionLeaseRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use SyncLocalExecutionRequest.ProtoReflect.Descriptor instead.
+func (*SyncLocalExecutionRequest) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{164}
 }
 
-func (x *RenewLocalExecutionLeaseRequest) GetNamespaceId() string {
+func (x *SyncLocalExecutionRequest) GetNamespaceId() string {
 	if x != nil {
 		return x.NamespaceId
 	}
 	return ""
 }
 
-func (x *RenewLocalExecutionLeaseRequest) GetExecution() *v14.WorkflowExecution {
+func (x *SyncLocalExecutionRequest) GetRequest() *v118.SyncLocalExecutionRequest {
 	if x != nil {
-		return x.Execution
+		return x.Request
 	}
 	return nil
 }
 
-func (x *RenewLocalExecutionLeaseRequest) GetLocalServerId() string {
-	if x != nil {
-		return x.LocalServerId
-	}
-	return ""
-}
-
-func (x *RenewLocalExecutionLeaseRequest) GetOwnershipToken() []byte {
-	if x != nil {
-		return x.OwnershipToken
-	}
-	return nil
-}
-
-func (x *RenewLocalExecutionLeaseRequest) GetFencingEpoch() int64 {
-	if x != nil {
-		return x.FencingEpoch
-	}
-	return 0
-}
-
-func (x *RenewLocalExecutionLeaseRequest) GetPreviousEventId() int64 {
-	if x != nil {
-		return x.PreviousEventId
-	}
-	return 0
-}
-
-func (x *RenewLocalExecutionLeaseRequest) GetPreviousEventVersion() int64 {
-	if x != nil {
-		return x.PreviousEventVersion
-	}
-	return 0
-}
-
-func (x *RenewLocalExecutionLeaseRequest) GetNewEventId() int64 {
-	if x != nil {
-		return x.NewEventId
-	}
-	return 0
-}
-
-func (x *RenewLocalExecutionLeaseRequest) GetNewEventVersion() int64 {
-	if x != nil {
-		return x.NewEventVersion
-	}
-	return 0
-}
-
-func (x *RenewLocalExecutionLeaseRequest) GetSyncId() string {
-	if x != nil {
-		return x.SyncId
-	}
-	return ""
-}
-
-func (x *RenewLocalExecutionLeaseRequest) GetSyncRequestHash() []byte {
+func (x *SyncLocalExecutionRequest) GetSyncRequestHash() []byte {
 	if x != nil {
 		return x.SyncRequestHash
 	}
 	return nil
 }
 
-func (x *RenewLocalExecutionLeaseRequest) GetRelease() bool {
-	if x != nil {
-		return x.Release
-	}
-	return false
+type SyncLocalExecutionResponse struct {
+	state         protoimpl.MessageState           `protogen:"open.v1"`
+	Response      *v118.SyncLocalExecutionResponse `protobuf:"bytes,1,opt,name=response,proto3" json:"response,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
-type RenewLocalExecutionLeaseResponse struct {
-	state               protoimpl.MessageState `protogen:"open.v1"`
-	LeaseExpirationTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=lease_expiration_time,json=leaseExpirationTime,proto3" json:"lease_expiration_time,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
-}
-
-func (x *RenewLocalExecutionLeaseResponse) Reset() {
-	*x = RenewLocalExecutionLeaseResponse{}
+func (x *SyncLocalExecutionResponse) Reset() {
+	*x = SyncLocalExecutionResponse{}
 	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[165]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RenewLocalExecutionLeaseResponse) String() string {
+func (x *SyncLocalExecutionResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RenewLocalExecutionLeaseResponse) ProtoMessage() {}
+func (*SyncLocalExecutionResponse) ProtoMessage() {}
 
-func (x *RenewLocalExecutionLeaseResponse) ProtoReflect() protoreflect.Message {
+func (x *SyncLocalExecutionResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_temporal_server_api_historyservice_v1_request_response_proto_msgTypes[165]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -10592,14 +10522,14 @@ func (x *RenewLocalExecutionLeaseResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RenewLocalExecutionLeaseResponse.ProtoReflect.Descriptor instead.
-func (*RenewLocalExecutionLeaseResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use SyncLocalExecutionResponse.ProtoReflect.Descriptor instead.
+func (*SyncLocalExecutionResponse) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{165}
 }
 
-func (x *RenewLocalExecutionLeaseResponse) GetLeaseExpirationTime() *timestamppb.Timestamp {
+func (x *SyncLocalExecutionResponse) GetResponse() *v118.SyncLocalExecutionResponse {
 	if x != nil {
-		return x.LeaseExpirationTime
+		return x.Response
 	}
 	return nil
 }
@@ -11686,24 +11616,13 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12c\n" +
 	"\arequest\x18\x02 \x01(\v2I.temporal.api.workflowservice.v1.PollWorkflowExecutionTimeSkippingRequestR\arequest:,\x92\xc4\x03(*&request.workflow_execution.workflow_id\"\x93\x01\n" +
 	")PollWorkflowExecutionTimeSkippingResponse\x12f\n" +
-	"\bresponse\x18\x01 \x01(\v2J.temporal.api.workflowservice.v1.PollWorkflowExecutionTimeSkippingResponseR\bresponse\"\xaf\x04\n" +
-	"\x1fRenewLocalExecutionLeaseRequest\x12!\n" +
-	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12G\n" +
-	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12&\n" +
-	"\x0flocal_server_id\x18\x03 \x01(\tR\rlocalServerId\x12'\n" +
-	"\x0fownership_token\x18\x04 \x01(\fR\x0eownershipToken\x12#\n" +
-	"\rfencing_epoch\x18\x05 \x01(\x03R\ffencingEpoch\x12*\n" +
-	"\x11previous_event_id\x18\x06 \x01(\x03R\x0fpreviousEventId\x124\n" +
-	"\x16previous_event_version\x18\a \x01(\x03R\x14previousEventVersion\x12 \n" +
-	"\fnew_event_id\x18\b \x01(\x03R\n" +
-	"newEventId\x12*\n" +
-	"\x11new_event_version\x18\t \x01(\x03R\x0fnewEventVersion\x12\x17\n" +
-	"\async_id\x18\n" +
-	" \x01(\tR\x06syncId\x12*\n" +
-	"\x11sync_request_hash\x18\v \x01(\fR\x0fsyncRequestHash\x12\x18\n" +
-	"\arelease\x18\f \x01(\bR\arelease:\x1b\x92\xc4\x03\x17*\x15execution.workflow_id\"r\n" +
-	" RenewLocalExecutionLeaseResponse\x12N\n" +
-	"\x15lease_expiration_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x13leaseExpirationTime:t\n" +
+	"\bresponse\x18\x01 \x01(\v2J.temporal.api.workflowservice.v1.PollWorkflowExecutionTimeSkippingResponseR\bresponse\"\xe9\x01\n" +
+	"\x19SyncLocalExecutionRequest\x12!\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12X\n" +
+	"\arequest\x18\x02 \x01(\v2>.temporal.server.api.adminservice.v1.SyncLocalExecutionRequestR\arequest\x12*\n" +
+	"\x11sync_request_hash\x18\x03 \x01(\fR\x0fsyncRequestHash:#\x92\xc4\x03\x1f*\x1drequest.execution.workflow_id\"y\n" +
+	"\x1aSyncLocalExecutionResponse\x12[\n" +
+	"\bresponse\x18\x01 \x01(\v2?.temporal.server.api.adminservice.v1.SyncLocalExecutionResponseR\bresponse:t\n" +
 	"\arouting\x12\x1f.google.protobuf.MessageOptions\x18\xc28 \x01(\v25.temporal.server.api.historyservice.v1.RoutingOptionsR\arouting\x88\x01\x01B<Z:go.temporal.io/server/api/historyservice/v1;historyserviceb\x06proto3"
 
 var (
@@ -11884,8 +11803,8 @@ var file_temporal_server_api_historyservice_v1_request_response_proto_goTypes = 
 	(*CancelNexusOperationResponse)(nil),                    // 161: temporal.server.api.historyservice.v1.CancelNexusOperationResponse
 	(*PollWorkflowExecutionTimeSkippingRequest)(nil),        // 162: temporal.server.api.historyservice.v1.PollWorkflowExecutionTimeSkippingRequest
 	(*PollWorkflowExecutionTimeSkippingResponse)(nil),       // 163: temporal.server.api.historyservice.v1.PollWorkflowExecutionTimeSkippingResponse
-	(*RenewLocalExecutionLeaseRequest)(nil),                 // 164: temporal.server.api.historyservice.v1.RenewLocalExecutionLeaseRequest
-	(*RenewLocalExecutionLeaseResponse)(nil),                // 165: temporal.server.api.historyservice.v1.RenewLocalExecutionLeaseResponse
+	(*SyncLocalExecutionRequest)(nil),                       // 164: temporal.server.api.historyservice.v1.SyncLocalExecutionRequest
+	(*SyncLocalExecutionResponse)(nil),                      // 165: temporal.server.api.historyservice.v1.SyncLocalExecutionResponse
 	(*ExecuteMultiOperationRequest_Operation)(nil),          // 166: temporal.server.api.historyservice.v1.ExecuteMultiOperationRequest.Operation
 	(*ExecuteMultiOperationResponse_Response)(nil),          // 167: temporal.server.api.historyservice.v1.ExecuteMultiOperationResponse.Response
 	nil,                                                   // 168: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.QueriesEntry
@@ -12012,9 +11931,11 @@ var file_temporal_server_api_historyservice_v1_request_response_proto_goTypes = 
 	(*v121.CancelOperationResponse)(nil),                  // 289: temporal.api.nexus.v1.CancelOperationResponse
 	(*v1.PollWorkflowExecutionTimeSkippingRequest)(nil),   // 290: temporal.api.workflowservice.v1.PollWorkflowExecutionTimeSkippingRequest
 	(*v1.PollWorkflowExecutionTimeSkippingResponse)(nil),  // 291: temporal.api.workflowservice.v1.PollWorkflowExecutionTimeSkippingResponse
-	(*v114.WorkflowQuery)(nil),                            // 292: temporal.api.query.v1.WorkflowQuery
-	(*v117.ReplicationMessages)(nil),                      // 293: temporal.server.api.replication.v1.ReplicationMessages
-	(*descriptorpb.MessageOptions)(nil),                   // 294: google.protobuf.MessageOptions
+	(*v118.SyncLocalExecutionRequest)(nil),                // 292: temporal.server.api.adminservice.v1.SyncLocalExecutionRequest
+	(*v118.SyncLocalExecutionResponse)(nil),               // 293: temporal.server.api.adminservice.v1.SyncLocalExecutionResponse
+	(*v114.WorkflowQuery)(nil),                            // 294: temporal.api.query.v1.WorkflowQuery
+	(*v117.ReplicationMessages)(nil),                      // 295: temporal.server.api.replication.v1.ReplicationMessages
+	(*descriptorpb.MessageOptions)(nil),                   // 296: google.protobuf.MessageOptions
 }
 var file_temporal_server_api_historyservice_v1_request_response_proto_depIdxs = []int32{
 	175, // 0: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest.start_request:type_name -> temporal.api.workflowservice.v1.StartWorkflowExecutionRequest
@@ -12277,19 +12198,19 @@ var file_temporal_server_api_historyservice_v1_request_response_proto_depIdxs = 
 	289, // 257: temporal.server.api.historyservice.v1.CancelNexusOperationResponse.response:type_name -> temporal.api.nexus.v1.CancelOperationResponse
 	290, // 258: temporal.server.api.historyservice.v1.PollWorkflowExecutionTimeSkippingRequest.request:type_name -> temporal.api.workflowservice.v1.PollWorkflowExecutionTimeSkippingRequest
 	291, // 259: temporal.server.api.historyservice.v1.PollWorkflowExecutionTimeSkippingResponse.response:type_name -> temporal.api.workflowservice.v1.PollWorkflowExecutionTimeSkippingResponse
-	193, // 260: temporal.server.api.historyservice.v1.RenewLocalExecutionLeaseRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
-	177, // 261: temporal.server.api.historyservice.v1.RenewLocalExecutionLeaseResponse.lease_expiration_time:type_name -> google.protobuf.Timestamp
+	292, // 260: temporal.server.api.historyservice.v1.SyncLocalExecutionRequest.request:type_name -> temporal.server.api.adminservice.v1.SyncLocalExecutionRequest
+	293, // 261: temporal.server.api.historyservice.v1.SyncLocalExecutionResponse.response:type_name -> temporal.server.api.adminservice.v1.SyncLocalExecutionResponse
 	1,   // 262: temporal.server.api.historyservice.v1.ExecuteMultiOperationRequest.Operation.start_workflow:type_name -> temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest
 	105, // 263: temporal.server.api.historyservice.v1.ExecuteMultiOperationRequest.Operation.update_workflow:type_name -> temporal.server.api.historyservice.v1.UpdateWorkflowExecutionRequest
 	2,   // 264: temporal.server.api.historyservice.v1.ExecuteMultiOperationResponse.Response.start_workflow:type_name -> temporal.server.api.historyservice.v1.StartWorkflowExecutionResponse
 	106, // 265: temporal.server.api.historyservice.v1.ExecuteMultiOperationResponse.Response.update_workflow:type_name -> temporal.server.api.historyservice.v1.UpdateWorkflowExecutionResponse
-	292, // 266: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.QueriesEntry.value:type_name -> temporal.api.query.v1.WorkflowQuery
-	292, // 267: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.QueriesEntry.value:type_name -> temporal.api.query.v1.WorkflowQuery
-	293, // 268: temporal.server.api.historyservice.v1.GetReplicationMessagesResponse.ShardMessagesEntry.value:type_name -> temporal.server.api.replication.v1.ReplicationMessages
+	294, // 266: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse.QueriesEntry.value:type_name -> temporal.api.query.v1.WorkflowQuery
+	294, // 267: temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponseWithRawHistory.QueriesEntry.value:type_name -> temporal.api.query.v1.WorkflowQuery
+	295, // 268: temporal.server.api.historyservice.v1.GetReplicationMessagesResponse.ShardMessagesEntry.value:type_name -> temporal.server.api.replication.v1.ReplicationMessages
 	98,  // 269: temporal.server.api.historyservice.v1.ShardReplicationStatus.RemoteClustersEntry.value:type_name -> temporal.server.api.historyservice.v1.ShardReplicationStatusPerCluster
 	97,  // 270: temporal.server.api.historyservice.v1.ShardReplicationStatus.HandoverNamespacesEntry.value:type_name -> temporal.server.api.historyservice.v1.HandoverNamespaceInfo
 	235, // 271: temporal.server.api.historyservice.v1.AddTasksRequest.Task.blob:type_name -> temporal.api.common.v1.DataBlob
-	294, // 272: temporal.server.api.historyservice.v1.routing:extendee -> google.protobuf.MessageOptions
+	296, // 272: temporal.server.api.historyservice.v1.routing:extendee -> google.protobuf.MessageOptions
 	0,   // 273: temporal.server.api.historyservice.v1.routing:type_name -> temporal.server.api.historyservice.v1.RoutingOptions
 	274, // [274:274] is the sub-list for method output_type
 	274, // [274:274] is the sub-list for method input_type

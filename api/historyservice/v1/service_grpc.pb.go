@@ -98,7 +98,7 @@ const (
 	HistoryService_StartNexusOperation_FullMethodName                    = "/temporal.server.api.historyservice.v1.HistoryService/StartNexusOperation"
 	HistoryService_CancelNexusOperation_FullMethodName                   = "/temporal.server.api.historyservice.v1.HistoryService/CancelNexusOperation"
 	HistoryService_PollWorkflowExecutionTimeSkipping_FullMethodName      = "/temporal.server.api.historyservice.v1.HistoryService/PollWorkflowExecutionTimeSkipping"
-	HistoryService_RenewLocalExecutionLease_FullMethodName               = "/temporal.server.api.historyservice.v1.HistoryService/RenewLocalExecutionLease"
+	HistoryService_SyncLocalExecution_FullMethodName                     = "/temporal.server.api.historyservice.v1.HistoryService/SyncLocalExecution"
 )
 
 // HistoryServiceClient is the client API for HistoryService service.
@@ -392,7 +392,7 @@ type HistoryServiceClient interface {
 	// CancelNexusOperation cancels a Nexus operation on the __temporal_system endpoint.
 	CancelNexusOperation(ctx context.Context, in *CancelNexusOperationRequest, opts ...grpc.CallOption) (*CancelNexusOperationResponse, error)
 	PollWorkflowExecutionTimeSkipping(ctx context.Context, in *PollWorkflowExecutionTimeSkippingRequest, opts ...grpc.CallOption) (*PollWorkflowExecutionTimeSkippingResponse, error)
-	RenewLocalExecutionLease(ctx context.Context, in *RenewLocalExecutionLeaseRequest, opts ...grpc.CallOption) (*RenewLocalExecutionLeaseResponse, error)
+	SyncLocalExecution(ctx context.Context, in *SyncLocalExecutionRequest, opts ...grpc.CallOption) (*SyncLocalExecutionResponse, error)
 }
 
 type historyServiceClient struct {
@@ -1127,9 +1127,9 @@ func (c *historyServiceClient) PollWorkflowExecutionTimeSkipping(ctx context.Con
 	return out, nil
 }
 
-func (c *historyServiceClient) RenewLocalExecutionLease(ctx context.Context, in *RenewLocalExecutionLeaseRequest, opts ...grpc.CallOption) (*RenewLocalExecutionLeaseResponse, error) {
-	out := new(RenewLocalExecutionLeaseResponse)
-	err := c.cc.Invoke(ctx, HistoryService_RenewLocalExecutionLease_FullMethodName, in, out, opts...)
+func (c *historyServiceClient) SyncLocalExecution(ctx context.Context, in *SyncLocalExecutionRequest, opts ...grpc.CallOption) (*SyncLocalExecutionResponse, error) {
+	out := new(SyncLocalExecutionResponse)
+	err := c.cc.Invoke(ctx, HistoryService_SyncLocalExecution_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -1427,7 +1427,7 @@ type HistoryServiceServer interface {
 	// CancelNexusOperation cancels a Nexus operation on the __temporal_system endpoint.
 	CancelNexusOperation(context.Context, *CancelNexusOperationRequest) (*CancelNexusOperationResponse, error)
 	PollWorkflowExecutionTimeSkipping(context.Context, *PollWorkflowExecutionTimeSkippingRequest) (*PollWorkflowExecutionTimeSkippingResponse, error)
-	RenewLocalExecutionLease(context.Context, *RenewLocalExecutionLeaseRequest) (*RenewLocalExecutionLeaseResponse, error)
+	SyncLocalExecution(context.Context, *SyncLocalExecutionRequest) (*SyncLocalExecutionResponse, error)
 	mustEmbedUnimplementedHistoryServiceServer()
 }
 
@@ -1669,8 +1669,8 @@ func (UnimplementedHistoryServiceServer) CancelNexusOperation(context.Context, *
 func (UnimplementedHistoryServiceServer) PollWorkflowExecutionTimeSkipping(context.Context, *PollWorkflowExecutionTimeSkippingRequest) (*PollWorkflowExecutionTimeSkippingResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PollWorkflowExecutionTimeSkipping not implemented")
 }
-func (UnimplementedHistoryServiceServer) RenewLocalExecutionLease(context.Context, *RenewLocalExecutionLeaseRequest) (*RenewLocalExecutionLeaseResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method RenewLocalExecutionLease not implemented")
+func (UnimplementedHistoryServiceServer) SyncLocalExecution(context.Context, *SyncLocalExecutionRequest) (*SyncLocalExecutionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SyncLocalExecution not implemented")
 }
 func (UnimplementedHistoryServiceServer) mustEmbedUnimplementedHistoryServiceServer() {}
 
@@ -3097,20 +3097,20 @@ func _HistoryService_PollWorkflowExecutionTimeSkipping_Handler(srv interface{}, 
 	return interceptor(ctx, in, info, handler)
 }
 
-func _HistoryService_RenewLocalExecutionLease_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(RenewLocalExecutionLeaseRequest)
+func _HistoryService_SyncLocalExecution_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SyncLocalExecutionRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(HistoryServiceServer).RenewLocalExecutionLease(ctx, in)
+		return srv.(HistoryServiceServer).SyncLocalExecution(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: HistoryService_RenewLocalExecutionLease_FullMethodName,
+		FullMethod: HistoryService_SyncLocalExecution_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(HistoryServiceServer).RenewLocalExecutionLease(ctx, req.(*RenewLocalExecutionLeaseRequest))
+		return srv.(HistoryServiceServer).SyncLocalExecution(ctx, req.(*SyncLocalExecutionRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -3431,8 +3431,8 @@ var HistoryService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _HistoryService_PollWorkflowExecutionTimeSkipping_Handler,
 		},
 		{
-			MethodName: "RenewLocalExecutionLease",
-			Handler:    _HistoryService_RenewLocalExecutionLease_Handler,
+			MethodName: "SyncLocalExecution",
+			Handler:    _HistoryService_SyncLocalExecution_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

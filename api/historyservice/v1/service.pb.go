@@ -26,7 +26,7 @@ var File_temporal_server_api_historyservice_v1_service_proto protoreflect.FileDe
 
 const file_temporal_server_api_historyservice_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"3temporal/server/api/historyservice/v1/service.proto\x12%temporal.server.api.historyservice.v1\x1a0temporal/server/api/common/v1/api_category.proto\x1a<temporal/server/api/historyservice/v1/request_response.proto2\x81l\n" +
+	"3temporal/server/api/historyservice/v1/service.proto\x12%temporal.server.api.historyservice.v1\x1a0temporal/server/api/common/v1/api_category.proto\x1a<temporal/server/api/historyservice/v1/request_response.proto2\xefk\n" +
 	"\x0eHistoryService\x12\xad\x01\n" +
 	"\x16StartWorkflowExecution\x12D.temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest\x1aE.temporal.server.api.historyservice.v1.StartWorkflowExecutionResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\x98\x01\n" +
 	"\x0fGetMutableState\x12=.temporal.server.api.historyservice.v1.GetMutableStateRequest\x1a>.temporal.server.api.historyservice.v1.GetMutableStateResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\x9b\x01\n" +
@@ -108,8 +108,8 @@ const file_temporal_server_api_historyservice_v1_service_proto_rawDesc = "" +
 	"\x18UnpauseWorkflowExecution\x12F.temporal.server.api.historyservice.v1.UnpauseWorkflowExecutionRequest\x1aG.temporal.server.api.historyservice.v1.UnpauseWorkflowExecutionResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xa4\x01\n" +
 	"\x13StartNexusOperation\x12A.temporal.server.api.historyservice.v1.StartNexusOperationRequest\x1aB.temporal.server.api.historyservice.v1.StartNexusOperationResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xa7\x01\n" +
 	"\x14CancelNexusOperation\x12B.temporal.server.api.historyservice.v1.CancelNexusOperationRequest\x1aC.temporal.server.api.historyservice.v1.CancelNexusOperationResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xce\x01\n" +
-	"!PollWorkflowExecutionTimeSkipping\x12O.temporal.server.api.historyservice.v1.PollWorkflowExecutionTimeSkippingRequest\x1aP.temporal.server.api.historyservice.v1.PollWorkflowExecutionTimeSkippingResponse\"\x06\x8a\xb5\x18\x02\b\x02\x12\xb3\x01\n" +
-	"\x18RenewLocalExecutionLease\x12F.temporal.server.api.historyservice.v1.RenewLocalExecutionLeaseRequest\x1aG.temporal.server.api.historyservice.v1.RenewLocalExecutionLeaseResponse\"\x06\x8a\xb5\x18\x02\b\x01B<Z:go.temporal.io/server/api/historyservice/v1;historyserviceb\x06proto3"
+	"!PollWorkflowExecutionTimeSkipping\x12O.temporal.server.api.historyservice.v1.PollWorkflowExecutionTimeSkippingRequest\x1aP.temporal.server.api.historyservice.v1.PollWorkflowExecutionTimeSkippingResponse\"\x06\x8a\xb5\x18\x02\b\x02\x12\xa1\x01\n" +
+	"\x12SyncLocalExecution\x12@.temporal.server.api.historyservice.v1.SyncLocalExecutionRequest\x1aA.temporal.server.api.historyservice.v1.SyncLocalExecutionResponse\"\x06\x8a\xb5\x18\x02\b\x01B<Z:go.temporal.io/server/api/historyservice/v1;historyserviceb\x06proto3"
 
 var file_temporal_server_api_historyservice_v1_service_proto_goTypes = []any{
 	(*StartWorkflowExecutionRequest)(nil),                  // 0: temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest
@@ -190,7 +190,7 @@ var file_temporal_server_api_historyservice_v1_service_proto_goTypes = []any{
 	(*StartNexusOperationRequest)(nil),                     // 75: temporal.server.api.historyservice.v1.StartNexusOperationRequest
 	(*CancelNexusOperationRequest)(nil),                    // 76: temporal.server.api.historyservice.v1.CancelNexusOperationRequest
 	(*PollWorkflowExecutionTimeSkippingRequest)(nil),       // 77: temporal.server.api.historyservice.v1.PollWorkflowExecutionTimeSkippingRequest
-	(*RenewLocalExecutionLeaseRequest)(nil),                // 78: temporal.server.api.historyservice.v1.RenewLocalExecutionLeaseRequest
+	(*SyncLocalExecutionRequest)(nil),                      // 78: temporal.server.api.historyservice.v1.SyncLocalExecutionRequest
 	(*StartWorkflowExecutionResponse)(nil),                 // 79: temporal.server.api.historyservice.v1.StartWorkflowExecutionResponse
 	(*GetMutableStateResponse)(nil),                        // 80: temporal.server.api.historyservice.v1.GetMutableStateResponse
 	(*PollMutableStateResponse)(nil),                       // 81: temporal.server.api.historyservice.v1.PollMutableStateResponse
@@ -269,7 +269,7 @@ var file_temporal_server_api_historyservice_v1_service_proto_goTypes = []any{
 	(*StartNexusOperationResponse)(nil),                    // 154: temporal.server.api.historyservice.v1.StartNexusOperationResponse
 	(*CancelNexusOperationResponse)(nil),                   // 155: temporal.server.api.historyservice.v1.CancelNexusOperationResponse
 	(*PollWorkflowExecutionTimeSkippingResponse)(nil),      // 156: temporal.server.api.historyservice.v1.PollWorkflowExecutionTimeSkippingResponse
-	(*RenewLocalExecutionLeaseResponse)(nil),               // 157: temporal.server.api.historyservice.v1.RenewLocalExecutionLeaseResponse
+	(*SyncLocalExecutionResponse)(nil),                     // 157: temporal.server.api.historyservice.v1.SyncLocalExecutionResponse
 }
 var file_temporal_server_api_historyservice_v1_service_proto_depIdxs = []int32{
 	0,   // 0: temporal.server.api.historyservice.v1.HistoryService.StartWorkflowExecution:input_type -> temporal.server.api.historyservice.v1.StartWorkflowExecutionRequest
@@ -350,7 +350,7 @@ var file_temporal_server_api_historyservice_v1_service_proto_depIdxs = []int32{
 	75,  // 75: temporal.server.api.historyservice.v1.HistoryService.StartNexusOperation:input_type -> temporal.server.api.historyservice.v1.StartNexusOperationRequest
 	76,  // 76: temporal.server.api.historyservice.v1.HistoryService.CancelNexusOperation:input_type -> temporal.server.api.historyservice.v1.CancelNexusOperationRequest
 	77,  // 77: temporal.server.api.historyservice.v1.HistoryService.PollWorkflowExecutionTimeSkipping:input_type -> temporal.server.api.historyservice.v1.PollWorkflowExecutionTimeSkippingRequest
-	78,  // 78: temporal.server.api.historyservice.v1.HistoryService.RenewLocalExecutionLease:input_type -> temporal.server.api.historyservice.v1.RenewLocalExecutionLeaseRequest
+	78,  // 78: temporal.server.api.historyservice.v1.HistoryService.SyncLocalExecution:input_type -> temporal.server.api.historyservice.v1.SyncLocalExecutionRequest
 	79,  // 79: temporal.server.api.historyservice.v1.HistoryService.StartWorkflowExecution:output_type -> temporal.server.api.historyservice.v1.StartWorkflowExecutionResponse
 	80,  // 80: temporal.server.api.historyservice.v1.HistoryService.GetMutableState:output_type -> temporal.server.api.historyservice.v1.GetMutableStateResponse
 	81,  // 81: temporal.server.api.historyservice.v1.HistoryService.PollMutableState:output_type -> temporal.server.api.historyservice.v1.PollMutableStateResponse
@@ -429,7 +429,7 @@ var file_temporal_server_api_historyservice_v1_service_proto_depIdxs = []int32{
 	154, // 154: temporal.server.api.historyservice.v1.HistoryService.StartNexusOperation:output_type -> temporal.server.api.historyservice.v1.StartNexusOperationResponse
 	155, // 155: temporal.server.api.historyservice.v1.HistoryService.CancelNexusOperation:output_type -> temporal.server.api.historyservice.v1.CancelNexusOperationResponse
 	156, // 156: temporal.server.api.historyservice.v1.HistoryService.PollWorkflowExecutionTimeSkipping:output_type -> temporal.server.api.historyservice.v1.PollWorkflowExecutionTimeSkippingResponse
-	157, // 157: temporal.server.api.historyservice.v1.HistoryService.RenewLocalExecutionLease:output_type -> temporal.server.api.historyservice.v1.RenewLocalExecutionLeaseResponse
+	157, // 157: temporal.server.api.historyservice.v1.HistoryService.SyncLocalExecution:output_type -> temporal.server.api.historyservice.v1.SyncLocalExecutionResponse
 	79,  // [79:158] is the sub-list for method output_type
 	0,   // [0:79] is the sub-list for method input_type
 	0,   // [0:0] is the sub-list for extension type_name

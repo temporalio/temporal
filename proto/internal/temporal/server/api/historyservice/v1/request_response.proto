@@ -1455,23 +1455,16 @@ message PollWorkflowExecutionTimeSkippingResponse {
   temporal.api.workflowservice.v1.PollWorkflowExecutionTimeSkippingResponse response = 1;
 }
 
-message RenewLocalExecutionLeaseRequest {
-  option (routing).workflow_id = "execution.workflow_id";
+message SyncLocalExecutionRequest {
+  option (routing).workflow_id = "request.execution.workflow_id";
 
   string namespace_id = 1;
-  temporal.api.common.v1.WorkflowExecution execution = 2;
-  string local_server_id = 3;
-  bytes ownership_token = 4;
-  int64 fencing_epoch = 5;
-  int64 previous_event_id = 6;
-  int64 previous_event_version = 7;
-  int64 new_event_id = 8;
-  int64 new_event_version = 9;
-  string sync_id = 10;
-  bytes sync_request_hash = 11;
-  bool release = 12;
+  temporal.server.api.adminservice.v1.SyncLocalExecutionRequest request = 2;
+  // SHA-256 of the deterministic serialization of request. History stores this
+  // fingerprint with the committed cursor to make retries idempotent.
+  bytes sync_request_hash = 3;
 }
 
-message RenewLocalExecutionLeaseResponse {
-  google.protobuf.Timestamp lease_expiration_time = 1;
+message SyncLocalExecutionResponse {
+  temporal.server.api.adminservice.v1.SyncLocalExecutionResponse response = 1;
 }

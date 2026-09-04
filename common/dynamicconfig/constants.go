@@ -1840,6 +1840,21 @@ See DynamicRateLimitingParams comments for more details.`,
 		time.Minute,
 		`LocalExecutionMaxSyncInterval is the longest synchronization interval a bridge may request.`,
 	)
+	LocalExecutionSyncMaxBytes = NewNamespaceIntSetting(
+		"history.localExecutionSyncMaxBytes",
+		8*1024*1024,
+		`LocalExecutionSyncMaxBytes limits the serialized history bytes in one local execution synchronization request.`,
+	)
+	LocalExecutionSyncMaxEvents = NewNamespaceIntSetting(
+		"history.localExecutionSyncMaxEvents",
+		10240,
+		`LocalExecutionSyncMaxEvents limits the number of history events in one local execution synchronization request.`,
+	)
+	LocalExecutionSyncMaxBatches = NewNamespaceIntSetting(
+		"history.localExecutionSyncMaxBatches",
+		256,
+		`LocalExecutionSyncMaxBatches limits the number of history batches in one local execution synchronization request.`,
+	)
 	WorkflowTaskCompletionBufferTotalSizeLimit = NewGlobalIntSetting(
 		"history.workflowTaskCompletionBufferTotalSizeLimit",
 		1024*1024*1024,
