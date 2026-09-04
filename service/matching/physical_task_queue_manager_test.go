@@ -35,6 +35,81 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
+func TestNonNegligibleBacklogPriority(t *testing.T) {
+	const negligibleAge = time.Minute
+	classicReader := &taskReader{}
+	classicReader.backlogHeadCreateTime.Store(time.Now().Add(-2 * negligibleAge).UnixNano())
+	classic := &backlogManagerImpl{
+		taskReader: classicReader,
+		config: &taskQueueConfig{
+			DefaultPriorityKey: 4,
+			BacklogNegligibleAge: func() time.Duration {
+				return negligibleAge
+			},
+		},
+	}
+	active := newPriorityBacklogManagerForTest(negligibleAge, map[priorityKey]time.Duration{
+		1: negligibleAge / 2,
+		3: 2 * negligibleAge,
+		5: 2 * negligibleAge,
+	})
+	draining := newFairBacklogManagerForTest(negligibleAge, map[priorityKey]time.Duration{
+		1: negligibleAge / 2,
+		2: 2 * negligibleAge,
+		4: 2 * negligibleAge,
+	})
+	physicalQueue := &physicalTaskQueueManagerImpl{
+		backlogMgr:      active,
+		drainBacklogMgr: draining,
+	}
+
+	require.Equal(t, priorityKey(4), classic.NonNegligibleBacklogPriority())
+	require.Equal(t, priorityKey(3), active.NonNegligibleBacklogPriority())
+	require.Equal(t, priorityKey(2), draining.NonNegligibleBacklogPriority())
+	require.Equal(t, priorityKey(2), physicalQueue.NonNegligibleBacklogPriority())
+	require.Zero(t, newPriorityBacklogManagerForTest(negligibleAge, nil).NonNegligibleBacklogPriority())
+}
+
+func newPriorityBacklogManagerForTest(
+	negligibleAge time.Duration,
+	backlogs map[priorityKey]time.Duration,
+) *priBacklogManagerImpl {
+	priorities := make(map[subqueueIndex]priorityKey, len(backlogs))
+	manager := &priBacklogManagerImpl{
+		config:             &taskQueueConfig{BacklogNegligibleAge: func() time.Duration { return negligibleAge }},
+		priorityBySubqueue: priorities,
+		subqueues:          make([]*priTaskReader, len(backlogs)),
+	}
+	for priority, age := range backlogs {
+		subqueue := subqueueIndex(len(priorities))
+		priorities[subqueue] = priority
+		reader := &priTaskReader{backlogAge: newBacklogAgeTracker()}
+		reader.backlogAge.record(timestamppb.New(time.Now().Add(-age)), 1)
+		manager.subqueues[subqueue] = reader
+	}
+	return manager
+}
+
+func newFairBacklogManagerForTest(
+	negligibleAge time.Duration,
+	backlogs map[priorityKey]time.Duration,
+) *fairBacklogManagerImpl {
+	priorities := make(map[subqueueIndex]priorityKey, len(backlogs))
+	manager := &fairBacklogManagerImpl{
+		config:             &taskQueueConfig{BacklogNegligibleAge: func() time.Duration { return negligibleAge }},
+		priorityBySubqueue: priorities,
+		subqueues:          make([]*fairTaskReader, len(backlogs)),
+	}
+	for priority, age := range backlogs {
+		subqueue := subqueueIndex(len(priorities))
+		priorities[subqueue] = priority
+		reader := &fairTaskReader{backlogAge: newBacklogAgeTracker()}
+		reader.backlogAge.record(timestamppb.New(time.Now().Add(-age)), 1)
+		manager.subqueues[subqueue] = reader
+	}
+	return manager
+}
+
 var rpsInf = math.Inf(1)
 
 const (

@@ -675,6 +675,100 @@ reredirectTask:
 	return assignedBuildId, false, err
 }
 
+func (pm *taskQueuePartitionManagerImpl) GrantEagerDispatch(
+	ctx context.Context,
+	items []*matchingservice.GrantEagerDispatchRequest_Item,
+) ([]*matchingservice.GrantEagerDispatchResponse_Item, error) {
+	if _, ok := pm.partition.(*tqid.NormalPartition); !ok {
+		return nil, serviceerror.NewInvalidArgument("eager dispatch grants only support normal task queue partitions")
+	}
+	defer pm.sendPartitionCountTrailer(ctx)
+	if err := pm.checkPartitionCounts(ctx, true); err != nil {
+		return nil, err
+	}
+
+	var currentVersion, rampingVersion *deploymentspb.WorkerDeploymentVersion
+	var isRamping bool
+	var rampingPercentage float32
+	for _, item := range items {
+		if item.GetVersion() != nil {
+			perTypeUserData, _, err := pm.getPerTypeUserData()
+			if err != nil {
+				return nil, err
+			}
+			currentVersion, _, _, rampingVersion, isRamping, rampingPercentage, _, _ =
+				worker_versioning.CalculateTaskQueueVersioningInfo(perTypeUserData.GetDeploymentData())
+			break
+		}
+	}
+
+	physicalQueues := make([]physicalTaskQueueManager, len(items))
+	checkDefaultBacklog := make([]bool, len(items))
+	for index, item := range items {
+		if item.GetCount() <= 0 {
+			return nil, serviceerror.NewInvalidArgument("eager dispatch count must be greater than zero")
+		}
+
+		version := item.GetVersion()
+		if version != nil {
+			if err := worker_versioning.ValidateDeploymentVersion(version, pm.engine.config.MaxIDLengthLimit()); err != nil {
+				return nil, err
+			}
+		}
+		physicalQueue, err := pm.getPhysicalQueue(
+			ctx,
+			"",
+			worker_versioning.DeploymentFromDeploymentVersion(version),
+		)
+		if err != nil {
+			return nil, err
+		}
+		physicalQueues[index] = physicalQueue
+		checkDefaultBacklog[index] = version.Equal(currentVersion) ||
+			(isRamping && rampingPercentage > 0 && version.Equal(rampingVersion))
+	}
+
+	responseItems := make([]*matchingservice.GrantEagerDispatchResponse_Item, len(items))
+	backlogPriorities := make(map[physicalTaskQueueManager]priorityKey)
+	for index, item := range items {
+		physicalQueue := physicalQueues[index]
+		backlogPriority, seen := backlogPriorities[physicalQueue]
+		if !seen {
+			physicalQueue.MarkAlive()
+			backlogPriority = physicalQueue.NonNegligibleBacklogPriority()
+			backlogPriorities[physicalQueue] = backlogPriority
+		}
+
+		if checkDefaultBacklog[index] {
+			defaultQueue := pm.defaultQueue()
+			if defaultQueue == nil {
+				return nil, errDefaultQueueNotInit
+			}
+			defaultBacklogPriority, seen := backlogPriorities[defaultQueue]
+			if !seen {
+				defaultQueue.MarkAlive()
+				defaultBacklogPriority = defaultQueue.NonNegligibleBacklogPriority()
+				backlogPriorities[defaultQueue] = defaultBacklogPriority
+			}
+			if defaultBacklogPriority != 0 &&
+				(backlogPriority == 0 || defaultBacklogPriority < backlogPriority) {
+				backlogPriority = defaultBacklogPriority
+			}
+		}
+
+		priority := pm.config.clipPriority(priorityKey(item.GetPriority().GetPriorityKey()))
+		// Same or higher priority backlog (<= priority value) prevents Eager.
+		if backlogPriority != 0 && backlogPriority <= priority {
+			responseItems[index] = &matchingservice.GrantEagerDispatchResponse_Item{}
+			continue
+		}
+		responseItems[index] = &matchingservice.GrantEagerDispatchResponse_Item{
+			GrantedCount: pm.rateLimitManager.grantTokens(item.GetPriority(), item.GetCount()),
+		}
+	}
+	return responseItems, nil
+}
+
 func syncMatchOutcomeToHook(outcome syncMatchOutcome) hooks.SyncMatchOutcome {
 	switch outcome {
 	case syncMatchSuccess:
@@ -1987,7 +2081,7 @@ func (pm *taskQueuePartitionManagerImpl) unloadFromEngine(unloadCause unloadCaus
 }
 
 func (pm *taskQueuePartitionManagerImpl) getPhysicalQueue(ctx context.Context, buildId string, deployment *deploymentpb.Deployment) (physicalTaskQueueManager, error) {
-	if buildId == "" {
+	if buildId == "" && deployment == nil {
 		dbq := pm.defaultQueue()
 		if dbq == nil {
 			return nil, errDefaultQueueNotInit

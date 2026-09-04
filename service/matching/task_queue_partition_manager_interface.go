@@ -25,6 +25,7 @@ type (
 		// Returns the build ID assigned to the task according to the assignment rules (if any),
 		// and a boolean indicating if sync-match happened or not.
 		AddTask(ctx context.Context, params addTaskParams) (buildId string, syncMatch bool, err error)
+		GrantEagerDispatch(ctx context.Context, items []*matchingservice.GrantEagerDispatchRequest_Item) ([]*matchingservice.GrantEagerDispatchResponse_Item, error)
 		// PollTask blocks waiting for a task Returns error when context deadline is exceeded
 		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
 		// from this task queue to pollers

@@ -10,8 +10,10 @@ import (
 
 	"github.com/google/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -183,6 +185,64 @@ func (c *clientImpl) addActivityTask(
 	defer cancel()
 
 	return client.AddActivityTask(ctx, request, opts...)
+}
+
+func (c *clientImpl) GrantEagerDispatch(
+	ctx context.Context,
+	request *matchingservice.GrantEagerDispatchRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.GrantEagerDispatchResponse, error) {
+	p := tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId())
+	if _, ok := p.(*tqid.NormalPartition); !ok {
+		return nil, serviceerror.NewInvalidArgument("eager dispatch grants only support normal task queue partitions")
+	}
+	loadBalance := p.SupportsPartitions() && p.IsRoot()
+	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, p, loadBalance, request, opts, c.grantEagerDispatch)
+}
+
+func (c *clientImpl) grantEagerDispatch(
+	ctx context.Context,
+	p tqid.Partition,
+	loadBalance bool,
+	pc PartitionCounts,
+	request *matchingservice.GrantEagerDispatchRequest,
+	opts []grpc.CallOption,
+) (*matchingservice.GrantEagerDispatchResponse, error) {
+	if loadBalance {
+		p = c.loadBalancer.PickWritePartition(p.TaskQueue(), pc)
+	}
+	request, err := grantEagerDispatchRequestForPartition(request, p)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := c.getClientForTaskQueuePartition(p)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.GrantEagerDispatch(ctx, request, opts...)
+}
+
+func grantEagerDispatchRequestForPartition(
+	request *matchingservice.GrantEagerDispatchRequest,
+	partition tqid.Partition,
+) (*matchingservice.GrantEagerDispatchRequest, error) {
+	request = common.CloneProto(request)
+	request.TaskQueuePartition = &taskqueuespb.TaskQueuePartition{
+		TaskQueue:     partition.TaskQueue().Name(),
+		TaskQueueType: partition.TaskType(),
+	}
+	switch partition := partition.(type) {
+	case *tqid.NormalPartition:
+		request.TaskQueuePartition.PartitionId = &taskqueuespb.TaskQueuePartition_NormalPartitionId{
+			NormalPartitionId: int32(partition.PartitionId()),
+		}
+	default:
+		return nil, serviceerror.NewInvalidArgument("eager dispatch grants only support normal task queue partitions")
+	}
+	return request, nil
 }
 
 func (c *clientImpl) AddWorkflowTask(

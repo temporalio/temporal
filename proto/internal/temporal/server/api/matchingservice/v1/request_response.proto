@@ -208,38 +208,36 @@ message GrantEagerDispatchRequest {
   // The task queue partition that decides for every item in this request. task_queue_type
   // selects whether these are workflow or activity tasks.
   //
-  // Callers set task_queue and task_queue_type and leave partition_id unset; the matching
-  // client fills partition_id in while routing. Note that unlike other messages carrying a
-  // TaskQueuePartition, an unset partition_id here means the request was never routed,
-  // not the root partition.
+  // Callers should leave partition_id unset, the matching client will fill it in and use
+  // it for routing. Only normal partitions are currently supported.
   temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;
-  repeated EagerDispatchRequestItem items = 3;
-}
+  repeated Item items = 3;
 
-message EagerDispatchRequestItem {
-  // Must greater than 0. Use more than one to request a batch grant.
-  int32 count = 1;
+  message Item {
+    // Must be greater than 0. Use more than one to request a batch grant.
+    int32 count = 1;
 
-  // Carries priority_key and fairness_key. Drives both the priority comparison against
-  // the partition's next dispatchable task and the per-fairness-key rate limit check.
-  // Eager grants only honor per-fairness-key rate limits, not fairness itself.
-  temporal.api.common.v1.Priority priority = 2;
+    // Carries priority_key and fairness_key. Drives both the priority comparison against
+    // the partition's next dispatchable task and the per-fairness-key rate limit check.
+    // A queued task with non-negligible backlog prevents a grant when it has equal or higher
+    // priority. Eager grants only honor per-fairness-key rate limits, not fairness itself.
+    temporal.api.common.v1.Priority priority = 2;
 
-  // Version of the worker. Matters because priority backlog is separate by version.
-  // Routing config is not considered for Eager grant. Assumption is the request is always
-  // asking for the same version as the workflow which is consistent with both Pinned and
-  // AutoUpgrade behaviors.
-  temporal.server.api.deployment.v1.WorkerDeploymentVersion version = 3;
+    // Version of the worker. Matters because priority backlog is separate by version. For
+    // current versions and ramping versions with a non-zero ramp percentage, the default
+    // queue's backlog is considered too because unpinned tasks are persisted there until dispatch.
+    temporal.server.api.deployment.v1.WorkerDeploymentVersion version = 3;
+  }
 }
 
 message GrantEagerDispatchResponse {
   // This list has the same length and order of the request items.
-  repeated EagerDispatchResponseItem items = 1;
-}
+  repeated Item items = 1;
 
-message EagerDispatchResponseItem {
-  // Could be less than or equal to the requested count.
-  int32 granted_count = 1;
+  message Item {
+    // Could be less than or equal to the requested count.
+    int32 granted_count = 1;
+  }
 }
 
 message QueryWorkflowRequest {
