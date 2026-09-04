@@ -1,9 +1,13 @@
 package tests
 
 import (
+	"context"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -14,6 +18,9 @@ import (
 	"go.temporal.io/sdk/client"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
+	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
@@ -249,6 +256,23 @@ func (s *NexusCancelPolicyTestSuite) TestOperationScheduleToCloseTimeout_Deliver
 	}, 20*time.Second, 200*time.Millisecond)
 }
 
+// The operation's start-to-close timeout is the sibling of schedule-to-close: both close the
+// operation while the caller keeps running, so both must notify the handler.
+func (s *NexusCancelPolicyTestSuite) TestOperationStartToCloseTimeout_Delivered() {
+	cancelCh := make(chan struct{}, 1)
+	env, taskQueue, endpointName := s.nexusCancelEnv(cancelCh)
+
+	run := nexusCancelStartSchedule(s.T(), env, endpointName, client.StartWorkflowOptions{
+		TaskQueue:           taskQueue,
+		WorkflowTaskTimeout: 10 * time.Second,
+	}, 0, func(a *commandpb.ScheduleNexusOperationCommandAttributes) {
+		a.StartToCloseTimeout = durationpb.New(5 * time.Second)
+	})
+	nexusCancelAwaitOpState(s.T(), env, run, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED)
+
+	requireCancelDelivered(s.T(), cancelCh)
+}
+
 // --- Workflow reset ------------------------------------------------------------------------------
 
 // Reset to a point before the operation was scheduled. NexusOperationScheduled is never
@@ -293,6 +317,199 @@ func (s *NexusCancelPolicyTestSuite) TestResetAdoptsOperation_NotDelivered() {
 
 	// The operation is carried into the reset run rather than abandoned.
 	nexusCancelAwaitOpState(s.T(), env, run, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED)
+}
+
+// Reset after the cancel already took effect on the handler. The caller is terminated under
+// REQUEST_CANCEL, the handler honors the cancel and reports the outcome — but the caller run is already
+// closed, so that outcome has nowhere to land. Resetting to a point after the operation started then
+// re-adopts the operation on the new run, which must not be left waiting for an outcome that already
+// happened.
+func (s *NexusCancelPolicyTestSuite) TestResetAfterCancelCompleted_AdoptedOperationResolves() {
+	cancelCh := make(chan struct{}, 1)
+	var callbackToken, publicCallbackURL string
+
+	env := s.newTestEnv()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	endpointName := env.createRandomExternalNexusServer(s.Context(), s.T(), nexustest.Handler{
+		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			callbackToken = options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
+			publicCallbackURL = options.CallbackURL
+			return &nexus.HandlerStartOperationResultAsync{OperationToken: "nexus-cancel-reset"}, nil
+		},
+		OnCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
+			select {
+			case cancelCh <- struct{}{}:
+			default:
+			}
+			return nil
+		},
+	})
+
+	run := nexusCancelStartSchedule(s.T(), env, endpointName, client.StartWorkflowOptions{
+		TaskQueue:           taskQueue,
+		WorkflowTaskTimeout: 10 * time.Second,
+	}, 0)
+	nexusCancelAwaitOpState(s.T(), env, run, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED)
+
+	// NexusOperationStarted schedules a workflow task; completing it gives a reset point that sits
+	// after the operation started, so the reset run adopts the operation.
+	nexusCancelPollAndRespondEmpty(s.T(), env, taskQueue)
+	resetPoint := nexusCancelWFTCompletedEventID(s.T(), env, run, false)
+
+	// Terminate: the close policy requests the cancel and the handler receives it.
+	s.NoError(env.SdkClient().TerminateWorkflow(s.Context(), run.GetID(), run.GetRunID(), "test"))
+	requireCancelDelivered(s.T(), cancelCh)
+
+	// The handler honors the cancel and reports the canceled outcome. The caller run is already closed,
+	// so this completion has no open history to land in.
+	completionErr := nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
+		Serializer: commonnexus.PayloadSerializer,
+	}).CompleteOperation(s.Context(), publicCallbackURL, nexusrpc.CompleteOperationOptions{
+		Header: nexus.Header{commonnexus.CallbackTokenHeader: callbackToken},
+		Error: &nexus.OperationError{
+			State: nexus.OperationStateCanceled,
+			Cause: errors.New("canceled by handler"),
+		},
+	})
+	s.T().Logf("completion delivered to the closed run returned: %v", completionErr)
+
+	// Reset to after the operation started: the new run re-adopts the operation.
+	nexusCancelReset(s.T(), env, run, resetPoint)
+
+	// The adopted operation must not stay pending forever — its outcome already happened handler-side.
+	await.Require(s.T().Context(), s.T(), func(c *await.T) {
+		desc, err := env.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: run.GetID()},
+		})
+		require.NoError(c, err)
+		require.Empty(c, desc.PendingNexusOperations,
+			"reset run is still waiting on an operation the handler already canceled")
+	}, 15*time.Second, 500*time.Millisecond)
+}
+
+// A completion delivered *after* the reset must reach the new run: the callback targets the
+// superseded run, and run fallback re-targets it to the run that now owns the operation. This is the
+// mirror of TestResetAfterCancelCompleted_AdoptedOperationResolves, where the completion arrives
+// before the new run exists and is lost. It guards against a change that lets a closed run absorb
+// completions, which would starve the run actually waiting for the outcome.
+func (s *NexusCancelPolicyTestSuite) TestCompletionAfterReset_ResolvesOnNewRun() {
+	cancelCh := make(chan struct{}, 1)
+	var callbackToken, publicCallbackURL string
+
+	env := s.newTestEnv()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	endpointName := env.createRandomExternalNexusServer(s.Context(), s.T(), nexustest.Handler{
+		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			callbackToken = options.CallbackHeader.Get(commonnexus.CallbackTokenHeader)
+			publicCallbackURL = options.CallbackURL
+			return &nexus.HandlerStartOperationResultAsync{OperationToken: "nexus-completion-after-reset"}, nil
+		},
+		OnCancelOperation: func(ctx context.Context, service, operation, token string, options nexus.CancelOperationOptions) error {
+			select {
+			case cancelCh <- struct{}{}:
+			default:
+			}
+			return nil
+		},
+	})
+
+	run := nexusCancelStartSchedule(s.T(), env, endpointName, client.StartWorkflowOptions{
+		TaskQueue:           taskQueue,
+		WorkflowTaskTimeout: 10 * time.Second,
+	}, 0)
+	nexusCancelAwaitOpState(s.T(), env, run, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED)
+
+	nexusCancelPollAndRespondEmpty(s.T(), env, taskQueue)
+	resetPoint := nexusCancelWFTCompletedEventID(s.T(), env, run, false)
+
+	s.NoError(env.SdkClient().TerminateWorkflow(s.Context(), run.GetID(), run.GetRunID(), "test"))
+	requireCancelDelivered(s.T(), cancelCh)
+
+	// Reset first, so the new run exists and is the one waiting for the outcome.
+	nexusCancelReset(s.T(), env, run, resetPoint)
+	nexusCancelAwaitOpState(s.T(), env, run, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED)
+
+	// Only now does the handler report the outcome, against the superseded run's callback URL.
+	s.NoError(nexusrpc.NewCompletionHTTPClient(nexusrpc.CompletionHTTPClientOptions{
+		Serializer: commonnexus.PayloadSerializer,
+	}).CompleteOperation(s.Context(), publicCallbackURL, nexusrpc.CompleteOperationOptions{
+		Header: nexus.Header{commonnexus.CallbackTokenHeader: callbackToken},
+		Error: &nexus.OperationError{
+			State: nexus.OperationStateCanceled,
+			Cause: errors.New("canceled by handler"),
+		},
+	}))
+
+	// The adopted operation on the new run resolves rather than hanging.
+	await.Require(s.T().Context(), s.T(), func(c *await.T) {
+		desc, err := env.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: run.GetID()},
+		})
+		require.NoError(c, err)
+		require.Empty(c, desc.PendingNexusOperations,
+			"completion delivered after the reset should resolve the operation on the new run")
+	}, 15*time.Second, 500*time.Millisecond)
+}
+
+// Reset to a point after the operation was scheduled but before it started. NexusOperationScheduled
+// replays (so the operation is carried over) while Started does not, leaving it back in "scheduled"
+// and re-invoked — with the same request ID, so a handler that deduplicates reconnects to the
+// operation it already started rather than starting a second one.
+func (s *NexusCancelPolicyTestSuite) TestResetBeforeStarted_ReinvokedWithSameRequestID() {
+	startGate := make(chan struct{})
+	var mu sync.Mutex
+	var startRequestIDs []string
+
+	env := s.newTestEnv()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	endpointName := env.createRandomExternalNexusServer(s.Context(), s.T(), nexustest.Handler{
+		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			mu.Lock()
+			startRequestIDs = append(startRequestIDs, options.RequestID)
+			first := len(startRequestIDs) == 1
+			mu.Unlock()
+			if first {
+				// Hold the first attempt so a workflow task can complete while the operation is still
+				// "scheduled", giving us a reset point between Scheduled and Started.
+				select {
+				case <-startGate:
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				}
+			}
+			return &nexus.HandlerStartOperationResultAsync{OperationToken: "nexus-reset-before-started"}, nil
+		},
+	})
+
+	run := nexusCancelStartSchedule(s.T(), env, endpointName, client.StartWorkflowOptions{
+		TaskQueue:           taskQueue,
+		WorkflowTaskTimeout: 10 * time.Second,
+	}, 0)
+	nexusCancelAwaitOpState(s.T(), env, run, enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED)
+
+	// Signal produces a workflow task while the operation is still scheduled; completing it gives a
+	// reset point that sits after Scheduled but before Started.
+	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "pause", nil))
+	nexusCancelPollAndRespondEmpty(s.T(), env, taskQueue)
+	resetPoint := nexusCancelWFTCompletedEventID(s.T(), env, run, false)
+
+	// Let the operation start, so Started lands after the reset point.
+	close(startGate)
+	nexusCancelAwaitOpState(s.T(), env, run, enumspb.PENDING_NEXUS_OPERATION_STATE_STARTED)
+
+	nexusCancelReset(s.T(), env, run, resetPoint)
+
+	// The reset run re-invokes the start, reusing the original request ID.
+	await.Require(s.T().Context(), s.T(), func(c *await.T) {
+		mu.Lock()
+		defer mu.Unlock()
+		require.GreaterOrEqual(c, len(startRequestIDs), 2, "expected the reset run to re-invoke StartOperation")
+		require.NotEmpty(c, startRequestIDs[0], "request ID must be set, otherwise the reuse check below is vacuous")
+		require.Equal(c, startRequestIDs[0], startRequestIDs[len(startRequestIDs)-1],
+			"re-invocation must reuse the original request ID so the handler can deduplicate")
+	}, 20*time.Second, 200*time.Millisecond)
 }
 
 // --- Standalone (SANO) under REQUEST_CANCEL -------------------------------------------------------

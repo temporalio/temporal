@@ -95,6 +95,7 @@ func nexusCancelStartSchedule(
 	endpointName string,
 	startOpts client.StartWorkflowOptions,
 	scheduleToClose time.Duration,
+	attrOpts ...func(*commandpb.ScheduleNexusOperationCommandAttributes),
 ) client.WorkflowRun {
 	t.Helper()
 	ctx := testcore.NewContext()
@@ -120,6 +121,9 @@ func nexusCancelStartSchedule(
 		}
 		if scheduleToClose > 0 {
 			attrs.ScheduleToCloseTimeout = durationpb.New(scheduleToClose)
+		}
+		for _, opt := range attrOpts {
+			opt(attrs)
 		}
 		_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 			Identity:  "test",
