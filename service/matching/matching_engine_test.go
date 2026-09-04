@@ -3890,7 +3890,11 @@ func (s *matchingEngineSuite) TestAddConsumeWorkflowTasksDBErrors() {
 	s.addConsumeAllWorkflowTasksNonConcurrently(200)
 }
 
-func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int, rangeSize int) {
+// resetBacklogCounter adds tasks then verifies approximate backlog accounting through a simulated
+// TTL/reload cycle. allowUndercount should be true when CreateTasks ConditionFailed faults are
+// injected: that unloads the partition without flushing backlog counts, so the in-memory counter
+// may be strictly less than the number of successfully persisted tasks after reload.
+func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int, rangeSize int, allowUndercount bool) {
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(1 * time.Millisecond)
 	s.matchingEngine.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
 
@@ -3916,9 +3920,15 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 	s.Equal(maxTaskId, pqMgr.backlogMgr.getDB().GetMaxReadLevel(0))
 
 	// validate the approximateBacklogCounter
+	expectedCount := int64(taskCount * numWorkers)
 	await.Requiref(s.T().Context(), s.T(), func(t *await.T) {
-		require.Equal(t, int64(taskCount*numWorkers), totalApproximateBacklogCount(pqMgr.backlogMgr))
-	}, 5*time.Second, 10*time.Millisecond, "backlog counter should be total task count")
+		count := totalApproximateBacklogCount(pqMgr.backlogMgr)
+		if allowUndercount {
+			require.LessOrEqual(t, count, expectedCount)
+		} else {
+			require.Equal(t, expectedCount, count)
+		}
+	}, 5*time.Second, 10*time.Millisecond, "backlog counter should match task count (or under-count when DB faults unload without flush)")
 
 	// Unload the PQM
 	s.matchingEngine.unloadTaskQueuePartition(partitionManager, unloadCauseForce)
@@ -3952,16 +3962,17 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 		require.Equal(t, int64(0), totalApproximateBacklogCount(pqMgr.backlogMgr))
 	}, 4*time.Second, 10*time.Millisecond, "backlog counter should have been reset")
 
+	// Ack level advanced past all tasks once the queue was fully drained.
 	s.Equal(maxTaskId, pqMgr.backlogMgr.InternalStatus()[0].AckLevel)
 }
 
 // TestResettingBacklogCounter tests the scenario where approximateBacklogCounter over-counts and resets it accordingly
 func (s *matchingEngineSuite) TestResetBacklogCounterNoDBErrors() {
-	if s.newMatcher {
-		s.T().Skip("not supported by new matcher; flaky")
+	if s.fairness {
+		s.T().Skip("test is flaky with fairness matcher")
 	}
 
-	s.resetBacklogCounter(2, 2, 2)
+	s.resetBacklogCounter(2, 2, 2, false)
 }
 
 func (s *matchingEngineSuite) TestResetBacklogCounterDBErrors() {
@@ -3973,14 +3984,14 @@ func (s *matchingEngineSuite) TestResetBacklogCounterDBErrors() {
 	s.taskManager.addFault("CreateTasks", "ConditionFailed", 0.1)
 	s.taskManager.addFault("GetTasks", "Unavailable", 0.1)
 
-	s.resetBacklogCounter(2, 2, 2)
+	s.resetBacklogCounter(2, 2, 2, true)
 }
 
 func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterNoDBErrors() {
-	if s.newMatcher {
-		s.T().Skip("test is flaky with new matcher")
+	if s.fairness {
+		s.T().Skip("test is flaky with fairness matcher")
 	}
-	s.resetBacklogCounter(10, 20, 2)
+	s.resetBacklogCounter(10, 20, 2, false)
 }
 
 func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterDBErrors() {
@@ -3994,7 +4005,7 @@ func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterDBErrors() {
 	s.taskManager.addFault("CreateTasks", "ConditionFailed", 0.1)
 	s.taskManager.addFault("GetTasks", "Unavailable", 0.1)
 
-	s.resetBacklogCounter(10, 50, 5)
+	s.resetBacklogCounter(10, 50, 5, true)
 }
 
 // Concurrent tests for testing approximateBacklogCounter
