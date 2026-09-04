@@ -31,7 +31,7 @@ type (
 	StateRebuilder interface {
 		Rebuild(
 			ctx context.Context,
-			now time.Time,
+			startTime time.Time,
 			baseWorkflowIdentifier definition.WorkflowKey,
 			baseBranchToken []byte,
 			baseLastEventID int64,
@@ -42,7 +42,7 @@ type (
 		) (historyi.MutableState, RebuildStats, error)
 		RebuildWithCurrentMutableState(
 			ctx context.Context,
-			now time.Time,
+			startTime time.Time,
 			baseWorkflowIdentifier definition.WorkflowKey,
 			baseBranchToken []byte,
 			baseLastEventID int64,
@@ -102,7 +102,7 @@ func NewStateRebuilder(
 
 func (r *StateRebuilderImpl) Rebuild(
 	ctx context.Context,
-	now time.Time,
+	startTime time.Time,
 	baseWorkflowIdentifier definition.WorkflowKey,
 	baseBranchToken []byte,
 	baseLastEventID int64,
@@ -113,7 +113,7 @@ func (r *StateRebuilderImpl) Rebuild(
 ) (historyi.MutableState, RebuildStats, error) {
 	rebuiltMutableState, lastTxnId, err := r.buildMutableStateFromEvent(
 		ctx,
-		now,
+		startTime,
 		baseWorkflowIdentifier,
 		baseBranchToken,
 		baseLastEventID,
@@ -151,7 +151,7 @@ func (r *StateRebuilderImpl) Rebuild(
 
 func (r *StateRebuilderImpl) RebuildWithCurrentMutableState(
 	ctx context.Context,
-	now time.Time,
+	startTime time.Time,
 	baseWorkflowIdentifier definition.WorkflowKey,
 	baseBranchToken []byte,
 	baseLastEventID int64,
@@ -163,7 +163,7 @@ func (r *StateRebuilderImpl) RebuildWithCurrentMutableState(
 	// Use the original start request ID handlers can still correlate rebuilt callbacks to the correct BufferedStart entry.
 	rebuiltMutableState, lastTxnId, err := r.buildMutableStateFromEvent(
 		ctx,
-		now,
+		startTime,
 		baseWorkflowIdentifier,
 		baseBranchToken,
 		baseLastEventID,
@@ -223,7 +223,7 @@ func copyToRebuildMutableState(
 
 func (r *StateRebuilderImpl) buildMutableStateFromEvent(
 	ctx context.Context,
-	now time.Time,
+	startTime time.Time,
 	baseWorkflowIdentifier definition.WorkflowKey,
 	baseBranchToken []byte,
 	baseLastEventID int64,
@@ -248,7 +248,7 @@ func (r *StateRebuilderImpl) buildMutableStateFromEvent(
 	rebuiltMutableState, stateBuilder := r.initializeBuilders(
 		namespaceEntry,
 		targetWorkflowIdentifier,
-		now,
+		startTime,
 	)
 
 	var lastTxnId int64
@@ -307,7 +307,7 @@ func (r *StateRebuilderImpl) buildMutableStateFromEvent(
 func (r *StateRebuilderImpl) initializeBuilders(
 	namespaceEntry *namespace.Namespace,
 	workflowIdentifier definition.WorkflowKey,
-	now time.Time,
+	startTime time.Time,
 ) (historyi.MutableState, workflow.MutableStateRebuilder) {
 	resetMutableState := workflow.NewMutableState(
 		r.shard,
@@ -316,7 +316,7 @@ func (r *StateRebuilderImpl) initializeBuilders(
 		namespaceEntry,
 		workflowIdentifier.GetWorkflowID(),
 		workflowIdentifier.GetRunID(),
-		now,
+		startTime,
 	)
 	stateBuilder := workflow.NewMutableStateRebuilder(
 		r.shard,

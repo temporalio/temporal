@@ -295,9 +295,9 @@ func runDigestCommand(c *cli.Context) error {
 	// Handle dry-run mode
 	if dryRun {
 		logger.Info("Dry-run mode: printing report to stdout")
-		fmt.Println(FormatReportForDebug(report))
-		fmt.Println("\n--- Slack JSON Payload ---")
 		message := BuildSuccessReportMessage(report)
+		fmt.Println(message.RenderMarkdown())
+		fmt.Println("\n--- Slack JSON Payload ---")
 		payload, err := marshalIndent(message)
 		if err != nil {
 			logger.Error("Failed to marshal message for display", zap.Error(err))

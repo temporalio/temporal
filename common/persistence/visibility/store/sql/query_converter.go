@@ -263,15 +263,15 @@ func (c *SQLQueryConverter) ConvertIsExpr(
 }
 
 func (c *SQLQueryConverter) buildValueExpr(name string, value any) (sqlparser.Expr, error) {
-	// ExecutionStatus is stored as an integer in SQL database.
-	if name == sadefs.ExecutionStatus {
-		// Query converter already validates the value, so there should not be any errors here.
-		status, _ := enumspb.WorkflowExecutionStatusFromString(value.(string))
-		return sqlparser.NewIntVal([]byte(strconv.FormatInt(int64(status), 10))), nil
-	}
-
 	switch v := value.(type) {
 	case string:
+		// ExecutionStatus is stored as an integer in SQL database.
+		if name == sadefs.ExecutionStatus {
+			// Query converter already validates the value, so there should not be any errors here.
+			status, _ := enumspb.WorkflowExecutionStatusFromString(value.(string))
+			return sqlparser.NewIntVal([]byte(strconv.FormatInt(int64(status), 10))), nil
+		}
+
 		// escape strings for safety
 		replacer := strings.NewReplacer(escapeCharMap...)
 		return query.NewUnsafeSQLString(replacer.Replace(v)), nil
