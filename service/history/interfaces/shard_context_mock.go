@@ -23,6 +23,7 @@ import (
 	chasm "go.temporal.io/server/chasm"
 	workflow "go.temporal.io/server/chasm/lib/workflow"
 	archiver "go.temporal.io/server/common/archiver"
+	callbacks "go.temporal.io/server/common/callbacks"
 	clock0 "go.temporal.io/server/common/clock"
 	cluster "go.temporal.io/server/common/cluster"
 	definition "go.temporal.io/server/common/definition"
@@ -136,6 +137,20 @@ func (m *MockShardContext) BusinessIDReuseRateLimiter(namespaceID namespace.ID, 
 func (mr *MockShardContextMockRecorder) BusinessIDReuseRateLimiter(namespaceID, businessID, archetypeID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BusinessIDReuseRateLimiter", reflect.TypeOf((*MockShardContext)(nil).BusinessIDReuseRateLimiter), namespaceID, businessID, archetypeID)
+}
+
+// CallbackValidator mocks base method.
+func (m *MockShardContext) CallbackValidator() callbacks.Validator {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CallbackValidator")
+	ret0, _ := ret[0].(callbacks.Validator)
+	return ret0
+}
+
+// CallbackValidator indicates an expected call of CallbackValidator.
+func (mr *MockShardContextMockRecorder) CallbackValidator() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CallbackValidator", reflect.TypeOf((*MockShardContext)(nil).CallbackValidator))
 }
 
 // ChasmRegistry mocks base method.
@@ -983,6 +998,20 @@ func (m *MockControllableContext) BusinessIDReuseRateLimiter(namespaceID namespa
 func (mr *MockControllableContextMockRecorder) BusinessIDReuseRateLimiter(namespaceID, businessID, archetypeID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BusinessIDReuseRateLimiter", reflect.TypeOf((*MockControllableContext)(nil).BusinessIDReuseRateLimiter), namespaceID, businessID, archetypeID)
+}
+
+// CallbackValidator mocks base method.
+func (m *MockControllableContext) CallbackValidator() callbacks.Validator {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CallbackValidator")
+	ret0, _ := ret[0].(callbacks.Validator)
+	return ret0
+}
+
+// CallbackValidator indicates an expected call of CallbackValidator.
+func (mr *MockControllableContextMockRecorder) CallbackValidator() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CallbackValidator", reflect.TypeOf((*MockControllableContext)(nil).CallbackValidator))
 }
 
 // ChasmRegistry mocks base method.

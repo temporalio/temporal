@@ -16,17 +16,20 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	"go.temporal.io/server/common/callbacks"
+	commoncallbacks "go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func newCallbackTestContext() *chasm.MockMutableContext {
-	return &chasm.MockMutableContext{
+	ctx := &chasm.MockMutableContext{
 		MockContext: chasm.MockContext{
 			HandleNow: func(chasm.Component) time.Time { return defaultTime },
 			HandleExecutionKey: func() chasm.ExecutionKey {
@@ -43,6 +46,29 @@ func newCallbackTestContext() *chasm.MockMutableContext {
 			}),
 		},
 	}
+	// Attaching completion callbacks runs Callback component code, which reads its own values off
+	// the chasm context. Register them the same way the framework does in production, so the
+	// callback library keeps its context key unexported.
+	ctx.RegisterLibrary(callback.NewNilLibrary())
+	return ctx
+}
+
+// defaultCallbackValidator returns a Validator whose limits are generous enough not to interfere
+// with tests that are not exercising them.
+func defaultCallbackValidator(t *testing.T) commoncallbacks.Validator {
+	t.Helper()
+	cfg := test.NewCallbacksValidatorConfig()
+	v, err := commoncallbacks.NewValidator(cfg)
+	require.NoError(t, err)
+	return v
+}
+
+func validatorWithMaxExecutions(t *testing.T, maxExecutionCallbacks int) commoncallbacks.Validator {
+	cfg := test.NewCallbacksValidatorConfig()
+	cfg.MaxCallbacksPerExecution = func(string) int { return maxExecutionCallbacks }
+	v, err := commoncallbacks.NewValidator(cfg)
+	require.NoError(t, err)
+	return v
 }
 
 func TestNewStandaloneOperationAttachesCompletionCallbacks(t *testing.T) {
@@ -67,7 +93,7 @@ func TestNewStandaloneOperationAttachesCompletionCallbacks(t *testing.T) {
 		ctx := newCallbackTestContext()
 
 		req := newStartReq(newNexusCallback())
-		op, err := newStandaloneOperation(ctx, req, 10, newTestLinkValidator(10, 10))
+		op, err := newStandaloneOperation(ctx, req, defaultCallbackValidator(t), newTestLinkValidator(10, 10))
 		require.NoError(t, err)
 		require.Equal(t, nexusoperationpb.OPERATION_STATUS_SCHEDULED, op.Status)
 
@@ -80,7 +106,7 @@ func TestNewStandaloneOperationAttachesCompletionCallbacks(t *testing.T) {
 	t.Run("WithoutCallbacks", func(t *testing.T) {
 		ctx := newCallbackTestContext()
 
-		op, err := newStandaloneOperation(ctx, newStartReq(), 10, newTestLinkValidator(10, 10))
+		op, err := newStandaloneOperation(ctx, newStartReq(), defaultCallbackValidator(t), newTestLinkValidator(10, 10))
 		require.NoError(t, err)
 		require.Nil(t, op.Callbacks)
 	})
@@ -91,9 +117,7 @@ func TestNewStandaloneOperationAttachesCompletionCallbacks(t *testing.T) {
 		_, err := newStandaloneOperation(ctx, newStartReq(
 			newNexusCallback(),
 			newNexusCallback(),
-		), 1, newTestLinkValidator(10, 10))
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPreconditionErr)
+		), validatorWithMaxExecutions(t, 1), newTestLinkValidator(10, 10))
 		require.ErrorContains(t, err, "cannot attach more than 1 callbacks")
 	})
 }
@@ -123,7 +147,7 @@ func TestAddCompletionCallbacks(t *testing.T) {
 			cb2,
 		}
 
-		err := op.addCompletionCallbacks(ctx, "req-id", cbs, 10)
+		err := op.addCompletionCallbacks(ctx, "req-id", cbs, defaultCallbackValidator(t))
 		require.NoError(t, err)
 		require.Len(t, op.Callbacks, 2)
 
@@ -157,7 +181,7 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		ctx := newCallbackTestContext()
 		op := newScheduledTestOperation(t, ctx)
 
-		require.NoError(t, op.addCompletionCallbacks(ctx, "req-id", nil, 10))
+		require.NoError(t, op.addCompletionCallbacks(ctx, "req-id", nil, defaultCallbackValidator(t)))
 		require.Nil(t, op.Callbacks)
 	})
 
@@ -167,8 +191,8 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		op := newScheduledTestOperation(t, ctx)
 		cbs := []*commonpb.Callback{newNexusCallback()}
 
-		require.NoError(t, op.addCompletionCallbacks(ctx, "req-id", cbs, 10))
-		require.NoError(t, op.addCompletionCallbacks(ctx, "req-id", cbs, 10))
+		require.NoError(t, op.addCompletionCallbacks(ctx, "req-id", cbs, defaultCallbackValidator(t)))
+		require.NoError(t, op.addCompletionCallbacks(ctx, "req-id", cbs, defaultCallbackValidator(t)))
 		require.Len(t, op.Callbacks, 1)
 	})
 
@@ -181,12 +205,12 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		op := newScheduledTestOperation(t, ctx)
 		cbs := []*commonpb.Callback{newNexusCallback()}
 
-		require.NoError(t, op.addCompletionCallbacks(ctx, "req-id", cbs, 10))
+		require.NoError(t, op.addCompletionCallbacks(ctx, "req-id", cbs, defaultCallbackValidator(t)))
 		require.NoError(t, TransitionSucceeded.Apply(op, ctx, EventSucceeded{}))
 		require.Equal(t, callbackspb.CALLBACK_STATUS_SCHEDULED, op.Callbacks["req-id-0"].Get(ctx).Status)
 
 		tasksBefore := len(ctx.Tasks)
-		require.NoError(t, op.addCompletionCallbacks(ctx, "req-id", cbs, 10))
+		require.NoError(t, op.addCompletionCallbacks(ctx, "req-id", cbs, defaultCallbackValidator(t)))
 
 		// The retry must leave the already-scheduled callback alone: re-attaching would reset it to
 		// STANDBY, stranding a callback the terminal transition had already released for delivery.
@@ -200,8 +224,8 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		op := newScheduledTestOperation(t, ctx)
 		cbs := []*commonpb.Callback{newNexusCallback()}
 
-		require.NoError(t, op.addCompletionCallbacks(ctx, "req-1", cbs, 10))
-		require.NoError(t, op.addCompletionCallbacks(ctx, "req-2", cbs, 10))
+		require.NoError(t, op.addCompletionCallbacks(ctx, "req-1", cbs, defaultCallbackValidator(t)))
+		require.NoError(t, op.addCompletionCallbacks(ctx, "req-2", cbs, defaultCallbackValidator(t)))
 		require.Len(t, op.Callbacks, 2)
 	})
 
@@ -210,10 +234,10 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		op := newScheduledTestOperation(t, ctx)
 		cbs := []*commonpb.Callback{newNexusCallback(), newNexusCallback()}
 
-		err := op.addCompletionCallbacks(ctx, "req-id", cbs, 1)
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPreconditionErr)
-		require.Contains(t, err.Error(), "cannot attach more than 1 callbacks")
+		callbackValidator := validatorWithMaxExecutions(t, 1)
+
+		err := op.addCompletionCallbacks(ctx, "req-id", cbs, callbackValidator)
+		require.ErrorContains(t, err, "cannot attach more than 1 callbacks")
 		require.Empty(t, op.Callbacks)
 	})
 
@@ -221,17 +245,43 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		ctx := newCallbackTestContext()
 		op := newScheduledTestOperation(t, ctx)
 
+		callbackValidator := validatorWithMaxExecutions(t, 2)
+
 		require.NoError(t, op.addCompletionCallbacks(ctx, "req-1", []*commonpb.Callback{
 			newNexusCallback(),
-		}, 2))
+		}, callbackValidator))
 
 		err := op.addCompletionCallbacks(ctx, "req-2", []*commonpb.Callback{
 			newNexusCallback(),
 			newNexusCallback(),
-		}, 2)
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPreconditionErr)
-		require.Contains(t, err.Error(), "1 callbacks already attached")
+		}, callbackValidator)
+		require.ErrorContains(t, err, "1 callbacks already attached")
+		require.Len(t, op.Callbacks, 1)
+	})
+
+	// The frontend bounds the source context on one request. Only this check bounds what accumulates
+	// across the several requests an on-conflict attach can make.
+	t.Run("RejectsExceedingTheSourceContextLimitWithAlreadyAttachedCallbacks", func(t *testing.T) {
+		ctx := newCallbackTestContext()
+		op := newScheduledTestOperation(t, ctx)
+
+		// Callback validator capping the aggregate source context payload size to ~1,500 bytes.
+		cfg := test.NewCallbacksValidatorConfig()
+		cfg.TotalNexusHandlerSourceContextMaxSize = func(string) int { return 1500 }
+		callbackValidator, err := callbacks.NewValidator(cfg)
+		require.NoError(t, err)
+
+		// Each request is within the limit on its own.
+		require.NoError(t, op.addCompletionCallbacks(ctx, "req-1", []*commonpb.Callback{
+			newNexusHandlerCallback(900),
+		}, callbackValidator))
+
+		err = op.addCompletionCallbacks(ctx, "req-2", []*commonpb.Callback{
+			newNexusHandlerCallback(900),
+		}, callbackValidator)
+		// req-2 is within the limit on its own, so only the accumulated total can have rejected it.
+		require.ErrorContains(t, err, "cannot attach more than 1500 bytes of callback source_context")
+		// The rejected request attached nothing.
 		require.Len(t, op.Callbacks, 1)
 	})
 
@@ -242,7 +292,7 @@ func TestAddCompletionCallbacks(t *testing.T) {
 
 		err := op.addCompletionCallbacks(ctx, "req-id", []*commonpb.Callback{
 			newNexusCallback(),
-		}, 10)
+		}, defaultCallbackValidator(t))
 		var failedPreconditionErr *serviceerror.FailedPrecondition
 		require.ErrorAs(t, err, &failedPreconditionErr)
 		require.Contains(t, err.Error(), "cannot attach callbacks to a closed nexus operation")
@@ -258,7 +308,7 @@ func TestAddCompletionCallbacks(t *testing.T) {
 
 		err := op.addCompletionCallbacks(ctx, "", []*commonpb.Callback{
 			newNexusCallback(),
-		}, 10)
+		}, defaultCallbackValidator(t))
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.Contains(t, err.Error(), "without a request ID")
@@ -335,7 +385,7 @@ func TestScheduleCompletionCallbacksOnTerminalTransition(t *testing.T) {
 			op := newScheduledTestOperation(t, ctx)
 			require.NoError(t, op.addCompletionCallbacks(ctx, "req-id", []*commonpb.Callback{
 				newNexusCallback(),
-			}, 10))
+			}, defaultCallbackValidator(t)))
 
 			tasksBefore := len(ctx.Tasks)
 			require.NoError(t, tc.apply(op, ctx))
@@ -467,7 +517,7 @@ func TestCompletionCallbacksRoundTripThroughTheTree(t *testing.T) {
 	op.Visibility = chasm.NewComponentField(ctx, chasm.NewVisibilityWithData(ctx, nil, nil))
 	require.NoError(t, op.addCompletionCallbacks(ctx, "req-id", []*commonpb.Callback{
 		newNexusCallback(),
-	}, 10))
+	}, defaultCallbackValidator(t)))
 	require.NoError(t, root.SetRootComponent(op))
 	_, err := root.CloseTransaction()
 	require.NoError(t, err)
@@ -507,7 +557,7 @@ func TestDescribeResponseIncludesCompletionCallbacks(t *testing.T) {
 		op := newOp(ctx)
 		require.NoError(t, op.addCompletionCallbacks(ctx, "req-id", []*commonpb.Callback{
 			newNexusCallback(),
-		}, 10))
+		}, defaultCallbackValidator(t)))
 
 		resp, err := op.buildDescribeResponse(ctx, req)
 		require.NoError(t, err)

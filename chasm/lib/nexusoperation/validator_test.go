@@ -45,14 +45,15 @@ func mustNewCallbackValidator() callbacks.Validator {
 		},
 	}
 	cfg := callbacks.ValidatorConfig{
-		MaxCallbacksPerExecution:         func(string) int { return 10 },
-		MaxIDLengthLimit:                 func() int { return 10 },
-		URLMaxLength:                     func(string) int { return 1000 },
-		HeaderMaxSize:                    func(string) int { return 4096 },
-		EndpointRules:                    func(string) callbacks.AddressMatchRules { return allowAllAddresses },
-		MaxServiceNameLength:             func(string) int { return 10 },
-		MaxOperationNameLength:           func(string) int { return 10 },
-		NexusHandlerSourceContextMaxSize: func(string) int { return 1000 },
+		MaxCallbacksPerExecution:              func(string) int { return 10 },
+		MaxIDLengthLimit:                      func() int { return 10 },
+		URLMaxLength:                          func(string) int { return 1000 },
+		HeaderMaxSize:                         func(string) int { return 4096 },
+		EndpointRules:                         func(string) callbacks.AddressMatchRules { return allowAllAddresses },
+		MaxServiceNameLength:                  func(string) int { return 10 },
+		MaxOperationNameLength:                func(string) int { return 10 },
+		NexusHandlerSourceContextMaxSize:      func(string) int { return 1000 },
+		TotalNexusHandlerSourceContextMaxSize: func(string) int { return 1500 },
 	}
 
 	v, err := callbacks.NewValidator(cfg)
@@ -73,6 +74,25 @@ func newNexusCallback() *commonpb.Callback {
 				},
 			},
 		},
+	}
+}
+
+// newNexusHandlerCallback returns a NexusHandler-variant callback whose source context serializes to approximately sourceCtxSize bytes.
+func newNexusHandlerCallback(sourceCtxSize int) *commonpb.Callback {
+	sourceContext := &commonpb.Payload{Data: make([]byte, sourceCtxSize)}
+	return &commonpb.Callback{
+		Variant: &commonpb.Callback_NexusHandler_{NexusHandler: &commonpb.Callback_NexusHandler{
+			TaskQueueName: "wc-queue",
+			Service:       "Adapter",
+			Operation:     "Deliver",
+			SourceContext: sourceContext,
+		}},
+	}
+}
+
+func enableNexusHandlerCallbacks(c *Config) {
+	c.EnabledCallbackKinds = func(string) []callbacks.Kind {
+		return []callbacks.Kind{callbacks.KindNexus, callbacks.KindNexusHandler}
 	}
 }
 
@@ -390,6 +410,32 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			},
 		},
 		{
+			// The default for enabledCallbackKinds is empty, i.e. the feature is off.
+			name: "completion_callbacks - rejected when no kinds are enabled",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.CompletionCallbacks = []*commonpb.Callback{newNexusCallback()}
+			},
+			mutateConfig: func(c *Config) {
+				c.EnabledCallbackKinds = func(string) []callbacks.Kind { return nil }
+			},
+			wantErr: "completion callbacks are not enabled for this namespace",
+		},
+		{
+			name: "completion_callbacks - rejects a kind that is not enabled",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.CompletionCallbacks = []*commonpb.Callback{newNexusHandlerCallback(0)}
+			},
+			wantErr: "nexusHandler callbacks are not enabled for this execution type",
+		},
+		{
+			name: "source_context - rejects a single callback over the per-callback limit",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.CompletionCallbacks = []*commonpb.Callback{newNexusHandlerCallback(1001)}
+			},
+			mutateConfig: enableNexusHandlerCallbacks,
+			wantErr:      "source_context exceeds size limit",
+		},
+		{
 			name: "links - accepts a valid link",
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.Links = []*commonpb.Link{testLink("wf-id")}
@@ -411,6 +457,43 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 				for i := range 11 {
 					r.Links = append(r.Links, testLink(fmt.Sprintf("wf-%d", i)))
 				}
+			},
+			wantErr: "cannot attach more than 10 links per request",
+		},
+		{
+			// Links ride along on callbacks as well as on the request, and are validated whether or
+			// not the request brought any of its own.
+			name: "links - rejects an incomplete variant carried by a callback",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				cb := newNexusCallback()
+				cb.Links = []*commonpb.Link{{Variant: &commonpb.Link_WorkflowEvent_{
+					WorkflowEvent: &commonpb.Link_WorkflowEvent{WorkflowId: "wf-id", RunId: "wf-run-id"},
+				}}}
+				r.CompletionCallbacks = []*commonpb.Callback{cb}
+			},
+			wantErr: "must not have an empty namespace",
+		},
+		{
+			name: "links - rejects an oversized link carried by a callback",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				// newTestLinkValidator below allows 4000 bytes per link.
+				cb := newNexusCallback()
+				cb.Links = []*commonpb.Link{testLink(strings.Repeat("x", 4001))}
+				r.CompletionCallbacks = []*commonpb.Callback{cb}
+			},
+			wantErr: "link exceeds allowed size of 4000",
+		},
+		{
+			// A callback's links count toward the same per-request limit as the request's own, so
+			// neither side can smuggle links past it by splitting them across the two.
+			name: "links - counts callback links toward the per-request limit",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				cb := newNexusCallback()
+				for i := range 6 {
+					r.Links = append(r.Links, testLink(fmt.Sprintf("req-wf-%d", i)))
+					cb.Links = append(cb.Links, testLink(fmt.Sprintf("cb-wf-%d", i)))
+				}
+				r.CompletionCallbacks = []*commonpb.Callback{cb}
 			},
 			wantErr: "cannot attach more than 10 links per request",
 		},
@@ -474,9 +557,12 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutateConfig != nil {
 				tc.mutateConfig(&caseConfig)
 			}
+
 			cbValidator := mustNewCallbackValidator()
-			err := newValidator(&caseConfig, log.NewNoopLogger(), nil, saValidator, cbValidator, newTestLinkValidator(10, 10)).
-				validateAndNormalizeStartRequest(context.Background(), req)
+			logger := log.NewNoopLogger()
+			v := newValidator(&caseConfig, logger, nil, saValidator, cbValidator, newTestLinkValidator(10, 10))
+
+			err := v.validateAndNormalizeStartRequest(context.Background(), req)
 			if tc.wantErr != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -489,6 +575,61 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Tests for the the aggregate cap on NexusHandler-callback source context payloads.
+func TestValidateStartRequestSourceContextAggregate(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	newRequest := func(cbs ...*commonpb.Callback) *workflowservice.StartNexusOperationExecutionRequest {
+		return &workflowservice.StartNexusOperationExecutionRequest{
+			Namespace:           "ns-name",
+			OperationId:         "op-id",
+			RequestId:           "req-id",
+			Endpoint:            "endpoint",
+			Service:             "service",
+			Operation:           "operation",
+			CompletionCallbacks: cbs,
+		}
+	}
+
+	config := &Config{
+		MaxIDLengthLimit:                   func() int { return 50 },
+		MaxServiceNameLength:               func(string) int { return 10 },
+		MaxOperationNameLength:             func(string) int { return 10 },
+		PayloadSizeLimit:                   func(string) int { return 20 },
+		PayloadSizeLimitWarn:               func(string) int { return 10 },
+		MaxUserMetadataSummarySize:         func(string) int { return 10 },
+		MaxUserMetadataDetailsSize:         func(string) int { return 20 },
+		MaxOperationHeaderSize:             func(string) int { return 10 },
+		DisallowedOperationHeaders:         func() []string { return nil },
+		MaxOperationScheduleToCloseTimeout: func(string) time.Duration { return time.Hour },
+	}
+	enableNexusHandlerCallbacks(config)
+	v := newTestValidator(config)
+
+	t.Run("AcceptsCallbacksWithinTheAggregateLimit", func(t *testing.T) {
+		err := v.validateAndNormalizeStartRequest(ctx, newRequest(newNexusHandlerCallback(900)))
+		require.NoError(t, err)
+	})
+
+	t.Run("RejectsCallbacksOverTheAggregateLimitTogether", func(t *testing.T) {
+		err := v.validateAndNormalizeStartRequest(
+			ctx,
+			newRequest(newNexusHandlerCallback(900), newNexusHandlerCallback(900)))
+
+		require.ErrorContains(t, err, "cannot attach more than 1500 bytes of callback source_context")
+	})
+
+	t.Run("NexusCallbacksCarryNoSourceContext", func(t *testing.T) {
+		cbs := []*commonpb.Callback{newNexusHandlerCallback(900)}
+		for range 5 {
+			cbs = append(cbs, newNexusCallback())
+		}
+		err := v.validateAndNormalizeStartRequest(ctx, newRequest(cbs...))
+		require.NoError(t, err)
+	})
 }
 
 func TestValidateDescribeNexusOperationExecutionRequest(t *testing.T) {

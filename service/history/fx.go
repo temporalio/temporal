@@ -16,6 +16,7 @@ import (
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	commoncache "go.temporal.io/server/common/cache"
+	commoncallbacks "go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -73,6 +74,7 @@ var Module = fx.Options(
 	archival.Module,
 	ChasmEngineModule,
 	chasmtests.Module,
+	fx.Provide(callbackValidatorProvider),
 	fx.Provide(CallbackDestinationBlockedProvider),
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(workflow.NewCommandHandlerRegistry),
@@ -133,6 +135,25 @@ var Module = fx.Options(
 	chasmworkflow.Module,
 	chasmworkflow.HistoryHandlerModule,
 )
+
+// callbackValidatorProvider creates a callback Validator for the history service, which uses it to
+// re-apply the aggregate callback limits when callbacks are attached to a running execution.
+//
+// It must stay in sync with the frontend provider of the same name (service/frontend/fx.go), so that
+// the limits a request is admitted under are the ones re-applied against the execution's state.
+func callbackValidatorProvider(dc *dynamicconfig.Collection) (commoncallbacks.Validator, error) {
+	return commoncallbacks.NewValidator(commoncallbacks.ValidatorConfig{
+		MaxCallbacksPerExecution:              callback.MaxPerExecution.Get(dc),
+		MaxIDLengthLimit:                      dynamicconfig.MaxIDLengthLimit.Get(dc),
+		URLMaxLength:                          dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
+		HeaderMaxSize:                         dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
+		EndpointRules:                         callback.AllowedAddresses.Get(dc),
+		MaxServiceNameLength:                  chasmnexus.MaxServiceNameLength.Get(dc),
+		MaxOperationNameLength:                chasmnexus.MaxOperationNameLength.Get(dc),
+		NexusHandlerSourceContextMaxSize:      callback.NexusHandlerSourceContextMaxSize.Get(dc),
+		TotalNexusHandlerSourceContextMaxSize: callback.TotalNexusHandlerSourceContextMaxSize.Get(dc),
+	})
+}
 
 // CallbackDestinationBlockedProvider lets the callback library report a callback as BLOCKED while
 // the outbound queue's circuit breaker for its destination is open. Only the history service runs

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"time"
 
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
@@ -80,6 +81,7 @@ type invocationTaskHandlerOptions struct {
 	HTTPCallerProvider HTTPCallerProvider
 	HTTPTraceProvider  commonnexus.HTTPClientTraceProvider
 	HistoryClient      resource.HistoryClient
+	MatchingClient     resource.MatchingClient
 }
 
 type invocationTaskHandler struct {
@@ -91,6 +93,7 @@ type invocationTaskHandler struct {
 	httpCallerProvider HTTPCallerProvider
 	httpTraceProvider  commonnexus.HTTPClientTraceProvider
 	historyClient      resource.HistoryClient
+	matchingClient     resource.MatchingClient
 }
 
 func newInvocationTaskHandler(opts invocationTaskHandlerOptions) *invocationTaskHandler {
@@ -102,6 +105,7 @@ func newInvocationTaskHandler(opts invocationTaskHandlerOptions) *invocationTask
 		httpCallerProvider: opts.HTTPCallerProvider,
 		httpTraceProvider:  opts.HTTPTraceProvider,
 		historyClient:      opts.HistoryClient,
+		matchingClient:     opts.MatchingClient,
 	}
 }
 
@@ -147,6 +151,21 @@ func (h *invocationTaskHandler) Execute(
 		},
 	)
 	return invokable.WrapError(result, saveErr)
+}
+
+// emitMetrics emits the Count and Latency metrics for the invocation.
+func (h *invocationTaskHandler) emitMetrics(
+	startTime time.Time,
+	ns *namespace.Namespace,
+	destination string,
+	outcome string) {
+	namespaceTag := metrics.NamespaceTag(ns.Name().String())
+	destinationTag := metrics.DestinationTag(destination)
+	outcomeTag := metrics.OutcomeTag(outcome)
+	tags := []metrics.Tag{namespaceTag, destinationTag, outcomeTag}
+
+	h.metricsHandler.Counter(RequestCounter.Name()).Record(1, tags...)
+	h.metricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), tags...)
 }
 
 type backoffTaskHandler struct {

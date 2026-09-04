@@ -1204,6 +1204,50 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_NonNexusCallbac
 	}
 }
 
+// A workflow's NexusHandler callbacks are bounded by the total source context they carry, not just
+// by each payload on its own. Workflow.AddCompletionCallbacks re-checks this against the callbacks a
+// running workflow already has, which the frontend cannot see.
+func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_CallbackSourceContextAggregate() {
+	ctx := s.T().Context()
+
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespace.NewID(), nil).AnyTimes()
+	config := s.newConfig()
+	config.WorkflowEnabledCallbackKinds = dc.GetTypedPropertyFnFilteredByNamespace(
+		[]callbacks.Kind{callbacks.KindNexusHandler},
+	)
+	wh := s.getWorkflowHandler(config)
+
+	nexusHandlerCallback := func(sourceCtxSize int) *commonpb.Callback {
+		return &commonpb.Callback{
+			Variant: &commonpb.Callback_NexusHandler_{NexusHandler: &commonpb.Callback_NexusHandler{
+				TaskQueueName: "completions-task-queue",
+				Service:       "HTTPAdapter",
+				Operation:     "DeliverAsWebhook",
+				SourceContext: &commonpb.Payload{Data: make([]byte, sourceCtxSize)},
+			}},
+		}
+	}
+	newRequest := func(cbs ...*commonpb.Callback) *workflowservice.StartWorkflowExecutionRequest {
+		return &workflowservice.StartWorkflowExecutionRequest{
+			Namespace:           "test-namespace",
+			WorkflowId:          "workflow-id",
+			WorkflowType:        &commonpb.WorkflowType{Name: "workflow-type"},
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: "task-queue"},
+			RequestId:           uuid.NewString(),
+			CompletionCallbacks: cbs,
+		}
+	}
+
+	// Each callback is within the 4096-byte per-callback cap; only their total is over.
+	_, err := wh.StartWorkflowExecution(ctx, newRequest(
+		nexusHandlerCallback(3000), nexusHandlerCallback(3000),
+	))
+	s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+	s.ErrorContains(err, "source_context exceeds size limit.")
+	s.ErrorContains(err, "Limit=1000") // Size set in the result from test.NewCallbackValidatorConfig()
+}
+
 func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_InvalidAggregatedLinks() {
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).AnyTimes().Return(nil, nil)
 	config := s.newConfig()

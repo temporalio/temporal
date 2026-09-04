@@ -101,18 +101,21 @@ func (v *validator) validateAndNormalizeStartRequest(
 	// Callbacks
 	cbs := req.GetCompletionCallbacks()
 	if len(cbs) > 0 {
-		opts := callbacks.ValidatorOptions{
-			EnabledKinds: v.config.EnabledCallbackKinds(ns),
+		enabledKinds := v.config.EnabledCallbackKinds(ns)
+		if len(enabledKinds) == 0 {
+			return serviceerror.NewInvalidArgument("completion callbacks are not enabled for this namespace")
 		}
+		opts := callbacks.ValidatorOptions{EnabledKinds: enabledKinds}
+		// Operation.addCompletionCallbacks re-checks the aggregate limits against the callbacks
+		// already attached to a running operation, which the frontend cannot see.
 		if err := v.callbackValidator.Validate(ctx, ns, cbs, opts); err != nil {
 			return err
 		}
 	}
-	// Links
-	if links := req.GetLinks(); len(links) > 0 {
-		if err := v.linkValidator.ValidateRequestWithCallbacks(ns, links, cbs); err != nil {
-			return err
-		}
+	// Links, including those carried by the request's callbacks.
+	links := req.GetLinks()
+	if err := v.linkValidator.ValidateRequestWithCallbacks(ns, links, cbs); err != nil {
+		return err
 	}
 	if err := v.validateOnConflictOptions(req); err != nil {
 		return err

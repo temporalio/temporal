@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -126,6 +127,9 @@ type (
 		// ChasmWorkflowRegistry returns the CHASM workflow library's event/command registry.
 		ChasmWorkflowRegistry() *chasmworkflow.Registry
 		EndpointRegistry() chasm.EndpointRegistry
+		// CallbackValidator returns the validator used to re-apply the aggregate completion callback
+		// limits when callbacks are attached to a running execution.
+		CallbackValidator() callbacks.Validator
 
 		BusinessIDReuseRateLimiter(namespaceID namespace.ID, businessID string, archetypeID chasm.ArchetypeID) quotas.RateLimiter
 	}

@@ -3,6 +3,7 @@ package activity
 import (
 	"errors"
 	"fmt"
+	"maps"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
@@ -18,6 +19,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
+	commoncallbacks "go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -300,7 +302,7 @@ func (a *Activity) addCompletionCallbacks(
 	ctx chasm.MutableContext,
 	requestID string,
 	completionCallbacks []*commonpb.Callback,
-	maxCallbacks int,
+	callbackValidator commoncallbacks.Validator,
 ) error {
 	if len(completionCallbacks) == 0 {
 		return nil
@@ -309,13 +311,18 @@ func (a *Activity) addCompletionCallbacks(
 		return serviceerror.NewFailedPrecondition("cannot attach callbacks to a closed activity")
 	}
 
-	currentCount := len(a.Callbacks)
-	if len(completionCallbacks)+currentCount > maxCallbacks {
-		return serviceerror.NewFailedPreconditionf(
-			"cannot attach more than %d callbacks to an activity (%d callbacks already attached)",
-			maxCallbacks,
-			currentCount,
-		)
+	// Re-check the aggregate limits against what is already attached, since frontend's validation
+	// doesn't know the current state of the execution.
+	totalSourceContextSize := callback.SumNexusHandlerSourceContextSize(ctx, maps.Values(a.Callbacks))
+	if err := callbackValidator.ValidateAdditions(
+		ctx.NamespaceEntry().Name().String(),
+		completionCallbacks,
+		commoncallbacks.AdditionOptions{
+			CurrentCallbacksAttached:                          len(a.Callbacks),
+			CurrentTotalNexusHandlerCallbackSourceContextSize: totalSourceContextSize,
+		},
+	); err != nil {
+		return err
 	}
 
 	if a.Callbacks == nil {

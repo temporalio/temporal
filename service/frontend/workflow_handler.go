@@ -693,6 +693,8 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		opts := callbacks.ValidatorOptions{
 			EnabledKinds: wh.config.WorkflowEnabledCallbackKinds(namespaceName.String()),
 		}
+		// Workflow.AddCompletionCallbacks re-checks the aggregate limits against the callbacks
+		// already attached to a running workflow, which the frontend cannot see.
 		if err := wh.callbackValidator.Validate(ctx, namespaceName.String(), cbs, opts); err != nil {
 			return nil, err
 		}
@@ -5568,6 +5570,8 @@ func (wh *WorkflowHandler) prepareUpdateWorkflowRequest(
 		opts := callbacks.ValidatorOptions{
 			EnabledKinds: wh.config.WorkflowEnabledCallbackKinds(namespaceName.String()),
 		}
+		// Workflow.AddUpdateCompletionCallbacks re-checks the aggregate limits against the callbacks
+		// already attached to a running workflow, which the frontend cannot see.
 		if err := wh.callbackValidator.Validate(ctx, namespaceName.String(), cbs, opts); err != nil {
 			return err
 		}

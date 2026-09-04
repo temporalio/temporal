@@ -272,7 +272,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting_OnConflictOpt
 				AttachCompletionCallbacks: true,
 				AttachLinks:               true,
 			},
-			ErrMessage:              "cannot attach more than 1 callbacks to a workflow (1 callbacks already attached)",
+			ErrMessage:              "cannot attach more than 1 callbacks to an execution (1 callbacks already attached)",
 			MaxCallbacksPerWorkflow: 1,
 		},
 	}

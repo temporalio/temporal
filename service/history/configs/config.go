@@ -1,7 +1,6 @@
 package configs
 
 import (
-	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -77,7 +76,6 @@ type Config struct {
 	EnableUpdateWorkflowModeIgnoreCurrent      dynamicconfig.BoolPropertyFn
 	EnableTransitionHistory                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	MaxCallbacksPerWorkflow                    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxCallbacksPerExecution                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxCallbacksPerUpdateID                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableChasm                                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMSkipPersistence                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -530,7 +528,6 @@ func NewConfig(
 		EnableUpdateWorkflowModeIgnoreCurrent:      dynamicconfig.EnableUpdateWorkflowModeIgnoreCurrent.Get(dc),
 		EnableTransitionHistory:                    dynamicconfig.EnableTransitionHistory.Get(dc),
 		MaxCallbacksPerWorkflow:                    dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
-		MaxCallbacksPerExecution:                   callback.MaxPerExecution.Get(dc),
 		MaxCallbacksPerUpdateID:                    dynamicconfig.MaxCallbacksPerUpdateID.Get(dc),
 		EnableChasm:                                dynamicconfig.EnableChasm.Get(dc),
 		EnableCHASMSkipPersistence:                 dynamicconfig.EnableCHASMSkipPersistence.Get(dc),

@@ -39,6 +39,7 @@ import (
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	commoncallbacks "go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/contextutil"
@@ -273,6 +274,7 @@ type (
 		logger                 log.Logger
 		metricsHandler         metrics.Handler
 		endpointRegistry       chasm.EndpointRegistry
+		callbackValidator      commoncallbacks.Validator
 		stateMachineNode       *hsm.Node
 		subStateMachineDeleted bool
 
@@ -369,14 +371,15 @@ func NewMutableState(
 
 		QueryRegistry: NewQueryRegistry(),
 
-		shard:            shard,
-		clusterMetadata:  shard.GetClusterMetadata(),
-		eventsCache:      eventsCache,
-		config:           shard.GetConfig(),
-		timeSource:       shard.GetTimeSource(),
-		logger:           logger,
-		metricsHandler:   shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.WorkflowContextScope)),
-		endpointRegistry: shard.EndpointRegistry(),
+		shard:             shard,
+		clusterMetadata:   shard.GetClusterMetadata(),
+		eventsCache:       eventsCache,
+		config:            shard.GetConfig(),
+		timeSource:        shard.GetTimeSource(),
+		logger:            logger,
+		metricsHandler:    shard.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.WorkflowContextScope)),
+		endpointRegistry:  shard.EndpointRegistry(),
+		callbackValidator: shard.CallbackValidator(),
 	}
 
 	s.executionInfo = &persistencespb.WorkflowExecutionInfo{
@@ -3490,9 +3493,9 @@ func (ms *MutableStateImpl) addUpdateCallbacksChasm(
 	}
 
 	nsName := ms.GetNamespaceEntry().Name().String()
-	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerWorkflow(nsName)
 	maxCallbacksPerUpdateID := ms.config.MaxCallbacksPerUpdateID(nsName)
-	return wf.AddUpdateCompletionCallbacks(ctx, event.EventTime, updateID, requestID, updateCallbacks, maxCallbacksPerWorkflow, maxCallbacksPerUpdateID)
+	return wf.AddUpdateCompletionCallbacks(
+		ctx, event.EventTime, updateID, requestID, updateCallbacks, ms.callbackValidator, maxCallbacksPerUpdateID)
 }
 
 func (ms *MutableStateImpl) addCompletionCallbacks(
@@ -3523,6 +3526,7 @@ func (ms *MutableStateImpl) addCompletionCallbacksHsm(
 	coll := callbacks.MachineCollection(ms.HSM())
 	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerWorkflow(ms.GetNamespaceEntry().Name().String())
 	if len(completionCallbacks)+coll.Size() > maxCallbacksPerWorkflow {
+		// Diverted from the CHASM validation path, so the user error depends on the state machine used.
 		return serviceerror.NewFailedPreconditionf(
 			"cannot attach more than %d callbacks to a workflow (%d callbacks already attached)",
 			maxCallbacksPerWorkflow,
@@ -3573,8 +3577,7 @@ func (ms *MutableStateImpl) addCompletionCallbacksChasm(
 		return err
 	}
 
-	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerExecution(ms.GetNamespaceEntry().Name().String())
-	return wf.AddCompletionCallbacks(ctx, event.EventTime, requestID, completionCallbacks, maxCallbacksPerWorkflow)
+	return wf.AddCompletionCallbacks(ctx, event.EventTime, requestID, completionCallbacks, ms.callbackValidator)
 }
 
 // AddFirstWorkflowTaskScheduled adds the first workflow task scheduled event unless it should be delayed as indicated

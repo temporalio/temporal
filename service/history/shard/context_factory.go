@@ -6,6 +6,7 @@ import (
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -65,6 +66,7 @@ type (
 		ChasmRegistry          *chasm.Registry
 		ChasmWorkflowRegistry  *chasmworkflow.Registry
 		EndpointRegistry       commonnexus.EndpointRegistry
+		CallbackValidator      callbacks.Validator
 		HandoverTrackerFactory HandoverTrackerFactory
 	}
 
@@ -111,6 +113,7 @@ func (c *contextFactoryImpl) CreateContext(
 		c.ChasmRegistry,
 		c.ChasmWorkflowRegistry,
 		c.EndpointRegistry,
+		c.CallbackValidator,
 		c.HandoverTrackerFactory,
 	)
 	if err != nil {

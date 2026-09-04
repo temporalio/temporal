@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/callbacks"
 	cclock "go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -156,6 +157,7 @@ type (
 		chasmRegistry         *chasm.Registry
 		chasmWorkflowRegistry *chasmworkflow.Registry
 		endpointRegistry      chasm.EndpointRegistry
+		callbackValidator     callbacks.Validator
 
 		businessIDRateLimiters cache.Cache
 	}
@@ -2178,6 +2180,7 @@ func newContext(
 	chasmRegistry *chasm.Registry,
 	chasmWorkflowRegistry *chasmworkflow.Registry,
 	endpointRegistry chasm.EndpointRegistry,
+	callbackValidator callbacks.Validator,
 	handoverTrackerFactory HandoverTrackerFactory,
 ) (*ContextImpl, error) {
 	hostIdentity := hostInfoProvider.HostInfo().Identity()
@@ -2230,6 +2233,7 @@ func newContext(
 		chasmRegistry:           chasmRegistry,
 		chasmWorkflowRegistry:   chasmWorkflowRegistry,
 		endpointRegistry:        endpointRegistry,
+		callbackValidator:       callbackValidator,
 		businessIDRateLimiters: cache.New(
 			historyConfig.BusinessIDReuseLimiterCacheSize(),
 			&cache.Options{TTL: historyConfig.BusinessIDReuseLimiterCacheTTL()},
@@ -2364,6 +2368,10 @@ func (s *ContextImpl) ChasmWorkflowRegistry() *chasmworkflow.Registry {
 
 func (s *ContextImpl) EndpointRegistry() chasm.EndpointRegistry {
 	return s.endpointRegistry
+}
+
+func (s *ContextImpl) CallbackValidator() callbacks.Validator {
+	return s.callbackValidator
 }
 
 func (s *ContextImpl) BusinessIDReuseRateLimiter(namespaceID namespace.ID, businessID string, archetypeID chasm.ArchetypeID) quotas.RateLimiter {

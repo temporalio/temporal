@@ -19,10 +19,10 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	chasmcallback "go.temporal.io/server/chasm/lib/callback"
-	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
+	commoncallbacks "go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -574,17 +574,17 @@ func buildChasmCallbackInfo(
 	cb *chasmcallback.Callback,
 	trigger *workflowpb.CallbackInfo_Trigger,
 ) (*workflowpb.CallbackInfo, error) {
-	switch cb.GetCallback().GetVariant().(type) {
-	case *callbackspb.Callback_Nexus_, *callbackspb.Callback_NexusHandler_:
-	default:
-		// Callbacks of an unrecognized variant are omitted rather than reported as an error.
+	apiCb, err := cb.ToAPICallback()
+	cbKind := commoncallbacks.KindOf(apiCb)
+	if cbKind == commoncallbacks.KindUnknown {
+		// A variant this server does not know how to describe, e.g. one written by a newer server.
+		// Omit it rather than failing the whole response.
 		return nil, nil
 	}
-
-	apiCb, err := cb.ToAPICallback()
 	if err != nil {
 		return nil, err
 	}
+
 	state, blockedReason, err := cb.APIState(ctx)
 	if err != nil {
 		return nil, err
