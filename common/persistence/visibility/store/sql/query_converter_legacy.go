@@ -450,19 +450,16 @@ func (c *QueryConverterLegacy) convertColName(exprRef *sqlparser.Expr) (*saColNa
 	}
 	saAlias := strings.ReplaceAll(sqlparser.String(expr), "`", "")
 
-	saFieldName, saType, err := query.ResolveSearchAttributeAlias(saAlias, c.namespaceName, c.saMapper, c.saTypeMap, c.chasmMapper)
+	saFieldName, saType, err := query.ResolveSearchAttributeAlias(
+		saAlias,
+		c.namespaceName,
+		c.saMapper,
+		c.saTypeMap,
+		c.chasmMapper,
+		c.archetypeID,
+	)
 	if err != nil {
-		if c.archetypeID != chasm.SchedulerArchetypeID || saAlias != "TemporalSystemExecutionStatus" {
-			return nil, query.NewConverterError(
-				"%s: column name '%s' is not a valid search attribute",
-				query.InvalidExpressionErrMessage,
-				saAlias,
-			)
-		}
-		// To support querying Workflow based schedulers and CHASM based schedulers, we need to translate
-		// TemporalSystemExecutionStatus as an alias to the system search attribute ExecutionStatus.
-		saFieldName = sadefs.ExecutionStatus
-		saType, _ = c.saTypeMap.GetType(saFieldName)
+		return nil, err
 	}
 	if saFieldName == sadefs.TemporalNamespaceDivision {
 		c.seenNamespaceDivision = true
@@ -526,6 +523,43 @@ func (c *QueryConverterLegacy) convertValueExpr(
 			}
 		}
 		return nil
+	case *sqlparser.UnaryExpr:
+		// Negative value may be parsed as UnaryExpr
+		if e.Operator != sqlparser.UPlusStr && e.Operator != sqlparser.UMinusStr {
+			return query.NewConverterError(
+				"%s: unary operator %q",
+				query.NotSupportedErrMessage,
+				e.Operator,
+			)
+		}
+		if value, ok := e.Expr.(*sqlparser.SQLVal); !ok || value.Type == sqlparser.StrVal {
+			return query.NewConverterError(
+				"%s: unary operator not supported in %q",
+				query.InvalidExpressionErrMessage,
+				sqlparser.String(expr),
+			)
+		}
+		err := c.convertValueExpr(&e.Expr, name, saFieldName, saType)
+		if err != nil {
+			return err
+		}
+		if value, ok := e.Expr.(*sqlparser.SQLVal); ok && (value.Type == sqlparser.IntVal || value.Type == sqlparser.FloatVal) {
+			if e.Operator == sqlparser.UMinusStr && len(value.Val) > 0 {
+				if value.Val[0] == '-' {
+					value.Val = value.Val[1:]
+				} else {
+					value.Val = append([]byte{'-'}, value.Val...)
+				}
+			}
+			*exprRef = e.Expr
+			return nil
+		}
+		// This should never happen, but here to catch any unexpected case.
+		return query.NewConverterError(
+			"%s: unary expression %q",
+			query.InvalidExpressionErrMessage,
+			sqlparser.String(expr),
+		)
 	case *sqlparser.GroupConcatExpr:
 		return query.NewConverterError("%s: 'group_concat'", query.NotSupportedErrMessage)
 	case *sqlparser.FuncExpr:
