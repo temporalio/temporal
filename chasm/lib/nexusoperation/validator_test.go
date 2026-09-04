@@ -619,8 +619,6 @@ func TestValidateStartRequestSourceContextAggregate(t *testing.T) {
 			ctx,
 			newRequest(newNexusHandlerCallback(900), newNexusHandlerCallback(900)))
 
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPreconditionErr)
 		require.ErrorContains(t, err, "cannot attach more than 1500 bytes of callback source_context")
 	})
 

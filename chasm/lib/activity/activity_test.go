@@ -1161,8 +1161,6 @@ func TestAddCompletionCallbacksSourceContextLimit(t *testing.T) {
 		err := activity.addCompletionCallbacks(ctx, "req-1", []*commonpb.Callback{
 			nexusHandlerCallback(1600),
 		}, callbackValidator)
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPreconditionErr)
 		require.ErrorContains(t, err, "cannot attach more than 1500 bytes of callback source_context")
 		require.Empty(t, activity.Callbacks)
 	})

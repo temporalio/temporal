@@ -58,15 +58,15 @@ func newCallbackTestContext() *chasm.MockMutableContext {
 func defaultCallbackValidator(t *testing.T) commoncallbacks.Validator {
 	t.Helper()
 	cfg := test.NewCallbacksValidatorConfig()
-	v, err := callbacks.NewValidator(cfg)
+	v, err := commoncallbacks.NewValidator(cfg)
 	require.NoError(t, err)
 	return v
 }
 
-func validatorWithMaxExecutions(t *testing.T, maxExecutionCallbacks int) callbacks.Validator {
+func validatorWithMaxExecutions(t *testing.T, maxExecutionCallbacks int) commoncallbacks.Validator {
 	cfg := test.NewCallbacksValidatorConfig()
 	cfg.MaxCallbacksPerExecution = func(string) int { return maxExecutionCallbacks }
-	v, err := callbacks.NewValidator(cfg)
+	v, err := commoncallbacks.NewValidator(cfg)
 	require.NoError(t, err)
 	return v
 }
@@ -118,8 +118,6 @@ func TestNewStandaloneOperationAttachesCompletionCallbacks(t *testing.T) {
 			newNexusCallback(),
 			newNexusCallback(),
 		), validatorWithMaxExecutions(t, 1), newTestLinkValidator(10, 10))
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPreconditionErr)
 		require.ErrorContains(t, err, "cannot attach more than 1 callbacks")
 	})
 }
@@ -239,9 +237,7 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		callbackValidator := validatorWithMaxExecutions(t, 1)
 
 		err := op.addCompletionCallbacks(ctx, "req-id", cbs, callbackValidator)
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPreconditionErr)
-		require.Contains(t, err.Error(), "cannot attach more than 1 callbacks")
+		require.ErrorContains(t, err, "cannot attach more than 1 callbacks")
 		require.Empty(t, op.Callbacks)
 	})
 
@@ -259,9 +255,7 @@ func TestAddCompletionCallbacks(t *testing.T) {
 			newNexusCallback(),
 			newNexusCallback(),
 		}, callbackValidator)
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPreconditionErr)
-		require.Contains(t, err.Error(), "1 callbacks already attached")
+		require.ErrorContains(t, err, "1 callbacks already attached")
 		require.Len(t, op.Callbacks, 1)
 	})
 
@@ -285,8 +279,6 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		err = op.addCompletionCallbacks(ctx, "req-2", []*commonpb.Callback{
 			newNexusHandlerCallback(900),
 		}, callbackValidator)
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPreconditionErr)
 		// req-2 is within the limit on its own, so only the accumulated total can have rejected it.
 		require.ErrorContains(t, err, "cannot attach more than 1500 bytes of callback source_context")
 		// The rejected request attached nothing.

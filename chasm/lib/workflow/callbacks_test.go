@@ -75,8 +75,8 @@ func TestWorkflowCallbackSourceContextLimit(t *testing.T) {
 		err := wf.AddCompletionCallbacks(ctx, eventTime, "req-1", []*commonpb.Callback{
 			nexusHandlerCallback(1600),
 		}, callbackValidator)
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPreconditionErr)
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
 		require.ErrorContains(t, err, "cannot attach more than 1500 bytes of callback source_context")
 		require.Empty(t, wf.Callbacks)
 	})

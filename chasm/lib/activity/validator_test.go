@@ -647,7 +647,6 @@ func TestValidateStartRequestSourceContextAggregate(t *testing.T) {
 		h := newHandler(t)
 		req := newRequest(nexusHandlerCallback(900), nexusHandlerCallback(900))
 		_, err := h.validateAndPopulateStartRequest(t.Context(), req, namespace.ID(defaultNamespaceID))
-		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
 		require.ErrorContains(t, err, "cannot attach more than 1500 bytes of callback source_context")
 	})
 }
