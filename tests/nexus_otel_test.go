@@ -29,7 +29,6 @@ import (
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testtelemetry"
@@ -47,6 +46,12 @@ type nexusHTTPSpan struct {
 	URLPath      string
 	Status       codes.Code
 	NexusAttrs   map[string]any
+	Links        []nexusHTTPLink
+}
+
+type nexusHTTPLink struct {
+	SpanContextValid bool
+	Attributes       map[string]any
 }
 
 type nexusTaskSpan struct {
@@ -143,6 +148,7 @@ func (s *NexusOTELSuite) TestOperation() {
 	handlerEnv := s.newTestEnv(exporter)
 	tv := callerEnv.Tv()
 	handlerTaskQueue := handlerEnv.Tv().TaskQueue().GetName()
+	handlerWorkflowID := handlerEnv.Tv().WorkflowID()
 
 	handlerWorkflow := func(ctx workflow.Context, _ nexus.NoValue) (nexus.NoValue, error) {
 		workflow.GetSignalChannel(ctx, "complete").Receive(ctx, nil)
@@ -158,8 +164,9 @@ func (s *NexusOTELSuite) TestOperation() {
 			default:
 			}
 			return client.StartWorkflowOptions{
-				ID:        options.RequestID,
-				TaskQueue: handlerTaskQueue,
+				ID:                       handlerWorkflowID,
+				TaskQueue:                handlerTaskQueue,
+				WorkflowIDConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING,
 			}, nil
 		},
 	)
@@ -170,6 +177,11 @@ func (s *NexusOTELSuite) TestOperation() {
 	handlerWorker.RegisterNexusService(service)
 	s.NoError(handlerWorker.Start())
 	s.T().Cleanup(handlerWorker.Stop)
+	handlerWorkflowRun, err := handlerEnv.SdkClient().ExecuteWorkflow(s.Context(), client.StartWorkflowOptions{
+		ID:        handlerWorkflowID,
+		TaskQueue: handlerTaskQueue,
+	}, handlerWorkflow, nexus.NoValue(nil))
+	s.NoError(err)
 
 	handlerWorkerEndpoint := handlerEnv.createNexusEndpoint(s.Context(), s.T(), testcore.RandomizedNexusEndpoint(s.T().Name()), handlerTaskQueue)
 	callerExternalEndpoint := callerEnv.createExternalNexusEndpoint(s.Context(), s.T(), handlerEnv.dispatchByEndpointURL(handlerWorkerEndpoint.Id))
@@ -203,6 +215,7 @@ func (s *NexusOTELSuite) TestOperation() {
 	})
 	s.NoError(err)
 
+	handlerRunID := handlerWorkflowRun.GetRunID()
 	operationURLPath := "/nexus/endpoints/" + handlerWorkerEndpoint.Id + "/services/" + service.Name + "/" + operation.Name()
 	s.requireNexusHTTPSpans(exporter, []nexusHTTPSpan{
 		{
@@ -213,7 +226,7 @@ func (s *NexusOTELSuite) TestOperation() {
 			Kind:        oteltrace.SpanKindClient,
 			URLPath:     operationURLPath,
 			NexusAttrs: map[string]any{
-				"nexus.request_id": nexusRequestID,
+				"temporalNexusRequestID": nexusRequestID,
 			},
 		},
 		{
@@ -225,11 +238,21 @@ func (s *NexusOTELSuite) TestOperation() {
 			Kind:         oteltrace.SpanKindServer,
 			URLPath:      operationURLPath,
 			NexusAttrs: map[string]any{
-				"nexus.endpoint":   handlerWorkerEndpoint.GetSpec().GetName(),
-				"nexus.operation":  operation.Name(),
-				"nexus.request_id": nexusRequestID,
-				"nexus.service":    service.Name,
+				"temporalNexusEndpoint":          handlerWorkerEndpoint.GetSpec().GetName(),
+				"temporalNexusHandlerNamespace":  handlerEnv.Namespace().String(),
+				"temporalNexusHandlerRunID":      handlerRunID,
+				"temporalNexusHandlerWorkflowID": handlerWorkflowID,
+				"temporalNexusOperation":         operation.Name(),
+				"temporalNexusRequestID":         nexusRequestID,
+				"temporalNexusService":           service.Name,
 			},
+			Links: []nexusHTTPLink{{
+				Attributes: map[string]any{
+					"temporalNamespace":  handlerEnv.Namespace().String(),
+					"temporalRunID":      handlerRunID,
+					"temporalWorkflowID": handlerWorkflowID,
+				},
+			}},
 		},
 		{
 			TraceID:     2,
@@ -248,9 +271,9 @@ func (s *NexusOTELSuite) TestOperation() {
 			Kind:         oteltrace.SpanKindServer,
 			URLPath:      operationURLPath + "/cancel",
 			NexusAttrs: map[string]any{
-				"nexus.endpoint":  handlerWorkerEndpoint.GetSpec().GetName(),
-				"nexus.operation": operation.Name(),
-				"nexus.service":   service.Name,
+				"temporalNexusEndpoint":  handlerWorkerEndpoint.GetSpec().GetName(),
+				"temporalNexusOperation": operation.Name(),
+				"temporalNexusService":   service.Name,
 			},
 		},
 	})
@@ -302,8 +325,8 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 			Kind:        oteltrace.SpanKindClient,
 			URLPath:     operationURLPath,
 			NexusAttrs: map[string]any{
-				"nexus.namespace":  env.Namespace().String(),
-				"nexus.request_id": request.requestID,
+				"temporalNexusNamespace": env.Namespace().String(),
+				"temporalNexusRequestID": request.requestID,
 			},
 		},
 		{
@@ -315,10 +338,10 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 			Kind:         oteltrace.SpanKindServer,
 			URLPath:      operationURLPath,
 			NexusAttrs: map[string]any{
-				"nexus.endpoint":   endpoint.GetSpec().GetName(),
-				"nexus.operation":  operation.Name(),
-				"nexus.request_id": request.requestID,
-				"nexus.service":    service.Name,
+				"temporalNexusEndpoint":  endpoint.GetSpec().GetName(),
+				"temporalNexusOperation": operation.Name(),
+				"temporalNexusRequestID": request.requestID,
+				"temporalNexusService":   service.Name,
 			},
 		},
 	})
@@ -390,9 +413,9 @@ func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 		URLPath:     dispatchURL.Path + "/test-service/my-operation",
 		Status:      codes.Error,
 		NexusAttrs: map[string]any{
-			"nexus.operation":  "my-operation",
-			"nexus.request_id": requestID,
-			"nexus.service":    "test-service",
+			"temporalNexusOperation": "my-operation",
+			"temporalNexusRequestID": requestID,
+			"temporalNexusService":   "test-service",
 		},
 	}})
 	s.Require().Equal(traceID, httpSpans[0].SpanContext.TraceID().String())
@@ -427,7 +450,7 @@ func (s *NexusOTELSuite) requireNexusTaskGRPCSpans(
 
 func (s *NexusOTELSuite) nexusTaskGRPCSpans(spans tracetest.SpanStubs) []nexusTaskSpan {
 	spans = testtelemetry.FilterSpans(spans, func(span tracetest.SpanStub) bool {
-		_, ok := testtelemetry.SpanAttribute(span, telemetry.WorkerTaskIDKey)
+		_, ok := testtelemetry.SpanAttribute(span, "temporalWorkerTaskID")
 		return ok
 	})
 	slices.SortFunc(spans, func(a, b tracetest.SpanStub) int {
@@ -435,7 +458,7 @@ func (s *NexusOTELSuite) nexusTaskGRPCSpans(spans tracetest.SpanStubs) []nexusTa
 	})
 
 	localSpanIDs := testtelemetry.LocalSpanIDs(spans)
-	localTaskIDs := testtelemetry.LocalAttributeIDs(spans, telemetry.WorkerTaskIDKey)
+	localTaskIDs := testtelemetry.LocalAttributeIDs(spans, "temporalWorkerTaskID")
 
 	result := make([]nexusTaskSpan, 0, len(spans))
 	for i, span := range spans {
@@ -487,7 +510,7 @@ func (s *NexusOTELSuite) nexusHTTPSpans(
 		var nexusAttrs map[string]any
 		for _, attr := range span.Attributes {
 			key := string(attr.Key)
-			if strings.HasPrefix(key, "nexus.") {
+			if strings.HasPrefix(key, "temporalNexus") {
 				if nexusAttrs == nil {
 					nexusAttrs = make(map[string]any)
 				}
@@ -502,6 +525,17 @@ func (s *NexusOTELSuite) nexusHTTPSpans(
 				}
 			}
 		}
+		var links []nexusHTTPLink
+		for _, link := range span.Links {
+			attrs := make(map[string]any, len(link.Attributes))
+			for _, attr := range link.Attributes {
+				attrs[string(attr.Key)] = attr.Value.AsInterface()
+			}
+			links = append(links, nexusHTTPLink{
+				SpanContextValid: link.SpanContext.IsValid(),
+				Attributes:       attrs,
+			})
+		}
 		result = append(result, nexusHTTPSpan{
 			TraceID:      localIDs[i].Trace,
 			SpanID:       localIDs[i].Span,
@@ -512,6 +546,7 @@ func (s *NexusOTELSuite) nexusHTTPSpans(
 			URLPath:      urlPath,
 			Status:       span.Status.Code,
 			NexusAttrs:   nexusAttrs,
+			Links:        links,
 		})
 	}
 	return result, httpSpans

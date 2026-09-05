@@ -291,30 +291,38 @@ func (e *executableImpl) Execute() (retErr error) {
 		entityID := e.GetWorkflowID()
 		idKey := telemetry.WorkflowIDKey
 		taskLabel := e.GetType().String()
+		var chasmAttributes []attribute.KeyValue
 
 		// Override defaults if CHASM task
-		if _, ok := e.GetTask().(tasks.HasArchetypeID); ok {
+		if task, ok := e.GetTask().(tasks.HasArchetypeID); ok {
 			idKey = telemetry.BusinessIDKey
+			chasmAttributes = []attribute.KeyValue{
+				attribute.String(telemetry.NamespaceIDKey, e.GetNamespaceID()),
+				attribute.Int64(telemetry.ChasmArchetypeIDKey, int64(task.GetArchetypeID())),
+			}
 			if name := e.GetTask().GetCategory().Name(); name != "" {
 				taskLabel = strcase.ToCamel(name) + "Task"
 			}
 		}
 
+		spanAttributes := append(
+			chasmAttributes,
+			attribute.Key(idKey).String(entityID),
+			attribute.Key(telemetry.RunIDKey).String(e.GetRunID()),
+			attribute.Key(telemetry.QueueTaskTypeKey).String(e.GetType().String()),
+			attribute.Key(telemetry.QueueTaskIDKey).Int64(e.GetTaskID()),
+		)
 		ctx, span = e.tracer.Start(
 			ctx,
 			fmt.Sprintf("queue.Execute/%v", taskLabel),
 			trace.WithSpanKind(trace.SpanKindConsumer),
-			trace.WithAttributes(
-				attribute.Key(idKey).String(entityID),
-				attribute.Key(telemetry.RunIDKey).String(e.GetRunID()),
-				attribute.Key("queue.task.type").String(e.GetType().String()),
-				attribute.Key("queue.task.id").Int64(e.GetTaskID())))
+			trace.WithAttributes(spanAttributes...))
 
 		if telemetry.DebugMode() {
 			if taskPayload, err := json.Marshal(e.GetTask()); err != nil {
 				e.logger.Error("failed to serialize task payload for OTEL span", tag.Error(err))
 			} else {
-				span.SetAttributes(attribute.Key("queue.task.payload").String(string(taskPayload)))
+				span.SetAttributes(attribute.Key(telemetry.QueueTaskPayloadKey).String(string(taskPayload)))
 			}
 		}
 

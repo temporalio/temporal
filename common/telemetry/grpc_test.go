@@ -35,6 +35,50 @@ func TestServerStatsHandler(t *testing.T) {
 		require.NotContains(t, spanAttrsByKey, "rpc.response.payload")
 	})
 
+	t.Run("annotate span with Nexus operation tags", func(t *testing.T) {
+		t.Parallel()
+
+		attrs := captureServerRPCAttributes(t, "PollNexusOperationExecution", &stats.InPayload{
+			Payload: &workflowservice.PollNexusOperationExecutionRequest{
+				OperationId: "OPERATION-ID",
+				RunId:       "RUN-ID",
+			},
+		}, &stats.End{})
+
+		require.Equal(t, "OPERATION-ID", attrs[telemetry.BusinessIDKey].Value.AsString())
+		require.Equal(t, "RUN-ID", attrs[telemetry.RunIDKey].Value.AsString())
+	})
+
+	t.Run("annotate standalone activity spans with business ID", func(t *testing.T) {
+		t.Parallel()
+
+		attrs := captureServerRPCAttributes(t, "PollActivityExecution", &stats.InPayload{
+			Payload: &workflowservice.PollActivityExecutionRequest{
+				ActivityId: "ACTIVITY-ID",
+				RunId:      "RUN-ID",
+			},
+		}, &stats.End{})
+
+		require.Equal(t, "ACTIVITY-ID", attrs[telemetry.BusinessIDKey].Value.AsString())
+		require.Equal(t, "RUN-ID", attrs[telemetry.RunIDKey].Value.AsString())
+	})
+
+	t.Run("do not treat workflow activity ID as business ID", func(t *testing.T) {
+		t.Parallel()
+
+		attrs := captureServerRPCAttributes(t, "RespondActivityTaskCompletedById", &stats.InPayload{
+			Payload: &workflowservice.RespondActivityTaskCompletedByIdRequest{
+				WorkflowId: "WORKFLOW-ID",
+				RunId:      "RUN-ID",
+				ActivityId: "ACTIVITY-ID",
+			},
+		}, &stats.End{})
+
+		require.Equal(t, "WORKFLOW-ID", attrs[telemetry.WorkflowIDKey].Value.AsString())
+		require.Equal(t, "RUN-ID", attrs[telemetry.RunIDKey].Value.AsString())
+		require.NotContains(t, attrs, telemetry.BusinessIDKey)
+	})
+
 	t.Run("annotate span with request/response payload in debug mode", func(t *testing.T) {
 		t.Setenv("TEMPORAL_OTEL_DEBUG", "true")
 
