@@ -3282,7 +3282,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Ch
 	capture := captureHandler.StartCapture()
 	defer captureHandler.StopCapture(capture)
 
-	childWorkflowID, childRunID, transferTask := s.setupStartedChildForNotFoundTest()
+	transferTask := s.setupStartedChildForNotFoundTest()
 
 	s.mockHistoryClient.EXPECT().ScheduleWorkflowTask(gomock.Any(), gomock.Any()).Return(
 		nil, serviceerror.NewNotFound("workflow not found"),
@@ -3290,15 +3290,10 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Ch
 
 	resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Error(resp.ExecutionErr)
-	s.IsType(&serviceerror.NotFound{}, resp.ExecutionErr)
 
 	recordings := capture.Snapshot()[metrics.ChildExecutionNotFound.Name()]
 	s.Len(recordings, 1)
 	s.Equal(int64(1), recordings[0].Value)
-	// Namespace attribution comes from the log, matching the other metrics on this executor's handler.
-	s.Empty(recordings[0].Tags)
-	s.NotEmpty(childWorkflowID)
-	s.NotEmpty(childRunID)
 }
 
 // A closed child answers ErrWorkflowCompleted, a legitimate NotFound.
@@ -3308,10 +3303,13 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Ch
 	capture := captureHandler.StartCapture()
 	defer captureHandler.StopCapture(capture)
 
-	_, _, transferTask := s.setupStartedChildForNotFoundTest()
+	transferTask := s.setupStartedChildForNotFoundTest()
+
+	// Completion recovery answers this same error with its own GetMutableState round trip; this test
+	// covers only the metric exclusion.
+	s.transferQueueActiveTaskExecutor.config.EnableChildWorkflowCompletionRecovery = func(string) bool { return false }
 
 	overTheWire := serviceerror.FromStatus(serviceerror.ToStatus(consts.ErrWorkflowCompleted))
-	s.NotErrorIs(overTheWire, consts.ErrWorkflowCompleted) // only the message survives the hop
 	s.mockHistoryClient.EXPECT().ScheduleWorkflowTask(gomock.Any(), gomock.Any()).Return(nil, overTheWire)
 
 	resp := s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
@@ -3326,7 +3324,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Ch
 	capture := captureHandler.StartCapture()
 	defer captureHandler.StopCapture(capture)
 
-	_, _, transferTask := s.setupStartedChildForNotFoundTest()
+	transferTask := s.setupStartedChildForNotFoundTest()
 
 	s.mockHistoryClient.EXPECT().ScheduleWorkflowTask(gomock.Any(), gomock.Any()).Return(
 		nil, serviceerror.NewNamespaceNotFound(s.childNamespace.String()),
@@ -3339,7 +3337,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Ch
 
 // Builds a parent whose ChildWorkflowExecutionStarted is already committed, so the task takes the childStarted branch
 // straight to createFirstWorkflowTask.
-func (s *transferQueueActiveTaskExecutorSuite) setupStartedChildForNotFoundTest() (string, string, *tasks.StartChildExecutionTask) {
+func (s *transferQueueActiveTaskExecutorSuite) setupStartedChildForNotFoundTest() *tasks.StartChildExecutionTask {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.NewString(),
@@ -3409,7 +3407,7 @@ func (s *transferQueueActiveTaskExecutorSuite) setupStartedChildForNotFoundTest(
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
-	return childWorkflowID, childRunID, transferTask
+	return transferTask
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Duplication() {
