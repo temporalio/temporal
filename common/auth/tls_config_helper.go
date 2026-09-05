@@ -15,22 +15,36 @@ import (
 
 var ErrTLSConfig = errors.New("unable to config TLS")
 
-// Helper methods for creating tls.Config structs to ensure MinVersion is 1.3
+// Helper methods for creating tls.Config structs. These default to MinVersion 1.2 with
+// MaxVersion left to the Go runtime. The WithVersions variants accept explicit bounds.
 
 func NewEmptyTLSConfig() *tls.Config {
-	return &tls.Config{
-		MinVersion: tls.VersionTLS12,
+	return newEmptyTLSConfig(TLSVersions{})
+}
+
+func newEmptyTLSConfig(versions TLSVersions) *tls.Config {
+	c := &tls.Config{
 		NextProtos: []string{
 			"h2",
 		},
 	}
+	versions.apply(c)
+	return c
 }
 
 func NewTLSConfigForServer(
 	serverName string,
 	enableHostVerification bool,
 ) *tls.Config {
-	c := NewEmptyTLSConfig()
+	return newTLSConfigForServer(serverName, enableHostVerification, TLSVersions{})
+}
+
+func newTLSConfigForServer(
+	serverName string,
+	enableHostVerification bool,
+	versions TLSVersions,
+) *tls.Config {
+	c := newEmptyTLSConfig(versions)
 	c.ServerName = serverName
 	c.InsecureSkipVerify = !enableHostVerification
 	return c
@@ -42,7 +56,19 @@ func NewDynamicTLSClientConfig(
 	serverName string,
 	enableHostVerification bool,
 ) *tls.Config {
-	c := NewTLSConfigForServer(serverName, enableHostVerification)
+	return NewDynamicTLSClientConfigWithVersions(getCert, rootCAs, serverName, enableHostVerification, TLSVersions{})
+}
+
+// NewDynamicTLSClientConfigWithVersions is NewDynamicTLSClientConfig restricted to the given
+// TLS protocol version bounds.
+func NewDynamicTLSClientConfigWithVersions(
+	getCert func() (*tls.Certificate, error),
+	rootCAs *x509.CertPool,
+	serverName string,
+	enableHostVerification bool,
+	versions TLSVersions,
+) *tls.Config {
+	c := newTLSConfigForServer(serverName, enableHostVerification, versions)
 
 	if getCert != nil {
 		c.GetClientCertificate = func(info *tls.CertificateRequestInfo) (*tls.Certificate, error) {
@@ -60,7 +86,19 @@ func NewTLSConfigWithCertsAndCAs(
 	clientCAs *x509.CertPool,
 	logger log.Logger,
 ) *tls.Config {
-	c := NewEmptyTLSConfig()
+	return NewTLSConfigWithCertsAndCAsWithVersions(clientAuth, certificates, clientCAs, logger, TLSVersions{})
+}
+
+// NewTLSConfigWithCertsAndCAsWithVersions is NewTLSConfigWithCertsAndCAs restricted to the
+// given TLS protocol version bounds.
+func NewTLSConfigWithCertsAndCAsWithVersions(
+	clientAuth tls.ClientAuthType,
+	certificates []tls.Certificate,
+	clientCAs *x509.CertPool,
+	logger log.Logger,
+	versions TLSVersions,
+) *tls.Config {
+	c := newEmptyTLSConfig(versions)
 	c.ClientAuth = clientAuth
 	c.Certificates = certificates
 	c.ClientCAs = clientCAs
