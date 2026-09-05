@@ -315,6 +315,42 @@ func (s *WorkerDeploymentSuite) TestDeploymentVersionLimits() {
 	s.pollFromDeploymentExpectFail(env, secondDeploymentVersionOne.WithTaskQueueNumber(2), expectedErrorMaxTaskQueues)
 }
 
+func (s *WorkerDeploymentSuite) TestDeploymentVersionTaskQueueFamilyLimitAllowsNewType() {
+	env := s.newTestEnv(
+		testcore.WithDynamicConfig(dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion, 1),
+	)
+	tv := env.Tv()
+
+	go s.pollFromDeployment(env, tv)
+	s.ensureCreateVersionWithExpectedTaskQueues(env, tv, 1)
+
+	go pollActivityFromDeployment(s.Context(), env.TestEnv, tv)
+	s.Await(func(s *WorkerDeploymentSuite) {
+		resp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(
+			s.Context(),
+			&workflowservice.DescribeWorkerDeploymentVersionRequest{
+				Namespace:         env.Namespace().String(),
+				DeploymentVersion: tv.ExternalDeploymentVersion(),
+			},
+		)
+		s.NoError(err)
+		s.ProtoElementsMatch(
+			[]*deploymentpb.WorkerDeploymentVersionInfo_VersionTaskQueueInfo{
+				{Name: tv.TaskQueue().GetName(), Type: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+				{Name: tv.TaskQueue().GetName(), Type: enumspb.TASK_QUEUE_TYPE_ACTIVITY},
+			},
+			resp.GetWorkerDeploymentVersionInfo().GetTaskQueueInfos(),
+		)
+	}, 10*time.Second, 200*time.Millisecond)
+
+	secondTaskQueue := tv.WithTaskQueueNumber(2)
+	expectedError := fmt.Sprintf(
+		"cannot add task queue %v since maximum number of task queues (1) have been registered in deployment",
+		secondTaskQueue.TaskQueue().GetName(),
+	)
+	s.pollFromDeploymentExpectFail(env, secondTaskQueue, expectedError)
+}
+
 func (s *WorkerDeploymentSuite) TestNamespaceDeploymentsLimit() {
 	// TODO (carly): check the error messages that poller receives in each case and make sense they are informative and appropriate (e.g. do not expose internal stuff)
 	// Also in TestCreateWorkerDeployment_MaxDeploymentsLimit

@@ -706,10 +706,11 @@ func (d *VersionWorkflowRunner) doesVersionHaveActivePollers(ctx workflow.Contex
 func (d *VersionWorkflowRunner) validateRegisterWorker(args *deploymentspb.RegisterWorkerInVersionArgs) error {
 	// Should not ensure not deleted, instead the version would revive if deleted.
 
-	if _, ok := d.VersionState.TaskQueueFamilies[args.TaskQueueName].GetTaskQueues()[int32(args.TaskQueueType)]; ok {
+	taskQueueFamily, familyExists := d.VersionState.TaskQueueFamilies[args.TaskQueueName]
+	if _, ok := taskQueueFamily.GetTaskQueues()[int32(args.TaskQueueType)]; ok {
 		return temporal.NewApplicationError("task queue already exists in deployment version", errNoChangeType)
 	}
-	if len(d.VersionState.TaskQueueFamilies) >= int(args.MaxTaskQueues) {
+	if !familyExists && len(d.VersionState.TaskQueueFamilies) >= int(args.MaxTaskQueues) {
 		return temporal.NewApplicationError(
 			fmt.Sprintf("maximum number of task queues (%d) have been registered in deployment", args.MaxTaskQueues),
 			errMaxTaskQueuesInVersionType,
