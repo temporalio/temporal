@@ -213,6 +213,12 @@ ACTIONLINT := $(LOCALBIN)/actionlint-$(ACTIONLINT_VER)
 $(ACTIONLINT): | $(LOCALBIN)
 	$(call go-install-tool,$(ACTIONLINT),github.com/rhysd/actionlint/cmd/actionlint,$(ACTIONLINT_VER))
 
+PROMPTSPEC_VER := v0.0.0-20260903210123-42aec342b2f3
+PROMPTSPEC := $(LOCALBIN)/promptspec-$(PROMPTSPEC_VER)
+$(PROMPTSPEC): export GOPRIVATE := $(shell go env GOPRIVATE),github.com/temporalio/promptspec
+$(PROMPTSPEC): | $(LOCALBIN)
+	$(call go-install-tool,$(PROMPTSPEC),github.com/temporalio/promptspec/cmd/promptspec,$(PROMPTSPEC_VER))
+
 WORKFLOWCHECK_VER := master # TODO: pin this specific version once 0.3.0 follow-up is released
 WORKFLOWCHECK := $(LOCALBIN)/workflowcheck-$(WORKFLOWCHECK_VER)
 $(WORKFLOWCHECK): | $(LOCALBIN)
@@ -802,6 +808,11 @@ update-dependencies-major: $(GOMAJOR)
 go-generate: $(MOCKGEN) $(GOIMPORTS) $(STRINGER) $(GOWRAP)
 	@printf $(COLOR) "Process go:generate directives..."
 	@PATH="$(ROOT)/$(LOCALBIN):$(PATH)" go generate ./...
+
+.PHONY: promptspec
+promptspec: $(PROMPTSPEC)
+	@printf $(COLOR) "Generate prompts..."
+	@$(PROMPTSPEC) generate
 
 ensure-no-changes:
 	@printf $(COLOR) "Check for local changes..."
