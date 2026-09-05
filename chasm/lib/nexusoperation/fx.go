@@ -21,7 +21,10 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/rpc/httpfaults"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/httpfaultstest"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/fx"
 )
 
@@ -126,6 +129,7 @@ func clientProviderFactory(
 	namespaceRegistry namespace.Registry,
 	rpcFactory common.RPCFactory,
 	httpClientTransportInstrumenter telemetry.HTTPClientTransportInstrumenter,
+	testHooks testhooks.TestHooks,
 ) (ClientProvider, error) {
 	cl, err := rpcFactory.CreateLocalFrontendHTTPClient()
 	if err != nil {
@@ -136,6 +140,7 @@ func clientProviderFactory(
 	if clusterInfo, ok := clusterMetadata.GetAllClusterInfo()[clusterMetadata.GetCurrentClusterName()]; ok {
 		clusterID = clusterInfo.ClusterID
 	}
+	httpFaultGenerator := httpfaultstest.NewGenerator(testHooks)
 	m := collection.NewFallibleOnceMap(func(key clientProviderCacheKey) (*http.Client, error) {
 		transport := httpTransportProvider(key.namespaceID, key.endpointID)
 		return &http.Client{
@@ -194,6 +199,11 @@ func clientProviderFactory(
 				return baseHTTPCaller(r)
 			}
 		}
+		httpCaller = httpfaults.Wrap(
+			httpFaultGenerator,
+			httpfaults.Scope{NamespaceID: namespace.ID(namespaceID)},
+			httpCaller,
+		)
 
 		return nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
 			BaseURL:    url,
