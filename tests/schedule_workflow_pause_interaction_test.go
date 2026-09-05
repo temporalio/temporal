@@ -115,7 +115,7 @@ func runSchedulePauseRecoveryMatrix(t *testing.T, newContext contextFactory) {
 // pauseInteractionOpts returns the schedule test options plus the dynamic config
 // required to enable the workflow pause feature.
 func pauseInteractionOpts(t *testing.T) []testcore.TestOption {
-	return append(scheduleCommonOpts(t),
+	return append(scheduleCommonOpts(false),
 		testcore.WithDynamicConfig(dynamicconfig.WorkflowPauseEnabled, true),
 	)
 }
@@ -141,7 +141,7 @@ func setupPausedScheduledWorkflow(
 	policy enumspb.ScheduleOverlapPolicy,
 	register func(s *testcore.TestEnv, wt string),
 ) *scheduledPauseFixture {
-	env := newScheduleEnv(t, pauseInteractionOpts(t)...)
+	env := newScheduleEnv(t, false, pauseInteractionOpts(t)...)
 
 	sid := testcore.RandomizeStr("sched-pause-" + policy.String())
 	wid := testcore.RandomizeStr("sched-pause-wf-" + policy.String())
@@ -331,7 +331,7 @@ func setupPausedTriggeredWorkflow(
 	register func(s *testcore.TestEnv, wt string),
 	afterStart func(s *testcore.TestEnv, firstRun *commonpb.WorkflowExecution),
 ) *scheduledPauseFixture {
-	env := newScheduleEnv(t, opts...)
+	env := newScheduleEnv(t, false, opts...)
 
 	sid := testcore.RandomizeStr(idPrefix)
 	wid := testcore.RandomizeStr(idPrefix + "-wf")
