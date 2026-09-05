@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -72,6 +73,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/metadata"
+	"gopkg.in/yaml.v3"
 )
 
 type (
@@ -205,6 +207,17 @@ func (s *adminHandlerSuite) SetupTest() {
 		chasmRegistry,
 		nsreplication.NewNoopDataMerger(),
 		nil, // schedulerClient - not needed for most admin handler tests
+		dynamicconfig.NewCollection(
+			dynamicconfig.StaticClient{
+				dynamicconfig.WorkflowTimeSkippingEnabled.Key(): []dynamicconfig.ConstrainedValue{
+					{
+						Constraints: dynamicconfig.Constraints{Namespace: s.namespace.String()},
+						Value:       true,
+					},
+				},
+			},
+			s.mockResource.GetLogger(),
+		),
 		tasks.NewDefaultTaskCategoryRegistry(),
 		s.mockResource.GetMatchingClient(),
 	}
@@ -228,6 +241,142 @@ func (s *adminHandlerSuite) SetupTest() {
 func (s *adminHandlerSuite) TearDownTest() {
 	s.controller.Finish()
 	s.handler.Stop()
+}
+
+func (s *adminHandlerSuite) TestGetDynamicConfigValue() {
+	s.Run("returns effective and configured values", func() {
+		response, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
+			Key:                      dynamicconfig.WorkflowTimeSkippingEnabled.Key().String(),
+			Constraints:              fmt.Sprintf("namespace: %q", s.namespace),
+			IncludeConstrainedValues: true,
+		})
+		s.Require().NoError(err)
+		s.Equal([]byte("true\n"), response.GetValue())
+		s.Equal("[]Constraints{{Namespace: namespace}, {}}", response.GetConstraintDescription())
+		requireYAMLEqual(s.T(), fmt.Sprintf(`
+			- constraints:
+			    namespace: %q
+			  value: true
+		`, s.namespace), response.GetConstrainedValues())
+	})
+
+	s.Run("returns compiled default", func() {
+		response, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
+			Key:         dynamicconfig.WorkflowTimeSkippingEnabled.Key().String(),
+			Constraints: `namespace: other-namespace`,
+		})
+		s.Require().NoError(err)
+		s.Equal([]byte("false\n"), response.GetValue())
+		s.Empty(response.GetConstrainedValues())
+	})
+
+	s.Run("rejects invalid constraints", func() {
+		_, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
+			Key:         dynamicconfig.WorkflowTimeSkippingEnabled.Key().String(),
+			Constraints: `unknown: value`,
+		})
+		s.Require().Error(err)
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+	})
+
+	s.Run("ignores unused constraints", func() {
+		response, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
+			Key:         "frontend.WorkflowTimeSkippingEnabled",
+			Constraints: fmt.Sprintf("namespace: %q\ntaskQueueName: queue-a", s.namespace),
+		})
+		s.Require().NoError(err)
+		s.Equal([]byte("true\n"), response.GetValue())
+	})
+
+	s.Run("rejects unknown key", func() {
+		_, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
+			Key: "unknown-key",
+		})
+		s.Require().Error(err)
+		var invalidArgument *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgument)
+	})
+
+	s.Run("encodes duration value", func() {
+		key := dynamicconfig.DynamicConfigSubscriptionPollInterval.Key()
+		s.handler.dynamicConfig = dynamicconfig.NewCollection(
+			dynamicconfig.StaticClient{key: 90 * time.Second},
+			s.mockResource.GetLogger(),
+		)
+
+		response, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
+			Key:                      key.String(),
+			IncludeConstrainedValues: true,
+		})
+		s.Require().NoError(err)
+		s.Equal("1m30s\n", string(response.GetValue()))
+		requireYAMLEqual(s.T(), `
+			- constraints: {}
+			  value: 1m30s
+		`, response.GetConstrainedValues())
+	})
+}
+
+func requireYAMLEqual(t *testing.T, expected string, actual []byte) {
+	t.Helper()
+	var expectedValue any
+	require.NoError(t, yaml.Unmarshal([]byte(strings.ReplaceAll(expected, "\t", "")), &expectedValue))
+	var actualValue any
+	require.NoError(t, yaml.Unmarshal(actual, &actualValue))
+	require.Equal(t, expectedValue, actualValue)
+}
+
+func (s *adminHandlerSuite) TestDescribeDynamicConfigSetting() {
+	response, err := s.handler.DescribeDynamicConfigSetting(
+		context.Background(),
+		&adminservice.DescribeDynamicConfigSettingRequest{
+			Key: "admin.matchingNamespaceTaskqueueToPartitionDispatchRate",
+		},
+	)
+	s.Require().NoError(err)
+	s.Equal("admin.matchingNamespaceTaskqueueToPartitionDispatchRate", response.GetKey())
+	s.Equal("float64", response.GetValueType())
+	s.Equal(
+		"[]Constraints{{Namespace: namespace, TaskQueueName: taskQueue, TaskQueueType: taskQueueType}, "+
+			"{Namespace: namespace, TaskQueueName: taskQueue}, {TaskQueueName: taskQueue}, "+
+			"{Namespace: namespace}, {}}",
+		response.GetConstraintDescription(),
+	)
+}
+
+func (s *adminHandlerSuite) TestDumpDynamicConfigValues() {
+	s.Run("returns configured values", func() {
+		response, err := s.handler.DumpDynamicConfigValues(
+			s.T().Context(),
+			&adminservice.DumpDynamicConfigValuesRequest{},
+		)
+		s.Require().NoError(err)
+		loadedValues := dynamicconfig.LoadYamlFile(response.GetValues())
+		s.Empty(loadedValues.Errors)
+		s.Equal([]dynamicconfig.ConstrainedValue{{
+			Constraints: dynamicconfig.Constraints{Namespace: s.namespace.String()},
+			Value:       true,
+		}}, loadedValues.Map[dynamicconfig.WorkflowTimeSkippingEnabled.Key()])
+	})
+
+	s.Run("returns marshal error", func() {
+		s.handler.dynamicConfig = dynamicconfig.NewCollection(
+			dynamicconfig.StaticClient{dynamicconfig.MakeKey("invalid"): make(chan struct{})},
+			s.mockResource.GetLogger(),
+		)
+
+		_, err := s.handler.DumpDynamicConfigValues(
+			s.T().Context(),
+			&adminservice.DumpDynamicConfigValuesRequest{},
+		)
+		s.Require().EqualError(
+			err,
+			`unable to encode dynamic config values: dynamic config key "invalid" constrained value at index 0: cannot marshal type: chan struct {}`,
+		)
+		var internal *serviceerror.Internal
+		s.ErrorAs(err, &internal)
+	})
 }
 
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Success() {

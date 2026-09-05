@@ -75,6 +75,13 @@ func getCommands(
 			Usage:       "Decode payload",
 			Subcommands: newDecodeCommands(taskBlobEncoder),
 		},
+		{
+			Name:        "dynamic-config",
+			Aliases:     []string{"dc"},
+			Usage:       "Inspect dynamic configuration",
+			UsageText:   "tdbg dynamic-config [command options]\ntdbg dc [command options]",
+			Subcommands: newDynamicConfigCommands(clientFactory),
+		},
 	}
 }
 

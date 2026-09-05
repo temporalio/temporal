@@ -99,6 +99,16 @@ func (c *clientImpl) DescribeDLQJob(
 	return c.client.DescribeDLQJob(ctx, request, opts...)
 }
 
+func (c *clientImpl) DescribeDynamicConfigSetting(
+	ctx context.Context,
+	request *adminservice.DescribeDynamicConfigSettingRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.DescribeDynamicConfigSettingResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DescribeDynamicConfigSetting(ctx, request, opts...)
+}
+
 func (c *clientImpl) DescribeHistoryHost(
 	ctx context.Context,
 	request *adminservice.DescribeHistoryHostRequest,
@@ -127,6 +137,16 @@ func (c *clientImpl) DescribeTaskQueuePartition(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.DescribeTaskQueuePartition(ctx, request, opts...)
+}
+
+func (c *clientImpl) DumpDynamicConfigValues(
+	ctx context.Context,
+	request *adminservice.DumpDynamicConfigValuesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.DumpDynamicConfigValuesResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DumpDynamicConfigValues(ctx, request, opts...)
 }
 
 func (c *clientImpl) ForceUnloadTaskQueuePartition(
@@ -177,6 +197,16 @@ func (c *clientImpl) GetDLQTasks(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return c.client.GetDLQTasks(ctx, request, opts...)
+}
+
+func (c *clientImpl) GetDynamicConfigValue(
+	ctx context.Context,
+	request *adminservice.GetDynamicConfigValueRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetDynamicConfigValueResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.GetDynamicConfigValue(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetNamespace(

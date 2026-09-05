@@ -3335,6 +3335,228 @@ func (this *GetTaskQueueUserDataResponse) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type GetDynamicConfigValueRequest to the protobuf v3 wire format
+func (val *GetDynamicConfigValueRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type GetDynamicConfigValueRequest from the protobuf v3 wire format
+func (val *GetDynamicConfigValueRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *GetDynamicConfigValueRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two GetDynamicConfigValueRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *GetDynamicConfigValueRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *GetDynamicConfigValueRequest
+	switch t := that.(type) {
+	case *GetDynamicConfigValueRequest:
+		that1 = t
+	case GetDynamicConfigValueRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type GetDynamicConfigValueResponse to the protobuf v3 wire format
+func (val *GetDynamicConfigValueResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type GetDynamicConfigValueResponse from the protobuf v3 wire format
+func (val *GetDynamicConfigValueResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *GetDynamicConfigValueResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two GetDynamicConfigValueResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *GetDynamicConfigValueResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *GetDynamicConfigValueResponse
+	switch t := that.(type) {
+	case *GetDynamicConfigValueResponse:
+		that1 = t
+	case GetDynamicConfigValueResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type DescribeDynamicConfigSettingRequest to the protobuf v3 wire format
+func (val *DescribeDynamicConfigSettingRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type DescribeDynamicConfigSettingRequest from the protobuf v3 wire format
+func (val *DescribeDynamicConfigSettingRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *DescribeDynamicConfigSettingRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two DescribeDynamicConfigSettingRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *DescribeDynamicConfigSettingRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *DescribeDynamicConfigSettingRequest
+	switch t := that.(type) {
+	case *DescribeDynamicConfigSettingRequest:
+		that1 = t
+	case DescribeDynamicConfigSettingRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type DescribeDynamicConfigSettingResponse to the protobuf v3 wire format
+func (val *DescribeDynamicConfigSettingResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type DescribeDynamicConfigSettingResponse from the protobuf v3 wire format
+func (val *DescribeDynamicConfigSettingResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *DescribeDynamicConfigSettingResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two DescribeDynamicConfigSettingResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *DescribeDynamicConfigSettingResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *DescribeDynamicConfigSettingResponse
+	switch t := that.(type) {
+	case *DescribeDynamicConfigSettingResponse:
+		that1 = t
+	case DescribeDynamicConfigSettingResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type DumpDynamicConfigValuesRequest to the protobuf v3 wire format
+func (val *DumpDynamicConfigValuesRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type DumpDynamicConfigValuesRequest from the protobuf v3 wire format
+func (val *DumpDynamicConfigValuesRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *DumpDynamicConfigValuesRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two DumpDynamicConfigValuesRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *DumpDynamicConfigValuesRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *DumpDynamicConfigValuesRequest
+	switch t := that.(type) {
+	case *DumpDynamicConfigValuesRequest:
+		that1 = t
+	case DumpDynamicConfigValuesRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type DumpDynamicConfigValuesResponse to the protobuf v3 wire format
+func (val *DumpDynamicConfigValuesResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type DumpDynamicConfigValuesResponse from the protobuf v3 wire format
+func (val *DumpDynamicConfigValuesResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *DumpDynamicConfigValuesResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two DumpDynamicConfigValuesResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *DumpDynamicConfigValuesResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *DumpDynamicConfigValuesResponse
+	switch t := that.(type) {
+	case *DumpDynamicConfigValuesResponse:
+		that1 = t
+	case DumpDynamicConfigValuesResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type StartAdminBatchOperationRequest to the protobuf v3 wire format
 func (val *StartAdminBatchOperationRequest) Marshal() ([]byte, error) {
 	return proto.Marshal(val)

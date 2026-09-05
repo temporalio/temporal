@@ -4,6 +4,7 @@
 package dynamicconfig
 
 import (
+	"reflect"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -17,6 +18,36 @@ const (
 	Precedence{{.Name}}
 {{- end}}
 )
+
+func (p Precedence) ConstraintDescription() string {
+	switch p {
+{{- range $P := .Precedences}}
+	case Precedence{{$P.Name}}:
+		return {{printf "%q" $P.ConstraintDescription}}
+{{- end}}
+	default:
+		return ""
+	}
+}
+
+func (p Precedence) buildPropertyFnArgs(constraints Constraints) ([]reflect.Value, bool) {
+	switch p {
+{{- range $P := .Precedences}}
+	case Precedence{{$P.Name}}:
+{{- if $P.PropertyFnArgs}}
+		return []reflect.Value{
+{{- range $Arg := $P.PropertyFnArgs}}
+			reflect.ValueOf({{$Arg}}),
+{{- end}}
+		}, true
+{{- else}}
+		return nil, true
+{{- end}}
+{{- end}}
+	default:
+		return nil, false
+	}
+}
 {{$Precedences := .Precedences }}
 {{- range $T :=.Types}}
 {{- range $P := $Precedences}}
@@ -71,6 +102,7 @@ func New{{$P.Name}}TypedSettingWithConstrainedDefault[T any](key string, convert
 
 func (s {{$P.Name}}TypedSetting[T]) Key() Key               { return s.key }
 func (s {{$P.Name}}TypedSetting[T]) Precedence() Precedence { return Precedence{{$P.Name}} }
+func (s {{$P.Name}}TypedSetting[T]) ValueType() reflect.Type { return reflect.TypeFor[T]() }
 func (s {{$P.Name}}TypedSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
@@ -78,6 +110,9 @@ func (s {{$P.Name}}TypedSetting[T]) Validate(v any) error {
 
 func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
 func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) Precedence() Precedence { return Precedence{{$P.Name}} }
+func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) ValueType() reflect.Type {
+	return reflect.TypeFor[T]()
+}
 func (s {{$P.Name}}TypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
@@ -222,4 +257,4 @@ func Get{{$T.Name}}PropertyFnFilteredBy{{$P.Name}}(value {{$T.GoType}}) {{$T.Nam
 {{- end}}
 {{end }}{{/* if $T.IsGeneric */}}
 {{- end}}{{/* range $T :=.Types */}}
-{{- end}}{{/* range $P := $Precedences */}}
+{{- end}}{{/* range $P := $Precedences */ -}}

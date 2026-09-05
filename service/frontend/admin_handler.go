@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -89,6 +90,7 @@ type (
 		eventLogger                otellog.Logger
 		numberOfHistoryShards      int32
 		config                     *Config
+		dynamicConfig              *dynamicconfig.Collection
 		namespaceDLQHandler        nsreplication.DLQMessageHandler
 		eventSerializer            serialization.Serializer
 		visibilityMgr              manager.VisibilityManager
@@ -146,6 +148,7 @@ type (
 		ChasmRegistry                       *chasm.Registry
 		NamespaceDataMerger                 nsreplication.NamespaceDataMerger
 		SchedulerClient                     schedulerpb.SchedulerServiceClient
+		DynamicConfig                       *dynamicconfig.Collection
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -180,6 +183,7 @@ func NewAdminHandler(
 		status:                     common.DaemonStatusInitialized,
 		numberOfHistoryShards:      args.PersistenceConfig.NumHistoryShards,
 		config:                     args.Config,
+		dynamicConfig:              args.DynamicConfig,
 		namespaceDLQHandler:        namespaceDLQHandler,
 		eventSerializer:            args.EventSerializer,
 		visibilityMgr:              args.visibilityMgr,
@@ -2232,6 +2236,95 @@ func convertFailoverHistoryToReplicationProto(
 	}
 
 	return replicationProto
+}
+
+func (adh *AdminHandler) GetDynamicConfigValue(
+	_ context.Context,
+	request *adminservice.GetDynamicConfigValueRequest,
+) (_ *adminservice.GetDynamicConfigValueResponse, retErr error) {
+	defer log.CapturePanic(adh.logger, &retErr)
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetKey() == "" {
+		return nil, serviceerror.NewInvalidArgument("dynamic config key is not set")
+	}
+	constraints, err := dynamicconfig.ParseConstraintsYAML(request.GetConstraints())
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgumentf("invalid dynamic config constraints: %v", err)
+	}
+
+	key := dynamicconfig.MakeKey(request.GetKey())
+	value, err := adh.dynamicConfig.GetEffectiveValue(key, constraints)
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgument(err.Error())
+	}
+	constraintDescription, err := adh.dynamicConfig.ConstraintDescription(key)
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgument(err.Error())
+	}
+
+	encodedValue, err := dynamicconfig.MarshalValueYAML(value)
+	if err != nil {
+		return nil, serviceerror.NewInternalf("unable to encode dynamic config value: %v", err)
+	}
+	response := &adminservice.GetDynamicConfigValueResponse{
+		Value:                 encodedValue,
+		ConstraintDescription: constraintDescription,
+	}
+	if request.GetIncludeConstrainedValues() {
+		response.ConstrainedValues, err = dynamicconfig.MarshalConstrainedValuesYAML(
+			key,
+			adh.dynamicConfig.GetConfiguredValues(key),
+		)
+		if err != nil {
+			return nil, serviceerror.NewInternalf("unable to encode dynamic config constrained values: %v", err)
+		}
+	}
+	return response, nil
+}
+
+func (adh *AdminHandler) DescribeDynamicConfigSetting(
+	_ context.Context,
+	request *adminservice.DescribeDynamicConfigSettingRequest,
+) (_ *adminservice.DescribeDynamicConfigSettingResponse, retErr error) {
+	defer log.CapturePanic(adh.logger, &retErr)
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if request.GetKey() == "" {
+		return nil, serviceerror.NewInvalidArgument("dynamic config key is not set")
+	}
+
+	description, err := adh.dynamicConfig.DescribeSetting(dynamicconfig.MakeKey(request.GetKey()))
+	if err != nil {
+		return nil, serviceerror.NewInvalidArgument(err.Error())
+	}
+	return &adminservice.DescribeDynamicConfigSettingResponse{
+		Key:                   request.GetKey(),
+		ValueType:             description.ValueType,
+		ConstraintDescription: description.ConstraintDescription,
+	}, nil
+}
+
+func (adh *AdminHandler) DumpDynamicConfigValues(
+	_ context.Context,
+	request *adminservice.DumpDynamicConfigValuesRequest,
+) (_ *adminservice.DumpDynamicConfigValuesResponse, retErr error) {
+	defer log.CapturePanic(adh.logger, &retErr)
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	values, err := adh.dynamicConfig.DumpConfiguredValues()
+	if err != nil {
+		return nil, serviceerror.NewUnimplemented(err.Error())
+	}
+	encodedValues, err := dynamicconfig.MarshalConfigValueMapYAML(values)
+	if err != nil {
+		return nil, serviceerror.NewInternalf("unable to encode dynamic config values: %v", err)
+	}
+	return &adminservice.DumpDynamicConfigValuesResponse{Values: encodedValues}, nil
 }
 
 func (adh *AdminHandler) MigrateSchedule(ctx context.Context, request *adminservice.MigrateScheduleRequest) (_ *adminservice.MigrateScheduleResponse, retErr error) {

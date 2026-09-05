@@ -10,12 +10,36 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testutils"
 	"go.uber.org/mock/gomock"
 )
+
+// TestServerOptionsProviderDynamicConfigClient verifies that the dynamic config client selected
+// by the server implements dynamicconfig.ConfigValueMapProvider.
+func TestServerOptionsProviderDynamicConfigClient(t *testing.T) {
+	configDir := path.Join(testutils.GetRepoRootDirectory(), "config")
+	cfg, err := config.Load(
+		config.WithEnv("development-sqlite"),
+		config.WithConfigDir(configDir),
+	)
+	require.NoError(t, err)
+	cfg.DynamicConfigClient.Filepath = path.Join(configDir, "dynamicconfig", "development-sql.yaml")
+
+	provider, err := ServerOptionsProvider([]ServerOption{
+		WithConfig(cfg),
+		WithLogger(log.NewNoopLogger()),
+		WithCustomMetricsHandler(metrics.NoopMetricsHandler),
+	})
+	require.NoError(t, err)
+	close(provider.StopChan)
+
+	require.Implements(t, (*dynamicconfig.ConfigValueMapProvider)(nil), provider.DynamicConfigClient)
+}
 
 func TestInitCurrentClusterMetadataRecord(t *testing.T) {
 	configDir := path.Join(testutils.GetRepoRootDirectory(), "config")
