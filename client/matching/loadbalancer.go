@@ -202,7 +202,7 @@ func (lb *defaultLoadBalancer) PickReadPartition(
 	if pc.Read > 0 {
 		partitionCount = int(pc.Read)
 	} else if namespaceErr == nil {
-		partitionCount = lb.nReadPartitions(string(namespaceName), taskQueue.Name(), taskQueue.TaskType())
+		partitionCount = max(1, lb.nReadPartitions(string(namespaceName), taskQueue.Name(), taskQueue.TaskType()))
 	}
 
 	if n, ok := testhooks.Get(lb.testHooks, testhooks.MatchingLBForceReadPartition, namespace.ID(taskQueue.NamespaceId())); ok {
