@@ -5,6 +5,7 @@ const (
 	OperationTagName               = "operation"
 	ServiceRoleTagName             = "service_role"
 	CacheTypeTagName               = "cache_type"
+	CacheHitTagName                = "cache_hit"
 	FailureTagName                 = "failure"
 	FailureSourceTagName           = "failure_source"
 	TaskCategoryTagName            = "task_category"
@@ -1676,6 +1677,7 @@ var (
 	WorkerDeploymentVersioningOverrideCounter         = NewCounterDef("worker_deployment_versioning_override_count")
 	WorkerDeploymentVersioningOneTimeOverrideCounter  = NewCounterDef("worker_deployment_versioning_one_time_override_count")
 	WorkerDeploymentVersionDeletePropagationFailure   = NewCounterDef("worker_deployment_version_delete_propagation_failure")
+	WorkerDeploymentRegistrationErrors                = NewCounterDef("worker_deployment_registration_errors")
 	StartDeploymentTransitionCounter                  = NewCounterDef("start_deployment_transition_count")
 	VersioningDataPropagationLatency                  = NewTimerDef("versioning_data_propagation_latency")
 	SlowVersioningDataPropagationCounter              = NewCounterDef("slow_versioning_data_propagation")

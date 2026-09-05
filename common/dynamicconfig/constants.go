@@ -3375,6 +3375,19 @@ but existing callbacks will still be processed and fired.`,
 		target version workflow.`,
 	)
 
+	WorkerDeploymentRegistrationErrorCacheTTL = NewGlobalDurationSetting(
+		"matching.workerDeploymentRegistrationErrorCacheTTL",
+		30*time.Second,
+		`TTL for errors cached by worker deployment registration operations. Set to zero to disable caching.`,
+	)
+
+	WorkerDeploymentRegistrationErrorCacheMaxSize = NewGlobalIntSetting(
+		"matching.workerDeploymentRegistrationErrorCacheMaxSize",
+		10000,
+		`Maximum number of worker deployment registration errors cached per worker service instance.
+Set to zero to disable caching. Requires a worker service restart to take effect.`,
+	)
+
 	EnableVersionReactivationSignals = NewGlobalBoolSetting(
 		"history.enableVersionReactivationSignals",
 		true,
