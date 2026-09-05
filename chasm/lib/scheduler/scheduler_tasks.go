@@ -211,14 +211,19 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 		func(s *Scheduler, ctx chasm.MutableContext, _ any) (chasm.NoValue, error) {
 			generator := s.Generator.Get(ctx)
 			invoker := s.Invoker.Get(ctx)
+			var completedRequestIDs []string
 
 			for _, start := range invoker.BufferedStarts {
 				if result, ok := results[start.RequestId]; ok {
-					start.HasCallback = true
 					if result.completed != nil {
-						start.Completed = result.completed
+						completedRequestIDs = append(completedRequestIDs, start.RequestId)
+					} else {
+						start.HasCallback = true
 					}
 				}
+			}
+			for _, requestID := range completedRequestIDs {
+				s.completeAction(ctx, requestID, results[requestID].completed, nil)
 			}
 
 			s.getOrCreateEventLog(ctx).LogEvent(ctx,
@@ -314,16 +319,8 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 		},
 	})
 	if err != nil {
-		// WorkflowExecutionAlreadyStarted: workflow completed between describe
-		// and this attach call (REJECT_DUPLICATE rejects completed workflows).
-		if isAlreadyStartedError(err) {
-			return &watchResult{
-				completed: &schedulespb.CompletedResult{
-					Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-					CloseTime: timestamppb.Now(),
-				},
-			}, nil
-		}
+		// An already-started error means the workflow closed between the describe and
+		// this call. Retry so the next describe reports the real terminal status.
 		return nil, err
 	}
 
