@@ -476,6 +476,23 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryTimerTaskSuite() {
 	suite.Run(p.T(), s)
 }
 
+func (p *PostgreSQLSuite) TestPostgreSQLHistoryScheduledTaskSuite() {
+	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
+	SetupPostgreSQLDatabase(p.T(), cfg)
+	SetupPostgreSQLSchema(p.T(), cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+	if err != nil {
+		p.T().Fatalf("unable to create PostgreSQL DB: %v", err)
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownPostgreSQLDatabase(p.T(), cfg)
+	}()
+
+	s := sqltests.NewHistoryScheduledTaskSuite(p.T(), store)
+	suite.Run(p.T(), s)
+}
+
 func (p *PostgreSQLSuite) TestPostgreSQLHistoryReplicationTaskSuite() {
 	cfg := NewPostgreSQLConfig(p.pluginName, p.connectAttrs)
 	SetupPostgreSQLDatabase(p.T(), cfg)
