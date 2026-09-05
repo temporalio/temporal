@@ -15,9 +15,11 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -109,14 +111,15 @@ type (
 		ProcessToolBox
 
 		// immutable data
-		taskID            int64
-		metricsTag        string
-		taskCreationTime  time.Time
-		taskReceivedTime  time.Time
-		sourceClusterName string
-		sourceShardKey    ClusterShardKey
-		taskPriority      enumsspb.TaskPriority
-		replicationTask   *replicationspb.ReplicationTask
+		taskID               int64
+		metricsTag           string
+		taskCreationTime     time.Time
+		taskReceivedTime     time.Time
+		sourceClusterName    string
+		sourceShardKey       ClusterShardKey
+		taskPriority         enumsspb.TaskPriority
+		replicationTask      *replicationspb.ReplicationTask
+		bypassGradualConnect bool
 
 		// mutable data
 		taskState              int32
@@ -788,6 +791,9 @@ func (e *ExecutableTaskImpl) SyncState(
 
 		tasksToAdd := make([]*adminservice.AddTasksRequest_Task, 0, len(taskEquivalents))
 		for _, taskEquivalent := range taskEquivalents {
+			if e.replicationTask.GetRawTaskInfo().GetIsForceReplication() {
+				taskEquivalent.IsForceReplication = true
+			}
 			blob, err := e.Serializer.ReplicationTaskInfoToBlob(taskEquivalent)
 			if err != nil {
 				return false, err
@@ -910,7 +916,78 @@ FilterLoop:
 			break FilterLoop
 		}
 	}
+	if shouldProcessTask && !e.admittedByGradualConnect(namespaceEntry, businessID) {
+		metrics.ReplicationTasksShedByGradualConnect.With(e.MetricsHandler).Record(
+			int64(1),
+			metrics.NamespaceTag(namespaceEntry.Name().String()),
+		)
+		shouldProcessTask = false
+	}
 	return namespaceEntry.Name().String(), shouldProcessTask, nil
+}
+
+// admittedByGradualConnect reports whether businessID is admitted by the namespace gradual-connect
+// replication ramp. It fails open when no complete ramp schedule is recorded.
+func (e *ExecutableTaskImpl) admittedByGradualConnect(namespaceEntry *namespace.Namespace, businessID string) bool {
+	if e.bypassGradualConnect {
+		return true
+	}
+	ramp := namespaceEntry.ReplicationRamp(e.ClusterMetadata.GetCurrentClusterName())
+	if ramp == nil || ramp.GetStartTime() == nil || ramp.GetDuration() == nil {
+		return true
+	}
+	admitted, percent := gradualConnectAdmission(
+		ramp,
+		e.TimeSource.Now(),
+		businessID,
+	)
+	nsName := namespaceEntry.Name().String()
+	metrics.ReplicationGradualConnectPercent.With(e.MetricsHandler).Record(
+		float64(percent),
+		metrics.NamespaceTag(nsName),
+	)
+	if e.replicationTask.GetRawTaskInfo().GetIsForceReplication() {
+		// Shed tasks are dropped, not retried -- shedding these would strand a migration's verify loop.
+		if percent < 100 {
+			metrics.ReplicationForceTaskBeforeGradualConnectReady.With(e.MetricsHandler).Record(
+				1,
+				metrics.NamespaceTag(nsName),
+			)
+		}
+		return true
+	}
+	return admitted
+}
+
+func gradualConnectAdmission(
+	ramp *persistencespb.NamespaceReplicationRamp,
+	now time.Time,
+	businessID string,
+) (bool, int) {
+	percent := gradualConnectPercent(
+		ramp.GetStartTime().AsTime(),
+		now,
+		ramp.GetDuration().AsDuration(),
+		int(ramp.GetInitialPercentage()),
+	)
+	return dynamicconfig.RolloutAccepts([]byte(businessID), percent), percent
+}
+
+// gradualConnectPercent computes the current admission percent, capped at 100. It treats a time
+// before connectTime as the start of the ramp so clock skew cannot temporarily admit tasks that a
+// later evaluation would shed. Invalid schedules fail open.
+func gradualConnectPercent(connectTime, now time.Time, duration time.Duration, initialPercent int) int {
+	elapsed := now.Sub(connectTime)
+	if duration <= 0 || initialPercent < 0 || initialPercent >= 100 {
+		return 100
+	}
+	if elapsed < 0 {
+		elapsed = 0
+	}
+	if elapsed >= duration {
+		return 100
+	}
+	return initialPercent + int(float64(elapsed)/float64(duration)*float64(100-initialPercent))
 }
 
 func (e *ExecutableTaskImpl) MarkPoisonPill() error {

@@ -846,12 +846,13 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 		taskEquivalents = make([]tasks.Task, 0, len(r.mutableState.GetPendingActivityInfos())+1)
 		taskEquivalents = append(taskEquivalents, &tasks.HistoryReplicationTask{
 			// TaskID, VisibilityTimestamp is set by shard
-			WorkflowKey:    workflowKey,
-			FirstEventID:   executionInfo.LastFirstEventId,
-			NextEventID:    nextEventID,
-			Version:        lastItem.GetVersion(),
-			Priority:       enumsspb.TASK_PRIORITY_LOW,
-			TargetClusters: targetClusters,
+			WorkflowKey:        workflowKey,
+			FirstEventID:       executionInfo.LastFirstEventId,
+			NextEventID:        nextEventID,
+			Version:            lastItem.GetVersion(),
+			Priority:           enumsspb.TASK_PRIORITY_LOW,
+			TargetClusters:     targetClusters,
+			IsForceReplication: true,
 		})
 		activityIDs := make(map[int64]struct{}, len(r.mutableState.GetPendingActivityInfos()))
 		for activityID := range r.mutableState.GetPendingActivityInfos() {
@@ -863,6 +864,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 			r.mutableState.GetPendingActivityInfos(),
 			activityIDs,
 			targetClusters,
+			true,
 		) {
 			syncActivityTask.(*tasks.SyncActivityTask).Priority = enumsspb.TASK_PRIORITY_LOW
 			taskEquivalents = append(taskEquivalents, syncActivityTask)
@@ -870,8 +872,9 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 		taskEquivalents = append(taskEquivalents, &tasks.SyncHSMTask{
 			WorkflowKey: workflowKey,
 			// TaskID and VisibilityTimestamp are set by shard
-			Priority:       enumsspb.TASK_PRIORITY_LOW,
-			TargetClusters: targetClusters,
+			Priority:           enumsspb.TASK_PRIORITY_LOW,
+			TargetClusters:     targetClusters,
+			IsForceReplication: true,
 		})
 	}
 

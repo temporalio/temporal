@@ -20,6 +20,7 @@ type (
 		NewRunID            string
 		Priority            enumsspb.TaskPriority
 		TargetClusters      []string
+		IsForceReplication  bool
 
 		// deprecated
 		BranchToken       []byte

@@ -109,7 +109,12 @@ func (e *taskExecutorImpl) handleActivityTask(
 ) error {
 
 	attr := task.GetSyncActivityTaskAttributes()
-	doContinue, err := e.filterTask(namespace.ID(attr.GetNamespaceId()), attr.WorkflowId, forceApply)
+	doContinue, err := e.filterTask(
+		namespace.ID(attr.GetNamespaceId()),
+		attr.WorkflowId,
+		forceApply,
+		task.GetRawTaskInfo().GetIsForceReplication(),
+	)
 	if err != nil || !doContinue {
 		return err
 	}
@@ -211,7 +216,12 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 ) error {
 
 	attr := task.GetHistoryTaskAttributes()
-	doContinue, err := e.filterTask(namespace.ID(attr.GetNamespaceId()), attr.WorkflowId, forceApply)
+	doContinue, err := e.filterTask(
+		namespace.ID(attr.GetNamespaceId()),
+		attr.WorkflowId,
+		forceApply,
+		task.GetRawTaskInfo().GetIsForceReplication(),
+	)
 	if err != nil || !doContinue {
 		return err
 	}
@@ -308,7 +318,12 @@ func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
 	executionInfo := attr.GetWorkflowState().GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.GetNamespaceId())
 
-	doContinue, err := e.filterTask(namespaceID, executionInfo.GetWorkflowId(), forceApply)
+	doContinue, err := e.filterTask(
+		namespaceID,
+		executionInfo.GetWorkflowId(),
+		forceApply,
+		task.GetRawTaskInfo().GetIsForceReplication(),
+	)
 	if err != nil || !doContinue {
 		return err
 	}
@@ -363,6 +378,7 @@ func (e *taskExecutorImpl) filterTask(
 	namespaceID namespace.ID,
 	workflowID string,
 	forceApply bool,
+	isForceReplication bool,
 ) (bool, error) {
 
 	if forceApply {
@@ -386,7 +402,40 @@ FilterLoop:
 			break FilterLoop
 		}
 	}
-	return shouldProcessTask, nil
+	if !shouldProcessTask {
+		return false, nil
+	}
+
+	ramp := namespaceEntry.ReplicationRamp(e.currentCluster)
+	if ramp == nil || ramp.GetStartTime() == nil || ramp.GetDuration() == nil {
+		return true, nil
+	}
+	admitted, percent := gradualConnectAdmission(
+		ramp,
+		e.shardContext.GetTimeSource().Now(),
+		workflowID,
+	)
+	metrics.ReplicationGradualConnectPercent.With(e.metricsHandler).Record(
+		float64(percent),
+		metrics.NamespaceTag(namespaceEntry.Name().String()),
+	)
+	if isForceReplication {
+		if percent < 100 {
+			metrics.ReplicationForceTaskBeforeGradualConnectReady.With(e.metricsHandler).Record(
+				1,
+				metrics.NamespaceTag(namespaceEntry.Name().String()),
+			)
+		}
+		return true, nil
+	}
+	if admitted {
+		return true, nil
+	}
+	metrics.ReplicationTasksShedByGradualConnect.With(e.metricsHandler).Record(
+		1,
+		metrics.NamespaceTag(namespaceEntry.Name().String()),
+	)
+	return false, nil
 }
 
 func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespaceID string, workflowID string, runID string) (retErr error) {

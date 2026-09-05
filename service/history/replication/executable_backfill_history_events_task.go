@@ -154,14 +154,7 @@ func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
 	case nil, *serviceerror.NotFound:
 		return nil
 	case *serviceerrors.SyncState:
-		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
-			context.Background(),
-			callerInfo,
-		), e.NamespaceID, e.WorkflowID)
-		if nsError != nil {
-			return err
-		}
-		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
+		ctx, cancel := newTaskContext(e.NamespaceName(), e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 		defer cancel()
 
 		if doContinue, syncStateErr := e.SyncState(
@@ -183,14 +176,7 @@ func (e *ExecutableBackfillHistoryEventsTask) HandleErr(err error) error {
 		}
 		return e.Execute()
 	case *serviceerrors.RetryReplication:
-		namespaceName, _, nsError := e.GetNamespaceInfo(headers.SetCallerInfo(
-			context.Background(),
-			callerInfo,
-		), e.NamespaceID, e.WorkflowID)
-		if nsError != nil {
-			return err
-		}
-		ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
+		ctx, cancel := newTaskContext(e.NamespaceName(), e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 		defer cancel()
 		history := &historyspb.VersionHistory{
 			Items: e.taskAttr.EventVersionHistory,

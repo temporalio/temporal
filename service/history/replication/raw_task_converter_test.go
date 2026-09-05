@@ -1282,6 +1282,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionTransitionTask_ConvertTask
 			NamespaceFailoverVersion: version,
 			TransitionCount:          165,
 		},
+		IsForceReplication: true,
 		TaskEquivalents: []tasks.Task{
 			&tasks.SyncActivityTask{
 				WorkflowKey:      workflowKey,
@@ -1329,6 +1330,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionTransitionTask_ConvertTask
 			VisibilityTimestamp: visibilityTimestamp,
 			Version:             version,
 			ScheduledEventID:    100,
+			IsForceReplication:  true,
 		},
 		targetClusterID,
 	).Return(expectedReplicationTask, nil).Times(1)
@@ -1370,7 +1372,8 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionTransitionTask_AddTaskEqui
 			NamespaceFailoverVersion: version,
 			TransitionCount:          165,
 		},
-		TaskEquivalents: []tasks.Task{syncActivityTask, historyReplicationTask},
+		IsForceReplication: true,
+		TaskEquivalents:    []tasks.Task{syncActivityTask, historyReplicationTask},
 	}
 	s.workflowCache.EXPECT().GetOrCreateChasmExecution(
 		gomock.Any(),

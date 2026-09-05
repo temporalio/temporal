@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -121,7 +122,7 @@ func (s *taskExecutorSuite) TestFilterTask_Apply() {
 			}},
 			0,
 		), nil)
-	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, "test-workflow-id", false)
+	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, "test-workflow-id", false, false)
 	s.NoError(err)
 	s.True(ok)
 }
@@ -136,7 +137,7 @@ func (s *taskExecutorSuite) TestFilterTask_NotApply() {
 			&persistencespb.NamespaceReplicationConfig{Clusters: []string{cluster.TestAlternativeClusterName}},
 			0,
 		), nil)
-	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, "test-workflow-id", false)
+	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, "test-workflow-id", false, false)
 	s.NoError(err)
 	s.False(ok)
 }
@@ -146,14 +147,14 @@ func (s *taskExecutorSuite) TestFilterTask_Error() {
 	s.mockNamespaceCache.EXPECT().
 		GetNamespaceByID(namespaceID).
 		Return(nil, fmt.Errorf("random error"))
-	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, "test-workflow-id", false)
+	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, "test-workflow-id", false, false)
 	s.Error(err)
 	s.False(ok)
 }
 
 func (s *taskExecutorSuite) TestFilterTask_EnforceApply() {
 	namespaceID := namespace.ID(uuid.NewString())
-	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, "test-workflow-id", true)
+	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, "test-workflow-id", true, false)
 	s.NoError(err)
 	s.True(ok)
 }
@@ -163,9 +164,41 @@ func (s *taskExecutorSuite) TestFilterTask_NamespaceNotFound() {
 	s.mockNamespaceCache.EXPECT().
 		GetNamespaceByID(namespaceID).
 		Return(nil, &serviceerror.NamespaceNotFound{})
-	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, "test-workflow-id", false)
+	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, "test-workflow-id", false, false)
 	s.NoError(err)
 	s.False(ok)
+}
+
+func (s *taskExecutorSuite) TestFilterTask_GradualConnectShedsOrdinaryTaskAndAdmitsForceReplication() {
+	namespaceID := namespace.ID(uuid.NewString())
+	workflowID := "test-workflow-id"
+	namespaceEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "test-namespace"},
+		nil,
+		&persistencespb.NamespaceReplicationConfig{
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			},
+			ClusterReplicationRamps: map[string]*persistencespb.NamespaceReplicationRamp{
+				cluster.TestCurrentClusterName: {
+					StartTime:         timestamppb.New(s.mockShard.GetTimeSource().Now()),
+					Duration:          durationpb.New(time.Hour),
+					InitialPercentage: 0,
+				},
+			},
+		},
+		0,
+	)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(namespaceEntry, nil).Times(2)
+
+	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, workflowID, false, false)
+	s.NoError(err)
+	s.False(ok)
+
+	ok, err = s.replicationTaskExecutor.filterTask(namespaceID, workflowID, false, true)
+	s.NoError(err)
+	s.True(ok)
 }
 
 func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask() {

@@ -18,6 +18,7 @@ type (
 		ScheduledEventID    int64
 		Priority            enumsspb.TaskPriority
 		TargetClusters      []string
+		IsForceReplication  bool
 	}
 )
 

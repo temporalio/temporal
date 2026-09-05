@@ -2,6 +2,7 @@ package nsreplication
 
 import (
 	"context"
+	"maps"
 
 	otellog "go.opentelemetry.io/otel/log"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -115,9 +116,10 @@ func (r *replicator) HandleTransmissionTask(
 				ActiveClusterName: replicationConfig.ActiveClusterName,
 				Clusters:          convertClusterReplicationConfigToProto(replicationConfig.Clusters),
 			},
-			ConfigVersion:   configVersion,
-			FailoverVersion: failoverVersion,
-			FailoverHistory: convertFailoverHistoryToReplicationProto(failoverHistoy),
+			ConfigVersion:           configVersion,
+			FailoverVersion:         failoverVersion,
+			FailoverHistory:         convertFailoverHistoryToReplicationProto(failoverHistoy),
+			ClusterReplicationRamps: maps.Clone(replicationConfig.GetClusterReplicationRamps()),
 		},
 	}
 

@@ -371,6 +371,7 @@ func (s *taskSerializerSuite) TestSyncActivityTask() {
 		TaskID:              rand.Int63(),
 		Version:             rand.Int63(),
 		ScheduledEventID:    rand.Int63(),
+		IsForceReplication:  true,
 		Priority:            enumsspb.TASK_PRIORITY_LOW,
 	}
 
@@ -387,6 +388,7 @@ func (s *taskSerializerSuite) TestHistoryReplicationTask() {
 		NextEventID:         rand.Int63(),
 		BranchToken:         shuffle.Bytes([]byte("random branch token")),
 		NewRunBranchToken:   shuffle.Bytes([]byte("random new branch token")),
+		IsForceReplication:  true,
 		Priority:            enumsspb.TASK_PRIORITY_LOW,
 	}
 
@@ -398,6 +400,7 @@ func (s *taskSerializerSuite) TestSyncHSMTask() {
 		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
 		TaskID:              rand.Int63(),
+		IsForceReplication:  true,
 		Priority:            enumsspb.TASK_PRIORITY_LOW,
 	}
 
@@ -437,6 +440,19 @@ func (s *taskSerializerSuite) TestSyncVersionedTransitionTask() {
 		},
 		cmpopts.IgnoreFields(tasks.SyncVersionedTransitionTask{}, "VersionedTransition"),
 	)
+}
+
+func (s *taskSerializerSuite) TestForceSyncVersionedTransitionTaskMarksEquivalentsAsForce() {
+	taskInfo, err := s.serializer.SerializeReplicationTask(&tasks.SyncVersionedTransitionTask{
+		WorkflowKey:        s.workflowKey,
+		IsForceReplication: true,
+		TaskEquivalents: []tasks.Task{
+			&tasks.HistoryReplicationTask{WorkflowKey: s.workflowKey},
+		},
+	})
+	s.NoError(err)
+	s.Len(taskInfo.GetTaskEquivalents(), 1)
+	s.True(taskInfo.GetTaskEquivalents()[0].GetIsForceReplication())
 }
 
 func (s *taskSerializerSuite) TestSyncWorkflowStateTask() {

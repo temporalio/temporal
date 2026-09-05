@@ -48,6 +48,17 @@ func NewExecutableDeleteExecutionTask(
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableDeleteExecutionTask {
 	rawInfo := replicationTask.GetRawTaskInfo()
+	executableTask := NewExecutableTask(
+		processToolBox,
+		taskID,
+		metrics.DeleteExecutionReplicationTaskScope,
+		taskCreationTime,
+		time.Now().UTC(),
+		sourceClusterName,
+		sourceShardKey,
+		replicationTask,
+	)
+	executableTask.bypassGradualConnect = true
 
 	// ArchetypeID should never be unspecified. Default to WorkflowArchetypeID.
 	archetypeID := chasm.WorkflowArchetypeID
@@ -75,16 +86,7 @@ func NewExecutableDeleteExecutionTask(
 			},
 			archetypeID,
 		),
-		ExecutableTask: NewExecutableTask(
-			processToolBox,
-			taskID,
-			metrics.DeleteExecutionReplicationTaskScope,
-			taskCreationTime,
-			time.Now().UTC(),
-			sourceClusterName,
-			sourceShardKey,
-			replicationTask,
-		),
+		ExecutableTask:   executableTask,
 		lastWriteVersion: lastWriteVersion,
 	}
 }
