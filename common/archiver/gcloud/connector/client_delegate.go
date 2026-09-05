@@ -54,6 +54,7 @@ type (
 		Close() error
 		Write(p []byte) (n int, err error)
 		CloseWithError(err error) error
+		SetMetadata(metadata map[string]string)
 	}
 
 	writerDelegate struct {
@@ -190,6 +191,10 @@ func (w *writerDelegate) Write(p []byte) (int, error) {
 // Deprecated: cancel the context passed to NewWriter instead.
 func (w *writerDelegate) CloseWithError(err error) error {
 	return w.writer.CloseWithError(err)
+}
+
+func (w *writerDelegate) SetMetadata(metadata map[string]string) {
+	w.writer.Metadata = metadata
 }
 
 // Close closes the Reader. It must be called when done reading.
