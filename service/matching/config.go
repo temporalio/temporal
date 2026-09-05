@@ -138,6 +138,7 @@ type (
 		PollerScalingDecisionsPerSecond     dynamicconfig.FloatPropertyFnWithTaskQueueFilter
 		PollerScalingTaskAddToDispatchRatio dynamicconfig.FloatPropertyFnWithTaskQueueFilter
 		EnablePollerScalingDecisionMetrics  dynamicconfig.BoolPropertyFnWithTaskQueueFilter
+		UseSignalsV2ForPollerScaling        dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
 		FairnessCounter               dynamicconfig.TypedPropertyFnWithTaskQueueFilter[counter.CounterParams]
 		FairnessPassDither            dynamicconfig.BoolPropertyFnWithTaskQueueFilter
@@ -232,6 +233,7 @@ type (
 		PollerScalingDecisionsPerSecond     func() float64
 		PollerScalingTaskAddToDispatchRatio func() float64
 		EnablePollerScalingDecisionMetrics  func() bool
+		UseSignalsV2ForPollerScaling        func() bool
 
 		FairnessCounter               func() counter.CounterParams
 		FairnessPassDither            func() bool
@@ -385,6 +387,7 @@ func NewConfig(
 		PollerScalingDecisionsPerSecond:     dynamicconfig.MatchingPollerScalingDecisionsPerSecond.Get(dc),
 		PollerScalingTaskAddToDispatchRatio: dynamicconfig.MatchingPollerScalingTaskAddToDispatchRatio.Get(dc),
 		EnablePollerScalingDecisionMetrics:  dynamicconfig.MatchingEnablePollerScalingDecisionMetrics.Get(dc),
+		UseSignalsV2ForPollerScaling:        dynamicconfig.MatchingUseSignalsV2ForPollerScaling.Get(dc),
 
 		FairnessCounter:               dynamicconfig.MatchingFairnessCounter.Get(dc),
 		FairnessPassDither:            dynamicconfig.MatchingFairnessPassDither.Get(dc),
@@ -563,6 +566,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		EnablePollerScalingDecisionMetrics: func() bool {
 			return config.EnablePollerScalingDecisionMetrics(ns.String(), taskQueueName, taskType)
+		},
+		UseSignalsV2ForPollerScaling: func() bool {
+			return config.UseSignalsV2ForPollerScaling(ns.String(), taskQueueName, taskType)
 		},
 		FairnessCounter: func() counter.CounterParams {
 			return config.FairnessCounter(ns.String(), taskQueueName, taskType)

@@ -54,7 +54,7 @@ func TestBuildQueryParams(t *testing.T) {
 		{
 			name:  "fail invalid custom search attribute",
 			query: "AliasForFoo = 'foo'",
-			err:   "invalid expression: column name 'AliasForFoo' is not a valid search attribute",
+			err:   "invalid search attribute: AliasForFoo",
 		},
 		{
 			name:  "fail order by not supported",

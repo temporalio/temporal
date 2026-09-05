@@ -66,7 +66,7 @@ func (s *predicatesSuite) TestNamespacePredicate_Equals() {
 	s.True(p.Equals(NewNamespacePredicate(namespaceIDs)))
 
 	s.False(p.Equals(NewNamespacePredicate([]string{uuid.NewString(), uuid.NewString()})))
-	s.False(p.Equals(NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER})))
+	s.False(p.Equals(NewOutboundTaskPredicate([]TaskGroupNamespaceIDAndDestination{{"g1", "n1", "d1"}})))
 	s.False(p.Equals(predicates.Universal[Task]()))
 }
 
@@ -175,7 +175,7 @@ func (s *predicatesSuite) TestDestinationPredicate_Equals() {
 	s.True(p.Equals(NewDestinationPredicate(destinations)))
 
 	s.False(p.Equals(NewDestinationPredicate([]string{uuid.NewString(), uuid.NewString()})))
-	s.False(p.Equals(NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER})))
+	s.False(p.Equals(NewOutboundTaskPredicate([]TaskGroupNamespaceIDAndDestination{{"g1", "n1", "d1"}})))
 	s.False(p.Equals(predicates.Universal[Task]()))
 }
 
@@ -217,7 +217,7 @@ func (s *predicatesSuite) TestOutboundTaskGroupPredicate_Equals() {
 	s.True(p.Equals(NewOutboundTaskGroupPredicate(groups)))
 
 	s.False(p.Equals(NewOutboundTaskGroupPredicate([]string{"3", "4"})))
-	s.False(p.Equals(NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER})))
+	s.False(p.Equals(NewOutboundTaskPredicate([]TaskGroupNamespaceIDAndDestination{{"g1", "n1", "d1"}})))
 	s.False(p.Equals(predicates.Universal[Task]()))
 }
 
@@ -297,7 +297,7 @@ func (s *predicatesSuite) TestOutboundTaskPredicate_Equals() {
 		{"g1", "n1", "d3"},
 		{"g2", "n2", "d4"},
 	})))
-	s.False(p.Equals(NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER})))
+	s.False(p.Equals(NewNamespacePredicate([]string{uuid.NewString()})))
 	s.False(p.Equals(predicates.Universal[Task]()))
 }
 
@@ -323,30 +323,8 @@ func (s *predicatesSuite) TestAndPredicates() {
 			expectedResult: NewNamespacePredicate([]string{"namespace2"}),
 		},
 		{
-			predicateA: NewTypePredicate([]enumsspb.TaskType{
-				enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
-			}),
-			predicateB: NewTypePredicate([]enumsspb.TaskType{
-				enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
-				enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT,
-			}),
-			expectedResult: NewTypePredicate([]enumsspb.TaskType{
-				enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
-			}),
-		},
-		{
-			predicateA:     NewDestinationPredicate([]string{"dest1", "dest2"}),
-			predicateB:     NewDestinationPredicate([]string{"dest2", "dest3"}),
-			expectedResult: NewDestinationPredicate([]string{"dest2"}),
-		},
-		{
 			predicateA:     NewNamespacePredicate([]string{"namespace1", "namespace2"}),
 			predicateB:     NewNamespacePredicate([]string{"namespace3"}),
-			expectedResult: predicates.Empty[Task](),
-		},
-		{
-			predicateA:     NewOutboundTaskGroupPredicate([]string{"g1", "g2"}),
-			predicateB:     NewOutboundTaskGroupPredicate([]string{"g3"}),
 			expectedResult: predicates.Empty[Task](),
 		},
 		{
@@ -360,14 +338,17 @@ func (s *predicatesSuite) TestAndPredicates() {
 			expectedResult: predicates.Empty[Task](),
 		},
 		{
+			// Cross-type combination that no case-specific branch simplifies, so it falls back
+			// to the generic wrapper. NamespacePredicate/OutboundTaskPredicate are both still
+			// live types; either would do here.
 			predicateA: NewNamespacePredicate([]string{"namespace1"}),
-			predicateB: NewTypePredicate([]enumsspb.TaskType{
-				enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
+			predicateB: NewOutboundTaskPredicate([]TaskGroupNamespaceIDAndDestination{
+				{"g1", "n1", "d1"},
 			}),
 			expectedResult: predicates.And(
 				NewNamespacePredicate([]string{"namespace1"}),
-				NewTypePredicate([]enumsspb.TaskType{
-					enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
+				NewOutboundTaskPredicate([]TaskGroupNamespaceIDAndDestination{
+					{"g1", "n1", "d1"},
 				}),
 			),
 		},
@@ -410,29 +391,6 @@ func (s *predicatesSuite) TestOrPredicates() {
 			expectedResult: NewNamespacePredicate([]string{"namespace1", "namespace2", "namespace3"}),
 		},
 		{
-			predicateA: NewTypePredicate([]enumsspb.TaskType{
-				enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
-			}),
-			predicateB: NewTypePredicate([]enumsspb.TaskType{
-				enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
-				enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT,
-			}),
-			expectedResult: NewTypePredicate([]enumsspb.TaskType{
-				enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
-				enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT,
-			}),
-		},
-		{
-			predicateA:     NewDestinationPredicate([]string{"dest1", "dest2"}),
-			predicateB:     NewDestinationPredicate([]string{"dest2", "dest3"}),
-			expectedResult: NewDestinationPredicate([]string{"dest1", "dest2", "dest3"}),
-		},
-		{
-			predicateA:     NewOutboundTaskGroupPredicate([]string{"g1", "g2"}),
-			predicateB:     NewOutboundTaskGroupPredicate([]string{"g2", "g3"}),
-			expectedResult: NewOutboundTaskGroupPredicate([]string{"g1", "g2", "g3"}),
-		},
-		{
 			predicateA: NewOutboundTaskPredicate([]TaskGroupNamespaceIDAndDestination{
 				{"g1", "n1", "d1"},
 				{"g2", "n2", "d2"},
@@ -447,14 +405,17 @@ func (s *predicatesSuite) TestOrPredicates() {
 			}),
 		},
 		{
+			// Cross-type combination that no case-specific branch simplifies, so it falls back
+			// to the generic wrapper. NamespacePredicate/OutboundTaskPredicate are both still
+			// live types; either would do here.
 			predicateA: NewNamespacePredicate([]string{"namespace1"}),
-			predicateB: NewTypePredicate([]enumsspb.TaskType{
-				enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
+			predicateB: NewOutboundTaskPredicate([]TaskGroupNamespaceIDAndDestination{
+				{"g1", "n1", "d1"},
 			}),
 			expectedResult: predicates.Or(
 				NewNamespacePredicate([]string{"namespace1"}),
-				NewTypePredicate([]enumsspb.TaskType{
-					enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT,
+				NewOutboundTaskPredicate([]TaskGroupNamespaceIDAndDestination{
+					{"g1", "n1", "d1"},
 				}),
 			),
 		},

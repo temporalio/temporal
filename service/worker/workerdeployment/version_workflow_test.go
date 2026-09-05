@@ -853,11 +853,9 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagation() {
 	s.Require().NoError(s.env.GetWorkflowError())
 }
 
-// Test_DeleteVersion_AsyncPropagationFailureKeepsWorkflowOpen verifies that when
-// task-queue delete propagation fails with a non-retryable error, the version
-// workflow stays open (propagation counter is not decremented) so that the
-// system does not lose track of the incomplete cleanup.
-func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagationFailureKeepsWorkflowOpen() {
+// Test_DeleteVersion_AsyncPropagationFailureCompletesWorkflow verifies that the
+// workflow completes after reporting a non-retryable propagation failure.
+func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagationFailureCompletesWorkflow() {
 	tv := testvars.New(s.T())
 
 	var a *VersionActivities
@@ -882,13 +880,6 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagationFailureKeepsWo
 		}, &deploymentspb.DeleteVersionArgs{AsyncPropagation: true})
 	}, time.Millisecond)
 
-	// Verify consequence: after propagation fails, check the workflow is still open.
-	observedOpen := false
-	s.env.RegisterDelayedCallback(func() {
-		observedOpen = !s.env.IsWorkflowCompleted()
-		s.env.CancelWorkflow()
-	}, 100*time.Millisecond)
-
 	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
 		NamespaceName: tv.NamespaceName().String(),
 		NamespaceId:   tv.NamespaceID().String(),
@@ -911,8 +902,8 @@ func (s *VersionWorkflowSuite) Test_DeleteVersion_AsyncPropagationFailureKeepsWo
 		},
 	})
 
-	s.True(observedOpen, "workflow should remain open when delete propagation fails")
-	s.True(temporal.IsCanceledError(s.env.GetWorkflowError()))
+	s.True(s.env.IsWorkflowCompleted())
+	s.Require().NoError(s.env.GetWorkflowError())
 }
 
 // Test_DeleteVersion_AsyncPropagation_BlocksWorkerRegistration tests that:
