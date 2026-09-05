@@ -704,10 +704,12 @@ func CallerInfoInterceptorProvider(
 
 func SlowRequestLoggerInterceptorProvider(
 	logger log.Logger,
+	namespaceRegistry namespace.Registry,
 	dc *dynamicconfig.Collection,
 ) *interceptor.SlowRequestLoggerInterceptor {
 	return interceptor.NewSlowRequestLoggerInterceptor(
 		logger,
+		namespaceRegistry,
 		dynamicconfig.SlowRequestLoggingThreshold.Get(dc),
 	)
 }
