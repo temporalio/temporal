@@ -18,7 +18,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -77,10 +76,12 @@ func (c invocableInternal) Invoke(
 		requestID = c.requestID
 	}
 
-	// Validate that the bytes are a valid ChasmComponentRef
 	ref := &persistencespb.ChasmComponentRef{}
-	if err := proto.Unmarshal(decodedRef, ref); err != nil {
-		return invocationResultFail{logInternalError(h.logger, "failed to unmarshal CHASM ComponentRef", err)}
+	if err := ref.Unmarshal(decodedRef); err != nil || ref.GetNamespaceId() == "" || ref.GetBusinessId() == "" {
+		return invocationResultFail{logInternalError(h.logger, "invalid CHASM ComponentRef", err)}
+	}
+	if h.config.internalCallbackRequiresSameNamespace(ref.GetArchetypeId()) && ref.GetNamespaceId() != ns.ID().String() {
+		return invocationResultFail{logInternalError(h.logger, "internal callback namespace mismatch", nil)}
 	}
 
 	request, err := c.getHistoryRequest(decodedRef, requestID)
