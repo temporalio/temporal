@@ -111,6 +111,49 @@ func TestAdminHandlerSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestValidateAdminBatchOperation_MigrateSchedules(t *testing.T) {
+	validRequest := func(target adminservice.MigrateScheduleRequest_SchedulerTarget) *adminservice.StartAdminBatchOperationRequest {
+		return &adminservice.StartAdminBatchOperationRequest{
+			Namespace: "namespace",
+			JobId:     "job-id",
+			Reason:    "schedule migration",
+			Identity:  "test-identity",
+			Operation: &adminservice.StartAdminBatchOperationRequest_MigrateSchedulesOperation{
+				MigrateSchedulesOperation: &adminservice.BatchOperationMigrateSchedules{Target: target},
+			},
+		}
+	}
+
+	t.Run("target selects source schedules without a user query", func(t *testing.T) {
+		require.NoError(t, validateAdminBatchOperation(validRequest(
+			adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM,
+		)))
+	})
+
+	t.Run("unspecified target is rejected", func(t *testing.T) {
+		require.Error(t, validateAdminBatchOperation(validRequest(
+			adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_UNSPECIFIED,
+		)))
+	})
+
+	t.Run("unknown target is rejected", func(t *testing.T) {
+		require.Error(t, validateAdminBatchOperation(validRequest(
+			adminservice.MigrateScheduleRequest_SchedulerTarget(99),
+		)))
+	})
+
+	t.Run("refresh still requires a selector", func(t *testing.T) {
+		require.Error(t, validateAdminBatchOperation(&adminservice.StartAdminBatchOperationRequest{
+			Namespace: "namespace",
+			JobId:     "job-id",
+			Reason:    "refresh",
+			Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
+				RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
+			},
+		}))
+	})
+}
+
 func (s *adminHandlerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.ProtoAssertions = protorequire.New(s.T())

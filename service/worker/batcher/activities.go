@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	batchspb "go.temporal.io/server/api/batch/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
@@ -29,10 +30,12 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/worker_versioning"
 	workercommon "go.temporal.io/server/service/worker/common"
+	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
@@ -437,7 +440,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	if batchParams.AdminRequest != nil {
 		ctx = headers.SetCallerType(ctx, headers.CallerTypePreemptable)
 		adminReq := batchParams.AdminRequest
-		visibilityQuery = adminReq.GetVisibilityQuery()
+		visibilityQuery = a.adjustQueryAdminBatchType(adminReq)
 		executions = adminReq.GetExecutions()
 	} else {
 		visibilityQuery = a.adjustQueryBatchTypeEnum(batchParams.Request.VisibilityQuery, batchParams.BatchType)
@@ -547,9 +550,25 @@ func (a *activities) adjustQueryBatchTypeEnum(query string, batchType enumspb.Ba
 }
 
 func (a *activities) adjustQueryAdminBatchType(adminReq *adminservice.StartAdminBatchOperationRequest) string {
-	// RefreshWorkflowTasks applies to both open and closed workflows,
-	// so no additional filter is needed - return query as-is.
-	return adminReq.GetVisibilityQuery()
+	query := adminReq.GetVisibilityQuery()
+	op, ok := adminReq.GetOperation().(*adminservice.StartAdminBatchOperationRequest_MigrateSchedulesOperation)
+	if !ok {
+		return query
+	}
+
+	var sourceQuery string
+	switch op.MigrateSchedulesOperation.GetTarget() {
+	case adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_CHASM:
+		sourceQuery = fmt.Sprintf("TemporalNamespaceDivision = '%s' AND ExecutionStatus = 'Running'", scheduler.NamespaceDivision)
+	case adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW:
+		sourceQuery = fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Running'", chasm.SchedulerArchetypeID)
+	default:
+		return query
+	}
+	if query == "" {
+		return sourceQuery
+	}
+	return fmt.Sprintf("(%s) AND (%s)", sourceQuery, query)
 }
 
 func (a *activities) getOperationConcurrency(concurrency int) int {
@@ -934,7 +953,7 @@ func (a *activities) processAdminTask(
 	limiter quotas.RequestRateLimiter,
 ) error {
 	adminReq := batchOperation.AdminRequest
-	switch adminReq.Operation.(type) {
+	switch operation := adminReq.Operation.(type) {
 	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation:
 		return processTask(ctx, limiter, task,
 			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
@@ -949,6 +968,25 @@ func (a *activities) processAdminTask(
 						NamespaceId: batchOperation.NamespaceId,
 						Execution:   executionInfo.Execution,
 					},
+				})
+				return err
+			})
+	case *adminservice.StartAdminBatchOperationRequest_MigrateSchedulesOperation:
+		return processTask(ctx, limiter, task,
+			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
+				target := operation.MigrateSchedulesOperation.GetTarget()
+				scheduleID := strings.TrimPrefix(executionInfo.GetExecution().GetWorkflowId(), primitives.ScheduleWorkflowIDPrefix)
+				_, err := a.AdminClient.MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
+					Namespace:  adminReq.GetNamespace(),
+					ScheduleId: scheduleID,
+					Target:     target,
+					Identity:   adminReq.GetIdentity(),
+					RequestId: deterministicRequestID(
+						adminReq.GetJobId(),
+						"migrate-schedule",
+						target.String(),
+						scheduleID,
+					),
 				})
 				return err
 			})
