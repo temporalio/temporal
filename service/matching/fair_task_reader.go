@@ -434,16 +434,14 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTaskInfo, mode mergeMode) []*internalTask {
 	batchSize := tr.backlogMgr.config.GetTasksBatchSize()
 
-	// Work on a copy-on-write snapshot of the outstanding tasks: merge the newly read/written
-	// tasks into it, trim it back to batchSize loaded tasks, and install the result as the new set
-	// of outstanding tasks. The btree does the trimming for us.
-	merged := tr.outstandingTasks.Copy()
+	// Merge the newly read/written tasks into the outstanding tasks, then trim back to batchSize
+	// loaded tasks. The btree does the trimming for us.
 
-	// The merged operations below all touch nearby levels, so share one path hint across the Get,
-	// Set, and Delete point operations on merged.
+	// The operations below all touch nearby levels, so share one path hint across the Get, Set, and
+	// Delete point operations on outstandingTasks.
 	var hint btree.PathHint
 
-	// (1) Merge the newly read/written tasks into the snapshot. Already-acked tasks (expired, or
+	// (1) Merge the newly read/written tasks into the tree. Already-acked tasks (expired, or
 	// re-read after their ack was evicted) go in as acks; the rest become loaded tasks. We create
 	// the internalTask now so the tree can order it by level, and remember the ones we created so
 	// we can drop any that don't survive the trim below.
@@ -458,7 +456,7 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 			// If we're writing and we're not at the end, ignore tasks above readLevel since we
 			// don't know what's in between readLevel and there.
 			continue
-		} else if _, have := merged.GetHint(outstandingTask{level: level}, &hint); have {
+		} else if _, have := tr.outstandingTasks.GetHint(outstandingTask{level: level}, &hint); have {
 			// On a write/read race or a re-read of a range we may see a task we already have
 			// (loaded or acked). Ignore tasks we already track.
 			continue
@@ -466,15 +464,15 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 			// This task was already acked, but its ack was evicted from memory before it could
 			// advance the ack level, and now we've re-read it. Insert it as a pre-acked (nil) entry
 			// so it advances the ack level instead of being re-delivered to the matcher.
-			merged.SetHint(outstandingTask{level: level}, &hint)
+			tr.outstandingTasks.SetHint(outstandingTask{level: level}, &hint)
 		} else if IsTaskExpired(t) {
 			// Expired tasks are inserted pre-acked so they advance ackLevel and get GC'd.
-			merged.SetHint(outstandingTask{level: level}, &hint)
+			tr.outstandingTasks.SetHint(outstandingTask{level: level}, &hint)
 			recordDroppedTask(tr.backlogMgr.metricsHandler, dropReasonExpiredRead)
 		} else {
 			task := newInternalTaskFromBacklog(t, tr.completeTask)
 			tr.backlogMgr.setPriority(task)
-			merged.SetHint(outstandingTask{level: level, task: task}, &hint)
+			tr.outstandingTasks.SetHint(outstandingTask{level: level, task: task}, &hint)
 			created = append(created, task)
 		}
 	}
@@ -484,7 +482,7 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 	// batchSize, cut stays at maxFairLevel, meaning nothing is trimmed.
 	cut := outstandingTask{level: maxFairLevel}
 	loaded := 0
-	merged.Scan(func(o outstandingTask) bool {
+	tr.outstandingTasks.Scan(func(o outstandingTask) bool {
 		if o.acked() {
 			return true
 		} else if loaded++; loaded > batchSize {
@@ -500,7 +498,7 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 	// eventually call task.finish/finishForwarded, which calls tr.completeTask.
 	created = slices.DeleteFunc(created, func(task *internalTask) bool {
 		if level := task.fairLevel(); !level.less(cut.level) {
-			merged.DeleteHint(outstandingTask{level: level}, &hint)
+			tr.outstandingTasks.DeleteHint(outstandingTask{level: level}, &hint)
 			return true
 		}
 		tr.loadedTasks++
@@ -511,7 +509,7 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 	// (4) Chop the pre-existing entries at or above the cut and evict them. The overflow we created
 	// is already gone, so everything chopped here was in the matcher (a loaded task) or is an ack.
 	// When there's no cut, cut is maxFairLevel and this range is empty.
-	chopped := merged.DeleteRange(cut, outstandingTask{level: maxFairLevel}, nil)
+	chopped := tr.outstandingTasks.DeleteRange(cut, outstandingTask{level: maxFairLevel}, nil)
 	chopped.Scan(func(o outstandingTask) bool {
 		if o.task != nil {
 			// A loaded task we're dropping from memory. It may already have been matched and
@@ -533,12 +531,9 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 		tr.evictedAcks.PopMax()
 	}
 
-	// Install the trimmed snapshot as the new outstanding tasks.
-	tr.outstandingTasks = merged
-
 	// readLevel is the highest level we track, loaded or acked. If we track nothing, leave it where
 	// it is so we resume reading from there.
-	if maxItem, ok := merged.Max(); ok {
+	if maxItem, ok := tr.outstandingTasks.Max(); ok {
 		tr.readLevel = maxItem.level
 	}
 
