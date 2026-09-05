@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/wideevents"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -46,6 +47,17 @@ func (l *transmissionCaptureLogger) Emit(_ context.Context, record otellog.Recor
 
 func (l *transmissionCaptureLogger) Enabled(context.Context, otellog.EnabledParameters) bool {
 	return true
+}
+
+func replicationTaskWithVisibilityTime(expected *replicationspb.ReplicationTask) gomock.Matcher {
+	return gomock.Cond(func(actual *replicationspb.ReplicationTask) bool {
+		if actual == nil || actual.GetVisibilityTime() == nil || actual.GetVisibilityTime().CheckValid() != nil {
+			return false
+		}
+		actual = proto.Clone(actual).(*replicationspb.ReplicationTask)
+		actual.VisibilityTime = nil
+		return proto.Equal(actual, expected)
+	})
 }
 
 func TestTransmissionTaskSuite(t *testing.T) {
@@ -124,7 +136,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	}
 	isGlobalNamespace := true
 
-	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), &replicationspb.ReplicationTask{
+	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), replicationTaskWithVisibilityTime(&replicationspb.ReplicationTask{
 		TaskType: taskType,
 		Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
 			NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
@@ -154,7 +166,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 				FailoverVersion: failoverVersion,
 			},
 		},
-	}).Return(nil)
+	})).Return(nil)
 
 	err := s.namespaceReplicator.HandleTransmissionTask(
 		context.Background(),
@@ -306,7 +318,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 	}
 	isGlobalNamespace := true
 
-	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), &replicationspb.ReplicationTask{
+	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), replicationTaskWithVisibilityTime(&replicationspb.ReplicationTask{
 		TaskType: taskType,
 		Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
 			NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
@@ -335,7 +347,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 				FailoverVersion: failoverVersion,
 			},
 		},
-	}).Return(nil)
+	})).Return(nil)
 
 	err := s.namespaceReplicator.HandleTransmissionTask(
 		context.Background(),
@@ -396,7 +408,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_N
 	}
 	isGlobalNamespace := true
 
-	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), &replicationspb.ReplicationTask{
+	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), replicationTaskWithVisibilityTime(&replicationspb.ReplicationTask{
 		TaskType: taskType,
 		Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
 			NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
@@ -426,7 +438,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_N
 				FailoverVersion: failoverVersion,
 			},
 		},
-	}).Return(nil)
+	})).Return(nil)
 
 	err := s.namespaceReplicator.HandleTransmissionTask(
 		context.Background(),
@@ -487,7 +499,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_H
 	}
 	isGlobalNamespace := true
 
-	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), &replicationspb.ReplicationTask{
+	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), replicationTaskWithVisibilityTime(&replicationspb.ReplicationTask{
 		TaskType: taskType,
 		Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
 			NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
@@ -517,7 +529,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_H
 				FailoverVersion: failoverVersion,
 			},
 		},
-	}).Return(nil)
+	})).Return(nil)
 
 	err := s.namespaceReplicator.HandleTransmissionTask(
 		context.Background(),
@@ -632,7 +644,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_R
 
 	isGlobalNamespace := true
 
-	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), &replicationspb.ReplicationTask{
+	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), replicationTaskWithVisibilityTime(&replicationspb.ReplicationTask{
 		TaskType: taskType,
 		Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
 			NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
@@ -661,7 +673,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_R
 				FailoverVersion: failoverVersion,
 			},
 		},
-	}).Return(nil).Times(1)
+	})).Return(nil).Times(1)
 
 	err := s.namespaceReplicator.HandleTransmissionTask(
 		context.Background(),
