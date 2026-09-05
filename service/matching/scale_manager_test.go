@@ -140,6 +140,28 @@ func (s *ScaleManagerSuite) startManagerWithLogger(
 	writePartitions int,
 	initial *persistencespb.PartitionScaleState,
 ) {
+	s.startManagerWithScalerAndLogger(logger, s.scaler, writePartitions, initial)
+}
+
+func (s *ScaleManagerSuite) startManagerWithScaler(
+	scaler PartitionScaler,
+	writePartitions int,
+	initial *persistencespb.PartitionScaleState,
+) {
+	s.startManagerWithScalerAndLogger(
+		testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly),
+		scaler,
+		writePartitions,
+		initial,
+	)
+}
+
+func (s *ScaleManagerSuite) startManagerWithScalerAndLogger(
+	logger log.Logger,
+	scaler PartitionScaler,
+	writePartitions int,
+	initial *persistencespb.PartitionScaleState,
+) {
 	if tl, ok := logger.(*testlogger.TestLogger); ok {
 		s.newTarget = tl.Expect(testlogger.Info, "new target")
 	}
@@ -150,7 +172,7 @@ func (s *ScaleManagerSuite) startManagerWithLogger(
 		s.metricsHandler,
 		s.userData,
 		s.matching,
-		s.scaler,
+		scaler,
 		s.timeSource,
 		dynamicconfig.GetTypedPropertyFn(s.settings),
 		dynamicconfig.GetIntPropertyFn(writePartitions),
@@ -388,6 +410,106 @@ func (s *ScaleManagerSuite) TestDecisionPersistsAndUpdatesEphemeralData() {
 	info := waitRecv(s, scaleInfos, "no ephemeral data update")
 	s.Equal(int32(4), info.Read)
 	s.Equal(int32(2), info.Write)
+}
+
+// TestDisablingScalerReleasesManagedState verifies that disabling the real scaler
+// after it has produced state clears its target and private state. Backlog state is
+// retained for server-side tracking, while Write=0 makes clients fall back to the
+// dynamic-config partition counts even when the managed count was higher.
+func (s *ScaleManagerSuite) TestDisablingScalerReleasesManagedState() {
+	var enabled atomic.Bool
+	enabled.Store(true)
+	scaler := newSimplePartitionScaler(func() dynamicconfig.SimplePartitionScalerSettings {
+		return dynamicconfig.SimplePartitionScalerSettings{Enabled: enabled.Load(), Min: 6}
+	}, s.timeSource)
+
+	dbWrites := make(chan *persistencespb.PartitionScaleState, 2)
+	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), true).
+		Do(func(state *persistencespb.PartitionScaleState, _ bool) {
+			dbWrites <- common.CloneProto(state)
+		}).
+		Return(nil).Times(2)
+
+	scaleInfos := make(chan *taskqueuespb.PartitionScaleInfo, 2)
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).
+		Do(func(info *taskqueuespb.PartitionScaleInfo) {
+			scaleInfos <- common.CloneProto(info)
+		}).Times(2)
+
+	s.startManagerWithScaler(scaler, 4, nil)
+
+	s.sm.AddedTasks(1)
+	enabledState := waitRecv(s, dbWrites, "enabled state was not persisted")
+	s.Equal(int32(6), enabledState.Target)
+	s.NotNil(enabledState.PrivateScalerState)
+	s.Equal(int32(6), bitSet(enabledState.BacklogState).len())
+	enabledInfo := waitRecv(s, scaleInfos, "enabled scale info was not pushed")
+	s.Equal(int32(6), enabledInfo.Read)
+	s.Equal(int32(6), enabledInfo.Write)
+
+	s.awaitDecisionApplied(1)
+	enabled.Store(false)
+	s.timeSource.Advance(110 * time.Millisecond)
+	s.sm.AddedTasks(1)
+
+	disabledState := waitRecv(s, dbWrites, "disabled state was not persisted")
+	s.Zero(disabledState.Target)
+	s.Nil(disabledState.PrivateScalerState)
+	s.Equal(int32(6), bitSet(disabledState.BacklogState).len())
+	disabledInfo := waitRecv(s, scaleInfos, "disabled scale info was not pushed")
+	s.Equal(int32(6), disabledInfo.Read)
+	s.Zero(disabledInfo.Write)
+}
+
+// TestRestartRestoresManagedState verifies that a fresh manager and scaler load
+// persisted scale state, republish its partition counts, and continue scaling.
+func (s *ScaleManagerSuite) TestRestartRestoresManagedState() {
+	var minTarget atomic.Int32
+	minTarget.Store(6)
+	newScaler := func() PartitionScaler {
+		return newSimplePartitionScaler(func() dynamicconfig.SimplePartitionScalerSettings {
+			return dynamicconfig.SimplePartitionScalerSettings{Enabled: true, Min: minTarget.Load()}
+		}, s.timeSource)
+	}
+
+	dbWrites := make(chan *persistencespb.PartitionScaleState, 2)
+	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), true).
+		Do(func(state *persistencespb.PartitionScaleState, _ bool) {
+			dbWrites <- common.CloneProto(state)
+		}).
+		Return(nil).Times(2)
+
+	scaleInfos := make(chan *taskqueuespb.PartitionScaleInfo, 3)
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).
+		Do(func(info *taskqueuespb.PartitionScaleInfo) {
+			scaleInfos <- common.CloneProto(info)
+		}).Times(3)
+
+	s.startManagerWithScaler(newScaler(), 4, nil)
+	s.sm.AddedTasks(1)
+	persisted := waitRecv(s, dbWrites, "initial state was not persisted")
+	s.Equal(int32(6), persisted.Target)
+	s.NotNil(persisted.PrivateScalerState)
+	initialInfo := waitRecv(s, scaleInfos, "initial scale info was not pushed")
+	s.Equal(int32(6), initialInfo.Read)
+	s.Equal(int32(6), initialInfo.Write)
+
+	s.sm.Stop()
+	<-s.sm.background.Done()
+	s.sm = nil
+
+	s.startManagerWithScaler(newScaler(), 4, persisted)
+	reloadedInfo := waitRecv(s, scaleInfos, "reloaded scale info was not pushed")
+	s.ProtoEqual(initialInfo, reloadedInfo)
+
+	minTarget.Store(7)
+	s.sm.AddedTasks(1)
+	continued := waitRecv(s, dbWrites, "reloaded manager did not continue scaling")
+	s.Equal(int32(7), continued.Target)
+	s.ProtoEqual(persisted.PrivateScalerState, continued.PrivateScalerState)
+	continuedInfo := waitRecv(s, scaleInfos, "continued scale info was not pushed")
+	s.Equal(int32(7), continuedInfo.Read)
+	s.Equal(int32(7), continuedInfo.Write)
 }
 
 // TestEmitsGaugeMetrics verifies that when gauge emission is enabled, a scale
