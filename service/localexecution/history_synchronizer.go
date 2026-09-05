@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
@@ -53,6 +54,7 @@ type ReplicationTarget struct {
 	OwnershipToken []byte
 	FencingEpoch   int64
 	AdminClient    adminservice.AdminServiceClient
+	Registrations  *WorkerRegistrationManifest
 }
 
 type HistoryReplicator struct {
@@ -62,6 +64,8 @@ type HistoryReplicator struct {
 	cursor          SyncCursor
 	eventSerializer serialization.Serializer
 	pendingRequest  *adminservice.SyncLocalExecutionRequest
+	registrations   *WorkerRegistrationManifest
+	activityTypes   map[string]struct{}
 }
 
 type SynchronizationLoopOptions struct {
@@ -207,6 +211,18 @@ func NewHistoryReplicator(
 	if cursor.EventID < common.FirstEventID {
 		return nil, errors.New("source cursor must identify an existing event")
 	}
+	activityTypes := make(map[string]struct{})
+	if target.Registrations != nil {
+		if target.Registrations.TaskQueue == "" {
+			return nil, errors.New("registration task queue is required")
+		}
+		if err := validateRegistrationTypes("activity", target.Registrations.ActivityTypes); err != nil {
+			return nil, err
+		}
+		for _, activityType := range target.Registrations.ActivityTypes {
+			activityTypes[activityType] = struct{}{}
+		}
+	}
 
 	return &HistoryReplicator{
 		source:          source,
@@ -214,6 +230,8 @@ func NewHistoryReplicator(
 		maximumPageSize: defaultMaximumPageSize,
 		cursor:          cursor,
 		eventSerializer: serialization.NewSerializer(),
+		registrations:   target.Registrations,
+		activityTypes:   activityTypes,
 	}, nil
 }
 
@@ -348,7 +366,7 @@ func (r *HistoryReplicator) prepareSyncRequest(
 	if err != nil {
 		return nil, fmt.Errorf("read source history cursor: %w", err)
 	}
-	release := r.historyClosesWorkflow(historyBatches)
+	release := r.historyRequiresUpstream(historyBatches)
 	syncID := uuid.NewString()
 	return &adminservice.SyncLocalExecutionRequest{
 		Namespace:            r.target.Namespace,
@@ -421,6 +439,44 @@ func (r *HistoryReplicator) historyClosesWorkflow(historyBatches []*commonpb.Dat
 	}
 }
 
+func (r *HistoryReplicator) historyRequiresUpstream(historyBatches []*commonpb.DataBlob) bool {
+	for _, batch := range historyBatches {
+		events, err := r.eventSerializer.DeserializeEvents(batch)
+		if err != nil {
+			return true
+		}
+		for _, event := range events {
+			switch event.GetEventType() {
+			case enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:
+				if r.activityRequiresUpstream(event) {
+					return true
+				}
+			case enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+				enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED,
+				enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:
+				return true
+			default:
+			}
+		}
+	}
+	return r.historyClosesWorkflow(historyBatches)
+}
+
+func (r *HistoryReplicator) activityRequiresUpstream(event *historypb.HistoryEvent) bool {
+	if r.registrations == nil {
+		return false
+	}
+	attributes := event.GetActivityTaskScheduledEventAttributes()
+	if attributes == nil || attributes.GetActivityType().GetName() == "" {
+		return true
+	}
+	if attributes.GetTaskQueue().GetName() != r.registrations.TaskQueue {
+		return true
+	}
+	_, registered := r.activityTypes[attributes.GetActivityType().GetName()]
+	return !registered
+}
+
 func (r *HistoryReplicator) Run(
 	ctx context.Context,
 	execution *commonpb.WorkflowExecution,
@@ -458,7 +514,7 @@ func (r *HistoryReplicator) RunControlled(
 	ctx context.Context,
 	execution *commonpb.WorkflowExecution,
 	options SynchronizationLoopOptions,
-	afterSync func(SyncResult),
+	afterSync func(SyncResult) error,
 ) error {
 	if err := normalizeSynchronizationLoopOptions(&options); err != nil {
 		return err
@@ -485,10 +541,11 @@ func (r *HistoryReplicator) RunControlled(
 			return err
 		}
 		if afterSync != nil {
-			afterSync(result)
+			if err := afterSync(result); err != nil {
+				return fmt.Errorf("record synchronization result: %w", err)
+			}
 		}
 		if result.Released {
-			<-ctx.Done()
 			return nil
 		}
 		if result.LeaseExpiration.IsZero() {

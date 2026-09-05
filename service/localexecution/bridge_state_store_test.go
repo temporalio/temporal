@@ -103,6 +103,7 @@ func TestBridgeStateStoreOperationsFailAfterClose(t *testing.T) {
 
 func validBridgeExecutionRecord() BridgeExecutionRecord {
 	return BridgeExecutionRecord{
+		Phase:                        BridgeExecutionPhaseReady,
 		Namespace:                    "namespace",
 		NamespaceID:                  "namespace-id",
 		WorkflowID:                   "workflow-id",

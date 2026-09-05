@@ -10,6 +10,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -43,6 +44,82 @@ func TestHistoryClosesWorkflow(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, replicator.historyClosesWorkflow([]*commonpb.DataBlob{openBatch}))
 	require.False(t, replicator.historyClosesWorkflow(nil))
+}
+
+func TestHistoryRequiresUpstreamForRemoteOperations(t *testing.T) {
+	serializer := serialization.NewSerializer()
+	replicator := &HistoryReplicator{
+		eventSerializer: serializer,
+		registrations: &WorkerRegistrationManifest{
+			TaskQueue:     "local-task-queue",
+			ActivityTypes: []string{"local-activity"},
+		},
+		activityTypes: map[string]struct{}{"local-activity": {}},
+	}
+	activityEvent := func(activityType string, taskQueue string) *historypb.HistoryEvent {
+		return &historypb.HistoryEvent{
+			EventId:   3,
+			EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
+			Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
+				ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
+					ActivityType: &commonpb.ActivityType{Name: activityType},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: taskQueue},
+				},
+			},
+		}
+	}
+
+	tests := []struct {
+		name     string
+		event    *historypb.HistoryEvent
+		required bool
+	}{
+		{
+			name:  "registered activity on the local task queue",
+			event: activityEvent("local-activity", "local-task-queue"),
+		},
+		{
+			name:     "unregistered activity",
+			event:    activityEvent("remote-activity", "local-task-queue"),
+			required: true,
+		},
+		{
+			name:     "differently routed activity",
+			event:    activityEvent("local-activity", "remote-task-queue"),
+			required: true,
+		},
+		{
+			name: "Nexus operation",
+			event: &historypb.HistoryEvent{
+				EventId:   3,
+				EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+			},
+			required: true,
+		},
+		{
+			name: "external signal",
+			event: &historypb.HistoryEvent{
+				EventId:   3,
+				EventType: enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED,
+			},
+			required: true,
+		},
+		{
+			name: "external cancellation",
+			event: &historypb.HistoryEvent{
+				EventId:   3,
+				EventType: enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED,
+			},
+			required: true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			batch, err := serializer.SerializeEvents([]*historypb.HistoryEvent{test.event})
+			require.NoError(t, err)
+			require.Equal(t, test.required, replicator.historyRequiresUpstream([]*commonpb.DataBlob{batch}))
+		})
+	}
 }
 
 func TestHistoryAfterCursorTrimsReturnedPrefix(t *testing.T) {

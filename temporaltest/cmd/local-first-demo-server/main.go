@@ -9,14 +9,11 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"sync/atomic"
 	"syscall"
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -26,7 +23,6 @@ import (
 	temporalite "go.temporal.io/server/temporaltest/internal"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 const (
@@ -51,7 +47,6 @@ type options struct {
 	activityType     string
 	taskQueue        string
 	iterations       int
-	localServerID    string
 	failSyncAttempts int
 }
 
@@ -80,7 +75,6 @@ func main() {
 	flag.StringVar(&opts.activityType, "activity-type", demoActivityType, "Activity type advertised to Core")
 	flag.StringVar(&opts.taskQueue, "task-queue", demoTaskQueue, "task queue used by the workflow")
 	flag.IntVar(&opts.iterations, "iterations", 3, "number of Activities the Core workflow driver will execute")
-	flag.StringVar(&opts.localServerID, "local-server-id", "local-first-core-steel-thread", "stable local bridge identifier")
 	flag.IntVar(&opts.failSyncAttempts, "fail-sync-attempts", 0, "number of synchronization attempts to fail for testing")
 	flag.Parse()
 
@@ -159,11 +153,17 @@ func runBridge(ctx context.Context, opts options) error {
 	if err := validateBridgeOptions(opts); err != nil {
 		return err
 	}
-	if err := os.MkdirAll(opts.stateDirectory, 0o700); err != nil {
-		return fmt.Errorf("create state directory: %w", err)
+	stateStore, err := localexecution.OpenBridgeStateStore(opts.stateDirectory)
+	if err != nil {
+		return fmt.Errorf("open bridge state: %w", err)
 	}
+	defer func() {
+		if err := stateStore.Close(); err != nil {
+			log.Printf("close bridge state: %v", err)
+		}
+	}()
 
-	local, err := startServer(filepath.Join(opts.stateDirectory, "local.sqlite"), false, opts.namespace, false)
+	local, err := startServer(stateStore.DatabasePath(), false, opts.namespace, false)
 	if err != nil {
 		return fmt.Errorf("start local server: %w", err)
 	}
@@ -191,11 +191,6 @@ func runBridge(ctx context.Context, opts options) error {
 		return fmt.Errorf("wait for local history service: %w", err)
 	}
 
-	acquisition, err := acquireLocalExecution(startupCtx, upstreamClient, opts)
-	if err != nil {
-		return err
-	}
-	execution := acquisition.GetWorkflowExecution()
 	upstreamAdmin, upstreamNamespaceID, closeUpstreamAdmin, err := adminClient(
 		startupCtx,
 		opts.upstreamAddress,
@@ -215,43 +210,6 @@ func runBridge(ctx context.Context, opts options) error {
 	}
 	defer closeLocalAdmin()
 
-	baselineImporter, err := localexecution.NewBaselineImporter(
-		localexecution.HistoryEndpoint{
-			NamespaceID: upstreamNamespaceID,
-			AdminClient: upstreamAdmin,
-		},
-		localexecution.HistoryEndpoint{
-			Namespace:   opts.namespace,
-			AdminClient: localAdmin,
-		},
-	)
-	if err != nil {
-		return fmt.Errorf("configure baseline import: %w", err)
-	}
-	baseline, err := baselineImporter.Import(startupCtx, execution)
-	if err != nil {
-		return fmt.Errorf("import baseline: %w", err)
-	}
-	if baseline.LastEventID != acquisition.GetLocalExecutionInfo().GetLastSynchronizedEventId() ||
-		baseline.LastEventVersion != acquisition.GetLocalExecutionInfo().GetLastSynchronizedEventVersion() {
-		return fmt.Errorf(
-			"imported baseline cursor %d/%d does not match acquired cursor %d/%d",
-			baseline.LastEventID,
-			baseline.LastEventVersion,
-			acquisition.GetLocalExecutionInfo().GetLastSynchronizedEventId(),
-			acquisition.GetLocalExecutionInfo().GetLastSynchronizedEventVersion(),
-		)
-	}
-	stateController, err := localexecution.NewExecutionStateController(
-		opts.namespace,
-		opts.localServerID,
-		acquisition.GetLocalExecutionInfo().GetFencingEpoch(),
-		localAdmin,
-	)
-	if err != nil {
-		return fmt.Errorf("configure local execution state: %w", err)
-	}
-
 	syncTargetAdmin := upstreamAdmin
 	if opts.failSyncAttempts > 0 {
 		faults := &faultInjectingAdminClient{AdminServiceClient: upstreamAdmin}
@@ -259,34 +217,37 @@ func runBridge(ctx context.Context, opts options) error {
 		syncTargetAdmin = faults
 	}
 
-	replicator, err := localexecution.NewHistoryReplicator(
-		localexecution.HistoryEndpoint{
-			NamespaceID: localNamespaceID,
-			AdminClient: localAdmin,
+	runtime, err := localexecution.NewBridgeRuntime(localexecution.BridgeRuntimeOptions{
+		Configuration: localexecution.BridgeConfiguration{
+			Namespace: opts.namespace,
+			Upstream: localexecution.UpstreamConnectionProfile{
+				Address: opts.upstreamAddress,
+			},
+			Options: localexecution.BridgeLocalFirstOptions{
+				SyncIntervalMilliseconds:    opts.syncInterval.Milliseconds(),
+				MaximumUnsynchronizedEvents: 10_240,
+				MaximumUnsynchronizedBytes:  8 << 20,
+			},
+			Registrations: localexecution.WorkerRegistrationManifest{
+				TaskQueue:     opts.taskQueue,
+				WorkflowTypes: []string{opts.workflowType},
+				ActivityTypes: []string{opts.activityType},
+			},
 		},
-		localexecution.ReplicationTarget{
-			Namespace:      opts.namespace,
-			LocalServerID:  opts.localServerID,
-			OwnershipToken: acquisition.GetLocalExecutionInfo().GetOwnershipToken(),
-			FencingEpoch:   acquisition.GetLocalExecutionInfo().GetFencingEpoch(),
-			AdminClient:    syncTargetAdmin,
-		},
-		localexecution.SyncCursor{
-			EventID: baseline.LastEventID,
-			Version: baseline.LastEventVersion,
-		},
-	)
+		StateStore:          stateStore,
+		UpstreamNamespaceID: upstreamNamespaceID,
+		LocalNamespaceID:    localNamespaceID,
+		UpstreamWorkflow:    upstreamClient.WorkflowService(),
+		UpstreamAdmin:       syncTargetAdmin,
+		LocalAdmin:          localAdmin,
+	})
 	if err != nil {
-		return fmt.Errorf("configure history synchronization: %w", err)
+		return fmt.Errorf("configure bridge runtime: %w", err)
 	}
-
-	syncErrors := startHistorySynchronization(
-		ctx,
-		acquisition,
-		replicator,
-		stateController,
-		opts.syncInterval,
-	)
+	runtimeDone, err := runtime.Start(ctx)
+	if err != nil {
+		return fmt.Errorf("start bridge runtime: %w", err)
+	}
 
 	if err := writeReady(readyMessage{
 		UpstreamAddress: opts.upstreamAddress,
@@ -302,38 +263,7 @@ func runBridge(ctx context.Context, opts options) error {
 		return err
 	}
 
-	return waitForBridge(ctx, syncErrors)
-}
-
-func startHistorySynchronization(
-	ctx context.Context,
-	acquisition *workflowservice.PollWorkflowTaskQueueResponse,
-	replicator *localexecution.HistoryReplicator,
-	stateController *localexecution.ExecutionStateController,
-	interval time.Duration,
-) <-chan error {
-	syncErrors := make(chan error, 1)
-	go func() {
-		leaseExpiration := acquisition.GetLocalExecutionInfo().GetLeaseExpirationTime()
-		if leaseExpiration == nil || leaseExpiration.CheckValid() != nil {
-			syncErrors <- errors.New("acquisition returned an invalid lease expiration")
-			return
-		}
-		syncErrors <- replicator.RunControlled(ctx, acquisition.GetWorkflowExecution(), localexecution.SynchronizationLoopOptions{
-			Interval:        interval,
-			LeaseExpiration: leaseExpiration.AsTime(),
-			StateController: stateController,
-		}, logSynchronizationResult)
-	}()
-	return syncErrors
-}
-
-func logSynchronizationResult(result localexecution.SyncResult) {
-	if result.Released {
-		log.Printf("synchronized %d batches through event %d and released ownership", result.HistoryBatches, result.LastEventID)
-		return
-	}
-	log.Printf("synchronized %d batches through event %d", result.HistoryBatches, result.LastEventID)
+	return waitForBridge(ctx, runtimeDone)
 }
 
 func waitForBridge(ctx context.Context, syncErrors <-chan error) error {
@@ -367,53 +297,6 @@ func (c *faultInjectingAdminClient) SyncLocalExecution(
 		return nil, serviceerror.NewUnavailable("injected synchronization failure")
 	}
 	return c.AdminServiceClient.SyncLocalExecution(ctx, request, opts...)
-}
-
-func acquireLocalExecution(
-	ctx context.Context,
-	upstreamClient client.Client,
-	opts options,
-) (*workflowservice.PollWorkflowTaskQueueResponse, error) {
-	acquisition, err := upstreamClient.WorkflowService().PollWorkflowTaskQueue(
-		ctx,
-		&workflowservice.PollWorkflowTaskQueueRequest{
-			Namespace: opts.namespace,
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: opts.taskQueue,
-				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-			},
-			Identity: opts.localServerID,
-			LocalExecutionOptions: &workflowservice.LocalExecutionPollOptions{
-				LocalServerId:          opts.localServerID,
-				ProtocolVersion:        localexecution.ProtocolVersion,
-				SyncInterval:           durationpb.New(opts.syncInterval),
-				RequestedLeaseDuration: durationpb.New(3 * opts.syncInterval),
-			},
-		},
-	)
-	if err != nil {
-		return nil, fmt.Errorf("acquire upstream workflow task: %w", err)
-	}
-	if acquisition.GetLocalExecutionInfo() == nil {
-		return nil, fmt.Errorf(
-			"upstream did not return local execution ownership (task token bytes: %d, started event: %d, history events: %d)",
-			len(acquisition.GetTaskToken()),
-			acquisition.GetStartedEventId(),
-			len(acquisition.GetHistory().GetEvents()),
-		)
-	}
-	if len(acquisition.GetTaskToken()) != 0 {
-		return nil, errors.New("upstream returned a workflow task token for local execution acquisition")
-	}
-	execution := acquisition.GetWorkflowExecution()
-	if execution.GetWorkflowId() != opts.workflowID || execution.GetRunId() != opts.runID {
-		return nil, fmt.Errorf(
-			"acquired unexpected execution %s/%s",
-			execution.GetWorkflowId(),
-			execution.GetRunId(),
-		)
-	}
-	return acquisition, nil
 }
 
 func validateCommonOptions(opts options) error {
@@ -450,9 +333,6 @@ func validateBridgeOptions(opts options) error {
 	}
 	if opts.runID == "" {
 		return errors.New("--run-id is required")
-	}
-	if opts.localServerID == "" {
-		return errors.New("--local-server-id is required")
 	}
 	if opts.syncInterval <= 0 {
 		return errors.New("--sync-interval must be positive")

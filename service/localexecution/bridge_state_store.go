@@ -23,18 +23,26 @@ const (
 	bridgeExecutionsDirname = "executions"
 )
 
+type BridgeExecutionPhase string
+
+const (
+	BridgeExecutionPhaseImporting BridgeExecutionPhase = "IMPORTING"
+	BridgeExecutionPhaseReady     BridgeExecutionPhase = "READY"
+)
+
 type BridgeExecutionRecord struct {
-	Version                      int       `json:"version"`
-	Namespace                    string    `json:"namespace"`
-	NamespaceID                  string    `json:"namespace_id"`
-	WorkflowID                   string    `json:"workflow_id"`
-	RunID                        string    `json:"run_id"`
-	OwnershipToken               []byte    `json:"ownership_token"`
-	FencingEpoch                 int64     `json:"fencing_epoch"`
-	LeaseExpiration              time.Time `json:"lease_expiration"`
-	SyncIntervalMilliseconds     int64     `json:"sync_interval_milliseconds"`
-	LastSynchronizedEventID      int64     `json:"last_synchronized_event_id"`
-	LastSynchronizedEventVersion int64     `json:"last_synchronized_event_version"`
+	Version                      int                  `json:"version"`
+	Phase                        BridgeExecutionPhase `json:"phase"`
+	Namespace                    string               `json:"namespace"`
+	NamespaceID                  string               `json:"namespace_id"`
+	WorkflowID                   string               `json:"workflow_id"`
+	RunID                        string               `json:"run_id"`
+	OwnershipToken               []byte               `json:"ownership_token"`
+	FencingEpoch                 int64                `json:"fencing_epoch"`
+	LeaseExpiration              time.Time            `json:"lease_expiration"`
+	SyncIntervalMilliseconds     int64                `json:"sync_interval_milliseconds"`
+	LastSynchronizedEventID      int64                `json:"last_synchronized_event_id"`
+	LastSynchronizedEventVersion int64                `json:"last_synchronized_event_version"`
 }
 
 type bridgeIdentity struct {
@@ -229,6 +237,11 @@ func validatePrivateDirectory(directory string) error {
 }
 
 func validateBridgeExecutionRecord(record BridgeExecutionRecord) error {
+	switch record.Phase {
+	case BridgeExecutionPhaseImporting, BridgeExecutionPhaseReady:
+	default:
+		return errors.New("execution phase is invalid")
+	}
 	if record.Namespace == "" || record.NamespaceID == "" {
 		return errors.New("execution namespace and namespace ID are required")
 	}
