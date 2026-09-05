@@ -441,7 +441,9 @@ type (
 		PluginName string `yaml:"pluginName" validate:"nonzero"`
 		// DatabaseName is the name of SQL database to connect to
 		DatabaseName string `yaml:"databaseName" validate:"nonzero"`
-		// ConnectAddr is the remote addr of the database
+		// ConnectAddr is the remote address of the database.
+		// MySQL supports comma-separated addresses with a TCP protocol, or a full DNS SRV record
+		// when ConnectProtocol is "tcp+srv".
 		ConnectAddr string `yaml:"connectAddr" validate:"nonzero"`
 		// ConnectProtocol is the protocol that goes with the ConnectAddr ex - tcp, unix
 		ConnectProtocol string `yaml:"connectProtocol" validate:"nonzero"`
