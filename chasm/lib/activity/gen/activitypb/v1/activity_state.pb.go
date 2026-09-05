@@ -242,8 +242,7 @@ type ActivityState struct {
 	// retries will be attempted. Either this or `start_to_close_timeout` must be specified.
 	//
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
+	//     aip.dev/not-precedent: "to" is used to indicate interval. --)
 	ScheduleToCloseTimeout *durationpb.Duration `protobuf:"bytes,3,opt,name=schedule_to_close_timeout,json=scheduleToCloseTimeout,proto3" json:"schedule_to_close_timeout,omitempty"`
 	// Limits time an activity task can stay in a task queue before a worker picks it up. This
 	// timeout is always non retryable, as all a retry would achieve is to put it back into the same
@@ -251,16 +250,14 @@ type ActivityState struct {
 	// specified.
 	//
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
+	//     aip.dev/not-precedent: "to" is used to indicate interval. --)
 	ScheduleToStartTimeout *durationpb.Duration `protobuf:"bytes,4,opt,name=schedule_to_start_timeout,json=scheduleToStartTimeout,proto3" json:"schedule_to_start_timeout,omitempty"`
 	// Maximum time an activity is allowed to execute after being picked up by a worker. This
 	// timeout is always retryable. Either this or `schedule_to_close_timeout` must be
 	// specified.
 	//
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
+	//     aip.dev/not-precedent: "to" is used to indicate interval. --)
 	StartToCloseTimeout *durationpb.Duration `protobuf:"bytes,5,opt,name=start_to_close_timeout,json=startToCloseTimeout,proto3" json:"start_to_close_timeout,omitempty"`
 	// Maximum permitted time between successful worker heartbeats.
 	HeartbeatTimeout *durationpb.Duration `protobuf:"bytes,6,opt,name=heartbeat_timeout,json=heartbeatTimeout,proto3" json:"heartbeat_timeout,omitempty"`
