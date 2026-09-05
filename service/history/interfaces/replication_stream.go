@@ -6,6 +6,7 @@ import (
 
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -17,6 +18,7 @@ type (
 			ctx context.Context,
 			task tasks.Task,
 			clusterID int32,
+			lockPriority locks.Priority,
 		) (*replicationspb.ReplicationTask, error)
 
 		GetReplicationTasksIter(

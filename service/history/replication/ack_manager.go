@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -44,6 +45,7 @@ type (
 			ctx context.Context,
 			task tasks.Task,
 			targetClusterID int32,
+			lockPriority locks.Priority,
 		) (*replicationspb.ReplicationTask, error)
 		GetReplicationTasksIter(
 			ctx context.Context,
@@ -413,6 +415,14 @@ func (p *ackMgrImpl) ConvertTask(
 	ctx context.Context,
 	task tasks.Task,
 ) (*replicationspb.ReplicationTask, error) {
+	return p.convertTask(ctx, task, locks.PriorityLow)
+}
+
+func (p *ackMgrImpl) convertTask(
+	ctx context.Context,
+	task tasks.Task,
+	lockPriority locks.Priority,
+) (*replicationspb.ReplicationTask, error) {
 	switch task := task.(type) {
 	case *tasks.SyncActivityTask:
 		return convertActivityStateReplicationTask(
@@ -420,6 +430,7 @@ func (p *ackMgrImpl) ConvertTask(
 			p.shardContext,
 			task,
 			p.workflowCache,
+			lockPriority,
 		)
 	case *tasks.SyncWorkflowStateTask:
 		return convertWorkflowStateReplicationTask(
@@ -427,6 +438,7 @@ func (p *ackMgrImpl) ConvertTask(
 			p.shardContext,
 			task,
 			p.workflowCache,
+			lockPriority,
 		)
 	case *tasks.HistoryReplicationTask:
 		return convertHistoryReplicationTask(
@@ -446,6 +458,7 @@ func (p *ackMgrImpl) ConvertTask(
 			p.shardContext,
 			task,
 			p.workflowCache,
+			lockPriority,
 		)
 	case *tasks.DeleteExecutionReplicationTask:
 		return convertDeleteExecutionReplicationTask(task)
@@ -458,6 +471,7 @@ func (p *ackMgrImpl) ConvertTaskByCluster(
 	ctx context.Context,
 	task tasks.Task,
 	targetClusterID int32,
+	lockPriority locks.Priority,
 ) (*replicationspb.ReplicationTask, error) {
 	switch task := task.(type) {
 	case *tasks.SyncVersionedTransitionTask:
@@ -466,9 +480,10 @@ func (p *ackMgrImpl) ConvertTaskByCluster(
 			task,
 			targetClusterID,
 			p.syncVersionedTransitionTaskConverter,
+			lockPriority,
 		)
 	default:
-		return p.ConvertTask(ctx, task)
+		return p.convertTask(ctx, task, lockPriority)
 	}
 }
 

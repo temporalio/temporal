@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/channel"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -577,6 +578,10 @@ Loop:
 		var attempt int64
 		operation := func() error {
 			attempt++
+			lockPriority := getReplicationTaskGenerationLockPriority(
+				attempt,
+				s.config.ReplicationTaskGenerationHighPriorityLockAttempts(),
+			)
 			startTime := time.Now().UTC()
 			defer func() {
 				metrics.ReplicationTaskGenerationLatency.With(s.metrics).Record(
@@ -587,7 +592,7 @@ Loop:
 					metrics.ReplicationTaskPriorityTag(priority),
 				)
 			}()
-			task, err := s.taskConverter.Convert(item, s.clientShardKey.ClusterID, priority)
+			task, err := s.taskConverter.Convert(item, s.clientShardKey.ClusterID, priority, lockPriority)
 			if err != nil {
 				// Wrap as convertError so isSkippable can tell "the task could not be built"
 				// (its source info is corrupt/unusable) apart from transient send/rate-limit
@@ -724,6 +729,16 @@ Loop:
 			},
 		},
 	})
+}
+
+func getReplicationTaskGenerationLockPriority(
+	attempt int64,
+	highPriorityAfterAttempts int,
+) locks.Priority {
+	if attempt > int64(highPriorityAfterAttempts) {
+		return locks.PriorityHigh
+	}
+	return locks.PriorityLow
 }
 
 func (s *StreamSenderImpl) sendToStream(payload *historyservice.StreamWorkflowReplicationMessagesResponse) error {

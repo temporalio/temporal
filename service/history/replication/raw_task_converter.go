@@ -42,7 +42,7 @@ type (
 		config                    *configs.Config
 	}
 	SourceTaskConverter interface {
-		Convert(task tasks.Task, targetClusterID int32, priority enumsspb.TaskPriority) (*replicationspb.ReplicationTask, error)
+		Convert(task tasks.Task, targetClusterID int32, priority enumsspb.TaskPriority, lockPriority locks.Priority) (*replicationspb.ReplicationTask, error)
 	}
 	SourceTaskConverterProvider func(
 		historyEngine historyi.Engine,
@@ -83,6 +83,7 @@ func (c *SourceTaskConverterImpl) Convert(
 	task tasks.Task,
 	targetClusterID int32,
 	priority enumsspb.TaskPriority,
+	lockPriority locks.Priority,
 ) (*replicationspb.ReplicationTask, error) {
 
 	var ctx context.Context
@@ -101,7 +102,7 @@ func (c *SourceTaskConverterImpl) Convert(
 	callerInfo := getReplicaitonCallerInfo(priority)
 	ctx, cancel = newTaskContext(nsName, c.config.ReplicationTaskApplyTimeout(), callerInfo)
 	defer cancel()
-	replicationTask, err := c.historyEngine.ConvertReplicationTask(ctx, task, targetClusterID)
+	replicationTask, err := c.historyEngine.ConvertReplicationTask(ctx, task, targetClusterID, lockPriority)
 	if err != nil {
 		return nil, err
 	}
@@ -120,6 +121,7 @@ func convertActivityStateReplicationTask(
 	shardContext historyi.ShardContext,
 	taskInfo *tasks.SyncActivityTask,
 	workflowCache wcache.Cache,
+	lockPriority locks.Priority,
 ) (*replicationspb.ReplicationTask, error) {
 	return generateStateReplicationTask(
 		ctx,
@@ -127,6 +129,7 @@ func convertActivityStateReplicationTask(
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
 		chasm.WorkflowArchetypeID,
 		workflowCache,
+		lockPriority,
 		func(mutableState historyi.MutableState, releaseFunc historyi.ReleaseWorkflowContextFunc) (*replicationspb.ReplicationTask, error) {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, nil
@@ -208,6 +211,7 @@ func convertWorkflowStateReplicationTask(
 	shardContext historyi.ShardContext,
 	taskInfo *tasks.SyncWorkflowStateTask,
 	workflowCache wcache.Cache,
+	lockPriority locks.Priority,
 ) (*replicationspb.ReplicationTask, error) {
 	return generateStateReplicationTask(
 		ctx,
@@ -215,6 +219,7 @@ func convertWorkflowStateReplicationTask(
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
 		chasm.WorkflowArchetypeID,
 		workflowCache,
+		lockPriority,
 		func(mutableState historyi.MutableState, releaseFunc historyi.ReleaseWorkflowContextFunc) (*replicationspb.ReplicationTask, error) {
 			state, _ := mutableState.GetWorkflowStateStatus()
 			if state != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
@@ -253,6 +258,7 @@ func convertSyncHSMReplicationTask(
 	shardContext historyi.ShardContext,
 	taskInfo *tasks.SyncHSMTask,
 	workflowCache wcache.Cache,
+	lockPriority locks.Priority,
 ) (*replicationspb.ReplicationTask, error) {
 	return generateStateReplicationTask(
 		ctx,
@@ -260,6 +266,7 @@ func convertSyncHSMReplicationTask(
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
 		chasm.WorkflowArchetypeID,
 		workflowCache,
+		lockPriority,
 		func(mutableState historyi.MutableState, releaseFunc historyi.ReleaseWorkflowContextFunc) (*replicationspb.ReplicationTask, error) {
 			// HSM can be updated after workflow is completed
 			// so no check on workflow state here.
@@ -305,6 +312,7 @@ func convertSyncVersionedTransitionTask(
 	taskInfo *tasks.SyncVersionedTransitionTask,
 	targetClusterID int32,
 	converter *syncVersionedTransitionTaskConverter,
+	lockPriority locks.Priority,
 ) (*replicationspb.ReplicationTask, error) {
 	if taskInfo.ArchetypeID == chasm.UnspecifiedArchetypeID {
 		taskInfo.ArchetypeID = chasm.WorkflowArchetypeID
@@ -315,8 +323,9 @@ func convertSyncVersionedTransitionTask(
 		definition.NewWorkflowKey(taskInfo.NamespaceID, taskInfo.WorkflowID, taskInfo.RunID),
 		taskInfo.ArchetypeID,
 		converter.workflowCache,
+		lockPriority,
 		func(mutableState historyi.MutableState, releaseFunc historyi.ReleaseWorkflowContextFunc) (*replicationspb.ReplicationTask, error) {
-			return converter.convert(ctx, taskInfo, targetClusterID, mutableState, releaseFunc)
+			return converter.convert(ctx, taskInfo, targetClusterID, mutableState, releaseFunc, lockPriority)
 		},
 	)
 }
@@ -400,6 +409,7 @@ func generateStateReplicationTask(
 	workflowKey definition.WorkflowKey,
 	archetypeID chasm.ArchetypeID,
 	workflowCache wcache.Cache,
+	lockPriority locks.Priority,
 	action func(mutableState historyi.MutableState, releaseFunc historyi.ReleaseWorkflowContextFunc) (*replicationspb.ReplicationTask, error),
 ) (retReplicationTask *replicationspb.ReplicationTask, retError error) {
 	wfContext, release, err := workflowCache.GetOrCreateChasmExecution(
@@ -411,7 +421,7 @@ func generateStateReplicationTask(
 			RunId:      workflowKey.RunID,
 		},
 		archetypeID,
-		locks.PriorityLow,
+		lockPriority,
 	)
 	if err != nil {
 		return nil, err
@@ -662,6 +672,7 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 	targetClusterID int32,
 	mutableState historyi.MutableState,
 	releaseFunc historyi.ReleaseWorkflowContextFunc,
+	lockPriority locks.Priority,
 ) (*replicationspb.ReplicationTask, error) {
 	executionInfo := mutableState.GetExecutionInfo()
 
@@ -673,7 +684,7 @@ func (c *syncVersionedTransitionTaskConverter) convert(
 		if !isWorkflow {
 			return nil, serviceerror.NewInternalf("chasm execution not on any versioned transition, is state-based replication enabled? execution key: %v", taskInfo.WorkflowKey)
 		}
-		return c.convertTaskEquivalents(ctx, taskInfo, targetClusterID)
+		return c.convertTaskEquivalents(ctx, taskInfo, targetClusterID, lockPriority)
 	}
 
 	progress := c.replicationCache.Get(taskInfo.RunID, targetClusterID)
@@ -917,6 +928,7 @@ func (c *syncVersionedTransitionTaskConverter) convertTaskEquivalents(
 	ctx context.Context,
 	taskInfo *tasks.SyncVersionedTransitionTask,
 	targetClusterID int32,
+	lockPriority locks.Priority,
 ) (*replicationspb.ReplicationTask, error) {
 	if len(taskInfo.TaskEquivalents) == 0 {
 		// no task equivalents, nothing to do
@@ -938,7 +950,7 @@ func (c *syncVersionedTransitionTaskConverter) convertTaskEquivalents(
 		taskEquivalent.SetTaskID(taskInfo.GetTaskID())
 		taskEquivalent.SetVisibilityTime(taskInfo.GetVisibilityTime())
 		// TODO: set workflow key as well so we don't have to persist it multiple times
-		return historyEngine.ConvertReplicationTask(ctx, taskEquivalent, targetClusterID)
+		return historyEngine.ConvertReplicationTask(ctx, taskEquivalent, targetClusterID, lockPriority)
 	}
 	// When there are multiple task equivalents, we have to write them back to the replication queue,
 	// as multiple tasks can't share the same taskID.

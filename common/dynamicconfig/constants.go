@@ -3143,8 +3143,13 @@ time (mirrors gRPC MaxConnectionAge's +/-10% jitter). Values outside [0, 1] are 
 	)
 	ReplicationStreamSenderErrorRetryMaxAttempts = NewGlobalIntSetting(
 		"history.ReplicationStreamSenderErrorRetryMaxAttempts",
-		80,
+		40,
 		`ReplicationStreamSenderErrorRetryMaxAttempts is the max retry attempts for sending replication tasks`,
+	)
+	ReplicationTaskGenerationHighPriorityLockAttempts = NewGlobalIntSetting(
+		"history.ReplicationTaskGenerationHighPriorityLockAttempts",
+		15,
+		`ReplicationTaskGenerationHighPriorityLockAttempts is the number of replication task generation attempts that use low priority when acquiring the workflow lock. Subsequent attempts use high priority.`,
 	)
 	ReplicationStreamSenderErrorRetryExpiration = NewGlobalDurationSetting(
 		"history.ReplicationStreamSenderErrorRetryExpiration",
