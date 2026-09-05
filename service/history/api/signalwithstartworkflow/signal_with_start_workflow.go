@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -351,26 +352,53 @@ func signalWorkflow(
 		return err
 	}
 
-	// Create a transfer task to schedule a workflow task
+	// Create a transfer task to schedule a workflow task.
 	if !mutableState.HasPendingWorkflowTask() && !mutableState.IsWorkflowExecutionStatusPaused() {
+		createWorkflowTask := true
+		now := shardContext.GetTimeSource().Now()
+		executionTime := mutableState.GetExecutionInfo().GetExecutionTime().AsTime()
+		beforeExecutionTime := now.Before(executionTime)
+		continueAsNewBackoff := false
 
-		executionInfo := mutableState.GetExecutionInfo()
-		executionState := mutableState.GetExecutionState()
-		if !mutableState.HadOrHasWorkflowTask() && !executionInfo.ExecutionTime.AsTime().Equal(executionState.StartTime.AsTime()) {
-			metrics.SignalWithStartSkipDelayCounter.With(shardContext.GetMetricsHandler()).Record(1, metrics.NamespaceTag(request.GetNamespace()))
+		// Only runs still inside their backoff window can have the delay bypassed, so the start
+		// event is loaded lazily to keep it off the hot path.
+		if beforeExecutionTime && mutableState.IsWorkflowPendingOnWorkflowTaskBackoff() {
+			startEvent, err := mutableState.GetStartEvent(ctx)
+			if err != nil {
+				return err
+			}
+			startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
+			backoffType := signalWithStartBackoffType(startAttr)
+			metrics.SignalWithStartSkipDelayCounter.With(shardContext.GetMetricsHandler()).Record(
+				1,
+				metrics.NamespaceTag(request.GetNamespace()),
+				metrics.StringTag("backoff_type", backoffType),
+			)
+			continueAsNewBackoff = startAttr.GetContinuedExecutionRunId() != "" &&
+				startAttr.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW
+			createWorkflowTask = !continueAsNewBackoff || !shardContext.GetConfig().EnableSignalWithStartContinueAsNewBackoff(request.GetNamespace())
+		}
+
+		if beforeExecutionTime {
+			message := "Skipped workflow start delay for signalWithStart request"
+			if continueAsNewBackoff && !createWorkflowTask {
+				message = "Honored continue-as-new backoff for signalWithStart request"
+			}
 
 			workflowKey := workflowLease.GetContext().GetWorkflowKey()
 			shardContext.GetThrottledLogger().Info(
-				"Skipped workflow start delay for signalWithStart request",
+				message,
 				tag.WorkflowNamespace(request.GetNamespace()),
 				tag.WorkflowID(workflowKey.WorkflowID),
 				tag.WorkflowRunID(workflowKey.RunID),
 			)
 		}
 
-		_, err := mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
-		if err != nil {
-			return err
+		if createWorkflowTask {
+			_, err := mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -380,4 +408,20 @@ func signalWorkflow(
 		ctx,
 		shardContext,
 	)
+}
+
+func signalWithStartBackoffType(startAttr *historypb.WorkflowExecutionStartedEventAttributes) string {
+	switch startAttr.GetInitiator() {
+	case enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW:
+		if startAttr.GetContinuedExecutionRunId() != "" {
+			return "CONTINUE_AS_NEW"
+		}
+		return "DELAY_START"
+	case enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY:
+		return "RETRY"
+	case enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE:
+		return "CRON"
+	default:
+		return "DELAY_START"
+	}
 }
