@@ -144,6 +144,11 @@ func validateActivityRetryPolicy(
 		return nil
 	}
 	defaultActivityRetrySettings := getDefaultActivityRetrySettings(namespaceName.String())
+	// Don't override explicit MaximumAttempts=0 (unlimited).
+	// Proto3 int32 can't distinguish "unset" from "explicitly set to 0".
+	if defaultActivityRetrySettings.MaximumAttempts != 0 {
+		defaultActivityRetrySettings.MaximumAttempts = 0
+	}
 	retrypolicy.EnsureDefaults(retryPolicy, defaultActivityRetrySettings)
 	return retrypolicy.Validate(retryPolicy)
 }
