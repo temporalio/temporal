@@ -28,6 +28,8 @@ type Context interface {
 	ExecutionKey() ExecutionKey
 	// ExecutionInfo returns metadata information about the execution.
 	ExecutionInfo() ExecutionInfo
+	// GetTimeSkippingInfo returns a detached API snapshot of the execution's virtual-time state.
+	GetTimeSkippingInfo() *commonpb.TimeSkippingInfo
 	// GetTimeSkippingPropagateState returns the time-skipping configuration and
 	// state to propagate to a new, independent execution that shares this execution's virtual clock.
 	GetTimeSkippingPropagateState() (*commonpb.TimeSkippingConfig, *commonpb.TimeSkippingStatePropagation)
@@ -198,6 +200,10 @@ func (c *immutableCtx) ExecutionInfo() ExecutionInfo {
 		ApproximateStateSize: c.root.backend.GetApproximatePersistedSize(),
 		CloseTime:            closeTime,
 	}
+}
+
+func (c *immutableCtx) GetTimeSkippingInfo() *commonpb.TimeSkippingInfo {
+	return timeSkippingInfoFromPersistence(c.root.backend.GetExecutionInfo().GetTimeSkippingInfo(), c.now)
 }
 
 func (c *immutableCtx) GetTimeSkippingPropagateState() (

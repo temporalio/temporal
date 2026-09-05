@@ -568,16 +568,17 @@ func CreateHistoryStartWorkflowRequest(
 		startRequest = CloneProto(startRequest)
 	}
 	histRequest := &historyservice.StartWorkflowExecutionRequest{
-		NamespaceId:              namespaceID,
-		StartRequest:             startRequest,
-		ContinueAsNewInitiator:   enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED,
-		Attempt:                  1,
-		ParentExecutionInfo:      parentExecutionInfo,
-		FirstWorkflowTaskBackoff: durationpb.New(backoff.GetBackoffForNextScheduleNonNegative(startRequest.GetCronSchedule(), now, now)),
-		ContinuedFailure:         startRequest.ContinuedFailure,
-		LastCompletionResult:     startRequest.LastCompletionResult,
-		RootExecutionInfo:        rootExecutionInfo,
-		VersioningOverride:       startRequest.GetVersioningOverride(),
+		NamespaceId:                  namespaceID,
+		StartRequest:                 startRequest,
+		ContinueAsNewInitiator:       enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED,
+		Attempt:                      1,
+		ParentExecutionInfo:          parentExecutionInfo,
+		FirstWorkflowTaskBackoff:     durationpb.New(backoff.GetBackoffForNextScheduleNonNegative(startRequest.GetCronSchedule(), now, now)),
+		ContinuedFailure:             startRequest.ContinuedFailure,
+		LastCompletionResult:         startRequest.LastCompletionResult,
+		RootExecutionInfo:            rootExecutionInfo,
+		VersioningOverride:           startRequest.GetVersioningOverride(),
+		TimeSkippingStatePropagation: startRequest.GetTimeSkippingStatePropagation(),
 	}
 	startRequest.ContinuedFailure = nil
 	startRequest.LastCompletionResult = nil

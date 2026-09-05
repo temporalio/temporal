@@ -113,6 +113,97 @@ func TestCreateScheduler_InitialPauseState(t *testing.T) {
 	}
 }
 
+func TestTimeSkippingConfigWiring(t *testing.T) {
+	ctx := &chasm.MockMutableContext{}
+	initialConfig := &commonpb.TimeSkippingConfig{
+		Enabled: true,
+		FastForwardConfig: &commonpb.FastForwardConfig{
+			Id:       "initial",
+			Duration: durationpb.New(5 * time.Hour),
+		},
+	}
+	input := defaultSchedule()
+	input.TimeSkippingConfig = initialConfig
+
+	sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, input, nil)
+	require.NoError(t, err)
+	protorequire.ProtoEqual(t, initialConfig, ctx.TimeSkippingConfig)
+
+	updatedConfig := &commonpb.TimeSkippingConfig{
+		Enabled: true,
+		FastForwardConfig: &commonpb.FastForwardConfig{
+			Id:       "updated",
+			Duration: durationpb.New(6 * time.Hour),
+		},
+	}
+	updated := defaultSchedule()
+	updated.TimeSkippingConfig = updatedConfig
+	_, err = sched.Update(ctx, &schedulerpb.UpdateScheduleRequest{
+		FrontendRequest: &workflowservice.UpdateScheduleRequest{Schedule: updated},
+	})
+	require.NoError(t, err)
+	protorequire.ProtoEqual(t, updatedConfig, ctx.TimeSkippingConfig)
+}
+
+func TestIsExecutionSkippable(t *testing.T) {
+	markGeneratorReady := func(sched *scheduler.Scheduler, ctx chasm.MutableContext) {
+		sched.Generator.Get(ctx).LastProcessedTime = timestamppb.New(ctx.Now(sched))
+	}
+
+	t.Run("pending generator task after update", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+		sched.Info.UpdateTime = timestamppb.New(sched.Generator.Get(ctx).GetLastProcessedTime().AsTime().Add(time.Second))
+		require.False(t, sched.IsExecutionSkippable(ctx))
+	})
+
+	t.Run("idle", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+		markGeneratorReady(sched, ctx)
+		require.True(t, sched.IsExecutionSkippable(ctx))
+	})
+
+	t.Run("running and completed workflows do not block scheduler time", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+		markGeneratorReady(sched, ctx)
+		sched.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{
+			{RequestId: "running", RunId: "run-id"},
+			{RequestId: "completed", RunId: "completed-run-id", Completed: &schedulespb.CompletedResult{}},
+		}
+		require.True(t, sched.IsExecutionSkippable(ctx))
+	})
+
+	tests := []struct {
+		name  string
+		block func(*scheduler.Scheduler, chasm.MutableContext)
+	}{
+		{name: "paused", block: func(s *scheduler.Scheduler, _ chasm.MutableContext) { s.Schedule.State.Paused = true }},
+		{name: "closed", block: func(s *scheduler.Scheduler, _ chasm.MutableContext) { s.Closed = true }},
+		{name: "migration", block: func(s *scheduler.Scheduler, _ chasm.MutableContext) {
+			s.WorkflowMigration = &schedulerpb.WorkflowMigrationState{}
+		}},
+		{name: "backfill", block: func(s *scheduler.Scheduler, ctx chasm.MutableContext) {
+			s.Backfillers["pending"] = chasm.NewComponentField(ctx, &scheduler.Backfiller{})
+		}},
+		{name: "pending start", block: func(s *scheduler.Scheduler, ctx chasm.MutableContext) {
+			s.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{{RequestId: "pending"}}
+		}},
+		{name: "cancel", block: func(s *scheduler.Scheduler, ctx chasm.MutableContext) {
+			s.Invoker.Get(ctx).CancelWorkflows = []*commonpb.WorkflowExecution{{WorkflowId: "wf"}}
+		}},
+		{name: "terminate", block: func(s *scheduler.Scheduler, ctx chasm.MutableContext) {
+			s.Invoker.Get(ctx).TerminateWorkflows = []*commonpb.WorkflowExecution{{WorkflowId: "wf"}}
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			sched, ctx, _ := setupSchedulerForTest(t)
+			markGeneratorReady(sched, ctx)
+			tc.block(sched, ctx)
+			require.False(t, sched.IsExecutionSkippable(ctx))
+		})
+	}
+}
+
 // TestListInfo_RecentActionsCapped verifies that the ScheduleListInfo memo
 // hard-caps RecentActions. recentActions() includes running starts, which
 // aren't bounded by completed-action retention, so without the cap the

@@ -2049,6 +2049,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmPureTimerTask_Execut
 		WorkflowId: tests.WorkflowKey.WorkflowID,
 		RunId:      tests.WorkflowKey.RunID,
 	}
+	virtualNow := s.now.Add(5 * time.Hour)
 
 	// Mock the CHASM tree and execute interface.
 	mockEach := &chasm.MockNodePureTask{
@@ -2057,7 +2058,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmPureTimerTask_Execut
 		},
 	}
 	chasmTree := historyi.NewMockChasmTree(s.controller)
-	chasmTree.EXPECT().EachPureTask(gomock.Any(), gomock.Any()).
+	chasmTree.EXPECT().EachPureTask(virtualNow, gomock.Any()).
 		Times(1).Do(
 		func(_ time.Time, callback func(executor chasm.NodePureTask, taskAttributes chasm.TaskAttributes, task any) (bool, error)) error {
 			_, err := callback(mockEach, chasm.TaskAttributes{}, nil)
@@ -2076,7 +2077,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmPureTimerTask_Execut
 		&persistencespb.WorkflowExecutionState{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING},
 	).AnyTimes()
 	ms.EXPECT().ChasmTree().Return(chasmTree).AnyTimes()
-	ms.EXPECT().Now().Return(s.now).AnyTimes()
+	ms.EXPECT().Now().Return(virtualNow).AnyTimes()
 
 	// Add a valid timer task.
 	timerTask := &tasks.ChasmTaskPure{

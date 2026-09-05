@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -21,6 +22,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"google.golang.org/protobuf/testing/protopack"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func TestIsContextDeadlineExceededErr(t *testing.T) {
@@ -647,4 +649,25 @@ func TestCreateHistoryStartWorkflowRequestPayloads(t *testing.T) {
 
 	// ensure the original request object is unmodified
 	require.Equal(t, startRequestClone, startRequest)
+}
+
+func TestCreateHistoryStartWorkflowRequestTimeSkippingStatePropagation(t *testing.T) {
+	state := &commonpb.TimeSkippingStatePropagation{
+		InitialSkippedDuration: durationpb.New(2 * time.Hour),
+	}
+	startRequest := &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:                    uuid.NewString(),
+		WorkflowId:                   uuid.NewString(),
+		TimeSkippingStatePropagation: state,
+	}
+
+	historyRequest := CreateHistoryStartWorkflowRequest(
+		startRequest.Namespace,
+		startRequest,
+		nil,
+		nil,
+		time.Now(),
+	)
+
+	require.Equal(t, state, historyRequest.GetTimeSkippingStatePropagation())
 }

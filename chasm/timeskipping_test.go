@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -56,6 +57,45 @@ func TestPropagateTimeSkippingToOtherExecution(t *testing.T) {
 		require.Nil(t, config)
 		require.Equal(t, time.Hour, state.GetInitialSkippedDuration().AsDuration())
 	})
+}
+
+func TestTimeSkippingInfoFromPersistence(t *testing.T) {
+	t.Parallel()
+
+	currentTime := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
+	require.Nil(t, timeSkippingInfoFromPersistence(nil, currentTime))
+
+	config := &commonpb.TimeSkippingConfig{
+		Enabled: true,
+		FastForwardConfig: &commonpb.FastForwardConfig{
+			Id:       "fast-forward-id",
+			Duration: durationpb.New(5 * time.Hour),
+		},
+	}
+	targetTime := currentTime.Add(5 * time.Hour)
+	persistenceInfo := &persistencespb.TimeSkippingInfo{
+		Config: config,
+		FastForwardInfo: &persistencespb.FastForwardInfo{
+			TargetTime: timestamppb.New(targetTime),
+			HasReached: true,
+		},
+	}
+	info := timeSkippingInfoFromPersistence(persistenceInfo, currentTime)
+
+	require.Equal(t, currentTime, info.GetCurrentTime().AsTime())
+	require.True(t, proto.Equal(config, info.GetEffectiveConfig()))
+	require.NotSame(t, config, info.GetEffectiveConfig())
+	require.Equal(t, targetTime, info.GetFastForwardInfo().GetTargetTime().AsTime())
+	require.True(t, info.GetFastForwardInfo().GetHasCompleted())
+	require.Equal(t, "fast-forward-id", info.GetFastForwardInfo().GetFastForwardId())
+	require.Equal(t, 5*time.Hour, info.GetFastForwardInfo().GetFastForwardDuration().AsDuration())
+
+	info.EffectiveConfig.Enabled = false
+	info.FastForwardInfo.TargetTime.Seconds = 0
+	info.FastForwardInfo.FastForwardDuration.Seconds = 0
+	require.True(t, persistenceInfo.GetConfig().GetEnabled())
+	require.Equal(t, targetTime, persistenceInfo.GetFastForwardInfo().GetTargetTime().AsTime())
+	require.Equal(t, 5*time.Hour, persistenceInfo.GetConfig().GetFastForwardConfig().GetDuration().AsDuration())
 }
 
 // TestTimeSkippingTransition covers the pure timeSkippingTransition data structure:
