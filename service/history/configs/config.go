@@ -281,7 +281,6 @@ type Config struct {
 	WorkflowTaskHeartbeatTimeout                     dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	WorkflowTaskCriticalAttempts                     dynamicconfig.IntPropertyFn
 	WorkflowTaskRetryMaxInterval                     dynamicconfig.DurationPropertyFn
-	EnableWorkflowTaskStampIncrementOnFailure        dynamicconfig.BoolPropertyFn
 	DiscardSpeculativeWorkflowTaskMaximumEventsCount dynamicconfig.IntPropertyFn
 	EnableDropRepeatedWorkflowTaskFailures           dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// TODO seankane: Added on 3/10/2026, if this is never used we should remove it at a later date
@@ -398,7 +397,6 @@ type Config struct {
 
 	EnableCrossNamespaceCommands      dynamicconfig.BoolPropertyFn
 	EnableActivityEagerExecution      dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableActivityRetryStampIncrement dynamicconfig.BoolPropertyFn
 	EnableCancelActivityWorkerCommand dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	WorkerCommandsDispatchTimeout     dynamicconfig.DurationPropertyFn
 	WorkerCommandsMaxAttempts         dynamicconfig.IntPropertyFn
@@ -731,7 +729,6 @@ func NewConfig(
 		WorkflowTaskHeartbeatTimeout:                     dynamicconfig.WorkflowTaskHeartbeatTimeout.Get(dc),
 		WorkflowTaskCriticalAttempts:                     dynamicconfig.WorkflowTaskCriticalAttempts.Get(dc),
 		WorkflowTaskRetryMaxInterval:                     dynamicconfig.WorkflowTaskRetryMaxInterval.Get(dc),
-		EnableWorkflowTaskStampIncrementOnFailure:        dynamicconfig.EnableWorkflowTaskStampIncrementOnFailure.Get(dc),
 		DiscardSpeculativeWorkflowTaskMaximumEventsCount: dynamicconfig.DiscardSpeculativeWorkflowTaskMaximumEventsCount.Get(dc),
 		EnableDropRepeatedWorkflowTaskFailures:           dynamicconfig.EnableDropRepeatedWorkflowTaskFailures.Get(dc),
 		SendTransientOrSpeculativeWorkflowTaskEvents:     dynamicconfig.SendTransientOrSpeculativeWorkflowTaskEvents.Get(dc),
@@ -813,7 +810,6 @@ func NewConfig(
 
 		EnableCrossNamespaceCommands:      dynamicconfig.EnableCrossNamespaceCommands.Get(dc),
 		EnableActivityEagerExecution:      dynamicconfig.EnableActivityEagerExecution.Get(dc),
-		EnableActivityRetryStampIncrement: dynamicconfig.EnableActivityRetryStampIncrement.Get(dc),
 		EnableCancelActivityWorkerCommand: dynamicconfig.EnableCancelActivityWorkerCommand.Get(dc),
 		WorkerCommandsDispatchTimeout:     dynamicconfig.WorkerCommandsDispatchTimeout.Get(dc),
 		WorkerCommandsMaxAttempts:         dynamicconfig.WorkerCommandsMaxAttempts.Get(dc),

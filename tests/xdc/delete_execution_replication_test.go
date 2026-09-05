@@ -54,10 +54,9 @@ func TestDeleteExecutionReplicationTestSuite(t *testing.T) {
 
 func (s *deleteExecutionReplicationTestSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
-		dynamicconfig.EnableReplicationStream.Key():                   true,
-		dynamicconfig.EnableReplicationTaskBatching.Key():             true,
-		dynamicconfig.EnableSeparateReplicationEnableFlag.Key():       true,
-		dynamicconfig.EnableWorkflowTaskStampIncrementOnFailure.Key(): true,
+		dynamicconfig.EnableReplicationStream.Key():             true,
+		dynamicconfig.EnableReplicationTaskBatching.Key():       true,
+		dynamicconfig.EnableSeparateReplicationEnableFlag.Key(): true,
 	}
 	s.logger = log.NewTestLogger()
 
