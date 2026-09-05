@@ -404,6 +404,13 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			false)
 	} else {
 		namespace := namespaceEntry.Name()
+		localExecutionTaskQueue := handler.config.LocalExecutionBridgeTaskQueue(namespace.String())
+		localExecutionActivityTypes := handler.config.LocalExecutionBridgeActivityTypes(namespace.String())
+		api.DisableLocalExecutionEagerActivities(
+			commands,
+			localExecutionTaskQueue,
+			localExecutionActivityTypes,
+		)
 		workflowSizeChecker := newWorkflowSizeChecker(
 			workflowSizeLimits{
 				blobSizeLimitWarn:              handler.config.BlobSizeLimitWarn(namespace.String()),
@@ -457,6 +464,12 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		); err != nil {
 			return nil, err
 		}
+		api.PauseLocalExecutionForRemoteCommands(
+			ms.GetExecutionInfo(),
+			commands,
+			localExecutionTaskQueue,
+			localExecutionActivityTypes,
+		)
 
 		// Worker must respond with Update Accepted or Update Rejected message on every Update Requested
 		// message that were delivered on specific WT, when completing this WT.

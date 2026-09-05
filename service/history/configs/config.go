@@ -56,6 +56,8 @@ type Config struct {
 	LocalExecutionSyncMaxEvents                dynamicconfig.IntPropertyFnWithNamespaceFilter
 	LocalExecutionSyncMaxBatches               dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableLocalExecution                       dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	LocalExecutionBridgeTaskQueue              dynamicconfig.StringPropertyFnWithNamespaceFilter
+	LocalExecutionBridgeActivityTypes          dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
 	AlignMembershipChange                      dynamicconfig.DurationPropertyFn
 	WorkflowTaskCompletionBufferTotalSizeLimit dynamicconfig.IntPropertyFn
 	WorkflowTaskCompletionBufferSizeLimit      dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -887,6 +889,8 @@ func NewConfig(
 		LocalExecutionSyncMaxEvents:                dynamicconfig.LocalExecutionSyncMaxEvents.Get(dc),
 		LocalExecutionSyncMaxBatches:               dynamicconfig.LocalExecutionSyncMaxBatches.Get(dc),
 		EnableLocalExecution:                       dynamicconfig.EnableLocalExecution.Get(dc),
+		LocalExecutionBridgeTaskQueue:              dynamicconfig.LocalExecutionBridgeTaskQueue.Get(dc),
+		LocalExecutionBridgeActivityTypes:          dynamicconfig.LocalExecutionBridgeActivityTypes.Get(dc),
 		WorkflowTaskCompletionBufferTotalSizeLimit: dynamicconfig.WorkflowTaskCompletionBufferTotalSizeLimit.Get(dc),
 		WorkflowTaskCompletionBufferSizeLimit:      dynamicconfig.WorkflowTaskCompletionBufferSizeLimit.Get(dc),
 		WorkflowTaskCompletionBufferNamespaceRatio: dynamicconfig.WorkflowTaskCompletionBufferNamespaceRatio.Get(dc),

@@ -1830,6 +1830,16 @@ See DynamicRateLimitingParams comments for more details.`,
 		false,
 		`EnableLocalExecution allows trusted bridge workers to acquire workflow executions for local processing.`,
 	)
+	LocalExecutionBridgeTaskQueue = NewNamespaceStringSetting(
+		"history.localExecutionBridgeTaskQueue",
+		"",
+		`LocalExecutionBridgeTaskQueue identifies the task queue served by a local bridge. An empty value disables local remote-operation boundary detection.`,
+	)
+	LocalExecutionBridgeActivityTypes = NewNamespaceTypedSetting(
+		"history.localExecutionBridgeActivityTypes",
+		[]string(nil),
+		`LocalExecutionBridgeActivityTypes lists the Activity types registered with a local bridge Worker.`,
+	)
 	LocalExecutionMinSyncInterval = NewNamespaceDurationSetting(
 		"history.localExecutionMinSyncInterval",
 		time.Second,

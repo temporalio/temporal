@@ -28,6 +28,7 @@ const (
 	bridgeWorkflowPollTimeout   = common.DefaultLongPollTimeout + 10*time.Second
 	bridgePollRetryInitialDelay = 100 * time.Millisecond
 	bridgePollRetryMaximumDelay = time.Second
+	bridgeLocalDeletionTimeout  = 10 * time.Second
 )
 
 type WorkflowTaskPoller interface {
@@ -59,8 +60,9 @@ type BridgeRuntime struct {
 	syncInterval        time.Duration
 	workflowTypes       map[string]struct{}
 
-	mu      sync.Mutex
-	started bool
+	mu               sync.Mutex
+	started          bool
+	activeExecutions map[string]chan struct{}
 }
 
 type managedBridgeExecution struct {
@@ -69,6 +71,7 @@ type managedBridgeExecution struct {
 	replicator  *HistoryReplicator
 	controller  *ExecutionStateController
 	leaseExpiry time.Time
+	finish      func()
 }
 
 func NewBridgeRuntime(options BridgeRuntimeOptions) (*BridgeRuntime, error) {
@@ -106,6 +109,7 @@ func NewBridgeRuntime(options BridgeRuntimeOptions) (*BridgeRuntime, error) {
 		localAdmin:          options.LocalAdmin,
 		syncInterval:        syncInterval,
 		workflowTypes:       workflowTypes,
+		activeExecutions:    make(map[string]chan struct{}),
 	}, nil
 }
 
@@ -149,14 +153,24 @@ func (r *BridgeRuntime) Start(ctx context.Context) (<-chan error, error) {
 		return nil, fmt.Errorf("load bridge executions: %w", err)
 	}
 	for _, record := range records {
+		finish, err := r.beginExecution(runtimeContext, record.WorkflowID, record.RunID)
+		if err != nil {
+			cancelRuntime(err)
+			executionGroup.Wait()
+			return nil, err
+		}
 		managed, err := r.recoverExecution(runtimeContext, record)
 		if err != nil {
+			finish()
 			cancelRuntime(err)
 			executionGroup.Wait()
 			return nil, fmt.Errorf("recover local execution %s/%s: %w", record.WorkflowID, record.RunID, err)
 		}
 		if managed != nil {
+			managed.finish = finish
 			r.startSynchronization(runtimeContext, cancelRuntime, &executionGroup, managed)
+		} else {
+			finish()
 		}
 	}
 
@@ -224,12 +238,57 @@ func (r *BridgeRuntime) handleAcquisitionResponse(
 		return nil, err
 	}
 	if _, registered := r.workflowTypes[response.GetWorkflowType().GetName()]; registered {
-		return r.adoptExecution(ctx, response)
+		finish, err := r.beginExecution(
+			ctx,
+			response.GetWorkflowExecution().GetWorkflowId(),
+			response.GetWorkflowExecution().GetRunId(),
+		)
+		if err != nil {
+			return nil, err
+		}
+		managed, err := r.adoptExecution(ctx, response)
+		if err != nil {
+			finish()
+			return nil, err
+		}
+		managed.finish = finish
+		return managed, nil
 	}
 	if err := r.releaseAcquisition(ctx, response); err != nil {
 		return nil, fmt.Errorf("release unregistered workflow type: %w", err)
 	}
 	return nil, nil
+}
+
+func (r *BridgeRuntime) beginExecution(
+	ctx context.Context,
+	workflowID string,
+	runID string,
+) (func(), error) {
+	key := workflowID + "\x00" + runID
+	for {
+		r.mu.Lock()
+		prior := r.activeExecutions[key]
+		if prior == nil {
+			done := make(chan struct{})
+			r.activeExecutions[key] = done
+			r.mu.Unlock()
+			return func() {
+				r.mu.Lock()
+				if r.activeExecutions[key] == done {
+					delete(r.activeExecutions, key)
+					close(done)
+				}
+				r.mu.Unlock()
+			}, nil
+		}
+		r.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			return nil, context.Cause(ctx)
+		case <-prior:
+		}
+	}
 }
 
 func (r *BridgeRuntime) pollUpstream(
@@ -414,12 +473,8 @@ func (r *BridgeRuntime) discardExpiredExecution(
 		if err != nil {
 			return err
 		}
-		if err := managed.controller.Update(
-			ctx,
-			execution,
-			adminservice.UpdateLocalExecutionStateRequest_STATE_OWNERSHIP_LOST,
-		); err != nil {
-			return fmt.Errorf("invalidate expired local execution: %w", err)
+		if err := r.deleteLocalExecution(ctx, managed); err != nil {
+			return fmt.Errorf("discard expired local execution: %w", err)
 		}
 	}
 	return r.stateStore.DeleteExecution(record.Namespace, record.WorkflowID, record.RunID)
@@ -565,6 +620,7 @@ func (r *BridgeRuntime) startSynchronization(
 	executionGroup.Add(1)
 	go func() {
 		defer executionGroup.Done()
+		defer managed.finish()
 		released := false
 		err := managed.replicator.RunControlled(
 			ctx,
@@ -576,6 +632,9 @@ func (r *BridgeRuntime) startSynchronization(
 			},
 			func(result SyncResult) error {
 				if result.Released {
+					if err := r.deleteLocalExecution(ctx, managed); err != nil {
+						return err
+					}
 					released = true
 					return r.stateStore.DeleteExecution(
 						managed.record.Namespace,
@@ -590,6 +649,10 @@ func (r *BridgeRuntime) startSynchronization(
 			},
 		)
 		if errors.Is(err, ErrLocalExecutionOwnershipLost) {
+			if deleteErr := r.deleteLocalExecution(ctx, managed); deleteErr != nil {
+				cancelRuntime(fmt.Errorf("remove lost local execution: %w", deleteErr))
+				return
+			}
 			if deleteErr := r.stateStore.DeleteExecution(
 				managed.record.Namespace,
 				managed.record.WorkflowID,
@@ -609,6 +672,46 @@ func (r *BridgeRuntime) startSynchronization(
 	}()
 }
 
+func (r *BridgeRuntime) deleteLocalExecution(
+	ctx context.Context,
+	managed *managedBridgeExecution,
+) error {
+	deleteContext, cancelDelete := context.WithTimeout(ctx, bridgeLocalDeletionTimeout)
+	defer cancelDelete()
+	if err := managed.controller.Update(
+		deleteContext,
+		managed.execution,
+		adminservice.UpdateLocalExecutionStateRequest_STATE_OWNERSHIP_LOST,
+	); err != nil {
+		var notFound *serviceerror.NotFound
+		if !errors.As(err, &notFound) && status.Code(err) != codes.NotFound {
+			return fmt.Errorf("invalidate local execution: %w", err)
+		}
+	}
+	_, err := r.localAdmin.DeleteWorkflowExecution(deleteContext, &adminservice.DeleteWorkflowExecutionRequest{
+		Namespace: r.configuration.Namespace,
+		Execution: managed.execution,
+	})
+	if err != nil {
+		var notFound *serviceerror.NotFound
+		if !errors.As(err, &notFound) && status.Code(err) != codes.NotFound {
+			return fmt.Errorf("delete local execution: %w", err)
+		}
+	}
+	for {
+		exists, err := r.localExecutionExists(deleteContext, managed.execution)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return nil
+		}
+		if err := waitForDelay(deleteContext, 25*time.Millisecond); err != nil {
+			return fmt.Errorf("wait for local execution deletion: %w", err)
+		}
+	}
+}
+
 func (r *BridgeRuntime) localExecutionExists(
 	ctx context.Context,
 	execution *commonpb.WorkflowExecution,
@@ -626,7 +729,7 @@ func (r *BridgeRuntime) localExecutionExists(
 		return true, nil
 	}
 	var notFound *serviceerror.NotFound
-	if errors.As(err, &notFound) {
+	if errors.As(err, &notFound) || status.Code(err) == codes.NotFound {
 		return false, nil
 	}
 	return false, fmt.Errorf("inspect local execution: %w", err)

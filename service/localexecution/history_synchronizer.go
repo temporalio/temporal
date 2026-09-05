@@ -12,6 +12,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -82,6 +83,8 @@ type ExecutionStateController struct {
 	fencingEpoch  int64
 	adminClient   adminservice.AdminServiceClient
 }
+
+const localExecutionBoundaryPollInterval = 100 * time.Millisecond
 
 func NewBaselineImporter(source HistoryEndpoint, target HistoryEndpoint) (*BaselineImporter, error) {
 	if source.NamespaceID == "" {
@@ -274,6 +277,28 @@ func (c *ExecutionStateController) Update(
 		State:         state,
 	})
 	return err
+}
+
+func (c *ExecutionStateController) State(
+	ctx context.Context,
+	execution *commonpb.WorkflowExecution,
+) (persistencespb.LocalExecutionInfo_BridgeState, error) {
+	response, err := c.adminClient.DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace: c.namespace,
+		Execution: execution,
+	})
+	if err != nil {
+		return persistencespb.LocalExecutionInfo_BRIDGE_STATE_UNSPECIFIED, err
+	}
+	mutableState := response.GetCacheMutableState()
+	if mutableState == nil {
+		mutableState = response.GetDatabaseMutableState()
+	}
+	if mutableState == nil {
+		return persistencespb.LocalExecutionInfo_BRIDGE_STATE_UNSPECIFIED,
+			errors.New("local server returned no mutable state")
+	}
+	return mutableState.GetExecutionInfo().GetLocalExecutionInfo().GetBridgeState(), nil
 }
 
 func (r *HistoryReplicator) Sync(
@@ -522,8 +547,16 @@ func (r *HistoryReplicator) RunControlled(
 
 	leaseExpiration := options.LeaseExpiration
 	for {
-		if err := waitUntil(ctx, leaseExpiration.Add(-2*options.Interval)); err != nil {
-			return nil
+		if err := waitForSynchronizationBoundary(
+			ctx,
+			execution,
+			leaseExpiration.Add(-2*options.Interval),
+			options.StateController,
+		); err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return fmt.Errorf("observe local synchronization boundary: %w", err)
 		}
 		if err := options.StateController.Update(
 			ctx,
@@ -558,6 +591,38 @@ func (r *HistoryReplicator) RunControlled(
 			adminservice.UpdateLocalExecutionStateRequest_STATE_RUNNABLE,
 		); err != nil {
 			return fmt.Errorf("resume local execution: %w", err)
+		}
+	}
+}
+
+func waitForSynchronizationBoundary(
+	ctx context.Context,
+	execution *commonpb.WorkflowExecution,
+	deadline time.Time,
+	controller *ExecutionStateController,
+) error {
+	deadlineTimer := time.NewTimer(max(time.Until(deadline), 0))
+	defer deadlineTimer.Stop()
+	boundaryTicker := time.NewTicker(localExecutionBoundaryPollInterval)
+	defer boundaryTicker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return context.Cause(ctx)
+		case <-deadlineTimer.C:
+			return nil
+		case <-boundaryTicker.C:
+			state, err := controller.State(ctx, execution)
+			if err != nil {
+				return err
+			}
+			switch state {
+			case persistencespb.LocalExecutionInfo_BRIDGE_STATE_PAUSED:
+				return nil
+			case persistencespb.LocalExecutionInfo_BRIDGE_STATE_OWNERSHIP_LOST:
+				return ErrLocalExecutionOwnershipLost
+			default:
+			}
 		}
 	}
 }

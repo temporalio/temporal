@@ -36,18 +36,19 @@ const (
 )
 
 type options struct {
-	mode             string
-	stateDirectory   string
-	syncInterval     time.Duration
-	upstreamAddress  string
-	namespace        string
-	workflowID       string
-	runID            string
-	workflowType     string
-	activityType     string
-	taskQueue        string
-	iterations       int
-	failSyncAttempts int
+	mode                 string
+	stateDirectory       string
+	syncInterval         time.Duration
+	upstreamAddress      string
+	namespace            string
+	workflowID           string
+	runID                string
+	workflowType         string
+	activityType         string
+	taskQueue            string
+	iterations           int
+	failSyncAttempts     int
+	enableLocalExecution bool
 }
 
 type readyMessage struct {
@@ -76,6 +77,7 @@ func main() {
 	flag.StringVar(&opts.taskQueue, "task-queue", demoTaskQueue, "task queue used by the workflow")
 	flag.IntVar(&opts.iterations, "iterations", 3, "number of Activities the Core workflow driver will execute")
 	flag.IntVar(&opts.failSyncAttempts, "fail-sync-attempts", 0, "number of synchronization attempts to fail for testing")
+	flag.BoolVar(&opts.enableLocalExecution, "enable-local-execution", true, "advertise local execution support")
 	flag.Parse()
 
 	ctx, stop := signal.NotifyContext(context.TODO(), os.Interrupt, syscall.SIGTERM)
@@ -102,7 +104,7 @@ func runUpstream(ctx context.Context, opts options) error {
 		return err
 	}
 
-	upstream, err := startServer("", true, opts.namespace, true)
+	upstream, err := startServer("", true, opts.namespace, opts.enableLocalExecution)
 	if err != nil {
 		return fmt.Errorf("start upstream server: %w", err)
 	}

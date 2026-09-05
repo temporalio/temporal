@@ -32,6 +32,7 @@ type BridgeConfiguration struct {
 
 type UpstreamConnectionProfile struct {
 	Address    string            `json:"address"`
+	Identity   string            `json:"identity,omitempty"`
 	ServerName string            `json:"server_name,omitempty"`
 	TLS        *UpstreamTLS      `json:"tls,omitempty"`
 	APIKey     string            `json:"api_key,omitempty"`
