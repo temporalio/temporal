@@ -2,6 +2,7 @@ package mixedbrain
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -67,6 +68,7 @@ var scenarios = []omesScenario{
 		namespace: "throughput-stress",
 		options: []string{
 			"internal-iterations=10",
+			"include-standalone-activity=true",
 			"nexus-enabled=true",
 			"nexus-endpoint=" + nexusEndpoint,
 		},
@@ -92,6 +94,26 @@ func TestMixedBrain(t *testing.T) {
 
 	currentLog := filepath.Join(logRoot, "mixedbrain_process-current.log")
 	releaseLog := filepath.Join(logRoot, "mixedbrain_process-release.log")
+	var proxy *frontendProxy
+	report := &mixedBrainReport{
+		StartedAt:      time.Now(),
+		CurrentVersion: headers.ServerVersion,
+		Scenarios:      make([]string, 0, len(scenarios)),
+		ChaosEvents:    &chaosEvents{},
+		Logs: map[string]string{
+			"current server": currentLog,
+			"release server": releaseLog,
+		},
+	}
+	for _, scenario := range scenarios {
+		report.Scenarios = append(report.Scenarios, scenario.name)
+		report.Logs["Omes "+scenario.name] = filepath.Join(logRoot, "mixedbrain_omes_"+scenario.name+".log")
+	}
+	registerMixedBrainReport(t, logRoot, report, &proxy)
+
+	chaosInterval, err := configuredProcessChaosInterval()
+	require.NoError(t, err)
+	report.ChaosInterval = chaosInterval
 
 	var releaseTag string
 	t.Run("setup", func(t *testing.T) {
@@ -105,6 +127,7 @@ func TestMixedBrain(t *testing.T) {
 			downloadAndBuildOmes(t, tmpDir, omesBinary)
 		})
 	})
+	report.ReleaseVersion = releaseTag
 	if t.Failed() {
 		return
 	}
@@ -124,16 +147,41 @@ func TestMixedBrain(t *testing.T) {
 	persistence := devserver.PersistenceOptions{Driver: persistenceDriver}
 
 	var currentSrv, releaseSrv *devserver.Server
-	var currentLogFile, releaseLogFile *os.File
 	var conn *grpc.ClientConn
-	var proxy *frontendProxy
 	runID := fmt.Sprintf("mixed-brain-%d", time.Now().Unix())
+	// startDevServer registers server shutdown and log closure after this cleanup,
+	// so both logs are fully flushed before they are scanned. This also runs when
+	// setup or Omes fails.
+	t.Cleanup(func() {
+		var paths []string
+		for _, path := range []string{currentLog, releaseLog} {
+			if _, err := os.Stat(path); err == nil {
+				paths = append(paths, path)
+			} else if !os.IsNotExist(err) {
+				t.Errorf("inspect server log %s: %v", path, err)
+			}
+		}
+		if len(paths) == 0 {
+			return
+		}
+		problems, err := scanServerLogs(serverLogValidators, paths...)
+		if err != nil {
+			t.Errorf("scan server logs: %v", err)
+			return
+		}
+		for _, problem := range problems {
+			t.Error(problem)
+		}
+	})
 
 	t.Run("start current server", func(st *testing.T) {
 		// Server processes use the parent t so their context survives this sub-test.
-		currentSrv, currentLogFile = startDevServer(t, "current", currentLog, devserver.Options{
+		currentSrv, _ = startDevServer(t, "current", currentLog, devserver.Options{
 			SourceDir:   sourceRoot(),
 			Persistence: persistence,
+			DynamicConfigValues: map[string]any{
+				"activity.enableStandalone": true,
+			},
 		})
 
 		var err error
@@ -153,15 +201,11 @@ func TestMixedBrain(t *testing.T) {
 	defer func() { _ = conn.Close() }()
 
 	t.Run("start release server", func(_ *testing.T) {
-		releaseSrv, releaseLogFile = startDevServer(t, "release", releaseLog, devserver.Options{
+		releaseSrv, _ = startDevServer(t, "release", releaseLog, devserver.Options{
 			Ref:         releaseTag,
 			Persistence: persistence,
 			ClusterEndpoint: devserver.ClusterEndpoint{
 				RPCAddress: currentSrv.FrontendHostPort(),
-			},
-			// TODO: remove this once the release server defaults to standalone activities on. Currently the downgrade version of 1.31 has SAA defaulted to off.
-			DynamicConfigValues: map[string]any{
-				"activity.enableStandalone": true,
 			},
 		})
 	})
@@ -184,13 +228,62 @@ func TestMixedBrain(t *testing.T) {
 
 		proxy = startFrontendProxy(st, currentSrv.FrontendHostPort(), releaseSrv.FrontendHostPort())
 		st.Cleanup(proxy.stop)
+		ctx, cancel := context.WithCancelCause(st.Context())
+		defer cancel(nil)
+		chaosDone := make(chan error, 1)
+		go func() {
+			chaosDone <- runProcessChaos(
+				ctx,
+				chaosInterval,
+				func(ctx context.Context) error {
+					return waitForClusterFormationErr(ctx, conn, clusterReformationTimeout, currentSrv.Ports(), releaseSrv.Ports())
+				},
+				report.ChaosEvents,
+				processChaosTarget{name: "current", target: currentSrv},
+				processChaosTarget{name: "release", target: releaseSrv},
+			)
+		}()
 
+		type scenarioResult struct {
+			err error
+		}
+		results := make(chan scenarioResult, len(scenarios))
 		for _, scenario := range scenarios {
-			st.Run(scenario.name, func(sst *testing.T) {
-				sst.Parallel()
+			go func() {
 				logPath := filepath.Join(logRoot, "mixedbrain_omes_"+scenario.name+".log")
-				runOmes(sst, omesBinary, proxy.addr(), logPath, testDuration(), scenario, runID+"-"+scenario.name)
-			})
+				err := runOmes(ctx, st, omesBinary, proxy.addr(), logPath, testDuration(), scenario, runID+"-"+scenario.name)
+				results <- scenarioResult{err: err}
+			}()
+		}
+
+		var chaosErr error
+		var scenarioErr error
+		resultsRemaining := len(scenarios)
+		for resultsRemaining > 0 {
+			select {
+			case err := <-chaosDone:
+				chaosDone = nil
+				if err != nil {
+					chaosErr = err
+					cancel(err)
+				}
+			case result := <-results:
+				resultsRemaining--
+				if result.err != nil && scenarioErr == nil && chaosErr == nil {
+					scenarioErr = result.err
+					cancel(scenarioErr)
+				}
+			}
+		}
+		cancel(nil)
+		if chaosDone != nil {
+			chaosErr = <-chaosDone
+		}
+		if chaosErr != nil {
+			st.Fatalf("process chaos failed: %v", chaosErr)
+		}
+		if scenarioErr != nil {
+			st.Fatal(scenarioErr)
 		}
 	})
 	if t.Failed() {
@@ -208,41 +301,30 @@ func TestMixedBrain(t *testing.T) {
 		}
 	})
 
-	// Stop the servers so their logs are fully flushed, then scan them for
-	// panics, soft-assertion failures, and other problems that don't surface as
-	// a process exit. Runs regardless of whether "verify" failed, since a crashed
-	// server's log is exactly what we want to inspect.
-	_ = currentSrv.Stop()
-	_ = releaseSrv.Stop()
-	_ = currentLogFile.Close()
-	_ = releaseLogFile.Close()
-
-	t.Run("scan server logs", func(st *testing.T) {
-		problems, err := scanServerLogs(serverLogValidators, currentLog, releaseLog)
-		require.NoError(st, err)
-		for _, p := range problems {
-			st.Error(p)
-		}
-	})
 }
 
 // runOmes runs the given Omes scenario against serverAddr under the given run ID.
 // Retries if Omes fails due to search attribute not being ready yet.
 // Deducts elapsed time from duration on retry so total wall time stays bounded.
-func runOmes(t *testing.T, binary, serverAddr, logPath string, duration time.Duration, scenario omesScenario, runID string) {
+func runOmes(ctx context.Context, t *testing.T, binary, serverAddr, logPath string, duration time.Duration, scenario omesScenario, runID string) error {
 	t.Helper()
 	t.Logf("Running Omes %s for %v against %s", scenario.name, duration, serverAddr)
 
 	started := time.Now()
 	for {
 		remaining := duration - time.Since(started)
-		require.Greater(t, remaining, 10*time.Second, "Omes never started successfully, check %s", logPath)
+		if remaining <= 10*time.Second {
+			return fmt.Errorf("Omes never started successfully, check %s", logPath)
+		}
 
 		logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-		require.NoError(t, err)
+		if err != nil {
+			return err
+		}
 
 		args := []string{
 			"run-scenario-with-worker",
+			"--log-encoding", "json",
 			"--scenario", scenario.name,
 			"--language", "go",
 			"--server-address", serverAddr,
@@ -257,7 +339,7 @@ func runOmes(t *testing.T, binary, serverAddr, logPath string, duration time.Dur
 		}
 
 		var buf bytes.Buffer
-		cmd := exec.CommandContext(t.Context(), binary, args...)
+		cmd := exec.CommandContext(ctx, binary, args...)
 		cmd.Env = append(os.Environ(), "GOTOOLCHAIN=auto") // Omes workers may require a newer toolchain
 		cmd.Stdout = logFile
 		cmd.Stderr = io.MultiWriter(logFile, &buf)
@@ -270,7 +352,12 @@ func runOmes(t *testing.T, binary, serverAddr, logPath string, duration time.Dur
 			t.Log("Omes failed due to search attributes not ready, retrying...")
 			continue
 		}
-		require.NoError(t, err, "Omes scenario failed, check %s", logPath)
-		return
+		if err != nil {
+			if ctx.Err() != nil {
+				return context.Cause(ctx)
+			}
+			return newOmesFailure(scenario.name, logPath, err)
+		}
+		return nil
 	}
 }

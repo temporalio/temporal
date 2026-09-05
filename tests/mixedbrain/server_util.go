@@ -2,6 +2,7 @@ package mixedbrain
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"os"
 	"strconv"
@@ -73,12 +74,12 @@ func startDevServer(t *testing.T, name, logPath string, opts devserver.Options) 
 	require.NoError(t, err)
 
 	var srv *devserver.Server
+	t.Cleanup(func() { _ = f.Close() })
 	t.Cleanup(func() {
 		if srv != nil {
 			_ = srv.Stop()
 		}
 	})
-	t.Cleanup(func() { _ = f.Close() })
 
 	opts.Output = f
 	srv, err = devserver.Start(t.Context(), opts)
@@ -92,47 +93,70 @@ func startDevServer(t *testing.T, name, logPath string, opts devserver.Options) 
 // discovered each other. Reachable members use raw ringpop addresses (membership ports).
 func waitForClusterFormation(t *testing.T, conn *grpc.ClientConn, timeout time.Duration, servers ...devserver.Ports) {
 	t.Helper()
+	require.NoError(t, waitForClusterFormationErr(t.Context(), conn, timeout, servers...))
+}
 
+func waitForClusterFormationErr(ctx context.Context, conn *grpc.ClientConn, timeout time.Duration, servers ...devserver.Ports) error {
 	client := adminservice.NewAdminServiceClient(conn)
+	deadline := time.NewTimer(timeout)
+	defer deadline.Stop()
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
 
-	require.Eventually(t, func() bool {
-		resp, err := client.DescribeCluster(t.Context(), &adminservice.DescribeClusterRequest{})
+	for {
+		formed, err := clusterFormed(ctx, client, servers...)
 		if err != nil {
-			return false
+			return err
 		}
-		membership := resp.GetMembershipInfo()
-		if membership == nil {
-			return false
+		if formed {
+			return nil
 		}
+		select {
+		case <-ctx.Done():
+			return context.Cause(ctx)
+		case <-deadline.C:
+			return fmt.Errorf("cluster did not form within %v", timeout)
+		case <-ticker.C:
+		}
+	}
+}
 
-		seen := map[int]bool{}
-		for _, member := range membership.GetReachableMembers() {
-			_, portStr, err := net.SplitHostPort(member)
-			if err != nil {
-				continue
-			}
-			port, err := strconv.Atoi(portStr)
-			if err != nil {
-				continue
-			}
-			seen[port] = true
-		}
+func clusterFormed(ctx context.Context, client adminservice.AdminServiceClient, servers ...devserver.Ports) (bool, error) {
+	resp, err := client.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
+	if err != nil {
+		return false, nil
+	}
+	membership := resp.GetMembershipInfo()
+	if membership == nil {
+		return false, nil
+	}
 
-		for _, server := range servers {
-			for _, port := range []int{
-				server.FrontendMembership,
-				server.HistoryMembership,
-				server.MatchingMembership,
-				server.WorkerMembership,
-			} {
-				if !seen[port] {
-					t.Logf("Waiting for cluster formation: port %d not yet visible", port)
-					return false
-				}
+	seen := map[int]bool{}
+	for _, member := range membership.GetReachableMembers() {
+		_, portStr, err := net.SplitHostPort(member)
+		if err != nil {
+			continue
+		}
+		port, err := strconv.Atoi(portStr)
+		if err != nil {
+			continue
+		}
+		seen[port] = true
+	}
+
+	for _, server := range servers {
+		for _, port := range []int{
+			server.FrontendMembership,
+			server.HistoryMembership,
+			server.MatchingMembership,
+			server.WorkerMembership,
+		} {
+			if !seen[port] {
+				return false, nil
 			}
 		}
-		return true
-	}, timeout, time.Second, "cluster did not form within %v", timeout)
+	}
+	return true, nil
 }
 
 func requireServerAlive(t *testing.T, name, address string) {
