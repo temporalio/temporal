@@ -152,7 +152,11 @@ func TestThrottleLogger(t *testing.T) {
 		outC <- buf.String()
 	}()
 
-	logger := NewThrottledLogger(NewZapLogger(zap.NewExample()),
+	// The service tag is applied before the throttled logger wraps it (and calls Skip()), exactly as
+	// the production ThrottledLoggerProvider does. Skip() must carry that tag forward so the later
+	// With() calls, which rebuild the logger from its untagged base, don't drop it.
+	logger := NewThrottledLogger(
+		With(NewZapLogger(zap.NewExample()), tag.Service("test-service")),
 		func() float64 { return 1 })
 	preCaller := caller(1)
 	With(With(logger, tag.Error(fmt.Errorf("test error"))), tag.ComponentShardContext).Info("test info", tag.WorkflowActionWorkflowStarted)
@@ -166,7 +170,7 @@ func TestThrottleLogger(t *testing.T) {
 	assert.Nil(t, err)
 	lineNum := fmt.Sprintf("%v", par+1)
 	fmt.Println(out, lineNum)
-	assert.Regexp(t, `{"level":"info","msg":"test info","error":"test error","component":"shard-context","wf-action":"add-workflow-started-event","logging-call-at":".*zap_logger_test.go:`+lineNum+`"}`+"\n", out)
+	assert.Regexp(t, `{"level":"info","msg":"test info","service":"test-service","error":"test error","component":"shard-context","wf-action":"add-workflow-started-event","logging-call-at":".*zap_logger_test.go:`+lineNum+`"}`+"\n", out)
 }
 
 func TestEmptyMsg(t *testing.T) {
