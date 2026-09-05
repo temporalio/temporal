@@ -253,6 +253,10 @@ func (c *lru) Delete(key any) {
 }
 
 // Release decrements the ref count of a pinned element.
+//
+// CONSIDER(ekalinin): references are identified by key only, so a release owed for an entry that
+// was deleted lands on whatever was re-inserted under that key and unpins it while its real holder
+// is still using it. Telling them apart needs per-entry identity in the Cache interface.
 func (c *lru) Release(key any) {
 	if c.maxSize == 0 || !c.pin {
 		return
@@ -265,13 +269,26 @@ func (c *lru) Release(key any) {
 		return
 	}
 	entry := elt.Value.(*entryImpl)
+	if entry.refCount <= 0 {
+		// Release without a matching reference. Entries are looked up by key, so this happens when
+		// the key was deleted and re-inserted while the caller still owed a release for the entry
+		// that is gone. Letting refCount go negative would pin the entry forever, since both
+		// eviction and TTL expiry require refCount == 0.
+		return
+	}
 	entry.refCount--
+	// Entry size might have changed. Recalculate size and evict entries if necessary.
+	newEntrySize := getSize(entry.value)
 	if entry.refCount == 0 {
 		c.pinnedSize -= entry.Size()
 		metrics.CachePinnedUsage.With(c.metricsHandler).Record(float64(c.pinnedSize))
+	} else if newEntrySize != entry.Size() {
+		// Entry stays pinned, so pinnedSize must follow the size change applied below. Otherwise
+		// the release that unpins the entry would subtract a size different from the one added
+		// when the entry was pinned, and pinnedSize would drift, possibly below zero.
+		c.pinnedSize += newEntrySize - entry.Size()
+		metrics.CachePinnedUsage.With(c.metricsHandler).Record(float64(c.pinnedSize))
 	}
-	// Entry size might have changed. Recalculate size and evict entries if necessary.
-	newEntrySize := getSize(entry.value)
 	c.currSize = c.calculateNewCacheSize(newEntrySize, entry.Size())
 	entry.size = newEntrySize
 	if c.currSize > c.maxSize {
@@ -381,6 +398,12 @@ func (c *lru) deleteInternal(element *list.Element) {
 	entry := c.byAccess.Remove(element).(*entryImpl)
 	c.currSize -= entry.Size()
 	metrics.CacheUsage.With(c.metricsHandler).Record(float64(c.currSize))
+	if entry.refCount > 0 {
+		// Entry is gone from the cache, so its subsequent Release won't find it and won't
+		// be able to give the pinned bytes back.
+		c.pinnedSize -= entry.Size()
+		metrics.CachePinnedUsage.With(c.metricsHandler).Record(float64(c.pinnedSize))
+	}
 	metrics.CacheEntryAgeOnEviction.With(c.metricsHandler).Record(c.timeSource.Now().UTC().Sub(entry.createTime))
 	delete(c.byKey, entry.key)
 
