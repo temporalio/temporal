@@ -11,6 +11,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -183,7 +184,7 @@ func (s *mutableStateSuite) TestPropagateTimeSkippingToNextRun() {
 
 	s.Run("DisablePropagationFlag_PreservedInChainOfRuns", func() {
 		// Chain-of-runs clones the full config, so DisablePropagation is preserved. Contrast with
-		// propagateTimeSkippingToOtherExecution, which never carries the flag onto a child config.
+		// chasm.PropagateTimeSkippingToOtherExecution, which never carries the flag onto a child config.
 		tsi := &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{
 				Enabled:             true,
@@ -220,7 +221,7 @@ func (s *mutableStateSuite) TestPropagateTimeSkippingToOtherExecution() {
 	}
 
 	s.Run("NilTimeSkippingInfo_PropagatesNothing", func() {
-		tsc, propagatedState := propagateTimeSkippingToOtherExecution(nil)
+		tsc, propagatedState := chasm.PropagateTimeSkippingToOtherExecution(nil)
 		s.Nil(tsc)
 		s.Nil(propagatedState)
 		s.requireInitNoPanic(tsc, propagatedState)
@@ -228,7 +229,7 @@ func (s *mutableStateSuite) TestPropagateTimeSkippingToOtherExecution() {
 
 	s.Run("FullState_PropagatesConfigAndVirtualTime", func() {
 		tsi := newTSI()
-		tsc, propagatedState := propagateTimeSkippingToOtherExecution(tsi)
+		tsc, propagatedState := chasm.PropagateTimeSkippingToOtherExecution(tsi)
 		s.Require().NotNil(tsc)
 		s.True(tsc.GetEnabled())
 		// no fast-forward
@@ -244,7 +245,7 @@ func (s *mutableStateSuite) TestPropagateTimeSkippingToOtherExecution() {
 
 	s.Run("FastForward_NeverPropagatedToChild", func() {
 		tsi := newTSI() // enabled parent carrying an active, unreached fast-forward
-		tsc, propagatedState := propagateTimeSkippingToOtherExecution(tsi)
+		tsc, propagatedState := chasm.PropagateTimeSkippingToOtherExecution(tsi)
 		s.Require().NotNil(tsc)
 		s.Nil(tsc.GetFastForwardConfig(), "child never inherits the fast-forward config")
 		s.Require().NotNil(propagatedState)
@@ -257,7 +258,7 @@ func (s *mutableStateSuite) TestPropagateTimeSkippingToOtherExecution() {
 		// Config only propagates when !DisablePropagation, so the flag is structurally always
 		// false on a propagated child config -- there is nothing to carry down the tree.
 		tsi := newTSI()
-		tsc, propagatedState := propagateTimeSkippingToOtherExecution(tsi)
+		tsc, propagatedState := chasm.PropagateTimeSkippingToOtherExecution(tsi)
 		s.Require().NotNil(tsc)
 		s.False(tsc.GetDisablePropagation())
 		s.requireInitNoPanic(tsc, propagatedState)
@@ -266,7 +267,7 @@ func (s *mutableStateSuite) TestPropagateTimeSkippingToOtherExecution() {
 	s.Run("DisablePropagationSet_NoConfigPropagated", func() {
 		tsi := newTSI()
 		tsi.Config.DisablePropagation = true
-		tsc, propagatedState := propagateTimeSkippingToOtherExecution(tsi)
+		tsc, propagatedState := chasm.PropagateTimeSkippingToOtherExecution(tsi)
 		s.Nil(tsc)
 		s.Require().NotNil(propagatedState)
 		s.Equal(accumSkip, propagatedState.GetInitialSkippedDuration().AsDuration())
@@ -278,7 +279,7 @@ func (s *mutableStateSuite) TestPropagateTimeSkippingToOtherExecution() {
 	s.Run("NilConfig_PropagatesVirtualTime", func() {
 		tsi := newTSI()
 		tsi.Config = nil
-		tsc, propagatedState := propagateTimeSkippingToOtherExecution(tsi)
+		tsc, propagatedState := chasm.PropagateTimeSkippingToOtherExecution(tsi)
 		s.Nil(tsc)
 		s.Require().NotNil(propagatedState)
 		s.Equal(int32(0), propagatedState.GetInitialSkipCount())
@@ -291,7 +292,7 @@ func (s *mutableStateSuite) TestPropagateTimeSkippingToOtherExecution() {
 	s.Run("DisabledParentConfig_PropagatesDisabledConfig", func() {
 		tsi := newTSI()
 		tsi.Config.Enabled = false
-		tsc, propagatedState := propagateTimeSkippingToOtherExecution(tsi)
+		tsc, propagatedState := chasm.PropagateTimeSkippingToOtherExecution(tsi)
 		// enabled is copied through: a disabled-but-propagating parent hands the child a disabled config.
 		s.Require().NotNil(tsc)
 		s.False(tsc.GetEnabled())
@@ -308,7 +309,7 @@ func (s *mutableStateSuite) TestPropagateTimeSkippingToOtherExecution() {
 	s.Run("ZeroAccumulatedSkip_ConfigButNilState", func() {
 		tsi := newTSI()
 		tsi.AccumulatedSkippedDuration = nil
-		tsc, propagatedState := propagateTimeSkippingToOtherExecution(tsi)
+		tsc, propagatedState := chasm.PropagateTimeSkippingToOtherExecution(tsi)
 		s.Require().NotNil(tsc, "an enabled config still propagates with no accumulated skip")
 		s.True(tsc.GetEnabled())
 		s.Nil(propagatedState, "no accumulated skip -> no state to propagate")
@@ -1004,7 +1005,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 	s.Run("NilTimeSkippingInfo_NoPanic", func() {
 		resetMS()
 		s.mutableState.executionInfo.TimeSkippingInfo = nil
-		var tr *timeSkippingTransition
+		var tr *chasm.TimeSkippingTransition
 		s.NotPanics(func() { tr = s.mutableState.findNextSkipTarget() })
 		s.Nil(tr, "nil TimeSkippingInfo with no candidates yields no transition")
 	})
@@ -1032,7 +1033,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.Equal(t1, tr.TargetTime)
+		s.Equal(t1, tr.GetTargetTime())
 		s.False(tr.DisabledAfterFastForward)
 	})
 
@@ -1043,7 +1044,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.Equal(baseTime.Add(2*time.Hour), tr.TargetTime)
+		s.Equal(baseTime.Add(2*time.Hour), tr.GetTargetTime())
 	})
 
 	s.Run("UserTimerAndEarlierFastForward_TargetIsFastForward", func() {
@@ -1054,7 +1055,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.Equal(fastForwardTarget, tr.TargetTime)
+		s.Equal(fastForwardTarget, tr.GetTargetTime())
 		// The fast-forward is the earliest target (earlier than the timer), so skipping to it
 		// consumes the budget and disables time skipping on this transition.
 		s.True(tr.DisabledAfterFastForward)
@@ -1071,7 +1072,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.Equal(execTime, tr.TargetTime)
+		s.Equal(execTime, tr.GetTargetTime())
 		s.False(tr.DisabledAfterFastForward)
 	})
 
@@ -1114,7 +1115,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.Equal(schedTime, tr.TargetTime)
+		s.Equal(schedTime, tr.GetTargetTime())
 		s.False(tr.DisabledAfterFastForward)
 	})
 
@@ -1133,7 +1134,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.Equal(early, tr.TargetTime)
+		s.Equal(early, tr.GetTargetTime())
 	})
 
 	s.Run("ActivityBackoffAndEarlierTimer_TargetIsTimer", func() {
@@ -1147,7 +1148,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.Equal(timerTime, tr.TargetTime)
+		s.Equal(timerTime, tr.GetTargetTime())
 	})
 
 	s.Run("RunTimeout_IsTarget", func() {
@@ -1157,7 +1158,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.Equal(runTimeout, tr.TargetTime)
+		s.Equal(runTimeout, tr.GetTargetTime())
 	})
 
 	s.Run("ExecutionTimeout_IsTarget", func() {
@@ -1167,7 +1168,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.Equal(execTimeout, tr.TargetTime)
+		s.Equal(execTimeout, tr.GetTargetTime())
 	})
 
 	s.Run("RunAndExecutionTimeout_EarliestWins", func() {
@@ -1178,7 +1179,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.Equal(runTimeout, tr.TargetTime, "the earlier run timeout must win")
+		s.Equal(runTimeout, tr.GetTargetTime(), "the earlier run timeout must win")
 	})
 
 	s.Run("ExpiredTimeouts_NotTargets", func() {
@@ -1197,7 +1198,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.Equal(runTimeout, tr.TargetTime, "skip is bounded by the earlier run timeout")
+		s.Equal(runTimeout, tr.GetTargetTime(), "skip is bounded by the earlier run timeout")
 		s.False(tr.DisabledAfterFastForward, "fast-forward not reached: it was not the chosen target")
 	})
 
@@ -1209,7 +1210,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.Equal(fastForwardTarget, tr.TargetTime)
+		s.Equal(fastForwardTarget, tr.GetTargetTime())
 		s.True(tr.DisabledAfterFastForward, "fast-forward is the earliest target: skipping to it disables time skipping")
 	})
 
@@ -1221,7 +1222,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.Equal(execTimeout, tr.TargetTime, "skip is bounded by the earlier execution timeout")
+		s.Equal(execTimeout, tr.GetTargetTime(), "skip is bounded by the earlier execution timeout")
 		s.False(tr.DisabledAfterFastForward)
 	})
 
@@ -1235,7 +1236,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.Equal(fastForwardTarget, tr.TargetTime, "a zero-valued timeout must not cap the skip")
+		s.Equal(fastForwardTarget, tr.GetTargetTime(), "a zero-valued timeout must not cap the skip")
 		// The fast-forward is the only (and therefore earliest) target, so it is reached and
 		// time skipping is disabled.
 		s.True(tr.DisabledAfterFastForward)
@@ -1249,7 +1250,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 		tr := s.mutableState.findNextSkipTarget()
 		s.Require().NotNil(tr)
-		s.True(tr.TargetTime.IsZero())
+		s.True(tr.GetTargetTime().IsZero())
 		s.True(tr.DisabledAfterFastForward)
 	})
 }

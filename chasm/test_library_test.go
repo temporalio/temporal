@@ -48,6 +48,7 @@ func (l *TestLibrary) Components() []*RegistrableComponent {
 			WithBusinessIDAlias("TestBusinessId"),
 			WithSearchAttributes(TestComponentStartTimeSearchAttribute),
 		),
+		NewRegistrableComponent[*TestTimeSkippingImplComponent](testTimeSkippingComponentName),
 		NewRegistrableComponent[*TestSubComponent1](testSubComponent1Name),
 		NewRegistrableComponent[*TestSubComponent11](testSubComponent11Name),
 		NewRegistrableComponent[*TestSubComponent2](testSubComponent2Name),
