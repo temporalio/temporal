@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
@@ -284,6 +285,34 @@ func TestRunControlledInvalidatesAtLeaseExpiration(t *testing.T) {
 		adminservice.UpdateLocalExecutionStateRequest_STATE_PAUSED,
 		adminservice.UpdateLocalExecutionStateRequest_STATE_OWNERSHIP_LOST,
 	}, states)
+}
+
+func TestWaitForSynchronizationBoundaryObservesLocalPause(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	local := adminservicemock.NewMockAdminServiceClient(ctrl)
+	execution := &commonpb.WorkflowExecution{WorkflowId: "workflow-id", RunId: "run-id"}
+	local.EXPECT().DescribeMutableState(gomock.Any(), gomock.Any()).Return(
+		&adminservice.DescribeMutableStateResponse{
+			CacheMutableState: &persistencespb.WorkflowMutableState{
+				ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+					LocalExecutionInfo: &persistencespb.LocalExecutionInfo{
+						BridgeState: persistencespb.LocalExecutionInfo_BRIDGE_STATE_PAUSED,
+					},
+				},
+			},
+		},
+		nil,
+	)
+	controller, err := NewExecutionStateController("namespace", "bridge", 1, local)
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	require.NoError(t, waitForSynchronizationBoundary(
+		ctx,
+		execution,
+		time.Now().Add(time.Minute),
+		controller,
+	))
 }
 
 func newTestReplicator(
