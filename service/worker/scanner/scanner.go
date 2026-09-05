@@ -57,6 +57,9 @@ type (
 		HistoryScannerDataMinAge dynamicconfig.DurationPropertyFn
 		// HistoryScannerVerifyRetention indicates if the history scavenger to do retention verification
 		HistoryScannerVerifyRetention dynamicconfig.BoolPropertyFn
+		// HistoryScannerRPS is the max rate of persistence calls made by the history scavenger.
+		// When it is not set (0 or negative), PersistenceMaxQPS is used instead.
+		HistoryScannerRPS dynamicconfig.IntPropertyFn
 		// ExecutionScannerPerHostQPS the max rate of calls to scan execution data per host
 		ExecutionScannerPerHostQPS dynamicconfig.IntPropertyFn
 		// ExecutionScannerPerShardQPS the max rate of calls to scan execution data per shard

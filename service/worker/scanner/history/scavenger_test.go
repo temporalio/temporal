@@ -94,7 +94,7 @@ func (s *ScavengerTestSuite) createTestScavenger(
 	s.scavenger = NewScavenger(
 		s.numShards,
 		s.mockExecutionManager,
-		rps,
+		dynamicconfig.GetIntPropertyFn(rps),
 		s.mockHistoryClient,
 		s.mockAdminClient,
 		s.mockRegistry,
