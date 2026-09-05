@@ -46,6 +46,25 @@ func RandomSnapshot(
 	dbRecordVersion int64,
 	branchToken []byte,
 ) (*p.WorkflowSnapshot, []*p.WorkflowEvents) {
+	timerInfos := RandomStringTimerInfoMap()
+	// persist all but one entry verbatim so stores round trip encoded user
+	// timer blobs as well as decoded ones
+	timerInfoBlobs := make(map[string]*commonpb.DataBlob, len(timerInfos))
+	serializer := serialization.NewSerializer()
+	keptTypedKey := ""
+	for key, info := range timerInfos {
+		if keptTypedKey == "" {
+			keptTypedKey = key
+			continue
+		}
+		blob, err := serializer.TimerInfoToBlob(info)
+		if err != nil {
+			t.Fatal(err)
+		}
+		timerInfoBlobs[key] = blob
+		delete(timerInfos, key)
+	}
+
 	snapshot := &p.WorkflowSnapshot{
 		ExecutionInfo:  RandomExecutionInfo(namespaceID, workflowID, eventID, lastWriteVersion, branchToken),
 		ExecutionState: RandomExecutionState(runID, state, status, lastWriteVersion),
@@ -53,7 +72,8 @@ func RandomSnapshot(
 		NextEventID: eventID + 1, // NOTE: RandomSnapshot generates a single history event, hence NextEventID is plus 1
 
 		ActivityInfos:       RandomInt64ActivityInfoMap(),
-		TimerInfos:          RandomStringTimerInfoMap(),
+		TimerInfos:          timerInfos,
+		TimerInfoBlobs:      timerInfoBlobs,
 		ChildExecutionInfos: RandomInt64ChildExecutionInfoMap(),
 		RequestCancelInfos:  RandomInt64RequestCancelInfoMap(),
 		SignalInfos:         RandomInt64SignalInfoMap(),

@@ -358,7 +358,7 @@ func (s *mutableStateSuite) TestIsWorkflowSkippable() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
-		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
+		s.mutableState.pendingUserTimers.put(&persistencespb.TimerInfo{TimerId: "t1"})
 		s.False(s.mutableState.isWorkflowSkippable())
 	})
 
@@ -423,7 +423,7 @@ func (s *mutableStateSuite) TestIsWorkflowSkippable() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
-		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{TimerId: "t1"}
+		s.mutableState.pendingUserTimers.put(&persistencespb.TimerInfo{TimerId: "t1"})
 		s.True(s.mutableState.isWorkflowSkippable())
 	})
 
@@ -967,10 +967,10 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 	s.mutableState.timeSource = fixedTimeSource
 
 	addTimer := func(id string, expiry time.Time) {
-		s.mutableState.pendingTimerInfoIDs[id] = &persistencespb.TimerInfo{
+		s.mutableState.pendingUserTimers.put(&persistencespb.TimerInfo{
 			TimerId:    id,
 			ExpiryTime: timestamppb.New(expiry),
-		}
+		})
 	}
 	setFastForward := func(target time.Time) {
 		s.mutableState.executionInfo.TimeSkippingInfo.FastForwardInfo =
@@ -982,7 +982,7 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 		ts := clock.NewEventTimeSource()
 		ts.Update(baseTime)
 		s.mutableState.timeSource = ts
-		s.mutableState.pendingTimerInfoIDs = make(map[string]*persistencespb.TimerInfo)
+		s.mutableState.pendingUserTimers.seedTyped(map[string]*persistencespb.TimerInfo{})
 		s.mutableState.pendingActivityInfoIDs = make(map[int64]*persistencespb.ActivityInfo)
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{Enabled: true},
@@ -1256,10 +1256,10 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 
 func (s *mutableStateSuite) TestCloseTransactionHandleWorkflowTimeSkipping() {
 	// A valid skip target exists: a user timer one hour in the (virtual) future.
-	s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{
+	s.mutableState.pendingUserTimers.put(&persistencespb.TimerInfo{
 		TimerId:    "t1",
 		ExpiryTime: timestamppb.New(s.mutableState.Now().Add(time.Hour)),
-	}
+	})
 	s.Require().True(s.mutableState.findNextSkipTarget().IsValid(), "the user timer is a valid skip target")
 
 	s.Run("NilConfig_NoSkip", func() {
@@ -1303,10 +1303,10 @@ func (s *mutableStateSuite) TestCloseTransactionHandleWorkflowTimeSkipping() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
-		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{
+		s.mutableState.pendingUserTimers.put(&persistencespb.TimerInfo{
 			TimerId:    "t1",
 			ExpiryTime: timestamppb.New(s.mutableState.Now().Add(time.Hour)),
-		}
+		})
 		s.mutableState.timeSkippingInfoUpdated = false
 		s.Require().True(s.mutableState.IsWorkflow())
 		s.Require().True(s.mutableState.isWorkflowSkippable())
@@ -1338,10 +1338,10 @@ func (s *mutableStateSuite) TestCloseTransactionHandleWorkflowTimeSkipping() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
-		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{
+		s.mutableState.pendingUserTimers.put(&persistencespb.TimerInfo{
 			TimerId:    "t1",
 			ExpiryTime: timestamppb.New(s.mutableState.Now().Add(time.Hour)),
-		}
+		})
 		s.mutableState.timeSkippingInfoUpdated = false
 
 		needRegen := s.mutableState.closeTransactionHandleWorkflowTimeSkipping(

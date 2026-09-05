@@ -425,13 +425,14 @@ func (c *ContextImpl) LoadMutableState(ctx context.Context, shardContext history
 			return nil, err
 		}
 
-		mutableState, err := NewMutableStateFromDB(
+		mutableState, err := NewMutableStateFromDBWithTimerBlobs(
 			shardContext,
 			shardContext.GetEventsCache(),
 			c.logger,
 			namespaceEntry,
 			response.State,
 			response.DBRecordVersion,
+			response.TimerInfoBlobs,
 		)
 		if err != nil {
 			return nil, err

@@ -133,10 +133,9 @@ type (
 		deleteActivityInfos            map[int64]struct{}                     // Deleted activities from last update.
 		syncActivityTasks              map[int64]struct{}                     // Activity to be sync to remote
 
-		pendingTimerInfoIDs     map[string]*persistencespb.TimerInfo // User Timer ID -> Timer Info.
-		pendingTimerEventIDToID map[int64]string                     // User Timer Start Event ID -> User Timer ID.
-		updateTimerInfos        map[string]*persistencespb.TimerInfo // Modified timers from last update.
-		deleteTimerInfos        map[string]struct{}                  // Deleted timers from last update.
+		pendingUserTimers *userTimers                          // User timers, entries loaded from DB stay encoded until first access.
+		updateTimerInfos  map[string]*persistencespb.TimerInfo // Modified timers from last update.
+		deleteTimerInfos  map[string]struct{}                  // Deleted timers from last update.
 
 		pendingChildExecutionInfoIDs map[int64]*persistencespb.ChildExecutionInfo // Initiated Event ID -> Child Execution Info
 		updateChildExecutionInfos    map[int64]*persistencespb.ChildExecutionInfo // Modified ChildExecution Infos since last update
@@ -321,10 +320,9 @@ func NewMutableState(
 		deleteActivityInfos:            make(map[int64]struct{}),
 		syncActivityTasks:              make(map[int64]struct{}),
 
-		pendingTimerInfoIDs:     make(map[string]*persistencespb.TimerInfo),
-		pendingTimerEventIDToID: make(map[int64]string),
-		updateTimerInfos:        make(map[string]*persistencespb.TimerInfo),
-		deleteTimerInfos:        make(map[string]struct{}),
+		pendingUserTimers: newUserTimers(logger),
+		updateTimerInfos:  make(map[string]*persistencespb.TimerInfo),
+		deleteTimerInfos:  make(map[string]struct{}),
 
 		updateChildExecutionInfos:    make(map[int64]*persistencespb.ChildExecutionInfo),
 		pendingChildExecutionInfoIDs: make(map[int64]*persistencespb.ChildExecutionInfo),
@@ -451,6 +449,33 @@ func NewMutableStateFromDB(
 	dbRecord *persistencespb.WorkflowMutableState,
 	dbRecordVersion int64,
 ) (*MutableStateImpl, error) {
+	return newMutableStateFromDB(shard, eventsCache, logger, namespaceEntry, dbRecord, dbRecordVersion, nil)
+}
+
+// NewMutableStateFromDBWithTimerBlobs is a variant of NewMutableStateFromDB
+// where user timer entries are passed still encoded. dbRecord.TimerInfos must
+// be empty in that case.
+func NewMutableStateFromDBWithTimerBlobs(
+	shard historyi.ShardContext,
+	eventsCache events.Cache,
+	logger log.Logger,
+	namespaceEntry *namespace.Namespace,
+	dbRecord *persistencespb.WorkflowMutableState,
+	dbRecordVersion int64,
+	timerInfosBlobs map[string]*commonpb.DataBlob,
+) (*MutableStateImpl, error) {
+	return newMutableStateFromDB(shard, eventsCache, logger, namespaceEntry, dbRecord, dbRecordVersion, timerInfosBlobs)
+}
+
+func newMutableStateFromDB(
+	shard historyi.ShardContext,
+	eventsCache events.Cache,
+	logger log.Logger,
+	namespaceEntry *namespace.Namespace,
+	dbRecord *persistencespb.WorkflowMutableState,
+	dbRecordVersion int64,
+	timerInfosBlobs map[string]*commonpb.DataBlob,
+) (*MutableStateImpl, error) {
 	// startTime will be overridden by DB record
 	startTime := time.Time{}
 
@@ -464,51 +489,8 @@ func NewMutableStateFromDB(
 		startTime,
 	)
 
-	if dbRecord.ActivityInfos != nil {
-		mutableState.pendingActivityInfoIDs = dbRecord.ActivityInfos
-		mutableState.approximateSize += int64SizeBytes * len(mutableState.pendingActivityInfoIDs)
-	}
-	for _, activityInfo := range dbRecord.ActivityInfos {
-		mutableState.pendingActivityIDToEventID[activityInfo.ActivityId] = activityInfo.ScheduledEventId
-		mutableState.approximateSize += activityInfo.Size()
-		if (activityInfo.TimerTaskStatus & TimerTaskStatusCreatedHeartbeat) > 0 {
-			// Sets last pending timer heartbeat to year 2000.
-			// This ensures at least one heartbeat task will be processed for the pending activity.
-			mutableState.pendingActivityTimerHeartbeats[activityInfo.ScheduledEventId] = time.Unix(946684800, 0)
-		}
-	}
-
-	if dbRecord.TimerInfos != nil {
-		mutableState.pendingTimerInfoIDs = dbRecord.TimerInfos
-	}
-	for timerID, timerInfo := range dbRecord.TimerInfos {
-		mutableState.pendingTimerEventIDToID[timerInfo.GetStartedEventId()] = timerInfo.GetTimerId()
-		mutableState.approximateSize += timerInfo.Size()
-		mutableState.approximateSize += len(timerID)
-	}
-
-	if dbRecord.ChildExecutionInfos != nil {
-		mutableState.pendingChildExecutionInfoIDs = dbRecord.ChildExecutionInfos
-		mutableState.approximateSize += int64SizeBytes * len(mutableState.pendingChildExecutionInfoIDs)
-	}
-	for _, childInfo := range dbRecord.ChildExecutionInfos {
-		mutableState.approximateSize += childInfo.Size()
-	}
-
-	if dbRecord.RequestCancelInfos != nil {
-		mutableState.pendingRequestCancelInfoIDs = dbRecord.RequestCancelInfos
-		mutableState.approximateSize += int64SizeBytes * len(mutableState.pendingRequestCancelInfoIDs)
-	}
-	for _, cancelInfo := range dbRecord.RequestCancelInfos {
-		mutableState.approximateSize += cancelInfo.Size()
-	}
-
-	if dbRecord.SignalInfos != nil {
-		mutableState.pendingSignalInfoIDs = dbRecord.SignalInfos
-		mutableState.approximateSize += int64SizeBytes * len(mutableState.pendingSignalInfoIDs)
-	}
-	for _, signalInfo := range dbRecord.SignalInfos {
-		mutableState.approximateSize += signalInfo.Size()
+	if err := mutableState.seedSubStateMachineInfosFromDB(dbRecord, timerInfosBlobs); err != nil {
+		return nil, err
 	}
 
 	mutableState.pendingSignalRequestedIDs = convert.StringSliceToSet(dbRecord.SignalRequestedIds)
@@ -602,6 +584,72 @@ func NewMutableStateFromDB(
 		mutableState.wrapTimeSourceWithTimeSkipping()
 	}
 	return mutableState, nil
+}
+
+// seedSubStateMachineInfosFromDB seeds the pending activity, user timer, child
+// execution, request cancel and signal infos from a DB record. User timer
+// entries can be passed still encoded via timerInfosBlobs, in which case
+// dbRecord.TimerInfos must be empty.
+func (ms *MutableStateImpl) seedSubStateMachineInfosFromDB(
+	dbRecord *persistencespb.WorkflowMutableState,
+	timerInfosBlobs map[string]*commonpb.DataBlob,
+) error {
+	if dbRecord.ActivityInfos != nil {
+		ms.pendingActivityInfoIDs = dbRecord.ActivityInfos
+		ms.approximateSize += int64SizeBytes * len(ms.pendingActivityInfoIDs)
+	}
+	for _, activityInfo := range dbRecord.ActivityInfos {
+		ms.pendingActivityIDToEventID[activityInfo.ActivityId] = activityInfo.ScheduledEventId
+		ms.approximateSize += activityInfo.Size()
+		if (activityInfo.TimerTaskStatus & TimerTaskStatusCreatedHeartbeat) > 0 {
+			// Sets last pending timer heartbeat to year 2000.
+			// This ensures at least one heartbeat task will be processed for the pending activity.
+			ms.pendingActivityTimerHeartbeats[activityInfo.ScheduledEventId] = time.Unix(946684800, 0)
+		}
+	}
+
+	if timerInfosBlobs == nil {
+		ms.pendingUserTimers.seedTyped(dbRecord.TimerInfos)
+		for timerID, timerInfo := range dbRecord.TimerInfos {
+			ms.approximateSize += timerInfo.Size()
+			ms.approximateSize += len(timerID)
+		}
+	} else {
+		if len(dbRecord.TimerInfos) != 0 {
+			return softassert.UnexpectedInternalErr(
+				ms.logger,
+				"decoded user timer infos provided alongside encoded user timer infos",
+				nil,
+			)
+		}
+		ms.pendingUserTimers.seedBlobs(timerInfosBlobs)
+		ms.approximateSize += ms.pendingUserTimers.approximateEncodedSize()
+	}
+
+	if dbRecord.ChildExecutionInfos != nil {
+		ms.pendingChildExecutionInfoIDs = dbRecord.ChildExecutionInfos
+		ms.approximateSize += int64SizeBytes * len(ms.pendingChildExecutionInfoIDs)
+	}
+	for _, childInfo := range dbRecord.ChildExecutionInfos {
+		ms.approximateSize += childInfo.Size()
+	}
+
+	if dbRecord.RequestCancelInfos != nil {
+		ms.pendingRequestCancelInfoIDs = dbRecord.RequestCancelInfos
+		ms.approximateSize += int64SizeBytes * len(ms.pendingRequestCancelInfoIDs)
+	}
+	for _, cancelInfo := range dbRecord.RequestCancelInfos {
+		ms.approximateSize += cancelInfo.Size()
+	}
+
+	if dbRecord.SignalInfos != nil {
+		ms.pendingSignalInfoIDs = dbRecord.SignalInfos
+		ms.approximateSize += int64SizeBytes * len(ms.pendingSignalInfoIDs)
+	}
+	for _, signalInfo := range dbRecord.SignalInfos {
+		ms.approximateSize += signalInfo.Size()
+	}
+	return nil
 }
 
 func NewSanitizedMutableState(
@@ -984,7 +1032,7 @@ func (ms *MutableStateImpl) GetHSMCompletionCallbackArg(ctx context.Context) (*p
 func (ms *MutableStateImpl) CloneToProto() *persistencespb.WorkflowMutableState {
 	msProto := &persistencespb.WorkflowMutableState{
 		ActivityInfos:       ms.pendingActivityInfoIDs,
-		TimerInfos:          ms.pendingTimerInfoIDs,
+		TimerInfos:          ms.pendingUserTimers.all(),
 		ChildExecutionInfos: ms.pendingChildExecutionInfoIDs,
 		RequestCancelInfos:  ms.pendingRequestCancelInfoIDs,
 		SignalInfos:         ms.pendingSignalInfoIDs,
@@ -2258,26 +2306,21 @@ func (ms *MutableStateImpl) DeleteActivity(
 func (ms *MutableStateImpl) GetUserTimerInfo(
 	timerID string,
 ) (*persistencespb.TimerInfo, bool) {
-	timerInfo, ok := ms.pendingTimerInfoIDs[timerID]
-	return timerInfo, ok
+	return ms.pendingUserTimers.get(timerID)
 }
 
 // GetUserTimerInfoByEventID gives details about a user timer.
 func (ms *MutableStateImpl) GetUserTimerInfoByEventID(
 	startEventID int64,
 ) (*persistencespb.TimerInfo, bool) {
-	timerID, ok := ms.pendingTimerEventIDToID[startEventID]
-	if !ok {
-		return nil, false
-	}
-	return ms.GetUserTimerInfo(timerID)
+	return ms.pendingUserTimers.getByEventID(startEventID)
 }
 
 // UpdateUserTimer updates the user timer in progress.
 func (ms *MutableStateImpl) UpdateUserTimer(
 	ti *persistencespb.TimerInfo,
 ) error {
-	timerID, ok := ms.pendingTimerEventIDToID[ti.GetStartedEventId()]
+	_, ok := ms.pendingUserTimers.getByEventID(ti.GetStartedEventId())
 	if !ok {
 		ms.logError(
 			fmt.Sprintf("unable to find timer event ID: %v in mutable state", ti.GetStartedEventId()),
@@ -2286,22 +2329,14 @@ func (ms *MutableStateImpl) UpdateUserTimer(
 		return ErrMissingTimerInfo
 	}
 
-	if _, ok := ms.pendingTimerInfoIDs[timerID]; !ok {
-		ms.logError(
-			fmt.Sprintf("unable to find timer ID: %v in mutable state", timerID),
-			tag.ErrorTypeInvalidMutableStateAction,
-		)
-		return ErrMissingTimerInfo
-	}
-
-	ms.pendingTimerInfoIDs[ti.TimerId] = ti
+	ms.pendingUserTimers.put(ti)
 	ms.updateTimerInfos[ti.TimerId] = ti
 	ms.timerInfosUserDataUpdated[ti.TimerId] = struct{}{}
 	return nil
 }
 
 func (ms *MutableStateImpl) UpdateUserTimerTaskStatus(timerID string, status int64) error {
-	timerInfo, ok := ms.pendingTimerInfoIDs[timerID]
+	timerInfo, ok := ms.pendingUserTimers.get(timerID)
 	if !ok {
 		ms.logError(
 			fmt.Sprintf("unable to find timer ID: %v in mutable state", timerID),
@@ -2318,19 +2353,10 @@ func (ms *MutableStateImpl) UpdateUserTimerTaskStatus(timerID string, status int
 func (ms *MutableStateImpl) DeleteUserTimer(
 	timerID string,
 ) error {
-	if timerInfo, ok := ms.pendingTimerInfoIDs[timerID]; ok {
-		delete(ms.pendingTimerInfoIDs, timerID)
-		ms.approximateSize -= timerInfo.Size() + len(timerID)
-
-		if _, ok = ms.pendingTimerEventIDToID[timerInfo.GetStartedEventId()]; ok {
-			delete(ms.pendingTimerEventIDToID, timerInfo.GetStartedEventId())
-		} else {
-			ms.logError(
-				fmt.Sprintf("unable to find timer event ID: %v in mutable state", timerID),
-				tag.ErrorTypeInvalidMutableStateAction,
-			)
-			// log data inconsistency instead of returning an error
-			ms.logDataInconsistency()
+	timerInfo, ok := ms.pendingUserTimers.delete(timerID)
+	if ok {
+		if timerInfo != nil {
+			ms.approximateSize -= timerInfo.Size() + len(timerID)
 		}
 	} else {
 		ms.logError(
@@ -2357,7 +2383,7 @@ func (ms *MutableStateImpl) GetPendingActivityInfos() map[int64]*persistencespb.
 }
 
 func (ms *MutableStateImpl) GetPendingTimerInfos() map[string]*persistencespb.TimerInfo {
-	return ms.pendingTimerInfoIDs
+	return ms.pendingUserTimers.all()
 }
 
 func (ms *MutableStateImpl) GetPendingChildExecutionInfos() map[int64]*persistencespb.ChildExecutionInfo {
@@ -5543,8 +5569,7 @@ func (ms *MutableStateImpl) ApplyTimerStartedEvent(
 		TaskStatus:     TimerTaskStatusNone,
 	}
 
-	ms.pendingTimerInfoIDs[ti.TimerId] = ti
-	ms.pendingTimerEventIDToID[ti.StartedEventId] = ti.TimerId
+	ms.pendingUserTimers.put(ti)
 	ms.updateTimerInfos[ti.TimerId] = ti
 	ms.timerInfosUserDataUpdated[ti.TimerId] = struct{}{}
 	ms.approximateSize += ti.Size() + len(ti.TimerId)
@@ -7669,7 +7694,8 @@ func (ms *MutableStateImpl) CloseTransactionAsSnapshot(
 		NextEventID:    ms.hBuilder.NextEventID(),
 
 		ActivityInfos:       ms.pendingActivityInfoIDs,
-		TimerInfos:          ms.pendingTimerInfoIDs,
+		TimerInfos:          ms.pendingUserTimers.decoded(),
+		TimerInfoBlobs:      ms.pendingUserTimers.untouchedBlobs(),
 		ChildExecutionInfos: ms.pendingChildExecutionInfoIDs,
 		RequestCancelInfos:  ms.pendingRequestCancelInfoIDs,
 		SignalInfos:         ms.pendingSignalInfoIDs,
@@ -9367,10 +9393,10 @@ func (ms *MutableStateImpl) applyUpdatesToSubStateMachines(
 		return err
 	}
 
-	err = applyUpdatesToSubStateMachine(ms, ms.pendingTimerInfoIDs, ms.updateTimerInfos, updatedTimerInfos, isSnapshot, ms.DeleteUserTimer, func(current, incoming *persistencespb.TimerInfo) {
+	err = applyUpdatesToSubStateMachine(ms, ms.pendingUserTimers.all(), ms.updateTimerInfos, updatedTimerInfos, isSnapshot, ms.DeleteUserTimer, func(current, incoming *persistencespb.TimerInfo) {
 		incoming.TaskStatus = TimerTaskStatusNone
 	}, func(ti *persistencespb.TimerInfo) {
-		ms.pendingTimerEventIDToID[ti.StartedEventId] = ti.TimerId
+		ms.pendingUserTimers.updateEventIDIndex(ti)
 		ms.timerInfosUserDataUpdated[ti.TimerId] = struct{}{}
 	})
 	if err != nil {
@@ -9696,7 +9722,7 @@ func (ms *MutableStateImpl) applyTombstones(
 					err = ms.DeleteActivity(tombstone.GetActivityScheduledEventId())
 				}
 			case *persistencespb.StateMachineTombstone_TimerId:
-				if _, ok := ms.pendingTimerInfoIDs[tombstone.GetTimerId()]; ok {
+				if ms.pendingUserTimers.has(tombstone.GetTimerId()) {
 					err = ms.DeleteUserTimer(tombstone.GetTimerId())
 				}
 			case *persistencespb.StateMachineTombstone_ChildExecutionInitiatedEventId:
