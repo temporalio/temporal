@@ -36,6 +36,7 @@ type MockContext struct {
 	HandleLinks                func(component Component) []*commonpb.Link
 	HandleRequestLinks         func(component Component, requestID string) ([]*commonpb.Link, error)
 	HandleUserMetadata         func(component Component) *sdkpb.UserMetadata
+	HandleComponentFqn         func(component Component) string
 
 	// GoCtx is the underlying context.Context used for context value lookups.
 	// Any values set on it will be available via the CHASM mock context's Value method,
@@ -139,6 +140,13 @@ func (c *MockContext) MetricsHandler() metrics.Handler {
 
 func (c *MockContext) Value(key any) any {
 	return c.goContext().Value(key)
+}
+
+func (c *MockContext) ComponentFqn(component Component) string {
+	if c.HandleComponentFqn != nil {
+		return c.HandleComponentFqn(component)
+	}
+	return ""
 }
 
 func (c *MockContext) Links(component Component) []*commonpb.Link {

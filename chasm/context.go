@@ -56,6 +56,8 @@ type Context interface {
 	RequestLinks(Component, string) ([]*commonpb.Link, error)
 	// UserMetadata returns the user metadata attached to the given component, or nil if none.
 	UserMetadata(Component) *sdkpb.UserMetadata
+	// ComponentFqn returns the fully qualified name the given component is registered under.
+	ComponentFqn(Component) string
 
 	// Intent() OperationIntent
 	// ComponentOptions(Component) []ComponentOption
@@ -170,6 +172,10 @@ func (c *immutableCtx) RequestLinks(component Component, requestID string) ([]*c
 
 func (c *immutableCtx) UserMetadata(component Component) *sdkpb.UserMetadata {
 	return c.root.componentUserMetadata(component)
+}
+
+func (c *immutableCtx) ComponentFqn(component Component) string {
+	return c.root.componentFqn(component)
 }
 
 func (c *immutableCtx) Now(_ Component) time.Time {
