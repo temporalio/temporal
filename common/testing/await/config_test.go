@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/debug"
+	"go.temporal.io/server/common/testing/testcontext"
 )
 
 func TestConfig_OverrideAttemptTimeout(t *testing.T) {
@@ -13,6 +14,13 @@ func TestConfig_OverrideAttemptTimeout(t *testing.T) {
 
 	cfg := newConfig()
 	require.Equal(t, 250*time.Millisecond*debug.TimeoutMultiplier, cfg.attemptTimeout)
+}
+
+func TestConfig_UsesTestContextTimeout(t *testing.T) {
+	t.Setenv("TEMPORAL_TEST_TIMEOUT", "250ms")
+
+	cfg := newConfig()
+	require.Equal(t, testcontext.DefaultTimeout(), cfg.totalTimeout)
 }
 
 func TestNextPollIntervalCapsAtMaximum(t *testing.T) {
