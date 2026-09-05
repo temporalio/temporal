@@ -275,6 +275,7 @@ func (r *registry) TryResurrect(_ context.Context, acptOrRejMsg *protocolpb.Mess
 		r.remover(updateID),
 		withInstrumentation(&r.instrumentation),
 	)
+	upd.originalReqID = reqMsg.RequestId
 	r.updates[updateID] = upd
 
 	return upd, nil
