@@ -73,6 +73,59 @@ func doNexusHTTPRequest(t *testing.T, router *mux.Router, endpointID string) *ht
 	return rec
 }
 
+func TestNexusOperationHTTPHandler_JWTAudience(t *testing.T) {
+	testCases := []struct {
+		name               string
+		token              string
+		tokenAudience      string
+		configuredAudience string
+		wantDenied         bool
+	}{
+		{
+			name:               "matching audience",
+			token:              "Bearer token",
+			tokenAudience:      "nexus-api",
+			configuredAudience: "nexus-api",
+		},
+		{
+			name:               "mismatching audience",
+			token:              "Bearer token",
+			tokenAudience:      "other-api",
+			configuredAudience: "nexus-api",
+			wantDenied:         true,
+		},
+		{
+			name:          "no configured audience",
+			token:         "Bearer token",
+			tokenAudience: "other-api",
+		},
+		{
+			name:               "no token",
+			configuredAudience: "nexus-api",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := &NexusOperationHTTPHandler{
+				auth: newAudienceTestInterceptor(tc.tokenAudience, tc.configuredAudience, mockAuthorizer{}),
+			}
+			r := httptest.NewRequest(http.MethodPost, "/", nil)
+			if tc.token != "" {
+				r.Header.Set("Authorization", tc.token)
+			}
+
+			_, err := h.parseTLSAndAuthInfo(r, &nexusContext{})
+			if tc.wantDenied {
+				var permissionDenied *serviceerror.PermissionDenied
+				require.ErrorAs(t, err, &permissionDenied)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestDispatchNexusTaskByEndpoint_NotFound_NonRetryable(t *testing.T) {
 	reg := nexustest.FakeEndpointRegistry{
 		OnGetByID: func(_ context.Context, _ string) (*persistencespb.NexusEndpointEntry, error) {

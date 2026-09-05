@@ -29,7 +29,7 @@ type (
 )
 
 type (
-	// JWTAudienceMapper returns JWT audience for a given request. req and info are nil from streaming RPCs.
+	// JWTAudienceMapper returns JWT audience for a given request. req and info are nil for gRPC streams and Nexus HTTP requests.
 	JWTAudienceMapper interface {
 		Audience(ctx context.Context, req any, info *grpc.UnaryServerInfo) string
 	}
@@ -196,14 +196,7 @@ func (a *Interceptor) InterceptStream(
 	if !bypassAuth {
 		tlsConnection := TLSInfoFromContext(ctx)
 		headerGetter := headers.NewGRPCHeaderGetter(ctx)
-
-		authInfo := a.GetAuthInfo(tlsConnection, headerGetter, func() string {
-			// Skip the mapper for tokenless streams; calling custom impls with nil req/info would be a behavior change.
-			if a.audienceGetter == nil || headerGetter.Get(a.authHeaderName) == "" {
-				return ""
-			}
-			return a.audienceGetter.Audience(ctx, nil, nil)
-		})
+		authInfo := a.GetAuthInfoForRequest(ctx, tlsConnection, headerGetter)
 
 		var claims *Claims
 		if authInfo != nil {
@@ -244,6 +237,22 @@ type wrappedServerStream struct {
 }
 
 func (w *wrappedServerStream) Context() context.Context { return w.ctx }
+
+// GetAuthInfoForRequest extracts auth info for gRPC streams and Nexus HTTP requests,
+// where there is no unary request to hand to the audience mapper.
+func (a *Interceptor) GetAuthInfoForRequest(
+	ctx context.Context,
+	tlsConnection *credentials.TLSInfo,
+	header headers.HeaderGetter,
+) *AuthInfo {
+	return a.GetAuthInfo(tlsConnection, header, func() string {
+		// The audience only applies to a token, so skip the mapper when there isn't one.
+		if a.audienceGetter == nil || header == nil || header.Get(a.authHeaderName) == "" {
+			return ""
+		}
+		return a.audienceGetter.Audience(ctx, nil, nil)
+	})
+}
 
 // GetAuthInfo extracts auth info from TLS info and headers.
 // Returns nil if either the policy's claimMapper or authorizer are nil or when there is no auth information in the
