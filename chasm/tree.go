@@ -357,7 +357,7 @@ func newTreeInitSearchAttributesAndMemo(
 		return err
 	}
 
-	// Theoritically we should check if the root node has a Visibility component or not.
+	// Theoretically we should check if the root node has a Visibility component or not.
 	// But that doesn't really matter. Even if it doesn't have one, currentSearchAttributes
 	// and currentMemo will just never be used.
 
@@ -1926,7 +1926,7 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 	visibility.generateTask(mutableContext)
 	visibilityNode.setValueState(valueStateNeedSerialize)
 
-	// We don't need to sync tree structure here for the visiblity node because we only generated a task without
+	// We don't need to sync tree structure here for the visibility node because we only generated a task without
 	// changing any component fields.
 	return nil
 }
@@ -3005,7 +3005,7 @@ func (n *Node) delete(isSystemDelete bool) error {
 	// if the same node is updated and then deleted in the same transaction.
 	//
 	// That's not a problem today though and DeletedNodes entries are always added
-	// before UpdatedNodes entires.
+	// before UpdatedNodes entries.
 	// - For active logic, DeletedNodes are added upon syncSubComponents(),
 	//   and UpdatedNodes are added when closing transaction and serializing nodes.
 	// - For standby replication logic, mutable state calls ApplyMutation() twice,
@@ -3405,7 +3405,7 @@ func deserializeTask(
 		return taskValue, nil
 	}
 
-	// TODO: consider pre-calculating the proto field num when registring the task type.
+	// TODO: consider pre-calculating the proto field num when registering the task type.
 
 	protoMessageFound := false
 	for i := 0; i < taskGoType.NumField(); i++ {
@@ -3453,7 +3453,7 @@ func serializeTask(
 		return encodeChasmBlob(nil)
 	}
 
-	// TODO: consider pre-calculating the proto field num when registring the task type.
+	// TODO: consider pre-calculating the proto field num when registering the task type.
 
 	var blob *commonpb.DataBlob
 	protoMessageFound := false
