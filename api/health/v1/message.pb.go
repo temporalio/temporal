@@ -44,7 +44,10 @@ type HealthCheck struct {
 	Threshold float64 `protobuf:"fixed64,4,opt,name=threshold,proto3" json:"threshold,omitempty"`
 	// Human-readable detail describing what happened, e.g.
 	// "RPC latency 850.00ms exceeded 500.00ms threshold".
-	Message       string `protobuf:"bytes,5,opt,name=message,proto3" json:"message,omitempty"`
+	Message string `protobuf:"bytes,5,opt,name=message,proto3" json:"message,omitempty"`
+	// Whether a breach of this check actually affects the reported state. When false the
+	// `state` is always set to SERVING.
+	Enforced      bool `protobuf:"varint,6,opt,name=enforced,proto3" json:"enforced,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -114,14 +117,23 @@ func (x *HealthCheck) GetMessage() string {
 	return ""
 }
 
+func (x *HealthCheck) GetEnforced() bool {
+	if x != nil {
+		return x.Enforced
+	}
+	return false
+}
+
 // Health details for a single host.
 type HostHealthDetail struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Address       string                 `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
-	State         v1.HealthState         `protobuf:"varint,2,opt,name=state,proto3,enum=temporal.server.api.enums.v1.HealthState" json:"state,omitempty"`
-	Checks        []*HealthCheck         `protobuf:"bytes,3,rep,name=checks,proto3" json:"checks,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Address string                 `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
+	State   v1.HealthState         `protobuf:"varint,2,opt,name=state,proto3,enum=temporal.server.api.enums.v1.HealthState" json:"state,omitempty"`
+	Checks  []*HealthCheck         `protobuf:"bytes,3,rep,name=checks,proto3" json:"checks,omitempty"`
+	// the state that also takes HealthCheck.enforced = false into account
+	UnenforcedState v1.HealthState `protobuf:"varint,4,opt,name=unenforced_state,json=unenforcedState,proto3,enum=temporal.server.api.enums.v1.HealthState" json:"unenforced_state,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *HostHealthDetail) Reset() {
@@ -175,6 +187,13 @@ func (x *HostHealthDetail) GetChecks() []*HealthCheck {
 	return nil
 }
 
+func (x *HostHealthDetail) GetUnenforcedState() v1.HealthState {
+	if x != nil {
+		return x.UnenforcedState
+	}
+	return v1.HealthState(0)
+}
+
 // Health details for a service (history, frontend, matching).
 type ServiceHealthDetail struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
@@ -182,9 +201,11 @@ type ServiceHealthDetail struct {
 	State   v1.HealthState         `protobuf:"varint,2,opt,name=state,proto3,enum=temporal.server.api.enums.v1.HealthState" json:"state,omitempty"`
 	Hosts   []*HostHealthDetail    `protobuf:"bytes,3,rep,name=hosts,proto3" json:"hosts,omitempty"`
 	// Service-level diagnostic message (e.g. "no available hosts", "resolver error").
-	Message       string `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Message string `protobuf:"bytes,4,opt,name=message,proto3" json:"message,omitempty"`
+	// the state that also takes HealthCheck.enforced = false into account
+	UnenforcedState v1.HealthState `protobuf:"varint,5,opt,name=unenforced_state,json=unenforcedState,proto3,enum=temporal.server.api.enums.v1.HealthState" json:"unenforced_state,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ServiceHealthDetail) Reset() {
@@ -245,27 +266,37 @@ func (x *ServiceHealthDetail) GetMessage() string {
 	return ""
 }
 
+func (x *ServiceHealthDetail) GetUnenforcedState() v1.HealthState {
+	if x != nil {
+		return x.UnenforcedState
+	}
+	return v1.HealthState(0)
+}
+
 var File_temporal_server_api_health_v1_message_proto protoreflect.FileDescriptor
 
 const file_temporal_server_api_health_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"+temporal/server/api/health/v1/message.proto\x12\x1dtemporal.server.api.health.v1\x1a*temporal/server/api/enums/v1/cluster.proto\"\xbb\x01\n" +
+	"+temporal/server/api/health/v1/message.proto\x12\x1dtemporal.server.api.health.v1\x1a*temporal/server/api/enums/v1/cluster.proto\"\xd7\x01\n" +
 	"\vHealthCheck\x12\x1d\n" +
 	"\n" +
 	"check_type\x18\x01 \x01(\tR\tcheckType\x12?\n" +
 	"\x05state\x18\x02 \x01(\x0e2).temporal.server.api.enums.v1.HealthStateR\x05state\x12\x14\n" +
 	"\x05value\x18\x03 \x01(\x01R\x05value\x12\x1c\n" +
 	"\tthreshold\x18\x04 \x01(\x01R\tthreshold\x12\x18\n" +
-	"\amessage\x18\x05 \x01(\tR\amessage\"\xb1\x01\n" +
+	"\amessage\x18\x05 \x01(\tR\amessage\x12\x1a\n" +
+	"\benforced\x18\x06 \x01(\bR\benforced\"\x87\x02\n" +
 	"\x10HostHealthDetail\x12\x18\n" +
 	"\aaddress\x18\x01 \x01(\tR\aaddress\x12?\n" +
 	"\x05state\x18\x02 \x01(\x0e2).temporal.server.api.enums.v1.HealthStateR\x05state\x12B\n" +
-	"\x06checks\x18\x03 \x03(\v2*.temporal.server.api.health.v1.HealthCheckR\x06checks\"\xd1\x01\n" +
+	"\x06checks\x18\x03 \x03(\v2*.temporal.server.api.health.v1.HealthCheckR\x06checks\x12T\n" +
+	"\x10unenforced_state\x18\x04 \x01(\x0e2).temporal.server.api.enums.v1.HealthStateR\x0funenforcedState\"\xa7\x02\n" +
 	"\x13ServiceHealthDetail\x12\x18\n" +
 	"\aservice\x18\x01 \x01(\tR\aservice\x12?\n" +
 	"\x05state\x18\x02 \x01(\x0e2).temporal.server.api.enums.v1.HealthStateR\x05state\x12E\n" +
 	"\x05hosts\x18\x03 \x03(\v2/.temporal.server.api.health.v1.HostHealthDetailR\x05hosts\x12\x18\n" +
-	"\amessage\x18\x04 \x01(\tR\amessageB,Z*go.temporal.io/server/api/health/v1;healthb\x06proto3"
+	"\amessage\x18\x04 \x01(\tR\amessage\x12T\n" +
+	"\x10unenforced_state\x18\x05 \x01(\x0e2).temporal.server.api.enums.v1.HealthStateR\x0funenforcedStateB,Z*go.temporal.io/server/api/health/v1;healthb\x06proto3"
 
 var (
 	file_temporal_server_api_health_v1_message_proto_rawDescOnce sync.Once
@@ -290,13 +321,15 @@ var file_temporal_server_api_health_v1_message_proto_depIdxs = []int32{
 	3, // 0: temporal.server.api.health.v1.HealthCheck.state:type_name -> temporal.server.api.enums.v1.HealthState
 	3, // 1: temporal.server.api.health.v1.HostHealthDetail.state:type_name -> temporal.server.api.enums.v1.HealthState
 	0, // 2: temporal.server.api.health.v1.HostHealthDetail.checks:type_name -> temporal.server.api.health.v1.HealthCheck
-	3, // 3: temporal.server.api.health.v1.ServiceHealthDetail.state:type_name -> temporal.server.api.enums.v1.HealthState
-	1, // 4: temporal.server.api.health.v1.ServiceHealthDetail.hosts:type_name -> temporal.server.api.health.v1.HostHealthDetail
-	5, // [5:5] is the sub-list for method output_type
-	5, // [5:5] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	3, // 3: temporal.server.api.health.v1.HostHealthDetail.unenforced_state:type_name -> temporal.server.api.enums.v1.HealthState
+	3, // 4: temporal.server.api.health.v1.ServiceHealthDetail.state:type_name -> temporal.server.api.enums.v1.HealthState
+	1, // 5: temporal.server.api.health.v1.ServiceHealthDetail.hosts:type_name -> temporal.server.api.health.v1.HostHealthDetail
+	3, // 6: temporal.server.api.health.v1.ServiceHealthDetail.unenforced_state:type_name -> temporal.server.api.enums.v1.HealthState
+	7, // [7:7] is the sub-list for method output_type
+	7, // [7:7] is the sub-list for method input_type
+	7, // [7:7] is the sub-list for extension type_name
+	7, // [7:7] is the sub-list for extension extendee
+	0, // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_health_v1_message_proto_init() }

@@ -42,21 +42,28 @@ func (h *deepHealthCheckHandler) DeepHealthCheck(
 				CheckType: healthcheck.CheckTypeGRPCHealth,
 				State:     enumsspb.HEALTH_STATE_NOT_SERVING,
 				Message:   fmt.Sprintf("gRPC health check failed: %v", err),
+				Enforced:  true,
 			}},
+			UnenforcedState: enumsspb.HEALTH_STATE_NOT_SERVING,
 		}, nil
 	}
 
 	checks = append(checks, &healthspb.HealthCheck{
 		CheckType: healthcheck.CheckTypeGRPCHealth,
 		// Convert to SERVING to avoid false positives during initialization
-		State:   suppressStartupErrors(status.Status, now.Sub(h.startupTime), h.config.HealthHistoryInitializationTime()),
-		Message: fmt.Sprintf("historyservice gRPC health check: %s", status.Status.String()),
+		State:    suppressStartupErrors(status.Status, now.Sub(h.startupTime), h.config.HealthHistoryInitializationTime()),
+		Message:  fmt.Sprintf("historyservice gRPC health check: %s", status.Status.String()),
+		Enforced: true,
 	})
 
 	// TODO: Remove AverageLatency check once Latency is used by default.
-	checks = append(checks, errorIfOverThreshold(healthcheck.CheckTypeRPCLatency,
-		h.historyHealthSignal.AverageLatency(), h.config.HealthRPCLatencyFailure(),
-		"historyservice latency", true))
+	checks = append(checks, errorIfOverThreshold(
+		healthcheck.CheckTypeRPCLatency,
+		h.historyHealthSignal.AverageLatency(),
+		h.config.HealthRPCLatencyFailure(),
+		"historyservice latency",
+		true, // enforced
+	))
 
 	for _, settings := range h.config.HealthRPCLatencyPercentiles().PercentileSettings {
 		latency, found := h.historyHealthSignal.LatencyQuantile(settings.Percentile)
@@ -157,9 +164,13 @@ func (h *deepHealthCheckHandler) DeepHealthCheck(
 	}
 
 	// TODO: Remove AverageLatency check once Latency is used by default.
-	checks = append(checks, errorIfOverThreshold(healthcheck.CheckTypePersistenceLatency,
-		h.persistenceHealthSignal.AverageLatency(), h.config.HealthPersistenceLatencyFailure(),
-		"persistenceservice latency", true))
+	checks = append(checks, errorIfOverThreshold(
+		healthcheck.CheckTypePersistenceLatency,
+		h.persistenceHealthSignal.AverageLatency(),
+		h.config.HealthPersistenceLatencyFailure(),
+		"persistenceservice latency",
+		true, // enforced
+	))
 
 	for _, settings := range h.config.HealthPersistenceLatencyPercentiles().PercentileSettings {
 		checks = append(checks, errorIfOverThreshold(
@@ -171,24 +182,36 @@ func (h *deepHealthCheckHandler) DeepHealthCheck(
 		))
 	}
 
-	checks = append(checks, errorIfOverThreshold(healthcheck.CheckTypePersistenceErrRatio,
-		h.persistenceHealthSignal.ErrorRatio(), h.config.HealthPersistenceErrorRatio(),
-		"persistenceservice error ratio", true))
+	checks = append(checks, errorIfOverThreshold(
+		healthcheck.CheckTypePersistenceErrRatio,
+		h.persistenceHealthSignal.ErrorRatio(),
+		h.config.HealthPersistenceErrorRatio(),
+		"persistenceservice error ratio",
+		true,
+	))
 
 	overallState := enumsspb.HEALTH_STATE_SERVING
+	unenforcedState := enumsspb.HEALTH_STATE_SERVING
 
 	for _, check := range checks {
-		if check.State == enumsspb.HEALTH_STATE_NOT_SERVING {
-			overallState = check.State
-			break
+		if check.State == enumsspb.HEALTH_STATE_SERVING {
+			continue
+		}
+
+		// an unhealthy check always counts towards the unenforced state
+		unenforcedState = enumsspb.HEALTH_STATE_NOT_SERVING
+
+		if check.Enforced {
+			overallState = enumsspb.HEALTH_STATE_NOT_SERVING
 		}
 	}
 
 	metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(overallState))
 
 	return &historyservice.DeepHealthCheckResponse{
-		State:  overallState,
-		Checks: checks,
+		State:           overallState,
+		Checks:          checks,
+		UnenforcedState: unenforcedState,
 	}, nil
 }
 
@@ -203,15 +226,17 @@ func suppressStartupErrors(status grpchealthspb.HealthCheckResponse_ServingStatu
 
 func errorIfOverThreshold(checkType string, value float64, threshold float64, message string, enforced bool) *healthspb.HealthCheck {
 	state := enumsspb.HEALTH_STATE_SERVING
-	if value > threshold && enforced {
+	if value > threshold {
 		state = enumsspb.HEALTH_STATE_NOT_SERVING
 	}
+
 	return &healthspb.HealthCheck{
 		CheckType: checkType,
 		State:     state,
 		Value:     value,
 		Threshold: threshold,
 		Message:   message,
+		Enforced:  enforced,
 	}
 }
 
