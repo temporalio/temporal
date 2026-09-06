@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strconv"
 
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/log"
@@ -20,6 +21,7 @@ import (
 // The "-bin" suffix instructs grpc to base64-encode the value, so we can use binary.
 const partitionCountsHeaderName = "pcnt-bin"
 const partitionCountsTrailerName = "pcnt-bin"
+const estimatedTasksAllPartitionsHeaderName = "etap"
 
 // PartitionCounts is a smaller version of taskqueuespb.ClientPartitionCounts that we can more
 // easily pass around and put in a map.
@@ -92,6 +94,25 @@ func ParsePartitionCountsFromIncomingContext(ctx context.Context) (PartitionCoun
 		return PartitionCounts{}, nil
 	}
 	return parsePartitionCounts(vals[0])
+}
+
+func appendEstimatedTasksAllPartitions(ctx context.Context, estimatedTasksAllPartitions int) context.Context {
+	if estimatedTasksAllPartitions <= 0 {
+		return ctx
+	}
+	return metadata.AppendToOutgoingContext(ctx, estimatedTasksAllPartitionsHeaderName, strconv.Itoa(estimatedTasksAllPartitions))
+}
+
+func ParseEstimatedTasksAllPartitions(ctx context.Context) int {
+	vals := metadata.ValueFromIncomingContext(ctx, estimatedTasksAllPartitionsHeaderName)
+	if len(vals) == 0 {
+		return 0
+	}
+	estimatedTasksAllPartitions, err := strconv.Atoi(vals[0])
+	if err != nil || estimatedTasksAllPartitions <= 0 {
+		return 0
+	}
+	return estimatedTasksAllPartitions
 }
 
 func parsePartitionCountsFromTrailer(trailer metadata.MD) (PartitionCounts, error) {
