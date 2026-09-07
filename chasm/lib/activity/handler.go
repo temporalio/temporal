@@ -112,8 +112,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 	)
 
 	if err != nil {
-		var alreadyStartedErr *chasm.ExecutionAlreadyStartedError
-		if errors.As(err, &alreadyStartedErr) {
+		if alreadyStartedErr, ok := errors.AsType[*chasm.ExecutionAlreadyStartedError](err); ok {
 			return nil, serviceerror.NewActivityExecutionAlreadyStarted("activity execution already started", alreadyStartedErr.CurrentRequestID, alreadyStartedErr.CurrentRunID)
 		}
 

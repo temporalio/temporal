@@ -76,7 +76,7 @@ func (e *Engine) FirePureTasks(ref chasm.ComponentRef, referenceTime time.Time) 
 		return executed, err
 	}
 
-	if err := exec.closeTransaction(); err != nil {
+	if err := e.closeTransaction(exec); err != nil {
 		return executed, err
 	}
 	return executed, nil

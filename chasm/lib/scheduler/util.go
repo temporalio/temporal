@@ -50,10 +50,13 @@ func newTaggedMetricsHandler(baseHandler metrics.Handler, scheduler *Scheduler) 
 
 // Outcomes for task-lifecycle counters (e.g. ScheduleIdleTask). Mutually
 // exclusive: a given task run either fires (Validate=true, Execute ran) or is
-// invalidated (Validate=false; reason tag explains why).
+// invalidated (Validate=false; reason tag explains why). "skipped" covers the
+// arm side rather than a task run: a task that was deliberately not created
+// because an equivalent one is already pending.
 const (
 	outcomeFired       = "fired"
 	outcomeInvalidated = "invalidated"
+	outcomeSkipped     = "skipped"
 )
 
 // reasonNone is the ReasonTag value emitted on the "fired" outcome. Prometheus

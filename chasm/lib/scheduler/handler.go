@@ -42,8 +42,7 @@ func (h *handler) CreateSchedule(ctx context.Context, req *schedulerpb.CreateSch
 		chasm.WithRequestID(req.FrontendRequest.RequestId),
 	)
 
-	var alreadyStartedErr *chasm.ExecutionAlreadyStartedError
-	if errors.As(err, &alreadyStartedErr) {
+	if _, ok := errors.AsType[*chasm.ExecutionAlreadyStartedError](err); ok {
 		// Check if the existing schedule is a sentinel.
 		//
 		// TODO lina@ - this can be removed (as well as all other sentinel business)
@@ -93,8 +92,7 @@ func (h *handler) CreateFromMigrationState(ctx context.Context, req *schedulerpb
 		req,
 	)
 
-	var alreadyStartedErr *chasm.ExecutionAlreadyStartedError
-	if errors.As(err, &alreadyStartedErr) {
+	if _, ok := errors.AsType[*chasm.ExecutionAlreadyStartedError](err); ok {
 		// Check if the existing schedule is a sentinel. Sentinels are
 		// auto-deleted SentinelIdleTime after schedule creation; the
 		// V1 schedule will keep retrying migration until it expires.
@@ -143,8 +141,7 @@ func (h *handler) CreateSentinel(ctx context.Context, req *schedulerpb.CreateSen
 		req,
 	)
 
-	var alreadyStartedErr *chasm.ExecutionAlreadyStartedError
-	if errors.As(err, &alreadyStartedErr) {
+	if _, ok := errors.AsType[*chasm.ExecutionAlreadyStartedError](err); ok {
 		// If a sentinel already exists, succeed idempotently.
 		// If a real scheduler exists, fail.
 		_, readErr := chasm.ReadComponent(

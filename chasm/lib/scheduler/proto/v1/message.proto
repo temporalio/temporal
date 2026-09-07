@@ -42,6 +42,22 @@ message SchedulerState {
   // Surfaced as the ScheduleIdleCloseTime search attribute for stuck-schedule
   // detection.
   google.protobuf.Timestamp idle_close_time = 12;
+
+  // Monotonic high water mark for the most recent "event" on this schedule
+  // (create, update, or action start). The idle deadline is anchored on this
+  // value.
+  //
+  // This exists because the value cannot be safely recomputed on demand:
+  // recentActions() is derived from the Invoker's BufferedStarts, which
+  // completed-action retention truncates to the last `recentActionCount`
+  // entries. Evicting the start that held the largest StartTime drags a
+  // recomputed last-event-time - and therefore the idle deadline - backwards,
+  // closing the schedule earlier than intended.
+  //
+  // Unset on schedules created before this field was introduced; callers must
+  // fall back to the recomputed value, which is what makes the rollout a no-op
+  // until the first Generator tick advances it.
+  google.protobuf.Timestamp last_event_time = 13;
 }
 
 // WorkflowMigrationState tracks the state of an in-progress V2-to-V1 migration.

@@ -349,8 +349,7 @@ func (tr *fairTaskReader) addErrorBehavior(err error) (drop, retry bool) {
 		// retry here. if tqCtx is closing, addTaskToMatcher will give up.
 		return false, true
 	}
-	var stickyUnavailable *serviceerrors.StickyWorkerUnavailable
-	if errors.As(err, &stickyUnavailable) {
+	if _, ok := errors.AsType[*serviceerrors.StickyWorkerUnavailable](err); ok {
 		return true, false // drop the task
 	}
 	var invalid *serviceerror.InvalidArgument

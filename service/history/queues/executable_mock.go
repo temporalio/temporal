@@ -479,6 +479,20 @@ func (m *MockMaybeTerminalTaskError) EXPECT() *MockMaybeTerminalTaskErrorMockRec
 	return m.recorder
 }
 
+// Error mocks base method.
+func (m *MockMaybeTerminalTaskError) Error() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Error")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// Error indicates an expected call of Error.
+func (mr *MockMaybeTerminalTaskErrorMockRecorder) Error() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Error", reflect.TypeOf((*MockMaybeTerminalTaskError)(nil).Error))
+}
+
 // IsTerminalTaskError mocks base method.
 func (m *MockMaybeTerminalTaskError) IsTerminalTaskError() bool {
 	m.ctrl.T.Helper()

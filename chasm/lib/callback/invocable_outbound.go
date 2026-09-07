@@ -88,8 +88,7 @@ func (n invocableOutbound) Invoke(
 }
 
 func isRetryableCallError(err error) bool {
-	var handlerError *nexus.HandlerError
-	if errors.As(err, &handlerError) {
+	if handlerError, ok := errors.AsType[*nexus.HandlerError](err); ok {
 		return handlerError.Retryable()
 	}
 	return true
@@ -100,8 +99,7 @@ func outcomeTag(callCtx context.Context, callErr error) string {
 		if callCtx.Err() != nil {
 			return "request-timeout"
 		}
-		var handlerErr *nexus.HandlerError
-		if errors.As(callErr, &handlerErr) {
+		if handlerErr, ok := errors.AsType[*nexus.HandlerError](callErr); ok {
 			return "handler-error:" + string(handlerErr.Type)
 		}
 		return "unknown-error"

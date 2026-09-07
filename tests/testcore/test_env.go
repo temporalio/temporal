@@ -26,7 +26,9 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -259,7 +261,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 
 	// Create the test context before any expensive setup, so that the deadline
 	// extension below can compensate for the time setup takes.
-	testcontext.For(t)
+	ctx := testcontext.For(t)
 
 	var options testOptions
 	for _, opt := range opts {
@@ -296,6 +298,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	baseName := strings.ReplaceAll(t.Name(), "/", "-")
 	ns := namespace.Name(RandomizeStr(baseName))
 	nsID, err := base.RegisterNamespace(
+		ctx,
 		ns,
 		1, // 1 day retention
 		enumspb.ARCHIVAL_STATE_DISABLED,
@@ -457,6 +460,46 @@ func (e *TestEnv) Tv() *testvars.TestVars {
 	return e.tv
 }
 
+// InjectRequestFault registers a pre-handler gRPC fault injection scoped to this test's namespace.
+// Requests match either the namespace ID or name filter, depending on which
+// namespace field they expose. Requests without either field are ignored.
+// Returns a cleanup function that disables the fault.
+func (e *TestEnv) InjectRequestFault(fault RequestFault) func() {
+	scope := grpcfaults.Scope{
+		NamespaceID:   e.nsID,
+		NamespaceName: e.nsName,
+	}
+	tracker := newFaultTracker(e.t)
+	unregister := e.GetTestCluster().Host().GetGRPCFaultGenerator().RegisterRequestCallback(scope, func(_ context.Context, _ string, req any) *grpcfaults.Outcome {
+		if injectedErr := fault(req); injectedErr != nil {
+			tracker.markFired(req)
+			return &grpcfaults.Outcome{Error: injectedErr}
+		}
+		return nil
+	})
+	return tracker.attach(unregister)
+}
+
+// InjectResponseFault registers a post-handler gRPC fault injection scoped to this test's namespace.
+// Requests match either the namespace ID or name filter, depending on which
+// namespace field they expose. Requests without either field are ignored.
+// Returns a cleanup function that disables the fault.
+func (e *TestEnv) InjectResponseFault(fault ResponseFault) func() {
+	scope := grpcfaults.Scope{
+		NamespaceID:   e.nsID,
+		NamespaceName: e.nsName,
+	}
+	tracker := newFaultTracker(e.t)
+	unregister := e.GetTestCluster().Host().GetGRPCFaultGenerator().RegisterResponseCallback(scope, func(_ context.Context, _ string, req, resp any, err error) *grpcfaults.Outcome {
+		if injectedErr := fault(req, resp, err); injectedErr != nil {
+			tracker.markFired(req)
+			return &grpcfaults.Outcome{Error: injectedErr}
+		}
+		return nil
+	})
+	return tracker.attach(unregister)
+}
+
 // Context returns the test-level timeout context with RPC version headers already included.
 // This context will be canceled when the test timeout occurs. Use this directly for all RPC
 // operations - no need to wrap with NewContext or add headers manually.
@@ -471,26 +514,6 @@ func (e *TestEnv) Tv() *testvars.TestVars {
 // Deprecated: use the suite's Context() method instead.
 func (e *TestEnv) Context() context.Context {
 	return testcontext.For(e.t)
-}
-
-// WaitForChannel waits for ch to receive using the TestEnv context.
-func (e *TestEnv) WaitForChannel(ch <-chan struct{}) {
-	e.t.Helper()
-	select {
-	case <-ch:
-	case <-e.Context().Done():
-		e.FailNow("context timeout while waiting for channel")
-	}
-}
-
-// SendToChannel sends to ch using the TestEnv context.
-func (e *TestEnv) SendToChannel(ch chan<- struct{}) {
-	e.t.Helper()
-	select {
-	case ch <- struct{}{}:
-	case <-e.Context().Done():
-		e.FailNow("context timeout while sending to channel")
-	}
 }
 
 // SdkClient returns the SDK client. It is lazily initialized on the first call.
@@ -569,6 +592,22 @@ func (e *TestEnv) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, va
 		e.dedicatedGuard.record("global dynamic config used")
 	}
 	return e.cluster.host.overrideDynamicConfigForTest(e.t, setting.Key(), value)
+}
+
+// StartNamespaceLogCapture starts a log capture scoped to this test environment's namespace.
+func (e *TestEnv) StartNamespaceLogCapture() *testlogger.Capture {
+	testLogger, ok := e.Logger.(*testlogger.TestLogger)
+	if !ok {
+		e.t.Fatalf("StartNamespaceLogCapture requires a *testlogger.TestLogger logger, got %T", e.Logger)
+	}
+	capture := testLogger.StartCapture(
+		tag.WorkflowNamespace(e.Namespace().String()),
+		tag.WorkflowNamespaceID(e.NamespaceID().String()),
+	)
+	e.t.Cleanup(func() {
+		testLogger.StopCapture(capture)
+	})
+	return capture
 }
 
 // StartGlobalMetricCapture starts a cluster-global metrics capture for this test and automatically stops it during cleanup.

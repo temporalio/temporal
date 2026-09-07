@@ -29,6 +29,8 @@ import (
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/tests/testcore"
@@ -45,6 +47,12 @@ type nexusHTTPSpan struct {
 	URLPath      string
 	Status       codes.Code
 	NexusAttrs   map[string]any
+}
+
+type nexusTaskSpan struct {
+	TraceID int
+	Name    string
+	TaskID  int
 }
 
 type NexusOTELSuite struct {
@@ -111,12 +119,7 @@ func (s *NexusOTELSuite) TestCallback() {
 	s.NoError(err)
 	s.NoError(env.SdkClient().GetWorkflow(s.Context(), env.Tv().WorkflowID(), startResponse.RunId).Get(s.Context(), nil))
 
-	var headers http.Header
-	select {
-	case headers = <-requestHeaders:
-	case <-s.Context().Done():
-		s.FailNow("timed out waiting for Nexus callback", s.Context().Err().Error())
-	}
+	headers := await.Rcv(s.T(), requestHeaders)
 	s.Equal(callbackHeaderValue, headers.Get("X-Callback-Header"))
 	httpSpans := s.requireNexusHTTPSpans(exporter, []nexusHTTPSpan{{
 		TraceID:     1,
@@ -181,12 +184,7 @@ func (s *NexusOTELSuite) TestOperation() {
 		ScheduleToCloseTimeout: durationpb.New(time.Minute),
 	})
 	s.NoError(err)
-	var nexusRequestID string
-	select {
-	case nexusRequestID = <-requestIDs:
-	case <-s.Context().Done():
-		s.FailNow("timed out waiting for Nexus operation", s.Context().Err().Error())
-	}
+	nexusRequestID := await.Rcv(s.T(), requestIDs)
 
 	pollResponse, err := callerEnv.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
 		Namespace:   callerEnv.Namespace().String(),
@@ -293,12 +291,7 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 	})
 	s.NoError(err)
 
-	var request nexusRequest
-	select {
-	case request = <-requests:
-	case <-s.Context().Done():
-		s.FailNow("timed out waiting for Nexus operation", s.Context().Err().Error())
-	}
+	request := await.Rcv(s.T(), requests)
 	operationURLPath := "/nexus/endpoints/" + endpoint.Id + "/services/" + service.Name + "/" + operation.Name()
 	httpSpans := s.requireNexusHTTPSpans(exporter, []nexusHTTPSpan{
 		{
@@ -335,6 +328,23 @@ func (s *NexusOTELSuite) TestWorkerOperation() {
 	s.Require().True(spanContext.IsValid())
 	s.Require().Equal(spanContext.TraceID(), httpSpans[0].SpanContext.TraceID())
 	s.Require().Equal(spanContext.SpanID(), httpSpans[0].SpanContext.SpanID())
+	s.requireNexusTaskGRPCSpans(exporter, []nexusTaskSpan{
+		{
+			TraceID: 1,
+			Name:    "temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue",
+			TaskID:  1,
+		},
+		{
+			TraceID: 2,
+			Name:    "temporal.api.workflowservice.v1.WorkflowService/RespondNexusTaskCompleted",
+			TaskID:  1,
+		},
+		{
+			TraceID: 3,
+			Name:    "temporal.server.api.matchingservice.v1.MatchingService/DispatchNexusTask",
+			TaskID:  1,
+		},
+	})
 }
 
 // Verifies the namespace and task queue route propagates tracing and records handler failures without forwarding.
@@ -369,7 +379,7 @@ func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 	})
 	var handlerErr *nexus.HandlerError
 	s.Require().ErrorAs(err, &handlerErr)
-	s.NoError(<-pollerErrCh)
+	s.NoError(await.Rcv(s.T(), pollerErrCh))
 
 	httpSpans := s.requireNexusHTTPSpans(exporter, []nexusHTTPSpan{{
 		TraceID:     1,
@@ -387,6 +397,55 @@ func (s *NexusOTELSuite) TestNamespaceAndTaskQueueDispatch() {
 	}})
 	s.Require().Equal(traceID, httpSpans[0].SpanContext.TraceID().String())
 	s.Require().Equal(parentSpanID, httpSpans[0].Parent.SpanID().String())
+	s.requireNexusTaskGRPCSpans(exporter, []nexusTaskSpan{
+		{
+			TraceID: 1,
+			Name:    "temporal.api.workflowservice.v1.WorkflowService/PollNexusTaskQueue",
+			TaskID:  1,
+		},
+		{
+			TraceID: 2,
+			Name:    "temporal.api.workflowservice.v1.WorkflowService/RespondNexusTaskFailed",
+			TaskID:  1,
+		},
+		{
+			TraceID: 3,
+			Name:    "temporal.server.api.matchingservice.v1.MatchingService/DispatchNexusTask",
+			TaskID:  1,
+		},
+	})
+}
+
+// requireNexusTaskGRPCSpans compares worker task gRPC spans after assigning stable trace and task IDs.
+func (s *NexusOTELSuite) requireNexusTaskGRPCSpans(
+	exporter *tracetest.InMemoryExporter,
+	expected []nexusTaskSpan,
+) {
+	s.T().Helper()
+	requireExportedSpans(s, exporter, expected, s.nexusTaskGRPCSpans)
+}
+
+func (s *NexusOTELSuite) nexusTaskGRPCSpans(spans tracetest.SpanStubs) []nexusTaskSpan {
+	spans = testtelemetry.FilterSpans(spans, func(span tracetest.SpanStub) bool {
+		_, ok := testtelemetry.SpanAttribute(span, telemetry.WorkerTaskIDKey)
+		return ok
+	})
+	slices.SortFunc(spans, func(a, b tracetest.SpanStub) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+
+	localSpanIDs := testtelemetry.LocalSpanIDs(spans)
+	localTaskIDs := testtelemetry.LocalAttributeIDs(spans, telemetry.WorkerTaskIDKey)
+
+	result := make([]nexusTaskSpan, 0, len(spans))
+	for i, span := range spans {
+		result = append(result, nexusTaskSpan{
+			TraceID: localSpanIDs[i].Trace,
+			Name:    span.Name,
+			TaskID:  localTaskIDs[i],
+		})
+	}
+	return result
 }
 
 // requireNexusHTTPSpans compares all exported HTTP spans and their Nexus attributes after

@@ -95,7 +95,7 @@ values in system search attributes.`,
 	)
 	VisibilityEnableUnifiedQueryConverter = NewGlobalBoolSetting(
 		"system.visibilityEnableUnifiedQueryConverter",
-		false,
+		true,
 		`VisibilityEnableUnifiedQueryConverter enables the unified query converter for parsing the
 query.`,
 	)
@@ -209,6 +209,22 @@ in the consistent hash ring used by ringpop. Changing it may cause service disru
 		"system.enableCancelActivityWorkerCommand",
 		false,
 		`EnableCancelActivityWorkerCommand enables pushing activity cancellation to workers via Nexus worker commands`,
+	)
+	WorkerCommandsDispatchTimeout = NewGlobalDurationSetting(
+		"system.workerCommandsDispatchTimeout",
+		5*time.Second*debug.TimeoutMultiplier,
+		`WorkerCommandsDispatchTimeout is the timeout for dispatching worker commands to a worker via Nexus.`+
+			` A small value is used to detect missing workers sooner — otherwise the outbound executor`+
+			` thread is held waiting for a poller that will never arrive.`,
+	)
+	WorkerCommandsMaxAttempts = NewGlobalIntSetting(
+		"system.workerCommandsMaxAttempts",
+		30,
+		`WorkerCommandsMaxAttempts is the maximum number of dispatch attempts for a worker commands task before dropping it.`+
+			` This only applies to transport errors (e.g. matching server unavailable) — missing poller`+
+			` timeouts are not retried. Set high enough to ride out matching server rolling restarts —`+
+			` with the default backoff (initial=1s, coefficient=1.1), 30 attempts spreads retries over`+
+			` ~2 minutes. Transport errors fail fast, so more attempts are cheap.`,
 	)
 	NamespaceMinRetentionGlobal = NewGlobalDurationSetting(
 		"system.namespaceMinRetentionGlobal",
@@ -679,7 +695,7 @@ ScheduleInvariantsScannerParams comments for details.`,
 	FrontendDisabledScheduleValidations = NewNamespaceTypedSetting(
 		"frontend.disabledScheduleValidations",
 		[]string(nil),
-		`FrontendDisabledScheduleValidations is a list of schedule validation names that should log and continue instead of rejecting the request for a specific namespace. Valid values: versioning-override, scheduler-duration.`,
+		`FrontendDisabledScheduleValidations is a list of schedule validation names that should log and continue instead of rejecting the request for a specific namespace. Valid values: versioning-override, scheduler-duration, scheduler-overlap-policy, scheduler-timestamp, scheduler-remaining-actions.`,
 	)
 	FrontendHTTPAllowedHosts = NewGlobalTypedSettingWithConverter(
 		"frontend.httpAllowedHosts",
@@ -1379,11 +1395,12 @@ observability stack. Disabling this option will disable all the per-Task Queue g
 	MetricsBreakdownByBuildID = NewTaskQueueBoolSetting(
 		"metrics.breakdownByBuildID",
 		true,
-		`MetricsBreakdownByBuildID determines if the 'worker_version' tag in Matching metrics should
-contain the actual Worker Deployment Version or a generic "__versioned__" value. Regardless of this config, the tag value for unversioned
-queues will be "__unversioned__". Disable this option if the version cardinality is too high for your
-observability stack. Disabling this option will disable all the per-Task Queue gauges such as backlog lag, count, and age
-for VERSIONED queues.`,
+		`MetricsBreakdownByBuildID determines if Worker Deployment tags in Matching and History metrics should
+contain actual deployment and build ID values. When disabled, the deployment and build ID tags are empty, and the
+'worker_version' tag in metrics contains a generic "__versioned__" value. Regardless of this config, the
+'worker_version' tag value for unversioned task queues is "__unversioned__". Disable this option if the version cardinality
+is too high for your observability stack. Disabling this option will disable all the per-Task Queue gauges such as
+backlog lag, count, and age for VERSIONED queues.`,
 	)
 	MatchingForwarderMaxOutstandingPolls = NewTaskQueueIntSetting(
 		"matching.forwarderMaxOutstandingPolls",
@@ -1543,7 +1560,9 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		"matching.pollerScalingMinimumBacklog",
 		200*time.Millisecond,
 		`MatchingPollerScalingBacklogAgeScaleUp is the minimum backlog age that must be accumulated before
-a decision to scale up the number of pollers will be issued`,
+a decision to scale up the number of pollers will be issued. If MatchingUseSignalsV2ForPollerScaling is true,
+this is instead the maximum age of a dispatched task (measured from its create time) above which a scale-up
+will be issued.`,
 	)
 	MatchingPollerScalingWaitTime = NewTaskQueueDurationSetting(
 		"matching.pollerScalingWaitTime",
@@ -1561,7 +1580,8 @@ second per poller by one physical queue manager`,
 		"matching.pollerScalingTaskAddToDispatchRatio",
 		1.2,
 		`MatchingPollerScalingTaskAddToDispatchRatio is the ratio of task add rate to task
-dispatch rate above which a decision to scale up the number of pollers will be issued`,
+dispatch rate above which a decision to scale up the number of pollers will be issued. If MatchingUseSignalsV2ForPollerScaling
+is true, this is instead the ratio of task add rate to task sync match rate.`,
 	)
 	MatchingEnablePollerScalingDecisionMetrics = NewTaskQueueBoolSetting(
 		"matching.enablePollerScalingDecisionMetrics",
@@ -1569,6 +1589,13 @@ dispatch rate above which a decision to scale up the number of pollers will be i
 		`MatchingEnablePollerScalingDecisionMetrics, when enabled, causes matching to emit the poller_scale_decision
 metric describing why pollers are scaled up, down, or held for a physical task queue. This is opt-in and can be
 scoped by namespace and/or task queue.`,
+	)
+	MatchingUseSignalsV2ForPollerScaling = NewTaskQueueBoolSetting(
+		"matching.useSignalsV2ForPollerScaling",
+		false,
+		`MatchingUseSignalsV2ForPollerScaling, when enabled, uses v2 scaling signals for poller autoscaling:
+(1) sync match rate instead of total dispatch rate for the add-to-dispatch ratio check, and
+(2) task dispatch latency instead of backlog age stats for the backlog scale-up check.`,
 	)
 	MatchingUseNewMatcher = NewTaskQueueTypedSettingWithConverter(
 		"matching.useNewMatcher",
@@ -1739,7 +1766,7 @@ branch token is not the execution's current one, but still serves the read.`,
 	EmitReplicationLifecycleEvents = NewGlobalBoolSetting(
 		"history.emitReplicationLifecycleEvents",
 		false,
-		`EmitReplicationLifecycleEvents controls whether the history service emits ReplicationLifecycle wide events (sent/executing/applied/skipped/error phases). Cluster-level; default off.`,
+		`EmitReplicationLifecycleEvents controls whether the history service emits ReplicationLifecycle wide events, including parent-child diagnostics. Cluster-level; default off.`,
 	)
 	EnableCloseInboundReplicationStreamOnShutdown = NewGlobalBoolSetting(
 		"history.enableCloseInboundReplicationStreamOnShutdown",
@@ -2695,6 +2722,13 @@ where the user has set an explicit RetryPolicy, but not specified all the fields
 		true,
 		`Allows resetting of workflows with pending children when set to true`,
 	)
+	EnableOrphanedChildWorkflowReplacement = NewNamespaceBoolSetting(
+		"history.enableOrphanedChildWorkflowReplacement",
+		false,
+		`Allows a parent to replace an orphaned child only while the current cluster sees its first run with no history after WorkflowExecutionStarted.
+The setting is evaluated against the parent namespace.
+Enable only after all history hosts that may process child starts in this cluster support orphaned child replacement info; an older host ignores the request field and may permanently record WORKFLOW_ALREADY_EXISTS in the parent history`,
+	)
 	HistoryMaxAutoResetPoints = NewNamespaceIntSetting(
 		"history.historyMaxAutoResetPoints",
 		primitives.DefaultHistoryMaxAutoResetPoints,
@@ -2795,15 +2829,8 @@ the number of children greater than or equal to this threshold`,
 	ReplicationTaskApplyTimeout = NewGlobalDurationSetting(
 		"history.ReplicationTaskApplyTimeout",
 		20*time.Second,
-		`ReplicationTaskApplyTimeout is the context timeout for replication task apply, and for the
-standby CloseExecutionTask's child-to-parent completion verification`,
-	)
-	ParentWorkflowResendMaxInFlight = NewGlobalIntSetting(
-		"history.parentWorkflowResendMaxInFlight",
-		8,
-		`ParentWorkflowResendMaxInFlight caps how many parent workflow resends a shard may run
-concurrently when EnableAsyncParentWorkflowResend is on. Attempts beyond the cap are dropped; the
-verifying task retries. This bounds the goroutines this path can create per shard.`,
+		`ReplicationTaskApplyTimeout is the context timeout for replication task apply, and for
+standby parent-child verification resends`,
 	)
 	EnableAsyncParentWorkflowResend = NewGlobalBoolSetting(
 		"history.enableAsyncParentWorkflowResend",
@@ -2811,6 +2838,27 @@ verifying task retries. This bounds the goroutines this path can create per shar
 		`EnableAsyncParentWorkflowResend controls whether the standby child-to-parent completion
 verification resends the parent workflow in the background rather than inline, so the verifying task
 is not held for the duration of the cross-cluster sync.`,
+	)
+	EnableChildWorkflowResend = NewGlobalBoolSetting(
+		"history.enableChildWorkflowResend",
+		false,
+		`EnableChildWorkflowResend controls whether standby parent-to-child first workflow task
+verification may resend a missing child workflow in the background from the active cluster. When
+disabled, verification remains local-only. StandbyTaskMissingEventsResendDelay plus
+ReplicationTaskApplyTimeout should remain below StandbyTaskMissingEventsDiscardDelay.`,
+	)
+	EnableChildWorkflowCompletionRecovery = NewNamespaceBoolSetting(
+		"history.enableChildWorkflowCompletionRecovery",
+		true,
+		`EnableChildWorkflowCompletionRecovery controls whether an active StartChildExecution task may
+refresh a terminal child workflow to recover a completion notification lost while the parent was missing.`,
+	)
+	WorkflowResendHostMaxInFlight = NewGlobalIntSetting(
+		"history.workflowResendHostMaxInFlight",
+		16,
+		`WorkflowResendHostMaxInFlight caps the total number of asynchronous parent and child workflow
+resends that may run concurrently on a history host. Values less than one reject all asynchronous
+workflow resends.`,
 	)
 	ReplicationTaskFetcherParallelism = NewGlobalIntSetting(
 		"history.ReplicationTaskFetcherParallelism",
@@ -3597,6 +3645,19 @@ error and stopping the schedule.`,
 		`SchedulerSpecWarnIterations is how many excluded candidate times the scheduler evaluates
 while searching for a schedule's next action time before emitting a warning (metric + log). It
 is non-fatal: the search continues past this threshold.`,
+	)
+	SchedulerV1VersionCeiling = NewNamespaceIntSetting(
+		"worker.schedulerV1VersionCeiling",
+		-1,
+		`SchedulerV1VersionCeiling caps the workflow version the V1 scheduler records into history, so histories written on this cluster stay replayable on peer clusters that do not support newer versions. Set it to the highest scheduler version supported by the lowest peer. Intended for multi-cluster failover and rollback. The supported floor is version 1 (OSS v1.20). A negative value (the default) disables the cap.
+The ceiling is reread on every tweakables evaluation. The version never decreases within a run, but raising or removing a ceiling can advance it on the next evaluation. A lower ceiling is recorded immediately; if it is below the version already recorded for the run, that version is retained.
+Operational notes: (1) A ceiling below 12 holds fresh or not-yet-advanced runs below CHASM migration support, so it pauses their V1->V2 CHASM migrations until the ceiling is lifted (deferred, not dropped). It cannot downgrade a version already recorded in an existing run. (2) A ceiling below 6 skips custom search-attribute updates on schedule edits in fresh or not-yet-advanced runs. (3) This caps V1 scheduler histories only; schedules already migrated to CHASM V2 are not made rollback-safe by it.`,
+	)
+	SchedulerV1VersionOverride = NewNamespaceIntSetting(
+		"worker.schedulerV1VersionOverride",
+		-1,
+		`SchedulerV1VersionOverride selects a supported V1 scheduler workflow version without waiting for a server release to change the default. Set it to a version from the current default through the latest version supported by this binary. A negative value (the default), a value below the default, or a value above the latest supported version is ignored.
+The override is reread during every scheduler tweakables evaluation through MutableSideEffect. It can advance the version in the current workflow run at the next evaluation, subject to the current SchedulerV1VersionCeiling. Neither a lower override nor a newly lower ceiling can reduce a version already recorded in that run.`,
 	)
 	WorkerDeleteNamespaceActivityLimits = NewGlobalTypedSetting(
 		"worker.deleteNamespaceActivityLimitsConfig",

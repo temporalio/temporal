@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
@@ -90,7 +91,7 @@ func (s *hsmStateReplicatorSuite) SetupTest() {
 	err = stateMachineRegistry.RegisterTaskSerializer(hsmtest.TaskType, hsmtest.TaskSerializer{})
 	s.NoError(err)
 
-	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
 
 	s.namespaceEntry = tests.GlobalNamespaceEntry
 	s.workflowKey = definition.NewWorkflowKey(s.namespaceEntry.ID().String(), tests.WorkflowID, tests.RunID)

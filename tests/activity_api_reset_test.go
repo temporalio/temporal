@@ -104,6 +104,24 @@ func (s *ActivityApiResetClientTestSuite) makeWorkflowFunc(activityFunction Acti
 	}
 }
 
+func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterWorkflowCompleted() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	workflowFn := func(workflow.Context) error { return nil }
+	s.SdkWorker().RegisterWorkflow(workflowFn)
+
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
+		TaskQueue: s.TaskQueue(),
+	}, workflowFn)
+	s.Require().NoError(err)
+	s.Require().NoError(workflowRun.Get(ctx, nil))
+
+	err = s.resetFn(ctx, workflowRun.GetID(), "activity-id", false, false)
+	s.Require().ErrorContains(err, "workflow execution already completed")
+}
+
 func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterRetry() {
 	// activity reset is called after multiple attempts,
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -121,7 +139,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterRetry() {
 			return "", activityErr
 		}
 
-		s.WaitForChannel(ctx, activityCompleteCh) //nolint:staticcheck
+		await.Rcv(s.T(), activityCompleteCh)
 		return "done!", nil
 	}
 
@@ -180,7 +198,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WhileRunning() {
 	var startedActivityCount atomic.Int32
 	activityFunction := func() (string, error) {
 		startedActivityCount.Add(1)
-		s.WaitForChannel(ctx, activityCompleteCh) //nolint:staticcheck
+		await.Rcv(s.T(), activityCompleteCh)
 		return "done!", nil
 	}
 
@@ -240,7 +258,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_UnpausesRunningAc
 	var startedActivityCount atomic.Int32
 	activityFunction := func() (string, error) {
 		startedActivityCount.Add(1)
-		s.WaitForChannel(ctx, activityCompleteCh) //nolint:staticcheck
+		await.Rcv(s.T(), activityCompleteCh)
 		return "done!", nil
 	}
 
@@ -392,7 +410,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_InRetry() {
 			return "", activityErr
 		}
 
-		s.WaitForChannel(ctx, activityCompleteCh) //nolint:staticcheck
+		await.Rcv(s.T(), activityCompleteCh)
 		return "done!", nil
 	}
 
@@ -464,7 +482,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_KeepPaused() {
 			return "", activityErr
 		}
 
-		s.WaitForChannel(ctx, activityCompleteCh) //nolint:staticcheck
+		await.Rcv(s.T(), activityCompleteCh)
 		return "done!", nil
 	}
 
@@ -592,7 +610,7 @@ func (s *ActivityApiResetClientTestSuite) runResetHeartbeatDetails(resetHeartbea
 			return "", errors.New("bad-luck-please-retry")
 		}
 		// not the first iteration
-		s.WaitForChannel(ctx, activityCompleteCh) //nolint:staticcheck
+		await.Rcv(s.T(), activityCompleteCh)
 		for activityShouldFinish.Load() == false {
 			activity.RecordHeartbeat(ctx, "second")
 			time.Sleep(time.Second) //nolint:forbidigo
@@ -704,7 +722,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WhilePaused() {
 		if !activityWasReset.Load() {
 			return "", errors.New("bad-luck-please-retry")
 		}
-		s.WaitForChannel(ctx, activityCompleteCh) //nolint:staticcheck
+		await.Rcv(s.T(), activityCompleteCh)
 		return "done!", nil
 	}
 
@@ -783,7 +801,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_TerminateWhileDef
 
 	activityFunction := func() (string, error) {
 		startedActivityCount.Add(1)
-		s.WaitForChannel(ctx, activityBlockCh) //nolint:staticcheck
+		await.Rcv(s.T(), activityBlockCh)
 		return "done!", nil
 	}
 

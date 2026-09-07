@@ -247,12 +247,14 @@ func TestFilterCompleted(t *testing.T) {
 
 func TestSlowestRuns(t *testing.T) {
 	report := &DigestReport{
-		Runs: []github.Run{
-			{DisplayTitle: "medium", Duration: 20 * time.Minute},
-			{DisplayTitle: "ignored", Duration: 0},
-			{DisplayTitle: "slowest", Duration: 45 * time.Minute},
-			{DisplayTitle: "fastest", Duration: 5 * time.Minute},
-			{DisplayTitle: "second slowest", Duration: 30 * time.Minute},
+		DigestPeriod: DigestPeriod{
+			Runs: []github.Run{
+				{DisplayTitle: "medium", Duration: 20 * time.Minute},
+				{DisplayTitle: "ignored", Duration: 0},
+				{DisplayTitle: "slowest", Duration: 45 * time.Minute},
+				{DisplayTitle: "fastest", Duration: 5 * time.Minute},
+				{DisplayTitle: "second slowest", Duration: 30 * time.Minute},
+			},
 		},
 	}
 

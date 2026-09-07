@@ -789,6 +789,7 @@ func startMultiBatchWorkflow(
 func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_ContinuationFromAnotherNamespace(
 	enableTransitionHistory bool,
 ) {
+	ctx := s.Context()
 	// A single-shard cluster so both namespaces map to the same history shard. On SQL backends
 	// shard_id is part of the history_node primary key, so without this the replay would be
 	// rejected for the wrong reason; on Cassandra it is not part of the key at all.
@@ -800,7 +801,7 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_ContinuationFromAnothe
 	)
 
 	otherNamespace := namespace.Name(testcore.RandomizeStr("other-namespace"))
-	_, err := env.RegisterNamespace(otherNamespace, 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
+	_, err := env.RegisterNamespace(ctx, otherNamespace, 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
 
 	startMultiBatchWorkflow(s.Context(), s.Require(), env)
@@ -841,6 +842,7 @@ func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_ContinuationFromAnothe
 }
 
 func (s *RawHistorySuite) TestGetWorkflowExecutionHistoryReverse_ContinuationFromAnotherNamespace() {
+	ctx := s.Context()
 	env := s.newTestEnv(
 		testcore.WithHistoryShardCount(1),
 		// Shadow mode reports the mismatch but still serves the page.
@@ -848,7 +850,7 @@ func (s *RawHistorySuite) TestGetWorkflowExecutionHistoryReverse_ContinuationFro
 	)
 
 	otherNamespace := namespace.Name(testcore.RandomizeStr("other-namespace"))
-	_, err := env.RegisterNamespace(otherNamespace, 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
+	_, err := env.RegisterNamespace(ctx, otherNamespace, 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
 
 	startMultiBatchWorkflow(s.Context(), s.Require(), env)

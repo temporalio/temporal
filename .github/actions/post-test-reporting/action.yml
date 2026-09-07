@@ -64,7 +64,7 @@ runs:
 
     - name: Upload code coverage to Codecov
       if: ${{ !failure() && !cancelled() }}
-      uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
+      uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1
       with:
         token: ${{ env.CODECOV_TOKEN }}
         directory: ./.testoutput
@@ -72,7 +72,7 @@ runs:
 
     - name: Upload test results to Codecov
       if: ${{ !cancelled() }}
-      uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
+      uses: codecov/codecov-action@e79a6962e0d4c0c17b229090214935d2e33f8354 # v6.0.1
       with:
         token: ${{ env.CODECOV_TOKEN }}
         directory: ./.testoutput

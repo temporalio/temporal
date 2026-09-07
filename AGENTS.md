@@ -47,7 +47,8 @@ Before starting the implementation of any request, you MUST REVIEW the following
 - `/service/worker`: worker service implementation
 
 ## Important Commands:
-- Linting: `make lint-code`
+- Fast Go linting (changed packages): `make lint-code-fast`
+- Full Go linting (all packages): `make lint-code`
 - Formatting imports: `make fmt-imports`
 - Code generation: `make proto`
 - Update API proto: `make update-go-api`
@@ -87,7 +88,7 @@ When requested to perform tasks like fixing bugs, adding features, refactoring, 
 3. **Implement:** Use the available tools to act on the plan, strictly adhering to the project's established conventions (detailed under 'Core Mandates').
 4. **Regenerate:** If necessary, regenerate code based on your changes. If you alter anything annotated with `//go:generate` or in a `.proto` file you will need to do this.
 5. **Verify (Tests):** If applicable and feasible, verify the changes using the project's testing procedures. Identify the correct test commands and frameworks by examining 'README' files, build/package configuration (e.g., 'Makefile'), or existing test execution patterns. NEVER assume standard test commands.
-6. **Verify (Standards):** VERY IMPORTANT: After making code changes, execute the project-specific build, linting and type-checking commands (`make lint-code`)
+6. **Verify (Standards):** VERY IMPORTANT: After making code changes, execute the project-specific build, linting and type-checking commands (`make lint-code-fast` for development)
 
 ## Planning
 When planning (under 'Software Engineering Tasks'):

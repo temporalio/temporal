@@ -11,8 +11,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
-	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -44,7 +44,7 @@ var ErrStandaloneActivityOperatorCommandsDisabled = serviceerror.NewUnimplemente
 
 type frontendHandler struct {
 	FrontendHandler
-	callbackValidator callback.Validator
+	callbackValidator callbacks.Validator
 	linkValidator     *linkValidator
 	client            activitypb.ActivityServiceClient
 	config            *Config
@@ -57,7 +57,7 @@ type frontendHandler struct {
 
 // NewFrontendHandler creates a new FrontendHandler instance for processing activity frontend requests.
 func NewFrontendHandler(
-	callbackValidator callback.Validator,
+	callbackValidator callbacks.Validator,
 	linkValidator *linkValidator,
 	client activitypb.ActivityServiceClient,
 	config *Config,
@@ -423,7 +423,7 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		}
 	}
 
-	if err := h.linkValidator.ValidateStartRequest(req.GetNamespace(), req.GetLinks(), req.GetCompletionCallbacks()); err != nil {
+	if err := h.linkValidator.ValidateRequestWithCallbacks(req.GetNamespace(), req.GetLinks(), req.GetCompletionCallbacks()); err != nil {
 		return nil, err
 	}
 
