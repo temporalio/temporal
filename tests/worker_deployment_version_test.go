@@ -109,7 +109,7 @@ func (s *DeploymentVersionSuite) pollFromDeployment(ctx context.Context, env *te
 	})
 }
 
-func (s *DeploymentVersionSuite) pollActivityFromDeployment(ctx context.Context, env *testcore.TestEnv, tv *testvars.TestVars) {
+func pollActivityFromDeployment(ctx context.Context, env *testcore.TestEnv, tv *testvars.TestVars) {
 	_, _ = env.FrontendClient().PollActivityTaskQueue(ctx, &workflowservice.PollActivityTaskQueueRequest{
 		Namespace:         env.Namespace().String(),
 		TaskQueue:         tv.TaskQueue(),
@@ -364,7 +364,7 @@ func (s *DeploymentVersionSuite) TestDescribeVersion_RegisterTaskQueue_Concurren
 		tv2 := env.Tv().WithTaskQueue(root.TaskQueue().NormalPartition(p).RpcName())
 		for range 3 {
 			go s.pollFromDeployment(s.Context(), env, tv2)
-			go s.pollActivityFromDeployment(s.Context(), env, tv2)
+			go pollActivityFromDeployment(s.Context(), env, tv2)
 		}
 	}
 
