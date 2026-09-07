@@ -23,6 +23,7 @@ const VersionCheckInterval = 24 * time.Hour
 type VersionChecker struct {
 	config                 *Config
 	shutdownChan           chan struct{}
+	cancelFunc             context.CancelFunc
 	metricsHandler         metrics.Handler
 	clusterMetadataManager persistence.ClusterMetadataManager
 	startOnce              sync.Once
@@ -48,12 +49,11 @@ func NewVersionChecker(
 func (vc *VersionChecker) Start() {
 	if vc.config.EnableServerVersionCheck() {
 		vc.startOnce.Do(func() {
-			// TODO: specify a timeout for the context
-			ctx := headers.SetCallerInfo(
-				context.TODO(),
+			ctx, cancel := context.WithCancel(headers.SetCallerInfo(
+				context.Background(),
 				headers.SystemBackgroundHighCallerInfo,
-			)
-
+			))
+			vc.cancelFunc = cancel
 			go vc.versionCheckLoop(ctx)
 		})
 	}
@@ -62,6 +62,9 @@ func (vc *VersionChecker) Start() {
 func (vc *VersionChecker) Stop() {
 	if vc.config.EnableServerVersionCheck() {
 		vc.stopOnce.Do(func() {
+			if vc.cancelFunc != nil {
+				vc.cancelFunc()
+			}
 			close(vc.shutdownChan)
 		})
 	}
@@ -105,7 +108,7 @@ func (vc *VersionChecker) performVersionCheck(
 		metrics.VersionCheckFailedCount.With(vc.metricsHandler).Record(1)
 		return
 	}
-	resp, err := vc.getVersionInfo(req)
+	resp, err := vc.getVersionInfo(ctx, req)
 	if err != nil {
 		metrics.VersionCheckRequestFailedCount.With(vc.metricsHandler).Record(1)
 		metrics.VersionCheckFailedCount.With(vc.metricsHandler).Record(1)
@@ -146,8 +149,8 @@ func (vc *VersionChecker) createVersionCheckRequest(metadata *persistence.GetClu
 	}, nil
 }
 
-func (vc *VersionChecker) getVersionInfo(req *versioninfo.VersionCheckRequest) (*versioninfo.VersionCheckResponse, error) {
-	return versioninfo.NewCaller().Call(req)
+func (vc *VersionChecker) getVersionInfo(ctx context.Context, req *versioninfo.VersionCheckRequest) (*versioninfo.VersionCheckResponse, error) {
+	return versioninfo.NewCaller().CallWithContext(ctx, req)
 }
 
 func (vc *VersionChecker) saveVersionInfo(ctx context.Context, resp *versioninfo.VersionCheckResponse) error {
