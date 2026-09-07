@@ -2249,7 +2249,7 @@ func (adh *AdminHandler) GetDynamicConfigValue(
 	if request.GetKey() == "" {
 		return nil, serviceerror.NewInvalidArgument("dynamic config key is not set")
 	}
-	constraints, err := dynamicconfig.ParseAliasedConstraintsYAML(request.GetConstraints())
+	constraints, err := dynamicconfig.ParseAliasedConstraintsJSON(request.GetConstraints())
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgumentf("invalid dynamic config constraints: %v", err)
 	}

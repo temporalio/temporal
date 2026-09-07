@@ -247,7 +247,7 @@ func (s *adminHandlerSuite) TestGetDynamicConfigValue() {
 	s.Run("returns effective and configured values", func() {
 		response, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
 			Key:                      dynamicconfig.WorkflowTimeSkippingEnabled.Key().String(),
-			Constraints:              fmt.Sprintf("namespace: %q", s.namespace),
+			Constraints:              fmt.Sprintf(`{"namespace":%q}`, s.namespace),
 			IncludeConstrainedValues: true,
 		})
 		s.Require().NoError(err)
@@ -263,7 +263,7 @@ func (s *adminHandlerSuite) TestGetDynamicConfigValue() {
 	s.Run("returns compiled default", func() {
 		response, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
 			Key:         dynamicconfig.WorkflowTimeSkippingEnabled.Key().String(),
-			Constraints: `namespace: other-namespace`,
+			Constraints: `{"namespace":"other-namespace"}`,
 		})
 		s.Require().NoError(err)
 		s.Equal([]byte("false\n"), response.GetValue())
@@ -273,7 +273,7 @@ func (s *adminHandlerSuite) TestGetDynamicConfigValue() {
 	s.Run("rejects invalid constraints", func() {
 		_, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
 			Key:         dynamicconfig.WorkflowTimeSkippingEnabled.Key().String(),
-			Constraints: `unknown: value`,
+			Constraints: `{"unknown":"value"}`,
 		})
 		s.Require().Error(err)
 		var invalidArgument *serviceerror.InvalidArgument
@@ -283,7 +283,7 @@ func (s *adminHandlerSuite) TestGetDynamicConfigValue() {
 	s.Run("ignores unused constraints", func() {
 		response, err := s.handler.GetDynamicConfigValue(context.Background(), &adminservice.GetDynamicConfigValueRequest{
 			Key:         "frontend.WorkflowTimeSkippingEnabled",
-			Constraints: fmt.Sprintf("namespace: %q\ntaskQueueName: queue-a", s.namespace),
+			Constraints: fmt.Sprintf(`{"namespace":%q,"taskQueueName":"queue-a"}`, s.namespace),
 		})
 		s.Require().NoError(err)
 		s.Equal([]byte("true\n"), response.GetValue())

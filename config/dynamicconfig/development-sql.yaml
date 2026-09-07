@@ -81,13 +81,3 @@ history.ReplicationEnableUpdateWithNewTaskMerge:
   - value: true
 history.hostLevelCacheMaxSize:
   - value: 8192
-
-# Temporary local value for testing tdbg task queue constraints.
-matching.getTasksBatchSize:
-  - constraints:
-      namespace: tdbg-test
-      taskQueueName: tdbg-test-task-queue
-      taskType: Workflow
-    value: 123
-  - constraints: {}
-    value: 1000

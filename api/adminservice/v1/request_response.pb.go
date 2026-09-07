@@ -5488,7 +5488,7 @@ func (x *GetTaskQueueUserDataResponse) GetVersion() int64 {
 type GetDynamicConfigValueRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Key   string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	// YAML-encoded dynamic config constraints.
+	// JSON-encoded dynamic config constraints.
 	Constraints string `protobuf:"bytes,2,opt,name=constraints,proto3" json:"constraints,omitempty"`
 	// Include the configured constrained values currently held for this key.
 	IncludeConstrainedValues bool `protobuf:"varint,3,opt,name=include_constrained_values,json=includeConstrainedValues,proto3" json:"include_constrained_values,omitempty"`

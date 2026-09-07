@@ -98,11 +98,11 @@ func TestGetDynamicConfigValue(t *testing.T) {
 		"tdbg",
 		"dc", "get",
 		"--key", "frontend.WorkflowTimeSkippingEnabled",
-		"--constraints", `{namespace: A}`,
+		"--constraints", `{"namespace":"A"}`,
 	})
 	require.NoError(t, err)
 	require.Equal(t, "frontend.WorkflowTimeSkippingEnabled", adminClient.request.GetKey())
-	require.Equal(t, `{namespace: A}`, adminClient.request.GetConstraints())
+	require.JSONEq(t, `{"namespace":"A"}`, adminClient.request.GetConstraints())
 	require.False(t, adminClient.request.GetIncludeConstrainedValues())
 	require.Equal(t, "true\n", output.String())
 	require.Equal(t, dynamicConfigNotesOutput(dynamicConfigGetNote), stderr.String())
@@ -185,7 +185,7 @@ func TestGetDynamicConfigValueVerbose(t *testing.T) {
 		"tdbg",
 		"dc", "get",
 		"-k", "frontend.WorkflowTimeSkippingEnabled",
-		"-c", `{namespace: A}`,
+		"-c", `{"namespace":"A"}`,
 		"-v",
 	})
 	require.NoError(t, err)
@@ -356,7 +356,7 @@ func TestDumpDynamicConfigValues(t *testing.T) {
 	require.Equal(t, dynamicConfigDumpMaxReceiveSize, maxReceiveSize.MaxRecvMsgSize)
 	require.Equal(t, dynamicConfigDumpNote+"\n", stderr.String())
 	filename := strings.TrimSpace(output.String())
-	require.Regexp(t, `^tmp_dc_cvs_\d{8}T\d{6}Z\.yaml$`, filename)
+	require.Regexp(t, `^tmp_dc_cvs_[0-9a-f-]{36}\.yaml$`, filename)
 	contents, err := os.ReadFile(filepath.Clean(filename))
 	require.NoError(t, err)
 	loadedValues := dynamicconfig.LoadYamlFile(contents)

@@ -1,9 +1,11 @@
 package dynamicconfig
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -31,23 +33,31 @@ type (
 	}
 )
 
-// ParseAliasedConstraintsYAML parses YAML-encoded Constraints using file-based client field aliases.
+// ParseAliasedConstraintsJSON parses JSON-encoded Constraints using file-based client field aliases.
 // An empty string represents no constraints.
-func ParseAliasedConstraintsYAML(input string) (Constraints, error) {
+func ParseAliasedConstraintsJSON(input string) (Constraints, error) {
 	if strings.TrimSpace(input) == "" {
 		return Constraints{}, nil
 	}
 
-	decoder := yaml.NewDecoder(strings.NewReader(input))
+	decoder := json.NewDecoder(strings.NewReader(input))
+	decoder.UseNumber()
 	var constraints map[string]any
 	if err := decoder.Decode(&constraints); err != nil {
 		return Constraints{}, err
 	}
 	if constraints == nil {
-		return Constraints{}, errors.New("constraints must be a YAML mapping")
+		return Constraints{}, errors.New("constraints must be a JSON object")
 	}
 	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		return Constraints{}, errors.New("constraints must contain exactly one YAML document")
+		return Constraints{}, errors.New("constraints must contain exactly one JSON object")
+	}
+	for key, value := range constraints {
+		if number, ok := value.(json.Number); ok {
+			if integer, err := strconv.Atoi(number.String()); err == nil {
+				constraints[key] = integer
+			}
+		}
 	}
 
 	loader := &YamlLoader{}

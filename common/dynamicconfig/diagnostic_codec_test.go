@@ -13,7 +13,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func TestParseAliasedConstraintsYAML(t *testing.T) {
+func TestParseAliasedConstraintsJSON(t *testing.T) {
 	t.Parallel()
 
 	validCases := []struct {
@@ -25,15 +25,16 @@ func TestParseAliasedConstraintsYAML(t *testing.T) {
 		{name: "empty mapping", input: "{}", expected: Constraints{}},
 		{
 			name: "all fields",
-			input: `namespace: namespace-a
-namespaceId: namespace-id-a
-taskQueueName: queue-a
-destination: cluster-a
-chasmTaskType: chasm-task-a
-taskType: Activity
-shardId: 12
-historyTaskType: TransferWorkflowTask
-`,
+			input: `{
+  "namespace": "namespace-a",
+  "namespaceId": "namespace-id-a",
+  "taskQueueName": "queue-a",
+  "destination": "cluster-a",
+  "chasmTaskType": "chasm-task-a",
+  "taskType": "Activity",
+  "shardId": 12,
+  "historyTaskType": "TransferWorkflowTask"
+}`,
 			expected: Constraints{
 				Namespace:     "namespace-a",
 				NamespaceID:   "namespace-id-a",
@@ -45,11 +46,19 @@ historyTaskType: TransferWorkflowTask
 				TaskType:      enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK,
 			},
 		},
+		{
+			name:  "numeric enum aliases",
+			input: `{"taskType": 1, "historyTaskType": 4}`,
+			expected: Constraints{
+				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				TaskType:      enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK,
+			},
+		},
 	}
 	for _, testCase := range validCases {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			actual, err := ParseAliasedConstraintsYAML(testCase.input)
+			actual, err := ParseAliasedConstraintsJSON(testCase.input)
 			require.NoError(t, err)
 			require.Equal(t, testCase.expected, actual)
 		})
@@ -59,15 +68,16 @@ historyTaskType: TransferWorkflowTask
 		name  string
 		input string
 	}{
-		{name: "malformed YAML", input: `namespace: [`},
-		{name: "unknown field", input: `unknown: value`},
-		{name: "invalid value", input: `shardId: one`},
-		{name: "multiple documents", input: "{}\n---\n{}"},
+		{name: "malformed JSON", input: `{"namespace": [`},
+		{name: "YAML is rejected", input: `namespace: value`},
+		{name: "unknown field", input: `{"unknown": "value"}`},
+		{name: "invalid value", input: `{"shardId": "one"}`},
+		{name: "multiple objects", input: `{} {}`},
 		{name: "not a mapping", input: `null`},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := ParseAliasedConstraintsYAML(testCase.input)
+			_, err := ParseAliasedConstraintsJSON(testCase.input)
 			require.Error(t, err)
 		})
 	}

@@ -5,9 +5,9 @@ import (
 	"os"
 	"regexp"
 	"strings"
-	"time"
 
 	"github.com/fatih/color"
+	"github.com/google/uuid"
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -50,7 +50,7 @@ func newDynamicConfigCommands(clientFactory ClientFactory) []*cli.Command {
 				&cli.StringFlag{
 					Name:    FlagDynamicConfigConstraints,
 					Aliases: []string{"c"},
-					Usage:   `YAML mapping of dynamic config constraints, for example: '{namespace: my-namespace}'`,
+					Usage:   `JSON object of dynamic config constraints, for example: '{"namespace":"my-namespace"}'`,
 				},
 				&cli.BoolFlag{
 					Name:    FlagVerbose,
@@ -122,8 +122,8 @@ func describeDynamicConfigSetting(c *cli.Context, clientFactory ClientFactory) e
 }
 
 func getDynamicConfigValue(c *cli.Context, clientFactory ClientFactory) error {
-	constraintsYAML := c.String(FlagDynamicConfigConstraints)
-	_, err := dynamicconfig.ParseAliasedConstraintsYAML(constraintsYAML)
+	constraintsJSON := c.String(FlagDynamicConfigConstraints)
+	_, err := dynamicconfig.ParseAliasedConstraintsJSON(constraintsJSON)
 	if err != nil {
 		return fmt.Errorf("invalid dynamic config constraints: %w", err)
 	}
@@ -134,7 +134,7 @@ func getDynamicConfigValue(c *cli.Context, clientFactory ClientFactory) error {
 		ctx,
 		&adminservice.GetDynamicConfigValueRequest{
 			Key:                      c.String(FlagDynamicConfigKey),
-			Constraints:              constraintsYAML,
+			Constraints:              constraintsJSON,
 			IncludeConstrainedValues: c.Bool(FlagVerbose),
 		},
 	)
@@ -144,11 +144,11 @@ func getDynamicConfigValue(c *cli.Context, clientFactory ClientFactory) error {
 	if c.Bool(FlagVerbose) {
 		output := formatVerboseDynamicConfigValue(
 			c.String(FlagDynamicConfigKey),
-			constraintsYAML,
+			constraintsJSON,
 			response,
 		)
 		notes := []string{dynamicConfigConstraintAliasNote}
-		if strings.TrimSpace(constraintsYAML) != "" {
+		if strings.TrimSpace(constraintsJSON) != "" {
 			notes = append(notes, dynamicConfigGetNote)
 		}
 		if err = printDynamicConfigNotes(c, notes...); err != nil {
@@ -159,7 +159,7 @@ func getDynamicConfigValue(c *cli.Context, clientFactory ClientFactory) error {
 		}
 		return nil
 	}
-	if strings.TrimSpace(constraintsYAML) != "" {
+	if strings.TrimSpace(constraintsJSON) != "" {
 		if err = printDynamicConfigNotes(c, dynamicConfigGetNote); err != nil {
 			return err
 		}
@@ -177,16 +177,16 @@ func getDynamicConfigValue(c *cli.Context, clientFactory ClientFactory) error {
 
 func formatVerboseDynamicConfigValue(
 	key string,
-	constraintsYAML string,
+	constraintsJSON string,
 	response *adminservice.GetDynamicConfigValueResponse,
 ) string {
-	if strings.TrimSpace(constraintsYAML) == "" {
-		constraintsYAML = "{}"
+	if strings.TrimSpace(constraintsJSON) == "" {
+		constraintsJSON = "{}"
 	}
 
 	var output strings.Builder
 	fmt.Fprintf(&output, "key: %s\n", key)
-	writeDynamicConfigYAMLField(&output, "queryConstraints", constraintsYAML)
+	writeDynamicConfigYAMLField(&output, "queryConstraints", constraintsJSON)
 	fmt.Fprintf(
 		&output,
 		"constraintDescription: '%s'\n",
@@ -239,9 +239,17 @@ func dumpDynamicConfigValues(c *cli.Context, clientFactory ClientFactory) error 
 	if err != nil {
 		return fmt.Errorf("unable to dump dynamic config values: %w", err)
 	}
-	filename := fmt.Sprintf("tmp_dc_cvs_%s.yaml", time.Now().UTC().Format("20060102T150405Z"))
-	if err := os.WriteFile(filename, response.GetValues(), 0o644); err != nil {
+	filename := fmt.Sprintf("tmp_dc_cvs_%s.yaml", uuid.NewString())
+	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
 		return fmt.Errorf("unable to write dynamic config values to %q: %w", filename, err)
+	}
+	if _, err = file.Write(response.GetValues()); err != nil {
+		_ = file.Close()
+		return fmt.Errorf("unable to write dynamic config values to %q: %w", filename, err)
+	}
+	if err = file.Close(); err != nil {
+		return fmt.Errorf("unable to close dynamic config values file %q: %w", filename, err)
 	}
 	if _, err = fmt.Fprintln(c.App.Writer, filename); err != nil {
 		return err

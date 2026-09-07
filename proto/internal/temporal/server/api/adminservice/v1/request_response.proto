@@ -620,7 +620,7 @@ message GetTaskQueueUserDataResponse {
 
 message GetDynamicConfigValueRequest {
   string key = 1;
-  // YAML-encoded dynamic config constraints.
+  // JSON-encoded dynamic config constraints.
   string constraints = 2;
   // Include the configured constrained values currently held for this key.
   bool include_constrained_values = 3;
