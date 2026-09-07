@@ -350,6 +350,12 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	if err := d.syncVersionDataToComputeStatus(ctx); err != nil {
 		return err
 	}
+	if workflow.GetInfo(ctx).ContinuedExecutionRunID != "" &&
+		d.hasMinVersion(TaskQueueFamilySummary) &&
+		len(d.VersionState.GetTaskQueueFamilies()) > 0 &&
+		!d.VersionState.GetTaskQueueFamilySummarySignalSent() {
+		d.syncSummary(ctx)
+	}
 
 	// Listen to signals in a different goroutine to make business logic clearer
 	workflow.Go(ctx, d.listenToSignals)
@@ -777,6 +783,7 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	if d.VersionState.TaskQueueFamilies == nil {
 		d.VersionState.TaskQueueFamilies = make(map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData)
 	}
+	_, taskQueueFamilyExists := d.VersionState.TaskQueueFamilies[args.TaskQueueName]
 	if d.VersionState.TaskQueueFamilies[args.TaskQueueName] == nil {
 		d.VersionState.TaskQueueFamilies[args.TaskQueueName] = &deploymentspb.VersionLocalState_TaskQueueFamilyData{}
 	}
@@ -795,6 +802,9 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	if d.VersionState.Status == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED {
 		d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE
 		// deployment workflow updates the status in version summary to INACTIVE
+	}
+	if !taskQueueFamilyExists && d.hasMinVersion(TaskQueueFamilySummary) {
+		d.syncSummary(ctx)
 	}
 
 	if withRevisionNumbers && args.GetRoutingConfig() != nil {
@@ -984,7 +994,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 	}
 
 	return &deploymentspb.SyncVersionStateResponse{
-		Summary: versionStateToSummary(state),
+		Summary: d.versionStateToSummary(state),
 	}, nil
 }
 
@@ -1065,15 +1075,30 @@ func (d *VersionWorkflowRunner) newUUID(ctx workflow.Context) string {
 
 // Sync version summary with the WorkerDeployment workflow.
 func (d *VersionWorkflowRunner) syncSummary(ctx workflow.Context) {
+	summary := d.versionStateToSummary(d.GetVersionState())
 	err := workflow.SignalExternalWorkflow(ctx,
 		GenerateDeploymentWorkflowID(d.VersionState.Version.DeploymentName),
 		"",
 		SyncVersionSummarySignal,
-		versionStateToSummary(d.GetVersionState()),
+		summary,
 	).Get(ctx, nil)
 	if err != nil {
 		d.logger.Error("could not sync version summary to deployment workflow", "error", err)
+		return
 	}
+	if summary.GetTaskQueueFamilySummary() != nil {
+		d.VersionState.TaskQueueFamilySummarySignalSent = true
+	}
+}
+
+func (d *VersionWorkflowRunner) versionStateToSummary(
+	s *deploymentspb.VersionLocalState,
+) *deploymentspb.WorkerDeploymentVersionSummary {
+	summary := versionStateToSummary(s)
+	if d.hasMinVersion(TaskQueueFamilySummary) {
+		summary.TaskQueueFamilySummary = buildTaskQueueFamilySummary(s.GetTaskQueueFamilies())
+	}
+	return summary
 }
 
 func versionStateToSummary(s *deploymentspb.VersionLocalState) *deploymentspb.WorkerDeploymentVersionSummary {

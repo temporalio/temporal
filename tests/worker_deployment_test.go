@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/bits-and-blooms/bloom/v3"
+	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
@@ -317,6 +319,7 @@ func (s *WorkerDeploymentSuite) TestDeploymentVersionLimits() {
 
 func (s *WorkerDeploymentSuite) TestDeploymentVersionTaskQueueFamilyLimitAllowsNewType() {
 	env := s.newTestEnv(
+		testcore.WithDynamicConfig(dynamicconfig.MatchingDeploymentWorkflowVersion, int(workerdeployment.TaskQueueFamilySummary)),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion, 1),
 	)
 	tv := env.Tv()
@@ -343,12 +346,90 @@ func (s *WorkerDeploymentSuite) TestDeploymentVersionTaskQueueFamilyLimitAllowsN
 		)
 	}, 10*time.Second, 200*time.Millisecond)
 
-	secondTaskQueue := tv.WithTaskQueueNumber(2)
+	deploymentWorkflowID := workerdeployment.GenerateDeploymentWorkflowID(tv.DeploymentSeries())
+	var taskQueueFamilySummary *deploymentspb.TaskQueueFamilySummary
+	s.Await(func(s *WorkerDeploymentSuite) {
+		queryResult, err := env.SdkClient().QueryWorkflow(
+			s.Context(),
+			deploymentWorkflowID,
+			"",
+			workerdeployment.QueryDescribeDeployment,
+		)
+		if err != nil {
+			s.NoError(err)
+			return
+		}
+
+		var queryResponse deploymentspb.QueryDescribeWorkerDeploymentResponse
+		if err := queryResult.Get(&queryResponse); err != nil {
+			s.NoError(err)
+			return
+		}
+		versionSummary := queryResponse.GetState().GetVersions()[tv.DeploymentVersionString()]
+		if versionSummary == nil {
+			s.NotNil(versionSummary)
+			return
+		}
+		taskQueueFamilySummary = versionSummary.GetTaskQueueFamilySummary()
+		if taskQueueFamilySummary == nil {
+			s.NotNil(taskQueueFamilySummary)
+			return
+		}
+		s.Equal(int32(1), taskQueueFamilySummary.GetCount())
+		s.NotEmpty(taskQueueFamilySummary.GetBloomFilter())
+	}, 10*time.Second, 200*time.Millisecond)
+
+	var filter bloom.BloomFilter
+	s.Require().NoError(filter.UnmarshalBinary(taskQueueFamilySummary.GetBloomFilter()))
+	var secondTaskQueue *testvars.TestVars
+	for taskQueueNumber := 2; taskQueueNumber < 1000; taskQueueNumber++ {
+		candidate := tv.WithTaskQueueNumber(taskQueueNumber)
+		if !filter.TestString(candidate.TaskQueue().GetName()) {
+			secondTaskQueue = candidate
+			break
+		}
+	}
+	s.Require().NotNil(secondTaskQueue, "expected to find a task queue that is definitely absent from the Bloom filter")
+
+	describeResponse, err := env.FrontendClient().DescribeWorkflowExecution(
+		s.Context(),
+		&workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: deploymentWorkflowID},
+		},
+	)
+	s.Require().NoError(err)
+	deploymentWorkflowRunID := describeResponse.GetWorkflowExecutionInfo().GetExecution().GetRunId()
+	s.Require().NotEmpty(deploymentWorkflowRunID)
+
 	expectedError := fmt.Sprintf(
 		"cannot add task queue %v since maximum number of task queues (1) have been registered in deployment",
 		secondTaskQueue.TaskQueue().GetName(),
 	)
 	s.pollFromDeploymentExpectFail(env, secondTaskQueue, expectedError)
+
+	updateID := fmt.Sprintf(
+		"%s%v-%v-%d",
+		workerdeployment.AutoCreateRequestIDPrefix,
+		farm.Fingerprint64([]byte(secondTaskQueue.BuildID())),
+		farm.Fingerprint64([]byte(secondTaskQueue.TaskQueue().GetName())),
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+	)
+	history := env.SdkClient().GetWorkflowHistory(
+		s.Context(),
+		deploymentWorkflowID,
+		deploymentWorkflowRunID,
+		false,
+		enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT,
+	)
+	for history.HasNext() {
+		event, err := history.Next()
+		s.Require().NoError(err)
+		accepted := event.GetWorkflowExecutionUpdateAcceptedEventAttributes()
+		if accepted != nil && accepted.GetProtocolInstanceId() == updateID {
+			s.FailNow("task queue registration update was accepted by the Deployment workflow")
+		}
+	}
 }
 
 func (s *WorkerDeploymentSuite) TestNamespaceDeploymentsLimit() {
