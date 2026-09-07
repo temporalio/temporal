@@ -36,14 +36,6 @@ func TestNexusWorkflowUpdateTestSuite(t *testing.T) {
 	parallelsuite.Run(t, &NexusWorkflowUpdateTestSuite{})
 }
 
-func (s *NexusWorkflowUpdateTestSuite) callerWFName() string {
-	return "caller"
-}
-
-func (s *NexusWorkflowUpdateTestSuite) childWFName() string {
-	return "child"
-}
-
 // updateNexusTestConfig holds configuration for workflow update + nexus integration tests.
 type updateNexusTestConfig struct {
 	taskQueue string
@@ -239,17 +231,17 @@ func (s *NexusWorkflowUpdateTestSuite) startWorker(env *NexusTestEnv, taskQueue 
 	s.T().Cleanup(w.Stop)
 }
 
-// startWorkers creates a worker on the given task queue, registers the caller and child workflows,
-// starts it, and schedules cleanup.
-func (s *NexusWorkflowUpdateTestSuite) startWorkers(
+// startCallerAndChildWorker creates a worker on the given task queue, registers the caller and child
+// workflows, starts it, and schedules cleanup.
+func (s *NexusWorkflowUpdateTestSuite) startCallerAndChildWorker(
 	env *NexusTestEnv,
 	taskQueue string,
 	callerWF func(workflow.Context) (string, error),
 	childWF func(workflow.Context, string) (string, error),
 ) {
 	w := worker.New(env.SdkClient(), taskQueue, worker.Options{})
-	w.RegisterWorkflowWithOptions(callerWF, workflow.RegisterOptions{Name: s.callerWFName()})
-	w.RegisterWorkflowWithOptions(childWF, workflow.RegisterOptions{Name: s.childWFName()})
+	w.RegisterWorkflowWithOptions(callerWF, workflow.RegisterOptions{Name: "caller"})
+	w.RegisterWorkflowWithOptions(childWF, workflow.RegisterOptions{Name: "child"})
 	s.NoError(w.Start())
 	s.T().Cleanup(w.Stop)
 }
@@ -303,12 +295,11 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateAsyncNexusOperation() {
 	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
 
 	childWF := newUpdateChildWorkflow(false)
-	childWFName := s.childWFName()
 
 	callerWF := func(ctx workflow.Context) (string, error) {
 		cwf := workflow.ExecuteChildWorkflow(
 			workflow.WithWorkflowID(ctx, cfg.childWfID),
-			childWFName,
+			"child",
 			"initial input",
 		)
 		var childWE workflow.Execution
@@ -322,12 +313,12 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateAsyncNexusOperation() {
 		return result, err
 	}
 
-	s.startWorkers(env, cfg.taskQueue, callerWF, childWF)
+	s.startCallerAndChildWorker(env, cfg.taskQueue, callerWF, childWF)
 
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue:                cfg.taskQueue,
 		WorkflowExecutionTimeout: 30 * time.Second,
-	}, s.callerWFName())
+	}, "caller")
 	s.NoError(err)
 	var result string
 	s.NoError(run.Get(ctx, &result))
@@ -360,12 +351,11 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateAsyncAttachedNexusOpera
 	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
 
 	childWF := newUpdateChildWorkflow(true)
-	childWFName := s.childWFName()
 
 	callerWF := func(ctx workflow.Context) (string, error) {
 		cwf := workflow.ExecuteChildWorkflow(
 			workflow.WithWorkflowID(ctx, cfg.childWfID),
-			childWFName,
+			"child",
 			"initial input",
 		)
 		var childWE workflow.Execution
@@ -398,12 +388,12 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateAsyncAttachedNexusOpera
 		return result, err
 	}
 
-	s.startWorkers(env, cfg.taskQueue, callerWF, childWF)
+	s.startCallerAndChildWorker(env, cfg.taskQueue, callerWF, childWF)
 
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue:                cfg.taskQueue,
 		WorkflowExecutionTimeout: 10 * time.Second,
-	}, s.callerWFName())
+	}, "caller")
 	s.NoError(err)
 	var result string
 	s.NoError(run.Get(ctx, &result))
@@ -425,7 +415,6 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateNoCallbackAttachedOnAlr
 	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
 
 	childWF := newUpdateChildWorkflow(false)
-	childWFName := s.childWFName()
 
 	// Caller workflow sends two nexus operations targeting the same update.
 	// The first one triggers the update, the second one arrives after it completes
@@ -433,7 +422,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateNoCallbackAttachedOnAlr
 	callerWF := func(ctx workflow.Context) (string, error) {
 		cwf := workflow.ExecuteChildWorkflow(
 			workflow.WithWorkflowID(ctx, cfg.childWfID),
-			childWFName,
+			"child",
 			"initial input",
 		)
 		var childWE workflow.Execution
@@ -459,12 +448,12 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateNoCallbackAttachedOnAlr
 		return result1 + " | " + result2, nil
 	}
 
-	s.startWorkers(env, cfg.taskQueue, callerWF, childWF)
+	s.startCallerAndChildWorker(env, cfg.taskQueue, callerWF, childWF)
 
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
 		TaskQueue:                cfg.taskQueue,
 		WorkflowExecutionTimeout: 30 * time.Second,
-	}, s.callerWFName())
+	}, "caller")
 	s.NoError(err)
 	var result string
 	s.NoError(run.Get(ctx, &result))
