@@ -51,6 +51,14 @@ func (m audienceClaimMapper) GetClaims(authInfo *authorization.AuthInfo) (*autho
 	return &authorization.Claims{System: authorization.RoleAdmin}, nil
 }
 
+type errorClaimMapper struct {
+	err error
+}
+
+func (m errorClaimMapper) GetClaims(*authorization.AuthInfo) (*authorization.Claims, error) {
+	return nil, m.err
+}
+
 type errorAuthorizer struct{}
 
 func (errorAuthorizer) Authorize(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error) {
@@ -62,8 +70,20 @@ func newAudienceTestInterceptor(
 	configuredAudience string,
 	authorizer authorization.Authorizer,
 ) *authorization.Interceptor {
-	return authorization.NewInterceptor(
+	return newTestAuthInterceptor(
 		audienceClaimMapper{tokenAudience: tokenAudience},
+		configuredAudience,
+		authorizer,
+	)
+}
+
+func newTestAuthInterceptor(
+	claimMapper authorization.ClaimMapper,
+	configuredAudience string,
+	authorizer authorization.Authorizer,
+) *authorization.Interceptor {
+	return authorization.NewInterceptor(
+		claimMapper,
 		authorizer,
 		metrics.NoopMetricsHandler,
 		log.NewNoopLogger(),

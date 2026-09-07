@@ -2,6 +2,7 @@ package frontend
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -90,6 +91,60 @@ func TestNexusCompletionHTTPHandler_JWTAudience(t *testing.T) {
 				require.ErrorAs(t, err, &handlerError)
 				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerError.Type)
 			}
+		})
+	}
+}
+
+func TestNexusCompletionHTTPHandler_ClaimMapperInternalErrors(t *testing.T) {
+	plainErr := errors.New("claim mapper unavailable")
+	testCases := []struct {
+		name            string
+		claimMapperErr  error
+		wantHandlerType nexus.HandlerErrorType
+	}{
+		{
+			name:            "gRPC internal error",
+			claimMapperErr:  serviceerror.NewInternal("claim mapper unavailable"),
+			wantHandlerType: nexus.HandlerErrorTypeInternal,
+		},
+		{
+			name:           "plain internal error",
+			claimMapperErr: plainErr,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := &nexusCompletionHandler{
+				AuthInterceptor: newTestAuthInterceptor(
+					errorClaimMapper{err: tc.claimMapperErr},
+					"nexus-api",
+					errorAuthorizer{},
+				),
+				Logger: log.NewNoopLogger(),
+			}
+			requestContext := &requestContext{
+				nexusCompletionHandler: h,
+				namespace: namespace.NewLocalNamespaceForTest(
+					&persistencespb.NamespaceInfo{Name: "test-namespace"},
+					nil,
+					"active",
+				),
+				logger: log.NewNoopLogger(),
+			}
+			httpRequest := httptest.NewRequest(http.MethodPost, "/", nil)
+			httpRequest.Header.Set("Authorization", "Bearer token")
+
+			err := requestContext.interceptRequest(context.Background(), &nexusrpc.CompletionRequest{HTTPRequest: httpRequest})
+
+			if tc.wantHandlerType == "" {
+				require.ErrorIs(t, err, plainErr)
+			} else {
+				var handlerError *nexus.HandlerError
+				require.ErrorAs(t, err, &handlerError)
+				require.Equal(t, tc.wantHandlerType, handlerError.Type)
+			}
+			require.Equal(t, metrics.OutcomeTag("internal_auth_error"), requestContext.outcomeTag)
 		})
 	}
 }

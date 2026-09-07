@@ -852,6 +852,35 @@ func (s *authorizerInterceptorSuite) TestInterceptStream_AudienceMapperSkippedWi
 	s.NoError(err)
 }
 
+func (s *authorizerInterceptorSuite) TestInterceptStream_ContextPropagated() {
+	// Verify the handler receives a wrapped stream with the modified context.
+	streamTarget := &CallTarget{
+		Namespace: "",
+		APIName:   streamInfo.FullMethod,
+		Request:   nil,
+	}
+	s.mockMetricsHandler.EXPECT().WithTags(
+		metrics.OperationTag(metrics.AuthorizationScope),
+		metrics.NamespaceUnknownTag(),
+	).Return(s.mockMetricsHandler)
+	s.mockAuthorizer.EXPECT().Authorize(gomock.Any(), nil, streamTarget).
+		Return(Result{Decision: DecisionAllow}, nil)
+
+	// Inject a spoofed principal header; it must be stripped in the handler's context.
+	inCtx := metadata.NewIncomingContext(ctx, metadata.MD{})
+
+	var handlerCtx context.Context
+	streamHandler := func(srv any, stream grpc.ServerStream) error {
+		handlerCtx = stream.Context()
+		return nil
+	}
+
+	ss := &mockServerStream{ctx: inCtx}
+	err := s.interceptor.InterceptStream(nil, ss, streamInfo, streamHandler)
+	s.NoError(err)
+	s.NotNil(handlerCtx)
+}
+
 func (s *authorizerInterceptorSuite) TestGetAuthInfoForRequest_AudiencePassedToClaimMapper() {
 	mockAudienceMapper := NewMockJWTAudienceMapper(s.controller)
 	mockAudienceMapper.EXPECT().Audience(ctx, nil, nil).Return("request-audience")
@@ -905,33 +934,4 @@ func (s *authorizerInterceptorSuite) TestGetAuthInfoForRequest_AudienceMapperSki
 	s.Empty(authInfo.AuthToken)
 	s.Empty(authInfo.Audience)
 	s.NotNil(authInfo.TLSSubject)
-}
-
-func (s *authorizerInterceptorSuite) TestInterceptStream_ContextPropagated() {
-	// Verify the handler receives a wrapped stream with the modified context.
-	streamTarget := &CallTarget{
-		Namespace: "",
-		APIName:   streamInfo.FullMethod,
-		Request:   nil,
-	}
-	s.mockMetricsHandler.EXPECT().WithTags(
-		metrics.OperationTag(metrics.AuthorizationScope),
-		metrics.NamespaceUnknownTag(),
-	).Return(s.mockMetricsHandler)
-	s.mockAuthorizer.EXPECT().Authorize(gomock.Any(), nil, streamTarget).
-		Return(Result{Decision: DecisionAllow}, nil)
-
-	// Inject a spoofed principal header; it must be stripped in the handler's context.
-	inCtx := metadata.NewIncomingContext(ctx, metadata.MD{})
-
-	var handlerCtx context.Context
-	streamHandler := func(srv any, stream grpc.ServerStream) error {
-		handlerCtx = stream.Context()
-		return nil
-	}
-
-	ss := &mockServerStream{ctx: inCtx}
-	err := s.interceptor.InterceptStream(nil, ss, streamInfo, streamHandler)
-	s.NoError(err)
-	s.NotNil(handlerCtx)
 }

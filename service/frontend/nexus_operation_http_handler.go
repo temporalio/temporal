@@ -165,7 +165,7 @@ func (h *NexusOperationHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w h
 	rWithAuthCtx, err := h.parseTLSAndAuthInfo(r, nc)
 	if err != nil {
 		logger.Error("failed to get claims", tag.Error(err))
-		h.writeFailure(w, r, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnauthenticated, "unauthorized"))
+		h.writeFailure(w, r, convertNexusClaimMapperError(err))
 		return
 	}
 	r = rWithAuthCtx
@@ -228,7 +228,7 @@ func (h *NexusOperationHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseW
 	rWithAuthCtx, err := h.parseTLSAndAuthInfo(r, nc)
 	if err != nil {
 		logger.Error("failed to get claims", tag.Error(err))
-		h.writeFailure(w, r, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnauthenticated, "unauthorized"))
+		h.writeFailure(w, r, convertNexusClaimMapperError(err))
 		return
 	}
 	r = rWithAuthCtx
