@@ -169,19 +169,38 @@ func CHASMToLegacyStartScheduleArgs(
 		invokerBuffered = invoker.GetBufferedStarts()
 	}
 	bufferedStarts, running, recent := splitBufferedStartsForLegacy(invokerBuffered)
-	if len(info.GetRecentActions()) > 0 {
+	recentFromInfo := len(info.GetRecentActions()) > 0
+	if recentFromInfo {
 		storedRecent := make([]*schedulepb.ScheduleActionResult, 0, len(info.GetRecentActions()))
 		for _, action := range info.GetRecentActions() {
 			storedRecent = append(storedRecent, common.CloneProto(action))
 		}
 		recent = append(storedRecent, recent...)
+	}
+	ongoingBackfills, triggerStarts := convertBackfillersCHASMToLegacy(backfillers, migrationTime)
+
+	// recent is a concatenation of independently-ordered sources (stored info + invoker-derived),
+	// and RecentActions has no order-sensitive consumer -- it's just a display/history list -- so
+	// a plain re-sort by ActualTime is correct.
+	if recentFromInfo {
 		slices.SortFunc(recent, func(a, b *schedulepb.ScheduleActionResult) int {
 			return a.GetActualTime().AsTime().Compare(b.GetActualTime().AsTime())
 		})
 		recent = util.SliceTail(recent, legacyRecentActionCount)
 	}
-	ongoingBackfills, triggerStarts := convertBackfillersCHASMToLegacy(backfillers, migrationTime)
-	bufferedStarts = append(bufferedStarts, triggerStarts...)
+
+	// bufferedStarts is different: it's already in invoker enqueue order, and that order is
+	// load-bearing -- it's fed into the same ProcessBuffer V1 uses, where BUFFER_ONE and
+	// "nothing running" both take whichever entry comes first in iteration order, never
+	// comparing ActualTime. A pending trigger Backfiller hasn't been enqueued yet --
+	// BackfillerTaskHandler.processTrigger builds its single BufferedStart and only appends it
+	// via Invoker.EnqueueBufferedStarts once its task actually executes, regardless of the
+	// trigger's own ActualTime -- so simulating "if CHASM kept running" means every still-pending
+	// trigger belongs after whatever's already buffered, not repositioned into it by time.
+	// triggerStarts are sorted only among themselves (built from a randomized map iteration, so
+	// they have no defined relative order of their own) purely for a deterministic tie-break,
+	// then appended after bufferedStarts unchanged.
+	bufferedStarts = appendSortedTriggerStarts(bufferedStarts, triggerStarts)
 
 	var generatorLastProcessed *timestamppb.Timestamp
 	if generator != nil {
@@ -215,6 +234,26 @@ func CHASMToLegacyStartScheduleArgs(
 		Info:     info,
 		State:    state,
 	}
+}
+
+// appendSortedTriggerStarts appends triggerStarts after bufferedStarts, leaving bufferedStarts'
+// own relative order untouched. See the comment at the call site for why: a pending trigger
+// Backfiller only ever gets enqueued (appended) once its task actually executes, never
+// repositioned earlier by its own ActualTime. triggerStarts are sorted only among themselves --
+// built from a randomized map iteration over pending backfillers, they have no defined relative
+// order of their own -- purely so that multiple simultaneously-pending triggers land in the
+// resulting list in a deterministic (not map-iteration-dependent) order.
+func appendSortedTriggerStarts(
+	bufferedStarts []*schedulespb.BufferedStart,
+	triggerStarts []*schedulespb.BufferedStart,
+) []*schedulespb.BufferedStart {
+	if len(triggerStarts) == 0 {
+		return bufferedStarts
+	}
+	slices.SortFunc(triggerStarts, func(a, b *schedulespb.BufferedStart) int {
+		return a.GetActualTime().AsTime().Compare(b.GetActualTime().AsTime())
+	})
+	return append(bufferedStarts, triggerStarts...)
 }
 
 // convertBufferedStartsLegacyToCHASM transforms V1 buffered starts to V2 format.

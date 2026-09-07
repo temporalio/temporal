@@ -1,6 +1,7 @@
 package matching
 
 import (
+	"math"
 	"math/rand"
 	"sync"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/number"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 )
 
@@ -344,6 +346,42 @@ func TestPickReadPartition_IncompleteBacklogFallsBack(t *testing.T) {
 	require.Equal(t, []int{2, 2, 2, 2}, tqlb.pollerCounts)
 }
 
+func TestPickWritePartitionRootFloorPreservesNonRootWeights(t *testing.T) {
+	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
+	require.NoError(t, err)
+	taskQueue := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	lb := &defaultLoadBalancer{}
+
+	const partitionCount = 32
+	backlogCap := number.EncodeCompact8(1000)
+	backlogCounts := make([]number.Compact8, partitionCount)
+	backlogCounts[0] = backlogCap
+	backlogCounts[partitionCount-1] = number.EncodeCompact8(number.DecodeCompact8(backlogCap) - 100)
+	pc := PartitionCounts{
+		Write:        partitionCount,
+		BacklogCap:   backlogCap,
+		BacklogCount: backlogCounts,
+	}
+
+	decodedCap := number.DecodeCompact8(backlogCap)
+	lastGap := decodedCap - number.DecodeCompact8(backlogCounts[partitionCount-1])
+	nonRootTotal := int64(partitionCount-2)*decodedCap + lastGap
+	rootGap := int64(math.Ceil(float64(nonRootTotal) * writePartitionRootProbabilityFloor /
+		(1 - writePartitionRootProbabilityFloor)))
+	require.Less(t, lastGap, rootGap)
+
+	const attempts = 100_000
+	picks := 0
+	for range attempts {
+		partition, _ := lb.PickWritePartition(taskQueue, pc)
+		if partition.PartitionId() == partitionCount-1 {
+			picks++
+		}
+	}
+	expectedPicks := float64(attempts) * float64(lastGap) / float64(nonRootTotal+rootGap)
+	require.InDelta(t, expectedPicks, picks, expectedPicks*0.3)
+}
+
 func TestPickWritePartition_BacklogAware(t *testing.T) {
 	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
 	require.NoError(t, err)
@@ -365,18 +403,24 @@ func TestPickWritePartition_BacklogAware(t *testing.T) {
 		BacklogCap:   200,
 		BacklogCount: []number.Compact8{0, number.EncodeCompact8(13_000_000)},
 	}
+	gap0 := backlogCap - number.DecodeCompact8(0)
+	gap1 := backlogCap - number.DecodeCompact8(number.EncodeCompact8(13_000_000))
 	counts := make([]int, 2)
+	estimatedTasks := 0
 	const n = 3000
 	for range n {
-		p := lb.PickWritePartition(taskQueue, pc)
+		p, estimatedTasksAllPartitions := lb.PickWritePartition(taskQueue, pc)
 		counts[p.PartitionId()]++
+		if p.IsRoot() {
+			estimatedTasks += estimatedTasksAllPartitions
+		}
 	}
 	require.Greater(t, counts[0], counts[1], "emptier partition should receive more writes")
 	require.Positive(t, counts[1], "the below-cap partition should still receive some writes")
-	gap0 := backlogCap - number.DecodeCompact8(0)
-	gap1 := backlogCap - number.DecodeCompact8(number.EncodeCompact8(13_000_000))
 	require.InDelta(t, float64(n)*float64(gap0)/float64(gap0+gap1), counts[0], float64(n)*0.05,
 		"writes split in proportion to each partition's gap to cap")
+	require.InDelta(t, n, estimatedTasks, float64(n)*0.05,
+		"root samples should estimate total writes without bias")
 
 	// Now, every partition at/above cap -> no gap to weight by, so the picker declines and the caller
 	// falls back to uniform random.
@@ -388,12 +432,54 @@ func TestPickWritePartition_BacklogAware(t *testing.T) {
 	}
 	atCap := make([]int, 2)
 	for range n {
-		p := lb.PickWritePartition(taskQueue, pcAtCap)
+		p, estimatedTasksAllPartitions := lb.PickWritePartition(taskQueue, pcAtCap)
 		atCap[p.PartitionId()]++
+		if p.IsRoot() {
+			require.Equal(t, 2, estimatedTasksAllPartitions)
+		} else {
+			require.Zero(t, estimatedTasksAllPartitions)
+		}
 	}
 	for i := range atCap {
 		require.InDelta(t, n/2, atCap[i], float64(n)*0.1, "at-cap partition %d roughly uniform", i)
 	}
+}
+
+func TestPickWritePartition_RootProbabilityFloor(t *testing.T) {
+	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
+	require.NoError(t, err)
+	taskQueue := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	lb := &defaultLoadBalancer{
+		namespaceIDToName: func(namespace.ID) (namespace.Name, error) { return "fake-namespace", nil },
+		taskQueueLBs:      make(map[tqid.TaskQueue]*tqLoadBalancer),
+	}
+
+	pc := PartitionCounts{
+		Read:         2,
+		Write:        2,
+		BacklogCap:   number.EncodeCompact8(50),
+		BacklogCount: []number.Compact8{number.EncodeCompact8(50), 0},
+	}
+	const attempts = 100_000
+	rootPicks := 0
+	estimatedTasks := 0
+	backlogCap := number.DecodeCompact8(pc.BacklogCap)
+	total := backlogCap - number.DecodeCompact8(pc.BacklogCount[1])
+	gap0 := int64(math.Ceil(float64(total) * writePartitionRootProbabilityFloor))
+	expectedProbability := float64(gap0) / float64(total)
+	expectedTasksAllPartitions := float64(total) / float64(gap0)
+	for range attempts {
+		partition, estimatedTasksAllPartitions := lb.PickWritePartition(taskQueue, pc)
+		if partition.IsRoot() {
+			rootPicks++
+			require.InDelta(t, expectedTasksAllPartitions, estimatedTasksAllPartitions, 1)
+			estimatedTasks += estimatedTasksAllPartitions
+		} else {
+			require.Zero(t, estimatedTasksAllPartitions)
+		}
+	}
+	require.InDelta(t, attempts*expectedProbability, rootPicks, attempts*expectedProbability*0.2)
+	require.InDelta(t, attempts, estimatedTasks, attempts*0.1)
 }
 
 func TestPickWritePartition_NoBacklogUniform(t *testing.T) {
@@ -411,11 +497,37 @@ func TestPickWritePartition_NoBacklogUniform(t *testing.T) {
 	counts := make([]int, 4)
 	const n = 4000
 	for range n {
-		p := lb.PickWritePartition(taskQueue, pc)
+		p, estimatedTasksAllPartitions := lb.PickWritePartition(taskQueue, pc)
 		counts[p.PartitionId()]++
+		if p.IsRoot() {
+			require.Equal(t, 4, estimatedTasksAllPartitions)
+		} else {
+			require.Zero(t, estimatedTasksAllPartitions)
+		}
 	}
 	for i := range counts {
 		require.InDelta(t, n/4, counts[i], float64(n)*0.1, "partition %d roughly uniform", i)
+	}
+}
+
+func TestPickWritePartition_Forced(t *testing.T) {
+	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
+	require.NoError(t, err)
+	taskQueue := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	testHooks := testhooks.NewTestHooks()
+	lb := &defaultLoadBalancer{
+		namespaceIDToName: func(namespace.ID) (namespace.Name, error) { return "fake-namespace", nil },
+		testHooks:         testHooks,
+	}
+	pc := PartitionCounts{Write: 4}
+
+	for partitionID, expectedEstimate := range map[int]int{0: 4, 1: 0} {
+		cleanup := testhooks.Set(testHooks, testhooks.MatchingLBForceWritePartition, partitionID, namespace.ID(taskQueue.NamespaceId()))
+		partition, estimatedTasksAllPartitions := lb.PickWritePartition(taskQueue, pc)
+		cleanup()
+
+		require.Equal(t, partitionID, partition.PartitionId())
+		require.Equal(t, expectedEstimate, estimatedTasksAllPartitions)
 	}
 }
 

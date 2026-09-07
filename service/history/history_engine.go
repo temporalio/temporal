@@ -312,6 +312,7 @@ func NewEngineWithShardContext(
 			persistenceRateLimiter,
 			logger,
 			shard.GetEventLogger(),
+			testHooks,
 		)
 		historyEngImpl.nDCHSMStateReplicator = ndc.NewHSMStateReplicator(
 			shard,
@@ -1003,6 +1004,15 @@ func (e *historyEngineImpl) ConvertReplicationTask(
 	task tasks.Task,
 	clusterID int32,
 ) (*replicationspb.ReplicationTask, error) {
+	if hook, ok := testhooks.Get(
+		e.testHooks,
+		testhooks.HistoryReplicationTaskConversionInterceptor,
+		namespace.ID(task.GetNamespaceID()),
+	); ok {
+		return hook(task, func() (*replicationspb.ReplicationTask, error) {
+			return e.replicationAckMgr.ConvertTaskByCluster(ctx, task, clusterID)
+		})
+	}
 	return e.replicationAckMgr.ConvertTaskByCluster(ctx, task, clusterID)
 }
 

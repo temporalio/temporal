@@ -43,10 +43,12 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/grpcfaultstest"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
@@ -259,6 +261,7 @@ func GrpcServerOptionsProvider(
 	customInterceptors []grpc.UnaryServerInterceptor,
 	customStreamInterceptors []grpc.StreamServerInterceptor,
 	metricsHandler metrics.Handler,
+	testHooks testhooks.TestHooks,
 ) GrpcServerOptions {
 	kep := keepalive.EnforcementPolicy{
 		MinTime:             serviceConfig.KeepAliveMinTime(),
@@ -317,6 +320,10 @@ func GrpcServerOptionsProvider(
 	if len(customInterceptors) > 0 {
 		// TODO: Deprecate WithChainedFrontendGrpcInterceptors and provide a inner custom interceptor
 		unaryInterceptors = append(unaryInterceptors, customInterceptors...)
+	}
+	faultGenerator := grpcfaultstest.NewGenerator(testHooks)
+	if faultInterceptor := grpcfaults.UnaryServerInterceptor(faultGenerator); faultInterceptor != nil {
+		unaryInterceptors = append(unaryInterceptors, faultInterceptor)
 	}
 	// retry interceptor should be the most inner interceptor
 	unaryInterceptors = append(unaryInterceptors, retryableInterceptor.Intercept)

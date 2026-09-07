@@ -394,6 +394,10 @@ func component(component string) ZapTag {
 	return NewStringTag("component", component)
 }
 
+func nexusStage(stage string) ZapTag {
+	return NewStringTag("nexus-stage", stage)
+}
+
 // Lifecycle returns tag for Lifecycle
 func lifecycle(lifecycle string) ZapTag {
 	return NewStringTag("lifecycle", lifecycle)

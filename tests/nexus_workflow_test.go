@@ -48,10 +48,17 @@ import (
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
-	"go.temporal.io/server/components/nexusoperations"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/frontend/configs"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
+)
+
+const (
+	dataBlobMessageType = "temporal.api.common.v1.DataBlob"
+	payloadsMessageType = "temporal.api.common.v1.Payloads"
+	protobufEncoding    = "binary/protobuf"
 )
 
 type NexusWorkflowTestSuite struct {
@@ -2631,9 +2638,11 @@ func (s *NexusWorkflowTestSuite) TestNexusCallbackAfterCallerComplete(chasmEnabl
 func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure(chasmEnabled bool) {
 	env := s.newTestEnv(chasmEnabled)
 	taskQueue := testcore.RandomizeStr(s.T().Name())
+	handlerRequestIDs := make(chan string, 1)
 
 	h := nexustest.Handler{
 		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			handlerRequestIDs <- options.RequestID
 			return nil, &nexus.HandlerError{
 				Type: nexus.HandlerErrorTypeBadRequest,
 				Cause: &nexus.FailureError{
@@ -2664,7 +2673,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure(chasmEnabled
 	s.NoError(w.Start())
 	s.T().Cleanup(w.Stop)
 
-	capture := env.StartNamespaceMetricCapture()
+	logCapture := env.StartNamespaceLogCapture()
+	metricCapture := env.StartNamespaceMetricCapture()
 	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), client.StartWorkflowOptions{
 		TaskQueue: taskQueue,
 	}, callerWF)
@@ -2685,7 +2695,34 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure(chasmEnabled
 	s.NoError(json.Unmarshal(failure.Details, &details))
 	s.Equal("details", details)
 
-	outboundRequests := capture.Metric("nexus_outbound_requests")
+	handlerRequestID := await.Rcv(s.T(), handlerRequestIDs)
+	s.Require().NotEmpty(handlerRequestID)
+
+	// The attempt tag is off by one between implementations: HSM's task carries the count of
+	// *completed* attempts, CHASM's is 1-based.
+	attempt := int32(0)
+	if chasmEnabled {
+		attempt = 1
+	}
+	logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
+		Level:   testlogger.Error,
+		Message: "Nexus StartOperation request failed",
+		Tags: map[string]any{
+			"operation":                          "StartOperation",
+			"wf-namespace":                       env.Namespace().String(),
+			"nexus-endpoint-target-namespace-id": "",
+			"request-id":                         handlerRequestID,
+			"nexus-operation":                    "operation",
+			"endpoint":                           endpointName,
+			"wf-id":                              run.GetID(),
+			"wf-run-id":                          run.GetRunID(),
+			"attempt-start":                      testlogger.AnyTagValue,
+			"attempt":                            attempt,
+			"error":                              "handler error (BAD_REQUEST)",
+		},
+	})
+
+	outboundRequests := metricCapture.Metric("nexus_outbound_requests")
 	s.Len(outboundRequests, 1)
 	// Confirming that requests which do not go through our frontend are not tagged with `failure_source`
 	s.Subset(outboundRequests[0].Tags, map[string]string{"namespace": env.Namespace().String(), "method": "StartOperation", "failure_source": "_unknown_", "outcome": "handler-error:BAD_REQUEST"})
@@ -3283,6 +3320,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSystemEndpoint(chasmEnabled b
 	result := completedEvent.GetNexusOperationCompletedEventAttributes().Result
 	s.NotNil(result)
 	s.Equal([]byte("true"), result.GetMetadata()[commonnexus.SystemPayloadMetadataKey])
+	// TestOperation returns a proto message, so the result must be proto encoded, not JSON.
+	s.Equal([]byte(dataBlobMessageType), result.GetMetadata()["messageType"])
+	s.Equal([]byte(protobufEncoding), result.GetMetadata()["encoding"])
 
 	// Complete the workflow
 	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -3302,9 +3342,10 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSystemEndpoint(chasmEnabled b
 		},
 	})
 	s.NoError(err)
-	var response string
+	var response commonpb.DataBlob
 	s.NoError(run.Get(ctx, &response))
-	s.Equal("Hello, Temporal", response)
+	data := response.Data
+	s.Equal("Hello, Temporal", string(data))
 }
 
 // NOTE: This test cannot use the SDK workflow package because there is a restriction that prevents setting the
@@ -3361,9 +3402,10 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSystemEndpoint_PayloadMetadat
 	completedEvent := s.RequireHistoryEvent(pollResp.History.Events, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
 	result := completedEvent.GetNexusOperationCompletedEventAttributes().Result
 	s.NotNil(result)
-	// TestOperationWithPayload's response embeds a nested Payload, so the system payload metadata
-	// flag must be set.
+	// TestOperationWithPayload's response embeds a nested Payload, so the system payload metadata flag must be set.
 	s.Equal([]byte("true"), result.GetMetadata()[commonnexus.SystemPayloadMetadataKey])
+	s.Equal([]byte(payloadsMessageType), result.GetMetadata()["messageType"])
+	s.Equal([]byte(protobufEncoding), result.GetMetadata()["encoding"])
 
 	// Complete the workflow
 	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{

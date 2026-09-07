@@ -90,7 +90,7 @@ func newNexusCompletionHandler(
 	return &nexusCompletionHandler{
 		ClusterMetadata:                      clusterMetadata,
 		NamespaceRegistry:                    namespaceRegistry,
-		Logger:                               logger,
+		Logger:                               log.With(logger, tag.NexusStageCallerInbound),
 		MetricsHandler:                       metricsHandler,
 		Config:                               serviceConfig,
 		CallbackTokenGenerator:               callbackTokenGenerator,
@@ -110,11 +110,11 @@ func newNexusCompletionHandler(
 	}
 }
 
-func newNexusCompletionHTTPHandler(handler *nexusCompletionHandler, logger log.Logger) *nexusCompletionHTTPHandler {
+func newNexusCompletionHTTPHandler(handler *nexusCompletionHandler) *nexusCompletionHTTPHandler {
 	return &nexusCompletionHTTPHandler{
 		httpHandler: nexusrpc.NewCompletionHTTPHandler(nexusrpc.CompletionHandlerOptions{
 			Handler:    handler,
-			Logger:     log.NewSlogLogger(logger),
+			Logger:     log.NewSlogLogger(handler.Logger),
 			Serializer: commonnexus.PayloadSerializer,
 		}),
 	}

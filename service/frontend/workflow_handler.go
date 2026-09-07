@@ -3904,6 +3904,12 @@ func (wh *WorkflowHandler) CreateSchedule(
 	if request.Schedule == nil {
 		request.Schedule = &schedulepb.Schedule{}
 	}
+	if err := wh.validateScheduleOverlapPolicies(request.Schedule, request.InitialPatch, namespaceName.String()); err != nil {
+		return nil, err
+	}
+	if err := wh.validateSchedulePatchTimestamps(request.InitialPatch, namespaceName.String()); err != nil {
+		return nil, err
+	}
 	err := wh.canonicalizeScheduleSpec(request.Schedule, namespaceName.String())
 	if err != nil {
 		return nil, err
@@ -4719,6 +4725,9 @@ func (wh *WorkflowHandler) UpdateSchedule(
 	if request.Schedule == nil {
 		request.Schedule = &schedulepb.Schedule{}
 	}
+	if err := wh.validateScheduleOverlapPolicies(request.Schedule, nil, namespaceName.String()); err != nil {
+		return nil, err
+	}
 	err := wh.canonicalizeScheduleSpec(request.Schedule, namespaceName.String())
 	if err != nil {
 		return nil, err
@@ -4865,6 +4874,12 @@ func (wh *WorkflowHandler) PatchSchedule(
 		len(request.Patch.Unpause) > common.ScheduleNotesSizeLimit {
 		return nil, errNotesTooLong
 	}
+	if err := wh.validateScheduleOverlapPolicies(nil, request.Patch, request.Namespace); err != nil {
+		return nil, err
+	}
+	if err := wh.validateSchedulePatchTimestamps(request.Patch, request.Namespace); err != nil {
+		return nil, err
+	}
 
 	if trigger := request.Patch.GetTriggerImmediately(); trigger != nil && trigger.ScheduledTime == nil {
 		trigger.ScheduledTime = timestamppb.Now()
@@ -4971,6 +4986,9 @@ func (wh *WorkflowHandler) ListScheduleMatchingTimes(ctx context.Context, reques
 
 	if !wh.config.EnableSchedules(request.Namespace) {
 		return nil, errSchedulesNotAllowed
+	}
+	if err := wh.validateScheduleMatchingTimesTimestamps(request); err != nil {
+		return nil, err
 	}
 
 	// Prefer CHASM scheduler if enabled.
@@ -5281,15 +5299,18 @@ func (wh *WorkflowHandler) listSchedulesChasm(
 		// versions can be returned.
 		listInfo := ex.ChasmMemo // V2
 		customMemo := ex.Memo
-		if listInfo.GetSpec() == nil {
+		isV1Schedule := listInfo.GetSpec() == nil
+		if isV1Schedule {
 			listInfo = wh.decodeScheduleListInfo(customMemo) // V1
 			wh.cleanScheduleMemo(customMemo)
 		} else {
 			scheduler.CleanSpec(listInfo.Spec) // done as part of decodeScheduleListInfo for V1
 		}
 
-		workflowID := ex.BusinessID
-		scheduleID := strings.TrimPrefix(workflowID, scheduler.WorkflowIDPrefix) // needed for V1 schedules, not CHASM
+		scheduleID := ex.BusinessID
+		if isV1Schedule {
+			scheduleID = strings.TrimPrefix(scheduleID, scheduler.WorkflowIDPrefix)
+		}
 
 		schedules[i] = &schedulepb.ScheduleListEntry{
 			ScheduleId: scheduleID,
@@ -7004,9 +7025,118 @@ func validateScheduleIntervalDurations(spec *schedulepb.ScheduleSpec) error {
 	return nil
 }
 
+func validateScheduleTimestamps(spec *schedulepb.ScheduleSpec) error {
+	if err := validateTimestamp(spec.GetStartTime(), "start time"); err != nil {
+		return err
+	}
+	return validateTimestamp(spec.GetEndTime(), "end time")
+}
+
+func validateTimestamp(value *timestamppb.Timestamp, field string) error {
+	if value != nil {
+		if err := value.CheckValid(); err != nil {
+			return fmt.Errorf("%s is not a valid timestamp: %w", field, err)
+		}
+	}
+	return nil
+}
+
+func validateScheduleRemainingActions(schedule *schedulepb.Schedule) error {
+	if schedule.GetState().GetRemainingActions() < 0 {
+		return errors.New("remaining actions cannot be negative")
+	}
+	return nil
+}
+
+func validateScheduleOverlapPolicy(policy enumspb.ScheduleOverlapPolicy, field string) error {
+	if _, ok := enumspb.ScheduleOverlapPolicy_name[int32(policy)]; !ok {
+		return fmt.Errorf("%s has unsupported overlap policy %v", field, policy)
+	}
+	return nil
+}
+
+func (wh *WorkflowHandler) validateScheduleOverlapPolicies(
+	schedule *schedulepb.Schedule,
+	patch *schedulepb.SchedulePatch,
+	namespaceName string,
+) error {
+	if schedule != nil {
+		if err := validateScheduleOverlapPolicy(schedule.GetPolicies().GetOverlapPolicy(), "schedule policies"); err != nil {
+			return wh.handleScheduleValidationError(err, scheduleValidationOverlapPolicy, namespaceName)
+		}
+	}
+	if patch == nil {
+		return nil
+	}
+	if trigger := patch.GetTriggerImmediately(); trigger != nil {
+		if err := validateScheduleOverlapPolicy(trigger.GetOverlapPolicy(), "trigger immediately request"); err != nil {
+			return wh.handleScheduleValidationError(err, scheduleValidationOverlapPolicy, namespaceName)
+		}
+	}
+	for i, backfill := range patch.GetBackfillRequest() {
+		if err := validateScheduleOverlapPolicy(backfill.GetOverlapPolicy(), fmt.Sprintf("backfill request %d", i)); err != nil {
+			return wh.handleScheduleValidationError(err, scheduleValidationOverlapPolicy, namespaceName)
+		}
+	}
+	return nil
+}
+
+func (wh *WorkflowHandler) validateSchedulePatchTimestamps(
+	patch *schedulepb.SchedulePatch,
+	namespaceName string,
+) error {
+	if patch == nil {
+		return nil
+	}
+	if trigger := patch.GetTriggerImmediately(); trigger != nil {
+		if err := validateTimestamp(trigger.GetScheduledTime(), "trigger immediately request scheduled time"); err != nil {
+			return wh.handleScheduleValidationError(err, scheduleValidationTimestamp, namespaceName)
+		}
+	}
+	for i, backfill := range patch.GetBackfillRequest() {
+		if err := validateTimestamp(backfill.GetStartTime(), fmt.Sprintf("backfill request %d start time", i)); err != nil {
+			return wh.handleScheduleValidationError(err, scheduleValidationTimestamp, namespaceName)
+		}
+		if err := validateTimestamp(backfill.GetEndTime(), fmt.Sprintf("backfill request %d end time", i)); err != nil {
+			return wh.handleScheduleValidationError(err, scheduleValidationTimestamp, namespaceName)
+		}
+	}
+	return nil
+}
+
+func (wh *WorkflowHandler) validateScheduleMatchingTimesTimestamps(
+	request *workflowservice.ListScheduleMatchingTimesRequest,
+) error {
+	if err := validateTimestamp(request.GetStartTime(), "start time"); err != nil {
+		return wh.handleScheduleValidationError(err, scheduleValidationTimestamp, request.GetNamespace())
+	}
+	if err := validateTimestamp(request.GetEndTime(), "end time"); err != nil {
+		return wh.handleScheduleValidationError(err, scheduleValidationTimestamp, request.GetNamespace())
+	}
+	return nil
+}
+
+func (wh *WorkflowHandler) handleScheduleValidationError(err error, validation, namespaceName string) error {
+	if !wh.config.IsScheduleValidationDisabled(validation, namespaceName) {
+		return serviceerror.NewInvalidArgumentf("Invalid schedule: %v", err)
+	}
+	wh.throttledLogger.Warn(
+		"Ignoring disabled schedule validation",
+		tag.WorkflowNamespace(namespaceName),
+		tag.NewStringTag("validation", validation),
+		tag.Error(err),
+	)
+	return nil
+}
+
 func (wh *WorkflowHandler) canonicalizeScheduleSpec(schedule *schedulepb.Schedule, namespaceName string) error {
 	if schedule.Spec == nil {
 		schedule.Spec = &schedulepb.ScheduleSpec{}
+	}
+	if err := validateScheduleRemainingActions(schedule); err != nil {
+		if err := wh.handleScheduleValidationError(err, scheduleValidationRemainingActions, namespaceName); err != nil {
+			return err
+		}
 	}
 	if err := validateScheduleIntervalDurations(schedule.Spec); err != nil {
 		if !wh.config.IsScheduleValidationDisabled(scheduleValidationScheduleDuration, namespaceName) {
@@ -7018,6 +7148,11 @@ func (wh *WorkflowHandler) canonicalizeScheduleSpec(schedule *schedulepb.Schedul
 			tag.NewStringTag("validation", scheduleValidationScheduleDuration),
 			tag.Error(err),
 		)
+	}
+	if err := validateScheduleTimestamps(schedule.Spec); err != nil {
+		if err := wh.handleScheduleValidationError(err, scheduleValidationTimestamp, namespaceName); err != nil {
+			return err
+		}
 	}
 	compiledSpec, err := wh.scheduleSpecBuilder.NewCompiledSpec(schedule.Spec)
 	if err != nil {
@@ -7082,7 +7217,12 @@ func (wh *WorkflowHandler) cleanScheduleMemo(memo *commonpb.Memo) *commonpb.Memo
 
 // This mutates request (but idempotent so safe for retries)
 func (wh *WorkflowHandler) addInitialScheduleMemo(request *workflowservice.CreateScheduleRequest, args *schedulespb.StartScheduleArgs) {
-	info := scheduler.GetListInfoFromStartArgs(args, time.Now().UTC(), wh.scheduleSpecBuilder)
+	versionCeiling := wh.config.SchedulerV1VersionCeiling(request.Namespace)
+	versionOverride := wh.config.SchedulerV1VersionOverride(request.Namespace)
+	info := scheduler.GetListInfoFromStartArgs(args, time.Now().UTC(), wh.scheduleSpecBuilder, scheduler.VersionSelection{
+		Ceiling:  versionCeiling,
+		Override: versionOverride,
+	})
 	infoBytes, err := info.Marshal()
 	if err != nil {
 		wh.logger.Error("encoding initial schedule memo failed", tag.Error(err))
