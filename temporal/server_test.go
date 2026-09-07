@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -25,6 +26,8 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence/serialization"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite" // needed to register the sqlite plugin
+	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/freeport"
 	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/temporal"
@@ -71,9 +74,6 @@ func runAndTestServer(t *testing.T) {
 
 	logDetector := newErrorLogDetector(t, log.NewTestLogger())
 	logDetector.Start()
-	t.Cleanup(func() {
-		logDetector.Stop()
-	})
 
 	// Tweak matching to ensure tasks are written to persistence immediately.
 	dcClient := dynamicconfig.StaticClient{
@@ -92,7 +92,8 @@ func runAndTestServer(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
-		assert.NoError(t, server.Stop())
+		logDetector.Stop()
+		require.NoError(t, server.Stop())
 	})
 	require.NoError(t, server.Start())
 
@@ -126,7 +127,7 @@ func runAndTestServer(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = adminConn.Close() }()
 	adminClient := adminservice.NewAdminServiceClient(adminConn)
-	assert.Eventually(t, func() bool {
+	await.RequireTrue(t, func() bool {
 		response, err := adminClient.GetTaskQueueTasks(ctx, &adminservice.GetTaskQueueTasksRequest{
 			Namespace:     namespace,
 			TaskQueue:     taskQueue,
@@ -157,6 +158,7 @@ func runAndTestServer(t *testing.T) {
 
 func loadConfig(t *testing.T) *config.Config {
 	cfg := loadSQLiteConfig(t)
+	setSQLiteDatabaseName(cfg, "test-"+uuid.NewString())
 	setTestPorts(cfg)
 	return cfg
 }
@@ -176,29 +178,30 @@ func loadSQLiteConfig(t *testing.T) *config.Config {
 	return cfg
 }
 
+func setSQLiteDatabaseName(cfg *config.Config, databaseName string) {
+	for _, storeName := range []string{cfg.Persistence.DefaultStore, cfg.Persistence.VisibilityStore} {
+		store := cfg.Persistence.DataStores[storeName]
+		store.SQL.DatabaseName = databaseName
+		cfg.Persistence.DataStores[storeName] = store
+	}
+}
+
 // setTestPorts sets the ports of all services to something different from the default ports.
 func setTestPorts(cfg *config.Config) {
-	port := 10000
-
 	// The prometheus reporter does not shut down in-between test runs.
 	// This will assign a random port to the prometheus reporter,
 	// so that it doesn't conflict with other tests.
 	cfg.Global.Metrics.Prometheus.ListenAddress = ":0"
 
 	for k, v := range cfg.Services {
-		v.RPC.GRPCPort = port
-		port++
-
-		v.RPC.MembershipPort = port
-		port++
-
-		v.RPC.HTTPPort = port
-		port++
+		v.RPC.GRPCPort = freeport.MustGetFreePort()
+		v.RPC.MembershipPort = freeport.MustGetFreePort()
+		v.RPC.HTTPPort = freeport.MustGetFreePort()
 
 		cfg.Services[k] = v
 	}
 
-	cfg.Global.PProf.Port = port
+	cfg.Global.PProf.Port = freeport.MustGetFreePort()
 }
 
 func getFrontendInterceptors() func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (resp any, err error) {
@@ -279,12 +282,13 @@ func (d *errorLogDetector) Error(msg string, tags ...tag.Tag) {
 		"Unable to process new range",
 		"Unable to call",
 		"service failures",
-		"Queue reader unable to retrieve tasks",        // transient startup error
-		"error from matching when initializing",        // transient startup error
-		"error fetching user data from parent",         // transient startup error
-		"Failed to check Nexus endpoints ownership",    // transient startup error
-		"Failed to force load non-root partition",      // transient shutdown error
-		"error refreshing endpoints by background job", // transient shutdown error
+		"Queue reader unable to retrieve tasks",               // transient startup error
+		"error from matching when initializing",               // transient startup error
+		"error fetching user data from parent",                // transient startup error
+		"Failed to check Nexus endpoints ownership",           // transient startup error
+		"long poll to refresh Nexus endpoints returned error", // transient startup error
+		"Failed to force load non-root partition",             // transient shutdown error
+		"error refreshing endpoints by background job",        // transient shutdown error
 	} {
 		if strings.Contains(msg, s) {
 			return
@@ -331,6 +335,7 @@ func TestErrorLogDetector(t *testing.T) {
 	d.Error("Unable to call matching.PollActivityTaskQueue")
 	d.Error("service failures")
 	d.Error("unexpected error")
+	d.Error("long poll to refresh Nexus endpoints returned error")
 	d.DPanic("dpanic")
 	d.Panic("panic")
 	d.Fatal("fatal")

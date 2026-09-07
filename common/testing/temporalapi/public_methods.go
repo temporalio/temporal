@@ -21,9 +21,9 @@ func WalkExportedMethods(obj any, cb func(reflect.Method)) {
 	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
-	for i := 0; i < t.NumMethod(); i++ {
-		if publicMethodRgx.MatchString(t.Method(i).Name) {
-			cb(t.Method(i))
+	for method := range t.Methods() {
+		if publicMethodRgx.MatchString(method.Name) {
+			cb(method)
 		}
 	}
 }

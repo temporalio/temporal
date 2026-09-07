@@ -1,7 +1,6 @@
 package matching
 
 import (
-	"sync"
 	"time"
 
 	"go.temporal.io/server/common/clock"
@@ -37,8 +36,9 @@ func (cb *circularTaskBuffer) totalTasks() int {
 	return totalTasks
 }
 
+// taskTracker is not safe for concurrent use; callers must provide their own
+// synchronization.
 type taskTracker struct {
-	lock            sync.Mutex
 	clock           clock.TimeSource
 	startTime       time.Time     // time when taskTracker was initialized
 	bucketStartTime time.Time     // the starting time of a bucket in the buffer
@@ -66,9 +66,8 @@ func newTaskTracker(
 	}
 }
 
-// advanceAndResetLocked advances the trackers position and clears out any expired intervals
-// This method must be called with taskTracker's lock held.
-func (s *taskTracker) advanceAndResetLocked(elapsed time.Duration) {
+// advanceAndReset advances the trackers position and clears out any expired intervals.
+func (s *taskTracker) advanceAndReset(elapsed time.Duration) {
 	// Calculate the number of intervals elapsed since the start interval time
 	intervalsElapsed := int(elapsed / s.bucketSize)
 
@@ -80,34 +79,39 @@ func (s *taskTracker) advanceAndResetLocked(elapsed time.Duration) {
 
 // inc increments the count of tasks by n at the current time
 func (s *taskTracker) inc(n int) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
 	currentTime := s.clock.Now()
 
 	// Calculate elapsed time from the latest start interval time
 	elapsed := currentTime.Sub(s.bucketStartTime)
-	s.advanceAndResetLocked(elapsed)
+	s.advanceAndReset(elapsed)
 	s.tasks.inc(n)
 }
 
-// rate returns the rate of tasks added/dispatched in a given interval
+// rate returns the rate of increments in a given interval
 func (s *taskTracker) rate() float32 {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	rate, _ := s.rateAndFull()
+	return rate
+}
+
+// rateAndFull returns the rate of increments in a given interval, plus whether the full
+// interval has elapsed.
+func (s *taskTracker) rateAndFull() (float32, bool) {
 	currentTime := s.clock.Now()
 
 	// Calculate elapsed time from the latest start interval time
 	elapsed := currentTime.Sub(s.bucketStartTime)
-	s.advanceAndResetLocked(elapsed)
+	s.advanceAndReset(elapsed)
 	totalTasks := s.tasks.totalTasks()
 
-	elapsedTime := min(currentTime.Sub(s.bucketStartTime)+s.totalInterval,
+	elapsedTime := min(
+		currentTime.Sub(s.bucketStartTime)+s.totalInterval,
 		currentTime.Sub(s.startTime))
 
 	if elapsedTime <= 0 {
-		return 0
+		return 0, false
 	}
 
 	// rate per second
-	return float32(totalTasks) / float32(elapsedTime.Seconds())
+	full := elapsedTime >= s.totalInterval
+	return float32(totalTasks) / float32(elapsedTime.Seconds()), full
 }

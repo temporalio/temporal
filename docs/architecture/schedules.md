@@ -5,10 +5,10 @@ This page documents the internal architecture behind Temporal's [Schedules featu
 
 ### Introduction
 
-Scheduler is implemented as a [CHASM](https://github.com/temporalio/temporal/blob/main/docs/architecture/chasm.md) library, with all related implementation code located in [`chasm/lib/scheduler`](https://github.com/temporalio/temporal/tree/main/chasm/lib/scheduler). Every schedule is backed by an execution whose root component is a [`Scheduler`](https://github.com/temporalio/temporal/blob/main/chasm/lib/scheduler/scheduler.go#L35), which parents several other key components:
+Scheduler is implemented as a [CHASM](https://github.com/temporalio/temporal/blob/main/docs/architecture/chasm.md) library, with all related implementation code located in [`chasm/lib/scheduler`](https://github.com/temporalio/temporal/tree/main/chasm/lib/scheduler). Every schedule is backed by an execution whose root component is a [`Scheduler`](https://github.com/temporalio/temporal/blob/main/chasm/lib/scheduler/scheduler.go), which parents several other key components:
 
-* [**Generator**](https://github.com/temporalio/temporal/blob/main/chasm/lib/scheduler/generator.go#L11): buffers actions in accordance with the schedule's specification (one per `Scheduler`).
-* [**Invoker**](https://github.com/temporalio/temporal/blob/main/chasm/lib/scheduler/invoker.go#L16): executes buffered actions and handles retry logic (one per `Scheduler`).
+* [**Generator**](https://github.com/temporalio/temporal/blob/main/chasm/lib/scheduler/generator.go): buffers actions in accordance with the schedule's specification (one per `Scheduler`).
+* [**Invoker**](https://github.com/temporalio/temporal/blob/main/chasm/lib/scheduler/invoker.go): executes buffered actions and handles retry logic (one per `Scheduler`).
 * [**Backfiller**](https://github.com/temporalio/temporal/blob/main/chasm/lib/scheduler/backfiller.go): buffers actions from manually requested backfills and trigger requests (one `Backfiller` per pending request).
 
 Only the `Invoker` makes service calls with side effect tasks; the rest of the scheduler is driven through pure timer tasks. The `Scheduler` component itself implements required CHASM interfaces for lifecycle management and visibility, request-reply handler functions, and helper functions for mutating state common to the entire scheduler tree.
@@ -50,7 +50,11 @@ classDiagram
 
 ### Generator (Automated Actions)
 
-The Generator component buffers automated actions according to the schedule's specification. This is driven through `GeneratorTask`, a timer task that fires, and re-schedules itself, on the schedule's interval until the schedule is complete. Generator is solely responsible for buffering automated actions, not driving those actions to execution; that work is handed off to the `Invoker`. The following high-level sequence diagram indicates the Generator's contribution towards firing an action:
+The Generator component buffers automated actions according to the schedule's specification. This is driven through `GeneratorTask`, a timer task that fires, and re-schedules itself, on the schedule's interval until the schedule is complete. Generator is solely responsible for buffering automated actions, not driving those actions to execution; that work is handed off to the `Invoker`.
+
+The Generator runs continuously rather than stopping while paused: a paused fire still advances the high water mark but produces no `BufferedStart`s. This guarantees that `FutureActionTimes` remains accurate, including in visibility, even for paused schedules.
+
+The following high-level sequence diagram indicates the Generator's contribution towards firing an action:
 
 ```mermaid
 sequenceDiagram
@@ -84,7 +88,7 @@ sequenceDiagram
 #### Tasks
 `GeneratorTask`: Drives the automated actions loop. When a schedule is first created (or updated), a `GeneratorTask` is scheduled for immediate execution. `GeneratorTask` will reschedule itself for subsequent execution at the point in time where the next automated action is scheduled to fire. If the schedule has completed (by exceeding its lifetime, or action count), `GeneratorTask` won't reschedule itself, and will instead schedule the Scheduler's `IdleTask`. The idle task keeps the schedule open for a retention period before closing it, ensuring the schedule doesn't immediately disappear after completion.
 
-`GeneratorTask`'s primary responsibility is to call `EnqueueBufferedStarts` on the `Invoker`, handing off actions for execution (see also *Specification Processor* in this document):
+`GeneratorTask`'s primary responsibility is to call `EnqueueBufferedStarts` on the `Invoker`, handing off actions for execution (see also *Specification Processor* in this document). After processing, three terminal outcomes are possible: arm the idle task to close the schedule, reschedule for the next spec wakeup, or hold open without a task (paused with no spec wakeup, or a paused schedule with a pending backfiller - revived by external events like `Patch.Unpause` or `BackfillerTask` completion).
 
 ```mermaid
 flowchart TD
@@ -97,8 +101,9 @@ flowchart TD
     G[Update LastProcessedTime]
     H{Is scheduler idle?}
     I[Schedule IdleTask]
-    J{Is scheduler paused?}
+    J{Spec has next wakeup?}
     K[Reschedule GeneratorTask]
+    M[Hold open - no task]
     L{{Finish executing}}
 
     A --> B
@@ -113,21 +118,20 @@ flowchart TD
     H -->|Yes| I
     H -->|No| J
     I --> L
-    J -->|Yes| L
-    J -->|No| K
+    J -->|Yes| K
+    J -->|No| M
     K --> L
+    M --> L
 ```
 
 *Figure: `GeneratorTask`'s decision tree for buffering starts (trivial branches omitted).*
-
-Note that when the schedule is paused, `GeneratorTask` finishes without rescheduling itself. Whenever the schedule is updated (including being resumed from a paused state), a new `GeneratorTask` is scheduled for immediate execution, restarting the loop.
 
 #### Notes
 - At time of writing, `FutureActionTimes` is also maintained in Generator's state. This field is a cached view of speculated action times, and is returned as part of describe responses, but is not involved in actual start time calculations, action buffering, or even as assured guarantees of execution (e.g., a listed time may be dropped for having missed catchup window).
 
 ### Backfiller (Manual Actions)
 
-A Backfiller component is created for every backfill requested through the API (including "trigger immediately" requests). Similar to the `GeneratorTask`, the `BackfillerTask` is responsible for driving a backfill to completion by enqueueing buffered actions into the Invoker. Each backfiller acts as a distinct buffer per backfill request, and will avoid [monopolizing the Invoker's shared `BufferedStarts` field](https://github.com/temporalio/temporal/blob/658b80da2ed66355fe78650788ac33814ffd1561/chasm/lib/scheduler/backfiller_tasks.go#L233-L234), instead backing off and retrying while waiting for the buffer to drain. 
+A Backfiller component is created for every backfill requested through the API (including "trigger immediately" requests). Similar to the `GeneratorTask`, the `BackfillerTask` is responsible for driving a backfill to completion by enqueueing buffered actions into the Invoker. Each backfiller acts as a distinct buffer per backfill request, and will avoid monopolizing the Invoker's shared `BufferedStarts` field (see [`BackfillerTask.Execute`](https://github.com/temporalio/temporal/blob/main/chasm/lib/scheduler/backfiller_tasks.go) for the buffer-full backoff), instead backing off and retrying while waiting for the buffer to drain. 
 
 The Backfiller component fits into the scheduler sequence diagram similarly to the Generator:
 
@@ -193,7 +197,7 @@ The Invoker component is responsible for driving buffered starts to execution, m
 
 #### State
 - `BufferedStarts`: Invoker manages the scheduler's buffered starts/actions through their entire lifecycle (see *BufferedStart Lifecycle* below). The Invoker function `EnqueueBufferedStarts` is used to schedule an action for execution by adding it to this list, setting `Attempt` to `0`. Once added to the list, the `ProcessBufferTask` will evaluate the schedule's overlap policy, as well as other scheduler state, before bumping `Attempt` to `1`, which makes it eligible for `ExecuteTask` to drive to completion. Entries remain in `BufferedStarts` after starting (with `RunId` set) and after completion (with `Completed` set), providing computed views for running workflows and recent actions.
-	- Each `BufferedStart` entry is itself stateful, maintaining its own `Attempt` and `BackoffTime`. Only once `Attempt` is past `0` will it be eligible for execution (see [`getEligibleBufferedStarts`](https://github.com/temporalio/temporal/blob/85635674d7c55a8679b715b118aaf14c973266eb/chasm/lib/scheduler/invoker.go#L276)).
+	- Each `BufferedStart` entry is itself stateful, maintaining its own `Attempt` and `BackoffTime`. Only once `Attempt` is past `0` will it be eligible for execution (see `getEligibleBufferedStarts` in [`invoker.go`](https://github.com/temporalio/temporal/blob/main/chasm/lib/scheduler/invoker.go)).
 - `CancelWorkflows`: Workflows that will be cancelled due to overlap policy. The `ProcessBufferTask` adds to this list, and the `ExecuteTask` consumes the list.
 - `TerminateWorkflows`: Similar to `CancelWorkflows`.
 - `LastProcessedTime`: A high water mark used to evaluate when to fire tasks that are pending a retry after execution failure.
@@ -208,10 +212,9 @@ flowchart TD
     C{Need terminate or cancel?}
     D[Queue terminate/cancel requests]
     E{Starts ready for execution?}
-    F{Is action manual?}
-    G{Is schedule paused?}
-    H{Scheduled actions remaining?}
     I{Is start expired?}
+    F{Is action manual?}
+    N{Paused or no actions remaining?}
     J[Discard start]
     K[Mark for execution]
     L([Schedule ExecuteTask])
@@ -222,24 +225,22 @@ flowchart TD
     C -->|Yes| D
     C -->|No| E
     D --> E
-    E -->|Yes| F
+    E -->|Yes| I
     E -->|No| L
-    F -->|Yes| I
-    F -->|No| G
-    G -->|Yes| J
-    G -->|No| H
-    H -->|No| J
-    H -->|Yes| I
     I -->|Yes| J
-    I -->|No| K
+    I -->|No| F
+    F -->|Yes| K
+    F -->|No| N
+    N -->|Yes| J
+    N -->|No| K
     J --> E
     K --> E
     L --> M
 ```
 
-*Figure: `ProcessBufferTask`'s decision tree (trivial branches omitted).*
+*Figure: `ProcessBufferTask`'s decision tree (trivial branches omitted). The catchup-window check runs before consuming a `LimitedActions` slot - otherwise an expired start would burn a slot it never actually used.*
 
-`ExecuteTask`: Drives all [eligible buffered starts](https://github.com/temporalio/temporal/blob/85635674d7c55a8679b715b118aaf14c973266eb/chasm/lib/scheduler/invoker.go#L276) and pending cancel/terminate requests to execution by making service calls. `ExecuteTask` reschedules itself whenever a service call fails and must be retried, as well as when it wants to "checkpoint" a batch of completed executions by flushing to mutable state.
+`ExecuteTask`: Drives all eligible buffered starts (via `getEligibleBufferedStarts` in [`invoker.go`](https://github.com/temporalio/temporal/blob/main/chasm/lib/scheduler/invoker.go)) and pending cancel/terminate requests to execution by making service calls. On retryable failures, the start's `BackoffTime` is set and `addTasks` arms a future `ProcessBufferTask` at that backoff. There's no direct "reschedule ExecuteTask after backoff" path: `ProcessBufferTask` fires at the backoff deadline, re-promotes the eligible start, then emits a fresh `ExecuteTask`.
 
 ```mermaid
 flowchart TD
@@ -256,8 +257,8 @@ flowchart TD
     K[Apply backoff for retry]
     L[Drop start]
     M([Record execute results])
-    N{Starts pending retry?}
-    O([Reschedule ExecuteTask])
+    N{Any buffered starts left?}
+    O([addTasks: ProcessBuffer at backoff, or Execute immediate])
     P{{Finish executing}}
 
     A --> B
@@ -341,7 +342,7 @@ The `BufferedStarts` queue allows scheduler to compute the following `Info` bloc
 
 ### Completion Callbacks
 
-In order to determine when an action started by a schedule has completed, Scheduler makes use of Nexus completion callbacks. When the Invoker starts an action, a Nexus callback token [is generated](https://github.com/temporalio/temporal/blob/main/chasm/nexus_completion.go#L26), and set as part of the [`StartWorkflowExecution` request](https://github.com/temporalio/temporal/blob/main/chasm/lib/scheduler/invoker_tasks.go#L551). Once the action has completed, the callback mechanism will eventually trigger the [scheduler's completion handler](https://github.com/temporalio/temporal/blob/main/chasm/lib/scheduler/scheduler.go#L419).
+In order to determine when an action started by a schedule has completed, Scheduler makes use of Nexus completion callbacks. When the Invoker starts an action, a Nexus callback token is generated (see `GenerateNexusCallback` in [`nexus_completion.go`](https://github.com/temporalio/temporal/blob/main/chasm/nexus_completion.go)), and set as part of the `StartWorkflowExecution` request (see `startWorkflow` in [`invoker_tasks.go`](https://github.com/temporalio/temporal/blob/main/chasm/lib/scheduler/invoker_tasks.go)). Once the action has completed, the callback mechanism will eventually trigger the scheduler's completion handler (see `HandleNexusCompletion` in [`scheduler.go`](https://github.com/temporalio/temporal/blob/main/chasm/lib/scheduler/scheduler.go)).
 
 The completion handler has several responsibilities:
 - Records the completed action's payloads (success/failure) to the scheduler's `LastCompletionResult`.
@@ -350,8 +351,20 @@ The completion handler has several responsibilities:
 - Records the action's close time, to measure the latency between "last action completed" and "next action started" when multiple starts are buffered sequentially and pending execution.
 - Applies retention to keep only the most recent completed actions in `BufferedStarts`.
 - Schedules another `ProcessBufferTask`, as a completion may make a buffered start eligible for execution.
+- Schedules another `GeneratorTask`, to handle a potentially updated idle close time.
 
 Nexus completion callbacks are the only way that Scheduler can find out about an action's completion (there is no additional synchronous path). When the Invoker's `ProcessBufferTask` evaluates running workflow status, the computed view of running workflows (derived from `BufferedStarts` entries with `RunId` set but not completed) is used instead of making additional describe calls. 
+
+### Idle Task (Closing)
+
+`SchedulerIdleTask` is a pure task armed by the `Generator` when it determines the schedule has no more work to do (no future spec wakeups, no pending backfills, no remaining limited actions, and not paused). When the task fires, it sets `Scheduler.Closed = true`, ending the schedule's lifetime. Between arming and firing the task waits `IdleTime` (a tweakable, default 7 days), which is the retention window during which a customer can still describe/modify the schedule.
+
+`Validate` enforces three drop conditions, each tagged with a `reason` for the `ScheduleIdleTaskInvalidated` counter:
+- `closed` - the schedule is already closed (idempotency guard).
+- `held_open` - the schedule transitioned into a state that disqualifies idle close: paused or has a pending backfiller.
+- `expiration_shift` - the recomputed idle deadline (anchor + `IdleTime`) has moved later than the task's `ScheduledTime`, meaning the Generator has since armed a new task at the correct deadline.
+
+Manual-only schedules (no automated wakeup source, e.g. TriggerImmediately-only) idle out like any other schedule when unpaused - `lastEventTime` is advanced by manual triggers via `recentActions`, matching V1's `RetentionTime` semantics. Sentinels are exempt from `held_open` and anchor their idle deadline on `CreateTime` directly - they exist to reserve a schedule ID and must close regardless of their otherwise-paused/empty state.
 
 ### Specification Processor
 

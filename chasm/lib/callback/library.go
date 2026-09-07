@@ -5,6 +5,8 @@ import (
 	"google.golang.org/grpc"
 )
 
+const InvocationTaskGroup = chasm.CallbackLibraryName + ".invoke"
+
 type (
 	Library struct {
 		chasm.UnimplementedLibrary
@@ -13,6 +15,12 @@ type (
 		BackoffTaskHandler    *backoffTaskHandler
 	}
 )
+
+// NewNilLibrary creates a Library with all nil handlers. Useful for
+// registration-only contexts like tdbg where no task execution is needed.
+func NewNilLibrary() *Library {
+	return &Library{}
+}
 
 func newLibrary(
 	InvocationTaskHandler *invocationTaskHandler,
@@ -42,6 +50,7 @@ func (l *Library) Tasks() []*chasm.RegistrableTask {
 		chasm.NewRegistrableSideEffectTask(
 			"invoke",
 			l.InvocationTaskHandler,
+			chasm.WithTaskGroup(InvocationTaskGroup),
 		),
 		chasm.NewRegistrablePureTask(
 			"backoff",

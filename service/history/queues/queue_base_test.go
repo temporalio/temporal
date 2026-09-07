@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/predicates"
@@ -59,6 +60,7 @@ var testQueueOptions = Options{
 	MonitorOptions: MonitorOptions{
 		PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
 		ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(5),
+		ReaderStuckShadowMode:       dynamicconfig.GetBoolPropertyFn(false),
 		SliceCountCriticalThreshold: dynamicconfig.GetIntPropertyFn(50),
 	},
 	MaxPollRPS:                          dynamicconfig.GetIntPropertyFn(20),
@@ -69,6 +71,7 @@ var testQueueOptions = Options{
 	MaxReaderCount:                      dynamicconfig.GetIntPropertyFn(5),
 	MoveGroupTaskCountBase:              dynamicconfig.GetIntPropertyFn(0),
 	MoveGroupTaskCountMultiplier:        dynamicconfig.GetFloatPropertyFn(3.0),
+	ShrinkPredicateMaxPendingKeys:       dynamicconfig.GetIntPropertyFn(10),
 }
 
 func TestQueueBaseSuite(t *testing.T) {
@@ -136,10 +139,12 @@ func (s *queueBaseSuite) TestNewProcessBase_WithPreviousState_RestoreSucceed() {
 							ExclusiveMax: &persistencespb.TaskKey{FireTime: timestamppb.New(tasks.DefaultFireTime), TaskId: 3000},
 						},
 						Predicate: &persistencespb.Predicate{
-							PredicateType: enumsspb.PREDICATE_TYPE_TASK_TYPE,
-							Attributes: &persistencespb.Predicate_TaskTypePredicateAttributes{
-								TaskTypePredicateAttributes: &persistencespb.TaskTypePredicateAttributes{
-									TaskTypes: []enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER},
+							PredicateType: enumsspb.PREDICATE_TYPE_OUTBOUND_TASK,
+							Attributes: &persistencespb.Predicate_OutboundTaskPredicateAttributes{
+								OutboundTaskPredicateAttributes: &persistencespb.OutboundTaskPredicateAttributes{
+									Groups: []*persistencespb.OutboundTaskPredicateAttributes_Group{
+										{TaskGroup: "g1", NamespaceId: "n1", Destination: "d1"},
+									},
 								},
 							},
 						},
@@ -209,6 +214,7 @@ func (s *queueBaseSuite) TestStartStop() {
 			key := NewRandomKeyInRange(paginationRange)
 			mockTask.EXPECT().GetKey().Return(key).AnyTimes()
 			mockTask.EXPECT().GetNamespaceID().Return(uuid.NewString()).AnyTimes()
+			mockTask.EXPECT().GetWorkflowID().Return(uuid.NewString()).AnyTimes()
 			mockTask.EXPECT().GetVisibilityTime().Return(time.Now()).AnyTimes()
 			return []tasks.Task{mockTask}, nil, nil
 		}
@@ -453,11 +459,107 @@ func (s *queueBaseSuite) TestCheckPoint_NoPendingTasks() {
 	s.True(exclusiveReaderHighWatermark.CompareTo(base.exclusiveDeletionHighWatermark) == 0)
 }
 
+func (s *queueBaseSuite) TestCheckPoint_RecordsSliceCountWithTaskCategoryTag() {
+	numSlices := 3
+	scopes := NewRandomScopes(numSlices)
+	queueState := &queueState{
+		readerScopes: map[int64][]Scope{
+			DefaultReaderId: scopes,
+		},
+		exclusiveReaderHighWatermark: tasks.MaximumKey,
+	}
+	persistenceState := ToPersistenceQueueState(queueState)
+
+	mockShard := shard.NewTestContext(
+		s.controller,
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 10,
+			QueueStates: map[int32]*persistencespb.QueueState{
+				int32(tasks.CategoryIDTimer): persistenceState,
+			},
+		},
+		s.config,
+	)
+	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	mockShard.Resource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+	s.metricsHandler = captureHandler
+
+	base := s.newQueueBase(mockShard, tasks.CategoryTimer, nil)
+	base.checkpointTimer = time.NewTimer(s.options.CheckpointInterval())
+
+	// set to a smaller value so that delete will be triggered, matching TestCheckPoint_SlicePredicateAction
+	base.exclusiveDeletionHighWatermark = tasks.MinimumKey
+
+	mockShard.Resource.ExecutionMgr.EXPECT().RangeCompleteHistoryTasks(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	mockShard.Resource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
+	base.checkpoint()
+
+	snapshot := capture.Snapshot()
+	recordings := snapshot[metrics.QueueSliceCountHistogram.Name()]
+	s.Require().Len(recordings, 1)
+	s.Equal(int64(numSlices), recordings[0].Value)
+	s.Equal(tasks.CategoryTimer.Name(), recordings[0].Tags["task_category"])
+}
+
+func (s *queueBaseSuite) TestCheckPoint_RecordsSliceCountTotal() {
+	numSlices := 3
+	scopes := NewRandomScopes(numSlices)
+	queueState := &queueState{
+		readerScopes: map[int64][]Scope{
+			DefaultReaderId: scopes,
+		},
+		exclusiveReaderHighWatermark: tasks.MaximumKey,
+	}
+	persistenceState := ToPersistenceQueueState(queueState)
+
+	mockShard := shard.NewTestContext(
+		s.controller,
+		&persistencespb.ShardInfo{
+			ShardId: 0,
+			RangeId: 10,
+			QueueStates: map[int32]*persistencespb.QueueState{
+				int32(tasks.CategoryIDTimer): persistenceState,
+			},
+		},
+		s.config,
+	)
+	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	mockShard.Resource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+	s.metricsHandler = captureHandler
+
+	base := s.newQueueBase(mockShard, tasks.CategoryTimer, nil)
+	base.checkpointTimer = time.NewTimer(s.options.CheckpointInterval())
+
+	// set to a smaller value so that delete will be triggered, matching TestCheckPoint_SlicePredicateAction
+	base.exclusiveDeletionHighWatermark = tasks.MinimumKey
+
+	mockShard.Resource.ExecutionMgr.EXPECT().RangeCompleteHistoryTasks(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	mockShard.Resource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
+	base.checkpoint()
+
+	snapshot := capture.Snapshot()
+	recordings := snapshot[metrics.QueueSliceCountTotal.Name()]
+	s.Require().Len(recordings, 1)
+	s.Equal(int64(numSlices), recordings[0].Value)
+	s.Equal(tasks.CategoryTimer.Name(), recordings[0].Tags["task_category"])
+}
+
 func (s *queueBaseSuite) TestCheckPoint_SlicePredicateAction() {
 	exclusiveReaderHighWatermark := tasks.MaximumKey
 	scopes := NewRandomScopes(3)
 	scopes[0].Predicate = tasks.NewNamespacePredicate([]string{uuid.NewString()})
-	scopes[2].Predicate = tasks.NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER})
+	scopes[2].Predicate = tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{{TaskGroup: "g1", NamespaceID: "n1", Destination: "d1"}})
 	initialQueueState := &queueState{
 		readerScopes: map[int64][]Scope{
 			DefaultReaderId: scopes,
@@ -553,6 +655,7 @@ func (s *queueBaseSuite) TestCheckPoint_MoveTaskGroupAction() {
 			mockTask := tasks.NewMockTask(s.controller)
 			mockTask.EXPECT().GetKey().Return(NewRandomKeyInRange(sliceRange)).AnyTimes()
 			mockTask.EXPECT().GetNamespaceID().Return(namespaceID).AnyTimes()
+			mockTask.EXPECT().GetWorkflowID().Return(uuid.NewString()).AnyTimes()
 			mockTask.EXPECT().GetVisibilityTime().Return(time.Now()).AnyTimes()
 			slice.(*SliceImpl).add(base.executableFactory.NewExecutable(mockTask, readerID))
 		}
@@ -568,7 +671,7 @@ func (s *queueBaseSuite) TestCheckPoint_MoveTaskGroupAction() {
 	reader0Scopes := scopes[:3]
 	reader0Slices := make([]Slice, 0, len(reader0Scopes))
 	for _, scope := range reader0Scopes {
-		slice := NewSlice(base.paginationFnProvider, base.executableFactory, base.monitor, scope, GrouperNamespaceID{}, noPredicateSizeLimit)
+		slice := NewSlice(base.paginationFnProvider, base.executableFactory, base.monitor, scope, GrouperNamespaceID{}, noPredicateSizeLimit, defaultMaxPendingKeys, metrics.NoopMetricsHandler)
 		// manually set iterators to nil as we will be adding tasks directly to the slice
 		slice.iterators = nil
 		reader0Slices = append(reader0Slices, slice)
@@ -585,7 +688,7 @@ func (s *queueBaseSuite) TestCheckPoint_MoveTaskGroupAction() {
 	reader1Scopes := scopes[3:4]
 	reader1Slices := make([]Slice, 0, len(reader1Scopes))
 	for _, scope := range reader1Scopes {
-		slice := NewSlice(base.paginationFnProvider, base.executableFactory, base.monitor, scope, GrouperNamespaceID{}, noPredicateSizeLimit)
+		slice := NewSlice(base.paginationFnProvider, base.executableFactory, base.monitor, scope, GrouperNamespaceID{}, noPredicateSizeLimit, defaultMaxPendingKeys, metrics.NoopMetricsHandler)
 		// manually set iterators to nil as we will be adding tasks directly to the slice
 		slice.iterators = nil
 		reader1Slices = append(reader1Slices, slice)

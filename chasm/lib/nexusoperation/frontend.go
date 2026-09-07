@@ -36,11 +36,9 @@ var ErrStandaloneNexusOperationDisabled = serviceerror.NewUnimplemented("Standal
 type frontendHandler struct {
 	client            nexusoperationpb.NexusOperationServiceClient
 	config            *Config
-	logger            log.Logger
 	namespaceRegistry namespace.Registry
 	endpointRegistry  commonnexus.EndpointRegistry
-	saMapperProvider  searchattribute.MapperProvider
-	saValidator       *searchattribute.Validator
+	validator         *validator
 }
 
 func NewFrontendHandler(
@@ -55,11 +53,9 @@ func NewFrontendHandler(
 	return &frontendHandler{
 		client:            client,
 		config:            config,
-		logger:            logger,
 		namespaceRegistry: namespaceRegistry,
 		endpointRegistry:  endpointRegistry,
-		saMapperProvider:  saMapperProvider,
-		saValidator:       saValidator,
+		validator:         newValidator(config, logger, saMapperProvider, saValidator),
 	}
 }
 
@@ -76,7 +72,7 @@ func (h *frontendHandler) StartNexusOperationExecution(
 		return nil, err
 	}
 
-	if err := validateAndNormalizeStartRequest(req, h.config, h.logger, h.saMapperProvider, h.saValidator); err != nil {
+	if err := h.validator.validateAndNormalizeStartRequest(req); err != nil {
 		return nil, err
 	}
 
@@ -107,7 +103,7 @@ func (h *frontendHandler) DescribeNexusOperationExecution(
 		return nil, err
 	}
 
-	if err := validateAndNormalizeDescribeRequest(req, namespaceID.String(), h.config); err != nil {
+	if err := h.validator.validateAndNormalizeDescribeRequest(req, namespaceID.String()); err != nil {
 		return nil, err
 	}
 
@@ -127,7 +123,7 @@ func (h *frontendHandler) PollNexusOperationExecution(
 		return nil, ErrStandaloneNexusOperationDisabled
 	}
 
-	if err := validateAndNormalizePollRequest(req, h.config); err != nil {
+	if err := h.validator.validateAndNormalizePollRequest(req); err != nil {
 		return nil, err
 	}
 
@@ -248,7 +244,7 @@ func (h *frontendHandler) RequestCancelNexusOperationExecution(
 		return nil, err
 	}
 
-	if err := validateAndNormalizeCancelRequest(req, h.config); err != nil {
+	if err := h.validator.validateAndNormalizeCancelRequest(req); err != nil {
 		return nil, err
 	}
 
@@ -276,7 +272,7 @@ func (h *frontendHandler) TerminateNexusOperationExecution(
 		return nil, err
 	}
 
-	if err := validateAndNormalizeTerminateRequest(req, h.config); err != nil {
+	if err := h.validator.validateAndNormalizeTerminateRequest(req); err != nil {
 		return nil, err
 	}
 
@@ -304,7 +300,7 @@ func (h *frontendHandler) DeleteNexusOperationExecution(
 		return nil, err
 	}
 
-	if err := validateAndNormalizeDeleteRequest(req, h.config); err != nil {
+	if err := h.validator.validateAndNormalizeDeleteRequest(req); err != nil {
 		return nil, err
 	}
 

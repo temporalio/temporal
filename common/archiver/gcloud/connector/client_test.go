@@ -240,7 +240,7 @@ func (s *clientSuite) TestQuery() {
 	s.Require().NoError(err)
 	fileNames, err = storageWrapper.Query(ctx, URI, "7478875943689868082123907395549832634615673687049942026838")
 	s.Require().NoError(err)
-	s.Equal(strings.Join(fileNames, ", "), "fileName_01")
+	s.Equal("fileName_01", strings.Join(fileNames, ", "))
 }
 
 func (s *clientSuite) TestQueryWithFilter() {
@@ -277,7 +277,7 @@ func (s *clientSuite) TestQueryWithFilter() {
 	fileNames, _, _, err = storageWrapper.QueryWithFilters(ctx, URI, "closeTimeout_2020-02-27T09:42:28Z", 0, 0, []connector.Precondition{newWorkflowIDPrecondition("4418294404690464320")})
 
 	s.Require().NoError(err)
-	s.Equal(strings.Join(fileNames, ", "), "closeTimeout_2020-02-27T09:42:28Z_12851121011173788097_4418294404690464320_15619178330501475177.visibility")
+	s.Equal("closeTimeout_2020-02-27T09:42:28Z_12851121011173788097_4418294404690464320_15619178330501475177.visibility", strings.Join(fileNames, ", "))
 }
 
 func newWorkflowIDPrecondition(workflowID string) connector.Precondition {

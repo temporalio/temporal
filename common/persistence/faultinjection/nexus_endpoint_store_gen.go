@@ -33,7 +33,7 @@ func newFaultInjectionNexusEndpointStore(
 
 // CreateOrUpdateNexusEndpoint wraps NexusEndpointStore.CreateOrUpdateNexusEndpoint.
 func (d faultInjectionNexusEndpointStore) CreateOrUpdateNexusEndpoint(ctx context.Context, request *_sourcePersistence.InternalCreateOrUpdateNexusEndpointRequest) (err error) {
-	err = d.generator.generate("CreateOrUpdateNexusEndpoint").inject(func() error {
+	err = d.generator.generate("CreateOrUpdateNexusEndpoint", request).inject(func() error {
 		err = d.NexusEndpointStore.CreateOrUpdateNexusEndpoint(ctx, request)
 		return err
 	})
@@ -42,7 +42,7 @@ func (d faultInjectionNexusEndpointStore) CreateOrUpdateNexusEndpoint(ctx contex
 
 // DeleteNexusEndpoint wraps NexusEndpointStore.DeleteNexusEndpoint.
 func (d faultInjectionNexusEndpointStore) DeleteNexusEndpoint(ctx context.Context, request *_sourcePersistence.DeleteNexusEndpointRequest) (err error) {
-	err = d.generator.generate("DeleteNexusEndpoint").inject(func() error {
+	err = d.generator.generate("DeleteNexusEndpoint", request).inject(func() error {
 		err = d.NexusEndpointStore.DeleteNexusEndpoint(ctx, request)
 		return err
 	})
@@ -51,7 +51,7 @@ func (d faultInjectionNexusEndpointStore) DeleteNexusEndpoint(ctx context.Contex
 
 // GetNexusEndpoint wraps NexusEndpointStore.GetNexusEndpoint.
 func (d faultInjectionNexusEndpointStore) GetNexusEndpoint(ctx context.Context, request *_sourcePersistence.GetNexusEndpointRequest) (ip1 *_sourcePersistence.InternalNexusEndpoint, err error) {
-	err = d.generator.generate("GetNexusEndpoint").inject(func() error {
+	err = d.generator.generate("GetNexusEndpoint", request).inject(func() error {
 		ip1, err = d.NexusEndpointStore.GetNexusEndpoint(ctx, request)
 		return err
 	})
@@ -60,7 +60,7 @@ func (d faultInjectionNexusEndpointStore) GetNexusEndpoint(ctx context.Context, 
 
 // ListNexusEndpoints wraps NexusEndpointStore.ListNexusEndpoints.
 func (d faultInjectionNexusEndpointStore) ListNexusEndpoints(ctx context.Context, request *_sourcePersistence.ListNexusEndpointsRequest) (ip1 *_sourcePersistence.InternalListNexusEndpointsResponse, err error) {
-	err = d.generator.generate("ListNexusEndpoints").inject(func() error {
+	err = d.generator.generate("ListNexusEndpoints", request).inject(func() error {
 		ip1, err = d.NexusEndpointStore.ListNexusEndpoints(ctx, request)
 		return err
 	})

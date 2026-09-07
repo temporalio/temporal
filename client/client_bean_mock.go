@@ -44,6 +44,18 @@ func (m *MockBean) EXPECT() *MockBeanMockRecorder {
 	return m.recorder
 }
 
+// Close mocks base method.
+func (m *MockBean) Close() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Close")
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockBeanMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockBean)(nil).Close))
+}
+
 // GetFrontendClient mocks base method.
 func (m *MockBean) GetFrontendClient() workflowservice.WorkflowServiceClient {
 	m.ctrl.T.Helper()

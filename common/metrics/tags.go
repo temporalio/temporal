@@ -28,6 +28,8 @@ const (
 	targetCluster           = "target_cluster"
 	taskSourceTag           = "source"
 	forwardedTag            = "forwarded"
+	pollResultTagName       = "poll_result"
+	pollerScaleDecisionTag  = "decision"
 	fromCluster             = "from_cluster"
 	toCluster               = "to_cluster"
 	taskQueue               = "taskqueue"
@@ -45,7 +47,7 @@ const (
 	// See server.api.enums.v1.ReplicationTaskType
 	replicationTaskType                            = "replicationTaskType"
 	replicationTaskPriority                        = "replicationTaskPriority"
-	taskExpireStage                                = "task_expire_stage"
+	taskAddResult                                  = "task_add_result"
 	versioningBehavior                             = "versioning_behavior"
 	continueAsNewVersioningBehavior                = "continue_as_new_versioning_behavior"
 	suggestContinueAsNewReasonTooManyUpdates       = "suggest_continue_as_new_reason_too_many_updates"
@@ -62,13 +64,13 @@ const (
 	namespaceAllValue                              = "all"
 	clientName                                     = "client_name"
 	isInternal                                     = "is_internal"
-	activityTargetingMethod                        = "activity_targeting_method"
 	unknownValue                                   = "_unknown_"
 	totalMetricSuffix                              = "_total"
 	tagExcludedValue                               = "_tag_excluded_"
 	falseValue                                     = "false"
 	trueValue                                      = "true"
 	errorPrefix                                    = "*"
+	ScalerShadowModeTagName                        = "scaler_shadow_mode"
 
 	queryTypeStackTrace       = "__stack_trace"
 	queryTypeOpenSessions     = "__open_sessions"
@@ -224,11 +226,6 @@ func ActivityTypeTag(value string) Tag {
 	return Tag{Key: activityType, Value: value}
 }
 
-// ActivityTargetingMethodTag returns a tag indicating how the activity was targeted: "id" or "type".
-func ActivityTargetingMethodTag(value string) Tag {
-	return Tag{Key: activityTargetingMethod, Value: value}
-}
-
 // CommandTypeTag returns a new command type tag.
 func CommandTypeTag(value string) Tag {
 	if len(value) == 0 {
@@ -313,6 +310,42 @@ func TaskSourceTag(source enumsspb.TaskSource) Tag {
 
 func ForwardedTag(forwarded bool) Tag {
 	return Tag{Key: forwardedTag, Value: strconv.FormatBool(forwarded)}
+}
+
+func PollResultTag(result string) Tag {
+	return Tag{Key: pollResultTagName, Value: result}
+}
+
+const (
+	TaskAddResultSyncMatch        = "sync_match"
+	TaskAddResultSyncMatchUnavail = "sync_match_unavailable"
+	TaskAddResultBacklog          = "backlog"
+	TaskAddResultThrottled        = "throttled"
+	TaskAddResultFailure          = "failure"
+)
+
+func TaskAddResultTag(result string) Tag {
+	return Tag{Key: taskAddResult, Value: result}
+}
+
+const (
+	PollerScaleDecisionUp   = "scale_up"
+	PollerScaleDecisionDown = "scale_down"
+	PollerScaleDecisionHold = "hold"
+)
+
+const (
+	PollerScaleReasonIdle                 ReasonString = "idle"
+	PollerScaleReasonDelay                ReasonString = "delay"
+	PollerScaleReasonRatio                ReasonString = "ratio"
+	PollerScaleReasonRateLimited          ReasonString = "rate_limited"
+	PollerScaleReasonTaskQueueRateLimited ReasonString = "task_queue_rate_limited"
+)
+
+// PollerScaleDecisionTag records the direction of a poller scaling decision (scale up, scale
+// down, or hold). Pair it with ReasonTag for the cause. See metrics.PollerScaleDecisionCounter.
+func PollerScaleDecisionTag(decision string) Tag {
+	return Tag{Key: pollerScaleDecisionTag, Value: decision}
 }
 
 func MatchingTaskPriorityTag(value int32) Tag {
@@ -407,6 +440,22 @@ func ResourceExhaustedCauseTag(cause enumspb.ResourceExhaustedCause) Tag {
 func ResourceExhaustedScopeTag(scope enumspb.ResourceExhaustedScope) Tag {
 	return Tag{Key: resourceExhaustedScopeTag, Value: scope.String()}
 }
+
+func LastAttemptCauseTag(value string) Tag {
+	return Tag{Key: LastAttemptCauseTagName, Value: value}
+}
+
+// Values for AttemptStageTagName, identifying whether TaskAlertableAttempt was recorded
+// mid-retry or at the attempt's final resolution.
+const (
+	AttemptStageInFlight = "in_flight"
+	AttemptStageTerminal = "terminal"
+)
+
+var (
+	AttemptStageInFlightTag = Tag{Key: AttemptStageTagName, Value: AttemptStageInFlight}
+	AttemptStageTerminalTag = Tag{Key: AttemptStageTagName, Value: AttemptStageTerminal}
+)
 
 func ServiceNameTag(value primitives.ServiceName) Tag {
 	return Tag{Key: serviceName, Value: string(value)}
@@ -548,10 +597,6 @@ func ToUnversionedTag(version string) Tag {
 	return Tag{Key: toUnversioned, Value: falseValue}
 }
 
-var TaskExpireStageReadTag = Tag{Key: taskExpireStage, Value: "read"}
-var TaskExpireStageMemoryTag = Tag{Key: taskExpireStage, Value: "memory"}
-var TaskInvalidTag = Tag{Key: taskExpireStage, Value: "invalid"}
-
 // ClientNameTag returns a new client_name tag for the SDK client name.
 func ClientNameTag(value string) Tag {
 	if len(value) == 0 {
@@ -574,4 +619,12 @@ func HeaderCallsiteTag(kind string) Tag {
 
 func TimeoutTypeTag(timeoutType string) Tag {
 	return Tag{Key: timeoutTypeTagName, Value: timeoutType}
+}
+
+func ScalerShadowModeTag(enabled bool) Tag {
+	v := falseValue
+	if enabled {
+		v = trueValue
+	}
+	return Tag{Key: ScalerShadowModeTagName, Value: v}
 }

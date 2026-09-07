@@ -17,12 +17,32 @@ import (
 	commongocql "go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
+	cassandraschema "go.temporal.io/server/schema/cassandra"
 	"go.temporal.io/server/temporal/environment"
 	"go.temporal.io/server/tests/testutils"
 )
 
 const (
 	testSchemaDir = "schema/cassandra/"
+
+	createSchemaVersionTableCQL = `CREATE TABLE IF NOT EXISTS schema_version(keyspace_name text PRIMARY KEY, ` +
+		`creation_time timestamp, ` +
+		`curr_version text, ` +
+		`min_compatible_version text);`
+
+	createSchemaUpdateHistoryTableCQL = `CREATE TABLE IF NOT EXISTS schema_update_history(` +
+		`year int, ` +
+		`month int, ` +
+		`update_time timestamp, ` +
+		`description text, ` +
+		`manifest_md5 text, ` +
+		`new_version text, ` +
+		`old_version text, ` +
+		`PRIMARY KEY ((year, month), update_time));`
+
+	writeSchemaVersionCQL = `INSERT into schema_version(keyspace_name, creation_time, curr_version, min_compatible_version) VALUES (?,?,?,?)`
+
+	writeSchemaUpdateHistoryCQL = `INSERT into schema_update_history(year, month, update_time, old_version, new_version, manifest_md5, description) VALUES(?,?,?,?,?,?,?)`
 )
 
 // TestCluster allows executing cassandra operations in testing.
@@ -93,6 +113,7 @@ func (s *TestCluster) SetupTestDatabase() {
 	}
 
 	s.LoadSchema(path.Join(schemaDir, "temporal", "schema.cql"))
+	s.loadSchemaVersion()
 }
 
 // TearDownTestDatabase from PersistenceTestCluster interface
@@ -179,6 +200,38 @@ func (s *TestCluster) LoadSchema(schemaFile string) {
 		}
 	}
 	s.logger.Info("loaded schema")
+}
+
+func (s *TestCluster) loadSchemaVersion() {
+	s.createSchemaVersionTables()
+	s.updateSchemaVersion(cassandraschema.Version, cassandraschema.Version)
+	s.writeSchemaUpdateLog("0", cassandraschema.Version, "", "initial version")
+	s.logger.Info("loaded schema version", tag.String("version", cassandraschema.Version))
+}
+
+func (s *TestCluster) createSchemaVersionTables() {
+	s.execSchemaVersionQuery(createSchemaVersionTableCQL)
+	s.execSchemaVersionQuery(createSchemaUpdateHistoryTableCQL)
+}
+
+func (s *TestCluster) updateSchemaVersion(newVersion string, minCompatibleVersion string) {
+	now := time.Now().UTC()
+	s.execSchemaVersionQuery(
+		writeSchemaVersionCQL,
+		s.keyspace, now, newVersion, minCompatibleVersion)
+}
+
+func (s *TestCluster) writeSchemaUpdateLog(oldVersion string, newVersion string, manifestMD5 string, description string) {
+	now := time.Now().UTC()
+	s.execSchemaVersionQuery(
+		writeSchemaUpdateHistoryCQL,
+		now.Year(), int(now.Month()), now, oldVersion, newVersion, manifestMD5, description)
+}
+
+func (s *TestCluster) execSchemaVersionQuery(stmt string, args ...any) {
+	if err := s.session.Query(stmt, args...).Exec(); err != nil {
+		s.logger.Fatal("loadSchemaVersion", tag.Error(err))
+	}
 }
 
 func (s *TestCluster) GetSession() commongocql.Session {

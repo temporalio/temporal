@@ -5,6 +5,7 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.uber.org/fx"
@@ -49,6 +50,7 @@ type (
 		Config                    *configs.Config
 		ExecutionManagerDLQWriter *executionManagerDLQWriter
 		DLQWriterAdapter          *DLQWriterAdapter
+		TestHooks                 testhooks.TestHooks
 	}
 	dlqWriterToggle struct {
 		*dlqWriterToggleParams
@@ -88,10 +90,20 @@ func newDLQWriterToggle(
 // - QueueV1: [ExecutionManagerDLQWriter.WriteTaskToDLQ]
 // - QueueV2: [DLQWriterAdapter.WriteTaskToDLQ]
 func (d *dlqWriterToggle) WriteTaskToDLQ(ctx context.Context, request DLQWriteRequest) error {
-	if d.Config.HistoryReplicationDLQV2() {
-		return d.DLQWriterAdapter.WriteTaskToDLQ(ctx, request)
+	write := func() error {
+		if d.Config.HistoryReplicationDLQV2() {
+			return d.DLQWriterAdapter.WriteTaskToDLQ(ctx, request)
+		}
+		return d.ExecutionManagerDLQWriter.WriteTaskToDLQ(ctx, request)
 	}
-	return d.ExecutionManagerDLQWriter.WriteTaskToDLQ(ctx, request)
+	if hook, ok := testhooks.Get(
+		d.TestHooks,
+		testhooks.HistoryReplicationDLQWriteInterceptor,
+		testhooks.GlobalScope,
+	); ok {
+		return hook(request.ReplicationTaskInfo, write)
+	}
+	return write()
 }
 
 // WriteTaskToDLQ implements [DLQWriter.WriteTaskToDLQ] by calling [persistence.ExecutionManager.PutReplicationTaskToDLQ].

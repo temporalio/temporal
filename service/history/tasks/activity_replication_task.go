@@ -16,6 +16,7 @@ type (
 		TaskID              int64
 		Version             int64
 		ScheduledEventID    int64
+		Priority            enumsspb.TaskPriority
 		TargetClusters      []string
 	}
 )

@@ -93,6 +93,8 @@ const (
 
 	// FailureReasonActivityTimeout is failureReason for when an activity times out, with %v as the timeout type.
 	FailureReasonActivityTimeout = "activity %v timeout"
+	// FailureReasonActivityRetryScheduleToCloseTimeout is failureReason for when an activity retry cannot be scheduled before its schedule-to-close timeout.
+	FailureReasonActivityRetryScheduleToCloseTimeout = "Not enough time to schedule next retry before activity ScheduleToClose timeout, giving up retrying"
 	// FailureReasonCompleteResultExceedsLimit is failureReason for complete result exceeds limit
 	FailureReasonCompleteResultExceedsLimit = "Complete result exceeds size limit."
 	// FailureReasonFailureDetailsExceedsLimit is failureReason for failure details exceeds limit
@@ -169,17 +171,41 @@ func CreateFrontendClientRetryPolicy() backoff.RetryPolicy {
 		WithMaximumAttempts(frontendClientRetryMaxAttempts)
 }
 
-// CreateHistoryClientRetryPolicy creates a retry policy for calls to history service
-func CreateHistoryClientRetryPolicy() backoff.RetryPolicy {
-	return backoff.NewExponentialRetryPolicy(historyClientRetryInitialInterval).
-		WithMaximumAttempts(historyClientRetryMaxAttempts)
-
+// CreateHistoryClientRetryPolicy creates a retry policy for calls to history service.
+// When retryUnboundedOnSystemResourceExhausted returns true, system-scoped ResourceExhausted
+// errors retry past the historyClientRetryMaxAttempts cap, bounded only by the policy's
+// default 1-minute expiration interval and the caller's context. Other errors (and all
+// errors when the flag is off) follow the standard cap.
+func CreateHistoryClientRetryPolicy(retryUnboundedOnSystemResourceExhausted func() bool) backoff.RetryPolicy {
+	return newClientRetryPolicy(historyClientRetryInitialInterval, historyClientRetryMaxAttempts, retryUnboundedOnSystemResourceExhausted)
 }
 
-// CreateMatchingClientRetryPolicy creates a retry policy for calls to matching service
-func CreateMatchingClientRetryPolicy() backoff.RetryPolicy {
-	return backoff.NewExponentialRetryPolicy(matchingClientRetryInitialInterval).
-		WithMaximumAttempts(matchingClientRetryMaxAttempts)
+// CreateMatchingClientRetryPolicy creates a retry policy for calls to matching service.
+// When retryUnboundedOnSystemResourceExhausted returns true, system-scoped ResourceExhausted
+// errors retry past the matchingClientRetryMaxAttempts cap, bounded only by the policy's
+// default 1-minute expiration interval and the caller's context. Other errors (and all
+// errors when the flag is off) follow the standard cap.
+func CreateMatchingClientRetryPolicy(retryUnboundedOnSystemResourceExhausted func() bool) backoff.RetryPolicy {
+	return newClientRetryPolicy(matchingClientRetryInitialInterval, matchingClientRetryMaxAttempts, retryUnboundedOnSystemResourceExhausted)
+}
+
+func newClientRetryPolicy(initialInterval time.Duration, maxAttempts int, retryUnboundedOnSystemResourceExhausted func() bool) backoff.RetryPolicy {
+	capped := backoff.NewExponentialRetryPolicy(initialInterval).
+		WithMaximumAttempts(maxAttempts)
+	// No max-attempts cap; bounded by the default 1-minute expiration interval
+	// and the caller's context.
+	extended := backoff.NewExponentialRetryPolicy(initialInterval)
+	predicate := func(err error) bool {
+		return retryUnboundedOnSystemResourceExhausted() && isSystemResourceExhausted(err)
+	}
+	return backoff.NewConditionalRetryPolicy(predicate, extended, capped)
+}
+
+func isSystemResourceExhausted(err error) bool {
+	if re, ok := err.(*serviceerror.ResourceExhausted); ok {
+		return re.Scope == enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM
+	}
+	return false
 }
 
 // CreateMatchingClientLongPollRetryPolicy creates a retry policy for poll calls to matching service
@@ -314,14 +340,17 @@ func IsServiceClientTransientError(err error) bool {
 		return true
 	}
 
-	switch err := err.(type) {
-	case *serviceerror.ResourceExhausted:
-		return err.Scope != enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE
-	case *serviceerrors.ShardOwnershipLost:
+	if isSystemResourceExhausted(err) {
 		return true
-	default:
-		return false
 	}
+
+	switch err.(type) {
+	case *serviceerrors.ShardOwnershipLost,
+		*serviceerrors.StalePartitionCounts:
+		return true
+	}
+
+	return false
 }
 
 func IsServiceHandlerRetryableError(err error) bool {
@@ -440,10 +469,7 @@ func VerifyShardIDMapping(
 		panic(fmt.Sprintf("cannot verify shard ID mapping between diff shard count: %v vs %v",
 			thisShardCount, thatShardCount))
 	}
-	shardCountMin := thisShardCount
-	if shardCountMin > thatShardCount {
-		shardCountMin = thatShardCount
-	}
+	shardCountMin := min(thisShardCount, thatShardCount)
 	if thisShardID%shardCountMin == thatShardID%shardCountMin {
 		return nil
 	}
@@ -736,18 +762,32 @@ func getFieldNameFromStruct(structPtr any, fieldPtr any) (string, error) {
 	return "", serviceerror.NewInternal("field not found in the struct")
 }
 
+// GetRPCStatus returns the gRPC status carried by err, or false if err is not a gRPC-induced
+// error.
+//
+// Wrapped gRPC status errors are supported, but wrapped errors implementing
+// Status() must be unwrapped before calling GetRPCStatus.
+func GetRPCStatus(err error) (*status.Status, bool) {
+	// This isn't correct, but is to maintain existing behavior.
+	//
+	// Exposing gRPC errors via `Status()` was a convention that existed for several years,
+	// but the canonical way to expose error status (from google.golang.org/grpc/status) is
+	// by an `GRPCStatus() *status.Status` method. [status.FromError] below does unwrapping
+	// and checks for that.
+	if stGetter, ok := err.(interface{ Status() *status.Status }); ok {
+		return stGetter.Status(), true
+	}
+	return status.FromError(err)
+}
+
 // IsRetryableRPCError checks if the error is a retryable gRPC error.
+//
+// This does not unwrap err, see [GetRPCStatus].
 func IsRetryableRPCError(err error) bool {
-	var st *status.Status
-	stGetter, ok := err.(interface{ Status() *status.Status })
-	if ok {
-		st = stGetter.Status()
-	} else {
-		st, ok = status.FromError(err)
-		if !ok {
-			// Not a gRPC induced error
-			return false
-		}
+	st, ok := GetRPCStatus(err)
+	if !ok {
+		// Not a gRPC induced error
+		return false
 	}
 	// nolint:exhaustive
 	switch st.Code() {

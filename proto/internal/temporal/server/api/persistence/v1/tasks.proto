@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package temporal.server.api.persistence.v1;
 
+import "google/protobuf/any.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/enums/v1/task_queue.proto";
@@ -72,6 +73,9 @@ message TaskQueueInfo {
   // After determinining that the inactive table has no more tasks left, then this
   // can be cleared on the active table.
   bool other_has_tasks = 10;
+
+  // Dynamic partition scaling state (root only):
+  PartitionScaleState partition_scale_state = 11;
 }
 
 message SubqueueInfo {
@@ -104,7 +108,44 @@ message SubqueueKey {
   int32 priority = 1;
 }
 
-message TaskKey {
-  google.protobuf.Timestamp fire_time = 1;
-  int64 task_id = 2;
+message PartitionScaleState {
+  // Target number of partitions. Zero means managed scaling is not enabled.
+  int32 target = 1;
+
+  // Highest value that target has ever been set to.
+  int32 max_target = 2;
+
+  // Version number for target. This should change every time target changes.
+  sfixed64 target_version = 3;
+
+  // Bit field of partitions that may have backlog. Partition i is represented by:
+  // backlog_state[i/64] & (1 << i%64).
+  // (-- api-linter: core::0141::forbidden-types=disabled
+  //     aip.dev/not-precedent: This is a bit field --)
+  repeated uint64 backlog_state = 4;
+
+  // Summary of backlog counts, 8 bits per partition (see common/number/compact8.go).
+  // This is different from backlog_state: a partition will have a 1 bit in backlog_state
+  // unless it is draining and we know for sure that it's fully drained. It may have zero
+  // actual backlog most of that time, so it would have a zero here. Also, we commit changes to
+  // backlog_state to persistence before changing counts, but we don't have to keep
+  // backlog_counts as consistent.
+  bytes backlog_counts = 5;
+  // Backlog load balancing config from scaler, in compact8 format.
+  int32 backlog_cap = 6;
+
+  // Arbitrary state kept by the scaler implementation.
+  // (-- api-linter: core::0146::any=disabled
+  //     aip.dev/not-precedent: This is not public. --)
+  google.protobuf.Any private_scaler_state = 100;
+}
+
+message SimplePartitionScalerState {
+  // How many partitions to target based on add rate alone.
+  int32 add_target = 1;
+  // Partitions to reserve based on backlog count. This is a bitfield where a 1 means "this has
+  // gone above BacklogBase and not gone below BacklogReset".
+  // (-- api-linter: core::0141::forbidden-types=disabled
+  //     aip.dev/not-precedent: This is a bit field --)
+  repeated uint64 backlog_target = 2;
 }

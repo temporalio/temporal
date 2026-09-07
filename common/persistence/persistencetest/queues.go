@@ -43,8 +43,8 @@ func GetQueueKey(t *testing.T, opts ...func(p *getQueueKeyParams)) persistence.Q
 	return persistence.QueueKey{
 		QueueType:     params.QueueType,
 		Category:      params.Category,
-		SourceCluster: "test-source-cluster-" + t.Name(),
-		TargetCluster: "test-target-cluster-" + t.Name(),
+		SourceCluster: "src-" + t.Name(),
+		TargetCluster: "tgt-" + t.Name(),
 	}
 }
 

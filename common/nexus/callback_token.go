@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"go.temporal.io/api/serviceerror"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -89,6 +90,28 @@ func validateCompletion(completion *tokenspb.NexusOperationCompletion) error {
 	default:
 		return serviceerror.NewInvalidArgument("callback token must contain either all HSM fields or a component ref")
 	}
+}
+
+// CompletionTarget resolves the target namespace ID, business (workflow) ID, and run ID from a
+// completion token. For CHASM completions the ComponentRef is canonical and embeds all three; for
+// HSM/workflow completions the top-level fields are used. The system-callback router and the
+// frontend completion handler must resolve these identically, so they share this helper rather than
+// each cracking the ComponentRef on their own (which is how the router previously missed the
+// namespace and dropped standalone-operation completions).
+func CompletionTarget(completion *tokenspb.NexusOperationCompletion) (namespaceID, businessID, runID string, err error) {
+	namespaceID = completion.GetNamespaceId()
+	businessID = completion.GetWorkflowId()
+	runID = completion.GetRunId()
+	if len(completion.GetComponentRef()) > 0 {
+		ref := &persistencespb.ChasmComponentRef{}
+		if err := ref.Unmarshal(completion.GetComponentRef()); err != nil {
+			return "", "", "", err
+		}
+		namespaceID = ref.GetNamespaceId()
+		businessID = ref.GetBusinessId()
+		runID = ref.GetRunId()
+	}
+	return namespaceID, businessID, runID, nil
 }
 
 // DecodeCallbackToken unmarshals the given token applying minimal data verification.

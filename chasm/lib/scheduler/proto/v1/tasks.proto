@@ -30,7 +30,11 @@ message InvokerProcessBufferTask {}
 message InvokerExecuteTask {}
 
 // Buffers actions based on a manually-requested backfill.
-message BackfillerTask {}
+message BackfillerTask {
+  // Snapshot of BackfillerState.task_stamp when this task was scheduled, used
+  // to reject a stale task.
+  int64 stamp = 1;
+}
 
 // Triggers migration from CHASM (V2) to workflow-backed (V1) scheduler.
 message SchedulerMigrateToWorkflowTask {}

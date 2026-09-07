@@ -14,6 +14,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -57,6 +59,7 @@ import (
 	"go.temporal.io/server/common/stream_batcher"
 	"go.temporal.io/server/common/taskqueue"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
@@ -71,6 +74,15 @@ const (
 	// If sticky poller is not seen in last 10s, we treat it as sticky worker unavailable.
 	// This seems aggressive, but the default sticky schedule_to_start timeout is 5s, so 10s seems reasonable.
 	stickyPollerUnavailableWindow = 10 * time.Second
+
+	// Fraction of the long poll interval used as the maximum jitter for non-forwarded polls.
+	// Approximately matches the original 10s jitter on the default 60s interval (1/6 ≈ 16.7%).
+	// Spreads out expiration times across pollers to prevent thundering herd reconnects.
+	forwardedPollJitterRatio = 1.0 / 6
+	// Floor for the long poll interval after jitter is applied. Jitter is capped so that
+	// the interval never drops below this value; if the interval is already at or below
+	// this floor, no jitter is applied.
+	forwardedPollMinInterval = common.CriticalLongPollTimeout
 
 	// shutdownWorkersCacheMaxSize is generous: each entry is a UUID string (~36 bytes),
 	// entries auto-expire after shutdownWorkersCacheTTL, and the cache only grows when
@@ -158,6 +170,7 @@ type (
 		partitions                    map[tqid.PartitionKey]taskQueuePartitionManager
 		gaugeMetrics                  gaugeMetrics // per-namespace task queue counters
 		config                        *Config
+		partitionScalerFactory        PartitionScalerFactory
 		versionChecker                headers.VersionChecker
 		testHooks                     testhooks.TestHooks
 		// queryResults maps query TaskID (which is a UUID generated in QueryWorkflow() call) to a channel
@@ -273,6 +286,7 @@ func NewEngine(
 	rateLimiter TaskDispatchRateLimiter,
 	historySerializer serialization.Serializer,
 	taskHookFactories []hooks.TaskHookFactory,
+	partitionScalerFactory PartitionScalerFactory,
 ) Engine {
 	scopedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope))
 	e := &matchingEngineImpl{
@@ -317,6 +331,7 @@ func NewEngine(
 		userDataUpdateBatchers:    collection.NewSyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]](),
 		rateLimiter:               rateLimiter,
 		taskHookFactories:         taskHookFactories,
+		partitionScalerFactory:    partitionScalerFactory,
 	}
 	e.nexusEndpointsOwnershipLostCh.Store(make(chan struct{}))
 	e.reachabilityCache = newReachabilityCache(
@@ -516,6 +531,9 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	pm, ok = e.partitions[key]
 	if ok {
 		e.partitionsLock.Unlock()
+		// Lost the race with a concurrent load of the same partition. The unstarted
+		// newPM holds no external references (subscriptions etc. are only registered
+		// in Start), so it can simply be dropped and garbage collected.
 		return pm, false, nil
 	}
 
@@ -533,6 +551,7 @@ func (e *matchingEngineImpl) loggerAndMetricsForPartition(
 ) (log.Logger, log.Logger, metrics.Handler) {
 	nsName := nsEntry.Name().String()
 	var nsState string
+	//nolint:forbidigo // metric tag for namespace state, not per-workflow
 	if nsEntry.ActiveInCluster(e.clusterMeta.GetCurrentClusterName()) {
 		nsState = metrics.ActiveNamespaceStateTagValue
 	} else {
@@ -606,6 +625,17 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		Priority:         addRequest.Priority,
 	}
 
+	if span := trace.SpanFromContext(ctx); span.IsRecording() {
+		// Later poll and response spans derive the same ID from the task token,
+		// allowing them to be correlated with this span.
+		workerTaskID := tasktoken.WorkflowWorkerTaskID(
+			taskInfo.GetNamespaceId(),
+			taskInfo.GetRunId(),
+			taskInfo.GetScheduledEventId(),
+		)
+		span.SetAttributes(attribute.String(telemetry.WorkerTaskIDKey, workerTaskID))
+	}
+
 	return pm.AddTask(ctx, addTaskParams{
 		taskInfo:    taskInfo,
 		forwardInfo: addRequest.ForwardInfo,
@@ -644,6 +674,17 @@ func (e *matchingEngineImpl) AddActivityTask(
 		Stamp:            addRequest.Stamp,
 		Priority:         addRequest.Priority,
 		ComponentRef:     addRequest.ComponentRef,
+	}
+
+	if span := trace.SpanFromContext(ctx); span.IsRecording() {
+		// Later poll and response spans derive the same ID from the task token,
+		// allowing them to be correlated with this span.
+		workerTaskID := tasktoken.ActivityWorkerTaskID(
+			taskInfo.GetNamespaceId(),
+			taskInfo.GetRunId(),
+			taskInfo.GetScheduledEventId(),
+		)
+		span.SetAttributes(attribute.String(telemetry.WorkerTaskIDKey, workerTaskID))
 	}
 
 	return pm.AddTask(ctx, addTaskParams{
@@ -708,7 +749,7 @@ pollLoop:
 		}
 
 		if task.isQuery() {
-			task.finish(nil, true) // this only means query task sync match succeed.
+			task.finish(taskFinishResult{consumedToken: true}) // this only means query task sync match succeed.
 
 			// for query task, we don't need to update history to record workflow task started. but we need to know
 			// the NextEventID and the currently set sticky task queue.
@@ -767,10 +808,14 @@ pollLoop:
 		resp, err := e.recordWorkflowTaskStarted(ctx, requestClone, task)
 		if err != nil {
 			switch err := err.(type) {
-			case *serviceerror.Internal, *serviceerror.DataLoss:
+			case *serviceerror.Internal:
 				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
 				// drop the task as otherwise task would be stuck in a retry-loop
-				task.finish(nil, false)
+				task.finish(taskFinishResult{dropReason: dropReasonInternalError})
+			case *serviceerror.DataLoss:
+				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
+				// drop the task as otherwise task would be stuck in a retry-loop
+				task.finish(taskFinishResult{dropReason: dropReasonDataLoss})
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or workflow task not found
 				e.logger.Info("Workflow task not found",
 					tag.WorkflowTaskQueueName(taskQueueName),
@@ -782,10 +827,10 @@ pollLoop:
 					tag.WorkflowEventID(task.event.Data.GetScheduledEventId()),
 					tag.Error(err),
 				)
-				task.finish(nil, false)
+				task.finish(taskFinishResult{dropReason: dropReasonNotFound})
 			case *serviceerrors.TaskAlreadyStarted:
 				e.logger.Debug("Duplicated workflow task", tag.WorkflowTaskQueueName(taskQueueName), tag.TaskID(task.event.GetTaskId()))
-				task.finish(nil, false)
+				task.finish(taskFinishResult{dropReason: dropReasonInvalid})
 			case *serviceerrors.ObsoleteDispatchBuildId:
 				// history should've scheduled another task on the right build ID. dropping this one.
 				e.logger.Info("dropping workflow task due to invalid build ID",
@@ -797,7 +842,7 @@ pollLoop:
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.BuildId(requestClone.WorkerVersionCapabilities.GetBuildId()),
 				)
-				task.finish(nil, false)
+				task.finish(taskFinishResult{dropReason: dropReasonInvalid})
 			case *serviceerrors.ObsoleteMatchingTask:
 				// History should've scheduled another task on the right task queue and deployment.
 				// Dropping this one.
@@ -816,17 +861,17 @@ pollLoop:
 					tag.BuildId(worker_versioning.BuildIdFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 					tag.Error(err),
 				)
-				task.finish(nil, false)
+				task.finish(taskFinishResult{dropReason: dropReasonInvalid})
 			case *serviceerror.ResourceExhausted:
 				// If history returns one ResourceExhausted, it's likely to return more if we retry
 				// immediately. Instead, return the error to the client which will back off.
 				// BUSY_WORKFLOW is limited to one workflow and is okay to retry.
-				task.finish(err, false)
+				task.finish(taskFinishResult{err: err})
 				if err.Cause != enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
 					return nil, err
 				}
 			default:
-				task.finish(err, false)
+				task.finish(taskFinishResult{err: err})
 				if err.Error() == common.ErrNamespaceHandover.Error() {
 					// do not keep polling new tasks when namespace is in handover state
 					// as record start request will be rejected by history service
@@ -837,7 +882,7 @@ pollLoop:
 			continue pollLoop
 		}
 
-		task.finish(nil, true)
+		task.finish(taskFinishResult{consumedToken: true})
 		e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), request.Namespace, pollMetadata)
 		return e.createPollWorkflowTaskQueueResponse(task, resp, opMetrics), nil
 	}
@@ -990,10 +1035,14 @@ pollLoop:
 		resp, err := e.recordActivityTaskStarted(ctx, requestClone, task)
 		if err != nil {
 			switch err := err.(type) {
-			case *serviceerror.Internal, *serviceerror.DataLoss:
+			case *serviceerror.Internal:
 				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
 				// drop the task as otherwise task would be stuck in a retry-loop
-				task.finish(nil, false)
+				task.finish(taskFinishResult{dropReason: dropReasonInternalError})
+			case *serviceerror.DataLoss:
+				e.nonRetryableErrorsDropTask(task, taskQueueName, err)
+				// drop the task as otherwise task would be stuck in a retry-loop
+				task.finish(taskFinishResult{dropReason: dropReasonDataLoss})
 			case *serviceerror.NotFound: // mutable state not found, workflow not running or activity info not found
 				e.logger.Info("Activity task not found",
 					tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
@@ -1005,10 +1054,10 @@ pollLoop:
 					tag.WorkflowEventID(task.event.Data.GetScheduledEventId()),
 					tag.Error(err),
 				)
-				task.finish(nil, false)
+				task.finish(taskFinishResult{dropReason: dropReasonNotFound})
 			case *serviceerrors.TaskAlreadyStarted:
 				e.logger.Debug("Duplicated activity task", tag.WorkflowTaskQueueName(taskQueueName), tag.TaskID(task.event.GetTaskId()))
-				task.finish(nil, false)
+				task.finish(taskFinishResult{dropReason: dropReasonInvalid})
 			case *serviceerrors.ObsoleteDispatchBuildId:
 				// history should've scheduled another task on the right build ID. dropping this one.
 				e.logger.Info("dropping activity task due to invalid build ID",
@@ -1020,7 +1069,7 @@ pollLoop:
 					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
 					tag.BuildId(requestClone.WorkerVersionCapabilities.GetBuildId()),
 				)
-				task.finish(nil, false)
+				task.finish(taskFinishResult{dropReason: dropReasonInvalid})
 			case *serviceerrors.ObsoleteMatchingTask:
 				// History should've scheduled another task on the right task queue and deployment.
 				// Dropping this one.
@@ -1039,7 +1088,7 @@ pollLoop:
 					tag.BuildId(worker_versioning.BuildIdFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 					tag.Error(err),
 				)
-				task.finish(nil, false)
+				task.finish(taskFinishResult{dropReason: dropReasonInvalid})
 			case *serviceerrors.ActivityStartDuringTransition:
 				// History will schedule another task once transition ends. Dropping this one.
 				e.logger.Info("dropping activity task during transition",
@@ -1056,17 +1105,17 @@ pollLoop:
 					//nolint:staticcheck // SA1019 deprecated WorkerVersionCapabilities will clean up later
 					tag.BuildId(worker_versioning.BuildIdFromCapabilities(requestClone.WorkerVersionCapabilities, requestClone.DeploymentOptions)),
 				)
-				task.finish(nil, false)
+				task.finish(taskFinishResult{dropReason: dropReasonInvalid})
 			case *serviceerror.ResourceExhausted:
 				// If history returns one ResourceExhausted, it's likely to return more if we retry
 				// immediately. Instead, return the error to the client which will back off.
 				// BUSY_WORKFLOW is limited to one workflow and is okay to retry.
-				task.finish(err, false)
+				task.finish(taskFinishResult{err: err})
 				if err.Cause != enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
 					return nil, err
 				}
 			default:
-				task.finish(err, false)
+				task.finish(taskFinishResult{err: err})
 				if err.Error() == common.ErrNamespaceHandover.Error() {
 					// do not keep polling new tasks when namespace is in handover state
 					// as record start request will be rejected by history service
@@ -1076,7 +1125,7 @@ pollLoop:
 
 			continue pollLoop
 		}
-		task.finish(nil, true)
+		task.finish(taskFinishResult{consumedToken: true})
 		e.emitTaskDispatchLatency(task, partition, req.GetNamespaceId(), request.Namespace, pollMetadata)
 		return e.createPollActivityTaskQueueResponse(task, resp, opMetrics), nil
 	}
@@ -1121,6 +1170,12 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	// this remote host's result can be returned directly
 	if resp != nil || err != nil {
 		return resp, err
+	}
+	if span := trace.SpanFromContext(ctx); span.IsRecording() {
+		// Later poll and response spans derive the same ID from the task token,
+		// allowing them to be correlated with this span.
+		workerTaskID := tasktoken.QueryWorkerTaskID(queryRequest.GetNamespaceId(), taskID)
+		span.SetAttributes(attribute.String(telemetry.WorkerTaskIDKey, workerTaskID))
 	}
 
 	// if we get here it means that dispatch of query task has occurred locally
@@ -1199,39 +1254,202 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
 	ctx context.Context,
 	request *matchingservice.CancelOutstandingWorkerPollsRequest,
 ) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
+	partition, err := tqid.PartitionFromProto(request.GetTaskQueue(), request.GetNamespaceId(), request.GetTaskQueueType())
+	if err != nil {
+		return nil, err
+	}
+	ns, err := e.namespaceRegistry.GetNamespaceName(namespace.ID(request.GetNamespaceId()))
+	if err != nil {
+		return nil, err
+	}
+	if e.config.EnableMatchingFanOutForPollCancellation(ns.String()) {
+		// TODO: Remove the IsRoot/Sticky guard after EnableMatchingFanOutForPollCancellation is
+		// fully rolled out. This check is only needed during the transition since the legacy
+		// frontend fan-out path may send non-root partitions to this handler.
+		if partition.IsRoot() && partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
+			return e.cancelOutstandingWorkerPollsForAllPartitions(ctx, request, partition)
+		}
+	}
+	// TODO: Delete this code path after EnableMatchingFanOutForPollCancellation is rolled out.
 	if request.WorkerInstanceKey != "" {
+		// Keep Put before CancelAll; poll registration uses the inverse order to avoid missed polls.
 		e.shutdownWorkers.Put(request.WorkerInstanceKey, struct{}{})
 	}
 	cancelledCount := e.workerInstancePollers.CancelAll(request.WorkerInstanceKey)
-	e.removePollerFromHistory(ctx, request)
+	e.removePollerFromHistory(ctx, partition, request.GetWorkerIdentity())
 	return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: cancelledCount}, nil
+}
+
+// cancelOutstandingWorkerPollsForAllPartitions performs flat fan-out from the root partition.
+// It computes all partitions, groups them by destination matching host, processes local
+// partitions directly, and sends one CancelOutstandingWorkerPollsPartition RPC per remote host.
+func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
+	ctx context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsRequest,
+	rootPartition tqid.Partition,
+) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
+	rootPM, _, err := e.getTaskQueuePartitionManager(ctx, rootPartition, false, loadCauseOtherWrite)
+	if err != nil {
+		return nil, err
+	}
+	if rootPM == nil {
+		// Root not loaded means no pending polls anywhere — child partitions loading
+		// triggers root to load via user data fetch chain.
+		e.logger.Debug("Skipping poll cancellation fan-out: root partition not loaded",
+			tag.WorkflowNamespaceID(request.GetNamespaceId()),
+			tag.WorkflowTaskQueueName(rootPartition.TaskQueue().Name()),
+			tag.WorkflowTaskQueueType(request.GetTaskQueueType()),
+			tag.NewStringTag("worker-instance-key", request.GetWorkerInstanceKey()),
+		)
+		return &matchingservice.CancelOutstandingWorkerPollsResponse{}, nil
+	}
+	cfg := rootPM.GetConfig()
+	// TODO(dynamic partitioning): get real num read partitions from the partition manager.
+	numPartitions := cfg.NumReadPartitions()
+
+	e.logger.Debug("Initiating fan-out for worker poll cancellation",
+		tag.WorkflowNamespaceID(request.GetNamespaceId()),
+		tag.WorkflowTaskQueueName(rootPartition.TaskQueue().Name()),
+		tag.WorkflowTaskQueueType(request.GetTaskQueueType()),
+		tag.NewStringTag("worker-instance-key", request.GetWorkerInstanceKey()),
+		tag.NewInt32("partition-count", int32(numPartitions)),
+	)
+
+	workers := []*matchingservice.CancelOutstandingWorkerPollsPartitionRequest_WorkerEntry{{
+		WorkerInstanceKey: request.GetWorkerInstanceKey(),
+		WorkerIdentity:    request.GetWorkerIdentity(),
+	}}
+
+	// Group partitions by destination host. When Route() is unavailable or fails, each
+	// unroutable partition gets a synthetic key so it's sent as an individual RPC.
+	routingClient, _ := e.matchingRawClient.(matching.RoutingClient) //nolint:revive // unchecked-type-assertion: nil is the desired zero value
+	self := e.hostInfoProvider.HostInfo().Identity()
+	tq := rootPartition.TaskQueue()
+	partitionsByTarget := make(map[string][]*tqid.NormalPartition, numPartitions)
+
+	for i := range numPartitions {
+		partition := tq.NormalPartition(i)
+		target := ""
+		if routingClient != nil {
+			h, err := routingClient.Route(partition)
+			if err != nil {
+				e.logger.Warn("Failed to resolve matching host for poll cancellation, sending individual RPC",
+					tag.NewInt32("partition-id", int32(i)),
+					tag.Error(err))
+			} else {
+				target = h
+			}
+		}
+		if target == "" {
+			target = fmt.Sprintf("_unroutable_%d", i)
+		}
+		partitionsByTarget[target] = append(partitionsByTarget[target], partition)
+	}
+
+	// Process each target: local via direct call, remote via RPC.
+	var totalCancelled atomic.Int32
+	var wg sync.WaitGroup
+
+	for target, partitions := range partitionsByTarget {
+		partitionProtos := make([]*taskqueuespb.TaskQueuePartition, len(partitions))
+		for i, np := range partitions {
+			partitionProtos[i] = &taskqueuespb.TaskQueuePartition{
+				TaskQueue:     np.TaskQueue().Name(),
+				TaskQueueType: np.TaskType(),
+				PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(np.PartitionId())},
+			}
+		}
+		req := &matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
+			NamespaceId:        request.GetNamespaceId(),
+			TaskQueuePartition: partitionProtos[0], // routing key
+			Partitions:         partitionProtos,
+			Workers:            workers,
+		}
+		if target == self {
+			resp, err := e.CancelOutstandingWorkerPollsPartition(ctx, req)
+			if err != nil {
+				e.logger.Warn("Failed to cancel outstanding worker polls for local partitions",
+					tag.NewInt("partition-count", len(partitions)),
+					tag.Error(err))
+			} else {
+				totalCancelled.Add(resp.GetCancelledCount())
+			}
+			continue
+		}
+		wg.Go(func() {
+			resp, err := e.matchingRawClient.CancelOutstandingWorkerPollsPartition(ctx, req)
+			if err != nil {
+				e.logger.Warn("Failed to cancel outstanding worker polls for remote host",
+					tag.NewStringTag("target-host", target),
+					tag.NewInt("partition-count", len(partitions)),
+					tag.Error(err))
+				return
+			}
+			totalCancelled.Add(resp.GetCancelledCount())
+		})
+	}
+
+	wg.Wait()
+	return &matchingservice.CancelOutstandingWorkerPollsResponse{
+		CancelledCount: totalCancelled.Load(),
+	}, nil
+}
+
+// CancelOutstandingWorkerPollsPartition cancels outstanding polls for workers on the
+// specified partitions. This is a leaf handler — no fan-out. Called by the matching root
+// during flat fan-out to process partitions on a remote host.
+func (e *matchingEngineImpl) CancelOutstandingWorkerPollsPartition(
+	ctx context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsPartitionRequest,
+) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
+	if len(request.GetPartitions()) == 0 || len(request.GetWorkers()) == 0 {
+		return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{}, nil
+	}
+
+	e.logger.Debug("Cancelling worker polls",
+		tag.WorkflowNamespaceID(request.GetNamespaceId()),
+		tag.WorkflowTaskQueueName(request.GetTaskQueuePartition().GetTaskQueue()),
+		tag.NewInt("worker-count", len(request.GetWorkers())),
+		tag.NewInt("partition-count", len(request.GetPartitions())),
+	)
+
+	// Cancel polls for each worker.
+	var cancelledCount int32
+	for _, worker := range request.GetWorkers() {
+		if worker.GetWorkerInstanceKey() != "" {
+			// Keep Put before CancelAll; poll registration uses the inverse order to avoid missed polls.
+			e.shutdownWorkers.Put(worker.GetWorkerInstanceKey(), struct{}{})
+		}
+		cancelledCount += e.workerInstancePollers.CancelAll(worker.GetWorkerInstanceKey())
+	}
+
+	// Remove each worker from poller history for each partition.
+	for _, partitionProto := range request.GetPartitions() {
+		partition := tqid.PartitionFromPartitionProto(partitionProto, request.GetNamespaceId())
+		for _, worker := range request.GetWorkers() {
+			e.removePollerFromHistory(ctx, partition, worker.GetWorkerIdentity())
+		}
+	}
+
+	return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{
+		CancelledCount: cancelledCount,
+	}, nil
 }
 
 // removePollerFromHistory eagerly removes the worker from pollerHistory so
 // DescribeTaskQueue doesn't show stale pollers after worker shutdown.
 func (e *matchingEngineImpl) removePollerFromHistory(
 	ctx context.Context,
-	request *matchingservice.CancelOutstandingWorkerPollsRequest,
+	partition tqid.Partition,
+	workerIdentity string,
 ) {
-	workerIdentity := request.GetWorkerIdentity()
 	if workerIdentity == "" {
 		return
 	}
 
-	taskQueueName := request.GetTaskQueue().GetName()
-	partition, err := tqid.PartitionFromProto(request.GetTaskQueue(), request.GetNamespaceId(), request.GetTaskQueueType())
-	if err != nil {
-		e.logger.Warn("Invalid task queue for poller history cleanup",
-			tag.WorkflowTaskQueueName(taskQueueName),
-			tag.Error(err))
-		return
-	}
-
+	taskQueueName := partition.RpcName()
 	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, false, loadCauseOtherWrite)
 	if err != nil {
-		e.logger.Warn("Failed to get task queue partition manager for poller history cleanup",
-			tag.WorkflowTaskQueueName(taskQueueName),
-			tag.Error(err))
 		return
 	}
 	if pm == nil {
@@ -1594,15 +1812,17 @@ func (e *matchingEngineImpl) DescribeTaskQueuePartition(
 	if request.GetVersions() == nil {
 		return nil, serviceerror.NewInvalidArgument("versions must not be nil, to describe the default queue, pass the default build ID as a member of the BuildIds list")
 	}
-	pm, _, err := e.getTaskQueuePartitionManager(ctx, tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId()), true, loadCauseDescribe)
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId()), !request.GetOnlyIfLoaded(), loadCauseDescribe)
 	if err != nil {
 		return nil, err
+	} else if pm == nil {
+		return nil, serviceerror.NewFailedPrecondition("partition was not loaded")
 	}
 	buildIds, err := e.getBuildIds(request.GetVersions())
 	if err != nil {
 		return nil, err
 	}
-	return pm.Describe(ctx, buildIds, request.GetVersions().GetAllActive(), request.GetReportStats(), request.GetReportPollers(), request.GetReportInternalTaskQueueStatus())
+	return pm.Describe(ctx, buildIds, request.GetVersions().GetAllActive(), request.GetReportStats(), request.GetReportPollers(), request.GetReportInternalTaskQueueStatus(), request.GetOnlyIfLoaded())
 }
 
 func (e *matchingEngineImpl) getBuildIds(versions *taskqueuepb.TaskQueueVersionSelection) (map[string]bool, error) {
@@ -2472,7 +2692,6 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 	if err != nil {
 		return nil, err
 	}
-
 	// Buffer the deadline so we can still respond with timeout if we hit the deadline while dispatching
 	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, matching.DefaultTimeout, e.config.MinDispatchTaskTimeout(ns.Name().String()))
 	defer cancel()
@@ -2499,6 +2718,12 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 	// host's result can be returned directly.
 	if resp != nil {
 		return resp, nil
+	}
+	if span := trace.SpanFromContext(ctx); span.IsRecording() {
+		// Later poll and response spans derive the same ID from the task token,
+		// allowing them to be correlated with this span.
+		workerTaskID := tasktoken.NexusWorkerTaskID(request.GetNamespaceId(), taskID)
+		span.SetAttributes(attribute.String(telemetry.WorkerTaskIDKey, workerTaskID))
 	}
 
 	// If we get here it means that task dispatch has occurred locally.
@@ -2578,15 +2803,16 @@ pollLoop:
 			return task.pollNexusTaskQueueResponse(), nil
 		}
 
-		task.finish(err, true)
+		task.finish(taskFinishResult{err: err, consumedToken: true})
 		if err != nil {
 			continue pollLoop
 		}
 
 		taskToken := &tokenspb.NexusTask{
-			NamespaceId: string(namespaceID),
-			TaskQueue:   taskQueueName,
-			TaskId:      task.nexus.taskID,
+			NamespaceId:   string(namespaceID),
+			TaskQueue:     taskQueueName,
+			TaskId:        task.nexus.taskID,
+			TaskQueueKind: partition.Kind(),
 		}
 		serializedToken, _ := e.tokenSerializer.SerializeNexusTaskToken(taskToken)
 
@@ -2612,7 +2838,7 @@ pollLoop:
 	}
 }
 
-func (e *matchingEngineImpl) RespondNexusTaskCompleted(ctx context.Context, request *matchingservice.RespondNexusTaskCompletedRequest, opMetrics metrics.Handler) (*matchingservice.RespondNexusTaskCompletedResponse, error) {
+func (e *matchingEngineImpl) RespondNexusTaskCompleted(_ context.Context, request *matchingservice.RespondNexusTaskCompletedRequest, opMetrics metrics.Handler) (*matchingservice.RespondNexusTaskCompletedResponse, error) {
 	resultCh, ok := e.nexusResults.Pop(request.GetTaskId())
 	if !ok {
 		opMetrics.Counter(metrics.RespondNexusTaskFailedPerTaskQueueCounter.Name()).Record(1)
@@ -2625,7 +2851,7 @@ func (e *matchingEngineImpl) RespondNexusTaskCompleted(ctx context.Context, requ
 	return &matchingservice.RespondNexusTaskCompletedResponse{}, nil
 }
 
-func (e *matchingEngineImpl) RespondNexusTaskFailed(ctx context.Context, request *matchingservice.RespondNexusTaskFailedRequest, opMetrics metrics.Handler) (*matchingservice.RespondNexusTaskFailedResponse, error) {
+func (e *matchingEngineImpl) RespondNexusTaskFailed(_ context.Context, request *matchingservice.RespondNexusTaskFailedRequest, opMetrics metrics.Handler) (*matchingservice.RespondNexusTaskFailedResponse, error) {
 	resultCh, ok := e.nexusResults.Pop(request.GetTaskId())
 	if !ok {
 		opMetrics.Counter(metrics.RespondNexusTaskFailedPerTaskQueueCounter.Name()).Record(1)
@@ -2834,36 +3060,44 @@ func (e *matchingEngineImpl) pollTask(
 	// reached, instead of emptyTask, context timeout error is returned to the frontend by the rpc stack,
 	// which counts against our SLO. By shortening the timeout by a very small amount, the emptyTask can be
 	// returned to the handler before a context timeout error is generated.
-	workerInstanceKey := pollMetadata.workerInstanceKey
-	if workerInstanceKey != "" && e.shutdownWorkers.Get(workerInstanceKey) != nil {
-		e.logger.Info("Rejecting poll from recently-shutdown worker",
-			tag.WorkflowNamespaceID(partition.NamespaceId()),
-			tag.WorkflowTaskQueueName(partition.TaskQueue().Name()),
-			tag.WorkflowTaskQueueType(partition.TaskType()),
-			tag.NewStringTag("worker-instance-key", workerInstanceKey),
-		)
-		return nil, false, errNoTasks
+	// For non-forwarded polls, subtract a proportional random jitter to spread expiration
+	// times across pollers and prevent thundering herd reconnects. Jitter is capped so the
+	// interval never falls below forwardedPollMinInterval.
+	longPollInterval := pm.LongPollExpirationInterval()
+	if pollMetadata.forwardedFrom == "" {
+		jitterMax := time.Duration(float64(longPollInterval) * forwardedPollJitterRatio)
+		if longPollInterval-jitterMax < forwardedPollMinInterval {
+			jitterMax = longPollInterval - forwardedPollMinInterval
+		}
+		if jitterMax > 0 {
+			longPollInterval -= backoff.FullJitter(jitterMax)
+		}
 	}
-
-	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, pm.LongPollExpirationInterval(), returnEmptyTaskTimeBudget)
+	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, longPollInterval, returnEmptyTaskTimeBudget)
 	defer cancel()
+
+	if workerInstanceKey := pollMetadata.workerInstanceKey; workerInstanceKey != "" {
+		// Register before checking shutdownWorkers. The shutdown path does the reverse:
+		// it populates shutdownWorkers before calling CancelAll. So either the check
+		// sees the shutdown, or CancelAll sees the registration.
+		pollerTrackerKey := uuid.NewString()
+		e.workerInstancePollers.Add(workerInstanceKey, pollerTrackerKey, cancel)
+		defer e.workerInstancePollers.Remove(workerInstanceKey, pollerTrackerKey)
+
+		if e.shutdownWorkers.Get(workerInstanceKey) != nil {
+			e.logger.Debug("Rejecting poll from recently-shutdown worker",
+				tag.WorkflowNamespaceID(partition.NamespaceId()),
+				tag.WorkflowTaskQueueName(partition.TaskQueue().Name()),
+				tag.WorkflowTaskQueueType(partition.TaskType()),
+				tag.NewStringTag("worker-instance-key", workerInstanceKey),
+			)
+			return nil, false, errNoTasks
+		}
+	}
 
 	if pollerID, ok := ctx.Value(pollerIDKey).(string); ok && pollerID != "" {
 		e.outstandingPollers.Set(pollerID, cancel)
-
-		// Also track by worker instance key for bulk cancellation during shutdown.
-		// Use UUID (not pollerID) because pollerID is reused when forwarded.
-		pollerTrackerKey := uuid.NewString()
-		if workerInstanceKey != "" {
-			e.workerInstancePollers.Add(workerInstanceKey, pollerTrackerKey, cancel)
-		}
-
-		defer func() {
-			e.outstandingPollers.Delete(pollerID)
-			if workerInstanceKey != "" {
-				e.workerInstancePollers.Remove(workerInstanceKey, pollerTrackerKey)
-			}
-		}()
+		defer e.outstandingPollers.Delete(pollerID)
 	}
 	return pm.PollTask(ctx, pollMetadata)
 }
@@ -2913,7 +3147,9 @@ func (e *matchingEngineImpl) emitTaskDispatchLatency(
 		} // else ignore the error and use the current partition
 	}
 
-	workerVersion := worker_versioning.WorkerDeploymentVersionToStringV32(worker_versioning.DeploymentVersionFromOptions(pollMetadata.deploymentOptions))
+	deploymentVersion := worker_versioning.DeploymentVersionFromOptions(pollMetadata.deploymentOptions)
+	workerVersion := worker_versioning.WorkerDeploymentVersionToStringV32(deploymentVersion)
+	breakdownMetricsByBuildID := e.config.BreakdownMetricsByBuildID(namespaceName, tqName, taskType)
 
 	handler := metrics.GetPerTaskQueuePartitionIDScope(
 		e.metricsHandler,
@@ -2928,7 +3164,9 @@ func (e *matchingEngineImpl) emitTaskDispatchLatency(
 		metrics.TaskSourceTag(task.source),
 		metrics.ForwardedTag(task.isForwarded()),
 		metrics.MatchingTaskPriorityTag(task.getPriority().GetPriorityKey()),
-		metrics.WorkerVersionTag(workerVersion, e.config.BreakdownMetricsByBuildID(namespaceName, tqName, taskType)),
+		metrics.WorkerVersionTag(workerVersion, breakdownMetricsByBuildID),
+		metrics.WorkerDeploymentNameTag(deploymentVersion.GetDeploymentName(), breakdownMetricsByBuildID),
+		metrics.WorkerDeploymentBuildIDTag(deploymentVersion.GetBuildId(), breakdownMetricsByBuildID),
 	)
 }
 
@@ -3188,6 +3426,12 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		metrics.AsyncMatchLatencyPerTaskQueue.With(metricsHandler).Record(time.Since(ct))
 	}
 
+	componentRef := task.event.GetData().GetComponentRef()
+	activityAttemptStamp := int32(0)
+	if len(componentRef) > 0 {
+		activityAttemptStamp = task.event.Data.GetStamp()
+	}
+
 	taskToken := tasktoken.NewActivityTaskToken(
 		task.event.Data.GetNamespaceId(),
 		task.event.Data.GetWorkflowId(),
@@ -3199,7 +3443,8 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		historyResponse.GetClock(),
 		historyResponse.GetVersion(),
 		historyResponse.GetStartVersion(),
-		task.event.GetData().GetComponentRef(),
+		componentRef,
+		activityAttemptStamp,
 	)
 	serializedToken, _ := e.tokenSerializer.Serialize(taskToken)
 

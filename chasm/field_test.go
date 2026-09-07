@@ -68,8 +68,7 @@ func (s *fieldSuite) initAssertions() {
 }
 
 func (s *fieldSuite) TestInternalFieldName() {
-	f := Field[any]{}
-	fT := reflect.TypeOf(f)
+	fT := reflect.TypeFor[Field[any]]()
 
 	_, ok := fT.FieldByName(internalFieldName)
 	s.True(ok, "expected field %s not found", internalFieldName)

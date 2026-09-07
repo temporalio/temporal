@@ -11,6 +11,11 @@ const (
 	testDiscardableSideEffectTaskName = "test_discardable_side_effect_task"
 	testOutboundSideEffectTaskName    = "test_outbound_side_effect_task"
 	testPureTaskName                  = "test_pure_task"
+
+	testSingletonReplaceSideEffectTaskName = "test_singleton_replace_side_effect_task"
+	testSingletonIgnoreSideEffectTaskName  = "test_singleton_ignore_side_effect_task"
+	testSingletonReplacePureTaskName       = "test_singleton_replace_pure_task"
+	testSingletonIgnorePureTaskName        = "test_singleton_ignore_pure_task"
 )
 
 var (
@@ -23,6 +28,11 @@ var (
 	testDiscardableSideEffectTaskFQN = FullyQualifiedName(testLibraryName, testDiscardableSideEffectTaskName)
 	testOutboundSideEffectTaskFQN    = FullyQualifiedName(testLibraryName, testOutboundSideEffectTaskName)
 	testPureTaskFQN                  = FullyQualifiedName(testLibraryName, testPureTaskName)
+
+	testSingletonReplaceSideEffectTaskFQN = FullyQualifiedName(testLibraryName, testSingletonReplaceSideEffectTaskName)
+	testSingletonIgnoreSideEffectTaskFQN  = FullyQualifiedName(testLibraryName, testSingletonIgnoreSideEffectTaskName)
+	testSingletonReplacePureTaskFQN       = FullyQualifiedName(testLibraryName, testSingletonReplacePureTaskName)
+	testSingletonIgnorePureTaskFQN        = FullyQualifiedName(testLibraryName, testSingletonIgnorePureTaskName)
 )
 
 var (
@@ -35,4 +45,7 @@ var (
 	testDiscardableSideEffectTaskTypeID = GenerateTypeID(testDiscardableSideEffectTaskFQN)
 	testOutboundSideEffectTaskTypeID    = GenerateTypeID(testOutboundSideEffectTaskFQN)
 	testPureTaskTypeID                  = GenerateTypeID(testPureTaskFQN)
+
+	testSingletonReplaceSideEffectTaskTypeID = GenerateTypeID(testSingletonReplaceSideEffectTaskFQN)
+	testSingletonReplacePureTaskTypeID       = GenerateTypeID(testSingletonReplacePureTaskFQN)
 )

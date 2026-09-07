@@ -6,6 +6,7 @@ import (
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -123,7 +124,16 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 	stage *tasks.DeleteWorkflowExecutionStage,
 ) error {
 
-	return m.deleteWorkflowExecutionInternal(ctx, nsID, we, weCtx, ms, stage, m.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryDeleteWorkflowExecutionScope)))
+	return m.deleteWorkflowExecutionInternal(
+		ctx,
+		nsID,
+		we,
+		weCtx,
+		ms,
+		stage,
+		false,
+		m.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryDeleteWorkflowExecutionScope)),
+	)
 }
 
 func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
@@ -138,7 +148,16 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 	// timers and will delete on their own schedule.
 	stage.MarkProcessed(tasks.DeleteWorkflowExecutionStageReplication)
 
-	return m.deleteWorkflowExecutionInternal(ctx, nsID, we, weCtx, ms, stage, m.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryProcessDeleteHistoryEventScope)))
+	return m.deleteWorkflowExecutionInternal(
+		ctx,
+		nsID,
+		we,
+		weCtx,
+		ms,
+		stage,
+		true,
+		m.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryProcessDeleteHistoryEventScope)),
+	)
 }
 
 func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
@@ -148,6 +167,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	weCtx historyi.WorkflowContext,
 	ms historyi.MutableState,
 	stage *tasks.DeleteWorkflowExecutionStage,
+	retentionDelete bool,
 	metricsHandler metrics.Handler,
 ) error {
 
@@ -156,7 +176,19 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		return err
 	}
 
+	closeTime, err := ms.GetWorkflowCloseTime(ctx)
+	if err != nil {
+		return err
+	}
+
 	executionInfo := ms.GetExecutionInfo()
+	lastWriteVersion := common.EmptyVersion
+	if !retentionDelete {
+		lastWriteVersion, err = ms.GetLastWriteVersion()
+		if err != nil {
+			return err
+		}
+	}
 	if err := m.shardContext.DeleteWorkflowExecution(
 		ctx,
 		definition.WorkflowKey{
@@ -165,10 +197,13 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 			RunID:       we.GetRunId(),
 		},
 		ms.ChasmTree().ArchetypeID(),
+		lastWriteVersion,
 		currentBranchToken,
 		executionInfo.GetCloseVisibilityTaskId(),
-		executionInfo.GetCloseTime().AsTime(),
+		closeTime,
+		ms.GetExecutionState().GetStartTime().AsTime(),
 		stage,
+		retentionDelete,
 	); err != nil {
 		return err
 	}

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"slices"
 
+	otellog "go.opentelemetry.io/otel/log"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
@@ -18,8 +19,10 @@ import (
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/testhooks"
 	"google.golang.org/grpc"
 )
 
@@ -55,9 +58,14 @@ type (
 		customHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
 		customVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
 		clientFactoryProvider           client.FactoryProvider
+		persistenceFactoryProvider      persistenceClient.FactoryProviderFn
 		searchAttributesMapper          searchattribute.Mapper
 		customFrontendInterceptors      []grpc.UnaryServerInterceptor
+		additionalStreamInterceptors    []grpc.StreamServerInterceptor
 		metricHandler                   metrics.Handler
+		eventLoggerProvider             otellog.LoggerProvider
+		tokenProvider                   auth.TokenProvider
+		testHooks                       *testhooks.TestHooks
 	}
 )
 

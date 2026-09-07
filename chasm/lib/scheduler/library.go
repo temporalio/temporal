@@ -10,6 +10,7 @@ type (
 	Library struct {
 		chasm.UnimplementedLibrary
 
+		config  *Config
 		handler *handler
 
 		SchedulerIdleTaskHandler        *SchedulerIdleTaskHandler
@@ -29,6 +30,7 @@ func NewNilLibrary() *Library {
 }
 
 func NewLibrary(
+	config *Config,
 	handler *handler,
 	SchedulerIdleTaskHandler *SchedulerIdleTaskHandler,
 	SchedulerCallbacksTaskHandler *SchedulerCallbacksTaskHandler,
@@ -39,6 +41,7 @@ func NewLibrary(
 	MigrateToWorkflowTaskHandler *SchedulerMigrateToWorkflowTaskHandler,
 ) *Library {
 	return &Library{
+		config:                          config,
 		handler:                         handler,
 		SchedulerIdleTaskHandler:        SchedulerIdleTaskHandler,
 		SchedulerCallbacksTaskHandler:   SchedulerCallbacksTaskHandler,
@@ -59,11 +62,21 @@ func (l *Library) Components() []*chasm.RegistrableComponent {
 		chasm.NewRegistrableComponent[*Scheduler](
 			chasm.SchedulerComponentName,
 			chasm.WithBusinessIDAlias("ScheduleId"),
-			chasm.WithSearchAttributes(executionStatusSearchAttribute),
+			chasm.WithSearchAttributes(
+				executionStatusSearchAttribute,
+				scheduleNextActionTimeSearchAttribute,
+				scheduleIdleCloseTimeSearchAttribute,
+				scheduleRunningWorkflowCountSearchAttribute,
+				scheduleBufferedStartsCountSearchAttribute,
+			),
+			// Exposes Tweakables to scheduler components via the CHASM context
+			// (see tweakablesFromContext).
+			chasm.WithContextValues(l.config.contextValues()),
 		),
 		chasm.NewRegistrableComponent[*Generator]("generator"),
 		chasm.NewRegistrableComponent[*Invoker]("invoker"),
 		chasm.NewRegistrableComponent[*Backfiller]("backfiller"),
+		chasm.NewRegistrableComponent[*EventLog]("eventlog"),
 	}
 }
 

@@ -340,6 +340,8 @@ func (s *taskSerializerSuite) TestDeleteExecutionVisibilityTask() {
 		ArchetypeID:                    rand.Uint32(),
 		CloseExecutionVisibilityTaskID: rand.Int63(),
 		CloseTime:                      time.Unix(0, 0).UTC(),
+		StartTime:                      time.Unix(0, 0).UTC(),
+		IsRetentionDelete:              false,
 	}
 
 	s.assertEqualTasks(deleteExecutionVisibilityTask)
@@ -369,6 +371,7 @@ func (s *taskSerializerSuite) TestSyncActivityTask() {
 		TaskID:              rand.Int63(),
 		Version:             rand.Int63(),
 		ScheduledEventID:    rand.Int63(),
+		Priority:            enumsspb.TASK_PRIORITY_LOW,
 	}
 
 	s.assertEqualTasks(syncActivityTask)
@@ -384,6 +387,7 @@ func (s *taskSerializerSuite) TestHistoryReplicationTask() {
 		NextEventID:         rand.Int63(),
 		BranchToken:         shuffle.Bytes([]byte("random branch token")),
 		NewRunBranchToken:   shuffle.Bytes([]byte("random new branch token")),
+		Priority:            enumsspb.TASK_PRIORITY_LOW,
 	}
 
 	s.assertEqualTasks(historyReplicationTask)
@@ -394,6 +398,7 @@ func (s *taskSerializerSuite) TestSyncHSMTask() {
 		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
 		TaskID:              rand.Int63(),
+		Priority:            enumsspb.TASK_PRIORITY_LOW,
 	}
 
 	s.assertEqualTasks(syncHSMTask)
@@ -408,6 +413,7 @@ func (s *taskSerializerSuite) TestSyncVersionedTransitionTask() {
 		FirstEventID:        rand.Int63(),
 		NextEventID:         rand.Int63(),
 		NewRunID:            uuid.New().String(),
+		Priority:            enumsspb.TASK_PRIORITY_LOW,
 		VersionedTransition: &persistencespb.VersionedTransition{
 			NamespaceFailoverVersion: rand.Int63(),
 			TransitionCount:          rand.Int63(),
@@ -420,6 +426,7 @@ func (s *taskSerializerSuite) TestSyncVersionedTransitionTask() {
 				NextEventID:         rand.Int63(),
 				Version:             rand.Int63(),
 				NewRunID:            uuid.New().String(),
+				Priority:            enumsspb.TASK_PRIORITY_LOW,
 			},
 		},
 	}
@@ -450,6 +457,7 @@ func (s *taskSerializerSuite) TestDeleteExecutionReplicationTask() {
 		VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
 		TaskID:              rand.Int63(),
 		ArchetypeID:         rand.Uint32(),
+		Version:             rand.Int63(),
 	}
 
 	s.assertEqualTasks(deleteExecutionReplicationTask)
@@ -473,8 +481,8 @@ func (s *taskSerializerSuite) TestArchiveExecutionTask() {
 		TaskID:              rand.Int63(),
 		Version:             rand.Int63(),
 	}
-	s.Assert().Equal(tasks.CategoryArchival, task.GetCategory())
-	s.Assert().Equal(enumsspb.TASK_TYPE_ARCHIVAL_ARCHIVE_EXECUTION, task.GetType())
+	s.Equal(tasks.CategoryArchival, task.GetCategory())
+	s.Equal(enumsspb.TASK_TYPE_ARCHIVAL_ARCHIVE_EXECUTION, task.GetType())
 
 	s.assertEqualTasks(task)
 }
@@ -532,8 +540,8 @@ func (s *taskSerializerSuite) TestStateMachineOutboundTask() {
 		Destination: "foo",
 	}
 
-	s.Assert().Equal(tasks.CategoryOutbound, task.GetCategory())
-	s.Assert().Equal(enumsspb.TASK_TYPE_STATE_MACHINE_OUTBOUND, task.GetType())
+	s.Equal(tasks.CategoryOutbound, task.GetCategory())
+	s.Equal(enumsspb.TASK_TYPE_STATE_MACHINE_OUTBOUND, task.GetType())
 
 	blob, err := s.serializer.SerializeTask(task)
 	s.NoError(err)
@@ -583,8 +591,8 @@ func (s *taskSerializerSuite) TestStateMachineTimerTask() {
 		Version:             rand.Int63(),
 	}
 
-	s.Assert().Equal(tasks.CategoryTimer, task.GetCategory())
-	s.Assert().Equal(enumsspb.TASK_TYPE_STATE_MACHINE_TIMER, task.GetType())
+	s.Equal(tasks.CategoryTimer, task.GetCategory())
+	s.Equal(enumsspb.TASK_TYPE_STATE_MACHINE_TIMER, task.GetType())
 
 	blob, err := s.serializer.SerializeTask(task)
 	s.NoError(err)

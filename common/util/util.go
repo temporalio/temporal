@@ -3,12 +3,11 @@
 package util
 
 import (
+	"cmp"
 	"context"
 	"maps"
-	"sort"
+	"slices"
 	"time"
-
-	expconstraints "golang.org/x/exp/constraints"
 )
 
 // MinTime returns the earlier of two given time.Time
@@ -19,12 +18,15 @@ func MinTime(a, b time.Time) time.Time {
 	return b
 }
 
-// MaxTime returns the later of two given time.Time
-func MaxTime(a, b time.Time) time.Time {
-	if a.After(b) {
-		return a
+// MaxTime returns the latest of the given time.Time values.
+func MaxTime(first time.Time, rest ...time.Time) time.Time {
+	latest := first
+	for _, t := range rest {
+		if t.After(latest) {
+			latest = t
+		}
 	}
-	return b
+	return latest
 }
 
 // NextAlignedTime returns the earliest time after `t` that is aligned to an integer multiple
@@ -35,10 +37,8 @@ func NextAlignedTime(t time.Time, align time.Duration) time.Time {
 
 // SortSlice sorts the given slice of an ordered type.
 // Sort is not guaranteed to be stable.
-func SortSlice[S ~[]E, E expconstraints.Ordered](slice S) {
-	sort.Slice(slice, func(i, j int) bool {
-		return slice[i] < slice[j]
-	})
+func SortSlice[S ~[]E, E cmp.Ordered](slice S) {
+	slices.Sort(slice)
 }
 
 // SliceHead returns the first n elements of s. n may be greater than len(s).
@@ -117,8 +117,6 @@ func MapConcurrent[IN any, OUT any](input []IN, mapper func(IN) (OUT, error)) ([
 	results := make([]OUT, len(input))
 
 	for i, in := range input {
-		i := i
-		in := in
 		go func() {
 			var err error
 			results[i], err = mapper(in)
@@ -179,8 +177,10 @@ func RepeatSlice[T any](xs []T, n int) []T {
 }
 
 // Ptr returns a pointer to a copy of v.
+//
+//go:fix inline
 func Ptr[T any](v T) *T {
-	return &v
+	return new(v)
 }
 
 // InterruptibleSleep is like time.Sleep but can be interrupted by a context.

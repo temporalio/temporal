@@ -11,6 +11,7 @@ import (
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	wciiface "go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	sdkclient "go.temporal.io/sdk/client"
 	sdklog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
@@ -183,6 +184,64 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 		})
 	}
 
+	// Version gate for demote version signal to prevent NDEs during rollback
+	if workflow.GetVersion(ctx, "demote-version-signal", workflow.DefaultVersion, 0) >= 0 {
+		demoteSignalChannel := workflow.GetSignalChannel(ctx, DemoteVersionSignalName)
+
+		d.signalHandler.signalSelector.AddReceive(demoteSignalChannel, func(c workflow.ReceiveChannel, more bool) {
+			d.signalHandler.processingSignals++
+			defer func() { d.signalHandler.processingSignals-- }()
+
+			var args *deploymentspb.DemoteVersionSignalArgs
+			c.Receive(ctx, &args)
+
+			rg := args.GetRoutingConfig()
+			if rg == nil {
+				return
+			}
+
+			if d.deleteVersion {
+				return
+			}
+
+			// Acquire lock — syncTaskQueuesAsync requires it
+			if err := d.lock.Lock(ctx); err != nil {
+				d.logger.Error("Could not acquire workflow lock for demote signal")
+				return
+			}
+			defer d.lock.Unlock()
+
+			state := d.GetVersionState()
+			newStatus := d.findNewVersionStatusFromRoutingConfig(rg)
+			versionDataChanged := d.updateStateFromRoutingConfig(newStatus, state, rg)
+
+			// Propagate routing config to task queues
+			d.syncTaskQueuesAsync(ctx, rg, versionDataChanged)
+
+			// Start drainage tracking
+			if newStatus == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING {
+				state.LastDeactivationTime = state.RoutingUpdateTime
+				d.startDrainage(ctx)
+			}
+
+			d.setStateChanged()
+		})
+	}
+
+	// Version gate for sync-validation-status signal to prevent NDEs during rollback
+	if workflow.GetVersion(ctx, "sync-validation-status-signal", workflow.DefaultVersion, 0) >= 0 {
+		syncValidationStatusChannel := workflow.GetSignalChannel(ctx, worker_versioning.SignalSyncValidationStatus)
+		d.signalHandler.signalSelector.AddReceive(syncValidationStatusChannel, func(c workflow.ReceiveChannel, more bool) {
+			d.signalHandler.processingSignals++
+			defer func() { d.signalHandler.processingSignals-- }()
+
+			var vs wciiface.ValidationStatus
+			c.Receive(ctx, &vs)
+			d.VersionState.ComputeStatus = wciValidationStatusToComputeStatus(&vs)
+			d.syncSummary(ctx) // propagate updated ComputeStatus to deployment workflow
+		})
+	}
+
 	// Keep waiting for signals, when it's time to CaN the main goroutine will exit.
 	for {
 		d.signalHandler.signalSelector.Select(ctx)
@@ -284,6 +343,12 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 			//nolint:staticcheck // SA1019
 			d.VersionState.StartedDeploymentWorkflow = true
 		}
+	}
+
+	// When creating a compute provider and version together, there is a race condition between the two coming up. Making sure to have pulled
+	// the latest state from the compute provider if this happens to be the slower one.
+	if err := d.syncVersionDataToComputeStatus(ctx); err != nil {
+		return err
 	}
 
 	// Listen to signals in a different goroutine to make business logic clearer
@@ -544,7 +609,6 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 	return nil
 }
 
-//nolint:revive,errcheck // In async mode the activities retry indefinitely so this function should not return error
 func (d *VersionWorkflowRunner) deleteVersionFromTaskQueuesAsync(ctx workflow.Context) {
 	// If there are propagations in progress, we ask them to cancel and wait for them to do so.
 	// The reason is that the ongoing upsert propagation may overwrite the delete that we want to send here, unintentionally undoing it.
@@ -552,7 +616,20 @@ func (d *VersionWorkflowRunner) deleteVersionFromTaskQueuesAsync(ctx workflow.Co
 	workflow.Await(ctx, func() bool { return d.asyncPropagationsInProgress == 1 }) // delete itself is counted as one
 	d.cancelPropagations = false                                                   // need to unset this in case the version is revived
 
-	d.deleteVersionFromTaskQueues(ctx, workflow.WithActivityOptions(ctx, propagationActivityOptions))
+	// Retryable failures retry indefinitely.
+	err := d.deleteVersionFromTaskQueues(ctx, workflow.WithActivityOptions(ctx, propagationActivityOptions))
+	if err != nil {
+		// Terminal failure. Task queues may retain stale version data, but we still
+		// decrement below so the workflow can complete; the log and metric support manual
+		// recovery. This matches syncTaskQueuesAsync, which also decrements on failure.
+		d.logger.Error(
+			"failed to delete worker deployment version from task queues",
+			"error", err,
+			"taskQueues", workflow.DeterministicKeys(d.GetVersionState().GetTaskQueueFamilies()),
+			"revision", d.GetVersionState().GetRevisionNumber(),
+		)
+		d.metrics.Counter(metrics.WorkerDeploymentVersionDeletePropagationFailure.Name()).Inc(1)
+	}
 	d.asyncPropagationsInProgress--
 }
 
@@ -629,10 +706,11 @@ func (d *VersionWorkflowRunner) doesVersionHaveActivePollers(ctx workflow.Contex
 func (d *VersionWorkflowRunner) validateRegisterWorker(args *deploymentspb.RegisterWorkerInVersionArgs) error {
 	// Should not ensure not deleted, instead the version would revive if deleted.
 
-	if _, ok := d.VersionState.TaskQueueFamilies[args.TaskQueueName].GetTaskQueues()[int32(args.TaskQueueType)]; ok {
+	taskQueueFamily, familyExists := d.VersionState.TaskQueueFamilies[args.TaskQueueName]
+	if _, ok := taskQueueFamily.GetTaskQueues()[int32(args.TaskQueueType)]; ok {
 		return temporal.NewApplicationError("task queue already exists in deployment version", errNoChangeType)
 	}
-	if len(d.VersionState.TaskQueueFamilies) >= int(args.MaxTaskQueues) {
+	if !familyExists && len(d.VersionState.TaskQueueFamilies) >= int(args.MaxTaskQueues) {
 		return temporal.NewApplicationError(
 			fmt.Sprintf("maximum number of task queues (%d) have been registered in deployment", args.MaxTaskQueues),
 			errMaxTaskQueuesInVersionType,
@@ -1012,6 +1090,7 @@ func versionStateToSummary(s *deploymentspb.VersionLocalState) *deploymentspb.Wo
 		LastDeactivationTime: s.LastDeactivationTime,
 		Status:               s.Status,
 		ComputeConfig:        s.ComputeConfig,
+		ComputeStatus:        s.ComputeStatus,
 	}
 }
 
@@ -1028,7 +1107,7 @@ func (d *VersionWorkflowRunner) refreshDrainageInfo(ctx workflow.Context) {
 	drainage := d.VersionState.GetDrainageInfo()
 	var interval time.Duration
 	var err error
-	if drainage.LastCheckedTime.AsTime() == drainage.LastChangedTime.AsTime() {
+	if drainage.LastCheckedTime.AsTime().Equal(drainage.LastChangedTime.AsTime()) {
 		// this is the first update, so we wait according to the grace period config
 		interval, err = getSafeDurationConfig(ctx, "getVisibilityGracePeriod", d.unsafeVisibilityGracePeriodGetter, defaultVisibilityGrace)
 	} else {
@@ -1132,11 +1211,12 @@ func (d *VersionWorkflowRunner) findNewVersionStatus(args *deploymentspb.SyncVer
 }
 
 func (d *VersionWorkflowRunner) updateVersionStatusAfterDrainageStatusChange(ctx workflow.Context, newStatus enumspb.VersionDrainageStatus) {
-	if newStatus == enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
+	switch newStatus {
+	case enumspb.VERSION_DRAINAGE_STATUS_DRAINED:
 		d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED
-	} else if newStatus == enumspb.VERSION_DRAINAGE_STATUS_DRAINING {
+	case enumspb.VERSION_DRAINAGE_STATUS_DRAINING:
 		d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINING
-	} else {
+	default:
 		// This should only happen if we encounter an error while checking the drainage status of the version
 		d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_UNSPECIFIED
 	}
@@ -1181,6 +1261,33 @@ func (d *VersionWorkflowRunner) syncVersionStatusAfterDrainageStatusChange(ctx w
 	}
 
 	return d.syncVersionDataToTaskQueues(ctx, versionData)
+}
+
+// syncVersionDataToComputeStatus is a helper that syncs the compute status from WCI to the worker deployment version
+func (d *VersionWorkflowRunner) syncVersionDataToComputeStatus(ctx workflow.Context) error {
+	if workflow.GetVersion(ctx, "sync-compute-validation-status", workflow.DefaultVersion, 0) == workflow.DefaultVersion {
+		return nil
+	}
+
+	state := d.GetVersionState()
+
+	if state.ComputeStatus == nil && state.ComputeConfig != nil {
+		workflow.Go(ctx, func(ctx workflow.Context) {
+			logger := workflow.GetLogger(ctx)
+
+			var result deploymentpb.ComputeStatus
+			resp := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, defaultActivityOptions), d.a.DescribeWorkerControllerInstanceStatus, state.GetVersion())
+			if err := resp.Get(ctx, &result); err != nil {
+				logger.Error("failed to sync compute status", "error", err)
+			} else if result.ProviderValidation != nil {
+				state.ComputeStatus = &result
+				if workflow.GetVersion(ctx, "sync-compute-status-to-deployment", workflow.DefaultVersion, 0) >= 0 {
+					d.syncSummary(ctx) // propagate updated ComputeStatus to deployment workflow
+				}
+			}
+		})
+	}
+	return nil
 }
 
 // syncVersionDataToTaskQueues is a helper that syncs the provided version data to all task queues.

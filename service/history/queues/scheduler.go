@@ -115,6 +115,7 @@ func NewScheduler(
 		ns, err := namespaceRegistry.GetNamespaceByID(namespace.ID(key.NamespaceID))
 		if err == nil {
 			namespaceName = ns.Name()
+			//nolint:forbidigo // scheduler is namespace-scoped
 			if !ns.ActiveInCluster(currentClusterName) {
 				namespaceWeights = options.StandbyNamespaceWeights
 			}

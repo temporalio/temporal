@@ -6,6 +6,7 @@ import (
 	"text/template"
 	"time"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -15,14 +16,14 @@ import (
 
 var LongPollTimeout = dynamicconfig.NewNamespaceDurationSetting(
 	"nexusoperation.longPollTimeout",
-	20*time.Second,
+	common.DefaultLongPollTimeout,
 	`Maximum timeout for nexus operation long-poll requests. Actual wait may be shorter to leave
 longPollBuffer before the caller deadline.`,
 )
 
 var LongPollBuffer = dynamicconfig.NewNamespaceDurationSetting(
 	"nexusoperation.longPollBuffer",
-	time.Second,
+	common.DefaultLongPollBuffer,
 	`A buffer used to adjust the nexus operation long-poll timeouts.
  Specifically, nexus operation long-poll requests are timed out at a time which leaves at least the buffer's duration
  remaining before the caller's deadline, if permitted by the caller's deadline.`,
@@ -34,12 +35,35 @@ var Enabled = dynamicconfig.NewNamespaceBoolSetting(
 	`Toggles standalone Nexus operation functionality on the server.`,
 )
 
-var EnableChasmNexus = dynamicconfig.NewNamespaceBoolSetting(
-	"nexusoperation.enableChasm",
+var EnableChasmWorkflowOperations = dynamicconfig.NewNamespaceBoolSetting(
+	"nexusoperation.enableChasmWorkflowOperations",
 	false,
 	`Feature flag that controls whether the legacy HSM-based implementation (when flag is false; default) or the newer
 CHASM-based implementation of Nexus will be used when scheduling new Nexus Operations.`,
 )
+
+var ChasmWorkflowOperationsRolloutPercent = dynamicconfig.NewNamespaceIntSetting(
+	"nexusoperation.chasmWorkflowOperationsRolloutPercent",
+	0,
+	`Per-namespace percentage [0,100] of workflows whose new Nexus Operations are created on the CHASM-based
+implementation instead of the legacy HSM-based implementation. This setting is only consulted when
+enableChasmWorkflowOperations is true and is re-evaluated on every ScheduleNexusOperation command. Membership is
+decided by a stable hash of the namespace and workflow ID, so a given workflow consistently lands on the same
+implementation across all of its operations and dialing the percentage up is monotonic. Defaults to 0 (conservative
+dial-up model): even when enableChasmWorkflowOperations is on, no operations are routed to CHASM until the percentage
+is explicitly dialed up.`,
+)
+
+// UseChasmForWorkflow reports whether new Nexus operations for a workflow
+// should be created on CHASM. Live creation and rebuild must share this
+// predicate so reset keeps workflows in the same rollout bucket.
+func UseChasmForWorkflow(enabled bool, rolloutPercent int, namespaceName, workflowID string) bool {
+	if !enabled {
+		return false
+	}
+	key := fmt.Appendf(nil, "%s\x00%s", namespaceName, workflowID)
+	return dynamicconfig.RolloutAccepts(key, rolloutPercent)
+}
 
 var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
 	"nexusoperation.request.timeout",
@@ -114,7 +138,8 @@ var DisallowedOperationHeaders = dynamicconfig.NewGlobalTypedSettingWithConverte
 	},
 	[]string{
 		"request-timeout",
-		interceptor.DCRedirectionApiHeaderName,
+		interceptor.DCRedirectionAPIHeaderName,
+		interceptor.DCRedirectionSourceCellHeaderName,
 		interceptor.DCRedirectionContextHeaderName,
 		headers.CallerNameHeaderName,
 		headers.CallerTypeHeaderName,
@@ -211,43 +236,47 @@ Uses Go's len() function to determine the length.`,
 var UseNewFailureWireFormat = dynamicconfig.NewNamespaceBoolSetting(
 	"nexusoperation.useNewFailureWireFormat",
 	true,
-	`Controls whether to use the new failure wire format via an HTTP header that is attached to StartOperation requests.
+	`Controls whether to use the new failure wire format via an HTTP header that is attached to Nexus operation requests.
 Added for safety. Defaults to true. Likely to be removed in future server versions.`,
 )
 
 type Config struct {
-	Enabled                             dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableChasm                         dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableChasmNexus                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	NumHistoryShards                    int32
-	LongPollBuffer                      dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	LongPollTimeout                     dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	RequestTimeout                      dynamicconfig.DurationPropertyFnWithDestinationFilter
-	MinRequestTimeout                   dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	MaxConcurrentOperationsPerWorkflow  dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxServiceNameLength                dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxOperationNameLength              dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxOperationTokenLength             dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxOperationHeaderSize              dynamicconfig.IntPropertyFnWithNamespaceFilter
-	DisallowedOperationHeaders          dynamicconfig.TypedPropertyFn[[]string]
-	MaxOperationScheduleToCloseTimeout  dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	PayloadSizeLimit                    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	CallbackURLTemplate                 dynamicconfig.TypedPropertyFn[*template.Template]
-	UseSystemCallbackURL                dynamicconfig.BoolPropertyFn
-	PayloadSizeLimitWarn                dynamicconfig.IntPropertyFnWithNamespaceFilter
-	UseNewFailureWireFormat             dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	RecordCancelRequestCompletionEvents dynamicconfig.BoolPropertyFn
-	VisibilityMaxPageSize               dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxIDLengthLimit                    dynamicconfig.IntPropertyFn
-	MaxReasonLength                     dynamicconfig.IntPropertyFnWithNamespaceFilter
-	RetryPolicy                         func() backoff.RetryPolicy
+	Enabled                                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableChasm                                dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableChasmNexusWorkflowOperations         dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ChasmNexusWorkflowOperationsRolloutPercent dynamicconfig.IntPropertyFnWithNamespaceFilter
+	NumHistoryShards                           int32
+	LongPollBuffer                             dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	LongPollTimeout                            dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	RequestTimeout                             dynamicconfig.DurationPropertyFnWithDestinationFilter
+	MinRequestTimeout                          dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	MaxConcurrentOperationsPerWorkflow         dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxServiceNameLength                       dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxOperationNameLength                     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxOperationTokenLength                    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxOperationHeaderSize                     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	DisallowedOperationHeaders                 dynamicconfig.TypedPropertyFn[[]string]
+	MaxOperationScheduleToCloseTimeout         dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	PayloadSizeLimit                           dynamicconfig.IntPropertyFnWithNamespaceFilter
+	CallbackURLTemplate                        dynamicconfig.TypedPropertyFn[*template.Template]
+	UseSystemCallbackURL                       dynamicconfig.BoolPropertyFn
+	PayloadSizeLimitWarn                       dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxUserMetadataSummarySize                 dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxUserMetadataDetailsSize                 dynamicconfig.IntPropertyFnWithNamespaceFilter
+	UseNewFailureWireFormat                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	RecordCancelRequestCompletionEvents        dynamicconfig.BoolPropertyFn
+	VisibilityMaxPageSize                      dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxIDLengthLimit                           dynamicconfig.IntPropertyFn
+	MaxReasonLength                            dynamicconfig.IntPropertyFnWithNamespaceFilter
+	RetryPolicy                                func() backoff.RetryPolicy
 }
 
 func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Config {
 	return &Config{
 		Enabled:                            Enabled.Get(dc),
 		EnableChasm:                        dynamicconfig.EnableChasm.Get(dc),
-		EnableChasmNexus:                   EnableChasmNexus.Get(dc),
+		EnableChasmNexusWorkflowOperations: EnableChasmWorkflowOperations.Get(dc),
+		ChasmNexusWorkflowOperationsRolloutPercent: ChasmWorkflowOperationsRolloutPercent.Get(dc),
 		NumHistoryShards:                   cfg.NumHistoryShards,
 		LongPollBuffer:                     LongPollBuffer.Get(dc),
 		LongPollTimeout:                    LongPollTimeout.Get(dc),
@@ -262,6 +291,8 @@ func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 		MaxOperationScheduleToCloseTimeout: MaxOperationScheduleToCloseTimeout.Get(dc),
 		PayloadSizeLimit:                   dynamicconfig.BlobSizeLimitError.Get(dc),
 		PayloadSizeLimitWarn:               dynamicconfig.BlobSizeLimitWarn.Get(dc),
+		MaxUserMetadataSummarySize:         dynamicconfig.MaxUserMetadataSummarySize.Get(dc),
+		MaxUserMetadataDetailsSize:         dynamicconfig.MaxUserMetadataDetailsSize.Get(dc),
 		CallbackURLTemplate:                CallbackURLTemplate.Get(dc),
 		UseSystemCallbackURL:               UseSystemCallbackURL.Get(dc),
 		UseNewFailureWireFormat:            UseNewFailureWireFormat.Get(dc),

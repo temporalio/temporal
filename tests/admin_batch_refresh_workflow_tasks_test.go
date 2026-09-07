@@ -1,14 +1,12 @@
 package tests
 
 import (
-	"context"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -18,26 +16,29 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/codes"
 )
 
 type AdminBatchRefreshWorkflowTasksTestSuite struct {
-	testcore.FunctionalTestBase
+	parallelsuite.Suite[*AdminBatchRefreshWorkflowTasksTestSuite]
 }
 
 func TestAdminBatchRefreshWorkflowTasksTestSuite(t *testing.T) {
-	s := new(AdminBatchRefreshWorkflowTasksTestSuite)
-	suite.Run(t, s)
+	parallelsuite.Run(t, &AdminBatchRefreshWorkflowTasksTestSuite{})
 }
 
-func (s *AdminBatchRefreshWorkflowTasksTestSuite) SetupSuite() {
+// newTestEnv creates a TestEnv with the dynamic config this suite needs.
+// Additional per-test options may be passed in opts.
+func (s *AdminBatchRefreshWorkflowTasksTestSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
 	// Use a higher limit for general tests to avoid interference from batch operations
 	// that haven't completed yet. The isolation test (A_SeparateLimitFromFrontendBatchOperation)
 	// explicitly sets limit to 1 to verify frontend and admin batch ops use separate limits.
-	s.SetupSuiteWithCluster(testcore.WithDynamicConfigOverrides(map[dynamicconfig.Key]any{
-		dynamicconfig.FrontendMaxConcurrentAdminBatchOperationPerNamespace.Key(): 10,
-	}))
+	baseOpts := []testcore.TestOption{
+		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentAdminBatchOperationPerNamespace, 10),
+	}
+	return testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
 }
 
 func (s *AdminBatchRefreshWorkflowTasksTestSuite) simpleWorkflow(ctx workflow.Context) (string, error) {
@@ -45,37 +46,36 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) simpleWorkflow(ctx workflow.Co
 	return "done", nil
 }
 
-func (s *AdminBatchRefreshWorkflowTasksTestSuite) createWorkflow(ctx context.Context, workflowFn any) sdkclient.WorkflowRun {
+func (s *AdminBatchRefreshWorkflowTasksTestSuite) createWorkflow(env *testcore.TestEnv, workflowFn any) sdkclient.WorkflowRun {
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
-		TaskQueue: s.TaskQueue(),
+		TaskQueue: env.WorkerTaskQueue(),
 	}
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), workflowOptions, workflowFn)
 	s.NoError(err)
 	s.NotNil(workflowRun)
 	return workflowRun
 }
 
 func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_RefreshWorkflowTasks_Success() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	env := s.newTestEnv()
 
-	s.SdkWorker().RegisterWorkflow(s.simpleWorkflow)
+	env.SdkWorker().RegisterWorkflow(s.simpleWorkflow)
 
 	// Create two workflows
-	workflowRun1 := s.createWorkflow(ctx, s.simpleWorkflow)
-	workflowRun2 := s.createWorkflow(ctx, s.simpleWorkflow)
+	workflowRun1 := s.createWorkflow(env, s.simpleWorkflow)
+	workflowRun2 := s.createWorkflow(env, s.simpleWorkflow)
 
 	// Wait for workflows to complete
 	var out string
-	err := workflowRun1.Get(ctx, &out)
+	err := workflowRun1.Get(s.Context(), &out)
 	s.NoError(err)
-	err = workflowRun2.Get(ctx, &out)
+	err = workflowRun2.Get(s.Context(), &out)
 	s.NoError(err)
 
 	// Start admin batch operation to refresh workflow tasks using executions list
-	resp, err := s.AdminClient().StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
-		Namespace: s.Namespace().String(),
+	resp, err := env.AdminClient().StartAdminBatchOperation(s.Context(), &adminservice.StartAdminBatchOperationRequest{
+		Namespace: env.Namespace().String(),
 		JobId:     uuid.NewString(),
 		Reason:    "test refresh workflow tasks",
 		Identity:  "test-identity",
@@ -92,26 +92,25 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_R
 }
 
 func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_RefreshWorkflowTasks_WithVisibilityQuery() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	env := s.newTestEnv()
 
-	s.SdkWorker().RegisterWorkflow(s.simpleWorkflow)
+	env.SdkWorker().RegisterWorkflow(s.simpleWorkflow)
 
 	// Create workflows
-	workflowRun1 := s.createWorkflow(ctx, s.simpleWorkflow)
-	workflowRun2 := s.createWorkflow(ctx, s.simpleWorkflow)
+	workflowRun1 := s.createWorkflow(env, s.simpleWorkflow)
+	workflowRun2 := s.createWorkflow(env, s.simpleWorkflow)
 
 	// Wait for workflows to complete
 	var out string
-	err := workflowRun1.Get(ctx, &out)
+	err := workflowRun1.Get(s.Context(), &out)
 	s.NoError(err)
-	err = workflowRun2.Get(ctx, &out)
+	err = workflowRun2.Get(s.Context(), &out)
 	s.NoError(err)
 
 	// Wait for workflows to be visible
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		resp, err := s.FrontendClient().CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
-			Namespace: s.Namespace().String(),
+		resp, err := env.FrontendClient().CountWorkflowExecutions(s.Context(), &workflowservice.CountWorkflowExecutionsRequest{
+			Namespace: env.Namespace().String(),
 			Query:     "WorkflowType='simpleWorkflow'",
 		})
 		require.NoError(t, err)
@@ -119,8 +118,8 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_R
 	}, 10*time.Second, 500*time.Millisecond)
 
 	// Start admin batch operation using visibility query
-	resp, err := s.AdminClient().StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
-		Namespace:       s.Namespace().String(),
+	resp, err := env.AdminClient().StartAdminBatchOperation(s.Context(), &adminservice.StartAdminBatchOperationRequest{
+		Namespace:       env.Namespace().String(),
 		VisibilityQuery: "WorkflowType='simpleWorkflow'",
 		JobId:           uuid.NewString(),
 		Reason:          "test refresh workflow tasks with query",
@@ -134,12 +133,11 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_R
 }
 
 func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_InvalidArgument_NoOperation() {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	env := s.newTestEnv()
 
 	// Request without operation should fail
-	_, err := s.AdminClient().StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
-		Namespace: s.Namespace().String(),
+	_, err := env.AdminClient().StartAdminBatchOperation(s.Context(), &adminservice.StartAdminBatchOperationRequest{
+		Namespace: env.Namespace().String(),
 		JobId:     uuid.NewString(),
 		Reason:    "test",
 		Executions: []*commonpb.WorkflowExecution{
@@ -151,11 +149,10 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_I
 }
 
 func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_InvalidArgument_NoNamespace() {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	env := s.newTestEnv()
 
 	// Request without namespace should fail
-	_, err := s.AdminClient().StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
+	_, err := env.AdminClient().StartAdminBatchOperation(s.Context(), &adminservice.StartAdminBatchOperationRequest{
 		JobId:    uuid.NewString(),
 		Reason:   "test",
 		Identity: "test-identity",
@@ -171,12 +168,11 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_I
 }
 
 func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_InvalidArgument_NoJobId() {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	env := s.newTestEnv()
 
 	// Request without job_id should fail
-	_, err := s.AdminClient().StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
-		Namespace: s.Namespace().String(),
+	_, err := env.AdminClient().StartAdminBatchOperation(s.Context(), &adminservice.StartAdminBatchOperationRequest{
+		Namespace: env.Namespace().String(),
 		Reason:    "test",
 		Identity:  "test-identity",
 		Executions: []*commonpb.WorkflowExecution{
@@ -191,12 +187,11 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_I
 }
 
 func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_InvalidArgument_NoExecutionsOrQuery() {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
+	env := s.newTestEnv()
 
 	// Request without executions or visibility_query should fail
-	_, err := s.AdminClient().StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
-		Namespace: s.Namespace().String(),
+	_, err := env.AdminClient().StartAdminBatchOperation(s.Context(), &adminservice.StartAdminBatchOperationRequest{
+		Namespace: env.Namespace().String(),
 		JobId:     uuid.NewString(),
 		Reason:    "test",
 		Identity:  "test-identity",
@@ -209,27 +204,26 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_I
 }
 
 func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_0_SeparateLimitFromFrontendBatchOperation() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	env := s.newTestEnv(
+		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, 1),
+		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentAdminBatchOperationPerNamespace, 1),
+	)
 
-	s.SdkWorker().RegisterWorkflow(s.simpleWorkflow)
-
-	s.OverrideDynamicConfig(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, 1)
-	s.OverrideDynamicConfig(dynamicconfig.FrontendMaxConcurrentAdminBatchOperationPerNamespace, 1)
+	env.SdkWorker().RegisterWorkflow(s.simpleWorkflow)
 
 	// Create workflows
-	workflowRun1 := s.createWorkflow(ctx, s.simpleWorkflow)
-	workflowRun2 := s.createWorkflow(ctx, s.simpleWorkflow)
+	workflowRun1 := s.createWorkflow(env, s.simpleWorkflow)
+	workflowRun2 := s.createWorkflow(env, s.simpleWorkflow)
 
 	// Wait for workflows to complete
 	var out string
-	err := workflowRun1.Get(ctx, &out)
+	err := workflowRun1.Get(s.Context(), &out)
 	s.NoError(err)
-	err = workflowRun2.Get(ctx, &out)
+	err = workflowRun2.Get(s.Context(), &out)
 	s.NoError(err)
 
-	_, err = s.FrontendClient().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
-		Namespace: s.Namespace().String(),
+	_, err = env.FrontendClient().StartBatchOperation(s.Context(), &workflowservice.StartBatchOperationRequest{
+		Namespace: env.Namespace().String(),
 		Executions: []*commonpb.WorkflowExecution{
 			{WorkflowId: workflowRun1.GetID(), RunId: workflowRun1.GetRunID()},
 		},
@@ -245,8 +239,8 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_0
 	})
 	s.NoError(err, "frontend batch operation should succeed")
 
-	_, err = s.AdminClient().StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
-		Namespace: s.Namespace().String(),
+	_, err = env.AdminClient().StartAdminBatchOperation(s.Context(), &adminservice.StartAdminBatchOperationRequest{
+		Namespace: env.Namespace().String(),
 		Executions: []*commonpb.WorkflowExecution{
 			{WorkflowId: workflowRun2.GetID(), RunId: workflowRun2.GetRunID()},
 		},

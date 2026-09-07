@@ -60,5 +60,5 @@ func (s *fixedTranslatorPluginTestSuite) TestFixedAddressTranslator() {
 	s.Equal(ipToExpect, translatedHost)
 	s.Equal(6001, translatedPort)
 
-	s.Equal(nil, err)
+	s.NoError(err)
 }

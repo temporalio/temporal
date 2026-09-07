@@ -1,57 +1,27 @@
 package flakereport
 
 import (
-	"encoding/xml"
 	"fmt"
-	"os"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/jstemmer/go-junit-report/v2/junit"
+	"go.temporal.io/server/tools/common/junit"
 )
 
 var finalRegex = regexp.MustCompile(`\s*\(final\)$`)
 var trailingSuffixRegex = regexp.MustCompile(`\s*\([^)]+\)$`)
 
-// parseJUnitFile reads and parses a single JUnit XML file
-func parseJUnitFile(filePath string) (*junit.Testsuites, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open file %s: %w", filePath, err)
-	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			fmt.Printf("Warning: Failed to close file %s: %v\n", filePath, err)
-		}
-	}()
-
-	var testsuites junit.Testsuites
-	decoder := xml.NewDecoder(file)
-	if err := decoder.Decode(&testsuites); err != nil {
-		// Try parsing as a single testsuite
-		if _, seekErr := file.Seek(0, 0); seekErr != nil {
-			return nil, fmt.Errorf("failed to seek file %s: %w", filePath, seekErr)
-		}
-		var testsuite junit.Testsuite
-		decoder = xml.NewDecoder(file)
-		if err := decoder.Decode(&testsuite); err != nil {
-			return nil, fmt.Errorf("failed to parse JUnit XML %s: %w", filePath, err)
-		}
-		testsuites.Suites = []junit.Testsuite{testsuite}
-	}
-
-	return &testsuites, nil
-}
+const testRunnerTotalTimeout = "testrunner.TotalTimeout"
 
 // topLevelTestName extracts the suite/top-level test name from a test name.
 // For "TestSuiteV0/TestMethod" returns "TestSuiteV0".
 // For "TestFoo" (no slash) returns "TestFoo".
 func topLevelTestName(name string) string {
-	if idx := strings.IndexByte(name, '/'); idx >= 0 {
-		return name[:idx]
+	if before, _, ok := strings.Cut(name, "/"); ok {
+		return before
 	}
 	return name
 }
@@ -128,6 +98,31 @@ func normalizeTestName(name string) string {
 	}
 }
 
+func isTestRunnerTimeout(name string) bool {
+	return strings.EqualFold(normalizeTestName(name), testRunnerTotalTimeout)
+}
+
+func splitTestRunnerTimeoutFailures(failures []TestFailure) (testFailures, testRunnerTimeouts []TestFailure) {
+	for _, failure := range failures {
+		if isTestRunnerTimeout(failure.Name) {
+			testRunnerTimeouts = append(testRunnerTimeouts, failure)
+			continue
+		}
+		testFailures = append(testFailures, failure)
+	}
+	return testFailures, testRunnerTimeouts
+}
+
+func filterTestRunnerTimeoutRuns(runs []TestRun) []TestRun {
+	filtered := runs[:0]
+	for _, run := range runs {
+		if !isTestRunnerTimeout(run.Name) {
+			filtered = append(filtered, run)
+		}
+	}
+	return filtered
+}
+
 // groupFailuresByTest groups failures by normalized test name
 func groupFailuresByTest(failures []TestFailure) map[string][]TestFailure {
 	grouped := make(map[string][]TestFailure)
@@ -159,6 +154,9 @@ func countTestRuns(allRuns []TestRun) map[string]int {
 // Uses Contains (not HasSuffix) so it works on both raw and normalized names.
 func classifyFailure(name string) string {
 	lower := strings.ToLower(name)
+	if isTestRunnerTimeout(name) {
+		return "timeout"
+	}
 	if strings.Contains(lower, "(timeout)") {
 		return "timeout"
 	}
@@ -192,9 +190,49 @@ func classifyFailures(grouped map[string][]TestFailure) (flaky, timeout, crash m
 	return flaky, timeout, crash
 }
 
+func utcDay(t time.Time) time.Time {
+	y, m, d := t.UTC().Date()
+	return time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+}
+
+type reportWindow struct {
+	days []time.Time
+}
+
+func newReportWindow(since, until time.Time) reportWindow {
+	if since.IsZero() || until.IsZero() || until.Before(since) {
+		return reportWindow{}
+	}
+
+	start := utcDay(since)
+	end := utcDay(until)
+	days := make([]time.Time, 0, int(end.Sub(start).Hours()/24)+1)
+	for day := start; !day.After(end); day = day.AddDate(0, 0, 1) {
+		days = append(days, day)
+	}
+	return reportWindow{days: days}
+}
+
+func (w reportWindow) dailyFailureCounts(failures []TestFailure) []int {
+	if len(w.days) == 0 {
+		return nil
+	}
+
+	counts := make([]int, len(w.days))
+	firstDay := w.days[0]
+	for _, failure := range failures {
+		day := utcDay(failure.Timestamp)
+		if day.Before(firstDay) || day.After(w.days[len(w.days)-1]) {
+			continue
+		}
+		counts[int(day.Sub(firstDay).Hours()/24)]++
+	}
+	return counts
+}
+
 // buildReports builds TestReport slice from grouped failures, sorts by FailureCount/TotalRuns descending.
 // numerator and denominator return the rate components for each test.
-func buildReports(grouped map[string][]TestFailure, numerator func(string, []TestFailure) int, denominator func(string, []TestFailure) int, repo string, maxLinks int) []TestReport {
+func buildReports(grouped map[string][]TestFailure, numerator func(string, []TestFailure) int, denominator func(string, []TestFailure) int, repo string, maxLinks int, window reportWindow) []TestReport {
 	var reports []TestReport
 
 	for testName, failures := range grouped {
@@ -211,6 +249,7 @@ func buildReports(grouped map[string][]TestFailure, numerator func(string, []Tes
 			FailureCount: numerator(testName, failures),
 			TotalRuns:    denominator(testName, failures),
 			LastFailure:  lastFailure,
+			TrendPoints:  window.dailyFailureCounts(failures),
 			GitHubURLs:   make([]string, 0, maxLinks),
 		}
 
@@ -240,7 +279,7 @@ func buildReports(grouped map[string][]TestFailure, numerator func(string, []Tes
 
 // convertToReports converts grouped failures to TestReport slice
 // testRunCounts maps test name to total number of runs (including successes)
-func convertToReports(grouped map[string][]TestFailure, testRunCounts map[string]int, repo string, maxLinks int) []TestReport {
+func convertToReports(grouped map[string][]TestFailure, testRunCounts map[string]int, repo string, maxLinks int, window reportWindow) []TestReport {
 	return buildReports(grouped,
 		func(_ string, failures []TestFailure) int { return len(failures) },
 		func(name string, failures []TestFailure) int {
@@ -249,7 +288,22 @@ func convertToReports(grouped map[string][]TestFailure, testRunCounts map[string
 			}
 			return len(failures) // Fallback if we don't have run counts
 		},
-		repo, maxLinks)
+		repo, maxLinks, window)
+}
+
+func convertEventReports(grouped map[string][]TestFailure, repo string, maxLinks int, window reportWindow) []TestReport {
+	return buildReports(grouped,
+		func(_ string, failures []TestFailure) int { return countArtifacts(failures) },
+		func(string, []TestFailure) int { return 0 },
+		repo, maxLinks, window)
+}
+
+func countArtifacts(failures []TestFailure) int {
+	artifacts := make(map[string]struct{}, len(failures))
+	for _, failure := range failures {
+		artifacts[failure.ArtifactID] = struct{}{}
+	}
+	return len(artifacts)
 }
 
 // filterParentTests removes top-level test names from grouped when subtests of
@@ -260,8 +314,8 @@ func convertToReports(grouped map[string][]TestFailure, testRunCounts map[string
 func filterParentTests(grouped map[string][]TestFailure, testRunCounts map[string]int) {
 	suitePrefix := make(map[string]bool, len(testRunCounts))
 	for name := range testRunCounts {
-		if idx := strings.IndexByte(name, '/'); idx >= 0 {
-			suitePrefix[name[:idx]] = true
+		if before, _, ok := strings.Cut(name, "/"); ok {
+			suitePrefix[before] = true
 		}
 	}
 	for testName := range grouped {
@@ -302,7 +356,7 @@ func analyzeArtifactForCIBreakers(artifactID string, artifactFailures []TestFail
 // Crashes are job-level events. The rate is unique-jobs-with-crash / total jobs of that type.
 // The crash name (e.g. "functional-test") matches the artifact name suffix, so we count
 // artifacts ending with "--<crash-name>" as the denominator.
-func convertCrashesToReports(grouped map[string][]TestFailure, jobs []ArtifactJob, repo string, maxLinks int) []TestReport {
+func convertCrashesToReports(grouped map[string][]TestFailure, jobs []ArtifactJob, repo string, maxLinks int, window reportWindow) []TestReport {
 	// Count artifacts per type suffix (e.g. "functional-test", "unit-test")
 	artifactsByType := make(map[string]int)
 	for _, job := range jobs {
@@ -326,16 +380,15 @@ func convertCrashesToReports(grouped map[string][]TestFailure, jobs []ArtifactJo
 			}
 			return 1 // Fallback to avoid division by zero
 		},
-		repo, maxLinks)
+		repo, maxLinks, window)
 }
 
-// convertCIBreakersToReports converts CI breaker failures to TestReport slice.
-// totalWorkflowRuns is the total number of CI runs analyzed (denominator for break rate).
-func convertCIBreakersToReports(grouped map[string][]TestFailure, ciBreakCounts map[string]int, totalWorkflowRuns int, repo string, maxLinks int) []TestReport {
+// convertCIBreakersToReports converts final-retry failures to TestReport slice.
+func convertCIBreakersToReports(grouped map[string][]TestFailure, ciBreakCounts map[string]int, repo string, maxLinks int, window reportWindow) []TestReport {
 	return buildReports(grouped,
 		func(name string, _ []TestFailure) int { return ciBreakCounts[name] },
-		func(_ string, _ []TestFailure) int { return totalWorkflowRuns },
-		repo, maxLinks)
+		func(string, []TestFailure) int { return 0 },
+		repo, maxLinks, window)
 }
 
 // identifyCIBreakers finds tests that failed their final retry in a CI job.
@@ -413,7 +466,8 @@ func generateSuiteReports(allFailures []TestFailure, allTestRuns []TestRun) []Su
 		if suiteFailedRuns[failure.SuiteName] == nil {
 			suiteFailedRuns[failure.SuiteName] = make(map[string]bool)
 		}
-		suiteFailedRuns[failure.SuiteName][suiteRunKey(failure.RunID, failure.MatrixName)] = true
+		runKey := suiteRunKey(failure.RunID, failure.MatrixName)
+		suiteFailedRuns[failure.SuiteName][runKey] = true
 		if failure.Timestamp.After(suiteLastFailure[failure.SuiteName]) {
 			suiteLastFailure[failure.SuiteName] = failure.Timestamp
 		}

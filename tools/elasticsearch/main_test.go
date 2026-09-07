@@ -33,7 +33,7 @@ func (s *MainTestSuite) TestSetupSchemaError() {
 	args := []string{"./tool", "setup-schema"}
 	app := BuildCLIOptions()
 	err := app.Run(args)
-	s.Nil(err)
+	s.NoError(err)
 }
 
 func (s *MainTestSuite) TestPingError() {
@@ -46,5 +46,5 @@ func (s *MainTestSuite) TestPingError() {
 	args := []string{"./tool", "--endpoint", "http://nonexistent:9200", "ping"}
 	app := BuildCLIOptions()
 	err := app.Run(args)
-	s.Nil(err)
+	s.NoError(err)
 }

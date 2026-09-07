@@ -4,6 +4,7 @@ package ringpop
 import (
 	"fmt"
 	"math/bits"
+	"strings"
 
 	"github.com/dgryski/go-farm"
 	rpmembership "github.com/temporalio/ringpop-go/membership"
@@ -48,16 +49,17 @@ func (hi *hostInfo) Label(key string) (string, bool) {
 
 // summary returns a shorthand summary string suitable for logging.
 func (hi *hostInfo) summary() string {
-	s := hi.GetAddress()
+	var s strings.Builder
+	s.WriteString(hi.GetAddress())
 	for k, v := range hi.labels {
 		switch k {
 		case roleKey, portKey:
 			// skip these, they can be determined from context
 		default:
-			s += fmt.Sprintf("[%s=%s]", k, v)
+			s.WriteString(fmt.Sprintf("[%s=%s]", k, v))
 		}
 	}
-	return s
+	return s.String()
 }
 
 // checksumLabels returns a checksum of a labels map

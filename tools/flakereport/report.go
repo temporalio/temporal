@@ -7,7 +7,12 @@ import (
 	"time"
 )
 
-const boldFlakeRateThreshold = 5.0
+const (
+	boldFlakeRateThreshold = 5.0
+	maxReportRowsPerTable  = 100
+)
+
+var sparklineRunes = []rune("▁▂▃▄▅▆▇█")
 
 // hoursAgo formats a timestamp as "Xh ago" relative to now.
 func hoursAgo(t time.Time) string {
@@ -32,17 +37,50 @@ func formatReportLines(reports []TestReport) []string {
 	return lines
 }
 
+func formatOccurrenceLines(reports []TestReport, countLabel string) []string {
+	lines := make([]string, 0, len(reports))
+	for _, r := range reports {
+		lines = append(lines, fmt.Sprintf("• %d %s: `%s`", r.FailureCount, countLabel, r.TestName))
+	}
+	return lines
+}
+
 // formatLinks formats GitHub URLs as numbered markdown links
 func formatLinks(urls []string, maxLinks int) string {
-	linkCount := len(urls)
-	if linkCount > maxLinks {
-		linkCount = maxLinks
-	}
+	linkCount := min(len(urls), maxLinks)
 	var parts []string
-	for i := 0; i < linkCount; i++ {
+	for i := range linkCount {
 		parts = append(parts, fmt.Sprintf("[%d](%s)", i+1, urls[i]))
 	}
 	return strings.Join(parts, " ")
+}
+
+func formatSparkline(points []int) string {
+	if len(points) == 0 {
+		return "-"
+	}
+
+	maxPoint := 0
+	for _, point := range points {
+		if point > maxPoint {
+			maxPoint = point
+		}
+	}
+	var sb strings.Builder
+	sb.Grow(len(points))
+	for _, point := range points {
+		if point == 0 {
+			sb.WriteRune(sparklineRunes[0])
+			continue
+		}
+		idx := int(math.Ceil(float64(point) / float64(maxPoint) * float64(len(sparklineRunes)-1)))
+		sb.WriteRune(sparklineRunes[idx])
+	}
+	return sb.String()
+}
+
+func limitReportRows[T any](rows []T) []T {
+	return rows[:min(len(rows), maxReportRowsPerTable)]
 }
 
 // generateSuiteBreakdownTable creates a markdown table of per-suite flake data
@@ -76,9 +114,11 @@ func generateTestReportTable(reports []TestReport, rateHeader string, maxLinks i
 		return ""
 	}
 
+	reports = limitReportRows(reports)
+
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("| Test | %s | Last Failure | Links |\n", rateHeader))
-	sb.WriteString("|------|------------|-------------|-------|\n")
+	sb.WriteString(fmt.Sprintf("| Test | %s | Last Failure | Trend | Links |\n", rateHeader))
+	sb.WriteString("|------|------------|-------------|-------|-------|\n")
 
 	for _, report := range reports {
 		pct := 0.0
@@ -94,8 +134,30 @@ func generateTestReportTable(reports []TestReport, rateHeader string, maxLinks i
 		if pct > boldFlakeRateThreshold {
 			rate = "**" + rate + "**"
 		}
-		sb.WriteString(fmt.Sprintf("| `%s` | %s | %s | %s |\n",
-			report.TestName, rate, lastFailure, links))
+		sb.WriteString(fmt.Sprintf("| `%s` | %s | %s | `%s` | %s |\n",
+			report.TestName, rate, lastFailure, formatSparkline(report.TrendPoints), links))
+	}
+
+	return sb.String()
+}
+
+func generateOccurrenceReportTable(reports []TestReport, nameHeader, countHeader string, maxLinks int) string {
+	if len(reports) == 0 {
+		return ""
+	}
+	reports = limitReportRows(reports)
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("| %s | %s | Last Occurrence | Trend | Links |\n", nameHeader, countHeader))
+	sb.WriteString("|------|--------------------|-----------------|-------|-------|\n")
+	for _, report := range reports {
+		links := formatLinks(report.GitHubURLs, maxLinks)
+		lastOccurrence := "N/A"
+		if !report.LastFailure.IsZero() {
+			lastOccurrence = hoursAgo(report.LastFailure)
+		}
+		sb.WriteString(fmt.Sprintf("| `%s` | %d | %s | `%s` | %s |\n",
+			report.TestName, report.FailureCount, lastOccurrence, formatSparkline(report.TrendPoints), links))
 	}
 
 	return sb.String()

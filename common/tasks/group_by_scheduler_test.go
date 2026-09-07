@@ -71,10 +71,10 @@ func TestSchedulerLogic(t *testing.T) {
 	task4b.EXPECT().Abort().Times(1)
 	require.True(t, sched.TrySubmit(task4b))
 
-	require.Equal(t, 2, len(scheds))
-	require.Equal(t, 1, len(scheds["a"].buffer))
+	require.Len(t, scheds, 2)
+	require.Len(t, scheds["a"].buffer, 1)
 	require.Equal(t, "a", scheds["a"].buffer[0].(RunnableTask).Task.(taskWithID).ID)
-	require.Equal(t, 1, len(scheds["b"].buffer))
+	require.Len(t, scheds["b"].buffer, 1)
 	require.Equal(t, "b", scheds["b"].buffer[0].(RunnableTask).Task.(taskWithID).ID)
 	// Stop shuts down all groups.
 	require.True(t, scheds["a"].stopped && scheds["b"].stopped)

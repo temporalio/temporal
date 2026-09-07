@@ -99,7 +99,7 @@ func (s *HistoryIteratorSuite) TestReadHistory_Success_EventsV2() {
 	itr := s.constructTestHistoryIterator(s.mockExecutionMgr, testDefaultTargetHistoryBlobSize, nil)
 	history, err := itr.readHistory(context.Background(), common.FirstEventID)
 	s.NoError(err)
-	s.Len(history, 0)
+	s.Empty(history)
 }
 
 // In the following test:
@@ -325,7 +325,7 @@ func (s *HistoryIteratorSuite) TestNext_Fail_IteratorDepleted() {
 	// set target history batches such that a single call to next will read all of history
 	itr := s.constructTestHistoryIterator(s.mockExecutionMgr, 16*testDefaultHistoryEventSize, nil)
 	blob, err := itr.Next(context.Background())
-	s.Nil(err)
+	s.NoError(err)
 
 	expectedIteratorState := historyIteratorState{
 		// when iteration is finished page token is not advanced
@@ -561,7 +561,7 @@ func (s *HistoryIteratorSuite) TestNext_Success_SameHistoryDifferentPage() {
 		s.NoError(err)
 
 		s.Equal(history1.Header, history2.Header)
-		s.Equal(len(history1.Body), len(history2.Body))
+		s.Len(history2.Body, len(history1.Body))
 		s.Equal(expectedFirstEventID[i], history1.Body[0].Events[0].GetEventId())
 		s.Equal(expectedFirstEventID[i], history2.Body[0].Events[0].GetEventId())
 	}

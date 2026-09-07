@@ -1,8 +1,8 @@
 {
   "CurrVersion": "1.13",
   "MinCompatibleVersion": "0.1",
-  "Description": "add TemporalUsedWorkerDeploymentVersions search attribute",
+  "Description": "combined changed from v1.10 to v1.13 (add TemporalUsedWorkerDeploymentVersions search attribute)",
   "SchemaUpdateCqlFiles": [
-    "add_used_deployment_versions_search_attribute.sql"
+    "combined_v1.10_v1.13.sql"
   ]
 }

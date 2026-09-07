@@ -59,3 +59,37 @@ message DeleteActivityExecutionRequest {
 }
 
 message DeleteActivityExecutionResponse {}
+
+message PauseActivityExecutionRequest {
+  string namespace_id = 1;
+
+  temporal.api.workflowservice.v1.PauseActivityExecutionRequest frontend_request = 2;
+}
+
+message PauseActivityExecutionResponse {}
+
+message UnpauseActivityExecutionRequest {
+  string namespace_id = 1;
+
+  temporal.api.workflowservice.v1.UnpauseActivityExecutionRequest frontend_request = 2;
+}
+
+message UnpauseActivityExecutionResponse {}
+
+message ResetActivityExecutionRequest {
+  string namespace_id = 1;
+
+  temporal.api.workflowservice.v1.ResetActivityExecutionRequest frontend_request = 2;
+}
+
+message ResetActivityExecutionResponse {}
+
+message UpdateActivityExecutionOptionsRequest {
+  string namespace_id = 1;
+
+  temporal.api.workflowservice.v1.UpdateActivityExecutionOptionsRequest frontend_request = 2;
+}
+
+message UpdateActivityExecutionOptionsResponse {
+  temporal.api.workflowservice.v1.UpdateActivityExecutionOptionsResponse frontend_response = 1;
+}

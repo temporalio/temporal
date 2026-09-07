@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/goro"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -41,7 +42,7 @@ const (
 
 type (
 	PerNamespaceWorkerManager struct {
-		status int32
+		status atomic.Int32
 
 		// from init params or Start
 		logger            log.Logger
@@ -58,6 +59,7 @@ type (
 		startLimiter      quotas.RateLimiter
 
 		membershipChangedCh chan *membership.ChangedEvent
+		backgroundLoops     goro.Group
 
 		lock    sync.Mutex
 		workers map[namespace.ID]*perNamespaceWorker
@@ -127,18 +129,14 @@ func NewPerNamespaceWorkerManager(
 }
 
 func (wm *PerNamespaceWorkerManager) Running() bool {
-	return atomic.LoadInt32(&wm.status) == common.DaemonStatusStarted
+	return wm.status.Load() == common.DaemonStatusStarted
 }
 
 func (wm *PerNamespaceWorkerManager) Start(
 	self membership.HostInfo,
 	serviceResolver membership.ServiceResolver,
 ) {
-	if !atomic.CompareAndSwapInt32(
-		&wm.status,
-		common.DaemonStatusInitialized,
-		common.DaemonStatusStarted,
-	) {
+	if !wm.status.CompareAndSwap(common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
 
@@ -154,18 +152,14 @@ func (wm *PerNamespaceWorkerManager) Start(
 	if err != nil {
 		wm.logger.Fatal("Unable to register membership listener", tag.Error(err))
 	}
-	go wm.membershipChangedListener()
-	go wm.periodicRefresh()
+	wm.backgroundLoops.Go(wm.membershipChangedListener)
+	wm.backgroundLoops.Go(wm.periodicRefreshLoop)
 
 	wm.logger.Info("", tag.LifeCycleStarted)
 }
 
 func (wm *PerNamespaceWorkerManager) Stop() {
-	if !atomic.CompareAndSwapInt32(
-		&wm.status,
-		common.DaemonStatusStarted,
-		common.DaemonStatusStopped,
-	) {
+	if !wm.status.CompareAndSwap(common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
 
@@ -176,7 +170,8 @@ func (wm *PerNamespaceWorkerManager) Stop() {
 	if err != nil {
 		wm.logger.Error("Unable to unregister membership listener", tag.Error(err))
 	}
-	close(wm.membershipChangedCh)
+	wm.backgroundLoops.Cancel()
+	wm.backgroundLoops.Wait()
 
 	wm.lock.Lock()
 	workers := expmaps.Values(wm.workers)
@@ -203,18 +198,28 @@ func (wm *PerNamespaceWorkerManager) refreshAll() {
 	}
 }
 
-func (wm *PerNamespaceWorkerManager) membershipChangedListener() {
-	for range wm.membershipChangedCh {
-		wm.refreshAll()
+func (wm *PerNamespaceWorkerManager) membershipChangedListener(ctx context.Context) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-wm.membershipChangedCh:
+			wm.refreshAll()
+		}
 	}
 }
 
-func (wm *PerNamespaceWorkerManager) periodicRefresh() {
-	for range time.NewTicker(refreshInterval).C {
-		if atomic.LoadInt32(&wm.status) != common.DaemonStatusStarted {
-			return
+func (wm *PerNamespaceWorkerManager) periodicRefreshLoop(ctx context.Context) error {
+	ticker := time.NewTicker(refreshInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			wm.refreshAll()
 		}
-		wm.refreshAll()
 	}
 }
 
@@ -325,7 +330,8 @@ func (w *perNamespaceWorker) update(ns *namespace.Namespace, nsDeleted bool, new
 func (w *perNamespaceWorker) handleError(err error) {
 	if err == nil {
 		return
-	} else if err == errNoWorkerNeeded {
+	}
+	if errors.Is(err, errNoWorkerNeeded) {
 		w.stopWorkerAndResetTimer()
 		return
 	}
@@ -373,7 +379,9 @@ func (w *perNamespaceWorker) refresh(args refreshArgs) (retErr error) {
 
 	if !w.wm.Running() ||
 		args.ns.State() == enumspb.NAMESPACE_STATE_DELETED ||
+		//nolint:forbidigo // per-namespace worker lifecycle, no workflow context
 		!args.ns.ActiveInCluster(w.wm.thisClusterName) {
+
 		return errNoWorkerNeeded
 	}
 

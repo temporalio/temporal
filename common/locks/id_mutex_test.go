@@ -202,6 +202,6 @@ func (s *idMutexSuite) TestConcurrentAccess() {
 	s.Equal(iteration, counter)
 	impl := s.idMutex.(*idMutexImpl)
 	for i := uint32(0); i < s.numShard; i++ {
-		s.Equal(0, len(impl.shards[i].mutexInfos))
+		s.Empty(impl.shards[i].mutexInfos)
 	}
 }

@@ -46,7 +46,7 @@ func TestVisibilityValue(t *testing.T) {
 		var out bool
 		err := payload.Decode(p, &out)
 		require.NoError(t, err)
-		require.Equal(t, true, out)
+		require.True(t, out)
 
 		require.True(t, v.Equal(VisibilityValueBool(true)))
 		require.False(t, v.Equal(VisibilityValueBool(false)))
@@ -99,6 +99,21 @@ func TestVisibilityValue(t *testing.T) {
 		require.True(t, v.Equal(VisibilityValueTime(base)))
 		require.False(t, v.Equal(VisibilityValueTime(base.Add(time.Second))))
 		require.False(t, v.Equal(VisibilityValueKeyword(base.String())))
+	})
+
+	t.Run("Text", func(t *testing.T) {
+		v := VisibilityValueText("foo bar")
+		p := v.MustEncode()
+		require.NotNil(t, p)
+
+		var out string
+		err := payload.Decode(p, &out)
+		require.NoError(t, err)
+		require.Equal(t, "foo bar", out)
+
+		require.True(t, v.Equal(VisibilityValueText("foo bar")))
+		require.False(t, v.Equal(VisibilityValueText("foo")))
+		require.False(t, v.Equal(VisibilityValueBool(true)))
 	})
 }
 

@@ -13,7 +13,11 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -21,6 +25,103 @@ import (
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+func TestRequestCancelDeduplicationAfterTerminalState(t *testing.T) {
+	const requestID = "cancel-request-id"
+
+	newCanceledOperation := func() (*Operation, *chasm.MockMutableContext) {
+		ctx := &chasm.MockMutableContext{}
+		op := newTestOperation()
+		op.Status = nexusoperationpb.OPERATION_STATUS_CANCELED
+		op.Cancellation = chasm.NewComponentField(
+			ctx,
+			newCancellation(&nexusoperationpb.CancellationState{
+				RequestId: requestID,
+			}),
+		)
+		return op, ctx
+	}
+
+	t.Run("same request", func(t *testing.T) {
+		// With the same RequestId, the cancellation is idempotent, and returns a successful response.
+		op, ctx := newCanceledOperation()
+
+		err := op.RequestCancel(ctx, &nexusoperationpb.CancellationState{
+			RequestId: requestID,
+		})
+
+		require.NoError(t, err)
+		require.Equal(t, nexusoperationpb.OPERATION_STATUS_CANCELED, op.Status)
+	})
+
+	t.Run("new request", func(t *testing.T) {
+		// With a new RequestId, the operation now fails. It is already completed.
+		op, ctx := newCanceledOperation()
+
+		err := op.RequestCancel(ctx, &nexusoperationpb.CancellationState{
+			RequestId: "new-request-id",
+		})
+
+		require.ErrorIs(t, err, ErrOperationAlreadyCompleted)
+		require.Equal(t, nexusoperationpb.OPERATION_STATUS_CANCELED, op.Status)
+	})
+}
+
+func TestTerminate(t *testing.T) {
+	t.Parallel()
+
+	newOpWithStatus := func(status nexusoperationpb.OperationStatus) (*Operation, *chasm.MockMutableContext) {
+		ctx := &chasm.MockMutableContext{
+			MockContext: chasm.MockContext{
+				HandleNow: func(chasm.Component) time.Time { return defaultTime },
+				HandleNamespaceEntry: func() *namespace.Namespace {
+					return namespace.NewNamespaceForTest(
+						&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0,
+					)
+				},
+				GoCtx: context.WithValue(context.Background(), OperationContextKey, &OperationContext{
+					MetricTagConfig: dynamicconfig.GetTypedPropertyFn(NexusMetricTagConfig{}),
+				}),
+			},
+		}
+		op := newTestOperation()
+		op.Status = status
+		return op, ctx
+	}
+
+	t.Run("TerminatesARunningOperation", func(t *testing.T) {
+		op, ctx := newOpWithStatus(nexusoperationpb.OPERATION_STATUS_STARTED)
+
+		_, err := op.Terminate(ctx, chasm.TerminateComponentRequest{RequestID: "req-id"})
+		require.NoError(t, err)
+		require.Equal(t, nexusoperationpb.OPERATION_STATUS_TERMINATED, op.Status)
+	})
+
+	// Terminating an operation that already reached a terminal outcome is a FailedPrecondition.
+	for _, status := range []nexusoperationpb.OperationStatus{
+		nexusoperationpb.OPERATION_STATUS_SUCCEEDED,
+		nexusoperationpb.OPERATION_STATUS_CANCELED,
+		nexusoperationpb.OPERATION_STATUS_FAILED,
+		nexusoperationpb.OPERATION_STATUS_TIMED_OUT,
+	} {
+		t.Run("Rejects"+status.String(), func(t *testing.T) {
+			op, ctx := newOpWithStatus(status)
+
+			_, err := op.Terminate(ctx, chasm.TerminateComponentRequest{RequestID: "req-id"})
+			require.ErrorIs(t, err, ErrOperationAlreadyCompleted)
+			require.Equal(t, status, op.Status)
+		})
+	}
+
+	t.Run("IsIdempotentForTheSameRequestID", func(t *testing.T) {
+		op, ctx := newOpWithStatus(nexusoperationpb.OPERATION_STATUS_STARTED)
+
+		_, err := op.Terminate(ctx, chasm.TerminateComponentRequest{RequestID: "req-id"})
+		require.NoError(t, err)
+		_, err = op.Terminate(ctx, chasm.TerminateComponentRequest{RequestID: "req-id"})
+		require.NoError(t, err)
+	})
+}
 
 func TestIsWaitStageReached(t *testing.T) {
 	t.Parallel()
@@ -114,6 +215,17 @@ func TestHandleNexusCompletion(t *testing.T) {
 		require.NoError(t, TransitionStarted.Apply(op, ctx, EventStarted{OperationToken: "tok"}))
 		return op
 	}
+	newBackingOffOp := func(t *testing.T, ctx *chasm.MockMutableContext) *Operation {
+		t.Helper()
+		op := newScheduledTestOperation(t, ctx)
+		require.NoError(t, transitionAttemptFailed.Apply(op, ctx, EventAttemptFailed{
+			Failure: &failurepb.Failure{
+				Message: "retryable failure",
+			},
+			RetryPolicy: backoff.NewConstantDelayRetryPolicy(time.Minute),
+		}))
+		return op
+	}
 	ctrl := gomock.NewController(t)
 	nsRegistry := namespace.NewMockRegistry(ctrl)
 	nsRegistry.EXPECT().GetNamespaceName(namespace.ID("ns-id")).Return(namespace.Name("ns-name"), nil).AnyTimes()
@@ -181,6 +293,29 @@ func TestHandleNexusCompletion(t *testing.T) {
 			require.Equal(t, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, op.GetStatus())
 			require.Equal(t, "tok", op.GetOperationToken())
 			require.Equal(t, defaultTime, op.GetStartedTime().AsTime())
+		})
+
+		t.Run("CompletionDuringRetryBackoff", func(t *testing.T) {
+			ctx := newCtx()
+			op := newBackingOffOp(t, ctx)
+			startTime := defaultTime.Add(-time.Second)
+
+			err := op.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+				StartTime:      timestamppb.New(startTime),
+				RequestId:      op.GetRequestId(),
+				OperationToken: "tok",
+				Outcome: &persistencespb.ChasmNexusCompletion_Success{
+					Success: mustToPayload(t, "result"),
+				},
+			})
+
+			require.NoError(t, err)
+			require.Equal(t, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, op.GetStatus())
+			require.Equal(t, "tok", op.GetOperationToken())
+			require.Equal(t, startTime, op.GetStartedTime().AsTime())
+			require.Equal(t, startTime, op.GetLastAttemptCompleteTime().AsTime())
+			require.Nil(t, op.GetLastAttemptFailure())
+			require.Nil(t, op.GetNextAttemptScheduleTime())
 		})
 	})
 
@@ -331,4 +466,53 @@ func TestDescribeOutcome(t *testing.T) {
 			protorequire.ProtoEqual(t, tc.expectedFailure, failure)
 		})
 	}
+}
+
+// TestOperation_BuildExecutionInfo_ReturnsIsolatedSearchAttributes proves that the
+// DescribeNexusOperation response carries an isolated copy of the Visibility component's
+// search-attribute map.
+//
+// CustomSearchAttributes returns the component's live map by reference, and the describe
+// response is marshalled by gRPC after the read lease is released, so aliasing it would
+// let a concurrent mutation race the marshal ("concurrent map iteration and map write").
+// Rather than race the panic (nondeterministic), we test the positive invariant: mutating
+// the returned response map must not touch the live component map. Before the fix this
+// fails because the maps are shared.
+func TestOperation_BuildExecutionInfo_ReturnsIsolatedSearchAttributes(t *testing.T) {
+	logger := log.NewNoopLogger()
+	registry := chasm.NewRegistry(logger)
+	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
+	require.NoError(t, registry.Register(&Library{}))
+
+	timeSource := clock.NewEventTimeSource()
+	timeSource.Update(time.Now())
+	nodeBackend := &chasm.MockNodeBackend{
+		HandleNextTransitionCount: func() int64 { return 2 },
+		HandleGetCurrentVersion:   func() int64 { return 1 },
+		HandleCurrentVersionedTransition: func() *persistencespb.VersionedTransition {
+			return &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1}
+		},
+	}
+	root := chasm.NewEmptyTree(registry, timeSource, nodeBackend, chasm.DefaultPathEncoder, logger, metrics.NoopMetricsHandler)
+	ctx := chasm.NewMutableContext(context.Background(), root)
+
+	op := NewOperation(&nexusoperationpb.OperationState{Status: nexusoperationpb.OPERATION_STATUS_STARTED})
+	op.RequestData = chasm.NewDataField(ctx, &nexusoperationpb.OperationRequestData{})
+	op.Visibility = chasm.NewComponentField(ctx, chasm.NewVisibilityWithData(
+		ctx,
+		map[string]*commonpb.Payload{"saKey": payload.EncodeString("v")},
+		nil,
+	))
+	require.NoError(t, root.SetRootComponent(op))
+	_, err := root.CloseTransaction()
+	require.NoError(t, err)
+
+	ctx = chasm.NewMutableContext(context.Background(), root)
+	info := op.buildExecutionInfo(ctx)
+	require.Contains(t, info.GetSearchAttributes().GetIndexedFields(), "saKey")
+
+	// Mutating the response map must not reach back into the live Visibility component map.
+	info.GetSearchAttributes().GetIndexedFields()["injected"] = payload.EncodeString("x")
+	require.NotContains(t, op.Visibility.Get(ctx).CustomSearchAttributes(ctx), "injected",
+		"DescribeNexusOperation response SearchAttributes must be a copy, not the live Visibility map")
 }

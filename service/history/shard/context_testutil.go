@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"sync"
 
+	otellog "go.opentelemetry.io/otel/log"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/finalizer"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -42,8 +45,9 @@ func NewTestContextWithTimeSource(
 	shardInfo *persistencespb.ShardInfo,
 	config *configs.Config,
 	timeSource clock.TimeSource,
+	eventLogger ...otellog.Logger,
 ) *ContextTest {
-	result := NewTestContext(ctrl, shardInfo, config)
+	result := NewTestContext(ctrl, shardInfo, config, eventLogger...)
 	result.timeSource = timeSource
 	result.taskKeyManager.generator.timeSource = timeSource
 	result.Resource.TimeSource = timeSource
@@ -54,15 +58,21 @@ func NewTestContext(
 	ctrl *gomock.Controller,
 	shardInfo *persistencespb.ShardInfo,
 	config *configs.Config,
+	eventLogger ...otellog.Logger,
 ) *ContextTest {
+	var logger otellog.Logger
+	if len(eventLogger) > 0 {
+		logger = eventLogger[0]
+	}
 	resourceTest := resourcetest.NewTest(ctrl, primitives.HistoryService)
 	eventsCache := events.NewMockCache(ctrl)
 	shard := newTestContext(
 		resourceTest,
 		eventsCache,
 		ContextConfigOverrides{
-			ShardInfo: shardInfo,
-			Config:    config,
+			ShardInfo:   shardInfo,
+			Config:      config,
+			EventLogger: logger,
 		},
 	)
 	return &ContextTest{
@@ -78,6 +88,7 @@ type ContextConfigOverrides struct {
 	Registry         namespace.Registry
 	ClusterMetadata  cluster.Metadata
 	ExecutionManager persistence.ExecutionManager
+	EventLogger      otellog.Logger
 }
 
 type StubContext struct {
@@ -139,6 +150,7 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 		lifecycleCtx:        lifecycleCtx,
 		lifecycleCancel:     lifecycleCancel,
 		queueMetricEmitter:  sync.Once{},
+		eventLogger:         config.EventLogger,
 
 		state:              contextStateAcquired,
 		engineFuture:       future.NewFuture[historyi.Engine](),
@@ -222,6 +234,10 @@ func (s *ContextTest) SetChasmRegistry(reg *chasm.Registry) {
 	s.chasmRegistry = reg
 }
 
+func (s *ContextTest) SetChasmWorkflowRegistry(reg *chasmworkflow.Registry) {
+	s.chasmWorkflowRegistry = reg
+}
+
 func (s *ContextTest) SetClusterMetadata(metadata cluster.Metadata) {
 	s.clusterMetadata = metadata
 }
@@ -231,6 +247,12 @@ func (s *ContextTest) SetClusterMetadata(metadata cluster.Metadata) {
 // background acquireShard goroutines that may exist.
 func (s *ContextTest) StopForTest() {
 	s.FinishStop()
+}
+
+// SetFinalizerForTest overrides the shard's finalizer. Production shards always have one, so
+// tests that exercise cache paths gated on a finalizer being present must set it explicitly.
+func (s *ContextTest) SetFinalizerForTest(f *finalizer.Finalizer) {
+	s.finalizer = f
 }
 
 func (s *StubContext) GetEngine(_ context.Context) (historyi.Engine, error) {

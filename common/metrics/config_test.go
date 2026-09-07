@@ -166,7 +166,6 @@ func TestMetricsHandlerFromConfig(t *testing.T) {
 			expectedType: &otelMetricsHandler{},
 		},
 	} {
-		c := c
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 

@@ -1,0 +1,27 @@
+name: Docker Compose Healthy
+description: Wait for Docker Compose services to become healthy.
+
+inputs:
+  compose_file:
+    description: Docker Compose file to use.
+    required: true
+  services:
+    description: Whitespace-delimited list of services to wait for.
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Wait for services
+      shell: bash
+      env:
+        COMPOSE_FILE: ${{ inputs.compose_file }}
+        SERVICES: ${{ inputs.services }}
+      run: |
+        if [[ -z "${SERVICES//[[:space:]]/}" ]]; then
+          echo "No services configured for docker compose healthy."
+          exit 0
+        fi
+
+        read -r -a services <<< "$SERVICES"
+        docker compose -f "$COMPOSE_FILE" up --wait "${services[@]}"

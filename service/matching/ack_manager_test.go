@@ -33,10 +33,10 @@ func (s *AckManagerTestSuite) AddingTasksIncreasesBacklogCounter() {
 	ackMgr := newTestAckMgr(s.logger)
 
 	ackMgr.addTask(1)
-	s.Equal(ackMgr.getBacklogCountHint(), int64(1))
+	s.Equal(int64(1), ackMgr.getBacklogCountHint())
 
 	ackMgr.addTask(12)
-	s.Equal(ackMgr.getBacklogCountHint(), int64(2))
+	s.Equal(int64(2), ackMgr.getBacklogCountHint())
 }
 
 func (s *AckManagerTestSuite) CompleteTaskMovesAckLevelUpToGap() {

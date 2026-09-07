@@ -1,10 +1,13 @@
 package scheduler
 
 import (
+	"fmt"
 	"time"
 
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -18,22 +21,26 @@ type Generator struct {
 	*schedulerpb.GeneratorState
 
 	Scheduler chasm.ParentPtr[*Scheduler]
+
+	EventLog chasm.Field[*EventLog]
 }
 
 // NewGenerator returns an initialized Generator component, which should
 // be parented under a Scheduler root node.
 func NewGenerator(ctx chasm.MutableContext) *Generator {
-	return newGeneratorWithState(ctx, &schedulerpb.GeneratorState{
+	generator := newGeneratorWithState(ctx, &schedulerpb.GeneratorState{
 		LastProcessedTime: nil,
 	})
+	// Kick off initial generator run as an immediate task.
+	generator.Generate(ctx)
+	return generator
 }
 
 func newGeneratorWithState(ctx chasm.MutableContext, state *schedulerpb.GeneratorState) *Generator {
 	generator := &Generator{
 		GeneratorState: state,
+		EventLog:       chasm.NewComponentField(ctx, NewEventLog(ctx)),
 	}
-	// Kick off initial generator run as an immediate task.
-	generator.Generate(ctx)
 	return generator
 }
 
@@ -45,6 +52,8 @@ func (g *Generator) Generate(ctx chasm.MutableContext) {
 
 // scheduleTask schedules a GeneratorTask at the given time.
 func (g *Generator) scheduleTask(ctx chasm.MutableContext, scheduledTime time.Time) {
+	g.getOrCreateEventLog(ctx).LogEvent(ctx,
+		fmt.Sprintf("scheduled generatorTask for %s", scheduledTime.Format(time.RFC3339)))
 	ctx.AddTask(g, chasm.TaskAttributes{
 		ScheduledTime: scheduledTime,
 	}, &schedulerpb.GeneratorTask{})
@@ -55,34 +64,52 @@ func (g *Generator) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 }
 
 // UpdateFutureActionTimes computes and stores the next scheduled action times.
+// On spec-compile error the previously stored times are left untouched.
 func (g *Generator) UpdateFutureActionTimes(
-	ctx chasm.Context,
+	ctx chasm.MutableContext,
 	specBuilder *scheduler.SpecBuilder,
 ) {
+	futureTimes, err := g.computeFutureActionTimes(ctx, specBuilder)
+	if err != nil {
+		g.getOrCreateEventLog(ctx).LogEvent(ctx,
+			fmt.Sprintf("failed to update future action times: %v", err.Error()))
+		ctx.Logger().Warn("failed to update future action times", tag.Error(err))
+		return
+	}
+	g.FutureActionTimes = futureTimes
+}
+
+// computeFutureActionTimes returns the next scheduled action times without mutating
+// component state, so it's safe to call from a read-only context.
+func (g *Generator) computeFutureActionTimes(
+	ctx chasm.Context,
+	specBuilder *scheduler.SpecBuilder,
+) ([]*timestamppb.Timestamp, error) {
 	sched := g.Scheduler.Get(ctx)
 	spec, err := sched.getCompiledSpec(specBuilder)
 	if err != nil {
-		return
+		return nil, err
 	}
 
 	count := recentActionCount
 	if sched.Schedule.State.LimitedActions {
-		count = min(int(sched.Schedule.State.RemainingActions), recentActionCount)
+		count = max(min(int(sched.Schedule.State.RemainingActions), recentActionCount), 0)
 	}
 
 	futureTimes := make([]*timestamppb.Timestamp, 0, count)
-	// Start from max(now, updateTime) to ensure we skip times before the last update.
-	t := ctx.Now(g)
-	if updateTime := sched.Info.GetUpdateTime().AsTime(); updateTime.After(t) {
-		t = updateTime
-	}
+	// Start from max(now, updateTime, lastProcessedTime) to ensure we skip times
+	// before the last update and times already processed (or skipped) by the
+	// generator's high water mark.
+	t := util.MaxTime(ctx.Now(g), sched.Info.GetUpdateTime().AsTime(), g.GetLastProcessedTime().AsTime())
 	for len(futureTimes) < count {
-		t = spec.GetNextTime(sched.jitterSeed(), t).Next
-		if t.IsZero() {
+		res, err := spec.GetNextTime(sched.jitterSeed(), t)
+		if err != nil || res.Next.IsZero() {
+			// Over-excluded spec (limit) or end of schedule: return a partial list.
 			break
 		}
+		t = res.Next
 		futureTimes = append(futureTimes, timestamppb.New(t))
 	}
 
-	g.FutureActionTimes = futureTimes
+	return futureTimes, nil
 }

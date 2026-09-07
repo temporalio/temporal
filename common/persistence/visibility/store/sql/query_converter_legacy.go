@@ -3,6 +3,7 @@ package sql
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -13,7 +14,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/sqlquery"
@@ -183,7 +183,7 @@ func (c *QueryConverterLegacy) convertWhereString(queryString string) (*queryPar
 	}
 
 	res := &queryParamsLegacy{}
-	if selectStmt.Where != nil {
+	if selectStmt.Where != nil && selectStmt.Where.Expr != nil {
 		res.queryString = sqlparser.String(selectStmt.Where.Expr)
 	}
 	for _, groupByExpr := range selectStmt.GroupBy {
@@ -229,6 +229,31 @@ func (c *QueryConverterLegacy) convertSelectStmt(sel *sqlparser.Select) error {
 		}
 	}
 
+	// Convert the GROUP BY clause before applying the default namespace division
+	// filter below. convertColName sets c.seenNamespaceDivision when the group-by
+	// field is TemporalNamespaceDivision, which suppresses the default filter so
+	// that grouping spans all divisions (grouping by it is only meaningful across
+	// all divisions).
+	if len(sel.GroupBy) > 1 {
+		return query.NewConverterError(
+			"%s: 'GROUP BY' clause supports only a single field",
+			query.NotSupportedErrMessage,
+		)
+	}
+	for k := range sel.GroupBy {
+		colName, err := c.convertColName(&sel.GroupBy[k])
+		if err != nil {
+			return err
+		}
+		if !query.IsGroupByFieldAllowed(colName.fieldName) {
+			return query.NewConverterError(
+				"%s: 'GROUP BY' clause is not supported for search attribute %s",
+				query.NotSupportedErrMessage,
+				colName.alias,
+			)
+		}
+	}
+
 	// This logic comes from elasticsearch/visibility_store.go#convertQuery function.
 	// If the query did not explicitly filter on TemporalNamespaceDivision,
 	// try setting the namespace division filter based on the archetype ID,
@@ -256,25 +281,6 @@ func (c *QueryConverterLegacy) convertSelectStmt(sel *sqlparser.Select) error {
 				Left:  sel.Where.Expr,
 				Right: namespaceDivisionExpr,
 			}
-		}
-	}
-
-	if len(sel.GroupBy) > 1 {
-		return query.NewConverterError(
-			"%s: 'GROUP BY' clause supports only a single field",
-			query.NotSupportedErrMessage,
-		)
-	}
-	for k := range sel.GroupBy {
-		colName, err := c.convertColName(&sel.GroupBy[k])
-		if err != nil {
-			return err
-		}
-		if !query.IsGroupByFieldAllowed(colName.fieldName) {
-			return query.NewConverterError(
-				"%s: 'GROUP BY' clause is only supported for ExecutionStatus",
-				query.NotSupportedErrMessage,
-			)
 		}
 	}
 
@@ -444,19 +450,16 @@ func (c *QueryConverterLegacy) convertColName(exprRef *sqlparser.Expr) (*saColNa
 	}
 	saAlias := strings.ReplaceAll(sqlparser.String(expr), "`", "")
 
-	saFieldName, saType, err := query.ResolveSearchAttributeAlias(saAlias, c.namespaceName, c.saMapper, c.saTypeMap, c.chasmMapper)
+	saFieldName, saType, err := query.ResolveSearchAttributeAlias(
+		saAlias,
+		c.namespaceName,
+		c.saMapper,
+		c.saTypeMap,
+		c.chasmMapper,
+		c.archetypeID,
+	)
 	if err != nil {
-		if c.archetypeID != chasm.SchedulerArchetypeID || saAlias != "TemporalSystemExecutionStatus" {
-			return nil, query.NewConverterError(
-				"%s: column name '%s' is not a valid search attribute",
-				query.InvalidExpressionErrMessage,
-				saAlias,
-			)
-		}
-		// To support querying Workflow based schedulers and CHASM based schedulers, we need to translate
-		// TemporalSystemExecutionStatus as an alias to the system search attribute ExecutionStatus.
-		saFieldName = sadefs.ExecutionStatus
-		saType, _ = c.saTypeMap.GetType(saFieldName)
+		return nil, err
 	}
 	if saFieldName == sadefs.TemporalNamespaceDivision {
 		c.seenNamespaceDivision = true
@@ -487,10 +490,6 @@ func (c *QueryConverterLegacy) convertValueExpr(
 		value, err := c.parseSQLVal(e, name, saFieldName, saType)
 		if err != nil {
 			return err
-		}
-
-		if name == sadefs.ScheduleID && saFieldName == sadefs.WorkflowID {
-			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
 		}
 
 		switch v := value.(type) {
@@ -524,6 +523,43 @@ func (c *QueryConverterLegacy) convertValueExpr(
 			}
 		}
 		return nil
+	case *sqlparser.UnaryExpr:
+		// Negative value may be parsed as UnaryExpr
+		if e.Operator != sqlparser.UPlusStr && e.Operator != sqlparser.UMinusStr {
+			return query.NewConverterError(
+				"%s: unary operator %q",
+				query.NotSupportedErrMessage,
+				e.Operator,
+			)
+		}
+		if value, ok := e.Expr.(*sqlparser.SQLVal); !ok || value.Type == sqlparser.StrVal {
+			return query.NewConverterError(
+				"%s: unary operator not supported in %q",
+				query.InvalidExpressionErrMessage,
+				sqlparser.String(expr),
+			)
+		}
+		err := c.convertValueExpr(&e.Expr, name, saFieldName, saType)
+		if err != nil {
+			return err
+		}
+		if value, ok := e.Expr.(*sqlparser.SQLVal); ok && (value.Type == sqlparser.IntVal || value.Type == sqlparser.FloatVal) {
+			if e.Operator == sqlparser.UMinusStr && len(value.Val) > 0 {
+				if value.Val[0] == '-' {
+					value.Val = value.Val[1:]
+				} else {
+					value.Val = append([]byte{'-'}, value.Val...)
+				}
+			}
+			*exprRef = e.Expr
+			return nil
+		}
+		// This should never happen, but here to catch any unexpected case.
+		return query.NewConverterError(
+			"%s: unary expression %q",
+			query.InvalidExpressionErrMessage,
+			sqlparser.String(expr),
+		)
 	case *sqlparser.GroupConcatExpr:
 		return query.NewConverterError("%s: 'group_concat'", query.NotSupportedErrMessage)
 	case *sqlparser.FuncExpr:
@@ -661,12 +697,7 @@ func (c *QueryConverterLegacy) convertIsExpr(exprRef *sqlparser.Expr) error {
 }
 
 func isSupportedOperator(supportedOperators []string, operator string) bool {
-	for _, op := range supportedOperators {
-		if operator == op {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(supportedOperators, operator)
 }
 
 func isSupportedComparisonOperator(operator string) bool {
@@ -682,10 +713,5 @@ func isSupportedTextOperator(operator string) bool {
 }
 
 func isSupportedTypeRangeCond(saType enumspb.IndexedValueType) bool {
-	for _, tp := range supportedTypesRangeCond {
-		if saType == tp {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(supportedTypesRangeCond, saType)
 }

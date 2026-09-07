@@ -17,8 +17,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
@@ -40,31 +38,6 @@ type operationTimeoutBelowMinError struct {
 
 func (o *operationTimeoutBelowMinError) Error() string {
 	return fmt.Sprintf("not enough time to execute another request before %s timeout", o.timeoutType.String())
-}
-
-func convertResponseLinks(links []nexus.Link, logger log.Logger) []*commonpb.Link {
-	var result []*commonpb.Link
-	for _, nexusLink := range links {
-		switch nexusLink.Type {
-		case string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName()):
-			link, err := commonnexus.ConvertNexusLinkToLinkWorkflowEvent(nexusLink)
-			if err != nil {
-				logger.Error(
-					fmt.Sprintf("failed to parse link to %q: %s", nexusLink.Type, nexusLink.URL),
-					tag.Error(err),
-				)
-				continue
-			}
-			result = append(result, &commonpb.Link{
-				Variant: &commonpb.Link_WorkflowEvent_{
-					WorkflowEvent: link,
-				},
-			})
-		default:
-			logger.Error(fmt.Sprintf("invalid link data type: %q", nexusLink.Type))
-		}
-	}
-	return result
 }
 
 func isDestinationDown(err error) bool {
@@ -168,7 +141,7 @@ func cancelCallOutcomeTag(callCtx context.Context, callErr error) string {
 // Always returns a non-nil failure.
 func callErrorToFailure(callErr error) (*failurepb.Failure, bool, error) {
 	if serviceErr, ok := errors.AsType[serviceerror.ServiceError](callErr); ok {
-		retryable := common.IsRetryableRPCError(callErr)
+		retryable := common.IsRetryableRPCError(serviceErr)
 		failure := &failurepb.Failure{
 			Message: fmt.Sprintf("%s: %s", strings.Replace(fmt.Sprintf("%T", serviceErr), "*serviceerror.", "", 1), serviceErr.Error()),
 			FailureInfo: &failurepb.Failure_ServerFailureInfo{
@@ -260,7 +233,7 @@ func newInvocationResult(
 	}
 
 	if serviceErr, ok := errors.AsType[serviceerror.ServiceError](callErr); ok {
-		retryable := common.IsRetryableRPCError(callErr)
+		retryable := common.IsRetryableRPCError(serviceErr)
 		failure := &failurepb.Failure{
 			Message: fmt.Sprintf("%s: %s", strings.Replace(fmt.Sprintf("%T", serviceErr), "*serviceerror.", "", 1), serviceErr.Error()),
 			FailureInfo: &failurepb.Failure_ServerFailureInfo{
@@ -347,11 +320,7 @@ func operationErrorToFailure(opErr *nexus.OperationError) (*failurepb.Failure, e
 			return nil, err
 		}
 	}
-	unwrapError := nf.Metadata["unwrap-error"] == "true"
-	if unwrapError && nf.Cause != nil {
-		return commonnexus.NexusFailureToTemporalFailure(*nf.Cause)
-	}
-	return commonnexus.NexusFailureToTemporalFailure(nf)
+	return commonnexus.NexusFailureToTemporalFailure(*nexusrpc.UnwrapFailure(&nf))
 }
 
 func buildCallbackURL(

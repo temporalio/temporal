@@ -15,12 +15,12 @@ func TestTaskValidator(t *testing.T) {
 	}
 
 	visibility.Data.TransitionCount = 1
-	valid, err := defaultVisibilityTaskHandler.Validate(ctx, visibility, TaskAttributes{}, task)
+	valid, err := defaultVisibilityTaskHandler.Validate(ctx, visibility, TaskInvocation{}, task)
 	require.NoError(t, err)
 	require.False(t, valid)
 
 	visibility.Data.TransitionCount = task.TransitionCount
-	valid, err = defaultVisibilityTaskHandler.Validate(ctx, visibility, TaskAttributes{}, task)
+	valid, err = defaultVisibilityTaskHandler.Validate(ctx, visibility, TaskInvocation{}, task)
 	require.NoError(t, err)
 	require.True(t, valid)
 }

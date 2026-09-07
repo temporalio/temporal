@@ -246,15 +246,13 @@ func TestStreamBatcher_AddTimeout(t *testing.T) {
 	sb := NewBatcher(process, opts, clk)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		// this will time out before a response
 		ctx, cancel := clock.ContextWithTimeout(context.Background(), time.Second, clk)
 		defer cancel()
 		_, err := sb.Add(ctx, 123)
 		assert.ErrorIs(t, err, context.DeadlineExceeded)
-	}()
+	})
 	time.Sleep(time.Millisecond) // wait for it to block in Add
 	clk.AdvanceNext()
 	time.Sleep(time.Millisecond)
@@ -264,15 +262,13 @@ func TestStreamBatcher_AddTimeout(t *testing.T) {
 	wg.Wait()
 
 	// we should be able to process another batch again
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		ctx, cancel := clock.ContextWithTimeout(context.Background(), 7*time.Second, clk)
 		defer cancel()
 		r, err := sb.Add(ctx, 123)
 		assert.NoError(t, err)
-		assert.Equal(t, r, 123)
-	}()
+		assert.Equal(t, 123, r)
+	})
 	time.Sleep(time.Millisecond) // wait for it to block in Add
 	clk.AdvanceNext()
 	time.Sleep(time.Millisecond)

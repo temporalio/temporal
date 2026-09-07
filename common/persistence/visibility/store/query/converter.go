@@ -13,8 +13,9 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/sqlquery"
@@ -64,6 +65,9 @@ type (
 		archetypeID   chasm.ArchetypeID
 
 		seenNamespaceDivision bool
+
+		metricsHandler metrics.Handler
+		logger         log.Logger
 	}
 
 	QueryConverterOptionFunc[ExprT any] func(*QueryConverter[ExprT])
@@ -79,6 +83,7 @@ type (
 var (
 	groupByFieldAllowlist = []string{
 		sadefs.ExecutionStatus,
+		sadefs.TemporalNamespaceDivision,
 	}
 
 	groupByFieldPrefixAllowlist = []string{
@@ -134,6 +139,8 @@ func NewQueryConverter[ExprT any](
 	namespaceName namespace.Name,
 	saTypeMap searchattribute.NameTypeMap,
 	saMapper searchattribute.Mapper,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
 ) *QueryConverter[ExprT] {
 	c := &QueryConverter[ExprT]{
 		storeQC:       storeQC,
@@ -144,6 +151,9 @@ func NewQueryConverter[ExprT any](
 		saMapper:      saMapper,
 
 		seenNamespaceDivision: false,
+
+		metricsHandler: metricsHandler,
+		logger:         logger,
 	}
 	return c
 }
@@ -178,7 +188,11 @@ func (c *QueryConverter[ExprT]) SeenNamespaceDivision() bool {
 
 func (c *QueryConverter[ExprT]) Convert(
 	queryString string,
-) (*QueryParams[ExprT], error) {
+) (_ *QueryParams[ExprT], retError error) {
+	// Convert function may throw unexpected panics (eg: bugs).
+	// Capture them here to replace with an error.
+	defer metrics.CapturePanic(c.logger, c.metricsHandler, &retError)
+
 	queryParams, err := c.convertWhereString(queryString)
 	if err != nil {
 		return nil, err
@@ -282,8 +296,9 @@ func (c *QueryConverter[ExprT]) convertSelectStmt(
 		}
 		if !IsGroupByFieldAllowed(colName.FieldName) {
 			return nil, NewConverterError(
-				"%s: 'GROUP BY' clause is only supported for ExecutionStatus",
+				"%s: 'GROUP BY' clause is not supported for search attribute %s",
 				NotSupportedErrMessage,
+				colName.Alias,
 			)
 		}
 		res.GroupBy = append(res.GroupBy, colName)
@@ -477,7 +492,14 @@ func (c *QueryConverter[ExprT]) convertColName(in sqlparser.Expr) (*SAColumn, er
 		)
 	}
 	saAlias := strings.ReplaceAll(sqlparser.String(expr), "`", "")
-	saFieldName, saType, err := c.resolveSearchAttributeAlias(saAlias)
+	saFieldName, saType, err := ResolveSearchAttributeAlias(
+		saAlias,
+		c.namespaceName,
+		c.saMapper,
+		c.saTypeMap,
+		c.chasmMapper,
+		c.archetypeID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -493,79 +515,6 @@ func (c *QueryConverter[ExprT]) convertColName(in sqlparser.Expr) (*SAColumn, er
 	return colName, nil
 }
 
-func (c *QueryConverter[ExprT]) resolveSearchAttributeAlias(
-	alias string,
-) (fieldName string, fieldType enumspb.IndexedValueType, retErr error) {
-	// resolveCSA only returns true if `alias` is a custom search attribute.
-	resolveCSA := func(alias string) bool {
-		fn, err := c.saMapper.GetFieldName(alias, c.namespaceName.String())
-		if err != nil {
-			return false
-		}
-		ft, err := c.saTypeMap.GetType(fn)
-		if err != nil {
-			return false
-		}
-		fieldName, fieldType = fn, ft
-		return true
-	}
-	// resolveChasmSA only returns true if `alias` is a CHASM search attribute.
-	resolveChasmSA := func(alias string) bool {
-		if c.chasmMapper == nil {
-			return false
-		}
-		fn, err := c.chasmMapper.Field(alias)
-		if err != nil {
-			return false
-		}
-		ft, err := c.chasmMapper.ValueType(fn)
-		if err != nil {
-			return false
-		}
-		fieldName, fieldType = fn, ft
-		return true
-	}
-
-	var err error
-	fieldName = alias
-	// First, check if it's a custom search attribute.
-	if sadefs.IsMappable(alias) && resolveCSA(alias) {
-		return
-	}
-	// Second, check if it's a CHASM search attribute.
-	if resolveChasmSA(alias) {
-		return
-	}
-	// Third, check if it's a system/reserved search attribute.
-	fieldType, err = c.saTypeMap.GetType(fieldName)
-	if err == nil {
-		return
-	}
-	// Fourth, check for special aliases or adding/removing the `Temporal` prefix.
-	if strings.TrimPrefix(alias, sadefs.ReservedPrefix) == sadefs.ScheduleID {
-		fieldName = sadefs.WorkflowID
-	} else if c.archetypeID == chasm.SchedulerArchetypeID && alias == "TemporalSystemExecutionStatus" {
-		// To support querying Workflow based schedulers and CHASM based schedulers, we need to translate
-		// TemporalSystemExecutionStatus as an alias to the system search attribute ExecutionStatus.
-		fieldName = "ExecutionStatus"
-	} else if strings.HasPrefix(fieldName, sadefs.ReservedPrefix) {
-		fieldName = fieldName[len(sadefs.ReservedPrefix):]
-	} else {
-		fieldName = sadefs.ReservedPrefix + fieldName
-	}
-	fieldType, err = c.saTypeMap.GetType(fieldName)
-	if err == nil {
-		return
-	}
-
-	retErr = NewConverterError(
-		"%s: column name '%s' is not a valid search attribute",
-		InvalidExpressionErrMessage,
-		alias,
-	)
-	return
-}
-
 func (c *QueryConverter[ExprT]) parseValueExpr(
 	expr sqlparser.Expr,
 	saName string,
@@ -578,13 +527,9 @@ func (c *QueryConverter[ExprT]) parseValueExpr(
 		if err != nil {
 			return nil, err
 		}
-		if saName == sadefs.ScheduleID && saFieldName == sadefs.WorkflowID {
-			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
-		}
 		return value, nil
 	case sqlparser.BoolVal:
-		// no-op: no validation needed
-		return bool(e), nil
+		return c.validateValueType(saName, saType, bool(e))
 	case sqlparser.ValTuple:
 		// This is "in (1,2,3)" case.
 		values := make([]any, 0, len(e))
@@ -596,6 +541,44 @@ func (c *QueryConverter[ExprT]) parseValueExpr(
 			values = append(values, item)
 		}
 		return values, nil
+	case *sqlparser.UnaryExpr:
+		// Negative value may be parsed as UnaryExpr
+		if e.Operator != sqlparser.UPlusStr && e.Operator != sqlparser.UMinusStr {
+			return nil, NewConverterError(
+				"%s: unary operator %q",
+				NotSupportedErrMessage,
+				e.Operator,
+			)
+		}
+		if value, ok := e.Expr.(*sqlparser.SQLVal); !ok || value.Type == sqlparser.StrVal {
+			return nil, NewConverterError(
+				"%s: unary operator not supported in %q",
+				InvalidExpressionErrMessage,
+				sqlparser.String(expr),
+			)
+		}
+		value, err := c.parseValueExpr(e.Expr, saName, saFieldName, saType)
+		if err != nil {
+			return nil, err
+		}
+		switch v := value.(type) {
+		case int64:
+			if e.Operator == sqlparser.UMinusStr {
+				value = -v
+			}
+		case float64:
+			if e.Operator == sqlparser.UMinusStr {
+				value = -v
+			}
+		default:
+			// This should never happen, but here to catch any unexpected case.
+			return nil, NewConverterError(
+				"%s: unary expression %q",
+				InvalidExpressionErrMessage,
+				sqlparser.String(expr),
+			)
+		}
+		return value, nil
 	case *sqlparser.GroupConcatExpr:
 		return nil, NewConverterError("%s: 'group_concat'", NotSupportedErrMessage)
 	case *sqlparser.FuncExpr:
@@ -654,6 +637,16 @@ func (c *QueryConverter[ExprT]) parseSQLVal(
 	}
 }
 
+// validateValueType validates a single value type against the search attribute type,
+// and returns the value formatted if needed.
+// If search attribute type is:
+//   - Int, Double: value type must be int64 or float64 and returns the input value;
+//   - Bool: value type must be bool and returns the input value;
+//   - Keyword, KeywordList: value type must be string and returns the input value;
+//   - Text: value type must be string with a valid token (empty string or string
+//     with only spaces are not valid) and returns the input value;
+//   - Datetime: value type must be int64 (Unix nanos) or string and returns datetime
+//     formated based on storeQC.GetDatetimeFormat() value.
 func (c *QueryConverter[ExprT]) validateValueType(
 	saName string,
 	saType enumspb.IndexedValueType,
@@ -701,10 +694,20 @@ func (c *QueryConverter[ExprT]) validateValueType(
 		}
 		return tm.UTC().Format(c.storeQC.GetDatetimeFormat()), nil
 	case enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-		enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
-		enumspb.INDEXED_VALUE_TYPE_TEXT:
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST:
 		if _, ok := value.(string); !ok {
 			return nil, valueTypeErr
+		}
+		return value, nil
+	case enumspb.INDEXED_VALUE_TYPE_TEXT:
+		if v, ok := value.(string); !ok {
+			return nil, valueTypeErr
+		} else if strings.TrimSpace(v) == "" {
+			return nil, NewConverterError(
+				"%s: no tokens found filtering on Text type search attribute %s",
+				InvalidExpressionErrMessage,
+				saName,
+			)
 		}
 		return value, nil
 	default:
@@ -718,10 +721,8 @@ func (c *QueryConverter[ExprT]) validateValueType(
 }
 
 func IsGroupByFieldAllowed(fieldName string) bool {
-	for _, allowedField := range groupByFieldAllowlist {
-		if fieldName == allowedField {
-			return true
-		}
+	if slices.Contains(groupByFieldAllowlist, fieldName) {
+		return true
 	}
 	for _, allowedPrefix := range groupByFieldPrefixAllowlist {
 		if strings.HasPrefix(fieldName, allowedPrefix) {

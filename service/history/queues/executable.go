@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/iancoleman/strcase"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -72,6 +73,7 @@ type (
 	// MaybeTerminalTaskError are errors which (if IsTerminalTaskError returns true) cannot be retried and should
 	// not be rescheduled. Tasks should be enqueued to the DLQ immediately if an error is marked as terminal.
 	MaybeTerminalTaskError interface {
+		error
 		IsTerminalTaskError() bool
 	}
 )
@@ -85,6 +87,8 @@ var (
 	taskNotReadyReschedulePolicy               = common.CreateTaskNotReadyReschedulePolicy()
 	taskResourceExhuastedReschedulePolicy      = common.CreateTaskResourceExhaustedReschedulePolicy()
 	dependencyTaskNotCompletedReschedulePolicy = common.CreateDependencyTaskNotCompletedReschedulePolicy()
+
+	_ MaybeTerminalTaskError = terminalTaskError{}
 )
 
 const (
@@ -137,6 +141,8 @@ type (
 		dlqEnabled                 dynamicconfig.BoolPropertyFn
 		terminalFailureCause       error
 		unexpectedErrorAttempts    int
+		alertableAttempts          int
+		alertableErrorCauseTag     metrics.Tag
 		maxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
 		dlqInternalErrors          dynamicconfig.BoolPropertyFn
 		dlqErrorPattern            dynamicconfig.StringPropertyFn
@@ -152,6 +158,27 @@ type (
 
 	TaskTypeTagProvider func(t tasks.Task, isActive bool, chasmRegistry *chasm.Registry) string
 )
+
+// terminalTaskError indicates a task hit an unexpected, unrecoverable invariant violation in its
+// own state. It is a generic implementation of a MaybeTerminalTaskError. The task framework treats it as terminal:
+// it records failure/corruption metrics, drops the task, and only sends it to the DLQ if that is enabled for the category.
+type terminalTaskError struct {
+	Message string
+}
+
+// NewTerminalTaskError returns an error that the task framework treats as terminal (non-retryable).
+func NewTerminalTaskError(message string) error {
+	return terminalTaskError{Message: message}
+}
+
+func (e terminalTaskError) Error() string {
+	return e.Message
+}
+
+// IsTerminalTaskError marks this error as terminal to be handled appropriately.
+func (terminalTaskError) IsTerminalTaskError() bool {
+	return true
+}
 
 func NewExecutable(
 	readerID int64,
@@ -215,6 +242,7 @@ func NewExecutable(
 		maxUnexpectedErrorAttempts: params.MaxUnexpectedErrorAttempts,
 		dlqInternalErrors:          params.DLQInternalErrors,
 		dlqErrorPattern:            params.DLQErrorPattern,
+		alertableErrorCauseTag:     metrics.LastAttemptCauseTag("none"),
 	}
 	e.refreshMetricsHandlers(nil)
 	e.attempt.Store(1)
@@ -229,7 +257,6 @@ func NewExecutable(
 }
 
 func (e *executableImpl) Execute() (retErr error) {
-
 	startTime := e.timeSource.Now()
 	e.scheduleLatency = startTime.Sub(e.scheduledTime)
 
@@ -259,13 +286,27 @@ func (e *executableImpl) Execute() (retErr error) {
 	// Wrapped in if block to avoid unnecessary allocations when OTEL is disabled.
 	if telemetry.IsEnabled(e.tracer) {
 		var span trace.Span
+
+		// Set defaults assuming workflow task
+		entityID := e.GetWorkflowID()
+		idKey := telemetry.WorkflowIDKey
+		taskLabel := e.GetType().String()
+
+		// Override defaults if CHASM task
+		if _, ok := e.GetTask().(tasks.HasArchetypeID); ok {
+			idKey = telemetry.BusinessIDKey
+			if name := e.GetTask().GetCategory().Name(); name != "" {
+				taskLabel = strcase.ToCamel(name) + "Task"
+			}
+		}
+
 		ctx, span = e.tracer.Start(
 			ctx,
-			fmt.Sprintf("queue.Execute/%v", e.GetType().String()),
+			fmt.Sprintf("queue.Execute/%v", taskLabel),
 			trace.WithSpanKind(trace.SpanKindConsumer),
 			trace.WithAttributes(
-				attribute.Key(telemetry.WorkflowIDKey).String(e.GetWorkflowID()),
-				attribute.Key(telemetry.WorkflowRunIDKey).String(e.GetRunID()),
+				attribute.Key(idKey).String(entityID),
+				attribute.Key(telemetry.RunIDKey).String(e.GetRunID()),
 				attribute.Key("queue.task.type").String(e.GetType().String()),
 				attribute.Key("queue.task.id").Int64(e.GetTaskID())))
 
@@ -353,6 +394,9 @@ func (e *executableImpl) Execute() (retErr error) {
 		// reset task priority since it changes between active/standby
 		e.resetAttempt()
 		e.priority = e.priorityAssigner.Assign(e)
+		// reset accumulated in-memory latency: time accrued under the previous
+		// active/standby regime must not be reported as this regime's TaskLatency
+		e.inMemoryNoUserLatency = 0
 	}
 	e.lastActiveness = resp.ExecutedAsActive
 
@@ -426,6 +470,28 @@ func (e *executableImpl) isSafeToDropError(err error) bool {
 	return false
 }
 
+// classifyAlertableError answers both whether err should count toward alertableAttempts and,
+// if so, what cause tag it should carry.
+func classifyAlertableError(err error) (alertable bool, causeTag metrics.Tag) {
+	if resourceExhaustedErr, ok := errors.AsType[*serviceerror.ResourceExhausted](err); ok {
+		alertable = resourceExhaustedErr.Scope != enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE ||
+			resourceExhaustedErr.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW
+		if alertable {
+			causeTag = metrics.LastAttemptCauseTag(resourceExhaustedErr.Cause.String())
+		}
+		return alertable, causeTag
+	}
+	if _, ok := err.(*serviceerror.NamespaceNotActive); ok {
+		return false, causeTag
+	}
+	if err == consts.ErrDependencyTaskNotCompleted ||
+		err == consts.ErrTaskRetry ||
+		err.Error() == consts.ErrNamespaceHandover.Error() {
+		return false, causeTag
+	}
+	return true, metrics.LastAttemptCauseTag(metrics.ServiceErrorTypeTag(err).Value)
+}
+
 // Returns true when the error is expected and should be retried. You're expected to return
 // an error in this case, as that possible-rewritten-error is what we'll return
 func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, retErr error) {
@@ -436,8 +502,7 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 		}
 	}()
 
-	var resourceExhaustedErr *serviceerror.ResourceExhausted
-	if errors.As(err, &resourceExhaustedErr) {
+	if resourceExhaustedErr, ok := errors.AsType[*serviceerror.ResourceExhausted](err); ok {
 		switch resourceExhaustedErr.Cause { //nolint:exhaustive
 		case enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW:
 			err = consts.ErrResourceExhaustedBusyWorkflow
@@ -480,8 +545,7 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 }
 
 func (e *executableImpl) isUnexpectedNonRetryableError(err error) bool {
-	var terr MaybeTerminalTaskError
-	if errors.As(err, &terr) {
+	if terr, ok := errors.AsType[MaybeTerminalTaskError](err); ok {
 		return terr.IsTerminalTaskError()
 	}
 
@@ -532,6 +596,15 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	}
 
 	e.incAttempt()
+
+	if alertable, causeTag := classifyAlertableError(err); alertable {
+		e.alertableAttempts++
+		e.alertableErrorCauseTag = causeTag
+		if e.attempt.Load() > taskCriticalLogMetricAttempts {
+			metrics.TaskAlertableAttempt.With(e.chasmMetricsHandler).Record(
+				int64(e.alertableAttempts), causeTag, metrics.AttemptStageInFlightTag)
+		}
+	}
 
 	if ok, rewrittenErr := e.isExpectedRetryableError(err); ok {
 		return rewrittenErr
@@ -656,6 +729,8 @@ func (e *executableImpl) Ack() {
 	}
 
 	metrics.TaskAttempt.With(e.chasmMetricsHandler).Record(e.attempt.Load())
+	metrics.TaskAlertableAttempt.With(e.chasmMetricsHandler).Record(
+		int64(e.alertableAttempts), e.alertableErrorCauseTag, metrics.AttemptStageTerminalTag)
 
 	priorityTaggedProvider := e.chasmMetricsHandler.WithTags(metrics.TaskPriorityTag(e.priority.String()))
 	metrics.TaskLatency.With(priorityTaggedProvider).Record(e.inMemoryNoUserLatency)
@@ -861,7 +936,7 @@ func taskBaseMetricTagsWithoutArchetype(
 	ns, err := namespaceRegistry.GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
 	if err == nil {
 		namespaceTag = metrics.NamespaceTag(ns.Name().String())
-		isActive = ns.ActiveInCluster(currentClusterName)
+		isActive = ns.ActiveClusterName(namespace.RoutingKey{ID: task.GetWorkflowID()}) == currentClusterName
 	}
 
 	taskType := taskTypeTagProvider(task, isActive, chasmRegistry)

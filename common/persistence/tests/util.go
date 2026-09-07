@@ -167,7 +167,7 @@ func RandomChasmNode() *persistencespb.ChasmNode {
 	// Some arbitrary random data to ensure the chasm node's attributes are preserved.
 	var blobInfo persistencespb.WorkflowExecutionInfo
 	_ = fakedata.FakeStruct(&blobInfo)
-	blob, _ := serialization.ProtoEncode(&blobInfo)
+	blob, _ := serialization.Encode(&blobInfo)
 
 	var versionedTransition persistencespb.VersionedTransition
 	_ = fakedata.FakeStruct(&versionedTransition)

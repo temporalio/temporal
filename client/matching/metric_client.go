@@ -232,7 +232,8 @@ func (c *metricClient) finishMetricsRecording(
 			*serviceerror.QueryFailed,
 			*serviceerror.NamespaceNotFound,
 			*serviceerror.NewerBuildExists,
-			*serviceerror.WorkflowExecutionAlreadyStarted:
+			*serviceerror.WorkflowExecutionAlreadyStarted,
+			*serviceerror.ResourceExhausted:
 			// noop - not interest and too many logs
 		default:
 			c.throttledLogger.Info("matching client encountered error", tag.Error(err), tag.ServiceErrorType(err))
@@ -251,4 +252,12 @@ func (c *metricClient) Route(p tqid.Partition) (string, error) {
 		return "", errors.New("not routing client")
 	}
 	return rc.Route(p)
+}
+
+// Stop forwards a deterministic shutdown to the wrapped client. See
+// clientImpl.Stop. It is only invoked via client.Bean.Close.
+func (c *metricClient) Stop() {
+	if s, ok := c.client.(interface{ Stop() }); ok {
+		s.Stop()
+	}
 }

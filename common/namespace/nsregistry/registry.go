@@ -26,7 +26,6 @@ package nsregistry
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
@@ -185,6 +184,7 @@ func DefaultNamespaceStateChanged(currentClusterName string, oldNS *namespace.Na
 		oldNS.State() != newNS.State() ||
 		oldNS.Name() != newNS.Name() ||
 		oldNS.IsGlobalNamespace() != newNS.IsGlobalNamespace() ||
+		//nolint:forbidigo // ns-wide state diff for cache invalidation.
 		oldNS.ActiveInCluster(currentClusterName) != newNS.ActiveInCluster(currentClusterName) ||
 		oldNS.ReplicationState("") != newNS.ReplicationState("")
 }
@@ -269,7 +269,7 @@ func (r *registry) GetPingChecks() []pingable.Check {
 	}
 }
 
-func (r *registry) getAllNamespace() []*namespace.Namespace {
+func (r *registry) GetAllNamespaces() []*namespace.Namespace {
 	r.nsMapsLock.RLock()
 	defer r.nsMapsLock.RUnlock()
 	return expmaps.Values(r.idToNamespace)
@@ -294,7 +294,10 @@ func (r *registry) RegisterStateChangeCallback(key any, cb namespace.StateChange
 				metrics.NamespaceRegistrySlowCallbacks.With(r.metricsHandler).Record(1)
 				r.logger.Warn(
 					"Namespace registry callback slow",
-					tag.Key(fmt.Sprintf("%v", key)),
+					// Use tag.Any (JSON reflection) rather than fmt %v: %v walks unexported fields, which
+					// deep-printed the whole registrant (e.g. *WorkflowHandler) and iterated an internal map
+					// mid-mutation, crashing the process with "concurrent map iteration and map write".
+					tag.Any("key", key),
 					tag.Duration("duration", duration),
 				)
 			}
@@ -599,7 +602,7 @@ func (r *registry) refreshNamespaces(ctx context.Context) (err error) {
 	newIDToNamespace := make(map[namespace.ID]*namespace.Namespace)
 
 	var deletedEntries []*namespace.Namespace
-	for _, ns := range r.getAllNamespace() {
+	for _, ns := range r.GetAllNamespaces() {
 		if _, namespaceExistsDb := namespaceIDsDb[ns.ID()]; !namespaceExistsDb {
 			deletedEntries = append(deletedEntries, ns)
 			continue
@@ -713,7 +716,7 @@ func (r *registry) updateIDToNamespace(
 	id namespace.ID,
 	newNS *namespace.Namespace,
 ) *namespace.Namespace {
-	oldNS, _ := iDToNamespace[id]
+	oldNS := iDToNamespace[id]
 	iDToNamespace[id] = newNS
 	return oldNS
 }

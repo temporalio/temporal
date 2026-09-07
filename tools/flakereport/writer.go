@@ -9,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"go.temporal.io/server/tools/common/github"
 )
 
 // writeFailuresJSON writes failures.json containing every individual test failure (for analytics).
@@ -36,7 +38,7 @@ func writeFailuresJSON(outputDir string, failures []TestFailure, repo string) er
 }
 
 // generateGitHubSummary creates markdown summary for GitHub Actions
-func generateGitHubSummary(summary *ReportSummary, runID string, maxLinks int) string {
+func generateGitHubSummary(summary *ReportSummary, bisectReports []TestBisectReport, repo, runID string, maxLinks int, minProbability float64) string {
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
 
 	var content string
@@ -55,19 +57,29 @@ func generateGitHubSummary(summary *ReportSummary, runID string, maxLinks int) s
 	content += fmt.Sprintf("* **Total Failures**: %d\n", summary.TotalFailures)
 	content += fmt.Sprintf("* **Overall Failure Rate**: %.1f per 1000 tests\n\n", summary.OverallFailureRate)
 
+	if len(bisectReports) > 0 {
+		content += generateBisectSummary(bisectReports, repo, minProbability)
+	}
+
 	// Summary table
 	content += "### Failure Categories Summary\n\n"
-	content += "| Category | Unique Tests |\n"
-	content += "|----------|--------------|\n"
-	content += fmt.Sprintf("| CI Breakers | %d |\n", len(summary.CIBreakers))
+	content += "| Category | Unique Entries |\n"
+	content += "|----------|----------------|\n"
+	content += fmt.Sprintf("| CI Execution Interruptions | %d |\n", len(summary.TestRunnerTimeouts))
+	content += fmt.Sprintf("| Final-Retry Test Failures | %d |\n", len(summary.CIBreakers))
 	content += fmt.Sprintf("| Crashes | %d |\n", len(summary.Crashes))
 	content += fmt.Sprintf("| Timeouts | %d |\n", len(summary.Timeouts))
 	content += fmt.Sprintf("| Flaky Tests | %d |\n\n", summary.TotalFlakyCount)
 
-	// CI Breakers section (tests that failed all retries)
+	if len(summary.TestRunnerTimeouts) > 0 {
+		content += "### CI Execution Interruptions\n\n"
+		content += generateOccurrenceReportTable(summary.TestRunnerTimeouts, "Event", "Affected Artifacts", maxLinks) + "\n"
+	}
+
+	// Final-retry failures are tracked per artifact, not per GitHub Actions workflow run.
 	if len(summary.CIBreakers) > 0 {
-		content += "### CI Breakers (Failed All Retries)\n\n"
-		content += generateTestReportTable(summary.CIBreakers, "CI Break Rate", maxLinks) + "\n"
+		content += "### Final-Retry Test Failures\n\n"
+		content += generateOccurrenceReportTable(summary.CIBreakers, "Test", "Affected Artifacts", maxLinks) + "\n"
 	}
 
 	// Crashes section
@@ -82,7 +94,7 @@ func generateGitHubSummary(summary *ReportSummary, runID string, maxLinks int) s
 		content += generateTestReportTable(summary.Timeouts, "Flake Rate", maxLinks) + "\n"
 	}
 
-	// Flaky tests section (show ALL tests)
+	// Flaky tests section
 	if len(summary.FlakyTests) > 0 {
 		content += "### Flaky Tests\n\n"
 		content += generateTestReportTable(summary.FlakyTests, "Flake Rate", maxLinks) + "\n"
@@ -96,7 +108,7 @@ func generateGitHubSummary(summary *ReportSummary, runID string, maxLinks int) s
 
 	// Link to run
 	if runID != "" {
-		content += fmt.Sprintf("\n[View Full Report & Artifacts](https://github.com/%s/actions/runs/%s)\n", defaultRepository, runID)
+		content += fmt.Sprintf("\n[View Full Report & Artifacts](%s)\n", github.RunURL(defaultRepository, runID))
 	}
 
 	return content
@@ -118,37 +130,63 @@ func escapeTableCell(s string) string {
 	return strings.ReplaceAll(s, "|", "&#124;")
 }
 
-// writeBisectTable writes all suspect (test, commit) pairs into a single flat table.
-func writeBisectTable(sb *strings.Builder, reports []TestBisectReport, repo string) {
+type bisectTableRow struct {
+	testName string
+	suspect  BisectResult
+}
+
+func buildBisectTableRows(reports []TestBisectReport) []bisectTableRow {
+	rankedReports := make([]TestBisectReport, 0, len(reports))
+	for _, report := range reports {
+		if !report.Skipped && len(report.TopSuspects) > 0 {
+			rankedReports = append(rankedReports, report)
+		}
+	}
+	sort.Slice(rankedReports, func(i, j int) bool {
+		pi := rankedReports[i].TopSuspects[0].Probability
+		pj := rankedReports[j].TopSuspects[0].Probability
+		if pi != pj {
+			return pi > pj
+		}
+		return rankedReports[i].TestName < rankedReports[j].TestName
+	})
+
+	var rows []bisectTableRow
+	for _, report := range rankedReports {
+		for _, suspect := range report.TopSuspects {
+			rows = append(rows, bisectTableRow{testName: report.TestName, suspect: suspect})
+		}
+	}
+	return rows
+}
+
+// writeBisectTable writes suspect (test, commit) pairs into a single flat table.
+func writeBisectTable(sb *strings.Builder, rows []bisectTableRow, repo string) {
 	sb.WriteString("| Test | Prob | Commit | Date | Author | Before | After | Note |\n")
 	sb.WriteString("|------|------|--------|------|--------|--------|-------|------|\n")
-	for _, r := range reports {
-		if r.Skipped || len(r.TopSuspects) == 0 {
-			continue
+	for _, row := range rows {
+		s := row.suspect
+		shortSHA := s.CommitSHA
+		if len(shortSHA) > 7 {
+			shortSHA = shortSHA[:7]
 		}
-		for _, s := range r.TopSuspects {
-			shortSHA := s.CommitSHA
-			if len(shortSHA) > 7 {
-				shortSHA = shortSHA[:7]
-			}
-			commitURL := fmt.Sprintf("https://github.com/%s/commit/%s", repo, s.CommitSHA)
-			title := s.CommitTitle
-			if title == s.CommitSHA || title == "" {
-				title = shortSHA
-			}
-			beforeStr := fmt.Sprintf("%d/%d (%.0f%%)", s.FailsBefore, s.PassesBefore+s.FailsBefore,
-				pct(s.FailsBefore, s.PassesBefore+s.FailsBefore))
-			afterStr := fmt.Sprintf("%d/%d (%.0f%%)", s.FailsAfter, s.PassesAfter+s.FailsAfter,
-				pct(s.FailsAfter, s.PassesAfter+s.FailsAfter))
-			fmt.Fprintf(sb, "| `%s` | %.1f%% | [%s](%s) %s | %s | %s | %s | %s | %s |\n",
-				escapeTableCell(r.TestName), s.Probability*100, shortSHA, commitURL, escapeTableCell(title),
-				s.CommitDate, escapeTableCell(s.CommitAuthor), beforeStr, afterStr, escapeTableCell(s.HeuristicNote))
+		commitURL := github.CommitURL(repo, s.CommitSHA)
+		title := s.CommitTitle
+		if title == s.CommitSHA || title == "" {
+			title = shortSHA
 		}
+		beforeStr := fmt.Sprintf("%d/%d (%.0f%%)", s.FailsBefore, s.PassesBefore+s.FailsBefore,
+			pct(s.FailsBefore, s.PassesBefore+s.FailsBefore))
+		afterStr := fmt.Sprintf("%d/%d (%.0f%%)", s.FailsAfter, s.PassesAfter+s.FailsAfter,
+			pct(s.FailsAfter, s.PassesAfter+s.FailsAfter))
+		fmt.Fprintf(sb, "| `%s` | %.1f%% | [%s](%s) %s | %s | %s | %s | %s | %s |\n",
+			escapeTableCell(row.testName), s.Probability*100, shortSHA, commitURL, escapeTableCell(title),
+			s.CommitDate, escapeTableCell(s.CommitAuthor), beforeStr, afterStr, escapeTableCell(s.HeuristicNote))
 	}
 	sb.WriteString("\n")
 }
 
-// generateBisectSummary creates the markdown section for bisect results to append to the GitHub summary.
+// generateBisectSummary creates the markdown section for Bayesian bisect results.
 func generateBisectSummary(reports []TestBisectReport, repo string, minProb float64) string {
 	qualifying := countQualifyingBisectReports(reports)
 
@@ -156,7 +194,7 @@ func generateBisectSummary(reports []TestBisectReport, repo string, minProb floa
 	threshold := fmt.Sprintf("%.0f%%", minProb*100)
 
 	var sb strings.Builder
-	sb.WriteString("\n## Bayesian Commit Suspects\n\n")
+	sb.WriteString("\n### Bayesian Commit Suspects\n\n")
 
 	if qualifying == 0 {
 		sb.WriteString("No actionable commit suspects found")
@@ -173,20 +211,8 @@ func generateBisectSummary(reports []TestBisectReport, repo string, minProb floa
 	}
 	sb.WriteString("\n\n")
 
-	// Sort by top suspect probability descending so the most actionable rows appear first.
-	sort.Slice(reports, func(i, j int) bool {
-		pi := 0.0
-		if len(reports[i].TopSuspects) > 0 {
-			pi = reports[i].TopSuspects[0].Probability
-		}
-		pj := 0.0
-		if len(reports[j].TopSuspects) > 0 {
-			pj = reports[j].TopSuspects[0].Probability
-		}
-		return pi > pj
-	})
-
-	writeBisectTable(&sb, reports, repo)
+	rows := limitReportRows(buildBisectTableRows(reports))
+	writeBisectTable(&sb, rows, repo)
 	return sb.String()
 }
 
@@ -198,9 +224,9 @@ func pct(num, denom int) float64 {
 	return float64(num) / float64(denom) * 100.0
 }
 
-// writeGitHubSummary writes markdown summary to GITHUB_STEP_SUMMARY (if set)
-// and always writes to outputDir/github-report.md.
-func writeGitHubSummary(content string, outputDir string) error {
+// writeGitHubSummary writes content to GITHUB_STEP_SUMMARY (if set)
+// and always writes it to outputDir/github-report.md.
+func writeGitHubSummary(content, outputDir string) error {
 	// Always write to output dir
 	outPath := filepath.Join(outputDir, "github-report.md")
 	if err := os.WriteFile(outPath, []byte(content), 0644); err != nil {

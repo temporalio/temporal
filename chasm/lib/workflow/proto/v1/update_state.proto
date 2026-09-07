@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.workflow.proto.v1;
+
+import "temporal/api/failure/v1/message.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb;workflowpb";
+
+message UpdateState {
+  string update_id = 1;
+  // Populated when the update was rejected by a validator.
+  // Used to resolve the update outcome for callbacks on rejected updates.
+  temporal.api.failure.v1.Failure rejection_failure = 2;
+}

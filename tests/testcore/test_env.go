@@ -10,25 +10,31 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/require"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
-	"go.temporal.io/server/common/debug"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/testing/taskpoller"
+	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
-	"google.golang.org/grpc"
+	"go.temporal.io/server/temporal"
 )
 
 // shardSalt is used to distribute functional tests across shards.
@@ -37,13 +43,12 @@ import (
 //go:embed shard_salt.txt
 var shardSalt string
 
-var (
-	_                  Env = (*TestEnv)(nil)
-	defaultTestTimeout     = 90 * time.Second * debug.TimeoutMultiplier
-)
+var _ Env = (*TestEnv)(nil)
 
 type Env interface {
-	// T returns the *testing.T. Deprecated: use the suite's T() method instead.
+	// T returns the *testing.T.
+	//
+	// Deprecated: use the suite's T() method instead.
 	T() *testing.T
 	Namespace() namespace.Name
 	NamespaceID() namespace.ID
@@ -52,6 +57,7 @@ type Env interface {
 	GetTestCluster() *TestCluster
 	CloseShard(namespaceID string, workflowID string)
 	OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func())
+	// Deprecated: use the suite's Context() method instead.
 	Context() context.Context
 	InjectHook(hook testhooks.Hook) (cleanup func())
 }
@@ -73,7 +79,6 @@ type TestEnv struct {
 	taskPoller     *taskpoller.TaskPoller
 	t              *testing.T
 	tv             *testvars.TestVars
-	ctx            context.Context
 	dedicatedGuard *dedicatedClusterGuard
 
 	sdkClientOnce sync.Once
@@ -86,15 +91,22 @@ type TestEnv struct {
 type TestOption func(*testOptions)
 
 type testOptions struct {
-	dedicatedCluster      bool
-	dynamicConfigSettings []dynamicConfigOverride
-	timeout               time.Duration
+	dedicatedCluster         bool
+	needWorkerService        bool
+	dedicatedReason          string
+	disableTestloggerFailure bool
+	dynamicConfigSettings    []dynamicConfigOverride
+	clusterOptions           []TestClusterOption
+	testVars                 func(*testvars.TestVars) *testvars.TestVars
+	historyTaskRecorder      bool
 }
 
 type dynamicConfigOverride struct {
 	setting dynamicconfig.GenericSetting
 	value   any
 }
+
+type versionHeadersContextKey struct{}
 
 // WithDedicatedCluster requests a dedicated (non-shared) cluster for the test.
 // Use this for tests that have cluster-global side effects.
@@ -104,9 +116,124 @@ func WithDedicatedCluster() TestOption {
 	}
 }
 
+// WithSpanExporter enables OpenTelemetry tracing with exporter on a dedicated test cluster.
+func WithSpanExporter(exporter sdktrace.SpanExporter) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, withSpanExporter(exporter))
+		o.dedicatedReason = "span exporter configured"
+	}
+}
+
+// WithDisableTestloggerFailure disables the test logger's behavior of failing
+// the test when an error log matches a registered expectation (e.g. soft-assert
+// errors tagged with tag.FailedAssertion). Use for tests that intentionally
+// trigger and then verify soft-assert errors. Implies WithDedicatedCluster,
+// because FailOnError is cluster-wide and disabling it on a shared cluster may
+// hide failures in concurrent tests.
+func WithDisableTestloggerFailure() TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.disableTestloggerFailure = true
+		o.dedicatedReason = "testlogger failures disabled"
+	}
+}
+
 // Deprecated: this option is no longer required and will be removed once all callers have been updated.
 func WithSdkWorker() TestOption {
 	return func(o *testOptions) {
+	}
+}
+
+// WithTestVars customizes the default test variables for the environment.
+func WithTestVars(fn func(*testvars.TestVars) *testvars.TestVars) TestOption {
+	return func(o *testOptions) {
+		o.testVars = fn
+	}
+}
+
+// WithWorkerService enables the system worker service. The service is off by
+// default to avoid the worker overhead. This implies a dedicated cluster.
+func WithWorkerService(reason string) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.needWorkerService = true
+		o.dedicatedReason = "worker service required: " + reason
+	}
+}
+
+// WithMTLS enables mutual TLS on the test's cluster. This implies a dedicated
+// cluster, since the TLS configuration cannot be shared across tests.
+func WithMTLS() TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, withMTLS())
+		o.dedicatedReason = "mTLS enabled"
+	}
+}
+
+// WithPersistenceFaultInjection requests a dedicated cluster with the given persistence fault injection config.
+func WithPersistenceFaultInjection(cfg *config.FaultInjection) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, WithFaultInjectionConfig(cfg))
+		o.dedicatedReason = "fault injection config used"
+	}
+}
+
+// WithArchival enables archival on the test's cluster. This implies a dedicated
+// cluster because archival is configured at the cluster level.
+func WithArchival() TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, withArchivalConfig())
+		o.dedicatedReason = "archival enabled"
+	}
+}
+
+// WithCustomArchivers configures custom history and visibility archiver factories
+// on the test's cluster. This implies a dedicated cluster because the factories are
+// configured at the cluster level.
+func WithCustomArchivers(historyFactory provider.CustomHistoryArchiverFactory, visibilityFactory provider.CustomVisibilityArchiverFactory) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, func(params *testClusterParams) {
+			params.AdditionalServerOptions = append(params.AdditionalServerOptions,
+				temporal.WithCustomHistoryArchiverFactory(historyFactory),
+				temporal.WithCustomVisibilityArchiverFactory(visibilityFactory),
+			)
+		})
+		o.dedicatedReason = "custom archivers used"
+	}
+}
+
+// WithLogger sets a custom logger for the test's cluster, letting a test intercept
+// server log output. This implies a dedicated cluster, since a custom logger cannot
+// be shared across tests.
+func WithLogger(logger log.Logger) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, WithClusterLogger(logger))
+		o.dedicatedReason = "custom logger used"
+	}
+}
+
+// WithHistoryShardCount sets the number of history shards for the test's cluster.
+// This implies a dedicated cluster, since shard count cannot be changed on a shared cluster.
+func WithHistoryShardCount(n int32) TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, WithNumHistoryShards(n))
+		o.dedicatedReason = "custom history shard count used"
+	}
+}
+
+func WithHistoryTaskRecorder() TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, WithClusterHistoryTaskRecorder())
+		o.dedicatedReason = "task queue recorder used"
+		o.historyTaskRecorder = true
 	}
 }
 
@@ -125,15 +252,6 @@ func WithDynamicConfig(setting dynamicconfig.GenericSetting, value any) TestOpti
 	}
 }
 
-// WithTimeout sets a custom timeout for the test. The test will fail if it runs longer
-// than this duration. The timeout is multiplied by debug.TimeoutMultiplier when debugging.
-// The TEMPORAL_TEST_TIMEOUT environment variable can also set the default timeout in seconds.
-func WithTimeout(duration time.Duration) TestOption {
-	return func(o *testOptions) {
-		o.timeout = duration
-	}
-}
-
 // NewEnv creates a new test environment with access to a Temporal cluster.
 func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	t.Helper()
@@ -141,11 +259,18 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	// Check test sharding early, before any expensive operations.
 	checkTestShard(t)
 
+	// Create the test context before any expensive setup, so that the deadline
+	// extension below can compensate for the time setup takes.
+	ctx := testcontext.For(t)
+
 	var options testOptions
 	for _, opt := range opts {
 		opt(&options)
 	}
 	dedicatedGuard := newDedicatedClusterGuard(options.dedicatedCluster)
+	if options.dedicatedReason != "" {
+		dedicatedGuard.record(options.dedicatedReason)
+	}
 
 	// For dedicated clusters, pass all dynamic config settings at cluster creation.
 	var startupConfig map[dynamicconfig.Key]any
@@ -159,14 +284,21 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		}
 	}
 
-	// Obtain the test cluster from the pool.
-	base := testClusterPool.get(t, options.dedicatedCluster, startupConfig)
+	// Obtain the test cluster from the router.
+	base := testClusterRouter.get(t, clusterRequest{
+		dedicated:         options.dedicatedCluster,
+		needWorkerService: options.needWorkerService,
+		dedicatedReason:   options.dedicatedReason,
+		dynamicConfig:     startupConfig,
+		clusterOpts:       options.clusterOptions,
+	})
 	cluster := base.GetTestCluster()
 
 	// Create a dedicated namespace for the test to help with test isolation.
 	baseName := strings.ReplaceAll(t.Name(), "/", "-")
 	ns := namespace.Name(RandomizeStr(baseName))
 	nsID, err := base.RegisterNamespace(
+		ctx,
 		ns,
 		1, // 1 day retention
 		enumspb.ARCHIVAL_STATE_DISABLED,
@@ -177,6 +309,18 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		t.Fatalf("Failed to register namespace: %v", err)
 	}
 
+	tv := testvars.New(t)
+	if options.testVars != nil {
+		tv = options.testVars(tv)
+	}
+
+	// Attach version headers decorator to the test context.
+	testcontext.AttachDecorator(t, versionHeadersContextKey{}, headers.SetVersions)
+
+	// Restore as much of the test's timeout budget as the context's ceiling
+	// allows, now that setup is done.
+	testcontext.EnsureRemaining(testcontext.For(t), t, testcontext.DefaultTimeout())
+
 	env := &TestEnv{
 		FunctionalTestBase: base,
 		Assertions:         require.New(t),
@@ -186,22 +330,35 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 		Logger:             base.Logger,
 		taskPoller:         taskpoller.New(t, cluster.FrontendClient(), ns.String()),
 		t:                  t,
-		tv:                 testvars.New(t),
-		ctx:                setupTestTimeoutWithContext(t, options.timeout),
+		tv:                 tv,
 		sdkWorkerTQ:        RandomizeStr("tq-" + t.Name()),
 		dedicatedGuard:     dedicatedGuard,
 	}
 	t.Cleanup(func() {
-		if err := env.dedicatedGuard.validate(); err != nil && !t.Failed() {
+		defer func() { dedicatedGuard = nil }()
+		if err := dedicatedGuard.validate(); err != nil && !t.Failed() {
 			t.Fatal(err)
 		}
 	})
+
+	if options.disableTestloggerFailure {
+		tl, ok := base.Logger.(*testlogger.TestLogger)
+		if !ok {
+			t.Fatalf("WithDisableTestloggerFailure requires a *testlogger.TestLogger logger, got %T", base.Logger)
+		}
+		prev := tl.FailOnError(false)
+		t.Cleanup(func() { tl.FailOnError(prev) })
+	}
 
 	// For shared clusters, apply all dynamic config settings as overrides.
 	if !options.dedicatedCluster && len(options.dynamicConfigSettings) > 0 {
 		for _, override := range options.dynamicConfigSettings {
 			env.OverrideDynamicConfig(override.setting, override.value)
 		}
+	}
+	if options.historyTaskRecorder {
+		recorder := cluster.GetHistoryTaskRecorder()
+		require.NotNil(t, recorder)
 	}
 
 	return env
@@ -220,14 +377,14 @@ func (e *TestEnv) NamespaceID() namespace.ID {
 //
 // It auto-detects the scope from the hook:
 // - For namespace-scoped hooks: scopes it to the test's namespace
-// - For global hooks: requires a dedicated cluster (fails early if used on shared cluster)
+// - For global hooks: requires a dedicated cluster, except for suite-scoped legacy clusters.
 func (e *TestEnv) InjectHook(hook testhooks.Hook) (cleanup func()) {
 	var scope any
 	switch hook.Scope() {
 	case testhooks.ScopeNamespace:
 		scope = e.nsID
 	case testhooks.ScopeGlobal:
-		if e.isShared {
+		if e.isShared && !testClusterRouter.hasSuiteScoped(e.t) {
 			e.t.Fatal("InjectHook: global hooks require a dedicated cluster; use testcore.WithDedicatedCluster()")
 		}
 		e.dedicatedGuard.record("global hook injected")
@@ -269,6 +426,7 @@ func (e *TestEnv) TaskPoller() *taskpoller.TaskPoller {
 }
 
 // NoError asserts that err is nil.
+//
 // Deprecated: use require.NoError with the parent test or suite instead.
 // TODO: remove once all tests are migrated to TestEnv (and no longer use FunctionalTestBase directly).
 func (e *TestEnv) NoError(err error, msgAndArgs ...any) {
@@ -276,6 +434,7 @@ func (e *TestEnv) NoError(err error, msgAndArgs ...any) {
 }
 
 // Error asserts that err is not nil.
+//
 // Deprecated: use require.Error with the parent test or suite instead.
 // TODO: remove once all tests are migrated to TestEnv (and no longer use FunctionalTestBase directly).
 func (e *TestEnv) Error(err error, msgAndArgs ...any) {
@@ -283,19 +442,62 @@ func (e *TestEnv) Error(err error, msgAndArgs ...any) {
 }
 
 // Run executes a subtest.
+//
 // Deprecated: use the suite's Run method instead.
 // TODO: remove once all tests are migrated to TestEnv (and no longer use FunctionalTestBase directly).
 func (e *TestEnv) Run(name string, subtest func()) bool {
 	return e.FunctionalTestBase.Run(name, subtest)
 }
 
-// T returns the *testing.T. Deprecated: use the suite's T() method instead.
+// T returns the *testing.T.
+//
+// Deprecated: use the suite's T() method instead.
 func (e *TestEnv) T() *testing.T {
 	return e.t
 }
 
 func (e *TestEnv) Tv() *testvars.TestVars {
 	return e.tv
+}
+
+// InjectRequestFault registers a pre-handler gRPC fault injection scoped to this test's namespace.
+// Requests match either the namespace ID or name filter, depending on which
+// namespace field they expose. Requests without either field are ignored.
+// Returns a cleanup function that disables the fault.
+func (e *TestEnv) InjectRequestFault(fault RequestFault) func() {
+	scope := grpcfaults.Scope{
+		NamespaceID:   e.nsID,
+		NamespaceName: e.nsName,
+	}
+	tracker := newFaultTracker(e.t)
+	unregister := e.GetTestCluster().Host().GetGRPCFaultGenerator().RegisterRequestCallback(scope, func(_ context.Context, _ string, req any) *grpcfaults.Outcome {
+		if injectedErr := fault(req); injectedErr != nil {
+			tracker.markFired(req)
+			return &grpcfaults.Outcome{Error: injectedErr}
+		}
+		return nil
+	})
+	return tracker.attach(unregister)
+}
+
+// InjectResponseFault registers a post-handler gRPC fault injection scoped to this test's namespace.
+// Requests match either the namespace ID or name filter, depending on which
+// namespace field they expose. Requests without either field are ignored.
+// Returns a cleanup function that disables the fault.
+func (e *TestEnv) InjectResponseFault(fault ResponseFault) func() {
+	scope := grpcfaults.Scope{
+		NamespaceID:   e.nsID,
+		NamespaceName: e.nsName,
+	}
+	tracker := newFaultTracker(e.t)
+	unregister := e.GetTestCluster().Host().GetGRPCFaultGenerator().RegisterResponseCallback(scope, func(_ context.Context, _ string, req, resp any, err error) *grpcfaults.Outcome {
+		if injectedErr := fault(req, resp, err); injectedErr != nil {
+			tracker.markFired(req)
+			return &grpcfaults.Outcome{Error: injectedErr}
+		}
+		return nil
+	})
+	return tracker.attach(unregister)
 }
 
 // Context returns the test-level timeout context with RPC version headers already included.
@@ -306,8 +508,12 @@ func (e *TestEnv) Tv() *testvars.TestVars {
 //
 //	ctx, cancel := context.WithTimeout(env.Context(), 10*time.Second)
 //	defer cancel()
+//
+// The context is deliberately not cached; see [testcontext.EnsureRemaining].
+//
+// Deprecated: use the suite's Context() method instead.
 func (e *TestEnv) Context() context.Context {
-	return e.ctx
+	return testcontext.For(e.t)
 }
 
 // SdkClient returns the SDK client. It is lazily initialized on the first call.
@@ -323,19 +529,15 @@ func (e *TestEnv) SdkClient() sdkclient.Client {
 			clientOptions.ConnectionOptions.TLS = provider.FrontendClientConfig
 		}
 
-		if interceptor := e.cluster.host.grpcClientInterceptor; interceptor != nil {
-			clientOptions.ConnectionOptions.DialOptions = []grpc.DialOption{
-				grpc.WithUnaryInterceptor(interceptor.Unary()),
-				grpc.WithStreamInterceptor(interceptor.Stream()),
-			}
-		}
-
-		var err error
-		e.sdkClient, err = sdkclient.Dial(clientOptions)
+		client, err := sdkclient.Dial(clientOptions)
 		if err != nil {
 			e.t.Fatalf("Failed to create SDK client: %v", err)
 		}
-		e.t.Cleanup(func() { e.sdkClient.Close() })
+		e.sdkClient = client
+		e.t.Cleanup(func() {
+			client.Close()
+			client = nil
+		})
 	})
 	return e.sdkClient
 }
@@ -344,11 +546,15 @@ func (e *TestEnv) SdkClient() sdkclient.Client {
 func (e *TestEnv) SdkWorker() sdkworker.Worker {
 	e.sdkWorkerOnce.Do(func() {
 		client := e.SdkClient() // Ensure client is initialized
-		e.sdkWorker = sdkworker.New(client, e.sdkWorkerTQ, sdkworker.Options{})
-		if err := e.sdkWorker.Start(); err != nil {
+		worker := sdkworker.New(client, e.sdkWorkerTQ, sdkworker.Options{})
+		if err := worker.Start(); err != nil {
 			e.t.Fatalf("Failed to start SDK worker: %v", err)
 		}
-		e.t.Cleanup(func() { e.sdkWorker.Stop() })
+		e.sdkWorker = worker
+		e.t.Cleanup(func() {
+			worker.Stop()
+			worker = nil
+		})
 	})
 	return e.sdkWorker
 }
@@ -386,6 +592,22 @@ func (e *TestEnv) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, va
 		e.dedicatedGuard.record("global dynamic config used")
 	}
 	return e.cluster.host.overrideDynamicConfigForTest(e.t, setting.Key(), value)
+}
+
+// StartNamespaceLogCapture starts a log capture scoped to this test environment's namespace.
+func (e *TestEnv) StartNamespaceLogCapture() *testlogger.Capture {
+	testLogger, ok := e.Logger.(*testlogger.TestLogger)
+	if !ok {
+		e.t.Fatalf("StartNamespaceLogCapture requires a *testlogger.TestLogger logger, got %T", e.Logger)
+	}
+	capture := testLogger.StartCapture(
+		tag.WorkflowNamespace(e.Namespace().String()),
+		tag.WorkflowNamespaceID(e.NamespaceID().String()),
+	)
+	e.t.Cleanup(func() {
+		testLogger.StopCapture(capture)
+	})
+	return capture
 }
 
 // StartGlobalMetricCapture starts a cluster-global metrics capture for this test and automatically stops it during cleanup.

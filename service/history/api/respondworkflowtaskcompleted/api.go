@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -33,6 +34,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/recordworkflowtaskstarted"
@@ -218,7 +220,8 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	}
 
 	behavior := request.GetVersioningBehavior()
-	deployment := worker_versioning.DeploymentFromDeploymentVersion(worker_versioning.DeploymentVersionFromOptions(request.GetDeploymentOptions()))
+	wftDeploymentVersion := worker_versioning.DeploymentVersionFromOptions(request.GetDeploymentOptions())
+	deployment := worker_versioning.DeploymentFromDeploymentVersion(wftDeploymentVersion)
 	//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
 	if behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED && request.GetDeployment() == nil &&
 		(request.GetDeploymentOptions() == nil || request.GetDeploymentOptions().GetWorkerVersioningMode() != enumspb.WORKER_VERSIONING_MODE_VERSIONED) {
@@ -271,6 +274,24 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	}
 
 	nsName := namespaceEntry.Name().String()
+
+	// When pagination is enabled, buffer intermediate pages and merge them into the final page
+	// before continuing through the normal workflow task completion path.
+	paginationResp, mergedCommands, err := handler.applyTaskCompletionPagination(weContext, token, request, nsName)
+	// In case of a buffer overflow fall through and fail the workflow task below
+	paginationOverflow := errors.Is(err, workflow.ErrTaskCompletionBufferSizeExceeded)
+	if !paginationOverflow && (paginationResp != nil || err != nil) {
+		releaseLeaseWithError = false
+		return paginationResp, err
+	}
+
+	// `commands` is the effective list of commands to execute including ones from
+	// paginated requests. `request.Commands` is left unchanged.
+	commands := request.Commands
+	if len(mergedCommands) > 0 {
+		commands = append(mergedCommands, request.Commands...)
+	}
+
 	limits := historyi.WorkflowTaskCompletionLimits{
 		MaxResetPoints:              handler.config.MaxAutoResetPoints(nsName),
 		MaxSearchAttributeValueSize: handler.config.SearchAttributesSizeOfValueLimit(nsName),
@@ -289,7 +310,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	// In a mean time, there might be pending commands and messages on the worker side.
 	// If those commands/messages are sent on the heartbeat WT it means that WF is making progress.
 	// WT heartbeat timeout is applicable only when WF doesn't make any progress and does heartbeats only.
-	checkWTHeartbeatTimeout := request.GetForceCreateNewWorkflowTask() && len(request.Commands) == 0 && len(request.Messages) == 0
+	checkWTHeartbeatTimeout := request.GetForceCreateNewWorkflowTask() && len(commands) == 0 && len(request.Messages) == 0
 
 	if checkWTHeartbeatTimeout {
 		// WorkflowTaskHeartbeatTimeout is a total duration for which workflow is allowed to send continuous heartbeats.
@@ -361,7 +382,14 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	//   and admitted updates are lost. Uncomment this check when durable admitted is implemented
 	//   or updates stay in the registry after WFT is failed.
 	hasBufferedEventsOrMessages := ms.HasBufferedEvents() // || updateRegistry.HasOutgoingMessages(false)
-	if err := namespaceEntry.VerifyBinaryChecksum(request.GetBinaryChecksum()); err != nil {
+	if paginationOverflow {
+		// Per-workflow completion buffer overflowed: terminate the workflow
+		wtFailedCause = newWorkflowTaskFailedCause(
+			enumspb.WORKFLOW_TASK_FAILED_CAUSE_REQUEST_TOO_LARGE,
+			serviceerror.NewInvalidArgument(
+				"workflow task completion buffer size exceeds the per-workflow limit"),
+			true)
+	} else if err := namespaceEntry.VerifyBinaryChecksum(request.GetBinaryChecksum()); err != nil { //nolint:staticcheck // SA1019 deprecated stamp will clean up later
 		wtFailedCause = newWorkflowTaskFailedCause(
 			enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY,
 			serviceerror.NewInvalidArgumentf(
@@ -395,6 +423,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			request.GetIdentity(),
 			request.GetWorkerControlTaskQueue(),
 			completedEvent.GetEventId(), // If completedEvent is nil, then GetEventId() returns 0 and this value shouldn't be used in workflowTaskHandler.
+			deployment,
 			ms,
 			updateRegistry,
 			&effects,
@@ -415,7 +444,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 
 		if responseMutations, err = workflowTaskHandler.handleCommands(
 			ctx,
-			request.Commands,
+			commands,
 			collection.NewIndexedTakeList(
 				request.Messages,
 				func(msg *protocolpb.Message) string { return msg.Id },
@@ -465,13 +494,20 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		// registryClearedErr, which may lead to continuous retries of UpdateWorkflowExecution API.
 		updateRegistry.Abort(update.AbortReasonWorkflowTaskFailed)
 
-		metrics.FailedWorkflowTasksCounter.With(handler.metricsHandler).Record(
-			1,
-			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope),
-			metrics.NamespaceTag(namespaceEntry.Name().String()),
-			metrics.VersioningBehaviorTag(ms.GetEffectiveVersioningBehavior()),
-			metrics.FailureTag(wtFailedCause.failedCause.String()),
-			metrics.FirstAttemptTag(currentWorkflowTask.Attempt),
+		workflow.RecordWorkflowTaskFailedMetrics(
+			handler.config,
+			handler.metricsHandler,
+			namespaceEntry.Name(),
+			ms.GetExecutionInfo().GetTaskQueue(),
+			metrics.HistoryRespondWorkflowTaskCompletedScope,
+			wtFailedCause.failedCause.String(),
+			workflow.WorkflowTaskCompletionMetrics{
+				VersioningInfo: workflow.VersioningMetricContext{
+					Behavior:          ms.GetEffectiveVersioningBehavior(),
+					DeploymentVersion: wftDeploymentVersion,
+				},
+				Attempt: currentWorkflowTask.Attempt,
+			},
 		)
 		handler.logger.Info("Failing the workflow task.",
 			tag.Value(wtFailedCause.Message()),
@@ -486,9 +522,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			return nil, serviceerror.NewInvalidArgument(wtFailedCause.Message())
 		}
 
-		// wtFailedEventID must be used as the event batch ID for any following workflow termination events
-		var wtFailedEventID int64
-		ms, wtFailedEventID, err = failWorkflowTask(ctx, handler.shardContext, weContext, currentWorkflowTask, wtFailedCause, request)
+		ms, _, err = failWorkflowTask(ctx, handler.shardContext, weContext, currentWorkflowTask, wtFailedCause, request)
 		if err != nil {
 			return nil, err
 		}
@@ -500,7 +534,6 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			ms.FlushBufferedEvents()
 
 			_, err := ms.AddWorkflowExecutionTerminatedEvent(
-				wtFailedEventID,
 				wtFailedCause.Message(),
 				nil,
 				consts.IdentityHistoryService,
@@ -516,7 +549,12 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	}
 
 	newWorkflowTaskType := enumsspb.WORKFLOW_TASK_TYPE_UNSPECIFIED
-	if ms.IsWorkflowExecutionRunning() {
+	// Do not schedule a new workflow task if the workflow is paused. Accepting the in-flight
+	// WT completion is intentional (see HistoryBuilder buffering of WORKFLOW_EXECUTION_PAUSED),
+	// but scheduling a follow-up WT would call ApplyWorkflowTaskScheduledEvent, which resets
+	// Status to RUNNING while leaving executionInfo.PauseInfo set — desyncing pause state.
+	// Mirrors the gate in closeTransactionHandleWorkflowTaskScheduling.
+	if ms.IsWorkflowExecutionRunning() && !ms.IsWorkflowExecutionStatusPaused() {
 		if request.GetForceCreateNewWorkflowTask() || // Heartbeat WT is always of Normal type.
 			wtFailedShouldCreateNewTask ||
 			hasBufferedEventsOrMessages ||
@@ -603,7 +641,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				workflowLease.GetContext().UpdateRegistry(ctx),
 				false,
 				nil,
-				0,
+				-1, // sentinel: inline path didn't consult matching, has no routing revision
 			)
 			if err != nil {
 				return nil, err
@@ -629,6 +667,8 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				handler.logger,
 				handler.shardContext.GetThrottledLogger(),
 				handler.shardContext.GetMetricsHandler(),
+				nil, // no pagination buffer limiter as it is a transient context
+				testhooks.TestHooks{},
 			),
 			newMutableState,
 		)
@@ -729,7 +769,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			workflowLease.GetContext().UpdateRegistry(ctx),
 			false,
 			nil,
-			0,
+			-1, // sentinel: inline path didn't consult matching, has no routing revision
 		)
 		if err != nil {
 			return nil, err
@@ -790,6 +830,51 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	return resp, nil
 }
 
+// applyTaskCompletionPagination handles pagination of RespondWorkflowTaskCompleted requests before the
+// request proceeds through the normal completion path:
+//   - intermediate pages are buffered on the cached workflow context
+//   - for the final page the buffered intermediate pages are returned as mergedCommands,
+//     to be merged ahead of the page's own commands by the caller
+func (handler *WorkflowTaskCompletedHandler) applyTaskCompletionPagination(
+	weContext historyi.WorkflowContext,
+	token *tokenspb.Task,
+	request *workflowservice.RespondWorkflowTaskCompletedRequest,
+	nsName string,
+) (resp *historyservice.RespondWorkflowTaskCompletedResponse, mergedCommands []*commandpb.Command, err error) {
+	if !handler.config.EnableWorkflowTaskCompletionPagination(nsName) {
+		if request.GetIntermediatePage() || request.GetPageNumber() > 0 {
+			return nil, nil, serviceerror.NewFailedPreconditionf(
+				"workflow task completion pagination is disabled for this namespace %s",
+				nsName,
+			)
+		}
+		return nil, nil, nil
+	}
+
+	schedID := token.GetScheduledEventId()
+	attempt := token.Attempt
+
+	switch {
+	case request.GetIntermediatePage():
+		// Buffer this page on the cached context
+		if err := weContext.AppendTaskCompletionPage(schedID, attempt, request); err != nil {
+			return nil, nil, err
+		}
+		return &historyservice.RespondWorkflowTaskCompletedResponse{}, nil, nil
+	case request.GetPageNumber() > 0:
+		// Final page: return the buffered intermediate pages so the caller can merge
+		// them ahead of this page's own commands.
+		mergedCommands, err := weContext.GetMergedTaskCompletionPages(schedID, attempt, request)
+		if err != nil {
+			// Buffer lost (e.g. the context was evicted between pages).
+			return nil, nil, err
+		}
+		return nil, mergedCommands, nil
+	}
+
+	return nil, nil, nil
+}
+
 func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse(
 	ctx context.Context,
 	namespaceName namespace.Name,
@@ -834,8 +919,7 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 		//  when data inconsistency occurs
 		//  long term solution should check event batch pointing backwards within history store
 		defer func() {
-			var dataLossErr *serviceerror.DataLoss
-			if errors.As(retError, &dataLossErr) {
+			if _, ok := errors.AsType[*serviceerror.DataLoss](retError); ok {
 				api.TrimHistoryNode(
 					ctx,
 					handler.shardContext,

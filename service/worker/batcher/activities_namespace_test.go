@@ -16,9 +16,9 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
 	"go.uber.org/mock/gomock"
-	"golang.org/x/time/rate"
 )
 
 // These tests guard against cross-namespace escalation via the batcher activity.
@@ -142,8 +142,8 @@ func TestStartTaskProcessor_UsesWorkerBoundNamespaceForSignal(t *testing.T) {
 	go func() {
 		defer close(done)
 		a.startTaskProcessor(ctx, batchOp, ns, taskCh, respCh,
-			rate.NewLimiter(rate.Inf, 1), nil, mockFE,
-			metrics.NoopMetricsHandler, log.NewTestLogger())
+			quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 1e9 })),
+			nil, mockFE, metrics.NoopMetricsHandler, log.NewTestLogger())
 	}()
 
 	<-respCh

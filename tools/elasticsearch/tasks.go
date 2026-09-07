@@ -31,7 +31,7 @@ type SetupTask struct {
 func (task *SetupTask) setupClusterSettings() error {
 	config := task.config
 	if len(config.SettingsContent) == 0 {
-		task.logger.Info("Skipping cluster settings update, no embedded settings content")
+		task.logger.Info("Skipping cluster settings update")
 		return nil
 	}
 
@@ -76,8 +76,7 @@ func (task *SetupTask) setupIndex(ctx context.Context) error {
 	success, err := task.esClient.CreateIndex(ctx, config.VisibilityIndex, nil)
 	if err != nil {
 		// Check if the error is an Elasticsearch error and if so check if the index already exists.
-		var esErr *elastic.Error
-		if errors.As(err, &esErr) {
+		if esErr, ok := errors.AsType[*elastic.Error](err); ok {
 			if esErr.Status == 400 && esErr.Details != nil && esErr.Details.Type == "resource_already_exists_exception" {
 				task.logger.Info("Index already exists, skipping creation", tag.String("indexName", config.VisibilityIndex))
 				return nil

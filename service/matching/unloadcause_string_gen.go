@@ -24,8 +24,9 @@ const _unloadCause_name = "UnspecifiedInitErrorIdleMembershipConflictShuttingDow
 var _unloadCause_index = [...]uint8{0, 11, 20, 24, 34, 42, 54, 59, 71, 81}
 
 func (i unloadCause) String() string {
-	if i < 0 || i >= unloadCause(len(_unloadCause_index)-1) {
+	idx := int(i) - 0
+	if i < 0 || idx >= len(_unloadCause_index)-1 {
 		return "unloadCause(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _unloadCause_name[_unloadCause_index[i]:_unloadCause_index[i+1]]
+	return _unloadCause_name[_unloadCause_index[idx]:_unloadCause_index[idx+1]]
 }

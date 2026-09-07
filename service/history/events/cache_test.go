@@ -89,7 +89,7 @@ func (s *eventsCacheSuite) TestEventsCacheHitSuccess() {
 		shardID,
 		EventKey{namespaceID, workflowID, runID, eventID, common.EmptyVersion},
 		eventID, nil)
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event, actualEvent)
 }
 
@@ -149,7 +149,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 		shardID,
 		EventKey{namespaceID, workflowID, runID, event6.GetEventId(), common.EmptyVersion},
 		event1.GetEventId(), []byte("store_token"))
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event6, actualEvent)
 }
 
@@ -218,7 +218,7 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 		shardID,
 		EventKey{namespaceID, workflowID, runID, event2.GetEventId(), common.EmptyVersion},
 		event2.GetEventId(), []byte("store_token"))
-	s.Nil(err)
+	s.NoError(err)
 	s.Equal(event2, actualEvent)
 }
 

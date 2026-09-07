@@ -28,7 +28,7 @@ func TestBatcherSuite(t *testing.T) {
 
 func (s *batcherSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
-	s.env = s.WorkflowTestSuite.NewTestWorkflowEnvironment()
+	s.env = s.NewTestWorkflowEnvironment()
 	s.env.RegisterWorkflow(BatchWorkflowProtobuf)
 }
 
@@ -63,7 +63,7 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query_Protobuf() {
 			Reason:          "test-reason",
 			VisibilityQuery: "test-query",
 		},
-		BatchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE,
+		BatchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
 	})
 	err := s.env.GetWorkflowError()
 	s.Require().NoError(err)
@@ -100,7 +100,7 @@ func (s *batcherSuite) TestBatchWorkflow_ValidParams_Executions_Protobuf() {
 			Reason:    "test-reason",
 			Namespace: "test-namespace",
 		},
-		BatchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE,
+		BatchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
 	})
 	err := s.env.GetWorkflowError()
 	s.Require().NoError(err)

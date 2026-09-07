@@ -96,8 +96,7 @@ func (c *fairBacklogManagerImpl) signalIfFatal(err error) bool {
 	if err == nil {
 		return false
 	}
-	var condfail *persistence.ConditionFailedError
-	if errors.As(err, &condfail) {
+	if _, ok := errors.AsType[*persistence.ConditionFailedError](err); ok {
 		c.metricsHandler.Counter(metrics.ConditionFailedErrorPerTaskQueueCounter.Name()).Record(1)
 		c.skipFinalUpdate.Store(true)
 		c.pqMgr.UnloadFromPartitionManager(unloadCauseConflict)
@@ -141,6 +140,12 @@ func (c *fairBacklogManagerImpl) initState(state taskQueueState, err error) {
 		c.skipFinalUpdate.Store(true)
 		c.pqMgr.UnloadFromPartitionManager(unloadCauseInitError)
 		return
+	}
+
+	// Pass scale info back to physical tq from unversioned (default) queue.
+	// This must be done before c.initializedError.Set().
+	if c.queueKey().Partition().IsRoot() && !c.queueKey().IsVersioned() && !c.isDraining {
+		c.pqMgr.StartScaleManager(state.scaleState)
 	}
 
 	if state.otherHasTasks {

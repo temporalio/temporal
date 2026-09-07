@@ -6,8 +6,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	enumspb "go.temporal.io/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/hsm"
@@ -45,6 +48,7 @@ func (s *transactionMgrForExistingWorkflowSuite) SetupTest() {
 	err := workflow.RegisterStateMachine(reg)
 	s.NoError(err)
 	s.mockShard.EXPECT().StateMachineRegistry().Return(reg).AnyTimes()
+	s.mockShard.EXPECT().GetThrottledLogger().Return(log.NewNoopLogger()).AnyTimes()
 
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
 	mockTaskRefresher.EXPECT().Refresh(gomock.Any(), gomock.Any(), false).Return(nil).AnyTimes()
@@ -244,6 +248,319 @@ func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow
 	s.True(targetReleaseCalled)
 	s.True(newReleaseCalled)
 	s.True(currentReleaseCalled)
+}
+
+func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_NoCurrentRecord_ClosedTargetRun_AppliesAsZombie() {
+	// Closed run with no current execution record (deleted workflow): persist it via bypass-current
+	// instead of poison-pilling, so any changes the run carries are replicated without touching the
+	// current record (bypass-current allows a missing current record).
+	ctx := context.Background()
+
+	namespaceID := namespace.ID("some random namespace ID")
+	workflowID := "some random workflow ID"
+	targetRunID := "some random run ID"
+
+	isWorkflowRebuilt := false
+
+	targetReleaseCalled := false
+
+	targetWorkflow := NewMockWorkflow(s.controller)
+	targetContext := historyi.NewMockWorkflowContext(s.controller)
+	targetMutableState := historyi.NewMockMutableState(s.controller)
+	var targetReleaseFn historyi.ReleaseWorkflowContextFunc = func(error) { targetReleaseCalled = true }
+	targetWorkflow.EXPECT().GetContext().Return(targetContext).AnyTimes()
+	targetWorkflow.EXPECT().GetMutableState().Return(targetMutableState).AnyTimes()
+	targetWorkflow.EXPECT().GetReleaseFn().Return(targetReleaseFn).AnyTimes()
+
+	targetMutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
+	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId: namespaceID.String(),
+		WorkflowId:  workflowID,
+	}).AnyTimes()
+	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: targetRunID,
+	}).AnyTimes()
+	// no current execution record exists
+	s.mockTransactionMgr.EXPECT().GetCurrentWorkflowRunID(ctx, namespaceID, workflowID, chasm.WorkflowArchetypeID).Return("", nil)
+	// target run is closed and no new run -> takes the bypass-current path
+	targetMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
+
+	// with no current workflow to suppress against, the closed orphan is written directly via
+	// bypass-current (allows a missing current record).
+	targetContext.EXPECT().UpdateWorkflowExecutionWithNew(
+		gomock.Any(),
+		s.mockShard,
+		persistence.UpdateWorkflowModeBypassCurrent,
+		(historyi.WorkflowContext)(nil),
+		(historyi.MutableState)(nil),
+		historyi.TransactionPolicyPassive,
+		(*historyi.TransactionPolicy)(nil),
+	).Return(nil)
+
+	err := s.updateMgr.dispatchForExistingWorkflow(ctx, isWorkflowRebuilt, chasm.WorkflowArchetypeID, targetWorkflow, nil)
+	s.NoError(err)
+	s.True(targetReleaseCalled)
+}
+
+func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_NoCurrentRecord_ClosedTargetRun_Rebuilt_AppliesAsZombie() {
+	// A rebuilt closed run with no current execution record is persisted via conflict-resolve
+	// bypass-current (which also allows a missing current record) rather than being dropped.
+	ctx := context.Background()
+
+	namespaceID := namespace.ID("some random namespace ID")
+	workflowID := "some random workflow ID"
+	targetRunID := "some random run ID"
+
+	isWorkflowRebuilt := true
+
+	targetReleaseCalled := false
+
+	targetWorkflow := NewMockWorkflow(s.controller)
+	targetContext := historyi.NewMockWorkflowContext(s.controller)
+	targetMutableState := historyi.NewMockMutableState(s.controller)
+	var targetReleaseFn historyi.ReleaseWorkflowContextFunc = func(error) { targetReleaseCalled = true }
+	targetWorkflow.EXPECT().GetContext().Return(targetContext).AnyTimes()
+	targetWorkflow.EXPECT().GetMutableState().Return(targetMutableState).AnyTimes()
+	targetWorkflow.EXPECT().GetReleaseFn().Return(targetReleaseFn).AnyTimes()
+
+	targetMutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
+	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId: namespaceID.String(),
+		WorkflowId:  workflowID,
+	}).AnyTimes()
+	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: targetRunID,
+	}).AnyTimes()
+	s.mockTransactionMgr.EXPECT().GetCurrentWorkflowRunID(ctx, namespaceID, workflowID, chasm.WorkflowArchetypeID).Return("", nil)
+	targetMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
+
+	targetContext.EXPECT().ConflictResolveWorkflowExecution(
+		gomock.Any(),
+		s.mockShard,
+		persistence.ConflictResolveWorkflowModeBypassCurrent,
+		targetMutableState,
+		(historyi.WorkflowContext)(nil),
+		(historyi.MutableState)(nil),
+		(historyi.WorkflowContext)(nil),
+		(historyi.MutableState)(nil),
+		historyi.TransactionPolicyPassive,
+		gomock.Any(),
+		(*historyi.TransactionPolicy)(nil),
+	).Return(nil)
+
+	err := s.updateMgr.dispatchForExistingWorkflow(ctx, isWorkflowRebuilt, chasm.WorkflowArchetypeID, targetWorkflow, nil)
+	s.NoError(err)
+	s.True(targetReleaseCalled)
+}
+
+func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_NoCurrentRecord_RunningTargetRun_ReturnsError() {
+	// A running run with no current execution record is not an expected state - current records are
+	// only removed by deletion, which targets closed chains - so it is surfaced as an error.
+	ctx := context.Background()
+
+	namespaceID := namespace.ID("some random namespace ID")
+	workflowID := "some random workflow ID"
+	targetRunID := "some random run ID"
+
+	targetWorkflow := NewMockWorkflow(s.controller)
+	targetMutableState := historyi.NewMockMutableState(s.controller)
+	targetWorkflow.EXPECT().GetMutableState().Return(targetMutableState).AnyTimes()
+	targetWorkflow.EXPECT().GetReleaseFn().Return(historyi.ReleaseWorkflowContextFunc(func(error) {})).AnyTimes()
+
+	targetMutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
+	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId: namespaceID.String(),
+		WorkflowId:  workflowID,
+	}).AnyTimes()
+	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: targetRunID,
+	}).AnyTimes()
+	s.mockTransactionMgr.EXPECT().GetCurrentWorkflowRunID(ctx, namespaceID, workflowID, chasm.WorkflowArchetypeID).Return("", nil)
+	targetMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+
+	err := s.updateMgr.dispatchForExistingWorkflow(ctx, false, chasm.WorkflowArchetypeID, targetWorkflow, nil)
+	s.Error(err)
+}
+
+func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_NoCurrentRecord_RunningTargetRun_WithNewRun_ReturnsError() {
+	// Defensive: a running target should never carry a new run (running means it has not continued-as-new),
+	// but if one is present it is released (never persisted) and the running-without-current invariant error
+	// is still returned.
+	ctx := context.Background()
+
+	namespaceID := namespace.ID("some random namespace ID")
+	workflowID := "some random workflow ID"
+	targetRunID := "some random run ID"
+
+	newReleaseCalled := false
+
+	targetWorkflow := NewMockWorkflow(s.controller)
+	targetMutableState := historyi.NewMockMutableState(s.controller)
+	targetWorkflow.EXPECT().GetMutableState().Return(targetMutableState).AnyTimes()
+	targetWorkflow.EXPECT().GetReleaseFn().Return(historyi.ReleaseWorkflowContextFunc(func(error) {})).AnyTimes()
+
+	newWorkflow := NewMockWorkflow(s.controller)
+	var newReleaseFn historyi.ReleaseWorkflowContextFunc = func(error) { newReleaseCalled = true }
+	newWorkflow.EXPECT().GetReleaseFn().Return(newReleaseFn).AnyTimes()
+
+	targetMutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
+	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId: namespaceID.String(),
+		WorkflowId:  workflowID,
+	}).AnyTimes()
+	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: targetRunID,
+	}).AnyTimes()
+	s.mockTransactionMgr.EXPECT().GetCurrentWorkflowRunID(ctx, namespaceID, workflowID, chasm.WorkflowArchetypeID).Return("", nil)
+	targetMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+
+	err := s.updateMgr.dispatchForExistingWorkflow(ctx, false, chasm.WorkflowArchetypeID, targetWorkflow, newWorkflow)
+	s.Error(err)
+	s.True(newReleaseCalled)
+}
+
+func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_NoCurrentRecord_ClosedTargetRunWithNewRun_NewRunDoesNotExist_PersistsNewRun() {
+	// Closed target carrying a continue-as-new successor with no current execution record: the current
+	// record was deleted, so the target is persisted via bypass-current and never becomes current. The
+	// successor still holds real history, so - because it is not already present locally - it is forced
+	// into the zombie state and persisted bypass-current (never as the current run).
+	ctx := context.Background()
+
+	namespaceID := namespace.ID("some random namespace ID")
+	workflowID := "some random workflow ID"
+	targetRunID := "some random run ID"
+	newRunID := "some random new run ID"
+
+	targetReleaseCalled := false
+	newReleaseCalled := false
+
+	targetWorkflow := NewMockWorkflow(s.controller)
+	targetContext := historyi.NewMockWorkflowContext(s.controller)
+	targetMutableState := historyi.NewMockMutableState(s.controller)
+	var targetReleaseFn historyi.ReleaseWorkflowContextFunc = func(error) { targetReleaseCalled = true }
+	targetWorkflow.EXPECT().GetContext().Return(targetContext).AnyTimes()
+	targetWorkflow.EXPECT().GetMutableState().Return(targetMutableState).AnyTimes()
+	targetWorkflow.EXPECT().GetReleaseFn().Return(targetReleaseFn).AnyTimes()
+
+	newWorkflow := NewMockWorkflow(s.controller)
+	newContext := historyi.NewMockWorkflowContext(s.controller)
+	newMutableState := historyi.NewMockMutableState(s.controller)
+	var newReleaseFn historyi.ReleaseWorkflowContextFunc = func(error) { newReleaseCalled = true }
+	newWorkflow.EXPECT().GetContext().Return(newContext).AnyTimes()
+	newWorkflow.EXPECT().GetMutableState().Return(newMutableState).AnyTimes()
+	newWorkflow.EXPECT().GetReleaseFn().Return(newReleaseFn).AnyTimes()
+
+	targetMutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
+	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId: namespaceID.String(),
+		WorkflowId:  workflowID,
+	}).AnyTimes()
+	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: targetRunID,
+	}).AnyTimes()
+	newMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId: namespaceID.String(),
+		WorkflowId:  workflowID,
+	}).AnyTimes()
+	newMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: newRunID,
+	}).AnyTimes()
+
+	s.mockTransactionMgr.EXPECT().GetCurrentWorkflowRunID(ctx, namespaceID, workflowID, chasm.WorkflowArchetypeID).Return("", nil)
+	// target run is closed -> takes the bypass-current path
+	targetMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
+	// with no current to compare against, a still-running successor is forced into the zombie state
+	newMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+	newMutableState.EXPECT().UpdateWorkflowStateStatus(
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	).Return(true, nil)
+	// the successor is not already present locally, so it is persisted alongside the bypass-current update
+	s.mockTransactionMgr.EXPECT().CheckWorkflowExists(ctx, namespaceID, workflowID, newRunID, chasm.WorkflowArchetypeID).Return(false, nil)
+
+	targetContext.EXPECT().UpdateWorkflowExecutionWithNew(
+		gomock.Any(),
+		s.mockShard,
+		persistence.UpdateWorkflowModeBypassCurrent,
+		newContext,
+		newMutableState,
+		historyi.TransactionPolicyPassive,
+		historyi.TransactionPolicyPassive.Ptr(),
+	).Return(nil)
+
+	err := s.updateMgr.dispatchForExistingWorkflow(ctx, false, chasm.WorkflowArchetypeID, targetWorkflow, newWorkflow)
+	s.NoError(err)
+	s.True(targetReleaseCalled)
+	s.True(newReleaseCalled)
+}
+
+func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_NoCurrentRecord_ClosedTargetRunWithNewRun_NewRunExists_SkipsNewRun() {
+	// Same as above, but the successor is already present locally (e.g. created by workflow resend), so
+	// it is not re-created; only the closed target is persisted via bypass-current.
+	ctx := context.Background()
+
+	namespaceID := namespace.ID("some random namespace ID")
+	workflowID := "some random workflow ID"
+	targetRunID := "some random run ID"
+	newRunID := "some random new run ID"
+
+	targetReleaseCalled := false
+	newReleaseCalled := false
+
+	targetWorkflow := NewMockWorkflow(s.controller)
+	targetContext := historyi.NewMockWorkflowContext(s.controller)
+	targetMutableState := historyi.NewMockMutableState(s.controller)
+	var targetReleaseFn historyi.ReleaseWorkflowContextFunc = func(error) { targetReleaseCalled = true }
+	targetWorkflow.EXPECT().GetContext().Return(targetContext).AnyTimes()
+	targetWorkflow.EXPECT().GetMutableState().Return(targetMutableState).AnyTimes()
+	targetWorkflow.EXPECT().GetReleaseFn().Return(targetReleaseFn).AnyTimes()
+
+	newWorkflow := NewMockWorkflow(s.controller)
+	newMutableState := historyi.NewMockMutableState(s.controller)
+	var newReleaseFn historyi.ReleaseWorkflowContextFunc = func(error) { newReleaseCalled = true }
+	newWorkflow.EXPECT().GetMutableState().Return(newMutableState).AnyTimes()
+	newWorkflow.EXPECT().GetReleaseFn().Return(newReleaseFn).AnyTimes()
+
+	targetMutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
+	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId: namespaceID.String(),
+		WorkflowId:  workflowID,
+	}).AnyTimes()
+	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: targetRunID,
+	}).AnyTimes()
+	newMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		NamespaceId: namespaceID.String(),
+		WorkflowId:  workflowID,
+	}).AnyTimes()
+	newMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: newRunID,
+	}).AnyTimes()
+
+	s.mockTransactionMgr.EXPECT().GetCurrentWorkflowRunID(ctx, namespaceID, workflowID, chasm.WorkflowArchetypeID).Return("", nil)
+	targetMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
+	newMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
+	newMutableState.EXPECT().UpdateWorkflowStateStatus(
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	).Return(true, nil)
+	// the successor already exists locally, so it is skipped (not re-created)
+	s.mockTransactionMgr.EXPECT().CheckWorkflowExists(ctx, namespaceID, workflowID, newRunID, chasm.WorkflowArchetypeID).Return(true, nil)
+
+	targetContext.EXPECT().UpdateWorkflowExecutionWithNew(
+		gomock.Any(),
+		s.mockShard,
+		persistence.UpdateWorkflowModeBypassCurrent,
+		(historyi.WorkflowContext)(nil),
+		(historyi.MutableState)(nil),
+		historyi.TransactionPolicyPassive,
+		(*historyi.TransactionPolicy)(nil),
+	).Return(nil)
+
+	err := s.updateMgr.dispatchForExistingWorkflow(ctx, false, chasm.WorkflowArchetypeID, targetWorkflow, newWorkflow)
+	s.NoError(err)
+	s.True(targetReleaseCalled)
+	s.True(newReleaseCalled)
 }
 
 func (s *transactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkflow_NoRebuild_CurrentWorkflowNotGuaranteed_NotCurrent_UpdateAsZombie_NewRunDoesNotExists() {

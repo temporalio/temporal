@@ -107,7 +107,7 @@ func (t *ForwarderTestSuite) TestForwardWorkflowTask() {
 
 	schedToStart := int32(request.GetScheduleToStartTimeout().AsDuration().Seconds())
 	rewritten := convert.Int32Ceil(time.Until(taskInfo.Data.ExpiryTime.AsTime()).Seconds())
-	t.EqualValues(schedToStart, rewritten)
+	t.Equal(schedToStart, rewritten)
 	t.Equal(t.partition.RpcName(), request.GetForwardInfo().GetSourcePartition())
 	t.Equal(enumsspb.TASK_SOURCE_DB_BACKLOG, request.GetForwardInfo().GetTaskSource())
 }
@@ -137,7 +137,7 @@ func (t *ForwarderTestSuite) TestForwardWorkflowTask_WithBuildId() {
 
 	schedToStart := int32(request.GetScheduleToStartTimeout().AsDuration().Seconds())
 	rewritten := convert.Int32Ceil(time.Until(taskInfo.Data.ExpiryTime.AsTime()).Seconds())
-	t.EqualValues(schedToStart, rewritten)
+	t.Equal(schedToStart, rewritten)
 	t.Equal(t.partition.RpcName(), request.GetForwardInfo().GetSourcePartition())
 	t.Equal(enumsspb.TASK_SOURCE_HISTORY, request.GetForwardInfo().GetTaskSource())
 }
@@ -162,7 +162,7 @@ func (t *ForwarderTestSuite) TestForwardActivityTask() {
 	t.Equal(taskInfo.Data.GetWorkflowId(), request.GetExecution().GetWorkflowId())
 	t.Equal(taskInfo.Data.GetRunId(), request.GetExecution().GetRunId())
 	t.Equal(taskInfo.Data.GetScheduledEventId(), request.GetScheduledEventId())
-	t.EqualValues(convert.Int32Ceil(time.Until(taskInfo.Data.ExpiryTime.AsTime()).Seconds()),
+	t.Equal(convert.Int32Ceil(time.Until(taskInfo.Data.ExpiryTime.AsTime()).Seconds()),
 		int32(request.GetScheduleToStartTimeout().AsDuration().Seconds()))
 	t.Equal(t.partition.RpcName(), request.GetForwardInfo().GetSourcePartition())
 	t.Equal(enumsspb.TASK_SOURCE_DB_BACKLOG, request.GetForwardInfo().GetTaskSource())
@@ -190,7 +190,7 @@ func (t *ForwarderTestSuite) TestForwardActivityTask_WithBuildId() {
 	t.Equal(taskInfo.Data.GetWorkflowId(), request.GetExecution().GetWorkflowId())
 	t.Equal(taskInfo.Data.GetRunId(), request.GetExecution().GetRunId())
 	t.Equal(taskInfo.Data.GetScheduledEventId(), request.GetScheduledEventId())
-	t.EqualValues(convert.Int32Ceil(time.Until(taskInfo.Data.ExpiryTime.AsTime()).Seconds()),
+	t.Equal(convert.Int32Ceil(time.Until(taskInfo.Data.ExpiryTime.AsTime()).Seconds()),
 		int32(request.GetScheduleToStartTimeout().AsDuration().Seconds()))
 	t.Equal(t.partition.RpcName(), request.GetForwardInfo().GetSourcePartition())
 	t.Equal(enumsspb.TASK_SOURCE_DB_BACKLOG, request.GetForwardInfo().GetTaskSource())
@@ -426,8 +426,7 @@ func (t *ForwarderTestSuite) TestMaxOutstandingConcurrency() {
 		polls = 0
 		t.Run(tc.name, func() {
 			for range concurrency {
-				wg.Add(1)
-				go func() {
+				wg.Go(func() {
 					timer := time.NewTimer(time.Millisecond * 200)
 					select {
 					case token := <-fwdr.AddReqTokenC():
@@ -449,8 +448,7 @@ func (t *ForwarderTestSuite) TestMaxOutstandingConcurrency() {
 						atomic.AddInt32(&polls, 1)
 					case <-timer.C:
 					}
-					wg.Done()
-				}()
+				})
 			}
 			t.True(common.AwaitWaitGroup(&wg, time.Second))
 			t.Equal(tc.output, adds)
@@ -474,15 +472,13 @@ func (t *ForwarderTestSuite) TestMaxOutstandingConfigUpdate() {
 	startC := make(chan struct{})
 	doneWG := sync.WaitGroup{}
 	for range 10 {
-		doneWG.Add(1)
-		go func() {
+		doneWG.Go(func() {
 			<-startC
 			token1 := <-fwdr.AddReqTokenC()
 			token1.release()
 			token2 := <-fwdr.PollReqTokenC()
 			token2.release()
-			doneWG.Done()
-		}()
+		})
 	}
 
 	maxOutstandingTasks = 10
@@ -499,7 +495,7 @@ func (t *ForwarderTestSuite) usingTaskqueuePartition(taskType enumspb.TaskQueueT
 	t.NoError(err)
 	t.partition = f.TaskQueue(taskType).NormalPartition(1)
 	t.fwdr, err = newForwarder(t.cfg, UnversionedQueueKey(t.partition), t.client)
-	t.Nil(err)
+	t.NoError(err)
 }
 
 func (t *ForwarderTestSuite) usingBuildIdQueue(taskType enumspb.TaskQueueType, buildId string) {
@@ -507,7 +503,7 @@ func (t *ForwarderTestSuite) usingBuildIdQueue(taskType enumspb.TaskQueueType, b
 	t.NoError(err)
 	t.partition = f.TaskQueue(taskType).NormalPartition(1)
 	t.fwdr, err = newForwarder(t.cfg, BuildIdQueueKey(t.partition, buildId), t.client)
-	t.Nil(err)
+	t.NoError(err)
 }
 
 func mustParent(tn *tqid.NormalPartition, n int) *tqid.NormalPartition {

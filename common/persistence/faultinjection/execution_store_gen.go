@@ -33,7 +33,7 @@ func newFaultInjectionExecutionStore(
 
 // AddHistoryTasks wraps ExecutionStore.AddHistoryTasks.
 func (d faultInjectionExecutionStore) AddHistoryTasks(ctx context.Context, request *_sourcePersistence.InternalAddHistoryTasksRequest) (err error) {
-	err = d.generator.generate("AddHistoryTasks").inject(func() error {
+	err = d.generator.generate("AddHistoryTasks", request).inject(func() error {
 		err = d.ExecutionStore.AddHistoryTasks(ctx, request)
 		return err
 	})
@@ -42,7 +42,7 @@ func (d faultInjectionExecutionStore) AddHistoryTasks(ctx context.Context, reque
 
 // AppendHistoryNodes wraps ExecutionStore.AppendHistoryNodes.
 func (d faultInjectionExecutionStore) AppendHistoryNodes(ctx context.Context, request *_sourcePersistence.InternalAppendHistoryNodesRequest) (err error) {
-	err = d.generator.generate("AppendHistoryNodes").inject(func() error {
+	err = d.generator.generate("AppendHistoryNodes", request).inject(func() error {
 		err = d.ExecutionStore.AppendHistoryNodes(ctx, request)
 		return err
 	})
@@ -51,7 +51,7 @@ func (d faultInjectionExecutionStore) AppendHistoryNodes(ctx context.Context, re
 
 // CompleteHistoryTask wraps ExecutionStore.CompleteHistoryTask.
 func (d faultInjectionExecutionStore) CompleteHistoryTask(ctx context.Context, request *_sourcePersistence.CompleteHistoryTaskRequest) (err error) {
-	err = d.generator.generate("CompleteHistoryTask").inject(func() error {
+	err = d.generator.generate("CompleteHistoryTask", request).inject(func() error {
 		err = d.ExecutionStore.CompleteHistoryTask(ctx, request)
 		return err
 	})
@@ -60,7 +60,7 @@ func (d faultInjectionExecutionStore) CompleteHistoryTask(ctx context.Context, r
 
 // ConflictResolveWorkflowExecution wraps ExecutionStore.ConflictResolveWorkflowExecution.
 func (d faultInjectionExecutionStore) ConflictResolveWorkflowExecution(ctx context.Context, request *_sourcePersistence.InternalConflictResolveWorkflowExecutionRequest) (err error) {
-	err = d.generator.generate("ConflictResolveWorkflowExecution").inject(func() error {
+	err = d.generator.generate("ConflictResolveWorkflowExecution", request).inject(func() error {
 		err = d.ExecutionStore.ConflictResolveWorkflowExecution(ctx, request)
 		return err
 	})
@@ -69,7 +69,7 @@ func (d faultInjectionExecutionStore) ConflictResolveWorkflowExecution(ctx conte
 
 // CreateWorkflowExecution wraps ExecutionStore.CreateWorkflowExecution.
 func (d faultInjectionExecutionStore) CreateWorkflowExecution(ctx context.Context, request *_sourcePersistence.InternalCreateWorkflowExecutionRequest) (ip1 *_sourcePersistence.InternalCreateWorkflowExecutionResponse, err error) {
-	err = d.generator.generate("CreateWorkflowExecution").inject(func() error {
+	err = d.generator.generate("CreateWorkflowExecution", request).inject(func() error {
 		ip1, err = d.ExecutionStore.CreateWorkflowExecution(ctx, request)
 		return err
 	})
@@ -78,7 +78,7 @@ func (d faultInjectionExecutionStore) CreateWorkflowExecution(ctx context.Contex
 
 // DeleteCurrentWorkflowExecution wraps ExecutionStore.DeleteCurrentWorkflowExecution.
 func (d faultInjectionExecutionStore) DeleteCurrentWorkflowExecution(ctx context.Context, request *_sourcePersistence.DeleteCurrentWorkflowExecutionRequest) (err error) {
-	err = d.generator.generate("DeleteCurrentWorkflowExecution").inject(func() error {
+	err = d.generator.generate("DeleteCurrentWorkflowExecution", request).inject(func() error {
 		err = d.ExecutionStore.DeleteCurrentWorkflowExecution(ctx, request)
 		return err
 	})
@@ -87,7 +87,7 @@ func (d faultInjectionExecutionStore) DeleteCurrentWorkflowExecution(ctx context
 
 // DeleteHistoryBranch wraps ExecutionStore.DeleteHistoryBranch.
 func (d faultInjectionExecutionStore) DeleteHistoryBranch(ctx context.Context, request *_sourcePersistence.InternalDeleteHistoryBranchRequest) (err error) {
-	err = d.generator.generate("DeleteHistoryBranch").inject(func() error {
+	err = d.generator.generate("DeleteHistoryBranch", request).inject(func() error {
 		err = d.ExecutionStore.DeleteHistoryBranch(ctx, request)
 		return err
 	})
@@ -96,7 +96,7 @@ func (d faultInjectionExecutionStore) DeleteHistoryBranch(ctx context.Context, r
 
 // DeleteHistoryNodes wraps ExecutionStore.DeleteHistoryNodes.
 func (d faultInjectionExecutionStore) DeleteHistoryNodes(ctx context.Context, request *_sourcePersistence.InternalDeleteHistoryNodesRequest) (err error) {
-	err = d.generator.generate("DeleteHistoryNodes").inject(func() error {
+	err = d.generator.generate("DeleteHistoryNodes", request).inject(func() error {
 		err = d.ExecutionStore.DeleteHistoryNodes(ctx, request)
 		return err
 	})
@@ -105,7 +105,7 @@ func (d faultInjectionExecutionStore) DeleteHistoryNodes(ctx context.Context, re
 
 // DeleteReplicationTaskFromDLQ wraps ExecutionStore.DeleteReplicationTaskFromDLQ.
 func (d faultInjectionExecutionStore) DeleteReplicationTaskFromDLQ(ctx context.Context, request *_sourcePersistence.DeleteReplicationTaskFromDLQRequest) (err error) {
-	err = d.generator.generate("DeleteReplicationTaskFromDLQ").inject(func() error {
+	err = d.generator.generate("DeleteReplicationTaskFromDLQ", request).inject(func() error {
 		err = d.ExecutionStore.DeleteReplicationTaskFromDLQ(ctx, request)
 		return err
 	})
@@ -114,7 +114,7 @@ func (d faultInjectionExecutionStore) DeleteReplicationTaskFromDLQ(ctx context.C
 
 // DeleteWorkflowExecution wraps ExecutionStore.DeleteWorkflowExecution.
 func (d faultInjectionExecutionStore) DeleteWorkflowExecution(ctx context.Context, request *_sourcePersistence.DeleteWorkflowExecutionRequest) (err error) {
-	err = d.generator.generate("DeleteWorkflowExecution").inject(func() error {
+	err = d.generator.generate("DeleteWorkflowExecution", request).inject(func() error {
 		err = d.ExecutionStore.DeleteWorkflowExecution(ctx, request)
 		return err
 	})
@@ -123,7 +123,7 @@ func (d faultInjectionExecutionStore) DeleteWorkflowExecution(ctx context.Contex
 
 // ForkHistoryBranch wraps ExecutionStore.ForkHistoryBranch.
 func (d faultInjectionExecutionStore) ForkHistoryBranch(ctx context.Context, request *_sourcePersistence.InternalForkHistoryBranchRequest) (err error) {
-	err = d.generator.generate("ForkHistoryBranch").inject(func() error {
+	err = d.generator.generate("ForkHistoryBranch", request).inject(func() error {
 		err = d.ExecutionStore.ForkHistoryBranch(ctx, request)
 		return err
 	})
@@ -132,7 +132,7 @@ func (d faultInjectionExecutionStore) ForkHistoryBranch(ctx context.Context, req
 
 // GetAllHistoryTreeBranches wraps ExecutionStore.GetAllHistoryTreeBranches.
 func (d faultInjectionExecutionStore) GetAllHistoryTreeBranches(ctx context.Context, request *_sourcePersistence.GetAllHistoryTreeBranchesRequest) (ip1 *_sourcePersistence.InternalGetAllHistoryTreeBranchesResponse, err error) {
-	err = d.generator.generate("GetAllHistoryTreeBranches").inject(func() error {
+	err = d.generator.generate("GetAllHistoryTreeBranches", request).inject(func() error {
 		ip1, err = d.ExecutionStore.GetAllHistoryTreeBranches(ctx, request)
 		return err
 	})
@@ -141,7 +141,7 @@ func (d faultInjectionExecutionStore) GetAllHistoryTreeBranches(ctx context.Cont
 
 // GetCurrentExecution wraps ExecutionStore.GetCurrentExecution.
 func (d faultInjectionExecutionStore) GetCurrentExecution(ctx context.Context, request *_sourcePersistence.GetCurrentExecutionRequest) (ip1 *_sourcePersistence.InternalGetCurrentExecutionResponse, err error) {
-	err = d.generator.generate("GetCurrentExecution").inject(func() error {
+	err = d.generator.generate("GetCurrentExecution", request).inject(func() error {
 		ip1, err = d.ExecutionStore.GetCurrentExecution(ctx, request)
 		return err
 	})
@@ -150,7 +150,7 @@ func (d faultInjectionExecutionStore) GetCurrentExecution(ctx context.Context, r
 
 // GetHistoryTasks wraps ExecutionStore.GetHistoryTasks.
 func (d faultInjectionExecutionStore) GetHistoryTasks(ctx context.Context, request *_sourcePersistence.GetHistoryTasksRequest) (ip1 *_sourcePersistence.InternalGetHistoryTasksResponse, err error) {
-	err = d.generator.generate("GetHistoryTasks").inject(func() error {
+	err = d.generator.generate("GetHistoryTasks", request).inject(func() error {
 		ip1, err = d.ExecutionStore.GetHistoryTasks(ctx, request)
 		return err
 	})
@@ -159,7 +159,7 @@ func (d faultInjectionExecutionStore) GetHistoryTasks(ctx context.Context, reque
 
 // GetHistoryTreeContainingBranch wraps ExecutionStore.GetHistoryTreeContainingBranch.
 func (d faultInjectionExecutionStore) GetHistoryTreeContainingBranch(ctx context.Context, request *_sourcePersistence.InternalGetHistoryTreeContainingBranchRequest) (ip1 *_sourcePersistence.InternalGetHistoryTreeContainingBranchResponse, err error) {
-	err = d.generator.generate("GetHistoryTreeContainingBranch").inject(func() error {
+	err = d.generator.generate("GetHistoryTreeContainingBranch", request).inject(func() error {
 		ip1, err = d.ExecutionStore.GetHistoryTreeContainingBranch(ctx, request)
 		return err
 	})
@@ -168,7 +168,7 @@ func (d faultInjectionExecutionStore) GetHistoryTreeContainingBranch(ctx context
 
 // GetReplicationTasksFromDLQ wraps ExecutionStore.GetReplicationTasksFromDLQ.
 func (d faultInjectionExecutionStore) GetReplicationTasksFromDLQ(ctx context.Context, request *_sourcePersistence.GetReplicationTasksFromDLQRequest) (ip1 *_sourcePersistence.InternalGetReplicationTasksFromDLQResponse, err error) {
-	err = d.generator.generate("GetReplicationTasksFromDLQ").inject(func() error {
+	err = d.generator.generate("GetReplicationTasksFromDLQ", request).inject(func() error {
 		ip1, err = d.ExecutionStore.GetReplicationTasksFromDLQ(ctx, request)
 		return err
 	})
@@ -177,7 +177,7 @@ func (d faultInjectionExecutionStore) GetReplicationTasksFromDLQ(ctx context.Con
 
 // GetWorkflowExecution wraps ExecutionStore.GetWorkflowExecution.
 func (d faultInjectionExecutionStore) GetWorkflowExecution(ctx context.Context, request *_sourcePersistence.GetWorkflowExecutionRequest) (ip1 *_sourcePersistence.InternalGetWorkflowExecutionResponse, err error) {
-	err = d.generator.generate("GetWorkflowExecution").inject(func() error {
+	err = d.generator.generate("GetWorkflowExecution", request).inject(func() error {
 		ip1, err = d.ExecutionStore.GetWorkflowExecution(ctx, request)
 		return err
 	})
@@ -186,7 +186,7 @@ func (d faultInjectionExecutionStore) GetWorkflowExecution(ctx context.Context, 
 
 // IsReplicationDLQEmpty wraps ExecutionStore.IsReplicationDLQEmpty.
 func (d faultInjectionExecutionStore) IsReplicationDLQEmpty(ctx context.Context, request *_sourcePersistence.GetReplicationTasksFromDLQRequest) (b1 bool, err error) {
-	err = d.generator.generate("IsReplicationDLQEmpty").inject(func() error {
+	err = d.generator.generate("IsReplicationDLQEmpty", request).inject(func() error {
 		b1, err = d.ExecutionStore.IsReplicationDLQEmpty(ctx, request)
 		return err
 	})
@@ -195,7 +195,7 @@ func (d faultInjectionExecutionStore) IsReplicationDLQEmpty(ctx context.Context,
 
 // ListConcreteExecutions wraps ExecutionStore.ListConcreteExecutions.
 func (d faultInjectionExecutionStore) ListConcreteExecutions(ctx context.Context, request *_sourcePersistence.ListConcreteExecutionsRequest) (ip1 *_sourcePersistence.InternalListConcreteExecutionsResponse, err error) {
-	err = d.generator.generate("ListConcreteExecutions").inject(func() error {
+	err = d.generator.generate("ListConcreteExecutions", request).inject(func() error {
 		ip1, err = d.ExecutionStore.ListConcreteExecutions(ctx, request)
 		return err
 	})
@@ -204,7 +204,7 @@ func (d faultInjectionExecutionStore) ListConcreteExecutions(ctx context.Context
 
 // PutReplicationTaskToDLQ wraps ExecutionStore.PutReplicationTaskToDLQ.
 func (d faultInjectionExecutionStore) PutReplicationTaskToDLQ(ctx context.Context, request *_sourcePersistence.PutReplicationTaskToDLQRequest) (err error) {
-	err = d.generator.generate("PutReplicationTaskToDLQ").inject(func() error {
+	err = d.generator.generate("PutReplicationTaskToDLQ", request).inject(func() error {
 		err = d.ExecutionStore.PutReplicationTaskToDLQ(ctx, request)
 		return err
 	})
@@ -213,7 +213,7 @@ func (d faultInjectionExecutionStore) PutReplicationTaskToDLQ(ctx context.Contex
 
 // RangeCompleteHistoryTasks wraps ExecutionStore.RangeCompleteHistoryTasks.
 func (d faultInjectionExecutionStore) RangeCompleteHistoryTasks(ctx context.Context, request *_sourcePersistence.RangeCompleteHistoryTasksRequest) (err error) {
-	err = d.generator.generate("RangeCompleteHistoryTasks").inject(func() error {
+	err = d.generator.generate("RangeCompleteHistoryTasks", request).inject(func() error {
 		err = d.ExecutionStore.RangeCompleteHistoryTasks(ctx, request)
 		return err
 	})
@@ -222,7 +222,7 @@ func (d faultInjectionExecutionStore) RangeCompleteHistoryTasks(ctx context.Cont
 
 // RangeDeleteReplicationTaskFromDLQ wraps ExecutionStore.RangeDeleteReplicationTaskFromDLQ.
 func (d faultInjectionExecutionStore) RangeDeleteReplicationTaskFromDLQ(ctx context.Context, request *_sourcePersistence.RangeDeleteReplicationTaskFromDLQRequest) (err error) {
-	err = d.generator.generate("RangeDeleteReplicationTaskFromDLQ").inject(func() error {
+	err = d.generator.generate("RangeDeleteReplicationTaskFromDLQ", request).inject(func() error {
 		err = d.ExecutionStore.RangeDeleteReplicationTaskFromDLQ(ctx, request)
 		return err
 	})
@@ -231,7 +231,7 @@ func (d faultInjectionExecutionStore) RangeDeleteReplicationTaskFromDLQ(ctx cont
 
 // ReadHistoryBranch wraps ExecutionStore.ReadHistoryBranch.
 func (d faultInjectionExecutionStore) ReadHistoryBranch(ctx context.Context, request *_sourcePersistence.InternalReadHistoryBranchRequest) (ip1 *_sourcePersistence.InternalReadHistoryBranchResponse, err error) {
-	err = d.generator.generate("ReadHistoryBranch").inject(func() error {
+	err = d.generator.generate("ReadHistoryBranch", request).inject(func() error {
 		ip1, err = d.ExecutionStore.ReadHistoryBranch(ctx, request)
 		return err
 	})
@@ -240,7 +240,7 @@ func (d faultInjectionExecutionStore) ReadHistoryBranch(ctx context.Context, req
 
 // SetWorkflowExecution wraps ExecutionStore.SetWorkflowExecution.
 func (d faultInjectionExecutionStore) SetWorkflowExecution(ctx context.Context, request *_sourcePersistence.InternalSetWorkflowExecutionRequest) (err error) {
-	err = d.generator.generate("SetWorkflowExecution").inject(func() error {
+	err = d.generator.generate("SetWorkflowExecution", request).inject(func() error {
 		err = d.ExecutionStore.SetWorkflowExecution(ctx, request)
 		return err
 	})
@@ -249,7 +249,7 @@ func (d faultInjectionExecutionStore) SetWorkflowExecution(ctx context.Context, 
 
 // UpdateWorkflowExecution wraps ExecutionStore.UpdateWorkflowExecution.
 func (d faultInjectionExecutionStore) UpdateWorkflowExecution(ctx context.Context, request *_sourcePersistence.InternalUpdateWorkflowExecutionRequest) (err error) {
-	err = d.generator.generate("UpdateWorkflowExecution").inject(func() error {
+	err = d.generator.generate("UpdateWorkflowExecution", request).inject(func() error {
 		err = d.ExecutionStore.UpdateWorkflowExecution(ctx, request)
 		return err
 	})

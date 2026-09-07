@@ -5,19 +5,31 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/goro"
+	"go.temporal.io/server/common/testing/parallelsuite"
 )
+
+type AdaptivePoolSuite struct {
+	parallelsuite.Suite[*AdaptivePoolSuite]
+}
+
+func TestAdaptivePoolSuite(t *testing.T) {
+	parallelsuite.Run(t, &AdaptivePoolSuite{})
+}
 
 func block()   { <-make(chan struct{}) }
 func nothing() {}
 
-func TestAdaptivePool_CallsF(t *testing.T) {
-	t.Parallel()
+func (s *AdaptivePoolSuite) TestCallsF() {
 	ts := clock.NewEventTimeSource()
 
-	p := goro.NewAdaptivePool(ts, 1, 10, 10*time.Millisecond, 10)
+	const (
+		minWorkers = 1
+		maxWorkers = 10
+	)
+
+	p := goro.NewAdaptivePool(ts, minWorkers, maxWorkers, 10*time.Millisecond, 10)
 	defer p.Stop()
 
 	var wg sync.WaitGroup
@@ -26,54 +38,64 @@ func TestAdaptivePool_CallsF(t *testing.T) {
 	wg.Wait()
 }
 
-func TestAdaptivePool_Grows(t *testing.T) {
-	t.Parallel()
+func (s *AdaptivePoolSuite) TestGrows() {
 	ts := clock.NewEventTimeSource()
 
-	p := goro.NewAdaptivePool(ts, 5, 10, 10*time.Millisecond, 10)
+	const (
+		minWorkers         = 5
+		maxWorkers         = 10
+		workersBeforeDelay = minWorkers
+		workersAfterGrowth = minWorkers + 1
+	)
+
+	p := goro.NewAdaptivePool(ts, minWorkers, maxWorkers, 10*time.Millisecond, 10)
 	defer p.Stop()
 
-	// occupy five workers
+	// Occupy five workers.
 	p.Do(block)
 	p.Do(block)
 	p.Do(block)
 	p.Do(block)
 	p.Do(block)
 
-	// sixth call will still start new worker after delay
+	// The sixth call will still start a new worker after the delay.
 	doneCh := make(chan struct{})
 	go func() {
 		p.Do(block)
 		doneCh <- struct{}{}
 	}()
 
-	// wait for goroutine to block in Do
-	// there should be one timer
-	assert.Eventually(t, func() bool { return ts.NumTimers() == 1 }, time.Second, time.Millisecond)
+	// Wait for the goroutine to block in Do.
+	// There should be one timer.
+	s.AwaitTrue(func() bool { return ts.NumTimers() == 1 }, time.Second, time.Millisecond)
 
 	select {
 	case <-doneCh:
-		t.Error("should be blocked")
+		s.Fail("should be blocked")
 		return
 	default:
 	}
 
-	assert.Equal(t, 5, p.NumWorkers()) // still 5 here
+	s.Equal(workersBeforeDelay, p.NumWorkers()) // still 5 here
 
 	ts.Advance(15 * time.Millisecond)
 	<-doneCh
 
-	assert.Equal(t, 6, p.NumWorkers()) // now 6 here
+	s.Equal(workersAfterGrowth, p.NumWorkers()) // now 6 here
 }
 
-func TestAdaptivePool_DoesntGrowPastMax(t *testing.T) {
-	t.Parallel()
+func (s *AdaptivePoolSuite) TestDoesntGrowPastMax() {
 	ts := clock.NewEventTimeSource()
 
-	p := goro.NewAdaptivePool(ts, 5, 5, 10*time.Millisecond, 10)
+	const (
+		minWorkers = 5
+		maxWorkers = minWorkers
+	)
+
+	p := goro.NewAdaptivePool(ts, minWorkers, maxWorkers, 10*time.Millisecond, 10)
 	defer p.Stop()
 
-	// occupy five workers, one is interruptible
+	// Occupy five workers, one of which is interruptible.
 	p.Do(block)
 	p.Do(block)
 	interruptCh := make(chan struct{})
@@ -81,65 +103,73 @@ func TestAdaptivePool_DoesntGrowPastMax(t *testing.T) {
 	p.Do(block)
 	p.Do(block)
 
-	// sixth call will block
+	// The sixth call will block.
 	doneCh := make(chan struct{})
 	go func() {
 		p.Do(block)
 		doneCh <- struct{}{}
 	}()
 
-	// wait for goroutine to block in Do
-	// we can't use NumTimers since it doesn't create a timer
+	// Wait for the goroutine to block in Do.
+	// We can't use NumTimers since it doesn't create a timer.
 	time.Sleep(10 * time.Millisecond)
 
 	select {
 	case <-doneCh:
-		t.Error("should be blocked")
+		s.Fail("should be blocked")
 		return
 	default:
 	}
 
-	// unblock fifth, which will allow sixth to run immediately
+	// Unblock the fifth worker, which will allow the sixth call to run immediately.
 	<-interruptCh
-	// wait for sixth
+	// Wait for the sixth call.
 	<-doneCh
 
-	assert.Equal(t, 5, p.NumWorkers()) // still 5
+	s.Equal(maxWorkers, p.NumWorkers()) // still 5
 }
 
-func TestAdaptivePool_ShrinksAgain(t *testing.T) {
-	t.Parallel()
+func (s *AdaptivePoolSuite) TestShrinksAgain() {
 	ts := clock.NewEventTimeSource()
 
-	p := goro.NewAdaptivePool(ts, 1, 5, 10*time.Millisecond, 1)
+	const (
+		minWorkers         = 1
+		maxWorkers         = 5
+		workersAfterGrowth = 3
+		workersAfterShrink = 2
+	)
+
+	p := goro.NewAdaptivePool(ts, minWorkers, maxWorkers, 10*time.Millisecond, 1)
 	defer p.Stop()
 
-	// make 3 calls to force it to grow to 3 workers
+	// Make 3 calls to force it to grow to 3 workers.
 	p.Do(block)
 
 	syncCh := make(chan struct{}, 10)
 	go p.Do(func() { syncCh <- struct{}{}; block() })
-	// wait for goroutine to block in Do
-	assert.Eventually(t, func() bool { return ts.NumTimers() == 1 }, time.Second, time.Millisecond)
+	// Wait for the goroutine to block in Do.
+	s.AwaitTrue(func() bool { return ts.NumTimers() == 1 }, time.Second, time.Millisecond)
 	ts.Advance(10 * time.Millisecond) // allow it to start another
 	<-syncCh                          // wait for it to call the function
 
 	go p.Do(func() { syncCh <- struct{}{} })
-	assert.Eventually(t, func() bool { return ts.NumTimers() == 1 }, time.Second, time.Millisecond)
+	s.AwaitTrue(func() bool { return ts.NumTimers() == 1 }, time.Second, time.Millisecond)
 	ts.Advance(10 * time.Millisecond) // allow it to start another
 	<-syncCh                          // wait for it to call the function
 
-	assert.Equal(t, 3, p.NumWorkers())
+	s.Equal(workersAfterGrowth, p.NumWorkers())
 
-	// now there are 3 workers with one free, another call or three should start immediately
+	// Now there are 3 workers with one free, another call or three should start immediately.
 	p.Do(nothing)
 	p.Do(nothing)
 	p.Do(nothing)
 
-	// after no more than 10ms, the free worker should exit
-	// wait until worker is blocked on timer
-	assert.Eventually(t, func() bool { return ts.NumTimers() == 1 }, time.Second, time.Millisecond)
-	ts.Advance(20 * time.Millisecond) // let timer fire
-	// wait for worker to exit
-	assert.Eventually(t, func() bool { return p.NumWorkers() == 2 }, time.Second, time.Millisecond)
+	// After no more than 10ms, the free worker should exit.
+	// Advance the next timer once the worker has registered it.
+	s.Await(func(s *AdaptivePoolSuite) {
+		if ts.NumTimers() > 0 {
+			ts.AdvanceNext() // let timer fire
+		}
+		s.Equal(workersAfterShrink, p.NumWorkers())
+	}, time.Second, time.Millisecond)
 }

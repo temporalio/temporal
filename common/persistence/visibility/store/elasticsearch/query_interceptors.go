@@ -13,7 +13,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
-	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 )
@@ -79,8 +78,14 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 	if err != nil {
 		return "", err
 	}
-	fieldName, fieldType, err := query.ResolveSearchAttributeAlias(name, ni.namespace, mapper,
-		ni.searchAttributesTypeMap, ni.chasmMapper)
+	fieldName, fieldType, err := query.ResolveSearchAttributeAlias(
+		name,
+		ni.namespace,
+		mapper,
+		ni.searchAttributesTypeMap,
+		ni.chasmMapper,
+		ni.archetypeID,
+	)
 	if err != nil {
 		// Check for special aliases that require archetypeID context.
 		if ni.archetypeID != chasm.SchedulerArchetypeID || name != "TemporalSystemExecutionStatus" {
@@ -106,9 +111,16 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 	case query.FieldNameGroupBy:
 		if !query.IsGroupByFieldAllowed(fieldName) {
 			return "", query.NewConverterError(
-				"%s: 'GROUP BY' clause is only supported for ExecutionStatus",
+				"%s: 'GROUP BY' clause is not supported for search attribute %s",
 				query.NotSupportedErrMessage,
+				name,
 			)
+		}
+		// Grouping by TemporalNamespaceDivision is meaningful only across all
+		// divisions, so disable the default filter that would otherwise limit
+		// results to the default (empty) namespace division.
+		if fieldName == sadefs.TemporalNamespaceDivision {
+			ni.seenNamespaceDivision = true
 		}
 	}
 
@@ -121,7 +133,7 @@ func (vi *valuesInterceptor) Values(name string, fieldName string, values ...any
 
 	fieldType, err = vi.saTypeMap.GetType(fieldName)
 	if err != nil {
-		return nil, query.NewConverterError("invalid search attribute: %s", name)
+		return nil, query.NewConverterError("%s: %s", query.InvalidSearchAttribute, name)
 	}
 
 	var result []any
@@ -129,10 +141,6 @@ func (vi *valuesInterceptor) Values(name string, fieldName string, values ...any
 		value, err = parseSystemSearchAttributeValues(name, value)
 		if err != nil {
 			return nil, err
-		}
-
-		if name == sadefs.ScheduleID && fieldName == sadefs.WorkflowID {
-			value = primitives.ScheduleWorkflowIDPrefix + fmt.Sprintf("%v", value)
 		}
 
 		value, err = vi.validateValueType(name, value, fieldType)

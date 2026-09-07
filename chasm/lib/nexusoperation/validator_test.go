@@ -8,17 +8,23 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
+
+func newTestValidator(config *Config) *validator {
+	return newValidator(config, log.NewNoopLogger(), nil, nil)
+}
 
 func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -35,6 +41,8 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 		mockVisibilityManager,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		metrics.NoopMetricsHandler,
+		log.NewNoopLogger(),
 	)
 
 	config := &Config{
@@ -43,6 +51,8 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 		MaxOperationNameLength:             func(string) int { return 10 },
 		PayloadSizeLimit:                   func(string) int { return 20 },
 		PayloadSizeLimitWarn:               func(string) int { return 10 },
+		MaxUserMetadataSummarySize:         func(string) int { return 10 },
+		MaxUserMetadataDetailsSize:         func(string) int { return 20 },
 		MaxOperationHeaderSize:             func(string) int { return 10 },
 		DisallowedOperationHeaders:         func() []string { return []string{"disallowed-header"} },
 		MaxOperationScheduleToCloseTimeout: func(string) time.Duration { return time.Hour },
@@ -242,6 +252,24 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			errMsg: "input exceeds size limit",
 		},
 		{
+			name: "user_metadata.summary - exceeds size limit",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.UserMetadata = &sdkpb.UserMetadata{
+					Summary: &commonpb.Payload{Data: []byte("too-long-summary")},
+				}
+			},
+			errMsg: "user_metadata.summary exceeds size limit",
+		},
+		{
+			name: "user_metadata.details - exceeds size limit",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.UserMetadata = &sdkpb.UserMetadata{
+					Details: &commonpb.Payload{Data: []byte("this-details-payload-is-too-long")},
+				}
+			},
+			errMsg: "user_metadata.details exceeds size limit",
+		},
+		{
 			name: "nexus_header - disallowed key",
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.NexusHeader = map[string]string{"Disallowed-Header": "value"}
@@ -278,9 +306,9 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.SearchAttributes = &commonpb.SearchAttributes{
 					IndexedFields: map[string]*commonpb.Payload{
-						"CustomKeywordField": payload.EncodeString("v1"),
-						"CustomTextField":    payload.EncodeString("v2"),
-						"CustomIntField":     payload.EncodeString("3"),
+						"CustomKeywordField": sadefs.MustEncodeValue("v1", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+						"CustomTextField":    sadefs.MustEncodeValue("v2", enumspb.INDEXED_VALUE_TYPE_TEXT),
+						"CustomIntField":     sadefs.MustEncodeValue(3, enumspb.INDEXED_VALUE_TYPE_INT),
 					},
 				}
 			},
@@ -291,7 +319,10 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.SearchAttributes = &commonpb.SearchAttributes{
 					IndexedFields: map[string]*commonpb.Payload{
-						"CustomKeywordField": payload.EncodeString(strings.Repeat("x", 100)),
+						"CustomKeywordField": sadefs.MustEncodeValue(
+							strings.Repeat("x", 100),
+							enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						),
 					},
 				}
 			},
@@ -308,14 +339,15 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 				Operation:   "operation",
 				SearchAttributes: &commonpb.SearchAttributes{
 					IndexedFields: map[string]*commonpb.Payload{
-						"CustomKeywordField": payload.EncodeString("val"),
+						"CustomKeywordField": sadefs.MustEncodeValue("val", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 					},
 				},
 			}
 			if tc.mutate != nil {
 				tc.mutate(req)
 			}
-			err := validateAndNormalizeStartRequest(req, config, log.NewNoopLogger(), nil, saValidator)
+			err := newValidator(config, log.NewNoopLogger(), nil, saValidator).
+				validateAndNormalizeStartRequest(req)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -377,7 +409,7 @@ func TestValidateDescribeNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.DescribeNexusOperationExecutionRequest) {
 				r.RunId = "not-a-uuid"
 			},
-			errMsg: "run_id is not a valid UUID",
+			errMsg: errInvalidRunID,
 		},
 		{
 			name: "long_poll_token - requires run_id",
@@ -411,7 +443,7 @@ func TestValidateDescribeNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := validateAndNormalizeDescribeRequest(validReq, "test-namespace-id", config)
+			err := newTestValidator(config).validateAndNormalizeDescribeRequest(validReq, "test-namespace-id")
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -473,7 +505,7 @@ func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.RequestCancelNexusOperationExecutionRequest) {
 				r.RunId = "not-a-uuid"
 			},
-			errMsg: "run_id is not a valid UUID",
+			errMsg: errInvalidRunID,
 		},
 		{
 			name: "identity - exceeds length limit",
@@ -498,7 +530,7 @@ func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := validateAndNormalizeCancelRequest(validReq, config)
+			err := newTestValidator(config).validateAndNormalizeCancelRequest(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -551,7 +583,7 @@ func TestValidateDeleteNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.DeleteNexusOperationExecutionRequest) {
 				r.RunId = "not-a-valid-uuid"
 			},
-			errMsg: "invalid run id: must be a valid UUID",
+			errMsg: errInvalidRunID,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -562,7 +594,7 @@ func TestValidateDeleteNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := validateAndNormalizeDeleteRequest(validReq, config)
+			err := newTestValidator(config).validateAndNormalizeDeleteRequest(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -624,7 +656,7 @@ func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.TerminateNexusOperationExecutionRequest) {
 				r.RunId = "not-a-uuid"
 			},
-			errMsg: "run_id is not a valid UUID",
+			errMsg: errInvalidRunID,
 		},
 		{
 			name: "identity - exceeds length limit",
@@ -649,7 +681,7 @@ func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := validateAndNormalizeTerminateRequest(validReq, config)
+			err := newTestValidator(config).validateAndNormalizeTerminateRequest(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -697,7 +729,7 @@ func TestValidatePollNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.PollNexusOperationExecutionRequest) {
 				r.RunId = "not-a-uuid"
 			},
-			errMsg: "run_id is not a valid UUID",
+			errMsg: errInvalidRunID,
 		},
 		{
 			name: "wait_stage - normalizes UNSPECIFIED to CLOSED",
@@ -742,7 +774,7 @@ func TestValidatePollNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := validateAndNormalizePollRequest(validReq, config)
+			err := newTestValidator(config).validateAndNormalizePollRequest(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)

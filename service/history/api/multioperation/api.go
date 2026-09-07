@@ -10,7 +10,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
@@ -194,12 +193,15 @@ func (uws *updateWithStart) Invoke(ctx context.Context) (*historyservice.Execute
 		// If Update is complete, return it.
 		if outcome, err := workflowLease.GetMutableState().GetUpdateOutcome(ctx, updateID); err == nil {
 			workflowKey := workflowLease.GetContext().GetWorkflowKey()
+			// Capture status before releasing the lock to avoid a data race with concurrent goroutines that may
+			// modify ExecutionState after acquiring the lock.
+			status := workflowLease.GetMutableState().GetExecutionState().Status
 			workflowLease.GetReleaseFn()(nil)
 			return makeResponse(
 				&historyservice.StartWorkflowExecutionResponse{
 					RunId:   workflowKey.RunID,
 					Started: false, // set explicitly for emphasis
-					Status:  workflowLease.GetMutableState().GetExecutionState().Status,
+					Status:  status,
 				},
 				uws.updater.CreateResponse(workflowKey, outcome, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED),
 			), nil
@@ -291,8 +293,7 @@ func (uws *updateWithStart) getWorkflowLease(ctx context.Context) (api.WorkflowL
 		definition.NewWorkflowKey(uws.namespaceId.String(), uws.startReq.StartRequest.WorkflowId, ""),
 		locks.PriorityHigh,
 	)
-	var notFound *serviceerror.NotFound
-	if errors.As(err, &notFound) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 		return nil, nil
 	}
 	if err != nil {
@@ -336,20 +337,7 @@ func (uws *updateWithStart) updateWorkflow(
 		RunId:   currentWorkflowLease.GetContext().GetWorkflowKey().RunID,
 		Started: false, // set explicitly for emphasis
 		Status:  enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		Link: &commonpb.Link{
-			Variant: &commonpb.Link_WorkflowEvent_{
-				WorkflowEvent: &commonpb.Link_WorkflowEvent{
-					WorkflowId: wfKey.WorkflowID,
-					RunId:      wfKey.RunID,
-					Reference: &commonpb.Link_WorkflowEvent_EventRef{
-						EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-							EventId:   common.FirstEventID,
-							EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-						},
-					},
-				},
-			},
-		},
+		Link:    api.GenerateStartedEventRefLink(uws.startReq.StartRequest.GetNamespace(), wfKey.WorkflowID, wfKey.RunID),
 	}
 
 	return makeResponse(startResp, updateResp), nil

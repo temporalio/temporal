@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -99,7 +100,8 @@ func Invoke(
 					// TODO (shahab): do we need to do anything with wf redirect in this case or any
 					// other case where an activity starts?
 					nil,
-					"", // workerControlTaskQueue not available for force complete
+					"",  // workerControlTaskQueue not available for force complete
+					nil, // startedClock not needed for force complete
 				)
 				if err != nil {
 					return nil, err
@@ -138,11 +140,14 @@ func Invoke(
 				FirstScheduledTime: firstScheduledTime,
 				Status:             workflow.ActivityStatusSucceeded,
 				Closed:             true,
+				VersioningInfo: workflow.VersioningMetricContext{
+					Behavior:          versioningBehavior,
+					DeploymentVersion: worker_versioning.DeploymentVersionFromOptions(request.GetDeploymentOptions()),
+				},
 			},
 			metrics.OperationTag(metrics.HistoryRespondActivityTaskCompletedScope),
 			metrics.WorkflowTypeTag(workflowTypeName),
 			metrics.ActivityTypeTag(token.ActivityType),
-			metrics.VersioningBehaviorTag(versioningBehavior),
 		)
 	}
 	return &historyservice.RespondActivityTaskCompletedResponse{}, err

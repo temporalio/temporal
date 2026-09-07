@@ -33,7 +33,7 @@ func newFaultInjectionTaskStore(
 
 // CompleteTasksLessThan wraps TaskStore.CompleteTasksLessThan.
 func (d faultInjectionTaskStore) CompleteTasksLessThan(ctx context.Context, request *_sourcePersistence.CompleteTasksLessThanRequest) (i1 int, err error) {
-	err = d.generator.generate("CompleteTasksLessThan").inject(func() error {
+	err = d.generator.generate("CompleteTasksLessThan", request).inject(func() error {
 		i1, err = d.TaskStore.CompleteTasksLessThan(ctx, request)
 		return err
 	})
@@ -42,7 +42,7 @@ func (d faultInjectionTaskStore) CompleteTasksLessThan(ctx context.Context, requ
 
 // CountTaskQueuesByBuildId wraps TaskStore.CountTaskQueuesByBuildId.
 func (d faultInjectionTaskStore) CountTaskQueuesByBuildId(ctx context.Context, request *_sourcePersistence.CountTaskQueuesByBuildIdRequest) (i1 int, err error) {
-	err = d.generator.generate("CountTaskQueuesByBuildId").inject(func() error {
+	err = d.generator.generate("CountTaskQueuesByBuildId", request).inject(func() error {
 		i1, err = d.TaskStore.CountTaskQueuesByBuildId(ctx, request)
 		return err
 	})
@@ -51,7 +51,7 @@ func (d faultInjectionTaskStore) CountTaskQueuesByBuildId(ctx context.Context, r
 
 // CreateTaskQueue wraps TaskStore.CreateTaskQueue.
 func (d faultInjectionTaskStore) CreateTaskQueue(ctx context.Context, request *_sourcePersistence.InternalCreateTaskQueueRequest) (err error) {
-	err = d.generator.generate("CreateTaskQueue").inject(func() error {
+	err = d.generator.generate("CreateTaskQueue", request).inject(func() error {
 		err = d.TaskStore.CreateTaskQueue(ctx, request)
 		return err
 	})
@@ -60,7 +60,7 @@ func (d faultInjectionTaskStore) CreateTaskQueue(ctx context.Context, request *_
 
 // CreateTasks wraps TaskStore.CreateTasks.
 func (d faultInjectionTaskStore) CreateTasks(ctx context.Context, request *_sourcePersistence.InternalCreateTasksRequest) (cp1 *_sourcePersistence.CreateTasksResponse, err error) {
-	err = d.generator.generate("CreateTasks").inject(func() error {
+	err = d.generator.generate("CreateTasks", request).inject(func() error {
 		cp1, err = d.TaskStore.CreateTasks(ctx, request)
 		return err
 	})
@@ -69,7 +69,7 @@ func (d faultInjectionTaskStore) CreateTasks(ctx context.Context, request *_sour
 
 // DeleteTaskQueue wraps TaskStore.DeleteTaskQueue.
 func (d faultInjectionTaskStore) DeleteTaskQueue(ctx context.Context, request *_sourcePersistence.DeleteTaskQueueRequest) (err error) {
-	err = d.generator.generate("DeleteTaskQueue").inject(func() error {
+	err = d.generator.generate("DeleteTaskQueue", request).inject(func() error {
 		err = d.TaskStore.DeleteTaskQueue(ctx, request)
 		return err
 	})
@@ -78,7 +78,7 @@ func (d faultInjectionTaskStore) DeleteTaskQueue(ctx context.Context, request *_
 
 // GetTaskQueue wraps TaskStore.GetTaskQueue.
 func (d faultInjectionTaskStore) GetTaskQueue(ctx context.Context, request *_sourcePersistence.InternalGetTaskQueueRequest) (ip1 *_sourcePersistence.InternalGetTaskQueueResponse, err error) {
-	err = d.generator.generate("GetTaskQueue").inject(func() error {
+	err = d.generator.generate("GetTaskQueue", request).inject(func() error {
 		ip1, err = d.TaskStore.GetTaskQueue(ctx, request)
 		return err
 	})
@@ -87,7 +87,7 @@ func (d faultInjectionTaskStore) GetTaskQueue(ctx context.Context, request *_sou
 
 // GetTaskQueueUserData wraps TaskStore.GetTaskQueueUserData.
 func (d faultInjectionTaskStore) GetTaskQueueUserData(ctx context.Context, request *_sourcePersistence.GetTaskQueueUserDataRequest) (ip1 *_sourcePersistence.InternalGetTaskQueueUserDataResponse, err error) {
-	err = d.generator.generate("GetTaskQueueUserData").inject(func() error {
+	err = d.generator.generate("GetTaskQueueUserData", request).inject(func() error {
 		ip1, err = d.TaskStore.GetTaskQueueUserData(ctx, request)
 		return err
 	})
@@ -96,7 +96,7 @@ func (d faultInjectionTaskStore) GetTaskQueueUserData(ctx context.Context, reque
 
 // GetTaskQueuesByBuildId wraps TaskStore.GetTaskQueuesByBuildId.
 func (d faultInjectionTaskStore) GetTaskQueuesByBuildId(ctx context.Context, request *_sourcePersistence.GetTaskQueuesByBuildIdRequest) (sa1 []string, err error) {
-	err = d.generator.generate("GetTaskQueuesByBuildId").inject(func() error {
+	err = d.generator.generate("GetTaskQueuesByBuildId", request).inject(func() error {
 		sa1, err = d.TaskStore.GetTaskQueuesByBuildId(ctx, request)
 		return err
 	})
@@ -105,7 +105,7 @@ func (d faultInjectionTaskStore) GetTaskQueuesByBuildId(ctx context.Context, req
 
 // GetTasks wraps TaskStore.GetTasks.
 func (d faultInjectionTaskStore) GetTasks(ctx context.Context, request *_sourcePersistence.GetTasksRequest) (ip1 *_sourcePersistence.InternalGetTasksResponse, err error) {
-	err = d.generator.generate("GetTasks").inject(func() error {
+	err = d.generator.generate("GetTasks", request).inject(func() error {
 		ip1, err = d.TaskStore.GetTasks(ctx, request)
 		return err
 	})
@@ -114,7 +114,7 @@ func (d faultInjectionTaskStore) GetTasks(ctx context.Context, request *_sourceP
 
 // ListTaskQueue wraps TaskStore.ListTaskQueue.
 func (d faultInjectionTaskStore) ListTaskQueue(ctx context.Context, request *_sourcePersistence.ListTaskQueueRequest) (ip1 *_sourcePersistence.InternalListTaskQueueResponse, err error) {
-	err = d.generator.generate("ListTaskQueue").inject(func() error {
+	err = d.generator.generate("ListTaskQueue", request).inject(func() error {
 		ip1, err = d.TaskStore.ListTaskQueue(ctx, request)
 		return err
 	})
@@ -123,7 +123,7 @@ func (d faultInjectionTaskStore) ListTaskQueue(ctx context.Context, request *_so
 
 // ListTaskQueueUserDataEntries wraps TaskStore.ListTaskQueueUserDataEntries.
 func (d faultInjectionTaskStore) ListTaskQueueUserDataEntries(ctx context.Context, request *_sourcePersistence.ListTaskQueueUserDataEntriesRequest) (ip1 *_sourcePersistence.InternalListTaskQueueUserDataEntriesResponse, err error) {
-	err = d.generator.generate("ListTaskQueueUserDataEntries").inject(func() error {
+	err = d.generator.generate("ListTaskQueueUserDataEntries", request).inject(func() error {
 		ip1, err = d.TaskStore.ListTaskQueueUserDataEntries(ctx, request)
 		return err
 	})
@@ -132,7 +132,7 @@ func (d faultInjectionTaskStore) ListTaskQueueUserDataEntries(ctx context.Contex
 
 // UpdateTaskQueue wraps TaskStore.UpdateTaskQueue.
 func (d faultInjectionTaskStore) UpdateTaskQueue(ctx context.Context, request *_sourcePersistence.InternalUpdateTaskQueueRequest) (up1 *_sourcePersistence.UpdateTaskQueueResponse, err error) {
-	err = d.generator.generate("UpdateTaskQueue").inject(func() error {
+	err = d.generator.generate("UpdateTaskQueue", request).inject(func() error {
 		up1, err = d.TaskStore.UpdateTaskQueue(ctx, request)
 		return err
 	})
@@ -141,7 +141,7 @@ func (d faultInjectionTaskStore) UpdateTaskQueue(ctx context.Context, request *_
 
 // UpdateTaskQueueUserData wraps TaskStore.UpdateTaskQueueUserData.
 func (d faultInjectionTaskStore) UpdateTaskQueueUserData(ctx context.Context, request *_sourcePersistence.InternalUpdateTaskQueueUserDataRequest) (err error) {
-	err = d.generator.generate("UpdateTaskQueueUserData").inject(func() error {
+	err = d.generator.generate("UpdateTaskQueueUserData", request).inject(func() error {
 		err = d.TaskStore.UpdateTaskQueueUserData(ctx, request)
 		return err
 	})

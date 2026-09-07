@@ -231,7 +231,7 @@ func deleteWorkflowExecutions(ctx workflow.Context, logger log.Logger, params Re
 	if executionsCount == 0 {
 		return result, nil
 	}
-	params.DeleteExecutionsParams.TotalExecutionsCount = int(executionsCount)
+	params.TotalExecutionsCount = int(executionsCount)
 
 	ctx2 := workflow.WithChildOptions(ctx, deleteExecutionsWorkflowOptions)
 	ctx2 = workflow.WithWorkflowID(ctx2, fmt.Sprintf("%s/%s", deleteexecutions.WorkflowName, params.Namespace))
@@ -247,8 +247,7 @@ func deleteWorkflowExecutions(ctx workflow.Context, logger log.Logger, params Re
 	ctx3 := workflow.WithActivityOptions(ctx, ensureNoExecutionsAdvVisibilityActivityOptions)
 	err = workflow.ExecuteActivity(ctx3, a.EnsureNoExecutionsAdvVisibilityActivity, params.NamespaceID, params.Namespace, der.ErrorCount).Get(ctx, nil)
 	if err != nil {
-		var appErr *temporal.ApplicationError
-		if stderrors.As(err, &appErr) {
+		if appErr, ok := stderrors.AsType[*temporal.ApplicationError](err); ok {
 			switch appErr.Type() {
 			case errors.ExecutionsStillExistErrType, errors.NoProgressErrType, errors.NotDeletedExecutionsStillExistErrType:
 				var notDeletedCount int

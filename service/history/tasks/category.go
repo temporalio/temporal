@@ -108,7 +108,7 @@ func (c Category) Type() CategoryType {
 }
 
 func (c Category) MarshalText() (text []byte, err error) {
-	return []byte(fmt.Sprintf("%s(id:%d, type:%s)", c.name, c.id, c.cType)), nil
+	return fmt.Appendf(nil, "%s(id:%d, type:%s)", c.name, c.id, c.cType), nil
 }
 
 func (t CategoryType) String() string {

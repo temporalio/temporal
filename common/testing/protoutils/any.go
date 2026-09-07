@@ -14,7 +14,7 @@ func UnmarshalAny[T proto.Message](t require.TestingT, a *anypb.Any) T {
 	}
 	pb := new(T)
 	ppb := reflect.ValueOf(pb).Elem()
-	pbNew := reflect.New(reflect.TypeOf(pb).Elem().Elem())
+	pbNew := reflect.New(reflect.TypeFor[T]().Elem())
 	ppb.Set(pbNew)
 
 	require.NoError(t, a.UnmarshalTo(*pb))

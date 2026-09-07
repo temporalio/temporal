@@ -1,19 +1,16 @@
 package scheduler_test
 
 import (
-	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/chasmtest"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/log"
 	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
-	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -24,7 +21,7 @@ func runSentinelHandlerTestCase(
 	callFn func(sentinel *scheduler.Scheduler, ctx chasm.MutableContext, specBuilder *legacyscheduler.SpecBuilder) error,
 ) {
 	sentinel, ctx, _ := setupSentinelForTest(t)
-	specBuilder := legacyscheduler.NewSpecBuilder()
+	specBuilder := newLegacySpecBuilder(0, 0)
 
 	err := callFn(sentinel, ctx, specBuilder)
 
@@ -111,15 +108,9 @@ func TestSentinelHandler_MigrateToWorkflow(t *testing.T) {
 }
 
 func TestHandler_CreateFromMigrationState_Sentinel(t *testing.T) {
-	ctrl := gomock.NewController(t)
 	logger := log.NewTestLogger()
-	registry := chasm.NewRegistry(logger)
-	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
-	require.NoError(t, registry.Register(newTestLibrary(logger, newRealSpecProcessor(ctrl, logger))))
-
 	h := scheduler.NewTestHandler(logger)
-	testEngine := chasmtest.NewEngine(t, registry)
-	engineCtx := chasm.NewEngineContext(context.Background(), testEngine)
+	_, engineCtx := newTestEngineContext(t, logger)
 	_, err := chasm.StartExecution(
 		engineCtx,
 		chasm.ExecutionKey{
@@ -149,15 +140,9 @@ func TestHandler_CreateFromMigrationState_Sentinel(t *testing.T) {
 }
 
 func TestHandler_MigrateToWorkflow_Sentinel(t *testing.T) {
-	ctrl := gomock.NewController(t)
 	logger := log.NewTestLogger()
-	registry := chasm.NewRegistry(logger)
-	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
-	require.NoError(t, registry.Register(newTestLibrary(logger, newRealSpecProcessor(ctrl, logger))))
-
 	h := scheduler.NewTestHandler(logger)
-	testEngine := chasmtest.NewEngine(t, registry)
-	engineCtx := chasm.NewEngineContext(context.Background(), testEngine)
+	_, engineCtx := newTestEngineContext(t, logger)
 	_, err := chasm.StartExecution(
 		engineCtx,
 		chasm.ExecutionKey{

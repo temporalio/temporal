@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"time"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
@@ -54,31 +53,21 @@ func (c *FrontendHTTPClientCache) newClientForCluster(targetClusterName string) 
 		return nil, fmt.Errorf("%w: %w", serviceerror.NewInternal("invalid frontend address"), err)
 	}
 
-	// dialer and transport field values copied from http.DefaultTransport.
-	dialer := &net.Dialer{
-		Timeout:   30 * time.Second,
-		KeepAlive: 30 * time.Second,
-	}
-	transport := &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
-		DialContext:           dialer.DialContext,
-		ForceAttemptHTTP2:     true,
-		MaxIdleConns:          100,
-		IdleConnTimeout:       90 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-	}
-
 	urlScheme := "http"
+	var tlsClientConfig *tls.Config
 	if c.tlsProvider != nil {
-		tlsClientConfig, err := c.tlsProvider.GetRemoteClusterClientConfig(host)
+		tlsClientConfig, err = c.tlsProvider.GetRemoteClusterClientConfig(host)
 		if err != nil {
 			return nil, err
 		}
 		if tlsClientConfig != nil {
-			transport.TLSClientConfig = tlsClientConfig
 			urlScheme = "https"
 		}
+	}
+
+	transport, err := common.NewHTTPTransport(tlsClientConfig)
+	if err != nil {
+		return nil, err
 	}
 
 	return &common.FrontendHTTPClient{

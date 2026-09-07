@@ -45,6 +45,13 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 		return nil
 	case *historyservice.DeleteDLQTasksResponse:
 		return nil
+	case *historyservice.DeleteExecutionRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetExecution().GetRunId()),
+		}
+	case *historyservice.DeleteExecutionResponse:
+		return nil
 	case *historyservice.DeleteWorkflowExecutionRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
@@ -226,6 +233,13 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
 			tag.WorkflowRunID(r.GetExecution().GetRunId()),
 		}
+	case *historyservice.PollWorkflowExecutionTimeSkippingRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetRequest().GetWorkflowExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetRequest().GetWorkflowExecution().GetRunId()),
+		}
+	case *historyservice.PollWorkflowExecutionTimeSkippingResponse:
+		return nil
 	case *historyservice.PollWorkflowExecutionUpdateRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetRequest().GetUpdateRef().GetWorkflowExecution().GetWorkflowId()),

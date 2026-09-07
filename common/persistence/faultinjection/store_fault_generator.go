@@ -5,16 +5,51 @@ import (
 )
 
 type (
-	// storeFaultGenerator is an implementation of faultGenerator that will inject errors into the persistence layer
-	// using a per-method configuration.
-	storeFaultGenerator struct {
-		methodFaultGenerators map[string]faultGenerator
+	// storeFaultInjector is an implementation of faultGenerator that will inject errors into the persistence layer
+	// using runtime injectors or per-method configuration.
+	storeFaultInjector struct {
+		storeName config.DataStoreName
+		injectors []faultInjector
 	}
+
+	faultInjector func(config.FaultInjectionTarget) *fault
 )
 
-// newStoreFaultGenerator returns a new instance of a data store error generator that will inject errors
+// newStoreFaultInjector returns a new instance of a data store fault injector that will inject errors
 // into the persistence layer based on the provided configuration.
-func newStoreFaultGenerator(cfg *config.FaultInjectionDataStoreConfig) *storeFaultGenerator {
+func newStoreFaultInjector(
+	storeName config.DataStoreName,
+	cfg *config.FaultInjectionDataStoreConfig,
+	injector config.FaultInjector,
+) (*storeFaultInjector, bool) {
+	var injectors []faultInjector
+	if injector != nil {
+		injectors = append(injectors, runtimeFaultInjector(injector))
+	}
+	if len(cfg.Methods) > 0 {
+		injectors = append(injectors, configuredFaultInjector(cfg))
+	}
+	if len(injectors) == 0 {
+		return nil, false
+	}
+	return &storeFaultInjector{
+		storeName: storeName,
+		injectors: injectors,
+	}, true
+}
+
+func runtimeFaultInjector(injector config.FaultInjector) faultInjector {
+	return func(target config.FaultInjectionTarget) *fault {
+		err := injector(target)
+		if err == nil {
+			return nil
+		}
+		f := newFaultFromError(err, 1.0)
+		return &f
+	}
+}
+
+func configuredFaultInjector(cfg *config.FaultInjectionDataStoreConfig) faultInjector {
 	methodFaultGenerators := make(map[string]faultGenerator, len(cfg.Methods))
 	for methodName, methodConfig := range cfg.Methods {
 		var faults []fault
@@ -23,19 +58,29 @@ func newStoreFaultGenerator(cfg *config.FaultInjectionDataStoreConfig) *storeFau
 		}
 		methodFaultGenerators[methodName] = newMethodFaultGenerator(faults, methodConfig.Seed)
 	}
-	return &storeFaultGenerator{
-		methodFaultGenerators: methodFaultGenerators,
+	return func(target config.FaultInjectionTarget) *fault {
+		methodGenerator, ok := methodFaultGenerators[target.Method]
+		if !ok {
+			return nil
+		}
+		return methodGenerator.generate(target.Method)
 	}
 }
 
-// Generate returns an error from the configured error types and rates for this method.
-// If no errors are configured for the method, or if there are some errors configured for this method,
-// but no error is sampled, then this method returns nil.
-// When this method returns nil, this causes the persistence layer to use the real implementation.
-func (d *storeFaultGenerator) generate(methodName string) *fault {
-	methodGenerator, ok := d.methodFaultGenerators[methodName]
-	if !ok {
-		return nil
+// generate returns a fault from the first injector that chooses to inject one.
+// When this method returns nil, the persistence layer uses the real implementation.
+func (d *storeFaultInjector) generate(methodName string, requests ...any) *fault {
+	target := config.FaultInjectionTarget{
+		Store:  d.storeName,
+		Method: methodName,
 	}
-	return methodGenerator.generate(methodName)
+	if len(requests) > 0 {
+		target.Request = requests[0]
+	}
+	for _, injector := range d.injectors {
+		if f := injector(target); f != nil {
+			return f
+		}
+	}
+	return nil
 }

@@ -371,6 +371,10 @@ service HistoryService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }
 
+  rpc DeleteExecution(DeleteExecutionRequest) returns (DeleteExecutionResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
   rpc GetDLQTasks(GetDLQTasksRequest) returns (GetDLQTasksResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
   }
@@ -513,5 +517,9 @@ service HistoryService {
   // CancelNexusOperation cancels a Nexus operation on the __temporal_system endpoint.
   rpc CancelNexusOperation(CancelNexusOperationRequest) returns (CancelNexusOperationResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  rpc PollWorkflowExecutionTimeSkipping(PollWorkflowExecutionTimeSkippingRequest) returns (PollWorkflowExecutionTimeSkippingResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
   }
 }

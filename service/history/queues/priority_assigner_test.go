@@ -48,6 +48,7 @@ func (s *priorityAssignerSuite) TearDownTest() {
 func (s *priorityAssignerSuite) TestAssign_SelectedTaskTypes() {
 	mockExecutable := NewMockExecutable(s.controller)
 	mockExecutable.EXPECT().GetNamespaceID().Return("test-namespace-id").Times(1)
+	mockExecutable.EXPECT().GetWorkflowID().Return("test-workflow-id").Times(1)
 	mockExecutable.EXPECT().GetType().Return(enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT).Times(1)
 
 	// Create a local namespace that is active in "current" cluster
@@ -64,6 +65,7 @@ func (s *priorityAssignerSuite) TestAssign_SelectedTaskTypes() {
 func (s *priorityAssignerSuite) TestAssign_UnknownTaskTypes() {
 	mockExecutable := NewMockExecutable(s.controller)
 	mockExecutable.EXPECT().GetNamespaceID().Return("test-namespace-id").Times(1)
+	mockExecutable.EXPECT().GetWorkflowID().Return("test-workflow-id").Times(1)
 	mockExecutable.EXPECT().GetType().Return(enumsspb.TaskType(1234)).Times(1)
 
 	// Create a local namespace that is active in "current" cluster
@@ -87,6 +89,7 @@ func (s *priorityAssignerSuite) TestAssign_HighPriorityTaskTypes() {
 	} {
 		mockExecutable := NewMockExecutable(s.controller)
 		mockExecutable.EXPECT().GetNamespaceID().Return("test-namespace-id").Times(1)
+		mockExecutable.EXPECT().GetWorkflowID().Return("test-workflow-id").Times(1)
 		mockExecutable.EXPECT().GetType().Return(taskType).Times(1)
 
 		// Create a local namespace that is active in "current" cluster
@@ -111,6 +114,7 @@ func (s *priorityAssignerSuite) TestAssign_BackgroundPriorityTaskTypes() {
 	} {
 		mockExecutable := NewMockExecutable(s.controller)
 		mockExecutable.EXPECT().GetNamespaceID().Return("test-namespace-id").Times(1)
+		mockExecutable.EXPECT().GetWorkflowID().Return("test-workflow-id").Times(1)
 		mockExecutable.EXPECT().GetType().Return(taskType).Times(1)
 
 		// Create a local namespace that is active in "current" cluster
@@ -134,6 +138,7 @@ func (s *priorityAssignerSuite) TestAssign_LowPriorityTaskTypes() {
 	} {
 		mockExecutable := NewMockExecutable(s.controller)
 		mockExecutable.EXPECT().GetNamespaceID().Return("test-namespace-id").Times(1)
+		mockExecutable.EXPECT().GetWorkflowID().Return("test-workflow-id").Times(1)
 		mockExecutable.EXPECT().GetType().Return(taskType).Times(1)
 
 		// Create a local namespace that is active in "current" cluster
@@ -151,6 +156,7 @@ func (s *priorityAssignerSuite) TestAssign_LowPriorityTaskTypes() {
 func (s *priorityAssignerSuite) TestAssign_StandbyNamespace() {
 	mockExecutable := NewMockExecutable(s.controller)
 	mockExecutable.EXPECT().GetNamespaceID().Return("test-namespace-id").Times(1)
+	mockExecutable.EXPECT().GetWorkflowID().Return("test-workflow-id").Times(1)
 
 	// Create a global namespace with active cluster as "other", not "current"
 	ns := namespace.NewGlobalNamespaceForTest(
@@ -180,6 +186,7 @@ func (s *priorityAssignerSuite) TestAssign_NamespaceNotFound() {
 func (s *priorityAssignerSuite) TestAssign_ActiveNamespaceHighPriority() {
 	mockExecutable := NewMockExecutable(s.controller)
 	mockExecutable.EXPECT().GetNamespaceID().Return("test-namespace-id").Times(1)
+	mockExecutable.EXPECT().GetWorkflowID().Return("test-workflow-id").Times(1)
 	mockExecutable.EXPECT().GetType().Return(enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK).Times(1)
 
 	// Create a global namespace with active cluster as "current"

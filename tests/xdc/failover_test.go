@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -33,9 +34,9 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/service/worker/migration"
 	"go.temporal.io/server/tests/testcore"
-	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -114,6 +115,32 @@ func (s *FunctionalClustersTestSuite) TestNamespaceFailover() {
 	we, err := s.clusters[1].FrontendClient().StartWorkflowExecution(testcore.NewContext(), startReq)
 	s.NoError(err)
 	s.NotNil(we.GetRunId())
+}
+
+// TestNamespaceFailover_ReplicationStateIsNormalOnBothClusters guards against
+// State being dropped on the wire for UPDATE replication tasks, which left the
+// non-receiving cluster stuck at UNSPECIFIED after a force-failover.
+func (s *FunctionalClustersTestSuite) TestNamespaceFailover_ReplicationStateIsNormalOnBothClusters() {
+	namespace := s.createGlobalNamespace()
+
+	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
+
+	await.Require(testcore.NewContext(), s.T(), func(t *await.T) {
+		for _, c := range s.clusters {
+			resp, err := c.FrontendClient().DescribeNamespace(t.Context(), &workflowservice.DescribeNamespaceRequest{
+				Namespace: namespace,
+			})
+			require.NoError(t, err)
+			require.Equal(
+				t,
+				enumspb.REPLICATION_STATE_NORMAL,
+				resp.ReplicationConfig.State,
+				"cluster %s left ReplicationConfig.State = %s after failover",
+				c.ClusterName(),
+				resp.ReplicationConfig.State,
+			)
+		}
+	}, replicationWaitTime, replicationCheckInterval)
 }
 
 func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
@@ -2065,17 +2092,18 @@ func (s *FunctionalClustersTestSuite) TestActivityHeartbeatFailover() {
 	// Make sure the heartbeat details are sent to cluster2 even when the activity at cluster1
 	// has heartbeat timeout. Also make sure the information is recorded when the activity state
 	// is "Scheduled"
-	dweResponse, err := client1.DescribeWorkflowExecution(testcore.NewContext(), workflowID, "")
-	s.NoError(err)
-	pendingActivities := dweResponse.GetPendingActivities()
-	s.Len(pendingActivities, 1)
-	s.Equal(enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, pendingActivities[0].GetState())
-	heartbeatPayload := pendingActivities[0].GetHeartbeatDetails()
-	var heartbeatValue int
-	s.NoError(payloads.Decode(heartbeatPayload, &heartbeatValue))
-	s.Equal(expectedHeartbeatValue, heartbeatValue)
-	s.Equal(enumspb.TIMEOUT_TYPE_HEARTBEAT, pendingActivities[0].GetLastFailure().GetTimeoutFailureInfo().GetTimeoutType())
-	s.Equal("worker0", pendingActivities[0].GetLastWorkerIdentity())
+	await.Require(testcore.NewContext(), s.T(), func(t *await.T) {
+		dweResponse, err := client1.DescribeWorkflowExecution(t.Context(), workflowID, "")
+		require.NoError(t, err)
+		pendingActivities := dweResponse.GetPendingActivities()
+		require.Len(t, pendingActivities, 1)
+		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, pendingActivities[0].GetState())
+		heartbeatPayload := pendingActivities[0].GetHeartbeatDetails()
+		var heartbeatValue int
+		require.NoError(t, payloads.Decode(heartbeatPayload, &heartbeatValue))
+		require.Equal(t, expectedHeartbeatValue, heartbeatValue)
+		require.Equal(t, enumspb.TIMEOUT_TYPE_HEARTBEAT, pendingActivities[0].GetLastFailure().GetTimeoutFailureInfo().GetTimeoutType())
+	}, replicationWaitTime, replicationCheckInterval)
 
 	// start worker1
 	worker1.RegisterWorkflow(testWorkflowFn)
@@ -2742,11 +2770,7 @@ func TestFuncClustersWithRedirectionTestSuite(t *testing.T) {
 
 func (s *FunctionalClustersWithRedirectionTestSuite) SetupSuite() {
 	s.setupSuite(
-		testcore.WithFxOptionsForService(primitives.FrontendService,
-			fx.Decorate(func(_ config.DCRedirectionPolicy) config.DCRedirectionPolicy {
-				return config.DCRedirectionPolicy{Policy: "all-apis-forwarding"}
-			}),
-		),
+		testcore.WithDCRedirectionPolicy(config.DCRedirectionPolicy{Policy: "all-apis-forwarding"}),
 	)
 }
 

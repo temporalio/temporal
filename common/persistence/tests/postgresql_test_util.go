@@ -45,9 +45,9 @@ type (
 	}
 )
 
-func setUpPostgreSQLTest(t *testing.T, pluginName string) (PostgreSQLTestData, func()) {
+func setUpPostgreSQLTest(t *testing.T, pluginName string, connectAttrs map[string]string) (PostgreSQLTestData, func()) {
 	var testData PostgreSQLTestData
-	testData.Cfg = NewPostgreSQLConfig(pluginName)
+	testData.Cfg = NewPostgreSQLConfig(pluginName, connectAttrs)
 	testData.Logger = log.NewZapLogger(zaptest.NewLogger(t))
 	mh := metricstest.NewCaptureHandler()
 	testData.Metrics = mh.StartCapture()
@@ -73,7 +73,7 @@ func setUpPostgreSQLTest(t *testing.T, pluginName string) (PostgreSQLTestData, f
 }
 
 // NewPostgreSQLConfig returns a new MySQL config for test
-func NewPostgreSQLConfig(pluginName string) *config.SQL {
+func NewPostgreSQLConfig(pluginName string, connectAttrs map[string]string) *config.SQL {
 	return &config.SQL{
 		User:     testPostgreSQLUser,
 		Password: testPostgreSQLPassword,
@@ -81,9 +81,10 @@ func NewPostgreSQLConfig(pluginName string) *config.SQL {
 			environment.GetPostgreSQLAddress(),
 			strconv.Itoa(environment.GetPostgreSQLPort()),
 		),
-		ConnectProtocol: testPostgreSQLConnectionProtocol,
-		PluginName:      pluginName,
-		DatabaseName:    testPostgreSQLDatabaseNamePrefix + shuffle.String(testPostgreSQLDatabaseNameSuffix),
+		ConnectProtocol:   testPostgreSQLConnectionProtocol,
+		PluginName:        pluginName,
+		DatabaseName:      testPostgreSQLDatabaseNamePrefix + shuffle.String(testPostgreSQLDatabaseNameSuffix),
+		ConnectAttributes: connectAttrs,
 	}
 }
 

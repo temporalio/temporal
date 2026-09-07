@@ -14,9 +14,10 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -92,15 +93,25 @@ type serializedHandlerError struct {
 // TemporalFailureToNexusFailure converts an API proto Failure to a Nexus SDK Failure setting the metadata "type" field to
 // the proto fullname of the temporal API Failure message or the standard Nexus SDK failure types.
 // Returns an error if the failure cannot be converted.
-// Mutates the failure temporarily, unsetting the Message and StackTrace fields to avoid duplicating the information in
-// the serialized failure. Mutating was chosen over cloning for performance reasons since this function may be called
-// frequently.
+//
+// Compared to TemporalFailureToNexusFailureInPlace, this function clones the failure before converting it to avoid
+// mutating a shared proto.
 func TemporalFailureToNexusFailure(failure *failurepb.Failure) (nexus.Failure, error) {
+	return TemporalFailureToNexusFailureInPlace(proto.Clone(failure).(*failurepb.Failure))
+}
+
+// TemporalFailureToNexusFailureInPlace converts an API proto Failure to a Nexus SDK Failure setting the metadata
+// "type" field to the proto fullname of the temporal API Failure message or the standard Nexus SDK failure types.
+// Returns an error if the failure cannot be converted.
+//
+// Compared to TemporalFailureToNexusFailure, this function converts the failure in place to avoid cloning. This
+// is only safe for callers who exclusively own the failure.
+func TemporalFailureToNexusFailureInPlace(failure *failurepb.Failure) (nexus.Failure, error) {
 	var causep *nexus.Failure
 	if failure.GetCause() != nil {
 		var cause nexus.Failure
 		var err error
-		cause, err = TemporalFailureToNexusFailure(failure.GetCause())
+		cause, err = TemporalFailureToNexusFailureInPlace(failure.GetCause())
 		if err != nil {
 			return nexus.Failure{}, err
 		}
@@ -312,16 +323,10 @@ func nexusFailureMetadataToApplicationFailureInfo(failure nexus.Failure) (*failu
 // and
 // https://github.com/grpc-ecosystem/grpc-gateway/blob/a7cf811e6ffabeaddcfb4ff65602c12671ff326e/runtime/errors.go#L56.
 func ConvertGRPCError(err error, exposeDetails bool) error {
-	var st *status.Status
-	stGetter, ok := err.(interface{ Status() *status.Status })
-	if ok {
-		st = stGetter.Status()
-	} else {
-		st, ok = status.FromError(err)
-		if !ok {
-			// The Nexus SDK will translate this into an internal server error and will not expose the error details.
-			return err
-		}
+	st, ok := common.GetRPCStatus(err)
+	if !ok {
+		// The Nexus SDK will translate this into an internal server error and will not expose the error details.
+		return err
 	}
 
 	errMessage := err.Error()

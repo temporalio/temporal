@@ -27,15 +27,13 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/namespace/nsreplication"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/tests/testcore"
 	"go.temporal.io/server/tools/tdbg"
 	"go.temporal.io/server/tools/tdbg/tdbgtest"
-	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -73,34 +71,13 @@ type (
 		workflowIDToFail    atomic.Pointer[string]
 		workflowIDToObserve atomic.Pointer[string]
 	}
-	testReplicationTaskExecutor struct {
-		*replicationTaskExecutorParams
-		taskExecutor replication.TaskExecutor
-	}
 	dlqWriterParams struct {
 		// This channel is sent to once we're done processing a request to add a message to the DLQ.
 		processedDLQRequests chan replication.DLQWriteRequest
 	}
-	testDLQWriter struct {
-		*dlqWriterParams
-		replication.DLQWriter
-	}
 	namespaceReplicationTaskExecutorParams struct {
 		// This channel is sent to once we're done processing a namespace replication task.
 		tasks chan *replicationspb.NamespaceTaskAttributes
-	}
-	testNamespaceReplicationTaskExecutor struct {
-		*namespaceReplicationTaskExecutorParams
-		replicationTaskExecutor nsreplication.TaskExecutor
-	}
-	testExecutableTaskConverter struct {
-		*replicationTaskExecutorParams
-		converter replication.ExecutableTaskConverter
-	}
-	testExecutableTask struct {
-		*replicationTaskExecutorParams
-		replication.TrackableExecutableTask
-		replicationTask *replicationspb.ReplicationTask
 	}
 )
 
@@ -165,35 +142,23 @@ func (s *historyReplicationDLQSuite) SetupSuite() {
 	s.replicationTaskExecutors.workflowIDToFail.Store(&workflowIDToFail)
 	s.replicationTaskExecutors.workflowIDToObserve.Store(&workflowIDToFail)
 
-	// This can't be very long, so we just use a UUID instead of a more descriptive name.
-	// We also don't escape this string in many places, so it can't contain any dashes.
-	taskExecutorDecorator := s.getTaskExecutorDecorator()
 	s.logger = log.NewTestLogger()
-	s.setupSuite(
-		testcore.WithFxOptionsForService(primitives.HistoryService,
-			fx.Decorate(
-				taskExecutorDecorator,
-				func(dlqWriter replication.DLQWriter) replication.DLQWriter {
-					// Replace the dlq writer with one that records DLQ requests so that we can wait until a task is
-					// added to the DLQ before querying tdbg.
-					return &testDLQWriter{
-						dlqWriterParams: &s.dlqWriters,
-						DLQWriter:       dlqWriter,
-					}
-				},
-			),
-		),
-		testcore.WithFxOptionsForService(primitives.WorkerService,
-			fx.Decorate(
-				func(executor nsreplication.TaskExecutor) nsreplication.TaskExecutor {
-					return &testNamespaceReplicationTaskExecutor{
-						replicationTaskExecutor:                executor,
-						namespaceReplicationTaskExecutorParams: &s.namespaceReplicationTaskExecutors,
-					}
-				},
-			),
-		),
-	)
+	s.setupSuite()
+
+	for _, cluster := range s.clusters {
+		cluster.InjectHook(s.T(), testhooks.NewHook(
+			testhooks.HistoryReplicationTaskInterceptor,
+			s.interceptHistoryReplicationTask,
+		), testhooks.GlobalScope)
+		cluster.InjectHook(s.T(), testhooks.NewHook(
+			testhooks.HistoryReplicationDLQWriteInterceptor,
+			s.interceptHistoryReplicationDLQWrite,
+		), testhooks.GlobalScope)
+		cluster.InjectHook(s.T(), testhooks.NewHook(
+			testhooks.NamespaceReplicationTaskInterceptor,
+			s.interceptNamespaceReplicationTask,
+		), namespace.Name("history-replication-dlq-test-namespace"))
+	}
 }
 
 func (s *historyReplicationDLQSuite) TearDownSuite() {
@@ -546,124 +511,56 @@ func (s *historyReplicationDLQSuite) runTDBGCommand(
 	s.T().Log("========================================")
 }
 
-func (s *historyReplicationDLQSuite) getTaskExecutorDecorator() any {
-	if s.enableReplicationStream {
-		// The replication stream uses a different code path which converts tasks into executables using this interface,
-		// so that's a good injection point for us.
-		return func(converter replication.ExecutableTaskConverter) replication.ExecutableTaskConverter {
-			return &testExecutableTaskConverter{
-				replicationTaskExecutorParams: &s.replicationTaskExecutors,
-				converter:                     converter,
-			}
-		}
-	}
-	// Without the replication stream, we use polling that relies on a task executor, so we can inject our own
-	// faulty version here.
-	return func(provider replication.TaskExecutorProvider) replication.TaskExecutorProvider {
-		return func(params replication.TaskExecutorParams) replication.TaskExecutor {
-			taskExecutor := provider(params)
-			return &testReplicationTaskExecutor{
-				replicationTaskExecutorParams: &s.replicationTaskExecutors,
-				taskExecutor:                  taskExecutor,
-			}
-		}
-	}
-}
-
-// Execute the replication task as-normal, but also send it to the channel so that the test can wait for it to
-// know that the namespace data has been replicated.
-func (t *testNamespaceReplicationTaskExecutor) Execute(
+func (s *historyReplicationDLQSuite) interceptNamespaceReplicationTask(
 	ctx context.Context,
 	task *replicationspb.NamespaceTaskAttributes,
+	execute func() error,
 ) error {
-	err := t.replicationTaskExecutor.Execute(ctx, task)
+	err := execute()
 	if err != nil {
 		return err
 	}
-	t.tasks <- task
+	s.namespaceReplicationTaskExecutors.tasks <- task
 	return nil
 }
 
-// WriteTaskToDLQ is the same as the normal dlq writer, but also sends the request to the channel so that the test can
-// wait for it to know that the replication task has been added to the DLQ.
-func (t *testDLQWriter) WriteTaskToDLQ(
-	ctx context.Context,
-	request replication.DLQWriteRequest,
+func (s *historyReplicationDLQSuite) interceptHistoryReplicationDLQWrite(
+	replicationTaskInfo *persistencespb.ReplicationTaskInfo,
+	write func() error,
 ) error {
-	err := t.DLQWriter.WriteTaskToDLQ(ctx, request)
-	t.processedDLQRequests <- request
-	return err
-}
-
-// Execute the replication task as-normal or return an error if the workflow ID matches the one that we want to fail.
-// This is run only when streaming is disabled for replication.
-func (f testReplicationTaskExecutor) Execute(
-	ctx context.Context,
-	replicationTask *replicationspb.ReplicationTask,
-	forceApply bool,
-) error {
-	err := f.execute(ctx, replicationTask, forceApply)
-	if attr := replicationTask.GetHistoryTaskAttributes(); attr != nil && attr.WorkflowId == *f.workflowIDToObserve.Load() {
-		f.executedTasks <- replicationTask
-	}
-	if attr := replicationTask.GetSyncVersionedTransitionTaskAttributes(); attr != nil && attr.WorkflowId == *f.workflowIDToObserve.Load() {
-		f.executedTasks <- replicationTask
+	err := write()
+	s.dlqWriters.processedDLQRequests <- replication.DLQWriteRequest{
+		ReplicationTaskInfo: replicationTaskInfo,
 	}
 	return err
 }
 
-func (f testReplicationTaskExecutor) execute(
-	ctx context.Context,
+func (s *historyReplicationDLQSuite) interceptHistoryReplicationTask(
 	replicationTask *replicationspb.ReplicationTask,
-	forceApply bool,
+	execute func() error,
 ) error {
-	if attr := replicationTask.GetHistoryTaskAttributes(); attr != nil && attr.WorkflowId == *f.workflowIDToFail.Load() {
+	err := s.executeHistoryReplicationTask(replicationTask, execute)
+	if attr := replicationTask.GetHistoryTaskAttributes(); attr != nil && attr.WorkflowId == *s.replicationTaskExecutors.workflowIDToObserve.Load() {
+		s.replicationTaskExecutors.executedTasks <- replicationTask
+	}
+	if attr := replicationTask.GetSyncVersionedTransitionTaskAttributes(); attr != nil && attr.WorkflowId == *s.replicationTaskExecutors.workflowIDToObserve.Load() {
+		s.replicationTaskExecutors.executedTasks <- replicationTask
+	}
+	if attr := replicationTask.GetVerifyVersionedTransitionTaskAttributes(); attr != nil && attr.WorkflowId == *s.replicationTaskExecutors.workflowIDToObserve.Load() {
+		s.replicationTaskExecutors.executedTasks <- replicationTask
+	}
+	return err
+}
+
+func (s *historyReplicationDLQSuite) executeHistoryReplicationTask(
+	replicationTask *replicationspb.ReplicationTask,
+	execute func() error,
+) error {
+	if attr := replicationTask.GetHistoryTaskAttributes(); attr != nil && attr.WorkflowId == *s.replicationTaskExecutors.workflowIDToFail.Load() {
 		return serviceerror.NewInvalidArgument("failed to apply replication task")
 	}
-	if attr := replicationTask.GetSyncVersionedTransitionTaskAttributes(); attr != nil && attr.WorkflowId == *f.workflowIDToFail.Load() {
+	if attr := replicationTask.GetSyncVersionedTransitionTaskAttributes(); attr != nil && attr.WorkflowId == *s.replicationTaskExecutors.workflowIDToFail.Load() {
 		return serviceerror.NewInvalidArgument("failed to apply replication task")
 	}
-	err := f.taskExecutor.Execute(ctx, replicationTask, forceApply)
-	return err
-}
-
-// Convert the replication tasks using the testcore converter, but then wrap them in our own faulty executable tasks.
-func (t *testExecutableTaskConverter) Convert(
-	taskClusterName string,
-	clientShardKey replication.ClusterShardKey,
-	serverShardKey replication.ClusterShardKey,
-	replicationTasks ...*replicationspb.ReplicationTask,
-) []replication.TrackableExecutableTask {
-	convertedTasks := t.converter.Convert(taskClusterName, clientShardKey, serverShardKey, replicationTasks...)
-	testExecutableTasks := make([]replication.TrackableExecutableTask, len(convertedTasks))
-	for i, task := range convertedTasks {
-		testExecutableTasks[i] = &testExecutableTask{
-			replicationTaskExecutorParams: t.replicationTaskExecutorParams,
-			TrackableExecutableTask:       task,
-			replicationTask:               replicationTasks[i],
-		}
-	}
-	return testExecutableTasks
-}
-
-// Execute the replication task as-normal or return an error if the workflow ID matches the one that we want to fail.
-// This is run only when streaming is enabled for replication.
-func (t *testExecutableTask) Execute() error {
-	err := t.execute()
-	t.replicationTaskExecutorParams.executedTasks <- t.replicationTask
-	return err
-}
-
-func (t *testExecutableTask) execute() error {
-	if et, ok := t.TrackableExecutableTask.(*replication.ExecutableHistoryTask); ok {
-		if et.WorkflowID == *t.workflowIDToFail.Load() {
-			return serviceerror.NewInvalidArgument("failed to apply replication task")
-		}
-	}
-	if et, ok := t.TrackableExecutableTask.(*replication.ExecutableSyncVersionedTransitionTask); ok {
-		if et.WorkflowID == *t.workflowIDToFail.Load() {
-			return serviceerror.NewInvalidArgument("failed to apply replication task")
-		}
-	}
-	return t.TrackableExecutableTask.Execute()
+	return execute()
 }

@@ -135,7 +135,7 @@ func (s *sessionTestSuite) TestBuildDSN() {
 				}
 				s.True(strings.HasPrefix(out, tc.outURLPath), "invalid url path")
 				tokens := strings.Split(out, "?")
-				s.Equal(2, len(tokens), "invalid url")
+				s.Len(tokens, 2, "invalid url")
 				qry, err := url.Parse("?" + tokens[1])
 				s.NoError(err)
 				wantAttrs := buildExpectedURLParams(dbKind, tc.in.ConnectAttributes, tc.outIsolationKey, tc.outIsolationVal)

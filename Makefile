@@ -60,6 +60,7 @@ TEST_TIMEOUT ?= 35m
 
 # Number of retries for *-coverage targets.
 MAX_TEST_ATTEMPTS ?= 3
+TEST_RUNNER_TIMEOUT_ARG := $(if $(TEST_RUNNER_TIMEOUT),--total-timeout=$(TEST_RUNNER_TIMEOUT),)
 
 # Whether or not to test with the race detector. All of (1 on y yes t true) are true values.
 TEST_RACE_FLAG ?= on
@@ -125,8 +126,12 @@ MIXED_BRAIN_TEST_ROOT         := ./tests/mixedbrain
 DB_INTEGRATION_TEST_ROOT      := ./common/persistence/tests
 DB_TOOL_INTEGRATION_TEST_ROOT := ./tools/tests
 INTEGRATION_TEST_DIRS := $(DB_INTEGRATION_TEST_ROOT) $(DB_TOOL_INTEGRATION_TEST_ROOT) ./temporaltest
+TESTCORE_UNITTESTS := ./tests/testcore
 ifeq ($(UNIT_TEST_DIRS),)
 UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_ROOT)% $(FUNCTIONAL_TEST_NDC_ROOT)% $(MIXED_BRAIN_TEST_ROOT)% $(DB_INTEGRATION_TEST_ROOT)% $(DB_TOOL_INTEGRATION_TEST_ROOT)% ./temporaltest%,$(TEST_DIRS))
+
+# Testcore unit tests are filtered out by the FUNCTIONAL_TEST_ROOT pattern, need to add them back manually.
+UNIT_TEST_DIRS += $(TESTCORE_UNITTESTS)
 endif
 SYSTEM_WORKFLOWS_ROOT := ./service/worker
 
@@ -167,11 +172,11 @@ $(STAMPDIR):
 $(LOCALBIN):
 	@mkdir -p $(LOCALBIN)
 
-# When updating the version, update the golangci-lint GHA workflow as well.
 .PHONY: golangci-lint
+LINT_CODE_TARGETS ?= ./...
 GOLANGCI_LINT_BASE_REV ?= $(MAIN_BRANCH)
 GOLANGCI_LINT_FIX ?= true
-GOLANGCI_LINT_VERSION := v2.9.0
+GOLANGCI_LINT_VERSION := v2.13.0
 GOLANGCI_LINT := $(LOCALBIN)/golangci-lint-$(GOLANGCI_LINT_VERSION)
 $(GOLANGCI_LINT): $(LOCALBIN)
 	$(call go-install-tool,$(GOLANGCI_LINT),github.com/golangci/golangci-lint/v2/cmd/golangci-lint,$(GOLANGCI_LINT_VERSION))
@@ -213,12 +218,18 @@ WORKFLOWCHECK := $(LOCALBIN)/workflowcheck-$(WORKFLOWCHECK_VER)
 $(WORKFLOWCHECK): | $(LOCALBIN)
 	$(call go-install-tool,$(WORKFLOWCHECK),go.temporal.io/sdk/contrib/tools/workflowcheck,$(WORKFLOWCHECK_VER))
 
+# NilAway has no tagged releases; pin the pseudo-version for reproducible CI.
+NILAWAY_VER := v0.0.0-20260717164209-b48ebb193579
+NILAWAY := $(LOCALBIN)/nilaway-$(NILAWAY_VER)
+$(NILAWAY): | $(LOCALBIN)
+	$(call go-install-tool,$(NILAWAY),go.uber.org/nilaway/cmd/nilaway,$(NILAWAY_VER))
+
 YAMLFMT_VER := v0.16.0
 YAMLFMT := $(LOCALBIN)/yamlfmt-$(YAMLFMT_VER)
 $(YAMLFMT): | $(LOCALBIN)
 	$(call go-install-tool,$(YAMLFMT),github.com/google/yamlfmt/cmd/yamlfmt,$(YAMLFMT_VER))
 
-GOIMPORTS_VER := v0.36.0
+GOIMPORTS_VER := v0.49.0
 GOIMPORTS := $(LOCALBIN)/goimports-$(GOIMPORTS_VER)
 $(STAMPDIR)/goimports-$(GOIMPORTS_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(GOIMPORTS),golang.org/x/tools/cmd/goimports,$(GOIMPORTS_VER))
@@ -252,7 +263,7 @@ $(STAMPDIR)/mockgen-$(MOCKGEN_VER): | $(STAMPDIR) $(LOCALBIN)
 	@touch $@
 $(MOCKGEN): $(STAMPDIR)/mockgen-$(MOCKGEN_VER)
 
-STRINGER_VER := v0.36.0
+STRINGER_VER := v0.49.0
 STRINGER := $(LOCALBIN)/stringer
 $(STAMPDIR)/stringer-$(STRINGER_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(STRINGER),golang.org/x/tools/cmd/stringer,$(STRINGER_VER))
@@ -393,14 +404,55 @@ lint-actions: $(ACTIONLINT)
 	@printf $(COLOR) "Linting GitHub actions..."
 	@$(ACTIONLINT)
 
+.PHONY: lint-code lint-code-fast
+# --new-from-rev filters reported issues _after_ analysis; this target also reduces package inputs _before_ analysis.
+lint-code-fast:
+	@if ! git rev-parse --verify --quiet "$(GOLANGCI_LINT_BASE_REV)^{commit}" >/dev/null; then \
+		printf $(RED) "GOLANGCI_LINT_BASE_REV=$(GOLANGCI_LINT_BASE_REV) is not a known commit; fetch it or override GOLANGCI_LINT_BASE_REV"; \
+		exit 1; \
+	fi
+	@base=$$(git merge-base HEAD "$(GOLANGCI_LINT_BASE_REV)"); \
+	targets=$$({ \
+		git diff --no-renames --name-only "$$base" -- '*.go'; \
+		git ls-files --others --exclude-standard -- '*.go'; \
+	} | sed 's|^|./|; s|/[^/]*$$||' | sort -u \
+	  | while read -r dir; do [ -d "$$dir" ] && printf '%s ' "$$dir"; done); \
+	if [ -z "$$targets" ]; then \
+		printf $(COLOR) "No changed Go packages to lint."; \
+	else \
+		$(MAKE) GOLANGCI_LINT_BASE_REV="$$base" LINT_CODE_TARGETS="$$targets" lint-code; \
+	fi
+
 lint-code: $(GOLANGCI_LINT) $(ERRORTYPE)
 	@printf $(COLOR) "Linting code..."
-	@$(GOLANGCI_LINT) run --verbose --build-tags $(ALL_TEST_TAGS) --timeout 10m --fix=$(GOLANGCI_LINT_FIX) --new-from-rev=$(GOLANGCI_LINT_BASE_REV) --config=.github/.golangci.yml
-	@go vet -tags $(ALL_TEST_TAGS) -vettool="$(ERRORTYPE)" -style-check=false ./...
+	@$(GOLANGCI_LINT) run \
+		--verbose \
+		--build-tags $(ALL_TEST_TAGS) \
+		--timeout 10m \
+		--fix=$(GOLANGCI_LINT_FIX) \
+		--new-from-rev=$(GOLANGCI_LINT_BASE_REV) \
+		--config=.github/.golangci.yml \
+		$(LINT_CODE_TARGETS)
+	@go vet -tags $(ALL_TEST_TAGS) -vettool="$(ERRORTYPE)" -style-check=false $(LINT_CODE_TARGETS)
 
 lint-yaml: $(YAMLFMT)
 	@printf $(COLOR) "Checking YAML formatting..."
 	@$(YAMLFMT) -conf .github/.yamlfmt -lint .
+
+# Nil-safety analysis. Override NILAWAY_SCOPE to widen coverage as more packages
+# are made nil-clean; every path below is derived from it. -include-pkgs restricts
+# the expensive inference to our own packages; without it nilaway analyzes the
+# entire transitive dependency graph and OOMs CI runners.
+.PHONY: lint-nilaway
+NILAWAY_SCOPE ?= chasm/lib/scheduler
+lint-nilaway: $(NILAWAY)
+	@printf $(COLOR) "Running nilaway..."
+	@$(NILAWAY) \
+		-include-pkgs $(MODULE_ROOT)/$(NILAWAY_SCOPE) \
+		-include-errors-in-files $(ROOT)/$(NILAWAY_SCOPE) \
+		-exclude-test-files \
+		-exclude-file-docstrings "Code generated by" \
+		./$(NILAWAY_SCOPE)/...
 
 lint-api: $(API_LINTER) $(API_BINPB)
 	@printf $(COLOR) "Linting proto API..."
@@ -419,7 +471,7 @@ fmt: fmt-gofix fmt-imports fmt-protos fmt-yaml
 # on the exit code alone, since go fix can exit non-zero without actually
 # modifying any files (see https://github.com/golang/go/issues/77482).
 # Note: go fix automatically skips generated files.
-GOFIX_FLAGS ?= -any -rangeint
+GOFIX_FLAGS ?=
 GOFIX_MAX_ITERATIONS ?= 5
 fmt-gofix:
 	@printf $(COLOR) "Run go fix..."
@@ -505,8 +557,24 @@ functional-with-fault-injection-test: clean-test-output
 
 mixed-brain-test: clean-test-output
 	@printf $(COLOR) "Run mixed brain tests..."
-	@CGO_ENABLED=1 TEST_OUTPUT_ROOT=$(CURDIR)/$(TEST_OUTPUT_ROOT) go test -v $(MIXED_BRAIN_TEST_ROOT) $(COMPILED_TEST_ARGS) 2>&1 | tee -a test.log
+	@cd $(MIXED_BRAIN_TEST_ROOT) && CGO_ENABLED=1 TEST_OUTPUT_ROOT=$(CURDIR)/$(TEST_OUTPUT_ROOT) go test -v ./... $(COMPILED_TEST_ARGS) 2>&1 | tee -a $(CURDIR)/test.log
 	@$(MAKE) verify-test-log
+
+LEAK_OUTPUT_DIR        ?= $(TEST_OUTPUT_ROOT)/leakcheck
+LEAK_ITERS             ?= 15
+LEAK_ITERS_WARMUP      ?= 3
+LEAK_GC_SETTLE_TIMEOUT ?= 10s
+LEAK_TIMEOUT           ?= 5m
+leak-test:
+	@printf $(COLOR) "Run goroutine-leak regression test..."
+	@mkdir -p $(LEAK_OUTPUT_DIR)
+	LEAK_ITERS=$(LEAK_ITERS) \
+		LEAK_ITERS_WARMUP=$(LEAK_ITERS_WARMUP) \
+		LEAK_OUTPUT_DIR=$(LEAK_OUTPUT_DIR) \
+		LEAK_GC_SETTLE_TIMEOUT=$(LEAK_GC_SETTLE_TIMEOUT) \
+		go test -run TestClusterShutdownLeak -count=1 -v \
+			-timeout $(LEAK_TIMEOUT) $(TEST_TAG_FLAG) \
+			./tests/leakcheck/ -args -persistenceType=sql -persistenceDriver=sqlite
 
 verify-test-log:
 	@test -s test.log || (echo "TEST FAILURE: test.log is missing or empty" && exit 1)
@@ -523,33 +591,33 @@ prepare-coverage-test: $(GOTESTSUM) $(TEST_OUTPUT_ROOT)
 
 unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
-	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) --junitfile=$(NEW_REPORT) -- \
+	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(UNIT_TEST_DIRS)
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
-	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) --junitfile=$(NEW_REPORT) -- \
+	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(INTEGRATION_TEST_DIRS)
 
-# This should use the same build flags as functional-test-coverage and functional-test-{xdc,ndc}-coverage for best build caching.
+# MUST use the same build flags as functional-test-coverage and functional-test-{xdc,ndc}-coverage for best build caching.
 pre-build-functional-test-coverage: prepare-coverage-test
-	go test -c -cover -o /dev/null $(FUNCTIONAL_TEST_ROOT) $(TEST_ARGS) $(TEST_TAG_FLAG) $(COVERPKG_FLAG)
+	go test -c -cover -o /dev/null $(COMPILED_TEST_ARGS) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_ROOT)
 
 functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) --junitfile=$(NEW_REPORT) -- \
+	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) --junitfile=$(NEW_REPORT) -- \
+	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_XDC_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 functional-test-ndc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) --junitfile=$(NEW_REPORT) -- \
+	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_NDC_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
@@ -559,9 +627,10 @@ report-test-crash: $(TEST_OUTPUT_ROOT)
 		--junitfile=$(TEST_OUTPUT_ROOT)/junit.crash.xml \
 		--crashreportname=$(CRASH_REPORT_NAME)
 
-print-test-summary: $(TEST_OUTPUT_ROOT)
-	@go run ./cmd/tools/test-runner print-summary \
-		--junit-glob=$(TEST_OUTPUT_ROOT)/junit.*.xml
+generate-test-summary: $(TEST_OUTPUT_ROOT)
+	@go run ./cmd/tools/test-runner generate-summary \
+		--junit-glob=$(TEST_OUTPUT_ROOT)/junit.*.xml \
+		--summary-output-dir=$(TEST_OUTPUT_ROOT)
 
 ##### Schema #####
 install-schema-cass-es: temporal-cassandra-tool install-schema-es

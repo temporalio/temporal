@@ -117,10 +117,8 @@ func (rc *reachabilityCalculator) run(ctx context.Context, buildId string) (enum
 
 	// 2. Cases for REACHABLE
 	// 2a. If buildId is assignable to new tasks
-	for _, bid := range buildIdsOfInterest {
-		if rc.isReachableActiveAssignmentRuleTargetOrDefault(bid) {
-			return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedRuleTargetsForUpstream, nil
-		}
+	if slices.ContainsFunc(buildIdsOfInterest, rc.isReachableActiveAssignmentRuleTargetOrDefault) {
+		return enumspb.BUILD_ID_TASK_REACHABILITY_REACHABLE, checkedRuleTargetsForUpstream, nil
 	}
 
 	// 2b. If buildId could be reached from the backlog

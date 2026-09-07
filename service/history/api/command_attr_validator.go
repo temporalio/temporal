@@ -100,6 +100,11 @@ func (v *CommandAttrValidator) ValidateActivityScheduleAttributes(
 		attributes.RetryPolicy = &commonpb.RetryPolicy{}
 	}
 
+	namespaceEntry, err := v.namespaceRegistry.GetNamespaceByID(namespaceID)
+	if err != nil {
+		return failedCause, err
+	}
+
 	opts := &activitypb.ActivityOptions{
 		TaskQueue:              attributes.TaskQueue,
 		ScheduleToCloseTimeout: attributes.GetScheduleToCloseTimeout(),
@@ -109,12 +114,12 @@ func (v *CommandAttrValidator) ValidateActivityScheduleAttributes(
 		RetryPolicy:            attributes.RetryPolicy,
 	}
 
-	err := activity.ValidateAndNormalizeEmbeddedActivity(
+	err = activity.ValidateAndNormalizeEmbeddedActivity(
 		activityID,
 		activityType,
 		v.getDefaultActivityRetrySettings,
 		v.maxIDLengthLimit,
-		namespaceID,
+		namespaceEntry.Name(),
 		opts,
 		attributes.GetPriority(),
 		runTimeout,
@@ -551,14 +556,13 @@ func (v *CommandAttrValidator) ValidateStartChildExecutionAttributes(
 }
 
 func (v *CommandAttrValidator) validateActivityRetryPolicy(
-	namespaceID namespace.ID,
+	namespaceName namespace.Name,
 	retryPolicy *commonpb.RetryPolicy,
 ) error {
 	if retryPolicy == nil {
 		return nil
 	}
-	// TODO: this is a namespace setting, not a namespace id setting
-	defaultActivityRetrySettings := v.getDefaultActivityRetrySettings(namespaceID.String())
+	defaultActivityRetrySettings := v.getDefaultActivityRetrySettings(namespaceName.String())
 	retrypolicy.EnsureDefaults(retryPolicy, defaultActivityRetrySettings)
 	return retrypolicy.Validate(retryPolicy)
 }

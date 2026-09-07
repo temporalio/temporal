@@ -41,11 +41,11 @@ func MaskYaml(yamlStr string, fieldNamesToMask []string) (string, error) {
 func MaskStruct(strct any, fieldNamesToMask []string) any {
 	strctV := reflect.ValueOf(strct)
 
-	if strct == nil || (strctV.Kind() == reflect.Ptr && strctV.IsNil()) {
+	if strct == nil || (strctV.Kind() == reflect.Pointer && strctV.IsNil()) {
 		return strct
 	}
 
-	for t := reflect.TypeOf(strct); t.Kind() == reflect.Ptr; t = t.Elem() {
+	for t := reflect.TypeOf(strct); t.Kind() == reflect.Pointer; t = t.Elem() {
 		strctV = strctV.Elem()
 	}
 

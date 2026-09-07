@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"context"
+	"maps"
 	"sync"
 
 	metricsspb "go.temporal.io/server/api/metrics/v1"
@@ -101,9 +102,7 @@ func NewServerMetricsTrailerPropagatorInterceptor(logger log.Logger) grpc.UnaryS
 		metricsBaggage := &metricsspb.Baggage{CountersInt: make(map[string]int64)}
 
 		metricsCtx.Lock()
-		for k, v := range metricsCtx.CountersInt {
-			metricsBaggage.CountersInt[k] = v
-		}
+		maps.Copy(metricsBaggage.CountersInt, metricsCtx.CountersInt)
 		metricsCtx.Unlock()
 
 		bytes, marshalErr := metricsBaggage.Marshal()

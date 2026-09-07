@@ -24,8 +24,8 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
@@ -55,8 +55,14 @@ type (
 		logger                 log.Logger
 		dynamicConfigOverrides map[dynamicconfig.Key]any
 
+		// clusterNames, if set, overrides the default two-cluster ("active"/"standby")
+		// topology. setupSuite provisions one TestCluster per name and connects every
+		// pair, so any count is supported. Leave empty for the historical two clusters.
+		clusterNames []string
+
 		startTime          time.Time
 		onceClusterConnect sync.Once
+		numHistoryShards   int32
 
 		enableTransitionHistory bool
 
@@ -66,7 +72,7 @@ type (
 
 // TODO (alex): this should be gone.
 func (s *xdcBaseSuite) clusterReplicationConfig() []*replicationpb.ClusterReplicationConfig {
-	config := make([]*replicationpb.ClusterReplicationConfig, 2)
+	config := make([]*replicationpb.ClusterReplicationConfig, len(s.clusters))
 	for ci, c := range s.clusters {
 		config[ci] = &replicationpb.ClusterReplicationConfig{
 			ClusterName: c.ClusterName(),
@@ -78,6 +84,7 @@ func (s *xdcBaseSuite) clusterReplicationConfig() []*replicationpb.ClusterReplic
 func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 
 	params := testcore.ApplyTestClusterOptions(opts)
+	s.numHistoryShards = cmp.Or(params.NumHistoryShards, int32(1))
 
 	if s.logger == nil {
 		s.logger = log.NewTestLogger()
@@ -85,7 +92,9 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 	if s.dynamicConfigOverrides == nil {
 		s.dynamicConfigOverrides = make(map[dynamicconfig.Key]any)
 	}
-	s.dynamicConfigOverrides[dynamicconfig.ClusterMetadataRefreshInterval.Key()] = time.Second * 5
+	if _, ok := s.dynamicConfigOverrides[dynamicconfig.ClusterMetadataRefreshInterval.Key()]; !ok {
+		s.dynamicConfigOverrides[dynamicconfig.ClusterMetadataRefreshInterval.Key()] = time.Second * 5
+	}
 	s.dynamicConfigOverrides[dynamicconfig.NamespaceCacheRefreshInterval.Key()] = testcore.NamespaceCacheRefreshInterval
 	s.dynamicConfigOverrides[dynamicconfig.EnableTransitionHistory.Key()] = s.enableTransitionHistory
 	// TODO (prathyush): remove this after setting it to true by default.
@@ -103,51 +112,54 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 	s.dynamicConfigOverrides[dynamicconfig.OutboundProcessorMaxPollInterval.Key()] = time.Second * 3
 
 	persistenceDefaults := testcore.GetPersistenceTestDefaults()
-	clusterConfigs := []*testcore.TestClusterConfig{
-		{
-			ClusterMetadata: cluster.Config{
-				EnableGlobalNamespace:    true,
-				FailoverVersionIncrement: 10,
-			},
-			HistoryConfig: testcore.HistoryConfig{
-				NumHistoryShards: cmp.Or(params.NumHistoryShards, 1),
-			},
-			Persistence: persistenceDefaults,
-		},
-		{
-			ClusterMetadata: cluster.Config{
-				EnableGlobalNamespace:    true,
-				FailoverVersionIncrement: 10,
-			},
-			HistoryConfig: testcore.HistoryConfig{
-				NumHistoryShards: cmp.Or(params.NumHistoryShards, 1),
-			},
-			Persistence: persistenceDefaults,
-		},
+
+	// The default topology is two clusters, named "active" and "standby". Suites
+	// that need a different number of clusters set s.clusterNames before calling
+	// setupSuite; everything below (including the connect-every-pair loop) scales
+	// to any cluster count.
+	clusterBaseNames := s.clusterNames
+	if len(clusterBaseNames) == 0 {
+		clusterBaseNames = []string{"active", "standby"}
 	}
 
-	s.clusters = make([]*testcore.TestCluster, len(clusterConfigs))
 	suffix := common.GenerateRandomString(5)
+	clusterConfigs := make([]*testcore.TestClusterConfig, len(clusterBaseNames))
+	s.clusters = make([]*testcore.TestCluster, len(clusterBaseNames))
 
 	testClusterFactory := testcore.NewTestClusterFactory()
-	for clusterIndex, clusterName := range []string{"active_" + suffix, "standby_" + suffix} {
-		clusterConfigs[clusterIndex].DynamicConfigOverrides = s.dynamicConfigOverrides
-		clusterConfigs[clusterIndex].ClusterMetadata.MasterClusterName = clusterName
-		clusterConfigs[clusterIndex].ClusterMetadata.CurrentClusterName = clusterName
-		clusterConfigs[clusterIndex].ClusterMetadata.EnableGlobalNamespace = true
-		clusterConfigs[clusterIndex].Persistence.DBName += "_" + clusterName
-		clusterConfigs[clusterIndex].ClusterMetadata.ClusterInformation = map[string]cluster.ClusterInformation{
-			clusterName: {
-				Enabled:                true,
-				InitialFailoverVersion: int64(clusterIndex + 1),
-				// RPCAddress and HTTPAddress will be filled in
+	for clusterIndex, baseName := range clusterBaseNames {
+		clusterName := baseName + "_" + suffix
+		clusterConfig := &testcore.TestClusterConfig{
+			ClusterMetadata: cluster.Config{
+				EnableGlobalNamespace:    true,
+				FailoverVersionIncrement: 10,
+				MasterClusterName:        clusterName,
+				CurrentClusterName:       clusterName,
+				ClusterInformation: map[string]cluster.ClusterInformation{
+					clusterName: {
+						Enabled:                true,
+						InitialFailoverVersion: int64(clusterIndex + 1),
+						// RPCAddress and HTTPAddress will be filled in
+					},
+				},
 			},
+			HistoryConfig: testcore.HistoryConfig{
+				NumHistoryShards: s.numHistoryShards,
+			},
+			Persistence:               persistenceDefaults,
+			DynamicConfigOverrides:    s.dynamicConfigOverrides,
+			DCRedirectionPolicy:       params.DCRedirectionPolicy,
+			EnableArchival:            params.EnableArchival,
+			AdditionalServerOptions:   params.AdditionalServerOptions,
+			EnableMetricsCapture:      true,
+			EnableHistoryTaskRecorder: params.EnableHistoryTaskRecorder,
+			EnableReplicationRecorder: params.EnableReplicationRecorder,
 		}
-		clusterConfigs[clusterIndex].ServiceFxOptions = params.ServiceOptions
-		clusterConfigs[clusterIndex].EnableMetricsCapture = true
+		clusterConfig.Persistence.DBName += "_" + clusterName
+		clusterConfigs[clusterIndex] = clusterConfig
 
 		var err error
-		s.clusters[clusterIndex], err = testClusterFactory.NewCluster(s.T(), clusterConfigs[clusterIndex], log.With(s.logger, tag.ClusterName(clusterName)))
+		s.clusters[clusterIndex], err = testClusterFactory.NewCluster(s.T(), clusterConfig, log.With(s.logger, tag.ClusterName(clusterName)))
 		s.Require().NoError(err)
 	}
 
@@ -177,27 +189,29 @@ func (s *xdcBaseSuite) waitForClusterConnected(
 	sourceCluster *testcore.TestCluster,
 	targetClusterName string,
 ) {
+	expectedNumHistoryShards := cmp.Or(s.numHistoryShards, int32(1))
 	s.logger.Info("wait for clusters to be synced", tag.SourceCluster(sourceCluster.ClusterName()), tag.TargetCluster(targetClusterName))
-	s.EventuallyWithT(func(c *assert.CollectT) {
+	await.Require(context.Background(), s.T(), func(c *await.T) {
 		s.logger.Info("check if clusters are synced", tag.SourceCluster(sourceCluster.ClusterName()), tag.TargetCluster(targetClusterName))
-		resp, err := sourceCluster.HistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
+		resp, err := sourceCluster.HistoryClient().GetReplicationStatus(c.Context(), &historyservice.GetReplicationStatusRequest{})
 		require.NoError(c, err)
-		require.Lenf(c, resp.Shards, 1, "test cluster has only one history shard")
+		require.Lenf(c, resp.Shards, int(expectedNumHistoryShards), "unexpected history shard count")
 
-		shard := resp.Shards[0]
-		require.NotNil(c, shard)
-		require.Positive(c, shard.MaxReplicationTaskId)
-		require.NotNil(c, shard.ShardLocalTime)
-		require.WithinRange(c, shard.ShardLocalTime.AsTime(), s.startTime, time.Now())
-		require.NotNil(c, shard.RemoteClusters)
+		for _, shard := range resp.Shards {
+			require.NotNil(c, shard)
+			require.Positive(c, shard.MaxReplicationTaskId)
+			require.NotNil(c, shard.ShardLocalTime)
+			require.WithinRange(c, shard.ShardLocalTime.AsTime(), s.startTime, time.Now())
+			require.NotNil(c, shard.RemoteClusters)
 
-		standbyAckInfo, ok := shard.RemoteClusters[targetClusterName]
-		require.True(c, ok)
-		require.NotNil(c, standbyAckInfo)
-		require.LessOrEqual(c, shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId)
-		require.NotNil(c, standbyAckInfo.AckedTaskVisibilityTime)
-		require.WithinRange(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime(), s.startTime, time.Now())
-	}, 90*time.Second, 1*time.Second)
+			standbyAckInfo, ok := shard.RemoteClusters[targetClusterName]
+			require.True(c, ok)
+			require.NotNil(c, standbyAckInfo)
+			require.LessOrEqual(c, shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId)
+			require.NotNil(c, standbyAckInfo.AckedTaskVisibilityTime)
+			require.WithinRange(c, standbyAckInfo.AckedTaskVisibilityTime.AsTime(), s.startTime, time.Now())
+		}
+	}, 90*time.Second, time.Second)
 	s.logger.Info("clusters synced", tag.SourceCluster(sourceCluster.ClusterName()), tag.TargetCluster(targetClusterName))
 }
 
@@ -302,12 +316,7 @@ func (s *xdcBaseSuite) createNamespace(
 	s.NoError(err)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		for _, r := range clusters[0].Host().NamespaceRegistries() {
-			resp, err := r.GetNamespace(namespace.Name(ns))
-			require.NoError(t, err)
-			require.NotNil(t, resp)
-			require.Equal(t, isGlobal, resp.IsGlobalNamespace())
-		}
+		s.describeNamespace(t, clusters[0], ns, isGlobal)
 	}, namespaceCacheWaitTime, namespaceCacheCheckInterval)
 
 	if len(clusters) > 1 && isGlobal {
@@ -315,17 +324,13 @@ func (s *xdcBaseSuite) createNamespace(
 		// Check other clusters too.
 		s.EventuallyWithT(func(t *assert.CollectT) {
 			for _, c := range clusters[1:] {
-				for _, r := range c.Host().NamespaceRegistries() {
-					resp, err := r.GetNamespace(namespace.Name(ns))
-					require.NoError(t, err)
-					require.NotNil(t, resp)
-					require.Equal(t, isGlobal, resp.IsGlobalNamespace())
-					require.Equal(t, clusterNames, resp.ClusterNames(namespace.EmptyBusinessID))
-				}
+				resp := s.describeNamespace(t, c, ns, isGlobal)
+				require.ElementsMatch(t, clusterNames, s.namespaceClusterNames(resp))
 			}
 		}, replicationWaitTime, replicationCheckInterval)
 	}
 
+	s.waitForNamespaceCacheRefresh()
 	return ns
 }
 
@@ -334,7 +339,6 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 	inClusterIndex int,
 	clusters []*testcore.TestCluster,
 ) {
-
 	replicationConfigs := make([]*replicationpb.ClusterReplicationConfig, len(clusters))
 	clusterNames := make([]string, len(clusters))
 	for ci, c := range clusters {
@@ -351,13 +355,9 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 
 	var isGlobalNamespace bool
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		for _, r := range clusters[inClusterIndex].Host().NamespaceRegistries() {
-			resp, err := r.GetNamespace(namespace.Name(ns))
-			require.NoError(t, err)
-			require.NotNil(t, resp)
-			require.Equal(t, clusterNames, resp.ClusterNames(namespace.EmptyBusinessID))
-			isGlobalNamespace = resp.IsGlobalNamespace()
-		}
+		resp := s.describeNamespace(t, clusters[inClusterIndex], ns, true)
+		require.ElementsMatch(t, clusterNames, s.namespaceClusterNames(resp))
+		isGlobalNamespace = resp.GetIsGlobalNamespace()
 	}, namespaceCacheWaitTime, namespaceCacheCheckInterval)
 
 	if len(clusters) > 1 && isGlobalNamespace {
@@ -368,22 +368,18 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 				if ci == inClusterIndex {
 					continue
 				}
-				for _, r := range c.Host().NamespaceRegistries() {
-					resp, err := r.GetNamespace(namespace.Name(ns))
-					require.NoError(t, err)
-					require.NotNil(t, resp)
-					require.Equal(t, clusterNames, resp.ClusterNames(namespace.EmptyBusinessID))
-				}
+				resp := s.describeNamespace(t, c, ns, true)
+				require.ElementsMatch(t, clusterNames, s.namespaceClusterNames(resp))
 			}
 		}, replicationWaitTime, replicationCheckInterval)
 	}
+	s.waitForNamespaceCacheRefresh()
 }
 
 func (s *xdcBaseSuite) promoteNamespace(
 	ns string,
 	inClusterIndex int,
 ) {
-
 	_, err := s.clusters[inClusterIndex].FrontendClient().UpdateNamespace(testcore.NewContext(), &workflowservice.UpdateNamespaceRequest{
 		Namespace:        ns,
 		PromoteNamespace: true,
@@ -391,13 +387,9 @@ func (s *xdcBaseSuite) promoteNamespace(
 	s.NoError(err)
 
 	s.EventuallyWithT(func(t *assert.CollectT) {
-		for _, r := range s.clusters[inClusterIndex].Host().NamespaceRegistries() {
-			resp, err := r.GetNamespace(namespace.Name(ns))
-			require.NoError(t, err)
-			require.NotNil(t, resp)
-			require.True(t, resp.IsGlobalNamespace())
-		}
+		s.describeNamespace(t, s.clusters[inClusterIndex], ns, true)
 	}, namespaceCacheWaitTime, namespaceCacheCheckInterval)
+	s.waitForNamespaceCacheRefresh()
 }
 
 func (s *xdcBaseSuite) failover(
@@ -423,16 +415,48 @@ func (s *xdcBaseSuite) failover(
 	// check local and remote clusters
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		for _, c := range s.clusters {
-			for _, r := range c.Host().NamespaceRegistries() {
-				resp, err := r.GetNamespace(namespace.Name(ns))
-				require.NoError(t, err)
-				require.NotNil(t, resp)
-				require.Equal(t, targetCluster, resp.ActiveClusterName(namespace.RoutingKey{}))
-			}
+			resp := s.describeNamespace(t, c, ns, true)
+			require.Equal(t, targetCluster, resp.GetReplicationConfig().GetActiveClusterName())
 		}
 	}, replicationWaitTime, replicationCheckInterval)
 
 	s.waitForClusterSynced()
+	s.waitForNamespaceCacheRefresh()
+}
+
+func (s *xdcBaseSuite) waitForNamespaceCacheRefresh() {
+	time.Sleep(namespaceCacheWaitTime) //nolint:forbidigo
+}
+
+func (s *xdcBaseSuite) describeNamespace(
+	t require.TestingT,
+	testCluster *testcore.TestCluster,
+	ns string,
+	isGlobal bool,
+) *workflowservice.DescribeNamespaceResponse {
+	resp, err := testCluster.FrontendClient().DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{
+		Namespace: ns,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	require.Equal(t, isGlobal, resp.GetIsGlobalNamespace())
+	if isGlobal {
+		require.NotNil(t, resp.GetReplicationConfig())
+	}
+	return resp
+}
+
+func (s *xdcBaseSuite) namespaceClusterNames(resp *workflowservice.DescribeNamespaceResponse) []string {
+	replicationConfig := resp.GetReplicationConfig()
+	if replicationConfig == nil {
+		return nil
+	}
+	clusters := replicationConfig.GetClusters()
+	clusterNames := make([]string, len(clusters))
+	for i, replicationCluster := range clusters {
+		clusterNames[i] = replicationCluster.GetClusterName()
+	}
+	return clusterNames
 }
 
 func (s *xdcBaseSuite) newClientAndWorker(hostport, ns, taskqueue, identity string) (sdkclient.Client, sdkworker.Worker) {

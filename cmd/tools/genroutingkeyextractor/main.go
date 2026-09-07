@@ -137,7 +137,8 @@ func terminalField(fieldPath string) string {
 // E.g. "workflow_execution.workflow_id" → "r.GetWorkflowExecution().GetWorkflowId()"
 func fieldPathToAccessor(fieldPath string, msgDesc protoreflect.MessageDescriptor) (string, error) {
 	parts := strings.Split(fieldPath, ".")
-	accessor := "r"
+	var accessor strings.Builder
+	accessor.WriteString("r")
 	currentMsg := msgDesc
 
 	for _, part := range parts {
@@ -147,14 +148,14 @@ func fieldPathToAccessor(fieldPath string, msgDesc protoreflect.MessageDescripto
 		}
 
 		goName := protoFieldToGoName(part)
-		accessor += ".Get" + goName + "()"
+		accessor.WriteString(".Get" + goName + "()")
 
 		if field.Kind() == protoreflect.MessageKind && field.Message() != nil {
 			currentMsg = field.Message()
 		}
 	}
 
-	return accessor, nil
+	return accessor.String(), nil
 }
 
 // protoFieldToGoName converts a snake_case proto field name to PascalCase Go name.

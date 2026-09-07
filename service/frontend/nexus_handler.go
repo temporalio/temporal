@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.opentelemetry.io/otel/trace"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
@@ -85,6 +86,18 @@ type operationContext struct {
 	headersBlacklist              dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 	metricTagConfig               dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
 	cleanupFunctions              []func(map[string]string, error)
+}
+
+func (c *operationContext) annotateServerSpan(
+	ctx context.Context,
+	service, operation, requestID string,
+) {
+	nexusrpc.AnnotateServerSpan(trace.SpanFromContext(ctx), nexusrpc.ServerSpanAttributes{
+		Endpoint:  c.endpointName,
+		Service:   service,
+		Operation: operation,
+		RequestID: requestID,
+	})
 }
 
 // Panic handler and metrics recording function.
@@ -171,8 +184,7 @@ func (c *operationContext) interceptRequest(
 		// If frontend.exposeAuthorizerErrors is false, Authorize err is either an explicitly set reason, or a generic
 		// "Request unauthorized." message.
 		// Otherwise, expose the underlying error.
-		var permissionDeniedError *serviceerror.PermissionDenied
-		if errors.As(err, &permissionDeniedError) {
+		if permissionDeniedError, ok := errors.AsType[*serviceerror.PermissionDenied](err); ok {
 			c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("unauthorized"))
 			return commonnexus.AdaptAuthorizeError(permissionDeniedError)
 		}
@@ -187,6 +199,7 @@ func (c *operationContext) interceptRequest(
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 
+	//nolint:forbidigo // Nexus requests are not tied to a business ID by design (see line 184)
 	if !c.namespace.ActiveInCluster(c.clusterMetadata.GetCurrentClusterName()) {
 		if c.shouldForwardRequest(ctx, header) {
 			// Handler methods should have special logic to forward requests if this method returns
@@ -233,7 +246,12 @@ func (c *operationContext) interceptRequest(
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 
-	if err := c.namespaceRateLimitInterceptor.Allow(c.namespace.Name(), c.apiName, header); err != nil {
+	if err := c.namespaceRateLimitInterceptor.Allow(
+		ctx,
+		c.namespace.Name(),
+		c.apiName,
+		header,
+	); err != nil {
 		c.metricsHandler = c.metricsHandler.WithTags(metrics.OutcomeTag("namespace_rate_limited"))
 		return commonnexus.ConvertGRPCError(err, true)
 	}
@@ -307,6 +325,19 @@ func (c *operationContext) enrichNexusOperationMetrics(service, operation string
 	}
 }
 
+// enrichNexusOperationLogs adds Nexus operation context to the handler-side logger.
+func (c *operationContext) enrichNexusOperationLogs(service, operation, requestID string) {
+	tags := []tag.Tag{
+		tag.NexusService(service),
+		tag.NexusOperation(operation),
+		tag.Endpoint(c.endpointName),
+	}
+	if requestID != "" {
+		tags = append(tags, tag.RequestID(requestID))
+	}
+	c.logger = log.With(c.logger, tags...)
+}
+
 // Key to extract a nexusContext object from a context.Context.
 type nexusContextKey struct{}
 
@@ -372,8 +403,7 @@ func (h *nexusHandler) getOperationContext(ctx context.Context, method string) (
 			metrics.OutcomeTag("namespace_not_found"),
 		)
 
-		var nfe *serviceerror.NamespaceNotFound
-		if errors.As(err, &nfe) {
+		if _, ok := errors.AsType[*serviceerror.NamespaceNotFound](err); ok {
 			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeNotFound, "namespace not found: %q", nc.namespaceName)
 		}
 		return nil, commonnexus.ConvertGRPCError(err, false)
@@ -396,6 +426,8 @@ func (h *nexusHandler) StartOperation(
 	}
 	ctx = oc.augmentContext(ctx, options.Header)
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
+	oc.enrichNexusOperationLogs(service, operation, options.RequestID)
+	oc.annotateServerSpan(ctx, service, operation, options.RequestID)
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	var links []*nexuspb.Link
@@ -426,8 +458,7 @@ func (h *nexusHandler) StartOperation(
 	})
 
 	if err := oc.interceptRequest(ctx, request, options.Header); err != nil {
-		var notActiveErr *serviceerror.NamespaceNotActive
-		if errors.As(err, &notActiveErr) {
+		if _, ok := errors.AsType[*serviceerror.NamespaceNotActive](err); ok {
 			return h.forwardStartOperation(ctx, service, operation, input, options, oc)
 		}
 		return nil, err
@@ -448,118 +479,17 @@ func (h *nexusHandler) StartOperation(
 	// RPC.
 	response, err := h.matchingClient.DispatchNexusTask(ctx, request)
 	if err != nil {
+		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("matching_timeout"))
 		oc.logger.Error("received error from matching service for Nexus StartOperation request", tag.Error(err))
 		return nil, commonnexus.ConvertGRPCError(err, false)
 	}
 	// Convert to standard Nexus SDK response.
-	switch t := response.GetOutcome().(type) {
-	case *matchingservice.DispatchNexusTaskResponse_Failure:
-		// Set the failure source to "worker" if we've reached this case.
-		// Failure conversions errors below are the user's fault, as it implies that malformed completions were sent from
-		// the worker.
-		oc.setFailureSource(commonnexus.FailureSourceWorker)
-		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.Failure.GetNexusHandlerFailureInfo().GetType()))
-		nf, err := commonnexus.TemporalFailureToNexusFailure(t.Failure)
-		if err != nil {
-			oc.logger.Error("error converting Temporal failure to Nexus failure", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
-			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
-		}
-		he, err := nexusrpc.DefaultFailureConverter().FailureToError(nf)
-		if err != nil {
-			oc.logger.Error("error converting Nexus failure to Nexus HandlerError", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
-			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
-		}
-		return nil, he
-
-	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
-		// Deprecated case. Replaced with DispatchNexusTaskResponse_Failure
-		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.HandlerError.GetErrorType()))
-		oc.setFailureSource(commonnexus.FailureSourceWorker)
-		err := convertOutcomeToNexusHandlerError(t)
+	result, handlerLinks, err := oc.handleStartOperationResponse(response, operation)
+	if err != nil {
 		return nil, err
-
-	case *matchingservice.DispatchNexusTaskResponse_RequestTimeout:
-		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_timeout"))
-		oc.setFailureSource(commonnexus.FailureSourceWorker)
-		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
-
-	case *matchingservice.DispatchNexusTaskResponse_Response:
-		switch t := t.Response.GetStartOperation().GetVariant().(type) {
-		case *nexuspb.StartOperationResponse_SyncSuccess:
-			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("sync_success"))
-			links := parseLinks(t.SyncSuccess.GetLinks(), oc.logger)
-			nexus.AddHandlerLinks(ctx, links...)
-			return &nexus.HandlerStartOperationResultSync[any]{
-				Value: t.SyncSuccess.GetPayload(),
-			}, nil
-
-		case *nexuspb.StartOperationResponse_AsyncSuccess:
-			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("async_success"))
-			token := t.AsyncSuccess.GetOperationToken()
-			if token == "" {
-				token = t.AsyncSuccess.GetOperationId()
-			}
-			links := parseLinks(t.AsyncSuccess.GetLinks(), oc.logger)
-			nexus.AddHandlerLinks(ctx, links...)
-			return &nexus.HandlerStartOperationResultAsync{
-				OperationToken: token,
-			}, nil
-
-		case *nexuspb.StartOperationResponse_OperationError:
-			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("operation_error"))
-			oc.setFailureSource(commonnexus.FailureSourceWorker)
-			opErr := &nexus.OperationError{
-				Message: "operation error",
-				// nolint:staticcheck // Deprecated function still in use for backward compatibility.
-				State: nexus.OperationState(t.OperationError.GetOperationState()),
-				Cause: &nexus.FailureError{
-					// nolint:staticcheck // Deprecated function still in use for backward compatibility.
-					Failure: commonnexus.ProtoFailureToNexusFailure(t.OperationError.GetFailure()),
-				},
-			}
-			if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
-				oc.logger.Error("error converting OperationError to Nexus failure", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
-				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
-			}
-			return nil, opErr
-
-		case *nexuspb.StartOperationResponse_Failure:
-			// Set the failure source to "worker" if we've reached this case.
-			// Failure conversions errors below are the user's fault, as it implies that malformed completions were sent from
-			// the worker.
-			oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("failure"))
-			oc.setFailureSource(commonnexus.FailureSourceWorker)
-			nf, err := commonnexus.TemporalFailureToNexusFailure(t.Failure)
-			if err != nil {
-				oc.logger.Error("error converting Temporal failure to Nexus failure", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
-				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
-			}
-			cause, err := nexusrpc.DefaultFailureConverter().FailureToError(nf)
-			if err != nil {
-				oc.logger.Error("error converting Nexus failure to Nexus OperationError", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
-				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
-			}
-			state := nexus.OperationStateFailed
-			if t.Failure.GetCanceledFailureInfo() != nil {
-				state = nexus.OperationStateCanceled
-			}
-			opErr := &nexus.OperationError{
-				State:   state,
-				Message: "operation error",
-				Cause:   cause,
-			}
-			if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
-				oc.logger.Error("error converting OperationError to Nexus failure", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
-				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
-			}
-			return nil, opErr
-		}
 	}
-	// This is the worker's fault.
-	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:EMPTY_OUTCOME"))
-	oc.setFailureSource(commonnexus.FailureSourceWorker)
-
-	return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "empty outcome")
+	nexus.AddHandlerLinks(ctx, handlerLinks...)
+	return result, nil
 }
 
 func parseLinks(links []*nexuspb.Link, logger log.Logger) []nexus.Link {
@@ -590,7 +520,8 @@ func (h *nexusHandler) forwardStartOperation(
 	options nexus.StartOperationOptions,
 	oc *operationContext,
 ) (nexus.HandlerStartOperationResult[any], error) {
-	options.Header[interceptor.DCRedirectionApiHeaderName] = "true"
+	options.Header[interceptor.DCRedirectionAPIHeaderName] = "true"
+	options.Header[interceptor.DCRedirectionSourceCellHeaderName] = h.clusterMetadata.GetCurrentClusterName()
 
 	client, err := h.nexusClientForActiveCluster(oc, service)
 	if err != nil {
@@ -634,6 +565,8 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	}
 	ctx = oc.augmentContext(ctx, options.Header)
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
+	oc.enrichNexusOperationLogs(service, operation, "")
+	oc.annotateServerSpan(ctx, service, operation, "")
 	defer oc.capturePanicAndRecordMetrics(&ctx, &retErr)
 
 	request := oc.matchingRequest(&nexuspb.Request{
@@ -653,8 +586,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 		},
 	})
 	if err := oc.interceptRequest(ctx, request, options.Header); err != nil {
-		var notActiveErr *serviceerror.NamespaceNotActive
-		if errors.As(err, &notActiveErr) {
+		if _, ok := errors.AsType[*serviceerror.NamespaceNotActive](err); ok {
 			return h.forwardCancelOperation(ctx, service, operation, token, options, oc)
 		}
 		return err
@@ -665,50 +597,12 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	// RPC.
 	response, err := h.matchingClient.DispatchNexusTask(ctx, request)
 	if err != nil {
+		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("matching_timeout"))
 		oc.logger.Error("received error from matching service for Nexus CancelOperation request", tag.Error(err))
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 	// Convert to standard Nexus SDK response.
-	switch t := response.GetOutcome().(type) {
-	case *matchingservice.DispatchNexusTaskResponse_Failure:
-		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.Failure.GetNexusHandlerFailureInfo().GetType()))
-		// Set the failure source to "worker" if we've reached this case.
-		// Failure conversions errors below are the user's fault, as it implies that malformed completions were sent from
-		// the worker.
-		oc.setFailureSource(commonnexus.FailureSourceWorker)
-		nf, err := commonnexus.TemporalFailureToNexusFailure(t.Failure)
-		if err != nil {
-			oc.logger.Error("error converting Temporal failure to Nexus failure", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
-			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
-		}
-		he, err := nexusrpc.DefaultFailureConverter().FailureToError(nf)
-		if err != nil {
-			oc.logger.Error("error converting Nexus failure to Nexus HandlerError", tag.Error(err), tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
-			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error")
-		}
-		return he
-
-	case *matchingservice.DispatchNexusTaskResponse_HandlerError:
-		// Deprecated case. Replaced with DispatchNexusTaskResponse_Failure
-		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:" + t.HandlerError.GetErrorType()))
-		oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
-		err := convertOutcomeToNexusHandlerError(t)
-		return err
-
-	case *matchingservice.DispatchNexusTaskResponse_RequestTimeout:
-		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_timeout"))
-		oc.setFailureSource(commonnexus.FailureSourceWorker)
-		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
-
-	case *matchingservice.DispatchNexusTaskResponse_Response:
-		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("success"))
-		return nil
-	}
-	// This is the worker's fault.
-	oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("handler_error:EMPTY_OUTCOME"))
-	oc.nexusContext.setFailureSource(commonnexus.FailureSourceWorker)
-
-	return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "empty outcome")
+	return oc.handleCancelOperationResponse(response, operation)
 }
 
 func (h *nexusHandler) forwardCancelOperation(
@@ -719,7 +613,8 @@ func (h *nexusHandler) forwardCancelOperation(
 	options nexus.CancelOperationOptions,
 	oc *operationContext,
 ) error {
-	options.Header[interceptor.DCRedirectionApiHeaderName] = "true"
+	options.Header[interceptor.DCRedirectionAPIHeaderName] = "true"
+	options.Header[interceptor.DCRedirectionSourceCellHeaderName] = h.clusterMetadata.GetCurrentClusterName()
 
 	client, err := h.nexusClientForActiveCluster(oc, service)
 	if err != nil {
@@ -802,25 +697,6 @@ func (h *nexusHandler) nexusClientForActiveCluster(oc *operationContext, service
 		BaseURL:    baseURL,
 		Service:    service,
 	})
-}
-
-func convertOutcomeToNexusHandlerError(resp *matchingservice.DispatchNexusTaskResponse_HandlerError) *nexus.HandlerError {
-	var retryBehavior nexus.HandlerErrorRetryBehavior
-	// nolint:exhaustive // unspecified is the default
-	switch resp.HandlerError.RetryBehavior {
-	case enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_RETRYABLE:
-		retryBehavior = nexus.HandlerErrorRetryBehaviorRetryable
-	case enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_NON_RETRYABLE:
-		retryBehavior = nexus.HandlerErrorRetryBehaviorNonRetryable
-	}
-	// nolint:staticcheck // Deprecated function still in use for backward compatibility.
-	cause := commonnexus.ProtoFailureToNexusFailure(resp.HandlerError.GetFailure())
-	return &nexus.HandlerError{
-		// nolint:staticcheck // Deprecated function still in use for backward compatibility.
-		Type:          nexus.HandlerErrorType(resp.HandlerError.GetErrorType()),
-		RetryBehavior: retryBehavior,
-		Cause:         &nexus.FailureError{Failure: cause},
-	}
 }
 
 func (nc *nexusContext) setFailureSource(source string) {
