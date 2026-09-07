@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	nexusrpc "github.com/nexus-rpc/sdk-go/nexus"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -48,18 +49,17 @@ func (i *ServiceErrorInterceptor) Intercept(
 	return resp, i.transformError(err)
 }
 
-// InterceptNexus is a no-op: unlike the gRPC path, every error reaching the Nexus
-// chain is already converted to a *nexus.HandlerError/*nexus.OperationError at its
-// origin (see commonnexus.ConvertGRPCError call sites in nexus_handler.go and the
-// other Nexus interceptors), so there's nothing left for transformError to do. This
-// method exists only so ServiceErrorInterceptor keeps its chain position for parity
-// with the gRPC ordering.
 func (i *ServiceErrorInterceptor) InterceptNexus(
 	ctx context.Context,
 	in nexus.InterceptorInput,
 	next nexus.HandlerFunc,
 ) (any, error) {
-	return next(ctx, in)
+	resp, err := i.capturePanicHandlerNexus(ctx, in, next)
+	if ie, ok := errors.AsType[*nexus.InterceptorError](err); ok {
+		ie.Err = i.transformNexusError(ie.Err)
+		return resp, ie
+	}
+	return resp, i.transformNexusError(err)
 }
 
 func (i *ServiceErrorInterceptor) transformError(err error) error {
@@ -91,4 +91,28 @@ func (i *ServiceErrorInterceptor) capturePanicHandler(
 ) (_ any, retError error) {
 	defer metrics.CapturePanic(i.logger, i.metricsHandler, &retError)
 	return handler(ctx, req)
+}
+
+func (i *ServiceErrorInterceptor) capturePanicHandlerNexus(
+	ctx context.Context,
+	in nexus.InterceptorInput,
+	next nexus.HandlerFunc,
+) (_ any, retError error) {
+	defer metrics.CapturePanic(i.logger, i.metricsHandler, &retError)
+	return next(ctx, in)
+}
+
+// transformNexusError only normalizes gRPC-shaped errors. Nexus-native errors
+// are returned as-is to preserve existing mappings.
+func (i *ServiceErrorInterceptor) transformNexusError(err error) error {
+	if err == nil {
+		return nil
+	}
+	if _, ok := errors.AsType[*nexusrpc.HandlerError](err); ok {
+		return err
+	}
+	if _, ok := errors.AsType[*nexusrpc.OperationError](err); ok {
+		return err
+	}
+	return i.transformError(err)
 }

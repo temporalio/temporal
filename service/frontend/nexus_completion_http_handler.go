@@ -3,9 +3,12 @@ package frontend
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
+	"runtime/debug"
 	"strings"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -38,7 +41,6 @@ const nexusCompletionAPIName = configs.CompleteNexusOperation
 const nexusCompletionMethodName = "CompleteNexusOperation"
 
 type nexusCompletionHandler struct {
-	ClusterMetadata         cluster.Metadata
 	NamespaceRegistry       namespace.Registry
 	Logger                  log.Logger
 	MetricsHandler          metrics.Handler
@@ -47,8 +49,6 @@ type nexusCompletionHandler struct {
 	HistoryClient           resource.HistoryClient
 	RequestErrorHandler     *interceptor.RequestErrorHandler
 	AuthInterceptor         *authorization.Interceptor // required for parsing auth info, not used as an interceptor
-	HTTPTraceProvider       commonnexus.HTTPClientTraceProvider
-	clientVersionChecker    headers.VersionChecker
 	preProcessErrorsCounter metrics.CounterIface
 	chainedHandler          interceptornexus.HandlerFunc
 }
@@ -72,7 +72,6 @@ func newNexusCompletionHandler(
 ) *nexusCompletionHandler {
 
 	h := &nexusCompletionHandler{
-		ClusterMetadata:         clusterMetadata,
 		NamespaceRegistry:       namespaceRegistry,
 		Logger:                  log.With(logger, tag.NexusStageCallerInbound),
 		MetricsHandler:          metricsHandler,
@@ -81,8 +80,6 @@ func newNexusCompletionHandler(
 		HistoryClient:           historyClient,
 		RequestErrorHandler:     requestErrorHandler,
 		AuthInterceptor:         authInterceptor,
-		HTTPTraceProvider:       httpTraceProvider,
-		clientVersionChecker:    headers.NewDefaultVersionChecker(),
 		preProcessErrorsCounter: metricsHandler.Counter(metrics.NexusCompletionRequestPreProcessErrors.Name()),
 	}
 	h.chainedHandler = interceptornexus.ChainInterceptors(h.finalCompleteHandler, interceptorsProvider.NexusInterceptors())
@@ -102,6 +99,7 @@ func newNexusCompletionHTTPHandler(handler *nexusCompletionHandler) *nexusComple
 // CompleteOperation implements nexus.CompletionHandler.
 // nolint:revive // (cyclomatic complexity) This function is long but the complexity is justified.
 func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.CompletionRequest) (retErr error) {
+	requestStartTime := time.Now()
 	token, err := commonnexus.DecodeCallbackToken(r.HTTPRequest.Header.Get(commonnexus.CallbackTokenHeader))
 	if err != nil {
 		h.Logger.Error("failed to decode callback token", tag.Error(err))
@@ -144,7 +142,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 	rCtx := &requestContext{
 		nexusCompletionHandler: h,
 		namespace:              ns,
-		logger:                 log.With(h.Logger, tag.WorkflowNamespace(ns.Name().String())),
+		logger:                 logger,
 		metricsHandlerForInterceptors: h.MetricsHandler.WithTags(
 			metrics.OperationTag(nexusCompletionMethodName),
 			metrics.NamespaceTag(ns.Name().String()),
@@ -156,29 +154,51 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 	ctx = rCtx.augmentContext(ctx, r.HTTPRequest.Header)
 	defer finalizeCompletionRequest(rCtx, &retErr)
 
+	// recordBadRequest is for pre-interceptor chain error recording
+	recordBadRequest := func() {
+		metrics.NexusCompletionRequests.With(h.MetricsHandler).Record(
+			1,
+			metrics.NamespaceTag(ns.Name().String()),
+			metrics.OutcomeTag("error_bad_request"),
+		)
+	}
+
 	if r.HTTPRequest.URL.Path != commonnexus.PathCompletionCallbackNoIdentifier {
 		nsNameEscaped := commonnexus.RouteCompletionCallback.Deserialize(mux.Vars(r.HTTPRequest))
 		nsName, err := url.PathUnescape(nsNameEscaped)
 		if err != nil {
 			logger.Error("failed to extract namespace from request", tag.Error(err))
 			h.preProcessErrorsCounter.Record(1)
-			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid URL")
+			recordBadRequest()
+			return &interceptornexus.InterceptorError{
+				Err:                       nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid URL"),
+				SkipServiceErrorReporting: true,
+			}
 		}
 		if nsName != ns.Name().String() {
 			logger.Error(
 				"namespace in callback URL doesn't match the completion token",
 				tag.String("url-namespace", nsName),
 			)
-			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token")
+			recordBadRequest()
+			return &interceptornexus.InterceptorError{
+				Err:                       nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token"),
+				SkipServiceErrorReporting: true,
+			}
 		}
 	}
 	ctx, err = rCtx.parseTLSAndAuthInfo(ctx, r)
 	if err != nil {
-		return err
+		recordBadRequest()
+		return &interceptornexus.InterceptorError{
+			Err:                       err,
+			SkipServiceErrorReporting: true,
+		}
 	}
 
 	interceptorInput, err := interceptornexus.NewCompleteOpInput(
 		ns.Name().String(),
+		requestStartTime,
 		r,
 		completion,
 		interceptornexus.ForwardingInfo{
@@ -192,7 +212,11 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 	)
 	if err != nil {
 		logger.Error("invalid nexus completion request", tag.Error(err))
-		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid request")
+		recordBadRequest()
+		return &interceptornexus.InterceptorError{
+			Err:                       nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid request"),
+			SkipServiceErrorReporting: true,
+		}
 	}
 	ctx = withRequestContext(ctx, rCtx)
 	_, err = h.chainedHandler(ctx, interceptorInput)
@@ -252,7 +276,7 @@ func (h *nexusCompletionHandler) finalCompleteHandler(
 		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "cluster inactive")
 	}
 	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
-		return nil, &interceptornexus.InterceptorError{Err: err, Outcome: "error_not_found"}
+		return nil, &interceptornexus.InterceptorError{Err: err, Outcome: "error_not_found", ExposeDetails: true}
 	}
 	return nil, &interceptornexus.InterceptorError{Err: err, Outcome: "error_internal"}
 }
@@ -467,11 +491,12 @@ func (c *requestContext) handleRequestError(err error) {
 		return
 	}
 	if taggedErr, ok := errors.AsType[*interceptornexus.InterceptorError](err); ok {
+		if taggedErr.SkipServiceErrorReporting {
+			return
+		}
 		err = taggedErr.Err
 	}
 	c.RequestErrorHandler.HandleError(
-		// The request is only read to extract workflow log tags, which is keyed off the
-		// gRPC full method. Nexus has none, so it is never used.
 		nil,
 		"",
 		c.metricsHandlerForInterceptors,
@@ -485,7 +510,14 @@ func (c *requestContext) handleRequestError(err error) {
 // panic into errPtr, log/classify the (still raw) resulting error, then sanitize it for the
 // response. Order matters and must not be split back into separate defers.
 func finalizeCompletionRequest(rCtx *requestContext, errPtr *error) {
-	captureOperationPanic(rCtx.logger, errPtr)
+	if recovered := recover(); recovered != nil { //nolint:revive
+		err, ok := recovered.(error)
+		if !ok {
+			err = fmt.Errorf("panic: %v", recovered)
+		}
+		rCtx.logger.Error("Panic captured", tag.SysStackTrace(string(debug.Stack())), tag.Error(err))
+		*errPtr = err
+	}
 	rCtx.handleRequestError(*errPtr)
 	*errPtr = convertInterceptorError(*errPtr)
 }

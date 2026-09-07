@@ -156,12 +156,17 @@ func (nsvi *NamespaceStateValidatorInterceptor) InterceptNexus(
 	ns, err := in.NamespaceEntry()
 	if err != nil {
 		return nil, &nexus.InterceptorError{
-			Err:     err,
-			Outcome: "interceptor_failed",
+			Err:                       err,
+			Outcome:                   "interceptor_failed",
+			SkipServiceErrorReporting: true,
 		}
 	}
 	if len(ns.Info().GetName()) > nsvi.maxNamespaceLength() {
-		return nil, errNamespaceTooLong
+		return nil, &nexus.InterceptorError{
+			Err:                       errNamespaceTooLong,
+			Outcome:                   "interceptor_failed",
+			SkipServiceErrorReporting: true,
+		}
 	}
 
 	return next(ctx, in)
@@ -280,14 +285,16 @@ func (ni *NamespaceValidatorInterceptor) InterceptNexus(
 	namespaceEntry, err := in.NamespaceEntry()
 	if err != nil {
 		return nil, &nexus.InterceptorError{
-			Err:     err,
-			Outcome: "interceptor_failed",
+			Err:                       err,
+			Outcome:                   "interceptor_failed",
+			SkipServiceErrorReporting: true,
 		}
 	}
 	if err := ni.ValidateState(namespaceEntry, in.APIName(), in.ForwardingInfo().BusinessID); err != nil {
 		return nil, &nexus.InterceptorError{
-			Err:     err,
-			Outcome: "invalid_namespace_state",
+			Err:                       err,
+			Outcome:                   "invalid_namespace_state",
+			SkipServiceErrorReporting: true,
 		}
 	}
 	return next(ctx, in)

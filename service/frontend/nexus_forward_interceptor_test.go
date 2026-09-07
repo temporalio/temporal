@@ -8,7 +8,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
@@ -38,8 +40,10 @@ func TestNexusForwardingInterceptorInterceptNexus(t *testing.T) {
 		requestForwarded
 	)
 
-	// dummy server to simulate fowarded req
+	var receivedHeaders http.Header
+	// dummy server to simulate forwarded req
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, request *http.Request) {
+		receivedHeaders = request.Header.Clone()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		_, _ = fmt.Fprint(w, `{"token":"operation-token","state":"running"}`)
@@ -52,22 +56,11 @@ func TestNexusForwardingInterceptorInterceptNexus(t *testing.T) {
 			Scheme:  "http",
 		},
 	}}
-	options := nexus.StartOperationOptions{
-		Header: nexus.Header{"X-Request": "request"},
-	}
-	requestInput := nexus.NewLazyValue(nexus.DefaultSerializer(), &nexus.Reader{
-		ReadCloser: io.NopCloser(bytes.NewBufferString(`"input"`)),
-		Header:     nexus.Header{"type": "json"},
-	})
-	forwardingInfo := interceptornexus.ForwardingInfo{
-		OriginalRequestHeaders: http.Header{"X-Original": {"original"}},
-		TaskQueue:              "task-queue",
-	}
-
 	for _, tc := range []struct {
 		name            string
 		namespace       *namespace.Namespace
 		forwardingOn    bool
+		redirectAllowed *bool
 		expectedOutcome string
 		disposition     requestDisposition
 	}{
@@ -106,6 +99,20 @@ func TestNexusForwardingInterceptorInterceptNexus(t *testing.T) {
 			disposition:     requestFailed,
 		},
 		{
+			name: "global namespace with redirection disabled should fail",
+			namespace: namespace.NewNamespaceForTest(
+				&persistencespb.NamespaceInfo{Name: testNamespace},
+				nil,
+				true,
+				&persistencespb.NamespaceReplicationConfig{ActiveClusterName: remoteCluster, Clusters: []string{currentCluster, remoteCluster}},
+				0,
+			),
+			forwardingOn:    true,
+			redirectAllowed: new(false),
+			expectedOutcome: "namespace_inactive_forwarding_disabled",
+			disposition:     requestFailed,
+		},
+		{
 			name: "global namespace with forwarding enabled to unknown cluster fails",
 			namespace: namespace.NewNamespaceForTest(
 				&persistencespb.NamespaceInfo{Name: testNamespace},
@@ -120,6 +127,19 @@ func TestNexusForwardingInterceptorInterceptNexus(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			receivedHeaders = nil
+			options := nexus.StartOperationOptions{Header: nexus.Header{"X-Request": "request"}}
+			if tc.redirectAllowed != nil {
+				options.Header[interceptor.DCRedirectionContextHeaderName] = strconv.FormatBool(*tc.redirectAllowed)
+			}
+			requestInput := nexus.NewLazyValue(nexus.DefaultSerializer(), &nexus.Reader{
+				ReadCloser: io.NopCloser(bytes.NewBufferString(`"input"`)),
+				Header:     nexus.Header{"type": "json"},
+			})
+			forwardingInfo := interceptornexus.ForwardingInfo{
+				OriginalRequestHeaders: http.Header{"X-Original": {"original"}},
+				TaskQueue:              "task-queue",
+			}
 			forwarder := &nexusForwardingInterceptor{
 				logger:            log.NewNoopLogger(),
 				clusterMetadata:   metadata,
@@ -141,7 +161,7 @@ func TestNexusForwardingInterceptorInterceptNexus(t *testing.T) {
 				},
 			}
 			in := interceptornexus.NewStartOpInput(
-				"s", "o", testNamespace, options, requestInput,
+				"s", "o", testNamespace, time.Now(), options, requestInput,
 				forwardingInfo,
 				interceptornexus.RequestMetadata{NamespaceEntry: tc.namespace},
 			)
@@ -159,6 +179,7 @@ func TestNexusForwardingInterceptorInterceptNexus(t *testing.T) {
 				var interceptorErr *interceptornexus.InterceptorError
 				require.ErrorAs(t, err, &interceptorErr)
 				require.Equal(t, tc.expectedOutcome, interceptorErr.Outcome)
+				require.True(t, interceptorErr.SkipServiceErrorReporting)
 			} else {
 				require.NoError(t, err)
 			}
@@ -169,6 +190,8 @@ func TestNexusForwardingInterceptorInterceptNexus(t *testing.T) {
 				require.Equal(t, requestHandledLocally, result)
 			case requestForwarded:
 				require.IsType(t, &nexus.HandlerStartOperationResultAsync{}, result)
+				require.Equal(t, "true", receivedHeaders.Get(interceptor.DCRedirectionAPIHeaderName))
+				require.Equal(t, currentCluster, receivedHeaders.Get(interceptor.DCRedirectionSourceCellHeaderName))
 			case requestFailed:
 				require.Nil(t, result)
 			default:

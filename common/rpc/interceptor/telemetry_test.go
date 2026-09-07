@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/assert"
@@ -34,7 +35,7 @@ import (
 func TestTelemetryInterceptNexusOutermost(t *testing.T) {
 	extraTag := metrics.StringTag("configured", "tag")
 	input := interceptornexus.NewStartOpInput(
-		"s", "o", testNamespace, nexus.StartOperationOptions{}, nil,
+		"s", "o", testNamespace, time.Now(), nexus.StartOperationOptions{}, nil,
 		interceptornexus.ForwardingInfo{},
 		interceptornexus.RequestMetadata{MetricTags: []metrics.Tag{extraTag}},
 	)
@@ -71,13 +72,13 @@ func TestTelemetryInterceptNexusOutermost(t *testing.T) {
 		{
 			name:            "a short-circuiting interceptor overrides the success outcome",
 			handlerOut:      &nexus.HandlerStartOperationResultSync[any]{},
-			setOverride:     interceptornexus.OutcomeRequestForwarded,
+			setOverride:     "request_forwarded",
 			expectedOutcome: "request_forwarded",
 		},
 		{
 			name:            "an error outcome wins over the override",
 			handlerErr:      &interceptornexus.InterceptorError{Err: errors.New("forward failed"), Outcome: "forwarded_request_error"},
-			setOverride:     interceptornexus.OutcomeRequestForwarded,
+			setOverride:     "request_forwarded",
 			expectedOutcome: "forwarded_request_error",
 			expectedErrors:  1,
 		},
@@ -139,7 +140,7 @@ func TestTelemetryInterceptNexusRecordsNothing(t *testing.T) {
 	nextCalled := false
 	_, err := telemetry.InterceptNexus(
 		context.Background(),
-		interceptornexus.NewStartOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil, interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{}),
+		interceptornexus.NewStartOpInput("s", "o", testNamespace, time.Now(), nexus.StartOperationOptions{}, nil, interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{}),
 		func(context.Context, interceptornexus.InterceptorInput) (any, error) {
 			nextCalled = true
 			return nil, nil

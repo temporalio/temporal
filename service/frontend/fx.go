@@ -43,10 +43,12 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/grpcfaultstest"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
@@ -96,8 +98,6 @@ var Module = fx.Options(
 	fx.Provide(interceptor.NewRoutingKeyExtractor),
 	fx.Provide(BusinessIDInterceptorProvider),
 	fx.Provide(RedirectionInterceptorProvider),
-	fx.Provide(RedirectionSlotProvider),
-	fx.Provide(NewMetricsContextInjectorInterceptor),
 	fx.Provide(ErrorHandlerProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RetryableInterceptorProvider),
@@ -134,6 +134,7 @@ var Module = fx.Options(
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(newNexusForwardingInterceptor),
 	fx.Provide(interceptor.NewNamespaceRateLimitInterceptorWrapper),
+	fx.Provide(NewFaultsInterceptorProvider),
 	fx.Provide(NewInterceptorsProvider),
 	fx.Provide(newNexusCompletionHandler),
 	fx.Provide(NewNexusOperationHTTPHandler),
@@ -238,7 +239,6 @@ func (n *namespaceChecker) Exists(name namespace.Name) error {
 
 func GrpcServerOptionsProvider(
 	logger log.Logger,
-	cfg *config.Config,
 	serviceConfig *Config,
 	serviceName primitives.ServiceName,
 	rpcFactory common.RPCFactory,
@@ -248,8 +248,6 @@ func GrpcServerOptionsProvider(
 	metricsStatsHandler metrics.ServerStatsHandler,
 	authInterceptor *authorization.Interceptor,
 	customStreamInterceptors []grpc.StreamServerInterceptor,
-	metricsHandler metrics.Handler,
-	testHooks testhooks.TestHooks,
 ) GrpcServerOptions {
 	kep := keepalive.EnforcementPolicy{
 		MinTime:             serviceConfig.KeepAliveMinTime(),
@@ -347,20 +345,6 @@ func RetryableInterceptorProvider() *interceptor.RetryableInterceptor {
 		common.CreateFrontendHandlerRetryPolicy(),
 		common.IsServiceHandlerRetryableError,
 	)
-}
-
-func RedirectionSlotProvider(
-	redirectionInterceptor *interceptor.Redirection,
-	nexusForwarder *nexusForwardingInterceptor,
-) *redirectionWrapper {
-	return &redirectionWrapper{
-		grpc:  redirectionInterceptor,
-		nexus: nexusForwarder,
-	}
-}
-
-func NewMetricsContextInjectorInterceptor() *metricsCtxInjectorInterceptor {
-	return &metricsCtxInjectorInterceptor{}
 }
 
 func RedirectionInterceptorProvider(
@@ -757,6 +741,12 @@ func FEReplicatorNamespaceReplicationQueueProvider(
 		replicatorNamespaceReplicationQueue = namespaceReplicationQueue
 	}
 	return replicatorNamespaceReplicationQueue
+}
+
+func NewFaultsInterceptorProvider(hooks testhooks.TestHooks) *grpcfaults.FaultsInterceptor {
+	return grpcfaults.NewFaultsInterceptor(
+		grpcfaultstest.NewGenerator(hooks),
+	)
 }
 
 func ServiceResolverProvider(

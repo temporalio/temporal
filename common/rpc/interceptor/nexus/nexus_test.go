@@ -2,10 +2,34 @@ package nexus
 
 import (
 	"context"
+	"net/http"
 	"testing"
+	"time"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 )
+
+func TestInterceptorInputRequest(t *testing.T) {
+	dispatchRequest := &http.Request{Method: http.MethodPost}
+	requestStartTime := time.Date(2026, time.May, 5, 17, 0, 0, 123456789, time.UTC)
+	requestMetadata := RequestMetadata{Request: dispatchRequest}
+	inputs := []InterceptorInput{
+		NewStartOpInput("s", "o", "n", requestStartTime, nexus.StartOperationOptions{}, nil, ForwardingInfo{}, requestMetadata),
+		NewCancelOpInput("s", "o", "n", requestStartTime, nexus.CancelOperationOptions{}, "t", ForwardingInfo{}, requestMetadata),
+	}
+	for _, input := range inputs {
+		require.Same(t, dispatchRequest, input.Request())
+		require.True(t, input.StartTime().Equal(requestStartTime))
+	}
+
+	completionRequest := &nexusrpc.CompletionRequest{HTTPRequest: &http.Request{}}
+	completionInput, err := NewCompleteOpInput("n", requestStartTime, completionRequest, nil, ForwardingInfo{}, RequestMetadata{})
+	require.NoError(t, err)
+	require.Same(t, completionRequest, completionInput.Request())
+	require.True(t, completionInput.StartTime().Equal(requestStartTime))
+}
 
 func TestChainNexusInterceptors(t *testing.T) {
 	var calls []string

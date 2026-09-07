@@ -52,7 +52,6 @@ func NewNexusOperationHTTPHandler(
 	matchingClient resource.MatchingClient,
 	metricsHandler metrics.Handler,
 	clusterMetadata cluster.Metadata,
-	clientCache *cluster.FrontendHTTPClientCache,
 	namespaceRegistry namespace.Registry,
 	endpointRegistry commonnexus.EndpointRegistry,
 	authInterceptor *authorization.Interceptor,
@@ -60,7 +59,6 @@ func NewNexusOperationHTTPHandler(
 	requestErrorHandler *interceptor.RequestErrorHandler,
 	interceptorsProvider *InterceptorsProvider,
 	logger log.Logger,
-	httpTraceProvider commonnexus.HTTPClientTraceProvider,
 	httpServerHandlerInstrumenter telemetry.HTTPServerHandlerInstrumenter,
 ) *NexusOperationHTTPHandler {
 	logger = log.With(logger, tag.NexusStageHandlerInbound)
@@ -87,9 +85,7 @@ func NewNexusOperationHTTPHandler(
 				requestErrorHandler,
 				serviceConfig.BlobSizeLimitError,
 				serviceConfig.NexusRequestHeadersBlacklist,
-				serviceConfig.NexusForwardRequestUseEndpoint,
 				serviceConfig.NexusOperationsMetricTagConfig,
-				httpTraceProvider,
 				interceptorsProvider.NexusInterceptors(),
 			),
 			GetResultTimeout: serviceConfig.KeepAliveMaxConnectionIdle(),
@@ -150,7 +146,7 @@ func (h *NexusOperationHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w h
 		return
 	}
 
-	rWithAuthCtx, err := h.parseTLSAndAuthInfo(r, nc)
+	rWithAuthCtx, err := h.parseTLSAndAuthInfo(r)
 	if err != nil {
 		logger.Error("failed to get claims", tag.Error(err))
 		h.writeFailure(w, r, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnauthenticated, "unauthorized"))
@@ -213,7 +209,7 @@ func (h *NexusOperationHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseW
 		return
 	}
 
-	rWithAuthCtx, err := h.parseTLSAndAuthInfo(r, nc)
+	rWithAuthCtx, err := h.parseTLSAndAuthInfo(r)
 	if err != nil {
 		logger.Error("failed to get claims", tag.Error(err))
 		h.writeFailure(w, r, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnauthenticated, "unauthorized"))
@@ -293,7 +289,7 @@ func prepareRequest[T any](route routing.Route[T], w http.ResponseWriter, r *htt
 	return route.Deserialize(vars)
 }
 
-func (h *NexusOperationHTTPHandler) parseTLSAndAuthInfo(r *http.Request, nc *nexusContext) (*http.Request, error) {
+func (h *NexusOperationHTTPHandler) parseTLSAndAuthInfo(r *http.Request) (*http.Request, error) {
 	var tlsInfo *credentials.TLSInfo
 	if r.TLS != nil {
 		tlsInfo = &credentials.TLSInfo{

@@ -98,7 +98,6 @@ func NewNamespaceRateLimitInterceptorWrapper(ni NamespaceRateLimitInterceptor) *
 }
 
 // NamespaceRateLimitInterceptorWrapper is a wrapper on namespace rate limiter
-// draft-review: should this interim be removed in favor of a lock step impl w/ deps
 type NamespaceRateLimitInterceptorWrapper struct {
 	ni NamespaceRateLimitInterceptor
 }
@@ -119,8 +118,9 @@ func (n *NamespaceRateLimitInterceptorWrapper) InterceptNexus(
 ) (out any, retErr error) {
 	if err := n.ni.Allow(ctx, namespace.Name(in.NamespaceName()), in.APIName(), in.Header()); err != nil {
 		return nil, &nexus.InterceptorError{
-			Err:     err,
-			Outcome: "namespace_rate_limited",
+			Err:           err,
+			Outcome:       "namespace_rate_limited",
+			ExposeDetails: true,
 		}
 	}
 	return next(ctx, in)

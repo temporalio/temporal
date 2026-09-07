@@ -35,6 +35,7 @@ func NewFrontendServiceErrorInterceptorWrapper(logger log.Logger) *FrontendServi
 	}
 }
 
+// NewFrontendServiceErrorInterceptor provides the legacy standalone gRPC Interceptor for existing deployments.
 func NewFrontendServiceErrorInterceptor(logger log.Logger) grpc.UnaryServerInterceptor {
 	t := NewFrontendServiceErrorInterceptorWrapper(logger)
 	return t.Intercept

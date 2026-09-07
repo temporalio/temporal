@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/assert"
@@ -153,7 +154,7 @@ func TestConcurrentRequestLimitInterceptor_InterceptNexus(t *testing.T) {
 		map[string]int{"NexusAPI": 1},
 	)
 	input := interceptornexus.NewStartOpInput(
-		"s", "o", testNamespace, nexus.StartOperationOptions{}, nil,
+		"s", "o", testNamespace, time.Now(), nexus.StartOperationOptions{}, nil,
 		interceptornexus.ForwardingInfo{},
 		interceptornexus.RequestMetadata{APIName: "NexusAPI"},
 	)

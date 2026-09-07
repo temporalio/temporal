@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
@@ -131,6 +132,7 @@ func (s *callerInfoSuite) TestIntercept_CallerName() {
 func (s *callerInfoSuite) TestInterceptNexus() {
 	completeInput, err := interceptornexus.NewCompleteOpInput(
 		testNamespace,
+		time.Now(),
 		&nexusrpc.CompletionRequest{HTTPRequest: &http.Request{}},
 		nil,
 		interceptornexus.ForwardingInfo{},
@@ -145,12 +147,12 @@ func (s *callerInfoSuite) TestInterceptNexus() {
 	}{
 		{
 			name:           "start",
-			input:          interceptornexus.NewStartOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil, interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{}),
+			input:          interceptornexus.NewStartOpInput("s", "o", testNamespace, time.Now(), nexus.StartOperationOptions{}, nil, interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{}),
 			expectedOrigin: "StartNexusOperation",
 		},
 		{
 			name:       "cancel - preserves background origin",
-			input:      interceptornexus.NewCancelOpInput("s", "o", testNamespace, nexus.CancelOperationOptions{}, "t", interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{}),
+			input:      interceptornexus.NewCancelOpInput("s", "o", testNamespace, time.Now(), nexus.CancelOperationOptions{}, "t", interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{}),
 			callerInfo: headers.SystemBackgroundHighCallerInfo,
 		},
 		{

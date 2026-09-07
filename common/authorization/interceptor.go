@@ -166,6 +166,7 @@ func (a *Interceptor) InterceptNexus(
 	next nexus.HandlerFunc,
 ) (any, error) {
 	a.logger.Debug("authorizing request")
+	ctx = headers.StripPrincipal(ctx)
 	if a.authorizer == nil {
 		return next(ctx, in)
 	}
@@ -173,31 +174,36 @@ func (a *Interceptor) InterceptNexus(
 	apiName := in.APIName()
 	endpointName := in.EndpointName()
 	claims, _ := ctx.Value(MappedClaims).(*Claims) //nolint:revive // unchecked-type-assertion: empty claims will 403
-	// draft-review: check if this might be required to preserve compatibility for custom authorizers
-	// or if its ok since an interface was not already used instead
-	// switch in.(type) {
-	// case nexus.StartOpInput, nexus.CancelOpInput:
-	// case *nexus.CancelOpInput:
-	// }
 	ct := &CallTarget{
 		APIName:           apiName,
 		NexusEndpointName: endpointName,
 		Namespace:         namespaceName,
-		Request:           in,
+		Request:           in.Request(),
 	}
 	principal, err := a.Authorize(ctx, claims, ct)
 	if err != nil {
 		if permissionDeniedError, ok := errors.AsType[*serviceerror.PermissionDenied](err); ok {
 			a.logger.Debug("Request unauthorized")
 			return nil, &nexus.InterceptorError{
-				Err:     commonnexus.AdaptAuthorizeError(permissionDeniedError),
-				Outcome: "unauthorized",
+				Err:                       commonnexus.AdaptAuthorizeError(permissionDeniedError),
+				Outcome:                   "unauthorized",
+				SkipServiceErrorReporting: true,
 			}
 		}
-		a.logger.Error("Authorization internal error with processing nexus request", tag.Error(err))
+		logTags := []tag.Tag{
+			tag.Operation(apiName),
+			tag.WorkflowNamespace(namespaceName),
+			tag.Endpoint(endpointName),
+			tag.Error(err),
+		}
+		if operationName := in.OperationName(); operationName != "" {
+			logTags = append(logTags, tag.NexusOperation(operationName))
+		}
+		a.logger.Error("Authorization internal error with processing nexus request", logTags...)
 		return nil, &nexus.InterceptorError{
-			Err:     err,
-			Outcome: "internal_auth_error",
+			Err:                       err,
+			Outcome:                   "internal_auth_error",
+			SkipServiceErrorReporting: true,
 		}
 	}
 	if a.enablePrincipalPropagation != nil && a.enablePrincipalPropagation(namespaceName) && principal != nil {

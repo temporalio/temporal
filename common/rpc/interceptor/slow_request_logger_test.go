@@ -73,7 +73,7 @@ func (s *slowRequestLoggerSuite) TestIntercept() {
 	s.NoError(err)
 
 	// Ensure slow requests are logged.
-	expectedMsg := "Slow gRPC call"
+	expectedMsg := "Slow request"
 	s.logger.EXPECT().Warn(gomock.Eq(expectedMsg), gomock.Any()).Times(1)
 	_, err = s.interceptor.Intercept(ctx, request, info, slowHandler)
 	s.NoError(err)
@@ -120,6 +120,7 @@ func (s *slowRequestLoggerSuite) TestInterceptNexus() {
 		"test-service",
 		"user-defined-operation",
 		"namespace-name",
+		time.Now(),
 		nexus.StartOperationOptions{},
 		nil,
 		interceptornexus.ForwardingInfo{},
@@ -131,7 +132,7 @@ func (s *slowRequestLoggerSuite) TestInterceptNexus() {
 	s.Require().NoError(err)
 
 	// Ensure slow requests are logged.
-	s.logger.EXPECT().Warn(gomock.Eq("Slow gRPC call"), gomock.Any()).Times(1)
+	s.logger.EXPECT().Warn(gomock.Eq("Slow request"), gomock.Any()).Times(1)
 	_, err = s.interceptor.InterceptNexus(ctx, input, slowNext)
 	s.Require().NoError(err)
 }

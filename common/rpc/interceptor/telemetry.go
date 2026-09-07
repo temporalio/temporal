@@ -231,15 +231,16 @@ func (ti *TelemetryInterceptor) InterceptNexusOutermost(
 	// chain (e.g. request forwarding) can still override the derived success outcome.
 	ctx, outcomeOverride := nexus.NewOutcomeOverrideContext(ctx)
 
-	startTime := time.Now().UTC()
-	outcome, failed := nexus.OutcomeInternalError, true
+	startTime := in.StartTime()
+	outcome, failed := "internal_error", true
+	ctx = metrics.AddMetricsContext(ctx)
 	defer func() {
 		ti.RecordLatencyMetrics(ctx, startTime, serviceHandler)
 		ti.recordNexusRequest(in, startTime, outcome, failed)
 	}()
 
 	out, err := next(ctx, in)
-	outcome, failed = nexus.Outcome(in, out, err), err != nil
+	outcome, failed = in.Outcome(out, err), err != nil
 
 	// override outcome if its set - for request forwarding cases.
 	// error cases are captured by the wrapped InterceptorError

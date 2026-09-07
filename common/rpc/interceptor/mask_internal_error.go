@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	nexusrpc "github.com/nexus-rpc/sdk-go/nexus"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/api"
@@ -70,10 +71,10 @@ func (mi *MaskInternalErrorDetailsInterceptor) InterceptNexus(
 		return resp, err
 	}
 	if ie, ok := errors.AsType[*nexus.InterceptorError](err); ok {
-		ie.Err = mi.maskUnknownOrInternalErrors(in, in.APIName(), ie.Err)
+		ie.Err = mi.maskNexusError(in, ie.Err)
 		err = ie
 	} else {
-		err = mi.maskUnknownOrInternalErrors(in, in.APIName(), err)
+		err = mi.maskNexusError(in, err)
 	}
 	return resp, err
 }
@@ -84,6 +85,19 @@ func (mi *MaskInternalErrorDetailsInterceptor) shouldMaskErrors(req any) bool {
 		return false
 	}
 	return mi.maskInternalError(ns.String())
+}
+
+func (mi *MaskInternalErrorDetailsInterceptor) maskNexusError(in nexus.InterceptorInput, err error) error {
+	if _, ok := errors.AsType[*nexusrpc.HandlerError](err); ok {
+		return err
+	}
+	if _, ok := errors.AsType[*nexusrpc.OperationError](err); ok {
+		return err
+	}
+	if _, ok := common.GetRPCStatus(err); !ok {
+		return err
+	}
+	return mi.maskUnknownOrInternalErrors(in, in.APIName(), err)
 }
 
 func (mi *MaskInternalErrorDetailsInterceptor) maskUnknownOrInternalErrors(

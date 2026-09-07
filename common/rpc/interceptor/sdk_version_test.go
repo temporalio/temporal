@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/assert"
@@ -102,7 +103,7 @@ func TestSDKVersionInterceptNexus(t *testing.T) {
 			nextCalled := false
 			_, err := interceptor.InterceptNexus(
 				tc.ctx,
-				interceptornexus.NewStartOpInput("s", "o", testNamespace, nexus.StartOperationOptions{}, nil, interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{}),
+				interceptornexus.NewStartOpInput("s", "o", testNamespace, time.Now(), nexus.StartOperationOptions{}, nil, interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{}),
 				func(context.Context, interceptornexus.InterceptorInput) (any, error) {
 					nextCalled = true
 					return nil, nil

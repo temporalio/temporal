@@ -9,8 +9,6 @@ import (
 	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/rpc/interceptor/nexus"
-	"go.temporal.io/server/common/testing/grpcfaultstest"
-	"go.temporal.io/server/common/testing/testhooks"
 	"google.golang.org/grpc"
 )
 
@@ -32,11 +30,8 @@ type Interceptor interface {
 }
 
 type InterceptorsProvider struct {
-	interceptors           []Interceptor
-	nexusTelemetry         nexus.Interceptor                 // required to be first in the Nexus chain
-	retryableInterceptor   *interceptor.RetryableInterceptor // required to be last in chain after custom interceptors
-	customGRPCInterceptors []grpc.UnaryServerInterceptor     // required for legacy reasons
-	faultGenerator         grpcfaults.Generator
+	interceptors   []Interceptor
+	nexusTelemetry nexus.Interceptor // required to be first in the Nexus chain
 }
 
 func NewInterceptorsProvider(
@@ -46,10 +41,10 @@ func NewInterceptorsProvider(
 	businessIDInterceptor *interceptor.RoutingKeyInterceptor,
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
 	namespaceLogInterceptor *interceptor.NamespaceLogInterceptor,
-	metricsCtxInjectorInterceptor *metricsCtxInjectorInterceptor,
 	authInterceptor *authorization.Interceptor,
 	namespaceHandoverInterceptor *interceptor.NamespaceHandoverInterceptor,
-	redirectionSlot *redirectionWrapper,
+	redirectionInterceptor *interceptor.Redirection,
+	nexusForwarder *nexusForwardingInterceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	healthInterceptor *interceptor.HealthInterceptor,
 	namespaceStateValidatorInterceptor *interceptor.NamespaceStateValidatorInterceptor,
@@ -63,10 +58,26 @@ func NewInterceptorsProvider(
 	contextMetadataInterceptor *interceptor.ContextMetadataInterceptor,
 	customGRPCInterceptors []grpc.UnaryServerInterceptor,
 	customInterceptors []Interceptor,
-	testHooks testhooks.TestHooks,
 	retryableInterceptor *interceptor.RetryableInterceptor,
+	faultsInterceptor *grpcfaults.FaultsInterceptor,
 ) *InterceptorsProvider {
 
+	metricsCtxInjectorInterceptor := &interceptorWrapper{
+		grpcInterceptor:  metrics.NewServerMetricsContextInjectorInterceptor(),
+		nexusInterceptor: nexusNoOpInterceptor, // added by telemetryInterceptor.InterceptNexusOutermost
+	}
+
+	// redirectionWrapper is one chain position for both transports: gRPC DC redirection
+	// and Nexus HTTP forwarding. The implementations stay separate but are wrapped together
+	// for canonical ordering of interceptors for both gRPC and Nexus
+	redirectionWrapper := &interceptorWrapper{
+		grpcInterceptor:  redirectionInterceptor.Intercept,
+		nexusInterceptor: nexusForwarder.InterceptNexus,
+	}
+
+	// Order is important. Error interceptors must stay outermost, routing must precede namespace
+	// access, and telemetry must follow redirection to attribute requests to the serving cluster.
+	// Nexus interceptors outward of error producers must preserve InterceptorError.
 	interceptors := []Interceptor{
 		maskInternalErrorDetailsInterceptor,
 		serviceErrorInterceptor,
@@ -77,7 +88,7 @@ func NewInterceptorsProvider(
 		metricsCtxInjectorInterceptor,
 		authInterceptor,
 		namespaceHandoverInterceptor,
-		redirectionSlot,
+		redirectionWrapper,
 		telemetryInterceptor,
 		healthInterceptor,
 		namespaceValidatorInterceptor,
@@ -90,37 +101,33 @@ func NewInterceptorsProvider(
 		chasmRequestVisibilityInterceptor,
 		contextMetadataInterceptor,
 	}
-	// it is debatable if this should be *after* customGRPCInterceptors that are
-	// in use today. We will opt for this instead because relative ordering remains
-	// unchanged and anyone using customInterceptors should deprecate customGRPCInterceptors entirely
+	for _, grpcInterceptor := range customGRPCInterceptors {
+		interceptors = append(interceptors, &interceptorWrapper{
+			grpcInterceptor:  grpcInterceptor,
+			nexusInterceptor: nexusNoOpInterceptor,
+		})
+	}
 	interceptors = append(interceptors, customInterceptors...)
 
+	interceptors = append(interceptors, faultsInterceptor)
+	interceptors = append(interceptors, retryableInterceptor)
+
 	return &InterceptorsProvider{
-		interceptors:           interceptors,
-		nexusTelemetry:         telemetryInterceptor.InterceptNexusOutermost,
-		customGRPCInterceptors: customGRPCInterceptors,
-		retryableInterceptor:   retryableInterceptor,
-		faultGenerator:         grpcfaultstest.NewGenerator(testHooks),
+		interceptors:   interceptors,
+		nexusTelemetry: telemetryInterceptor.InterceptNexusOutermost,
 	}
 }
 
 func (n *InterceptorsProvider) GrpcInterceptors() []grpc.UnaryServerInterceptor {
-	grpcInterceptors := make([]grpc.UnaryServerInterceptor, 0, len(n.interceptors)+len(n.customGRPCInterceptors)+1)
+	grpcInterceptors := make([]grpc.UnaryServerInterceptor, 0, len(n.interceptors))
 	for _, i := range n.interceptors {
 		grpcInterceptors = append(grpcInterceptors, i.Intercept)
-	}
-	// custom interceptors chain after system interceptors
-	grpcInterceptors = append(grpcInterceptors, n.customGRPCInterceptors...)
-	grpcInterceptors = append(grpcInterceptors, n.retryableInterceptor.Intercept)
-
-	if faultInterceptor := grpcfaults.UnaryServerInterceptor(n.faultGenerator); faultInterceptor != nil {
-		grpcInterceptors = append(grpcInterceptors, faultInterceptor)
 	}
 	return grpcInterceptors
 }
 
 func (n *InterceptorsProvider) NexusInterceptors() []nexus.Interceptor {
-	nexusInterceptors := make([]nexus.Interceptor, 0, len(n.interceptors)+2)
+	nexusInterceptors := make([]nexus.Interceptor, 0, len(n.interceptors)+1)
 	// telemetry is the outermost in chain for Nexus requests to allow recording
 	// all metrics and retain behavior. In the future, gRPC will also move telemetry
 	// to outermost after an impact evaluation- this will allow gRPC to also capture
@@ -129,55 +136,35 @@ func (n *InterceptorsProvider) NexusInterceptors() []nexus.Interceptor {
 	for _, i := range n.interceptors {
 		nexusInterceptors = append(nexusInterceptors, i.InterceptNexus)
 	}
-
-	nexusInterceptors = append(nexusInterceptors, n.retryableInterceptor.InterceptNexus)
 	return nexusInterceptors
 }
 
-// redirectionWrapper is one chain position for both transports: gRPC DC redirection
-// and Nexus HTTP forwarding. The implementations stay separate but are wrapped together
-// for canonical ordering of interceptors for both gRPC and Nexus
-type redirectionWrapper struct {
-	grpc  *interceptor.Redirection
-	nexus *nexusForwardingInterceptor
+type interceptorWrapper struct {
+	grpcInterceptor  grpc.UnaryServerInterceptor
+	nexusInterceptor nexus.Interceptor
 }
 
-func (s *redirectionWrapper) Intercept(
+func (i interceptorWrapper) Intercept(
 	ctx context.Context,
 	req any,
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (any, error) {
-	return s.grpc.Intercept(ctx, req, info, handler)
+	return i.grpcInterceptor(ctx, req, info, handler)
 }
 
-func (s *redirectionWrapper) InterceptNexus(
+func (i interceptorWrapper) InterceptNexus(
 	ctx context.Context,
 	in nexus.InterceptorInput,
 	next nexus.HandlerFunc,
 ) (any, error) {
-	return s.nexus.InterceptNexus(ctx, in, next)
+	return i.nexusInterceptor(ctx, in, next)
 }
 
-// tiny wrapper to inject metrics context and avoid
-// cyclical dependencies in metrics/interceptors packages
-type metricsCtxInjectorInterceptor struct{}
-
-func (m *metricsCtxInjectorInterceptor) Intercept(
-	ctx context.Context,
-	req any,
-	info *grpc.UnaryServerInfo,
-	handler grpc.UnaryHandler,
-) (any, error) {
-	ctxWithMetricsBaggage := metrics.AddMetricsContext(ctx)
-	return handler(ctxWithMetricsBaggage, req)
-}
-
-func (m *metricsCtxInjectorInterceptor) InterceptNexus(
+func nexusNoOpInterceptor(
 	ctx context.Context,
 	in nexus.InterceptorInput,
 	next nexus.HandlerFunc,
 ) (any, error) {
-	ctxWithMetricsBaggage := metrics.AddMetricsContext(ctx)
-	return next(ctxWithMetricsBaggage, in)
+	return next(ctx, in)
 }

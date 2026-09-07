@@ -132,6 +132,12 @@ func (so *serverOptions) loadConfig() error {
 }
 
 func (so *serverOptions) validateConfig() error {
+	if len(so.customFrontendInterceptors) > 0 &&
+		len(so.customFrontendUnifiedInterceptors) > 0 {
+		// Both could be supported as a migration path but intentionally avoided as
+		// migration itself is as simple as wrapping with no-op Nexus Interceptors.
+		return errors.New("configure either custom gRPC or unified interceptors, not both")
+	}
 	if err := so.config.Validate(); err != nil {
 		return err
 	}

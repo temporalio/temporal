@@ -202,6 +202,8 @@ func WithSearchAttributesMapper(m searchattribute.Mapper) ServerOption {
 // Frontend gRPC API calls. The list of custom interceptors will be appended to the end of the internal
 // ServerInterceptors. The custom interceptors will be invoked in the order as they appear in the supplied list, after
 // the internal ServerInterceptors.
+//
+// Deprecated: Use WithChainedFrontendInterceptors instead.
 func WithChainedFrontendGrpcInterceptors(
 	interceptors ...grpc.UnaryServerInterceptor,
 ) ServerOption {
@@ -211,9 +213,8 @@ func WithChainedFrontendGrpcInterceptors(
 }
 
 // WithChainedFrontendInterceptors sets an ordered chain of custom gRPC+Nexus interceptors that will be invoked for all
-// Frontend gRPC and Nexus API calls respectively. The list of custom interceptors will be appended to the end of the internal
-// ServerInterceptors. The custom interceptors will be invoked in the order as they appear in the supplied list, after
-// the internal ServerInterceptors.
+// Frontend gRPC and Nexus API calls respectively. Custom interceptors run after the internal
+// interceptors and before the fault-injection and retryable interceptors, in the order supplied.
 func WithChainedFrontendInterceptors(
 	interceptors ...frontend.Interceptor,
 ) ServerOption {

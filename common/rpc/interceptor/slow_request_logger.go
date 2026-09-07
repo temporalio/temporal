@@ -81,5 +81,5 @@ func (i *SlowRequestLoggerInterceptor) logSlowRequest(
 	tags = append(tags, tag.Duration("duration", elapsed))
 	tags = append(tags, tag.String("method", method))
 
-	i.logger.Warn("Slow gRPC call", tags...)
+	i.logger.Warn("Slow request", tags...)
 }

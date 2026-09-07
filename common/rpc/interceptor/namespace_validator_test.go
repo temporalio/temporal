@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -129,7 +130,7 @@ func (s *namespaceValidatorSuite) TestInterceptNexus() {
 		{
 			name: "resolved namespace",
 			input: interceptornexus.NewStartOpInput(
-				"s", "o", testNamespace, nexus.StartOperationOptions{}, nil,
+				"s", "o", testNamespace, time.Now(), nexus.StartOperationOptions{}, nil,
 				interceptornexus.ForwardingInfo{},
 				interceptornexus.RequestMetadata{
 					APIName: api.NexusServicePrefix + "DispatchNexusTask",
@@ -147,7 +148,7 @@ func (s *namespaceValidatorSuite) TestInterceptNexus() {
 		{
 			name: "invalid namespace state",
 			input: interceptornexus.NewStartOpInput(
-				"s", "o", testNamespace, nexus.StartOperationOptions{}, nil,
+				"s", "o", testNamespace, time.Now(), nexus.StartOperationOptions{}, nil,
 				interceptornexus.ForwardingInfo{},
 				interceptornexus.RequestMetadata{
 					APIName: api.NexusServicePrefix + "DispatchNexusTask",
@@ -165,7 +166,7 @@ func (s *namespaceValidatorSuite) TestInterceptNexus() {
 		{
 			name: "missing namespace",
 			input: interceptornexus.NewStartOpInput(
-				"s", "o", testNamespace, nexus.StartOperationOptions{}, nil,
+				"s", "o", testNamespace, time.Now(), nexus.StartOperationOptions{}, nil,
 				interceptornexus.ForwardingInfo{},
 				interceptornexus.RequestMetadata{APIName: "NexusAPI"},
 			),
@@ -186,6 +187,7 @@ func (s *namespaceValidatorSuite) TestInterceptNexus() {
 				var interceptorErr *interceptornexus.InterceptorError
 				s.ErrorAs(err, &interceptorErr)
 				s.Equal(tc.expectedOutcome, interceptorErr.Outcome)
+				s.True(interceptorErr.SkipServiceErrorReporting)
 			} else {
 				s.NoError(err)
 			}

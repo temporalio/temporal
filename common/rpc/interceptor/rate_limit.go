@@ -100,8 +100,9 @@ func (i *RateLimitInterceptor) InterceptNexus(
 ) (any, error) {
 	if err := i.Allow(in.APIName(), in.Header()); err != nil {
 		return nil, &nexus.InterceptorError{
-			Err:     err,
-			Outcome: "global_rate_limited",
+			Err:           err,
+			Outcome:       "global_rate_limited",
+			ExposeDetails: true,
 		}
 	}
 	return next(ctx, in)

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
@@ -17,6 +18,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
@@ -72,23 +74,26 @@ func TestAuthorizerInterceptorSuite(t *testing.T) {
 
 func (s *authorizerInterceptorSuite) TestInterceptNexus() {
 	apiName, endpoint := "NexusAPI", "endpoint"
+	authorizationRequest := &matchingservice.DispatchNexusTaskRequest{}
 	input := interceptornexus.NewStartOpInput(
 		"s",
 		"o",
 		testNamespace,
+		time.Now(),
 		nexus.StartOperationOptions{},
 		nil,
 		interceptornexus.ForwardingInfo{},
 		interceptornexus.RequestMetadata{
 			APIName:      apiName,
 			EndpointName: endpoint,
+			Request:      authorizationRequest,
 		},
 	)
 	expectedTarget := &CallTarget{
 		APIName:           apiName,
 		NexusEndpointName: endpoint,
 		Namespace:         testNamespace,
-		Request:           input,
+		Request:           authorizationRequest,
 	}
 	for _, tc := range []struct {
 		name                string
@@ -108,8 +113,9 @@ func (s *authorizerInterceptorSuite) TestInterceptNexus() {
 			ctx:                 context.Background(),
 			authorizationResult: &Result{Decision: DecisionDeny},
 			expectedError: &interceptornexus.InterceptorError{
-				Err:     nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnauthorized, "permission denied"),
-				Outcome: "unauthorized",
+				Err:                       nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnauthorized, "permission denied"),
+				Outcome:                   "unauthorized",
+				SkipServiceErrorReporting: true,
 			},
 		},
 	} {

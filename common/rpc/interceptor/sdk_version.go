@@ -51,15 +51,15 @@ func (vi *SDKVersionInterceptor) InterceptNexus(
 	in nexus.InterceptorInput,
 	next nexus.HandlerFunc,
 ) (any, error) {
-	// draft-review: RecordSDKInfo didnt exist before, nice to add
 	sdkName, sdkVersion := headers.GetClientNameAndVersion(ctx)
 	if sdkName != "" && sdkVersion != "" {
 		vi.RecordSDKInfo(sdkName, sdkVersion)
 	}
 	if err := vi.versionChecker.ClientSupported(ctx); err != nil {
 		return nil, &nexus.InterceptorError{
-			Err:     err,
-			Outcome: "unsupported_client",
+			Err:           err,
+			Outcome:       "unsupported_client",
+			ExposeDetails: true,
 		}
 	}
 	return next(ctx, in)

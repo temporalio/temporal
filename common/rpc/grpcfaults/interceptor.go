@@ -3,6 +3,7 @@ package grpcfaults
 import (
 	"context"
 
+	"go.temporal.io/server/common/rpc/interceptor/nexus"
 	"google.golang.org/grpc"
 )
 
@@ -42,4 +43,34 @@ func UnaryServerInterceptor(generator Generator) grpc.UnaryServerInterceptor {
 		}
 		return resp, err
 	}
+}
+
+func NewFaultsInterceptor(generator Generator) *FaultsInterceptor {
+	return &FaultsInterceptor{
+		h: UnaryServerInterceptor(generator),
+	}
+}
+
+type FaultsInterceptor struct {
+	h grpc.UnaryServerInterceptor
+}
+
+func (g *FaultsInterceptor) Intercept(
+	ctx context.Context,
+	req any,
+	info *grpc.UnaryServerInfo,
+	handler grpc.UnaryHandler,
+) (any, error) {
+	if g.h == nil {
+		return handler(ctx, req)
+	}
+	return g.h(ctx, req, info, handler)
+}
+
+func (g *FaultsInterceptor) InterceptNexus(
+	ctx context.Context,
+	in nexus.InterceptorInput,
+	next nexus.HandlerFunc,
+) (any, error) {
+	return next(ctx, in)
 }

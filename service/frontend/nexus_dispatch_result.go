@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 )
 
 // handleStartOperationResponse converts matching's response to a StartOperation dispatch into the result the
@@ -38,16 +39,16 @@ func (c *operationContext) handleStartOperationResponse(
 		// answer, reported to the caller as a Nexus operation error rather than a handler error.
 		cause, internalErr := c.convertWorkerFailure(result.Failure, operation)
 		if internalErr != nil {
-			return nil, nil, internalErr
+			return nil, nil, dispatchError(result, internalErr)
 		}
 		state := nexus.OperationStateFailed
 		if result.Failure.GetCanceledFailureInfo() != nil {
 			state = nexus.OperationStateCanceled
 		}
-		return nil, nil, c.operationError(state, cause, operation)
+		return nil, nil, dispatchError(result, c.operationError(state, cause, operation))
 
 	default:
-		return nil, nil, c.failedDispatchToNexusError(result, operation)
+		return nil, nil, dispatchError(result, c.failedDispatchToNexusError(result, operation))
 	}
 }
 
@@ -64,7 +65,19 @@ func (c *operationContext) handleCancelOperationResponse(
 	if result.Outcome == commonnexus.DispatchOutcomeCancelAccepted {
 		return nil
 	}
-	return c.failedDispatchToNexusError(result, operation)
+	return dispatchError(result, c.failedDispatchToNexusError(result, operation))
+}
+
+// dispatchError wraps the error with the result's outcome tag so it can
+// be tagged in turn by the nexus telemetry outermost interceptor
+func dispatchError(result commonnexus.DispatchResult, err error) error {
+	if err == nil {
+		return nil
+	}
+	return &interceptornexus.InterceptorError{
+		Err:     err,
+		Outcome: result.OutcomeTag().Value,
+	}
 }
 
 // failedDispatchToNexusError converts the outcomes that mean the task was never handled, or was
@@ -140,10 +153,9 @@ func (c *operationContext) operationError(
 	return opErr
 }
 
-// recordDispatchOutcome tags the request's metrics with the dispatch outcome and, when the dispatch
-// did not succeed, attributes the failure to the worker in the response header.
+// recordDispatchOutcome attributes a failed dispatch to the worker in the response header. The
+// outcome is carried by the returned InterceptorError and recorded by the Nexus telemetry interceptor.
 func (c *operationContext) recordDispatchOutcome(result commonnexus.DispatchResult) {
-	c.metricsHandler = c.metricsHandler.WithTags(result.OutcomeTag())
 	if !result.Outcome.Succeeded() {
 		c.setFailureSource(commonnexus.FailureSourceWorker)
 	}

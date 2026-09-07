@@ -3,6 +3,7 @@ package interceptor
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
@@ -31,29 +32,22 @@ func TestRateLimitInterceptorSuite(t *testing.T) {
 func (s *rateLimitInterceptorSuite) TestInterceptNexus() {
 	for _, tc := range []struct {
 		name            string
-		apiName         string
 		input           interceptornexus.InterceptorInput
-		allow           *bool
+		allow           bool
 		nextCalled      bool
 		expectedOutcome string
 	}{
-		{name: "allowed", apiName: "NexusOperation", input: interceptornexus.NewStartOpInput("service", "operation", testNamespace, nexus.StartOperationOptions{}, nil, interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{APIName: "NexusOperation"}), allow: new(true), nextCalled: true},
-		{name: "rate limited", apiName: "NexusOperation", input: interceptornexus.NewStartOpInput("service", "operation", testNamespace, nexus.StartOperationOptions{}, nil, interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{APIName: "NexusOperation"}), allow: new(false), expectedOutcome: "global_rate_limited"},
+		{name: "allowed", input: interceptornexus.NewStartOpInput("service", "operation", testNamespace, time.Now(), nexus.StartOperationOptions{}, nil, interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{APIName: "NexusOperation"}), allow: true, nextCalled: true},
+		{name: "rate limited", input: interceptornexus.NewStartOpInput("service", "operation", testNamespace, time.Now(), nexus.StartOperationOptions{}, nil, interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{APIName: "NexusOperation"}), expectedOutcome: "global_rate_limited"},
 	} {
 		s.Run(tc.name, func() {
 			ctx := context.Background()
 			interceptor := NewRateLimitInterceptor(s.mockRateLimiter, nil)
-			if tc.allow != nil {
-				s.mockRateLimiter.EXPECT().Allow(gomock.Any(), gomock.Any()).Return(*tc.allow)
-			}
-			input := tc.input
-			if input == nil {
-				input = interceptornexus.NewStartOpInput("service", "operation", testNamespace, nexus.StartOperationOptions{}, nil, interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{})
-			}
+			s.mockRateLimiter.EXPECT().Allow(gomock.Any(), gomock.Any()).Return(tc.allow)
 			nextCalled := false
 			_, err := interceptor.InterceptNexus(
 				ctx,
-				input,
+				tc.input,
 				func(context.Context, interceptornexus.InterceptorInput) (any, error) {
 					nextCalled = true
 					return nil, nil

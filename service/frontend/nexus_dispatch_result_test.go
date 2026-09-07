@@ -1,8 +1,10 @@
 package frontend
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
@@ -11,8 +13,12 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	commonnexus "go.temporal.io/server/common/nexus"
+	rpcinterceptor "go.temporal.io/server/common/rpc/interceptor"
+	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 )
 
 // These tests pin down how the frontend turns matching's DispatchNexusTaskResponse into the result the
@@ -21,30 +27,46 @@ import (
 // dashboards and by interceptRequest's error-reporting cleanup. They are asserted here so the shared
 // classifier introduced alongside them cannot silently change any of it.
 
-// outcomeTagOf reads the outcome tag accumulated on the context's metrics handler.
-func outcomeTagOf(t *testing.T, oc *operationContext) string {
-	t.Helper()
-	mh, ok := oc.metricsHandler.(*metricstest.CaptureHandler)
-	require.True(t, ok, "expected a capture handler")
-	capture := mh.StartCapture()
-	oc.metricsHandler.Counter("test").Record(1)
-	mh.StopCapture(capture)
-	snap := capture.Snapshot()
-	require.Len(t, snap["test"], 1)
-	return snap["test"][0].Tags["outcome"]
-}
-
 func failureSourceOf(oc *operationContext) string {
 	return oc.responseHeaders[commonnexus.FailureSourceHeaderName]
 }
 
+func requireDispatchOutcome(t *testing.T, err error, outcome string) {
+	t.Helper()
+	var interceptorErr *interceptornexus.InterceptorError
+	require.ErrorAs(t, err, &interceptorErr)
+	require.Equal(t, outcome, interceptorErr.Outcome)
+}
+
+func requireRecordedDispatchOutcome(
+	t *testing.T,
+	input interceptornexus.InterceptorInput,
+	expectedOutcome string,
+	handler func(*operationContext) error,
+) {
+	t.Helper()
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
+	telemetry := rpcinterceptor.NewTelemetryInterceptor(nil, metricsHandler, log.NewNoopLogger(), nil, nil)
+	_, err := telemetry.InterceptNexusOutermost(
+		context.Background(),
+		input,
+		func(context.Context, interceptornexus.InterceptorInput) (any, error) {
+			return nil, handler(testOperationContext())
+		},
+	)
+	requireDispatchOutcome(t, err, expectedOutcome)
+
+	snapshot := capture.Snapshot()
+	require.Len(t, snapshot[metrics.NexusRequests.Name()], 1)
+	outcomeTag := metrics.OutcomeTag(expectedOutcome)
+	require.Equal(t, expectedOutcome, snapshot[metrics.NexusRequests.Name()][0].Tags[outcomeTag.Key])
+}
+
 func testOperationContext() *operationContext {
-	return newOperationContext(contextOptions{
-		namespaceState:          enumspb.NAMESPACE_STATE_REGISTERED,
-		quota:                   1,
-		namespaceRateLimitAllow: true,
-		rateLimitAllow:          true,
-	})
+	return newOperationContext()
 }
 
 // startOperationResponse wraps a StartOperationResponse in the matching response envelope. The oneof
@@ -56,6 +78,78 @@ func startOperationResponse(sor *nexuspb.StartOperationResponse) *matchingservic
 				Variant: &nexuspb.Response_StartOperation{StartOperation: sor},
 			},
 		},
+	}
+}
+
+func TestDispatchErrorsPreserveOutcomeForTelemetry(t *testing.T) {
+	handlerFailure := &matchingservice.DispatchNexusTaskResponse{
+		Outcome: &matchingservice.DispatchNexusTaskResponse_Failure{
+			Failure: &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
+					NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
+						Type: string(nexus.HandlerErrorTypeBadRequest),
+					},
+				},
+			},
+		},
+	}
+	requestTimeout := &matchingservice.DispatchNexusTaskResponse{
+		Outcome: &matchingservice.DispatchNexusTaskResponse_RequestTimeout{
+			RequestTimeout: &matchingservice.DispatchNexusTaskResponse_Timeout{},
+		},
+	}
+	operationFailure := startOperationResponse(&nexuspb.StartOperationResponse{
+		Variant: &nexuspb.StartOperationResponse_Failure{
+			Failure: &failurepb.Failure{
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{},
+				},
+			},
+		},
+	})
+
+	for _, tc := range []struct {
+		name     string
+		response *matchingservice.DispatchNexusTaskResponse
+		outcome  string
+	}{
+		{name: "handler failure", response: handlerFailure, outcome: "handler_error:BAD_REQUEST"},
+		{name: "request timeout", response: requestTimeout, outcome: "handler_timeout"},
+		{name: "operation failure", response: operationFailure, outcome: "failure"},
+		{name: "unrecognized outcome", response: &matchingservice.DispatchNexusTaskResponse{}, outcome: "handler_error:EMPTY_OUTCOME"},
+	} {
+		t.Run("start "+tc.name, func(t *testing.T) {
+			requireRecordedDispatchOutcome(
+				t,
+				interceptornexus.NewStartOpInput("s", "o", "n", time.Now(), nexus.StartOperationOptions{}, nil, interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{}),
+				tc.outcome,
+				func(oc *operationContext) error {
+					_, _, err := oc.handleStartOperationResponse(tc.response, "op")
+					return err
+				},
+			)
+		})
+	}
+
+	for _, tc := range []struct {
+		name     string
+		response *matchingservice.DispatchNexusTaskResponse
+		outcome  string
+	}{
+		{name: "handler failure", response: handlerFailure, outcome: "handler_error:BAD_REQUEST"},
+		{name: "request timeout", response: requestTimeout, outcome: "handler_timeout"},
+		{name: "unrecognized outcome", response: &matchingservice.DispatchNexusTaskResponse{}, outcome: "handler_error:EMPTY_OUTCOME"},
+	} {
+		t.Run("cancel "+tc.name, func(t *testing.T) {
+			requireRecordedDispatchOutcome(
+				t,
+				interceptornexus.NewCancelOpInput("s", "o", "n", time.Now(), nexus.CancelOperationOptions{}, "t", interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{}),
+				tc.outcome,
+				func(oc *operationContext) error {
+					return oc.handleCancelOperationResponse(tc.response, "op")
+				},
+			)
+		})
 	}
 }
 
@@ -82,7 +176,6 @@ func TestHandleStartOperationResponse_SyncSuccess(t *testing.T) {
 	require.Len(t, links, 1)
 	require.Equal(t, "http://links.test/valid", links[0].URL.String())
 	require.Equal(t, "some.Type", links[0].Type)
-	require.Equal(t, "sync_success", outcomeTagOf(t, oc))
 	require.Empty(t, failureSourceOf(oc), "success must not be attributed to the worker")
 }
 
@@ -100,7 +193,6 @@ func TestHandleStartOperationResponse_SyncSuccess_NoPayloadNoLinks(t *testing.T)
 	require.True(t, ok)
 	require.Nil(t, sync.Value)
 	require.Empty(t, links)
-	require.Equal(t, "sync_success", outcomeTagOf(t, oc))
 }
 
 func TestHandleStartOperationResponse_AsyncSuccess_PrefersOperationToken(t *testing.T) {
@@ -122,7 +214,6 @@ func TestHandleStartOperationResponse_AsyncSuccess_PrefersOperationToken(t *test
 	require.True(t, ok, "expected an async result, got %T", result)
 	require.Equal(t, "token", async.OperationToken)
 	require.Len(t, links, 1)
-	require.Equal(t, "async_success", outcomeTagOf(t, oc))
 	require.Empty(t, failureSourceOf(oc))
 }
 
@@ -191,7 +282,7 @@ func TestHandleStartOperationResponse_HandlerFailure(t *testing.T) {
 			require.Equal(t, "handler said no", handlerErr.Message)
 			require.Equal(t, tc.wantRetryable, handlerErr.Retryable())
 			require.NoError(t, handlerErr.Cause, "no cause on the wire means no cause on the error")
-			require.Equal(t, "handler_error:BAD_REQUEST", outcomeTagOf(t, oc))
+			requireDispatchOutcome(t, err, "handler_error:BAD_REQUEST")
 			require.Equal(t, commonnexus.FailureSourceWorker, failureSourceOf(oc))
 		})
 	}
@@ -255,7 +346,7 @@ func TestHandleStartOperationResponse_WorkerFailure_NotAHandlerError(t *testing.
 	var handlerErr *nexus.HandlerError
 	require.NotErrorAs(t, err, &handlerErr, "not reported as a handler error today")
 	// There is no handler error type to report, so the tag bounds to UNKNOWN.
-	require.Equal(t, "handler_error:UNKNOWN", outcomeTagOf(t, oc))
+	requireDispatchOutcome(t, err, "handler_error:UNKNOWN")
 	require.Equal(t, commonnexus.FailureSourceWorker, failureSourceOf(oc))
 }
 
@@ -282,7 +373,7 @@ func TestHandleStartOperationResponse_DeprecatedHandlerError(t *testing.T) {
 	deprecatedCause, ok := handlerErr.Cause.(*nexus.FailureError)
 	require.True(t, ok, "expected a Nexus FailureError cause, got %T", handlerErr.Cause)
 	require.Equal(t, "slow down", deprecatedCause.Failure.Message)
-	require.Equal(t, "handler_error:RESOURCE_EXHAUSTED", outcomeTagOf(t, oc))
+	requireDispatchOutcome(t, err, "handler_error:RESOURCE_EXHAUSTED")
 	require.Equal(t, commonnexus.FailureSourceWorker, failureSourceOf(oc))
 }
 
@@ -301,7 +392,7 @@ func TestHandleStartOperationResponse_RequestTimeout(t *testing.T) {
 	require.ErrorAs(t, err, &handlerErr)
 	require.Equal(t, nexus.HandlerErrorTypeUpstreamTimeout, handlerErr.Type)
 	require.Equal(t, "upstream timeout", handlerErr.Message)
-	require.Equal(t, "handler_timeout", outcomeTagOf(t, oc))
+	requireDispatchOutcome(t, err, "handler_timeout")
 	require.Equal(t, commonnexus.FailureSourceWorker, failureSourceOf(oc))
 }
 
@@ -351,7 +442,7 @@ func TestHandleStartOperationResponse_OperationFailure(t *testing.T) {
 			require.NotNil(t, opErr.OriginalFailure)
 			require.Equal(t, "true", opErr.OriginalFailure.Metadata["unwrap-error"])
 			require.NotNil(t, opErr.OriginalFailure.Cause)
-			require.Equal(t, "failure", outcomeTagOf(t, oc))
+			requireDispatchOutcome(t, err, "failure")
 			require.Equal(t, commonnexus.FailureSourceWorker, failureSourceOf(oc))
 		})
 	}
@@ -386,7 +477,7 @@ func TestHandleStartOperationResponse_OperationFailure_UnconvertibleFailureIsInt
 	var opErr *nexus.OperationError
 	require.NotErrorAs(t, err, &opErr, "an unreadable failure is not a legitimate operation error")
 	// The outcome was still classified as an operation failure, so the tag and header stand.
-	require.Equal(t, "failure", outcomeTagOf(t, oc))
+	requireDispatchOutcome(t, err, "failure")
 	require.Equal(t, commonnexus.FailureSourceWorker, failureSourceOf(oc))
 }
 
@@ -415,7 +506,7 @@ func TestHandleStartOperationResponse_HandlerFailure_UnconvertibleCauseIsInterna
 	require.ErrorAs(t, err, &handlerErr)
 	require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type,
 		"the worker's own BAD_REQUEST must not survive a failed conversion")
-	require.Equal(t, "handler_error:BAD_REQUEST", outcomeTagOf(t, oc))
+	requireDispatchOutcome(t, err, "handler_error:BAD_REQUEST")
 	require.Equal(t, commonnexus.FailureSourceWorker, failureSourceOf(oc))
 }
 
@@ -459,7 +550,7 @@ func TestHandleStartOperationResponse_DeprecatedOperationError(t *testing.T) {
 	require.Equal(t, "worker canceled it", cause.Failure.Message)
 	require.NotNil(t, opErr.OriginalFailure)
 	require.Equal(t, "true", opErr.OriginalFailure.Metadata["unwrap-error"])
-	require.Equal(t, "operation_error", outcomeTagOf(t, oc))
+	requireDispatchOutcome(t, err, "operation_error")
 	require.Equal(t, commonnexus.FailureSourceWorker, failureSourceOf(oc))
 }
 
@@ -502,7 +593,7 @@ func TestHandleStartOperationResponse_DeprecatedOperationErrorReEncodesWorkerFai
 	require.NoError(t, json.Unmarshal(details[0].GetData(), &workerFailure))
 	require.Equal(t, map[string]string{"k": "v"}, workerFailure.Metadata)
 	require.JSONEq(t, `"details"`, string(workerFailure.Details))
-	require.Equal(t, "operation_error", outcomeTagOf(t, oc))
+	requireDispatchOutcome(t, err, "operation_error")
 }
 
 // Anything the frontend cannot interpret is blamed on the worker and reported as an internal error.
@@ -545,7 +636,7 @@ func TestHandleStartOperationResponse_UnrecognizedOutcomes(t *testing.T) {
 			require.ErrorAs(t, err, &handlerErr)
 			require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
 			require.Equal(t, "empty outcome", handlerErr.Message)
-			require.Equal(t, "handler_error:EMPTY_OUTCOME", outcomeTagOf(t, oc))
+			requireDispatchOutcome(t, err, "handler_error:EMPTY_OUTCOME")
 			require.Equal(t, commonnexus.FailureSourceWorker, failureSourceOf(oc))
 		})
 	}
@@ -581,7 +672,6 @@ func TestHandleCancelOperationResponse_Success(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			oc := testOperationContext()
 			require.NoError(t, oc.handleCancelOperationResponse(tc.resp, "op"))
-			require.Equal(t, "success", outcomeTagOf(t, oc))
 			require.Empty(t, failureSourceOf(oc))
 		})
 	}
@@ -607,7 +697,7 @@ func TestHandleCancelOperationResponse_HandlerFailure(t *testing.T) {
 	require.ErrorAs(t, err, &handlerErr)
 	require.Equal(t, nexus.HandlerErrorTypeNotFound, handlerErr.Type)
 	require.Equal(t, "cannot cancel", handlerErr.Message)
-	require.Equal(t, "handler_error:NOT_FOUND", outcomeTagOf(t, oc))
+	requireDispatchOutcome(t, err, "handler_error:NOT_FOUND")
 	require.Equal(t, commonnexus.FailureSourceWorker, failureSourceOf(oc))
 }
 
@@ -627,7 +717,7 @@ func TestHandleCancelOperationResponse_DeprecatedHandlerError(t *testing.T) {
 	var handlerErr *nexus.HandlerError
 	require.ErrorAs(t, err, &handlerErr)
 	require.Equal(t, nexus.HandlerErrorTypeNotImplemented, handlerErr.Type)
-	require.Equal(t, "handler_error:NOT_IMPLEMENTED", outcomeTagOf(t, oc))
+	requireDispatchOutcome(t, err, "handler_error:NOT_IMPLEMENTED")
 	require.Equal(t, commonnexus.FailureSourceWorker, failureSourceOf(oc))
 }
 
@@ -644,7 +734,7 @@ func TestHandleCancelOperationResponse_RequestTimeout(t *testing.T) {
 	require.ErrorAs(t, err, &handlerErr)
 	require.Equal(t, nexus.HandlerErrorTypeUpstreamTimeout, handlerErr.Type)
 	require.Equal(t, "upstream timeout", handlerErr.Message)
-	require.Equal(t, "handler_timeout", outcomeTagOf(t, oc))
+	requireDispatchOutcome(t, err, "handler_timeout")
 	require.Equal(t, commonnexus.FailureSourceWorker, failureSourceOf(oc))
 }
 
@@ -655,7 +745,7 @@ func TestHandleCancelOperationResponse_UnrecognizedOutcome(t *testing.T) {
 	require.ErrorAs(t, err, &handlerErr)
 	require.Equal(t, nexus.HandlerErrorTypeInternal, handlerErr.Type)
 	require.Equal(t, "empty outcome", handlerErr.Message)
-	require.Equal(t, "handler_error:EMPTY_OUTCOME", outcomeTagOf(t, oc))
+	requireDispatchOutcome(t, err, "handler_error:EMPTY_OUTCOME")
 	require.Equal(t, commonnexus.FailureSourceWorker, failureSourceOf(oc))
 }
 
@@ -725,7 +815,7 @@ func TestHandleStartOperationResponse_HandlerErrorTypeTagIsBounded(t *testing.T)
 
 			_, _, err := oc.handleStartOperationResponse(resp, "op")
 			require.Error(t, err)
-			require.Equal(t, tc.wantTag, outcomeTagOf(t, oc))
+			requireDispatchOutcome(t, err, tc.wantTag)
 			// The error itself still carries the worker's real type; only the metric is bounded.
 			var handlerErr *nexus.HandlerError
 			require.ErrorAs(t, err, &handlerErr)
@@ -744,6 +834,7 @@ func TestHandleCancelOperationResponse_DeprecatedHandlerErrorTypeTagIsBounded(t 
 		},
 	}
 
-	require.Error(t, oc.handleCancelOperationResponse(resp, "op"))
-	require.Equal(t, "handler_error:UNKNOWN", outcomeTagOf(t, oc))
+	err := oc.handleCancelOperationResponse(resp, "op")
+	require.Error(t, err)
+	requireDispatchOutcome(t, err, "handler_error:UNKNOWN")
 }

@@ -3,10 +3,12 @@ package nexus
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	tokenspb "go.temporal.io/server/api/token/v1"
@@ -14,19 +16,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-)
-
-const (
-	methodNameStartNexusOp    = "StartNexusOperation"
-	methodNameCancelNexusOp   = "CancelNexusOperation"
-	methodNameCompleteNexusOp = "CompleteNexusOperation"
-	// metric tags
-	OutcomeInternalError    = "internal_error"
-	OutcomeRequestForwarded = "request_forwarded"
-	outcomeSyncSuccess      = "sync_success"
-	outcomeAsyncSuccess     = "async_success"
-	outcomeSuccess          = "success"
-	outcomeErrorInternal    = "error_internal"
 )
 
 type HandlerFunc func(ctx context.Context, in InterceptorInput) (any, error)
@@ -44,6 +33,9 @@ type InterceptorInput interface {
 	MetricTags() []metrics.Tag
 	Header() headers.HeaderGetter
 	MethodName() string
+	Request() any
+	Outcome(out any, err error) string
+	StartTime() time.Time
 	sealNexusOp()
 }
 
@@ -65,36 +57,20 @@ type ForwardingInfo struct {
 type InterceptorError struct {
 	// wrapped error
 	Err error
-	// Outcome tag for metrics reporting, (draft-review: should Outcomes be enum or at least constants instead)
+	// Outcome tag for metrics reporting
 	Outcome string
+	// Flag for propagating the error to the caller as-is without conversion
+	ExposeDetails bool
+	// SkipServiceErrorReporting prevents reporting the error as a frontend service failure.
+	SkipServiceErrorReporting bool
 }
 
 func (t *InterceptorError) Error() string {
-	return t.Err.Error()
+	return fmt.Sprintf("interceptor error (%s): %v", t.Outcome, t.Err.Error())
 }
 
 func (t *InterceptorError) Unwrap() error {
 	return t.Err
-}
-
-// Outcome derives the outcome metric tag value based on the request type and its result
-func Outcome(in InterceptorInput, out any, err error) string {
-	if _, ok := in.(CompleteOpInput); ok {
-		return completionOutcome(err)
-	}
-	if err != nil {
-		if ie, ok := errors.AsType[*InterceptorError](err); ok && ie.Outcome != "" {
-			return ie.Outcome
-		}
-		return OutcomeInternalError
-	}
-	switch out.(type) {
-	case *nexus.HandlerStartOperationResultSync[any]:
-		return outcomeSyncSuccess
-	case *nexus.HandlerStartOperationResultAsync:
-		return outcomeAsyncSuccess
-	}
-	return outcomeSuccess
 }
 
 type outcomeOverrideCtxKey struct{}
@@ -137,23 +113,6 @@ func SetOutcomeOverride(ctx context.Context, v string) {
 	override.Set(v)
 }
 
-func completionOutcome(err error) string {
-	if err == nil {
-		return outcomeSuccess
-	}
-	if ie, ok := errors.AsType[*InterceptorError](err); ok {
-		if ie.Outcome != "" {
-			return ie.Outcome
-		}
-		err = ie.Err
-	}
-	// retaining behavior
-	if handlerErr, ok := errors.AsType[*nexus.HandlerError](err); ok {
-		return "error_" + strings.ToLower(string(handlerErr.Type))
-	}
-	return outcomeErrorInternal
-}
-
 // RequestMetadata carries request metadata resolved by the handler (e.g. after a
 // namespace registry lookup) that is supplied alongside the rest of the params at
 // InterceptorInput construction time.
@@ -162,16 +121,22 @@ type RequestMetadata struct {
 	NamespaceEntry *namespace.Namespace
 	EndpointName   string
 	MetricTags     []metrics.Tag // handler-resolved frontend dynamic config for the tags to record
+	Request        any           // preserves the request shape passed to custom authorizers
 }
 
 // container for ServiceName(), OperationName(), NamespaceName(), ForwardingInfo(), and
 // the fields in RequestMetadata.
 type nexusOpBase struct {
 	serviceName, operation, namespaceName, methodName string
-	header                                            headers.HeaderGetter
-	// TBD: ForwardingInfo and RequestMetadata could just collapse into nexusOpBase
+
+	header          headers.HeaderGetter
 	forwardingInfo  ForwardingInfo
 	requestMetadata RequestMetadata
+	startTime       time.Time
+}
+
+func (b nexusOpBase) StartTime() time.Time {
+	return b.startTime
 }
 
 func (b nexusOpBase) ServiceName() string {
@@ -217,6 +182,10 @@ func (b nexusOpBase) MethodName() string {
 	return b.methodName
 }
 
+func (b nexusOpBase) Request() any {
+	return b.requestMetadata.Request
+}
+
 func (nexusOpBase) sealNexusOp() {}
 
 type StartOpInput struct {
@@ -229,6 +198,7 @@ func NewStartOpInput(
 	serviceName string,
 	operation string,
 	namespaceName string,
+	startTime time.Time,
 	options nexus.StartOperationOptions,
 	input *nexus.LazyValue,
 	forwardingInfo ForwardingInfo,
@@ -240,9 +210,10 @@ func NewStartOpInput(
 			operation:       operation,
 			namespaceName:   namespaceName,
 			header:          options.Header,
-			methodName:      methodNameStartNexusOp,
+			methodName:      "StartNexusOperation",
 			forwardingInfo:  forwardingInfo,
 			requestMetadata: requestMetadata,
+			startTime:       startTime,
 		},
 		StartOperationOptions: options,
 		StartOperationInput:   input,
@@ -259,6 +230,7 @@ func NewCancelOpInput(
 	serviceName string,
 	operation string,
 	namespaceName string,
+	startTime time.Time,
 	options nexus.CancelOperationOptions,
 	cancellationToken string,
 	forwardingInfo ForwardingInfo,
@@ -270,9 +242,10 @@ func NewCancelOpInput(
 			operation:       operation,
 			namespaceName:   namespaceName,
 			header:          options.Header,
-			methodName:      methodNameCancelNexusOp,
+			methodName:      "CancelNexusOperation",
 			forwardingInfo:  forwardingInfo,
 			requestMetadata: requestMetadata,
+			startTime:       startTime,
 		},
 		CancelOperationOptions: options,
 		CancellationToken:      cancellationToken,
@@ -287,6 +260,7 @@ type CompleteOpInput struct {
 
 func NewCompleteOpInput(
 	namespaceName string,
+	startTime time.Time,
 	request *nexusrpc.CompletionRequest,
 	completion *tokenspb.NexusOperationCompletion,
 	forwardingInfo ForwardingInfo,
@@ -295,17 +269,66 @@ func NewCompleteOpInput(
 	if request == nil || request.HTTPRequest == nil {
 		return CompleteOpInput{}, errors.New("nexus completion request not found")
 	}
+	requestMetadata.Request = request
 	return CompleteOpInput{
 		nexusOpBase: nexusOpBase{
 			namespaceName:   namespaceName,
 			header:          request.HTTPRequest.Header,
-			methodName:      methodNameCompleteNexusOp,
+			methodName:      "CompleteNexusOperation",
 			forwardingInfo:  forwardingInfo,
 			requestMetadata: requestMetadata,
+			startTime:       startTime,
 		},
 		CompletionRequest: request,
 		Completion:        completion,
 	}, nil
+}
+
+func (c CompleteOpInput) Outcome(out any, err error) string {
+	if err == nil {
+		return "success"
+	}
+	if ie, ok := errors.AsType[*InterceptorError](err); ok {
+		if ie.Outcome != "" {
+			return ie.Outcome
+		}
+		err = ie.Err
+	}
+	// retaining behavior
+	if handlerErr, ok := errors.AsType[*nexus.HandlerError](err); ok {
+		return "error_" + strings.ToLower(string(handlerErr.Type))
+	}
+	return "error_internal"
+}
+
+func (s StartOpInput) Outcome(out any, err error) string {
+	if outcome, ok := errorOutcome(err); ok {
+		return outcome
+	}
+	switch out.(type) {
+	case *nexus.HandlerStartOperationResultSync[any]:
+		return "sync_success"
+	case *nexus.HandlerStartOperationResultAsync:
+		return "async_success"
+	}
+	return "internal_error"
+}
+
+func (c CancelOpInput) Outcome(out any, err error) string {
+	if outcome, ok := errorOutcome(err); ok {
+		return outcome
+	}
+	return "success"
+}
+
+func errorOutcome(err error) (string, bool) {
+	if err != nil {
+		if ie, ok := errors.AsType[*InterceptorError](err); ok && ie.Outcome != "" {
+			return ie.Outcome, true
+		}
+		return "internal_error", true
+	}
+	return "", false
 }
 
 func ChainInterceptors(final HandlerFunc, chain []Interceptor) HandlerFunc {
