@@ -6,6 +6,8 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/temporalnexus"
 	"go.temporal.io/server/common/telemetry"
 )
@@ -18,9 +20,10 @@ type ServerSpanAttributes struct {
 	RequestID string
 }
 
-// AnnotateServerSpanLinks adds Nexus response links to span.
+// AnnotateServerSpanLinks adds handler workflow links from a Nexus response to span.
 func AnnotateServerSpanLinks(
 	span trace.Span,
+	requestID string,
 	links []nexus.Link,
 ) {
 	// Non-recording spans discard attributes, so avoid constructing them.
@@ -31,7 +34,7 @@ func AnnotateServerSpanLinks(
 	var handlerWorkflow handlerWorkflowIdentity
 	for _, link := range links {
 		workflowEvent, err := temporalnexus.ConvertNexusLinkToLinkWorkflowEvent(link)
-		if err != nil || workflowEvent.GetWorkflowId() == "" {
+		if err != nil || !isHandlerWorkflowLink(workflowEvent, requestID) {
 			continue
 		}
 		identity := handlerWorkflowIdentity{
@@ -57,6 +60,16 @@ func AnnotateServerSpanLinks(
 			attribute.String(telemetry.NexusHandlerWorkflowIDKey, handlerWorkflow.workflowID),
 		)
 	}
+}
+
+func isHandlerWorkflowLink(workflowEvent *commonpb.Link_WorkflowEvent, requestID string) bool {
+	if workflowEvent.GetWorkflowId() == "" {
+		return false
+	}
+	if workflowEvent.GetEventRef().GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+		return true
+	}
+	return requestID != "" && workflowEvent.GetRequestIdRef().GetRequestId() == requestID
 }
 
 type handlerWorkflowIdentity struct {

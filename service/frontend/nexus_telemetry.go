@@ -26,11 +26,12 @@ func (c *operationContext) annotateServerSpan(
 
 func (c *operationContext) annotateServerSpanLinks(
 	ctx context.Context,
+	requestID string,
 	links []nexus.Link,
 ) {
 	span := trace.SpanFromContext(ctx)
 	if !span.IsRecording() {
 		return
 	}
-	nexusrpc.AnnotateServerSpanLinks(span, links)
+	nexusrpc.AnnotateServerSpanLinks(span, requestID, links)
 }

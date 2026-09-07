@@ -481,7 +481,7 @@ func (h *nexusHandler) StartOperation(
 	if err != nil {
 		return nil, err
 	}
-	oc.annotateServerSpanLinks(ctx, handlerLinks)
+	oc.annotateServerSpanLinks(ctx, options.RequestID, handlerLinks)
 	nexus.AddHandlerLinks(ctx, handlerLinks...)
 	return result, nil
 }
@@ -544,6 +544,8 @@ func (h *nexusHandler) forwardStartOperation(
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("forwarded_request_error"))
 		return nil, err
 	}
+	oc.annotateServerSpanLinks(ctx, options.RequestID, resp.Links)
+	nexus.AddHandlerLinks(ctx, resp.Links...)
 
 	if resp.Successful != nil {
 		return &nexus.HandlerStartOperationResultSync[any]{Value: resp.Successful.Reader}, nil
