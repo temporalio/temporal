@@ -238,8 +238,8 @@ type wrappedServerStream struct {
 
 func (w *wrappedServerStream) Context() context.Context { return w.ctx }
 
-// ExtractAuthInfoForRequest extracts auth info for gRPC streams and Nexus HTTP requests,
-// where there is no unary request to hand to the audience mapper.
+// ExtractAuthInfoForRequest extracts auth info for gRPC streams and Nexus HTTP requests.
+// It invokes JWTAudienceMapper.Audience with nil req and info because those arguments describe unary gRPC calls.
 func (a *Interceptor) ExtractAuthInfoForRequest(
 	ctx context.Context,
 	tlsConnection *credentials.TLSInfo,
