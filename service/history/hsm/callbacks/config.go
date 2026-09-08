@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/lib/callback"
+	chasmcallbacks "go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus"
@@ -51,7 +51,7 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 				backoff.NoInterval,
 			)
 		},
-		InspectSourceHeader: callback.InspectSourceHeader.Get(dc),
+		InspectSourceHeader: chasmcallbacks.InspectSourceHeader.Get(dc),
 	}
 }
 
