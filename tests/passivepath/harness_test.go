@@ -52,6 +52,50 @@ func TestMutableStateDiffNormalizesOnlyLocalFields(t *testing.T) {
 	require.Contains(t, mutableStateDiff(expected, actual), "update_count")
 }
 
+func TestMutableStateDiffComparesStateMachineTimers(t *testing.T) {
+	state := func(machineTransitionCount int64) *persistencespb.WorkflowMutableState {
+		return &persistencespb.WorkflowMutableState{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+				StateMachineTimers: []*persistencespb.StateMachineTimerGroup{{
+					Deadline:  timestamppb.New(time.Unix(10, 0)),
+					Scheduled: true,
+					Infos: []*persistencespb.StateMachineTaskInfo{{
+						Type: "callback-timeout",
+						Data: []byte("timer-data"),
+						Ref: &persistencespb.StateMachineRef{
+							Path: []*persistencespb.StateMachineKey{{Type: "callback", Id: "id"}},
+							MutableStateVersionedTransition: &persistencespb.VersionedTransition{
+								NamespaceFailoverVersion: 1,
+								TransitionCount:          2,
+							},
+							MachineInitialVersionedTransition: &persistencespb.VersionedTransition{
+								NamespaceFailoverVersion: 1,
+								TransitionCount:          1,
+							},
+							MachineLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+								NamespaceFailoverVersion: 1,
+								TransitionCount:          2,
+							},
+							MachineTransitionCount: machineTransitionCount,
+						},
+					}},
+				}},
+			},
+		}
+	}
+
+	expected := state(10)
+	actual := state(20)
+	require.Empty(t, mutableStateDiff(expected, actual))
+
+	actual.ExecutionInfo.StateMachineTimers[0].Scheduled = false
+	require.Contains(t, mutableStateDiff(expected, actual), "scheduled")
+
+	actual = state(20)
+	actual.ExecutionInfo.StateMachineTimers[0].Infos[0].Data = []byte("different")
+	require.Contains(t, mutableStateDiff(expected, actual), "data")
+}
+
 func TestForceSnapshotReplication(t *testing.T) {
 	harness := NewHarness(log.NewNoopLogger())
 	transition := &persistencespb.VersionedTransition{

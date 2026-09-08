@@ -330,8 +330,21 @@ func normalizeMutableStateForComparison(state *persistencespb.WorkflowMutableSta
 	if info == nil {
 		return
 	}
+	stateMachineTimers := info.StateMachineTimers
 	// Reuse the production definition of cluster- and shard-local mutable state.
 	workflow.SanitizeMutableState(state)
+	// StateMachineTimers are regenerated locally rather than replicated, but this
+	// single-cluster harness expects the passive refresh to reproduce the active timer
+	// schedule. Preserve them across sanitization and ignore only the cluster-local
+	// state machine transition counter embedded in each task reference.
+	info.StateMachineTimers = stateMachineTimers
+	for _, timerGroup := range info.StateMachineTimers {
+		for _, timerInfo := range timerGroup.GetInfos() {
+			if timerInfo.Ref != nil {
+				timerInfo.Ref.MachineTransitionCount = 0
+			}
+		}
+	}
 	for _, activityInfo := range state.ActivityInfos {
 		activityInfo.TimerTaskStatus = 0
 	}
