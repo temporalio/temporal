@@ -214,7 +214,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2AlreadyExists() {
 	s.NoError(err)
 }
 
-func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1BlockedBySentinel() {
+func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1BlockedOnlyByRunningSentinel() {
 	env := newScheduleEnv(
 		s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
@@ -229,6 +229,12 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1BlockedBySentine
 	nsName := env.Namespace().String()
 	nsID := env.NamespaceID().String()
 
+	completeSignal := "complete"
+	env.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		workflow.GetSignalChannel(ctx, completeSignal).Receive(ctx, nil)
+		return nil
+	}, workflow.RegisterOptions{Name: dummy.DummyWFTypeName})
+
 	v1WorkflowID := scheduler.WorkflowIDPrefix + sid
 	_, err := env.GetTestCluster().HistoryClient().StartWorkflowExecution(
 		ctx,
@@ -238,7 +244,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1BlockedBySentine
 				Namespace:                nsName,
 				WorkflowId:               v1WorkflowID,
 				WorkflowType:             &commonpb.WorkflowType{Name: dummy.DummyWFTypeName},
-				TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue()},
 				Identity:                 "test",
 				RequestId:                uuid.NewString(),
 				WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
@@ -247,7 +253,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1BlockedBySentine
 			nil, nil, time.Now().UTC(),
 		),
 	)
-	s.NoError(err)
+	s.Require().NoError(err)
 
 	sched := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
@@ -279,7 +285,7 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1BlockedBySentine
 			},
 		},
 	)
-	s.NoError(err)
+	s.Require().NoError(err)
 
 	_, err = env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
 		Namespace:  nsName,
@@ -289,8 +295,47 @@ func (s *ScheduleMigrationTestSuite) TestScheduleMigrationV2ToV1BlockedBySentine
 		RequestId:  uuid.NewString(),
 	})
 	var unavailableErr *serviceerror.Unavailable
-	s.ErrorAs(err, &unavailableErr)
+	s.Require().ErrorAs(err, &unavailableErr)
 	s.Contains(unavailableErr.Message, "sentinel")
+
+	_, err = env.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace:         nsName,
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: v1WorkflowID},
+		SignalName:        completeSignal,
+		Identity:          "test",
+	})
+	s.Require().NoError(err)
+
+	// The production sentinel completes after its idle timeout. This test uses a
+	// signal to reach the same retained COMPLETED state without waiting 15 minutes.
+	var closedSentinel *workflowservice.DescribeWorkflowExecutionResponse
+	s.Require().Eventually(func() bool {
+		closedSentinel, err = env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: nsName,
+			Execution: &commonpb.WorkflowExecution{WorkflowId: v1WorkflowID},
+		})
+		return err == nil && closedSentinel.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	}, 10*time.Second, 500*time.Millisecond)
+	s.Require().Equal(dummy.DummyWFTypeName, closedSentinel.GetWorkflowExecutionInfo().GetType().GetName())
+
+	_, err = env.AdminClient().MigrateSchedule(ctx, &adminservice.MigrateScheduleRequest{
+		Namespace:  nsName,
+		ScheduleId: sid,
+		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	s.Require().NoError(err)
+
+	var migrated *workflowservice.DescribeWorkflowExecutionResponse
+	s.Require().Eventually(func() bool {
+		migrated, err = env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: nsName,
+			Execution: &commonpb.WorkflowExecution{WorkflowId: v1WorkflowID},
+		})
+		return err == nil && migrated.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	}, 10*time.Second, 500*time.Millisecond)
+	s.Require().Equal(scheduler.WorkflowType, migrated.GetWorkflowExecutionInfo().GetType().GetName())
 }
 
 func (s *ScheduleMigrationTestSuite) TestCreateFromMigrationStateBlockedBySentinel() {
