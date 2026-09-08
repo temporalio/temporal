@@ -98,7 +98,7 @@ func TestDynamicRateLimiterRefreshesOnceAcrossConcurrentCallers(t *testing.T) {
 	var start, done sync.WaitGroup
 	start.Add(1)
 	done.Add(goroutines)
-	for i := 0; i < goroutines; i++ {
+	for range goroutines {
 		go func() {
 			defer done.Done()
 			start.Wait()
