@@ -54,7 +54,7 @@ func configProvider(dc *dynamicconfig.Collection) *Config {
 
 var EncodeInternalTokenWithEnvelope = dynamicconfig.NewNamespaceBoolSetting(
 	"callback.encodeInternalTokenWithEnvelope",
-	false,
+	true,
 	`Controls how the internal CHASM Nexus completion callback token is encoded. When true the token is
 encoded as a NexusOperationCompletion envelope; when false (default) it is the legacy bare base64-encoded
 ChasmComponentRef. Gates a safe fleet-wide rollout of the envelope encoding: keep disabled until every
