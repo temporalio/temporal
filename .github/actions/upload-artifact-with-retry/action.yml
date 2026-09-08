@@ -23,16 +23,16 @@ runs:
   steps:
     - name: Upload artifact
       id: upload
+      if: ${{ !cancelled() }}
       # Can't pin to major because the action linter doesn't recognize the include-hidden-files flag.
       uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
       continue-on-error: true
-      with: &artifact-inputs
+      with:
         name: ${{ inputs.name }}
         path: ${{ inputs.path }}
         if-no-files-found: ${{ inputs['if-no-files-found'] }}
         include-hidden-files: ${{ inputs['include-hidden-files'] }}
         retention-days: ${{ inputs['retention-days'] }}
-        overwrite: true
 
     - name: Wait before retrying artifact upload
       if: ${{ !cancelled() && steps.upload.outcome == 'failure' }}
@@ -44,7 +44,13 @@ runs:
       if: ${{ !cancelled() && steps.upload.outcome == 'failure' }}
       uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
       continue-on-error: true
-      with: *artifact-inputs
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.path }}
+        if-no-files-found: ${{ inputs['if-no-files-found'] }}
+        include-hidden-files: ${{ inputs['include-hidden-files'] }}
+        retention-days: ${{ inputs['retention-days'] }}
+        overwrite: true
 
     - name: Wait before retrying artifact upload again
       if: ${{ !cancelled() && steps.retry.outcome == 'failure' }}
@@ -54,4 +60,10 @@ runs:
     - name: Retry artifact upload again
       if: ${{ !cancelled() && steps.retry.outcome == 'failure' }}
       uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
-      with: *artifact-inputs
+      with:
+        name: ${{ inputs.name }}
+        path: ${{ inputs.path }}
+        if-no-files-found: ${{ inputs['if-no-files-found'] }}
+        include-hidden-files: ${{ inputs['include-hidden-files'] }}
+        retention-days: ${{ inputs['retention-days'] }}
+        overwrite: true
