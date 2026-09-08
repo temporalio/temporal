@@ -35,7 +35,11 @@ func TestWrap_NilGeneratorReturnsNext(t *testing.T) {
 	t.Parallel()
 
 	next := func(*http.Request) (*http.Response, error) { return nil, nil }
-	requireSameFunction(t, next, httpfaults.Wrap(nil, httpfaults.Scope{}, next))
+	require.Equal(
+		t,
+		reflect.ValueOf(next).Pointer(),
+		reflect.ValueOf(httpfaults.Wrap(nil, httpfaults.Scope{}, next)).Pointer(),
+	)
 }
 
 func TestWrap_RequestFault(t *testing.T) {
@@ -165,13 +169,4 @@ func TestNewResponse(t *testing.T) {
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.Equal(t, "injected", string(body))
-}
-
-func requireSameFunction(
-	t *testing.T,
-	expected func(*http.Request) (*http.Response, error),
-	actual func(*http.Request) (*http.Response, error),
-) {
-	t.Helper()
-	require.Equal(t, reflect.ValueOf(expected).Pointer(), reflect.ValueOf(actual).Pointer())
 }

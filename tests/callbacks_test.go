@@ -66,11 +66,10 @@ func (s *CallbacksSuite) TestHTTPFaultInjection_NexusCallbackRetriesAfterRespons
 	env := s.newTestEnv(testOpts...)
 	ctx := s.Context()
 
-	workflowType := "test-http-fault-injection"
 	workflowID := env.Tv().WorkflowID()
 	env.SdkWorker().RegisterWorkflowWithOptions(
-		func(workflow.Context) (int, error) { return 666, nil },
-		workflow.RegisterOptions{Name: workflowType},
+		func(workflow.Context) (int, error) { return 42, nil },
+		workflow.RegisterOptions{Name: env.Tv().WorkflowType().GetName()},
 	)
 
 	ch, callbackAddress := newNexusCompletionHandler(s.T())
@@ -97,7 +96,7 @@ func (s *CallbacksSuite) TestHTTPFaultInjection_NexusCallbackRetriesAfterRespons
 		RequestId:           uuid.NewString(),
 		Namespace:           env.Namespace().String(),
 		WorkflowId:          workflowID,
-		WorkflowType:        &commonpb.WorkflowType{Name: workflowType},
+		WorkflowType:        env.Tv().WorkflowType(),
 		TaskQueue:           &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
 		Identity:            s.T().Name(),
@@ -113,15 +112,15 @@ func (s *CallbacksSuite) TestHTTPFaultInjection_NexusCallbackRetriesAfterRespons
 	await.Snd(s.T(), ch.requestCompleteCh, nil)
 
 	sdkClient := env.SdkClient()
-	await.Require(ctx, s.T(), func(col *await.T) {
-		description, err := sdkClient.DescribeWorkflowExecution(ctx, workflowID, "")
-		require.NoError(col, err)
-		require.Len(col, description.Callbacks, 1)
+	s.Await(func(s *CallbacksSuite) {
+		description, err := sdkClient.DescribeWorkflowExecution(s.Context(), workflowID, "")
+		s.NoError(err)
+		s.Len(description.Callbacks, 1)
 		callbackInfo := description.Callbacks[0]
-		require.Equal(col, enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
-		require.Nil(col, callbackInfo.LastAttemptFailure)
-		require.GreaterOrEqual(col, callbackInfo.Attempt, int32(2))
-		protorequire.ProtoEqual(col, cb, callbackInfo.Callback)
+		s.Equal(enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.State)
+		s.Nil(callbackInfo.LastAttemptFailure)
+		s.GreaterOrEqual(callbackInfo.Attempt, int32(2))
+		protorequire.ProtoEqual(s.T(), cb, callbackInfo.Callback)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	s.GreaterOrEqual(attempts.Load(), int32(2))

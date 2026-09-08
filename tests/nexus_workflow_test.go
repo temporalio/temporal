@@ -601,14 +601,13 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationRetriesAfterHTTPFault(chasmEn
 	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
 
 	// The first request fails before it reaches the handler. The retry succeeds.
-	injectedErr := errors.New("simulated transport failure")
 	var attempts atomic.Int32
 	env.InjectHTTPRequestFault(func(_ context.Context, req *http.Request) *httpfaults.Outcome {
 		if !strings.HasSuffix(req.URL.Path, "/operation") {
 			return nil
 		}
 		if attempts.Add(1) == 1 {
-			return &httpfaults.Outcome{Error: injectedErr}
+			return &httpfaults.Outcome{Error: errors.New("simulated transport failure")}
 		}
 		return nil
 	})
