@@ -2309,10 +2309,9 @@ func (adh *AdminHandler) migrateScheduleToWorkflow(
 	})
 	info := descResp.GetWorkflowExecutionInfo()
 	switch {
-	case common.IsNotFoundError(err):
-	case err != nil:
+	case err != nil && !common.IsNotFoundError(err):
 		return nil, err
-	case info.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
+	case common.IsNotFoundError(err) || info.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
 		// A closed workflow does not occupy the V1 ID: the create path only treats
 		// RUNNING workflows as occupying it (isRealSchedulerInV1KeySpace), and an
 		// expired sentinel completes rather than disappearing, staying describable
