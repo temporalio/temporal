@@ -16,6 +16,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.15
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.99.1
 	github.com/aws/smithy-go v1.25.0
+	github.com/bits-and-blooms/bloom/v3 v3.7.1
 	github.com/blang/semver/v4 v4.0.0
 	github.com/cactus/go-statsd-client/v5 v5.1.0
 	github.com/caio/go-tdigest/v5 v5.0.0
@@ -90,6 +91,7 @@ require (
 
 require (
 	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794 // indirect
+	github.com/bits-and-blooms/bitset v1.24.2 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
 	github.com/go-openapi/swag/cmdutils v0.26.0 // indirect

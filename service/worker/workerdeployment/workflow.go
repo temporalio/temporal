@@ -363,10 +363,13 @@ func (d *WorkflowRunner) run(ctx workflow.Context) error {
 		return err
 	}
 
-	if err := workflow.SetUpdateHandler(
+	if err := workflow.SetUpdateHandlerWithOptions(
 		ctx,
 		RegisterWorkerInWorkerDeployment,
 		d.handleRegisterWorker,
+		workflow.UpdateHandlerOptions{
+			Validator: d.validateRegisterWorker,
+		},
 	); err != nil {
 		return err
 	}
@@ -714,6 +717,11 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		d.setStateChanged()
 		d.lock.Unlock()
 	}()
+	// Revalidate after acquiring the lock because the summary may have changed after update validation.
+	bloomFilterPassed, err := d.validateRegisterWorkerWithBloomFilterResult(args)
+	if err != nil {
+		return err
+	}
 
 	version := worker_versioning.WorkerDeploymentVersionToStringV31(args.Version)
 
@@ -740,15 +748,19 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		RoutingConfig: routingConfigToSync,
 	}).Get(ctx, nil)
 	if err != nil {
-		if appError, ok := errors.AsType[*temporal.ApplicationError](err); ok {
-			if appError.Type() == errMaxTaskQueuesInVersionType {
-				return temporal.NewApplicationError(
-					fmt.Sprintf("cannot add task queue %v since maximum number of task queues (%d) have been registered in deployment", args.TaskQueueName, args.MaxTaskQueues),
-					errMaxTaskQueuesInVersionType,
-				)
+		if isMaxTaskQueuesInVersionError(err) {
+			if bloomFilterPassed {
+				d.recordTaskQueueFamilyBloomFilterOutcome(taskQueueFamilyBloomFilterOutcomeFalsePositive)
 			}
+			return temporal.NewApplicationError(
+				fmt.Sprintf("cannot add task queue %v since maximum number of task queues (%d) have been registered in deployment", args.TaskQueueName, args.MaxTaskQueues),
+				errMaxTaskQueuesInVersionType,
+			)
 		}
 		return err
+	}
+	if bloomFilterPassed {
+		d.recordTaskQueueFamilyBloomFilterOutcome(taskQueueFamilyBloomFilterOutcomeAccepted)
 	}
 
 	if d.State.Versions[version].Status == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED {
@@ -758,6 +770,40 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 
 	// update memo
 	return d.updateMemo(ctx)
+}
+
+func (d *WorkflowRunner) validateRegisterWorker(args *deploymentspb.RegisterWorkerInWorkerDeploymentArgs) error {
+	_, err := d.validateRegisterWorkerWithBloomFilterResult(args)
+	return err
+}
+
+func (d *WorkflowRunner) validateRegisterWorkerWithBloomFilterResult(args *deploymentspb.RegisterWorkerInWorkerDeploymentArgs) (bool, error) {
+	if !d.hasMinVersion(TaskQueueFamilySummary) {
+		return false, nil
+	}
+
+	version := worker_versioning.WorkerDeploymentVersionToStringV31(args.GetVersion())
+	versionSummary := d.GetState().GetVersions()[version]
+	taskQueueFamilySummary := versionSummary.GetTaskQueueFamilySummary()
+	if taskQueueFamilySummary == nil ||
+		taskQueueFamilySummary.GetCount() < args.GetMaxTaskQueues() {
+		return false, nil
+	}
+	if taskQueueFamilyMayExist(taskQueueFamilySummary, args.GetTaskQueueName()) {
+		return true, nil
+	}
+
+	// The bloom filter thinks that adding this task queue would exceed the currently set limit
+	d.recordTaskQueueFamilyBloomFilterOutcome(taskQueueFamilyBloomFilterOutcomeRejected)
+	return false, temporal.NewApplicationError(
+		fmt.Sprintf("cannot add task queue %v since maximum number of task queues (%d) have been registered in deployment", args.GetTaskQueueName(), args.GetMaxTaskQueues()),
+		errMaxTaskQueuesInVersionType,
+	)
+}
+
+func (d *WorkflowRunner) recordTaskQueueFamilyBloomFilterOutcome(outcome string) {
+	d.metrics.WithTags(map[string]string{"outcome": outcome}).
+		Counter(metrics.WorkerDeploymentTaskQueueFamilyBloomFilterOutcome.Name()).Inc(1)
 }
 
 func (d *WorkflowRunner) validateDeleteDeployment() error {
@@ -1625,7 +1671,7 @@ func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string,
 			d.updateVersionSummary(sum)
 		} else {
 			//nolint:staticcheck // SA1019
-			d.updateVersionSummary(versionStateToSummary(res.GetVersionState()))
+			d.updateVersionSummary(versionStateToSummary(res.GetVersionState(), false))
 		}
 	} else if revisionNumber > 0 {
 		// Activity failed meaning the synchronous part of the sync request failed. we need to untrack the revision number.

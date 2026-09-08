@@ -53,7 +53,7 @@ func TestReplays(t *testing.T) {
 
 func testReplays(t *testing.T, versionDemotionSignalEnabled bool) {
 	// For each workflow implementation version we run all the replay tests for snapshots created by that version or older versions
-	for wv := workerdeployment.InitialVersion; wv <= workerdeployment.VersionDataRevisionNumber; wv++ {
+	for wv := workerdeployment.InitialVersion; wv <= workerdeployment.TaskQueueFamilySummary; wv++ {
 		replayer := worker.NewWorkflowReplayer()
 
 		// Create version workflow wrapper to match production registration

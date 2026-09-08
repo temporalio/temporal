@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -17,6 +18,7 @@ import (
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/worker_versioning"
@@ -36,7 +38,7 @@ type VersionWorkflowSuite struct {
 
 func TestVersionWorkflowSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, &VersionWorkflowSuite{workflowVersion: VersionDataRevisionNumber})
+	suite.Run(t, &VersionWorkflowSuite{workflowVersion: TaskQueueFamilySummary})
 }
 
 func (s *VersionWorkflowSuite) SetupTest() {
@@ -66,6 +68,108 @@ func (s *VersionWorkflowSuite) SetupTest() {
 func (s *VersionWorkflowSuite) TearDownTest() {
 	s.controller.Finish()
 	s.env.AssertExpectations(s.T())
+}
+
+func TestVersionWorkflowTaskQueueFamilySummaryBootstrap(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name        string
+		summarySent bool
+		wantSignal  bool
+	}{
+		{
+			name:       "first v3 run after continue as new",
+			wantSignal: true,
+		},
+		{
+			name:        "later v3 run",
+			summarySent: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			tv := testvars.New(t)
+			var workflowSuite testsuite.WorkflowTestSuite
+			env := workflowSuite.NewTestWorkflowEnvironment()
+			versionWorkflow := func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentVersionWorkflowArgs) error {
+				return VersionWorkflow(
+					ctx,
+					func() DeploymentWorkflowVersion { return TaskQueueFamilySummary },
+					func() time.Duration { return 5 * time.Minute },
+					func() time.Duration { return 3 * time.Minute },
+					args,
+				)
+			}
+			env.RegisterWorkflowWithOptions(versionWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentVersionWorkflowType})
+			env.SetContinuedExecutionRunID("previous-run-id")
+
+			var capturedSummary *deploymentspb.WorkerDeploymentVersionSummary
+			signalCall := env.OnSignalExternalWorkflow(
+				mock.Anything,
+				GenerateDeploymentWorkflowID(tv.DeploymentSeries()),
+				"",
+				SyncVersionSummarySignal,
+				mock.Anything,
+			).Return(func(namespace string, workflowID string, runID string, signalName string, arg any) error {
+				capturedSummary = arg.(*deploymentspb.WorkerDeploymentVersionSummary)
+				return nil
+			})
+			if tc.wantSignal {
+				signalCall.Once()
+			} else {
+				signalCall.Maybe()
+			}
+
+			env.RegisterDelayedCallback(func() {
+				env.SignalWorkflow(ForceCANSignalName, &deploymentspb.ForceCANVersionSignalArgs{})
+			}, time.Millisecond)
+
+			env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+				NamespaceName: tv.NamespaceName().String(),
+				NamespaceId:   tv.NamespaceID().String(),
+				VersionState: &deploymentspb.VersionLocalState{
+					Version: &deploymentspb.WorkerDeploymentVersion{
+						DeploymentName: tv.DeploymentSeries(),
+						BuildId:        tv.BuildID(),
+					},
+					TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
+						tv.TaskQueue().GetName(): {
+							TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
+								int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
+							},
+						},
+					},
+					TaskQueueFamilySummarySignalSent: tc.summarySent,
+				},
+			})
+
+			require.True(t, env.IsWorkflowCompleted())
+			workflowErr := env.GetWorkflowError()
+			require.Error(t, workflowErr)
+			var executionErr *temporal.WorkflowExecutionError
+			require.ErrorAs(t, workflowErr, &executionErr)
+			var continueAsNewErr *workflow.ContinueAsNewError
+			require.ErrorAs(t, executionErr.Unwrap(), &continueAsNewErr)
+			var nextArgs deploymentspb.WorkerDeploymentVersionWorkflowArgs
+			require.NoError(t, payloads.Decode(continueAsNewErr.Input, &nextArgs))
+			require.True(t, nextArgs.GetVersionState().GetTaskQueueFamilySummarySignalSent())
+
+			require.Equal(t, tc.wantSignal, capturedSummary != nil)
+			if !tc.wantSignal {
+				require.Nil(t, capturedSummary)
+			} else {
+				require.Equal(t, int32(1), capturedSummary.GetTaskQueueFamilySummary().GetCount())
+				require.NotZero(t, capturedSummary.GetTaskQueueFamilySummary().GetBloomFilterSize())
+				require.NotZero(t, capturedSummary.GetTaskQueueFamilySummary().GetBloomFilterHashCount())
+				require.NotEmpty(t, capturedSummary.GetTaskQueueFamilySummary().GetBloomFilterWords())
+			}
+			env.AssertExpectations(t)
+		})
+	}
 }
 
 // Test_SyncState_BatchSize verifies if the right number of batches are created during the SyncDeploymentVersionUserData activity
@@ -1095,6 +1199,18 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_ResetRevisionNumber_WhenReviv
 	// Make propagation check take long enough so register worker happens before workflow exits
 	s.env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).After(100 * time.Millisecond).Return(nil).Maybe()
 
+	var capturedSummary *deploymentspb.WorkerDeploymentVersionSummary
+	s.env.OnSignalExternalWorkflow(
+		mock.Anything,
+		GenerateDeploymentWorkflowID(tv.DeploymentSeries()),
+		"",
+		SyncVersionSummarySignal,
+		mock.Anything,
+	).Return(func(namespace string, workflowID string, runID string, signalName string, arg any) error {
+		capturedSummary = arg.(*deploymentspb.WorkerDeploymentVersionSummary)
+		return nil
+	}).Maybe()
+
 	// Delete the version
 	s.env.RegisterDelayedCallback(func() {
 		deleteArgs := &deploymentspb.DeleteVersionArgs{
@@ -1193,6 +1309,8 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_ResetRevisionNumber_WhenReviv
 	})
 
 	s.True(s.env.IsWorkflowCompleted())
+	s.Require().NotNil(capturedSummary)
+	s.Equal(int32(1), capturedSummary.GetTaskQueueFamilySummary().GetCount())
 }
 
 // Test_SyncState_IncrementsRevisionNumber_InAsyncMode tests that revision numbers are tracked
@@ -1617,7 +1735,20 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_DoesNotSignalPropagationCompl
 
 	s.env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).Return(nil).Maybe()
 
-	s.env.OnSignalExternalWorkflow(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Run(func(args mock.Arguments) {
+	var capturedSummary *deploymentspb.WorkerDeploymentVersionSummary
+	expectedWorkflowID := GenerateDeploymentWorkflowID(tv.DeploymentSeries())
+	s.env.OnSignalExternalWorkflow(
+		mock.Anything,
+		expectedWorkflowID,
+		"",
+		SyncVersionSummarySignal,
+		mock.Anything,
+	).Return(func(namespace string, workflowID string, runID string, signalName string, arg any) error {
+		capturedSummary = arg.(*deploymentspb.WorkerDeploymentVersionSummary)
+		return nil
+	}).Maybe()
+
+	s.env.OnSignalExternalWorkflow(mock.Anything, mock.Anything, mock.Anything, PropagationCompleteSignal, mock.Anything).Run(func(args mock.Arguments) {
 		s.Fail("Should not signal propagation complete for worker registration")
 	}).Maybe()
 
@@ -1663,6 +1794,11 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_DoesNotSignalPropagationCompl
 	})
 
 	s.True(s.env.IsWorkflowCompleted())
+	s.Require().NotNil(capturedSummary)
+	s.Equal(int32(1), capturedSummary.GetTaskQueueFamilySummary().GetCount())
+	s.NotZero(capturedSummary.GetTaskQueueFamilySummary().GetBloomFilterSize())
+	s.NotZero(capturedSummary.GetTaskQueueFamilySummary().GetBloomFilterHashCount())
+	s.NotEmpty(capturedSummary.GetTaskQueueFamilySummary().GetBloomFilterWords())
 }
 
 // Test_BatchTaskQueuesForSync_SingleBatch tests batching when task queues fit in one batch

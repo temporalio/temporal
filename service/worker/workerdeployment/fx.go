@@ -33,6 +33,8 @@ const (
 	AsyncSetCurrentAndRamping
 	// Version Data has its own revision number with TaskQueue registration being async as well
 	VersionDataRevisionNumber
+	// Version summaries include task queue family membership information.
+	TaskQueueFamilySummary
 )
 
 type (

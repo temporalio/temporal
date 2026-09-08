@@ -1680,6 +1680,7 @@ var (
 	WorkerDeploymentVersioningOverrideCounter         = NewCounterDef("worker_deployment_versioning_override_count")
 	WorkerDeploymentVersioningOneTimeOverrideCounter  = NewCounterDef("worker_deployment_versioning_one_time_override_count")
 	WorkerDeploymentVersionDeletePropagationFailure   = NewCounterDef("worker_deployment_version_delete_propagation_failure")
+	WorkerDeploymentTaskQueueFamilyBloomFilterOutcome = NewCounterDef("worker_deployment_task_queue_family_bloom_filter_outcome")
 	StartDeploymentTransitionCounter                  = NewCounterDef("start_deployment_transition_count")
 	VersioningDataPropagationLatency                  = NewTimerDef("versioning_data_propagation_latency")
 	SlowVersioningDataPropagationCounter              = NewCounterDef("slow_versioning_data_propagation")
