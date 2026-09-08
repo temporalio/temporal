@@ -284,7 +284,7 @@ type Config struct {
 	EnableWorkflowTaskStampIncrementOnFailure        dynamicconfig.BoolPropertyFn
 	DiscardSpeculativeWorkflowTaskMaximumEventsCount dynamicconfig.IntPropertyFn
 	EnableDropRepeatedWorkflowTaskFailures           dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableSignalWithStartContinueAsNewBackoff        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableSignalWithStartWorkflowTaskBackoff         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// TODO seankane: Added on 3/10/2026, if this is never used we should remove it at a later date
 	SendTransientOrSpeculativeWorkflowTaskEvents dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -735,7 +735,7 @@ func NewConfig(
 		EnableWorkflowTaskStampIncrementOnFailure:        dynamicconfig.EnableWorkflowTaskStampIncrementOnFailure.Get(dc),
 		DiscardSpeculativeWorkflowTaskMaximumEventsCount: dynamicconfig.DiscardSpeculativeWorkflowTaskMaximumEventsCount.Get(dc),
 		EnableDropRepeatedWorkflowTaskFailures:           dynamicconfig.EnableDropRepeatedWorkflowTaskFailures.Get(dc),
-		EnableSignalWithStartContinueAsNewBackoff:        dynamicconfig.EnableSignalWithStartContinueAsNewBackoff.Get(dc),
+		EnableSignalWithStartWorkflowTaskBackoff:         dynamicconfig.EnableSignalWithStartWorkflowTaskBackoff.Get(dc),
 		SendTransientOrSpeculativeWorkflowTaskEvents:     dynamicconfig.SendTransientOrSpeculativeWorkflowTaskEvents.Get(dc),
 
 		ReplicationTaskApplyTimeout:                  dynamicconfig.ReplicationTaskApplyTimeout.Get(dc),

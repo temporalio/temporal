@@ -357,12 +357,10 @@ func signalWorkflow(
 		createWorkflowTask := true
 		now := shardContext.GetTimeSource().Now()
 		executionTime := mutableState.GetExecutionInfo().GetExecutionTime().AsTime()
-		beforeExecutionTime := now.Before(executionTime)
-		continueAsNewBackoff := false
 
 		// Only runs still inside their backoff window can have the delay bypassed, so the start
 		// event is loaded lazily to keep it off the hot path.
-		if beforeExecutionTime && mutableState.IsWorkflowPendingOnWorkflowTaskBackoff() {
+		if now.Before(executionTime) && mutableState.IsWorkflowPendingOnWorkflowTaskBackoff() {
 			startEvent, err := mutableState.GetStartEvent(ctx)
 			if err != nil {
 				return err
@@ -374,15 +372,13 @@ func signalWorkflow(
 				metrics.NamespaceTag(request.GetNamespace()),
 				metrics.StringTag("backoff_type", backoffType),
 			)
-			continueAsNewBackoff = startAttr.GetContinuedExecutionRunId() != "" &&
-				startAttr.GetInitiator() == enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW
-			createWorkflowTask = !continueAsNewBackoff || !shardContext.GetConfig().EnableSignalWithStartContinueAsNewBackoff(request.GetNamespace())
-		}
+			if shardContext.GetConfig().EnableSignalWithStartWorkflowTaskBackoff(request.GetNamespace()) {
+				createWorkflowTask = false
+			}
 
-		if beforeExecutionTime {
-			message := "Skipped workflow start delay for signalWithStart request"
-			if continueAsNewBackoff && !createWorkflowTask {
-				message = "Honored continue-as-new backoff for signalWithStart request"
+			message := "Skipped first workflow task backoff for signalWithStart request"
+			if !createWorkflowTask {
+				message = "Honored first workflow task backoff for signalWithStart request"
 			}
 
 			workflowKey := workflowLease.GetContext().GetWorkflowKey()

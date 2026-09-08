@@ -269,7 +269,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_ContinuedAsNewWorkflow
 }
 
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_ContinuedAsNewWorkflowTaskBackoff_Enforced() {
-	s.config.EnableSignalWithStartContinueAsNewBackoff = func(string) bool { return true }
+	s.config.EnableSignalWithStartWorkflowTaskBackoff = func(string) bool { return true }
 
 	ctx := context.Background()
 	currentWorkflowLease := api.NewWorkflowLease(
@@ -329,8 +329,20 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_RetryInitiatorDuringBa
 	s.assertWorkflowTaskScheduledDuringBackoff(enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY)
 }
 
+func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_RetryInitiatorDuringBackoff_Enforced() {
+	s.assertWorkflowTaskBackoff(enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY, true, false)
+}
+
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_CronInitiatorDuringBackoff() {
 	s.assertWorkflowTaskScheduledDuringBackoff(enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE)
+}
+
+func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_CronInitiatorDuringBackoff_Enforced() {
+	s.assertWorkflowTaskBackoff(enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, true, false)
+}
+
+func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_DelayStartDuringBackoff_Enforced() {
+	s.assertWorkflowTaskBackoff(enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED, true, false)
 }
 
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_OverdueWorkflowTaskBackoff() {
@@ -359,6 +371,14 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_OverdueWorkflowTaskBac
 }
 
 func (s *signalWithStartWorkflowSuite) assertWorkflowTaskScheduledDuringBackoff(initiator enumspb.ContinueAsNewInitiator) {
+	s.assertWorkflowTaskBackoff(initiator, false, true)
+}
+
+func (s *signalWithStartWorkflowSuite) assertWorkflowTaskBackoff(
+	initiator enumspb.ContinueAsNewInitiator,
+	enforceBackoff bool,
+	expectWorkflowTask bool,
+) {
 	ctx := context.Background()
 	currentWorkflowLease := api.NewWorkflowLease(
 		s.currentContext,
@@ -367,13 +387,16 @@ func (s *signalWithStartWorkflowSuite) assertWorkflowTaskScheduledDuringBackoff(
 	)
 	request := s.randomRequest()
 	s.currentExecutionInfo.ExecutionTime = timestamppb.New(s.timeSource.Now().Add(time.Hour))
+	s.config.EnableSignalWithStartWorkflowTaskBackoff = func(string) bool { return enforceBackoff }
 
 	s.expectSignalWorkflowEvent(request)
 	s.currentMutableState.EXPECT().HasPendingWorkflowTask().Return(false)
 	s.currentMutableState.EXPECT().IsWorkflowExecutionStatusPaused().Return(false)
 	s.currentMutableState.EXPECT().IsWorkflowPendingOnWorkflowTaskBackoff().Return(true)
 	s.currentMutableState.EXPECT().GetStartEvent(ctx).Return(signalWorkflowStartEvent(initiator, uuid.NewString()), nil)
-	s.currentMutableState.EXPECT().AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL).Return(&historyi.WorkflowTaskInfo{}, nil)
+	if expectWorkflowTask {
+		s.currentMutableState.EXPECT().AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL).Return(&historyi.WorkflowTaskInfo{}, nil)
+	}
 	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
 
 	capture := s.metricsHandler.StartCapture()
@@ -385,9 +408,14 @@ func (s *signalWithStartWorkflowSuite) assertWorkflowTaskScheduledDuringBackoff(
 		request,
 	)
 	s.Require().NoError(err)
-	expectedBackoffType := "RETRY"
-	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE {
+	expectedBackoffType := "DELAY_START"
+	switch initiator {
+	case enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY:
+		expectedBackoffType = "RETRY"
+	case enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE:
 		expectedBackoffType = "CRON"
+	case enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW:
+		expectedBackoffType = "CONTINUE_AS_NEW"
 	}
 	s.assertSkipDelayMetric(capture, request, expectedBackoffType)
 }

@@ -2785,10 +2785,10 @@ the number of children greater than or equal to this threshold`,
 		false,
 		`EnableDropRepeatedWorkflowTaskFailures whether to silently drop repeated workflow task failures`,
 	)
-	EnableSignalWithStartContinueAsNewBackoff = NewNamespaceBoolSetting(
-		"history.enableSignalWithStartContinueAsNewBackoff",
+	EnableSignalWithStartWorkflowTaskBackoff = NewNamespaceBoolSetting(
+		"history.enableSignalWithStartWorkflowTaskBackoff",
 		false,
-		`EnableSignalWithStartContinueAsNewBackoff enables SignalWithStart to honor workflow-initiated continue-as-new first workflow task backoff.`,
+		`EnableSignalWithStartWorkflowTaskBackoff enables SignalWithStart to honor first workflow task backoff.`,
 	)
 	SendTransientOrSpeculativeWorkflowTaskEvents = NewNamespaceBoolSetting(
 		"history.sendTransientOrSpeculativeWorkflowTaskEvents",
