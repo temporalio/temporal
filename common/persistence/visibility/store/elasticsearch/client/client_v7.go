@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 )
 
 type (
@@ -71,6 +73,8 @@ func newClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*client
 		httpClient.Timeout = 60 * time.Second
 	}
 
+	wrapDialLogger(httpClient, logger)
+
 	// TODO (alex): Remove this when https://github.com/olivere/elastic/pull/1507 is merged.
 	if cfg.CloseIdleConnectionsInterval != time.Duration(0) {
 		if cfg.CloseIdleConnectionsInterval < minimumCloseIdleConnectionsInterval {
@@ -121,6 +125,42 @@ func buildTLSHTTPClient(config *auth.TLS) (*http.Client, error) {
 	tlsClient := &http.Client{Transport: transport}
 
 	return tlsClient, nil
+}
+
+// wrapDialLogger wraps the transport's DialContext to log the remote IP for each new TCP connection
+// to Elasticsearch. Helps diagnose which node is being dialed during zone partition experiments.
+func wrapDialLogger(httpClient *http.Client, logger log.Logger) {
+	var transport *http.Transport
+	switch t := httpClient.Transport.(type) {
+	case *http.Transport:
+		transport = t
+	case nil:
+		transport = http.DefaultTransport.(*http.Transport).Clone()
+		httpClient.Transport = transport
+	default:
+		// Non-*http.Transport (e.g. AWS RoundTripper) — cannot wrap DialContext.
+		return
+	}
+
+	baseDialContext := transport.DialContext
+	if baseDialContext == nil {
+		d := &net.Dialer{
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
+		}
+		baseDialContext = d.DialContext
+	}
+	transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+		conn, err := baseDialContext(ctx, network, addr)
+		if err != nil {
+			return nil, err
+		}
+		logger.Info("Elasticsearch TCP connection established",
+			tag.NewStringTag("remote_addr", conn.RemoteAddr().String()),
+			tag.NewStringTag("local_addr", conn.LocalAddr().String()),
+		)
+		return conn, nil
+	}
 }
 
 func (c *clientImpl) Get(ctx context.Context, index string, docID string) (*elastic.GetResult, error) {
