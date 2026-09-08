@@ -20,6 +20,8 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resourcetest"
@@ -199,6 +201,38 @@ func (s *taskExecutorSuite) TestFilterTask_GradualConnectShedsOrdinaryTaskAndAdm
 	ok, err = s.replicationTaskExecutor.filterTask(namespaceID, workflowID, false, true)
 	s.NoError(err)
 	s.True(ok)
+}
+
+func (s *taskExecutorSuite) TestFilterTask_CompletedGradualConnectDoesNotEmitMetrics() {
+	namespaceID := namespace.ID(uuid.NewString())
+	namespaceEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "test-namespace"},
+		nil,
+		&persistencespb.NamespaceReplicationConfig{
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			},
+			ClusterReplicationRamps: map[string]*persistencespb.NamespaceReplicationRamp{
+				cluster.TestCurrentClusterName: {
+					StartTime:         timestamppb.New(s.mockShard.GetTimeSource().Now().Add(-2 * time.Hour)),
+					Duration:          durationpb.New(time.Hour),
+					InitialPercentage: 0,
+				},
+			},
+		},
+		0,
+	)
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(namespaceEntry, nil)
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.replicationTaskExecutor.metricsHandler = metricsHandler
+
+	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, "test-workflow-id", false, false)
+	s.Require().NoError(err)
+	s.True(ok)
+	s.Empty(capture.Snapshot()[metrics.ReplicationGradualConnectPercent.Name()])
 }
 
 func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask() {
@@ -447,5 +481,14 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncHSMTask() {
 
 	// not handling SyncHSMTask in deprecated replication task processing code path
 	err := s.replicationTaskExecutor.Execute(context.Background(), task, true)
+	s.ErrorIs(err, ErrUnknownReplicationTask)
+}
+
+func (s *taskExecutorSuite) TestProcessTaskOnce_DeleteExecutionTaskIsRejected() {
+	task := &replicationspb.ReplicationTask{
+		TaskType: enumsspb.REPLICATION_TASK_TYPE_DELETE_EXECUTION_TASK,
+	}
+
+	err := s.replicationTaskExecutor.Execute(context.Background(), task, false)
 	s.ErrorIs(err, ErrUnknownReplicationTask)
 }

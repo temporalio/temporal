@@ -94,6 +94,8 @@ func (e *taskExecutorImpl) Execute(
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
 		err = e.handleSyncWorkflowStateTask(ctx, replicationTask, forceApply)
 	default:
+		// Delete tasks must remain unsupported here: this legacy path applies gradual-connect
+		// filtering without the delete executable's correctness-critical bypass.
 		// NOTE: not handling SyncHSMTask in this deprecated code path, task will go to DLQ
 		e.logger.Error("Unknown replication task type.", tag.ReplicationTask(replicationTask))
 		err = ErrUnknownReplicationTask
@@ -415,17 +417,18 @@ FilterLoop:
 		e.shardContext.GetTimeSource().Now(),
 		workflowID,
 	)
+	if percent >= 100 {
+		return true, nil
+	}
 	metrics.ReplicationGradualConnectPercent.With(e.metricsHandler).Record(
 		float64(percent),
 		metrics.NamespaceTag(namespaceEntry.Name().String()),
 	)
 	if isForceReplication {
-		if percent < 100 {
-			metrics.ReplicationForceTaskBeforeGradualConnectReady.With(e.metricsHandler).Record(
-				1,
-				metrics.NamespaceTag(namespaceEntry.Name().String()),
-			)
-		}
+		metrics.ReplicationForceTaskBypassedRamp.With(e.metricsHandler).Record(
+			1,
+			metrics.NamespaceTag(namespaceEntry.Name().String()),
+		)
 		return true, nil
 	}
 	if admitted {

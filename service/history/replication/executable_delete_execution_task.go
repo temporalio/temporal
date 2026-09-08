@@ -58,6 +58,8 @@ func NewExecutableDeleteExecutionTask(
 		sourceShardKey,
 		replicationTask,
 	)
+	// Admission can decrease after clock regression. Never shed a delete after admitting earlier
+	// history: force replication can restore ordinary gaps, but it cannot safely infer the deletion.
 	executableTask.bypassGradualConnect = true
 
 	// ArchetypeID should never be unspecified. Default to WorkflowArchetypeID.
@@ -115,17 +117,6 @@ func (e *ExecutableDeleteExecutionTask) Execute() error {
 	if err != nil {
 		return err
 	} else if !apply {
-		e.Logger.Warn("Skipping the replication task",
-			tag.WorkflowNamespaceID(e.NamespaceID),
-			tag.WorkflowID(e.BusinessID),
-			tag.WorkflowRunID(e.RunID),
-			tag.TaskID(e.TaskID()),
-		)
-		metrics.ReplicationTasksSkipped.With(e.MetricsHandler).Record(
-			1,
-			metrics.OperationTag(metrics.DeleteExecutionReplicationTaskScope),
-			metrics.NamespaceTag(namespaceName),
-		)
 		return nil
 	}
 	namespaceEntry, err := e.NamespaceCache.GetNamespaceByID(namespace.ID(e.NamespaceID))

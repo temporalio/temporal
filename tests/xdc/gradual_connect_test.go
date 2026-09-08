@@ -48,8 +48,8 @@ func (s *gradualConnectTestSuite) SetupTest() {
 	s.setupTest()
 }
 
-// Exercises the gradual-connect ramp end to end: shed while the ramp is active, admitted once it
-// completes.
+// Exercises the gradual-connect ramp end to end: shed while the ramp is active, explicitly open
+// it with a zero-duration update, and recover previously shed history with force replication.
 func (s *gradualConnectTestSuite) TestNewlyConnectedClusterRampsAdmission() {
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
@@ -60,9 +60,9 @@ func (s *gradualConnectTestSuite) TestNewlyConnectedClusterRampsAdmission() {
 	active := s.clusters[0]
 	standby := s.clusters[1]
 
-	// Explicitly opt this namespace into a short ramp. The active cluster snapshots these values
+	// Explicitly opt this namespace into a long ramp. The active cluster snapshots these values
 	// into namespace state when standby is added.
-	const rampDuration = 12 * time.Second
+	const rampDuration = time.Hour
 	for _, override := range []struct {
 		setting dynamicconfig.GenericSetting
 		value   any
@@ -93,10 +93,9 @@ func (s *gradualConnectTestSuite) TestNewlyConnectedClusterRampsAdmission() {
 	nsResp, err := standby.TestBase().MetadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: ns})
 	s.Require().NoError(err)
 	ramp := nsResp.Namespace.GetReplicationConfig().GetClusterReplicationRamps()[standby.ClusterName()]
-	s.Require().NotNil(ramp, "standby should receive the immutable ramp for this connection")
+	s.Require().NotNil(ramp, "standby should receive the snapshotted ramp for this connection")
 	s.Require().WithinDuration(connectedAt, ramp.GetStartTime().AsTime(), namespaceCacheWaitTime+5*time.Second)
 	s.Require().Equal(rampDuration, ramp.GetDuration().AsDuration())
-	connectTime := ramp.GetStartTime().AsTime()
 
 	// Still inside the ramp window: a workflow started on active must not replicate to standby yet.
 	var shedWorkflowID string
@@ -111,10 +110,32 @@ func (s *gradualConnectTestSuite) TestNewlyConnectedClusterRampsAdmission() {
 		return s.gcWorkflowExistsOn(ctx, standby, ns, shedWorkflowID)
 	}, 3*time.Second, 200*time.Millisecond, "workflow should be shed while the ramp is still active")
 
-	// Once the ramp has completed, a new workflow started on active must replicate normally.
-	// Sleep-until-deadline is deliberate, not poll-until-condition: a task generated before the
-	// deadline is dropped for good by the shed gate, so polling early can't substitute for it.
-	time.Sleep(time.Until(connectTime.Add(rampDuration + 3*time.Second))) //nolint:forbidigo
+	// Setting the existing cluster's ramp duration to zero explicitly opens the ramp. Confirm that
+	// removal reaches standby persistence before generating the next replication task; checking
+	// only the source response could race namespace replication.
+	s.updateNamespaceClustersWithReplicationConfigs(
+		ns,
+		0,
+		s.clusters,
+		[]*replicationpb.ClusterReplicationConfig{
+			{ClusterName: active.ClusterName()},
+			{
+				ClusterName:             standby.ClusterName(),
+				ReplicationRampDuration: durationpb.New(0),
+			},
+		},
+	)
+	await.RequireTruef(s.T(), func() bool {
+		nsResp, err := standby.TestBase().MetadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: ns})
+		if err != nil {
+			return false
+		}
+		return nsResp.Namespace.GetReplicationConfig().GetClusterReplicationRamps()[standby.ClusterName()] == nil
+	}, replicationWaitTime, replicationCheckInterval, "standby should remove the ramp after a zero-duration update")
+	s.waitForNamespaceCacheRefresh()
+
+	// A new workflow started after the explicit clear must replicate normally even though the
+	// original ramp duration has not elapsed.
 	admittedWorkflowID := "gc-admit-" + uuid.NewString()
 	s.gcStartAndCompleteWorkflow(ctx, active, ns, admittedWorkflowID)
 	await.RequireTruef(s.T(), func() bool {

@@ -2,6 +2,7 @@ package replication
 
 import (
 	"context"
+	"maps"
 	"sync"
 
 	"go.temporal.io/api/serviceerror"
@@ -105,6 +106,9 @@ func (e *eagerNamespaceRefresherImpl) SyncNamespaceFromSourceCluster(
 		ConfigVersion:      resp.GetConfigVersion(),
 		FailoverVersion:    resp.GetFailoverVersion(),
 		FailoverHistory:    resp.GetFailoverHistory(),
+		ClusterReplicationRamps: maps.Clone(
+			resp.GetClusterReplicationRamps(),
+		),
 	}
 	err = e.replicationTaskExecutor.Execute(ctx, task)
 	if err != nil {

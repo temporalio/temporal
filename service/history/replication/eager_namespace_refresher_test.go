@@ -81,6 +81,9 @@ func TestEagerNamespaceRefresherSuite(t *testing.T) {
 func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_CreateSuccess() {
 	namespaceId := namespace.ID("abc")
 	nsName := "another-random-namespace-name"
+	ramps := map[string]*persistencespb.NamespaceReplicationRamp{
+		mockCurrentCuster: {},
+	}
 	nsResponse := &adminservice.GetNamespaceResponse{
 		Info: &namespacepb.NamespaceInfo{
 			Id:    namespaceId.String(),
@@ -94,17 +97,19 @@ func (s *EagerNamespaceRefresherSuite) TestSyncNamespaceFromSourceCluster_Create
 				{ClusterName: "not_current_cluster_1"},
 			},
 		},
-		IsGlobalNamespace: true,
+		ClusterReplicationRamps: ramps,
+		IsGlobalNamespace:       true,
 	}
 	task := &replicationspb.NamespaceTaskAttributes{
-		NamespaceOperation: enumsspb.NAMESPACE_OPERATION_CREATE,
-		Id:                 nsResponse.GetInfo().Id,
-		Info:               nsResponse.GetInfo(),
-		Config:             nsResponse.GetConfig(),
-		ReplicationConfig:  nsResponse.GetReplicationConfig(),
-		ConfigVersion:      nsResponse.GetConfigVersion(),
-		FailoverVersion:    nsResponse.GetFailoverVersion(),
-		FailoverHistory:    nsResponse.GetFailoverHistory(),
+		NamespaceOperation:      enumsspb.NAMESPACE_OPERATION_CREATE,
+		Id:                      nsResponse.GetInfo().Id,
+		Info:                    nsResponse.GetInfo(),
+		Config:                  nsResponse.GetConfig(),
+		ReplicationConfig:       nsResponse.GetReplicationConfig(),
+		ConfigVersion:           nsResponse.GetConfigVersion(),
+		FailoverVersion:         nsResponse.GetFailoverVersion(),
+		FailoverHistory:         nsResponse.GetFailoverHistory(),
+		ClusterReplicationRamps: ramps,
 	}
 	s.remoteAdminClient.EXPECT().GetNamespace(gomock.Any(), &adminservice.GetNamespaceRequest{
 		Attributes: &adminservice.GetNamespaceRequest_Id{

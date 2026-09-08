@@ -141,6 +141,33 @@ func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsDisabledByDefaul
 	s.Empty(ramps)
 }
 
+func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsRepeatedDisabledRequestIsNoOp() {
+	request := []*replicationpb.ClusterReplicationConfig{
+		{ClusterName: "active"},
+		{ClusterName: "standby", ReplicationRampDuration: durationpb.New(time.Hour)},
+	}
+
+	ramps, err := s.handler.updateReplicationRamps(
+		"test-ns",
+		nil,
+		[]string{"active"},
+		request,
+		"active",
+	)
+	s.Require().NoError(err)
+	s.Empty(ramps)
+
+	ramps, err = s.handler.updateReplicationRamps(
+		"test-ns",
+		ramps,
+		[]string{"active", "standby"},
+		request,
+		"active",
+	)
+	s.Require().NoError(err)
+	s.Empty(ramps)
+}
+
 func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsSnapshotsAndRestartsAfterReconnect() {
 	const namespaceName = "test-ns"
 	s.config.EnableReplicationGradualConnect = dc.GetBoolPropertyFn(true)

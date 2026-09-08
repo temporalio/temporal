@@ -695,6 +695,38 @@ func (d *namespaceHandler) updateReplicationRamps(
 	newClusterConfigs []*replicationpb.ClusterReplicationConfig,
 	activeCluster string,
 ) (map[string]*persistencespb.NamespaceReplicationRamp, error) {
+	initialPercentage := d.config.ReplicationGradualConnectInitialPercent(namespaceName)
+	rampCreationEnabled := d.config.EnableReplicationGradualConnect() &&
+		initialPercentage >= 0 && initialPercentage < 100
+	ramps, err := updateExistingReplicationRamps(
+		existing,
+		oldClusters,
+		newClusterConfigs,
+		rampCreationEnabled,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if !rampCreationEnabled {
+		return ramps, nil
+	}
+	return addNewReplicationRamps(
+		ramps,
+		oldClusters,
+		newClusterConfigs,
+		activeCluster,
+		timestamppb.New(d.timeSource.Now()),
+		initialPercentage,
+	)
+}
+
+func updateExistingReplicationRamps(
+	existing map[string]*persistencespb.NamespaceReplicationRamp,
+	oldClusters []string,
+	newClusterConfigs []*replicationpb.ClusterReplicationConfig,
+	rampCreationEnabled bool,
+) (map[string]*persistencespb.NamespaceReplicationRamp, error) {
 	newClusters := make([]string, len(newClusterConfigs))
 	for i, clusterConfig := range newClusterConfigs {
 		newClusters[i] = clusterConfig.GetClusterName()
@@ -711,6 +743,12 @@ func (d *namespaceHandler) updateReplicationRamps(
 		if duration == nil || !slices.Contains(oldClusters, clusterName) {
 			continue
 		}
+		ramp := existing[clusterName]
+		if ramp == nil && !rampCreationEnabled {
+			// A disabled creation request is a silent no-op, including on declarative retries after
+			// the cluster-list update has already connected the target.
+			continue
+		}
 		if err := duration.CheckValid(); err != nil {
 			return nil, serviceerror.NewInvalidArgumentf(
 				"Invalid replication ramp duration for cluster %q: %v",
@@ -719,7 +757,6 @@ func (d *namespaceHandler) updateReplicationRamps(
 			)
 		}
 		if duration.AsDuration() != 0 {
-			ramp := existing[clusterName]
 			if ramp != nil && ramp.GetDuration() != nil &&
 				duration.AsDuration() == ramp.GetDuration().AsDuration() {
 				continue
@@ -731,13 +768,17 @@ func (d *namespaceHandler) updateReplicationRamps(
 		}
 		delete(ramps, clusterName)
 	}
+	return ramps, nil
+}
 
-	initialPercentage := d.config.ReplicationGradualConnectInitialPercent(namespaceName)
-	if !d.config.EnableReplicationGradualConnect() ||
-		initialPercentage < 0 || initialPercentage >= 100 {
-		return ramps, nil
-	}
-	startTime := timestamppb.New(d.timeSource.Now())
+func addNewReplicationRamps(
+	ramps map[string]*persistencespb.NamespaceReplicationRamp,
+	oldClusters []string,
+	newClusterConfigs []*replicationpb.ClusterReplicationConfig,
+	activeCluster string,
+	startTime *timestamppb.Timestamp,
+	initialPercentage int,
+) (map[string]*persistencespb.NamespaceReplicationRamp, error) {
 	for _, clusterConfig := range newClusterConfigs {
 		clusterName := clusterConfig.GetClusterName()
 		if clusterName == activeCluster || slices.Contains(oldClusters, clusterName) {

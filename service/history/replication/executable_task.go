@@ -790,8 +790,9 @@ func (e *ExecutableTaskImpl) SyncState(
 		}
 
 		tasksToAdd := make([]*adminservice.AddTasksRequest_Task, 0, len(taskEquivalents))
+		isForceReplication := e.replicationTask.GetRawTaskInfo().GetIsForceReplication()
 		for _, taskEquivalent := range taskEquivalents {
-			if e.replicationTask.GetRawTaskInfo().GetIsForceReplication() {
+			if isForceReplication {
 				taskEquivalent.IsForceReplication = true
 			}
 			blob, err := e.Serializer.ReplicationTaskInfoToBlob(taskEquivalent)
@@ -889,6 +890,7 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 			e.emitReplicationTaskError(wideevents.ReplOperationNamespaceSync, "Failed to refresh namespace from source cluster; replication task skipped", err, map[string]any{
 				"disposition": wideevents.ReplDispositionDiscarded,
 			})
+			e.emitReplicationTaskSkipped("", namespaceID, businessID)
 			return "", false, nil
 		}
 	default:
@@ -906,6 +908,7 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 
 	e.namespace.Store(namespaceEntry.Name())
 	if namespaceEntry.State() == enumspb.NAMESPACE_STATE_DELETED {
+		e.emitReplicationTaskSkipped(namespaceEntry.Name().String(), namespaceID, businessID)
 		return namespaceEntry.Name().String(), false, nil
 	}
 	shouldProcessTask := false
@@ -916,14 +919,36 @@ FilterLoop:
 			break FilterLoop
 		}
 	}
-	if shouldProcessTask && !e.admittedByGradualConnect(namespaceEntry, businessID) {
+	if !shouldProcessTask {
+		e.emitReplicationTaskSkipped(namespaceEntry.Name().String(), namespaceID, businessID)
+		return namespaceEntry.Name().String(), false, nil
+	}
+	if !e.admittedByGradualConnect(namespaceEntry, businessID) {
 		metrics.ReplicationTasksShedByGradualConnect.With(e.MetricsHandler).Record(
 			int64(1),
 			metrics.NamespaceTag(namespaceEntry.Name().String()),
 		)
-		shouldProcessTask = false
+		return namespaceEntry.Name().String(), false, nil
 	}
-	return namespaceEntry.Name().String(), shouldProcessTask, nil
+	return namespaceEntry.Name().String(), true, nil
+}
+
+func (e *ExecutableTaskImpl) emitReplicationTaskSkipped(namespaceName, namespaceID, businessID string) {
+	runID := ""
+	if rawTaskInfo := e.replicationTask.GetRawTaskInfo(); rawTaskInfo != nil {
+		runID = rawTaskInfo.GetRunId()
+	}
+	e.Logger.Warn("Skipping the replication task",
+		tag.WorkflowNamespaceID(namespaceID),
+		tag.WorkflowID(businessID),
+		tag.WorkflowRunID(runID),
+		tag.TaskID(e.TaskID()),
+	)
+	metrics.ReplicationTasksSkipped.With(e.MetricsHandler).Record(
+		1,
+		metrics.OperationTag(e.metricsTag),
+		metrics.NamespaceTag(namespaceName),
+	)
 }
 
 // admittedByGradualConnect reports whether businessID is admitted by the namespace gradual-connect
@@ -941,6 +966,9 @@ func (e *ExecutableTaskImpl) admittedByGradualConnect(namespaceEntry *namespace.
 		e.TimeSource.Now(),
 		businessID,
 	)
+	if percent >= 100 {
+		return true
+	}
 	nsName := namespaceEntry.Name().String()
 	metrics.ReplicationGradualConnectPercent.With(e.MetricsHandler).Record(
 		float64(percent),
@@ -948,12 +976,10 @@ func (e *ExecutableTaskImpl) admittedByGradualConnect(namespaceEntry *namespace.
 	)
 	if e.replicationTask.GetRawTaskInfo().GetIsForceReplication() {
 		// Shed tasks are dropped, not retried -- shedding these would strand a migration's verify loop.
-		if percent < 100 {
-			metrics.ReplicationForceTaskBeforeGradualConnectReady.With(e.MetricsHandler).Record(
-				1,
-				metrics.NamespaceTag(nsName),
-			)
-		}
+		metrics.ReplicationForceTaskBypassedRamp.With(e.MetricsHandler).Record(
+			1,
+			metrics.NamespaceTag(nsName),
+		)
 		return true
 	}
 	return admitted
@@ -973,9 +999,9 @@ func gradualConnectAdmission(
 	return dynamicconfig.RolloutAccepts([]byte(businessID), percent), percent
 }
 
-// gradualConnectPercent computes the current admission percent, capped at 100. It treats a time
-// before connectTime as the start of the ramp so clock skew cannot temporarily admit tasks that a
-// later evaluation would shed. Invalid schedules fail open.
+// gradualConnectPercent computes the current admission percent, capped at 100. Times before
+// connectTime use the initial percentage. Clock regression can reduce admission; delete tasks
+// bypass the ramp, and force replication repairs gaps from ordinary tasks. Invalid schedules fail open.
 func gradualConnectPercent(connectTime, now time.Time, duration time.Duration, initialPercent int) int {
 	elapsed := now.Sub(connectTime)
 	if duration <= 0 || initialPercent < 0 || initialPercent >= 100 {

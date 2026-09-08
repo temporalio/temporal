@@ -136,17 +136,6 @@ func (e *ExecutableActivityStateTask) Execute() error {
 	if nsError != nil {
 		return nsError
 	} else if !apply {
-		e.Logger.Warn("Skipping the replication task",
-			tag.WorkflowNamespaceID(e.NamespaceID),
-			tag.WorkflowID(e.WorkflowID),
-			tag.WorkflowRunID(e.RunID),
-			tag.TaskID(e.TaskID()),
-		)
-		metrics.ReplicationTasksSkipped.With(e.MetricsHandler).Record(
-			1,
-			metrics.OperationTag(metrics.SyncActivityTaskScope),
-			metrics.NamespaceTag(namespaceName),
-		)
 		return nil
 	}
 	ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)

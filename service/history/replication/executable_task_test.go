@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -857,11 +858,17 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_Skip() {
 	namespaceEntry, err := namespace.FromPersistentState(detail, factory(detail))
 	s.NoError(err)
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.task.MetricsHandler = metricsHandler
 
 	name, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
 	s.NoError(err)
 	s.Equal(namespaceName, name)
 	s.False(toProcess)
+	s.Len(capture.Snapshot()[metrics.ReplicationTasksSkipped.Name()], 1)
+	s.Empty(capture.Snapshot()[metrics.ReplicationTasksShedByGradualConnect.Name()])
 }
 
 func (s *executableTaskSuite) TestGetNamespaceInfo_Deleted() {
@@ -1121,6 +1128,10 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_ConnectTimeInF
 		InitialPercentage: 0,
 	})
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.task.MetricsHandler = metricsHandler
 
 	_, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
 	s.NoError(err)
@@ -1130,6 +1141,8 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_ConnectTimeInF
 	_, toProcess, err = s.task.GetNamespaceInfo(context.Background(), namespaceID, "test-workflow-id")
 	s.NoError(err)
 	s.False(toProcess, "catching up to the ramp start must not reduce the admission percentage")
+	s.Len(capture.Snapshot()[metrics.ReplicationTasksShedByGradualConnect.Name()], 2)
+	s.Empty(capture.Snapshot()[metrics.ReplicationTasksSkipped.Name()])
 }
 
 // TestGetNamespaceInfo_GradualConnect_ForceReplication_Admits: a shed task is dropped for good, so
@@ -1157,6 +1170,10 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_RampComplete_A
 		InitialPercentage: 0,
 	})
 	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespaceEntry, nil).AnyTimes()
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.task.MetricsHandler = metricsHandler
 
 	s.timeSource.Update(connectTime.Add(time.Hour)) // well past the ramp duration
 	for range 20 {
@@ -1164,6 +1181,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_RampComplete_A
 		s.NoError(err)
 		s.True(toProcess, "every workflow ID must be admitted once the ramp has run past 100%%")
 	}
+	s.Empty(capture.Snapshot()[metrics.ReplicationGradualConnectPercent.Name()])
 }
 
 func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_AdmissionGrowsAsClockMovesForward() {

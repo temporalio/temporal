@@ -1147,6 +1147,9 @@ func (s *adminHandlerSuite) TestGetNamespace_WithIDSuccess() {
 func (s *adminHandlerSuite) TestGetNamespace_WithNameSuccess() {
 	namespaceName := "some name"
 	namespaceId := "some id"
+	ramps := map[string]*persistencespb.NamespaceReplicationRamp{
+		cluster.TestCurrentClusterName: {},
+	}
 	nsResponse := &persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
 			FailoverVersion: 1,
@@ -1166,6 +1169,7 @@ func (s *adminHandlerSuite) TestGetNamespace_WithNameSuccess() {
 					cluster.TestCurrentClusterName,
 					cluster.TestAlternativeClusterName,
 				},
+				ClusterReplicationRamps: ramps,
 			},
 			FailoverNotificationVersion: 0,
 		},
@@ -1182,6 +1186,7 @@ func (s *adminHandlerSuite) TestGetNamespace_WithNameSuccess() {
 	s.Equal(namespaceId, resp.GetInfo().GetId())
 	s.Equal(namespaceName, resp.GetInfo().GetName())
 	s.Equal(cluster.TestAlternativeClusterName, resp.GetReplicationConfig().GetActiveClusterName())
+	s.Equal(ramps, resp.GetClusterReplicationRamps())
 }
 
 func (s *adminHandlerSuite) TestGetNamespace_EmptyRequest() {
