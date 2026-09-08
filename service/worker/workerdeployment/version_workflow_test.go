@@ -74,18 +74,17 @@ func TestVersionWorkflowTaskQueueFamilySummaryBootstrap(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
-		name          string
-		summarySent   bool
-		wantSignalCnt int
+		name        string
+		summarySent bool
+		wantSignal  bool
 	}{
 		{
-			name:          "first v3 run after continue as new",
-			wantSignalCnt: 1,
+			name:       "first v3 run after continue as new",
+			wantSignal: true,
 		},
 		{
-			name:          "later v3 run",
-			summarySent:   true,
-			wantSignalCnt: 0,
+			name:        "later v3 run",
+			summarySent: true,
 		},
 	}
 
@@ -109,17 +108,20 @@ func TestVersionWorkflowTaskQueueFamilySummaryBootstrap(t *testing.T) {
 			env.SetContinuedExecutionRunID("previous-run-id")
 
 			var capturedSummary *deploymentspb.WorkerDeploymentVersionSummary
-			if tc.wantSignalCnt > 0 {
-				env.OnSignalExternalWorkflow(
-					mock.Anything,
-					GenerateDeploymentWorkflowID(tv.DeploymentSeries()),
-					"",
-					SyncVersionSummarySignal,
-					mock.Anything,
-				).Return(func(namespace string, workflowID string, runID string, signalName string, arg any) error {
-					capturedSummary = arg.(*deploymentspb.WorkerDeploymentVersionSummary)
-					return nil
-				}).Once()
+			signalCall := env.OnSignalExternalWorkflow(
+				mock.Anything,
+				GenerateDeploymentWorkflowID(tv.DeploymentSeries()),
+				"",
+				SyncVersionSummarySignal,
+				mock.Anything,
+			).Return(func(namespace string, workflowID string, runID string, signalName string, arg any) error {
+				capturedSummary = arg.(*deploymentspb.WorkerDeploymentVersionSummary)
+				return nil
+			})
+			if tc.wantSignal {
+				signalCall.Once()
+			} else {
+				signalCall.Maybe()
 			}
 
 			env.RegisterDelayedCallback(func() {
@@ -156,11 +158,14 @@ func TestVersionWorkflowTaskQueueFamilySummaryBootstrap(t *testing.T) {
 			require.NoError(t, payloads.Decode(continueAsNewErr.Input, &nextArgs))
 			require.True(t, nextArgs.GetVersionState().GetTaskQueueFamilySummarySignalSent())
 
-			if tc.wantSignalCnt == 0 {
+			require.Equal(t, tc.wantSignal, capturedSummary != nil)
+			if !tc.wantSignal {
 				require.Nil(t, capturedSummary)
 			} else {
 				require.Equal(t, int32(1), capturedSummary.GetTaskQueueFamilySummary().GetCount())
-				require.NotEmpty(t, capturedSummary.GetTaskQueueFamilySummary().GetBloomFilter())
+				require.NotZero(t, capturedSummary.GetTaskQueueFamilySummary().GetBloomFilterSize())
+				require.NotZero(t, capturedSummary.GetTaskQueueFamilySummary().GetBloomFilterHashCount())
+				require.NotEmpty(t, capturedSummary.GetTaskQueueFamilySummary().GetBloomFilterWords())
 			}
 			env.AssertExpectations(t)
 		})
@@ -1791,7 +1796,9 @@ func (s *VersionWorkflowSuite) Test_RegisterWorker_DoesNotSignalPropagationCompl
 	s.True(s.env.IsWorkflowCompleted())
 	s.Require().NotNil(capturedSummary)
 	s.Equal(int32(1), capturedSummary.GetTaskQueueFamilySummary().GetCount())
-	s.NotEmpty(capturedSummary.GetTaskQueueFamilySummary().GetBloomFilter())
+	s.NotZero(capturedSummary.GetTaskQueueFamilySummary().GetBloomFilterSize())
+	s.NotZero(capturedSummary.GetTaskQueueFamilySummary().GetBloomFilterHashCount())
+	s.NotEmpty(capturedSummary.GetTaskQueueFamilySummary().GetBloomFilterWords())
 }
 
 // Test_BatchTaskQueuesForSync_SingleBatch tests batching when task queues fit in one batch

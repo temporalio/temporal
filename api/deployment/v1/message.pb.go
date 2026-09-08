@@ -881,7 +881,9 @@ type WorkerDeploymentVersionSummary struct {
 	// Also set by the deployment workflow at version creation time if a compute config was provided.
 	ComputeConfig *v12.ComputeConfigSummary `protobuf:"bytes,13,opt,name=compute_config,json=computeConfig,proto3" json:"compute_config,omitempty"`
 	// Compute status for this version. Synced from the version workflow when WCI signals a status change.
-	ComputeStatus          *v11.ComputeStatus      `protobuf:"bytes,14,opt,name=compute_status,json=computeStatus,proto3" json:"compute_status,omitempty"`
+	ComputeStatus *v11.ComputeStatus `protobuf:"bytes,14,opt,name=compute_status,json=computeStatus,proto3" json:"compute_status,omitempty"`
+	// Snapshot of registered task queue families published by the Version workflow.
+	// It is refreshed periodically or after relevant state changes and may lag the Version workflow's exact state.
 	TaskQueueFamilySummary *TaskQueueFamilySummary `protobuf:"bytes,15,opt,name=task_queue_family_summary,json=taskQueueFamilySummary,proto3" json:"task_queue_family_summary,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
@@ -3960,12 +3962,16 @@ func (x *DemoteVersionSignalArgs) GetRoutingConfig() *v11.RoutingConfig {
 
 type TaskQueueFamilySummary struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Exact number of task queue families registered in the Version.
+	// Exact number of task queue families registered in the Version. This is n when sizing the Bloom filter.
 	Count int32 `protobuf:"varint,1,opt,name=count,proto3" json:"count,omitempty"`
-	// Bloom filter containing the registered task queue family names.
-	BloomFilter   []byte `protobuf:"bytes,2,opt,name=bloom_filter,json=bloomFilter,proto3" json:"bloom_filter,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Number of bits in the Bloom filter.
+	BloomFilterSize int64 `protobuf:"varint,2,opt,name=bloom_filter_size,json=bloomFilterSize,proto3" json:"bloom_filter_size,omitempty"`
+	// Number of hash functions used by the Bloom filter.
+	BloomFilterHashCount int32 `protobuf:"varint,3,opt,name=bloom_filter_hash_count,json=bloomFilterHashCount,proto3" json:"bloom_filter_hash_count,omitempty"`
+	// Bloom filter words containing the registered task queue family names.
+	BloomFilterWords []int64 `protobuf:"varint,4,rep,packed,name=bloom_filter_words,json=bloomFilterWords,proto3" json:"bloom_filter_words,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *TaskQueueFamilySummary) Reset() {
@@ -4005,9 +4011,23 @@ func (x *TaskQueueFamilySummary) GetCount() int32 {
 	return 0
 }
 
-func (x *TaskQueueFamilySummary) GetBloomFilter() []byte {
+func (x *TaskQueueFamilySummary) GetBloomFilterSize() int64 {
 	if x != nil {
-		return x.BloomFilter
+		return x.BloomFilterSize
+	}
+	return 0
+}
+
+func (x *TaskQueueFamilySummary) GetBloomFilterHashCount() int32 {
+	if x != nil {
+		return x.BloomFilterHashCount
+	}
+	return 0
+}
+
+func (x *TaskQueueFamilySummary) GetBloomFilterWords() []int64 {
+	if x != nil {
+		return x.BloomFilterWords
 	}
 	return nil
 }
@@ -4483,10 +4503,12 @@ const file_temporal_server_api_deployment_v1_message_proto_rawDesc = "" +
 	"\x19ForceCANVersionSignalArgs\x12[\n" +
 	"\x0eoverride_state\x18\x01 \x01(\v24.temporal.server.api.deployment.v1.VersionLocalStateR\roverrideState\"k\n" +
 	"\x17DemoteVersionSignalArgs\x12P\n" +
-	"\x0erouting_config\x18\x01 \x01(\v2).temporal.api.deployment.v1.RoutingConfigR\rroutingConfig\"Q\n" +
+	"\x0erouting_config\x18\x01 \x01(\v2).temporal.api.deployment.v1.RoutingConfigR\rroutingConfig\"\xbf\x01\n" +
 	"\x16TaskQueueFamilySummary\x12\x14\n" +
-	"\x05count\x18\x01 \x01(\x05R\x05count\x12!\n" +
-	"\fbloom_filter\x18\x02 \x01(\fR\vbloomFilterB4Z2go.temporal.io/server/api/deployment/v1;deploymentb\x06proto3"
+	"\x05count\x18\x01 \x01(\x05R\x05count\x12*\n" +
+	"\x11bloom_filter_size\x18\x02 \x01(\x03R\x0fbloomFilterSize\x125\n" +
+	"\x17bloom_filter_hash_count\x18\x03 \x01(\x05R\x14bloomFilterHashCount\x12,\n" +
+	"\x12bloom_filter_words\x18\x04 \x03(\x03R\x10bloomFilterWordsB4Z2go.temporal.io/server/api/deployment/v1;deploymentb\x06proto3"
 
 var (
 	file_temporal_server_api_deployment_v1_message_proto_rawDescOnce sync.Once
