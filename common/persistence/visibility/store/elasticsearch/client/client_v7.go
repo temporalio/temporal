@@ -66,6 +66,12 @@ func newClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*client
 		}
 	}
 
+	if httpClient == nil || httpClient == http.DefaultClient {
+		httpClient = &http.Client{Timeout: 5 * time.Second}
+	} else {
+		httpClient.Timeout = 5 * time.Second
+	}
+
 	// TODO (alex): Remove this when https://github.com/olivere/elastic/pull/1507 is merged.
 	if cfg.CloseIdleConnectionsInterval != time.Duration(0) {
 		if cfg.CloseIdleConnectionsInterval < minimumCloseIdleConnectionsInterval {

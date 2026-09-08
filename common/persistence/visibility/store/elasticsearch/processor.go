@@ -176,7 +176,9 @@ func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey s
 		return nil
 	})
 	if !isDup {
+		p.logger.Info("Adding request to Elasticsearch bulk processor.", tag.Key(visibilityTaskKey), tag.ESDocID(request.ID))
 		p.bulkProcessor.Add(request)
+		p.logger.Info("Added request to Elasticsearch bulk processor.", tag.Key(visibilityTaskKey), tag.ESDocID(request.ID))
 		newFuture.recordAdd(p.metricsHandler)
 	}
 	return newFuture.future
@@ -184,6 +186,7 @@ func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey s
 
 // bulkBeforeAction is triggered before bulk processor commit
 func (p *processorImpl) bulkBeforeAction(_ int64, requests []elastic.BulkableRequest) {
+	p.logger.Info("Elasticsearch bulk processor committing bulk.", tag.RequestCount(len(requests)))
 	metrics.ElasticsearchBulkProcessorRequests.With(p.metricsHandler).Record(int64(len(requests)))
 	p.metricsHandler.Histogram(metrics.ElasticsearchBulkProcessorBulkSize.Name(), metrics.ElasticsearchBulkProcessorBulkSize.Unit()).
 		Record(int64(len(requests)))
@@ -206,6 +209,7 @@ func (p *processorImpl) bulkBeforeAction(_ int64, requests []elastic.BulkableReq
 
 // bulkAfterAction is triggered after bulk processor commit
 func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequest, response *elastic.BulkResponse, err error) {
+	p.logger.Info("Elasticsearch bulk processor bulk committed.", tag.RequestCount(len(requests)), tag.Error(err))
 	if err != nil {
 		const logFirstNRequests = 5
 		var httpStatus int
@@ -291,6 +295,7 @@ func (p *processorImpl) buildResponseIndex(response *elastic.BulkResponse) map[s
 }
 
 func (p *processorImpl) notifyResult(visibilityTaskKey string, ack bool) {
+	p.logger.Info("Notifying ES indexing result.", tag.Key(visibilityTaskKey), tag.Value(ack))
 	// Use RemoveIf here to prevent race condition with de-dup logic in Add method.
 	_ = p.mapToAckFuture.RemoveIf(visibilityTaskKey, func(key any, value any) bool {
 		ackF, ok := value.(*ackFuture)
