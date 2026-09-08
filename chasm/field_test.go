@@ -143,7 +143,6 @@ func (s *fieldSuite) newTestTree(
 	if len(serializedNodes) == 0 {
 		return NewEmptyTree(
 			s.registry,
-			s.timeSource,
 			s.nodeBackend,
 			s.nodePathEncoder,
 			s.logger,
@@ -153,7 +152,6 @@ func (s *fieldSuite) newTestTree(
 	return NewTreeFromDB(
 		serializedNodes,
 		s.registry,
-		s.timeSource,
 		s.nodeBackend,
 		s.nodePathEncoder,
 		s.logger,
@@ -165,7 +163,6 @@ func (s *fieldSuite) newTestTree(
 func (s *fieldSuite) setupComponentWithTree(rootComponent *TestComponent) (*Node, MutableContext, error) {
 	rootNode := NewEmptyTree(
 		s.registry,
-		s.timeSource,
 		s.nodeBackend,
 		s.nodePathEncoder,
 		s.logger,
