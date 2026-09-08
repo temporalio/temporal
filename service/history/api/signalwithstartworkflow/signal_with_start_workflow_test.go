@@ -12,6 +12,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/testing/fakedata"
 	"go.temporal.io/server/service/history/api"
@@ -33,9 +34,10 @@ type (
 		namespaceID string
 		workflowID  string
 
-		currentContext      *historyi.MockWorkflowContext
-		currentMutableState *historyi.MockMutableState
-		currentRunID        string
+		currentContext        *historyi.MockWorkflowContext
+		currentMutableState   *historyi.MockMutableState
+		currentRunID          string
+		currentExecutionState *persistencespb.WorkflowExecutionState
 	}
 )
 
@@ -72,8 +74,11 @@ func (s *signalWithStartWorkflowSuite) SetupTest() {
 	s.currentMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowId: s.workflowID,
 	}).AnyTimes()
-	s.currentMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+	s.currentExecutionState = &persistencespb.WorkflowExecutionState{
 		RunId: s.currentRunID,
+	}
+	s.currentMutableState.EXPECT().GetExecutionState().DoAndReturn(func() *persistencespb.WorkflowExecutionState {
+		return s.currentExecutionState
 	}).AnyTimes()
 }
 
@@ -223,6 +228,57 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_WhenPaused() {
 		request,
 	)
 	s.NoError(err)
+}
+
+func (s *signalWithStartWorkflowSuite) TestDedupSignalWithStartRequest() {
+	ctx := context.Background()
+	requestID := uuid.New().String()
+	firstRunID := uuid.New().String()
+	s.currentMutableState.EXPECT().IsSignalRequested(requestID).Return(true)
+	s.currentMutableState.EXPECT().GetFirstRunID(ctx).Return(firstRunID, nil)
+	s.currentContext.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.currentRunID))
+
+	outcome, deduped, err := dedupSignalWithStartRequest(ctx, s.newCurrentWorkflowLease(), requestID)
+	s.Require().NoError(err)
+	s.True(deduped)
+	s.Equal(s.currentRunID, outcome.runID)
+	s.Equal(firstRunID, outcome.firstExecutionRunID)
+	s.False(outcome.started)
+}
+
+func (s *signalWithStartWorkflowSuite) TestDedupSignalWithStartRequest_RequestIDsCollisionNotDeduped() {
+	ctx := context.Background()
+	requestID := uuid.New().String()
+	s.currentExecutionState.RequestIds = map[string]*persistencespb.RequestIDInfo{
+		requestID: {},
+	}
+	s.currentMutableState.EXPECT().IsSignalRequested(requestID).Return(false)
+
+	outcome, deduped, err := dedupSignalWithStartRequest(ctx, s.newCurrentWorkflowLease(), requestID)
+	s.Require().NoError(err)
+	s.False(deduped)
+	s.Equal(startOutcome{}, outcome)
+}
+
+func (s *signalWithStartWorkflowSuite) TestDedupSignalWithStartRequest_GetFirstRunIDError() {
+	ctx := context.Background()
+	requestID := uuid.New().String()
+	expectedErr := consts.ErrWorkflowClosing
+	s.currentMutableState.EXPECT().IsSignalRequested(requestID).Return(true)
+	s.currentMutableState.EXPECT().GetFirstRunID(ctx).Return("", expectedErr)
+
+	outcome, deduped, err := dedupSignalWithStartRequest(ctx, s.newCurrentWorkflowLease(), requestID)
+	s.ErrorIs(err, expectedErr)
+	s.False(deduped)
+	s.Equal(startOutcome{}, outcome)
+}
+
+func (s *signalWithStartWorkflowSuite) newCurrentWorkflowLease() api.WorkflowLease {
+	return api.NewWorkflowLease(
+		s.currentContext,
+		wcache.NoopReleaseFn,
+		s.currentMutableState,
+	)
 }
 
 func (s *signalWithStartWorkflowSuite) randomRequest() *workflowservice.SignalWithStartWorkflowExecutionRequest {

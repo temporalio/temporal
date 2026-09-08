@@ -83,6 +83,12 @@ func startAndSignalWorkflow(
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) (startOutcome, error) {
+	if outcome, deduped, err := dedupSignalWithStartRequest(ctx, currentWorkflowLease, signalWithStartRequest.GetRequestId()); err != nil {
+		return startOutcome{}, err
+	} else if deduped {
+		return outcome, nil
+	}
+
 	workflowID := signalWithStartRequest.GetWorkflowId()
 	runID := uuid.New().String()
 	// TODO(bergundy): Support eager workflow task
@@ -150,6 +156,31 @@ func startAndSignalWorkflow(
 		currentWorkflowLease,
 		signalWithStartRequest.RequestId,
 	)
+}
+
+func dedupSignalWithStartRequest(
+	ctx context.Context,
+	currentWorkflowLease api.WorkflowLease,
+	requestID string,
+) (startOutcome, bool, error) {
+	if currentWorkflowLease == nil || requestID == "" {
+		return startOutcome{}, false, nil
+	}
+
+	mutableState := currentWorkflowLease.GetMutableState()
+	if !mutableState.IsSignalRequested(requestID) {
+		return startOutcome{}, false, nil
+	}
+
+	firstExecutionRunID, err := mutableState.GetFirstRunID(ctx)
+	if err != nil {
+		return startOutcome{}, false, err
+	}
+	return startOutcome{
+		runID:               currentWorkflowLease.GetContext().GetWorkflowKey().RunID,
+		firstExecutionRunID: firstExecutionRunID,
+		started:             false,
+	}, true, nil
 }
 
 func createWorkflowMutationFunction(
