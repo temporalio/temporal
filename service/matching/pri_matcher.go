@@ -532,7 +532,7 @@ func (tm *priTaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool
 		metrics.StringTag("source", task.source.String()),
 		metrics.ForwardedTag(forwarded),
 		metrics.MatchingTaskPriorityTag(task.getPriority().GetPriorityKey()),
-		metrics.FairnessKeyTag(task.getPriority().GetFairnessKey()),
+		metrics.FairnessKeyTag(task.getPriority().GetFairnessKey(), tm.config.BreakdownMetricsByFairnessKey()),
 	)
 }
 
@@ -657,7 +657,7 @@ func (tm *priTaskMatcher) poll(
 
 	if !pollWasForwarded {
 		// Only record these metrics on the parent for forwarded polls
-		fairnessKeyTag := metrics.FairnessKeyTag(task.getPriority().GetFairnessKey())
+		fairnessKeyTag := metrics.FairnessKeyTag(task.getPriority().GetFairnessKey(), tm.config.BreakdownMetricsByFairnessKey())
 		if !task.isQuery() {
 			if task.isSyncMatchTask() {
 				metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1, fairnessKeyTag)

@@ -1397,6 +1397,14 @@ contain actual deployment and build ID values. When disabled, the deployment and
 is too high for your observability stack. Disabling this option will disable all the per-Task Queue gauges such as
 backlog lag, count, and age for VERSIONED queues.`,
 	)
+	MetricsBreakdownByFairnessKey = NewTaskQueueBoolSetting(
+		"metrics.breakdownByFairnessKey",
+		false,
+		`MetricsBreakdownByFairnessKey determines if the 'fairness_key' tag on Matching dispatch metrics
+(task_dispatch_latency, poll_success, poll_success_with_sync) contains the actual client-supplied fairness key or a
+generic "__omitted__" value. Fairness keys are client-supplied and potentially unbounded, so this defaults to disabled;
+enable it only if your observability stack can absorb the added cardinality.`,
+	)
 	MatchingForwarderMaxOutstandingPolls = NewTaskQueueIntSetting(
 		"matching.forwarderMaxOutstandingPolls",
 		1,
