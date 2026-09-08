@@ -97,12 +97,12 @@ func isRetryableCallError(err error) bool {
 func outcomeTag(callCtx context.Context, callErr error) string {
 	if callErr != nil {
 		if callCtx.Err() != nil {
-			return outcomeRequestTimeout
+			return "request-timeout"
 		}
 		if handlerErr, ok := errors.AsType[*nexus.HandlerError](callErr); ok {
 			return "handler-error:" + string(handlerErr.Type)
 		}
 		return "unknown-error"
 	}
-	return outcomeSuccess
+	return "success"
 }

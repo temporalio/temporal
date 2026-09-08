@@ -127,7 +127,6 @@ type SchedulerCallbacksTaskHandlerOptions struct {
 	Config         *Config
 	HistoryClient  resource.HistoryClient
 	FrontendClient workflowservice.WorkflowServiceClient
-	MetricsHandler metrics.Handler
 }
 
 type SchedulerCallbacksTaskHandler struct {
@@ -135,7 +134,6 @@ type SchedulerCallbacksTaskHandler struct {
 	config         *Config
 	historyClient  resource.HistoryClient
 	frontendClient workflowservice.WorkflowServiceClient
-	metricsHandler metrics.Handler
 }
 
 func NewSchedulerCallbacksTaskHandler(opts SchedulerCallbacksTaskHandlerOptions) *SchedulerCallbacksTaskHandler {
@@ -143,7 +141,6 @@ func NewSchedulerCallbacksTaskHandler(opts SchedulerCallbacksTaskHandlerOptions)
 		config:         opts.Config,
 		historyClient:  opts.HistoryClient,
 		frontendClient: opts.FrontendClient,
-		metricsHandler: opts.MetricsHandler,
 	}
 }
 
@@ -152,9 +149,6 @@ func NewSchedulerCallbacksTaskHandler(opts SchedulerCallbacksTaskHandlerOptions)
 // workflow is still running.
 type watchResult struct {
 	completed *schedulespb.CompletedResult
-
-	// reason attributes how completed was arrived at, for ScheduleCallbackReattach.
-	reason metrics.ReasonString
 }
 
 func (r *SchedulerCallbacksTaskHandler) Execute(
@@ -243,18 +237,6 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 		return fmt.Errorf("failed to update component state: %w", err)
 	}
 
-	// Only after the update commits, so a rolled-back re-attach isn't counted.
-	metricsHandler := newTaggedMetricsHandler(r.metricsHandler, scheduler)
-	for _, result := range results {
-		outcome := outcomeReattachAttached
-		if result.completed != nil {
-			outcome = outcomeReattachCompleted
-		}
-		metrics.ScheduleCallbackReattach.With(metricsHandler).Record(1,
-			metrics.OutcomeTag(outcome),
-			metrics.ReasonTag(result.reason))
-	}
-
 	return nil
 }
 
@@ -285,7 +267,6 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 					Status:    enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
 					CloseTime: timestamppb.Now(),
 				},
-				reason: reasonReattachNotFound,
 			}, nil
 		}
 		return nil, err
@@ -301,7 +282,6 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 				Status:    wfInfo.GetStatus(),
 				CloseTime: wfInfo.GetCloseTime(),
 			},
-			reason: reasonReattachAlreadyClosed,
 		}, nil
 	}
 
@@ -342,14 +322,13 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 					Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 					CloseTime: timestamppb.Now(),
 				},
-				reason: reasonReattachRace,
 			}, nil
 		}
 		return nil, err
 	}
 
 	// Callback attached successfully.
-	return &watchResult{reason: reasonNone}, nil
+	return &watchResult{}, nil
 }
 
 func (r *SchedulerCallbacksTaskHandler) Validate(
