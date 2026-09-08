@@ -31,6 +31,12 @@ type (
 		GetValue(key Key) []ConstrainedValue
 	}
 
+	// ConfigValueMapProvider is an optional interface for clients that can return all of
+	// their currently held values.
+	ConfigValueMapProvider interface {
+		Dump() ConfigValueMap
+	}
+
 	// NotifyingClient is an optional interface that a Client can also implement, that adds
 	// support for faster notifications of dynamic config changes.
 	NotifyingClient interface {
@@ -90,8 +96,10 @@ type (
 		TaskQueueName string
 		Destination   string
 		ChasmTaskType string
+		// File-based client renames it as "taskType".
 		TaskQueueType enumspb.TaskQueueType
 		ShardID       int32
-		TaskType      enumsspb.TaskType
+		// File-based client renames it as "historyTaskType".
+		TaskType enumsspb.TaskType
 	}
 )

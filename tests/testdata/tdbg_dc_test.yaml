@@ -1,0 +1,25 @@
+test.tdbg.task-queue:
+  - constraints:
+      namespace: namespace-a
+      taskQueueName: task-queue-a
+      taskType: Workflow
+    value: 405
+  - constraints:
+      namespace: namespace-a
+      taskQueueName: task-queue-a
+    value: 404
+  - constraints:
+      taskQueueName: task-queue-a
+    value: 403
+  - constraints:
+      namespace: namespace-a
+    value: 402
+  - constraints: {}
+    value: 401
+
+test.tdbg.history-task-type:
+  - constraints:
+      historyTaskType: TransferWorkflowTask
+    value: 601
+  - constraints: {}
+    value: 600

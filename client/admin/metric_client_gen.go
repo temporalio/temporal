@@ -135,6 +135,20 @@ func (c *metricClient) DescribeDLQJob(
 	return c.client.DescribeDLQJob(ctx, request, opts...)
 }
 
+func (c *metricClient) DescribeDynamicConfigSetting(
+	ctx context.Context,
+	request *adminservice.DescribeDynamicConfigSettingRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.DescribeDynamicConfigSettingResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientDescribeDynamicConfigSetting")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DescribeDynamicConfigSetting(ctx, request, opts...)
+}
+
 func (c *metricClient) DescribeHistoryHost(
 	ctx context.Context,
 	request *adminservice.DescribeHistoryHostRequest,
@@ -175,6 +189,20 @@ func (c *metricClient) DescribeTaskQueuePartition(
 	}()
 
 	return c.client.DescribeTaskQueuePartition(ctx, request, opts...)
+}
+
+func (c *metricClient) DumpDynamicConfigValues(
+	ctx context.Context,
+	request *adminservice.DumpDynamicConfigValuesRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.DumpDynamicConfigValuesResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientDumpDynamicConfigValues")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DumpDynamicConfigValues(ctx, request, opts...)
 }
 
 func (c *metricClient) ForceUnloadTaskQueuePartition(
@@ -245,6 +273,20 @@ func (c *metricClient) GetDLQTasks(
 	}()
 
 	return c.client.GetDLQTasks(ctx, request, opts...)
+}
+
+func (c *metricClient) GetDynamicConfigValue(
+	ctx context.Context,
+	request *adminservice.GetDynamicConfigValueRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.GetDynamicConfigValueResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientGetDynamicConfigValue")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.GetDynamicConfigValue(ctx, request, opts...)
 }
 
 func (c *metricClient) GetNamespace(

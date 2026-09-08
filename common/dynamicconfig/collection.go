@@ -124,6 +124,89 @@ func NewCollection(client Client, logger log.Logger) *Collection {
 	}
 }
 
+// DumpConfiguredValues returns all configured values currently held by the Client.
+func (c *Collection) DumpConfiguredValues() (ConfigValueMap, error) {
+	provider, ok := c.client.(ConfigValueMapProvider)
+	if !ok {
+		return nil, errors.New("dynamic config client does not support dumping configured values")
+	}
+	return provider.Dump(), nil
+}
+
+// GetConfiguredValues returns the values currently held by the Client for a key.
+func (c *Collection) GetConfiguredValues(key Key) []ConstrainedValue {
+	return c.client.GetValue(key)
+}
+
+type SettingDescription struct {
+	ValueType             string
+	ConstraintDescription string
+}
+
+// DescribeSetting returns the generated constraint metadata for a registered setting.
+func (c *Collection) DescribeSetting(key Key) (SettingDescription, error) {
+	setting := queryRegistry(key)
+	if setting == nil {
+		return SettingDescription{}, fmt.Errorf("unregistered dynamic config key %q", key)
+	}
+	return SettingDescription{
+		ValueType:             setting.ValueType().String(),
+		ConstraintDescription: setting.Precedence().ConstraintDescription(),
+	}, nil
+}
+
+// GetEffectiveValue returns the effective value of a registered setting for the given constraints.
+func (c *Collection) GetEffectiveValue(
+	key Key,
+	constraints Constraints,
+) (any, error) {
+	setting := queryRegistry(key)
+	if setting == nil {
+		return nil, fmt.Errorf("unregistered dynamic config key %q", key)
+	}
+
+	// Get returns the generated property function used by normal dynamic config callers.
+	get := reflect.ValueOf(setting).MethodByName("Get")
+	if !get.IsValid() || get.Type().NumIn() != 1 || get.Type().In(0) != reflect.TypeFor[*Collection]() {
+		return nil, fmt.Errorf("dynamic config setting %q does not implement Get", key)
+	}
+	propertyFnResults := get.Call([]reflect.Value{reflect.ValueOf(c)})
+	if len(propertyFnResults) != 1 || propertyFnResults[0].Kind() != reflect.Func {
+		return nil, fmt.Errorf("dynamic config setting %q returned an invalid property function", key)
+	}
+
+	// Build only the arguments used by this setting's precedence. Other constraint fields are ignored.
+	propertyFnArgs, precedenceSupported := setting.Precedence().buildPropertyFnArgs(constraints)
+	if !precedenceSupported {
+		return nil, fmt.Errorf("dynamic config setting %q has unsupported precedence %d", key, setting.Precedence())
+	}
+
+	// Verify the generated arguments match the property function before calling it through reflection.
+	propertyFn := propertyFnResults[0]
+	if propertyFn.Type().NumIn() != len(propertyFnArgs) {
+		return nil, fmt.Errorf("dynamic config setting %q property function has an unexpected signature", key)
+	}
+	for i, propertyFnArg := range propertyFnArgs {
+		if propertyFnArg.Type() != propertyFn.Type().In(i) {
+			return nil, fmt.Errorf("dynamic config setting %q property function has an unexpected argument type", key)
+		}
+	}
+	valueResults := propertyFn.Call(propertyFnArgs)
+	if len(valueResults) != 1 {
+		return nil, fmt.Errorf("dynamic config setting %q property function returned an unexpected number of values", key)
+	}
+	return valueResults[0].Interface(), nil
+}
+
+// ConstraintDescription returns the generated constraint lookup description for a registered setting.
+func (c *Collection) ConstraintDescription(key Key) (string, error) {
+	setting := queryRegistry(key)
+	if setting == nil {
+		return "", fmt.Errorf("unregistered dynamic config key %q", key)
+	}
+	return setting.Precedence().ConstraintDescription(), nil
+}
+
 func (c *Collection) Start() {
 	c.subscriptionLock.Lock()
 	defer c.subscriptionLock.Unlock()

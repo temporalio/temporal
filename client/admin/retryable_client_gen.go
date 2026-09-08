@@ -146,6 +146,21 @@ func (c *retryableClient) DescribeDLQJob(
 	return resp, err
 }
 
+func (c *retryableClient) DescribeDynamicConfigSetting(
+	ctx context.Context,
+	request *adminservice.DescribeDynamicConfigSettingRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.DescribeDynamicConfigSettingResponse, error) {
+	var resp *adminservice.DescribeDynamicConfigSettingResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DescribeDynamicConfigSetting(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) DescribeHistoryHost(
 	ctx context.Context,
 	request *adminservice.DescribeHistoryHostRequest,
@@ -185,6 +200,21 @@ func (c *retryableClient) DescribeTaskQueuePartition(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.DescribeTaskQueuePartition(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) DumpDynamicConfigValues(
+	ctx context.Context,
+	request *adminservice.DumpDynamicConfigValuesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.DumpDynamicConfigValuesResponse, error) {
+	var resp *adminservice.DumpDynamicConfigValuesResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DumpDynamicConfigValues(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
@@ -260,6 +290,21 @@ func (c *retryableClient) GetDLQTasks(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.GetDLQTasks(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) GetDynamicConfigValue(
+	ctx context.Context,
+	request *adminservice.GetDynamicConfigValueRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetDynamicConfigValueResponse, error) {
+	var resp *adminservice.GetDynamicConfigValueResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.GetDynamicConfigValue(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
