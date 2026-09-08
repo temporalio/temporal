@@ -6,7 +6,6 @@ import (
 
 	"github.com/google/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -366,11 +365,10 @@ func signalWorkflow(
 				return err
 			}
 			startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
-			backoffType := signalWithStartBackoffType(startAttr)
-			metrics.SignalWithStartSkipDelayCounter.With(shardContext.GetMetricsHandler()).Record(
+			metrics.SignalWithStartWorkflowTaskBackoffCounter.With(shardContext.GetMetricsHandler()).Record(
 				1,
 				metrics.NamespaceTag(request.GetNamespace()),
-				metrics.StringTag("backoff_type", backoffType),
+				metrics.StringTag("initiator", startAttr.GetInitiator().String()),
 			)
 			if shardContext.GetConfig().EnableSignalWithStartWorkflowTaskBackoff(request.GetNamespace()) {
 				createWorkflowTask = false
@@ -404,20 +402,4 @@ func signalWorkflow(
 		ctx,
 		shardContext,
 	)
-}
-
-func signalWithStartBackoffType(startAttr *historypb.WorkflowExecutionStartedEventAttributes) string {
-	switch startAttr.GetInitiator() {
-	case enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW:
-		if startAttr.GetContinuedExecutionRunId() != "" {
-			return "CONTINUE_AS_NEW"
-		}
-		return "DELAY_START"
-	case enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY:
-		return "RETRY"
-	case enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE:
-		return "CRON"
-	default:
-		return "DELAY_START"
-	}
 }
