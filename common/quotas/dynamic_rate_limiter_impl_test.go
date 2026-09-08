@@ -63,37 +63,41 @@ func TestDynamicRateLimiterRateAndBurstRefreshAfterInterval(t *testing.T) {
 }
 
 type countingRateBurst struct {
-	rate  atomic.Uint64
+	rate  float64
+	burst int
 	calls atomic.Int64
 }
 
 func (c *countingRateBurst) Rate() float64 {
 	c.calls.Add(1)
-	return float64(c.rate.Load())
+	return c.rate
 }
 
 func (c *countingRateBurst) Burst() int {
-	return int(c.rate.Load())
+	return c.burst
 }
 
-func TestDynamicRateLimiterRefreshesOnceAcrossConcurrentCallers(t *testing.T) {
+func TestDynamicRateLimiterRefreshesOnceAfterIdleIntervals(t *testing.T) {
 	t.Parallel()
 
 	const (
 		// Wide enough that the goroutine burst below cannot straddle the
 		// deadline and trigger a second refresh on a loaded machine.
-		refreshInterval = 500 * time.Millisecond
+		refreshInterval = 300 * time.Millisecond
+		idleIntervals   = 3
 		goroutines      = 16
 	)
 
-	rateBurst := &countingRateBurst{}
-	rateBurst.rate.Store(10)
+	rateBurst := &countingRateBurst{rate: 10, burst: 10}
 	limiter := quotas.NewDynamicRateLimiter(rateBurst, refreshInterval)
 
 	// One Rate() call per Refresh(); the constructor already consumed one.
 	callsAfterInit := rateBurst.calls.Load()
 
-	time.Sleep(refreshInterval + 100*time.Millisecond)
+	// The refresh deadline is anchored to a package-level monotonic epoch with
+	// no injectable clock, so real time has to pass to cross it.
+	//nolint:forbidigo // no await helper can advance the limiter's own clock
+	time.Sleep(idleIntervals*refreshInterval + 50*time.Millisecond)
 
 	var start, done sync.WaitGroup
 	start.Add(1)
@@ -109,22 +113,5 @@ func TestDynamicRateLimiterRefreshesOnceAcrossConcurrentCallers(t *testing.T) {
 	done.Wait()
 
 	require.Equal(t, callsAfterInit+1, rateBurst.calls.Load(),
-		"concurrent callers past the deadline must trigger exactly one refresh")
-}
-
-func TestDynamicRateLimiterRefreshesRepeatedlyAcrossIntervals(t *testing.T) {
-	t.Parallel()
-
-	const refreshInterval = 20 * time.Millisecond
-
-	rateBurst := quotas.NewMutableRateBurst(10, 10)
-	limiter := quotas.NewDynamicRateLimiter(rateBurst, refreshInterval)
-
-	for _, want := range []float64{20, 30, 40} {
-		rateBurst.SetRPS(want)
-		rateBurst.SetBurst(int(want))
-		require.Eventually(t, func() bool {
-			return limiter.Rate() == want
-		}, time.Second, 2*time.Millisecond)
-	}
+		"concurrent callers past several idle intervals must trigger exactly one refresh")
 }

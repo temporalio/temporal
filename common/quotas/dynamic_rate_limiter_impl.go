@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-// processStart anchors refresh deadlines to the monotonic clock, so they are
-// unaffected by wall-clock steps.
+// Refresh deadlines are nanos since processStart: time.Since reads only the
+// monotonic clock, which is both step-immune and ~2x cheaper than time.Now.
 var processStart = time.Now()
 
 func elapsedSinceStart() int64 {
@@ -146,8 +146,8 @@ func (d *DynamicRateLimiterImpl) maybeRefresh() {
 	if now < next {
 		return
 	}
-	// Only the caller that moves the deadline forward performs the refresh, so a
-	// burst of concurrent callers past the deadline refreshes once.
+	// For a positive interval only the caller that moves the deadline forward
+	// refreshes, so a burst of concurrent callers past the deadline refreshes once.
 	if d.nextRefresh.CompareAndSwap(next, now+int64(d.refreshInterval)) {
 		d.Refresh()
 	}
