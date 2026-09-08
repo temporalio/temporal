@@ -35,6 +35,7 @@ func httpCallerProviderProvider(
 	logger log.Logger,
 	httpClientTransportInstrumenter telemetry.HTTPClientTransportInstrumenter,
 	testHooks testhooks.TestHooks,
+	config *Config,
 ) (HTTPCallerProvider, error) {
 	localClient, err := rpcFactory.CreateLocalFrontendHTTPClient()
 	if err != nil {
@@ -61,6 +62,7 @@ func httpCallerProviderProvider(
 				externalClient,
 				localClient,
 				logger,
+				config.InspectSourceHeader(),
 			)
 		}
 		return httpfaults.Wrap(httpFaultGenerator, scope, caller)

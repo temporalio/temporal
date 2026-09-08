@@ -33,6 +33,7 @@ func HTTPCallerProviderProvider(
 	httpClientCache *cluster.FrontendHTTPClientCache,
 	logger log.Logger,
 	testHooks testhooks.TestHooks,
+	config *Config,
 ) (HTTPCallerProvider, error) {
 	localClient, err := rpcFactory.CreateLocalFrontendHTTPClient()
 	if err != nil {
@@ -56,6 +57,7 @@ func HTTPCallerProviderProvider(
 				defaultClient,
 				localClient,
 				logger,
+				config.InspectSourceHeader(),
 			)
 		}
 		return httpfaults.Wrap(httpFaultGenerator, httpfaults.Scope{NamespaceID: namespace.ID(key.NamespaceID)}, caller)
