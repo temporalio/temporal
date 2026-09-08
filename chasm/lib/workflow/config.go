@@ -1,8 +1,16 @@
 package workflow
 
 import (
+	commoncallbacks "go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/retrypolicy"
+)
+
+var EnabledCallbackKinds = dynamicconfig.NewNamespaceTypedSettingWithConverter(
+	"workflow.enabledCallbackKinds",
+	commoncallbacks.ConvertEnabledKinds,
+	[]commoncallbacks.Kind{commoncallbacks.KindNexus},
+	`The list of completion callback kinds that may be attached to a workflow execution.`,
 )
 
 type Config struct {
