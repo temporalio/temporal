@@ -18,7 +18,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
@@ -275,13 +274,10 @@ func (t *timerQueueTaskExecutorBase) executeChasmPureTimers(
 		return errNoChasmTree
 	}
 
-	// Because the persistence layer can lose precision on the task compared to the
-	// physical task stored in the queue, we take the max of both here. Time is also
-	// truncated to a common (millisecond) precision later on.
-	//
-	// See also queues.IsTimeExpired.
-	// TODO@time-skipping: hasn's supported time skipping for CHASM system yet
-	referenceTime := util.MaxTime(t.Now(), task.GetKey().FireTime)
+	// CHASM task timestamps and mutable-state time share the virtual frame. The
+	// queue task's fire time has already been converted back to wall-clock time,
+	// so comparing it here would miss timers made due by a time skip.
+	referenceTime := ms.Now()
 
 	return tree.EachPureTask(referenceTime, callback)
 }
