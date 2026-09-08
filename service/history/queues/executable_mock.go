@@ -16,6 +16,7 @@ import (
 
 	enums "go.temporal.io/server/api/enums/v1"
 	backoff "go.temporal.io/server/common/backoff"
+	tag "go.temporal.io/server/common/log/tag"
 	tasks "go.temporal.io/server/common/tasks"
 	tasks0 "go.temporal.io/server/service/history/tasks"
 	gomock "go.uber.org/mock/gomock"
@@ -505,4 +506,42 @@ func (m *MockMaybeTerminalTaskError) IsTerminalTaskError() bool {
 func (mr *MockMaybeTerminalTaskErrorMockRecorder) IsTerminalTaskError() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsTerminalTaskError", reflect.TypeOf((*MockMaybeTerminalTaskError)(nil).IsTerminalTaskError))
+}
+
+// MockTaskErrorLogTags is a mock of TaskErrorLogTags interface.
+type MockTaskErrorLogTags struct {
+	ctrl     *gomock.Controller
+	recorder *MockTaskErrorLogTagsMockRecorder
+	isgomock struct{}
+}
+
+// MockTaskErrorLogTagsMockRecorder is the mock recorder for MockTaskErrorLogTags.
+type MockTaskErrorLogTagsMockRecorder struct {
+	mock *MockTaskErrorLogTags
+}
+
+// NewMockTaskErrorLogTags creates a new mock instance.
+func NewMockTaskErrorLogTags(ctrl *gomock.Controller) *MockTaskErrorLogTags {
+	mock := &MockTaskErrorLogTags{ctrl: ctrl}
+	mock.recorder = &MockTaskErrorLogTagsMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockTaskErrorLogTags) EXPECT() *MockTaskErrorLogTagsMockRecorder {
+	return m.recorder
+}
+
+// LogTags mocks base method.
+func (m *MockTaskErrorLogTags) LogTags() []tag.Tag {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LogTags")
+	ret0, _ := ret[0].([]tag.Tag)
+	return ret0
+}
+
+// LogTags indicates an expected call of LogTags.
+func (mr *MockTaskErrorLogTagsMockRecorder) LogTags() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LogTags", reflect.TypeOf((*MockTaskErrorLogTags)(nil).LogTags))
 }
