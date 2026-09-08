@@ -146,8 +146,6 @@ func (d *DynamicRateLimiterImpl) maybeRefresh() {
 	if now < next {
 		return
 	}
-	// For a positive interval only the caller that moves the deadline forward
-	// refreshes, so a burst of concurrent callers past the deadline refreshes once.
 	if d.nextRefresh.CompareAndSwap(next, now+int64(d.refreshInterval)) {
 		d.Refresh()
 	}
