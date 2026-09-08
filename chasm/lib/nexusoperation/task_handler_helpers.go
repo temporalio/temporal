@@ -324,7 +324,6 @@ func operationErrorToFailure(opErr *nexus.OperationError) (*failurepb.Failure, e
 }
 
 func buildCallbackURL(
-	useSystemCallback bool,
 	callbackTemplate *template.Template,
 	ns *namespace.Namespace,
 	endpoint *persistencespb.NexusEndpointEntry,
@@ -333,9 +332,6 @@ func buildCallbackURL(
 		return commonnexus.SystemCallbackURL, nil
 	}
 	target := endpoint.GetEndpoint().GetSpec().GetTarget().GetVariant()
-	if !useSystemCallback {
-		return buildCallbackFromTemplate(callbackTemplate, ns)
-	}
 	switch target.(type) {
 	case *persistencespb.NexusEndpointTarget_Worker_:
 		return commonnexus.SystemCallbackURL, nil
