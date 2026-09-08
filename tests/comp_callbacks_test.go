@@ -48,6 +48,7 @@ func (s *CompletionCallbacksSuite) newTestEnv() *testcore.TestEnv {
 		testcore.WithDynamicConfig(activity.EnabledCallbackKinds, []callbacks.Kind{callbacks.KindNexus}),
 		// Standalone Nexus operations
 		testcore.WithDynamicConfig(nexusoperation.Enabled, true),
+		testcore.WithDynamicConfig(nexusoperation.EnabledCallbackKinds, []callbacks.Kind{callbacks.KindNexus}),
 		// All Callbacks and Retry policy
 		testcore.WithDynamicConfig(callback.AllowedAddresses,
 			[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}}),
@@ -74,13 +75,13 @@ type completionCallbackTestcase func(*CompletionCallbacksSuite, executionWithCal
 // forEachTestCombination runs the given testcase across all permutations of execution types and callback variants.
 func (s *CompletionCallbacksSuite) forEachTestCombination(testFn completionCallbackTestcase) {
 	// Types of Temporal executions that support completion callbacks.
-	// COMING SOON: Standalone Nexus operations (which don't support comp. callbacks yet)
 	executionTypes := []struct {
 		Name      string
 		Execution executionWithCallbacks
 	}{
-		{"Workflow", &workflowExecutionType{}},
 		{"StandaloneActivity", &standaloneActivityExecutionType{}},
+		{"StandaloneNexusOperation", &standaloneNexusOperationExecutionType{}},
+		{"Workflow", &workflowExecutionType{}},
 	}
 
 	// Types of callback targets.
