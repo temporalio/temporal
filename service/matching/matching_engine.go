@@ -3241,6 +3241,7 @@ func (e *matchingEngineImpl) emitTaskDispatchLatency(
 	deploymentVersion := worker_versioning.DeploymentVersionFromOptions(pollMetadata.deploymentOptions)
 	workerVersion := worker_versioning.WorkerDeploymentVersionToStringV32(deploymentVersion)
 	breakdownMetricsByBuildID := e.config.BreakdownMetricsByBuildID(namespaceName, tqName, taskType)
+	breakdownMetricsByFairnessKey := e.config.BreakdownMetricsByFairnessKey(namespaceName, tqName, taskType)
 
 	handler := metrics.GetPerTaskQueuePartitionIDScope(
 		e.metricsHandler,
@@ -3255,7 +3256,7 @@ func (e *matchingEngineImpl) emitTaskDispatchLatency(
 		metrics.TaskSourceTag(task.source),
 		metrics.ForwardedTag(task.isForwarded()),
 		metrics.MatchingTaskPriorityTag(task.getPriority().GetPriorityKey()),
-		metrics.FairnessKeyTag(task.getPriority().GetFairnessKey()),
+		metrics.FairnessKeyTag(task.getPriority().GetFairnessKey(), breakdownMetricsByFairnessKey),
 		metrics.WorkerVersionTag(workerVersion, breakdownMetricsByBuildID),
 		metrics.WorkerDeploymentNameTag(deploymentVersion.GetDeploymentName(), breakdownMetricsByBuildID),
 		metrics.WorkerDeploymentBuildIDTag(deploymentVersion.GetBuildId(), breakdownMetricsByBuildID),
