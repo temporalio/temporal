@@ -454,6 +454,8 @@ jobs:
     name: Mixed brain test
     needs: [pre-build]
     runs-on: ubuntu-24.04-arm
+    env:
+      MAX_TEST_ATTEMPTS: 1
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -476,25 +478,27 @@ jobs:
         timeout-minutes: 20
         run: ./develop/github/monitor_test.sh make mixed-brain-test
         env:
+          GOTOOLCHAIN: auto
           TEST_TIMEOUT: 18m
           MIXED_BRAIN_TEST_DURATION: 5m
           PERSISTENCE_DRIVER: postgres12
 
-      - name: Print memory snapshot
+      - name: Append mixed-brain summary
         if: always()
-        run: cat .testoutput/memory/memory-snapshot.txt || true
+        run: |
+          if [ -s .testoutput/mixedbrain-summary.md ]; then
+            cat .testoutput/mixedbrain-summary.md >> "$GITHUB_STEP_SUMMARY"
+          fi
 
-      - name: Print current server logs
+      - name: Upload complete mixed-brain logs
         if: always()
-        run: cat .testoutput/mixedbrain_process-current.log || true
-
-      - name: Print release server logs
-        if: always()
-        run: cat .testoutput/mixedbrain_process-release.log || true
-
-      - name: Print Omes logs
-        if: always()
-        run: cat .testoutput/mixedbrain_omes_*.log || true
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: mixed-brain-logs--${{ github.run_id }}--${{ github.run_attempt }}
+          path: .testoutput/mixedbrain_*.log
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Stop containerized dependencies
         if: always()
