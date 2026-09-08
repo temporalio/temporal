@@ -10,6 +10,7 @@ const (
 	TaskCategoryTagName            = "task_category"
 	TaskTypeTagName                = "task_type"
 	TaskPriorityTagName            = "task_priority"
+	FairnessKeyTagName             = "fairness_key"
 	QueueReaderIDTagName           = "queue_reader_id"
 	QueueActionTagName             = "queue_action"
 	QueueTypeTagName               = "queue_type"

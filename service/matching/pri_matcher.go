@@ -532,6 +532,7 @@ func (tm *priTaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool
 		metrics.StringTag("source", task.source.String()),
 		metrics.ForwardedTag(forwarded),
 		metrics.MatchingTaskPriorityTag(task.getPriority().GetPriorityKey()),
+		metrics.FairnessKeyTag(task.getPriority().GetFairnessKey()),
 	)
 }
 
@@ -656,14 +657,15 @@ func (tm *priTaskMatcher) poll(
 
 	if !pollWasForwarded {
 		// Only record these metrics on the parent for forwarded polls
+		fairnessKeyTag := metrics.FairnessKeyTag(task.getPriority().GetFairnessKey())
 		if !task.isQuery() {
 			if task.isSyncMatchTask() {
-				metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+				metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1, fairnessKeyTag)
 			}
-			metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+			metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1, fairnessKeyTag)
 		} else {
-			metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
-			metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+			metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1, fairnessKeyTag)
+			metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1, fairnessKeyTag)
 		}
 		tm.emitForwardedSourceStats(task.isForwarded(), pollMetadata.forwardedFrom)
 	}

@@ -3164,6 +3164,7 @@ func (e *matchingEngineImpl) emitTaskDispatchLatency(
 		metrics.TaskSourceTag(task.source),
 		metrics.ForwardedTag(task.isForwarded()),
 		metrics.MatchingTaskPriorityTag(task.getPriority().GetPriorityKey()),
+		metrics.FairnessKeyTag(task.getPriority().GetFairnessKey()),
 		metrics.WorkerVersionTag(workerVersion, breakdownMetricsByBuildID),
 		metrics.WorkerDeploymentNameTag(deploymentVersion.GetDeploymentName(), breakdownMetricsByBuildID),
 		metrics.WorkerDeploymentBuildIDTag(deploymentVersion.GetBuildId(), breakdownMetricsByBuildID),
