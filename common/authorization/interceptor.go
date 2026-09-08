@@ -196,7 +196,7 @@ func (a *Interceptor) InterceptStream(
 	if !bypassAuth {
 		tlsConnection := TLSInfoFromContext(ctx)
 		headerGetter := headers.NewGRPCHeaderGetter(ctx)
-		authInfo := a.GetAuthInfoForRequest(ctx, tlsConnection, headerGetter)
+		authInfo := a.ExtractAuthInfoForRequest(ctx, tlsConnection, headerGetter)
 
 		var claims *Claims
 		if authInfo != nil {
@@ -238,9 +238,9 @@ type wrappedServerStream struct {
 
 func (w *wrappedServerStream) Context() context.Context { return w.ctx }
 
-// GetAuthInfoForRequest extracts auth info for gRPC streams and Nexus HTTP requests,
+// ExtractAuthInfoForRequest extracts auth info for gRPC streams and Nexus HTTP requests,
 // where there is no unary request to hand to the audience mapper.
-func (a *Interceptor) GetAuthInfoForRequest(
+func (a *Interceptor) ExtractAuthInfoForRequest(
 	ctx context.Context,
 	tlsConnection *credentials.TLSInfo,
 	header headers.HeaderGetter,
