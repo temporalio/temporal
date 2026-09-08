@@ -116,12 +116,14 @@ func TestRenderSummaryFromReports_Markdown_RendersTrimmedFailureBody(t *testing.
 	require.NotContains(t, s, "some setup log")
 }
 
-func TestRenderSummaryFromReports_Markdown_RendersAlertRow(t *testing.T) {
+func TestRenderSummaryFromReports_Markdown_RendersDataRaceDetailsAsCodeBlock(t *testing.T) {
 	report := mustReadReportFixture(t, "testdata/junit-alert-data-race.xml")
+	report.Suites[0].Testcases[0].Failure.Data = "go.temporal.io/server/service/worker/scheduler.(*scheduler).run()\n```"
 
 	rendered := newSummaryFromReports([]*junitReport{report}).Markdown()
 	require.Contains(t, rendered, failureTypeDataRace)
-	require.Contains(t, rendered, "Write at 0x00c000123456 by goroutine 7")
+	require.Contains(t, rendered, "\n\n````\ngo.temporal.io/server/service/worker/scheduler.(*scheduler).run()\n```\n````\n\n")
+	require.NotContains(t, rendered, "<pre>")
 }
 
 func TestRenderSummaryFromReports_Markdown_EmptyWhenNoFailures(t *testing.T) {

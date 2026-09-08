@@ -113,15 +113,37 @@ func (row summaryRow) Markdown() string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "<tr><td>%s</td><td>", html.EscapeString(kind))
 	if row.Details != "" {
-		escaped := html.EscapeString(row.Details)
+		details := row.Details
 		if strings.Contains(row.Details, summaryTruncatedMarker) {
-			escaped += "\n… (truncated — see full output in job logs)"
+			details += "\n… (truncated — see full output in job logs)"
 		}
-		fmt.Fprintf(&sb, "<details><summary>%s</summary><pre>%s</pre></details>",
-			html.EscapeString(row.Name), escaped)
+		if row.Kind == failureTypeDataRace {
+			fmt.Fprintf(&sb, "<details><summary>%s</summary>\n\n%s\n\n</details>",
+				html.EscapeString(row.Name), markdownCodeBlock(details))
+		} else {
+			fmt.Fprintf(&sb, "<details><summary>%s</summary><pre>%s</pre></details>",
+				html.EscapeString(row.Name), html.EscapeString(details))
+		}
 	} else {
 		sb.WriteString(html.EscapeString(row.Name))
 	}
 	sb.WriteString("</td></tr>\n")
+	return sb.String()
+}
+
+func markdownCodeBlock(content string) string {
+	fence := "```"
+	for strings.Contains(content, fence) {
+		fence += "`"
+	}
+
+	var sb strings.Builder
+	sb.WriteString(fence)
+	sb.WriteByte('\n')
+	sb.WriteString(content)
+	if !strings.HasSuffix(content, "\n") {
+		sb.WriteByte('\n')
+	}
+	sb.WriteString(fence)
 	return sb.String()
 }
