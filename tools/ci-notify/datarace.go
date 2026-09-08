@@ -6,7 +6,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"time"
 
 	"go.temporal.io/server/tools/common/github"
 )
@@ -46,18 +45,15 @@ type DataRace struct {
 	JobID string
 }
 
-// DataRaceReport aggregates the data races found in a single CI run along with
-// the commit context needed to attribute and link them.
+// DataRaceReport aggregates the data races found in a single CI run.
 type DataRaceReport struct {
 	Run       github.Run
-	Author    string
-	Title     string
 	DataRaces []DataRace
 }
 
-// BuildDataRaceReport fetches the run's test summaries, extracts any data races,
-// and enriches them with commit metadata. It returns a report with an empty
-// DataRaces slice when no races were detected.
+// BuildDataRaceReport fetches the run's test summaries and extracts any data
+// races. It returns a report with an empty DataRaces slice when no races were
+// detected.
 func BuildDataRaceReport(runID string) (*DataRaceReport, error) {
 	run, err := getWorkflowRun(runID)
 	if err != nil {
@@ -71,18 +67,7 @@ func BuildDataRaceReport(runID string) (*DataRaceReport, error) {
 
 	report := &DataRaceReport{
 		Run:       *run,
-		Title:     run.DisplayTitle,
 		DataRaces: races,
-	}
-
-	// Commit metadata is best-effort: a missing author must not suppress the alert.
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	if commit, err := github.GetCommit(ctx, temporalRepository, run.HeadSHA); err == nil {
-		report.Author = commit.Commit.Author.Name
-		if title := commit.Title(); title != "" {
-			report.Title = title
-		}
 	}
 
 	return report, nil
