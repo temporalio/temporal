@@ -3,6 +3,7 @@ package callback
 import (
 	"time"
 
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/backoff"
 	commoncallbacks "go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -33,13 +34,15 @@ var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
 )
 
 type Config struct {
-	RequestTimeout dynamicconfig.DurationPropertyFnWithDestinationFilter
-	RetryPolicy    func() backoff.RetryPolicy
+	RequestTimeout                          dynamicconfig.DurationPropertyFnWithDestinationFilter
+	RetryPolicy                             func() backoff.RetryPolicy
+	InternalCallbackSameNamespaceArchetypes dynamicconfig.TypedPropertyFn[[]string]
 }
 
 func configProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		RequestTimeout: RequestTimeout.Get(dc),
+		RequestTimeout:                          RequestTimeout.Get(dc),
+		InternalCallbackSameNamespaceArchetypes: InternalCallbackSameNamespaceArchetypes.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(
 				RetryPolicyInitialInterval.Get(dc)(),
@@ -50,6 +53,21 @@ func configProvider(dc *dynamicconfig.Collection) *Config {
 			)
 		},
 	}
+}
+
+var InternalCallbackSameNamespaceArchetypes = dynamicconfig.NewGlobalTypedSetting(
+	"callback.internal.sameNamespaceArchetypes",
+	[]string{chasm.SchedulerArchetype},
+	`The list of fully-qualified CHASM archetype names whose internal callbacks must target the callback source namespace.`,
+)
+
+func (c *Config) internalCallbackRequiresSameNamespace(archetypeID chasm.ArchetypeID) bool {
+	for _, archetype := range c.InternalCallbackSameNamespaceArchetypes() {
+		if chasm.GenerateTypeID(archetype) == archetypeID {
+			return true
+		}
+	}
+	return false
 }
 
 var EncodeInternalTokenWithEnvelope = dynamicconfig.NewNamespaceBoolSetting(
