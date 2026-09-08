@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/olivere/elastic/v7"
@@ -127,8 +128,63 @@ func buildTLSHTTPClient(config *auth.TLS) (*http.Client, error) {
 	return tlsClient, nil
 }
 
-// wrapDialLogger wraps the transport's DialContext to log the remote IP for each new TCP connection
-// to Elasticsearch. Helps diagnose which node is being dialed during zone partition experiments.
+const (
+	// dialFailureCacheTTL is how long an IP stays marked unhealthy before
+	// it is probed again. Short enough to recover quickly after a partition
+	// heals; long enough to avoid hammering a dead node every few seconds.
+	dialFailureCacheTTL = 30 * time.Second
+
+	// dialFailureCacheDialTimeout is the per-IP TCP dial deadline. A SYN
+	// silently dropped by a NACL would otherwise hang until the HTTP-client
+	// timeout (60 s). This short deadline lets each unhealthy IP fail fast so
+	// the loop can proceed to the next candidate.
+	dialFailureCacheDialTimeout = 3 * time.Second
+)
+
+// dialFailureCache tracks recently-failed Elasticsearch node IPs. When a
+// zone partition severs connectivity to some ES nodes, the cache marks those
+// IPs unhealthy and routes new dials to healthy nodes instead, rather than
+// retrying the dead connection at the HTTP-client-timeout cadence.
+type dialFailureCache struct {
+	mu     sync.RWMutex
+	badIPs map[string]time.Time
+	ttl    time.Duration
+}
+
+func newDialFailureCache() *dialFailureCache {
+	return &dialFailureCache{
+		badIPs: make(map[string]time.Time),
+		ttl:    dialFailureCacheTTL,
+	}
+}
+
+func (c *dialFailureCache) isBad(ip string) bool {
+	c.mu.RLock()
+	t, ok := c.badIPs[ip]
+	c.mu.RUnlock()
+	return ok && time.Since(t) < c.ttl
+}
+
+func (c *dialFailureCache) markBad(ip string) {
+	c.mu.Lock()
+	c.badIPs[ip] = time.Now()
+	c.mu.Unlock()
+}
+
+func (c *dialFailureCache) markGood(ip string) {
+	c.mu.Lock()
+	delete(c.badIPs, ip)
+	c.mu.Unlock()
+}
+
+// wrapDialLogger wraps the transport's DialContext to:
+//  1. Log the remote IP for each new TCP connection to Elasticsearch.
+//  2. Route new connections away from recently-failed IPs via a per-IP
+//     failure cache. On each dial the hostname is resolved to all IPs;
+//     IPs not currently marked unhealthy are tried first. A short per-IP
+//     deadline (dialFailureCacheDialTimeout) ensures that a node whose
+//     SYN packets are silently dropped (e.g. by a NACL) fails fast rather
+//     than consuming the full HTTP-client timeout.
 func wrapDialLogger(httpClient *http.Client, logger log.Logger) {
 	var transport *http.Transport
 	switch t := httpClient.Transport.(type) {
@@ -150,16 +206,69 @@ func wrapDialLogger(httpClient *http.Client, logger log.Logger) {
 		}
 		baseDialContext = d.DialContext
 	}
+
+	cb := newDialFailureCache()
+
 	transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
-		conn, err := baseDialContext(ctx, network, addr)
+		host, port, err := net.SplitHostPort(addr)
 		if err != nil {
-			return nil, err
+			// Malformed addr — fall back to original dialer unchanged.
+			return baseDialContext(ctx, network, addr)
 		}
-		logger.Info("Elasticsearch TCP connection established",
-			tag.NewStringTag("remote_addr", conn.RemoteAddr().String()),
-			tag.NewStringTag("local_addr", conn.LocalAddr().String()),
-		)
-		return conn, nil
+
+		// Resolve the hostname to discover all ES node IPs. This lets us
+		// select a healthy IP rather than relying on the transport to pick
+		// one at random, which may land on a partitioned node.
+		ips, resolveErr := net.DefaultResolver.LookupHost(ctx, host)
+		if resolveErr != nil || len(ips) == 0 {
+			// DNS failure — fall back to original dialer.
+			return baseDialContext(ctx, network, addr)
+		}
+
+		// Separate healthy IPs from recently-failed ones. Try healthy
+		// candidates first; fall back to bad ones only if all are marked
+		// unhealthy (e.g. total cluster outage).
+		var good, bad []string
+		for _, ip := range ips {
+			if cb.isBad(ip) {
+				bad = append(bad, ip)
+			} else {
+				good = append(good, ip)
+			}
+		}
+		candidates := append(good, bad...)
+
+		var lastErr error
+		for _, ip := range candidates {
+			// Short per-IP deadline: fail fast on NACL-dropped SYNs so the
+			// loop can immediately proceed to a reachable node.
+			ipCtx, cancel := context.WithTimeout(ctx, dialFailureCacheDialTimeout)
+			conn, dialErr := baseDialContext(ipCtx, network, net.JoinHostPort(ip, port))
+			cancel()
+
+			if dialErr != nil {
+				cb.markBad(ip)
+				logger.Debug("Elasticsearch TCP connection failed, marking IP unhealthy",
+					tag.NewStringTag("remote_ip", ip),
+					tag.NewStringTag("error", dialErr.Error()),
+				)
+				lastErr = dialErr
+				if ctx.Err() != nil {
+					// Parent context expired; no point trying remaining IPs.
+					break
+				}
+				continue
+			}
+
+			cb.markGood(ip)
+			logger.Debug("Elasticsearch TCP connection established",
+				tag.NewStringTag("remote_addr", conn.RemoteAddr().String()),
+				tag.NewStringTag("local_addr", conn.LocalAddr().String()),
+			)
+			return conn, nil
+		}
+
+		return nil, lastErr
 	}
 }
 
