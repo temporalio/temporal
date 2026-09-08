@@ -2,8 +2,17 @@ package quotas
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 )
+
+// processStart anchors refresh deadlines to the monotonic clock, so they are
+// unaffected by wall-clock steps.
+var processStart = time.Now()
+
+func elapsedSinceStart() int64 {
+	return int64(time.Since(processStart))
+}
 
 const (
 	defaultRefreshInterval        = time.Minute
@@ -17,8 +26,10 @@ type (
 		rateBurstFn     RateBurst
 		refreshInterval time.Duration
 
-		refreshTimer *time.Timer
-		rateLimiter  *RateLimiterImpl
+		// nextRefresh is the deadline, in nanos since processStart, after which
+		// the next token operation picks up rate/burst changes.
+		nextRefresh atomic.Int64
+		rateLimiter *RateLimiterImpl
 	}
 )
 
@@ -33,9 +44,9 @@ func NewDynamicRateLimiter(
 		rateBurstFn:     rateBurstFn,
 		refreshInterval: refreshInterval,
 
-		refreshTimer: time.NewTimer(refreshInterval),
-		rateLimiter:  NewRateLimiter(rateBurstFn.Rate(), rateBurstFn.Burst()),
+		rateLimiter: NewRateLimiter(rateBurstFn.Rate(), rateBurstFn.Burst()),
 	}
+	rateLimiter.nextRefresh.Store(elapsedSinceStart() + int64(refreshInterval))
 	return rateLimiter
 }
 
@@ -130,13 +141,15 @@ func (d *DynamicRateLimiterImpl) Refresh() {
 }
 
 func (d *DynamicRateLimiterImpl) maybeRefresh() {
-	select {
-	case <-d.refreshTimer.C:
-		d.refreshTimer.Reset(d.refreshInterval)
+	now := elapsedSinceStart()
+	next := d.nextRefresh.Load()
+	if now < next {
+		return
+	}
+	// Only the caller that moves the deadline forward performs the refresh, so a
+	// burst of concurrent callers past the deadline refreshes once.
+	if d.nextRefresh.CompareAndSwap(next, now+int64(d.refreshInterval)) {
 		d.Refresh()
-
-	default:
-		// noop
 	}
 }
 
