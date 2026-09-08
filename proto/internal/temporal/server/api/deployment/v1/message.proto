@@ -247,6 +247,8 @@ message WorkerDeploymentVersionSummary {
   // Compute status for this version. Synced from the version workflow when WCI signals a status change.
   temporal.api.deployment.v1.ComputeStatus compute_status = 14;
 
+  // Snapshot of registered task queue families published by the Version workflow.
+  // It is refreshed periodically or after relevant state changes and may lag the Version workflow's exact state.
   TaskQueueFamilySummary task_queue_family_summary = 15;
 }
 
@@ -636,8 +638,12 @@ message DemoteVersionSignalArgs {
 }
 
 message TaskQueueFamilySummary {
-  // Exact number of task queue families registered in the Version.
+  // Exact number of task queue families registered in the Version. This is n when sizing the Bloom filter.
   int32 count = 1;
-  // Bloom filter containing the registered task queue family names.
-  bytes bloom_filter = 2;
+  // Number of bits in the Bloom filter.
+  int64 bloom_filter_size = 2;
+  // Number of hash functions used by the Bloom filter.
+  int32 bloom_filter_hash_count = 3;
+  // Bloom filter words containing the registered task queue family names.
+  repeated int64 bloom_filter_words = 4;
 }

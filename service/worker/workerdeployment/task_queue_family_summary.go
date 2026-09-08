@@ -21,24 +21,32 @@ func buildTaskQueueFamilySummary(
 		filter.AddString(taskQueueName)
 	}
 
-	serializedFilter, err := filter.MarshalBinary()
-	if err != nil {
-		return nil
+	summary.BloomFilterSize = int64(filter.Cap())
+	summary.BloomFilterHashCount = int32(filter.K())
+	summary.BloomFilterWords = make([]int64, len(filter.BitSet().Words()))
+	for index, word := range filter.BitSet().Words() {
+		summary.BloomFilterWords[index] = int64(word)
 	}
-	summary.BloomFilter = serializedFilter
 	return summary
 }
 
 func taskQueueFamilyMayExist(summary *deploymentspb.TaskQueueFamilySummary, taskQueueName string) bool {
-	serializedFilter := summary.GetBloomFilter()
-	if len(serializedFilter) == 0 {
+	count := summary.GetCount()
+	if count <= 0 {
 		return true
 	}
 
-	// TODO: Consider validating the Bloom filter's encoded metadata before decoding.
-	var filter bloom.BloomFilter
-	if err := filter.UnmarshalBinary(serializedFilter); err != nil {
-		return true
+	filterWords := summary.GetBloomFilterWords()
+	// TODO: Validate the Bloom filter metadata before reconstructing it.
+	// The proto uses int64 words to satisfy proto lint, while the Bloom library requires uint64.
+	// This conversion preserves the existing bitset; it does not rebuild the filter from task queue names.
+	words := make([]uint64, len(filterWords))
+	for index, word := range filterWords {
+		words[index] = uint64(word)
 	}
-	return filter.TestString(taskQueueName)
+	return bloom.FromWithM(
+		words,
+		uint(summary.GetBloomFilterSize()),
+		uint(summary.GetBloomFilterHashCount()),
+	).TestString(taskQueueName)
 }

@@ -6,6 +6,7 @@ import (
 	"github.com/bits-and-blooms/bloom/v3"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/worker_versioning"
@@ -14,37 +15,59 @@ import (
 func TestBuildTaskQueueFamilySummary(t *testing.T) {
 	t.Parallel()
 
-	taskQueueFamilies := map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
-		"queue-a": {
-			TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
-				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
-				int32(enumspb.TASK_QUEUE_TYPE_NEXUS):    {},
+	testCases := []struct {
+		name              string
+		taskQueueFamilies map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData
+		wantCount         int32
+	}{
+		{
+			name: "families",
+			taskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
+				"queue-a": {
+					TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
+						int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {},
+						int32(enumspb.TASK_QUEUE_TYPE_NEXUS):    {},
+					},
+				},
+				"queue-b": {
+					TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
+						int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY): {},
+					},
+				},
 			},
+			wantCount: 2,
 		},
-		"queue-b": {
-			TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{
-				int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY): {},
-			},
+		{
+			name: "no families",
 		},
 	}
 
-	summary := buildTaskQueueFamilySummary(taskQueueFamilies)
-	require.Equal(t, int32(2), summary.GetCount())
-	require.NotEmpty(t, summary.GetBloomFilter())
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	var filter bloom.BloomFilter
-	require.NoError(t, filter.UnmarshalBinary(summary.GetBloomFilter()))
-	require.True(t, filter.TestString("queue-a"))
-	require.True(t, filter.TestString("queue-b"))
-	require.False(t, filter.TestString("queue-c"))
-}
+			summary := buildTaskQueueFamilySummary(tc.taskQueueFamilies)
+			require.Equal(t, tc.wantCount, summary.GetCount())
+			if tc.wantCount == 0 {
+				require.Zero(t, summary.GetBloomFilterSize())
+				require.Zero(t, summary.GetBloomFilterHashCount())
+				require.Empty(t, summary.GetBloomFilterWords())
+				return
+			}
 
-func TestBuildTaskQueueFamilySummary_Empty(t *testing.T) {
-	t.Parallel()
-
-	summary := buildTaskQueueFamilySummary(nil)
-	require.Equal(t, int32(0), summary.GetCount())
-	require.Empty(t, summary.GetBloomFilter())
+			require.NotZero(t, summary.GetBloomFilterSize())
+			require.NotZero(t, summary.GetBloomFilterHashCount())
+			require.NotEmpty(t, summary.GetBloomFilterWords())
+			words := make([]uint64, len(summary.GetBloomFilterWords()))
+			for index, word := range summary.GetBloomFilterWords() {
+				words[index] = uint64(word)
+			}
+			filter := bloom.FromWithM(words, uint(summary.GetBloomFilterSize()), uint(summary.GetBloomFilterHashCount()))
+			require.True(t, filter.TestString("queue-a"))
+			require.True(t, filter.TestString("queue-b"))
+			require.False(t, filter.TestString("queue-c"))
+		})
+	}
 }
 
 func TestVersionStateToSummaryTaskQueueFamilySummary(t *testing.T) {
@@ -80,8 +103,10 @@ func TestVersionStateToSummaryTaskQueueFamilySummary(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			runner := &VersionWorkflowRunner{workflowVersion: tc.workflowVersion}
-			summary := runner.versionStateToSummary(state).GetTaskQueueFamilySummary()
+			summary := versionStateToSummary(
+				state,
+				tc.workflowVersion >= TaskQueueFamilySummary,
+			).GetTaskQueueFamilySummary()
 			if !tc.wantSummary {
 				require.Nil(t, summary)
 				return
@@ -91,7 +116,7 @@ func TestVersionStateToSummaryTaskQueueFamilySummary(t *testing.T) {
 	}
 }
 
-func TestValidateRegisterWorker_TaskQueueFamilySummary(t *testing.T) {
+func TestValidateRegisterWorkerTaskQueueFamilySummary(t *testing.T) {
 	t.Parallel()
 
 	version := &deploymentspb.WorkerDeploymentVersion{
@@ -110,6 +135,7 @@ func TestValidateRegisterWorker_TaskQueueFamilySummary(t *testing.T) {
 		taskQueueName   string
 		maxTaskQueues   int32
 		wantLimitError  bool
+		wantBloomPass   bool
 	}{
 		{
 			name:            "definite miss at limit",
@@ -125,6 +151,7 @@ func TestValidateRegisterWorker_TaskQueueFamilySummary(t *testing.T) {
 			summary:         completeSummary,
 			taskQueueName:   "existing-queue",
 			maxTaskQueues:   1,
+			wantBloomPass:   true,
 		},
 		{
 			name:            "below limit",
@@ -138,16 +165,6 @@ func TestValidateRegisterWorker_TaskQueueFamilySummary(t *testing.T) {
 			workflowVersion: TaskQueueFamilySummary,
 			taskQueueName:   "new-queue",
 			maxTaskQueues:   1,
-		},
-		{
-			name:            "invalid filter fails open",
-			workflowVersion: TaskQueueFamilySummary,
-			summary: &deploymentspb.TaskQueueFamilySummary{
-				Count:       1,
-				BloomFilter: []byte("invalid"),
-			},
-			taskQueueName: "new-queue",
-			maxTaskQueues: 1,
 		},
 		{
 			name:            "old workflow version fails open",
@@ -170,14 +187,16 @@ func TestValidateRegisterWorker_TaskQueueFamilySummary(t *testing.T) {
 						},
 					},
 				},
+				metrics:         sdkclient.MetricsNopHandler,
 				workflowVersion: tc.workflowVersion,
 			}
-			err := runner.validateRegisterWorker(&deploymentspb.RegisterWorkerInWorkerDeploymentArgs{
+			bloomFilterPassed, err := runner.validateRegisterWorkerWithBloomFilterResult(&deploymentspb.RegisterWorkerInWorkerDeploymentArgs{
 				TaskQueueName: tc.taskQueueName,
 				TaskQueueType: enumspb.TASK_QUEUE_TYPE_NEXUS,
 				MaxTaskQueues: tc.maxTaskQueues,
 				Version:       version,
 			})
+			require.Equal(t, tc.wantBloomPass, bloomFilterPassed)
 
 			if !tc.wantLimitError {
 				require.NoError(t, err)

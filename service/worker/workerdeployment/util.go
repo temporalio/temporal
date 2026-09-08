@@ -91,6 +91,10 @@ const (
 	errVersionIsDraining          = "errVersionIsDraining"
 	errVersionHasPollers          = "errVersionHasPollersSuffix"
 
+	taskQueueFamilyBloomFilterOutcomeAccepted      = "accepted"
+	taskQueueFamilyBloomFilterOutcomeFalsePositive = "false_positive"
+	taskQueueFamilyBloomFilterOutcomeRejected      = "rejected"
+
 	errFailedPrecondition   = "FailedPrecondition"
 	errInvalidComputeConfig = "errInvalidComputeConfig"
 

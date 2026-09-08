@@ -994,7 +994,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 	}
 
 	return &deploymentspb.SyncVersionStateResponse{
-		Summary: d.versionStateToSummary(state),
+		Summary: versionStateToSummary(state, d.hasMinVersion(TaskQueueFamilySummary)),
 	}, nil
 }
 
@@ -1075,7 +1075,10 @@ func (d *VersionWorkflowRunner) newUUID(ctx workflow.Context) string {
 
 // Sync version summary with the WorkerDeployment workflow.
 func (d *VersionWorkflowRunner) syncSummary(ctx workflow.Context) {
-	summary := d.versionStateToSummary(d.GetVersionState())
+	summary := versionStateToSummary(
+		d.GetVersionState(),
+		d.hasMinVersion(TaskQueueFamilySummary),
+	)
 	err := workflow.SignalExternalWorkflow(ctx,
 		GenerateDeploymentWorkflowID(d.VersionState.Version.DeploymentName),
 		"",
@@ -1091,18 +1094,11 @@ func (d *VersionWorkflowRunner) syncSummary(ctx workflow.Context) {
 	}
 }
 
-func (d *VersionWorkflowRunner) versionStateToSummary(
+func versionStateToSummary(
 	s *deploymentspb.VersionLocalState,
+	includeTaskQueueFamilySummary bool,
 ) *deploymentspb.WorkerDeploymentVersionSummary {
-	summary := versionStateToSummary(s)
-	if d.hasMinVersion(TaskQueueFamilySummary) {
-		summary.TaskQueueFamilySummary = buildTaskQueueFamilySummary(s.GetTaskQueueFamilies())
-	}
-	return summary
-}
-
-func versionStateToSummary(s *deploymentspb.VersionLocalState) *deploymentspb.WorkerDeploymentVersionSummary {
-	return &deploymentspb.WorkerDeploymentVersionSummary{
+	summary := &deploymentspb.WorkerDeploymentVersionSummary{
 		Version:              worker_versioning.WorkerDeploymentVersionToStringV31(s.Version),
 		CreateTime:           s.CreateTime,
 		DrainageStatus:       s.DrainageInfo.GetStatus(), // deprecated.
@@ -1117,6 +1113,10 @@ func versionStateToSummary(s *deploymentspb.VersionLocalState) *deploymentspb.Wo
 		ComputeConfig:        s.ComputeConfig,
 		ComputeStatus:        s.ComputeStatus,
 	}
+	if includeTaskQueueFamilySummary {
+		summary.TaskQueueFamilySummary = buildTaskQueueFamilySummary(s.GetTaskQueueFamilies())
+	}
+	return summary
 }
 
 func (d *VersionWorkflowRunner) refreshDrainageInfo(ctx workflow.Context) {
