@@ -222,11 +222,14 @@ func GetSchemaFiles(t *testing.T, schemaDir string, logger log.Logger) []string 
 // NewCassandraConfig returns a new Cassandra config for test
 func NewCassandraConfig() *config.Cassandra {
 	return &config.Cassandra{
-		User:           testCassandraUser,
-		Password:       testCassandraPassword,
-		Hosts:          environment.GetCassandraAddress(),
-		Port:           environment.GetCassandraPort(),
-		Keyspace:       testCassandraDatabaseNamePrefix + shuffle.String(testCassandraDatabaseNameSuffix),
-		ConnectTimeout: 30 * time.Second,
+		User:                     testCassandraUser,
+		Password:                 testCassandraPassword,
+		Hosts:                    environment.GetCassandraAddress(),
+		Port:                     environment.GetCassandraPort(),
+		DisableInitialHostLookup: environment.GetCassandraDisableInitialHostLookup(),
+		IgnorePeerAddr:           environment.GetCassandraIgnorePeerAddr(),
+		DisableShardAwarePort:    environment.GetCassandraDisableShardAwarePort(),
+		Keyspace:                 testCassandraDatabaseNamePrefix + shuffle.String(testCassandraDatabaseNameSuffix),
+		ConnectTimeout:           30 * time.Second,
 	}
 }
