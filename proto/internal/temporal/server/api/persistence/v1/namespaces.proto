@@ -50,7 +50,7 @@ message NamespaceReplicationConfig {
   map<string, NamespaceReplicationRamp> cluster_replication_ramps = 9;
 }
 
-// Immutable admission-ramp parameters for one namespace/target-cluster connection.
+// Snapshotted gradual-connect parameters for a namespace target.
 message NamespaceReplicationRamp {
   google.protobuf.Timestamp start_time = 1;
   google.protobuf.Duration duration = 2;

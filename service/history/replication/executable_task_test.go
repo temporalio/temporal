@@ -1145,10 +1145,8 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_ConnectTimeInF
 	s.Empty(capture.Snapshot()[metrics.ReplicationTasksSkipped.Name()])
 }
 
-// TestGetNamespaceInfo_GradualConnect_ForceReplication_Admits: a shed task is dropped for good, so
-// shedding force-replication traffic would stall migration verification until it hard-fails.
 func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_ForceReplication_Admits() {
-	connectTime := s.timeSource.Now() // freshly connected -- percent would otherwise be 0, i.e. shed
+	connectTime := s.timeSource.Now()
 	namespaceEntry, namespaceID := s.newGradualConnectNamespace(&persistencespb.NamespaceReplicationRamp{
 		StartTime:         timestamppb.New(connectTime),
 		Duration:          durationpb.New(time.Hour),
@@ -1175,7 +1173,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_RampComplete_A
 	defer metricsHandler.StopCapture(capture)
 	s.task.MetricsHandler = metricsHandler
 
-	s.timeSource.Update(connectTime.Add(time.Hour)) // well past the ramp duration
+	s.timeSource.Update(connectTime.Add(time.Hour))
 	for range 20 {
 		_, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, uuid.NewString())
 		s.NoError(err)
@@ -1201,7 +1199,7 @@ func (s *executableTaskSuite) TestGetNamespaceInfo_GradualConnect_AdmissionGrows
 	}
 
 	admitted := make(map[string]bool, numWorkflows)
-	for tick := 0; tick <= 10; tick++ { // Sample the linear ramp once per minute.
+	for tick := 0; tick <= 10; tick++ {
 		s.timeSource.Update(connectTime.Add(time.Duration(tick) * sampleInterval))
 		for _, wfID := range workflowIDs {
 			_, toProcess, err := s.task.GetNamespaceInfo(context.Background(), namespaceID, wfID)

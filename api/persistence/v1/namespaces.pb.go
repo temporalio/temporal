@@ -388,7 +388,7 @@ func (x *NamespaceReplicationConfig) GetClusterReplicationRamps() map[string]*Na
 	return nil
 }
 
-// Immutable admission-ramp parameters for one namespace/target-cluster connection.
+// Snapshotted gradual-connect parameters for a namespace target.
 type NamespaceReplicationRamp struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	StartTime         *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`

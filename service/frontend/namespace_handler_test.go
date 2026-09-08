@@ -191,7 +191,6 @@ func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsSnapshotsAndRest
 	s.Equal(time.Hour, ramp.GetDuration().AsDuration())
 	s.Equal(int32(10), ramp.GetInitialPercentage())
 
-	// Disabling creation and changing defaults cannot alter an in-flight connection generation.
 	s.config.EnableReplicationGradualConnect = dc.GetBoolPropertyFn(false)
 	s.config.ReplicationGradualConnectInitialPercent = dc.GetIntPropertyFnFilteredByNamespace(25)
 	unchanged, err := s.handler.updateReplicationRamps(

@@ -94,8 +94,7 @@ func (e *taskExecutorImpl) Execute(
 	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
 		err = e.handleSyncWorkflowStateTask(ctx, replicationTask, forceApply)
 	default:
-		// Delete tasks must remain unsupported here: this legacy path applies gradual-connect
-		// filtering without the delete executable's correctness-critical bypass.
+		// This path must not handle deletes because it lacks their gradual-connect bypass.
 		// NOTE: not handling SyncHSMTask in this deprecated code path, task will go to DLQ
 		e.logger.Error("Unknown replication task type.", tag.ReplicationTask(replicationTask))
 		err = ErrUnknownReplicationTask

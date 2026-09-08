@@ -58,8 +58,7 @@ func NewExecutableDeleteExecutionTask(
 		sourceShardKey,
 		replicationTask,
 	)
-	// Admission can decrease after clock regression. Never shed a delete after admitting earlier
-	// history: force replication can restore ordinary gaps, but it cannot safely infer the deletion.
+	// Never shed deletes: clock regression can reduce admission, and force replication cannot infer a deletion.
 	executableTask.bypassGradualConnect = true
 
 	// ArchetypeID should never be unspecified. Default to WorkflowArchetypeID.

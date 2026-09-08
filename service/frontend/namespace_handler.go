@@ -745,8 +745,7 @@ func updateExistingReplicationRamps(
 		}
 		ramp := existing[clusterName]
 		if ramp == nil && !rampCreationEnabled {
-			// A disabled creation request is a silent no-op, including on declarative retries after
-			// the cluster-list update has already connected the target.
+			// Repeated requests remain no-ops when ramp creation is disabled.
 			continue
 		}
 		if err := duration.CheckValid(); err != nil {

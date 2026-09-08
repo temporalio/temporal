@@ -1149,11 +1149,8 @@ var (
 	ReplicationTasksFailed             = NewCounterDef("replication_tasks_failed")
 	ReplicationTasksBackFill           = NewCounterDef("replication_tasks_back_fill")
 	ReplicationTasksBackFillLatency    = NewTimerDef("replication_tasks_back_fill_latency")
-	// ReplicationTasksShedByGradualConnect counts tasks shed by the namespace gradual-connect ramp.
 	ReplicationTasksShedByGradualConnect = NewCounterDef("replication_tasks_shed_by_gradual_connect")
-	// ReplicationGradualConnectPercent is the admission percent while a gradual-connect ramp is incomplete.
 	ReplicationGradualConnectPercent = NewGaugeDef("replication_gradual_connect_percent")
-	// ReplicationForceTaskBypassedRamp counts force-replication tasks that bypass an incomplete ramp.
 	ReplicationForceTaskBypassedRamp = NewCounterDef("replication_force_task_bypassed_ramp")
 	// ParentWorkflowResendAttempts counts parent resends started by standby completion verification.
 	ParentWorkflowResendAttempts = NewCounterDef("parent_workflow_resend_attempts")

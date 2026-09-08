@@ -779,10 +779,10 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		Config: &namespacepb.NamespaceConfig{},
 		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
 			ActiveClusterName: updateClusterActive,
-			Clusters:          updateClusters, // unchanged membership -- standby was already connected
+			Clusters:          updateClusters,
 		},
 		ConfigVersion:   updateConfigVersion,
-		FailoverVersion: updateFailoverVersion, // no failover bump
+		FailoverVersion: updateFailoverVersion,
 	}
 
 	s.namespaceReplicator.currentCluster = updateClusterStandby

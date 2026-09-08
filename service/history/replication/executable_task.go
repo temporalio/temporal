@@ -951,8 +951,7 @@ func (e *ExecutableTaskImpl) emitReplicationTaskSkipped(namespaceName, namespace
 	)
 }
 
-// admittedByGradualConnect reports whether businessID is admitted by the namespace gradual-connect
-// replication ramp. It fails open when no complete ramp schedule is recorded.
+// admittedByGradualConnect fails open when no complete ramp is recorded.
 func (e *ExecutableTaskImpl) admittedByGradualConnect(namespaceEntry *namespace.Namespace, businessID string) bool {
 	if e.bypassGradualConnect {
 		return true
@@ -975,7 +974,7 @@ func (e *ExecutableTaskImpl) admittedByGradualConnect(namespaceEntry *namespace.
 		metrics.NamespaceTag(nsName),
 	)
 	if e.replicationTask.GetRawTaskInfo().GetIsForceReplication() {
-		// Shed tasks are dropped, not retried -- shedding these would strand a migration's verify loop.
+		// Force replication must bypass shedding because shed tasks are not retried.
 		metrics.ReplicationForceTaskBypassedRamp.With(e.MetricsHandler).Record(
 			1,
 			metrics.NamespaceTag(nsName),
@@ -999,9 +998,7 @@ func gradualConnectAdmission(
 	return dynamicconfig.RolloutAccepts([]byte(businessID), percent), percent
 }
 
-// gradualConnectPercent computes the current admission percent, capped at 100. Times before
-// connectTime use the initial percentage. Clock regression can reduce admission; delete tasks
-// bypass the ramp, and force replication repairs gaps from ordinary tasks. Invalid schedules fail open.
+// Invalid schedules fail open; times before connectTime use the initial percentage.
 func gradualConnectPercent(connectTime, now time.Time, duration time.Duration, initialPercent int) int {
 	elapsed := now.Sub(connectTime)
 	if duration <= 0 || initialPercent < 0 || initialPercent >= 100 {

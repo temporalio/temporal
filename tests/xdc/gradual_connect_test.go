@@ -48,20 +48,17 @@ func (s *gradualConnectTestSuite) SetupTest() {
 	s.setupTest()
 }
 
-// Exercises the gradual-connect ramp end to end: shed while the ramp is active, explicitly open
-// it with a zero-duration update, and recover previously shed history with force replication.
+// Tests shedding, explicit ramp completion, and force-replication recovery.
 func (s *gradualConnectTestSuite) TestNewlyConnectedClusterRampsAdmission() {
 	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
 	defer cancel()
 
-	// Create the namespace on the active cluster only -- standby isn't a member yet.
 	ns := s.createNamespaceInCluster0(true)
 
 	active := s.clusters[0]
 	standby := s.clusters[1]
 
-	// Explicitly opt this namespace into a long ramp. The active cluster snapshots these values
-	// into namespace state when standby is added.
+	// Keep the ramp active for the duration of the test.
 	const rampDuration = time.Hour
 	for _, override := range []struct {
 		setting dynamicconfig.GenericSetting
@@ -73,7 +70,6 @@ func (s *gradualConnectTestSuite) TestNewlyConnectedClusterRampsAdmission() {
 		s.T().Cleanup(active.OverrideDynamicConfig(s.T(), override.setting, override.value))
 	}
 
-	// Add standby to the namespace's cluster list.
 	connectedAt := time.Now()
 	s.updateNamespaceClustersWithReplicationConfigs(
 		ns,
@@ -88,8 +84,7 @@ func (s *gradualConnectTestSuite) TestNewlyConnectedClusterRampsAdmission() {
 		},
 	)
 
-	// Diagnostic: standby's own connect time, read directly from persisted state (not the
-	// namespace cache, to rule out a cache-refresh delay).
+	// Verify the ramp reached target persistence before generating traffic.
 	nsResp, err := standby.TestBase().MetadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: ns})
 	s.Require().NoError(err)
 	ramp := nsResp.Namespace.GetReplicationConfig().GetClusterReplicationRamps()[standby.ClusterName()]
@@ -97,7 +92,7 @@ func (s *gradualConnectTestSuite) TestNewlyConnectedClusterRampsAdmission() {
 	s.Require().WithinDuration(connectedAt, ramp.GetStartTime().AsTime(), namespaceCacheWaitTime+5*time.Second)
 	s.Require().Equal(rampDuration, ramp.GetDuration().AsDuration())
 
-	// Still inside the ramp window: a workflow started on active must not replicate to standby yet.
+	// Select an ID that remains outside the ramp even if the test takes almost an hour.
 	var shedWorkflowID string
 	for {
 		shedWorkflowID = "gc-shed-" + uuid.NewString()
@@ -110,9 +105,7 @@ func (s *gradualConnectTestSuite) TestNewlyConnectedClusterRampsAdmission() {
 		return s.gcWorkflowExistsOn(ctx, standby, ns, shedWorkflowID)
 	}, 3*time.Second, 200*time.Millisecond, "workflow should be shed while the ramp is still active")
 
-	// Setting the existing cluster's ramp duration to zero explicitly opens the ramp. Confirm that
-	// removal reaches standby persistence before generating the next replication task; checking
-	// only the source response could race namespace replication.
+	// Wait for the clear to reach target persistence before generating more traffic.
 	s.updateNamespaceClustersWithReplicationConfigs(
 		ns,
 		0,
@@ -134,16 +127,13 @@ func (s *gradualConnectTestSuite) TestNewlyConnectedClusterRampsAdmission() {
 	}, replicationWaitTime, replicationCheckInterval, "standby should remove the ramp after a zero-duration update")
 	s.waitForNamespaceCacheRefresh()
 
-	// A new workflow started after the explicit clear must replicate normally even though the
-	// original ramp duration has not elapsed.
 	admittedWorkflowID := "gc-admit-" + uuid.NewString()
 	s.gcStartAndCompleteWorkflow(ctx, active, ns, admittedWorkflowID)
 	await.RequireTruef(s.T(), func() bool {
 		return s.gcWorkflowExistsOn(ctx, standby, ns, admittedWorkflowID)
 	}, replicationWaitTime, replicationCheckInterval, "workflow should replicate once the ramp has completed")
 
-	// Shed tasks are acknowledged and dropped, so force replication must restore the earlier
-	// workflow after the ramp. This is the recovery contract gradual connection relies on.
+	// Shed tasks are acknowledged, so recovery requires force replication.
 	s.waitForVisibilityCount(ctx, ns, 2)
 	systemClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  active.Host().FrontendGRPCAddress(),
@@ -168,8 +158,6 @@ func (s *gradualConnectTestSuite) TestNewlyConnectedClusterRampsAdmission() {
 	}, replicationWaitTime, replicationCheckInterval, "force replication should restore the workflow shed during the ramp")
 }
 
-// gcStartAndCompleteWorkflow starts and completes a workflow on cluster c via the raw frontend API,
-// waiting for it to reach COMPLETED before returning.
 func (s *gradualConnectTestSuite) gcStartAndCompleteWorkflow(ctx context.Context, c *testcore.TestCluster, ns, workflowID string) {
 	client := c.FrontendClient()
 	taskQueue := "gc-tq-" + uuid.NewString()
@@ -196,7 +184,7 @@ func (s *gradualConnectTestSuite) gcStartAndCompleteWorkflow(ctx context.Context
 			},
 		}}, nil
 	}
-	//nolint:staticcheck // matches the existing pattern in delete_execution_replication_test.go
+	//nolint:staticcheck // TODO: replace with taskpoller.TaskPoller
 	poller := &testcore.TaskPoller{
 		Client:              client,
 		Namespace:           ns,
@@ -221,7 +209,6 @@ func (s *gradualConnectTestSuite) gcStartAndCompleteWorkflow(ctx context.Context
 	}, 10*time.Second, time.Second, "workflow should reach COMPLETED on %s", c.ClusterName())
 }
 
-// gcWorkflowExistsOn reports whether workflowID is visible on cluster c.
 func (s *gradualConnectTestSuite) gcWorkflowExistsOn(ctx context.Context, c *testcore.TestCluster, ns, workflowID string) bool {
 	_, err := c.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: ns,
