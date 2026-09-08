@@ -21,7 +21,7 @@ func (c *operationContext) handleStartOperationResponse(
 	operation string,
 ) (nexus.HandlerStartOperationResult[any], []nexus.Link, error) {
 	result := commonnexus.ClassifyStartOperationDispatch(resp)
-	c.recordDispatchOutcome(result)
+	c.attributeFailureToWorker(result)
 
 	switch result.Outcome {
 	case commonnexus.DispatchOutcomeSyncSuccess:
@@ -60,7 +60,7 @@ func (c *operationContext) handleCancelOperationResponse(
 	operation string,
 ) error {
 	result := commonnexus.ClassifyCancelOperationDispatch(resp)
-	c.recordDispatchOutcome(result)
+	c.attributeFailureToWorker(result)
 
 	if result.Outcome == commonnexus.DispatchOutcomeCancelAccepted {
 		return nil
@@ -153,9 +153,7 @@ func (c *operationContext) operationError(
 	return opErr
 }
 
-// recordDispatchOutcome attributes a failed dispatch to the worker in the response header. The
-// outcome is carried by the returned InterceptorError and recorded by the Nexus telemetry interceptor.
-func (c *operationContext) recordDispatchOutcome(result commonnexus.DispatchResult) {
+func (c *operationContext) attributeFailureToWorker(result commonnexus.DispatchResult) {
 	if !result.Outcome.Succeeded() {
 		c.setFailureSource(commonnexus.FailureSourceWorker)
 	}

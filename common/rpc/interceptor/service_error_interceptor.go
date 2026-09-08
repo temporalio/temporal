@@ -4,13 +4,14 @@ import (
 	"context"
 	"errors"
 
-	nexusrpc "github.com/nexus-rpc/sdk-go/nexus"
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/rpc/interceptor/nexus"
+	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.temporal.io/server/common/util"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/status"
@@ -51,11 +52,11 @@ func (i *ServiceErrorInterceptor) Intercept(
 
 func (i *ServiceErrorInterceptor) InterceptNexus(
 	ctx context.Context,
-	in nexus.InterceptorInput,
-	next nexus.HandlerFunc,
+	in interceptornexus.InterceptorInput,
+	next interceptornexus.HandlerFunc,
 ) (any, error) {
 	resp, err := i.capturePanicHandlerNexus(ctx, in, next)
-	if ie, ok := errors.AsType[*nexus.InterceptorError](err); ok {
+	if ie, ok := errors.AsType[*interceptornexus.InterceptorError](err); ok {
 		ie.Err = i.transformNexusError(ie.Err)
 		return resp, ie
 	}
@@ -95,10 +96,32 @@ func (i *ServiceErrorInterceptor) capturePanicHandler(
 
 func (i *ServiceErrorInterceptor) capturePanicHandlerNexus(
 	ctx context.Context,
-	in nexus.InterceptorInput,
-	next nexus.HandlerFunc,
+	in interceptornexus.InterceptorInput,
+	next interceptornexus.HandlerFunc,
 ) (_ any, retError error) {
-	defer metrics.CapturePanic(i.logger, i.metricsHandler, &retError)
+	logTags := []tag.Tag{
+		tag.Operation(in.MethodName()),
+		tag.WorkflowNamespace(in.NamespaceName()),
+	}
+	if endpointName := in.EndpointName(); endpointName != "" {
+		logTags = append(logTags, tag.Endpoint(endpointName))
+	}
+	if operationName := in.OperationName(); operationName != "" {
+		logTags = append(logTags, tag.NexusOperation(operationName))
+	}
+	switch input := in.(type) {
+	case interceptornexus.StartOpInput:
+		logTags = append(logTags, tag.NexusStageHandlerInbound, tag.RequestID(input.StartOperationOptions.RequestID))
+	case interceptornexus.CancelOpInput:
+		logTags = append(logTags, tag.NexusStageHandlerInbound)
+	case interceptornexus.CompleteOpInput:
+		logTags = append(logTags, tag.NexusStageCallerInbound)
+		if input.Completion != nil && input.Completion.GetRequestId() != "" {
+			logTags = append(logTags, tag.RequestID(input.Completion.GetRequestId()))
+		}
+	default:
+	}
+	defer metrics.CapturePanic(log.With(i.logger, logTags...), i.metricsHandler, &retError)
 	return next(ctx, in)
 }
 
@@ -108,10 +131,10 @@ func (i *ServiceErrorInterceptor) transformNexusError(err error) error {
 	if err == nil {
 		return nil
 	}
-	if _, ok := errors.AsType[*nexusrpc.HandlerError](err); ok {
+	if _, ok := errors.AsType[*nexus.HandlerError](err); ok {
 		return err
 	}
-	if _, ok := errors.AsType[*nexusrpc.OperationError](err); ok {
+	if _, ok := errors.AsType[*nexus.OperationError](err); ok {
 		return err
 	}
 	return i.transformError(err)

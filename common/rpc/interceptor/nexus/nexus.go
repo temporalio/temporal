@@ -25,7 +25,7 @@ type Interceptor func(ctx context.Context, in InterceptorInput, next HandlerFunc
 type InterceptorInput interface {
 	ServiceName() string
 	OperationName() string
-	NamespaceName() string // TODO: this should just use NamespaceEntry() instead
+	NamespaceName() string
 	ForwardingInfo() ForwardingInfo
 	APIName() string // analogous to the gRPC FullMethod
 	NamespaceEntry() (*namespace.Namespace, error)
@@ -66,7 +66,7 @@ type InterceptorError struct {
 }
 
 func (t *InterceptorError) Error() string {
-	return fmt.Sprintf("interceptor error (%s): %v", t.Outcome, t.Err.Error())
+	return fmt.Sprintf("interceptor error (%s): %v", t.Outcome, t.Err)
 }
 
 func (t *InterceptorError) Unwrap() error {
@@ -91,7 +91,7 @@ func (o *OutcomeOverride) Set(v string) {
 	o.value = v
 }
 
-func (o *OutcomeOverride) Get() string {
+func (o *OutcomeOverride) Value() string {
 	if o == nil {
 		return ""
 	}

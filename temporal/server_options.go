@@ -136,7 +136,7 @@ func (so *serverOptions) validateConfig() error {
 		len(so.customFrontendUnifiedInterceptors) > 0 {
 		// Both could be supported as a migration path but intentionally avoided as
 		// migration itself is as simple as wrapping with no-op Nexus Interceptors.
-		return errors.New("configure either custom gRPC or unified interceptors, not both")
+		return errors.New("WithChainedFrontendGrpcInterceptors is deprecated in favor of WithChainedFrontendInterceptors- they cannot both be set")
 	}
 	if err := so.config.Validate(); err != nil {
 		return err

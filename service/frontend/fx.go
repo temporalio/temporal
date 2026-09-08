@@ -105,7 +105,7 @@ var Module = fx.Options(
 	fx.Provide(interceptor.NewHealthInterceptor),
 	fx.Provide(NamespaceCountLimitInterceptorProvider),
 	fx.Provide(NamespaceValidatorInterceptorProvider),
-	fx.Provide(NamespaceStateValidatorInterceptorProvider),
+	fx.Provide(NamespaceLengthValidatorInterceptorProvider),
 	fx.Provide(NamespaceRateLimitersProvider),
 	fx.Provide(NamespaceRateLimitInterceptorProvider),
 	fx.Provide(SDKVersionInterceptorProvider),
@@ -135,7 +135,7 @@ var Module = fx.Options(
 	fx.Provide(newNexusForwardingInterceptor),
 	fx.Provide(interceptor.NewNamespaceRateLimitInterceptorWrapper),
 	fx.Provide(NewFaultsInterceptorProvider),
-	fx.Provide(NewInterceptorsProvider),
+	fx.Provide(newInterceptorsProvider),
 	fx.Provide(newNexusCompletionHandler),
 	fx.Provide(NewNexusOperationHTTPHandler),
 	fx.Provide(newNexusCompletionHTTPHandler),
@@ -242,7 +242,7 @@ func GrpcServerOptionsProvider(
 	serviceConfig *Config,
 	serviceName primitives.ServiceName,
 	rpcFactory common.RPCFactory,
-	interceptorsProvider *InterceptorsProvider,
+	interceptorsProvider *interceptorsProvider,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	traceStatsHandler telemetry.ServerStatsHandler,
 	metricsStatsHandler metrics.ServerStatsHandler,
@@ -274,7 +274,7 @@ func GrpcServerOptionsProvider(
 		logger.Fatal("creating gRPC server options failed", tag.Error(err))
 	}
 
-	unaryInterceptors := interceptorsProvider.GrpcInterceptors()
+	unaryInterceptors := interceptorsProvider.grpcInterceptors()
 
 	streamInterceptor := []grpc.StreamServerInterceptor{
 		authInterceptor.InterceptStream,
@@ -640,10 +640,10 @@ func NamespaceValidatorInterceptorProvider(
 	)
 }
 
-func NamespaceStateValidatorInterceptorProvider(
+func NamespaceLengthValidatorInterceptorProvider(
 	params NamespaceValidatorInterceptorParams,
-) *interceptor.NamespaceStateValidatorInterceptor {
-	return interceptor.NewNamespaceStateValidatorInterceptor(
+) *interceptor.NamespaceLengthValidatorInterceptor {
+	return interceptor.NewNamespaceLengthValidatorInterceptor(
 		params.NamespaceRegistry,
 		params.ServiceConfig.MaxIDLengthLimit,
 	)

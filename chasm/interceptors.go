@@ -5,7 +5,7 @@ import (
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	n "go.temporal.io/server/common/rpc/interceptor/nexus"
+	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 	"google.golang.org/grpc"
 )
 
@@ -63,8 +63,8 @@ func (i *ChasmVisibilityInterceptor) Intercept(
 
 func (i *ChasmVisibilityInterceptor) InterceptNexus(
 	ctx context.Context,
-	in n.InterceptorInput,
-	next n.HandlerFunc,
+	in interceptornexus.InterceptorInput,
+	next interceptornexus.HandlerFunc,
 ) (any, error) {
 	ctx = NewVisibilityManagerContext(ctx, i.visibilityMgr)
 	return next(ctx, in)

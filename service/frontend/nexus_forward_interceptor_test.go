@@ -192,6 +192,7 @@ func TestNexusForwardingInterceptorInterceptNexus(t *testing.T) {
 				require.IsType(t, &nexus.HandlerStartOperationResultAsync{}, result)
 				require.Equal(t, "true", receivedHeaders.Get(interceptor.DCRedirectionAPIHeaderName))
 				require.Equal(t, currentCluster, receivedHeaders.Get(interceptor.DCRedirectionSourceCellHeaderName))
+				require.Equal(t, "original", receivedHeaders.Get("X-Original"))
 			case requestFailed:
 				require.Nil(t, result)
 			default:

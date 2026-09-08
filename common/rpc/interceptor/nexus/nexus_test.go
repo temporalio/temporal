@@ -2,6 +2,7 @@ package nexus
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -10,6 +11,74 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 )
+
+func TestOperationInputOutcomes(t *testing.T) {
+	handlerErr := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid input")
+	tests := []struct {
+		name    string
+		input   InterceptorInput
+		out     any
+		err     error
+		outcome string
+	}{
+		{
+			name:    "start synchronous success",
+			input:   StartOpInput{},
+			out:     &nexus.HandlerStartOperationResultSync[any]{},
+			outcome: "sync_success",
+		},
+		{
+			name:    "start asynchronous success",
+			input:   StartOpInput{},
+			out:     &nexus.HandlerStartOperationResultAsync{},
+			outcome: "async_success",
+		},
+		{
+			name:    "start interceptor error",
+			input:   StartOpInput{},
+			err:     &InterceptorError{Err: errors.New("failed"), Outcome: "custom_outcome"},
+			outcome: "custom_outcome",
+		},
+		{
+			name:    "cancel success",
+			input:   CancelOpInput{},
+			outcome: "success",
+		},
+		{
+			name:    "cancel unclassified error",
+			input:   CancelOpInput{},
+			err:     errors.New("failed"),
+			outcome: "internal_error",
+		},
+		{
+			name:    "completion success",
+			input:   CompleteOpInput{},
+			outcome: "success",
+		},
+		{
+			name:    "completion interceptor error",
+			input:   CompleteOpInput{},
+			err:     &InterceptorError{Err: errors.New("failed"), Outcome: "custom_outcome"},
+			outcome: "custom_outcome",
+		},
+		{
+			name:    "completion handler error",
+			input:   CompleteOpInput{},
+			err:     handlerErr,
+			outcome: "error_bad_request",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.outcome, tc.input.Outcome(tc.out, tc.err))
+		})
+	}
+
+	require.Equal(t, "interceptor error (): <nil>", (&InterceptorError{}).Error())
+	_, err := NewCompleteOpInput("namespace", time.Now(), nil, nil, ForwardingInfo{}, RequestMetadata{})
+	require.EqualError(t, err, "nexus completion request not found")
+}
 
 func TestInterceptorInputRequest(t *testing.T) {
 	dispatchRequest := &http.Request{Method: http.MethodPost}

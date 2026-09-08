@@ -16,7 +16,6 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/authorization"
-	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -51,13 +50,12 @@ func NewNexusOperationHTTPHandler(
 	serviceConfig *Config,
 	matchingClient resource.MatchingClient,
 	metricsHandler metrics.Handler,
-	clusterMetadata cluster.Metadata,
 	namespaceRegistry namespace.Registry,
 	endpointRegistry commonnexus.EndpointRegistry,
 	authInterceptor *authorization.Interceptor,
 	namespaceValidationInterceptor *interceptor.NamespaceValidatorInterceptor,
 	requestErrorHandler *interceptor.RequestErrorHandler,
-	interceptorsProvider *InterceptorsProvider,
+	interceptorsProvider *interceptorsProvider,
 	logger log.Logger,
 	httpServerHandlerInstrumenter telemetry.HTTPServerHandlerInstrumenter,
 ) *NexusOperationHTTPHandler {
@@ -79,14 +77,13 @@ func NewNexusOperationHTTPHandler(
 			Handler: newNexusHandler(
 				logger,
 				metricsHandler,
-				clusterMetadata,
 				namespaceRegistry,
 				matchingservice.MatchingServiceClient(matchingClient),
 				requestErrorHandler,
 				serviceConfig.BlobSizeLimitError,
 				serviceConfig.NexusRequestHeadersBlacklist,
 				serviceConfig.NexusOperationsMetricTagConfig,
-				interceptorsProvider.NexusInterceptors(),
+				interceptorsProvider.nexusInterceptors(),
 			),
 			GetResultTimeout: serviceConfig.KeepAliveMaxConnectionIdle(),
 			Logger:           log.NewSlogLogger(logger),

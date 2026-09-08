@@ -901,7 +901,7 @@ func (s *namespaceValidatorSuite) Test_Intercept_SearchAttributeRequests() {
 }
 
 func (s *namespaceValidatorSuite) Test_NamespaceValidateIntercept() {
-	nnvi := NewNamespaceStateValidatorInterceptor(
+	nnvi := NewNamespaceLengthValidatorInterceptor(
 		s.mockRegistry,
 		dynamicconfig.GetIntPropertyFn(10),
 	)

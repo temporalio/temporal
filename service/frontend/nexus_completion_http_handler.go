@@ -17,7 +17,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/authorization"
-	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -48,6 +47,7 @@ type nexusCompletionHandler struct {
 	CallbackTokenGenerator  *commonnexus.CallbackTokenGenerator
 	HistoryClient           resource.HistoryClient
 	RequestErrorHandler     *interceptor.RequestErrorHandler
+	telemetryInterceptor    *interceptor.TelemetryInterceptor
 	AuthInterceptor         *authorization.Interceptor // required for parsing auth info, not used as an interceptor
 	preProcessErrorsCounter metrics.CounterIface
 	chainedHandler          interceptornexus.HandlerFunc
@@ -58,7 +58,6 @@ type nexusCompletionHTTPHandler struct {
 }
 
 func newNexusCompletionHandler(
-	clusterMetadata cluster.Metadata,
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
@@ -67,8 +66,8 @@ func newNexusCompletionHandler(
 	historyClient resource.HistoryClient,
 	requestErrorHandler *interceptor.RequestErrorHandler,
 	authInterceptor *authorization.Interceptor,
-	httpTraceProvider commonnexus.HTTPClientTraceProvider,
-	interceptorsProvider *InterceptorsProvider,
+	telemetryInterceptor *interceptor.TelemetryInterceptor,
+	interceptorsProvider *interceptorsProvider,
 ) *nexusCompletionHandler {
 
 	h := &nexusCompletionHandler{
@@ -80,9 +79,10 @@ func newNexusCompletionHandler(
 		HistoryClient:           historyClient,
 		RequestErrorHandler:     requestErrorHandler,
 		AuthInterceptor:         authInterceptor,
+		telemetryInterceptor:    telemetryInterceptor,
 		preProcessErrorsCounter: metricsHandler.Counter(metrics.NexusCompletionRequestPreProcessErrors.Name()),
 	}
-	h.chainedHandler = interceptornexus.ChainInterceptors(h.finalCompleteHandler, interceptorsProvider.NexusInterceptors())
+	h.chainedHandler = interceptornexus.ChainInterceptors(h.finalCompleteHandler, interceptorsProvider.nexusInterceptors())
 	return h
 }
 
@@ -154,12 +154,23 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 	ctx = rCtx.augmentContext(ctx, r.HTTPRequest.Header)
 	defer finalizeCompletionRequest(rCtx, &retErr)
 
-	// recordBadRequest is for pre-interceptor chain error recording
-	recordBadRequest := func() {
-		metrics.NexusCompletionRequests.With(h.MetricsHandler).Record(
-			1,
+	const outcomeBadRequest = "error_bad_request"
+
+	// recordPreInterceptorFailure is for pre-interceptor chain error recording.
+	recordPreInterceptorFailure := func(outcome string) {
+		completionMetrics := h.MetricsHandler.WithTags(
 			metrics.NamespaceTag(ns.Name().String()),
-			metrics.OutcomeTag("error_bad_request"),
+			metrics.OutcomeTag(outcome),
+		)
+		completionMetrics.Counter(metrics.NexusCompletionRequests.Name()).Record(1)
+		completionMetrics.Histogram(
+			metrics.NexusCompletionLatencyHistogram.Name(),
+			metrics.Milliseconds,
+		).Record(time.Since(requestStartTime).Milliseconds())
+
+		metrics.ServiceRequests.With(rCtx.metricsHandlerForInterceptors).Record(1)
+		h.telemetryInterceptor.RecordLatencyMetrics(
+			ctx, requestStartTime, rCtx.metricsHandlerForInterceptors,
 		)
 	}
 
@@ -169,7 +180,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		if err != nil {
 			logger.Error("failed to extract namespace from request", tag.Error(err))
 			h.preProcessErrorsCounter.Record(1)
-			recordBadRequest()
+			recordPreInterceptorFailure(outcomeBadRequest)
 			return &interceptornexus.InterceptorError{
 				Err:                       nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid URL"),
 				SkipServiceErrorReporting: true,
@@ -180,7 +191,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 				"namespace in callback URL doesn't match the completion token",
 				tag.String("url-namespace", nsName),
 			)
-			recordBadRequest()
+			recordPreInterceptorFailure(outcomeBadRequest)
 			return &interceptornexus.InterceptorError{
 				Err:                       nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid callback token"),
 				SkipServiceErrorReporting: true,
@@ -189,7 +200,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 	}
 	ctx, err = rCtx.parseTLSAndAuthInfo(ctx, r)
 	if err != nil {
-		recordBadRequest()
+		recordPreInterceptorFailure("error_internal")
 		return &interceptornexus.InterceptorError{
 			Err:                       err,
 			SkipServiceErrorReporting: true,
@@ -212,7 +223,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 	)
 	if err != nil {
 		logger.Error("invalid nexus completion request", tag.Error(err))
-		recordBadRequest()
+		recordPreInterceptorFailure(outcomeBadRequest)
 		return &interceptornexus.InterceptorError{
 			Err:                       nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid request"),
 			SkipServiceErrorReporting: true,
@@ -278,7 +289,13 @@ func (h *nexusCompletionHandler) finalCompleteHandler(
 	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 		return nil, &interceptornexus.InterceptorError{Err: err, Outcome: "error_not_found", ExposeDetails: true}
 	}
-	return nil, &interceptornexus.InterceptorError{Err: err, Outcome: "error_internal"}
+	// Preserve specific outcome tags on handler errors.
+	converted := commonnexus.ConvertGRPCError(err, false)
+	outcome := "error_internal"
+	if handlerErr, ok := errors.AsType[*nexus.HandlerError](converted); ok {
+		outcome = "error_" + strings.ToLower(string(handlerErr.Type))
+	}
+	return nil, &interceptornexus.InterceptorError{Err: err, Outcome: outcome}
 }
 
 // completeOperation dispatches the completion to the framework named by its

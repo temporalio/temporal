@@ -245,7 +245,7 @@ func (ti *TelemetryInterceptor) InterceptNexusOutermost(
 	// override outcome if its set - for request forwarding cases.
 	// error cases are captured by the wrapped InterceptorError
 	if err == nil {
-		if override := outcomeOverride.Get(); override != "" {
+		if override := outcomeOverride.Value(); override != "" {
 			outcome = override
 		}
 	}

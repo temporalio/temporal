@@ -20,7 +20,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
-	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -114,6 +113,9 @@ func (c *operationContext) handleRequestError(err error) {
 		return
 	}
 	if taggedErr, ok := errors.AsType[*interceptornexus.InterceptorError](err); ok {
+		if taggedErr.SkipServiceErrorReporting {
+			return
+		}
 		err = taggedErr.Err
 	}
 	source, ok := c.responseHeaders[commonnexus.FailureSourceHeaderName]
@@ -213,7 +215,6 @@ type nexusHandler struct {
 	nexus.UnimplementedHandler
 	logger              log.Logger
 	metricsHandler      metrics.Handler
-	clusterMetadata     cluster.Metadata
 	namespaceRegistry   namespace.Registry
 	matchingClient      matchingservice.MatchingServiceClient
 	requestErrorHandler *interceptor.RequestErrorHandler
@@ -226,7 +227,6 @@ type nexusHandler struct {
 func newNexusHandler(
 	logger log.Logger,
 	metricsHandler metrics.Handler,
-	clusterMetadata cluster.Metadata,
 	namespaceRegistry namespace.Registry,
 	matchingClient matchingservice.MatchingServiceClient,
 	requestErrorHandler *interceptor.RequestErrorHandler,
@@ -238,7 +238,6 @@ func newNexusHandler(
 	h := &nexusHandler{
 		logger:              logger,
 		metricsHandler:      metricsHandler,
-		clusterMetadata:     clusterMetadata,
 		namespaceRegistry:   namespaceRegistry,
 		matchingClient:      matchingClient,
 		requestErrorHandler: requestErrorHandler,

@@ -191,7 +191,7 @@ func (a *Interceptor) InterceptNexus(
 			}
 		}
 		logTags := []tag.Tag{
-			tag.Operation(apiName),
+			tag.Operation(api.MethodName(apiName)),
 			tag.WorkflowNamespace(namespaceName),
 			tag.Endpoint(endpointName),
 			tag.Error(err),

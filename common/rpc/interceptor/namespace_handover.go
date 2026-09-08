@@ -92,50 +92,13 @@ func (i *NamespaceHandoverInterceptor) handlesMethod(fullMethod string) bool {
 	return false
 }
 
+// InterceptNexus is a no-op: the handover gate only applies to WorkflowService
+// methods- see [NamespaceHandoverInterceptor.handlesMethod] for details.
 func (i *NamespaceHandoverInterceptor) InterceptNexus(
 	ctx context.Context,
 	in nexus.InterceptorInput,
 	next nexus.HandlerFunc,
-) (_ any, retError error) {
-	defer log.CapturePanic(i.logger, &retError)
-
-	apiName := in.APIName()
-	if !i.handlesMethod(apiName) {
-		return next(ctx, in)
-	}
-	methodName := api.MethodName(apiName)
-	namespaceName := MustGetNamespaceName(i.namespaceRegistry, in)
-
-	if namespaceName != namespace.EmptyName {
-		var waitTime *time.Duration
-		defer func() {
-			if waitTime != nil {
-				metrics.HandoverWaitLatency.With(i.metricsHandler).Record(*waitTime)
-			}
-		}()
-		waitTime, err := i.waitNamespaceHandoverUpdate(ctx, namespaceName, methodName)
-		if err != nil {
-			metricsHandler, logTags := CreateUnaryMetricsHandlerLogTags(
-				i.metricsHandler,
-				in,
-				apiName,
-				methodName,
-				namespaceName,
-			)
-			// count the request as this will not be counted
-			metrics.ServiceRequests.With(metricsHandler).Record(1)
-
-			i.requestErrorHandler.HandleError(
-				in,
-				apiName,
-				metricsHandler,
-				logTags,
-				err,
-				namespaceName,
-			)
-			return nil, err
-		}
-	}
+) (any, error) {
 	return next(ctx, in)
 }
 

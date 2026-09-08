@@ -11,6 +11,7 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -83,10 +84,8 @@ func (i *nexusForwardingInterceptor) InterceptNexus(
 
 	interceptornexus.SetOutcomeOverride(ctx, "request_forwarded")
 
-	// this is the user-facing operation identity, and the DCRedirection prefix
-	// matches the convention the gRPC redirection path uses for the same metrics.
 	metricsHandler, forwardStartTime := i.redirectionInterceptor.BeforeCall(
-		interceptor.DCRedirectionMetricsPrefix + in.MethodName(),
+		interceptor.DCRedirectionMetricsPrefix + api.MethodName(in.APIName()),
 	)
 	defer func() {
 		redirectionErr := retErr
@@ -110,7 +109,14 @@ func (i *nexusForwardingInterceptor) InterceptNexus(
 		// empty for completion requests
 		logTags = append(logTags, tag.NexusOperation(operationName))
 	}
-	logger := log.With(i.logger, logTags...)
+	// Retrieve loggers for operation type-specific tags.
+	baseLogger := i.logger
+	if rCtx, ok := requestContextFromContext(ctx); ok {
+		baseLogger = rCtx.logger
+	} else if oc, ok := operationContextFromContext(ctx); ok {
+		baseLogger = oc.logger
+	}
+	logger := log.With(baseLogger, logTags...)
 
 	switch request := in.(type) {
 	case interceptornexus.StartOpInput:

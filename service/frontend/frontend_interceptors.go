@@ -29,12 +29,12 @@ type Interceptor interface {
 	) (any, error)
 }
 
-type InterceptorsProvider struct {
+type interceptorsProvider struct {
 	interceptors   []Interceptor
 	nexusTelemetry nexus.Interceptor // required to be first in the Nexus chain
 }
 
-func NewInterceptorsProvider(
+func newInterceptorsProvider(
 	maskInternalErrorDetailsInterceptor *interceptor.MaskInternalErrorDetailsInterceptor,
 	serviceErrorInterceptor *interceptor.ServiceErrorInterceptor,
 	frontendServiceErrorInterceptor *interceptor.FrontendServiceErrorInterceptor,
@@ -47,7 +47,7 @@ func NewInterceptorsProvider(
 	nexusForwarder *nexusForwardingInterceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	healthInterceptor *interceptor.HealthInterceptor,
-	namespaceStateValidatorInterceptor *interceptor.NamespaceStateValidatorInterceptor,
+	namespaceLengthValidatorInterceptor *interceptor.NamespaceLengthValidatorInterceptor,
 	namespaceCountLimiterInterceptor *interceptor.ConcurrentRequestLimitInterceptor,
 	namespaceRateLimiterInterceptorWrapper *interceptor.NamespaceRateLimitInterceptorWrapper,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
@@ -60,7 +60,7 @@ func NewInterceptorsProvider(
 	customInterceptors []Interceptor,
 	retryableInterceptor *interceptor.RetryableInterceptor,
 	faultsInterceptor *grpcfaults.FaultsInterceptor,
-) *InterceptorsProvider {
+) *interceptorsProvider {
 
 	metricsCtxInjectorInterceptor := &interceptorWrapper{
 		grpcInterceptor:  metrics.NewServerMetricsContextInjectorInterceptor(),
@@ -83,7 +83,7 @@ func NewInterceptorsProvider(
 		serviceErrorInterceptor,
 		frontendServiceErrorInterceptor,
 		businessIDInterceptor,
-		namespaceStateValidatorInterceptor,
+		namespaceLengthValidatorInterceptor,
 		namespaceLogInterceptor,
 		metricsCtxInjectorInterceptor,
 		authInterceptor,
@@ -112,13 +112,13 @@ func NewInterceptorsProvider(
 	interceptors = append(interceptors, faultsInterceptor)
 	interceptors = append(interceptors, retryableInterceptor)
 
-	return &InterceptorsProvider{
+	return &interceptorsProvider{
 		interceptors:   interceptors,
 		nexusTelemetry: telemetryInterceptor.InterceptNexusOutermost,
 	}
 }
 
-func (n *InterceptorsProvider) GrpcInterceptors() []grpc.UnaryServerInterceptor {
+func (n *interceptorsProvider) grpcInterceptors() []grpc.UnaryServerInterceptor {
 	grpcInterceptors := make([]grpc.UnaryServerInterceptor, 0, len(n.interceptors))
 	for _, i := range n.interceptors {
 		grpcInterceptors = append(grpcInterceptors, i.Intercept)
@@ -126,7 +126,7 @@ func (n *InterceptorsProvider) GrpcInterceptors() []grpc.UnaryServerInterceptor 
 	return grpcInterceptors
 }
 
-func (n *InterceptorsProvider) NexusInterceptors() []nexus.Interceptor {
+func (n *interceptorsProvider) nexusInterceptors() []nexus.Interceptor {
 	nexusInterceptors := make([]nexus.Interceptor, 0, len(n.interceptors)+1)
 	// telemetry is the outermost in chain for Nexus requests to allow recording
 	// all metrics and retain behavior. In the future, gRPC will also move telemetry

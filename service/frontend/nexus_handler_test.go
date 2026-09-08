@@ -11,7 +11,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func newOperationContext() *operationContext {
+func testOperationContext() *operationContext {
 	oc := &operationContext{
 		nexusContext: &nexusContext{},
 	}

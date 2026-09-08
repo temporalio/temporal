@@ -31,11 +31,10 @@ type (
 		additionalAllowedMethodsDuringHandover map[string]struct{}
 	}
 
-	// NamespaceStateValidatorInterceptor validates/sets the namespace on a request and enforces
-	// the namespace name length limit. It is separate from NamespaceValidatorInterceptor to allow
-	// both to expose cleaner Intercept/InterceptNexus methods that are used as gRPC and Nexus
-	// interceptors.
-	NamespaceStateValidatorInterceptor struct {
+	// NamespaceLengthValidatorInterceptor enforces the namespace name length limit. It is separate
+	// from NamespaceValidatorInterceptor to allow both to expose cleaner Intercept/InterceptNexus
+	// methods that are used as gRPC and Nexus interceptors.
+	NamespaceLengthValidatorInterceptor struct {
 		namespaceRegistry  namespace.Registry
 		tokenSerializer    *tasktoken.Serializer
 		maxNamespaceLength dynamicconfig.IntPropertyFn
@@ -98,7 +97,7 @@ var (
 )
 
 var _ grpc.UnaryServerInterceptor = (*NamespaceValidatorInterceptor)(nil).Intercept
-var _ grpc.UnaryServerInterceptor = (*NamespaceStateValidatorInterceptor)(nil).Intercept
+var _ grpc.UnaryServerInterceptor = (*NamespaceLengthValidatorInterceptor)(nil).Intercept
 
 func NewNamespaceValidatorInterceptor(
 	namespaceRegistry namespace.Registry,
@@ -119,18 +118,18 @@ func NewNamespaceValidatorInterceptor(
 	}
 }
 
-func NewNamespaceStateValidatorInterceptor(
+func NewNamespaceLengthValidatorInterceptor(
 	namespaceRegistry namespace.Registry,
 	maxNamespaceLength dynamicconfig.IntPropertyFn,
-) *NamespaceStateValidatorInterceptor {
-	return &NamespaceStateValidatorInterceptor{
+) *NamespaceLengthValidatorInterceptor {
+	return &NamespaceLengthValidatorInterceptor{
 		namespaceRegistry:  namespaceRegistry,
 		tokenSerializer:    tasktoken.NewSerializer(),
 		maxNamespaceLength: maxNamespaceLength,
 	}
 }
 
-func (nsvi *NamespaceStateValidatorInterceptor) Intercept(
+func (nsvi *NamespaceLengthValidatorInterceptor) Intercept(
 	ctx context.Context,
 	req any,
 	info *grpc.UnaryServerInfo,
@@ -148,7 +147,7 @@ func (nsvi *NamespaceStateValidatorInterceptor) Intercept(
 	return handler(ctx, req)
 }
 
-func (nsvi *NamespaceStateValidatorInterceptor) InterceptNexus(
+func (nsvi *NamespaceLengthValidatorInterceptor) InterceptNexus(
 	ctx context.Context,
 	in nexus.InterceptorInput,
 	next nexus.HandlerFunc,

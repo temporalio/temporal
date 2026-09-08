@@ -24,7 +24,7 @@ import (
 // These tests pin down how the frontend turns matching's DispatchNexusTaskResponse into the result the
 // Nexus SDK serializes back to the caller. Every arm of the response oneof is wire-visible: the error
 // type decides the HTTP status, and the outcome tag and failure-source header are consumed by
-// dashboards and by interceptRequest's error-reporting cleanup. They are asserted here so the shared
+// dashboards and by request error-reporting cleanup. They are asserted here so the shared
 // classifier introduced alongside them cannot silently change any of it.
 
 func failureSourceOf(oc *operationContext) string {
@@ -63,10 +63,6 @@ func requireRecordedDispatchOutcome(
 	require.Len(t, snapshot[metrics.NexusRequests.Name()], 1)
 	outcomeTag := metrics.OutcomeTag(expectedOutcome)
 	require.Equal(t, expectedOutcome, snapshot[metrics.NexusRequests.Name()][0].Tags[outcomeTag.Key])
-}
-
-func testOperationContext() *operationContext {
-	return newOperationContext()
 }
 
 // startOperationResponse wraps a StartOperationResponse in the matching response envelope. The oneof

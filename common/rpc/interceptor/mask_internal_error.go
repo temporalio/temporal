@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	nexusrpc "github.com/nexus-rpc/sdk-go/nexus"
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/api"
@@ -14,7 +14,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/interceptor/logtags"
-	"go.temporal.io/server/common/rpc/interceptor/nexus"
+	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.temporal.io/server/common/tasktoken"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -61,8 +61,8 @@ func (mi *MaskInternalErrorDetailsInterceptor) Intercept(
 
 func (mi *MaskInternalErrorDetailsInterceptor) InterceptNexus(
 	ctx context.Context,
-	in nexus.InterceptorInput,
-	next nexus.HandlerFunc,
+	in interceptornexus.InterceptorInput,
+	next interceptornexus.HandlerFunc,
 ) (any, error) {
 
 	resp, err := next(ctx, in)
@@ -70,7 +70,7 @@ func (mi *MaskInternalErrorDetailsInterceptor) InterceptNexus(
 	if err == nil || !mi.shouldMaskErrors(in) {
 		return resp, err
 	}
-	if ie, ok := errors.AsType[*nexus.InterceptorError](err); ok {
+	if ie, ok := errors.AsType[*interceptornexus.InterceptorError](err); ok {
 		ie.Err = mi.maskNexusError(in, ie.Err)
 		err = ie
 	} else {
@@ -87,11 +87,11 @@ func (mi *MaskInternalErrorDetailsInterceptor) shouldMaskErrors(req any) bool {
 	return mi.maskInternalError(ns.String())
 }
 
-func (mi *MaskInternalErrorDetailsInterceptor) maskNexusError(in nexus.InterceptorInput, err error) error {
-	if _, ok := errors.AsType[*nexusrpc.HandlerError](err); ok {
+func (mi *MaskInternalErrorDetailsInterceptor) maskNexusError(in interceptornexus.InterceptorInput, err error) error {
+	if _, ok := errors.AsType[*nexus.HandlerError](err); ok {
 		return err
 	}
-	if _, ok := errors.AsType[*nexusrpc.OperationError](err); ok {
+	if _, ok := errors.AsType[*nexus.OperationError](err); ok {
 		return err
 	}
 	if _, ok := common.GetRPCStatus(err); !ok {
