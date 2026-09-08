@@ -95,7 +95,7 @@ values in system search attributes.`,
 	)
 	VisibilityEnableUnifiedQueryConverter = NewGlobalBoolSetting(
 		"system.visibilityEnableUnifiedQueryConverter",
-		false,
+		true,
 		`VisibilityEnableUnifiedQueryConverter enables the unified query converter for parsing the
 query.`,
 	)
@@ -3271,6 +3271,15 @@ Requires service restart to take effect.`,
 		`EnableCHASMSkipPersistence controls whether CHASM CloseTransaction omits nodes whose serialized data is unchanged.
 This optimization should only be enabled after every cluster that may receive CHASM replication supports invalidating
 hydrated ancestor components when applying child-node mutations.`,
+	)
+
+	ChasmDLQScheduledPureTaskOnValidation = NewNamespaceBoolSetting(
+		"history.chasmDLQScheduledPureTaskOnValidation",
+		false,
+		`ChasmDLQScheduledPureTaskOnValidation controls whether scheduled CHASM pure tasks that remain valid
+after successful execution are sent to DLQ instead of retried indefinitely. A pure task that is still
+valid after execution would otherwise loop forever; enabling this flag detects that condition and
+terminates the task via DLQ. Immediate pure tasks are never affected by this setting.`,
 	)
 
 	ChasmMaxInMemoryPureTasks = NewGlobalIntSetting(
