@@ -336,8 +336,8 @@ const (
 
 const (
 	PollerScaleReasonIdle                 ReasonString = "idle"
-	PollerScaleReasonBacklog              ReasonString = "backlog"
-	PollerScaleReasonTaskRate             ReasonString = "task_rate"
+	PollerScaleReasonDelay                ReasonString = "delay"
+	PollerScaleReasonRatio                ReasonString = "ratio"
 	PollerScaleReasonRateLimited          ReasonString = "rate_limited"
 	PollerScaleReasonTaskQueueRateLimited ReasonString = "task_queue_rate_limited"
 )
