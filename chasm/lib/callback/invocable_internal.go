@@ -66,9 +66,9 @@ func (c invocableInternal) Invoke(
 	defer func() {
 		namespaceTag := metrics.NamespaceTag(ns.Name().String())
 		destTag := metrics.DestinationTag(taskAttr.Destination)
-		outcomeTag := metrics.OutcomeTag(outcome)
-		h.metricsHandler.Counter(InternalRequestCounter.Name()).Record(1, namespaceTag, destTag, outcomeTag)
-		h.metricsHandler.Timer(InternalRequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, outcomeTag)
+		outcomeMetricTag := metrics.OutcomeTag(string(outcome))
+		h.metricsHandler.Counter(InternalRequestCounter.Name()).Record(1, namespaceTag, destTag, outcomeMetricTag)
+		h.metricsHandler.Timer(InternalRequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, outcomeMetricTag)
 	}()
 
 	header := nexus.Header(c.callback.GetHeader())
@@ -113,9 +113,9 @@ func (c invocableInternal) Invoke(
 		// GetRPCStatus, not status.Code: the internode interceptor returns serviceerror
 		// types, which expose Status() rather than GRPCStatus(), so status.Code reports
 		// Unknown for all of them. IsRetryableRPCError below reads the code the same way.
-		outcome = "error:" + codes.Unknown.String()
+		outcome = outcomeTag(errorOutcomePrefix + codes.Unknown.String())
 		if st, ok := common.GetRPCStatus(err); ok {
-			outcome = "error:" + st.Code().String()
+			outcome = outcomeTag(errorOutcomePrefix + st.Code().String())
 		}
 		if ctx.Err() != nil {
 			outcome = outcomeRequestTimeout

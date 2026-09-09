@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -115,6 +117,24 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 			},
 			retryable:             false,
 			expectedMetricOutcome: "handler-error:BAD_REQUEST",
+			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
+				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
+			},
+		},
+		{
+			// A destination naming its own handler error type must not reach the tag.
+			name: "off-spec-handler-error-type",
+			caller: func(r *http.Request) (*http.Response, error) {
+				body := `{"message":"boom","metadata":{"type":"nexus.HandlerError"},` +
+					`"details":{"type":"MINTED_BY_THE_DESTINATION","retryableOverride":false}}`
+				return &http.Response{
+					StatusCode: 500,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body:       io.NopCloser(strings.NewReader(body)),
+				}, nil
+			},
+			retryable:             false,
+			expectedMetricOutcome: "handler-error:UNKNOWN",
 			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
 			},
