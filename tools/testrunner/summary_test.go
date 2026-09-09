@@ -128,7 +128,19 @@ func TestRenderSummaryFromReports_Markdown_RendersAlertRow(t *testing.T) {
 }
 
 func TestMarkdownCodeBlock_AvoidsFenceCollisions(t *testing.T) {
-	require.Equal(t, "````\nline\n```\n````", markdownCodeBlock("line\n```"))
+	for _, tc := range []struct {
+		name     string
+		content  string
+		expected string
+	}{
+		{name: "no fence", content: "line", expected: "```\nline\n```"},
+		{name: "three backticks", content: "line\n```", expected: "````\nline\n```\n````"},
+		{name: "four backticks", content: "line\n````", expected: "`````\nline\n````\n`````"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.expected, markdownCodeBlock(tc.content))
+		})
+	}
 }
 
 func TestRenderSummaryFromReports_Markdown_EmptyWhenNoFailures(t *testing.T) {
@@ -143,7 +155,7 @@ func TestRenderSummaryFromReports_Markdown_ShowsTruncatedDetail(t *testing.T) {
 	}
 
 	s := summary.Markdown()
-	require.Contains(t, s, "truncated")
+	require.Equal(t, 1, strings.Count(s, "truncated"))
 	require.Contains(t, s, "head")
 	require.Contains(t, s, "tail")
 	require.Less(t, len(s), summaryMarkdownMaxBytes)
