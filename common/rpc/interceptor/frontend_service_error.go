@@ -2,7 +2,6 @@ package interceptor
 
 import (
 	"context"
-	"errors"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/api"
@@ -36,11 +35,6 @@ func NewFrontendServiceErrorInterceptor(
 		resp, err := handler(ctx, req)
 		if err == nil {
 			return resp, nil
-		}
-
-		var currentBranchChanged *serviceerrors.CurrentBranchChanged
-		if errors.As(err, &currentBranchChanged) {
-			err = serviceerror.NewInvalidArgument(currentBranchChanged.Error())
 		}
 
 		switch serviceErr := err.(type) {

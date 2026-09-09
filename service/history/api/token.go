@@ -5,13 +5,13 @@ import (
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -234,10 +234,7 @@ func ValidateBranchTokenForExecution(
 	if config.EnablePaginationTokenBranchValidationShadowMode() {
 		return nil
 	}
-	return serviceerrors.NewCurrentBranchChanged(
-		currentBranchToken,
-		requestBranchToken,
-		nil,
-		nil,
+	return serviceerror.NewInvalidArgument(
+		"Current and request branch tokens, or current and request versioned transitions, don't match.",
 	)
 }
