@@ -3,6 +3,7 @@ package callback
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -12,13 +13,14 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -57,6 +59,18 @@ func (c invocableInternal) Invoke(
 	task *callbackspb.InvocationTask,
 	taskAttr chasm.TaskAttributes,
 ) invocationResult {
+	// nolint:forbidigo // Wall-clock RPC measurement, not component state; Invoke has no chasm.Context.
+	startTime := time.Now()
+	// Sentinel default: a return path that forgets to set outcome must not read as a success.
+	outcome := outcomeUnknown
+	defer func() {
+		namespaceTag := metrics.NamespaceTag(ns.Name().String())
+		destTag := metrics.DestinationTag(taskAttr.Destination)
+		outcomeTag := metrics.OutcomeTag(outcome)
+		h.metricsHandler.Counter(InternalRequestCounter.Name()).Record(1, namespaceTag, destTag, outcomeTag)
+		h.metricsHandler.Timer(InternalRequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, outcomeTag)
+	}()
+
 	header := nexus.Header(c.callback.GetHeader())
 	if header == nil {
 		header = nexus.Header{}
@@ -65,11 +79,13 @@ func (c invocableInternal) Invoke(
 	// Get back the component ref and (optional) request ID from the callback token in the header.
 	encodedToken := header.Get(commonnexus.CallbackTokenHeader)
 	if encodedToken == "" {
+		outcome = outcomeMissingToken
 		return invocationResultFail{logInternalError(h.logger, "callback missing token", nil)}
 	}
 
 	decodedRef, requestID, err := chasm.UnpackNexusCallbackToken(encodedToken)
 	if err != nil {
+		outcome = outcomeTokenDecodeError
 		return invocationResultFail{logInternalError(h.logger, "failed to decode CHASM callback token", err)}
 	}
 
@@ -81,52 +97,38 @@ func (c invocableInternal) Invoke(
 	// Validate that the bytes are a valid ChasmComponentRef
 	ref := &persistencespb.ChasmComponentRef{}
 	if err := proto.Unmarshal(decodedRef, ref); err != nil {
+		outcome = outcomeInvalidRef
 		return invocationResultFail{logInternalError(h.logger, "failed to unmarshal CHASM ComponentRef", err)}
 	}
 
 	request, err := c.getHistoryRequest(decodedRef, requestID)
 	if err != nil {
+		outcome = outcomeRequestBuildError
 		return invocationResultFail{logInternalError(h.logger, "failed to build history request", err)}
 	}
 
 	// RPC to History for cross-shard completion delivery.
 	_, err = h.historyClient.CompleteNexusOperationChasm(ctx, request)
 	if err != nil {
+		// GetRPCStatus, not status.Code: the internode interceptor returns serviceerror
+		// types, which expose Status() rather than GRPCStatus(), so status.Code reports
+		// Unknown for all of them. IsRetryableRPCError below reads the code the same way.
+		outcome = "error:" + codes.Unknown.String()
+		if st, ok := common.GetRPCStatus(err); ok {
+			outcome = "error:" + st.Code().String()
+		}
+		if ctx.Err() != nil {
+			outcome = outcomeRequestTimeout
+		}
 		msg := logInternalError(h.logger, "failed to complete Nexus operation", err)
-		if isRetryableRPCResponse(err) {
+		if common.IsRetryableRPCError(err) {
 			return invocationResultRetry{err: msg}
 		}
 		return invocationResultFail{msg}
 	}
 
+	outcome = outcomeSuccess
 	return invocationResultOK{}
-}
-
-func isRetryableRPCResponse(err error) bool {
-	var st *status.Status
-	stGetter, ok := err.(interface{ Status() *status.Status })
-	if ok {
-		st = stGetter.Status()
-	} else {
-		st, ok = status.FromError(err)
-		if !ok {
-			// Not a gRPC induced error
-			return false
-		}
-	}
-	// nolint:exhaustive
-	switch st.Code() {
-	case codes.Canceled,
-		codes.Unknown,
-		codes.Unavailable,
-		codes.DeadlineExceeded,
-		codes.ResourceExhausted,
-		codes.Aborted,
-		codes.Internal:
-		return true
-	default:
-		return false
-	}
 }
 
 func (c invocableInternal) getHistoryRequest(

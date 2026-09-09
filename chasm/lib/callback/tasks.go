@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -97,7 +98,7 @@ func newInvocationTaskHandler(opts invocationTaskHandlerOptions) *invocationTask
 		config:             opts.Config,
 		namespaceRegistry:  opts.NamespaceRegistry,
 		metricsHandler:     opts.MetricsHandler,
-		logger:             opts.Logger,
+		logger:             log.With(opts.Logger, tag.NexusStageHandlerOutbound),
 		httpCallerProvider: opts.HTTPCallerProvider,
 		httpTraceProvider:  opts.HTTPTraceProvider,
 		historyClient:      opts.HistoryClient,
@@ -145,7 +146,45 @@ func (h *invocationTaskHandler) Execute(
 			retryPolicy: h.config.RetryPolicy(),
 		},
 	)
+	if saveErr == nil {
+		// Only after the transition commits; transitions can be rolled back.
+		h.recordDisposition(ns, taskAttr, task, result)
+	}
 	return invokable.WrapError(result, saveErr)
+}
+
+// recordDisposition emits the committed outcome of a single invocation.
+func (h *invocationTaskHandler) recordDisposition(
+	ns *namespace.Namespace,
+	taskAttr chasm.TaskAttributes,
+	task *callbackspb.InvocationTask,
+	result invocationResult,
+) {
+	var disposition string
+	switch result.(type) {
+	case invocationResultOK:
+		disposition = dispositionSucceeded
+	case invocationResultRetry:
+		disposition = dispositionRetrying
+	case invocationResultFail:
+		disposition = dispositionFailed
+	default:
+		// saveResult rejects anything else as an unprocessable task.
+		return
+	}
+
+	tags := []metrics.Tag{
+		metrics.NamespaceTag(ns.Name().String()),
+		metrics.DestinationTag(taskAttr.Destination),
+		metrics.OutcomeTag(disposition),
+	}
+	h.metricsHandler.Counter(InvocationResultCounter.Name()).Record(1, tags...)
+
+	if disposition != dispositionRetrying {
+		// Attempt is 0-based, so +1 is the count. Only terminal dispositions have a final total.
+		h.metricsHandler.Histogram(InvocationAttemptsHistogram.Name(), InvocationAttemptsHistogram.Unit()).
+			Record(int64(task.GetAttempt())+1, tags...)
+	}
 }
 
 type backoffTaskHandler struct {

@@ -35,9 +35,9 @@
 /common/persistence/ @temporalio/oss-foundations @temporalio/oss-matching @temporalio/cgs
 /common/persistence/**/nexus_endpoint* @temporalio/oss-foundations @temporalio/oss-matching @temporalio/nexus
 
-# Components
+# Legacy HSM implementations
 
-/components/ @temporalio/act @temporalio/nexus
+/service/history/hsm/ @temporalio/act @temporalio/nexus
 
 # Proto Definitions
 
@@ -107,3 +107,6 @@
 *_mock.go      @temporalio/server @temporalio/cgs @temporalio/nexus
 *_gen.go       @temporalio/server @temporalio/cgs @temporalio/nexus
 *.gen.go       @temporalio/server @temporalio/cgs @temporalio/nexus
+
+# This generated file has no code owner to allow automated updates by CI.
+/tests/testcore/shard_salt.txt

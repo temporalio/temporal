@@ -4,6 +4,7 @@ import (
 	"context"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/metrics"
@@ -12,10 +13,23 @@ import (
 	"go.uber.org/fx"
 )
 
+// DispatchTaskHook wraps a validated activity dispatch on the active cluster before it is sent to
+// Matching. The hook must call dispatch exactly once. If it returns nil without calling dispatch,
+// task processing completes successfully without sending the Activity to Matching. Hook errors are
+// returned to task processing; returning an error after dispatch succeeds may cause the task to
+// retry and resend. Standby discard spills bypass the hook.
+type DispatchTaskHook func(
+	ctx context.Context,
+	namespaceID string,
+	task *activitypb.ActivityDispatchTask,
+	dispatch func(context.Context) error,
+) error
+
 type activityDispatchTaskHandlerOptions struct {
 	fx.In
 
-	MatchingClient resource.MatchingClient
+	MatchingClient   resource.MatchingClient
+	DispatchTaskHook DispatchTaskHook `optional:"true"`
 }
 
 type activityDispatchTaskHandler struct {
@@ -43,9 +57,31 @@ func (h *activityDispatchTaskHandler) Execute(
 	ctx context.Context,
 	activityRef chasm.ComponentRef,
 	_ chasm.TaskAttributes,
-	_ *activitypb.ActivityDispatchTask,
+	task *activitypb.ActivityDispatchTask,
 ) error {
-	return h.pushToMatching(ctx, activityRef)
+	request, err := h.createMatchingRequest(ctx, activityRef)
+	if err != nil {
+		return err
+	}
+
+	// Invoke the hook at the final dispatch boundary so it observes only validated
+	// active tasks and can wrap the Matching call.
+	if h.opts.DispatchTaskHook != nil {
+		return h.opts.DispatchTaskHook(
+			ctx,
+			activityRef.NamespaceID,
+			task,
+			func(ctx context.Context) error {
+				_, err := h.opts.MatchingClient.AddActivityTask(ctx, request)
+
+				return err
+			},
+		)
+	}
+
+	_, err = h.opts.MatchingClient.AddActivityTask(ctx, request)
+
+	return err
 }
 
 // Discard spills the task to matching instead of silently discarding it on standby clusters when the activity
@@ -56,19 +92,7 @@ func (h *activityDispatchTaskHandler) Discard(
 	_ chasm.TaskAttributes,
 	_ *activitypb.ActivityDispatchTask,
 ) error {
-	return h.pushToMatching(ctx, activityRef)
-}
-
-func (h *activityDispatchTaskHandler) pushToMatching(
-	ctx context.Context,
-	activityRef chasm.ComponentRef,
-) error {
-	request, err := chasm.ReadComponent(
-		ctx,
-		activityRef,
-		(*Activity).createAddActivityTaskRequest,
-		activityRef.NamespaceID,
-	)
+	request, err := h.createMatchingRequest(ctx, activityRef)
 	if err != nil {
 		return err
 	}
@@ -76,6 +100,18 @@ func (h *activityDispatchTaskHandler) pushToMatching(
 	_, err = h.opts.MatchingClient.AddActivityTask(ctx, request)
 
 	return err
+}
+
+func (h *activityDispatchTaskHandler) createMatchingRequest(
+	ctx context.Context,
+	activityRef chasm.ComponentRef,
+) (*matchingservice.AddActivityTaskRequest, error) {
+	return chasm.ReadComponent(
+		ctx,
+		activityRef,
+		(*Activity).createAddActivityTaskRequest,
+		activityRef.NamespaceID,
+	)
 }
 
 type scheduleToStartTimeoutTaskHandler struct {
@@ -102,7 +138,7 @@ func (h *scheduleToStartTimeoutTaskHandler) Execute(
 	_ chasm.TaskAttributes,
 	_ *activitypb.ScheduleToStartTimeoutTask,
 ) error {
-	metricsHandler := activity.enrichedMetricsHandler(ctx, metrics.TimerActiveTaskActivityTimeoutScope)
+	metricsHandler := activity.completionMetricsHandler(ctx, metrics.TimerActiveTaskActivityTimeoutScope)
 
 	event := timeoutEvent{
 		timeoutType:    enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
@@ -146,7 +182,7 @@ func (h *scheduleToCloseTimeoutTaskHandler) Execute(
 	_ chasm.TaskAttributes,
 	_ *activitypb.ScheduleToCloseTimeoutTask,
 ) error {
-	metricsHandler := activity.enrichedMetricsHandler(ctx, metrics.TimerActiveTaskActivityTimeoutScope)
+	metricsHandler := activity.completionMetricsHandler(ctx, metrics.TimerActiveTaskActivityTimeoutScope)
 	retryState := enumspb.RETRY_STATE_TIMEOUT
 	if activity.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
 		retryState = enumspb.RETRY_STATE_CANCEL_REQUESTED
@@ -196,7 +232,7 @@ func (h *startToCloseTimeoutTaskHandler) Execute(
 		return err
 	}
 
-	metricsHandler := activity.enrichedMetricsHandler(ctx, metrics.TimerActiveTaskActivityTimeoutScope)
+	metricsHandler := activity.completionMetricsHandler(ctx, metrics.TimerActiveTaskActivityTimeoutScope)
 
 	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
 		activity.emitOnAttemptTimedOutMetrics(metricsHandler, enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
@@ -276,7 +312,7 @@ func (h *heartbeatTimeoutTaskHandler) Execute(
 		return err
 	}
 
-	metricsHandler := activity.enrichedMetricsHandler(ctx, metrics.TimerActiveTaskActivityTimeoutScope)
+	metricsHandler := activity.completionMetricsHandler(ctx, metrics.TimerActiveTaskActivityTimeoutScope)
 
 	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
 		activity.emitOnAttemptTimedOutMetrics(metricsHandler, enumspb.TIMEOUT_TYPE_HEARTBEAT)

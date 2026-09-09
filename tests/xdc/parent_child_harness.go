@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -26,11 +27,13 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
+	historytasks "go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -76,13 +79,15 @@ type (
 		parentTestVars *testvars.TestVars
 		childTestVars  *testvars.TestVars
 
-		activeClusterIndex int
-		gates              [2]*parentChildReplicationGate
-		removeHooks        []func()
-		cleanups           []func()
-		delayedTasks       map[parentChildReplicationLane]*parentChildReplicationTask
-		metricCaptures     [2]parentChildMetricCapture
-		trace              []string
+		activeClusterIndex        int
+		gates                     [2]*parentChildReplicationGate
+		removeHooks               []func()
+		cleanups                  []func()
+		legacyReplicationCleanups []func()
+		delayedTasks              map[parentChildReplicationLane]*parentChildReplicationTask
+		metricCaptures            [2]parentChildMetricCapture
+		trace                     []string
+		resumeParentConversion    func()
 	}
 
 	parentChildMetricCapture struct {
@@ -225,21 +230,24 @@ func (r *parentChildScenarioRuntime) initialize(ctx context.Context) error {
 }
 
 func (r *parentChildScenarioRuntime) close() {
+	if r.resumeParentConversion != nil {
+		r.resumeParentConversion()
+	}
 	for _, gate := range r.gates {
 		if gate != nil {
 			gate.close()
 		}
 	}
-	for index := len(r.removeHooks) - 1; index >= 0; index-- {
-		r.removeHooks[index]()
+	for _, removeHook := range slices.Backward(r.removeHooks) {
+		removeHook()
 	}
 	for _, capture := range r.metricCaptures {
 		if capture.handler != nil && capture.capture != nil {
 			capture.handler.StopCapture(capture.capture)
 		}
 	}
-	for index := len(r.cleanups) - 1; index >= 0; index-- {
-		r.cleanups[index]()
+	for _, cleanup := range slices.Backward(r.cleanups) {
+		cleanup()
 	}
 }
 
@@ -248,12 +256,27 @@ func useLegacyHistoryReplication() parentChildScenarioStep {
 		name: "use legacy history replication for this scenario",
 		run: func(_ context.Context, runtime *parentChildScenarioRuntime) error {
 			for _, cluster := range runtime.suite.clusters {
-				runtime.cleanups = append(runtime.cleanups, cluster.OverrideDynamicConfig(
+				cleanup := cluster.OverrideDynamicConfig(
 					runtime.suite.T(),
 					dynamicconfig.EnableTransitionHistory,
 					false,
-				))
+				)
+				runtime.cleanups = append(runtime.cleanups, cleanup)
+				runtime.legacyReplicationCleanups = append(runtime.legacyReplicationCleanups, cleanup)
 			}
+			return nil
+		},
+	}
+}
+
+func useTransitionHistory() parentChildScenarioStep {
+	return parentChildScenarioStep{
+		name: "use transition history for this scenario",
+		run: func(_ context.Context, runtime *parentChildScenarioRuntime) error {
+			for _, cleanup := range slices.Backward(runtime.legacyReplicationCleanups) {
+				cleanup()
+			}
+			runtime.legacyReplicationCleanups = nil
 			return nil
 		},
 	}
@@ -301,6 +324,42 @@ func setStandbyClusterDelay(
 	}
 }
 
+func delayParentReplicationTaskConversion(cluster parentChildCluster) parentChildScenarioStep {
+	return parentChildScenarioStep{
+		name: fmt.Sprintf("delay parent replication task conversion on %s", cluster),
+		run: func(_ context.Context, runtime *parentChildScenarioRuntime) error {
+			clusterIndex := int(cluster)
+			if clusterIndex < 0 || clusterIndex >= len(runtime.suite.clusters) {
+				return fmt.Errorf("unknown parent-child cluster %d", cluster)
+			}
+			if runtime.resumeParentConversion != nil {
+				return errors.New("parent replication task conversion is already delayed")
+			}
+
+			release := make(chan struct{})
+			var releaseOnce sync.Once
+			runtime.resumeParentConversion = func() {
+				releaseOnce.Do(func() { close(release) })
+			}
+			runtime.removeHooks = append(runtime.removeHooks, runtime.suite.clusters[clusterIndex].InjectHook(
+				runtime.suite.T(),
+				testhooks.NewHook(
+					testhooks.HistoryReplicationTaskConversionInterceptor,
+					func(task historytasks.Task, convert func() (*replicationspb.ReplicationTask, error)) (*replicationspb.ReplicationTask, error) {
+						if task.GetWorkflowID() != runtime.parentID {
+							return convert()
+						}
+						<-release
+						return convert()
+					},
+				),
+				namespace.ID(runtime.namespaceID),
+			))
+			return nil
+		},
+	}
+}
+
 func setStandbyTaskDiscardDelay(
 	cluster parentChildCluster,
 	taskType enumsspb.TaskType,
@@ -316,6 +375,49 @@ func setStandbyTaskDiscardDelay(
 			runtime.cleanups = append(runtime.cleanups, runtime.suite.clusters[clusterIndex].OverrideDynamicConfig(
 				runtime.suite.T(),
 				dynamicconfig.StandbyTaskMissingEventsDiscardDelay,
+				[]dynamicconfig.ConstrainedValue{{
+					Constraints: dynamicconfig.Constraints{TaskType: taskType},
+					Value:       duration,
+				}},
+			))
+			return nil
+		},
+	}
+}
+
+func enableChildWorkflowResend(cluster parentChildCluster) parentChildScenarioStep {
+	return parentChildScenarioStep{
+		name: fmt.Sprintf("enable child workflow resend on %s", cluster),
+		run: func(_ context.Context, runtime *parentChildScenarioRuntime) error {
+			clusterIndex := int(cluster)
+			if clusterIndex < 0 || clusterIndex >= len(runtime.suite.clusters) {
+				return fmt.Errorf("unknown parent-child cluster %d", cluster)
+			}
+			runtime.cleanups = append(runtime.cleanups, runtime.suite.clusters[clusterIndex].OverrideDynamicConfig(
+				runtime.suite.T(),
+				dynamicconfig.EnableChildWorkflowResend,
+				true,
+			))
+			return nil
+		},
+	}
+}
+
+func setStandbyTaskResendDelay(
+	cluster parentChildCluster,
+	taskType enumsspb.TaskType,
+	duration time.Duration,
+) parentChildScenarioStep {
+	return parentChildScenarioStep{
+		name: fmt.Sprintf("set standby %s resend delay on %s to %s", taskType, cluster, duration),
+		run: func(_ context.Context, runtime *parentChildScenarioRuntime) error {
+			clusterIndex := int(cluster)
+			if clusterIndex < 0 || clusterIndex >= len(runtime.suite.clusters) {
+				return fmt.Errorf("unknown parent-child cluster %d", cluster)
+			}
+			runtime.cleanups = append(runtime.cleanups, runtime.suite.clusters[clusterIndex].OverrideDynamicConfig(
+				runtime.suite.T(),
+				dynamicconfig.StandbyTaskMissingEventsResendDelay,
 				[]dynamicconfig.ConstrainedValue{{
 					Constraints: dynamicconfig.Constraints{TaskType: taskType},
 					Value:       duration,
@@ -359,7 +461,19 @@ func applyDelayedReplication(
 	return parentChildScenarioStep{
 		name: fmt.Sprintf("apply delayed %s replication to %s", workflow, targetCluster),
 		run: func(_ context.Context, runtime *parentChildScenarioRuntime) error {
-			return runtime.applyDelayedReplication(targetCluster, workflow)
+			return runtime.resolveDelayedReplication(targetCluster, workflow, true)
+		},
+	}
+}
+
+func acknowledgeDelayedReplicationWithoutApplying(
+	targetCluster parentChildCluster,
+	workflow parentChildWorkflow,
+) parentChildScenarioStep {
+	return parentChildScenarioStep{
+		name: fmt.Sprintf("acknowledge delayed %s replication to %s without applying", workflow, targetCluster),
+		run: func(_ context.Context, runtime *parentChildScenarioRuntime) error {
+			return runtime.resolveDelayedReplication(targetCluster, workflow, false)
 		},
 	}
 }
@@ -370,6 +484,18 @@ func acknowledgeReplicationTaskContainingEventWithoutApplying(
 	eventType enumspb.EventType,
 ) parentChildScenarioStep {
 	return replicationTaskStep(ackReplicationTaskWithoutApplying, targetCluster, workflow, eventType)
+}
+
+func acknowledgeNextReplicationTaskWithoutApplying(
+	targetCluster parentChildCluster,
+	workflow parentChildWorkflow,
+) parentChildScenarioStep {
+	return parentChildScenarioStep{
+		name: fmt.Sprintf("acknowledge next %s replication to %s without applying", workflow, targetCluster),
+		run: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
+			return runtime.acknowledgeNextReplicationTaskWithoutApplying(ctx, targetCluster, workflow)
+		},
+	}
 }
 
 func replicationTaskStep(
@@ -399,7 +525,17 @@ func completeChildWorkflowTask() parentChildScenarioStep {
 	return parentChildScenarioStep{
 		name: "complete the child workflow task",
 		run: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
-			return runtime.completeChildWorkflowTask(ctx)
+			_, err := runtime.closeChildWorkflowTask(ctx, enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION)
+			return err
+		},
+	}
+}
+
+func signalChildWorkflow() parentChildScenarioStep {
+	return parentChildScenarioStep{
+		name: "signal the child workflow on the active cluster",
+		run: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
+			return runtime.signalChildWorkflow(ctx)
 		},
 	}
 }
@@ -473,18 +609,6 @@ func currentWorkflowHasStatusOnCluster(
 				return fmt.Errorf("%s status is %s, want %s", workflow, actualStatus, status)
 			}
 			return nil
-		},
-	}
-}
-
-func workflowIsMissingOnCluster(
-	cluster parentChildCluster,
-	workflow parentChildWorkflow,
-) parentChildExpectation {
-	return parentChildExpectation{
-		name: fmt.Sprintf("%s is missing on %s", workflow, cluster),
-		check: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
-			return runtime.confirmWorkflowMissing(ctx, cluster, workflow)
 		},
 	}
 }
@@ -651,9 +775,41 @@ func (r *parentChildScenarioRuntime) processReplicationThroughTaskContainingEven
 	}
 }
 
-func (r *parentChildScenarioRuntime) applyDelayedReplication(
+func (r *parentChildScenarioRuntime) acknowledgeNextReplicationTaskWithoutApplying(
+	ctx context.Context,
 	targetCluster parentChildCluster,
 	workflow parentChildWorkflow,
+) error {
+	targetClusterIndex := int(targetCluster)
+	if targetClusterIndex < 0 || targetClusterIndex >= len(r.gates) {
+		return fmt.Errorf("unknown parent-child cluster %d", targetCluster)
+	}
+	workflowID, err := r.workflowID(workflow)
+	if err != nil {
+		return err
+	}
+	task, err := r.gates[targetClusterIndex].nextForWorkflow(ctx, workflowID)
+	if err != nil {
+		return err
+	}
+	events, err := decodeParentChildReplicationEvents(task.task)
+	if err != nil {
+		return err
+	}
+	r.tracef(
+		"  acknowledge task %d to cluster %d for %s without applying [%s]",
+		task.task.GetSourceTaskId(),
+		targetClusterIndex,
+		workflow,
+		formatParentChildReplicationTask(task.task, events),
+	)
+	return task.acknowledgeWithoutApplying()
+}
+
+func (r *parentChildScenarioRuntime) resolveDelayedReplication(
+	targetCluster parentChildCluster,
+	workflow parentChildWorkflow,
+	shouldApply bool,
 ) error {
 	targetClusterIndex := int(targetCluster)
 	if targetClusterIndex < 0 || targetClusterIndex >= len(r.gates) {
@@ -673,19 +829,29 @@ func (r *parentChildScenarioRuntime) applyDelayedReplication(
 		return err
 	}
 
+	delete(r.delayedTasks, lane)
+	if shouldApply {
+		r.tracef(
+			"  apply delayed task %d to cluster %d for %s [%s]",
+			task.task.GetSourceTaskId(),
+			targetClusterIndex,
+			workflow,
+			formatParentChildReplicationTask(task.task, events),
+		)
+		if err := task.apply(); err != nil {
+			return err
+		}
+		r.recordChildRunIDFromAppliedTask(workflow, task, events)
+		return nil
+	}
 	r.tracef(
-		"  apply delayed task %d to cluster %d for %s [%s]",
+		"  acknowledge delayed task %d to cluster %d for %s without applying [%s]",
 		task.task.GetSourceTaskId(),
 		targetClusterIndex,
 		workflow,
 		formatParentChildReplicationTask(task.task, events),
 	)
-	delete(r.delayedTasks, lane)
-	if err := task.apply(); err != nil {
-		return err
-	}
-	r.recordChildRunIDFromAppliedTask(workflow, task, events)
-	return nil
+	return task.acknowledgeWithoutApplying()
 }
 
 func (r *parentChildScenarioRuntime) completeParentWorkflowTaskWithStartChildCommand(ctx context.Context) error {
@@ -724,7 +890,36 @@ func (r *parentChildScenarioRuntime) completeParentWorkflowTaskWithStartChildCom
 	return err
 }
 
-func (r *parentChildScenarioRuntime) completeChildWorkflowTask(ctx context.Context) error {
+func (r *parentChildScenarioRuntime) closeChildWorkflowTask(
+	ctx context.Context,
+	commandType enumspb.CommandType,
+) (string, error) {
+	var command *commandpb.Command
+	switch commandType {
+	case enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION:
+		command = &commandpb.Command{
+			CommandType: commandType,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
+			},
+		}
+	case enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION:
+		command = &commandpb.Command{
+			CommandType: commandType,
+			Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+				ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+					WorkflowType:        &commonpb.WorkflowType{Name: "child-workflow"},
+					TaskQueue:           r.childTestVars.TaskQueue(),
+					WorkflowRunTimeout:  durationpb.New(time.Minute),
+					WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+				},
+			},
+		}
+	default:
+		return "", fmt.Errorf("unsupported child close command %s", commandType)
+	}
+
+	closedRunID := r.childRunID
 	poller := taskpoller.New(r.suite.T(), r.activeCluster().FrontendClient(), r.namespace)
 	_, err := poller.PollAndHandleWorkflowTask(r.childTestVars, func(
 		task *workflowservice.PollWorkflowTaskQueueResponse,
@@ -735,19 +930,83 @@ func (r *parentChildScenarioRuntime) completeChildWorkflowTask(ctx context.Conte
 		}
 		if r.childRunID == "" {
 			r.childRunID = execution.GetRunId()
+			closedRunID = r.childRunID
 		}
 		if execution.GetRunId() != r.childRunID {
 			return nil, fmt.Errorf("polled child run %s, want %s", execution.GetRunId(), r.childRunID)
 		}
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{
-			Commands: []*commandpb.Command{{
-				CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-				Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-					CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
-				},
-			}},
+			Commands: []*commandpb.Command{command},
 		}, nil
 	}, taskpoller.WithTimeout(testTimeout))
+	if err != nil || commandType != enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION {
+		return closedRunID, err
+	}
+
+	events, err := r.activeWorkflowHistory(ctx, childWorkflow)
+	if err != nil {
+		return "", err
+	}
+	continuedAsNewEvent := findHistoryEvent(events, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, nil)
+	if continuedAsNewEvent == nil {
+		return "", fmt.Errorf("child run %s has no WorkflowExecutionContinuedAsNew event", closedRunID)
+	}
+	newRunID := continuedAsNewEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
+	if newRunID == "" {
+		return "", fmt.Errorf("child run %s continued as new without a new run ID", closedRunID)
+	}
+	r.childRunID = newRunID
+	r.tracef("  child continued as new from run %s to %s", closedRunID, newRunID)
+	return closedRunID, nil
+}
+
+func (r *parentChildScenarioRuntime) resetChildWorkflow(ctx context.Context) error {
+	events, err := r.activeWorkflowHistory(ctx, childWorkflow)
+	if err != nil {
+		return err
+	}
+	workflowTaskCompletedEvent := findHistoryEvent(events, enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, nil)
+	if workflowTaskCompletedEvent == nil {
+		return fmt.Errorf("child run %s has no WorkflowTaskCompleted event", r.childRunID)
+	}
+
+	baseRunID := r.childRunID
+	response, err := r.activeCluster().FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace: r.namespace,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: r.childID,
+			RunId:      baseRunID,
+		},
+		Reason:                    "parent-child XDC test",
+		WorkflowTaskFinishEventId: workflowTaskCompletedEvent.GetEventId(),
+		RequestId:                 uuid.NewString(),
+		Identity:                  r.childTestVars.WorkerIdentity(),
+	})
+	if err != nil {
+		return err
+	}
+	if response.GetRunId() == "" {
+		return fmt.Errorf("reset child run %s without a new run ID", baseRunID)
+	}
+	r.childRunID = response.GetRunId()
+	r.tracef("  reset child from run %s to %s", baseRunID, r.childRunID)
+	return nil
+}
+
+func (r *parentChildScenarioRuntime) signalChildWorkflow(ctx context.Context) error {
+	if r.childRunID == "" {
+		return errors.New("child workflow is not started")
+	}
+	_, err := r.activeCluster().FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace: r.namespace,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: r.childID,
+			RunId:      r.childRunID,
+		},
+		SignalName: "initialize-transition-history",
+		Identity:   r.childTestVars.WorkerIdentity(),
+		RequestId:  uuid.NewString(),
+	})
 	return err
 }
 
@@ -811,8 +1070,7 @@ func (r *parentChildScenarioRuntime) confirmWorkflowMissing(
 	workflow parentChildWorkflow,
 ) error {
 	_, err := r.workflowMutableState(ctx, cluster, workflow)
-	var notFound *serviceerror.NotFound
-	if errors.As(err, &notFound) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 		return nil
 	}
 	if err == nil {

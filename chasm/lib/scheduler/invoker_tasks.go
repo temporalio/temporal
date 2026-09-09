@@ -16,6 +16,7 @@ import (
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/scheduler/internal"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -243,7 +244,9 @@ func (h *InvokerExecuteTaskHandler) Execute(
 			s := i.Scheduler.Get(ctx)
 			// Use newlyStarted (not len(result.CompletedStarts)) so a concurrent
 			// ExecuteTask's duplicate StartWorkflow can't inflate ActionCount.
-			newlyStarted, droppedDuplicates := i.recordExecuteResult(ctx, &result)
+			newlyStarted, droppedDuplicates, latestStartTime, startOnlyActions := i.recordExecuteResult(ctx, &result)
+			s.advanceLastEventTimeTo(latestStartTime)
+			s.recordStartOnlyActions(ctx, startOnlyActions)
 			s.recordActionResult(&schedulerActionResult{actionCount: int64(newlyStarted)})
 			if droppedDuplicates > 0 {
 				h.recordDuplicateExecuteDrops(s, droppedDuplicates)
@@ -378,8 +381,8 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 			break
 		}
 
-		// Clone start before concurrent access. The clone will have RunId/StartTime
-		// set by startWorkflow, then copied back to the original in recordExecuteResult.
+		// Clone start before concurrent access. Buffered starts carry the policy
+		// resolved when they entered CHASM, including through migration.
 		start = common.CloneProto(start)
 
 		// Run all starts concurrently.
@@ -660,14 +663,18 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 		reusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 	}
 
+	tracksCompletionResult := internal.TracksCompletionResult(start.GetOverlapPolicy())
 	var lcr []*commonpb.Payload
-	if lastCompletionState.Success != nil {
+	continuedFailure := lastCompletionState.Failure
+	if tracksCompletionResult && lastCompletionState.Success != nil {
 		lcr = append(lcr, lastCompletionState.Success)
 	}
-	// Build the completion callback with this start's request ID packed into its token, so the
-	// completion is matched by a request ID that rides in the callback header and survives
-	// continue-as-new, rather than the started workflow's callback state which is re-stamped on each
-	// new run.
+	if !tracksCompletionResult {
+		continuedFailure = nil
+	}
+	// Always attach callbacks so StartWorkflowExecution requests remain compatible
+	// across mixed server versions. ALLOW_ALL callbacks become harmless late deliveries
+	// after their starts move to start-only history.
 	callback, err := chasm.GenerateNexusCallback(schedulerRef, start.RequestId, h.config.EncodeInternalTokenWithEnvelope(scheduler.Namespace))
 	if err != nil {
 		return err
@@ -691,7 +698,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 		WorkflowTaskTimeout:      requestSpec.WorkflowTaskTimeout,
 		WorkflowType:             requestSpec.WorkflowType,
 		Priority:                 requestSpec.Priority,
-		ContinuedFailure:         lastCompletionState.Failure,
+		ContinuedFailure:         continuedFailure,
 		LastCompletionResult: &commonpb.Payloads{
 			Payloads: lcr,
 		},

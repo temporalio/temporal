@@ -6,25 +6,29 @@ import (
 
 	"github.com/olivere/elastic/v7"
 	"github.com/temporalio/sqlparser"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
+	"go.temporal.io/server/common/searchattribute"
 )
 
-type queryConverter struct{}
+type esQueryConverter struct{}
 
-var _ query.StoreQueryConverter[elastic.Query] = (*queryConverter)(nil)
+var _ query.StoreQueryConverter[elastic.Query] = (*esQueryConverter)(nil)
 
-func (c *queryConverter) GetDatetimeFormat() string {
+func (c *esQueryConverter) GetDatetimeFormat() string {
 	return time.RFC3339Nano
 }
 
-func (c *queryConverter) BuildParenExpr(expr elastic.Query) (elastic.Query, error) {
+func (c *esQueryConverter) BuildParenExpr(expr elastic.Query) (elastic.Query, error) {
 	if expr == nil {
 		return nil, nil
 	}
 	return expr, nil
 }
 
-func (c *queryConverter) BuildNotExpr(expr elastic.Query) (elastic.Query, error) {
+func (c *esQueryConverter) BuildNotExpr(expr elastic.Query) (elastic.Query, error) {
 	if expr == nil {
 		return nil, nil
 	}
@@ -37,7 +41,7 @@ func (c *queryConverter) BuildNotExpr(expr elastic.Query) (elastic.Query, error)
 	return newBoolQuery().MustNot(expr), nil
 }
 
-func (c *queryConverter) BuildAndExpr(exprs ...elastic.Query) (elastic.Query, error) {
+func (c *esQueryConverter) BuildAndExpr(exprs ...elastic.Query) (elastic.Query, error) {
 	var reusableBoolQuery *boolQuery
 	validExprs := make([]elastic.Query, 0, len(exprs))
 	for _, e := range exprs {
@@ -65,7 +69,7 @@ func (c *queryConverter) BuildAndExpr(exprs ...elastic.Query) (elastic.Query, er
 	return newBoolQuery().Filter(validExprs...), nil
 }
 
-func (c *queryConverter) BuildOrExpr(exprs ...elastic.Query) (elastic.Query, error) {
+func (c *esQueryConverter) BuildOrExpr(exprs ...elastic.Query) (elastic.Query, error) {
 	var reusableBoolQuery *boolQuery
 	validExprs := make([]elastic.Query, 0, len(exprs))
 	for _, e := range exprs {
@@ -93,7 +97,7 @@ func (c *queryConverter) BuildOrExpr(exprs ...elastic.Query) (elastic.Query, err
 	return newBoolQuery().Should(validExprs...).MinimumNumberShouldMatch(1), nil
 }
 
-func (c *queryConverter) ConvertComparisonExpr(
+func (c *esQueryConverter) ConvertComparisonExpr(
 	operator string,
 	col *query.SAColumn,
 	value any,
@@ -126,7 +130,7 @@ func (c *queryConverter) ConvertComparisonExpr(
 	return res, nil
 }
 
-func (c *queryConverter) ConvertKeywordComparisonExpr(
+func (c *esQueryConverter) ConvertKeywordComparisonExpr(
 	operator string,
 	col *query.SAColumn,
 	value any,
@@ -152,7 +156,7 @@ func (c *queryConverter) ConvertKeywordComparisonExpr(
 	}
 }
 
-func (c *queryConverter) ConvertKeywordListComparisonExpr(
+func (c *esQueryConverter) ConvertKeywordListComparisonExpr(
 	operator string,
 	col *query.SAColumn,
 	value any,
@@ -160,7 +164,7 @@ func (c *queryConverter) ConvertKeywordListComparisonExpr(
 	return c.ConvertKeywordComparisonExpr(operator, col, value)
 }
 
-func (c *queryConverter) ConvertTextComparisonExpr(
+func (c *esQueryConverter) ConvertTextComparisonExpr(
 	operator string,
 	col *query.SAColumn,
 	value any,
@@ -176,7 +180,7 @@ func (c *queryConverter) ConvertTextComparisonExpr(
 	}
 }
 
-func (c *queryConverter) ConvertRangeExpr(
+func (c *esQueryConverter) ConvertRangeExpr(
 	operator string,
 	col *query.SAColumn,
 	from, to any,
@@ -198,7 +202,7 @@ func (c *queryConverter) ConvertRangeExpr(
 	}
 }
 
-func (c *queryConverter) ConvertIsExpr(
+func (c *esQueryConverter) ConvertIsExpr(
 	operator string,
 	col *query.SAColumn,
 ) (elastic.Query, error) {
@@ -216,4 +220,21 @@ func (c *queryConverter) ConvertIsExpr(
 			query.InvalidExpressionErrMessage,
 		)
 	}
+}
+
+func NewQueryConverter(
+	namespaceName namespace.Name,
+	saTypeMap searchattribute.NameTypeMap,
+	saMapper searchattribute.Mapper,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
+) *query.QueryConverter[elastic.Query] {
+	return query.NewQueryConverter(
+		&esQueryConverter{},
+		namespaceName,
+		saTypeMap,
+		saMapper,
+		metricsHandler,
+		logger,
+	)
 }

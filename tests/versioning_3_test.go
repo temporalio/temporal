@@ -33,6 +33,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
@@ -1243,6 +1244,45 @@ func (s *Versioning3Suite) TestEagerActivity() {
 			return env.respondCompleteWorkflow(tv, vbUnpinned), nil
 		})
 	env.verifyWorkflowVersioning(s, tv, vbUnpinned, tv.Deployment(), nil, nil)
+}
+
+func (s *Versioning3Suite) TestEagerActivityTimeoutMetricTags() {
+	env := s.setupEnv(
+		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerExecution, true),
+		testcore.WithDynamicConfig(dynamicconfig.MetricsBreakdownByBuildID, true),
+	)
+	tv := env.Tv()
+
+	env.updateTaskQueueDeploymentDataWithRoutingConfig(s, tv, &deploymentpb.RoutingConfig{
+		CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv.DeploymentVersionString()),
+		CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
+		RevisionNumber:            1,
+	}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv.DeploymentVersion().GetBuildId(): {
+		Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+	}}, []string{}, tqTypeWf, tqTypeAct)
+	env.startWorkflow(s, tv, nil)
+	capture := env.StartNamespaceMetricCapture()
+
+	_, resp := env.pollWftAndHandle(s, tv, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.NotNil(task)
+			response := env.respondWftWithActivities(tv, tv, true, vbUnpinned, "eager-timeout")
+			activity := response.Commands[0].GetScheduleActivityTaskCommandAttributes()
+			activity.RequestEagerExecution = true
+			activity.StartToCloseTimeout = durationpb.New(200 * time.Millisecond)
+			activity.RetryPolicy = &commonpb.RetryPolicy{MaximumAttempts: 1}
+			return response, nil
+		})
+	s.NotEmpty(resp.GetActivityTasks())
+
+	requireWorkerDeploymentMetricTags(
+		s,
+		capture,
+		tv,
+		metrics.ActivityTaskTimeout.Name(),
+		metrics.ActivityTimeout.Name(),
+		metrics.ActivityScheduleToCloseLatency.Name(),
+	)
 }
 
 func (s *Versioning3Suite) TestTransitionFromActivity_Sticky() {

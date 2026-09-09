@@ -199,6 +199,53 @@ You'll find a fully initialized task poller in any functional test suite, look f
 
 _NOTE: The previous `testcore.TaskPoller` has been deprecated and should not be used in new code._
 
+### gRPC fault injection
+
+The `testcore` package injects faults into gRPC calls by intercepting requests and responses.
+The fault function determines which RPCs trigger a fault and returns the error to inject.
+It returns a cleanup function that can be used to remove the fault again.
+
+**Example:**
+
+```go
+env.InjectRequestFault(
+    func(req any) error {
+        if _, ok := req.(*matchingservice.AddWorkflowTaskRequest); ok {
+            return serviceerror.NewNotFound("injected fault")
+        }
+        return nil
+    })
+```
+
+`InjectRequestFault` runs _before_ the handler, so an injected error prevents the operation from
+executing. `InjectResponseFault` runs _after_ the handler, so an injected error can model an
+operation that executed but whose response was lost. The test fails if the fault never triggers.
+Only unary RPCs are intercepted; streaming RPCs are unaffected.
+
+The `env` methods scope faults to the test's namespace.
+
+### HTTP fault injection
+
+`InjectHTTPRequestFault` and `InjectHTTPResponseFault` inject faults into HTTP clients that install
+the test fault generator. Callback delivery and Nexus operation clients support these faults. The
+faults are scoped to the test namespace and are unavailable in builds without `test_dep`.
+
+Return an `httpfaults.Outcome` with one action:
+
+- `Response` returns a synthetic HTTP response.
+- `Error` returns a transport error.
+
+```go
+env.InjectHTTPRequestFault(func(ctx context.Context, req *http.Request) *httpfaults.Outcome {
+    if req.URL.Path != "/callback" {
+        return nil
+    }
+    return &httpfaults.Outcome{
+        Response: httpfaults.NewResponse(http.StatusServiceUnavailable, "injected"),
+    }
+})
+```
+
 ### testhooks package
 
 The `testhooks` package injects test-specific behavior into production code paths that are otherwise

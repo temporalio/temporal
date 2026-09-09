@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -948,6 +949,7 @@ func (e *ChasmEngine) createNewExecutionWithUpdate(
 			shardContext.GetThrottledLogger(),
 			shardContext.GetMetricsHandler(),
 			nil, // no pagination buffer limiter as it is a transient context
+			testhooks.TestHooks{},
 		),
 		mutableState: mutableState,
 		snapshot:     snapshot,

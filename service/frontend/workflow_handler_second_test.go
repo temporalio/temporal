@@ -9,12 +9,17 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/api/workflowservice/v1"
+	chasmspb "go.temporal.io/server/api/chasm/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
+	"go.temporal.io/server/api/visibilityservice/v1"
+	"go.temporal.io/server/chasm"
 	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/worker/scheduler"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc/metadata"
 )
@@ -77,6 +82,47 @@ func TestCHASMSchedulerRoutingAndCreationGates(t *testing.T) {
 			require.Equal(t, tc.expectRouting, wh.chasmSchedulerEnabled(ctx, "test-namespace"))
 		})
 	}
+}
+
+func TestListSchedulesChasmPreservesV2ScheduleIDs(t *testing.T) {
+	controller := gomock.NewController(t)
+	chasmVisibilityManager := chasm.NewMockVisibilityManager(controller)
+
+	v2ListInfoPayload, err := payload.Encode(&schedulepb.ScheduleListInfo{Spec: &schedulepb.ScheduleSpec{}})
+	require.NoError(t, err)
+	v1ChasmMemoPayload, err := payload.Encode(&schedulepb.ScheduleListInfo{})
+	require.NoError(t, err)
+	v1ListInfoBytes, err := (&schedulepb.ScheduleListInfo{Spec: &schedulepb.ScheduleSpec{}}).Marshal()
+	require.NoError(t, err)
+
+	chasmVisibilityManager.EXPECT().ListExecutions(gomock.Any(), gomock.Any(), gomock.Any()).Return(
+		&visibilityservice.ListChasmExecutionsResponse{Executions: []*chasmspb.VisibilityExecutionInfo{
+			{BusinessId: "foo", ChasmMemo: v2ListInfoPayload},
+			{BusinessId: scheduler.WorkflowIDPrefix + "foo", ChasmMemo: v2ListInfoPayload},
+			{
+				BusinessId: scheduler.WorkflowIDPrefix + "legacy",
+				ChasmMemo:  v1ChasmMemoPayload,
+				Memo: &commonpb.Memo{Fields: map[string]*commonpb.Payload{
+					scheduler.MemoFieldInfo: payload.EncodeBytes(v1ListInfoBytes),
+				}},
+			},
+		}}, nil,
+	)
+
+	wh := &WorkflowHandler{}
+	response, err := wh.listSchedulesChasm(
+		chasm.NewVisibilityManagerContext(context.Background(), chasmVisibilityManager),
+		&workflowservice.ListSchedulesRequest{MaximumPageSize: 10},
+		"test-namespace",
+		"test-namespace-id",
+		"",
+	)
+	require.NoError(t, err)
+	require.Equal(t, []string{"foo", scheduler.WorkflowIDPrefix + "foo", "legacy"}, []string{
+		response.Schedules[0].ScheduleId,
+		response.Schedules[1].ScheduleId,
+		response.Schedules[2].ScheduleId,
+	})
 }
 
 func TestDescribeScheduleAnnotatesScheduledWorkflowWithTypes(t *testing.T) {
