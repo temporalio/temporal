@@ -148,26 +148,26 @@ func (h *invocationTaskHandler) Execute(
 	)
 	if saveErr == nil {
 		// Only after the transition commits; transitions can be rolled back.
-		h.recordDisposition(ns, taskAttr, task, result)
+		h.recordInvocationEvent(ns, taskAttr, task, result)
 	}
 	return invokable.WrapError(result, saveErr)
 }
 
-// recordDisposition emits the committed outcome of a single invocation.
-func (h *invocationTaskHandler) recordDisposition(
+// recordInvocationEvent emits the committed outcome of a single invocation attempt.
+func (h *invocationTaskHandler) recordInvocationEvent(
 	ns *namespace.Namespace,
 	taskAttr chasm.TaskAttributes,
 	task *callbackspb.InvocationTask,
 	result invocationResult,
 ) {
-	var disposition string
+	var outcome outcomeTag
 	switch result.(type) {
 	case invocationResultOK:
-		disposition = dispositionSucceeded
+		outcome = outcomeSuccess
 	case invocationResultRetry:
-		disposition = dispositionRetrying
+		outcome = outcomeRetryableError
 	case invocationResultFail:
-		disposition = dispositionFailed
+		outcome = outcomeNonretryableError
 	default:
 		// saveResult rejects anything else as an unprocessable task.
 		return
@@ -176,12 +176,12 @@ func (h *invocationTaskHandler) recordDisposition(
 	tags := []metrics.Tag{
 		metrics.NamespaceTag(ns.Name().String()),
 		metrics.DestinationTag(taskAttr.Destination),
-		metrics.OutcomeTag(disposition),
+		metrics.OutcomeTag(string(outcome)),
 	}
-	h.metricsHandler.Counter(InvocationResultCounter.Name()).Record(1, tags...)
+	h.metricsHandler.Counter(InvocationEventCounter.Name()).Record(1, tags...)
 
-	if disposition != dispositionRetrying {
-		// Attempt is 0-based, so +1 is the count. Only terminal dispositions have a final total.
+	if outcome != outcomeRetryableError {
+		// Attempt is 0-based, so +1 is the count. Only terminal events have a final total.
 		h.metricsHandler.Histogram(InvocationAttemptsHistogram.Name(), InvocationAttemptsHistogram.Unit()).
 			Record(int64(task.GetAttempt())+1, tags...)
 	}

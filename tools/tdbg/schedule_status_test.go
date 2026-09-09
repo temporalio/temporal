@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -137,8 +138,20 @@ func chasmSchedulerStateResponse(t *testing.T, sentinel bool) *adminservice.Desc
 			ChasmNodes: map[string]*persistencespb.ChasmNode{
 				"": {Data: blob},
 			},
+			ExecutionState: runningState(),
 		},
 	}
+}
+
+// runningState is the execution state every live schedule and sentinel has; fixtures must set it
+// because a closed record stays describable until retention deletes it, and only the status
+// distinguishes the two.
+func runningState() *persistencespb.WorkflowExecutionState {
+	return &persistencespb.WorkflowExecutionState{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING}
+}
+
+func completedState() *persistencespb.WorkflowExecutionState {
+	return &persistencespb.WorkflowExecutionState{Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED}
 }
 
 // workflowTypeResponse builds a DescribeMutableState response for a plain workflow execution of
@@ -147,7 +160,19 @@ func chasmSchedulerStateResponse(t *testing.T, sentinel bool) *adminservice.Desc
 func workflowTypeResponse(typeName string) *adminservice.DescribeMutableStateResponse {
 	return &adminservice.DescribeMutableStateResponse{
 		DatabaseMutableState: &persistencespb.WorkflowMutableState{
-			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{WorkflowTypeName: typeName},
+			ExecutionInfo:  &persistencespb.WorkflowExecutionInfo{WorkflowTypeName: typeName},
+			ExecutionState: runningState(),
+		},
+	}
+}
+
+// closedWorkflowTypeResponse is the same execution after it completed: still describable, but no
+// longer holding the workflow ID. An expired dummy sentinel looks exactly like this.
+func closedWorkflowTypeResponse(typeName string) *adminservice.DescribeMutableStateResponse {
+	return &adminservice.DescribeMutableStateResponse{
+		DatabaseMutableState: &persistencespb.WorkflowMutableState{
+			ExecutionInfo:  &persistencespb.WorkflowExecutionInfo{WorkflowTypeName: typeName},
+			ExecutionState: completedState(),
 		},
 	}
 }
@@ -220,7 +245,7 @@ func TestScheduleStatus_SingleSchedule_V1GenuineWithV2Sentinel(t *testing.T) {
 
 	require.Contains(t, stdout, `Schedule "foo" is a V1 (workflow-backed) schedule.`+"\n")
 	require.Contains(t, stdout, "Additionally, a placeholder (\"sentinel\") V2 entity exists")
-	require.Contains(t, stdout, "V1→V2 migration is in progress")
+	require.Contains(t, stdout, "while a V1→V2 migration is in progress")
 }
 
 func TestScheduleStatus_SingleSchedule_V1SentinelWithV2Genuine(t *testing.T) {
@@ -234,7 +259,38 @@ func TestScheduleStatus_SingleSchedule_V1SentinelWithV2Genuine(t *testing.T) {
 
 	require.Contains(t, stdout, `Schedule "foo" is a V2 (CHASM) schedule.`+"\n")
 	require.Contains(t, stdout, "Additionally, a placeholder (\"sentinel\") V1 workflow exists")
-	require.Contains(t, stdout, "V2→V1 rollback is in progress")
+	require.Contains(t, stdout, "while a V2→V1 rollback is in progress")
+}
+
+// A dummy sentinel completes after its idle window rather than disappearing, so a V2 schedule
+// created minutes ago has a closed sentinel at its V1 ID for the whole retention period. That
+// must read as a plain V2 schedule, not as an ID still reserved by a rollback.
+func TestScheduleStatus_SingleSchedule_ClosedV1SentinelWithV2Genuine(t *testing.T) {
+	admin := &describeMutableStateAdminClient{responses: map[string]*adminservice.DescribeMutableStateResponse{
+		primitives.ScheduleWorkflowIDPrefix + "foo": closedWorkflowTypeResponse(dummy.DummyWFTypeName),
+		"foo": chasmSchedulerStateResponse(t, false),
+	}}
+
+	stdout, _, err := runScheduleStatusForSchedule(t, admin, "-n", "my-ns", "schedule", "migrate", "status", "--schedule-id", "foo")
+	require.NoError(t, err)
+
+	require.Contains(t, stdout, `Schedule "foo" is a V2 (CHASM) schedule.`+"\n")
+	require.NotContains(t, stdout, "Additionally")
+	require.Contains(t, stdout, "expired sentinel (closed; no longer reserving the ID)")
+}
+
+// A closed V1 scheduler workflow is a deleted or terminated schedule still inside retention.
+// Reporting it as a live V1 schedule would tell an operator a deleted schedule is running.
+func TestScheduleStatus_SingleSchedule_ClosedV1IsNotALiveSchedule(t *testing.T) {
+	admin := &describeMutableStateAdminClient{responses: map[string]*adminservice.DescribeMutableStateResponse{
+		primitives.ScheduleWorkflowIDPrefix + "foo": closedWorkflowTypeResponse(scheduler.WorkflowType),
+	}}
+
+	stdout, _, err := runScheduleStatusForSchedule(t, admin, "-n", "my-ns", "schedule", "migrate", "status", "--schedule-id", "foo")
+	require.NoError(t, err)
+
+	require.Contains(t, stdout, `Schedule "foo" was not found as either a V1 (workflow-backed) or V2 (CHASM) schedule.`)
+	require.Contains(t, stdout, "not reserving the ID")
 }
 
 func TestScheduleStatus_SingleSchedule_NotFoundBothSides(t *testing.T) {
