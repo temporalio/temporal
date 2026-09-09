@@ -258,6 +258,7 @@ func WorkersRegistryProvider(
 		MetricsConfig: workers.WorkerMetricsConfig{
 			EnablePluginMetrics:            serviceConfig.EnableWorkerPluginMetrics,
 			EnablePollerAutoscalingMetrics: serviceConfig.EnablePollerAutoscalingMetrics,
+			EnablePerWorkerPollerMetrics:   serviceConfig.EnablePerWorkerPollerMetrics,
 			BreakdownMetricsByTaskQueue:    serviceConfig.BreakdownMetricsByTaskQueue,
 			ExternalPayloadsEnabled:        serviceConfig.ExternalPayloadsEnabled,
 		},

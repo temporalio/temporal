@@ -139,3 +139,73 @@ func TestPollerAutoscalingMetricsDisabled(t *testing.T) {
 	autoscalingMetrics := snapshot[metrics.PollerAutoscalingHeartbeatCount.Name()]
 	assert.Empty(t, autoscalingMetrics, "should not record autoscaling metrics when disabled")
 }
+
+func perWorkerEmitter(handler metrics.Handler, enabled bool) *workerMetricsEmitter {
+	return &workerMetricsEmitter{
+		handler: handler,
+		config: WorkerMetricsConfig{
+			EnablePollerAutoscalingMetrics: dynamicconfig.GetBoolPropertyFn(true),
+			EnablePerWorkerPollerMetrics:   dynamicconfig.GetBoolPropertyFnFilteredByNamespace(enabled),
+		},
+	}
+}
+
+func TestPerWorkerPollerMetrics(t *testing.T) {
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	// The SDK fills all four poller blocks regardless of which sub-workers exist, so a zero
+	// target is how "no autoscaler for this poller" arrives. Here nexus is not run at all and
+	// the activity pollers have a fixed count; neither should produce a series.
+	worker := &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey:        "worker-1",
+		TaskQueue:                "test-task-queue",
+		WorkflowPollerInfo:       &workerpb.WorkerPollerInfo{IsAutoscaling: true, TargetPollers: 10},
+		WorkflowStickyPollerInfo: &workerpb.WorkerPollerInfo{IsAutoscaling: true, TargetPollers: 12},
+		ActivityPollerInfo:       &workerpb.WorkerPollerInfo{TargetPollers: 0},
+		NexusPollerInfo:          &workerpb.WorkerPollerInfo{},
+	}
+
+	perWorkerEmitter(captureHandler, true).
+		emit(namespace.ID("ns-id"), namespace.Name("ns"), []*workerpb.WorkerHeartbeat{worker})
+
+	recordings := capture.Snapshot()[metrics.WorkerPollerTarget.Name()]
+	require.Len(t, recordings, 2, "only the two auto-scaled workflow pollers")
+
+	byKind := make(map[string]float64)
+	for _, m := range recordings {
+		require.Equal(t, "worker-1", m.Tags[metrics.WorkerInstanceKeyTagName])
+		require.Equal(t, enumspb.TASK_QUEUE_TYPE_WORKFLOW.String(), m.Tags[metrics.TaskTypeTagName])
+		byKind[m.Tags[metrics.PollerKindTagName]] = m.Value.(float64)
+	}
+	require.InDelta(t, float64(10), byKind[pollerKindNormal], 0)
+	require.InDelta(t, float64(12), byKind[pollerKindSticky], 0)
+}
+
+func TestPerWorkerPollerMetricsGating(t *testing.T) {
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	newWorker := func(taskQueue string) *workerpb.WorkerHeartbeat {
+		return &workerpb.WorkerHeartbeat{
+			WorkerInstanceKey:  "worker-1",
+			TaskQueue:          taskQueue,
+			ActivityPollerInfo: &workerpb.WorkerPollerInfo{IsAutoscaling: true, TargetPollers: 3},
+		}
+	}
+	// primitives.internalTaskQueuePrefix, unexported.
+	systemWorker := newWorker("temporal-sys-scanner-tq")
+
+	perWorkerEmitter(captureHandler, false).
+		emit(namespace.ID("ns-id"), namespace.Name("ns"), []*workerpb.WorkerHeartbeat{newWorker("tq")})
+	require.Empty(t, capture.Snapshot()[metrics.WorkerPollerTarget.Name()], "disabled for the namespace")
+	require.Len(t, capture.Snapshot()[metrics.PollerAutoscalingHeartbeatCount.Name()], 1,
+		"the autoscaling adoption counter is gated independently")
+
+	// Temporal's own internal workers heartbeat too, and are excluded to match ListWorkers.
+	perWorkerEmitter(captureHandler, true).
+		emit(namespace.ID("ns-id"), namespace.Name("ns"), []*workerpb.WorkerHeartbeat{systemWorker})
+	require.Empty(t, capture.Snapshot()[metrics.WorkerPollerTarget.Name()], "system worker excluded")
+}

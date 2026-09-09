@@ -36,6 +36,8 @@ const (
 	timeoutTypeTagName             = "timeout_type"
 	LastAttemptCauseTagName        = "last_attempt_cause"
 	AttemptStageTagName            = "attempt_stage"
+	PollerKindTagName              = "poller_kind"
+	WorkerInstanceKeyTagName       = "worker_instance_key"
 )
 
 // This package should hold all the metrics and tags for temporal
@@ -1428,6 +1430,15 @@ var (
 		"poller_autoscaling_heartbeat_count",
 		WithDescription(
 			"Count of worker heartbeats with poller autoscaling enabled. Dimensions: namespace, taskqueue, task_type"),
+	)
+	// One series per worker; intended for short-lived diagnosis. See the docstring on
+	// matching.enablePerWorkerPollerMetrics for the series-retention caveat.
+	WorkerPollerTarget = NewGaugeDef(
+		"worker_poller_target",
+		WithDescription(
+			"Poller count the worker's autoscaler is targeting, from its heartbeat. Zero when that poller has a "+
+				"fixed count. Dimensions: namespace, taskqueue, task_type, poller_kind, "+
+				"worker_instance_key"),
 	)
 	PollerScaleDecisionCounter = NewCounterDef(
 		"poller_scale_decision",
