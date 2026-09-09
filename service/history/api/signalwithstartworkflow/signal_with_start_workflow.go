@@ -28,9 +28,6 @@ type startOutcome struct {
 	firstExecutionRunID string
 	// started is true when a new run was created rather than signaling an existing one.
 	started bool
-	// deduped is true when this invocation only recovered an already-applied result; callers must
-	// not repeat start-only side effects.
-	deduped bool
 }
 
 func SignalWithStartWorkflow(
@@ -86,7 +83,13 @@ func startAndSignalWorkflow(
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) (startOutcome, error) {
-	if outcome, err := dedupSignalWithStartRequest(ctx, currentWorkflowLease, signalWithStartRequest.GetRequestId()); err != nil {
+	if outcome, err := dedupSignalWithStartRequest(
+		ctx,
+		shard,
+		namespaceEntry,
+		currentWorkflowLease,
+		signalWithStartRequest.GetRequestId(),
+	); err != nil {
 		return startOutcome{}, err
 	} else if outcome != nil {
 		return *outcome, nil
@@ -166,10 +169,12 @@ func startAndSignalWorkflow(
 //
 // Only IsSignalRequested proves the signal was applied. ExecutionState.RequestIds never records
 // SIGNALED events, so an id found only there may belong to another API's request and must not
-// dedup; it is read solely to recover the Started value of the original response. Dedup holds only
-// while the signaled run is still current: signal request ids do not survive continue-as-new.
+// dedup. Dedup holds only while the signaled run is still current: signal request ids do not
+// survive continue-as-new.
 func dedupSignalWithStartRequest(
 	ctx context.Context,
+	shard historyi.ShardContext,
+	namespaceEntry *namespace.Namespace,
 	currentWorkflowLease api.WorkflowLease,
 	requestID string,
 ) (*startOutcome, error) {
@@ -186,13 +191,15 @@ func dedupSignalWithStartRequest(
 	if err != nil {
 		return nil, err
 	}
-	// The original request started this run exactly when it attached its id to the started event.
-	requestIDInfo := mutableState.GetExecutionState().GetRequestIds()[requestID]
+	metrics.SignalWithStartWorkflowStartDeduped.With(shard.GetMetricsHandler()).Record(
+		1,
+		metrics.NamespaceTag(namespaceEntry.Name().String()),
+	)
+	// started stays false: it reports a run created by this call, and the running-workflow dedup
+	// path below reports false too.
 	return &startOutcome{
 		runID:               currentWorkflowLease.GetContext().GetWorkflowKey().RunID,
 		firstExecutionRunID: firstExecutionRunID,
-		started:             requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-		deduped:             true,
 	}, nil
 }
 

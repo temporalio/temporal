@@ -87,9 +87,8 @@ func Invoke(
 		return nil, err
 	}
 
-	// Notify version workflow if we're starting a new workflow pinned to a potentially drained
-	// version. A deduped retry reports the original response's Started, but started nothing.
-	if outcome.started && !outcome.deduped {
+	// Notify version workflow if we're starting a new workflow pinned to a potentially drained version
+	if outcome.started {
 		api.ReactivateVersionWorkflowIfPinned(ctx, namespaceEntry, request.GetVersioningOverride(), reactivationSignaler, shard.GetConfig().EnableVersionReactivationSignals(), shouldSkipReactivation, revisionNumber)
 	}
 

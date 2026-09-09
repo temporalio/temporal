@@ -7,7 +7,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -15,6 +14,8 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/testing/fakedata"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
@@ -29,16 +30,16 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller   *gomock.Controller
-		shardContext *historyi.MockShardContext
+		controller     *gomock.Controller
+		shardContext   *historyi.MockShardContext
+		metricsHandler *metricstest.CaptureHandler
 
 		namespaceID string
 		workflowID  string
 
-		currentContext        *historyi.MockWorkflowContext
-		currentMutableState   *historyi.MockMutableState
-		currentRunID          string
-		currentExecutionState *persistencespb.WorkflowExecutionState
+		currentContext      *historyi.MockWorkflowContext
+		currentMutableState *historyi.MockMutableState
+		currentRunID        string
 	}
 )
 
@@ -66,7 +67,10 @@ func (s *signalWithStartWorkflowSuite) SetupTest() {
 	s.currentMutableState = historyi.NewMockMutableState(s.controller)
 	s.currentRunID = uuid.New().String()
 
+	s.metricsHandler = metricstest.NewCaptureHandler()
+
 	s.shardContext.EXPECT().GetConfig().Return(tests.NewDynamicConfig()).AnyTimes()
+	s.shardContext.EXPECT().GetMetricsHandler().Return(s.metricsHandler).AnyTimes()
 	s.shardContext.EXPECT().GetLogger().Return(log.NewTestLogger()).AnyTimes()
 	s.shardContext.EXPECT().GetThrottledLogger().Return(log.NewTestLogger()).AnyTimes()
 	s.shardContext.EXPECT().GetTimeSource().Return(clock.NewRealTimeSource()).AnyTimes()
@@ -75,11 +79,8 @@ func (s *signalWithStartWorkflowSuite) SetupTest() {
 	s.currentMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		WorkflowId: s.workflowID,
 	}).AnyTimes()
-	s.currentExecutionState = &persistencespb.WorkflowExecutionState{
+	s.currentMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.currentRunID,
-	}
-	s.currentMutableState.EXPECT().GetExecutionState().DoAndReturn(func() *persistencespb.WorkflowExecutionState {
-		return s.currentExecutionState
 	}).AnyTimes()
 }
 
@@ -231,31 +232,9 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_WhenPaused() {
 	s.NoError(err)
 }
 
-// A retry of a SignalWithStart that started the run reproduces its Started=true response.
-func (s *signalWithStartWorkflowSuite) TestDedupSignalWithStartRequest_StartedByOriginalRequest() {
-	ctx := context.Background()
-	requestID := uuid.New().String()
-	firstRunID := uuid.New().String()
-	s.currentExecutionState.RequestIds = map[string]*persistencespb.RequestIDInfo{
-		requestID: {EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
-	}
-	s.currentMutableState.EXPECT().IsSignalRequested(requestID).Return(true)
-	s.currentMutableState.EXPECT().GetFirstRunID(ctx).Return(firstRunID, nil)
-	s.currentContext.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.currentRunID))
-
-	outcome, err := dedupSignalWithStartRequest(ctx, s.newCurrentWorkflowLease(), requestID)
-	s.Require().NoError(err)
-	s.Require().NotNil(outcome)
-	s.Equal(s.currentRunID, outcome.runID)
-	s.Equal(firstRunID, outcome.firstExecutionRunID)
-	s.True(outcome.started)
-	s.True(outcome.deduped)
-}
-
-// A retry of a SignalWithStart that only signaled an already running run reproduces its
-// Started=false response: such a request id is in the signal-requested store but was never
-// attached to a started event.
-func (s *signalWithStartWorkflowSuite) TestDedupSignalWithStartRequest_SignaledExistingRun() {
+// A retry whose request id the current run already handled resolves to that run and counts.
+// started stays false: it reports a run created by this call.
+func (s *signalWithStartWorkflowSuite) TestDedupSignalWithStartRequest_Deduped() {
 	ctx := context.Background()
 	requestID := uuid.New().String()
 	firstRunID := uuid.New().String()
@@ -263,28 +242,38 @@ func (s *signalWithStartWorkflowSuite) TestDedupSignalWithStartRequest_SignaledE
 	s.currentMutableState.EXPECT().GetFirstRunID(ctx).Return(firstRunID, nil)
 	s.currentContext.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.currentRunID))
 
-	outcome, err := dedupSignalWithStartRequest(ctx, s.newCurrentWorkflowLease(), requestID)
+	capture := s.metricsHandler.StartCapture()
+	defer s.metricsHandler.StopCapture(capture)
+
+	outcome, err := dedupSignalWithStartRequest(ctx, s.shardContext, tests.GlobalNamespaceEntry, s.newCurrentWorkflowLease(), requestID)
 	s.Require().NoError(err)
 	s.Require().NotNil(outcome)
 	s.Equal(s.currentRunID, outcome.runID)
 	s.Equal(firstRunID, outcome.firstExecutionRunID)
 	s.False(outcome.started)
-	s.True(outcome.deduped)
+
+	namespaceTag := metrics.NamespaceTag(tests.GlobalNamespaceEntry.Name().String())
+	recordings := capture.Snapshot()[metrics.SignalWithStartWorkflowStartDeduped.Name()]
+	s.Require().Len(recordings, 1)
+	s.Equal(int64(1), recordings[0].Value)
+	s.Equal(namespaceTag.Value, recordings[0].Tags[namespaceTag.Key])
 }
 
-// A request id present only in ExecutionState.RequestIds may belong to a plain
-// StartWorkflowExecution, so it must not suppress this request's signal.
-func (s *signalWithStartWorkflowSuite) TestDedupSignalWithStartRequest_RequestIDsCollisionNotDeduped() {
+// IsSignalRequested is the sole dedup predicate. ExecutionState.RequestIds is deliberately not
+// consulted: it never records SIGNALED events, so an id found only there may belong to a plain
+// StartWorkflowExecution and must not suppress this request's signal.
+func (s *signalWithStartWorkflowSuite) TestDedupSignalWithStartRequest_NotSignalRequested() {
 	ctx := context.Background()
 	requestID := uuid.New().String()
-	s.currentExecutionState.RequestIds = map[string]*persistencespb.RequestIDInfo{
-		requestID: {EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
-	}
 	s.currentMutableState.EXPECT().IsSignalRequested(requestID).Return(false)
 
-	outcome, err := dedupSignalWithStartRequest(ctx, s.newCurrentWorkflowLease(), requestID)
+	capture := s.metricsHandler.StartCapture()
+	defer s.metricsHandler.StopCapture(capture)
+
+	outcome, err := dedupSignalWithStartRequest(ctx, s.shardContext, tests.GlobalNamespaceEntry, s.newCurrentWorkflowLease(), requestID)
 	s.Require().NoError(err)
 	s.Nil(outcome)
+	s.Empty(capture.Snapshot()[metrics.SignalWithStartWorkflowStartDeduped.Name()])
 }
 
 func (s *signalWithStartWorkflowSuite) TestDedupSignalWithStartRequest_GetFirstRunIDError() {
@@ -294,9 +283,13 @@ func (s *signalWithStartWorkflowSuite) TestDedupSignalWithStartRequest_GetFirstR
 	s.currentMutableState.EXPECT().IsSignalRequested(requestID).Return(true)
 	s.currentMutableState.EXPECT().GetFirstRunID(ctx).Return("", expectedErr)
 
-	outcome, err := dedupSignalWithStartRequest(ctx, s.newCurrentWorkflowLease(), requestID)
+	capture := s.metricsHandler.StartCapture()
+	defer s.metricsHandler.StopCapture(capture)
+
+	outcome, err := dedupSignalWithStartRequest(ctx, s.shardContext, tests.GlobalNamespaceEntry, s.newCurrentWorkflowLease(), requestID)
 	s.ErrorIs(err, expectedErr)
 	s.Nil(outcome)
+	s.Empty(capture.Snapshot()[metrics.SignalWithStartWorkflowStartDeduped.Name()])
 }
 
 func (s *signalWithStartWorkflowSuite) newCurrentWorkflowLease() api.WorkflowLease {

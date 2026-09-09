@@ -2532,6 +2532,110 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_RequestIDColli
 	s.Nil(resp)
 }
 
+// signalWithStartRequestWithConflictPolicy builds a SignalWithStart carrying an explicit
+// workflow id conflict policy.
+func (s *engine2Suite) signalWithStartRequestWithConflictPolicy(
+	workflowID string,
+	requestID string,
+	conflictPolicy enumspb.WorkflowIdConflictPolicy,
+) *historyservice.SignalWithStartWorkflowExecutionRequest {
+	return &historyservice.SignalWithStartWorkflowExecutionRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
+			Namespace:                tests.NamespaceID.String(),
+			WorkflowId:               workflowID,
+			WorkflowType:             &commonpb.WorkflowType{Name: "workflowType"},
+			TaskQueue:                &taskqueuepb.TaskQueue{Name: "testTaskQueue"},
+			WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+			WorkflowTaskTimeout:      durationpb.New(2 * time.Second),
+			Identity:                 "testIdentity",
+			RequestId:                requestID,
+			WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			WorkflowIdConflictPolicy: conflictPolicy,
+			SignalName:               "my signal name",
+			SignalInput:              payloads.EncodeString("test input"),
+		},
+	}
+}
+
+// currentRunCarryingRequestID returns mutable state for a current run that already handled a
+// SignalWithStart: its id is on the started event and in the signal-requested set.
+func (s *engine2Suite) currentRunCarryingRequestID(
+	workflowID string,
+	runID string,
+	requestID string,
+	state enumsspb.WorkflowExecutionState,
+	status enumspb.WorkflowExecutionStatus,
+) *persistencespb.WorkflowMutableState {
+	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.mockEventsCache, tests.LocalNamespaceEntry,
+		workflowID, runID, log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+		"wType", "testTaskQueue", payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, "testIdentity")
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
+	wfMs.ExecutionState.State = state
+	wfMs.ExecutionState.Status = status
+	wfMs.ExecutionState.FirstExecutionRunId = runID
+	wfMs.ExecutionState.RequestIds = map[string]*persistencespb.RequestIDInfo{
+		requestID: {EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, EventId: common.FirstEventID},
+	}
+	wfMs.SignalRequestedIds = []string{requestID}
+	return wfMs
+}
+
+// A retry of a SignalWithStart whose request id the closed current run already handled resolves to
+// that run without writing anything: no second run is started and the signal is not re-applied.
+func (s *engine2Suite) TestSignalWithStartWorkflowExecution_DedupedRetry_ReturnsExistingRunWithoutWrite() {
+	s.config.EnableWorkflowIdReuseStartTimeValidation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+
+	workflowID := "wId"
+	runID := tests.RunID
+	requestID := uuid.NewString()
+	sRequest := s.signalWithStartRequestWithConflictPolicy(workflowID, requestID,
+		enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING)
+
+	wfMs := s.currentRunCarryingRequestID(workflowID, runID, requestID,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
+
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil).AnyTimes()
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{State: wfMs}, nil).AnyTimes()
+	// No CreateWorkflowExecution/UpdateWorkflowExecution expectation: the retry must not write.
+
+	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
+	s.NoError(err)
+	s.Equal(runID, resp.GetRunId())
+	s.Equal(runID, resp.GetFirstExecutionRunId())
+	s.False(resp.GetStarted(), "started reports a run created by this call")
+}
+
+// Dedup runs ahead of workflow id conflict policy resolution, so a duplicate request id against a
+// running workflow does not terminate it even under TERMINATE_EXISTING. This is the behavior change
+// with the widest blast radius: a caller reusing a request id as a "restart me" idiom loses it.
+func (s *engine2Suite) TestSignalWithStartWorkflowExecution_DedupedRetry_TerminateExistingDoesNotTerminate() {
+	s.config.EnableWorkflowIdReuseStartTimeValidation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+
+	workflowID := "wId"
+	runID := tests.RunID
+	requestID := uuid.NewString()
+	sRequest := s.signalWithStartRequestWithConflictPolicy(workflowID, requestID,
+		enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING)
+
+	wfMs := s.currentRunCarryingRequestID(workflowID, runID, requestID,
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
+
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil).AnyTimes()
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{State: wfMs}, nil).AnyTimes()
+	// No write expectation: neither the terminate mutation nor a new run may be persisted.
+
+	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
+	s.NoError(err)
+	s.Equal(runID, resp.GetRunId(), "the running run is returned, not terminated and replaced")
+	s.False(resp.GetStarted())
+}
+
 func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlreadyStarted() {
 	s.config.EnableWorkflowIdReuseStartTimeValidation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
 
