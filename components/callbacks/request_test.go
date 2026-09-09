@@ -51,6 +51,36 @@ func TestRouteRequest_ExternalTarget(t *testing.T) {
 		ts.Client(),
 		nil, // localClient not needed for external targets
 		log.NewNoopLogger(),
+		false,
+	)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+func TestRouteRequest_SourceHeaderIgnored(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	ctrl := gomock.NewController(t)
+	clusterMeta := cluster.NewMockMetadata(ctrl)
+
+	r, err := http.NewRequest(http.MethodPost, ts.URL+"/some/path", nil)
+	require.NoError(t, err)
+	r.Header.Set(callbackSourceHeader, "cluster-id-A")
+
+	resp, err := routeRequest(
+		r,
+		clusterMeta,
+		nil,
+		nil,
+		nil,
+		ts.Client(),
+		nil,
+		log.NewNoopLogger(),
+		false,
 	)
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
@@ -86,6 +116,7 @@ func TestRouteRequest_SourceHeaderLocal(t *testing.T) {
 		&http.Client{},
 		localClient,
 		log.NewNoopLogger(),
+		true,
 	)
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
@@ -121,6 +152,7 @@ func TestRouteRequest_SourceHeaderUnknownCluster(t *testing.T) {
 		&http.Client{},
 		localClient,
 		log.NewNoopLogger(),
+		true,
 	)
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
@@ -317,6 +349,7 @@ func TestRouteRequest_SystemCallback(t *testing.T) {
 		&http.Client{},
 		localClient,
 		log.NewNoopLogger(),
+		false,
 	)
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
