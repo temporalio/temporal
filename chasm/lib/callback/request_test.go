@@ -51,7 +51,7 @@ func TestRouteRequest_ExternalTarget(t *testing.T) {
 		ts.Client(),
 		nil, // localClient not needed for external targets
 		log.NewNoopLogger(),
-		false, // inspectSourceHeader
+		true, // inspectSourceHeader
 	)
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()

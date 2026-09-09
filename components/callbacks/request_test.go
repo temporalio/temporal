@@ -51,7 +51,7 @@ func TestRouteRequest_ExternalTarget(t *testing.T) {
 		ts.Client(),
 		nil, // localClient not needed for external targets
 		log.NewNoopLogger(),
-		false,
+		true, // inspectSourceHeader
 	)
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
@@ -116,7 +116,7 @@ func TestRouteRequest_SourceHeaderLocal(t *testing.T) {
 		&http.Client{},
 		localClient,
 		log.NewNoopLogger(),
-		true,
+		true, // inspectSourceHeader
 	)
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
@@ -152,7 +152,7 @@ func TestRouteRequest_SourceHeaderUnknownCluster(t *testing.T) {
 		&http.Client{},
 		localClient,
 		log.NewNoopLogger(),
-		true,
+		true, // inspectSourceHeader
 	)
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
@@ -349,7 +349,7 @@ func TestRouteRequest_SystemCallback(t *testing.T) {
 		&http.Client{},
 		localClient,
 		log.NewNoopLogger(),
-		false,
+		false, // inspectSourceHeader
 	)
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
