@@ -94,6 +94,36 @@ func TestBranchTokenMismatchReason(t *testing.T) {
 	})
 }
 
+func TestBranchTokensReferToSameBranch(t *testing.T) {
+	branchUtil := persistence.NewHistoryBranchUtil(serialization.NewSerializer())
+	treeID := primitives.NewUUID().String()
+	branchID := primitives.NewUUID().String()
+	otherTreeID := primitives.NewUUID().String()
+	otherBranchID := primitives.NewUUID().String()
+	current := newTestBranchToken(t, treeID, branchID, nil)
+
+	for _, tc := range []struct {
+		name    string
+		request []byte
+		want    bool
+	}{
+		{
+			name: "same tree and branch with different metadata",
+			request: newTestBranchToken(t, treeID, branchID, []*persistencespb.HistoryBranchRange{
+				{BranchId: otherBranchID, BeginNodeId: 1, EndNodeId: 10},
+			}),
+			want: true,
+		},
+		{name: "different tree", request: newTestBranchToken(t, otherTreeID, branchID, nil)},
+		{name: "different branch", request: newTestBranchToken(t, treeID, otherBranchID, nil)},
+		{name: "malformed request token", request: []byte{1, 2, 3}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, branchTokensReferToSameBranch(branchUtil, current, tc.request))
+		})
+	}
+}
+
 func TestValidateBranchTokenForExecution_EmptyRequestToken(t *testing.T) {
 	for _, tc := range []struct {
 		name       string
@@ -109,7 +139,7 @@ func TestValidateBranchTokenForExecution_EmptyRequestToken(t *testing.T) {
 				EnablePaginationTokenBranchValidation: dynamicconfig.GetBoolPropertyFn(tc.validation),
 			}).AnyTimes()
 
-			err := ValidateBranchTokenForExecution(
+			_, err := ValidateBranchTokenForExecution(
 				context.Background(), shardContext, nil, nil, "", "", nil, nil)
 			require.ErrorIs(t, err, tc.wantErr)
 		})
