@@ -506,6 +506,16 @@ func DestinationTag(value string) Tag {
 	return Tag{Key: destination, Value: value}
 }
 
+// NexusCompletionSourceTag identifies the CHASM component that delivered a completion callback, by
+// its fully qualified name, e.g. "workflow.workflow". An empty value means the framework could not
+// resolve the callback's parent.
+func NexusCompletionSourceTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: nexusCompletionSourceTagName, Value: value}
+}
+
 func VersioningBehaviorTag(behavior enumspb.VersioningBehavior) Tag {
 	return Tag{Key: versioningBehavior, Value: behavior.String()}
 }
