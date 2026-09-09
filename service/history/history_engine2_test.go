@@ -2458,7 +2458,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 	s.NotEqual(runID, resp.GetRunId())
 }
 
-func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateRequests() {
+func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_RequestIDCollision() {
 	s.config.EnableWorkflowIdReuseStartTimeValidation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
 
 	namespaceID := tests.NamespaceID
@@ -2528,9 +2528,8 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 
 	ctx := metrics.AddMetricsContext(context.Background())
 	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(ctx, sRequest)
-	s.NoError(err)
-	s.NotNil(resp.GetRunId())
-	s.Equal(runID, resp.GetRunId())
+	s.ErrorIs(err, workflowAlreadyStartedErr)
+	s.Nil(resp)
 }
 
 func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlreadyStarted() {

@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -230,7 +231,31 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_WhenPaused() {
 	s.NoError(err)
 }
 
-func (s *signalWithStartWorkflowSuite) TestDedupSignalWithStartRequest() {
+// A retry of a SignalWithStart that started the run reproduces its Started=true response.
+func (s *signalWithStartWorkflowSuite) TestDedupSignalWithStartRequest_StartedByOriginalRequest() {
+	ctx := context.Background()
+	requestID := uuid.New().String()
+	firstRunID := uuid.New().String()
+	s.currentExecutionState.RequestIds = map[string]*persistencespb.RequestIDInfo{
+		requestID: {EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+	}
+	s.currentMutableState.EXPECT().IsSignalRequested(requestID).Return(true)
+	s.currentMutableState.EXPECT().GetFirstRunID(ctx).Return(firstRunID, nil)
+	s.currentContext.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.currentRunID))
+
+	outcome, err := dedupSignalWithStartRequest(ctx, s.newCurrentWorkflowLease(), requestID)
+	s.Require().NoError(err)
+	s.Require().NotNil(outcome)
+	s.Equal(s.currentRunID, outcome.runID)
+	s.Equal(firstRunID, outcome.firstExecutionRunID)
+	s.True(outcome.started)
+	s.True(outcome.deduped)
+}
+
+// A retry of a SignalWithStart that only signaled an already running run reproduces its
+// Started=false response: such a request id is in the signal-requested store but was never
+// attached to a started event.
+func (s *signalWithStartWorkflowSuite) TestDedupSignalWithStartRequest_SignaledExistingRun() {
 	ctx := context.Background()
 	requestID := uuid.New().String()
 	firstRunID := uuid.New().String()
@@ -238,26 +263,28 @@ func (s *signalWithStartWorkflowSuite) TestDedupSignalWithStartRequest() {
 	s.currentMutableState.EXPECT().GetFirstRunID(ctx).Return(firstRunID, nil)
 	s.currentContext.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.currentRunID))
 
-	outcome, deduped, err := dedupSignalWithStartRequest(ctx, s.newCurrentWorkflowLease(), requestID)
+	outcome, err := dedupSignalWithStartRequest(ctx, s.newCurrentWorkflowLease(), requestID)
 	s.Require().NoError(err)
-	s.True(deduped)
+	s.Require().NotNil(outcome)
 	s.Equal(s.currentRunID, outcome.runID)
 	s.Equal(firstRunID, outcome.firstExecutionRunID)
 	s.False(outcome.started)
+	s.True(outcome.deduped)
 }
 
+// A request id present only in ExecutionState.RequestIds may belong to a plain
+// StartWorkflowExecution, so it must not suppress this request's signal.
 func (s *signalWithStartWorkflowSuite) TestDedupSignalWithStartRequest_RequestIDsCollisionNotDeduped() {
 	ctx := context.Background()
 	requestID := uuid.New().String()
 	s.currentExecutionState.RequestIds = map[string]*persistencespb.RequestIDInfo{
-		requestID: {},
+		requestID: {EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
 	}
 	s.currentMutableState.EXPECT().IsSignalRequested(requestID).Return(false)
 
-	outcome, deduped, err := dedupSignalWithStartRequest(ctx, s.newCurrentWorkflowLease(), requestID)
+	outcome, err := dedupSignalWithStartRequest(ctx, s.newCurrentWorkflowLease(), requestID)
 	s.Require().NoError(err)
-	s.False(deduped)
-	s.Equal(startOutcome{}, outcome)
+	s.Nil(outcome)
 }
 
 func (s *signalWithStartWorkflowSuite) TestDedupSignalWithStartRequest_GetFirstRunIDError() {
@@ -267,10 +294,9 @@ func (s *signalWithStartWorkflowSuite) TestDedupSignalWithStartRequest_GetFirstR
 	s.currentMutableState.EXPECT().IsSignalRequested(requestID).Return(true)
 	s.currentMutableState.EXPECT().GetFirstRunID(ctx).Return("", expectedErr)
 
-	outcome, deduped, err := dedupSignalWithStartRequest(ctx, s.newCurrentWorkflowLease(), requestID)
+	outcome, err := dedupSignalWithStartRequest(ctx, s.newCurrentWorkflowLease(), requestID)
 	s.ErrorIs(err, expectedErr)
-	s.False(deduped)
-	s.Equal(startOutcome{}, outcome)
+	s.Nil(outcome)
 }
 
 func (s *signalWithStartWorkflowSuite) newCurrentWorkflowLease() api.WorkflowLease {

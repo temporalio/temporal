@@ -1777,10 +1777,12 @@ func (s *SignalWorkflowTestSuite) TestSignalWithStartWorkflow_DedupOnClosedExecu
 	s.Require().NoError(err)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.WorkflowExecutionInfo.Status)
 
+	// The retry is deduped: it resolves to the original run and reproduces that response, including
+	// Started=true, rather than starting and signaling another run.
 	resp, err = env.FrontendClient().SignalWithStartWorkflowExecution(s.Context(), sRequest)
 	s.Require().NoError(err)
 	s.Equal(runID1, resp.GetRunId())
-	s.False(resp.Started)
+	s.True(resp.Started)
 
 	descResp, err = env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),

@@ -28,6 +28,9 @@ type startOutcome struct {
 	firstExecutionRunID string
 	// started is true when a new run was created rather than signaling an existing one.
 	started bool
+	// deduped is true when this invocation only recovered an already-applied result; callers must
+	// not repeat start-only side effects.
+	deduped bool
 }
 
 func SignalWithStartWorkflow(
@@ -83,10 +86,10 @@ func startAndSignalWorkflow(
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) (startOutcome, error) {
-	if outcome, deduped, err := dedupSignalWithStartRequest(ctx, currentWorkflowLease, signalWithStartRequest.GetRequestId()); err != nil {
+	if outcome, err := dedupSignalWithStartRequest(ctx, currentWorkflowLease, signalWithStartRequest.GetRequestId()); err != nil {
 		return startOutcome{}, err
-	} else if deduped {
-		return outcome, nil
+	} else if outcome != nil {
+		return *outcome, nil
 	}
 
 	workflowID := signalWithStartRequest.GetWorkflowId()
@@ -153,34 +156,54 @@ func startAndSignalWorkflow(
 		shard,
 		vrid,
 		newWorkflowLease,
-		currentWorkflowLease,
-		signalWithStartRequest.RequestId,
 	)
 }
 
+// dedupSignalWithStartRequest returns the already-applied outcome when requestID names a
+// SignalWithStart the current run has already handled, and nil when the request still has to be
+// processed. It must run before workflow id reuse/conflict policy is resolved: a retry asks for the
+// result of work already accepted, so it must not be reinterpreted as a fresh request to reject,
+// terminate or replace an execution.
+//
+// The two request id stores serve different purposes here. IsSignalRequested is the only one that
+// proves the signal was applied, so it alone establishes idempotency; ExecutionState.RequestIds is
+// populated for WORKFLOW_EXECUTION_STARTED, update and options-updated events but never for
+// WORKFLOW_EXECUTION_SIGNALED, so an id found only there may belong to a plain
+// StartWorkflowExecution and deduping on it would silently drop this request's signal. RequestIds
+// is read only to reconstruct the Started field of the original response: a SignalWithStart that
+// started the run attached its id to the started event, one that signaled an already running run
+// did not.
+//
+// Dedup only holds while the run that received the signal is still the current run. Signal request
+// ids live on that run's mutable state and are not carried across continue-as-new
+// (NewMutableStateInChain starts each new run with an empty pendingSignalRequestedIDs), so once a
+// later run becomes current a retry misses here and is handled as a fresh request.
 func dedupSignalWithStartRequest(
 	ctx context.Context,
 	currentWorkflowLease api.WorkflowLease,
 	requestID string,
-) (startOutcome, bool, error) {
+) (*startOutcome, error) {
 	if currentWorkflowLease == nil || requestID == "" {
-		return startOutcome{}, false, nil
+		return nil, nil
 	}
 
 	mutableState := currentWorkflowLease.GetMutableState()
 	if !mutableState.IsSignalRequested(requestID) {
-		return startOutcome{}, false, nil
+		return nil, nil
 	}
 
 	firstExecutionRunID, err := mutableState.GetFirstRunID(ctx)
 	if err != nil {
-		return startOutcome{}, false, err
+		return nil, err
 	}
-	return startOutcome{
+	// The original request started this run exactly when it attached its id to the started event.
+	requestIDInfo := mutableState.GetExecutionState().GetRequestIds()[requestID]
+	return &startOutcome{
 		runID:               currentWorkflowLease.GetContext().GetWorkflowKey().RunID,
 		firstExecutionRunID: firstExecutionRunID,
-		started:             false,
-	}, true, nil
+		started:             requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		deduped:             true,
+	}, nil
 }
 
 func createWorkflowMutationFunction(
@@ -273,8 +296,6 @@ func startAndSignalWithoutCurrentWorkflow(
 	shardContext historyi.ShardContext,
 	vrid *api.VersionedRunID,
 	newWorkflowLease api.WorkflowLease,
-	currentWorkflowLease api.WorkflowLease,
-	requestID string,
 ) (startOutcome, error) {
 	newWorkflow, newWorkflowEventsSeq, err := newWorkflowLease.GetMutableState().CloseTransactionAsSnapshot(
 		ctx,
@@ -314,30 +335,12 @@ func startAndSignalWithoutCurrentWorkflow(
 		newWorkflowEventsSeq,
 		historyi.TransactionPolicyActive,
 	)
-	switch failedErr := err.(type) {
-	case nil:
-		// Brand-new run: head of the chain == this run id.
-		runID := newWorkflowLease.GetContext().GetWorkflowKey().RunID
-		return startOutcome{runID: runID, firstExecutionRunID: runID, started: true}, nil
-	case *persistence.CurrentWorkflowConditionFailedError:
-		if _, ok := failedErr.RequestIDs[requestID]; ok {
-			// CurrentWorkflowConditionFailedError carries the persisted WorkflowExecutionState blob,
-			// which may not have first_execution_run_id populated on records written before that
-			// field existed. Fall back to the mutable state we already have loaded to recover the
-			// canonical head-of-chain run id (mirrors StartWorkflowExecution's behavior).
-			firstRunID := failedErr.FirstExecutionRunID
-			if firstRunID == "" && currentWorkflowLease != nil &&
-				currentWorkflowLease.GetContext().GetWorkflowKey().RunID == failedErr.RunID {
-				if id, ferr := currentWorkflowLease.GetMutableState().GetFirstRunID(ctx); ferr == nil {
-					firstRunID = id
-				}
-			}
-			return startOutcome{runID: failedErr.RunID, firstExecutionRunID: firstRunID, started: false}, nil
-		}
-		return startOutcome{}, err
-	default:
+	if err != nil {
 		return startOutcome{}, err
 	}
+	// Brand-new run: head of the chain == this run id.
+	runID := newWorkflowLease.GetContext().GetWorkflowKey().RunID
+	return startOutcome{runID: runID, firstExecutionRunID: runID, started: true}, nil
 }
 
 func signalWorkflow(
