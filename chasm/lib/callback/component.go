@@ -80,9 +80,11 @@ func (c *Callback) loadInvocationArgs(
 	ctx chasm.Context,
 	_ chasm.NoValue,
 ) (invocable, error) {
-	// Only Nexus-variant callbacks are supported for now.
-	callback := c.GetCallback().GetNexus()
-	if callback == nil {
+	// Reject unknown/unsupported callback variants.
+	switch c.GetCallback().GetVariant().(type) {
+	case *callbackspb.Callback_Nexus_, *callbackspb.Callback_NexusHandler_:
+		// OK
+	default:
 		return nil, queueserrors.NewUnprocessableTaskError(
 			fmt.Sprintf("unprocessable callback variant: %T", c.GetCallback().GetVariant()),
 		)
@@ -95,6 +97,21 @@ func (c *Callback) loadInvocationArgs(
 		return nil, err
 	}
 
+	// NexusHandler callbacks, deliver the result by invoking a Nexus handler.
+	if nexusHandler := c.GetCallback().GetNexusHandler(); nexusHandler != nil {
+		return invocableNexusHandler{
+			callback:            nexusHandler,
+			completion:          completion,
+			completionSourceTag: c.CompletionSource.Fqn(),
+			businessID:          ctx.ExecutionKey().BusinessID,
+			runID:               ctx.ExecutionKey().RunID,
+			requestID:           c.RequestId,
+			attempt:             c.Attempt,
+		}, nil
+	}
+
+	// Nexus callbacks deliver results by also invoking a Nexus handler, but using HTTP.
+	callback := c.GetCallback().GetNexus()
 	if callback.GetUrl() == chasm.NexusCompletionHandlerURL {
 		return invocableInternal{
 			callback:   callback,
@@ -107,7 +124,7 @@ func (c *Callback) loadInvocationArgs(
 		callback:            callback,
 		completion:          completion,
 		completionSourceTag: c.CompletionSource.Fqn(),
-		workflowID:          ctx.ExecutionKey().BusinessID,
+		businessID:          ctx.ExecutionKey().BusinessID,
 		runID:               ctx.ExecutionKey().RunID,
 		attempt:             c.Attempt,
 	}, nil
@@ -262,9 +279,6 @@ func FromAPICallback(cb *commonpb.Callback) (*callbackspb.Callback, error) {
 		}
 		return res, nil
 	case *commonpb.Callback_NexusHandler_:
-		// Conversion is implemented ahead of the rest of the feature, but is currently
-		// unreachable. If somehow this gets persisted, executing the callback will
-		// fail with an UnprocessableTaskError and retried until it is DLQ'd.
 		res.Variant = &callbackspb.Callback_NexusHandler_{
 			NexusHandler: &callbackspb.Callback_NexusHandler{
 				TaskQueueName: variant.NexusHandler.GetTaskQueueName(),

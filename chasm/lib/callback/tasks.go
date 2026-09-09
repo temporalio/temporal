@@ -80,6 +80,7 @@ type invocationTaskHandlerOptions struct {
 	HTTPCallerProvider HTTPCallerProvider
 	HTTPTraceProvider  commonnexus.HTTPClientTraceProvider
 	HistoryClient      resource.HistoryClient
+	MatchingClient     resource.MatchingClient
 }
 
 type invocationTaskHandler struct {
@@ -91,6 +92,7 @@ type invocationTaskHandler struct {
 	httpCallerProvider HTTPCallerProvider
 	httpTraceProvider  commonnexus.HTTPClientTraceProvider
 	historyClient      resource.HistoryClient
+	matchingClient     resource.MatchingClient
 }
 
 func newInvocationTaskHandler(opts invocationTaskHandlerOptions) *invocationTaskHandler {
@@ -102,6 +104,7 @@ func newInvocationTaskHandler(opts invocationTaskHandlerOptions) *invocationTask
 		httpCallerProvider: opts.HTTPCallerProvider,
 		httpTraceProvider:  opts.HTTPTraceProvider,
 		historyClient:      opts.HistoryClient,
+		matchingClient:     opts.MatchingClient,
 	}
 }
 
@@ -163,11 +166,11 @@ func (h *invocationTaskHandler) recordInvocationEvent(
 	var outcome outcomeTag
 	switch result.(type) {
 	case invocationResultOK:
-		outcome = outcomeSuccess
+		outcome = outcomeEventSuccess
 	case invocationResultRetry:
-		outcome = outcomeRetryableError
+		outcome = outcomeEventRetryableError
 	case invocationResultFail:
-		outcome = outcomeNonretryableError
+		outcome = outcomeEventNonRetryableError
 	default:
 		// saveResult rejects anything else as an unprocessable task.
 		return
@@ -180,10 +183,10 @@ func (h *invocationTaskHandler) recordInvocationEvent(
 	}
 	h.metricsHandler.Counter(InvocationEventCounter.Name()).Record(1, tags...)
 
-	if outcome != outcomeRetryableError {
+	if outcome != outcomeEventRetryableError {
+		hist := h.metricsHandler.Histogram(InvocationAttemptsHistogram.Name(), InvocationAttemptsHistogram.Unit())
 		// Attempt is 0-based, so +1 is the count. Only terminal events have a final total.
-		h.metricsHandler.Histogram(InvocationAttemptsHistogram.Name(), InvocationAttemptsHistogram.Unit()).
-			Record(int64(task.GetAttempt())+1, tags...)
+		hist.Record(int64(task.GetAttempt())+1, tags...)
 	}
 }
 

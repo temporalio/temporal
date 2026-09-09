@@ -37,23 +37,24 @@ func TestCompletionCallbacksSuite(t *testing.T) {
 // execution types, and the retry policy dialed down so failures can accumulate within the tests's
 // lifetime. The retry policy is a global setting, hence the dedicated cluster.
 func (s *CompletionCallbacksSuite) newTestEnv() *testcore.TestEnv {
+	allCallbackKinds := []callbacks.Kind{callbacks.KindNexus, callbacks.KindNexusHandler}
 	opts := []testcore.TestOption{
 		testcore.WithDedicatedCluster(),
 		// Workflows
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
-		testcore.WithDynamicConfig(workflow.EnabledCallbackKinds, []callbacks.Kind{callbacks.KindNexus}),
+		testcore.WithDynamicConfig(workflow.EnabledCallbackKinds, allCallbackKinds),
 		// Standalone Activities
 		testcore.WithDynamicConfig(activity.Enabled, true),
 		testcore.WithDynamicConfig(activity.EnableCallbacks, true),
-		testcore.WithDynamicConfig(activity.EnabledCallbackKinds, []callbacks.Kind{callbacks.KindNexus}),
+		testcore.WithDynamicConfig(activity.EnabledCallbackKinds, allCallbackKinds),
 		// Standalone Nexus operations
 		testcore.WithDynamicConfig(nexusoperation.Enabled, true),
-		testcore.WithDynamicConfig(nexusoperation.EnabledCallbackKinds, []callbacks.Kind{callbacks.KindNexus}),
+		testcore.WithDynamicConfig(nexusoperation.EnabledCallbackKinds, allCallbackKinds),
 		// All Callbacks and Retry policy
 		testcore.WithDynamicConfig(callback.AllowedAddresses,
 			[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}}),
 		testcore.WithDynamicConfig(callback.RetryPolicyInitialInterval, 10*time.Millisecond),
-		testcore.WithDynamicConfig(callback.RetryPolicyMaximumInterval, 20*time.Millisecond),
+		testcore.WithDynamicConfig(callback.RetryPolicyMaximumInterval, 50*time.Millisecond),
 		// Circuit breaker. Timeout is how long the breaker stays open before half-opening
 		// (and trying to send a request again). It defaults to 60s which is too long for a
 		// unit test to observe. But 1s is too short, and tests couldn't detect the BLOCKED
@@ -85,12 +86,12 @@ func (s *CompletionCallbacksSuite) forEachTestCombination(testFn completionCallb
 	}
 
 	// Types of callback targets.
-	// COMING SOON: The NexusHandler-variant.
 	callbackTargets := []struct {
 		Name                string
 		CBTargetConstructor newCompletionCallbackTargetFn
 	}{
 		{"Nexus", newNexusCompletionCallbackTarget},
+		{"NexusHandler", newNexusHandlerCompletionCallbackTarget},
 	}
 
 	// Run the testcase against all combinations of execution types and callback variants.
@@ -170,17 +171,7 @@ func (s *CompletionCallbacksSuite) TestUnsupportedVariants() {
 					&commonpb.Callback{Variant: nil},
 					"unknown callback variant: <nil>",
 				},
-				{
-					"NexusHandler",
-					&commonpb.Callback{
-						Variant: &commonpb.Callback_NexusHandler_{
-							NexusHandler: &commonpb.Callback_NexusHandler{
-								// Should be rejected based on type, not its contents.
-							},
-						},
-					},
-					"nexusHandler callbacks are not enabled for this execution type",
-				},
+				// All other variants are enabled by default for this test suite.
 			}
 
 			for _, tc := range cases {
