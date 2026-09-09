@@ -32,9 +32,19 @@ var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
 	`The maximum backoff interval between every callback request attempt for a given callback.`,
 )
 
+var InspectSourceHeader = dynamicconfig.NewGlobalBoolSetting(
+	"callback.inspectSourceHeader",
+	false,
+	`Controls whether the legacy "source" header should be inspected to determine if a Nexus callback request is internal
+or external. This header was used before worker callbacks used the temporal://system URL. Leave this disabled unless it
+is required for mixed-version compatibility because trusting a caller-controlled header can route external requests
+internally.`,
+)
+
 type Config struct {
-	RequestTimeout dynamicconfig.DurationPropertyFnWithDestinationFilter
-	RetryPolicy    func() backoff.RetryPolicy
+	RequestTimeout      dynamicconfig.DurationPropertyFnWithDestinationFilter
+	RetryPolicy         dynamicconfig.TypedPropertyFn[backoff.RetryPolicy]
+	InspectSourceHeader dynamicconfig.BoolPropertyFn
 }
 
 func configProvider(dc *dynamicconfig.Collection) *Config {
@@ -49,6 +59,7 @@ func configProvider(dc *dynamicconfig.Collection) *Config {
 				backoff.NoInterval,
 			)
 		},
+		InspectSourceHeader: InspectSourceHeader.Get(dc),
 	}
 }
 

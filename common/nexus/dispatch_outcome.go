@@ -288,7 +288,7 @@ func (r DispatchResult) metricOutcome() string {
 		DispatchOutcomeWorkerFailure:
 		// A worker failure has no handler error type to report and will map to UNKNOWN.
 		hErrType := r.Failure.GetNexusHandlerFailureInfo().GetType()
-		return "handler_error:" + boundHandlerErrorType(hErrType)
+		return "handler_error:" + BoundHandlerErrorType(hErrType)
 	case DispatchOutcomeRequestTimeout:
 		return "handler_timeout"
 	case DispatchOutcomeUnrecognized:
@@ -314,10 +314,10 @@ var handlerErrorTypes = map[string]struct{}{
 	string(nexus.HandlerErrorTypeUpstreamTimeout):   {},
 }
 
-// boundHandlerErrorType bounds the metric cardinality a worker can introduce through a handler error
-// type. Types in the Nexus spec pass through; anything else, including the empty string, collapses to
-// UNKNOWN.
-func boundHandlerErrorType(errType string) string {
+// BoundHandlerErrorType bounds the metric cardinality a worker or a remote handler can introduce
+// through a handler error type. Types in the Nexus spec pass through; anything else, including the
+// empty string, collapses to UNKNOWN. The caller supplies its own prefix.
+func BoundHandlerErrorType(errType string) string {
 	if _, ok := handlerErrorTypes[errType]; ok {
 		return errType
 	}
