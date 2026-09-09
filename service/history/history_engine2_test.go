@@ -2582,8 +2582,8 @@ func (s *engine2Suite) currentRunCarryingRequestID(
 	return wfMs
 }
 
-// A retry of a SignalWithStart whose request id the closed current run already handled resolves to
-// that run without writing anything: no second run is started and the signal is not re-applied.
+// A retry with a request ID handled by the closed current run returns that run without writing,
+// starting another run, or applying the signal again.
 func (s *engine2Suite) TestSignalWithStartWorkflowExecution_DedupedRetry_ReturnsExistingRunWithoutWrite() {
 	s.config.EnableWorkflowIdReuseStartTimeValidation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
 
@@ -2600,7 +2600,6 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_DedupedRetry_Returns
 		Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil).AnyTimes()
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(&persistence.GetWorkflowExecutionResponse{State: wfMs}, nil).AnyTimes()
-	// No CreateWorkflowExecution/UpdateWorkflowExecution expectation: the retry must not write.
 
 	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
 	s.NoError(err)
@@ -2609,9 +2608,8 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_DedupedRetry_Returns
 	s.False(resp.GetStarted(), "started reports a run created by this call")
 }
 
-// Dedup runs ahead of workflow id conflict policy resolution, so a duplicate request id against a
-// running workflow does not terminate it even under TERMINATE_EXISTING. This is the behavior change
-// with the widest blast radius: a caller reusing a request id as a "restart me" idiom loses it.
+// Deduplication precedes conflict-policy resolution, so a duplicate request ID does not terminate a
+// running workflow, even with TERMINATE_EXISTING. Reusing the ID to request a restart has no effect.
 func (s *engine2Suite) TestSignalWithStartWorkflowExecution_DedupedRetry_TerminateExistingDoesNotTerminate() {
 	s.config.EnableWorkflowIdReuseStartTimeValidation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
 
@@ -2628,7 +2626,6 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_DedupedRetry_Termina
 		Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil).AnyTimes()
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(&persistence.GetWorkflowExecutionResponse{State: wfMs}, nil).AnyTimes()
-	// No write expectation: neither the terminate mutation nor a new run may be persisted.
 
 	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
 	s.NoError(err)

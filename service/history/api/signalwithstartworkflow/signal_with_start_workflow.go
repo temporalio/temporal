@@ -162,15 +162,13 @@ func startAndSignalWorkflow(
 	)
 }
 
-// dedupSignalWithStartRequest returns the outcome of a SignalWithStart the current run already
-// handled, or nil when the request still has to be processed. It must run before workflow id
-// reuse/conflict policy: a retry asks for an already-accepted result, not to reject or replace an
-// execution.
+// dedupSignalWithStartRequest returns the result for a request already handled by the current run,
+// or nil. Call it before workflow ID reuse and conflict policies so a retry returns that result
+// instead of rejecting or replacing the execution.
 //
-// Only IsSignalRequested proves the signal was applied. ExecutionState.RequestIds never records
-// SIGNALED events, so an id found only there may belong to another API's request and must not
-// dedup. Dedup holds only while the signaled run is still current: signal request ids do not
-// survive continue-as-new.
+// IsSignalRequested is authoritative. ExecutionState.RequestIds omits SIGNALED events and may
+// contain another API's request ID. Deduplication applies only to the current run because signal
+// request IDs do not survive continue-as-new.
 func dedupSignalWithStartRequest(
 	ctx context.Context,
 	shard historyi.ShardContext,
@@ -195,8 +193,8 @@ func dedupSignalWithStartRequest(
 		1,
 		metrics.NamespaceTag(namespaceEntry.Name().String()),
 	)
-	// started stays false: it reports a run created by this call, and the running-workflow dedup
-	// path below reports false too.
+	// started remains false because this call did not create the run, matching the running-workflow
+	// deduplication path.
 	return &startOutcome{
 		runID:               currentWorkflowLease.GetContext().GetWorkflowKey().RunID,
 		firstExecutionRunID: firstExecutionRunID,

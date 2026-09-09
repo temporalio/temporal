@@ -232,8 +232,8 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_WhenPaused() {
 	s.NoError(err)
 }
 
-// A retry whose request id the current run already handled resolves to that run and counts.
-// started stays false: it reports a run created by this call.
+// A retry handled by the current run resolves to that run, increments the deduplication metric, and
+// leaves started false because this call did not create the run.
 func (s *signalWithStartWorkflowSuite) TestDedupSignalWithStartRequest_Deduped() {
 	ctx := context.Background()
 	requestID := uuid.New().String()
@@ -259,9 +259,9 @@ func (s *signalWithStartWorkflowSuite) TestDedupSignalWithStartRequest_Deduped()
 	s.Equal(namespaceTag.Value, recordings[0].Tags[namespaceTag.Key])
 }
 
-// IsSignalRequested is the sole dedup predicate. ExecutionState.RequestIds is deliberately not
-// consulted: it never records SIGNALED events, so an id found only there may belong to a plain
-// StartWorkflowExecution and must not suppress this request's signal.
+// Deduplication uses only IsSignalRequested. ExecutionState.RequestIds never records SIGNALED events,
+// so an ID found only there may belong to a plain StartWorkflowExecution and must not be used to
+// deduplicate this signal.
 func (s *signalWithStartWorkflowSuite) TestDedupSignalWithStartRequest_NotSignalRequested() {
 	ctx := context.Background()
 	requestID := uuid.New().String()
