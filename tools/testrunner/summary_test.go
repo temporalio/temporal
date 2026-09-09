@@ -101,7 +101,8 @@ func TestRenderSummaryFromReports_Markdown_RendersFailureRows(t *testing.T) {
 	require.Contains(t, s, "<table>")
 	require.NotContains(t, s, "<th>Details</th>")
 	require.Contains(t, s, "<details><summary>TestFoo</summary>")
-	require.Contains(t, s, "<pre>FAIL\n</pre>")
+	require.Contains(t, s, "\n\n```\nFAIL\n```\n\n")
+	require.NotContains(t, s, "<pre>")
 	require.Contains(t, s, "<details><summary>panic test (retry 1) (final)</summary>")
 	require.Contains(t, s, "❌ PANIC")
 	require.Equal(t, 2, strings.Count(s, "<tr><td>"))
@@ -116,7 +117,7 @@ func TestRenderSummaryFromReports_Markdown_RendersTrimmedFailureBody(t *testing.
 	require.NotContains(t, s, "some setup log")
 }
 
-func TestRenderSummaryFromReports_Markdown_RendersDataRaceDetailsAsCodeBlock(t *testing.T) {
+func TestRenderSummaryFromReports_Markdown_RendersAlertRow(t *testing.T) {
 	report := mustReadReportFixture(t, "testdata/junit-alert-data-race.xml")
 	report.Suites[0].Testcases[0].Failure.Data = "go.temporal.io/server/service/worker/scheduler.(*scheduler).run()\n```"
 

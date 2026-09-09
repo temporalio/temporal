@@ -117,13 +117,8 @@ func (row summaryRow) Markdown() string {
 		if strings.Contains(row.Details, summaryTruncatedMarker) {
 			details += "\n… (truncated — see full output in job logs)"
 		}
-		if row.Kind == failureTypeDataRace {
-			fmt.Fprintf(&sb, "<details><summary>%s</summary>\n\n%s\n\n</details>",
-				html.EscapeString(row.Name), markdownCodeBlock(details))
-		} else {
-			fmt.Fprintf(&sb, "<details><summary>%s</summary><pre>%s</pre></details>",
-				html.EscapeString(row.Name), html.EscapeString(details))
-		}
+		fmt.Fprintf(&sb, "<details><summary>%s</summary>\n\n%s\n\n</details>",
+			html.EscapeString(row.Name), markdownCodeBlock(details))
 	} else {
 		sb.WriteString(html.EscapeString(row.Name))
 	}
