@@ -72,9 +72,9 @@ func (n invocableOutbound) Invoke(
 
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(taskAttr.Destination)
-	outcomeTag := metrics.OutcomeTag(outcomeTag(ctx, err))
-	h.metricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, outcomeTag)
-	h.metricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, outcomeTag)
+	outcomeMetricTag := metrics.OutcomeTag(string(outboundOutcome(ctx, err)))
+	h.metricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, outcomeMetricTag)
+	h.metricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, outcomeMetricTag)
 
 	if err != nil {
 		retryable := isRetryableCallError(err)
@@ -94,15 +94,19 @@ func isRetryableCallError(err error) bool {
 	return true
 }
 
-func outcomeTag(callCtx context.Context, callErr error) string {
+func outboundOutcome(callCtx context.Context, callErr error) outcomeTag {
 	if callErr != nil {
 		if callCtx.Err() != nil {
 			return outcomeRequestTimeout
 		}
 		if handlerErr, ok := errors.AsType[*nexus.HandlerError](callErr); ok {
-			return "handler-error:" + string(handlerErr.Type)
+			return handlerErrorOutcome(handlerErr)
 		}
-		return "unknown-error"
+		return outcomeUnknownError
 	}
 	return outcomeSuccess
+}
+
+func handlerErrorOutcome(handlerErr *nexus.HandlerError) outcomeTag {
+	return outcomeTag(handlerErrorOutcomePrefix + commonnexus.BoundHandlerErrorType(string(handlerErr.Type)))
 }

@@ -80,6 +80,7 @@ type (
 	// TaskErrorLogTags are optional tags provided by task processing errors.
 	// They are emitted on logs only and must not be converted into metric tags.
 	TaskErrorLogTags interface {
+		error
 		LogTags() []tag.Tag
 	}
 )
@@ -98,8 +99,7 @@ var (
 )
 
 func taskErrorLogTags(err error) []tag.Tag {
-	var tagged TaskErrorLogTags
-	if errors.As(err, &tagged) {
+	if tagged, ok := errors.AsType[TaskErrorLogTags](err); ok {
 		return tagged.LogTags()
 	}
 	return nil

@@ -94,7 +94,7 @@ func outcomeTag(callCtx context.Context, callErr error) string {
 			return "request-timeout"
 		}
 		if handlerErr, ok := errors.AsType[*nexus.HandlerError](callErr); ok {
-			return "handler-error:" + string(handlerErr.Type)
+			return "handler-error:" + commonnexus.BoundHandlerErrorType(string(handlerErr.Type))
 		}
 		return "unknown-error"
 	}
