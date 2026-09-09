@@ -706,10 +706,7 @@ func ApplyClusterMetadataConfigProvider(
 		svc.Persistence.GetVisibilityStoreConfig(),
 		svc.Persistence.GetSecondaryVisibilityStoreConfig(),
 	}
-	indexSearchAttributes := make(map[string]*persistencespb.IndexSearchAttributes)
-	for _, ds := range visDataStores {
-		indexSearchAttributes[ds.GetIndexName()] = sadefs.GetDBIndexSearchAttributes(visCSAOverride)
-	}
+	indexSearchAttributes := buildInitialIndexSearchAttributes(visDataStores, visCSAOverride)
 
 	clusterMetadata := svc.ClusterMetadata
 	if len(clusterMetadata.ClusterInformation) > 1 {
@@ -899,6 +896,23 @@ func overwriteCurrentClusterMetadataWithDBRecord(
 			tag.Value(currentClusterDBRecord.FailoverVersionIncrement))
 		svc.ClusterMetadata.FailoverVersionIncrement = currentClusterDBRecord.FailoverVersionIncrement
 	}
+}
+
+// buildInitialIndexSearchAttributes returns the default preallocated custom search
+// attributes for SQL and custom visibility stores. Elasticsearch-backed stores manage
+// their custom search attributes via AddSearchAttributes and are skipped.
+func buildInitialIndexSearchAttributes(
+	visDataStores []config.DataStore,
+	visCSAOverride map[enumspb.IndexedValueType]int,
+) map[string]*persistencespb.IndexSearchAttributes {
+	indexSearchAttributes := make(map[string]*persistencespb.IndexSearchAttributes)
+	for _, ds := range visDataStores {
+		if ds.Elasticsearch != nil {
+			continue
+		}
+		indexSearchAttributes[ds.GetIndexName()] = sadefs.GetDBIndexSearchAttributes(visCSAOverride)
+	}
+	return indexSearchAttributes
 }
 
 // updateIndexSearchAttributes updates the IndexSearchAttributes if needed.
