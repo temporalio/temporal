@@ -130,20 +130,25 @@ func ValidatePaginationToken(
 
 const (
 	// branchTokenMismatchReasonNonCurrent is a branch this execution records but no longer reads from.
-	branchTokenMismatchReasonNonCurrent metrics.ReasonString = "non_current_branch"
-	branchTokenMismatchReasonForeign    metrics.ReasonString = "foreign_branch"
+	branchTokenMismatchReasonNonCurrent         metrics.ReasonString = "non_current_branch"
+	branchTokenMismatchReasonSameBranchMetadata metrics.ReasonString = "same_branch_metadata_mismatch"
+	branchTokenMismatchReasonForeign            metrics.ReasonString = "foreign_branch"
 )
 
 // maxLoggedBranchTokenLen bounds caller-supplied bytes reaching the log.
 const maxLoggedBranchTokenLen = 4096
 
 func branchTokenMismatchReason(
+	branchUtil persistence.HistoryBranchUtil,
 	currentBranchToken []byte,
 	requestBranchToken []byte,
 	versionHistories *historyspb.VersionHistories,
 ) metrics.ReasonString {
 	if bytes.Equal(requestBranchToken, currentBranchToken) {
 		return ""
+	}
+	if branchTokensReferToSameBranch(branchUtil, currentBranchToken, requestBranchToken) {
+		return branchTokenMismatchReasonSameBranchMetadata
 	}
 	for _, versionHistory := range versionHistories.GetHistories() {
 		if bytes.Equal(versionHistory.GetBranchToken(), requestBranchToken) {
@@ -228,22 +233,16 @@ func ValidateBranchTokenForExecution(
 	}
 
 	currentBranchToken := response.GetCurrentBranchToken()
-	if !bytes.Equal(requestBranchToken, currentBranchToken) {
-		if branchTokensReferToSameBranch(
-			shardContext.GetExecutionManager().GetHistoryBranchUtil(),
-			currentBranchToken,
-			requestBranchToken,
-		) && !shadowMode {
-			return currentBranchToken, nil
-		}
-	}
-
 	mismatchReason := branchTokenMismatchReason(
+		shardContext.GetExecutionManager().GetHistoryBranchUtil(),
 		currentBranchToken,
 		requestBranchToken,
 		response.GetVersionHistories(),
 	)
 	if mismatchReason == "" {
+		return currentBranchToken, nil
+	}
+	if mismatchReason == branchTokenMismatchReasonSameBranchMetadata && !shadowMode {
 		return currentBranchToken, nil
 	}
 

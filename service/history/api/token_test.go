@@ -44,6 +44,7 @@ func testVersionHistories(tokens ...[]byte) *historyspb.VersionHistories {
 }
 
 func TestBranchTokenMismatchReason(t *testing.T) {
+	branchUtil := persistence.NewHistoryBranchUtil(serialization.NewSerializer())
 	treeID := primitives.NewUUID().String()
 	branchID := primitives.NewUUID().String()
 	otherTreeID := primitives.NewUUID().String()
@@ -53,43 +54,43 @@ func TestBranchTokenMismatchReason(t *testing.T) {
 	nonCurrent := newTestBranchToken(t, otherTreeID, otherBranchID, nil)
 
 	t.Run("matches the current branch token", func(t *testing.T) {
-		got := branchTokenMismatchReason(current, current, testVersionHistories(current))
+		got := branchTokenMismatchReason(branchUtil, current, current, testVersionHistories(current))
 		require.Empty(t, got)
 	})
 
 	t.Run("matches the current token when an identical token is recorded twice", func(t *testing.T) {
-		got := branchTokenMismatchReason(current, current, testVersionHistories(current, current))
+		got := branchTokenMismatchReason(branchUtil, current, current, testVersionHistories(current, current))
 		require.Empty(t, got)
 	})
 
 	t.Run("matches opaque tokens the branch parser cannot read", func(t *testing.T) {
 		opaque := []byte{1, 2, 3}
-		got := branchTokenMismatchReason(opaque, opaque, testVersionHistories(opaque))
+		got := branchTokenMismatchReason(branchUtil, opaque, opaque, testVersionHistories(opaque))
 		require.Empty(t, got)
 	})
 
 	t.Run("reports a non-current branch when the token names an older history", func(t *testing.T) {
 		histories := testVersionHistories(nonCurrent, current)
-		got := branchTokenMismatchReason(current, nonCurrent, histories)
+		got := branchTokenMismatchReason(branchUtil, current, nonCurrent, histories)
 		require.Equal(t, branchTokenMismatchReasonNonCurrent, got)
 	})
 
 	t.Run("reports foreign for a different branch in the same tree", func(t *testing.T) {
 		request := newTestBranchToken(t, treeID, otherBranchID, nil)
-		got := branchTokenMismatchReason(current, request, testVersionHistories(current))
+		got := branchTokenMismatchReason(branchUtil, current, request, testVersionHistories(current))
 		require.Equal(t, branchTokenMismatchReasonForeign, got)
 	})
 
-	t.Run("reports foreign for the current branch carrying injected ancestors", func(t *testing.T) {
+	t.Run("reports same branch for changed metadata", func(t *testing.T) {
 		request := newTestBranchToken(t, treeID, branchID, []*persistencespb.HistoryBranchRange{
 			{BranchId: otherBranchID, BeginNodeId: 1, EndNodeId: 1000},
 		})
-		got := branchTokenMismatchReason(current, request, testVersionHistories(current))
-		require.Equal(t, branchTokenMismatchReasonForeign, got)
+		got := branchTokenMismatchReason(branchUtil, current, request, testVersionHistories(current))
+		require.Equal(t, branchTokenMismatchReasonSameBranchMetadata, got)
 	})
 
 	t.Run("reports foreign when there are no version histories", func(t *testing.T) {
-		got := branchTokenMismatchReason(current, nonCurrent, nil)
+		got := branchTokenMismatchReason(branchUtil, current, nonCurrent, nil)
 		require.Equal(t, branchTokenMismatchReasonForeign, got)
 	})
 }
