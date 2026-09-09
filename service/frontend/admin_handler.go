@@ -2299,23 +2299,32 @@ func (adh *AdminHandler) migrateScheduleToWorkflow(
 			},
 		},
 	})
+	info := descResp.GetWorkflowExecutionInfo()
 	switch {
-	case common.IsNotFoundError(err):
-	case err != nil:
+	case err != nil && !common.IsNotFoundError(err):
 		return nil, err
-	case descResp.GetWorkflowExecutionInfo().GetType().GetName() == dummy.DummyWFTypeName:
-		sentinelIdleTimeRemaining := max(time.Until(descResp.GetWorkflowExecutionInfo().GetStartTime().AsTime().Add(chasmscheduler.SentinelIdleTime)), 0)
+	case common.IsNotFoundError(err) || info.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
+		// A closed workflow does not occupy the V1 ID: the create path only treats
+		// RUNNING workflows as occupying it (isRealSchedulerInV1KeySpace), and an
+		// expired sentinel completes rather than disappearing, staying describable
+		// for the namespace's whole retention period. Blocking on it here would
+		// stall rollback for days instead of the 15 minutes a sentinel reserves.
+	case info.GetType().GetName() == dummy.DummyWFTypeName:
+		startTime := info.GetStartTime().AsTime()
 		adh.logger.Warn(
 			"schedule migration to workflow blocked by workflow sentinel",
 			tag.ScheduleID(request.GetScheduleId()),
-			tag.Duration("sentinel-idle-time", sentinelIdleTimeRemaining),
+			tag.Duration("sentinel-idle-time", max(time.Until(startTime.Add(chasmscheduler.SentinelIdleTime)), 0)),
+			// Age disambiguates a sentinel still inside its idle window from one
+			// running past it (idle-time reads 0s in both cases).
+			tag.Duration("sentinel-age", time.Since(startTime)),
 		)
 		return nil, chasmscheduler.ErrSentinelBlocked
 	default:
 		adh.logger.Warn(
 			"schedule migration to workflow found existing workflow",
 			tag.ScheduleID(request.GetScheduleId()),
-			tag.WorkflowType(descResp.GetWorkflowExecutionInfo().GetType().GetName()),
+			tag.WorkflowType(info.GetType().GetName()),
 		)
 	}
 

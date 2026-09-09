@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -237,16 +238,16 @@ func (r *parentChildScenarioRuntime) close() {
 			gate.close()
 		}
 	}
-	for index := len(r.removeHooks) - 1; index >= 0; index-- {
-		r.removeHooks[index]()
+	for _, removeHook := range slices.Backward(r.removeHooks) {
+		removeHook()
 	}
 	for _, capture := range r.metricCaptures {
 		if capture.handler != nil && capture.capture != nil {
 			capture.handler.StopCapture(capture.capture)
 		}
 	}
-	for index := len(r.cleanups) - 1; index >= 0; index-- {
-		r.cleanups[index]()
+	for _, cleanup := range slices.Backward(r.cleanups) {
+		cleanup()
 	}
 }
 
@@ -272,8 +273,8 @@ func useTransitionHistory() parentChildScenarioStep {
 	return parentChildScenarioStep{
 		name: "use transition history for this scenario",
 		run: func(_ context.Context, runtime *parentChildScenarioRuntime) error {
-			for index := len(runtime.legacyReplicationCleanups) - 1; index >= 0; index-- {
-				runtime.legacyReplicationCleanups[index]()
+			for _, cleanup := range slices.Backward(runtime.legacyReplicationCleanups) {
+				cleanup()
 			}
 			runtime.legacyReplicationCleanups = nil
 			return nil
@@ -1069,8 +1070,7 @@ func (r *parentChildScenarioRuntime) confirmWorkflowMissing(
 	workflow parentChildWorkflow,
 ) error {
 	_, err := r.workflowMutableState(ctx, cluster, workflow)
-	var notFound *serviceerror.NotFound
-	if errors.As(err, &notFound) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 		return nil
 	}
 	if err == nil {

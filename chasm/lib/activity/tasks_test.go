@@ -2,13 +2,16 @@ package activity
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/server/api/matchingservicemock/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common"
@@ -16,9 +19,220 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/retrypolicy"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+func TestActivityDispatchTaskHook(t *testing.T) {
+	t.Run("wraps active dispatch", func(t *testing.T) {
+		controller := gomock.NewController(t)
+		engine := chasm.NewMockEngine(controller)
+		matchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
+		activityRef := chasm.NewComponentRef[*Activity](chasm.ExecutionKey{NamespaceID: "namespace-id"})
+		task := &activitypb.ActivityDispatchTask{DispatchReason: activitypb.DISPATCH_REASON_RETRY}
+		chasmCtx := &chasm.MockMutableContext{
+			MockContext: chasm.MockContext{
+				HandleRef: func(chasm.Component) ([]byte, error) {
+					return []byte("component-ref"), nil
+				},
+			},
+		}
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				TaskQueue: &taskqueuepb.TaskQueue{Name: "task-queue"},
+			},
+			LastAttempt: chasm.NewDataField(chasmCtx, &activitypb.ActivityAttemptState{Stamp: 7}),
+		}
+
+		engine.EXPECT().ReadComponent(gomock.Any(), activityRef, gomock.Any()).DoAndReturn(
+			func(
+				_ context.Context,
+				_ chasm.ComponentRef,
+				readFn func(chasm.Context, chasm.Component) error,
+				_ ...chasm.TransitionOption,
+			) error {
+				return readFn(chasmCtx, activity)
+			},
+		)
+		matchingClient.EXPECT().AddActivityTask(gomock.Any(), gomock.Any()).Return(nil, nil)
+
+		hookCalls := 0
+		handler := newActivityDispatchTaskHandler(activityDispatchTaskHandlerOptions{
+			MatchingClient: matchingClient,
+			DispatchTaskHook: func(
+				ctx context.Context,
+				namespaceID string,
+				actualTask *activitypb.ActivityDispatchTask,
+				dispatch func(context.Context) error,
+			) error {
+				hookCalls++
+				require.Equal(t, "namespace-id", namespaceID)
+				require.Same(t, task, actualTask)
+
+				return dispatch(ctx)
+			},
+		})
+
+		err := handler.Execute(chasm.NewEngineContext(context.Background(), engine), activityRef, chasm.TaskAttributes{}, task)
+		require.NoError(t, err)
+		require.Equal(t, 1, hookCalls)
+	})
+
+	t.Run("honors hook result", func(t *testing.T) {
+		hookErr := errors.New("hook failed")
+		testCases := []struct {
+			name    string
+			hookErr error
+		}{
+			{name: "suppresses dispatch"},
+			{name: "propagates error", hookErr: hookErr},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				controller := gomock.NewController(t)
+				engine := chasm.NewMockEngine(controller)
+				activityRef := chasm.NewComponentRef[*Activity](chasm.ExecutionKey{NamespaceID: "namespace-id"})
+				chasmCtx := &chasm.MockMutableContext{
+					MockContext: chasm.MockContext{
+						HandleRef: func(chasm.Component) ([]byte, error) {
+							return []byte("component-ref"), nil
+						},
+					},
+				}
+				activity := &Activity{
+					ActivityState: &activitypb.ActivityState{
+						TaskQueue: &taskqueuepb.TaskQueue{Name: "task-queue"},
+					},
+					LastAttempt: chasm.NewDataField(chasmCtx, &activitypb.ActivityAttemptState{Stamp: 7}),
+				}
+
+				engine.EXPECT().ReadComponent(gomock.Any(), activityRef, gomock.Any()).DoAndReturn(
+					func(
+						_ context.Context,
+						_ chasm.ComponentRef,
+						readFn func(chasm.Context, chasm.Component) error,
+						_ ...chasm.TransitionOption,
+					) error {
+						return readFn(chasmCtx, activity)
+					},
+				)
+
+				handler := newActivityDispatchTaskHandler(activityDispatchTaskHandlerOptions{
+					MatchingClient: matchingservicemock.NewMockMatchingServiceClient(controller),
+					DispatchTaskHook: func(
+						context.Context,
+						string,
+						*activitypb.ActivityDispatchTask,
+						func(context.Context) error,
+					) error {
+						return tc.hookErr
+					},
+				})
+
+				err := handler.Execute(
+					chasm.NewEngineContext(context.Background(), engine),
+					activityRef,
+					chasm.TaskAttributes{},
+					&activitypb.ActivityDispatchTask{},
+				)
+				if tc.hookErr == nil {
+					require.NoError(t, err)
+				} else {
+					require.ErrorIs(t, err, tc.hookErr)
+				}
+			})
+		}
+	})
+
+	t.Run("skipped when request construction fails", func(t *testing.T) {
+		controller := gomock.NewController(t)
+		engine := chasm.NewMockEngine(controller)
+		activityRef := chasm.NewComponentRef[*Activity](chasm.ExecutionKey{NamespaceID: "namespace-id"})
+		validationErr := serviceerror.NewNotFound("task is no longer valid")
+
+		engine.EXPECT().ReadComponent(gomock.Any(), activityRef, gomock.Any()).Return(validationErr)
+
+		hookCalls := 0
+		handler := newActivityDispatchTaskHandler(activityDispatchTaskHandlerOptions{
+			MatchingClient: matchingservicemock.NewMockMatchingServiceClient(controller),
+			DispatchTaskHook: func(
+				context.Context,
+				string,
+				*activitypb.ActivityDispatchTask,
+				func(context.Context) error,
+			) error {
+				hookCalls++
+				return nil
+			},
+		})
+
+		err := handler.Execute(
+			chasm.NewEngineContext(context.Background(), engine),
+			activityRef,
+			chasm.TaskAttributes{},
+			&activitypb.ActivityDispatchTask{},
+		)
+		require.ErrorIs(t, err, validationErr)
+		require.Zero(t, hookCalls)
+	})
+
+	t.Run("bypassed on standby discard", func(t *testing.T) {
+		controller := gomock.NewController(t)
+		engine := chasm.NewMockEngine(controller)
+		matchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
+		activityRef := chasm.NewComponentRef[*Activity](chasm.ExecutionKey{NamespaceID: "namespace-id"})
+		chasmCtx := &chasm.MockMutableContext{
+			MockContext: chasm.MockContext{
+				HandleRef: func(chasm.Component) ([]byte, error) {
+					return []byte("component-ref"), nil
+				},
+			},
+		}
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{
+				TaskQueue: &taskqueuepb.TaskQueue{Name: "task-queue"},
+			},
+			LastAttempt: chasm.NewDataField(chasmCtx, &activitypb.ActivityAttemptState{Stamp: 7}),
+		}
+
+		engine.EXPECT().ReadComponent(gomock.Any(), activityRef, gomock.Any()).DoAndReturn(
+			func(
+				_ context.Context,
+				_ chasm.ComponentRef,
+				readFn func(chasm.Context, chasm.Component) error,
+				_ ...chasm.TransitionOption,
+			) error {
+				return readFn(chasmCtx, activity)
+			},
+		)
+		matchingClient.EXPECT().AddActivityTask(gomock.Any(), gomock.Any()).Return(nil, nil)
+
+		hookCalls := 0
+		handler := newActivityDispatchTaskHandler(activityDispatchTaskHandlerOptions{
+			MatchingClient: matchingClient,
+			DispatchTaskHook: func(
+				context.Context,
+				string,
+				*activitypb.ActivityDispatchTask,
+				func(context.Context) error,
+			) error {
+				hookCalls++
+				return nil
+			},
+		})
+
+		err := handler.Discard(
+			chasm.NewEngineContext(context.Background(), engine),
+			activityRef,
+			chasm.TaskAttributes{},
+			&activitypb.ActivityDispatchTask{DispatchReason: activitypb.DISPATCH_REASON_RETRY},
+		)
+		require.NoError(t, err)
+		require.Zero(t, hookCalls)
+	})
+}
 
 func TestScheduleToCloseTimeoutTaskValidateStamp(t *testing.T) {
 	handler := newScheduleToCloseTimeoutTaskHandler()
