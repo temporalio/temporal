@@ -2,6 +2,7 @@ package interceptor
 
 import (
 	"context"
+	"errors"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/api"
@@ -37,11 +38,14 @@ func NewFrontendServiceErrorInterceptor(
 			return resp, nil
 		}
 
+		var currentBranchChanged *serviceerrors.CurrentBranchChanged
+		if errors.As(err, &currentBranchChanged) {
+			err = serviceerror.NewInvalidArgument(currentBranchChanged.Error())
+		}
+
 		switch serviceErr := err.(type) {
 		case *serviceerrors.ShardOwnershipLost:
 			err = serviceerror.NewUnavailable("shard unavailable, please backoff and retry")
-		case *serviceerrors.CurrentBranchChanged:
-			err = serviceerror.NewInvalidArgument(serviceErr.Error())
 		case *serviceerror.DataLoss:
 			err = serviceerror.NewUnavailable("internal history service error")
 		case *serviceerror.ResourceExhausted:

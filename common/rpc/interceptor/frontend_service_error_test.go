@@ -3,6 +3,7 @@ package interceptor
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -18,6 +19,15 @@ import (
 )
 
 func TestFrontendServiceErrorInterceptor(t *testing.T) {
+	verifyCurrentBranchChanged := func(t *testing.T, err error, _ *rpctest.MockServerTransportStream) {
+		require.Error(t, err)
+
+		var invalidArgument *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgument)
+		require.Equal(t, "Current and request branch tokens, or current and request versioned transitions, don't match.", err.Error())
+		require.Empty(t, serviceerror.ToStatus(err).Proto().GetDetails())
+	}
+
 	tests := []struct {
 		name            string
 		handlerErr      error
@@ -46,14 +56,13 @@ func TestFrontendServiceErrorInterceptor(t *testing.T) {
 		{
 			name:       "Mask CurrentBranchChanged",
 			handlerErr: serviceerrors.NewCurrentBranchChanged([]byte("current"), []byte("request"), nil, nil),
-			verifyFn: func(t *testing.T, err error, _ *rpctest.MockServerTransportStream) {
-				require.Error(t, err)
-
-				var invalidArgument *serviceerror.InvalidArgument
-				require.ErrorAs(t, err, &invalidArgument)
-				require.Equal(t, "Current and request branch tokens, or current and request versioned transitions, don't match.", err.Error())
-				require.Empty(t, serviceerror.ToStatus(err).Proto().GetDetails())
-			},
+			verifyFn:   verifyCurrentBranchChanged,
+		},
+		{
+			name: "Mask Wrapped CurrentBranchChanged",
+			handlerErr: fmt.Errorf("wrapped: %w",
+				serviceerrors.NewCurrentBranchChanged([]byte("current"), []byte("request"), nil, nil)),
+			verifyFn: verifyCurrentBranchChanged,
 		},
 		{
 			name:       "Mask DataLoss",
