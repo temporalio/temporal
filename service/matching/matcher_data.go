@@ -63,7 +63,9 @@ const maxTokens = 1
 // pollerList is an intrusive doubly-linked list of waiting pollers. Pollers are matched
 // by walking from the head, so the list is kept in the order we want to match them:
 // FIFO (insertion order), except that task forwarders/validators are kept after all
-// local pollers so a task is matched to a local poller in preference to a forwarder.
+// local pollers so a task is matched to a local poller in preference to a forwarder,
+// and parentTaskForwarder is kept before validatorTaskForwarder so the child forwarder
+// takes the head before the batch validator.
 //
 // It's intrusive (next/prev live in waitingPoller) so there's no per-poller allocation
 // and removal is O(1) given the poller. There are only ever a handful of forwarders, so
@@ -82,13 +84,21 @@ func (p *pollerList) Add(poller *waitingPoller) {
 	softassert.That(p.logger, !poller.queued, "adding poller that is already queued")
 	poller.queued = true
 
-	// Insert after the last local poller: at the tail for a forwarder, or just before
-	// the forwarders (which stay grouped at the tail) for a local poller.
+	// Match order is head→tail: local pollers, parentTaskForwarder, then
+	// validatorTaskForwarder. Locals must win over both. On child partitions
+	// the task forwarder must take the head before the batch validator.
 	at := p.tail
-	if poller.taskForwarderType == notTaskForwarder {
+	switch poller.taskForwarderType {
+	case notTaskForwarder:
 		for at != nil && at.taskForwarderType != notTaskForwarder {
 			at = at.prev
 		}
+	case parentTaskForwarder:
+		for at != nil && at.taskForwarderType == validatorTaskForwarder {
+			at = at.prev
+		}
+	default:
+		// validatorTaskForwarder: insert at tail
 	}
 
 	next := p.head
