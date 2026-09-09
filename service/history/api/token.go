@@ -234,7 +234,5 @@ func ValidateBranchTokenForExecution(
 	if config.EnablePaginationTokenBranchValidationShadowMode() {
 		return nil
 	}
-	return serviceerror.NewInvalidArgument(
-		"Current and request branch tokens, or current and request versioned transitions, don't match.",
-	)
+	return serviceerror.NewInvalidArgument("request branchToken is not current.")
 }

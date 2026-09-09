@@ -7151,10 +7151,7 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_BranchTokenNotOwnedByExecu
 		_, err = engine.GetWorkflowExecutionHistory(context.Background(), req)
 		var invalidArgument *serviceerror.InvalidArgument
 		s.Require().ErrorAs(err, &invalidArgument, "sendRawHistory=%v", sendRawHistory)
-		s.Require().Equal(
-			"Current and request branch tokens, or current and request versioned transitions, don't match.",
-			err.Error(),
-		)
+		s.Require().Equal("request branchToken is not current.", err.Error())
 		s.Require().Empty(serviceerror.ToStatus(err).Proto().GetDetails())
 	}
 }
@@ -7255,9 +7252,6 @@ func (s *engineSuite) TestGetWorkflowExecutionHistoryReverse_BranchTokenNotOwned
 	)
 	var invalidArgument *serviceerror.InvalidArgument
 	s.Require().ErrorAs(err, &invalidArgument)
-	s.Require().Equal(
-		"Current and request branch tokens, or current and request versioned transitions, don't match.",
-		err.Error(),
-	)
+	s.Require().Equal("request branchToken is not current.", err.Error())
 	s.Require().Empty(serviceerror.ToStatus(err).Proto().GetDetails())
 }
