@@ -99,13 +99,14 @@ func (nct *nexusCompletionCallbackTarget) newCallback() *commonpb.Callback {
 
 // CompleteOperation implements the nexusrpc handler interface.
 func (nct *nexusCompletionCallbackTarget) CompleteOperation(_ context.Context, _ *nexusrpc.CompletionRequest) error {
-	// NOTE: deliver returns a typed *nexus.HandlerError. Returning it directly would hand back a
-	// non-nil error interface wrapping a nil pointer, and the handler would treat every successful
-	// delivery as a failure.
-	if err := nct.deliver(); err != nil {
-		return err
+	handlerErr := nct.deliver()
+	if handlerErr == nil {
+		// NOTE: deliver returns a typed *nexus.HandlerError, so it can't be returned unconditionally:
+		// a nil pointer becomes a non-nil error interface, and the handler would treat every
+		// successful delivery as a failure.
+		return nil
 	}
-	return nil
+	return handlerErr
 }
 
 // newNexusCompletionCallbackTarget creates a new Nexus-variant callback target.

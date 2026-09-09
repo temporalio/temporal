@@ -69,8 +69,10 @@ func (n invocableOutbound) Invoke(
 		Serializer: commonnexus.PayloadSerializer,
 	})
 
-	// Make the call.
+	// nolint:forbidigo // Wall-clock RPC measurement, not component state; Invoke has no chasm.Context.
 	startTime := time.Now()
+
+	// Make the call.
 	n.completion.Header = n.callback.Header
 	err := client.CompleteOperation(ctx, n.callback.Url, n.completion)
 
