@@ -159,25 +159,15 @@ func startAndSignalWorkflow(
 	)
 }
 
-// dedupSignalWithStartRequest returns the already-applied outcome when requestID names a
-// SignalWithStart the current run has already handled, and nil when the request still has to be
-// processed. It must run before workflow id reuse/conflict policy is resolved: a retry asks for the
-// result of work already accepted, so it must not be reinterpreted as a fresh request to reject,
-// terminate or replace an execution.
+// dedupSignalWithStartRequest returns the outcome of a SignalWithStart the current run already
+// handled, or nil when the request still has to be processed. It must run before workflow id
+// reuse/conflict policy: a retry asks for an already-accepted result, not to reject or replace an
+// execution.
 //
-// The two request id stores serve different purposes here. IsSignalRequested is the only one that
-// proves the signal was applied, so it alone establishes idempotency; ExecutionState.RequestIds is
-// populated for WORKFLOW_EXECUTION_STARTED, update and options-updated events but never for
-// WORKFLOW_EXECUTION_SIGNALED, so an id found only there may belong to a plain
-// StartWorkflowExecution and deduping on it would silently drop this request's signal. RequestIds
-// is read only to reconstruct the Started field of the original response: a SignalWithStart that
-// started the run attached its id to the started event, one that signaled an already running run
-// did not.
-//
-// Dedup only holds while the run that received the signal is still the current run. Signal request
-// ids live on that run's mutable state and are not carried across continue-as-new
-// (NewMutableStateInChain starts each new run with an empty pendingSignalRequestedIDs), so once a
-// later run becomes current a retry misses here and is handled as a fresh request.
+// Only IsSignalRequested proves the signal was applied. ExecutionState.RequestIds never records
+// SIGNALED events, so an id found only there may belong to another API's request and must not
+// dedup; it is read solely to recover the Started value of the original response. Dedup holds only
+// while the signaled run is still current: signal request ids do not survive continue-as-new.
 func dedupSignalWithStartRequest(
 	ctx context.Context,
 	currentWorkflowLease api.WorkflowLease,
