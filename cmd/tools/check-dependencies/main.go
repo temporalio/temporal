@@ -56,11 +56,27 @@ var knownModules = []moduleSpec{
 	},
 }
 
+const (
+	modeCheck          = "check"
+	modePlanAPIRelease = "plan-api-release"
+)
+
+const (
+	releaseBranchPrefix = "release/"
+	cloudBranchPrefix   = "cloud/"
+	mainBranch          = "main"
+)
+
 func main() {
-	baseBranch := flag.String("base-branch", "", "PR base branch (e.g. main, release/v1.31)")
+	mode := flag.String("mode", modeCheck,
+		`Either "check", to validate go.mod against the base branch's policy, or `+
+			`"plan-api-release", to decide whether a cloud branch needs an api-go release`)
+	baseBranch := flag.String("base-branch", "", "Branch the policy applies to (e.g. main, release/v1.31, cloud/v1.32.0-163)")
 	goModPath := flag.String("go-mod", defaultGoModPath, "Path to go.mod")
 	flag.Parse()
 
+	// Checked before reading go.mod so that a missing flag is reported as
+	// such rather than as whatever go.mod problem happens to come first.
 	branch := strings.TrimSpace(*baseBranch)
 	if branch == "" {
 		fmt.Fprintln(os.Stderr, "Error: base branch is required; pass --base-branch")
@@ -80,25 +96,36 @@ func main() {
 		os.Exit(1)
 	}
 
-	var validateErr error
-	switch {
-	case strings.HasPrefix(branch, "release/"):
-		validateErr = validateReleaseBranch(modFile)
-	case strings.HasPrefix(branch, "cloud/"):
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		defer cancel()
-		validateErr = validateCloudBranch(ctx, modFile)
-	case branch == "main":
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		defer cancel()
-		validateErr = validateMainBranch(ctx, modFile)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	var runErr error
+	switch *mode {
+	case modeCheck:
+		runErr = runCheck(ctx, branch, modFile)
+	case modePlanAPIRelease:
+		runErr = runPlanAPIRelease(ctx, branch, modFile)
 	default:
-		fmt.Printf("No dependency policy for base branch %q; skipping validation\n", branch)
+		runErr = fmt.Errorf("unknown mode %q; want %q or %q", *mode, modeCheck, modePlanAPIRelease)
 	}
 
-	if validateErr != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", validateErr)
+	if runErr != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", runErr)
 		os.Exit(1)
+	}
+}
+
+func runCheck(ctx context.Context, branch string, modFile *modfile.File) error {
+	switch {
+	case strings.HasPrefix(branch, releaseBranchPrefix):
+		return validateReleaseBranch(modFile)
+	case strings.HasPrefix(branch, cloudBranchPrefix):
+		return validateCloudBranch(ctx, modFile)
+	case branch == mainBranch:
+		return validateMainBranch(ctx, modFile)
+	default:
+		fmt.Printf("No dependency policy for base branch %q; skipping validation\n", branch)
+		return nil
 	}
 }
 
