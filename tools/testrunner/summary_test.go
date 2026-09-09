@@ -56,7 +56,7 @@ func TestNewSummaryFromReports_RendersAlertRow(t *testing.T) {
 	require.Equal(t, []summaryRow{{
 		Kind:    failureTypeDataRace,
 		Name:    "DATA RACE: Data race detected in TestFoo",
-		Details: "WARNING: DATA RACE\nWrite at 0x00c000123456 by goroutine 7:\n  main.TestFoo()\n      /path/to/foo_test.go:42 +0x123\n\nPrevious read at 0x00c000123456 by goroutine 8:\n  main.TestFoo()\n      /path/to/foo_test.go:43 +0x456",
+		Details: "WARNING: DATA RACE\nWrite at 0x00c000123456 by goroutine 7:\n  go.temporal.io/server/service/worker/scheduler.(*scheduler).updateTweakables.func1()\n      /path/to/workflow.go:1442 +0x123\n\nPrevious read at 0x00c000123456 by goroutine 8:\n  go.temporal.io/server/service/worker/scheduler.(*scheduler).run()\n      /path/to/workflow.go:466 +0x456",
 	}}, s.Rows)
 }
 
@@ -119,12 +119,16 @@ func TestRenderSummaryFromReports_Markdown_RendersTrimmedFailureBody(t *testing.
 
 func TestRenderSummaryFromReports_Markdown_RendersAlertRow(t *testing.T) {
 	report := mustReadReportFixture(t, "testdata/junit-alert-data-race.xml")
-	report.Suites[0].Testcases[0].Failure.Data = "go.temporal.io/server/service/worker/scheduler.(*scheduler).run()\n```"
 
 	rendered := newSummaryFromReports([]*junitReport{report}).Markdown()
 	require.Contains(t, rendered, failureTypeDataRace)
-	require.Contains(t, rendered, "\n\n````\ngo.temporal.io/server/service/worker/scheduler.(*scheduler).run()\n```\n````\n\n")
+	require.Contains(t, rendered, "\n\n```\nWARNING: DATA RACE")
+	require.Contains(t, rendered, "go.temporal.io/server/service/worker/scheduler.(*scheduler).run()")
 	require.NotContains(t, rendered, "<pre>")
+}
+
+func TestMarkdownCodeBlock_AvoidsFenceCollisions(t *testing.T) {
+	require.Equal(t, "````\nline\n```\n````", markdownCodeBlock("line\n```"))
 }
 
 func TestRenderSummaryFromReports_Markdown_EmptyWhenNoFailures(t *testing.T) {
