@@ -747,26 +747,74 @@ func (s *StreamSenderImpl) shouldProcessTask(item tasks.Task) bool {
 		return false
 	}
 
-	var shouldProcessTask bool
 	namespaceEntry, err := s.shardContext.GetNamespaceRegistry().GetNamespaceByID(
 		namespace.ID(item.GetNamespaceID()),
 	)
 	if err != nil {
 		// if there is error, then blindly send the task, better safe than sorry
-		shouldProcessTask = true
+		return true
 	}
 
+	var shouldProcessTask bool
 	if namespaceEntry != nil {
 	FilterLoop:
 		for _, targetCluster := range namespaceEntry.ClusterNames(item.GetWorkflowID()) {
 			if s.clientClusterName == targetCluster {
-				shouldProcessTask = true
+				shouldProcessTask = s.admittedByGradualConnect(item, namespaceEntry)
 				break FilterLoop
 			}
 		}
 	}
-
 	return shouldProcessTask
+}
+
+func (s *StreamSenderImpl) admittedByGradualConnect(item tasks.Task, namespaceEntry *namespace.Namespace) bool {
+	// A shed delete can permanently resurrect history after force replication.
+	if item.GetType() == enumsspb.TASK_TYPE_REPLICATION_DELETE_EXECUTION {
+		return true
+	}
+
+	// Force-replication tasks follow the ramp; operators should clear the ramp before running force-replication.
+	ramp := namespaceEntry.ReplicationRamp(s.clientClusterName)
+	if ramp == nil {
+		return true
+	}
+	percent := gradualConnectPercent(ramp, s.shardContext.GetTimeSource().Now())
+	if percent >= 100 {
+		return true
+	}
+	metricTags := []metrics.Tag{
+		metrics.NamespaceTag(namespaceEntry.Name().String()),
+		metrics.TargetClusterTag(s.clientClusterName),
+	}
+	metrics.ReplicationGradualConnectPercent.With(s.metrics).Record(float64(percent), metricTags...)
+	if dynamicconfig.RolloutAccepts([]byte(item.GetWorkflowID()), percent) {
+		return true
+	}
+	metrics.ReplicationTasksShedByGradualConnect.With(s.metrics).Record(
+		1,
+		append(metricTags, metrics.OperationTag(TaskOperationTagFromTask(item.GetType())))...,
+	)
+	return false
+}
+
+func gradualConnectPercent(ramp *persistencespb.NamespaceReplicationRamp, now time.Time) int {
+	if ramp == nil || ramp.GetStartTime() == nil || ramp.GetDuration() == nil ||
+		ramp.GetStartTime().CheckValid() != nil || ramp.GetDuration().CheckValid() != nil {
+		return 100
+	}
+	duration := ramp.GetDuration().AsDuration()
+	if duration <= 0 {
+		return 100
+	}
+	elapsed := now.Sub(ramp.GetStartTime().AsTime())
+	if elapsed <= 0 {
+		return 0
+	}
+	if elapsed >= duration {
+		return 100
+	}
+	return int(float64(elapsed) / float64(duration) * 100)
 }
 
 func (s *StreamSenderImpl) getTaskPriority(task tasks.Task) enumsspb.TaskPriority {

@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -405,6 +406,7 @@ func (d *namespaceHandler) UpdateNamespace(
 	info := getResponse.Namespace.Info
 	config := getResponse.Namespace.Config
 	replicationConfig := getResponse.Namespace.ReplicationConfig
+	oldReplicationClusters := slices.Clone(replicationConfig.Clusters)
 	failoverHistory := getResponse.Namespace.ReplicationConfig.FailoverHistory
 	configVersion := getResponse.Namespace.ConfigVersion
 	failoverVersion := getResponse.Namespace.FailoverVersion
@@ -541,6 +543,10 @@ func (d *namespaceHandler) UpdateNamespace(
 
 	if updateRequest.ReplicationConfig != nil {
 		updateReplicationConfig := updateRequest.ReplicationConfig
+		effectiveActiveCluster := replicationConfig.GetActiveClusterName()
+		if updateReplicationConfig.GetActiveClusterName() != "" {
+			effectiveActiveCluster = updateReplicationConfig.GetActiveClusterName()
+		}
 		if len(updateReplicationConfig.Clusters) != 0 {
 			configurationChanged = true
 			clusterListChanged = true
@@ -549,6 +555,16 @@ func (d *namespaceHandler) UpdateNamespace(
 				clustersNew = append(clustersNew, clusterConfig.GetClusterName())
 			}
 			replicationConfig.Clusters = clustersNew
+			updatedRamps, err := d.updateReplicationRamps(
+				replicationConfig.GetClusterReplicationRamps(),
+				oldReplicationClusters,
+				updateReplicationConfig.Clusters,
+				effectiveActiveCluster,
+			)
+			if err != nil {
+				return nil, err
+			}
+			replicationConfig.ClusterReplicationRamps = updatedRamps
 		}
 		if updateReplicationConfig.State != enumspb.REPLICATION_STATE_UNSPECIFIED &&
 			updateReplicationConfig.State != replicationConfig.State {
@@ -560,6 +576,9 @@ func (d *namespaceHandler) UpdateNamespace(
 		}
 
 		if updateReplicationConfig.GetActiveClusterName() != "" {
+			if updateReplicationConfig.GetActiveClusterName() != replicationConfig.GetActiveClusterName() {
+				replicationConfig.ClusterReplicationRamps = nil
+			}
 			activeClusterChanged = true
 			replicationConfig.ActiveClusterName = updateReplicationConfig.GetActiveClusterName()
 			replicationConfig.State = enumspb.REPLICATION_STATE_NORMAL
@@ -669,6 +688,112 @@ func (d *namespaceHandler) UpdateNamespace(
 		tag.WorkflowNamespaceID(info.Id),
 	)
 	return response, nil
+}
+
+func (d *namespaceHandler) updateReplicationRamps(
+	existing map[string]*persistencespb.NamespaceReplicationRamp,
+	oldClusters []string,
+	newClusterConfigs []*replicationpb.ClusterReplicationConfig,
+	activeCluster string,
+) (map[string]*persistencespb.NamespaceReplicationRamp, error) {
+	creationEnabled := d.config.EnableReplicationGradualConnect()
+	ramps, err := updateExistingReplicationRamps(existing, oldClusters, newClusterConfigs, creationEnabled)
+	if err != nil || !creationEnabled {
+		return ramps, err
+	}
+	return addNewReplicationRamps(
+		ramps,
+		oldClusters,
+		newClusterConfigs,
+		activeCluster,
+		timestamppb.New(d.timeSource.Now()),
+	)
+}
+
+func updateExistingReplicationRamps(
+	existing map[string]*persistencespb.NamespaceReplicationRamp,
+	oldClusters []string,
+	newClusterConfigs []*replicationpb.ClusterReplicationConfig,
+	creationEnabled bool,
+) (map[string]*persistencespb.NamespaceReplicationRamp, error) {
+	newClusters := make([]string, len(newClusterConfigs))
+	for i, clusterConfig := range newClusterConfigs {
+		newClusters[i] = clusterConfig.GetClusterName()
+	}
+	ramps := maps.Clone(existing)
+	for clusterName := range ramps {
+		if !slices.Contains(newClusters, clusterName) {
+			delete(ramps, clusterName)
+		}
+	}
+
+	for _, clusterConfig := range newClusterConfigs {
+		clusterName := clusterConfig.GetClusterName()
+		duration := clusterConfig.GetReplicationRampDuration()
+		if duration == nil || !slices.Contains(oldClusters, clusterName) {
+			continue
+		}
+		ramp := existing[clusterName]
+		if ramp == nil && !creationEnabled {
+			continue
+		}
+		if err := duration.CheckValid(); err != nil {
+			return nil, serviceerror.NewInvalidArgumentf(
+				"Invalid replication ramp duration for cluster %q: %v",
+				clusterName,
+				err,
+			)
+		}
+		if duration.AsDuration() != 0 {
+			if ramp != nil && ramp.GetDuration() != nil &&
+				duration.AsDuration() == ramp.GetDuration().AsDuration() {
+				continue
+			}
+			return nil, serviceerror.NewInvalidArgumentf(
+				"Replication ramp duration for existing cluster %q can only be set to zero",
+				clusterName,
+			)
+		}
+		delete(ramps, clusterName)
+	}
+	return ramps, nil
+}
+
+func addNewReplicationRamps(
+	ramps map[string]*persistencespb.NamespaceReplicationRamp,
+	oldClusters []string,
+	newClusterConfigs []*replicationpb.ClusterReplicationConfig,
+	activeCluster string,
+	startTime *timestamppb.Timestamp,
+) (map[string]*persistencespb.NamespaceReplicationRamp, error) {
+	for _, clusterConfig := range newClusterConfigs {
+		clusterName := clusterConfig.GetClusterName()
+		if clusterName == activeCluster || slices.Contains(oldClusters, clusterName) {
+			continue
+		}
+		duration := clusterConfig.GetReplicationRampDuration()
+		if duration == nil {
+			continue
+		}
+		if err := duration.CheckValid(); err != nil {
+			return nil, serviceerror.NewInvalidArgumentf(
+				"Invalid replication ramp duration for cluster %q: %v",
+				clusterName,
+				err,
+			)
+		}
+		if duration.AsDuration() <= 0 {
+			continue
+		}
+		if ramps == nil {
+			ramps = make(map[string]*persistencespb.NamespaceReplicationRamp)
+		}
+		ramps[clusterName] = &persistencespb.NamespaceReplicationRamp{
+			StartTime: startTime,
+			Duration:  durationpb.New(duration.AsDuration()),
+		}
+	}
+	return ramps, nil
 }
 
 // DeprecateNamespace deprecates a namespace

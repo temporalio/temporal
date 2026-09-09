@@ -95,7 +95,8 @@ type Config struct {
 
 	MaxFairnessWeightOverrideConfigLimit dynamicconfig.IntPropertyFnWithTaskQueueFilter
 
-	MaxBadBinaries dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxBadBinaries                  dynamicconfig.IntPropertyFnWithNamespaceFilter
+	EnableReplicationGradualConnect dynamicconfig.BoolPropertyFn
 
 	// security protection settings
 	DisableListVisibilityByFilter dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -350,6 +351,7 @@ func NewConfig(
 		ReachabilityCacheClosedWFsTTL:            dynamicconfig.ReachabilityCacheClosedWFsTTL.Get(dc),
 		ReachabilityQuerySetDurationSinceDefault: dynamicconfig.ReachabilityQuerySetDurationSinceDefault.Get(dc),
 		MaxBadBinaries:                           dynamicconfig.FrontendMaxBadBinaries.Get(dc),
+		EnableReplicationGradualConnect:          dynamicconfig.EnableReplicationGradualConnect.Get(dc),
 		DisableListVisibilityByFilter:            dynamicconfig.DisableListVisibilityByFilter.Get(dc),
 		BlobSizeLimitError:                       dynamicconfig.BlobSizeLimitError.Get(dc),
 		BlobSizeLimitWarn:                        dynamicconfig.BlobSizeLimitWarn.Get(dc),
