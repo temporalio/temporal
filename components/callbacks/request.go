@@ -14,8 +14,7 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 )
 
-// Header key used to identify callbacks that originate from and target the same cluster.
-// Note: this is the nexusoperations.NexusCallbackSourceHeader stripped of Nexus-Callback-
+// Legacy header key used to identify callbacks that originate from and target the same cluster.
 const callbackSourceHeader = "source"
 
 // routeSystemCallbackRequest routes a system callback request to the appropriate frontend client
@@ -96,13 +95,13 @@ func routeRequest(
 	defaultClient *http.Client,
 	localClient *common.FrontendHTTPClient,
 	logger log.Logger,
+	inspectSourceHeader bool,
 ) (*http.Response, error) {
 	if r.URL.String() == commonnexus.SystemCallbackURL {
 		return routeSystemCallbackRequest(r, clusterMetadata, namespaceRegistry, httpClientCache, callbackTokenGenerator, localClient, logger)
 	}
-	// This source header is populated in nexusoperations/executors (via the ClientProvider) for worker targets
-	// if this header is not populated then we assume it's an external target.
-	if r.Header == nil || r.Header.Get(callbackSourceHeader) == "" {
+	// Older servers populated this header for worker targets. Treat the request as external unless legacy inspection is enabled.
+	if !inspectSourceHeader || r.Header == nil || r.Header.Get(callbackSourceHeader) == "" {
 		return defaultClient.Do(r)
 	}
 	// If we got here, we assume that the endpoint in the original call was a worker target, and we should route

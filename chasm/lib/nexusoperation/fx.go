@@ -23,8 +23,6 @@ import (
 	"go.uber.org/fx"
 )
 
-const nexusCallbackSourceHeader = "Nexus-Callback-Source"
-
 var Module = fx.Module(
 	"chasm.lib.nexusoperation",
 	fx.Provide(configProvider),
@@ -159,7 +157,6 @@ func clientProviderFactory(
 			httpClient = &cl.Client
 			if clusterID != "" {
 				httpCaller = func(r *http.Request) (*http.Response, error) {
-					r.Header.Set(nexusCallbackSourceHeader, clusterID)
 					resp, callErr := httpClient.Do(r)
 					commonnexus.SetFailureSourceOnContext(ctx, resp)
 					return resp, callErr
