@@ -312,6 +312,21 @@ func TestWaitForSynchronizationBoundaryObservesLocalPause(t *testing.T) {
 		execution,
 		time.Now().Add(time.Minute),
 		controller,
+		nil,
+	))
+}
+
+func TestWaitForSynchronizationBoundaryObservesExplicitTrigger(t *testing.T) {
+	trigger := make(chan struct{}, 1)
+	trigger <- struct{}{}
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+	require.NoError(t, waitForSynchronizationBoundary(
+		ctx,
+		&commonpb.WorkflowExecution{WorkflowId: "workflow-id", RunId: "run-id"},
+		time.Now().Add(time.Minute),
+		nil,
+		trigger,
 	))
 }
 

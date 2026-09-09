@@ -73,6 +73,7 @@ type SynchronizationLoopOptions struct {
 	Interval          time.Duration
 	LeaseExpiration   time.Time
 	StateController   *ExecutionStateController
+	Trigger           <-chan struct{}
 	RetryInitialDelay time.Duration
 	RetryMaximumDelay time.Duration
 }
@@ -552,6 +553,7 @@ func (r *HistoryReplicator) RunControlled(
 			execution,
 			leaseExpiration.Add(-2*options.Interval),
 			options.StateController,
+			options.Trigger,
 		); err != nil {
 			if ctx.Err() != nil {
 				return nil
@@ -600,6 +602,7 @@ func waitForSynchronizationBoundary(
 	execution *commonpb.WorkflowExecution,
 	deadline time.Time,
 	controller *ExecutionStateController,
+	trigger <-chan struct{},
 ) error {
 	deadlineTimer := time.NewTimer(max(time.Until(deadline), 0))
 	defer deadlineTimer.Stop()
@@ -609,6 +612,8 @@ func waitForSynchronizationBoundary(
 		select {
 		case <-ctx.Done():
 			return context.Cause(ctx)
+		case <-trigger:
+			return nil
 		case <-deadlineTimer.C:
 			return nil
 		case <-boundaryTicker.C:

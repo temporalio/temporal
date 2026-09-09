@@ -8,11 +8,14 @@ import (
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -61,6 +64,91 @@ func TestBridgeRuntimePollsWithFinalConfiguration(t *testing.T) {
 	require.NoError(t, <-done)
 	_, err = runtime.Start(ctx)
 	require.EqualError(t, err, "bridge runtime is already started")
+}
+
+func TestBridgeRuntimeRequestSynchronization(t *testing.T) {
+	execution := &commonpb.WorkflowExecution{WorkflowId: "workflow-id", RunId: "run-id"}
+	trigger := make(chan struct{}, 1)
+	runtime := &BridgeRuntime{
+		syncTriggers: map[string]chan struct{}{"workflow-id\x00run-id": trigger},
+	}
+	require.NoError(t, runtime.RequestSynchronization(execution))
+	require.NoError(t, runtime.RequestSynchronization(execution))
+	require.Len(t, trigger, 1)
+	<-trigger
+	require.EqualError(
+		t,
+		runtime.RequestSynchronization(&commonpb.WorkflowExecution{WorkflowId: "other", RunId: "run-id"}),
+		"workflow execution is not managed by this bridge",
+	)
+}
+
+func TestBridgeRuntimeRejectsLegacyQueryWithoutStopping(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	workflowClient := workflowservicemock.NewMockWorkflowServiceClient(ctrl)
+	runtime := &BridgeRuntime{
+		configuration:    BridgeConfiguration{Namespace: "namespace"},
+		upstreamWorkflow: workflowClient,
+	}
+	response := &workflowservice.PollWorkflowTaskQueueResponse{
+		TaskToken:         []byte("query-token"),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "workflow-id", RunId: "run-id"},
+		Query:             &querypb.WorkflowQuery{QueryType: "__temporal_workflow_metadata"},
+		PollerGroupId:     "poller-group-id",
+	}
+
+	workflowClient.EXPECT().RespondQueryTaskCompleted(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *workflowservice.RespondQueryTaskCompletedRequest,
+			_ ...grpc.CallOption,
+		) (*workflowservice.RespondQueryTaskCompletedResponse, error) {
+			require.Equal(t, "namespace", request.GetNamespace())
+			require.Equal(t, response.GetTaskToken(), request.GetTaskToken())
+			require.Equal(t, "poller-group-id", request.GetPollerGroupId())
+			require.Equal(t, "queries for locally owned workflows are not supported yet", request.GetErrorMessage())
+			require.Equal(t, enumspb.QUERY_RESULT_TYPE_FAILED, request.GetCompletedType())
+			return &workflowservice.RespondQueryTaskCompletedResponse{}, nil
+		},
+	)
+
+	managed, err := runtime.handleAcquisitionResponse(context.Background(), response)
+	require.NoError(t, err)
+	require.Nil(t, managed)
+}
+
+func TestBridgeRuntimeQueryResponseFailureDoesNotStop(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	workflowClient := workflowservicemock.NewMockWorkflowServiceClient(ctrl)
+	runtime := &BridgeRuntime{
+		configuration:    BridgeConfiguration{Namespace: "namespace"},
+		upstreamWorkflow: workflowClient,
+	}
+	response := &workflowservice.PollWorkflowTaskQueueResponse{
+		TaskToken:         []byte("query-token"),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "workflow-id", RunId: "run-id"},
+		Query:             &querypb.WorkflowQuery{QueryType: "query"},
+	}
+	workflowClient.EXPECT().RespondQueryTaskCompleted(gomock.Any(), gomock.Any()).Return(
+		nil,
+		serviceerror.NewUnavailable("upstream unavailable"),
+	)
+
+	managed, err := runtime.handleAcquisitionResponse(context.Background(), response)
+	require.NoError(t, err)
+	require.Nil(t, managed)
+}
+
+func TestBridgeRuntimeStillRejectsOrdinaryWorkflowTask(t *testing.T) {
+	runtime := &BridgeRuntime{}
+	response := &workflowservice.PollWorkflowTaskQueueResponse{
+		TaskToken:         []byte("workflow-task-token"),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: "workflow-id", RunId: "run-id"},
+	}
+
+	managed, err := runtime.handleAcquisitionResponse(context.Background(), response)
+	require.EqualError(t, err, "upstream returned an ordinary workflow task to a local execution poll")
+	require.Nil(t, managed)
 }
 
 func TestBridgeRuntimePersistsAcquisitionBeforeImport(t *testing.T) {

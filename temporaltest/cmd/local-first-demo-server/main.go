@@ -7,12 +7,15 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"sync/atomic"
 	"syscall"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
@@ -61,6 +64,7 @@ type readyMessage struct {
 	ActivityType    string `json:"activity_type"`
 	TaskQueue       string `json:"task_queue"`
 	Iterations      int    `json:"iterations"`
+	SyncAddress     string `json:"sync_address,omitempty"`
 }
 
 func main() {
@@ -250,6 +254,11 @@ func runBridge(ctx context.Context, opts options) error {
 	if err != nil {
 		return fmt.Errorf("start bridge runtime: %w", err)
 	}
+	syncAddress, stopSyncServer, err := startSyncServer(runtime, opts)
+	if err != nil {
+		return fmt.Errorf("start explicit synchronization server: %w", err)
+	}
+	defer stopSyncServer()
 
 	if err := writeReady(readyMessage{
 		UpstreamAddress: opts.upstreamAddress,
@@ -261,11 +270,44 @@ func runBridge(ctx context.Context, opts options) error {
 		ActivityType:    opts.activityType,
 		TaskQueue:       opts.taskQueue,
 		Iterations:      opts.iterations,
+		SyncAddress:     syncAddress,
 	}); err != nil {
 		return err
 	}
 
 	return waitForBridge(ctx, runtimeDone)
+}
+
+func startSyncServer(runtime *localexecution.BridgeRuntime, opts options) (string, func(), error) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return "", nil, err
+	}
+	execution := &commonpb.WorkflowExecution{WorkflowId: opts.workflowID, RunId: opts.runID}
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /sync", func(writer http.ResponseWriter, _ *http.Request) {
+		if err := runtime.RequestSynchronization(execution); err != nil {
+			http.Error(writer, err.Error(), http.StatusConflict)
+			return
+		}
+		writer.WriteHeader(http.StatusAccepted)
+	})
+	server := &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+	go func() {
+		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Printf("explicit synchronization server failed: %v", err)
+		}
+	}()
+	return listener.Addr().String(), func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			log.Printf("stop explicit synchronization server: %v", err)
+		}
+	}, nil
 }
 
 func waitForBridge(ctx context.Context, syncErrors <-chan error) error {

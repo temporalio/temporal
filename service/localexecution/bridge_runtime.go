@@ -29,6 +29,7 @@ const (
 	bridgePollRetryInitialDelay = 100 * time.Millisecond
 	bridgePollRetryMaximumDelay = time.Second
 	bridgeLocalDeletionTimeout  = 10 * time.Second
+	bridgeQueryResponseTimeout  = 5 * time.Second
 )
 
 type WorkflowTaskPoller interface {
@@ -37,6 +38,14 @@ type WorkflowTaskPoller interface {
 		request *workflowservice.PollWorkflowTaskQueueRequest,
 		opts ...grpc.CallOption,
 	) (*workflowservice.PollWorkflowTaskQueueResponse, error)
+}
+
+type queryTaskResponder interface {
+	RespondQueryTaskCompleted(
+		ctx context.Context,
+		request *workflowservice.RespondQueryTaskCompletedRequest,
+		opts ...grpc.CallOption,
+	) (*workflowservice.RespondQueryTaskCompletedResponse, error)
 }
 
 type BridgeRuntimeOptions struct {
@@ -63,6 +72,7 @@ type BridgeRuntime struct {
 	mu               sync.Mutex
 	started          bool
 	activeExecutions map[string]chan struct{}
+	syncTriggers     map[string]chan struct{}
 }
 
 type managedBridgeExecution struct {
@@ -71,6 +81,7 @@ type managedBridgeExecution struct {
 	replicator  *HistoryReplicator
 	controller  *ExecutionStateController
 	leaseExpiry time.Time
+	syncTrigger chan struct{}
 	finish      func()
 }
 
@@ -110,7 +121,28 @@ func NewBridgeRuntime(options BridgeRuntimeOptions) (*BridgeRuntime, error) {
 		syncInterval:        syncInterval,
 		workflowTypes:       workflowTypes,
 		activeExecutions:    make(map[string]chan struct{}),
+		syncTriggers:        make(map[string]chan struct{}),
 	}, nil
+}
+
+// RequestSynchronization wakes the managed execution's synchronization loop. Repeated requests
+// coalesce while a synchronization is already pending or in progress.
+func (r *BridgeRuntime) RequestSynchronization(execution *commonpb.WorkflowExecution) error {
+	if execution.GetWorkflowId() == "" || execution.GetRunId() == "" {
+		return errors.New("workflow ID and run ID are required")
+	}
+	key := execution.GetWorkflowId() + "\x00" + execution.GetRunId()
+	r.mu.Lock()
+	trigger := r.syncTriggers[key]
+	r.mu.Unlock()
+	if trigger == nil {
+		return errors.New("workflow execution is not managed by this bridge")
+	}
+	select {
+	case trigger <- struct{}{}:
+	default:
+	}
+	return nil
 }
 
 func cloneBridgeConfiguration(configuration BridgeConfiguration) BridgeConfiguration {
@@ -231,6 +263,15 @@ func (r *BridgeRuntime) handleAcquisitionResponse(
 	ctx context.Context,
 	response *workflowservice.PollWorkflowTaskQueueResponse,
 ) (*managedBridgeExecution, error) {
+	// Until query relay is implemented, a legacy query can be delivered to the bridge's
+	// acquisition poll without LocalExecutionInfo. Complete it as unsupported so clients do not
+	// hang and, more importantly, so an observational query does not stop local execution.
+	if response.GetLocalExecutionInfo() == nil && response.GetQuery() != nil {
+		// The query has no durable relay state to recover. If its best-effort response fails, its
+		// caller will reach its deadline; the bridge must continue serving the owned execution.
+		_ = r.rejectUnsupportedQuery(ctx, response)
+		return nil, nil
+	}
 	if response.GetLocalExecutionInfo() == nil && response.GetWorkflowExecution() == nil {
 		return nil, nil
 	}
@@ -258,6 +299,32 @@ func (r *BridgeRuntime) handleAcquisitionResponse(
 		return nil, fmt.Errorf("release unregistered workflow type: %w", err)
 	}
 	return nil, nil
+}
+
+func (r *BridgeRuntime) rejectUnsupportedQuery(
+	ctx context.Context,
+	response *workflowservice.PollWorkflowTaskQueueResponse,
+) error {
+	if len(response.GetTaskToken()) == 0 {
+		return errors.New("query task has no task token")
+	}
+	responder, ok := r.upstreamWorkflow.(queryTaskResponder)
+	if !ok {
+		return errors.New("upstream workflow client cannot respond to query tasks")
+	}
+	responseContext, cancelResponse := context.WithTimeout(ctx, bridgeQueryResponseTimeout)
+	defer cancelResponse()
+	_, err := responder.RespondQueryTaskCompleted(
+		responseContext,
+		&workflowservice.RespondQueryTaskCompletedRequest{
+			Namespace:     r.configuration.Namespace,
+			TaskToken:     response.GetTaskToken(),
+			CompletedType: enumspb.QUERY_RESULT_TYPE_FAILED,
+			ErrorMessage:  "queries for locally owned workflows are not supported yet",
+			PollerGroupId: response.GetPollerGroupId(),
+		},
+	)
+	return err
 }
 
 func (r *BridgeRuntime) beginExecution(
@@ -608,6 +675,7 @@ func (r *BridgeRuntime) newManagedExecution(
 		replicator:  replicator,
 		controller:  controller,
 		leaseExpiry: record.LeaseExpiration,
+		syncTrigger: make(chan struct{}, 1),
 	}, nil
 }
 
@@ -617,10 +685,21 @@ func (r *BridgeRuntime) startSynchronization(
 	executionGroup *sync.WaitGroup,
 	managed *managedBridgeExecution,
 ) {
+	key := managed.execution.GetWorkflowId() + "\x00" + managed.execution.GetRunId()
+	r.mu.Lock()
+	r.syncTriggers[key] = managed.syncTrigger
+	r.mu.Unlock()
 	executionGroup.Add(1)
 	go func() {
 		defer executionGroup.Done()
 		defer managed.finish()
+		defer func() {
+			r.mu.Lock()
+			if r.syncTriggers[key] == managed.syncTrigger {
+				delete(r.syncTriggers, key)
+			}
+			r.mu.Unlock()
+		}()
 		released := false
 		err := managed.replicator.RunControlled(
 			ctx,
@@ -629,6 +708,7 @@ func (r *BridgeRuntime) startSynchronization(
 				Interval:        r.syncInterval,
 				LeaseExpiration: managed.leaseExpiry,
 				StateController: managed.controller,
+				Trigger:         managed.syncTrigger,
 			},
 			func(result SyncResult) error {
 				if result.Released {
