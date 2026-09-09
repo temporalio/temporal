@@ -3,6 +3,7 @@ package matching
 import (
 	"context"
 	"math/rand"
+	"sync"
 	"testing"
 	"time"
 
@@ -73,115 +74,181 @@ func (s *taskValidatorSuite) SetupTest() {
 	s.taskValidator = newTaskValidator(context.Background(), s.clusterMetadata, s.namespaceCache, s.historyClient)
 }
 
+func (s *taskValidatorSuite) putCache(info taskValidationInfo) {
+	s.taskValidator.mu.Lock()
+	defer s.taskValidator.mu.Unlock()
+	s.taskValidator.cache[info.taskID] = info
+}
+
+func (s *taskValidatorSuite) cacheInfo(taskID int64) (taskValidationInfo, bool) {
+	s.taskValidator.mu.Lock()
+	defer s.taskValidator.mu.Unlock()
+	info, ok := s.taskValidator.cache[taskID]
+	return info, ok
+}
+
 func (s *taskValidatorSuite) TestPreValidateActive_NewTask_Skip_WithCreationTime() {
-	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
-		taskID:         s.task.TaskId - 1,
-		validationTime: time.Unix(0, rand.Int63()).UTC(),
-	}
 	s.task.Data.CreateTime = timestamppb.New(time.Unix(0, rand.Int63()))
 
 	shouldValidate := s.taskValidator.preValidateActive(s.task)
 	s.False(shouldValidate)
+	info, ok := s.cacheInfo(s.task.TaskId)
+	s.True(ok)
 	s.Equal(taskValidationInfo{
 		taskID:         s.task.TaskId,
 		validationTime: s.task.Data.CreateTime.AsTime(),
-	}, s.taskValidator.lastValidatedTaskInfo)
+	}, info)
 }
 
 func (s *taskValidatorSuite) TestPreValidateActive_NewTask_Skip_WithoutCreationTime() {
-	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
-		taskID:         s.task.TaskId - 1,
-		validationTime: time.Unix(0, rand.Int63()).UTC(),
-	}
 	s.task.Data.CreateTime = nil
 
 	shouldValidate := s.taskValidator.preValidateActive(s.task)
 	s.False(shouldValidate)
-	s.Equal(s.task.TaskId, s.taskValidator.lastValidatedTaskInfo.taskID)
-	s.True(time.Now().Sub(s.taskValidator.lastValidatedTaskInfo.validationTime) < time.Second)
+	info, ok := s.cacheInfo(s.task.TaskId)
+	s.True(ok)
+	s.Equal(s.task.TaskId, info.taskID)
+	s.Less(time.Since(info.validationTime), time.Second)
 }
 
 func (s *taskValidatorSuite) TestPreValidateActive_ExistingTask_Validate() {
-	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
+	s.putCache(taskValidationInfo{
 		taskID:         s.task.TaskId,
 		validationTime: time.Now().Add(-taskReaderValidationThreshold * 2),
-	}
-
+	})
 	shouldValidate := s.taskValidator.preValidateActive(s.task)
 	s.True(shouldValidate)
 }
 
 func (s *taskValidatorSuite) TestPreValidateActive_ExistingTask_Skip() {
-	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
+	s.putCache(taskValidationInfo{
 		taskID:         s.task.TaskId,
 		validationTime: time.Now().Add(taskReaderValidationThreshold * 2),
-	}
-
+	})
 	shouldValidate := s.taskValidator.preValidateActive(s.task)
 	s.False(shouldValidate)
 }
 
 func (s *taskValidatorSuite) TestPreValidatePassive_NewTask_Skip_WithCreationTime() {
-	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
-		taskID:         s.task.TaskId - 1,
-		validationTime: time.Unix(0, rand.Int63()).UTC(),
-	}
 	s.task.Data.CreateTime = timestamppb.New(time.Now().Add(-taskReaderValidationThreshold / 2))
 
 	shouldValidate := s.taskValidator.preValidatePassive(s.task)
 	s.False(shouldValidate)
+	info, ok := s.cacheInfo(s.task.TaskId)
+	s.True(ok)
 	s.Equal(taskValidationInfo{
 		taskID:         s.task.TaskId,
 		validationTime: s.task.Data.CreateTime.AsTime(),
-	}, s.taskValidator.lastValidatedTaskInfo)
+	}, info)
 }
 
 func (s *taskValidatorSuite) TestPreValidatePassive_NewTask_Validate_WithCreationTime() {
-	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
-		taskID:         s.task.TaskId - 1,
-		validationTime: time.Unix(0, rand.Int63()).UTC(),
-	}
 	s.task.Data.CreateTime = timestamppb.New(time.Now().Add(-taskReaderValidationThreshold * 2))
 
 	shouldValidate := s.taskValidator.preValidatePassive(s.task)
 	s.True(shouldValidate)
+	info, ok := s.cacheInfo(s.task.TaskId)
+	s.True(ok)
 	s.Equal(taskValidationInfo{
 		taskID:         s.task.TaskId,
 		validationTime: s.task.Data.CreateTime.AsTime(),
-	}, s.taskValidator.lastValidatedTaskInfo)
+	}, info)
 }
 
 func (s *taskValidatorSuite) TestPreValidatePassive_NewTask_Skip_WithoutCreationTime() {
-	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
-		taskID:         s.task.TaskId - 1,
-		validationTime: time.Unix(0, rand.Int63()).UTC(),
-	}
 	s.task.Data.CreateTime = nil
 
 	shouldValidate := s.taskValidator.preValidatePassive(s.task)
 	s.False(shouldValidate)
-	s.Equal(s.task.TaskId, s.taskValidator.lastValidatedTaskInfo.taskID)
-	s.True(time.Now().Sub(s.taskValidator.lastValidatedTaskInfo.validationTime) < time.Second)
+	info, ok := s.cacheInfo(s.task.TaskId)
+	s.True(ok)
+	s.Equal(s.task.TaskId, info.taskID)
+	s.Less(time.Since(info.validationTime), time.Second)
 }
 
 func (s *taskValidatorSuite) TestPreValidatePassive_ExistingTask_Validate() {
-	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
+	s.putCache(taskValidationInfo{
 		taskID:         s.task.TaskId,
 		validationTime: time.Now().Add(-taskReaderValidationThreshold * 2),
-	}
-
+	})
 	shouldValidate := s.taskValidator.preValidatePassive(s.task)
 	s.True(shouldValidate)
 }
 
 func (s *taskValidatorSuite) TestPreValidatePassive_ExistingTask_Skip() {
-	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
+	s.putCache(taskValidationInfo{
 		taskID:         s.task.TaskId,
 		validationTime: time.Now().Add(taskReaderValidationThreshold * 2),
-	}
-
+	})
 	shouldValidate := s.taskValidator.preValidatePassive(s.task)
 	s.False(shouldValidate)
+}
+
+func (s *taskValidatorSuite) TestCache_TwoTaskIDsIndependent() {
+	other := s.task.TaskId + 1
+	s.putCache(taskValidationInfo{
+		taskID:         other,
+		validationTime: time.Now().Add(-taskReaderValidationThreshold * 2),
+	})
+	s.task.Data.CreateTime = timestamppb.Now()
+
+	s.False(s.taskValidator.preValidateActive(s.task), "first sight of this id must skip")
+	s.True(s.taskValidator.preValidateActive(&persistencespb.AllocatedTaskInfo{
+		TaskId: other,
+		Data:   s.task.Data,
+	}), "other id must still be past threshold")
+}
+
+func (s *taskValidatorSuite) TestCache_ConcurrentFirstSeen() {
+	const n = 20
+	shouldValidate := make([]bool, n)
+	var wg sync.WaitGroup
+	wg.Add(n)
+	for i := 0; i < n; i++ {
+		go func(i int) {
+			defer wg.Done()
+			task := &persistencespb.AllocatedTaskInfo{
+				TaskId: int64(i + 1),
+				Data: &persistencespb.TaskInfo{
+					CreateTime: timestamppb.Now(),
+				},
+			}
+			shouldValidate[i] = s.taskValidator.preValidateActive(task)
+		}(i)
+	}
+	wg.Wait()
+
+	for i, got := range shouldValidate {
+		s.False(got, "first sight of task %d must skip", i+1)
+	}
+	s.taskValidator.mu.Lock()
+	defer s.taskValidator.mu.Unlock()
+	s.Len(s.taskValidator.cache, n)
+}
+
+func (s *taskValidatorSuite) TestCache_EvictsOldestWhenFull() {
+	now := time.Now()
+	for i := 0; i < taskValidatorCacheMaxSize; i++ {
+		s.putCache(taskValidationInfo{
+			taskID:         int64(i + 1),
+			validationTime: now.Add(time.Duration(i) * time.Second),
+		})
+	}
+	newTask := &persistencespb.AllocatedTaskInfo{
+		TaskId: int64(taskValidatorCacheMaxSize + 1),
+		Data:   &persistencespb.TaskInfo{CreateTime: timestamppb.Now()},
+	}
+	s.False(s.taskValidator.preValidateActive(newTask))
+
+	_, oldestStillThere := s.cacheInfo(1)
+	s.False(oldestStillThere, "oldest validationTime must be evicted")
+	_, newestKept := s.cacheInfo(int64(taskValidatorCacheMaxSize))
+	s.True(newestKept)
+	_, inserted := s.cacheInfo(newTask.TaskId)
+	s.True(inserted)
+	s.taskValidator.mu.Lock()
+	defer s.taskValidator.mu.Unlock()
+	s.Len(s.taskValidator.cache, taskValidatorCacheMaxSize)
 }
 
 func (s *taskValidatorSuite) TestIsTaskValid_ActivityTask_Valid() {
