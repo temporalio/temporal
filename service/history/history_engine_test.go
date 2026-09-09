@@ -56,7 +56,6 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -7150,8 +7149,10 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_BranchTokenNotOwnedByExecu
 	for _, sendRawHistory := range []bool{false, true} {
 		s.config.SendRawWorkflowHistory = func(string) bool { return sendRawHistory }
 		_, err = engine.GetWorkflowExecutionHistory(context.Background(), req)
-		var branchErr *serviceerrors.CurrentBranchChanged
-		s.ErrorAs(err, &branchErr, "sendRawHistory=%v", sendRawHistory)
+		var invalidArgument *serviceerror.InvalidArgument
+		s.Require().ErrorAs(err, &invalidArgument, "sendRawHistory=%v", sendRawHistory)
+		s.Require().Equal("request branchToken is not current.", err.Error())
+		s.Require().Empty(serviceerror.ToStatus(err).Proto().GetDetails())
 	}
 }
 
@@ -7249,6 +7250,8 @@ func (s *engineSuite) TestGetWorkflowExecutionHistoryReverse_BranchTokenNotOwned
 			},
 		},
 	)
-	var branchErr *serviceerrors.CurrentBranchChanged
-	s.ErrorAs(err, &branchErr)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.Require().ErrorAs(err, &invalidArgument)
+	s.Require().Equal("request branchToken is not current.", err.Error())
+	s.Require().Empty(serviceerror.ToStatus(err).Proto().GetDetails())
 }
