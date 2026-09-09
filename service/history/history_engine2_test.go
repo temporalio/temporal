@@ -4130,7 +4130,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
 	_, err := s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
-	s.Require().NoError(err)
+	s.IsType(&serviceerror.NotFound{}, err)
 }
 
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEventFoundOnCurrentBranch() {

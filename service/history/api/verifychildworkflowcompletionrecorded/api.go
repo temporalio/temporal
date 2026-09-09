@@ -71,9 +71,10 @@ func verifyChildExecution(
 	}
 
 	if !onCurrentBranch {
-		// Due to conflict resolution, the initiated event may be on a different branch of the workflow.
-		// The child is not associated with the current branch, so verification is complete.
-		return nil, nil, parentWorkflowState, nil
+		// due to conflict resolution, the initiated event may on a different branch of the workflow.
+		// we don't have to do anything and can simply return not found error. Standby logic
+		// after seeing this error will give up verification.
+		return nil, nil, parentWorkflowState, consts.ErrChildExecutionNotFound
 	}
 
 	ci, isRunning := mutableState.GetChildExecutionInfo(request.ParentInitiatedId)
