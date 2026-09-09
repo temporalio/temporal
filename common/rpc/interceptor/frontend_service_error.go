@@ -40,6 +40,8 @@ func NewFrontendServiceErrorInterceptor(
 		switch serviceErr := err.(type) {
 		case *serviceerrors.ShardOwnershipLost:
 			err = serviceerror.NewUnavailable("shard unavailable, please backoff and retry")
+		case *serviceerrors.CurrentBranchChanged:
+			err = serviceerror.NewInvalidArgument(serviceErr.Error())
 		case *serviceerror.DataLoss:
 			err = serviceerror.NewUnavailable("internal history service error")
 		case *serviceerror.ResourceExhausted:

@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -233,5 +234,10 @@ func ValidateBranchTokenForExecution(
 	if config.EnablePaginationTokenBranchValidationShadowMode() {
 		return nil
 	}
-	return consts.ErrInvalidNextPageToken
+	return serviceerrors.NewCurrentBranchChanged(
+		currentBranchToken,
+		requestBranchToken,
+		nil,
+		nil,
+	)
 }

@@ -56,6 +56,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -7149,7 +7150,8 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_BranchTokenNotOwnedByExecu
 	for _, sendRawHistory := range []bool{false, true} {
 		s.config.SendRawWorkflowHistory = func(string) bool { return sendRawHistory }
 		_, err = engine.GetWorkflowExecutionHistory(context.Background(), req)
-		s.ErrorIs(err, consts.ErrInvalidNextPageToken, "sendRawHistory=%v", sendRawHistory)
+		var branchErr *serviceerrors.CurrentBranchChanged
+		s.ErrorAs(err, &branchErr, "sendRawHistory=%v", sendRawHistory)
 	}
 }
 
@@ -7247,5 +7249,6 @@ func (s *engineSuite) TestGetWorkflowExecutionHistoryReverse_BranchTokenNotOwned
 			},
 		},
 	)
-	s.ErrorIs(err, consts.ErrInvalidNextPageToken)
+	var branchErr *serviceerrors.CurrentBranchChanged
+	s.ErrorAs(err, &branchErr)
 }

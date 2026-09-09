@@ -44,6 +44,18 @@ func TestFrontendServiceErrorInterceptor(t *testing.T) {
 			},
 		},
 		{
+			name:       "Mask CurrentBranchChanged",
+			handlerErr: serviceerrors.NewCurrentBranchChanged([]byte("current"), []byte("request"), nil, nil),
+			verifyFn: func(t *testing.T, err error, _ *rpctest.MockServerTransportStream) {
+				require.Error(t, err)
+
+				var invalidArgument *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgument)
+				require.Equal(t, "Current and request branch tokens, or current and request versioned transitions, don't match.", err.Error())
+				require.Empty(t, serviceerror.ToStatus(err).Proto().GetDetails())
+			},
+		},
+		{
 			name:       "Mask DataLoss",
 			handlerErr: serviceerror.NewDataLoss("..."),
 			verifyFn: func(t *testing.T, err error, _ *rpctest.MockServerTransportStream) {
