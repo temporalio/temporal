@@ -271,3 +271,12 @@ func (s *PriMatcherSuite) TestValidatorDrop_SetsDropReason() {
 		})
 	}
 }
+
+func (s *PriMatcherSuite) TestValidatorBatchSizeDefault() {
+	cfg := newTaskQueueConfig(
+		tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+		NewConfig(dynamicconfig.NewNoopCollection()),
+		"nsname",
+	)
+	s.Equal(10, cfg.ValidatorBatchSize())
+}
