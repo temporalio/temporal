@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "1.16",
+  "MinCompatibleVersion": "1.0",
+  "Description": "Fix data_encoding column in current_executions table",
+  "SchemaUpdateCqlFiles": [
+    "fix_data_encoding_column.sql"
+  ]
+}
