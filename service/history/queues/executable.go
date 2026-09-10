@@ -609,6 +609,9 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		return nil
 	}
 
+	// The attempt that just failed. incAttempt moves the counter on to the next attempt, so it can no longer
+	// answer "which attempt failed" for the logging below.
+	failedAttempt := e.attempt.Load()
 	e.incAttempt()
 
 	if alertable, causeTag := classifyAlertableError(err); alertable {
@@ -630,7 +633,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	logTags := []tag.Tag{
 		tag.Error(err),
 		tag.ErrorType(err),
-		tag.Attempt(int32(e.attempt.Load())),
+		tag.Attempt(int32(failedAttempt)),
 		tag.UnexpectedErrorAttempts(int32(e.unexpectedErrorAttempts)),
 		tag.LifeCycleProcessingFailed,
 		tag.String("task-category", e.GetCategory().Name()),
