@@ -1,6 +1,7 @@
 # Code Guidelines
 
 These rules apply when authoring or reviewing code; the Review Feedback Style section applies only when reviewing code.
+Express each rule as a concise, direct statement of the expected code or review behavior.
 
 ## 1. Structural Simplicity (Highest Priority)
 
