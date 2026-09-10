@@ -15,7 +15,6 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -52,7 +51,7 @@ type invocableNexusHandler struct {
 // operation's outcome and the context the callback was registered with.
 func (n invocableNexusHandler) buildOnCompleteRequest() (*notificationservice.OnCompleteRequest, error) {
 	onCompReq := &notificationservice.OnCompleteRequest{
-		SourceContext: common.CloneProto(n.callback.GetSourceContext()),
+		SourceContext: n.callback.GetSourceContext(),
 	}
 
 	if n.completion.Error != nil {
@@ -176,12 +175,8 @@ func (n invocableNexusHandler) Invoke(
 		metrics.OutcomeTag(string(outcome)),
 		metrics.NexusCompletionSourceTag(n.completionSourceTag),
 	}
-
-	reqCounter := h.metricsHandler.Counter(NexusHandlerRequestCounter.Name())
-	reqCounter.Record(1, tags...)
-
-	latencyHist := h.metricsHandler.Timer(NexusHandlerRequestLatencyHistogram.Name())
-	latencyHist.Record(time.Since(startTime), tags...)
+	NexusHandlerRequestCounter.With(h.metricsHandler).Record(1, tags...)
+	NexusHandlerRequestLatencyHistogram.With(h.metricsHandler).Record(time.Since(startTime), tags...)
 
 	return result
 }
@@ -208,7 +203,8 @@ func (n invocableNexusHandler) dispatch(
 		// The task never reached a worker, so this is a problem between history and matching.
 		// Every other dispatch error is internal to Temporal and not something the namespace's users can
 		// fix, so only a reference ID to the logged error is surfaced to them.
-		retryable := common.IsRetryableRPCError(rpcErr)
+		handlerErr := commonnexus.ConvertGRPCError(rpcErr, false)
+		retryable := isRetryableCallError(handlerErr)
 		logger = log.With(logger, tag.Bool("retryable", retryable))
 		userFacingErr := logInternalError(logger, "NexusHandler callback dispatch failed", rpcErr)
 
@@ -259,7 +255,7 @@ func (n invocableNexusHandler) classifyDispatchResult(
 		// resolved as failed or canceled. That is the handler's verdict on this completion rather than
 		// a delivery problem, and redelivering would collect the same verdict, so the callback fails
 		// permanently.
-		logger.Error("NexusHandler callback was rejected by the handler", tag.Error(err))
+		logger.Error("NexusHandler callback resulted in an operation error", tag.Error(err))
 		return invocationResultFail{err}
 
 	case commonnexus.DispatchOutcomeHandlerFailure,
@@ -271,17 +267,12 @@ func (n invocableNexusHandler) classifyDispatchResult(
 		// handler errors synthesized above, so all three ask the same question.
 		handlerErr, ok := errors.AsType[*nexus.HandlerError](err)
 		retryable := ok && handlerErr.Retryable()
-		logger.Error("NexusHandler callback delivery failed", tag.Error(err), tag.Bool("retryable", retryable))
+		logger.Error("NexusHandler callback resulted in a handler error", tag.Error(err), tag.Bool("retryable", retryable))
 		if retryable {
 			return invocationResultRetry{err}
 		}
 		return invocationResultFail{err}
 
-	case commonnexus.DispatchOutcomeWorkerFailure:
-		// the worker failed the task with a failure carrying no Nexus handler failure info. This is
-		// rejected by the RespondNexusTaskFailed operation, and so this shouldn't be reachable in
-		// outside of tests. Treat as some other unknown/unhandled response; and retry.
-		fallthrough
 	default:
 		// An outcome this build does not know about and that Succeeded() did not vouch for. Treat it
 		// like an unreadable response and keep retrying, in the hope the mismatch is transient.
