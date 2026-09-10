@@ -82,38 +82,24 @@ func FormatMessageForDebug(report *FailureReport) string {
 // BuildDataRaceMessage creates a Slack message announcing data races on main.
 func BuildDataRaceMessage(report *DataRaceReport) *slack.Message {
 	runID := strconv.FormatInt(report.Run.DatabaseID, 10)
-	commitURL := github.CommitURL(temporalRepository, report.Run.HeadSHA)
 
 	message := slack.NewMessage(fmt.Sprintf("Data Race Detected on Main (%d)", len(report.DataRaces)))
 	message.AddSection(":rotating_light: *Data Race Detected on Main Branch* :rotating_light:")
-	message.AddFields(
-		fmt.Sprintf("*Commit:*\n<%s|%s>", commitURL, report.Run.ShortSHA()),
-		fmt.Sprintf("*Author:*\n%s", orUnknown(report.Author)),
-	)
-	if report.Title != "" {
-		message.AddSection(fmt.Sprintf("*Commit message:*\n%s", report.Title))
-	}
 
 	for _, race := range report.DataRaces {
-		var sb strings.Builder
+		lines := raceSites(race.Details)
 		if race.Location != "" {
-			fmt.Fprintf(&sb, "*%s*", race.Location)
+			lines = append([]string{race.Location}, lines...)
 		}
-		for _, site := range raceSites(race.Details) {
-			fmt.Fprintf(&sb, "\n• %s", site)
+		var sb strings.Builder
+		if len(lines) > 0 {
+			fmt.Fprintf(&sb, "```\n%s\n```\n", strings.Join(lines, "\n"))
 		}
-		fmt.Fprintf(&sb, "\n<%s|View job logs>", raceLink(runID, race))
+		fmt.Fprintf(&sb, "<%s|View job logs>", raceLink(runID, race))
 		message.AddSection(sb.String())
 	}
 
 	return message
-}
-
-func orUnknown(s string) string {
-	if s == "" {
-		return "Unknown"
-	}
-	return s
 }
 
 // raceLink points at the specific job that reported the race so the alert is
