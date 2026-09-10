@@ -138,6 +138,8 @@ type (
 		PollerScalingDecisionsPerSecond     dynamicconfig.FloatPropertyFnWithTaskQueueFilter
 		PollerScalingTaskAddToDispatchRatio dynamicconfig.FloatPropertyFnWithTaskQueueFilter
 		EnablePollerScalingDecisionMetrics  dynamicconfig.BoolPropertyFnWithTaskQueueFilter
+		PollerScalingFairnessFactor         dynamicconfig.FloatPropertyFnWithTaskQueueFilter
+		PollerScalingFairnessMinWorkers     dynamicconfig.IntPropertyFnWithTaskQueueFilter
 
 		FairnessCounter               dynamicconfig.TypedPropertyFnWithTaskQueueFilter[counter.CounterParams]
 		FairnessPassDither            dynamicconfig.BoolPropertyFnWithTaskQueueFilter
@@ -232,6 +234,8 @@ type (
 		PollerScalingDecisionsPerSecond     func() float64
 		PollerScalingTaskAddToDispatchRatio func() float64
 		EnablePollerScalingDecisionMetrics  func() bool
+		PollerScalingFairnessFactor         func() float64
+		PollerScalingFairnessMinWorkers     func() int
 
 		FairnessCounter               func() counter.CounterParams
 		FairnessPassDither            func() bool
@@ -385,6 +389,8 @@ func NewConfig(
 		PollerScalingDecisionsPerSecond:     dynamicconfig.MatchingPollerScalingDecisionsPerSecond.Get(dc),
 		PollerScalingTaskAddToDispatchRatio: dynamicconfig.MatchingPollerScalingTaskAddToDispatchRatio.Get(dc),
 		EnablePollerScalingDecisionMetrics:  dynamicconfig.MatchingEnablePollerScalingDecisionMetrics.Get(dc),
+		PollerScalingFairnessFactor:         dynamicconfig.MatchingPollerScalingFairnessFactor.Get(dc),
+		PollerScalingFairnessMinWorkers:     dynamicconfig.MatchingPollerScalingFairnessMinWorkers.Get(dc),
 
 		FairnessCounter:               dynamicconfig.MatchingFairnessCounter.Get(dc),
 		FairnessPassDither:            dynamicconfig.MatchingFairnessPassDither.Get(dc),
@@ -563,6 +569,12 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		EnablePollerScalingDecisionMetrics: func() bool {
 			return config.EnablePollerScalingDecisionMetrics(ns.String(), taskQueueName, taskType)
+		},
+		PollerScalingFairnessFactor: func() float64 {
+			return config.PollerScalingFairnessFactor(ns.String(), taskQueueName, taskType)
+		},
+		PollerScalingFairnessMinWorkers: func() int {
+			return config.PollerScalingFairnessMinWorkers(ns.String(), taskQueueName, taskType)
 		},
 		FairnessCounter: func() counter.CounterParams {
 			return config.FairnessCounter(ns.String(), taskQueueName, taskType)

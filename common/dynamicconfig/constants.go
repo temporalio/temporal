@@ -1563,6 +1563,29 @@ second per poller by one physical queue manager`,
 		`MatchingPollerScalingTaskAddToDispatchRatio is the ratio of task add rate to task
 dispatch rate above which a decision to scale up the number of pollers will be issued`,
 	)
+	MatchingPollerScalingFairnessFactor = NewTaskQueueFloatSetting(
+		"matching.pollerScalingFairnessFactor",
+		0,
+		`MatchingPollerScalingFairnessFactor bounds how far above its fair share of a task
+queue's pollers a worker may go before the server stops sending it scale-up suggestions.
+Fair share is weighted by each worker's reported slot capacity, so a larger worker is
+permitted proportionally more pollers. 1.5 means "suppress once a worker holds 50% more
+pollers per slot than the fleet average". 0 disables the check.
+
+Scale-up suggestions ride on dispatched tasks and dispatch is proportional to poller
+count, so without this a worker's growth rate is proportional to its current size and any
+imbalance between identical workers persists or grows. Only workers whose SDK reports
+PollerScalingInfo take part; see MatchingPollerScalingFairnessMinWorkers.`,
+	)
+	MatchingPollerScalingFairnessMinWorkers = NewTaskQueueIntSetting(
+		"matching.pollerScalingFairnessMinWorkers",
+		2,
+		`MatchingPollerScalingFairnessMinWorkers is the minimum number of workers that must be
+reporting PollerScalingInfo on a physical queue before share-based suppression applies.
+Workers on SDKs that do not report are invisible to the check, so with low coverage the
+reporting workers would be held to a fair share while the rest grow unchecked -- making an
+SDK upgrade cost a worker share. Raise this to require broader coverage first.`,
+	)
 	MatchingEnablePollerScalingDecisionMetrics = NewTaskQueueBoolSetting(
 		"matching.enablePollerScalingDecisionMetrics",
 		false,

@@ -48,3 +48,7 @@
 
 # Ignoring AI agent files
 .agents/
+
+# Local-only workspace pinning an unreleased go.temporal.io/api build.
+go.work
+go.work.sum

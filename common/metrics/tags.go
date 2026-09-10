@@ -346,6 +346,10 @@ const (
 	PollerScaleReasonTaskRate             ReasonString = "task_rate"
 	PollerScaleReasonRateLimited          ReasonString = "rate_limited"
 	PollerScaleReasonTaskQueueRateLimited ReasonString = "task_queue_rate_limited"
+	// PollerScaleReasonUnfairShare means the queue wanted more pollers but this worker
+	// already holds more than its capacity-weighted share of them, so the suggestion was
+	// withheld for a worker below its share to pick up instead.
+	PollerScaleReasonUnfairShare ReasonString = "unfair_share"
 )
 
 // PollerScaleDecisionTag records the direction of a poller scaling decision (scale up, scale

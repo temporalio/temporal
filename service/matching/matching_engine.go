@@ -116,6 +116,9 @@ type (
 		localPollStartTime        time.Time
 		workerInstanceKey         string
 		workerControlTaskQueue    string
+		// Worker-reported poller pool state, used to spread scaling suggestions across a
+		// fleet by share. Nil for older SDKs and for Nexus polls, which do not report it.
+		pollerScalingInfo *taskqueuepb.PollerScalingInfo
 	}
 
 	userDataUpdate struct {
@@ -708,6 +711,7 @@ pollLoop:
 			forwardedFrom:             req.ForwardedSource,
 			conditions:                req.Conditions,
 			workerInstanceKey:         request.WorkerInstanceKey,
+			pollerScalingInfo:         request.PollerScalingInfo,
 			workerControlTaskQueue:    request.WorkerControlTaskQueue,
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
@@ -985,6 +989,7 @@ pollLoop:
 			forwardedFrom:             req.ForwardedSource,
 			conditions:                req.Conditions,
 			workerInstanceKey:         request.WorkerInstanceKey,
+			pollerScalingInfo:         request.PollerScalingInfo,
 			workerControlTaskQueue:    request.WorkerControlTaskQueue,
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)

@@ -91,6 +91,9 @@ type (
 		taskValidator            taskValidator
 		deploymentRegistrationCh chan struct{}
 		pollerScalingRateLimiter quotas.RateLimiter
+		// pollerShares holds the poller pool state workers report on their polls, so
+		// scale-up suggestions can be withheld from a worker already above its share.
+		pollerShares *pollerShareTracker
 
 		taskTrackerLock sync.Mutex
 		tasksAdded      map[priorityKey]*taskTracker
@@ -169,6 +172,10 @@ func newPhysicalTaskQueueManager(
 	pqMgr.deploymentRegistrationCh <- struct{}{} // seed
 
 	pqMgr.pollerHistory = newPollerHistory(partitionMgr.config.PollerHistoryTTL())
+	// Shares the poller-history TTL: both answer "which workers are on this queue right
+	// now", so a worker should fall out of both at the same time.
+	pqMgr.pollerShares = newPollerShareTracker(
+		partitionMgr.engine.timeSource, partitionMgr.config.PollerHistoryTTL())
 
 	pqMgr.liveness = newLiveness(
 		clock.NewRealTimeSource(),
@@ -627,12 +634,16 @@ func (c *physicalTaskQueueManagerImpl) DispatchNexusTask(
 
 func (c *physicalTaskQueueManagerImpl) UpdatePollerInfo(id pollerIdentity, pollMetadata *pollMetadata) {
 	c.pollerHistory.updatePollerInfo(id, pollMetadata)
+	c.pollerShares.record(pollerShareKey(pollMetadata, id), pollMetadata.pollerScalingInfo)
 }
 
 func (c *physicalTaskQueueManagerImpl) RemovePoller(id pollerIdentity) {
 	if c.pollerHistory != nil {
 		c.pollerHistory.removePoller(id)
 	}
+	// RemovePoller only carries the identity, so this only reaches entries keyed by it.
+	// A worker keyed by its instance key ages out via the tracker TTL instead.
+	c.pollerShares.forget(string(id))
 }
 
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes
@@ -880,17 +891,24 @@ func (c *physicalTaskQueueManagerImpl) GetFairnessWeightOverrides() fairnessWeig
 
 func (c *physicalTaskQueueManagerImpl) MakePollerScalingDecision(
 	ctx context.Context,
-	pollStartTime time.Time,
+	pollMetadata *pollMetadata,
 	taskSource enumsspb.TaskSource,
 ) *taskqueuepb.PollerScalingDecision {
-	return c.makePollerScalingDecisionImpl(pollStartTime, taskSource, func() *taskqueuepb.TaskQueueStats {
-		return c.partitionMgr.GetPhysicalQueueAdjustedStats(ctx, c)
-	})
+	return c.makePollerScalingDecisionImpl(
+		pollMetadata.localPollStartTime,
+		taskSource,
+		pollerShareKey(pollMetadata, ""),
+		func() *taskqueuepb.TaskQueueStats {
+			return c.partitionMgr.GetPhysicalQueueAdjustedStats(ctx, c)
+		})
 }
 
 func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 	pollStartTime time.Time,
 	taskSource enumsspb.TaskSource,
+	// Identifies the polling worker for share-based fairness. Empty disables the check,
+	// which is what older SDKs that report no pool state get.
+	shareKey string,
 	statsFn func() *taskqueuepb.TaskQueueStats,
 ) *taskqueuepb.PollerScalingDecision {
 	pollWaitTime := c.partitionMgr.engine.timeSource.Since(pollStartTime)
@@ -948,11 +966,45 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 	if delta == 0 {
 		return nil
 	}
+	if c.suppressForUnfairShare(shareKey) {
+		c.recordPollerScaleDecision(metrics.PollerScaleDecisionHold, metrics.PollerScaleReasonUnfairShare)
+		return nil
+	}
 	// Both scale-up branches above set delta = 1, so the decision here is always a scale-up.
 	c.recordPollerScaleDecision(metrics.PollerScaleDecisionUp, reason)
 	return &taskqueuepb.PollerScalingDecision{
 		PollRequestDeltaSuggestion: delta,
 	}
+}
+
+// pollerShareKey identifies the worker a poll came from. workerInstanceKey is preferred:
+// it is a per-worker UUID, whereas identity is user-settable and a fleet that sets one
+// shared value would collapse into a single entry -- making every worker look exactly
+// average and silently disabling fairness.
+func pollerShareKey(pollMetadata *pollMetadata, id pollerIdentity) string {
+	if pollMetadata != nil && pollMetadata.workerInstanceKey != "" {
+		return pollMetadata.workerInstanceKey
+	}
+	return string(id)
+}
+
+// suppressForUnfairShare reports whether this scale-up should be withheld because the
+// polling worker already holds more than its capacity-weighted share of the fleet's
+// pollers. Withholding does not waste the suggestion: the queue is still hot, so the next
+// task dispatched to a worker below its share carries it instead.
+func (c *physicalTaskQueueManagerImpl) suppressForUnfairShare(shareKey string) bool {
+	factor := c.partitionMgr.config.PollerScalingFairnessFactor()
+	if factor <= 0 {
+		return false // disabled
+	}
+	// Workers on SDKs that do not report are invisible to the tracker. Applying fairness
+	// under thin coverage would hold reporting workers to a share while the rest grow
+	// unchecked, so an SDK upgrade would cost a worker share.
+	if c.pollerShares.reportingWorkers() < c.partitionMgr.config.PollerScalingFairnessMinWorkers() {
+		return false
+	}
+	over, _, _ := c.pollerShares.overShare(shareKey, factor)
+	return over
 }
 
 // recordPollerScaleDecision emits the poller_scale_decision metric describing the direction of a

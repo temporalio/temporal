@@ -68,7 +68,7 @@ type (
 		QueueKey() *PhysicalTaskQueueKey
 		// MakePollerScalingDecision makes a decision on whether to scale pollers up or down based on the current state
 		// of the task queue and the task about to be returned.
-		MakePollerScalingDecision(ctx context.Context, pollStartTime time.Time, taskSource enumsspb.TaskSource) *taskqueuepb.PollerScalingDecision
+		MakePollerScalingDecision(ctx context.Context, pollMetadata *pollMetadata, taskSource enumsspb.TaskSource) *taskqueuepb.PollerScalingDecision
 		// GetFairnessWeightOverrides returns current fairness weight overrides for this queue.
 		GetFairnessWeightOverrides() fairnessWeightOverrides
 		UpdateRemotePriorityBacklogs(remotePriorityBacklogSet)
