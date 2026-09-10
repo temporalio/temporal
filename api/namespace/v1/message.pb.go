@@ -25,12 +25,10 @@ const (
 type NamespaceCacheInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "in" and "by" are needed here. --)
+	//     aip.dev/not-precedent: "in" and "by" are needed here. --)
 	ItemsInCacheByIdCount int64 `protobuf:"varint,1,opt,name=items_in_cache_by_id_count,json=itemsInCacheByIdCount,proto3" json:"items_in_cache_by_id_count,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "in" and "by" are needed here. --)
+	//     aip.dev/not-precedent: "in" and "by" are needed here. --)
 	ItemsInCacheByNameCount int64 `protobuf:"varint,2,opt,name=items_in_cache_by_name_count,json=itemsInCacheByNameCount,proto3" json:"items_in_cache_by_name_count,omitempty"`
 	unknownFields           protoimpl.UnknownFields
 	sizeCache               protoimpl.SizeCache
