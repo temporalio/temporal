@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -248,7 +248,7 @@ func remoteTags(ctx context.Context, mod moduleSpec) (map[string]string, error) 
 	}
 
 	commits := make(map[string]string) // tag name -> commit sha
-	for _, line := range strings.Split(string(out), "\n") {
+	for line := range strings.SplitSeq(string(out), "\n") {
 		sha, ref, found := strings.Cut(strings.TrimSpace(line), "\t")
 		if !found {
 			continue
@@ -257,7 +257,7 @@ func remoteTags(ctx context.Context, mod moduleSpec) (map[string]string, error) 
 		if name == ref {
 			continue
 		}
-		if deref := strings.TrimSuffix(name, "^{}"); deref != name {
+		if deref, ok := strings.CutSuffix(name, "^{}"); ok {
 			commits[deref] = sha
 			continue
 		}
@@ -282,7 +282,7 @@ func releaseTagsAt(tags map[string]string, shortHash string) []string {
 		}
 		found = append(found, name)
 	}
-	sort.Strings(found)
+	slices.Sort(found)
 	return found
 }
 
