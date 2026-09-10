@@ -30,8 +30,20 @@ type migrateAdminClient struct {
 	err     error
 	failIDs map[string]string // scheduleID -> error message
 
-	mu       sync.Mutex
-	requests []*adminservice.MigrateScheduleRequest
+	mu            sync.Mutex
+	requests      []*adminservice.MigrateScheduleRequest
+	batchRequests []*adminservice.StartAdminBatchOperationRequest
+}
+
+func (c *migrateAdminClient) StartAdminBatchOperation(
+	_ context.Context,
+	req *adminservice.StartAdminBatchOperationRequest,
+	_ ...grpc.CallOption,
+) (*adminservice.StartAdminBatchOperationResponse, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.batchRequests = append(c.batchRequests, req)
+	return &adminservice.StartAdminBatchOperationResponse{}, c.err
 }
 
 func (c *migrateAdminClient) MigrateSchedule(
@@ -53,9 +65,20 @@ func (c *migrateAdminClient) MigrateSchedule(
 
 type migrateWorkflowClient struct {
 	workflowservice.WorkflowServiceClient
-	pages    []*workflowservice.ListWorkflowExecutionsResponse
-	next     int
-	requests []*workflowservice.ListWorkflowExecutionsRequest
+	pages         []*workflowservice.ListWorkflowExecutionsResponse
+	next          int
+	requests      []*workflowservice.ListWorkflowExecutionsRequest
+	countRequests []*workflowservice.CountWorkflowExecutionsRequest
+	count         int64
+}
+
+func (c *migrateWorkflowClient) CountWorkflowExecutions(
+	_ context.Context,
+	req *workflowservice.CountWorkflowExecutionsRequest,
+	_ ...grpc.CallOption,
+) (*workflowservice.CountWorkflowExecutionsResponse, error) {
+	c.countRequests = append(c.countRequests, req)
+	return &workflowservice.CountWorkflowExecutionsResponse{Count: c.count}, nil
 }
 
 func (c *migrateWorkflowClient) ListWorkflowExecutions(
@@ -104,143 +127,95 @@ func runMigrate(t *testing.T, factory tdbg.ClientFactory, args ...string) (stdou
 	return stdout.String(), stderr.String(), err
 }
 
+func TestMigrateSchedule_FromVisibility_StartsAdminBatch(t *testing.T) {
+	admin := &migrateAdminClient{}
+	wf := &migrateWorkflowClient{count: 3}
+	factory := migrateClientFactory{admin: admin, workflow: wf}
+
+	stdout, _, err := runMigrate(t, factory,
+		"-n", "payments", "schedule", "migrate",
+		"--target", "workflow",
+		"--from-visibility",
+		"--query", "WorkflowId STARTS_WITH 'critical-'",
+		"--execute",
+		"--reason", "rollback",
+		"--job-id", "rollback-payments")
+	require.NoError(t, err)
+	require.Contains(t, stdout, "rollback-payments")
+
+	require.Len(t, wf.countRequests, 1)
+	require.Equal(t, "payments", wf.countRequests[0].Namespace)
+	require.Equal(t,
+		fmt.Sprintf("(TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Running') AND (WorkflowId STARTS_WITH 'critical-')", chasm.SchedulerArchetypeID),
+		wf.countRequests[0].Query,
+	)
+
+	require.Len(t, admin.batchRequests, 1)
+	req := admin.batchRequests[0]
+	require.Equal(t, "payments", req.Namespace)
+	require.Equal(t, "rollback-payments", req.JobId)
+	require.Equal(t, "rollback", req.Reason)
+	require.Equal(t, "WorkflowId STARTS_WITH 'critical-'", req.VisibilityQuery)
+	op := req.GetMigrateSchedulesOperation()
+	require.NotNil(t, op)
+	require.Equal(t, adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW, op.Target)
+	require.Empty(t, admin.requests)
+}
+
 func TestMigrateSchedule_FromVisibility_DryRun(t *testing.T) {
 	admin := &migrateAdminClient{}
-	wf := &migrateWorkflowClient{
-		pages: []*workflowservice.ListWorkflowExecutionsResponse{
-			{
-				Executions:    []*workflowpb.WorkflowExecutionInfo{scheduleExecution("sched-a")},
-				NextPageToken: []byte("page2"),
-			},
-			{
-				Executions: []*workflowpb.WorkflowExecutionInfo{scheduleExecution("sched-b")},
-			},
-		},
-	}
+	wf := &migrateWorkflowClient{count: 2}
 	factory := migrateClientFactory{admin: admin, workflow: wf}
 
 	stdout, _, err := runMigrate(t, factory,
 		"-n", "my-ns", "schedule", "migrate", "--target", "workflow", "--from-visibility")
 	require.NoError(t, err)
 
-	// Dry-run performs no migrations.
 	require.Empty(t, admin.requests)
-	// Default query is built from the CHASM scheduler archetype ID and scoped to --namespace.
-	require.NotEmpty(t, wf.requests)
+	require.Empty(t, admin.batchRequests)
+	require.Len(t, wf.countRequests, 1)
 	expectedQuery := fmt.Sprintf("TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Running'", chasm.SchedulerArchetypeID)
-	require.Equal(t, expectedQuery, wf.requests[0].Query)
-	require.Equal(t, "my-ns", wf.requests[0].Namespace)
-	// Both pages are listed and reported.
-	require.Contains(t, stdout, "[dry-run] would migrate my-ns/sched-a -> workflow")
-	require.Contains(t, stdout, "[dry-run] would migrate my-ns/sched-b -> workflow")
+	require.Equal(t, expectedQuery, wf.countRequests[0].Query)
+	require.Equal(t, "my-ns", wf.countRequests[0].Namespace)
 	require.Contains(t, stdout, "Dry-run: 2 schedule(s)")
 }
 
 func TestMigrateSchedule_FromVisibility_Execute(t *testing.T) {
 	admin := &migrateAdminClient{}
-	wf := &migrateWorkflowClient{
-		pages: []*workflowservice.ListWorkflowExecutionsResponse{
-			{
-				Executions: []*workflowpb.WorkflowExecutionInfo{
-					// CHASM execution: workflow id is the schedule id directly.
-					scheduleExecution("sched-v2"),
-					// V1 execution: the scheduler workflow-id prefix is trimmed off.
-					scheduleExecution("temporal-sys-scheduler:sched-v1"),
-				},
-			},
-		},
-	}
+	wf := &migrateWorkflowClient{count: 2}
 	factory := migrateClientFactory{admin: admin, workflow: wf}
 
 	_, _, err := runMigrate(t, factory,
-		"-n", "my-ns", "schedule", "migrate", "--target", "workflow", "--from-visibility", "--execute")
+		"-n", "my-ns", "schedule", "migrate", "--target", "workflow", "--from-visibility", "--execute",
+		"--reason", "rollback", "--job-id", "rollback-job")
 	require.NoError(t, err)
 
-	require.Len(t, admin.requests, 2)
-	ids := []string{admin.requests[0].ScheduleId, admin.requests[1].ScheduleId}
-	require.ElementsMatch(t, []string{"sched-v2", "sched-v1"}, ids)
-	for _, req := range admin.requests {
-		require.Equal(t, "my-ns", req.Namespace)
-		require.Equal(t, adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW, req.Target)
-		require.NotEmpty(t, req.RequestId)
-	}
+	require.Empty(t, admin.requests)
+	require.Len(t, admin.batchRequests, 1)
+	req := admin.batchRequests[0]
+	require.Equal(t, "my-ns", req.Namespace)
+	require.Equal(t, "rollback-job", req.JobId)
+	require.Equal(t, "rollback", req.Reason)
+	require.Equal(t, adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW, req.GetMigrateSchedulesOperation().GetTarget())
 }
 
-func TestMigrateSchedule_FromVisibility_Workers(t *testing.T) {
-	admin := &migrateAdminClient{}
-	const n = 12
-	execs := make([]*workflowpb.WorkflowExecutionInfo, n)
-	want := make([]string, n)
-	for i := range n {
-		id := fmt.Sprintf("sched-%d", i)
-		execs[i] = scheduleExecution(id)
-		want[i] = id
-	}
-	wf := &migrateWorkflowClient{
-		pages: []*workflowservice.ListWorkflowExecutionsResponse{{Executions: execs}},
-	}
-	factory := migrateClientFactory{admin: admin, workflow: wf}
+func TestMigrateSchedule_FromVisibility_RejectsWorkers(t *testing.T) {
+	factory := migrateClientFactory{admin: &migrateAdminClient{}, workflow: &migrateWorkflowClient{}}
 
 	_, _, err := runMigrate(t, factory,
 		"-n", "my-ns", "schedule", "migrate", "--target", "workflow", "--from-visibility",
 		"--execute", "--workers", "4")
-	require.NoError(t, err)
-
-	require.Len(t, admin.requests, n)
-	got := make([]string, len(admin.requests))
-	for i, req := range admin.requests {
-		got[i] = req.ScheduleId
-	}
-	require.ElementsMatch(t, want, got)
+	require.ErrorContains(t, err, "only valid when piping")
 }
 
-func TestMigrateSchedule_FromVisibility_OutputLog(t *testing.T) {
-	admin := &migrateAdminClient{failIDs: map[string]string{"sched-bad": "boom"}}
-	wf := &migrateWorkflowClient{
-		pages: []*workflowservice.ListWorkflowExecutionsResponse{{
-			Executions: []*workflowpb.WorkflowExecutionInfo{
-				scheduleExecution("sched-ok"),
-				scheduleExecution("sched-bad"),
-			},
-		}},
-	}
-	factory := migrateClientFactory{admin: admin, workflow: wf}
+func TestMigrateSchedule_FromVisibility_RejectsOutputLog(t *testing.T) {
+	factory := migrateClientFactory{admin: &migrateAdminClient{}, workflow: &migrateWorkflowClient{}}
 
 	logPath := filepath.Join(t.TempDir(), "migrations.jsonl")
 	_, _, err := runMigrate(t, factory,
 		"-n", "my-ns", "schedule", "migrate", "--target", "workflow", "--from-visibility",
 		"--execute", "--output-log", logPath)
-	require.NoError(t, err)
-
-	type logRec struct {
-		Timestamp  string `json:"timestamp"`
-		Namespace  string `json:"namespace"`
-		ScheduleID string `json:"schedule_id"`
-		Target     string `json:"target"`
-		Status     string `json:"status"`
-		Error      string `json:"error"`
-	}
-	data, err := os.ReadFile(logPath)
-	require.NoError(t, err)
-	byID := map[string]logRec{}
-	for line := range strings.SplitSeq(strings.TrimSpace(string(data)), "\n") {
-		var rec logRec
-		require.NoError(t, json.Unmarshal([]byte(line), &rec))
-		byID[rec.ScheduleID] = rec
-	}
-
-	require.Len(t, byID, 2)
-
-	ok := byID["sched-ok"]
-	require.Equal(t, "migrated", ok.Status)
-	require.Equal(t, "my-ns", ok.Namespace)
-	require.Equal(t, "workflow", ok.Target)
-	require.Empty(t, ok.Error)
-	require.NotEmpty(t, ok.Timestamp)
-
-	bad := byID["sched-bad"]
-	require.Equal(t, "failed", bad.Status)
-	require.Contains(t, bad.Error, "boom")
+	require.ErrorContains(t, err, "only valid when piping")
 }
 
 func TestMigrateSchedule_FromVisibility_CustomQuery(t *testing.T) {
@@ -248,14 +223,17 @@ func TestMigrateSchedule_FromVisibility_CustomQuery(t *testing.T) {
 	wf := &migrateWorkflowClient{}
 	factory := migrateClientFactory{admin: admin, workflow: wf}
 
-	customQuery := "TemporalNamespaceDivision = '403648407' AND ScheduleId = 'only-this'"
+	customQuery := "WorkflowId = 'only-this'"
 	_, _, err := runMigrate(t, factory,
 		"-n", "my-ns", "schedule", "migrate", "--target", "workflow", "--from-visibility",
 		"--query", customQuery)
 	require.NoError(t, err)
 
-	require.NotEmpty(t, wf.requests)
-	require.Equal(t, customQuery, wf.requests[0].Query)
+	require.Len(t, wf.countRequests, 1)
+	require.Equal(t,
+		fmt.Sprintf("(TemporalNamespaceDivision = '%d' AND ExecutionStatus = 'Running') AND (%s)", chasm.SchedulerArchetypeID, customQuery),
+		wf.countRequests[0].Query,
+	)
 }
 
 func TestMigrateSchedule_FromVisibility_DefaultQueryToChasm(t *testing.T) {
@@ -268,23 +246,22 @@ func TestMigrateSchedule_FromVisibility_DefaultQueryToChasm(t *testing.T) {
 		"-n", "my-ns", "schedule", "migrate", "--target", "chasm", "--from-visibility")
 	require.NoError(t, err)
 
-	require.NotEmpty(t, wf.requests)
+	require.Len(t, wf.countRequests, 1)
 	expectedQuery := fmt.Sprintf("TemporalNamespaceDivision = '%s' AND ExecutionStatus = 'Running'", scheduler.NamespaceDivision)
-	require.Equal(t, expectedQuery, wf.requests[0].Query)
+	require.Equal(t, expectedQuery, wf.countRequests[0].Query)
 }
 
 func TestMigrateSchedule_RejectsQueryWithoutFromVisibility(t *testing.T) {
 	factory := migrateClientFactory{admin: &migrateAdminClient{}, workflow: &migrateWorkflowClient{}}
 	_, _, err := runMigrate(t, factory,
-		"schedule", "migrate", "--target", "workflow", "--schedule-id", "x", "--query", "ScheduleId = 'x'")
+		"schedule", "migrate", "--target", "workflow", "--schedule-id", "x", "--query", "WorkflowId = 'x'")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "query")
 	require.Contains(t, err.Error(), "from-visibility")
 }
 
 func TestMigrateSchedule_RejectsWorkersWithScheduleID(t *testing.T) {
-	// --workers applies to the bulk modes (--from-visibility and stdin) but is meaningless when
-	// migrating a single --schedule-id, so it is rejected rather than silently ignored.
+	// --workers controls client-side stdin fan-out and is meaningless for a single schedule.
 	factory := migrateClientFactory{admin: &migrateAdminClient{}, workflow: &migrateWorkflowClient{}}
 	_, _, err := runMigrate(t, factory,
 		"schedule", "migrate", "--target", "workflow", "--schedule-id", "x", "--workers", "4")

@@ -320,11 +320,11 @@ func newAdminScheduleCommands(clientFactory ClientFactory) []*cli.Command {
 					Name: FlagFromVisibility,
 					Usage: "Select schedules from visibility instead of --schedule-id, scoped to --namespace. " +
 						"The default query is chosen from --target: migrating to chasm selects running V1 schedules, " +
-						"migrating to workflow selects running V2 schedules. Override with --query",
+						"migrating to workflow selects running V2 schedules. Narrow the selection with --query",
 				},
 				&cli.StringFlag{
 					Name: FlagVisibilityQuery,
-					Usage: "Visibility query used with --from-visibility, overriding the target-based default. The defaults are:\n" +
+					Usage: "Visibility query appended to the target-based source query used with --from-visibility. The source queries are:\n" +
 						"\tV1 (workflow-backed): TemporalNamespaceDivision = 'TemporalScheduler' AND ExecutionStatus = 'Running'\n" +
 						"\tV2 (CHASM):           TemporalNamespaceDivision = '<scheduler-archetype-id>' AND ExecutionStatus = 'Running'",
 				},
@@ -335,11 +335,19 @@ func newAdminScheduleCommands(clientFactory ClientFactory) []*cli.Command {
 				&cli.IntFlag{
 					Name:  FlagWorkers,
 					Value: defaultMigrateWorkers,
-					Usage: "Number of concurrent workers migrating schedules in --from-visibility and stdin modes",
+					Usage: "Number of concurrent workers migrating schedules supplied on stdin",
 				},
 				&cli.StringFlag{
 					Name:  FlagOutputLog,
-					Usage: "Path to write a structured (JSON lines) log of each migration result in --from-visibility and stdin modes",
+					Usage: "Path to write a structured (JSON lines) log of each migration result supplied on stdin",
+				},
+				&cli.StringFlag{
+					Name:  FlagReason,
+					Usage: "Reason for the durable batch migration",
+				},
+				&cli.StringFlag{
+					Name:  FlagJobID,
+					Usage: "Job ID for the durable batch migration (generated when omitted)",
 				},
 			},
 			Action: func(c *cli.Context) error {
