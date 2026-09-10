@@ -39,6 +39,100 @@ func TestSimplePartitionScalerEnabledDoesNotPanic(t *testing.T) {
 	require.True(t, dec.NoChange, "first call before a full window should not change the target")
 }
 
+func TestSimplePartitionScalerRateDecisions(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name          string
+		settings      dynamicconfig.SimplePartitionScalerSettings
+		currentTarget int
+		tasksPerSec   int
+		duration      time.Duration
+		wantTarget    int
+	}{
+		{
+			name: "scale up",
+			settings: dynamicconfig.SimplePartitionScalerSettings{
+				Enabled: true,
+				Ups: []dynamicconfig.SimplePartitionScalerThreshold{
+					{Window: time.Second, TargetRate: 100},
+				},
+			},
+			currentTarget: 1,
+			tasksPerSec:   1000,
+			duration:      time.Second,
+			wantTarget:    10,
+		},
+		{
+			name: "scale down",
+			settings: dynamicconfig.SimplePartitionScalerSettings{
+				Enabled: true,
+				Downs: []dynamicconfig.SimplePartitionScalerThreshold{
+					{Window: time.Second, TargetRate: 100},
+				},
+			},
+			currentTarget: 20,
+			tasksPerSec:   300,
+			duration:      time.Second,
+			wantTarget:    3,
+		},
+		{
+			name: "ups take priority",
+			settings: dynamicconfig.SimplePartitionScalerSettings{
+				Enabled: true,
+				Downs: []dynamicconfig.SimplePartitionScalerThreshold{
+					{Window: time.Second, TargetRate: 100},
+				},
+				Ups: []dynamicconfig.SimplePartitionScalerThreshold{
+					{Window: 2 * time.Second, TargetRate: 50},
+				},
+			},
+			currentTarget: 20,
+			tasksPerSec:   500,
+			duration:      2 * time.Second,
+			wantTarget:    10,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			decision := runSimplePartitionScaler(
+				t,
+				tc.settings,
+				tc.currentTarget,
+				tc.tasksPerSec,
+				tc.duration,
+			)
+			require.False(t, decision.NoChange)
+			require.Equal(t, tc.wantTarget, decision.NewTarget)
+		})
+	}
+}
+
+func runSimplePartitionScaler(
+	t *testing.T,
+	settings dynamicconfig.SimplePartitionScalerSettings,
+	currentTarget int,
+	tasksPerSec int,
+	duration time.Duration,
+) PartitionScalerDecision {
+	t.Helper()
+
+	timeSource := clock.NewEventTimeSource()
+	scaler := newSimplePartitionScaler(dynamicconfig.GetTypedPropertyFn(settings), timeSource)
+	const interval = 100 * time.Millisecond
+	for range int(duration / interval) {
+		decision := scaler.OnTasks(PartitionScalerInput{
+			NumTasks:      tasksPerSec / int(time.Second/interval),
+			CurrentTarget: currentTarget,
+		})
+		require.True(t, decision.NoChange)
+		timeSource.Advance(interval)
+	}
+	return scaler.OnTasks(PartitionScalerInput{CurrentTarget: currentTarget})
+}
+
 // encodeCounts builds a Compact8-encoded backlog-count slice from raw values,
 // matching the on-the-wire form updateBacklogTarget consumes.
 func encodeCounts(values ...int64) []byte {
