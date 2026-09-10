@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/codes"
 )
@@ -387,6 +388,8 @@ func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_RunningWor
 		s.Equal(int32(1), description.PendingActivities[0].Attempt)
 	}
 
+	// Await may have refreshed the suite context; renew it for workflow completion.
+	ctx = testcontext.EnsureRemaining(s.Context(), s.T(), testcontext.DefaultTimeout())
 	internalWorkflow.letActivitySucceed.Store(true)
 
 	replacementWorker := sdkworker.New(env.SdkClient(), env.WorkerTaskQueue(), sdkworker.Options{})

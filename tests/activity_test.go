@@ -982,10 +982,27 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 		}}, nil
 	}
 
+	// Hold the activity after it starts so cancellation targets a running task.
+	// Release it only after the cancellation command is recorded, making its next
+	// heartbeat deterministically observe CancelRequested.
+	activityStartedCh := make(chan struct{})
+	continueActivityCh := make(chan struct{})
+	activityPollErrCh := make(chan error, 1)
+	var continueActivityOnce sync.Once
+	continueActivity := func() {
+		continueActivityOnce.Do(func() {
+			close(continueActivityCh)
+		})
+	}
+	defer continueActivity()
+
 	activityCanceled := false
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
 		s.Equal(id, task.WorkflowExecution.GetWorkflowId())
 		s.Equal(activityName, task.ActivityType.GetName())
+		close(activityStartedCh)
+		<-continueActivityCh
+
 		for i := range 10 {
 			env.Logger.Info("Heartbeating for activity", tag.ActivityID(task.ActivityId), tag.Counter(i))
 			response, err := env.FrontendClient().RecordActivityTaskHeartbeat(s.Context(),
@@ -1018,35 +1035,32 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 	_, err := poller.PollAndProcessWorkflowTask()
 	s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
 
-	cancelCh := make(chan struct{})
 	go func() {
-		env.Logger.Info("Trying to cancel the task in a different thread")
-		// Send signal so that worker can send an activity cancel
-		_, err1 := env.FrontendClient().SignalWorkflowExecution(s.Context(), &workflowservice.SignalWorkflowExecutionRequest{
-			Namespace: env.Namespace().String(),
-			WorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: id,
-				RunId:      we.RunId,
-			},
-			SignalName: "my signal",
-			Input:      nil,
-			Identity:   identity,
-		})
-		s.NoError(err1)
-
-		scheduleActivity = false
-		requestCancellation = true
-		_, err2 := poller.PollAndProcessWorkflowTask()
-		s.NoError(err2)
-		close(cancelCh)
+		activityPollErrCh <- poller.PollAndProcessActivityTask(false)
 	}()
 
-	env.Logger.Info("Start activity.")
-	err = poller.PollAndProcessActivityTask(false)
-	s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
+	await.Rcv(s.T(), activityStartedCh)
 
-	env.Logger.Info("Waiting for cancel to complete.", tag.WorkflowRunID(we.RunId))
-	await.Rcv(s.T(), cancelCh)
+	_, err = env.FrontendClient().SignalWorkflowExecution(s.Context(), &workflowservice.SignalWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we.RunId,
+		},
+		SignalName: "my signal",
+		Input:      nil,
+		Identity:   identity,
+	})
+	s.Require().NoError(err)
+
+	scheduleActivity = false
+	requestCancellation = true
+	_, err = poller.PollAndProcessWorkflowTask()
+	s.Require().NoError(err)
+	continueActivity()
+
+	err = await.Rcv(s.T(), activityPollErrCh)
+	s.Require().NoError(err)
 	s.True(activityCanceled, "Activity was not cancelled.")
 	env.Logger.Info("Activity cancelled.", tag.WorkflowRunID(we.RunId))
 }
