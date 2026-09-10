@@ -106,6 +106,10 @@ func newLibrary(
 	}
 }
 
+// NewNilLibrary returns a Library with nil handlers, suitable for decoding contexts
+// like tdbg where no task execution is needed.
+func NewNilLibrary() chasm.Library { return &Library{} }
+
 func (l *Library) Tasks() []*chasm.RegistrableTask {
 	return []*chasm.RegistrableTask{
 		chasm.NewRegistrableSideEffectTask(
