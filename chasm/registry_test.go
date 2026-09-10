@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -31,9 +32,19 @@ type (
 		chasm.UnimplementedComponent
 		Visibility chasm.Field[*chasm.Visibility]
 	}
+
+	unmanagedFieldComponent struct {
+		chasm.UnimplementedComponent
+		Data  *persistencespb.WorkflowExecutionState
+		cache int
+	}
 )
 
 func (t *testComponentWithVisibility) LifecycleState(_ chasm.Context) chasm.LifecycleState {
+	return chasm.LifecycleStateRunning
+}
+
+func (t *unmanagedFieldComponent) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
 }
 
@@ -107,6 +118,43 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_WithDetached() {
 	// Verify that a component without WithDetached() has IsDetached() return false
 	normalRC := chasm.NewRegistrableComponent[*chasm.MockComponent]("NormalComponent")
 	s.Require().False(normalRC.IsDetached())
+}
+
+func (s *RegistryTestSuite) TestRegistry_WarnUnmanagedFields() {
+	tests := []struct {
+		name            string
+		component       *chasm.RegistrableComponent
+		expectedWarning string
+	}{
+		{
+			name:            "unacknowledged field",
+			component:       chasm.NewRegistrableComponent[*unmanagedFieldComponent]("Component"),
+			expectedWarning: "Warning: CHASM component TestLibrary.Component declares state fields that won't be managed by CHASM:\n\tcache int",
+		},
+		{
+			name:      "acknowledged field",
+			component: chasm.NewRegistrableComponent[*unmanagedFieldComponent]("Component", chasm.WithUnmanagedFields("cache")),
+		},
+	}
+
+	for _, tt := range tests {
+		s.T().Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			logger := log.NewMockLogger(ctrl)
+			lib := chasm.NewMockLibrary(ctrl)
+			lib.EXPECT().Name().Return("TestLibrary").AnyTimes()
+			lib.EXPECT().Components().Return([]*chasm.RegistrableComponent{tt.component})
+			lib.EXPECT().Tasks().Return(nil)
+			lib.EXPECT().NexusServices().Return(nil)
+			lib.EXPECT().NexusServiceProcessors().Return(nil)
+			if tt.expectedWarning != "" {
+				logger.EXPECT().Info(tt.expectedWarning)
+			}
+
+			err := chasm.NewRegistry(logger).Register(lib)
+			require.NoError(t, err)
+		})
+	}
 }
 
 func (s *RegistryTestSuite) TestRegistry_RegisterTasks_Success() {

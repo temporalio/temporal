@@ -27,6 +27,8 @@ type (
 		searchAttributesMapper *VisibilitySearchAttributesMapper
 
 		contextValues map[any]any
+
+		unmanagedFields map[string]struct{}
 	}
 
 	RegistrableComponentOption func(*RegistrableComponent)
@@ -178,6 +180,21 @@ func WithContextValues(
 			rc.contextValues = make(map[any]any, len(keyVals))
 		}
 		maps.Copy(rc.contextValues, keyVals)
+	}
+}
+
+// WithUnmanagedFields acknowledges fields intentionally kept outside CHASM-managed state.
+// The named fields won't produce an unmanaged-state warning during registration.
+func WithUnmanagedFields(
+	fields ...string,
+) RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		if rc.unmanagedFields == nil {
+			rc.unmanagedFields = make(map[string]struct{}, len(fields))
+		}
+		for _, field := range fields {
+			rc.unmanagedFields[field] = struct{}{}
+		}
 	}
 }
 

@@ -72,6 +72,7 @@ func (l *Library) Components() []*chasm.RegistrableComponent {
 			// Exposes Tweakables to scheduler components via the CHASM context
 			// (see tweakablesFromContext).
 			chasm.WithContextValues(l.config.contextValues()),
+			chasm.WithUnmanagedFields("cacheConflictToken", "compiledSpec"),
 		),
 		chasm.NewRegistrableComponent[*Generator]("generator"),
 		chasm.NewRegistrableComponent[*Invoker]("invoker"),
