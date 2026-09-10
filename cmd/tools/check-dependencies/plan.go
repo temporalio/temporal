@@ -179,13 +179,15 @@ func findKnownModule(modulePath string) (moduleSpec, bool) {
 // proto/api submodule points at the api commit being released, so the pair has
 // to be consistent. The submodule pointer is the only record of which api
 // commit an api-go commit was generated from.
-func resolveAPIGoCommit(ctx context.Context, rev string) (string, string, error) {
-	apiGoSHA, err := githubSHA(ctx, fmt.Sprintf("repos/%s/commits/%s", apiGoRepoSlug, url.PathEscape(rev)))
+func resolveAPIGoCommit(ctx context.Context, rev string) (apiGoSHA string,
+	apiRef string, err error,
+) {
+	apiGoSHA, err = githubSHA(ctx, fmt.Sprintf("repos/%s/commits/%s", apiGoRepoSlug, url.PathEscape(rev)))
 	if err != nil {
 		return "", "", fmt.Errorf("failed to resolve commit %s in %s: %w", rev, apiGoRepoSlug, err)
 	}
 
-	apiRef, err := githubSHA(ctx, fmt.Sprintf("repos/%s/contents/proto/api?ref=%s", apiGoRepoSlug, url.QueryEscape(apiGoSHA)))
+	apiRef, err = githubSHA(ctx, fmt.Sprintf("repos/%s/contents/proto/api?ref=%s", apiGoRepoSlug, url.QueryEscape(apiGoSHA)))
 	if err != nil {
 		return "", "", fmt.Errorf("failed to resolve the api commit for api-go %s: %w", apiGoSHA, err)
 	}
