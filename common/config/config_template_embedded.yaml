@@ -299,6 +299,7 @@ global:
         permissionsRegex: {{ default "" (env "TEMPORAL_JWT_PERMISSIONS_REGEX") }}
         authorizer: {{ default "" (env "TEMPORAL_AUTH_AUTHORIZER") }}
         claimMapper: {{ default "" (env "TEMPORAL_AUTH_CLAIM_MAPPER") }}
+        audience: {{ default "" (env "TEMPORAL_JWT_AUDIENCE") }}
 
 {{- $temporalGrpcPort := default "7233" (env "FRONTEND_GRPC_PORT") }}
 {{- $temporalHTTPPort := default "7243" (env "FRONTEND_HTTP_PORT") }}
