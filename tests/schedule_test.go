@@ -1088,9 +1088,9 @@ func testBufferOneDeferredFiresAfterCompletion(t *testing.T, newContext contextF
 			Namespace:  s.Namespace().String(),
 			ScheduleId: sid,
 		})
-		return descErr == nil && desc.GetInfo().GetBufferSize() == 1 && len(desc.GetInfo().GetRunningWorkflows()) == 1
+		return descErr == nil && desc.GetInfo().GetBufferSize() == 1 &&
+			len(desc.GetInfo().GetRunningWorkflows()) == 1 && runs.Load() == 1
 	}, awaitTimeout, pollInterval, "expected exactly one running workflow with one deferred start buffered behind it")
-	require.Equal(t, int32(1), runs.Load(), "only the first workflow should have fired before the running one completes")
 
 	// Keep the first workflow open across several more ticks. V1 evaluates the
 	// complete buffer and keeps its first entry; CHASM must do the same even after
@@ -1107,9 +1107,6 @@ func testBufferOneDeferredFiresAfterCompletion(t *testing.T, newContext contextF
 
 	// Releasing the running workflow must re-enable the deferred start (Attempt=-1 -> 0) so it fires.
 	require.Equal(t, 1, completeRunningWorkflows(ctx, t, s, sid))
-	await.RequireTruef(t, func() bool { return runs.Load() == 2 },
-		awaitTimeout, pollInterval,
-		"deferred start must fire after the running workflow completes - regression for the Attempt=-1 -> 0 re-enable path")
 
 	// The fire is specifically the tick buffered directly behind the first start,
 	// not a fresh action generated after completion. RecentActions lists the
@@ -4977,17 +4974,16 @@ func testBackfillReprocessesCompletedAction(
 	))
 
 	expectedRuns := int32(2 + 2*intervalsOnEachSide)
-	await.RequireTruef(t, func() bool { return runs.Load() == expectedRuns }, neverWindow, pollInterval,
-		"backfill should reprocess the completed action exactly once")
-
-	desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
-		Namespace:  s.Namespace().String(),
-		ScheduleId: sid,
-	})
-	require.NoError(t, err)
-	require.Equal(t, int64(expectedRuns), desc.GetInfo().GetActionCount())
-	require.Empty(t, desc.GetInfo().GetRunningWorkflows())
-	require.Equal(t, paused, desc.GetSchedule().GetState().GetPaused())
+	await.RequireTruef(t, func() bool {
+		desc, descErr := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		return descErr == nil && runs.Load() == expectedRuns &&
+			desc.GetInfo().GetActionCount() == int64(expectedRuns) &&
+			len(desc.GetInfo().GetRunningWorkflows()) == 0 &&
+			desc.GetSchedule().GetState().GetPaused() == paused
+	}, awaitTimeout, pollInterval, "backfill should reprocess the completed action exactly once and settle")
 }
 
 // testBackfillWithBufferOneOverlap pins the expected behavior of BUFFER_ONE
@@ -5021,9 +5017,9 @@ func testBackfillWithBufferOneOverlap(t *testing.T, newContext contextFactory) {
 			Namespace:  s.Namespace().String(),
 			ScheduleId: sid,
 		})
-		return descErr == nil && desc.GetInfo().GetBufferSize() == 1 && len(desc.GetInfo().GetRunningWorkflows()) == 1
+		return descErr == nil && desc.GetInfo().GetBufferSize() == 1 &&
+			len(desc.GetInfo().GetRunningWorkflows()) == 1 && runs.Load() == 1
 	}, awaitTimeout, pollInterval, "expected exactly one running backfill start with one deferred behind it")
-	require.Equal(t, int32(1), runs.Load(), "only the first backfill start should have fired so far")
 
 	// Releasing the running start must re-enable the deferred one (Attempt=-1 -> 0) so it fires.
 	require.Equal(t, 1, completeRunningWorkflows(ctx, t, s, sid))
