@@ -146,7 +146,45 @@ func (h *invocationTaskHandler) Execute(
 			retryPolicy: h.config.RetryPolicy(),
 		},
 	)
+	if saveErr == nil {
+		// Only after the transition commits; transitions can be rolled back.
+		h.recordInvocationEvent(ns, taskAttr, task, result)
+	}
 	return invokable.WrapError(result, saveErr)
+}
+
+// recordInvocationEvent emits the committed outcome of a single invocation attempt.
+func (h *invocationTaskHandler) recordInvocationEvent(
+	ns *namespace.Namespace,
+	taskAttr chasm.TaskAttributes,
+	task *callbackspb.InvocationTask,
+	result invocationResult,
+) {
+	var outcome outcomeTag
+	switch result.(type) {
+	case invocationResultOK:
+		outcome = outcomeSuccess
+	case invocationResultRetry:
+		outcome = outcomeRetryableError
+	case invocationResultFail:
+		outcome = outcomeNonretryableError
+	default:
+		// saveResult rejects anything else as an unprocessable task.
+		return
+	}
+
+	tags := []metrics.Tag{
+		metrics.NamespaceTag(ns.Name().String()),
+		metrics.DestinationTag(taskAttr.Destination),
+		metrics.OutcomeTag(string(outcome)),
+	}
+	h.metricsHandler.Counter(InvocationEventCounter.Name()).Record(1, tags...)
+
+	if outcome != outcomeRetryableError {
+		// Attempt is 0-based, so +1 is the count. Only terminal events have a final total.
+		h.metricsHandler.Histogram(InvocationAttemptsHistogram.Name(), InvocationAttemptsHistogram.Unit()).
+			Record(int64(task.GetAttempt())+1, tags...)
+	}
 }
 
 type backoffTaskHandler struct {

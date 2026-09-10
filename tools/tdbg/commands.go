@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/urfave/cli/v2"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -999,17 +1000,30 @@ func countScheduleVisibility(c *cli.Context, wfClient workflowservice.WorkflowSe
 // v2ScheduleStatus is what was found, if anything, on the CHASM (V2) side of a schedule ID.
 type v2ScheduleStatus struct {
 	found    bool
+	running  bool // only meaningful when found
 	sentinel bool // only meaningful when found
 }
 
-// isGenuine reports whether this is a real V2 schedule, as opposed to a migration sentinel
-// reserving the ID.
-func (s v2ScheduleStatus) isGenuine() bool { return s.found && !s.sentinel }
+// holdsID reports whether anything at this ID still occupies it. A closed entity stays
+// describable until retention deletes the record, but no longer blocks creation or migration,
+// so it must not be reported as occupying the ID.
+func (s v2ScheduleStatus) holdsID() bool { return s.found && s.running }
+
+// isGenuine reports whether this is a real, live V2 schedule, as opposed to a migration
+// sentinel reserving the ID.
+func (s v2ScheduleStatus) isGenuine() bool { return s.holdsID() && !s.sentinel }
+
+// isSentinel reports whether a live sentinel is reserving the CHASM ID.
+func (s v2ScheduleStatus) isSentinel() bool { return s.holdsID() && s.sentinel }
 
 func (s v2ScheduleStatus) describe() string {
 	switch {
 	case !s.found:
 		return "not found"
+	case !s.running && s.sentinel:
+		return "expired sentinel (closed; no longer reserving the ID)"
+	case !s.running:
+		return "closed (retained until retention expires; not reserving the ID)"
 	case s.sentinel:
 		return "sentinel (V1→V2 migration placeholder)"
 	default:
@@ -1020,24 +1034,35 @@ func (s v2ScheduleStatus) describe() string {
 // v1ScheduleStatus is what was found, if anything, on the workflow (V1) side of a schedule ID.
 type v1ScheduleStatus struct {
 	found        bool
+	running      bool   // only meaningful when found
 	workflowType string // only meaningful when found
 }
 
-// isGenuine reports whether this is a real V1 scheduler workflow.
+// holdsID reports whether the V1 workflow ID is actually reserved. A closed execution stays
+// describable for the namespace's whole retention period, but the create path treats only
+// RUNNING workflows as occupying the ID (see isRealSchedulerInV1KeySpace), so a closed
+// execution -- including an expired dummy sentinel, which completes rather than disappearing --
+// must not be reported as holding it.
+func (s v1ScheduleStatus) holdsID() bool { return s.found && s.running }
+
+// isGenuine reports whether this is a real, running V1 scheduler workflow.
 func (s v1ScheduleStatus) isGenuine() bool {
-	return s.found && s.workflowType == scheduler.WorkflowType
+	return s.holdsID() && s.workflowType == scheduler.WorkflowType
 }
 
-// isSentinel reports whether this is a placeholder DummyWorkflow reserving the V1 workflow ID
-// during a V2->V1 rollback.
+// isSentinel reports whether a live placeholder DummyWorkflow is reserving the V1 workflow ID.
 func (s v1ScheduleStatus) isSentinel() bool {
-	return s.found && s.workflowType == dummy.DummyWFTypeName
+	return s.holdsID() && s.workflowType == dummy.DummyWFTypeName
 }
 
 func (s v1ScheduleStatus) describe() string {
 	switch {
 	case !s.found:
 		return "not found"
+	case !s.running && s.workflowType == dummy.DummyWFTypeName:
+		return "expired sentinel (closed; no longer reserving the ID)"
+	case !s.running:
+		return fmt.Sprintf("closed %q execution (retained until retention expires; not reserving the ID)", s.workflowType)
 	case s.isGenuine():
 		return "genuine"
 	case s.isSentinel():
@@ -1077,22 +1102,23 @@ func describeScheduleMigrationStatus(c *cli.Context, clientFactory ClientFactory
 
 	w := c.App.Writer
 	switch {
-	case v1.isGenuine() && !v2.found:
+	case v1.isGenuine() && !v2.holdsID():
 		_, _ = fmt.Fprintf(w, "Schedule %q is a V1 (workflow-backed) schedule.\n", scheduleID)
-	case !v1.found && v2.isGenuine():
+	case !v1.holdsID() && v2.isGenuine():
 		_, _ = fmt.Fprintf(w, "Schedule %q is a V2 (CHASM) schedule.\n", scheduleID)
-	case v1.isGenuine() && v2.sentinel:
+	case v1.isGenuine() && v2.isSentinel():
 		_, _ = fmt.Fprintf(w, "Schedule %q is a V1 (workflow-backed) schedule.\n", scheduleID)
 		_, _ = fmt.Fprintf(w, "Additionally, a placeholder (\"sentinel\") V2 entity exists at business ID %q, "+
-			"reserving that ID while a V1→V2 migration is in progress. This is expected during migration and "+
-			"requires no action — the V1 schedule above remains authoritative until the migration completes.\n",
+			"reserving that ID for a short window after the V1 schedule was created, or while a V1→V2 "+
+			"migration is in progress. This is expected and requires no action — it expires on its own, and "+
+			"the V1 schedule above remains authoritative.\n",
 			rawID)
 	case v1.isSentinel() && v2.isGenuine():
 		_, _ = fmt.Fprintf(w, "Schedule %q is a V2 (CHASM) schedule.\n", scheduleID)
 		_, _ = fmt.Fprintf(w, "Additionally, a placeholder (\"sentinel\") V1 workflow exists at workflow ID %q, "+
-			"reserving that ID while a V2→V1 rollback is in progress. This is expected during rollback and "+
-			"requires no action.\n", v1ID)
-	case !v1.found && !v2.found:
+			"reserving that ID for a short window after the V2 schedule was created, or while a V2→V1 "+
+			"rollback is in progress. This is expected and requires no action — it expires on its own.\n", v1ID)
+	case !v1.holdsID() && !v2.holdsID():
 		_, _ = fmt.Fprintf(w, "Schedule %q was not found as either a V1 (workflow-backed) or V2 (CHASM) schedule. "+
 			"It may not exist, may have been deleted, or the ID may be mistyped.\n", scheduleID)
 	default:
@@ -1138,7 +1164,11 @@ func describeSchedulerChasmState(c *cli.Context, adminClient adminservice.AdminS
 	if err := serialization.Decode(node.GetData(), &state); err != nil {
 		return v2ScheduleStatus{}, fmt.Errorf("failed to decode scheduler state: %w", err)
 	}
-	return v2ScheduleStatus{found: true, sentinel: state.GetSentinel()}, nil
+	return v2ScheduleStatus{
+		found:    true,
+		running:  isRunning(resp),
+		sentinel: state.GetSentinel(),
+	}, nil
 }
 
 // describeWorkflowTypeName looks up the workflow (V1) side of workflowID and reports its
@@ -1159,8 +1189,17 @@ func describeWorkflowTypeName(c *cli.Context, adminClient adminservice.AdminServ
 	}
 	return v1ScheduleStatus{
 		found:        true,
+		running:      isRunning(resp),
 		workflowType: resp.GetDatabaseMutableState().GetExecutionInfo().GetWorkflowTypeName(),
 	}, nil
+}
+
+// isRunning reports whether the described execution is still open. DescribeMutableState keeps
+// answering for closed executions until retention deletes them, so callers that care about ID
+// occupancy have to check this rather than treating "described" as "live".
+func isRunning(resp *adminservice.DescribeMutableStateResponse) bool {
+	return resp.GetDatabaseMutableState().GetExecutionState().GetStatus() ==
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 }
 
 // migrateSingleSchedule migrates one schedule and performs the migration immediately.

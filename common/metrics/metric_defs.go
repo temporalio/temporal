@@ -22,6 +22,7 @@ const (
 	nexusServiceTagName            = "nexus_service"
 	nexusOperationTagName          = "nexus_operation"
 	outcomeTagName                 = "outcome"
+	nexusCompletionSourceTagName   = "nexus_completion_source"
 	versionedTagName               = "versioned"
 	resourceExhaustedTag           = "resource_exhausted_cause"
 	resourceExhaustedScopeTag      = "resource_exhausted_scope"
@@ -34,6 +35,8 @@ const (
 	ArchetypeTagName               = "archetype"
 	ChasmTaskTypeTagName           = "chasm_task_type"
 	timeoutTypeTagName             = "timeout_type"
+	LastAttemptCauseTagName        = "last_attempt_cause"
+	AttemptStageTagName            = "attempt_stage"
 )
 
 // This package should hold all the metrics and tags for temporal
@@ -891,6 +894,10 @@ var (
 		"task_attempt",
 		WithDescription("The number of attempts took to complete a history task."),
 	)
+	TaskAlertableAttempt = NewDimensionlessHistogramDef(
+		"task_alertable_attempt",
+		WithDescription("The number of attempts, among a history task's total, caused by an alertable (system-side) error."),
+	)
 	TaskFailures = NewCounterDef(
 		"task_errors",
 		WithDescription("The number of unexpected history task processing errors."),
@@ -924,7 +931,12 @@ var (
 		"task_errors_throttled",
 		WithDescription("The number of history task processing errors caused by resource exhausted errors, excluding workflow busy case."),
 	)
-	TaskCorruptionCounter = NewCounterDef("task_errors_corruption")
+	TaskCorruptionCounter  = NewCounterDef("task_errors_corruption")
+	ChildExecutionNotFound = NewCounterDef(
+		"child_execution_not_found",
+		WithDescription("The number of times scheduling a child's first workflow task returned NotFound after the "+
+			"parent had already committed ChildWorkflowExecutionStarted."),
+	)
 	ChasmPureTaskRequests = NewCounterDef(
 		"chasm_pure_task_requests",
 		WithDescription("The number of CHASM pure tasks executed."),
@@ -1021,6 +1033,7 @@ var (
 	// This metric has a "reason" tag attached to it to understand why eager start was denied.
 	WorkflowEagerExecutionDeniedCounter           = NewCounterDef("workflow_eager_execution_denied")
 	StartWorkflowRequestDeduped                   = NewCounterDef("start_workflow_request_deduped")
+	OrphanedChildWorkflowReplacement              = NewCounterDef("orphaned_child_workflow_replacement")
 	EmptyCompletionCommandsCounter                = NewCounterDef("empty_completion_commands")
 	MultipleCompletionCommandsCounter             = NewCounterDef("multiple_completion_commands")
 	FailedWorkflowTasksCounter                    = NewCounterDef("failed_workflow_tasks")
@@ -1157,6 +1170,10 @@ var (
 	ChildWorkflowResendLimited = NewCounterDef("child_workflow_resend_limited")
 	// ChildWorkflowResendLatency measures a child resend and subsequent verification.
 	ChildWorkflowResendLatency = NewTimerDef("child_workflow_resend_latency")
+	// ChildWorkflowCompletionRecoveryAttempts counts terminal child refreshes triggered by a late parent.
+	ChildWorkflowCompletionRecoveryAttempts = NewCounterDef("child_workflow_completion_recovery_attempts")
+	// ChildWorkflowCompletionRecoveryChainMismatch counts recoveries skipped after Workflow ID reuse.
+	ChildWorkflowCompletionRecoveryChainMismatch = NewCounterDef("child_workflow_completion_recovery_chain_mismatch")
 	// WorkflowResendSchedulerAtCapacity counts host-level workflow resends rejected at the concurrency limit.
 	WorkflowResendSchedulerAtCapacity = NewCounterDef("workflow_resend_scheduler_at_capacity")
 	// ReplicationOrphanedHistoryBranch tracks cases where history branch cleanup was skipped on error
@@ -1418,7 +1435,8 @@ var (
 		WithDescription(
 			"Count of poller scaling decisions made by a physical task queue manager. Emitted only when the opt-in "+
 				"dynamic config matching.enablePollerScalingDecisionMetrics is enabled. Dimensions: namespace, taskqueue, "+
-				"task_type, partition, decision (scale_up/scale_down/hold), reason (idle/backlog/task_rate/rate_limited)"),
+				"task_type, partition, decision (scale_up/scale_down/hold), "+
+				"reason (idle/delay/ratio/rate_limited/task_queue_rate_limited)"),
 	)
 	// ----------------------------------------------------------------------------------------------------------------
 
@@ -1648,6 +1666,10 @@ var (
 	ScheduleCallbackIgnored = NewCounterDef(
 		"schedule_callback_ignored",
 		WithDescription("Scheduler received a completion callback unassociated with any known running actions"),
+	)
+	ScheduleCallbackReattach = NewCounterDef(
+		"schedule_callback_reattach",
+		WithDescription("Outcomes of re-attaching a completion callback to an already-running action, used for migration and anti-entropy. The reason tag distinguishes a genuine attach from the paths that synthesize an action result: not_found (target gone, recorded TERMINATED) and attach_race (target closed mid-attach, recorded COMPLETED)."),
 	)
 
 	// Worker Versioning

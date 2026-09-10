@@ -44,18 +44,13 @@ func TestBuildCallbackURL(t *testing.T) {
 		},
 	}
 
-	// When UseSystemCallbackURL is true and target is worker, return the system URL
-	got, err := buildCallbackURL(true, "http://example/callback/{{.NamespaceName}}", ns, workerEndpoint)
+	// When target is worker, return the system URL
+	got, err := buildCallbackURL("http://example/callback/{{.NamespaceName}}", ns, workerEndpoint)
 	require.NoError(t, err)
 	require.Equal(t, "temporal://system", got)
 
-	// When UseSystemCallbackURL is true but target is external, use the template
-	got, err = buildCallbackURL(true, "http://example/callback/{{.NamespaceName}}-{{.NamespaceID}}", ns, externalEndpoint)
+	// When target is external, use the template
+	got, err = buildCallbackURL("http://example/callback/{{.NamespaceName}}-{{.NamespaceID}}", ns, externalEndpoint)
 	require.NoError(t, err)
 	require.Equal(t, "http://example/callback/ns-name-ns-id", got)
-
-	// When UseSystemCallbackURL is false, always use the template
-	got, err = buildCallbackURL(false, "https://cb/{{.NamespaceID}}/{{.NamespaceName}}", ns, workerEndpoint)
-	require.NoError(t, err)
-	require.Equal(t, "https://cb/ns-id/ns-name", got)
 }
