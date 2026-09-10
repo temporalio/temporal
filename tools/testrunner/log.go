@@ -373,14 +373,14 @@ func normalizedFailureLines(data string) []string {
 
 func findLastAssertionFailureBlock(lines []string) (string, bool) {
 	var failLine string
-	for i := len(lines) - 1; i >= 0; i-- {
-		line := strings.TrimSpace(lines[i])
-		if failLine == "" && strings.HasPrefix(line, goTestFailLinePrefix) {
+	for i, line := range slices.Backward(lines) {
+		trimmed := strings.TrimSpace(line)
+		if failLine == "" && strings.HasPrefix(trimmed, goTestFailLinePrefix) {
 			// Keep the final Go test failure line because it carries the test duration.
-			failLine = line
+			failLine = trimmed
 			continue
 		}
-		if !strings.Contains(lines[i], "Error Trace:") {
+		if !strings.Contains(line, "Error Trace:") {
 			continue
 		}
 
@@ -422,8 +422,8 @@ func endOfAssertionBlock(lines []string, start int) int {
 }
 
 func findLastTestOutputFailureBlock(lines []string) (start, end int, ok bool) {
-	for start := len(lines) - 1; start >= 0; start-- {
-		if !isTestOutputLine(lines[start]) {
+	for start, line := range slices.Backward(lines) {
+		if !isTestOutputLine(line) {
 			continue
 		}
 		end := start + 1

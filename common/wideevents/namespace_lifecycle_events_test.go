@@ -145,6 +145,32 @@ func TestEmitHandoverWatermarkEvents(t *testing.T) {
 	require.Equal(t, true, lagDetails(t, lg.records[1])["deleted_from_db"])
 }
 
+func TestEmitNamespaceMigrationWorkflowLifecycle(t *testing.T) {
+	lg := &captureLogger{}
+	verifiedCount := int64(42)
+
+	EmitNamespaceMigrationWorkflowLifecycle(lg, NamespaceMigrationWorkflowLifecycleInput{
+		Phase:                 PhaseNamespaceForceReplicationFinished,
+		Namespace:             "ns",
+		NamespaceID:           "ns-id",
+		WorkflowType:          "force-replication-v2",
+		WorkflowID:            "workflow-id",
+		RunID:                 "run-id",
+		FirstRunID:            "first-run-id",
+		Input:                 map[string]any{"target_cluster": "target"},
+		Status:                NamespaceMigrationWorkflowSucceeded,
+		VerifiedWorkflowCount: &verifiedCount,
+	})
+
+	require.Len(t, lg.records, 1)
+	require.Equal(t, PhaseNamespaceForceReplicationFinished, attrValue(lg.records[0], "phase"))
+	require.Equal(t, "ns-id", attrValue(lg.records[0], "namespace_id"))
+	details := lagDetails(t, lg.records[0])
+	require.Equal(t, "force-replication-v2", details["workflow_type"])
+	require.Equal(t, NamespaceMigrationWorkflowSucceeded, details["status"])
+	require.EqualValues(t, verifiedCount, details["verified_workflow_count"])
+}
+
 func TestEmitNamespaceRegistered(t *testing.T) {
 	lg := &captureLogger{}
 

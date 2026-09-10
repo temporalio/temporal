@@ -116,7 +116,7 @@ type (
 
 	// TestTransferTaskIDGenerator helper
 	TestTransferTaskIDGenerator struct {
-		seqNum int64
+		seqNum atomic.Int64
 	}
 )
 
@@ -365,7 +365,7 @@ func (s *TestBase) EqualTimes(t1, t2 time.Time) {
 
 // GenerateTransferTaskID helper
 func (g *TestTransferTaskIDGenerator) GenerateTransferTaskID() (int64, error) {
-	return atomic.AddInt64(&g.seqNum, 1), nil
+	return g.seqNum.Add(1), nil
 }
 
 // Publish is a utility method to add messages to the queue

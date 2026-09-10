@@ -133,6 +133,9 @@ func TestNewHTTPClientTransport(t *testing.T) {
 		var disabled HTTPClientTransportInstrumenter
 		require.Same(t, rt, disabled.Instrument(rt))
 
+		require.Nil(t, NewHTTPClientTransportInstrumenter(nil, nil))
+		require.Nil(t, NewHTTPClientTransportInstrumenter(NoopTracerProvider, nil))
+
 		instrumenter := NewHTTPClientTransportInstrumenter(trace.NewTracerProvider(), nil)
 		require.NotSame(t, rt, instrumenter.Instrument(rt))
 	})
@@ -183,6 +186,31 @@ func TestNewHTTPClientTransport(t *testing.T) {
 		require.NotContains(t, attrs, "http.response.payload")
 		require.NotContains(t, attrs, "http.request.headers.request-header")
 		require.NotContains(t, attrs, "http.response.headers.response-header")
+	})
+
+	// Callers can add domain attributes without coupling HTTP instrumentation to their domain.
+	t.Run("AnnotatesRequest", func(t *testing.T) {
+		t.Parallel()
+
+		traceEnv := newHTTPTraceEnv(t)
+		rt := traceEnv.newClientTransport(roundTripperFunc(func(r *http.Request) (*http.Response, error) {
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       http.NoBody,
+				Header:     http.Header{},
+				Request:    r,
+			}, nil
+		}))
+
+		req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
+		req = WithHTTPClientSpanAttributes(req, attribute.String("test.attribute", "value"))
+
+		resp, err := rt.RoundTrip(req)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+
+		// Check only the annotated attribute; standard HTTP attributes are covered elsewhere.
+		require.Equal(t, "value", traceEnv.spanAttrs()["test.attribute"])
 	})
 
 	// Debug mode adds diagnostic HTTP headers and payloads to client spans.
@@ -426,6 +454,9 @@ func TestNewHTTPHandler(t *testing.T) {
 		handler := http.NewServeMux()
 		var disabled HTTPServerHandlerInstrumenter
 		require.Same(t, handler, disabled.Instrument(handler, "test-handler"))
+
+		require.Nil(t, NewHTTPServerHandlerInstrumenter(nil, nil))
+		require.Nil(t, NewHTTPServerHandlerInstrumenter(NoopTracerProvider, nil))
 
 		recorder := tracetest.NewSpanRecorder()
 		tp := trace.NewTracerProvider(trace.WithSpanProcessor(recorder))

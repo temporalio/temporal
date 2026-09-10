@@ -11,6 +11,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/mock/gomock"
 )
 
@@ -105,8 +106,10 @@ func TestClientProviderFactoryUsesSelectedHTTPClient(t *testing.T) {
 					return endpointTransport
 				},
 				clusterMetadata,
+				nil,
 				rpcFactory,
 				nil,
+				testhooks.NewTestHooks(),
 			)
 			require.NoError(t, err)
 

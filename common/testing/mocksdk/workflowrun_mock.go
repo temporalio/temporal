@@ -55,6 +55,20 @@ func (mr *MockWorkflowRunMockRecorder) Get(ctx, valuePtr any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Get", reflect.TypeOf((*MockWorkflowRun)(nil).Get), ctx, valuePtr)
 }
 
+// GetFirstExecutionRunID mocks base method.
+func (m *MockWorkflowRun) GetFirstExecutionRunID() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetFirstExecutionRunID")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetFirstExecutionRunID indicates an expected call of GetFirstExecutionRunID.
+func (mr *MockWorkflowRunMockRecorder) GetFirstExecutionRunID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFirstExecutionRunID", reflect.TypeOf((*MockWorkflowRun)(nil).GetFirstExecutionRunID))
+}
+
 // GetID mocks base method.
 func (m *MockWorkflowRun) GetID() string {
 	m.ctrl.T.Helper()

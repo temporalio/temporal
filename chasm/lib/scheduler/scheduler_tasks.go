@@ -67,6 +67,7 @@ const (
 	idleInvalidatedHeldOpen        metrics.ReasonString = "held_open"
 	idleInvalidatedExpirationShift metrics.ReasonString = "expiration_shift"
 	idleInvalidatedClosed          metrics.ReasonString = "closed"
+	idleAlreadyArmed               metrics.ReasonString = "already_armed"
 )
 
 func (r *SchedulerIdleTaskHandler) Validate(
@@ -92,9 +93,11 @@ func (r *SchedulerIdleTaskHandler) Validate(
 		return false, nil
 	}
 
-	// Deadline moved earlier - shouldn't happen if getLastEventTime is monotonic.
-	// Fire (closing the schedule is the safe call) but log so a real regression
-	// surfaces.
+	// Deadline moved earlier. getLastEventTime floors the recomputed value at the
+	// persisted LastEventTime mark, so this is now only reachable on a schedule
+	// whose mark predates that field (nil) - i.e. one that has not ticked since
+	// the upgrade. Fire anyway (closing the schedule is the safe call) but log,
+	// so a mark that is failing to hold the line still surfaces.
 	if idleExpiration.Before(taskAttrs.ScheduledTime) {
 		newTaggedLogger(r.baseLogger, scheduler).Warn("idle deadline regressed",
 			tag.Timestamp(idleExpiration),
@@ -124,6 +127,7 @@ type SchedulerCallbacksTaskHandlerOptions struct {
 	Config         *Config
 	HistoryClient  resource.HistoryClient
 	FrontendClient workflowservice.WorkflowServiceClient
+	MetricsHandler metrics.Handler
 }
 
 type SchedulerCallbacksTaskHandler struct {
@@ -131,6 +135,7 @@ type SchedulerCallbacksTaskHandler struct {
 	config         *Config
 	historyClient  resource.HistoryClient
 	frontendClient workflowservice.WorkflowServiceClient
+	metricsHandler metrics.Handler
 }
 
 func NewSchedulerCallbacksTaskHandler(opts SchedulerCallbacksTaskHandlerOptions) *SchedulerCallbacksTaskHandler {
@@ -138,6 +143,7 @@ func NewSchedulerCallbacksTaskHandler(opts SchedulerCallbacksTaskHandlerOptions)
 		config:         opts.Config,
 		historyClient:  opts.HistoryClient,
 		frontendClient: opts.FrontendClient,
+		metricsHandler: opts.MetricsHandler,
 	}
 }
 
@@ -146,6 +152,9 @@ func NewSchedulerCallbacksTaskHandler(opts SchedulerCallbacksTaskHandlerOptions)
 // workflow is still running.
 type watchResult struct {
 	completed *schedulespb.CompletedResult
+
+	// reason attributes how completed was arrived at, for ScheduleCallbackReattach.
+	reason metrics.ReasonString
 }
 
 func (r *SchedulerCallbacksTaskHandler) Execute(
@@ -234,6 +243,18 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 		return fmt.Errorf("failed to update component state: %w", err)
 	}
 
+	// Only after the update commits, so a rolled-back re-attach isn't counted.
+	metricsHandler := newTaggedMetricsHandler(r.metricsHandler, scheduler)
+	for _, result := range results {
+		outcome := outcomeReattachAttached
+		if result.completed != nil {
+			outcome = outcomeReattachCompleted
+		}
+		metrics.ScheduleCallbackReattach.With(metricsHandler).Record(1,
+			metrics.OutcomeTag(outcome),
+			metrics.ReasonTag(result.reason))
+	}
+
 	return nil
 }
 
@@ -258,13 +279,13 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 		},
 	})
 	if err != nil {
-		var notFoundErr *serviceerror.NotFound
-		if errors.As(err, &notFoundErr) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			return &watchResult{
 				completed: &schedulespb.CompletedResult{
 					Status:    enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
 					CloseTime: timestamppb.Now(),
 				},
+				reason: reasonReattachNotFound,
 			}, nil
 		}
 		return nil, err
@@ -280,6 +301,7 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 				Status:    wfInfo.GetStatus(),
 				CloseTime: wfInfo.GetCloseTime(),
 			},
+			reason: reasonReattachAlreadyClosed,
 		}, nil
 	}
 
@@ -320,13 +342,14 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 					Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 					CloseTime: timestamppb.Now(),
 				},
+				reason: reasonReattachRace,
 			}, nil
 		}
 		return nil, err
 	}
 
 	// Callback attached successfully.
-	return &watchResult{}, nil
+	return &watchResult{reason: reasonNone}, nil
 }
 
 func (r *SchedulerCallbacksTaskHandler) Validate(

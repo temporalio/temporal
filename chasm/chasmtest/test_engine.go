@@ -27,6 +27,11 @@ import (
 type (
 	EngineOption func(*Engine)
 
+	// InvariantCheck validates an execution after a successful transition. The
+	// node is clean, so checks may inspect its snapshot without affecting the
+	// state being validated.
+	InvariantCheck func(*testing.T, *chasm.Node, chasm.RootComponent)
+
 	// Engine is a lightweight in memory CHASM engine for unit tests. It implements
 	// [chasm.Engine] and supports the full set of conflict and reuse policies, as
 	// well as blocking [PollComponent] with [NotifyExecution], matching the behavior
@@ -40,8 +45,9 @@ type (
 		// currentExecutions maps (namespaceID, businessID) to the latest run (running or closed).
 		currentExecutions map[businessKey]*execution
 		// allExecutions maps (namespaceID, businessID, runID) to any run, for lookups by specific RunID.
-		allExecutions map[runKey]*execution
-		notifier      *executionNotifier
+		allExecutions   map[runKey]*execution
+		notifier        *executionNotifier
+		invariantChecks []InvariantCheck
 	}
 
 	execution struct {
@@ -75,6 +81,21 @@ type (
 func WithTimeSource(ts clock.TimeSource) EngineOption {
 	return func(e *Engine) {
 		e.timeSource = ts
+	}
+}
+
+// WithMetricsHandler overrides the engine's default no-op metrics handler.
+func WithMetricsHandler(handler metrics.Handler) EngineOption {
+	return func(e *Engine) {
+		e.metrics = handler
+	}
+}
+
+// WithInvariantCheck adds a check that runs after every successful transition.
+// Multiple checks run in the order in which they were added.
+func WithInvariantCheck(check InvariantCheck) EngineOption {
+	return func(e *Engine) {
+		e.invariantChecks = append(e.invariantChecks, check)
 	}
 }
 
@@ -240,8 +261,7 @@ func (e *Engine) UpdateComponent(
 	options := constructTransitionOptions(opts...)
 	if options.RequestID != "" {
 		if _, ok := execution.requestIDs[options.RequestID]; ok {
-			return nil, serviceerror.NewFailedPreconditionf(
-				"request ID %s has already been used for this execution", options.RequestID)
+			return nil, chasm.ErrRequestIDAlreadyUsed
 		}
 	}
 
@@ -453,11 +473,11 @@ func (e *Engine) startNew(
 	if err := exec.node.SetRootComponent(root); err != nil {
 		return chasm.StartExecutionResult{}, err
 	}
-	if err = exec.closeTransaction(); err != nil {
+	exec.root = root
+	if err = e.closeTransaction(exec); err != nil {
 		return chasm.StartExecutionResult{}, err
 	}
 
-	exec.root = root
 	e.currentExecutions[newBusinessKey(exec.key)] = exec
 	e.allExecutions[newRunKey(exec.key)] = exec
 
@@ -497,11 +517,11 @@ func (e *Engine) startAndUpdateNew(
 	if err := updateFn(mutableCtx, root); err != nil {
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
-	if err = exec.closeTransaction(); err != nil {
+	exec.root = root
+	if err = e.closeTransaction(exec); err != nil {
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
 
-	exec.root = root
 	e.currentExecutions[newBusinessKey(exec.key)] = exec
 	e.allExecutions[newRunKey(exec.key)] = exec
 
@@ -546,6 +566,11 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 			}
 		},
 		HandleGetCurrentVersion: func() int64 { return 1 },
+		// Always run the post-execution validation for scheduled pure tasks so that
+		// FirePureTasks surfaces a TaskNotInvalidatedError when a component fails to
+		// invalidate its task after a successful Execute. Nothing is DLQ'd in unit tests
+		// (there is no queue executor here); the error is returned for tests to assert on.
+		HandleChasmDLQScheduledPureTaskOnValidationEnabled: func() bool { return true },
 		HandleGetWorkflowKey: func() definition.WorkflowKey {
 			return definition.NewWorkflowKey(key.NamespaceID, key.BusinessID, key.RunID)
 		},
@@ -597,12 +622,16 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 	}
 }
 
-// closeTransaction closes the execution's transaction and commits its transition count.
-func (x *execution) closeTransaction() error {
+// closeTransaction closes the execution's transaction, commits its transition
+// count, and validates the resulting clean tree.
+func (e *Engine) closeTransaction(x *execution) error {
 	if _, err := x.node.CloseTransaction(); err != nil {
 		return err
 	}
 	x.commitTransition()
+	for _, check := range e.invariantChecks {
+		check(e.t, x.node, x.root)
+	}
 	return nil
 }
 
@@ -654,7 +683,7 @@ func (e *Engine) updateComponentInExecution(
 		return nil, err
 	}
 
-	if err = execution.closeTransaction(); err != nil {
+	if err = e.closeTransaction(execution); err != nil {
 		return nil, err
 	}
 	execution.recordRequestID(requestID)

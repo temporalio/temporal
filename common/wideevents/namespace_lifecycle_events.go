@@ -19,6 +19,69 @@ const (
 	PhaseHandoverIncomplete       = "shard_handover_incomplete"
 )
 
+// Namespace migration system workflow lifecycle phases.
+const (
+	PhaseNamespaceHandoverStarted          = "namespace_handover_started"
+	PhaseNamespaceHandoverFinished         = "namespace_handover_finished"
+	PhaseNamespaceForceReplicationStarted  = "namespace_force_replication_started"
+	PhaseNamespaceForceReplicationFinished = "namespace_force_replication_finished"
+	PhaseNamespaceCatchupStarted           = "namespace_catchup_started"
+	PhaseNamespaceCatchupFinished          = "namespace_catchup_finished"
+)
+
+// Namespace migration system workflow terminal statuses.
+const (
+	NamespaceMigrationWorkflowSucceeded = "succeeded"
+	NamespaceMigrationWorkflowCanceled  = "canceled"
+	NamespaceMigrationWorkflowFailed    = "failed"
+)
+
+// NamespaceMigrationWorkflowLifecycleInput describes one namespace migration system workflow
+// starting or finishing. Input contains only the operation parameters useful for tracing.
+type NamespaceMigrationWorkflowLifecycleInput struct {
+	Phase                 string
+	Namespace             string
+	NamespaceID           string
+	WorkflowType          string
+	WorkflowID            string
+	RunID                 string
+	FirstRunID            string
+	Input                 map[string]any
+	Status                string
+	ErrorMessage          string
+	VerifiedWorkflowCount *int64
+}
+
+// EmitNamespaceMigrationWorkflowLifecycle emits a system workflow lifecycle event.
+func EmitNamespaceMigrationWorkflowLifecycle(
+	logger otellog.Logger,
+	in NamespaceMigrationWorkflowLifecycleInput,
+) {
+	details := map[string]any{
+		"workflow_type": in.WorkflowType,
+		"workflow_id":   in.WorkflowID,
+		"run_id":        in.RunID,
+		"first_run_id":  in.FirstRunID,
+		"input":         in.Input,
+	}
+	if in.Status != "" {
+		details["status"] = in.Status
+	}
+	if in.ErrorMessage != "" {
+		details["error_message"] = in.ErrorMessage
+	}
+	if in.VerifiedWorkflowCount != nil {
+		details["verified_workflow_count"] = *in.VerifiedWorkflowCount
+	}
+
+	Emit(logger, NamespaceLifecyclePayload{
+		Phase:       in.Phase,
+		Namespace:   in.Namespace,
+		NamespaceID: in.NamespaceID,
+		Details:     details,
+	})
+}
+
 // Why a shard took or advanced its watermark.
 const (
 	// WatermarkAdded: the namespace entered handover.

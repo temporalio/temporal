@@ -208,6 +208,11 @@ func Invoke(
 			workflowScheduleToStartLatency := workflowTask.StartedTime.Sub(workflowTask.ScheduledTime)
 			namespaceName := namespaceEntry.Name()
 			tqPartition := tqid.UnsafePartitionFromProto(workflowTask.TaskQueue, req.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+			breakdownMetricsByBuildID := config.BreakdownMetricsByBuildID(
+				namespaceName.String(),
+				tqPartition.TaskQueue().Name(),
+				enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			)
 			metrics.TaskScheduleToStartLatency.With(
 				metrics.GetPerTaskQueuePartitionTypeScope(
 					metricsScope,
@@ -215,7 +220,11 @@ func Invoke(
 					tqPartition,
 					config.BreakdownMetricsByTaskQueue(namespaceName.String(), tqPartition.TaskQueue().Name(), enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 				),
-			).Record(workflowScheduleToStartLatency)
+			).Record(
+				workflowScheduleToStartLatency,
+				metrics.WorkerDeploymentNameTag(pollerDeployment.GetSeriesName(), breakdownMetricsByBuildID),
+				metrics.WorkerDeploymentBuildIDTag(pollerDeployment.GetBuildId(), breakdownMetricsByBuildID),
+			)
 
 			resp, err = CreateRecordWorkflowTaskStartedResponseWithRawHistory(
 				ctx,
@@ -281,8 +290,7 @@ func setHistoryForRecordWfTaskStartedResp(
 	//  when data inconsistency occurs
 	//  long term solution should check event batch pointing backwards within history store
 	defer func() {
-		var dataLossErr *serviceerror.DataLoss
-		if errors.As(retError, &dataLossErr) {
+		if _, ok := errors.AsType[*serviceerror.DataLoss](retError); ok {
 			api.TrimHistoryNode(
 				ctx,
 				shardContext,

@@ -293,8 +293,7 @@ func (uws *updateWithStart) getWorkflowLease(ctx context.Context) (api.WorkflowL
 		definition.NewWorkflowKey(uws.namespaceId.String(), uws.startReq.StartRequest.WorkflowId, ""),
 		locks.PriorityHigh,
 	)
-	var notFound *serviceerror.NotFound
-	if errors.As(err, &notFound) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 		return nil, nil
 	}
 	if err != nil {

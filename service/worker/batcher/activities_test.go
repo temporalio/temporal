@@ -1419,7 +1419,7 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_ProcessesAll
 	}
 
 	// Fake worker pool: drain taskCh and report success for every real task.
-	var processed int64
+	var processed atomic.Int64
 	fakeWorker := func(
 		ctx context.Context,
 		taskCh chan task,
@@ -1437,7 +1437,7 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_ProcessesAll
 				if t.executionInfo == nil {
 					continue
 				}
-				atomic.AddInt64(&processed, 1)
+				processed.Add(1)
 				select {
 				case respCh <- taskResponse{err: nil, page: t.page}:
 				case <-ctx.Done():
@@ -1470,7 +1470,7 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_ProcessesAll
 	s.NoError(encoded.Get(&hbd))
 	s.Equal(total, hbd.SuccessCount)
 	s.Equal(0, hbd.ErrorCount)
-	s.Equal(int64(total), atomic.LoadInt64(&processed))
+	s.Equal(int64(total), processed.Load())
 	mockSdk.AssertExpectations(s.T())
 }
 
@@ -1509,8 +1509,8 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_ProcessesAll
 	mockSdk := &mocks.Client{}
 	mockSdk.On("WorkflowService").Return(s.mockFrontendClient)
 
-	var processed int64
-	var invalidTargets int64
+	var processed atomic.Int64
+	var invalidTargets atomic.Int64
 	fakeWorker := func(
 		ctx context.Context,
 		taskCh chan task,
@@ -1528,9 +1528,9 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_ProcessesAll
 				if task.targetExecution == nil ||
 					task.targetExecution.GetType() != enumspb.EXECUTION_TYPE_ACTIVITY ||
 					task.targetExecution.GetBusinessId() == "" || task.targetExecution.GetRunId() == "" {
-					atomic.AddInt64(&invalidTargets, 1)
+					invalidTargets.Add(1)
 				}
-				atomic.AddInt64(&processed, 1)
+				processed.Add(1)
 				select {
 				case respCh <- taskResponse{page: task.page}:
 				case <-ctx.Done():
@@ -1564,8 +1564,8 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_ProcessesAll
 	s.Require().NoError(encoded.Get(&hbd))
 	s.Equal(total, hbd.SuccessCount)
 	s.Equal(0, hbd.ErrorCount)
-	s.Equal(int64(total), atomic.LoadInt64(&processed))
-	s.Zero(atomic.LoadInt64(&invalidTargets))
+	s.Equal(int64(total), processed.Load())
+	s.Zero(invalidTargets.Load())
 	mockSdk.AssertExpectations(s.T())
 }
 

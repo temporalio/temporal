@@ -42,7 +42,7 @@ const (
 
 type (
 	PerNamespaceWorkerManager struct {
-		status int32
+		status atomic.Int32
 
 		// from init params or Start
 		logger            log.Logger
@@ -129,18 +129,14 @@ func NewPerNamespaceWorkerManager(
 }
 
 func (wm *PerNamespaceWorkerManager) Running() bool {
-	return atomic.LoadInt32(&wm.status) == common.DaemonStatusStarted
+	return wm.status.Load() == common.DaemonStatusStarted
 }
 
 func (wm *PerNamespaceWorkerManager) Start(
 	self membership.HostInfo,
 	serviceResolver membership.ServiceResolver,
 ) {
-	if !atomic.CompareAndSwapInt32(
-		&wm.status,
-		common.DaemonStatusInitialized,
-		common.DaemonStatusStarted,
-	) {
+	if !wm.status.CompareAndSwap(common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
 
@@ -163,11 +159,7 @@ func (wm *PerNamespaceWorkerManager) Start(
 }
 
 func (wm *PerNamespaceWorkerManager) Stop() {
-	if !atomic.CompareAndSwapInt32(
-		&wm.status,
-		common.DaemonStatusStarted,
-		common.DaemonStatusStopped,
-	) {
+	if !wm.status.CompareAndSwap(common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
 

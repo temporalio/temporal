@@ -2,6 +2,7 @@ package testcore
 
 import (
 	"fmt"
+	"slices"
 	"sync"
 	"testing"
 
@@ -54,8 +55,8 @@ func (f *mockSubtestT) finish() {
 	cleanups := f.cleanups
 	f.cleanups = nil
 	f.mu.Unlock()
-	for i := len(cleanups) - 1; i >= 0; i-- {
-		cleanups[i]()
+	for _, cleanup := range slices.Backward(cleanups) {
+		cleanup()
 	}
 }
 

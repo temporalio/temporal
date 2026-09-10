@@ -144,7 +144,7 @@ func (s *sharedClusterT) doCleanups() {
 	cs := s.cleanups
 	s.cleanups = nil
 	s.mu.Unlock()
-	for i := len(cs) - 1; i >= 0; i-- {
-		cs[i]()
+	for _, c := range slices.Backward(cs) {
+		c()
 	}
 }

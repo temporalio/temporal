@@ -6,11 +6,9 @@ import (
 	"fmt"
 	"maps"
 	"os"
-	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	otellog "go.opentelemetry.io/otel/log"
 	lognoop "go.opentelemetry.io/otel/log/noop"
@@ -966,7 +964,6 @@ func verifyPersistenceCompatibleVersion(
 type SpanExporterInputs struct {
 	fx.In
 	Lifecycyle fx.Lifecycle
-	Logger     log.Logger
 	Config     *config.Config `optional:"true"`
 }
 
@@ -977,13 +974,6 @@ type SpanExporterInputs struct {
 // - []go.opentelemetry.io/otel/sdk/trace.SpanExporter
 var TraceExportModule = fx.Options(
 	fx.Provide(func(inputs SpanExporterInputs) ([]otelsdktrace.SpanExporter, error) {
-		var tracingReady atomic.Bool
-		otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
-			if tracingReady.Load() { // ignore errors during startup
-				inputs.Logger.Warn("OTEL error", tag.Error(err), tag.ServiceErrorType(err))
-			}
-		}))
-
 		// (1) Exporters from config.
 		exportersByType := map[telemetry.SpanExporterType]otelsdktrace.SpanExporter{}
 		if inputs.Config != nil {
@@ -1010,12 +1000,8 @@ var TraceExportModule = fx.Options(
 
 		// Configure exporters' lifecycle hooks.
 		inputs.Lifecycyle.Append(fx.Hook{
-			OnStart: func(ctx context.Context) error {
-				err = startAll(exporters)(ctx)
-				tracingReady.Store(true)
-				return err
-			},
-			OnStop: shutdownAll(exporters),
+			OnStart: startAll(exporters),
+			OnStop:  shutdownAll(exporters),
 		})
 		return exporters, nil
 	}),
@@ -1086,10 +1072,6 @@ var ServiceTracingModule = fx.Options(
 		tp := otelsdktrace.NewTracerProvider(opts...)
 		lc.Append(fx.Hook{
 			OnStop: func(ctx context.Context) error {
-				otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
-					// ignore errors during shutdown
-				}))
-
 				shutdownCtx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 				defer cancel()
 

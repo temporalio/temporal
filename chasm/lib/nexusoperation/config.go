@@ -219,13 +219,6 @@ Adding high-cardinality tags (like unique operation names) can significantly inc
 query complexity. Consider the cardinality impact when enabling these tags.`,
 )
 
-var UseSystemCallbackURL = dynamicconfig.NewGlobalBoolSetting(
-	"nexusoperation.useSystemCallbackURL",
-	true,
-	`Controls how the executor generates callback URLs for worker targets in Nexus Operations.
-When true, uses the fixed system callback URL for all worker targets.`,
-)
-
 var MaxReasonLength = dynamicconfig.NewNamespaceIntSetting(
 	"nexusoperation.limit.reasonLength",
 	1000,
@@ -236,7 +229,7 @@ Uses Go's len() function to determine the length.`,
 var UseNewFailureWireFormat = dynamicconfig.NewNamespaceBoolSetting(
 	"nexusoperation.useNewFailureWireFormat",
 	true,
-	`Controls whether to use the new failure wire format via an HTTP header that is attached to StartOperation requests.
+	`Controls whether to use the new failure wire format via an HTTP header that is attached to Nexus operation requests.
 Added for safety. Defaults to true. Likely to be removed in future server versions.`,
 )
 
@@ -259,7 +252,6 @@ type Config struct {
 	MaxOperationScheduleToCloseTimeout         dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	PayloadSizeLimit                           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackURLTemplate                        dynamicconfig.TypedPropertyFn[*template.Template]
-	UseSystemCallbackURL                       dynamicconfig.BoolPropertyFn
 	PayloadSizeLimitWarn                       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxUserMetadataSummarySize                 dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxUserMetadataDetailsSize                 dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -294,7 +286,6 @@ func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 		MaxUserMetadataSummarySize:         dynamicconfig.MaxUserMetadataSummarySize.Get(dc),
 		MaxUserMetadataDetailsSize:         dynamicconfig.MaxUserMetadataDetailsSize.Get(dc),
 		CallbackURLTemplate:                CallbackURLTemplate.Get(dc),
-		UseSystemCallbackURL:               UseSystemCallbackURL.Get(dc),
 		UseNewFailureWireFormat:            UseNewFailureWireFormat.Get(dc),
 		VisibilityMaxPageSize:              dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
 		MaxIDLengthLimit:                   dynamicconfig.MaxIDLengthLimit.Get(dc),

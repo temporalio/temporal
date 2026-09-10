@@ -776,9 +776,24 @@ func (s *StreamSenderImpl) getTaskPriority(task tasks.Task) enumsspb.TaskPriorit
 			return enumsspb.TASK_PRIORITY_LOW
 		}
 		return t.Priority
+	case *tasks.SyncVersionedTransitionTask:
+		return defaultHighTaskPriority(t.Priority)
+	case *tasks.HistoryReplicationTask:
+		return defaultHighTaskPriority(t.Priority)
+	case *tasks.SyncActivityTask:
+		return defaultHighTaskPriority(t.Priority)
+	case *tasks.SyncHSMTask:
+		return defaultHighTaskPriority(t.Priority)
 	default:
 		return enumsspb.TASK_PRIORITY_HIGH
 	}
+}
+
+func defaultHighTaskPriority(priority enumsspb.TaskPriority) enumsspb.TaskPriority {
+	if priority == enumsspb.TASK_PRIORITY_UNSPECIFIED {
+		return enumsspb.TASK_PRIORITY_HIGH
+	}
+	return priority
 }
 
 func (s *StreamSenderImpl) getTaskTargetCluster(task tasks.Task) []string {
