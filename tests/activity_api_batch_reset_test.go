@@ -387,8 +387,6 @@ func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_RunningWor
 		s.Equal(int32(1), description.PendingActivities[0].Attempt)
 	}
 
-	// Await may have refreshed the suite context; renew it for workflow completion.
-	ctx := testcontext.EnsureRemaining(s.Context(), s.T(), testcontext.DefaultTimeout())
 	internalWorkflow.letActivitySucceed.Store(true)
 
 	replacementWorker := sdkworker.New(env.SdkClient(), env.WorkerTaskQueue(), sdkworker.Options{})
@@ -397,6 +395,8 @@ func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_RunningWor
 	s.NoError(replacementWorker.Start())
 	defer replacementWorker.Stop()
 
+	// Extend the deadline for workflow completion after the polling above.
+	ctx := testcontext.EnsureRemaining(s.Context(), s.T(), testcontext.DefaultTimeout())
 	for _, workflowRun := range workflowRuns {
 		var out string
 		err = workflowRun.Get(ctx, &out)
