@@ -260,6 +260,7 @@ func (c *mysqlQueryConverter) buildCountStmt(
 	namespaceID namespace.ID,
 	queryString string,
 	groupBy []string,
+	usesCustomSearchAttribute bool,
 ) (string, []any) {
 	var whereClauses []string
 	var queryArgs []any
@@ -279,18 +280,30 @@ func (c *mysqlQueryConverter) buildCountStmt(
 		groupByClause = fmt.Sprintf("GROUP BY %s", strings.Join(groupBy, ", "))
 	}
 
+	// GROUP BY is only ever allowed on ExecutionStatus (a column on executions_visibility
+	// itself), so the joins are only needed when the WHERE clause references a custom or
+	// CHASM search attribute. Skipping them when it doesn't avoids an expensive join against
+	// custom_search_attributes/chasm_search_attributes that the query never uses.
+	joinClause := ""
+	if usesCustomSearchAttribute {
+		joinClause = fmt.Sprintf(
+			`LEFT JOIN custom_search_attributes USING (%s, %s)
+		LEFT JOIN chasm_search_attributes USING (%s, %s)`,
+			sadefs.GetSqlDbColName(sadefs.NamespaceID),
+			sadefs.GetSqlDbColName(sadefs.RunID),
+			sadefs.GetSqlDbColName(sadefs.NamespaceID),
+			sadefs.GetSqlDbColName(sadefs.RunID),
+		)
+	}
+
 	return fmt.Sprintf(
 		`SELECT %s
 		FROM executions_visibility ev
-		LEFT JOIN custom_search_attributes USING (%s, %s)
-		LEFT JOIN chasm_search_attributes USING (%s, %s)
+		%s
 		WHERE %s
 		%s`,
 		strings.Join(append(groupBy, "COUNT(*)"), ", "),
-		sadefs.GetSqlDbColName(sadefs.NamespaceID),
-		sadefs.GetSqlDbColName(sadefs.RunID),
-		sadefs.GetSqlDbColName(sadefs.NamespaceID),
-		sadefs.GetSqlDbColName(sadefs.RunID),
+		joinClause,
 		strings.Join(whereClauses, " AND "),
 		groupByClause,
 	), queryArgs
