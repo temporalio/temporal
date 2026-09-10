@@ -116,6 +116,8 @@ func parseElasticConfig(cli *cli.Context) (*esclient.Config, error) {
 	if cli.GlobalString(CLIOptAWSCredentials) != "" {
 		cfg.AWSRequestSigning.CredentialProvider = cli.GlobalString(CLIOptAWSCredentials)
 		cfg.AWSRequestSigning.Enabled = true
+		cfg.AWSRequestSigning.Service = cli.GlobalString(CLIOptAWSService)
+		cfg.AWSRequestSigning.AddPayloadHashHeader = cli.GlobalBool(CLIOptAWSAddPayloadHash)
 
 		if cfg.AWSRequestSigning.CredentialProvider == "static" {
 			cfg.AWSRequestSigning.Static.AccessKeyID = cfg.Username

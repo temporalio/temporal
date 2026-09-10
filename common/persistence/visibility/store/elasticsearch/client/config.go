@@ -34,14 +34,21 @@ type (
 		// DisableGzip disables gzip compression for Elasticsearch requests.
 		// Useful in test/development environments where ES runs locally.
 		DisableGzip bool `yaml:"disableGzip"`
+		// Serverless indicates the backend is a serverless OpenSearch collection
+		// (e.g. Amazon OpenSearch Serverless) that exposes no cluster-level APIs.
+		// When set, AddSearchAttributes confirms the mapping is queryable per index
+		// instead of polling _cluster/health, which such backends answer with 404.
+		Serverless bool `yaml:"serverless"`
 		// httpClient is the awsHttpClient to be used for creating esClient.
 		httpClient *http.Client
 	}
 
 	// ESAWSRequestSigningConfig represents configuration for signing ES requests to AWS
 	ESAWSRequestSigningConfig struct {
-		Enabled bool   `yaml:"enabled"`
-		Region  string `yaml:"region"`
+		Enabled              bool   `yaml:"enabled"`
+		Region               string `yaml:"region"`
+		Service              string `yaml:"service"`
+		AddPayloadHashHeader bool   `yaml:"addPayloadHashHeader"`
 
 		// Possible options for CredentialProvider include:
 		//   1) static (fill out static Credential Provider)

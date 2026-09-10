@@ -12,12 +12,16 @@ const (
 	CLIOptVisibilityIndex     = "index"
 	CLIOptAWSCredentials      = "aws-credentials"
 	CLIOptAWSToken            = "aws-session-token"
+	CLIOptAWSService          = "aws-service"
+	CLIOptAWSAddPayloadHash   = "aws-add-payload-hash-header"
 	CLIOptFailSilently        = "fail"
 	CLIOptSkipClusterSettings = "skip-cluster-settings"
 
 	CLIFlagVisibilityIndex     = CLIOptVisibilityIndex + ", i"
 	CLIFlagAWSToken            = CLIOptAWSToken
 	CLIFlagAWSCredentials      = CLIOptAWSCredentials + ", aws"
+	CLIFlagAWSService          = CLIOptAWSService
+	CLIFlagAWSAddPayloadHash   = CLIOptAWSAddPayloadHash
 	CLIFlagFailSilently        = CLIOptFailSilently
 	CLIFlagSkipClusterSettings = CLIOptSkipClusterSettings
 )
@@ -79,6 +83,17 @@ func BuildCLIOptions() *cli.App {
 			Value:  "",
 			Usage:  "AWS sessiontoken for use with 'static' AWS credentials provider",
 			EnvVar: "AWS_SESSION_TOKEN",
+		},
+		cli.StringFlag{
+			Name:   CLIFlagAWSService,
+			Value:  "",
+			Usage:  "AWS SigV4 signing service name (defaults to 'es'; use 'aoss' for OpenSearch Serverless)",
+			EnvVar: "AWS_SERVICE",
+		},
+		cli.BoolFlag{
+			Name:   CLIFlagAWSAddPayloadHash,
+			Usage:  "send a signed X-Amz-Content-Sha256 header (required by OpenSearch Serverless)",
+			EnvVar: "AWS_ADD_PAYLOAD_HASH_HEADER",
 		},
 		cli.BoolFlag{
 			Name:  commonschema.CLIOptQuiet,
