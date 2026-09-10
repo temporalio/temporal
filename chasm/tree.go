@@ -3533,7 +3533,7 @@ func (n *Node) ExecutePureTask(
 	defer log.CapturePanic(n.logger, &retErr)
 
 	archetypeTag := metrics.ArchetypeTag("")
-	if name, ok := n.registry.ArchetypeDisplayName(n.ArchetypeID()); ok {
+	if name, ok := n.registry.ArchetypeFqnByID(n.ArchetypeID()); ok {
 		archetypeTag = metrics.ArchetypeTag(name)
 	}
 	chasmTaskTypeTag := metrics.ChasmTaskTypeTag(registrableTask.fqType())
