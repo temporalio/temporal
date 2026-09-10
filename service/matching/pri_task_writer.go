@@ -125,6 +125,23 @@ func (w *priTaskWriter) appendTasks(reqs []*writeTaskRequest) error {
 	resp, err := w.db.CreateTasks(w.backlogMgr.tqCtx, reqs)
 	if err != nil {
 		w.backlogMgr.signalIfFatal(err)
+		if !writeDefinitelyFailed(err) {
+			state, leaseErr := w.renewLeaseWithRetry(persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+			if leaseErr != nil {
+				if !w.backlogMgr.signalIfFatal(leaseErr) {
+					w.backlogMgr.pqMgr.UnloadFromPartitionManager(unloadCauseOtherError)
+				}
+			} else {
+				w.taskIDBlock = rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize)
+				// The write may not have committed, so readers must reload from
+				// persistence instead of adding these tasks directly to memory.
+				w.backlogMgr.subqueueLock.Lock()
+				for _, reader := range w.backlogMgr.subqueues {
+					reader.SignalTaskLoading()
+				}
+				w.backlogMgr.subqueueLock.Unlock()
+			}
+		}
 		w.logger.Error("Persistent store operation failure",
 			tag.StoreOperationCreateTask,
 			tag.Error(err),
