@@ -2708,8 +2708,9 @@ the oldest task of each immediate queue category that has a backlog`,
 	DefaultActivityRetryPolicy = NewNamespaceTypedSetting(
 		"history.defaultActivityRetryPolicy",
 		retrypolicy.DefaultDefaultRetrySettings,
-		`DefaultActivityRetryPolicy represents the out-of-box retry policy for activities where
-the user has not specified an explicit RetryPolicy`,
+		`DefaultActivityRetryPolicy represents the out-of-box retry policy for activities. It
+applies both when the user has not specified any RetryPolicy and, field by field, to fill
+in fields that are unset (or set to their zero value) in an explicit RetryPolicy`,
 	)
 	DefaultWorkflowRetryPolicy = NewNamespaceTypedSetting(
 		"history.defaultWorkflowRetryPolicy",
