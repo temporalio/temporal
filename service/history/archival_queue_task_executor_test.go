@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -41,6 +42,34 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 		{
 			Name: "success",
 			Configure: func(p *params) {
+			},
+		},
+		{
+			// The active cluster archives this workflow, so pushing again from here would be a
+			// duplicate write that visibility archival does not dedup. The deletion task must
+			// still be scheduled: with archival enabled, addDeletionTask is the only producer of
+			// the retention DeleteHistoryEventTask, and this cluster still holds its own copy.
+			Name: "standby cluster skips archival but still schedules deletion",
+			Configure: func(p *params) {
+				p.NamespaceActiveClusterName = cluster.TestAlternativeClusterName
+				p.ExpectArchive = false
+				p.ExpectedTargets = nil
+				p.ExpectAddTask = true
+			},
+		},
+		{
+			Name: "standby cluster archives when active cluster gate is disabled",
+			Configure: func(p *params) {
+				p.NamespaceActiveClusterName = cluster.TestAlternativeClusterName
+				p.DisableActiveClusterGate = true
+			},
+		},
+		{
+			// A local namespace is active wherever it lives, so it must archive even though its
+			// recorded active cluster name differs from the current cluster.
+			Name: "local namespace archives regardless of active cluster name",
+			Configure: func(p *params) {
+				p.LocalNamespace = true
 			},
 		},
 		{
@@ -320,6 +349,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			p.ExpectAddTask = true
 			p.MetricsHandler = metrics.NewMockHandler(p.Controller)
 			p.MutableStateExists = true
+			p.NamespaceActiveClusterName = cluster.TestCurrentClusterName
 
 			c.Configure(&p)
 			namespaceRegistry := namespace.NewMockRegistry(p.Controller)
@@ -337,6 +367,9 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			cfg.RetentionTimerJitterDuration = func() time.Duration {
 				return 0
 			}
+			if p.DisableActiveClusterGate {
+				cfg.ArchivalQueueArchiveOnlyOnActiveCluster = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+			}
 			shardContext.EXPECT().GetConfig().Return(cfg).AnyTimes()
 			mockMetadata := cluster.NewMockMetadata(p.Controller)
 			mockMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
@@ -348,26 +381,40 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			historyArchivalState := p.HistoryConfig.NamespaceArchivalState
 			visibilityArchivalState := p.VisibilityConfig.NamespaceArchivalState
 
-			namespaceEntry := namespace.NewGlobalNamespaceForTest(
-				&persistencespb.NamespaceInfo{
-					Id:   tests.NamespaceID.String(),
-					Name: tests.Namespace.String(),
-				},
-				&persistencespb.NamespaceConfig{
-					Retention:               p.Retention,
-					HistoryArchivalState:    enumspb.ArchivalState(historyArchivalState),
-					HistoryArchivalUri:      p.HistoryURI,
-					VisibilityArchivalState: enumspb.ArchivalState(visibilityArchivalState),
-					VisibilityArchivalUri:   p.VisibilityURI,
-				},
-				&persistencespb.NamespaceReplicationConfig{
-					ActiveClusterName: cluster.TestCurrentClusterName,
-					Clusters: []string{
-						cluster.TestCurrentClusterName,
+			namespaceInfo := &persistencespb.NamespaceInfo{
+				Id:   tests.NamespaceID.String(),
+				Name: tests.Namespace.String(),
+			}
+			namespaceConfig := &persistencespb.NamespaceConfig{
+				Retention:               p.Retention,
+				HistoryArchivalState:    enumspb.ArchivalState(historyArchivalState),
+				HistoryArchivalUri:      p.HistoryURI,
+				VisibilityArchivalState: enumspb.ArchivalState(visibilityArchivalState),
+				VisibilityArchivalUri:   p.VisibilityURI,
+			}
+			var namespaceEntry *namespace.Namespace
+			if p.LocalNamespace {
+				// The target cluster deliberately differs from the current cluster: a local
+				// namespace is active wherever it lives, so the gate must not consult it.
+				namespaceEntry = namespace.NewLocalNamespaceForTest(
+					namespaceInfo,
+					namespaceConfig,
+					cluster.TestAlternativeClusterName,
+				)
+			} else {
+				namespaceEntry = namespace.NewGlobalNamespaceForTest(
+					namespaceInfo,
+					namespaceConfig,
+					&persistencespb.NamespaceReplicationConfig{
+						ActiveClusterName: p.NamespaceActiveClusterName,
+						Clusters: []string{
+							cluster.TestCurrentClusterName,
+							cluster.TestAlternativeClusterName,
+						},
 					},
-				},
-				123,
-			)
+					123,
+				)
+			}
 			namespaceRegistry.EXPECT().GetNamespaceName(namespaceEntry.ID()).
 				Return(namespaceEntry.Name(), nil).AnyTimes()
 			namespaceRegistry.EXPECT().GetNamespaceByID(namespaceEntry.ID()).
@@ -579,6 +626,14 @@ type params struct {
 	GetCloseVersionBeforeArchivalError error
 	CloseVersionAfterArchival          int64
 	GetCloseVersionAfterArchivalError  error
+	// NamespaceActiveClusterName is the active cluster of the global namespace under test. It
+	// defaults to the current cluster; set it to cluster.TestAlternativeClusterName to make the
+	// current cluster standby for the namespace.
+	NamespaceActiveClusterName string
+	// LocalNamespace builds a local (non-global) namespace instead of a global one.
+	LocalNamespace bool
+	// DisableActiveClusterGate turns off history.archivalQueueArchiveOnlyOnActiveCluster.
+	DisableActiveClusterGate bool
 }
 
 // archivalConfig represents the user configuration of archival for the cluster and namespace
