@@ -143,13 +143,16 @@ func (s *storageWrapper) QueryWithFilters(ctx context.Context, URI archiver.URI,
 	})
 
 	for {
+		// Check page completion BEFORE fetching the next item. This ensures that
+		// when filters skip many items, a full page always returns completed=false
+		// (i.e. there may be more), regardless of whether the raw iterator is exhausted.
+		if isPageCompleted(pageSize, len(resultSet)) {
+			return resultSet, false, currentPos, nil
+		}
+
 		attrs, err = it.Next()
 		if err == iterator.Done {
 			return resultSet, true, currentPos, nil
-		}
-
-		if completed := isPageCompleted(pageSize, len(resultSet)); completed {
-			return resultSet, completed, currentPos, err
 		}
 
 		valid := true
