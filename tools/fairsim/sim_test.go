@@ -3,12 +3,39 @@ package fairsim
 import (
 	"io"
 	"math/rand/v2"
+	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/service/matching/counter"
 )
+
+func TestRunTool_InvalidPartitions(t *testing.T) {
+	t.Parallel()
+
+	for _, partitions := range []string{"0", "-1"} {
+		t.Run(partitions, func(t *testing.T) {
+			err := RunTool([]string{"-partitions=" + partitions})
+			require.EqualError(t, err, "partitions must be positive, got "+partitions)
+		})
+	}
+}
+
+func TestLoadCounterParams_PartialConfigPreservesDefaults(t *testing.T) {
+	t.Parallel()
+
+	path := filepath.Join(t.TempDir(), "counter.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"CMS":{"W":10}}`), 0o600))
+
+	params, err := loadCounterParams(path)
+	require.NoError(t, err)
+	expected := counter.DefaultCounterParams
+	expected.CMS.W = 10
+	require.Equal(t, expected, params)
+}
 
 func newTestSimulator() *simulator {
 	src := rand.NewPCG(rand.Uint64(), rand.Uint64())
