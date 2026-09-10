@@ -40,6 +40,52 @@ func (s *PriMatcherSuite) SetupTest() {
 	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
 }
 
+func (s *PriMatcherSuite) newRootMatcher(
+	ctx context.Context,
+	validator taskValidator,
+	batchSize int,
+) *priTaskMatcher {
+	cfg := newTaskQueueConfig(
+		tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+		NewConfig(dynamicconfig.NewNoopCollection()),
+		"nsname",
+	)
+	if batchSize > 0 {
+		cfg.ValidatorBatchSize = func() int { return batchSize }
+	}
+	partition := tqid.UnsafeTaskQueueFamily("nsid", "tq").
+		TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).
+		RootPartition()
+	rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	rateLimitManager.Start()
+	return newPriTaskMatcher(
+		ctx,
+		cfg,
+		partition,
+		nil,
+		nil,
+		validator,
+		s.logger,
+		metrics.NoopMetricsHandler,
+		rateLimitManager,
+		func() {},
+		func() {},
+	)
+}
+
+func newBacklogTask(id int64, done chan taskResponse) *internalTask {
+	task := newInternalTaskFromBacklog(&persistencespb.AllocatedTaskInfo{
+		TaskId: id,
+		Data: &persistencespb.TaskInfo{
+			CreateTime: timestamppb.Now(),
+		},
+	}, func(_ *internalTask, res taskResponse) {
+		done <- res
+	})
+	task.resetMatcherState()
+	return task
+}
+
 // TestValidatorWorksOnRoot tests that the validator goroutine can pick up tasks
 // on a root partition (where there is no forwarder).
 func (s *PriMatcherSuite) TestValidatorWorksOnRoot() {
@@ -235,7 +281,7 @@ func (s *PriMatcherSuite) TestValidatorDrop_SetsDropReason() {
 				ctx,
 				cfg,
 				partition,
-				nil, // nil forwarder = root partition -> validateTasksOnRoot path
+				nil, // nil forwarder = root partition -> validateTasks path
 				nil,
 				mockValidator,
 				s.logger,
@@ -279,4 +325,99 @@ func (s *PriMatcherSuite) TestValidatorBatchSizeDefault() {
 		"nsname",
 	)
 	s.Equal(10, cfg.ValidatorBatchSize())
+}
+
+func (s *PriMatcherSuite) TestValidatorBatch_AllInvalidDropsAll() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	mockValidator := NewMocktaskValidator(s.controller)
+	mockValidator.EXPECT().maybeValidate(gomock.Any(), gomock.Any()).Return(false).Times(3)
+
+	tm := s.newRootMatcher(ctx, mockValidator, 3)
+	tm.Start()
+	defer tm.Stop()
+
+	done := make(chan taskResponse, 3)
+	for id := int64(1); id <= 3; id++ {
+		s.Require().NoError(tm.AddTask(newBacklogTask(id, done)))
+	}
+
+	for i := 0; i < 3; i++ {
+		select {
+		case res := <-done:
+			s.Require().NoError(res.err())
+			s.Equal(dropReasonInvalid, res.dropReason)
+		case <-time.After(2 * time.Second):
+			s.Fail("timed out waiting for validator to drop batch")
+		}
+	}
+}
+
+func (s *PriMatcherSuite) TestValidatorBatch_AllValidReprocessesAll() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	mockValidator := NewMocktaskValidator(s.controller)
+	mockValidator.EXPECT().maybeValidate(gomock.Any(), gomock.Any()).Return(true).Times(3)
+
+	tm := s.newRootMatcher(ctx, mockValidator, 3)
+	tm.Start()
+	defer tm.Stop()
+
+	done := make(chan taskResponse, 3)
+	for id := int64(1); id <= 3; id++ {
+		s.Require().NoError(tm.AddTask(newBacklogTask(id, done)))
+	}
+
+	for i := 0; i < 3; i++ {
+		select {
+		case res := <-done:
+			s.ErrorIs(res.err(), errReprocessTask) //nolint:testifylint
+		case <-time.After(2 * time.Second):
+			s.Fail("timed out waiting for validator to reprocess batch")
+		}
+	}
+}
+
+func (s *PriMatcherSuite) TestValidatorBatch_MixedInvalidContinuesImmediately() {
+	// synctest: after a mixed batch the validator must not sleep before the next match.
+	synctest.Test(s.T(), func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		mockValidator := NewMocktaskValidator(s.controller)
+		mockValidator.EXPECT().maybeValidate(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(task *persistencespb.AllocatedTaskInfo, _ enumspb.TaskQueueType) bool {
+				return task.TaskId != 1 // task 1 invalid; others valid
+			},
+		).AnyTimes()
+
+		tm := s.newRootMatcher(ctx, mockValidator, 2)
+		tm.Start()
+		defer tm.Stop()
+
+		done := make(chan taskResponse, 4)
+		for id := int64(1); id <= 2; id++ {
+			require.NoError(t, tm.AddTask(newBacklogTask(id, done)))
+		}
+		// Drain first batch.
+		for i := 0; i < 2; i++ {
+			select {
+			case <-done:
+			case <-time.After(time.Second):
+				t.Fatal("timed out waiting for first batch")
+			}
+		}
+
+		require.NoError(t, tm.AddTask(newBacklogTask(3, done)))
+		select {
+		case <-done:
+			// If the validator slept (~1s backoff) synctest would still pass
+			// this receive only after time advanced. We never advance time, so
+			// a sleep would deadlock until the 1s wait below fires.
+		case <-time.After(100 * time.Millisecond):
+			t.Fatal("validator did not continue immediately after mixed batch")
+		}
+	})
 }
