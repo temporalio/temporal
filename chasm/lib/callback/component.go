@@ -102,11 +102,12 @@ func (c *Callback) loadInvocationArgs(
 		}, nil
 	}
 	return invocableOutbound{
-		callback:   callback,
-		completion: completion,
-		workflowID: ctx.ExecutionKey().BusinessID,
-		runID:      ctx.ExecutionKey().RunID,
-		attempt:    c.Attempt,
+		callback:            callback,
+		completion:          completion,
+		completionSourceTag: c.CompletionSource.Fqn(),
+		workflowID:          ctx.ExecutionKey().BusinessID,
+		runID:               ctx.ExecutionKey().RunID,
+		attempt:             c.Attempt,
 	}, nil
 }
 

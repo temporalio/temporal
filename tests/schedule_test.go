@@ -3753,19 +3753,19 @@ func testMigrationCallbackAttach(t *testing.T, newContext contextFactory) {
 
 // requireInternalCallbackDelivered asserts that at least one completion callback was
 // delivered over the internal (cross-shard) path and that the delivery is fully
-// instrumented: a successful delivery sample, a committed disposition, an attempt
+// instrumented: a successful delivery sample, a committed invocation event, an attempt
 // count, and no sample left at the "unknown" sentinel -- an outcome that would mean a
 // return path recorded no outcome at all, which is indistinguishable from never having
 // run.
 func requireInternalCallbackDelivered(t *testing.T, capture *testcore.NamespaceMetricCapture) {
 	t.Helper()
 
-	// The disposition is recorded after the callback's own state transition commits,
+	// The event is recorded after the callback's own state transition commits,
 	// which is strictly after the scheduler observed the completion, so poll.
 	await.RequireTruef(t, func() bool {
-		return countMetric(capture, callback.InvocationResultCounter.Name(),
-			map[string]string{"outcome": "succeeded", "destination": chasm.NexusCompletionHandlerURL}) >= 1
-	}, awaitTimeout, pollInterval, "a committed callback disposition should be recorded")
+		return countMetric(capture, callback.InvocationEventCounter.Name(),
+			map[string]string{"outcome": "success", "destination": chasm.NexusCompletionHandlerURL}) >= 1
+	}, awaitTimeout, pollInterval, "a committed callback event should be recorded")
 
 	deliveries := capture.Metric(callback.InternalRequestCounter.Name())
 	require.NotEmpty(t, deliveries, "internal callback delivery should be counted")
@@ -3785,14 +3785,14 @@ func requireInternalCallbackDelivered(t *testing.T, capture *testcore.NamespaceM
 			len(capture.Metric(callback.InternalRequestCounter.Name()))
 	}, awaitTimeout, pollInterval, "every counted delivery should also record a latency sample")
 
-	// Attempts are recorded only on a terminal disposition, where the total is final.
+	// Attempts are recorded only on a terminal event, where the total is final.
 	attempts := capture.CollectMetric(callback.InvocationAttemptsHistogram.Name(),
-		func(rec *metricstest.CapturedRecording) bool { return rec.Tags["outcome"] == "succeeded" })
-	require.NotEmpty(t, attempts, "a terminal disposition should record an attempt count")
+		func(rec *metricstest.CapturedRecording) bool { return rec.Tags["outcome"] == "success" })
+	require.NotEmpty(t, attempts, "a terminal event should record an attempt count")
 	require.GreaterOrEqual(t, attempts[0].Value, int64(1))
 
-	require.Zero(t, countMetric(capture, callback.InvocationResultCounter.Name(),
-		map[string]string{"outcome": "failed"}), "no callback should have been dropped permanently")
+	require.Zero(t, countMetric(capture, callback.InvocationEventCounter.Name(),
+		map[string]string{"outcome": "nonretryable-error"}), "no callback should have been dropped permanently")
 }
 
 // testCallbackCompletionMetrics pins the instrumentation on the V2 completion-callback

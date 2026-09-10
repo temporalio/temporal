@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -70,6 +72,8 @@ type mockNexusCompletionGetterLibrary struct {
 	chasm.UnimplementedLibrary
 }
 
+const testCompletionSourceFqn = "mock.nexusCompletionGetter"
+
 func (l *mockNexusCompletionGetterLibrary) Name() string {
 	return "mock"
 }
@@ -86,10 +90,10 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 		name                  string
 		caller                HTTPCaller
 		expectedMetricOutcome string
-		// expectedDisposition is the outcome tag on callback_invocation_results, which is
+		// expectedEvent is the outcome tag on callback_invocation_events, which is
 		// recorded for the outbound path as well as the internal one.
-		expectedDisposition string
-		assertOutcome       func(*testing.T, *Callback, error)
+		expectedEvent string
+		assertOutcome func(*testing.T, *Callback, error)
 	}{
 		{
 			name: "success",
@@ -97,7 +101,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				return &http.Response{StatusCode: 200, Body: http.NoBody}, nil
 			},
 			expectedMetricOutcome: "success",
-			expectedDisposition:   "succeeded",
+			expectedEvent:         "success",
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
 				require.NoError(t, err)
 				require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, cb.Status)
@@ -109,7 +113,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				return nil, errors.New("fake failure")
 			},
 			expectedMetricOutcome: "unknown-error",
-			expectedDisposition:   "retrying",
+			expectedEvent:         "retryable-error",
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
 				var destDownErr *queueserrors.DestinationDownError
 				require.ErrorAs(t, err, &destDownErr)
@@ -122,7 +126,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				return &http.Response{StatusCode: 500, Body: http.NoBody}, nil
 			},
 			expectedMetricOutcome: "handler-error:INTERNAL",
-			expectedDisposition:   "retrying",
+			expectedEvent:         "retryable-error",
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
 				var destDownErr *queueserrors.DestinationDownError
 				require.ErrorAs(t, err, &destDownErr)
@@ -135,7 +139,26 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				return &http.Response{StatusCode: 400, Body: http.NoBody}, nil
 			},
 			expectedMetricOutcome: "handler-error:BAD_REQUEST",
-			expectedDisposition:   "failed",
+			expectedEvent:         "nonretryable-error",
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				require.NoError(t, err)
+				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
+			},
+		},
+		{
+			// A destination naming its own handler error type must not reach the tag.
+			name: "off-spec-handler-error-type",
+			caller: func(r *http.Request) (*http.Response, error) {
+				body := `{"message":"boom","metadata":{"type":"nexus.HandlerError"},` +
+					`"details":{"type":"MINTED_BY_THE_DESTINATION","retryableOverride":false}}`
+				return &http.Response{
+					StatusCode: 500,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body:       io.NopCloser(strings.NewReader(body)),
+				}, nil
+			},
+			expectedMetricOutcome: "handler-error:UNKNOWN",
+			expectedEvent:         "nonretryable-error",
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
 				require.NoError(t, err)
 				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
@@ -169,29 +192,31 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			counter.EXPECT().Record(int64(1),
 				metrics.NamespaceTag("namespace-name"),
 				metrics.DestinationTag("http://localhost"),
-				metrics.OutcomeTag(tc.expectedMetricOutcome))
+				metrics.OutcomeTag(tc.expectedMetricOutcome),
+				metrics.NexusCompletionSourceTag(testCompletionSourceFqn))
 			metricsHandler.EXPECT().Timer(RequestLatencyHistogram.Name()).Return(timer)
 			timer.EXPECT().Record(gomock.Any(),
 				metrics.NamespaceTag("namespace-name"),
 				metrics.DestinationTag("http://localhost"),
-				metrics.OutcomeTag(tc.expectedMetricOutcome))
+				metrics.OutcomeTag(tc.expectedMetricOutcome),
+				metrics.NexusCompletionSourceTag(testCompletionSourceFqn))
 
-			// The committed disposition is recorded for the outbound path too, not just the
+			// The committed event is recorded for the outbound path too, not just the
 			// internal one, so a permanently dropped external callback is also visible.
-			dispositionTags := []metrics.Tag{
+			eventTags := []metrics.Tag{
 				metrics.NamespaceTag("namespace-name"),
 				metrics.DestinationTag("http://localhost"),
-				metrics.OutcomeTag(tc.expectedDisposition),
+				metrics.OutcomeTag(tc.expectedEvent),
 			}
-			dispositionCounter := metrics.NewMockCounterIface(ctrl)
-			metricsHandler.EXPECT().Counter(InvocationResultCounter.Name()).Return(dispositionCounter)
-			dispositionCounter.EXPECT().Record(int64(1), dispositionTags)
-			if tc.expectedDisposition != dispositionRetrying {
+			eventCounter := metrics.NewMockCounterIface(ctrl)
+			metricsHandler.EXPECT().Counter(InvocationEventCounter.Name()).Return(eventCounter)
+			eventCounter.EXPECT().Record(int64(1), eventTags)
+			if tc.expectedEvent != string(outcomeRetryableError) {
 				attemptHistogram := metrics.NewMockHistogramIface(ctrl)
 				metricsHandler.EXPECT().
 					Histogram(InvocationAttemptsHistogram.Name(), InvocationAttemptsHistogram.Unit()).
 					Return(attemptHistogram)
-				attemptHistogram.EXPECT().Record(int64(1), dispositionTags)
+				attemptHistogram.EXPECT().Record(int64(1), eventTags)
 			}
 
 			// Setup logger
@@ -386,8 +411,8 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 		// Every path through Invoke must record exactly one sample: this counter is the only
 		// evidence the delivery was attempted at all.
 		wantDeliveryOutcome string
-		// wantDisposition is the outcome tag expected on callback_invocation_results.
-		wantDisposition string
+		// wantEvent is the outcome tag expected on callback_invocation_events.
+		wantEvent string
 		// wantAttemptSample is whether callback_invocation_attempts should be recorded, which
 		// happens only on a terminal disposition.
 		wantAttemptSample bool
@@ -426,7 +451,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, cb.Status)
 			},
 			wantDeliveryOutcome: "success",
-			wantDisposition:     "succeeded",
+			wantEvent:           "success",
 			wantAttemptSample:   true,
 		},
 		{
@@ -460,7 +485,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, cb.Status)
 			},
 			wantDeliveryOutcome: "success",
-			wantDisposition:     "succeeded",
+			wantEvent:           "success",
 			wantAttemptSample:   true,
 		},
 		{
@@ -484,7 +509,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, cb.Status)
 			},
 			wantDeliveryOutcome: "error:Unavailable",
-			wantDisposition:     "retrying",
+			wantEvent:           "retryable-error",
 			wantAttemptSample:   false,
 		},
 		{
@@ -508,7 +533,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
 			},
 			wantDeliveryOutcome: "error:InvalidArgument",
-			wantDisposition:     "failed",
+			wantEvent:           "nonretryable-error",
 			wantAttemptSample:   true,
 		},
 		{
@@ -535,7 +560,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
 			},
 			wantDeliveryOutcome: "error:NotFound",
-			wantDisposition:     "failed",
+			wantEvent:           "nonretryable-error",
 			wantAttemptSample:   true,
 		},
 		{
@@ -556,7 +581,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
 			},
 			wantDeliveryOutcome: "missing-token",
-			wantDisposition:     "failed",
+			wantEvent:           "nonretryable-error",
 			wantAttemptSample:   true,
 		},
 		{
@@ -577,7 +602,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
 			},
 			wantDeliveryOutcome: "request-build-error",
-			wantDisposition:     "failed",
+			wantEvent:           "nonretryable-error",
 			wantAttemptSample:   true,
 		},
 		{
@@ -597,7 +622,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
 			},
 			wantDeliveryOutcome: "token-decode-error",
-			wantDisposition:     "failed",
+			wantEvent:           "nonretryable-error",
 			wantAttemptSample:   true,
 		},
 		{
@@ -617,7 +642,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
 			},
 			wantDeliveryOutcome: "invalid-ref",
-			wantDisposition:     "failed",
+			wantEvent:           "nonretryable-error",
 			wantAttemptSample:   true,
 		},
 	}
@@ -796,15 +821,15 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			require.Len(t, snapshot[InternalRequestLatencyHistogram.Name()], 1,
 				"latency must be recorded alongside the request counter")
 
-			results := snapshot[InvocationResultCounter.Name()]
+			results := snapshot[InvocationEventCounter.Name()]
 			require.Len(t, results, 1)
-			require.Equal(t, tc.wantDisposition, results[0].Tags["outcome"])
+			require.Equal(t, tc.wantEvent, results[0].Tags["outcome"])
 
 			attempts := snapshot[InvocationAttemptsHistogram.Name()]
 			if tc.wantAttemptSample {
 				require.Len(t, attempts, 1,
 					"a terminal disposition must record the attempt count")
-				require.Equal(t, tc.wantDisposition, attempts[0].Tags["outcome"])
+				require.Equal(t, tc.wantEvent, attempts[0].Tags["outcome"])
 				// task.Attempt is 0-based, and the task below is built with Attempt: 1.
 				require.Equal(t, int64(2), attempts[0].Value)
 			} else {

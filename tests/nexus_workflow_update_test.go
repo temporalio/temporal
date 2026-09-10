@@ -291,6 +291,8 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateAsyncNexusOperation() {
 	ctx := s.Context()
 	cfg := newUpdateNexusTestConfig(s.T())
 
+	capture := env.StartNamespaceMetricCapture()
+
 	h := makeUpdateWithCallbackHandler(env, s.T(), cfg, nil)
 	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
 
@@ -340,6 +342,8 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateAsyncNexusOperation() {
 		}
 	}
 	s.True(foundUpdateAccepted, "expected to find WorkflowExecutionUpdateAccepted event in child workflow history")
+
+	requireNexusCompletionSource(s.T(), capture, "workflow.update")
 }
 
 func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateAsyncAttachedNexusOperation() {
