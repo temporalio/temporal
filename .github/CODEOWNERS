@@ -84,7 +84,6 @@
 
 /service/worker/workerdeployment/ @temporalio/oss-matching
 
-/service/worker/addsearchattributes/ @temporalio/oss-foundations
 /service/worker/deletenamespace/ @temporalio/oss-foundations
 /service/worker/dlq/ @temporalio/oss-foundations
 
