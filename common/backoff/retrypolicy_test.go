@@ -223,6 +223,28 @@ func (s *RetryPolicySuite) TestUnbounded() {
 	}
 }
 
+// Validate that a policy without maximum interval and expiration interval stops retrying once
+// the computed interval overflows time.Duration. The conversion of an out-of-range float64 to
+// int64 is platform-dependent (it saturates to MaxInt64 on arm64 but wraps negative on amd64),
+// so without an explicit overflow check the policy returns a ~292-year backoff on arm64.
+func (s *RetryPolicySuite) TestUnboundedOverflowReturnsDone() {
+	policy := createPolicy(time.Second)
+
+	// initialInterval * 2^(100-1) overflows int64 nanoseconds by a wide margin
+	s.Equal(done, policy.ComputeNextDelay(0, 100, nil))
+}
+
+// Validate that a policy with a maximum interval keeps retrying at the capped interval even
+// after the raw exponential computation overflows.
+func (s *RetryPolicySuite) TestOverflowWithMaximumIntervalStillRetries() {
+	policy := createPolicy(time.Second).WithMaximumInterval(10 * time.Second)
+
+	next := policy.ComputeNextDelay(0, 100, nil)
+	s.NotEqual(done, next)
+	s.Greater(next, time.Duration(0))
+	s.LessOrEqual(next, 10*time.Second)
+}
+
 // Validate that ErrorDependentRetryPolicy returns the expected delay for a given error, with and without jitter
 func (s *RetryPolicySuite) TestErrorDependentPolicy() {
 	var twoSecondError = fmt.Errorf("two seconds")
