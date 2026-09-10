@@ -2,6 +2,9 @@ package frontend
 
 import (
 	"context"
+	"errors"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -13,6 +16,8 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/nexusworkflowref"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
@@ -21,6 +26,128 @@ import (
 )
 
 const convTestRequestID = "request-id"
+
+func TestNexusCompletionHTTPHandler_JWTAudience(t *testing.T) {
+	testCases := []struct {
+		name               string
+		token              string
+		tokenAudience      string
+		configuredAudience string
+		wantDenied         bool
+	}{
+		{
+			name:               "matching audience",
+			token:              "Bearer token",
+			tokenAudience:      "nexus-api",
+			configuredAudience: "nexus-api",
+		},
+		{
+			name:               "mismatching audience",
+			token:              "Bearer token",
+			tokenAudience:      "other-api",
+			configuredAudience: "nexus-api",
+			wantDenied:         true,
+		},
+		{
+			name:          "no configured audience",
+			token:         "Bearer token",
+			tokenAudience: "other-api",
+		},
+		{
+			name:               "no token",
+			configuredAudience: "nexus-api",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := &nexusCompletionHandler{
+				AuthInterceptor: newAudienceTestInterceptor(tc.tokenAudience, tc.configuredAudience, errorAuthorizer{}),
+				Logger:          log.NewNoopLogger(),
+			}
+			requestContext := &requestContext{
+				nexusCompletionHandler: h,
+				namespace: namespace.NewLocalNamespaceForTest(
+					&persistencespb.NamespaceInfo{Name: "test-namespace"},
+					nil,
+					"active",
+				),
+				logger: log.NewNoopLogger(),
+			}
+			httpRequest := httptest.NewRequest(http.MethodPost, "/", nil)
+			if tc.token != "" {
+				httpRequest.Header.Set("Authorization", tc.token)
+			}
+
+			err := requestContext.interceptRequest(context.Background(), &nexusrpc.CompletionRequest{HTTPRequest: httpRequest})
+			if tc.wantDenied {
+				var handlerError *nexus.HandlerError
+				require.ErrorAs(t, err, &handlerError)
+				require.Equal(t, nexus.HandlerErrorTypeUnauthenticated, handlerError.Type)
+				require.Equal(t, metrics.OutcomeTag("unauthorized"), requestContext.outcomeTag)
+			} else {
+				// Claim mapping succeeded, so the request reached errorAuthorizer's sentinel error.
+				var handlerError *nexus.HandlerError
+				require.ErrorAs(t, err, &handlerError)
+				require.Equal(t, nexus.HandlerErrorTypeInternal, handlerError.Type)
+			}
+		})
+	}
+}
+
+func TestNexusCompletionHTTPHandler_ClaimMapperInternalErrors(t *testing.T) {
+	plainErr := errors.New("claim mapper unavailable")
+	testCases := []struct {
+		name            string
+		claimMapperErr  error
+		wantHandlerType nexus.HandlerErrorType
+	}{
+		{
+			name:            "gRPC internal error",
+			claimMapperErr:  serviceerror.NewInternal("claim mapper unavailable"),
+			wantHandlerType: nexus.HandlerErrorTypeInternal,
+		},
+		{
+			name:           "plain internal error",
+			claimMapperErr: plainErr,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := &nexusCompletionHandler{
+				AuthInterceptor: newTestAuthInterceptor(
+					errorClaimMapper{err: tc.claimMapperErr},
+					"nexus-api",
+					errorAuthorizer{},
+				),
+				Logger: log.NewNoopLogger(),
+			}
+			requestContext := &requestContext{
+				nexusCompletionHandler: h,
+				namespace: namespace.NewLocalNamespaceForTest(
+					&persistencespb.NamespaceInfo{Name: "test-namespace"},
+					nil,
+					"active",
+				),
+				logger: log.NewNoopLogger(),
+			}
+			httpRequest := httptest.NewRequest(http.MethodPost, "/", nil)
+			httpRequest.Header.Set("Authorization", "Bearer token")
+
+			err := requestContext.interceptRequest(context.Background(), &nexusrpc.CompletionRequest{HTTPRequest: httpRequest})
+
+			if tc.wantHandlerType == "" {
+				require.ErrorIs(t, err, plainErr)
+			} else {
+				var handlerError *nexus.HandlerError
+				require.ErrorAs(t, err, &handlerError)
+				require.Equal(t, tc.wantHandlerType, handlerError.Type)
+			}
+			require.Equal(t, metrics.OutcomeTag("internal_auth_error"), requestContext.outcomeTag)
+		})
+	}
+}
 
 // hsmCompletionToken builds the HSM token used by these conversion tests.
 func hsmCompletionToken() *tokenspb.NexusOperationCompletion {

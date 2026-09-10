@@ -577,16 +577,19 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexusrpc
 		}
 	}
 
-	authInfo := c.AuthInterceptor.GetAuthInfo(tlsInfo, request.HTTPRequest.Header, func() string {
-		return "" // TODO: support audience getter
-	})
-
-	var claims *authorization.Claims
 	var err error
-	if authInfo != nil {
+	var claims *authorization.Claims
+	if authInfo := c.AuthInterceptor.ExtractAuthInfoForRequest(ctx, tlsInfo, request.HTTPRequest.Header); authInfo != nil {
 		claims, err = c.AuthInterceptor.GetClaims(authInfo)
 		if err != nil {
-			return err
+			c.logger.Error("failed to get claims for nexus completion request", tag.Error(err))
+			var permissionDeniedError *serviceerror.PermissionDenied
+			if errors.As(err, &permissionDeniedError) {
+				c.outcomeTag = metrics.OutcomeTag("unauthorized")
+			} else {
+				c.outcomeTag = metrics.OutcomeTag("internal_auth_error")
+			}
+			return convertNexusClaimMapperError(err)
 		}
 		// Make the auth info and claims available on the context.
 		ctx = c.AuthInterceptor.EnhanceContext(ctx, authInfo, claims)
