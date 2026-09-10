@@ -163,7 +163,7 @@ func (h *invocationTaskHandler) recordInvocationEvent(
 	task *callbackspb.InvocationTask,
 	result invocationResult,
 ) {
-	var outcome outcomeTag
+	var outcome coarseOutcomeTag
 	switch result.(type) {
 	case invocationResultOK:
 		outcome = outcomeEventSuccess
@@ -184,9 +184,8 @@ func (h *invocationTaskHandler) recordInvocationEvent(
 	h.metricsHandler.Counter(InvocationEventCounter.Name()).Record(1, tags...)
 
 	if outcome != outcomeEventRetryableError {
-		hist := h.metricsHandler.Histogram(InvocationAttemptsHistogram.Name(), InvocationAttemptsHistogram.Unit())
 		// Attempt is 0-based, so +1 is the count. Only terminal events have a final total.
-		hist.Record(int64(task.GetAttempt())+1, tags...)
+		InvocationAttemptsHistogram.With(h.metricsHandler).Record(int64(task.GetAttempt())+1, tags...)
 	}
 }
 

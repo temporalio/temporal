@@ -52,18 +52,21 @@ var (
 	)
 )
 
+// coarseOutcomeTag is the more coarse outcome only used by the InvocationEventCounter and InvocationAttemptsHistogram metrics.
+type coarseOutcomeTag string
+
+// The tags specific to InvocationEventCounter, which tracks the summary callback invocation event.
+const (
+	outcomeEventSuccess           coarseOutcomeTag = "success"
+	outcomeEventRetryableError    coarseOutcomeTag = "retryable-error"
+	outcomeEventNonRetryableError coarseOutcomeTag = "nonretryable-error"
+)
+
 // outcomeTag is a value of the outcome tag carried by the metrics above.
 //
 // While CHASM Callback outcomes are distinct from the Frontend service's Nexus invocation outcomes,
 // the labels should match when applicable. See common/nexus.DispatchResult's metricOutcome.
 type outcomeTag string
-
-// The tags specific to InvocationEventCounter, which tracks the summary callback invocation event.
-const (
-	outcomeEventSuccess           outcomeTag = "success"
-	outcomeEventRetryableError    outcomeTag = "retryable-error"
-	outcomeEventNonRetryableError outcomeTag = "nonretryable-error"
-)
 
 // Outcome tags used for more granular tracing, used by InternalRequestCounter or NexusHandlerRequestLatencyHistogram.
 // This list is not exhaustive, handlerErrorOutcome and grpcErrorOutcome are used to generate outcome tags too.

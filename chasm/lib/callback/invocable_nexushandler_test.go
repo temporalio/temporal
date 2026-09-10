@@ -160,7 +160,7 @@ func TestExecuteInvocationTaskNexusHandler_Outcomes(t *testing.T) {
 		expectedOutcome outcomeTag
 		// Outcome tag for the aggregate InvocationEventCounter, InvocationAttemptsHistogram which
 		// is just one of outcomeEvent{ Success, RetryableError, NonRetryableError }.
-		expectedEventOutcome outcomeTag
+		expectedEventOutcome coarseOutcomeTag
 		assertOutcome        func(*testing.T, *Callback, error)
 	}{
 		{
@@ -268,15 +268,11 @@ func TestExecuteInvocationTaskNexusHandler_Outcomes(t *testing.T) {
 				},
 			},
 			expectedOutcome:      outcomeTag("handler_error:UNKNOWN"),
-			expectedEventOutcome: outcomeEventRetryableError,
+			expectedEventOutcome: outcomeEventNonRetryableError,
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
-				var destDown *queueserrors.DestinationDownError
-				require.ErrorAs(t, err, &destDown)
-				require.Equal(t, callbackspb.CALLBACK_STATUS_BACKING_OFF, cb.Status)
-
-				// The failure is recorded, but not as a terminal one: another attempt is scheduled.
+				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
 				require.Contains(t, cb.LastAttemptFailure.GetMessage(), "worker rejected the task")
-				require.False(t, cb.LastAttemptFailure.GetApplicationFailureInfo().GetNonRetryable())
+				require.True(t, cb.LastAttemptFailure.GetApplicationFailureInfo().GetNonRetryable())
 			},
 		},
 		{

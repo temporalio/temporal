@@ -282,25 +282,12 @@ func (n invocableNexusHandler) classifyDispatchResult(
 	}
 }
 
-// isDestinationDown returns whether a retryable delivery failure indicates the destination is
-// unavailable for subsequent retries.
-func isDestinationDown(err error) bool {
-	handlerErr, ok := errors.AsType[*nexus.HandlerError](err)
-	if !ok {
-		// Was not a worker-produced error, so the RPC to matching itself failed.
-		return true
-	}
-	// Any other retryable handler error should be considered a DestinationDown error, and trip
-	// the circuit breaker. (HandlerErrorTypeResourceExhausted, HandlerErrorTypeUnavailable, etc.)
-	return handlerErr.Retryable()
-}
-
 func (n invocableNexusHandler) WrapError(result invocationResult, err error) error {
 	// A DestinationDownError counts against the outbound queue's circuit breaker for this task
 	// queue, which holds back every callback targeting it. Note that this means a single broken
 	// Nexus handler (e.g. always timing out) would open the circuit breaker and block every
 	// Nexus handler on the same task queue for delivering NexusHandler callbacks.
-	if retry, ok := result.(invocationResultRetry); ok && isDestinationDown(retry.err) {
+	if retry, ok := result.(invocationResultRetry); ok {
 		return queueserrors.NewDestinationDownError(retry.err.Error(), err)
 	}
 	return err
