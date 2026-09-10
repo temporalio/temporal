@@ -91,6 +91,7 @@ func (v *taskValidatorImpl) preValidate(
 		// if cannot find the namespace entry, treat task as active
 		return v.preValidateActive(task)
 	}
+	// CONSIDER(fretz12): A RoutingKey-aware resolver must use component_ref.business_id for standalone activities.
 	if v.clusterMetadata.GetCurrentClusterName() == namespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: task.Data.WorkflowId}) {
 		return v.preValidateActive(task)
 	}
@@ -176,6 +177,7 @@ func (v *taskValidatorImpl) isTaskValid(
 			Clock:            task.Data.Clock,
 			ScheduledEventId: task.Data.ScheduledEventId,
 			Stamp:            task.Data.GetStamp(),
+			ComponentRef:     task.Data.GetComponentRef(),
 		})
 		switch err.(type) {
 		case nil:

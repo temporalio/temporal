@@ -100,7 +100,7 @@ func (c *clientImpl) CompleteNexusOperationChasm(
 		return nil, serviceerror.NewInvalidArgument("error deserializing component ref")
 	}
 	shardID := c.shardIDFromWorkflowID(ref.GetNamespaceId(), ref.GetBusinessId())
-	
+
 	var response *historyservice.CompleteNexusOperationChasmResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -519,26 +519,6 @@ func (c *clientImpl) InvokeStateMachineMethod(
 	return response, nil
 }
 
-func (c *clientImpl) IsActivityTaskValid(
-	ctx context.Context,
-	request *historyservice.IsActivityTaskValidRequest,
-	opts ...grpc.CallOption,
-) (*historyservice.IsActivityTaskValidResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetExecution().GetWorkflowId())
-	var response *historyservice.IsActivityTaskValidResponse
-	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
-		var err error
-		ctx, cancel := c.createContext(ctx)
-		defer cancel()
-		response, err = client.IsActivityTaskValid(ctx, request, opts...)
-		return err
-	}
-	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
-		return nil, err
-	}
-	return response, nil
-}
-
 func (c *clientImpl) IsWorkflowTaskValid(
 	ctx context.Context,
 	request *historyservice.IsWorkflowTaskValidRequest,
@@ -822,7 +802,7 @@ func (c *clientImpl) RecordActivityTaskHeartbeat(
 		businessID = taskToken.GetWorkflowId()
 	}
 	shardID := c.shardIDFromWorkflowID(namespaceID, businessID)
-	
+
 	var response *historyservice.RecordActivityTaskHeartbeatResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -1080,7 +1060,7 @@ func (c *clientImpl) RespondActivityTaskCanceled(
 		businessID = taskToken.GetWorkflowId()
 	}
 	shardID := c.shardIDFromWorkflowID(namespaceID, businessID)
-	
+
 	var response *historyservice.RespondActivityTaskCanceledResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -1118,7 +1098,7 @@ func (c *clientImpl) RespondActivityTaskCompleted(
 		businessID = taskToken.GetWorkflowId()
 	}
 	shardID := c.shardIDFromWorkflowID(namespaceID, businessID)
-	
+
 	var response *historyservice.RespondActivityTaskCompletedResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -1156,7 +1136,7 @@ func (c *clientImpl) RespondActivityTaskFailed(
 		businessID = taskToken.GetWorkflowId()
 	}
 	shardID := c.shardIDFromWorkflowID(namespaceID, businessID)
-	
+
 	var response *historyservice.RespondActivityTaskFailedResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -1194,7 +1174,7 @@ func (c *clientImpl) RespondWorkflowTaskCompleted(
 		businessID = taskToken.GetWorkflowId()
 	}
 	shardID := c.shardIDFromWorkflowID(namespaceID, businessID)
-	
+
 	var response *historyservice.RespondWorkflowTaskCompletedResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -1232,7 +1212,7 @@ func (c *clientImpl) RespondWorkflowTaskFailed(
 		businessID = taskToken.GetWorkflowId()
 	}
 	shardID := c.shardIDFromWorkflowID(namespaceID, businessID)
-	
+
 	var response *historyservice.RespondWorkflowTaskFailedResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error

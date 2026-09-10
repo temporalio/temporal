@@ -2753,7 +2753,10 @@ type IsActivityTaskValidRequest struct {
 	Clock            *v18.VectorClock       `protobuf:"bytes,3,opt,name=clock,proto3" json:"clock,omitempty"`
 	ScheduledEventId int64                  `protobuf:"varint,4,opt,name=scheduled_event_id,json=scheduledEventId,proto3" json:"scheduled_event_id,omitempty"`
 	// Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
-	Stamp         int32 `protobuf:"varint,5,opt,name=stamp,proto3" json:"stamp,omitempty"`
+	Stamp int32 `protobuf:"varint,5,opt,name=stamp,proto3" json:"stamp,omitempty"`
+	// Reference to the Chasm component for standalone activity execution. When present, execution, clock, and
+	// scheduled_event_id are not used.
+	ComponentRef  []byte `protobuf:"bytes,6,opt,name=component_ref,json=componentRef,proto3" json:"component_ref,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2821,6 +2824,13 @@ func (x *IsActivityTaskValidRequest) GetStamp() int32 {
 		return x.Stamp
 	}
 	return 0
+}
+
+func (x *IsActivityTaskValidRequest) GetComponentRef() []byte {
+	if x != nil {
+		return x.ComponentRef
+	}
+	return nil
 }
 
 type IsActivityTaskValidResponse struct {
@@ -11022,13 +11032,14 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\"RespondActivityTaskCanceledRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12j\n" +
 	"\x0ecancel_request\x18\x02 \x01(\v2C.temporal.api.workflowservice.v1.RespondActivityTaskCanceledRequestR\rcancelRequest:\x1f\x92\xc4\x03\x1b2\x19cancel_request.task_token\"%\n" +
-	"#RespondActivityTaskCanceledResponse\"\xaa\x02\n" +
+	"#RespondActivityTaskCanceledResponse\"\xba\x02\n" +
 	"\x1aIsActivityTaskValidRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12G\n" +
 	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12?\n" +
 	"\x05clock\x18\x03 \x01(\v2).temporal.server.api.clock.v1.VectorClockR\x05clock\x12,\n" +
 	"\x12scheduled_event_id\x18\x04 \x01(\x03R\x10scheduledEventId\x12\x14\n" +
-	"\x05stamp\x18\x05 \x01(\x05R\x05stamp:\x1b\x92\xc4\x03\x17*\x15execution.workflow_id\"8\n" +
+	"\x05stamp\x18\x05 \x01(\x05R\x05stamp\x12#\n" +
+	"\rcomponent_ref\x18\x06 \x01(\fR\fcomponentRef:\x06\x92\xc4\x03\x02\b\x01\"8\n" +
 	"\x1bIsActivityTaskValidResponse\x12\x19\n" +
 	"\bis_valid\x18\x01 \x01(\bR\aisValid\"\xfb\x02\n" +
 	"\x1eSignalWorkflowExecutionRequest\x12!\n" +

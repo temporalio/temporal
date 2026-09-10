@@ -234,6 +234,71 @@ func TestActivityDispatchTaskHook(t *testing.T) {
 	})
 }
 
+func TestActivityIsDispatchTaskValid(t *testing.T) {
+	const currentStamp int32 = 42
+
+	testCases := []struct {
+		name   string
+		status activitypb.ActivityExecutionStatus
+		stamp  int32
+		valid  bool
+	}{
+		{
+			name:   "scheduled current attempt",
+			status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			stamp:  currentStamp,
+			valid:  true,
+		},
+		{
+			name:   "scheduled obsolete attempt",
+			status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			stamp:  currentStamp - 1,
+			valid:  false,
+		},
+		{
+			name:   "scheduled future attempt",
+			status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			stamp:  currentStamp + 1,
+			valid:  false,
+		},
+		{
+			name:   "started",
+			status: activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+			stamp:  currentStamp,
+			valid:  false,
+		},
+		{
+			name:   "paused",
+			status: activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED,
+			stamp:  currentStamp,
+			valid:  false,
+		},
+		{
+			name:   "completed",
+			status: activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+			stamp:  currentStamp,
+			valid:  false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := &chasm.MockMutableContext{}
+			activity := &Activity{
+				ActivityState: &activitypb.ActivityState{Status: tc.status},
+				LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
+					Stamp: currentStamp,
+				}),
+			}
+
+			valid, err := activity.IsDispatchTaskValid(ctx, tc.stamp)
+
+			require.NoError(t, err)
+			require.Equal(t, tc.valid, valid)
+		})
+	}
+}
+
 func TestScheduleToCloseTimeoutTaskValidateStamp(t *testing.T) {
 	handler := newScheduleToCloseTimeoutTaskHandler()
 

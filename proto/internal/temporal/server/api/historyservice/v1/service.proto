@@ -111,7 +111,7 @@ service HistoryService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }
 
-  // IsActivityTaskValid is called by matching service checking whether the workflow task is valid.
+  // IsActivityTaskValid is called by matching service checking whether the activity task is valid.
   rpc IsActivityTaskValid(IsActivityTaskValidRequest) returns (IsActivityTaskValidResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }

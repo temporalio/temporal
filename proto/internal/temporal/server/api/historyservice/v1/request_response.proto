@@ -477,7 +477,7 @@ message RespondActivityTaskCanceledRequest {
 message RespondActivityTaskCanceledResponse {}
 
 message IsActivityTaskValidRequest {
-  option (routing).workflow_id = "execution.workflow_id";
+  option (routing).custom = true;
 
   string namespace_id = 1;
   temporal.api.common.v1.WorkflowExecution execution = 2;
@@ -485,6 +485,9 @@ message IsActivityTaskValidRequest {
   int64 scheduled_event_id = 4;
   // Stamp represents the internal “version” of the activity options and can/will be changed with Activity API.
   int32 stamp = 5;
+  // Reference to the Chasm component for standalone activity execution. When present, execution, clock, and
+  // scheduled_event_id are not used.
+  bytes component_ref = 6;
 }
 
 message IsActivityTaskValidResponse {
