@@ -935,6 +935,19 @@ func (s *workflowSuite) TestCatchupWindow() {
 	s.True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
 
+func (s *workflowSuite) TestZeroCatchupWindowUsesMinimum() {
+	legacy := &scheduler{
+		StartScheduleArgs: &schedulespb.StartScheduleArgs{Schedule: &schedulepb.Schedule{
+			Policies: &schedulepb.SchedulePolicies{CatchupWindow: durationpb.New(0)},
+		}},
+		tweakables: TweakablePolicies{
+			DefaultCatchupWindow: 365 * 24 * time.Hour,
+			MinCatchupWindow:     10 * time.Second,
+		},
+	}
+	s.Equal(10*time.Second, legacy.getCatchupWindow())
+}
+
 func (s *workflowSuite) TestCatchupWindowWhilePaused() {
 	// written using low-level mocks so we can set initial state
 
@@ -1104,6 +1117,7 @@ func (s *workflowSuite) TestOverlapBufferOne() {
 			},
 			Policies: &schedulepb.SchedulePolicies{
 				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
+				CatchupWindow: durationpb.New(10 * time.Minute),
 			},
 		},
 	)
