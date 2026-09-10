@@ -21,7 +21,10 @@ import (
 
 // LoggingCallAtKey is reserved tag
 const (
+	ActivityIDKey    = "activity-id"
+	ChasmRunIDKey    = "run-id"
 	LoggingCallAtKey = "logging-call-at"
+	OperationIDKey   = "operation-id"
 	WorkflowIDKey    = "wf-id"
 	WorkflowRunIDKey = "wf-run-id"
 )
@@ -933,17 +936,17 @@ func ActivityInfo(activityInfo any) ZapTag {
 
 // ActivityID returns tag for an activity ID
 func ActivityID(id string) ZapTag {
-	return NewStringTag("activity-id", id)
+	return NewStringTag(ActivityIDKey, id)
 }
 
 // OperationID returns tag for a nexus operation ID
 func OperationID(id string) ZapTag {
-	return NewStringTag("operation-id", id)
+	return NewStringTag(OperationIDKey, id)
 }
 
 // ChasmRunID returns tag for an entity run ID
 func ChasmRunID(id string) ZapTag {
-	return NewStringTag("run-id", id)
+	return NewStringTag(ChasmRunIDKey, id)
 }
 
 // ActivitySize returns a tag for a standalone activity size

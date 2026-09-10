@@ -55,6 +55,7 @@ var (
 
 	// These types have task_token field, but it is not of type *tokenspb.Task and doesn't have Workflow tags.
 	excludeTaskTokenTypes = []reflect.Type{
+		reflect.TypeFor[*workflowservice.PollNexusTaskQueueResponse](),
 		reflect.TypeFor[*workflowservice.RespondQueryTaskCompletedRequest](),
 		reflect.TypeFor[*workflowservice.RespondNexusTaskCompletedRequest](),
 		reflect.TypeFor[*workflowservice.RespondNexusTaskFailedRequest](),
