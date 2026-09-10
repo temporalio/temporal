@@ -104,11 +104,25 @@ func (s *SenderFlowControllerImpl) Wait(ctx context.Context, priority enumsspb.T
 
 	state.mu.Lock()
 	if !state.resume {
+		// Lock before broadcasting so cancellation cannot race between checking
+		// ctx.Err and entering Wait. Other waiters must recheck their own context.
+		stop := context.AfterFunc(ctx, func() {
+			state.mu.Lock()
+			defer state.mu.Unlock()
+			state.cond.Broadcast()
+		})
 		state.waiters++
 		s.logger.Info("sender is paused", tag.TaskPriority(priority.String()))
-		state.cond.Wait()
-		s.logger.Info("sender is resumed", tag.TaskPriority(priority.String()))
+		for !state.resume && ctx.Err() == nil {
+			state.cond.Wait()
+		}
 		state.waiters--
+		stop()
+		if err := ctx.Err(); err != nil {
+			state.mu.Unlock()
+			return err
+		}
+		s.logger.Info("sender is resumed", tag.TaskPriority(priority.String()))
 	}
 	state.mu.Unlock()
 	return waitForRateLimiter(state.rateLimiter)
