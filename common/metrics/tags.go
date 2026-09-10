@@ -26,6 +26,7 @@ const (
 	namespaceState          = "namespace_state"
 	sourceCluster           = "source_cluster"
 	targetCluster           = "target_cluster"
+	transport               = "transport"
 	taskSourceTag           = "source"
 	forwardedTag            = "forwarded"
 	pollResultTagName       = "poll_result"
@@ -155,6 +156,14 @@ func TargetClusterTag(value string) Tag {
 		value = unknownValue
 	}
 	return Tag{Key: targetCluster, Value: value}
+}
+
+// TransportTag returns a new transport tag.
+func TransportTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: transport, Value: value}
 }
 
 // FromClusterIDTag returns a new from cluster tag.
