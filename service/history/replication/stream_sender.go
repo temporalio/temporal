@@ -769,13 +769,17 @@ func (s *StreamSenderImpl) shouldProcessTask(item tasks.Task) bool {
 }
 
 func (s *StreamSenderImpl) admittedByGradualConnect(item tasks.Task, namespaceEntry *namespace.Namespace) bool {
+	if !s.config.EnableReplicationGradualConnect() {
+		return true
+	}
+
 	// A shed delete can permanently resurrect history after force replication.
 	if item.GetType() == enumsspb.TASK_TYPE_REPLICATION_DELETE_EXECUTION {
 		return true
 	}
 
 	// Force-replication tasks follow the ramp; operators should clear the ramp before running force-replication.
-	ramp := namespaceEntry.ReplicationRamp(s.clientClusterName)
+	ramp := namespaceEntry.ReplicationConfig().GetClusterReplicationRamps()[s.clientClusterName]
 	if ramp == nil {
 		return true
 	}

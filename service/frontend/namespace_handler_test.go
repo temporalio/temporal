@@ -126,7 +126,8 @@ func (s *namespaceHandlerCommonSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsDisabledByDefault() {
+func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsCreatesRamp() {
+	s.fakeClock.Update(now)
 	ramps, err := s.handler.updateReplicationRamps(
 		nil,
 		[]string{"active"},
@@ -137,10 +138,12 @@ func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsDisabledByDefaul
 		"active",
 	)
 	s.Require().NoError(err)
-	s.Empty(ramps)
+	s.Equal(now, ramps["standby"].GetStartTime().AsTime())
+	s.Equal(time.Hour, ramps["standby"].GetDuration().AsDuration())
 }
 
-func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsRepeatedDisabledRequestIsNoOp() {
+func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsRepeatedRequestIsNoOp() {
+	s.fakeClock.Update(now)
 	request := []*replicationpb.ClusterReplicationConfig{
 		{ClusterName: "active"},
 		{ClusterName: "standby", ReplicationRampDuration: durationpb.New(time.Hour)},
@@ -148,15 +151,15 @@ func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsRepeatedDisabled
 
 	ramps, err := s.handler.updateReplicationRamps(nil, []string{"active"}, request, "active")
 	s.Require().NoError(err)
-	s.Empty(ramps)
+	ramp := ramps["standby"]
+	s.Require().NotNil(ramp)
 
 	ramps, err = s.handler.updateReplicationRamps(ramps, []string{"active", "standby"}, request, "active")
 	s.Require().NoError(err)
-	s.Empty(ramps)
+	s.Same(ramp, ramps["standby"])
 }
 
 func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsLifecycle() {
-	s.config.EnableReplicationGradualConnect = dc.GetBoolPropertyFn(true)
 	s.fakeClock.Update(now)
 
 	ramps, err := s.handler.updateReplicationRamps(
@@ -181,7 +184,6 @@ func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsLifecycle() {
 	s.NotContains(ramps, "zero-ramp")
 	s.NotContains(ramps, "negative-ramp")
 
-	s.config.EnableReplicationGradualConnect = dc.GetBoolPropertyFn(false)
 	unchanged, err := s.handler.updateReplicationRamps(
 		ramps,
 		[]string{"active", "standby-1", "standby-2"},
@@ -196,7 +198,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsLifecycle() {
 	s.NotContains(unchanged, "standby-2")
 }
 
-func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsClearWorksWhenDisabled() {
+func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsClear() {
 	ramp := &persistencespb.NamespaceReplicationRamp{
 		StartTime: timestamppb.New(now),
 		Duration:  durationpb.New(time.Hour),
@@ -216,7 +218,6 @@ func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsClearWorksWhenDi
 }
 
 func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsRejectsChangingExistingRamp() {
-	s.config.EnableReplicationGradualConnect = dc.GetBoolPropertyFn(true)
 	ramp := &persistencespb.NamespaceReplicationRamp{
 		StartTime: timestamppb.New(now),
 		Duration:  durationpb.New(time.Hour),
@@ -249,8 +250,6 @@ func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsRejectsChangingE
 }
 
 func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsRejectsStartingForExistingCluster() {
-	s.config.EnableReplicationGradualConnect = dc.GetBoolPropertyFn(true)
-
 	_, err := s.handler.updateReplicationRamps(
 		nil,
 		[]string{"active", "standby"},
@@ -265,8 +264,6 @@ func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsRejectsStartingF
 }
 
 func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsRejectsInvalidDuration() {
-	s.config.EnableReplicationGradualConnect = dc.GetBoolPropertyFn(true)
-
 	_, err := s.handler.updateReplicationRamps(
 		nil,
 		[]string{"active"},
@@ -289,7 +286,6 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespacePersistsRampOnlyOnSourc
 		active        = "active"
 		standby       = "standby"
 	)
-	s.config.EnableReplicationGradualConnect = dc.GetBoolPropertyFn(true)
 	s.fakeClock.Update(now)
 	detail := &persistencespb.NamespaceDetail{
 		Info: &persistencespb.NamespaceInfo{

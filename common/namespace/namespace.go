@@ -245,11 +245,6 @@ func (ns *Namespace) ReplicationConfig() *persistencespb.NamespaceReplicationCon
 	return ns.replicationResolver.ReplicationConfig()
 }
 
-// ReplicationRamp returns the source-local ramp for a target cluster.
-func (ns *Namespace) ReplicationRamp(clusterName string) *persistencespb.NamespaceReplicationRamp {
-	return ns.ReplicationConfig().GetClusterReplicationRamps()[clusterName]
-}
-
 // NotificationVersion return the global notification version of when namespace changed
 func (ns *Namespace) NotificationVersion() int64 {
 	return ns.notificationVersion

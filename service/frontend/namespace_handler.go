@@ -696,9 +696,8 @@ func (d *namespaceHandler) updateReplicationRamps(
 	newClusterConfigs []*replicationpb.ClusterReplicationConfig,
 	activeCluster string,
 ) (map[string]*persistencespb.NamespaceReplicationRamp, error) {
-	creationEnabled := d.config.EnableReplicationGradualConnect()
-	ramps, err := updateExistingReplicationRamps(existing, oldClusters, newClusterConfigs, creationEnabled)
-	if err != nil || !creationEnabled {
+	ramps, err := updateExistingReplicationRamps(existing, oldClusters, newClusterConfigs)
+	if err != nil {
 		return ramps, err
 	}
 	return addNewReplicationRamps(
@@ -714,7 +713,6 @@ func updateExistingReplicationRamps(
 	existing map[string]*persistencespb.NamespaceReplicationRamp,
 	oldClusters []string,
 	newClusterConfigs []*replicationpb.ClusterReplicationConfig,
-	creationEnabled bool,
 ) (map[string]*persistencespb.NamespaceReplicationRamp, error) {
 	newClusters := make([]string, len(newClusterConfigs))
 	for i, clusterConfig := range newClusterConfigs {
@@ -734,9 +732,6 @@ func updateExistingReplicationRamps(
 			continue
 		}
 		ramp := existing[clusterName]
-		if ramp == nil && !creationEnabled {
-			continue
-		}
 		if err := duration.CheckValid(); err != nil {
 			return nil, serviceerror.NewInvalidArgumentf(
 				"Invalid replication ramp duration for cluster %q: %v",

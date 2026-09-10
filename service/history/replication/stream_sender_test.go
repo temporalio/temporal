@@ -786,6 +786,7 @@ func (s *streamSenderSuite) gradualConnectNamespace(
 
 func (s *streamSenderSuite) TestShouldProcessTask_GradualConnect() {
 	const namespaceID = "namespace-id"
+	s.config.EnableReplicationGradualConnect = dynamicconfig.GetBoolPropertyFn(true)
 	startTime := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
 	s.timeSource.Update(startTime)
 	s.streamSender.clientClusterShardCount = 1
@@ -817,8 +818,31 @@ func (s *streamSenderSuite) TestShouldProcessTask_GradualConnect() {
 	s.NotContains(recordings[metrics.ReplicationGradualConnectPercent.Name()][0].Tags, metrics.OperationTagName)
 }
 
+func (s *streamSenderSuite) TestShouldProcessTask_GradualConnectDisabled() {
+	const namespaceID = "namespace-id"
+	startTime := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
+	s.timeSource.Update(startTime)
+	s.streamSender.clientClusterShardCount = 1
+	registry := namespace.NewMockRegistry(s.controller)
+	registry.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(
+		s.gradualConnectNamespace(namespaceID, &persistencespb.NamespaceReplicationRamp{
+			StartTime: timestamppb.New(startTime),
+			Duration:  durationpb.New(time.Hour),
+		}),
+		nil,
+	)
+	s.shardContext.EXPECT().GetNamespaceRegistry().Return(registry)
+	task := &tasks.HistoryReplicationTask{WorkflowKey: definition.WorkflowKey{
+		NamespaceID: namespaceID,
+		WorkflowID:  "workflow-id",
+	}}
+
+	s.True(s.streamSender.shouldProcessTask(task))
+}
+
 func (s *streamSenderSuite) TestShouldProcessTask_DeleteBypassesGradualConnect() {
 	const namespaceID = "namespace-id"
+	s.config.EnableReplicationGradualConnect = dynamicconfig.GetBoolPropertyFn(true)
 	startTime := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
 	s.timeSource.Update(startTime)
 	s.streamSender.clientClusterShardCount = 1
@@ -841,6 +865,7 @@ func (s *streamSenderSuite) TestShouldProcessTask_DeleteBypassesGradualConnect()
 
 func (s *streamSenderSuite) TestShouldProcessTask_ForceReplicationRequiresClearedRamp() {
 	const namespaceID = "namespace-id"
+	s.config.EnableReplicationGradualConnect = dynamicconfig.GetBoolPropertyFn(true)
 	startTime := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
 	s.timeSource.Update(startTime)
 	s.streamSender.clientClusterShardCount = 1
@@ -867,6 +892,7 @@ func (s *streamSenderSuite) TestShouldProcessTask_ForceReplicationRequiresCleare
 
 func (s *streamSenderSuite) TestShouldProcessTask_ClockRegressionCanReduceAdmission() {
 	const namespaceID = "namespace-id"
+	s.config.EnableReplicationGradualConnect = dynamicconfig.GetBoolPropertyFn(true)
 	startTime := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
 	var workflowID string
 	for i := 0; ; i++ {
@@ -900,6 +926,7 @@ func (s *streamSenderSuite) TestShouldProcessTask_ClockRegressionCanReduceAdmiss
 
 func (s *streamSenderSuite) TestSendTasks_GradualConnectSkipsConversionAndAdvancesWatermark() {
 	const namespaceID = "namespace-id"
+	s.config.EnableReplicationGradualConnect = dynamicconfig.GetBoolPropertyFn(true)
 	startTime := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
 	s.timeSource.Update(startTime)
 	s.streamSender.clientClusterShardCount = 1

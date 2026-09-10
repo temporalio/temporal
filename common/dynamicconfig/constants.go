@@ -887,12 +887,6 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		10,
 		`FrontendMaxBadBinaries is the max number of bad binaries in namespace config`,
 	)
-	EnableReplicationGradualConnect = NewGlobalBoolSetting(
-		"frontend.enableReplicationGradualConnect",
-		false,
-		`Controls whether namespace cluster-list updates may create new gradual-connect ramps. Changing
-this setting does not alter ramps already in progress.`,
-	)
 	FrontendMaskInternalErrorDetails = NewNamespaceBoolSetting(
 		"frontend.maskInternalErrorDetails",
 		true,
@@ -3045,6 +3039,11 @@ to persistence. The buffer holds slim queue rows (task metadata, not event paylo
 		"history.ReplicationStreamSenderLowPriorityQPS",
 		100,
 		`Maximum number of low priority replication tasks that can be sent per second per shard`,
+	)
+	EnableReplicationGradualConnect = NewGlobalBoolSetting(
+		"history.enableReplicationGradualConnect",
+		false,
+		`Controls whether replication stream senders honor gradual-connect ramps.`,
 	)
 	ReplicationStreamEventLoopRetryMaxAttempts = NewGlobalIntSetting(
 		"history.ReplicationStreamEventLoopRetryMaxAttempts",
