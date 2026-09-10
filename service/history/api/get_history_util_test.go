@@ -7,9 +7,50 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/searchattribute"
+	"go.uber.org/mock/gomock"
 )
+
+// TestProcessOutgoingSearchAttributes_PreservesResourceExhausted is a
+// regression test for #11571: a persistence rate-limit error from the search
+// attribute provider was flattened into a generic Unavailable error, so
+// common/backoff.Retry's longer throttle backoff (which only applies to
+// *serviceerror.ResourceExhausted via a direct type assertion) never kicked
+// in, and retries ran at the ordinary rate against an already exhausted
+// persistence budget.
+func TestProcessOutgoingSearchAttributes_PreservesResourceExhausted(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+
+	resourceExhausted := serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, "persistence rate limit exceeded")
+	saProvider := searchattribute.NewMockProvider(ctrl)
+	saProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.NameTypeMap{}, resourceExhausted)
+	visibilityMgr := manager.NewMockVisibilityManager(ctrl)
+	visibilityMgr.EXPECT().GetIndexName().Return("test-index")
+
+	err := ProcessOutgoingSearchAttributes(saProvider, nil, nil, "test-namespace", visibilityMgr)
+	require.Same(t, resourceExhausted, err, "ResourceExhausted must be returned as-is, not wrapped as Unavailable")
+	require.IsType(t, &serviceerror.ResourceExhausted{}, err)
+}
+
+// TestProcessOutgoingSearchAttributes_WrapsOtherErrors verifies non-rate-limit
+// errors are still wrapped into a client-safe Unavailable error, as before.
+func TestProcessOutgoingSearchAttributes_WrapsOtherErrors(t *testing.T) {
+	t.Parallel()
+	ctrl := gomock.NewController(t)
+
+	saProvider := searchattribute.NewMockProvider(ctrl)
+	saProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.NameTypeMap{}, serviceerror.NewInternal("boom"))
+	visibilityMgr := manager.NewMockVisibilityManager(ctrl)
+	visibilityMgr.EXPECT().GetIndexName().Return("test-index")
+
+	err := ProcessOutgoingSearchAttributes(saProvider, nil, nil, "test-namespace", visibilityMgr)
+	require.IsType(t, &serviceerror.Unavailable{}, err)
+}
 
 func TestShouldIncludeTransientOrSpeculativeTasks(t *testing.T) {
 	t.Parallel()
