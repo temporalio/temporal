@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"slices"
 	"strconv"
+	"strings"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -3244,17 +3245,81 @@ func (n *Node) EachPureTask(
 				if err := n.syncSubComponents(); err != nil {
 					return err
 				}
+
+				// A processed task MUST become invalid, so that
+				// closeTransactionCleanupInvalidTasks removes it upon CloseTransaction().
+				// Enforce that here rather than letting a violation surface later as a
+				// silently stalled execution.
+				//
+				// Skipped when the component was deleted while executing (some
+				// components complete by deleting themselves): its node is gone, so
+				// there is no task left behind to strand anything.
+				if _, stillInTree := n.valueToNode[component]; stillInTree {
+					if err := node.assertPureTaskInvalidated(taskAttributes, taskInstance); err != nil {
+						return err
+					}
+				}
 			}
 
-			// Processed task should become invalid and will be removed upon CloseTransaction().
-
-			// TODO: Add a validation for that and return an internal error if tasks is still valid after processing.
 			// Alternatively, remove task from PureTasks slice after processing, but that requires persisting the
 			// task changes as well even if the component itself is not changed.
 		}
 	}
 
 	return nil
+}
+
+// assertPureTaskInvalidated enforces a load-bearing framework invariant: a pure
+// task must become invalid once it has executed.
+//
+// A validator returning false is the only mechanism that removes a task from
+// ComponentAttributes.PureTasks (see closeTransactionCleanupInvalidTasks). A task
+// that stays valid is never pruned. It is now past-due, so it remains the tree's
+// earliest pure task, and since its PhysicalTaskStatus is already
+// physicalTaskStatusCreated, closeTransactionGeneratePhysicalPureTask declines to
+// create another physical timer. Because only the earliest pure task in the tree
+// is ever considered for a timer, the entire execution - every component, not just
+// the offending one - stops receiving pure task timers, with no ordinary
+// self-healing path.
+//
+// Failing the task instead makes the bug visible: the returned
+// serviceerror.Internal aborts the transaction, so the execution's state is
+// unchanged and the physical timer is retried and eventually DLQ'd (subject to
+// the existing history.taskDLQInternalErrors policy) rather than quietly wedging.
+//
+// Note for component authors: this runs the task's validator one extra time per
+// execution, so validators must stay cheap and free of side effects. Emitting
+// metrics or logs from a validator will over-count.
+func (n *Node) assertPureTaskInvalidated(
+	taskAttributes TaskAttributes,
+	taskInstance any,
+) error {
+	// Match the operation intent used by the pre-execution gate in ExecutePureTask
+	// and by closeTransactionCleanupInvalidTasks, so a validator that inspects the
+	// intent sees the same value it will see when the task is pruned.
+	validationContext := NewContext(
+		NewContextWithOperationIntent(context.Background(), OperationIntentProgress), n)
+
+	stillValid, err := n.validateTask(
+		validationContext,
+		TaskInvocation{TaskAttributes: taskAttributes},
+		taskInstance,
+	)
+	if err != nil {
+		return err
+	}
+	if !stillValid {
+		return nil
+	}
+
+	return softassert.UnexpectedInternalErr(
+		n.logger,
+		"pure task is still valid after being executed",
+		nil,
+		tag.NewStringTag("chasm-component-path", strings.Join(n.path(), "/")),
+		tag.NewStringTag("chasm-task-type", fmt.Sprintf("%T", taskInstance)),
+		tag.NewTimeTag("chasm-task-scheduled-time", taskAttributes.ScheduledTime),
+	)
 }
 
 func newNode(
