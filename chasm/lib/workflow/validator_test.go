@@ -150,6 +150,20 @@ func TestValidateSignalWithStartRequest(t *testing.T) {
 		require.ErrorContains(t, err, "WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE cannot be used together with WorkflowIdConflictPolicy WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING")
 	})
 
+	t.Run("ValidCronSchedule", func(t *testing.T) {
+		req := validSWSRequest()
+		req.CronSchedule = "0 * * * *"
+		err := v.ValidateSignalWithStartRequest(req)
+		require.NoError(t, err)
+	})
+
+	t.Run("InvalidCronSchedule", func(t *testing.T) {
+		req := validSWSRequest()
+		req.CronSchedule = "not-a-cron-schedule"
+		err := v.ValidateSignalWithStartRequest(req)
+		require.ErrorContains(t, err, "invalid CronSchedule")
+	})
+
 	t.Run("CronAndStartDelaySetTogether", func(t *testing.T) {
 		req := validSWSRequest()
 		req.CronSchedule = "0 * * * *"
