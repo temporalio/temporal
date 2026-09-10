@@ -1,604 +1,83 @@
 package nexusoperation
 
 import (
-	"strings"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	sdkpb "go.temporal.io/api/sdk/v1"
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/searchattribute/sadefs"
-	"go.uber.org/mock/gomock"
-	"google.golang.org/protobuf/types/known/durationpb"
+	"go.temporal.io/server/common/validation"
 )
 
-func newTestValidator(config *Config) *validator {
-	return newValidator(config, log.NewNoopLogger(), nil, nil)
+func newTestRegistry(config *Config) *validation.ValidatorRegistry {
+	registry := validation.NewValidatorRegistry()
+	_ = newDeleteNexusOperationExecutionValidator(config).RegisterValidator(registry)
+	_ = newDescribeNexusOperationExecutionValidator(config).RegisterValidator(registry)
+	_ = newPollNexusOperationExecutionValidator(config).RegisterValidator(registry)
+	_ = newRequestCancelNexusOperationExecutionValidator(config).RegisterValidator(registry)
+	_ = newTerminateNexusOperationExecutionValidator(config).RegisterValidator(registry)
+	_ = newListNexusOperationExecutionsValidator().RegisterValidator(registry)
+	_ = newCountNexusOperationExecutionsValidator().RegisterValidator(registry)
+	_ = newStartNexusOperationExecutionValidator(config).RegisterValidator(registry)
+	return registry
 }
 
-func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	mockVisibilityManager := manager.NewMockVisibilityManager(ctrl)
-	mockVisibilityManager.EXPECT().GetIndexName().Return("index-name").AnyTimes()
-	mockVisibilityManager.EXPECT().ValidateCustomSearchAttributes(gomock.Any()).Return(nil, nil).AnyTimes()
-
-	saValidator := searchattribute.NewValidator(
-		searchattribute.NewTestEsProvider(),
-		searchattribute.NewTestMapperProvider(nil),
-		func(string) int { return 2 },   // max number of keys
-		func(string) int { return 20 },  // max size of value
-		func(string) int { return 100 }, // max total size
-		mockVisibilityManager,
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
-		metrics.NoopMetricsHandler,
-		log.NewNoopLogger(),
-	)
-
-	config := &Config{
-		MaxIDLengthLimit:                   func() int { return 50 },
-		MaxServiceNameLength:               func(string) int { return 10 },
-		MaxOperationNameLength:             func(string) int { return 10 },
-		PayloadSizeLimit:                   func(string) int { return 20 },
-		PayloadSizeLimitWarn:               func(string) int { return 10 },
-		MaxUserMetadataSummarySize:         func(string) int { return 10 },
-		MaxUserMetadataDetailsSize:         func(string) int { return 20 },
-		MaxOperationHeaderSize:             func(string) int { return 10 },
-		DisallowedOperationHeaders:         func() []string { return []string{"disallowed-header"} },
-		MaxOperationScheduleToCloseTimeout: func(string) time.Duration { return time.Hour },
-	}
-
-	for _, tc := range []struct {
-		name   string
-		mutate func(*workflowservice.StartNexusOperationExecutionRequest)
-		errMsg string
-		check  func(*testing.T, *workflowservice.StartNexusOperationExecutionRequest)
-	}{
-		{
-			name: "valid request",
-		},
-		{
-			name: "operation_id - required",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				r.OperationId = ""
-			},
-			errMsg: "operation_id is required",
-		},
-		{
-			name: "operation_id - exceeds length limit",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				r.OperationId = strings.Repeat("x", 51)
-			},
-			errMsg: "operation_id exceeds length limit",
-		},
-		{
-			name: "request_id - defaults empty to UUID",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				r.RequestId = ""
-			},
-			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
-				require.Len(t, r.RequestId, 36) // UUID length
-			},
-		},
-		{
-			name: "request_id - exceeds length limit",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				r.RequestId = strings.Repeat("x", 51)
-			},
-			errMsg: "request_id exceeds length limit",
-		},
-		{
-			name: "identity - exceeds length limit",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				r.Identity = strings.Repeat("x", 51)
-			},
-			errMsg: "identity exceeds length limit",
-		},
-		{
-			name:   "endpoint - required",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) { r.Endpoint = "" },
-			errMsg: "endpoint is required",
-		},
-		{
-			name:   "service - required",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) { r.Service = "" },
-			errMsg: "service is required",
-		},
-		{
-			name: "service - exceeds length limit",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				r.Service = "too-long-svc"
-			},
-			errMsg: "service exceeds length limit",
-		},
-		{
-			name:   "operation - required",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) { r.Operation = "" },
-			errMsg: "operation is required",
-		},
-		{
-			name: "operation - exceeds length limit",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				r.Operation = "too-long-op!"
-			},
-			errMsg: "operation exceeds length limit",
-		},
-		{
-			name: "schedule_to_close_timeout - invalid",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				r.ScheduleToCloseTimeout = &durationpb.Duration{Seconds: -1}
-			},
-			errMsg: "schedule_to_close_timeout is invalid",
-		},
-		{
-			name: "schedule_to_close_timeout - caps exceeding max",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				r.ScheduleToCloseTimeout = durationpb.New(2 * time.Hour)
-			},
-			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
-				require.Equal(t, time.Hour, r.ScheduleToCloseTimeout.AsDuration())
-			},
-		},
-		{
-			name: "schedule_to_close_timeout - caps unset to max",
-			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
-				require.Equal(t, time.Hour, r.ScheduleToCloseTimeout.AsDuration())
-			},
-		},
-		{
-			name: "schedule_to_close_timeout - preserves within max",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				r.ScheduleToCloseTimeout = durationpb.New(30 * time.Minute)
-			},
-			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
-				require.Equal(t, 30*time.Minute, r.ScheduleToCloseTimeout.AsDuration())
-			},
-		},
-		{
-			name: "schedule_to_start_timeout - invalid",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				r.ScheduleToStartTimeout = &durationpb.Duration{Seconds: -1}
-			},
-			errMsg: "schedule_to_start_timeout is invalid",
-		},
-		{
-			name: "schedule_to_start_timeout - caps to defaulted schedule_to_close_timeout",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				r.ScheduleToStartTimeout = durationpb.New(2 * time.Hour)
-			},
-			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
-				require.Equal(t, time.Hour, r.ScheduleToCloseTimeout.AsDuration())
-				require.Equal(t, time.Hour, r.ScheduleToStartTimeout.AsDuration())
-			},
-		},
-		{
-			name: "schedule_to_start_timeout - caps to schedule_to_close_timeout",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				r.ScheduleToCloseTimeout = durationpb.New(30 * time.Minute)
-				r.ScheduleToStartTimeout = durationpb.New(time.Hour)
-			},
-			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
-				require.Equal(t, 30*time.Minute, r.ScheduleToStartTimeout.AsDuration())
-			},
-		},
-		{
-			name: "schedule_to_start_timeout - preserves value within schedule_to_close_timeout",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				r.ScheduleToCloseTimeout = durationpb.New(30 * time.Minute)
-				r.ScheduleToStartTimeout = durationpb.New(20 * time.Minute)
-			},
-			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
-				require.Equal(t, 20*time.Minute, r.ScheduleToStartTimeout.AsDuration())
-			},
-		},
-		{
-			name: "start_to_close_timeout - invalid",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				r.StartToCloseTimeout = &durationpb.Duration{Seconds: -1}
-			},
-			errMsg: "start_to_close_timeout is invalid",
-		},
-		{
-			name: "start_to_close_timeout - caps to defaulted schedule_to_close_timeout",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				r.StartToCloseTimeout = durationpb.New(2 * time.Hour)
-			},
-			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
-				require.Equal(t, time.Hour, r.ScheduleToCloseTimeout.AsDuration())
-				require.Equal(t, time.Hour, r.StartToCloseTimeout.AsDuration())
-			},
-		},
-		{
-			name: "start_to_close_timeout - caps to schedule_to_close_timeout",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				r.ScheduleToCloseTimeout = durationpb.New(30 * time.Minute)
-				r.StartToCloseTimeout = durationpb.New(time.Hour)
-			},
-			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
-				require.Equal(t, 30*time.Minute, r.StartToCloseTimeout.AsDuration())
-			},
-		},
-		{
-			name: "start_to_close_timeout - preserves value within schedule_to_close_timeout",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				r.ScheduleToCloseTimeout = durationpb.New(30 * time.Minute)
-				r.StartToCloseTimeout = durationpb.New(10 * time.Minute)
-			},
-			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
-				require.Equal(t, 10*time.Minute, r.StartToCloseTimeout.AsDuration())
-			},
-		},
-		{
-			name: "input - exceeds warning limit but within hard limit",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				r.Input = &commonpb.Payload{Data: []byte("exceed-warn-limit")}
-			},
-		},
-		{
-			name: "input - exceeds size limit",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				r.Input = &commonpb.Payload{Data: []byte("this-input-is-longer-than-twenty-characters")}
-			},
-			errMsg: "input exceeds size limit",
-		},
-		{
-			name: "user_metadata.summary - exceeds size limit",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				r.UserMetadata = &sdkpb.UserMetadata{
-					Summary: &commonpb.Payload{Data: []byte("too-long-summary")},
-				}
-			},
-			errMsg: "user_metadata.summary exceeds size limit",
-		},
-		{
-			name: "user_metadata.details - exceeds size limit",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				r.UserMetadata = &sdkpb.UserMetadata{
-					Details: &commonpb.Payload{Data: []byte("this-details-payload-is-too-long")},
-				}
-			},
-			errMsg: "user_metadata.details exceeds size limit",
-		},
-		{
-			name: "nexus_header - disallowed key",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				r.NexusHeader = map[string]string{"Disallowed-Header": "value"}
-			},
-			errMsg: "nexus_header contains a disallowed key",
-		},
-		{
-			name: "nexus_header - exceeds size limit",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				r.NexusHeader = map[string]string{"key": "too-long-val"}
-			},
-			errMsg: "nexus_header exceeds size limit",
-		},
-		{
-			name: "id_policies - defaults unspecified",
-			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
-				require.Equal(t, enumspb.NEXUS_OPERATION_ID_REUSE_POLICY_ALLOW_DUPLICATE, r.IdReusePolicy)
-				require.Equal(t, enumspb.NEXUS_OPERATION_ID_CONFLICT_POLICY_FAIL, r.IdConflictPolicy)
-			},
-		},
-		{
-			name: "id_policies - preserves explicit values",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				r.IdReusePolicy = enumspb.NEXUS_OPERATION_ID_REUSE_POLICY_REJECT_DUPLICATE
-				r.IdConflictPolicy = enumspb.NEXUS_OPERATION_ID_CONFLICT_POLICY_USE_EXISTING
-			},
-			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
-				require.Equal(t, enumspb.NEXUS_OPERATION_ID_REUSE_POLICY_REJECT_DUPLICATE, r.IdReusePolicy)
-				require.Equal(t, enumspb.NEXUS_OPERATION_ID_CONFLICT_POLICY_USE_EXISTING, r.IdConflictPolicy)
-			},
-		},
-		{
-			name: "search_attributes - too many keys",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				r.SearchAttributes = &commonpb.SearchAttributes{
-					IndexedFields: map[string]*commonpb.Payload{
-						"CustomKeywordField": sadefs.MustEncodeValue("v1", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
-						"CustomTextField":    sadefs.MustEncodeValue("v2", enumspb.INDEXED_VALUE_TYPE_TEXT),
-						"CustomIntField":     sadefs.MustEncodeValue(3, enumspb.INDEXED_VALUE_TYPE_INT),
-					},
-				}
-			},
-			errMsg: "number of search attributes",
-		},
-		{
-			name: "search_attributes - value exceeds size limit",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
-				r.SearchAttributes = &commonpb.SearchAttributes{
-					IndexedFields: map[string]*commonpb.Payload{
-						"CustomKeywordField": sadefs.MustEncodeValue(
-							strings.Repeat("x", 100),
-							enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-						),
-					},
-				}
-			},
-			errMsg: "exceeds size limit",
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			req := &workflowservice.StartNexusOperationExecutionRequest{
-				Namespace:   "default",
-				OperationId: "op-id",
-				RequestId:   "request-id",
-				Endpoint:    "endpoint",
-				Service:     "service",
-				Operation:   "operation",
-				SearchAttributes: &commonpb.SearchAttributes{
-					IndexedFields: map[string]*commonpb.Payload{
-						"CustomKeywordField": sadefs.MustEncodeValue("val", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
-					},
-				},
-			}
-			if tc.mutate != nil {
-				tc.mutate(req)
-			}
-			err := newValidator(config, log.NewNoopLogger(), nil, saValidator).
-				validateAndNormalizeStartRequest(req)
-			if tc.errMsg != "" {
-				var invalidArgErr *serviceerror.InvalidArgument
-				require.ErrorAs(t, err, &invalidArgErr)
-				require.Contains(t, err.Error(), tc.errMsg)
-			} else {
-				require.NoError(t, err)
-			}
-			if tc.check != nil {
-				tc.check(t, req)
-			}
-		})
-	}
-}
-
-func TestValidateDescribeNexusOperationExecutionRequest(t *testing.T) {
-	config := &Config{
-		MaxIDLengthLimit: func() int { return 20 },
-	}
-
-	validRunID := "11111111-2222-3333-4444-555555555555"
-	validToken, err := (&persistencespb.ChasmComponentRef{
-		NamespaceId: "test-namespace-id",
-		BusinessId:  "operation-id",
-		RunId:       validRunID,
-	}).Marshal()
-	require.NoError(t, err)
-
-	wrongNamespaceToken, err := (&persistencespb.ChasmComponentRef{
-		NamespaceId: "other-namespace-id",
-		BusinessId:  "operation-id",
-		RunId:       validRunID,
-	}).Marshal()
-	require.NoError(t, err)
-
-	for _, tc := range []struct {
-		name   string
-		mutate func(*workflowservice.DescribeNexusOperationExecutionRequest)
-		errMsg string
-	}{
-		{
-			name: "valid request",
-		},
-		{
-			name: "operation_id - required",
-			mutate: func(r *workflowservice.DescribeNexusOperationExecutionRequest) {
-				r.OperationId = ""
-			},
-			errMsg: "operation_id is required",
-		},
-		{
-			name: "operation_id - exceeds length limit",
-			mutate: func(r *workflowservice.DescribeNexusOperationExecutionRequest) {
-				r.OperationId = "this-operation-id-is-too-long"
-			},
-			errMsg: "operation_id exceeds length limit",
-		},
-		{
-			name: "run_id - not a valid UUID",
-			mutate: func(r *workflowservice.DescribeNexusOperationExecutionRequest) {
-				r.RunId = "not-a-uuid"
-			},
-			errMsg: errInvalidRunID,
-		},
-		{
-			name: "long_poll_token - requires run_id",
-			mutate: func(r *workflowservice.DescribeNexusOperationExecutionRequest) {
-				r.LongPollToken = validToken
-			},
-			errMsg: "run_id is required when long_poll_token is provided",
-		},
-		{
-			name: "long_poll_token - rejects malformed token",
-			mutate: func(r *workflowservice.DescribeNexusOperationExecutionRequest) {
-				r.RunId = validRunID
-				r.LongPollToken = []byte("not-a-token")
-			},
-			errMsg: "invalid long poll token",
-		},
-		{
-			name: "long_poll_token - rejects wrong namespace",
-			mutate: func(r *workflowservice.DescribeNexusOperationExecutionRequest) {
-				r.RunId = validRunID
-				r.LongPollToken = wrongNamespaceToken
-			},
-			errMsg: "long poll token does not match execution",
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			validReq := &workflowservice.DescribeNexusOperationExecutionRequest{
-				Namespace:   "default",
-				OperationId: "operation-id",
-			}
-			if tc.mutate != nil {
-				tc.mutate(validReq)
-			}
-			err := newTestValidator(config).validateAndNormalizeDescribeRequest(validReq, "test-namespace-id")
-			if tc.errMsg != "" {
-				var invalidArgErr *serviceerror.InvalidArgument
-				require.ErrorAs(t, err, &invalidArgErr)
-				require.Contains(t, err.Error(), tc.errMsg)
-			} else {
-				require.NoError(t, err)
-			}
-		})
-	}
-}
-
-func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
-	config := &Config{
-		MaxIDLengthLimit: func() int { return 20 },
-		MaxReasonLength:  func(string) int { return 20 },
-	}
-
-	for _, tc := range []struct {
-		name   string
-		mutate func(*workflowservice.RequestCancelNexusOperationExecutionRequest)
-		errMsg string
-		check  func(*testing.T, *workflowservice.RequestCancelNexusOperationExecutionRequest)
-	}{
-		{
-			name: "valid request",
-		},
-		{
-			name: "request_id - defaults empty to UUID",
-			mutate: func(r *workflowservice.RequestCancelNexusOperationExecutionRequest) {
-				r.RequestId = ""
-			},
-			check: func(t *testing.T, r *workflowservice.RequestCancelNexusOperationExecutionRequest) {
-				require.Len(t, r.RequestId, 36)
-			},
-		},
-		{
-			name: "operation_id - required",
-			mutate: func(r *workflowservice.RequestCancelNexusOperationExecutionRequest) {
-				r.OperationId = ""
-			},
-			errMsg: "operation_id is required",
-		},
-		{
-			name: "operation_id - exceeds length limit",
-			mutate: func(r *workflowservice.RequestCancelNexusOperationExecutionRequest) {
-				r.OperationId = "this-operation-id-is-too-long"
-			},
-			errMsg: "operation_id exceeds length limit",
-		},
-		{
-			name: "request_id - exceeds length limit",
-			mutate: func(r *workflowservice.RequestCancelNexusOperationExecutionRequest) {
-				r.RequestId = "this-request-id-is-too-long"
-			},
-			errMsg: "request_id exceeds length limit",
-		},
-		{
-			name: "run_id - not a valid UUID",
-			mutate: func(r *workflowservice.RequestCancelNexusOperationExecutionRequest) {
-				r.RunId = "not-a-uuid"
-			},
-			errMsg: errInvalidRunID,
-		},
-		{
-			name: "identity - exceeds length limit",
-			mutate: func(r *workflowservice.RequestCancelNexusOperationExecutionRequest) {
-				r.Identity = "this-identity-is-too-long!!"
-			},
-			errMsg: "identity exceeds length limit",
-		},
-		{
-			name: "reason - exceeds length limit",
-			mutate: func(r *workflowservice.RequestCancelNexusOperationExecutionRequest) {
-				r.Reason = "this-reason-is-longer-than-twenty-characters"
-			},
-			errMsg: "reason exceeds length limit",
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			validReq := &workflowservice.RequestCancelNexusOperationExecutionRequest{
-				Namespace:   "default",
-				OperationId: "operation-id",
-			}
-			if tc.mutate != nil {
-				tc.mutate(validReq)
-			}
-			err := newTestValidator(config).validateAndNormalizeCancelRequest(validReq)
-			if tc.errMsg != "" {
-				var invalidArgErr *serviceerror.InvalidArgument
-				require.ErrorAs(t, err, &invalidArgErr)
-				require.Contains(t, err.Error(), tc.errMsg)
-			} else {
-				require.NoError(t, err)
-			}
-			if tc.check != nil {
-				tc.check(t, validReq)
-			}
-		})
+func testConfig() *Config {
+	return &Config{
+		MaxIDLengthLimit: func() int { return 50 },
 	}
 }
 
 func TestValidateDeleteNexusOperationExecutionRequest(t *testing.T) {
-	config := &Config{
-		MaxIDLengthLimit: func() int { return 20 },
-	}
+	registry := newTestRegistry(testConfig())
 
 	for _, tc := range []struct {
-		name   string
-		mutate func(*workflowservice.DeleteNexusOperationExecutionRequest)
-		errMsg string
+		name    string
+		req     *workflowservice.DeleteNexusOperationExecutionRequest
+		wantErr string
 	}{
 		{
-			name: "valid request",
-		},
-		{
-			name: "valid request - with run_id",
-			mutate: func(r *workflowservice.DeleteNexusOperationExecutionRequest) {
-				r.RunId = "550e8400-e29b-41d4-a716-446655440000"
+			name: "valid with run_id",
+			req: &workflowservice.DeleteNexusOperationExecutionRequest{
+				Namespace:   "ns",
+				OperationId: "op",
+				RunId:       "a7d6f9c2-1234-5678-abcd-ef0123456789",
 			},
 		},
 		{
-			name: "operation_id - required",
-			mutate: func(r *workflowservice.DeleteNexusOperationExecutionRequest) {
-				r.OperationId = ""
+			name: "valid without run_id",
+			req: &workflowservice.DeleteNexusOperationExecutionRequest{
+				Namespace:   "ns",
+				OperationId: "op",
 			},
-			errMsg: "operation_id is required",
 		},
 		{
-			name: "operation_id - exceeds length limit",
-			mutate: func(r *workflowservice.DeleteNexusOperationExecutionRequest) {
-				r.OperationId = "this-operation-id-is-too-long"
-			},
-			errMsg: "operation_id exceeds length limit",
+			name:    "missing operation_id",
+			req:     &workflowservice.DeleteNexusOperationExecutionRequest{Namespace: "ns"},
+			wantErr: "operation_id is required",
 		},
 		{
-			name: "run_id - invalid UUID",
-			mutate: func(r *workflowservice.DeleteNexusOperationExecutionRequest) {
-				r.RunId = "not-a-valid-uuid"
+			name: "operation_id too long",
+			req: &workflowservice.DeleteNexusOperationExecutionRequest{
+				Namespace:   "ns",
+				OperationId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", // >50 chars
 			},
-			errMsg: errInvalidRunID,
+			wantErr: "operation_id exceeds length limit",
+		},
+		{
+			name: "invalid run_id",
+			req: &workflowservice.DeleteNexusOperationExecutionRequest{
+				Namespace:   "ns",
+				OperationId: "op",
+				RunId:       "not-a-uuid",
+			},
+			wantErr: "run_id is not a valid UUID",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			validReq := &workflowservice.DeleteNexusOperationExecutionRequest{
-				Namespace:   "default",
-				OperationId: "operation-id",
-			}
-			if tc.mutate != nil {
-				tc.mutate(validReq)
-			}
-			err := newTestValidator(config).validateAndNormalizeDeleteRequest(validReq)
-			if tc.errMsg != "" {
-				var invalidArgErr *serviceerror.InvalidArgument
-				require.ErrorAs(t, err, &invalidArgErr)
-				require.Contains(t, err.Error(), tc.errMsg)
+			err := validation.ValidateAndNormalize(registry, tc.req)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
 			} else {
 				require.NoError(t, err)
 			}
@@ -606,185 +85,361 @@ func TestValidateDeleteNexusOperationExecutionRequest(t *testing.T) {
 	}
 }
 
-func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
-	config := &Config{
-		MaxIDLengthLimit: func() int { return 20 },
-		MaxReasonLength:  func(string) int { return 20 },
-	}
+func TestValidateDeleteNexusOperationExecutionResponse(t *testing.T) {
+	registry := newTestRegistry(testConfig())
+	resp := &workflowservice.DeleteNexusOperationExecutionResponse{}
+	require.NoError(t, validation.ValidateAndNormalize(registry, resp))
+}
+
+func TestValidateDescribeNexusOperationExecutionRequest(t *testing.T) {
+	registry := newTestRegistry(testConfig())
 
 	for _, tc := range []struct {
-		name   string
-		mutate func(*workflowservice.TerminateNexusOperationExecutionRequest)
-		errMsg string
-		check  func(*testing.T, *workflowservice.TerminateNexusOperationExecutionRequest)
+		name    string
+		req     *workflowservice.DescribeNexusOperationExecutionRequest
+		wantErr string
 	}{
 		{
-			name: "valid request",
-		},
-		{
-			name: "request_id - defaults empty to UUID",
-			mutate: func(r *workflowservice.TerminateNexusOperationExecutionRequest) {
-				r.RequestId = ""
-			},
-			check: func(t *testing.T, r *workflowservice.TerminateNexusOperationExecutionRequest) {
-				require.Len(t, r.RequestId, 36)
+			name: "valid with run_id",
+			req: &workflowservice.DescribeNexusOperationExecutionRequest{
+				Namespace:   "ns",
+				OperationId: "op",
+				RunId:       "a7d6f9c2-1234-5678-abcd-ef0123456789",
 			},
 		},
 		{
-			name: "operation_id - required",
-			mutate: func(r *workflowservice.TerminateNexusOperationExecutionRequest) {
-				r.OperationId = ""
+			name: "valid without run_id",
+			req: &workflowservice.DescribeNexusOperationExecutionRequest{
+				Namespace:   "ns",
+				OperationId: "op",
 			},
-			errMsg: "operation_id is required",
 		},
 		{
-			name: "operation_id - exceeds length limit",
-			mutate: func(r *workflowservice.TerminateNexusOperationExecutionRequest) {
-				r.OperationId = "this-operation-id-is-too-long"
-			},
-			errMsg: "operation_id exceeds length limit",
+			name:    "missing operation_id",
+			req:     &workflowservice.DescribeNexusOperationExecutionRequest{Namespace: "ns"},
+			wantErr: "operation_id is required",
 		},
 		{
-			name: "request_id - exceeds length limit",
-			mutate: func(r *workflowservice.TerminateNexusOperationExecutionRequest) {
-				r.RequestId = "this-request-id-is-too-long"
+			name: "operation_id too long",
+			req: &workflowservice.DescribeNexusOperationExecutionRequest{
+				Namespace:   "ns",
+				OperationId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			},
-			errMsg: "request_id exceeds length limit",
+			wantErr: "operation_id exceeds length limit",
 		},
 		{
-			name: "run_id - not a valid UUID",
-			mutate: func(r *workflowservice.TerminateNexusOperationExecutionRequest) {
-				r.RunId = "not-a-uuid"
+			name: "invalid run_id",
+			req: &workflowservice.DescribeNexusOperationExecutionRequest{
+				Namespace:   "ns",
+				OperationId: "op",
+				RunId:       "not-a-uuid",
 			},
-			errMsg: errInvalidRunID,
-		},
-		{
-			name: "identity - exceeds length limit",
-			mutate: func(r *workflowservice.TerminateNexusOperationExecutionRequest) {
-				r.Identity = "this-identity-is-too-long!!"
-			},
-			errMsg: "identity exceeds length limit",
-		},
-		{
-			name: "reason - exceeds length limit",
-			mutate: func(r *workflowservice.TerminateNexusOperationExecutionRequest) {
-				r.Reason = "this-reason-is-longer-than-twenty-characters"
-			},
-			errMsg: "reason exceeds length limit",
+			wantErr: "run_id is not a valid UUID",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			validReq := &workflowservice.TerminateNexusOperationExecutionRequest{
-				Namespace:   "default",
-				OperationId: "operation-id",
-			}
-			if tc.mutate != nil {
-				tc.mutate(validReq)
-			}
-			err := newTestValidator(config).validateAndNormalizeTerminateRequest(validReq)
-			if tc.errMsg != "" {
-				var invalidArgErr *serviceerror.InvalidArgument
-				require.ErrorAs(t, err, &invalidArgErr)
-				require.Contains(t, err.Error(), tc.errMsg)
+			err := validation.ValidateAndNormalize(registry, tc.req)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
 			} else {
 				require.NoError(t, err)
 			}
-			if tc.check != nil {
-				tc.check(t, validReq)
-			}
 		})
 	}
+}
+
+func TestValidateDescribeNexusOperationExecutionResponse(t *testing.T) {
+	registry := newTestRegistry(testConfig())
+	resp := &workflowservice.DescribeNexusOperationExecutionResponse{}
+	require.NoError(t, validation.ValidateAndNormalize(registry, resp))
 }
 
 func TestValidatePollNexusOperationExecutionRequest(t *testing.T) {
-	config := &Config{
-		MaxIDLengthLimit: func() int { return 20 },
-	}
+	registry := newTestRegistry(testConfig())
 
 	for _, tc := range []struct {
-		name   string
-		mutate func(*workflowservice.PollNexusOperationExecutionRequest)
-		errMsg string
-		check  func(*testing.T, *workflowservice.PollNexusOperationExecutionRequest)
+		name    string
+		req     *workflowservice.PollNexusOperationExecutionRequest
+		wantErr string
 	}{
 		{
-			name: "valid request",
-		},
-		{
-			name: "operation_id - required",
-			mutate: func(r *workflowservice.PollNexusOperationExecutionRequest) {
-				r.OperationId = ""
-			},
-			errMsg: "operation_id is required",
-		},
-		{
-			name: "operation_id - exceeds length limit",
-			mutate: func(r *workflowservice.PollNexusOperationExecutionRequest) {
-				r.OperationId = "this-operation-id-is-too-long"
-			},
-			errMsg: "operation_id exceeds length limit",
-		},
-		{
-			name: "run_id - not a valid UUID",
-			mutate: func(r *workflowservice.PollNexusOperationExecutionRequest) {
-				r.RunId = "not-a-uuid"
-			},
-			errMsg: errInvalidRunID,
-		},
-		{
-			name: "wait_stage - normalizes UNSPECIFIED to CLOSED",
-			mutate: func(r *workflowservice.PollNexusOperationExecutionRequest) {
-				r.WaitStage = enumspb.NEXUS_OPERATION_WAIT_STAGE_UNSPECIFIED
-			},
-			check: func(t *testing.T, r *workflowservice.PollNexusOperationExecutionRequest) {
-				require.Equal(t, enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED, r.WaitStage)
+			name: "valid",
+			req: &workflowservice.PollNexusOperationExecutionRequest{
+				Namespace:   "ns",
+				OperationId: "op",
+				RunId:       "a7d6f9c2-1234-5678-abcd-ef0123456789",
+				WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
 			},
 		},
 		{
-			name: "wait_stage - preserves STARTED",
-			mutate: func(r *workflowservice.PollNexusOperationExecutionRequest) {
-				r.WaitStage = enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED
-			},
-			check: func(t *testing.T, r *workflowservice.PollNexusOperationExecutionRequest) {
-				require.Equal(t, enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED, r.WaitStage)
-			},
-		},
-		{
-			name: "wait_stage - preserves CLOSED",
-			mutate: func(r *workflowservice.PollNexusOperationExecutionRequest) {
-				r.WaitStage = enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED
-			},
-			check: func(t *testing.T, r *workflowservice.PollNexusOperationExecutionRequest) {
-				require.Equal(t, enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED, r.WaitStage)
+			name: "valid without run_id",
+			req: &workflowservice.PollNexusOperationExecutionRequest{
+				Namespace:   "ns",
+				OperationId: "op",
+				WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
 			},
 		},
 		{
-			name: "wait_stage - rejects unsupported value",
-			mutate: func(r *workflowservice.PollNexusOperationExecutionRequest) {
-				r.WaitStage = enumspb.NexusOperationWaitStage(99)
+			name:    "missing operation_id",
+			req:     &workflowservice.PollNexusOperationExecutionRequest{Namespace: "ns", WaitStage: enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED},
+			wantErr: "operation_id is required",
+		},
+		{
+			name:    "unspecified wait_stage",
+			req:     &workflowservice.PollNexusOperationExecutionRequest{Namespace: "ns", OperationId: "op"},
+			wantErr: "wait_stage must be specified",
+		},
+		{
+			name: "invalid run_id",
+			req: &workflowservice.PollNexusOperationExecutionRequest{
+				Namespace:   "ns",
+				OperationId: "op",
+				RunId:       "not-a-uuid",
+				WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
 			},
-			errMsg: "unsupported wait_stage",
+			wantErr: "run_id is not a valid UUID",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			validReq := &workflowservice.PollNexusOperationExecutionRequest{
-				Namespace:   "default",
-				OperationId: "operation-id",
-			}
-			if tc.mutate != nil {
-				tc.mutate(validReq)
-			}
-			err := newTestValidator(config).validateAndNormalizePollRequest(validReq)
-			if tc.errMsg != "" {
-				var invalidArgErr *serviceerror.InvalidArgument
-				require.ErrorAs(t, err, &invalidArgErr)
-				require.Contains(t, err.Error(), tc.errMsg)
+			err := validation.ValidateAndNormalize(registry, tc.req)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
 			} else {
 				require.NoError(t, err)
 			}
-			if tc.check != nil {
-				tc.check(t, validReq)
+		})
+	}
+}
+
+func TestValidatePollNexusOperationExecutionResponse(t *testing.T) {
+	registry := newTestRegistry(testConfig())
+	resp := &workflowservice.PollNexusOperationExecutionResponse{}
+	require.NoError(t, validation.ValidateAndNormalize(registry, resp))
+}
+
+func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
+	registry := newTestRegistry(testConfig())
+
+	for _, tc := range []struct {
+		name    string
+		req     *workflowservice.RequestCancelNexusOperationExecutionRequest
+		wantErr string
+	}{
+		{
+			name: "valid",
+			req: &workflowservice.RequestCancelNexusOperationExecutionRequest{
+				Namespace:   "ns",
+				OperationId: "op",
+				RunId:       "a7d6f9c2-1234-5678-abcd-ef0123456789",
+				RequestId:   "b8e7f0d1-abcd-ef01-2345-678901234567",
+			},
+		},
+		{
+			name: "valid without optional fields",
+			req: &workflowservice.RequestCancelNexusOperationExecutionRequest{
+				Namespace:   "ns",
+				OperationId: "op",
+			},
+		},
+		{
+			name:    "missing operation_id",
+			req:     &workflowservice.RequestCancelNexusOperationExecutionRequest{Namespace: "ns"},
+			wantErr: "operation_id is required",
+		},
+		{
+			name: "invalid request_id",
+			req: &workflowservice.RequestCancelNexusOperationExecutionRequest{
+				Namespace:   "ns",
+				OperationId: "op",
+				RequestId:   "not-a-uuid",
+			},
+			wantErr: "request_id is not a valid UUID",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validation.ValidateAndNormalize(registry, tc.req)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+			} else {
+				require.NoError(t, err)
 			}
 		})
 	}
+}
+
+func TestValidateRequestCancelNexusOperationExecutionResponse(t *testing.T) {
+	registry := newTestRegistry(testConfig())
+	resp := &workflowservice.RequestCancelNexusOperationExecutionResponse{}
+	require.NoError(t, validation.ValidateAndNormalize(registry, resp))
+}
+
+func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
+	registry := newTestRegistry(testConfig())
+
+	for _, tc := range []struct {
+		name    string
+		req     *workflowservice.TerminateNexusOperationExecutionRequest
+		wantErr string
+	}{
+		{
+			name: "valid",
+			req: &workflowservice.TerminateNexusOperationExecutionRequest{
+				Namespace:   "ns",
+				OperationId: "op",
+				RunId:       "a7d6f9c2-1234-5678-abcd-ef0123456789",
+				RequestId:   "b8e7f0d1-abcd-ef01-2345-678901234567",
+				Reason:      "terminated by admin",
+			},
+		},
+		{
+			name: "valid without optional fields",
+			req: &workflowservice.TerminateNexusOperationExecutionRequest{
+				Namespace:   "ns",
+				OperationId: "op",
+			},
+		},
+		{
+			name:    "missing operation_id",
+			req:     &workflowservice.TerminateNexusOperationExecutionRequest{Namespace: "ns"},
+			wantErr: "operation_id is required",
+		},
+		{
+			name: "invalid request_id",
+			req: &workflowservice.TerminateNexusOperationExecutionRequest{
+				Namespace:   "ns",
+				OperationId: "op",
+				RequestId:   "not-a-uuid",
+			},
+			wantErr: "request_id is not a valid UUID",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validation.ValidateAndNormalize(registry, tc.req)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateTerminateNexusOperationExecutionResponse(t *testing.T) {
+	registry := newTestRegistry(testConfig())
+	resp := &workflowservice.TerminateNexusOperationExecutionResponse{}
+	require.NoError(t, validation.ValidateAndNormalize(registry, resp))
+}
+
+func TestValidateListNexusOperationExecutionsRequest(t *testing.T) {
+	registry := newTestRegistry(testConfig())
+	req := &workflowservice.ListNexusOperationExecutionsRequest{
+		Namespace: "ns",
+		PageSize:  10,
+		Query:     "WorkflowType='foo'",
+	}
+	require.NoError(t, validation.ValidateAndNormalize(registry, req))
+}
+
+func TestValidateListNexusOperationExecutionsResponse(t *testing.T) {
+	registry := newTestRegistry(testConfig())
+	resp := &workflowservice.ListNexusOperationExecutionsResponse{}
+	require.NoError(t, validation.ValidateAndNormalize(registry, resp))
+}
+
+func TestValidateCountNexusOperationExecutionsRequest(t *testing.T) {
+	registry := newTestRegistry(testConfig())
+	req := &workflowservice.CountNexusOperationExecutionsRequest{
+		Namespace: "ns",
+		Query:     "WorkflowType='foo'",
+	}
+	require.NoError(t, validation.ValidateAndNormalize(registry, req))
+}
+
+func TestValidateCountNexusOperationExecutionsResponse(t *testing.T) {
+	registry := newTestRegistry(testConfig())
+	resp := &workflowservice.CountNexusOperationExecutionsResponse{Count: 42}
+	require.NoError(t, validation.ValidateAndNormalize(registry, resp))
+}
+
+func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
+	registry := newTestRegistry(testConfig())
+
+	for _, tc := range []struct {
+		name    string
+		req     *workflowservice.StartNexusOperationExecutionRequest
+		wantErr string
+	}{
+		{
+			name: "valid",
+			req: &workflowservice.StartNexusOperationExecutionRequest{
+				Namespace:   "ns",
+				Endpoint:    "my-endpoint",
+				Service:     "my-service",
+				Operation:   "my-operation",
+				OperationId: "my-op-id",
+				RequestId:   "a7d6f9c2-1234-5678-abcd-ef0123456789",
+			},
+		},
+		{
+			name: "valid without optional fields",
+			req: &workflowservice.StartNexusOperationExecutionRequest{
+				Namespace: "ns",
+				Endpoint:  "my-endpoint",
+				Service:   "my-service",
+				Operation: "my-operation",
+			},
+		},
+		{
+			name:    "missing endpoint",
+			req:     &workflowservice.StartNexusOperationExecutionRequest{Namespace: "ns", Service: "svc", Operation: "op"},
+			wantErr: "endpoint is required",
+		},
+		{
+			name:    "missing service",
+			req:     &workflowservice.StartNexusOperationExecutionRequest{Namespace: "ns", Endpoint: "ep", Operation: "op"},
+			wantErr: "service is required",
+		},
+		{
+			name:    "missing operation",
+			req:     &workflowservice.StartNexusOperationExecutionRequest{Namespace: "ns", Endpoint: "ep", Service: "svc"},
+			wantErr: "operation is required",
+		},
+		{
+			name: "operation_id too long",
+			req: &workflowservice.StartNexusOperationExecutionRequest{
+				Namespace:   "ns",
+				Endpoint:    "ep",
+				Service:     "svc",
+				Operation:   "op",
+				OperationId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			},
+			wantErr: "operation_id exceeds length limit",
+		},
+		{
+			name: "invalid request_id",
+			req: &workflowservice.StartNexusOperationExecutionRequest{
+				Namespace: "ns",
+				Endpoint:  "ep",
+				Service:   "svc",
+				Operation: "op",
+				RequestId: "not-a-uuid",
+			},
+			wantErr: "request_id is not a valid UUID",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validation.ValidateAndNormalize(registry, tc.req)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateStartNexusOperationExecutionResponse(t *testing.T) {
+	registry := newTestRegistry(testConfig())
+	resp := &workflowservice.StartNexusOperationExecutionResponse{RunId: "a7d6f9c2-1234-5678-abcd-ef0123456789", Started: true}
+	require.NoError(t, validation.ValidateAndNormalize(registry, resp))
 }
