@@ -15,8 +15,12 @@ type (
 		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
-		// TODO: this is not used right now, but we should check it
-		// against workflow start version in timer task executor
+		// Version is included for task versioning infrastructure but is not
+		// explicitly checked against workflow start version in the timer task
+		// executors. For standby execution, this is safe because this task only
+		// fires when mutable state's next event ID is 2 (workflow started event
+		// only), meaning the start version is immutable and guaranteed to match.
+		// See executeWorkflowBackoffTimerTask in timer_queue_standby_task_executor.go.
 		Version             int64
 		WorkflowBackoffType enumsspb.WorkflowBackoffType
 	}
