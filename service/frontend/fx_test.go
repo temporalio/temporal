@@ -12,7 +12,9 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
@@ -332,6 +334,57 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 				if err != nil {
 					return
 				}
+			}
+		})
+	}
+}
+
+// TestRateLimitInterceptorProviderPodOnlyAPIs verifies that PodOnlyAPIToPriority entries (e.g.
+// DescribeMutableState) are routed to the pod-level Execution rate limiter, the same way
+// APIToPriority entries are.
+func TestRateLimitInterceptorProviderPodOnlyAPIs(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name              string
+		executionRPSLimit int
+		expectRateLimit   bool
+	}{
+		{name: "admin API rate limit hit", executionRPSLimit: 0, expectRateLimit: true},
+		{name: "admin API rate limit not hit", executionRPSLimit: 100, expectRateLimit: false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctrl := gomock.NewController(t)
+			serviceResolver := membership.NewMockServiceResolver(ctrl)
+			serviceResolver.EXPECT().AvailableMemberCount().Return(1).AnyTimes()
+
+			rateLimiters := RateLimitersProvider(&Config{
+				RPS: func() int {
+					return tc.executionRPSLimit
+				},
+				GlobalRPS: func() int {
+					return tc.executionRPSLimit
+				},
+				NamespaceReplicationInducingAPIsRPS: func() int {
+					return 100
+				},
+				OperatorRPSRatio: func() float64 {
+					return 0.2
+				},
+			}, serviceResolver, metrics.NoopMetricsHandler, log.NewTestLogger())
+			rateLimitInterceptor := RateLimitInterceptorProvider(rateLimiters)
+
+			err := rateLimitInterceptor.Allow(
+				adminservice.AdminService_DescribeMutableState_FullMethodName,
+				headers.NewGRPCHeaderGetter(context.Background()),
+			)
+			if tc.expectRateLimit {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
 			}
 		})
 	}

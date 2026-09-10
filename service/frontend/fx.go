@@ -545,6 +545,9 @@ func RateLimitInterceptorProvider(
 	for api := range configs.NamespaceReplicationInducingAPIToPriority {
 		mapping[api] = rateLimiters.NamespaceReplicationInducing
 	}
+	for api := range configs.PodOnlyAPIToPriority { // do not mirror this loop in NamespaceRateLimitInterceptorProvider
+		mapping[api] = rateLimiters.Execution
+	}
 
 	return interceptor.NewRateLimitInterceptor(
 		quotas.NewRoutingRateLimiter(mapping),

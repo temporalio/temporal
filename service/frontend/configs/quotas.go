@@ -3,6 +3,7 @@ package configs
 import (
 	"time"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -254,6 +255,12 @@ var (
 	}
 
 	NamespaceReplicationInducingAPIPrioritiesOrdered = []int{0, 1, 2}
+
+	// PodOnlyAPIToPriority is deliberately separate from APIToPriority: RateLimitInterceptorProvider
+	// composes this map, NamespaceRateLimitInterceptorProvider must not.
+	PodOnlyAPIToPriority = map[string]int{
+		adminservice.AdminService_DescribeMutableState_FullMethodName: 5,
+	}
 
 	// APIs that are not considered as a namespace operation. Namespace operations are used to track the usage of a namespace.
 	// This includes some APIs, history tasks, etc.
