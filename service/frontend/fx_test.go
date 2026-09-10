@@ -297,19 +297,19 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 			defer func() {
 				// Check if the rate limit is hit.
 				if tc.expectRateLimit {
-					assert.ErrorContains(t, err, "rate limit exceeded")
+					require.ErrorContains(t, err, "rate limit exceeded")
 					s := status.Convert(err)
 					var resourceExhausted *serviceerror.ResourceExhausted
 					errors.As(serviceerror.FromStatus(s), &resourceExhausted)
-					assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, resourceExhausted.Cause)
-					assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM, resourceExhausted.Scope)
+					require.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, resourceExhausted.Cause)
+					require.Equal(t, enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM, resourceExhausted.Scope)
 
-					assert.Len(t, header.Get(interceptor.ResourceExhaustedCauseHeader), 1)
-					assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT.String(), header.Get(interceptor.ResourceExhaustedCauseHeader)[0])
-					assert.Len(t, header.Get(interceptor.ResourceExhaustedScopeHeader), 1)
-					assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM.String(), header.Get(interceptor.ResourceExhaustedScopeHeader)[0])
+					require.Len(t, header.Get(interceptor.ResourceExhaustedCauseHeader), 1)
+					require.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT.String(), header.Get(interceptor.ResourceExhaustedCauseHeader)[0])
+					require.Len(t, header.Get(interceptor.ResourceExhaustedScopeHeader), 1)
+					require.Equal(t, enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM.String(), header.Get(interceptor.ResourceExhaustedScopeHeader)[0])
 				} else {
-					assert.NoError(t, err)
+					require.NoError(t, err)
 				}
 			}()
 
@@ -382,7 +382,7 @@ func TestRateLimitInterceptorProviderPodOnlyAPIs(t *testing.T) {
 				headers.NewGRPCHeaderGetter(context.Background()),
 			)
 			if tc.expectRateLimit {
-				assert.Error(t, err)
+				require.Error(t, err)
 			} else {
 				assert.NoError(t, err)
 			}

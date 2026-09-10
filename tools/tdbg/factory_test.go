@@ -12,7 +12,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -168,7 +167,7 @@ func TestCreateGRPCConnection_TagsCallerInfoAsOperator(t *testing.T) {
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 	go func() { _ = server.Serve(listener) }()
 	defer server.Stop()
 
@@ -178,6 +177,6 @@ func TestCreateGRPCConnection_TagsCallerInfoAsOperator(t *testing.T) {
 	_, err = client.DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{})
 	require.NoError(t, err)
 
-	assert.Equal(t, []string{"tdbg"}, adminServer.callerName)
-	assert.Equal(t, []string{headers.CallerTypeOperator}, adminServer.callerType)
+	require.Equal(t, []string{"tdbg"}, adminServer.callerName)
+	require.Equal(t, []string{headers.CallerTypeOperator}, adminServer.callerType)
 }
