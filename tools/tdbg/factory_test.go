@@ -1,13 +1,24 @@
 package tdbg
 
 import (
+	"context"
+	"flag"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/urfave/cli/v2"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/common/headers"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 )
 
 type args struct {
@@ -119,4 +130,54 @@ func Test_fetchCACertFromFile(t *testing.T) {
 			}
 		})
 	}
+}
+
+// callerInfoCapturingAdminServer records the caller-name/caller-type headers seen on
+// DescribeMutableState, so tests can verify what tdbg's client actually put on the wire.
+type callerInfoCapturingAdminServer struct {
+	adminservice.UnimplementedAdminServiceServer
+	callerName []string
+	callerType []string
+}
+
+func (s *callerInfoCapturingAdminServer) DescribeMutableState(
+	ctx context.Context,
+	_ *adminservice.DescribeMutableStateRequest,
+) (*adminservice.DescribeMutableStateResponse, error) {
+	md, _ := metadata.FromIncomingContext(ctx)
+	s.callerName = md.Get(headers.CallerNameHeaderName)
+	s.callerType = md.Get(headers.CallerTypeHeaderName)
+	return &adminservice.DescribeMutableStateResponse{}, nil
+}
+
+// newTestCLIContext builds a *cli.Context with the same flags (and defaults) as the real
+// tdbg app, so factory.go's flag lookups (e.g. TLS settings) behave the same as in production.
+func newTestCLIContext(t *testing.T) *cli.Context {
+	app := NewCliApp()
+	set := flag.NewFlagSet("test", flag.ContinueOnError)
+	for _, f := range app.Flags {
+		require.NoError(t, f.Apply(set))
+	}
+	return cli.NewContext(app, set, nil)
+}
+
+func TestCreateGRPCConnection_TagsCallerInfoAsOperator(t *testing.T) {
+	adminServer := &callerInfoCapturingAdminServer{}
+	server := grpc.NewServer()
+	adminservice.RegisterAdminServiceServer(server, adminServer)
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer listener.Close()
+	go func() { _ = server.Serve(listener) }()
+	defer server.Stop()
+
+	factory := NewClientFactory(WithFrontendAddress(listener.Addr().String()))
+	client := factory.AdminClient(newTestCLIContext(t))
+
+	_, err = client.DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{})
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{"tdbg"}, adminServer.callerName)
+	assert.Equal(t, []string{headers.CallerTypeOperator}, adminServer.callerType)
 }
