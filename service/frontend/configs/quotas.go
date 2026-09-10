@@ -271,31 +271,6 @@ var (
 	}
 )
 
-func NewRequestToRateLimiter(
-	executionRateBurstFn quotas.RateBurst,
-	visibilityRateBurstFn quotas.RateBurst,
-	namespaceReplicationInducingRateBurstFn quotas.RateBurst,
-	operatorRPSRatio dynamicconfig.FloatPropertyFn,
-) quotas.RequestRateLimiter {
-	mapping := make(map[string]quotas.RequestRateLimiter)
-
-	executionRateLimiter := NewExecutionPriorityRateLimiter(executionRateBurstFn, operatorRPSRatio)
-	visibilityRateLimiter := NewVisibilityPriorityRateLimiter(visibilityRateBurstFn, operatorRPSRatio)
-	namespaceReplicationInducingRateLimiter := NewNamespaceReplicationInducingAPIPriorityRateLimiter(namespaceReplicationInducingRateBurstFn, operatorRPSRatio)
-
-	for api := range APIToPriority {
-		mapping[api] = executionRateLimiter
-	}
-	for api := range VisibilityAPIToPriority {
-		mapping[api] = visibilityRateLimiter
-	}
-	for api := range NamespaceReplicationInducingAPIToPriority {
-		mapping[api] = namespaceReplicationInducingRateLimiter
-	}
-
-	return quotas.NewRoutingRateLimiter(mapping)
-}
-
 func NewExecutionPriorityRateLimiter(
 	rateBurstFn quotas.RateBurst,
 	operatorRPSRatio dynamicconfig.FloatPropertyFn,
