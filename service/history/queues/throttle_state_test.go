@@ -149,6 +149,13 @@ func testKey() ThrottleKey {
 // closeWindow advances past the control window that is currently open and triggers the single
 // rate decision for it. The rate only ever moves at a window boundary, so a test that reports
 // evidence without closing the window is asserting on a decision that has not been made yet.
+// admitOK is the bool-only form of Admit, which is all most of these tests need. Admit itself
+// carries the metered flag and the retry estimate because production depends on both.
+func admitOK(c ThrottleController, key ThrottleKey) bool {
+	allowed, _, _ := c.Admit(key)
+	return allowed
+}
+
 func closeWindow(state *ThrottleState, ts *clock.EventTimeSource, key ThrottleKey) {
 	ts.Update(ts.Now().Add(testThrottleWindow))
 	state.ReportSuccess(key)
@@ -193,7 +200,7 @@ func TestThrottleState_AdditiveIncreaseAfterCleanWindow(t *testing.T) {
 
 	// A window that released work and saw no rejection is what earns an increase. An idle
 	// window earns nothing, so the release here is the point of the test, not setup.
-	require.True(t, state.Admit(key))
+	require.True(t, admitOK(state, key))
 	closeWindow(state, timeSource, key)
 
 	_, increases := state.Counters(key)
@@ -233,7 +240,7 @@ func TestThrottleState_ClampsRate(t *testing.T) {
 	require.InEpsilon(t, 20.0, state.AdmittedRate(key), 1e-9, "floor keeps the class making forward progress")
 
 	for i := 0; i < 200; i++ {
-		state.Admit(key)
+		admitOK(state, key)
 		closeWindow(state, timeSource, key)
 	}
 	require.InEpsilon(t, 120.0, state.AdmittedRate(key), 1e-9, "ceiling bounds what a recovering class can climb to")
@@ -247,17 +254,17 @@ func TestThrottleState_AdmitEnforcesRate(t *testing.T) {
 
 	admitted := 0
 	for i := 0; i < 100; i++ {
-		if state.Admit(key) {
+		if admitOK(state, key) {
 			admitted++
 		}
 	}
 	require.Equal(t, 10, admitted, "burst is capped at one window of the current rate")
 
-	require.False(t, state.Admit(key))
+	require.False(t, admitOK(state, key))
 	timeSource.Update(timeSource.Now().Add(200 * time.Millisecond))
-	require.True(t, state.Admit(key))
-	require.True(t, state.Admit(key))
-	require.False(t, state.Admit(key))
+	require.True(t, admitOK(state, key))
+	require.True(t, admitOK(state, key))
+	require.False(t, admitOK(state, key))
 }
 
 func TestThrottleState_DecreaseTrimsAccumulatedTokens(t *testing.T) {
@@ -266,13 +273,13 @@ func TestThrottleState_DecreaseTrimsAccumulatedTokens(t *testing.T) {
 	state, timeSource := newTestThrottleState(overrides)
 	key := testKey()
 
-	require.True(t, state.Admit(key))
+	require.True(t, admitOK(state, key))
 	timeSource.Update(timeSource.Now().Add(10 * testThrottleWindow))
 	state.ReportThrottled(key, true)
 
 	admitted := 0
 	for i := 0; i < 1000; i++ {
-		if state.Admit(key) {
+		if admitOK(state, key) {
 			admitted++
 		}
 	}
@@ -287,7 +294,7 @@ func TestThrottleState_DisabledAlwaysAdmits(t *testing.T) {
 
 	for i := 0; i < 100; i++ {
 		state.ReportThrottled(key, true)
-		require.True(t, state.Admit(key))
+		require.True(t, admitOK(state, key))
 	}
 	require.Zero(t, state.Len(), "a disabled controller must not accumulate state")
 }
@@ -304,8 +311,8 @@ func TestThrottleState_FailsOpenPastKeyCap(t *testing.T) {
 		key.NamespaceID = string(rune('a' + i))
 		tracked = append(tracked, key)
 		state.ReportThrottled(key, true)
-		require.True(t, state.Admit(key))
-		require.False(t, state.Admit(key))
+		require.True(t, admitOK(state, key))
+		require.False(t, admitOK(state, key))
 	}
 	require.Equal(t, 2, state.Len())
 
@@ -313,13 +320,13 @@ func TestThrottleState_FailsOpenPastKeyCap(t *testing.T) {
 	overflow.NamespaceID = "overflow"
 	state.ReportThrottled(overflow, true)
 	for i := 0; i < 100; i++ {
-		require.True(t, state.Admit(overflow), "past the cap the real limiter stays the enforcement point")
+		require.True(t, admitOK(state, overflow), "past the cap the real limiter stays the enforcement point")
 	}
 	require.Equal(t, 2, state.Len())
 	require.Zero(t, state.AdmittedRate(overflow))
 
 	// The tracked keys keep their own budgets.
-	require.False(t, state.Admit(tracked[0]))
+	require.False(t, admitOK(state, tracked[0]))
 }
 
 func TestThrottleState_SweepsIdleKeys(t *testing.T) {
@@ -365,7 +372,7 @@ func TestThrottleState_ConvergesTowardEnforcedBudget(t *testing.T) {
 
 	// A token bucket enforcing 200/s rejects whenever the class asks for more than that.
 	const enforcedBudget = 200.0
-	if state.Admit(key) {
+	if admitOK(state, key) {
 		state.ReportThrottled(key, true)
 	}
 	for window := 0; window < 60; window++ {
@@ -373,7 +380,7 @@ func TestThrottleState_ConvergesTowardEnforcedBudget(t *testing.T) {
 		if state.AdmittedRate(key) > enforcedBudget {
 			state.ReportThrottled(key, true)
 		} else {
-			state.Admit(key)
+			admitOK(state, key)
 			state.ReportSuccess(key)
 		}
 	}
@@ -413,7 +420,7 @@ func TestThrottleState_UnadmittedRejectionsDoNotBlockIncrease(t *testing.T) {
 	require.InEpsilon(t, 85.0, state.AdmittedRate(key), 1e-9)
 
 	for i := 0; i < 4; i++ {
-		require.True(t, state.Admit(key))
+		require.True(t, admitOK(state, key))
 		state.ReportThrottled(key, false)
 		closeWindow(state, timeSource, key)
 	}
@@ -428,13 +435,13 @@ func TestThrottleState_ReturnRestoresAToken(t *testing.T) {
 	state, _ := newTestThrottleState(overrides)
 	key := testKey()
 
-	require.True(t, state.Admit(key))
-	require.True(t, state.Admit(key))
-	require.False(t, state.Admit(key))
+	require.True(t, admitOK(state, key))
+	require.True(t, admitOK(state, key))
+	require.False(t, admitOK(state, key))
 
 	state.Return(key)
-	require.True(t, state.Admit(key))
-	require.False(t, state.Admit(key))
+	require.True(t, admitOK(state, key))
+	require.False(t, admitOK(state, key))
 }
 
 func TestThrottleState_ReturnCannotExceedBurst(t *testing.T) {
@@ -443,14 +450,14 @@ func TestThrottleState_ReturnCannotExceedBurst(t *testing.T) {
 	state, _ := newTestThrottleState(overrides)
 	key := testKey()
 
-	require.True(t, state.Admit(key))
+	require.True(t, admitOK(state, key))
 	for i := 0; i < 10; i++ {
 		state.Return(key)
 	}
 
 	admitted := 0
 	for i := 0; i < 10; i++ {
-		if state.Admit(key) {
+		if admitOK(state, key) {
 			admitted++
 		}
 	}
@@ -463,7 +470,7 @@ func TestThrottleState_IdleWindowsDoNotMoveTheRate(t *testing.T) {
 	state, timeSource := newTestThrottleState(defaultThrottleOverrides())
 	key := testKey()
 
-	require.True(t, state.Admit(key))
+	require.True(t, admitOK(state, key))
 	closeWindow(state, timeSource, key)
 	rate := state.AdmittedRate(key)
 
@@ -495,7 +502,7 @@ func TestThrottleState_BusyClassIsNotPunishedForItsSize(t *testing.T) {
 		admitted := 0
 		for w := 0; w < 20; w++ {
 			for i := 0; i < demandPerWindow; i++ {
-				if !state.Admit(key) {
+				if !admitOK(state, key) {
 					continue
 				}
 				admitted++

@@ -66,7 +66,7 @@ type (
 		timeSource                  clock.TimeSource
 		logger                      log.Logger
 		metricsHandler              metrics.Handler
-		throttleState               *ThrottleState
+		throttleState               ThrottleController
 		maxThrottledReleasesPerPass dynamicconfig.IntPropertyFn
 
 		status     int32
@@ -89,7 +89,7 @@ func NewRescheduler(
 	timeSource clock.TimeSource,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
-	throttleState *ThrottleState,
+	throttleState ThrottleController,
 	maxThrottledReleasesPerPass dynamicconfig.IntPropertyFn,
 ) *reschedulerImpl {
 	if maxThrottledReleasesPerPass == nil {
@@ -343,7 +343,7 @@ func (r *reschedulerImpl) drainClassLocked(
 		if gated {
 			var allowed bool
 			var retryAfter time.Duration
-			allowed, metered, retryAfter = r.throttleState.admit(key.Throttle)
+			allowed, metered, retryAfter = r.throttleState.Admit(key.Throttle)
 			if !allowed {
 				metrics.TaskReschedulerBudgetDenied.With(r.metricsHandler).Record(1, tags...)
 				// The class is over its admitted rate. Come back when the gate expects to have
@@ -427,7 +427,7 @@ func (r *reschedulerImpl) rescheduleUngatedLocked(now time.Time) {
 func (r *reschedulerImpl) budgetRetryInterval(eta time.Duration) time.Duration {
 	const budgetRetryDivisor = 10
 
-	window := r.throttleState.window()
+	window := r.throttleState.Window()
 	interval := min(max(eta, window/budgetRetryDivisor), window)
 	return max(interval, time.Millisecond)
 }

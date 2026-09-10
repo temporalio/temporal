@@ -102,7 +102,7 @@ func TestReschedule_ThrottledClassDoesNotBlockHealthyClass(t *testing.T) {
 
 	key := apsKey("ns-throttled")
 	// Drain the class's single burst token so the next pass has no budget for it.
-	require.True(t, state.Admit(key))
+	require.True(t, admitOK(state, key))
 
 	throttled := newThrottledExecutable(ctrl, key, true)
 	throttled.EXPECT().GetNamespaceID().Return("ns-throttled").AnyTimes()
@@ -240,7 +240,7 @@ func TestReschedule_BudgetDeniedWakesInsideControlWindow(t *testing.T) {
 	r, scheduler, gate := newTestRescheduler(t, ctrl, timeSource, state, 1000)
 
 	key := apsKey("ns-1")
-	require.True(t, state.Admit(key))
+	require.True(t, admitOK(state, key))
 
 	for i := 0; i < 5; i++ {
 		e := newThrottledExecutable(ctrl, key, true)
@@ -307,7 +307,7 @@ func TestReschedule_DifferentCausesAreDifferentClasses(t *testing.T) {
 	require.NotEqual(t, persistence, aps)
 
 	// Exhaust only the namespace scoped budget.
-	require.True(t, state.Admit(persistence))
+	require.True(t, admitOK(state, persistence))
 
 	blocked := newThrottledExecutable(ctrl, persistence, true)
 	blocked.EXPECT().GetNamespaceID().Return("ns-1").AnyTimes()

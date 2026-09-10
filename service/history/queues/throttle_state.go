@@ -32,6 +32,36 @@ const (
 )
 
 type (
+	// ThrottleController paces releases for a class of parked tasks. ThrottleState is the AIMD
+	// implementation; the interface exists so a different control law can replace it without
+	// touching the rescheduler or the executable.
+	//
+	// Implementations must tolerate being called concurrently for the same key.
+	ThrottleController interface {
+		// Enabled reports whether releases are being gated at all. Callers check this before
+		// anything else, so it must be safe on a controller that was never constructed.
+		Enabled() bool
+
+		// Window is the control period. The rescheduler needs it to bound how long it will
+		// wait on a denied class.
+		Window() time.Duration
+
+		// Admit consumes one release token. metered says the controller counted this release
+		// as its own, which is what makes a later rejection evidence it may act on.
+		// retryAfter, set only on denial, is how long until a token is expected.
+		Admit(key ThrottleKey) (allowed, metered bool, retryAfter time.Duration)
+
+		// Return gives back a token for a release that never happened.
+		Return(key ThrottleKey)
+
+		// ReportThrottled feeds one observed rejection in. admitted must be the metered value
+		// from the Admit that issued the release.
+		ReportThrottled(key ThrottleKey, admitted bool)
+
+		// ReportSuccess reports that a released task completed.
+		ReportSuccess(key ThrottleKey)
+	}
+
 	// ThrottleKey identifies one controlled class. Every governed cause is a namespace budget,
 	// so one budget is one class however the traffic is spread.
 	ThrottleKey struct {
@@ -192,25 +222,18 @@ func (k ThrottleKey) cappedTags() []metrics.Tag {
 	return []metrics.Tag{metrics.ResourceExhaustedCauseTag(k.Cause)}
 }
 
-// Enabled reports whether the controller is gating releases at all.
+// Enabled tolerates a nil receiver. A controller that was never constructed reaches the
+// callers as a typed nil inside a ThrottleController, which is not == nil, so without this the
+// first check on a server with the feature unwired would panic instead of reading as disabled.
 func (s *ThrottleState) Enabled() bool {
-	return s.options.Enabled()
+	return s != nil && s.options.Enabled != nil && s.options.Enabled()
 }
 
-// Admit consumes one release token, returning false when the class is over its admitted rate.
-// It fails open when disabled or past the key cap, leaving the real limiter as the enforcer.
-func (s *ThrottleState) Admit(key ThrottleKey) bool {
-	allowed, _, _ := s.admit(key)
-	return allowed
-}
-
-// admit also reports whether the gate metered the release. An unmetered one is loss on a packet
-// the controller never sent, so its rejection must not move the rate.
-//
-// retryAfter, set only on denial, is how long until the bucket holds a whole token. Zero means
-// it could not be derived and the caller should pick its own interval.
-func (s *ThrottleState) admit(key ThrottleKey) (allowed, metered bool, retryAfter time.Duration) {
-	if !s.options.Enabled() {
+// Admit fails open when disabled or past the key cap, leaving the real limiter as the enforcer.
+// An unmetered release is loss on a packet the controller never sent, so its rejection must not
+// move the rate.
+func (s *ThrottleState) Admit(key ThrottleKey) (allowed, metered bool, retryAfter time.Duration) {
+	if !s.Enabled() {
 		return true, false, 0
 	}
 	entry := s.getOrCreate(key)
@@ -220,7 +243,7 @@ func (s *ThrottleState) admit(key ThrottleKey) (allowed, metered bool, retryAfte
 	}
 
 	now := s.timeSource.Now()
-	window := s.window()
+	window := s.Window()
 
 	entry.Lock()
 	defer entry.Unlock()
@@ -245,7 +268,7 @@ func (s *ThrottleState) admit(key ThrottleKey) (allowed, metered bool, retryAfte
 // reacting to traffic it never sent would ratchet parked tasks to the floor while the traffic
 // actually consuming the budget flows past untouched.
 func (s *ThrottleState) ReportThrottled(key ThrottleKey, admitted bool) {
-	if !s.options.Enabled() {
+	if !s.Enabled() {
 		return
 	}
 	entry := s.getOrCreate(key)
@@ -256,7 +279,7 @@ func (s *ThrottleState) ReportThrottled(key ThrottleKey, admitted bool) {
 	metrics.TaskThrottleRejections.With(s.metricsHandler).Record(1, key.metricsTags()...)
 
 	now := s.timeSource.Now()
-	window := s.window()
+	window := s.Window()
 
 	entry.Lock()
 	defer entry.Unlock()
@@ -274,7 +297,7 @@ func (s *ThrottleState) ReportThrottled(key ThrottleKey, admitted bool) {
 // Return gives back a token taken by Admit for a release that never happened, so scheduler
 // saturation does not silently spend the class's budget.
 func (s *ThrottleState) Return(key ThrottleKey) {
-	if !s.options.Enabled() {
+	if !s.Enabled() {
 		return
 	}
 	entry := s.peek(key)
@@ -285,7 +308,7 @@ func (s *ThrottleState) Return(key ThrottleKey) {
 	entry.Lock()
 	defer entry.Unlock()
 
-	entry.tokens = min(entry.tokens+1, entry.burstLocked(s.window()))
+	entry.tokens = min(entry.tokens+1, entry.burstLocked(s.Window()))
 	// Leaves the loss denominator too. A dispatch that never happened cannot be rejected, so
 	// keeping it would read as a guaranteed success and climb the rate on nothing.
 	if entry.releases > 0 {
@@ -297,7 +320,7 @@ func (s *ThrottleState) Return(key ThrottleKey) {
 // elapsed window. It cannot raise an idle class, since a window with no releases is left alone;
 // what it does reach is the last window of a drain, after admit stops being called.
 func (s *ThrottleState) ReportSuccess(key ThrottleKey) {
-	if !s.options.Enabled() {
+	if !s.Enabled() {
 		return
 	}
 	entry := s.peek(key)
@@ -306,7 +329,7 @@ func (s *ThrottleState) ReportSuccess(key ThrottleKey) {
 	}
 
 	now := s.timeSource.Now()
-	window := s.window()
+	window := s.Window()
 
 	entry.Lock()
 	defer entry.Unlock()
@@ -438,9 +461,9 @@ func (e *throttleEntry) tokenETALocked() time.Duration {
 	return time.Duration(seconds * float64(time.Second))
 }
 
-// window is read on every admit, so it stays a single lookup. A non positive window would close
+// Window is read on every admit, so it stays a single lookup. A non positive window would close
 // on every call and let one release and its rejection be decided twice.
-func (s *ThrottleState) window() time.Duration {
+func (s *ThrottleState) Window() time.Duration {
 	if w := s.options.Window(); w > 0 {
 		return w
 	}
@@ -533,7 +556,7 @@ func (s *ThrottleState) getOrCreate(key ThrottleKey) *throttleEntry {
 		windowStart: now,
 		lastAccess:  now,
 	}
-	entry.tokens = entry.burstLocked(s.window())
+	entry.tokens = entry.burstLocked(s.Window())
 	s.entries[key] = entry
 	metrics.TaskThrottleKeysTracked.With(s.metricsHandler).Record(float64(len(s.entries)))
 	return entry

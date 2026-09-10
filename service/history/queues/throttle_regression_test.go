@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.uber.org/mock/gomock"
 )
@@ -125,7 +126,7 @@ func TestThrottleState_IndependentInstancesConvergeOnSharedBudget(t *testing.T) 
 		total := 0
 		for i, s := range states {
 			for j := 0; j < offered[i]; j++ {
-				if s.Admit(key) {
+				if admitOK(s, key) {
 					admitted[i]++
 					total++
 				}
@@ -207,7 +208,7 @@ func TestReschedule_DeniedClassIsProbedOncePerPass(t *testing.T) {
 
 	key := apsKey("ns-1")
 	// Drain the initial burst so the class is over budget for the whole test.
-	for state.Admit(key) { //nolint:revive // draining, body intentionally empty
+	for admitOK(state, key) { //nolint:revive // draining, body intentionally empty
 	}
 
 	for i := 0; i < 50; i++ {
@@ -286,12 +287,12 @@ func TestThrottleState_DeniedAdmitReportsWhenTheNextTokenArrives(t *testing.T) {
 
 	// Burst is rate*window = 4 tokens. Drain them, then the next admit must be denied.
 	for i := 0; i < 4; i++ {
-		allowed, _, retryAfter := state.admit(key)
+		allowed, _, retryAfter := state.Admit(key)
 		require.True(t, allowed, "token %d of the burst should be admitted", i+1)
 		require.Zero(t, retryAfter, "an admitted release reports no wait")
 	}
 
-	allowed, metered, retryAfter := state.admit(key)
+	allowed, metered, retryAfter := state.Admit(key)
 	require.False(t, allowed, "the burst is spent, so this release must be denied")
 	require.False(t, metered)
 	require.Equal(t, 250*time.Millisecond, retryAfter,
@@ -385,10 +386,10 @@ func TestThrottleState_ReturnedReleaseLeavesTheLossDenominator(t *testing.T) {
 
 	// Twenty admits the scheduler refused, then one real dispatch that was rejected.
 	for i := 0; i < 20; i++ {
-		require.True(t, state.Admit(key))
+		require.True(t, admitOK(state, key))
 		state.Return(key)
 	}
-	require.True(t, state.Admit(key))
+	require.True(t, admitOK(state, key))
 	state.ReportThrottled(key, true)
 	closeWindow(state, timeSource, key)
 
@@ -405,9 +406,9 @@ func TestThrottleState_FailOpenAdmitIsNotMetered(t *testing.T) {
 	state, _ := newTestThrottleState(overrides)
 
 	tracked, overflow := apsKey("ns-tracked"), apsKey("ns-overflow")
-	require.True(t, state.Admit(tracked))
+	require.True(t, admitOK(state, tracked))
 
-	allowed, metered, _ := state.admit(overflow)
+	allowed, metered, _ := state.Admit(overflow)
 	require.True(t, allowed, "past the cap the real limiter stays the enforcement point")
 	require.False(t, metered, "an untracked release must not be reported as metered")
 }
@@ -422,10 +423,10 @@ func TestThrottleState_NonPositiveKeyTTLStillEnforces(t *testing.T) {
 	state, timeSource := newTestThrottleState(overrides)
 	key := apsKey("ns-1")
 
-	require.True(t, state.Admit(key), "the burst allows the first release")
+	require.True(t, admitOK(state, key), "the burst allows the first release")
 	for i := 0; i < 5; i++ {
 		timeSource.Update(timeSource.Now().Add(time.Millisecond))
-		require.False(t, state.Admit(key), "an invalid TTL must not refill the bucket")
+		require.False(t, admitOK(state, key), "an invalid TTL must not refill the bucket")
 	}
 }
 
@@ -446,7 +447,7 @@ func TestThrottleState_IdleKeyRestartsAtInitialRate(t *testing.T) {
 	require.InEpsilon(t, o.minRate, state.AdmittedRate(key), 1e-9, "driven to the floor")
 
 	timeSource.Update(timeSource.Now().Add(2 * o.keyTTL))
-	require.True(t, state.Admit(key), "the first touch after the retention period")
+	require.True(t, admitOK(state, key), "the first touch after the retention period")
 
 	require.InEpsilon(t, o.initialRate, state.AdmittedRate(key), 1e-9,
 		"a class idle past its TTL must restart at InitialRate, not crawl up from the floor")
@@ -464,7 +465,7 @@ func TestThrottleState_RefillCreditsTheWindowAtTheRateThatGovernedIt(t *testing.
 
 	// Drain the whole burst inside the first window, with no rejections.
 	drained := 0
-	for state.Admit(key) {
+	for admitOK(state, key) {
 		drained++
 	}
 	require.Equal(t, 100, drained, "burst is rate x window")
@@ -474,7 +475,7 @@ func TestThrottleState_RefillCreditsTheWindowAtTheRateThatGovernedIt(t *testing.
 	timeSource.Update(timeSource.Now().Add(testThrottleWindow))
 
 	refilled := 0
-	for state.Admit(key) {
+	for admitOK(state, key) {
 		refilled++
 	}
 
@@ -498,7 +499,7 @@ func TestThrottleState_NaNInitialRateDoesNotOpenTheGate(t *testing.T) {
 	// every one of these instead of stopping there.
 	admitted := 0
 	for i := 0; i < 2*int(defaultThrottleInitialRate); i++ {
-		if allowed, _, _ := state.admit(key); allowed {
+		if allowed, _, _ := state.Admit(key); allowed {
 			admitted++
 		}
 	}
@@ -519,12 +520,12 @@ func TestThrottleState_BackwardClockDoesNotResetABusyClass(t *testing.T) {
 	key := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
 	start := ts.Now()
 
-	state.admit(key)
+	admitOK(state, key)
 	// Drive the rate down so a reset to InitialRate would be visible.
 	for i := 0; i < 6; i++ {
 		ts.Update(start.Add(time.Duration(i+1) * time.Second))
 		state.ReportThrottled(key, true)
-		state.admit(key)
+		admitOK(state, key)
 	}
 	driven := state.AdmittedRate(key)
 	require.Less(t, driven, float64(5), "the class should have been driven below InitialRate")
@@ -533,9 +534,9 @@ func TestThrottleState_BackwardClockDoesNotResetABusyClass(t *testing.T) {
 	// idle period. Without the guard the recovery reads as 10m of inactivity against a 5m TTL
 	// and resets the class to InitialRate.
 	ts.Update(start.Add(-10 * time.Minute))
-	state.admit(key)
+	admitOK(state, key)
 	ts.Update(start.Add(10 * time.Second))
-	state.admit(key)
+	admitOK(state, key)
 
 	after := state.AdmittedRate(key)
 	require.Less(t, after, float64(5),
@@ -560,7 +561,7 @@ func TestThrottleState_NonPositiveMaxKeysStillEnforces(t *testing.T) {
 		key := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
 		admitted := 0
 		for i := 0; i < 50; i++ {
-			if allowed, _, _ := state.admit(key); allowed {
+			if allowed, _, _ := state.Admit(key); allowed {
 				admitted++
 			}
 		}
@@ -589,4 +590,37 @@ func throttleTagKeys(tags []metrics.Tag) []string {
 		keys = append(keys, tag.Key)
 	}
 	return keys
+}
+
+// A controller that was never constructed reaches its callers as a typed nil inside a
+// ThrottleController, which is not == nil. Every caller checks Enabled first, so that call has to
+// survive the nil receiver or a server with the feature unwired panics on its first task failure.
+func TestThrottleController_TypedNilReadsAsDisabled(t *testing.T) {
+	var absent ThrottleController = (*ThrottleState)(nil)
+
+	// absent != nil is true here, which is the trap - but asserting that is a tautology the
+	// compiler can prove, so the assertions worth making are that Enabled answers and that
+	// nothing downstream of it is reached.
+	require.False(t, absent.Enabled(), "an unwired controller must read as disabled")
+
+	// The rescheduler's gate check and the executable's guards all route through Enabled, so
+	// nothing past it should ever be reached. Assert that directly rather than trusting it.
+	require.NotPanics(t, func() {
+		r := &reschedulerImpl{throttleState: absent}
+		require.False(t, r.gating())
+	}, "an unwired controller must leave the rescheduler ungated, not panic")
+}
+
+// An options struct with no Enabled function is the same hazard by a different route: the field
+// is nil rather than the receiver, and calling it would panic just as readily.
+func TestThrottleState_MissingEnabledFnReadsAsDisabled(t *testing.T) {
+	s := NewThrottleState(ThrottleStateOptions{}, clock.NewEventTimeSource(),
+		log.NewTestLogger(), metrics.NoopMetricsHandler)
+
+	require.False(t, s.Enabled(), "an unset Enabled must read as disabled")
+	require.NotPanics(t, func() {
+		allowed, metered, _ := s.Admit(apsKey("ns-1"))
+		require.True(t, allowed, "a disabled controller fails open")
+		require.False(t, metered, "and does not meter what it did not gate")
+	})
 }

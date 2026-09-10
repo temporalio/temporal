@@ -146,7 +146,7 @@ type (
 		invalidTask                bool
 		invalidTaskReason          string
 		resourceExhaustedCount     int // does NOT include consts.ErrResourceExhaustedBusyWorkflow
-		throttleState              *ThrottleState
+		throttleState              ThrottleController
 		throttleMu                 sync.Mutex
 		throttleKey                ThrottleKey
 		hasThrottleKey             bool
@@ -160,7 +160,7 @@ type (
 		dlqErrorPattern            dynamicconfig.StringPropertyFn
 	}
 	ExecutableParams struct {
-		ThrottleState              *ThrottleState
+		ThrottleState              ThrottleController
 		DLQEnabled                 dynamicconfig.BoolPropertyFn
 		DLQWriter                  *DLQWriter
 		MaxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn

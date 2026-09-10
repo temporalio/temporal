@@ -34,11 +34,11 @@ func benchThrottleState(b *testing.B, alwaysAdmit bool) (*ThrottleState, Throttl
 	key := apsKey("ns-1")
 
 	// Materialise the key so the benchmark measures the steady state lookup, not creation.
-	state.Admit(key)
+	admitOK(state, key)
 	if !alwaysAdmit {
 		// A new entry starts with a full burst. Drain it so every measured call is denied,
 		// which is the path a gated class actually takes at steady state.
-		for state.Admit(key) { //nolint:revive // draining, body intentionally empty
+		for admitOK(state, key) { //nolint:revive // draining, body intentionally empty
 		}
 	}
 	return state, key
@@ -51,7 +51,7 @@ func BenchmarkThrottleState_AdmitAllowed(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if !state.Admit(key) {
+		if !admitOK(state, key) {
 			b.Fatal("expected admit to succeed")
 		}
 	}
@@ -66,7 +66,7 @@ func BenchmarkThrottleState_AdmitDenied(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if state.Admit(key) {
+		if admitOK(state, key) {
 			b.Fatal("expected admit to be denied")
 		}
 	}
@@ -83,7 +83,7 @@ func BenchmarkThrottleState_AdmitDeniedParallel(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			state.Admit(key)
+			admitOK(state, key)
 		}
 	})
 }
