@@ -432,6 +432,7 @@ type Config struct {
 
 	EnablePaginationTokenBranchValidation           dynamicconfig.BoolPropertyFn
 	EnablePaginationTokenBranchValidationShadowMode dynamicconfig.BoolPropertyFn
+	EnablePaginationTokenBranchReplacement          dynamicconfig.BoolPropertyFn
 
 	WorkflowIdReuseMinimalInterval           dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	EnableWorkflowIdReuseStartTimeValidation dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -848,6 +849,7 @@ func NewConfig(
 
 		EnablePaginationTokenBranchValidation:           dynamicconfig.EnablePaginationTokenBranchValidation.Get(dc),
 		EnablePaginationTokenBranchValidationShadowMode: dynamicconfig.EnablePaginationTokenBranchValidationShadowMode.Get(dc),
+		EnablePaginationTokenBranchReplacement:          dynamicconfig.EnablePaginationTokenBranchReplacement.Get(dc),
 
 		WorkflowIdReuseMinimalInterval:           dynamicconfig.WorkflowIdReuseMinimalInterval.Get(dc),
 		EnableWorkflowIdReuseStartTimeValidation: dynamicconfig.EnableWorkflowIdReuseStartTimeValidation.Get(dc),

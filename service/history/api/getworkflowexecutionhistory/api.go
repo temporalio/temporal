@@ -257,7 +257,7 @@ func Invoke(
 			continuationToken.NextEventId = nextEventID
 			continuationToken.IsWorkflowRunning = isWorkflowRunning
 		} else {
-			if err = api.ValidateBranchTokenForExecution(
+			if continuationToken.BranchToken, err = api.ValidateBranchTokenForExecution(
 				ctx,
 				shardContext,
 				workflowConsistencyChecker,
