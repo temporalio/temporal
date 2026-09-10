@@ -504,7 +504,7 @@ func (d *MutableStateStore) GetWorkflowExecution(
 		request.RunID,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID,
-	).WithContext(ctx)
+	).WithContext(ctx).Idempotent(true)
 
 	result := make(map[string]any)
 	if err := query.MapScan(result); err != nil {
@@ -930,7 +930,7 @@ func (d *MutableStateStore) DeleteWorkflowExecution(
 		request.RunID,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID,
-	).WithContext(ctx)
+	).WithContext(ctx).Idempotent(true)
 
 	err := query.Exec()
 	return gocql.ConvertError("DeleteWorkflowExecution", err)
@@ -967,7 +967,7 @@ func (d *MutableStateStore) GetCurrentExecution(
 		d.getCurrentRecordRunID(request.ArchetypeID),
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID,
-	).WithContext(ctx)
+	).WithContext(ctx).Idempotent(true)
 
 	result := make(map[string]any)
 	if err := query.MapScan(result); err != nil {
@@ -1056,7 +1056,7 @@ func (d *MutableStateStore) ListConcreteExecutions(
 		templateListWorkflowExecutionQuery,
 		request.ShardID,
 		rowTypeExecution,
-	).WithContext(ctx)
+	).WithContext(ctx).Idempotent(true)
 	iter := query.PageSize(request.PageSize).PageState(request.PageToken).Iter()
 
 	response := &p.InternalListConcreteExecutionsResponse{}
