@@ -9,6 +9,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/service/worker/scanner/executions"
 	"go.temporal.io/server/service/worker/scanner/history"
@@ -110,7 +111,7 @@ func HistoryScavengerActivity(
 ) (history.ScavengerHeartbeatDetails, error) {
 
 	ctx := activityCtx.Value(scannerContextKey).(scannerContext)
-	rps := ctx.cfg.PersistenceMaxQPS()
+	rps := historyScavengerRPS(ctx.cfg)
 	numShards := ctx.cfg.Persistence.NumHistoryShards
 
 	hbd := history.ScavengerHeartbeatDetails{}
@@ -136,6 +137,19 @@ func HistoryScavengerActivity(
 		ctx.serializer,
 	)
 	return scavenger.Run(activityCtx)
+}
+
+// historyScavengerRPS returns the rate limit to apply to the history scavenger's
+// persistence calls. HistoryScannerRPS takes precedence, so that the scavenger can be
+// throttled without throttling the rest of the scanner; when it is not set the scavenger
+// falls back to the scanner wide PersistenceMaxQPS.
+func historyScavengerRPS(cfg *Config) dynamicconfig.IntPropertyFn {
+	return func() int {
+		if rps := cfg.HistoryScannerRPS(); rps > 0 {
+			return rps
+		}
+		return cfg.PersistenceMaxQPS()
+	}
 }
 
 // TaskQueueScavengerActivity is the activity that runs task queue scavenger
