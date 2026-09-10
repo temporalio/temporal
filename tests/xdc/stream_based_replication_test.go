@@ -87,10 +87,9 @@ func TestStreamBasedReplicationTestSuite(t *testing.T) {
 func (s *streamBasedReplicationTestSuite) SetupSuite() {
 	s.controller = gomock.NewController(s.T())
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
-		dynamicconfig.EnableReplicationStream.Key():                   true,
-		dynamicconfig.EnableReplicationTaskBatching.Key():             true,
-		dynamicconfig.EnableWorkflowTaskStampIncrementOnFailure.Key(): true,
-		dynamicconfig.EnableSeparateReplicationEnableFlag.Key():       true,
+		dynamicconfig.EnableReplicationStream.Key():             true,
+		dynamicconfig.EnableReplicationTaskBatching.Key():       true,
+		dynamicconfig.EnableSeparateReplicationEnableFlag.Key(): true,
 	}
 	s.logger = log.NewTestLogger()
 	s.serializer = serialization.NewSerializer()

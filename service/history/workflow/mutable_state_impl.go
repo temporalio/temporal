@@ -6926,9 +6926,7 @@ func (ms *MutableStateImpl) RetryActivity(
 			ClearActivityStartedState(activityInfo)
 			activityInfo.RetryLastFailure = ms.truncateRetryableActivityFailure(activityFailure)
 			activityInfo.Attempt++
-			if ms.config.EnableActivityRetryStampIncrement() {
-				activityInfo.Stamp++
-			}
+			activityInfo.Stamp++
 			return nil
 		}); err != nil {
 			return enumspb.RETRY_STATE_INTERNAL_SERVER_ERROR, err
@@ -7012,7 +7010,6 @@ func (ms *MutableStateImpl) updateActivityInfoForRetries(
 			nextAttempt,
 			ms.truncateRetryableActivityFailure(activityFailure),
 			timestamppb.New(nextScheduledTime),
-			ms.config.EnableActivityRetryStampIncrement(),
 		)
 		return nil
 	})
