@@ -1760,8 +1760,8 @@ branch token is not the execution's current one, but still serves the read.`,
 	EnablePaginationTokenBranchReplacement = NewGlobalBoolSetting(
 		"history.enablePaginationTokenBranchReplacement",
 		true,
-		`EnablePaginationTokenBranchReplacement replaces a page token's branch token when it identifies
-the current branch but has different metadata.`,
+		`EnablePaginationTokenBranchReplacement, when pagination-token branch validation is enforced,
+replaces a page token's branch token when it identifies the current branch but has different metadata.`,
 	)
 
 	EnableReplicationStream = NewGlobalBoolSetting(

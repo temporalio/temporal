@@ -242,11 +242,6 @@ func ValidateBranchTokenForExecution(
 	if mismatchReason == "" {
 		return currentBranchToken, nil
 	}
-	if mismatchReason == branchTokenMismatchReasonSameBranchMetadata &&
-		!shadowMode &&
-		config.EnablePaginationTokenBranchReplacement() {
-		return currentBranchToken, nil
-	}
 
 	reportBranchTokenMismatch(
 		shardContext,
@@ -258,6 +253,10 @@ func ValidateBranchTokenForExecution(
 	)
 	if shadowMode {
 		return requestBranchToken, nil
+	}
+	if mismatchReason == branchTokenMismatchReasonSameBranchMetadata &&
+		config.EnablePaginationTokenBranchReplacement() {
+		return currentBranchToken, nil
 	}
 	return nil, serviceerror.NewInvalidArgument("request branchToken is not current.")
 }
