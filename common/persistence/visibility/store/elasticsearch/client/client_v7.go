@@ -135,7 +135,7 @@ const (
 	dialFailureCacheTTL = 30 * time.Second
 
 	// dialFailureCacheDialTimeout is the per-IP TCP dial deadline. A SYN
-	// silently dropped by a NACL would otherwise hang until the HTTP-client
+	// silently dropped by a network call would otherwise hang until the HTTP-client
 	// timeout (60 s). This short deadline lets each unhealthy IP fail fast so
 	// the loop can proceed to the next candidate.
 	dialFailureCacheDialTimeout = 3 * time.Second
@@ -177,6 +177,32 @@ func (c *dialFailureCache) markGood(ip string) {
 	c.mu.Unlock()
 }
 
+// startCleanup starts a background goroutine that periodically evicts entries
+// whose TTL has expired. This prevents stale IPs from accumulating when ES
+// nodes are replaced (new IPs replacing old ones that were never seen again).
+// The goroutine stops when ctx is cancelled.
+func (c *dialFailureCache) startCleanup(ctx context.Context) {
+	go func() {
+		ticker := time.NewTicker(c.ttl * 2)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				now := time.Now()
+				c.mu.Lock()
+				for ip, t := range c.badIPs {
+					if now.Sub(t) >= c.ttl {
+						delete(c.badIPs, ip)
+					}
+				}
+				c.mu.Unlock()
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+}
+
 // wrapDialLogger wraps the transport's DialContext to:
 //  1. Log the remote IP for each new TCP connection to Elasticsearch.
 //  2. Route new connections away from recently-failed IPs via a per-IP
@@ -208,6 +234,7 @@ func wrapDialLogger(httpClient *http.Client, logger log.Logger) {
 	}
 
 	cb := newDialFailureCache()
+	cb.startCleanup(context.Background())
 
 	transport.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
 		host, port, err := net.SplitHostPort(addr)
@@ -218,7 +245,7 @@ func wrapDialLogger(httpClient *http.Client, logger log.Logger) {
 
 		// Resolve the hostname to discover all ES node IPs. This lets us
 		// select a healthy IP rather than relying on the transport to pick
-		// one at random, which may land on a partitioned node.
+		// one at random, which may land on a bad node.
 		ips, resolveErr := net.DefaultResolver.LookupHost(ctx, host)
 		if resolveErr != nil || len(ips) == 0 {
 			// DNS failure — fall back to original dialer.
