@@ -315,6 +315,7 @@ type Config struct {
 	ReplicationStreamSenderErrorRetryBackoffCoefficient  dynamicconfig.FloatPropertyFn
 	ReplicationStreamSenderErrorRetryMaxInterval         dynamicconfig.DurationPropertyFn
 	ReplicationStreamSenderErrorRetryMaxAttempts         dynamicconfig.IntPropertyFn
+	ReplicationTaskGenerationHighPriorityLockAttempts    dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderErrorRetryExpiration          dynamicconfig.DurationPropertyFn
 	ReplicationStreamSenderSkipStuckTask                 dynamicconfig.BoolPropertyFn
 
@@ -762,6 +763,7 @@ func NewConfig(
 		ReplicationStreamSenderErrorRetryBackoffCoefficient: dynamicconfig.ReplicationStreamSenderErrorRetryBackoffCoefficient.Get(dc),
 		ReplicationStreamSenderErrorRetryMaxInterval:        dynamicconfig.ReplicationStreamSenderErrorRetryMaxInterval.Get(dc),
 		ReplicationStreamSenderErrorRetryMaxAttempts:        dynamicconfig.ReplicationStreamSenderErrorRetryMaxAttempts.Get(dc),
+		ReplicationTaskGenerationHighPriorityLockAttempts:   dynamicconfig.ReplicationTaskGenerationHighPriorityLockAttempts.Get(dc),
 		ReplicationStreamSenderErrorRetryExpiration:         dynamicconfig.ReplicationStreamSenderErrorRetryExpiration.Get(dc),
 		ReplicationStreamSenderSkipStuckTask:                dynamicconfig.ReplicationStreamSenderSkipStuckTask.Get(dc),
 

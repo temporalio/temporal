@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -61,6 +62,46 @@ type (
 func TestStreamSenderSuite(t *testing.T) {
 	s := new(streamSenderSuite)
 	suite.Run(t, s)
+}
+
+func TestGetReplicationTaskGenerationLockPriority(t *testing.T) {
+	testCases := []struct {
+		name                      string
+		attempt                   int64
+		highPriorityAfterAttempts int
+		expected                  locks.Priority
+	}{
+		{
+			name:                      "BeforeThreshold",
+			attempt:                   4,
+			highPriorityAfterAttempts: 5,
+			expected:                  locks.PriorityLow,
+		},
+		{
+			name:                      "AtThreshold",
+			attempt:                   5,
+			highPriorityAfterAttempts: 5,
+			expected:                  locks.PriorityLow,
+		},
+		{
+			name:                      "AfterThreshold",
+			attempt:                   6,
+			highPriorityAfterAttempts: 5,
+			expected:                  locks.PriorityHigh,
+		},
+		{
+			name:                      "ZeroThreshold",
+			attempt:                   1,
+			highPriorityAfterAttempts: 0,
+			expected:                  locks.PriorityHigh,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.expected, getReplicationTaskGenerationLockPriority(tc.attempt, tc.highPriorityAfterAttempts))
+		})
+	}
 }
 
 func (s *streamSenderSuite) SetupSuite() {
@@ -805,6 +846,7 @@ func (s *streamSenderSuite) TestSendTasks_WithoutTasks() {
 
 func (s *streamSenderSuite) TestSendTasks_WithTasks() {
 	s.streamSender.isTieredStackEnabled = false
+	s.config.ReplicationTaskGenerationHighPriorityLockAttempts = dynamicconfig.GetIntPropertyFn(0)
 	beginInclusiveWatermark := rand.Int63()
 	endExclusiveWatermark := beginInclusiveWatermark + 100
 	item0 := tasks.NewMockTask(s.controller)
@@ -857,10 +899,10 @@ func (s *streamSenderSuite) TestSendTasks_WithTasks() {
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
-	s.taskConverter.EXPECT().Convert(item0, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED).Return(task0, nil)
-	s.taskConverter.EXPECT().Convert(item1, s.clientShardKey.ClusterID, gomock.Any()).Times(0)
-	s.taskConverter.EXPECT().Convert(item2, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED).Return(task2, nil)
-	s.taskConverter.EXPECT().Convert(item3, s.clientShardKey.ClusterID, gomock.Any()).Times(0)
+	s.taskConverter.EXPECT().Convert(item0, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED, locks.PriorityHigh).Return(task0, nil)
+	s.taskConverter.EXPECT().Convert(item1, s.clientShardKey.ClusterID, gomock.Any(), gomock.Any()).Times(0)
+	s.taskConverter.EXPECT().Convert(item2, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED, locks.PriorityHigh).Return(task2, nil)
+	s.taskConverter.EXPECT().Convert(item3, s.clientShardKey.ClusterID, gomock.Any(), gomock.Any()).Times(0)
 	gomock.InOrder(
 		s.server.EXPECT().Send(&historyservice.StreamWorkflowReplicationMessagesResponse{
 			Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
@@ -883,6 +925,70 @@ func (s *streamSenderSuite) TestSendTasks_WithTasks() {
 		s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
 			s.Equal(endExclusiveWatermark, resp.GetMessages().ExclusiveHighWatermark)
 			s.NotNil(resp.GetMessages().ExclusiveHighWatermarkTime)
+			return nil
+		}),
+	)
+
+	err := s.streamSender.sendTasks(
+		enumsspb.TASK_PRIORITY_UNSPECIFIED,
+		beginInclusiveWatermark,
+		endExclusiveWatermark,
+	)
+	s.NoError(err)
+}
+
+func (s *streamSenderSuite) TestSendTasks_EscalatesWorkflowLockPriorityAfterConfiguredAttempts() {
+	s.streamSender.isTieredStackEnabled = false
+	s.config.ReplicationTaskGenerationHighPriorityLockAttempts = dynamicconfig.GetIntPropertyFn(2)
+	s.config.ReplicationStreamSenderErrorRetryMaxAttempts = dynamicconfig.GetIntPropertyFn(3)
+	s.config.ReplicationStreamSenderErrorRetryWait = dynamicconfig.GetDurationPropertyFn(time.Millisecond)
+
+	beginInclusiveWatermark := rand.Int63n(math.MaxInt32)
+	endExclusiveWatermark := beginInclusiveWatermark + 1
+	item := tasks.NewMockTask(s.controller)
+	item.EXPECT().GetNamespaceID().Return("1").AnyTimes()
+	item.EXPECT().GetWorkflowID().Return("1").AnyTimes()
+	item.EXPECT().GetRunID().Return("run-1").AnyTimes()
+	item.EXPECT().GetTaskID().Return(beginInclusiveWatermark).AnyTimes()
+	item.EXPECT().GetVisibilityTime().Return(time.Now().UTC()).AnyTimes()
+	item.EXPECT().GetType().Return(enumsspb.TASK_TYPE_REPLICATION_HISTORY).AnyTimes()
+
+	iter := collection.NewPagingIterator[tasks.Task](
+		func([]byte) ([]tasks.Task, []byte, error) {
+			return []tasks.Task{item}, nil, nil
+		},
+	)
+	mockRegistry := namespace.NewMockRegistry(s.controller)
+	mockRegistry.EXPECT().GetNamespaceByID(namespace.ID("1")).Return(namespace.NewGlobalNamespaceForTest(
+		nil, nil, &persistencespb.NamespaceReplicationConfig{
+			Clusters: []string{"source_cluster", "target_cluster"},
+		}, 100), nil).AnyTimes()
+	s.shardContext.EXPECT().GetNamespaceRegistry().Return(mockRegistry).AnyTimes()
+	s.historyEngine.EXPECT().GetReplicationTasksIter(
+		gomock.Any(),
+		string(s.clientShardKey.ClusterID),
+		beginInclusiveWatermark,
+		endExclusiveWatermark,
+	).Return(iter, nil)
+
+	replicationTask := &replicationspb.ReplicationTask{
+		SourceTaskId:   beginInclusiveWatermark,
+		VisibilityTime: timestamppb.New(time.Now().UTC()),
+	}
+	gomock.InOrder(
+		s.taskConverter.EXPECT().Convert(item, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED, locks.PriorityLow).
+			Return(nil, errors.New("lock unavailable")),
+		s.taskConverter.EXPECT().Convert(item, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED, locks.PriorityLow).
+			Return(nil, errors.New("lock unavailable")),
+		s.taskConverter.EXPECT().Convert(item, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED, locks.PriorityHigh).
+			Return(replicationTask, nil),
+		s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+			s.Equal([]*replicationspb.ReplicationTask{replicationTask}, resp.GetMessages().ReplicationTasks)
+			return nil
+		}),
+		s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+			s.Empty(resp.GetMessages().ReplicationTasks)
+			s.Equal(endExclusiveWatermark, resp.GetMessages().ExclusiveHighWatermark)
 			return nil
 		}),
 	)
@@ -944,7 +1050,7 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_HighPriority() {
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
-	s.taskConverter.EXPECT().Convert(item1, s.clientShardKey.ClusterID, item1.Priority).Return(task1, nil)
+	s.taskConverter.EXPECT().Convert(item1, s.clientShardKey.ClusterID, item1.Priority, gomock.Any()).Return(task1, nil)
 
 	gomock.InOrder(
 		s.server.EXPECT().Send(&historyservice.StreamWorkflowReplicationMessagesResponse{
@@ -1028,8 +1134,8 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_LowPriority() {
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
-	s.taskConverter.EXPECT().Convert(item0, s.clientShardKey.ClusterID, item0.Priority).Return(task0, nil)
-	s.taskConverter.EXPECT().Convert(item0, s.clientShardKey.ClusterID, item0.Priority).Return(task2, nil)
+	s.taskConverter.EXPECT().Convert(item0, s.clientShardKey.ClusterID, item0.Priority, gomock.Any()).Return(task0, nil)
+	s.taskConverter.EXPECT().Convert(item0, s.clientShardKey.ClusterID, item0.Priority, gomock.Any()).Return(task2, nil)
 
 	gomock.InOrder(
 		s.server.EXPECT().Send(&historyservice.StreamWorkflowReplicationMessagesResponse{
@@ -1162,7 +1268,7 @@ func (s *streamSenderSuite) setupSingleFailingTask(convertErr error) (beginInclu
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
-	s.taskConverter.EXPECT().Convert(item, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED).
+	s.taskConverter.EXPECT().Convert(item, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED, gomock.Any()).
 		Return(nil, convertErr).MinTimes(1)
 	return beginInclusiveWatermark, endExclusiveWatermark
 }
@@ -1324,9 +1430,9 @@ func (s *streamSenderSuite) TestSendTasks_SkipStuckTask_StreamKeepsFlowingPastSk
 	// Times(1) (not MinTimes): with MaxAttempts=1 the stuck convert is attempted exactly once, and
 	// bounding it prevents gomock from greedily matching okItem's Convert call to this expectation
 	// (mock tasks are reflect.DeepEqual-equal, so an unbounded matcher would swallow both calls).
-	s.taskConverter.EXPECT().Convert(stuckItem, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED).
+	s.taskConverter.EXPECT().Convert(stuckItem, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED, gomock.Any()).
 		Return(nil, errors.New("boom")).Times(1)
-	s.taskConverter.EXPECT().Convert(okItem, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED).
+	s.taskConverter.EXPECT().Convert(okItem, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED, gomock.Any()).
 		Return(okTask, nil).Times(1)
 
 	gomock.InOrder(
@@ -1396,7 +1502,7 @@ func (s *streamSenderSuite) TestSendTasks_SkipStuckTask_SendFailureNotSkipped() 
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
-	s.taskConverter.EXPECT().Convert(item, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED).
+	s.taskConverter.EXPECT().Convert(item, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED, gomock.Any()).
 		Return(task, nil).MinTimes(1)
 	// The send fails; sendToStream wraps it as a (non-retryable) StreamError, which is not a
 	// convertError, so isSkippable is false and the task must not be skipped.

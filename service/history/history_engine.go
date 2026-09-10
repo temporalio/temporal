@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -1003,6 +1004,7 @@ func (e *historyEngineImpl) ConvertReplicationTask(
 	ctx context.Context,
 	task tasks.Task,
 	clusterID int32,
+	lockPriority locks.Priority,
 ) (*replicationspb.ReplicationTask, error) {
 	if hook, ok := testhooks.Get(
 		e.testHooks,
@@ -1010,10 +1012,10 @@ func (e *historyEngineImpl) ConvertReplicationTask(
 		namespace.ID(task.GetNamespaceID()),
 	); ok {
 		return hook(task, func() (*replicationspb.ReplicationTask, error) {
-			return e.replicationAckMgr.ConvertTaskByCluster(ctx, task, clusterID)
+			return e.replicationAckMgr.ConvertTaskByCluster(ctx, task, clusterID, lockPriority)
 		})
 	}
-	return e.replicationAckMgr.ConvertTaskByCluster(ctx, task, clusterID)
+	return e.replicationAckMgr.ConvertTaskByCluster(ctx, task, clusterID, lockPriority)
 }
 
 func (e *historyEngineImpl) GetReplicationTasksIter(

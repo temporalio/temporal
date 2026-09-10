@@ -155,7 +155,31 @@ func (s *rawTaskConverterSuite) TearDownTest() {
 	s.shardContext.StopForTest()
 }
 
-func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_WorkflowMissing() {
+func (s *rawTaskConverterSuite) TestSourceTaskConverter_ForwardsLockPriority() {
+	const targetClusterID = int32(3)
+	task := &tasks.SyncActivityTask{
+		WorkflowKey: definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.runID),
+	}
+	converter := NewSourceTaskConverter(
+		s.mockEngine,
+		s.shardContext.GetNamespaceRegistry(),
+		nil,
+		nil,
+		s.shardContext.GetConfig(),
+	)
+
+	s.mockEngine.EXPECT().ConvertReplicationTask(gomock.Any(), task, targetClusterID, locks.PriorityLow).Return(nil, nil)
+	result, err := converter.Convert(task, targetClusterID, enumsspb.TASK_PRIORITY_LOW, locks.PriorityLow)
+	s.NoError(err)
+	s.Nil(result)
+
+	s.mockEngine.EXPECT().ConvertReplicationTask(gomock.Any(), task, targetClusterID, locks.PriorityHigh).Return(nil, nil)
+	result, err = converter.Convert(task, targetClusterID, enumsspb.TASK_PRIORITY_LOW, locks.PriorityHigh)
+	s.NoError(err)
+	s.Nil(result)
+}
+
+func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_WorkflowMissing_HighPriorityLock() {
 	ctx := context.Background()
 	scheduledEventID := int64(144)
 	version := int64(288)
@@ -180,11 +204,11 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Workflow
 			RunId:      s.runID,
 		},
 		chasm.WorkflowArchetypeID,
-		locks.PriorityLow,
+		locks.PriorityHigh,
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(nil, serviceerror.NewNotFound(""))
 
-	result, err := convertActivityStateReplicationTask(ctx, s.shardContext, task, s.workflowCache)
+	result, err := convertActivityStateReplicationTask(ctx, s.shardContext, task, s.workflowCache, locks.PriorityHigh)
 	s.NoError(err)
 	s.Nil(result)
 	s.True(s.lockReleased)
@@ -220,7 +244,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Workflow
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil)
 	s.mutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 
-	result, err := convertActivityStateReplicationTask(ctx, s.shardContext, task, s.workflowCache)
+	result, err := convertActivityStateReplicationTask(ctx, s.shardContext, task, s.workflowCache, locks.PriorityLow)
 	s.NoError(err)
 	s.Nil(result)
 	s.True(s.lockReleased)
@@ -257,7 +281,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 	s.mutableState.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	s.mutableState.EXPECT().GetActivityInfo(scheduledEventID).Return(nil, false).AnyTimes()
 
-	result, err := convertActivityStateReplicationTask(ctx, s.shardContext, task, s.workflowCache)
+	result, err := convertActivityStateReplicationTask(ctx, s.shardContext, task, s.workflowCache, locks.PriorityLow)
 	s.NoError(err)
 	s.Nil(result)
 	s.True(s.lockReleased)
@@ -339,7 +363,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 	}).AnyTimes()
 	s.mutableState.EXPECT().GetBaseWorkflowInfo().Return(baseWorkflowInfo).AnyTimes()
 
-	result, err := convertActivityStateReplicationTask(ctx, s.shardContext, task, s.workflowCache)
+	result, err := convertActivityStateReplicationTask(ctx, s.shardContext, task, s.workflowCache, locks.PriorityLow)
 	s.NoError(err)
 	s.NotNil(result)
 	retryInitialInterval := &durationpb.Duration{
@@ -451,7 +475,7 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Activity
 	}).AnyTimes()
 	s.mutableState.EXPECT().GetBaseWorkflowInfo().Return(baseWorkflowInfo).AnyTimes()
 
-	result, err := convertActivityStateReplicationTask(ctx, s.shardContext, task, s.workflowCache)
+	result, err := convertActivityStateReplicationTask(ctx, s.shardContext, task, s.workflowCache, locks.PriorityLow)
 	s.NoError(err)
 	retryInitialInterval := &durationpb.Duration{
 		Nanos: 0,
@@ -512,7 +536,7 @@ func (s *rawTaskConverterSuite) TestConvertWorkflowStateReplicationTask_Workflow
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil)
 	s.mutableState.EXPECT().GetWorkflowStateStatus().Return(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING).AnyTimes()
 
-	result, err := convertWorkflowStateReplicationTask(ctx, s.shardContext, task, s.workflowCache)
+	result, err := convertWorkflowStateReplicationTask(ctx, s.shardContext, task, s.workflowCache, locks.PriorityLow)
 	s.NoError(err)
 	s.Nil(result)
 	s.True(s.lockReleased)
@@ -570,7 +594,7 @@ func (s *rawTaskConverterSuite) TestConvertWorkflowStateReplicationTask_Workflow
 	s.mutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	s.mutableState.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.runID)).AnyTimes()
 
-	result, err := convertWorkflowStateReplicationTask(ctx, s.shardContext, task, s.workflowCache)
+	result, err := convertWorkflowStateReplicationTask(ctx, s.shardContext, task, s.workflowCache, locks.PriorityLow)
 	s.NoError(err)
 
 	sanitizedMutableState := s.mutableState.CloneToProto()
@@ -934,7 +958,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncHSMTask_WorkflowMissing() {
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(nil, serviceerror.NewNotFound(""))
 
-	result, err := convertSyncHSMReplicationTask(ctx, s.shardContext, task, s.workflowCache)
+	result, err := convertSyncHSMReplicationTask(ctx, s.shardContext, task, s.workflowCache, locks.PriorityLow)
 	s.NoError(err)
 	s.Nil(result)
 	s.True(s.lockReleased)
@@ -1006,7 +1030,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncHSMTask_WorkflowFound() {
 	s.NoError(err)
 	s.mutableState.EXPECT().HSM().Return(root).AnyTimes()
 
-	result, err := convertSyncHSMReplicationTask(ctx, s.shardContext, task, s.workflowCache)
+	result, err := convertSyncHSMReplicationTask(ctx, s.shardContext, task, s.workflowCache, locks.PriorityLow)
 	s.NoError(err)
 	sanitizedRoot := common.CloneProto(root.InternalRepr())
 	workflow.SanitizeStateMachineNode(sanitizedRoot)
@@ -1076,7 +1100,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncHSMTask_BufferedEvents() {
 	s.NoError(err)
 	s.mutableState.EXPECT().HSM().Return(root).AnyTimes()
 
-	result, err := convertSyncHSMReplicationTask(ctx, s.shardContext, task, s.workflowCache)
+	result, err := convertSyncHSMReplicationTask(ctx, s.shardContext, task, s.workflowCache, locks.PriorityLow)
 	s.NoError(err)
 	s.Nil(result)
 	s.True(s.lockReleased)
@@ -1238,7 +1262,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Backfill(
 		taskVersionHistoryItems,
 	).Return(nil)
 	converter := newSyncVersionedTransitionTaskConverter(s.shardContext, s.workflowCache, nil, s.progressCache, s.executionManager, s.syncStateRetriever, s.logger)
-	result, err := convertSyncVersionedTransitionTask(ctx, task, targetClusterID, converter)
+	result, err := convertSyncVersionedTransitionTask(ctx, task, targetClusterID, converter, locks.PriorityLow)
 	s.NoError(err)
 	s.Equal(&replicationspb.ReplicationTask{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_BACKFILL_HISTORY_TASK,
@@ -1262,7 +1286,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Backfill(
 	s.True(s.lockReleased)
 }
 
-func (s *rawTaskConverterSuite) TestConvertSyncVersionTransitionTask_ConvertTaskEquivalent() {
+func (s *rawTaskConverterSuite) TestConvertSyncVersionTransitionTask_ConvertTaskEquivalentWithHighPriorityLock() {
 	ctx := context.Background()
 	targetClusterID := int32(3)
 	version := int64(288)
@@ -1299,7 +1323,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionTransitionTask_ConvertTask
 			RunId:      s.runID,
 		},
 		chasm.WorkflowArchetypeID,
-		locks.PriorityLow,
+		locks.PriorityHigh,
 	).Return(s.workflowContext, s.releaseFn, nil).Times(1)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil).Times(1)
 	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
@@ -1331,9 +1355,10 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionTransitionTask_ConvertTask
 			ScheduledEventID:    100,
 		},
 		targetClusterID,
+		locks.PriorityHigh,
 	).Return(expectedReplicationTask, nil).Times(1)
 	converter := newSyncVersionedTransitionTaskConverter(s.shardContext, s.workflowCache, nil, s.progressCache, s.executionManager, s.syncStateRetriever, s.logger)
-	result, err := convertSyncVersionedTransitionTask(ctx, task, targetClusterID, converter)
+	result, err := convertSyncVersionedTransitionTask(ctx, task, targetClusterID, converter, locks.PriorityHigh)
 	s.NoError(err)
 	s.Equal(expectedReplicationTask, result)
 	s.True(s.lockReleased)
@@ -1407,7 +1432,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionTransitionTask_AddTaskEqui
 		},
 	).Times(1)
 	converter := newSyncVersionedTransitionTaskConverter(s.shardContext, s.workflowCache, nil, s.progressCache, s.executionManager, s.syncStateRetriever, s.logger)
-	result, err := convertSyncVersionedTransitionTask(ctx, task, targetClusterID, converter)
+	result, err := convertSyncVersionedTransitionTask(ctx, task, targetClusterID, converter, locks.PriorityLow)
 	s.NoError(err)
 	s.Nil(result)
 	s.True(s.lockReleased)
@@ -1521,7 +1546,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Mutation(
 		gomock.Any(),
 	).Return(syncResult, nil)
 	converter := newSyncVersionedTransitionTaskConverter(s.shardContext, s.workflowCache, nil, s.progressCache, s.executionManager, s.syncStateRetriever, s.logger)
-	result, err := convertSyncVersionedTransitionTask(ctx, task, targetClusterID, converter)
+	result, err := convertSyncVersionedTransitionTask(ctx, task, targetClusterID, converter, locks.PriorityLow)
 	s.NoError(err)
 	s.Equal(&replicationspb.ReplicationTask{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_VERSIONED_TRANSITION_TASK,
@@ -1655,7 +1680,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_FirstTask
 		gomock.Any(),
 	).Return(syncResult, nil)
 	converter := newSyncVersionedTransitionTaskConverter(s.shardContext, s.workflowCache, nil, s.progressCache, s.executionManager, s.syncStateRetriever, s.logger)
-	result, err := convertSyncVersionedTransitionTask(ctx, task, targetClusterID, converter)
+	result, err := convertSyncVersionedTransitionTask(ctx, task, targetClusterID, converter, locks.PriorityLow)
 	s.NoError(err)
 	s.Equal(&replicationspb.ReplicationTask{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_VERSIONED_TRANSITION_TASK,
@@ -1731,7 +1756,7 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_HasBuffer
 	).Return(nil)
 
 	converter := newSyncVersionedTransitionTaskConverter(s.shardContext, s.workflowCache, nil, s.progressCache, s.executionManager, s.syncStateRetriever, s.logger)
-	result, err := convertSyncVersionedTransitionTask(ctx, task, targetClusterID, converter)
+	result, err := convertSyncVersionedTransitionTask(ctx, task, targetClusterID, converter, locks.PriorityLow)
 	s.NoError(err)
 	s.Nil(result)
 }
