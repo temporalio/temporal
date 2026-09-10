@@ -117,6 +117,39 @@ func TestBackfillTask_TriggerImmediate(t *testing.T) {
 	})
 }
 
+func TestImmediateTriggerUsesScheduledTime(t *testing.T) {
+	env := newTestEnv(t)
+	processingTime := env.TimeSource.Now().UTC()
+	requestedTime := processingTime.Add(-time.Second)
+
+	runBackfillTestCase(t, env, &backfillTestCase{
+		InitialTriggerRequest: &schedulepb.TriggerImmediatelyRequest{
+			ScheduledTime: timestamppb.New(requestedTime),
+		},
+		ExpectedBufferedStarts: 1,
+		ExpectedComplete:       true,
+		ValidateInvoker: func(t *testing.T, invoker *scheduler.Invoker) {
+			start := invoker.GetBufferedStarts()[0]
+			require.Equal(t, requestedTime, start.GetNominalTime().AsTime())
+			require.NotEqual(t, processingTime, start.GetNominalTime().AsTime())
+		},
+	})
+}
+
+func TestImmediateTriggerWithoutScheduledTimeUsesFrameworkTime(t *testing.T) {
+	env := newTestEnv(t)
+	processingTime := env.TimeSource.Now().UTC()
+
+	runBackfillTestCase(t, env, &backfillTestCase{
+		InitialTriggerRequest:  &schedulepb.TriggerImmediatelyRequest{},
+		ExpectedBufferedStarts: 1,
+		ExpectedComplete:       true,
+		ValidateInvoker: func(t *testing.T, invoker *scheduler.Invoker) {
+			require.Equal(t, processingTime, invoker.GetBufferedStarts()[0].GetNominalTime().AsTime())
+		},
+	})
+}
+
 // An immediately-triggered run will back off and retry if the buffer is full.
 func TestBackfillTask_TriggerImmediateFullBuffer(t *testing.T) {
 	env := newTestEnv(t)
