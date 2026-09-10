@@ -119,17 +119,21 @@ func NewScavenger(
 func (s *Scavenger) Run(ctx context.Context) (ScavengerHeartbeatDetails, error) {
 	reqCh := make(chan taskDetail, pageSize)
 
-	go s.loadTasks(ctx, reqCh)
 	for range numWorker {
 		s.Add(1)
 		go s.taskWorker(ctx, reqCh)
 	}
 
+	err := s.loadTasks(ctx, reqCh)
+	// Drain dispatched work before reporting enumeration failure.
 	s.Wait()
 
 	s.Lock()
 	defer s.Unlock()
-	return s.hbd, nil
+	if err == nil {
+		err = ctx.Err()
+	}
+	return s.hbd, err
 }
 
 func (s *Scavenger) loadTasks(
