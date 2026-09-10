@@ -2982,6 +2982,13 @@ scans share one persistence read, with only readers below the buffered range fal
 to persistence. The buffer holds slim queue rows (task metadata, not event payloads).
 0 disables the buffer.`,
 	)
+	ReplicationStreamReceiverPauseRead = NewShardIDBoolSetting(
+		"history.ReplicationStreamReceiverPauseRead",
+		false,
+		`ReplicationStreamReceiverPauseRead pauses gRPC receive calls for replication streams on the
+selected local shard while keeping the stream connected. This setting is intended only for
+controlled test-cell fault injection.`,
+	)
 	ReplicationStreamSenderHighPriorityQPS = NewGlobalIntSetting(
 		"history.ReplicationStreamSenderHighPriorityQPS",
 		100,

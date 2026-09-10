@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
@@ -16,6 +17,7 @@ const (
 	streamStatusInitialized int32 = 0
 	streamStatusOpen        int32 = 1
 	streamStatusClosed      int32 = 2
+	recvPausePollInterval         = 100 * time.Millisecond
 )
 
 const (
@@ -47,10 +49,12 @@ type (
 		Err  error
 	}
 	BiDirectionStreamImpl[Req any, Resp any] struct {
-		ctx            context.Context
-		clientProvider BiDirectionStreamClientProvider[Req, Resp]
-		metricsHandler metrics.Handler
-		logger         log.Logger
+		ctx             context.Context
+		cancel          context.CancelFunc
+		clientProvider  BiDirectionStreamClientProvider[Req, Resp]
+		metricsHandler  metrics.Handler
+		logger          log.Logger
+		shouldPauseRecv func() bool
 
 		sync.Mutex
 		status          int32
@@ -68,12 +72,16 @@ func NewBiDirectionStream[Req any, Resp any](
 	clientProvider BiDirectionStreamClientProvider[Req, Resp],
 	metricsHandler metrics.Handler,
 	logger log.Logger,
+	shouldPauseRecv func() bool,
 ) *BiDirectionStreamImpl[Req, Resp] {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &BiDirectionStreamImpl[Req, Resp]{
-		ctx:            context.Background(),
-		clientProvider: clientProvider,
-		metricsHandler: metricsHandler,
-		logger:         logger,
+		ctx:             ctx,
+		cancel:          cancel,
+		clientProvider:  clientProvider,
+		metricsHandler:  metricsHandler,
+		logger:          logger,
+		shouldPauseRecv: shouldPauseRecv,
 
 		status:          streamStatusInitialized,
 		channel:         make(chan StreamResp[Resp], defaultChanSize),
@@ -126,6 +134,7 @@ func (s *BiDirectionStreamImpl[Req, Resp]) closeLocked() {
 		return
 	}
 	s.status = streamStatusClosed
+	s.cancel()
 	if s.streamingClient != nil {
 		err := s.streamingClient.CloseSend() // if there is error, the stream is also closed
 		if err != nil {
@@ -159,6 +168,9 @@ func (s *BiDirectionStreamImpl[Req, Resp]) recvLoop() {
 	defer s.Close()
 
 	for {
+		if !s.waitUntilRecvResumed() {
+			return
+		}
 		resp, err := s.streamingClient.Recv()
 		switch err {
 		case nil:
@@ -169,6 +181,27 @@ func (s *BiDirectionStreamImpl[Req, Resp]) recvLoop() {
 			var errResp Resp
 			s.notifyRecvChannel(errResp, NewStreamError("BiDirectionStream recv error", err))
 			return
+		}
+	}
+}
+
+func (s *BiDirectionStreamImpl[Req, Resp]) waitUntilRecvResumed() bool {
+	if s.shouldPauseRecv == nil || !s.shouldPauseRecv() {
+		return true
+	}
+
+	s.logger.Info("Replication stream receive paused")
+	ticker := time.NewTicker(recvPausePollInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-s.ctx.Done():
+			return false
+		case <-ticker.C:
+			if !s.shouldPauseRecv() {
+				s.logger.Info("Replication stream receive resumed")
+				return true
+			}
 		}
 	}
 }

@@ -527,6 +527,9 @@ func newStream(
 		clientProvider,
 		processToolBox.MetricsHandler,
 		log.With(processToolBox.Logger, tag.ShardID(clientShardKey.ShardID)),
+		func() bool {
+			return processToolBox.Config.ReplicationStreamReceiverPauseRead(clientShardKey.ShardID)
+		},
 	)
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"math/rand"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -11,6 +12,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/testing/await"
 	"go.uber.org/mock/gomock"
 )
 
@@ -37,6 +39,7 @@ type (
 
 		responseCount int
 		responses     []int
+		recvCount     atomic.Int32
 	}
 	mockStreamErrClient struct {
 		sendErr error
@@ -77,6 +80,7 @@ func (s *biDirectionStreamSuite) SetupTest() {
 		s.streamClientProvider,
 		metrics.NoopMetricsHandler,
 		log.NewTestLogger(),
+		nil,
 	)
 }
 
@@ -136,7 +140,7 @@ func (s *biDirectionStreamSuite) TestRecv() {
 
 	var resps []int
 	streamRespChan, err := s.biDirectionStream.Recv()
-	s.NoError(err)
+	s.Require().NoError(err)
 	for streamResp := range streamRespChan {
 		s.NoError(streamResp.Err)
 		resps = append(resps, streamResp.Resp)
@@ -150,13 +154,59 @@ func (s *biDirectionStreamSuite) TestRecv_Err() {
 	s.streamClientProvider.streamClient = s.streamErrClient
 
 	streamRespChan, err := s.biDirectionStream.Recv()
-	s.NoError(err)
+	s.Require().NoError(err)
 	streamResp := <-streamRespChan
 	s.Error(streamResp.Err)
 	_, ok := <-streamRespChan
 	s.False(ok)
 	s.False(s.biDirectionStream.IsValid())
 
+}
+
+func (s *biDirectionStreamSuite) TestRecvPaused() {
+	var paused atomic.Bool
+	paused.Store(true)
+	s.biDirectionStream.shouldPauseRecv = paused.Load
+
+	streamRespChan, err := s.biDirectionStream.Recv()
+	s.NoError(err)
+	s.Never(
+		func() bool { return s.streamClient.recvCount.Load() != 0 },
+		3*recvPausePollInterval,
+		recvPausePollInterval/10,
+	)
+
+	paused.Store(false)
+	await.RequireTrue(
+		s.T(),
+		func() bool { return s.streamClient.recvCount.Load() != 0 },
+		3*recvPausePollInterval,
+		recvPausePollInterval/10,
+	)
+	close(s.streamClient.shutdownChan)
+	for range streamRespChan {
+	}
+}
+
+func (s *biDirectionStreamSuite) TestCloseWhileRecvPaused() {
+	s.biDirectionStream.shouldPauseRecv = func() bool { return true }
+
+	streamRespChan, err := s.biDirectionStream.Recv()
+	s.NoError(err)
+	s.biDirectionStream.Close()
+	await.RequireTrue(
+		s.T(),
+		func() bool {
+			select {
+			case _, ok := <-streamRespChan:
+				return !ok
+			default:
+				return false
+			}
+		},
+		3*recvPausePollInterval,
+		recvPausePollInterval/10,
+	)
 }
 
 func (p *mockStreamClientProvider) Get(
@@ -178,6 +228,7 @@ func (c *mockStreamClient) Recv() (int, error) {
 
 	resp := rand.Int()
 	c.responses = append(c.responses, resp)
+	c.recvCount.Add(1)
 	return resp, nil
 }
 
