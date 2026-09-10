@@ -311,7 +311,6 @@ func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_Success_Pr
 
 func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_RunningWorkflowsResetAttempts() {
 	env := newBatchResetEnv(s.T())
-	ctx := s.Context()
 
 	const workflowCount = 10
 	workflowTypeName := testcore.RandomizeStr("activity-batch-reset-running-workflow")
@@ -325,7 +324,7 @@ func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_RunningWor
 
 	workflowRuns := make([]sdkclient.WorkflowRun, 0, workflowCount)
 	for range workflowCount {
-		workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{
 			ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
 			TaskQueue: env.WorkerTaskQueue(),
 		}, workflowTypeName)
@@ -357,7 +356,7 @@ func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_RunningWor
 	}, 5*time.Second, 500*time.Millisecond)
 
 	jobID := uuid.NewString()
-	_, err := env.SdkClient().WorkflowService().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
+	_, err := env.SdkClient().WorkflowService().StartBatchOperation(s.Context(), &workflowservice.StartBatchOperationRequest{
 		Namespace: env.Namespace().String(),
 		Operation: &workflowservice.StartBatchOperationRequest_ResetActivitiesOperation{
 			ResetActivitiesOperation: &batchpb.BatchOperationResetActivities{
@@ -382,14 +381,14 @@ func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_RunningWor
 	}, 15*time.Second, 100*time.Millisecond)
 
 	for _, workflowRun := range workflowRuns {
-		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		description, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowRun.GetID(), workflowRun.GetRunID())
 		s.NoError(err)
 		s.Len(description.PendingActivities, 1)
 		s.Equal(int32(1), description.PendingActivities[0].Attempt)
 	}
 
 	// Await may have refreshed the suite context; renew it for workflow completion.
-	ctx = testcontext.EnsureRemaining(s.Context(), s.T(), testcontext.DefaultTimeout())
+	ctx := testcontext.EnsureRemaining(s.Context(), s.T(), testcontext.DefaultTimeout())
 	internalWorkflow.letActivitySucceed.Store(true)
 
 	replacementWorker := sdkworker.New(env.SdkClient(), env.WorkerTaskQueue(), sdkworker.Options{})

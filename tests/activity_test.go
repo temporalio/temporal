@@ -985,9 +985,13 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 	// Hold the activity after it starts so cancellation targets a running task.
 	// Release it only after the cancellation command is recorded, making its next
 	// heartbeat deterministically observe CancelRequested.
-	activityStartedCh := make(chan struct{})
+	activityStartedCh := make(chan *workflowservice.PollActivityTaskQueueResponse)
 	continueActivityCh := make(chan struct{})
-	activityPollErrCh := make(chan error, 1)
+	type activityPollResult struct {
+		err      error
+		canceled bool
+	}
+	activityPollResultCh := make(chan activityPollResult, 1)
 	var continueActivityOnce sync.Once
 	continueActivity := func() {
 		continueActivityOnce.Do(func() {
@@ -996,11 +1000,10 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 	}
 	defer continueActivity()
 
+	var activityHandlerErr error
 	activityCanceled := false
 	atHandler := func(task *workflowservice.PollActivityTaskQueueResponse) (*commonpb.Payloads, bool, error) {
-		s.Equal(id, task.WorkflowExecution.GetWorkflowId())
-		s.Equal(activityName, task.ActivityType.GetName())
-		close(activityStartedCh)
+		activityStartedCh <- task
 		<-continueActivityCh
 
 		for i := range 10 {
@@ -1015,7 +1018,10 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 				activityCanceled = true
 				return payloads.EncodeString("Activity Cancelled"), true, nil
 			}
-			s.NoError(err)
+			if err != nil {
+				activityHandlerErr = err
+				return nil, false, err
+			}
 			time.Sleep(10 * time.Millisecond) //nolint:forbidigo
 		}
 		return payloads.EncodeString("Activity Result"), false, nil
@@ -1036,10 +1042,22 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 	s.True(err == nil || errors.Is(err, testcore.ErrNoTasks))
 
 	go func() {
-		activityPollErrCh <- poller.PollAndProcessActivityTask(false)
+		pollErr := poller.PollAndProcessActivityTask(false)
+		if activityHandlerErr != nil {
+			pollErr = errors.Join(pollErr, activityHandlerErr)
+		}
+		activityPollResultCh <- activityPollResult{err: pollErr, canceled: activityCanceled}
 	}()
 
-	await.Rcv(s.T(), activityStartedCh)
+	var activityTask *workflowservice.PollActivityTaskQueueResponse
+	select {
+	case activityTask = <-activityStartedCh:
+	case result := <-activityPollResultCh:
+		s.Require().NoError(result.err)
+		s.FailNow("activity poll completed before the activity started")
+	}
+	s.Equal(id, activityTask.WorkflowExecution.GetWorkflowId())
+	s.Equal(activityName, activityTask.ActivityType.GetName())
 
 	_, err = env.FrontendClient().SignalWorkflowExecution(s.Context(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: env.Namespace().String(),
@@ -1059,9 +1077,9 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 	s.Require().NoError(err)
 	continueActivity()
 
-	err = await.Rcv(s.T(), activityPollErrCh)
-	s.Require().NoError(err)
-	s.True(activityCanceled, "Activity was not cancelled.")
+	result := await.Rcv(s.T(), activityPollResultCh)
+	s.Require().NoError(result.err)
+	s.True(result.canceled, "Activity was not cancelled.")
 	env.Logger.Info("Activity cancelled.", tag.WorkflowRunID(we.RunId))
 }
 
