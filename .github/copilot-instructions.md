@@ -8,7 +8,7 @@ These rules apply when authoring or reviewing code; the Review Feedback Style se
 - Every line contributes to the implementation or verifies behavior in a test.
 - Tests contain only the activities and complexity needed to exercise the behavior in scope.
 - Tests use deterministic inputs unless randomness is the behavior under test.
-- Tests assert the behavior in scope and rely on unrelated operations to work. For example, a test that is not about `TerminateWorkflowExecution` assumes that operation works.
+- Tests assert only the behavior in scope; they assume that unrelated operations work. For example, a test that is not about `TerminateWorkflowExecution` assumes that operation works.
 - Values assigned immediately before use are used without redundant nil checks.
 - Packages export only identifiers required by their callers.
 
