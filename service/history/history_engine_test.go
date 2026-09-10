@@ -7237,6 +7237,7 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RewrittenBranchTokenUsesCu
 	s.NoError(err)
 
 	s.config.EnablePaginationTokenBranchValidationShadowMode = dynamicconfig.GetBoolPropertyFn(false)
+	s.config.EnablePaginationTokenBranchReplacement = dynamicconfig.GetBoolPropertyFn(true)
 	currentBranchToken, previousBranchToken := s.mockExecutionWithRewrittenBranchToken(&we)
 
 	for _, sendRawHistory := range []bool{false, true} {
@@ -7260,6 +7261,35 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_RewrittenBranchTokenUsesCu
 		)
 		s.NoError(err, "sendRawHistory=%v", sendRawHistory)
 	}
+}
+
+func (s *engineSuite) TestGetWorkflowExecutionHistory_RewrittenBranchTokenRejectedWhenReplacementDisabled() {
+	we := commonpb.WorkflowExecution{WorkflowId: "wid-rewritten-branch-rejected", RunId: uuid.NewString()}
+
+	engine, err := s.historyEngine.shardContext.GetEngine(context.Background())
+	s.NoError(err)
+
+	s.config.EnablePaginationTokenBranchValidation = dynamicconfig.GetBoolPropertyFn(true)
+	s.config.EnablePaginationTokenBranchValidationShadowMode = dynamicconfig.GetBoolPropertyFn(false)
+	s.config.EnablePaginationTokenBranchReplacement = dynamicconfig.GetBoolPropertyFn(false)
+	_, previousBranchToken := s.mockExecutionWithRewrittenBranchToken(&we)
+
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Times(0)
+	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Times(0)
+
+	_, err = engine.GetWorkflowExecutionHistory(
+		context.Background(),
+		s.getHistoryRequestWithPageToken(&we, &tokenspb.HistoryContinuation{
+			RunId:             we.GetRunId(),
+			FirstEventId:      common.FirstEventID,
+			NextEventId:       5,
+			PersistenceToken:  []byte("some random persistence token"),
+			BranchToken:       previousBranchToken,
+			IsWorkflowRunning: true,
+		}, false),
+	)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.Require().ErrorAs(err, &invalidArgument)
 }
 
 func (s *engineSuite) TestGetWorkflowExecutionHistory_RewrittenBranchTokenPreservedInShadowMode() {

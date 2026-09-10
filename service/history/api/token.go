@@ -242,7 +242,9 @@ func ValidateBranchTokenForExecution(
 	if mismatchReason == "" {
 		return currentBranchToken, nil
 	}
-	if mismatchReason == branchTokenMismatchReasonSameBranchMetadata && !shadowMode {
+	if mismatchReason == branchTokenMismatchReasonSameBranchMetadata &&
+		!shadowMode &&
+		config.EnablePaginationTokenBranchReplacement() {
 		return currentBranchToken, nil
 	}
 
