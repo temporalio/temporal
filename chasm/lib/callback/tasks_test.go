@@ -704,7 +704,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			require.NoError(t, err)
 
 			nodeBackend := &chasm.MockNodeBackend{}
-			root := chasm.NewEmptyTree(chasmRegistry, timeSource, nodeBackend, chasm.DefaultPathEncoder, logger, metricsHandler)
+			root := chasm.NewEmptyTree(chasmRegistry, nodeBackend, chasm.DefaultPathEncoder, logger, metricsHandler)
 
 			// Create headers
 			headers := nexus.Header{}

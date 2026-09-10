@@ -28,6 +28,9 @@ type Context interface {
 	ExecutionKey() ExecutionKey
 	// ExecutionInfo returns metadata information about the execution.
 	ExecutionInfo() ExecutionInfo
+	// GetTimeSkippingPropagateState returns the time-skipping configuration and
+	// state to propagate to a new, independent execution that shares this execution's virtual clock.
+	GetTimeSkippingPropagateState() (*commonpb.TimeSkippingConfig, *commonpb.TimeSkippingStatePropagation)
 	// Logger returns a logger tagged with execution key and other chasm framework internal information.
 	Logger() log.Logger
 	// NamespaceEntry returns the namespace entry for the execution.
@@ -85,6 +88,7 @@ type EndpointRegistry interface {
 
 type MutableContext interface {
 	Context
+	TimeSkippingConfigurator
 
 	// AddTask adds a task to be emitted as part of the current transaction.
 	// The task is associated with the given component and will be invoked via the registered handler for the given task
@@ -196,6 +200,13 @@ func (c *immutableCtx) ExecutionInfo() ExecutionInfo {
 	}
 }
 
+func (c *immutableCtx) GetTimeSkippingPropagateState() (
+	*commonpb.TimeSkippingConfig,
+	*commonpb.TimeSkippingStatePropagation,
+) {
+	return PropagateTimeSkippingToOtherExecution(c.root.backend.GetExecutionInfo().GetTimeSkippingInfo())
+}
+
 func (c *immutableCtx) Logger() log.Logger {
 	return c.root.logger
 }
@@ -281,6 +292,10 @@ func (c *mutableCtx) withValue(key any, value any) Context {
 	return &mutableCtx{
 		immutableCtx: ContextWithValue(c.immutableCtx, key, value),
 	}
+}
+
+func (c *mutableCtx) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
+	c.root.backend.SetTimeSkippingConfig(config)
 }
 
 // ContextWithValue returns a new Context with the given key-value pair added.
