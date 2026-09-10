@@ -985,7 +985,7 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 	// Hold the activity after it starts so cancellation targets a running task.
 	// Release it only after the cancellation command is recorded, making its next
 	// heartbeat deterministically observe CancelRequested.
-	activityStartedCh := make(chan *workflowservice.PollActivityTaskQueueResponse)
+	activityStartedCh := make(chan *workflowservice.PollActivityTaskQueueResponse, 1)
 	continueActivityCh := make(chan struct{})
 	type activityPollResult struct {
 		err      error
@@ -1050,11 +1050,14 @@ func (s *ActivityTestSuite) TestTryActivityCancellationFromWorkflow() {
 	}()
 
 	var activityTask *workflowservice.PollActivityTaskQueueResponse
+	ctx := s.Context()
 	select {
 	case activityTask = <-activityStartedCh:
 	case result := <-activityPollResultCh:
 		s.Require().NoError(result.err)
 		s.FailNow("activity poll completed before the activity started")
+	case <-ctx.Done():
+		s.FailNowf("activity poll did not start before the test context ended", "error: %v", ctx.Err())
 	}
 	s.Equal(id, activityTask.WorkflowExecution.GetWorkflowId())
 	s.Equal(activityName, activityTask.ActivityType.GetName())
