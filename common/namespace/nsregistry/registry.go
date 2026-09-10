@@ -604,8 +604,27 @@ func (r *registry) refreshNamespaces(ctx context.Context) (err error) {
 	var deletedEntries []*namespace.Namespace
 	for _, ns := range r.GetAllNamespaces() {
 		if _, namespaceExistsDb := namespaceIDsDb[ns.ID()]; !namespaceExistsDb {
-			deletedEntries = append(deletedEntries, ns)
-			continue
+			// A concurrent rename can move a namespace behind the pagination cursor.
+			// Confirm physical deletion by ID before removing a cached namespace.
+			response, err := r.persistence.GetNamespace(ctx, &persistence.GetNamespaceRequest{ID: ns.ID().String()})
+			var notFound *serviceerror.NamespaceNotFound
+			if errors.As(err, &notFound) {
+				deletedEntries = append(deletedEntries, ns)
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			current, err := namespace.FromPersistentState(
+				response.Namespace,
+				r.replicationResolverFactory(response.Namespace),
+				namespace.WithGlobalFlag(response.IsGlobalNamespace),
+				namespace.WithNotificationVersion(response.NotificationVersion),
+			)
+			if err != nil {
+				return err
+			}
+			namespacesDb = append(namespacesDb, current)
 		}
 		newNameToID[ns.Name()] = ns.ID()
 		newIDToNamespace[ns.ID()] = ns
@@ -614,8 +633,8 @@ func (r *registry) refreshNamespaces(ctx context.Context) (err error) {
 	var stateChanged []*namespace.Namespace
 	for _, aNamespace := range namespacesDb {
 		oldNS := r.updateIDToNamespace(newIDToNamespace, aNamespace.ID(), aNamespace)
-		// If namespace was renamed, remove entry for the old name
-		if oldNS != nil && oldNS.Name() != aNamespace.Name() {
+		// Remove a renamed namespace's old name only if it has not been reused.
+		if oldNS != nil && oldNS.Name() != aNamespace.Name() && newNameToID[oldNS.Name()] == aNamespace.ID() {
 			delete(newNameToID, oldNS.Name())
 		}
 		newNameToID[aNamespace.Name()] = aNamespace.ID()
