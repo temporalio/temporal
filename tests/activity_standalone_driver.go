@@ -30,7 +30,7 @@ import (
 
 type saaDriver struct {
 	env              *testcore.TestEnv
-	t                *testing.T
+	ctx              context.Context
 	cfg              activityConfig
 	numStarted       int
 	activityIDPrefix string
@@ -38,18 +38,14 @@ type saaDriver struct {
 
 // newSAADriver builds a driver.
 func newSAADriver(t *testing.T, env *testcore.TestEnv, cfg activityConfig) *saaDriver {
+	// Snapshot only after all decorators are attached: AttachDecorator replaces
+	// the context, while EnsureRemaining preserves its identity.
 	return &saaDriver{
 		env:              env,
-		t:                t,
+		ctx:              testcontext.For(t),
 		cfg:              cfg,
 		activityIDPrefix: t.Name(),
 	}
-}
-
-// testContext returns the driver's current test context, deliberately not cached;
-// see [testcontext.EnsureRemaining].
-func (d *saaDriver) testContext() context.Context {
-	return testcontext.For(d.t)
 }
 
 // saaHandle is a handle to an activity instance.
@@ -77,7 +73,7 @@ func (a *saaHandle) driveEvent(t testing.TB, e model.Event) {
 }
 
 func (a *saaHandle) testContext() context.Context {
-	return a.d.testContext()
+	return a.d.ctx
 }
 
 func (a *saaHandle) awaitTimeout(t testing.TB, e model.Event, deadline time.Time) {
@@ -116,7 +112,7 @@ func (a *saaHandle) awaitDispatchDelay(t testing.TB, e model.Event) {
 func (d *saaDriver) start(t require.TestingT, cfg activityConfig) *saaHandle {
 	d.numStarted++
 	id := fmt.Sprintf("%s-%d", d.activityIDPrefix, d.numStarted)
-	resp, err := d.env.FrontendClient().StartActivityExecution(d.testContext(), d.startRequest(cfg, id, id))
+	resp, err := d.env.FrontendClient().StartActivityExecution(d.ctx, d.startRequest(cfg, id, id))
 	require.NoError(t, err)
 	return &saaHandle{
 		activityDriverState: activityDriverState{cfg: cfg},
