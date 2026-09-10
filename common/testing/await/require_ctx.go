@@ -84,7 +84,7 @@ func run(
 
 	// Ensure enough context time for the await itself plus post-await reserve.
 	// This only works for [testcontext]s; other contexts will be left unchanged.
-	parentCtx = testcontext.EnsureRemaining(parentCtx, tb, cfg.totalTimeout+postAwaitTimeoutReserve)
+	testcontext.EnsureRemaining(parentCtx, tb, cfg.totalTimeout+postAwaitTimeoutReserve)
 
 	deadline := time.Now().Add(cfg.totalTimeout)
 	if parentDeadline, hasDeadline := parentCtx.Deadline(); hasDeadline {
