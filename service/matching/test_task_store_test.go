@@ -191,6 +191,8 @@ func (m *testTaskManager) queueKeyFromInfo(info *persistencespb.TaskQueueInfo) d
 	}
 }
 
+// Randomize persistence latency, occasionally allowing calls through without
+// delay, to exercise different concurrent reader/writer interleavings.
 func (m *testTaskManager) delay() {
 	if m.delayInjection > 0 && rand.Int31n(128) >= 13 {
 		time.Sleep(time.Duration(rand.Float32() * float32(m.delayInjection))) // nolint:forbidigo

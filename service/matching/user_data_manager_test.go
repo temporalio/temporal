@@ -123,7 +123,7 @@ func TestUserData_LoadOnInit_Refresh(t *testing.T) {
 	tqCfg.expectUserDataError = false
 
 	data1 := &persistencespb.VersionedTaskQueueUserData{
-		Version: 0,
+		Version: 0, // Version 0 requests an insert; persistence stores the new row at version 1.
 		Data:    mkUserData(1),
 	}
 
@@ -186,7 +186,7 @@ func TestUserData_LoadOnInit_Refresh_Backwards(t *testing.T) {
 	tqCfg.expectUserDataError = true
 
 	data5 := &persistencespb.VersionedTaskQueueUserData{
-		Version: 0,
+		Version: 0, // Version 0 requests an insert; persistence stores the new row at version 1.
 		Data:    mkUserData(5),
 	}
 
