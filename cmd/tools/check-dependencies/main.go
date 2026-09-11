@@ -1,10 +1,16 @@
 // check-dependencies validates that key Go module dependencies (go.temporal.io/api
 // and go.temporal.io/sdk) meet version policies for the PR's base branch:
 //
-//   - release/* and cloud/* branches: dependencies must be tagged semver releases.
+//   - release/* branches: dependencies must be tagged semver releases.
+//   - cloud/* branches: as release/*, except that go.temporal.io/api may also be
+//     a pseudo-version whose commit carries a release tag, since that still
+//     corresponds to a tagged release even though go.mod does not name it.
 //   - main: tagged releases are accepted; pseudo-versions must reference a commit
 //     on the dependency's default branch.
 //   - Other branches: no policy enforced.
+//
+// Prereleases never count as releases on release/* or cloud/*, whether named
+// directly in go.mod or reached through a pseudo-version.
 package main
 
 import (
@@ -14,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"time"
 
@@ -30,9 +37,15 @@ type moduleSpec struct {
 	defaultBranch string
 }
 
+// apiModulePath is the only module whose cloud/* policy accepts a
+// pseudo-version on a tagged commit, and the only one an api-go release can be
+// planned for. There is no equivalent automation for the SDK, so it keeps the
+// strict rule.
+const apiModulePath = "go.temporal.io/api"
+
 var knownModules = []moduleSpec{
 	{
-		modulePath:    "go.temporal.io/api",
+		modulePath:    apiModulePath,
 		repoURL:       "https://github.com/temporalio/api-go.git",
 		defaultBranch: "main",
 	},
@@ -43,11 +56,27 @@ var knownModules = []moduleSpec{
 	},
 }
 
+const (
+	modeCheck          = "check"
+	modePlanAPIRelease = "plan-api-release"
+)
+
+const (
+	releaseBranchPrefix = "release/"
+	cloudBranchPrefix   = "cloud/"
+	mainBranch          = "main"
+)
+
 func main() {
-	baseBranch := flag.String("base-branch", "", "PR base branch (e.g. main, release/v1.31)")
+	mode := flag.String("mode", modeCheck,
+		`Either "check", to validate go.mod against the base branch's policy, or `+
+			`"plan-api-release", to decide whether a cloud branch needs an api-go release`)
+	baseBranch := flag.String("base-branch", "", "Branch the policy applies to (e.g. main, release/v1.31, cloud/v1.32.0-163)")
 	goModPath := flag.String("go-mod", defaultGoModPath, "Path to go.mod")
 	flag.Parse()
 
+	// Checked before reading go.mod so that a missing flag is reported as
+	// such rather than as whatever go.mod problem happens to come first.
 	branch := strings.TrimSpace(*baseBranch)
 	if branch == "" {
 		fmt.Fprintln(os.Stderr, "Error: base branch is required; pass --base-branch")
@@ -67,39 +96,45 @@ func main() {
 		os.Exit(1)
 	}
 
-	var validateErr error
-	switch {
-	case strings.HasPrefix(branch, "release/") || strings.HasPrefix(branch, "cloud/"):
-		validateErr = validateReleaseBranch(modFile)
-	case branch == "main":
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-		defer cancel()
-		validateErr = validateMainBranch(ctx, modFile)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	var runErr error
+	switch *mode {
+	case modeCheck:
+		runErr = runCheck(ctx, branch, modFile)
+	case modePlanAPIRelease:
+		runErr = runPlanAPIRelease(ctx, branch, modFile)
 	default:
-		fmt.Printf("No dependency policy for base branch %q; skipping validation\n", branch)
+		runErr = fmt.Errorf("unknown mode %q; want %q or %q", *mode, modeCheck, modePlanAPIRelease)
 	}
 
-	if validateErr != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", validateErr)
+	if runErr != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", runErr)
 		os.Exit(1)
+	}
+}
+
+func runCheck(ctx context.Context, branch string, modFile *modfile.File) error {
+	switch {
+	case strings.HasPrefix(branch, releaseBranchPrefix):
+		return validateReleaseBranch(modFile)
+	case strings.HasPrefix(branch, cloudBranchPrefix):
+		return validateCloudBranch(ctx, modFile)
+	case branch == mainBranch:
+		return validateMainBranch(ctx, modFile)
+	default:
+		fmt.Printf("No dependency policy for base branch %q; skipping validation\n", branch)
+		return nil
 	}
 }
 
 func validateReleaseBranch(modFile *modfile.File) error {
 	var failures []string
 	for _, mod := range knownModules {
-		modVersion, ok := findRequiredModuleVersion(modFile, mod.modulePath)
-		if !ok {
-			failures = append(failures, fmt.Sprintf("%s: dependency not found in go.mod", mod.modulePath))
-			continue
+		if err := validateTaggedModule(modFile, mod); err != nil {
+			failures = append(failures, err.Error())
 		}
-
-		if !semver.IsValid(modVersion.Version) || module.IsPseudoVersion(modVersion.Version) {
-			failures = append(failures, fmt.Sprintf("%s: version %q must be a tagged semver release", mod.modulePath, modVersion.Version))
-			continue
-		}
-
-		fmt.Printf("  - %s@%s (ok)\n", mod.modulePath, modVersion.Version)
 	}
 
 	if len(failures) > 0 {
@@ -108,6 +143,155 @@ func validateReleaseBranch(modFile *modfile.File) error {
 
 	fmt.Println("All required dependencies use tagged releases")
 	return nil
+}
+
+// validateTaggedModule requires that mod resolve to a tagged semver release
+// named directly in go.mod. A prerelease is not a release, so it does not
+// satisfy this however it is spelled.
+func validateTaggedModule(modFile *modfile.File, mod moduleSpec) error {
+	modVersion, ok := findRequiredModuleVersion(modFile, mod.modulePath)
+	if !ok {
+		return fmt.Errorf("%s: dependency not found in go.mod", mod.modulePath)
+	}
+
+	version := modVersion.Version
+	if !semver.IsValid(version) || module.IsPseudoVersion(version) || semver.Prerelease(version) != "" {
+		return fmt.Errorf("%s: version %q must be a tagged semver release", mod.modulePath, version)
+	}
+
+	fmt.Printf("  - %s@%s (ok)\n", mod.modulePath, version)
+	return nil
+}
+
+// validateCloudBranch enforces the cloud/* policy. It matches release/* except
+// for apiModulePath, which may also be a pseudo-version whose commit carries a
+// release tag: the requirement is that the version in use have a tag, not that
+// go.mod name it, and RE automation creates that tag.
+func validateCloudBranch(ctx context.Context, modFile *modfile.File) error {
+	var failures []string
+	for _, mod := range knownModules {
+		var err error
+		if mod.modulePath == apiModulePath {
+			err = validateCloudModule(ctx, modFile, mod)
+		} else {
+			err = validateTaggedModule(modFile, mod)
+		}
+		if err != nil {
+			failures = append(failures, err.Error())
+		}
+	}
+
+	if len(failures) > 0 {
+		return fmt.Errorf("cloud branch dependency validation failed:\n  - %s", strings.Join(failures, "\n  - "))
+	}
+
+	fmt.Println("All required dependencies correspond to tagged releases")
+	return nil
+}
+
+func validateCloudModule(
+	ctx context.Context,
+	modFile *modfile.File,
+	mod moduleSpec,
+) error {
+	modVersion, ok := findRequiredModuleVersion(modFile, mod.modulePath)
+	if !ok {
+		return fmt.Errorf("%s: dependency not found in go.mod", mod.modulePath)
+	}
+	version := modVersion.Version
+
+	if !semver.IsValid(version) {
+		return fmt.Errorf("%s: version %q is not valid semver", mod.modulePath, version)
+	}
+
+	if !module.IsPseudoVersion(version) {
+		// A prerelease is not a release, so it does not satisfy the
+		// requirement even though it is a tag. releaseTagsAt excludes them for
+		// the same reason, and the two paths have to agree.
+		if semver.Prerelease(version) != "" {
+			return fmt.Errorf("%s: version %q is a prerelease, not a release", mod.modulePath, version)
+		}
+		fmt.Printf("  - %s@%s is a tagged release (ok)\n", mod.modulePath, version)
+		return nil
+	}
+
+	shortHash, err := module.PseudoVersionRev(version)
+	if err != nil {
+		return fmt.Errorf("%s@%s: failed to parse pseudo-version revision: %v", mod.modulePath, version, err)
+	}
+
+	tags, err := releaseTagsForCommit(ctx, mod, shortHash)
+	if err != nil {
+		return fmt.Errorf("%s@%s: failed to list tags for commit %s: %v", mod.modulePath, version, shortHash, err)
+	}
+
+	if len(tags) == 0 {
+		return fmt.Errorf("%s@%s: commit %s has no release tag in %s; a cloud release requires a tagged version",
+			mod.modulePath, version, shortHash, mod.repoURL)
+	}
+
+	fmt.Printf("  - %s@%s pins commit %s, tagged %s (ok)\n",
+		mod.modulePath, version, shortHash, strings.Join(tags, ", "))
+	return nil
+}
+
+// remoteTags maps every tag in mod's repository to the commit it points at,
+// using a single `git ls-remote --tags` rather than a clone.
+//
+// An annotated tag appears twice: refs/tags/<name> resolves to the tag object,
+// and refs/tags/<name>^{} to the commit it points at. Only the latter is a
+// commit, so it wins.
+func remoteTags(ctx context.Context, mod moduleSpec) (map[string]string, error) {
+	out, err := exec.CommandContext(ctx, "git", "ls-remote", "--tags", mod.repoURL).Output()
+	if err != nil {
+		return nil, fmt.Errorf("git ls-remote --tags failed: %w", err)
+	}
+
+	commits := make(map[string]string) // tag name -> commit sha
+	for line := range strings.SplitSeq(string(out), "\n") {
+		sha, ref, found := strings.Cut(strings.TrimSpace(line), "\t")
+		if !found {
+			continue
+		}
+		name := strings.TrimPrefix(ref, "refs/tags/")
+		if name == ref {
+			continue
+		}
+		if deref, ok := strings.CutSuffix(name, "^{}"); ok {
+			commits[deref] = sha
+			continue
+		}
+		if _, seen := commits[name]; !seen {
+			commits[name] = sha
+		}
+	}
+	return commits, nil
+}
+
+// releaseTagsAt returns the semver release tags pointing at the commit named by
+// shortHash, which may be abbreviated. Prereleases are excluded: they do not
+// satisfy the requirement that the version correspond to a release.
+func releaseTagsAt(tags map[string]string, shortHash string) []string {
+	var found []string
+	for name, sha := range tags {
+		if !strings.HasPrefix(sha, shortHash) {
+			continue
+		}
+		if !semver.IsValid(name) || semver.Prerelease(name) != "" {
+			continue
+		}
+		found = append(found, name)
+	}
+	slices.Sort(found)
+	return found
+}
+
+func releaseTagsForCommit(ctx context.Context, mod moduleSpec, shortHash string) ([]string, error) {
+	tags, err := remoteTags(ctx, mod)
+	if err != nil {
+		return nil, err
+	}
+	return releaseTagsAt(tags, shortHash), nil
 }
 
 func validateMainBranch(
