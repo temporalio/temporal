@@ -2820,9 +2820,10 @@ pollLoop:
 		if nexusReq.Header == nil {
 			nexusReq.Header = make(map[string]string)
 		}
-		nexusReq.Header[nexus.HeaderRequestTimeout] = time.Until(task.nexus.deadline).String()
+		requestTimeout := formatNexusRequestTimeout(time.Until(task.nexus.deadline))
+		nexusReq.Header[nexus.HeaderRequestTimeout] = requestTimeout
 		// Java SDK currently expects the header in this form. We should be able to remove this duplication sometime mid 2025.
-		nexusReq.Header["Request-Timeout"] = time.Until(task.nexus.deadline).String()
+		nexusReq.Header["Request-Timeout"] = requestTimeout
 		if !task.nexus.operationDeadline.IsZero() {
 			nexusReq.Header[nexus.HeaderOperationTimeout] = commonnexus.FormatDuration(time.Until(task.nexus.operationDeadline))
 		}
@@ -2836,6 +2837,13 @@ pollLoop:
 			},
 		}, nil
 	}
+}
+
+// formatNexusRequestTimeout formats remaining request time for the Nexus duration grammar
+// (`<number>(ms|s|m)`). Negative remaining time is clamped to 0 so expired tasks do not emit
+// a signed or non-grammar Duration.String() value.
+func formatNexusRequestTimeout(remaining time.Duration) string {
+	return commonnexus.FormatDuration(max(remaining, 0))
 }
 
 func (e *matchingEngineImpl) RespondNexusTaskCompleted(_ context.Context, request *matchingservice.RespondNexusTaskCompletedRequest, opMetrics metrics.Handler) (*matchingservice.RespondNexusTaskCompletedResponse, error) {
