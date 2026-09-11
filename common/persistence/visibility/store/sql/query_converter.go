@@ -196,6 +196,23 @@ func (c *SQLQueryConverter) ConvertKeywordComparisonExpr(
 			Right:    v,
 			Escape:   defaultLikeEscapeExpr,
 		}, nil
+	case sqlparser.LikeStr, sqlparser.NotLikeStr:
+		v, ok := valueExpr.(*query.UnsafeSQLString)
+		if !ok {
+			return nil, query.NewConverterError(
+				"%s: right-hand side of %q operator must be a literal string (got: %v)",
+				query.InvalidExpressionErrMessage,
+				operator,
+				value,
+			)
+		}
+		// The value is a raw LIKE pattern ('%' and '_' wildcards) supplied by the user,
+		// so it is passed through without escaping.
+		return &sqlparser.ComparisonExpr{
+			Operator: operator,
+			Left:     col,
+			Right:    v,
+		}, nil
 	default:
 		return c.ConvertComparisonExpr(operator, col, value)
 	}

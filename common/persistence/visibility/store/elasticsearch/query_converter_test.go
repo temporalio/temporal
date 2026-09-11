@@ -469,12 +469,36 @@ func TestQueryConverter_ConvertKeywordComparisonExpr(t *testing.T) {
 			),
 		},
 		{
-			name:     "invalid operator",
+			name:     "operator like",
 			operator: sqlparser.LikeStr,
+			col:      keywordCol,
+			value:    "%foo_bar%",
+			out:      elastic.NewWildcardQuery(keywordCol.FieldName, "*foo?bar*"),
+		},
+		{
+			name:     "operator not like",
+			operator: sqlparser.NotLikeStr,
+			col:      keywordCol,
+			value:    "%foo%",
+			out:      newBoolQuery().MustNot(elastic.NewWildcardQuery(keywordCol.FieldName, "*foo*")),
+		},
+		{
+			name:     "operator like invalid value",
+			operator: sqlparser.LikeStr,
+			col:      keywordCol,
+			value:    123,
+			err: fmt.Sprintf(
+				"%s: right-hand side of operator 'LIKE' must be a string",
+				query.InvalidExpressionErrMessage,
+			),
+		},
+		{
+			name:     "invalid operator",
+			operator: sqlparser.BetweenStr,
 			col:      keywordCol,
 			value:    "foo",
 			err: fmt.Sprintf(
-				"%s: operator 'LIKE' not supported for Keyword type search attribute 'AliasForKeyword01'",
+				"%s: operator 'BETWEEN' not supported for Keyword type search attribute 'AliasForKeyword01'",
 				query.NotSupportedErrMessage,
 			),
 		},
@@ -545,11 +569,11 @@ func TestQueryConverter_ConvertKeywordListComparisonExpr(t *testing.T) {
 		},
 		{
 			name:     "invalid operator",
-			operator: sqlparser.LikeStr,
+			operator: sqlparser.BetweenStr,
 			col:      keywordListCol,
 			value:    "foo",
 			err: fmt.Sprintf(
-				"%s: operator 'LIKE' not supported for KeywordList type search attribute 'AliasForKeywordList01'",
+				"%s: operator 'BETWEEN' not supported for KeywordList type search attribute 'AliasForKeywordList01'",
 				query.NotSupportedErrMessage,
 			),
 		},

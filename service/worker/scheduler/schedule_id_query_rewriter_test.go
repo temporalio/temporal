@@ -85,6 +85,18 @@ func TestRewriteScheduleIDQuery(t *testing.T) {
 			want:         "WorkflowId not starts_with '" + prefix + "my-'",
 		},
 		{
+			name:         "V1 like",
+			query:        "ScheduleId LIKE '%guid%'",
+			chasmEnabled: false,
+			want:         "WorkflowId like '" + prefix + "%guid%'",
+		},
+		{
+			name:         "V1 not like",
+			query:        "ScheduleId NOT LIKE '%guid%'",
+			chasmEnabled: false,
+			want:         "WorkflowId not like '" + prefix + "%guid%'",
+		},
+		{
 			name:         "V1 IN",
 			query:        "ScheduleId IN ('foo', 'bar')",
 			chasmEnabled: false,
@@ -133,6 +145,12 @@ func TestRewriteScheduleIDQuery(t *testing.T) {
 			want:         "(WorkflowId starts_with '" + prefix + "my-' or WorkflowId starts_with 'my-')",
 		},
 		{
+			name:         "CHASM like OR",
+			query:        "ScheduleId LIKE '%guid%'",
+			chasmEnabled: true,
+			want:         "(WorkflowId like '" + prefix + "%guid%' or WorkflowId like '%guid%')",
+		},
+		{
 			name:         "CHASM IN OR",
 			query:        "ScheduleId IN ('foo', 'bar')",
 			chasmEnabled: true,
@@ -151,6 +169,12 @@ func TestRewriteScheduleIDQuery(t *testing.T) {
 			query:        "ScheduleId NOT STARTS_WITH 'my-'",
 			chasmEnabled: true,
 			want:         "(WorkflowId not starts_with '" + prefix + "my-' and WorkflowId not starts_with 'my-')",
+		},
+		{
+			name:         "CHASM not like AND",
+			query:        "ScheduleId NOT LIKE '%guid%'",
+			chasmEnabled: true,
+			want:         "(WorkflowId not like '" + prefix + "%guid%' and WorkflowId not like '%guid%')",
 		},
 		{
 			name:         "CHASM NOT IN AND",

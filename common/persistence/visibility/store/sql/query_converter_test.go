@@ -464,6 +464,18 @@ func TestSQLQueryConverter_ConvertKeywordComparisonExpr(t *testing.T) {
 			out:      "a not like 'foo%' escape '!'",
 		},
 		{
+			operator: sqlparser.LikeStr,
+			col:      query.NewSAColumn("a", "a", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+			value:    "%foo%",
+			out:      "a like '%foo%'",
+		},
+		{
+			operator: sqlparser.NotLikeStr,
+			col:      query.NewSAColumn("a", "a", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+			value:    "%foo%",
+			out:      "a not like '%foo%'",
+		},
+		{
 			operator:  sqlparser.EqualStr,
 			col:       query.NewSAColumn("a", "a", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 			value:     123,
@@ -476,6 +488,13 @@ func TestSQLQueryConverter_ConvertKeywordComparisonExpr(t *testing.T) {
 			value:     int64(123),
 			errString: query.InvalidExpressionErrMessage,
 			out:       "unexpected type a starts_with 123",
+		},
+		{
+			operator:  sqlparser.LikeStr,
+			col:       query.NewSAColumn("a", "a", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+			value:     int64(123),
+			errString: query.InvalidExpressionErrMessage,
+			out:       "unexpected type a like 123",
 		},
 	}
 
