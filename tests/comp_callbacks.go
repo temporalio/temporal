@@ -207,8 +207,7 @@ func (nhct *nexusHandlerCompletionCallbackTarget) respond(
 
 	startOp := task.GetRequest().GetStartOperation()
 	if startOp == nil {
-		msg := fmt.Sprintf("got unexpected NexusTask: %v", task.GetRequest())
-		panic(msg)
+		return fmt.Errorf("got unexpected NexusTask: %v", task.GetRequest())
 	}
 
 	// Determine the right response based on the current behavior, and respond.
@@ -590,7 +589,7 @@ func (sno *standaloneNexusOperationExecutionType) startAndCompleteEx(
 			IncludeOutcome: true,
 		}
 		descResp, err := env.FrontendClient().DescribeNexusOperationExecution(c.Context(), descReq)
-		require.NoError(t, err)
+		require.NoError(c, err)
 
 		gotStatus := descResp.GetInfo().GetStatus()
 		require.Equal(c, enumspb.NEXUS_OPERATION_EXECUTION_STATUS_COMPLETED, gotStatus)

@@ -253,9 +253,9 @@ func TestExecuteInvocationTaskNexusHandler_Outcomes(t *testing.T) {
 		{
 			// A worker can fail the task with something other than a handler error, e.g. an
 			// application error. RespondNexusTaskFailed rejects a failure carrying no handler failure
-			// info, so this shouldn't be reachable outside of tests; it is treated like a response this
-			// build cannot interpret and kept retrying. There is no handler error type to report,
-			// hence the UNKNOWN suffix.
+			// info, so this shouldn't be reachable outside of tests. There is no nexus.HandlerError to
+			// ask about retryability, so the delivery fails permanently, and no handler error type to
+			// report, hence the UNKNOWN suffix.
 			name: "non-handler-task-failure",
 			response: &matchingservice.DispatchNexusTaskResponse{
 				Outcome: &matchingservice.DispatchNexusTaskResponse_Failure{

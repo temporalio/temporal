@@ -97,7 +97,7 @@ func handlerErrorOutcome(handlerErr *nexus.HandlerError) outcomeTag {
 }
 
 // grpcErrorOutcome returns an outcomeTag derived from an error implementing
-// Statsui()/GRPCStatus(). Otherwise defaults to "error:Unknown".
+// Stats()/GRPCStatus(). Otherwise defaults to "error:Unknown".
 func grpcErrorOutcome(err error) outcomeTag {
 	tagSuffix := codes.Unknown.String()
 	if st, ok := common.GetRPCStatus(err); ok {

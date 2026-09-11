@@ -60,9 +60,8 @@ func TestCallbackDestination(t *testing.T) {
 	}
 }
 
-// Scheduling a NexusHandler callback succeeds and routes its invocation task to the target task
-// queue. Invoking it is not implemented yet, so the invocation task itself fails; scheduling must
-// not, since it runs as part of the execution's close transaction.
+// Scheduling a NexusHandler callback routes its invocation task to the target task queue rather
+// than to a URL-derived destination.
 func TestTransitionScheduled_NexusHandler(t *testing.T) {
 	cb := &Callback{
 		CallbackState: &callbackspb.CallbackState{
