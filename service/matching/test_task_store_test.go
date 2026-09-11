@@ -207,7 +207,7 @@ func (m *testTaskManager) addFault(method, err string, fraction float32) {
 	m.faultInjection[method+":"+err] = fraction
 }
 
-func (m *testTaskManager) fault(method, err string) bool {
+func (m *testTaskManager) shouldFault(method, err string) bool {
 	m.Lock()
 	frac := m.faultInjection[method+":"+err]
 	m.Unlock()
@@ -247,13 +247,13 @@ func (m *testTaskManager) CreateTasks(
 	m.delay()
 	defer m.delay()
 
-	if m.fault("CreateTasks", "ConditionFailed") {
+	if m.shouldFault("CreateTasks", "ConditionFailed") {
 		return nil, &persistence.ConditionFailedError{Msg: "Fake ConditionFailedError"}
-	} else if m.fault("CreateTasks", "Unavailable") {
+	} else if m.shouldFault("CreateTasks", "Unavailable") {
 		return nil, serviceerror.NewUnavailable("Fake Unavailable")
-	} else if m.fault("CreateTasks", "PersistenceLimit") {
+	} else if m.shouldFault("CreateTasks", "PersistenceLimit") {
 		return nil, persistence.ErrPersistenceNamespaceShardLimitExceeded
-	} else if m.fault("CreateTasks", "ConcurrentLimit") {
+	} else if m.shouldFault("CreateTasks", "ConcurrentLimit") {
 		return nil, &serviceerror.ResourceExhausted{
 			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT,
 			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
@@ -280,7 +280,7 @@ func (m *testTaskManager) GetTasks(
 	m.delay()
 	defer m.delay()
 
-	if m.fault("GetTasks", "Unavailable") {
+	if m.shouldFault("GetTasks", "Unavailable") {
 		return nil, serviceerror.NewUnavailablef("GetTasks operation failed")
 	}
 
