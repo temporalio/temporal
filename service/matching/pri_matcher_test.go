@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
@@ -419,5 +420,82 @@ func (s *PriMatcherSuite) TestValidatorBatch_MixedInvalidContinuesImmediately() 
 		case <-time.After(100 * time.Millisecond):
 			t.Fatal("validator did not continue immediately after mixed batch")
 		}
+	})
+}
+
+func (s *PriMatcherSuite) TestValidatorRunsOnChildBehindForwardedHead() {
+	synctest.Test(s.T(), func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		tq := tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+		childPartition := tq.NormalPartition(1)
+		cfg := newTaskQueueConfig(tq, NewConfig(dynamicconfig.NewNoopCollection()), "nsname")
+		cfg.ValidatorBatchSize = func() int { return 2 }
+		cfg.ForwarderMaxOutstandingTasks = func() int { return 1 }
+		cfg.ForwarderMaxRatePerSecond = func() float64 { return 1000 }
+
+		mockClient := matchingservicemock.NewMockMatchingServiceClient(s.controller)
+		forwardStarted := make(chan struct{})
+		forwardRelease := make(chan struct{})
+		mockClient.EXPECT().
+			AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).
+			DoAndReturn(func(context.Context, *matchingservice.AddWorkflowTaskRequest, ...any) (*matchingservice.AddWorkflowTaskResponse, error) {
+				close(forwardStarted)
+				<-forwardRelease
+				return &matchingservice.AddWorkflowTaskResponse{}, nil
+			}).AnyTimes()
+
+		// Return true so the forwarder actually forwards the head (false would
+		// drop it in forwardTask and never call AddWorkflowTask). The batch
+		// validator then reprocesses the tasks behind the head.
+		mockValidator := NewMocktaskValidator(s.controller)
+		mockValidator.EXPECT().maybeValidate(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+
+		queue := UnversionedQueueKey(childPartition)
+		fwdr, err := newPriForwarder(&cfg.forwarderConfig, queue, mockClient, testhooks.TestHooks{})
+		require.NoError(t, err)
+
+		rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+		rateLimitManager.Start()
+		tm := newPriTaskMatcher(
+			ctx, cfg, childPartition, fwdr, mockClient, mockValidator,
+			s.logger, metrics.NoopMetricsHandler, rateLimitManager, func() {}, func() {},
+		)
+		tm.Start()
+		defer tm.Stop()
+
+		// Wait until both the parentTaskForwarder and validator pollers are queued
+		// so poller-list order applies when the tasks are added.
+		await.RequireTrue(t, func() bool {
+			tm.data.lock.Lock()
+			defer tm.data.lock.Unlock()
+			return tm.data.pollers.Len() >= 2
+		}, time.Second, time.Millisecond)
+
+		done := make(chan taskResponse, 3)
+		for id := int64(1); id <= 3; id++ {
+			require.NoError(t, tm.AddTask(newBacklogTask(id, done)))
+		}
+
+		select {
+		case <-forwardStarted:
+		case <-time.After(time.Second):
+			t.Fatal("forwarder never took the head")
+		}
+
+		reprocessed := 0
+		deadline := time.After(time.Second)
+		for reprocessed < 2 {
+			select {
+			case res := <-done:
+				require.ErrorIs(t, res.err(), errReprocessTask)
+				reprocessed++
+			case <-deadline:
+				t.Fatalf("validator did not reprocess tasks behind the head, reprocessed=%d", reprocessed)
+			}
+		}
+
+		close(forwardRelease)
 	})
 }

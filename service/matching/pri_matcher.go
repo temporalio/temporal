@@ -129,8 +129,9 @@ func (tm *priTaskMatcher) Start() {
 			WithExpirationInterval(backoff.NoInterval),
 		clock.NewRealTimeSource(),
 	)
+	go tm.validateTasks(validatorRetrier)
+
 	if tm.fwdr == nil {
-		go tm.validateTasks(validatorRetrier)
 		return
 	}
 
@@ -140,8 +141,8 @@ func (tm *priTaskMatcher) Start() {
 	retrier := backoff.NewRetrier(policy, clock.NewRealTimeSource())
 	lim := quotas.NewDefaultOutgoingRateLimiter(tm.config.ForwarderMaxRatePerSecond)
 
-	// TODO(pri): ForwarderMaxOutstandingTasks > 1 is not supported: it will cause alternating
-	// tasks to be sent to the validator, which will make the validator not validate anything.
+	// ForwarderMaxOutstandingTasks > 1 is now safe: the validator cache is
+	// keyed by task ID, so alternating tasks no longer skip validation.
 	for range tm.config.ForwarderMaxOutstandingTasks() {
 		go tm.forwardTasks(lim, retrier)
 	}
