@@ -227,7 +227,12 @@ func (sm *scaleManager) callScaler() {
 	newState.TargetVersion = sm.timeSource.Now().UnixNano()
 	newState.BacklogCap = int32(backlogCapC8)
 	newState.PrivateScalerState = decision.PrivateState
+	var prevRead, prevWrite int32
 	if target == 0 {
+		// Disabling managed scaling is a clean break to dynamic config; any backlog
+		// outside its read range remains unpolled until it times out.
+		prevInfo := scaleStateToInfo(sm.scaleState, settings)
+		prevRead, prevWrite = prevInfo.Read, prevInfo.Write
 		newState.BacklogState = nil
 		newState.BacklogCounts = nil
 		newState.BacklogCap = 0
@@ -265,6 +270,11 @@ func (sm *scaleManager) callScaler() {
 		}
 
 		sm.setState(newState, settings) // emits partition_scale_{read,write,target}
+		if target == 0 {
+			sm.logger.Info("disabled managed scaling",
+				tag.Int32("prev-read", prevRead),
+				tag.Int32("prev-write", prevWrite))
+		}
 	}
 
 	cooldown := time.Duration(float32(time.Second) / settings.MaxRate)
