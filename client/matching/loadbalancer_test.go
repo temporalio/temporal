@@ -322,6 +322,30 @@ func TestPickReadPartition_NoBacklogFallsBack(t *testing.T) {
 	}
 }
 
+func TestPickReadPartition_NonPositiveConfiguredCount(t *testing.T) {
+	f := newTestTaskQueueFamily(t)
+	tq := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+
+	for name, partitionCount := range map[string]int{
+		"zero":     0,
+		"negative": -1,
+	} {
+		t.Run(name, func(t *testing.T) {
+			lb := &defaultLoadBalancer{
+				namespaceIDToName: func(namespace.ID) (namespace.Name, error) { return "fake-namespace", nil },
+				nReadPartitions: func(string, string, enumspb.TaskQueueType) int {
+					return partitionCount
+				},
+				taskQueueLBs: make(map[tqid.TaskQueue]*tqLoadBalancer),
+			}
+
+			token := lb.PickReadPartition(tq, PartitionCounts{})
+			require.Zero(t, token.TQPartition.PartitionId())
+			token.Release()
+		})
+	}
+}
+
 func TestPickReadPartition_IncompleteBacklogFallsBack(t *testing.T) {
 	f, err := tqid.NewTaskQueueFamily("fake-namespace-id", "fake-taskqueue")
 	require.NoError(t, err)
