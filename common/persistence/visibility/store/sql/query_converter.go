@@ -31,6 +31,10 @@ var (
 		"\r", "\\r",
 		"\t", "\\t",
 		"\\", "\\\\",
+		// Escape literal '?' in string values so sqlx.Rebind (which
+		// replaces bare '?' with PostgreSQL $N placeholders) does not
+		// corrupt user-provided filter values containing '?'.
+		"?", "??",
 	}
 
 	defaultLikeEscapeExpr = query.NewUnsafeSQLString(string(defaultLikeEscapeChar))
