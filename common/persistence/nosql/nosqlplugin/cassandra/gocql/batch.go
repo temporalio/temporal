@@ -57,6 +57,11 @@ func (b *Batch) WithTimestamp(timestamp int64) *Batch {
 	return newBatch(b.session, b.gocqlBatch)
 }
 
+func (b *Batch) WithTrace(tr gocql.Tracer) *Batch {
+	b.gocqlBatch.Trace(tr)
+	return newBatch(b.session, b.gocqlBatch)
+}
+
 func mustConvertBatchType(batchType BatchType) gocql.BatchType {
 	switch batchType {
 	case LoggedBatch:
