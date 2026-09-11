@@ -324,10 +324,7 @@ func (i *Redirection) handleRedirectAPIInvocation(
 			resp = respCtorFn()
 			ctx = metadata.AppendToOutgoingContext(ctx, DCRedirectionAPIHeaderName, "true")
 			ctx = metadata.AppendToOutgoingContext(ctx, DCRedirectionSourceCellHeaderName, i.currentClusterName)
-			err = remoteClient.Invoke(ctx, info.FullMethod, req, resp)
-			if err != nil {
-				return err
-			}
+			return remoteClient.Invoke(ctx, info.FullMethod, req, resp)
 		}
 		return err
 	})
