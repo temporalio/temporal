@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
@@ -58,6 +59,7 @@ type (
 		maxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
 		dlqInternalErrors          dynamicconfig.BoolPropertyFn
 		dlqErrorPattern            dynamicconfig.StringPropertyFn
+		logger                     log.Logger
 	}
 	option func(*params)
 )
@@ -1135,6 +1137,30 @@ func (s *executableSuite) TestHandleErr_RandomErr() {
 	s.Error(executable.HandleErr(errors.New("random error")))
 }
 
+// The failure log reports the attempt that failed, not the one that will run next.
+func (s *executableSuite) TestHandleErr_UnexpectedError_LogsFailedAttempt() {
+	const numAttempts = 3
+
+	var loggedAttempts []int32
+	logger := log.NewMockLogger(s.controller)
+	logger.EXPECT().Warn("Fail to process task", gomock.Any()).Do(func(_ string, tags ...tag.Tag) {
+		for _, t := range tags {
+			if t.Key() == "attempt" {
+				loggedAttempts = append(loggedAttempts, t.Value().(int32))
+			}
+		}
+	}).Times(numAttempts)
+
+	executable := s.newTestExecutable(func(p *params) {
+		p.logger = logger
+	})
+	for range numAttempts {
+		s.Error(executable.HandleErr(errors.New("random error")))
+	}
+
+	s.Equal([]int32{1, 2, 3}, loggedAttempts)
+}
+
 func (s *executableSuite) TestTaskAck_ValidTask_NoRetry() {
 	executable := s.newTestExecutable()
 
@@ -1499,6 +1525,7 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 		dlqErrorPattern: func() string {
 			return ""
 		},
+		logger: log.NewTestLogger(),
 	}
 	for _, opt := range opts {
 		opt(&p)
@@ -1523,7 +1550,7 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 		s.mockClusterMetadata,
 		s.chasmRegistry,
 		queues.GetTaskTypeTagValue,
-		log.NewTestLogger(),
+		p.logger,
 		s.metricsHandler,
 		telemetry.NoopTracer,
 		func(params *queues.ExecutableParams) {

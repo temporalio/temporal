@@ -370,6 +370,10 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 	}
 	if resp.Namespace.FailoverVersion < task.GetFailoverVersion() {
 		recordUpdated = true
+		// Source-local ramps must not survive an active-cluster change.
+		if resp.Namespace.ReplicationConfig.GetActiveClusterName() != task.ReplicationConfig.GetActiveClusterName() {
+			request.Namespace.ReplicationConfig.ClusterReplicationRamps = nil
+		}
 		request.Namespace.ReplicationConfig.ActiveClusterName = task.ReplicationConfig.GetActiveClusterName()
 		request.Namespace.ReplicationConfig.State = task.ReplicationConfig.GetState()
 		request.Namespace.FailoverVersion = task.GetFailoverVersion()
