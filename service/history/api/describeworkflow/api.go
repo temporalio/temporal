@@ -573,12 +573,6 @@ func buildChasmCallbackInfo(
 	cb *chasmcallback.Callback,
 	trigger *workflowpb.CallbackInfo_Trigger,
 ) (*workflowpb.CallbackInfo, error) {
-	nexusVariant := cb.GetCallback().GetNexus()
-	if nexusVariant == nil {
-		// Only Nexus callbacks are supported
-		return nil, nil
-	}
-
 	apiCb, err := cb.ToAPICallback()
 	if err != nil {
 		return nil, err
