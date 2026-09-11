@@ -297,8 +297,10 @@ func makeGetHistoryClient(reqType reflect.Type, routingOptions *historyservice.R
 		namespaceID = %s
 		businessID = taskToken.GetWorkflowId()
 	}
-	shardID := c.shardIDFromWorkflowID(namespaceID, businessID)
-	`, toGetter(routingOptions.TaskToken), toGetter(namespaceIdField))
+	shardID := c.shardIDFromWorkflowID(namespaceID, businessID)`,
+			toGetter(routingOptions.TaskToken),
+			toGetter(namespaceIdField),
+		) + "\n"
 	}
 	if routingOptions.ChasmComponentRef != "" {
 		verifyFieldExists(t, routingOptions.ChasmComponentRef)
@@ -306,8 +308,9 @@ func makeGetHistoryClient(reqType reflect.Type, routingOptions *historyservice.R
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument("error deserializing component ref")
 	}
-	shardID := c.shardIDFromWorkflowID(ref.GetNamespaceId(), ref.GetBusinessId())
-	`, toGetter(routingOptions.ChasmComponentRef))
+	shardID := c.shardIDFromWorkflowID(ref.GetNamespaceId(), ref.GetBusinessId())`,
+			toGetter(routingOptions.ChasmComponentRef),
+		) + "\n"
 	}
 	if routingOptions.TaskInfos != "" {
 		verifyFieldExists(t, routingOptions.TaskInfos)
