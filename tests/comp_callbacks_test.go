@@ -10,6 +10,8 @@ import (
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
+	"go.temporal.io/server/chasm/lib/workflow"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
@@ -39,9 +41,11 @@ func (s *CompletionCallbacksSuite) newTestEnv() *testcore.TestEnv {
 		testcore.WithDedicatedCluster(),
 		// Workflows
 		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(workflow.EnabledCallbackKinds, []callbacks.Kind{callbacks.KindNexus}),
 		// Standalone Activities
 		testcore.WithDynamicConfig(activity.Enabled, true),
 		testcore.WithDynamicConfig(activity.EnableCallbacks, true),
+		testcore.WithDynamicConfig(activity.EnabledCallbackKinds, []callbacks.Kind{callbacks.KindNexus}),
 		// Standalone Nexus operations
 		testcore.WithDynamicConfig(nexusoperation.Enabled, true),
 		// All Callbacks and Retry policy
