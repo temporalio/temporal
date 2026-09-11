@@ -270,7 +270,7 @@ func newInvocationResult(
 	}
 
 	if opErr, ok := errors.AsType[*nexus.OperationError](callErr); ok {
-		failure, err := operationErrorToFailure(opErr)
+		failure, err := commonnexus.OperationErrorToTemporalFailure(opErr)
 		if err != nil {
 			return nil, err
 		}
@@ -307,20 +307,6 @@ func newInvocationResult(
 		return invocationResultFail{failure: failure}, nil
 	}
 	return invocationResultRetry{failure: failure}, nil
-}
-
-func operationErrorToFailure(opErr *nexus.OperationError) (*failurepb.Failure, error) {
-	var nf nexus.Failure
-	if opErr.OriginalFailure != nil {
-		nf = *opErr.OriginalFailure
-	} else {
-		var err error
-		nf, err = nexusrpc.DefaultFailureConverter().ErrorToFailure(opErr)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return commonnexus.NexusFailureToTemporalFailure(*nexusrpc.UnwrapFailure(&nf))
 }
 
 func buildCallbackURL(

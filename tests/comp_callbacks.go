@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http/httptest"
 	"slices"
@@ -15,10 +16,13 @@ import (
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -35,8 +39,8 @@ type completionCallbackTarget interface {
 	deliveries() int
 }
 
-// completionCallbackBehavior determines how a baseCompletionCallbackTarget should respond to
-// the CompleteOperation method.
+// completionCallbackBehavior determines how a baseCompletionCallbackTarget should answer a
+// delivery reaching it.
 type completionCallbackBehavior int32
 
 const (
@@ -60,7 +64,9 @@ func (ct *baseCompletionCallbackTarget) changeBehavior(newBehavior completionCal
 	ct.behavior.Store(int32(newBehavior))
 }
 
-func (ct *baseCompletionCallbackTarget) CompleteOperation(_ context.Context, _ *nexusrpc.CompletionRequest) error {
+// deliver records a delivery having reached the target and returns how the target answers it.
+// A return value of nil means accepts the delivery, otherwise fail.
+func (ct *baseCompletionCallbackTarget) deliver() *nexus.HandlerError {
 	received := ct.deliveryCount.Add(1)
 	switch ct.behavior.Load() {
 	case int32(completionCallbackBehaviorSuccess):
@@ -91,6 +97,18 @@ func (nct *nexusCompletionCallbackTarget) newCallback() *commonpb.Callback {
 	}
 }
 
+// CompleteOperation implements the nexusrpc handler interface.
+func (nct *nexusCompletionCallbackTarget) CompleteOperation(_ context.Context, _ *nexusrpc.CompletionRequest) error {
+	handlerErr := nct.deliver()
+	if handlerErr == nil {
+		// NOTE: deliver returns a typed *nexus.HandlerError, so it can't be returned unconditionally:
+		// a nil pointer becomes a non-nil error interface, and the handler would treat every
+		// successful delivery as a failure.
+		return nil
+	}
+	return handlerErr
+}
+
 // newNexusCompletionCallbackTarget creates a new Nexus-variant callback target.
 // Starts a new HTTP server, will be cleaned up with the testcase.
 func newNexusCompletionCallbackTarget(t *testing.T, _ *testcore.TestEnv, behavior completionCallbackBehavior) completionCallbackTarget {
@@ -102,6 +120,152 @@ func newNexusCompletionCallbackTarget(t *testing.T, _ *testcore.TestEnv, behavio
 	}))
 	t.Cleanup(srv.Close)
 	target.url = srv.URL
+
+	return target
+}
+
+// nexusHandlerCompletionCallbackTarget provides an implementation of callbackTarget for receiving NexusHandler-variant callbacks.
+type nexusHandlerCompletionCallbackTarget struct {
+	baseCompletionCallbackTarget
+	// taskQueue the target's worker polls on. Distinct per nexusHandlerCompletionCallbackTarget so that
+	// an open circuitbreaker doesn't block all potential callback targets.
+	taskQueue string
+}
+
+func (nhct *nexusHandlerCompletionCallbackTarget) newCallback() *commonpb.Callback {
+	return &commonpb.Callback{
+		Variant: &commonpb.Callback_NexusHandler_{
+			NexusHandler: &commonpb.Callback_NexusHandler{
+				TaskQueueName: nhct.taskQueue,
+				Service:       "NexusHandlerService",
+				Operation:     "OnComplete",
+				SourceContext: &commonpb.Payload{
+					Data: []byte("source context payload"),
+				},
+			},
+		},
+	}
+}
+
+// pollAndRespond is the worker side of a NexusHandler callback. It polls the target's task queue and
+// answers every task it is handed according to the target's behavior at that moment.
+//
+// Runs until ctx is canceled.
+func (nhct *nexusHandlerCompletionCallbackTarget) pollAndRespond(ctx context.Context, t *testing.T, env *NexusTestEnv) {
+	for ctx.Err() == nil {
+		// Issue a long-poll request.
+		pollCtx, cancelPoll := rpc.NewContextFromParentWithTimeoutAndVersionHeaders(ctx, 30*time.Second)
+
+		task, err := env.FrontendClient().PollNexusTaskQueue(pollCtx, &workflowservice.PollNexusTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			Identity:  env.Tv().WorkerIdentity(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: nhct.taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		cancelPoll()
+
+		if err != nil {
+			// Cancelation is how the loop is stopped, so it isn't worth reporting.
+			if ctx.Err() != nil {
+				return
+			}
+			if errors.Is(err, context.DeadlineExceeded) {
+				// The long poll ran out of time without a task, which is business as usual.
+				continue
+			}
+			t.Logf("failed to poll Nexus task queue %q: %v", nhct.taskQueue, err)
+
+			// If the context is still valid, pause a beat and retry.
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(50 * time.Millisecond):
+			}
+			continue
+		}
+
+		// An empty task token means the long poll timed out without a task being dispatched.
+		if len(task.GetTaskToken()) == 0 {
+			continue
+		}
+
+		// Otherwise, respond to the Nexus invocation task.
+		if err := nhct.respond(ctx, env, task); err != nil {
+			t.Logf("failed to respond to Nexus task on %q: %v", nhct.taskQueue, err)
+		}
+	}
+}
+
+// respond answers a single delivered Nexus task the way the target's behavior dictates.
+func (nhct *nexusHandlerCompletionCallbackTarget) respond(
+	ctx context.Context,
+	env *NexusTestEnv,
+	task *workflowservice.PollNexusTaskQueueResponse,
+) error {
+	// The poller's own context has no deadline, it lives as long as the test does.
+	ctx, cancel := rpc.NewContextFromParentWithTimeoutAndVersionHeaders(ctx, 10*time.Second)
+	defer cancel()
+
+	startOp := task.GetRequest().GetStartOperation()
+	if startOp == nil {
+		msg := fmt.Sprintf("got unexpected NexusTask: %v", task.GetRequest())
+		panic(msg)
+	}
+
+	// Determine the right response based on the current behavior, and respond.
+	if deliveryErr := nhct.deliver(); deliveryErr != nil {
+		return env.respondNexusTaskFailed(ctx, task.GetTaskToken(), deliveryErr)
+	}
+
+	// The handler accepted the completion. Report back as if it returned a sync response.
+	result, err := payload.Encode("NexusHandler callback delivered")
+	if err != nil {
+		return err
+	}
+	_, err = env.FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
+		Namespace: env.Namespace().String(),
+		Identity:  env.Tv().WorkerIdentity(),
+		TaskToken: task.GetTaskToken(),
+		Response: &nexuspb.Response{
+			Variant: &nexuspb.Response_StartOperation{
+				StartOperation: &nexuspb.StartOperationResponse{
+					Variant: &nexuspb.StartOperationResponse_SyncSuccess{
+						SyncSuccess: &nexuspb.StartOperationResponse_Sync{Payload: result},
+					},
+				},
+			},
+		},
+	})
+	return err
+}
+
+// newNexusHandlerCompletionCallbackTarget creates a new NexusHandler-variant callback target.
+func newNexusHandlerCompletionCallbackTarget(t *testing.T, env *testcore.TestEnv, behavior completionCallbackBehavior) completionCallbackTarget {
+	target := &nexusHandlerCompletionCallbackTarget{
+		taskQueue: testcore.RandomizeStr("nh-callback-tq"),
+	}
+	target.behavior.Store(int32(behavior))
+
+	// A NexusHandler callback is delivered as a Nexus task on the callback's task queue, in the
+	// source execution's own namespace. So the "worker" here is a bare poll loop against that task
+	// queue. It answers as the registered Nexus service, no endpoint required.
+
+	// The poller needs a context of its own: t.Context is canceled before cleanups run, and the
+	// poll loop has to outlive it long enough to be shut down in an orderly way.
+	pollerCtx, stopPolling := context.WithCancel(context.Background())
+	pollerDone := make(chan struct{})
+	go func() {
+		defer close(pollerDone)
+		nexusEnv := &NexusTestEnv{
+			TestEnv:             env,
+			useTemporalFailures: true,
+		}
+		target.pollAndRespond(pollerCtx, t, nexusEnv)
+	}()
+	t.Cleanup(func() {
+		stopPolling()
+		// The poll loop may report failures to t, so the poller must stop before the test does.
+		<-pollerDone
+	})
 
 	return target
 }

@@ -75,7 +75,7 @@ func (c *operationContext) failedDispatchToNexusError(
 	operation string,
 ) error {
 	switch result.Outcome {
-	case commonnexus.DispatchOutcomeHandlerFailure, commonnexus.DispatchOutcomeWorkerFailure:
+	case commonnexus.DispatchOutcomeHandlerFailure:
 		// A handler error round-trips as a handler error. Anything else the worker used to fail the
 		// task converts to an opaque failure error, which the SDK reports to the caller as internal.
 		// Neither is wrapped, so both errors are reported to the caller unchanged.

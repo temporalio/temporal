@@ -27,7 +27,7 @@ type invocableOutbound struct {
 	// completionSourceTag is the fully qualified name of the CHASM component that produced this
 	// completion, e.g. "workflow.workflow" or "activity.activity".
 	completionSourceTag string
-	workflowID, runID   string
+	businessID, runID   string
 	attempt             int32
 }
 
@@ -50,7 +50,7 @@ func (n invocableOutbound) Invoke(
 			tag.WorkflowNamespace(ns.Name().String()),
 			tag.Operation("CompleteNexusOperation"),
 			tag.Destination(taskAttr.Destination),
-			tag.WorkflowID(n.workflowID),
+			tag.WorkflowID(n.businessID),
 			tag.WorkflowRunID(n.runID),
 			tag.NexusCompletionSource(n.completionSourceTag),
 			tag.AttemptStart(time.Now().UTC()),
@@ -68,18 +68,23 @@ func (n invocableOutbound) Invoke(
 		}),
 		Serializer: commonnexus.PayloadSerializer,
 	})
-	// Make the call and record metrics.
+
+	// nolint:forbidigo // Wall-clock RPC measurement, not component state; Invoke has no chasm.Context.
 	startTime := time.Now()
 
+	// Make the call.
 	n.completion.Header = n.callback.Header
 	err := client.CompleteOperation(ctx, n.callback.Url, n.completion)
 
-	namespaceTag := metrics.NamespaceTag(ns.Name().String())
-	destTag := metrics.DestinationTag(taskAttr.Destination)
-	outcomeMetricTag := metrics.OutcomeTag(string(outboundOutcome(ctx, err)))
-	completionSourceMetricTag := metrics.NexusCompletionSourceTag(n.completionSourceTag)
-	h.metricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, outcomeMetricTag, completionSourceMetricTag)
-	h.metricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, outcomeMetricTag, completionSourceMetricTag)
+	// Record metrics.
+	tags := []metrics.Tag{
+		metrics.NamespaceTag(ns.Name().String()),
+		metrics.DestinationTag(taskAttr.Destination),
+		metrics.OutcomeTag(string(outboundOutcome(ctx, err))),
+		metrics.NexusCompletionSourceTag(n.completionSourceTag),
+	}
+	h.metricsHandler.Counter(RequestCounter.Name()).Record(1, tags...)
+	h.metricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), tags...)
 
 	if err != nil {
 		retryable := isRetryableCallError(err)
@@ -88,7 +93,7 @@ func (n invocableOutbound) Invoke(
 			tag.Error(err),
 			tag.WorkflowNamespace(ns.Name().String()),
 			tag.Destination(taskAttr.Destination),
-			tag.WorkflowID(n.workflowID),
+			tag.WorkflowID(n.businessID),
 			tag.WorkflowRunID(n.runID),
 			tag.NexusCompletionSource(n.completionSourceTag),
 			tag.Attempt(n.attempt),
@@ -120,8 +125,4 @@ func outboundOutcome(callCtx context.Context, callErr error) outcomeTag {
 		return outcomeUnknownError
 	}
 	return outcomeSuccess
-}
-
-func handlerErrorOutcome(handlerErr *nexus.HandlerError) outcomeTag {
-	return outcomeTag(handlerErrorOutcomePrefix + commonnexus.BoundHandlerErrorType(string(handlerErr.Type)))
 }
