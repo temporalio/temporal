@@ -290,42 +290,38 @@ func TestPartitionScaling_Backlog(t *testing.T) {
 }
 
 // TestPartitionScaling_Disable verifies that disabling managed scaling cleanly
-// falls back to dynamic-config partition counts. It enables managed scaling
-// with Fixed=2 while DC allows 4 partitions, builds backlog on partitions 0-1,
-// then disables the scaler. After the disable, it forces add/poll traffic to
-// partition 3 (valid under DC=4 but beyond the managed range) and verifies
-// both operations succeed.
-//
-// Conservative shrink settings (ShrinkRatio=0.1, ShrinkDelta=1) ensure that
-// the server-side partition validation gate (scaleInfo.Read>0 && Write>0) stays
-// active after disable, so the test exercises the full cleanup path.
+// falls back to dynamic-config partition counts. After disabling, adds and
+// polls to partitions beyond the old managed range must succeed.
 func TestPartitionScaling_Disable(t *testing.T) {
+	// Conservative shrink keeps Write > 0 from stale BacklogState bits after
+	// disable, so the server-side validation gate stays active.
 	s := testcore.NewEnv(t, append(scalerEnvOptions(4),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingPartitionScaleManager, dynamicconfig.PartitionScaleManagerSettings{
 			MaxRate:            100,
 			BatchSize:          1,
 			BackgroundInterval: time.Second,
 			DrainBufferTime:    time.Second,
-			ShrinkRatio:        0.1, // conservative: keeps Write > 0 with stale state
+			ShrinkRatio:        0.1,
 			ShrinkDelta:        1,
 		}),
 	)...)
 
-	t.Log("enable managed scaling to 2 partitions")
+	t.Log("enable managed scaling to 2 partitions (DC=4)")
 	s.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
 		Enabled: true,
 		Fixed:   2,
 	})
 
-	t.Log("start sending 10 tasks/s")
+	t.Log("build backlog on partitions 0-1 to activate the scaler")
 	stopTasks := scalerBackgroundTasks(s, s.Tv(), 10)
 	defer stopTasks()
-
-	t.Log("wait until partitions 0,1 have 5 tasks backlog")
 	await.RequireTrue(t, scalerBacklogAtLeast(s, s.Tv(), 5, 0, 1), 15*time.Second, time.Second)
 	stopTasks()
 
-	t.Log("drain partitions 0,1")
+	// Drain all backlog. This also lets the drain path clear BacklogState bits
+	// 2-3 (partitions beyond the target that never had tasks). Without this,
+	// stale Read=4 would cover all DC partitions and mask the bug.
+	t.Log("drain all backlog")
 	stopPolls := scalerBackgroundPolls(s, s.Tv(), s.TaskPoller(), 3)
 	await.RequireTrue(t, scalerBacklogEmpty(s, s.Tv(), 0, 1), 15*time.Second, time.Second)
 	stopPolls()
@@ -335,19 +331,17 @@ func TestPartitionScaling_Disable(t *testing.T) {
 		Enabled: false,
 	})
 
-	t.Log("wait for scaler to process the disable and propagate new scaleInfo")
-	// The scaler runs every BackgroundInterval (1s). Give it time to run, persist
-	// the cleared state, and for ephemeral data to propagate to child partitions.
+	// Wait for the scaler to process the disable and propagate scaleInfo.
 	time.Sleep(5 * time.Second) //nolint:forbidigo
 
-	t.Log("force traffic to partition 3 (valid under DC=4, invalid under stale scaleInfo)")
+	t.Log("force traffic to partition 3 (valid under DC=4)")
 	cleanupWrite := s.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceWritePartition, 3))
 	defer cleanupWrite()
 	cleanupRead := s.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, 3))
 	defer cleanupRead()
 
-	t.Log("start workflow routed to partition 3 and verify it completes")
-	run, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+	t.Log("start workflow and verify task lands on partition 3 (add path)")
+	_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:    s.Namespace().String(),
 		WorkflowId:   uuid.NewString(),
 		WorkflowType: s.Tv().WorkflowType(),
@@ -355,15 +349,15 @@ func TestPartitionScaling_Disable(t *testing.T) {
 		Identity:     s.Tv().ClientIdentity(),
 		RequestId:    uuid.NewString(),
 	})
-	require.NoError(t, err, "StartWorkflowExecution should succeed after disabling scaler")
-	require.NotEmpty(t, run.RunId)
+	require.NoError(t, err)
+	await.RequireTrue(t, scalerBacklogAtLeast(s, s.Tv(), 1, 3), 10*time.Second, 500*time.Millisecond)
 
-	t.Log("poll and complete the workflow task on partition 3")
+	t.Log("poll partition 3 and complete the workflow task (poll path)")
 	_, err = s.TaskPoller().PollAndHandleWorkflowTask(
 		s.Tv(),
 		taskpoller.CompleteWorkflowHandler,
 	)
-	require.NoError(t, err, "PollAndHandleWorkflowTask should succeed after disabling scaler")
+	require.NoError(t, err)
 }
 
 func scalerBackgroundTasks(s testcore.Env, tv *testvars.TestVars, rate float32) func() {
