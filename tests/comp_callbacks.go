@@ -370,3 +370,93 @@ func (saa *standaloneActivityExecutionType) awaitCallbackState(
 	}
 	return saa.baseAwaitCallbackState(t, describeFn, wantState, errorStates)
 }
+
+// standaloneNexusOperationExecutionType implements the executionWithCallbacks using standalone Nexus operations.
+type standaloneNexusOperationExecutionType struct {
+	baseExecutionWithCallbacks
+}
+
+var _ executionWithCallbacks = (*standaloneNexusOperationExecutionType)(nil)
+
+func (sno *standaloneNexusOperationExecutionType) startAndCompleteEx(
+	t *testing.T,
+	env *testcore.TestEnv,
+	callback *commonpb.Callback,
+) (string, error) {
+	t.Helper()
+	ctx := t.Context()
+
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	operationID := testcore.RandomizeStr(t.Name())
+	nexusTestEnv := NexusTestEnv{
+		TestEnv:             env,
+		useTemporalFailures: true,
+	}
+	alwaysSuccessNexusEndpoint := nexusTestEnv.createSyncSuccessEndpoint(ctx, t, "operation-result")
+
+	// Start the standalone Nexus operation.
+	startReq := &workflowservice.StartNexusOperationExecutionRequest{
+		Namespace: env.Namespace().String(),
+
+		// The always success endpoint ignores the Service/Operation fields.
+		Endpoint:  alwaysSuccessNexusEndpoint,
+		Service:   "nexus-service",
+		Operation: "nexus-operation",
+
+		OperationId:            operationID,
+		ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
+		CompletionCallbacks: []*commonpb.Callback{
+			callback,
+		},
+	}
+	startResp, err := env.FrontendClient().StartNexusOperationExecution(ctx, startReq)
+	if err != nil {
+		return "", err
+	}
+
+	require.True(t, startResp.GetStarted())
+
+	// Wait for the Nexus operation to be resolved, only then are its completion callbacks triggered.
+	await.Require(ctx, t, func(c *await.T) {
+		descReq := &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:      env.Namespace().String(),
+			OperationId:    operationID,
+			IncludeOutcome: true,
+		}
+		descResp, err := env.FrontendClient().DescribeNexusOperationExecution(c.Context(), descReq)
+		require.NoError(t, err)
+
+		gotStatus := descResp.GetInfo().GetStatus()
+		require.Equal(c, enumspb.NEXUS_OPERATION_EXECUTION_STATUS_COMPLETED, gotStatus)
+	}, 10*time.Second, 200*time.Millisecond)
+
+	return operationID, nil
+}
+
+func (sno *standaloneNexusOperationExecutionType) awaitCallbackState(
+	t *testing.T,
+	executionID string,
+	env *testcore.TestEnv,
+	wantState enumspb.CallbackState,
+	errorStates []enumspb.CallbackState,
+) *callbackpb.CallbackInfo {
+	t.Helper()
+
+	describeFn := func(ctx context.Context) (*callbackpb.CallbackInfo, error) {
+		descResp, err := env.FrontendClient().DescribeNexusOperationExecution(ctx, &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
+			OperationId: executionID,
+		})
+		if err != nil {
+			return nil, err
+		}
+		callbacks := descResp.GetCompletionCallbacks()
+		if len(callbacks) != 1 {
+			return nil, fmt.Errorf("expected 1 callback, got %d", len(callbacks))
+		}
+		return callbacks[0].GetInfo(), nil
+	}
+	return sno.baseAwaitCallbackState(t, describeFn, wantState, errorStates)
+}
