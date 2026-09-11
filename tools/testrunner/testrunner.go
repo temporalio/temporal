@@ -395,7 +395,7 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 		// attempt but before the next one completes).
 		r.writeCurrentReport()
 
-		// If the run completely successfull, no need to retry.
+		// If the run completely successful, no need to retry.
 		if currentAttempt.exitErr == nil {
 			break
 		}
