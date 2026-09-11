@@ -13,6 +13,42 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 )
 
+func TestCoerceToCanceledFailure(t *testing.T) {
+	t.Run("already a CanceledFailure is returned unchanged", func(t *testing.T) {
+		f := &failurepb.Failure{
+			Message:     "canceled",
+			FailureInfo: &failurepb.Failure_CanceledFailureInfo{CanceledFailureInfo: &failurepb.CanceledFailureInfo{}},
+		}
+		require.Same(t, f, CoerceToCanceledFailure(f))
+	})
+
+	t.Run("non-canceled failure is rebuilt as a CanceledFailure, preserving fields", func(t *testing.T) {
+		cause := &failurepb.Failure{Message: "cause"}
+		encoded := mustToPayload(t, "encoded message")
+		// A plain / non-Temporal canceled failure converts to a non-canceled failure (here an
+		// ApplicationFailure). This is the branch the CHASM completion paths rely on.
+		in := &failurepb.Failure{
+			Message:           "canceled from handler",
+			Source:            "GoSDK",
+			StackTrace:        "stack trace here",
+			EncodedAttributes: encoded,
+			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "SomeError"},
+			},
+			Cause: cause,
+		}
+
+		got := CoerceToCanceledFailure(in)
+
+		require.NotNil(t, got.GetCanceledFailureInfo(), "must surface as a CanceledFailure")
+		require.Equal(t, "canceled from handler", got.GetMessage())
+		require.Equal(t, "GoSDK", got.GetSource())
+		require.Equal(t, "stack trace here", got.GetStackTrace())
+		protorequire.ProtoEqual(t, encoded, got.GetEncodedAttributes())
+		protorequire.ProtoEqual(t, cause, got.GetCause())
+	})
+}
+
 func TestRoundTrip_ApplicationFailure(t *testing.T) {
 	original := &failurepb.Failure{
 		Message:           "application error",
