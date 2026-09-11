@@ -157,17 +157,9 @@ func addCallbacksToMap(
 ) error {
 	chasmCBs := make([]*callbackspb.Callback, len(completionCallbacks))
 	for i, cb := range completionCallbacks {
-		chasmCB := &callbackspb.Callback{Links: cb.GetLinks()}
-		switch variant := cb.Variant.(type) {
-		case *commonpb.Callback_Nexus_:
-			chasmCB.Variant = &callbackspb.Callback_Nexus_{
-				Nexus: &callbackspb.Callback_Nexus{
-					Url:    variant.Nexus.GetUrl(),
-					Header: variant.Nexus.GetHeader(),
-				},
-			}
-		default:
-			return serviceerror.NewInvalidArgumentf("unsupported callback variant: %T", variant)
+		chasmCB, err := callback.FromAPICallback(cb)
+		if err != nil {
+			return err
 		}
 		chasmCBs[i] = chasmCB
 	}
