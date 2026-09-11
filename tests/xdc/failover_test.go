@@ -2337,6 +2337,9 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 	err = run3.Get(testCtx, nil)
 	s.NoError(err)
 
+	// Wait for all 6 workflow runs (wf1, wf2, wf3, wf6, wf7, wf8) to be indexed before force-replication.
+	s.waitForVisibilityCount(testCtx, namespace, 6)
+
 	// start force-replicate wf
 	sysClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
@@ -2349,8 +2352,10 @@ func (s *FunctionalClustersTestSuite) TestLocalNamespaceMigration() {
 		TaskQueue:          primitives.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
 	}, "force-replication", migration.ForceReplicationParams{
-		Namespace:  namespace,
-		OverallRps: 10,
+		Namespace:          namespace,
+		OverallRps:         10,
+		EnableVerification: true,
+		TargetClusterName:  s.clusters[1].ClusterName(),
 	})
 
 	s.NoError(err)
@@ -2478,6 +2483,9 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	// Update ns to have 2 clusters
 	s.updateNamespaceClusters(namespace, 0, s.clusters)
 
+	// Wait for wf1 to be indexed before force-replication.
+	s.waitForVisibilityCount(testCtx, namespace, 1)
+
 	// Start force-replicate wf
 	sysClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
@@ -2490,8 +2498,10 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 		TaskQueue:          primitives.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
 	}, "force-replication", migration.ForceReplicationParams{
-		Namespace:  namespace,
-		OverallRps: 10,
+		Namespace:          namespace,
+		OverallRps:         10,
+		EnableVerification: true,
+		TargetClusterName:  s.clusters[1].ClusterName(),
 	})
 	s.NoError(err)
 	err = sysWfRun.Get(testCtx, nil)
@@ -2500,10 +2510,14 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	// Verify all wf in ns is now available in cluster2
 	client1, worker1 := s.newClientAndWorker(s.clusters[1].Host().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
 	verify := func(wfID string, expectedRunID string) {
-		desc1, err := client1.DescribeWorkflowExecution(testCtx, wfID, "")
-		s.NoError(err)
-		s.Equal(expectedRunID, desc1.WorkflowExecutionInfo.Execution.RunId)
-		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc1.WorkflowExecutionInfo.Status)
+		s.Eventually(func() bool {
+			desc1, err := client1.DescribeWorkflowExecution(testCtx, wfID, "")
+			if err != nil {
+				return false
+			}
+			return desc1.WorkflowExecutionInfo.Execution.RunId == expectedRunID &&
+				desc1.WorkflowExecutionInfo.Status == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+		}, 15*time.Second, 200*time.Millisecond, "workflow %s should be replicated to cluster2", wfID)
 	}
 	verify(workflowID, run1.GetRunID())
 
@@ -2530,9 +2544,13 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow() {
 	err = resetRun.Get(testCtx, nil)
 	s.NoError(err)
 
-	descResp, err := client1.DescribeWorkflowExecution(testCtx, workflowID, resetResp.GetRunId())
-	s.NoError(err)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, descResp.GetWorkflowExecutionInfo().Status)
+	s.Eventually(func() bool {
+		descResp, err := client1.DescribeWorkflowExecution(testCtx, workflowID, resetResp.GetRunId())
+		if err != nil {
+			return false
+		}
+		return descResp.GetWorkflowExecutionInfo().Status == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	}, 15*time.Second, 200*time.Millisecond, "reset workflow should be visible on cluster2")
 }
 
 func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
@@ -2585,6 +2603,9 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 	// Update ns to have 2 clusters
 	s.updateNamespaceClusters(namespace, 0, s.clusters)
 
+	// Wait for both workflow runs (original + reset) to be indexed before force-replication.
+	s.waitForVisibilityCount(testCtx, namespace, 2)
+
 	// Start force-replicate wf
 	sysClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
@@ -2597,12 +2618,48 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow() {
 		TaskQueue:          primitives.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
 	}, "force-replication", migration.ForceReplicationParams{
-		Namespace:  namespace,
-		OverallRps: 10,
+		Namespace:          namespace,
+		OverallRps:         10,
+		EnableVerification: true,
+		TargetClusterName:  s.clusters[1].ClusterName(),
 	})
 	s.NoError(err)
 	err = sysWfRun.Get(testCtx, nil)
 	s.NoError(err)
+
+	// Verify the force-replication workflow actually ran VerifyReplicationTasks activities
+	// and that they verified exactly the expected number of workflow runs.
+	var totalVerifiedCount int64
+	scheduledActivityTypes := make(map[int64]string) // scheduledEventId -> activity type name
+	histIter := sysClient.GetWorkflowHistory(testCtx, forceReplicationWorkflowID, sysWfRun.GetRunID(),
+		false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
+	for histIter.HasNext() {
+		event, err := histIter.Next()
+		s.NoError(err)
+		switch event.GetEventType() {
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:
+			attrs := event.GetActivityTaskScheduledEventAttributes()
+			scheduledActivityTypes[event.GetEventId()] = attrs.GetActivityType().GetName()
+		case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
+			attrs := event.GetActivityTaskCompletedEventAttributes()
+			activityType := scheduledActivityTypes[attrs.GetScheduledEventId()]
+			if activityType != "VerifyReplicationTasks" {
+				continue
+			}
+			result := attrs.GetResult()
+			if result != nil && len(result.GetPayloads()) > 0 {
+				var resp struct {
+					VerifiedWorkflowCount int64
+				}
+				s.NoError(payloads.Decode(result, &resp))
+				totalVerifiedCount += resp.VerifiedWorkflowCount
+			}
+		default:
+		}
+	}
+	// Expect exactly 2 verified workflow runs: original run + reset run
+	s.Equal(int64(2), totalVerifiedCount,
+		"force-replication should have verified exactly 2 workflow runs (original + reset run)")
 
 	s.waitForClusterSynced()
 

@@ -74,6 +74,14 @@ jobs:
       version: __latest_features_docker_image__
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
+      # These jobs run temporalio/features@main, whose nexus/sync_success test
+      # needs worker-target Nexus callbacks to use temporal://system. Server
+      # main does that unconditionally; on 1.30.x it is off by default and the
+      # callback URL template it falls back to is never set.
+      dynamic-config-values: |
+        component.nexusoperations.useSystemCallbackURL:
+          - value: true
+            constraints: {}
 
   feature-tests-go:
     needs: build-docker-image
@@ -82,6 +90,14 @@ jobs:
       version: __latest_features_docker_image__
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
+      # These jobs run temporalio/features@main, whose nexus/sync_success test
+      # needs worker-target Nexus callbacks to use temporal://system. Server
+      # main does that unconditionally; on 1.30.x it is off by default and the
+      # callback URL template it falls back to is never set.
+      dynamic-config-values: |
+        component.nexusoperations.useSystemCallbackURL:
+          - value: true
+            constraints: {}
 
   feature-tests-python:
     needs: build-docker-image
@@ -90,6 +106,14 @@ jobs:
       version: __latest_features_docker_image__
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
+      # These jobs run temporalio/features@main, whose nexus/sync_success test
+      # needs worker-target Nexus callbacks to use temporal://system. Server
+      # main does that unconditionally; on 1.30.x it is off by default and the
+      # callback URL template it falls back to is never set.
+      dynamic-config-values: |
+        component.nexusoperations.useSystemCallbackURL:
+          - value: true
+            constraints: {}
 
   feature-tests-java:
     needs: build-docker-image
@@ -98,6 +122,14 @@ jobs:
       version: __latest_features_docker_image__
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
+      # These jobs run temporalio/features@main, whose nexus/sync_success test
+      # needs worker-target Nexus callbacks to use temporal://system. Server
+      # main does that unconditionally; on 1.30.x it is off by default and the
+      # callback URL template it falls back to is never set.
+      dynamic-config-values: |
+        component.nexusoperations.useSystemCallbackURL:
+          - value: true
+            constraints: {}
 
   feature-tests-dotnet:
     needs: build-docker-image
@@ -106,6 +138,14 @@ jobs:
       version: __latest_features_docker_image__
       version-is-repo-ref: false
       docker-image-artifact-name: temporal-server-docker
+      # These jobs run temporalio/features@main, whose nexus/sync_success test
+      # needs worker-target Nexus callbacks to use temporal://system. Server
+      # main does that unconditionally; on 1.30.x it is off by default and the
+      # callback URL template it falls back to is never set.
+      dynamic-config-values: |
+        component.nexusoperations.useSystemCallbackURL:
+          - value: true
+            constraints: {}
 
   feature-tests-status:
     name: Tests Status
