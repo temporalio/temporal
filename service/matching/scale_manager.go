@@ -194,9 +194,15 @@ func (sm *scaleManager) callScaler() {
 		PrivateState:  sm.scaleState.GetPrivateScalerState(),
 	})
 	backlogCapC8 := number.EncodeCompact8(int64(decision.BacklogCap))
+	disabledStateNeedsCleanup := decision.NewTarget == 0 &&
+		(len(sm.scaleState.GetBacklogState()) > 0 ||
+			len(sm.scaleState.GetBacklogCounts()) > 0 ||
+			sm.scaleState.GetBacklogCap() != 0 ||
+			sm.scaleState.GetPrivateScalerState() != nil)
 	if decision.NoChange ||
 		decision.NewTarget == int(sm.scaleState.GetTarget()) &&
-			backlogCapC8 == number.Compact8(sm.scaleState.GetBacklogCap()) {
+			backlogCapC8 == number.Compact8(sm.scaleState.GetBacklogCap()) &&
+			!disabledStateNeedsCleanup {
 		return
 	}
 
@@ -212,9 +218,20 @@ func (sm *scaleManager) callScaler() {
 	newState.TargetVersion = sm.timeSource.Now().UnixNano()
 	newState.BacklogCap = int32(backlogCapC8)
 	newState.PrivateScalerState = decision.PrivateState
+	var prevRead, prevWrite int32
+	if target == 0 {
+		// Disabling managed scaling is a clean break to dynamic config; any backlog
+		// outside its read range remains unpolled until it times out.
+		prevInfo := scaleStateToInfo(sm.scaleState, settings)
+		prevRead, prevWrite = prevInfo.Read, prevInfo.Write
+		newState.BacklogState = nil
+		newState.BacklogCounts = nil
+		newState.BacklogCap = 0
+		newState.PrivateScalerState = nil
+	}
 
 	mayHaveBacklog := target
-	if prevTarget == 0 {
+	if prevTarget == 0 && target > 0 {
 		// Turning on managed partition scaling: consider all partitions from dynamic
 		// config as having backlog also.
 		mayHaveBacklog = max(mayHaveBacklog, int32(sm.getWritePartitions()))
@@ -249,11 +266,17 @@ func (sm *scaleManager) callScaler() {
 	cooldown := time.Duration(float32(time.Second) / settings.MaxRate)
 	sm.nextDecision = sm.timeSource.Now().Add(cooldown)
 
-	sm.logger.Info("new target",
-		tag.Int32("target", target),
-		tag.Int32("prev-target", prevTarget),
-		tag.Int32("max-target", newState.MaxTarget),
-		tag.Bool(metrics.ScalerShadowModeTagName, shadowMode))
+	if target == 0 {
+		sm.logger.Info("disabled managed scaling",
+			tag.Int32("prev-read", prevRead),
+			tag.Int32("prev-write", prevWrite))
+	} else {
+		sm.logger.Info("new target",
+			tag.Int32("target", target),
+			tag.Int32("prev-target", prevTarget),
+			tag.Int32("max-target", newState.MaxTarget),
+			tag.Bool(metrics.ScalerShadowModeTagName, shadowMode))
+	}
 	metrics.PartitionScaleEvents.With(sm.metricsHandler.WithTags(metrics.ScalerShadowModeTag(shadowMode))).Record(1)
 }
 
