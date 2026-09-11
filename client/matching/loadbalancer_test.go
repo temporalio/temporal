@@ -358,6 +358,7 @@ func TestPickWritePartitionRootFloorPreservesNonRootWeights(t *testing.T) {
 	backlogCounts[0] = backlogCap
 	backlogCounts[partitionCount-1] = number.EncodeCompact8(number.DecodeCompact8(backlogCap) - 100)
 	pc := PartitionCounts{
+		Read:         partitionCount,
 		Write:        partitionCount,
 		BacklogCap:   backlogCap,
 		BacklogCount: backlogCounts,
@@ -519,7 +520,7 @@ func TestPickWritePartition_Forced(t *testing.T) {
 		namespaceIDToName: func(namespace.ID) (namespace.Name, error) { return "fake-namespace", nil },
 		testHooks:         testHooks,
 	}
-	pc := PartitionCounts{Write: 4}
+	pc := PartitionCounts{Read: 4, Write: 4}
 
 	for partitionID, expectedEstimate := range map[int]int{0: 4, 1: 0} {
 		cleanup := testhooks.Set(testHooks, testhooks.MatchingLBForceWritePartition, partitionID, namespace.ID(taskQueue.NamespaceId()))
