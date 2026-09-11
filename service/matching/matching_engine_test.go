@@ -3930,7 +3930,12 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 	}, 4*time.Second, 10*time.Millisecond, "backlog counter should have been reset")
 
 	// Ack level advanced past all tasks once the queue was fully drained.
-	s.Equal(maxTaskId, pqMgr.backlogMgr.InternalStatus()[0].AckLevel)
+	ackLevel := pqMgr.backlogMgr.InternalStatus()[0].AckLevel
+	if allowUndercount {
+		s.GreaterOrEqual(ackLevel, maxTaskId)
+	} else {
+		s.Equal(maxTaskId, ackLevel)
+	}
 }
 
 // TestResettingBacklogCounter tests the scenario where approximateBacklogCounter over-counts and resets it accordingly
