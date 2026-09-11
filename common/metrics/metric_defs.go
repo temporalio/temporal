@@ -1062,7 +1062,7 @@ var (
 	CompleteWorkflowTaskWithStickyEnabledCounter  = NewCounterDef("complete_workflow_task_sticky_enabled_count")
 	CompleteWorkflowTaskWithStickyDisabledCounter = NewCounterDef("complete_workflow_task_sticky_disabled_count")
 	WorkflowTaskHeartbeatTimeoutCounter           = NewCounterDef("workflow_task_heartbeat_timeout_count")
-	SignalWithStartSkipDelayCounter               = NewCounterDef("signal_with_start_skip_delay_count")
+	SignalWithStartWorkflowTaskBackoffCounter     = NewCounterDef("signal_with_start_workflow_task_backoff_count")
 	DuplicateReplicationEventsCounter             = NewCounterDef("duplicate_replication_events")
 	AcquireLockFailedCounter                      = NewCounterDef("acquire_lock_failed")
 	WorkflowContextCleared                        = NewCounterDef("workflow_context_cleared")
