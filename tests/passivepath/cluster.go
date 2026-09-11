@@ -21,6 +21,7 @@ import (
 
 func newSingleClusterWithGlobalNamespace(t *testing.T, logger log.Logger) *testcore.TestCluster {
 	clusterName := "passivepath_" + common.GenerateRandomString(5)
+	standbyClusterName := clusterName + "_standby"
 
 	persistenceDefaults := testcore.GetPersistenceTestDefaults()
 	persistenceDefaults.DBName += "_" + clusterName
@@ -36,12 +37,18 @@ func newSingleClusterWithGlobalNamespace(t *testing.T, logger log.Logger) *testc
 					Enabled:                true,
 					InitialFailoverVersion: 1,
 				},
+				standbyClusterName: {
+					Enabled:                true,
+					InitialFailoverVersion: 2,
+					RPCAddress:             "127.0.0.1:1",
+				},
 			},
 		},
 		HistoryConfig: testcore.HistoryConfig{NumHistoryShards: 1},
 		Persistence:   persistenceDefaults,
 		DynamicConfigOverrides: map[dynamicconfig.Key]any{
-			dynamicconfig.EnableTransitionHistory.Key(): true,
+			dynamicconfig.EnableTransitionHistory.Key():   true,
+			dynamicconfig.FrontendPersistenceMaxQPS.Key(): 100_000,
 		},
 		EnableHistoryTaskRecorder: true,
 	}
@@ -54,13 +61,17 @@ func newSingleClusterWithGlobalNamespace(t *testing.T, logger log.Logger) *testc
 
 func registerGlobalNamespace(t *testing.T, tc *testcore.TestCluster, name string) namespace.ID {
 	clusterName := tc.ClusterName()
+	standbyClusterName := clusterName + "_standby"
 	_, err := tc.FrontendClient().RegisterNamespace(
 		testcore.NewContext(),
 		&workflowservice.RegisterNamespaceRequest{
-			Namespace:                        name,
-			IsGlobalNamespace:                true,
-			ActiveClusterName:                clusterName,
-			Clusters:                         []*replicationpb.ClusterReplicationConfig{{ClusterName: clusterName}},
+			Namespace:         name,
+			IsGlobalNamespace: true,
+			ActiveClusterName: clusterName,
+			Clusters: []*replicationpb.ClusterReplicationConfig{
+				{ClusterName: clusterName},
+				{ClusterName: standbyClusterName},
+			},
 			WorkflowExecutionRetentionPeriod: durationpb.New(24 * time.Hour),
 		})
 	require.NoError(t, err)
