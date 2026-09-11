@@ -31,6 +31,7 @@ type (
 		PageSize(int) Query
 		PageState([]byte) Query
 		WithTimestamp(int64) Query
+		WithTrace(gocql.Tracer) Query
 		Consistency(Consistency) Query
 		Bind(...any) Query
 		Idempotent(bool) Query
