@@ -18,3 +18,8 @@ This section is essential for developers looking to contribute to the Temporal c
 This section provides reference materials for administrators responsible for deploying Temporal in a production environment. 
 It is pretty bare for now, but it is intended to covers topics like spinning up a production environment, configuring it, and monitoring it with metrics and dynamic configurations.
 For now, you can find this info on the Temporal docs website at https://docs.temporal.io/self-hosted-guide.
+
+### Experimental local-first prototype (`/local-first`)
+
+This section contains the design specifications, implementation review, and runnable demo for the
+local-first execution prototype. Start with the [local-first index](local-first/README.md).
