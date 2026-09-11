@@ -44,10 +44,11 @@ type (
 
 		// mutable
 		sync.Mutex
-		rangeID       int64
-		subqueues     []*dbSubqueue
-		otherHasTasks bool
-		scaleState    *persistencespb.PartitionScaleState
+		rangeID          int64
+		subqueues        []*dbSubqueue
+		otherHasTasks    bool
+		scaleState       *persistencespb.PartitionScaleState
+		unknownTaskWrite bool
 
 		// used to avoid unnecessary metadata writes:
 		lastChange time.Time // updated when metadata is changed in memory
@@ -164,6 +165,15 @@ func (db *taskQueueDB) RenewLease(
 			return taskQueueState{}, err
 		}
 	}
+	if db.unknownTaskWrite {
+		// The range-ID update fences pending writes from the previous lease. Only
+		// now is it safe for readers to skip IDs that those writes did not create.
+		maxReadLevel := rangeIDToTaskIDBlock(db.rangeID, db.config.RangeSize).start - 1
+		for _, s := range db.subqueues {
+			s.maxReadLevel = maxReadLevel
+		}
+		db.unknownTaskWrite = false
+	}
 	return taskQueueState{
 		rangeID:       db.rangeID,
 		ackLevel:      db.subqueues[subqueueZero].AckLevel, // TODO(pri): cleanup, only used by old backlog manager
@@ -269,7 +279,7 @@ func (db *taskQueueDB) OldUpdateState(
 
 	// Reset approximateBacklogCount to fix the count divergence issue
 	maxReadLevel := db.getMaxReadLevelLocked(subqueueZero)
-	if ackLevel == maxReadLevel {
+	if ackLevel == maxReadLevel && !db.unknownTaskWrite {
 		db.subqueues[subqueueZero].ApproximateBacklogCount = 0
 		db.subqueues[subqueueZero].oldestTime = time.Time{} // zero time means no backlog
 	}
@@ -354,7 +364,7 @@ func (db *taskQueueDB) updateAckLevelAndBacklogStats(subqueue subqueueIndex, new
 		dbQueue.AckLevel = newAckLevel
 	}
 
-	if newAckLevel == db.getMaxReadLevelLocked(subqueue) {
+	if newAckLevel == db.getMaxReadLevelLocked(subqueue) && !db.unknownTaskWrite {
 		// Reset approximateBacklogCount to fix the count divergence issue
 		if dbQueue.ApproximateBacklogCount != 0 || !dbQueue.oldestTime.Equal(oldestTime) {
 			db.lastChange = time.Now()
@@ -531,6 +541,9 @@ func (db *taskQueueDB) CreateTasks(
 	if len(reqs) == 0 {
 		return createTasksResponse{}, nil
 	}
+	if db.unknownTaskWrite {
+		return createTasksResponse{}, errShutdown
+	}
 
 	updates := make(map[subqueueIndex]subqueueCreateTasksResponse)
 	allTasks := make([]*persistencespb.AllocatedTaskInfo, len(reqs))
@@ -574,9 +587,13 @@ func (db *taskQueueDB) CreateTasks(
 
 	// Update the maxReadLevel after the writes are completed, but before we send the response,
 	// so that taskReader is guaranteed to see the new read level when SpoolTask wakes it up.
-	// Do this even if the write fails, we won't reuse the task ids.
-	for sq, update := range updates {
-		db.subqueues[sq].maxReadLevel = update.maxReadLevelAfter
+	// A write with an unknown outcome may still commit, so keep its IDs unreadable
+	// until RenewLease fences the previous range ID.
+	db.unknownTaskWrite = err != nil && !writeDefinitelyFailed(err)
+	if !db.unknownTaskWrite {
+		for sq, update := range updates {
+			db.subqueues[sq].maxReadLevel = update.maxReadLevelAfter
+		}
 	}
 
 	if err == nil {

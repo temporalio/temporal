@@ -141,6 +141,19 @@ func (w *taskWriter) appendTasks(reqs []*writeTaskRequest) error {
 	_, err := w.db.CreateTasks(w.backlogMgr.tqCtx, reqs)
 	if err != nil {
 		w.backlogMgr.signalIfFatal(err)
+		if !writeDefinitelyFailed(err) {
+			// Recover even if no further appends arrive. The new lease fences the
+			// uncertain write before its task IDs become readable.
+			state, leaseErr := w.renewLeaseWithRetry(persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+			if leaseErr != nil {
+				if !w.backlogMgr.signalIfFatal(leaseErr) {
+					w.backlogMgr.pqMgr.UnloadFromPartitionManager(unloadCauseOtherError)
+				}
+			} else {
+				w.taskIDBlock = rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize)
+				w.backlogMgr.taskReader.Signal()
+			}
+		}
 		w.logger.Error("Persistent store operation failure",
 			tag.StoreOperationCreateTask,
 			tag.Error(err),
