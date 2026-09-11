@@ -1,6 +1,6 @@
 package grpcfaults
 
-import "go.temporal.io/server/common/rpc/faultinjection"
+import "go.temporal.io/server/common/faultinjection"
 
 type (
 	// Outcome contains the result returned when a gRPC fault matches.

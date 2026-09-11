@@ -5,41 +5,39 @@ import (
 )
 
 type (
-	// storeFaultInjector is an implementation of faultGenerator that will inject errors into the persistence layer
-	// using runtime injectors or per-method configuration.
+	// storeFaultInjector injects configured and runtime faults.
 	storeFaultInjector struct {
 		storeName config.DataStoreName
-		injectors []faultInjector
+		registry  *FaultRegistry
 	}
-
-	faultInjector func(config.FaultInjectionTarget) *fault
 )
 
-// newStoreFaultInjector returns a new instance of a data store fault injector that will inject errors
-// into the persistence layer based on the provided configuration.
+// newStoreFaultInjector returns false when the store has no fault source.
 func newStoreFaultInjector(
 	storeName config.DataStoreName,
 	cfg *config.FaultInjectionDataStoreConfig,
 	injector config.FaultInjector,
 ) (*storeFaultInjector, bool) {
-	var injectors []faultInjector
+	if injector == nil && len(cfg.Methods) == 0 {
+		return nil, false
+	}
+
+	registry := NewFaultRegistry()
+	// Runtime faults take priority over configured faults.
 	if injector != nil {
-		injectors = append(injectors, runtimeFaultInjector(injector))
+		registry.register(injectorCallback(injector))
 	}
 	if len(cfg.Methods) > 0 {
-		injectors = append(injectors, configuredFaultInjector(cfg))
-	}
-	if len(injectors) == 0 {
-		return nil, false
+		registry.register(configCallback(cfg))
 	}
 	return &storeFaultInjector{
 		storeName: storeName,
-		injectors: injectors,
+		registry:  registry,
 	}, true
 }
 
-func runtimeFaultInjector(injector config.FaultInjector) faultInjector {
-	return func(target config.FaultInjectionTarget) *fault {
+func injectorCallback(injector config.FaultInjector) faultCallback {
+	return func(target Target) *fault {
 		err := injector(target)
 		if err == nil {
 			return nil
@@ -49,7 +47,7 @@ func runtimeFaultInjector(injector config.FaultInjector) faultInjector {
 	}
 }
 
-func configuredFaultInjector(cfg *config.FaultInjectionDataStoreConfig) faultInjector {
+func configCallback(cfg *config.FaultInjectionDataStoreConfig) faultCallback {
 	methodFaultGenerators := make(map[string]faultGenerator, len(cfg.Methods))
 	for methodName, methodConfig := range cfg.Methods {
 		var faults []fault
@@ -58,7 +56,7 @@ func configuredFaultInjector(cfg *config.FaultInjectionDataStoreConfig) faultInj
 		}
 		methodFaultGenerators[methodName] = newMethodFaultGenerator(faults, methodConfig.Seed)
 	}
-	return func(target config.FaultInjectionTarget) *fault {
+	return func(target Target) *fault {
 		methodGenerator, ok := methodFaultGenerators[target.Method]
 		if !ok {
 			return nil
@@ -67,20 +65,13 @@ func configuredFaultInjector(cfg *config.FaultInjectionDataStoreConfig) faultInj
 	}
 }
 
-// generate returns a fault from the first injector that chooses to inject one.
-// When this method returns nil, the persistence layer uses the real implementation.
 func (d *storeFaultInjector) generate(methodName string, requests ...any) *fault {
-	target := config.FaultInjectionTarget{
+	target := Target{
 		Store:  d.storeName,
 		Method: methodName,
 	}
 	if len(requests) > 0 {
 		target.Request = requests[0]
 	}
-	for _, injector := range d.injectors {
-		if f := injector(target); f != nil {
-			return f
-		}
-	}
-	return nil
+	return d.registry.generate(target)
 }

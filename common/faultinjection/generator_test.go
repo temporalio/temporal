@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common/rpc/faultinjection"
+	"go.temporal.io/server/common/faultinjection"
 	"go.temporal.io/server/common/testing/await"
 )
 

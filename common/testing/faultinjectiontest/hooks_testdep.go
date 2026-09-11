@@ -5,8 +5,8 @@ package faultinjectiontest
 import (
 	"context"
 
+	"go.temporal.io/server/common/faultinjection"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/rpc/faultinjection"
 	"go.temporal.io/server/common/testing/testhooks"
 )
 
