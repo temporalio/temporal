@@ -143,6 +143,7 @@ type (
 		FairnessPassDither            dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		PartitionScaleAllowedDrift    dynamicconfig.TypedPropertyFnWithTaskQueueFilter[dynamicconfig.PartitionScaleAllowedDrift]
 		PartitionScaleManagerSettings dynamicconfig.TypedPropertyFnWithTaskQueueFilter[dynamicconfig.PartitionScaleManagerSettings]
+		PartitionScalerSettings       dynamicconfig.TypedPropertyFnWithTaskQueueFilter[dynamicconfig.SimplePartitionScalerSettings]
 
 		LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
@@ -237,6 +238,7 @@ type (
 		FairnessPassDither            func() bool
 		PartitionScaleAllowedDrift    func() dynamicconfig.PartitionScaleAllowedDrift
 		PartitionScaleManagerSettings func() dynamicconfig.PartitionScaleManagerSettings
+		PartitionScalerSettings       func() dynamicconfig.SimplePartitionScalerSettings
 
 		loadCause loadCause
 	}
@@ -390,6 +392,7 @@ func NewConfig(
 		FairnessPassDither:            dynamicconfig.MatchingFairnessPassDither.Get(dc),
 		PartitionScaleAllowedDrift:    dynamicconfig.MatchingPartitionScaleAllowedDrift.Get(dc),
 		PartitionScaleManagerSettings: dynamicconfig.MatchingPartitionScaleManager.Get(dc),
+		PartitionScalerSettings:       dynamicconfig.MatchingPartitionScaler.Get(dc),
 
 		LogAllReqErrors: dynamicconfig.LogAllReqErrors.Get(dc),
 
@@ -575,6 +578,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		PartitionScaleManagerSettings: func() dynamicconfig.PartitionScaleManagerSettings {
 			return config.PartitionScaleManagerSettings(ns.String(), taskQueueName, taskType)
+		},
+		PartitionScalerSettings: func() dynamicconfig.SimplePartitionScalerSettings {
+			return config.PartitionScalerSettings(ns.String(), taskQueueName, taskType)
 		},
 		MaxVersionsInTaskQueue: func() int { return config.MaxVersionsInTaskQueue(ns.String()) },
 	}

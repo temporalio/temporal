@@ -361,6 +361,15 @@ func (pm *taskQueuePartitionManagerImpl) checkPartitionCounts(ctx context.Contex
 	if !ok {
 		return nil // only normal partitions do dynamic scaling
 	}
+
+	// The scaler may have been disabled after it wrote scale state. That state is
+	// republished to ephemeral data on every task queue load, so it would keep
+	// rejecting RPCs with no scaler left to correct it.
+	// TODO: clear the published scale info in scaleManager instead.
+	if !pm.config.PartitionScalerSettings().Enabled {
+		return nil
+	}
+
 	id := normal.PartitionId()
 
 	// userDataManager must be initialized here already so we can just ask it for scale info
