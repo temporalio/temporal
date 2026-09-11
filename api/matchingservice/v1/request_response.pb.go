@@ -642,13 +642,11 @@ type PollActivityTaskQueueResponse struct {
 	Input             *v11.Payloads          `protobuf:"bytes,5,opt,name=input,proto3" json:"input,omitempty"`
 	ScheduledTime     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=scheduled_time,json=scheduledTime,proto3" json:"scheduled_time,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
+	//     aip.dev/not-precedent: "to" is used to indicate interval. --)
 	ScheduleToCloseTimeout *durationpb.Duration   `protobuf:"bytes,7,opt,name=schedule_to_close_timeout,json=scheduleToCloseTimeout,proto3" json:"schedule_to_close_timeout,omitempty"`
 	StartedTime            *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=started_time,json=startedTime,proto3" json:"started_time,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
+	//     aip.dev/not-precedent: "to" is used to indicate interval. --)
 	StartToCloseTimeout         *durationpb.Duration       `protobuf:"bytes,9,opt,name=start_to_close_timeout,json=startToCloseTimeout,proto3" json:"start_to_close_timeout,omitempty"`
 	HeartbeatTimeout            *durationpb.Duration       `protobuf:"bytes,10,opt,name=heartbeat_timeout,json=heartbeatTimeout,proto3" json:"heartbeat_timeout,omitempty"`
 	Attempt                     int32                      `protobuf:"varint,11,opt,name=attempt,proto3" json:"attempt,omitempty"`
@@ -843,8 +841,7 @@ type AddWorkflowTaskRequest struct {
 	TaskQueue        *v14.TaskQueue         `protobuf:"bytes,3,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	ScheduledEventId int64                  `protobuf:"varint,4,opt,name=scheduled_event_id,json=scheduledEventId,proto3" json:"scheduled_event_id,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
+	//     aip.dev/not-precedent: "to" is used to indicate interval. --)
 	ScheduleToStartTimeout *durationpb.Duration `protobuf:"bytes,5,opt,name=schedule_to_start_timeout,json=scheduleToStartTimeout,proto3" json:"schedule_to_start_timeout,omitempty"`
 	Clock                  *v17.VectorClock     `protobuf:"bytes,9,opt,name=clock,proto3" json:"clock,omitempty"`
 	// How this task should be directed by matching. (Missing means the default
@@ -1011,8 +1008,7 @@ type AddActivityTaskRequest struct {
 	TaskQueue        *v14.TaskQueue         `protobuf:"bytes,4,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	ScheduledEventId int64                  `protobuf:"varint,5,opt,name=scheduled_event_id,json=scheduledEventId,proto3" json:"scheduled_event_id,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "to" is used to indicate interval. --)
+	//     aip.dev/not-precedent: "to" is used to indicate interval. --)
 	ScheduleToStartTimeout *durationpb.Duration `protobuf:"bytes,6,opt,name=schedule_to_start_timeout,json=scheduleToStartTimeout,proto3" json:"schedule_to_start_timeout,omitempty"`
 	Clock                  *v17.VectorClock     `protobuf:"bytes,9,opt,name=clock,proto3" json:"clock,omitempty"`
 	// How this task should be directed by matching. (Missing means the default
@@ -2008,8 +2004,12 @@ type DescribeTaskQueuePartitionRequest struct {
 	// Report list of pollers for requested task queue types and versions
 	ReportPollers                 bool `protobuf:"varint,5,opt,name=report_pollers,json=reportPollers,proto3" json:"report_pollers,omitempty"`
 	ReportInternalTaskQueueStatus bool `protobuf:"varint,6,opt,name=report_internal_task_queue_status,json=reportInternalTaskQueueStatus,proto3" json:"report_internal_task_queue_status,omitempty"`
-	unknownFields                 protoimpl.UnknownFields
-	sizeCache                     protoimpl.SizeCache
+	// Only process the request if the task queue partition is already loaded, and do not refresh
+	// the idle timeout of described physical task queues. Explicitly requested physical task queues
+	// may still be loaded to serve the request.
+	OnlyIfLoaded  bool `protobuf:"varint,7,opt,name=only_if_loaded,json=onlyIfLoaded,proto3" json:"only_if_loaded,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DescribeTaskQueuePartitionRequest) Reset() {
@@ -2080,6 +2080,13 @@ func (x *DescribeTaskQueuePartitionRequest) GetReportPollers() bool {
 func (x *DescribeTaskQueuePartitionRequest) GetReportInternalTaskQueueStatus() bool {
 	if x != nil {
 		return x.ReportInternalTaskQueueStatus
+	}
+	return false
+}
+
+func (x *DescribeTaskQueuePartitionRequest) GetOnlyIfLoaded() bool {
+	if x != nil {
+		return x.OnlyIfLoaded
 	}
 	return false
 }
@@ -2927,8 +2934,7 @@ type SyncDeploymentUserDataRequest struct {
 	TaskQueue   string                 `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	// Required, unless deprecated fields are used.
 	// (-- api-linter: core::0203::required=disabled
-	//
-	//	aip.dev/not-precedent: Not following Google API format --)
+	//     aip.dev/not-precedent: Not following Google API format --)
 	DeploymentName string              `protobuf:"bytes,9,opt,name=deployment_name,json=deploymentName,proto3" json:"deployment_name,omitempty"`
 	TaskQueueTypes []v19.TaskQueueType `protobuf:"varint,8,rep,packed,name=task_queue_types,json=taskQueueTypes,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_types,omitempty"`
 	// Types that are valid to be assigned to Operation:
@@ -2941,8 +2947,7 @@ type SyncDeploymentUserDataRequest struct {
 	UpdateRoutingConfig *v112.RoutingConfig `protobuf:"bytes,10,opt,name=update_routing_config,json=updateRoutingConfig,proto3" json:"update_routing_config,omitempty"`
 	// Optional map of build id to upsert version data.
 	// (-- api-linter: core::0203::required=disabled
-	//
-	//	aip.dev/not-precedent: Not following Google API format --)
+	//     aip.dev/not-precedent: Not following Google API format --)
 	UpsertVersionsData map[string]*v110.WorkerDeploymentVersionData `protobuf:"bytes,11,rep,name=upsert_versions_data,json=upsertVersionsData,proto3" json:"upsert_versions_data,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// List of build ids to forget from task queue.
 	ForgetVersions []string `protobuf:"bytes,12,rep,name=forget_versions,json=forgetVersions,proto3" json:"forget_versions,omitempty"`
@@ -5844,8 +5849,7 @@ type DescribeVersionedTaskQueuesResponse_VersionTaskQueue struct {
 	Type  v19.TaskQueueType      `protobuf:"varint,2,opt,name=type,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"type,omitempty"`
 	Stats *v14.TaskQueueStats    `protobuf:"bytes,3,opt,name=stats,proto3" json:"stats,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "by" is used to clarify the key. --)
+	//     aip.dev/not-precedent: "by" is used to clarify the key. --)
 	StatsByPriorityKey map[int32]*v14.TaskQueueStats `protobuf:"bytes,4,rep,name=stats_by_priority_key,json=statsByPriorityKey,proto3" json:"stats_by_priority_key,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
@@ -6249,14 +6253,15 @@ const file_temporal_server_api_matchingservice_v1_request_response_proto_rawDesc
 	"\x15stats_by_priority_key\x18\x04 \x03(\v2t.temporal.server.api.matchingservice.v1.DescribeVersionedTaskQueuesResponse.VersionTaskQueue.StatsByPriorityKeyEntryR\x12statsByPriorityKey\x1ap\n" +
 	"\x17StatsByPriorityKeyEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\x05R\x03key\x12?\n" +
-	"\x05value\x18\x02 \x01(\v2).temporal.api.taskqueue.v1.TaskQueueStatsR\x05value:\x028\x01\"\x94\x03\n" +
+	"\x05value\x18\x02 \x01(\v2).temporal.api.taskqueue.v1.TaskQueueStatsR\x05value:\x028\x01\"\xba\x03\n" +
 	"!DescribeTaskQueuePartitionRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12f\n" +
 	"\x14task_queue_partition\x18\x02 \x01(\v24.temporal.server.api.taskqueue.v1.TaskQueuePartitionR\x12taskQueuePartition\x12P\n" +
 	"\bversions\x18\x03 \x01(\v24.temporal.api.taskqueue.v1.TaskQueueVersionSelectionR\bversions\x12!\n" +
 	"\freport_stats\x18\x04 \x01(\bR\vreportStats\x12%\n" +
 	"\x0ereport_pollers\x18\x05 \x01(\bR\rreportPollers\x12H\n" +
-	"!report_internal_task_queue_status\x18\x06 \x01(\bR\x1dreportInternalTaskQueueStatus\"\xa0\x03\n" +
+	"!report_internal_task_queue_status\x18\x06 \x01(\bR\x1dreportInternalTaskQueueStatus\x12$\n" +
+	"\x0eonly_if_loaded\x18\a \x01(\bR\fonlyIfLoaded\"\xa0\x03\n" +
 	"\"DescribeTaskQueuePartitionResponse\x12\x9a\x01\n" +
 	"\x16versions_info_internal\x18\x01 \x03(\v2d.temporal.server.api.matchingservice.v1.DescribeTaskQueuePartitionResponse.VersionsInfoInternalEntryR\x14versionsInfoInternal\x12S\n" +
 	"\n" +

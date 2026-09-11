@@ -344,6 +344,10 @@ func (db *taskQueueDB) updateAckLevelAndBacklogStats(subqueue subqueueIndex, new
 			tag.Int("subqueue-id", int(subqueue)),
 			tag.Any("cur-ack-level", dbQueue.AckLevel),
 			tag.Any("new-ack-level", newAckLevel))
+		// This shouldn't happen, but if it does: keep the max so that we don't re-read tasks
+		// that we already acked. This also keeps the maxReadLevel comparison consistent with
+		// what is persisted (dbQueue.AckLevel).
+		newAckLevel = dbQueue.AckLevel
 	}
 	if dbQueue.AckLevel != newAckLevel {
 		db.lastChange = time.Now()
@@ -416,6 +420,7 @@ func (db *taskQueueDB) updateBacklogStatsLocked(subqueue subqueueIndex, countDel
 	count := &db.subqueues[subqueue].ApproximateBacklogCount
 	if *count+countDelta < 0 {
 		db.logger.Info("ApproximateBacklogCount could have under-counted.",
+			tag.Int("subqueue-id", int(subqueue)),
 			tag.WorkerVersion(db.queue.Version().MetricsTagValue()),
 			tag.WorkflowNamespaceID(db.queue.Partition().NamespaceId()))
 		*count = 0
@@ -751,6 +756,7 @@ func (db *taskQueueDB) CompleteTasksLessThan(
 		db.logger.Error("Persistent store operation failure",
 			tag.StoreOperationCompleteTasksLessThan,
 			tag.Error(err),
+			tag.Int("subqueue-id", int(subqueue)),
 			tag.TaskID(exclusiveMaxTaskID),
 			tag.WorkflowTaskQueueType(db.queue.TaskType()),
 			tag.WorkflowTaskQueueName(db.queue.PersistenceName()),
@@ -781,6 +787,7 @@ func (db *taskQueueDB) CompleteFairTasksLessThan(
 		db.logger.Error("Persistent store operation failure",
 			tag.StoreOperationCompleteTasksLessThan,
 			tag.Error(err),
+			tag.Int("subqueue-id", int(subqueue)),
 			tag.AckLevel(exclusiveMaxLevel),
 			tag.WorkflowTaskQueueType(db.queue.TaskType()),
 			tag.WorkflowTaskQueueName(db.queue.PersistenceName()),

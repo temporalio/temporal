@@ -5,6 +5,7 @@ package history
 import (
 	"context"
 	"math"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
@@ -13,6 +14,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -21,6 +23,7 @@ import (
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -98,6 +101,14 @@ func (r *workflowRebuilderImpl) rebuild(
 		rebuildSpec.mutableState,
 	)
 	if err != nil {
+		return err
+	}
+	rebuildMutableState.GetExecutionInfo().MutableStateRebuildTime = timestamppb.New(r.shard.GetTimeSource().Now())
+	// The run deadline is recomputed from the original start time and the execution deadline is
+	// copied from the started event, so either can already be in the past and its refreshed
+	// timer task would fire at once. Re-anchor both deadlines at the current time and regenerate
+	// the timeout timer tasks from them, similarly to what reset does.
+	if err := rebuildMutableState.RefreshExpirationTimeoutTask(ctx); err != nil {
 		return err
 	}
 	return r.overwriteToDB(ctx, rebuildMutableState)
@@ -198,6 +209,31 @@ func (r *workflowRebuilderImpl) getRebuildSpecFromMutableState(
 	}, nil
 }
 
+// rebuildStartTime returns the start time the rebuilt mutable state should carry.
+func (r *workflowRebuilderImpl) rebuildStartTime(
+	workflowKey definition.WorkflowKey,
+	mutableState *persistencespb.WorkflowMutableState,
+) time.Time {
+	if startTime := mutableState.GetExecutionState().GetStartTime(); startTime != nil {
+		return startTime.AsTime()
+	}
+	// Fallback to ExecutionInfo.StartTime if ExecutionState.StartTime is unexpectedly nil.
+	if startTime := mutableState.GetExecutionInfo().GetStartTime(); startTime != nil {
+		r.logger.Warn("workflowRebuilder unable to find a recorded start time, falling back to ExecutionInfo.StartTime",
+			tag.WorkflowNamespaceID(workflowKey.NamespaceID),
+			tag.WorkflowID(workflowKey.WorkflowID),
+			tag.WorkflowRunID(workflowKey.RunID),
+		)
+		return startTime.AsTime()
+	}
+	r.logger.Warn("workflowRebuilder unable to find a recorded start time, falling back to current time",
+		tag.WorkflowNamespaceID(workflowKey.NamespaceID),
+		tag.WorkflowID(workflowKey.WorkflowID),
+		tag.WorkflowRunID(workflowKey.RunID),
+	)
+	return r.shard.GetTimeSource().Now()
+}
+
 func (r *workflowRebuilderImpl) replayResetWorkflow(
 	ctx context.Context,
 	workflowKey definition.WorkflowKey,
@@ -208,7 +244,7 @@ func (r *workflowRebuilderImpl) replayResetWorkflow(
 ) (historyi.MutableState, error) {
 	rebuildMutableState, rebuildStats, err := ndc.NewStateRebuilder(r.shard, r.logger).RebuildWithCurrentMutableState(
 		ctx,
-		r.shard.GetTimeSource().Now(),
+		r.rebuildStartTime(workflowKey, mutableState),
 		workflowKey,
 		branchToken,
 		math.MaxInt64-1, // NOTE: this is last event ID, layer below will +1 to calculate the next event ID

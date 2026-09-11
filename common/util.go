@@ -93,6 +93,8 @@ const (
 
 	// FailureReasonActivityTimeout is failureReason for when an activity times out, with %v as the timeout type.
 	FailureReasonActivityTimeout = "activity %v timeout"
+	// FailureReasonActivityRetryScheduleToCloseTimeout is failureReason for when an activity retry cannot be scheduled before its schedule-to-close timeout.
+	FailureReasonActivityRetryScheduleToCloseTimeout = "Not enough time to schedule next retry before activity ScheduleToClose timeout, giving up retrying"
 	// FailureReasonCompleteResultExceedsLimit is failureReason for complete result exceeds limit
 	FailureReasonCompleteResultExceedsLimit = "Complete result exceeds size limit."
 	// FailureReasonFailureDetailsExceedsLimit is failureReason for failure details exceeds limit
@@ -760,18 +762,32 @@ func getFieldNameFromStruct(structPtr any, fieldPtr any) (string, error) {
 	return "", serviceerror.NewInternal("field not found in the struct")
 }
 
+// GetRPCStatus returns the gRPC status carried by err, or false if err is not a gRPC-induced
+// error.
+//
+// Wrapped gRPC status errors are supported, but wrapped errors implementing
+// Status() must be unwrapped before calling GetRPCStatus.
+func GetRPCStatus(err error) (*status.Status, bool) {
+	// This isn't correct, but is to maintain existing behavior.
+	//
+	// Exposing gRPC errors via `Status()` was a convention that existed for several years,
+	// but the canonical way to expose error status (from google.golang.org/grpc/status) is
+	// by an `GRPCStatus() *status.Status` method. [status.FromError] below does unwrapping
+	// and checks for that.
+	if stGetter, ok := err.(interface{ Status() *status.Status }); ok {
+		return stGetter.Status(), true
+	}
+	return status.FromError(err)
+}
+
 // IsRetryableRPCError checks if the error is a retryable gRPC error.
+//
+// This does not unwrap err, see [GetRPCStatus].
 func IsRetryableRPCError(err error) bool {
-	var st *status.Status
-	stGetter, ok := err.(interface{ Status() *status.Status })
-	if ok {
-		st = stGetter.Status()
-	} else {
-		st, ok = status.FromError(err)
-		if !ok {
-			// Not a gRPC induced error
-			return false
-		}
+	st, ok := GetRPCStatus(err)
+	if !ok {
+		// Not a gRPC induced error
+		return false
 	}
 	// nolint:exhaustive
 	switch st.Code() {

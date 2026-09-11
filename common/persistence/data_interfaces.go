@@ -925,6 +925,12 @@ type (
 	ForkHistoryBranchResponse struct {
 		// branchToken to represent the new branch
 		NewBranchToken []byte
+		// The storage layer might have changed the base branch token. This
+		// response represents the changed base branch token to be used for further
+		// processing in a workflow rebuild operation.
+		// An empty value indicates that the caller's base branch token
+		// is still correct.
+		BaseBranchToken []byte
 	}
 
 	// CompleteForkBranchRequest is used to complete forking
@@ -1165,7 +1171,8 @@ type (
 		// ReadRawHistoryBranch returns history node raw data for a branch ByBatch
 		// NOTE: this API should only be used by 3+DC
 		ReadRawHistoryBranch(ctx context.Context, request *ReadHistoryBranchRequest) (*ReadRawHistoryBranchResponse, error)
-		// ForkHistoryBranch forks a new branch from a old branch
+		// ForkHistoryBranch forks a new branch from an old branch. The response may contain a different/rewritten base token that
+		// should be used for further action.
 		ForkHistoryBranch(ctx context.Context, request *ForkHistoryBranchRequest) (*ForkHistoryBranchResponse, error)
 		// DeleteHistoryBranch removes a branch
 		// If this is the last branch to delete, it will also remove the root node

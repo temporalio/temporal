@@ -609,7 +609,6 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 	return nil
 }
 
-//nolint:revive,errcheck // In async mode the activities retry indefinitely so this function should not return error
 func (d *VersionWorkflowRunner) deleteVersionFromTaskQueuesAsync(ctx workflow.Context) {
 	// If there are propagations in progress, we ask them to cancel and wait for them to do so.
 	// The reason is that the ongoing upsert propagation may overwrite the delete that we want to send here, unintentionally undoing it.
@@ -617,7 +616,20 @@ func (d *VersionWorkflowRunner) deleteVersionFromTaskQueuesAsync(ctx workflow.Co
 	workflow.Await(ctx, func() bool { return d.asyncPropagationsInProgress == 1 }) // delete itself is counted as one
 	d.cancelPropagations = false                                                   // need to unset this in case the version is revived
 
-	d.deleteVersionFromTaskQueues(ctx, workflow.WithActivityOptions(ctx, propagationActivityOptions))
+	// Retryable failures retry indefinitely.
+	err := d.deleteVersionFromTaskQueues(ctx, workflow.WithActivityOptions(ctx, propagationActivityOptions))
+	if err != nil {
+		// Terminal failure. Task queues may retain stale version data, but we still
+		// decrement below so the workflow can complete; the log and metric support manual
+		// recovery. This matches syncTaskQueuesAsync, which also decrements on failure.
+		d.logger.Error(
+			"failed to delete worker deployment version from task queues",
+			"error", err,
+			"taskQueues", workflow.DeterministicKeys(d.GetVersionState().GetTaskQueueFamilies()),
+			"revision", d.GetVersionState().GetRevisionNumber(),
+		)
+		d.metrics.Counter(metrics.WorkerDeploymentVersionDeletePropagationFailure.Name()).Inc(1)
+	}
 	d.asyncPropagationsInProgress--
 }
 
@@ -694,10 +706,11 @@ func (d *VersionWorkflowRunner) doesVersionHaveActivePollers(ctx workflow.Contex
 func (d *VersionWorkflowRunner) validateRegisterWorker(args *deploymentspb.RegisterWorkerInVersionArgs) error {
 	// Should not ensure not deleted, instead the version would revive if deleted.
 
-	if _, ok := d.VersionState.TaskQueueFamilies[args.TaskQueueName].GetTaskQueues()[int32(args.TaskQueueType)]; ok {
+	taskQueueFamily, familyExists := d.VersionState.TaskQueueFamilies[args.TaskQueueName]
+	if _, ok := taskQueueFamily.GetTaskQueues()[int32(args.TaskQueueType)]; ok {
 		return temporal.NewApplicationError("task queue already exists in deployment version", errNoChangeType)
 	}
-	if len(d.VersionState.TaskQueueFamilies) >= int(args.MaxTaskQueues) {
+	if !familyExists && len(d.VersionState.TaskQueueFamilies) >= int(args.MaxTaskQueues) {
 		return temporal.NewApplicationError(
 			fmt.Sprintf("maximum number of task queues (%d) have been registered in deployment", args.MaxTaskQueues),
 			errMaxTaskQueuesInVersionType,
@@ -1268,6 +1281,9 @@ func (d *VersionWorkflowRunner) syncVersionDataToComputeStatus(ctx workflow.Cont
 				logger.Error("failed to sync compute status", "error", err)
 			} else if result.ProviderValidation != nil {
 				state.ComputeStatus = &result
+				if workflow.GetVersion(ctx, "sync-compute-status-to-deployment", workflow.DefaultVersion, 0) >= 0 {
+					d.syncSummary(ctx) // propagate updated ComputeStatus to deployment workflow
+				}
 			}
 		})
 	}

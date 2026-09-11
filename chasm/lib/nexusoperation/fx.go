@@ -15,15 +15,18 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/rpc/httpfaults"
+	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/httpfaultstest"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/fx"
 )
-
-const nexusCallbackSourceHeader = "Nexus-Callback-Source"
 
 var Module = fx.Module(
 	"chasm.lib.nexusoperation",
@@ -89,10 +92,14 @@ func endpointRegistryLifetimeHooks(lc fx.Lifecycle, registry commonnexus.Endpoin
 // NexusTransportProvider allows customization of the HTTP transport used for Nexus requests.
 type NexusTransportProvider func(namespaceID, serviceName string) http.RoundTripper
 
-func defaultNexusTransportProvider() NexusTransportProvider {
-	return func(namespaceID, serviceName string) http.RoundTripper {
-		return http.DefaultTransport
+func defaultNexusTransportProvider() (NexusTransportProvider, error) {
+	transport, err := common.NewHTTPTransport(nil)
+	if err != nil {
+		return nil, err
 	}
+	return func(namespaceID, serviceName string) http.RoundTripper {
+		return transport
+	}, nil
 }
 
 // responseSizeLimiter wraps an http.RoundTripper to limit response body size.
@@ -117,7 +124,10 @@ type clientProviderCacheKey struct {
 func clientProviderFactory(
 	httpTransportProvider NexusTransportProvider,
 	clusterMetadata cluster.Metadata,
+	namespaceRegistry namespace.Registry,
 	rpcFactory common.RPCFactory,
+	httpClientTransportInstrumenter telemetry.HTTPClientTransportInstrumenter,
+	testHooks testhooks.TestHooks,
 ) (ClientProvider, error) {
 	cl, err := rpcFactory.CreateLocalFrontendHTTPClient()
 	if err != nil {
@@ -128,17 +138,18 @@ func clientProviderFactory(
 	if clusterInfo, ok := clusterMetadata.GetAllClusterInfo()[clusterMetadata.GetCurrentClusterName()]; ok {
 		clusterID = clusterInfo.ClusterID
 	}
+	httpFaultGenerator := httpfaultstest.NewGenerator(testHooks)
 	m := collection.NewFallibleOnceMap(func(key clientProviderCacheKey) (*http.Client, error) {
 		transport := httpTransportProvider(key.namespaceID, key.endpointID)
 		return &http.Client{
-			Transport: responseSizeLimiter{transport},
+			Transport: httpClientTransportInstrumenter.Instrument(responseSizeLimiter{transport}),
 		}, nil
 	})
 
 	return func(ctx context.Context, namespaceID string, entry *persistencespb.NexusEndpointEntry, service string) (*nexusrpc.HTTPClient, error) {
 		var url string
+		var targetNamespaceID string
 		var httpClient *http.Client
-		httpCaller := httpClient.Do
 		switch variant := entry.Endpoint.Spec.Target.Variant.(type) {
 		case *persistencespb.NexusEndpointTarget_External_:
 			url = variant.External.GetUrl()
@@ -147,27 +158,45 @@ func clientProviderFactory(
 			if err != nil {
 				return nil, err
 			}
-			if clusterID != "" {
-				httpCaller = func(r *http.Request) (*http.Response, error) {
-					resp, callErr := httpClient.Do(r)
-					commonnexus.SetFailureSourceOnContext(ctx, resp)
-					return resp, callErr
-				}
-			}
 		case *persistencespb.NexusEndpointTarget_Worker_:
 			url = cl.BaseURL() + "/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Path(entry.Id)
 			httpClient = &cl.Client
-			if clusterID != "" {
-				httpCaller = func(r *http.Request) (*http.Response, error) {
-					r.Header.Set(nexusCallbackSourceHeader, clusterID)
-					resp, callErr := httpClient.Do(r)
-					commonnexus.SetFailureSourceOnContext(ctx, resp)
-					return resp, callErr
-				}
-			}
+			targetNamespaceID = variant.Worker.GetNamespaceId()
 		default:
 			return nil, serviceerror.NewInternal("got unexpected endpoint target")
 		}
+
+		httpCaller := httpClient.Do
+		if clusterID != "" {
+			httpCaller = func(r *http.Request) (*http.Response, error) {
+				resp, callErr := httpClient.Do(r)
+				// nexusrpc.HTTPClient does not return the raw HTTP response, so copy the failure-source header into the call context.
+				commonnexus.SetFailureSourceOnContext(ctx, resp)
+				return resp, callErr
+			}
+		}
+
+		if httpClientTransportInstrumenter != nil {
+			var targetNamespaceName string
+			if targetNamespaceID != "" {
+				if namespaceName, err := namespaceRegistry.GetNamespaceName(namespace.ID(targetNamespaceID)); err == nil {
+					targetNamespaceName = namespaceName.String()
+				}
+			}
+
+			// Add Nexus attributes when the HTTP transport will create a client span.
+			baseHTTPCaller := httpCaller
+			httpCaller = func(r *http.Request) (*http.Response, error) {
+				r = nexusrpc.AnnotateClientRequest(r, targetNamespaceName)
+				return baseHTTPCaller(r)
+			}
+		}
+		httpCaller = httpfaults.Wrap(
+			httpFaultGenerator,
+			httpfaults.Scope{NamespaceID: namespace.ID(namespaceID)},
+			httpCaller,
+		)
+
 		return nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{
 			BaseURL:    url,
 			Service:    service,

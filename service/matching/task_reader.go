@@ -253,7 +253,6 @@ func (tr *taskReader) addTasksToBuffer(
 	for _, t := range tasks {
 		if IsTaskExpired(t) {
 			// task is expired when "add tasks to buffer" is called, so when we read it
-			metrics.ExpiredTasksPerTaskQueueCounter.With(tr.taggedMetricsHandler()).Record(1, metrics.TaskExpireStageReadTag)
 			recordDroppedTask(tr.taggedMetricsHandler(), dropReasonExpiredRead)
 			// Also increment readLevel for expired tasks otherwise it could result in
 			// looping over the same tasks if all tasks read in the batch are expired

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -95,6 +96,7 @@ type UsecaseConfig struct {
 	tokenAttempt        int32
 	isCacheStale        bool
 	includeHeartbeat    bool
+	deploymentOptions   *deploymentpb.WorkerDeploymentOptions
 }
 
 func (s *workflowSuite) Test_NormalFlowShouldRescheduleActivity_UpdatesWorkflowExecutionAsActive() {
@@ -107,6 +109,11 @@ func (s *workflowSuite) Test_NormalFlowShouldRescheduleActivity_UpdatesWorkflowE
 		expectRetryActivity: true,
 		isCacheStale:        false,
 		retryActivityState:  enumspb.RETRY_STATE_IN_PROGRESS,
+		deploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+			WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+			DeploymentName:       "deployment",
+			BuildId:              "build-id",
+		},
 	})
 	request := s.newRespondActivityTaskFailedRequest(uc)
 	s.setupStubs(uc)
@@ -438,6 +445,7 @@ func (s *workflowSuite) newRespondActivityTaskFailedRequest(uc UsecaseConfig) *h
 			Namespace:            uc.namespaceId.String(),
 			TaskToken:            taskToken,
 			LastHeartbeatDetails: hbDetails,
+			DeploymentOptions:    uc.deploymentOptions,
 		},
 	}
 	return request
@@ -477,11 +485,14 @@ func (s *workflowSuite) setupShardContext(registry namespace.Registry) *historyi
 func (s *workflowSuite) expectTransientFailureMetricsRecorded(uc UsecaseConfig, shardContext *historyi.MockShardContext) {
 	timer := metrics.NewMockTimerIface(s.controller)
 	counter := metrics.NewMockCounterIface(s.controller)
+	deploymentNameTag, buildIDTag := expectedWorkerDeploymentMetricTags(uc.deploymentOptions)
 	tags := []metrics.Tag{
 		metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope),
 		metrics.WorkflowTypeTag(uc.wfType.Name),
 		metrics.ActivityTypeTag(uc.activityType),
 		metrics.VersioningBehaviorTag(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED),
+		deploymentNameTag,
+		buildIDTag,
 		metrics.NamespaceTag(uc.namespaceName.String()),
 		metrics.UnsafeTaskQueueTag(uc.taskQueueId),
 	}
@@ -507,11 +518,14 @@ func (s *workflowSuite) expectTransientFailureMetricsRecordedWithStartedTime(
 	startToCloseTimer := metrics.NewMockTimerIface(s.controller)
 	e2eTimer := metrics.NewMockTimerIface(s.controller)
 	counter := metrics.NewMockCounterIface(s.controller)
+	deploymentNameTag, buildIDTag := expectedWorkerDeploymentMetricTags(uc.deploymentOptions)
 	tags := []metrics.Tag{
 		metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope),
 		metrics.WorkflowTypeTag(uc.wfType.Name),
 		metrics.ActivityTypeTag(uc.activityType),
 		metrics.VersioningBehaviorTag(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED),
+		deploymentNameTag,
+		buildIDTag,
 		metrics.NamespaceTag(uc.namespaceName.String()),
 		metrics.UnsafeTaskQueueTag(uc.taskQueueId),
 	}
@@ -542,11 +556,14 @@ func (s *workflowSuite) expectTransientFailureMetricsRecordedWithStartedTime(
 func (s *workflowSuite) expectTerminalFailureMetricsRecorded(uc UsecaseConfig, shardContext *historyi.MockShardContext) {
 	timer := metrics.NewMockTimerIface(s.controller)
 	counter := metrics.NewMockCounterIface(s.controller)
+	deploymentNameTag, buildIDTag := expectedWorkerDeploymentMetricTags(uc.deploymentOptions)
 	tags := []metrics.Tag{
 		metrics.OperationTag(metrics.HistoryRespondActivityTaskFailedScope),
 		metrics.WorkflowTypeTag(uc.wfType.Name),
 		metrics.ActivityTypeTag(uc.activityType),
 		metrics.VersioningBehaviorTag(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED),
+		deploymentNameTag,
+		buildIDTag,
 		metrics.NamespaceTag(uc.namespaceName.String()),
 		metrics.UnsafeTaskQueueTag(uc.taskQueueId),
 	}
@@ -563,6 +580,19 @@ func (s *workflowSuite) expectTerminalFailureMetricsRecorded(uc UsecaseConfig, s
 	metricsHandler.EXPECT().Counter(metrics.ActivityTaskFail.Name()).Return(counter)
 
 	shardContext.EXPECT().GetMetricsHandler().Return(metricsHandler).AnyTimes()
+}
+
+func expectedWorkerDeploymentMetricTags(
+	options *deploymentpb.WorkerDeploymentOptions,
+) (deploymentNameTag metrics.Tag, buildIDTag metrics.Tag) {
+	deploymentName := ""
+	buildID := ""
+	if options.GetWorkerVersioningMode() == enumspb.WORKER_VERSIONING_MODE_VERSIONED {
+		deploymentName = options.GetDeploymentName()
+		buildID = options.GetBuildId()
+	}
+	return metrics.WorkerDeploymentNameTag(deploymentName, true),
+		metrics.WorkerDeploymentBuildIDTag(buildID, true)
 }
 
 func (s *workflowSuite) expectCounterRecorded(shardContext *historyi.MockShardContext) *historyi.MockShardContext {

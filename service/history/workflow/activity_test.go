@@ -294,6 +294,36 @@ func (s *activitySuite) TestGetPendingActivityInfoHasRetryPolicy() {
 	s.Equal(ai.RetryMaximumAttempts, pi.ActivityOptions.RetryPolicy.MaximumAttempts)
 }
 
+func (s *activitySuite) TestGetPendingActivityInfoNextAttemptScheduleTimeAndCurrentRetryInterval() {
+	now := s.mockShard.GetTimeSource().Now().UTC()
+	activityType := commonpb.ActivityType{
+		Name: "activityType",
+	}
+	ai := &persistencespb.ActivityInfo{
+		StartedEventId:          common.EmptyEventID,
+		LastAttemptCompleteTime: timestamppb.New(now),
+		HasRetryPolicy:          true,
+	}
+	s.mockMutableState.EXPECT().GetActivityType(gomock.Any(), gomock.Any()).Return(&activityType, nil).Times(2)
+
+	// Before dispatch to Matching: waiting for the retry, so we report when the next attempt is
+	// scheduled and the interval until then.
+	ai.ScheduledTime = timestamppb.New(now.Add(5 * time.Second))
+	pi, err := GetPendingActivityInfo(context.Background(), s.mockShard, s.mockMutableState, ai)
+	s.NoError(err)
+	s.Equal(enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, pi.State)
+	s.Equal(ai.ScheduledTime, pi.NextAttemptScheduleTime)
+	s.Equal(durationpb.New(5*time.Second), pi.CurrentRetryInterval)
+
+	// After dispatch to Matching: no next attempt schedule time or current retry interval.
+	ai.ScheduledTime = timestamppb.New(now.Add(-1 * time.Minute))
+	pi, err = GetPendingActivityInfo(context.Background(), s.mockShard, s.mockMutableState, ai)
+	s.NoError(err)
+	s.Equal(enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, pi.State)
+	s.Nil(pi.NextAttemptScheduleTime)
+	s.Nil(pi.CurrentRetryInterval)
+}
+
 func (s *activitySuite) AddActivityInfo() *persistencespb.ActivityInfo {
 	activityId := "activity-id"
 	activityScheduledEvent := &historypb.HistoryEvent{
@@ -340,14 +370,21 @@ func (s *activitySuite) TestResetPausedActivityAcceptance() {
 	s.NotNil(ai.PauseInfo)
 	s.Equal("test_identity", ai.PauseInfo.GetManual().Identity)
 	s.Equal("test_reason", ai.PauseInfo.GetManual().Reason)
+	timerTaskStatus := int32(TimerTaskStatusCreatedScheduleToClose |
+		TimerTaskStatusCreatedScheduleToStart |
+		TimerTaskStatusCreatedStartToClose |
+		TimerTaskStatusCreatedHeartbeat)
+	ai.TimerTaskStatus = timerTaskStatus
 
 	prevStamp = ai.Stamp
 	err = ResetActivity(context.Background(), s.mockShard, s.mutableState, ai.ActivityId,
 		false, true, false, 0)
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is not reset")
 	s.Equal(prevStamp, ai.Stamp, "ActivityInfo.Stamp should not change")
 	s.True(ai.Paused, "ActivityInfo.Paused shouldn't change by reset")
+	s.Equal(pauseInfo, ai.PauseInfo, "ActivityInfo.PauseInfo shouldn't change by reset")
+	s.Equal(timerTaskStatus, ai.TimerTaskStatus, "ActivityInfo.TimerTaskStatus shouldn't change by reset")
 }
 
 func (s *activitySuite) TestResetAndUnPauseActivityAcceptance() {
@@ -370,14 +407,91 @@ func (s *activitySuite) TestResetAndUnPauseActivityAcceptance() {
 	s.NotNil(ai.PauseInfo)
 	s.Equal("test_identity", ai.PauseInfo.GetManual().Identity)
 	s.Equal("test_reason", ai.PauseInfo.GetManual().Reason)
+	ai.TimerTaskStatus = TimerTaskStatusCreatedScheduleToClose |
+		TimerTaskStatusCreatedScheduleToStart |
+		TimerTaskStatusCreatedStartToClose |
+		TimerTaskStatusCreatedHeartbeat
 
 	prevStamp = ai.Stamp
 	err = ResetActivity(context.Background(), s.mockShard, s.mutableState, ai.ActivityId,
 		false, false, false, 0)
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is not reset")
 	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
-	s.False(ai.Paused, "ActivityInfo.Paused shouldn't change by reset")
+	s.False(ai.Paused, "ActivityInfo.Paused should be cleared by reset")
+	s.Nil(ai.PauseInfo, "ActivityInfo.PauseInfo should be cleared by reset")
+	s.Equal(int32(TimerTaskStatusNone), ai.TimerTaskStatus, "ActivityInfo.TimerTaskStatus should be reset to none")
+
+	// Simulate the transaction-close step that recreates activity timers.
+	timerCreated, err := NewTimerSequence(s.mutableState).CreateNextActivityTimer()
+	s.Require().NoError(err)
+	s.True(timerCreated, "activity timeout task should be recreated after reset unpauses the activity")
+}
+
+func (s *activitySuite) TestResetUnpausesRunningActivity() {
+	ai := s.AddActivityInfo()
+	ai.StartedEventId = 2
+	ai.StartedTime = timestamppb.New(s.mockShard.GetTimeSource().Now())
+
+	pauseInfo := &persistencespb.ActivityInfo_PauseInfo{
+		PauseTime: timestamppb.New(s.mockShard.GetTimeSource().Now()),
+		PausedBy: &persistencespb.ActivityInfo_PauseInfo_Manual_{
+			Manual: &persistencespb.ActivityInfo_PauseInfo_Manual{
+				Identity: "test_identity",
+				Reason:   "test_reason",
+			},
+		},
+	}
+	err := PauseActivity(s.mutableState, ai.ActivityId, pauseInfo)
+	s.Require().NoError(err)
+	ai.TimerTaskStatus = TimerTaskStatusCreatedScheduleToClose |
+		TimerTaskStatusCreatedScheduleToStart |
+		TimerTaskStatusCreatedStartToClose |
+		TimerTaskStatusCreatedHeartbeat
+
+	err = ResetActivity(context.Background(), s.mockShard, s.mutableState, ai.ActivityId,
+		false, false, false, 0)
+	s.Require().NoError(err)
+	s.False(ai.Paused, "ActivityInfo.Paused should be cleared by reset")
+	s.Nil(ai.PauseInfo, "ActivityInfo.PauseInfo should be cleared by reset")
+	s.Equal(int32(TimerTaskStatusNone), ai.TimerTaskStatus, "ActivityInfo.TimerTaskStatus should be reset to none")
+
+	// Simulate the transaction-close step that recreates activity timers.
+	timerCreated, err := NewTimerSequence(s.mutableState).CreateNextActivityTimer()
+	s.Require().NoError(err)
+	s.True(timerCreated, "activity timeout task should be recreated after reset unpauses the running activity")
+}
+
+func (s *activitySuite) TestUnpauseActivityAcceptance() {
+	ai := s.AddActivityInfo()
+	pauseInfo := &persistencespb.ActivityInfo_PauseInfo{
+		PauseTime: timestamppb.New(s.mockShard.GetTimeSource().Now()),
+		PausedBy: &persistencespb.ActivityInfo_PauseInfo_Manual_{
+			Manual: &persistencespb.ActivityInfo_PauseInfo_Manual{
+				Identity: "test_identity",
+				Reason:   "test_reason",
+			},
+		},
+	}
+	err := PauseActivity(s.mutableState, ai.ActivityId, pauseInfo)
+	s.Require().NoError(err)
+	ai.TimerTaskStatus = TimerTaskStatusCreatedScheduleToClose |
+		TimerTaskStatusCreatedScheduleToStart |
+		TimerTaskStatusCreatedStartToClose |
+		TimerTaskStatusCreatedHeartbeat
+	prevStamp := ai.Stamp
+
+	err = UnpauseActivity(s.mockShard, s.mutableState, ai, false, false, 0)
+	s.Require().NoError(err)
+	s.False(ai.Paused, "ActivityInfo.Paused should be cleared by unpause")
+	s.Nil(ai.PauseInfo, "ActivityInfo.PauseInfo should be cleared by unpause")
+	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
+	s.Equal(int32(TimerTaskStatusNone), ai.TimerTaskStatus, "ActivityInfo.TimerTaskStatus should be reset to none")
+
+	// Simulate the transaction-close step that recreates activity timers.
+	timerCreated, err := NewTimerSequence(s.mutableState).CreateNextActivityTimer()
+	s.Require().NoError(err)
+	s.True(timerCreated, "activity timeout task should be recreated after unpause")
 }
 
 func (s *activitySuite) TestUnpauseActivityWithResumeAcceptance() {
@@ -391,6 +505,10 @@ func (s *activitySuite) TestUnpauseActivityWithResumeAcceptance() {
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is shouldn't change")
 	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
 	s.True(ai.Paused, "ActivityInfo.Paused was not unpaused")
+	ai.TimerTaskStatus = TimerTaskStatusCreatedScheduleToClose |
+		TimerTaskStatusCreatedScheduleToStart |
+		TimerTaskStatusCreatedStartToClose |
+		TimerTaskStatusCreatedHeartbeat
 	prevStamp = ai.Stamp
 	_, err = UnpauseActivityWithResume(s.mockShard, s.mutableState, ai, false, 0)
 	s.NoError(err)
@@ -398,6 +516,12 @@ func (s *activitySuite) TestUnpauseActivityWithResumeAcceptance() {
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is shouldn't change")
 	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
 	s.False(ai.Paused, "ActivityInfo.Paused was not unpaused")
+	s.Equal(int32(TimerTaskStatusNone), ai.TimerTaskStatus, "ActivityInfo.TimerTaskStatus should be reset to none")
+
+	// Verify invalidating the stale timer mask allows the timeout task to be regenerated.
+	timerCreated, err := NewTimerSequence(s.mutableState).CreateNextActivityTimer()
+	s.Require().NoError(err)
+	s.True(timerCreated, "activity timeout task should be recreated after unpause")
 }
 
 func (s *activitySuite) TestUnpauseActivityWithNewRun() {

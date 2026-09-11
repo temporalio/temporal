@@ -8,7 +8,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/trace"
-	otelnoop "go.opentelemetry.io/otel/trace/noop"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/rpc/interceptor/logtags"
@@ -28,10 +28,16 @@ type (
 	// ClientStatsHandler gives a named type to the grpc.UnaryClientInterceptor implementation provided by otelgrpc.
 	ClientStatsHandler stats.Handler
 
+	// taskTokenCarrier is implemented by RPC payloads carrying serialized task tokens.
+	taskTokenCarrier interface {
+		GetTaskToken() []byte
+	}
+
 	customServerStatsHandler struct {
-		isDebug bool
-		wrapped stats.Handler
-		tags    *logtags.WorkflowTags
+		isDebug         bool
+		wrapped         stats.Handler
+		tags            *logtags.WorkflowTags
+		tokenSerializer *tasktoken.Serializer
 	}
 )
 
@@ -79,9 +85,10 @@ func newCustomServerStatsHandler(
 	logger log.Logger,
 ) *customServerStatsHandler {
 	return &customServerStatsHandler{
-		wrapped: handler,
-		isDebug: DebugMode(),
-		tags:    logtags.NewWorkflowTags(tasktoken.NewSerializer(), logger),
+		wrapped:         handler,
+		isDebug:         DebugMode(),
+		tags:            logtags.NewWorkflowTags(tasktoken.NewSerializer(), logger),
+		tokenSerializer: tasktoken.NewSerializer(),
 	}
 }
 
@@ -163,6 +170,10 @@ func (c *customServerStatsHandler) annotateTags(
 	span trace.Span,
 	payload any,
 ) {
+	if !span.IsRecording() {
+		return
+	}
+
 	methodName, ok := ctx.Value(methodNameKey{}).(string)
 	if !ok {
 		methodName = "unknown"
@@ -181,6 +192,67 @@ func (c *customServerStatsHandler) annotateTags(
 		}
 		span.SetAttributes(attribute.Key(k).String(logTag.Value().(string)))
 	}
+
+	if workerTaskID := c.workerTaskID(payload); workerTaskID != "" {
+		span.SetAttributes(attribute.String(WorkerTaskIDKey, workerTaskID))
+	}
+}
+
+// workerTaskID returns the correlation ID from a supported task-token payload, or empty if unavailable.
+func (c *customServerStatsHandler) workerTaskID(payload any) string {
+	tokenCarrier, ok := payload.(taskTokenCarrier)
+	if !ok {
+		return ""
+	}
+	taskToken := tokenCarrier.GetTaskToken()
+	if len(taskToken) == 0 {
+		return ""
+	}
+
+	switch message := payload.(type) {
+	case *workflowservice.PollNexusTaskQueueResponse,
+		*workflowservice.RespondNexusTaskCompletedRequest,
+		*workflowservice.RespondNexusTaskFailedRequest:
+		token, err := c.tokenSerializer.DeserializeNexusTaskToken(taskToken)
+		if err == nil {
+			return tasktoken.NexusWorkerTaskID(token.GetNamespaceId(), token.GetTaskId())
+		}
+	case *workflowservice.RespondQueryTaskCompletedRequest:
+		token, err := c.tokenSerializer.DeserializeQueryTaskToken(taskToken)
+		if err == nil {
+			return tasktoken.QueryWorkerTaskID(token.GetNamespaceId(), token.GetTaskId())
+		}
+	case *workflowservice.PollWorkflowTaskQueueResponse:
+		if message.GetQuery() != nil {
+			token, err := c.tokenSerializer.DeserializeQueryTaskToken(taskToken)
+			if err == nil {
+				return tasktoken.QueryWorkerTaskID(token.GetNamespaceId(), token.GetTaskId())
+			}
+		} else {
+			token, err := c.tokenSerializer.Deserialize(taskToken)
+			if err == nil {
+				return tasktoken.WorkflowWorkerTaskID(token.GetNamespaceId(), token.GetRunId(), token.GetScheduledEventId())
+			}
+		}
+	case *workflowservice.RespondWorkflowTaskCompletedRequest,
+		*workflowservice.RespondWorkflowTaskFailedRequest:
+		token, err := c.tokenSerializer.Deserialize(taskToken)
+		if err == nil {
+			return tasktoken.WorkflowWorkerTaskID(token.GetNamespaceId(), token.GetRunId(), token.GetScheduledEventId())
+		}
+	case *workflowservice.PollActivityTaskQueueResponse,
+		*workflowservice.RecordActivityTaskHeartbeatRequest,
+		*workflowservice.RespondActivityTaskCompletedRequest,
+		*workflowservice.RespondActivityTaskFailedRequest,
+		*workflowservice.RespondActivityTaskCanceledRequest:
+		token, err := c.tokenSerializer.Deserialize(taskToken)
+		if err == nil {
+			return tasktoken.ActivityWorkerTaskID(token.GetNamespaceId(), token.GetRunId(), token.GetScheduledEventId())
+		}
+	default:
+		return ""
+	}
+	return ""
 }
 
 func (c *customServerStatsHandler) TagConn(ctx context.Context, info *stats.ConnTagInfo) context.Context {
@@ -189,9 +261,4 @@ func (c *customServerStatsHandler) TagConn(ctx context.Context, info *stats.Conn
 
 func (c *customServerStatsHandler) HandleConn(ctx context.Context, stat stats.ConnStats) {
 	c.wrapped.HandleConn(ctx, stat)
-}
-
-func isEnabled(tp trace.TracerProvider) bool {
-	_, isNoop := tp.(otelnoop.TracerProvider)
-	return !isNoop
 }

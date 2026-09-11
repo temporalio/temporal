@@ -22,6 +22,36 @@ import (
 
 // TestReplays tests workflow logic backwards compatibility from previous versions.
 func TestReplays(t *testing.T) {
+	testCases := []struct {
+		name                         string
+		versionDemotionSignalEnabled bool
+	}{
+		{
+			name:                         "version_demotion_signal_disabled",
+			versionDemotionSignalEnabled: false,
+		},
+		{
+			name:                         "version_demotion_signal_enabled",
+			versionDemotionSignalEnabled: true,
+		},
+	}
+
+	// Replay every history with both current config values. This verifies that existing OSS
+	// histories without commit-routing-first remain on the update path without an NDE, and that
+	// Cloud histories in which the Deployment workflow sent demote-version and the Version
+	// workflow received it, but which lack version-demotion-signal-dynamic-config, remain on the
+	// signal path without an NDE even when the current config is false. A Cloud history that has
+	// not reached a demotion has no recorded choice; when its first demotion runs with the config
+	// true, the signal path is selected and recorded. The fresh-execution workflow tests cover
+	// that live decision.
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			testReplays(t, tc.versionDemotionSignalEnabled)
+		})
+	}
+}
+
+func testReplays(t *testing.T, versionDemotionSignalEnabled bool) {
 	// For each workflow implementation version we run all the replay tests for snapshots created by that version or older versions
 	for wv := workerdeployment.InitialVersion; wv <= workerdeployment.VersionDataRevisionNumber; wv++ {
 		replayer := worker.NewWorkflowReplayer()
@@ -45,7 +75,8 @@ func TestReplays(t *testing.T) {
 			maxVersionsGetter := func() int {
 				return 100
 			}
-			return workerdeployment.Workflow(ctx, workflowVersionGetter, maxVersionsGetter, args)
+			versionDemotionSignalEnabledGetter := func() bool { return versionDemotionSignalEnabled }
+			return workerdeployment.Workflow(ctx, workflowVersionGetter, maxVersionsGetter, versionDemotionSignalEnabledGetter, args)
 		}
 
 		replayer.RegisterWorkflowWithOptions(versionWorkflow, workflow.RegisterOptions{Name: workerdeployment.WorkerDeploymentVersionWorkflowType})

@@ -14,9 +14,12 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/goro"
@@ -25,6 +28,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
 	"go.uber.org/mock/gomock"
@@ -63,6 +67,11 @@ func TestPhysicalTaskQueueManager_Pri_Suite(t *testing.T) {
 
 func TestPhysicalTaskQueueManager_Fair_TestSuite(t *testing.T) {
 	suite.Run(t, &PhysicalTaskQueueManagerTestSuite{newMatcher: true, fairness: true})
+}
+
+// SetupSubTest rebuilds the manager for each subtest so table cases cannot leak tracker state.
+func (s *PhysicalTaskQueueManagerTestSuite) SetupSubTest() {
+	s.SetupTest()
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) SetupTest() {
@@ -362,7 +371,6 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestAddTaskStandby() {
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesFinalUpdateOnIdleUnload() {
 	s.config.MaxTaskQueueIdleTime = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(1 * time.Second)
-	s.config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
 	s.tqMgr.Start()
 	defer s.tqMgr.Stop(unloadCauseShuttingDown)
 
@@ -376,14 +384,21 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesFinalUpdateOnIdleUnload()
 func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnershipLost() {
 	// TODO: use mocks instead of testTaskManager so we can do synchronization better instead of sleeps
 	s.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
-	s.config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
 	s.tqMgr.Start()
 
 	// wait for goroutines to start and to acquire rangeid lock
 	time.Sleep(10 * time.Millisecond) // nolint:forbidigo
 
 	tm := s.getTaskManager()
-	s.Equal(0, tm.getUpdateCount(s.physicalTaskQueueKey))
+
+	// Fresh fair/new-matcher queues drain the other backlog on startup. This
+	// completes immediately (nothing to drain) and persists otherHasTasks=false.
+	// Wait for it to settle so it doesn't race with the assertions below, then
+	// capture the resulting write count as our baseline.
+	await.RequireTrue(s.T(), func() bool {
+		return s.tqMgr.getDrainBacklogMgr() == nil
+	}, 5*time.Second, 20*time.Millisecond)
+	baseline := tm.getUpdateCount(s.physicalTaskQueueKey)
 
 	// simulate stolen lock
 	ptm := tm.getQueueDataByKey(s.physicalTaskQueueKey)
@@ -399,8 +414,9 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnersh
 		return s.tqMgr.tqCtx.Err() != nil
 	}, 5*time.Second, 20*time.Millisecond)
 
-	// no additional updates (the failed periodic update counts as "1")
-	s.Equal(1, tm.getUpdateCount(s.physicalTaskQueueKey))
+	// no additional updates beyond the failed periodic write (which counts as "1");
+	// in particular, no final update is done during shutdown after losing ownership.
+	s.Equal(baseline+1, tm.getUpdateCount(s.physicalTaskQueueKey))
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestTQMInterruptsPollOnClose() {
@@ -417,6 +433,19 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMInterruptsPollOnClose() {
 	s.Less(time.Since(pollStart), 4*time.Second)
 }
 
+// pollScalingTask builds a minimal task carrying just the source and create time that
+// makePollerScalingDecisionImpl reads off it.
+func pollScalingTask(source enumsspb.TaskSource, createTime time.Time) *internalTask {
+	return &internalTask{
+		source: source,
+		event: &genericTaskInfo{
+			AllocatedTaskInfo: &persistencespb.AllocatedTaskInfo{
+				Data: &persistencespb.TaskInfo{CreateTime: timestamppb.New(createTime)},
+			},
+		},
+	}
+}
+
 func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingUpOnBacklog() {
 	rl := quotas.NewMockRateLimiter(s.controller)
 	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
@@ -427,7 +456,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingUpOnBacklog() {
 		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
 	}
 
-	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return fakeStats })
 	s.NotNil(decision)
 	s.GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(1))
 }
@@ -442,7 +471,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingUpAddRateExceedsDispa
 		TasksDispatchRate: 10,
 	}
 
-	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return fakeStats })
 	s.NotNil(decision)
 	s.GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(1))
 }
@@ -456,12 +485,12 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingUpUsesDefaultRatioThr
 
 	// 110/100 = 1.1, below the 1.2 default.
 	belowThreshold := &taskqueuepb.TaskQueueStats{TasksAddRate: 110, TasksDispatchRate: 100}
-	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return belowThreshold })
+	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return belowThreshold })
 	s.Nil(decision)
 
 	// 130/100 = 1.3, above the 1.2 default.
 	aboveThreshold := &taskqueuepb.TaskQueueStats{TasksAddRate: 130, TasksDispatchRate: 100}
-	decision = s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return aboveThreshold })
+	decision = s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return aboveThreshold })
 	s.NotNil(decision)
 	s.GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(1))
 }
@@ -475,14 +504,14 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingUpRatioThresholdIsCon
 	// above the actual ratio should suppress the scale-up.
 	highRatio := &taskqueuepb.TaskQueueStats{TasksAddRate: 100, TasksDispatchRate: 10}
 	s.tqMgr.partitionMgr.config.PollerScalingTaskAddToDispatchRatio = func() float64 { return 20 }
-	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return highRatio })
+	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return highRatio })
 	s.Nil(decision)
 
 	// 110/100 = 1.1, which would not scale up under the default 1.2 threshold. Lowering the
 	// threshold below the actual ratio should trigger a scale-up.
 	lowRatio := &taskqueuepb.TaskQueueStats{TasksAddRate: 110, TasksDispatchRate: 100}
 	s.tqMgr.partitionMgr.config.PollerScalingTaskAddToDispatchRatio = func() float64 { return 1.0 }
-	decision = s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return lowRatio })
+	decision = s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return lowRatio })
 	s.NotNil(decision)
 	s.GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(1))
 }
@@ -492,7 +521,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingNoChangeOnNoBacklogFa
 		ApproximateBacklogCount: 0,
 		ApproximateBacklogAge:   durationpb.New(0),
 	}
-	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return fakeStats })
 	s.Nil(decision)
 }
 
@@ -511,12 +540,12 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingNonRootPartition() {
 		ApproximateBacklogCount: 100,
 		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
 	}
-	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return fakeStats })
 	s.NotNil(decision)
 	s.GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(1))
 
 	fakeStats.ApproximateBacklogCount = 0
-	decision = s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	decision = s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return fakeStats })
 	s.Nil(decision)
 }
 
@@ -539,7 +568,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingStickyQueue() {
 		TasksAddRate:      100,
 		TasksDispatchRate: 10,
 	}
-	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return fakeStats })
 	s.NotNil(decision)
 	s.GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(1))
 }
@@ -548,8 +577,53 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDownOnLongSyncMatch()
 	fakeStats := &taskqueuepb.TaskQueueStats{
 		ApproximateBacklogCount: 0,
 	}
-	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now().Add(-2*time.Second), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now().Add(-2*time.Second), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return fakeStats })
 	s.LessOrEqual(decision.PollRequestDeltaSuggestion, int32(-1))
+}
+
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingHoldOnLongBacklogMatch() {
+	// Backlog task with long poll wait and no sustained backlog: no scaling decision.
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 0,
+	}
+	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now().Add(-2*time.Second), pollScalingTask(enumsspb.TASK_SOURCE_DB_BACKLOG, time.Now()), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	s.Nil(decision)
+}
+
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingBacklogFallsThruToScaleUp() {
+	// Backlog task with long poll wait and sustained backlog: scale up (+1).
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 100,
+		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
+	}
+	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now().Add(-2*time.Second), pollScalingTask(enumsspb.TASK_SOURCE_DB_BACKLOG, time.Now()), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	s.NotNil(decision)
+	s.Equal(int32(1), decision.PollRequestDeltaSuggestion)
+}
+
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingHoldOnTaskQueueRateLimited() {
+	// Long poll + backlog task + rate limit active: suppress -1 (backlog), then hold instead of +1 (rate limited).
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 100,
+		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
+		RateLimitingActive:      true,
+	}
+	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now().Add(-2*time.Second), pollScalingTask(enumsspb.TASK_SOURCE_DB_BACKLOG, time.Now()), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	s.Nil(decision)
+}
+
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricTaskQueueRateLimited() {
+	handler := s.enablePollerScaleDecisionMetrics()
+	capture := handler.StartCapture()
+	defer handler.StopCapture(capture)
+
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 100,
+		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
+		RateLimitingActive:      true,
+	}
+	s.tqMgr.makePollerScalingDecisionImpl(time.Now().Add(-2*time.Second), pollScalingTask(enumsspb.TASK_SOURCE_DB_BACKLOG, time.Now()), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionHold, metrics.PollerScaleReasonTaskQueueRateLimited)
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionsAreRateLimited() {
@@ -562,10 +636,10 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionsAreRateLimit
 		ApproximateBacklogCount: 100,
 		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
 	}
-	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return fakeStats })
 	s.GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(1))
 
-	decision = s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	decision = s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return fakeStats })
 	s.Nil(decision)
 }
 
@@ -594,11 +668,11 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricScaleDo
 	defer handler.StopCapture(capture)
 
 	fakeStats := &taskqueuepb.TaskQueueStats{ApproximateBacklogCount: 0}
-	s.tqMgr.makePollerScalingDecisionImpl(time.Now().Add(-2*time.Second), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	s.tqMgr.makePollerScalingDecisionImpl(time.Now().Add(-2*time.Second), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return fakeStats })
 	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionDown, metrics.PollerScaleReasonIdle)
 }
 
-func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricScaleUpBacklog() {
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricScaleUpDelay() {
 	rl := quotas.NewMockRateLimiter(s.controller)
 	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 	s.tqMgr.pollerScalingRateLimiter = rl
@@ -610,11 +684,11 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricScaleUp
 		ApproximateBacklogCount: 100,
 		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
 	}
-	s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
-	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonBacklog)
+	s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonDelay)
 }
 
-func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricScaleUpTaskRate() {
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricScaleUpRatio() {
 	rl := quotas.NewMockRateLimiter(s.controller)
 	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 	s.tqMgr.pollerScalingRateLimiter = rl
@@ -626,8 +700,8 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricScaleUp
 		TasksAddRate:      100,
 		TasksDispatchRate: 10,
 	}
-	s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
-	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonTaskRate)
+	s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionUp, metrics.PollerScaleReasonRatio)
 }
 
 func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricHoldRateLimited() {
@@ -642,7 +716,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricHoldRat
 		ApproximateBacklogCount: 100,
 		ApproximateBacklogAge:   durationpb.New(1 * time.Minute),
 	}
-	s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return fakeStats })
 	s.assertPollerScaleDecision(capture, metrics.PollerScaleDecisionHold, metrics.PollerScaleReasonRateLimited)
 }
 
@@ -661,7 +735,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricNoSigna
 		TasksAddRate:            10,
 		TasksDispatchRate:       100,
 	}
-	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return fakeStats })
 	s.Nil(decision)
 	s.Empty(capture.Snapshot()[metrics.PollerScaleDecisionCounter.Name()])
 }
@@ -674,7 +748,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDecisionMetricDisable
 	defer handler.StopCapture(capture)
 
 	fakeStats := &taskqueuepb.TaskQueueStats{ApproximateBacklogCount: 0}
-	s.tqMgr.makePollerScalingDecisionImpl(time.Now().Add(-2*time.Second), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	s.tqMgr.makePollerScalingDecisionImpl(time.Now().Add(-2*time.Second), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return fakeStats })
 	s.Empty(capture.Snapshot()[metrics.PollerScaleDecisionCounter.Name()])
 }
 
@@ -689,7 +763,6 @@ func TestDrainCompletionNoReloadDraining(t *testing.T) {
 
 	config := defaultTestConfig()
 	config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(50 * time.Millisecond)
-	config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true)
 
 	nsName := namespace.Name("ns-name")
 	ns, registry := createMockNamespaceCache(controller, nsName)
@@ -782,4 +855,178 @@ func TestDrainCompletionNoReloadDraining(t *testing.T) {
 	// verify no new persistence calls on pri queue
 	assert.Equal(t, prevPriStats.updateCount, priQueueData.persistenceStats().updateCount,
 		"no new UpdateTaskQueue calls should be made to drained table after reload")
+}
+
+// syncMatchOneTask offers a task to a waiting local poller and blocks until PollTask has returned,
+// which is when the task trackers are updated.
+func (s *PhysicalTaskQueueManagerTestSuite) syncMatchOneTask(forwardInfo *taskqueuespb.TaskForwardInfo) {
+	poller, pollResult := runOneShotPoller(context.Background(), s.tqMgr)
+	defer poller.Cancel()
+
+	task := newInternalTaskForSyncMatch(&persistencespb.TaskInfo{
+		CreateTime: timestamppb.New(time.Now()),
+	}, forwardInfo, 0, nil)
+
+	outcome, err := s.tqMgr.TrySyncMatch(context.Background(), task)
+	s.Require().NoError(err)
+	s.Require().Equal(syncMatchSuccess, outcome)
+	s.Require().IsType(&internalTask{}, <-pollResult, "poller should have received the task")
+}
+
+func (s *PhysicalTaskQueueManagerTestSuite) TestSyncMatchRateCountsLocallyAddedTasks() {
+	// Counterpart to TestSyncMatchRateExcludesForwardedTasks: a locally added task is counted.
+	s.syncMatchOneTask(nil)
+
+	addRate, syncMatchRate := s.tqMgr.getAggregateRates()
+	s.Positive(addRate)
+	s.Positive(syncMatchRate)
+}
+
+func (s *PhysicalTaskQueueManagerTestSuite) TestSyncMatchRateExcludesForwardedTasks() {
+	// TrySyncMatch does not count a forwarded task as added on this partition, so a match of one
+	// must not count toward the sync match rate either.
+	s.syncMatchOneTask(&taskqueuespb.TaskForwardInfo{
+		SourcePartition: "/_sys/" + taskQueueName + "/1",
+		TaskSource:      enumsspb.TASK_SOURCE_HISTORY,
+	})
+
+	addRate, syncMatchRate := s.tqMgr.getAggregateRates()
+	s.Zero(addRate, "a forwarded task is not an add on this partition")
+	s.Zero(syncMatchRate, "a forwarded task must not count toward the sync match rate")
+}
+
+// useSignalsV2ForPollerScaling sets matching.useSignalsV2ForPollerScaling for the manager under
+// test and removes the decision rate limit so every call yields a decision.
+func (s *PhysicalTaskQueueManagerTestSuite) useSignalsV2ForPollerScaling(enabled bool) {
+	rl := quotas.NewMockRateLimiter(s.controller)
+	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+	s.tqMgr.pollerScalingRateLimiter = rl
+	s.tqMgr.partitionMgr.config.UseSignalsV2ForPollerScaling = func() bool { return enabled }
+}
+
+// freezePollScalingTime installs a controllable time source. The backlog threshold is 200ms, so
+// poll scaling decisions race wall time without it. Call it before any task tracker is created:
+// newTaskTracker captures the engine time source.
+func (s *PhysicalTaskQueueManagerTestSuite) freezePollScalingTime() *clock.EventTimeSource {
+	ts := clock.NewEventTimeSource()
+	ts.Update(time.Now())
+	s.tqMgr.partitionMgr.engine.timeSource = ts
+	return ts
+}
+
+// seedTaskTrackers records task counts and advances the clock so rate() has a nonzero divisor. The
+// advance must stay under the 5s bucket size or the counts rotate out of the circular buffer.
+func (s *PhysicalTaskQueueManagerTestSuite) seedTaskTrackers(ts *clock.EventTimeSource, added, syncMatched int) {
+	pri := s.tqMgr.config.DefaultPriorityKey
+	s.tqMgr.incTaskTracker(s.tqMgr.tasksAdded, pri, added)
+	s.tqMgr.incTaskTracker(s.tqMgr.tasksSyncMatched, pri, syncMatched)
+	ts.Update(ts.Now().Add(time.Second))
+}
+
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingSignalsV2() {
+	cases := []struct {
+		name         string
+		v2Enabled    bool
+		taskAge      time.Duration
+		taskSource   enumsspb.TaskSource
+		added        int
+		syncMatched  int
+		stats        *taskqueuepb.TaskQueueStats
+		wantDelta    int32
+		wantDecision string
+		wantReason   metrics.ReasonString
+	}{
+		{
+			name:         "dispatch latency above threshold scales up",
+			v2Enabled:    true,
+			taskAge:      500 * time.Millisecond,
+			taskSource:   enumsspb.TASK_SOURCE_DB_BACKLOG,
+			stats:        &taskqueuepb.TaskQueueStats{},
+			wantDelta:    1,
+			wantDecision: metrics.PollerScaleDecisionUp,
+			wantReason:   metrics.PollerScaleReasonDelay,
+		},
+		{
+			name:       "dispatch latency below threshold holds",
+			v2Enabled:  true,
+			taskAge:    50 * time.Millisecond,
+			taskSource: enumsspb.TASK_SOURCE_HISTORY,
+			stats:      &taskqueuepb.TaskQueueStats{TasksAddRate: 10, TasksDispatchRate: 100},
+		},
+		{
+			name:         "add rate outpacing sync match rate scales up",
+			v2Enabled:    true,
+			taskSource:   enumsspb.TASK_SOURCE_HISTORY,
+			added:        300,
+			syncMatched:  100,
+			stats:        &taskqueuepb.TaskQueueStats{TasksAddRate: 1, TasksDispatchRate: 100},
+			wantDelta:    1,
+			wantDecision: metrics.PollerScaleDecisionUp,
+			wantReason:   metrics.PollerScaleReasonRatio,
+		},
+		{
+			name:         "zero sync match rate scales up",
+			v2Enabled:    true,
+			taskSource:   enumsspb.TASK_SOURCE_HISTORY,
+			added:        100,
+			stats:        &taskqueuepb.TaskQueueStats{TasksAddRate: 10, TasksDispatchRate: 100},
+			wantDelta:    1,
+			wantDecision: metrics.PollerScaleDecisionUp,
+			wantReason:   metrics.PollerScaleReasonRatio,
+		},
+		{
+			name:       "no local rates holds and ignores stats",
+			v2Enabled:  true,
+			taskSource: enumsspb.TASK_SOURCE_HISTORY,
+			stats:      &taskqueuepb.TaskQueueStats{TasksAddRate: 100, TasksDispatchRate: 10},
+		},
+		{
+			name:         "task queue rate limit suppresses a latency scale up",
+			v2Enabled:    true,
+			taskAge:      500 * time.Millisecond,
+			taskSource:   enumsspb.TASK_SOURCE_DB_BACKLOG,
+			stats:        &taskqueuepb.TaskQueueStats{RateLimitingActive: true},
+			wantDecision: metrics.PollerScaleDecisionHold,
+			wantReason:   metrics.PollerScaleReasonTaskQueueRateLimited,
+		},
+		{
+			name:       "disabled ignores task create time",
+			v2Enabled:  false,
+			taskAge:    time.Hour,
+			taskSource: enumsspb.TASK_SOURCE_DB_BACKLOG,
+			stats:      &taskqueuepb.TaskQueueStats{ApproximateBacklogCount: 0},
+		},
+	}
+
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			s.useSignalsV2ForPollerScaling(tc.v2Enabled)
+			ts := s.freezePollScalingTime()
+			handler := s.enablePollerScaleDecisionMetrics()
+			capture := handler.StartCapture()
+			defer handler.StopCapture(capture)
+
+			if tc.added != 0 || tc.syncMatched != 0 {
+				s.seedTaskTrackers(ts, tc.added, tc.syncMatched)
+			}
+
+			decision := s.tqMgr.makePollerScalingDecisionImpl(
+				ts.Now(), pollScalingTask(tc.taskSource, ts.Now().Add(-tc.taskAge)),
+				func() *taskqueuepb.TaskQueueStats { return tc.stats },
+			)
+
+			if tc.wantDelta == 0 {
+				s.Nil(decision)
+			} else {
+				s.Require().NotNil(decision)
+				s.Equal(tc.wantDelta, decision.PollRequestDeltaSuggestion)
+			}
+
+			if tc.wantDecision == "" {
+				s.Empty(capture.Snapshot()[metrics.PollerScaleDecisionCounter.Name()])
+			} else {
+				s.assertPollerScaleDecision(capture, tc.wantDecision, tc.wantReason)
+			}
+		})
+	}
 }

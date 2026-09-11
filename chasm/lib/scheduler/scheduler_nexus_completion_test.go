@@ -9,10 +9,17 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	schedulepb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
+	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/scheduler/migration"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/testing/testlogger"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -126,6 +133,167 @@ func TestHandleNexusCompletion_Success(t *testing.T) {
 	executeNexusCompletion(t, tc)
 }
 
+func TestHandleNexusCompletion_ExistingAllowAllDoesNotUpdateCompletionState(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		manual bool
+	}{
+		{name: "generator", manual: false},
+		{name: "backfiller", manual: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sched, ctx, node := setupSchedulerForTest(t)
+			initial := &schedulerpb.LastCompletionResult{Success: &commonpb.Payload{Data: []byte("previous-result")}}
+			sched.LastCompletionResult = chasm.NewDataField(ctx, initial)
+			sched.Schedule.Policies.PauseOnFailure = true
+			sched.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{{
+				RequestId: "req-1", WorkflowId: "wf-1", RunId: "run-1", Attempt: 1,
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+				ActualTime:    timestamppb.New(time.Now().Add(-time.Minute)),
+				StartTime:     timestamppb.New(time.Now().Add(-30 * time.Second)),
+				Manual:        tc.manual,
+			}}
+
+			err := sched.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+				RequestId: "req-1",
+				Outcome: &persistencespb.ChasmNexusCompletion_Failure{
+					Failure: &failurepb.Failure{Message: "allow-all failure"},
+				},
+				CloseTime: timestamppb.Now(),
+			})
+			require.NoError(t, err)
+			_, err = node.CloseTransaction()
+			require.NoError(t, err)
+
+			readCtx := chasm.NewContext(context.Background(), node)
+			require.Equal(t, initial, sched.LastCompletionResult.Get(readCtx))
+			require.False(t, sched.Schedule.State.Paused)
+			invoker := sched.Invoker.Get(readCtx)
+			require.Empty(t, invoker.GetBufferedStarts())
+			require.Len(t, sched.Info.GetRecentActions(), 1)
+			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, sched.Info.GetRecentActions()[0].GetStartWorkflowStatus())
+		})
+	}
+}
+
+func TestHandleNexusCompletion_IgnoredReasonMetric(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		setup  func(*scheduler.Invoker)
+		reason string
+	}{
+		{
+			name:   "unrecognized request",
+			reason: "unrecognized_request_id",
+		},
+		{
+			name: "already completed",
+			setup: func(invoker *scheduler.Invoker) {
+				invoker.BufferedStarts = []*schedulespb.BufferedStart{{
+					RequestId: "request-id",
+					Completed: &schedulespb.CompletedResult{
+						Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+					},
+				}}
+			},
+			reason: "already_completed",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			recorder := metricstest.NewCaptureHandler()
+			capture := recorder.StartCapture()
+			defer recorder.StopCapture(capture)
+
+			logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+			_, engineCtx := newTestEngineContext(t, logger, withEngineMetricsHandler(recorder))
+			_, err := chasm.StartExecution(
+				engineCtx,
+				chasm.ExecutionKey{NamespaceID: namespaceID, BusinessID: scheduleID},
+				scheduler.CreateScheduler,
+				&schedulerpb.CreateScheduleRequest{
+					NamespaceId: namespaceID,
+					FrontendRequest: &workflowservice.CreateScheduleRequest{
+						Namespace: namespace, ScheduleId: scheduleID, Schedule: defaultSchedule(), RequestId: "create-request",
+					},
+				},
+			)
+			require.NoError(t, err)
+			rootRef := chasm.NewComponentRef[*scheduler.Scheduler](chasm.ExecutionKey{NamespaceID: namespaceID, BusinessID: scheduleID})
+
+			_, _, err = chasm.UpdateComponent(engineCtx, rootRef,
+				func(s *scheduler.Scheduler, ctx chasm.MutableContext, _ struct{}) (struct{}, error) {
+					if tc.setup != nil {
+						tc.setup(s.Invoker.Get(ctx))
+					}
+					return struct{}{}, s.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{RequestId: "request-id"})
+				}, struct{}{})
+			require.NoError(t, err)
+
+			recordings := capture.Snapshot()[metrics.ScheduleCallbackIgnored.Name()]
+			require.Len(t, recordings, 1)
+			require.Equal(t, tc.reason, recordings[0].Tags["reason"])
+		})
+	}
+}
+
+func TestHandleNexusCompletion_MigratedRunningWorkflowKeepsCompletionState(t *testing.T) {
+	now := time.Now().UTC()
+	v1Schedule := defaultSchedule()
+	v1Schedule.Policies.OverlapPolicy = enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL
+	v1Schedule.Policies.PauseOnFailure = true
+	v1Info := &schedulepb.ScheduleInfo{
+		RunningWorkflows: []*commonpb.WorkflowExecution{{WorkflowId: "wf-tracked", RunId: "run-tracked"}},
+	}
+	v1State := &schedulespb.InternalState{
+		Namespace:         namespace,
+		NamespaceId:       namespaceID,
+		ScheduleId:        scheduleID,
+		ConflictToken:     42,
+		LastProcessedTime: timestamppb.New(now),
+	}
+	req := migration.LegacyToCreateFromMigrationStateRequest(v1Schedule, v1Info, v1State, nil, nil, now)
+
+	var migrated *schedulespb.BufferedStart
+	for _, start := range req.GetState().GetInvokerState().GetBufferedStarts() {
+		if start.GetWorkflowId() == "wf-tracked" {
+			migrated = start
+			break
+		}
+	}
+	require.NotNil(t, migrated)
+	require.Equal(t, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, migrated.GetOverlapPolicy())
+
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+	_, engineCtx := newTestEngineContext(t, logger)
+	handler := scheduler.NewTestHandler(logger)
+	_, err := handler.TestCreateFromMigrationState(engineCtx, req)
+	require.NoError(t, err)
+
+	rootRef := chasm.NewComponentRef[*scheduler.Scheduler](chasm.ExecutionKey{
+		NamespaceID: namespaceID,
+		BusinessID:  scheduleID,
+	})
+	_, _, err = chasm.UpdateComponent(engineCtx, rootRef,
+		func(s *scheduler.Scheduler, ctx chasm.MutableContext, _ struct{}) (struct{}, error) {
+			return struct{}{}, s.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+				RequestId: migrated.GetRequestId(),
+				Outcome: &persistencespb.ChasmNexusCompletion_Failure{
+					Failure: &failurepb.Failure{Message: "tracked workflow failed"},
+				},
+				CloseTime: timestamppb.New(now),
+			})
+		}, struct{}{})
+	require.NoError(t, err)
+
+	_, err = chasm.ReadComponent(engineCtx, rootRef,
+		func(s *scheduler.Scheduler, ctx chasm.Context, _ struct{}) (struct{}, error) {
+			require.Equal(t, "tracked workflow failed", s.LastCompletionResult.Get(ctx).GetFailure().GetMessage())
+			require.True(t, s.Schedule.State.Paused)
+			return struct{}{}, nil
+		}, struct{}{})
+	require.NoError(t, err)
+}
+
 // TestHandleNexusCompletion_Failure verifies that a failed workflow completion
 // is properly recorded with the failure payload and workflow status is updated.
 func TestHandleNexusCompletion_Failure(t *testing.T) {
@@ -193,6 +361,64 @@ func TestHandleNexusCompletion_PauseOnFailure(t *testing.T) {
 	}
 
 	executeNexusCompletion(t, tc)
+}
+
+func TestPauseOnFailureInvalidatesConflictToken(t *testing.T) {
+	sched, ctx, node := setupSchedulerForTest(t)
+	sched.Schedule.Policies.PauseOnFailure = true
+	sched.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{
+		{
+			RequestId:  "req-1",
+			WorkflowId: "wf-1",
+			RunId:      "run-1",
+			Attempt:    1,
+		},
+	}
+	_, err := node.CloseTransaction()
+	require.NoError(t, err)
+
+	describeResponse, err := sched.Describe(
+		chasm.NewContext(context.Background(), node),
+		&schedulerpb.DescribeScheduleRequest{
+			NamespaceId: namespaceID,
+			FrontendRequest: &workflowservice.DescribeScheduleRequest{
+				Namespace:  namespace,
+				ScheduleId: scheduleID,
+			},
+		},
+		newLegacySpecBuilder(0, 0),
+	)
+	require.NoError(t, err)
+	staleDescription := describeResponse.GetFrontendResponse()
+	require.False(t, staleDescription.GetSchedule().GetState().GetPaused())
+
+	ctx = chasm.NewMutableContext(context.Background(), node)
+	err = sched.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+		RequestId: "req-1",
+		Outcome: &persistencespb.ChasmNexusCompletion_Failure{
+			Failure: &failurepb.Failure{Message: "workflow failed"},
+		},
+		CloseTime: timestamppb.Now(),
+	})
+	require.NoError(t, err)
+	_, err = node.CloseTransaction()
+	require.NoError(t, err)
+	require.True(t, sched.Schedule.GetState().GetPaused())
+	require.NotEmpty(t, sched.Schedule.GetState().GetNotes())
+
+	ctx = chasm.NewMutableContext(context.Background(), node)
+	_, err = sched.Update(ctx, &schedulerpb.UpdateScheduleRequest{
+		NamespaceId: namespaceID,
+		FrontendRequest: &workflowservice.UpdateScheduleRequest{
+			Namespace:     namespace,
+			ScheduleId:    scheduleID,
+			Schedule:      staleDescription.GetSchedule(),
+			ConflictToken: staleDescription.GetConflictToken(),
+		},
+	})
+	require.ErrorIs(t, err, scheduler.ErrConflictTokenMismatch)
+	require.True(t, sched.Schedule.GetState().GetPaused())
+	require.NotEmpty(t, sched.Schedule.GetState().GetNotes())
 }
 
 // TestHandleNexusCompletion_Idempotent verifies that handling a completion for an

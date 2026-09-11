@@ -145,6 +145,7 @@ var (
 		"GetWorkerTaskReachability":                    {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},
 		"UpdateWorkflowExecution":                      {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"PollWorkflowExecutionUpdate":                  {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingAlways},
+		"PollWorkflowExecutionTimeSkipping":            {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingAlways},
 		"StartBatchOperation":                          {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"StopBatchOperation":                           {Scope: ScopeNamespace, Access: AccessWrite, Polling: PollingNone},
 		"DescribeBatchOperation":                       {Scope: ScopeNamespace, Access: AccessReadOnly, Polling: PollingNone},

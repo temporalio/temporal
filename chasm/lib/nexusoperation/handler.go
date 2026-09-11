@@ -11,6 +11,7 @@ import (
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/log"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type handler struct {
@@ -207,9 +208,10 @@ func (h *handler) RequestCancelNexusOperation(
 		ref,
 		func(o *Operation, ctx chasm.MutableContext, req *nexusoperationpb.RequestCancelNexusOperationRequest) (*nexusoperationpb.RequestCancelNexusOperationResponse, error) {
 			if err := o.RequestCancel(ctx, &nexusoperationpb.CancellationState{
-				RequestId: req.GetFrontendRequest().GetRequestId(),
-				Identity:  req.GetFrontendRequest().GetIdentity(),
-				Reason:    req.GetFrontendRequest().GetReason(),
+				RequestId:     req.GetFrontendRequest().GetRequestId(),
+				Identity:      req.GetFrontendRequest().GetIdentity(),
+				Reason:        req.GetFrontendRequest().GetReason(),
+				RequestedTime: timestamppb.New(ctx.Now(o)),
 			}); err != nil {
 				return nil, err
 			}

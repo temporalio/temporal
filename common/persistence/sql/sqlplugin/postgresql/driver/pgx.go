@@ -77,6 +77,11 @@ func (p *PGXDriver) IsDupDatabaseError(err error) bool {
 	return ok && pqErr.Code == dupDatabaseCode
 }
 
+func (p *PGXDriver) IsObjectInUseError(err error) bool {
+	pgxErr, ok := err.(*pgconn.PgError)
+	return ok && pgxErr.Code == objectInUseCode
+}
+
 func (p *PGXDriver) IsConnNeedsRefreshError(err error) bool {
 	pqErr, ok := err.(*pgconn.PgError)
 	if !ok {

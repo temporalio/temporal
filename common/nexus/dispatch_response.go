@@ -2,7 +2,6 @@ package nexus
 
 import (
 	"github.com/nexus-rpc/sdk-go/nexus"
-	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/api/matchingservice/v1"
 )
@@ -11,35 +10,43 @@ import (
 // Returns nil if the response indicates success.
 //
 // For failure cases (worker explicitly returned an error), the Temporal SDK's failure
-// converter is used to produce standard Go errors (ApplicationError, CanceledError).
+// converter is used to produce standard Go errors (temporal.ApplicationError, temporal.CanceledError).
 // For transport-level issues (timeout, internal), a nexus.HandlerError is returned
 // so the caller can check Retryable().
 func MatchingDispatchResponseToError(resp *matchingservice.DispatchNexusTaskResponse) error {
-	switch t := resp.GetOutcome().(type) {
-	case *matchingservice.DispatchNexusTaskResponse_Failure:
-		// Worker received the task and explicitly failed it (via RespondNexusTaskFailed).
-		return temporal.GetDefaultFailureConverter().FailureToError(t.Failure)
-	case *matchingservice.DispatchNexusTaskResponse_RequestTimeout:
-		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
-	case *matchingservice.DispatchNexusTaskResponse_Response:
-		return StartOperationResponseToError(t.Response.GetStartOperation())
-	default:
-		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "empty or unknown dispatch outcome")
-	}
+	return DispatchResultToError(ClassifyStartOperationDispatch(resp))
 }
 
-// StartOperationResponseToError converts a StartOperationResponse proto into a Go error.
-// Returns nil for success variants (SyncSuccess, AsyncSuccess).
-func StartOperationResponseToError(resp *nexuspb.StartOperationResponse) error {
-	switch t := resp.GetVariant().(type) {
-	case *nexuspb.StartOperationResponse_SyncSuccess:
+// DispatchResultToError converts a classified dispatch into a Go error for server-internal
+// consumption. Returns nil for the success outcomes.
+//
+// The errors this produces are SDK-shaped: a failure the worker reported becomes a
+// *temporal.ApplicationError or *temporal.CanceledError, and a Nexus handler error becomes a
+// *nexus.HandlerError.
+//
+// Wire-facing paths convert through nexusrpc instead. The Nexus HTTP handler re-serializes a returned
+// error with nexusrpc's failure converter, which flattens an SDK-shaped cause to just its message and
+// drops the failure type and details.
+func DispatchResultToError(result DispatchResult) error {
+	if result.Outcome.Succeeded() {
 		return nil
-	case *nexuspb.StartOperationResponse_AsyncSuccess:
-		return nil
-	case *nexuspb.StartOperationResponse_Failure:
-		// Operation processed but failed — the worker returned an explicit failure.
-		return temporal.GetDefaultFailureConverter().FailureToError(t.Failure)
+	}
+
+	switch result.Outcome {
+	case DispatchOutcomeHandlerFailure,
+		DispatchOutcomeWorkerFailure,
+		DispatchOutcomeOperationFailure:
+		// The worker either failed the task (via RespondNexusTaskFailed) or answered with a failed
+		// operation. Either way the failure reports what the worker said.
+		return temporal.GetDefaultFailureConverter().FailureToError(result.Failure)
+
+	case DispatchOutcomeRequestTimeout:
+		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
+
 	default:
-		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "empty or unknown start operation response variant")
+		return nexus.NewHandlerErrorf(
+			nexus.HandlerErrorTypeInternal,
+			"unsupported or unrecognized dispatch outcome: %s", result.Outcome,
+		)
 	}
 }

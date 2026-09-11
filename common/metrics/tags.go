@@ -47,7 +47,6 @@ const (
 	// See server.api.enums.v1.ReplicationTaskType
 	replicationTaskType                            = "replicationTaskType"
 	replicationTaskPriority                        = "replicationTaskPriority"
-	taskExpireStage                                = "task_expire_stage"
 	taskAddResult                                  = "task_add_result"
 	versioningBehavior                             = "versioning_behavior"
 	continueAsNewVersioningBehavior                = "continue_as_new_versioning_behavior"
@@ -65,7 +64,6 @@ const (
 	namespaceAllValue                              = "all"
 	clientName                                     = "client_name"
 	isInternal                                     = "is_internal"
-	activityTargetingMethod                        = "activity_targeting_method"
 	unknownValue                                   = "_unknown_"
 	totalMetricSuffix                              = "_total"
 	tagExcludedValue                               = "_tag_excluded_"
@@ -228,11 +226,6 @@ func ActivityTypeTag(value string) Tag {
 	return Tag{Key: activityType, Value: value}
 }
 
-// ActivityTargetingMethodTag returns a tag indicating how the activity was targeted: "id" or "type".
-func ActivityTargetingMethodTag(value string) Tag {
-	return Tag{Key: activityTargetingMethod, Value: value}
-}
-
 // CommandTypeTag returns a new command type tag.
 func CommandTypeTag(value string) Tag {
 	if len(value) == 0 {
@@ -342,10 +335,11 @@ const (
 )
 
 const (
-	PollerScaleReasonIdle        ReasonString = "idle"
-	PollerScaleReasonBacklog     ReasonString = "backlog"
-	PollerScaleReasonTaskRate    ReasonString = "task_rate"
-	PollerScaleReasonRateLimited ReasonString = "rate_limited"
+	PollerScaleReasonIdle                 ReasonString = "idle"
+	PollerScaleReasonDelay                ReasonString = "delay"
+	PollerScaleReasonRatio                ReasonString = "ratio"
+	PollerScaleReasonRateLimited          ReasonString = "rate_limited"
+	PollerScaleReasonTaskQueueRateLimited ReasonString = "task_queue_rate_limited"
 )
 
 // PollerScaleDecisionTag records the direction of a poller scaling decision (scale up, scale
@@ -447,6 +441,22 @@ func ResourceExhaustedScopeTag(scope enumspb.ResourceExhaustedScope) Tag {
 	return Tag{Key: resourceExhaustedScopeTag, Value: scope.String()}
 }
 
+func LastAttemptCauseTag(value string) Tag {
+	return Tag{Key: LastAttemptCauseTagName, Value: value}
+}
+
+// Values for AttemptStageTagName, identifying whether TaskAlertableAttempt was recorded
+// mid-retry or at the attempt's final resolution.
+const (
+	AttemptStageInFlight = "in_flight"
+	AttemptStageTerminal = "terminal"
+)
+
+var (
+	AttemptStageInFlightTag = Tag{Key: AttemptStageTagName, Value: AttemptStageInFlight}
+	AttemptStageTerminalTag = Tag{Key: AttemptStageTagName, Value: AttemptStageTerminal}
+)
+
 func ServiceNameTag(value primitives.ServiceName) Tag {
 	return Tag{Key: serviceName, Value: string(value)}
 }
@@ -494,6 +504,16 @@ func ReplicationTaskPriorityTag(value enumsspb.TaskPriority) Tag {
 // DestinationTag is a tag for metrics emitted by outbound task executors for the task's destination.
 func DestinationTag(value string) Tag {
 	return Tag{Key: destination, Value: value}
+}
+
+// NexusCompletionSourceTag identifies the CHASM component that delivered a completion callback, by
+// its fully qualified name, e.g. "workflow.workflow". An empty value means the framework could not
+// resolve the callback's parent.
+func NexusCompletionSourceTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: nexusCompletionSourceTagName, Value: value}
 }
 
 func VersioningBehaviorTag(behavior enumspb.VersioningBehavior) Tag {
@@ -586,10 +606,6 @@ func ToUnversionedTag(version string) Tag {
 	}
 	return Tag{Key: toUnversioned, Value: falseValue}
 }
-
-var TaskExpireStageReadTag = Tag{Key: taskExpireStage, Value: "read"}
-var TaskExpireStageMemoryTag = Tag{Key: taskExpireStage, Value: "memory"}
-var TaskInvalidTag = Tag{Key: taskExpireStage, Value: "invalid"}
 
 // ClientNameTag returns a new client_name tag for the SDK client name.
 func ClientNameTag(value string) Tag {

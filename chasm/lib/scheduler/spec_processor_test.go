@@ -157,6 +157,41 @@ func TestProcessTimeRange_CatchupWindow(t *testing.T) {
 	require.Len(t, res.BufferedStarts, 5)
 }
 
+// A nil or zero catchup window means "not specified" and resolves to the 1-year
+// default, not the 10s minimum. Actions older than the minimum but well within
+// the default must still be buffered, not dropped as "missed catchup window".
+func TestProcessTimeRange_CatchupWindowNilOrZeroUsesDefault(t *testing.T) {
+	cases := []struct {
+		name          string
+		catchupWindow *durationpb.Duration
+	}{
+		{"nil", nil},
+		{"zero", durationpb.New(0)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newTestEnv(t)
+			ctx := chasm.NewMutableContext(context.Background(), env.Node)
+
+			sch := defaultSchedule()
+			sch.Policies.CatchupWindow = tc.catchupWindow
+			sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, sch, nil)
+			require.NoError(t, err)
+			processor := newTestSpecProcessor(env.Ctrl)
+
+			// Five actions, each 1..5 minutes old, all older than the 10s minimum.
+			end := time.Now()
+			start := end.Add(-5 * defaultInterval)
+
+			res, err := processor.ProcessTimeRange(sched, start, end, enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED, sched.WorkflowID(), "", false, nil)
+			require.NoError(t, err)
+			// Resolved to the 1-year default, so none are past the window: all are
+			// buffered. Under the bug (zero => clamped to 10s), all five would drop.
+			require.Len(t, res.BufferedStarts, 5)
+		})
+	}
+}
+
 func TestProcessTimeRange_Limit(t *testing.T) {
 	env := newTestEnv(t)
 	ctx := chasm.NewMutableContext(context.Background(), env.Node)

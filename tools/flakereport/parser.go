@@ -1,50 +1,20 @@
 package flakereport
 
 import (
-	"encoding/xml"
 	"fmt"
-	"os"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/jstemmer/go-junit-report/v2/junit"
+	"go.temporal.io/server/tools/common/junit"
 )
 
 var finalRegex = regexp.MustCompile(`\s*\(final\)$`)
 var trailingSuffixRegex = regexp.MustCompile(`\s*\([^)]+\)$`)
 
-// parseJUnitFile reads and parses a single JUnit XML file
-func parseJUnitFile(filePath string) (*junit.Testsuites, error) {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open file %s: %w", filePath, err)
-	}
-	defer func() {
-		if err := file.Close(); err != nil {
-			fmt.Printf("Warning: Failed to close file %s: %v\n", filePath, err)
-		}
-	}()
-
-	var testsuites junit.Testsuites
-	decoder := xml.NewDecoder(file)
-	if err := decoder.Decode(&testsuites); err != nil {
-		// Try parsing as a single testsuite
-		if _, seekErr := file.Seek(0, 0); seekErr != nil {
-			return nil, fmt.Errorf("failed to seek file %s: %w", filePath, seekErr)
-		}
-		var testsuite junit.Testsuite
-		decoder = xml.NewDecoder(file)
-		if err := decoder.Decode(&testsuite); err != nil {
-			return nil, fmt.Errorf("failed to parse JUnit XML %s: %w", filePath, err)
-		}
-		testsuites.Suites = []junit.Testsuite{testsuite}
-	}
-
-	return &testsuites, nil
-}
+const testRunnerTotalTimeout = "testrunner.TotalTimeout"
 
 // topLevelTestName extracts the suite/top-level test name from a test name.
 // For "TestSuiteV0/TestMethod" returns "TestSuiteV0".
@@ -128,6 +98,31 @@ func normalizeTestName(name string) string {
 	}
 }
 
+func isTestRunnerTimeout(name string) bool {
+	return strings.EqualFold(normalizeTestName(name), testRunnerTotalTimeout)
+}
+
+func splitTestRunnerTimeoutFailures(failures []TestFailure) (testFailures, testRunnerTimeouts []TestFailure) {
+	for _, failure := range failures {
+		if isTestRunnerTimeout(failure.Name) {
+			testRunnerTimeouts = append(testRunnerTimeouts, failure)
+			continue
+		}
+		testFailures = append(testFailures, failure)
+	}
+	return testFailures, testRunnerTimeouts
+}
+
+func filterTestRunnerTimeoutRuns(runs []TestRun) []TestRun {
+	filtered := runs[:0]
+	for _, run := range runs {
+		if !isTestRunnerTimeout(run.Name) {
+			filtered = append(filtered, run)
+		}
+	}
+	return filtered
+}
+
 // groupFailuresByTest groups failures by normalized test name
 func groupFailuresByTest(failures []TestFailure) map[string][]TestFailure {
 	grouped := make(map[string][]TestFailure)
@@ -159,6 +154,9 @@ func countTestRuns(allRuns []TestRun) map[string]int {
 // Uses Contains (not HasSuffix) so it works on both raw and normalized names.
 func classifyFailure(name string) string {
 	lower := strings.ToLower(name)
+	if isTestRunnerTimeout(name) {
+		return "timeout"
+	}
 	if strings.Contains(lower, "(timeout)") {
 		return "timeout"
 	}
@@ -293,6 +291,21 @@ func convertToReports(grouped map[string][]TestFailure, testRunCounts map[string
 		repo, maxLinks, window)
 }
 
+func convertEventReports(grouped map[string][]TestFailure, repo string, maxLinks int, window reportWindow) []TestReport {
+	return buildReports(grouped,
+		func(_ string, failures []TestFailure) int { return countArtifacts(failures) },
+		func(string, []TestFailure) int { return 0 },
+		repo, maxLinks, window)
+}
+
+func countArtifacts(failures []TestFailure) int {
+	artifacts := make(map[string]struct{}, len(failures))
+	for _, failure := range failures {
+		artifacts[failure.ArtifactID] = struct{}{}
+	}
+	return len(artifacts)
+}
+
 // filterParentTests removes top-level test names from grouped when subtests of
 // that parent were observed in testRunCounts. A top-level failure whose subtests
 // ran in other CI jobs is already captured (with a correct denominator) in the
@@ -370,12 +383,11 @@ func convertCrashesToReports(grouped map[string][]TestFailure, jobs []ArtifactJo
 		repo, maxLinks, window)
 }
 
-// convertCIBreakersToReports converts CI breaker failures to TestReport slice.
-// totalWorkflowRuns is the total number of CI runs analyzed (denominator for break rate).
-func convertCIBreakersToReports(grouped map[string][]TestFailure, ciBreakCounts map[string]int, totalWorkflowRuns int, repo string, maxLinks int, window reportWindow) []TestReport {
+// convertCIBreakersToReports converts final-retry failures to TestReport slice.
+func convertCIBreakersToReports(grouped map[string][]TestFailure, ciBreakCounts map[string]int, repo string, maxLinks int, window reportWindow) []TestReport {
 	return buildReports(grouped,
 		func(name string, _ []TestFailure) int { return ciBreakCounts[name] },
-		func(_ string, _ []TestFailure) int { return totalWorkflowRuns },
+		func(string, []TestFailure) int { return 0 },
 		repo, maxLinks, window)
 }
 

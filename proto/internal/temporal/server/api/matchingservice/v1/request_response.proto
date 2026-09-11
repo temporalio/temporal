@@ -338,6 +338,10 @@ message DescribeTaskQueuePartitionRequest {
   // Report list of pollers for requested task queue types and versions
   bool report_pollers = 5;
   bool report_internal_task_queue_status = 6;
+  // Only process the request if the task queue partition is already loaded, and do not refresh
+  // the idle timeout of described physical task queues. Explicitly requested physical task queues
+  // may still be loaded to serve the request.
+  bool only_if_loaded = 7;
 }
 
 message DescribeTaskQueuePartitionResponse {

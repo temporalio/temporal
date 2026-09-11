@@ -29,6 +29,10 @@ type TestCluster struct {
 	logger         log.Logger
 }
 
+type forceDatabaseDropper interface {
+	ForceDropDatabase(database string) error
+}
+
 // NewTestCluster returns a new SQL test cluster
 func NewTestCluster(
 	pluginName string,
@@ -140,7 +144,13 @@ func (s *TestCluster) DropDatabase() {
 	cfg2.DatabaseName = ""
 	db := s.newAdminDB(sqlplugin.DbKindUnknown, &cfg2)
 	defer s.closeAdminDB(db)
-	if err := db.DropDatabase(s.cfg.DatabaseName); err != nil {
+	var err error
+	if dropper, ok := db.(forceDatabaseDropper); ok {
+		err = dropper.ForceDropDatabase(s.cfg.DatabaseName)
+	} else {
+		err = db.DropDatabase(s.cfg.DatabaseName)
+	}
+	if err != nil {
 		panic(err)
 	}
 	s.logger.Info("dropped database", tag.String("database", s.cfg.DatabaseName))

@@ -37,7 +37,7 @@ func TestTimeSkippingReplicationSuite(t *testing.T) {
 
 func (s *timeSkippingReplicationSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
-		dynamicconfig.TimeSkippingEnabled.Key(): true,
+		dynamicconfig.WorkflowTimeSkippingEnabled.Key(): true,
 	}
 	// Drive the state-based replication path so TimeSkippingInfo replicates via the
 	// generic ExecutionInfo merge and PartialRefresh re-stamps timer tasks on the standby.
@@ -178,8 +178,10 @@ func (s *timeSkippingReplicationSuite) TestBasicSkipReplicates() {
 
 	s.waitForTimeSkippingInfoSynced(ctx, nsID, wfID, runID)
 
-	active := s.getExecutionInfoFromCluster(ctx, 0, nsID, wfID, runID).GetTimeSkippingInfo()
-	standby := s.getExecutionInfoFromCluster(ctx, 1, nsID, wfID, runID).GetTimeSkippingInfo()
+	activeInfo := s.getExecutionInfoFromCluster(ctx, 0, nsID, wfID, runID)
+	standbyInfo := s.getExecutionInfoFromCluster(ctx, 1, nsID, wfID, runID)
+	active := activeInfo.GetTimeSkippingInfo()
+	standby := standbyInfo.GetTimeSkippingInfo()
 	s.True(proto.Equal(active.GetConfig(), standby.GetConfig()))
 	s.Equal(
 		active.GetAccumulatedSkippedDuration().AsDuration(),
@@ -187,6 +189,10 @@ func (s *timeSkippingReplicationSuite) TestBasicSkipReplicates() {
 	)
 	s.InDelta(float64(startDelay), float64(standby.GetAccumulatedSkippedDuration().AsDuration()), float64(accumTol),
 		"standby's accumulated skip should match the configured startDelay within tolerance")
+	s.Equal(activeInfo.GetStartTime().AsTime(), standbyInfo.GetStartTime().AsTime(),
+		"replication must preserve the already-virtual start timestamp without applying the offset again")
+	s.Equal(activeInfo.GetExecutionTime().AsTime(), standbyInfo.GetExecutionTime().AsTime())
+	s.Equal(activeInfo.GetWorkflowRunExpirationTime().AsTime(), standbyInfo.GetWorkflowRunExpirationTime().AsTime())
 }
 
 // TestFastForwardDisablePropagates verifies that completing a registered FastForward
@@ -208,8 +214,8 @@ func (s *timeSkippingReplicationSuite) TestFastForwardDisablePropagates() {
 	)
 	runID := s.startSkippingWorkflow(ctx, ns, wfID, tq, 24*time.Hour, 0,
 		&commonpb.TimeSkippingConfig{
-			Enabled:     true,
-			FastForward: durationpb.New(fastForward),
+			Enabled:           true,
+			FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(fastForward), Id: "ff-id"},
 		},
 	)
 
@@ -289,8 +295,8 @@ func (s *timeSkippingReplicationSuite) TestStandbyTimeSkippingTimerTaskAcksOnRea
 	const fastForward = 30 * time.Minute
 	runID := s.startSkippingWorkflow(ctx, ns, wfID, tq, 24*time.Hour, 0,
 		&commonpb.TimeSkippingConfig{
-			Enabled:     true,
-			FastForward: durationpb.New(fastForward),
+			Enabled:           true,
+			FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(fastForward), Id: "ff-id"},
 		},
 	)
 

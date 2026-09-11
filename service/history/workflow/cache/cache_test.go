@@ -11,21 +11,25 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/finalizer"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/testhooks"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -79,7 +83,7 @@ func (s *workflowCacheSuite) TearDownTest() {
 }
 
 func (s *workflowCacheSuite) TestHistoryCacheBasic() {
-	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
 
 	namespaceID := namespace.ID("test_namespace_id")
 	execution1 := commonpb.WorkflowExecution{
@@ -126,7 +130,7 @@ func (s *workflowCacheSuite) TestHistoryCacheBasic() {
 }
 
 func (s *workflowCacheSuite) TestHistoryCachePanic() {
-	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
 
 	namespaceID := namespace.ID("test_namespace_id")
 	execution1 := commonpb.WorkflowExecution{
@@ -169,7 +173,7 @@ func (s *workflowCacheSuite) TestHistoryCachePanic() {
 func (s *workflowCacheSuite) TestHistoryCachePinning() {
 	s.mockShard.GetConfig().HistoryHostLevelCacheMaxSize = dynamicconfig.GetIntPropertyFn(1)
 	namespaceID := namespace.ID("test_namespace_id")
-	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wf-cache-test-pinning",
 		RunId:      uuid.NewString(),
@@ -225,10 +229,82 @@ func (s *workflowCacheSuite) TestHistoryCachePinning() {
 	release(err4)
 }
 
+// TestHistoryCacheEvictionReleasesPaginationBuffer verifies that when a cached context
+// holding an in-flight pagination buffer is evicted, the bytes it
+// reserved on the shared pagination limiter are released. Without a Clear() on the eviction
+// path those bytes leak and eventually reject all paginated completions on the host.
+func (s *workflowCacheSuite) TestHistoryCacheEvictionReleasesPaginationBuffer() {
+	// Count-based cache with room for a single entry, so the next insert forces eviction.
+	s.mockShard.GetConfig().HistoryHostLevelCacheMaxSize = dynamicconfig.GetIntPropertyFn(1)
+	// Production shards always have a finalizer, so give the test shard one too
+	s.mockShard.SetFinalizerForTest(finalizer.New(s.mockShard.GetLogger(), metrics.NoopMetricsHandler))
+	namespaceID := namespace.ID("test_namespace_id")
+	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
+	limiter := s.cache.(*cacheImpl).paginationLimiter
+
+	we := commonpb.WorkflowExecution{
+		WorkflowId: "wf-cache-test-eviction-buffer",
+		RunId:      uuid.NewString(),
+	}
+	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
+		context.Background(),
+		s.mockShard,
+		namespaceID,
+		&we,
+		locks.PriorityHigh,
+	)
+	s.NoError(err)
+
+	// Give the context a MutableState so it can buffer a page and later Clear().
+	mock := historyi.NewMockMutableState(s.controller)
+	mock.EXPECT().IsDirty().Return(false).AnyTimes()
+	mock.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
+	mock.EXPECT().GetStartedWorkflowTask().Return(&historyi.WorkflowTaskInfo{}).AnyTimes()
+	mock.EXPECT().GetQueryRegistry().Return(workflow.NewQueryRegistry()).AnyTimes()
+	mock.EXPECT().RemoveSpeculativeWorkflowTaskTimeoutTask().AnyTimes()
+	wfCtx := ctx.(*workflow.ContextImpl)
+	wfCtx.MutableState = mock
+
+	// Buffer an intermediate page; this reserves bytes on the shared limiter.
+	page := &workflowservice.RespondWorkflowTaskCompletedRequest{
+		IntermediatePage: true,
+		PageNumber:       0,
+		Commands: []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_RECORD_MARKER,
+			Attributes: &commandpb.Command_RecordMarkerCommandAttributes{
+				RecordMarkerCommandAttributes: &commandpb.RecordMarkerCommandAttributes{MarkerName: "m"},
+			},
+		}},
+	}
+	s.NoError(wfCtx.AppendTaskCompletionPage(10, 1, page))
+	s.Positive(limiter.Used())
+
+	// Unpin the entry so it is eligible for eviction.
+	release(nil)
+
+	// Insert a second workflow, forcing eviction of the first from the cache.
+	we2 := commonpb.WorkflowExecution{
+		WorkflowId: "wf-cache-test-eviction-buffer-2",
+		RunId:      uuid.NewString(),
+	}
+	_, release2, err := s.cache.GetOrCreateWorkflowExecution(
+		context.Background(),
+		s.mockShard,
+		namespaceID,
+		&we2,
+		locks.PriorityHigh,
+	)
+	s.NoError(err)
+	release2(nil)
+
+	// The evicted context must have released its reserved pagination bytes.
+	s.Equal(int64(0), limiter.Used())
+}
+
 func (s *workflowCacheSuite) TestHistoryCacheClear() {
 	s.mockShard.GetConfig().HistoryHostLevelCacheMaxSize = dynamicconfig.GetIntPropertyFn(20)
 	namespaceID := namespace.ID("test_namespace_id")
-	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wf-cache-test-clear",
 		RunId:      uuid.NewString(),
@@ -285,7 +361,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
 	coroutineCount := 50
 
 	s.mockShard.GetConfig().HistoryHostLevelCacheMaxSize = dynamicconfig.GetIntPropertyFn(cacheMaxSize)
-	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
 
 	startGroup := &sync.WaitGroup{}
 	stopGroup := &sync.WaitGroup{}
@@ -354,7 +430,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Pin() {
 
 	s.mockShard.GetConfig().HistoryHostLevelCacheMaxSize = dynamicconfig.GetIntPropertyFn(cacheMaxSize)
 	s.mockShard.GetConfig().HistoryCacheTTL = dynamicconfig.GetDurationPropertyFn(time.Nanosecond)
-	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
 
 	startGroup := &sync.WaitGroup{}
 	stopGroup := &sync.WaitGroup{}
@@ -410,7 +486,7 @@ func (s *workflowCacheSuite) TestHistoryCacheConcurrentAccess_Pin() {
 }*/
 
 func (s *workflowCacheSuite) TestHistoryCache_CacheLatencyMetricContext() {
-	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
 
 	ctx := metrics.AddMetricsContext(context.Background())
 	currentRelease, err := s.cache.GetOrCreateCurrentExecution(
@@ -451,7 +527,7 @@ func (s *workflowCacheSuite) TestHistoryCache_CacheHoldTimeMetricContext() {
 	capture := metricsHandler.StartCapture()
 
 	s.mockShard.SetMetricsHandler(metricsHandler)
-	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metricsHandler)
+	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metricsHandler, testhooks.TestHooks{})
 
 	release1, err := s.cache.GetOrCreateCurrentExecution(
 		context.Background(),
@@ -540,7 +616,7 @@ func (s *workflowCacheSuite) TestCacheImpl_lockWorkflowExecution() {
 	}
 	for _, tt := range testSets {
 		s.Run(tt.name, func() {
-			c := NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+			c := NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
 
 			namespaceID := namespace.ID("test_namespace_id")
 			execution := commonpb.WorkflowExecution{
@@ -559,6 +635,8 @@ func (s *workflowCacheSuite) TestCacheImpl_lockWorkflowExecution() {
 				s.mockShard.GetLogger(),
 				s.mockShard.GetThrottledLogger(),
 				s.mockShard.GetMetricsHandler(),
+				nil,
+				testhooks.TestHooks{},
 			)
 			ctx := headers.SetCallerType(context.Background(), tt.callerType)
 			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -589,7 +667,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitSimple() {
 		},
 		config,
 	)
-	s.cache = NewHostLevelCache(config, s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+	s.cache = NewHostLevelCache(config, s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
 
 	namespaceID := namespace.ID("test_namespace_id")
 	execution1 := commonpb.WorkflowExecution{
@@ -655,7 +733,7 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 		},
 		config,
 	)
-	s.cache = NewHostLevelCache(config, s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+	s.cache = NewHostLevelCache(config, s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
 	namespaceID := namespace.ID("test_namespace_id")
 	execution1 := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -663,6 +741,9 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 	}
 	mockMS1 := historyi.NewMockMutableState(s.controller)
 	mockMS1.EXPECT().IsDirty().Return(false).AnyTimes()
+	// Eviction now clears the evicted context, which drains these on its MutableState.
+	mockMS1.EXPECT().GetQueryRegistry().Return(workflow.NewQueryRegistry()).AnyTimes()
+	mockMS1.EXPECT().RemoveSpeculativeWorkflowTaskTimeoutTask().AnyTimes()
 
 	ctx, release1, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
@@ -694,6 +775,8 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 	}
 	mockMS2 := historyi.NewMockMutableState(s.controller)
 	mockMS2.EXPECT().IsDirty().Return(false).AnyTimes()
+	mockMS2.EXPECT().GetQueryRegistry().Return(workflow.NewQueryRegistry()).AnyTimes()
+	mockMS2.EXPECT().RemoveSpeculativeWorkflowTaskTimeoutTask().AnyTimes()
 	ctx, release2, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		mockShard,
@@ -722,6 +805,8 @@ func (s *workflowCacheSuite) TestCacheImpl_RejectsRequestWhenAtLimitMultiple() {
 	}
 	mockMS3 := historyi.NewMockMutableState(s.controller)
 	mockMS3.EXPECT().IsDirty().Return(false).AnyTimes()
+	mockMS3.EXPECT().GetQueryRegistry().Return(workflow.NewQueryRegistry()).AnyTimes()
+	mockMS3.EXPECT().RemoveSpeculativeWorkflowTaskTimeoutTask().AnyTimes()
 	_, _, err = s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		mockShard,
@@ -792,7 +877,7 @@ func (s *workflowCacheSuite) TestCacheImpl_CheckCacheLimitSizeBasedFlag() {
 		},
 		config,
 	)
-	s.cache = NewHostLevelCache(config, s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+	s.cache = NewHostLevelCache(config, s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
 
 	namespaceID := namespace.ID("test_namespace_id")
 	execution1 := commonpb.WorkflowExecution{
@@ -826,7 +911,7 @@ func (s *workflowCacheSuite) TestCacheImpl_CheckCacheLimitSizeBasedFlag() {
 }
 
 func (s *workflowCacheSuite) TestCacheImpl_GetCurrentRunID_CurrentRunExists() {
-	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
 
 	namespaceID := namespace.ID("test_namespace_id")
 	execution := commonpb.WorkflowExecution{
@@ -863,7 +948,7 @@ func (s *workflowCacheSuite) TestCacheImpl_GetCurrentRunID_CurrentRunExists() {
 }
 
 func (s *workflowCacheSuite) TestCacheImpl_GetCurrentRunID_NoCurrentRun() {
-	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+	s.cache = NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
 
 	namespaceID := namespace.ID("test_namespace_id")
 	execution := commonpb.WorkflowExecution{

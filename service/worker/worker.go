@@ -18,7 +18,7 @@ import (
 type (
 	// workerManager maintains list of SDK workers.
 	workerManager struct {
-		status           int32
+		status           atomic.Int32
 		hostInfo         membership.HostInfo
 		logger           log.Logger
 		sdkClientFactory sdk.ClientFactory
@@ -44,11 +44,7 @@ func NewWorkerManager(
 }
 
 func (wm *workerManager) Start() {
-	if !atomic.CompareAndSwapInt32(
-		&wm.status,
-		common.DaemonStatusInitialized,
-		common.DaemonStatusStarted,
-	) {
+	if !wm.status.CompareAndSwap(common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
 
@@ -101,11 +97,7 @@ func (wm *workerManager) Start() {
 }
 
 func (wm *workerManager) Stop() {
-	if !atomic.CompareAndSwapInt32(
-		&wm.status,
-		common.DaemonStatusStarted,
-		common.DaemonStatusStopped,
-	) {
+	if !wm.status.CompareAndSwap(common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
 

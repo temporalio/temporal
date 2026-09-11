@@ -62,7 +62,9 @@ const (
 	defaultBurstDuration = time.Second
 )
 
-// Create a new rate limit manager for the task queue partition.
+// Create a new rate limit manager for the task queue partition. This only allocates;
+// dynamic config subscriptions are registered in Start, so an unstarted manager holds
+// no external references and can simply be garbage collected.
 func newRateLimitManager(
 	userDataManager userDataManager,
 	config *taskQueueConfig,
@@ -83,21 +85,23 @@ func newRateLimitManager(
 		r.dynamicRateBurst,
 		config.RateLimiterRefreshInterval,
 	)
+	return r
+}
 
+// Start registers dynamic config subscriptions and computes the initial rate limits.
+func (r *rateLimitManager) Start() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	// Overall system rate limit will be the min of the two configs that are partition wise times the number of partitons.
 	var cancel func()
-	r.adminNsRate, cancel = config.AdminNamespaceToPartitionRateSub(r.setAdminNsRate)
+	r.adminNsRate, cancel = r.config.AdminNamespaceToPartitionRateSub(r.setAdminNsRate)
 	r.cancels = append(r.cancels, cancel)
-	r.adminTqRate, cancel = config.AdminNamespaceTaskQueueToPartitionRateSub(r.setAdminTqRate)
+	r.adminTqRate, cancel = r.config.AdminNamespaceTaskQueueToPartitionRateSub(r.setAdminTqRate)
 	r.cancels = append(r.cancels, cancel)
-	r.numReadPartitions, cancel = config.NumReadPartitionsSub(r.setNumReadPartitions)
+	r.numReadPartitions, cancel = r.config.NumReadPartitionsSub(r.setNumReadPartitions)
 	r.cancels = append(r.cancels, cancel)
 	r.computeEffectiveRPSAndSourceLocked()
-
-	return r
 }
 
 func (r *rateLimitManager) setAdminNsRate(rps float64) {

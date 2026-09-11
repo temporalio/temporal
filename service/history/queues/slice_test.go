@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/predicates"
 	ctasks "go.temporal.io/server/common/tasks"
@@ -81,9 +82,10 @@ func (s *sliceSuite) SetupTest() {
 			telemetry.NoopTracer,
 		)
 	})
-	s.monitor = newMonitor(tasks.CategoryTypeScheduled, clock.NewRealTimeSource(), &MonitorOptions{
+	s.monitor = newMonitor(tasks.CategoryTypeScheduled, clock.NewRealTimeSource(), log.NewTestLogger(), metrics.NoopMetricsHandler, &MonitorOptions{
 		PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
 		ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(5),
+		ReaderStuckShadowMode:       dynamicconfig.GetBoolPropertyFn(false),
 		SliceCountCriticalThreshold: dynamicconfig.GetIntPropertyFn(50),
 	})
 }
@@ -446,6 +448,80 @@ func (s *sliceSuite) TestShrinkScope_ShrinkPredicate() {
 	s.True(ok)
 	for namespaceID := range namespacePredicate.NamespaceIDs {
 		s.True(slices.Index(pendingNamespaceID, namespaceID) != -1)
+	}
+}
+
+func (s *sliceSuite) TestShrinkScope_RecordsPendingKeysHistogram() {
+	testCases := []struct {
+		name                 string
+		numPendingNamespaces int
+		leaveIteratorsOpen   bool
+		expectDeclined       bool
+	}{
+		{
+			name:                 "narrowing succeeds",
+			numPendingNamespaces: 3,
+		},
+		{
+			name:                 "narrowing declines",
+			numPendingNamespaces: 12,
+			expectDeclined:       true,
+		},
+		{
+			name:                 "slice still reading its range: no sample recorded",
+			numPendingNamespaces: 3,
+			leaveIteratorsOpen:   true,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			r := NewRandomRange()
+			predicate := predicates.Universal[tasks.Task]()
+
+			handler := metricstest.NewCaptureHandler()
+			capture := handler.StartCapture()
+			defer handler.StopCapture(capture)
+
+			slice := NewSlice(nil, s.executableFactory, s.monitor, NewScope(r, predicate), GrouperNamespaceID{}, noPredicateSizeLimit, defaultMaxPendingKeys, handler)
+			if !tc.leaveIteratorsOpen {
+				slice.iterators = []Iterator{} // manually set iterators to be empty to trigger predicate update
+			}
+
+			// One pending executable per namespace, each with its own distinct namespace ID,
+			// so the pending-key count is exact rather than a coincidence of random assignment
+			// across a shared, smaller pool of namespace IDs.
+			executables := s.randomExecutablesInRange(r, tc.numPendingNamespaces)
+			for _, executable := range executables {
+				mockExecutable := executable.(*MockExecutable)
+				mockExecutable.EXPECT().GetTask().Return(mockExecutable).AnyTimes()
+				mockExecutable.EXPECT().GetNamespaceID().Return(uuid.NewString()).AnyTimes()
+				mockExecutable.EXPECT().State().Return(ctasks.TaskStatePending).MaxTimes(1)
+				slice.add(executable)
+			}
+
+			slice.ShrinkScope()
+			s.validateSliceState(slice)
+
+			snapshot := capture.Snapshot()
+
+			if tc.leaveIteratorsOpen {
+				s.Empty(snapshot[metrics.QueueSlicePendingKeys.Name()])
+				s.Empty(snapshot[metrics.QueuePredicateResolutionLoss.Name()])
+				return
+			}
+
+			pendingKeysRecordings := snapshot[metrics.QueueSlicePendingKeys.Name()]
+			s.Require().Len(pendingKeysRecordings, 1)
+			s.Equal(int64(tc.numPendingNamespaces), pendingKeysRecordings[0].Value)
+
+			lossRecordings := snapshot[metrics.QueuePredicateResolutionLoss.Name()]
+			if tc.expectDeclined {
+				s.Len(lossRecordings, 1)
+			} else {
+				s.Empty(lossRecordings)
+			}
+		})
 	}
 }
 

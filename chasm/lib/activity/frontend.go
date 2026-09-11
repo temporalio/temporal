@@ -11,8 +11,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
-	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -40,9 +40,11 @@ type FrontendHandler interface {
 
 var ErrStandaloneActivityDisabled = serviceerror.NewUnimplemented("Standalone activity is disabled")
 
+var ErrStandaloneActivityOperatorCommandsDisabled = serviceerror.NewUnimplemented("Standalone activity operator commands are disabled")
+
 type frontendHandler struct {
 	FrontendHandler
-	callbackValidator callback.Validator
+	callbackValidator callbacks.Validator
 	linkValidator     *linkValidator
 	client            activitypb.ActivityServiceClient
 	config            *Config
@@ -55,7 +57,7 @@ type frontendHandler struct {
 
 // NewFrontendHandler creates a new FrontendHandler instance for processing activity frontend requests.
 func NewFrontendHandler(
-	callbackValidator callback.Validator,
+	callbackValidator callbacks.Validator,
 	linkValidator *linkValidator,
 	client activitypb.ActivityServiceClient,
 	config *Config,
@@ -219,6 +221,9 @@ func (h *frontendHandler) ListActivityExecutions(
 			if !exec.StartTime.IsZero() {
 				info.ExecutionDuration = durationpb.New(exec.CloseTime.Sub(exec.StartTime))
 			}
+		}
+		if executionTime, ok := chasm.SearchAttributeValue(exec.ChasmSearchAttributes, chasm.SearchAttributeExecutionTime); ok {
+			info.ExecutionTime = timestamppb.New(executionTime)
 		}
 		executions = append(executions, info)
 	}
@@ -400,9 +405,7 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 
 	err = validateAndNormalizeStartRequest(
 		req,
-		h.config.MaxIDLengthLimit(),
-		h.config.BlobSizeLimitError,
-		h.config.BlobSizeLimitWarn,
+		h.config,
 		h.logger,
 		h.saMapperProvider,
 		h.saValidator,
@@ -420,7 +423,7 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		}
 	}
 
-	if err := h.linkValidator.ValidateRequest(req.GetNamespace(), req.GetLinks()); err != nil {
+	if err := h.linkValidator.ValidateRequestWithCallbacks(req.GetNamespace(), req.GetLinks(), req.GetCompletionCallbacks()); err != nil {
 		return nil, err
 	}
 
@@ -450,6 +453,9 @@ func (h *frontendHandler) PauseActivityExecution(
 ) (*workflowservice.PauseActivityExecutionResponse, error) {
 	if req.GetWorkflowId() == "" && !h.config.Enabled(req.GetNamespace()) {
 		return nil, ErrStandaloneActivityDisabled
+	}
+	if req.GetWorkflowId() == "" && !h.config.EnableStandaloneActivityOperatorCommands(req.GetNamespace()) {
+		return nil, ErrStandaloneActivityOperatorCommandsDisabled
 	}
 
 	if err := validateAndNormalizePauseActivityExecutionRequest(
@@ -483,6 +489,9 @@ func (h *frontendHandler) UnpauseActivityExecution(
 	if req.GetWorkflowId() == "" && !h.config.Enabled(req.GetNamespace()) {
 		return nil, ErrStandaloneActivityDisabled
 	}
+	if req.GetWorkflowId() == "" && !h.config.EnableStandaloneActivityOperatorCommands(req.GetNamespace()) {
+		return nil, ErrStandaloneActivityOperatorCommandsDisabled
+	}
 
 	if err := validateAndNormalizeUnpauseActivityExecutionRequest(req, h.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
@@ -510,6 +519,9 @@ func (h *frontendHandler) ResetActivityExecution(
 	if req.GetWorkflowId() == "" && !h.config.Enabled(req.GetNamespace()) {
 		return nil, ErrStandaloneActivityDisabled
 	}
+	if req.GetWorkflowId() == "" && !h.config.EnableStandaloneActivityOperatorCommands(req.GetNamespace()) {
+		return nil, ErrStandaloneActivityOperatorCommandsDisabled
+	}
 
 	if err := validateAndNormalizeResetActivityExecutionRequest(req, h.config.MaxIDLengthLimit()); err != nil {
 		return nil, err
@@ -534,13 +546,14 @@ func (h *frontendHandler) UpdateActivityExecutionOptions(
 	ctx context.Context,
 	req *workflowservice.UpdateActivityExecutionOptionsRequest,
 ) (*workflowservice.UpdateActivityExecutionOptionsResponse, error) {
-	// Standalone path requires the feature to be enabled. Workflow path (workflow_id != "")
-	// is always permitted and routes to the history service.
 	if req.GetWorkflowId() == "" && !h.config.Enabled(req.GetNamespace()) {
 		return nil, ErrStandaloneActivityDisabled
 	}
+	if req.GetWorkflowId() == "" && !h.config.EnableStandaloneActivityOperatorCommands(req.GetNamespace()) {
+		return nil, ErrStandaloneActivityOperatorCommandsDisabled
+	}
 
-	if err := validateUpdateActivityExecutionOptionsRequest(
+	if err := validateAndNormalizeUpdateActivityExecutionOptionsRequest(
 		req,
 		h.config.DefaultActivityRetryPolicy,
 		h.config.MaxIDLengthLimit(),

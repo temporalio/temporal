@@ -33,6 +33,8 @@ type (
 		ShrinkScope() int
 		SelectTasks(readerID int64, batchSize int) ([]Executable, error)
 		MoreTasks() bool
+		// TaskStats returns a shallow copy.
+		// Deep copy fields before using them outside a reader lock.
 		TaskStats() TaskStats
 		Clear()
 	}
@@ -346,6 +348,7 @@ func (s *SliceImpl) shrinkPredicate() {
 
 	// TODO: this should be generic enough to shrink any predicate type, probably doesn't belong here.
 	pendingPerKey := s.pendingPerKey
+	metrics.QueueSlicePendingKeys.With(s.metricsHandler).Record(int64(len(pendingPerKey)))
 	if len(pendingPerKey) > s.maxPendingKeysFn() {
 		// only shrink predicate if there're few keys left
 		metrics.QueuePredicateResolutionLoss.With(s.metricsHandler).Record(

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -361,6 +362,32 @@ func TestDLQCommand_V2(t *testing.T) {
 				// Set error that will be triggered when calling ListQueues
 				p.adminClient.err = errors.New("connection failed")
 				p.expectedErrSubstrings = []string{"failed to find last message ID", "connection failed"}
+			},
+		},
+		{
+			name: "merge archival DLQ (category 5) is supported",
+			override: func(p *dlqTestParams) {
+				p.command = "merge"
+				p.dlqType = strconv.Itoa(tasks.CategoryArchival.ID())
+				p.lastMessageID = "" // No last message ID provided
+				p.adminClient.err = nil
+				queueName := persistence.GetHistoryTaskQueueName(
+					tasks.CategoryArchival.ID(), "test-source-cluster", "test-target-cluster")
+				p.adminClient.listQueueResponses = []*adminservice.ListQueuesResponse{
+					{
+						Queues: []*adminservice.ListQueuesResponse_QueueInfo{
+							{
+								QueueName:     queueName,
+								MessageCount:  10,
+								LastMessageId: 150,
+							},
+						},
+						NextPageToken: nil,
+					},
+				}
+			},
+			validateStdout: func(t *testing.T, b *bytes.Buffer) {
+				require.Contains(t, b.String(), "Found last message ID: 150")
 			},
 		},
 	} {

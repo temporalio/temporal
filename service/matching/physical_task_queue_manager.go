@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -94,6 +95,10 @@ type (
 		taskTrackerLock sync.Mutex
 		tasksAdded      map[priorityKey]*taskTracker
 		tasksDispatched map[priorityKey]*taskTracker
+		// tasksSyncMatched is kept out of GetStatsByPriority because TaskQueueStats is a public API
+		// proto and this rate is only used internally, for poller scaling decisions. Exposing it via
+		// DescribeTaskQueue would mean moving it there and adding a proto field.
+		tasksSyncMatched map[priorityKey]*taskTracker
 		// tasksRateLimited tracks rate-limit events in a sliding window for stats reporting.
 		tasksRateLimited *taskTracker
 	}
@@ -161,6 +166,7 @@ func newPhysicalTaskQueueManager(
 		metricsHandler:           taggedMetricsHandler,
 		tasksAdded:               make(map[priorityKey]*taskTracker),
 		tasksDispatched:          make(map[priorityKey]*taskTracker),
+		tasksSyncMatched:         make(map[priorityKey]*taskTracker),
 		tasksRateLimited:         e.newTaskTracker(),
 		pollerScalingRateLimiter: quotas.NewDefaultOutgoingRateLimiter(pollerScalingRateLimitFn),
 		deploymentRegistrationCh: make(chan struct{}, 1),
@@ -195,7 +201,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.logger,
 			pqMgr.throttledLogger,
 			e.matchingRawClient,
-			newFairMetricsHandler(taggedMetricsHandler),
+			taggedMetricsHandler,
 			pqMgr.counterFactory,
 			false,
 		)
@@ -216,7 +222,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.matchingClient,
 			pqMgr.taskValidator,
 			pqMgr.logger,
-			newFairMetricsHandler(taggedMetricsHandler),
+			taggedMetricsHandler,
 			partitionMgr.rateLimitManager,
 			pqMgr.onRateLimited,
 			pqMgr.MarkAlive,
@@ -236,7 +242,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.logger,
 			pqMgr.throttledLogger,
 			e.matchingRawClient,
-			newPriMetricsHandler(taggedMetricsHandler),
+			taggedMetricsHandler,
 			false,
 		)
 		var fwdr *priForwarder
@@ -256,7 +262,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.matchingClient,
 			pqMgr.taskValidator,
 			pqMgr.logger,
-			newPriMetricsHandler(taggedMetricsHandler),
+			taggedMetricsHandler,
 			partitionMgr.rateLimitManager,
 			pqMgr.onRateLimited,
 			pqMgr.MarkAlive,
@@ -379,10 +385,6 @@ func (c *physicalTaskQueueManagerImpl) SetupDraining() {
 		return
 	}
 
-	if !c.config.EnableMigration() {
-		return
-	}
-
 	var drainBacklogMgr backlogManager
 	var logger log.Logger
 	switch c.backlogMgr.(type) {
@@ -396,7 +398,7 @@ func (c *physicalTaskQueueManagerImpl) SetupDraining() {
 			logger,
 			log.With(c.throttledLogger, backlogTagPriorityDrain),
 			c.partitionMgr.engine.matchingRawClient,
-			newPriMetricsHandler(c.metricsHandler),
+			c.metricsHandler,
 			true,
 		)
 	case *priBacklogManagerImpl:
@@ -409,7 +411,7 @@ func (c *physicalTaskQueueManagerImpl) SetupDraining() {
 			logger,
 			log.With(c.throttledLogger, backlogTagFairnessDrain),
 			c.partitionMgr.engine.matchingRawClient,
-			newFairMetricsHandler(c.metricsHandler),
+			c.metricsHandler,
 			c.counterFactory,
 			true,
 		)
@@ -525,7 +527,6 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		// history, but this is more efficient.
 		if task.event != nil && IsTaskExpired(task.event.AllocatedTaskInfo) {
 			// task is expired while polling
-			c.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, metrics.TaskExpireStageMemoryTag)
 			task.finish(taskFinishResult{dropReason: dropReasonExpiredMemory})
 			continue
 		}
@@ -534,7 +535,13 @@ func (c *physicalTaskQueueManagerImpl) PollTask(
 		task.backlogCountHint = c.backlogCountHint
 
 		if pollMetadata.forwardedFrom == "" { // track the task on the child, not where a poll was forwarded to
-			c.incTaskTracker(c.tasksDispatched, priorityKey(task.getPriority().GetPriorityKey()), 1)
+			pri := priorityKey(task.getPriority().GetPriorityKey())
+			c.incTaskTracker(c.tasksDispatched, pri, 1)
+			// Mirror the !task.isForwarded() guard on tasksAdded in TrySyncMatch. A task forwarded
+			// in from a child is not counted as added here, so it is not counted as matched here.
+			if task.source == enumsspb.TASK_SOURCE_HISTORY && !task.isForwarded() {
+				c.incTaskTracker(c.tasksSyncMatched, pri, 1)
+			}
 		}
 		return task, nil
 	}
@@ -580,8 +587,6 @@ func (c *physicalTaskQueueManagerImpl) ProcessSpooledTask(
 	task *internalTask,
 ) error {
 	if !c.taskValidator.maybeValidate(task.event.AllocatedTaskInfo, c.queue.TaskType()) {
-		var invalidTaskTag = getInvalidTaskTag(task)
-		c.metricsHandler.Counter(metrics.ExpiredTasksPerTaskQueueCounter.Name()).Record(1, invalidTaskTag)
 		task.finish(taskFinishResult{dropReason: getDroppedTaskExpiryReason(task)})
 		// Don't try to set read level here because it may have been advanced already.
 
@@ -886,20 +891,26 @@ func (c *physicalTaskQueueManagerImpl) GetFairnessWeightOverrides() fairnessWeig
 
 func (c *physicalTaskQueueManagerImpl) MakePollerScalingDecision(
 	ctx context.Context,
-	pollStartTime time.Time) *taskqueuepb.PollerScalingDecision {
-	return c.makePollerScalingDecisionImpl(pollStartTime, func() *taskqueuepb.TaskQueueStats {
+	pollStartTime time.Time,
+	task *internalTask,
+) *taskqueuepb.PollerScalingDecision {
+	return c.makePollerScalingDecisionImpl(pollStartTime, task, func() *taskqueuepb.TaskQueueStats {
 		return c.partitionMgr.GetPhysicalQueueAdjustedStats(ctx, c)
 	})
 }
 
 func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 	pollStartTime time.Time,
+	task *internalTask,
 	statsFn func() *taskqueuepb.TaskQueueStats,
 ) *taskqueuepb.PollerScalingDecision {
 	pollWaitTime := c.partitionMgr.engine.timeSource.Since(pollStartTime)
-	// If a poller has waited around a while, we can always suggest a decrease.
-	if pollWaitTime >= c.partitionMgr.config.PollerScalingWaitTime() {
-		// Decrease if any poll matched after sitting idle for some configured period
+	// Only suggest scaling down for non-backlog tasks. Sync-matched tasks typically have
+	// tens of milliseconds latency, so a long wait means the poller was genuinely
+	// idle — there are more pollers than needed. For backlog tasks, the wait most likely
+	// comes from the DB read path (write → reader → matcher), not excess pollers. Skip
+	// the scale-down and fall through to the scale-up checks below.
+	if pollWaitTime >= c.partitionMgr.config.PollerScalingWaitTime() && task.source != enumsspb.TASK_SOURCE_DB_BACKLOG {
 		c.recordPollerScaleDecision(metrics.PollerScaleDecisionDown, metrics.PollerScaleReasonIdle)
 		return &taskqueuepb.PollerScalingDecision{
 			PollRequestDeltaSuggestion: -1,
@@ -920,24 +931,23 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 	delta := int32(0)
 	var reason metrics.ReasonString
 	stats := statsFn()
-	if stats.GetApproximateBacklogCount() > 0 &&
-		stats.GetApproximateBacklogAge().AsDuration() > c.partitionMgr.config.PollerScalingBacklogAgeScaleUp() {
-		// Always increase when there is a backlog, even if we're a partition. It's also important to increase for
-		// sticky queues.
+	// If dispatch is bottlenecked by a task queue rate limit, adding pollers won't help.
+	if stats.GetRateLimitingActive() {
+		c.recordPollerScaleDecision(metrics.PollerScaleDecisionHold, metrics.PollerScaleReasonTaskQueueRateLimited)
+		return nil
+	}
+
+	if c.delaySignalFiring(stats, task) {
 		delta = 1
-		reason = metrics.PollerScaleReasonBacklog
+		reason = metrics.PollerScaleReasonDelay
 	} else if c.queue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY && !c.queue.Partition().IsRoot() {
 		// Non-root partitions don't have an appropriate view of the data to make decisions beyond backlog.
 		// Sticky queues are exempt: they aren't considered root but do have a complete view of their data,
 		// as they have only 1 partition.
 		return nil
-	} else {
-		if float64(stats.GetTasksAddRate())/float64(stats.GetTasksDispatchRate()) > c.partitionMgr.config.PollerScalingTaskAddToDispatchRatio() {
-			// Increase if we're adding tasks faster than we're dispatching them. Particularly useful for Nexus tasks,
-			// since those (currently) don't get backlogged.
-			delta = 1
-			reason = metrics.PollerScaleReasonTaskRate
-		}
+	} else if c.ratioSignalFiring(stats) {
+		delta = 1
+		reason = metrics.PollerScaleReasonRatio
 	}
 
 	if delta == 0 {
@@ -959,6 +969,53 @@ func (c *physicalTaskQueueManagerImpl) recordPollerScaleDecision(decision string
 	}
 	c.metricsHandler.Counter(metrics.PollerScaleDecisionCounter.Name()).
 		Record(1, metrics.PollerScaleDecisionTag(decision), metrics.ReasonTag(reason))
+}
+
+// delaySignalFiring reports whether tasks are taking too long to reach a worker, which warrants
+// scaling pollers up. Under UseSignalsV2ForPollerScaling, this measures task dispatch latency,
+// which is wider than backlog delay alone.
+func (c *physicalTaskQueueManagerImpl) delaySignalFiring(stats *taskqueuepb.TaskQueueStats, task *internalTask) bool {
+	maxAge := c.partitionMgr.config.PollerScalingBacklogAgeScaleUp()
+
+	if c.partitionMgr.config.UseSignalsV2ForPollerScaling() {
+		return c.partitionMgr.engine.timeSource.Since(task.getCreateTime().AsTime()) > maxAge
+	}
+
+	return stats.GetApproximateBacklogCount() > 0 && stats.GetApproximateBacklogAge().AsDuration() > maxAge
+}
+
+// ratioSignalFiring reports whether we're adding tasks faster than we're dispatching them, which
+// warrants scaling pollers up. Under UseSignalsV2ForPollerScaling, this measures if we are adding
+// tasks faster than we can sync match them.
+// Particularly useful for Nexus tasks, since those (currently) don't get backlogged.
+func (c *physicalTaskQueueManagerImpl) ratioSignalFiring(stats *taskqueuepb.TaskQueueStats) bool {
+	maxRatio := c.partitionMgr.config.PollerScalingTaskAddToDispatchRatio()
+
+	if c.partitionMgr.config.UseSignalsV2ForPollerScaling() {
+		// If the syncMatch rate is 0 while tasks are being added, the division is +Inf and this
+		// always fires -- intentional. Note that when neither tracker has recorded anything the
+		// division is 0/0 = NaN instead, and NaN > maxRatio is false, so it does not fire.
+		addRate, syncMatchRate := c.getAggregateRates()
+		return float64(addRate)/float64(syncMatchRate) > maxRatio
+	}
+
+	return float64(stats.GetTasksAddRate())/float64(stats.GetTasksDispatchRate()) > maxRatio
+}
+
+// getAggregateRates returns the task add and sync match rates, each summed across all priorities.
+// Both are read under one lock so they form a consistent snapshot: incTaskTracker takes the same
+// lock on every add and every dispatch, so reading them separately could mix two instants.
+func (c *physicalTaskQueueManagerImpl) getAggregateRates() (addRate, syncMatchRate float32) {
+	c.taskTrackerLock.Lock()
+	defer c.taskTrackerLock.Unlock()
+
+	for _, tt := range c.tasksAdded {
+		addRate += tt.rate()
+	}
+	for _, tt := range c.tasksSyncMatched {
+		syncMatchRate += tt.rate()
+	}
+	return addRate, syncMatchRate
 }
 
 func (c *physicalTaskQueueManagerImpl) UpdateRemotePriorityBacklogs(backlogs remotePriorityBacklogSet) {
@@ -990,6 +1047,7 @@ func (c *physicalTaskQueueManagerImpl) incTaskTracker(
 		// Initialize all task trackers together; or the timeframes won't line up.
 		c.tasksAdded[priorityKey] = c.partitionMgr.engine.newTaskTracker()
 		c.tasksDispatched[priorityKey] = c.partitionMgr.engine.newTaskTracker()
+		c.tasksSyncMatched[priorityKey] = c.partitionMgr.engine.newTaskTracker()
 		tracker = intervals[priorityKey]
 	}
 	tracker.inc(n)

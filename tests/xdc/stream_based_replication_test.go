@@ -98,6 +98,7 @@ func (s *streamBasedReplicationTestSuite) SetupSuite() {
 	s.setupSuite(
 		testcore.WithDCRedirectionPolicy(config.DCRedirectionPolicy{Policy: "noop"}),
 		testcore.WithClusterHistoryTaskRecorder(),
+		testcore.WithReplicationStreamRecorder(),
 	)
 }
 
@@ -472,17 +473,22 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 	})
 	s.NoError(err)
 
+	// Wipe the local copies on the passive cluster. The frontend DeleteWorkflowExecution API rejects
+	// deletions on a cluster that is passive for the workflow (they would not be replicated), so go
+	// through the history service directly, which is the same path replication apply uses. The admin
+	// force-delete API is not usable here: it deletes the DB rows without clearing the workflow cache,
+	// so the target keeps serving the deleted runs from cache.
 	client1 := s.clusters[1].FrontendClient()
-	_, err = client1.DeleteWorkflowExecution(testcore.NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
-		Namespace: ns,
+	_, err = s.clusters[1].HistoryClient().DeleteWorkflowExecution(testcore.NewContext(), &historyservice.DeleteWorkflowExecutionRequest{
+		NamespaceId: resp.NamespaceInfo.GetId(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      we.GetRunId(),
 		},
 	})
 	s.NoError(err)
-	_, err = client1.DeleteWorkflowExecution(testcore.NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
-		Namespace: ns,
+	_, err = s.clusters[1].HistoryClient().DeleteWorkflowExecution(testcore.NewContext(), &historyservice.DeleteWorkflowExecutionRequest{
+		NamespaceId: resp.NamespaceInfo.GetId(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: id,
 			RunId:      resetResp.GetRunId(),
@@ -1070,7 +1076,7 @@ func (s *streamBasedReplicationTestSuite) TestPassiveActivityRetryTimerReplicati
 	s.NoError(err)
 	defer sdkClient.Close()
 
-	var activityAttempts int32
+	var activityAttempts atomic.Int32
 
 	// Workflow with activity that retries with 3 second intervals
 	simpleWorkflow := func(ctx workflow.Context) (string, error) {
@@ -1095,7 +1101,7 @@ func (s *streamBasedReplicationTestSuite) TestPassiveActivityRetryTimerReplicati
 
 	// Activity that sleeps 3 seconds and fails twice, succeeds on 3rd attempt
 	simpleActivity := func(ctx context.Context) (string, error) {
-		attempt := atomic.AddInt32(&activityAttempts, 1)
+		attempt := activityAttempts.Add(1)
 		if attempt < 3 {
 			return "", fmt.Errorf("failed attempt %d", attempt)
 		}

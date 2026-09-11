@@ -347,8 +347,16 @@ func newAdminScheduleCommands(clientFactory ClientFactory) []*cli.Command {
 			},
 			Subcommands: []*cli.Command{
 				{
-					Name:  "status",
-					Usage: "Show counts of V1 (workflow-backed) and V2 (CHASM) schedules in --namespace, from visibility",
+					Name: "status",
+					Usage: "Show counts of V1 (workflow-backed) and V2 (CHASM) schedules in --namespace, from visibility. " +
+						"With --schedule-id, instead reports the migration status of that one schedule (V1, V2, or sentinel).",
+					Flags: []cli.Flag{
+						&cli.StringFlag{
+							Name:    FlagScheduleID,
+							Aliases: FlagScheduleIDAlias,
+							Usage:   "Schedule ID to check the migration status of a single schedule, instead of namespace-wide counts",
+						},
+					},
 					Action: func(c *cli.Context) error {
 						return AdminScheduleStatus(c, clientFactory)
 					},

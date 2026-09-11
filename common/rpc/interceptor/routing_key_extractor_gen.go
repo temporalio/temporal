@@ -64,6 +64,8 @@ func workflowServiceRequestRoutingKey(req any) namespace.RoutingKey {
 		return namespace.RoutingKey{ID: r.GetPollerGroupId(), Strategy: namespace.RoutingStrategyPollerGroup}
 	case *workflowservice.PollNexusTaskQueueRequest:
 		return namespace.RoutingKey{ID: r.GetPollerGroupId(), Strategy: namespace.RoutingStrategyPollerGroup}
+	case *workflowservice.PollWorkflowExecutionTimeSkippingRequest:
+		return namespace.RoutingKey{ID: r.GetWorkflowExecution().GetWorkflowId()}
 	case *workflowservice.PollWorkflowExecutionUpdateRequest:
 		return namespace.RoutingKey{ID: r.GetUpdateRef().GetWorkflowExecution().GetWorkflowId()}
 	case *workflowservice.PollWorkflowTaskQueueRequest:
