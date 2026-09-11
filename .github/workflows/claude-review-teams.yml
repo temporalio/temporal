@@ -227,18 +227,22 @@ jobs:
       issues: write
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
+          persist-credentials: false
           ref: ${{ needs.check-review-eligibility.outputs.head_sha }}
           path: pr-head
       - name: Claude PR review
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@be7b93b1907a4abad570368f3c74b6fe3807510b # v1.0.183
         with:
           github_token: ${{ github.token }}
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           # Always on, so label- and auto-triggered reviews produce the same output.
           track_progress: true
           include_fix_links: false
+          show_full_output: false
           prompt: |
             ## Review task
 
@@ -264,4 +268,4 @@ jobs:
             formatted like an inline finding.
             Only post GitHub comments - don't submit review text as messages.
           claude_args: |
-            --add-dir pr-head --allowedTools "Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment,Bash(gh pr diff:*),Bash(gh pr view:*)"
+            --add-dir pr-head --max-turns 6 --disallowedTools WebFetch,WebSearch --allowedTools "Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment,Bash(gh pr diff:*),Bash(gh pr view:*)"
