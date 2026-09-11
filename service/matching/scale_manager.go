@@ -546,16 +546,6 @@ func scaleStateToInfo(
 	scaleState *persistencespb.PartitionScaleState,
 	settings dynamicconfig.PartitionScaleManagerSettings,
 ) *taskqueuespb.PartitionScaleInfo {
-	if scaleState.GetTarget() == 0 {
-		return &taskqueuespb.PartitionScaleInfo{
-			Read:          0,
-			Write:         0,
-			BacklogCounts: nil,
-			BacklogCap:    0,
-			Version:       scaleState.GetTargetVersion(),
-		}
-	}
-
 	// note if scaleState == nil, read and write will both be 0
 	read := scaleStateToReadCount(scaleState)
 	allowedShrink := max(
