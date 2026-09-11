@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/rpc/interceptor/nexus"
 	"google.golang.org/grpc"
 )
 
@@ -41,4 +42,13 @@ func (i *RetryableInterceptor) Intercept(
 
 	err := backoff.ThrottleRetryContext(ctx, op, i.policy, i.isRetryable)
 	return response, err
+}
+
+// InterceptNexus is a no-op as retries are on the caller side
+func (i *RetryableInterceptor) InterceptNexus(
+	ctx context.Context,
+	in nexus.InterceptorInput,
+	next nexus.HandlerFunc,
+) (any, error) {
+	return next(ctx, in)
 }

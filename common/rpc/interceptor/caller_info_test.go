@@ -2,13 +2,18 @@ package interceptor
 
 import (
 	"context"
+	"net/http"
 	"testing"
+	"time"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/nexus/nexusrpc"
+	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
@@ -121,6 +126,51 @@ func (s *callerInfoSuite) TestIntercept_CallerName() {
 
 		actualCallerName := headers.GetCallerInfo(resultingCtx).CallerName
 		s.Equal(testCase.expectedCallerName, actualCallerName)
+	}
+}
+
+func (s *callerInfoSuite) TestInterceptNexus() {
+	completeInput, err := interceptornexus.NewCompleteOpInput(
+		testNamespace,
+		time.Now(),
+		&nexusrpc.CompletionRequest{HTTPRequest: &http.Request{}},
+		nil,
+		interceptornexus.ForwardingInfo{},
+		interceptornexus.RequestMetadata{},
+	)
+	s.NoError(err)
+	for _, tc := range []struct {
+		name           string
+		input          interceptornexus.InterceptorInput
+		callerInfo     headers.CallerInfo
+		expectedOrigin string
+	}{
+		{
+			name:           "start",
+			input:          interceptornexus.NewStartOpInput("s", "o", testNamespace, time.Now(), nexus.StartOperationOptions{}, nil, interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{}),
+			expectedOrigin: "StartNexusOperation",
+		},
+		{
+			name:       "cancel - preserves background origin",
+			input:      interceptornexus.NewCancelOpInput("s", "o", testNamespace, time.Now(), nexus.CancelOperationOptions{}, "t", interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{}),
+			callerInfo: headers.SystemBackgroundHighCallerInfo,
+		},
+		{
+			name:           "complete",
+			input:          completeInput,
+			expectedOrigin: "CompleteNexusOperation",
+		},
+	} {
+		s.Run(tc.name, func() {
+			ctx := headers.SetCallerInfo(context.Background(), tc.callerInfo)
+			_, err := s.interceptor.InterceptNexus(ctx, tc.input, func(ctx context.Context, _ interceptornexus.InterceptorInput) (any, error) {
+				callerInfo := headers.GetCallerInfo(ctx)
+				s.Equal(testNamespace, callerInfo.CallerName)
+				s.Equal(tc.expectedOrigin, callerInfo.CallOrigin)
+				return nil, nil
+			})
+			s.NoError(err)
+		})
 	}
 }
 
