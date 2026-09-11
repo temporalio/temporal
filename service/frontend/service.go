@@ -176,6 +176,10 @@ type Config struct {
 
 	// Enable schedule-related RPCs
 	EnableSchedules dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	// Ceiling on the V1 scheduler workflow's recorded version.
+	SchedulerV1VersionCeiling dynamicconfig.IntPropertyFnWithNamespaceFilter
+	// Requested V1 scheduler workflow version.
+	SchedulerV1VersionOverride dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	// Enable CHASM tree infrastructure
 	EnableChasm dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -233,8 +237,7 @@ type Config struct {
 	MaskInternalErrorDetails dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// Health check
-	HistoryHostErrorPercentage     dynamicconfig.FloatPropertyFn
-	HistoryHostSelfErrorProportion dynamicconfig.FloatPropertyFn
+	HistoryHostErrorPercentage dynamicconfig.FloatPropertyFn
 
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -385,6 +388,8 @@ func NewConfig(
 		MaxFairnessWeightOverrideConfigLimit: dynamicconfig.MatchingMaxFairnessKeyWeightOverrides.Get(dc),
 
 		EnableSchedules:                      dynamicconfig.FrontendEnableSchedules.Get(dc),
+		SchedulerV1VersionCeiling:            dynamicconfig.SchedulerV1VersionCeiling.Get(dc),
+		SchedulerV1VersionOverride:           dynamicconfig.SchedulerV1VersionOverride.Get(dc),
 		EnableChasm:                          dynamicconfig.EnableChasm.Get(dc),
 		EnableCHASMSchedulerCreation:         dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
 		CHASMSchedulerCreationRolloutPercent: dynamicconfig.CHASMSchedulerCreationRolloutPercent.Get(dc),
@@ -428,7 +433,6 @@ func NewConfig(
 		MaskInternalErrorDetails: dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc),
 
 		HistoryHostErrorPercentage:              dynamicconfig.HistoryHostErrorPercentage.Get(dc),
-		HistoryHostSelfErrorProportion:          dynamicconfig.HistoryHostSelfErrorProportion.Get(dc),
 		LogAllReqErrors:                         dynamicconfig.LogAllReqErrors.Get(dc),
 		EnableEagerWorkflowStart:                dynamicconfig.EnableEagerWorkflowStart.Get(dc),
 		WorkflowRulesAPIsEnabled:                dynamicconfig.WorkflowRulesAPIsEnabled.Get(dc),

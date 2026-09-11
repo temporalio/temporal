@@ -11,13 +11,12 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -71,7 +70,7 @@ func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 	_, err = e.HistoryClient.CompleteNexusOperationChasm(ctx, request)
 	if err != nil {
 		redactedErr := logInternalError(e.Logger, "failed to complete Nexus operation", err)
-		if isRetryableRPCResponse(err) {
+		if common.IsRetryableRPCError(err) {
 			return invocationResultRetry{redactedErr}
 		}
 		return invocationResultFail{redactedErr}
@@ -132,31 +131,4 @@ func (c chasmInvocation) getHistoryRequest(
 	}
 
 	return req, nil
-}
-
-func isRetryableRPCResponse(err error) bool {
-	var st *status.Status
-	stGetter, ok := err.(interface{ Status() *status.Status })
-	if ok {
-		st = stGetter.Status()
-	} else {
-		st, ok = status.FromError(err)
-		if !ok {
-			// Not a gRPC induced error
-			return false
-		}
-	}
-	// nolint:exhaustive
-	switch st.Code() {
-	case codes.Canceled,
-		codes.Unknown,
-		codes.Unavailable,
-		codes.DeadlineExceeded,
-		codes.ResourceExhausted,
-		codes.Aborted,
-		codes.Internal:
-		return true
-	default:
-		return false
-	}
 }

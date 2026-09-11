@@ -8,12 +8,26 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/testing/testhooks"
+	historytasks "go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testcore"
+)
+
+type childRunAction int
+
+const (
+	completeChildRun childRunAction = iota
+	continueAsNewChildRun
+	resetChildRun
 )
 
 func TestParentChildXDCTestSuite(t *testing.T) {
@@ -34,161 +48,372 @@ func (s *parentChildXDCTestSuite) TearDownSuite() {
 	s.tearDownSuite()
 }
 
-// TestReproOrphanedChildAfterForceFailover covers the cross-shard ordering where the child start
-// reaches the passive while parent replication from WorkflowTaskStarted onward, including
-// StartChildWorkflowExecutionInitiated, remains delayed, followed by force failover.
+// TestRecoversOrphanedChildAfterForceFailover covers the cross-shard ordering where the child start
+// reaches the passive without its initial workflow task. Parent replication from WorkflowTaskStarted
+// onward, including StartChildWorkflowExecutionInitiated, remains delayed before force failover.
 //
-//	                       | parent on target                         | child on target                 | active          | outcome
-//	-----------------------+------------------------------------------+---------------------------------+-----------------+------------------------------
-//	parent prefix arrives  | WFT scheduled                            | does not exist                  | initial active  | common parent prefix
-//	child start arrives    | parent update remains delayed            | RUNNING, points to old version  | initial active  | cross-shard partial state
-//	force failover         | incomplete branch becomes current        | unchanged                       | initial standby | target begins active recovery
-//	retry StartChild       | same initiated event ID at a new version | unchanged                       | initial standby | WORKFLOW_ALREADY_EXISTS
-//	assert                 | no ChildWorkflowExecutionStarted         | still points to losing version  | initial standby | child is orphaned
+//	                       | parent on target                         | child on target                  | active          | outcome
+//	-----------------------+------------------------------------------+----------------------------------+-----------------+------------------------------
+//	parent prefix arrives  | WFT scheduled                            | does not exist                   | initial active  | common parent prefix
+//	child start arrives    | parent update remains delayed            | pristine, points to old version  | initial active  | cross-shard partial state
+//	force failover         | incomplete branch becomes current        | unchanged                        | initial standby | target begins active recovery
+//	retry StartChild       | reissued initiation on the new branch    | old run terminated, new run open | initial standby | orphan is replaced atomically
+//	assert                 | ChildWorkflowExecutionStarted            | replacement is current           | initial standby | parent can make progress
 //
-// Event checkpoints select an entire replication task, not an individual event. The delayed parent
-// task intentionally remains unapplied through the assertions.
-func (s *parentChildXDCTestSuite) TestReproOrphanedChildAfterForceFailover() {
+// This scenario uses the default transition-history replication. Event checkpoints select an entire
+// replication task, and the delayed parent task remains unapplied through the assertions.
+func (s *parentChildXDCTestSuite) TestRecoversOrphanedChildAfterForceFailover() {
 	s.runParentChildScenario(parentChildScenario{
 		steps: []parentChildScenarioStep{
-			// Create the parent and its first workflow task on the initial active cluster.
+			enableOrphanedChildWorkflowReplacement(),
 			startParentWorkflow(),
-			// Give the passive a common parent prefix before introducing the cross-shard gap.
 			applyReplicationThroughTaskContainingEvent(
 				initialStandbyCluster,
 				parentWorkflow,
 				enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 			),
-			// Complete the parent task with StartChild, creating the child on the source.
 			completeParentWorkflowTaskWithStartChildCommand(),
-			// Stop parent replication before its StartChild branch is complete on the passive.
 			delayReplicationAtTaskContainingEvent(
 				initialStandbyCluster,
 				parentWorkflow,
 				enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 			),
-			// Let the child arrive independently, still pointing to the old parent branch.
 			applyReplicationThroughTaskContainingEvent(
 				initialStandbyCluster,
 				childWorkflow,
 				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 			),
-			// Promote the incomplete passive state without draining the delayed parent task.
 			forceFailoverNamespaceTo(initialStandbyCluster),
-			// Retry StartChild on the new active branch, where the child ID already exists.
 			completeParentWorkflowTaskWithStartChildCommand(),
 		},
 		expectations: []parentChildExpectation{
-			{
-				name: "parent StartChild fails because the child already exists",
-				check: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
-					events, err := runtime.activeWorkflowHistory(ctx, parentWorkflow)
-					if err != nil {
-						return err
-					}
-					failedEvent := findHistoryEvent(
-						events,
-						enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED,
-						func(event *historypb.HistoryEvent) bool {
-							attrs := event.GetStartChildWorkflowExecutionFailedEventAttributes()
-							return attrs.GetWorkflowId() == runtime.childID &&
-								attrs.GetCause() == enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_WORKFLOW_ALREADY_EXISTS
-						},
-					)
-					if failedEvent == nil {
-						return fmt.Errorf("parent has no WORKFLOW_ALREADY_EXISTS failure for child %q", runtime.childID)
-					}
-					return nil
-				},
-			},
-			currentWorkflowHasStatusOnCluster(
+			workflowHasEventOnCluster(
 				initialStandbyCluster,
 				childWorkflow,
-				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED,
 			),
-			{
-				name: "child remains attached to the losing parent branch",
-				check: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
-					if runtime.childRunID == "" {
-						return errors.New("child WorkflowExecutionStarted was not applied")
-					}
-					childEvents, err := runtime.activeWorkflowHistory(ctx, childWorkflow)
-					if err != nil {
-						return err
-					}
-					childStartedEvent := findHistoryEvent(
-						childEvents,
-						enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-						nil,
-					)
-					if childStartedEvent == nil {
-						return fmt.Errorf("child run %q has no persisted WorkflowExecutionStarted event", runtime.childRunID)
-					}
-					childStartedAttrs := childStartedEvent.GetWorkflowExecutionStartedEventAttributes()
-					if childStartedAttrs == nil {
-						return errors.New("persisted child start event has no attributes")
-					}
-					parentExecution := childStartedAttrs.GetParentWorkflowExecution()
-					if parentExecution.GetWorkflowId() != runtime.parentID || parentExecution.GetRunId() != runtime.parentRunID {
-						return fmt.Errorf(
-							"child parent is %s/%s, want %s/%s",
-							parentExecution.GetWorkflowId(),
-							parentExecution.GetRunId(),
-							runtime.parentID,
-							runtime.parentRunID,
-						)
-					}
-
-					parentEvents, err := runtime.activeWorkflowHistory(ctx, parentWorkflow)
-					if err != nil {
-						return err
-					}
-					currentInitiatedEvent := findHistoryEvent(
-						parentEvents,
-						enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED,
-						func(event *historypb.HistoryEvent) bool {
-							attrs := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
-							return attrs.GetWorkflowId() == runtime.childID &&
-								event.GetEventId() == childStartedAttrs.GetParentInitiatedEventId()
-						},
-					)
-					currentChildStartedEvent := findHistoryEvent(
-						parentEvents,
-						enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED,
-						func(event *historypb.HistoryEvent) bool {
-							attrs := event.GetChildWorkflowExecutionStartedEventAttributes()
-							return attrs.GetWorkflowExecution().GetWorkflowId() == runtime.childID &&
-								attrs.GetWorkflowExecution().GetRunId() == runtime.childRunID
-						},
-					)
-					if currentChildStartedEvent != nil {
-						return errors.New("current parent branch owns the applied child")
-					}
-					if currentInitiatedEvent == nil {
-						return fmt.Errorf(
-							"current parent branch has no StartChild event %d for child %q",
-							childStartedAttrs.GetParentInitiatedEventId(),
-							runtime.childID,
-						)
-					}
-					if currentInitiatedEvent.GetVersion() == childStartedAttrs.GetParentInitiatedEventVersion() {
-						return fmt.Errorf(
-							"child and current parent branch have the same initiation version %d",
-							currentInitiatedEvent.GetVersion(),
-						)
-					}
-					runtime.tracef(
-						"orphan confirmed: child parent pointer=(%d, v%d), current parent initiation=(%d, v%d)",
-						childStartedAttrs.GetParentInitiatedEventId(),
-						childStartedAttrs.GetParentInitiatedEventVersion(),
-						currentInitiatedEvent.GetEventId(),
-						currentInitiatedEvent.GetVersion(),
-					)
-					return nil
-				},
-			},
+			parentOwnsReplacementChild(),
+			orphanedChildReplacementWasRecorded(),
 		},
 	})
+}
+
+// TestActiveRecoversChildCompletionWhenParentReplicationArrivesLate covers the cross-shard ordering
+// where parent replication remains delayed until after the child closes on the new active cluster.
+//
+//	                    | parent on target                | child on target   | active          | outcome
+//	--------------------+---------------------------------+-------------------+-----------------+-----------------------------------------------
+//	conversion paused   | does not exist                  | does not exist    | initial active  | source cannot emit the parent snapshot
+//	child start arrives | does not exist                  | RUNNING           | initial active  | child points to the missing parent
+//	force failover      | does not exist                  | RUNNING           | initial standby | target becomes active with partial state
+//	child closes        | does not exist                  | COMPLETED         | initial standby | CloseExecution cannot notify the missing parent
+//	parent tasks arrive | child relationship restored     | COMPLETED         | initial standby | regenerated StartChild finds the child closed
+//	refresh child tasks | ChildWorkflowExecutionCompleted | COMPLETED         | initial standby | recreated CloseExecution records completion
+//
+// Parent task conversion is paused before the first task is emitted. After the child closes, the
+// first raw task is converted against the latest source state, producing a complete initial snapshot
+// that includes ChildWorkflowExecutionStarted. No task is acknowledged or dropped. Event checkpoints
+// select an entire replication task, not an individual event.
+func (s *parentChildXDCTestSuite) TestActiveRecoversChildCompletionWhenParentReplicationArrivesLate() {
+	s.runParentChildScenario(parentChildScenario{
+		steps: []parentChildScenarioStep{
+			setStandbyClusterDelay(initialStandbyCluster, 0),
+			delayParentReplicationTaskConversion(initialActiveCluster),
+			startParentWorkflow(),
+			completeParentWorkflowTaskWithStartChildCommand(),
+			waitForWorkflowEventOnCluster(
+				initialActiveCluster,
+				parentWorkflow,
+				enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED,
+			),
+			applyReplicationThroughTaskContainingEvent(
+				initialStandbyCluster,
+				childWorkflow,
+				enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+			),
+			confirmWorkflowIsMissingOnCluster(initialStandbyCluster, parentWorkflow),
+			forceFailoverNamespaceTo(initialStandbyCluster),
+			closeChildRunsBeforeApplyingParent(completeChildRun),
+		},
+		expectations: []parentChildExpectation{
+			parentRecordsFinalChildRunCompletion(),
+		},
+	})
+}
+
+// TestActiveRecoversContinuedAsNewChildCompletionWhenParentReplicationArrivesLate covers the same
+// delayed-parent ordering when the child continues as new before its terminal run closes.
+//
+//	                       | parent on target                 | child on target                         | active          | outcome
+//	-----------------------+----------------------------------+-----------------------------------------+-----------------+-----------------------------------------------
+//	conversion paused      | does not exist                   | does not exist                          | initial active  | source cannot emit the parent snapshot
+//	child start arrives    | does not exist                   | run 1 RUNNING                           | initial active  | child points to the missing parent
+//	force failover         | does not exist                   | run 1 RUNNING                           | initial standby | target becomes active with partial state
+//	child continues as new | does not exist                   | run 1 CONTINUED_AS_NEW; run 2 RUNNING   | initial standby | run 1 CloseExecution processes without replying
+//	terminal run closes    | does not exist                   | run 1 CONTINUED_AS_NEW; run 2 COMPLETED | initial standby | run 2 cannot notify the missing parent
+//	parent tasks arrive    | child relationship restored      | run 2 COMPLETED                         | initial standby | StartChild resolves the current chain member
+//	refresh current run    | ChildWorkflowExecutionCompleted  | run 2 COMPLETED                         | initial standby | recreated run 2 CloseExecution records completion
+//
+// Both child CloseExecution tasks are processed before the parent snapshot is applied. Scheduling
+// the first task on run 1 reports that it is closed; loading current mutable state finds terminal run 2
+// with the same first-run ID, so recovery refreshes run 2. Parent replication is delayed, not lost.
+func (s *parentChildXDCTestSuite) TestActiveRecoversContinuedAsNewChildCompletionWhenParentReplicationArrivesLate() {
+	s.runParentChildScenario(parentChildScenario{
+		steps: []parentChildScenarioStep{
+			setStandbyClusterDelay(initialStandbyCluster, 0),
+			delayParentReplicationTaskConversion(initialActiveCluster),
+			startParentWorkflow(),
+			completeParentWorkflowTaskWithStartChildCommand(),
+			waitForWorkflowEventOnCluster(
+				initialActiveCluster,
+				parentWorkflow,
+				enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED,
+			),
+			applyReplicationThroughTaskContainingEvent(
+				initialStandbyCluster,
+				childWorkflow,
+				enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+			),
+			confirmWorkflowIsMissingOnCluster(initialStandbyCluster, parentWorkflow),
+			forceFailoverNamespaceTo(initialStandbyCluster),
+			closeChildRunsBeforeApplyingParent(
+				continueAsNewChildRun,
+				completeChildRun,
+			),
+		},
+		expectations: []parentChildExpectation{
+			parentRecordsFinalChildRunCompletion(),
+		},
+	})
+}
+
+// TestActiveRecoversResetChildCompletionWhenParentReplicationArrivesLate covers the same
+// delayed-parent ordering when a completed child is reset and its reset run also closes.
+//
+//	                    | parent on target                 | child on target                         | active          | outcome
+//	--------------------+----------------------------------+-----------------------------------------+-----------------+-----------------------------------------------
+//	conversion paused   | does not exist                   | does not exist                          | initial active  | source cannot emit the parent snapshot
+//	child start arrives | does not exist                   | original run RUNNING                    | initial active  | child points to the missing parent
+//	force failover      | does not exist                   | original run RUNNING                    | initial standby | target becomes active with partial state
+//	original run closes | does not exist                   | original run COMPLETED                  | initial standby | completion cannot reach the missing parent
+//	child is reset      | does not exist                   | original COMPLETED; reset run RUNNING   | initial standby | reset run preserves the original first-run ID
+//	reset run closes    | does not exist                   | original COMPLETED; reset run COMPLETED | initial standby | reset completion cannot reach the missing parent
+//	parent tasks arrive | child relationship restored      | reset run COMPLETED                     | initial standby | StartChild resolves the current reset run
+//	refresh reset run   | ChildWorkflowExecutionCompleted  | reset run COMPLETED                     | initial standby | recreated reset-run CloseExecution records completion
+//
+// The original and reset-run CloseExecution tasks are processed before the parent snapshot is
+// applied. Because the reset run inherits the original first-run ID, recovery recognizes it as the
+// same child chain and refreshes the terminal reset run. Parent replication is delayed, not lost.
+func (s *parentChildXDCTestSuite) TestActiveRecoversResetChildCompletionWhenParentReplicationArrivesLate() {
+	s.runParentChildScenario(parentChildScenario{
+		steps: []parentChildScenarioStep{
+			setStandbyClusterDelay(initialStandbyCluster, 0),
+			delayParentReplicationTaskConversion(initialActiveCluster),
+			startParentWorkflow(),
+			completeParentWorkflowTaskWithStartChildCommand(),
+			waitForWorkflowEventOnCluster(
+				initialActiveCluster,
+				parentWorkflow,
+				enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED,
+			),
+			applyReplicationThroughTaskContainingEvent(
+				initialStandbyCluster,
+				childWorkflow,
+				enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+			),
+			confirmWorkflowIsMissingOnCluster(initialStandbyCluster, parentWorkflow),
+			forceFailoverNamespaceTo(initialStandbyCluster),
+			closeChildRunsBeforeApplyingParent(
+				completeChildRun,
+				resetChildRun,
+				completeChildRun,
+			),
+		},
+		expectations: []parentChildExpectation{
+			parentRecordsFinalChildRunCompletion(),
+		},
+	})
+}
+
+func parentRecordsFinalChildRunCompletion() parentChildExpectation {
+	return parentChildExpectation{
+		name: "parent records completion of the final child run",
+		check: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
+			events, err := runtime.workflowHistoryOnCluster(ctx, initialStandbyCluster, parentWorkflow)
+			if err != nil {
+				return err
+			}
+			if findHistoryEvent(
+				events,
+				enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED,
+				func(event *historypb.HistoryEvent) bool {
+					execution := event.GetChildWorkflowExecutionCompletedEventAttributes().GetWorkflowExecution()
+					return execution.GetWorkflowId() == runtime.childID && execution.GetRunId() == runtime.childRunID
+				},
+			) == nil {
+				return fmt.Errorf("parent has no completion for final child run %s/%s", runtime.childID, runtime.childRunID)
+			}
+			return nil
+		},
+	}
+}
+
+func closeChildRunsBeforeApplyingParent(actions ...childRunAction) parentChildScenarioStep {
+	return parentChildScenarioStep{
+		name: "close every child run before applying parent replication",
+		run: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
+			if len(actions) == 0 {
+				return errors.New("no child close commands")
+			}
+			processedCloseTasks := make(chan string, len(actions))
+			cleanup := runtime.suite.clusters[initialStandbyCluster].InjectHook(
+				runtime.suite.T(),
+				testhooks.NewHook(testhooks.HistoryTransferTaskInterceptor, func(task historytasks.Task, execute func()) {
+					execute()
+					if task.GetWorkflowID() == runtime.childID && task.GetType() == enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION {
+						select {
+						case processedCloseTasks <- task.GetRunID():
+						default:
+						}
+					}
+				}),
+				namespace.ID(runtime.namespaceID),
+			)
+			defer cleanup()
+
+			closeRun := func(commandType enumspb.CommandType) error {
+				closedRunID, err := runtime.closeChildWorkflowTask(ctx, commandType)
+				if err != nil {
+					return err
+				}
+				for {
+					select {
+					case processedRunID := <-processedCloseTasks:
+						if processedRunID == closedRunID {
+							runtime.tracef("  processed child CloseExecution for run %s", closedRunID)
+							return nil
+						}
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+				}
+			}
+
+			for _, action := range actions {
+				switch action {
+				case completeChildRun:
+					if err := closeRun(enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION); err != nil {
+						return err
+					}
+				case continueAsNewChildRun:
+					if err := closeRun(enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION); err != nil {
+						return err
+					}
+				case resetChildRun:
+					if err := runtime.resetChildWorkflow(ctx); err != nil {
+						return err
+					}
+				default:
+					return fmt.Errorf("unknown child run action %d", action)
+				}
+			}
+			if runtime.resumeParentConversion == nil {
+				return errors.New("parent replication task conversion is not delayed")
+			}
+			runtime.resumeParentConversion()
+			return runtime.processReplicationThroughTaskContainingEvent(
+				ctx,
+				initialStandbyCluster,
+				parentWorkflow,
+				enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED,
+				applyReplicationTask,
+			)
+		},
+	}
+}
+
+func enableOrphanedChildWorkflowReplacement() parentChildScenarioStep {
+	return parentChildScenarioStep{
+		name: "enable orphaned child workflow replacement",
+		run: func(_ context.Context, runtime *parentChildScenarioRuntime) error {
+			for _, cluster := range runtime.suite.clusters {
+				runtime.cleanups = append(runtime.cleanups, cluster.OverrideDynamicConfig(
+					runtime.suite.T(),
+					dynamicconfig.EnableOrphanedChildWorkflowReplacement,
+					true,
+				))
+			}
+			return nil
+		},
+	}
+}
+
+func parentOwnsReplacementChild() parentChildExpectation {
+	return parentChildExpectation{
+		name: "parent owns a running replacement child",
+		check: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
+			if runtime.childRunID == "" {
+				return errors.New("orphaned child WorkflowExecutionStarted was not applied")
+			}
+			currentChild, err := runtime.activeCluster().FrontendClient().DescribeWorkflowExecution(
+				ctx,
+				&workflowservice.DescribeWorkflowExecutionRequest{
+					Namespace: runtime.namespace,
+					Execution: &commonpb.WorkflowExecution{WorkflowId: runtime.childID},
+				},
+			)
+			if err != nil {
+				return err
+			}
+			currentChildInfo := currentChild.GetWorkflowExecutionInfo()
+			replacementRunID := currentChildInfo.GetExecution().GetRunId()
+			if replacementRunID == "" || replacementRunID == runtime.childRunID {
+				return fmt.Errorf("current child run is %q, want a replacement for %q", replacementRunID, runtime.childRunID)
+			}
+			if currentChildInfo.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+				return fmt.Errorf("replacement child status is %s, want RUNNING", currentChildInfo.GetStatus())
+			}
+
+			parentEvents, err := runtime.activeWorkflowHistory(ctx, parentWorkflow)
+			if err != nil {
+				return err
+			}
+			if findHistoryEvent(
+				parentEvents,
+				enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_FAILED,
+				func(event *historypb.HistoryEvent) bool {
+					return event.GetStartChildWorkflowExecutionFailedEventAttributes().GetWorkflowId() == runtime.childID
+				},
+			) != nil {
+				return fmt.Errorf("parent recorded StartChildWorkflowExecutionFailed for child %q", runtime.childID)
+			}
+			if findHistoryEvent(
+				parentEvents,
+				enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED,
+				func(event *historypb.HistoryEvent) bool {
+					startedExecution := event.GetChildWorkflowExecutionStartedEventAttributes().GetWorkflowExecution()
+					return startedExecution.GetWorkflowId() == runtime.childID &&
+						startedExecution.GetRunId() == replacementRunID
+				},
+			) == nil {
+				return fmt.Errorf("parent has no ChildWorkflowExecutionStarted for replacement run %q", replacementRunID)
+			}
+			return nil
+		},
+	}
+}
+
+func orphanedChildReplacementWasRecorded() parentChildExpectation {
+	return parentChildExpectation{
+		name: "orphaned child replacement metric is recorded",
+		check: func(_ context.Context, runtime *parentChildScenarioRuntime) error {
+			return runtime.requireCapturedMetric(
+				initialStandbyCluster,
+				metrics.OrphanedChildWorkflowReplacement.Name(),
+				map[string]string{"outcome": "replaced"},
+			)
+		},
+	}
 }
 
 // TestStandbyResendsMissingChild covers the cross-shard ordering where the parent update

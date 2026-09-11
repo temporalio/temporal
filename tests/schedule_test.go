@@ -31,6 +31,8 @@ import (
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives"
@@ -257,6 +259,18 @@ func registerGatedWorkflow(env *testcore.TestEnv, wt string, runs *atomic.Int32)
 	}, workflow.RegisterOptions{Name: wt})
 }
 
+// countMetric returns how many captured samples of metricName carry every tag in want.
+func countMetric(capture *testcore.NamespaceMetricCapture, metricName string, want map[string]string) int {
+	return len(capture.CollectMetric(metricName, func(rec *metricstest.CapturedRecording) bool {
+		for key, value := range want {
+			if rec.Tags[key] != value {
+				return false
+			}
+		}
+		return true
+	}))
+}
+
 // scheduleClosed reports whether the schedule has closed, i.e. DescribeSchedule
 // returns NotFound specifically (not just any error).
 func scheduleClosed(ctx context.Context, env *testcore.TestEnv, sid string) bool {
@@ -413,6 +427,11 @@ func TestScheduleCHASM(t *testing.T) {
 	t.Run("TestResetWithAdditionalCallback_HSMCallbacks", func(t *testing.T) { t.Parallel(); testResetWithAdditionalCallback(t, newContext, false) })
 	t.Run("TestResetWithAdditionalCallback_ChasmCallbacks", func(t *testing.T) { t.Parallel(); testResetWithAdditionalCallback(t, newContext, true) })
 	t.Run("TestMigrationCallbackAttach", func(t *testing.T) { t.Parallel(); testMigrationCallbackAttach(t, newContext) })
+	t.Run("TestMigrationCallbackReattachSynthesized", func(t *testing.T) {
+		t.Parallel()
+		testMigrationCallbackReattachSynthesized(t, newContext)
+	})
+	t.Run("TestCallbackCompletionMetrics", func(t *testing.T) { t.Parallel(); testCallbackCompletionMetrics(t, newContext) })
 	t.Run("TestCreatesWorkflowSentinel", func(t *testing.T) { t.Parallel(); testCreatesWorkflowSentinel(t, newContext) })
 	t.Run("TestSkipsWorkflowSentinelWhenDisabled", func(t *testing.T) { t.Parallel(); testSkipsWorkflowSentinelWhenDisabled(t, newContext) })
 	t.Run("TestLargeScheduleID", func(t *testing.T) { t.Parallel(); testLargeScheduleID(t, newContext) })
@@ -507,6 +526,9 @@ func TestScheduleV1(t *testing.T) {
 	newContext := v1ContextFactory
 	t.Run("TestCreateScheduleDuplicateSdkError", func(t *testing.T) { t.Parallel(); testCreateScheduleDuplicateSdkError(t, false) })
 	t.Run("TestCHASMCanListV1Schedules", func(t *testing.T) { t.Parallel(); testCHASMCanListV1Schedules(t, newContext) })
+	// Not parallel: testActionDelayMetrics temporarily overrides the package-level
+	// scheduler.CurrentTweakablePolicies.Version, which every parallel sibling schedule shares.
+	t.Run("TestActionDelayMetrics", func(t *testing.T) { testActionDelayMetrics(t, newContext) })
 	t.Run("TestRefresh", func(t *testing.T) { t.Parallel(); testRefresh(t, newContext) })
 	t.Run("TestListBeforeRun", func(t *testing.T) { t.Parallel(); testListBeforeRun(t, newContext) })
 	t.Run("TestRateLimit", func(t *testing.T) { t.Parallel(); testRateLimit(t, newContext) })
@@ -514,6 +536,152 @@ func TestScheduleV1(t *testing.T) {
 	t.Run("TestCreatesCHASMSentinel", func(t *testing.T) { t.Parallel(); testCreatesCHASMSentinel(t, newContext) })
 	t.Run("TestSkipsCHASMSentinelWhenDisabled", func(t *testing.T) { t.Parallel(); testSkipsCHASMSentinelWhenDisabled(t, newContext) })
 	t.Run("TestUpdateScheduleMemoRejected", func(t *testing.T) { t.Parallel(); testUpdateScheduleMemoRejected(t, newContext) })
+}
+
+func testActionDelayMetrics(t *testing.T, newContext contextFactory) {
+	// The short-refresh DesiredTime path this test exercises is gated behind
+	// RefreshCompletionDesiredTime; the shipped default stays at TriggerImmediatelyTimestamp
+	// until a follow-up deploy activates it. Force it on for this run (see the caller: this
+	// subtest is intentionally not run with t.Parallel(), since this override is shared
+	// package state).
+	prevVersion := scheduler.CurrentTweakablePolicies.Version
+	scheduler.CurrentTweakablePolicies.Version = scheduler.RefreshCompletionDesiredTime
+	t.Cleanup(func() { scheduler.CurrentTweakablePolicies.Version = prevVersion })
+
+	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+
+	sid := testcore.RandomizeStr("sched-action-delay")
+	wid := testcore.RandomizeStr("sched-action-delay-wf")
+	wt := testcore.RandomizeStr("sched-action-delay-wt")
+
+	var activityCalls atomic.Int32
+	releaseManualActivity := make(chan struct{})
+	releaseFirstScheduledActivity := make(chan struct{})
+	activityFn := func(ctx context.Context) error {
+		var release chan struct{}
+		switch activityCalls.Add(1) {
+		case 1:
+			release = releaseManualActivity
+		case 2:
+			release = releaseFirstScheduledActivity
+		default:
+			return nil
+		}
+		select {
+		case <-release:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	s.SdkWorker().RegisterActivity(activityFn)
+	s.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			StartToCloseTimeout: 30 * time.Second,
+		})
+		return workflow.ExecuteActivity(ctx, activityFn).Get(ctx, nil)
+	}, workflow.RegisterOptions{Name: wt})
+
+	ctx := newContext(testcontext.For(t))
+	metricCapture := s.StartNamespaceMetricCapture()
+	interval := 10 * time.Second
+	phaseOffset := 5 * time.Second
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{
+					Interval: durationpb.New(interval),
+					Phase:    durationpb.New(time.Duration((time.Now().Unix()+int64(phaseOffset/time.Second))%int64(interval/time.Second)) * time.Second),
+				}},
+			},
+			Action: startWorkflowAction(s, wid, wt),
+			Policies: &schedulepb.SchedulePolicies{
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
+			},
+			State: &schedulepb.ScheduleState{
+				LimitedActions:   true,
+				RemainingActions: 2,
+			},
+		},
+		InitialPatch: triggerPatch(enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED),
+		Identity:     "test",
+		RequestId:    uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	// Query the scheduler workflow directly (not DescribeSchedule, which signals a refresh and
+	// would race the completion-discovery path each stage below is intended to cover).
+	queryBufferAndRunning := func() (bufferSize int64, running int) {
+		encoded, queryErr := s.SdkClient().QueryWorkflow(ctx, scheduler.WorkflowIDPrefix+sid, "", scheduler.QueryNameDescribe)
+		if queryErr != nil {
+			return -1, -1
+		}
+		var response schedulespb.DescribeResponse
+		if encoded.Get(&response) != nil {
+			return -1, -1
+		}
+		return response.GetInfo().GetBufferSize(), len(response.GetInfo().GetRunningWorkflows())
+	}
+	await.RequireTruef(t, func() bool {
+		bufferSize, running := queryBufferAndRunning()
+		return activityCalls.Load() == 1 && bufferSize == 1 && running == 1
+	}, awaitTimeout, pollInterval, "manual action should be running with the first scheduled action buffered")
+	close(releaseManualActivity)
+
+	// Hold the first scheduled action open past the second scheduled tick, so the second
+	// scheduled action is buffered behind a still-running (not yet closed) action -- i.e.
+	// genuinely blocked, not merely started after an unrelated, already-finished one. Note this
+	// exercises DesiredTime backdating end-to-end (via whichever path discovers the completion --
+	// a long-poll watcher is installed as soon as a start is buffered behind a running action, so
+	// that watcher, not a later refresh, is what normally wins here). The specific
+	// refresh-discovers-a-real-backlog branch (refreshBackdate == true in processWatcherResult) is
+	// pinned deterministically by TestRefreshCompletionDesiredTimeBacklog in workflow_test.go,
+	// which controls discovery timing directly instead of racing a real watcher.
+	await.RequireTruef(t, func() bool {
+		bufferSize, running := queryBufferAndRunning()
+		return activityCalls.Load() == 2 && bufferSize == 1 && running == 1
+	}, awaitTimeout, pollInterval, "first scheduled action should be running with the second scheduled action buffered")
+	close(releaseFirstScheduledActivity)
+
+	// Do not describe the schedule while waiting. The second scheduled action must discover
+	// the prior completion through processBuffer's short refresh, not a DescribeSchedule signal.
+	await.RequireTruef(t, func() bool {
+		return activityCalls.Load() == 3 && len(metricCapture.Metric(metrics.ScheduleActionDelay.Name())) == 2
+	}, awaitTimeout, pollInterval, "manual action and two scheduled actions should start")
+	desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(3), desc.GetInfo().GetActionCount())
+	actions := desc.GetInfo().GetRecentActions()
+	require.Len(t, actions, 3)
+
+	closeTime := func(action *schedulepb.ScheduleActionResult) time.Time {
+		t.Helper()
+		events := s.GetHistory(s.Namespace().String(), action.GetStartWorkflowResult())
+		require.NotEmpty(t, events)
+		lastEvent := events[len(events)-1]
+		require.Equal(t, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, lastEvent.GetEventType())
+		return lastEvent.GetEventTime().AsTime()
+	}
+	// The prior action's close only backdates the desired time when it comes after this
+	// action's own scheduled time -- i.e. this action was actually blocked waiting on it.
+	// Otherwise the action ran on time and the desired time stays at its scheduled time.
+	expectedDesiredTime := func(priorClose time.Time, action *schedulepb.ScheduleActionResult) time.Time {
+		if scheduleTime := action.GetScheduleTime().AsTime(); priorClose.After(scheduleTime) {
+			return priorClose
+		}
+		return action.GetScheduleTime().AsTime()
+	}
+	recordings := metricCapture.Metric(metrics.ScheduleActionDelay.Name())
+	for _, recording := range recordings {
+		require.Equal(t, metrics.ScheduleBackendLegacy, recording.Tags[metrics.ScheduleBackendTag])
+	}
+	require.Equal(t, actions[1].GetActualTime().AsTime().Sub(expectedDesiredTime(closeTime(actions[0]), actions[1])), recordings[0].Value)
+	require.Equal(t, actions[2].GetActualTime().AsTime().Sub(expectedDesiredTime(closeTime(actions[1]), actions[2])), recordings[1].Value)
 }
 
 func runSharedScheduleTests(t *testing.T, newContext contextFactory) {
@@ -3411,32 +3579,18 @@ func testPatchRejectsExcessBackfillers(t *testing.T, newContext contextFactory) 
 	s.Contains(err.Error(), "too many concurrent backfillers")
 }
 
-func testMigrationCallbackAttach(t *testing.T, newContext contextFactory) {
-	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
-
-	sid := testcore.RandomizeStr("sid")
-	wid := testcore.RandomizeStr("wid")
-	wt := testcore.RandomizeStr("wt")
-
-	resumeSignal := "resume"
-	s.SdkWorker().RegisterWorkflowWithOptions(
-		func(ctx workflow.Context) error {
-			workflow.GetSignalChannel(ctx, resumeSignal).Receive(ctx, nil)
-			return nil
-		},
-		workflow.RegisterOptions{Name: wt},
-	)
-
-	ctx := newContext(s.Context())
-	startResp, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:    s.Namespace().String(),
-		WorkflowId:   wid,
-		WorkflowType: &commonpb.WorkflowType{Name: wt},
-		TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		Identity:     testcore.RandomizeStr("identity"),
-		RequestId:    testcore.RandomizeStr("request-id"),
-	})
-	s.NoError(err)
+// createSchedulerFromMigrationState creates a V2 scheduler directly from a migration
+// state carrying a single BufferedStart pointing at (wid, runID). That start is what
+// arms the callback re-attach task: it is the only path that produces a start with a
+// RunId but no callback attached, so it is the only way to reach
+// SchedulerCallbacksTaskHandler in a running server.
+func createSchedulerFromMigrationState(
+	ctx context.Context,
+	t *testing.T,
+	s *testcore.TestEnv,
+	sid, wid, wt, runID string,
+) {
+	t.Helper()
 
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
@@ -3475,7 +3629,7 @@ func testMigrationCallbackAttach(t *testing.T, newContext contextFactory) {
 					ActualTime:  timestamppb.New(now),
 					StartTime:   timestamppb.New(now),
 					WorkflowId:  wid,
-					RunId:       startResp.RunId,
+					RunId:       runID,
 					RequestId:   uuid.NewString(),
 					Attempt:     1,
 					HasCallback: false,
@@ -3483,14 +3637,57 @@ func testMigrationCallbackAttach(t *testing.T, newContext contextFactory) {
 			},
 		},
 	}
-	_, err = s.GetTestCluster().SchedulerClient().CreateFromMigrationState(
+	_, err := s.GetTestCluster().SchedulerClient().CreateFromMigrationState(
 		ctx,
 		&schedulerpb.CreateFromMigrationStateRequest{
 			NamespaceId: nsID,
 			State:       migrationState,
 		},
 	)
+	require.NoError(t, err)
+}
+
+// awaitReattachMetric waits for a schedule_callback_reattach sample with the given
+// outcome and reason. The counter is recorded only after the re-attach's component
+// update commits, so it lags the state it describes.
+func awaitReattachMetric(t *testing.T, capture *testcore.NamespaceMetricCapture, outcome, reason string) {
+	t.Helper()
+	want := map[string]string{"outcome": outcome, "reason": reason}
+	await.RequireTruef(t, func() bool {
+		return countMetric(capture, metrics.ScheduleCallbackReattach.Name(), want) >= 1
+	}, awaitTimeout, pollInterval, "re-attach should record outcome=%s reason=%s", outcome, reason)
+}
+
+func testMigrationCallbackAttach(t *testing.T, newContext contextFactory) {
+	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+
+	sid := testcore.RandomizeStr("sid")
+	wid := testcore.RandomizeStr("wid")
+	wt := testcore.RandomizeStr("wt")
+
+	resumeSignal := "resume"
+	s.SdkWorker().RegisterWorkflowWithOptions(
+		func(ctx workflow.Context) error {
+			workflow.GetSignalChannel(ctx, resumeSignal).Receive(ctx, nil)
+			return nil
+		},
+		workflow.RegisterOptions{Name: wt},
+	)
+
+	ctx := newContext(testcontext.For(t))
+	metricCapture := s.StartNamespaceMetricCapture()
+	startResp, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:    s.Namespace().String(),
+		WorkflowId:   wid,
+		WorkflowType: &commonpb.WorkflowType{Name: wt},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:     testcore.RandomizeStr("identity"),
+		RequestId:    testcore.RandomizeStr("request-id"),
+	})
 	s.NoError(err)
+
+	nsID := s.NamespaceID().String()
+	createSchedulerFromMigrationState(ctx, t, s, sid, wid, wt, startResp.RunId)
 
 	s.Eventually(func() bool {
 		descResp, err := s.GetTestCluster().SchedulerClient().DescribeSchedule(
@@ -3506,6 +3703,17 @@ func testMigrationCallbackAttach(t *testing.T, newContext contextFactory) {
 		running := descResp.GetFrontendResponse().GetInfo().GetRunningWorkflows()
 		return len(running) > 0 && running[0].WorkflowId == wid
 	}, 15*time.Second, 500*time.Millisecond, "CHASM scheduler should show running workflow")
+
+	// A genuine attach: the target was running when the re-attach task ran, so the
+	// completion below is observed over a callback rather than synthesized from a
+	// describe. reason=none is what separates it from the two synthesizing paths covered
+	// by testMigrationCallbackReattachSynthesized.
+	//
+	// This must be waited on before signaling: RunningWorkflows is populated straight
+	// from the migration state and says nothing about whether the callback was attached
+	// yet, so completing the target first would let the re-attach describe an
+	// already-closed workflow and take the already_closed path instead.
+	awaitReattachMetric(t, metricCapture, "attached", "none")
 
 	_, err = s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.Namespace().String(),
@@ -3537,6 +3745,194 @@ func testMigrationCallbackAttach(t *testing.T, newContext contextFactory) {
 		}
 		return false
 	}, 15*time.Second, 500*time.Millisecond, "CHASM scheduler should reflect workflow completion")
+
+	// The re-attached callback delivers over the same internal path as a natively
+	// started action, so the delivery must be instrumented here too.
+	requireInternalCallbackDelivered(t, metricCapture)
+}
+
+// requireInternalCallbackDelivered asserts that at least one completion callback was
+// delivered over the internal (cross-shard) path and that the delivery is fully
+// instrumented: a successful delivery sample, a committed invocation event, an attempt
+// count, and no sample left at the "unknown" sentinel -- an outcome that would mean a
+// return path recorded no outcome at all, which is indistinguishable from never having
+// run.
+func requireInternalCallbackDelivered(t *testing.T, capture *testcore.NamespaceMetricCapture) {
+	t.Helper()
+
+	// The event is recorded after the callback's own state transition commits,
+	// which is strictly after the scheduler observed the completion, so poll.
+	await.RequireTruef(t, func() bool {
+		return countMetric(capture, callback.InvocationEventCounter.Name(),
+			map[string]string{"outcome": "success", "destination": chasm.NexusCompletionHandlerURL}) >= 1
+	}, awaitTimeout, pollInterval, "a committed callback event should be recorded")
+
+	deliveries := capture.Metric(callback.InternalRequestCounter.Name())
+	require.NotEmpty(t, deliveries, "internal callback delivery should be counted")
+	for _, delivery := range deliveries {
+		require.NotEqual(t, "unknown", delivery.Tags["outcome"],
+			"a delivery returned without recording an outcome")
+		require.Equal(t, chasm.NexusCompletionHandlerURL, delivery.Tags["destination"])
+	}
+	require.GreaterOrEqual(t,
+		countMetric(capture, callback.InternalRequestCounter.Name(), map[string]string{"outcome": "success"}), 1,
+		"a successful internal delivery should be counted")
+
+	// Counter and latency are recorded together on every exit path, so a latency sample
+	// missing against a counted request means a path skipped the deferred record.
+	await.RequireTruef(t, func() bool {
+		return len(capture.Metric(callback.InternalRequestLatencyHistogram.Name())) ==
+			len(capture.Metric(callback.InternalRequestCounter.Name()))
+	}, awaitTimeout, pollInterval, "every counted delivery should also record a latency sample")
+
+	// Attempts are recorded only on a terminal event, where the total is final.
+	attempts := capture.CollectMetric(callback.InvocationAttemptsHistogram.Name(),
+		func(rec *metricstest.CapturedRecording) bool { return rec.Tags["outcome"] == "success" })
+	require.NotEmpty(t, attempts, "a terminal event should record an attempt count")
+	require.GreaterOrEqual(t, attempts[0].Value, int64(1))
+
+	require.Zero(t, countMetric(capture, callback.InvocationEventCounter.Name(),
+		map[string]string{"outcome": "nonretryable-error"}), "no callback should have been dropped permanently")
+}
+
+// testCallbackCompletionMetrics pins the instrumentation on the V2 completion-callback
+// delivery path for a natively started action. The schedule learns its action finished
+// only through that callback, so a delivery that is dropped leaves the schedule
+// believing the action is still running -- and before this instrumentation that drop
+// left no trace beyond a log line.
+func testCallbackCompletionMetrics(t *testing.T, newContext contextFactory) {
+	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+	// The instrumented delivery path is the CHASM callback implementation. It is the
+	// default, but pin it: under the HSM implementation these metrics never fire.
+	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true)
+
+	sid := testcore.RandomizeStr("sched-callback-metrics")
+	wid := testcore.RandomizeStr("sched-callback-metrics-wf")
+	wt := testcore.RandomizeStr("sched-callback-metrics-wt")
+
+	var runs atomic.Int32
+	registerCountingWorkflow(s, wt, &runs)
+
+	ctx := newContext(testcontext.For(t))
+	metricCapture := s.StartNamespaceMetricCapture()
+
+	createSchedule(ctx, t, s, sid, &schedulepb.Schedule{
+		Spec:   intervalSpec(noOpInterval),
+		Action: startWorkflowAction(s, wid, wt),
+	})
+	patchSchedule(ctx, t, s, sid, triggerPatch(enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED))
+
+	// A COMPLETED recent action is proof the callback landed: nothing else tells the
+	// schedule the workflow finished.
+	await.RequireTruef(t, func() bool {
+		desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		if err != nil {
+			return false
+		}
+		actions := desc.GetInfo().GetRecentActions()
+		return len(actions) == 1 &&
+			actions[0].GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	}, awaitTimeout, pollInterval, "the triggered action should be observed as completed")
+	require.Equal(t, int32(1), runs.Load())
+
+	requireInternalCallbackDelivered(t, metricCapture)
+
+	// A natively started action attaches its callback at start time, so the re-attach
+	// path -- and its counter -- must not be involved.
+	require.Empty(t, metricCapture.Metric(metrics.ScheduleCallbackReattach.Name()))
+}
+
+// testMigrationCallbackReattachSynthesized covers the two re-attach classifications
+// that synthesize an action result instead of observing one. Both fabricate a
+// completion for the schedule from a describe rather than from a callback, so they are
+// the paths where a migrated schedule can silently record an outcome the workflow never
+// had.
+func testMigrationCallbackReattachSynthesized(t *testing.T, newContext contextFactory) {
+	cases := []struct {
+		name string
+		// targetMissing points the buffered start at a workflow that never existed,
+		// standing in for a target deleted before the migration's re-attach ran.
+		targetMissing bool
+		wantReason    string
+		wantStatus    enumspb.WorkflowExecutionStatus
+	}{
+		{
+			name:       "AlreadyClosed",
+			wantReason: "already_closed",
+			wantStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		},
+		{
+			// Target gone: recorded TERMINATED, because the real outcome is unknowable.
+			name:          "TargetGone",
+			targetMissing: true,
+			wantReason:    "not_found",
+			wantStatus:    enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+
+			sid := testcore.RandomizeStr("sched-reattach")
+			wid := testcore.RandomizeStr("sched-reattach-wf")
+			wt := testcore.RandomizeStr("sched-reattach-wt")
+
+			ctx := newContext(testcontext.For(t))
+			metricCapture := s.StartNamespaceMetricCapture()
+
+			runID := uuid.NewString()
+			if !tc.targetMissing {
+				var runs atomic.Int32
+				registerCountingWorkflow(s, wt, &runs)
+				startResp, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+					Namespace:    s.Namespace().String(),
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					Identity:     testcore.RandomizeStr("identity"),
+					RequestId:    testcore.RandomizeStr("request-id"),
+				})
+				require.NoError(t, err)
+				runID = startResp.RunId
+
+				// Close it before migrating, so the re-attach describes a workflow that is
+				// already finished rather than racing one that is still running.
+				await.RequireTruef(t, func() bool {
+					desc, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+						Namespace: s.Namespace().String(),
+						Execution: &commonpb.WorkflowExecution{WorkflowId: wid, RunId: runID},
+					})
+					return err == nil &&
+						desc.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+				}, awaitTimeout, pollInterval, "target workflow should close before migration")
+			}
+
+			createSchedulerFromMigrationState(ctx, t, s, sid, wid, wt, runID)
+
+			awaitReattachMetric(t, metricCapture, "completed", tc.wantReason)
+
+			// The synthesized result must also reach the schedule's own view, not just
+			// the counter.
+			desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+				Namespace:  s.Namespace().String(),
+				ScheduleId: sid,
+			})
+			require.NoError(t, err)
+			require.Empty(t, desc.GetInfo().GetRunningWorkflows())
+			actions := desc.GetInfo().GetRecentActions()
+			require.Len(t, actions, 1)
+			require.Equal(t, wid, actions[0].GetStartWorkflowResult().GetWorkflowId())
+			require.Equal(t, tc.wantStatus, actions[0].GetStartWorkflowStatus())
+
+			// Nothing was actually attached, so no delivery should have been attempted.
+			require.Empty(t, metricCapture.Metric(callback.InternalRequestCounter.Name()))
+		})
+	}
 }
 
 // testCHASMCanListV1Schedules tests that a schedule created in the V1 stack
