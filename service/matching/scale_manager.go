@@ -203,9 +203,15 @@ func (sm *scaleManager) callScaler() {
 		PrivateState:  sm.scaleState.GetPrivateScalerState(),
 	})
 	backlogCapC8 := number.EncodeCompact8(int64(decision.BacklogCap))
+	disabledStateNeedsCleanup := decision.NewTarget == 0 &&
+		(len(sm.scaleState.GetBacklogState()) > 0 ||
+			len(sm.scaleState.GetBacklogCounts()) > 0 ||
+			sm.scaleState.GetBacklogCap() != 0 ||
+			sm.scaleState.GetPrivateScalerState() != nil)
 	if decision.NoChange ||
 		decision.NewTarget == int(sm.scaleState.GetTarget()) &&
-			backlogCapC8 == number.Compact8(sm.scaleState.GetBacklogCap()) {
+			backlogCapC8 == number.Compact8(sm.scaleState.GetBacklogCap()) &&
+			!disabledStateNeedsCleanup {
 		return
 	}
 
@@ -221,9 +227,15 @@ func (sm *scaleManager) callScaler() {
 	newState.TargetVersion = sm.timeSource.Now().UnixNano()
 	newState.BacklogCap = int32(backlogCapC8)
 	newState.PrivateScalerState = decision.PrivateState
+	if target == 0 {
+		newState.BacklogState = nil
+		newState.BacklogCounts = nil
+		newState.BacklogCap = 0
+		newState.PrivateScalerState = nil
+	}
 
 	mayHaveBacklog := target
-	if prevTarget == 0 {
+	if prevTarget == 0 && target > 0 {
 		// Turning on managed partition scaling: consider all partitions from dynamic
 		// config as having backlog also.
 		mayHaveBacklog = max(mayHaveBacklog, int32(sm.getWritePartitions()))
