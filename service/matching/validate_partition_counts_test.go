@@ -1,15 +1,58 @@
 package matching
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common/dynamicconfig"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/tqid"
 )
+
+func TestCheckPartitionCountsScalerEnablement(t *testing.T) {
+	t.Parallel()
+
+	var stale *serviceerrors.StalePartitionCounts
+	tests := []struct {
+		name     string
+		enabled  bool
+		expected any
+	}{
+		{name: "disabled", enabled: false, expected: nil},
+		{name: "enabled", enabled: true, expected: &stale},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			partition := tqid.UnsafeTaskQueueFamily(namespaceID, taskQueueName).
+				TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).
+				NormalPartition(8)
+			pm := &taskQueuePartitionManagerImpl{
+				partition: partition,
+				userDataManager: &mockUserDataManager{
+					scaleInfo: &taskqueuespb.PartitionScaleInfo{Read: 8, Write: 4},
+				},
+				config: &taskQueueConfig{
+					PartitionScalerSettings: func() dynamicconfig.SimplePartitionScalerSettings {
+						return dynamicconfig.SimplePartitionScalerSettings{Enabled: tc.enabled}
+					},
+				},
+			}
+
+			err := pm.checkPartitionCounts(context.Background(), true)
+			if tc.expected == nil {
+				require.NoError(t, err)
+			} else {
+				require.ErrorAs(t, err, tc.expected)
+			}
+		})
+	}
+}
 
 func TestValidatePartitionCounts(t *testing.T) {
 	t.Parallel()

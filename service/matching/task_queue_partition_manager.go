@@ -356,6 +356,10 @@ func (pm *taskQueuePartitionManagerImpl) StartScaleManager(scaleState *persisten
 }
 
 func (pm *taskQueuePartitionManagerImpl) checkPartitionCounts(ctx context.Context, forWrite bool) error {
+	if !pm.config.PartitionScalerSettings().Enabled {
+		return nil
+	}
+
 	normal, ok := pm.partition.(*tqid.NormalPartition)
 	if !ok {
 		return nil // only normal partitions do dynamic scaling
