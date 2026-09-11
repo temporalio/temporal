@@ -48,6 +48,7 @@ func newReplicationMessageProcessor(
 	logger log.Logger,
 	eventLogger otellog.Logger,
 	emitNamespaceLifecycleEvents dynamicconfig.BoolPropertyFn,
+	pauseNamespaceReplication dynamicconfig.BoolPropertyFn,
 	eventDataProvider wideevents.NamespaceReplicationTaskEventDataProvider,
 	remotePeer adminservice.AdminServiceClient,
 	metricsHandler metrics.Handler,
@@ -88,6 +89,7 @@ func newReplicationMessageProcessor(
 		logger:                       logger,
 		eventLogger:                  eventLogger,
 		emitNamespaceLifecycleEvents: emitNamespaceLifecycleEvents,
+		pauseNamespaceReplication:    pauseNamespaceReplication,
 		eventDataProvider:            eventDataProvider,
 		remotePeer:                   remotePeer,
 		namespaceTaskExecutor:        namespaceTaskExecutor,
@@ -113,6 +115,7 @@ type (
 		logger                       log.Logger
 		eventLogger                  otellog.Logger
 		emitNamespaceLifecycleEvents dynamicconfig.BoolPropertyFn
+		pauseNamespaceReplication    dynamicconfig.BoolPropertyFn
 		eventDataProvider            wideevents.NamespaceReplicationTaskEventDataProvider
 		remotePeer                   adminservice.AdminServiceClient
 		namespaceTaskExecutor        nsreplication.TaskExecutor
@@ -152,6 +155,10 @@ func (p *replicationMessageProcessor) processorLoop() {
 }
 
 func (p *replicationMessageProcessor) handleReplicationTasks() {
+	if p.pauseNamespaceReplication() {
+		return
+	}
+
 	// The following is a best effort to make sure only one worker is processing tasks for a
 	// particular source cluster. When the ring is under reconfiguration, it is possible that
 	// for a small period of time two or more workers think they are the owner and try to execute

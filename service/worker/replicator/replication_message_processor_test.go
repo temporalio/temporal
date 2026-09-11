@@ -70,6 +70,7 @@ func TestRetryPolicyForTask(t *testing.T) {
 		nil, // logger
 		nil, // eventLogger
 		dynamicconfig.GetBoolPropertyFn(false),
+		dynamicconfig.GetBoolPropertyFn(false),
 		wideevents.NewDefaultNamespaceReplicationTaskEventDataProvider(),
 		nil,                        // remotePeer
 		metrics.NoopMetricsHandler, // metricsHandler — actually used by constructor
@@ -231,6 +232,7 @@ func newReplicationEventTestProcessor(
 		logger:                       log.NewNoopLogger(),
 		eventLogger:                  eventLogger,
 		emitNamespaceLifecycleEvents: dynamicconfig.GetBoolPropertyFn(enabled),
+		pauseNamespaceReplication:    dynamicconfig.GetBoolPropertyFn(false),
 		eventDataProvider:            wideevents.NewDefaultNamespaceReplicationTaskEventDataProvider(),
 		remotePeer:                   remotePeer,
 		namespaceTaskExecutor:        executor,

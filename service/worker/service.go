@@ -99,6 +99,7 @@ type (
 		BatcherConcurrency                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 		EnableParentClosePolicyWorker        dynamicconfig.BoolPropertyFn
 		EmitNamespaceLifecycleEvents         dynamicconfig.BoolPropertyFn
+		PauseNamespaceReplication            dynamicconfig.BoolPropertyFn
 		PerNamespaceWorkerCount              dynamicconfig.TypedSubscribableWithNamespaceFilter[int]
 		PerNamespaceWorkerOptions            dynamicconfig.TypedSubscribableWithNamespaceFilter[sdkworker.Options]
 		PerNamespaceWorkerStartRate          dynamicconfig.FloatPropertyFn
@@ -229,6 +230,7 @@ func NewConfig(
 		BatcherConcurrency:                   dynamicconfig.BatcherConcurrency.Get(dc),
 		EnableParentClosePolicyWorker:        dynamicconfig.EnableParentClosePolicyWorker.Get(dc),
 		EmitNamespaceLifecycleEvents:         dynamicconfig.EmitNamespaceLifecycleEvents.Get(dc),
+		PauseNamespaceReplication:            dynamicconfig.WorkerPauseNamespaceReplication.Get(dc),
 		PerNamespaceWorkerCount:              dynamicconfig.WorkerPerNamespaceWorkerCount.Subscribe(dc),
 		PerNamespaceWorkerOptions:            dynamicconfig.WorkerPerNamespaceWorkerOptions.Subscribe(dc),
 		PerNamespaceWorkerStartRate:          dynamicconfig.WorkerPerNamespaceWorkerStartRate.Get(dc),
@@ -384,6 +386,7 @@ func (s *Service) startReplicator() {
 		s.logger,
 		s.eventLogger,
 		s.config.EmitNamespaceLifecycleEvents,
+		s.config.PauseNamespaceReplication,
 		s.eventDataProvider,
 		s.metricsHandler,
 		s.hostInfo,

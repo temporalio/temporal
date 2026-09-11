@@ -40,6 +40,7 @@ type (
 		logger                           log.Logger
 		eventLogger                      otellog.Logger
 		emitNamespaceLifecycleEvents     dynamicconfig.BoolPropertyFn
+		pauseNamespaceReplication        dynamicconfig.BoolPropertyFn
 		eventDataProvider                wideevents.NamespaceReplicationTaskEventDataProvider
 		metricsHandler                   metrics.Handler
 		hostInfo                         membership.HostInfo
@@ -65,6 +66,7 @@ func NewReplicator(
 	logger log.Logger,
 	eventLogger otellog.Logger,
 	emitNamespaceLifecycleEvents dynamicconfig.BoolPropertyFn,
+	pauseNamespaceReplication dynamicconfig.BoolPropertyFn,
 	eventDataProvider wideevents.NamespaceReplicationTaskEventDataProvider,
 	metricsHandler metrics.Handler,
 	hostInfo membership.HostInfo,
@@ -85,6 +87,7 @@ func NewReplicator(
 		logger:                           log.With(logger, tag.ComponentReplicator),
 		eventLogger:                      eventLogger,
 		emitNamespaceLifecycleEvents:     emitNamespaceLifecycleEvents,
+		pauseNamespaceReplication:        pauseNamespaceReplication,
 		eventDataProvider:                eventDataProvider,
 		metricsHandler:                   metricsHandler,
 		namespaceReplicationQueue:        namespaceReplicationQueue,
@@ -165,6 +168,7 @@ func (r *Replicator) listenToClusterMetadataChange() {
 						log.With(r.logger, tag.ComponentReplicationTaskProcessor, tag.SourceCluster(clusterName)),
 						r.eventLogger,
 						r.emitNamespaceLifecycleEvents,
+						r.pauseNamespaceReplication,
 						r.eventDataProvider,
 						remoteAdminClient,
 						r.metricsHandler,

@@ -3425,6 +3425,12 @@ Should be at least WorkerESProcessorFlushInterval+<time to process request>.`,
 		20,
 		`WorkerThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger`,
 	)
+	WorkerPauseNamespaceReplication = NewGlobalBoolSetting(
+		"worker.namespaceReplicationProcessorPause",
+		false,
+		`WorkerPauseNamespaceReplication pauses fetching and processing the namespace replication queue.
+This setting is intended only for controlled test-cell fault injection.`,
+	)
 	WorkerScannerMaxConcurrentActivityExecutionSize = NewGlobalIntSetting(
 		"worker.ScannerMaxConcurrentActivityExecutionSize",
 		10,
