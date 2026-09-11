@@ -90,7 +90,7 @@ func (lb *defaultLoadBalancer) PickWritePartition(
 	pc PartitionCounts,
 ) (*tqid.NormalPartition, int) {
 	var partitionCount int
-	if pc.Write > 0 {
+	if pc.Valid() {
 		partitionCount = int(pc.Write)
 	} else {
 		nsName, err := lb.namespaceIDToName(namespace.ID(taskQueue.NamespaceId()))
