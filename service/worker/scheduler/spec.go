@@ -239,7 +239,7 @@ func validateStructuredCalendar(scs *schedulepb.StructuredCalendarSpec) error {
 	checkRanges(scs.Hour, "Hour", 0, 23)
 	checkRanges(scs.DayOfMonth, "DayOfMonth", 1, 31)
 	checkRanges(scs.Month, "Month", 1, 12)
-	checkRanges(scs.Year, "Year", minCalendarYear, maxCalendarYear)
+	checkRanges(scs.Year, "Year", minCalendarYear, maxSpecYear)
 	checkRanges(scs.DayOfWeek, "DayOfWeek", 0, 6)
 
 	if len(scs.Comment) > maxCommentLen {
@@ -299,7 +299,7 @@ func (cs *CompiledSpec) GetNextTime(jitterSeed string, after time.Time) (GetNext
 	after = util.MaxTime(after, cs.spec.StartTime.AsTime().Add(-time.Second))
 
 	pastEndTime := func(t time.Time) bool {
-		return cs.spec.EndTime != nil && t.After(cs.spec.EndTime.AsTime()) || t.Year() > maxCalendarYear
+		return cs.spec.EndTime != nil && t.After(cs.spec.EndTime.AsTime()) || t.Year() > MaxCalendarYear
 	}
 	warnIterations := cs.warnIterations()
 	if warnIterations <= 0 {
