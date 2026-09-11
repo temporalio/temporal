@@ -592,9 +592,8 @@ func (d *WorkflowRunner) handleCreateWorkerDeploymentVersion(ctx workflow.Contex
 	if len(d.State.Versions) >= maxVersions {
 		err := d.tryDeleteVersion(ctx)
 		if err != nil {
-			return nil, temporal.NewApplicationError(
+			return nil, d.newTooManyVersionsError(
 				fmt.Sprintf("cannot add version %s since maximum number of versions (%d) have been registered in the deployment", args.GetVersion(), maxVersions),
-				errTooManyVersions,
 			)
 		}
 	}
@@ -680,7 +679,7 @@ func (d *WorkflowRunner) addVersionToWorkerDeployment(ctx workflow.Context, args
 	if len(d.State.Versions) >= maxVersions {
 		err := d.tryDeleteVersion(ctx)
 		if err != nil {
-			return temporal.NewApplicationError(fmt.Sprintf("cannot add version %s since maximum number of versions (%d) have been registered in the deployment", args.Version, maxVersions), errTooManyVersions)
+			return d.newTooManyVersionsError(fmt.Sprintf("cannot add version %s since maximum number of versions (%d) have been registered in the deployment", args.Version, maxVersions))
 		}
 	}
 
@@ -691,6 +690,26 @@ func (d *WorkflowRunner) addVersionToWorkerDeployment(ctx workflow.Context, args
 	}
 	d.metrics.Counter(metrics.WorkerDeploymentVersionCreated.Name()).Inc(1)
 	return nil
+}
+
+func (d *WorkflowRunner) newTooManyVersionsError(message string) error {
+	versions := workflow.DeterministicKeys(d.State.Versions)
+	fingerprints := make([]int64, 0, len(versions))
+	for _, version := range versions {
+		versionObj, err := worker_versioning.WorkerDeploymentVersionFromStringV31(version)
+		if err != nil {
+			d.logger.Error("failed to parse version while creating too-many-versions failure details", "version", version, "error", err)
+			continue
+		}
+		if versionObj == nil {
+			d.logger.Error("unexpected unversioned entry while creating too-many-versions failure details", "version", version)
+			continue
+		}
+		fingerprints = append(fingerprints, workerDeploymentVersionFingerprint(versionObj.GetDeploymentName(), versionObj.GetBuildId()))
+	}
+	return temporal.NewApplicationError(message, errTooManyVersions, &deploymentspb.TooManyVersionsFailureDetails{
+		VersionFingerprints: fingerprints,
+	})
 }
 
 func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploymentspb.RegisterWorkerInWorkerDeploymentArgs) error {

@@ -1151,8 +1151,11 @@ func (s *DeploymentVersionSuite) waitForNoPollers(env *testcore.TestEnv, tv *tes
 
 func (s *DeploymentVersionSuite) TestVersionScavenger_DeleteOnAdd() {
 	env := s.newTestEnv(
+		// TODO: remove WithWorkerService once legacy suite-scoped cluster behavior is removed.
+		testcore.WithWorkerService("worker-deployment version scavenger test"),
 		testcore.WithDynamicConfig(dynamicconfig.PollerHistoryTTL, 3*time.Second),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingMaxVersionsInDeployment, testMaxVersionsInDeployment),
+		testcore.WithDynamicConfig(dynamicconfig.WorkerDeploymentRegistrationErrorCacheTTL, 0),
 		// we don't want the version to drain in this test
 		testcore.WithDynamicConfig(dynamicconfig.VersionDrainageStatusVisibilityGracePeriod, 60*time.Second),
 		testcore.WithDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 0),
