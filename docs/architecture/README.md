@@ -50,7 +50,7 @@ These premises have led to a system architecture which is divided into user-host
 
 - The worker processes communicate with the Temporal server in two ways: they continuously poll the server for Workflow and Activity tasks, and on completion of each task they send information to the server.
   (For a Workflow task they send commands to the server specifying what must be done to further advance the Workflow execution, and for an Activity task they send the task result or failure information.)
-  See [Tasks](#Tasks) below.
+  See [Tasks](#tasks) below.
 
 ### Temporal Cluster
 
