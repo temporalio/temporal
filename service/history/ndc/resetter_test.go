@@ -2,6 +2,7 @@ package ndc
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -108,6 +110,77 @@ func (s *resetterSuite) SetupTest() {
 func (s *resetterSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockShard.StopForTest()
+}
+
+func (s *resetterSuite) TestResetWorkflow_HoldsBaseLeaseDuringFork() {
+	for _, forkFails := range []bool{false, true} {
+		name := "fork succeeds"
+		if forkFails {
+			name = "fork fails"
+		}
+		s.Run(name, func() {
+			r := require.New(s.T())
+			ctx := s.T().Context()
+			baseContext := workflow.NewContext(
+				s.mockShard.GetConfig(), definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.baseRunID),
+				chasm.WorkflowArchetypeID, s.logger, s.mockShard.GetThrottledLogger(), s.mockShard.GetMetricsHandler(), nil, testhooks.TestHooks{},
+			)
+			r.NoError(baseContext.Lock(ctx, locks.PriorityLow))
+			var releaseCount int
+			var releaseErr error
+			release := func(err error) {
+				releaseCount++
+				releaseErr = err
+				baseContext.Unlock()
+			}
+			baseState := historyi.NewMockMutableState(s.controller)
+			baseState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+				VersionHistories: versionhistory.NewVersionHistories(versionhistory.NewVersionHistory(
+					[]byte("base"), []*historyspb.VersionHistoryItem{versionhistory.NewVersionHistoryItem(100, 1)},
+				)),
+			})
+			baseWorkflow := NewMockWorkflow(s.controller)
+			baseWorkflow.EXPECT().GetMutableState().Return(baseState)
+			baseWorkflow.EXPECT().GetReleaseFn().Return(release)
+			s.mockTransactionMgr.EXPECT().LoadWorkflow(ctx, s.namespaceID, s.workflowID, s.baseRunID, chasm.WorkflowArchetypeID).Return(baseWorkflow, nil)
+			forkErr := errors.New("fork failed")
+			rebuildErr := errors.New("stop after fork")
+			s.mockExecManager.EXPECT().ForkHistoryBranch(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(context.Context, *persistence.ForkHistoryBranchRequest) (*persistence.ForkHistoryBranchResponse, error) {
+					// A competing history cleanup uses the same workflow lock.
+					waitCtx, cancel := context.WithTimeout(ctx, 10*time.Millisecond)
+					defer cancel()
+					lockErr := baseContext.Lock(waitCtx, locks.PriorityLow)
+					if lockErr == nil {
+						baseContext.Unlock()
+					}
+					r.ErrorIs(lockErr, context.DeadlineExceeded)
+					if forkFails {
+						return nil, forkErr
+					}
+					return &persistence.ForkHistoryBranchResponse{NewBranchToken: []byte("reset")}, nil
+				})
+			if !forkFails {
+				s.mockStateBuilder.EXPECT().Rebuild(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+					func(context.Context, time.Time, definition.WorkflowKey, []byte, int64, *int64, definition.WorkflowKey, []byte, string) (historyi.MutableState, RebuildStats, error) {
+						r.Equal(1, releaseCount)
+						return nil, RebuildStats{}, rebuildErr
+					})
+			}
+			_, err := s.workflowResetter.resetWorkflow(ctx, time.Now(), 90, 1, 91, 1)
+			r.Equal(1, releaseCount)
+			if forkFails {
+				r.ErrorIs(err, forkErr)
+				r.ErrorIs(releaseErr, forkErr)
+			} else {
+				r.ErrorIs(err, rebuildErr)
+				r.NoError(releaseErr)
+			}
+			// The lease is available again after either fork outcome.
+			r.NoError(baseContext.Lock(ctx, locks.PriorityLow))
+			baseContext.Unlock()
+		})
+	}
 }
 
 func (s *resetterSuite) TestResetWorkflow_NoError() {
