@@ -270,21 +270,22 @@ func (sm *scaleManager) callScaler() {
 		}
 
 		sm.setState(newState, settings) // emits partition_scale_{read,write,target}
-		if target == 0 {
-			sm.logger.Info("disabled managed scaling",
-				tag.Int32("prev-read", prevRead),
-				tag.Int32("prev-write", prevWrite))
-		}
 	}
 
 	cooldown := time.Duration(float32(time.Second) / settings.MaxRate)
 	sm.nextDecision = sm.timeSource.Now().Add(cooldown)
 
-	sm.logger.Info("new target",
-		tag.Int32("target", target),
-		tag.Int32("prev-target", prevTarget),
-		tag.Int32("max-target", newState.MaxTarget),
-		tag.Bool(metrics.ScalerShadowModeTagName, shadowMode))
+	if target == 0 {
+		sm.logger.Info("disabled managed scaling",
+			tag.Int32("prev-read", prevRead),
+			tag.Int32("prev-write", prevWrite))
+	} else {
+		sm.logger.Info("new target",
+			tag.Int32("target", target),
+			tag.Int32("prev-target", prevTarget),
+			tag.Int32("max-target", newState.MaxTarget),
+			tag.Bool(metrics.ScalerShadowModeTagName, shadowMode))
+	}
 	metrics.PartitionScaleEvents.With(sm.metricsHandler.WithTags(metrics.ScalerShadowModeTag(shadowMode))).Record(1)
 }
 
