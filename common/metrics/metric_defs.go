@@ -1150,6 +1150,9 @@ var (
 	ReplicationTasksFailed             = NewCounterDef("replication_tasks_failed")
 	ReplicationTasksBackFill           = NewCounterDef("replication_tasks_back_fill")
 	ReplicationTasksBackFillLatency    = NewTimerDef("replication_tasks_back_fill_latency")
+
+	ReplicationTasksShedByGradualConnect = NewCounterDef("replication_tasks_shed_by_gradual_connect")
+	ReplicationGradualConnectPercent     = NewGaugeDef("replication_gradual_connect_percent")
 	// ParentWorkflowResendAttempts counts parent resends started by standby completion verification.
 	ParentWorkflowResendAttempts = NewCounterDef("parent_workflow_resend_attempts")
 	// ParentWorkflowResendSkipped counts attempts that found a resend for the same parent in flight.

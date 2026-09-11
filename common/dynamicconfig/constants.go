@@ -3041,6 +3041,11 @@ to persistence. The buffer holds slim queue rows (task metadata, not event paylo
 		100,
 		`Maximum number of low priority replication tasks that can be sent per second per shard`,
 	)
+	EnableReplicationGradualConnect = NewGlobalBoolSetting(
+		"history.enableReplicationGradualConnect",
+		false,
+		`Controls whether replication stream senders honor gradual-connect ramps.`,
+	)
 	ReplicationStreamEventLoopRetryMaxAttempts = NewGlobalIntSetting(
 		"history.ReplicationStreamEventLoopRetryMaxAttempts",
 		100, // 0 means retry forever
