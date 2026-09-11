@@ -97,7 +97,7 @@ func (lb *defaultLoadBalancer) PickWritePartition(
 	}
 
 	var partitionCount int
-	if pc.Write > 0 {
+	if pc.Valid() {
 		partitionCount = int(pc.Write)
 	} else {
 		partitionCount = max(1, lb.nWritePartitions(nsName.String(), taskQueue.Name(), taskQueue.TaskType()))
@@ -157,7 +157,7 @@ func (lb *defaultLoadBalancer) PickReadPartition(
 	var partitionCount = dynamicconfig.GlobalDefaultNumTaskQueuePartitions
 	namespaceName, namespaceErr := lb.namespaceIDToName(namespace.ID(taskQueue.NamespaceId()))
 
-	if pc.Read > 0 {
+	if pc.Valid() {
 		partitionCount = int(pc.Read)
 	} else if namespaceErr == nil {
 		partitionCount = lb.nReadPartitions(string(namespaceName), taskQueue.Name(), taskQueue.TaskType())
