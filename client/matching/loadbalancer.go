@@ -199,7 +199,7 @@ func (lb *defaultLoadBalancer) PickReadPartition(
 	var partitionCount = dynamicconfig.GlobalDefaultNumTaskQueuePartitions
 	namespaceName, namespaceErr := lb.namespaceIDToName(namespace.ID(taskQueue.NamespaceId()))
 
-	if pc.Read > 0 {
+	if pc.Valid() {
 		partitionCount = int(pc.Read)
 	} else if namespaceErr == nil {
 		partitionCount = lb.nReadPartitions(string(namespaceName), taskQueue.Name(), taskQueue.TaskType())
