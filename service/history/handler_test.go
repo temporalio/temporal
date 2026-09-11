@@ -107,10 +107,12 @@ func TestIsActivityTaskValidStandaloneActivity(t *testing.T) {
 	engine.EXPECT().ReadComponent(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
 		func(
 			_ context.Context,
-			_ chasm.ComponentRef,
+			componentRef chasm.ComponentRef,
 			readFn func(chasm.Context, chasm.Component) error,
 			_ ...chasm.TransitionOption,
 		) error {
+			require.Equal(t, namespaceID, componentRef.NamespaceID)
+			require.Equal(t, businessID, componentRef.BusinessID)
 			return readFn(activityCtx, standaloneActivity)
 		},
 	)

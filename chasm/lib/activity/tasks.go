@@ -52,6 +52,8 @@ func (h *activityDispatchTaskHandler) Validate(
 	return activity.IsDispatchTaskValid(ctx, task.Stamp)
 }
 
+// IsDispatchTaskValid reports whether the attempt identified by stamp is still the activity's
+// current scheduled attempt.
 func (a *Activity) IsDispatchTaskValid(
 	ctx chasm.Context,
 	stamp int32,
