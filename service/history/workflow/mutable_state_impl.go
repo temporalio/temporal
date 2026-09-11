@@ -8336,6 +8336,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 	}
 
 	ms.closeTransactionCollapseVisibilityTasks()
+	ms.closeTransactionTrimTasksForClosedWorkflow()
 
 	if err := ms.closeTransactionGenerateChasmRetentionTask(transactionPolicy); err != nil {
 		return err
@@ -9112,6 +9113,27 @@ func (ms *MutableStateImpl) closeTransactionCollapseVisibilityTasks() {
 		}
 	}
 	ms.InsertTasks[tasks.CategoryVisibility] = collapsedVisTasks
+}
+
+func (ms *MutableStateImpl) closeTransactionTrimTasksForClosedWorkflow() {
+	if ms.IsWorkflowExecutionRunning() {
+		return
+	}
+
+	// External signals are abandoned when the source workflow closes. Avoid persisting
+	// tasks that the active and standby executors would immediately discard.
+	transferTasks := slices.DeleteFunc(
+		ms.InsertTasks[tasks.CategoryTransfer],
+		func(task tasks.Task) bool {
+			_, isSignalExecutionTask := task.(*tasks.SignalExecutionTask)
+			return isSignalExecutionTask
+		},
+	)
+	if len(transferTasks) == 0 {
+		delete(ms.InsertTasks, tasks.CategoryTransfer)
+		return
+	}
+	ms.InsertTasks[tasks.CategoryTransfer] = transferTasks
 }
 
 func (ms *MutableStateImpl) generateReplicationTask() bool {
