@@ -19,12 +19,11 @@ func TestCheckPartitionCountsScalerEnablement(t *testing.T) {
 
 	var stale *serviceerrors.StalePartitionCounts
 	tests := []struct {
-		name     string
-		enabled  bool
-		expected any
+		name    string
+		enabled bool
 	}{
-		{name: "disabled", enabled: false, expected: nil},
-		{name: "enabled", enabled: true, expected: &stale},
+		{name: "disabled", enabled: false},
+		{name: "enabled", enabled: true},
 	}
 
 	for _, tc := range tests {
@@ -45,10 +44,10 @@ func TestCheckPartitionCountsScalerEnablement(t *testing.T) {
 			}
 
 			err := pm.checkPartitionCounts(context.Background(), true)
-			if tc.expected == nil {
-				require.NoError(t, err)
+			if tc.enabled {
+				require.ErrorAs(t, err, &stale)
 			} else {
-				require.ErrorAs(t, err, tc.expected)
+				require.NoError(t, err)
 			}
 		})
 	}
