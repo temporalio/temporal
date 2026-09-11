@@ -41,7 +41,7 @@ import (
 )
 
 const (
-	namespaceID        = "ns-id"
+	namespaceID        = defaultNamespaceId
 	namespaceName      = "ns-name"
 	taskQueueName      = "my-test-tq"
 	defaultPriorityTag = "3" // MatchingTaskPriorityTag(DefaultPriorityKey) with PriorityLevels=5
@@ -93,7 +93,7 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 	s.matchingClient = matchingservicemock.NewMockMatchingServiceClient(s.controller)
 	s.matchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{}, nil).AnyTimes()
-	engine := createTestMatchingEngine(logger, s.controller, config, s.matchingClient, registry)
+	engine := createTestMatchingEngine(s.T(), logger, s.controller, config, s.matchingClient, registry)
 
 	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
 	s.NoError(err)
@@ -2197,7 +2197,7 @@ func TestWorkerCommandsPollTask_VersioningFieldsIgnored(t *testing.T) {
 			matchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
 			matchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any(), gomock.Any()).
 				Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{}, nil).AnyTimes()
-			engine := createTestMatchingEngine(logger, controller, config, matchingClient, registry)
+			engine := createTestMatchingEngine(t, logger, controller, config, matchingClient, registry)
 
 			f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
 			require.NoError(t, err)
@@ -2292,7 +2292,7 @@ func TestStickyQueueAdjustedStats_VersioningAttributionSkipped(t *testing.T) {
 	matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
 	matchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{}, nil).AnyTimes()
-	engine := createTestMatchingEngine(logger, ctrl, config, matchingClient, registry)
+	engine := createTestMatchingEngine(t, logger, ctrl, config, matchingClient, registry)
 
 	// Use a fixed time source so rate calculations are deterministic across reads.
 	ts := clock.NewEventTimeSource()

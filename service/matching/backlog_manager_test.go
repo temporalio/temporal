@@ -74,9 +74,9 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
 	if s.fairness {
-		s.taskMgr = newTestFairTaskManager(s.logger)
+		s.taskMgr = newTestFairTaskManager(s.T(), s.logger)
 	} else {
-		s.taskMgr = newTestTaskManager(s.logger)
+		s.taskMgr = newTestTaskManager(s.T(), s.logger)
 	}
 
 	// A capture handler discards recordings while no capture is active (see
@@ -87,7 +87,7 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 	s.cfgcli = dynamicconfig.NewMemoryClient()
 	s.cfgcol = dynamicconfig.NewCollection(s.cfgcli, s.logger)
 
-	f, _ := tqid.NewTaskQueueFamily("", "test-queue")
+	f, _ := tqid.NewTaskQueueFamily(defaultNamespaceId, "test-queue")
 	prtn := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0)
 	queue := UnversionedQueueKey(prtn)
 	tlCfg := newTaskQueueConfig(prtn.TaskQueue(), NewConfig(s.cfgcol), "test-namespace")
@@ -731,9 +731,7 @@ func (s *BacklogManagerTestSuite) TestSyncState_UnloadsOnOwnershipLoss() {
 	// simulate another partition stealing and releasing ownership
 	db := s.blm.getDB()
 	tqd := s.taskMgr.getQueueDataByKey(db.queue)
-	tqd.Lock()
-	tqd.rangeID++
-	tqd.Unlock()
+	tqd.bumpRangeID(s.T())
 
 	s.Eventually(unloadCalled.Load, time.Second, 100*time.Millisecond)
 }
