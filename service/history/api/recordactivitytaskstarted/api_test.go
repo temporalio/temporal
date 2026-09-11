@@ -285,6 +285,8 @@ func setupMutableStateWithStartedActivity(t *testing.T, startedClock *clockspb.V
 	*historyi.MockShardContext,
 	*historyi.MockMutableState,
 	*historyservice.RecordActivityTaskStartedRequest,
+	*persistencespb.ActivityInfo,
+	*commonpb.WorkflowType,
 ) {
 	t.Helper()
 	ctrl := gomock.NewController(t)
@@ -314,19 +316,27 @@ func setupMutableStateWithStartedActivity(t *testing.T, startedClock *clockspb.V
 	mockShard.EXPECT().GetMetricsHandler().Return(metrics.NoopMetricsHandler).AnyTimes()
 
 	ai := &persistencespb.ActivityInfo{
-		ScheduledEventId: scheduledEventID,
-		StartedEventId:   7, // already started
-		RequestId:        requestID,
-		StartedTime:      timestamppb.Now(),
-		Attempt:          1,
-		StartedClock:     startedClock,
+		ScheduledEventId:            scheduledEventID,
+		StartedEventId:              7, // already started
+		RequestId:                   requestID,
+		StartedTime:                 timestamppb.Now(),
+		Attempt:                     1,
+		StartedClock:                startedClock,
+		LastHeartbeatDetails:        &commonpb.Payloads{Payloads: []*commonpb.Payload{{Data: []byte("heartbeat")}}},
+		Version:                     11,
+		StartVersion:                12,
+		RetryBackoffCoefficient:     2,
+		RetryMaximumAttempts:        3,
+		RetryNonRetryableErrorTypes: []string{"bad-error"},
 	}
+	workflowType := &commonpb.WorkflowType{Name: "test-workflow-type"}
 
 	mockMS.EXPECT().GetActivityInfo(scheduledEventID).Return(ai, true)
 	mockMS.EXPECT().GetActivityScheduledEvent(gomock.Any(), scheduledEventID).Return(
 		&historypb.HistoryEvent{EventId: scheduledEventID}, nil,
 	)
 	mockMS.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{})
+	mockMS.EXPECT().GetWorkflowType().Return(workflowType)
 
 	request := &historyservice.RecordActivityTaskStartedRequest{
 		NamespaceId: nsID,
@@ -338,7 +348,7 @@ func setupMutableStateWithStartedActivity(t *testing.T, startedClock *clockspb.V
 		RequestId:        requestID,
 	}
 
-	return mockShard, mockMS, request
+	return mockShard, mockMS, request, ai, workflowType
 }
 
 // TestRecordActivityTaskStarted_DuplicateRequest_NilStartedClock verifies that
@@ -346,7 +356,7 @@ func setupMutableStateWithStartedActivity(t *testing.T, startedClock *clockspb.V
 // started before the StartedClock field was added (StartedClock is nil), the response
 // still contains a non-nil Clock for the shard staleness check.
 func TestRecordActivityTaskStarted_DuplicateRequest_NilStartedClock(t *testing.T) {
-	mockShard, mockMS, request := setupMutableStateWithStartedActivity(t, nil /* no StartedClock */)
+	mockShard, mockMS, request, _, _ := setupMutableStateWithStartedActivity(t, nil /* no StartedClock */)
 
 	// Should call NewVectorClock as fallback for nil StartedClock
 	fallbackClock := &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 42}
@@ -365,7 +375,7 @@ func TestRecordActivityTaskStarted_DuplicateRequest_NilStartedClock(t *testing.T
 // when StartedClock is stored, the stored clock is returned without creating a new one.
 func TestRecordActivityTaskStarted_DuplicateRequest_WithStartedClock(t *testing.T) {
 	storedClock := &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 100}
-	mockShard, mockMS, request := setupMutableStateWithStartedActivity(t, storedClock)
+	mockShard, mockMS, request, ai, workflowType := setupMutableStateWithStartedActivity(t, storedClock)
 
 	// Should NOT call NewVectorClock since StartedClock is available
 	mockShard.EXPECT().NewVectorClock().Times(0)
@@ -376,4 +386,12 @@ func TestRecordActivityTaskStarted_DuplicateRequest_WithStartedClock(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, rejectCodeAccepted, code)
 	require.Equal(t, storedClock, resp.Clock, "Should return the stored StartedClock")
+	require.Equal(t, ai.LastHeartbeatDetails, resp.HeartbeatDetails)
+	require.Equal(t, ai.Version, resp.Version)
+	require.Equal(t, ai.StartVersion, resp.StartVersion)
+	require.Equal(t, workflowType, resp.WorkflowType)
+	require.Equal(t, "test-namespace", resp.WorkflowNamespace)
+	require.InDelta(t, ai.RetryBackoffCoefficient, resp.RetryPolicy.BackoffCoefficient, 0)
+	require.Equal(t, ai.RetryMaximumAttempts, resp.RetryPolicy.MaximumAttempts)
+	require.Equal(t, ai.RetryNonRetryableErrorTypes, resp.RetryPolicy.NonRetryableErrorTypes)
 }

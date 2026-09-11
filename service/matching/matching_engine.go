@@ -3503,9 +3503,6 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		}
 	}
 
-	ctx, cancel := newRecordTaskStartedContext(ctx, task)
-	defer cancel()
-
 	sentTargetVersion := worker_versioning.ExternalWorkerDeploymentVersionFromVersion(task.targetWorkerDeploymentVersion)
 
 	recordStartedRequest := &historyservice.RecordWorkflowTaskStartedRequest{
@@ -3524,7 +3521,9 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		TargetDeploymentVersion:    sentTargetVersion,
 	}
 
-	resp, err := e.historyClient.RecordWorkflowTaskStarted(ctx, recordStartedRequest)
+	resp, err := recordTaskStartedWithRetry(ctx, task, func(ctx context.Context) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
+		return e.historyClient.RecordWorkflowTaskStarted(ctx, recordStartedRequest)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -3584,9 +3583,6 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		}
 	}
 
-	ctx, cancel := newRecordTaskStartedContext(ctx, task)
-	defer cancel()
-
 	recordStartedRequest := &historyservice.RecordActivityTaskStartedRequest{
 		NamespaceId:         task.event.Data.GetNamespaceId(),
 		WorkflowExecution:   task.workflowExecution(),
@@ -3603,7 +3599,42 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		ComponentRef:               task.event.Data.GetComponentRef(),
 	}
 
-	return e.historyClient.RecordActivityTaskStarted(ctx, recordStartedRequest)
+	return recordTaskStartedWithRetry(ctx, task, func(ctx context.Context) (*historyservice.RecordActivityTaskStartedResponse, error) {
+		return e.historyClient.RecordActivityTaskStarted(ctx, recordStartedRequest)
+	})
+}
+
+// recordTaskStartedWithRetry retries an ambiguous task-start request while the worker poll that
+// can receive its idempotent response is still active.
+func recordTaskStartedWithRetry[T any](
+	parentCtx context.Context,
+	task *internalTask,
+	operation func(context.Context) (T, error),
+) (T, error) {
+	ambiguousStart := false
+	for {
+		attemptCtx, cancel := newRecordTaskStartedContext(parentCtx, task)
+		response, err := operation(attemptCtx)
+		attemptDeadlineExceeded := attemptCtx.Err() == context.DeadlineExceeded
+		cancel()
+
+		if err == nil || parentCtx.Err() != nil {
+			return response, err
+		}
+		if common.IsContextDeadlineExceededErr(err) && attemptDeadlineExceeded {
+			ambiguousStart = true
+			continue
+		}
+
+		var resourceExhaustedErr *serviceerror.ResourceExhausted
+		if ambiguousStart &&
+			errors.As(err, &resourceExhaustedErr) &&
+			resourceExhaustedErr.Cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
+			continue
+		}
+
+		return response, err
+	}
 }
 
 // newRecordTaskStartedContext creates a context for recording
