@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -17,6 +19,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -502,4 +505,88 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateRejectsInvalidCallbackURL() {
 	var invalidArgument *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgument)
 	s.ErrorContains(err, "invalid url: unknown scheme")
+}
+
+// TestUpdateCallbackCloseWhenWorkflowCloses verifies that the
+// callback contains the update outcome when the workflow closes in the same WFT.
+func (s *UpdateWorkflowSdkSuite) TestUpdateCallbackCloseWhenWorkflowCloses() {
+	env := testcore.NewEnv(s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowUpdateCallbacks, true),
+		testcore.WithDynamicConfig(
+			callback.AllowedAddresses,
+			[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
+		),
+	)
+
+	completionHandler, callbackAddress := newNexusCompletionHandler(s.T())
+
+	// Register a workflow that simply waits for the update handler to be invoked and then returns immediately.
+	wfName := testcore.RandomizeStr("update-close-same-wft")
+	updateResult := "update result"
+	wf := func(ctx workflow.Context) (string, error) {
+		updateComplete := false
+		if err := workflow.SetUpdateHandler(ctx, env.Tv().HandlerName(), func(workflow.Context, string) (string, error) {
+			updateComplete = true
+			return updateResult, nil
+		}); err != nil {
+			return "", err
+		}
+		if err := workflow.Await(ctx, func() bool { return updateComplete }); err != nil {
+			return "", err
+		}
+		return "workflow result", nil
+	}
+	env.SdkWorker().RegisterWorkflowWithOptions(wf, workflow.RegisterOptions{Name: wfName})
+
+	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{
+		ID:        env.Tv().WorkflowID(),
+		TaskQueue: env.WorkerTaskQueue(),
+	}, wfName)
+	s.NoError(err)
+
+	_, err = env.FrontendClient().UpdateWorkflowExecution(s.Context(), &workflowservice.UpdateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()},
+		WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED},
+		Request: &updatepb.Request{
+			Meta:      &updatepb.Meta{UpdateId: env.Tv().UpdateID()},
+			Input:     &updatepb.Input{Name: env.Tv().HandlerName(), Args: &commonpb.Payloads{Payloads: []*commonpb.Payload{testcore.MustToPayload(s.T(), "input")}}},
+			RequestId: uuid.NewString(),
+			CompletionCallbacks: []*commonpb.Callback{{
+				Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackAddress + "/update"}},
+			}},
+		},
+	})
+	s.NoError(err)
+
+	completion := await.Rcv(s.T(), completionHandler.requestCh)
+	s.Equal(nexus.OperationStateSucceeded, completion.State)
+	var result string
+	s.NoError(completion.Result.Consume(&result))
+	s.Equal(updateResult, result)
+	await.Snd(s.T(), completionHandler.requestCompleteCh, nil)
+
+	var workflowResult string
+	s.NoError(run.Get(s.Context(), &workflowResult))
+	s.Equal("workflow result", workflowResult)
+
+	// Expect a single workflow task followed by the update completion and workflow completion events.
+	s.EqualHistoryEventsSuffix(`
+WorkflowTaskCompleted
+WorkflowExecutionUpdateAccepted
+WorkflowExecutionUpdateCompleted
+WorkflowExecutionCompleted`, env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		WorkflowId: run.GetID(),
+		RunId:      run.GetRunID(),
+	}))
+
+	description, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()},
+	})
+	s.NoError(err)
+	s.Len(description.GetCallbacks(), 1)
+	s.Equal(enumspb.CALLBACK_STATE_SUCCEEDED, description.GetCallbacks()[0].GetState())
 }

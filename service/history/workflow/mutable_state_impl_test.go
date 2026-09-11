@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -2915,6 +2916,72 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 	_, err = s.mutableState.GetUpdateOutcome(ctx, "not_an_update_id")
 	s.Error(err)
 	s.IsType((*serviceerror.NotFound)(nil), err)
+}
+
+// TestGetNexusUpdateCompletion_TransientReadErrorPropagated verifies that we correctly propagate
+// an update completion event read error if the event was actually recorded in-memory.
+func (s *mutableStateSuite) TestGetNexusUpdateCompletion_TransientReadErrorPropagated() {
+	ctx := context.Background()
+
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+		&historyservice.StartWorkflowExecutionRequest{StartRequest: &workflowservice.StartWorkflowExecutionRequest{}},
+	)
+	s.NoError(err)
+	_, err = s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+
+	updateID := s.T().Name() + "-update-id"
+	acptEvent, err := s.mutableState.AddWorkflowExecutionUpdateAcceptedEvent(
+		updateID, s.T().Name()+"-msg-id", 1,
+		&updatepb.Request{Meta: &updatepb.Meta{UpdateId: updateID}},
+	)
+	s.NoError(err)
+
+	completedEvent, err := s.mutableState.AddWorkflowExecutionUpdateCompletedEvent(
+		acptEvent.EventId,
+		&updatepb.Response{
+			Meta:    &updatepb.Meta{UpdateId: updateID},
+			Outcome: &updatepb.Outcome{Value: &updatepb.Outcome_Success{Success: testPayloads}},
+		},
+	)
+	s.NoError(err)
+
+	_, err = s.mutableState.AddCompletedWorkflowEvent(
+		completedEvent.GetEventId(),
+		&commandpb.CompleteWorkflowExecutionCommandAttributes{},
+		"",
+	)
+	s.NoError(err)
+
+	// Close the transaction to create the event version history used by the read.
+	_, _, err = s.mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+	s.NoError(err)
+
+	transientErr := serviceerror.NewUnavailablef("simulated transient read failure")
+	s.mockEventsCache.EXPECT().GetEvent(
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Cond(func(key events.EventKey) bool { return key.EventID == completedEvent.GetEventId() }),
+		gomock.Any(),
+		gomock.Any(),
+	).Return(nil, transientErr)
+	s.mockEventsCache.EXPECT().GetEvent(
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Cond(func(key events.EventKey) bool { return key.EventID != completedEvent.GetEventId() }),
+		gomock.Any(),
+		gomock.Any(),
+	).Return(&historypb.HistoryEvent{}, nil).AnyTimes()
+
+	// If the cache + persistence read returns a transient error but the completion is recorded, it must
+	// not be misclassified as another error.
+	opts, err := s.mutableState.GetNexusUpdateCompletion(ctx, updateID, "some-request-id")
+	var unavailableErr *serviceerror.Unavailable
+	s.Equal(nexusrpc.CompleteOperationOptions{}, opts)
+	s.ErrorAs(err, &unavailableErr, "expect transientErr to be propagated back to caller")
 }
 
 func (s *mutableStateSuite) TestApplyActivityTaskStartedEvent() {
