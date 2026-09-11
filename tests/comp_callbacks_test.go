@@ -15,6 +15,10 @@ import (
 	"go.temporal.io/server/tests/testcore"
 )
 
+// circuitBreakerFailureThreshold is how many failures are encountered before the circuit breaker
+// opens, and starts skipping deliveries.
+const circuitBreakerFailureThreshold = 5
+
 // CompletionCallbacksSuite tests completion callback behavior.
 //
 // There are several layers of abstraction so that the test suite can run the same test against
@@ -45,6 +49,12 @@ func (s *CompletionCallbacksSuite) newTestEnv() *testcore.TestEnv {
 			[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}}),
 		testcore.WithDynamicConfig(callback.RetryPolicyInitialInterval, 10*time.Millisecond),
 		testcore.WithDynamicConfig(callback.RetryPolicyMaximumInterval, 20*time.Millisecond),
+		// Circuit breaker. Timeout is how long the breaker stays open before half-opening
+		// (and trying to send a request again). It defaults to 60s which is too long for a
+		// unit test to observe. But 1s is too short, and tests couldn't detect the BLOCKED
+		// or BACKING_OFF state. 3s seems to be the sweet spot.
+		testcore.WithDynamicConfig(dynamicconfig.OutboundQueueCircuitBreakerSettings,
+			dynamicconfig.CircuitBreakerSettings{MaxRequests: 1, Timeout: 3 * time.Second}),
 	}
 	return testcore.NewEnv(s.T(), opts...)
 }
@@ -174,5 +184,101 @@ func (s *CompletionCallbacksSuite) TestUnsupportedVariants() {
 					require.ErrorContains(t, gotErr, tc.WantErr)
 				})
 			}
+		})
+}
+
+// TestBlockedWhenCircuitBreakerOpens covers deliveries that keep failing against the same
+// destination: its breaker opens and Describe reports the callback as BLOCKED.
+func (s *CompletionCallbacksSuite) TestBlockedWhenCircuitBreakerOpens() {
+	env := s.newTestEnv()
+
+	s.forEachTestCombination(
+		func(
+			s *CompletionCallbacksSuite,
+			exec executionWithCallbacks,
+			newCompCallbackTargetFn newCompletionCallbackTargetFn,
+		) {
+			t := s.T()
+
+			// Create a callback target that will always fail with a retryable error.
+			alwaysFailingCallbackTarget := newCompCallbackTargetFn(t, env, completionCallbackBehaviorRetryableFailure)
+			executionID, err := exec.startAndCompleteEx(t, env, alwaysFailingCallbackTarget.newCallback())
+			require.NoError(t, err)
+
+			// Deliveries are retried until enough have failed to open the breaker, so the callback passes
+			// through SCHEDULED and BACKING_OFF on the way to BLOCKED.
+			callbackInfo := exec.awaitCallbackState(t, executionID, env, enumspb.CALLBACK_STATE_BLOCKED, nil)
+			require.Equal(t, "The circuit breaker is open.", callbackInfo.GetBlockedReason())
+
+			require.Equal(t, "The circuit breaker is open.", callbackInfo.GetBlockedReason())
+			require.Greater(t, callbackInfo.GetAttempt(), int32(circuitBreakerFailureThreshold),
+				"the breaker should not open before the failure threshold is exceeded")
+		})
+}
+
+// TestBreakerIsPerDestination covers the isolation the per-destination key buys: one dead
+// destination must not hold back deliveries to a healthy one.
+//
+// The two executions are deliberately sequential. Attaching both callbacks to one execution does
+// not test anything: the healthy delivery succeeds immediately, long before the failing one has
+// accumulated enough failures for there to be an open breaker to be affected by.
+func (s *CompletionCallbacksSuite) TestBreakerIsPerDestination() {
+	env := s.newTestEnv()
+
+	s.forEachTestCombination(
+		func(
+			s *CompletionCallbacksSuite,
+			exec executionWithCallbacks,
+			newCompCallbackTargetFn newCompletionCallbackTargetFn,
+		) {
+			t := s.T()
+
+			// Create an execution trying to deliver a callback to an unavailable target.
+			alwaysFailingCallbackTarget := newCompCallbackTargetFn(t, env, completionCallbackBehaviorRetryableFailure)
+			failingExecutionID, err := exec.startAndCompleteEx(t, env, alwaysFailingCallbackTarget.newCallback())
+			require.NoError(t, err)
+
+			exec.awaitCallbackState(t, failingExecutionID, env, enumspb.CALLBACK_STATE_BLOCKED, nil)
+
+			// Start another execution with a callback targeting a _different_ destination for the same
+			// variant of callback. (e.g. a different Nexus handler.)
+			alwaysSucceedCallbackTarget := newCompCallbackTargetFn(t, env, completionCallbackBehaviorSuccess)
+			successfulExecutionID, err := exec.startAndCompleteEx(t, env, alwaysSucceedCallbackTarget.newCallback())
+			require.NoError(t, err)
+
+			errorStates := []enumspb.CallbackState{enumspb.CALLBACK_STATE_BLOCKED, enumspb.CALLBACK_STATE_BACKING_OFF}
+			successfulCallbackInfo := exec.awaitCallbackState(t, successfulExecutionID, env, enumspb.CALLBACK_STATE_SUCCEEDED, errorStates)
+			require.EqualValues(t, 1, successfulCallbackInfo.GetAttempt())
+		})
+}
+
+// TestRecoversFromBlocked covers BLOCKED not being terminal: once the breaker's open period elapses
+// it half-opens, and the destination, healthy again by then, gets the delivery.
+func (s *CompletionCallbacksSuite) TestRecoversFromBlocked() {
+	env := s.newTestEnv()
+
+	s.forEachTestCombination(
+		func(
+			s *CompletionCallbacksSuite,
+			exec executionWithCallbacks,
+			newCompCallbackTargetFn newCompletionCallbackTargetFn,
+		) {
+			t := s.T()
+
+			// Have the callback target always start where each request fails with a retryable error.
+			testCallbackTarget := newCompCallbackTargetFn(t, env, completionCallbackBehaviorRetryableFailure)
+			executionID, err := exec.startAndCompleteEx(t, env, testCallbackTarget.newCallback())
+			require.NoError(t, err)
+
+			blockedCbi := exec.awaitCallbackState(t, executionID, env, enumspb.CALLBACK_STATE_BLOCKED, nil)
+
+			// Simulate the destination recovering. The breaker half-opens, lets a delivery through, and it succeeds.
+			testCallbackTarget.changeBehavior(completionCallbackBehaviorSuccess)
+			successfulCbi := exec.awaitCallbackState(t, executionID, env, enumspb.CALLBACK_STATE_SUCCEEDED, nil)
+
+			// Confirm the updated CallbackInfo reflects the state change.
+			require.Equal(t, blockedCbi.GetRequestId(), successfulCbi.GetRequestId())
+			require.Less(t, blockedCbi.GetAttempt(), successfulCbi.GetAttempt())
+			require.Empty(t, successfulCbi.GetBlockedReason())
 		})
 }

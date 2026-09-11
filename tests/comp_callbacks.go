@@ -29,8 +29,8 @@ import (
 type completionCallbackTarget interface {
 	// newCallback returns a new completion callback addressed to this destination.
 	newCallback() *commonpb.Callback
-	// stopFailing makes every delivery from here on succeed moving forward.
-	stopFailing()
+	// changeBehavior updates the way the callback target operates moving forward.
+	changeBehavior(completionCallbackBehavior)
 	// deliveries reports how many deliveries have reached the destination so far.
 	deliveries() int
 }
@@ -56,8 +56,8 @@ func (ct *baseCompletionCallbackTarget) deliveries() int {
 	return int(ct.deliveryCount.Load())
 }
 
-func (ct *baseCompletionCallbackTarget) stopFailing() {
-	ct.behavior.Store(int32(completionCallbackBehaviorSuccess))
+func (ct *baseCompletionCallbackTarget) changeBehavior(newBehavior completionCallbackBehavior) {
+	ct.behavior.Store(int32(newBehavior))
 }
 
 func (ct *baseCompletionCallbackTarget) CompleteOperation(_ context.Context, _ *nexusrpc.CompletionRequest) error {

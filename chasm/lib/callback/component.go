@@ -5,7 +5,9 @@ import (
 	"maps"
 	"time"
 
+	callbackpb "go.temporal.io/api/callback/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
@@ -37,7 +39,6 @@ type Callback struct {
 func NewCallback(
 	requestID string,
 	registrationTime *timestamppb.Timestamp,
-	state *callbackspb.CallbackState,
 	cb *callbackspb.Callback,
 ) *Callback {
 	return &Callback{
@@ -87,6 +88,7 @@ func (c *Callback) loadInvocationArgs(
 		)
 	}
 
+	// Get the parent CHASM object's Nexus result to be delivered.
 	target := c.CompletionSource.Get(ctx)
 	completion, err := target.GetNexusCompletion(ctx, c.RequestId)
 	if err != nil {
@@ -174,6 +176,74 @@ func (c *Callback) ToAPICallback() (*commonpb.Callback, error) {
 	default:
 		return nil, serviceerror.NewInternalf("unsupported CHASM callback type: %T", variant)
 	}
+}
+
+// APIState converts the CHASM callback status to the API CallbackState enum along with the relevant
+// circuit breaker's blocking status.
+func (c *Callback) APIState(ctx chasm.Context) (enumspb.CallbackState, string, error) {
+	state, err := c.apiStatus()
+	if err != nil {
+		return enumspb.CALLBACK_STATE_UNSPECIFIED, "", err
+	}
+
+	// The circuit breaker is only relevant for scheduled callbacks.
+	if state != enumspb.CALLBACK_STATE_SCHEDULED {
+		return state, "", nil
+	}
+
+	cbCtx := callbackContextFromChasm(ctx)
+	destination, err := callbackDestination(c.GetCallback())
+	if err != nil {
+		return enumspb.CALLBACK_STATE_UNSPECIFIED, "", err
+	}
+	if !cbCtx.destinationBlocked(ctx.ExecutionKey().NamespaceID, destination) {
+		return state, "", nil
+	}
+	return enumspb.CALLBACK_STATE_BLOCKED, "The circuit breaker is open.", nil
+}
+
+func (c *Callback) apiStatus() (enumspb.CallbackState, error) {
+	switch c.Status {
+	case callbackspb.CALLBACK_STATUS_STANDBY:
+		return enumspb.CALLBACK_STATE_STANDBY, nil
+	case callbackspb.CALLBACK_STATUS_SCHEDULED:
+		return enumspb.CALLBACK_STATE_SCHEDULED, nil
+	case callbackspb.CALLBACK_STATUS_BACKING_OFF:
+		return enumspb.CALLBACK_STATE_BACKING_OFF, nil
+	case callbackspb.CALLBACK_STATUS_FAILED:
+		return enumspb.CALLBACK_STATE_FAILED, nil
+	case callbackspb.CALLBACK_STATUS_SUCCEEDED:
+		return enumspb.CALLBACK_STATE_SUCCEEDED, nil
+	case callbackspb.CALLBACK_STATUS_UNSPECIFIED:
+		return enumspb.CALLBACK_STATE_UNSPECIFIED, serviceerror.NewInternal("callback with UNSPECIFIED state")
+	default:
+		return enumspb.CALLBACK_STATE_UNSPECIFIED, serviceerror.NewInternalf("unknown callback state: %v", c.Status)
+	}
+}
+
+// ToAPICallbackInfo returns the API CallbackInfo based on the current state of the CHASM component.
+func (c *Callback) ToAPICallbackInfo(ctx chasm.Context) (*callbackpb.CallbackInfo, error) {
+	apiCb, err := c.ToAPICallback()
+	if err != nil {
+		return nil, err
+	}
+	apiState, blockedReason, err := c.APIState(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	info := &callbackpb.CallbackInfo{
+		Callback:                apiCb,
+		RegistrationTime:        common.CloneProto(c.RegistrationTime),
+		State:                   apiState,
+		BlockedReason:           blockedReason,
+		RequestId:               c.RequestId,
+		Attempt:                 c.Attempt,
+		LastAttemptCompleteTime: common.CloneProto(c.LastAttemptCompleteTime),
+		LastAttemptFailure:      common.CloneProto(c.LastAttemptFailure),
+		NextAttemptScheduleTime: common.CloneProto(c.NextAttemptScheduleTime),
+	}
+	return info, nil
 }
 
 // FromAPICallback converts an API callback into a CHASM callback proto.
