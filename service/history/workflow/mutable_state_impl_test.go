@@ -4448,6 +4448,23 @@ func (s *mutableStateSuite) TestCollapseVisibilityTasks() {
 	}
 }
 
+func (s *mutableStateSuite) TestCloseTransactionTrimTasksForClosedWorkflow() {
+	signalTask := &tasks.SignalExecutionTask{}
+	closeTask := &tasks.CloseExecutionTask{}
+
+	s.mutableState.InsertTasks[tasks.CategoryTransfer] = []tasks.Task{signalTask, closeTask}
+	s.mutableState.closeTransactionTrimTasksForClosedWorkflow()
+	s.Equal([]tasks.Task{signalTask, closeTask}, s.mutableState.InsertTasks[tasks.CategoryTransfer])
+
+	s.mutableState.executionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	s.mutableState.closeTransactionTrimTasksForClosedWorkflow()
+	s.Equal([]tasks.Task{closeTask}, s.mutableState.InsertTasks[tasks.CategoryTransfer])
+
+	s.mutableState.InsertTasks[tasks.CategoryTransfer] = []tasks.Task{signalTask}
+	s.mutableState.closeTransactionTrimTasksForClosedWorkflow()
+	s.NotContains(s.mutableState.InsertTasks, tasks.CategoryTransfer)
+}
+
 func (s *mutableStateSuite) TestStartChildWorkflowRequestID() {
 	workflowTaskCompletionEventID := rand.Int63()
 	attributes := &commandpb.StartChildWorkflowExecutionCommandAttributes{}
