@@ -15,6 +15,8 @@ type (
 	}
 )
 
+var _ Query = &query{}
+
 func newQuery(
 	session *session,
 	gocqlQuery *gocql.Query,
@@ -89,6 +91,11 @@ func (q *query) Consistency(c Consistency) Query {
 
 func (q *query) WithTimestamp(timestamp int64) Query {
 	q.gocqlQuery.WithTimestamp(timestamp)
+	return newQuery(q.session, q.gocqlQuery)
+}
+
+func (q *query) WithTrace(tr gocql.Tracer) Query {
+	q.gocqlQuery.Trace(tr)
 	return newQuery(q.session, q.gocqlQuery)
 }
 
