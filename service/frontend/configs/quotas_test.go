@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/quotas"
@@ -65,6 +66,17 @@ func (s *quotasSuite) TestNamespaceReplicationInducingAPIToPriorityMapping() {
 		index := slices.Index(NamespaceReplicationInducingAPIPrioritiesOrdered, priority)
 		s.NotEqual(-1, index)
 	}
+}
+
+func (s *quotasSuite) TestPodOnlyAPIToPriorityMapping() {
+	for _, priority := range PodOnlyAPIToPriority {
+		index := slices.Index(ExecutionAPIPrioritiesOrdered, priority)
+		s.NotEqual(-1, index)
+	}
+}
+
+func (s *quotasSuite) TestDescribeMutableStatePriority() {
+	s.Equal(5, PodOnlyAPIToPriority[adminservice.AdminService_DescribeMutableState_FullMethodName])
 }
 
 func (s *quotasSuite) TestExecutionAPIPrioritiesOrdered() {

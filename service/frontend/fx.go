@@ -76,6 +76,14 @@ type (
 		Visibility                   quotas.RequestRateLimiter
 		NamespaceReplicationInducing quotas.RequestRateLimiter
 	}
+
+	// RateLimiters holds the three per-category pod-level rate limiters that
+	// RateLimitInterceptorProvider combines into a single routing rate limiter.
+	RateLimiters struct {
+		Execution                    quotas.RequestRateLimiter
+		Visibility                   quotas.RequestRateLimiter
+		NamespaceReplicationInducing quotas.RequestRateLimiter
+	}
 )
 
 var Module = fx.Options(
@@ -101,6 +109,7 @@ var Module = fx.Options(
 	fx.Provide(ErrorHandlerProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RetryableInterceptorProvider),
+	fx.Provide(RateLimitersProvider),
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(interceptor.NewHealthInterceptor),
 	fx.Provide(NamespaceCountLimitInterceptorProvider),
@@ -493,12 +502,12 @@ func getRateFnWithMetrics(rateFn quotas.RateFn, handler metrics.Handler) quotas.
 	}
 }
 
-func RateLimitInterceptorProvider(
+func RateLimitersProvider(
 	serviceConfig *Config,
 	frontendServiceResolver membership.ServiceResolver,
 	handler metrics.Handler,
 	logger log.SnTaggedLogger,
-) *interceptor.RateLimitInterceptor {
+) RateLimiters {
 	rateFn := calculator.NewLoggedCalculator(
 		calculator.ClusterAwareQuotaCalculator{
 			MemberCounter:    frontendServiceResolver,
@@ -513,13 +522,35 @@ func RateLimitInterceptorProvider(
 		return float64(serviceConfig.NamespaceReplicationInducingAPIsRPS())
 	}
 
+	return RateLimiters{
+		Execution: configs.NewExecutionPriorityRateLimiter(
+			quotas.NewDefaultIncomingRateBurst(rateFnWithMetrics), serviceConfig.OperatorRPSRatio),
+		Visibility: configs.NewVisibilityPriorityRateLimiter(
+			quotas.NewDefaultIncomingRateBurst(rateFn), serviceConfig.OperatorRPSRatio),
+		NamespaceReplicationInducing: configs.NewNamespaceReplicationInducingAPIPriorityRateLimiter(
+			quotas.NewDefaultIncomingRateBurst(namespaceReplicationInducingRateFn), serviceConfig.OperatorRPSRatio),
+	}
+}
+
+func RateLimitInterceptorProvider(
+	rateLimiters RateLimiters,
+) *interceptor.RateLimitInterceptor {
+	mapping := make(map[string]quotas.RequestRateLimiter)
+	for api := range configs.APIToPriority {
+		mapping[api] = rateLimiters.Execution
+	}
+	for api := range configs.VisibilityAPIToPriority {
+		mapping[api] = rateLimiters.Visibility
+	}
+	for api := range configs.NamespaceReplicationInducingAPIToPriority {
+		mapping[api] = rateLimiters.NamespaceReplicationInducing
+	}
+	for api := range configs.PodOnlyAPIToPriority { // do not mirror this loop in NamespaceRateLimitInterceptorProvider
+		mapping[api] = rateLimiters.Execution
+	}
+
 	return interceptor.NewRateLimitInterceptor(
-		configs.NewRequestToRateLimiter(
-			quotas.NewDefaultIncomingRateBurst(rateFnWithMetrics),
-			quotas.NewDefaultIncomingRateBurst(rateFn),
-			quotas.NewDefaultIncomingRateBurst(namespaceReplicationInducingRateFn),
-			serviceConfig.OperatorRPSRatio,
-		),
+		quotas.NewRoutingRateLimiter(mapping),
 		map[string]int{
 			healthpb.Health_Check_FullMethodName:                     0, // exclude health check requests from rate limiting.
 			adminservice.AdminService_DeepHealthCheck_FullMethodName: 0, // exclude deep health check requests from rate limiting.

@@ -3,6 +3,7 @@ package configs
 import (
 	"time"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -255,6 +256,12 @@ var (
 
 	NamespaceReplicationInducingAPIPrioritiesOrdered = []int{0, 1, 2}
 
+	// PodOnlyAPIToPriority is deliberately separate from APIToPriority: RateLimitInterceptorProvider
+	// composes this map, NamespaceRateLimitInterceptorProvider must not.
+	PodOnlyAPIToPriority = map[string]int{
+		adminservice.AdminService_DescribeMutableState_FullMethodName: 5,
+	}
+
 	// APIs that are not considered as a namespace operation. Namespace operations are used to track the usage of a namespace.
 	// This includes some APIs, history tasks, etc.
 	operationExcludedAPIs = map[string]struct{}{
@@ -270,31 +277,6 @@ var (
 		"/temporal.server.api.adminservice.v1.AdminService/SyncWorkflowState":                {},
 	}
 )
-
-func NewRequestToRateLimiter(
-	executionRateBurstFn quotas.RateBurst,
-	visibilityRateBurstFn quotas.RateBurst,
-	namespaceReplicationInducingRateBurstFn quotas.RateBurst,
-	operatorRPSRatio dynamicconfig.FloatPropertyFn,
-) quotas.RequestRateLimiter {
-	mapping := make(map[string]quotas.RequestRateLimiter)
-
-	executionRateLimiter := NewExecutionPriorityRateLimiter(executionRateBurstFn, operatorRPSRatio)
-	visibilityRateLimiter := NewVisibilityPriorityRateLimiter(visibilityRateBurstFn, operatorRPSRatio)
-	namespaceReplicationInducingRateLimiter := NewNamespaceReplicationInducingAPIPriorityRateLimiter(namespaceReplicationInducingRateBurstFn, operatorRPSRatio)
-
-	for api := range APIToPriority {
-		mapping[api] = executionRateLimiter
-	}
-	for api := range VisibilityAPIToPriority {
-		mapping[api] = visibilityRateLimiter
-	}
-	for api := range NamespaceReplicationInducingAPIToPriority {
-		mapping[api] = namespaceReplicationInducingRateLimiter
-	}
-
-	return quotas.NewRoutingRateLimiter(mapping)
-}
 
 func NewExecutionPriorityRateLimiter(
 	rateBurstFn quotas.RateBurst,

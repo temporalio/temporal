@@ -172,13 +172,6 @@ func (r verifyResult) isVerified() bool {
 	return r.status == verified || r.status == skipped
 }
 
-// TODO: CallerTypePreemptablee should be set in activity background context for all migration activities.
-// However, activity background context is per-worker, which means once set, all activities processed by the
-// worker will use CallerType Preemptable, including those not related to migration. This is not ideal.
-// Using a different task queue and a dedicated worker for migration can solve the issue but requires
-// changing all existing tooling around namespace migration to start workflows & activities on the new task queue.
-// Another approach is to use separate workers for workflow tasks and activities and keep existing tooling unchanged.
-
 // GetMetadata returns history shard count and namespaceID for requested namespace.
 func (a *activities) GetMetadata(_ context.Context, request MetadataRequest) (*MetadataResponse, error) {
 	nsEntry, err := a.NamespaceRegistry.GetNamespace(namespace.Name(request.Namespace))
