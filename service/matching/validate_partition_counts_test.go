@@ -31,7 +31,7 @@ func TestCheckPartitionCountsScalerEnablement(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			partition := tqid.UnsafeTaskQueueFamily(namespaceID, taskQueueName).
 				TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).
-				NormalPartition(8)
+				NormalPartition(10)
 			pm := &taskQueuePartitionManagerImpl{
 				partition: partition,
 				userDataManager: &mockUserDataManager{
