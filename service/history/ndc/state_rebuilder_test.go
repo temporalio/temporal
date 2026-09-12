@@ -373,6 +373,7 @@ func (s *stateRebuilderSuite) TestRebuild() {
 
 func (s *stateRebuilderSuite) TestRebuildWithCurrentMutableState() {
 	startRequestID := uuid.NewString()
+	resetRequestID := uuid.NewString()
 	version := int64(12)
 	lastEventID := int64(2)
 	branchToken := []byte("other random branch token")
@@ -462,6 +463,7 @@ func (s *stateRebuilderSuite) TestRebuildWithCurrentMutableState() {
 		ExecutionState: &persistencespb.WorkflowExecutionState{
 			RequestIds: map[string]*persistencespb.RequestIDInfo{
 				startRequestID: {EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+				resetRequestID: {},
 			},
 		},
 		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
@@ -502,4 +504,5 @@ func (s *stateRebuilderSuite) TestRebuildWithCurrentMutableState() {
 	s.Equal(expectedLastFirstTransactionID, rebuildExecutionInfo.LastFirstEventTxnId)
 	s.Equal(int64(11), rebuildExecutionInfo.TransitionHistory[0].TransitionCount)
 	s.Equal(startRequestID, rebuildMutableState.GetExecutionState().CreateRequestId)
+	s.Contains(rebuildMutableState.GetExecutionState().GetRequestIds(), resetRequestID)
 }

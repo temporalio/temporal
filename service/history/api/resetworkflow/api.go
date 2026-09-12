@@ -10,6 +10,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
@@ -121,9 +122,13 @@ func Invoke(
 		defer func() { currentWorkflowLease.GetReleaseFn()(retError) }()
 	}
 
-	// dedup by requestID
-	if currentWorkflowLease != nil &&
-		currentWorkflowLease.GetMutableState().GetExecutionState().CreateRequestId == request.GetRequestId() {
+	// Dedup by the create request ID for older reset runs, or by the reset request marker stored in RequestIds.
+	duplicateResetRequest := false
+	if currentWorkflowLease != nil {
+		currentExecutionState := currentWorkflowLease.GetMutableState().GetExecutionState()
+		duplicateResetRequest = isDuplicateResetRequest(currentExecutionState, request.GetRequestId())
+	}
+	if duplicateResetRequest {
 		shardContext.GetLogger().Info("Duplicated reset request",
 			tag.WorkflowID(workflowID),
 			tag.WorkflowRunID(currentRunID),
@@ -191,6 +196,7 @@ func Invoke(
 		baseRebuildLastEventVersion,
 		baseNextEventID,
 		resetRunID,
+		request.GetRequestId(),
 		baseWorkflow,
 		currentWorkflow,
 		request.GetReason(),
@@ -213,6 +219,14 @@ func Invoke(
 	return &historyservice.ResetWorkflowExecutionResponse{
 		RunId: resetRunID,
 	}, nil
+}
+
+func isDuplicateResetRequest(executionState *persistencespb.WorkflowExecutionState, requestID string) bool {
+	if executionState.GetCreateRequestId() == requestID {
+		return true
+	}
+	requestIDInfo, ok := executionState.GetRequestIds()[requestID]
+	return ok && ndc.IsResetRequestIDInfo(requestIDInfo)
 }
 
 // shouldTolerateMissingCurrentExecution reports whether a failure to resolve the current execution

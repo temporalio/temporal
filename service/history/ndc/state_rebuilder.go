@@ -219,6 +219,7 @@ func copyToRebuildMutableState(
 	rebuiltMutableState.GetExecutionInfo().TransitionHistory = transitionhistory.CopyVersionedTransitions(currentMutableState.GetExecutionInfo().TransitionHistory)
 	rebuiltMutableState.GetExecutionInfo().PreviousTransitionHistory = transitionhistory.CopyVersionedTransitions(currentMutableState.GetExecutionInfo().PreviousTransitionHistory)
 	rebuiltMutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint = transitionhistory.CopyVersionedTransition(currentMutableState.GetExecutionInfo().LastTransitionHistoryBreakPoint)
+	copyResetRequestIDs(rebuiltMutableState, currentMutableState.GetExecutionState())
 }
 
 func (r *StateRebuilderImpl) buildMutableStateFromEvent(
