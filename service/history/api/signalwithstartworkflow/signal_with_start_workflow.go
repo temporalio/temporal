@@ -148,7 +148,7 @@ func startAndSignalWorkflow(
 		vrid,
 		newWorkflowLease,
 		currentWorkflowLease,
-		signalWithStartRequest.RequestId,
+		signalWithStartRequest,
 	)
 }
 
@@ -243,7 +243,7 @@ func startAndSignalWithoutCurrentWorkflow(
 	vrid *api.VersionedRunID,
 	newWorkflowLease api.WorkflowLease,
 	currentWorkflowLease api.WorkflowLease,
-	requestID string,
+	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) (startOutcome, error) {
 	newWorkflow, newWorkflowEventsSeq, err := newWorkflowLease.GetMutableState().CloseTransactionAsSnapshot(
 		ctx,
@@ -289,6 +289,7 @@ func startAndSignalWithoutCurrentWorkflow(
 		runID := newWorkflowLease.GetContext().GetWorkflowKey().RunID
 		return startOutcome{runID: runID, firstExecutionRunID: runID, started: true}, nil
 	case *persistence.CurrentWorkflowConditionFailedError:
+		requestID := signalWithStartRequest.GetRequestId()
 		if _, ok := failedErr.RequestIDs[requestID]; ok {
 			// CurrentWorkflowConditionFailedError carries the persisted WorkflowExecutionState blob,
 			// which may not have first_execution_run_id populated on records written before that
@@ -303,10 +304,93 @@ func startAndSignalWithoutCurrentWorkflow(
 			}
 			return startOutcome{runID: failedErr.RunID, firstExecutionRunID: firstRunID, started: false}, nil
 		}
-		return startOutcome{}, err
+		// Completed current row with no mutable state.
+		// StartWorkflow already recovers this with UpdateCurrent.
+		if createMode != persistence.CreateWorkflowModeBrandNew ||
+			failedErr.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED ||
+			len(failedErr.RunID) == 0 {
+			return startOutcome{}, err
+		}
+		if err := createAsCurrent(
+			ctx,
+			shardContext,
+			newWorkflowLease,
+			newWorkflow,
+			newWorkflowEventsSeq,
+			signalWithStartRequest.GetWorkflowIdReusePolicy(),
+			failedErr,
+		); err != nil {
+			return startOutcome{}, err
+		}
+		runID := newWorkflowLease.GetContext().GetWorkflowKey().RunID
+		return startOutcome{runID: runID, firstExecutionRunID: runID, started: true}, nil
 	default:
 		return startOutcome{}, err
 	}
+}
+
+// createAsCurrent writes the new run and points current_executions at it.
+func createAsCurrent(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	newWorkflowLease api.WorkflowLease,
+	newWorkflow *persistence.WorkflowSnapshot,
+	newWorkflowEventsSeq []*persistence.WorkflowEvents,
+	workflowIDReusePolicy enumspb.WorkflowIdReusePolicy,
+	failedErr *persistence.CurrentWorkflowConditionFailedError,
+) error {
+	mutableState := newWorkflowLease.GetMutableState()
+	if err := api.NewWorkflowVersionCheck(
+		shardContext,
+		failedErr.LastWriteVersion,
+		mutableState,
+	); err != nil {
+		return err
+	}
+
+	namespaceEntry := mutableState.GetNamespaceEntry()
+	currentWorkflowStartTime := time.Time{}
+	if shardContext.GetConfig().EnableWorkflowIdReuseStartTimeValidation(namespaceEntry.Name().String()) &&
+		failedErr.StartTime != nil {
+		currentWorkflowStartTime = *failedErr.StartTime
+	}
+
+	workflowKey := newWorkflowLease.GetContext().GetWorkflowKey()
+	workflowKey.RunID = failedErr.RunID
+	if err := api.ResolveWorkflowIDReusePolicy(
+		shardContext,
+		workflowKey,
+		namespaceEntry,
+		failedErr.Status,
+		failedErr.RequestIDs,
+		failedErr.FirstExecutionRunID,
+		workflowIDReusePolicy,
+		currentWorkflowStartTime,
+	); err != nil {
+		return err
+	}
+
+	// If current workflow is closed after the original snapshot was prepared,
+	// LastRunningClock in that snapshot can be smaller than the current row's,
+	// causing the new workflow to be marked as zombie in the standby cluster.
+	updateExecutionInfo, updatedWorkflowEventBatches, err := mutableState.UpdateLastRunningClock(newWorkflowEventsSeq)
+	if err != nil {
+		return err
+	}
+	newWorkflow.ExecutionInfo = updateExecutionInfo
+	newWorkflowEventsSeq = updatedWorkflowEventBatches
+
+	return newWorkflowLease.GetContext().CreateWorkflowExecution(
+		ctx,
+		shardContext,
+		persistence.CreateWorkflowModeUpdateCurrent,
+		failedErr.RunID,
+		failedErr.LastWriteVersion,
+		mutableState,
+		newWorkflow,
+		newWorkflowEventsSeq,
+		historyi.TransactionPolicyActive,
+	)
 }
 
 func signalWorkflow(
