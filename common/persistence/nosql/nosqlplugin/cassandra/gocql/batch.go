@@ -77,7 +77,7 @@ func mustConvertBatchType(batchType BatchType) gocql.BatchType {
 
 func (b *Batch) maybeTrace(ctx context.Context) {
 	if b.tracerFactory != nil {
-		tr := b.tracerFactory.GetTracerWithContext(ctx)
+		tr := b.tracerFactory.GetTracerForBatch(ctx, b.gocqlBatch)
 		if tr != nil {
 			b.gocqlBatch.Trace(tr)
 		}
