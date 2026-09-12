@@ -2464,6 +2464,32 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_OrphanedCompletedCur
 	s.ErrorAs(err, &alreadyStarted)
 }
 
+func (s *engine2Suite) TestSignalWithStartWorkflowExecution_OrphanedCompletedCurrentExecution_EmptyRunID() {
+	s.config.EnableWorkflowIdReuseStartTimeValidation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+
+	sRequest := makeMockSignalWithStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE)
+	conditionFailedErr := makeOrphanedCurrentExecutionConflict(
+		s.tv,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
+	)
+	conditionFailedErr.RunID = ""
+
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(
+		&persistence.GetCurrentExecutionResponse{RunID: s.tv.RunID()}, nil)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		nil, serviceerror.NewNotFound("mutable state missing"))
+	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), mock.MatchedBy(func(request *persistence.CreateWorkflowExecutionRequest) bool {
+		return request.Mode == persistence.CreateWorkflowModeBrandNew
+	})).Return(nil, conditionFailedErr)
+
+	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
+	s.Nil(resp)
+	var conditionFailed *persistence.CurrentWorkflowConditionFailedError
+	s.ErrorAs(err, &conditionFailed)
+	s.Empty(conditionFailed.RunID)
+}
+
 // Concurrent SignalWithStart also lands here (BrandNew vs a running current row). Don't overwrite it.
 func (s *engine2Suite) TestSignalWithStartWorkflowExecution_OrphanedRunningCurrentExecution() {
 	s.config.EnableWorkflowIdReuseStartTimeValidation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)

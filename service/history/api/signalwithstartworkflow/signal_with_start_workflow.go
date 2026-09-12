@@ -307,7 +307,8 @@ func startAndSignalWithoutCurrentWorkflow(
 		// Completed current row with no mutable state.
 		// StartWorkflow already recovers this with UpdateCurrent.
 		if createMode != persistence.CreateWorkflowModeBrandNew ||
-			failedErr.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+			failedErr.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED ||
+			len(failedErr.RunID) == 0 {
 			return startOutcome{}, err
 		}
 		if err := createAsCurrent(
