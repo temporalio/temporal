@@ -293,7 +293,10 @@ func (p *ConstantDelayRetryPolicy) ComputeNextDelay(_ time.Duration, attempt int
 }
 
 func addJitter(duration time.Duration, jitterPct float64) time.Duration {
-	return duration * time.Duration(1+jitterPct*rand.Float64())
+	// Multiply in float space and convert once at the end. Converting the (1 + jitter)
+	// factor to a time.Duration on its own truncates it to the integer 1 for any
+	// jitterPct < 1.0, which silently discards the jitter entirely.
+	return time.Duration(float64(duration) * (1 + jitterPct*rand.Float64()))
 }
 
 func getJitterRand() *rand.Rand {

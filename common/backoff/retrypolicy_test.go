@@ -257,13 +257,21 @@ func (s *RetryPolicySuite) TestErrorDependentPolicy() {
 	delay = retrier.NextBackOff(threeSecondError)
 	s.Equal(done, delay)
 
-	// test with jitter
-	policy = NewErrorDependentRetryPolicy(delayForError).WithMaximumAttempts(4).WithJitter(0.1)
-	retrier, _ = createRetrier(policy)
-
-	delay = retrier.NextBackOff(fmt.Errorf("other error"))
-	s.GreaterOrEqual(delay, 1*time.Second)
-	s.Less(delay, 1500*time.Millisecond)
+	// Test with jitter. Sample many times and require at least one delay strictly above
+	// the base: a single sample can't distinguish working jitter from jitter pinned to the
+	// base value. ComputeNextDelay is called directly so the attempt counter doesn't
+	// exhaust WithMaximumAttempts.
+	jitterPolicy := NewErrorDependentRetryPolicy(delayForError).WithMaximumAttempts(4).WithJitter(0.1)
+	sawJitter := false
+	for range 1000 {
+		delay = jitterPolicy.ComputeNextDelay(0, 1, fmt.Errorf("other error"))
+		s.GreaterOrEqual(delay, 1*time.Second)
+		s.Less(delay, 1100*time.Millisecond)
+		if delay > 1*time.Second {
+			sawJitter = true
+		}
+	}
+	s.True(sawJitter, "jitter was never applied; delay stayed at the base value")
 }
 
 func (s *RetryPolicySuite) TestConstantDelayPolicy() {
@@ -285,13 +293,19 @@ func (s *RetryPolicySuite) TestConstantDelayPolicy() {
 	delay = retrier.NextBackOff(nil)
 	s.Equal(done, delay)
 
-	// test with jitter
-	policy = NewConstantDelayRetryPolicy(2 * time.Second).WithMaximumAttempts(4).WithJitter(0.1)
-	retrier, _ = createRetrier(policy)
-
-	delay = retrier.NextBackOff(nil)
-	s.GreaterOrEqual(delay, 2*time.Second)
-	s.Less(delay, 2200*time.Millisecond)
+	// Test with jitter. See TestErrorDependentPolicy for why this samples repeatedly
+	// and asserts that some delay exceeds the base value.
+	jitterPolicy := NewConstantDelayRetryPolicy(2 * time.Second).WithMaximumAttempts(4).WithJitter(0.1)
+	sawJitter := false
+	for range 1000 {
+		delay = jitterPolicy.ComputeNextDelay(0, 1, nil)
+		s.GreaterOrEqual(delay, 2*time.Second)
+		s.Less(delay, 2200*time.Millisecond)
+		if delay > 2*time.Second {
+			sawJitter = true
+		}
+	}
+	s.True(sawJitter, "jitter was never applied; delay stayed at the base value")
 }
 
 func (s *RetryPolicySuite) TestConditionalRetryPolicy() {
@@ -314,13 +328,23 @@ func (s *RetryPolicySuite) TestConditionalRetryPolicy() {
 
 // Validate jitter computation
 func (s *RetryPolicySuite) TestAddJitter() {
-	for range 10 {
-		delay := 1 * time.Second
-		jitter := 0.5
+	delay := 1 * time.Second
+	jitter := 0.5
+	sawJitter := false
+	for range 1000 {
 		jitteredDelay := addJitter(delay, jitter)
 		s.GreaterOrEqual(jitteredDelay, 1*time.Second)
 		s.Less(jitteredDelay, 1500*time.Millisecond)
+		if jitteredDelay > delay {
+			sawJitter = true
+		}
 	}
+	// The bound above admits the un-jittered base value, so assert the jitter is actually
+	// applied rather than truncated away.
+	s.True(sawJitter, "jitter was never applied; delay stayed at the base value")
+
+	// A zero jitter percentage must return the base delay exactly.
+	s.Equal(delay, addJitter(delay, 0))
 }
 
 func createPolicy(initialInterval time.Duration) *ExponentialRetryPolicy {
