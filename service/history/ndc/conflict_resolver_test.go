@@ -11,6 +11,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -87,6 +88,7 @@ func (s *conflictResolverSuite) TestRebuild() {
 	updateCondition := int64(59)
 	dbVersion := int64(1444)
 	requestID := uuid.NewString()
+	resetRequestID := uuid.NewString()
 	version := int64(12)
 	historySize := int64(12345)
 	externalPayloadSize := int64(6789)
@@ -117,7 +119,8 @@ func (s *conflictResolverSuite) TestRebuild() {
 	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
 		RequestIds: map[string]*persistencespb.RequestIDInfo{
-			requestID: {EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+			requestID:      {EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED},
+			resetRequestID: {},
 		},
 	}).AnyTimes()
 	s.mockMutableState.EXPECT().GetHistorySize().Return(historySize).AnyTimes()
@@ -144,6 +147,7 @@ func (s *conflictResolverSuite) TestRebuild() {
 	mockRebuildMutableState.EXPECT().AddExternalPayloadSize(externalPayloadSize)
 	mockRebuildMutableState.EXPECT().AddExternalPayloadCount(externalPayloadCount)
 	mockRebuildMutableState.EXPECT().SetUpdateCondition(updateCondition, dbVersion)
+	mockRebuildMutableState.EXPECT().AttachRequestID(resetRequestID, enumspb.EVENT_TYPE_UNSPECIFIED, common.EmptyEventID)
 
 	s.mockStateBuilder.EXPECT().Rebuild(
 		ctx,

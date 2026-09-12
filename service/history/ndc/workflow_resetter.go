@@ -60,6 +60,7 @@ type (
 			baseRebuildLastEventVersion int64,
 			baseNextEventID int64,
 			resetRunID string,
+			resetRequestID string,
 			baseWorkflow Workflow,
 			currentWorkflow Workflow,
 			resetReason string,
@@ -115,6 +116,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	baseRebuildLastEventVersion int64,
 	baseNextEventID int64,
 	resetRunID string,
+	resetRequestID string,
 	baseWorkflow Workflow,
 	currentWorkflow Workflow,
 	resetReason string,
@@ -255,6 +257,9 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	defer func() { resetWorkflow.GetReleaseFn()(retError) }()
 
 	resetMS := resetWorkflow.GetMutableState()
+	// Reset has no corresponding history event. Keep an unswept marker without changing
+	// CreateRequestId, which must retain the original start request ID for callbacks.
+	attachResetRequestID(resetMS, resetRequestID)
 	if err := reapplyEventsFn(ctx, resetMS); err != nil {
 		return err
 	}
