@@ -21,7 +21,8 @@ type (
 	}
 
 	TracerFactory interface {
-		GetTracerWithContext(ctx context.Context) gocql.Tracer
+		GetTracerForQuery(context.Context, *gocql.Query) gocql.Tracer
+		GetTracerForBatch(context.Context, *gocql.Batch) gocql.Tracer
 	}
 
 	// Query is the interface for query object.
