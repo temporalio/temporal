@@ -332,6 +332,7 @@ jobs:
             cassandra
             mysql
             postgresql
+            elasticsearch
           down-flags: -v
 
       - uses: actions/setup-go@v6
