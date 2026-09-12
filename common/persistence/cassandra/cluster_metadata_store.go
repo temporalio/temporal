@@ -64,8 +64,8 @@ func (m *ClusterMetadataStore) ListClusterMetadata(
 	ctx context.Context,
 	request *p.InternalListClusterMetadataRequest,
 ) (*p.InternalListClusterMetadataResponse, error) {
-	query := m.session.Query(templateListClusterMetadata, constMetadataPartition).WithContext(ctx)
-	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
+	query := m.session.Query(templateListClusterMetadata, constMetadataPartition)
+	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter(ctx)
 
 	response := &p.InternalListClusterMetadataResponse{}
 	for {
@@ -106,8 +106,8 @@ func (m *ClusterMetadataStore) GetClusterMetadata(
 	var encoding string
 	var version int64
 
-	query := m.session.Query(templateGetClusterMetadata, constMetadataPartition, request.ClusterName).WithContext(ctx)
-	err := query.Scan(&clusterMetadata, &encoding, &version)
+	query := m.session.Query(templateGetClusterMetadata, constMetadataPartition, request.ClusterName)
+	err := query.Scan(ctx, &clusterMetadata, &encoding, &version)
 	if err != nil {
 		return nil, gocql.ConvertError("GetClusterMetadata", err)
 	}
@@ -131,7 +131,7 @@ func (m *ClusterMetadataStore) SaveClusterMetadata(
 			request.ClusterMetadata.Data,
 			request.ClusterMetadata.EncodingType.String(),
 			1,
-		).WithContext(ctx)
+		)
 	} else {
 		query = m.session.Query(
 			templateUpdateClusterMetadata,
@@ -141,11 +141,11 @@ func (m *ClusterMetadataStore) SaveClusterMetadata(
 			constMetadataPartition,
 			request.ClusterName,
 			request.Version,
-		).WithContext(ctx)
+		)
 	}
 
 	previous := make(map[string]any)
-	applied, err := query.MapScanCAS(previous)
+	applied, err := query.MapScanCAS(ctx, previous)
 	if err != nil {
 		return false, gocql.ConvertError("SaveClusterMetadata", err)
 	}
@@ -159,8 +159,8 @@ func (m *ClusterMetadataStore) DeleteClusterMetadata(
 	ctx context.Context,
 	request *p.InternalDeleteClusterMetadataRequest,
 ) error {
-	query := m.session.Query(templateDeleteClusterMetadata, constMetadataPartition, request.ClusterName).WithContext(ctx)
-	if err := query.Exec(); err != nil {
+	query := m.session.Query(templateDeleteClusterMetadata, constMetadataPartition, request.ClusterName)
+	if err := query.Exec(ctx); err != nil {
 		return gocql.ConvertError("DeleteClusterMetadata", err)
 	}
 	return nil
@@ -202,9 +202,9 @@ func (m *ClusterMetadataStore) GetClusterMembers(
 	}
 
 	queryString.WriteString(templateAllowFiltering)
-	query := m.session.Query(queryString.String(), operands...).WithContext(ctx)
+	query := m.session.Query(queryString.String(), operands...)
 
-	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
+	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter(ctx)
 
 	var clusterMembers []*p.ClusterMember
 
@@ -257,8 +257,8 @@ func (m *ClusterMetadataStore) UpsertClusterMembership(
 		request.SessionStart,
 		time.Now().UTC(),
 		int64(request.RecordExpiry.Seconds()),
-	).WithContext(ctx)
-	err := query.Exec()
+	)
+	err := query.Exec(ctx)
 
 	if err != nil {
 		return gocql.ConvertError("UpsertClusterMembership", err)

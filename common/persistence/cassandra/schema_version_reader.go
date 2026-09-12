@@ -1,6 +1,7 @@
 package cassandra
 
 import (
+	"context"
 	"fmt"
 
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
@@ -26,7 +27,7 @@ func NewSchemaVersionReader(session gocql.Session) *SchemaVersionReader {
 func (svr *SchemaVersionReader) ReadSchemaVersion(keyspace string) (string, error) {
 	query := svr.session.Query(readSchemaVersionCQL, keyspace)
 
-	iter := query.Iter()
+	iter := query.Iter(context.Background())
 	var version string
 	success := iter.Scan(&version)
 	err := iter.Close()

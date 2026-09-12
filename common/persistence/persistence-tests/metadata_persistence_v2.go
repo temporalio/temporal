@@ -85,19 +85,19 @@ func (m *MetadataPersistenceSuiteV2) createPartialNamespace(id string, name stri
 	const templateCreateNamespaceQuery = `INSERT INTO namespaces_by_id (` +
 		`id, name) ` +
 		`VALUES(?, ?) IF NOT EXISTS`
-	query := m.DefaultTestCluster.(*cassandra.TestCluster).GetSession().Query(templateCreateNamespaceQuery, id, name).WithContext(context.Background())
-	err := query.Exec()
+	query := m.DefaultTestCluster.(*cassandra.TestCluster).GetSession().Query(templateCreateNamespaceQuery, id, name)
+	err := query.Exec(context.Background())
 	m.NoError(err)
 
 }
 
 func (m *MetadataPersistenceSuiteV2) truncatePartialNamespace() {
-	query := m.DefaultTestCluster.(*cassandra.TestCluster).GetSession().Query("TRUNCATE namespaces_by_id").WithContext(context.Background())
-	err := query.Exec()
+	query := m.DefaultTestCluster.(*cassandra.TestCluster).GetSession().Query("TRUNCATE namespaces_by_id")
+	err := query.Exec(context.Background())
 	m.NoError(err)
 
-	query = m.DefaultTestCluster.(*cassandra.TestCluster).GetSession().Query("TRUNCATE namespaces").WithContext(context.Background())
-	err = query.Exec()
+	query = m.DefaultTestCluster.(*cassandra.TestCluster).GetSession().Query("TRUNCATE namespaces")
+	err = query.Exec(context.Background())
 	m.NoError(err)
 }
 
