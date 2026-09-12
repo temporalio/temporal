@@ -107,6 +107,21 @@ func TestConvertSqlValue(t *testing.T) {
 			expected: "  spaced  ",
 		},
 		{
+			name:     "quoted string ending with a quote",
+			input:    "'foo''",
+			expected: "foo'",
+		},
+		{
+			name:     "quoted string starting with a quote",
+			input:    "''foo'",
+			expected: "'foo",
+		},
+		{
+			name:     "quoted single quote",
+			input:    "'''",
+			expected: "'",
+		},
+		{
 			name:     "int value",
 			input:    "12345",
 			expected: int64(12345),
