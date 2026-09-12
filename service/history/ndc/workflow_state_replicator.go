@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -42,6 +43,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -78,6 +80,7 @@ type (
 		logger                       log.Logger
 		eventLogger                  otellog.Logger
 		taskRefresher                workflow.TaskRefresher
+		testHooks                    testhooks.TestHooks
 	}
 )
 
@@ -89,6 +92,7 @@ func NewWorkflowStateReplicator(
 	persistenceRateLimiter quotas.RequestRateLimiter,
 	logger log.Logger,
 	eventLogger otellog.Logger,
+	testHooks testhooks.TestHooks,
 ) *WorkflowStateReplicatorImpl {
 
 	logger = log.With(logger, tag.ComponentWorkflowStateReplicator)
@@ -105,6 +109,7 @@ func NewWorkflowStateReplicator(
 		logger:                       logger,
 		eventLogger:                  eventLogger,
 		taskRefresher:                workflow.NewTaskRefresher(shardContext),
+		testHooks:                    testHooks,
 	}
 }
 
@@ -228,6 +233,53 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 	)
 }
 
+func (r *WorkflowStateReplicatorImpl) getWorkflowContext(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	execution *commonpb.WorkflowExecution,
+	archetypeID chasm.ArchetypeID,
+) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error) {
+	hook, ok := testhooks.Get(
+		r.testHooks,
+		testhooks.HistoryPassiveReplicationTest,
+		namespaceID,
+	)
+	if ok && hook.UseTransientWorkflowContextForReplication(ctx) {
+		metrics.HistoryPassiveReplicationTestHookCounter.With(r.shardContext.GetMetricsHandler()).Record(
+			1,
+			metrics.OperationTag("ReplicateVersionedTransition"),
+		)
+		wfCtx := workflow.NewContext(
+			r.shardContext.GetConfig(),
+			definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
+			archetypeID,
+			r.logger,
+			r.shardContext.GetThrottledLogger(),
+			r.shardContext.GetMetricsHandler(),
+			nil,
+			r.testHooks,
+		)
+		if err := wfCtx.Lock(ctx, locks.PriorityHigh); err != nil {
+			return nil, nil, err
+		}
+		var releaseOnce sync.Once
+		return wfCtx, func(error) {
+			releaseOnce.Do(func() {
+				wfCtx.Clear()
+				wfCtx.Unlock()
+			})
+		}, nil
+	}
+	return r.workflowCache.GetOrCreateChasmExecution(
+		ctx,
+		r.shardContext,
+		namespaceID,
+		execution,
+		archetypeID,
+		locks.PriorityHigh,
+	)
+}
+
 //nolint:revive // cognitive complexity 37 (> max enabled 25)
 func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	ctx context.Context,
@@ -268,16 +320,11 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 		}
 	}()
 
-	wfCtx, releaseFn, err := r.workflowCache.GetOrCreateChasmExecution(
+	wfCtx, releaseFn, err := r.getWorkflowContext(
 		ctx,
-		r.shardContext,
 		namespaceID,
-		&commonpb.WorkflowExecution{
-			WorkflowId: wid,
-			RunId:      rid,
-		},
+		&commonpb.WorkflowExecution{WorkflowId: wid, RunId: rid},
 		archetypeID,
-		locks.PriorityHigh,
 	)
 	if err != nil {
 		return err
@@ -1253,6 +1300,7 @@ func (r *WorkflowStateReplicatorImpl) getNewRunWorkflow(
 		r.shardContext.GetThrottledLogger(),
 		r.shardContext.GetMetricsHandler(),
 		nil, // no pagination buffer limiter as it is a transient context
+		testhooks.TestHooks{},
 	)
 
 	return NewWorkflow(

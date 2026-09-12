@@ -417,6 +417,10 @@ func (o *Operation) Terminate(
 		return chasm.TerminateComponentResponse{}, nil
 	}
 
+	if !TransitionTerminated.Possible(o) {
+		return chasm.TerminateComponentResponse{}, ErrOperationAlreadyCompleted
+	}
+
 	return chasm.TerminateComponentResponse{}, TransitionTerminated.Apply(o, ctx, EventTerminated{
 		TerminateComponentRequest: req,
 	})

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
@@ -114,6 +115,7 @@ func TestCommandProtocolMessage(t *testing.T) {
 			t.Name(), // identity
 			"",       // workerControlTaskQueue
 			123,      // workflowTaskCompletedID
+			nil,      // workflowTaskDeployment
 			out.ms,
 			out.updates,
 			&effects,
@@ -630,12 +632,13 @@ func TestHandlePostCommandEagerExecuteActivity(t *testing.T) {
 	}
 
 	expectedClock := &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 42}
+	expectedDeployment := &deploymentpb.Deployment{SeriesName: "test-deployment", BuildId: "test-build-id"}
 
 	ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	ms.EXPECT().GetActivityByActivityID(activityID).Return(ai, true)
 	ms.EXPECT().GetAssignedBuildId().Return("")
 	ms.EXPECT().AddActivityTaskStartedEvent(
-		ai, scheduledEventID, gomock.Any(), "test-identity", gomock.Any(), nil, nil, "/_sys/worker-commands/test-ns/key1", expectedClock,
+		ai, scheduledEventID, gomock.Any(), "test-identity", gomock.Any(), expectedDeployment, nil, "/_sys/worker-commands/test-ns/key1", expectedClock,
 	).Return(&historypb.HistoryEvent{EventId: 7}, nil)
 	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		NamespaceId: "test-namespace-id",
@@ -656,6 +659,7 @@ func TestHandlePostCommandEagerExecuteActivity(t *testing.T) {
 	handler := &workflowTaskCompletedHandler{
 		identity:               "test-identity",
 		workerControlTaskQueue: "/_sys/worker-commands/test-ns/key1",
+		workflowTaskDeployment: expectedDeployment,
 		mutableState:           ms,
 		shard:                  shardCtx,
 		tokenSerializer:        tasktoken.NewSerializer(),

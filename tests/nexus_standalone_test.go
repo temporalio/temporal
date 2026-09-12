@@ -1194,7 +1194,9 @@ func (s *NexusStandaloneTestSuite) TestTerminateStandaloneNexusOperation() {
 		s.Contains(err.Error(), "already terminated")
 	})
 
-	s.Run("AlreadyCanceled", func(s *NexusStandaloneTestSuite) {
+	// A cancel request on a running operation only records the cancellation; the operation stays
+	// running, so terminate is still accepted and closes it as TERMINATED.
+	s.Run("CancelRequestedThenTerminated", func(s *NexusStandaloneTestSuite) {
 		env := s.newTestEnv()
 		endpointName := env.createRandomNexusEndpoint(s.Context(), s.T()).GetSpec().GetName()
 
@@ -1204,7 +1206,7 @@ func (s *NexusStandaloneTestSuite) TestTerminateStandaloneNexusOperation() {
 		})
 		s.NoError(err)
 
-		// Cancel the operation first.
+		// Request cancellation first.
 		_, err = env.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
 			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
@@ -1212,7 +1214,16 @@ func (s *NexusStandaloneTestSuite) TestTerminateStandaloneNexusOperation() {
 		})
 		s.NoError(err)
 
-		// Terminate a canceled operation — should succeed.
+		// No worker services this endpoint, so the operation is still running.
+		descResp, err := env.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+		})
+		s.NoError(err)
+		s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_RUNNING, descResp.GetInfo().GetStatus())
+		s.NotNil(descResp.GetInfo().GetCancellationInfo())
+
 		_, err = env.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
 			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
@@ -1222,14 +1233,70 @@ func (s *NexusStandaloneTestSuite) TestTerminateStandaloneNexusOperation() {
 		})
 		s.NoError(err)
 
-		// Verify state changed to terminated (terminate overrides cancel request).
-		descResp, err := env.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+		descResp, err = env.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
 			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 		})
 		s.NoError(err)
 		s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_TERMINATED, descResp.GetInfo().GetStatus())
+	})
+
+	s.Run("AlreadyCanceled", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		// The handler cancels on start, closing the operation as CANCELED.
+		endpointName := env.createRandomExternalNexusServer(s.Context(), s.T(), nexustest.Handler{
+			OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+				return nil, &nexus.OperationError{
+					State: nexus.OperationStateCanceled,
+					Cause: &nexus.FailureError{Failure: nexus.Failure{Message: "canceled by handler"}},
+				}
+			},
+		})
+
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: "test-op",
+			Endpoint:    endpointName,
+		})
+		s.NoError(err)
+
+		// Ensure the operation actually reached CANCELED before terminating.
+		_, err = env.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+			WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
+		})
+		s.NoError(err)
+
+		descResp, err := env.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+		})
+		s.NoError(err)
+		s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_CANCELED, descResp.GetInfo().GetStatus())
+
+		// Terminating a canceled operation is rejected.
+		_, err = env.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+			RequestId:   "terminate-request-id",
+			Reason:      "test termination",
+		})
+		var failedPrecondition *serviceerror.FailedPrecondition
+		s.ErrorAs(err, &failedPrecondition)
+		s.ErrorContains(err, "operation already completed")
+
+		// The rejected terminate left the outcome untouched.
+		descResp, err = env.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+		})
+		s.NoError(err)
+		s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_CANCELED, descResp.GetInfo().GetStatus())
 	})
 
 	s.Run("NotFound", func(s *NexusStandaloneTestSuite) {

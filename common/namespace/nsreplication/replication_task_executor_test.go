@@ -614,7 +614,15 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		Info: &persistencespb.NamespaceInfo{
 			Id: id,
 		},
-		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: updateClusterStandby,
+			ClusterReplicationRamps: map[string]*persistencespb.NamespaceReplicationRamp{
+				updateClusterActive: {
+					StartTime: timestamppb.New(failoverTime),
+					Duration:  durationpb.New(time.Hour),
+				},
+			},
+		},
 	}}, nil).Times(2)
 	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
 		NotificationVersion: updateFailoverVersion,

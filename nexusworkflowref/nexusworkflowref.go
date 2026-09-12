@@ -15,7 +15,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/components/nexusoperations"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 )
 
 // operationsFieldName is the first segment of a workflow Nexus operation's CHASM component path (the

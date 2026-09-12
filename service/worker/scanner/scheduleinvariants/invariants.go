@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/sdk"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -251,6 +252,10 @@ func (a *Activities) ListAllNamespaces() []string {
 		if ns.State() == enumspb.NAMESPACE_STATE_DELETED {
 			continue
 		}
+		//nolint:forbidigo // scanner works per namespace, not per workflow.
+		if !ns.ActiveInCluster(a.currentClusterName) {
+			continue
+		}
 		names = append(names, ns.Name().String())
 	}
 	return names
@@ -371,7 +376,37 @@ func (a *Activities) scheduleIsExpectedNotToFire(ctx context.Context, nsName, sc
 		len(desc.GetInfo().GetRunningWorkflows()) > 0 {
 		return true
 	}
+
+	// Confirm the invariant against what Describe just returned: the candidate came from
+	// a ScheduleNextActionTime index entry, which goes stale on replication or indexing
+	// lag.
+	if !a.nextActionTimeIsOverdue(desc.GetInfo().GetFutureActionTimes()) {
+		a.logger.Info("overdue candidate was not overdue on re-check; visibility entry was stale",
+			tag.WorkflowNamespace(nsName), tag.ScheduleID(scheduleID))
+		metrics.ScheduleInvariantsScannerOverdueNextActionTimeStaleCandidateCount.With(
+			a.metricsHandler.WithTags(metrics.NamespaceTag(nsName))).Record(1)
+		return true
+	}
 	return false
+}
+
+// nextActionTimeIsOverdue applies the candidate query's predicate to futureActionTimes.
+func (a *Activities) nextActionTimeIsOverdue(futureActionTimes []*timestamppb.Timestamp) bool {
+	var earliest time.Time
+	var found bool
+	for _, t := range futureActionTimes {
+		if t == nil {
+			continue
+		}
+		// Ordered soonest-first, but don't rely on it.
+		if ts := t.AsTime(); !found || ts.Before(earliest) {
+			earliest, found = ts, true
+		}
+	}
+	if !found {
+		return false
+	}
+	return earliest.Before(a.timeSource.Now().UTC().Add(-a.opts().OverdueNextActionTimeTolerance))
 }
 
 func (a *Activities) emitCount(metricName, namespaceTagValue string, count int64) {

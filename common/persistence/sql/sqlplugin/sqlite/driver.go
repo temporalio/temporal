@@ -17,8 +17,7 @@ const (
 var sqlTableExistsRegex = regexp.MustCompile(sqlTableExistsPattern)
 
 func (*db) IsDupEntryError(err error) bool {
-	var sqlErr *sqlite.Error
-	if errors.As(err, &sqlErr) {
+	if sqlErr, ok := errors.AsType[*sqlite.Error](err); ok {
 		return sqlErr.Code()&sqlConstraintCodes != 0
 	}
 
@@ -26,8 +25,7 @@ func (*db) IsDupEntryError(err error) bool {
 }
 
 func isTableExistsError(err error) bool {
-	var sqlErr *sqlite.Error
-	if errors.As(err, &sqlErr) {
+	if sqlErr, ok := errors.AsType[*sqlite.Error](err); ok {
 		return sqlTableExistsRegex.MatchString(sqlErr.Error())
 	}
 

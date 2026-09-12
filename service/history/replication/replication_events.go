@@ -542,8 +542,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) emitReplicationVerifyApplied(
 	outcome := "verified"
 	errStr := ""
 	if retErr != nil {
-		var syncStateErr *serviceerrors.SyncState
-		if errors.As(retErr, &syncStateErr) {
+		if _, ok := errors.AsType[*serviceerrors.SyncState](retErr); ok {
 			outcome = "resend_needed"
 		} else {
 			outcome = "error"

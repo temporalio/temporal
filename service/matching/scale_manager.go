@@ -32,8 +32,8 @@ import (
 // All scaler/state work is funneled through a single background goroutine. That
 // goroutine owns scaleState/scaleDB/lastDecision and is the only caller of
 // partitionScaler, so the scaler implementation can rely on serial calls and
-// scaleState needs no lock. AddedTasks talks to the worker only via the atomic
-// batch counter and the wakeup channel, so it never blocks.
+// scaleState needs no lock. AddedTasks talks to the worker only via atomics and
+// the wakeup channel, so it never blocks.
 type scaleManager struct {
 	partition              tqid.Partition
 	logger                 log.Logger
@@ -55,6 +55,10 @@ type scaleManager struct {
 	nextShadowLog    time.Time
 	prevShadowTarget int32
 
+	// store separately from scaleState to avoid data race
+	currentWrite atomic.Int32
+
+	// batch counts estimated tasks across all partitions in between calls to the scaler
 	batch  atomic.Int64
 	wakeup chan struct{}
 }
@@ -117,16 +121,21 @@ func (sm *scaleManager) Start(scaleState *persistencespb.PartitionScaleState, sc
 	sm.background.Go(sm.backgroundWork)
 }
 
-// AddedTasks is called on a batch of tasks added.
+// AddedTasks records one root sample representing estimated queue-wide task additions.
 // This is called in the task add path, so it shouldn't block.
-func (sm *scaleManager) AddedTasks(numTasks int) {
+func (sm *scaleManager) AddedTasks(estimatedTasksAllPartitions int) {
 	if sm == nil {
 		return
 	}
 
-	// scale target batch size by numTasks (since numTasks is scaled by partitions)
-	batchSize := int64(numTasks) * sm.batchSize
-	if sm.batch.Add(int64(numTasks)) < batchSize {
+	// Wake once ~batchSize tasks per write partition have accumulated. Before the first
+	// scaler decision we don't know the write count, so use the per-sample estimate, which
+	// scales with partitions the same way.
+	threshold := int64(estimatedTasksAllPartitions) * sm.batchSize
+	if currentWrite := sm.currentWrite.Load(); currentWrite > 0 {
+		threshold = int64(currentWrite) * sm.batchSize
+	}
+	if sm.batch.Add(int64(estimatedTasksAllPartitions)) < threshold {
 		return // not enough for a batch yet
 	}
 
@@ -194,9 +203,15 @@ func (sm *scaleManager) callScaler() {
 		PrivateState:  sm.scaleState.GetPrivateScalerState(),
 	})
 	backlogCapC8 := number.EncodeCompact8(int64(decision.BacklogCap))
+	disabledStateNeedsCleanup := decision.NewTarget == 0 &&
+		(len(sm.scaleState.GetBacklogState()) > 0 ||
+			len(sm.scaleState.GetBacklogCounts()) > 0 ||
+			sm.scaleState.GetBacklogCap() != 0 ||
+			sm.scaleState.GetPrivateScalerState() != nil)
 	if decision.NoChange ||
 		decision.NewTarget == int(sm.scaleState.GetTarget()) &&
-			backlogCapC8 == number.Compact8(sm.scaleState.GetBacklogCap()) {
+			backlogCapC8 == number.Compact8(sm.scaleState.GetBacklogCap()) &&
+			!disabledStateNeedsCleanup {
 		return
 	}
 
@@ -212,9 +227,20 @@ func (sm *scaleManager) callScaler() {
 	newState.TargetVersion = sm.timeSource.Now().UnixNano()
 	newState.BacklogCap = int32(backlogCapC8)
 	newState.PrivateScalerState = decision.PrivateState
+	var prevRead, prevWrite int32
+	if target == 0 {
+		// Disabling managed scaling is a clean break to dynamic config; any backlog
+		// outside its read range remains unpolled until it times out.
+		prevInfo := scaleStateToInfo(sm.scaleState, settings)
+		prevRead, prevWrite = prevInfo.Read, prevInfo.Write
+		newState.BacklogState = nil
+		newState.BacklogCounts = nil
+		newState.BacklogCap = 0
+		newState.PrivateScalerState = nil
+	}
 
 	mayHaveBacklog := target
-	if prevTarget == 0 {
+	if prevTarget == 0 && target > 0 {
 		// Turning on managed partition scaling: consider all partitions from dynamic
 		// config as having backlog also.
 		mayHaveBacklog = max(mayHaveBacklog, int32(sm.getWritePartitions()))
@@ -249,11 +275,17 @@ func (sm *scaleManager) callScaler() {
 	cooldown := time.Duration(float32(time.Second) / settings.MaxRate)
 	sm.nextDecision = sm.timeSource.Now().Add(cooldown)
 
-	sm.logger.Info("new target",
-		tag.Int32("target", target),
-		tag.Int32("prev-target", prevTarget),
-		tag.Int32("max-target", newState.MaxTarget),
-		tag.Bool(metrics.ScalerShadowModeTagName, shadowMode))
+	if target == 0 {
+		sm.logger.Info("disabled managed scaling",
+			tag.Int32("prev-read", prevRead),
+			tag.Int32("prev-write", prevWrite))
+	} else {
+		sm.logger.Info("new target",
+			tag.Int32("target", target),
+			tag.Int32("prev-target", prevTarget),
+			tag.Int32("max-target", newState.MaxTarget),
+			tag.Bool(metrics.ScalerShadowModeTagName, shadowMode))
+	}
 	metrics.PartitionScaleEvents.With(sm.metricsHandler.WithTags(metrics.ScalerShadowModeTag(shadowMode))).Record(1)
 }
 
@@ -302,6 +334,7 @@ func (sm *scaleManager) setState(newState *persistencespb.PartitionScaleState, s
 	sm.scaleState = newState
 
 	newInfo := scaleStateToInfo(sm.scaleState, settings)
+	sm.currentWrite.Store(newInfo.GetWrite())
 
 	// only push ephemeral data if _info_ changed, not on any state change
 	if !proto.Equal(prevInfo, newInfo) {

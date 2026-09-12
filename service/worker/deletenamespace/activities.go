@@ -78,8 +78,7 @@ func (a *localActivities) GetNamespaceInfoActivity(ctx context.Context, nsID nam
 
 	getNamespaceResponse, err := a.metadataManager.GetNamespace(ctx, getNamespaceRequest)
 	if err != nil {
-		var nsNotFoundErr *serviceerror.NamespaceNotFound
-		if stderrors.As(err, &nsNotFoundErr) {
+		if _, ok := stderrors.AsType[*serviceerror.NamespaceNotFound](err); ok {
 			ns := nsName.String()
 			if ns == "" {
 				ns = nsID.String()

@@ -154,9 +154,7 @@ type (
 	}
 )
 
-var (
-	_ adminservice.AdminServiceServer = (*AdminHandler)(nil)
-)
+var _ adminservice.AdminServiceServer = (*AdminHandler)(nil)
 
 // NewAdminHandler creates a gRPC handler for the adminservice
 func NewAdminHandler(
@@ -167,7 +165,6 @@ func NewAdminHandler(
 		primitives.HistoryService,
 		args.MembershipMonitor,
 		args.Config.HistoryHostErrorPercentage,
-		args.Config.HistoryHostSelfErrorProportion,
 		func(ctx context.Context, hostAddress string) (*historyservice.DeepHealthCheckResponse, error) {
 			return args.HistoryClient.DeepHealthCheck(ctx, &historyservice.DeepHealthCheckRequest{HostAddress: hostAddress})
 		},
@@ -246,8 +243,9 @@ func (adh *AdminHandler) DeepHealthCheck(
 	}
 
 	return &adminservice.DeepHealthCheckResponse{
-		State:    result.State,
-		Services: services,
+		State:           result.State,
+		Services:        services,
+		UnenforcedState: result.ServiceDetail.GetUnenforcedState(),
 	}, nil
 }
 
@@ -402,8 +400,7 @@ func (adh *AdminHandler) unaliasAndValidateSearchAttributes(historyBatches []*co
 
 			unaliasedSas, err := searchattribute.UnaliasFields(adh.saMapperProvider, sas, nsName.String())
 			if err != nil {
-				var invArgErr *serviceerror.InvalidArgument
-				if !errors.As(err, &invArgErr) {
+				if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); !ok {
 					return nil, err
 				}
 				// Mapper returns InvalidArgument if alias is not found. It means that history has field names, not aliases.
@@ -475,7 +472,6 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 		SkipForceReload: request.GetSkipForceReload(),
 		ArchetypeId:     archetypeID,
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -650,7 +646,6 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
 	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
 ) error {
-
 	execution := request.Execution
 	if execution.GetWorkflowId() == "" {
 		return workflow.ErrWorkflowIDNotSet
@@ -1528,7 +1523,6 @@ func (adh *AdminHandler) DescribeTaskQueuePartition(
 		ReportPollers:                 true,
 		ReportInternalTaskQueueStatus: true,
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -1563,7 +1557,6 @@ func (adh *AdminHandler) ForceUnloadTaskQueuePartition(
 		NamespaceId:        namespaceID.String(),
 		TaskQueuePartition: request.GetTaskQueuePartition(),
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -1735,7 +1728,6 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 			if err != nil {
 				logger.Error("Failed to close AdminStreamReplicationMessages server", tag.Error(err))
 			}
-
 		}()
 
 		for !shutdownChan.IsShutdown() {
@@ -1791,7 +1783,6 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 				}); err != nil {
 					if err != io.EOF {
 						logger.Info("AdminStreamReplicationMessages server -> client encountered error", tag.Error(err))
-
 					}
 					return
 				}
@@ -2308,23 +2299,32 @@ func (adh *AdminHandler) migrateScheduleToWorkflow(
 			},
 		},
 	})
+	info := descResp.GetWorkflowExecutionInfo()
 	switch {
-	case common.IsNotFoundError(err):
-	case err != nil:
+	case err != nil && !common.IsNotFoundError(err):
 		return nil, err
-	case descResp.GetWorkflowExecutionInfo().GetType().GetName() == dummy.DummyWFTypeName:
-		sentinelIdleTimeRemaining := max(time.Until(descResp.GetWorkflowExecutionInfo().GetStartTime().AsTime().Add(chasmscheduler.SentinelIdleTime)), 0)
+	case common.IsNotFoundError(err) || info.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
+		// A closed workflow does not occupy the V1 ID: the create path only treats
+		// RUNNING workflows as occupying it (isRealSchedulerInV1KeySpace), and an
+		// expired sentinel completes rather than disappearing, staying describable
+		// for the namespace's whole retention period. Blocking on it here would
+		// stall rollback for days instead of the 15 minutes a sentinel reserves.
+	case info.GetType().GetName() == dummy.DummyWFTypeName:
+		startTime := info.GetStartTime().AsTime()
 		adh.logger.Warn(
 			"schedule migration to workflow blocked by workflow sentinel",
 			tag.ScheduleID(request.GetScheduleId()),
-			tag.Duration("sentinel-idle-time", sentinelIdleTimeRemaining),
+			tag.Duration("sentinel-idle-time", max(time.Until(startTime.Add(chasmscheduler.SentinelIdleTime)), 0)),
+			// Age disambiguates a sentinel still inside its idle window from one
+			// running past it (idle-time reads 0s in both cases).
+			tag.Duration("sentinel-age", time.Since(startTime)),
 		)
 		return nil, chasmscheduler.ErrSentinelBlocked
 	default:
 		adh.logger.Warn(
 			"schedule migration to workflow found existing workflow",
 			tag.ScheduleID(request.GetScheduleId()),
-			tag.WorkflowType(descResp.GetWorkflowExecutionInfo().GetType().GetName()),
+			tag.WorkflowType(info.GetType().GetName()),
 		)
 	}
 

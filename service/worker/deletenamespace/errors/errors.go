@@ -38,8 +38,7 @@ func NewNotDeletedExecutionsStillExist(count int) error {
 }
 
 func ToServiceError(err error, workflowID, runID string) error {
-	var appErr *temporal.ApplicationError
-	if errors.As(err, &appErr) {
+	if appErr, ok := errors.AsType[*temporal.ApplicationError](err); ok {
 		switch appErr.Type() {
 		case InvalidArgumentErrType:
 			return serviceerror.NewInvalidArgument(appErr.Message())

@@ -109,8 +109,7 @@ func (c *priBacklogManagerImpl) signalIfFatal(err error) bool {
 	if err == nil {
 		return false
 	}
-	var condfail *persistence.ConditionFailedError
-	if errors.As(err, &condfail) {
+	if _, ok := errors.AsType[*persistence.ConditionFailedError](err); ok {
 		c.metricsHandler.Counter(metrics.ConditionFailedErrorPerTaskQueueCounter.Name()).Record(1)
 		c.skipFinalUpdate.Store(true)
 		c.pqMgr.UnloadFromPartitionManager(unloadCauseConflict)
