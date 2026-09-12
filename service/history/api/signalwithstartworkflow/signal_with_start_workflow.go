@@ -339,7 +339,16 @@ func createAsCurrent(
 	workflowIDReusePolicy enumspb.WorkflowIdReusePolicy,
 	failedErr *persistence.CurrentWorkflowConditionFailedError,
 ) error {
-	namespaceEntry := newWorkflowLease.GetMutableState().GetNamespaceEntry()
+	mutableState := newWorkflowLease.GetMutableState()
+	if err := api.NewWorkflowVersionCheck(
+		shardContext,
+		failedErr.LastWriteVersion,
+		mutableState,
+	); err != nil {
+		return err
+	}
+
+	namespaceEntry := mutableState.GetNamespaceEntry()
 	currentWorkflowStartTime := time.Time{}
 	if shardContext.GetConfig().EnableWorkflowIdReuseStartTimeValidation(namespaceEntry.Name().String()) &&
 		failedErr.StartTime != nil {
@@ -361,21 +370,13 @@ func createAsCurrent(
 		return err
 	}
 
-	if err := api.NewWorkflowVersionCheck(
-		shardContext,
-		failedErr.LastWriteVersion,
-		newWorkflowLease.GetMutableState(),
-	); err != nil {
-		return err
-	}
-
 	return newWorkflowLease.GetContext().CreateWorkflowExecution(
 		ctx,
 		shardContext,
 		persistence.CreateWorkflowModeUpdateCurrent,
 		failedErr.RunID,
 		failedErr.LastWriteVersion,
-		newWorkflowLease.GetMutableState(),
+		mutableState,
 		newWorkflow,
 		newWorkflowEventsSeq,
 		historyi.TransactionPolicyActive,
