@@ -256,6 +256,19 @@ func Invoke(
 			continuationToken.FirstEventId = continuationToken.GetNextEventId()
 			continuationToken.NextEventId = nextEventID
 			continuationToken.IsWorkflowRunning = isWorkflowRunning
+		} else {
+			if err = api.ValidateBranchTokenForExecution(
+				ctx,
+				shardContext,
+				workflowConsistencyChecker,
+				eventNotifier,
+				namespaceName,
+				namespaceID,
+				execution,
+				continuationToken.BranchToken,
+			); err != nil {
+				return nil, err
+			}
 		}
 	} else {
 		continuationToken = &tokenspb.HistoryContinuation{}

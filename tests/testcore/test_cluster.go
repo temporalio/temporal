@@ -8,9 +8,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"path"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -24,7 +22,6 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/filestore"
 	"go.temporal.io/server/common/archiver/provider"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -250,7 +247,7 @@ func newClusterWithPersistenceTestBaseFactory(
 			DisableGzip: true, // lowers memory and CPU usage significantly in tests
 		}
 
-		err = setupIndex(clusterConfig.ESConfig, logger)
+		err = persistencetests.SetupEsIndex(clusterConfig.ESConfig, logger)
 		if err != nil {
 			return nil, err
 		}
@@ -365,109 +362,6 @@ func newClusterWithPersistenceTestBaseFactory(
 	return &TestCluster{testBase: testBase, archiverBase: archiverBase, host: cluster}, nil
 }
 
-func setupIndex(esConfig *esclient.Config, logger log.Logger) error {
-	ctx := context.Background()
-	var esClient esclient.IntegrationTestsClient
-	op := func() error {
-		var err error
-		esClient, err = esclient.NewFunctionalTestsClient(esConfig, logger)
-		if err != nil {
-			return err
-		}
-
-		return esClient.Ping(ctx)
-	}
-
-	err := backoff.ThrottleRetry(
-		op,
-		backoff.NewExponentialRetryPolicy(time.Second).WithExpirationInterval(time.Minute),
-		nil,
-	)
-	if err != nil {
-		logger.Fatal("Failed to connect to elasticsearch", tag.Error(err))
-	}
-
-	exists, err := esClient.IndexExists(ctx, esConfig.GetVisibilityIndex())
-	if err != nil {
-		return err
-	}
-	if exists {
-		logger.Info("Index already exists.", tag.ESIndex(esConfig.GetVisibilityIndex()))
-		err = deleteIndex(esConfig, logger)
-		if err != nil {
-			return err
-		}
-	}
-
-	indexTemplateFile := path.Join(testutils.GetRepoRootDirectory(), "schema/elasticsearch/visibility/index_template_v7.json")
-	logger.Info("Creating index template.", tag.String("templatePath", indexTemplateFile))
-	template, err := os.ReadFile(indexTemplateFile)
-	if err != nil {
-		return err
-	}
-	// Template name doesn't matter.
-	// This operation is idempotent and won't return an error even if template already exists.
-	_, err = esClient.IndexPutTemplate(ctx, "temporal_visibility_v1_template", string(template))
-	if err != nil {
-		return err
-	}
-	logger.Info("Index template created.")
-
-	logger.Info("Creating index.", tag.ESIndex(esConfig.GetVisibilityIndex()))
-	_, err = esClient.CreateIndex(
-		ctx,
-		esConfig.GetVisibilityIndex(),
-		map[string]any{
-			"settings": map[string]any{
-				"index": map[string]any{
-					"number_of_replicas": 0,
-				},
-			},
-		},
-	)
-	if err != nil {
-		return err
-	}
-	if err := waitForYellowStatus(esClient, esConfig.GetVisibilityIndex()); err != nil {
-		return err
-	}
-	logger.Info("Index created.", tag.ESIndex(esConfig.GetVisibilityIndex()))
-
-	logger.Info("Add custom search attributes for tests.")
-	if err := waitForYellowStatus(esClient, esConfig.GetVisibilityIndex()); err != nil {
-		return err
-	}
-	logger.Info("Index setup complete.", tag.ESIndex(esConfig.GetVisibilityIndex()))
-
-	return nil
-}
-
-func waitForYellowStatus(esClient esclient.IntegrationTestsClient, index string) error {
-	status, err := esClient.WaitForYellowStatus(context.Background(), index)
-	if err != nil {
-		return err
-	}
-	if status == "red" {
-		return fmt.Errorf("Elasticsearch index status for %s is red", index)
-	}
-	return nil
-}
-
-func deleteIndex(esConfig *esclient.Config, logger log.Logger) error {
-	esClient, err := esclient.NewFunctionalTestsClient(esConfig, logger)
-	if err != nil {
-		return err
-	}
-
-	logger.Info("Deleting index.", tag.ESIndex(esConfig.GetVisibilityIndex()))
-	_, err = esClient.DeleteIndex(context.Background(), esConfig.GetVisibilityIndex())
-	if err != nil {
-		return err
-	}
-	logger.Info("Index deleted.", tag.ESIndex(esConfig.GetVisibilityIndex()))
-	return nil
-}
-
 func newPProfInitializerImpl(logger log.Logger, port int) *pprof.PProfInitializerImpl {
 	return &pprof.PProfInitializerImpl{
 		PProf: &config.PProf{
@@ -541,7 +435,7 @@ func (tc *TestCluster) TearDownCluster() error {
 	errs := tc.host.Stop()
 	tc.testBase.TearDownWorkflowStore()
 	if !UseSQLVisibility() && tc.host.esConfig != nil {
-		if err := deleteIndex(tc.host.esConfig, tc.host.logger); err != nil {
+		if err := persistencetests.DeleteEsIndex(tc.host.esConfig, tc.host.logger); err != nil {
 			errs = multierr.Combine(errs, err)
 		}
 	}
