@@ -145,7 +145,6 @@ func startAndSignalWorkflow(
 	return startAndSignalWithoutCurrentWorkflow(
 		ctx,
 		shard,
-		namespaceEntry,
 		vrid,
 		newWorkflowLease,
 		currentWorkflowLease,
@@ -241,7 +240,6 @@ func startAndSignalWithCurrentWorkflow(
 func startAndSignalWithoutCurrentWorkflow(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
-	namespaceEntry *namespace.Namespace,
 	vrid *api.VersionedRunID,
 	newWorkflowLease api.WorkflowLease,
 	currentWorkflowLease api.WorkflowLease,
@@ -315,11 +313,10 @@ func startAndSignalWithoutCurrentWorkflow(
 		if err := createAsCurrent(
 			ctx,
 			shardContext,
-			namespaceEntry,
 			newWorkflowLease,
 			newWorkflow,
 			newWorkflowEventsSeq,
-			signalWithStartRequest,
+			signalWithStartRequest.GetWorkflowIdReusePolicy(),
 			failedErr,
 		); err != nil {
 			return startOutcome{}, err
@@ -335,24 +332,21 @@ func startAndSignalWithoutCurrentWorkflow(
 func createAsCurrent(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
-	namespaceEntry *namespace.Namespace,
 	newWorkflowLease api.WorkflowLease,
 	newWorkflow *persistence.WorkflowSnapshot,
 	newWorkflowEventsSeq []*persistence.WorkflowEvents,
-	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
+	workflowIDReusePolicy enumspb.WorkflowIdReusePolicy,
 	failedErr *persistence.CurrentWorkflowConditionFailedError,
 ) error {
+	namespaceEntry := newWorkflowLease.GetMutableState().GetNamespaceEntry()
 	currentWorkflowStartTime := time.Time{}
 	if shardContext.GetConfig().EnableWorkflowIdReuseStartTimeValidation(namespaceEntry.Name().String()) &&
 		failedErr.StartTime != nil {
 		currentWorkflowStartTime = *failedErr.StartTime
 	}
 
-	workflowKey := definition.NewWorkflowKey(
-		namespaceEntry.ID().String(),
-		signalWithStartRequest.GetWorkflowId(),
-		failedErr.RunID,
-	)
+	workflowKey := newWorkflowLease.GetContext().GetWorkflowKey()
+	workflowKey.RunID = failedErr.RunID
 	if err := api.ResolveWorkflowIDReusePolicy(
 		shardContext,
 		workflowKey,
@@ -360,7 +354,7 @@ func createAsCurrent(
 		failedErr.Status,
 		failedErr.RequestIDs,
 		failedErr.FirstExecutionRunID,
-		signalWithStartRequest.GetWorkflowIdReusePolicy(),
+		workflowIDReusePolicy,
 		currentWorkflowStartTime,
 	); err != nil {
 		return err
