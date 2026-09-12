@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	archiverspb "go.temporal.io/server/api/archiver/v1"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/log"
@@ -27,16 +28,17 @@ import (
 
 func TestArchiver(t *testing.T) {
 	for _, c := range []struct {
-		Name                 string
-		ArchiveHistoryErr    error
-		ArchiveVisibilityErr error
-		RateLimiterWaitErr   error
-		Targets              []Target
-		SearchAttributes     *commonpb.SearchAttributes
-		SearchAttributesErr  error
-		NameTypeMap          searchattribute.NameTypeMap
-		NameTypeMapErr       error
-		NilHistoryUri        bool
+		Name                                        string
+		ArchiveHistoryErr                           error
+		ArchiveVisibilityErr                        error
+		RateLimiterWaitErr                          error
+		Targets                                     []Target
+		SearchAttributes                            *commonpb.SearchAttributes
+		SearchAttributesErr                         error
+		NameTypeMap                                 searchattribute.NameTypeMap
+		NameTypeMapErr                              error
+		NilHistoryURI                               bool
+		EnableVisibilityArchivalRecordDeduplication bool
 
 		ExpectArchiveHistory    bool
 		ExpectArchiveVisibility bool
@@ -76,9 +78,16 @@ func TestArchiver(t *testing.T) {
 			ExpectArchiveVisibility: true,
 		},
 		{
+			Name:    "Visibility archival succeeds with content-aware deduplication",
+			Targets: []Target{TargetVisibility},
+			EnableVisibilityArchivalRecordDeduplication: true,
+
+			ExpectArchiveVisibility: true,
+		},
+		{
 			Name:          "Visibility archival succeeds with nil HistoryURI",
 			Targets:       []Target{TargetVisibility},
-			NilHistoryUri: true,
+			NilHistoryURI: true,
 
 			ExpectArchiveVisibility: true,
 		},
@@ -166,7 +175,7 @@ func TestArchiver(t *testing.T) {
 
 			var historyURI carchiver.URI
 			var err error
-			if !c.NilHistoryUri {
+			if !c.NilHistoryURI {
 				historyURI, err = carchiver.NewURI("test:///history/archival")
 			}
 			require.NoError(t, err)
@@ -182,8 +191,21 @@ func TestArchiver(t *testing.T) {
 				Return(visibilityArchiver, nil).AnyTimes()
 
 			if c.ExpectArchiveVisibility {
-				visibilityArchiver.EXPECT().Archive(gomock.Any(), visibilityURI, gomock.Any()).
-					Return(c.ArchiveVisibilityErr)
+				if c.EnableVisibilityArchivalRecordDeduplication {
+					visibilityArchiver.EXPECT().Archive(gomock.Any(), visibilityURI, gomock.Any(), gomock.Any()).
+						DoAndReturn(func(
+							_ context.Context,
+							_ carchiver.URI,
+							_ *archiverspb.VisibilityRecord,
+							opts ...carchiver.ArchiveOption,
+						) error {
+							require.True(t, carchiver.GetFeatureCatalog(opts...).VisibilityArchivalRecordDeduplication)
+							return c.ArchiveVisibilityErr
+						})
+				} else {
+					visibilityArchiver.EXPECT().Archive(gomock.Any(), visibilityURI, gomock.Any()).
+						Return(c.ArchiveVisibilityErr)
+				}
 			}
 
 			rateLimiter := quotas.NewMockRateLimiter(controller)
@@ -239,6 +261,7 @@ func TestArchiver(t *testing.T) {
 				VisibilityURI:    visibilityURI,
 				Targets:          c.Targets,
 				SearchAttributes: searchAttributes,
+				EnableVisibilityArchivalRecordDeduplication: c.EnableVisibilityArchivalRecordDeduplication,
 			})
 
 			if len(c.ExpectedReturnErrors) > 0 {

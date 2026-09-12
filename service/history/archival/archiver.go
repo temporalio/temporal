@@ -42,15 +42,16 @@ type (
 		HistoryURI carchiver.URI
 
 		// visibility archival
-		WorkflowTypeName  string
-		StartTime         *timestamppb.Timestamp
-		ExecutionTime     *timestamppb.Timestamp
-		CloseTime         *timestamppb.Timestamp
-		ExecutionDuration *durationpb.Duration
-		Status            enumspb.WorkflowExecutionStatus
-		HistoryLength     int64
-		Memo              *commonpb.Memo
-		SearchAttributes  *commonpb.SearchAttributes
+		WorkflowTypeName                            string
+		StartTime                                   *timestamppb.Timestamp
+		ExecutionTime                               *timestamppb.Timestamp
+		CloseTime                                   *timestamppb.Timestamp
+		ExecutionDuration                           *durationpb.Duration
+		Status                                      enumspb.WorkflowExecutionStatus
+		HistoryLength                               int64
+		Memo                                        *commonpb.Memo
+		SearchAttributes                            *commonpb.SearchAttributes
+		EnableVisibilityArchivalRecordDeduplication bool
 		// VisibilityURI is the URI of the visibility archival backend.
 		VisibilityURI carchiver.URI
 
@@ -228,6 +229,11 @@ func (a *archiver) archiveVisibility(ctx context.Context, request *Request, logg
 		historyArchivalUri = request.HistoryURI.String()
 	}
 
+	archiveOptions := make([]carchiver.ArchiveOption, 0, 1)
+	if request.EnableVisibilityArchivalRecordDeduplication {
+		archiveOptions = append(archiveOptions, carchiver.GetVisibilityArchivalRecordDeduplicationOption())
+	}
+
 	return visibilityArchiver.Archive(ctx, request.VisibilityURI, &archiverspb.VisibilityRecord{
 		NamespaceId:        request.NamespaceID,
 		Namespace:          request.Namespace,
@@ -243,7 +249,7 @@ func (a *archiver) archiveVisibility(ctx context.Context, request *Request, logg
 		Memo:               request.Memo,
 		SearchAttributes:   searchAttributes,
 		HistoryArchivalUri: historyArchivalUri,
-	})
+	}, archiveOptions...)
 }
 
 // recordArchiveTargetResult takes an error pointer as an argument so that it isn't passed-by-value when used in a defer
