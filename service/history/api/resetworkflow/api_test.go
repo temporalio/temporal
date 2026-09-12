@@ -6,6 +6,9 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -42,6 +45,66 @@ func (s *resetWorkflowSuite) TestShouldTolerateMissingCurrentExecution() {
 	missing, err = shouldTolerateMissingCurrentExecution(other, "base-run-id")
 	s.False(missing)
 	s.Require().ErrorIs(err, other)
+}
+
+func (s *resetWorkflowSuite) TestIsDuplicateResetRequest() {
+	requestID := "request-id"
+	testCases := []struct {
+		name           string
+		executionState *persistencespb.WorkflowExecutionState
+		expected       bool
+	}{
+		{
+			name: "legacy create request ID",
+			executionState: &persistencespb.WorkflowExecutionState{
+				CreateRequestId: requestID,
+			},
+			expected: true,
+		},
+		{
+			name: "reset request marker",
+			executionState: &persistencespb.WorkflowExecutionState{
+				RequestIds: map[string]*persistencespb.RequestIDInfo{
+					requestID: {
+						EventType: enumspb.EVENT_TYPE_UNSPECIFIED,
+						EventId:   common.EmptyEventID,
+					},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "event-backed request ID",
+			executionState: &persistencespb.WorkflowExecutionState{
+				RequestIds: map[string]*persistencespb.RequestIDInfo{
+					requestID: {
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+						EventId:   5,
+					},
+				},
+			},
+		},
+		{
+			name: "CHASM request ID",
+			executionState: &persistencespb.WorkflowExecutionState{
+				RequestIds: map[string]*persistencespb.RequestIDInfo{
+					requestID: {
+						AttachTime: timestamppb.Now(),
+					},
+				},
+			},
+		},
+		{
+			name:           "unknown request ID",
+			executionState: &persistencespb.WorkflowExecutionState{},
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			s.Equal(tc.expected, isDuplicateResetRequest(tc.executionState, requestID))
+		})
+	}
 }
 
 func (s *resetWorkflowSuite) TestGetResetReapplyExcludeTypes() {
