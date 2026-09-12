@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testvars"
+	legacyscheduler "go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -26,6 +27,12 @@ const (
 	defaultInterval      = 1 * time.Minute
 	defaultCatchupWindow = 5 * time.Minute
 )
+
+// newLegacySpecBuilder builds a legacy SpecBuilder with the given warn/max compute-limit bounds.
+// A value of 0 means "use the default" (GetNextTime treats a non-positive bound as its default).
+func newLegacySpecBuilder(warnIter, maxIter int) *legacyscheduler.SpecBuilder {
+	return legacyscheduler.NewSpecBuilder(func() int { return warnIter }, func() int { return maxIter })
+}
 
 // defaultSchedule returns a protobuf definition for a schedule matching this
 // package's other testing defaults.

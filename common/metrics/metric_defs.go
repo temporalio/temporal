@@ -1295,6 +1295,14 @@ var (
 		"schedule_action_delay",
 		WithDescription("Delay between when scheduled actions should/actually happen"),
 	)
+	ScheduleComputeLimitExceeded = NewCounterDef(
+		"schedule_compute_limit_exceeded",
+		WithDescription("The number of times a schedule's next-time search hit the hard compute iteration bound and stopped the schedule"),
+	)
+	ScheduleComputeLimitWarning = NewCounterDef(
+		"schedule_compute_limit_warning",
+		WithDescription("The number of times a schedule's next-time search crossed the warn compute iteration threshold; the search continued and the schedule was not stopped"),
+	)
 	SchedulePayloadSize = NewCounterDef(
 		"schedule_payload_size",
 		WithDescription("The size in bytes of a customer payload (including action results and update signals)"),
