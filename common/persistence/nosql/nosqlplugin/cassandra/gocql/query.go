@@ -116,7 +116,7 @@ func (q *query) SetSpeculativeExecutionPolicy(policy SpeculativeExecutionPolicy)
 
 func (q *query) maybeTrace(ctx context.Context) {
 	if q.tracerFactory != nil {
-		tr := q.tracerFactory.GetTracerWithContext(ctx)
+		tr := q.tracerFactory.GetTracerForQuery(ctx, q.gocqlQuery)
 		if tr != nil {
 			q.gocqlQuery.Trace(tr)
 		}
