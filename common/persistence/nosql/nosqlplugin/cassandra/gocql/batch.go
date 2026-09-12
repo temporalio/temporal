@@ -9,9 +9,9 @@ import (
 
 type (
 	Batch struct {
-		session *session
-
-		gocqlBatch *gocql.Batch
+		session       *session
+		gocqlBatch    *gocql.Batch
+		tracerFactory TracerFactory
 	}
 )
 
@@ -38,13 +38,13 @@ func (b *Batch) Query(stmt string, args ...any) {
 
 func (b *Batch) Exec(ctx context.Context) (retError error) {
 	defer func() { b.session.handleError(retError) }()
-
+	b.maybeTrace(ctx)
 	return b.gocqlBatch.ExecContext(ctx)
 }
 
 func (b *Batch) MapExecCAS(ctx context.Context, dest map[string]any) (_ bool, _ Iter, retError error) {
 	defer func() { b.session.handleError(retError) }()
-
+	b.maybeTrace(ctx)
 	applied, iter, err := b.gocqlBatch.MapExecCASContext(ctx, dest)
 	if iter != nil {
 		return applied, newIter(b.session, iter), err
@@ -57,8 +57,8 @@ func (b *Batch) WithTimestamp(timestamp int64) *Batch {
 	return newBatch(b.session, b.gocqlBatch)
 }
 
-func (b *Batch) WithTrace(tr gocql.Tracer) *Batch {
-	b.gocqlBatch.Trace(tr)
+func (b *Batch) WithTrace(tr TracerFactory) *Batch {
+	b.tracerFactory = tr
 	return newBatch(b.session, b.gocqlBatch)
 }
 
@@ -72,5 +72,14 @@ func mustConvertBatchType(batchType BatchType) gocql.BatchType {
 		return gocql.CounterBatch
 	default:
 		panic(fmt.Sprintf("Unknown gocql BatchType: %v", batchType))
+	}
+}
+
+func (b *Batch) maybeTrace(ctx context.Context) {
+	if b.tracerFactory != nil {
+		tr := b.tracerFactory.GetTracerWithContext(ctx)
+		if tr != nil {
+			b.gocqlBatch.Trace(tr)
+		}
 	}
 }

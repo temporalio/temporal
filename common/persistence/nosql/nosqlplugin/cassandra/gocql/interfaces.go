@@ -20,6 +20,10 @@ type (
 		Close()
 	}
 
+	TracerFactory interface {
+		GetTracerWithContext(ctx context.Context) gocql.Tracer
+	}
+
 	// Query is the interface for query object.
 	Query interface {
 		Exec(context.Context) error
@@ -31,7 +35,7 @@ type (
 		PageSize(int) Query
 		PageState([]byte) Query
 		WithTimestamp(int64) Query
-		WithTrace(gocql.Tracer) Query
+		WithTrace(TracerFactory) Query
 		Consistency(Consistency) Query
 		Bind(...any) Query
 		Idempotent(bool) Query
