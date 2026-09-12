@@ -10,8 +10,9 @@ var _ Query = (*query)(nil)
 
 type (
 	query struct {
-		session    *session
-		gocqlQuery *gocql.Query
+		session       *session
+		gocqlQuery    *gocql.Query
+		tracerFactory TracerFactory
 	}
 )
 
@@ -29,7 +30,7 @@ func newQuery(
 
 func (q *query) Exec(ctx context.Context) (retError error) {
 	defer func() { q.session.handleError(retError) }()
-
+	q.maybeTrace(ctx)
 	return q.gocqlQuery.ExecContext(ctx)
 }
 
@@ -38,7 +39,7 @@ func (q *query) Scan(
 	dest ...any,
 ) (retError error) {
 	defer func() { q.session.handleError(retError) }()
-
+	q.maybeTrace(ctx)
 	return q.gocqlQuery.ScanContext(ctx, dest...)
 }
 
@@ -47,7 +48,7 @@ func (q *query) ScanCAS(
 	dest ...any,
 ) (_ bool, retError error) {
 	defer func() { q.session.handleError(retError) }()
-
+	q.maybeTrace(ctx)
 	return q.gocqlQuery.ScanCASContext(ctx, dest...)
 }
 
@@ -56,7 +57,7 @@ func (q *query) MapScan(
 	m map[string]any,
 ) (retError error) {
 	defer func() { q.session.handleError(retError) }()
-
+	q.maybeTrace(ctx)
 	return q.gocqlQuery.MapScanContext(ctx, m)
 }
 
@@ -65,11 +66,12 @@ func (q *query) MapScanCAS(
 	dest map[string]any,
 ) (_ bool, retError error) {
 	defer func() { q.session.handleError(retError) }()
-
+	q.maybeTrace(ctx)
 	return q.gocqlQuery.MapScanCASContext(ctx, dest)
 }
 
 func (q *query) Iter(ctx context.Context) Iter {
+	q.maybeTrace(ctx)
 	iter := q.gocqlQuery.IterContext(ctx)
 	return newIter(q.session, iter)
 }
@@ -94,8 +96,8 @@ func (q *query) WithTimestamp(timestamp int64) Query {
 	return newQuery(q.session, q.gocqlQuery)
 }
 
-func (q *query) WithTrace(tr gocql.Tracer) Query {
-	q.gocqlQuery.Trace(tr)
+func (q *query) WithTrace(tr TracerFactory) Query {
+	q.tracerFactory = tr
 	return newQuery(q.session, q.gocqlQuery)
 }
 
@@ -110,4 +112,13 @@ func (q *query) Idempotent(value bool) Query {
 
 func (q *query) SetSpeculativeExecutionPolicy(policy SpeculativeExecutionPolicy) Query {
 	return newQuery(q.session, q.gocqlQuery.SetSpeculativeExecutionPolicy(policy))
+}
+
+func (q *query) maybeTrace(ctx context.Context) {
+	if q.tracerFactory != nil {
+		tr := q.tracerFactory.GetTracerWithContext(ctx)
+		if tr != nil {
+			q.gocqlQuery.Trace(tr)
+		}
+	}
 }
