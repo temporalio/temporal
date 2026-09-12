@@ -5,6 +5,59 @@ package model
 
 import "fmt"
 
+type Status int
+
+const (
+	Unspecified Status = iota
+	Scheduled
+	Started
+	Completed
+	Failed
+	CancelRequested
+	Canceled
+	Terminated
+	TimedOut
+	PauseRequested
+	Paused
+	ResetRequested
+)
+
+// Dispatchability says whether a SCHEDULED attempt's next dispatch is available now, or still delayed
+// by a start_delay or retry backoff.
+type Dispatchability int
+
+const (
+	Dispatchable Dispatchability = iota // pollable now
+	StartDelayPending
+	BackoffPending
+)
+
+// AbstractState is the projection of observable internal state that the model predicts.
+type AbstractState struct {
+	Status          Status
+	AttemptCount    int32
+	Dispatchability Dispatchability
+	ResetKeepPaused bool // a deferred reset carries the pause through to the attempt it starts
+}
+
+// Config captures the start-time options that change transition behavior.
+type Config struct {
+	HasScheduleToClose bool
+	HasScheduleToStart bool
+	HasHeartbeat       bool
+	HasStartDelay      bool
+	MaxAttempts        int32 // 0 = unlimited
+
+	// NonRetryableTimeouts are the timeout elapses whose failure the retry policy refuses to retry,
+	// so that the timeout closes the activity instead of scheduling another attempt.
+	NonRetryableTimeouts []EventType
+
+	// RetryOutlivesScheduleToClose says a retry backoff would run past the schedule-to-close
+	// deadline. The server does not wait for an attempt it could never dispatch, so the failure or
+	// timeout that would have been retried closes the activity instead.
+	RetryOutlivesScheduleToClose bool
+}
+
 // EventType enumerates the events a driver can realize.
 type EventType int
 
@@ -101,6 +154,70 @@ var (
 	StartDelayElapses                               = Event{Type: StartDelayElapsesType}
 	BackoffElapses                                  = Event{Type: BackoffElapsesType}
 )
+
+// ErrorKind is the user facing error the model expects for a call.
+type ErrorKind int
+
+const (
+	NoError ErrorKind = iota
+	FailedPrecondition
+	NotFound
+	InvalidArgument
+)
+
+// Terminal reports whether the activity has reached a terminal state.
+func (s Status) Terminal() bool {
+	switch s {
+	case Completed, Failed, Canceled, Terminated, TimedOut:
+		return true
+	default:
+		return false
+	}
+}
+
+func (d Dispatchability) String() string {
+	switch d {
+	case Dispatchable:
+		return "Dispatchable"
+	case StartDelayPending:
+		return "StartDelayPending"
+	case BackoffPending:
+		return "BackoffPending"
+	default:
+		return "Dispatchability(?)"
+	}
+}
+
+func (s Status) String() string {
+	switch s {
+	case Unspecified:
+		return "Unspecified"
+	case Scheduled:
+		return "Scheduled"
+	case Started:
+		return "Started"
+	case CancelRequested:
+		return "CancelRequested"
+	case Completed:
+		return "Completed"
+	case Failed:
+		return "Failed"
+	case Canceled:
+		return "Canceled"
+	case Terminated:
+		return "Terminated"
+	case TimedOut:
+		return "TimedOut"
+	case Paused:
+		return "Paused"
+	case PauseRequested:
+		return "PauseRequested"
+	case ResetRequested:
+		return "ResetRequested"
+	default:
+		return "Status(?)"
+	}
+}
 
 // String is a label for an event type.
 func (t EventType) String() string {
