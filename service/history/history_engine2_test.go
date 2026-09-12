@@ -2406,14 +2406,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_OrphanedCompletedCur
 	s.config.EnableWorkflowIdReuseStartTimeValidation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
 
 	sRequest := makeMockSignalWithStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE)
-	brandNewExecutionRequest := mock.MatchedBy(func(request *persistence.CreateWorkflowExecutionRequest) bool {
-		return request.Mode == persistence.CreateWorkflowModeBrandNew
-	})
-	updateExecutionRequest := mock.MatchedBy(func(request *persistence.CreateWorkflowExecutionRequest) bool {
-		return request.Mode == persistence.CreateWorkflowModeUpdateCurrent &&
-			request.PreviousRunID == s.tv.RunID() &&
-			request.PreviousLastWriteVersion == common.EmptyVersion
-	})
+	var currentExecutionLastRunningClock int64
 	conditionFailedErr := makeOrphanedCurrentExecutionConflict(
 		s.tv,
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
@@ -2424,13 +2417,31 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_OrphanedCompletedCur
 		&persistence.GetCurrentExecutionResponse{RunID: s.tv.RunID()}, nil)
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
 		nil, serviceerror.NewNotFound("mutable state missing"))
-	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), brandNewExecutionRequest).Return(
-		nil, conditionFailedErr)
-	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), updateExecutionRequest).Return(
-		tests.CreateWorkflowExecutionResponse, nil)
+	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), mock.MatchedBy(func(request *persistence.CreateWorkflowExecutionRequest) bool {
+		return request.Mode == persistence.CreateWorkflowModeBrandNew
+	})).DoAndReturn(
+		func(_ context.Context, _ *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error) {
+			var err error
+			currentExecutionLastRunningClock, err = s.mockShard.GenerateTaskID()
+			if err != nil {
+				return nil, err
+			}
+			return nil, conditionFailedErr
+		},
+	)
+	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), mock.MatchedBy(func(request *persistence.CreateWorkflowExecutionRequest) bool {
+		return request.Mode == persistence.CreateWorkflowModeUpdateCurrent &&
+			request.PreviousRunID == s.tv.RunID() &&
+			request.PreviousLastWriteVersion == common.EmptyVersion
+	})).DoAndReturn(
+		func(_ context.Context, request *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error) {
+			s.assertWorkflowLastRunningClockUpdated(currentExecutionLastRunningClock, request)
+			return tests.CreateWorkflowExecutionResponse, nil
+		},
+	)
 
 	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
-	s.Nil(err)
+	s.NoError(err)
 	s.NotNil(resp)
 	s.True(resp.Started)
 	s.NotEmpty(resp.GetRunId())

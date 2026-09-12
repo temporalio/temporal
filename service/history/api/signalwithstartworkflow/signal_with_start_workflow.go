@@ -370,6 +370,16 @@ func createAsCurrent(
 		return err
 	}
 
+	// If current workflow is closed after the original snapshot was prepared,
+	// LastRunningClock in that snapshot can be smaller than the current row's,
+	// causing the new workflow to be marked as zombie in the standby cluster.
+	updateExecutionInfo, updatedWorkflowEventBatches, err := mutableState.UpdateLastRunningClock(newWorkflowEventsSeq)
+	if err != nil {
+		return err
+	}
+	newWorkflow.ExecutionInfo = updateExecutionInfo
+	newWorkflowEventsSeq = updatedWorkflowEventBatches
+
 	return newWorkflowLease.GetContext().CreateWorkflowExecution(
 		ctx,
 		shardContext,
