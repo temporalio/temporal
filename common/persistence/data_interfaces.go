@@ -305,6 +305,10 @@ type (
 		State             *persistencespb.WorkflowMutableState
 		DBRecordVersion   int64
 		MutableStateStats MutableStateStatistics
+		// TimerInfoBlobs contains user timer entries that were left encoded when
+		// loading the state, in which case State.TimerInfos is empty. Decoding is
+		// deferred until an entry is actually accessed.
+		TimerInfoBlobs map[string]*commonpb.DataBlob
 	}
 
 	// SetWorkflowExecutionRequest is used to overwrite the info of a workflow execution
@@ -385,8 +389,12 @@ type (
 		// TODO deprecate NextEventID in favor of DBRecordVersion
 		NextEventID int64
 
-		ActivityInfos       map[int64]*persistencespb.ActivityInfo
-		TimerInfos          map[string]*persistencespb.TimerInfo
+		ActivityInfos map[int64]*persistencespb.ActivityInfo
+		TimerInfos    map[string]*persistencespb.TimerInfo
+		// TimerInfoBlobs holds user timer entries that were never decoded in
+		// memory. They are persisted verbatim, avoiding a decode/encode round
+		// trip, and are disjoint from TimerInfos.
+		TimerInfoBlobs      map[string]*commonpb.DataBlob
 		ChildExecutionInfos map[int64]*persistencespb.ChildExecutionInfo
 		RequestCancelInfos  map[int64]*persistencespb.RequestCancelInfo
 		SignalInfos         map[int64]*persistencespb.SignalInfo
