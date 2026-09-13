@@ -42,6 +42,7 @@ type BacklogManagerTestSuite struct {
 	logger     *testlogger.TestLogger
 	blm        backlogManager
 	controller *gomock.Controller
+	tqCtx      context.Context
 	cancelCtx  context.CancelFunc
 	taskMgr    *testTaskManager
 	ptqMgr     *MockphysicalTaskQueueManager
@@ -98,13 +99,12 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 	s.ptqMgr.EXPECT().GetFairnessWeightOverrides().AnyTimes().Return(fairnessWeightOverrides{ /* To avoid deadlock with gomock method */ })
 	s.ptqMgr.EXPECT().StartScaleManager(gomock.Any()).AnyTimes()
 
-	var ctx context.Context
-	ctx, s.cancelCtx = context.WithCancel(context.Background())
+	s.tqCtx, s.cancelCtx = context.WithCancel(context.Background())
 	s.T().Cleanup(s.cancelCtx)
 
 	if s.fairness {
 		s.blm = newFairBacklogManager(
-			ctx,
+			s.tqCtx,
 			s.ptqMgr,
 			tlCfg,
 			s.taskMgr,
@@ -117,7 +117,7 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 		)
 	} else if s.newMatcher {
 		s.blm = newPriBacklogManager(
-			ctx,
+			s.tqCtx,
 			s.ptqMgr,
 			tlCfg,
 			s.taskMgr,
@@ -129,7 +129,7 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 		)
 	} else {
 		s.blm = newBacklogManager(
-			ctx,
+			s.tqCtx,
 			s.ptqMgr,
 			tlCfg,
 			s.taskMgr,
@@ -148,6 +148,25 @@ func (s *BacklogManagerTestSuite) setupToCaptureTasks() {
 		s.capturedTasksSlice = append(s.capturedTasksSlice, t)
 		return nil
 	}).AnyTimes()
+}
+
+func (s *BacklogManagerTestSuite) TestStopCancelsBacklogManagerContext() {
+	var backlogCtx context.Context
+	switch blm := s.blm.(type) {
+	case *backlogManagerImpl:
+		backlogCtx = blm.tqCtx
+	case *priBacklogManagerImpl:
+		backlogCtx = blm.tqCtx
+	case *fairBacklogManagerImpl:
+		backlogCtx = blm.tqCtx
+	default:
+		s.FailNow("unknown backlog manager type")
+	}
+
+	s.Require().NoError(backlogCtx.Err())
+	s.blm.Stop()
+	s.Require().ErrorIs(backlogCtx.Err(), context.Canceled)
+	s.Require().NoError(s.tqCtx.Err())
 }
 
 func (s *BacklogManagerTestSuite) capturedTasksLen() int {

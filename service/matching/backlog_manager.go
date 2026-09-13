@@ -58,6 +58,7 @@ type (
 	backlogManagerImpl struct {
 		pqMgr            physicalTaskQueueManager
 		tqCtx            context.Context
+		tqCtxCancel      context.CancelFunc
 		db               *taskQueueDB
 		taskWriter       *taskWriter
 		taskReader       *taskReader // reads tasks from db and async matches it with poller
@@ -87,9 +88,11 @@ func newBacklogManager(
 	matchingClient matchingservice.MatchingServiceClient,
 	metricsHandler metrics.Handler,
 ) *backlogManagerImpl {
+	tqCtx, tqCtxCancel := context.WithCancel(tqCtx)
 	bmg := &backlogManagerImpl{
 		pqMgr:            pqMgr,
 		tqCtx:            tqCtx,
+		tqCtxCancel:      tqCtxCancel,
 		matchingClient:   matchingClient,
 		metricsHandler:   metricsHandler,
 		logger:           logger,
@@ -102,7 +105,7 @@ func newBacklogManager(
 	bmg.taskWriter = newTaskWriter(bmg)
 	bmg.taskReader = newTaskReader(bmg)
 	bmg.taskAckManager = newAckManager(bmg.db, logger)
-	bmg.taskGC = newTaskGC(tqCtx, bmg.db, config)
+	bmg.taskGC = newTaskGC(bmg.tqCtx, bmg.db, config)
 
 	return bmg
 }
@@ -130,6 +133,8 @@ func (c *backlogManagerImpl) Start() {
 }
 
 func (c *backlogManagerImpl) Stop() {
+	defer c.tqCtxCancel()
+
 	// Maybe try to write one final update of ack level and GC some tasks.
 	// Skip the update if we never initialized (ackLevel will be -1 in that case).
 	// Also skip if we're stopping due to lost ownership (the update will fail in that case).
