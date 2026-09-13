@@ -26,12 +26,13 @@ import (
 
 type (
 	fairBacklogManagerImpl struct {
-		pqMgr      physicalTaskQueueManager
-		config     *taskQueueConfig
-		tqCtx      context.Context
-		isDraining bool
-		db         *taskQueueDB
-		taskWriter *fairTaskWriter
+		pqMgr       physicalTaskQueueManager
+		config      *taskQueueConfig
+		tqCtx       context.Context
+		tqCtxCancel context.CancelFunc
+		isDraining  bool
+		db          *taskQueueDB
+		taskWriter  *fairTaskWriter
 
 		subqueueLock        sync.Mutex
 		subqueues           []*fairTaskReader // subqueue index -> fairTaskReader
@@ -68,11 +69,13 @@ func newFairBacklogManager(
 	// For the purposes of taskQueueDB, call this just a TaskManager. It'll return errors if we
 	// use it incorectly. TODO(fairness): consider a cleaner way of doing this.
 	taskManager := persistence.TaskManager(fairTaskManager)
+	tqCtx, tqCtxCancel := context.WithCancel(tqCtx)
 
 	bmg := &fairBacklogManagerImpl{
 		pqMgr:               pqMgr,
 		config:              config,
 		tqCtx:               tqCtx,
+		tqCtxCancel:         tqCtxCancel,
 		isDraining:          isDraining,
 		db:                  newTaskQueueDB(config, taskManager, pqMgr.QueueKey(), logger, metricsHandler, isDraining),
 		subqueuesByPriority: make(map[priorityKey]subqueueIndex),
@@ -110,6 +113,8 @@ func (c *fairBacklogManagerImpl) Start() {
 }
 
 func (c *fairBacklogManagerImpl) Stop() {
+	defer c.tqCtxCancel()
+
 	// Maybe try to write one final update of ack level. Skip the update if we never
 	// initialized. Also skip if we're stopping due to lost ownership (the update will
 	// fail in that case). Ignore any errors. Don't bother with GC, the next reload will
