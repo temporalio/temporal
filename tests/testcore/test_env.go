@@ -670,8 +670,8 @@ func (e *TestEnv) StartGlobalMetricCapture() *GlobalMetricCapture {
 }
 
 // StartNamespaceMetricCapture starts a metrics capture scoped to this test's namespace.
-// Namespace captures are safe on shared clusters because reads are restricted to
-// per-metric namespace-filtered iteration and reject non-namespaced metrics.
+// Namespace captures are safe on shared clusters because recordings are filtered
+// to this namespace as they are captured, and non-namespaced metrics are rejected on read.
 func (e *TestEnv) StartNamespaceMetricCapture() *NamespaceMetricCapture {
 	return e.StartNamespaceMetricCaptureFor(e.Namespace().String())
 }
