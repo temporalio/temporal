@@ -683,11 +683,11 @@ func (e *TestEnv) StartNamespaceMetricCaptureFor(namespaceName string) *Namespac
 		e.t.Fatal("StartNamespaceMetricCapture is unavailable because metrics capture is not enabled on this cluster")
 	}
 
-	capture := handler.StartCapture()
+	capture := newNamespaceMetricCapture(handler, namespaceName)
 	e.t.Cleanup(func() {
-		handler.StopCapture(capture)
+		handler.StopCapture(capture.capture)
 	})
-	return newNamespaceMetricCapture(capture, namespaceName)
+	return capture
 }
 
 // CloseShard closes the shard that contains the given workflow.

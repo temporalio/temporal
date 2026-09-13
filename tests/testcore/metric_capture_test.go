@@ -1,8 +1,10 @@
 package testcore
 
 import (
+	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/testing/parallelsuite"
@@ -16,52 +18,74 @@ func TestMetricCaptureSuite(t *testing.T) {
 	parallelsuite.Run(t, &MetricCaptureSuite{})
 }
 
-func (s *MetricCaptureSuite) TestNamespaceMetricCapture() {
+func TestNamespaceMetricCapture(t *testing.T) {
+	t.Parallel()
+	for _, namespace := range []string{"test-ns", "other-ns", ""} {
+		t.Run(namespace, func(t *testing.T) {
+			t.Parallel()
+			handler := metricstest.NewCaptureHandler()
+			capture := newNamespaceMetricCapture(handler, namespace)
+			t.Cleanup(func() { handler.StopCapture(capture.capture) })
+			for range 100 {
+				handler.WithTags(metrics.NamespaceTag("unrelated-ns")).Counter("namespaced_metric").Record(1)
+				handler.Counter("cluster_metric").Record(1)
+			}
+			handler.WithTags(metrics.StringTag("namespace", namespace)).Counter("namespaced_metric").Record(2)
+			handler.Counter("namespaced_metric").Record(3, metrics.StringTag("namespace", namespace))
+			expected := []*metricstest.CapturedRecording{
+				{Value: int64(2), Tags: map[string]string{"namespace": namespace}},
+				{Value: int64(3), Tags: map[string]string{"namespace": namespace}},
+			}
+			require.Equal(t, metricstest.CaptureSnapshot{"namespaced_metric": expected}, capture.capture.Snapshot())
+			require.Equal(t, expected, capture.Metric("namespaced_metric"))
+			require.Equal(t, expected[1:], capture.CollectMetric("namespaced_metric", func(rec *metricstest.CapturedRecording) bool {
+				return rec.Value == int64(3)
+			}))
+			require.Empty(t, capture.Metric("absent_metric"))
+			require.PanicsWithValue(t, collectMetricNilKeepPanic, func() { capture.CollectMetric("namespaced_metric", nil) })
+			require.PanicsWithValue(t,
+				`metric "cluster_metric" is not namespace-scoped; use GlobalMetricCapture instead`,
+				func() { capture.Metric("cluster_metric") },
+			)
+			handler.Counter("namespaced_metric").Record(4)
+			require.PanicsWithValue(t,
+				`metric "namespaced_metric" is not namespace-scoped; use GlobalMetricCapture instead`,
+				func() { capture.Metric("namespaced_metric") },
+			)
+		})
+	}
+}
+
+func TestNamespaceMetricCaptureConcurrent(t *testing.T) {
+	t.Parallel()
 	handler := metricstest.NewCaptureHandler()
-	capture := handler.StartCapture()
-	s.T().Cleanup(func() {
-		handler.StopCapture(capture)
+	first := newNamespaceMetricCapture(handler, "first")
+	second := newNamespaceMetricCapture(handler, "second")
+	t.Cleanup(func() {
+		handler.StopCapture(first.capture)
+		handler.StopCapture(second.capture)
 	})
-
-	s.Run("returns only recordings for the test namespace", func(s *MetricCaptureSuite) {
-		// Record the same metric for two namespaces.
-		const metricName = "namespaced_metric"
-		metricsHandler := handler.WithTags(metrics.NamespaceTag("test-ns"))
-		metricsHandler.Counter(metricName).Record(1)
-		handler.WithTags(metrics.NamespaceTag("other-ns")).Counter(metricName).Record(1)
-
-		namespaceCapture := newNamespaceMetricCapture(capture, "test-ns")
-
-		recordings := namespaceCapture.Metric(metricName)
-		s.Len(recordings, 1)
-		s.Equal("test-ns", recordings[0].Tags["namespace"])
-	})
-
-	s.Run("can capture for an explicit namespace", func(s *MetricCaptureSuite) {
-		const metricName = "namespaced_metric_other"
-		handler.WithTags(metrics.NamespaceTag("test-ns")).Counter(metricName).Record(1)
-		handler.WithTags(metrics.NamespaceTag("other-ns")).Counter(metricName).Record(1)
-
-		namespaceCapture := newNamespaceMetricCapture(capture, "other-ns")
-
-		recordings := namespaceCapture.Metric(metricName)
-		s.Len(recordings, 1)
-		s.Equal("other-ns", recordings[0].Tags["namespace"])
-	})
-
-	s.Run("panics when the metric is not namespace-scoped", func(s *MetricCaptureSuite) {
-		// Record the metric without a namespace tag.
-		handler.Counter("cluster_metric").Record(1)
-
-		namespaceCapture := newNamespaceMetricCapture(capture, "test-ns")
-
-		s.PanicsWithValue(
-			`metric "cluster_metric" is not namespace-scoped; use GlobalMetricCapture instead`,
-			func() {
-				namespaceCapture.Metric("cluster_metric")
-			},
+	var wg sync.WaitGroup
+	for range 8 {
+		wg.Go(func() {
+			for range 100 {
+				handler.Counter("counter").Record(1, metrics.NamespaceTag("first"))
+				handler.Counter("counter").Record(2, metrics.NamespaceTag("second"))
+				handler.Counter("global").Record(3)
+				first.Metric("counter")
+				second.Metric("counter")
+			}
+		})
+	}
+	wg.Wait()
+	for _, capture := range []*NamespaceMetricCapture{first, second} {
+		require.Len(t, capture.Metric("counter"), 800)
+		require.Len(t, capture.capture.Snapshot(), 1)
+		require.PanicsWithValue(t,
+			`metric "global" is not namespace-scoped; use GlobalMetricCapture instead`,
+			func() { capture.Metric("global") },
 		)
-	})
+	}
 }
 
 func (s *MetricCaptureSuite) TestGlobalMetricCapture() {
