@@ -55,7 +55,7 @@ func (d *saaDriver) testContext() context.Context {
 // saaHandle is a handle to an activity instance.
 type saaHandle struct {
 	activityDriverState
-	cursor     *activityModelCursor // the model state reached, so driveEvent can check each event
+	model      *activityModel // the model state reached, so driveEvent can check each event
 	d          *saaDriver
 	activityID string
 	runID      string
@@ -73,7 +73,7 @@ func (d *saaDriver) driveTrace(t testing.TB, trace []model.Event) *saaHandle {
 }
 
 func (a *saaHandle) driveEvent(t testing.TB, e model.Event) {
-	driveActivityEvent(t, a, e, a.cursor)
+	driveActivityEvent(t, a, e, a.model)
 }
 
 func (a *saaHandle) testContext() context.Context {
@@ -120,7 +120,7 @@ func (d *saaDriver) start(t require.TestingT, cfg activityConfig) *saaHandle {
 	require.NoError(t, err)
 	return &saaHandle{
 		activityDriverState: activityDriverState{cfg: cfg},
-		cursor:              newActivityModelCursor(cfg),
+		model:               newActivityModel(cfg),
 		d:                   d,
 		activityID:          id,
 		runID:               resp.RunId,

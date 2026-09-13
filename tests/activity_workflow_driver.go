@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -54,7 +55,7 @@ func (d *wfaDriver) testContext() context.Context {
 // wfaHandle is a handle to a workflow-scheduled activity.
 type wfaHandle struct {
 	activityDriverState
-	cursor     *activityModelCursor // the model state reached, so driveEvent can check each event
+	model      *activityModel // the model state reached, so driveEvent can check each event
 	d          *wfaDriver
 	run        sdkclient.WorkflowRun
 	workflowID string
@@ -66,6 +67,9 @@ type wfaHandle struct {
 // driveTrace starts a workflow, which schedules an activity, and then advances that activity
 // through a sequence of events (a 'trace'). Returns a handle to the activity at the reached state.
 func (d *wfaDriver) driveTrace(t *testing.T, trace []model.Event) *wfaHandle {
+	require.Falsef(t, d.cfg.StartDelay > 0 || slices.ContainsFunc(trace, func(e model.Event) bool {
+		return e.Type == model.StartDelayElapsesType
+	}), "workflow activity does not support start delay")
 	a := d.start(t, d.cfg.forTrace(trace))
 	for _, e := range trace {
 		a.driveEvent(t, e)
@@ -74,7 +78,7 @@ func (d *wfaDriver) driveTrace(t *testing.T, trace []model.Event) *wfaHandle {
 }
 
 func (a *wfaHandle) driveEvent(t testing.TB, e model.Event) {
-	driveActivityEvent(t, a, e, a.cursor)
+	driveActivityEvent(t, a, e, a.model)
 }
 
 func (a *wfaHandle) testContext() context.Context {
@@ -117,6 +121,7 @@ func (a *wfaHandle) awaitDispatchDelay(t testing.TB, e model.Event) {
 }
 
 func (d *wfaDriver) start(t *testing.T, cfg activityConfig) *wfaHandle {
+	cfg.StartDelay = 0 // WFA does not support start delay, but SAA/WFA tests often share config
 	wfTQ := testcore.RandomizeStr("wfa-wf")
 	actTQ := testcore.RandomizeStr("wfa-act")
 	const actID = "act"
@@ -135,7 +140,7 @@ func (d *wfaDriver) start(t *testing.T, cfg activityConfig) *wfaHandle {
 	require.NoError(t, err)
 	a := &wfaHandle{
 		activityDriverState: activityDriverState{cfg: cfg},
-		cursor:              newActivityModelCursor(cfg),
+		model:               newActivityModel(cfg),
 		d:                   d,
 		run:                 run,
 		workflowID:          wfID,

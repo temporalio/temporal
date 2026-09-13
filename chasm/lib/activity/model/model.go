@@ -39,16 +39,6 @@ func Initial(cfg Config) AbstractState {
 	return s
 }
 
-func noop(s AbstractState) Outcome { return Outcome{Next: s, Reject: NoError} }
-
-func impossibleElapse(s AbstractState) Outcome {
-	o := noop(s)
-	o.ImpossibleTimeWindowElapse = true
-	return o
-}
-
-func reject(s AbstractState, k ErrorKind) Outcome { return Outcome{Next: s, Reject: k} }
-
 // Transition is the model's total transition function: given the config, the current state, and an
 // event, it returns an Outcome.
 func Transition(cfg Config, s AbstractState, e Event) Outcome {
@@ -63,10 +53,8 @@ func Transition(cfg Config, s AbstractState, e Event) Outcome {
 		return poll(cfg, s, e)
 	case HeartbeatType:
 		return heartbeat(cfg, s, e)
-	case RespondCompletedType:
+	case RespondCompletedType, RespondCompletedByIDType:
 		return respondCompleted(cfg, s, e)
-	case RespondCompletedByIDType:
-		return respondCompletedByID(cfg, s, e)
 	case RespondFailedType, RespondFailedByIDType:
 		return respondFailed(cfg, s, e)
 	case RespondCanceledType:
@@ -100,20 +88,9 @@ func Transition(cfg Config, s AbstractState, e Event) Outcome {
 	}
 }
 
-// Possible returns whether event type t can occur in state s. This is not related to whether an
-// error would be returned by the server. An event is always Possible, unless it is an elapse of a
-// time window that was not in effect.
-func Possible(cfg Config, s AbstractState, t EventType) bool {
-	return !Transition(cfg, s, Event{Type: t}).ImpossibleTimeWindowElapse
-}
-
-// Note: The model implies an "order of precedence": Cancel > Reset > Pause. I.e. you can Cancel in
-// {Reset,Pause}Requested, and you can Reset in PauseRequested, but neither a Pause nor a Reset will
-// undo a Cancel request.
-
 // PollActivityTaskQueue: advances a dispatchable Scheduled attempt to Started.
 func poll(_ Config, s AbstractState, _ Event) Outcome {
-	if s.Status != Scheduled || s.Dispatchability != Dispatchable {
+	if !FindsTask(s) {
 		return noop(s)
 	}
 	n := s
@@ -121,43 +98,38 @@ func poll(_ Config, s AbstractState, _ Event) Outcome {
 	return Outcome{Next: n}
 }
 
-// Worker RespondActivityTaskCompleted with task token: completes an in-progress attempt.
-func respondCompleted(_ Config, s AbstractState, _ Event) Outcome {
-	switch s.Status {
-	case Started, PauseRequested, CancelRequested, ResetRequested:
+// RespondActivityTaskCompleted (by task token, from a worker) or
+// RespondActivityTaskCompletedById (from a service completing the activity out of band). Completes
+// an in-progress attempt. Only the by-id form can complete an activity whose attempt has not
+// started.
+func respondCompleted(_ Config, s AbstractState, e Event) Outcome {
+	completed := func() Outcome {
 		n := s
 		n.Status = Completed
 		return Outcome{Next: n}
+	}
+	switch s.Status {
+	case Started, PauseRequested, CancelRequested, ResetRequested:
+		return completed()
 	case Scheduled, Paused:
+		if e.Type == RespondCompletedByIDType {
+			return completed()
+		}
 		return reject(s, NotFound)
 	default:
 		panic("model does not handle RespondCompleted while in status " + s.Status.String())
 	}
 }
 
-// RespondActivityTaskCompletedById: completes the activity without a task token. Unlike the
-// token-based form it can land before any worker has started an attempt, force-completing the
-// activity.
-func respondCompletedByID(_ Config, s AbstractState, _ Event) Outcome {
-	switch s.Status {
-	case Scheduled, Paused, Started, PauseRequested, CancelRequested, ResetRequested:
-		n := s
-		n.Status = Completed
-		return Outcome{Next: n}
-	default:
-		panic("model does not handle RespondCompletedByID while in status " + s.Status.String())
-	}
-}
-
-// Worker RespondActivityTaskFailed, by task token or by id: fails an in-progress attempt.
+// RespondActivityTaskFailed (by task token, from worker) or RespondActivityTaskFailedById.
+// (from a service completing the activity out of band). Fails an in-progress attempt.
 func respondFailed(cfg Config, s AbstractState, e Event) Outcome {
-	retriesRemaining := cfg.MaxAttempts == 0 || s.AttemptCount < cfg.MaxAttempts
 	switch s.Status {
 	case ResetRequested:
 		return applyDeferredReset(s)
 	case Started, PauseRequested:
 		n := s
-		if isRetryableFailure(cfg, e) && retriesRemaining {
+		if isRetryableFailure(cfg, e) && s.retriesRemaining(cfg) {
 			n.Status = Scheduled
 			n.Dispatchability = BackoffPending // the retry waits for the backoff interval
 			if s.Status == PauseRequested {
@@ -174,11 +146,16 @@ func respondFailed(cfg Config, s AbstractState, e Event) Outcome {
 		n.Status = Failed
 		return Outcome{Next: n}
 	case Scheduled, Paused:
-		return reject(s, NotFound) // task token invalid
+		// No attempt is in progress to fail.
+		return reject(s, NotFound)
 	default:
 		panic("model does not handle RespondFailed while in status " + s.Status.String())
 	}
 }
+
+// Note: The model implies an "order of precedence": Cancel > Reset > Pause. I.e. you can Cancel in
+// {Reset,Pause}Requested, and you can Reset in PauseRequested, but neither a Pause nor a Reset will
+// undo a Cancel request.
 
 // Worker RespondActivityTaskCanceled with task token: cancels an in-progress attempt for which
 // cancellation has been requested.
@@ -395,6 +372,28 @@ func backoffElapses(_ Config, s AbstractState, _ Event) Outcome {
 
 // helpers
 
+// Possible returns whether event type t can occur in state s. This is not related to whether an
+// error would be returned by the server. An event is always Possible, unless it is an elapse of a
+// time window that was not in effect.
+func Possible(cfg Config, s AbstractState, t EventType) bool {
+	return !Transition(cfg, s, Event{Type: t}).ImpossibleTimeWindowElapse
+}
+
+// FindsTask reports whether a poll would find a task to start.
+func FindsTask(s AbstractState) bool {
+	return s.Status == Scheduled && s.Dispatchability == Dispatchable
+}
+
+func noop(s AbstractState) Outcome { return Outcome{Next: s, Reject: NoError} }
+
+func impossibleElapse(s AbstractState) Outcome {
+	o := noop(s)
+	o.ImpossibleTimeWindowElapse = true
+	return o
+}
+
+func reject(s AbstractState, k ErrorKind) Outcome { return Outcome{Next: s, Reject: k} }
+
 // handleEventInTerminalState handles any event once the activity has reached a terminal status.
 func handleEventInTerminalState(s AbstractState, e Event) Outcome {
 	switch e.Type {
@@ -419,7 +418,7 @@ func attemptTimedOut(cfg Config, s AbstractState, e Event) Outcome {
 		return applyDeferredReset(s)
 	case Started, PauseRequested:
 		n := s
-		if isRetryableTimeout(cfg, e) && (cfg.MaxAttempts == 0 || s.AttemptCount < cfg.MaxAttempts) {
+		if isRetryableTimeout(cfg, e.Type) && s.retriesRemaining(cfg) {
 			// retry
 			n.Status = Scheduled
 			if s.Status == PauseRequested {
@@ -443,7 +442,12 @@ func attemptTimedOut(cfg Config, s AbstractState, e Event) Outcome {
 	}
 }
 
-// isRetryableFailure is whether a failure event reported by a worker should result in a retry.
+// retriesRemaining is whether the retry policy allows an attempt after the current one.
+func (s AbstractState) retriesRemaining(cfg Config) bool {
+	return cfg.MaxAttempts == 0 || s.AttemptCount < cfg.MaxAttempts
+}
+
+// isRetryableFailure is whether a reported failure should result in a retry.
 func isRetryableFailure(cfg Config, e Event) bool {
 	if cfg.RetryOutlivesScheduleToClose {
 		return false
@@ -454,8 +458,12 @@ func isRetryableFailure(cfg Config, e Event) bool {
 	}
 	switch f.Type {
 	case ApplicationFailureType, ServerFailureType:
-		return f.Retryable
-	case StartToCloseTimeoutFailureType, HeartbeatTimeoutFailureType, UnknownFailureType:
+		return !f.NonRetryable
+	case StartToCloseTimeoutFailureType:
+		return isRetryableTimeout(cfg, StartToCloseElapsesType)
+	case HeartbeatTimeoutFailureType:
+		return isRetryableTimeout(cfg, HeartbeatElapsesType)
+	case UnknownFailureType:
 		return true
 	case ScheduleToStartTimeoutFailureType, ScheduleToCloseTimeoutFailureType:
 		return false
@@ -464,12 +472,13 @@ func isRetryableFailure(cfg Config, e Event) bool {
 	}
 }
 
-// isRetryableTimeout is whether a timeout should result in a retry.
-func isRetryableTimeout(cfg Config, e Event) bool {
+// isRetryableTimeout is whether the timeout a timeout-elapse event type names should result in a
+// retry.
+func isRetryableTimeout(cfg Config, t EventType) bool {
 	if cfg.RetryOutlivesScheduleToClose {
 		return false
 	}
-	return !slices.Contains(cfg.NonRetryableTimeouts, e.Type)
+	return !slices.Contains(cfg.NonRetryableTimeouts, t)
 }
 
 // applyDeferredReset is triggered by failure or timeout. It consumes the pause intent stored while
@@ -477,6 +486,7 @@ func isRetryableTimeout(cfg Config, e Event) bool {
 func applyDeferredReset(s AbstractState) Outcome {
 	n := s
 	n.AttemptCount = 1
+	n.ResetKeepPaused = false
 	if s.ResetKeepPaused {
 		n.Status = Paused
 	} else {
