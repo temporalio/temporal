@@ -20,9 +20,17 @@ func TestMetricCaptureSuite(t *testing.T) {
 
 func TestNamespaceMetricCapture(t *testing.T) {
 	t.Parallel()
-	for _, namespace := range []string{"test-ns", "other-ns", ""} {
-		t.Run(namespace, func(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		namespace string
+	}{
+		{name: "test-ns", namespace: "test-ns"},
+		{name: "other-ns", namespace: "other-ns"},
+		{name: "empty-namespace", namespace: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			namespace := tc.namespace
 			handler := metricstest.NewCaptureHandler()
 			capture := newNamespaceMetricCapture(handler, namespace)
 			t.Cleanup(func() { handler.StopCapture(capture.capture) })

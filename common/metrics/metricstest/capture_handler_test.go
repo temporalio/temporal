@@ -72,25 +72,3 @@ func TestCaptureFilterConcurrentRecording(t *testing.T) {
 	handler.Counter("counter").Record(3, metrics.NamespaceTag("wanted"))
 	require.Len(t, capture.SnapshotMetric("counter"), 800)
 }
-
-func BenchmarkCaptureSnapshotMetric(b *testing.B) {
-	handler := NewCaptureHandler()
-	capture := handler.StartCapture()
-	defer handler.StopCapture(capture)
-	for range 10000 {
-		handler.Counter("unrelated").Record(1)
-	}
-	handler.Counter("queried").Record(1)
-	b.Run("all", func(b *testing.B) {
-		b.ReportAllocs()
-		for b.Loop() {
-			capture.Snapshot()
-		}
-	})
-	b.Run("one", func(b *testing.B) {
-		b.ReportAllocs()
-		for b.Loop() {
-			capture.SnapshotMetric("queried")
-		}
-	})
-}
