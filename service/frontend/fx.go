@@ -813,6 +813,7 @@ func AdminHandlerProvider(
 	eventSerializer serialization.Serializer,
 	timeSource clock.TimeSource,
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
+	dynamicClient dynamicconfig.Client,
 	matchingClient resource.MatchingClient,
 	chasmRegistry *chasm.Registry,
 	namespaceDataMerger nsreplication.NamespaceDataMerger,
@@ -847,6 +848,7 @@ func AdminHandlerProvider(
 		chasmRegistry,
 		namespaceDataMerger,
 		schedulerClient,
+		dynamicClient,
 		taskCategoryRegistry,
 		matchingClient,
 	}

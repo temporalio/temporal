@@ -80,10 +80,7 @@ var (
 	FlagScheduleID                 = "schedule-id"
 	FlagScheduleIDAlias            = []string{"sid"}
 	FlagTarget                     = "target"
-	FlagFromVisibility             = "from-visibility"
-	FlagExecute                    = "execute"
-	FlagWorkers                    = "workers"
-	FlagOutputLog                  = "output-log"
+	FlagKey                        = "key"
 )
 
 const defaultMigrateWorkers = 5
