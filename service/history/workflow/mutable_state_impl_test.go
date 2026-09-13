@@ -8000,6 +8000,11 @@ func (s *mutableStateSuite) TestCloseTransactionTimeSkipping() {
 		accumulated := ms.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration
 		s.Require().NotNil(accumulated)
 		s.Greater(accumulated.AsDuration(), time.Duration(0))
+		protorequire.ProtoEqual(
+			s.T(),
+			ms.CurrentVersionedTransition(),
+			ms.GetExecutionInfo().TimeSkippingInfo.GetLastUpdateVersionedTransition(),
+		)
 
 		// A WorkflowExecutionTimeSkippingTransitioned event must appear in the written batches.
 		var tsEvent *historypb.HistoryEvent

@@ -437,9 +437,6 @@ func NewMutableState(
 		)
 	}
 
-	if s.executionInfo.GetTimeSkippingInfo() != nil {
-		s.wrapTimeSourceWithTimeSkipping()
-	}
 	return s
 }
 
@@ -1777,8 +1774,6 @@ func (ms *MutableStateImpl) GetRetryBackoffDuration(
 		return backoff.NoBackoff, enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET
 	}
 
-	// todo@time-skipping: time skipping is naturally supported for cron backoff, and need to
-	// confirm it is the best default policy for cron
 	return getBackoffInterval(
 		ms.timeSource.Now(),
 		info.Attempt,
@@ -1797,8 +1792,6 @@ func (ms *MutableStateImpl) GetCronBackoffDuration() time.Duration {
 		return backoff.NoBackoff
 	}
 	executionTime := timestamp.TimeValue(ms.GetExecutionInfo().GetExecutionTime())
-	// todo@time-skipping: time skipping is naturally supported for cron backoff, and need to
-	// confirm it is the best default policy for cron
 	return backoff.GetBackoffForNextSchedule(ms.executionInfo.CronSchedule, executionTime, ms.timeSource.Now())
 }
 
@@ -2978,8 +2971,6 @@ func computeDeclinedTargetVersionUpgrade(
 
 func (ms *MutableStateImpl) ContinueAsNewMinBackoff(backoffDuration *durationpb.Duration) *durationpb.Duration {
 	// lifetime of previous execution
-	// todo@time-skipping: time skipping is naturally supported for continue as new backoff, and need to
-	// make sure the backoff is correctly applied in the time skipping case
 	now := ms.timeSource.Now()
 	lifetime := max(time.Duration(0), now.Sub(ms.executionState.StartTime.AsTime().UTC()))
 	if ms.executionInfo.ExecutionTime != nil {
@@ -3168,7 +3159,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		ms.executionInfo.RootRunId = execution.GetRunId()
 	}
 
-	// todo@time-skipping: apply time skipping to WorkflowStartDelay
 	ms.executionInfo.ExecutionTime = timestamppb.New(
 		ms.executionState.StartTime.AsTime().Add(event.GetFirstWorkflowTaskBackoff().AsDuration()),
 	)
@@ -3733,8 +3723,6 @@ func (ms *MutableStateImpl) addResetPointFromCompletion(
 		}
 	}
 
-	// todo@time-skipping: time skipping is naturally supported for auto reset points, and need to
-	// decide if this the best default policy for auto reset points
 	newPoint := &workflowpb.ResetPointInfo{
 		BinaryChecksum:               binaryChecksum,
 		BuildId:                      buildId,
@@ -7865,7 +7853,6 @@ func (ms *MutableStateImpl) closeTransaction(
 		}
 	}
 
-	// todo@TimeSkipping, we can move update versioned transition to inside closeTransactionHandleWorkflowTimeSkipping
 	ms.closeTransactionTrackLastUpdateVersionedTransition(
 		transactionPolicy,
 	)

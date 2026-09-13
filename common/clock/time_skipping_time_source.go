@@ -35,14 +35,14 @@ func (ts *TimeSkippingTimeSourceWrapper) Since(t time.Time) time.Duration {
 	return ts.Now().Sub(t)
 }
 
-// AfterFunc delegates to the base TimeSource and does not apply the offset.
-// TODO@time-skipping: examine if there is any need to skip time for this method.
+// AfterFunc delegates to the base TimeSource because durations measure elapsed
+// wall-clock time rather than points on the workflow's virtual timeline.
 func (ts *TimeSkippingTimeSourceWrapper) AfterFunc(d time.Duration, f func()) Timer {
 	return ts.base.AfterFunc(d, f)
 }
 
-// NewTimer delegates to the base TimeSource and does not apply the offset.
-// TODO@time-skipping: examine if there is any need to skip time for this method.
+// NewTimer delegates to the base TimeSource because durations measure elapsed
+// wall-clock time rather than points on the workflow's virtual timeline.
 func (ts *TimeSkippingTimeSourceWrapper) NewTimer(d time.Duration) (<-chan time.Time, Timer) {
 	return ts.base.NewTimer(d)
 }
