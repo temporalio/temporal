@@ -9635,6 +9635,9 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 	if err != nil {
 		return err
 	}
+	if current.GetTimeSkippingInfo() != nil {
+		ms.wrapTimeSourceWithTimeSkipping()
+	}
 
 	ms.ClearStickyTaskQueue()
 
