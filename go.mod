@@ -46,9 +46,9 @@ require (
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/sony/gobreaker v1.0.0
 	github.com/stretchr/testify v1.11.1
-	github.com/temporalio/ringpop-go v0.0.0-20250130211428-b97329e994f7
-	github.com/temporalio/sqlparser v0.0.0-20231115171017-f4060bcfa6cb
-	github.com/temporalio/tchannel-go v1.22.1-0.20240528171429-1db37fdea938
+	github.com/temporalio/ringpop-go v0.1.0
+	github.com/temporalio/sqlparser v0.1.0
+	github.com/temporalio/tchannel-go v1.22.1
 	github.com/tidwall/btree v1.8.1
 	github.com/uber-go/tally/v4 v4.1.17
 	github.com/urfave/cli v1.22.16

@@ -23,7 +23,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	wciclient "go.temporal.io/auto-scaled-workers/wci/client"
 	computeprovider "go.temporal.io/auto-scaled-workers/wci/workflow/compute_provider"
+	"go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
@@ -95,6 +97,11 @@ func (s *DeploymentVersionSuite) SetupSuite() {
 
 		// Test reactivation cache for all versioning tests.
 		dynamicconfig.EnableVersionReactivationSignals.Key(): true,
+
+		// The compute provider registry rejects any provider that is not named here.
+		wciclient.WorkerControllerEnabledComputeProviders.Key(): []string{
+			string(iface.ComputeProviderTypeTestInvoke),
+		},
 	}))
 }
 

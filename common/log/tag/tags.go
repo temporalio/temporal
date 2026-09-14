@@ -259,6 +259,11 @@ func WorkflowBranchToken(branchToken []byte) ZapTag {
 	return NewBinaryTag("wf-branch-token", branchToken)
 }
 
+// WorkflowRequestBranchToken returns tag for a branch token supplied by the caller
+func WorkflowRequestBranchToken(branchToken []byte) ZapTag {
+	return NewBinaryTag("wf-request-branch-token", branchToken)
+}
+
 // WorkflowTreeID returns tag for WorkflowTreeID
 func WorkflowTreeID(treeID string) ZapTag {
 	return NewStringTag("wf-tree-id", treeID)
