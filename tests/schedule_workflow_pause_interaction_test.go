@@ -74,17 +74,19 @@ func expectScheduleProgressesWhilePaused(policy enumspb.ScheduleOverlapPolicy) b
 }
 
 func (s *ScheduleV1Suite) TestWorkflowPauseInteraction() {
-	s.T().Run("Overlap", func(t *testing.T) { runSchedulePauseOverlapMatrix(t, routeToV1Scheduler) })
-	s.T().Run("UnpauseRecovery", func(t *testing.T) { runSchedulePauseRecoveryMatrix(t, routeToV1Scheduler) })
-	s.T().Run("ContinueAsNew", func(t *testing.T) { testSchedulePauseContinueAsNew(t, routeToV1Scheduler) })
-	s.T().Run("Reset", func(t *testing.T) { testSchedulePauseReset(t, routeToV1Scheduler) })
+	t := s.T()
+	t.Run("Overlap", func(t *testing.T) { runSchedulePauseOverlapMatrix(t, routeToV1Scheduler) })
+	t.Run("UnpauseRecovery", func(t *testing.T) { runSchedulePauseRecoveryMatrix(t, routeToV1Scheduler) })
+	t.Run("ContinueAsNew", func(t *testing.T) { testSchedulePauseContinueAsNew(t, routeToV1Scheduler) })
+	t.Run("Reset", func(t *testing.T) { testSchedulePauseReset(t, routeToV1Scheduler) })
 }
 
 func (s *ScheduleCHASMSuite) TestWorkflowPauseInteraction() {
-	s.T().Run("Overlap", func(t *testing.T) { runSchedulePauseOverlapMatrix(t, routeToCHASMScheduler) })
-	s.T().Run("UnpauseRecovery", func(t *testing.T) { runSchedulePauseRecoveryMatrix(t, routeToCHASMScheduler) })
-	s.T().Run("ContinueAsNew", func(t *testing.T) { testSchedulePauseContinueAsNew(t, routeToCHASMScheduler) })
-	s.T().Run("Reset", func(t *testing.T) { testSchedulePauseReset(t, routeToCHASMScheduler) })
+	t := s.T()
+	t.Run("Overlap", func(t *testing.T) { runSchedulePauseOverlapMatrix(t, routeToCHASMScheduler) })
+	t.Run("UnpauseRecovery", func(t *testing.T) { runSchedulePauseRecoveryMatrix(t, routeToCHASMScheduler) })
+	t.Run("ContinueAsNew", func(t *testing.T) { testSchedulePauseContinueAsNew(t, routeToCHASMScheduler) })
+	t.Run("Reset", func(t *testing.T) { testSchedulePauseReset(t, routeToCHASMScheduler) })
 }
 
 func runSchedulePauseOverlapMatrix(t *testing.T, routeToScheduler schedulerRoute) {
