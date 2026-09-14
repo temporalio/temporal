@@ -2399,7 +2399,7 @@ func nexusCompletedEvent() *historypb.HistoryEvent {
 func (s *stateBuilderSuite) TestApplyStateMachineEvent() {
 	hsmErr := serviceerror.NewInternal("hsm apply failed")
 	chasmErr := serviceerror.NewInternal("chasm unavailable")
-	notFound := serviceerror.NewNotFound("nexus operation not found for scheduled event ID")
+	nexusOpNotFoundError := serviceerror.NewNotFoundf("nexus operation not found for scheduled event ID %d", 5)
 
 	testCases := []struct {
 		name             string
@@ -2469,24 +2469,24 @@ func (s *stateBuilderSuite) TestApplyStateMachineEvent() {
 			wantHSMApplied: true,
 		},
 		{
-			// CHASM doesn't own the op (NotFound); the event falls back to the HSM tree.
-			name:             "non-create, chasm not found, falls back to hsm",
+			// CHASM does not contain the op; the event falls back to the HSM tree.
+			name:             "non-create, chasm component not found, falls back to hsm",
 			event:            nexusCompletedEvent(),
-			tc:               nexusRebuildCase{chasmEnabled: true, chasmHasDef: true, chasmApplyErr: notFound},
+			tc:               nexusRebuildCase{chasmEnabled: true, chasmHasDef: true, chasmApplyErr: nexusOpNotFoundError},
 			wantChasmApplied: true,
 			wantHSMApplied:   true,
 		},
 		{
-			// CHASM NotFound falls back to HSM, whose error is then surfaced as-is.
-			name:             "non-create, chasm not found, hsm error surfaced",
+			// A missing operation falls back to HSM, whose error is then surfaced as-is.
+			name:             "non-create, chasm component not found, hsm error surfaced",
 			event:            nexusCompletedEvent(),
-			tc:               nexusRebuildCase{chasmEnabled: true, chasmHasDef: true, chasmApplyErr: notFound, hsmApplyErr: hsmErr},
+			tc:               nexusRebuildCase{chasmEnabled: true, chasmHasDef: true, chasmApplyErr: nexusOpNotFoundError, hsmApplyErr: hsmErr},
 			wantChasmApplied: true,
 			wantHSMApplied:   true,
 			wantErr:          hsmErr,
 		},
 		{
-			// A genuine (non-NotFound) CHASM error is surfaced, not fallen back to HSM.
+			// A genuine (non-not-found) CHASM error is surfaced, not fallen back to HSM.
 			name:             "non-create, chasm error surfaced without hsm fallback",
 			event:            nexusCompletedEvent(),
 			tc:               nexusRebuildCase{chasmEnabled: true, chasmHasDef: true, chasmApplyErr: chasmErr},

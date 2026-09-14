@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -1109,7 +1110,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 	w := worker.New(env.SdkClient(), taskQueue, worker.Options{})
 	w.RegisterWorkflow(callerWF)
 	s.NoError(w.Start())
-	defer w.Stop()
+	// Make it possible to stop early as well as on return.
+	stopWorker := sync.OnceFunc(w.Stop)
+	defer stopWorker()
 
 	// Wait for the handler to be called by checking for the NexusOperationStarted event.
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -1308,14 +1311,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 	s.NoError(err)
 
 	resetHist1 := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: resp.RunId})
-	if chasmEnabled {
-		// Reset reapply is HSM-only, so a CHASM-owned operation's completion is not reapplied, though
-		// the reset itself must still succeed. Becomes RequireHistoryEvent on both rails once
-		// https://github.com/temporalio/temporal/issues/11384 is fixed.
-		s.RequireNoHistoryEvent(resetHist1, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
-	} else {
-		s.RequireHistoryEvent(resetHist1, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
-	}
+	s.RequireHistoryEvent(resetHist1, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
 
 	// Reset the workflow again to the same point with enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS option
 	// and verify that the completion event has been excluded.
@@ -1331,6 +1327,36 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 
 	resetHist2 := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: resp.RunId})
 	s.RequireNoHistoryEvent(resetHist2, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
+
+	// Reset once more, this time to an event before the operation was scheduled. NexusOperationScheduled is a command
+	// event and is never cherry-picked, so the rebuilt tree has no such operation, while the reapply batch still
+	// carries the operation's Started and Completed events. Those belong to an operation in neither tree: they must be
+	// skipped and the reset must still succeed.
+	//
+	// Stop the worker first. Unlike the two resets above, this reset point precedes the
+	// ScheduleNexusOperation command, so a running worker would replay callerWF on the reset run and schedule the
+	// operation again which would cause races with the history assertions below.
+	stopWorker()
+
+	nexusScheduledEvent := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED)
+	preScheduleIdx := slices.IndexFunc(hist, func(e *historypb.HistoryEvent) bool {
+		return e.EventType == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED && e.EventId < nexusScheduledEvent.EventId
+	})
+	s.NotEqual(-1, preScheduleIdx, "expected a WorkflowTaskCompleted before NexusOperationScheduled")
+
+	resp, err = env.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 env.Namespace().String(),
+		WorkflowExecution:         wfExec,
+		Reason:                    "test",
+		RequestId:                 uuid.NewString(),
+		WorkflowTaskFinishEventId: hist[preScheduleIdx].EventId,
+	})
+	s.NoError(err,
+		"resetting to before the operation was scheduled must skip the orphaned Nexus events, not fail on them")
+
+	resetHist3 := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: resp.RunId})
+	s.RequireNoHistoryEvent(resetHist3, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
+	s.RequireNoHistoryEvent(resetHist3, enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED)
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionBeforeStart(chasmEnabled bool) {

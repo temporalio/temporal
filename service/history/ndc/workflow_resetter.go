@@ -5,6 +5,7 @@ package ndc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -44,6 +45,10 @@ const (
 
 var (
 	errWorkflowResetterMaxChildren = serviceerror.NewInvalidArgumentf("WorkflowResetter encountered max allowed children [%d] while resetting.", maxChildrenInResetMutableState)
+	// errChasmDisabledWithNodes is returned when reapply cannot reach a CHASM operation because the tree was not
+	// hydrated even though the workflow holds CHASM nodes.
+	errChasmDisabledWithNodes = serviceerror.NewInternal(
+		"cannot reapply CHASM event: CHASM is disabled for this workflow but it has CHASM nodes")
 )
 
 type (
@@ -1110,22 +1115,22 @@ func reapplyEvents(
 			}
 		default:
 			// Nexus operations (and other state-machine-backed components) can be backed by either the HSM tree or the
-			// CHASM tree, and both coexist on the same mutable state. An op missing from the HSM tree is skipped
-			// rather than looked up in CHASM; see cherryPickHSMEvent.
-			outcome, err := cherryPickHSMEvent(mutableState, stateMachineRegistry, event, resetReapplyExcludeTypes, isReset, logger)
+			// CHASM tree, and both coexist on the same mutable state. HSM is tried first; an op it doesn't define or
+			// doesn't contain falls through to CHASM.
+			outcome, err := cherryPickHSMEvent(mutableState, stateMachineRegistry, event, resetReapplyExcludeTypes)
 			if err != nil {
 				return reappliedEvents, err
 			}
 			if outcome == cherryPickFallback {
-				// HSM doesn't define this event type: try the CHASM tree.
-				outcome, err = cherryPickChasmEvent(ctx, mutableState, chasmWorkflowRegistry, event, resetReapplyExcludeTypes)
+				// HSM either doesn't define this event type or doesn't contain the component: try the CHASM tree.
+				outcome, err = cherryPickChasmEvent(ctx, mutableState, chasmWorkflowRegistry, event, resetReapplyExcludeTypes, isReset, logger)
 				if err != nil {
 					return reappliedEvents, err
 				}
 			}
 			if outcome != cherryPickApplied {
-				// Skipped for one of three reasons: not cherry-pickable, the component is missing from the
-				// HSM tree, or neither framework defines the event type. Only reapply hardcoded events
+				// Skipped for one of three reasons: not cherry-pickable, the component is missing from both
+				// trees, or neither framework defines the event type. Only reapply hardcoded events
 				// above or ones cherry-picked in HSM or CHASM.
 				continue
 			}
@@ -1152,8 +1157,8 @@ const (
 	// (e.g. excluded by reset-reapply-exclude-types, or not a cherry-pickable transition). The event
 	// must be skipped, NOT routed to the other framework, to avoid double-applying.
 	cherryPickSkipped
-	// cherryPickFallback: this framework doesn't define the event type, so the caller should try the
-	// other framework. A component missing from this framework's tree is skipped, not a fallback.
+	// cherryPickFallback: this framework doesn't own the event: it either doesn't define the event type
+	// or doesn't contain the component, so the caller should try the other framework.
 	cherryPickFallback
 )
 
@@ -1163,8 +1168,6 @@ func cherryPickHSMEvent(
 	stateMachineRegistry *hsm.Registry,
 	event *historypb.HistoryEvent,
 	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
-	isReset bool,
-	logger log.Logger,
 ) (cherryPickOutcome, error) {
 	def, ok := stateMachineRegistry.EventDefinition(event.GetEventType())
 	if !ok {
@@ -1174,12 +1177,8 @@ func cherryPickHSMEvent(
 	if err := def.CherryPick(mutableState.HSM(), event, resetReapplyExcludeTypes); err != nil {
 		switch {
 		case errors.Is(err, hsm.ErrStateMachineNotFound):
-			// The op isn't in the HSM tree. Skip rather than falling back to CHASM: on the replication
-			// path the op is usually in no tree at all, and CHASM's NotFound for a missing op would abort
-			// the whole batch. The cost is that reset reapply drops completions for CHASM-owned ops.
-			// See https://github.com/temporalio/temporal/issues/11384.
-			logSkippedOperation(mutableState, event, isReset, logger)
-			return cherryPickSkipped, nil
+			// The op isn't in the HSM tree, so it may be in the CHASM tree: fall back.
+			return cherryPickFallback, nil
 		case errors.Is(err, hsm.ErrNotCherryPickable), errors.Is(err, hsm.ErrInvalidTransition):
 			// Recognized by HSM but intentionally not cherry-pickable here; skip without falling back.
 			return cherryPickSkipped, nil
@@ -1190,12 +1189,8 @@ func cherryPickHSMEvent(
 	return cherryPickApplied, nil
 }
 
-// logSkippedOperation records an event that reapply dropped because its component is missing from the HSM tree.
-//
-// The level differs by path because the same condition means different things. On the reset path a missing component
-// means a completion is silently dropped from the reset run, which is user-visible and worth a warning. On the
-// replication path the op is usually in no tree at all, so the skip is routine and stays at debug to keep from
-// drowning out the reset case.
+// logSkippedOperation records an event that reapply dropped because its component is in neither the HSM nor the
+// CHASM tree.
 func logSkippedOperation(
 	mutableState historyi.MutableState,
 	event *historypb.HistoryEvent,
@@ -1204,10 +1199,12 @@ func logSkippedOperation(
 ) {
 	logAtLevel := logger.Debug
 	if isReset {
+		// On the reset path a missing component means a completion is silently dropped from the reset run,
+		// which is worth a warning.
 		logAtLevel = logger.Warn
 	}
 	workflowKey := mutableState.GetWorkflowKey()
-	logAtLevel("skipping reapply of event: state machine not found in HSM tree",
+	logAtLevel("skipping reapply of event: operation not found in HSM or CHASM tree",
 		tag.WorkflowNamespaceID(workflowKey.NamespaceID),
 		tag.WorkflowID(workflowKey.WorkflowID),
 		tag.WorkflowRunID(workflowKey.RunID),
@@ -1217,17 +1214,14 @@ func logSkippedOperation(
 }
 
 // cherryPickChasmEvent attempts to cherry-pick an event against the CHASM workflow tree. It mirrors cherryPickHSMEvent.
-// As the last framework tried, an event type it doesn't define is skipped: there is nothing left to fall back to.
-//
-// HSM and CHASM register the same Nexus event types, and cherryPickHSMEvent no longer falls back when a component is
-// missing from the HSM tree, so callers only reach the registry lookup below. Everything past it, including the
-// ChasmEnabled check, is unreachable until https://github.com/temporalio/temporal/issues/11384 is fixed.
 func cherryPickChasmEvent(
 	ctx context.Context,
 	mutableState historyi.MutableState,
 	chasmWorkflowRegistry *chasmworkflow.Registry,
 	event *historypb.HistoryEvent,
 	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
+	isReset bool,
+	logger log.Logger,
 ) (cherryPickOutcome, error) {
 	// The event-type lookup is a cheap, side-effect-free registry check, so it runs before consulting mutable state.
 	def, ok := chasmWorkflowRegistry.EventDefinitionByEventType(event.GetEventType())
@@ -1236,17 +1230,40 @@ func cherryPickChasmEvent(
 		return cherryPickSkipped, nil
 	}
 	if !mutableState.ChasmEnabled() {
-		// The event is a CHASM feature event, but the workflow has no CHASM tree to reapply it into. Fail loudly
-		// rather than dropping it silently: reapplying a CHASM event requires CHASM to be enabled for the workflow.
-		return cherryPickSkipped, serviceerror.NewInternalf(
-			"cannot reapply CHASM event %v during reset: CHASM is not enabled for this workflow", event.GetEventType())
+		// There is no hydrated tree to apply the event to. Workflow may still hold CHASM nodes that were never hydrated.
+		if mutableState.HasChasmNodes() {
+			// The operation this event addresses may be among those nodes, so skipping would drop the event
+			// while its operation still exists. Fail here instead and let callers (like replication) retry and
+			// potentially recover once EnableChasm is on again for the namespace.
+			return cherryPickSkipped, fmt.Errorf("%w: event type %v",
+				errChasmDisabledWithNodes, event.GetEventType())
+		}
+		// No CHASM nodes at all, so no CHASM component can own the event and skipping loses nothing.
+		// With CHASM disabled, reset always takes this path rather than the error above, because its mutable
+		// state is rebuilt fresh and so tracks no persisted nodes.
+		logSkippedOperation(mutableState, event, isReset, logger)
+		return cherryPickSkipped, nil
 	}
 	wf, chasmCtx, err := mutableState.ChasmWorkflowComponent(ctx)
 	if err != nil {
 		return cherryPickSkipped, err
 	}
 	if err := def.CherryPick(chasmCtx, wf, event, resetReapplyExcludeTypes); err != nil {
-		if errors.Is(err, chasmworkflow.ErrEventNotCherryPickable) {
+		_, isNotFound := errors.AsType[*serviceerror.NotFound](err)
+		switch {
+		case errors.Is(err, chasmworkflow.ErrEventNotCherryPickable):
+			// Recognized, but intentionally not cherry-pickable (a command event, or excluded by
+			// resetReapplyExcludeTypes). Not a missing component, so it isn't logged as one.
+			return cherryPickSkipped, nil
+		case errors.Is(err, chasm.ErrInvalidTransition):
+			// The CHASM tree owns the operation, but the event cannot apply from its current state (a duplicate
+			// NexusOperationStarted on an already-started operation, for example). Mirrors cherryPickHSMEvent's
+			// handling of hsm.ErrInvalidTransition.
+			return cherryPickSkipped, nil
+		case isNotFound:
+			// The CHASM tree doesn't contain this operation either. HSM was tried first, so the operation is in
+			// neither tree and the event has nowhere to apply.
+			logSkippedOperation(mutableState, event, isReset, logger)
 			return cherryPickSkipped, nil
 		}
 		return cherryPickSkipped, err

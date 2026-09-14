@@ -3052,6 +3052,20 @@ func (mr *MockMutableStateMockRecorder) HasBufferedEvents() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasBufferedEvents", reflect.TypeOf((*MockMutableState)(nil).HasBufferedEvents))
 }
 
+// HasChasmNodes mocks base method.
+func (m *MockMutableState) HasChasmNodes() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HasChasmNodes")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// HasChasmNodes indicates an expected call of HasChasmNodes.
+func (mr *MockMutableStateMockRecorder) HasChasmNodes() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasChasmNodes", reflect.TypeOf((*MockMutableState)(nil).HasChasmNodes))
+}
+
 // HasCompletedAnyWorkflowTask mocks base method.
 func (m *MockMutableState) HasCompletedAnyWorkflowTask() bool {
 	m.ctrl.T.Helper()

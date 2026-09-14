@@ -9,6 +9,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -452,4 +454,135 @@ func TestCancelRequestCompletedEventDefinitionApply(t *testing.T) {
 	cancellation, hasCancellation := op.Cancellation.TryGet(tcx.chasmCtx)
 	require.True(t, hasCancellation)
 	require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_SUCCEEDED, cancellation.StateMachineState())
+}
+
+// TestNexusEventDefinitionsReportMissingOperation verifies that Apply reports a serviceerror.NotFound when the
+// event's scheduled event ID has no entry in the workflow's Operations map.
+func TestNexusEventDefinitionsReportMissingOperation(t *testing.T) {
+	const unknownScheduledEventID = int64(1234)
+
+	testCases := []struct {
+		name  string
+		def   EventDefinition
+		event *historypb.HistoryEvent
+	}{
+		{
+			name: "cancel request completed",
+			def:  CancelRequestCompletedEventDefinition{},
+			event: &historypb.HistoryEvent{Attributes: &historypb.HistoryEvent_NexusOperationCancelRequestCompletedEventAttributes{
+				NexusOperationCancelRequestCompletedEventAttributes: &historypb.NexusOperationCancelRequestCompletedEventAttributes{
+					ScheduledEventId: unknownScheduledEventID,
+				},
+			}},
+		},
+		{
+			name: "cancel request failed",
+			def:  CancelRequestFailedEventDefinition{},
+			event: &historypb.HistoryEvent{Attributes: &historypb.HistoryEvent_NexusOperationCancelRequestFailedEventAttributes{
+				NexusOperationCancelRequestFailedEventAttributes: &historypb.NexusOperationCancelRequestFailedEventAttributes{
+					ScheduledEventId: unknownScheduledEventID,
+				},
+			}},
+		},
+		{
+			name: "started",
+			def:  StartedEventDefinition{},
+			event: &historypb.HistoryEvent{Attributes: &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
+				NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
+					ScheduledEventId: unknownScheduledEventID,
+					OperationToken:   "token",
+				},
+			}},
+		},
+		{
+			name: "completed",
+			def:  CompletedEventDefinition{},
+			event: &historypb.HistoryEvent{Attributes: &historypb.HistoryEvent_NexusOperationCompletedEventAttributes{
+				NexusOperationCompletedEventAttributes: &historypb.NexusOperationCompletedEventAttributes{
+					ScheduledEventId: unknownScheduledEventID,
+				},
+			}},
+		},
+		{
+			name: "failed",
+			def:  FailedEventDefinition{},
+			event: &historypb.HistoryEvent{Attributes: &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
+				NexusOperationFailedEventAttributes: &historypb.NexusOperationFailedEventAttributes{
+					ScheduledEventId: unknownScheduledEventID,
+				},
+			}},
+		},
+		{
+			name: "canceled",
+			def:  CanceledEventDefinition{},
+			event: &historypb.HistoryEvent{Attributes: &historypb.HistoryEvent_NexusOperationCanceledEventAttributes{
+				NexusOperationCanceledEventAttributes: &historypb.NexusOperationCanceledEventAttributes{
+					ScheduledEventId: unknownScheduledEventID,
+				},
+			}},
+		},
+		{
+			name: "timed out",
+			def:  TimedOutEventDefinition{},
+			event: &historypb.HistoryEvent{Attributes: &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
+				NexusOperationTimedOutEventAttributes: &historypb.NexusOperationTimedOutEventAttributes{
+					ScheduledEventId: unknownScheduledEventID,
+				},
+			}},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tcx := newTestContext(t, defaultConfig)
+			// Schedule an unrelated operation so the lookup misses on the ID rather than on an empty tree --
+			// the shape a forked replication branch actually produces.
+			_, existingKey := scheduleOperation(t, tcx)
+			require.NotEqual(t, unknownScheduledEventID, existingKey)
+
+			err := tc.def.Apply(tcx.chasmCtx, tcx.wf, tc.event)
+
+			require.ErrorAs(t, err, new(*serviceerror.NotFound),
+				"could not get a NotFound error for a a missing operation")
+			require.NotErrorIs(t, err, ErrEventNotCherryPickable,
+				"a missing operation is not the same as an event that is not cherry-pickable")
+		})
+	}
+}
+
+// TestNexusEventDefinitionsReportInvalidTransition verifies that an event which cannot apply from the operation's
+// current state reports chasm.ErrInvalidTransition.
+func TestNexusEventDefinitionsReportInvalidTransition(t *testing.T) {
+	tcx := newTestContext(t, defaultConfig)
+	scheduledEvent, key := scheduleOperation(t, tcx)
+	eventTime := time.Now().UTC()
+
+	startedEvent := func() *historypb.HistoryEvent {
+		return &historypb.HistoryEvent{
+			EventTime: timestamppb.New(eventTime),
+			Attributes: &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
+				NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
+					ScheduledEventId: scheduledEvent.EventId,
+					OperationToken:   "token",
+				},
+			},
+		}
+	}
+
+	def, ok := eventDefinitionByGoType[StartedEventDefinition](tcx.registry)
+	require.True(t, ok)
+
+	// First Started moves the operation SCHEDULED -> STARTED.
+	require.NoError(t, def.CherryPick(tcx.chasmCtx, tcx.wf, startedEvent(), nil))
+	field, ok := tcx.wf.Operations[key]
+	require.True(t, ok)
+	require.Equal(t, nexusoperationpb.OPERATION_STATUS_STARTED, field.Get(tcx.chasmCtx).GetStatus())
+
+	// A second Started is what a reapplied duplicate looks like. The operation is still in the tree, so this is a
+	// state problem, not a missing-operation problem.
+	err := def.CherryPick(tcx.chasmCtx, tcx.wf, startedEvent(), nil)
+
+	require.ErrorIs(t, err, chasm.ErrInvalidTransition)
+	require.NotErrorAs(t, err, new(*serviceerror.NotFound), "the operation is present; this is not a lookup miss")
+	require.NotErrorIs(t, err, ErrEventNotCherryPickable)
 }
