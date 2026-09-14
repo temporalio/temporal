@@ -7,7 +7,7 @@ ARG TARGETARCH
 RUN apk add --no-cache \
     ca-certificates \
     tzdata && \
-    apk upgrade --no-cache zlib && \
+    apk upgrade --no-cache zlib libcrypto3 libssl3 && \
     addgroup -g 1000 temporal && \
     adduser -u 1000 -G temporal -D temporal
 
