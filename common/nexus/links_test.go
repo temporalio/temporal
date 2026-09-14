@@ -135,7 +135,7 @@ func TestConvertNexusLinksToProtoLinks_CallbackAndNilURL(t *testing.T) {
 		logger,
 	)
 
-	// The malformed and noURL cases were silently dropped during the conversion process.
+	// The malformed and missing-URL links are dropped with a warning.
 	protorequire.ProtoSliceEqual(t, []*commonpb.Link{
 		{
 			Variant: &commonpb.Link_Callback_{

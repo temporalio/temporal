@@ -9,9 +9,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
-	"slices"
 	"strconv"
-	"strings"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
@@ -40,8 +38,7 @@ const (
 	linkEventIDKey                    = "eventID"
 	linkEventTypeKey                  = "eventType"
 	linkRequestIDKey                  = "requestID"
-	// linkComponentPathKey carries Link_Callback.component_path, repeated once per segment and in
-	// order. See ConvertLinkCallbackToNexusLink for why it repeats instead of joining.
+	// linkComponentPathKey carries Link_Callback.component_path, repeated once per segment, in order.
 	linkComponentPathKey = "componentPath"
 )
 
@@ -64,14 +61,8 @@ var (
 	))
 	rePatternBusinessID        = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathBusinessIDKey)
 	rePatternCallbackRequestID = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathCallbackRequestIDKey)
-	// The alternation is built from the same map used to render the path, so a new execution type
-	// only has to be added in one place.
-	rePatternExecutionType = fmt.Sprintf(
-		`(?P<%s>%s)`,
-		urlPathExecutionTypeKey,
-		strings.Join(sortedCallbackLinkExecutionTypes(), "|"),
-	)
-	urlPathCallbackRE = regexp.MustCompile(fmt.Sprintf(
+	rePatternExecutionType     = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathExecutionTypeKey)
+	urlPathCallbackRE          = regexp.MustCompile(fmt.Sprintf(
 		`^/namespaces/%s/%s/%s/%s/callbacks/%s$`,
 		rePatternNamespace,
 		rePatternExecutionType,
@@ -318,17 +309,6 @@ var callbackLinkExecutionTypes = map[enumspb.ExecutionType]string{
 	enumspb.EXECUTION_TYPE_NEXUS_OPERATION: "nexus-operations",
 }
 
-// sortedCallbackLinkExecutionTypes returns the path segments in a stable order, so that the path
-// regex compiled from them does not depend on Go's map iteration order.
-func sortedCallbackLinkExecutionTypes() []string {
-	segments := make([]string, 0, len(callbackLinkExecutionTypes))
-	for _, segment := range callbackLinkExecutionTypes {
-		segments = append(segments, segment)
-	}
-	slices.Sort(segments)
-	return segments
-}
-
 // callbackLinkExecutionType is the inverse of callbackLinkExecutionTypes: it maps a URL path
 // segment back onto the execution type it names.
 func callbackLinkExecutionType(segment string) (enumspb.ExecutionType, bool) {
@@ -340,11 +320,8 @@ func callbackLinkExecutionType(segment string) (enumspb.ExecutionType, bool) {
 	return enumspb.EXECUTION_TYPE_UNSPECIFIED, false
 }
 
-// ConvertLinkCallbackToNexusLink converts a Link_Callback type to a Nexus Link.
-//
-// Unlike the other converters here this one can fail: a callback link names its execution by an
-// ExecutionType that has no path segment in this build, and emitting a link that cannot be
-// parsed back is worse than reporting it.
+// ConvertLinkCallbackToNexusLink converts a Link_Callback type to a Nexus Link. It fails when the
+// callback's execution type has no URL path segment.
 func ConvertLinkCallbackToNexusLink(cb *commonpb.Link_Callback) (nexus.Link, error) {
 	execution := cb.GetExecution()
 	executionType, ok := callbackLinkExecutionTypes[execution.GetType()]
@@ -376,18 +353,12 @@ func ConvertLinkCallbackToNexusLink(cb *commonpb.Link_Callback) (nexus.Link, err
 	}
 
 	if componentPath := cb.GetComponentPath(); len(componentPath) > 0 {
-		// One repeated query parameter per segment, rather than a single joined value. A component
-		// path ends in a user-supplied ID (an update ID is only length-validated, so it can hold
-		// any character), which means a joined encoding would need to escape the delimiter within
-		// each segment before joining and unescape after splitting: a second escaping layer on top
-		// of the URL's own, hand-rolled, for the parser to get wrong. Repeating the key lets
-		// net/url escape each segment independently and hands back the slice as it went in.
+		// Each segment is its own value of the same key. Encode sorts by key but keeps each key's
+		// values in insertion order, so the segment order survives.
 		values := url.Values{}
 		for _, segment := range componentPath {
 			values.Add(linkComponentPathKey, segment)
 		}
-		// Encode sorts by key but keeps each key's values in insertion order, so the path's order
-		// is preserved.
 		u.RawQuery = values.Encode()
 	}
 
@@ -420,10 +391,14 @@ func ConvertNexusLinkToLinkCallback(link nexus.Link) (*commonpb.Link_Callback, e
 		return nil, errors.New("failed to parse link to Link_Callback: malformed URL path")
 	}
 
-	// The alternation in the path regex only admits known segments, so this cannot fail.
-	executionType, _ := callbackLinkExecutionType(
-		matches[urlPathCallbackRE.SubexpIndex(urlPathExecutionTypeKey)],
-	)
+	segment := matches[urlPathCallbackRE.SubexpIndex(urlPathExecutionTypeKey)]
+	executionType, ok := callbackLinkExecutionType(segment)
+	if !ok {
+		return nil, fmt.Errorf(
+			"failed to parse link to Link_Callback: unsupported execution type: %q",
+			segment,
+		)
+	}
 	execution := &commonpb.Execution{Type: executionType}
 	cb.Execution = execution
 
