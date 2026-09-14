@@ -418,7 +418,10 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		if !h.config.EnableCallbacks(req.GetNamespace()) {
 			return nil, serviceerror.NewInvalidArgument("completion callbacks are not enabled for this namespace")
 		}
-		if err := h.callbackValidator.Validate(ctx, req.GetNamespace(), cbs); err != nil {
+		opts := callbacks.ValidatorOptions{
+			EnabledKinds: h.config.EnabledCallbackKinds(req.GetNamespace()),
+		}
+		if err := h.callbackValidator.Validate(ctx, req.GetNamespace(), cbs, opts); err != nil {
 			return nil, err
 		}
 	}
