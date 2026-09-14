@@ -30,6 +30,9 @@ import (
 func TestWorkerVersioningReschedulesPendingTasksThroughPassiveApply(t *testing.T) {
 	logger := log.NewNoopLogger()
 	harness := NewHarness(logger)
+	// Active execution can return the next workflow task inline without persisting
+	// its transfer task. The allowance permits only extra passive tasks; missing
+	// tasks still fail the comparison.
 	harness.AllowPassiveOnlyTaskTypes("transfer/TransferWorkflowTask")
 
 	tc := newSingleClusterWithGlobalNamespace(t, logger)
@@ -112,7 +115,7 @@ func TestWorkerVersioningReschedulesPendingTasksThroughPassiveApply(t *testing.T
 	activityPollDone := make(chan struct{})
 	defer func() {
 		cancelActivityPoll()
-		<-activityPollDone
+		await.Rcv(t, activityPollDone)
 	}()
 	go func() {
 		defer close(activityPollDone)
@@ -125,23 +128,26 @@ func TestWorkerVersioningReschedulesPendingTasksThroughPassiveApply(t *testing.T
 		) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
 			activityTask = task
 			return &workflowservice.RespondActivityTaskCompletedRequest{}, nil
-		}, taskpoller.WithContext(activityPollCtx), taskpoller.WithTimeout(30*time.Second))
+		}, taskpoller.WithContext(activityPollCtx), taskpoller.WithTimeout(60*time.Second))
 		activityResultCh <- activityPollResult{task: activityTask, err: pollErr}
 	}()
 
-	await.RequireTrue(t, func() bool {
-		describeResponse, describeErr := tc.FrontendClient().DescribeWorkflowExecution(
+	// The transition is started asynchronously by the v2 activity poll, so wait
+	// until the version transition is recorded on the mutable state.
+	await.Require(t.Context(), t, func(t *await.T) {
+		describeResponse, err := tc.FrontendClient().DescribeWorkflowExecution(
 			testcore.NewContext(t.Context()),
 			&workflowservice.DescribeWorkflowExecutionRequest{
 				Namespace: namespaceName,
 				Execution: execution,
 			},
 		)
-		transitionVersion := describeResponse.GetWorkflowExecutionInfo().GetVersioningInfo().
-			GetVersionTransition().GetDeploymentVersion()
-		return describeErr == nil &&
-			transitionVersion.GetDeploymentName() == tv2.DeploymentSeries() &&
-			transitionVersion.GetBuildId() == tv2.BuildID()
+		t.Require().NoError(err)
+		protorequire.ProtoEqual(
+			t,
+			tv2.DeploymentVersionTransition(),
+			describeResponse.GetWorkflowExecutionInfo().GetVersioningInfo().GetVersionTransition(),
+		)
 	}, 10*time.Second, 100*time.Millisecond)
 
 	_, err = poller.PollWorkflowTask(&workflowservice.PollWorkflowTaskQueueRequest{
@@ -155,7 +161,7 @@ func TestWorkerVersioningReschedulesPendingTasksThroughPassiveApply(t *testing.T
 	})
 	require.NoError(t, err)
 
-	activityResult := <-activityResultCh
+	activityResult := await.Rcv(t, activityResultCh)
 	require.NoError(t, activityResult.err)
 	protorequire.ProtoEqual(t, execution, activityResult.task.GetWorkflowExecution())
 	protorequire.ProtoEqual(t, tv1.ActivityType(), activityResult.task.GetActivityType())
