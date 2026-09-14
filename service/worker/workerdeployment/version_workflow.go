@@ -359,13 +359,15 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 		if d.asyncPropagationsInProgress != 0 {
 			return false
 		}
+		// version is deleted -> it's ok to drop all signals and updates.
 		if d.deleteVersion {
 			return true
 		}
+		// There is no pending signal or update, but the state is dirty or forceCaN is requested:
 		return !d.signalHandler.signalSelector.HasPending() &&
 			d.signalHandler.processingSignals == 0 &&
 			workflow.AllHandlersFinished(ctx) &&
-			(d.forceCAN || d.stateChanged || workflow.GetInfo(ctx).GetContinueAsNewSuggested()) // There is no pending signal or update, but the state is dirty or forceCaN is requested:
+			(d.forceCAN || d.stateChanged || workflow.GetInfo(ctx).GetContinueAsNewSuggested())
 	})
 	if err != nil {
 		return err
