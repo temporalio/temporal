@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/service/worker/dummy"
@@ -5633,10 +5634,19 @@ func testBackfillOnPausedSchedule(t *testing.T, newContext contextFactory) {
 		"backfill should fire actions on a paused schedule")
 }
 
+type ScheduleCHASMSuite struct {
+	parallelsuite.Suite[*ScheduleCHASMSuite]
+}
+
+func TestScheduleCHASMSuite(t *testing.T) {
+	parallelsuite.Run(t, &ScheduleCHASMSuite{})
+}
+
 // TestScheduleNextActionTimeVisibility asserts that the CHASM scheduler's
 // ScheduleNextActionTime search attribute is published to visibility and is
 // queryable through the frontend ListSchedules API.
-func TestScheduleNextActionTimeVisibility(t *testing.T) {
+func (suite *ScheduleCHASMSuite) TestScheduleNextActionTimeVisibility() {
+	t := suite.T()
 	opts := scheduleCommonOpts(t)
 	s := newScheduleEnv(t, opts...)
 
