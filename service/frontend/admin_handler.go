@@ -1327,22 +1327,27 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 		return nil, err
 	}
 
-	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	// The admin batch workflow runs in the system namespace so admin batches can operate on passive clusters
+	// of a target namespace and can operate fast when the target namespace is overloaded.
+	// The target namespace reaches the activity through the workflow input and AdminRequest.
+	targetNS := request.GetNamespace()
+	targetNSID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(targetNS))
 	if err != nil {
 		return nil, err
 	}
+	operateJobID := request.JobId
+	sysNS, sysNSID := primitives.SystemLocalNamespace, primitives.SystemNamespaceID
 
-	// Validate concurrent batch operation
-	maxConcurrentBatchOperation := adh.config.MaxConcurrentAdminBatchOperation(request.GetNamespace())
+	// Admin batch operations only run in the system namespace, so the concurrency limit is global.
+	maxConcurrentBatchOperation := adh.config.MaxConcurrentAdminBatchOperation()
 	countResp, err := adh.visibilityMgr.CountWorkflowExecutions(ctx, &manager.CountWorkflowExecutionsRequest{
-		NamespaceID: namespaceID,
-		Namespace:   namespace.Name(request.GetNamespace()),
+		NamespaceID: namespace.ID(sysNSID),
+		Namespace:   namespace.Name(sysNS),
 		Query:       batcher.OpenAdminBatchOperationQuery,
 	})
 	if err != nil {
 		return nil, err
 	}
-
 	openAdminBatchOperationCount := int(countResp.Count)
 	if openAdminBatchOperationCount >= maxConcurrentBatchOperation {
 		return nil, &serviceerror.ResourceExhausted{
@@ -1352,9 +1357,11 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 		}
 	}
 
-	input := &batchspb.BatchOperationInput{
+	// batchOperation input and payload have the data namespace, and
+	// the request to start workflow will use operate namespace for routing
+	batchOperationInput := &batchspb.BatchOperationInput{
 		AdminRequest: request,
-		NamespaceId:  namespaceID.String(),
+		NamespaceId:  targetNSID.String(),
 	}
 
 	identity := request.GetIdentity()
@@ -1366,7 +1373,7 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)
 	}
 
-	inputPayload, err := payloads.Encode(input)
+	batchOperationInputPayload, err := payloads.Encode(batchOperationInput)
 	if err != nil {
 		return nil, err
 	}
@@ -1386,11 +1393,11 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 	)
 
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:                request.Namespace,
-		WorkflowId:               request.GetJobId(),
+		Namespace:                sysNS,
+		WorkflowId:               operateJobID,
 		WorkflowType:             &commonpb.WorkflowType{Name: batcher.BatchWFTypeProtobufName},
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
-		Input:                    inputPayload,
+		Input:                    batchOperationInputPayload,
 		Identity:                 identity,
 		RequestId:                uuid.NewString(),
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
@@ -1402,7 +1409,7 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 	_, err = adh.historyClient.StartWorkflowExecution(
 		ctx,
 		common.CreateHistoryStartWorkflowRequest(
-			namespaceID.String(),
+			sysNSID,
 			startReq,
 			nil,
 			nil,
