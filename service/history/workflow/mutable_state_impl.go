@@ -693,6 +693,10 @@ func (ms *MutableStateImpl) ChasmEnabled() bool {
 	return !isNoop
 }
 
+func (ms *MutableStateImpl) HasChasmNodes() bool {
+	return len(ms.chasmNodeSizes) > 0
+}
+
 func (ms *MutableStateImpl) ChasmSkipPersistenceEnabled() bool {
 	return ms.config.EnableCHASMSkipPersistence != nil &&
 		ms.config.EnableCHASMSkipPersistence(ms.GetNamespaceEntry().Name().String())

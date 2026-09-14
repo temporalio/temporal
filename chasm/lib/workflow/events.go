@@ -17,11 +17,13 @@ type EventDefinition interface {
 	// IsWorkflowTaskTrigger returns a boolean indicating whether this event type should trigger a workflow task.
 	IsWorkflowTaskTrigger() bool
 	// Apply a history event to the state machine. Triggered during replication and workflow reset.
+	// An event addressing an operation this workflow's CHASM tree does not contain must report a
+	// serviceerror.NotFound.
 	Apply(ctx chasm.MutableContext, wf *Workflow, event *historypb.HistoryEvent) error
 	// CherryPick (a.k.a "reapply") an event from a different history branch.
 	// Implementations should apply the event to the machine state and return nil in case the event is cherry-pickable.
 	// Command events should never be cherry picked as we rely on the workflow to reschedule them.
-	// Return [ErrEventNotCherryPickable] to skip cherry picking. Any other error is considered fatal and will abort the
-	// cherry pick process.
+	// Return [ErrEventNotCherryPickable], a serviceerror.NotFound, or [chasm.ErrInvalidTransition] to skip cherry
+	// picking. Any other error is considered fatal and will abort the cherry pick process.
 	CherryPick(ctx chasm.MutableContext, wf *Workflow, event *historypb.HistoryEvent, resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error
 }

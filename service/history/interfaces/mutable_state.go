@@ -364,6 +364,9 @@ type (
 		IsWorkflow() bool
 		ChasmTree() ChasmTree
 		ChasmEnabled() bool
+		// HasChasmNodes returns whether any CHASM nodes are tracked or not. MutableState might have chasm nodes even if
+		// chasm is not enabled.
+		HasChasmNodes() bool
 		ChasmSignalBacklinksEnabled() bool
 		ChasmWorkflowComponent(ctx context.Context) (*chasmworkflow.Workflow, chasm.MutableContext, error)
 		ChasmWorkflowComponentReadOnly(ctx context.Context) (*chasmworkflow.Workflow, chasm.Context, error)
