@@ -957,10 +957,6 @@ func (s *BacklogManagerTestSuite) TestPhysicalBacklogGauges_AgeTaggedByPriority(
 		pri2 = int32(2)
 	)
 
-	// Disable version attribution so db.go emits the logical approximate_backlog_* gauges
-	// directly (the fallback path used when the partition manager's attributed loop is off).
-	s.cfgcli.OverrideValue(dynamicconfig.MatchingBacklogMetricsEmitInterval.Key(), time.Duration(0))
-
 	sq1 := &dbSubqueue{oldestTime: time.Now().Add(-30 * time.Second)}
 	sq1.Key = &persistencespb.SubqueueKey{Priority: pri1}
 	sq1.ApproximateBacklogCount = 3
@@ -992,10 +988,10 @@ func (s *BacklogManagerTestSuite) TestPhysicalBacklogGauges_AgeTaggedByPriority(
 	tag1 := metrics.MatchingTaskPriorityTag(pri1).Value
 	tag2 := metrics.MatchingTaskPriorityTag(pri2).Value
 
-	counts := byPriority(snap[metrics.ApproximateBacklogCount.Name()])
+	counts := byPriority(snap[metrics.PhysicalApproximateBacklogCount.Name()])
 	s.Equal(map[string]float64{tag1: 3, tag2: 5}, counts)
 
-	ages := byPriority(snap[metrics.ApproximateBacklogAgeSeconds.Name()])
+	ages := byPriority(snap[metrics.PhysicalApproximateBacklogAgeSeconds.Name()])
 	s.Len(ages, 2, "age gauge should be tagged per priority")
 	s.InDelta(30, ages[tag1], 5)
 	s.InDelta(90, ages[tag2], 5)
