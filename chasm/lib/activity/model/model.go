@@ -399,11 +399,11 @@ func handleEventInTerminalState(s AbstractState, e Event) Outcome {
 	switch e.Type {
 	case PollType:
 		return noop(s) // A worker can always poll
+	// Worker RPCs and operator commands alike: there is no activity left to act on.
 	case HeartbeatType, RespondCompletedType, RespondFailedType, RespondCanceledType,
-		RespondCompletedByIDType, RespondFailedByIDType:
-		return reject(s, NotFound) // Activity-specific RPCs from a worker
-	case RequestCancelType, TerminateType, PauseType, UnpauseType, ResetType, UpdateOptionsType:
-		return reject(s, FailedPrecondition) // Operator commands from client
+		RespondCompletedByIDType, RespondFailedByIDType,
+		RequestCancelType, TerminateType, PauseType, UnpauseType, ResetType, UpdateOptionsType:
+		return reject(s, NotFound)
 	case ScheduleToStartElapsesType, ScheduleToCloseElapsesType, StartToCloseElapsesType,
 		HeartbeatElapsesType, StartDelayElapsesType, BackoffElapsesType:
 		return impossibleElapse(s) // the activity has closed and no time windows are in effect
