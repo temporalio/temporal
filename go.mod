@@ -1,6 +1,6 @@
 module go.temporal.io/server
 
-go 1.25.11
+go 1.25.14
 
 retract (
 	v1.30.0
