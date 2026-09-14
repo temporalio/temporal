@@ -49,6 +49,7 @@ func TestBatchWorkflowActivityOptionsAreIndependent(t *testing.T) {
 	expectedTimeouts := make([]time.Duration, workflowCount)
 	actualTimeouts := make([]time.Duration, workflowCount)
 	errs := make([]error, workflowCount)
+	envs := make([]*testsuite.TestWorkflowEnvironment, workflowCount)
 	var wg sync.WaitGroup
 	for i := range workflowCount {
 		expectedTimeout := time.Duration(i+10) * time.Second
@@ -63,6 +64,7 @@ func TestBatchWorkflowActivityOptionsAreIndependent(t *testing.T) {
 		wg.Go(func() {
 			var workflowTestSuite testsuite.WorkflowTestSuite
 			env := workflowTestSuite.NewTestWorkflowEnvironment()
+			envs[i] = env
 			env.RegisterWorkflow(BatchWorkflowProtobuf)
 			var ac *activities
 			env.OnActivity(ac.BatchActivityWithProtobuf, mock.Anything, mock.Anything).
@@ -75,12 +77,12 @@ func TestBatchWorkflowActivityOptionsAreIndependent(t *testing.T) {
 				ActivityHeartbeatTimeout: heartbeatTimeout,
 			})
 			errs[i] = env.GetWorkflowError()
-			env.AssertExpectations(t)
 		})
 	}
 	wg.Wait()
 
 	for i := range workflowCount {
+		envs[i].AssertExpectations(t)
 		require.NoError(t, errs[i])
 		require.Equal(t, expectedTimeouts[i], actualTimeouts[i])
 	}
