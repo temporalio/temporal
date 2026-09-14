@@ -17,13 +17,14 @@ func TestLoadEmbeddedPostgresConnectTimeout(t *testing.T) {
 		t.Run(plugin, func(t *testing.T) {
 			t.Setenv("DB", plugin)
 			for _, tc := range []struct {
-				name     string
-				value    string
-				expected string
+				name            string
+				value           string
+				expected        string
+				expectedPresent bool
 			}{
-				{name: "default", value: "", expected: "10"},
-				{name: "custom", value: "30", expected: "30"},
-				{name: "disabled", value: "0", expected: "0"},
+				{name: "unset"},
+				{name: "custom", value: "30", expected: "30", expectedPresent: true},
+				{name: "disabled", value: "0", expected: "0", expectedPresent: true},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
 					t.Setenv("SQL_CONNECT_TIMEOUT", tc.value)
@@ -34,7 +35,9 @@ func TestLoadEmbeddedPostgresConnectTimeout(t *testing.T) {
 						require.True(t, ok, storeName)
 						require.NotNil(t, store.SQL, storeName)
 						require.Equal(t, plugin, store.SQL.PluginName, storeName)
-						require.Equal(t, tc.expected, store.SQL.ConnectAttributes["connect_timeout"], storeName)
+						actual, present := store.SQL.ConnectAttributes["connect_timeout"]
+						require.Equal(t, tc.expectedPresent, present, storeName)
+						require.Equal(t, tc.expected, actual, storeName)
 					}
 				})
 			}
