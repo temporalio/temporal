@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/codes"
 )
@@ -310,7 +311,6 @@ func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_Success_Pr
 
 func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_RunningWorkflowsResetAttempts() {
 	env := newBatchResetEnv(s.T())
-	ctx := s.Context()
 
 	const workflowCount = 10
 	workflowTypeName := testcore.RandomizeStr("activity-batch-reset-running-workflow")
@@ -324,7 +324,7 @@ func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_RunningWor
 
 	workflowRuns := make([]sdkclient.WorkflowRun, 0, workflowCount)
 	for range workflowCount {
-		workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		workflowRun, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{
 			ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
 			TaskQueue: env.WorkerTaskQueue(),
 		}, workflowTypeName)
@@ -356,7 +356,7 @@ func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_RunningWor
 	}, 5*time.Second, 500*time.Millisecond)
 
 	jobID := uuid.NewString()
-	_, err := env.SdkClient().WorkflowService().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
+	_, err := env.SdkClient().WorkflowService().StartBatchOperation(s.Context(), &workflowservice.StartBatchOperationRequest{
 		Namespace: env.Namespace().String(),
 		Operation: &workflowservice.StartBatchOperationRequest_ResetActivitiesOperation{
 			ResetActivitiesOperation: &batchpb.BatchOperationResetActivities{
@@ -381,7 +381,7 @@ func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_RunningWor
 	}, 15*time.Second, 100*time.Millisecond)
 
 	for _, workflowRun := range workflowRuns {
-		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		description, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowRun.GetID(), workflowRun.GetRunID())
 		s.NoError(err)
 		s.Len(description.PendingActivities, 1)
 		s.Equal(int32(1), description.PendingActivities[0].Attempt)
@@ -395,6 +395,8 @@ func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_RunningWor
 	s.NoError(replacementWorker.Start())
 	defer replacementWorker.Stop()
 
+	// Extend the deadline for workflow completion after the polling above.
+	ctx := testcontext.EnsureRemaining(s.Context(), s.T(), testcontext.DefaultTimeout())
 	for _, workflowRun := range workflowRuns {
 		var out string
 		err = workflowRun.Get(ctx, &out)

@@ -24,7 +24,7 @@ type PartitionScaler interface {
 	// It will be given the current partition count target, current backlog counts, and its
 	// private state (optional). It returns a PartitionScalerDecision, which will usually be
 	// "no change". To make a change, it should return a number in NewTarget. Zero means
-	// disable managed scaling.
+	// disable managed scaling and requires BacklogCap to also be zero.
 	//
 	// Changes may be ignored if values are out of range, if changed too often, or other
 	// reasons. Private state will not be updated if target doesn't also change, or if the
@@ -47,6 +47,6 @@ type PartitionScalerInput struct {
 type PartitionScalerDecision struct {
 	NoChange     bool       // if true, don't do anything
 	NewTarget    int        // if zero, disable managed scaling, otherwise set partition target
-	BacklogCap   int        // target cap for backlog count
+	BacklogCap   int        // target cap for backlog count; must be zero when NewTarget is zero
 	PrivateState *anypb.Any // optional private state to be stored with target
 }
