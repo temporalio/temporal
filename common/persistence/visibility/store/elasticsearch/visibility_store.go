@@ -37,6 +37,11 @@ const (
 	PersistenceName = "elasticsearch"
 
 	delimiter = "~"
+
+	// paginationDatetimeFormat is a copy from time.RFC3339Nano, but always writes
+	// the nanos component.
+	// Used only for formatting time.Time in the pagination filter.
+	paginationDatetimeFormat = "2006-01-02T15:04:05.000000000Z07:00"
 )
 
 type (
@@ -1395,12 +1400,13 @@ func buildPaginationQuery(
 //   - double: "Infinity" (desc) or "-Infinity" (asc)
 //   - keyword: nil
 //
-// Furthermore, for bool and datetime, they need to be converted to boolean or the RFC3339Nano
-// formats respectively.
+// Furthermore, for bool and datetime, they need to be converted to bool or string
+// types respectively.
 //
 //nolint:revive // cyclomatic complexity
 func parsePageTokenValue(
-	fieldName string, jsonValue any,
+	fieldName string,
+	jsonValue any,
 	tp enumspb.IndexedValueType,
 ) (any, error) {
 	switch tp {
@@ -1424,7 +1430,7 @@ func parsePageTokenValue(
 			return num != 0, nil
 		}
 		if tp == enumspb.INDEXED_VALUE_TYPE_DATETIME {
-			return time.Unix(0, num).UTC().Format(time.RFC3339Nano), nil
+			return time.Unix(0, num).UTC().Format(paginationDatetimeFormat), nil
 		}
 		return num, nil
 
