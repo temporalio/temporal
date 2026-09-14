@@ -811,3 +811,41 @@ ensure-no-changes:
 	@printf $(COLOR) "========================================================================"
 	@git status --porcelain
 	@test -z "`git status --porcelain`" || (printf $(COLOR) "========================================================================"; printf $(RED) "Above files are not regenerated properly. Regenerate them and try again."; git diff HEAD ; exit 1)
+
+##### Activity model conformance #####
+# Ordered by how likely each step is to pass, least likely last, so a run gets as far as it can before
+# stopping. The engine tier costs milliseconds and is swept hard; the onebox tier pays a real server and
+# real timers, so it gets one deep pass. The last two steps are repros for known defects and fail.
+ACTIVITY_WALK_SEEDS ?= 1 2 3 4 5 6 7 8
+
+activity-tests:
+	@printf $(COLOR) "Activity model: unit tests and static validation against the code..."
+	go test -count=1 ./chasm/lib/activity/model/validate
+	@printf $(COLOR) "Activity engine tier: conformance at the default depth..."
+	go test -count=1 -run TestConformance ./chasm/lib/activity/
+	@printf $(COLOR) "Activity engine tier: BFS to exhaustion of the reachable graph..."
+	TEMPORAL_SAASPEC_MAX_DEPTH=30 go test -count=1 -run TestConformance ./chasm/lib/activity/
+	@printf $(COLOR) "Activity engine tier: long random walk over $(words $(ACTIVITY_WALK_SEEDS)) seeds..."
+	@for seed in $(ACTIVITY_WALK_SEEDS); do \
+		printf "  seed $$seed\n"; \
+		TEMPORAL_SAASPEC_WALK_SEED=$$seed TEMPORAL_SAASPEC_WALK_STEPS=20000 \
+			go test -count=1 -run 'TestConformance/RandomWalk' ./chasm/lib/activity/ || exit 1; \
+	done
+	@printf $(COLOR) "Activity engine tier: under the race detector..."
+	go test -count=1 -race -run TestConformance ./chasm/lib/activity/
+	@printf $(COLOR) "Activity onebox tier: parity suite..."
+	go test -count=1 -tags test_dep -run 'TestActivityParityTestSuite' ./tests/
+	@printf $(COLOR) "Activity onebox tier: standalone activity suite..."
+	go test -count=1 -tags test_dep -run 'TestStandaloneActivityTestSuite' ./tests/
+	@printf $(COLOR) "Activity onebox tier: deeper BFS, longer walk, unexercised cells reported..."
+	TEMPORAL_SAASPEC_MAX_DEPTH=6 \
+	TEMPORAL_SAASPEC_NO_NEGATIVE_POLL=1 \
+	TEMPORAL_SAASPEC_COMPLETENESS=1 \
+	TEMPORAL_SAASPEC_WALK_STEPS=2000 \
+	TEMPORAL_SAASPEC_WALK_SEED=42 \
+	TEMPORAL_TEST_TIMEOUT=30m \
+		go test -count=1 -timeout 60m -tags test_dep -run 'TestActivityParityTestSuite/TestConformance' ./tests/
+	@printf $(COLOR) "Activity: an already-due dispatch task must not be routed to the timer queue..."
+	go test -count=1 -run TestDispatchRouting ./chasm/lib/activity/
+	@printf $(COLOR) "Activity: reset must not honor a remaining start delay..."
+	go test -count=1 -run TestRemainingDispatchDelay ./chasm/lib/activity/

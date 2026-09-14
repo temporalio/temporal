@@ -12,18 +12,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm/lib/activity/model"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -42,7 +46,7 @@ import (
 // absent when unset.
 type activityConfig struct {
 	MaxAttempts            int32         // RetryPolicy MaximumAttempts; 0 = unlimited
-	RetryInterval          time.Duration // RetryPolicy InitialInterval; 0 => activityShortRetryInterval
+	RetryInterval          time.Duration // RetryPolicy InitialInterval; 0 => activityShortDispatchDelay
 	BackoffCoefficient     float64       // RetryPolicy BackoffCoefficient; 0 => 1.0 (constant interval)
 	MaxRetryInterval       time.Duration // RetryPolicy MaximumInterval; 0 => RetryInterval
 	NextRetryDelay         time.Duration // ApplicationFailureInfo.NextRetryDelay sent with RespondFailed
@@ -63,8 +67,12 @@ const activityInput = "Input"
 // differs from the model.Heartbeat payload so assertions can tell which source was persisted.
 var activityHeartbeatDetails = payloads.EncodeString("failure checkpoint details")
 
+// activityRecordedHeartbeatDetailsString is the checkpoint a driver heartbeats, as an assertion can also
+// read it back decoded rather than as a payload.
+const activityRecordedHeartbeatDetailsString = "heartbeat details"
+
 // activityRecordedHeartbeatDetails is the checkpoint payload a driver sends for a model.Heartbeat event.
-var activityRecordedHeartbeatDetails = payloads.EncodeString("heartbeat details")
+var activityRecordedHeartbeatDetails = payloads.EncodeString(activityRecordedHeartbeatDetailsString)
 
 // timerProcessorMaxShift is the floor the timer queue puts on a task's fire time: it will not fire one
 // earlier than now + this.
@@ -86,6 +94,7 @@ var activityShortDispatchDelay = timerProcessorMaxShift
 func (c activityConfig) retryInterval() time.Duration {
 	return cmp.Or(c.RetryInterval, activityShortDispatchDelay)
 }
+
 func (c activityConfig) startToClose() time.Duration {
 	return cmp.Or(c.StartToClose, activityLongDuration)
 }
@@ -104,7 +113,6 @@ func (c activityConfig) forTrace(trace []model.Event) activityConfig {
 			c.HeartbeatTimeout = cmp.Or(c.HeartbeatTimeout, activityShortTimeout)
 		case model.StartDelayElapsesType:
 			c.StartDelay = cmp.Or(c.StartDelay, activityShortDispatchDelay)
-		default: // an event that arms no window of its own
 		}
 	}
 	return c
@@ -117,7 +125,7 @@ func (c activityConfig) timerDuration(e model.Event) time.Duration {
 		return c.StartDelay
 	case model.BackoffElapsesType:
 		// The first backoff only: a later one is longer under a non-constant policy. Waiting for a
-		// dispatch uses the server's schedule time instead; see awaitDispatchTimePassed.
+		// dispatch uses the server's schedule time instead; see awaitDispatchDelay.
 		return cmp.Or(c.NextRetryDelay, c.retryInterval())
 	case model.StartToCloseElapsesType:
 		return c.startToClose()
@@ -144,13 +152,6 @@ type activityInfo struct {
 	CurrentRetryInterval       time.Duration
 	NextAttemptScheduleTimeSet bool
 	LastHeartbeatDetails       []byte
-}
-
-// activityTerminalOutcome is user-visible terminal activity state projected from SAA's
-// ActivityExecutionOutcome and WFA's workflow result.
-type activityTerminalOutcome struct {
-	status     enumspb.ActivityExecutionStatus
-	retryState enumspb.RetryState
 }
 
 // modelConfig is the model's view of the activity: which options are configured at all, plus the two
@@ -339,14 +340,46 @@ type activityTimeoutInfo struct {
 
 // activityDriverState is the state shared by the two drivers.
 type activityDriverState struct {
-	cfg            activityConfig
-	token          []byte
-	startedAttempt int32 // attempt number returned by the last successful Poll
+	cfg                 activityConfig
+	token               []byte
+	startedAttempt      int32 // attempt number returned by the last successful Poll
+	positivePollTimeout time.Duration
+
+	path []model.Event // events driven to reach the edge under test, for failure reports
+
+	// establishedReqID[eventType] is the request id that established the current state for an operator
+	// command; a SameRequestID event reuses it. lastReqID is the most recent operator RPC's id, promoted
+	// into establishedReqID by the conformance engine when that RPC changes state.
+	establishedReqID map[model.EventType]string
+	lastReqID        string
 }
 
 // driverState lets an embedded activityDriverState supply its state to drivenActivity.
 func (a *activityDriverState) driverState() *activityDriverState {
 	return a
+}
+
+// reqID is the request id for an operator command: the id that established the current state for that
+// command type if the event is a SameRequestID replay, else a fresh one. It is recorded as lastReqID.
+func (a *activityDriverState) reqID(e model.Event) string {
+	id := uuid.NewString()
+	if e.SameRequestID {
+		if est, ok := a.establishedReqID[e.Type]; ok {
+			id = est
+		}
+	}
+	a.lastReqID = id
+	return id
+}
+
+// edge names the event and the status it was driven from, e.g. "RespondFailed[retryable=true] from
+// Started".
+func (a *activityDriverState) edge(e model.Event, src model.Status) string {
+	return fmt.Sprintf("%s from %s", e, src)
+}
+
+func (a *activityDriverState) pathLine() string {
+	return "  path: " + activityPathString(a.path)
 }
 
 // drivenActivity is what the shared event driver needs from either implementation.
@@ -370,8 +403,9 @@ func driveActivityEvent(t testing.TB, a drivenActivity, e model.Event, m *activi
 	state := a.driverState()
 	switch {
 	case e.Type == model.PollType:
-		resp := a.pollForTask(t, activityDriverTimeout)
-		require.NotNilf(t, resp, "%s: no task was dispatched within %s", e, activityDriverTimeout)
+		timeout := cmp.Or(state.positivePollTimeout, activityDriverTimeout)
+		resp := a.pollForTask(t, timeout)
+		require.NotNilf(t, resp, "%s: no task was dispatched within %s", e, timeout)
 		state.token = resp.GetTaskToken()
 		state.startedAttempt = resp.GetAttempt()
 	case isDispatchDelayEvent(e.Type):
@@ -522,6 +556,45 @@ func awaitActivityDispatchDelay(
 	}
 }
 
+// activityPollForTask polls taskQueue for one activity task, bounded by timeout, and classifies the
+// result: a task, no task (nil), or a poll that did not complete cleanly, which is reported against
+// driverName. Matching signals "waited, found nothing" with an empty response and a nil error, so any
+// error means the poll did not complete cleanly.
+func activityPollForTask(
+	ctx context.Context,
+	t require.TestingT,
+	driverName string,
+	env *testcore.TestEnv,
+	taskQueue string,
+	timeout time.Duration,
+) *workflowservice.PollActivityTaskQueueResponse {
+	pollCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	resp, err := env.FrontendClient().PollActivityTaskQueue(pollCtx, &workflowservice.PollActivityTaskQueueRequest{
+		Namespace: env.Namespace().String(),
+		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue},
+		Identity:  env.Tv().WorkerIdentity(),
+	})
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil // teardown
+		}
+		if deadline, ok := ctx.Deadline(); ok && time.Until(deadline) < common.MinLongPollTimeout {
+			t.Errorf("%s: test context budget exhausted before the poll could run (%.1fs left, need >= %s). "+
+				"Raise TEMPORAL_TEST_TIMEOUT and `go test -timeout`.\n  %v",
+				driverName, time.Until(deadline).Seconds(), common.MinLongPollTimeout, err)
+			return nil
+		}
+		t.Errorf("%s bug: PollActivityTaskQueue did not complete cleanly (poll timeout must be >= "+
+			"MinLongPollTimeout; only an empty response with a nil error means \"no task\"): %v", driverName, err)
+		return nil
+	}
+	if resp.GetActivityId() == "" {
+		return nil // no task available
+	}
+	return resp
+}
+
 func activityMarshalPayloads(p *commonpb.Payloads) []byte {
 	if p == nil {
 		return nil
@@ -531,4 +604,29 @@ func activityMarshalPayloads(p *commonpb.Payloads) []byte {
 		panic("marshaling payloads failed: " + err.Error())
 	}
 	return b
+}
+
+func firstPayloadData(p *commonpb.Payloads) []byte {
+	if ps := p.GetPayloads(); len(ps) > 0 {
+		return ps[0].GetData()
+	}
+	return nil
+}
+
+// activityTerminalProjection is what a user sees once the activity has closed: the terminal status,
+// the failure discriminant (the application failure Type for FAILED, the TimeoutType string for
+// TIMED_OUT, empty otherwise), and the retry state saying why it stopped retrying.
+//
+// Both implementations report all three, from unrelated places — SAA from the ActivityExecutionOutcome,
+// WFA from the ActivityError the workflow result carries — which is what makes them comparable.
+type activityTerminalProjection struct {
+	Status      enumspb.ActivityExecutionStatus
+	FailureType string
+	RetryState  enumspb.RetryState
+}
+
+// failureCause is the Type and Message of the failure a terminal outcome chains as its Cause.
+type failureCause struct {
+	Type    string
+	Message string
 }

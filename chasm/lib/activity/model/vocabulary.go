@@ -3,7 +3,11 @@
 // Standalone Activity and Workflow Activity.
 package model
 
-import "fmt"
+import (
+	"fmt"
+
+	activitypb "go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+)
 
 type Status int
 
@@ -34,10 +38,17 @@ const (
 
 // AbstractState is the projection of observable internal state that the model predicts.
 type AbstractState struct {
-	Status          Status
-	AttemptCount    int32
-	Dispatchability Dispatchability
-	ResetKeepPaused bool // a deferred reset carries the pause through to the attempt it starts
+	Status              Status
+	AttemptCount        int32
+	Dispatchability     Dispatchability
+	FirstAttemptStarted bool
+	DispatchTimeSet     bool
+
+	// Flags a deferred reset stores while the activity is RESET_REQUESTED, applied to the attempt it
+	// starts.
+	ResetKeepPaused     bool
+	ResetHeartbeats     bool
+	ResetRestoreOptions bool
 }
 
 // Config is what the model needs to know about an activity's configuration: which options are set,
@@ -76,6 +87,7 @@ const (
 	RespondFailedType
 	RespondFailedByIDType
 	RespondCanceledType
+	RespondCanceledByIDType
 	RequestCancelType
 	TerminateType
 	PauseType
@@ -104,6 +116,9 @@ type Event struct {
 	ResetHeartbeat      bool     // Reset: discard the persisted heartbeat checkpoint instead of carrying it into the new attempt.
 	HasHeartbeatDetails bool     // Failure response: attach last_heartbeat_details, to be stored as the activity's heartbeat progress.
 	Failure             *Failure // RespondFailed: the failure to send, or nil to respond with no failure at all (as a worker may). A nil failure is retryable.
+	RestoreOriginal     bool     // Reset / UpdateOptions: restore the options the activity was started with.
+	SameRequestID       bool     // Pause / Terminate / RequestCancel: repeat of the previous command's request id.
+	SetsStartDelay      bool     // UpdateOptions: the update sets start_delay.
 }
 
 // Failure specifies the failure a RespondFailed event sends.
@@ -128,29 +143,62 @@ const (
 	UnknownFailureType
 )
 
+// String names the kind of failure.
+func (t FailureType) String() string {
+	switch t {
+	case ApplicationFailureType:
+		return "application"
+	case ServerFailureType:
+		return "server"
+	case StartToCloseTimeoutFailureType:
+		return "startToCloseTimeout"
+	case HeartbeatTimeoutFailureType:
+		return "heartbeatTimeout"
+	case ScheduleToStartTimeoutFailureType:
+		return "scheduleToStartTimeout"
+	case ScheduleToCloseTimeoutFailureType:
+		return "scheduleToCloseTimeout"
+	case UnknownFailureType:
+		return "unknown"
+	default:
+		return fmt.Sprintf("FailureType(%d)", int(t))
+	}
+}
+
 // Canonical Event values for the variants frequently used in traces
 var (
-	Poll                   = Event{Type: PollType}
-	Heartbeat              = Event{Type: HeartbeatType}
-	Complete               = Event{Type: RespondCompletedType}
-	CompleteByID           = Event{Type: RespondCompletedByIDType}
-	FailRetryably          = Event{Type: RespondFailedType, Failure: &Failure{}}
-	FailNonRetryably       = Event{Type: RespondFailedType, Failure: &Failure{NonRetryable: true}}
-	RespondCanceled        = Event{Type: RespondCanceledType}
-	RequestCancel          = Event{Type: RequestCancelType}
-	Terminate              = Event{Type: TerminateType}
-	Pause                  = Event{Type: PauseType}
-	ResetKeepPaused        = Event{Type: ResetType, KeepPaused: true}
-	Unpause                = Event{Type: UnpauseType}
-	Reset                  = Event{Type: ResetType}
-	ResetClearingHeartbeat = Event{Type: ResetType, ResetHeartbeat: true}
-	UpdateOptions          = Event{Type: UpdateOptionsType}
-	StartToCloseElapses    = Event{Type: StartToCloseElapsesType}
-	ScheduleToCloseElapses = Event{Type: ScheduleToCloseElapsesType}
-	ScheduleToStartElapses = Event{Type: ScheduleToStartElapsesType}
-	HeartbeatElapses       = Event{Type: HeartbeatElapsesType}
-	StartDelayElapses      = Event{Type: StartDelayElapsesType}
-	BackoffElapses         = Event{Type: BackoffElapsesType}
+	Poll               = Event{Type: PollType}
+	Heartbeat          = Event{Type: HeartbeatType}
+	Complete           = Event{Type: RespondCompletedType}
+	CompleteByID       = Event{Type: RespondCompletedByIDType}
+	FailRetryably      = Event{Type: RespondFailedType, Failure: &Failure{}}
+	FailNonRetryably   = Event{Type: RespondFailedType, Failure: &Failure{NonRetryable: true}}
+	FailWithoutFailure = Event{Type: RespondFailedType}
+	// FailByIDRetryablyWithServerFailure reports a retryable ServerFailure through the by-ID API. Unlike
+	// the by-token API, the by-ID API accepts a non-application failure, so only this variant can carry a
+	// ServerFailure to the handler.
+	FailByIDRetryablyWithServerFailure              = Event{Type: RespondFailedByIDType, Failure: &Failure{Type: ServerFailureType}}
+	FailByIDRetryablyWithStartToCloseTimeoutFailure = Event{Type: RespondFailedByIDType, Failure: &Failure{Type: StartToCloseTimeoutFailureType}}
+	FailByIDRetryablyWithHeartbeatTimeoutFailure    = Event{Type: RespondFailedByIDType, Failure: &Failure{Type: HeartbeatTimeoutFailureType}}
+	FailByIDWithScheduleToStartTimeoutFailure       = Event{Type: RespondFailedByIDType, Failure: &Failure{Type: ScheduleToStartTimeoutFailureType}}
+	FailByIDWithScheduleToCloseTimeoutFailure       = Event{Type: RespondFailedByIDType, Failure: &Failure{Type: ScheduleToCloseTimeoutFailureType}}
+	FailByIDRetryablyWithUnknownFailure             = Event{Type: RespondFailedByIDType, Failure: &Failure{Type: UnknownFailureType}}
+	RespondCanceled                                 = Event{Type: RespondCanceledType}
+	RespondCanceledByID                             = Event{Type: RespondCanceledByIDType}
+	RequestCancel                                   = Event{Type: RequestCancelType}
+	Terminate                                       = Event{Type: TerminateType}
+	Pause                                           = Event{Type: PauseType}
+	ResetKeepPaused                                 = Event{Type: ResetType, KeepPaused: true}
+	Unpause                                         = Event{Type: UnpauseType}
+	Reset                                           = Event{Type: ResetType}
+	ResetClearingHeartbeat                          = Event{Type: ResetType, ResetHeartbeat: true}
+	UpdateOptions                                   = Event{Type: UpdateOptionsType}
+	StartToCloseElapses                             = Event{Type: StartToCloseElapsesType}
+	ScheduleToCloseElapses                          = Event{Type: ScheduleToCloseElapsesType}
+	ScheduleToStartElapses                          = Event{Type: ScheduleToStartElapsesType}
+	HeartbeatElapses                                = Event{Type: HeartbeatElapsesType}
+	StartDelayElapses                               = Event{Type: StartDelayElapsesType}
+	BackoffElapses                                  = Event{Type: BackoffElapsesType}
 )
 
 // ErrorKind is the user facing error the model expects for a call.
@@ -249,6 +297,8 @@ func (t EventType) String() string {
 		return "RespondFailedByID"
 	case RespondCanceledType:
 		return "RespondCanceled"
+	case RespondCanceledByIDType:
+		return "RespondCanceledByID"
 	case RequestCancelType:
 		return "RequestCancel"
 	case TerminateType:
@@ -290,8 +340,86 @@ func (e Event) String() string {
 		}
 		return fmt.Sprintf("%s[heartbeatDetails=%v,failureType=%d]", e.Type.String(), e.HasHeartbeatDetails, e.Failure.Type)
 	case ResetType:
-		return fmt.Sprintf("%s[keepPaused=%v,resetHeartbeat=%v]", e.Type.String(), e.KeepPaused, e.ResetHeartbeat)
+		return fmt.Sprintf("%s[keepPaused=%v,resetHeartbeat=%v,restoreOriginal=%v]", e.Type.String(), e.KeepPaused, e.ResetHeartbeat, e.RestoreOriginal)
+	case PauseType, TerminateType, RequestCancelType:
+		return fmt.Sprintf("%s[sameRequestID=%v]", e.Type.String(), e.SameRequestID)
+	case UpdateOptionsType:
+		return fmt.Sprintf("%s[setsStartDelay=%v,restoreOriginal=%v]", e.Type.String(), e.SetsStartDelay, e.RestoreOriginal)
 	default:
 		return e.Type.String()
 	}
+}
+
+// Observed is the internal state a driver reads out of the implementation.
+type Observed struct {
+	Status               activitypb.ActivityExecutionStatus
+	Count                int32
+	Stamp                int32
+	ScheduleToCloseStamp int32
+	ResetKeepPaused      bool
+	ResetHeartbeats      bool
+	ResetRestoreOptions  bool
+	FirstAttemptStarted  bool
+	DispatchTimeSet      bool
+}
+
+// Abstract maps an observed internal snapshot onto the model's AbstractState.
+func Abstract(o Observed) AbstractState {
+	return AbstractState{
+		Status:              mapStatus(o.Status),
+		AttemptCount:        o.Count,
+		ResetKeepPaused:     o.ResetKeepPaused,
+		ResetHeartbeats:     o.ResetHeartbeats,
+		ResetRestoreOptions: o.ResetRestoreOptions,
+		FirstAttemptStarted: o.FirstAttemptStarted,
+		DispatchTimeSet:     o.DispatchTimeSet,
+	}
+}
+
+func mapStatus(s activitypb.ActivityExecutionStatus) Status {
+	switch s {
+	case activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED:
+		return Scheduled
+	case activitypb.ACTIVITY_EXECUTION_STATUS_STARTED:
+		return Started
+	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED:
+		return CancelRequested
+	case activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED:
+		return Completed
+	case activitypb.ACTIVITY_EXECUTION_STATUS_FAILED:
+		return Failed
+	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED:
+		return Canceled
+	case activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED:
+		return Terminated
+	case activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT:
+		return TimedOut
+	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED:
+		return Paused
+	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
+		return PauseRequested
+	case activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
+		return ResetRequested
+	default:
+		return Unspecified
+	}
+}
+
+// SameObserved reports whether two states agree on every field that is live in the expected status.
+// It excludes the latent Dispatchability, and additionally drops any field that is not
+// observable-meaningful in the status (see mask), so the oracle never asserts mechanism state where
+// nobody observes it.
+func (s AbstractState) SameObserved(o AbstractState) bool {
+	return s.mask() == o.mask()
+}
+
+// mask zeroes fields that are not observable-meaningful in status s.Status, so the oracle only
+// compares each field where it is live. Dispatchability is always latent (verified by polling).
+func (s AbstractState) mask() AbstractState {
+	s.Dispatchability = Dispatchable
+	if s.Status != ResetRequested {
+		// The pending-reset intent is only meaningful while a reset is deferred.
+		s.ResetKeepPaused, s.ResetHeartbeats, s.ResetRestoreOptions = false, false, false
+	}
+	return s
 }

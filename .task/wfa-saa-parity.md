@@ -1,0 +1,248 @@
+# WFA / SAA parity
+
+User-visible differences between Workflow Activity (WFA) and Standalone Activity (SAA).
+
+Every entry carries an Assessment of what the tests observed: `valid` (the difference reproduces), `invalid` (both surfaces behave the same, so the entry no longer describes a difference), or `problematic to assess` (nothing observable through the API, or a confound in the way). The tests are in `tests/activity_parity_core_test.go`, `_reset_test.go`, `_pause_unpause_test.go` and `_update_options_test.go`; each subtest is named for the entry it checks, so an entry's label is the mapping. Run them with:
+
+    go test -tags test_dep ./tests/ -run 'TestActivityParityTestSuite/(TestActivityCore|TestReset|TestPauseUnpause|TestUpdateOptions)'
+
+A subtest fails when the surface it drives departs from the behaviour a user ought to get, which is how these assessments were reached; a failing subtest is therefore expected wherever an entry is `valid`.
+
+## Core Activity (non-reset, non-pause/unpause, non-update-options)
+
+- A01: Worker reports a synthetic schedule-to-start or schedule-to-close timeout failure through RespondActivityTaskFailed.
+    - WFA: The activity closes TIMED_OUT with retry state Timeout.
+    - SAA: The activity closes FAILED with retry state NonRetryableFailure.
+    - Assessment: valid. SAA closes FAILED with retry state NonRetryableFailure where WFA closes TIMED_OUT with retry state Timeout, for both timeout types.
+- A02: User issues any operator command (pause, unpause, reset, update-options) naming an activity that has already closed.
+    - WFA: The call returns NotFound.
+    - SAA: The call returns FailedPrecondition.
+    - Assessment: valid. WFA answers NotFound ("Can't find pending activity with such ID"); SAA answers FailedPrecondition.
+- A03: User describes an activity after it has closed.
+    - WFA: The activity has left the pending-activities list, so nothing is reported about it.
+    - SAA: `ActivityExecutionInfo` still reports `status`, `close_time` and `execution_duration`.
+    - Assessment: valid. Both surfaces report as described.
+- A05: User waits for one activity's result.
+    - WFA: There is no per-activity outcome API, so the user must wait on the workflow.
+    - SAA: `PollActivityExecution` long-polls to terminal, and `DescribeActivityExecution` returns the outcome, last failure and heartbeat details on request.
+    - Assessment: valid. Both surfaces report as described; PollActivityExecution naming the workflow activity is NotFound.
+- A06: User retries an unpause, reset or update-options call carrying the same `request_id`.
+    - WFA: The call is applied a second time, because `request_id` is ignored.
+    - SAA: The repeat is deduplicated and has no further effect.
+    - Assessment: valid for unpause, invalid for update-options. SAA recognises a replayed unpause and keeps the later pause (P12), but re-applies a replayed update-options, exactly as WFA does — so the dedup the entry credits SAA with does not extend to update-options. A replayed reset is not covered.
+- A07: User wants to pause, unpause, reset or update options for many activities at once.
+    - WFA: One call can target every activity of an `activity_type`, or all of them via `match_all`.
+    - SAA: The user must issue one call per `activity_id`.
+    - Assessment: valid. Both surfaces report as described; a PauseActivityExecution with no activity id is InvalidArgument for SAA.
+- A08: User inspects which worker build or deployment version ran the activity.
+    - WFA: Reports `assigned_build_id`, `last_worker_version_stamp`, `last_deployment` and `last_worker_deployment_version`.
+    - SAA: Reports only `last_deployment_version`.
+    - Assessment: valid. Both surfaces report as described.
+- A09: User inspects per-activity metadata.
+    - WFA: None is reported per activity, since it belongs to the enclosing workflow.
+    - SAA: Reports search attributes, header, user metadata, links, total heartbeat count, SDK name and version, state transition count, state size, task queue and execution time.
+    - Assessment: valid. SAA reports all the listed metadata. The WFA half is the absence of the fields, which has no runtime observation.
+- A10: User reads the activity's configured timeouts and retry policy.
+    - WFA: They are nested in `activity_options`, with `maximum_attempts` also exposed separately.
+    - SAA: They are flat fields on `ActivityExecutionInfo`.
+    - Assessment: valid. Both surfaces report as described.
+- A11: User reads the time at which the activity was scheduled.
+    - WFA: The field is named `scheduled_time`.
+    - SAA: The field is named `schedule_time`.
+    - Assessment: valid. Both surfaces report as described.
+- A12: User wants the first attempt held back before any worker can pick it up. Intended divergence.
+    - WFA: No such option exists; the workflow controls scheduling and can sleep on a durable timer before scheduling the activity.
+    - SAA: `start_delay` on StartActivityExecution delays the first dispatch.
+    - Assessment: valid. Both surfaces report as described; nothing is dispatched during an SAA start delay.
+- A13: User sets options when creating the activity. Intended divergence.
+    - WFA: Can request eager execution and `use_workflow_build_id`.
+    - SAA: Can set ID reuse policy, ID conflict policy, search attributes, user metadata, completion callbacks, links, on-conflict options and start delay.
+    - Assessment: valid. SAA accepts and echoes the listed start options. The WFA half is the absence of the fields, which has no runtime observation.
+- A14: User reads the failure message of an activity that timed out. Intended divergence.
+    - WFA: The SDK formats the message client-side.
+    - SAA: The server's proto message is returned verbatim.
+    - Assessment: valid. WFA's message is rendered client-side and carries the "(type: StartToClose)" decoration the SDK adds; SAA's is the server's, undecorated.
+
+- A15: User addresses an activity by ID.
+    - WFA: The activity ID is scoped to the Workflow run and there is no independently addressable chain of activity runs.
+    - SAA: The activity ID is namespace-scoped and its runs are governed by ID reuse and ID conflict policies.
+    - Assessment: valid. Two workflow runs each schedule an activity with the same id independently; a second SAA start under a running id is ActivityExecutionAlreadyStarted.
+- A16: The Workflow that owns an activity closes while that activity is still pending.
+    - WFA: The activity cannot outlive its Workflow run, leaves pending Workflow state, and later worker completions are rejected.
+    - SAA: There is no parent Workflow, so the activity continues until it reaches its own terminal state.
+    - Assessment: valid. Terminating the workflow leaves the worker's completion answered NotFound, while the standalone activity has no owning workflow to terminate and reaches its own terminal state. The closed run does keep listing the activity in its pending set, which is what "leaves pending Workflow state" describes.
+- A17: User searches for activities.
+    - WFA: Activities have no independent visibility records, list API, count API or activity search attributes.
+    - SAA: Activities have independent visibility records, custom search attributes, and list and count APIs.
+    - Assessment: valid. The standalone activity has a visibility record and is countable by query; the workflow activity has neither, with an indexed standalone activity as the control against indexing lag.
+- A18: User relies on Worker Versioning to route an activity.
+    - WFA: The activity can use Workflow Build ID inheritance or Task Queue versioning directives.
+    - SAA: Worker Versioning directives are not supported.
+    - Assessment: problematic to assess. Establishing versioning-based routing needs a registered worker deployment version and task-queue versioning rules, which the harness cannot express: its worker is a bare PollActivityTaskQueue call carrying no deployment options. The SAA half is a missing request field, which has no runtime observation.
+- A19: User omits activity priority.
+    - WFA: The activity inherits its priority from the Workflow.
+    - SAA: There is no parent priority to inherit, so the default standalone priority applies.
+    - Assessment: valid. The dispatched task carries the workflow's priority key for WFA and none for SAA.
+- A20: User supplies only `start_to_close_timeout`.
+    - WFA: The missing schedule timeouts are bounded and defaulted from the Workflow run timeout.
+    - SAA: There is no parent run timeout, so the schedule timeouts stay unbounded unless supplied explicitly.
+    - Assessment: valid. WFA reports a schedule-to-close bounded by the workflow run timeout plus an expiration time; SAA reports neither.
+- A21: User terminates or deletes a single activity directly.
+    - WFA: There is no independently retained activity execution for these APIs to act on.
+    - SAA: Dedicated terminate and delete APIs act on the standalone execution without terminating anything else.
+    - Assessment: valid. Terminate and delete naming the workflow activity's id are NotFound and leave it untouched; for SAA they close it TERMINATED and then make Describe NotFound.
+- A22: User attaches a completion callback to an activity that already exists, using ID conflict policy USE_EXISTING.
+    - WFA: The activity scheduling command has no per-activity completion-callback facility at all.
+    - SAA: Start attaches the additional callbacks to the existing execution.
+    - Assessment: valid. A second SAA start with USE_EXISTING plus attach_completion_callbacks attaches its callback to the running activity; a start naming a workflow activity's id creates a new standalone activity instead of reaching it.
+- A23: User issues an operator command while the standalone-activity operator-command feature gate is off.
+    - WFA: Pause, unpause, reset and update-options all remain available.
+    - SAA: All four are rejected by the feature gate.
+    - Assessment: valid. With the gate off, all four commands still succeed for WFA, while for SAA pause, reset and update-options are refused and so is unpause.
+
+## Reset
+
+- R01: User resets (default options) while an attempt is in progress.
+    - WFA: The reset takes effect immediately, so when the running attempt fails the activity is on attempt 2 and waits out that attempt's retry backoff.
+    - SAA: The reset is held until the running attempt ends, after which the activity is on a fresh attempt 1 and dispatches without waiting out any backoff.
+    - Assessment: valid. WFA reports attempt 2 serving the full retry backoff, for every shape of failure the attempt can end with; SAA reports attempt 1 dispatchable at once.
+- R02: The in-progress attempt fails non-retryably while a reset is pending.
+    - WFA: The activity closes FAILED and the reset is lost.
+    - SAA: The reset is applied and the activity continues at attempt 1.
+    - Assessment: valid. WFA closes the activity and loses the reset, with retries left and with the budget spent; SAA applies the reset and continues at attempt 1.
+- R03: User resets (default options) while a pause is pending.
+    - WFA: The activity still reports run state PAUSE_REQUESTED.
+    - SAA: The pause is withdrawn and the activity reports run state STARTED.
+    - Assessment: valid. WFA still reports PAUSE_REQUESTED after the reset; SAA reports STARTED and the reset then lands SCHEDULED.
+- R04: User resets with `keep_paused` while a pause is pending, and the worker then stops responding.
+    - WFA: Neither the pause nor the reset ever takes effect, because the attempt's timeouts never fire.
+    - SAA: The attempt times out and the activity lands PAUSED at attempt 1.
+    - Assessment: valid. WFA's attempt never ends, so neither the pause nor the reset takes effect; SAA's attempt times out and lands PAUSED at attempt 1, on both per-attempt clocks.
+- R05: User resets while a cancellation is pending.
+    - WFA: The call returns success.
+    - SAA: The call returns FailedPrecondition.
+    - Assessment: valid. WFA returns success; SAA returns FailedPrecondition.
+- R06: User resets while an earlier reset is still pending.
+    - WFA: The call returns success.
+    - SAA: The call returns FailedPrecondition.
+    - Assessment: valid. WFA returns success; SAA returns FailedPrecondition.
+- R08: The in-progress attempt ends with the retry budget already spent while a reset is pending, either by failing retryably or by hitting a per-attempt timeout. This is what reset exists to rescue: it rewinds the attempt counter, so the budget is no longer spent.
+    - WFA: The activity closes (FAILED for the failure, TIMED_OUT for the timeout) and the reset is lost. Unlike R04, P01 and P02, the per-attempt timers do fire here, so the reset is lost by being ignored when the attempt ends rather than by the attempt never ending.
+    - SAA: The reset is applied and the activity continues at attempt 1, dispatchable at once.
+    - Assessment: valid. WFA closes the activity, on a retryable failure and on either per-attempt timeout; SAA applies the reset and continues at attempt 1.
+- R09: User resets with `restore_original_options` while an attempt is in progress.
+    - WFA: The options are restored as soon as the call returns, so the attempt that is still running loses the options it was dispatched under, ahead of the reset the call defers.
+    - SAA: The restore is deferred with the rest of the reset, and lands when the attempt ends.
+    - Assessment: valid. WFA reports the original options as soon as the reset returns, while the superseded attempt is still running; SAA reports the updated ones until the reset is applied.
+- R10: Worker heartbeats after a cancellation has superseded a pending reset.
+    - WFA: The response reports `cancel_requested` and `activity_reset`, so the worker is told of a reset that will never be applied.
+    - SAA: The response reports `cancel_requested` only.
+    - Assessment: valid. WFA reports activity_reset alongside cancel_requested; SAA reports cancel_requested only.
+
+- R11: The in-progress attempt completes successfully while a reset is pending.
+    - WFA: The completion succeeds only if the token still matches the attempt number the immediate reset left behind. A reset requested during attempt 2 rewinds the counter at once, so the token that worker is holding is answered with NotFound and its work is lost.
+    - SAA: The completion succeeds with the original token, and the deferred reset is discarded without starting another attempt, whichever attempt the reset was requested during.
+    - Assessment: valid. A reset requested during attempt 2 leaves WFA answering that worker's completion NotFound, so its work is lost; SAA accepts it. A reset during attempt 1 is accepted by both, since the rewind lands on the attempt number the token already carries.
+- R12: User resets with `restore_original_options` after having updated the activity's priority.
+    - WFA: The updated priority is retained.
+    - SAA: The original priority is restored.
+    - Assessment: valid. WFA keeps the updated priority; SAA restores the original.
+- R13: User resets an activity that is waiting in retry backoff.
+    - WFA: The previous failure and last-started time are cleared.
+    - SAA: The previous failure and last-started time remain visible.
+    - Assessment: valid for the last failure: WFA reports none after the reset, SAA still reports it. The last-started-time half is problematic to assess — WFA reports no last_started_time while the retry is backing off, before any reset, so there is nothing for the reset to clear. That absence is itself a difference the entry does not describe.
+- R14: Worker heartbeats while both a pause and a `keep_paused` reset are pending.
+    - WFA: The response reports both pause and reset.
+    - SAA: The response reports reset only.
+    - Assessment: valid. WFA reports both pause and reset; SAA reports reset only.
+- R15: A token from an attempt a reset superseded is submitted once the attempt counter has come back round to the number that token carries.
+    - WFA: The stale token matches the reused attempt number and is accepted. Two routes reach the coincidence. The counter can land back where the token was issued: attempt 1 fails, the retry makes it attempt 2, the reset rewinds it to 1. Or it can climb back: the reset arrives during attempt 2 and rewinds to 1 under a worker that is still running and is not told (R16), that attempt's start-to-close timeout ends it, and the retry off 1 makes it attempt 2 again — so the abandoned worker can close the activity with the result the reset was asking to discard.
+    - SAA: A new attempt stamp makes the stale token invalid on either route.
+    - Assessment: valid. WFA accepts the token from the attempt the reset superseded; SAA answers NotFound.
+- R16: Worker heartbeats after a reset was requested during its attempt.
+    - WFA: The heartbeat is answered NotFound from attempt 2 onwards, so the worker is never told of the reset. The heartbeat handler validates the task token before it reads `ActivityReset`, and the immediate reset has already rewound the attempt counter under the token the worker holds. The flag is delivered only on attempt 1, where the rewind is a no-op.
+    - SAA: The heartbeat is answered and reports `activity_reset`, whichever attempt the reset was requested during.
+    - Assessment: valid. Same cause as R11 — the immediate rewind invalidating a live token — but a distinct observable: R11 is the worker's *result* being refused, this is the worker never being *told*. Both would be resolved by the same change (deferring the reset while an attempt is running), so R16 is a consequence of R01 rather than an independent decision.
+- R17: User resets while a cancellation is pending, and the cancelled worker then acknowledges.
+    - WFA: The acknowledgement is refused from attempt 2 onwards, because accepting the reset rewound the attempt counter under the token the worker holds, so the activity closes TIMED_OUT rather than CANCELED.
+    - SAA: The reset is refused, the worker's token stays valid, and the activity closes CANCELED.
+    - Assessment: valid. R05 records what the reset call answers; this records what the answer costs the activity. Also a consequence of R01, and resolved by the same change, but visible in the terminal status rather than in an error code.
+
+## Pause/Unpause
+
+- P01: User pauses an activity while an attempt is in progress, and the worker then stops responding.
+    - WFA: The start-to-close timeout never fires, so the attempt never ends and the pause never takes effect.
+    - SAA: The start-to-close timeout fires and the retry lands the activity PAUSED at the next attempt.
+    - Assessment: valid. WFA's attempt never ends, so the pause never takes effect; SAA's start-to-close timeout fires and the retry lands PAUSED at attempt 2.
+- P02: As P01, but the activity has a heartbeat timeout and the worker stops heartbeating.
+    - WFA: The heartbeat timeout never fires, so the attempt never ends and the pause never takes effect.
+    - SAA: The heartbeat timeout fires and the retry lands the activity PAUSED at the next attempt.
+    - Assessment: valid. As P01 for the heartbeat clock.
+- P03: An activity is paused and its schedule-to-close deadline passes.
+    - WFA: The deadline does not close the activity, which stays paused indefinitely.
+    - SAA: The activity closes TIMED_OUT.
+    - Assessment: valid. WFA never closes and never reports the deadline; SAA closes TIMED_OUT with timeout type ScheduleToClose.
+- P04: A pause request is redelivered after the user has already unpaused the activity.
+    - WFA: The activity is paused again, silently undoing the unpause.
+    - SAA: The spent `request_id` is recognised and the activity keeps running.
+    - Assessment: valid. WFA is paused again by the replay; SAA recognises the spent request id and stays SCHEDULED.
+- P05: User unpauses an activity that was never paused.
+    - WFA: The call returns success.
+    - SAA: The call returns FailedPrecondition.
+    - Assessment: valid. WFA returns success; SAA returns FailedPrecondition.
+- P06: User pauses while a cancellation is pending.
+    - WFA: The call returns success.
+    - SAA: The call returns FailedPrecondition.
+    - Assessment: valid. WFA returns success; SAA returns FailedPrecondition.
+- P07: User unpauses while a cancellation is pending.
+    - WFA: The call returns success.
+    - SAA: The call returns FailedPrecondition.
+    - Assessment: valid. WFA returns success; SAA returns FailedPrecondition.
+- P08: User pauses while a reset is pending.
+    - WFA: The call returns success.
+    - SAA: The call returns FailedPrecondition.
+    - Assessment: valid. WFA returns success; SAA returns FailedPrecondition.
+- P09: User wants to unpause and, in the same call, rewind the attempt counter or discard heartbeat progress.
+    - WFA: `reset_attempts` and `reset_heartbeat` on unpause do both.
+    - SAA: No such flags exist, so a separate Reset call is required.
+    - Assessment: valid. The two flags exist only on WFA's UnpauseActivity, which rewinds the attempt counter and discards the checkpoint; SAA's unpause leaves both standing and a separate Reset is what does either.
+- P10: User asks who paused an activity and when.
+    - WFA: `pause_info` reports `pause_time` and `paused_by`.
+    - SAA: Nothing is reported.
+    - Assessment: valid. WFA reports pause_time and the pausing identity and reason; nothing in SAA's Describe response carries either.
+- P11: Worker fails the last permitted attempt retryably while a pause is pending. Unconfirmed, seen once in 6000 walk steps.
+    - WFA: The activity appeared to remain in progress.
+    - SAA: The activity closes.
+    - Assessment: valid, and no longer only a one-off sighting: WFA stays in progress and its workflow does not close, while SAA closes FAILED with retry state MaximumAttemptsReached.
+
+- P12: An unpause request is redelivered after the user has paused the activity again.
+    - WFA: The activity is unpaused again, undoing the later pause.
+    - SAA: The spent `request_id` is recognised and the later pause stands.
+    - Assessment: valid. WFA's replayed unpause undoes the later pause; SAA recognises the spent request id and the pause stands.
+- P13: User unpauses an activity that was paused while waiting in retry backoff.
+    - WFA: The pending backoff is discarded and dispatch is scheduled from the unpause time plus any jitter.
+    - SAA: The existing retry deadline is kept, and dispatch occurs no earlier than both that deadline and the unpause time plus any jitter.
+    - Assessment: valid. WFA's dispatch deadline moves earlier than the backoff deadline the retry was already serving; SAA's does not.
+- P14: User unpauses while a reset is pending.
+    - WFA: The call returns success.
+    - SAA: The call returns FailedPrecondition.
+    - Assessment: valid. WFA returns success; SAA returns FailedPrecondition.
+
+## UpdateOptions
+
+- U01: User updates activity options while a cancellation is pending.
+    - WFA: The call returns success.
+    - SAA: The call returns FailedPrecondition.
+    - Assessment: valid. WFA returns success; SAA returns FailedPrecondition.
+- U02: User updates activity options while a reset is pending.
+    - WFA: The call returns success.
+    - SAA: The call returns FailedPrecondition.
+    - Assessment: valid. WFA returns success; SAA returns FailedPrecondition, and the refused update leaves the pending reset to land as it would have.
+- U03: User updates `retry_policy.non_retryable_error_types`.
+    - WFA: The changed error-type list is neither persisted nor reported.
+    - SAA: The changed list is persisted, reported, and used for later retry decisions.
+    - Assessment: valid. WFA reports no non-retryable error types back after the update; SAA reports the changed list and closes the activity on a failure of that type. Both surfaces honour a list supplied at start time, so the difference is in the update path only.
+- U04: User updates any option while the activity is waiting out a worker-supplied `next_retry_delay`.
+    - WFA: Regenerating the pending retry recomputes its deadline from the retry policy and can discard the worker's override.
+    - SAA: The deadline is preserved, including across retry-policy updates, because its source is a worker override.
+    - Assessment: valid. WFA replaces the worker's 12h next_retry_delay — with the 24h policy interval for an unrelated update, and with a newly set 6h interval for a retry-policy update; SAA preserves it in both cases.

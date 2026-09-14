@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -9,7 +10,7 @@ import (
 // Smoke tests over a few worked examples
 
 func TestInitial(t *testing.T) {
-	require.Equal(t, AbstractState{Status: Scheduled, AttemptCount: 1}, Initial(Config{HasScheduleToClose: true}))
+	require.Equal(t, AbstractState{Status: Scheduled, AttemptCount: 1, DispatchTimeSet: true}, Initial(Config{HasScheduleToClose: true}))
 }
 
 func TestPollFromScheduledStarts(t *testing.T) {
@@ -175,6 +176,36 @@ func TestPossible(t *testing.T) {
 
 			require.Equalf(t, c.want, Possible(c.cfg, c.state, c.event),
 				"Possible(%s in %v/%v)", c.event, c.state.Status, c.state.Dispatchability)
+		})
+	}
+}
+
+// ValidateTrace reports the first event a trace drives that cannot occur where it is driven from.
+func TestValidateTrace(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		cfg     Config
+		trace   []Event
+		wantIdx int // index of the first impossible event; -1 if the trace is valid
+	}{
+		{"poll", Config{}, []Event{Poll}, -1},
+		{"retry", Config{MaxAttempts: 3}, []Event{Poll, FailRetryably, BackoffElapses, Poll, Complete}, -1},
+		{"heartbeat timeout", Config{HasHeartbeat: true}, []Event{Poll, HeartbeatElapses}, -1},
+		{"heartbeat timeout unconfigured", Config{MaxAttempts: 3}, []Event{Poll, HeartbeatElapses}, 1},
+		{"attempt already ended", Config{HasHeartbeat: true}, []Event{Poll, HeartbeatElapses, StartToCloseElapses}, 2},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+
+			err := ValidateTrace(c.cfg, c.trace)
+			if c.wantIdx < 0 {
+				require.NoError(t, err)
+				return
+			}
+			require.ErrorContains(t, err, fmt.Sprintf("trace[%d] %s ", c.wantIdx, c.trace[c.wantIdx]))
 		})
 	}
 }

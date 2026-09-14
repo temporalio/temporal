@@ -575,6 +575,8 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 			return definition.NewWorkflowKey(key.NamespaceID, key.BusinessID, key.RunID)
 		},
 		HandleIsWorkflow: func() bool { return false },
+		// GetNamespaceEntry gives components a namespace to tag metrics and visibility records
+		// with. The test engine has no namespace registry, so the id doubles as the name.
 		HandleGetNamespaceEntry: func() *namespace.Namespace {
 			return namespace.NewLocalNamespaceForTest(
 				&persistencespb.NamespaceInfo{Id: key.NamespaceID, Name: key.NamespaceID},
