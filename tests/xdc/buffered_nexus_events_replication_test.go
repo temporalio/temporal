@@ -21,8 +21,8 @@ import (
 // losing branch. It expects all three events on the loser, only the shared completion on the winner,
 // and the losing-only operation skipped. This covers temporalio/temporal#10986.
 func (s *NexusStateReplicationSuite) TestBufferedNexusEventsReapplySharedOperationAndSkipLosingOnlyOperation() {
-	if !s.enableTransitionHistory || s.chasmEnabled {
-		s.T().Skip("this conflict-reapplication regression is specific to transition-history HSM Nexus operations")
+	if !s.enableTransitionHistory {
+		s.T().Skip("conflict reapplication of buffered events requires transition history")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
@@ -152,8 +152,8 @@ func (s *NexusStateReplicationSuite) TestBufferedNexusEventsReapplySharedOperati
 // cancel-request-failed outcomes for operations shared by both branches. It expects the terminal operation
 // outcomes to be reapplied to the winner and the non-cherry-pickable cancellation result to remain on the loser.
 func (s *NexusStateReplicationSuite) TestNaturallyBufferedNexusOutcomesFlushedAndReapplied() {
-	if !s.enableTransitionHistory || s.chasmEnabled {
-		s.T().Skip("this conflict-reapplication regression is specific to transition-history HSM Nexus operations")
+	if !s.enableTransitionHistory {
+		s.T().Skip("conflict reapplication of buffered events requires transition history")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -302,8 +302,8 @@ func (s *NexusStateReplicationSuite) TestNaturallyBufferedNexusOutcomesFlushedAn
 // cancel-request result. It expects the result to be persisted on the losing branch but skipped on the
 // winner because cancellation results are not cherry-pickable.
 func (s *NexusStateReplicationSuite) TestNaturallyBufferedNexusCancelRequestCompletedFlushedAndReapplied() {
-	if !s.enableTransitionHistory || s.chasmEnabled {
-		s.T().Skip("this conflict-reapplication regression is specific to transition-history HSM Nexus operations")
+	if !s.enableTransitionHistory {
+		s.T().Skip("conflict reapplication of buffered events requires transition history")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)

@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -778,11 +779,13 @@ func (b *MutableStateRebuilderImpl) applyChasmEvent(
 		return false, err
 	}
 	if err := def.Apply(chasmCtx, wf, event); err != nil {
-		// A NotFound means the operation is not in the CHASM tree (it lives in HSM), so report "not
+		// ErrNexusOperationNotFound means the operation is not in the CHASM tree (it lives in HSM), so report "not
 		// applied" and let the caller fall back to HSM. This mirrors HSM's ErrStateMachineNotFound.
-		if errors.As(err, new(*serviceerror.NotFound)) {
+		if errors.Is(err, chasmworkflow.ErrNexusOperationNotFound) {
 			return false, nil
 		}
+		// Any other error including *serviceerror.NotFounds raised due to a genuine failure anywhere deeper will be
+		// returned as a regular error
 		return false, err
 	}
 	return true, nil

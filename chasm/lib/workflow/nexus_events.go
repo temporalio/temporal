@@ -1,6 +1,9 @@
 package workflow
 
 import (
+	"errors"
+	"fmt"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -10,6 +13,14 @@ import (
 	workflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
 	"google.golang.org/protobuf/types/known/anypb"
 )
+
+// ErrNexusOperationNotFound is returned by Apply when the given scheduled event id can not be found in the given
+// workflow's CHASM tree (no entry in Operations map). Use this to identify whether the CHASM tree contains the Nexus
+// operation or not. The operation may live in the HSM tree instead, or in no tree at all. On the other hand, a failed
+// nested component load for example is a genuine failure which requires different handling, so callers must be able to
+// distinguish between the two.
+// See https://github.com/temporalio/temporal/issues/11384 for more information on why this distinction is needed.
+var ErrNexusOperationNotFound = errors.New("nexus operation not found")
 
 // ScheduledEventDefinition handles the NexusOperationScheduled history event.
 type ScheduledEventDefinition struct{}
@@ -121,7 +132,7 @@ func (d CancelRequestCompletedEventDefinition) Apply(ctx chasm.MutableContext, w
 	attrs := event.GetNexusOperationCancelRequestCompletedEventAttributes()
 	field, ok := wf.Operations[attrs.GetScheduledEventId()]
 	if !ok {
-		return serviceerror.NewNotFoundf("nexus operation not found for scheduled event ID %d", attrs.GetScheduledEventId())
+		return fmt.Errorf("%w for scheduled event ID %d", ErrNexusOperationNotFound, attrs.GetScheduledEventId())
 	}
 	// Cancellation must be present to deliver a cancel request.
 	cancellation := field.Get(ctx).Cancellation.Get(ctx)
@@ -151,7 +162,7 @@ func (d CancelRequestFailedEventDefinition) Apply(ctx chasm.MutableContext, wf *
 	attrs := event.GetNexusOperationCancelRequestFailedEventAttributes()
 	field, ok := wf.Operations[attrs.GetScheduledEventId()]
 	if !ok {
-		return serviceerror.NewNotFoundf("nexus operation not found for scheduled event ID %d", attrs.GetScheduledEventId())
+		return fmt.Errorf("%w for scheduled event ID %d", ErrNexusOperationNotFound, attrs.GetScheduledEventId())
 	}
 	// Cancellation must be present to deliver a cancel request.
 	cancellation := field.Get(ctx).Cancellation.Get(ctx)
@@ -183,7 +194,7 @@ func (d StartedEventDefinition) Apply(ctx chasm.MutableContext, wf *Workflow, ev
 	attrs := event.GetNexusOperationStartedEventAttributes()
 	field, ok := wf.Operations[attrs.GetScheduledEventId()]
 	if !ok {
-		return serviceerror.NewNotFoundf("nexus operation not found for scheduled event ID %d", attrs.GetScheduledEventId())
+		return fmt.Errorf("%w for scheduled event ID %d", ErrNexusOperationNotFound, attrs.GetScheduledEventId())
 	}
 	op := field.Get(ctx)
 
@@ -217,7 +228,7 @@ func (d CompletedEventDefinition) Apply(ctx chasm.MutableContext, wf *Workflow, 
 	attrs := event.GetNexusOperationCompletedEventAttributes()
 	field, ok := wf.Operations[attrs.GetScheduledEventId()]
 	if !ok {
-		return serviceerror.NewNotFoundf("nexus operation not found for scheduled event ID %d", attrs.GetScheduledEventId())
+		return fmt.Errorf("%w for scheduled event ID %d", ErrNexusOperationNotFound, attrs.GetScheduledEventId())
 	}
 	op := field.Get(ctx)
 
@@ -255,7 +266,7 @@ func (d FailedEventDefinition) Apply(ctx chasm.MutableContext, wf *Workflow, eve
 	attrs := event.GetNexusOperationFailedEventAttributes()
 	field, ok := wf.Operations[attrs.GetScheduledEventId()]
 	if !ok {
-		return serviceerror.NewNotFoundf("nexus operation not found for scheduled event ID %d", attrs.GetScheduledEventId())
+		return fmt.Errorf("%w for scheduled event ID %d", ErrNexusOperationNotFound, attrs.GetScheduledEventId())
 	}
 	op := field.Get(ctx)
 
@@ -293,7 +304,7 @@ func (d CanceledEventDefinition) Apply(ctx chasm.MutableContext, wf *Workflow, e
 	attrs := event.GetNexusOperationCanceledEventAttributes()
 	field, ok := wf.Operations[attrs.GetScheduledEventId()]
 	if !ok {
-		return serviceerror.NewNotFoundf("nexus operation not found for scheduled event ID %d", attrs.GetScheduledEventId())
+		return fmt.Errorf("%w for scheduled event ID %d", ErrNexusOperationNotFound, attrs.GetScheduledEventId())
 	}
 	op := field.Get(ctx)
 
@@ -331,7 +342,7 @@ func (d TimedOutEventDefinition) Apply(ctx chasm.MutableContext, wf *Workflow, e
 	attrs := event.GetNexusOperationTimedOutEventAttributes()
 	field, ok := wf.Operations[attrs.GetScheduledEventId()]
 	if !ok {
-		return serviceerror.NewNotFoundf("nexus operation not found for scheduled event ID %d", attrs.GetScheduledEventId())
+		return fmt.Errorf("%w for scheduled event ID %d", ErrNexusOperationNotFound, attrs.GetScheduledEventId())
 	}
 	op := field.Get(ctx)
 
