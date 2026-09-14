@@ -110,3 +110,46 @@ func TestConvertNexusLinksToProtoLinks(t *testing.T) {
 	}
 	protorequire.ProtoSliceEqual(t, expected, out)
 }
+
+// A Callback link is one of the variants a Nexus handler can hand back, so the batch converter has
+// to recognize it.
+func TestConvertNexusLinksToProtoLinks_CallbackAndNilURL(t *testing.T) {
+	logger := log.NewTestLogger()
+
+	callbackLink := nexus.Link{
+		URL: &url.URL{
+			Scheme:   "temporal",
+			Path:     "/namespaces/ns/nexus-operations/op-id/run-id/callbacks/request-id",
+			RawQuery: "componentPath=c-path1&componentPath=c-path2",
+		},
+		Type: "temporal.api.common.v1.Link.Callback",
+	}
+	malformedCallback := nexus.Link{
+		URL:  &url.URL{Scheme: "temporal", Path: "/namespaces/ns/nexus-operations/op-id/run-id/callbacks"},
+		Type: "temporal.api.common.v1.Link.Callback",
+	}
+	noURL := nexus.Link{Type: "temporal.api.common.v1.Link.Callback"}
+
+	out := commonnexus.ConvertNexusLinksToProtoLinks(
+		[]nexus.Link{callbackLink, malformedCallback, noURL},
+		logger,
+	)
+
+	// The malformed and noURL cases were silently dropped during the conversion process.
+	protorequire.ProtoSliceEqual(t, []*commonpb.Link{
+		{
+			Variant: &commonpb.Link_Callback_{
+				Callback: &commonpb.Link_Callback{
+					Namespace: "ns",
+					Execution: &commonpb.Execution{
+						Type:       enumspb.EXECUTION_TYPE_NEXUS_OPERATION,
+						BusinessId: "op-id",
+						RunId:      "run-id",
+					},
+					ComponentPath: []string{"c-path1", "c-path2"},
+					RequestId:     "request-id",
+				},
+			},
+		},
+	}, out)
+}

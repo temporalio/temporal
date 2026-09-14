@@ -9,7 +9,9 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
@@ -26,10 +28,21 @@ const (
 	urlPathNexusOperationTemplate = "/namespaces/%s/nexus-operations/%s/%s/details"
 	urlPathActivityTemplate       = "/namespaces/%s/activities/%s/%s/details"
 
+	// A callback link addresses one callback attached to an execution, so its path names the
+	// execution the way the links above do and then selects the callback by request ID:
+	// /namespaces/{ns}/{executionType}/{businessID}/{runID}/callbacks/{requestID}
+	urlPathCallbackTemplate     = "/namespaces/%s/%s/%s/%s/callbacks/%s"
+	urlPathExecutionTypeKey     = "executionType"
+	urlPathBusinessIDKey        = "businessID"
+	urlPathCallbackRequestIDKey = "callbackRequestID"
+
 	linkWorkflowEventReferenceTypeKey = "referenceType"
 	linkEventIDKey                    = "eventID"
 	linkEventTypeKey                  = "eventType"
 	linkRequestIDKey                  = "requestID"
+	// linkComponentPathKey carries Link_Callback.component_path, repeated once per segment and in
+	// order. See ConvertLinkCallbackToNexusLink for why it repeats instead of joining.
+	linkComponentPathKey = "componentPath"
 )
 
 var (
@@ -48,6 +61,23 @@ var (
 		rePatternNamespace,
 		rePatternActivityID,
 		rePatternRunID,
+	))
+	rePatternBusinessID        = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathBusinessIDKey)
+	rePatternCallbackRequestID = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathCallbackRequestIDKey)
+	// The alternation is built from the same map used to render the path, so a new execution type
+	// only has to be added in one place.
+	rePatternExecutionType = fmt.Sprintf(
+		`(?P<%s>%s)`,
+		urlPathExecutionTypeKey,
+		strings.Join(sortedCallbackLinkExecutionTypes(), "|"),
+	)
+	urlPathCallbackRE = regexp.MustCompile(fmt.Sprintf(
+		`^/namespaces/%s/%s/%s/%s/callbacks/%s$`,
+		rePatternNamespace,
+		rePatternExecutionType,
+		rePatternBusinessID,
+		rePatternRunID,
+		rePatternCallbackRequestID,
 	))
 	eventReferenceType     = string((&commonpb.Link_WorkflowEvent_EventReference{}).ProtoReflect().Descriptor().Name())
 	requestIDReferenceType = string((&commonpb.Link_WorkflowEvent_RequestIdReference{}).ProtoReflect().Descriptor().Name())
@@ -276,4 +306,148 @@ func convertURLQueryToLinkWorkflowEventRequestIdReference(queryValues url.Values
 		return nil, err
 	}
 	return requestIDRef, nil
+}
+
+// callbackLinkExecutionTypes maps the type of execution a callback is attached to onto the URL
+// path segment naming it. The segment is spelled the way the other link URLs in this file already
+// spell that kind of execution ("workflows", "activities", "nexus-operations"), so every
+// temporal:// link addresses an execution the same way.
+var callbackLinkExecutionTypes = map[enumspb.ExecutionType]string{
+	enumspb.EXECUTION_TYPE_WORKFLOW:        "workflows",
+	enumspb.EXECUTION_TYPE_ACTIVITY:        "activities",
+	enumspb.EXECUTION_TYPE_NEXUS_OPERATION: "nexus-operations",
+}
+
+// sortedCallbackLinkExecutionTypes returns the path segments in a stable order, so that the path
+// regex compiled from them does not depend on Go's map iteration order.
+func sortedCallbackLinkExecutionTypes() []string {
+	segments := make([]string, 0, len(callbackLinkExecutionTypes))
+	for _, segment := range callbackLinkExecutionTypes {
+		segments = append(segments, segment)
+	}
+	slices.Sort(segments)
+	return segments
+}
+
+// callbackLinkExecutionType is the inverse of callbackLinkExecutionTypes: it maps a URL path
+// segment back onto the execution type it names.
+func callbackLinkExecutionType(segment string) (enumspb.ExecutionType, bool) {
+	for executionType, candidate := range callbackLinkExecutionTypes {
+		if candidate == segment {
+			return executionType, true
+		}
+	}
+	return enumspb.EXECUTION_TYPE_UNSPECIFIED, false
+}
+
+// ConvertLinkCallbackToNexusLink converts a Link_Callback type to a Nexus Link.
+//
+// Unlike the other converters here this one can fail: a callback link names its execution by an
+// ExecutionType that has no path segment in this build, and emitting a link that cannot be
+// parsed back is worse than reporting it.
+func ConvertLinkCallbackToNexusLink(cb *commonpb.Link_Callback) (nexus.Link, error) {
+	execution := cb.GetExecution()
+	executionType, ok := callbackLinkExecutionTypes[execution.GetType()]
+	if !ok {
+		return nexus.Link{}, fmt.Errorf(
+			"failed to convert Link_Callback to link: unsupported execution type: %s",
+			execution.GetType(),
+		)
+	}
+
+	u := &url.URL{
+		Scheme: urlSchemeTemporalKey,
+		Path: fmt.Sprintf(
+			urlPathCallbackTemplate,
+			cb.GetNamespace(),
+			executionType,
+			execution.GetBusinessId(),
+			execution.GetRunId(),
+			cb.GetRequestId(),
+		),
+		RawPath: fmt.Sprintf(
+			urlPathCallbackTemplate,
+			url.PathEscape(cb.GetNamespace()),
+			executionType,
+			url.PathEscape(execution.GetBusinessId()),
+			url.PathEscape(execution.GetRunId()),
+			url.PathEscape(cb.GetRequestId()),
+		),
+	}
+
+	if componentPath := cb.GetComponentPath(); len(componentPath) > 0 {
+		// One repeated query parameter per segment, rather than a single joined value. A component
+		// path ends in a user-supplied ID (an update ID is only length-validated, so it can hold
+		// any character), which means a joined encoding would need to escape the delimiter within
+		// each segment before joining and unescape after splitting: a second escaping layer on top
+		// of the URL's own, hand-rolled, for the parser to get wrong. Repeating the key lets
+		// net/url escape each segment independently and hands back the slice as it went in.
+		values := url.Values{}
+		for _, segment := range componentPath {
+			values.Add(linkComponentPathKey, segment)
+		}
+		// Encode sorts by key but keeps each key's values in insertion order, so the path's order
+		// is preserved.
+		u.RawQuery = values.Encode()
+	}
+
+	return nexus.Link{
+		URL:  u,
+		Type: string(cb.ProtoReflect().Descriptor().FullName()),
+	}, nil
+}
+
+// ConvertNexusLinkToLinkCallback converts a Nexus Link to Link_Callback variant.
+func ConvertNexusLinkToLinkCallback(link nexus.Link) (*commonpb.Link_Callback, error) {
+	cb := &commonpb.Link_Callback{}
+	if link.Type != string(cb.ProtoReflect().Descriptor().FullName()) {
+		return nil, fmt.Errorf(
+			"cannot parse link type %q to %q",
+			link.Type,
+			cb.ProtoReflect().Descriptor().FullName(),
+		)
+	}
+
+	if link.URL.Scheme != urlSchemeTemporalKey {
+		return nil, fmt.Errorf(
+			"failed to parse link to Link_Callback: invalid scheme: %s",
+			link.URL.Scheme,
+		)
+	}
+
+	matches := urlPathCallbackRE.FindStringSubmatch(link.URL.EscapedPath())
+	if len(matches) != 6 {
+		return nil, errors.New("failed to parse link to Link_Callback: malformed URL path")
+	}
+
+	// The alternation in the path regex only admits known segments, so this cannot fail.
+	executionType, _ := callbackLinkExecutionType(
+		matches[urlPathCallbackRE.SubexpIndex(urlPathExecutionTypeKey)],
+	)
+	execution := &commonpb.Execution{Type: executionType}
+	cb.Execution = execution
+
+	var err error
+	cb.Namespace, err = url.PathUnescape(matches[urlPathCallbackRE.SubexpIndex(urlPathNamespaceKey)])
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse link to Link_Callback: %w", err)
+	}
+
+	execution.BusinessId, err = url.PathUnescape(matches[urlPathCallbackRE.SubexpIndex(urlPathBusinessIDKey)])
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse link to Link_Callback: %w", err)
+	}
+
+	execution.RunId, err = url.PathUnescape(matches[urlPathCallbackRE.SubexpIndex(urlPathRunIDKey)])
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse link to Link_Callback: %w", err)
+	}
+
+	cb.RequestId, err = url.PathUnescape(matches[urlPathCallbackRE.SubexpIndex(urlPathCallbackRequestIDKey)])
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse link to Link_Callback: %w", err)
+	}
+
+	cb.ComponentPath = link.URL.Query()[linkComponentPathKey]
+	return cb, nil
 }
