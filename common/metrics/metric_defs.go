@@ -1560,6 +1560,14 @@ var (
 		"namespace_replication_apply_end_to_end_latency",
 		WithDescription("Latency from source publication to a terminal namespace metadata replication apply outcome."),
 	)
+	TaskQueueUserDataReplicationApplyOutcomes = NewCounterDef(
+		"task_queue_user_data_replication_apply_outcomes",
+		WithDescription("The number of terminal task queue user data replication apply outcomes per target cluster."),
+	)
+	TaskQueueUserDataReplicationApplyEndToEndLatency = NewTimerDef(
+		"task_queue_user_data_replication_apply_end_to_end_latency",
+		WithDescription("Latency from source publication to a terminal task queue user data replication apply outcome."),
+	)
 	ParentClosePolicyProcessorSuccess       = NewCounterDef("parent_close_policy_processor_requests")
 	ParentClosePolicyProcessorFailures      = NewCounterDef("parent_close_policy_processor_errors")
 	SignalExternalWorkflowExecutionFailures = NewCounterDef(
