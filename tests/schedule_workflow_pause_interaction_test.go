@@ -73,8 +73,8 @@ func expectScheduleProgressesWhilePaused(policy enumspb.ScheduleOverlapPolicy) b
 	}
 }
 
-func TestScheduleV1WorkflowPauseInteraction(t *testing.T) {
-	t.Parallel()
+func (suite *ScheduleV1Suite) TestWorkflowPauseInteraction() {
+	t := suite.T()
 	t.Run("Overlap", func(t *testing.T) { runSchedulePauseOverlapMatrix(t, v1ContextFactory) })
 	t.Run("UnpauseRecovery", func(t *testing.T) { runSchedulePauseRecoveryMatrix(t, v1ContextFactory) })
 	t.Run("ContinueAsNew", func(t *testing.T) { testSchedulePauseContinueAsNew(t, v1ContextFactory) })
