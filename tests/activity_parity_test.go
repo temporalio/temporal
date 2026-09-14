@@ -585,6 +585,67 @@ func (s *activityParityTestSuite) TestUnpauseWithoutPause() {
 	})
 }
 
+// TestActivityCore covers the core-activity (A) entries of the WFA/SAA parity survey.
+func (s *activityParityTestSuite) TestActivityCore() {
+	t := s.T()
+	env := newActivityParityEnv(t)
+
+	// A02: an operator command naming an activity that has already closed answers NotFound. Workflow
+	// answers that uniformly across Signal, Update, UpdateOptions, Terminate, Pause and Unpause, and
+	// consistency across execution types is what settles it.
+	t.Run("OperatorCommandAfterClose", func(t *testing.T) {
+		parityDriveOutlivingActivity(t, env, activityConfig{MaxAttempts: 1},
+			[]model.Event{model.Poll, model.Complete},
+			func(t *testing.T, a parityActivity) {
+				for _, e := range []model.Event{model.Pause, model.Unpause, model.Reset, model.UpdateOptions} {
+					var notFound *serviceerror.NotFound
+					require.ErrorAsf(t, a.rpc(t, e), &notFound,
+						"%s naming a closed activity must answer NotFound, as every workflow command does", e)
+				}
+			})
+
+		// Terminate and RequestCancel are standalone-activity commands: a workflow activity has no
+		// terminate at all, and its cancellation is a workflow command rather than a call an operator
+		// can make. So they are asserted on the standalone surface alone.
+		t.Run("StandaloneActivityCommands", func(t *testing.T) {
+			a := newSAADriver(t, env, activityConfig{MaxAttempts: 1}).
+				driveTrace(t, []model.Event{model.Poll, model.Complete})
+			for _, e := range []model.Event{model.Terminate, model.RequestCancel} {
+				var notFound *serviceerror.NotFound
+				require.ErrorAsf(t, a.rpc(t, e), &notFound,
+					"%s naming a closed activity must answer NotFound, as every workflow command does", e)
+			}
+		})
+	})
+}
+
+// parityActivity is what a parity test reads from a driven activity. Both drivers' handles satisfy
+// it, so a test states its claim once instead of once per implementation.
+type parityActivity interface {
+	rpc(testing.TB, model.Event) error
+}
+
+// parityDriveOutlivingActivity drives trace through both implementations and hands each resulting
+// activity to check. It is for a test that acts on the activity after it has closed: the WFA wrapper
+// workflow must outlive its activity, or the RPC under test is answered about a workflow that no
+// longer exists, which says nothing about how a closed activity behaves.
+func parityDriveOutlivingActivity(
+	t *testing.T,
+	env *testcore.TestEnv,
+	cfg activityConfig,
+	trace []model.Event,
+	check func(*testing.T, parityActivity),
+) {
+	t.Run("WorkflowActivity", func(t *testing.T) {
+		d := newWFADriver(t, env, cfg)
+		d.holdOpen = true
+		check(t, d.driveTrace(t, trace))
+	})
+	t.Run("StandaloneActivity", func(t *testing.T) {
+		check(t, newSAADriver(t, env, cfg).driveTrace(t, trace))
+	})
+}
+
 // Force-completing an activity by ID must work whenever no attempt is in progress: while Scheduled
 // and never started, and while Paused before any worker picked it up.
 func (s *activityParityTestSuite) TestCompleteByID() {
