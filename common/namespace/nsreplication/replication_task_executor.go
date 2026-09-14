@@ -345,7 +345,12 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 		IsGlobalNamespace:   resp.IsGlobalNamespace,
 	}
 
-	mergedData, dataMerged := h.dataMerger.MergeData(resp.Namespace.Info.Data, task.Info.Data)
+	mergedData, dataMerged := h.dataMerger.MergeData(
+		resp.Namespace.Info.Data,
+		task.Info.Data,
+		resp.Namespace.ConfigVersion,
+		task.GetConfigVersion(),
+	)
 	if dataMerged {
 		recordUpdated = true
 		request.Namespace.Info.Data = mergedData
