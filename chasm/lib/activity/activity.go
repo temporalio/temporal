@@ -101,6 +101,11 @@ type RespondCancelledEvent struct {
 	Token   *tokenspb.Task
 }
 
+// errClosed is the error returned by an operator command on a closed activity.
+func (a *Activity) errClosed() error {
+	return serviceerror.NewNotFoundf("no running activity execution: it closed with status %v", a.GetStatus())
+}
+
 func (a *Activity) isTerminal() bool {
 	switch a.GetStatus() {
 	case activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
@@ -557,17 +562,12 @@ func (a *Activity) Terminate(
 	ctx chasm.MutableContext,
 	req chasm.TerminateComponentRequest,
 ) (chasm.TerminateComponentResponse, error) {
-	// If already in terminated state, fail if request ID is different, else no-op
-	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED {
-		newReqID := req.RequestID
-		existingReqID := a.GetTerminateState().GetRequestId()
-
-		if existingReqID != newReqID {
-			return chasm.TerminateComponentResponse{}, serviceerror.NewFailedPreconditionf(
-				"already terminated with request ID %s", existingReqID)
-		}
-
+	if req.RequestID != "" && a.GetTerminateState().GetRequestId() == req.RequestID {
 		return chasm.TerminateComponentResponse{}, nil
+	}
+
+	if a.isTerminal() {
+		return chasm.TerminateComponentResponse{}, a.errClosed()
 	}
 
 	metricsHandler := a.enrichedMetricsHandler(ctx, metrics.ActivityTerminatedScope)

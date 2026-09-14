@@ -10825,7 +10825,7 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// Pause should fail with FailedPrecondition on a terminal activity.
+		// Pause should fail with NotFound on a terminal activity.
 		_, err = env.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
@@ -10834,8 +10834,8 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 			Reason:     "test",
 		})
 		require.Error(t, err)
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPreconditionErr)
+		var notFoundErr *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFoundErr)
 	})
 
 	// PauseWhileRunning: pause a STARTED activity, fail the attempt, then verify the activity
@@ -12459,7 +12459,7 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// Unpause should fail with FailedPrecondition on a terminal activity.
+		// Unpause should fail with NotFound on a terminal activity.
 		_, err = env.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
@@ -12467,8 +12467,8 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 			Identity:   "test-identity",
 		})
 		require.Error(t, err)
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPreconditionErr)
+		var notFoundErr *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFoundErr)
 	})
 
 	// UnpauseWhileCancelRequestedFails: unpausing a CANCEL_REQUESTED activity must be rejected with
@@ -13338,8 +13338,8 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		})
 	}
 
-	t.Run("TerminalStateReturnsFailedPrecondition", func(t *testing.T) {
-		// Resetting a completed activity should return FailedPrecondition.
+	t.Run("TerminalStateReturnsNotFound", func(t *testing.T) {
+		// Resetting a completed activity should return NotFound.
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 
@@ -13355,14 +13355,14 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// Attempt to reset — should fail with FailedPrecondition since the activity is in a terminal state
+		// Attempt to reset — should fail with NotFound since the activity is in a terminal state
 		_, err = env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      startResp.GetRunId(),
 		})
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPreconditionErr)
+		var notFoundErr *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFoundErr)
 	})
 
 	t.Run("KeepPaused", func(t *testing.T) {

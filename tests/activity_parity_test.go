@@ -585,6 +585,40 @@ func (s *activityParityTestSuite) TestUnpauseWithoutPause() {
 	})
 }
 
+// An operator command for an activity that has already closed must return NotFound.
+func (s *activityParityTestSuite) TestOperatorCommandAfterClose() {
+	env := newActivityParityEnv(s.T())
+	cfg := activityConfig{MaxAttempts: 1}
+	trace := []model.Event{model.Poll, model.Complete}
+
+	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		d := newWFADriver(t, env, cfg)
+		d.holdOpen = true
+		handle := d.driveTrace(t, trace)
+		for _, e := range []model.Event{model.Pause, model.Unpause, model.Reset, model.UpdateOptions} {
+			assertCommandNotFound(t, e, handle.rpc(t, e))
+		}
+	})
+	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+		t := s.T()
+		handle := newSAADriver(t, env, cfg).driveTrace(t, trace)
+		// Terminate and RequestCancel have no workflow-activity counterpart, so the standalone
+		// surface is the only place they can be asserted.
+		for _, e := range []model.Event{
+			model.Pause, model.Unpause, model.Reset, model.UpdateOptions, model.Terminate, model.RequestCancel,
+		} {
+			assertCommandNotFound(t, e, handle.rpc(t, e))
+		}
+	})
+}
+
+func assertCommandNotFound(t testing.TB, e model.Event, err error) {
+	t.Helper()
+	var notFoundErr *serviceerror.NotFound
+	require.ErrorAsf(t, err, &notFoundErr, "%s on a closed activity must answer NotFound", e)
+}
+
 // Force-completing an activity by ID must work whenever no attempt is in progress: while Scheduled
 // and never started, and while Paused before any worker picked it up.
 func (s *activityParityTestSuite) TestCompleteByID() {
