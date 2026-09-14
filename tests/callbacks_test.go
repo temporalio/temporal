@@ -164,7 +164,7 @@ func (s *CallbacksSuite) TestScheduledCallbackTokenMigration_LegacyWriteEnvelope
 			},
 		},
 	}
-	_, err := env.FrontendClient().CreateSchedule(chasmContextFactory(ctx), &workflowservice.CreateScheduleRequest{
+	_, err := env.FrontendClient().CreateSchedule(routeToCHASMScheduler(ctx), &workflowservice.CreateScheduleRequest{
 		Namespace:  env.Namespace().String(),
 		ScheduleId: sid,
 		Schedule:   schedule,
@@ -175,7 +175,7 @@ func (s *CallbacksSuite) TestScheduledCallbackTokenMigration_LegacyWriteEnvelope
 
 	var startedWFID string
 	await.RequireTruef(s.T(), func() bool {
-		desc, descErr := env.FrontendClient().DescribeSchedule(chasmContextFactory(ctx), &workflowservice.DescribeScheduleRequest{
+		desc, descErr := env.FrontendClient().DescribeSchedule(routeToCHASMScheduler(ctx), &workflowservice.DescribeScheduleRequest{
 			Namespace:  env.Namespace().String(),
 			ScheduleId: sid,
 		})
@@ -215,7 +215,7 @@ func (s *CallbacksSuite) TestScheduledCallbackTokenMigration_LegacyWriteEnvelope
 	s.NoError(err)
 
 	await.RequireTruef(s.T(), func() bool {
-		desc, descErr := env.FrontendClient().DescribeSchedule(chasmContextFactory(ctx), &workflowservice.DescribeScheduleRequest{
+		desc, descErr := env.FrontendClient().DescribeSchedule(routeToCHASMScheduler(ctx), &workflowservice.DescribeScheduleRequest{
 			Namespace:  env.Namespace().String(),
 			ScheduleId: sid,
 		})
