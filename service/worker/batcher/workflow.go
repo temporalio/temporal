@@ -127,18 +127,16 @@ func BatchWorkflowProtobuf(ctx workflow.Context, batchParams *batchspb.BatchOper
 	}
 
 	batchParams = setDefaultParams(batchParams)
-	retryPolicy := temporal.RetryPolicy{
-		InitialInterval:    10 * time.Second,
-		BackoffCoefficient: 1.7,
-		MaximumInterval:    5 * time.Minute,
-	}
-	activityOptions := workflow.ActivityOptions{
+	opt := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		ScheduleToStartTimeout: 5 * time.Minute,
 		StartToCloseTimeout:    infiniteDuration,
 		HeartbeatTimeout:       batchParams.ActivityHeartbeatTimeout.AsDuration(),
-		RetryPolicy:            &retryPolicy,
-	}
-	opt := workflow.WithActivityOptions(ctx, activityOptions)
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    10 * time.Second,
+			BackoffCoefficient: 1.7,
+			MaximumInterval:    5 * time.Minute,
+		},
+	})
 	var result HeartBeatDetails
 	var ac *activities
 	err := workflow.ExecuteActivity(opt, ac.BatchActivityWithProtobuf, batchParams).Get(ctx, &result)
