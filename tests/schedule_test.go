@@ -523,23 +523,28 @@ func TestScheduleV1(t *testing.T) {
 	t.Parallel()
 	runSharedScheduleTests(t, v1ContextFactory)
 
-	// V1-only tests
-	newContext := v1ContextFactory
 	t.Run("TestCreateScheduleDuplicateSdkError", func(t *testing.T) { t.Parallel(); testCreateScheduleDuplicateSdkError(t, false) })
-	t.Run("TestCHASMCanListV1Schedules", func(t *testing.T) { t.Parallel(); testCHASMCanListV1Schedules(t, newContext) })
-	// Not parallel: testActionDelayMetrics temporarily overrides the package-level
-	// scheduler.CurrentTweakablePolicies.Version, which every parallel sibling schedule shares.
-	t.Run("TestActionDelayMetrics", func(t *testing.T) { testActionDelayMetrics(t, newContext) })
-	t.Run("TestRefresh", func(t *testing.T) { t.Parallel(); testRefresh(t, newContext) })
-	t.Run("TestListBeforeRun", func(t *testing.T) { t.Parallel(); testListBeforeRun(t, newContext) })
-	t.Run("TestRateLimit", func(t *testing.T) { t.Parallel(); testRateLimit(t, newContext) })
-	t.Run("TestNextTimeCache", func(t *testing.T) { t.Parallel(); testNextTimeCache(t, newContext) })
-	t.Run("TestCreatesCHASMSentinel", func(t *testing.T) { t.Parallel(); testCreatesCHASMSentinel(t, newContext) })
-	t.Run("TestSkipsCHASMSentinelWhenDisabled", func(t *testing.T) { t.Parallel(); testSkipsCHASMSentinelWhenDisabled(t, newContext) })
-	t.Run("TestUpdateScheduleMemoRejected", func(t *testing.T) { t.Parallel(); testUpdateScheduleMemoRejected(t, newContext) })
 }
 
-func testActionDelayMetrics(t *testing.T, newContext contextFactory) {
+type ScheduleV1Suite struct {
+	parallelsuite.Suite[*ScheduleV1Suite]
+}
+
+type ScheduleV1SequentialSuite struct {
+	parallelsuite.Suite[*ScheduleV1SequentialSuite]
+}
+
+func TestScheduleV1Suite(t *testing.T) {
+	parallelsuite.Run(t, &ScheduleV1Suite{})
+}
+
+func TestScheduleV1SequentialSuite(t *testing.T) {
+	parallelsuite.RunLegacySequential(t, &ScheduleV1SequentialSuite{}) //nolint:staticcheck // SA1019: mutates package-level scheduler tweakables.
+}
+
+func (suite *ScheduleV1SequentialSuite) TestActionDelayMetrics() {
+	t := suite.T()
+	newContext := v1ContextFactory
 	// The short-refresh DesiredTime path this test exercises is gated behind
 	// RefreshCompletionDesiredTime; the shipped default stays at TriggerImmediatelyTimestamp
 	// until a follow-up deploy activates it. Force it on for this run (see the caller: this
@@ -3224,7 +3229,9 @@ func testStateSizeBytesReported(t *testing.T, newContext contextFactory) {
 
 // testCreatesCHASMSentinel tests that creating a V1 schedule also creates a
 // CHASM sentinel to reserve the schedule ID in the CHASM execution space.
-func testCreatesCHASMSentinel(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleV1Suite) TestCreatesCHASMSentinel() {
+	t := suite.T()
+	newContext := v1ContextFactory
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := testcore.RandomizeStr("sid")
@@ -3358,7 +3365,9 @@ func testSkipsWorkflowSentinelWhenDisabled(t *testing.T, newContext contextFacto
 
 // testSkipsCHASMSentinelWhenDisabled asserts that a V1 CreateSchedule does not
 // create a CHASM sentinel when EnableCHASMSchedulerSentinels is off.
-func testSkipsCHASMSentinelWhenDisabled(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleV1Suite) TestSkipsCHASMSentinelWhenDisabled() {
+	t := suite.T()
+	newContext := v1ContextFactory
 	s := newScheduleEnv(t, append(scheduleCommonOpts(t),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerSentinels, false),
 	)...)
@@ -3937,7 +3946,9 @@ func testMigrationCallbackReattachSynthesized(t *testing.T, newContext contextFa
 
 // testCHASMCanListV1Schedules tests that a schedule created in the V1 stack
 // will also be visible in the V2 stack.
-func testCHASMCanListV1Schedules(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleV1Suite) TestCHASMCanListV1Schedules() {
+	t := suite.T()
+	newContext := v1ContextFactory
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "schedule-created-on-v1"
@@ -4008,7 +4019,9 @@ func testCHASMCanListV1Schedules(t *testing.T, newContext contextFactory) {
 }
 
 // testRefresh applies to V1 scheduler only; V2 does not support/need manual refresh.
-func testRefresh(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleV1Suite) TestRefresh() {
+	t := suite.T()
+	newContext := v1ContextFactory
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-refresh"
@@ -4118,7 +4131,9 @@ func testRefresh(t *testing.T, newContext contextFactory) {
 
 // testListBeforeRun only applies to V1, as V2 scheduler does not involve the
 // per-NS worker or workflow.
-func testListBeforeRun(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleV1Suite) TestListBeforeRun() {
+	t := suite.T()
+	newContext := v1ContextFactory
 	s := newScheduleEnv(t, append(scheduleCommonOpts(t),
 		testcore.WithDynamicConfig(dynamicconfig.WorkerPerNamespaceWorkerCount, 0),
 	)...)
@@ -4166,7 +4181,9 @@ func testListBeforeRun(t *testing.T, newContext contextFactory) {
 }
 
 // testRateLimit applies only to V1, as V2 scheduler does not impose its own rate limiting.
-func testRateLimit(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleV1Suite) TestRateLimit() {
+	t := suite.T()
+	newContext := v1ContextFactory
 	s := newScheduleEnv(t, append(scheduleCommonOpts(t),
 		testcore.WithDynamicConfig(dynamicconfig.SchedulerNamespaceStartWorkflowRPS, 1.0),
 	)...)
@@ -4221,7 +4238,9 @@ func testRateLimit(t *testing.T, newContext contextFactory) {
 }
 
 // testNextTimeCache only applies to V1.
-func testNextTimeCache(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleV1Suite) TestNextTimeCache() {
+	t := suite.T()
+	newContext := v1ContextFactory
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-next-time-cache"
@@ -4502,7 +4521,9 @@ func testUpdateScheduleMemo(t *testing.T, newContext contextFactory) {
 	require.Empty(t, describeResp.Memo.GetFields(), "memo should be empty after replace with empty map")
 }
 
-func testUpdateScheduleMemoRejected(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleV1Suite) TestUpdateScheduleMemoRejected() {
+	t := suite.T()
+	newContext := v1ContextFactory
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-update-memo-rejected"
