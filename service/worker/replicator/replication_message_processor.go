@@ -93,6 +93,7 @@ func newReplicationMessageProcessor(
 		namespaceTaskExecutor:        namespaceTaskExecutor,
 		customTaskHandler:            customTaskHandler,
 		metricsHandler:               metricsHandler.WithTags(metrics.OperationTag(metrics.NamespaceReplicationTaskScope)),
+		namespaceMetricsHandler:      metricsHandler,
 		retryPolicyForTask:           retryPolicyForTask,
 		lastProcessedMessageID:       -1,
 		lastRetrievedMessageID:       -1,
@@ -118,6 +119,7 @@ type (
 		namespaceTaskExecutor        nsreplication.TaskExecutor
 		customTaskHandler            func(ctx context.Context, task *replicationspb.ReplicationTask) error
 		metricsHandler               metrics.Handler
+		namespaceMetricsHandler      metrics.Handler
 		retryPolicyForTask           func(*replicationspb.ReplicationTask) backoff.RetryPolicy
 		lastProcessedMessageID       int64
 		lastRetrievedMessageID       int64
@@ -189,6 +191,12 @@ func (p *replicationMessageProcessor) handleReplicationTasks() {
 	taskCtx := headers.SetCallerInfo(context.TODO(), headers.SystemPreemptableCallerInfo)
 	for taskIndex := range response.Messages.ReplicationTasks {
 		task := response.Messages.ReplicationTasks[taskIndex]
+		taskMetricsCtx := nsreplication.WithTaskMetricsContext(taskCtx, nsreplication.TaskMetricsContext{
+			SourceCluster:  p.sourceCluster,
+			TargetCluster:  p.currentCluster,
+			Transport:      nsreplication.LegacyMetricsTransport,
+			VisibilityTime: task.GetVisibilityTime(),
+		})
 		eventData, emitEvents := p.namespaceReplicationEventData(task)
 		if emitEvents {
 			p.emitNamespaceReplicationEvent(
@@ -204,9 +212,9 @@ func (p *replicationMessageProcessor) handleReplicationTasks() {
 		policy := p.retryPolicyForTask(task)
 		err := backoff.ThrottleRetry(func() error {
 			attemptCount++
-			attemptCtx := taskCtx
+			attemptCtx := taskMetricsCtx
 			if emitEvents {
-				attemptCtx = wideevents.SetNamespaceReplicationTaskContext(taskCtx, wideevents.NamespaceReplicationTaskContext{
+				attemptCtx = wideevents.SetNamespaceReplicationTaskContext(attemptCtx, wideevents.NamespaceReplicationTaskContext{
 					SourceCluster: p.sourceCluster,
 					TargetCluster: p.currentCluster,
 					SourceTaskID:  task.GetSourceTaskId(),
@@ -228,6 +236,13 @@ func (p *replicationMessageProcessor) handleReplicationTasks() {
 				p.logger.Error("Failed to put replication tasks to DLQ", tag.Error(dlqErr))
 				metrics.ReplicatorDLQFailures.With(p.metricsHandler).Record(1)
 				return
+			}
+			if task.GetTaskType() == enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK {
+				nsreplication.RecordLegacyTerminalFailure(
+					taskMetricsCtx,
+					p.namespaceMetricsHandler,
+					task.GetNamespaceTaskAttributes(),
+				)
 			}
 
 			if emitEvents {
