@@ -609,3 +609,244 @@ func TestConvertNexusLinkToLinkWorkflowEvent(t *testing.T) {
 		})
 	}
 }
+
+// Every execution type a callback can be attached to must survive the round trip through a URL,
+// since the path segment naming the execution is the only thing that carries it.
+func TestConvertLinkCallback_RoundTripsEveryExecutionType(t *testing.T) {
+	for _, tc := range []struct {
+		executionType enumspb.ExecutionType
+		wantURL       string
+	}{
+		{
+			executionType: enumspb.EXECUTION_TYPE_WORKFLOW,
+			wantURL:       "temporal:///namespaces/ns/workflows/wf-id/run-id/callbacks/request-id",
+		},
+		{
+			executionType: enumspb.EXECUTION_TYPE_ACTIVITY,
+			wantURL:       "temporal:///namespaces/ns/activities/act-id/run-id/callbacks/request-id",
+		},
+		{
+			executionType: enumspb.EXECUTION_TYPE_NEXUS_OPERATION,
+			wantURL:       "temporal:///namespaces/ns/nexus-operations/op-id/run-id/callbacks/request-id",
+		},
+	} {
+		t.Run(tc.executionType.String(), func(t *testing.T) {
+			businessID := map[enumspb.ExecutionType]string{
+				enumspb.EXECUTION_TYPE_WORKFLOW:        "wf-id",
+				enumspb.EXECUTION_TYPE_ACTIVITY:        "act-id",
+				enumspb.EXECUTION_TYPE_NEXUS_OPERATION: "op-id",
+			}[tc.executionType]
+
+			input := &commonpb.Link_Callback{
+				Namespace: "ns",
+				Execution: &commonpb.Execution{
+					Type:       tc.executionType,
+					BusinessId: businessID,
+					RunId:      "run-id",
+				},
+				RequestId: "request-id",
+			}
+
+			link, err := commonnexus.ConvertLinkCallbackToNexusLink(input)
+			require.NoError(t, err)
+			require.Equal(t, "temporal.api.common.v1.Link.Callback", link.Type)
+			require.Equal(t, tc.wantURL, link.URL.String())
+
+			output, err := commonnexus.ConvertNexusLinkToLinkCallback(link)
+			require.NoError(t, err)
+			protorequire.ProtoEqual(t, input, output)
+		})
+	}
+}
+
+// A callback attached to a child component (e.g. a workflow update) carries a component path, whose
+// segments and their order have to survive the round trip.
+func TestConvertLinkCallback_RoundTripsComponentPath(t *testing.T) {
+	// Return a Link_Callback, but without any ComponentPath.
+	getInput := func() *commonpb.Link_Callback {
+		return &commonpb.Link_Callback{
+			Namespace: "ns",
+			Execution: &commonpb.Execution{
+				Type:       enumspb.EXECUTION_TYPE_WORKFLOW,
+				BusinessId: "wf-id",
+				RunId:      "run-id",
+			},
+			RequestId: "request-id",
+		}
+	}
+
+	t.Run("NoComponentPath", func(t *testing.T) {
+		// All of these result in no URL query parameters being added in the
+		// converted Nexus link URL.
+		cases := [][]string{
+			nil,
+			[]string{},
+		}
+		for _, tc := range cases {
+			input := getInput()
+			input.ComponentPath = tc
+
+			link, err := commonnexus.ConvertLinkCallbackToNexusLink(input)
+			require.NoError(t, err)
+			require.Equal(
+				t,
+				"temporal:///namespaces/ns/workflows/wf-id/run-id/callbacks/request-id",
+				link.URL.String(),
+			)
+
+			output, err := commonnexus.ConvertNexusLinkToLinkCallback(link)
+			require.NoError(t, err)
+			protorequire.ProtoEqual(t, input, output)
+		}
+	})
+
+	t.Run("WithComponentPath", func(t *testing.T) {
+		input := getInput()
+		input.ComponentPath = []string{"A:B", "C/D", "E_F"}
+
+		link, err := commonnexus.ConvertLinkCallbackToNexusLink(input)
+		require.NoError(t, err)
+		require.Equal(
+			t,
+			"temporal:///namespaces/ns/workflows/wf-id/run-id/callbacks/request-id"+
+				// Note the component path is in-order and URI encoded.
+				"?componentPath=A%3AB&componentPath=C%2FD&componentPath=E_F",
+			link.URL.String(),
+		)
+
+		output, err := commonnexus.ConvertNexusLinkToLinkCallback(link)
+		require.NoError(t, err)
+		protorequire.ProtoEqual(t, input, output)
+	})
+
+	// Each segment is its own query parameter rather than being joined into one value, so a
+	// delimiter occurring inside a segment cannot be mistaken for a separator. Path segments end in
+	// a user-supplied ID (an update ID is only length-validated), so a comma is reachable and a
+	// comma-joined encoding would need its own escaping layer on top of the URL's.
+	t.Run("SegmentContainingDelimiters", func(t *testing.T) {
+		input := getInput()
+		input.ComponentPath = []string{"Updates", "id,with,commas"}
+
+		link, err := commonnexus.ConvertLinkCallbackToNexusLink(input)
+		require.NoError(t, err)
+		require.Equal(
+			t,
+			"temporal:///namespaces/ns/workflows/wf-id/run-id/callbacks/request-id"+
+				"?componentPath=Updates&componentPath=id%2Cwith%2Ccommas",
+			link.URL.String(),
+		)
+
+		output, err := commonnexus.ConvertNexusLinkToLinkCallback(link)
+		require.NoError(t, err)
+		protorequire.ProtoEqual(t, input, output)
+	})
+
+	// url.Values.Encode sorts by key but keeps each key's values in insertion order, which is what
+	// the path relies on. Only a path whose order differs from its sorted order proves that; the
+	// cases above happen to already be in sorted order.
+	t.Run("PreservesUnsortedOrder", func(t *testing.T) {
+		input := getInput()
+		input.ComponentPath = []string{"zulu", "alpha"}
+
+		link, err := commonnexus.ConvertLinkCallbackToNexusLink(input)
+		require.NoError(t, err)
+		require.Equal(
+			t,
+			"temporal:///namespaces/ns/workflows/wf-id/run-id/callbacks/request-id"+
+				"?componentPath=zulu&componentPath=alpha",
+			link.URL.String(),
+		)
+
+		output, err := commonnexus.ConvertNexusLinkToLinkCallback(link)
+		require.NoError(t, err)
+		protorequire.ProtoEqual(t, input, output)
+	})
+}
+
+// IDs are user-supplied and may contain characters that would otherwise change the shape of the
+// path, so they have to be escaped on the way out and unescaped on the way back.
+func TestConvertLinkCallback_RoundTripsEscapedIDs(t *testing.T) {
+	input := &commonpb.Link_Callback{
+		Namespace: "ns/with-slash",
+		Execution: &commonpb.Execution{
+			Type:       enumspb.EXECUTION_TYPE_WORKFLOW,
+			BusinessId: "wf-id/callbacks/fake",
+			RunId:      "run-id",
+		},
+		RequestId: "request id?x=1",
+	}
+
+	link, err := commonnexus.ConvertLinkCallbackToNexusLink(input)
+	require.NoError(t, err)
+	require.Equal(
+		t,
+		"temporal:///namespaces/ns%2Fwith-slash/workflows/wf-id%2Fcallbacks%2Ffake/run-id"+
+			"/callbacks/request%20id%3Fx=1",
+		link.URL.String(),
+	)
+
+	output, err := commonnexus.ConvertNexusLinkToLinkCallback(link)
+	require.NoError(t, err)
+	protorequire.ProtoEqual(t, input, output)
+}
+
+func TestConvertLinkCallbackToNexusLink_UnsupportedExecutionType(t *testing.T) {
+	_, err := commonnexus.ConvertLinkCallbackToNexusLink(&commonpb.Link_Callback{
+		Namespace: "ns",
+		Execution: &commonpb.Execution{
+			Type:       enumspb.EXECUTION_TYPE_UNSPECIFIED,
+			BusinessId: "wf-id",
+			RunId:      "run-id",
+		},
+		RequestId: "request-id",
+	})
+	require.ErrorContains(t, err, "unsupported execution type")
+}
+
+func TestConvertNexusLinkToLinkCallback_Invalid(t *testing.T) {
+	callbackLinkType := "temporal.api.common.v1.Link.Callback"
+
+	for _, tc := range []struct {
+		name      string
+		link      nexus.Link
+		wantError string
+	}{
+		{
+			name: "wrong-type",
+			link: nexus.Link{
+				URL:  &url.URL{Scheme: "temporal", Path: "/namespaces/ns/workflows/wf-id/run-id/callbacks/req-id"},
+				Type: "temporal.api.common.v1.Link.Activity",
+			},
+			wantError: "cannot parse link type",
+		},
+		{
+			name: "wrong-scheme",
+			link: nexus.Link{
+				URL:  &url.URL{Scheme: "https", Path: "/namespaces/ns/workflows/wf-id/run-id/callbacks/req-id"},
+				Type: callbackLinkType,
+			},
+			wantError: "invalid scheme",
+		},
+		{
+			name: "unknown-execution-type",
+			link: nexus.Link{
+				URL:  &url.URL{Scheme: "temporal", Path: "/namespaces/ns/schedules/sched-id/run-id/callbacks/req-id"},
+				Type: callbackLinkType,
+			},
+			wantError: "malformed URL path",
+		},
+		{
+			name: "missing-request-id-segment",
+			link: nexus.Link{
+				URL:  &url.URL{Scheme: "temporal", Path: "/namespaces/ns/workflows/wf-id/run-id/callbacks"},
+				Type: callbackLinkType,
+			},
+			wantError: "malformed URL path",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := commonnexus.ConvertNexusLinkToLinkCallback(tc.link)
+			require.ErrorContains(t, err, tc.wantError)
+		})
+	}
+}
