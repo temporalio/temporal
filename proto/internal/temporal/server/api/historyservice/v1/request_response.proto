@@ -58,6 +58,8 @@ message RoutingOptions {
   // Request will be routed by resolving the namespace ID and the workflow ID from the first task info element.
   string task_infos = 7;
   // Request will be routed by resolving the namespace ID and the workflow ID from this chasm ref to a given shard.
+  // When specified with workflow_id, a non-empty ref routes by its namespace and business ID; an empty ref
+  // falls back to the workflow ID.
   string chasm_component_ref = 8;
 }
 
@@ -477,7 +479,10 @@ message RespondActivityTaskCanceledRequest {
 message RespondActivityTaskCanceledResponse {}
 
 message IsActivityTaskValidRequest {
-  option (routing).custom = true;
+  option (routing) = {
+    workflow_id: "execution.workflow_id"
+    chasm_component_ref: "component_ref"
+  };
 
   string namespace_id = 1;
   temporal.api.common.v1.WorkflowExecution execution = 2;

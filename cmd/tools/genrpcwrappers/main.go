@@ -253,7 +253,25 @@ func toGetter(snake string) string {
 func makeGetHistoryClient(reqType reflect.Type, routingOptions *historyservice.RoutingOptions) string {
 	t := reqType.Elem() // we know it's a pointer
 
-	if routingOptions.AnyHost && routingOptions.ShardId != "" && routingOptions.WorkflowId != "" && routingOptions.TaskToken != "" && routingOptions.TaskInfos != "" && routingOptions.ChasmComponentRef != "" {
+	hasWorkflowIDRouting := routingOptions.WorkflowId != "" && routingOptions.ChasmComponentRef == ""
+	hasComponentRefRouting := routingOptions.ChasmComponentRef != "" && routingOptions.WorkflowId == ""
+	hasComponentRefFallbackRouting := routingOptions.WorkflowId != "" && routingOptions.ChasmComponentRef != ""
+
+	routingDirectiveCount := 0
+	for _, configured := range []bool{
+		routingOptions.AnyHost,
+		routingOptions.ShardId != "",
+		hasWorkflowIDRouting,
+		routingOptions.TaskToken != "",
+		routingOptions.TaskInfos != "",
+		hasComponentRefRouting,
+		hasComponentRefFallbackRouting,
+	} {
+		if configured {
+			routingDirectiveCount++
+		}
+	}
+	if routingDirectiveCount > 1 {
 		log.Fatalf("Found more than one routing directive in %s", t)
 	}
 	if routingOptions.AnyHost {
@@ -263,7 +281,36 @@ func makeGetHistoryClient(reqType reflect.Type, routingOptions *historyservice.R
 		verifyFieldExists(t, routingOptions.ShardId)
 		return "shardID := " + toGetter(routingOptions.ShardId)
 	}
-	if routingOptions.WorkflowId != "" {
+	if hasComponentRefFallbackRouting {
+		namespaceIDField := routingOptions.NamespaceId
+		if namespaceIDField == "" {
+			namespaceIDField = "namespace_id"
+		}
+
+		verifyFieldExists(t, namespaceIDField)
+		verifyFieldExists(t, routingOptions.WorkflowId)
+		verifyFieldExists(t, routingOptions.ChasmComponentRef)
+		return fmt.Sprintf(`var shardID int32
+	if len(%s) == 0 {
+		shardID = c.shardIDFromWorkflowID(%s, %s)
+	} else {
+		componentRef, err := c.tokenSerializer.DeserializeChasmComponentRef(%s)
+		if err != nil {
+			return nil, serviceerror.NewInvalidArgument("error deserializing component ref")
+		}
+		if componentRef.GetNamespaceId() == "" || componentRef.GetBusinessId() == "" {
+			return nil, serviceerror.NewInvalidArgument("component ref missing namespace ID or business ID")
+		}
+
+		shardID = c.shardIDFromWorkflowID(componentRef.GetNamespaceId(), componentRef.GetBusinessId())
+	}`,
+			toGetter(routingOptions.ChasmComponentRef),
+			toGetter(namespaceIDField),
+			toGetter(routingOptions.WorkflowId),
+			toGetter(routingOptions.ChasmComponentRef),
+		) + "\n"
+	}
+	if hasWorkflowIDRouting {
 		namespaceIdField := routingOptions.NamespaceId
 		if namespaceIdField == "" {
 			namespaceIdField = "namespace_id"
@@ -302,7 +349,7 @@ func makeGetHistoryClient(reqType reflect.Type, routingOptions *historyservice.R
 			toGetter(namespaceIdField),
 		) + "\n"
 	}
-	if routingOptions.ChasmComponentRef != "" {
+	if hasComponentRefRouting {
 		verifyFieldExists(t, routingOptions.ChasmComponentRef)
 		return fmt.Sprintf(`ref, err := c.tokenSerializer.DeserializeChasmComponentRef(%s)
 	if err != nil {
