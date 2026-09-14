@@ -246,6 +246,27 @@ env.InjectHTTPRequestFault(func(ctx context.Context, req *http.Request) *httpfau
 })
 ```
 
+### Persistence fault injection
+
+Use `testcore.InjectPersistenceFault` to return custom errors from persistence calls. The fault is
+active before the test cluster starts. You can filter it by store and method.
+
+```go
+option := testcore.InjectPersistenceFault(t,
+    func(faultinjection.Target) error {
+        return context.DeadlineExceeded
+    },
+    testcore.WithStore(config.ShardStoreName),
+    testcore.WithMethod("UpdateShard"),
+)
+env := testcore.NewEnv(t, option)
+```
+
+Use `testcore.BlockPersistenceCall` when a test must control call order. Call `WaitUntilBlocked`
+before you check other state. Call `Gate.Release` to continue the persistence operation. Call
+`Gate.ReleaseWithError` to return an error from the blocked operation. The test fails if no matching
+call reaches the fault or gate.
+
 ### testhooks package
 
 The `testhooks` package injects test-specific behavior into production code paths that are otherwise

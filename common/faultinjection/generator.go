@@ -1,4 +1,4 @@
-// Package faultinjection registers request and response faults for multiple transports.
+// Package faultinjection registers request and response fault callbacks.
 package faultinjection
 
 import (

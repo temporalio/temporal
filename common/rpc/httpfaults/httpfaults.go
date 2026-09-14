@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"go.temporal.io/server/common/rpc/faultinjection"
+	"go.temporal.io/server/common/faultinjection"
 )
 
 // Scope identifies a namespace for fault matching.
