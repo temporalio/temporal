@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"time"
 
+	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 )
@@ -28,7 +29,12 @@ func (t *TestDynamicTLSConfigProvider) GetInternodeServerConfig() (*tls.Config, 
 }
 
 func (t *TestDynamicTLSConfigProvider) GetInternodeClientConfig() (*tls.Config, error) {
-	return newClientTLSConfig(t.InternodeClientCertProvider, t.settings.Internode.Client.ServerName, true, false, true)
+	client := &t.settings.Internode.Client
+	versions, err := auth.NewTLSVersions(client.MinVersion, client.MaxVersion)
+	if err != nil {
+		return nil, err
+	}
+	return newClientTLSConfig(t.InternodeClientCertProvider, client.ServerName, true, false, true, versions)
 }
 
 func (t *TestDynamicTLSConfigProvider) GetFrontendServerConfig() (*tls.Config, error) {
@@ -36,7 +42,12 @@ func (t *TestDynamicTLSConfigProvider) GetFrontendServerConfig() (*tls.Config, e
 }
 
 func (t *TestDynamicTLSConfigProvider) GetFrontendClientConfig() (*tls.Config, error) {
-	return newClientTLSConfig(t.WorkerCertProvider, t.settings.Frontend.Client.ServerName, true, false, true)
+	client := &t.settings.Frontend.Client
+	versions, err := auth.NewTLSVersions(client.MinVersion, client.MaxVersion)
+	if err != nil {
+		return nil, err
+	}
+	return newClientTLSConfig(t.WorkerCertProvider, client.ServerName, true, false, true, versions)
 }
 
 func (t *TestDynamicTLSConfigProvider) GetExpiringCerts(timeWindow time.Duration) (expiring CertExpirationMap, expired CertExpirationMap, err error) {
