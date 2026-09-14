@@ -354,14 +354,18 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	// Listen to signals in a different goroutine to make business logic clearer
 	workflow.Go(ctx, d.listenToSignals)
 
-	// Wait until we can continue as new or are cancelled. The workflow will continue-as-new iff
-	// there are no pending updates/signals and the state has changed.
+	// Wait until all async propagations complete before continuing as new or closing.
 	err := workflow.Await(ctx, func() bool {
-		return (d.deleteVersion && d.asyncPropagationsInProgress == 0) || // version is deleted -> it's ok to drop all signals and updates.
-			// There is no pending signal or update, but the state is dirty or forceCaN is requested:
-			(!d.signalHandler.signalSelector.HasPending() && d.signalHandler.processingSignals == 0 && workflow.AllHandlersFinished(ctx) &&
-				// And there is a force CaN or a propagated state change or history got too large
-				(d.forceCAN || (d.stateChanged && d.asyncPropagationsInProgress == 0) || workflow.GetInfo(ctx).GetContinueAsNewSuggested()))
+		if d.asyncPropagationsInProgress != 0 {
+			return false
+		}
+		if d.deleteVersion {
+			return true
+		}
+		return !d.signalHandler.signalSelector.HasPending() &&
+			d.signalHandler.processingSignals == 0 &&
+			workflow.AllHandlersFinished(ctx) &&
+			(d.forceCAN || d.stateChanged || workflow.GetInfo(ctx).GetContinueAsNewSuggested()) // There is no pending signal or update, but the state is dirty or forceCaN is requested:
 	})
 	if err != nil {
 		return err
