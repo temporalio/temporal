@@ -39,5 +39,5 @@ func TestConvertSQLError_WrapsOtherErrorsAsUnavailable(t *testing.T) {
 func TestConvertSQLError_Nil(t *testing.T) {
 	t.Parallel()
 	err := convertSQLError("Failed to lock task queue", nil)
-	require.Nil(t, err)
+	require.NoError(t, err)
 }
