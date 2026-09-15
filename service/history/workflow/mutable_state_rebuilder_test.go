@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"testing"
 	"time"
@@ -2399,7 +2400,8 @@ func nexusCompletedEvent() *historypb.HistoryEvent {
 func (s *stateBuilderSuite) TestApplyStateMachineEvent() {
 	hsmErr := serviceerror.NewInternal("hsm apply failed")
 	chasmErr := serviceerror.NewInternal("chasm unavailable")
-	notFound := serviceerror.NewNotFound("nexus operation not found for scheduled event ID")
+	nexusOpNotFoundInWfOpsError := fmt.Errorf("wrapped: %w", chasmworkflow.ErrNexusOperationNotFound)
+	notFoundErrFromTransitionApply := serviceerror.NewNotFound("a nested component load failed")
 
 	testCases := []struct {
 		name             string
@@ -2469,24 +2471,31 @@ func (s *stateBuilderSuite) TestApplyStateMachineEvent() {
 			wantHSMApplied: true,
 		},
 		{
-			// CHASM doesn't own the op (NotFound); the event falls back to the HSM tree.
-			name:             "non-create, chasm not found, falls back to hsm",
+			// CHASM doesn't contain the op (ErrNexusOperationNotFound); the event falls back to the HSM tree.
+			name:             "non-create, chasm component not found, falls back to hsm",
 			event:            nexusCompletedEvent(),
-			tc:               nexusRebuildCase{chasmEnabled: true, chasmHasDef: true, chasmApplyErr: notFound},
+			tc:               nexusRebuildCase{chasmEnabled: true, chasmHasDef: true, chasmApplyErr: nexusOpNotFoundInWfOpsError},
 			wantChasmApplied: true,
 			wantHSMApplied:   true,
 		},
 		{
-			// CHASM NotFound falls back to HSM, whose error is then surfaced as-is.
-			name:             "non-create, chasm not found, hsm error surfaced",
+			// ErrNexusOperationNotFound falls back to HSM, whose error is then surfaced as-is.
+			name:             "non-create, chasm component not found, hsm error surfaced",
 			event:            nexusCompletedEvent(),
-			tc:               nexusRebuildCase{chasmEnabled: true, chasmHasDef: true, chasmApplyErr: notFound, hsmApplyErr: hsmErr},
+			tc:               nexusRebuildCase{chasmEnabled: true, chasmHasDef: true, chasmApplyErr: nexusOpNotFoundInWfOpsError, hsmApplyErr: hsmErr},
 			wantChasmApplied: true,
 			wantHSMApplied:   true,
 			wantErr:          hsmErr,
 		},
 		{
-			// A genuine (non-NotFound) CHASM error is surfaced, not fallen back to HSM.
+			name:             "non-create, bare not-found is surfaced without hsm fallback",
+			event:            nexusCompletedEvent(),
+			tc:               nexusRebuildCase{chasmEnabled: true, chasmHasDef: true, chasmApplyErr: notFoundErrFromTransitionApply},
+			wantChasmApplied: true,
+			wantErr:          notFoundErrFromTransitionApply,
+		},
+		{
+			// A genuine (non-not-found) CHASM error is surfaced, not fallen back to HSM.
 			name:             "non-create, chasm error surfaced without hsm fallback",
 			event:            nexusCompletedEvent(),
 			tc:               nexusRebuildCase{chasmEnabled: true, chasmHasDef: true, chasmApplyErr: chasmErr},
