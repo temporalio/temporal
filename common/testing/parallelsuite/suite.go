@@ -134,20 +134,20 @@ func (s *Suite[T]) Context() context.Context {
 // Run creates a parallel subtest. The callback receives a fresh copy of the
 // concrete suite type, initialized for the subtest's *testing.T.
 func (s *Suite[T]) Run(name string, fn func(T)) bool {
-	pt := s.guardT.T // grab T before sealing
-	s.guardT.markHasSubtests()
-	return pt.Run(name, func(t *testing.T) {
-		fn(s.copySuite(t, s.runParallel, nil, nil).(T))
-	})
+	return s.run(name, s.runParallel, fn)
 }
 
 // RunSequential creates a serialized subtest. Use it when the subtests
 // intentionally share state and/or ordering between tests matters.
 func (s *Suite[T]) RunSequential(name string, fn func(T)) bool {
+	return s.run(name, false, fn)
+}
+
+func (s *Suite[T]) run(name string, parallel bool, fn func(T)) bool {
 	pt := s.guardT.T // grab T before sealing
 	s.guardT.markHasSubtests()
 	return pt.Run(name, func(t *testing.T) {
-		fn(s.copySuite(t, false, nil, nil).(T))
+		fn(s.copySuite(t, parallel, nil, nil).(T))
 	})
 }
 

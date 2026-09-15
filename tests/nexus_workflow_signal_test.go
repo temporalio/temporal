@@ -27,11 +27,9 @@ const (
 )
 
 type signalOperationArgs struct {
-	HandlerWorkflowID     string
-	HandlerRunID          string
-	SignalName            string
-	RequestID             string
-	WorkflowIDReusePolicy enumspb.WorkflowIdReusePolicy // Used only for Signal-with-Start
+	HandlerWorkflowID string
+	SignalName        string
+	RequestID         string
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationBackedBySignal(chasmEnabled bool) {
@@ -53,13 +51,13 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationBackedBySignal(chasmEnabled b
 			}
 			resp, err := env.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
 				Namespace:         env.Namespace().String(),
-				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: args.HandlerWorkflowID, RunId: args.HandlerRunID},
+				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: args.HandlerWorkflowID},
 				SignalName:        args.SignalName,
 				RequestId:         args.RequestID,
 				Links:             commonnexus.ConvertNexusLinksToProtoLinks(options.Links, log.NewNoopLogger()),
 			})
 			if err != nil {
-				// Note: The handler could choose to instead return a non-retryable error instead.
+				// Note: The handler could choose to return a non-retryable error instead.
 				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "signal failed: %v", err)
 			}
 			workflowEventLink := resp.GetLink().GetWorkflowEvent()
@@ -83,18 +81,20 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationBackedBySignal(chasmEnabled b
 
 	s.RunSequential("Signals on running workflows complete", func(s *NexusWorkflowTestSuite) {
 		callerRun := s.startCaller(ctx, env, taskQueue, endpointName, "signal", args)
-		s.assertSignalLinks(ctx, env, chasmEnabled, callerRun, handlerRun, args.RequestID, false)
+		s.assertSignalLinks(ctx, env, chasmEnabled, callerRun, handlerRun, args.RequestID)
 	})
 	s.RunSequential("Signals de-dup on requestID", func(s *NexusWorkflowTestSuite) {
 		callerRun := s.startCaller(ctx, env, taskQueue, endpointName, "signal", args)
 		s.assertSignalForwardLink(ctx, env, callerRun, handlerRun, args.RequestID)
 		// Verify no duplicates in handler history as well.
-		s.assertSingleHandlerSignalEvent(ctx, env, handlerRun, args.RequestID)
+		s.handlerSignalEvent(env, handlerRun, args.RequestID)
 	})
 	s.RunSequential("Workflow reset preserves signal with links", func(s *NexusWorkflowTestSuite) {
+		preResetLinks := s.handlerSignalEvent(env, handlerRun, args.RequestID).GetLinks()
 		handlerRun = s.resetHandlerWorkflowAfterSignal(ctx, env, handlerRun, args.RequestID)
-		s.assertSingleHandlerSignalEvent(ctx, env, handlerRun, args.RequestID)
-		s.assertHandlerSignalRequestIDResolves(ctx, env, chasmEnabled, handlerRun, args.RequestID)
+		signaledEvent := s.handlerSignalEvent(env, handlerRun, args.RequestID)
+		protorequire.ProtoSliceEqual(s.T(), preResetLinks, signaledEvent.GetLinks())
+		s.assertHandlerSignalRequestIDResolves(ctx, env, chasmEnabled, handlerRun, args.RequestID, signaledEvent)
 	})
 	// Intentionally skip unknown workflow/run IDs. Although frontend rejects these requests, the Nexus
 	// handler could choose to retry- maybe until a fixed version of the handler is deployed.
@@ -119,17 +119,16 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationBackedBySignalWithStart(chasm
 				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid signal with start arguments: %v", err)
 			}
 			resp, err := env.FrontendClient().SignalWithStartWorkflowExecution(ctx, &workflowservice.SignalWithStartWorkflowExecutionRequest{
-				Namespace:             env.Namespace().String(),
-				WorkflowId:            args.HandlerWorkflowID,
-				WorkflowType:          &commonpb.WorkflowType{Name: handlerWorkflowType},
-				TaskQueue:             &taskqueuepb.TaskQueue{Name: taskQueue},
-				SignalName:            args.SignalName,
-				RequestId:             args.RequestID,
-				WorkflowIdReusePolicy: args.WorkflowIDReusePolicy,
-				Links:                 commonnexus.ConvertNexusLinksToProtoLinks(options.Links, log.NewNoopLogger()),
+				Namespace:    env.Namespace().String(),
+				WorkflowId:   args.HandlerWorkflowID,
+				WorkflowType: &commonpb.WorkflowType{Name: handlerWorkflowType},
+				TaskQueue:    &taskqueuepb.TaskQueue{Name: taskQueue},
+				SignalName:   args.SignalName,
+				RequestId:    args.RequestID,
+				Links:        commonnexus.ConvertNexusLinksToProtoLinks(options.Links, log.NewNoopLogger()),
 			})
 			if err != nil {
-				// Note: The handler could choose to instead return a non-retryable error instead.
+				// Note: The handler could choose to return a non-retryable error instead.
 				return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "signal with start failed: %v", err)
 			}
 			workflowEventLink := resp.GetSignalLink().GetWorkflowEvent()
@@ -156,7 +155,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationBackedBySignalWithStart(chasm
 		var handlerRunID string
 		s.NoError(callerRun.Get(ctx, &handlerRunID))
 		s.Equal(handlerRun.GetRunID(), handlerRunID)
-		s.assertSignalLinks(ctx, env, chasmEnabled, callerRun, handlerRun, args.RequestID, false)
+		s.assertSignalLinks(ctx, env, chasmEnabled, callerRun, handlerRun, args.RequestID)
 	})
 	s.RunSequential("Signals de-dup on requestID", func(s *NexusWorkflowTestSuite) {
 		callerRun := s.startCaller(ctx, env, taskQueue, endpointName, "signal-with-start", args)
@@ -164,12 +163,14 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationBackedBySignalWithStart(chasm
 		s.NoError(callerRun.Get(ctx, &handlerRunID))
 		s.Equal(handlerRun.GetRunID(), handlerRunID)
 		s.assertSignalForwardLink(ctx, env, callerRun, handlerRun, args.RequestID)
-		s.assertSingleHandlerSignalEvent(ctx, env, handlerRun, args.RequestID)
+		s.handlerSignalEvent(env, handlerRun, args.RequestID)
 	})
 	s.RunSequential("Workflow reset preserves signal with links", func(s *NexusWorkflowTestSuite) {
+		preResetLinks := s.handlerSignalEvent(env, handlerRun, args.RequestID).GetLinks()
 		handlerRun = s.resetHandlerWorkflowAfterSignal(ctx, env, handlerRun, args.RequestID)
-		s.assertSingleHandlerSignalEvent(ctx, env, handlerRun, args.RequestID)
-		s.assertHandlerSignalRequestIDResolves(ctx, env, chasmEnabled, handlerRun, args.RequestID)
+		signaledEvent := s.handlerSignalEvent(env, handlerRun, args.RequestID)
+		protorequire.ProtoSliceEqual(s.T(), preResetLinks, signaledEvent.GetLinks())
+		s.assertHandlerSignalRequestIDResolves(ctx, env, chasmEnabled, handlerRun, args.RequestID, signaledEvent)
 	})
 	s.RunSequential("Completes handler workflow", func(s *NexusWorkflowTestSuite) {
 		s.NoError(env.SdkClient().SignalWorkflow(ctx, handlerRun.GetID(), handlerRun.GetRunID(), finishSignalName, nil))
@@ -181,7 +182,11 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationBackedBySignalWithStart(chasm
 		s.NoError(callerRun.Get(ctx, &replacementRunID))
 		s.NotEqual(handlerRun.GetRunID(), replacementRunID)
 		replacementRun := env.SdkClient().GetWorkflow(ctx, handlerRun.GetID(), replacementRunID)
-		s.assertSignalLinks(ctx, env, chasmEnabled, callerRun, replacementRun, args.RequestID, true)
+		signaledEvent := s.assertSignalLinks(ctx, env, chasmEnabled, callerRun, replacementRun, args.RequestID)
+		handlerHistory := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: replacementRun.GetID(), RunId: replacementRun.GetRunID()})
+		startedEvent := s.RequireHistoryEvent(handlerHistory, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
+		s.Require().Len(startedEvent.GetLinks(), 1)
+		protorequire.ProtoEqual(s.T(), signaledEvent.GetLinks()[0].GetWorkflowEvent(), startedEvent.GetLinks()[0].GetWorkflowEvent())
 		s.NoError(env.SdkClient().SignalWorkflow(ctx, replacementRun.GetID(), replacementRun.GetRunID(), finishSignalName, nil))
 		s.NoError(replacementRun.Get(ctx, nil))
 	})
@@ -210,29 +215,15 @@ func (s *NexusWorkflowTestSuite) assertSignalLinks(
 	callerRun client.WorkflowRun,
 	handlerRun client.WorkflowRun,
 	signalRequestID string,
-	assertStartedBacklink bool,
-) {
+) *historypb.HistoryEvent {
 	s.T().Helper()
-	s.NoError(callerRun.Get(ctx, nil))
 	s.assertSignalForwardLink(ctx, env, callerRun, handlerRun, signalRequestID)
 	callerHistory := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: callerRun.GetID(), RunId: callerRun.GetRunID()})
 	scheduledEvent := s.RequireHistoryEvent(callerHistory, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED)
-	handlerHistory := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: handlerRun.GetID(), RunId: handlerRun.GetRunID()})
-	var signaledEvent *historypb.HistoryEvent
-	for _, event := range handlerHistory {
-		if event.GetWorkflowExecutionSignaledEventAttributes().GetRequestId() == signalRequestID {
-			s.Require().Nil(signaledEvent, "expected exactly one signal event for request ID %q", signalRequestID)
-			signaledEvent = event
-		}
-	}
-	s.Require().NotNil(signaledEvent)
+	signaledEvent := s.handlerSignalEvent(env, handlerRun, signalRequestID)
 	s.assertSignalBackwardLink(env, callerRun, scheduledEvent, signaledEvent)
-	if assertStartedBacklink {
-		startedEvent := s.RequireHistoryEvent(handlerHistory, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
-		s.Require().Len(startedEvent.GetLinks(), 1)
-		protorequire.ProtoEqual(s.T(), signaledEvent.GetLinks()[0].GetWorkflowEvent(), startedEvent.GetLinks()[0].GetWorkflowEvent())
-	}
-	s.assertHandlerSignalRequestIDResolves(ctx, env, chasmEnabled, handlerRun, signalRequestID)
+	s.assertHandlerSignalRequestIDResolves(ctx, env, chasmEnabled, handlerRun, signalRequestID, signaledEvent)
+	return signaledEvent
 }
 
 func (s *NexusWorkflowTestSuite) assertSignalBackwardLink(env *NexusTestEnv, callerRun client.WorkflowRun, scheduledEvent, signaledEvent *historypb.HistoryEvent) {
@@ -258,21 +249,13 @@ func (s *NexusWorkflowTestSuite) assertHandlerSignalRequestIDResolves(
 	chasmEnabled bool,
 	handlerRun client.WorkflowRun,
 	signalRequestID string,
+	signaledEvent *historypb.HistoryEvent,
 ) {
 	s.T().Helper()
 	if !chasmEnabled {
 		// DescribeWorkflow exposes signal request-ID resolution only for CHASM.
 		return
 	}
-	handlerHistory := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: handlerRun.GetID(), RunId: handlerRun.GetRunID()})
-	var signaledEvent *historypb.HistoryEvent
-	for _, event := range handlerHistory {
-		if event.GetWorkflowExecutionSignaledEventAttributes().GetRequestId() == signalRequestID {
-			s.Require().Nil(signaledEvent, "expected exactly one signal event for request ID %q", signalRequestID)
-			signaledEvent = event
-		}
-	}
-	s.Require().NotNil(signaledEvent)
 	descResp, err := env.FrontendClient().DescribeWorkflowExecution(
 		ctx,
 		&workflowservice.DescribeWorkflowExecutionRequest{
@@ -306,16 +289,18 @@ func (s *NexusWorkflowTestSuite) assertSignalForwardLink(ctx context.Context, en
 	}, completedEvent.GetLinks()[0].GetWorkflowEvent())
 }
 
-func (s *NexusWorkflowTestSuite) assertSingleHandlerSignalEvent(ctx context.Context, env *NexusTestEnv, handlerRun client.WorkflowRun, signalRequestID string) {
+func (s *NexusWorkflowTestSuite) handlerSignalEvent(env *NexusTestEnv, handlerRun client.WorkflowRun, signalRequestID string) *historypb.HistoryEvent {
 	s.T().Helper()
 	handlerHistory := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: handlerRun.GetID(), RunId: handlerRun.GetRunID()})
-	var count int
+	var signaledEvent *historypb.HistoryEvent
 	for _, event := range handlerHistory {
 		if event.GetWorkflowExecutionSignaledEventAttributes().GetRequestId() == signalRequestID {
-			count++
+			s.Require().Nil(signaledEvent, "expected exactly one signal event for request ID %q", signalRequestID)
+			signaledEvent = event
 		}
 	}
-	s.Equal(1, count)
+	s.Require().NotNil(signaledEvent, "no signal event for request ID %q", signalRequestID)
+	return signaledEvent
 }
 
 func (s *NexusWorkflowTestSuite) resetHandlerWorkflowAfterSignal(
