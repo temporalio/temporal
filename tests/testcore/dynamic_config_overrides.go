@@ -3,6 +3,7 @@ package testcore
 import (
 	"time"
 
+	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/components/nexusoperations"
@@ -63,6 +64,7 @@ var (
 		dynamicconfig.FrontendEnableWorkerVersioningDataAPIs.Key():          true,
 		dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs.Key():      true,
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                    1 * time.Millisecond,
+		callback.InspectSourceHeader.Key():                                  false,
 		nexusoperations.RecordCancelRequestCompletionEvents.Key():           true,
 		nexusoperations.UseSystemCallbackURL.Key():                          true,
 	}

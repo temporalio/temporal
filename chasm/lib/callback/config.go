@@ -36,9 +36,10 @@ var InspectSourceHeader = dynamicconfig.NewGlobalBoolSetting(
 	"callback.inspectSourceHeader",
 	true,
 	`Controls whether the legacy "source" header should be inspected to determine if a Nexus callback request is internal
-or external. This defaults to true for mixed-version compatibility while worker callbacks migrate to the
-temporal://system URL. Disable it after migration because trusting a caller-controlled header can route external
-requests internally.`,
+or external. This defaults to true for mixed-version compatibility. Disable it only after
+component.nexusoperations.useSystemCallbackURL has been enabled and all callbacks created with the old callback URL
+template have drained. When disabled, temporal://system callbacks are routed internally without using this header,
+and other callbacks are routed externally, preventing caller-controlled headers from selecting an internal route.`,
 )
 
 type Config struct {

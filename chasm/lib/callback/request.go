@@ -23,33 +23,39 @@ func routeRequest(
 	inspectSourceHeader bool,
 ) (*http.Response, error) {
 	isSystemCallback := r.URL.String() == nexus.SystemCallbackURL
-	// Older servers populated this header for worker targets. Treat the request as external unless legacy inspection is enabled.
-	if !isSystemCallback && (!inspectSourceHeader || r.Header == nil || r.Header.Get(callbackSourceHeader) == "") {
+	callbackSource := ""
+	if inspectSourceHeader {
+		callbackSource = r.Header.Get(callbackSourceHeader)
+	}
+	// Older servers populated this header for worker targets. Treat non-system requests as external unless legacy inspection is enabled.
+	if !isSystemCallback && callbackSource == "" {
 		return defaultClient.Do(r)
 	}
 	// If we got here, we assume that the endpoint in the original call was a worker target, and we should route
 	// internally, either to a local frontend, or one of the other connected clusters' frontends.
 	var frontendClient *common.FrontendHTTPClient
-	callbackSource := r.Header.Get(callbackSourceHeader)
-	for clusterName, clusterInfo := range clusterMetadata.GetAllClusterInfo() {
-		if callbackSource == clusterInfo.ClusterID {
-			if clusterMetadata.GetCurrentClusterName() == clusterName {
-				frontendClient = localClient
-			} else {
-				fec, err := httpClientCache.Get(clusterName)
-				if err != nil {
-					logger.Warn(
-						"HTTPCallerProvider unable to get FrontendHTTPClient for callback target cluster. Using local HTTP Client.",
-						tag.SourceCluster(clusterMetadata.GetCurrentClusterName()),
-						tag.TargetCluster(clusterName),
-						tag.Error(err),
-					)
+	// Empty cluster IDs are valid, so only try to match a non-empty source.
+	if callbackSource != "" {
+		for clusterName, clusterInfo := range clusterMetadata.GetAllClusterInfo() {
+			if callbackSource == clusterInfo.ClusterID {
+				if clusterMetadata.GetCurrentClusterName() == clusterName {
 					frontendClient = localClient
 				} else {
-					frontendClient = fec
+					fec, err := httpClientCache.Get(clusterName)
+					if err != nil {
+						logger.Warn(
+							"HTTPCallerProvider unable to get FrontendHTTPClient for callback target cluster. Using local HTTP Client.",
+							tag.SourceCluster(clusterMetadata.GetCurrentClusterName()),
+							tag.TargetCluster(clusterName),
+							tag.Error(err),
+						)
+						frontendClient = localClient
+					} else {
+						frontendClient = fec
+					}
 				}
+				break
 			}
-			break
 		}
 	}
 	if frontendClient == nil {

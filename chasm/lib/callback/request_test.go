@@ -107,7 +107,7 @@ func TestRouteRequest_SourceHeaderInspected(t *testing.T) {
 	require.Equal(t, http.StatusAccepted, resp.StatusCode)
 }
 
-func TestRouteRequest_SystemCallback(t *testing.T) {
+func TestRouteRequest_SystemCallbackSourceHeaderIgnored(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
@@ -115,7 +115,35 @@ func TestRouteRequest_SystemCallback(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	clusterMeta := cluster.NewMockMetadata(ctrl)
-	clusterMeta.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{})
+	clusterMeta.EXPECT().GetCurrentClusterName().Return("cluster-A")
+
+	r, err := http.NewRequest(http.MethodPost, nexus.SystemCallbackURL, nil)
+	require.NoError(t, err)
+	r.Header.Set(callbackSourceHeader, "cluster-id-B")
+
+	resp, err := routeRequest(
+		r,
+		clusterMeta,
+		nil,
+		&http.Client{},
+		newTestFrontendHTTPClient(ts),
+		log.NewNoopLogger(),
+		false,
+	)
+	require.NoError(t, err)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, nexus.PathCompletionCallbackNoIdentifier, r.URL.Path)
+}
+
+func TestRouteRequest_SystemCallbackWithoutSourceHeader(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer ts.Close()
+
+	ctrl := gomock.NewController(t)
+	clusterMeta := cluster.NewMockMetadata(ctrl)
 	clusterMeta.EXPECT().GetCurrentClusterName().Return("cluster-A")
 
 	r, err := http.NewRequest(http.MethodPost, nexus.SystemCallbackURL, nil)
@@ -128,7 +156,7 @@ func TestRouteRequest_SystemCallback(t *testing.T) {
 		&http.Client{},
 		newTestFrontendHTTPClient(ts),
 		log.NewNoopLogger(),
-		false,
+		true,
 	)
 	require.NoError(t, err)
 	defer func() { _ = resp.Body.Close() }()
