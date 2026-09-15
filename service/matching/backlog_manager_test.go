@@ -948,6 +948,55 @@ func (s *BacklogManagerTestSuite) TestExpiredTasksOnRead_EmitTasksDropped() {
 	}
 }
 
+// TestPhysicalBacklogGauges_AgeTaggedByPriority verifies emitPhysicalBacklogGaugesLocked
+// records backlog age per priority with a task_priority tag, matching the count gauge,
+// rather than a single untagged "oldest across all priorities" value.
+func (s *BacklogManagerTestSuite) TestPhysicalBacklogGauges_AgeTaggedByPriority() {
+	const (
+		pri1 = int32(1)
+		pri2 = int32(2)
+	)
+
+	sq1 := &dbSubqueue{oldestTime: time.Now().Add(-30 * time.Second)}
+	sq1.Key = &persistencespb.SubqueueKey{Priority: pri1}
+	sq1.ApproximateBacklogCount = 3
+	sq2 := &dbSubqueue{oldestTime: time.Now().Add(-90 * time.Second)}
+	sq2.Key = &persistencespb.SubqueueKey{Priority: pri2}
+	sq2.ApproximateBacklogCount = 5
+
+	db := s.blm.getDB()
+	db.Lock()
+	db.subqueues = []*dbSubqueue{sq1, sq2}
+	db.Unlock()
+
+	capture := s.metricsCap.StartCapture()
+	defer s.metricsCap.StopCapture(capture)
+
+	db.Lock()
+	db.emitPhysicalBacklogGaugesLocked()
+	db.Unlock()
+
+	snap := capture.Snapshot()
+	byPriority := func(recs []*metricstest.CapturedRecording) map[string]float64 {
+		out := make(map[string]float64)
+		for _, rec := range recs {
+			out[rec.Tags[metrics.TaskPriorityTagName]] = rec.Value.(float64)
+		}
+		return out
+	}
+
+	tag1 := metrics.MatchingTaskPriorityTag(pri1).Value
+	tag2 := metrics.MatchingTaskPriorityTag(pri2).Value
+
+	counts := byPriority(snap[metrics.PhysicalApproximateBacklogCount.Name()])
+	s.Equal(map[string]float64{tag1: 3, tag2: 5}, counts)
+
+	ages := byPriority(snap[metrics.PhysicalApproximateBacklogAgeSeconds.Name()])
+	s.Len(ages, 2, "age gauge should be tagged per priority")
+	s.InDelta(30, ages[tag1], 5)
+	s.InDelta(90, ages[tag2], 5)
+}
+
 func totalApproximateBacklogCount(c backlogManager) (total int64) {
 	for _, stats := range c.BacklogStatsByPriority() {
 		total += stats.ApproximateBacklogCount
