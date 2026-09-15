@@ -61,6 +61,15 @@ type (
 		Throttle ThrottleKey
 	}
 
+	// weightedClass is one class in visit order with the priority weight that orders it. The
+	// weight is cached because reading it is a namespace registry lookup and a pass runs ten
+	// times a second on every shard; it is refreshed when the class set is next swept, so a
+	// namespace failover takes up to one sweep to change the order.
+	weightedClass struct {
+		key    reschedulerKey
+		weight int
+	}
+
 	reschedulerImpl struct {
 		scheduler                   Scheduler
 		timeSource                  clock.TimeSource
@@ -75,12 +84,15 @@ type (
 
 		timerGate        timer.Gate
 		taskChannelKeyFn TaskChannelKeyFn
+		channelWeightFn  ChannelWeightFn
 
 		sync.Mutex
 		pqMap          map[reschedulerKey]collection.Queue[rescheduledExecuable]
-		keyOrder       []reschedulerKey
+		keyOrder       []weightedClass
 		rrCursor       int
 		numExecutables int
+		// Scratch for one pass's visit order, reused so ordering allocates nothing.
+		visitOrder []weightedClass
 	}
 )
 
@@ -95,7 +107,7 @@ func NewRescheduler(
 	if maxThrottledReleasesPerPass == nil {
 		maxThrottledReleasesPerPass = dynamicconfig.GetIntPropertyFn(math.MaxInt)
 	}
-	return &reschedulerImpl{
+	r := &reschedulerImpl{
 		scheduler:                   scheduler,
 		timeSource:                  timeSource,
 		logger:                      logger,
@@ -111,6 +123,8 @@ func NewRescheduler(
 
 		pqMap: make(map[reschedulerKey]collection.Queue[rescheduledExecuable]),
 	}
+	r.channelWeightFn = scheduler.ChannelWeightFn()
+	return r
 }
 
 func (r *reschedulerImpl) Start() {
@@ -287,10 +301,9 @@ func (r *reschedulerImpl) reschedule() {
 	pass := reschedulePass{now: now, releasesRemaining: remaining}
 
 	n := len(r.keyOrder)
-	for i := 0; i < n; i++ {
-		key := r.keyOrder[(r.rrCursor+i)%n]
-		if pq, ok := r.pqMap[key]; ok && !pq.IsEmpty() {
-			r.drainClassLocked(key, pq, &pass)
+	for _, class := range r.visitOrderLocked() {
+		if pq, ok := r.pqMap[class.key]; ok && !pq.IsEmpty() {
+			r.drainClassLocked(class.key, pq, &pass)
 		}
 	}
 	if n > 0 {
@@ -299,6 +312,80 @@ func (r *reschedulerImpl) reschedule() {
 
 	if !pass.nextWake.IsZero() {
 		r.timerGate.Update(pass.nextWake)
+	}
+}
+
+// visitOrderLocked is the order gated classes are offered the budget in: by priority weight
+// first, then by the round robin cursor so no namespace starves another at the same priority.
+//
+// Order is the whole allocation. A class drains until the gate refuses it, and the pass cap is
+// far above the admitted rate, so whichever class is offered the bucket first takes what is in
+// it. Visiting in insertion order alone gave every (namespace, priority) class an equal turn,
+// which let preemptable work spend a namespace's budget ahead of high priority work.
+//
+// This is upstream of the IWRR scheduler, where priority is otherwise applied, so without it a
+// low priority backlog is never even submitted for IWRR to deprioritise.
+//
+// This runs on every pass of every shard's rescheduler, so it reads no configuration and
+// allocates nothing: weights are already cached on the class, and the scratch slice is reused.
+func (r *reschedulerImpl) visitOrderLocked() []weightedClass {
+	n := len(r.keyOrder)
+	r.visitOrder = r.visitOrder[:0]
+	uniform := true
+	for i := 0; i < n; i++ {
+		class := r.keyOrder[(r.rrCursor+i)%n]
+		r.visitOrder = append(r.visitOrder, class)
+		if class.weight != r.visitOrder[0].weight {
+			uniform = false
+		}
+	}
+	// Nothing to reorder when every class carries the same weight, which is the common case of
+	// one namespace at one priority.
+	if uniform {
+		return r.visitOrder
+	}
+
+	// Insertion sort, descending. Stable by construction because the comparison is strict, so
+	// the rotation above still decides order within one priority. Faster than sort.SliceStable
+	// at these lengths, a handful of classes rather than thousands.
+	//
+	// Strict order starves the lowest priority while a higher one has demand, and that is the
+	// intent. Both governed enforcers cascade: a request consumes its own priority's tokens and
+	// every lower priority's too, so while high priority saturates the budget a preemptable
+	// dispatch is refused whatever the rescheduler does. Releasing it anyway would spend a token
+	// on an attempt that cannot succeed, and its rejection is charged to this class - which has
+	// no priority in its key - dragging the admitted rate down for the high priority work as
+	// well. Not releasing it is the waste this controller exists to remove.
+	for i := 1; i < n; i++ {
+		class := r.visitOrder[i]
+		j := i - 1
+		for j >= 0 && r.visitOrder[j].weight < class.weight {
+			r.visitOrder[j+1] = r.visitOrder[j]
+			j--
+		}
+		r.visitOrder[j+1] = class
+	}
+	return r.visitOrder
+}
+
+// classWeight is the priority weight the visit order sorts by. A scheduler that cannot report
+// weights leaves every class equal, which is the behaviour before priority was considered.
+func (r *reschedulerImpl) classWeight(key reschedulerKey) int {
+	if r.channelWeightFn == nil {
+		return 0
+	}
+	return r.channelWeightFn(key.TaskChannelKey)
+}
+
+// refreshClassWeightsLocked re-reads every class's weight. It runs on the sweep rather than on a
+// pass so that a failover or a config push is picked up without paying for a registry lookup per
+// class ten times a second.
+func (r *reschedulerImpl) refreshClassWeightsLocked() {
+	if r.channelWeightFn == nil {
+		return
+	}
+	for i := range r.keyOrder {
+		r.keyOrder[i].weight = r.classWeight(r.keyOrder[i].key)
 	}
 }
 
@@ -450,6 +537,7 @@ func (r *reschedulerImpl) cleanupPQ() {
 		}
 	}
 	r.rebuildKeyOrderLocked()
+	r.refreshClassWeightsLocked()
 }
 
 func (r *reschedulerImpl) drain() {
@@ -473,9 +561,9 @@ func (r *reschedulerImpl) rebuildKeyOrderLocked() {
 		return
 	}
 	order := r.keyOrder[:0]
-	for _, key := range r.keyOrder {
-		if _, ok := r.pqMap[key]; ok {
-			order = append(order, key)
+	for _, class := range r.keyOrder {
+		if _, ok := r.pqMap[class.key]; ok {
+			order = append(order, class)
 		}
 	}
 	r.keyOrder = order
@@ -497,7 +585,7 @@ func (r *reschedulerImpl) getOrCreateClassLocked(
 
 	pq := r.newPriorityQueue(nil)
 	r.pqMap[key] = pq
-	r.keyOrder = append(r.keyOrder, key)
+	r.keyOrder = append(r.keyOrder, weightedClass{key: key, weight: r.classWeight(key)})
 	return pq
 }
 

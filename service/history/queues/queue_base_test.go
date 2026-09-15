@@ -87,6 +87,7 @@ func (s *queueBaseSuite) SetupTest() {
 	s.mockScheduler = NewMockScheduler(s.controller)
 	s.mockRescheduler = NewMockRescheduler(s.controller)
 
+	s.mockScheduler.EXPECT().ChannelWeightFn().Return(nil).AnyTimes()
 	s.mockScheduler.EXPECT().TaskChannelKeyFn().Return(
 		func(_ Executable) TaskChannelKey { return TaskChannelKey{} },
 	).AnyTimes()

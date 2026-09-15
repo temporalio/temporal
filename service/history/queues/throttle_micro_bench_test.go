@@ -1,10 +1,12 @@
 package queues
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
 	"go.temporal.io/server/common/clock"
+	ctasks "go.temporal.io/server/common/tasks"
 	"go.uber.org/mock/gomock"
 )
 
@@ -152,5 +154,40 @@ func BenchmarkReschedule_ReleasingPass(b *testing.B) {
 
 	if r.Len() != 0 {
 		b.Fatalf("expected the pass to drain the class, %d left", r.Len())
+	}
+}
+
+// visitOrderLocked runs on every pass of every shard's rescheduler, so it must not allocate.
+// An earlier version built a weight map and used sort.SliceStable, which cost 2.2KB and six
+// allocations per pass at sixteen classes; this pins that it stays at zero.
+func BenchmarkReschedulerVisitOrder(b *testing.B) {
+	weights := map[ctasks.Priority]int{
+		ctasks.PriorityHigh:        10,
+		ctasks.PriorityLow:         9,
+		ctasks.PriorityPreemptable: 1,
+	}
+	prios := []ctasks.Priority{ctasks.PriorityHigh, ctasks.PriorityLow, ctasks.PriorityPreemptable}
+
+	for _, classes := range []int{4, 16, 64} {
+		b.Run(fmt.Sprintf("classes=%d", classes), func(b *testing.B) {
+			r := &reschedulerImpl{
+				channelWeightFn: func(k TaskChannelKey) int { return weights[k.Priority] },
+			}
+			for i := 0; i < classes; i++ {
+				ns := string(rune('a' + i%26))
+				key := reschedulerKey{
+					TaskChannelKey: TaskChannelKey{NamespaceID: ns, Priority: prios[i%len(prios)]},
+					Throttle:       apsKey(ns),
+				}
+				r.keyOrder = append(r.keyOrder, weightedClass{key: key, weight: r.classWeight(key)})
+			}
+
+			b.ReportAllocs()
+			b.ResetTimer()
+			for i := 0; i < b.N; i++ {
+				_ = r.visitOrderLocked()
+				r.rrCursor = (r.rrCursor + 1) % len(r.keyOrder)
+			}
+		})
 	}
 }

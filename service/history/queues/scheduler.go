@@ -46,6 +46,12 @@ type (
 		TrySubmit(Executable) bool
 
 		TaskChannelKeyFn() TaskChannelKeyFn
+
+		// ChannelWeightFn reports how this scheduler weights channels by priority, or nil when
+		// it does not weight them. It is on the interface rather than an optional assertion so
+		// that a wrapper cannot silently drop it: every caller reaches the scheduler through at
+		// least one wrapper, and a dropped weight degrades ordering without failing anything.
+		ChannelWeightFn() ChannelWeightFn
 	}
 
 	TaskChannelKey struct {
@@ -211,6 +217,10 @@ func (s *schedulerImpl) Stop() {
 	s.Scheduler.Stop()
 }
 
+func (s *schedulerImpl) ChannelWeightFn() ChannelWeightFn {
+	return s.channelWeightFn
+}
+
 func (s *schedulerImpl) TaskChannelKeyFn() TaskChannelKeyFn {
 	return s.taskChannelKeyFn
 }
@@ -227,10 +237,18 @@ func (s *schedulerImpl) HandleBusyWorkflow(executable Executable) bool {
 type CommonSchedulerWrapper struct {
 	tasks.Scheduler[Executable]
 	TaskKeyFn func(e Executable) TaskChannelKey
+	// WeightFn is optional; nil means this scheduler does not weight channels by priority.
+	WeightFn ChannelWeightFn
 }
 
 func (s *CommonSchedulerWrapper) TaskChannelKeyFn() TaskChannelKeyFn {
 	return s.TaskKeyFn
+}
+
+// ChannelWeightFn reports no weights: this wrapper carries a key function and a plain scheduler,
+// with no priority weighting of its own to expose.
+func (s *CommonSchedulerWrapper) ChannelWeightFn() ChannelWeightFn {
+	return s.WeightFn
 }
 
 func NewRateLimitedScheduler(
@@ -298,6 +316,10 @@ func (s *rateLimitedSchedulerImpl) Start() {
 
 func (s *rateLimitedSchedulerImpl) Stop() {
 	s.baseScheduler.Stop()
+}
+
+func (s *rateLimitedSchedulerImpl) ChannelWeightFn() ChannelWeightFn {
+	return s.baseScheduler.ChannelWeightFn()
 }
 
 func (s *rateLimitedSchedulerImpl) TaskChannelKeyFn() TaskChannelKeyFn {

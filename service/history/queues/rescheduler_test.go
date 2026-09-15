@@ -40,6 +40,7 @@ func (s *rescheudulerSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockScheduler = NewMockScheduler(s.controller)
+	s.mockScheduler.EXPECT().ChannelWeightFn().Return(nil).AnyTimes()
 	s.mockScheduler.EXPECT().TaskChannelKeyFn().Return(
 		func(_ Executable) TaskChannelKey { return TaskChannelKey{} },
 	).AnyTimes()
