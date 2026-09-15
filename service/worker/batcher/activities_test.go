@@ -1429,24 +1429,24 @@ func (s *activitiesSuite) TestGetOperationRPS() {
 	}
 
 	s.Run("unset uses configured max", func() {
-		s.Equal(float64(configuredRPS), a.getOperationRPS(0))
+		s.InDelta(configuredRPS, a.getOperationRPS(0), 0)
 	})
 
 	s.Run("negative uses configured max", func() {
-		s.Equal(float64(configuredRPS), a.getOperationRPS(-1))
+		s.InDelta(configuredRPS, a.getOperationRPS(-1), 0)
 	})
 
 	s.Run("below max is honored", func() {
-		s.Equal(float64(1), a.getOperationRPS(1))
-		s.Equal(0.5, a.getOperationRPS(0.5))
+		s.InDelta(1, a.getOperationRPS(1), 0)
+		s.InDelta(0.5, a.getOperationRPS(0.5), 0)
 	})
 
 	s.Run("above max is capped", func() {
-		s.Equal(float64(configuredRPS), a.getOperationRPS(configuredRPS+1))
-		s.Equal(float64(configuredRPS), a.getOperationRPS(10000))
+		s.InDelta(configuredRPS, a.getOperationRPS(configuredRPS+1), 0)
+		s.InDelta(configuredRPS, a.getOperationRPS(10000), 0)
 	})
 
 	s.Run("equal to max is honored", func() {
-		s.Equal(float64(configuredRPS), a.getOperationRPS(configuredRPS))
+		s.InDelta(configuredRPS, a.getOperationRPS(configuredRPS), 0)
 	})
 }
