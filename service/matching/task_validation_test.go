@@ -203,6 +203,28 @@ func (s *taskValidatorSuite) TestIsTaskValid_ActivityTask_Valid() {
 	s.True(valid)
 }
 
+func (s *taskValidatorSuite) TestIsTaskValid_StandaloneActivityTask_Valid() {
+	const componentRef = "standalone-activity-component-ref"
+
+	s.task.Data.WorkflowId = ""
+	s.task.Data.RunId = ""
+	s.task.Data.ScheduledEventId = 0
+	s.task.Data.ComponentRef = []byte(componentRef)
+
+	s.historyClient.EXPECT().IsActivityTaskValid(gomock.Any(), &historyservice.IsActivityTaskValidRequest{
+		NamespaceId:  s.namespaceID,
+		Execution:    &commonpb.WorkflowExecution{},
+		Clock:        s.task.Data.Clock,
+		Stamp:        s.task.Data.GetStamp(),
+		ComponentRef: []byte(componentRef),
+	}).Return(&historyservice.IsActivityTaskValidResponse{IsValid: true}, nil)
+
+	valid, err := s.taskValidator.isTaskValid(s.task, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+
+	s.Require().NoError(err)
+	s.True(valid)
+}
+
 func (s *taskValidatorSuite) TestIsTaskValid_ActivityTask_NotFound() {
 	taskType := enumspb.TASK_QUEUE_TYPE_ACTIVITY
 

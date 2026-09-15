@@ -26,6 +26,7 @@ const (
 	namespaceState          = "namespace_state"
 	sourceCluster           = "source_cluster"
 	targetCluster           = "target_cluster"
+	transport               = "transport"
 	taskSourceTag           = "source"
 	forwardedTag            = "forwarded"
 	pollResultTagName       = "poll_result"
@@ -155,6 +156,14 @@ func TargetClusterTag(value string) Tag {
 		value = unknownValue
 	}
 	return Tag{Key: targetCluster, Value: value}
+}
+
+// TransportTag returns a new transport tag.
+func TransportTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: transport, Value: value}
 }
 
 // FromClusterIDTag returns a new from cluster tag.
@@ -504,6 +513,16 @@ func ReplicationTaskPriorityTag(value enumsspb.TaskPriority) Tag {
 // DestinationTag is a tag for metrics emitted by outbound task executors for the task's destination.
 func DestinationTag(value string) Tag {
 	return Tag{Key: destination, Value: value}
+}
+
+// NexusCompletionSourceTag identifies the CHASM component that delivered a completion callback, by
+// its fully qualified name, e.g. "workflow.workflow". An empty value means the framework could not
+// resolve the callback's parent.
+func NexusCompletionSourceTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: nexusCompletionSourceTagName, Value: value}
 }
 
 func VersioningBehaviorTag(behavior enumspb.VersioningBehavior) Tag {
