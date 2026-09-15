@@ -300,6 +300,12 @@ func NewExecutionPriorityRateLimiter(
 			if priority, ok := APIToPriority[req.API]; ok {
 				return priority
 			}
+			if priority, ok := PodOnlyAPIToPriority[req.API]; ok {
+				return priority
+			}
+			if priority, ok := DescribeMutableStateAPIToPriority[req.API]; ok {
+				return priority
+			}
 			return ExecutionAPIPrioritiesOrdered[len(ExecutionAPIPrioritiesOrdered)-1]
 		},
 		ExecutionAPIPrioritiesOrdered,
