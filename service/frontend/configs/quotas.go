@@ -257,8 +257,16 @@ var (
 	NamespaceReplicationInducingAPIPrioritiesOrdered = []int{0, 1, 2}
 
 	// PodOnlyAPIToPriority is deliberately separate from APIToPriority: RateLimitInterceptorProvider
-	// composes this map, NamespaceRateLimitInterceptorProvider must not.
-	PodOnlyAPIToPriority = map[string]int{
+	// composes this map, NamespaceRateLimitInterceptorProvider must not. Holds only APIs that are
+	// unconditionally pod-only rate-limited, with no dynamic config flag gating them.
+	// It's a placeholder for now but will contain APIs once their proven out using dynamic config
+	PodOnlyAPIToPriority = map[string]int{}
+
+	// DescribeMutableStateAPIToPriority holds AdminService.DescribeMutableState's pod-only rate-limit
+	// priority while it's still gated by AdminEnableDescribeMutableStateRateLimit. RateLimitInterceptorProvider
+	// Once the rollout is complete and the flag is retired, move this entry into PodOnlyAPIToPriority
+	// above and delete this map.
+	DescribeMutableStateAPIToPriority = map[string]int{
 		adminservice.AdminService_DescribeMutableState_FullMethodName: 5,
 	}
 

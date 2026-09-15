@@ -174,6 +174,7 @@ func TestCreateGRPCConnection_TagsCallerInfoAsOperator(t *testing.T) {
 	factory := NewClientFactory(WithFrontendAddress(listener.Addr().String()))
 	client := factory.AdminClient(newTestCLIContext(t))
 
+	// example API call - this tag should be set for all APIs called by tdbg
 	_, err = client.DescribeMutableState(context.Background(), &adminservice.DescribeMutableStateRequest{})
 	require.NoError(t, err)
 

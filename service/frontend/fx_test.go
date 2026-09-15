@@ -243,7 +243,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 			)
 
 			// Create a rate limit interceptor which uses the per-instance and global RPS limits from the test case.
-			rateLimiters := RateLimitersProvider(&Config{
+			config := &Config{
 				RPS: func() int {
 					return tc.perInstanceRPSLimit
 				},
@@ -256,8 +256,12 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 				OperatorRPSRatio: func() float64 {
 					return tc.operatorRPSRatio
 				},
-			}, tc.serviceResolver, metrics.NoopMetricsHandler, log.NewTestLogger())
-			rateLimitInterceptor := RateLimitInterceptorProvider(rateLimiters)
+				EnableDescribeMutableStateRateLimit: func() bool {
+					return false
+				},
+			}
+			rateLimiters := RateLimitersProvider(config, tc.serviceResolver, metrics.NoopMetricsHandler, log.NewTestLogger())
+			rateLimitInterceptor := RateLimitInterceptorProvider(config, rateLimiters)
 
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
@@ -341,17 +345,19 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 
 // TestRateLimitInterceptorProviderPodOnlyAPIs verifies that PodOnlyAPIToPriority entries (e.g.
 // DescribeMutableState) are routed to the pod-level Execution rate limiter, the same way
-// APIToPriority entries are.
+// APIToPriority entries are, but only while EnableDescribeMutableStateRateLimit is enabled.
 func TestRateLimitInterceptorProviderPodOnlyAPIs(t *testing.T) {
 	t.Parallel()
 
 	testCases := []struct {
 		name              string
 		executionRPSLimit int
+		rateLimitEnabled  bool
 		expectRateLimit   bool
 	}{
-		{name: "admin API rate limit hit", executionRPSLimit: 0, expectRateLimit: true},
-		{name: "admin API rate limit not hit", executionRPSLimit: 100, expectRateLimit: false},
+		{name: "admin API rate limit hit", executionRPSLimit: 0, rateLimitEnabled: true, expectRateLimit: true},
+		{name: "admin API rate limit not hit", executionRPSLimit: 100, rateLimitEnabled: true, expectRateLimit: false},
+		{name: "admin API rate limit disabled by flag", executionRPSLimit: 0, rateLimitEnabled: false, expectRateLimit: false},
 	}
 
 	for _, tc := range testCases {
@@ -361,7 +367,7 @@ func TestRateLimitInterceptorProviderPodOnlyAPIs(t *testing.T) {
 			serviceResolver := membership.NewMockServiceResolver(ctrl)
 			serviceResolver.EXPECT().AvailableMemberCount().Return(1).AnyTimes()
 
-			rateLimiters := RateLimitersProvider(&Config{
+			config := &Config{
 				RPS: func() int {
 					return tc.executionRPSLimit
 				},
@@ -374,8 +380,12 @@ func TestRateLimitInterceptorProviderPodOnlyAPIs(t *testing.T) {
 				OperatorRPSRatio: func() float64 {
 					return 0.2
 				},
-			}, serviceResolver, metrics.NoopMetricsHandler, log.NewTestLogger())
-			rateLimitInterceptor := RateLimitInterceptorProvider(rateLimiters)
+				EnableDescribeMutableStateRateLimit: func() bool {
+					return tc.rateLimitEnabled
+				},
+			}
+			rateLimiters := RateLimitersProvider(config, serviceResolver, metrics.NoopMetricsHandler, log.NewTestLogger())
+			rateLimitInterceptor := RateLimitInterceptorProvider(config, rateLimiters)
 
 			err := rateLimitInterceptor.Allow(
 				adminservice.AdminService_DescribeMutableState_FullMethodName,
@@ -875,6 +885,9 @@ func TestNamespaceRateLimitMetrics(t *testing.T) {
 				NamespaceReplicationInducingAPIsRPS: func() int {
 					return 1
 				},
+				EnableDescribeMutableStateRateLimit: func() bool {
+					return false
+				},
 			}
 
 			serviceErrorInterceptor := interceptor.NewServiceErrorInterceptor(
@@ -885,7 +898,7 @@ func TestNamespaceRateLimitMetrics(t *testing.T) {
 
 			// Create a rate limit interceptor which uses the per-instance and global RPS limits from the test case.
 			rateLimiters := RateLimitersProvider(config, serviceResolver, metricsHandler, log.NewTestLogger())
-			rateLimitInterceptor := RateLimitInterceptorProvider(rateLimiters)
+			rateLimitInterceptor := RateLimitInterceptorProvider(config, rateLimiters)
 
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
