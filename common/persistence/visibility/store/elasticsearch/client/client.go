@@ -82,11 +82,9 @@ func NewEsHTTPClient(cfg *Config) (*http.Client, error) {
 	}
 
 	// Replace http.DefaultClient (or nil) with a fresh client so we can safely
-	// set a timeout and wrap the transport without mutating the global default.
+	// wrap the transport without mutating the global default.
 	if httpClient == nil || httpClient == http.DefaultClient {
-		httpClient = &http.Client{Timeout: 60 * time.Second}
-	} else {
-		httpClient.Timeout = 60 * time.Second
+		httpClient = &http.Client{}
 	}
 
 	wrapDialContext(httpClient)
