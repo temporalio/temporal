@@ -969,7 +969,7 @@ func (s *activitiesSuite) TestStartTaskProcessor_SignalForwardsRequestFields() {
 	taskCh <- task{executionInfo: testPage.executionInfos[0], attempts: 1, page: testPage}
 
 	resp := <-respCh
-	s.NoError(resp.err)
+	s.Require().NoError(resp.err)
 
 	s.Require().NotNil(captured)
 	s.Equal("trusted-namespace", captured.Namespace, "must use worker namespace, not request namespace")
@@ -1242,7 +1242,7 @@ func (s *activitiesSuite) TestStartTaskProcessor_TerminationForwardsRequestField
 	taskCh <- task{executionInfo: testPage.executionInfos[0], attempts: 1, page: testPage}
 
 	resp := <-respCh
-	s.NoError(resp.err)
+	s.Require().NoError(resp.err)
 
 	s.Require().NotNil(captured)
 	s.Equal("trusted-namespace", captured.Namespace, "must use worker namespace, not request namespace")
@@ -1909,7 +1909,7 @@ func (s *activitiesSuite) TestProcessSingleTask_NilUpdateMask() {
 			},
 		}
 
-		s.NoError(s.processSingleTaskForTest(batchOperation, testTask))
+		s.Require().NoError(s.processSingleTaskForTest(batchOperation, testTask))
 		s.Require().NotNil(captured)
 		s.Equal("batch-updater", captured.GetIdentity())
 		s.True(captured.GetRestoreOriginal())
@@ -1941,7 +1941,7 @@ func (s *activitiesSuite) TestProcessSingleTask_NilUpdateMask() {
 			},
 		}
 
-		s.NoError(s.processSingleTaskForTest(batchOperation, testTask))
+		s.Require().NoError(s.processSingleTaskForTest(batchOperation, testTask))
 		s.Require().NotNil(captured)
 		s.Equal("batch-updater", captured.GetIdentity())
 		s.Require().NotNil(captured.GetUpdateMask())

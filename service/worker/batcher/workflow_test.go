@@ -299,13 +299,11 @@ func (s *batcherSuite) TestBatchActivityOptions_ConcurrentCallsDoNotInterfere() 
 	got := make([]time.Duration, numCalls)
 	var wg sync.WaitGroup
 	for i := range numCalls {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			// A distinct timeout per goroutine, so a shared value would surface
 			// as some other goroutine's timeout here.
 			got[i] = batchActivityOptions(time.Duration(i+1) * time.Second).HeartbeatTimeout
-		}()
+		})
 	}
 	wg.Wait()
 
