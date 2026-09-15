@@ -4,6 +4,7 @@ package queues
 
 import (
 	"math"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -266,8 +267,7 @@ func (r *reschedulerImpl) rescheduleLoop() {
 }
 
 // reschedulePass is the state one reschedule pass shares across classes: the running minimum
-// wake time, and a release ceiling every gated class draws from so one class cannot consume the
-// whole pass.
+// wake time, and a release ceiling that bounds the whole pass.
 type reschedulePass struct {
 	now               time.Time
 	nextWake          time.Time
@@ -318,16 +318,8 @@ func (r *reschedulerImpl) reschedule() {
 // visitOrderLocked is the order gated classes are offered the budget in: by priority weight
 // first, then by the round robin cursor so no namespace starves another at the same priority.
 //
-// Order is the whole allocation. A class drains until the gate refuses it, and the pass cap is
-// far above the admitted rate, so whichever class is offered the bucket first takes what is in
-// it. Visiting in insertion order alone gave every (namespace, priority) class an equal turn,
-// which let preemptable work spend a namespace's budget ahead of high priority work.
-//
-// This is upstream of the IWRR scheduler, where priority is otherwise applied, so without it a
-// low priority backlog is never even submitted for IWRR to deprioritise.
-//
-// This runs on every pass of every shard's rescheduler, so it reads no configuration and
-// allocates nothing: weights are already cached on the class, and the scratch slice is reused.
+// Order is the whole allocation, because a class drains until the gate refuses it. It runs once
+// per gated pass, so it reads no configuration and allocates nothing.
 func (r *reschedulerImpl) visitOrderLocked() []weightedClass {
 	n := len(r.keyOrder)
 	r.visitOrder = r.visitOrder[:0]
@@ -345,26 +337,15 @@ func (r *reschedulerImpl) visitOrderLocked() []weightedClass {
 		return r.visitOrder
 	}
 
-	// Insertion sort, descending. Stable by construction because the comparison is strict, so
-	// the rotation above still decides order within one priority. Faster than sort.SliceStable
-	// at these lengths, a handful of classes rather than thousands.
-	//
 	// Strict order starves the lowest priority while a higher one has demand, and that is the
-	// intent. Both governed enforcers cascade: a request consumes its own priority's tokens and
-	// every lower priority's too, so while high priority saturates the budget a preemptable
-	// dispatch is refused whatever the rescheduler does. Releasing it anyway would spend a token
-	// on an attempt that cannot succeed, and its rejection is charged to this class - which has
-	// no priority in its key - dragging the admitted rate down for the high priority work as
-	// well. Not releasing it is the waste this controller exists to remove.
-	for i := 1; i < n; i++ {
-		class := r.visitOrder[i]
-		j := i - 1
-		for j >= 0 && r.visitOrder[j].weight < class.weight {
-			r.visitOrder[j+1] = r.visitOrder[j]
-			j--
-		}
-		r.visitOrder[j+1] = class
-	}
+	// intent: both governed enforcers cascade, so a preemptable dispatch is refused anyway while
+	// high priority saturates the budget, and its rejection would be charged to this class,
+	// whose key carries no priority.
+	//
+	// Stable, so the rotation above still decides order within one priority.
+	slices.SortStableFunc(r.visitOrder, func(a, b weightedClass) int {
+		return b.weight - a.weight
+	})
 	return r.visitOrder
 }
 
@@ -474,7 +455,7 @@ func (r *reschedulerImpl) gating() bool {
 	return r.throttleState != nil && r.throttleState.Enabled()
 }
 
-// rescheduleUngatedLocked is the upstream reschedule loop, kept verbatim so that disabling the
+// rescheduleUngatedLocked is the reschedule loop used when the controller is not gating so that disabling the
 // controller disables the whole change and not just the admission gate.
 func (r *reschedulerImpl) rescheduleUngatedLocked(now time.Time) {
 	for _, pq := range r.pqMap {

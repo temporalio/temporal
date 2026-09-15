@@ -836,9 +836,8 @@ func (e *executableImpl) shouldResubmitOnNack(err error) bool {
 	}
 
 	if !errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) && common.IsResourceExhausted(err) {
-		// Namespace and system scoped throttles are shared budgets. Resubmitting synchronously
-		// would bypass the rescheduler, and with it the throttle controller, so every parked
-		// task would keep rediscovering the same constraint at full dispatch cost.
+		// Resubmitting synchronously bypasses the rescheduler, and with it the gate, so every
+		// parked task would keep rediscovering the same constraint at full dispatch cost.
 		if e.throttleState != nil && e.throttleState.Enabled() && e.isGovernedByController() {
 			return false
 		}
@@ -940,7 +939,6 @@ func (e *executableImpl) SetThrottleAdmitted(key ThrottleKey) {
 	e.throttleAdmittedKey = key
 }
 
-// ThrottleKey implements ThrottleKeyProvider.
 func (e *executableImpl) ThrottleKey() (ThrottleKey, bool) {
 	e.throttleMu.Lock()
 	defer e.throttleMu.Unlock()

@@ -908,8 +908,8 @@ var (
 		WithDescription("The amount of time it took to successfully send a task to the DLQ. This only records the"+
 			" latency of the final attempt to send the task to the DLQ, not the cumulative latency of all attempts."),
 	)
-	TaskDiscarded                   = NewCounterDef("task_errors_discarded")
-	TaskSkipped                     = NewCounterDef("task_skipped")
+	TaskDiscarded = NewCounterDef("task_errors_discarded")
+	TaskSkipped   = NewCounterDef("task_skipped")
 	// TaskAckedCounter counts every task that reaches the acked state, including tasks that
 	// are dropped as invalid. TaskLatency and TaskAttempt deliberately skip invalid drops, so
 	// this is the only counter that reflects the true rate at which the queue is cleared.
@@ -956,9 +956,9 @@ var (
 		"chasm_request_id_evicted",
 		WithDescription("The number of CHASM-attached request IDs swept from an execution's dedup map for exceeding history.maximumRequestIDsPerExecution or history.requestIDMaxAge."),
 	)
-	TaskScheduleToStartLatency  = NewTimerDef("task_schedule_to_start_latency")
-	TaskBatchCompleteCounter    = NewCounterDef("task_batch_complete_counter")
-	TaskReschedulerPendingTasks = NewDimensionlessHistogramDef("task_rescheduler_pending_tasks")
+	TaskScheduleToStartLatency     = NewTimerDef("task_schedule_to_start_latency")
+	TaskBatchCompleteCounter       = NewCounterDef("task_batch_complete_counter")
+	TaskReschedulerPendingTasks    = NewDimensionlessHistogramDef("task_rescheduler_pending_tasks")
 	TaskReschedulerClassQueueDepth = NewDimensionlessHistogramDef(
 		"task_rescheduler_class_queue_depth",
 		WithDescription("The number of task executables parked in one rescheduler class queue, keyed by namespace, priority and throttle cause."),
@@ -993,11 +993,11 @@ var (
 	)
 	TaskThrottleRejections = NewCounterDef(
 		"task_throttle_rejections",
-		WithDescription("The number of throttle rejections fed into the throttle controller, by cause and scope."),
+		WithDescription("The number of throttle rejections fed into the throttle controller, by cause."),
 	)
 	TaskThrottleAdmittedRate = NewGaugeDef(
 		"task_throttle_admitted_rate",
-		WithDescription("The current AIMD admitted rate, in task releases per second, for one throttle controller key."),
+		WithDescription("The current admitted rate, in task releases per second, for one throttle controller key."),
 	)
 	TaskThrottleRateDecreases = NewCounterDef(
 		"task_throttle_rate_decreases",
@@ -1005,7 +1005,7 @@ var (
 	)
 	TaskThrottleRateIncreases = NewCounterDef(
 		"task_throttle_rate_increases",
-		WithDescription("The number of additive increase events applied by the throttle controller when a window closes at or below the loss threshold."),
+		WithDescription("The number of increase events applied by the throttle controller when a window closes at or below the loss threshold."),
 	)
 	TaskThrottleKeysTracked = NewGaugeDef(
 		"task_throttle_keys_tracked",
@@ -1019,7 +1019,7 @@ var (
 		"task_throttle_keys_dropped",
 		WithDescription("The number of times the throttle controller failed open because a scope map was at its key cap."),
 	)
-	PendingTasksCounter         = NewDimensionlessHistogramDef(
+	PendingTasksCounter = NewDimensionlessHistogramDef(
 		"pending_tasks",
 		WithDescription("A histogram across history shards for the number of in-memory pending history tasks."),
 	)

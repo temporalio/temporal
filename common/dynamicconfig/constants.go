@@ -2090,7 +2090,7 @@ The actual count is calculated as base * (multiplier ^ level)`,
 		"history.taskThrottleControllerEnabled",
 		false,
 		`TaskThrottleControllerEnabled turns on the host level throttle aware task retry controller.
-When enabled, the rescheduler releases parked tasks for a throttled class at the class's AIMD
+When enabled, the rescheduler releases parked tasks for a throttled class at the class's learned
 admitted rate instead of letting every parked task rediscover the throttle on its own backoff.`,
 	)
 	TaskThrottleControllerBeta = NewGlobalFloatSetting(
@@ -2103,7 +2103,8 @@ admitted rate when a throttle is observed. At most one decrease is applied per c
 		"history.taskThrottleControllerIncreaseRatio",
 		0.10,
 		`TaskThrottleControllerIncreaseRatio is the fraction of the current admitted rate added
-after a control window that saw no throttle. Expressed as a ratio so it is scale free.`,
+after a control window whose loss stayed at or below the threshold. Expressed as a ratio so the
+increase is scale free, which makes it multiplicative rather than additive.`,
 	)
 	TaskThrottleControllerLossThreshold = NewGlobalFloatSetting(
 		"history.taskThrottleControllerLossThreshold",
@@ -2118,7 +2119,7 @@ depend on the enforcer's background rejection probability rather than on its own
 		"history.taskThrottleControllerWindow",
 		time.Second,
 		`TaskThrottleControllerWindow is the control window. At most one multiplicative decrease
-and one additive increase are applied per window per key.`,
+and one increase are applied per window per key.`,
 	)
 	TaskThrottleControllerMaxKeys = NewGlobalIntSetting(
 		"history.taskThrottleControllerMaxKeys",

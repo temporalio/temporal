@@ -245,8 +245,6 @@ func (s *CommonSchedulerWrapper) TaskChannelKeyFn() TaskChannelKeyFn {
 	return s.TaskKeyFn
 }
 
-// ChannelWeightFn reports no weights: this wrapper carries a key function and a plain scheduler,
-// with no priority weighting of its own to expose.
 func (s *CommonSchedulerWrapper) ChannelWeightFn() ChannelWeightFn {
 	return s.WeightFn
 }

@@ -36,7 +36,7 @@ const (
 )
 
 type (
-	// ThrottleController paces releases for a class of parked tasks. ThrottleState is the AIMD
+	// ThrottleController paces releases for a class of parked tasks. ThrottleState is the only
 	// implementation; the interface exists so a different control law can replace it without
 	// touching the rescheduler or the executable.
 	//
@@ -81,7 +81,7 @@ type (
 		lossThreshold float64
 	}
 
-	// ThrottleStateOptions are the AIMD control law parameters. The property functions are live
+	// ThrottleStateOptions are the control law parameters. The property functions are live
 	// dynamic config; the plain fields are fixed guardrails that only tests set, and zero means
 	// take the default.
 	ThrottleStateOptions struct {
@@ -107,8 +107,7 @@ type (
 		logger         log.Logger
 		metricsHandler metrics.Handler
 
-		// Resolved once at construction. Reading them per call would cost a branch on a path
-		// that runs thousands of times a second for no benefit; they cannot change at runtime.
+		// Resolved once at construction; these cannot change at runtime.
 		minRate     float64
 		maxRate     float64
 		initialRate float64
@@ -145,6 +144,10 @@ type (
 // PERSISTENCE_LIMIT covers two enforcement points that report identically, so a per shard
 // limiter's rejections pace the whole namespace on this host. Telling them apart needs a
 // distinguishable error.
+//
+// Adding RPS_LIMIT here needs the ErrBusinessIDRateLimitExceeded guard in IsControllerInput,
+// which is unreachable until then: that error reports RPS_LIMIT at namespace scope but is
+// enforced per business ID, so one hot workflow would ratchet the whole namespace down.
 var controlledCauses = map[enumspb.ResourceExhaustedCause]struct{}{
 	enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT:         {},
 	enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT: {},
@@ -320,9 +323,12 @@ func (s *ThrottleState) Return(key ThrottleKey) {
 	}
 }
 
-// ReportSuccess keeps a class that is completing work from being swept as idle, and closes an
-// elapsed window. It cannot raise an idle class, since a window with no releases is left alone;
-// what it does reach is the last window of a drain, after admit stops being called.
+// ReportSuccess closes a window that has already elapsed. It cannot raise an idle class, since a
+// window with no releases is left alone; what it reaches is the last window of a drain, whose
+// outcome would otherwise be discarded because the queue is empty and admit stops being called.
+//
+// Closing it early also refills at the old rate before the increase, so the next activation
+// starts with the larger burst rather than rebuilding it.
 func (s *ThrottleState) ReportSuccess(key ThrottleKey) {
 	if !s.Enabled() {
 		return
@@ -412,7 +418,6 @@ func (s *ThrottleState) advanceWindowLocked(entry *throttleEntry, now time.Time,
 	metrics.TaskThrottleAdmittedRate.With(s.metricsHandler).Record(entry.rate, entry.key.metricsTags()...)
 }
 
-// resetLocked discards everything the control law learned, keeping the entry's identity.
 func (e *throttleEntry) resetLocked(rate float64, now time.Time, window time.Duration) {
 	e.rate = rate
 	e.lastRefill = now
@@ -527,8 +532,9 @@ func (s *ThrottleState) peek(key ThrottleKey) *throttleEntry {
 
 // getOrCreate creates entries lazily, returning nil at the key cap for callers to fail open on.
 //
-// The entry is not pinned, so a concurrent sweep can orphan it. That costs at most one extra
-// release, and only for a key idle past its TTL, which is a class under no pressure.
+// The entry is not pinned, so a concurrent sweep can orphan it and a caller holding the old
+// pointer releases against state nothing else can see. Pinning would put a refcount on every
+// lookup to close a window that only opens for a key already idle past its TTL.
 func (s *ThrottleState) getOrCreate(key ThrottleKey) *throttleEntry {
 	if entry := s.peek(key); entry != nil {
 		return entry

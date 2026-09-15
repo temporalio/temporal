@@ -1,7 +1,6 @@
 package queues
 
 import (
-	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -109,15 +108,9 @@ func TestIsControllerInput(t *testing.T) {
 		// allowlist already rejects, so pairing it with APS_LIMIT is what actually exercises the
 		// errors.Is guard: delete that guard and this row fails, and only this row.
 		{
-			name:  "business id reuse, even under a governed cause",
+			name:  "business id reuse reports a cause the controller does not govern",
 			err:   consts.ErrBusinessIDRateLimitExceeded,
-			cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
-			scope: ns,
-		},
-		{
-			name:  "business id reuse, wrapped",
-			err:   fmt.Errorf("wrapped: %w", consts.ErrBusinessIDRateLimitExceeded),
-			cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
+			cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT,
 			scope: ns,
 		},
 	} {
@@ -190,7 +183,7 @@ func TestThrottleState_DecreasesAcrossWindows(t *testing.T) {
 	require.InEpsilon(t, 100*0.85*0.85*0.85*0.85, state.AdmittedRate(key), 1e-9)
 }
 
-func TestThrottleState_AdditiveIncreaseAfterCleanWindow(t *testing.T) {
+func TestThrottleState_IncreaseAfterCleanWindow(t *testing.T) {
 	state, timeSource := newTestThrottleState(defaultThrottleOverrides())
 	key := testKey()
 

@@ -99,7 +99,7 @@ func TestThrottleState_IndependentInstancesConvergeOnSharedBudget(t *testing.T) 
 	now := clocks[0].Now()
 
 	// Offered load is deliberately uneven. Real hosts own different shard counts, and identical
-	// stimulus would make any lockstep an artifact of the test rather than a property of AIMD.
+	// stimulus would make any lockstep an artifact of the test rather than of the control law.
 	offered := [hosts]int{60, 50, 45, 40, 35, 30, 25, 20}
 
 	aggregate := func() float64 {
@@ -164,7 +164,7 @@ func TestThrottleState_IndependentInstancesConvergeOnSharedBudget(t *testing.T) 
 		lastAggregate, minAggregate, sharedBudget)
 
 	// Generous bounds. The point is to catch a collapse to the floor or a runaway above the
-	// ceiling, not to pin AIMD's steady state oscillation to a narrow band.
+	// ceiling, not to pin the steady state oscillation to a narrow band.
 	// Mean over the settled tail rather than the final sample: a multiplicative law oscillates,
 	// so a single reading measures where in the sawtooth the loop stopped, not where it settled.
 	var sum float64
@@ -190,6 +190,18 @@ func TestThrottleState_IndependentInstancesConvergeOnSharedBudget(t *testing.T) 
 	}
 }
 
+// countingController counts how often the rescheduler asks the gate, which is the only way to
+// tell "asked once and broke" from "asked once per parked task": both leave every task parked.
+type countingController struct {
+	ThrottleController
+	admits int
+}
+
+func (c *countingController) Admit(key ThrottleKey) (allowed, metered bool, retryAfter time.Duration) {
+	c.admits++
+	return c.ThrottleController.Admit(key)
+}
+
 // A key that is denied must not be denied more than once per pass. The rescheduler breaks the
 // class on the first denial, so the denial counters measure refused polls rather than tasks
 // held back, and a change that made them per task would make the metric mean something else.
@@ -204,7 +216,9 @@ func TestReschedule_DeniedClassIsProbedOncePerPass(t *testing.T) {
 	timeSource := clock.NewEventTimeSource()
 	timeSource.Update(now)
 
+	counting := &countingController{ThrottleController: state}
 	r, scheduler, gate := newTestRescheduler(t, ctrl, timeSource, state, 1000)
+	r.throttleState = counting
 
 	key := apsKey("ns-1")
 	// Drain the initial burst so the class is over budget for the whole test.
@@ -220,8 +234,11 @@ func TestReschedule_DeniedClassIsProbedOncePerPass(t *testing.T) {
 	scheduler.EXPECT().TrySubmit(gomock.Any()).Times(0)
 
 	gate.updates = nil
+	counting.admits = 0
 	r.reschedule()
 
+	require.Equal(t, 1, counting.admits,
+		"the class must be asked once and then break, not once per parked task")
 	require.Equal(t, 50, r.Len(), "a denied pass must release nothing")
 	require.Len(t, gate.updates, 1, "a denied pass must set exactly one wake")
 	// One wake for fifty parked tasks, placed on the budget's schedule: at 1/s the next token

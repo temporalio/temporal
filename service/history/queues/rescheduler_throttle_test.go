@@ -358,7 +358,6 @@ func TestReschedule_FailedSubmitReturnsTheToken(t *testing.T) {
 	require.True(t, e.admitted, "a gated release must tell the task the controller metered it")
 }
 
-
 // weightsByPriority is the ChannelWeightFn a mock scheduler reports when a test needs the
 // rescheduler to order gated classes by priority.
 func weightsByPriority(weights map[ctasks.Priority]int) ChannelWeightFn {

@@ -57,7 +57,7 @@ type (
 		RemoteHistoryFetcher eventhandler.HistoryPaginatedFetcher
 		ChasmEngine          chasm.Engine
 		ChasmRegistry        *chasm.Registry
-		ThrottleState        *queues.ThrottleState
+		ThrottleState        queues.ThrottleController
 	}
 
 	QueueFactoryBase struct {
@@ -112,7 +112,7 @@ func ThrottleStateProvider(
 	timeSource clock.TimeSource,
 	logger log.SnTaggedLogger,
 	metricsHandler metrics.Handler,
-) *queues.ThrottleState {
+) queues.ThrottleController {
 	return queues.NewThrottleState(
 		queues.ThrottleStateOptions{
 			Enabled:       config.TaskThrottleControllerEnabled,
@@ -127,7 +127,6 @@ func ThrottleStateProvider(
 		metricsHandler,
 	)
 }
-
 
 // additionalQueueFactories is a container for a list of queue factories that are only added to the group if
 // they are enabled. This exists because there is no way to conditionally add to a group with a provider that returns
