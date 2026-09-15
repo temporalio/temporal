@@ -42,10 +42,38 @@ func (q *boolQuery) MinimumNumberShouldMatch(minimumNumberShouldMatch int) *bool
 }
 
 func (q *boolQuery) Source() (any, error) {
+	// Merge multiple range queries on the same field into a single one.
+	q.mergeRangeQueries()
 	return elastic.NewBoolQuery().
 		MustNot(q.mustNotClauses...).
 		Filter(q.filterClauses...).
 		Should(q.shouldClauses...).
 		MinimumShouldMatch(q.minimumShouldMatch).
 		Source()
+}
+
+func (q *boolQuery) mergeRangeQueries() {
+	rqs := make(map[string]*rangeQuery)
+	queries := make([]elastic.Query, 0, len(q.filterClauses))
+	for _, q := range q.filterClauses {
+		if rq, ok := q.(*rangeQuery); !ok {
+			// Non-range queries are left as it is.
+			queries = append(queries, q)
+		} else if otherRQ, ok := rqs[rq.Field]; !ok {
+			rqs[rq.Field] = rq
+		} else {
+			newRQ, ok := mergeRangeQueries(otherRQ, rq)
+			if !ok {
+				// Merge returns an error if trying to compare values with different types.
+				// Thus, error should not be possible since validation already happened.
+				// If something unexpected happens, ignore it and abort merging.
+				return
+			}
+			rqs[rq.Field] = newRQ
+		}
+	}
+	for _, rq := range rqs {
+		queries = append(queries, rq)
+	}
+	q.filterClauses = queries
 }

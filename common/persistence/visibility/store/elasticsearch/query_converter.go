@@ -107,13 +107,13 @@ func (c *esQueryConverter) ConvertComparisonExpr(
 	colName := col.FieldName
 	switch operator {
 	case sqlparser.GreaterEqualStr:
-		res = elastic.NewRangeQuery(colName).Gte(value)
+		res = &rangeQuery{Field: colName, Gte: value}
 	case sqlparser.LessEqualStr:
-		res = elastic.NewRangeQuery(colName).Lte(value)
+		res = &rangeQuery{Field: colName, Lte: value}
 	case sqlparser.GreaterThanStr:
-		res = elastic.NewRangeQuery(colName).Gt(value)
+		res = &rangeQuery{Field: colName, Gt: value}
 	case sqlparser.LessThanStr:
-		res = elastic.NewRangeQuery(colName).Lt(value)
+		res = &rangeQuery{Field: colName, Lt: value}
 	case sqlparser.EqualStr, sqlparser.NotEqualStr:
 		res = elastic.NewTermQuery(colName, value)
 		negate = operator == sqlparser.NotEqualStr
@@ -188,9 +188,9 @@ func (c *esQueryConverter) ConvertRangeExpr(
 	colName := col.FieldName
 	switch operator {
 	case sqlparser.BetweenStr:
-		return elastic.NewRangeQuery(colName).Gte(from).Lte(to), nil
+		return &rangeQuery{Field: colName, Gte: from, Lte: to}, nil
 	case sqlparser.NotBetweenStr:
-		return newBoolQuery().MustNot(elastic.NewRangeQuery(colName).Gte(from).Lte(to)), nil
+		return newBoolQuery().MustNot(&rangeQuery{Field: colName, Gte: from, Lte: to}), nil
 	default:
 		// This should be impossible since the query parser only calls this function with one of those
 		// operators strings.
