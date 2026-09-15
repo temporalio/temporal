@@ -9,8 +9,8 @@ import (
 )
 
 // ConvertNexusLinksToProtoLinks converts a slice of Nexus SDK links into Temporal proto links,
-// supporting Link_Workflow, Link_WorkflowEvent, Link_Activity, and Link_NexusOperation variants. Unsupported or
-// malformed entries are skipped with a warning since links are non-essential to execution.
+// supporting Link_Workflow, Link_WorkflowEvent, Link_Activity, and other variants. Unsupported
+// or malformed entries are skipped with a warning since links are non-essential to execution.
 func ConvertNexusLinksToProtoLinks(nexusLinks []nexus.Link, logger log.Logger) []*commonpb.Link {
 	logLinkConversionError := func(l nexus.Link, err error) {
 		logger.Warn(
