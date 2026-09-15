@@ -9,6 +9,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -54,6 +55,7 @@ func (d *wfaDriver) testContext() context.Context {
 // wfaHandle is a handle to a workflow-scheduled activity.
 type wfaHandle struct {
 	activityDriverState
+	model      *activityModel // the model state reached, so driveEvent can check each event
 	d          *wfaDriver
 	run        sdkclient.WorkflowRun
 	workflowID string
@@ -65,7 +67,9 @@ type wfaHandle struct {
 // driveTrace starts a workflow, which schedules an activity, and then advances that activity
 // through a sequence of events (a 'trace'). Returns a handle to the activity at the reached state.
 func (d *wfaDriver) driveTrace(t *testing.T, trace []model.Event) *wfaHandle {
-	validateTrace(t, trace)
+	require.Falsef(t, d.cfg.StartDelay > 0 || slices.ContainsFunc(trace, func(e model.Event) bool {
+		return e.Type == model.StartDelayElapsesType
+	}), "workflow activity does not support start delay")
 	a := d.start(t, d.cfg.forTrace(trace))
 	for _, e := range trace {
 		a.driveEvent(t, e)
@@ -74,7 +78,7 @@ func (d *wfaDriver) driveTrace(t *testing.T, trace []model.Event) *wfaHandle {
 }
 
 func (a *wfaHandle) driveEvent(t testing.TB, e model.Event) {
-	driveActivityEvent(t, a, e)
+	driveActivityEvent(t, a, e, a.model)
 }
 
 func (a *wfaHandle) testContext() context.Context {
@@ -117,6 +121,7 @@ func (a *wfaHandle) awaitDispatchDelay(t testing.TB, e model.Event) {
 }
 
 func (d *wfaDriver) start(t *testing.T, cfg activityConfig) *wfaHandle {
+	cfg.StartDelay = 0 // WFA does not support start delay, but SAA/WFA tests often share config
 	wfTQ := testcore.RandomizeStr("wfa-wf")
 	actTQ := testcore.RandomizeStr("wfa-act")
 	const actID = "act"
@@ -135,6 +140,7 @@ func (d *wfaDriver) start(t *testing.T, cfg activityConfig) *wfaHandle {
 	require.NoError(t, err)
 	a := &wfaHandle{
 		activityDriverState: activityDriverState{cfg: cfg},
+		model:               newActivityModel(cfg),
 		d:                   d,
 		run:                 run,
 		workflowID:          wfID,
@@ -245,6 +251,16 @@ func (a *wfaHandle) activityInfoIfInProgress(t require.TestingT) (activityInfo, 
 		return activityInfo{}, false
 	}
 	return wfaActivityInfo(pendingActivity), true
+}
+
+// observedState is the activity's state as its entry in the workflow's pending set reports it. An
+// activity that has left that set has closed.
+func (a *wfaHandle) observedState(t require.TestingT) activityState {
+	pendingActivity := a.pendingActivityInfo(t)
+	if pendingActivity == nil {
+		return activityState{closed: true}
+	}
+	return activityState{runState: pendingActivity.GetState(), attempt: pendingActivity.GetAttempt()}
 }
 
 // wfaActivityInfo converts PendingActivityInfo to the projection shared by both the WFA and SAA
