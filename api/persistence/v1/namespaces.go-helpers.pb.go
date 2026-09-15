@@ -153,6 +153,43 @@ func (this *NamespaceReplicationConfig) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type NamespaceReplicationRamp to the protobuf v3 wire format
+func (val *NamespaceReplicationRamp) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type NamespaceReplicationRamp from the protobuf v3 wire format
+func (val *NamespaceReplicationRamp) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *NamespaceReplicationRamp) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two NamespaceReplicationRamp values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *NamespaceReplicationRamp) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *NamespaceReplicationRamp
+	switch t := that.(type) {
+	case *NamespaceReplicationRamp:
+		that1 = t
+	case NamespaceReplicationRamp:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type FailoverStatus to the protobuf v3 wire format
 func (val *FailoverStatus) Marshal() ([]byte, error) {
 	return proto.Marshal(val)

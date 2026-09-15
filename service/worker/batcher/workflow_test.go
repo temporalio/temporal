@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
@@ -40,6 +41,51 @@ func (s *batcherSuite) SetupTest() {
 func (s *batcherSuite) TearDownTest() {
 	s.controller.Finish()
 	s.env.AssertExpectations(s.T())
+}
+
+func TestBatchWorkflowActivityOptionsAreIndependent(t *testing.T) {
+	const workflowCount = 32
+
+	expectedTimeouts := make([]time.Duration, workflowCount)
+	actualTimeouts := make([]time.Duration, workflowCount)
+	errs := make([]error, workflowCount)
+	envs := make([]*testsuite.TestWorkflowEnvironment, workflowCount)
+	var wg sync.WaitGroup
+	for i := range workflowCount {
+		expectedTimeout := time.Duration(i+10) * time.Second
+		var heartbeatTimeout *durationpb.Duration
+		if i == 0 {
+			expectedTimeout = defaultActivityHeartBeatTimeout
+		} else {
+			heartbeatTimeout = durationpb.New(expectedTimeout)
+		}
+		expectedTimeouts[i] = expectedTimeout
+
+		wg.Go(func() {
+			var workflowTestSuite testsuite.WorkflowTestSuite
+			env := workflowTestSuite.NewTestWorkflowEnvironment()
+			envs[i] = env
+			env.RegisterWorkflow(BatchWorkflowProtobuf)
+			var ac *activities
+			env.OnActivity(ac.BatchActivityWithProtobuf, mock.Anything, mock.Anything).
+				Return(func(ctx context.Context, _ *batchspb.BatchOperationInput) (HeartBeatDetails, error) {
+					actualTimeouts[i] = activity.GetInfo(ctx).HeartbeatTimeout
+					return HeartBeatDetails{}, nil
+				}).Once()
+			env.OnUpsertMemo(mock.Anything).Return(nil).Once()
+			env.ExecuteWorkflow(BatchWorkflowProtobuf, &batchspb.BatchOperationInput{
+				ActivityHeartbeatTimeout: heartbeatTimeout,
+			})
+			errs[i] = env.GetWorkflowError()
+		})
+	}
+	wg.Wait()
+
+	for i := range workflowCount {
+		envs[i].AssertExpectations(t)
+		require.NoError(t, errs[i])
+		require.Equal(t, expectedTimeouts[i], actualTimeouts[i])
+	}
 }
 
 func (s *batcherSuite) TestBatchWorkflow_ValidParams_Query_Protobuf() {
