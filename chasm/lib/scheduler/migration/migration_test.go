@@ -134,6 +134,7 @@ func TestLegacyToCreateFromMigrationStateRequest(t *testing.T) {
 		require.Equal(t, id, backfiller.BackfillId)
 		require.NotNil(t, backfiller.GetBackfillRequest())
 		require.Equal(t, now.Add(-time.Hour), backfiller.GetBackfillRequest().StartTime.AsTime())
+		require.Equal(t, now.Add(-time.Hour), backfiller.GetLastProcessedTime().AsTime())
 	}
 
 	// Last completion result
@@ -349,7 +350,7 @@ func TestConvertBackfillersCHASMToLegacy_BackfillCursor(t *testing.T) {
 			name:          "zero watermark",
 			attempt:       1,
 			lastProcessed: timestamppb.New(time.Unix(0, 0)),
-			wantStartTime: startTime.Add(-time.Millisecond),
+			wantStartTime: time.Unix(0, 0).UTC(),
 		},
 		{
 			name:          "progressed",
@@ -382,6 +383,25 @@ func TestConvertBackfillersCHASMToLegacy_BackfillCursor(t *testing.T) {
 			require.Equal(t, tc.wantStartTime, ongoing[0].GetStartTime().AsTime())
 		})
 	}
+}
+
+func TestBackfillCursorRoundTripPreservesLegacyProgress(t *testing.T) {
+	cursor := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+	request := &schedulepb.BackfillRequest{
+		StartTime: timestamppb.New(cursor),
+		EndTime:   timestamppb.New(cursor.Add(time.Hour)),
+	}
+
+	backfillers := convertBackfillsLegacyToCHASM([]*schedulepb.BackfillRequest{request})
+	require.Len(t, backfillers, 1)
+	for _, backfiller := range backfillers {
+		require.Equal(t, cursor, backfiller.GetLastProcessedTime().AsTime())
+	}
+
+	ongoing, triggers := convertBackfillersCHASMToLegacy(backfillers, cursor.Add(time.Hour))
+	require.Len(t, ongoing, 1)
+	require.Empty(t, triggers)
+	require.Equal(t, cursor, ongoing[0].GetStartTime().AsTime())
 }
 
 func TestCHASMToLegacyStartScheduleArgs_ExcludesAllowAllFromRunningWorkflows(t *testing.T) {
