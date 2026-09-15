@@ -1092,7 +1092,7 @@ func (r *parentChildScenarioRuntime) requireCapturedMetric(
 	if capture == nil {
 		return fmt.Errorf("metrics capture is not initialized for %s", cluster)
 	}
-	recordings := capture.Snapshot()[metricName]
+	recordings := capture.SnapshotMetric(metricName)
 	for _, recording := range recordings {
 		matches := true
 		for key, value := range tags {
