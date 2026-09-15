@@ -44,18 +44,11 @@ func NewEsClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*elas
 
 	if httpClient == nil {
 		var err error
-		httpClient, err = NewEsHTTPClient(cfg)
+		httpClient, err = NewEsHTTPClient(cfg, logger)
 		if err != nil {
 			return nil, err
 		}
 	}
-	if httpClient == nil || httpClient == http.DefaultClient {
-		httpClient = &http.Client{Timeout: 60 * time.Second}
-	} else {
-		httpClient.Timeout = 60 * time.Second
-	}
-
-	wrapDialLogger(httpClient, logger)
 
 	// TODO (alex): Remove this when https://github.com/olivere/elastic/pull/1507 is merged.
 	if cfg.CloseIdleConnectionsInterval != time.Duration(0) {

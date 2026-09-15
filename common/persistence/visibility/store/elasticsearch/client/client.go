@@ -11,6 +11,7 @@ import (
 	"github.com/olivere/elastic/v7"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/auth"
+	"go.temporal.io/server/common/log"
 )
 
 const (
@@ -64,28 +65,33 @@ type (
 	}
 )
 
-func NewEsHTTPClient(cfg *Config) (*http.Client, error) {
-	if httpClient := cfg.GetHttpClient(); httpClient != nil {
-		return httpClient, nil
-	}
+func NewEsHTTPClient(cfg *Config, logger log.Logger) (*http.Client, error) {
+	var httpClient *http.Client
 
-	httpClient, err := NewAwsHttpClient(cfg.AWSRequestSigning)
-	if err != nil {
+	if c := cfg.GetHttpClient(); c != nil {
+		httpClient = c
+	} else if awsClient, err := NewAwsHttpClient(cfg.AWSRequestSigning); err != nil {
 		return nil, fmt.Errorf("unable to create AWS HTTP client for Elasticsearch: %w", err)
-	}
-	if httpClient != nil {
-		return httpClient, nil
-	}
-
-	if cfg.TLS != nil && cfg.TLS.Enabled {
-		httpClient, err := buildTLSHTTPClient(cfg.TLS)
+	} else if awsClient != nil {
+		httpClient = awsClient
+	} else if cfg.TLS != nil && cfg.TLS.Enabled {
+		tlsClient, err := buildTLSHTTPClient(cfg.TLS)
 		if err != nil {
 			return nil, fmt.Errorf("unable to create TLS HTTP client: %w", err)
 		}
-		return httpClient, nil
+		httpClient = tlsClient
 	}
 
-	return http.DefaultClient, nil
+	// Replace http.DefaultClient (or nil) with a fresh client so we can safely
+	// set a timeout and wrap the transport without mutating the global default.
+	if httpClient == nil || httpClient == http.DefaultClient {
+		httpClient = &http.Client{Timeout: 60 * time.Second}
+	} else {
+		httpClient.Timeout = 60 * time.Second
+	}
+
+	wrapDialLogger(httpClient, logger)
+	return httpClient, nil
 }
 
 // Build Http Client with TLS
