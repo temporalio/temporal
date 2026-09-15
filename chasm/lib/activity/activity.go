@@ -46,6 +46,7 @@ var (
 )
 
 var _ chasm.VisibilitySearchAttributesProvider = (*Activity)(nil)
+var _ chasm.DescribableComponent = (*Activity)(nil)
 var _ callback.CompletionSource = (*Activity)(nil)
 
 type ActivityStore interface {
