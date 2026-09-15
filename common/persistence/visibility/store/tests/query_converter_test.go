@@ -152,13 +152,13 @@ var queryConverterTestCases = []queryConverterTestCase{
 		name: "Keyword greater than",
 		in:   "AliasForKeyword01 > 'foo'",
 		sql:  "TemporalNamespaceDivision is null and Keyword01 > 'foo'",
-		es:   `{"bool":{"filter":{"range":{"Keyword01":{"from":"foo","include_lower":false,"include_upper":true,"to":null}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+		es:   `{"bool":{"filter":{"range":{"Keyword01":{"gt":"foo"}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
 		name: "Keyword between",
 		in:   "AliasForKeyword01 BETWEEN 'a' AND 'b'",
 		sql:  "TemporalNamespaceDivision is null and Keyword01 between 'a' and 'b'",
-		es:   `{"bool":{"filter":{"range":{"Keyword01":{"from":"a","include_lower":true,"include_upper":true,"to":"b"}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+		es:   `{"bool":{"filter":{"range":{"Keyword01":{"gte":"a","lte":"b"}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
 		name: "Keyword is null",
@@ -267,25 +267,25 @@ var queryConverterTestCases = []queryConverterTestCase{
 		name: "Int greater than",
 		in:   "HistoryLength > 10",
 		sql:  "TemporalNamespaceDivision is null and history_length > 10",
-		es:   `{"bool":{"filter":{"range":{"HistoryLength":{"from":10,"include_lower":false,"include_upper":true,"to":null}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+		es:   `{"bool":{"filter":{"range":{"HistoryLength":{"gt":10}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
 		name: "Int greater equal",
 		in:   "HistoryLength >= 10",
 		sql:  "TemporalNamespaceDivision is null and history_length >= 10",
-		es:   `{"bool":{"filter":{"range":{"HistoryLength":{"from":10,"include_lower":true,"include_upper":true,"to":null}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+		es:   `{"bool":{"filter":{"range":{"HistoryLength":{"gte":10}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
 		name: "Int less than",
 		in:   "StateTransitionCount < 10",
 		sql:  "TemporalNamespaceDivision is null and state_transition_count < 10",
-		es:   `{"bool":{"filter":{"range":{"StateTransitionCount":{"from":null,"include_lower":true,"include_upper":false,"to":10}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+		es:   `{"bool":{"filter":{"range":{"StateTransitionCount":{"lt":10}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
 		name: "Int less equal",
 		in:   "StateTransitionCount <= 10",
 		sql:  "TemporalNamespaceDivision is null and state_transition_count <= 10",
-		es:   `{"bool":{"filter":{"range":{"StateTransitionCount":{"from":null,"include_lower":true,"include_upper":true,"to":10}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+		es:   `{"bool":{"filter":{"range":{"StateTransitionCount":{"lte":10}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
 		name: "Int in",
@@ -297,13 +297,13 @@ var queryConverterTestCases = []queryConverterTestCase{
 		name: "Int between",
 		in:   "HistoryLength BETWEEN 1 AND 10",
 		sql:  "TemporalNamespaceDivision is null and history_length between 1 and 10",
-		es:   `{"bool":{"filter":{"range":{"HistoryLength":{"from":1,"include_lower":true,"include_upper":true,"to":10}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+		es:   `{"bool":{"filter":{"range":{"HistoryLength":{"gte":1,"lte":10}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
 		name: "Int not between",
 		in:   "HistoryLength NOT BETWEEN 1 AND 10",
 		sql:  "TemporalNamespaceDivision is null and history_length not between 1 and 10",
-		es:   `{"bool":{"must_not":[{"exists":{"field":"TemporalNamespaceDivision"}},{"range":{"HistoryLength":{"from":1,"include_lower":true,"include_upper":true,"to":10}}}]}}`,
+		es:   `{"bool":{"must_not":[{"exists":{"field":"TemporalNamespaceDivision"}},{"range":{"HistoryLength":{"gte":1,"lte":10}}}]}}`,
 	},
 	{
 		name: "Int with float value",
@@ -364,7 +364,7 @@ var queryConverterTestCases = []queryConverterTestCase{
 		name: "Double negative value",
 		in:   "AliasForDouble01 >= -1.5",
 		sql:  "TemporalNamespaceDivision is null and Double01 >= -1.5",
-		es:   `{"bool":{"filter":{"range":{"Double01":{"from":-1.5,"include_lower":true,"include_upper":true,"to":null}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+		es:   `{"bool":{"filter":{"range":{"Double01":{"gte":-1.5}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
 		name: "Double positive sign value",
@@ -464,7 +464,7 @@ var queryConverterTestCases = []queryConverterTestCase{
 		mysql:    "TemporalNamespaceDivision is null and start_time > '2020-01-02 22:04:05.123456'",
 		postgres: "TemporalNamespaceDivision is null and start_time > '2020-01-02 22:04:05.123456'",
 		sqlite:   "TemporalNamespaceDivision is null and start_time > '2020-01-02 22:04:05.123456+00:00'",
-		es:       `{"bool":{"filter":{"range":{"StartTime":{"from":"2020-01-02T22:04:05.123456789Z","include_lower":false,"include_upper":true,"to":null}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+		es:       `{"bool":{"filter":{"range":{"StartTime":{"gt":"2020-01-02T22:04:05.123456789Z"}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
 		name:     "Datetime with unix nanoseconds",
@@ -472,7 +472,7 @@ var queryConverterTestCases = []queryConverterTestCase{
 		mysql:    "TemporalNamespaceDivision is null and start_time > '2020-01-02 15:04:05'",
 		postgres: "TemporalNamespaceDivision is null and start_time > '2020-01-02 15:04:05'",
 		sqlite:   "TemporalNamespaceDivision is null and start_time > '2020-01-02 15:04:05+00:00'",
-		es:       `{"bool":{"filter":{"range":{"StartTime":{"from":"2020-01-02T15:04:05Z","include_lower":false,"include_upper":true,"to":null}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+		es:       `{"bool":{"filter":{"range":{"StartTime":{"gt":"2020-01-02T15:04:05Z"}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
 		name:     "Datetime between",
@@ -480,7 +480,7 @@ var queryConverterTestCases = []queryConverterTestCase{
 		mysql:    "TemporalNamespaceDivision is null and close_time between '2020-01-02 15:04:05' and '2020-01-03 15:04:05'",
 		postgres: "TemporalNamespaceDivision is null and close_time between '2020-01-02 15:04:05' and '2020-01-03 15:04:05'",
 		sqlite:   "TemporalNamespaceDivision is null and close_time between '2020-01-02 15:04:05+00:00' and '2020-01-03 15:04:05+00:00'",
-		es:       `{"bool":{"filter":{"range":{"CloseTime":{"from":"2020-01-02T15:04:05Z","include_lower":true,"include_upper":true,"to":"2020-01-03T15:04:05Z"}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+		es:       `{"bool":{"filter":{"range":{"CloseTime":{"gte":"2020-01-02T15:04:05Z","lte":"2020-01-03T15:04:05Z"}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
 		name: "Datetime is null",
@@ -500,7 +500,7 @@ var queryConverterTestCases = []queryConverterTestCase{
 		mysql:    "TemporalNamespaceDivision is null and Datetime01 <= '2020-01-02 15:04:05'",
 		postgres: "TemporalNamespaceDivision is null and Datetime01 <= '2020-01-02 15:04:05'",
 		sqlite:   "TemporalNamespaceDivision is null and Datetime01 <= '2020-01-02 15:04:05+00:00'",
-		es:       `{"bool":{"filter":{"range":{"Datetime01":{"from":null,"include_lower":true,"include_upper":true,"to":"2020-01-02T15:04:05Z"}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+		es:       `{"bool":{"filter":{"range":{"Datetime01":{"lte":"2020-01-02T15:04:05Z"}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
 		name: "Datetime invalid value",
@@ -606,38 +606,38 @@ var queryConverterTestCases = []queryConverterTestCase{
 		name: "ExecutionDuration nanoseconds",
 		in:   "ExecutionDuration > 1000000",
 		sql:  "TemporalNamespaceDivision is null and execution_duration > 1000000",
-		es:   `{"bool":{"filter":{"range":{"ExecutionDuration":{"from":1000000,"include_lower":false,"include_upper":true,"to":null}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+		es:   `{"bool":{"filter":{"range":{"ExecutionDuration":{"gt":1000000}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
 		name: "ExecutionDuration golang duration",
 		in:   "ExecutionDuration > '10s'",
 		sql:  "TemporalNamespaceDivision is null and execution_duration > 10000000000",
-		es:   `{"bool":{"filter":{"range":{"ExecutionDuration":{"from":10000000000,"include_lower":false,"include_upper":true,"to":null}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+		es:   `{"bool":{"filter":{"range":{"ExecutionDuration":{"gt":10000000000}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
 		name: "ExecutionDuration days",
 		in:   "ExecutionDuration > '2d'",
 		sql:  "TemporalNamespaceDivision is null and execution_duration > 172800000000000",
-		es:   `{"bool":{"filter":{"range":{"ExecutionDuration":{"from":172800000000000,"include_lower":false,"include_upper":true,"to":null}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+		es:   `{"bool":{"filter":{"range":{"ExecutionDuration":{"gt":172800000000000}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
 		name: "ExecutionDuration hh:mm:ss",
 		in:   "ExecutionDuration > '00:10:30'",
 		sql:  "TemporalNamespaceDivision is null and execution_duration > 630000000000",
-		es:   `{"bool":{"filter":{"range":{"ExecutionDuration":{"from":630000000000,"include_lower":false,"include_upper":true,"to":null}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+		es:   `{"bool":{"filter":{"range":{"ExecutionDuration":{"gt":630000000000}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
 		// negative zero hours works because -0 = 0, it does not negate the duration (bug?)
 		name: "ExecutionDuration negative 00:mm:ss",
 		in:   "ExecutionDuration > '-00:10:30'",
 		sql:  "TemporalNamespaceDivision is null and execution_duration > 630000000000",
-		es:   `{"bool":{"filter":{"range":{"ExecutionDuration":{"from":630000000000,"include_lower":false,"include_upper":true,"to":null}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+		es:   `{"bool":{"filter":{"range":{"ExecutionDuration":{"gt":630000000000}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
 		name: "ExecutionDuration between",
 		in:   "ExecutionDuration BETWEEN '1s' AND '1m'",
 		sql:  "TemporalNamespaceDivision is null and execution_duration between 1000000000 and 60000000000",
-		es:   `{"bool":{"filter":{"range":{"ExecutionDuration":{"from":1000000000,"include_lower":true,"include_upper":true,"to":60000000000}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+		es:   `{"bool":{"filter":{"range":{"ExecutionDuration":{"gte":1000000000,"lte":60000000000}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
 		name: "ExecutionDuration invalid value",
@@ -648,25 +648,25 @@ var queryConverterTestCases = []queryConverterTestCase{
 		name: "ExecutionDuration negative value",
 		in:   "ExecutionDuration > -1000",
 		sql:  "TemporalNamespaceDivision is null and execution_duration > -1000",
-		es:   `{"bool":{"filter":{"range":{"ExecutionDuration":{"from":-1000,"include_lower":false,"include_upper":true,"to":null}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+		es:   `{"bool":{"filter":{"range":{"ExecutionDuration":{"gt":-1000}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
 		name: "ExecutionDuration positive sign value",
 		in:   "ExecutionDuration > +1000",
 		sql:  "TemporalNamespaceDivision is null and execution_duration > 1000",
-		es:   `{"bool":{"filter":{"range":{"ExecutionDuration":{"from":1000,"include_lower":false,"include_upper":true,"to":null}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+		es:   `{"bool":{"filter":{"range":{"ExecutionDuration":{"gt":1000}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
 		name: "ExecutionDuration golang negative duration",
 		in:   "ExecutionDuration > '-10s'",
 		sql:  "TemporalNamespaceDivision is null and execution_duration > -10000000000",
-		es:   `{"bool":{"filter":{"range":{"ExecutionDuration":{"from":-10000000000,"include_lower":false,"include_upper":true,"to":null}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+		es:   `{"bool":{"filter":{"range":{"ExecutionDuration":{"gt":-10000000000}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
 		name: "ExecutionDuration golang positive sign duration",
 		in:   "ExecutionDuration > '+10s'",
 		sql:  "TemporalNamespaceDivision is null and execution_duration > 10000000000",
-		es:   `{"bool":{"filter":{"range":{"ExecutionDuration":{"from":10000000000,"include_lower":false,"include_upper":true,"to":null}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+		es:   `{"bool":{"filter":{"range":{"ExecutionDuration":{"gt":10000000000}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
 		name: "ExecutionDuration negative golang duration",
@@ -891,7 +891,7 @@ var queryConverterTestCases = []queryConverterTestCase{
 		name: "system search attribute with Temporal prefix",
 		in:   "TemporalHistoryLength > 10",
 		sql:  "TemporalNamespaceDivision is null and history_length > 10",
-		es:   `{"bool":{"filter":{"range":{"HistoryLength":{"from":10,"include_lower":false,"include_upper":true,"to":null}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+		es:   `{"bool":{"filter":{"range":{"HistoryLength":{"gt":10}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
 		name: "ScheduleId is mapped to WorkflowId",
@@ -1009,6 +1009,133 @@ var queryConverterTestCases = []queryConverterTestCase{
 		sql:  "TemporalNamespaceDivision is null and (not close_time is null)",
 		es:   `{"bool":{"must_not":[{"exists":{"field":"TemporalNamespaceDivision"}},{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}}]}}`,
 	},
+	// Range query merging: Elasticsearch merges range conditions on the same field into a
+	// single range query whenever they end up in the same `filter` clause, keeping the most
+	// restrictive bound of each side. This is an Elasticsearch-only optimization, the SQL
+	// output is unchanged.
+	{
+		name: "merge range conditions on same field",
+		in:   "HistoryLength > 1 AND HistoryLength < 10",
+		sql:  "TemporalNamespaceDivision is null and (history_length > 1 and history_length < 10)",
+		es:   `{"bool":{"filter":{"range":{"HistoryLength":{"gt":1,"lt":10}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		// The unset bounds are omitted from the Elasticsearch query, but a zero value is a
+		// valid bound and must be kept.
+		name: "range condition with zero value",
+		in:   "HistoryLength > 0",
+		sql:  "TemporalNamespaceDivision is null and history_length > 0",
+		es:   `{"bool":{"filter":{"range":{"HistoryLength":{"gt":0}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		name: "merge range conditions with same operator",
+		in:   "HistoryLength > 1 AND HistoryLength > 5",
+		sql:  "TemporalNamespaceDivision is null and (history_length > 1 and history_length > 5)",
+		es:   `{"bool":{"filter":{"range":{"HistoryLength":{"gt":5}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		name: "merge range conditions keeping most restrictive bounds",
+		in: "HistoryLength >= 1 AND HistoryLength <= 10 " +
+			"AND HistoryLength >= 5 AND HistoryLength <= 20",
+		sql: "TemporalNamespaceDivision is null and " +
+			"(((history_length >= 1 and history_length <= 10) and history_length >= 5) " +
+			"and history_length <= 20)",
+		es: `{"bool":{"filter":{"range":{"HistoryLength":{"gte":5,"lte":10}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		// The `gte: 1` bound is redundant with `gt: 5` and is dropped.
+		name: "merge between with range condition",
+		in:   "HistoryLength BETWEEN 1 AND 10 AND HistoryLength > 5",
+		sql:  "TemporalNamespaceDivision is null and (history_length between 1 and 10 and history_length > 5)",
+		es:   `{"bool":{"filter":{"range":{"HistoryLength":{"gt":5,"lte":10}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		// The `gt: 1` bound is redundant with `gte: 5` and is dropped.
+		name: "merge range conditions with redundant strict bound",
+		in:   "HistoryLength > 1 AND HistoryLength >= 5",
+		sql:  "TemporalNamespaceDivision is null and (history_length > 1 and history_length >= 5)",
+		es:   `{"bool":{"filter":{"range":{"HistoryLength":{"gte":5}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		// `lt: 10` and `lte: 10` bound the same value, the strictest one is kept.
+		name: "merge range conditions with equal upper bounds",
+		in:   "HistoryLength < 10 AND HistoryLength <= 10",
+		sql:  "TemporalNamespaceDivision is null and (history_length < 10 and history_length <= 10)",
+		es:   `{"bool":{"filter":{"range":{"HistoryLength":{"lt":10}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		name: "merge keyword range conditions",
+		in:   "AliasForKeyword01 > 'a' AND AliasForKeyword01 < 'z'",
+		sql:  "TemporalNamespaceDivision is null and (Keyword01 > 'a' and Keyword01 < 'z')",
+		es:   `{"bool":{"filter":{"range":{"Keyword01":{"gt":"a","lt":"z"}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		name: "merge datetime range conditions",
+		in:   "StartTime > '2020-01-01T00:00:00Z' AND StartTime < '2020-02-01T00:00:00Z'",
+		sql:  "TemporalNamespaceDivision is null and (start_time > '2020-01-01 00:00:00' and start_time < '2020-02-01 00:00:00')",
+		sqlite: "TemporalNamespaceDivision is null and " +
+			"(start_time > '2020-01-01 00:00:00+00:00' and start_time < '2020-02-01 00:00:00+00:00')",
+		es: `{"bool":{"filter":{"range":{"StartTime":{"gt":"2020-01-01T00:00:00Z","lt":"2020-02-01T00:00:00Z"}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		name: "merge execution duration range conditions",
+		in:   "ExecutionDuration > '1s' AND ExecutionDuration < '1m'",
+		sql:  "TemporalNamespaceDivision is null and (execution_duration > 1000000000 and execution_duration < 60000000000)",
+		es:   `{"bool":{"filter":{"range":{"ExecutionDuration":{"gt":1000000000,"lt":60000000000}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		// Non-range conditions keep their relative order, and the merged range conditions
+		// are appended after them.
+		name: "merged range condition comes after non range conditions",
+		in:   "HistoryLength > 1 AND WorkflowId = 'wid'",
+		sql:  "TemporalNamespaceDivision is null and (history_length > 1 and workflow_id = 'wid')",
+		es: `{"bool":{"filter":[{"term":{"WorkflowId":"wid"}},` +
+			`{"range":{"HistoryLength":{"gt":1}}}],` +
+			`"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		// Nested AND expressions are flattened into a single bool query, so the range
+		// conditions still end up in the same filter clause and get merged.
+		name: "merge range conditions across nested and expressions",
+		in:   "HistoryLength > 1 AND (HistoryLength < 10 AND WorkflowId = 'wid')",
+		sql: "TemporalNamespaceDivision is null and " +
+			"(history_length > 1 and (history_length < 10 and workflow_id = 'wid'))",
+		es: `{"bool":{"filter":[{"term":{"WorkflowId":"wid"}},` +
+			`{"range":{"HistoryLength":{"gt":1,"lt":10}}}],` +
+			`"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		name: "merge range conditions inside or expression",
+		in:   "(HistoryLength > 1 AND HistoryLength < 10) OR WorkflowId = 'wid'",
+		sql: "TemporalNamespaceDivision is null and " +
+			"((history_length > 1 and history_length < 10) or workflow_id = 'wid')",
+		es: `{"bool":{"filter":{"bool":{"minimum_should_match":"1","should":[` +
+			`{"bool":{"filter":{"range":{"HistoryLength":{"gt":1,"lt":10}}}}},` +
+			`{"term":{"WorkflowId":"wid"}}]}},` +
+			`"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		// Only filter clauses are merged: the range conditions of an OR expression land in
+		// the should clause and are left as is.
+		name: "range conditions in or expression are not merged",
+		in:   "HistoryLength > 1 OR HistoryLength < 10",
+		sql:  "TemporalNamespaceDivision is null and (history_length > 1 or history_length < 10)",
+		es: `{"bool":{"filter":{"bool":{"minimum_should_match":"1","should":[` +
+			`{"range":{"HistoryLength":{"gt":1}}},` +
+			`{"range":{"HistoryLength":{"lt":10}}}]}},` +
+			`"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		// Only filter clauses are merged: a negated range condition lands in the must_not
+		// clause and is left as is.
+		name: "range condition in not expression is not merged",
+		in:   "HistoryLength NOT BETWEEN 1 AND 10 AND HistoryLength > 20",
+		sql: "TemporalNamespaceDivision is null and " +
+			"(history_length not between 1 and 10 and history_length > 20)",
+		es: `{"bool":{"filter":{"range":{"HistoryLength":{"gt":20}}},` +
+			`"must_not":[{"exists":{"field":"TemporalNamespaceDivision"}},` +
+			`{"range":{"HistoryLength":{"gte":1,"lte":10}}}]}}`,
+	},
 	{
 		name: "complex query",
 		in: "WorkflowType = 'wtype' AND ExecutionStatus IN ('Running', 'Failed') " +
@@ -1029,7 +1156,7 @@ var queryConverterTestCases = []queryConverterTestCase{
 		es: `{"bool":{"filter":[{"term":{"WorkflowType":"wtype"}},` +
 			`{"terms":{"ExecutionStatus":["Running","Failed"]}},` +
 			`{"bool":{"minimum_should_match":"1","should":[` +
-			`{"range":{"StartTime":{"from":"2020-01-02T15:04:05Z","include_lower":false,"include_upper":true,"to":null}}},` +
+			`{"range":{"StartTime":{"gt":"2020-01-02T15:04:05Z"}}},` +
 			`{"bool":{"must_not":{"exists":{"field":"CloseTime"}}}}]}}],` +
 			`"must_not":[{"exists":{"field":"TemporalNamespaceDivision"}},{"prefix":{"Keyword01":"foo"}}]}}`,
 	},
@@ -1279,15 +1406,55 @@ func TestElasticsearchQueryConverter(t *testing.T) {
 	runQueryConverterTest(
 		t,
 		esStore,
-		func() *query.QueryConverter[elastic.Query] {
-			return elasticsearch.NewQueryConverter(
-				testNamespaceName,
-				searchattribute.TestNameTypeMap(),
-				&searchattribute.TestMapper{},
-				nil, // metricsHandler
-				log.NewNoopLogger(),
-			)
-		},
+		newESQueryConverter,
 		serializeESQuery,
+	)
+}
+
+// Range conditions on distinct fields can't be part of the table driven test
+// above because the merged range queries are collected from a map, thus the
+// order they appear in the filter clause is not deterministic.
+func TestElasticsearchQueryConverter_MergeRangeQueriesOnDistinctFields(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	queryParams, err := newESQueryConverter().Convert(
+		"HistoryLength > 1 AND StateTransitionCount < 10 " +
+			"AND HistoryLength < 20 AND StateTransitionCount > 2",
+	)
+	r.NoError(err)
+	out, err := serializeESQuery(queryParams.QueryExpr)
+	r.NoError(err)
+
+	var got map[string]any
+	r.NoError(json.Unmarshal([]byte(out), &got))
+	boolClause := got["bool"].(map[string]any)
+
+	expectedFilter := make([]any, 0, 2)
+	for _, q := range []string{
+		`{"range":{"HistoryLength":{"gt":1,"lt":20}}}`,
+		`{"range":{"StateTransitionCount":{"gt":2,"lt":10}}}`,
+	} {
+		var expected any
+		r.NoError(json.Unmarshal([]byte(q), &expected))
+		expectedFilter = append(expectedFilter, expected)
+	}
+	r.ElementsMatch(expectedFilter, boolClause["filter"])
+
+	var expectedMustNot any
+	r.NoError(json.Unmarshal(
+		[]byte(`{"exists":{"field":"TemporalNamespaceDivision"}}`),
+		&expectedMustNot,
+	))
+	r.Equal(expectedMustNot, boolClause["must_not"])
+}
+
+func newESQueryConverter() *query.QueryConverter[elastic.Query] {
+	return elasticsearch.NewQueryConverter(
+		testNamespaceName,
+		searchattribute.TestNameTypeMap(),
+		&searchattribute.TestMapper{},
+		nil, // metricsHandler
+		log.NewNoopLogger(),
 	)
 }
