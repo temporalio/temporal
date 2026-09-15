@@ -20,7 +20,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-
 func TestActivityIsDispatchTaskValid(t *testing.T) {
 	const currentStamp int32 = 42
 
