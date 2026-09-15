@@ -84,6 +84,21 @@ var (
 	FlagExecute                    = "execute"
 	FlagWorkers                    = "workers"
 	FlagOutputLog                  = "output-log"
+	FlagFile                       = "file"
+	FlagStart                      = "start"
+	FlagStartTime                  = "start-time"
+	FlagEnd                        = "end"
+	FlagEndTime                    = "end-time"
+	FlagConcurrency                = "concurrency"
+	FlagRPS                        = "rps"
+	FlagListRPS                    = "list-rps"
+	FlagDelayThreshold             = "delay-threshold"
+	FlagIncludePaused              = "include-paused"
+	FlagQuiet                      = "quiet"
+)
+
+var (
+	FlagFileAlias = []string{"f"}
 )
 
 const defaultMigrateWorkers = 5
