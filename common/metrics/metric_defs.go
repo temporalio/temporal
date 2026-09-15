@@ -1360,7 +1360,7 @@ var (
 	)
 	DroppedTasksCounter = NewCounterDef(
 		"tasks_dropped",
-		WithDescription("Backlog/spooled tasks dropped by matching (e.g. a Record(Workflow|Activity)TaskStarted call to history failed, the task expired, or it failed validation). Sync-match tasks are excluded. Per-task-queue, tagged with `reason` identifying the failure mode."),
+		WithDescription("Backlog/spooled tasks dropped by matching (e.g. a Record(Workflow|Activity)TaskStarted call to history failed, the task expired, or it failed validation). Sync-match tasks are excluded. Per-task-queue, tagged with `reason` identifying the failure mode and (when metrics.breakdownByFairnessKey is enabled) fairness key."),
 	)
 	TaskCompletedMissing = NewCounterDef(
 		"task_completed_dropped",
