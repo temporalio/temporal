@@ -111,7 +111,8 @@ func (tr *priTaskReader) getOldestBacklogTime() time.Time {
 }
 
 func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
-	recordDroppedTask(tr.backlogMgr.metricsHandler, res.dropReason)
+	recordDroppedTask(tr.backlogMgr.metricsHandler, res.dropReason,
+		task.getPriority().GetFairnessKey(), tr.backlogMgr.config.BreakdownMetricsByFairnessKey())
 
 	err := res.err()
 
@@ -250,7 +251,8 @@ func (tr *priTaskReader) processTaskBatch(tasks []*persistencespb.AllocatedTaskI
 
 		if IsTaskExpired(t) {
 			// task expired when we read it
-			recordDroppedTask(tr.backlogMgr.metricsHandler, dropReasonExpiredRead)
+			recordDroppedTask(tr.backlogMgr.metricsHandler, dropReasonExpiredRead,
+				t.GetData().GetPriority().GetFairnessKey(), tr.backlogMgr.config.BreakdownMetricsByFairnessKey())
 			return true
 		}
 
