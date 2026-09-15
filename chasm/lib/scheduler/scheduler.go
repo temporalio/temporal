@@ -767,9 +767,10 @@ func (s *Scheduler) HandleNexusCompletion(
 	return nil
 }
 
-// completeAction performs the terminal transition for a buffered start. When
-// outcome is nil, completion metadata came from Describe and payload-derived
-// last-completion state is deliberately left unchanged.
+// completeAction performs the terminal transition for a buffered start and
+// reports whether the transition was applied. When outcome is nil, completion
+// metadata came from Describe and payload-derived last-completion state is
+// deliberately left unchanged.
 func (s *Scheduler) completeAction(
 	ctx chasm.MutableContext,
 	requestID string,
@@ -785,6 +786,11 @@ func (s *Scheduler) completeAction(
 		}
 	}
 	if start == nil {
+		ctx.Logger().Error(
+			"failed to complete action because its buffered start was not found or was already completed",
+			tag.RequestID(requestID),
+			tag.ScheduleID(s.ScheduleId),
+		)
 		return false
 	}
 	workflowID := start.GetWorkflowId()
