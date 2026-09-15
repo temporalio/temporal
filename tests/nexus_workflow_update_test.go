@@ -13,7 +13,9 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	updatepb "go.temporal.io/api/update/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
@@ -21,11 +23,15 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/chasm/lib/callback"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -1640,6 +1646,141 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateRequestIDInAcceptedEven
 		}
 	}
 	s.True(foundAccepted, "expected to find WorkflowExecutionUpdateAccepted event")
+
+	// Clean up.
+	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "stop", nil))
+}
+
+// TestWorkflowUpdateNexusHandlerCallbackLinks covers both halves of the link exchange for an
+// Update's NexusHandler-variant completion callback. On the way out, the handler is handed a
+// Link_Callback naming the Update's callback rather than the workflow hosting it. On the way back,
+// the links the handler attached to its response are recorded on that callback, so a Describe on
+// the workflow surfaces whatever the handler started to process the completion.
+func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateNexusHandlerCallbackLinks() {
+	env := newNexusTestEnv(s.T(), true, append(
+		enableUpdateCallbacksOpts(),
+		testcore.WithDynamicConfig(
+			chasmworkflow.EnabledCallbackKinds,
+			[]callbacks.Kind{callbacks.KindNexus, callbacks.KindNexusHandler},
+		),
+	)...)
+	ctx := s.Context()
+
+	workflowTaskQueue := testcore.RandomizeStr(s.T().Name())
+	handlerTaskQueue := testcore.RandomizeStr("nh-callback-" + s.T().Name())
+	updateID := "nh-callback-links-update-id"
+	requestID := uuid.NewString()
+
+	wf := newUpdateChildWorkflow(false)
+	s.startWorker(env, workflowTaskQueue, wf)
+
+	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		TaskQueue: workflowTaskQueue,
+	}, wf, "initial input")
+	s.NoError(err)
+
+	// The link the handler reports back, standing in for a workflow it started to process the
+	// completion.
+	handlerLink := &commonpb.Link_WorkflowEvent{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: "nh-callback-handler-wf-id",
+		RunId:      uuid.NewString(),
+		Reference: &commonpb.Link_WorkflowEvent_EventRef{
+			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+				EventId:   1,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			},
+		},
+	}
+
+	// Poll as the Nexus handler the callback targets. The poller starts before the update is sent so
+	// that it is already waiting when the completed update schedules the delivery. It answers from
+	// its own goroutine, so the links it received come back over a channel.
+	inboundLinks := make(chan []*nexuspb.Link, 1)
+	pollerErrCh := env.nexusTaskPoller(ctx, s.T(), handlerTaskQueue, func(
+		_ *testing.T,
+		res *workflowservice.PollNexusTaskQueueResponse,
+	) (*nexusTaskResponse, error) {
+		inboundLinks <- res.GetRequest().GetStartOperation().GetLinks()
+		return &nexusTaskResponse{
+			StartResult: &nexus.HandlerStartOperationResultAsync{OperationToken: "nh-callback-op-token"},
+			Links:       []nexus.Link{commonnexus.ConvertLinkWorkflowEventToNexusLink(handlerLink)},
+		}, nil
+	})
+
+	_, err = env.FrontendClient().UpdateWorkflowExecution(ctx, &workflowservice.UpdateWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: run.GetID(),
+			RunId:      run.GetRunID(),
+		},
+		WaitPolicy: &updatepb.WaitPolicy{
+			LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED,
+		},
+		Request: &updatepb.Request{
+			Meta: &updatepb.Meta{
+				UpdateId: updateID,
+			},
+			Input: &updatepb.Input{
+				Name: "update",
+				Args: &commonpb.Payloads{
+					Payloads: []*commonpb.Payload{testcore.MustToPayload(s.T(), "test")},
+				},
+			},
+			RequestId: requestID,
+			CompletionCallbacks: []*commonpb.Callback{{
+				Variant: &commonpb.Callback_NexusHandler_{
+					NexusHandler: &commonpb.Callback_NexusHandler{
+						TaskQueueName: handlerTaskQueue,
+						// The shared poller only accepts tasks addressed to "test-service".
+						Service:   "test-service",
+						Operation: "OnComplete",
+					},
+				},
+			}},
+		},
+	})
+	s.NoError(err)
+	s.NoError(await.Rcv(s.T(), pollerErrCh))
+
+	// Outbound half: the handler was handed a Link_Callback addressing the Update's callback. The
+	// component path is what distinguishes it from a callback attached to the workflow itself.
+	gotLinks := await.Rcv(s.T(), inboundLinks)
+	s.Require().Len(gotLinks, 1)
+	gotCallbackLink, err := commonnexus.ConvertNexusLinkToLinkCallback(commonnexus.ConvertLinksFromProto(gotLinks)[0])
+	s.NoError(err)
+	protorequire.ProtoEqual(s.T(), &commonpb.Link_Callback{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.Execution{
+			Type:       enumspb.EXECUTION_TYPE_WORKFLOW,
+			BusinessId: run.GetID(),
+			RunId:      run.GetRunID(),
+		},
+		ComponentPath: []string{"Updates", updateID},
+		RequestId:     requestID,
+	}, gotCallbackLink)
+
+	// Inbound half: the handler's link is recorded on the callback. Polling because the delivery's
+	// outcome is persisted in a transaction that follows the handler's response.
+	var callbackInfo *workflowpb.CallbackInfo
+	await.Require(ctx, s.T(), func(t *await.T) {
+		desc, err := env.FrontendClient().DescribeWorkflowExecution(t.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: run.GetID(),
+				RunId:      run.GetRunID(),
+			},
+		})
+		require.NoError(t, err)
+		require.Len(t, desc.GetCallbacks(), 1)
+		callbackInfo = desc.GetCallbacks()[0]
+		require.Equal(t, enumspb.CALLBACK_STATE_SUCCEEDED, callbackInfo.GetState())
+	}, 10*time.Second, 200*time.Millisecond)
+
+	s.Equal(updateID, callbackInfo.GetTrigger().GetUpdateWorkflowExecutionCompleted().GetUpdateId())
+	protorequire.ProtoSliceEqual(s.T(), []*commonpb.Link{
+		{Variant: &commonpb.Link_WorkflowEvent_{WorkflowEvent: handlerLink}},
+	}, callbackInfo.GetCallback().GetLinks())
 
 	// Clean up.
 	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "stop", nil))

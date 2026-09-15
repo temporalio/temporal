@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"github.com/nexus-rpc/sdk-go/nexus"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
@@ -64,4 +65,11 @@ func (u *WorkflowUpdate) GetNexusCompletion(
 
 	// Retrieve the completion data from the underlying mutable state via MSPointer
 	return u.GetNexusUpdateCompletion(ctx, u.UpdateId, requestID)
+}
+
+// GetComponentExecutionPath implements callback.CompletionSource. An Update lives inside a Workflow
+// execution, so its callbacks are addressed by the path to the Update within it. The first segment must
+// stay in sync with the Workflow.Updates field.
+func (u *WorkflowUpdate) GetComponentExecutionPath() (enumspb.ExecutionType, []string) {
+	return enumspb.EXECUTION_TYPE_WORKFLOW, []string{"Updates", u.GetUpdateId()}
 }

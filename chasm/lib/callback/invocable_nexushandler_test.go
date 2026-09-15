@@ -671,9 +671,16 @@ func TestExecuteInvocationTaskNexusHandler_DispatchedRequest(t *testing.T) {
 			// The callback's request ID doubles as the Nexus request ID, so a redelivery is idempotent
 			// from the handler's perspective.
 			require.Equal(t, "request-id", start.GetRequestId())
-			// The source operation is identified to the handler by the completion's links.
+			// The handler is handed a link to the callback, not the link to the source
+			// execution that the completion carries, so that whatever the handler spawns
+			// points back at this specific callback.
 			require.Len(t, start.GetLinks(), 1)
-			require.Equal(t, sourceLink.URL.String(), start.GetLinks()[0].GetUrl())
+			require.Equal(t, "temporal.api.common.v1.Link.Callback", start.GetLinks()[0].GetType())
+			require.Equal(
+				t,
+				"temporal:///namespaces/namespace-id/workflows/workflow-id/run-id/callbacks/request-id",
+				start.GetLinks()[0].GetUrl(),
+			)
 
 			var onComplete notificationservice.OnCompleteRequest
 			require.NoError(t, payload.Decode(start.GetPayload(), &onComplete))
@@ -722,6 +729,152 @@ func TestInvocableNexusHandlerCannotDispatch(t *testing.T) {
 
 			require.IsType(t, invocationResultFail{}, result)
 			require.ErrorContains(t, result.error(), tc.wantMessage)
+		})
+	}
+}
+
+// handlerWorkflowLink is the kind of link a worker returns when its completion handler starts a
+// workflow to process the completion: a workflow_event link to that workflow.
+func handlerWorkflowLink() (*commonpb.Link, *nexuspb.Link) {
+	workflowEvent := &commonpb.Link_WorkflowEvent{
+		Namespace:  "handler-ns",
+		WorkflowId: "handler-wf-id",
+		RunId:      "handler-run-id",
+		Reference: &commonpb.Link_WorkflowEvent_EventRef{
+			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+				EventId:   1,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			},
+		},
+	}
+	nexusLink := commonnexus.ConvertLinkWorkflowEventToNexusLink(workflowEvent)
+	return &commonpb.Link{
+			Variant: &commonpb.Link_WorkflowEvent_{WorkflowEvent: workflowEvent},
+		},
+		commonnexus.ConvertLinksToProto([]nexus.Link{nexusLink})[0]
+}
+
+// TestExecuteInvocationTaskNexusHandler_RecordsHandlerLinks covers the return half of the link
+// exchange: links the worker attached to its response are recorded on the callback, so the source
+// execution can point at whatever handled its completion.
+func TestExecuteInvocationTaskNexusHandler_RecordsHandlerLinks(t *testing.T) {
+	expectedLink, responseLink := handlerWorkflowLink()
+
+	for _, tc := range []struct {
+		name     string
+		response *matchingservice.DispatchNexusTaskResponse
+		// wantLinks are the links expected on the callback afterwards.
+		wantLinks []*commonpb.Link
+		// wantErr is the delivery error, set only when the case expects the handler to reject the
+		// completion. Asserting it keeps a success case from passing on an unexpected failure.
+		wantErr string
+	}{
+		{
+			// A handler that ran the completion inline can still report what it touched.
+			name: "sync-success",
+			response: startOperationResponse(&nexuspb.StartOperationResponse{
+				Variant: &nexuspb.StartOperationResponse_SyncSuccess{
+					SyncSuccess: &nexuspb.StartOperationResponse_Sync{
+						Links: []*nexuspb.Link{responseLink},
+					},
+				},
+			}),
+			wantLinks: []*commonpb.Link{expectedLink},
+		},
+		{
+			// The common case: the handler started a workflow to process the completion and links
+			// the caller to it.
+			name: "async-success",
+			response: startOperationResponse(&nexuspb.StartOperationResponse{
+				Variant: &nexuspb.StartOperationResponse_AsyncSuccess{
+					AsyncSuccess: &nexuspb.StartOperationResponse_Async{
+						OperationToken: "operation-token",
+						Links:          []*nexuspb.Link{responseLink},
+					},
+				},
+			}),
+			wantLinks: []*commonpb.Link{expectedLink},
+		},
+		{
+			name:      "success-without-links",
+			response:  syncSuccessResponse(),
+			wantLinks: nil,
+		},
+		{
+			// Links are supplementary, so one the server cannot parse is dropped and the delivery
+			// still counts as successful.
+			name: "unparseable-link-is-dropped",
+			response: startOperationResponse(&nexuspb.StartOperationResponse{
+				Variant: &nexuspb.StartOperationResponse_SyncSuccess{
+					SyncSuccess: &nexuspb.StartOperationResponse_Sync{
+						Links: []*nexuspb.Link{{
+							Url:  "temporal:///nonsense",
+							Type: "temporal.api.common.v1.Link.WorkflowEvent",
+						}},
+					},
+				},
+			}),
+			wantLinks: nil,
+		},
+		{
+			// A failed delivery is not a completed one, so there is nothing to link to. The
+			// callback will be retried and the next attempt's response is what counts.
+			name:      "handler-failure-records-nothing",
+			response:  handlerFailureResponse(string(nexus.HandlerErrorTypeInternal)),
+			wantLinks: nil,
+			wantErr:   "handler error (INTERNAL)",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+			matchingClient.EXPECT().DispatchNexusTask(gomock.Any(), gomock.Any()).Return(tc.response, nil)
+
+			ns := test.NewNamespace(t)
+			nsRegistry := namespace.NewMockRegistry(ctrl)
+			nsRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil)
+
+			handler := &invocationTaskHandler{
+				config: &Config{
+					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
+					RetryPolicy: func() backoff.RetryPolicy {
+						return backoff.NewExponentialRetryPolicy(time.Second)
+					},
+				},
+				namespaceRegistry: nsRegistry,
+				metricsHandler:    metrics.NoopMetricsHandler,
+				logger:            log.NewTestLogger(),
+				matchingClient:    matchingClient,
+			}
+
+			cb := newNexusHandlerCallback(t)
+			engineCtx, callbackRef := newInvocationTaskTest(t, handler, cb, nexusrpc.CompleteOperationOptions{})
+
+			err := handler.Execute(
+				engineCtx,
+				callbackRef,
+				chasm.TaskAttributes{Destination: testNexusHandlerDestination},
+				&callbackspb.InvocationTask{Attempt: 0},
+			)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+
+			readCallbackState(engineCtx, t, callbackRef, func(chasmCtx chasm.Context, c *Callback) {
+				t.Helper()
+
+				protorequire.ProtoSliceEqual(t, tc.wantLinks, chasmCtx.Links(c))
+
+				// The links also have to reach the API, which is how a Describe on the source
+				// execution surfaces them.
+				info, err := c.ToAPICallbackInfo(chasmCtx)
+				require.NoError(t, err)
+				protorequire.ProtoSliceEqual(t, tc.wantLinks, info.GetCallback().GetLinks())
+			})
 		})
 	}
 }

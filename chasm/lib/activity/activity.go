@@ -382,6 +382,12 @@ func (a *Activity) attachLinks(ctx chasm.MutableContext, links []*commonpb.Link,
 	return ctx.SetRequestLinks(a, requestID, links)
 }
 
+// GetComponentExecutionPath implements callback.CompletionSource. A standalone Activity is the root
+// component of its own execution, so it has no component path.
+func (a *Activity) GetComponentExecutionPath() (enumspb.ExecutionType, []string) {
+	return enumspb.EXECUTION_TYPE_ACTIVITY, nil
+}
+
 // GetNexusCompletion returns the activity's completion data in the format required by the Nexus callback invocation.
 // Implements callback.CompletionSource.
 func (a *Activity) GetNexusCompletion(ctx chasm.Context, _ string) (nexusrpc.CompleteOperationOptions, error) {

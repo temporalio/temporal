@@ -13,6 +13,7 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
@@ -52,6 +53,10 @@ type mockNexusCompletionGetterComponent struct {
 
 func (m *mockNexusCompletionGetterComponent) GetNexusCompletion(_ chasm.Context, requestID string) (nexusrpc.CompleteOperationOptions, error) {
 	return m.completion, m.err
+}
+
+func (m *mockNexusCompletionGetterComponent) GetComponentExecutionPath() (enumspb.ExecutionType, []string) {
+	return enumspb.EXECUTION_TYPE_WORKFLOW, nil
 }
 
 func (m *mockNexusCompletionGetterComponent) LifecycleState(_ chasm.Context) chasm.LifecycleState {
