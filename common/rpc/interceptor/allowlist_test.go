@@ -7,9 +7,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.uber.org/mock/gomock"
 )
 
@@ -168,4 +171,38 @@ func TestNewNamespaceHandoverInterceptor_LogsInvalidEntriesAndKeepsGoing(t *test
 
 	require.True(t, handoverAllowed(api.MatchingServicePrefix+"DescribeTaskQueue",
 		i.additionalAllowedMethodsDuringHandover))
+}
+
+// The extension has to reach the policy NewRedirection builds for itself, not just a
+// policy a caller happens to hold: the field is private and there is no other way in, so
+// without this an embedder could register a redirect response and still never forward.
+func TestRedirection_WithAdditionalWhitelistedMethods(t *testing.T) {
+	controller := gomock.NewController(t)
+	clusterMetadata := cluster.NewMockMetadata(controller)
+	clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	clusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
+
+	newRedirection := func() *Redirection {
+		return NewRedirection(
+			dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+			dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+			namespace.NewMockRegistry(controller),
+			config.DCRedirectionPolicy{Policy: DCRedirectionPolicySelectedAPIsForwarding},
+			log.NewNoopLogger(), nil, metrics.NoopMetricsHandler, clock.NewRealTimeSource(),
+			clusterMetadata,
+		)
+	}
+
+	const embedderMethod = "/embedder.api.v1.Service/ScheduleWorkflowTask"
+
+	base := newRedirection()
+	require.False(t, base.redirectionPolicy.(*SelectedAPIsForwardingRedirectionPolicy).whitelisted(embedderMethod))
+
+	extended := newRedirection().WithAdditionalWhitelistedMethods(embedderMethod)
+	require.True(t, extended.redirectionPolicy.(*SelectedAPIsForwardingRedirectionPolicy).whitelisted(embedderMethod))
+
+	// The server's own surface is untouched, and the receiver is not mutated.
+	require.False(t, extended.redirectionPolicy.(*SelectedAPIsForwardingRedirectionPolicy).
+		whitelisted(api.WorkflowServicePrefix+"ScheduleWorkflowTask"))
+	require.False(t, base.redirectionPolicy.(*SelectedAPIsForwardingRedirectionPolicy).whitelisted(embedderMethod))
 }

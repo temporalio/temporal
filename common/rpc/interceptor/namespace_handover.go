@@ -57,6 +57,10 @@ func NewNamespaceHandoverInterceptor(
 	// Inert entries fail open here — a method meant to be let through a handover is not —
 	// so say so rather than start silently wrong. Both interceptors get this list from the
 	// same source, so checking it once covers both.
+	//
+	// TODO: fail startup instead of logging, once callers verify their entries before
+	// deploying. A list assembled at runtime makes a bad entry fail on an arbitrary
+	// restart rather than at deploy time, which is the wrong moment to refuse to start.
 	if err := validateFullMethods(additionalAllowedMethodsDuringHandover...); err != nil {
 		logger.Warn("handover allow-list entries will never match", tag.Error(err))
 	}

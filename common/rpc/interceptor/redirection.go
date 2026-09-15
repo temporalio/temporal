@@ -233,6 +233,16 @@ func (i *Redirection) WithRedirectResponses(responses map[string]func() any) *Re
 	return &clone
 }
 
+// WithAdditionalWhitelistedMethods returns a copy of the interceptor whose policy also
+// forwards the given full gRPC methods. Embedder uses this to extend its own methods.
+func (i *Redirection) WithAdditionalWhitelistedMethods(fullMethods ...string) *Redirection {
+	clone := *i
+	if policy, ok := i.redirectionPolicy.(*SelectedAPIsForwardingRedirectionPolicy); ok {
+		clone.redirectionPolicy = policy.WithAdditionalWhitelistedMethods(fullMethods...)
+	}
+	return &clone
+}
+
 var _ grpc.UnaryServerInterceptor = (*Redirection)(nil).Intercept
 
 func (i *Redirection) Intercept(
