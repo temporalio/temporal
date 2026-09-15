@@ -624,3 +624,32 @@ func TestThrottleState_MissingEnabledFnReadsAsDisabled(t *testing.T) {
 		require.False(t, metered, "and does not meter what it did not gate")
 	})
 }
+
+// Loss is bounded at 1 and the decision is loss > threshold, so a configured threshold of 1
+// makes the decrease branch unreachable: a class losing every release would climb to MaxRate
+// instead of backing off. The guard used to clamp to 1, which permitted exactly that value.
+func TestThrottleState_LossThresholdOfOneStillDecreases(t *testing.T) {
+	for _, threshold := range []float64{1, 1.5, 100} {
+		o := defaultThrottleOverrides()
+		o.lossThresh = threshold
+		o.initialRate = 100
+		state, ts := newTestThrottleState(o)
+		key := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
+
+		// Every release of the window comes back rejected: loss is exactly 1.
+		for i := 0; i < 10; i++ {
+			allowed, metered, _ := state.Admit(key)
+			require.True(t, allowed)
+			if metered {
+				state.ReportThrottled(key, true)
+			}
+		}
+		closeWindow(state, ts, key)
+
+		decreases, _ := state.Counters(key)
+		require.Positive(t, decreases,
+			"threshold %v: total loss must decrease the rate, not increase it", threshold)
+		require.Less(t, state.AdmittedRate(key), float64(100),
+			"threshold %v: the rate must fall below where it started", threshold)
+	}
+}

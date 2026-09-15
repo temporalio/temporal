@@ -21,6 +21,10 @@ const throttleSweepDivisor = 4
 // Matches the dynamic config default, so a bad push lands on the documented value.
 const defaultThrottleMaxKeys = 1024
 
+// Matches the dynamic config default, and is the fallback when a pushed threshold would make
+// the decrease branch unreachable.
+const defaultThrottleLossThreshold = 0.05
+
 // Guardrails rather than tuning knobs: none has a production story that would justify the
 // dynamic config surface, and a pushed MinRate of 0 would stall every class. Tests override
 // them through ThrottleStateOptions.
@@ -488,10 +492,12 @@ func (s *ThrottleState) controlLaw() controlLaw {
 	if !(c.increaseRatio > 0) {
 		c.increaseRatio = 0
 	}
-	if !(c.lossThreshold >= 0) {
-		c.lossThreshold = 0
+	// Loss is bounded at 1, and the decision is loss > threshold, so a threshold of 1 or more
+	// makes the decrease branch unreachable and the rate climbs on total loss. Treat it the way
+	// the other inverting values are treated and fall back to the documented default.
+	if !(c.lossThreshold >= 0) || c.lossThreshold >= 1 {
+		c.lossThreshold = defaultThrottleLossThreshold
 	}
-	c.lossThreshold = min(c.lossThreshold, 1)
 	return c
 }
 
