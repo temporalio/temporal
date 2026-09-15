@@ -8,7 +8,9 @@ import (
 	"errors"
 	"slices"
 	"testing"
+	"time"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
@@ -16,12 +18,14 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -66,6 +70,78 @@ type (
 func TestAuthorizerInterceptorSuite(t *testing.T) {
 	s := new(authorizerInterceptorSuite)
 	suite.Run(t, s)
+}
+
+func (s *authorizerInterceptorSuite) TestInterceptNexus() {
+	apiName, endpoint := "NexusAPI", "endpoint"
+	authorizationRequest := &matchingservice.DispatchNexusTaskRequest{}
+	input := interceptornexus.NewStartOpInput(
+		"s",
+		"o",
+		testNamespace,
+		time.Now(),
+		nexus.StartOperationOptions{},
+		nil,
+		interceptornexus.ForwardingInfo{},
+		interceptornexus.RequestMetadata{
+			APIName:      apiName,
+			EndpointName: endpoint,
+			Request:      authorizationRequest,
+		},
+	)
+	expectedTarget := &CallTarget{
+		APIName:           apiName,
+		NexusEndpointName: endpoint,
+		Namespace:         testNamespace,
+		Request:           authorizationRequest,
+	}
+	for _, tc := range []struct {
+		name                string
+		ctx                 context.Context
+		authorizationResult *Result
+		nextCalled          bool
+		expectedError       error
+	}{
+		{
+			name:                "authorized",
+			ctx:                 context.Background(),
+			authorizationResult: &Result{Decision: DecisionAllow},
+			nextCalled:          true,
+		},
+		{
+			name:                "unauthorized",
+			ctx:                 context.Background(),
+			authorizationResult: &Result{Decision: DecisionDeny},
+			expectedError: &interceptornexus.InterceptorError{
+				Err:                       nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnauthorized, "permission denied"),
+				Outcome:                   "unauthorized",
+				SkipServiceErrorReporting: true,
+			},
+		},
+	} {
+		s.Run(tc.name, func() {
+			if tc.authorizationResult != nil {
+				s.mockAuthorizer.EXPECT().Authorize(gomock.Any(), nil, expectedTarget).
+					Return(*tc.authorizationResult, nil)
+				if tc.authorizationResult.Decision == DecisionDeny {
+					s.mockMetricsHandler.EXPECT().
+						Counter(metrics.ServiceErrUnauthorizedCounter.Name()).
+						Return(metrics.NoopCounterMetricFunc)
+				}
+			}
+
+			nextCalled := false
+			_, err := s.interceptor.InterceptNexus(
+				tc.ctx,
+				input,
+				func(context.Context, interceptornexus.InterceptorInput) (any, error) {
+					nextCalled = true
+					return nil, nil
+				})
+			s.Equal(tc.expectedError, err)
+			s.Equal(tc.nextCalled, nextCalled)
+		})
+	}
 }
 
 func (s *authorizerInterceptorSuite) SetupTest() {

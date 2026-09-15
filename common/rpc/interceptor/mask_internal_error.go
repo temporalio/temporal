@@ -2,8 +2,10 @@ package interceptor
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/api"
@@ -12,6 +14,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/interceptor/logtags"
+	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.temporal.io/server/common/tasktoken"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -56,12 +59,45 @@ func (mi *MaskInternalErrorDetailsInterceptor) Intercept(
 	return resp, err
 }
 
+func (mi *MaskInternalErrorDetailsInterceptor) InterceptNexus(
+	ctx context.Context,
+	in interceptornexus.InterceptorInput,
+	next interceptornexus.HandlerFunc,
+) (any, error) {
+
+	resp, err := next(ctx, in)
+
+	if err == nil || !mi.shouldMaskErrors(in) {
+		return resp, err
+	}
+	if ie, ok := errors.AsType[*interceptornexus.InterceptorError](err); ok {
+		ie.Err = mi.maskNexusError(in, ie.Err)
+		err = ie
+	} else {
+		err = mi.maskNexusError(in, err)
+	}
+	return resp, err
+}
+
 func (mi *MaskInternalErrorDetailsInterceptor) shouldMaskErrors(req any) bool {
 	ns := MustGetNamespaceName(mi.namespaceRegistry, req)
 	if ns.IsEmpty() {
 		return false
 	}
 	return mi.maskInternalError(ns.String())
+}
+
+func (mi *MaskInternalErrorDetailsInterceptor) maskNexusError(in interceptornexus.InterceptorInput, err error) error {
+	if _, ok := errors.AsType[*nexus.HandlerError](err); ok {
+		return err
+	}
+	if _, ok := errors.AsType[*nexus.OperationError](err); ok {
+		return err
+	}
+	if _, ok := common.GetRPCStatus(err); !ok {
+		return err
+	}
+	return mi.maskUnknownOrInternalErrors(in, in.APIName(), err)
 }
 
 func (mi *MaskInternalErrorDetailsInterceptor) maskUnknownOrInternalErrors(

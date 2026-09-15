@@ -165,7 +165,7 @@ func getUnaryInterceptors(params GrpcServerOptionsParams) []grpc.UnaryServerInte
 		params.ServiceErrorInterceptor.Intercept,
 		metrics.NewServerMetricsContextInjectorInterceptor(),
 		metrics.NewServerMetricsTrailerPropagatorInterceptor(params.Logger),
-		params.TelemetryInterceptor.UnaryIntercept,
+		params.TelemetryInterceptor.Intercept,
 	}
 
 	interceptors = append(interceptors, params.AdditionalInterceptors...)

@@ -6,6 +6,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/rpc/interceptor/nexus"
 	"google.golang.org/grpc"
 )
 
@@ -119,6 +120,20 @@ func (i *RoutingKeyInterceptor) Intercept(
 	}
 
 	return handler(ctx, req)
+}
+
+func (i *RoutingKeyInterceptor) InterceptNexus(
+	ctx context.Context,
+	in nexus.InterceptorInput,
+	next nexus.HandlerFunc,
+) (any, error) {
+	if in.ForwardingInfo().BusinessID != "" {
+		key := namespace.RoutingKey{
+			ID: in.ForwardingInfo().BusinessID,
+		}
+		ctx = AddRoutingKeyToContext(ctx, key)
+	}
+	return next(ctx, in)
 }
 
 // AddRoutingKeyToContext adds the routing Key to the context

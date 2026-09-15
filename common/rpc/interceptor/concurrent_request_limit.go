@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas/calculator"
+	"go.temporal.io/server/common/rpc/interceptor/nexus"
 	"google.golang.org/grpc"
 )
 
@@ -114,6 +115,24 @@ func (ni *ConcurrentRequestLimitInterceptor) Allow(
 		return cleanup, ErrNamespaceCountLimitServerBusy
 	}
 	return cleanup, nil
+}
+
+// InterceptNexus enforces the namespace concurrent-request limit for a Nexus request.
+func (ni *ConcurrentRequestLimitInterceptor) InterceptNexus(
+	ctx context.Context,
+	in nexus.InterceptorInput,
+	next nexus.HandlerFunc,
+) (any, error) {
+	metricsHandler := GetMetricsHandlerFromContext(ctx, ni.logger)
+	cleanup, err := ni.Allow(namespace.Name(in.NamespaceName()), in.APIName(), metricsHandler, in)
+	defer cleanup()
+	if err != nil {
+		return nil, &nexus.InterceptorError{
+			Err:     err,
+			Outcome: "namespace_concurrency_limited",
+		}
+	}
+	return next(ctx, in)
 }
 
 func (ni *ConcurrentRequestLimitInterceptor) counter(

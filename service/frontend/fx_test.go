@@ -235,7 +235,7 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 			svc := &testSvc{}
 			server := grpc.NewServer(grpc.ChainUnaryInterceptor(
 				serviceErrorInterceptor.Intercept,
-				interceptor.NewFrontendServiceErrorInterceptor(log.NewTestLogger()),
+				interceptor.NewFrontendServiceErrorInterceptorWrapper(log.NewTestLogger()).Intercept,
 				rateLimitInterceptor.Intercept,
 			))
 			workflowservice.RegisterWorkflowServiceServer(server, svc)
@@ -603,7 +603,7 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 			svc := &testSvc{}
 			server := grpc.NewServer(grpc.ChainUnaryInterceptor(
 				serviceErrorInterceptor.Intercept,
-				interceptor.NewFrontendServiceErrorInterceptor(log.NewTestLogger()),
+				interceptor.NewFrontendServiceErrorInterceptorWrapper(log.NewTestLogger()).Intercept,
 				rateLimitInterceptor.Intercept,
 			))
 			workflowservice.RegisterWorkflowServiceServer(server, svc)
@@ -798,7 +798,7 @@ func TestNamespaceRateLimitMetrics(t *testing.T) {
 			svc := &testSvc{}
 			server := grpc.NewServer(grpc.ChainUnaryInterceptor(
 				serviceErrorInterceptor.Intercept,
-				interceptor.NewFrontendServiceErrorInterceptor(log.NewTestLogger()),
+				interceptor.NewFrontendServiceErrorInterceptorWrapper(log.NewTestLogger()).Intercept,
 				rateLimitInterceptor.Intercept,
 			))
 			workflowservice.RegisterWorkflowServiceServer(server, svc)
