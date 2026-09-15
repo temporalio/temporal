@@ -143,7 +143,7 @@ func TestStartTaskProcessor_UsesWorkerBoundNamespaceForSignal(t *testing.T) {
 		defer close(done)
 		a.startTaskProcessor(ctx, batchOp, ns, taskCh, respCh,
 			quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 1e9 })),
-			nil, mockFE, metrics.NoopMetricsHandler, log.NewTestLogger())
+			mockFE, metrics.NoopMetricsHandler, log.NewTestLogger())
 	}()
 
 	<-respCh
