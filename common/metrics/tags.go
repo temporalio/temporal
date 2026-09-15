@@ -365,6 +365,15 @@ func MatchingTaskPriorityTag(value int32) Tag {
 	return Tag{Key: TaskPriorityTagName, Value: priStr}
 }
 
+func FairnessKeyTag(value string, breakdown bool) Tag {
+	if !breakdown {
+		value = omitted
+	} else if value == "" {
+		value = unknownValue
+	}
+	return Tag{Key: FairnessKeyTagName, Value: value}
+}
+
 func QueueReaderIDTag(readerID int64) Tag {
 	return Tag{Key: QueueReaderIDTagName, Value: strconv.Itoa(int(readerID))}
 }

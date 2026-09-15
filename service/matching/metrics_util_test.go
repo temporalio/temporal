@@ -35,19 +35,24 @@ func TestGetDroppedTaskExpiryReason(t *testing.T) {
 }
 
 // TestRecordDroppedTask verifies the single tasks_dropped entry point records the counter
-// with the reason's tag, and is a no-op when the reason is dropReasonUnspecified.
+// with the reason and fairness_key tags, and is a no-op when the reason is dropReasonUnspecified.
 func TestRecordDroppedTask(t *testing.T) {
 	capture := metricstest.NewCaptureHandler()
 	c := capture.StartCapture()
 	defer capture.StopCapture(c)
 
 	// not dropped (normal completion): no-op.
-	recordDroppedTask(capture, dropReasonUnspecified)
+	recordDroppedTask(capture, dropReasonUnspecified, "orders", true)
 	require.Empty(t, c.Snapshot()[metrics.DroppedTasksCounter.Name()])
 
-	// dropped: counted with the reason's tag.
-	recordDroppedTask(capture, dropReasonNotFound)
+	// dropped, breakdown enabled: real fairness key tagged.
+	recordDroppedTask(capture, dropReasonNotFound, "orders", true)
+	// dropped, breakdown disabled: fairness key omitted.
+	recordDroppedTask(capture, dropReasonNotFound, "orders", false)
+
 	recordings := c.Snapshot()[metrics.DroppedTasksCounter.Name()]
-	require.Len(t, recordings, 1)
+	require.Len(t, recordings, 2)
 	require.Equal(t, dropReasonNotFound.tag().Value, recordings[0].Tags["reason"])
+	require.Equal(t, "orders", recordings[0].Tags[metrics.FairnessKeyTagName])
+	require.Equal(t, "__omitted__", recordings[1].Tags[metrics.FairnessKeyTagName])
 }

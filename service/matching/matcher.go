@@ -385,6 +385,7 @@ func (tm *TaskMatcher) emitDispatchLatency(task *internalTask, forwarded bool) {
 		metrics.StringTag("source", task.source.String()),
 		metrics.ForwardedTag(forwarded),
 		metrics.StringTag(metrics.TaskPriorityTagName, ""),
+		metrics.FairnessKeyTag("", tm.config.BreakdownMetricsByFairnessKey()),
 	)
 }
 
@@ -417,6 +418,10 @@ func (tm *TaskMatcher) poll(
 
 	start := time.Now()
 	tm.lastPoller.Store(start.UnixNano())
+
+	// Keep poll_success's label set identical to the pri matcher's, so the metric doesn't
+	// split by which matcher owns the queue; the old matcher has no real fairness key.
+	fairnessKeyTag := metrics.FairnessKeyTag("", tm.config.BreakdownMetricsByFairnessKey())
 
 	defer func() {
 		if pollMetadata.forwardedFrom == "" {
@@ -467,13 +472,13 @@ func (tm *TaskMatcher) poll(
 	select {
 	case task := <-taskC:
 		if task.responseC != nil {
-			metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+			metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1, fairnessKeyTag)
 		}
-		metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+		metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1, fairnessKeyTag)
 		return task, false, nil
 	case task := <-queryTaskC:
-		metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
-		metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+		metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1, fairnessKeyTag)
+		metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1, fairnessKeyTag)
 		return task, false, nil
 	default:
 	}
@@ -494,13 +499,13 @@ func (tm *TaskMatcher) poll(
 			return nil, false, errNoTasks
 		case task := <-taskC:
 			if task.responseC != nil {
-				metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+				metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1, fairnessKeyTag)
 			}
-			metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+			metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1, fairnessKeyTag)
 			return task, false, nil
 		case task := <-queryTaskC:
-			metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
-			metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+			metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1, fairnessKeyTag)
+			metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1, fairnessKeyTag)
 			return task, false, nil
 		case token := <-tm.fwdrPollReqTokenC():
 			// Arrange to cancel this request if closeC is closed
@@ -523,13 +528,13 @@ func (tm *TaskMatcher) poll(
 		return nil, false, errNoTasks
 	case task := <-taskC:
 		if task.responseC != nil {
-			metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+			metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1, fairnessKeyTag)
 		}
-		metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+		metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1, fairnessKeyTag)
 		return task, false, nil
 	case task := <-queryTaskC:
-		metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
-		metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1)
+		metrics.PollSuccessWithSyncPerTaskQueueCounter.With(tm.metricsHandler).Record(1, fairnessKeyTag)
+		metrics.PollSuccessPerTaskQueueCounter.With(tm.metricsHandler).Record(1, fairnessKeyTag)
 		return task, false, nil
 	}
 }

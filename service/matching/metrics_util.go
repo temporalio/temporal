@@ -47,9 +47,9 @@ func getDroppedTaskExpiryReason(task *internalTask) dropReason {
 
 // recordDroppedTask records the tasks_dropped counter on the given physical-queue
 // handler. It is a no-op when reason is dropReasonUnspecified (a non-drop completion).
-func recordDroppedTask(handler metrics.Handler, reason dropReason) {
+func recordDroppedTask(handler metrics.Handler, reason dropReason, fairnessKey string, breakdown bool) {
 	if reason == dropReasonUnspecified {
 		return
 	}
-	metrics.DroppedTasksCounter.With(handler).Record(1, reason.tag())
+	metrics.DroppedTasksCounter.With(handler).Record(1, reason.tag(), metrics.FairnessKeyTag(fairnessKey, breakdown))
 }

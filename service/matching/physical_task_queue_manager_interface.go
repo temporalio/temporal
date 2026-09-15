@@ -73,6 +73,6 @@ type (
 		UpdateRemotePriorityBacklogs(remotePriorityBacklogSet)
 		// RecordTaskAdd records the outcome of a task add to this physical queue using
 		// the queue's tagged metrics handler, so all per-physical-queue labels are included.
-		RecordTaskAdd(result string, forwarded bool, behavior enumspb.VersioningBehavior)
+		RecordTaskAdd(result string, forwarded bool, behavior enumspb.VersioningBehavior, fairnessKey string)
 	}
 )

@@ -10,6 +10,7 @@ const (
 	TaskCategoryTagName            = "task_category"
 	TaskTypeTagName                = "task_type"
 	TaskPriorityTagName            = "task_priority"
+	FairnessKeyTagName             = "fairness_key"
 	QueueReaderIDTagName           = "queue_reader_id"
 	QueueActionTagName             = "queue_action"
 	QueueTypeTagName               = "queue_type"
@@ -1336,7 +1337,7 @@ var (
 	TaskQueueStoppedCounter                           = NewCounterDef("task_queue_stopped")
 	TasksAddedCounter                                 = NewCounterDef(
 		"tasks_added",
-		WithDescription("Number of tasks arriving at a physical task queue, broken down by add result, forwarding, and versioning behavior"),
+		WithDescription("Number of tasks arriving at a physical task queue, broken down by add result, forwarding, versioning behavior, and (when metrics.breakdownByFairnessKey is enabled) fairness key"),
 	)
 	TaskWriteThrottlePerTaskQueueCounter = NewCounterDef("task_write_throttle_count")
 	TaskWriteLatencyPerTaskQueue         = NewTimerDef("task_write_latency")
@@ -1359,7 +1360,7 @@ var (
 	)
 	DroppedTasksCounter = NewCounterDef(
 		"tasks_dropped",
-		WithDescription("Backlog/spooled tasks dropped by matching (e.g. a Record(Workflow|Activity)TaskStarted call to history failed, the task expired, or it failed validation). Sync-match tasks are excluded. Per-task-queue, tagged with `reason` identifying the failure mode."),
+		WithDescription("Backlog/spooled tasks dropped by matching (e.g. a Record(Workflow|Activity)TaskStarted call to history failed, the task expired, or it failed validation). Sync-match tasks are excluded. Per-task-queue, tagged with `reason` identifying the failure mode and (when metrics.breakdownByFairnessKey is enabled) fairness key."),
 	)
 	TaskCompletedMissing = NewCounterDef(
 		"task_completed_dropped",
