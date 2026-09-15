@@ -1032,6 +1032,7 @@ func (s *matchingEngineSuite) TestDroppedTaskMetric_LabelKeysAreVersionScoped() 
 		"partition",
 		"reason",
 		metrics.TaskTypeTagName,
+		metrics.FairnessKeyTagName,
 		"taskqueue",
 		"worker_build_id",
 		"worker_deployment_name",
