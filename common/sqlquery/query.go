@@ -3,7 +3,6 @@ package sqlquery
 import (
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -53,8 +52,7 @@ func ParseValue(sqlValue string) (any, error) {
 		return "", nil
 	}
 
-	if sqlValue[0] == '\'' && sqlValue[len(sqlValue)-1] == '\'' {
-		strValue := strings.Trim(sqlValue, "'")
+	if strValue, err := ExtractStringValue(sqlValue); err == nil {
 		return strValue, nil
 	}
 
