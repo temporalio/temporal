@@ -113,9 +113,8 @@ func (r *replicationReaderGroup) FailoverWatermark(
 // allowExtraScopes controls the >3-scope case: with the reader group disabled it is
 // false and any scope count other than exactly 3 falls back to index 0 — the
 // pre-reader-group behavior, byte for byte. With the reader group enabled it is true
-// and scopes 3+ are tolerated: they are reserved for the per-lane cursors of
-// replication namespace isolation, introduced by a follow-up PR (which updates this
-// comment to point at the component that owns them).
+// and scopes 3+ are tolerated: they are isolated member-lane cursors owned by the
+// isolationManager (see isolation_manager.go), not looked up here.
 func priorityScopeIndex(priority enumsspb.TaskPriority, scopeCount int, allowExtraScopes bool) int {
 	if scopeCount == 3 || (allowExtraScopes && scopeCount > 3) {
 		switch priority {
