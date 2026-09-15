@@ -1417,3 +1417,36 @@ func (s *activitiesSuite) TestDeterministicRequestID_ScopedToJob() {
 	s.NotEqual(deterministicRequestID(jobA, parts...), deterministicRequestID(jobB, parts...))
 	s.NotEqual(deterministicRequestID(jobA, "signal", "workflow-id", "run-id", "other-signal"), deterministicRequestID(jobA, parts...))
 }
+
+func (s *activitiesSuite) TestGetOperationRPS() {
+	const configuredRPS = 50
+	a := &activities{
+		namespace: "test-namespace",
+		rps: func(namespace string) int {
+			s.Equal("test-namespace", namespace)
+			return configuredRPS
+		},
+	}
+
+	s.Run("unset uses configured max", func() {
+		s.InDelta(configuredRPS, a.getOperationRPS(0), 0)
+	})
+
+	s.Run("negative uses configured max", func() {
+		s.InDelta(configuredRPS, a.getOperationRPS(-1), 0)
+	})
+
+	s.Run("below max is honored", func() {
+		s.InDelta(1, a.getOperationRPS(1), 0)
+		s.InDelta(0.5, a.getOperationRPS(0.5), 0)
+	})
+
+	s.Run("above max is capped", func() {
+		s.InDelta(configuredRPS, a.getOperationRPS(configuredRPS+1), 0)
+		s.InDelta(configuredRPS, a.getOperationRPS(10000), 0)
+	})
+
+	s.Run("equal to max is honored", func() {
+		s.InDelta(configuredRPS, a.getOperationRPS(configuredRPS), 0)
+	})
+}
