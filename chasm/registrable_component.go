@@ -25,6 +25,11 @@ type (
 		detached      bool
 		executionType enumspb.ExecutionType // May be unset, defaulting to UNSPECIFIED.
 
+		// taskCountMetricEnabled opts every task type of this component into the
+		// logical task count metrics. Individual task types can override it via
+		// [WithTaskCountMetricOverride].
+		taskCountMetricEnabled bool
+
 		searchAttributesMapper *VisibilitySearchAttributesMapper
 
 		contextValues map[any]any
@@ -87,6 +92,23 @@ func WithExecutionType(
 ) RegistrableComponentOption {
 	return func(rc *RegistrableComponent) {
 		rc.executionType = executionType
+	}
+}
+
+// WithTaskCountMetric opts the component type into the logical task count metrics.
+// At CloseTransaction, the framework counts the logical tasks this component type holds
+// across the execution, grouped by task type, and emits chasm_logical_task_count and
+// chasm_logical_task_count_exceeded for any task type whose count exceeds the
+// history.chasmLogicalTaskCountAlertThreshold dynamic config value.
+//
+// This is a sub-metric of the mutable state size metrics: it attributes execution growth
+// to task accumulation in a specific (component type, task type) pair.
+//
+// Individual task types can opt out (or opt in, for a component that did not) with
+// [WithTaskCountMetricOverride] on the registrable task.
+func WithTaskCountMetric() RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		rc.taskCountMetricEnabled = true
 	}
 }
 

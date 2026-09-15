@@ -39,6 +39,11 @@ type (
 		nexusServices          map[string]*nexus.Service // service name -> nexus service
 		NexusEndpointProcessor *NexusEndpointProcessor
 
+		// taskCountMetricEnabled is true if any registered component or task opted into
+		// the logical task count metrics. It lets CloseTransaction skip counting entirely
+		// when nothing opted in.
+		taskCountMetricEnabled bool
+
 		logger log.Logger
 	}
 )
@@ -277,6 +282,10 @@ func (r *Registry) registerComponent(
 	}
 	r.warnUnmanagedFields(fqn, rc)
 
+	if rc.taskCountMetricEnabled {
+		r.taskCountMetricEnabled = true
+	}
+
 	r.rcByFqn[fqn] = rc
 	r.rcByID[id] = rc
 	r.rcByGoType[rc.goType] = rc
@@ -323,6 +332,10 @@ func (r *Registry) registerTask(
 			(rt.componentGoType.Kind() == reflect.Pointer && rt.componentGoType.Elem().Kind() == reflect.Struct)) &&
 			rt.componentGoType.AssignableTo(reflect.TypeFor[Component]())) {
 		return fmt.Errorf("component type %s must be and interface or struct that implements Component interface", rt.componentGoType.String())
+	}
+
+	if rt.taskCountMetricEnabled != nil && *rt.taskCountMetricEnabled {
+		r.taskCountMetricEnabled = true
 	}
 
 	r.rtByFqn[fqn] = rt
