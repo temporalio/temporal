@@ -386,7 +386,7 @@ func (s *Scheduler) Terminate(
 	return chasm.TerminateComponentResponse{}, nil
 }
 
-// NewRangeBackfiller returns an intialized Backfiller component, which should
+// NewRangeBackfiller returns an initialized Backfiller component, which should
 // be parented under a Scheduler root node.
 func (s *Scheduler) NewRangeBackfiller(
 	ctx chasm.MutableContext,
@@ -399,7 +399,7 @@ func (s *Scheduler) NewRangeBackfiller(
 	return backfiller
 }
 
-// NewImmediateBackfiller returns an intialized Backfiller component, which should
+// NewImmediateBackfiller returns an initialized Backfiller component, which should
 // be parented under a Scheduler root node.
 func (s *Scheduler) NewImmediateBackfiller(
 	ctx chasm.MutableContext,
@@ -699,7 +699,7 @@ func (s *Scheduler) recordIgnoredCallback(
 }
 
 // HandleNexusCompletion allows Scheduler to record workflow completions from
-// worfklows started by the same scheduler tree's Invoker.
+// workflows started by the same scheduler tree's Invoker.
 func (s *Scheduler) HandleNexusCompletion(
 	ctx chasm.MutableContext,
 	info *persistencespb.ChasmNexusCompletion,
