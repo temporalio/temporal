@@ -177,10 +177,11 @@ func (c *clientImpl) addActivityTask(
 	opts []grpc.CallOption,
 ) (*matchingservice.AddActivityTaskResponse, error) {
 	request = common.CloneProto(request)
-	client, err := c.pickClientForWrite(request.GetTaskQueue(), p, loadBalance, pc)
+	client, estimatedTasksAllPartitions, err := c.pickClientForWrite(request.GetTaskQueue(), p, loadBalance, pc)
 	if err != nil {
 		return nil, err
 	}
+	ctx = appendEstimatedTasksAllPartitions(ctx, estimatedTasksAllPartitions)
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 
@@ -267,10 +268,11 @@ func (c *clientImpl) addWorkflowTask(
 	opts []grpc.CallOption,
 ) (*matchingservice.AddWorkflowTaskResponse, error) {
 	request = common.CloneProto(request)
-	client, err := c.pickClientForWrite(request.GetTaskQueue(), p, loadBalance, pc)
+	client, estimatedTasksAllPartitions, err := c.pickClientForWrite(request.GetTaskQueue(), p, loadBalance, pc)
 	if err != nil {
 		return nil, err
 	}
+	ctx = appendEstimatedTasksAllPartitions(ctx, estimatedTasksAllPartitions)
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.AddWorkflowTask(ctx, request, opts...)
@@ -377,10 +379,11 @@ func (c *clientImpl) queryWorkflow(
 		ForwardInfo:      request.ForwardInfo,
 		Priority:         request.Priority,
 	}
-	client, err := c.pickClientForWrite(request.GetTaskQueue(), p, loadBalance, pc)
+	client, estimatedTasksAllPartitions, err := c.pickClientForWrite(request.GetTaskQueue(), p, loadBalance, pc)
 	if err != nil {
 		return nil, err
 	}
+	ctx = appendEstimatedTasksAllPartitions(ctx, estimatedTasksAllPartitions)
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.QueryWorkflow(ctx, request, opts...)
@@ -415,10 +418,11 @@ func (c *clientImpl) dispatchNexusTask(
 		Request:     request.Request,
 		ForwardInfo: request.ForwardInfo,
 	}
-	client, err := c.pickClientForWrite(request.GetTaskQueue(), p, loadBalance, pc)
+	client, estimatedTasksAllPartitions, err := c.pickClientForWrite(request.GetTaskQueue(), p, loadBalance, pc)
 	if err != nil {
 		return nil, err
 	}
+	ctx = appendEstimatedTasksAllPartitions(ctx, estimatedTasksAllPartitions)
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.DispatchNexusTask(ctx, request, opts...)
@@ -482,12 +486,14 @@ func (c *clientImpl) pickClientForWrite(
 	p tqid.Partition,
 	loadBalance bool,
 	pc PartitionCounts,
-) (matchingservice.MatchingServiceClient, error) {
+) (matchingservice.MatchingServiceClient, int, error) {
+	estimatedTasksAllPartitions := 0
 	if loadBalance {
-		p = c.loadBalancer.PickWritePartition(p.TaskQueue(), pc)
+		p, estimatedTasksAllPartitions = c.loadBalancer.PickWritePartition(p.TaskQueue(), pc)
 	}
 	proto.Name = p.RpcName()
-	return c.getClientForTaskQueuePartition(p)
+	client, err := c.getClientForTaskQueuePartition(p)
+	return client, estimatedTasksAllPartitions, err
 }
 
 // pickClientForRead mutates the given proto. Callers should copy the proto before if necessary.

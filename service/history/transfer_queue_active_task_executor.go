@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -14,6 +15,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -913,7 +915,25 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 			return serviceerror.NewNamespaceNotFound(childInfo.Namespace)
 		}
 
-		return t.createFirstWorkflowTask(ctx, targetNamespaceID.String(), childExecution, parentClock, childClock)
+		// Recovery depends on this separate scheduling request returning ErrWorkflowCompleted. If
+		// child start and first Workflow Task scheduling are combined into one transaction, this
+		// path cannot detect a completion that happened before parent replication arrived.
+		scheduleErr := t.createFirstWorkflowTask(ctx, targetNamespaceID.String(), childExecution, parentClock, childClock, task)
+		if scheduleErr == nil || !isWorkflowCompletedError(scheduleErr) {
+			return scheduleErr
+		}
+
+		// Child completion removes ChildExecutionInfo, so reaching this point means the parent still
+		// needs a completion event for this child execution chain.
+		return t.recoverClosedChildCompletion(
+			ctx,
+			task,
+			targetNamespaceName,
+			targetNamespaceID.String(),
+			childExecution.GetWorkflowId(),
+			childExecution.GetRunId(),
+			scheduleErr,
+		)
 	}
 
 	// remaining 2 cases:
@@ -1070,7 +1090,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 			if err != nil {
 				return err
 			}
-			return t.createFirstWorkflowTask(ctx, targetNamespaceID.String(), childExecution, parentClock, childClock)
+			return t.createFirstWorkflowTask(ctx, targetNamespaceID.String(), childExecution, parentClock, childClock, task)
 		}
 		// now if there was no child found after reset then it could mean one of the following.
 		// 1. The parent never got a chance to start the child. So we should go ahead and start one (below)
@@ -1092,24 +1112,33 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		},
 	}
 
-	childRunID, childClock, err := t.startChildWorkflow(
-		ctx,
-		task,
-		parentNamespaceName,
-		targetNamespaceName,
-		namespace.ID(targetNamespaceID),
-		childInfo.CreateRequestId,
-		attributes,
-		sourceVersionStamp,
-		rootExecutionInfo,
-		inheritedBuildID,
-		initiatedEvent.GetUserMetadata(),
-		shouldTerminateAndStartChild,
-		inheritedVersioningOverride,
-		inheritedPinnedVersion,
-		priorities.Merge(mutableState.GetExecutionInfo().Priority, attributes.Priority),
-		inheritedAutoUpgradeInfo,
-	)
+	childPriority := priorities.Merge(mutableState.GetExecutionInfo().Priority, attributes.Priority)
+	startParams := &startChildWorkflowParams{
+		task:                        task,
+		parentNamespaceName:         parentNamespaceName,
+		targetNamespaceName:         targetNamespaceName,
+		targetNamespaceID:           namespace.ID(targetNamespaceID),
+		requestID:                   childInfo.CreateRequestId,
+		attributes:                  attributes,
+		sourceVersionStamp:          sourceVersionStamp,
+		rootExecutionInfo:           rootExecutionInfo,
+		inheritedBuildID:            inheritedBuildID,
+		userMetadata:                initiatedEvent.GetUserMetadata(),
+		inheritedVersioningOverride: inheritedVersioningOverride,
+		inheritedPinnedVersion:      inheritedPinnedVersion,
+		priority:                    childPriority,
+		inheritedAutoUpgradeInfo:    inheritedAutoUpgradeInfo,
+		terminateExisting:           shouldTerminateAndStartChild,
+	}
+	if !shouldTerminateAndStartChild {
+		startParams.orphanedChildReplacementInfo = t.getOrphanedChildReplacementInfo(
+			mutableState,
+			childInfo,
+			parentNamespaceName,
+		)
+	}
+
+	childRunID, childClock, err := t.startChildWorkflow(ctx, startParams)
 	if err != nil {
 		t.logger.Debug("Failed to start child workflow execution", tag.Error(err))
 		var failedCause enumspb.StartChildWorkflowExecutionFailedCause
@@ -1171,7 +1200,54 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	return t.createFirstWorkflowTask(ctx, targetNamespaceID.String(), &commonpb.WorkflowExecution{
 		WorkflowId: childInfo.StartedWorkflowId,
 		RunId:      childRunID,
-	}, parentClock, childClock)
+	}, parentClock, childClock, task)
+}
+
+// getOrphanedChildReplacementInfo returns the parent branch evidence needed to validate a
+// conflicting child. Nil keeps normal workflow-ID conflict handling.
+func (t *transferQueueActiveTaskExecutor) getOrphanedChildReplacementInfo(
+	mutableState historyi.MutableState,
+	childInfo *persistencespb.ChildExecutionInfo,
+	parentNamespaceName namespace.Name,
+) *historyservice.OrphanedChildReplacementInfo {
+	if !t.config.EnableOrphanedChildWorkflowReplacement(parentNamespaceName.String()) {
+		return nil
+	}
+	executionInfo := mutableState.GetExecutionInfo()
+	childNamespaceMatchesParent := childInfo.GetNamespaceId() == executionInfo.GetNamespaceId()
+	if childInfo.GetNamespaceId() == "" {
+		childNamespaceMatchesParent = childInfo.GetNamespace() == parentNamespaceName.String()
+	}
+	// The parent lock remains held across the child start RPC. Never send replacement intent when the
+	// conflicting workflow could be this parent, or the child-side transaction could wait on that lock.
+	if childNamespaceMatchesParent && childInfo.GetStartedWorkflowId() == executionInfo.GetWorkflowId() {
+		return nil
+	}
+	// Multiple pending initiations for the same target are ambiguous: the child cannot determine
+	// which initiation should own the replacement, so keep ordinary conflict handling.
+	for initiatedEventID, pendingChild := range mutableState.GetPendingChildExecutionInfos() {
+		if initiatedEventID != childInfo.GetInitiatedEventId() && sameChildWorkflowTarget(pendingChild, childInfo) {
+			return nil
+		}
+	}
+
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.GetVersionHistories())
+	if err != nil || len(currentVersionHistory.GetItems()) == 0 {
+		return nil
+	}
+	return &historyservice.OrphanedChildReplacementInfo{
+		ParentCurrentVersionHistoryItems: versionhistory.CopyVersionHistoryItems(currentVersionHistory.GetItems()),
+	}
+}
+
+func sameChildWorkflowTarget(first, second *persistencespb.ChildExecutionInfo) bool {
+	if first.GetStartedWorkflowId() != second.GetStartedWorkflowId() {
+		return false
+	}
+	if first.GetNamespaceId() != "" && second.GetNamespaceId() != "" {
+		return first.GetNamespaceId() == second.GetNamespaceId()
+	}
+	return first.GetNamespace() == second.GetNamespace()
 }
 
 // verifyChildWorkflow describes the childWorkflowID and identifies its parent. It then checks if the current run was derived from that parent by comparing the OriginalRunID value.
@@ -1210,7 +1286,10 @@ func (t *transferQueueActiveTaskExecutor) verifyChildWorkflow(
 	}
 
 	childsParentRunID := response.WorkflowExecutionInfo.ParentExecution.RunId
-	// Check if the child's parent was the base run for the current run.
+	// A reset run may be missing ChildWorkflowExecutionStarted for a child that its original run
+	// already started before the reset point. If the child points directly to that original run,
+	// return the existing child's run IDs so the caller reconnects it to this reset run instead of
+	// starting a duplicate child.
 	if childsParentRunID == mutableState.GetExecutionInfo().OriginalExecutionRunId {
 		return response.WorkflowExecutionInfo.Execution.RunId, response.WorkflowExecutionInfo.FirstRunId, nil
 	}
@@ -1440,6 +1519,7 @@ func (t *transferQueueActiveTaskExecutor) createFirstWorkflowTask(
 	execution *commonpb.WorkflowExecution,
 	parentClock *clockspb.VectorClock,
 	childClock *clockspb.VectorClock,
+	task *tasks.StartChildExecutionTask,
 ) error {
 	_, err := t.historyRawClient.ScheduleWorkflowTask(ctx, &historyservice.ScheduleWorkflowTaskRequest{
 		NamespaceId:         namespaceID,
@@ -1448,7 +1528,122 @@ func (t *transferQueueActiveTaskExecutor) createFirstWorkflowTask(
 		ParentClock:         parentClock,
 		ChildClock:          childClock,
 	})
+	if isUnexpectedChildNotFound(err) {
+		metrics.ChildExecutionNotFound.With(t.metricHandler).Record(1)
+		t.logger.Error(
+			"Child execution not found after ChildWorkflowExecutionStarted was recorded; StartChildExecution task will be dropped",
+			tag.WorkflowNamespaceID(task.NamespaceID),
+			tag.WorkflowID(task.WorkflowID),
+			tag.WorkflowRunID(task.RunID),
+			tag.NewStringTag("child-namespace-id", namespaceID),
+			tag.NewStringTag("child-workflow-id", execution.GetWorkflowId()),
+			tag.NewStringTag("child-run-id", execution.GetRunId()),
+			tag.NewInt64("initiated-event-id", task.InitiatedEventID),
+			tag.Error(err),
+		)
+	}
 	return err
+}
+
+func isWorkflowCompletedError(err error) bool {
+	var notFoundErr *serviceerror.NotFound
+	// ScheduleWorkflowTask is a gRPC call, so errors.Is cannot identify the local sentinel after
+	// it has been serialized. Match both the service error type and the sentinel message instead.
+	return errors.As(err, &notFoundErr) && notFoundErr.Error() == consts.ErrWorkflowCompleted.Error()
+}
+
+func (t *transferQueueActiveTaskExecutor) recoverClosedChildCompletion(
+	ctx context.Context,
+	parentTask *tasks.StartChildExecutionTask,
+	childNamespaceName namespace.Name,
+	childNamespaceID string,
+	childWorkflowID string,
+	childFirstRunID string,
+	scheduleErr error,
+) error {
+	if !t.config.EnableChildWorkflowCompletionRecovery(childNamespaceName.String()) {
+		return scheduleErr
+	}
+
+	// Parent replication can regenerate this task after the child's original close task was
+	// acknowledged while the parent was missing.
+	mutableStateResponse, mutableStateErr := t.historyRawClient.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
+		NamespaceId: childNamespaceID,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: childWorkflowID,
+		},
+	})
+	if mutableStateErr != nil {
+		if common.IsNotFoundError(mutableStateErr) {
+			// TODO: Revisit this recovery gap. If the current run is deleted before parent
+			// replication arrives, there is no execution to refresh and completion cannot be recovered.
+			return nil
+		}
+		return mutableStateErr
+	}
+
+	if mutableStateResponse.GetFirstExecutionRunId() != childFirstRunID {
+		metrics.ChildWorkflowCompletionRecoveryChainMismatch.With(
+			t.metricHandler.WithTags(metrics.NamespaceTag(childNamespaceName.String())),
+		).Record(1)
+		t.logger.Warn(
+			"Unable to recover child completion because the workflow ID points to a different execution chain",
+			tag.NewStringTag("parent-namespace-id", parentTask.GetNamespaceID()),
+			tag.NewStringTag("parent-workflow-id", parentTask.GetWorkflowID()),
+			tag.NewStringTag("parent-run-id", parentTask.GetRunID()),
+			tag.NewStringTag("child-namespace-id", childNamespaceID),
+			tag.NewStringTag("child-workflow-id", childWorkflowID),
+			tag.NewStringTag("expected-child-first-run-id", childFirstRunID),
+			tag.NewStringTag("current-child-first-run-id", mutableStateResponse.GetFirstExecutionRunId()),
+			tag.NewStringTag("current-child-run-id", mutableStateResponse.GetExecution().GetRunId()),
+		)
+		return nil
+	}
+	// A running successor will generate its own CloseExecution task after the parent is present.
+	// Only a terminal current run needs recovery for the completion notification that was lost.
+	switch mutableStateResponse.GetWorkflowStatus() {
+	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
+	default:
+		return nil
+	}
+
+	currentExecution := mutableStateResponse.GetExecution()
+	metrics.ChildWorkflowCompletionRecoveryAttempts.With(
+		t.metricHandler.WithTags(metrics.NamespaceTag(childNamespaceName.String())),
+	).Record(1)
+	t.logger.Info(
+		"Refreshing terminal child workflow to recover completion notification",
+		tag.NewStringTag("parent-namespace-id", parentTask.GetNamespaceID()),
+		tag.NewStringTag("parent-workflow-id", parentTask.GetWorkflowID()),
+		tag.NewStringTag("parent-run-id", parentTask.GetRunID()),
+		tag.NewStringTag("child-namespace-id", childNamespaceID),
+		tag.NewStringTag("child-workflow-id", childWorkflowID),
+		tag.NewStringTag("child-first-run-id", childFirstRunID),
+		tag.NewStringTag("child-terminal-run-id", currentExecution.GetRunId()),
+	)
+
+	_, err := t.historyRawClient.RefreshWorkflowTasks(ctx, &historyservice.RefreshWorkflowTasksRequest{
+		NamespaceId: childNamespaceID,
+		ArchetypeId: chasm.WorkflowArchetypeID,
+		Request: &adminservice.RefreshWorkflowTasksRequest{
+			Execution: currentExecution,
+		},
+	})
+	return err
+}
+
+// isUnexpectedChildNotFound reports whether the child is absent for a reason the parent's committed
+// ChildWorkflowExecutionStarted cannot account for.
+func isUnexpectedChildNotFound(err error) bool {
+	if !common.IsNotFoundError(err) {
+		return false
+	}
+	// A closed child results in ErrWorkflowCompleted, which is also a NotFound
+	return err.Error() != consts.ErrWorkflowCompleted.Error()
 }
 
 func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionCompleted(
@@ -1671,92 +1866,98 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecution(
 	return err
 }
 
+type startChildWorkflowParams struct {
+	task                         *tasks.StartChildExecutionTask
+	parentNamespaceName          namespace.Name
+	targetNamespaceName          namespace.Name
+	targetNamespaceID            namespace.ID
+	requestID                    string
+	attributes                   *historypb.StartChildWorkflowExecutionInitiatedEventAttributes
+	sourceVersionStamp           *commonpb.WorkerVersionStamp
+	rootExecutionInfo            *workflowspb.RootExecutionInfo
+	inheritedBuildID             string
+	userMetadata                 *sdkpb.UserMetadata
+	inheritedVersioningOverride  *workflowpb.VersioningOverride
+	inheritedPinnedVersion       *deploymentpb.WorkerDeploymentVersion
+	priority                     *commonpb.Priority
+	inheritedAutoUpgradeInfo     *deploymentpb.InheritedAutoUpgradeInfo
+	terminateExisting            bool
+	orphanedChildReplacementInfo *historyservice.OrphanedChildReplacementInfo
+}
+
 func (t *transferQueueActiveTaskExecutor) startChildWorkflow(
 	ctx context.Context,
-	task *tasks.StartChildExecutionTask,
-	namespace namespace.Name,
-	targetNamespace namespace.Name,
-	targetNamespaceID namespace.ID,
-	childRequestID string,
-	attributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
-	sourceVersionStamp *commonpb.WorkerVersionStamp,
-	rootExecutionInfo *workflowspb.RootExecutionInfo,
-	inheritedBuildId string,
-	userMetadata *sdkpb.UserMetadata,
-	shouldTerminateAndStartChild bool,
-	inheritedVersioningOverride *workflowpb.VersioningOverride,
-	inheritedPinnedVersion *deploymentpb.WorkerDeploymentVersion,
-	priority *commonpb.Priority,
-	inheritedAutoUpgradeInfo *deploymentpb.InheritedAutoUpgradeInfo,
+	params *startChildWorkflowParams,
 ) (string, *clockspb.VectorClock, error) {
-	versioningOverride := inheritedVersioningOverride
-	if attributes.GetVersioningOverride() != nil {
-		versioningOverride = attributes.GetVersioningOverride()
+	versioningOverride := params.inheritedVersioningOverride
+	if params.attributes.GetVersioningOverride() != nil {
+		versioningOverride = params.attributes.GetVersioningOverride()
 	}
 
 	startRequest := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:                targetNamespace.String(),
-		WorkflowId:               attributes.WorkflowId,
-		WorkflowType:             attributes.WorkflowType,
-		TaskQueue:                attributes.TaskQueue,
-		Input:                    attributes.Input,
-		Header:                   attributes.Header,
-		WorkflowExecutionTimeout: attributes.WorkflowExecutionTimeout,
-		WorkflowRunTimeout:       attributes.WorkflowRunTimeout,
-		WorkflowTaskTimeout:      attributes.WorkflowTaskTimeout,
+		Namespace:                params.targetNamespaceName.String(),
+		WorkflowId:               params.attributes.WorkflowId,
+		WorkflowType:             params.attributes.WorkflowType,
+		TaskQueue:                params.attributes.TaskQueue,
+		Input:                    params.attributes.Input,
+		Header:                   params.attributes.Header,
+		WorkflowExecutionTimeout: params.attributes.WorkflowExecutionTimeout,
+		WorkflowRunTimeout:       params.attributes.WorkflowRunTimeout,
+		WorkflowTaskTimeout:      params.attributes.WorkflowTaskTimeout,
 
 		// Use the same request ID to dedupe StartWorkflowExecution calls
-		RequestId:                childRequestID,
-		WorkflowIdReusePolicy:    attributes.WorkflowIdReusePolicy,
+		RequestId:                params.requestID,
+		WorkflowIdReusePolicy:    params.attributes.WorkflowIdReusePolicy,
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
-		RetryPolicy:              attributes.RetryPolicy,
-		CronSchedule:             attributes.CronSchedule,
-		Memo:                     attributes.Memo,
-		SearchAttributes:         attributes.SearchAttributes,
-		UserMetadata:             userMetadata,
+		RetryPolicy:              params.attributes.RetryPolicy,
+		CronSchedule:             params.attributes.CronSchedule,
+		Memo:                     params.attributes.Memo,
+		SearchAttributes:         params.attributes.SearchAttributes,
+		UserMetadata:             params.userMetadata,
 		VersioningOverride:       versioningOverride,
-		Priority:                 priority,
-		TimeSkippingConfig:       attributes.GetTimeSkippingConfig(),
+		Priority:                 params.priority,
+		TimeSkippingConfig:       params.attributes.GetTimeSkippingConfig(),
 	}
-
-	statePropagation := attributes.GetTimeSkippingStatePropagation()
+	statePropagation := params.attributes.GetTimeSkippingStatePropagation()
 	nowForExpirationAndBackoff := workflow.AdjustNowWithTimeSkipping(
 		t.shardContext.GetTimeSource().Now(),
 		statePropagation,
 	)
 
 	request := common.CreateHistoryStartWorkflowRequest(
-		targetNamespaceID.String(),
+		params.targetNamespaceID.String(),
 		startRequest,
 		&workflowspb.ParentExecutionInfo{
-			NamespaceId: task.NamespaceID,
-			Namespace:   namespace.String(),
+			NamespaceId: params.task.NamespaceID,
+			Namespace:   params.parentNamespaceName.String(),
 			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: task.WorkflowID,
-				RunId:      task.RunID,
+				WorkflowId: params.task.WorkflowID,
+				RunId:      params.task.RunID,
 			},
-			InitiatedId:      task.InitiatedEventID,
-			InitiatedVersion: task.Version,
-			Clock:            vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), task.TaskID),
+			InitiatedId:      params.task.InitiatedEventID,
+			InitiatedVersion: params.task.Version,
+			Clock:            vclock.NewVectorClock(t.shardContext.GetClusterMetadata().GetClusterID(), t.shardContext.GetShardID(), params.task.TaskID),
 		},
-		rootExecutionInfo,
+		params.rootExecutionInfo,
 		nowForExpirationAndBackoff,
 	)
 
-	request.SourceVersionStamp = sourceVersionStamp
-	request.InheritedBuildId = inheritedBuildId
-	request.InheritedPinnedVersion = inheritedPinnedVersion
+	request.SourceVersionStamp = params.sourceVersionStamp
+	request.InheritedBuildId = params.inheritedBuildID
+	request.InheritedPinnedVersion = params.inheritedPinnedVersion
 	request.TimeSkippingStatePropagation = statePropagation
 
 	// Only set the AutoUpgrade info if the Pinned version is not set.
 	if request.InheritedPinnedVersion == nil {
-		request.InheritedAutoUpgradeInfo = inheritedAutoUpgradeInfo
+		request.InheritedAutoUpgradeInfo = params.inheritedAutoUpgradeInfo
 	}
 
-	if shouldTerminateAndStartChild {
+	if params.terminateExisting {
 		request.StartRequest.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 		request.StartRequest.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
 		request.ChildWorkflowOnly = true
+	} else {
+		request.OrphanedChildReplacementInfo = params.orphanedChildReplacementInfo
 	}
 
 	response, err := t.historyRawClient.StartWorkflowExecution(ctx, request)

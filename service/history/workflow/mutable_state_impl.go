@@ -65,12 +65,12 @@ import (
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
-	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/callbacks"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow/update"
@@ -118,6 +118,9 @@ var (
 	ErrMissingSignalInitiatedEvent = serviceerror.NewInternal("unable to get signal initiated event")
 	// ErrPinnedWorkflowCannotTransition indicates attempt to start a transition on a pinned workflow
 	ErrPinnedWorkflowCannotTransition = serviceerror.NewInternal("unable to start transition on pinned workflows")
+
+	errUpdateNotFound    = serviceerror.NewNotFound("update not found")
+	errUpdateNotComplete = serviceerror.NewInternal("update has not completed")
 
 	timeZeroUTC = time.Unix(0, 0).UTC()
 )
@@ -698,6 +701,11 @@ func (ms *MutableStateImpl) ChasmSkipPersistenceEnabled() bool {
 		ms.config.EnableCHASMSkipPersistence(ms.GetNamespaceEntry().Name().String())
 }
 
+func (ms *MutableStateImpl) ChasmDLQScheduledPureTaskOnValidationEnabled() bool {
+	return ms.config.ChasmDLQScheduledPureTaskOnValidation != nil &&
+		ms.config.ChasmDLQScheduledPureTaskOnValidation(ms.GetNamespaceEntry().Name().String())
+}
+
 // chasmCallbacksEnabled returns true if CHASM callbacks are enabled for this workflow.
 func (ms *MutableStateImpl) chasmCallbacksEnabled() bool {
 	if !ms.ChasmEnabled() {
@@ -773,6 +781,13 @@ func (ms *MutableStateImpl) GetNexusUpdateCompletion(
 	cevent, err := ms.getUpdateOutcomeEvent(ctx, updateID)
 	var outcome *updatepb.Outcome
 	if err != nil {
+		// If the completion event ID is recorded but the read failed for a reason other than the
+		// event being absent, the failure is likely transient. Return it so the caller can retry.
+		if !errors.Is(err, errUpdateNotFound) &&
+			!errors.Is(err, errUpdateNotComplete) &&
+			!common.IsNotFoundError(err) {
+			return nexusrpc.CompleteOperationOptions{}, err
+		}
 		// If the workflow is complete but the update outcome is missing we need to respond to all callbacks
 		ce, errCE := ms.GetCompletionEvent(ctx)
 		if errors.Is(errCE, ErrMissingWorkflowCompletionEvent) {
@@ -1552,16 +1567,17 @@ func (ms *MutableStateImpl) getUpdateOutcomeEvent(
 	updateID string,
 ) (*historypb.HistoryEvent, error) {
 	if ms.executionInfo.UpdateInfos == nil {
-		return nil, serviceerror.NewNotFound("update not found")
+		return nil, errUpdateNotFound
 	}
 	ui, ok := ms.executionInfo.UpdateInfos[updateID]
 	if !ok {
-		return nil, serviceerror.NewNotFound("update not found")
+		return nil, errUpdateNotFound
 	}
 	completion := ui.GetCompletion()
 	if completion == nil {
-		return nil, serviceerror.NewInternal("update has not completed")
+		return nil, errUpdateNotComplete
 	}
+
 	currentBranchToken, version, err := ms.getCurrentBranchTokenAndEventVersion(completion.EventId)
 	if err != nil {
 		return nil, err
@@ -2975,9 +2991,13 @@ func (ms *MutableStateImpl) ContinueAsNewMinBackoff(backoffDuration *durationpb.
 	// lifetime of previous execution
 	// todo@time-skipping: time skipping is naturally supported for continue as new backoff, and need to
 	// make sure the backoff is correctly applied in the time skipping case
-	lifetime := ms.timeSource.Now().Sub(ms.executionState.StartTime.AsTime().UTC())
+	now := ms.timeSource.Now()
+	lifetime := max(time.Duration(0), now.Sub(ms.executionState.StartTime.AsTime().UTC()))
 	if ms.executionInfo.ExecutionTime != nil {
-		lifetime = ms.timeSource.Now().Sub(ms.executionInfo.ExecutionTime.AsTime().UTC())
+		executionLifetime := now.Sub(ms.executionInfo.ExecutionTime.AsTime().UTC())
+		if executionLifetime >= 0 {
+			lifetime = executionLifetime
+		}
 	}
 
 	interval := lifetime
@@ -7511,7 +7531,10 @@ func (ms *MutableStateImpl) UpdateWorkflowStateStatus(
 		ms.executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		// Suppress and Revive workflows are cluster local operations.
 		ms.executionStateUpdated = true
-		ms.visibilityUpdated = true // workflow status & state change triggers visibility change as well
+		// Internal state changes do not affect visibility. Status changes do.
+		if status != ms.executionState.Status {
+			ms.visibilityUpdated = true
+		}
 	}
 	return true, setStateStatus(ms.executionState, state, status)
 }
@@ -9541,14 +9564,14 @@ func (ms *MutableStateImpl) applyUpdatesToUpdateInfos(
 		}
 	}
 
+	// UpdateCount is the source's cumulative count and is synchronized with
+	// ExecutionInfo; inserting replicated map entries must not increment it again.
 	for updateID, ui := range updatedUpdateInfos {
 		if existing, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
 			if transitionhistory.Compare(existing.GetLastUpdateVersionedTransition(), ui.GetLastUpdateVersionedTransition()) == 0 {
 				continue
 			}
 			ms.approximateSize -= existing.Size() + len(updateID)
-		} else {
-			ms.executionInfo.UpdateCount++
 		}
 		ms.executionInfo.UpdateInfos[updateID] = ui
 		ms.approximateSize += ui.Size() + len(updateID)

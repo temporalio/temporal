@@ -14,7 +14,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/components/nexusoperations"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
