@@ -96,6 +96,53 @@ func TestGradualChangeValue_Monotonic(t *testing.T) {
 	}
 }
 
+func TestGradualChangeValue_NewAtWhenTime(t *testing.T) {
+	start := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2024, 1, 11, 0, 0, 0, 0, time.UTC)
+	gc := GradualChange[string]{Old: "old", New: "new", Start: start, End: end}
+
+	for i := range 100 {
+		key := fmt.Appendf(nil, "key%d", i)
+		at := gc.When(key)
+		assert.Equal(t, "new", gc.Value(key, at),
+			"Value at the transition time returned by When must already be the new value, "+
+				"otherwise a subscriber whose timer fires exactly at When misses the transition")
+	}
+}
+
+func TestSubscribeGradualChange_TimerFiresExactlyAtTransitionTime(t *testing.T) {
+	ts := clock.NewEventTimeSource()
+	ts.UseAsyncTimers(true)
+
+	start := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	end := time.Date(2024, 1, 11, 0, 0, 0, 0, time.UTC)
+	ts.Update(start)
+
+	gc := GradualChange[bool]{Old: false, New: true, Start: start, End: end}
+
+	subscribable := func(cb func(GradualChange[bool])) (GradualChange[bool], func()) {
+		return gc, func() {}
+	}
+
+	key := []byte("test_key")
+	var callbackVals syncSlice[bool]
+	initial, cancel := SubscribeGradualChange(subscribable, key, func(v bool) {
+		callbackVals.append(v)
+	}, ts)
+	defer cancel()
+
+	assert.False(t, initial)
+
+	// Fire the rescheduled timer exactly at the key's transition time. In production this
+	// happens whenever the runtime timer fires within (End-Start)/2^32 of its deadline
+	// (~200us for this 10-day window). The subscriber must still observe the new value;
+	// otherwise it is stuck on the old value with no timer left to reevaluate.
+	ts.Update(gc.When(key))
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Equal(c, []bool{true}, callbackVals.get())
+	}, time.Second, time.Millisecond)
+}
+
 func TestGradualChangeWhen_DifferentKeysHaveDifferentTimes(t *testing.T) {
 	start := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
 	end := time.Date(2024, 1, 11, 0, 0, 0, 0, time.UTC)
