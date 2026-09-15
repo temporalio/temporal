@@ -10,6 +10,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -575,4 +576,60 @@ func (s *activitySuite) TestUnpauseActivityWithResetAcceptance() {
 	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
 	s.Nil(ai.LastHeartbeatUpdateTime)
 	s.Nil(ai.LastHeartbeatDetails)
+}
+
+// An unset request ID identifies no request, so it must never deduplicate against the unset
+// request ID of an earlier pause. PauseWorkflowExecution already guards its equivalent check.
+func (s *activitySuite) TestPauseActivityDoesNotDeduplicateUnsetRequestID() {
+	ai := s.AddActivityInfo()
+
+	pauseInfo := func(reason string) *persistencespb.ActivityInfo_PauseInfo {
+		return &persistencespb.ActivityInfo_PauseInfo{
+			PauseTime: timestamppb.New(time.Now()),
+			PausedBy: &persistencespb.ActivityInfo_PauseInfo_Manual_{
+				Manual: &persistencespb.ActivityInfo_PauseInfo_Manual{
+					Identity: "test_identity",
+					Reason:   reason,
+				},
+			},
+		}
+	}
+
+	s.NoError(PauseActivity(s.mutableState, ai.ActivityId, pauseInfo("first")))
+	s.True(ai.Paused)
+
+	err := PauseActivity(s.mutableState, ai.ActivityId, pauseInfo("second"))
+	var failedPrecondition *serviceerror.FailedPrecondition
+	s.ErrorAs(err, &failedPrecondition)
+	s.Equal("first", ai.PauseInfo.GetManual().Reason)
+}
+
+func (s *activitySuite) TestPauseActivityDeduplicatesSameRequestID() {
+	ai := s.AddActivityInfo()
+
+	s.NoError(PauseActivity(s.mutableState, ai.ActivityId, pauseRequest("pause-request-id")))
+	s.NoError(PauseActivity(s.mutableState, ai.ActivityId, pauseRequest("pause-request-id")))
+}
+
+// The replayed pause arrives after the activity has been unpaused, which is the case that needs
+// the request ID to outlive the pause it identifies: PauseInfo is cleared by the unpause.
+func (s *activitySuite) TestPauseActivityDeduplicatesReplayAfterUnpause() {
+	ai := s.AddActivityInfo()
+
+	s.NoError(PauseActivity(s.mutableState, ai.ActivityId, pauseRequest("pause-request-id")))
+	s.NoError(UnpauseActivity(s.mockShard, s.mutableState, ai, false, false, 0, "unpause-request-id"))
+	s.False(ai.Paused)
+
+	s.NoError(PauseActivity(s.mutableState, ai.ActivityId, pauseRequest("pause-request-id")))
+	s.False(ai.Paused, "a replayed pause must not re-pause an activity that was unpaused")
+}
+
+func pauseRequest(requestID string) *persistencespb.ActivityInfo_PauseInfo {
+	return &persistencespb.ActivityInfo_PauseInfo{
+		PauseTime: timestamppb.New(time.Now()),
+		RequestId: requestID,
+		PausedBy: &persistencespb.ActivityInfo_PauseInfo_Manual_{
+			Manual: &persistencespb.ActivityInfo_PauseInfo_Manual{Identity: "test_identity"},
+		},
+	}
 }
