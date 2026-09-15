@@ -32,6 +32,16 @@ type signalOperationArgs struct {
 	RequestID         string
 }
 
+type signalOperationCaller struct {
+	workflowRun    client.WorkflowRun
+	operationID    string
+	operationRunID string
+}
+
+func (c signalOperationCaller) isStandalone() bool {
+	return c.operationID != ""
+}
+
 func (s *NexusWorkflowTestSuite) TestNexusOperationBackedBySignal(chasmEnabled bool) {
 	env := s.newTestEnv(chasmEnabled)
 	ctx := s.Context()
@@ -77,25 +87,30 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationBackedBySignal(chasmEnabled b
 
 	handlerRun, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{ID: handlerWorkflowID, TaskQueue: taskQueue}, signalHandlerWorkflow)
 	s.NoError(err)
-	args := signalOperationArgs{HandlerWorkflowID: handlerWorkflowID, SignalName: nexusSignalName, RequestID: uuid.NewString()}
-
-	s.RunSequential("Signals on running workflows complete", func(s *NexusWorkflowTestSuite) {
-		callerRun := s.startCaller(ctx, env, taskQueue, endpointName, "signal", args)
-		s.assertSignalLinks(ctx, env, chasmEnabled, callerRun, handlerRun, args.RequestID)
-	})
-	s.RunSequential("Signals de-dup on requestID", func(s *NexusWorkflowTestSuite) {
-		callerRun := s.startCaller(ctx, env, taskQueue, endpointName, "signal", args)
-		s.assertSignalForwardLink(ctx, env, callerRun, handlerRun, args.RequestID)
-		// Verify no duplicates in handler history as well.
-		s.handlerSignalEvent(env, handlerRun, args.RequestID)
-	})
-	s.RunSequential("Workflow reset preserves signal with links", func(s *NexusWorkflowTestSuite) {
-		preResetLinks := s.handlerSignalEvent(env, handlerRun, args.RequestID).GetLinks()
-		handlerRun = s.resetHandlerWorkflowAfterSignal(ctx, env, handlerRun, args.RequestID)
-		signaledEvent := s.handlerSignalEvent(env, handlerRun, args.RequestID)
-		protorequire.ProtoSliceEqual(s.T(), preResetLinks, signaledEvent.GetLinks())
-		s.assertHandlerSignalRequestIDResolves(ctx, env, chasmEnabled, handlerRun, args.RequestID, signaledEvent)
-	})
+	callerKinds := []string{"Workflow"}
+	if chasmEnabled {
+		callerKinds = append(callerKinds, "SANO")
+	}
+	for _, callerKind := range callerKinds {
+		args := signalOperationArgs{HandlerWorkflowID: handlerWorkflowID, SignalName: nexusSignalName, RequestID: uuid.NewString()}
+		s.RunSequential(callerKind+": Signals on running workflows complete", func(s *NexusWorkflowTestSuite) {
+			caller := s.startCaller(ctx, env, taskQueue, endpointName, "signal", args, callerKind)
+			s.assertSignalLinks(ctx, env, chasmEnabled, caller, handlerRun, args.RequestID)
+		})
+		s.RunSequential(callerKind+": Signals de-dup on requestID", func(s *NexusWorkflowTestSuite) {
+			caller := s.startCaller(ctx, env, taskQueue, endpointName, "signal", args, callerKind)
+			s.assertSignalForwardLink(ctx, env, caller, handlerRun, args.RequestID)
+			// Verify no duplicates in handler history as well.
+			s.handlerSignalEvent(env, handlerRun, args.RequestID)
+		})
+		s.RunSequential(callerKind+": Workflow reset preserves signal with links", func(s *NexusWorkflowTestSuite) {
+			preResetLinks := s.handlerSignalEvent(env, handlerRun, args.RequestID).GetLinks()
+			handlerRun = s.resetHandlerWorkflowAfterSignal(ctx, env, handlerRun, args.RequestID)
+			signaledEvent := s.handlerSignalEvent(env, handlerRun, args.RequestID)
+			protorequire.ProtoSliceEqual(s.T(), preResetLinks, signaledEvent.GetLinks())
+			s.assertHandlerSignalRequestIDResolves(ctx, env, chasmEnabled, handlerRun, args.RequestID, signaledEvent)
+		})
+	}
 	// Intentionally skip unknown workflow/run IDs. Although frontend rejects these requests, the Nexus
 	// handler could choose to retry- maybe until a fixed version of the handler is deployed.
 }
@@ -148,48 +163,54 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationBackedBySignalWithStart(chasm
 
 	handlerRun, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{ID: handlerWorkflowID, TaskQueue: taskQueue}, handlerWorkflowType)
 	s.NoError(err)
-	args := signalOperationArgs{HandlerWorkflowID: handlerWorkflowID, SignalName: nexusSignalName, RequestID: uuid.NewString()}
-
-	s.RunSequential("Signals on running workflows complete", func(s *NexusWorkflowTestSuite) {
-		callerRun := s.startCaller(ctx, env, taskQueue, endpointName, "signal-with-start", args)
-		var handlerRunID string
-		s.NoError(callerRun.Get(ctx, &handlerRunID))
-		s.Equal(handlerRun.GetRunID(), handlerRunID)
-		s.assertSignalLinks(ctx, env, chasmEnabled, callerRun, handlerRun, args.RequestID)
-	})
-	s.RunSequential("Signals de-dup on requestID", func(s *NexusWorkflowTestSuite) {
-		callerRun := s.startCaller(ctx, env, taskQueue, endpointName, "signal-with-start", args)
-		var handlerRunID string
-		s.NoError(callerRun.Get(ctx, &handlerRunID))
-		s.Equal(handlerRun.GetRunID(), handlerRunID)
-		s.assertSignalForwardLink(ctx, env, callerRun, handlerRun, args.RequestID)
-		s.handlerSignalEvent(env, handlerRun, args.RequestID)
-	})
-	s.RunSequential("Workflow reset preserves signal with links", func(s *NexusWorkflowTestSuite) {
-		preResetLinks := s.handlerSignalEvent(env, handlerRun, args.RequestID).GetLinks()
-		handlerRun = s.resetHandlerWorkflowAfterSignal(ctx, env, handlerRun, args.RequestID)
-		signaledEvent := s.handlerSignalEvent(env, handlerRun, args.RequestID)
-		protorequire.ProtoSliceEqual(s.T(), preResetLinks, signaledEvent.GetLinks())
-		s.assertHandlerSignalRequestIDResolves(ctx, env, chasmEnabled, handlerRun, args.RequestID, signaledEvent)
-	})
+	callerKinds := []string{"Workflow"}
+	if chasmEnabled {
+		callerKinds = append(callerKinds, "SANO")
+	}
+	for _, callerKind := range callerKinds {
+		args := signalOperationArgs{HandlerWorkflowID: handlerWorkflowID, SignalName: nexusSignalName, RequestID: uuid.NewString()}
+		s.RunSequential(callerKind+": Signals on running workflows complete", func(s *NexusWorkflowTestSuite) {
+			caller := s.startCaller(ctx, env, taskQueue, endpointName, "signal-with-start", args, callerKind)
+			s.Equal(handlerRun.GetRunID(), s.signalRunID(ctx, env, caller))
+			s.assertSignalLinks(ctx, env, chasmEnabled, caller, handlerRun, args.RequestID)
+		})
+		s.RunSequential(callerKind+": Signals de-dup on requestID", func(s *NexusWorkflowTestSuite) {
+			caller := s.startCaller(ctx, env, taskQueue, endpointName, "signal-with-start", args, callerKind)
+			s.Equal(handlerRun.GetRunID(), s.signalRunID(ctx, env, caller))
+			s.assertSignalForwardLink(ctx, env, caller, handlerRun, args.RequestID)
+			s.handlerSignalEvent(env, handlerRun, args.RequestID)
+		})
+		s.RunSequential(callerKind+": Workflow reset preserves signal with links", func(s *NexusWorkflowTestSuite) {
+			preResetLinks := s.handlerSignalEvent(env, handlerRun, args.RequestID).GetLinks()
+			handlerRun = s.resetHandlerWorkflowAfterSignal(ctx, env, handlerRun, args.RequestID)
+			signaledEvent := s.handlerSignalEvent(env, handlerRun, args.RequestID)
+			protorequire.ProtoSliceEqual(s.T(), preResetLinks, signaledEvent.GetLinks())
+			s.assertHandlerSignalRequestIDResolves(ctx, env, chasmEnabled, handlerRun, args.RequestID, signaledEvent)
+		})
+	}
 	s.RunSequential("Completes handler workflow", func(s *NexusWorkflowTestSuite) {
 		s.NoError(env.SdkClient().SignalWorkflow(ctx, handlerRun.GetID(), handlerRun.GetRunID(), finishSignalName, nil))
 		s.NoError(handlerRun.Get(ctx, nil))
 	})
-	s.RunSequential("Signals to completed workflows restart handlers", func(s *NexusWorkflowTestSuite) {
-		callerRun := s.startCaller(ctx, env, taskQueue, endpointName, "signal-with-start", args)
-		var replacementRunID string
-		s.NoError(callerRun.Get(ctx, &replacementRunID))
-		s.NotEqual(handlerRun.GetRunID(), replacementRunID)
-		replacementRun := env.SdkClient().GetWorkflow(ctx, handlerRun.GetID(), replacementRunID)
-		signaledEvent := s.assertSignalLinks(ctx, env, chasmEnabled, callerRun, replacementRun, args.RequestID)
-		handlerHistory := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: replacementRun.GetID(), RunId: replacementRun.GetRunID()})
-		startedEvent := s.RequireHistoryEvent(handlerHistory, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
-		s.Require().Len(startedEvent.GetLinks(), 1)
-		protorequire.ProtoEqual(s.T(), signaledEvent.GetLinks()[0].GetWorkflowEvent(), startedEvent.GetLinks()[0].GetWorkflowEvent())
-		s.NoError(env.SdkClient().SignalWorkflow(ctx, replacementRun.GetID(), replacementRun.GetRunID(), finishSignalName, nil))
-		s.NoError(replacementRun.Get(ctx, nil))
-	})
+	for _, callerKind := range callerKinds {
+		args := signalOperationArgs{HandlerWorkflowID: handlerWorkflowID, SignalName: nexusSignalName, RequestID: uuid.NewString()}
+		s.RunSequential(callerKind+": Signals to completed workflows restart handlers", func(s *NexusWorkflowTestSuite) {
+			caller := s.startCaller(ctx, env, taskQueue, endpointName, "signal-with-start", args, callerKind)
+			replacementRunID := s.signalRunID(ctx, env, caller)
+			s.NotEqual(handlerRun.GetRunID(), replacementRunID)
+			replacementRun := env.SdkClient().GetWorkflow(ctx, handlerRun.GetID(), replacementRunID)
+			signaledEvent := s.assertSignalLinks(ctx, env, chasmEnabled, caller, replacementRun, args.RequestID)
+			handlerHistory := env.GetHistory(
+				env.Namespace().String(),
+				&commonpb.WorkflowExecution{WorkflowId: replacementRun.GetID(), RunId: replacementRun.GetRunID()},
+			)
+			startedEvent := s.RequireHistoryEvent(handlerHistory, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
+			s.Require().Len(startedEvent.GetLinks(), 1)
+			protorequire.ProtoEqual(s.T(), signaledEvent.GetLinks()[0], startedEvent.GetLinks()[0]) // Both should point back to the caller - SANO or workflow event.
+			s.NoError(env.SdkClient().SignalWorkflow(ctx, replacementRun.GetID(), replacementRun.GetRunID(), finishSignalName, nil))
+			s.NoError(replacementRun.Get(ctx, nil))
+		})
+	}
 	// Intentionally skip unknown workflow/run IDs and REJECT_DUPLICATE. Although frontend rejects these
 	// requests, the Nexus handler could choose to retry- maybe until a fixed version of the handler is deployed.
 }
@@ -201,46 +222,79 @@ func (s *NexusWorkflowTestSuite) startCaller(
 	endpointName string,
 	operation string,
 	args signalOperationArgs,
-) client.WorkflowRun {
+	callerKind string,
+) signalOperationCaller {
 	s.T().Helper()
+	if callerKind == "SANO" {
+		operationID := testcore.RandomizeStr(s.T().Name() + "-sano")
+		resp, err := env.startNexusOperation(ctx, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: operationID,
+			Endpoint:    endpointName,
+			Service:     "service",
+			Operation:   operation,
+			Input:       testcore.MustToPayload(s.T(), args),
+		})
+		s.NoError(err)
+		s.True(resp.GetStarted())
+		return signalOperationCaller{operationID: operationID, operationRunID: resp.GetRunId()}
+	}
 	callerRun, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{TaskQueue: taskQueue}, signalCallerWorkflow, endpointName, operation, args)
 	s.NoError(err)
-	return callerRun
+	return signalOperationCaller{workflowRun: callerRun}
 }
 
 func (s *NexusWorkflowTestSuite) assertSignalLinks(
 	ctx context.Context,
 	env *NexusTestEnv,
 	chasmEnabled bool,
-	callerRun client.WorkflowRun,
+	caller signalOperationCaller,
 	handlerRun client.WorkflowRun,
 	signalRequestID string,
 ) *historypb.HistoryEvent {
 	s.T().Helper()
-	s.assertSignalForwardLink(ctx, env, callerRun, handlerRun, signalRequestID)
-	callerHistory := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: callerRun.GetID(), RunId: callerRun.GetRunID()})
-	scheduledEvent := s.RequireHistoryEvent(callerHistory, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED)
+	s.assertSignalForwardLink(ctx, env, caller, handlerRun, signalRequestID)
 	signaledEvent := s.handlerSignalEvent(env, handlerRun, signalRequestID)
-	s.assertSignalBackwardLink(env, callerRun, scheduledEvent, signaledEvent)
+	s.assertSignalBackwardLink(env, caller, signaledEvent)
 	s.assertHandlerSignalRequestIDResolves(ctx, env, chasmEnabled, handlerRun, signalRequestID, signaledEvent)
 	return signaledEvent
 }
 
-func (s *NexusWorkflowTestSuite) assertSignalBackwardLink(env *NexusTestEnv, callerRun client.WorkflowRun, scheduledEvent, signaledEvent *historypb.HistoryEvent) {
+func (s *NexusWorkflowTestSuite) assertSignalBackwardLink(env *NexusTestEnv, caller signalOperationCaller, signaledEvent *historypb.HistoryEvent) {
 	s.T().Helper()
-	backwardLink := &commonpb.Link_WorkflowEvent{
-		Namespace:  env.Namespace().String(),
-		WorkflowId: callerRun.GetID(),
-		RunId:      callerRun.GetRunID(),
-		Reference: &commonpb.Link_WorkflowEvent_EventRef{
-			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-				EventId:   scheduledEvent.GetEventId(),
-				EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+	var backwardLink *commonpb.Link
+	if caller.isStandalone() {
+		backwardLink = &commonpb.Link{
+			Variant: &commonpb.Link_NexusOperation_{
+				NexusOperation: &commonpb.Link_NexusOperation{
+					Namespace:   env.Namespace().String(),
+					OperationId: caller.operationID,
+					RunId:       caller.operationRunID,
+				},
 			},
-		},
+		}
+	} else {
+		callerHistory := env.GetHistory(
+			env.Namespace().String(),
+			&commonpb.WorkflowExecution{WorkflowId: caller.workflowRun.GetID(), RunId: caller.workflowRun.GetRunID()},
+		)
+		scheduledEvent := s.RequireHistoryEvent(callerHistory, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED)
+		backwardLink = &commonpb.Link{
+			Variant: &commonpb.Link_WorkflowEvent_{
+				WorkflowEvent: &commonpb.Link_WorkflowEvent{
+					Namespace:  env.Namespace().String(),
+					WorkflowId: caller.workflowRun.GetID(),
+					RunId:      caller.workflowRun.GetRunID(),
+					Reference: &commonpb.Link_WorkflowEvent_EventRef{
+						EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+							EventId:   scheduledEvent.GetEventId(),
+							EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+						}},
+				},
+			},
+		}
 	}
 	s.Require().Len(signaledEvent.GetLinks(), 1)
-	protorequire.ProtoEqual(s.T(), backwardLink, signaledEvent.GetLinks()[0].GetWorkflowEvent())
+	protorequire.ProtoEqual(s.T(), backwardLink, signaledEvent.GetLinks()[0])
 }
 
 func (s *NexusWorkflowTestSuite) assertHandlerSignalRequestIDResolves(
@@ -270,23 +324,55 @@ func (s *NexusWorkflowTestSuite) assertHandlerSignalRequestIDResolves(
 	s.Equal(signaledEvent.GetEventId(), requestInfo.GetEventId())
 }
 
-func (s *NexusWorkflowTestSuite) assertSignalForwardLink(ctx context.Context, env *NexusTestEnv, callerRun, handlerRun client.WorkflowRun, signalRequestID string) {
+func (s *NexusWorkflowTestSuite) assertSignalForwardLink(ctx context.Context, env *NexusTestEnv, caller signalOperationCaller, handlerRun client.WorkflowRun, signalRequestID string) {
 	s.T().Helper()
-	s.NoError(callerRun.Get(ctx, nil))
-	callerHistory := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: callerRun.GetID(), RunId: callerRun.GetRunID()})
-	completedEvent := s.RequireHistoryEvent(callerHistory, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
-	s.Require().Len(completedEvent.GetLinks(), 1)
-	protorequire.ProtoEqual(s.T(), &commonpb.Link_WorkflowEvent{
-		Namespace:  env.Namespace().String(),
-		WorkflowId: handlerRun.GetID(),
-		RunId:      handlerRun.GetRunID(),
-		Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
-			RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-				RequestId: signalRequestID,
-				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+	wantLink := &commonpb.Link{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{
+				Namespace:  env.Namespace().String(),
+				WorkflowId: handlerRun.GetID(),
+				RunId:      handlerRun.GetRunID(),
+				Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+					RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+						RequestId: signalRequestID,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+					},
+				},
 			},
 		},
-	}, completedEvent.GetLinks()[0].GetWorkflowEvent())
+	}
+	if caller.isStandalone() {
+		s.Await(func(s *NexusWorkflowTestSuite) {
+			descResp := env.describeNexusOperation(ctx, s.T(), caller.operationID)
+			s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_COMPLETED, descResp.GetInfo().GetStatus())
+			s.Require().Len(descResp.GetInfo().GetLinks(), 1)
+			protorequire.ProtoEqual(s.T(), wantLink, descResp.GetInfo().GetLinks()[0])
+		}, 5*time.Second, 100*time.Millisecond)
+		return
+	}
+	s.NoError(caller.workflowRun.Get(ctx, nil))
+	callerHistory := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: caller.workflowRun.GetID(), RunId: caller.workflowRun.GetRunID()})
+	completedEvent := s.RequireHistoryEvent(callerHistory, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
+	s.Require().Len(completedEvent.GetLinks(), 1)
+	protorequire.ProtoEqual(s.T(), wantLink, completedEvent.GetLinks()[0])
+}
+
+func (s *NexusWorkflowTestSuite) signalRunID(ctx context.Context, env *NexusTestEnv, caller signalOperationCaller) string {
+	s.T().Helper()
+	if caller.isStandalone() {
+		var runID string
+		s.Await(func(s *NexusWorkflowTestSuite) {
+			descResp := env.describeNexusOperation(ctx, s.T(), caller.operationID)
+			s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_COMPLETED, descResp.GetInfo().GetStatus())
+			s.Require().Len(descResp.GetInfo().GetLinks(), 1)
+			runID = descResp.GetInfo().GetLinks()[0].GetWorkflowEvent().GetRunId()
+			s.NotEmpty(runID)
+		}, 5*time.Second, 100*time.Millisecond)
+		return runID
+	}
+	var handlerRunID string
+	s.NoError(caller.workflowRun.Get(ctx, &handlerRunID))
+	return handlerRunID
 }
 
 func (s *NexusWorkflowTestSuite) handlerSignalEvent(env *NexusTestEnv, handlerRun client.WorkflowRun, signalRequestID string) *historypb.HistoryEvent {
