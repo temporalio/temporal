@@ -26,7 +26,7 @@ import (
 type nexusCompletionTestCase struct {
 	name              string
 	setupInvoker      func(*scheduler.Invoker)
-	setupScheduler    func(*scheduler.Scheduler)
+	setupScheduler    func(*scheduler.Scheduler, chasm.MutableContext)
 	completion        *persistencespb.ChasmNexusCompletion
 	expectPaused      bool
 	expectStatus      enumspb.WorkflowExecutionStatus
@@ -44,7 +44,7 @@ func executeNexusCompletion(t *testing.T, tc nexusCompletionTestCase) {
 		tc.setupInvoker(invoker)
 	}
 	if tc.setupScheduler != nil {
-		tc.setupScheduler(sched)
+		tc.setupScheduler(sched, ctx)
 	}
 
 	initialLastCompletion := sched.LastCompletionResult.Get(ctx)
@@ -119,6 +119,11 @@ func TestHandleNexusCompletion_Success(t *testing.T) {
 				},
 			}
 		},
+		setupScheduler: func(sched *scheduler.Scheduler, ctx chasm.MutableContext) {
+			sched.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{
+				Failure: &failurepb.Failure{Message: "previous failure"},
+			})
+		},
 		completion: &persistencespb.ChasmNexusCompletion{
 			RequestId: "req-1",
 			Outcome: &persistencespb.ChasmNexusCompletion_Success{
@@ -128,6 +133,9 @@ func TestHandleNexusCompletion_Success(t *testing.T) {
 		},
 		expectPaused: false,
 		expectStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		validateScheduler: func(t *testing.T, sched *scheduler.Scheduler, ctx chasm.Context) {
+			require.Nil(t, sched.LastCompletionResult.Get(ctx).Failure)
+		},
 	}
 
 	executeNexusCompletion(t, tc)
@@ -344,7 +352,7 @@ func TestHandleNexusCompletion_PauseOnFailure(t *testing.T) {
 				},
 			}
 		},
-		setupScheduler: func(sched *scheduler.Scheduler) {
+		setupScheduler: func(sched *scheduler.Scheduler, _ chasm.MutableContext) {
 			sched.Schedule.Policies.PauseOnFailure = true
 		},
 		completion: &persistencespb.ChasmNexusCompletion{
