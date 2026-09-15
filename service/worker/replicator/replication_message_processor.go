@@ -93,7 +93,7 @@ func newReplicationMessageProcessor(
 		namespaceTaskExecutor:        namespaceTaskExecutor,
 		customTaskHandler:            customTaskHandler,
 		metricsHandler:               metricsHandler.WithTags(metrics.OperationTag(metrics.NamespaceReplicationTaskScope)),
-		namespaceMetricsHandler:      metricsHandler,
+		applyOutcomeMetricsHandler:   metricsHandler,
 		retryPolicyForTask:           retryPolicyForTask,
 		lastProcessedMessageID:       -1,
 		lastRetrievedMessageID:       -1,
@@ -119,7 +119,7 @@ type (
 		namespaceTaskExecutor        nsreplication.TaskExecutor
 		customTaskHandler            func(ctx context.Context, task *replicationspb.ReplicationTask) error
 		metricsHandler               metrics.Handler
-		namespaceMetricsHandler      metrics.Handler
+		applyOutcomeMetricsHandler   metrics.Handler
 		retryPolicyForTask           func(*replicationspb.ReplicationTask) backoff.RetryPolicy
 		lastProcessedMessageID       int64
 		lastRetrievedMessageID       int64
@@ -240,8 +240,15 @@ func (p *replicationMessageProcessor) handleReplicationTasks() {
 			if task.GetTaskType() == enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK {
 				nsreplication.RecordLegacyTerminalFailure(
 					taskMetricsCtx,
-					p.namespaceMetricsHandler,
+					p.applyOutcomeMetricsHandler,
 					task.GetNamespaceTaskAttributes(),
+				)
+			} else if task.GetTaskType() == enumsspb.REPLICATION_TASK_TYPE_TASK_QUEUE_USER_DATA {
+				recordTaskQueueUserDataOutcome(
+					taskMetricsCtx,
+					p.applyOutcomeMetricsHandler,
+					task.GetTaskQueueUserDataAttributes(),
+					taskQueueUserDataMetricsOutcomeTerminalFailure,
 				)
 			}
 
@@ -372,6 +379,12 @@ func (p *replicationMessageProcessor) handleTaskQueueUserDataReplicationTask(
 		// When this cluster is added to the list of replicated clusters for this namespace on the origin cluster, the
 		// force replication workflow should be triggered to seed the namespace replication queue with all task queue
 		// user data entries for the namespace.
+		recordTaskQueueUserDataOutcome(
+			ctx,
+			p.applyOutcomeMetricsHandler,
+			attrs,
+			taskQueueUserDataMetricsOutcomeNotAdmitted,
+		)
 		return nil
 	default:
 		// return the original err
@@ -383,6 +396,14 @@ func (p *replicationMessageProcessor) handleTaskQueueUserDataReplicationTask(
 		TaskQueue:   attrs.GetTaskQueueName(),
 		UserData:    attrs.GetUserData(),
 	})
+	if err == nil {
+		recordTaskQueueUserDataOutcome(
+			ctx,
+			p.applyOutcomeMetricsHandler,
+			attrs,
+			taskQueueUserDataMetricsOutcomeApplied,
+		)
+	}
 	return err
 }
 
