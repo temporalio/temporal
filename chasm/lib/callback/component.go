@@ -121,15 +121,16 @@ func (c *Callback) loadInvocationArgs(
 		// Links are supplementary, so a source reporting an execution type with no link representation still has
 		// its completion delivered, just without one.
 		var backlinks []*nexuspb.Link
-		if backlink, err := c.buildCallbackBacklink(ctx); err == nil {
-			backlinks = commonnexus.ConvertLinksToProto([]nexus.Link{backlink})
-		} else {
+		backlink, err := c.buildCallbackBacklink(ctx, target)
+		if err != nil {
 			softassert.Fail(
 				ctx.Logger(),
 				"failed to build the callback backlink",
 				tag.Error(err),
 				tag.NexusCompletionSource(c.CompletionSource.Fqn()),
 			)
+		} else {
+			backlinks = commonnexus.ConvertLinksToProto([]nexus.Link{backlink})
 		}
 
 		return invocableNexusHandler{
@@ -178,7 +179,11 @@ func (c *Callback) recordHandlerLinks(ctx chasm.MutableContext, links []nexus.Li
 	if len(protoLinks) == 0 {
 		return nil
 	}
-	return ctx.SetRequestLinks(c, c.RequestId, protoLinks)
+	// Swallow any errors here for the same reason as above.
+	if err := ctx.SetRequestLinks(c, c.RequestId, protoLinks); err != nil {
+		softassert.Fail(ctx.Logger(), "failed to record NexusHandler callback links", tag.Error(err))
+	}
+	return nil
 }
 
 type saveResultInput struct {
@@ -371,9 +376,9 @@ func ScheduleStandbyCallbacks(ctx chasm.MutableContext, callbacks chasm.Map[stri
 
 // buildCallbackBacklink returns a commonpb.Link_Callback encoded as a nexus.Link, addressing this
 // callback within the execution of its completion source.
-func (c *Callback) buildCallbackBacklink(ctx chasm.Context) (nexus.Link, error) {
+func (c *Callback) buildCallbackBacklink(ctx chasm.Context, compSrc CompletionSource) (nexus.Link, error) {
 	exKey := ctx.ExecutionKey()
-	exType, componentPath := c.CompletionSource.Get(ctx).GetComponentExecutionPath()
+	exType, componentPath := compSrc.GetComponentExecutionPath()
 	link, err := commonnexus.ConvertLinkCallbackToNexusLink(&commonpb.Link_Callback{
 		Namespace: ctx.NamespaceEntry().Name().String(),
 		Execution: &commonpb.Execution{
