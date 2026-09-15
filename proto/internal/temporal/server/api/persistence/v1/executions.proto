@@ -752,6 +752,15 @@ message ActivityInfo {
   // Replication: This field is part of ActivityInfo and is automatically replicated
   // via state-based replication. No special handling is needed.
   temporal.server.api.clock.v1.VectorClock started_clock = 52;
+
+  // Request id of the most recent operator command of each kind that was applied to this activity.
+  // A command carrying the same request id is a client retry and is answered without being applied
+  // again. Only the most recent id per command is kept, so a replay of an older request is still
+  // applied a second time.
+  string last_pause_request_id = 53;
+  string last_unpause_request_id = 54;
+  string last_reset_request_id = 55;
+  string last_update_options_request_id = 56;
 }
 
 // timer_map column

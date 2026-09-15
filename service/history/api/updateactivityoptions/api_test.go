@@ -197,7 +197,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsWfNotRunning() {
 
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 
-	_, _, err := processActivityOptionsRequest(s.validator, s.mockMutableState, request.GetUpdateRequest(), request.GetNamespaceId())
+	_, _, err := processActivityOptionsRequest(s.validator, s.mockMutableState, request.GetUpdateRequest(), request.GetNamespaceId(), "")
 	s.Error(err)
 	s.ErrorAs(err, &consts.ErrWorkflowCompleted)
 }
@@ -219,7 +219,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsWfNoActivity() {
 
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(nil, false)
-	_, _, err := processActivityOptionsRequest(s.validator, s.mockMutableState, request.GetUpdateRequest(), request.GetNamespaceId())
+	_, _, err := processActivityOptionsRequest(s.validator, s.mockMutableState, request.GetUpdateRequest(), request.GetNamespaceId(), "")
 	s.Error(err)
 	s.ErrorAs(err, &consts.ErrActivityNotFound)
 }
@@ -283,7 +283,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsAcceptance() {
 	}
 
 	response, _, err := processActivityOptionsRequest(
-		s.validator, s.mockMutableState, request.GetUpdateRequest(), request.GetNamespaceId())
+		s.validator, s.mockMutableState, request.GetUpdateRequest(), request.GetNamespaceId(), "")
 
 	s.NoError(err)
 	s.NotNil(response)
@@ -384,7 +384,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsRejectsInvalidMergedRet
 	s.mockMutableState.EXPECT().GetActivityByActivityID("activity_id").Return(activityInfo, true)
 
 	_, _, err := processActivityOptionsRequest(
-		s.validator, s.mockMutableState, request.GetUpdateRequest(), request.GetNamespaceId())
+		s.validator, s.mockMutableState, request.GetUpdateRequest(), request.GetNamespaceId(), "")
 	s.ErrorContains(err, "MaximumInterval cannot be less than InitialInterval")
 }
 
@@ -437,7 +437,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptions_RestoreDefaultFail() {
 	request.UpdateRequest.Activity = &workflowservice.UpdateActivityOptionsRequest_Type{Type: "activity_type"}
 	activityInfos := map[int64]*persistencespb.ActivityInfo{}
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos)
-	_, _, err = restoreOriginalOptions(ctx, s.mockMutableState, request.GetUpdateRequest())
+	_, _, err = restoreOriginalOptions(ctx, s.mockMutableState, request.GetUpdateRequest(), "")
 	s.Error(err)
 
 	// not pending activity with such id
@@ -445,7 +445,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptions_RestoreDefaultFail() {
 	request.UpdateRequest.UpdateMask = nil
 	request.UpdateRequest.Activity = &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity_id"}
 	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(nil, false)
-	_, _, err = restoreOriginalOptions(ctx, s.mockMutableState, request.GetUpdateRequest())
+	_, _, err = restoreOriginalOptions(ctx, s.mockMutableState, request.GetUpdateRequest(), "")
 	s.Error(err)
 
 	ai := &persistencespb.ActivityInfo{
@@ -461,7 +461,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptions_RestoreDefaultFail() {
 	err = errors.New("some error")
 	s.mockMutableState.EXPECT().GetActivityScheduledEvent(gomock.Any(), gomock.Any()).Return(nil, err)
 	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(ai, true)
-	_, _, err = restoreOriginalOptions(ctx, s.mockMutableState, request.GetUpdateRequest())
+	_, _, err = restoreOriginalOptions(ctx, s.mockMutableState, request.GetUpdateRequest(), "")
 	s.Error(err)
 }
 
@@ -514,7 +514,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptions_RestoreDefaultSuccess(
 	s.mockMutableState.EXPECT().GetActivityScheduledEvent(gomock.Any(), gomock.Any()).Return(he, nil)
 	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(ai, true)
 	s.mockMutableState.EXPECT().UpdateActivity(gomock.Any(), gomock.Any()).Return(nil)
-	response, _, err := restoreOriginalOptions(ctx, s.mockMutableState, request.GetUpdateRequest())
+	response, _, err := restoreOriginalOptions(ctx, s.mockMutableState, request.GetUpdateRequest(), "")
 	s.NotNil(response)
 	s.NoError(err)
 }
@@ -546,7 +546,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptions_PerNSTQ_Blocked() {
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	s.mockMutableState.EXPECT().GetActivityByActivityID("activity_id").Return(activityInfo, true)
 
-	_, _, err := processActivityOptionsRequest(s.validator, s.mockMutableState, request.GetUpdateRequest(), request.GetNamespaceId())
+	_, _, err := processActivityOptionsRequest(s.validator, s.mockMutableState, request.GetUpdateRequest(), request.GetNamespaceId(), "")
 	s.Error(err)
 	s.Contains(err.Error(), "internal per-namespace task queue")
 }
@@ -581,7 +581,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptions_PerNSTQ_Allowed() {
 	s.mockMutableState.EXPECT().RegenerateActivityRetryTask(gomock.Any(), gomock.Any()).Return(nil)
 	s.mockMutableState.EXPECT().UpdateActivity(gomock.Any(), gomock.Any()).Return(nil)
 
-	resp, _, err := processActivityOptionsRequest(s.validator, s.mockMutableState, request.GetUpdateRequest(), request.GetNamespaceId())
+	resp, _, err := processActivityOptionsRequest(s.validator, s.mockMutableState, request.GetUpdateRequest(), request.GetNamespaceId(), "")
 	s.NoError(err)
 	s.NotNil(resp)
 }

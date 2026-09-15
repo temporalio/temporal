@@ -66,13 +66,14 @@ func Invoke(
 			var updatedActivities []*persistencespb.ActivityInfo
 			var err error
 			if updateRequest.RestoreOriginal {
-				response, updatedActivities, err = restoreOriginalOptions(ctx, mutableState, updateRequest)
+				response, updatedActivities, err = restoreOriginalOptions(ctx, mutableState, updateRequest, request.GetRequestId())
 			} else {
 				response, updatedActivities, err = processActivityOptionsRequest(
 					validator,
 					mutableState,
 					updateRequest,
 					request.GetNamespaceId(),
+					request.GetRequestId(),
 				)
 			}
 
@@ -129,6 +130,7 @@ func processActivityOptionsRequest(
 	mutableState historyi.MutableState,
 	updateRequest *workflowservice.UpdateActivityOptionsRequest,
 	namespaceID string,
+	requestID string,
 ) (*historyservice.UpdateActivityOptionsResponse, []*persistencespb.ActivityInfo, error) {
 	if !mutableState.IsWorkflowExecutionRunning() {
 		return nil, nil, consts.ErrWorkflowCompleted
@@ -161,7 +163,16 @@ func processActivityOptionsRequest(
 			return nil, nil, consts.ErrActivityNotFound
 		}
 
-		if adjustedOptions, err = processActivityOptionsUpdate(validator, mutableState, namespaceID, ai, mergeFrom, updateFields); err != nil {
+		// A replay of the request that last updated this activity's options is a no-op, and reports
+		// the options it left in place.
+		if requestID != "" && ai.LastUpdateOptionsRequestId == requestID {
+			adjustedOptions = currentActivityOptions(ai)
+			continue
+		}
+
+		if adjustedOptions, err = processActivityOptionsUpdate(
+			validator, mutableState, namespaceID, ai, mergeFrom, updateFields, requestID,
+		); err != nil {
 			return nil, nil, err
 		}
 		updatedActivities = append(updatedActivities, ai)
@@ -181,24 +192,9 @@ func processActivityOptionsUpdate(
 	ai *persistencespb.ActivityInfo,
 	mergeFrom *activitypb.ActivityOptions,
 	updateFields map[string]struct{},
+	requestID string,
 ) (*activitypb.ActivityOptions, error) {
-
-	mergeInto := &activitypb.ActivityOptions{
-		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: ai.TaskQueue,
-		},
-		ScheduleToCloseTimeout: ai.ScheduleToCloseTimeout,
-		ScheduleToStartTimeout: ai.ScheduleToStartTimeout,
-		StartToCloseTimeout:    ai.StartToCloseTimeout,
-		HeartbeatTimeout:       ai.HeartbeatTimeout,
-		Priority:               common.CloneProto(ai.Priority),
-		RetryPolicy: &commonpb.RetryPolicy{
-			BackoffCoefficient: ai.RetryBackoffCoefficient,
-			InitialInterval:    ai.RetryInitialInterval,
-			MaximumInterval:    ai.RetryMaximumInterval,
-			MaximumAttempts:    ai.RetryMaximumAttempts,
-		},
-	}
+	mergeInto := currentActivityOptions(ai)
 
 	// update activity options
 	if err := activityoptions.MergeActivityOptions(mergeInto, mergeFrom, updateFields); err != nil {
@@ -217,7 +213,26 @@ func processActivityOptionsUpdate(
 		return nil, err
 	}
 
-	return updateActivityOptions(mutableState, ai, adjustedOptions)
+	return updateActivityOptions(mutableState, ai, adjustedOptions, requestID)
+}
+
+func currentActivityOptions(ai *persistencespb.ActivityInfo) *activitypb.ActivityOptions {
+	return &activitypb.ActivityOptions{
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: ai.TaskQueue,
+		},
+		ScheduleToCloseTimeout: ai.ScheduleToCloseTimeout,
+		ScheduleToStartTimeout: ai.ScheduleToStartTimeout,
+		StartToCloseTimeout:    ai.StartToCloseTimeout,
+		HeartbeatTimeout:       ai.HeartbeatTimeout,
+		Priority:               common.CloneProto(ai.Priority),
+		RetryPolicy: &commonpb.RetryPolicy{
+			BackoffCoefficient: ai.RetryBackoffCoefficient,
+			InitialInterval:    ai.RetryInitialInterval,
+			MaximumInterval:    ai.RetryMaximumInterval,
+			MaximumAttempts:    ai.RetryMaximumAttempts,
+		},
+	}
 }
 
 func adjustActivityOptions(
@@ -275,9 +290,11 @@ func updateActivityOptions(
 	ms historyi.MutableState,
 	ai *persistencespb.ActivityInfo,
 	activityOptions *activitypb.ActivityOptions,
+	requestID string,
 ) (*activitypb.ActivityOptions, error) {
 	var err error
 	if err = ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
+		activityInfo.LastUpdateOptionsRequestId = requestID
 		// update activity info with new options
 		activityInfo.TaskQueue = activityOptions.TaskQueue.Name
 		activityInfo.ScheduleToCloseTimeout = activityOptions.ScheduleToCloseTimeout
@@ -326,6 +343,7 @@ func restoreOriginalOptions(
 	ctx context.Context,
 	ms historyi.MutableState,
 	updateRequest *workflowservice.UpdateActivityOptionsRequest,
+	requestID string,
 ) (*historyservice.UpdateActivityOptionsResponse, []*persistencespb.ActivityInfo, error) {
 
 	activityIDs := getActivityIDs(updateRequest, ms)
@@ -342,6 +360,13 @@ func restoreOriginalOptions(
 
 		if !activityFound {
 			return nil, nil, consts.ErrActivityNotFound
+		}
+
+		// A replay of the request that last restored this activity's options is a no-op, and reports
+		// the options it left in place.
+		if requestID != "" && ai.LastUpdateOptionsRequestId == requestID {
+			updatedOptions = currentActivityOptions(ai)
+			continue
 		}
 
 		event, err := ms.GetActivityScheduledEvent(ctx, ai.ScheduledEventId)
@@ -370,7 +395,7 @@ func restoreOriginalOptions(
 			RetryPolicy:            originalOptions.RetryPolicy,
 		}
 
-		if updatedOptions, err = updateActivityOptions(ms, ai, activityOptions); err != nil {
+		if updatedOptions, err = updateActivityOptions(ms, ai, activityOptions, requestID); err != nil {
 			return nil, nil, err
 		}
 		updatedActivities = append(updatedActivities, ai)

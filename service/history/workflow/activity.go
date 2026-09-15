@@ -257,10 +257,13 @@ func PauseActivity(
 		return consts.ErrActivityNotFound
 	}
 
+	// A replay of the request that last paused this activity is a no-op, even if the activity has
+	// since been unpaused: without this, the replay would re-pause it.
+	if reqID := pauseInfo.GetRequestId(); reqID != "" && ai.LastPauseRequestId == reqID {
+		return nil
+	}
+
 	if ai.Paused {
-		if ai.GetPauseInfo().GetRequestId() == pauseInfo.GetRequestId() {
-			return nil
-		}
 		return serviceerror.NewFailedPrecondition("activity is already paused")
 	}
 
@@ -272,6 +275,7 @@ func PauseActivity(
 		}
 		activityInfo.Paused = true
 		activityInfo.PauseInfo = pauseInfo
+		activityInfo.LastPauseRequestId = pauseInfo.GetRequestId()
 		return nil
 	})
 }
@@ -285,6 +289,7 @@ func ResetActivity(
 	keepPaused bool,
 	resetOptions bool,
 	jitter time.Duration,
+	requestID string,
 ) error {
 	if !mutableState.IsWorkflowExecutionRunning() {
 		return consts.ErrWorkflowCompleted
@@ -314,6 +319,7 @@ func ResetActivity(
 
 	return mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms historyi.MutableState) error {
 		wasPaused := activityInfo.Paused
+		activityInfo.LastResetRequestId = requestID
 
 		// reset the number of attempts
 		activityInfo.Attempt = 1
@@ -395,9 +401,11 @@ func UnpauseActivity(
 	resetAttempts bool,
 	resetHeartbeat bool,
 	jitter time.Duration,
+	requestID string,
 ) error {
 	if err := mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms historyi.MutableState) error {
 		unpauseActivityInfo(activityInfo)
+		activityInfo.LastUnpauseRequestId = requestID
 
 		if resetAttempts {
 			activityInfo.Attempt = 1

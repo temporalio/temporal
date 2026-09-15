@@ -1352,6 +1352,10 @@ message UpdateActivityOptionsRequest {
   string namespace_id = 1;
 
   temporal.api.workflowservice.v1.UpdateActivityOptionsRequest update_request = 2;
+
+  // Request id of the originating ...ActivityExecution request. The deprecated frontend message
+  // does not carry one, so it is forwarded here to let history recognize a client retry.
+  string request_id = 3;
 }
 
 message UpdateActivityOptionsResponse {
@@ -1377,6 +1381,10 @@ message UnpauseActivityRequest {
   string namespace_id = 1;
 
   temporal.api.workflowservice.v1.UnpauseActivityRequest frontend_request = 2;
+
+  // Request id of the originating ...ActivityExecution request. The deprecated frontend message
+  // does not carry one, so it is forwarded here to let history recognize a client retry.
+  string request_id = 3;
 }
 
 message UnpauseActivityResponse {}
@@ -1388,6 +1396,10 @@ message ResetActivityRequest {
   string namespace_id = 1;
 
   temporal.api.workflowservice.v1.ResetActivityRequest frontend_request = 2;
+
+  // Request id of the originating ...ActivityExecution request. The deprecated frontend message
+  // does not carry one, so it is forwarded here to let history recognize a client retry.
+  string request_id = 3;
 }
 
 message ResetActivityResponse {}

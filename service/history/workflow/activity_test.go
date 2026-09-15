@@ -378,7 +378,7 @@ func (s *activitySuite) TestResetPausedActivityAcceptance() {
 
 	prevStamp = ai.Stamp
 	err = ResetActivity(context.Background(), s.mockShard, s.mutableState, ai.ActivityId,
-		false, true, false, 0)
+		false, true, false, 0, "")
 	s.Require().NoError(err)
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is not reset")
 	s.Equal(prevStamp, ai.Stamp, "ActivityInfo.Stamp should not change")
@@ -414,7 +414,7 @@ func (s *activitySuite) TestResetAndUnPauseActivityAcceptance() {
 
 	prevStamp = ai.Stamp
 	err = ResetActivity(context.Background(), s.mockShard, s.mutableState, ai.ActivityId,
-		false, false, false, 0)
+		false, false, false, 0, "")
 	s.Require().NoError(err)
 	s.Equal(int32(1), ai.Attempt, "ActivityInfo.Attempt is not reset")
 	s.NotEqual(prevStamp, ai.Stamp, "ActivityInfo.Stamp should change")
@@ -450,7 +450,7 @@ func (s *activitySuite) TestResetUnpausesRunningActivity() {
 		TimerTaskStatusCreatedHeartbeat
 
 	err = ResetActivity(context.Background(), s.mockShard, s.mutableState, ai.ActivityId,
-		false, false, false, 0)
+		false, false, false, 0, "")
 	s.Require().NoError(err)
 	s.False(ai.Paused, "ActivityInfo.Paused should be cleared by reset")
 	s.Nil(ai.PauseInfo, "ActivityInfo.PauseInfo should be cleared by reset")
@@ -481,7 +481,7 @@ func (s *activitySuite) TestUnpauseActivityAcceptance() {
 		TimerTaskStatusCreatedHeartbeat
 	prevStamp := ai.Stamp
 
-	err = UnpauseActivity(s.mockShard, s.mutableState, ai, false, false, 0)
+	err = UnpauseActivity(s.mockShard, s.mutableState, ai, false, false, 0, "")
 	s.Require().NoError(err)
 	s.False(ai.Paused, "ActivityInfo.Paused should be cleared by unpause")
 	s.Nil(ai.PauseInfo, "ActivityInfo.PauseInfo should be cleared by unpause")

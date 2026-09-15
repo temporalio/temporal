@@ -64,11 +64,16 @@ func Invoke(
 				if !activityFound {
 					return nil, consts.ErrActivityNotFound
 				}
+				// A replay of the request that last reset this activity is a no-op.
+				if reqID := req.GetRequestId(); reqID != "" && activityInfo.LastResetRequestId == reqID {
+					continue
+				}
 				if err := workflow.ResetActivity(
 					ctx,
 					shardContext, mutableState, activityId,
 					request.ResetHeartbeat, request.KeepPaused, request.RestoreOriginalOptions,
 					request.Jitter.AsDuration(),
+					req.GetRequestId(),
 				); err != nil {
 					return nil, err
 				}

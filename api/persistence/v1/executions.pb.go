@@ -2897,9 +2897,17 @@ type ActivityInfo struct {
 	//
 	// Replication: This field is part of ActivityInfo and is automatically replicated
 	// via state-based replication. No special handling is needed.
-	StartedClock  *v15.VectorClock `protobuf:"bytes,52,opt,name=started_clock,json=startedClock,proto3" json:"started_clock,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	StartedClock *v15.VectorClock `protobuf:"bytes,52,opt,name=started_clock,json=startedClock,proto3" json:"started_clock,omitempty"`
+	// Request id of the most recent operator command of each kind that was applied to this activity.
+	// A command carrying the same request id is a client retry and is answered without being applied
+	// again. Only the most recent id per command is kept, so a replay of an older request is still
+	// applied a second time.
+	LastPauseRequestId         string `protobuf:"bytes,53,opt,name=last_pause_request_id,json=lastPauseRequestId,proto3" json:"last_pause_request_id,omitempty"`
+	LastUnpauseRequestId       string `protobuf:"bytes,54,opt,name=last_unpause_request_id,json=lastUnpauseRequestId,proto3" json:"last_unpause_request_id,omitempty"`
+	LastResetRequestId         string `protobuf:"bytes,55,opt,name=last_reset_request_id,json=lastResetRequestId,proto3" json:"last_reset_request_id,omitempty"`
+	LastUpdateOptionsRequestId string `protobuf:"bytes,56,opt,name=last_update_options_request_id,json=lastUpdateOptionsRequestId,proto3" json:"last_update_options_request_id,omitempty"`
+	unknownFields              protoimpl.UnknownFields
+	sizeCache                  protoimpl.SizeCache
 }
 
 func (x *ActivityInfo) Reset() {
@@ -3284,6 +3292,34 @@ func (x *ActivityInfo) GetStartedClock() *v15.VectorClock {
 		return x.StartedClock
 	}
 	return nil
+}
+
+func (x *ActivityInfo) GetLastPauseRequestId() string {
+	if x != nil {
+		return x.LastPauseRequestId
+	}
+	return ""
+}
+
+func (x *ActivityInfo) GetLastUnpauseRequestId() string {
+	if x != nil {
+		return x.LastUnpauseRequestId
+	}
+	return ""
+}
+
+func (x *ActivityInfo) GetLastResetRequestId() string {
+	if x != nil {
+		return x.LastResetRequestId
+	}
+	return ""
+}
+
+func (x *ActivityInfo) GetLastUpdateOptionsRequestId() string {
+	if x != nil {
+		return x.LastUpdateOptionsRequestId
+	}
+	return ""
 }
 
 type isActivityInfo_BuildIdInfo interface {
@@ -5265,7 +5301,7 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x17NexusInvocationTaskInfo\x12\x18\n" +
 	"\aattempt\x18\x01 \x01(\x05R\aattempt\"4\n" +
 	"\x18NexusCancelationTaskInfo\x12\x18\n" +
-	"\aattempt\x18\x01 \x01(\x05R\aattempt\"\xc8\x1c\n" +
+	"\aattempt\x18\x01 \x01(\x05R\aattempt\"\xa9\x1e\n" +
 	"\fActivityInfo\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x03R\aversion\x127\n" +
 	"\x18scheduled_event_batch_id\x18\x02 \x01(\x03R\x15scheduledEventBatchId\x12A\n" +
@@ -5320,7 +5356,11 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x10reset_heartbeats\x180 \x01(\bR\x0fresetHeartbeats\x12#\n" +
 	"\rstart_version\x182 \x01(\x03R\fstartVersion\x129\n" +
 	"\x19worker_control_task_queue\x183 \x01(\tR\x16workerControlTaskQueue\x12N\n" +
-	"\rstarted_clock\x184 \x01(\v2).temporal.server.api.clock.v1.VectorClockR\fstartedClock\x1ay\n" +
+	"\rstarted_clock\x184 \x01(\v2).temporal.server.api.clock.v1.VectorClockR\fstartedClock\x121\n" +
+	"\x15last_pause_request_id\x185 \x01(\tR\x12lastPauseRequestId\x125\n" +
+	"\x17last_unpause_request_id\x186 \x01(\tR\x14lastUnpauseRequestId\x121\n" +
+	"\x15last_reset_request_id\x187 \x01(\tR\x12lastResetRequestId\x12B\n" +
+	"\x1elast_update_options_request_id\x188 \x01(\tR\x1alastUpdateOptionsRequestId\x1ay\n" +
 	"\x16UseWorkflowBuildIdInfo\x12+\n" +
 	"\x12last_used_build_id\x18\x01 \x01(\tR\x0flastUsedBuildId\x122\n" +
 	"\x15last_redirect_counter\x18\x02 \x01(\x03R\x13lastRedirectCounter\x1a\xa8\x02\n" +

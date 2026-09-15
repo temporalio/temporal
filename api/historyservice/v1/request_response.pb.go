@@ -9481,6 +9481,9 @@ type UpdateActivityOptionsRequest struct {
 	// Namespace ID of the workflow which scheduled this activity
 	NamespaceId   string                           `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	UpdateRequest *v1.UpdateActivityOptionsRequest `protobuf:"bytes,2,opt,name=update_request,json=updateRequest,proto3" json:"update_request,omitempty"`
+	// Request id of the originating ...ActivityExecution request. The deprecated frontend message
+	// does not carry one, so it is forwarded here to let history recognize a client retry.
+	RequestId     string `protobuf:"bytes,3,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -9527,6 +9530,13 @@ func (x *UpdateActivityOptionsRequest) GetUpdateRequest() *v1.UpdateActivityOpti
 		return x.UpdateRequest
 	}
 	return nil
+}
+
+func (x *UpdateActivityOptionsRequest) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
 }
 
 type UpdateActivityOptionsResponse struct {
@@ -9668,8 +9678,11 @@ type UnpauseActivityRequest struct {
 	// Namespace ID of the workflow which scheduled this activity
 	NamespaceId     string                     `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	FrontendRequest *v1.UnpauseActivityRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Request id of the originating ...ActivityExecution request. The deprecated frontend message
+	// does not carry one, so it is forwarded here to let history recognize a client retry.
+	RequestId     string `protobuf:"bytes,3,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UnpauseActivityRequest) Reset() {
@@ -9716,6 +9729,13 @@ func (x *UnpauseActivityRequest) GetFrontendRequest() *v1.UnpauseActivityRequest
 	return nil
 }
 
+func (x *UnpauseActivityRequest) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
 type UnpauseActivityResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -9757,8 +9777,11 @@ type ResetActivityRequest struct {
 	// Namespace ID of the workflow which scheduled this activity
 	NamespaceId     string                   `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	FrontendRequest *v1.ResetActivityRequest `protobuf:"bytes,2,opt,name=frontend_request,json=frontendRequest,proto3" json:"frontend_request,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Request id of the originating ...ActivityExecution request. The deprecated frontend message
+	// does not carry one, so it is forwarded here to let history recognize a client retry.
+	RequestId     string `protobuf:"bytes,3,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ResetActivityRequest) Reset() {
@@ -9803,6 +9826,13 @@ func (x *ResetActivityRequest) GetFrontendRequest() *v1.ResetActivityRequest {
 		return x.FrontendRequest
 	}
 	return nil
+}
+
+func (x *ResetActivityRequest) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
 }
 
 type ResetActivityResponse struct {
@@ -11513,23 +11543,29 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x11target_cluster_id\x18\x05 \x01(\x05R\x0ftargetClusterId\x12!\n" +
 	"\farchetype_id\x18\x06 \x01(\rR\varchetypeId:\x1b\x92\xc4\x03\x17*\x15execution.workflow_id\"\xb9\x01\n" +
 	"\x19SyncWorkflowStateResponse\x12\x83\x01\n" +
-	"\x1dversioned_transition_artifact\x18\x05 \x01(\v2?.temporal.server.api.replication.v1.VersionedTransitionArtifactR\x1bversionedTransitionArtifactJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05\"\xd3\x01\n" +
+	"\x1dversioned_transition_artifact\x18\x05 \x01(\v2?.temporal.server.api.replication.v1.VersionedTransitionArtifactR\x1bversionedTransitionArtifactJ\x04\b\x01\x10\x02J\x04\b\x02\x10\x03J\x04\b\x03\x10\x04J\x04\b\x04\x10\x05\"\xf2\x01\n" +
 	"\x1cUpdateActivityOptionsRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12d\n" +
-	"\x0eupdate_request\x18\x02 \x01(\v2=.temporal.api.workflowservice.v1.UpdateActivityOptionsRequestR\rupdateRequest:*\x92\xc4\x03&*$update_request.execution.workflow_id\"u\n" +
+	"\x0eupdate_request\x18\x02 \x01(\v2=.temporal.api.workflowservice.v1.UpdateActivityOptionsRequestR\rupdateRequest\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x03 \x01(\tR\trequestId:*\x92\xc4\x03&*$update_request.execution.workflow_id\"u\n" +
 	"\x1dUpdateActivityOptionsResponse\x12T\n" +
 	"\x10activity_options\x18\x01 \x01(\v2).temporal.api.activity.v1.ActivityOptionsR\x0factivityOptions\"\xc9\x01\n" +
 	"\x14PauseActivityRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12`\n" +
 	"\x10frontend_request\x18\x02 \x01(\v25.temporal.api.workflowservice.v1.PauseActivityRequestR\x0ffrontendRequest:,\x92\xc4\x03(*&frontend_request.execution.workflow_id\"\x17\n" +
-	"\x15PauseActivityResponse\"\xcd\x01\n" +
+	"\x15PauseActivityResponse\"\xec\x01\n" +
 	"\x16UnpauseActivityRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12b\n" +
-	"\x10frontend_request\x18\x02 \x01(\v27.temporal.api.workflowservice.v1.UnpauseActivityRequestR\x0ffrontendRequest:,\x92\xc4\x03(*&frontend_request.execution.workflow_id\"\x19\n" +
-	"\x17UnpauseActivityResponse\"\xc9\x01\n" +
+	"\x10frontend_request\x18\x02 \x01(\v27.temporal.api.workflowservice.v1.UnpauseActivityRequestR\x0ffrontendRequest\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x03 \x01(\tR\trequestId:,\x92\xc4\x03(*&frontend_request.execution.workflow_id\"\x19\n" +
+	"\x17UnpauseActivityResponse\"\xe8\x01\n" +
 	"\x14ResetActivityRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12`\n" +
-	"\x10frontend_request\x18\x02 \x01(\v25.temporal.api.workflowservice.v1.ResetActivityRequestR\x0ffrontendRequest:,\x92\xc4\x03(*&frontend_request.execution.workflow_id\"\x17\n" +
+	"\x10frontend_request\x18\x02 \x01(\v25.temporal.api.workflowservice.v1.ResetActivityRequestR\x0ffrontendRequest\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x03 \x01(\tR\trequestId:,\x92\xc4\x03(*&frontend_request.execution.workflow_id\"\x17\n" +
 	"\x15ResetActivityResponse\"\xee\x01\n" +
 	"%UpdateWorkflowExecutionOptionsRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12m\n" +

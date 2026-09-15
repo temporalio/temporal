@@ -109,6 +109,12 @@ func processUnpauseActivityRequest(
 			return nil, nil, consts.ErrActivityNotFound
 		}
 
+		// A replay of the request that last unpaused this activity is a no-op, even if the activity
+		// has since been paused again: without this, the replay would unpause it.
+		if reqID := request.GetRequestId(); reqID != "" && ai.LastUnpauseRequestId == reqID {
+			continue
+		}
+
 		if !ai.Paused {
 			// do nothing
 			continue
@@ -118,7 +124,8 @@ func processUnpauseActivityRequest(
 			shardContext, mutableState, ai,
 			frontendRequest.GetResetAttempts(),
 			frontendRequest.GetResetHeartbeat(),
-			frontendRequest.GetJitter().AsDuration()); err != nil {
+			frontendRequest.GetJitter().AsDuration(),
+			request.GetRequestId()); err != nil {
 			return nil, nil, err
 		}
 		activityMetrics = append(activityMetrics, workflow.NewActivityMetricsInfo(mutableState, ai))
