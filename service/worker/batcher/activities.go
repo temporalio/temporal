@@ -59,7 +59,7 @@ type batchProcessorConfig struct {
 	adjustedQuery string
 	batchType     enumspb.BatchOperationType
 	concurrency   int
-	// heartbeatTimeout of the activity, or 0 for default.
+	// heartbeatTimeout (or default 0) of the activity.
 	heartbeatTimeout  time.Duration
 	initialPageToken  []byte
 	initialExecutions []*commonpb.WorkflowExecution
@@ -226,8 +226,8 @@ func fetchPage(
 	}, nil
 }
 
-// heartbeatInterval returns a fraction of the heartbeat timeout the activity was scheduled with.
-// Uses default activity heartbeat timeout of 10s, returning 2.5s, if not set.
+// heartbeatInterval returns 1/4th fraction of the activity's heartbeat timeout.
+// By default, returns 10s/4 = 2.5s.
 func heartbeatInterval(heartbeatTimeout time.Duration) time.Duration {
 	if heartbeatTimeout <= 0 {
 		heartbeatTimeout = defaultActivityHeartBeatTimeout
@@ -701,7 +701,7 @@ func (a *activities) processSingleTask(
 					Namespace:         namespace,
 					WorkflowExecution: executionInfo.Execution,
 					Identity:          operation.CancellationOperation.GetIdentity(),
-					// Surfaced as the cancel-requested event's cause.
+					// Surfaced as the cause of the cancel-requested event.
 					Reason: batchOperation.Request.GetReason(),
 					RequestId: deterministicRequestID(batchOperation.Request.GetJobId(), "cancel",
 						executionInfo.Execution.GetWorkflowId(), executionInfo.Execution.GetRunId()),
@@ -874,9 +874,8 @@ func isNonRetryableError(err error, batchType enumspb.BatchOperationType) bool {
 		return false
 	}
 
-	// Avoid retry on InvalidArgument, which can burn batch rate limit and
-	// log same per-target failure multiple times. This is similar to how
-	// fetchPage treats InvalidArgument.
+	// Avoid retry of InvalidArgument because it can burn batch rate limit, and
+	// log the same per-target failure multiple times.
 	if _, isInvalidArgument := errors.AsType[*serviceerror.InvalidArgument](err); isInvalidArgument {
 		return true
 	}

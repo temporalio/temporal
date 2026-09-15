@@ -6169,11 +6169,7 @@ func (wh *WorkflowHandler) StopBatchOperation(
 		return nil, errBatchAPINotAllowed
 	}
 
-	// The job ID is a caller-supplied workflow ID and the terminate below is an
-	// in-process call, so it does not go through the authorization check a
-	// TerminateWorkflowExecution API call would. Confirm the target really is a
-	// batcher workflow first, otherwise this API terminates any workflow in the
-	// namespace whose ID the caller can name.
+	// Check that the target job ID is a batcher workflow.
 	execution, err := wh.getBatchJobExecution(ctx, request.GetNamespace(), request.GetJobId())
 	if err != nil {
 		return nil, err
@@ -6181,8 +6177,8 @@ func (wh *WorkflowHandler) StopBatchOperation(
 
 	terminateReq := &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: request.GetNamespace(),
-		// Pinned to the run that was validated, so a run of the same workflow ID
-		// started in between cannot be terminated in its place.
+		// Use the validated execution from below, so that a run of the same workflow ID
+		// started in between is not terminated in its place.
 		WorkflowExecution: execution,
 		Reason:            request.GetReason(),
 		Identity:          request.GetIdentity(),
@@ -6194,12 +6190,10 @@ func (wh *WorkflowHandler) StopBatchOperation(
 	return &workflowservice.StopBatchOperationResponse{}, nil
 }
 
-// getBatchJobExecution resolves a batch job ID to the workflow execution running
-// that job, verifying that it is in fact a batcher workflow: one started by
-// StartBatchOperation or StartAdminBatchOperation, both of which use a known
-// workflow type and hide the workflow behind a batcher namespace division. A job
-// ID naming any other workflow is rejected, so the batch APIs cannot be used to
-// act on workflows that are not batch jobs.
+// getBatchJobExecution verifies that a batch job ID is in fact a batcher workflow
+// started by StartBatchOperation or StartAdminBatchOperation, that use a known
+// workflow type, and hide behind a batcher namespace division. This is used to
+// prevent batch APIs on non-batch workflows/jobs.
 func (wh *WorkflowHandler) getBatchJobExecution(
 	ctx context.Context,
 	nsName string,
