@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"encoding/gob"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
@@ -52,7 +53,7 @@ func (m *SqlStore) Close() {
 func (m *SqlStore) txExecute(ctx context.Context, operation string, f func(tx sqlplugin.Tx) error) error {
 	tx, err := m.DB.BeginTx(ctx)
 	if err != nil {
-		return serviceerror.NewUnavailablef("%s failed. Failed to start transaction. Error: %v", operation, err)
+		return convertSQLError(operation+" failed. Failed to start transaction", err)
 	}
 	err = f(tx)
 	if err != nil {
@@ -71,13 +72,26 @@ func (m *SqlStore) txExecute(ctx context.Context, operation string, f func(tx sq
 			*serviceerror.NotFound:
 			return err
 		default:
-			return serviceerror.NewUnavailablef("%v: %v", operation, err)
+			return convertSQLError(operation, err)
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		return serviceerror.NewUnavailablef("%s operation failed. Failed to commit transaction. Error: %v", operation, err)
+		return convertSQLError(operation+" operation failed. Failed to commit transaction", err)
 	}
 	return nil
+}
+
+// convertSQLError maps driver errors to persistence errors. Context cancel and
+// deadline must stay unwrap-able so callers can skip retries and error logs on
+// shutdown; other errors become Unavailable.
+func convertSQLError(message string, err error) error {
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return fmt.Errorf("%s: %w", message, err)
+	}
+	return serviceerror.NewUnavailablef("%s: %v", message, err)
 }
 
 func gobSerialize(x any) ([]byte, error) {
