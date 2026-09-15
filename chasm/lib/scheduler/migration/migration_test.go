@@ -468,6 +468,58 @@ func TestCHASMToLegacyStartScheduleArgs_PreservesInvokerBufferedOrder(t *testing
 	require.True(t, args.State.BufferedStarts[1].GetActualTime().AsTime().Equal(now.Add(-time.Hour)))
 }
 
+func TestLastCompletionResultSelectsFirstPayload(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		legacy *commonpb.Payloads
+	}{
+		{name: "nil"},
+		{name: "empty", legacy: &commonpb.Payloads{}},
+		{name: "one", legacy: &commonpb.Payloads{Payloads: []*commonpb.Payload{{Data: []byte("one")}}}},
+		{name: "multiple", legacy: &commonpb.Payloads{Payloads: []*commonpb.Payload{{Data: []byte("first")}, {Data: []byte("discarded")}}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			v2 := convertLastCompletionLegacyToCHASM(tc.legacy, nil)
+			v1, failure := convertLastCompletionCHASMToLegacy(v2)
+			require.Nil(t, failure)
+			if len(tc.legacy.GetPayloads()) == 0 {
+				require.Nil(t, v1)
+				return
+			}
+			first := tc.legacy.GetPayloads()[0]
+			require.Equal(t, first, v2.Success)
+			require.Equal(t, []*commonpb.Payload{first}, v1.GetPayloads())
+			require.NotSame(t, first, v1.GetPayloads()[0])
+		})
+	}
+}
+
+func TestConvertRunningWorkflowsToBufferedStarts_UsesRecentActionTimes(t *testing.T) {
+	migrationTime := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+	scheduleTime := timestamppb.New(migrationTime.Add(-time.Minute))
+	startTime := timestamppb.New(migrationTime.Add(-30 * time.Second))
+	starts := convertRunningWorkflowsToBufferedStarts(
+		[]*commonpb.WorkflowExecution{
+			{WorkflowId: "matched", RunId: "matched-run"},
+			{WorkflowId: "unmatched", RunId: "unmatched-run"},
+		},
+		[]*schedulepb.ScheduleActionResult{{
+			ScheduleTime:        scheduleTime,
+			ActualTime:          startTime,
+			StartWorkflowResult: &commonpb.WorkflowExecution{WorkflowId: "matched", RunId: "matched-run"},
+		}},
+		"namespace-id", "schedule-id", 1, migrationTime,
+	)
+
+	require.Len(t, starts, 2)
+	require.Nil(t, starts[0].NominalTime)
+	require.Equal(t, scheduleTime, starts[0].ActualTime)
+	require.Equal(t, startTime, starts[0].StartTime)
+	require.Nil(t, starts[1].NominalTime)
+	require.Equal(t, migrationTime, starts[1].ActualTime.AsTime())
+	require.Equal(t, migrationTime, starts[1].StartTime.AsTime())
+}
+
 func TestCHASMToLegacyStartScheduleArgs_ExcludesAllowAllFromRunningWorkflows(t *testing.T) {
 	// Regression test: workflows started under ALLOW_ALL are tracked in V2 as
 	// BufferedStarts with a RunId (and no Completed) while they run. Modern V1
@@ -628,7 +680,7 @@ func TestConvertRunningWorkflowsToBufferedStarts_UniqueRequestIDs(t *testing.T) 
 	}
 
 	starts := convertRunningWorkflowsToBufferedStarts(
-		running, "ns-id", "sched-id", 1, now,
+		running, nil, "ns-id", "sched-id", 1, now,
 	)
 	require.Len(t, starts, 3)
 
