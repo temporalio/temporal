@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -27,10 +28,11 @@ const (
 )
 
 type (
-	// DCRedirectionPolicy is a DC redirection policy interface
+	// DCRedirectionPolicy is a DC redirection policy interface. fullMethod is the full
+	// gRPC method ("/pkg.Service/Method"), not the bare name.
 	DCRedirectionPolicy interface {
-		WithNamespaceIDRedirect(ctx context.Context, namespaceID namespace.ID, apiName string, req any, call func(string) error) error
-		WithNamespaceRedirect(ctx context.Context, namespaceName namespace.Name, apiName string, req any, call func(string) error) error
+		WithNamespaceIDRedirect(ctx context.Context, namespaceID namespace.ID, fullMethod string, req any, call func(string) error) error
+		WithNamespaceRedirect(ctx context.Context, namespaceName namespace.Name, fullMethod string, req any, call func(string) error) error
 	}
 
 	// NoopRedirectionPolicy is DC redirection policy which does nothing
@@ -46,41 +48,56 @@ type (
 		selectedAPIsOnlyForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		namespaceRegistry     namespace.Registry
 		selectedAPIsOnly      bool
+		// additionalWhitelisted are embedder methods that forward under the
+		// selected-APIs policy, keyed by full gRPC method. Nil by default. Without this
+		// an embedder could register a response constructor on the Redirection
+		// interceptor and still never forward, because the whitelist in
+		// selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs is private
+		// and holds only this server's own methods.
+		additionalWhitelisted map[string]struct{}
 	}
 )
 
-// selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs contains a list of APIs which can be redirected
+// selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs are the APIs the
+// selected-apis-forwarding policy forwards to the active cluster, keyed by full gRPC
+// method.
+//
+// Full methods rather than bare names because an embedder registers its own services on
+// this server: a bare "DescribeTaskQueue" cannot tell WorkflowService's from another
+// service's, and an entry meant for one would silently apply to the other.
 var selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs = map[string]struct{}{
 	// Workflow APIs
-	"StartWorkflowExecution":           {},
-	"SignalWithStartWorkflowExecution": {},
-	"SignalWorkflowExecution":          {},
-	"UpdateWorkflowExecution":          {},
-	"RequestCancelWorkflowExecution":   {},
-	"TerminateWorkflowExecution":       {},
-	"PauseWorkflowExecution":           {},
-	"UnpauseWorkflowExecution":         {},
-	"ResetWorkflowExecution":           {},
-	"DeleteWorkflowExecution":          {},
-	"QueryWorkflow":                    {},
-	"ExecuteMultiOperation":            {},
+	wfMethod("StartWorkflowExecution"):           {},
+	wfMethod("SignalWithStartWorkflowExecution"): {},
+	wfMethod("SignalWorkflowExecution"):          {},
+	wfMethod("UpdateWorkflowExecution"):          {},
+	wfMethod("RequestCancelWorkflowExecution"):   {},
+	wfMethod("TerminateWorkflowExecution"):       {},
+	wfMethod("PauseWorkflowExecution"):           {},
+	wfMethod("UnpauseWorkflowExecution"):         {},
+	wfMethod("ResetWorkflowExecution"):           {},
+	wfMethod("DeleteWorkflowExecution"):          {},
+	wfMethod("QueryWorkflow"):                    {},
+	wfMethod("ExecuteMultiOperation"):            {},
 
 	// Standalone Activity APIs
-	"StartActivityExecution":         {},
-	"RequestCancelActivityExecution": {},
-	"TerminateActivityExecution":     {},
-	"DeleteActivityExecution":        {},
-	"PauseActivityExecution":         {},
-	"UnpauseActivityExecution":       {},
-	"ResetActivityExecution":         {},
-	"UpdateActivityExecutionOptions": {},
+	wfMethod("StartActivityExecution"):         {},
+	wfMethod("RequestCancelActivityExecution"): {},
+	wfMethod("TerminateActivityExecution"):     {},
+	wfMethod("DeleteActivityExecution"):        {},
+	wfMethod("PauseActivityExecution"):         {},
+	wfMethod("UnpauseActivityExecution"):       {},
+	wfMethod("ResetActivityExecution"):         {},
+	wfMethod("UpdateActivityExecutionOptions"): {},
 
 	// Standalone Nexus Operation APIs
-	"StartNexusOperationExecution":         {},
-	"RequestCancelNexusOperationExecution": {},
-	"TerminateNexusOperationExecution":     {},
-	"DeleteNexusOperationExecution":        {},
+	wfMethod("StartNexusOperationExecution"):         {},
+	wfMethod("RequestCancelNexusOperationExecution"): {},
+	wfMethod("TerminateNexusOperationExecution"):     {},
+	wfMethod("DeleteNexusOperationExecution"):        {},
 }
+
+func wfMethod(name string) string { return api.WorkflowServicePrefix + name }
 
 // RedirectionPolicyGenerator generate corresponding redirection policy
 func RedirectionPolicyGenerator(
@@ -156,26 +173,42 @@ func NewAllAPIsForwardingPolicy(
 	}
 }
 
+// WithAdditionalWhitelistedMethods returns a copy of the policy that also forwards the
+// given full gRPC methods under the selected-APIs policy.
+//
+// Embedders use it to opt their own methods into forwarding.
+func (policy *SelectedAPIsForwardingRedirectionPolicy) WithAdditionalWhitelistedMethods(fullMethods ...string) *SelectedAPIsForwardingRedirectionPolicy {
+	clone := *policy
+	clone.additionalWhitelisted = make(map[string]struct{}, len(policy.additionalWhitelisted)+len(fullMethods))
+	for method := range policy.additionalWhitelisted {
+		clone.additionalWhitelisted[method] = struct{}{}
+	}
+	for _, method := range fullMethods {
+		clone.additionalWhitelisted[method] = struct{}{}
+	}
+	return &clone
+}
+
 // WithNamespaceIDRedirect redirect the API call based on namespace ID
-func (policy *SelectedAPIsForwardingRedirectionPolicy) WithNamespaceIDRedirect(ctx context.Context, namespaceID namespace.ID, apiName string, _ any, call func(string) error) error {
+func (policy *SelectedAPIsForwardingRedirectionPolicy) WithNamespaceIDRedirect(ctx context.Context, namespaceID namespace.ID, fullMethod string, _ any, call func(string) error) error {
 	namespaceEntry, err := policy.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
 	}
-	return policy.withRedirect(ctx, namespaceEntry, apiName, call)
+	return policy.withRedirect(ctx, namespaceEntry, fullMethod, call)
 }
 
 // WithNamespaceRedirect redirect the API call based on namespace name
-func (policy *SelectedAPIsForwardingRedirectionPolicy) WithNamespaceRedirect(ctx context.Context, namespaceName namespace.Name, apiName string, _ any, call func(string) error) error {
+func (policy *SelectedAPIsForwardingRedirectionPolicy) WithNamespaceRedirect(ctx context.Context, namespaceName namespace.Name, fullMethod string, _ any, call func(string) error) error {
 	namespaceEntry, err := policy.namespaceRegistry.GetNamespace(namespaceName)
 	if err != nil {
 		return err
 	}
-	return policy.withRedirect(ctx, namespaceEntry, apiName, call)
+	return policy.withRedirect(ctx, namespaceEntry, fullMethod, call)
 }
 
-func (policy *SelectedAPIsForwardingRedirectionPolicy) withRedirect(ctx context.Context, namespaceEntry *namespace.Namespace, apiName string, call func(string) error) error {
-	targetDC, enableNamespaceNotActiveForwarding := policy.getTargetClusterAndIsNamespaceNotActiveAutoForwarding(ctx, namespaceEntry, apiName)
+func (policy *SelectedAPIsForwardingRedirectionPolicy) withRedirect(ctx context.Context, namespaceEntry *namespace.Namespace, fullMethod string, call func(string) error) error {
+	targetDC, enableNamespaceNotActiveForwarding := policy.getTargetClusterAndIsNamespaceNotActiveAutoForwarding(ctx, namespaceEntry, fullMethod)
 
 	err := call(targetDC)
 
@@ -186,6 +219,15 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) withRedirect(ctx context.
 	return call(targetDC)
 }
 
+// whitelisted reports whether fullMethod forwards under the selected-APIs policy.
+func (policy *SelectedAPIsForwardingRedirectionPolicy) whitelisted(fullMethod string) bool {
+	if _, ok := selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs[fullMethod]; ok {
+		return true
+	}
+	_, ok := policy.additionalWhitelisted[fullMethod]
+	return ok
+}
+
 func (policy *SelectedAPIsForwardingRedirectionPolicy) isNamespaceNotActiveError(err error) (string, bool) {
 	namespaceNotActiveErr, ok := err.(*serviceerror.NamespaceNotActive)
 	if !ok {
@@ -194,7 +236,7 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) isNamespaceNotActiveError
 	return namespaceNotActiveErr.ActiveCluster, true
 }
 
-func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsNamespaceNotActiveAutoForwarding(ctx context.Context, namespaceEntry *namespace.Namespace, apiName string) (string, bool) {
+func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsNamespaceNotActiveAutoForwarding(ctx context.Context, namespaceEntry *namespace.Namespace, fullMethod string) (string, bool) {
 	if !namespaceEntry.IsGlobalNamespace() {
 		return policy.currentClusterName, false
 	}
@@ -207,7 +249,7 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsName
 	// Get routingKey from context (set by RoutingKeyInterceptor)
 	routingKey := GetRoutingKeyFromContext(ctx)
 
-	if _, whitelisted := selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs[apiName]; whitelisted {
+	if policy.whitelisted(fullMethod) {
 		// redirect if API is whitelisted
 		return namespaceEntry.ActiveClusterName(routingKey), true
 	}
