@@ -35,11 +35,10 @@ type (
 		requestErrorHandler    ErrorHandler
 		// Keyed by full gRPC method.
 		additionalAllowedMethodsDuringHandover map[string]struct{}
-		// additionalServicePrefixes are gRPC service prefixes (besides WorkflowService) whose
-		// methods the handover gate also applies to. Empty by default; embedders set these via
-		// WithAdditionalServicePrefixes so the gate can cover other transports (e.g. a proxy
-		// service) whose requests already expose their namespace, without this package knowing
-		// about them.
+		// additionalServicePrefixes are gRPC service prefixes (besides WorkflowService)
+		// whose methods the handover gate also applies to. Empty by default; embedders set
+		// these via WithAdditionalServicePrefixes, for their own services whose requests
+		// expose a namespace, without this package knowing about them.
 		additionalServicePrefixes []string
 	}
 )

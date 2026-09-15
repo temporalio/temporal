@@ -61,8 +61,8 @@ func TestSelectedAPIsForwarding_WhitelistIsFullMethodScoped(t *testing.T) {
 		"HistoryService has the same method name and must not inherit the entry")
 
 	// ScheduleWorkflowTask exists on HistoryService and is deliberately absent from the
-	// server's whitelist: no client calls it. An embedder proxying it cross-cluster still
-	// needs it forwarded, which is what the extension point is for.
+	// server's whitelist: no client calls it. An embedder that needs it forwarded between
+	// clusters uses the extension point.
 	require.NotContains(t, selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs,
 		api.HistoryServicePrefix+"ScheduleWorkflowTask")
 	require.False(t, policy.whitelisted(api.HistoryServicePrefix+"ScheduleWorkflowTask"))

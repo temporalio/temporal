@@ -63,7 +63,7 @@ type (
 // method.
 //
 // Full methods rather than bare names because an embedder registers its own services on
-// this server: a bare "DescribeTaskQueue" cannot tell WorkflowService's from a proxy
+// this server: a bare "DescribeTaskQueue" cannot tell WorkflowService's from another
 // service's, and an entry meant for one would silently apply to the other.
 var selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs = map[string]struct{}{
 	// Workflow APIs
