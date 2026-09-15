@@ -9,12 +9,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/testing/await"
 )
 
 // nonHTTPTransport is a RoundTripper that is not *http.Transport, used to
-// verify that wrapDialLogger bails out on unsupported transport types.
+// verify that wrapDialContext bails out on unsupported transport types.
 type nonHTTPTransport struct{}
 
 func (t *nonHTTPTransport) RoundTrip(*http.Request) (*http.Response, error) { return nil, nil }
@@ -99,18 +98,18 @@ func TestDialFailureCache_Cleanup_StopsOnContextCancel(t *testing.T) {
 	cancel() // goroutine should exit cleanly
 }
 
-// ===== wrapDialLogger =====
+// ===== wrapDialContext =====
 
 func TestWrapDialLogger_NonHTTPTransport_Unchanged(t *testing.T) {
 	custom := &nonHTTPTransport{}
 	httpClient := &http.Client{Transport: custom}
-	wrapDialLogger(httpClient, log.NewNoopLogger())
+	wrapDialContext(httpClient)
 	require.Equal(t, custom, httpClient.Transport, "non-*http.Transport should not be replaced")
 }
 
 func TestWrapDialLogger_NilTransport_SetsHTTPTransport(t *testing.T) {
 	httpClient := &http.Client{}
-	wrapDialLogger(httpClient, log.NewNoopLogger())
+	wrapDialContext(httpClient)
 	_, ok := httpClient.Transport.(*http.Transport)
 	require.True(t, ok, "expected a *http.Transport to be set on the client")
 }
@@ -125,7 +124,7 @@ func TestWrapDialLogger_DialSuccess_ReturnsConn(t *testing.T) {
 	}
 
 	httpClient := &http.Client{Transport: transport}
-	wrapDialLogger(httpClient, log.NewNoopLogger())
+	wrapDialContext(httpClient)
 
 	conn, err := transport.DialContext(context.Background(), "tcp", "127.0.0.1:9200")
 	require.NoError(t, err)
@@ -139,7 +138,7 @@ func TestWrapDialLogger_DialFailure_ReturnsError(t *testing.T) {
 	}
 
 	httpClient := &http.Client{Transport: transport}
-	wrapDialLogger(httpClient, log.NewNoopLogger())
+	wrapDialContext(httpClient)
 
 	_, err := transport.DialContext(context.Background(), "tcp", "127.0.0.1:9200")
 	require.Error(t, err)
@@ -160,7 +159,7 @@ func TestWrapDialLogger_BaseDialer_CalledWithIP(t *testing.T) {
 	}
 
 	httpClient := &http.Client{Transport: transport}
-	wrapDialLogger(httpClient, log.NewNoopLogger())
+	wrapDialContext(httpClient)
 
 	conn, err := transport.DialContext(context.Background(), "tcp", "127.0.0.1:9200")
 	require.NoError(t, err)
@@ -187,7 +186,7 @@ func TestWrapDialLogger_FailedDial_MarksIPBad(t *testing.T) {
 	}
 
 	httpClient := &http.Client{Transport: transport}
-	wrapDialLogger(httpClient, log.NewNoopLogger())
+	wrapDialContext(httpClient)
 
 	// First dial fails.
 	_, err := transport.DialContext(context.Background(), "tcp", "127.0.0.1:9200")
@@ -212,7 +211,7 @@ func TestWrapDialLogger_MalformedAddr_FallsBackToBaseDialer(t *testing.T) {
 	}
 
 	httpClient := &http.Client{Transport: transport}
-	wrapDialLogger(httpClient, log.NewNoopLogger())
+	wrapDialContext(httpClient)
 
 	// Malformed addr: wrapper cannot split host/port, falls back to base dialer unchanged.
 	conn, err := transport.DialContext(context.Background(), "tcp", "not-valid-addr")
@@ -228,7 +227,7 @@ func TestWrapDialLogger_CancelledContext_ReturnsError(t *testing.T) {
 	}
 
 	httpClient := &http.Client{Transport: transport}
-	wrapDialLogger(httpClient, log.NewNoopLogger())
+	wrapDialContext(httpClient)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

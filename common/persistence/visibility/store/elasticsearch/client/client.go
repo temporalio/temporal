@@ -11,7 +11,6 @@ import (
 	"github.com/olivere/elastic/v7"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/auth"
-	"go.temporal.io/server/common/log"
 )
 
 const (
@@ -65,7 +64,7 @@ type (
 	}
 )
 
-func NewEsHTTPClient(cfg *Config, logger log.Logger) (*http.Client, error) {
+func NewEsHTTPClient(cfg *Config) (*http.Client, error) {
 	var httpClient *http.Client
 
 	if c := cfg.GetHttpClient(); c != nil {
@@ -90,7 +89,7 @@ func NewEsHTTPClient(cfg *Config, logger log.Logger) (*http.Client, error) {
 		httpClient.Timeout = 60 * time.Second
 	}
 
-	wrapDialLogger(httpClient, logger)
+	wrapDialContext(httpClient)
 	return httpClient, nil
 }
 

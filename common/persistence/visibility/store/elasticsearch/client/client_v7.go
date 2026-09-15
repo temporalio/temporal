@@ -15,7 +15,6 @@ import (
 	"github.com/olivere/elastic/v7/uritemplates"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 )
 
 func NewEsClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*elastic.Client, error) {
@@ -44,7 +43,7 @@ func NewEsClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*elas
 
 	if httpClient == nil {
 		var err error
-		httpClient, err = NewEsHTTPClient(cfg, logger)
+		httpClient, err = NewEsHTTPClient(cfg)
 		if err != nil {
 			return nil, err
 		}
@@ -184,15 +183,13 @@ func (c *dialFailureCache) startCleanup(ctx context.Context) {
 	}()
 }
 
-// wrapDialLogger wraps the transport's DialContext to:
-//  1. Log the remote IP for each new TCP connection to Elasticsearch.
-//  2. Route new connections away from recently-failed IPs via a per-IP
-//     failure cache. On each dial the hostname is resolved to all IPs;
-//     IPs not currently marked unhealthy are tried first. A short per-IP
-//     deadline (dialFailureCacheDialTimeout) ensures that a node whose
-//     SYN packets are silently dropped (e.g. by a NACL) fails fast rather
-//     than consuming the full HTTP-client timeout.
-func wrapDialLogger(httpClient *http.Client, logger log.Logger) {
+// wrapDialContext wraps the transport's DialContext to route new connections
+// away from recently-failed IPs via a per-IP failure cache. On each dial the
+// hostname is resolved to all IPs; IPs not currently marked unhealthy are
+// tried first. A short per-IP deadline (dialFailureCacheDialTimeout) ensures
+// that a node whose SYN packets are silently dropped (e.g. by a NACL) fails
+// fast rather than consuming the full HTTP-client timeout.
+func wrapDialContext(httpClient *http.Client) {
 	var transport *http.Transport
 	switch t := httpClient.Transport.(type) {
 	case *http.Transport:
@@ -256,10 +253,6 @@ func wrapDialLogger(httpClient *http.Client, logger log.Logger) {
 
 			if dialErr != nil {
 				cb.markBad(ip)
-				logger.Debug("Elasticsearch TCP connection failed, marking IP unhealthy",
-					tag.NewStringTag("remote_ip", ip),
-					tag.NewStringTag("error", dialErr.Error()),
-				)
 				lastErr = dialErr
 				if ctx.Err() != nil {
 					// Parent context expired; no point trying remaining IPs.
@@ -269,10 +262,6 @@ func wrapDialLogger(httpClient *http.Client, logger log.Logger) {
 			}
 
 			cb.markGood(ip)
-			logger.Debug("Elasticsearch TCP connection established",
-				tag.NewStringTag("remote_addr", conn.RemoteAddr().String()),
-				tag.NewStringTag("local_addr", conn.LocalAddr().String()),
-			)
 			return conn, nil
 		}
 
