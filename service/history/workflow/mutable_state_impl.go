@@ -698,6 +698,14 @@ func (ms *MutableStateImpl) ChasmSkipPersistenceEnabled() bool {
 		ms.config.EnableCHASMSkipPersistence(ms.GetNamespaceEntry().Name().String())
 }
 
+// ChasmLogicalTaskCountAlertThreshold implements chasm.NodeBackend.
+func (ms *MutableStateImpl) ChasmLogicalTaskCountAlertThreshold(chasmTaskType string) int {
+	if ms.config.ChasmLogicalTaskCountAlertThreshold == nil {
+		return 0
+	}
+	return ms.config.ChasmLogicalTaskCountAlertThreshold(chasmTaskType)
+}
+
 func (ms *MutableStateImpl) ChasmDLQScheduledPureTaskOnValidationEnabled() bool {
 	return ms.config.ChasmDLQScheduledPureTaskOnValidation != nil &&
 		ms.config.ChasmDLQScheduledPureTaskOnValidation(ms.GetNamespaceEntry().Name().String())
