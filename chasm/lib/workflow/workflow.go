@@ -17,6 +17,12 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// Both components hold callbacks, so both have to be a CompletionSource for their delivery.
+var (
+	_ callback.CompletionSource = (*Workflow)(nil)
+	_ callback.CompletionSource = (*WorkflowUpdate)(nil)
+)
+
 type Workflow struct {
 	chasm.UnimplementedComponent
 
