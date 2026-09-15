@@ -121,10 +121,12 @@ func (s *PriMatcherSuite) TestEmitDispatchLatency_FairnessKeyTag() {
 	cases := []struct {
 		name      string
 		breakdown bool
+		taskKey   string
 		wantKey   string
 	}{
-		{"breakdown enabled tags the real key", true, "orders"},
-		{"breakdown disabled omits the key", false, "__omitted__"},
+		{"breakdown enabled tags the real key", true, "orders", "orders"},
+		{"breakdown enabled maps an empty key to unknown", true, "", "_unknown_"},
+		{"breakdown disabled omits the key", false, "orders", "__omitted__"},
 	}
 	for _, tc := range cases {
 		s.Run(tc.name, func() {
@@ -155,7 +157,7 @@ func (s *PriMatcherSuite) TestEmitDispatchLatency_FairnessKeyTag() {
 
 			task := newInternalTaskForSyncMatch(&persistencespb.TaskInfo{
 				CreateTime: timestamppb.New(time.Now().Add(-time.Second)),
-				Priority:   &commonpb.Priority{PriorityKey: 3, FairnessKey: "orders"},
+				Priority:   &commonpb.Priority{PriorityKey: 3, FairnessKey: tc.taskKey},
 			}, nil, 0, nil)
 
 			tm.emitDispatchLatency(task, false)

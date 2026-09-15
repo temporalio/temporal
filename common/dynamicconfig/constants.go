@@ -1400,8 +1400,8 @@ backlog lag, count, and age for VERSIONED queues.`,
 	MetricsBreakdownByFairnessKey = NewTaskQueueBoolSetting(
 		"metrics.breakdownByFairnessKey",
 		false,
-		`MetricsBreakdownByFairnessKey determines if the 'fairness_key' tag on Matching dispatch metrics
-(task_dispatch_latency, poll_success, poll_success_with_sync) contains the actual client-supplied fairness key or a
+		`MetricsBreakdownByFairnessKey determines if the 'fairness_key' tag on Matching task metrics
+(tasks_added, task_dispatch_latency, poll_success, poll_success_sync) contains the actual client-supplied fairness key or a
 generic "__omitted__" value. Fairness keys are client-supplied and potentially unbounded, so this defaults to disabled;
 enable it only if your observability stack can absorb the added cardinality.`,
 	)

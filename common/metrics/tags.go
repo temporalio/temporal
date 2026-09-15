@@ -367,7 +367,9 @@ func MatchingTaskPriorityTag(value int32) Tag {
 
 func FairnessKeyTag(value string, breakdown bool) Tag {
 	if !breakdown {
-		value = "__omitted__"
+		value = omitted
+	} else if value == "" {
+		value = unknownValue
 	}
 	return Tag{Key: FairnessKeyTagName, Value: value}
 }
