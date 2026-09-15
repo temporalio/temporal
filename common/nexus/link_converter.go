@@ -25,11 +25,8 @@ const (
 	urlPathWorkflowEventTemplate  = "/namespaces/%s/workflows/%s/%s/history"
 	urlPathNexusOperationTemplate = "/namespaces/%s/nexus-operations/%s/%s/details"
 	urlPathActivityTemplate       = "/namespaces/%s/activities/%s/%s/details"
+	urlPathCallbackTemplate       = "/namespaces/%s/%s/%s/%s/callbacks/%s" // The execution type (e.g. "workflows" or "activities") is variable.
 
-	// A callback link addresses one callback attached to an execution, so its path names the
-	// execution the way the links above do and then selects the callback by request ID:
-	// /namespaces/{ns}/{executionType}/{businessID}/{runID}/callbacks/{requestID}
-	urlPathCallbackTemplate     = "/namespaces/%s/%s/%s/%s/callbacks/%s"
 	urlPathExecutionTypeKey     = "executionType"
 	urlPathBusinessIDKey        = "businessID"
 	urlPathCallbackRequestIDKey = "callbackRequestID"
@@ -38,16 +35,31 @@ const (
 	linkEventIDKey                    = "eventID"
 	linkEventTypeKey                  = "eventType"
 	linkRequestIDKey                  = "requestID"
+
 	// linkComponentPathKey carries Link_Callback.component_path, repeated once per segment, in order.
+	// So this URL query parameter key may show up multiple times.
 	linkComponentPathKey = "componentPath"
 )
 
 var (
-	rePatternNamespace  = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathNamespaceKey)
-	rePatternWorkflowID = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathWorkflowIDKey)
-	rePatternActivityID = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathActivityIDKey)
-	rePatternRunID      = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathRunIDKey)
-	urlPathRE           = regexp.MustCompile(fmt.Sprintf(
+	rePatternActivityID        = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathActivityIDKey)
+	rePatternBusinessID        = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathBusinessIDKey)
+	rePatternCallbackRequestID = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathCallbackRequestIDKey)
+	rePatternExecutionType     = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathExecutionTypeKey)
+	rePatternNamespace         = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathNamespaceKey)
+	rePatternRunID             = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathRunIDKey)
+	rePatternWorkflowID        = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathWorkflowIDKey)
+
+	// executionTypeNames maps the type of execution a callback is attached to onto the URL
+	// path segment naming it. The values intentionally match the way existing URLs are rendered,
+	// so every temporal:// link addresses an execution the same way.
+	executionTypeNames = map[enumspb.ExecutionType]string{
+		enumspb.EXECUTION_TYPE_WORKFLOW:        "workflows",
+		enumspb.EXECUTION_TYPE_ACTIVITY:        "activities",
+		enumspb.EXECUTION_TYPE_NEXUS_OPERATION: "nexus-operations",
+	}
+
+	urlPathRE = regexp.MustCompile(fmt.Sprintf(
 		`^/namespaces/%s/workflows/%s/%s/history$`,
 		rePatternNamespace,
 		rePatternWorkflowID,
@@ -59,10 +71,7 @@ var (
 		rePatternActivityID,
 		rePatternRunID,
 	))
-	rePatternBusinessID        = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathBusinessIDKey)
-	rePatternCallbackRequestID = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathCallbackRequestIDKey)
-	rePatternExecutionType     = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathExecutionTypeKey)
-	urlPathCallbackRE          = regexp.MustCompile(fmt.Sprintf(
+	urlPathCallbackRE = regexp.MustCompile(fmt.Sprintf(
 		`^/namespaces/%s/%s/%s/%s/callbacks/%s$`,
 		rePatternNamespace,
 		rePatternExecutionType,
@@ -299,32 +308,11 @@ func convertURLQueryToLinkWorkflowEventRequestIdReference(queryValues url.Values
 	return requestIDRef, nil
 }
 
-// callbackLinkExecutionTypes maps the type of execution a callback is attached to onto the URL
-// path segment naming it. The segment is spelled the way the other link URLs in this file already
-// spell that kind of execution ("workflows", "activities", "nexus-operations"), so every
-// temporal:// link addresses an execution the same way.
-var callbackLinkExecutionTypes = map[enumspb.ExecutionType]string{
-	enumspb.EXECUTION_TYPE_WORKFLOW:        "workflows",
-	enumspb.EXECUTION_TYPE_ACTIVITY:        "activities",
-	enumspb.EXECUTION_TYPE_NEXUS_OPERATION: "nexus-operations",
-}
-
-// callbackLinkExecutionType is the inverse of callbackLinkExecutionTypes: it maps a URL path
-// segment back onto the execution type it names.
-func callbackLinkExecutionType(segment string) (enumspb.ExecutionType, bool) {
-	for executionType, candidate := range callbackLinkExecutionTypes {
-		if candidate == segment {
-			return executionType, true
-		}
-	}
-	return enumspb.EXECUTION_TYPE_UNSPECIFIED, false
-}
-
 // ConvertLinkCallbackToNexusLink converts a Link_Callback type to a Nexus Link. It fails when the
 // callback's execution type has no URL path segment.
 func ConvertLinkCallbackToNexusLink(cb *commonpb.Link_Callback) (nexus.Link, error) {
 	execution := cb.GetExecution()
-	executionType, ok := callbackLinkExecutionTypes[execution.GetType()]
+	executionType, ok := executionTypeNames[execution.GetType()]
 	if !ok {
 		return nexus.Link{}, fmt.Errorf(
 			"failed to convert Link_Callback to link: unsupported execution type: %s",
@@ -391,15 +379,22 @@ func ConvertNexusLinkToLinkCallback(link nexus.Link) (*commonpb.Link_Callback, e
 		return nil, errors.New("failed to parse link to Link_Callback: malformed URL path")
 	}
 
+	// Determine the execution type from the string found in the regex.
+	exType := enumspb.EXECUTION_TYPE_UNSPECIFIED
 	segment := matches[urlPathCallbackRE.SubexpIndex(urlPathExecutionTypeKey)]
-	executionType, ok := callbackLinkExecutionType(segment)
-	if !ok {
+	for knownType, knownTypeName := range executionTypeNames {
+		if knownTypeName == segment {
+			exType = knownType
+			break
+		}
+	}
+	if exType == enumspb.EXECUTION_TYPE_UNSPECIFIED {
 		return nil, fmt.Errorf(
 			"failed to parse link to Link_Callback: unsupported execution type: %q",
 			segment,
 		)
 	}
-	execution := &commonpb.Execution{Type: executionType}
+	execution := &commonpb.Execution{Type: exType}
 	cb.Execution = execution
 
 	var err error
