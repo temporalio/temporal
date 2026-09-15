@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/taskpoller"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -288,7 +289,76 @@ func TestPartitionScaling_Backlog(t *testing.T) {
 	await.RequireTrue(t, scalerBacklogEmpty(s, s.Tv(), 0, 1, 2, 3), 30*time.Second, time.Second)
 }
 
-// TODO: test disabling scaler
+// TestPartitionScaling_Disable verifies that disabling managed scaling cleanly
+// falls back to dynamic-config partition counts. After disabling, adds and
+// polls to partitions beyond the old managed range must succeed.
+func TestPartitionScaling_Disable(t *testing.T) {
+	// Conservative shrink keeps Write > 0 from stale BacklogState bits after
+	// disable, so the server-side validation gate stays active.
+	s := testcore.NewEnv(t, append(scalerEnvOptions(4),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingPartitionScaleManager, dynamicconfig.PartitionScaleManagerSettings{
+			MaxRate:            100,
+			BatchSize:          1,
+			BackgroundInterval: time.Second,
+			DrainBufferTime:    time.Second,
+			ShrinkRatio:        0.1,
+			ShrinkDelta:        1,
+		}),
+	)...)
+
+	t.Log("enable managed scaling to 2 partitions (DC=4)")
+	s.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
+		Enabled: true,
+		Fixed:   2,
+	})
+
+	t.Log("build backlog on partitions 0-1 to activate the scaler")
+	stopTasks := scalerBackgroundTasks(s, s.Tv(), 10)
+	defer stopTasks()
+	await.RequireTrue(t, scalerBacklogAtLeast(s, s.Tv(), 5, 0, 1), 15*time.Second, time.Second)
+	stopTasks()
+
+	// Drain all backlog. This also lets the drain path clear BacklogState bits
+	// 2-3 (partitions beyond the target that never had tasks). Without this,
+	// stale Read=4 would cover all DC partitions and mask the bug.
+	t.Log("drain all backlog")
+	stopPolls := scalerBackgroundPolls(s, s.Tv(), s.TaskPoller(), 3)
+	await.RequireTrue(t, scalerBacklogEmpty(s, s.Tv(), 0, 1), 15*time.Second, time.Second)
+	stopPolls()
+
+	t.Log("disable managed scaling")
+	s.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
+		Enabled: false,
+	})
+
+	// Wait for the scaler to process the disable and propagate scaleInfo.
+	time.Sleep(5 * time.Second) //nolint:forbidigo
+
+	t.Log("force traffic to partition 3 (valid under DC=4)")
+	cleanupWrite := s.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceWritePartition, 3))
+	defer cleanupWrite()
+	cleanupRead := s.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, 3))
+	defer cleanupRead()
+
+	t.Log("start workflow and verify task lands on partition 3 (add path)")
+	_, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:    s.Namespace().String(),
+		WorkflowId:   uuid.NewString(),
+		WorkflowType: s.Tv().WorkflowType(),
+		TaskQueue:    s.Tv().TaskQueue(),
+		Identity:     s.Tv().ClientIdentity(),
+		RequestId:    uuid.NewString(),
+	})
+	require.NoError(t, err)
+	await.RequireTrue(t, scalerBacklogAtLeast(s, s.Tv(), 1, 3), 10*time.Second, 500*time.Millisecond)
+
+	t.Log("poll partition 3 and complete the workflow task (poll path)")
+	_, err = s.TaskPoller().PollAndHandleWorkflowTask(
+		s.Tv(),
+		taskpoller.CompleteWorkflowHandler,
+	)
+	require.NoError(t, err)
+}
 
 func scalerBackgroundTasks(s testcore.Env, tv *testvars.TestVars, rate float32) func() {
 	ctx, cancel := context.WithCancel(context.Background())
