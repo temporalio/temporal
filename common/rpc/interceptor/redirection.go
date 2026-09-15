@@ -312,7 +312,9 @@ func (i *Redirection) handleRedirectAPIInvocation(
 		i.AfterCall(scope, startTime, targetClusterName, namespaceName.String(), retError)
 	}()
 
-	err = i.redirectionPolicy.WithNamespaceRedirect(ctx, namespaceName, methodName, req, func(targetDC string) error {
+	// The policy matches on the full method; methodName stays bare for metrics, whose
+	// operation names are keyed that way.
+	err = i.redirectionPolicy.WithNamespaceRedirect(ctx, namespaceName, info.FullMethod, req, func(targetDC string) error {
 		targetClusterName = targetDC
 		if targetClusterName == i.currentClusterName {
 			resp, err = handler(ctx, req)

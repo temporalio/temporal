@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"google.golang.org/grpc"
@@ -26,12 +27,13 @@ var _ grpc.UnaryServerInterceptor = (*NamespaceHandoverInterceptor)(nil).Interce
 type (
 	// NamespaceHandoverInterceptor handles the namespace in handover replication state
 	NamespaceHandoverInterceptor struct {
-		namespaceRegistry                      namespace.Registry
-		timeSource                             clock.TimeSource
-		nsCacheRefreshInterval                 dynamicconfig.DurationPropertyFn
-		metricsHandler                         metrics.Handler
-		logger                                 log.Logger
-		requestErrorHandler                    ErrorHandler
+		namespaceRegistry      namespace.Registry
+		timeSource             clock.TimeSource
+		nsCacheRefreshInterval dynamicconfig.DurationPropertyFn
+		metricsHandler         metrics.Handler
+		logger                 log.Logger
+		requestErrorHandler    ErrorHandler
+		// Keyed by full gRPC method.
 		additionalAllowedMethodsDuringHandover map[string]struct{}
 		// additionalServicePrefixes are gRPC service prefixes (besides WorkflowService) whose
 		// methods the handover gate also applies to. Empty by default; embedders set these via
@@ -52,9 +54,12 @@ func NewNamespaceHandoverInterceptor(
 	additionalAllowedMethodsDuringHandover []string,
 ) *NamespaceHandoverInterceptor {
 
-	additional := make(map[string]struct{}, len(additionalAllowedMethodsDuringHandover))
-	for _, m := range additionalAllowedMethodsDuringHandover {
-		additional[m] = struct{}{}
+	additional := newAdditionalAllowedMethods(additionalAllowedMethodsDuringHandover)
+	// Inert entries fail open here — a method meant to be let through a handover is not —
+	// so say so rather than start silently wrong. Both interceptors get this list from the
+	// same source, so checking it once covers both.
+	if err := validateFullMethods(additionalAllowedMethodsDuringHandover...); err != nil {
+		logger.Warn("handover allow-list entries will never match", tag.Error(err))
 	}
 
 	return &NamespaceHandoverInterceptor{
@@ -114,7 +119,7 @@ func (i *NamespaceHandoverInterceptor) Intercept(
 				metrics.HandoverWaitLatency.With(i.metricsHandler).Record(*waitTime)
 			}
 		}()
-		waitTime, err := i.waitNamespaceHandoverUpdate(ctx, namespaceName, methodName)
+		waitTime, err := i.waitNamespaceHandoverUpdate(ctx, namespaceName, info.FullMethod)
 		if err != nil {
 			metricsHandler, logTags := CreateUnaryMetricsHandlerLogTags(
 				i.metricsHandler,
@@ -144,12 +149,9 @@ func (i *NamespaceHandoverInterceptor) Intercept(
 func (i *NamespaceHandoverInterceptor) waitNamespaceHandoverUpdate(
 	ctx context.Context,
 	namespaceName namespace.Name,
-	methodName string,
+	fullMethod string,
 ) (waitTime *time.Duration, retErr error) {
-	if _, ok := allowedMethodsDuringHandover[methodName]; ok {
-		return nil, nil
-	}
-	if _, ok := i.additionalAllowedMethodsDuringHandover[methodName]; ok {
+	if handoverAllowed(fullMethod, i.additionalAllowedMethodsDuringHandover) {
 		return nil, nil
 	}
 
