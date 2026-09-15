@@ -128,6 +128,9 @@ func (s *queueV2Store) EnqueueMessage(
 	} else {
 		nextMessageID = lastMessageID + 1
 	}
+	// Retaining the maximum physical ID prevents fresh allocations from going backwards, but does not
+	// fence this earlier allocation: cleanup can remove nextMessageID before the conditional insert,
+	// allowing it to succeed below the queue's minimum readable ID.
 	err = s.tryInsert(ctx, request.QueueType, request.QueueName, request.Blob, nextMessageID)
 	if err != nil {
 		return nil, err
