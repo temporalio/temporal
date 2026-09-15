@@ -13,6 +13,11 @@ consult library config or schedule tasks. Keep config lookups on write paths.
 
 ## Reading a persisted tree outside the history service
 
-Use `chasm.NewDetachedTree` rather than `NewTreeFromDB` with a hand rolled backend. It takes
-the facts living outside the tree (`chasm.ExecutionMetadata`) explicitly, and panics on write
-paths rather than fabricating state.
+Use `chasm.DetachedRootComponent` to decode nodes into a typed root component, or
+`chasm.NewDetachedTree` when you need the tree itself. Both panic on write paths rather than
+fabricating state.
+
+There is no execution behind a detached tree, so `Context.ExecutionKey` and
+`Context.ExecutionInfo` read back zero. Those facts live on the mutable state row that held
+the nodes, not in the nodes, so a component read detached cannot report them and a caller that
+knows them fills them in.

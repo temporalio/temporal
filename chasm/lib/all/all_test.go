@@ -54,20 +54,12 @@ func TestDetachedRead_StandaloneActivity(t *testing.T) {
 
 	nodes := persistStandaloneActivity(t, registry)
 
-	metadata := chasm.ExecutionMetadata{
-		WorkflowKey:          definition.NewWorkflowKey("ns-id", "my-activity-id", "run-id-1"),
-		CloseTime:            time.Unix(900, 0).UTC(),
-		StateTransitionCount: 7,
-		PersistedSize:        4242,
-	}
-
 	// Archetype is readable before decoding, so a caller can dispatch on it.
 	archetype, err := chasm.RootArchetype(nodes, registry)
 	require.NoError(t, err)
 	require.Equal(t, activity.Archetype, archetype)
 
-	act, ctx, err := chasm.DetachedRootComponent[*activity.Activity](
-		context.Background(), nodes, metadata, registry)
+	act, ctx, err := chasm.DetachedRootComponent[*activity.Activity](context.Background(), nodes, registry)
 	require.NoError(t, err)
 
 	// State decoded from the root node and its data children.
@@ -78,13 +70,11 @@ func TestDetachedRead_StandaloneActivity(t *testing.T) {
 	require.NotNil(t, act.Outcome.Get(ctx).GetSuccessful())
 	require.True(t, act.LifecycleState(ctx).IsClosed())
 
-	// Facts absent from the tree, supplied via ExecutionMetadata and read through Context.
-	require.Equal(t, "ns-id", ctx.ExecutionKey().NamespaceID)
-	require.Equal(t, "my-activity-id", ctx.ExecutionKey().BusinessID)
-	require.Equal(t, "run-id-1", ctx.ExecutionKey().RunID)
-	require.Equal(t, time.Unix(900, 0).UTC(), ctx.ExecutionInfo().CloseTime)
-	require.Equal(t, int64(7), ctx.ExecutionInfo().StateTransitionCount)
-	require.Equal(t, 4242, ctx.ExecutionInfo().ApproximateStateSize)
+	// Execution facts are absent from the tree, so they read back zero rather than wrong.
+	require.Equal(t, chasm.ExecutionKey{}, ctx.ExecutionKey())
+	require.Zero(t, ctx.ExecutionInfo().CloseTime)
+	require.Zero(t, ctx.ExecutionInfo().StateTransitionCount)
+	require.Zero(t, ctx.ExecutionInfo().ApproximateStateSize)
 }
 
 // TestDetachedRead_WritePathPanics documents the read only contract: a write path panics
@@ -93,13 +83,7 @@ func TestDetachedRead_WritePathPanics(t *testing.T) {
 	registry, err := all.NewRegistry(log.NewTestLogger())
 	require.NoError(t, err)
 
-	root, err := chasm.NewDetachedTree(
-		persistStandaloneActivity(t, registry),
-		chasm.ExecutionMetadata{
-			WorkflowKey: definition.NewWorkflowKey("ns-id", "my-activity-id", "run-id-1"),
-		},
-		registry,
-	)
+	root, err := chasm.NewDetachedTree(persistStandaloneActivity(t, registry), registry)
 	require.NoError(t, err)
 
 	require.Panics(t, func() {
@@ -108,24 +92,24 @@ func TestDetachedRead_WritePathPanics(t *testing.T) {
 }
 
 // TestDetachedRootComponent_Interface covers instantiating C as an interface rather than a
-// concrete type, which is how callers reach an export or describe method.
+// concrete type, which is how a caller reaches DescribeComponent without naming the root's
+// type. The constraint stays Component, not RootComponent, so an interface like
+// DescribableComponent can be used here.
 func TestDetachedRootComponent_Interface(t *testing.T) {
 	registry, err := all.NewRegistry(log.NewTestLogger())
 	require.NoError(t, err)
 
-	component, ctx, err := chasm.DetachedRootComponent[chasm.RootComponent](
+	component, ctx, err := chasm.DetachedRootComponent[chasm.Component](
 		context.Background(),
 		persistStandaloneActivity(t, registry),
-		chasm.ExecutionMetadata{
-			WorkflowKey: definition.NewWorkflowKey("ns-id", "my-activity-id", "run-id-1"),
-		},
 		registry,
 	)
 	require.NoError(t, err)
 	require.True(t, component.LifecycleState(ctx).IsClosed())
 }
 
-// TestDetachedRootComponent_WrongType reports a mismatch rather than returning a zero value.
+// TestDetachedRootComponent_WrongType reports the mismatch rather than handing back a zero
+// value.
 func TestDetachedRootComponent_WrongType(t *testing.T) {
 	registry, err := all.NewRegistry(log.NewTestLogger())
 	require.NoError(t, err)
@@ -133,7 +117,6 @@ func TestDetachedRootComponent_WrongType(t *testing.T) {
 	_, _, err = chasm.DetachedRootComponent[*chasm.Visibility](
 		context.Background(),
 		persistStandaloneActivity(t, registry),
-		chasm.ExecutionMetadata{},
 		registry,
 	)
 	require.ErrorContains(t, err, "root component is *activity.Activity")
