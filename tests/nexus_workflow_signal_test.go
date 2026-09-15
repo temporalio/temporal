@@ -45,8 +45,8 @@ func (c signalOperationCaller) isStandalone() bool {
 func (s *NexusWorkflowTestSuite) TestNexusOperationBackedBySignal(chasmEnabled bool) {
 	env := s.newTestEnv(chasmEnabled)
 	ctx := s.Context()
-	taskQueue := testcore.RandomizeStr(s.T().Name())
-	handlerWorkflowID := testcore.RandomizeStr(s.T().Name() + "-handler")
+	taskQueue := env.Tv().TaskQueue().Name
+	handlerWorkflowID := env.Tv().WorkflowID() + "-handler"
 	nexusHandler := nexustest.Handler{
 		OnStartOperation: func(
 			ctx context.Context,
@@ -80,12 +80,12 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationBackedBySignal(chasmEnabled b
 	}
 	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), nexusHandler)
 	w := worker.New(env.SdkClient(), taskQueue, worker.Options{})
-	w.RegisterWorkflow(signalHandlerWorkflow)
-	w.RegisterWorkflow(signalCallerWorkflow)
+	w.RegisterWorkflow(nexusSignalHandlerWorkflow)
+	w.RegisterWorkflow(nexusSignalCallerWorkflow)
 	s.NoError(w.Start())
 	defer w.Stop()
 
-	handlerRun, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{ID: handlerWorkflowID, TaskQueue: taskQueue}, signalHandlerWorkflow)
+	handlerRun, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{ID: handlerWorkflowID, TaskQueue: taskQueue}, nexusSignalHandlerWorkflow)
 	s.NoError(err)
 	callerKinds := []string{"Workflow"}
 	if chasmEnabled {
@@ -118,8 +118,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationBackedBySignal(chasmEnabled b
 func (s *NexusWorkflowTestSuite) TestNexusOperationBackedBySignalWithStart(chasmEnabled bool) {
 	env := s.newTestEnv(chasmEnabled)
 	ctx := s.Context()
-	taskQueue := testcore.RandomizeStr(s.T().Name())
-	handlerWorkflowID := testcore.RandomizeStr(s.T().Name() + "-handler")
+	taskQueue := env.Tv().TaskQueue().Name
+	handlerWorkflowID := env.Tv().WorkflowID() + "-handler"
 	const handlerWorkflowType = "nexus-signal-with-start-handler"
 	nexusHandler := nexustest.Handler{
 		OnStartOperation: func(
@@ -156,8 +156,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationBackedBySignalWithStart(chasm
 	}
 	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), nexusHandler)
 	w := worker.New(env.SdkClient(), taskQueue, worker.Options{})
-	w.RegisterWorkflowWithOptions(signalHandlerWorkflow, workflow.RegisterOptions{Name: handlerWorkflowType})
-	w.RegisterWorkflow(signalCallerWorkflow)
+	w.RegisterWorkflowWithOptions(nexusSignalHandlerWorkflow, workflow.RegisterOptions{Name: handlerWorkflowType})
+	w.RegisterWorkflow(nexusSignalCallerWorkflow)
 	s.NoError(w.Start())
 	defer w.Stop()
 
@@ -238,7 +238,7 @@ func (s *NexusWorkflowTestSuite) startCaller(
 		s.True(resp.GetStarted())
 		return signalOperationCaller{operationID: operationID, operationRunID: resp.GetRunId()}
 	}
-	callerRun, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{TaskQueue: taskQueue}, signalCallerWorkflow, endpointName, operation, args)
+	callerRun, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{TaskQueue: taskQueue}, nexusSignalCallerWorkflow, endpointName, operation, args)
 	s.NoError(err)
 	return signalOperationCaller{workflowRun: callerRun}
 }
@@ -423,13 +423,13 @@ func (s *NexusWorkflowTestSuite) resetHandlerWorkflowAfterSignal(
 	return env.SdkClient().GetWorkflow(ctx, handlerRun.GetID(), resetResp.GetRunId())
 }
 
-func signalHandlerWorkflow(ctx workflow.Context) error {
+func nexusSignalHandlerWorkflow(ctx workflow.Context) error {
 	workflow.GetSignalChannel(ctx, nexusSignalName).Receive(ctx, nil)
 	workflow.GetSignalChannel(ctx, finishSignalName).Receive(ctx, nil)
 	return nil
 }
 
-func signalCallerWorkflow(ctx workflow.Context, endpointName, operation string, args signalOperationArgs) (string, error) {
+func nexusSignalCallerWorkflow(ctx workflow.Context, endpointName, operation string, args signalOperationArgs) (string, error) {
 	var result string
 	err := workflow.NewNexusClient(endpointName, "service").
 		ExecuteOperation(ctx, operation, args, workflow.NexusOperationOptions{}).
