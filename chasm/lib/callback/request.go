@@ -10,8 +10,7 @@ import (
 	"go.temporal.io/server/common/nexus"
 )
 
-// Header key used to identify callbacks that originate from and target the same cluster.
-// Note: this is the nexusoperations.NexusCallbackSourceHeader stripped of Nexus-Callback-
+// Legacy header key used to identify callbacks that originate from and target the same cluster.
 const callbackSourceHeader = "source"
 
 func routeRequest(
@@ -21,35 +20,42 @@ func routeRequest(
 	defaultClient *http.Client,
 	localClient *common.FrontendHTTPClient,
 	logger log.Logger,
+	inspectSourceHeader bool,
 ) (*http.Response, error) {
-	// This source header is populated in nexusoperations/executors (via the ClientProvider) for worker targets
-	// if this header is not populated then we assume it's and external target.
-	if r.Header == nil || r.Header.Get(callbackSourceHeader) == "" {
+	isSystemCallback := r.URL.String() == nexus.SystemCallbackURL
+	callbackSource := ""
+	if inspectSourceHeader {
+		callbackSource = r.Header.Get(callbackSourceHeader)
+	}
+	// Older servers populated this header for worker targets. Treat non-system requests as external unless legacy inspection is enabled.
+	if !isSystemCallback && callbackSource == "" {
 		return defaultClient.Do(r)
 	}
 	// If we got here, we assume that the endpoint in the original call was a worker target, and we should route
 	// internally, either to a local frontend, or one of the other connected clusters' frontends.
 	var frontendClient *common.FrontendHTTPClient
-	callbackSource := r.Header.Get(callbackSourceHeader)
-	for clusterName, clusterInfo := range clusterMetadata.GetAllClusterInfo() {
-		if callbackSource == clusterInfo.ClusterID {
-			if clusterMetadata.GetCurrentClusterName() == clusterName {
-				frontendClient = localClient
-			} else {
-				fec, err := httpClientCache.Get(clusterName)
-				if err != nil {
-					logger.Warn(
-						"HTTPCallerProvider unable to get FrontendHTTPClient for callback target cluster. Using local HTTP Client.",
-						tag.SourceCluster(clusterMetadata.GetCurrentClusterName()),
-						tag.TargetCluster(clusterName),
-						tag.Error(err),
-					)
+	// Empty cluster IDs are valid, so only try to match a non-empty source.
+	if callbackSource != "" {
+		for clusterName, clusterInfo := range clusterMetadata.GetAllClusterInfo() {
+			if callbackSource == clusterInfo.ClusterID {
+				if clusterMetadata.GetCurrentClusterName() == clusterName {
 					frontendClient = localClient
 				} else {
-					frontendClient = fec
+					fec, err := httpClientCache.Get(clusterName)
+					if err != nil {
+						logger.Warn(
+							"HTTPCallerProvider unable to get FrontendHTTPClient for callback target cluster. Using local HTTP Client.",
+							tag.SourceCluster(clusterMetadata.GetCurrentClusterName()),
+							tag.TargetCluster(clusterName),
+							tag.Error(err),
+						)
+						frontendClient = localClient
+					} else {
+						frontendClient = fec
+					}
 				}
+				break
 			}
-			break
 		}
 	}
 	if frontendClient == nil {
@@ -61,7 +67,7 @@ func routeRequest(
 		frontendClient = localClient
 	}
 
-	if r.URL.String() == nexus.SystemCallbackURL {
+	if isSystemCallback {
 		r.URL.Path = nexus.PathCompletionCallbackNoIdentifier
 	}
 	r.URL.Scheme = frontendClient.Scheme

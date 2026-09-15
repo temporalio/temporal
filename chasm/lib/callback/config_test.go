@@ -5,10 +5,15 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
+
+func TestInspectSourceHeaderDefault(t *testing.T) {
+	require.True(t, InspectSourceHeader.Get(dynamicconfig.NewNoopCollection())())
+}
 
 func Test_addressPatternToRegexp(t *testing.T) {
 	tests := []struct {
