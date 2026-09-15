@@ -83,6 +83,18 @@ func startAndSignalWorkflow(
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) (startOutcome, error) {
+	if outcome, err := dedupSignalWithStartRequest(
+		ctx,
+		shard,
+		namespaceEntry,
+		currentWorkflowLease,
+		signalWithStartRequest.GetRequestId(),
+	); err != nil {
+		return startOutcome{}, err
+	} else if outcome != nil {
+		return *outcome, nil
+	}
+
 	workflowID := signalWithStartRequest.GetWorkflowId()
 	runID := uuid.New().String()
 	// TODO(bergundy): Support eager workflow task
@@ -147,9 +159,46 @@ func startAndSignalWorkflow(
 		shard,
 		vrid,
 		newWorkflowLease,
-		currentWorkflowLease,
-		signalWithStartRequest.RequestId,
 	)
+}
+
+// dedupSignalWithStartRequest returns the result for a request already handled by the current run,
+// or nil. Call it before workflow ID reuse and conflict policies so a retry returns that result
+// instead of rejecting or replacing the execution.
+//
+// IsSignalRequested is authoritative. ExecutionState.RequestIds omits SIGNALED events and may
+// contain another API's request ID. Deduplication applies only to the current run because signal
+// request IDs do not survive continue-as-new.
+func dedupSignalWithStartRequest(
+	ctx context.Context,
+	shard historyi.ShardContext,
+	namespaceEntry *namespace.Namespace,
+	currentWorkflowLease api.WorkflowLease,
+	requestID string,
+) (*startOutcome, error) {
+	if currentWorkflowLease == nil || requestID == "" {
+		return nil, nil
+	}
+
+	mutableState := currentWorkflowLease.GetMutableState()
+	if !mutableState.IsSignalRequested(requestID) {
+		return nil, nil
+	}
+
+	firstExecutionRunID, err := mutableState.GetFirstRunID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	metrics.SignalWithStartWorkflowStartDeduped.With(shard.GetMetricsHandler()).Record(
+		1,
+		metrics.NamespaceTag(namespaceEntry.Name().String()),
+	)
+	// started remains false because this call did not create the run, matching the running-workflow
+	// deduplication path.
+	return &startOutcome{
+		runID:               currentWorkflowLease.GetContext().GetWorkflowKey().RunID,
+		firstExecutionRunID: firstExecutionRunID,
+	}, nil
 }
 
 func createWorkflowMutationFunction(
@@ -242,8 +291,6 @@ func startAndSignalWithoutCurrentWorkflow(
 	shardContext historyi.ShardContext,
 	vrid *api.VersionedRunID,
 	newWorkflowLease api.WorkflowLease,
-	currentWorkflowLease api.WorkflowLease,
-	requestID string,
 ) (startOutcome, error) {
 	newWorkflow, newWorkflowEventsSeq, err := newWorkflowLease.GetMutableState().CloseTransactionAsSnapshot(
 		ctx,
@@ -283,30 +330,12 @@ func startAndSignalWithoutCurrentWorkflow(
 		newWorkflowEventsSeq,
 		historyi.TransactionPolicyActive,
 	)
-	switch failedErr := err.(type) {
-	case nil:
-		// Brand-new run: head of the chain == this run id.
-		runID := newWorkflowLease.GetContext().GetWorkflowKey().RunID
-		return startOutcome{runID: runID, firstExecutionRunID: runID, started: true}, nil
-	case *persistence.CurrentWorkflowConditionFailedError:
-		if _, ok := failedErr.RequestIDs[requestID]; ok {
-			// CurrentWorkflowConditionFailedError carries the persisted WorkflowExecutionState blob,
-			// which may not have first_execution_run_id populated on records written before that
-			// field existed. Fall back to the mutable state we already have loaded to recover the
-			// canonical head-of-chain run id (mirrors StartWorkflowExecution's behavior).
-			firstRunID := failedErr.FirstExecutionRunID
-			if firstRunID == "" && currentWorkflowLease != nil &&
-				currentWorkflowLease.GetContext().GetWorkflowKey().RunID == failedErr.RunID {
-				if id, ferr := currentWorkflowLease.GetMutableState().GetFirstRunID(ctx); ferr == nil {
-					firstRunID = id
-				}
-			}
-			return startOutcome{runID: failedErr.RunID, firstExecutionRunID: firstRunID, started: false}, nil
-		}
-		return startOutcome{}, err
-	default:
+	if err != nil {
 		return startOutcome{}, err
 	}
+	// Brand-new run: head of the chain == this run id.
+	runID := newWorkflowLease.GetContext().GetWorkflowKey().RunID
+	return startOutcome{runID: runID, firstExecutionRunID: runID, started: true}, nil
 }
 
 func signalWorkflow(
