@@ -60,7 +60,28 @@ func standbyTransferTaskPostActionTaskDiscarded(
 		return nil
 	}
 
-	logger.Warn("Discarding standby transfer task due to task being pending for too long.", tag.Task(taskInfo))
+	logTags := []tag.Tag{tag.Task(taskInfo)}
+	switch taskInfo.(type) {
+	case *tasks.CloseExecutionTask:
+		if info, ok := postActionInfo.(*verifyCompletionRecordedPostActionInfo); ok && info.parentWorkflowKey != nil {
+			logTags = append(logTags,
+				tag.NewStringTag("parent-namespace-id", info.parentWorkflowKey.NamespaceID),
+				tag.NewStringTag("parent-workflow-id", info.parentWorkflowKey.WorkflowID),
+				tag.NewStringTag("parent-run-id", info.parentWorkflowKey.RunID),
+			)
+		}
+	case *tasks.StartChildExecutionTask:
+		if info, ok := postActionInfo.(*startChildExecutionPostActionInfo); ok && info.childWorkflowKey != nil {
+			logTags = append(logTags,
+				tag.NewStringTag("child-namespace-id", info.childWorkflowKey.NamespaceID),
+				tag.NewStringTag("child-workflow-id", info.childWorkflowKey.WorkflowID),
+				tag.NewStringTag("child-run-id", info.childWorkflowKey.RunID),
+			)
+		}
+	default:
+	}
+
+	logger.Warn("Discarding standby transfer task due to task being pending for too long.", logTags...)
 	return consts.ErrTaskDiscarded
 }
 
