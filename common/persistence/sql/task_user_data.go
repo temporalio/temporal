@@ -157,7 +157,7 @@ func (uds *userDataStore) CountTaskQueuesByBuildId(ctx context.Context, request 
 func (uds *userDataStore) txExecute(ctx context.Context, operation string, f func(tx sqlplugin.Tx) error) error {
 	tx, err := uds.DB.BeginTx(ctx)
 	if err != nil {
-		return serviceerror.NewUnavailablef("%s failed. Failed to start transaction. Error: %v", operation, err)
+		return convertSQLError(operation+" failed. Failed to start transaction", err)
 	}
 	err = f(tx)
 	if err != nil {
@@ -176,11 +176,11 @@ func (uds *userDataStore) txExecute(ctx context.Context, operation string, f fun
 			*serviceerror.NotFound:
 			return err
 		default:
-			return serviceerror.NewUnavailablef("%v: %v", operation, err)
+			return convertSQLError(operation, err)
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		return serviceerror.NewUnavailablef("%s operation failed. Failed to commit transaction. Error: %v", operation, err)
+		return convertSQLError(operation+" operation failed. Failed to commit transaction", err)
 	}
 	return nil
 }
