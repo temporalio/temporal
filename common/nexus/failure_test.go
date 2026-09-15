@@ -22,6 +22,12 @@ func TestCoerceToCanceledFailure(t *testing.T) {
 		require.Same(t, f, CoerceToCanceledFailure(f))
 	})
 
+	t.Run("nil failure yields an empty CanceledFailure, not nil", func(t *testing.T) {
+		got := CoerceToCanceledFailure(nil)
+		require.NotNil(t, got)
+		require.NotNil(t, got.GetCanceledFailureInfo())
+	})
+
 	t.Run("non-canceled failure is rebuilt as a CanceledFailure, preserving fields", func(t *testing.T) {
 		cause := &failurepb.Failure{Message: "cause"}
 		encoded := mustToPayload(t, "encoded message")

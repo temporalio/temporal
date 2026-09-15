@@ -185,16 +185,20 @@ func TemporalFailureToNexusFailureInPlace(failure *failurepb.Failure) (nexus.Fai
 }
 
 // CoerceToCanceledFailure replaces failure's FailureInfo with CanceledFailureInfo so it
-// surfaces as a Temporal CanceledError. Every other field is left unchanged.
+// surfaces as a Temporal CanceledError. Every other field is left unchanged. A nil failure yields an empty
+// CanceledFailure rather than nil. A canceled operation must always carry a cause bearing CanceledFailureInfo.
 //
 // Call it only for canceled operations: old SDKs and non-Temporal handlers may send a canceled
 // completion whose converted cause is a plain ApplicationFailure, which would otherwise surface as
 // an ApplicationError to the caller.
 func CoerceToCanceledFailure(failure *failurepb.Failure) *failurepb.Failure {
-	if failure == nil || failure.GetCanceledFailureInfo() != nil {
+	if failure.GetCanceledFailureInfo() != nil {
 		return failure
 	}
-	canceled := common.CloneProto(failure)
+	canceled := &failurepb.Failure{}
+	if failure != nil {
+		canceled = common.CloneProto(failure)
+	}
 	canceled.FailureInfo = &failurepb.Failure_CanceledFailureInfo{
 		CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
 	}
