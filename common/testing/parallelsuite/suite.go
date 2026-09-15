@@ -141,6 +141,16 @@ func (s *Suite[T]) Run(name string, fn func(T)) bool {
 	})
 }
 
+// RunSequential creates a serialized subtest. Use it when the subtests
+// intentionally share state and/or ordering between tests matters.
+func (s *Suite[T]) RunSequential(name string, fn func(T)) bool {
+	pt := s.guardT.T // grab T before sealing
+	s.guardT.markHasSubtests()
+	return pt.Run(name, func(t *testing.T) {
+		fn(s.copySuite(t, false, nil, nil).(T))
+	})
+}
+
 // Await calls fn repeatedly until all assertions pass or timeout is reached.
 func (s *Suite[T]) Await(fn func(T), timeout, interval time.Duration) {
 	s.Awaitf(fn, timeout, interval, "")
