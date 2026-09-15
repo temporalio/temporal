@@ -6177,7 +6177,7 @@ func (wh *WorkflowHandler) StopBatchOperation(
 
 	terminateReq := &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: request.GetNamespace(),
-		// Use the validated execution from below, so that a run of the same workflow ID
+		// Use the validated execution from above, so that a run of the same workflow ID
 		// started in between is not terminated in its place.
 		WorkflowExecution: execution,
 		Reason:            request.GetReason(),

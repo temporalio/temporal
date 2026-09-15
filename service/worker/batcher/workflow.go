@@ -120,7 +120,7 @@ type (
 	}
 )
 
-// batchActivityOptions builds the activity options for a batch operation's activity.
+// batchActivityOptions helper to build the options for batch operation's activity.
 func batchActivityOptions(heartbeatTimeout time.Duration) workflow.ActivityOptions {
 	return workflow.ActivityOptions{
 		ScheduleToStartTimeout: 5 * time.Minute,
