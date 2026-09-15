@@ -213,8 +213,9 @@ func (e *archivalQueueTaskExecutor) getArchiveTaskRequest(
 		HistoryLength:        nextEventID - 1,
 		Memo:                 workflowAttributes.Memo,
 		SearchAttributes:     workflowAttributes.SearchAttributes,
-		Targets:              targets,
-		CallerService:        string(primitives.HistoryService),
+		EnableVisibilityArchivalRecordDeduplication: e.shardContext.GetConfig().EnableVisibilityArchivalRecordDeduplication(namespaceName.String()),
+		Targets:       targets,
+		CallerService: string(primitives.HistoryService),
 	}
 	return request, nil
 }

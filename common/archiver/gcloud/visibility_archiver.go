@@ -71,7 +71,7 @@ func NewVisibilityArchiver(logger log.Logger, metricsHandler metrics.Handler, cf
 // Please make sure your implementation is lossless. If any in-memory batching mechanism is used, then those batched records will be lost during server restarts.
 // This method will be invoked when workflow closes. Note that because of conflict resolution, it is possible for a workflow to through the closing process multiple times, which means that this method can be invoked more than once after a workflow closes.
 func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, request *archiverspb.VisibilityRecord, opts ...archiver.ArchiveOption) (err error) {
-	handler := v.metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryArchiverScope), metrics.NamespaceTag(request.Namespace))
+	handler := v.metricsHandler.WithTags(metrics.OperationTag(metrics.VisibilityArchiverScope), metrics.NamespaceTag(request.Namespace))
 	featureCatalog := archiver.GetFeatureCatalog(opts...)
 	startTime := time.Now().UTC()
 	defer func() {
@@ -109,19 +109,41 @@ func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, requ
 		logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(errEncodeVisibilityRecord), tag.Error(err))
 		return err
 	}
+	var recordHash string
+	if featureCatalog.VisibilityArchivalRecordDeduplication {
+		recordHash, err = archiver.VisibilityArchivalRecordHash(request)
+		if err != nil {
+			logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(errEncodeVisibilityRecord), tag.Error(err))
+			return err
+		}
+	}
+	upload := func(filename string) (bool, error) {
+		if featureCatalog.VisibilityArchivalRecordDeduplication {
+			return v.gcloudStorage.UploadIfHashChanged(ctx, URI, filename, encodedVisibilityRecord, recordHash)
+		}
+		return true, v.gcloudStorage.Upload(ctx, URI, filename, encodedVisibilityRecord)
+	}
 
 	// The filename has the format: closeTimestamp_hash(runID).visibility
 	// This format allows the archiver to sort all records without reading the file contents
 	filename := constructVisibilityFilename(request.GetNamespaceId(), request.WorkflowTypeName, request.GetWorkflowId(), request.GetRunId(), indexKeyCloseTimeout, request.CloseTime.AsTime())
-	if err := v.gcloudStorage.Upload(ctx, URI, filename, encodedVisibilityRecord); err != nil {
+	uploaded, err := upload(filename)
+	if err != nil {
 		logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
 		return errRetryable
 	}
+	if !uploaded {
+		metrics.VisibilityArchiverBlobExistsCount.With(handler).Record(1)
+	}
 
 	filename = constructVisibilityFilename(request.GetNamespaceId(), request.WorkflowTypeName, request.GetWorkflowId(), request.GetRunId(), indexKeyStartTimeout, request.StartTime.AsTime())
-	if err := v.gcloudStorage.Upload(ctx, URI, filename, encodedVisibilityRecord); err != nil {
+	uploaded, err = upload(filename)
+	if err != nil {
 		logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(errWriteFile), tag.Error(err))
 		return errRetryable
+	}
+	if !uploaded {
+		metrics.VisibilityArchiverBlobExistsCount.With(handler).Record(1)
 	}
 
 	metrics.VisibilityArchiveSuccessCount.With(handler).Record(1)

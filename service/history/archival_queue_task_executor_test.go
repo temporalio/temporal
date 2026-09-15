@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -337,6 +338,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			cfg.RetentionTimerJitterDuration = func() time.Duration {
 				return 0
 			}
+			cfg.EnableVisibilityArchivalRecordDeduplication = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 			shardContext.EXPECT().GetConfig().Return(cfg).AnyTimes()
 			mockMetadata := cluster.NewMockMetadata(p.Controller)
 			mockMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
@@ -482,6 +484,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 					assert.Equal(t, p.CloseTime, request.CloseTime.AsTime())
 					assert.Equal(t, p.ExecutionDuration, request.ExecutionDuration.AsDuration())
 					assert.ElementsMatch(t, p.ExpectedTargets, request.Targets)
+					require.True(t, request.EnableVisibilityArchivalRecordDeduplication)
 
 					return &archival.Response{}, p.ArchiveError
 				})
