@@ -18,27 +18,10 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/service/history/tasks"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // rootEncodedPath is what DefaultPathEncoder produces for the root node.
 const rootEncodedPath = ""
-
-// ExecutionMetadata carries the execution facts that live outside the CHASM tree but are
-// observed through Context.ExecutionKey and Context.ExecutionInfo. The history service reads
-// them from mutable state; a detached reader must supply them, and so must persist them
-// alongside the nodes.
-type ExecutionMetadata struct {
-	// WorkflowKey identifies the execution. WorkflowID is the component's business ID, which
-	// for a standalone activity is the activity ID.
-	WorkflowKey definition.WorkflowKey
-	// CloseTime is zero for a running execution.
-	CloseTime time.Time
-	// StateTransitionCount counts create and update transactions over the execution's life.
-	StateTransitionCount int64
-	// PersistedSize is the approximate size in bytes of the persisted execution state.
-	PersistedSize int
-}
 
 // NewDetachedTree builds a read only CHASM tree from persisted nodes, without mutable state,
 // for callers holding CHASM bytes but not the execution they came from, such as tdbg.
@@ -51,19 +34,23 @@ type ExecutionMetadata struct {
 // handler only on paths that are unreachable here, and the clock only affects components that
 // are still running, which a detached reader does not observe.
 //
-//	root, err := chasm.NewDetachedTree(nodes, meta, registry)
+// There is no execution behind the tree, so whatever a component reads through
+// Context.ExecutionKey or Context.ExecutionInfo comes back zero: no namespace, business ID,
+// run ID, close time, state size, or transition count. Those belong to the mutable state row
+// that held the nodes rather than to the nodes, so a caller that knows them fills them in.
+//
+//	root, err := chasm.NewDetachedTree(nodes, registry)
 //	ctx := chasm.NewContext(goCtx, root)
 //	component, err := root.Component(ctx, chasm.ComponentRef{})
 func NewDetachedTree(
 	nodes map[string]*persistencespb.ChasmNode,
-	metadata ExecutionMetadata,
 	registry *Registry,
 ) (*Node, error) {
 	return NewTreeFromDB(
 		nodes,
 		registry,
 		clock.NewRealTimeSource(),
-		newReadOnlyNodeBackend(metadata),
+		newReadOnlyNodeBackend(),
 		DefaultPathEncoder,
 		log.NewNoopLogger(),
 		metrics.NoopMetricsHandler,
@@ -74,20 +61,18 @@ func NewDetachedTree(
 // Context to read it through. It is the usual entry point for offline readers; use
 // NewDetachedTree directly only when you need the tree itself.
 //
-// C may be a concrete component type or an interface a component implements, such as
-// ExportableComponent. A root component of some other type is an error.
+// C may be a concrete component type or an interface the root implements, such as
+// DescribableComponent. A root of some other type is an error.
 //
-//	component, ctx, err := chasm.DetachedRootComponent[*activity.Activity](
-//	    goCtx, nodes, meta, registry)
+//	act, ctx, err := chasm.DetachedRootComponent[*activity.Activity](goCtx, nodes, registry)
 func DetachedRootComponent[C Component](
 	goCtx context.Context,
 	nodes map[string]*persistencespb.ChasmNode,
-	metadata ExecutionMetadata,
 	registry *Registry,
 ) (C, Context, error) {
 	var zero C
 
-	root, err := NewDetachedTree(nodes, metadata, registry)
+	root, err := NewDetachedTree(nodes, registry)
 	if err != nil {
 		return zero, nil, err
 	}
@@ -128,17 +113,16 @@ func RootArchetype(
 	return fqn, nil
 }
 
-// readOnlyNodeBackend serves NodeBackend reads from the caller's ExecutionMetadata. Methods
-// that would mutate, emit a task, or read history panic instead: reaching one is a caller bug,
-// and failing quietly would return a plausible but wrong result.
-type readOnlyNodeBackend struct {
-	metadata ExecutionMetadata
-}
+// readOnlyNodeBackend stands in for the mutable state a detached tree does not have. Reads
+// return zero values; methods that would mutate, emit a task, or read history panic instead,
+// since reaching one is a caller bug and failing quietly would return a plausible but wrong
+// result.
+type readOnlyNodeBackend struct{}
 
 var _ NodeBackend = (*readOnlyNodeBackend)(nil)
 
-func newReadOnlyNodeBackend(metadata ExecutionMetadata) *readOnlyNodeBackend {
-	return &readOnlyNodeBackend{metadata: metadata}
+func newReadOnlyNodeBackend() *readOnlyNodeBackend {
+	return &readOnlyNodeBackend{}
 }
 
 func (b *readOnlyNodeBackend) unsupported(method string) {
@@ -146,32 +130,19 @@ func (b *readOnlyNodeBackend) unsupported(method string) {
 }
 
 func (b *readOnlyNodeBackend) GetWorkflowKey() definition.WorkflowKey {
-	return b.metadata.WorkflowKey
+	return definition.WorkflowKey{}
 }
 
 func (b *readOnlyNodeBackend) GetExecutionInfo() *persistencespb.WorkflowExecutionInfo {
-	info := &persistencespb.WorkflowExecutionInfo{
-		WorkflowId:           b.metadata.WorkflowKey.WorkflowID,
-		StateTransitionCount: b.metadata.StateTransitionCount,
-	}
-	if !b.metadata.CloseTime.IsZero() {
-		info.CloseTime = timestamppb.New(b.metadata.CloseTime)
-	}
-	return info
+	return &persistencespb.WorkflowExecutionInfo{}
 }
 
 func (b *readOnlyNodeBackend) GetExecutionState() *persistencespb.WorkflowExecutionState {
-	return &persistencespb.WorkflowExecutionState{
-		RunId: b.metadata.WorkflowKey.RunID,
-	}
+	return &persistencespb.WorkflowExecutionState{}
 }
 
-func (b *readOnlyNodeBackend) GetApproximatePersistedSize() int {
-	return b.metadata.PersistedSize
-}
+func (b *readOnlyNodeBackend) GetApproximatePersistedSize() int { return 0 }
 
-// GetNamespaceEntry returns nil. No component read path needs it on a detached tree today;
-// add it to ExecutionMetadata when one does.
 func (b *readOnlyNodeBackend) GetNamespaceEntry() *namespace.Namespace { return nil }
 
 // ChasmSkipPersistenceEnabled is false: a detached tree is never persisted.
