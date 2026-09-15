@@ -295,6 +295,13 @@ func ArchetypeTag(value string) Tag {
 	return Tag{Key: ArchetypeTagName, Value: value}
 }
 
+func ChasmComponentTypeTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: ChasmComponentTypeTagName, Value: value}
+}
+
 func ChasmTaskTypeTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue

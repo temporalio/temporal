@@ -87,6 +87,7 @@ type Config struct {
 	EnableCHASMSignalBacklinks                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkflowUpdateCallbacks              dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ChasmMaxInMemoryPureTasks                  dynamicconfig.IntPropertyFn
+	ChasmLogicalTaskCountAlertThreshold        dynamicconfig.IntPropertyFnWithChasmTaskTypeFilter
 	ChasmDLQScheduledPureTaskOnValidation      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMSchedulerCreation               dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMSchedulerMigration              dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -540,6 +541,7 @@ func NewConfig(
 		EnableChasmNexusWorkflowOperations:         nexusoperation.EnableChasmWorkflowOperations.Get(dc),
 		ChasmNexusWorkflowOperationsRolloutPercent: nexusoperation.ChasmWorkflowOperationsRolloutPercent.Get(dc),
 		ChasmMaxInMemoryPureTasks:                  dynamicconfig.ChasmMaxInMemoryPureTasks.Get(dc),
+		ChasmLogicalTaskCountAlertThreshold:        dynamicconfig.ChasmLogicalTaskCountAlertThreshold.Get(dc),
 		ChasmDLQScheduledPureTaskOnValidation:      dynamicconfig.ChasmDLQScheduledPureTaskOnValidation.Get(dc),
 
 		EnableCHASMSchedulerCreation:  dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),

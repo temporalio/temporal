@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -5146,6 +5147,154 @@ func (s *nodeSuite) TestSetUserMetadata_NilClearsPersistedValue() {
 	mutation, err := root.CloseTransaction()
 	s.NoError(err)
 	s.Nil(mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes().GetUserMetadata())
+}
+
+func (s *nodeSuite) TestCloseTransaction_LogicalTaskCountMetrics() {
+	const taskCount = 3
+
+	testCases := []struct {
+		name          string
+		threshold     int
+		expectEmitted bool
+	}{
+		{name: "over threshold", threshold: taskCount - 1, expectEmitted: true},
+		{name: "at threshold", threshold: taskCount, expectEmitted: false},
+		{name: "disabled", threshold: 0, expectEmitted: false},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+			s.metricsHandler = metricsHandler
+
+			s.nodeBackend.HandleChasmLogicalTaskCountAlertThreshold = func(chasmTaskType string) int {
+				s.Equal(testSideEffectTaskFQN, chasmTaskType)
+				return tc.threshold
+			}
+
+			root := s.testComponentTree()
+			mutableContext := NewMutableContext(context.Background(), root)
+			c, err := root.Component(mutableContext, ComponentRef{})
+			s.NoError(err)
+			testComponent := c.(*TestComponent)
+
+			s.testLibrary.mockSideEffectTaskHandler.EXPECT().
+				Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+				Return(true, nil).Times(taskCount)
+			for i := range taskCount {
+				mutableContext.AddTask(testComponent, TaskAttributes{}, &TestSideEffectTask{
+					Data: []byte(fmt.Sprintf("task-%d", i)),
+				})
+			}
+
+			_, err = root.CloseTransaction()
+			s.NoError(err)
+
+			snapshot := capture.Snapshot()
+			counts := snapshot[metrics.ChasmLogicalTaskCount.Name()]
+			exceeded := snapshot[metrics.ChasmLogicalTaskCountExceeded.Name()]
+
+			if !tc.expectEmitted {
+				s.Empty(counts)
+				s.Empty(exceeded)
+				return
+			}
+
+			s.Len(counts, 1)
+			s.Equal(int64(taskCount), counts[0].Value)
+			s.Equal(testComponentName, counts[0].Tags[metrics.ArchetypeTagName])
+			s.Equal(testComponentFQN, counts[0].Tags[metrics.ChasmComponentTypeTagName])
+			s.Equal(testSideEffectTaskFQN, counts[0].Tags[metrics.ChasmTaskTypeTagName])
+
+			s.Len(exceeded, 1)
+			s.Equal(int64(1), exceeded[0].Value)
+			s.Equal(testComponentFQN, exceeded[0].Tags[metrics.ChasmComponentTypeTagName])
+			s.Equal(testSideEffectTaskFQN, exceeded[0].Tags[metrics.ChasmTaskTypeTagName])
+		})
+	}
+}
+
+// Tasks removed by validation must not be counted, since the metric is meant to report
+// the task backlog that is actually persisted.
+func (s *nodeSuite) TestCloseTransaction_LogicalTaskCountMetrics_ExcludesInvalidatedTasks() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.metricsHandler = metricsHandler
+
+	// Threshold of 1 is exceeded by the 2 valid tasks, but would also be exceeded by the
+	// single invalidated one if it were counted.
+	s.nodeBackend.HandleChasmLogicalTaskCountAlertThreshold = func(string) int { return 1 }
+
+	root := s.testComponentTree()
+	mutableContext := NewMutableContext(context.Background(), root)
+	c, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := c.(*TestComponent)
+
+	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(true, nil).Times(2)
+	for i := range 2 {
+		mutableContext.AddTask(testComponent, TaskAttributes{}, &TestSideEffectTask{
+			Data: []byte(fmt.Sprintf("valid-%d", i)),
+		})
+	}
+
+	// An invalid pure task is dropped before it is ever persisted.
+	s.testLibrary.mockPureTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(false, nil).Times(1)
+	mutableContext.AddTask(
+		testComponent,
+		TaskAttributes{ScheduledTime: s.timeSource.Now()},
+		&TestPureTask{Data: []byte("invalid")},
+	)
+
+	_, err = root.CloseTransaction()
+	s.NoError(err)
+
+	snapshot := capture.Snapshot()
+	counts := snapshot[metrics.ChasmLogicalTaskCount.Name()]
+	s.Len(counts, 1)
+	s.Equal(int64(2), counts[0].Value)
+	s.Equal(testSideEffectTaskFQN, counts[0].Tags[metrics.ChasmTaskTypeTagName])
+}
+
+func (s *nodeSuite) TestCloseTransaction_LogicalTaskCountMetrics_NotEmittedForOptedOutComponent() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.metricsHandler = metricsHandler
+
+	s.nodeBackend.HandleChasmLogicalTaskCountAlertThreshold = func(string) int { return 1 }
+
+	root := s.testComponentTree()
+	mutableContext := NewMutableContext(context.Background(), root)
+	c, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := c.(*TestComponent)
+
+	// TestSubComponent1 does not opt into the task count metric, so the very same task
+	// type that is reported for TestComponent must not be reported here.
+	subComponent1 := testComponent.SubComponent1.Get(mutableContext)
+	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(true, nil).Times(2)
+	for i := range 2 {
+		mutableContext.AddTask(subComponent1, TaskAttributes{}, &TestSideEffectTask{
+			Data: []byte(fmt.Sprintf("sub-%d", i)),
+		})
+	}
+
+	_, err = root.CloseTransaction()
+	s.NoError(err)
+
+	snapshot := capture.Snapshot()
+	s.Empty(snapshot[metrics.ChasmLogicalTaskCount.Name()])
+	s.Empty(snapshot[metrics.ChasmLogicalTaskCountExceeded.Name()])
 }
 
 func (s *nodeSuite) TestCloseTransaction_SingletonTask_Replace_SideEffect() {
