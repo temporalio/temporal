@@ -26,6 +26,7 @@ func HTTPCallerProviderProvider(
 	rpcFactory common.RPCFactory,
 	httpClientCache *cluster.FrontendHTTPClientCache,
 	logger log.Logger,
+	config *Config,
 ) (HTTPCallerProvider, error) {
 	localClient, err := rpcFactory.CreateLocalFrontendHTTPClient()
 	if err != nil {
@@ -41,6 +42,7 @@ func HTTPCallerProviderProvider(
 				defaultClient,
 				localClient,
 				logger,
+				config.InspectSourceHeader(),
 			)
 
 		}

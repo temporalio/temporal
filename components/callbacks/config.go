@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"go.temporal.io/server/chasm"
+	chasmcallbacks "go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus"
@@ -33,8 +34,9 @@ var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
 )
 
 type Config struct {
-	RequestTimeout dynamicconfig.DurationPropertyFnWithDestinationFilter
-	RetryPolicy    func() backoff.RetryPolicy
+	RequestTimeout      dynamicconfig.DurationPropertyFnWithDestinationFilter
+	RetryPolicy         func() backoff.RetryPolicy
+	InspectSourceHeader dynamicconfig.BoolPropertyFn
 }
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
@@ -49,6 +51,7 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 				backoff.NoInterval,
 			)
 		},
+		InspectSourceHeader: chasmcallbacks.InspectSourceHeader.Get(dc),
 	}
 }
 
