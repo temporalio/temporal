@@ -2240,7 +2240,7 @@ func (s *nodeSuite) TestGetComponent() {
 			ref: ComponentRef{
 				componentPath: []string{"unknownComponent"},
 			},
-			expectedErr: errComponentNotFound,
+			expectedErr: ErrComponentNotFound,
 		},
 		{
 			name: "initialVT mismatch",
@@ -2255,7 +2255,7 @@ func (s *nodeSuite) TestGetComponent() {
 					TransitionCount:          2,
 				},
 			},
-			expectedErr: errComponentNotFound,
+			expectedErr: ErrComponentNotFound,
 		},
 		{
 			name: "validation failure",

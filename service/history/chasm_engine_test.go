@@ -1305,6 +1305,80 @@ func (s *chasmEngineSuite) TestReadComponent_SetsContextMetadata() {
 	s.NoError(err)
 }
 
+// refToMissingComponent builds a ref addressing a sub-component path that no execution has, so that
+// resolving it inside the CHASM tree fails with chasm.ErrComponentNotFound.
+func (s *chasmEngineSuite) refToMissingComponent(key chasm.ExecutionKey) chasm.ComponentRef {
+	return chasm.ProtoRefToComponentRef(&persistencespb.ChasmComponentRef{
+		NamespaceId:   key.NamespaceID,
+		BusinessId:    key.BusinessID,
+		RunId:         key.RunID,
+		ArchetypeId:   s.archetypeID,
+		ComponentPath: []string{"non-existent-component"},
+	})
+}
+
+// TestUpdateComponent_ComponentNotFound and TestReadComponent_ComponentNotFound pin the access
+// boundary: the tree answers a component miss with the internal chasm.ErrComponentNotFound sentinel,
+// and the engine -- not the tree -- is what turns that into a user-facing *serviceerror.NotFound.
+// Without these, nothing would catch a refactor that lets the bare sentinel reach API callers.
+func (s *chasmEngineSuite) TestUpdateComponent_ComponentNotFound() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+
+	key := chasm.ExecutionKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+		RunID:       tv.RunID(),
+	}
+
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{
+			State: s.buildPersistenceMutableState(key, &persistencespb.ActivityInfo{
+				ActivityId: tv.ActivityID(),
+			}, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil),
+		}, nil).Times(1)
+
+	_, err := s.engine.UpdateComponent(
+		context.Background(),
+		s.refToMissingComponent(key),
+		func(chasm.MutableContext, chasm.Component) error {
+			s.Fail("updateFn should not be called")
+			return nil
+		},
+	)
+	s.Error(err)
+	s.ErrorAs(err, new(*serviceerror.NotFound))
+}
+
+func (s *chasmEngineSuite) TestReadComponent_ComponentNotFound() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+
+	key := chasm.ExecutionKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+		RunID:       tv.RunID(),
+	}
+
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{
+			State: s.buildPersistenceMutableState(key, &persistencespb.ActivityInfo{
+				ActivityId: tv.ActivityID(),
+			}, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil),
+		}, nil).Times(1)
+
+	err := s.engine.ReadComponent(
+		context.Background(),
+		s.refToMissingComponent(key),
+		func(chasm.Context, chasm.Component) error {
+			s.Fail("readFn should not be called")
+			return nil
+		},
+	)
+	s.Error(err)
+	s.ErrorAs(err, new(*serviceerror.NotFound))
+}
+
 // TestPollComponent_Success_NoWait tests the behavior of PollComponent when the predicate is
 // satisfied at the outset.
 func (s *chasmEngineSuite) TestPollComponent_Success_NoWait() {
@@ -2567,6 +2641,31 @@ func (s *chasmEngineSuite) TestConvertError() {
 		var notFoundErr *serviceerror.NotFound
 		require.ErrorAs(t, convertedErr, &notFoundErr)
 		require.Equal(t, err, convertedErr)
+	})
+
+	t.Run("ComponentNotFound", func(t *testing.T) {
+		convertedErr := s.engine.convertError(chasm.ErrComponentNotFound, ref, tv.RequestID())
+		require.Error(t, convertedErr)
+		// The internal sentinel must not escape the engine: callers outside the framework only ever
+		// see the transport error.
+		require.ErrorAs(t, convertedErr, new(*serviceerror.NotFound))
+		require.Equal(t, fmt.Sprintf("%s not found for ID: %s", "test_component", businessID), convertedErr.Error())
+	})
+
+	t.Run("ComponentNotFound_WithoutBusinessID", func(t *testing.T) {
+		// Without a business ID there is no execution-level message to build, so the sentinel itself
+		// is translated rather than being left to leak as a non-NotFound error.
+		refWithoutBusinessID := chasm.NewComponentRef[*testComponent](
+			chasm.ExecutionKey{
+				NamespaceID: string(tests.NamespaceID),
+				BusinessID:  "",
+				RunID:       tv.RunID(),
+			},
+		)
+		convertedErr := s.engine.convertError(chasm.ErrComponentNotFound, refWithoutBusinessID, tv.RequestID())
+		require.Error(t, convertedErr)
+		require.ErrorAs(t, convertedErr, new(*serviceerror.NotFound))
+		require.Equal(t, chasm.ErrComponentNotFound.Error(), convertedErr.Error())
 	})
 
 	t.Run("UnconvertedServiceErrors", func(t *testing.T) {

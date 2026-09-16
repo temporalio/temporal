@@ -40,9 +40,15 @@ var (
 	protoMessageT = reflect.TypeFor[proto.Message]()
 )
 
+// ErrComponentNotFound is returned by tree lookups when the addressed component is not in this tree -- no node at
+// the given path, or no node for the given component value. It designates "this tree does not contain it".
+//
+// It is NOT a serviceerror.NotFound, translation to a user-facing serviceerror.NotFound happens at the access boundary
+// (see ChasmEngine.convertNotFoundError).
+var ErrComponentNotFound = errors.New("component not found")
+
 var (
 	errAccessCheckFailed = serviceerror.NewNotFound("access check failed, CHASM tree is closed for writes")
-	errComponentNotFound = serviceerror.NewNotFound("component not found")
 	errDataNotFound      = serviceerror.NewNotFound("data not found")
 	errTaskNotValid      = serviceerror.NewNotFound("task is no longer valid")
 )
@@ -463,14 +469,14 @@ func (n *Node) Component(
 
 	node, ok := n.findNode(ref.componentPath)
 	if !ok {
-		return nil, errComponentNotFound
+		return nil, ErrComponentNotFound
 	}
 
 	if ref.componentInitialVT != nil && transitionhistory.Compare(
 		ref.componentInitialVT,
 		node.serializedNode.Metadata.InitialVersionedTransition,
 	) != 0 {
-		return nil, errComponentNotFound
+		return nil, ErrComponentNotFound
 	}
 
 	validationContext := NewContext(chasmContext.goContext(), node)
@@ -1451,7 +1457,7 @@ func (n *Node) structuredRef(
 
 	refNode, ok := n.valueToNode[component]
 	if !ok || !refNode.isComponent() {
-		return ComponentRef{}, errComponentNotFound
+		return ComponentRef{}, ErrComponentNotFound
 	}
 
 	workflowKey := refNode.backend.GetWorkflowKey()
@@ -1638,7 +1644,7 @@ func (n *Node) componentNodePath(
 
 	refNode, ok := n.valueToNode[component]
 	if !ok || !refNode.isComponent() {
-		return nil, errComponentNotFound
+		return nil, ErrComponentNotFound
 	}
 
 	return refNode.path(), nil
@@ -3823,7 +3829,7 @@ func (n *Node) ComponentByPath(
 ) (Component, error) {
 	node, ok := n.findNode(path)
 	if !ok {
-		return nil, errComponentNotFound
+		return nil, ErrComponentNotFound
 	}
 
 	if err := node.prepareComponentValue(chasmContext); err != nil {

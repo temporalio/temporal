@@ -457,7 +457,7 @@ func (e *ChasmEngine) applyUpdateWithLease(
 
 	serializedRef, err := mutableContext.Ref(component)
 	if err != nil {
-		if errors.As(err, new(*serviceerror.NotFound)) {
+		if errors.Is(err, chasm.ErrComponentNotFound) {
 			// The update may legitimately delete the addressed component, in which case
 			// there is no new ref to return even though the transition succeeded.
 			return nil, nil
@@ -1373,6 +1373,12 @@ func (e *ChasmEngine) convertError(
 	if _, ok := errors.AsType[*persistence.TimeoutError](err); ok {
 		e.logger.Error("chasm TimeoutError", tag.Error(err), tag.RequestID(requestID))
 		return serviceerror.NewDeadlineExceededf("persistence operation timed out (request ID: %s)", requestID)
+	}
+
+	if errors.Is(err, chasm.ErrComponentNotFound) {
+		// This is the access boundary: the framework-internal sentinel becomes a transport error
+		// exactly here, so callers outside CHASM keep seeing a NotFound.
+		err = serviceerror.NewNotFound(err.Error())
 	}
 
 	if _, ok := errors.AsType[*serviceerror.NotFound](err); !ok {
