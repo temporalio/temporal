@@ -7,8 +7,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client/history"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
@@ -153,6 +158,133 @@ func TestShardAgnosticConnectionStrategy(t *testing.T) {
 	}
 }
 
+func TestIsActivityTaskValidRouting(t *testing.T) {
+	const (
+		namespaceID    = "test-namespace-id"
+		businessID     = "test-activity-id"
+		workflowID     = "test-workflow-id"
+		numberOfShards = int32(128)
+	)
+	standaloneShardID := common.WorkflowIDToHistoryShard(namespaceID, businessID, numberOfShards)
+	workflowShardID := common.WorkflowIDToHistoryShard(namespaceID, workflowID, numberOfShards)
+	require.NotEqual(t, standaloneShardID, workflowShardID)
+
+	for _, tc := range []struct {
+		name       string
+		routingID  string
+		standalone bool
+	}{
+		{
+			name:       "standalone activity uses business ID",
+			routingID:  businessID,
+			standalone: true,
+		},
+		{
+			name:      "workflow activity uses workflow ID",
+			routingID: workflowID,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			expectedShardID := common.WorkflowIDToHistoryShard(namespaceID, tc.routingID, numberOfShards)
+
+			serviceResolver := membership.NewMockServiceResolver(ctrl)
+			serviceResolver.EXPECT().Lookup(convert.Int32ToString(expectedShardID)).Return(membership.NewHostInfoFromAddress("localhost"), nil)
+			serviceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+			serviceResolver.EXPECT().RemoveListener(gomock.Any()).Return(nil).AnyTimes()
+			serviceResolver.EXPECT().Members().Return(nil).AnyTimes()
+
+			listener := nettest.NewListener(nettest.NewPipe())
+			grpcServer := grpc.NewServer()
+			historyservice.RegisterHistoryServiceServer(grpcServer, &testHistoryService{})
+			errs := make(chan error)
+			go func() {
+				errs <- grpcServer.Serve(listener)
+			}()
+			defer func() {
+				grpcServer.Stop()
+				require.NoError(t, <-errs)
+			}()
+
+			request := &historyservice.IsActivityTaskValidRequest{NamespaceId: namespaceID}
+			if tc.standalone {
+				componentRef, err := (&persistencespb.ChasmComponentRef{
+					NamespaceId: namespaceID,
+					BusinessId:  businessID,
+				}).Marshal()
+				require.NoError(t, err)
+				request.ComponentRef = componentRef
+			} else {
+				request.Execution = &commonpb.WorkflowExecution{WorkflowId: workflowID}
+			}
+
+			client := history.NewClient(
+				dynamicconfig.NewNoopCollection(),
+				serviceResolver,
+				log.NewTestLogger(),
+				numberOfShards,
+				nettest.NewRPCFactory(listener),
+				time.Second,
+			)
+			response, err := client.IsActivityTaskValid(context.Background(), request)
+			require.NoError(t, err)
+			require.True(t, response.GetIsValid())
+		})
+	}
+}
+
+func TestIsActivityTaskValidInvalidComponentRef(t *testing.T) {
+	missingBusinessIDRef, err := (&persistencespb.ChasmComponentRef{NamespaceId: "test-namespace-id"}).Marshal()
+	require.NoError(t, err)
+	missingNamespaceIDRef, err := (&persistencespb.ChasmComponentRef{BusinessId: "test-activity-id"}).Marshal()
+	require.NoError(t, err)
+
+	for _, tc := range []struct {
+		name         string
+		componentRef []byte
+		errMessage   string
+	}{
+		{
+			name:         "malformed",
+			componentRef: []byte("not-a-component-ref"),
+			errMessage:   "error deserializing component ref",
+		},
+		{
+			name:         "missing business ID",
+			componentRef: missingBusinessIDRef,
+			errMessage:   "component ref missing namespace ID or business ID",
+		},
+		{
+			name:         "missing namespace ID",
+			componentRef: missingNamespaceIDRef,
+			errMessage:   "component ref missing namespace ID or business ID",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			serviceResolver := membership.NewMockServiceResolver(ctrl)
+			serviceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+			serviceResolver.EXPECT().RemoveListener(gomock.Any()).Return(nil).AnyTimes()
+			serviceResolver.EXPECT().Members().Return(nil).AnyTimes()
+
+			client := history.NewClient(
+				dynamicconfig.NewNoopCollection(),
+				serviceResolver,
+				log.NewTestLogger(),
+				1,
+				nil,
+				time.Second,
+			)
+			_, err := client.IsActivityTaskValid(context.Background(), &historyservice.IsActivityTaskValidRequest{
+				ComponentRef: tc.componentRef,
+			})
+
+			require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
+			require.ErrorContains(t, err, tc.errMessage)
+		})
+	}
+}
+
 func (s *testHistoryService) GetDLQTasks(
 	context.Context,
 	*historyservice.GetDLQTasksRequest,
@@ -165,6 +297,13 @@ func (s *testHistoryService) DeleteDLQTasks(
 	*historyservice.DeleteDLQTasksRequest,
 ) (*historyservice.DeleteDLQTasksResponse, error) {
 	return &historyservice.DeleteDLQTasksResponse{}, nil
+}
+
+func (s *testHistoryService) IsActivityTaskValid(
+	context.Context,
+	*historyservice.IsActivityTaskValidRequest,
+) (*historyservice.IsActivityTaskValidResponse, error) {
+	return &historyservice.IsActivityTaskValidResponse{IsValid: true}, nil
 }
 
 func (t *testRPCFactory) CreateHistoryGRPCConnection(rpcAddress string) *grpc.ClientConn {

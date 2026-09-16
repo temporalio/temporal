@@ -33,9 +33,7 @@ func DispatchResultToError(result DispatchResult) error {
 	}
 
 	switch result.Outcome {
-	case DispatchOutcomeHandlerFailure,
-		DispatchOutcomeWorkerFailure,
-		DispatchOutcomeOperationFailure:
+	case DispatchOutcomeHandlerFailure, DispatchOutcomeOperationFailure:
 		// The worker either failed the task (via RespondNexusTaskFailed) or answered with a failed
 		// operation. Either way the failure reports what the worker said.
 		return temporal.GetDefaultFailureConverter().FailureToError(result.Failure)
