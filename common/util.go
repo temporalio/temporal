@@ -394,6 +394,26 @@ func IsResourceExhausted(err error) bool {
 	return false
 }
 
+// IsCongestionError checks if the error indicates system/persistence congestion or a
+// transient outage: resource exhausted, unavailable, or (context) deadline exceeded.
+// These errors should engage, or at least preserve, the long congestion backoff instead
+// of the fast retry path. In particular, a brief window of Unavailable/DeadlineExceeded
+// errors (e.g. during a database failover) must not reset accumulated congestion
+// backoff state, otherwise queue readers/executables across all shards fall back to
+// the fast retry path at once and re-fire in a synchronized burst on recovery.
+func IsCongestionError(err error) bool {
+	if IsResourceExhausted(err) {
+		return true
+	}
+
+	var unavailableErr *serviceerror.Unavailable
+	if errors.As(err, &unavailableErr) {
+		return true
+	}
+
+	return IsContextDeadlineExceededErr(err)
+}
+
 // IsInternalError checks if the error is an internal error.
 func IsInternalError(err error) bool {
 	var internalErr *serviceerror.Internal
