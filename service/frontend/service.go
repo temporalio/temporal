@@ -223,7 +223,6 @@ type Config struct {
 
 	CallbackURLMaxLength    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackHeaderMaxSize   dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxCallbacksPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackEndpointConfigs dynamicconfig.TypedPropertyFnWithNamespaceFilter[callbacks.AddressMatchRules]
 
 	// The callback kinds a client may attach to a workflow execution.
@@ -424,7 +423,6 @@ func NewConfig(
 
 		CallbackURLMaxLength:           dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
 		CallbackHeaderMaxSize:          dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
-		MaxCallbacksPerWorkflow:        dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
 		MaxNexusOperationTokenLength:   nexusoperations.MaxOperationTokenLength.Get(dc),
 		NexusRequestHeadersBlacklist:   dynamicconfig.FrontendNexusRequestHeadersBlacklist.Get(dc),
 		NexusForwardRequestUseEndpoint: dynamicconfig.FrontendNexusForwardRequestUseEndpointDispatch.Get(dc),

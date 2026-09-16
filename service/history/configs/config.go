@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/health"
+	"go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/retrypolicy"
 )
@@ -88,7 +89,13 @@ type Config struct {
 	// needs settings owned by chasm/lib/nexusoperation, whose tests import
 	// service/history/tests and so cycle back through this package. A nil validator means the
 	// wiring was skipped, and the write path fails closed rather than going unenforced.
-	CallbackValidator                          callbacks.Validator
+	CallbackValidator callbacks.Validator
+	// WorkflowLinkValidator enforces the cumulative link cap for CHASM workflows, the
+	// counterpart of the caps the standalone Activity and Nexus Operation libraries apply.
+	// Built here rather than in chasm/lib/workflow: those libraries wrap links.Validator in a
+	// per-library type only to keep fx from collapsing them into one binding, and importing
+	// that package here would cycle back through service/history/tests.
+	WorkflowLinkValidator                      *links.Validator
 	EnableChasm                                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMSkipPersistence                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableChasmNexusWorkflowOperations         dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -533,18 +540,24 @@ func NewConfig(
 		EmitImmediateQueueBacklogAge: dynamicconfig.EmitImmediateQueueBacklogAge.Get(dc),
 		EnableDataLossMetrics:        dynamicconfig.EnableDataLossMetrics.Get(dc),
 		// HistoryCacheLimitSizeBased should not change during runtime.
-		HistoryCacheLimitSizeBased:                 dynamicconfig.HistoryCacheSizeBasedLimit.Get(dc)(),
-		HistoryHostLevelCacheMaxSize:               dynamicconfig.HistoryCacheHostLevelMaxSize.Get(dc),
-		HistoryHostLevelCacheMaxSizeBytes:          dynamicconfig.HistoryCacheHostLevelMaxSizeBytes.Get(dc),
-		HistoryCacheTTL:                            dynamicconfig.HistoryCacheTTL.Get(dc),
-		HistoryCacheNonUserContextLockTimeout:      dynamicconfig.HistoryCacheNonUserContextLockTimeout.Get(dc),
-		HistoryCacheBackgroundEvict:                dynamicconfig.HistoryCacheBackgroundEvict.Get(dc),
-		EnableWorkflowExecutionTimeoutTimer:        dynamicconfig.EnableWorkflowExecutionTimeoutTimer.Get(dc),
-		EnableUpdateWorkflowModeIgnoreCurrent:      dynamicconfig.EnableUpdateWorkflowModeIgnoreCurrent.Get(dc),
-		EnableTransitionHistory:                    dynamicconfig.EnableTransitionHistory.Get(dc),
-		MaxCallbacksPerWorkflow:                    dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
-		MaxCallbacksPerExecution:                   callback.MaxPerExecution.Get(dc),
-		MaxCallbacksPerUpdateID:                    dynamicconfig.MaxCallbacksPerUpdateID.Get(dc),
+		HistoryCacheLimitSizeBased:            dynamicconfig.HistoryCacheSizeBasedLimit.Get(dc)(),
+		HistoryHostLevelCacheMaxSize:          dynamicconfig.HistoryCacheHostLevelMaxSize.Get(dc),
+		HistoryHostLevelCacheMaxSizeBytes:     dynamicconfig.HistoryCacheHostLevelMaxSizeBytes.Get(dc),
+		HistoryCacheTTL:                       dynamicconfig.HistoryCacheTTL.Get(dc),
+		HistoryCacheNonUserContextLockTimeout: dynamicconfig.HistoryCacheNonUserContextLockTimeout.Get(dc),
+		HistoryCacheBackgroundEvict:           dynamicconfig.HistoryCacheBackgroundEvict.Get(dc),
+		EnableWorkflowExecutionTimeoutTimer:   dynamicconfig.EnableWorkflowExecutionTimeoutTimer.Get(dc),
+		EnableUpdateWorkflowModeIgnoreCurrent: dynamicconfig.EnableUpdateWorkflowModeIgnoreCurrent.Get(dc),
+		EnableTransitionHistory:               dynamicconfig.EnableTransitionHistory.Get(dc),
+		MaxCallbacksPerWorkflow:               dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
+		MaxCallbacksPerExecution:              callback.MaxPerExecution.Get(dc),
+		MaxCallbacksPerUpdateID:               dynamicconfig.MaxCallbacksPerUpdateID.Get(dc),
+		WorkflowLinkValidator: links.NewValidator(
+			"a workflow",
+			dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
+			dynamicconfig.MaxLinksPerComponent.Get(dc),
+			dynamicconfig.FrontendLinkMaxSize.Get(dc),
+		),
 		EnableChasm:                                dynamicconfig.EnableChasm.Get(dc),
 		EnableCHASMSkipPersistence:                 dynamicconfig.EnableCHASMSkipPersistence.Get(dc),
 		EnableChasmNexusWorkflowOperations:         nexusoperation.EnableChasmWorkflowOperations.Get(dc),

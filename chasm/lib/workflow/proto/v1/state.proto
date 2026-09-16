@@ -49,4 +49,16 @@ message WorkflowState {
   // existed; the total is recomputed from the tree on the next attach. That is unambiguous
   // because a validated callback always serializes to more than zero bytes.
   int64 total_callbacks_size = 2;
+
+  // Total links attached by callers across the start event and every options-updated event.
+  //
+  // Unlike callbacks, this cannot be recomputed: workflow links live on history events rather
+  // than in the CHASM tree. A workflow persisted before this field existed therefore starts
+  // counting from zero, effectively granting it a fresh budget. Reaching the cap takes
+  // hundreds of attach calls, so that is an acceptable trade for not reading history here.
+  //
+  // Counts only caller-attached request links, matching the standalone Activity and Nexus
+  // Operation caps. Links embedded in completion callbacks are not counted; they are already
+  // bounded by the callback size budget.
+  int32 total_links_count = 3;
 }

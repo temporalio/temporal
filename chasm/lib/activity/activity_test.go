@@ -1257,8 +1257,8 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		require.Equal(t, sumCallbackSizes(ctx, activity), activity.GetTotalCallbacksSize())
 		// The pre-existing callback's spec is included, but not its bookkeeping.
 		require.Greater(t, activity.GetTotalCallbacksSize(), int64(preExisting.GetCallback().Size()))
-		require.Less(t, activity.GetTotalCallbacksSize(), int64(preExisting.CallbackState.Size()+
-			activity.Callbacks["req-1-0"].Get(ctx).CallbackState.Size()))
+		require.Less(t, activity.GetTotalCallbacksSize(), int64(preExisting.Size()+
+			activity.Callbacks["req-1-0"].Get(ctx).Size()))
 	})
 
 	t.Run("EmptyListIsNoOp", func(t *testing.T) {

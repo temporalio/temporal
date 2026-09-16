@@ -164,6 +164,26 @@ func (w *Workflow) recomputeCallbackTotals(ctx chasm.Context) (count int, size i
 	return count, size
 }
 
+// RecordAttachedLinks folds the links a history event carried into the workflow's running
+// total. Called unconditionally from the Apply path, including during replication and reset,
+// so the count reflects what is actually persisted.
+func (w *Workflow) RecordAttachedLinks(count int) {
+	if count == 0 {
+		return
+	}
+	w.state().TotalLinksCount += int32(count)
+}
+
+// LinkCount returns how many caller-attached links the workflow holds. Used by the write path
+// to enforce the cumulative cap before an event is created.
+//
+// Workflow links live on history events rather than in the CHASM tree, so unlike the callback
+// totals this cannot be recomputed: a workflow that predates the counter reports zero and gets
+// a fresh budget.
+func (w *Workflow) LinkCount() int {
+	return int(w.GetTotalLinksCount())
+}
+
 // UpdateCallbackCount returns how many completion callbacks are attached to the given update,
 // or zero if the update has none yet. Used by the write path to enforce the per-update cap
 // before an event is created.

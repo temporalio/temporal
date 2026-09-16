@@ -194,8 +194,19 @@ type WorkflowState struct {
 	// existed; the total is recomputed from the tree on the next attach. That is unambiguous
 	// because a validated callback always serializes to more than zero bytes.
 	TotalCallbacksSize int64 `protobuf:"varint,2,opt,name=total_callbacks_size,json=totalCallbacksSize,proto3" json:"total_callbacks_size,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Total links attached by callers across the start event and every options-updated event.
+	//
+	// Unlike callbacks, this cannot be recomputed: workflow links live on history events rather
+	// than in the CHASM tree. A workflow persisted before this field existed therefore starts
+	// counting from zero, effectively granting it a fresh budget. Reaching the cap takes
+	// hundreds of attach calls, so that is an acceptable trade for not reading history here.
+	//
+	// Counts only caller-attached request links, matching the standalone Activity and Nexus
+	// Operation caps. Links embedded in completion callbacks are not counted; they are already
+	// bounded by the callback size budget.
+	TotalLinksCount int32 `protobuf:"varint,3,opt,name=total_links_count,json=totalLinksCount,proto3" json:"total_links_count,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *WorkflowState) Reset() {
@@ -242,6 +253,13 @@ func (x *WorkflowState) GetTotalCallbacksSize() int64 {
 	return 0
 }
 
+func (x *WorkflowState) GetTotalLinksCount() int32 {
+	if x != nil {
+		return x.TotalLinksCount
+	}
+	return 0
+}
+
 var File_temporal_server_chasm_lib_workflow_proto_v1_state_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDesc = "" +
@@ -253,10 +271,11 @@ const file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDesc = "" 
 	"\x1bNexusCancellationParentData\x12,\n" +
 	"\x12requested_event_id\x18\x01 \x01(\x03R\x10requestedEventId\"/\n" +
 	"\x12IncomingSignalData\x12\x19\n" +
-	"\bevent_id\x18\x01 \x01(\x03R\aeventId\"u\n" +
+	"\bevent_id\x18\x01 \x01(\x03R\aeventId\"\xa1\x01\n" +
 	"\rWorkflowState\x122\n" +
 	"\x15total_callbacks_count\x18\x01 \x01(\x05R\x13totalCallbacksCount\x120\n" +
-	"\x14total_callbacks_size\x18\x02 \x01(\x03R\x12totalCallbacksSizeBDZBgo.temporal.io/server/chasm/lib/workflow/gen/workflowpb;workflowpbb\x06proto3"
+	"\x14total_callbacks_size\x18\x02 \x01(\x03R\x12totalCallbacksSize\x12*\n" +
+	"\x11total_links_count\x18\x03 \x01(\x05R\x0ftotalLinksCountBDZBgo.temporal.io/server/chasm/lib/workflow/gen/workflowpb;workflowpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDescOnce sync.Once

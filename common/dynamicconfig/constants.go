@@ -1115,12 +1115,15 @@ so forwarding by endpoint ID will not work out of the box.`,
 	MaxCallbacksPerWorkflow = NewNamespaceIntSetting(
 		"system.maxCallbacksPerWorkflow",
 		32,
-		`MaxCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow.`,
+		`MaxCallbacksPerWorkflow is the maximum number of callbacks that can be attached to a workflow.
+Applies only to the legacy HSM callback implementation. CHASM workflows, including their updates,
+are bounded by callback.maxPerExecution instead.`,
 	)
 	MaxCallbacksPerUpdateID = NewNamespaceIntSetting(
 		"system.maxCallbacksPerUpdateID",
 		32,
-		`MaxCallbacksPerUpdateID is the maximum number of callbacks that can be attached to a single update ID.`,
+		`MaxCallbacksPerUpdateID is the maximum number of callbacks that can be attached to a single update ID.
+Bounds a single update; the workflow-wide bound across all of its updates is callback.maxPerExecution.`,
 	)
 	FrontendLinkMaxSize = NewNamespaceIntSetting(
 		"frontend.linkMaxSize",

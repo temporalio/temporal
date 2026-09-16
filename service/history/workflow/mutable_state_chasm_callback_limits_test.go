@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/log"
 	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/service/history/events"
@@ -174,4 +175,66 @@ func TestSuppressCallbackLimitChecksExemptsReapplyPaths(t *testing.T) {
 	require.Error(t, ms.validateChasmCallbackAttachments(ChasmCallbackAttachment{Callbacks: cbs}))
 	ms.SuppressCallbackLimitChecks()
 	require.NoError(t, ms.validateChasmCallbackAttachments(ChasmCallbackAttachment{Callbacks: cbs}))
+}
+
+func workflowLink(runID string) *commonpb.Link {
+	return &commonpb.Link{Variant: &commonpb.Link_Workflow_{
+		Workflow: &commonpb.Link_Workflow{Namespace: "ns", WorkflowId: "wid", RunId: runID},
+	}}
+}
+
+// Workflow links accumulate across the start event and every on-conflict attach. Unlike
+// standalone Activities and Nexus Operations they had no cumulative cap at all.
+func TestChasmWorkflowLinkCapIsEnforcedOnTheWritePath(t *testing.T) {
+	ms := newChasmCallbackTestMutableState(t, 100)
+	ms.config.WorkflowLinkValidator = links.NewValidator(
+		"a workflow",
+		func(string) int { return 10 },
+		func(string) int { return 2 }, // Cumulative cap.
+		func(string) int { return 4000 },
+	)
+
+	// Two links fit the cap.
+	require.NoError(t, ms.recordChasmAttachedLinks([]*commonpb.Link{
+		workflowLink("run-1"), workflowLink("run-2"),
+	}))
+
+	err := ms.validateChasmAttachedLinks([]*commonpb.Link{workflowLink("run-3")})
+	require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
+	require.ErrorContains(t, err, "cannot attach more than 2 links to a workflow (2 links already attached)")
+}
+
+// Same reasoning as callbacks: the Apply path is shared with replication and reset, so it only
+// counts what the event carried and never rejects it.
+func TestChasmWorkflowLinkCountIsMaintainedWithoutEnforcementOnApply(t *testing.T) {
+	ms := newChasmCallbackTestMutableState(t, 100)
+	ms.config.WorkflowLinkValidator = links.NewValidator(
+		"a workflow",
+		func(string) int { return 10 },
+		func(string) int { return 1 }, // Cap of one, yet three arrive on a committed event.
+		func(string) int { return 4000 },
+	)
+
+	require.NoError(t, ms.recordChasmAttachedLinks([]*commonpb.Link{
+		workflowLink("run-1"), workflowLink("run-2"), workflowLink("run-3"),
+	}))
+
+	count, err := ms.chasmLinkCount()
+	require.NoError(t, err)
+	require.Equal(t, 3, count)
+}
+
+func TestChasmWorkflowLinkCapIsSuppressedForReapplyPaths(t *testing.T) {
+	ms := newChasmCallbackTestMutableState(t, 100)
+	ms.config.WorkflowLinkValidator = links.NewValidator(
+		"a workflow",
+		func(string) int { return 10 },
+		func(string) int { return 1 },
+		func(string) int { return 4000 },
+	)
+	require.NoError(t, ms.recordChasmAttachedLinks([]*commonpb.Link{workflowLink("run-1")}))
+
+	require.Error(t, ms.validateChasmAttachedLinks([]*commonpb.Link{workflowLink("run-2")}))
+	ms.SuppressCallbackLimitChecks()
+	require.NoError(t, ms.validateChasmAttachedLinks([]*commonpb.Link{workflowLink("run-2")}))
 }

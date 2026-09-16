@@ -3053,6 +3053,9 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 	}); err != nil {
 		return nil, err
 	}
+	if err := ms.validateChasmAttachedLinks(startRequest.GetStartRequest().GetLinks()); err != nil {
+		return nil, err
+	}
 
 	event := ms.hBuilder.AddWorkflowExecutionStartedEvent(
 		ms.executionState.StartTime.AsTime(),
@@ -3139,6 +3142,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		requestID,
 		event.GetCompletionCallbacks(),
 	); err != nil {
+		return err
+	}
+	if err := ms.recordChasmAttachedLinks(startEvent.GetLinks()); err != nil {
 		return err
 	}
 	if _, err := ms.UpdateWorkflowStateStatus(
@@ -3606,6 +3612,52 @@ func (ms *MutableStateImpl) validateChasmCallbackAttachments(attachments ...Chas
 			)
 		}
 	}
+	return nil
+}
+
+// validateChasmAttachedLinks enforces the cumulative link cap for CHASM workflows.
+//
+// Only caller-attached request links are counted, matching the standalone Activity and Nexus
+// Operation caps. Links embedded in completion callbacks are excluded: the frontend's
+// dedupLinksFromCallbacks already strips them from the request's own list, and their bytes are
+// covered by the callback size budget.
+func (ms *MutableStateImpl) validateChasmAttachedLinks(links []*commonpb.Link) error {
+	if ms.suppressCallbackLimitChecks || !ms.ChasmEnabled() || len(links) == 0 {
+		return nil
+	}
+	existing, err := ms.chasmLinkCount()
+	if err != nil {
+		return err
+	}
+	return ms.config.WorkflowLinkValidator.ValidateTotal(
+		ms.GetNamespaceEntry().Name().String(), existing, len(links))
+}
+
+func (ms *MutableStateImpl) chasmLinkCount() (int, error) {
+	root, ok := ms.chasmTree.(*chasm.Node)
+	if !ok || root.ArchetypeID() == chasm.UnspecifiedArchetypeID {
+		return 0, nil
+	}
+	wf, _, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+	if err != nil {
+		return 0, err
+	}
+	return wf.LinkCount(), nil
+}
+
+// recordChasmAttachedLinks folds an event's links into the workflow's running total. Called
+// from Apply, so it also runs during replication and reset and stays consistent with what is
+// actually persisted.
+func (ms *MutableStateImpl) recordChasmAttachedLinks(links []*commonpb.Link) error {
+	if !ms.chasmCallbacksEnabled() || len(links) == 0 {
+		return nil
+	}
+	ms.EnsureChasmWorkflowComponent(context.Background())
+	wf, _, err := ms.ChasmWorkflowComponent(context.Background())
+	if err != nil {
+		return err
+	}
+	wf.RecordAttachedLinks(len(links))
 	return nil
 }
 
@@ -6111,6 +6163,9 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 	if err := ms.validateChasmCallbackAttachments(attachments...); err != nil {
 		return nil, err
 	}
+	if err := ms.validateChasmAttachedLinks(links); err != nil {
+		return nil, err
+	}
 
 	event := ms.hBuilder.AddWorkflowExecutionOptionsUpdatedEvent(
 		versioningOverride,
@@ -6172,6 +6227,9 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		attributes.GetAttachedRequestId(),
 		attributes.GetAttachedCompletionCallbacks(),
 	); err != nil {
+		return err
+	}
+	if err := ms.recordChasmAttachedLinks(event.GetLinks()); err != nil {
 		return err
 	}
 
