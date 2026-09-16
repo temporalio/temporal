@@ -308,8 +308,9 @@ func TestPartitionScaling_Backlog(t *testing.T) {
 // to the dynamic config settings, even when that's fewer partitions than the scaler had set.
 func TestPartitionScaling_Disable_ToFewerPartitions(t *testing.T) {
 	// default dynamic config to 1 to ensure we turn on managed scaling immediately.
-	// use slow shrinking to ensure that write doesn't drop to 0 ("target" when disabled)
-	// immediately, which would invalidate the test.
+	// use slow shrinking so that a regression that leaves backlog state set on disable keeps
+	// write above 0, which this test detects. with fast shrinking, write would reach 0 either
+	// way and clients would fall back to dynamic config even with stale scale info.
 	s := testcore.NewEnv(t, scalerEnvOptions(1, scalerShrinkSlow)...)
 
 	t.Log("set to 4 partitions using scaler")
