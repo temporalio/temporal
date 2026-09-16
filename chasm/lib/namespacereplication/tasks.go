@@ -249,11 +249,13 @@ func classifyLocalErr(err error) string {
 		deadlineExceeded  *serviceerror.DeadlineExceeded
 		invalidArgument   *serviceerror.InvalidArgument
 		alreadyExists     *serviceerror.NamespaceAlreadyExists
+		conditionFailed   *persistence.ConditionFailedError
 	)
 	switch {
 	case errors.As(err, &unavailable),
 		errors.As(err, &resourceExhausted),
-		errors.As(err, &deadlineExceeded):
+		errors.As(err, &deadlineExceeded),
+		errors.As(err, &conditionFailed):
 		return localFailureUnavailable
 	case errors.As(err, &invalidArgument):
 		return localFailureInvalidArgument

@@ -71,10 +71,172 @@ func (s *namespaceReplicationCHASMTestSuite) SetupSuite() {
 
 func (s *namespaceReplicationCHASMTestSuite) SetupTest() {
 	s.setupTest()
+	s.failApplyRequests.Store(false)
+	for {
+		select {
+		case <-s.observedApplyRequests:
+		default:
+			return
+		}
+	}
 }
 
 func (s *namespaceReplicationCHASMTestSuite) TearDownSuite() {
 	s.tearDownSuite()
+}
+
+func (s *namespaceReplicationCHASMTestSuite) TestAuthoritativeTransportConvergesWithoutFIFO() {
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	defer cancel()
+
+	active := s.clusters[0]
+	standby := s.clusters[1]
+	activeCleanup := active.OverrideDynamicConfig(
+		s.T(),
+		dynamicconfig.NamespaceReplicationTransportMode,
+		dynamicconfig.NamespaceReplicationTransportModeCHASM,
+	)
+	defer activeCleanup()
+	standbyCleanup := standby.OverrideDynamicConfig(
+		s.T(),
+		dynamicconfig.NamespaceReplicationTransportMode,
+		dynamicconfig.NamespaceReplicationTransportModeCHASM,
+	)
+	defer standbyCleanup()
+
+	namespaceName := "test-namespace-" + uuid.NewString()
+	legacyTasks := make(chan bufferedNamespaceReplicationTask, 1)
+	standby.InjectHook(
+		s.T(),
+		testhooks.NewHook(testhooks.NamespaceReplicationTaskInterceptor, func(
+			_ context.Context,
+			task *replicationspb.NamespaceTaskAttributes,
+			execute func() error,
+		) error {
+			legacyTasks <- bufferedNamespaceReplicationTask{
+				task:    proto.Clone(task).(*replicationspb.NamespaceTaskAttributes),
+				execute: execute,
+			}
+			return nil
+		}),
+		namespace.Name(namespaceName),
+	)
+
+	_, err := active.FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+		Namespace: namespaceName,
+		Clusters: []*replicationpb.ClusterReplicationConfig{
+			{ClusterName: active.ClusterName()},
+			{ClusterName: standby.ClusterName()},
+		},
+		ActiveClusterName:                active.ClusterName(),
+		IsGlobalNamespace:                true,
+		WorkflowExecutionRetentionPeriod: durationpb.New(24 * time.Hour),
+	})
+	s.Require().NoError(err)
+
+	createApply := s.receiveObservedApply(ctx)
+	s.requireSuccessfulApply(
+		createApply,
+		namespaceName,
+		enumsspb.NAMESPACE_OPERATION_CREATE,
+		false,
+		adminservice.ApplyNamespaceMutationResponse_OUTCOME_CREATED,
+	)
+	s.requireNamespaceDescription(ctx, active, namespaceName, "", 0)
+	s.requireNamespaceDescription(ctx, standby, namespaceName, "", 0)
+
+	const firstDescription = "first authoritative mutation"
+	_, err = active.FrontendClient().UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+		Namespace: namespaceName,
+		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
+			Description: firstDescription,
+		},
+	})
+	s.Require().NoError(err)
+	firstUpdateApply := s.receiveObservedApply(ctx)
+	s.requireSuccessfulApply(
+		firstUpdateApply,
+		namespaceName,
+		enumsspb.NAMESPACE_OPERATION_UPDATE,
+		false,
+		adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED,
+	)
+	s.requireNamespaceDescription(ctx, standby, namespaceName, firstDescription, 1)
+
+	const secondDescription = "second authoritative mutation"
+	_, err = active.FrontendClient().UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+		Namespace: namespaceName,
+		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
+			Description: secondDescription,
+		},
+	})
+	s.Require().NoError(err)
+	secondUpdateApply := s.receiveObservedApply(ctx)
+	s.requireSuccessfulApply(
+		secondUpdateApply,
+		namespaceName,
+		enumsspb.NAMESPACE_OPERATION_UPDATE,
+		false,
+		adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED,
+	)
+	s.requireNamespaceDescription(ctx, standby, namespaceName, secondDescription, 2)
+
+	for _, replay := range []struct {
+		name    string
+		request *adminservice.ApplyNamespaceMutationRequest
+		outcome adminservice.ApplyNamespaceMutationResponse_Outcome
+	}{
+		{"stale update", firstUpdateApply.request, adminservice.ApplyNamespaceMutationResponse_OUTCOME_NO_OP_STALE},
+		{"duplicate update", secondUpdateApply.request, adminservice.ApplyNamespaceMutationResponse_OUTCOME_NO_OP_STALE},
+		{"duplicate create", createApply.request, adminservice.ApplyNamespaceMutationResponse_OUTCOME_DUPLICATE},
+	} {
+		s.Run(replay.name, func() {
+			response, applyErr := standby.AdminClient().ApplyNamespaceMutation(
+				ctx,
+				proto.Clone(replay.request).(*adminservice.ApplyNamespaceMutationRequest),
+			)
+			s.Require().NoError(applyErr)
+			s.Require().Equal(replay.outcome, response.GetOutcome())
+			observed := s.receiveObservedApply(ctx)
+			s.Require().Equal(replay.outcome, observed.response.GetOutcome())
+		})
+	}
+	s.requireNamespaceDescription(ctx, standby, namespaceName, secondDescription, 2)
+
+	s.failApplyRequests.Store(true)
+	const recoveredDescription = "authoritative mutation recovered after peer outage"
+	_, err = active.FrontendClient().UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+		Namespace: namespaceName,
+		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
+			Description: recoveredDescription,
+		},
+	})
+	s.Require().NoError(err)
+	s.requireNamespaceDescription(ctx, active, namespaceName, recoveredDescription, 3)
+	failedApply := s.receiveObservedApply(ctx)
+	s.requireApplyRequest(failedApply, namespaceName, enumsspb.NAMESPACE_OPERATION_UPDATE, false)
+	s.Require().Nil(failedApply.response)
+	s.Require().ErrorAs(failedApply.err, new(*serviceerror.Unavailable))
+
+	s.failApplyRequests.Store(false)
+	recoveredApply := s.receiveObservedApply(ctx)
+	s.requireSuccessfulApply(
+		recoveredApply,
+		namespaceName,
+		enumsspb.NAMESPACE_OPERATION_UPDATE,
+		false,
+		adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED,
+	)
+	s.requireNamespaceDescription(ctx, standby, namespaceName, recoveredDescription, 3)
+
+	s.Require().Never(func() bool {
+		select {
+		case <-legacyTasks:
+			return true
+		default:
+			return false
+		}
+	}, time.Second, 20*time.Millisecond, "authoritative mode published a legacy namespace replication task")
 }
 
 func (s *namespaceReplicationCHASMTestSuite) TestShadowTransportDoesNotWrite() {
@@ -274,10 +436,13 @@ func (s *namespaceReplicationCHASMTestSuite) requireSuccessfulShadowApply(
 	namespaceName string,
 	operation enumsspb.NamespaceOperation,
 ) {
-	s.Require().NoError(observed.err)
-	s.Require().NotNil(observed.response)
-	s.Require().Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED, observed.response.GetOutcome())
-	s.requireShadowApplyRequest(observed, namespaceName, operation)
+	s.requireSuccessfulApply(
+		observed,
+		namespaceName,
+		operation,
+		true,
+		adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED,
+	)
 }
 
 func (s *namespaceReplicationCHASMTestSuite) requireShadowApplyRequest(
@@ -285,13 +450,53 @@ func (s *namespaceReplicationCHASMTestSuite) requireShadowApplyRequest(
 	namespaceName string,
 	operation enumsspb.NamespaceOperation,
 ) {
+	s.requireApplyRequest(observed, namespaceName, operation, true)
+}
+
+func (s *namespaceReplicationCHASMTestSuite) requireSuccessfulApply(
+	observed observedNamespaceMutationApply,
+	namespaceName string,
+	operation enumsspb.NamespaceOperation,
+	shadow bool,
+	outcome adminservice.ApplyNamespaceMutationResponse_Outcome,
+) {
+	s.Require().NoError(observed.err)
+	s.Require().NotNil(observed.response)
+	s.Require().Equal(outcome, observed.response.GetOutcome())
+	s.requireApplyRequest(observed, namespaceName, operation, shadow)
+}
+
+func (s *namespaceReplicationCHASMTestSuite) requireApplyRequest(
+	observed observedNamespaceMutationApply,
+	namespaceName string,
+	operation enumsspb.NamespaceOperation,
+	shadow bool,
+) {
 	s.Require().NotNil(observed.request)
-	s.Require().True(observed.request.GetShadow())
+	s.Require().Equal(shadow, observed.request.GetShadow())
 	s.Require().Equal(namespaceName, observed.request.GetNamespaceTask().GetInfo().GetName())
 	s.Require().Equal(operation, observed.request.GetNamespaceTask().GetNamespaceOperation())
 	fingerprint, err := nsreplication.NamespaceTaskFingerprint(observed.request.GetNamespaceTask())
 	s.Require().NoError(err)
 	s.Require().True(bytes.Equal(fingerprint, observed.request.GetFingerprint()))
+}
+
+func (s *namespaceReplicationCHASMTestSuite) requireNamespaceDescription(
+	ctx context.Context,
+	cluster *testcore.TestCluster,
+	namespaceName string,
+	description string,
+	configVersion int64,
+) {
+	await.RequireTruef(s.T(), func() bool {
+		response, err := cluster.TestBase().MetadataManager.GetNamespace(
+			ctx,
+			&persistence.GetNamespaceRequest{Name: namespaceName},
+		)
+		return err == nil &&
+			response.Namespace.GetInfo().GetDescription() == description &&
+			response.Namespace.GetConfigVersion() == configVersion
+	}, replicationWaitTime, replicationCheckInterval, "namespace %q did not converge", namespaceName)
 }
 
 func (s *namespaceReplicationCHASMTestSuite) requirePersistedNamespace(

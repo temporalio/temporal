@@ -35,6 +35,7 @@ func TestClassifyLocalErr(t *testing.T) {
 		want string
 	}{
 		{"CAS conflict / store unavailable -> Unavailable", serviceerror.NewUnavailable("conditional failure"), localFailureUnavailable},
+		{"persistence CAS conflict -> Unavailable", &persistence.ConditionFailedError{Msg: "conflict"}, localFailureUnavailable},
 		{"invalid argument -> InvalidArgument", serviceerror.NewInvalidArgument("bad"), localFailureInvalidArgument},
 		{"create collision -> AlreadyExists", serviceerror.NewNamespaceAlreadyExists("dup"), localFailureAlreadyExists},
 		{"not found -> Internal (degenerate)", serviceerror.NewNotFound("missing"), localFailureInternal},
