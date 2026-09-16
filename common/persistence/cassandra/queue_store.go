@@ -1,6 +1,7 @@
 package cassandra
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 
@@ -138,11 +139,20 @@ func (q *QueueStore) ReadMessages(
 	iter := query.Iter()
 
 	var result []*persistence.QueueMessage
-	message := make(map[string]any)
-	for iter.MapScan(message) {
-		queueMessage := convertQueueMessage(message)
-		result = append(result, queueMessage)
-		message = make(map[string]any)
+	var id int64
+	var data []byte
+	var encoding string
+	// Column order must match templateGetMessagesQuery SELECT clause.
+	for iter.Scan(&id, &data, &encoding) {
+		if encoding == "" {
+			encoding = enumspb.ENCODING_TYPE_PROTO3.String()
+		}
+		dataCopy := bytes.Clone(data)
+		result = append(result, &persistence.QueueMessage{
+			ID:       id,
+			Data:     dataCopy,
+			Encoding: encoding,
+		})
 	}
 
 	if err := iter.Close(); err != nil {
@@ -169,11 +179,20 @@ func (q *QueueStore) ReadMessagesFromDLQ(
 	iter := query.PageSize(pageSize).PageState(pageToken).Iter()
 
 	var result []*persistence.QueueMessage
-	message := make(map[string]any)
-	for iter.MapScan(message) {
-		queueMessage := convertQueueMessage(message)
-		result = append(result, queueMessage)
-		message = make(map[string]any)
+	var id int64
+	var data []byte
+	var encoding string
+	// Column order must match templateGetMessagesFromDLQQuery SELECT clause.
+	for iter.Scan(&id, &data, &encoding) {
+		if encoding == "" {
+			encoding = enumspb.ENCODING_TYPE_PROTO3.String()
+		}
+		dataCopy := bytes.Clone(data)
+		result = append(result, &persistence.QueueMessage{
+			ID:       id,
+			Data:     dataCopy,
+			Encoding: encoding,
+		})
 	}
 
 	var nextPageToken []byte
@@ -365,23 +384,6 @@ func (q *QueueStore) initializeDLQMetadata(
 		return q.insertInitialQueueMetadataRecord(ctx, q.getDLQTypeFromQueueType(), blob)
 	}
 	return err
-}
-
-func convertQueueMessage(
-	message map[string]any,
-) *persistence.QueueMessage {
-
-	id := message["message_id"].(int64)
-	data := message["message_payload"].([]byte)
-	encoding := message["message_encoding"].(string)
-	if encoding == "" {
-		encoding = enumspb.ENCODING_TYPE_PROTO3.String()
-	}
-	return &persistence.QueueMessage{
-		ID:       id,
-		Data:     data,
-		Encoding: encoding,
-	}
 }
 
 func convertQueueMetadata(
