@@ -172,6 +172,9 @@ func xTemporalPayload(payload *commonpb.Payload) (*nexus.Content, error) {
 	}, nil
 }
 
+// EncodeSystemPayload will marshal the supplied value into a commonpb.Payload, flagged
+// as a "system" payload. Meaning it is an envelope type that should bypass a decode
+// step on the client.
 func EncodeSystemPayload(value any) (*commonpb.Payload, error) {
 	encodedPayload, err := sdk.PreferProtoDataConverter.ToPayload(value)
 	if err != nil {
