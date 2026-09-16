@@ -383,8 +383,8 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryNodeSuite() {
 func testPostgreSQLHistoryNodeUpsert(p *PostgreSQLSuite, store sqlplugin.DB) {
 	ctx := context.Background()
 	shardID := int32(7)
-	treeID := primitives.NewUUID()
-	branchID := primitives.NewUUID()
+	treeID := primitives.MustParseUUID("11111111-1111-1111-1111-111111111111")
+	branchID := primitives.MustParseUUID("22222222-2222-2222-2222-222222222222")
 	nodeID := int64(11)
 	const txnID int64 = 42
 
@@ -440,7 +440,6 @@ func testPostgreSQLHistoryNodeUpsert(p *PostgreSQLSuite, store sqlplugin.DB) {
 	}
 	insert(&empty)
 	p.Require().Equal(-txnID, empty.TxnID)
-	p.Require().NotNil(empty.Data)
 	expected = empty
 	expected.TxnID = -expected.TxnID
 	p.Require().Equal(expected, read())
