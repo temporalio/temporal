@@ -17,6 +17,7 @@ func NewCallbacksValidatorConfig() callbacks.ValidatorConfig {
 	}
 	return callbacks.ValidatorConfig{
 		MaxCallbacksPerExecution:         func(string) int { return 10 },
+		TotalCallbacksMaxSize:            func(string) int { return 0 }, // Unlimited.
 		MaxIDLengthLimit:                 func() int { return 100 },
 		URLMaxLength:                     func(string) int { return 1000 },
 		HeaderMaxSize:                    func(string) int { return 4096 },
