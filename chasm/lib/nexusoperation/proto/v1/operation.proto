@@ -58,6 +58,16 @@ message OperationState {
   NexusOperationTerminateState terminate_state = 19;
   // Links are only populated for standalone operations. Workflow-backed operations derive links from history events.
   repeated temporal.api.common.v1.Link links = 20;
+
+  // Sum of the serialized size of every completion callback attached to this operation.
+  // Counts only the callback specification, never the delivery bookkeeping (attempt,
+  // failures, timestamps), which mutates after attach and would otherwise let an operation
+  // drift over its budget on its own.
+  //
+  // Zero alongside a non-empty callback set means the operation was persisted before this
+  // field existed; the total is recomputed from the tree on the next attach. That is
+  // unambiguous because a validated callback always serializes to more than zero bytes.
+  int64 total_callbacks_size = 21;
 }
 
 message NexusOperationTerminateState {

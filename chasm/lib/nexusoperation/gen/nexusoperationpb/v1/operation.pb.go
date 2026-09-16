@@ -262,9 +262,18 @@ type OperationState struct {
 	// Explicit terminate request state for standalone operations.
 	TerminateState *NexusOperationTerminateState `protobuf:"bytes,19,opt,name=terminate_state,json=terminateState,proto3" json:"terminate_state,omitempty"`
 	// Links are only populated for standalone operations. Workflow-backed operations derive links from history events.
-	Links         []*v11.Link `protobuf:"bytes,20,rep,name=links,proto3" json:"links,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Links []*v11.Link `protobuf:"bytes,20,rep,name=links,proto3" json:"links,omitempty"`
+	// Sum of the serialized size of every completion callback attached to this operation.
+	// Counts only the callback specification, never the delivery bookkeeping (attempt,
+	// failures, timestamps), which mutates after attach and would otherwise let an operation
+	// drift over its budget on its own.
+	//
+	// Zero alongside a non-empty callback set means the operation was persisted before this
+	// field existed; the total is recomputed from the tree on the next attach. That is
+	// unambiguous because a validated callback always serializes to more than zero bytes.
+	TotalCallbacksSize int64 `protobuf:"varint,21,opt,name=total_callbacks_size,json=totalCallbacksSize,proto3" json:"total_callbacks_size,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *OperationState) Reset() {
@@ -435,6 +444,13 @@ func (x *OperationState) GetLinks() []*v11.Link {
 		return x.Links
 	}
 	return nil
+}
+
+func (x *OperationState) GetTotalCallbacksSize() int64 {
+	if x != nil {
+		return x.TotalCallbacksSize
+	}
+	return 0
 }
 
 type NexusOperationTerminateState struct {
@@ -848,7 +864,8 @@ var File_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto proto
 
 const file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_rawDesc = "" +
 	"\n" +
-	"Atemporal/server/chasm/lib/nexusoperation/proto/v1/operation.proto\x121temporal.server.chasm.lib.nexusoperation.proto.v1\x1a\x19google/protobuf/any.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a'temporal/api/sdk/v1/user_metadata.proto\"\xe9\t\n" +
+	"Atemporal/server/chasm/lib/nexusoperation/proto/v1/operation.proto\x121temporal.server.chasm.lib.nexusoperation.proto.v1\x1a\x19google/protobuf/any.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a'temporal/api/sdk/v1/user_metadata.proto\"\x9b\n" +
+	"\n" +
 	"\x0eOperationState\x12Z\n" +
 	"\x06status\x18\x01 \x01(\x0e2B.temporal.server.chasm.lib.nexusoperation.proto.v1.OperationStatusR\x06status\x12\x1f\n" +
 	"\vendpoint_id\x18\x02 \x01(\tR\n" +
@@ -874,7 +891,8 @@ const file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_raw
 	"\x1anext_attempt_schedule_time\x18\x11 \x01(\v2\x1a.google.protobuf.TimestampR\x17nextAttemptScheduleTime\x12'\n" +
 	"\x0foperation_token\x18\x12 \x01(\tR\x0eoperationToken\x12x\n" +
 	"\x0fterminate_state\x18\x13 \x01(\v2O.temporal.server.chasm.lib.nexusoperation.proto.v1.NexusOperationTerminateStateR\x0eterminateState\x122\n" +
-	"\x05links\x18\x14 \x03(\v2\x1c.temporal.api.common.v1.LinkR\x05links\"=\n" +
+	"\x05links\x18\x14 \x03(\v2\x1c.temporal.api.common.v1.LinkR\x05links\x120\n" +
+	"\x14total_callbacks_size\x18\x15 \x01(\x03R\x12totalCallbacksSize\"=\n" +
 	"\x1cNexusOperationTerminateState\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\"\x82\x03\n" +

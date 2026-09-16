@@ -44,6 +44,17 @@ func newCallbackTestContext() *chasm.MockMutableContext {
 	}
 }
 
+// sumCallbackSizes recomputes the attached callbacks' size from the tree. This is the invariant
+// Operation.TotalCallbacksSize denormalizes: the callback specs alone, never the delivery bookkeeping
+// around them.
+func sumCallbackSizes(ctx chasm.Context, op *Operation) int64 {
+	var total int64
+	for _, field := range op.Callbacks {
+		total += int64(field.Get(ctx).GetCallback().Size())
+	}
+	return total
+}
+
 func TestNewStandaloneOperationAttachesCompletionCallbacks(t *testing.T) {
 	t.Parallel()
 
@@ -167,8 +178,10 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		cbs := []*commonpb.Callback{newNexusCallback()}
 
 		require.NoError(t, op.addCompletionCallbacks(ctx, "req-id", cbs, newTestCallbackValidator(t, 10), "ns-name"))
+		sizeAfterFirstAttach := op.TotalCallbacksSize
 		require.NoError(t, op.addCompletionCallbacks(ctx, "req-id", cbs, newTestCallbackValidator(t, 10), "ns-name"))
 		require.Len(t, op.Callbacks, 1)
+		require.Equal(t, sizeAfterFirstAttach, op.TotalCallbacksSize)
 	})
 
 	t.Run("ReAttachingTheSameRequestIsIdempotentAfterClose", func(t *testing.T) {
@@ -246,6 +259,61 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		require.ErrorAs(t, err, &failedPreconditionErr)
 		require.Contains(t, err.Error(), "cannot attach callbacks to a closed nexus operation")
 		require.Empty(t, op.Callbacks)
+	})
+
+	t.Run("TracksTotalCallbacksSize", func(t *testing.T) {
+		ctx := newCallbackTestContext()
+		op := newScheduledTestOperation(t, ctx)
+		require.Zero(t, op.TotalCallbacksSize)
+
+		require.NoError(t, op.addCompletionCallbacks(ctx, "req-1", []*commonpb.Callback{
+			newNexusCallback(),
+			newNexusCallback(),
+		}, newTestCallbackValidator(t, 10), "ns-name"))
+		require.Positive(t, op.TotalCallbacksSize)
+		require.Equal(t, sumCallbackSizes(ctx, op), op.TotalCallbacksSize)
+
+		require.NoError(t, op.addCompletionCallbacks(ctx, "req-2", []*commonpb.Callback{
+			newNexusCallback(),
+		}, newTestCallbackValidator(t, 10), "ns-name"))
+		require.Equal(t, sumCallbackSizes(ctx, op), op.TotalCallbacksSize)
+	})
+
+	t.Run("BackfillsTotalCallbacksSizeForOperationsPersistedBeforeTheField", func(t *testing.T) {
+		ctx := newCallbackTestContext()
+		op := newScheduledTestOperation(t, ctx)
+		require.NoError(t, op.addCompletionCallbacks(ctx, "req-1", []*commonpb.Callback{
+			newNexusCallback(),
+		}, newTestCallbackValidator(t, 10), "ns-name"))
+		oneCallbackSize := op.TotalCallbacksSize
+
+		// An operation written before total_callbacks_size existed: callbacks attached, total zero.
+		op.TotalCallbacksSize = 0
+
+		require.NoError(t, op.addCompletionCallbacks(ctx, "req-2", []*commonpb.Callback{
+			newNexusCallback(),
+		}, newTestCallbackValidator(t, 10), "ns-name"))
+		require.Equal(t, 2*oneCallbackSize, op.TotalCallbacksSize)
+		require.Equal(t, sumCallbackSizes(ctx, op), op.TotalCallbacksSize)
+	})
+
+	t.Run("RejectsExceedingTheTotalSizeLimit", func(t *testing.T) {
+		ctx := newCallbackTestContext()
+		op := newScheduledTestOperation(t, ctx)
+		require.NoError(t, op.addCompletionCallbacks(ctx, "req-1", []*commonpb.Callback{
+			newNexusCallback(),
+		}, newTestCallbackValidator(t, 10), "ns-name"))
+
+		// A budget with no room left for a second callback of the same size.
+		validator := newTestCallbackValidatorWithSizeLimit(t, 10, int(op.TotalCallbacksSize)+1)
+		err := op.addCompletionCallbacks(ctx, "req-2", []*commonpb.Callback{
+			newNexusCallback(),
+		}, validator, "ns-name")
+		var failedPreconditionErr *serviceerror.FailedPrecondition
+		require.ErrorAs(t, err, &failedPreconditionErr)
+		require.Contains(t, err.Error(), "bytes already attached")
+		require.Len(t, op.Callbacks, 1)
+		require.Equal(t, sumCallbackSizes(ctx, op), op.TotalCallbacksSize)
 	})
 
 	t.Run("RejectsAnEmptyRequestID", func(t *testing.T) {

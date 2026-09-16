@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/chasm/lib/callback"
+	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/contextutil"
@@ -317,21 +318,19 @@ func (a *Activity) addCompletionCallbacks(
 		return serviceerror.NewFailedPrecondition("cannot attach callbacks to a closed activity")
 	}
 
-	// TODO: Populate CurrentCallbacksSize once ActivityState.total_callbacks_size exists. Until
-	// then only the count limit is meaningful here (the size limit is disabled by default).
-	if err := validator.ValidateAdditions(namespaceName, completionCallbacks, callbacks.ValidateAdditionsOptions{
-		CurrentCount: len(a.Callbacks),
-	}); err != nil {
-		return err
+	// Resolve the insertions before validating: the limits must be charged against what this
+	// call would actually persist, not against the request as sent. A retry re-derives keys that
+	// are already present, and rejecting it for exceeding a cap it does not move is wrong.
+	type pendingCallback struct {
+		id      string
+		chasmCB *callbackspb.Callback
 	}
-
-	if a.Callbacks == nil {
-		a.Callbacks = make(chasm.Map[string, *callback.Callback], len(completionCallbacks))
-	}
-
-	registrationTime := timestamppb.New(ctx.Now(a))
-
+	var (
+		pending []pendingCallback
+		newCBs  []*commonpb.Callback
+	)
 	for idx, cb := range completionCallbacks {
+		// Convert before the skip guard so a malformed callback is still rejected on a retry.
 		chasmCB, err := callback.FromAPICallback(cb)
 		if err != nil {
 			return err
@@ -345,10 +344,54 @@ func (a *Activity) addCompletionCallbacks(
 			// made here, so re-inserting would double-count it.
 			continue
 		}
-		callbackObj := callback.NewCallback(requestID, registrationTime, chasmCB)
-		a.Callbacks[id] = chasm.NewComponentField(ctx, callbackObj)
+		pending = append(pending, pendingCallback{id: id, chasmCB: chasmCB})
+		newCBs = append(newCBs, cb)
+	}
+	if len(pending) == 0 {
+		return nil
+	}
+
+	a.backfillTotalCallbacksSize(ctx)
+
+	if err := validator.ValidateAdditions(namespaceName, newCBs, callbacks.ValidateAdditionsOptions{
+		CurrentCount:         len(a.Callbacks),
+		CurrentCallbacksSize: int(a.TotalCallbacksSize),
+	}); err != nil {
+		return err
+	}
+
+	if a.Callbacks == nil {
+		a.Callbacks = make(chasm.Map[string, *callback.Callback], len(pending))
+	}
+
+	registrationTime := timestamppb.New(ctx.Now(a))
+
+	for _, p := range pending {
+		callbackObj := callback.NewCallback(requestID, registrationTime, p.chasmCB)
+		a.Callbacks[p.id] = chasm.NewComponentField(ctx, callbackObj)
+		a.TotalCallbacksSize += int64(p.chasmCB.Size())
 	}
 	return nil
+}
+
+// backfillTotalCallbacksSize recomputes TotalCallbacksSize by walking the callback tree, for
+// activities persisted before the field existed.
+//
+// A zero total alongside a non-empty callback set is an unambiguous marker of that case: every
+// callback reaching the tree has passed validation, and a validated callback serializes to more
+// than zero bytes, so an activity that attached one while the field existed cannot have a zero
+// total. The recompute therefore runs at most once, before the first attach that persists it.
+func (a *Activity) backfillTotalCallbacksSize(ctx chasm.MutableContext) {
+	if a.TotalCallbacksSize != 0 || len(a.Callbacks) == 0 {
+		return
+	}
+	var total int64
+	for _, field := range a.Callbacks {
+		// Only the callback spec is counted, matching what the counter tracks: the surrounding
+		// CallbackState's delivery bookkeeping mutates after attach and would make it drift.
+		total += int64(field.Get(ctx).GetCallback().Size())
+	}
+	a.TotalCallbacksSize = total
 }
 
 // effectiveUserMetadata returns the activity's user metadata, preferring the
