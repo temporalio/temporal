@@ -72,7 +72,7 @@ func TestPartitionScaling_Up(t *testing.T) {
 	await.RequireTrue(t, scalerBacklogAtLeast(s, s.Tv(), 5, 0, 1), 15*time.Second, time.Second)
 
 	t.Log("check that 2,3 have no tasks (leave 4,5 unloaded)")
-	s.True(scalerBacklogEmpty(s, s.Tv(), 5, 2, 3)())
+	s.True(scalerBacklogEmpty(s, s.Tv(), 2, 3)())
 
 	t.Log("set to 6 partitions using scaler")
 	s.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
@@ -91,7 +91,7 @@ func TestPartitionScaling_Up(t *testing.T) {
 	defer stopPolls()
 
 	t.Log("wait until all are drained")
-	await.RequireTrue(t, scalerBacklogEmpty(s, s.Tv(), 5, 0, 1, 2, 3, 4, 5), 15*time.Second, time.Second)
+	await.RequireTrue(t, scalerBacklogEmpty(s, s.Tv(), 0, 1, 2, 3, 4, 5), 15*time.Second, time.Second)
 }
 
 func TestPartitionScaling_Down(t *testing.T) {
@@ -132,7 +132,7 @@ func TestPartitionScaling_Down(t *testing.T) {
 	defer stopPolls()
 
 	t.Log("wait until all are drained")
-	await.RequireTrue(t, scalerBacklogEmpty(s, s.Tv(), 5, 0, 1, 2, 3, 4, 5), 15*time.Second, time.Second)
+	await.RequireTrue(t, scalerBacklogEmpty(s, s.Tv(), 0, 1, 2, 3, 4, 5), 15*time.Second, time.Second)
 
 	// We want to check that polls went to all 6 partitions directly, even though we decreased
 	// the target to 4. Note that tasks will be forwarded, so we'll still drain everything even
@@ -174,7 +174,7 @@ func TestPartitionScaling_Up_FromDC(t *testing.T) {
 	defer stopPolls()
 
 	t.Log("wait until all are drained")
-	await.RequireTrue(t, scalerBacklogEmpty(s, s.Tv(), 5, 0, 1, 2, 3, 4, 5), 15*time.Second, time.Second)
+	await.RequireTrue(t, scalerBacklogEmpty(s, s.Tv(), 0, 1, 2, 3, 4, 5), 15*time.Second, time.Second)
 }
 
 func TestPartitionScaling_Down_FromDC(t *testing.T) {
@@ -209,7 +209,7 @@ func TestPartitionScaling_Down_FromDC(t *testing.T) {
 	defer stopPolls()
 
 	t.Log("wait until all are drained")
-	await.RequireTrue(t, scalerBacklogEmpty(s, s.Tv(), 5, 0, 1, 2, 3, 4, 5), 15*time.Second, time.Second)
+	await.RequireTrue(t, scalerBacklogEmpty(s, s.Tv(), 0, 1, 2, 3, 4, 5), 15*time.Second, time.Second)
 
 	// We want to check that polls went to all 6 partitions directly, even though we decreased
 	// the target to 4. Note that tasks will be forwarded, so we'll still drain everything even
