@@ -47,6 +47,7 @@ type (
 		// 3. Furthermore, it is possible that many UpdateAdmitted events were created after a Reset or during conflict
 		//    resolution. In that situation, we *must not* attempt to load all the payloads into the Registry.
 		request         *anypb.Any // of type *updatepb.Request
+		originalReqID   string
 		acceptedEventID int64
 		onComplete      func()
 		checkLimits     func(*updatepb.Request) error
@@ -349,6 +350,7 @@ func (u *Update) Admit(
 		return serviceerror.NewInvalidArgumentf("unable to unmarshal request: %v", err)
 	}
 	u.request = reqAny
+	u.originalReqID = req.GetRequestId()
 
 	prevState := u.setState(stateProvisionallyAdmitted)
 	eventStore.OnAfterCommit(func(context.Context) {
@@ -448,6 +450,14 @@ func (u *Update) AttachCallbacks(
 	}
 }
 
+// EventLinkType reports the projected event type for an Update's RequestIDRef link.
+func (u *Update) EventLinkType(requestID string) enumspb.EventType {
+	if u.originalReqID == requestID {
+		return enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED
+	}
+	return enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED
+}
+
 // persistPendingCallbacks writes one WorkflowExecutionOptionsUpdatedEvent per
 // buffered AttachCallbacks callback, skipping any whose requestID is already persisted.
 // Called from onAcceptanceMsg after the acceptance event has been written.
@@ -484,8 +494,15 @@ func (u *Update) persistCallback(
 	if requestID != "" && eventStore.HasRequestID(requestID) {
 		return true, nil
 	}
+	// Copy Nexus links to the event so that backlinks are preserved in history.
+	var callbackLinks []*commonpb.Link
+	for _, callback := range completionCallbacks {
+		if callback.GetNexus() != nil {
+			callbackLinks = append(callbackLinks, callback.GetLinks()...)
+		}
+	}
 	_, err = eventStore.AddWorkflowExecutionOptionsUpdatedEvent(
-		nil, false, "", nil, nil, "", nil, nil, false,
+		nil, false, "", nil, callbackLinks, "", nil, nil, false,
 		[]*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate{{
 			UpdateId:                    u.id,
 			AttachedRequestId:           requestID,

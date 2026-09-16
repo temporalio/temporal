@@ -443,6 +443,12 @@ func (b *EventStore) wireEventIDs(
 			if attributes.GetAttachedRequestId() != "" {
 				b.requestIDToEventID[attributes.AttachedRequestId] = event.GetEventId()
 			}
+			// Request IDs of duplicate updates are recorded per update, not on the event.
+			for _, updateOptions := range attributes.GetWorkflowUpdateOptions() {
+				if updateOptions.GetAttachedRequestId() != "" {
+					b.requestIDToEventID[updateOptions.AttachedRequestId] = event.GetEventId()
+				}
+			}
 
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 			attributes := event.GetWorkflowExecutionSignaledEventAttributes()
