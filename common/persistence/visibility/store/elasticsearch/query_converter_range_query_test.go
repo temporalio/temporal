@@ -266,6 +266,59 @@ func TestRangeQuery_MergeRangeQueriesDoesNotMutateInputs(t *testing.T) {
 	r.Equal(&rangeQuery{Field: "Int01", Gte: int64(2), Lte: int64(20)}, b)
 }
 
+// Datetime bounds reach the merge as RFC3339Nano strings, and RFC3339Nano is variable width: it
+// drops trailing zeros from the fractional seconds, and the whole fractional part when it is zero.
+// So "...:00Z" and "...:00.000000001Z" first differ at 'Z' (0x5A) against '.' (0x2E), which puts
+// the earlier instant later in byte order. Elasticsearch compares these fields as dates, so the
+// merge has to keep the bound Elasticsearch would find more restrictive: the later instant for a
+// lower bound, the earlier one for an upper bound.
+func TestRangeQuery_MergeRangeQueriesDatetimeBounds(t *testing.T) {
+	testCases := []struct {
+		name string
+		a    *rangeQuery
+		b    *rangeQuery
+		out  *rangeQuery
+	}{
+		{
+			// Byte order agrees with time order when the seconds differ, so this case already
+			// holds. It guards the common path against a fix that only inspects fractions.
+			name: "lower bounds at different seconds keep the later instant",
+			a:    &rangeQuery{Field: "StartTime", Gte: "2026-01-01T00:00:00Z"},
+			b:    &rangeQuery{Field: "StartTime", Gte: "2026-02-01T00:00:00Z"},
+			out:  &rangeQuery{Field: "StartTime", Gte: "2026-02-01T00:00:00Z"},
+		},
+		{
+			name: "lower bounds differing only in sub-second precision keep the later instant",
+			a:    &rangeQuery{Field: "StartTime", Gte: "2026-01-01T00:00:00Z"},
+			b:    &rangeQuery{Field: "StartTime", Gte: "2026-01-01T00:00:00.000000001Z"},
+			out:  &rangeQuery{Field: "StartTime", Gte: "2026-01-01T00:00:00.000000001Z"},
+		},
+		{
+			name: "upper bounds differing only in sub-second precision keep the earlier instant",
+			a:    &rangeQuery{Field: "CloseTime", Lte: "2026-01-01T00:00:00Z"},
+			b:    &rangeQuery{Field: "CloseTime", Lte: "2026-01-01T00:00:00.5Z"},
+			out:  &rangeQuery{Field: "CloseTime", Lte: "2026-01-01T00:00:00Z"},
+		},
+		{
+			// The strict bound is the earlier instant here, so it is the redundant one and the
+			// non-strict bound has to survive the collapse.
+			name: "strict lower bound collapses against a later non-strict bound",
+			a:    &rangeQuery{Field: "StartTime", Gt: "2026-01-01T00:00:00Z"},
+			b:    &rangeQuery{Field: "StartTime", Gte: "2026-01-01T00:00:00.000000001Z"},
+			out:  &rangeQuery{Field: "StartTime", Gte: "2026-01-01T00:00:00.000000001Z"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			out, ok := mergeRangeQueries(tc.a, tc.b)
+			r.True(ok)
+			r.Equal(tc.out, out)
+		})
+	}
+}
+
 func TestRangeQuery_CompareAnyAndGet(t *testing.T) {
 	maxFn := func(c int) bool { return c > 0 }
 	minFn := func(c int) bool { return c < 0 }

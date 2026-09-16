@@ -1449,6 +1449,29 @@ func TestElasticsearchQueryConverter_MergeRangeQueriesOnDistinctFields(t *testin
 	r.Equal(expectedMustNot, boolClause["must_not"])
 }
 
+// Two lower bounds on the same datetime field, differing only in sub-second precision, have to
+// merge to the later instant. The bounds are RFC3339Nano strings of different widths, so ordering
+// them as byte strings picks the earlier one and silently widens the query: this generates
+// gte '2026-01-01T00:00:00Z', which matches workflows the input query excludes.
+func TestElasticsearchQueryConverter_MergeDatetimeRangeConditions(t *testing.T) {
+	t.Parallel()
+	r := require.New(t)
+
+	queryParams, err := newESQueryConverter().Convert(
+		"StartTime >= '2026-01-01T00:00:00Z' AND StartTime >= '2026-01-01T00:00:00.000000001Z'",
+	)
+	r.NoError(err)
+	out, err := serializeESQuery(queryParams.QueryExpr)
+	r.NoError(err)
+
+	r.JSONEq(
+		`{"bool":{`+
+			`"filter":{"range":{"StartTime":{"gte":"2026-01-01T00:00:00.000000001Z"}}},`+
+			`"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+		out,
+	)
+}
+
 func newESQueryConverter() *query.QueryConverter[elastic.Query] {
 	return elasticsearch.NewQueryConverter(
 		testNamespaceName,
