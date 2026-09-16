@@ -3539,8 +3539,8 @@ because executions scanner support for SQL is not yet implemented.`,
 	)
 	HistoryScannerDataMinAge = NewGlobalDurationSetting(
 		"worker.historyScannerDataMinAge",
-		60*24*time.Hour,
-		`HistoryScannerDataMinAge indicates the history scanner cleanup minimum age.`,
+		7*24*time.Hour,
+		`HistoryScannerDataMinAge is the minimum age of an orphaned history branch before the scavenger will delete it.`,
 	)
 	HistoryScannerVerifyRetention = NewGlobalBoolSetting(
 		"worker.historyScannerVerifyRetention",
