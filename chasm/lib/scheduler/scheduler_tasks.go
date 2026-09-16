@@ -337,9 +337,10 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 		},
 	})
 	if err != nil {
-		// If the workflow closed between Describe and this call, retry the task so the
-		// next Describe reports its actual terminal status. Treating an already-started
-		// error as success here could record a failed workflow as completed.
+		// WorkflowExecutionAlreadyStarted means the workflow closed after Describe;
+		// REJECT_DUPLICATE prevents attaching to the closed execution. Return it so the
+		// task retries and Describe records the actual terminal status rather than
+		// incorrectly recording it as completed. Other errors are also retried.
 		return nil, err
 	}
 
