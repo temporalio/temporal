@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -468,7 +469,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandProtocolMessage(
 }
 
 func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
-	_ context.Context,
+	ctx context.Context,
 	attr *commandpb.ScheduleActivityTaskCommandAttributes,
 ) (*historypb.HistoryEvent, *handleCommandResponse, error) {
 	executionInfo := handler.mutableState.GetExecutionInfo()
@@ -550,6 +551,12 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 	if handler.mutableState.GetExecutionState().Status == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 		bypassActivityTaskGeneration = true
 		eagerStartActivity = false
+	} else if eagerStartActivity && !handler.eagerActivityDispatchAllowed(ctx, namespace, attr) {
+		// TODO: batch possibly multiple activities in a single RPC call
+		// Matching grants are best-effort. On a denial or any matching failure, generate the
+		// activity task normally instead of failing workflow task completion.
+		bypassActivityTaskGeneration = false
+		eagerStartActivity = false
 	}
 
 	event, _, err := handler.mutableState.AddActivityTaskScheduledEvent(
@@ -572,6 +579,41 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 			},
 		},
 		nil
+}
+
+func (handler *workflowTaskCompletedHandler) eagerActivityDispatchAllowed(
+	ctx context.Context,
+	namespace string,
+	attr *commandpb.ScheduleActivityTaskCommandAttributes,
+) bool {
+	return !handler.config.EnableEagerActivityDispatchCheck(namespace) ||
+		handler.grantEagerActivityDispatch(ctx, attr)
+}
+
+func (handler *workflowTaskCompletedHandler) grantEagerActivityDispatch(
+	ctx context.Context,
+	attr *commandpb.ScheduleActivityTaskCommandAttributes,
+) bool {
+	if handler.matchingClient == nil {
+		return false
+	}
+
+	executionInfo := handler.mutableState.GetExecutionInfo()
+	response, err := handler.matchingClient.GrantEagerDispatch(ctx, &matchingservice.GrantEagerDispatchRequest{
+		NamespaceId: executionInfo.GetNamespaceId(),
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     attr.GetTaskQueue().GetName(),
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+		},
+		Items: []*matchingservice.GrantEagerDispatchRequest_Item{
+			{
+				Count:    1,
+				Priority: attr.GetPriority(),
+				Version:  worker_versioning.DeploymentVersionFromDeployment(handler.workflowTaskDeployment),
+			},
+		},
+	})
+	return err == nil && len(response.GetItems()) == 1 && response.GetItems()[0].GetGrantedCount() == 1
 }
 
 func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivity(

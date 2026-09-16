@@ -210,7 +210,7 @@ func (c *clientImpl) grantEagerDispatch(
 	opts []grpc.CallOption,
 ) (*matchingservice.GrantEagerDispatchResponse, error) {
 	if loadBalance {
-		p = c.loadBalancer.PickWritePartition(p.TaskQueue(), pc)
+		p, _ = c.loadBalancer.PickWritePartition(p.TaskQueue(), pc)
 	}
 	request, err := grantEagerDispatchRequestForPartition(request, p)
 	if err != nil {
