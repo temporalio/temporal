@@ -23,56 +23,59 @@ import (
 // rootEncodedPath is what DefaultPathEncoder produces for the root node.
 const rootEncodedPath = ""
 
-// NewDetachedTree builds a read only CHASM tree from persisted nodes, without mutable state,
-// for callers holding CHASM bytes but not the execution they came from, such as tdbg.
+// NewDetachedTree builds a read only CHASM tree from a persisted mutable state record, outside
+// the history service. It is the supported entry point for a process holding CHASM bytes but
+// not the live execution, such as tdbg or a reader that describes persisted state.
 //
 // Register libraries with nil handlers (see chasm/lib/all); only read paths are safe, and
 // write paths panic on the read only backend. Callers must strip any node paths they injected
 // themselves, since the tree only understands paths its own encoder produced.
 //
+// Only ChasmNodes is required. ExecutionInfo and ExecutionState supply what a component reads
+// through Context.ExecutionKey and Context.ExecutionInfo: the namespace, business ID, run ID,
+// close time, and transition count. Those live on the record rather than in the tree, so a
+// caller that omits them gets zeros for them and everything else still decodes. A caller
+// storing nodes for later offline reads should store these two alongside, since nothing can
+// recover them from the tree.
+//
 // The clock, logger, and metrics handler are fixed. A read reaches the logger and metrics
-// handler only on paths that are unreachable here, and the clock only affects components that
-// are still running, which a detached reader does not observe.
-//
-// There is no execution behind the tree, so whatever a component reads through
-// Context.ExecutionKey or Context.ExecutionInfo comes back zero: no namespace, business ID,
-// run ID, close time, state size, or transition count. Those belong to the mutable state row
-// that held the nodes rather than to the nodes, so a caller that knows them fills them in.
-//
-//	root, err := chasm.NewDetachedTree(nodes, registry)
-//	ctx := chasm.NewContext(goCtx, root)
-//	component, err := root.Component(ctx, chasm.ComponentRef{})
+// handler only on paths unreachable here, and the clock only affects components that are still
+// running, which a detached reader does not observe.
 func NewDetachedTree(
-	nodes map[string]*persistencespb.ChasmNode,
+	mutableState *persistencespb.WorkflowMutableState,
 	registry *Registry,
 ) (*Node, error) {
+	if mutableState == nil {
+		return nil, errors.New("mutable state is nil")
+	}
+
 	return NewTreeFromDB(
-		nodes,
+		mutableState.GetChasmNodes(),
 		registry,
 		clock.NewRealTimeSource(),
-		newReadOnlyNodeBackend(),
+		newReadOnlyNodeBackend(mutableState),
 		DefaultPathEncoder,
 		log.NewNoopLogger(),
 		metrics.NoopMetricsHandler,
 	)
 }
 
-// DetachedRootComponent decodes nodes and returns the root component as C, along with the
-// Context to read it through. It is the usual entry point for offline readers; use
+// DetachedRootComponent decodes mutableState and returns the root component as C, along with
+// the Context to read it through. It is the usual entry point for offline readers; use
 // NewDetachedTree directly only when you need the tree itself.
 //
 // C may be a concrete component type or an interface the root implements, such as
 // DescribableComponent. A root of some other type is an error.
 //
-//	act, ctx, err := chasm.DetachedRootComponent[*activity.Activity](goCtx, nodes, registry)
+//	act, ctx, err := chasm.DetachedRootComponent[*activity.Activity](goCtx, mutableState, registry)
 func DetachedRootComponent[C Component](
 	goCtx context.Context,
-	nodes map[string]*persistencespb.ChasmNode,
+	mutableState *persistencespb.WorkflowMutableState,
 	registry *Registry,
 ) (C, Context, error) {
 	var zero C
 
-	root, err := NewDetachedTree(nodes, registry)
+	root, err := NewDetachedTree(mutableState, registry)
 	if err != nil {
 		return zero, nil, err
 	}
@@ -90,15 +93,15 @@ func DetachedRootComponent[C Component](
 	return typed, chasmContext, nil
 }
 
-// RootArchetype returns the archetype of the root component in a persisted node map, so a
-// caller can decide how to handle a tree before decoding it.
+// RootArchetype returns the archetype of the root component, so a caller can decide how to
+// handle a record before decoding it.
 func RootArchetype(
-	nodes map[string]*persistencespb.ChasmNode,
+	mutableState *persistencespb.WorkflowMutableState,
 	registry *Registry,
 ) (Archetype, error) {
-	root, ok := nodes[rootEncodedPath]
+	root, ok := mutableState.GetChasmNodes()[rootEncodedPath]
 	if !ok {
-		return "", errors.New("node map has no root node")
+		return "", errors.New("mutable state has no root CHASM node")
 	}
 
 	attributes := root.GetMetadata().GetComponentAttributes()
@@ -113,34 +116,55 @@ func RootArchetype(
 	return fqn, nil
 }
 
-// readOnlyNodeBackend stands in for the mutable state a detached tree does not have. Reads
-// return zero values; methods that would mutate, emit a task, or read history panic instead,
-// since reaching one is a caller bug and failing quietly would return a plausible but wrong
-// result.
-type readOnlyNodeBackend struct{}
+// readOnlyNodeBackend serves NodeBackend reads from a persisted mutable state record. Methods
+// that would mutate, emit a task, or read history panic instead, since reaching one is a
+// caller bug and failing quietly would return a plausible but wrong result.
+type readOnlyNodeBackend struct {
+	mutableState *persistencespb.WorkflowMutableState
+}
 
 var _ NodeBackend = (*readOnlyNodeBackend)(nil)
 
-func newReadOnlyNodeBackend() *readOnlyNodeBackend {
-	return &readOnlyNodeBackend{}
+func newReadOnlyNodeBackend(mutableState *persistencespb.WorkflowMutableState) *readOnlyNodeBackend {
+	return &readOnlyNodeBackend{mutableState: mutableState}
 }
 
 func (b *readOnlyNodeBackend) unsupported(method string) {
 	panic("chasm: " + method + " is not available on a detached read only tree") //nolint:forbidigo
 }
 
-func (b *readOnlyNodeBackend) GetWorkflowKey() definition.WorkflowKey {
-	return definition.WorkflowKey{}
-}
-
+// GetExecutionInfo and GetExecutionState never return nil, even when the caller supplied
+// neither. The framework dereferences both without a check, and these getters cannot report an
+// error, so an unsupplied record reads as an empty one.
 func (b *readOnlyNodeBackend) GetExecutionInfo() *persistencespb.WorkflowExecutionInfo {
+	if info := b.mutableState.GetExecutionInfo(); info != nil {
+		return info
+	}
 	return &persistencespb.WorkflowExecutionInfo{}
 }
 
 func (b *readOnlyNodeBackend) GetExecutionState() *persistencespb.WorkflowExecutionState {
+	if state := b.mutableState.GetExecutionState(); state != nil {
+		return state
+	}
 	return &persistencespb.WorkflowExecutionState{}
 }
 
+func (b *readOnlyNodeBackend) GetWorkflowKey() definition.WorkflowKey {
+	info := b.mutableState.GetExecutionInfo()
+	return definition.NewWorkflowKey(
+		info.GetNamespaceId(),
+		info.GetWorkflowId(),
+		b.mutableState.GetExecutionState().GetRunId(),
+	)
+}
+
+// Callers that describe a component and care about identity must check that the record carried
+// it. A zero execution key yields a description with empty identity fields rather than an
+// error, because neither this interface nor chasm.Context has a way to report one.
+
+// GetApproximatePersistedSize returns 0. The live value is computed as mutable state is built
+// and is not part of the persisted record, so there is nothing to recover it from.
 func (b *readOnlyNodeBackend) GetApproximatePersistedSize() int { return 0 }
 
 func (b *readOnlyNodeBackend) GetNamespaceEntry() *namespace.Namespace { return nil }
