@@ -22,25 +22,41 @@ import (
 	"go.temporal.io/server/tests/testcore"
 )
 
-func scalerEnvOptions(dcPartitions int) []testcore.TestOption {
+type scalerShrink int
+
+const (
+	// let write count drop all the way to target in one step, so tests don't have to wait
+	// for it to catch up with the read count
+	scalerShrinkFast scalerShrink = iota
+	// use normal shrink settings, which keep the write count close to the read count.
+	// needed for some tests.
+	scalerShrinkSlow
+)
+
+func scalerEnvOptions(dcPartitions int, shrink scalerShrink) []testcore.TestOption {
+	settings := dynamicconfig.PartitionScaleManagerSettings{
+		MaxRate:            100,         // don't limit speed of changes
+		BatchSize:          1,           // always go directly to scaler
+		BackgroundInterval: time.Second, // ping scaler often and drain faster
+		DrainBufferTime:    time.Second, // drain faster
+		ShrinkRatio:        1.0,         // allow fast shrinking
+		ShrinkDelta:        100,         // allow fast shrinking
+	}
+	if shrink == scalerShrinkSlow {
+		settings.ShrinkRatio = 0.1
+		settings.ShrinkDelta = 2
+	}
 	return []testcore.TestOption{
 		testcore.WithDynamicConfig(dynamicconfig.MatchingUseNewMatcher, true),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, dcPartitions),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, dcPartitions),
-		testcore.WithDynamicConfig(dynamicconfig.MatchingPartitionScaleManager, dynamicconfig.PartitionScaleManagerSettings{
-			MaxRate:            100,         // don't limit speed of changes
-			BatchSize:          1,           // always go directly to scaler
-			BackgroundInterval: time.Second, // ping scaler often and drain faster
-			DrainBufferTime:    time.Second, // drain faster
-			ShrinkRatio:        1.0,         // allow fast shrinking
-			ShrinkDelta:        100,         // allow fast shrinking
-		}),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingPartitionScaleManager, settings),
 	}
 }
 
 func TestPartitionScaling_Up(t *testing.T) {
 	// default dynamic config to 1 to ensure we turn on managed scaling immediately
-	s := testcore.NewEnv(t, scalerEnvOptions(1)...)
+	s := testcore.NewEnv(t, scalerEnvOptions(1, scalerShrinkFast)...)
 
 	t.Log("set to 2 partitions using scaler")
 	s.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
@@ -80,7 +96,7 @@ func TestPartitionScaling_Up(t *testing.T) {
 
 func TestPartitionScaling_Down(t *testing.T) {
 	// default dynamic config to 1 to ensure we turn on managed scaling immediately
-	s := testcore.NewEnv(t, scalerEnvOptions(1)...)
+	s := testcore.NewEnv(t, scalerEnvOptions(1, scalerShrinkFast)...)
 
 	t.Log("set to 6 partitions using scaler")
 	s.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
@@ -132,7 +148,7 @@ func TestPartitionScaling_Down(t *testing.T) {
 
 func TestPartitionScaling_Up_FromDC(t *testing.T) {
 	// default dynamic config to 3
-	s := testcore.NewEnv(t, scalerEnvOptions(3)...)
+	s := testcore.NewEnv(t, scalerEnvOptions(3, scalerShrinkFast)...)
 
 	t.Log("start sending 10 tasks/s")
 	stopTasks := scalerBackgroundTasks(s, s.Tv(), 10)
@@ -163,7 +179,7 @@ func TestPartitionScaling_Up_FromDC(t *testing.T) {
 
 func TestPartitionScaling_Down_FromDC(t *testing.T) {
 	// default dynamic config to 6
-	s := testcore.NewEnv(t, scalerEnvOptions(6)...)
+	s := testcore.NewEnv(t, scalerEnvOptions(6, scalerShrinkFast)...)
 
 	t.Log("start sending 10 tasks/s")
 	stopTasks := scalerBackgroundTasks(s, s.Tv(), 10)
@@ -205,7 +221,7 @@ func TestPartitionScaling_Down_FromDC(t *testing.T) {
 
 func TestPartitionScaling_Down_AndStopPolling(t *testing.T) {
 	// default dynamic config to 1 to ensure we turn on managed scaling immediately
-	s := testcore.NewEnv(t, scalerEnvOptions(1)...)
+	s := testcore.NewEnv(t, scalerEnvOptions(1, scalerShrinkFast)...)
 
 	t.Log("set to 6 partitions using scaler")
 	s.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
@@ -259,7 +275,7 @@ func TestPartitionScaling_Down_AndStopPolling(t *testing.T) {
 // confirm everything empties out.
 func TestPartitionScaling_Backlog(t *testing.T) {
 	// default dynamic config to 1 to ensure we turn on managed scaling immediately
-	s := testcore.NewEnv(t, scalerEnvOptions(1)...)
+	s := testcore.NewEnv(t, scalerEnvOptions(1, scalerShrinkFast)...)
 
 	t.Log("enable backlog-based scaling (no fixed target, no add-rate windows)")
 	s.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
@@ -288,14 +304,13 @@ func TestPartitionScaling_Backlog(t *testing.T) {
 	await.RequireTrue(t, scalerBacklogEmpty(s, s.Tv(), 0, 1, 2, 3), 30*time.Second, time.Second)
 }
 
-// TestPartitionScaling_Disable_ToFewerPartitions checks that disabling the scaler is a clean
-// break back to the dynamic config partition count, even when that's fewer partitions than the
-// scaler had opened. Note that the backlog left on the partitions outside of dynamic config
-// range is never polled directly, but it does still drain: those partitions stop seeing polls,
-// so they start forwarding their backlog to the root partition.
+// TestPartitionScaling_Disable_ToFewerPartitions checks that disabling the scaler falls back
+// to the dynamic config settings, even when that's fewer partitions than the scaler had set.
 func TestPartitionScaling_Disable_ToFewerPartitions(t *testing.T) {
-	// default dynamic config to 1 to ensure we turn on managed scaling immediately
-	s := testcore.NewEnv(t, scalerEnvOptions(1)...)
+	// default dynamic config to 1 to ensure we turn on managed scaling immediately.
+	// use slow shrinking to ensure that write doesn't drop to 0 ("target" when disabled)
+	// immediately, which would invalidate the test.
+	s := testcore.NewEnv(t, scalerEnvOptions(1, scalerShrinkSlow)...)
 
 	t.Log("set to 4 partitions using scaler")
 	s.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
@@ -332,8 +347,6 @@ func TestPartitionScaling_Disable_ToFewerPartitions(t *testing.T) {
 	t.Log("wait until all are drained (1,2,3 by forwarding to 0)")
 	await.RequireTrue(t, scalerBacklogEmpty(s, s.Tv(), 0, 1, 2, 3), 15*time.Second, time.Second)
 
-	// Everything drains either way, so draining doesn't tell us whether polls went where they
-	// should have. Check metrics for that.
 	t.Log("check that polls went to partition 0 only")
 	pollsByPartition := scalerCountPolls(s.Tv(), capture)
 	t.Log("poll counts", pollsByPartition)
@@ -341,13 +354,11 @@ func TestPartitionScaling_Disable_ToFewerPartitions(t *testing.T) {
 	s.Contains(pollsByPartition, 0)
 }
 
-// TestPartitionScaling_Disable_ToMorePartitions is the inverse of
-// TestPartitionScaling_Disable_ToFewerPartitions: the scaler holds the task queue below the
-// dynamic config partition count, and disabling it must open all dynamic config partitions back
-// up for both tasks and polls.
+// TestPartitionScaling_Disable_ToMorePartitions is the inverse of FewerPartitions: the scaler
+// sets the count below dynamic config count, and disabling it allows tasks/polls to all.
 func TestPartitionScaling_Disable_ToMorePartitions(t *testing.T) {
 	// default dynamic config to 4, which is what we should fall back to when disabling
-	s := testcore.NewEnv(t, scalerEnvOptions(4)...)
+	s := testcore.NewEnv(t, scalerEnvOptions(4, scalerShrinkFast)...)
 
 	t.Log("set to 1 partition using scaler")
 	s.OverrideDynamicConfig(dynamicconfig.MatchingPartitionScaler, dynamicconfig.SimplePartitionScalerSettings{
