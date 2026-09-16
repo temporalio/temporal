@@ -671,6 +671,9 @@ func TestExecuteInvocationTaskNexusHandler_DispatchedRequest(t *testing.T) {
 			// The callback's request ID doubles as the Nexus request ID, so a redelivery is idempotent
 			// from the handler's perspective.
 			require.Equal(t, "request-id", start.GetRequestId())
+			require.Equal(t, []byte("true"), start.GetPayload().GetMetadata()[commonnexus.SystemPayloadMetadataKey])
+			require.Equal(t, []byte("binary/protobuf"), start.GetPayload().GetMetadata()["encoding"])
+			require.Equal(t, []byte("temporal.api.notificationservice.v1.OnCompleteRequest"), start.GetPayload().GetMetadata()["messageType"])
 			// The source operation is identified to the handler by the completion's links.
 			require.Len(t, start.GetLinks(), 1)
 			require.Equal(t, sourceLink.URL.String(), start.GetLinks()[0].GetUrl())
