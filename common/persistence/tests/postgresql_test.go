@@ -411,7 +411,7 @@ func testPostgreSQLHistoryNodeUpsert(p *PostgreSQLSuite, store sqlplugin.DB) {
 		p.Require().NoError(err)
 		rowsAffected, err := result.RowsAffected()
 		p.Require().NoError(err)
-		p.Equal(int64(1), rowsAffected)
+		p.Require().Equal(int64(1), rowsAffected)
 	}
 
 	base := sqlplugin.HistoryNodeRow{
@@ -419,31 +419,31 @@ func testPostgreSQLHistoryNodeUpsert(p *PostgreSQLSuite, store sqlplugin.DB) {
 		PrevTxnID: 7, TxnID: txnID, Data: []byte("original"), DataEncoding: "original",
 	}
 	insert(&base)
-	p.Equal(-txnID, base.TxnID)
+	p.Require().Equal(-txnID, base.TxnID)
 	expected := base
 	expected.TxnID = -expected.TxnID
-	p.Equal(expected, read())
+	p.Require().Equal(expected, read())
 
 	changed := sqlplugin.HistoryNodeRow{
 		ShardID: shardID, TreeID: treeID, BranchID: branchID, NodeID: nodeID,
 		PrevTxnID: -9, TxnID: txnID, Data: []byte("changed"), DataEncoding: "changed",
 	}
 	insert(&changed)
-	p.Equal(-txnID, changed.TxnID)
+	p.Require().Equal(-txnID, changed.TxnID)
 	expected = changed
 	expected.TxnID = -expected.TxnID
-	p.Equal(expected, read())
+	p.Require().Equal(expected, read())
 
 	empty := sqlplugin.HistoryNodeRow{
 		ShardID: shardID, TreeID: treeID, BranchID: branchID, NodeID: nodeID,
 		PrevTxnID: 123, TxnID: txnID, Data: []byte{}, DataEncoding: "empty",
 	}
 	insert(&empty)
-	p.Equal(-txnID, empty.TxnID)
-	p.NotNil(empty.Data)
+	p.Require().Equal(-txnID, empty.TxnID)
+	p.Require().NotNil(empty.Data)
 	expected = empty
 	expected.TxnID = -expected.TxnID
-	p.Equal(expected, read())
+	p.Require().Equal(expected, read())
 
 	rollbackRow := sqlplugin.HistoryNodeRow{
 		ShardID: shardID, TreeID: treeID, BranchID: branchID, NodeID: nodeID,
@@ -455,9 +455,9 @@ func testPostgreSQLHistoryNodeUpsert(p *PostgreSQLSuite, store sqlplugin.DB) {
 	p.Require().NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	p.Require().NoError(err)
-	p.Equal(int64(1), rowsAffected)
+	p.Require().Equal(int64(1), rowsAffected)
 	p.Require().NoError(tx.Rollback())
-	p.Equal(expected, read())
+	p.Require().Equal(expected, read())
 
 	nilRow := empty
 	nilRow.TxnID = txnID
@@ -468,18 +468,15 @@ func testPostgreSQLHistoryNodeUpsert(p *PostgreSQLSuite, store sqlplugin.DB) {
 	p.Require().NoError(err)
 	_, err = tx.InsertIntoHistoryNode(ctx, &nilRow)
 	p.Require().Error(err)
-	var pqErr *pq.Error
-	var pgxErr *pgconn.PgError
-	switch {
-	case errors.As(err, &pqErr):
-		p.Equal("23502", string(pqErr.Code))
-	case errors.As(err, &pgxErr):
-		p.Equal("23502", pgxErr.Code)
-	default:
-		p.Failf("unexpected PostgreSQL error type", "%T: %v", err, err)
+	if pqErr, ok := errors.AsType[*pq.Error](err); ok {
+		p.Require().Equal("23502", string(pqErr.Code))
+	} else if pgxErr, ok := errors.AsType[*pgconn.PgError](err); ok {
+		p.Require().Equal("23502", pgxErr.Code)
+	} else {
+		p.Require().Failf("unexpected PostgreSQL error type", "%T: %v", err, err)
 	}
 	p.Require().NoError(tx.Rollback())
-	p.Equal(expected, read())
+	p.Require().Equal(expected, read())
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLHistoryTreeSuite() {
