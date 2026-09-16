@@ -60,8 +60,7 @@ func completedResultFromNexusCompletion(
 
 // completedResultFromWorkflowInfo applies the V1 watcher semantics to a status
 // returned by Describe. RUNNING and PAUSED still occupy the schedule's overlap
-// slot, and CONTINUED_AS_NEW is followed to the latest run when the callback is
-// attached, so none are action completions. A non-nil result represents one of
+// slot, so neither is an action completion. A non-nil result represents one of
 // the five final workflow statuses handled by the V1 watcher.
 func completedResultFromWorkflowInfo(
 	wfInfo *workflowpb.WorkflowExecutionInfo,
@@ -69,8 +68,13 @@ func completedResultFromWorkflowInfo(
 	status := wfInfo.GetStatus()
 	switch status {
 	case enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
-		enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:
+		enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED:
+		return nil, nil
+	case enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:
+		// CONSIDER(scheduler): Callback reattachment does not yet follow a
+		// continued-as-new chain. If its successor closes before callback attachment,
+		// the buffered start remains incomplete and the callbacks task retries until
+		// its retry limit.
 		return nil, nil
 	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
@@ -83,16 +87,6 @@ func completedResultFromWorkflowInfo(
 		}, nil
 	default:
 		return nil, fmt.Errorf("unexpected workflow execution status: %s", status)
-	}
-}
-
-func countsAsFailureForPause(status enumspb.WorkflowExecutionStatus) bool {
-	switch status {
-	case enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
-		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
-		return true
-	default:
-		return false
 	}
 }
 
@@ -194,7 +188,6 @@ func (s *Scheduler) completeAction(
 	workflowID := start.GetWorkflowId()
 	tracksCompletionResult := internal.TracksCompletionResult(start.GetOverlapPolicy())
 
-	// TODO - also record payload sizes once we have metrics wired into CHASM context.
 	if outcome != nil && tracksCompletionResult {
 		switch outcome := outcome.Outcome.(type) {
 		case *persistencespb.ChasmNexusCompletion_Failure:
@@ -202,9 +195,16 @@ func (s *Scheduler) completeAction(
 			s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{Failure: outcome.Failure, Success: previousResult.Success})
 		case *persistencespb.ChasmNexusCompletion_Success:
 			s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{Success: outcome.Success})
+		default:
 		}
 	}
-	if tracksCompletionResult && countsAsFailureForPause(completed.Status) && s.Schedule.Policies.PauseOnFailure && !s.Schedule.State.Paused {
+
+	if shouldPauseOnFailure(
+		completed.Status,
+		tracksCompletionResult,
+		s.Schedule.Policies.PauseOnFailure,
+		s.Schedule.State.Paused,
+	) {
 		s.Schedule.State.Paused = true
 		s.Schedule.State.Notes = fmt.Sprintf("paused, workflow %s: %s", strings.ToLower(completed.Status.String()), workflowID)
 		s.updateConflictToken()
@@ -212,4 +212,17 @@ func (s *Scheduler) completeAction(
 	start.HasCallback = true
 	invoker.recordCompletedAction(ctx, completed, requestID)
 	return true
+}
+
+func shouldPauseOnFailure(
+	status enumspb.WorkflowExecutionStatus,
+	tracksCompletionResult bool,
+	pauseOnFailureEnabled bool,
+	currentlyPaused bool,
+) bool {
+	return tracksCompletionResult &&
+		(status == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED ||
+			status == enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT) &&
+		pauseOnFailureEnabled &&
+		!currentlyPaused
 }

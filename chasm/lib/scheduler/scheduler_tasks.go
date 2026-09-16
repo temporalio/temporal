@@ -337,10 +337,9 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 		},
 	})
 	if err != nil {
-		// WorkflowExecutionAlreadyStarted means the workflow closed after Describe;
-		// REJECT_DUPLICATE prevents attaching to the closed execution. Return it so the
-		// task retries and Describe records the actual terminal status rather than
-		// incorrectly recording it as completed. Other errors are also retried.
+		// CONSIDER(scheduler): When this is WorkflowExecutionAlreadyStarted after a
+		// continued-as-new successor closes, retrying describes the predecessor and
+		// cannot observe the successor's terminal status. Follow the chain instead.
 		return nil, err
 	}
 
