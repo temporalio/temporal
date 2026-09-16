@@ -102,10 +102,7 @@ func (n invocableNexusHandler) buildDispatchRequest(
 	}
 	// The handler is a lang-SDK Nexus operation, so encode the input with the standard Temporal payload
 	// format (json/protobuf) that its data converter decodes back into an OnCompleteRequest.
-	//
-	// TODO(temporalio/temporal/issues/11891): Mark the Payload as a "system payload" to avoid the payload
-	// being decoded on the client-side by mistake.
-	input, err := payload.Encode(onComplete)
+	input, err := commonnexus.EncodeSystemPayload(onComplete)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode NexusHandler callback input: %w", err)
 	}
