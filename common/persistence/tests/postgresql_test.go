@@ -456,7 +456,7 @@ func testPostgreSQLHistoryNodeUpsert(p *PostgreSQLSuite, store sqlplugin.DB) {
 	rowsAffected, err := result.RowsAffected()
 	p.Require().NoError(err)
 	p.Equal(int64(1), rowsAffected)
-	p.NoError(tx.Rollback())
+	p.Require().NoError(tx.Rollback())
 	p.Equal(expected, read())
 
 	nilRow := empty
@@ -478,7 +478,7 @@ func testPostgreSQLHistoryNodeUpsert(p *PostgreSQLSuite, store sqlplugin.DB) {
 	default:
 		p.Failf("unexpected PostgreSQL error type", "%T: %v", err, err)
 	}
-	p.NoError(tx.Rollback())
+	p.Require().NoError(tx.Rollback())
 	p.Equal(expected, read())
 }
 
