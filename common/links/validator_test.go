@@ -30,6 +30,21 @@ func TestValidate(t *testing.T) {
 			},
 		},
 	}
+	validWorkflowEventRequestIDRef := &commonpb.Link{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{
+				Namespace:  "ns",
+				WorkflowId: "wf",
+				RunId:      "run",
+				Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+					RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+						RequestId: "request-id",
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+					},
+				},
+			},
+		},
+	}
 	validBatchJob := &commonpb.Link{
 		Variant: &commonpb.Link_BatchJob_{
 			BatchJob: &commonpb.Link_BatchJob{JobId: "job"},
@@ -126,6 +141,20 @@ func TestValidate(t *testing.T) {
 		l.GetWorkflowEvent().GetEventRef().EventId = 42
 		err := links.Validate([]*commonpb.Link{l}, maxLinks, maxSize)
 		require.ErrorContains(t, err, "workflow event link ref cannot have an unspecified event type and a non-zero event ID")
+	})
+
+	t.Run("WorkflowEvent/RequestIDRefEmptyRequestID", func(t *testing.T) {
+		l := proto.Clone(validWorkflowEventRequestIDRef).(*commonpb.Link)
+		l.GetWorkflowEvent().GetRequestIdRef().RequestId = ""
+		err := links.Validate([]*commonpb.Link{l}, maxLinks, maxSize)
+		require.ErrorContains(t, err, "workflow event request ID ref must not have an empty request ID")
+	})
+
+	t.Run("WorkflowEvent/RequestIDRefUnspecifiedEventType", func(t *testing.T) {
+		l := proto.Clone(validWorkflowEventRequestIDRef).(*commonpb.Link)
+		l.GetWorkflowEvent().GetRequestIdRef().EventType = enumspb.EVENT_TYPE_UNSPECIFIED
+		err := links.Validate([]*commonpb.Link{l}, maxLinks, maxSize)
+		require.ErrorContains(t, err, "workflow event request ID ref must not have an unspecified event type")
 	})
 
 	t.Run("BatchJob/EmptyJobID", func(t *testing.T) {
