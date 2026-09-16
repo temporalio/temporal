@@ -235,7 +235,7 @@ var queryConverterTestCases = []queryConverterTestCase{
 	{
 		name: "search attribute name is case sensitive",
 		in:   "workflowid = 'wid'",
-		err:  "invalid expression: column name 'workflowid' is not a valid search attribute",
+		err:  "invalid search attribute: workflowid",
 	},
 
 	// Int type search attributes.
@@ -908,12 +908,12 @@ var queryConverterTestCases = []queryConverterTestCase{
 	{
 		name: "unknown search attribute",
 		in:   "Foo = 'bar'",
-		err:  "invalid expression: column name 'Foo' is not a valid search attribute",
+		err:  "invalid search attribute: Foo",
 	},
 	{
 		name: "reserved field name is not a search attribute",
 		in:   "NamespaceId = 'foo'",
-		err:  "invalid expression: column name 'NamespaceId' is not a valid search attribute",
+		err:  "invalid search attribute: NamespaceId",
 	},
 
 	// Namespace division.
@@ -1036,17 +1036,17 @@ var queryConverterTestCases = []queryConverterTestCase{
 	{
 		name: "error inside and expression",
 		in:   "WorkflowId = 'wid' AND Foo = 'bar'",
-		err:  "invalid expression: column name 'Foo' is not a valid search attribute",
+		err:  "invalid search attribute: Foo",
 	},
 	{
 		name: "error inside or expression",
 		in:   "Foo = 'bar' OR WorkflowId = 'wid'",
-		err:  "invalid expression: column name 'Foo' is not a valid search attribute",
+		err:  "invalid search attribute: Foo",
 	},
 	{
 		name: "error inside not expression",
 		in:   "NOT Foo = 'bar'",
-		err:  "invalid expression: column name 'Foo' is not a valid search attribute",
+		err:  "invalid search attribute: Foo",
 	},
 
 	// GROUP BY clause.
@@ -1082,7 +1082,7 @@ var queryConverterTestCases = []queryConverterTestCase{
 	{
 		name: "group by unknown search attribute",
 		in:   "GROUP BY Foo",
-		err:  "invalid expression: column name 'Foo' is not a valid search attribute",
+		err:  "invalid search attribute: Foo",
 	},
 
 	// ORDER BY clause.
@@ -1129,7 +1129,7 @@ var queryConverterTestCases = []queryConverterTestCase{
 	{
 		name: "order by unknown search attribute",
 		in:   "ORDER BY Foo",
-		err:  "invalid expression: column name 'Foo' is not a valid search attribute",
+		err:  "invalid search attribute: Foo",
 	},
 
 	// Malformed and unsupported queries.

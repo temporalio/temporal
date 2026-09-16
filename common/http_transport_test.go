@@ -10,9 +10,14 @@ import (
 func TestNewHTTPTransport_ConfiguresHTTP2(t *testing.T) {
 	transport, err := NewHTTPTransport(nil)
 	require.NoError(t, err)
-	require.Contains(t, transport.TLSNextProto, "h2")
+	require.NotNil(t, transport.Protocols)
+	require.True(t, transport.Protocols.HTTP1())
+	require.True(t, transport.Protocols.HTTP2())
+	// The HTTP/2 config carries ReadIdleTimeout/PingTimeout, so assert those settings are applied.
+	require.NotNil(t, transport.HTTP2)
+	require.Equal(t, http2ReadIdleTimeout, transport.HTTP2.SendPingTimeout)
+	require.Equal(t, http2PingTimeout, transport.HTTP2.PingTimeout)
 	require.NotNil(t, transport.TLSClientConfig)
-	require.Contains(t, transport.TLSClientConfig.NextProtos, "h2")
 }
 
 func TestNewHTTPTransport_ClonesTLSConfig(t *testing.T) {
@@ -23,7 +28,6 @@ func TestNewHTTPTransport_ClonesTLSConfig(t *testing.T) {
 	// clients (both frontend clients pass one cached by localStoreTlsProvider).
 	require.NotSame(t, tlsConfig, transport.TLSClientConfig)
 	require.Equal(t, "some-host", transport.TLSClientConfig.ServerName)
-	require.Contains(t, transport.TLSClientConfig.NextProtos, "h2")
 	// ...and the caller's config must come back unmutated.
 	require.Empty(t, tlsConfig.NextProtos)
 }

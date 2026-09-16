@@ -12,22 +12,10 @@ import (
 	"github.com/olivere/elastic/v7"
 	"github.com/olivere/elastic/v7/uritemplates"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/log"
 )
 
-type (
-	// clientImpl implements Client
-	clientImpl struct {
-		esClient *elastic.Client
-		url      url.URL
-	}
-)
-
-var _ Client = (*clientImpl)(nil)
-
-// newClient create a ES client
-func newClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*clientImpl, error) {
+func NewEsClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*elastic.Client, error) {
 	var urls []string
 	if len(cfg.URLs) > 0 {
 		urls = make([]string, len(cfg.URLs))
@@ -52,17 +40,10 @@ func newClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*client
 	options = append(options, getLoggerOptions(cfg.LogLevel, logger)...)
 
 	if httpClient == nil {
-		// Check if httpClient is set in config (e.g., AWS HTTP client)
-		if configHTTPClient := cfg.GetHttpClient(); configHTTPClient != nil {
-			httpClient = configHTTPClient
-		} else if cfg.TLS != nil && cfg.TLS.Enabled {
-			tlsHttpClient, err := buildTLSHTTPClient(cfg.TLS)
-			if err != nil {
-				return nil, fmt.Errorf("unable to create TLS HTTP client: %w", err)
-			}
-			httpClient = tlsHttpClient
-		} else {
-			httpClient = http.DefaultClient
+		var err error
+		httpClient, err = NewEsHTTPClient(cfg)
+		if err != nil {
+			return nil, err
 		}
 	}
 
@@ -99,23 +80,30 @@ func newClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*client
 		client.Start()
 	}
 
-	return &clientImpl{
-		esClient: client,
-		url:      cfg.URL,
-	}, nil
+	return client, nil
 }
 
-// Build Http Client with TLS
-func buildTLSHTTPClient(config *auth.TLS) (*http.Client, error) {
-	tlsConfig, err := auth.NewTLSConfig(config)
+type (
+	// clientImpl implements Client
+	clientImpl struct {
+		esClient *elastic.Client
+		url      url.URL
+	}
+)
+
+var _ Client = (*clientImpl)(nil)
+
+// newClient create a ES client
+func newClient(cfg *Config, httpClient *http.Client, logger log.Logger) (*clientImpl, error) {
+	esClient, err := NewEsClient(cfg, httpClient, logger)
 	if err != nil {
 		return nil, err
 	}
 
-	transport := &http.Transport{TLSClientConfig: tlsConfig}
-	tlsClient := &http.Client{Transport: transport}
-
-	return tlsClient, nil
+	return &clientImpl{
+		esClient: esClient,
+		url:      cfg.URL,
+	}, nil
 }
 
 func (c *clientImpl) Get(ctx context.Context, index string, docID string) (*elastic.GetResult, error) {

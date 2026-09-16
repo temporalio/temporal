@@ -6,8 +6,10 @@ import (
 	"text/template"
 	"time"
 
+	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
@@ -33,6 +35,13 @@ var Enabled = dynamicconfig.NewNamespaceBoolSetting(
 	"nexusoperation.enableStandalone",
 	false,
 	`Toggles standalone Nexus operation functionality on the server.`,
+)
+
+var EnabledCallbackKinds = dynamicconfig.NewNamespaceTypedSettingWithConverter(
+	"nexusoperation.enabledCallbackKinds",
+	callbacks.ConvertEnabledKinds,
+	[]callbacks.Kind{}, // i.e. callbacks not enabled at all.
+	`The list of completion callback kinds that may be attached to a standalone Nexus operation execution.`,
 )
 
 var EnableChasmWorkflowOperations = dynamicconfig.NewNamespaceBoolSetting(
@@ -219,13 +228,6 @@ Adding high-cardinality tags (like unique operation names) can significantly inc
 query complexity. Consider the cardinality impact when enabling these tags.`,
 )
 
-var UseSystemCallbackURL = dynamicconfig.NewGlobalBoolSetting(
-	"nexusoperation.useSystemCallbackURL",
-	true,
-	`Controls how the executor generates callback URLs for worker targets in Nexus Operations.
-When true, uses the fixed system callback URL for all worker targets.`,
-)
-
 var MaxReasonLength = dynamicconfig.NewNamespaceIntSetting(
 	"nexusoperation.limit.reasonLength",
 	1000,
@@ -243,6 +245,8 @@ Added for safety. Defaults to true. Likely to be removed in future server versio
 type Config struct {
 	Enabled                                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableChasm                                dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnabledCallbackKinds                       dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.Kind]
+	MaxCallbacksPerExecution                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableChasmNexusWorkflowOperations         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ChasmNexusWorkflowOperationsRolloutPercent dynamicconfig.IntPropertyFnWithNamespaceFilter
 	NumHistoryShards                           int32
@@ -259,7 +263,6 @@ type Config struct {
 	MaxOperationScheduleToCloseTimeout         dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	PayloadSizeLimit                           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackURLTemplate                        dynamicconfig.TypedPropertyFn[*template.Template]
-	UseSystemCallbackURL                       dynamicconfig.BoolPropertyFn
 	PayloadSizeLimitWarn                       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxUserMetadataSummarySize                 dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxUserMetadataDetailsSize                 dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -275,6 +278,8 @@ func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 	return &Config{
 		Enabled:                            Enabled.Get(dc),
 		EnableChasm:                        dynamicconfig.EnableChasm.Get(dc),
+		EnabledCallbackKinds:               EnabledCallbackKinds.Get(dc),
+		MaxCallbacksPerExecution:           callback.MaxPerExecution.Get(dc),
 		EnableChasmNexusWorkflowOperations: EnableChasmWorkflowOperations.Get(dc),
 		ChasmNexusWorkflowOperationsRolloutPercent: ChasmWorkflowOperationsRolloutPercent.Get(dc),
 		NumHistoryShards:                   cfg.NumHistoryShards,
@@ -294,7 +299,6 @@ func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 		MaxUserMetadataSummarySize:         dynamicconfig.MaxUserMetadataSummarySize.Get(dc),
 		MaxUserMetadataDetailsSize:         dynamicconfig.MaxUserMetadataDetailsSize.Get(dc),
 		CallbackURLTemplate:                CallbackURLTemplate.Get(dc),
-		UseSystemCallbackURL:               UseSystemCallbackURL.Get(dc),
 		UseNewFailureWireFormat:            UseNewFailureWireFormat.Get(dc),
 		VisibilityMaxPageSize:              dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
 		MaxIDLengthLimit:                   dynamicconfig.MaxIDLengthLimit.Get(dc),
