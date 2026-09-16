@@ -15,24 +15,41 @@ var maxDatetime = time.Date(9999, 12, 31, 23, 59, 59, 0, time.UTC)
 
 const (
 	jsonBuildArrayFuncName = "jsonb_build_array"
+	plaintoTSQueryFuncName = "plainto_tsquery"
 	jsonContainsOp         = "@>"
 	ftsMatchOp             = "@@"
+
+	// textSearchConfig is the PostgreSQL text search configuration used to
+	// build both the stored Text search attribute tsvector columns (see the
+	// visibility schema) and the tsquery on the read path. It must match on
+	// both sides so queries keep matching the stored values. "simple" only
+	// folds case and splits on non-word characters (no stemming or stopword
+	// removal), which matches the token-based semantics used by the MySQL and
+	// SQLite visibility stores.
+	textSearchConfig = "simple"
 )
 
-var (
-	convertTypeTSQuery = &sqlparser.ConvertType{Type: "tsquery"}
-)
-
-type pgCastExpr struct {
+// pgTextSearchQueryExpr renders a tsquery that matches any of the given
+// sub-queries, combined with the tsquery OR operator (||). Each sub-query is
+// built with plainto_tsquery instead of a raw ::tsquery cast, so characters
+// that are significant in tsquery syntax (most notably ':') don't cause a
+// "syntax error in tsquery".
+type pgTextSearchQueryExpr struct {
 	sqlparser.Expr
-	Value sqlparser.Expr
-	Type  *sqlparser.ConvertType
+	queries []sqlparser.Expr
 }
 
-var _ sqlparser.Expr = (*pgCastExpr)(nil)
+var _ sqlparser.Expr = (*pgTextSearchQueryExpr)(nil)
 
-func (node *pgCastExpr) Format(buf *sqlparser.TrackedBuffer) {
-	buf.Myprintf("%v::%v", node.Value, node.Type)
+func (node *pgTextSearchQueryExpr) Format(buf *sqlparser.TrackedBuffer) {
+	buf.Myprintf("(")
+	for i, q := range node.queries {
+		if i > 0 {
+			buf.Myprintf(" || ")
+		}
+		buf.Myprintf("%v", q)
+	}
+	buf.Myprintf(")")
 }
 
 type queryConverter struct{}
@@ -109,14 +126,18 @@ func (c *queryConverter) ConvertTextComparisonExpr(
 			query.InvalidExpressionErrMessage,
 		)
 	}
-	valueExpr.Val = strings.Join(tokens, " | ")
+	queries := make([]sqlparser.Expr, len(tokens))
+	for i, token := range tokens {
+		queries[i] = query.NewFuncExpr(
+			plaintoTSQueryFuncName,
+			query.NewUnsafeSQLString(textSearchConfig),
+			query.NewUnsafeSQLString(token),
+		)
+	}
 	var newExpr sqlparser.Expr = &sqlparser.ComparisonExpr{
 		Operator: ftsMatchOp,
 		Left:     col,
-		Right: &pgCastExpr{
-			Value: value,
-			Type:  convertTypeTSQuery,
-		},
+		Right:    &pgTextSearchQueryExpr{queries: queries},
 	}
 	if operator == sqlparser.NotEqualStr {
 		newExpr = &sqlparser.NotExpr{Expr: newExpr}
