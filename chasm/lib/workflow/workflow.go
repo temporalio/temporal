@@ -253,16 +253,17 @@ func (w *Workflow) AddCompletionCallbacks(
 	}
 
 	insertedSize := applyCallbackInsertions(ctx, w.Callbacks, requestID, eventTime, pending)
-	w.recordCallbackTotals(currentCount+len(pending), currentSize+insertedSize)
+	w.recordCallbackTotals(ctx, currentCount+len(pending), currentSize+insertedSize)
 	return nil
 }
 
 // recordCallbackTotals persists the workflow's aggregate callback accounting. It is written
 // even when nothing was inserted, so that a total recomputed for a workflow that predates the
 // counters is not recomputed again on the next attach.
-func (w *Workflow) recordCallbackTotals(count int, size int64) {
+func (w *Workflow) recordCallbackTotals(ctx chasm.Context, count int, size int64) {
 	w.state().TotalCallbacksCount = int32(count)
 	w.state().TotalCallbacksSize = size
+	callback.RecordTotalSizePerExecution(ctx, size)
 }
 
 // AddUpdateCompletionCallbacks creates completion callbacks using the CHASM implementation.
@@ -298,7 +299,7 @@ func (w *Workflow) AddUpdateCompletionCallbacks(
 	update := w.Updates[updateID].Get(ctx)
 
 	insertedSize := applyCallbackInsertions(ctx, update.Callbacks, requestID, eventTime, pending)
-	w.recordCallbackTotals(currentCount+len(pending), currentSize+insertedSize)
+	w.recordCallbackTotals(ctx, currentCount+len(pending), currentSize+insertedSize)
 	return nil
 }
 

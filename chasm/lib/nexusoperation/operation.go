@@ -502,6 +502,7 @@ func (o *Operation) addCompletionCallbacks(
 		// wrapped around it, which mutates after attach.
 		o.TotalCallbacksSize += int64(chasmCB.Size())
 	}
+	callback.RecordTotalSizePerExecution(ctx, o.TotalCallbacksSize)
 	return nil
 }
 

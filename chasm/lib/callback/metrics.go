@@ -2,6 +2,7 @@ package callback
 
 import (
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -11,6 +12,15 @@ import (
 // CHASM callback metrics.
 // These are defined independently from HSM callbacks to avoid coupling between the two implementations.
 var (
+	// TotalSizePerExecution records an execution's cumulative callback size each time
+	// callbacks are attached to it. It exists so the fleet-wide distribution can be read
+	// before TotalMaxSizePerExecution is given a non-zero default, rather than guessing a
+	// limit and finding out from rejected requests.
+	TotalSizePerExecution = metrics.NewBytesHistogramDef(
+		"callback_total_size_per_execution",
+		metrics.WithDescription("Cumulative serialized size of all completion callbacks attached to a single execution, sampled whenever callbacks are attached."),
+	)
+
 	RequestCounter = metrics.NewCounterDef(
 		"callback_outbound_requests",
 		metrics.WithDescription("The number of callback outbound requests made by the history service."),
@@ -104,4 +114,13 @@ func grpcErrorOutcome(err error) outcomeTag {
 		tagSuffix = st.Code().String()
 	}
 	return outcomeTag("error:" + tagSuffix)
+}
+
+// RecordTotalSizePerExecution samples an execution's cumulative callback size. Callers pass the
+// total the execution will hold once the current attach commits, so the histogram describes
+// executions as they actually grow rather than only the increments.
+//
+// The context's metrics handler is already namespace-tagged.
+func RecordTotalSizePerExecution(ctx chasm.Context, totalSize int64) {
+	TotalSizePerExecution.With(ctx.MetricsHandler()).Record(totalSize)
 }
