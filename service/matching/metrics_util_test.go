@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
@@ -41,14 +42,18 @@ func TestRecordDroppedTask(t *testing.T) {
 	c := capture.StartCapture()
 	defer capture.StopCapture(c)
 
+	breakdownOn := &taskQueueConfig{BreakdownMetricsByFairnessKey: func() bool { return true }}
+	breakdownOff := &taskQueueConfig{BreakdownMetricsByFairnessKey: func() bool { return false }}
+	pri := &commonpb.Priority{FairnessKey: "orders"}
+
 	// not dropped (normal completion): no-op.
-	recordDroppedTask(capture, dropReasonUnspecified, "orders", true)
+	recordDroppedTask(capture, breakdownOn, dropReasonUnspecified, pri)
 	require.Empty(t, c.Snapshot()[metrics.DroppedTasksCounter.Name()])
 
 	// dropped, breakdown enabled: real fairness key tagged.
-	recordDroppedTask(capture, dropReasonNotFound, "orders", true)
+	recordDroppedTask(capture, breakdownOn, dropReasonNotFound, pri)
 	// dropped, breakdown disabled: fairness key omitted.
-	recordDroppedTask(capture, dropReasonNotFound, "orders", false)
+	recordDroppedTask(capture, breakdownOff, dropReasonNotFound, pri)
 
 	recordings := c.Snapshot()[metrics.DroppedTasksCounter.Name()]
 	require.Len(t, recordings, 2)
