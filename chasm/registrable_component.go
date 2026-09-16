@@ -164,7 +164,7 @@ func WithSearchAttributes(
 // via the Value() method whenever the chasm framework starts, updates, reads, polls, executes or
 // validates tasks on a component.
 //
-// This is useful for propagating values needed for those processing logic but are not avaiable via the
+// This is useful for propagating values needed for those processing logic but are not available via the
 // component's struct definition, such as configurations.
 //
 // Keys need to be globally unique across components. Conflicting keys across will cause component registration to fail.
