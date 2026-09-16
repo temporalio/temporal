@@ -16,6 +16,7 @@ import (
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	commoncache "go.temporal.io/server/common/cache"
+	commoncallbacks "go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -124,6 +125,7 @@ var Module = fx.Options(
 	}),
 
 	callbacks.Module,
+	fx.Provide(callbackValidatorProvider),
 	hsmnexusoperations.Module,
 	fx.Invoke(hsmnexusworkflow.RegisterCommandHandlers),
 	activity.HistoryModule,
@@ -133,6 +135,28 @@ var Module = fx.Options(
 	chasmworkflow.Module,
 	chasmworkflow.HistoryHandlerModule,
 )
+
+// callbackValidatorProvider creates a callback Validator using the production dynamic config
+// keys, so that existing operator configuration (callback.allowedAddresses and friends) is
+// honored.
+//
+// The frontend deliberately duplicates this function. The two must stay in agreement: the
+// frontend bounds a single request and history bounds the execution's cumulative totals, so
+// configuring them differently would let a request be accepted at one and rejected at the
+// other.
+func callbackValidatorProvider(dc *dynamicconfig.Collection) (commoncallbacks.Validator, error) {
+	return commoncallbacks.NewValidator(commoncallbacks.ValidatorConfig{
+		MaxCallbacksPerExecution:         callback.MaxPerExecution.Get(dc),
+		TotalCallbacksMaxSize:            callback.TotalMaxSizePerExecution.Get(dc),
+		MaxIDLengthLimit:                 dynamicconfig.MaxIDLengthLimit.Get(dc),
+		URLMaxLength:                     dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
+		HeaderMaxSize:                    dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
+		EndpointRules:                    callback.AllowedAddresses.Get(dc),
+		MaxServiceNameLength:             chasmnexus.MaxServiceNameLength.Get(dc),
+		MaxOperationNameLength:           chasmnexus.MaxOperationNameLength.Get(dc),
+		NexusHandlerSourceContextMaxSize: callback.NexusHandlerSourceContextMaxSize.Get(dc),
+	})
+}
 
 // CallbackDestinationBlockedProvider lets the callback library report a callback as BLOCKED while
 // the outbound queue's circuit breaker for its destination is open. Only the history service runs
