@@ -68,13 +68,12 @@ func completedResultFromWorkflowInfo(
 	status := wfInfo.GetStatus()
 	switch status {
 	case enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED:
-		return nil, nil
-	case enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:
+		enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
 		// CONSIDER(scheduler): Callback reattachment does not yet follow a
 		// continued-as-new chain. If its successor closes before callback attachment,
 		// the buffered start remains incomplete and the callbacks task retries until
 		// its retry limit.
+		enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:
 		return nil, nil
 	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
