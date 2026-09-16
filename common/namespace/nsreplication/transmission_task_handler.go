@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/wideevents"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // NOTE: the counterpart of namespace replication receiving logic is in service/worker package
@@ -126,8 +127,9 @@ func (r *replicator) HandleTransmissionTask(
 	}
 
 	replicationTask := &replicationspb.ReplicationTask{
-		TaskType:   taskType,
-		Attributes: task,
+		TaskType:       taskType,
+		Attributes:     task,
+		VisibilityTime: timestamppb.Now(),
 	}
 	err := r.namespaceReplicationQueue.Publish(ctx, replicationTask)
 	if err != nil {

@@ -190,8 +190,8 @@ var TransitionSucceeded = chasm.NewTransition(
 		}
 
 		o.emitOnSucceededMetrics(ctx, closeTime)
-		// Terminal state - no tasks to emit.
-		return nil
+		// Schedule the SANO's completion callbacks.
+		return o.scheduleCompletionCallbacks(ctx)
 	},
 )
 

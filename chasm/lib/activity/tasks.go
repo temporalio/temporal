@@ -49,8 +49,16 @@ func (h *activityDispatchTaskHandler) Validate(
 	_ chasm.TaskInvocation,
 	task *activitypb.ActivityDispatchTask,
 ) (bool, error) {
-	return (TransitionStarted.Possible(activity) &&
-		task.Stamp == activity.LastAttempt.Get(ctx).GetStamp()), nil
+	return activity.IsDispatchTaskValid(ctx, task.Stamp)
+}
+
+// IsDispatchTaskValid reports whether the attempt identified by stamp is still the activity's
+// current scheduled attempt.
+func (a *Activity) IsDispatchTaskValid(
+	ctx chasm.Context,
+	stamp int32,
+) (bool, error) {
+	return TransitionStarted.Possible(a) && stamp == a.LastAttempt.Get(ctx).GetStamp(), nil
 }
 
 func (h *activityDispatchTaskHandler) Execute(
