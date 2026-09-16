@@ -91,6 +91,11 @@ func (v *taskValidatorImpl) preValidate(
 		// if cannot find the namespace entry, treat task as active
 		return v.preValidateActive(task)
 	}
+	// CONSIDER(fretz12): preValidate passes task.Data.WorkflowId as the routing key. The current namespace
+	// resolver (defaultReplicationResolver) ignores routing keys, so standalone activities (with an empty
+	// key) correctly use the namespace active cluster. If a future namespace resolver uses routing keys,
+	// deserialize component_ref and use its business_id as the routing key; otherwise Matching can dispatch
+	// a task from a passive cluster, causing duplicate activity execution and external side effects.
 	if v.clusterMetadata.GetCurrentClusterName() == namespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: task.Data.WorkflowId}) {
 		return v.preValidateActive(task)
 	}
@@ -176,6 +181,7 @@ func (v *taskValidatorImpl) isTaskValid(
 			Clock:            task.Data.Clock,
 			ScheduledEventId: task.Data.ScheduledEventId,
 			Stamp:            task.Data.GetStamp(),
+			ComponentRef:     task.Data.GetComponentRef(),
 		})
 		switch err.(type) {
 		case nil:

@@ -88,17 +88,7 @@ func handleOperationError(
 
 		return FailedEventDefinition{}.Apply(node.Parent, event)
 	case nexus.OperationStateCanceled:
-		if originalCause.GetCanceledFailureInfo() == nil {
-			// Old SDKs may send an ApplicationFailure for canceled operation causes.
-			originalCause = &failurepb.Failure{
-				Message:    originalCause.GetMessage(),
-				StackTrace: originalCause.GetStackTrace(),
-				FailureInfo: &failurepb.Failure_CanceledFailureInfo{
-					CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
-				},
-				Cause: originalCause.GetCause(),
-			}
-		}
+		originalCause = commonnexus.CoerceToCanceledFailure(originalCause)
 		event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, func(e *historypb.HistoryEvent) {
 			// We must assign to this property, linter doesn't like this.
 			// nolint:revive

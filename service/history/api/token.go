@@ -5,13 +5,14 @@ import (
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -129,14 +130,16 @@ func ValidatePaginationToken(
 
 const (
 	// branchTokenMismatchReasonNonCurrent is a branch this execution records but no longer reads from.
-	branchTokenMismatchReasonNonCurrent metrics.ReasonString = "non_current_branch"
-	branchTokenMismatchReasonForeign    metrics.ReasonString = "foreign_branch"
+	branchTokenMismatchReasonNonCurrent         metrics.ReasonString = "non_current_branch"
+	branchTokenMismatchReasonSameBranchMetadata metrics.ReasonString = "same_branch_metadata_mismatch"
+	branchTokenMismatchReasonForeign            metrics.ReasonString = "foreign_branch"
 )
 
 // maxLoggedBranchTokenLen bounds caller-supplied bytes reaching the log.
 const maxLoggedBranchTokenLen = 4096
 
 func branchTokenMismatchReason(
+	branchUtil persistence.HistoryBranchUtil,
 	currentBranchToken []byte,
 	requestBranchToken []byte,
 	versionHistories *historyspb.VersionHistories,
@@ -144,12 +147,27 @@ func branchTokenMismatchReason(
 	if bytes.Equal(requestBranchToken, currentBranchToken) {
 		return ""
 	}
+	if branchTokensReferToSameBranch(branchUtil, currentBranchToken, requestBranchToken) {
+		return branchTokenMismatchReasonSameBranchMetadata
+	}
 	for _, versionHistory := range versionHistories.GetHistories() {
 		if bytes.Equal(versionHistory.GetBranchToken(), requestBranchToken) {
 			return branchTokenMismatchReasonNonCurrent
 		}
 	}
 	return branchTokenMismatchReasonForeign
+}
+
+func branchTokensReferToSameBranch(
+	branchUtil persistence.HistoryBranchUtil,
+	currentBranchToken []byte,
+	requestBranchToken []byte,
+) bool {
+	currentBranch, currentErr := branchUtil.ParseHistoryBranchInfo(currentBranchToken)
+	requestBranch, requestErr := branchUtil.ParseHistoryBranchInfo(requestBranchToken)
+	return currentErr == nil && requestErr == nil &&
+		currentBranch.GetTreeId() == requestBranch.GetTreeId() &&
+		currentBranch.GetBranchId() == requestBranch.GetBranchId()
 }
 
 func reportBranchTokenMismatch(
@@ -179,8 +197,8 @@ func reportBranchTokenMismatch(
 	)
 }
 
-// ValidateBranchTokenForExecution rejects a paging branch token that is not the execution's current
-// one.
+// ValidateBranchTokenForExecution replaces stale metadata for the current branch and rejects tokens
+// that refer to a different branch.
 func ValidateBranchTokenForExecution(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
@@ -190,14 +208,15 @@ func ValidateBranchTokenForExecution(
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
 	requestBranchToken []byte,
-) error {
+) ([]byte, error) {
 	config := shardContext.GetConfig()
 	if !config.EnablePaginationTokenBranchValidation() {
-		return nil
+		return requestBranchToken, nil
 	}
 	if len(requestBranchToken) == 0 {
-		return consts.ErrInvalidNextPageToken
+		return nil, consts.ErrInvalidNextPageToken
 	}
+	shadowMode := config.EnablePaginationTokenBranchValidationShadowMode()
 
 	response, err := GetOrPollWorkflowMutableState(
 		ctx,
@@ -210,17 +229,18 @@ func ValidateBranchTokenForExecution(
 		eventNotifier,
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	currentBranchToken := response.GetCurrentBranchToken()
 	mismatchReason := branchTokenMismatchReason(
+		shardContext.GetExecutionManager().GetHistoryBranchUtil(),
 		currentBranchToken,
 		requestBranchToken,
 		response.GetVersionHistories(),
 	)
 	if mismatchReason == "" {
-		return nil
+		return currentBranchToken, nil
 	}
 
 	reportBranchTokenMismatch(
@@ -231,13 +251,12 @@ func ValidateBranchTokenForExecution(
 		currentBranchToken,
 		requestBranchToken,
 	)
-	if config.EnablePaginationTokenBranchValidationShadowMode() {
-		return nil
+	if shadowMode {
+		return requestBranchToken, nil
 	}
-	return serviceerrors.NewCurrentBranchChanged(
-		currentBranchToken,
-		requestBranchToken,
-		nil,
-		nil,
-	)
+	if mismatchReason == branchTokenMismatchReasonSameBranchMetadata &&
+		config.EnablePaginationTokenBranchReplacement() {
+		return currentBranchToken, nil
+	}
+	return nil, serviceerror.NewInvalidArgument("request branchToken is not current.")
 }
