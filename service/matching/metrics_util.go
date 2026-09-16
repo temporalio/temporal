@@ -1,6 +1,7 @@
 package matching
 
 import (
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/common/metrics"
 )
 
@@ -47,9 +48,10 @@ func getDroppedTaskExpiryReason(task *internalTask) dropReason {
 
 // recordDroppedTask records the tasks_dropped counter on the given physical-queue
 // handler. It is a no-op when reason is dropReasonUnspecified (a non-drop completion).
-func recordDroppedTask(handler metrics.Handler, reason dropReason, fairnessKey string, breakdown bool) {
+func recordDroppedTask(handler metrics.Handler, config *taskQueueConfig, reason dropReason, pri *commonpb.Priority) {
 	if reason == dropReasonUnspecified {
 		return
 	}
-	metrics.DroppedTasksCounter.With(handler).Record(1, reason.tag(), metrics.FairnessKeyTag(fairnessKey, breakdown))
+	metrics.DroppedTasksCounter.With(handler).Record(1, reason.tag(),
+		metrics.FairnessKeyTag(pri.GetFairnessKey(), config.BreakdownMetricsByFairnessKey()))
 }

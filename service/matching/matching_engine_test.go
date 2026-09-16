@@ -1048,6 +1048,74 @@ func (s *matchingEngineSuite) TestDroppedTaskMetric_LabelKeysAreVersionScoped() 
 	}, gotKeys)
 }
 
+// TestDispatchMetrics_FairnessKeyTag asserts the default, operator-facing dispatch path
+// carries the task's real fairness key when the breakdown is enabled. Unlike the pri_matcher
+// unit test (which flips EmitTaskDispatchLatencyAtPoll off to reach the matcher emit), this
+// drives a full engine add/poll at the default setting, so task_dispatch_latency comes from
+// the engine's poll-time emission and poll_success from the matcher — the paths a default
+// deployment actually uses.
+func (s *matchingEngineSuite) TestDispatchMetrics_FairnessKeyTag() {
+	s.matchingEngine.config.BreakdownMetricsByFairnessKey = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true)
+	capture := s.captureDroppedOnEngine()
+
+	// A task with a fairness key can trip fairness auto-enable; accept the call as a no-op so
+	// the task stays on the current matcher and the metric assertions stay focused.
+	s.mockMatchingClient.EXPECT().UpdateFairnessState(gomock.Any(), gomock.Any()).
+		Return(&matchingservice.UpdateFairnessStateResponse{}, nil).AnyTimes()
+
+	namespaceID := uuid.NewString()
+	taskQueue := &taskqueuepb.TaskQueue{Name: "queue-fairnesskey", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+
+	_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &matchingservice.AddActivityTaskRequest{
+		NamespaceId:            namespaceID,
+		Execution:              &commonpb.WorkflowExecution{WorkflowId: "wf", RunId: uuid.NewString()},
+		ScheduledEventId:       int64(5),
+		TaskQueue:              taskQueue,
+		ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
+		Priority:               &commonpb.Priority{FairnessKey: "orders"},
+	})
+	s.NoError(err)
+
+	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest, _ ...any) (*historyservice.RecordActivityTaskStartedResponse, error) {
+			return &historyservice.RecordActivityTaskStartedResponse{
+				Attempt: 1,
+				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduledEventId, 0,
+					&commandpb.ScheduleActivityTaskCommandAttributes{
+						ActivityId:             "activityId1",
+						TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue.Name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+						ActivityType:           &commonpb.ActivityType{Name: "activity1"},
+						Input:                  payloads.EncodeString("input"),
+						ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
+						ScheduleToStartTimeout: durationpb.New(50 * time.Second),
+						StartToCloseTimeout:    durationpb.New(50 * time.Second),
+						HeartbeatTimeout:       durationpb.New(10 * time.Second),
+					}),
+				StartedTime: timestamp.TimeNowPtrUtc(),
+			}, nil
+		}).Times(1)
+
+	c := capture.StartCapture()
+	_, err = s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
+		NamespaceId: namespaceID,
+		PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+			TaskQueue: taskQueue,
+			Identity:  "identity",
+		},
+	}, metrics.NoopMetricsHandler)
+	s.NoError(err)
+	capture.StopCapture(c)
+
+	for _, name := range []string{
+		metrics.TaskDispatchLatencyPerTaskQueue.Name(),
+		metrics.PollSuccessPerTaskQueueCounter.Name(),
+	} {
+		recs := c.Snapshot()[name]
+		s.Require().NotEmpty(recs, "expected %s to be recorded", name)
+		s.Equal("orders", recs[0].Tags[metrics.FairnessKeyTagName], "%s fairness_key", name)
+	}
+}
+
 func (s *matchingEngineSuite) TestPollActivityTaskQueues_InternalError() {
 	s.logger.Expect(testlogger.Error, "dropping task due to non-nonretryable errors")
 	namespaceID := uuid.NewString()
