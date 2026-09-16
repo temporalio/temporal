@@ -13,7 +13,7 @@ consult library config or schedule tasks. Keep config lookups on write paths.
 
 Keep `Tasks()` reachable from the nil constructor. Handlers being nil is fine, but the
 registrations are what let offline readers resolve and decode the logical tasks a tree carries.
-`TestRegisterAll_TasksDecodable` covers this.
+`TestNewRegistry_TasksDecodable` covers this.
 
 ## Reading a persisted tree outside the history service
 

@@ -32,7 +32,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func TestRegisterAll(t *testing.T) {
+func TestNewRegistry(t *testing.T) {
 	registry, err := all.NewRegistry(log.NewTestLogger())
 	require.NoError(t, err)
 
@@ -218,10 +218,10 @@ func TestNewDetachedTree_NilMutableState(t *testing.T) {
 	require.ErrorContains(t, err, "nil")
 }
 
-// TestRegisterAll_TasksDecodable walks the tasks a real tree carries and checks each resolves
+// TestNewRegistry_TasksDecodable walks the tasks a real tree carries and checks each resolves
 // to a proto type and decodes. Nil libraries keep their Tasks(), so offline readers can render
 // logical tasks, and a library whose nil constructor dropped them would fail here.
-func TestRegisterAll_TasksDecodable(t *testing.T) {
+func TestNewRegistry_TasksDecodable(t *testing.T) {
 	registry, err := all.NewRegistry(log.NewTestLogger())
 	require.NoError(t, err)
 
@@ -287,7 +287,7 @@ func TestDetachedRead_UnknownTaskType(t *testing.T) {
 	require.True(t, act.LifecycleState(ctx).IsClosed())
 }
 
-// TestAllNilLibrariesRegistered guards RegisterAll against drift: every package under
+// TestAllNilLibrariesRegistered guards the libs slice against drift: every package under
 // chasm/lib exporting NewNilLibrary must appear in the libs slice, and vice versa.
 //
 // Missing one is not silent (decoding fails with "unknown component type ID"), but it fails in
