@@ -11,6 +11,14 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+func nexusCallback(url string) *commonpb.Callback {
+	return &commonpb.Callback{
+		Variant: &commonpb.Callback_Nexus_{
+			Nexus: &commonpb.Callback_Nexus{Url: url},
+		},
+	}
+}
+
 func newTotalsTestWorkflow() *Workflow {
 	return &Workflow{MSPointer: chasm.NewMSPointer(&chasm.MockNodeBackend{})}
 }
@@ -31,7 +39,6 @@ func wantSize(t *testing.T, cbs ...*commonpb.Callback) int64 {
 func TestCallbackTotals(t *testing.T) {
 	t.Parallel()
 
-	const maxPerWorkflow, maxPerUpdate = 100, 100
 	cb1, cb2 := nexusCallback("http://cb-1"), nexusCallback("http://cb-2")
 
 	t.Run("TracksCountAndSizeAcrossWorkflowAndUpdates", func(t *testing.T) {
@@ -39,9 +46,9 @@ func TestCallbackTotals(t *testing.T) {
 		wf := newTotalsTestWorkflow()
 
 		require.NoError(t, wf.AddCompletionCallbacks(
-			ctx, timestamppb.Now(), "req-1", []*commonpb.Callback{cb1}, maxPerWorkflow))
+			ctx, timestamppb.Now(), "req-1", []*commonpb.Callback{cb1}))
 		require.NoError(t, wf.AddUpdateCompletionCallbacks(
-			ctx, timestamppb.Now(), "u1", "req-2", []*commonpb.Callback{cb2}, maxPerWorkflow, maxPerUpdate))
+			ctx, timestamppb.Now(), "u1", "req-2", []*commonpb.Callback{cb2}))
 
 		require.Equal(t, int32(2), wf.GetTotalCallbacksCount())
 		require.Equal(t, wantSize(t, cb1, cb2), wf.GetTotalCallbacksSize())
@@ -57,11 +64,11 @@ func TestCallbackTotals(t *testing.T) {
 		wf := newTotalsTestWorkflow()
 		cbs := []*commonpb.Callback{cb1, cb2}
 
-		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", cbs, maxPerWorkflow))
+		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", cbs))
 		countAfterFirst, sizeAfterFirst := wf.GetTotalCallbacksCount(), wf.GetTotalCallbacksSize()
 
 		// Same request ID re-derives the same keys, so nothing is inserted.
-		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", cbs, maxPerWorkflow))
+		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", cbs))
 		require.Equal(t, countAfterFirst, wf.GetTotalCallbacksCount())
 		require.Equal(t, sizeAfterFirst, wf.GetTotalCallbacksSize())
 		require.Len(t, wf.Callbacks, 2)
@@ -71,13 +78,13 @@ func TestCallbackTotals(t *testing.T) {
 		ctx := &chasm.MockMutableContext{}
 		wf := newTotalsTestWorkflow()
 		require.NoError(t, wf.AddCompletionCallbacks(
-			ctx, timestamppb.Now(), "req-1", []*commonpb.Callback{cb1, cb2}, maxPerWorkflow))
+			ctx, timestamppb.Now(), "req-1", []*commonpb.Callback{cb1, cb2}))
 
 		// Simulate state written before WorkflowState existed: the callbacks are present but
 		// the counters decode as zero.
 		wf.WorkflowState = &chasmworkflowpb.WorkflowState{}
 
-		count, size := wf.callbackTotals(ctx)
+		count, size := wf.CallbackTotals(ctx)
 		require.Equal(t, 2, count)
 		require.Equal(t, wantSize(t, cb1, cb2), size)
 	})
@@ -86,59 +93,48 @@ func TestCallbackTotals(t *testing.T) {
 		ctx := &chasm.MockMutableContext{}
 		wf := newTotalsTestWorkflow()
 		require.NoError(t, wf.AddCompletionCallbacks(
-			ctx, timestamppb.Now(), "req-1", []*commonpb.Callback{cb1}, maxPerWorkflow))
+			ctx, timestamppb.Now(), "req-1", []*commonpb.Callback{cb1}))
 		wf.WorkflowState = &chasmworkflowpb.WorkflowState{}
 
 		// A no-op attach still writes the recomputed total back.
 		require.NoError(t, wf.AddCompletionCallbacks(
-			ctx, timestamppb.Now(), "req-1", []*commonpb.Callback{cb1}, maxPerWorkflow))
+			ctx, timestamppb.Now(), "req-1", []*commonpb.Callback{cb1}))
 		require.Equal(t, int32(1), wf.GetTotalCallbacksCount())
 		require.Equal(t, wantSize(t, cb1), wf.GetTotalCallbacksSize())
 	})
 
-	// Limits are charged against what the call would actually persist. A retry re-derives keys
-	// it has already written, so it inserts nothing and must not be rejected for exceeding a cap
-	// it does not move.
-	t.Run("ARetryThatInsertsNothingIsAcceptedAtTheCap", func(t *testing.T) {
+	// A retry re-derives keys it has already written, so it inserts nothing. The write path
+	// relies on this to avoid charging a retry against a cap it does not move; see
+	// MutableStateImpl.validateChasmCallbackAttachments.
+	t.Run("ARetryInsertsNothingAndLeavesTheCountUnchanged", func(t *testing.T) {
 		ctx := &chasm.MockMutableContext{}
 		wf := newTotalsTestWorkflow()
 		cbs := []*commonpb.Callback{cb1, cb2}
 
-		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", cbs, 2))
-		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", cbs, 2))
+		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", cbs))
+		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", cbs))
 		require.Len(t, wf.Callbacks, 2)
 		require.Equal(t, int32(2), wf.GetTotalCallbacksCount())
 	})
 
-	t.Run("ARetryOnAnUpdateIsAcceptedAtThePerUpdateCap", func(t *testing.T) {
+	t.Run("ARetryOnAnUpdateInsertsNothing", func(t *testing.T) {
 		ctx := &chasm.MockMutableContext{}
 		wf := newTotalsTestWorkflow()
 		cbs := []*commonpb.Callback{cb1, cb2}
 
 		require.NoError(t, wf.AddUpdateCompletionCallbacks(
-			ctx, timestamppb.Now(), "u1", "req-1", cbs, maxPerWorkflow, 2))
+			ctx, timestamppb.Now(), "u1", "req-1", cbs))
 		require.NoError(t, wf.AddUpdateCompletionCallbacks(
-			ctx, timestamppb.Now(), "u1", "req-1", cbs, maxPerWorkflow, 2))
+			ctx, timestamppb.Now(), "u1", "req-1", cbs))
 		require.Len(t, wf.Updates["u1"].Get(ctx).Callbacks, 2)
 		require.Equal(t, int32(2), wf.GetTotalCallbacksCount())
-	})
-
-	// A rejected request must not leave a half-built update component behind.
-	t.Run("RejectedUpdateDoesNotCreateTheUpdateComponent", func(t *testing.T) {
-		ctx := &chasm.MockMutableContext{}
-		wf := newTotalsTestWorkflow()
-
-		err := wf.AddUpdateCompletionCallbacks(
-			ctx, timestamppb.Now(), "u1", "req-1", []*commonpb.Callback{cb1, cb2}, maxPerWorkflow, 1)
-		require.Error(t, err)
-		require.NotContains(t, wf.Updates, "u1")
 	})
 
 	t.Run("EmptyWorkflowReportsZeroWithoutRecomputing", func(t *testing.T) {
 		ctx := &chasm.MockMutableContext{}
 		wf := newTotalsTestWorkflow()
 
-		count, size := wf.callbackTotals(ctx)
+		count, size := wf.CallbackTotals(ctx)
 		require.Zero(t, count)
 		require.Zero(t, size)
 		// Nothing was written, so a callback-free workflow still persists a nil blob.

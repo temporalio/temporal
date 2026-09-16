@@ -4,6 +4,7 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/health"
 	"go.temporal.io/server/common/namespace"
@@ -67,18 +68,27 @@ type Config struct {
 
 	// HistoryCache settings
 	// Change of these configs require shard restart
-	HistoryCacheLimitSizeBased                 bool
-	HistoryHostLevelCacheMaxSize               dynamicconfig.IntPropertyFn
-	HistoryHostLevelCacheMaxSizeBytes          dynamicconfig.IntPropertyFn
-	HistoryCacheTTL                            dynamicconfig.DurationPropertyFn
-	HistoryCacheNonUserContextLockTimeout      dynamicconfig.DurationPropertyFn
-	HistoryCacheBackgroundEvict                dynamicconfig.TypedPropertyFn[dynamicconfig.CacheBackgroundEvictSettings]
-	EnableWorkflowExecutionTimeoutTimer        dynamicconfig.BoolPropertyFn
-	EnableUpdateWorkflowModeIgnoreCurrent      dynamicconfig.BoolPropertyFn
-	EnableTransitionHistory                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	MaxCallbacksPerWorkflow                    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxCallbacksPerExecution                   dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxCallbacksPerUpdateID                    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	HistoryCacheLimitSizeBased            bool
+	HistoryHostLevelCacheMaxSize          dynamicconfig.IntPropertyFn
+	HistoryHostLevelCacheMaxSizeBytes     dynamicconfig.IntPropertyFn
+	HistoryCacheTTL                       dynamicconfig.DurationPropertyFn
+	HistoryCacheNonUserContextLockTimeout dynamicconfig.DurationPropertyFn
+	HistoryCacheBackgroundEvict           dynamicconfig.TypedPropertyFn[dynamicconfig.CacheBackgroundEvictSettings]
+	EnableWorkflowExecutionTimeoutTimer   dynamicconfig.BoolPropertyFn
+	EnableUpdateWorkflowModeIgnoreCurrent dynamicconfig.BoolPropertyFn
+	EnableTransitionHistory               dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	MaxCallbacksPerWorkflow               dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxCallbacksPerExecution              dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxCallbacksPerUpdateID               dynamicconfig.IntPropertyFnWithNamespaceFilter
+	// CallbackValidator enforces the cumulative CHASM callback limits on the write path. It is
+	// the same validator the frontend uses, built from the same settings, so a request cannot
+	// be accepted there and rejected here.
+	//
+	// Assigned by the history service's ConfigProvider rather than by NewConfig: building it
+	// needs settings owned by chasm/lib/nexusoperation, whose tests import
+	// service/history/tests and so cycle back through this package. A nil validator means the
+	// wiring was skipped, and the write path fails closed rather than going unenforced.
+	CallbackValidator                          callbacks.Validator
 	EnableChasm                                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMSkipPersistence                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableChasmNexusWorkflowOperations         dynamicconfig.BoolPropertyFnWithNamespaceFilter

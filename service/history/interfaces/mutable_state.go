@@ -283,6 +283,12 @@ type (
 		ApplyWorkflowExecutionStartedEvent(*clockspb.VectorClock, *commonpb.WorkflowExecution, string, *historypb.HistoryEvent) error
 		ApplyWorkflowExecutionTerminatedEvent(int64, *historypb.HistoryEvent) error
 		ApplyWorkflowExecutionOptionsUpdatedEvent(event *historypb.HistoryEvent) error
+
+		// SuppressCallbackLimitChecks disables aggregate CHASM callback limit enforcement for
+		// the remainder of this mutable state's life. For paths that re-materialize callbacks
+		// already accepted on a previous run (continue-as-new, retry, reset reapply), where
+		// enforcing a since-lowered limit would leave the execution unable to proceed at all.
+		SuppressCallbackLimitChecks()
 		ApplyWorkflowExecutionTimedoutEvent(int64, *historypb.HistoryEvent) error
 		ApplyWorkflowExecutionUpdateAcceptedEvent(*historypb.HistoryEvent) error
 		ApplyWorkflowExecutionUpdateCompletedEvent(event *historypb.HistoryEvent, batchID int64) error
