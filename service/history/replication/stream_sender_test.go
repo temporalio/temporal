@@ -1476,6 +1476,7 @@ func (s *streamSenderSuite) TestSendTasks_SkipStuckTask_EmitsWideEvent() {
 	s.Equal(int64(s.serverShardKey.ShardID), fields["source_shard"].AsInt64())
 	s.Equal("convert: boom", fields["error"].AsString())
 	s.Equal(s.streamSender.clientClusterName, fields["target_cluster"].AsString())
+	s.Equal(int64(s.clientShardKey.ShardID), fields["target_shard"].AsInt64())
 	s.Equal(enumsspb.TASK_PRIORITY_UNSPECIFIED.String(), fields["priority"].AsString())
 }
 
