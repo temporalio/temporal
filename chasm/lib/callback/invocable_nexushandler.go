@@ -36,10 +36,10 @@ type invocableNexusHandler struct {
 	callback   *callbackspb.Callback_NexusHandler
 	completion nexusrpc.CompleteOperationOptions
 
-	// callbackBacklinks identifies the source callback to the Nexus handler, so the handler can link whatever
+	// sourceLinks identifies the source callback to the Nexus handler, so the handler can link whatever
 	// resources it spawns to the source callback. (Rather than the source execution which had the NexusHandler-
 	// callback attached to it.)
-	callbackBacklinks []*nexuspb.Link
+	sourceLinks []*nexuspb.Link
 
 	// completionSourceTag is the fully qualified name of the CHASM component that produced this
 	// completion, e.g. "workflow.workflow" or "activity.activity".
@@ -139,7 +139,7 @@ func (n invocableNexusHandler) buildDispatchRequest(
 					Payload:   input,
 					// The handler gets a link to this callback, not the source-execution link the
 					// completion carries, so whatever it spawns points back at this specific callback.
-					Links: n.callbackBacklinks,
+					Links: n.sourceLinks,
 				},
 			},
 			Capabilities: &nexuspb.Request_Capabilities{

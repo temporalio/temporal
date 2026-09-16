@@ -113,30 +113,30 @@ func (c *Callback) loadInvocationArgs(
 
 	// NexusHandler callbacks, deliver the result by invoking a Nexus handler.
 	if nexusHandler := c.GetCallback().GetNexusHandler(); nexusHandler != nil {
-		// Generate a backlink pointing to this CHASM Callback. NexusHandler-variant callbacks do not invoke the
+		// Create a link pointing to *this* CHASM Callback. NexusHandler-variant callbacks do not invoke the
 		// targeted Nexus handler using the links carried on the CompletionSource, because that would point to the
 		// source execution. Instead, we use the Callback-variant link to identify a particular completion callback
 		// _attached to_ the source execution.
 		//
 		// Links are supplementary, so a source reporting an execution type with no link representation still has
-		// its completion delivered, just without one.
-		var backlinks []*nexuspb.Link
-		backlink, err := c.buildCallbackBacklink(ctx, target)
+		// its completion delivered.
+		var selfLinks []*nexuspb.Link
+		selfLink, err := c.buildSelfLink(ctx, target)
 		if err != nil {
 			softassert.Fail(
 				ctx.Logger(),
-				"failed to build the callback backlink",
+				"failed to build the callback self link",
 				tag.Error(err),
 				tag.NexusCompletionSource(c.CompletionSource.Fqn()),
 			)
 		} else {
-			backlinks = commonnexus.ConvertLinksToProto([]nexus.Link{backlink})
+			selfLinks = commonnexus.ConvertLinksToProto([]nexus.Link{selfLink})
 		}
 
 		return invocableNexusHandler{
 			callback:            nexusHandler,
 			completion:          completion,
-			callbackBacklinks:   backlinks,
+			sourceLinks:         selfLinks,
 			completionSourceTag: c.CompletionSource.Fqn(),
 			businessID:          ctx.ExecutionKey().BusinessID,
 			runID:               ctx.ExecutionKey().RunID,
@@ -374,9 +374,9 @@ func ScheduleStandbyCallbacks(ctx chasm.MutableContext, callbacks chasm.Map[stri
 	return nil
 }
 
-// buildCallbackBacklink returns a commonpb.Link_Callback encoded as a nexus.Link, addressing this
+// buildSelfLink returns a commonpb.Link_Callback encoded as a nexus.Link, addressing this
 // callback within the execution of its completion source.
-func (c *Callback) buildCallbackBacklink(ctx chasm.Context, compSrc CompletionSource) (nexus.Link, error) {
+func (c *Callback) buildSelfLink(ctx chasm.Context, compSrc CompletionSource) (nexus.Link, error) {
 	exKey := ctx.ExecutionKey()
 	exType, componentPath := compSrc.GetComponentExecutionPath()
 	link, err := commonnexus.ConvertLinkCallbackToNexusLink(&commonpb.Link_Callback{
