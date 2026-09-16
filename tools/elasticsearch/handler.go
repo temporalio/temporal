@@ -22,15 +22,6 @@ func createClient(cli *cli.Context, logger log.Logger) (esclient.CLIClient, erro
 		return nil, err
 	}
 
-	if cfg.AWSRequestSigning.Enabled {
-		awsHTTPClient, err := esclient.NewAwsHttpClient(cfg.AWSRequestSigning)
-		if err != nil {
-			logger.Error("Unable to create AWS HTTP client.", tag.Error(err))
-			return nil, err
-		}
-		cfg.SetHttpClient(awsHTTPClient)
-	}
-
 	esClient, err := esclient.NewCLIClient(cfg, logger)
 	if err != nil {
 		logger.Error("Unable to create elasticsearch client.", tag.Error(err))
