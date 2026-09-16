@@ -9,7 +9,7 @@ import (
 )
 
 // ConvertNexusLinksToProtoLinks converts a slice of Nexus SDK links into Temporal proto links,
-// supporting Link_Workflow, Link_WorkflowEvent, and Link_Activity variants. Unsupported or
+// supporting Link_Workflow, Link_WorkflowEvent, Link_Activity, and Link_NexusOperation variants. Unsupported or
 // malformed entries are skipped with a warning since links are non-essential to execution.
 func ConvertNexusLinksToProtoLinks(nexusLinks []nexus.Link, logger log.Logger) []*commonpb.Link {
 	var out []*commonpb.Link
@@ -56,6 +56,20 @@ func ConvertNexusLinksToProtoLinks(nexusLinks []nexus.Link, logger log.Logger) [
 			}
 			out = append(out, &commonpb.Link{
 				Variant: &commonpb.Link_Workflow_{Workflow: link},
+			})
+		case string((&commonpb.Link_NexusOperation{}).ProtoReflect().Descriptor().FullName()):
+			link, err := temporalnexus.ConvertNexusLinkToLinkNexusOperation(nexusLink)
+			if err != nil {
+				logger.Warn(
+					"failed to parse link",
+					tag.NewStringTag("nexus-link-type", nexusLink.Type),
+					tag.URL(nexusLink.URL.String()),
+					tag.Error(err),
+				)
+				continue
+			}
+			out = append(out, &commonpb.Link{
+				Variant: &commonpb.Link_NexusOperation_{NexusOperation: link},
 			})
 		default:
 			logger.Warn("invalid Nexus link data type",
