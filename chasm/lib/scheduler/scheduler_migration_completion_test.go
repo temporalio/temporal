@@ -14,7 +14,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func TestMigrationCompletion_ClosedFailedExecutionUsesTerminalTransition(t *testing.T) {
+func TestMigrationCompletion_ClosedFailedExecutionRecordsCompletion(t *testing.T) {
 	sched, ctx, _ := setupSchedulerForTest(t)
 	closeTime := time.Now()
 	invoker := sched.Invoker.Get(ctx)

@@ -297,16 +297,14 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 	}
 
 	wfInfo := descResp.GetWorkflowExecutionInfo()
-	wfProgressing := wfInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING ||
-		wfInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED
-
-	if !wfProgressing {
+	completed, err := completedResultFromWorkflowInfo(wfInfo)
+	if err != nil {
+		return nil, err
+	}
+	if completed != nil {
 		return &watchResult{
-			completed: &schedulespb.CompletedResult{
-				Status:    wfInfo.GetStatus(),
-				CloseTime: wfInfo.GetCloseTime(),
-			},
-			reason: reasonReattachAlreadyClosed,
+			completed: completed,
+			reason:    reasonReattachAlreadyClosed,
 		}, nil
 	}
 
