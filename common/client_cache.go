@@ -30,14 +30,27 @@ type (
 	// The returned release fn (if non-nil) is invoked when the entry is evicted.
 	clientProvider func(clientKey string) (any, func() error, error)
 
+	// ClientCacheEntry contains a client and optional lifecycle callbacks for
+	// its backing resource.
+	ClientCacheEntry struct {
+		Client any
+		// IsValid must be fast, non-blocking, and must not call back into its
+		// ClientCache because it is invoked while a cache lock is held.
+		IsValid func() bool
+		// Release is invoked outside cache locks after removal or replacement.
+		Release func() error
+	}
+
+	// ClientCacheProvider creates a client cache entry.
+	ClientCacheProvider func(clientKey string) (ClientCacheEntry, error)
+
 	cachedEntry struct {
-		client  any
-		release func() error
+		ClientCacheEntry
 	}
 
 	clientCacheImpl struct {
 		keyResolver    keyResolver
-		clientProvider clientProvider
+		clientProvider ClientCacheProvider
 
 		cacheLock sync.RWMutex
 		clients   map[string]cachedEntry
@@ -52,7 +65,23 @@ func NewClientCache(
 	clientProvider clientProvider,
 	logger log.Logger,
 ) ClientCache {
+	return NewClientCacheWithProvider(
+		keyResolver,
+		func(clientKey string) (ClientCacheEntry, error) {
+			client, release, err := clientProvider(clientKey)
+			return ClientCacheEntry{Client: client, Release: release}, err
+		},
+		logger,
+	)
+}
 
+// NewClientCacheWithProvider creates a client cache whose entries can report
+// when their backing resources are no longer usable and need replacement.
+func NewClientCacheWithProvider(
+	keyResolver keyResolver,
+	clientProvider ClientCacheProvider,
+	logger log.Logger,
+) ClientCache {
 	return &clientCacheImpl{
 		keyResolver:    keyResolver,
 		clientProvider: clientProvider,
@@ -77,25 +106,31 @@ func (c *clientCacheImpl) GetClientForKey(key string, index int) (any, error) {
 func (c *clientCacheImpl) GetClientForClientKey(clientKey string) (any, error) {
 	c.cacheLock.RLock()
 	entry, ok := c.clients[clientKey]
+	valid := ok && entry.isValid()
 	c.cacheLock.RUnlock()
-	if ok {
-		return entry.client, nil
+	if valid {
+		return entry.Client, nil
 	}
 
 	c.cacheLock.Lock()
-	defer c.cacheLock.Unlock()
-
 	entry, ok = c.clients[clientKey]
-	if ok {
-		return entry.client, nil
+	if ok && entry.isValid() {
+		c.cacheLock.Unlock()
+		return entry.Client, nil
 	}
 
-	client, release, err := c.clientProvider(clientKey)
+	newEntry, err := c.clientProvider(clientKey)
 	if err != nil {
+		c.cacheLock.Unlock()
 		return nil, err
 	}
-	c.clients[clientKey] = cachedEntry{client: client, release: release}
-	return client, nil
+	c.clients[clientKey] = cachedEntry{ClientCacheEntry: newEntry}
+	c.cacheLock.Unlock()
+
+	if ok {
+		c.release(entry)
+	}
+	return newEntry.Client, nil
 }
 
 func (c *clientCacheImpl) GetAllClients() ([]any, error) {
@@ -123,10 +158,8 @@ func (c *clientCacheImpl) Evict(clientKey string) {
 	}
 	c.cacheLock.Unlock()
 
-	if ok && entry.release != nil {
-		if err := entry.release(); err != nil {
-			c.logger.Warn("Error releasing evicted client resource", tag.Error(err))
-		}
+	if ok {
+		c.release(entry)
 	}
 }
 
@@ -137,10 +170,19 @@ func (c *clientCacheImpl) EvictAll() {
 	c.cacheLock.Unlock()
 
 	for _, entry := range entries {
-		if entry.release != nil {
-			if err := entry.release(); err != nil {
-				c.logger.Warn("Error releasing evicted client resource", tag.Error(err))
-			}
-		}
+		c.release(entry)
+	}
+}
+
+func (e cachedEntry) isValid() bool {
+	return e.IsValid == nil || e.IsValid()
+}
+
+func (c *clientCacheImpl) release(entry cachedEntry) {
+	if entry.Release == nil {
+		return
+	}
+	if err := entry.Release(); err != nil {
+		c.logger.Warn("Error releasing evicted client resource", tag.Error(err))
 	}
 }
