@@ -47,6 +47,7 @@ type PeerApplier interface {
 		targetCell string,
 		operation enumsspb.NamespaceOperation,
 		detail *persistencespb.NamespaceDetail,
+		shadow bool,
 	) (PeerApplyResult, error)
 }
 
@@ -67,13 +68,21 @@ func (a *adminClientPeerApplier) Apply(
 	targetCell string,
 	operation enumsspb.NamespaceOperation,
 	detail *persistencespb.NamespaceDetail,
+	shadow bool,
 ) (PeerApplyResult, error) {
 	adminClient, err := a.clientBean.GetRemoteAdminClient(targetCell)
 	if err != nil {
 		return 0, err
 	}
+	namespaceTask := nsreplication.NamespaceDetailToTaskAttributes(operation, detail)
+	fingerprint, err := nsreplication.NamespaceTaskFingerprint(namespaceTask)
+	if err != nil {
+		return 0, fmt.Errorf("fingerprint namespace mutation: %w", err)
+	}
 	resp, err := adminClient.ApplyNamespaceMutation(ctx, &adminservice.ApplyNamespaceMutationRequest{
-		NamespaceTask: nsreplication.NamespaceDetailToTaskAttributes(operation, detail),
+		NamespaceTask: namespaceTask,
+		Shadow:        shadow,
+		Fingerprint:   fingerprint,
 	})
 	if err != nil {
 		return 0, err

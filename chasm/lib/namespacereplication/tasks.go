@@ -68,13 +68,9 @@ func (h *applyLocalTaskHandler) Validate(
 	return true, nil
 }
 
-// Execute writes to the local metadata store with strict version-CAS, then
-// transitions the component to COMMITTED (and schedules peer fan-out) or
-// FAILED. CAS conflicts are treated as terminal — the caller is expected to
-// re-issue the mutation with fresh state (matching legacy behavior). Retrying
-// internally with the same mutation payload but a refreshed NotificationVersion
-// is unsafe for general UpdateNamespace, because a loser could overwrite a
-// winner's fields on unrelated attributes.
+// Execute writes authoritative mutations to the local metadata store with
+// strict version-CAS. Shadow mutations skip the write and transition directly
+// to COMMITTED so the same peer transport is exercised without double-writing.
 func (h *applyLocalTaskHandler) Execute(
 	ctx context.Context,
 	ref chasm.ComponentRef,
@@ -87,6 +83,7 @@ func (h *applyLocalTaskHandler) Execute(
 		Detail      *persistencespb.NamespaceDetail
 		ExpectedVer int64
 		IsGlobal    bool
+		Shadow      bool
 	}
 	loaded, err := chasm.ReadComponent(
 		ctx,
@@ -97,6 +94,7 @@ func (h *applyLocalTaskHandler) Execute(
 				Operation:   m.GetOperation(),
 				Detail:      m.GetNamespaceDetail(),
 				ExpectedVer: m.GetExpectedVersion(),
+				Shadow:      m.GetShadow(),
 				// Anything that reaches the CHASM transport is a global namespace —
 				// the frontend's shouldUseCHASMReplication gate ensures local-only
 				// namespaces never get here. Hardcoded rather than read from the
@@ -108,6 +106,9 @@ func (h *applyLocalTaskHandler) Execute(
 	)
 	if err != nil {
 		return fmt.Errorf("failed to read chasm component details: %w", err)
+	}
+	if loaded.Shadow {
+		return h.commitLocal(ctx, ref, loaded.ExpectedVer)
 	}
 
 	// Apply to the local metadata store. Any error (CAS conflict, validation,
@@ -153,7 +154,15 @@ func (h *applyLocalTaskHandler) Execute(
 	// destination after Apply returns (TransitionLocalCommitted's is RUNNING), so a
 	// COMPLETED set inside it would be clobbered — the same reason peer completion
 	// needs its own transition.
-	_, _, err = chasm.UpdateComponent(
+	return h.commitLocal(ctx, ref, newVersion)
+}
+
+func (h *applyLocalTaskHandler) commitLocal(
+	ctx context.Context,
+	ref chasm.ComponentRef,
+	newVersion int64,
+) error {
+	_, _, err := chasm.UpdateComponent(
 		ctx,
 		ref,
 		func(c *NamespaceMutationComponent, mctx chasm.MutableContext, _ chasm.NoValue) (chasm.NoValue, error) {
@@ -338,6 +347,7 @@ func (h *applyPeerTaskHandler) Execute(
 	type loadResult struct {
 		Operation enumsspb.NamespaceOperation
 		Detail    *persistencespb.NamespaceDetail
+		Shadow    bool
 	}
 	loaded, readErr := chasm.ReadComponent(
 		ctx,
@@ -347,6 +357,7 @@ func (h *applyPeerTaskHandler) Execute(
 			return loadResult{
 				Operation: convertOperation(m.GetOperation()),
 				Detail:    m.GetNamespaceDetail(),
+				Shadow:    m.GetShadow(),
 			}, nil
 		},
 		nil,
@@ -359,7 +370,7 @@ func (h *applyPeerTaskHandler) Execute(
 	// (dial failure or apply failure) is classified here into retriable vs
 	// terminal, so the retry/gating policy stays in this package regardless of
 	// which transport the deployment injected.
-	result, applyErr := h.peerApplier.Apply(ctx, task.GetTargetCell(), loaded.Operation, loaded.Detail)
+	result, applyErr := h.peerApplier.Apply(ctx, task.GetTargetCell(), loaded.Operation, loaded.Detail, loaded.Shadow)
 	if applyErr != nil {
 		saveErr := h.recordPeerOutcome(ctx, ref, task, classifyPeerErr(applyErr), applyErr)
 		if isPeerDestinationDown(applyErr) {

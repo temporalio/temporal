@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 )
 
 // -----------------------------------------------------------------------------
@@ -294,6 +295,20 @@ func TestApplyLocalTask_Execute_UpdateCommitSchedulesPeers(t *testing.T) {
 	}
 }
 
+func TestApplyLocalTask_Execute_ShadowSkipsMetadataWrite(t *testing.T) {
+	env := newNsreplTestEnv(t)
+	mutation := env.mutationUpdate("cellB")
+	mutation.Shadow = true
+	ref := env.start(mutation, nil)
+
+	require.NoError(t, env.localHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{}))
+
+	component := env.read(ref)
+	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED, component.GetLocalApply().GetOutcome())
+	require.Equal(t, mutation.GetExpectedVersion(), component.GetLocalApply().GetNewVersion())
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, component.GetPeerApply()["cellB"].GetOutcome())
+}
+
 // A local commit with no peers (single-cluster global namespace) has nothing to
 // fan out to and must complete immediately.
 func TestApplyLocalTask_Execute_NoPeersCompletes(t *testing.T) {
@@ -451,9 +466,13 @@ func TestAdminClientPeerApplier_Apply(t *testing.T) {
 	t.Run("applied outcome", func(t *testing.T) {
 		bean, admin, applier := newApplier(t)
 		bean.EXPECT().GetRemoteAdminClient("cellB").Return(admin, nil)
-		admin.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).Return(
-			&adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED}, nil)
-		res, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_UPDATE, detail)
+		admin.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, request *adminservice.ApplyNamespaceMutationRequest, _ ...grpc.CallOption) (*adminservice.ApplyNamespaceMutationResponse, error) {
+				require.True(t, request.GetShadow())
+				require.NotEmpty(t, request.GetFingerprint())
+				return &adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED}, nil
+			})
+		res, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_UPDATE, detail, true)
 		require.NoError(t, err)
 		require.Equal(t, PeerApplyResultApplied, res)
 	})
@@ -462,7 +481,7 @@ func TestAdminClientPeerApplier_Apply(t *testing.T) {
 		bean.EXPECT().GetRemoteAdminClient("cellB").Return(admin, nil)
 		admin.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).Return(
 			&adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_CREATED}, nil)
-		res, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_CREATE, detail)
+		res, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_CREATE, detail, true)
 		require.NoError(t, err)
 		require.Equal(t, PeerApplyResultApplied, res)
 	})
@@ -471,7 +490,7 @@ func TestAdminClientPeerApplier_Apply(t *testing.T) {
 		bean.EXPECT().GetRemoteAdminClient("cellB").Return(admin, nil)
 		admin.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).Return(
 			&adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_NO_OP_STALE}, nil)
-		res, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_UPDATE, detail)
+		res, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_UPDATE, detail, true)
 		require.NoError(t, err)
 		require.Equal(t, PeerApplyResultNoOpStale, res)
 	})
@@ -480,7 +499,7 @@ func TestAdminClientPeerApplier_Apply(t *testing.T) {
 		bean.EXPECT().GetRemoteAdminClient("cellB").Return(admin, nil)
 		admin.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).Return(
 			&adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_DUPLICATE}, nil)
-		res, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_CREATE, detail)
+		res, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_CREATE, detail, true)
 		require.NoError(t, err)
 		require.Equal(t, PeerApplyResultApplied, res)
 	})
@@ -489,7 +508,7 @@ func TestAdminClientPeerApplier_Apply(t *testing.T) {
 		bean.EXPECT().GetRemoteAdminClient("cellB").Return(admin, nil)
 		admin.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).Return(
 			&adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_NOT_ADMITTED}, nil)
-		res, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_UPDATE, detail)
+		res, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_UPDATE, detail, true)
 		require.NoError(t, err)
 		require.Equal(t, PeerApplyResultNotAdmitted, res)
 	})
@@ -498,20 +517,20 @@ func TestAdminClientPeerApplier_Apply(t *testing.T) {
 		bean.EXPECT().GetRemoteAdminClient("cellB").Return(admin, nil)
 		admin.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).Return(
 			&adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_UNSPECIFIED}, nil)
-		_, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_UPDATE, detail)
+		_, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_UPDATE, detail, true)
 		require.Error(t, err)
 	})
 	t.Run("rpc error propagates", func(t *testing.T) {
 		bean, admin, applier := newApplier(t)
 		bean.EXPECT().GetRemoteAdminClient("cellB").Return(admin, nil)
 		admin.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewUnavailable("down"))
-		_, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_UPDATE, detail)
+		_, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_UPDATE, detail, true)
 		require.Error(t, err)
 	})
 	t.Run("dial error propagates", func(t *testing.T) {
 		bean, _, applier := newApplier(t)
 		bean.EXPECT().GetRemoteAdminClient("cellB").Return(nil, serviceerror.NewUnavailable("no route"))
-		_, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_UPDATE, detail)
+		_, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_UPDATE, detail, true)
 		require.Error(t, err)
 	})
 }
@@ -524,7 +543,7 @@ type mockPeerApplier struct {
 	cells  []string
 }
 
-func (m *mockPeerApplier) Apply(_ context.Context, targetCell string, _ enumsspb.NamespaceOperation, _ *persistencespb.NamespaceDetail) (PeerApplyResult, error) {
+func (m *mockPeerApplier) Apply(_ context.Context, targetCell string, _ enumsspb.NamespaceOperation, _ *persistencespb.NamespaceDetail, _ bool) (PeerApplyResult, error) {
 	m.cells = append(m.cells, targetCell)
 	return m.result, m.err
 }

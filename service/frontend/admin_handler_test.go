@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
@@ -230,6 +231,28 @@ func (s *adminHandlerSuite) SetupTest() {
 func (s *adminHandlerSuite) TearDownTest() {
 	s.controller.Finish()
 	s.handler.Stop()
+}
+
+func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowCompareOnly() {
+	namespaceTask := &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"}
+	fingerprint, err := nsreplication.NamespaceTaskFingerprint(namespaceTask)
+	s.Require().NoError(err)
+
+	response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
+		NamespaceTask: namespaceTask,
+		Shadow:        true,
+		Fingerprint:   fingerprint,
+	})
+	s.Require().NoError(err)
+	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED, response.GetOutcome())
+}
+
+func (s *adminHandlerSuite) TestApplyNamespaceMutation_RejectsAuthoritativeRequest() {
+	_, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
+		NamespaceTask: &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"},
+	})
+	var failedPrecondition *serviceerror.FailedPrecondition
+	s.ErrorAs(err, &failedPrecondition)
 }
 
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Success() {

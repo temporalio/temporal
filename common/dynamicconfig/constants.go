@@ -14,6 +14,12 @@ import (
 	"go.temporal.io/server/service/matching/counter"
 )
 
+const (
+	NamespaceReplicationTransportModeLegacy = "legacy"
+	NamespaceReplicationTransportModeShadow = "shadow"
+	NamespaceReplicationTransportModeCHASM  = "chasm"
+)
+
 var (
 	// keys for dynamic config itself
 	DynamicConfigSubscriptionPollInterval = NewGlobalDurationSetting(
@@ -71,6 +77,11 @@ var (
 		"system.secondaryVisibilityWritingMode",
 		"off",
 		`SecondaryVisibilityWritingMode is key for how to write to secondary visibility`,
+	)
+	NamespaceReplicationTransportMode = NewGlobalStringSetting(
+		"system.namespaceReplicationTransportMode",
+		NamespaceReplicationTransportModeLegacy,
+		`NamespaceReplicationTransportMode selects the namespace replication transport: legacy, shadow, or chasm.`,
 	)
 	VisibilityDisableOrderByClause = NewNamespaceBoolSetting(
 		"system.visibilityDisableOrderByClause",

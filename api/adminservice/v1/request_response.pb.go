@@ -1727,6 +1727,11 @@ type ApplyNamespaceMutationRequest struct {
 	// receiver-side apply-if-higher logic (replication_task_executor.go) can be reused
 	// unchanged.
 	NamespaceTask *v15.NamespaceTaskAttributes `protobuf:"bytes,1,opt,name=namespace_task,json=namespaceTask,proto3" json:"namespace_task,omitempty"`
+	// Shadow requests validate transport equivalence but never mutate receiver state.
+	Shadow bool `protobuf:"varint,2,opt,name=shadow,proto3" json:"shadow,omitempty"`
+	// SHA-256 of the deterministic namespace_task protobuf encoding computed by
+	// the sender. The receiver recomputes it to detect transport drift.
+	Fingerprint   []byte `protobuf:"bytes,3,opt,name=fingerprint,proto3" json:"fingerprint,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1764,6 +1769,20 @@ func (*ApplyNamespaceMutationRequest) Descriptor() ([]byte, []int) {
 func (x *ApplyNamespaceMutationRequest) GetNamespaceTask() *v15.NamespaceTaskAttributes {
 	if x != nil {
 		return x.NamespaceTask
+	}
+	return nil
+}
+
+func (x *ApplyNamespaceMutationRequest) GetShadow() bool {
+	if x != nil {
+		return x.Shadow
+	}
+	return false
+}
+
+func (x *ApplyNamespaceMutationRequest) GetFingerprint() []byte {
+	if x != nil {
+		return x.Fingerprint
 	}
 	return nil
 }
@@ -6216,9 +6235,11 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\x19last_processed_message_id\x18\x02 \x01(\x03R\x16lastProcessedMessageId\x12!\n" +
 	"\fcluster_name\x18\x03 \x01(\tR\vclusterName\"~\n" +
 	"'GetNamespaceReplicationMessagesResponse\x12S\n" +
-	"\bmessages\x18\x01 \x01(\v27.temporal.server.api.replication.v1.ReplicationMessagesR\bmessages\"\x83\x01\n" +
+	"\bmessages\x18\x01 \x01(\v27.temporal.server.api.replication.v1.ReplicationMessagesR\bmessages\"\xbd\x01\n" +
 	"\x1dApplyNamespaceMutationRequest\x12b\n" +
-	"\x0enamespace_task\x18\x01 \x01(\v2;.temporal.server.api.replication.v1.NamespaceTaskAttributesR\rnamespaceTask\"\xa0\x02\n" +
+	"\x0enamespace_task\x18\x01 \x01(\v2;.temporal.server.api.replication.v1.NamespaceTaskAttributesR\rnamespaceTask\x12\x16\n" +
+	"\x06shadow\x18\x02 \x01(\bR\x06shadow\x12 \n" +
+	"\vfingerprint\x18\x03 \x01(\fR\vfingerprint\"\xa0\x02\n" +
 	"\x1eApplyNamespaceMutationResponse\x12e\n" +
 	"\aoutcome\x18\x01 \x01(\x0e2K.temporal.server.api.adminservice.v1.ApplyNamespaceMutationResponse.OutcomeR\aoutcome\"\x96\x01\n" +
 	"\aOutcome\x12\x17\n" +

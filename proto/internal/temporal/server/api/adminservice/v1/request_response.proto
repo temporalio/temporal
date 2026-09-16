@@ -206,6 +206,13 @@ message ApplyNamespaceMutationRequest {
   // receiver-side apply-if-higher logic (replication_task_executor.go) can be reused
   // unchanged.
   temporal.server.api.replication.v1.NamespaceTaskAttributes namespace_task = 1;
+
+  // Shadow requests validate transport equivalence but never mutate receiver state.
+  bool shadow = 2;
+
+  // SHA-256 of the deterministic namespace_task protobuf encoding computed by
+  // the sender. The receiver recomputes it to detect transport drift.
+  bytes fingerprint = 3;
 }
 
 message ApplyNamespaceMutationResponse {

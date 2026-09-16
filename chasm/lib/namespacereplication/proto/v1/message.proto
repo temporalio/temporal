@@ -25,6 +25,10 @@ message NamespaceMutation {
   // List of peer cells to fan out to after the local apply succeeds.
   // Drawn from NamespaceDetail.replication_config.clusters minus the local cell.
   repeated string peer_cells = 4;
+
+  // Shadow mutations exercise the full component and peer transport without
+  // writing namespace state in either the source or destination cell.
+  bool shadow = 5;
 }
 
 enum NamespaceOperation {
