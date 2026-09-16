@@ -3,6 +3,8 @@ package xdc
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -16,6 +18,9 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	frontendclient "go.temporal.io/server/client/frontend"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
@@ -53,7 +58,7 @@ func TestNamespaceReplicationCHASMTestSuite(t *testing.T) {
 	t.Parallel()
 
 	s := &namespaceReplicationCHASMTestSuite{
-		observedApplyRequests: make(chan observedNamespaceMutationApply, 10),
+		observedApplyRequests: make(chan observedNamespaceMutationApply, 1024),
 	}
 	s.enableTransitionHistory = true
 	suite.Run(t, s)
@@ -61,8 +66,13 @@ func TestNamespaceReplicationCHASMTestSuite(t *testing.T) {
 
 func (s *namespaceReplicationCHASMTestSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
-		dynamicconfig.EnableChasm.Key():                       true,
-		dynamicconfig.NamespaceReplicationTransportMode.Key(): dynamicconfig.NamespaceReplicationTransportModeShadow,
+		dynamicconfig.EnableChasm.Key(): true,
+		dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS.Key(): 1000,
+		dynamicconfig.NamespaceReplicationTransportMode.Key():                          dynamicconfig.NamespaceReplicationTransportModeShadow,
+		dynamicconfig.OutboundQueueCircuitBreakerSettings.Key(): dynamicconfig.CircuitBreakerSettings{
+			MaxRequests: 1,
+			Timeout:     time.Second,
+		},
 	}
 	s.setupSuite(testcore.WithAdditionalServerOptions(
 		temporal.WithChainedFrontendGrpcInterceptors(s.captureNamespaceMutationApply),
@@ -83,6 +93,159 @@ func (s *namespaceReplicationCHASMTestSuite) SetupTest() {
 
 func (s *namespaceReplicationCHASMTestSuite) TearDownSuite() {
 	s.tearDownSuite()
+}
+
+func (s *namespaceReplicationCHASMTestSuite) TestAuthoritativeTransportConcurrentCASAndOutage() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*testTimeout)
+	defer cancel()
+
+	active := s.clusters[0]
+	standby := s.clusters[1]
+	activeCleanup := active.OverrideDynamicConfig(
+		s.T(),
+		dynamicconfig.NamespaceReplicationTransportMode,
+		dynamicconfig.NamespaceReplicationTransportModeCHASM,
+	)
+	defer activeCleanup()
+	standbyCleanup := standby.OverrideDynamicConfig(
+		s.T(),
+		dynamicconfig.NamespaceReplicationTransportMode,
+		dynamicconfig.NamespaceReplicationTransportModeCHASM,
+	)
+	defer standbyCleanup()
+
+	namespaceName := "test-namespace-" + uuid.NewString()
+	legacyTasks := make(chan bufferedNamespaceReplicationTask, 1)
+	standby.InjectHook(
+		s.T(),
+		testhooks.NewHook(testhooks.NamespaceReplicationTaskInterceptor, func(
+			_ context.Context,
+			task *replicationspb.NamespaceTaskAttributes,
+			execute func() error,
+		) error {
+			legacyTasks <- bufferedNamespaceReplicationTask{
+				task:    proto.Clone(task).(*replicationspb.NamespaceTaskAttributes),
+				execute: execute,
+			}
+			return nil
+		}),
+		namespace.Name(namespaceName),
+	)
+
+	_, err := active.FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+		Namespace: namespaceName,
+		Clusters: []*replicationpb.ClusterReplicationConfig{
+			{ClusterName: active.ClusterName()},
+			{ClusterName: standby.ClusterName()},
+		},
+		ActiveClusterName:                active.ClusterName(),
+		IsGlobalNamespace:                true,
+		WorkflowExecutionRetentionPeriod: durationpb.New(24 * time.Hour),
+	})
+	s.Require().NoError(err)
+	s.requireSuccessfulApply(
+		s.receiveObservedApply(ctx),
+		namespaceName,
+		enumsspb.NAMESPACE_OPERATION_CREATE,
+		false,
+		adminservice.ApplyNamespaceMutationResponse_OUTCOME_CREATED,
+	)
+	s.requireNamespaceDescription(ctx, standby, namespaceName, "", 0)
+
+	const mutationCount = 24
+	retryClient := frontendclient.NewRetryableClient(
+		active.FrontendClient(),
+		backoff.NewExponentialRetryPolicy(10*time.Millisecond).
+			WithMaximumInterval(100*time.Millisecond).
+			WithExpirationInterval(testTimeout),
+		common.IsServiceClientTransientError,
+	)
+	s.failApplyRequests.Store(true)
+	defer s.failApplyRequests.Store(false)
+	start := make(chan struct{})
+	updateErrors := make(chan error, mutationCount)
+	var updates sync.WaitGroup
+	updates.Add(mutationCount)
+	for i := range mutationCount {
+		go func(index int) {
+			defer updates.Done()
+			<-start
+			_, updateErr := retryClient.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+				Namespace: namespaceName,
+				UpdateInfo: &namespacepb.UpdateNamespaceInfo{
+					Data: map[string]string{
+						fmt.Sprintf("mutation-%02d", index): fmt.Sprintf("value-%02d", index),
+					},
+				},
+			})
+			updateErrors <- updateErr
+		}(i)
+	}
+	close(start)
+	updates.Wait()
+	close(updateErrors)
+	for updateErr := range updateErrors {
+		s.Require().NoError(updateErr)
+	}
+
+	sourceNamespace := s.requirePersistedNamespace(ctx, active, namespaceName)
+	s.Require().Equal(int64(mutationCount), sourceNamespace.Namespace.GetConfigVersion())
+	for i := range mutationCount {
+		s.Require().Equal(
+			fmt.Sprintf("value-%02d", i),
+			sourceNamespace.Namespace.GetInfo().GetData()[fmt.Sprintf("mutation-%02d", i)],
+		)
+	}
+
+	failedApply := s.receiveObservedApply(ctx)
+	s.requireApplyRequest(failedApply, namespaceName, enumsspb.NAMESPACE_OPERATION_UPDATE, false)
+	s.Require().Nil(failedApply.response)
+	s.Require().ErrorAs(failedApply.err, new(*serviceerror.Unavailable))
+	s.failApplyRequests.Store(false)
+	recovered := false
+	for !recovered {
+		observed := s.receiveObservedApply(ctx)
+		if observed.err != nil {
+			s.Require().ErrorAs(observed.err, new(*serviceerror.Unavailable))
+			continue
+		}
+		s.requireApplyRequest(observed, namespaceName, enumsspb.NAMESPACE_OPERATION_UPDATE, false)
+		s.Require().NotNil(observed.response)
+		switch observed.response.GetOutcome() {
+		case adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED:
+			recovered = true
+		case adminservice.ApplyNamespaceMutationResponse_OUTCOME_NO_OP_STALE:
+		default:
+			s.FailNow("unexpected recovered apply outcome", observed.response.GetOutcome())
+		}
+	}
+
+	sourceFingerprint, err := nsreplication.NamespaceTaskFingerprint(
+		nsreplication.NamespaceDetailToTaskAttributes(enumsspb.NAMESPACE_OPERATION_UPDATE, sourceNamespace.Namespace),
+	)
+	s.Require().NoError(err)
+	await.RequireTruef(s.T(), func() bool {
+		standbyNamespace, getErr := standby.TestBase().MetadataManager.GetNamespace(
+			ctx,
+			&persistence.GetNamespaceRequest{Name: namespaceName},
+		)
+		if getErr != nil {
+			return false
+		}
+		standbyFingerprint, fingerprintErr := nsreplication.NamespaceTaskFingerprint(
+			nsreplication.NamespaceDetailToTaskAttributes(enumsspb.NAMESPACE_OPERATION_UPDATE, standbyNamespace.Namespace),
+		)
+		return fingerprintErr == nil && bytes.Equal(sourceFingerprint, standbyFingerprint)
+	}, replicationWaitTime, replicationCheckInterval, "standby did not converge to the exact source state")
+
+	s.Require().Never(func() bool {
+		select {
+		case <-legacyTasks:
+			return true
+		default:
+			return false
+		}
+	}, time.Second, 20*time.Millisecond, "authoritative stress test published a legacy namespace replication task")
 }
 
 func (s *namespaceReplicationCHASMTestSuite) TestAuthoritativeTransportConvergesWithoutFIFO() {
