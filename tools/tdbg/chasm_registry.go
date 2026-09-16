@@ -8,14 +8,13 @@ import (
 )
 
 func newChasmRegistry(logger log.Logger) (*chasm.Registry, error) {
-	registry := chasm.NewRegistry(logger)
-
-	if err := all.RegisterAll(registry); err != nil {
+	registry, err := all.NewRegistry(logger)
+	if err != nil {
 		return nil, err
 	}
 
-	// The test library lives under chasm/lib/tests and is deliberately not part of the
-	// generated set; tdbg registers it so test archetypes stay decodable.
+	// The test library lives under chasm/lib/tests and is deliberately not part of the shared
+	// set; tdbg registers it so test archetypes stay decodable.
 	if err := registry.Register(chasmtests.Library); err != nil {
 		return nil, err
 	}

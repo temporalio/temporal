@@ -12,23 +12,15 @@ import (
 	"go.temporal.io/server/common/log"
 )
 
-// NewRegistry returns a registry with every CHASM library registered, with nil handlers.
-// Use RegisterAll instead when you need to add libraries of your own, as tdbg does.
-func NewRegistry(logger log.Logger) (*chasm.Registry, error) {
-	registry := chasm.NewRegistry(logger)
-	if err := RegisterAll(registry); err != nil {
-		return nil, err
-	}
-	return registry, nil
-}
-
-// RegisterAll registers every CHASM library with nil handlers. When adding a library under
-// chasm/lib, export a NewNilLibrary() and add a line here; TestAllNilLibrariesRegistered
-// fails if the two drift.
+// NewRegistry returns a registry holding every CHASM library, with nil handlers. Callers
+// needing libraries of their own can register them onto the result, as tdbg does.
+//
+// When adding a library under chasm/lib, export a NewNilLibrary() and add a line to the libs
+// slice below; TestAllNilLibrariesRegistered fails if the two drift.
 //
 // A new entry makes that library's persisted state decodable by every offline reader,
 // including ones that write it to long lived external storage. Add deliberately.
-func RegisterAll(registry *chasm.Registry) error {
+func NewRegistry(logger log.Logger) (*chasm.Registry, error) {
 	libs := []chasm.Library{
 		&chasm.CoreLibrary{},
 		activity.NewNilLibrary(),
@@ -37,10 +29,12 @@ func RegisterAll(registry *chasm.Registry) error {
 		scheduler.NewNilLibrary(),
 		workflow.NewNilLibrary(),
 	}
+
+	registry := chasm.NewRegistry(logger)
 	for _, lib := range libs {
 		if err := registry.Register(lib); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	return registry, nil
 }
