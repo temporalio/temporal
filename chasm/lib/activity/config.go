@@ -3,6 +3,7 @@ package activity
 import (
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/retrypolicy"
 )
@@ -40,6 +41,14 @@ var (
 		`Allows attaching completion callbacks to standalone activity executions.`,
 	)
 
+	EnabledCallbackKinds = dynamicconfig.NewNamespaceTypedSettingWithConverter(
+		"activity.enabledCallbackKinds",
+		callbacks.ConvertEnabledKinds,
+		[]callbacks.Kind{callbacks.KindNexus},
+		`The list of completion callback kinds that may be attached to a standalone activity execution.
+Only consulted when activity.enableCallbacks is set.`,
+	)
+
 	EnableStandaloneActivityOperatorCommands = dynamicconfig.NewNamespaceBoolSetting(
 		"history.enableStandaloneActivityOperatorCommands",
 		false,
@@ -52,6 +61,7 @@ type Config struct {
 	BlobSizeLimitWarn                         dynamicconfig.IntPropertyFnWithNamespaceFilter
 	BreakdownMetricsByTaskQueue               dynamicconfig.TypedPropertyFnWithTaskQueueFilter[bool]
 	EnableCallbacks                           dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnabledCallbackKinds                      dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.Kind]
 	Enabled                                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableStandaloneActivityOperatorCommands  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	LongPollBuffer                            dynamicconfig.DurationPropertyFnWithNamespaceFilter
@@ -73,6 +83,7 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		BreakdownMetricsByTaskQueue:               dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
 		DefaultActivityRetryPolicy:                dynamicconfig.DefaultActivityRetryPolicy.Get(dc),
 		EnableCallbacks:                           EnableCallbacks.Get(dc),
+		EnabledCallbackKinds:                      EnabledCallbackKinds.Get(dc),
 		Enabled:                                   Enabled.Get(dc),
 		EnableStandaloneActivityOperatorCommands:  EnableStandaloneActivityOperatorCommands.Get(dc),
 		LongPollBuffer:                            LongPollBuffer.Get(dc),
