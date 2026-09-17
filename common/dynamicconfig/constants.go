@@ -1402,10 +1402,10 @@ backlog lag, count, and age for VERSIONED queues.`,
 		false,
 		`MetricsBreakdownByFairnessKey determines if the 'fairness_key' tag on Matching task metrics
 (tasks_added, tasks_dropped, task_dispatch_latency, poll_success, poll_success_sync) contains the actual client-supplied
-fairness key or a generic "__omitted__" value. Tasks that carry no fairness key are tagged "_unknown_", which is the
-dominant series since most tasks have no key. Fairness keys are client-supplied and potentially unbounded (and may encode
-tenant or user identifiers), so this defaults to disabled; enable it only if your observability stack can absorb the added
-cardinality and the keys are safe to expose there.`,
+fairness key or a generic "__omitted__" value. Tasks that carry no fairness key are tagged "__none__" regardless of this
+setting, so tasks with and without a fairness key stay distinguishable even while the breakdown is disabled. Fairness keys
+are client-supplied and potentially unbounded (and may encode tenant or user identifiers), so this defaults to disabled;
+enable it only if your observability stack can absorb the added cardinality and the keys are safe to expose there.`,
 	)
 	MatchingForwarderMaxOutstandingPolls = NewTaskQueueIntSetting(
 		"matching.forwarderMaxOutstandingPolls",

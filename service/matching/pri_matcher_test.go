@@ -125,8 +125,9 @@ func (s *PriMatcherSuite) TestEmitDispatchLatency_FairnessKeyTag() {
 		wantKey   string
 	}{
 		{"breakdown enabled tags the real key", true, "orders", "orders"},
-		{"breakdown enabled maps an empty key to unknown", true, "", "_unknown_"},
-		{"breakdown disabled omits the key", false, "orders", "__omitted__"},
+		{"breakdown enabled maps an empty key to none", true, "", "__none__"},
+		{"breakdown disabled omits a real key", false, "orders", "__omitted__"},
+		{"breakdown disabled still marks an empty key as none", false, "", "__none__"},
 	}
 	for _, tc := range cases {
 		s.Run(tc.name, func() {
