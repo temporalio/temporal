@@ -3150,7 +3150,23 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventReportsD
 		wantSignal    bool
 	}{
 		{
-			name: "incoming data discarded",
+			name: "clockless incoming data discarded",
+			current: &persistencespb.TaskQueueUserData{
+				Clock: &clockspb.HybridLogicalClock{WallClock: 10, ClusterId: 1},
+				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+					int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {FairnessState: enumsspb.FAIRNESS_STATE_V1},
+				},
+			},
+			incoming: &persistencespb.TaskQueueUserData{
+				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+					int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {FairnessState: enumsspb.FAIRNESS_STATE_V2},
+				},
+			},
+			discardedSide: "incoming",
+			wantSignal:    true,
+		},
+		{
+			name: "clocked incoming data discarded",
 			current: &persistencespb.TaskQueueUserData{
 				Clock: &clockspb.HybridLogicalClock{WallClock: 10, ClusterId: 1},
 				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
@@ -3164,10 +3180,9 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventReportsD
 				},
 			},
 			discardedSide: "incoming",
-			wantSignal:    true,
 		},
 		{
-			name: "current data discarded",
+			name: "clockless current data discarded",
 			current: &persistencespb.TaskQueueUserData{
 				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
 					int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {FairnessState: enumsspb.FAIRNESS_STATE_V1},
@@ -3183,16 +3198,30 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventReportsD
 			wantSignal:    true,
 		},
 		{
-			name: "empty incoming data discarded",
+			name: "clocked current data discarded",
+			current: &persistencespb.TaskQueueUserData{
+				Clock: &clockspb.HybridLogicalClock{WallClock: 5, ClusterId: 1},
+				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+					int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {FairnessState: enumsspb.FAIRNESS_STATE_V1},
+				},
+			},
+			incoming: &persistencespb.TaskQueueUserData{
+				Clock: &clockspb.HybridLogicalClock{WallClock: 10, ClusterId: 1},
+				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+					int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {FairnessState: enumsspb.FAIRNESS_STATE_V2},
+				},
+			},
+			discardedSide: "current",
+		},
+		{
+			name: "clockless empty incoming data discarded",
 			current: &persistencespb.TaskQueueUserData{
 				Clock: &clockspb.HybridLogicalClock{WallClock: 10, ClusterId: 1},
 				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
 					int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {FairnessState: enumsspb.FAIRNESS_STATE_V1},
 				},
 			},
-			incoming: &persistencespb.TaskQueueUserData{
-				Clock: &clockspb.HybridLogicalClock{WallClock: 5, ClusterId: 1},
-			},
+			incoming:      &persistencespb.TaskQueueUserData{},
 			discardedSide: "incoming",
 		},
 	}
@@ -3223,7 +3252,7 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventReportsD
 			s.Equal(test.discardedSide, recordings[0].Tags["discarded_side"])
 			logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
 				Level:   testlogger.Warn,
-				Message: "task queue user data replication discarded non-empty per-type data",
+				Message: "task queue user data replication discarded clockless non-empty per-type data",
 				Tags: map[string]any{
 					"discarded-side":          test.discardedSide,
 					"discarded-per-type-data": testlogger.AnyTagValue,

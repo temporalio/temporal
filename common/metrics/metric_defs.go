@@ -1570,7 +1570,7 @@ var (
 	)
 	TaskQueueUserDataReplicationPerTypeDataDropped = NewCounterDef(
 		"task_queue_user_data_replication_per_type_data_dropped",
-		WithDescription("The number of task queue user data replication merges that discarded non-empty per-type data."),
+		WithDescription("The number of task queue user data replication merges that discarded clockless non-empty per-type data."),
 	)
 	ParentClosePolicyProcessorSuccess       = NewCounterDef("parent_close_policy_processor_requests")
 	ParentClosePolicyProcessorFailures      = NewCounterDef("parent_close_policy_processor_errors")

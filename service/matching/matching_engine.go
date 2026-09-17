@@ -2514,12 +2514,12 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 			}
 			mergedUserData.PerType = req.GetUserData().GetPerType()
 		}
-		if len(discardedUserData.GetPerType()) > 0 {
+		if discardedUserData.GetClock() == nil && len(discardedUserData.GetPerType()) > 0 {
 			metrics.TaskQueueUserDataReplicationPerTypeDataDropped.With(e.metricsHandler).Record(1,
 				metrics.NamespaceTag(ns.Name().String()),
 				metrics.StringTag("discarded_side", discardedSide),
 			)
-			e.logger.Warn("task queue user data replication discarded non-empty per-type data",
+			e.logger.Warn("task queue user data replication discarded clockless non-empty per-type data",
 				tag.WorkflowNamespace(ns.Name().String()),
 				tag.WorkflowNamespaceID(req.GetNamespaceId()),
 				tag.WorkflowTaskQueueName(req.GetTaskQueue()),
