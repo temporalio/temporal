@@ -121,7 +121,8 @@ func (v *visibilityArchiver) Archive(ctx context.Context, URI archiver.URI, requ
 		if featureCatalog.VisibilityArchivalRecordDeduplication {
 			return v.gcloudStorage.UploadIfHashChanged(ctx, URI, filename, encodedVisibilityRecord, recordHash)
 		}
-		return true, v.gcloudStorage.Upload(ctx, URI, filename, encodedVisibilityRecord)
+		err := v.gcloudStorage.Upload(ctx, URI, filename, encodedVisibilityRecord)
+		return err == nil, err
 	}
 
 	// The filename has the format: closeTimestamp_hash(runID).visibility

@@ -15,12 +15,14 @@ import (
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/history/configs"
 	"go.uber.org/multierr"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -42,16 +44,15 @@ type (
 		HistoryURI carchiver.URI
 
 		// visibility archival
-		WorkflowTypeName                            string
-		StartTime                                   *timestamppb.Timestamp
-		ExecutionTime                               *timestamppb.Timestamp
-		CloseTime                                   *timestamppb.Timestamp
-		ExecutionDuration                           *durationpb.Duration
-		Status                                      enumspb.WorkflowExecutionStatus
-		HistoryLength                               int64
-		Memo                                        *commonpb.Memo
-		SearchAttributes                            *commonpb.SearchAttributes
-		EnableVisibilityArchivalRecordDeduplication bool
+		WorkflowTypeName  string
+		StartTime         *timestamppb.Timestamp
+		ExecutionTime     *timestamppb.Timestamp
+		CloseTime         *timestamppb.Timestamp
+		ExecutionDuration *durationpb.Duration
+		Status            enumspb.WorkflowExecutionStatus
+		HistoryLength     int64
+		Memo              *commonpb.Memo
+		SearchAttributes  *commonpb.SearchAttributes
 		// VisibilityURI is the URI of the visibility archival backend.
 		VisibilityURI carchiver.URI
 
@@ -72,12 +73,13 @@ type (
 	}
 
 	archiver struct {
-		archiverProvider        provider.ArchiverProvider
-		metricsHandler          metrics.Handler
-		logger                  log.Logger
-		rateLimiter             quotas.RateLimiter
-		searchAttributeProvider searchattribute.Provider
-		visibilityManager       manager.VisibilityManager
+		archiverProvider                            provider.ArchiverProvider
+		metricsHandler                              metrics.Handler
+		logger                                      log.Logger
+		rateLimiter                                 quotas.RateLimiter
+		searchAttributeProvider                     searchattribute.Provider
+		visibilityManager                           manager.VisibilityManager
+		enableVisibilityArchivalRecordDeduplication dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 )
 
@@ -94,6 +96,7 @@ func NewArchiver(
 	rateLimiter quotas.RateLimiter,
 	searchAttributeProvider searchattribute.Provider,
 	visibilityManger manager.VisibilityManager,
+	config *configs.Config,
 ) Archiver {
 	return &archiver{
 		archiverProvider:        archiverProvider,
@@ -102,6 +105,7 @@ func NewArchiver(
 		rateLimiter:             rateLimiter,
 		searchAttributeProvider: searchAttributeProvider,
 		visibilityManager:       visibilityManger,
+		enableVisibilityArchivalRecordDeduplication: config.EnableVisibilityArchivalRecordDeduplication,
 	}
 }
 
@@ -230,7 +234,7 @@ func (a *archiver) archiveVisibility(ctx context.Context, request *Request, logg
 	}
 
 	archiveOptions := make([]carchiver.ArchiveOption, 0, 1)
-	if request.EnableVisibilityArchivalRecordDeduplication {
+	if a.enableVisibilityArchivalRecordDeduplication(request.Namespace) {
 		archiveOptions = append(archiveOptions, carchiver.GetVisibilityArchivalRecordDeduplicationOption())
 	}
 

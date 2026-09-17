@@ -232,6 +232,10 @@ func TestArchiver(t *testing.T) {
 					ArchivalBackendMaxRPS: func() float64 {
 						return 42.0
 					},
+					EnableVisibilityArchivalRecordDeduplication: func(namespace string) bool {
+						assert.Equal(t, "test-namespace", namespace)
+						return c.EnableVisibilityArchivalRecordDeduplication
+					},
 				}),
 				Module,
 				fx.Decorate(func(rl quotas.RateLimiter) quotas.RateLimiter {
@@ -259,9 +263,9 @@ func TestArchiver(t *testing.T) {
 			_, err = archiver.Archive(ctx, &Request{
 				HistoryURI:       historyURI,
 				VisibilityURI:    visibilityURI,
+				Namespace:        "test-namespace",
 				Targets:          c.Targets,
 				SearchAttributes: searchAttributes,
-				EnableVisibilityArchivalRecordDeduplication: c.EnableVisibilityArchivalRecordDeduplication,
 			})
 
 			if len(c.ExpectedReturnErrors) > 0 {
