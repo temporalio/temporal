@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
@@ -32,6 +33,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -960,7 +962,7 @@ func (s *streamSenderSuite) TestSendTasks_GradualConnectSkipsConversionAndAdvanc
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
-	s.taskConverter.EXPECT().Convert(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+	s.taskConverter.EXPECT().Convert(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
 	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(
 		func(response *historyservice.StreamWorkflowReplicationMessagesResponse) error {
 			s.Empty(response.GetMessages().GetReplicationTasks())
@@ -1111,10 +1113,10 @@ func (s *streamSenderSuite) TestSendTasks_WithTasks() {
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
-	s.taskConverter.EXPECT().Convert(item0, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED).Return(task0, nil)
-	s.taskConverter.EXPECT().Convert(item1, s.clientShardKey.ClusterID, gomock.Any()).Times(0)
-	s.taskConverter.EXPECT().Convert(item2, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED).Return(task2, nil)
-	s.taskConverter.EXPECT().Convert(item3, s.clientShardKey.ClusterID, gomock.Any()).Times(0)
+	s.taskConverter.EXPECT().Convert(item0, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED, locks.PriorityLow).Return(task0, nil)
+	s.taskConverter.EXPECT().Convert(item1, s.clientShardKey.ClusterID, gomock.Any(), gomock.Any()).Times(0)
+	s.taskConverter.EXPECT().Convert(item2, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED, locks.PriorityLow).Return(task2, nil)
+	s.taskConverter.EXPECT().Convert(item3, s.clientShardKey.ClusterID, gomock.Any(), gomock.Any()).Times(0)
 	gomock.InOrder(
 		s.server.EXPECT().Send(&historyservice.StreamWorkflowReplicationMessagesResponse{
 			Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
@@ -1198,7 +1200,7 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_HighPriority() {
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
-	s.taskConverter.EXPECT().Convert(item1, s.clientShardKey.ClusterID, item1.Priority).Return(task1, nil)
+	s.taskConverter.EXPECT().Convert(item1, s.clientShardKey.ClusterID, item1.Priority, locks.PriorityLow).Return(task1, nil)
 
 	gomock.InOrder(
 		s.server.EXPECT().Send(&historyservice.StreamWorkflowReplicationMessagesResponse{
@@ -1282,8 +1284,8 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_LowPriority() {
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
-	s.taskConverter.EXPECT().Convert(item0, s.clientShardKey.ClusterID, item0.Priority).Return(task0, nil)
-	s.taskConverter.EXPECT().Convert(item0, s.clientShardKey.ClusterID, item0.Priority).Return(task2, nil)
+	s.taskConverter.EXPECT().Convert(item0, s.clientShardKey.ClusterID, item0.Priority, locks.PriorityLow).Return(task0, nil)
+	s.taskConverter.EXPECT().Convert(item0, s.clientShardKey.ClusterID, item0.Priority, locks.PriorityLow).Return(task2, nil)
 
 	gomock.InOrder(
 		s.server.EXPECT().Send(&historyservice.StreamWorkflowReplicationMessagesResponse{
@@ -1379,13 +1381,19 @@ func (s *streamSenderSuite) TestLivenessMonitor() {
 // setupSingleFailingTask wires a single replication task whose conversion always fails with
 // convertErr, and bounds retries to one fast attempt so the give-up path is reached quickly.
 func (s *streamSenderSuite) setupSingleFailingTask(convertErr error) (beginInclusiveWatermark, endExclusiveWatermark int64) {
-	s.streamSender.isTieredStackEnabled = false
 	s.config.ReplicationStreamSenderErrorRetryMaxAttempts = func() int { return 1 }
 	s.config.ReplicationStreamSenderErrorRetryWait = func() time.Duration { return time.Millisecond }
+	beginInclusiveWatermark, endExclusiveWatermark, item := s.setupSingleTask()
+	s.taskConverter.EXPECT().Convert(item, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED, locks.PriorityLow).
+		Return(nil, convertErr).MinTimes(1)
+	return beginInclusiveWatermark, endExclusiveWatermark
+}
 
+func (s *streamSenderSuite) setupSingleTask() (beginInclusiveWatermark, endExclusiveWatermark int64, item *tasks.MockTask) {
+	s.streamSender.isTieredStackEnabled = false
 	beginInclusiveWatermark = rand.Int63n(math.MaxInt32)
 	endExclusiveWatermark = beginInclusiveWatermark + 100
-	item := tasks.NewMockTask(s.controller)
+	item = tasks.NewMockTask(s.controller)
 	item.EXPECT().GetNamespaceID().Return("1").AnyTimes()
 	item.EXPECT().GetWorkflowID().Return("1").AnyTimes()
 	item.EXPECT().GetRunID().Return("run-1").AnyTimes()
@@ -1416,9 +1424,35 @@ func (s *streamSenderSuite) setupSingleFailingTask(convertErr error) (beginInclu
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
-	s.taskConverter.EXPECT().Convert(item, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED).
-		Return(nil, convertErr).MinTimes(1)
-	return beginInclusiveWatermark, endExclusiveWatermark
+	return beginInclusiveWatermark, endExclusiveWatermark, item
+}
+
+func (s *streamSenderSuite) TestSendTasks_EscalatesWorkflowLockPriorityAfterBusyFailures() {
+	s.config.ReplicationTaskConverterLowPriorityLockMaxAttempts = func() int { return 3 }
+	s.config.ReplicationStreamSenderErrorRetryMaxAttempts = func() int { return 4 }
+	s.config.ReplicationStreamSenderErrorRetryWait = func() time.Duration { return time.Millisecond }
+	beginInclusiveWatermark, endExclusiveWatermark, item := s.setupSingleTask()
+	task := &replicationspb.ReplicationTask{
+		SourceTaskId:   beginInclusiveWatermark,
+		VisibilityTime: timestamppb.New(time.Now().UTC()),
+	}
+
+	gomock.InOrder(
+		s.taskConverter.EXPECT().Convert(
+			item, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED, locks.PriorityLow,
+		).Return(nil, consts.ErrResourceExhaustedBusyWorkflow).Times(3),
+		s.taskConverter.EXPECT().Convert(
+			item, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED, locks.PriorityHigh,
+		).Return(task, nil),
+	)
+	s.server.EXPECT().Send(gomock.Any()).Return(nil).Times(2)
+
+	err := s.streamSender.sendTasks(
+		enumsspb.TASK_PRIORITY_UNSPECIFIED,
+		beginInclusiveWatermark,
+		endExclusiveWatermark,
+	)
+	s.NoError(err)
 }
 
 func (s *streamSenderSuite) TestSendTasks_SkipStuckTask_Enabled() {
@@ -1578,9 +1612,9 @@ func (s *streamSenderSuite) TestSendTasks_SkipStuckTask_StreamKeepsFlowingPastSk
 	// Times(1) (not MinTimes): with MaxAttempts=1 the stuck convert is attempted exactly once, and
 	// bounding it prevents gomock from greedily matching okItem's Convert call to this expectation
 	// (mock tasks are reflect.DeepEqual-equal, so an unbounded matcher would swallow both calls).
-	s.taskConverter.EXPECT().Convert(stuckItem, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED).
+	s.taskConverter.EXPECT().Convert(stuckItem, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED, locks.PriorityLow).
 		Return(nil, errors.New("boom")).Times(1)
-	s.taskConverter.EXPECT().Convert(okItem, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED).
+	s.taskConverter.EXPECT().Convert(okItem, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED, locks.PriorityLow).
 		Return(okTask, nil).Times(1)
 
 	gomock.InOrder(
@@ -1650,7 +1684,7 @@ func (s *streamSenderSuite) TestSendTasks_SkipStuckTask_SendFailureNotSkipped() 
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
-	s.taskConverter.EXPECT().Convert(item, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED).
+	s.taskConverter.EXPECT().Convert(item, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED, locks.PriorityLow).
 		Return(task, nil).MinTimes(1)
 	// The send fails; sendToStream wraps it as a (non-retryable) StreamError, which is not a
 	// convertError, so isSkippable is false and the task must not be skipped.
