@@ -65,8 +65,7 @@ func WrapEventLoop(
 		err := originalEventLoop()
 
 		if err != nil {
-			var streamError *StreamError
-			if errors.As(err, &streamError) {
+			if streamError, ok := errors.AsType[*StreamError](err); ok {
 				metrics.ReplicationStreamError.With(metricsHandler).Record(
 					int64(1),
 					metrics.ServiceErrorTypeTag(streamError.cause),

@@ -27,7 +27,7 @@ const (
 type (
 	// Scavenger is the type that holds the state for executions scavenger daemon
 	Scavenger struct {
-		status           int32
+		status           atomic.Int32
 		numHistoryShards int32
 		activityContext  context.Context
 
@@ -101,11 +101,7 @@ func NewScavenger(
 
 // Start starts the scavenger
 func (s *Scavenger) Start() {
-	if !atomic.CompareAndSwapInt32(
-		&s.status,
-		common.DaemonStatusInitialized,
-		common.DaemonStatusStarted,
-	) {
+	if !s.status.CompareAndSwap(common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
 	s.logger.Info("Executions scavenger starting")
@@ -118,11 +114,7 @@ func (s *Scavenger) Start() {
 
 // Stop stops the scavenger
 func (s *Scavenger) Stop() {
-	if !atomic.CompareAndSwapInt32(
-		&s.status,
-		common.DaemonStatusStarted,
-		common.DaemonStatusStopped,
-	) {
+	if !s.status.CompareAndSwap(common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
 	metrics.StoppedCount.With(s.metricsHandler).Record(1)
@@ -135,7 +127,7 @@ func (s *Scavenger) Stop() {
 
 // Alive returns true if the scavenger is still running
 func (s *Scavenger) Alive() bool {
-	return atomic.LoadInt32(&s.status) == common.DaemonStatusStarted
+	return s.status.Load() == common.DaemonStatusStarted
 }
 
 // run does a single run over all executions and validates them

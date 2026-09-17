@@ -3,7 +3,6 @@ package matching
 import (
 	"context"
 	"errors"
-	"fmt"
 	"maps"
 	"math"
 	"math/bits"
@@ -437,22 +436,20 @@ func validatePartitionScaleDrift(
 
 // signalPartitionScaler sends a signal to the partition scaler that a new task has arrived
 // (directly from history, not forwarded).
-func (pm *taskQueuePartitionManagerImpl) signalPartitionScaler() {
+func (pm *taskQueuePartitionManagerImpl) signalPartitionScaler(ctx context.Context) {
 	if pm.scaleManager == nil {
 		return // only run on root partition
 	}
-	scaleInfo := pm.userDataManager.PartitionScale()
-	effectiveWrite := int(scaleInfo.GetWrite())
-	// if no target is set yet, get effective count from dynamic config (matches client behavior)
-	if effectiveWrite == 0 {
-		effectiveWrite = max(1, pm.config.NumWritePartitions())
+	estimatedTasksAllPartitions := matching.ParseEstimatedTasksAllPartitions(ctx)
+	if estimatedTasksAllPartitions == 0 {
+		scaleInfo := pm.userDataManager.PartitionScale()
+		effectiveWrite := int(scaleInfo.GetWrite())
+		if effectiveWrite == 0 {
+			effectiveWrite = max(1, pm.config.NumWritePartitions())
+		}
+		estimatedTasksAllPartitions = effectiveWrite
 	}
-	// we assume that tasks are balanced uniformly across partitions, so if the root has
-	// seen 1 task then all have seen ~1 task, so the whole queue has seen 'effective'
-	// tasks in total.
-	// TODO(dp): this will change when we add non-uniform load balancing. we should eventually
-	// aggregate real stats instead of assuming
-	pm.scaleManager.AddedTasks(effectiveWrite)
+	pm.scaleManager.AddedTasks(estimatedTasksAllPartitions)
 }
 
 func (pm *taskQueuePartitionManagerImpl) sendPartitionCountTrailer(ctx context.Context) {
@@ -564,7 +561,7 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 		return "", false, err
 	}
 	if params.forwardInfo == nil {
-		pm.signalPartitionScaler()
+		pm.signalPartitionScaler(ctx)
 	}
 
 	var spoolQueue, syncMatchQueue physicalTaskQueueManager
@@ -701,8 +698,7 @@ func (pm *taskQueuePartitionManagerImpl) processTaskAddHooks(ctx context.Context
 }
 
 func taskAddErrResult(err error) string {
-	var resourceExhausted *serviceerror.ResourceExhausted
-	if errors.As(err, &resourceExhausted) {
+	if _, ok := errors.AsType[*serviceerror.ResourceExhausted](err); ok {
 		return metrics.TaskAddResultThrottled
 	}
 	return metrics.TaskAddResultFailure
@@ -849,7 +845,7 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 
 	task, err := dbq.PollTask(ctx, pollMetadata)
 	if task != nil {
-		task.pollerScalingDecision = dbq.MakePollerScalingDecision(ctx, pollMetadata.localPollStartTime)
+		task.pollerScalingDecision = dbq.MakePollerScalingDecision(ctx, pollMetadata.localPollStartTime, task)
 	}
 
 	// Update poller timestamp when poll ends, unless cancelled (e.g., shutdown/disconnect).
@@ -1025,7 +1021,7 @@ func (pm *taskQueuePartitionManagerImpl) DispatchQueryTask(
 		return nil, err
 	}
 	if request.ForwardInfo == nil {
-		pm.signalPartitionScaler()
+		pm.signalPartitionScaler(ctx)
 	}
 
 	task := newInternalQueryTask(taskID, request)
@@ -1095,7 +1091,7 @@ func (pm *taskQueuePartitionManagerImpl) DispatchNexusTask(
 		return nil, err
 	}
 	if request.ForwardInfo == nil {
-		pm.signalPartitionScaler()
+		pm.signalPartitionScaler(ctx)
 	}
 
 	deadline, _ := ctx.Deadline() // If not set by user, our client will set a default.
@@ -1105,7 +1101,12 @@ func (pm *taskQueuePartitionManagerImpl) DispatchNexusTask(
 			opTimeout, err := time.ParseDuration(opTimeoutHeader)
 			if err != nil {
 				// Operation-Timeout header is not required so don't fail request on parsing errors.
-				pm.logger.Warn(fmt.Sprintf("unable to parse %v header: %v", nexus.HeaderOperationTimeout, opTimeoutHeader), tag.Error(err), tag.WorkflowNamespaceID(request.NamespaceId))
+				pm.logger.Warn(
+					"unable to parse operation-timeout header",
+					tag.Error(err),
+					tag.NewStringTag(nexus.HeaderOperationTimeout, opTimeoutHeader),
+					tag.WorkflowNamespaceID(request.NamespaceId),
+				)
 			} else {
 				opDeadline = time.Now().Add(opTimeout)
 			}
@@ -1596,10 +1597,10 @@ func (pm *taskQueuePartitionManagerImpl) emitLogicalBacklogMetrics(ctx context.C
 }
 
 // fetchAndEmitLogicalBacklogMetrics calls Describe to get attributed backlog stats and emits
-// approximate_backlog_count and approximate_backlog_age_seconds per version. These metrics
-// reflect versioning attribution: for current/ramping versions, a proportional share of the
-// unversioned queue's backlog is added to their count, and the unversioned queue's count is
-// reduced accordingly. This ensures metrics match what DescribeTaskQueue returns.
+// approximate_backlog_count and approximate_backlog_age_seconds per version and task priority.
+// These metrics reflect versioning attribution: for current/ramping versions, a proportional
+// share of the unversioned queue's backlog is added to their count, and the unversioned queue's
+// count is reduced accordingly. This ensures metrics match what DescribeTaskQueue returns.
 func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx context.Context) {
 	if !pm.config.BreakdownMetricsByTaskQueue() || !pm.config.BreakdownMetricsByPartition() {
 		return
@@ -1629,20 +1630,18 @@ func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx c
 			metrics.WorkerDeploymentBuildIDTag(buildID, pm.config.BreakdownMetricsByBuildID()),
 		)
 
-		// Per-priority backlog count
+		// Per-priority backlog count and age
 		for pri, stats := range pqInfo.GetTaskQueueStatsByPriorityKey() {
+			priorityTag := metrics.MatchingTaskPriorityTag(pri)
 			metrics.ApproximateBacklogCount.With(versionHandler).Record(
 				float64(stats.GetApproximateBacklogCount()),
-				metrics.MatchingTaskPriorityTag(pri),
+				priorityTag,
 			)
-		}
 
-		// Backlog age (oldest across all priorities)
-		age := pqInfo.GetTaskQueueStats().GetApproximateBacklogAge()
-		if age != nil && age.AsDuration() > 0 {
-			metrics.ApproximateBacklogAgeSeconds.With(versionHandler).Record(age.AsDuration().Seconds())
-		} else {
-			metrics.ApproximateBacklogAgeSeconds.With(versionHandler).Record(0)
+			metrics.ApproximateBacklogAgeSeconds.With(versionHandler).Record(
+				stats.GetApproximateBacklogAge().AsDuration().Seconds(),
+				priorityTag,
+			)
 		}
 	}
 }
@@ -1669,9 +1668,10 @@ func (pm *taskQueuePartitionManagerImpl) emitZeroLogicalBacklogForQueue(version 
 		metrics.WorkerDeploymentBuildIDTag(buildID, pm.config.BreakdownMetricsByBuildID()),
 	)
 	for pri := range pq.GetStatsByPriority(false) {
-		metrics.ApproximateBacklogCount.With(handler).Record(0, metrics.MatchingTaskPriorityTag(pri))
+		priorityTag := metrics.MatchingTaskPriorityTag(pri)
+		metrics.ApproximateBacklogCount.With(handler).Record(0, priorityTag)
+		metrics.ApproximateBacklogAgeSeconds.With(handler).Record(0, priorityTag)
 	}
-	metrics.ApproximateBacklogAgeSeconds.With(handler).Record(0)
 }
 
 // parseDeploymentFromVersionKey extracts the deployment name and build ID from a version key

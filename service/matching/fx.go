@@ -71,9 +71,13 @@ func ConfigProvider(
 
 func ServiceErrorInterceptorProvider(
 	dc *dynamicconfig.Collection,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
 ) *interceptor.ServiceErrorInterceptor {
 	return interceptor.NewServiceErrorInterceptor(
 		dynamicconfig.MaxServiceErrorMessageLength.Get(dc),
+		metricsHandler,
+		logger,
 	)
 }
 
@@ -134,7 +138,6 @@ func NamespaceRateLimitInterceptorProvider(
 			namespaceRateFn,
 			serviceConfig.OperatorRPSRatio,
 		),
-		map[string]int{},       // no token overrides
 		configs.PollTaskAPISet, // set of APIs that will wait for token instead of immediate rejection
 		serviceConfig.PollWaitForNamespaceRateLimitToken,
 		metricsHandler,

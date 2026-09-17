@@ -7,10 +7,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/temporalio/sqlparser"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/searchattribute"
+	"go.uber.org/mock/gomock"
 )
 
 var pluginNames = []string{
@@ -51,7 +54,7 @@ func TestBuildQueryParams(t *testing.T) {
 		{
 			name:  "fail invalid custom search attribute",
 			query: "AliasForFoo = 'foo'",
-			err:   "invalid expression: column name 'AliasForFoo' is not a valid search attribute",
+			err:   "invalid search attribute: AliasForFoo",
 		},
 		{
 			name:  "fail order by not supported",
@@ -65,6 +68,7 @@ func TestBuildQueryParams(t *testing.T) {
 			tcName := fmt.Sprintf("%s/%s", pluginName, tc.name)
 			t.Run(tcName, func(t *testing.T) {
 				r := require.New(t)
+				ctrl := gomock.NewController(t)
 				sqlQC, err := NewSQLQueryConverter(pluginName)
 				r.NoError(err)
 
@@ -75,8 +79,10 @@ func TestBuildQueryParams(t *testing.T) {
 					sqlQC,
 					searchattribute.TestNameTypeMap(),
 					&searchattribute.TestMapper{},
-					nil,
+					nil, // chasmMapper
 					chasm.UnspecifiedArchetypeID,
+					metrics.NewMockHandler(ctrl),
+					log.NewNoopLogger(),
 				)
 				if tc.err != "" {
 					r.Error(err)

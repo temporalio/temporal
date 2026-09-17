@@ -48,6 +48,7 @@ import (
 // create path (there will be only current branch)
 // 1. create as current															-> nDCTransactionPolicyCreateAsCurrent
 // 2. create as zombie															-> nDCTransactionPolicyCreateAsZombie
+// 3. create without changing state or current									-> nDCTransactionPolicyCreateBypassCurrent
 //
 // create path (there will be only current branch) + suppress current
 // 1. create as current & suppress current										-> nDCTransactionPolicySuppressCurrentAndCreateAsCurrent
@@ -69,12 +70,12 @@ import (
 // conflict resolve path + suppress current
 // 1. update from zombie to current & suppress current							-> nDCTransactionPolicySuppressCurrentAndUpdateAsCurrent
 // 2. update from zombie to current & new created as current & suppress current	-> nDCTransactionPolicySuppressCurrentAndUpdateAsCurrent
-
 type nDCTransactionPolicy int
 
 const (
 	nDCTransactionPolicyCreateAsCurrent nDCTransactionPolicy = iota
 	nDCTransactionPolicyCreateAsZombie
+	nDCTransactionPolicyCreateBypassCurrent
 	nDCTransactionPolicySuppressCurrentAndCreateAsCurrent
 
 	nDCTransactionPolicyUpdateAsCurrent

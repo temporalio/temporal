@@ -209,6 +209,7 @@ type (
 		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo
 		GetApproximatePersistedSize() int
 		ChasmSkipPersistenceEnabled() bool
+		ChasmDLQScheduledPureTaskOnValidationEnabled() bool
 		GetNamespaceEntry() *namespace.Namespace
 		GetCurrentVersion() int64
 		NextTransitionCount() int64
@@ -253,11 +254,6 @@ type (
 		ExecutePureTask(baseCtx context.Context, taskAttributes TaskAttributes, taskInstance any) (bool, error)
 	}
 )
-
-// IsEmpty reports whether the mutation contains no node updates or deletions.
-func (m NodesMutation) IsEmpty() bool {
-	return len(m.UpdatedNodes) == 0 && len(m.DeletedNodes) == 0
-}
 
 // NewTreeFromDB creates a new in-memory CHASM tree from a collection of flattened persistence CHASM nodes.
 // This method should only be used when loading an existing CHASM tree from database.
@@ -2073,8 +2069,7 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 		}
 
 		sideEffectTasks := componentAttr.GetSideEffectTasks()
-		for idx := len(sideEffectTasks) - 1; idx >= 0; idx-- {
-			sideEffectTask := sideEffectTasks[idx]
+		for _, sideEffectTask := range slices.Backward(sideEffectTasks) {
 			if sideEffectTask.PhysicalTaskStatus == physicalTaskStatusCreated {
 				break
 			}
@@ -3559,12 +3554,26 @@ func (n *Node) ExecutePureTask(
 		return true, execErr
 	}
 
-	// TODO - a task validator must succeed validation after a task executes
-	// successfully (without error), otherwise it will generate an infinite loop.
-	// Check for this case by marking the in-memory task as having executed, which the
-	// CloseTransaction method will check against.
-	//
-	// See: https://github.com/temporalio/temporal/pull/7701#discussion_r2072026993
+	if !taskAttributes.IsImmediate() && n.backend.ChasmDLQScheduledPureTaskOnValidationEnabled() {
+		valid, err = n.validateTask(validationContext, TaskInvocation{TaskAttributes: taskAttributes}, taskInstance)
+		if err != nil {
+			return true, err
+		}
+		if valid {
+			archetypeID := n.ArchetypeID()
+			archetype, _ := n.registry.ArchetypeDisplayName(archetypeID)
+			encodedPath, _ := n.getEncodedPath()
+			return true, NewTaskNotInvalidatedErrorWithDetails("pure", TaskNotInvalidatedDetails{
+				TaskType:             registrableTask.fqType(),
+				TaskTypeID:           registrableTask.taskTypeID,
+				Archetype:            archetype,
+				ArchetypeID:          archetypeID,
+				ComponentPath:        n.path(),
+				EncodedComponentPath: encodedPath,
+				TaskAttributes:       taskAttributes,
+			})
+		}
+	}
 
 	return true, nil
 }

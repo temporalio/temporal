@@ -41,6 +41,77 @@ func TestTasksArePhysicallyGenerated(t *testing.T) {
 	})
 }
 
+func TestInvariantCheckRunsAfterSuccessfulTransitions(t *testing.T) {
+	var calls []string
+	check := func(name string) chasmtest.InvariantCheck {
+		return func(checkT *testing.T, node *chasm.Node, root chasm.RootComponent) {
+			checkT.Helper()
+			require.Same(checkT, t, checkT)
+			require.IsType(checkT, &tests.PayloadStore{}, root)
+			require.NotPanics(checkT, func() { node.Snapshot(nil) })
+			calls = append(calls, name)
+		}
+	}
+
+	e, ref := startStoreWithEngineOptions(
+		t,
+		time.Hour,
+		[]chasmtest.EngineOption{
+			chasmtest.WithInvariantCheck(check("first")),
+			chasmtest.WithInvariantCheck(check("second")),
+		},
+	)
+	require.Equal(t, []string{"first", "second"}, calls)
+
+	_, _, err := chasm.UpdateComponent(engineContext(e), ref,
+		func(*tests.PayloadStore, chasm.MutableContext, any) (any, error) {
+			return nil, nil
+		}, nil, chasm.WithRequestID("invariant-check"))
+	require.NoError(t, err)
+	require.Equal(t, []string{"first", "second", "first", "second"}, calls)
+
+	_, _, err = chasm.UpdateComponent(engineContext(e), ref,
+		func(*tests.PayloadStore, chasm.MutableContext, any) (any, error) {
+			return nil, nil
+		}, nil, chasm.WithRequestID("invariant-check"))
+	require.ErrorIs(t, err, chasm.ErrRequestIDAlreadyUsed)
+	require.Equal(t, []string{"first", "second", "first", "second"}, calls)
+
+	transitionErr := errors.New("transition failed")
+	_, _, err = chasm.UpdateComponent(engineContext(e), ref,
+		func(*tests.PayloadStore, chasm.MutableContext, any) (any, error) {
+			return nil, transitionErr
+		}, nil)
+	require.ErrorIs(t, err, transitionErr)
+	require.Equal(t, []string{"first", "second", "first", "second"}, calls)
+
+	executed, err := e.FirePureTasks(ref, time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC))
+	require.NoError(t, err)
+	require.Equal(t, 1, executed)
+	require.Equal(t, []string{"first", "second", "first", "second", "first", "second"}, calls)
+
+	key := chasm.ExecutionKey{NamespaceID: "test-ns", BusinessID: "update-with-start"}
+	result, err := chasm.UpdateWithStartExecution(
+		engineContext(e),
+		key,
+		func(mc chasm.MutableContext, _ any) (*tests.PayloadStore, error) {
+			return tests.NewPayloadStore(mc)
+		},
+		func(*tests.PayloadStore, chasm.MutableContext, any) (any, error) {
+			return nil, nil
+		},
+		nil,
+	)
+	require.NoError(t, err)
+	require.True(t, result.Created)
+	require.Equal(t, []string{
+		"first", "second",
+		"first", "second",
+		"first", "second",
+		"first", "second",
+	}, calls)
+}
+
 func TestUpdateComponentDeduplicatesRequestID(t *testing.T) {
 	e, ref := startStore(t, 0)
 	updateCount := 0
@@ -60,6 +131,7 @@ func TestUpdateComponentDeduplicatesRequestID(t *testing.T) {
 	updatedRef, err = update()
 	var failedPrecondition *serviceerror.FailedPrecondition
 	require.ErrorAs(t, err, &failedPrecondition)
+	require.ErrorIs(t, err, chasm.ErrRequestIDAlreadyUsed)
 	require.Nil(t, updatedRef)
 	require.Equal(t, 1, updateCount)
 }
@@ -123,13 +195,23 @@ func startStore(
 	ttl time.Duration,
 	opts ...chasm.TransitionOption,
 ) (*chasmtest.Engine, chasm.ComponentRef) {
+	return startStoreWithEngineOptions(t, ttl, nil, opts...)
+}
+
+func startStoreWithEngineOptions(
+	t *testing.T,
+	ttl time.Duration,
+	engineOpts []chasmtest.EngineOption,
+	opts ...chasm.TransitionOption,
+) (*chasmtest.Engine, chasm.ComponentRef) {
 	registry := chasm.NewRegistry(log.NewNoopLogger())
 	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
 	require.NoError(t, registry.Register(tests.Library))
 
 	ts := clock.NewEventTimeSource()
 	ts.Update(time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC))
-	e := chasmtest.NewEngine(t, registry, chasmtest.WithTimeSource(ts))
+	engineOpts = append([]chasmtest.EngineOption{chasmtest.WithTimeSource(ts)}, engineOpts...)
+	e := chasmtest.NewEngine(t, registry, engineOpts...)
 
 	key := chasm.ExecutionKey{NamespaceID: "test-ns", BusinessID: "store"}
 	result, err := chasm.StartExecution(engineContext(e), key,

@@ -5,23 +5,20 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"strings"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	failurepb "go.temporal.io/api/failure/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/scheduler/internal"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -475,18 +472,14 @@ func (s *Scheduler) identity() string {
 }
 
 func (s *Scheduler) overlapPolicy() enumspb.ScheduleOverlapPolicy {
-	policy := s.Schedule.GetPolicies().GetOverlapPolicy()
-	if policy == enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED {
-		policy = enumspb.SCHEDULE_OVERLAP_POLICY_SKIP
-	}
-	return policy
+	return internal.ResolveOverlapPolicy(
+		enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED,
+		s.Schedule.GetPolicies().GetOverlapPolicy(),
+	)
 }
 
 func (s *Scheduler) resolveOverlapPolicy(overlapPolicy enumspb.ScheduleOverlapPolicy) enumspb.ScheduleOverlapPolicy {
-	if overlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED {
-		overlapPolicy = s.overlapPolicy()
-	}
-	return overlapPolicy
+	return internal.ResolveOverlapPolicy(overlapPolicy, s.overlapPolicy())
 }
 
 // validateCachedState clears cached fields whenever the Scheduler's
@@ -509,22 +502,55 @@ func (s *Scheduler) updateConflictToken() {
 	s.ConflictToken++
 }
 
-// getLastEventTime returns the time of the last "event" to happen to the schedule.
-// An event here is the schedule getting created or updated, or an action. This
-// value is used for calculating the retention time (how long an idle schedule
-// lives after becoming idle).
-func (s *Scheduler) getLastEventTime(ctx chasm.Context) time.Time {
+// computeLastEventTime derives the last "event" time from currently-observable
+// state: schedule create/update, and the start time of any action still held in
+// the Invoker's buffer.
+//
+// The result is NOT monotonic. recentActions() reads BufferedStarts, which
+// applyCompletedRetention truncates to the last recentActionCount completed
+// entries (ordered by CloseTime). When the start holding the largest StartTime
+// is evicted - which happens whenever completion order differs from start order
+// - this value moves backwards. Callers must go through getLastEventTime.
+func (s *Scheduler) computeLastEventTime(ctx chasm.Context) time.Time {
 	latest := util.MaxTime(
 		s.Info.GetCreateTime().AsTime(),
 		s.Info.GetUpdateTime().AsTime(),
 	)
 
 	// The recentActions list is unsorted.
-	for _, a := range s.Invoker.Get(ctx).recentActions() {
+	for _, a := range s.recentActions(ctx) {
 		latest = util.MaxTime(latest, a.GetActualTime().AsTime())
 	}
 
 	return latest
+}
+
+// getLastEventTime returns the time of the last "event" to happen to the schedule.
+// An event here is the schedule getting created or updated, or an action. This
+// value is used for calculating the retention time (how long an idle schedule
+// lives after becoming idle).
+//
+// Read-only: floors the recomputed value at the persisted high water mark so the
+// idle deadline can never regress. LastEventTime is nil on schedules created
+// before it was introduced, in which case this degrades exactly to the old
+// recompute-only behaviour until advanceLastEventTime writes it.
+func (s *Scheduler) getLastEventTime(ctx chasm.Context) time.Time {
+	return util.MaxTime(
+		s.computeLastEventTime(ctx),
+		s.GetLastEventTime().AsTime(),
+	)
+}
+
+func (s *Scheduler) advanceLastEventTime(ctx chasm.MutableContext) time.Time {
+	latest := s.getLastEventTime(ctx)
+	s.advanceLastEventTimeTo(latest)
+	return latest
+}
+
+func (s *Scheduler) advanceLastEventTimeTo(latest time.Time) {
+	if latest.After(s.GetLastEventTime().AsTime()) {
+		s.LastEventTime = timestamppb.New(latest)
+	}
 }
 
 // isHeldOpen reports whether the schedule must stay open regardless of having
@@ -581,115 +607,49 @@ type schedulerActionResult struct {
 }
 
 // recordActionResult updates the Scheduler's customer-facing metrics.
-// RunningWorkflows and RecentActions are computed from BufferedStarts.
+// RunningWorkflows are computed from BufferedStarts. RecentActions also includes
+// start-only records for actions that are removed from active state after starting.
 func (s *Scheduler) recordActionResult(result *schedulerActionResult) {
 	s.Info.ActionCount += result.actionCount
 	s.Info.OverlapSkipped += result.overlapSkipped
 	s.Info.MissedCatchupWindow += result.missedCatchupWindow
 }
 
-var _ chasm.NexusCompletionHandler = &Scheduler{}
-
-func executionStatusFromFailure(failure *failurepb.Failure) enumspb.WorkflowExecutionStatus {
-	switch failure.FailureInfo.(type) {
-	case *failurepb.Failure_CanceledFailureInfo:
-		return enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED
-	case *failurepb.Failure_TimeoutFailureInfo:
-		return enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT
-	case *failurepb.Failure_TerminatedFailureInfo:
-		return enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED
-	default:
-		return enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
-	}
+func (s *Scheduler) recordRecentAction(
+	start *schedulespb.BufferedStart,
+	status enumspb.WorkflowExecutionStatus,
+) {
+	s.Info.RecentActions = append(s.Info.RecentActions, &schedulepb.ScheduleActionResult{
+		ScheduleTime: start.GetActualTime(),
+		ActualTime:   start.GetStartTime(),
+		StartWorkflowResult: &commonpb.WorkflowExecution{
+			WorkflowId: start.GetWorkflowId(),
+			RunId:      start.GetRunId(),
+		},
+		StartWorkflowStatus: status,
+	})
+	slices.SortFunc(s.Info.RecentActions, func(a, b *schedulepb.ScheduleActionResult) int {
+		return a.GetActualTime().AsTime().Compare(b.GetActualTime().AsTime())
+	})
+	s.Info.RecentActions = util.SliceTail(s.Info.RecentActions, recentActionCount)
 }
 
-func countsAsFailureForPause(status enumspb.WorkflowExecutionStatus) bool {
-	switch status {
-	case enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
-		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
-		return true
-	default:
-		return false
-	}
-}
-
-// HandleNexusCompletion allows Scheduler to record workflow completions from
-// worfklows started by the same scheduler tree's Invoker.
-func (s *Scheduler) HandleNexusCompletion(
+func (s *Scheduler) recordStartOnlyActions(
 	ctx chasm.MutableContext,
-	info *persistencespb.ChasmNexusCompletion,
-) error {
-	invoker := s.Invoker.Get(ctx)
-	metricsHandler := newTaggedMetricsHandler(ctx.MetricsHandler(), s)
-
-	workflowID := invoker.runningWorkflowID(info.RequestId)
-	if workflowID == "" {
-		// If the request ID was removed, the request must have already been processed;
-		// fast-succeed.
-		msg := "handled Nexus completion with an unrecognized request ID"
-		s.getOrCreateEventLog(ctx).LogEvent(ctx,
-			fmt.Sprintf("%s: %s", msg, info.RequestId))
-		ctx.Logger().Warn(msg,
-			tag.RequestID(info.RequestId),
-			tag.ScheduleID(s.ScheduleId))
-		metricsHandler.Counter(metrics.ScheduleCallbackIgnored.Name()).Record(1)
-		return nil
+	starts []*schedulespb.BufferedStart,
+) {
+	for _, start := range starts {
+		s.recordRecentAction(start, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
 	}
-
-	// Record how long it took for the callback to arrive after the action completed.
-	// Use ctx.Now instead of time.Since to use a consistent time source across nodes,
-	// and clamp to zero in case of clock skew.
-	if closeTime := info.GetCloseTime().AsTime(); !closeTime.IsZero() {
-		latency := max(0, ctx.Now(s).Sub(closeTime))
-		metricsHandler.Timer(metrics.ScheduleCallbackLatency.Name()).Record(latency)
+	if len(starts) > 0 {
+		// These starts have no completion callback to rearm an idle task after
+		// their start-only history advances the idle deadline.
+		s.Generator.Get(ctx).Generate(ctx)
 	}
+}
 
-	// Handle last completed/failed status and payloads.
-	//
-	// TODO - also record payload sizes once we have metrics wired into CHASM context.
-	var wfStatus enumspb.WorkflowExecutionStatus
-	switch outcome := info.Outcome.(type) {
-	case *persistencespb.ChasmNexusCompletion_Failure:
-		previousResult := s.LastCompletionResult.Get(ctx) // Most-recent success is kept after failure.
-		wfStatus = executionStatusFromFailure(outcome.Failure)
-		s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{
-			Failure: outcome.Failure,
-			Success: previousResult.Success,
-		})
-	case *persistencespb.ChasmNexusCompletion_Success:
-		wfStatus = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
-		s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{
-			Success: outcome.Success,
-		})
-	default:
-		wfStatus = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
-	}
-
-	// Handle pause-on-failure.
-	if countsAsFailureForPause(wfStatus) &&
-		s.Schedule.Policies.PauseOnFailure && !s.Schedule.State.Paused {
-		s.Schedule.State.Paused = true
-		s.Schedule.State.Notes = fmt.Sprintf(
-			"paused, workflow %s: %s",
-			strings.ToLower(wfStatus.String()),
-			workflowID,
-		)
-		s.updateConflictToken()
-	}
-
-	// Record the completed action in the Invoker.
-	completed := &schedulespb.CompletedResult{
-		Status:    wfStatus,
-		CloseTime: info.CloseTime,
-	}
-	invoker.recordCompletedAction(ctx, completed, info.RequestId)
-
-	// Generate immediately after recording completions, so that an idle task
-	// can be scheduled if no more actions are remaining. Necessary as
-	// additional events invalidate in-flight idle tasks.
-	s.Generator.Get(ctx).Generate(ctx)
-
-	return nil
+func (s *Scheduler) recentActions(ctx chasm.Context) []*schedulepb.ScheduleActionResult {
+	return s.Invoker.Get(ctx).recentActions(s.Info.GetRecentActions())
 }
 
 // Describe returns the current state of the Scheduler for DescribeSchedule requests.
@@ -735,11 +695,10 @@ func (s *Scheduler) Describe(
 	invoker := s.Invoker.Get(ctx)
 	info := common.CloneProto(s.Info)
 	info.RunningWorkflows = invoker.runningWorkflowExecutions()
-	info.RecentActions = invoker.recentActions()
+	info.RecentActions = s.recentActions(ctx)
 	info.FutureActionTimes = futureActionTimes
-	// BufferedStarts holds waiting, running, and recently-completed entries; only the
-	// waiting portion (those not yet surfaced via RecentActions) counts as buffered.
-	info.BufferSize = int64(len(invoker.GetBufferedStarts()) - len(info.RecentActions))
+	// Only starts that have not reached StartWorkflowExecution count as buffered.
+	info.BufferSize = int64(invoker.bufferedStartsCount())
 
 	executionInfo := ctx.ExecutionInfo()
 	info.StateSizeBytes = int64(executionInfo.ApproximateStateSize)
@@ -1017,7 +976,7 @@ func (s *Scheduler) SearchAttributes(ctx chasm.Context) []chasm.SearchAttributeK
 
 		invoker := s.Invoker.Get(ctx)
 		runningWorkflowCount := int64(len(invoker.runningWorkflowExecutions()))
-		bufferedStartsCount := int64(len(invoker.GetBufferedStarts()) - len(invoker.recentActions()))
+		bufferedStartsCount := int64(invoker.bufferedStartsCount())
 
 		// Emitted even when zero so that exact and range queries both work.
 		out = append(out,
@@ -1054,11 +1013,10 @@ func (s *Scheduler) ListInfo(
 	spec.StructuredCalendar = util.SliceHead(spec.StructuredCalendar, listInfoSpecFieldLimit)
 
 	generator := s.Generator.Get(ctx)
-	invoker := s.Invoker.Get(ctx)
 
 	// Hard-cap the memo's recent-action list by length after sorting by actual time
 	// (ascending towards most recent).
-	recentActions := invoker.recentActions()
+	recentActions := s.recentActions(ctx)
 	slices.SortFunc(recentActions, func(a, b *schedulepb.ScheduleActionResult) int {
 		return a.GetActualTime().AsTime().Compare(b.GetActualTime().AsTime())
 	})

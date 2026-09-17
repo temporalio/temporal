@@ -42,8 +42,7 @@ func GetRawHistory(
 	branchToken []byte,
 ) (_ []*commonpb.DataBlob, _ []byte, retError error) {
 	defer func() {
-		var dataLossErr *serviceerror.DataLoss
-		if errors.As(retError, &dataLossErr) {
+		if _, ok := errors.AsType[*serviceerror.DataLoss](retError); ok {
 			if shardContext.GetConfig().EnableDataLossMetrics() {
 				persistence.EmitDataLossMetric(
 					shardContext.GetMetricsHandler(),

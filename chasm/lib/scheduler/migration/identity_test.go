@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	schedulerinternal "go.temporal.io/server/chasm/lib/scheduler/internal"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -24,6 +25,7 @@ func TestSameTimePendingStartsReceiveUniqueIdentities(t *testing.T) {
 		"schedule-id",
 		1,
 		"workflow-id",
+		enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
 	)
 	require.Len(t, converted, 2)
 	require.NotEqual(t, converted[0].GetRequestId(), converted[1].GetRequestId(),
@@ -51,6 +53,7 @@ func TestMigratedStartsPreserveExistingIdentities(t *testing.T) {
 		"schedule-id",
 		1,
 		"workflow-id",
+		enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
 	)
 	require.Len(t, converted, 2)
 	for i, start := range converted {
@@ -58,5 +61,51 @@ func TestMigratedStartsPreserveExistingIdentities(t *testing.T) {
 			"identities carried over from V1 must not be regenerated")
 		require.Equal(t, fmt.Sprintf("wf-%d", i), start.GetWorkflowId(),
 			"identities carried over from V1 must not be suffixed")
+	}
+}
+
+func TestMigratedStartsResolveOverlapPolicy(t *testing.T) {
+	when := timestamppb.New(time.Date(2026, 7, 19, 12, 0, 0, 0, time.UTC))
+	tests := []struct {
+		name           string
+		startPolicy    enumspb.ScheduleOverlapPolicy
+		schedulePolicy enumspb.ScheduleOverlapPolicy
+		want           enumspb.ScheduleOverlapPolicy
+	}{
+		{
+			name:           "explicit start policy",
+			startPolicy:    enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+			schedulePolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			want:           enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+		},
+		{
+			name:           "inherited schedule policy",
+			schedulePolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			want:           enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		},
+		{
+			name: "default policy",
+			want: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			converted := convertBufferedStartsLegacyToCHASM(
+				[]*schedulespb.BufferedStart{{
+					NominalTime:   when,
+					ActualTime:    when,
+					OverlapPolicy: tt.startPolicy,
+				}},
+				"namespace-id",
+				"schedule-id",
+				1,
+				"workflow-id",
+				tt.schedulePolicy,
+			)
+
+			require.Len(t, converted, 1)
+			require.Equal(t, tt.want, converted[0].GetOverlapPolicy())
+		})
 	}
 }

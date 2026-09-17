@@ -5,17 +5,22 @@ package nsreplication
 import (
 	"context"
 
+	otellog "go.opentelemetry.io/otel/log"
 	enumspb "go.temporal.io/api/enums/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/wideevents"
+	"google.golang.org/protobuf/proto"
 )
 
 var (
@@ -49,13 +54,19 @@ type (
 		Execute(ctx context.Context, task *replicationspb.NamespaceTaskAttributes) error
 	}
 
+	// TaskExecutorOption configures a namespace replication task executor.
+	TaskExecutorOption func(*taskExecutorImpl)
+
 	taskExecutorImpl struct {
-		currentCluster  string
-		metadataManager persistence.MetadataManager
-		dataMerger      NamespaceDataMerger
-		admitter        NamespaceReplicationAdmitter
-		logger          log.Logger
-		testHooks       testhooks.TestHooks
+		currentCluster               string
+		metadataManager              persistence.MetadataManager
+		dataMerger                   NamespaceDataMerger
+		admitter                     NamespaceReplicationAdmitter
+		logger                       log.Logger
+		metricsHandler               metrics.Handler
+		eventLogger                  otellog.Logger
+		emitNamespaceLifecycleEvents dynamicconfig.BoolPropertyFn
+		testHooks                    testhooks.TestHooks
 	}
 )
 
@@ -67,14 +78,37 @@ func NewTaskExecutor(
 	admitter NamespaceReplicationAdmitter,
 	logger log.Logger,
 	testHooks testhooks.TestHooks,
+	options ...TaskExecutorOption,
 ) TaskExecutor {
-	return &taskExecutorImpl{
+	executor := &taskExecutorImpl{
 		currentCluster:  currentCluster,
 		metadataManager: metadataManagerV2,
 		dataMerger:      dataMerger,
 		admitter:        admitter,
 		logger:          logger,
 		testHooks:       testHooks,
+	}
+	for _, option := range options {
+		option(executor)
+	}
+	return executor
+}
+
+// WithNamespaceReplicationMetrics configures namespace replication outcome metrics.
+func WithNamespaceReplicationMetrics(metricsHandler metrics.Handler) TaskExecutorOption {
+	return func(executor *taskExecutorImpl) {
+		executor.metricsHandler = metricsHandler
+	}
+}
+
+// WithNamespaceReplicationLifecycleEvents configures processed lifecycle event emission.
+func WithNamespaceReplicationLifecycleEvents(
+	eventLogger otellog.Logger,
+	emitNamespaceLifecycleEvents dynamicconfig.BoolPropertyFn,
+) TaskExecutorOption {
+	return func(executor *taskExecutorImpl) {
+		executor.eventLogger = eventLogger
+		executor.emitNamespaceLifecycleEvents = emitNamespaceLifecycleEvents
 	}
 }
 
@@ -103,6 +137,16 @@ func (h *taskExecutorImpl) executeValidatedTask(
 	task *replicationspb.NamespaceTaskAttributes,
 ) error {
 	if shouldProcess, err := h.shouldProcessTask(ctx, task); !shouldProcess || err != nil {
+		if !shouldProcess && err == nil {
+			h.recordOutcome(ctx, task, metricsOutcomeNotAdmitted)
+			h.emitNamespaceReplicationProcessed(
+				ctx,
+				wideevents.NamespaceReplicationOutcomeNotAdmitted,
+				nil,
+				nil,
+				nil,
+			)
+		}
 		return err
 	}
 
@@ -237,12 +281,28 @@ func (h *taskExecutorImpl) handleNamespaceCreationReplicationTask(
 
 		if recordExists {
 			// name -> id & id -> name check pass, this is duplication request
+			h.recordOutcome(ctx, task, metricsOutcomeNoChange)
+			h.emitNamespaceReplicationProcessed(
+				ctx,
+				wideevents.NamespaceReplicationOutcomeDuplicate,
+				nil,
+				nil,
+				nil,
+			)
 			return nil
 		}
 		return err
 	}
 
-	return err
+	h.recordOutcome(ctx, task, metricsOutcomeApplied)
+	h.emitNamespaceReplicationProcessed(
+		ctx,
+		wideevents.NamespaceReplicationOutcomeCreated,
+		nil,
+		request,
+		nil,
+	)
+	return nil
 }
 
 // handleNamespaceUpdateReplicationTask handles the namespace update replication task
@@ -276,6 +336,7 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 		}
 		return err
 	}
+	localNamespacePreMutation := h.cloneLocalNamespaceForReplicationEvent(ctx, resp.Namespace)
 
 	recordUpdated := false
 	request := &persistence.UpdateNamespaceRequest{
@@ -284,7 +345,12 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 		IsGlobalNamespace:   resp.IsGlobalNamespace,
 	}
 
-	mergedData, dataMerged := h.dataMerger.MergeData(resp.Namespace.Info.Data, task.Info.Data)
+	mergedData, dataMerged := h.dataMerger.MergeData(
+		resp.Namespace.Info.Data,
+		task.Info.Data,
+		resp.Namespace.ConfigVersion,
+		task.GetConfigVersion(),
+	)
 	if dataMerged {
 		recordUpdated = true
 		request.Namespace.Info.Data = mergedData
@@ -321,6 +387,10 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 	}
 	if resp.Namespace.FailoverVersion < task.GetFailoverVersion() {
 		recordUpdated = true
+		// Source-local ramps must not survive an active-cluster change.
+		if resp.Namespace.ReplicationConfig.GetActiveClusterName() != task.ReplicationConfig.GetActiveClusterName() {
+			request.Namespace.ReplicationConfig.ClusterReplicationRamps = nil
+		}
 		request.Namespace.ReplicationConfig.ActiveClusterName = task.ReplicationConfig.GetActiveClusterName()
 		request.Namespace.ReplicationConfig.State = task.ReplicationConfig.GetState()
 		request.Namespace.FailoverVersion = task.GetFailoverVersion()
@@ -329,10 +399,94 @@ func (h *taskExecutorImpl) handleNamespaceUpdateReplicationTask(
 	}
 
 	if !recordUpdated {
+		h.recordOutcome(ctx, task, metricsOutcomeNoChange)
+		if localNamespacePreMutation != nil {
+			h.emitNamespaceReplicationProcessed(
+				ctx,
+				wideevents.NamespaceReplicationOutcomeNoChange,
+				localNamespacePreMutation,
+				nil,
+				nil,
+			)
+		}
 		return nil
 	}
 
-	return h.metadataManager.UpdateNamespace(ctx, request)
+	if err := h.metadataManager.UpdateNamespace(ctx, request); err != nil {
+		return err
+	}
+	h.recordOutcome(ctx, task, metricsOutcomeApplied)
+	if localNamespacePreMutation != nil {
+		h.emitNamespaceReplicationProcessed(
+			ctx,
+			wideevents.NamespaceReplicationOutcomeUpdated,
+			localNamespacePreMutation,
+			nil,
+			request,
+		)
+	}
+	return nil
+}
+
+func (h *taskExecutorImpl) recordOutcome(
+	ctx context.Context,
+	task *replicationspb.NamespaceTaskAttributes,
+	outcome string,
+) {
+	recordOutcome(ctx, h.metricsHandler, task, outcome)
+}
+
+func (h *taskExecutorImpl) cloneLocalNamespaceForReplicationEvent(
+	ctx context.Context,
+	namespaceDetail *persistencespb.NamespaceDetail,
+) *persistencespb.NamespaceDetail {
+	if h.eventLogger == nil ||
+		h.emitNamespaceLifecycleEvents == nil ||
+		!h.emitNamespaceLifecycleEvents() {
+		return nil
+	}
+	if _, ok := wideevents.NamespaceReplicationTaskContextFromContext(ctx); !ok {
+		return nil
+	}
+	clonedNamespace, ok := proto.Clone(namespaceDetail).(*persistencespb.NamespaceDetail)
+	if !ok {
+		h.logger.Error("Failed to clone local namespace for namespace replication lifecycle event")
+		return nil
+	}
+	return clonedNamespace
+}
+
+func (h *taskExecutorImpl) emitNamespaceReplicationProcessed(
+	ctx context.Context,
+	outcome wideevents.NamespaceReplicationOutcome,
+	localNamespacePreMutation *persistencespb.NamespaceDetail,
+	createRequest *persistence.CreateNamespaceRequest,
+	updateRequest *persistence.UpdateNamespaceRequest,
+) {
+	if h.eventLogger == nil ||
+		h.emitNamespaceLifecycleEvents == nil ||
+		!h.emitNamespaceLifecycleEvents() {
+		return
+	}
+
+	metadata, ok := wideevents.NamespaceReplicationTaskContextFromContext(ctx)
+	if !ok {
+		return
+	}
+
+	sourceTaskID := metadata.SourceTaskID
+	wideevents.EmitNamespaceReplicationLifecycle(h.eventLogger, wideevents.NamespaceReplicationLifecycleInput{
+		Phase:                     wideevents.NamespaceReplicationProcessed,
+		Outcome:                   outcome,
+		EventData:                 metadata.EventData,
+		SourceCluster:             metadata.SourceCluster,
+		TargetCluster:             metadata.TargetCluster,
+		SourceTaskID:              &sourceTaskID,
+		AttemptCount:              metadata.AttemptCount,
+		LocalNamespacePreMutation: localNamespacePreMutation,
+		CreateNamespaceRequest:    createRequest,
+		UpdateNamespaceRequest:    updateRequest,
+	})
 }
 
 func (h *taskExecutorImpl) validateNamespaceReplicationTask(task *replicationspb.NamespaceTaskAttributes) error {

@@ -197,7 +197,7 @@ func collectArtifactJobs(ctx context.Context, repo string, runs []github.Run, te
 }
 
 // buildReportSummary builds the complete report summary from processed data
-func buildReportSummary(flakyReports, timeoutReports, crashReports, ciBreakerReports []TestReport,
+func buildReportSummary(flakyReports, timeoutReports, testRunnerTimeoutReports, crashReports, ciBreakerReports []TestReport,
 	suiteReports []SuiteReport,
 	allFailures []TestFailure, allTestRuns []TestRun, runs []github.Run, successfulRuns int) *ReportSummary {
 	filteredFlakyReports := make([]TestReport, 0, len(flakyReports))
@@ -221,6 +221,7 @@ func buildReportSummary(flakyReports, timeoutReports, crashReports, ciBreakerRep
 	return &ReportSummary{
 		FlakyTests:         flakyReports,
 		Timeouts:           timeoutReports,
+		TestRunnerTimeouts: testRunnerTimeoutReports,
 		Crashes:            crashReports,
 		CIBreakers:         ciBreakerReports,
 		Suites:             suiteReports,
@@ -307,17 +308,21 @@ func runGenerateCommand(c *cli.Context) (err error) {
 	if err != nil {
 		return err
 	}
+	testFailures, testRunnerTimeouts := splitTestRunnerTimeoutFailures(allFailures)
+	allTestRuns = filterTestRunnerTimeoutRuns(allTestRuns)
 
 	fmt.Println("\n=== Processing Results ===")
 	fmt.Printf("Total test runs: %d\n", len(allTestRuns))
-	fmt.Printf("Total test failures found: %d\n", len(allFailures))
+	fmt.Printf("Total test failures found: %d\n", len(testFailures))
+	fmt.Printf("Test-runner timeouts: %d\n", len(testRunnerTimeouts))
 	fmt.Printf("Processed artifacts: %d\n", processedArtifacts)
 
 	// Count test runs by name for failure rate calculation
 	testRunCounts := countTestRuns(allTestRuns)
 
 	// Group failures by test name, then remove parent entries whose subtests were observed.
-	grouped := groupFailuresByTest(allFailures)
+	grouped := groupFailuresByTest(testFailures)
+	testRunnerTimeoutMap := groupFailuresByTest(testRunnerTimeouts)
 	filterParentTests(grouped, testRunCounts)
 	fmt.Printf("Unique tests with failures: %d\n", len(grouped))
 
@@ -328,7 +333,7 @@ func runGenerateCommand(c *cli.Context) (err error) {
 	fmt.Printf("Crash tests: %d\n", len(crashMap))
 
 	// Identify CI breakers (tests that failed all retries in a single job)
-	ciBreakerMap, ciBreakCounts := identifyCIBreakers(allFailures)
+	ciBreakerMap, ciBreakCounts := identifyCIBreakers(testFailures)
 	filterParentTests(ciBreakerMap, testRunCounts)
 	fmt.Printf("CI breaker tests (failed all retries): %d\n", len(ciBreakerMap))
 
@@ -336,18 +341,19 @@ func runGenerateCommand(c *cli.Context) (err error) {
 	reportWindow := newReportWindow(reportSince, now)
 	flakyReports := convertToReports(flakyMap, testRunCounts, repo, maxLinks, reportWindow)
 	timeoutReports := convertToReports(timeoutMap, testRunCounts, repo, maxLinks, reportWindow)
+	testRunnerTimeoutReports := convertEventReports(testRunnerTimeoutMap, repo, maxLinks, reportWindow)
 	crashReports := convertCrashesToReports(crashMap, jobs, repo, maxLinks, reportWindow)
-	ciBreakerReports := convertCIBreakersToReports(ciBreakerMap, ciBreakCounts, len(runs), repo, maxLinks, reportWindow)
+	ciBreakerReports := convertCIBreakersToReports(ciBreakerMap, ciBreakCounts, repo, maxLinks, reportWindow)
 
 	// Compute suite-level breakdown
-	suiteReports := generateSuiteReports(allFailures, allTestRuns)
+	suiteReports := generateSuiteReports(testFailures, allTestRuns)
 	fmt.Printf("Suites: %d\n", len(suiteReports))
 
 	// Build summary
 	summary := buildReportSummary(
-		flakyReports, timeoutReports, crashReports, ciBreakerReports,
+		flakyReports, timeoutReports, testRunnerTimeoutReports, crashReports, ciBreakerReports,
 		suiteReports,
-		allFailures, allTestRuns, runs, successfulRuns,
+		testFailures, allTestRuns, runs, successfulRuns,
 	)
 
 	// Optionally run Bayesian bisect analysis
@@ -392,10 +398,7 @@ func runGenerateCommand(c *cli.Context) (err error) {
 
 	// Write GitHub summary (to GITHUB_STEP_SUMMARY if set, otherwise to output dir)
 	fmt.Println("\n=== Writing GitHub summary ===")
-	summaryContent := generateGitHubSummary(summary, runID, maxLinks)
-	if len(bisectReports) > 0 {
-		summaryContent += generateBisectSummary(bisectReports, repo, bisectMinProbability)
-	}
+	summaryContent := generateGitHubSummary(summary, bisectReports, repo, runID, maxLinks, bisectMinProbability)
 	if err := writeGitHubSummary(summaryContent, outputDir); err != nil {
 		fmt.Printf("Warning: Failed to write GitHub summary: %v\n", err)
 	}

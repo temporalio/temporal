@@ -72,8 +72,8 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
-	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -767,9 +767,10 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_NamespaceHandover() {
 }
 
 // captureDroppedOnEngine points the engine's root metrics handler at a capture handler
-// so drops emitted down the partition handler chain are recorded. Must be called before
-// the task queue partition is created (i.e. before AddActivity/WorkflowTask).
+// so drops emitted down the partition handler chain are recorded. Must be called once
+// before any task queue partitions are created.
 func (s *matchingEngineSuite) captureDroppedOnEngine() *metricstest.CaptureHandler {
+	s.Empty(s.matchingEngine.getTaskQueuePartitions(1), "captureDroppedOnEngine must run before any partition is loaded")
 	capture := metricstest.NewCaptureHandler()
 	s.matchingEngine.metricsHandler = capture
 	return capture
@@ -778,6 +779,8 @@ func (s *matchingEngineSuite) captureDroppedOnEngine() *metricstest.CaptureHandl
 // TestPollActivityTaskQueues_DroppedTaskMetric asserts each error path that drops an
 // activity task emits tasks_dropped with the right `reason` tag.
 func (s *matchingEngineSuite) TestPollActivityTaskQueues_DroppedTaskMetric() {
+	capture := s.captureDroppedOnEngine()
+
 	cases := []struct {
 		name       string
 		err        error
@@ -799,8 +802,6 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_DroppedTaskMetric() {
 				s.logger.Expect(testlogger.Error, "dropping task due to non-nonretryable errors")
 			}
 
-			capture := s.captureDroppedOnEngine()
-
 			namespaceID := uuid.NewString()
 			taskQueue := &taskqueuepb.TaskQueue{Name: "queue-" + tc.name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
@@ -817,6 +818,7 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_DroppedTaskMetric() {
 				Return(nil, tc.err).Times(1)
 
 			c := capture.StartCapture()
+			defer capture.StopCapture(c)
 
 			resp, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
 				NamespaceId: namespaceID,
@@ -831,7 +833,6 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_DroppedTaskMetric() {
 			recordings := c.Snapshot()[metrics.DroppedTasksCounter.Name()]
 			s.Len(recordings, 1, "expected one tasks_dropped emission for %s", tc.name)
 			s.Equal(tc.wantReason, recordings[0].Tags["reason"])
-			capture.StopCapture(c)
 		})
 	}
 }
@@ -839,6 +840,8 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_DroppedTaskMetric() {
 // TestPollWorkflowTaskQueues_DroppedTaskMetric is the workflow counterpart of
 // TestPollActivityTaskQueues_DroppedTaskMetric (no ActivityStartDuringTransition arm).
 func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_DroppedTaskMetric() {
+	capture := s.captureDroppedOnEngine()
+
 	cases := []struct {
 		name       string
 		err        error
@@ -859,8 +862,6 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_DroppedTaskMetric() {
 				s.logger.Expect(testlogger.Error, "dropping task due to non-nonretryable errors")
 			}
 
-			capture := s.captureDroppedOnEngine()
-
 			namespaceID := uuid.NewString()
 			taskQueue := &taskqueuepb.TaskQueue{Name: "wf-queue-" + tc.name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
@@ -877,6 +878,7 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_DroppedTaskMetric() {
 				Return(nil, tc.err).Times(1)
 
 			c := capture.StartCapture()
+			defer capture.StopCapture(c)
 
 			resp, err := s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
 				NamespaceId: namespaceID,
@@ -891,7 +893,6 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_DroppedTaskMetric() {
 			recordings := c.Snapshot()[metrics.DroppedTasksCounter.Name()]
 			s.Len(recordings, 1, "expected one tasks_dropped emission for %s", tc.name)
 			s.Equal(tc.wantReason, recordings[0].Tags["reason"])
-			capture.StopCapture(c)
 		})
 	}
 }
@@ -900,6 +901,8 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_DroppedTaskMetric() {
 // asserts errors propagated back to the caller (ResourceExhausted, NamespaceHandover) do
 // not increment tasks_dropped.
 func (s *matchingEngineSuite) TestPollActivityTaskQueues_DroppedTaskMetric_NoEmissionOnPropagatedErrors() {
+	capture := s.captureDroppedOnEngine()
+
 	cases := []struct {
 		name string
 		err  error
@@ -910,8 +913,6 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_DroppedTaskMetric_NoEmi
 
 	for _, tc := range cases {
 		s.Run(tc.name, func() {
-			capture := s.captureDroppedOnEngine()
-
 			namespaceID := uuid.NewString()
 			taskQueue := &taskqueuepb.TaskQueue{Name: "queue-noemit-" + tc.name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
@@ -928,6 +929,7 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_DroppedTaskMetric_NoEmi
 				Return(nil, tc.err).Times(1)
 
 			c := capture.StartCapture()
+			defer capture.StopCapture(c)
 
 			_, err = s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
 				NamespaceId: namespaceID,
@@ -940,12 +942,13 @@ func (s *matchingEngineSuite) TestPollActivityTaskQueues_DroppedTaskMetric_NoEmi
 
 			recordings := c.Snapshot()[metrics.DroppedTasksCounter.Name()]
 			s.Empty(recordings, "tasks_dropped must not fire when the error is returned to the caller (%s)", tc.name)
-			capture.StopCapture(c)
 		})
 	}
 }
 
 func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_DroppedTaskMetric_NoEmissionOnPropagatedErrors() {
+	capture := s.captureDroppedOnEngine()
+
 	cases := []struct {
 		name string
 		err  error
@@ -956,8 +959,6 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_DroppedTaskMetric_NoEmi
 
 	for _, tc := range cases {
 		s.Run(tc.name, func() {
-			capture := s.captureDroppedOnEngine()
-
 			namespaceID := uuid.NewString()
 			taskQueue := &taskqueuepb.TaskQueue{Name: "wf-queue-noemit-" + tc.name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
@@ -974,6 +975,7 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_DroppedTaskMetric_NoEmi
 				Return(nil, tc.err).Times(1)
 
 			c := capture.StartCapture()
+			defer capture.StopCapture(c)
 
 			_, err = s.matchingEngine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
 				NamespaceId: namespaceID,
@@ -986,7 +988,6 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues_DroppedTaskMetric_NoEmi
 
 			recordings := c.Snapshot()[metrics.DroppedTasksCounter.Name()]
 			s.Empty(recordings, "tasks_dropped must not fire when the error is returned to the caller (%s)", tc.name)
-			capture.StopCapture(c)
 		})
 	}
 }
@@ -3002,6 +3003,142 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_NoData() {
 	})
 	s.NoError(err)
 	s.Nil(res.UserData.GetData())
+}
+
+func (s *matchingEngineSuite) applyTaskQueueUserDataReplicationEvent(
+	taskQueue string,
+	data *persistencespb.TaskQueueUserData,
+) *persistencespb.TaskQueueUserData {
+	taskQueueFamily, err := tqid.NewTaskQueueFamily(s.ns.ID().String(), taskQueue)
+	s.Require().NoError(err)
+	pm, _, err := s.matchingEngine.getTaskQueuePartitionManager(
+		context.Background(),
+		taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(),
+		true,
+		loadCauseUserData,
+	)
+	s.Require().NoError(err)
+
+	_, err = s.matchingEngine.ApplyTaskQueueUserDataReplicationEvent(context.Background(), &matchingservice.ApplyTaskQueueUserDataReplicationEventRequest{
+		NamespaceId: s.ns.ID().String(),
+		TaskQueue:   taskQueue,
+		UserData:    data,
+	})
+	s.Require().NoError(err)
+
+	userData, _, err := pm.GetUserDataManager().GetUserData()
+	s.Require().NoError(err)
+	s.Require().NotNil(userData.GetData())
+	return userData.GetData()
+}
+
+func (s *matchingEngineSuite) seedTaskQueueUserData(taskQueue string, data *persistencespb.TaskQueueUserData) {
+	s.Require().NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(), &persistence.UpdateTaskQueueUserDataRequest{
+		NamespaceID: s.ns.ID().String(),
+		Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+			taskQueue: {UserData: &persistencespb.VersionedTaskQueueUserData{Data: data}},
+		},
+	}))
+}
+
+func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventAcceptsClocklessData() {
+	deploymentData := &persistencespb.TaskQueueUserData{
+		PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+			int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+				DeploymentData: &persistencespb.DeploymentData{
+					DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+						"deployment": {
+							RoutingConfig: &deploymentpb.RoutingConfig{RevisionNumber: 1},
+						},
+					},
+				},
+			},
+		},
+	}
+	fairnessData := &persistencespb.TaskQueueUserData{
+		PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+			int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY): {FairnessState: enumsspb.FAIRNESS_STATE_V2},
+		},
+	}
+	tests := []struct {
+		name     string
+		current  *persistencespb.TaskQueueUserData
+		incoming *persistencespb.TaskQueueUserData
+	}{
+		{
+			name:     "deployment data replaces persisted empty payload",
+			current:  &persistencespb.TaskQueueUserData{},
+			incoming: deploymentData,
+		},
+		{
+			name:     "fairness data replaces absent payload",
+			incoming: fairnessData,
+		},
+		{
+			name: "incoming data replaces different clockless payload",
+			current: &persistencespb.TaskQueueUserData{
+				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+					int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY): {FairnessState: enumsspb.FAIRNESS_STATE_V1},
+				},
+			},
+			incoming: fairnessData,
+		},
+	}
+
+	for _, test := range tests {
+		s.Run(test.name, func() {
+			taskQueue := uuid.NewString()
+			if test.current != nil {
+				s.seedTaskQueueUserData(taskQueue, test.current)
+			}
+
+			got := s.applyTaskQueueUserDataReplicationEvent(taskQueue, test.incoming)
+
+			protorequire.ProtoEqual(s.T(), test.incoming, got)
+		})
+	}
+}
+
+func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventKeepsClockedCurrent() {
+	clockedCurrent := &persistencespb.TaskQueueUserData{
+		Clock: &clockspb.HybridLogicalClock{WallClock: 10, ClusterId: 1},
+		PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+			int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {FairnessState: enumsspb.FAIRNESS_STATE_V1},
+		},
+	}
+	tests := []struct {
+		name     string
+		incoming *persistencespb.TaskQueueUserData
+	}{
+		{
+			name: "clockless incoming",
+			incoming: &persistencespb.TaskQueueUserData{
+				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+					int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {FairnessState: enumsspb.FAIRNESS_STATE_V2},
+				},
+			},
+		},
+		{
+			name: "older clocked incoming",
+			incoming: &persistencespb.TaskQueueUserData{
+				Clock: &clockspb.HybridLogicalClock{WallClock: 5, ClusterId: 1},
+				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+					int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {FairnessState: enumsspb.FAIRNESS_STATE_V2},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		s.Run(test.name, func() {
+			taskQueue := uuid.NewString()
+			s.seedTaskQueueUserData(taskQueue, clockedCurrent)
+
+			got := s.applyTaskQueueUserDataReplicationEvent(taskQueue, test.incoming)
+
+			protorequire.ProtoEqual(s.T(), clockedCurrent, got)
+		})
+	}
 }
 
 func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsData() {

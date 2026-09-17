@@ -78,8 +78,14 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 	if err != nil {
 		return "", err
 	}
-	fieldName, fieldType, err := query.ResolveSearchAttributeAlias(name, ni.namespace, mapper,
-		ni.searchAttributesTypeMap, ni.chasmMapper)
+	fieldName, fieldType, err := query.ResolveSearchAttributeAlias(
+		name,
+		ni.namespace,
+		mapper,
+		ni.searchAttributesTypeMap,
+		ni.chasmMapper,
+		ni.archetypeID,
+	)
 	if err != nil {
 		// Check for special aliases that require archetypeID context.
 		if ni.archetypeID != chasm.SchedulerArchetypeID || name != "TemporalSystemExecutionStatus" {
@@ -127,7 +133,7 @@ func (vi *valuesInterceptor) Values(name string, fieldName string, values ...any
 
 	fieldType, err = vi.saTypeMap.GetType(fieldName)
 	if err != nil {
-		return nil, query.NewConverterError("invalid search attribute: %s", name)
+		return nil, query.NewConverterError("%s: %s", query.InvalidSearchAttribute, name)
 	}
 
 	var result []any

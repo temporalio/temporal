@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
@@ -591,7 +592,14 @@ Loop:
 				// Wrap as convertError so isSkippable can tell "the task could not be built"
 				// (its source info is corrupt/unusable) apart from transient send/rate-limit
 				// failures, which must not be skipped.
-				return s.recordRetry(item, attempt, &convertError{err: fmt.Errorf("convert: %w", err)})
+				return s.recordRetry(
+					item,
+					enumsspb.REPLICATION_TASK_TYPE_UNSPECIFIED,
+					priority,
+					attempt,
+					wideevents.ReplOperationTaskConversion,
+					&convertError{err: fmt.Errorf("convert: %w", err)},
+				)
 			}
 			if task == nil {
 				return nil
@@ -622,7 +630,7 @@ Loop:
 					0,
 					"",
 				)); err != nil {
-					return s.recordRetry(item, attempt, fmt.Errorf("rate_limit: %w", err))
+					return s.recordRetry(item, task.GetTaskType(), priority, attempt, wideevents.ReplOperationRateLimit, fmt.Errorf("rate_limit: %w", err))
 				}
 				metrics.ReplicationRateLimitLatency.With(s.metrics).Record(time.Since(rlStartTime), metrics.OperationTag(TaskOperationTag(task)))
 			}
@@ -639,7 +647,7 @@ Loop:
 					},
 				},
 			}); err != nil {
-				return s.recordRetry(item, attempt, fmt.Errorf("send: %w", err))
+				return s.recordRetry(item, task.GetTaskType(), priority, attempt, wideevents.ReplOperationStreamSend, fmt.Errorf("send: %w", err))
 			}
 			skipCount = 0
 			metrics.ReplicationTasksSend.With(s.metrics).Record(
@@ -739,26 +747,78 @@ func (s *StreamSenderImpl) shouldProcessTask(item tasks.Task) bool {
 		return false
 	}
 
-	var shouldProcessTask bool
 	namespaceEntry, err := s.shardContext.GetNamespaceRegistry().GetNamespaceByID(
 		namespace.ID(item.GetNamespaceID()),
 	)
 	if err != nil {
 		// if there is error, then blindly send the task, better safe than sorry
-		shouldProcessTask = true
+		return true
 	}
 
+	var shouldProcessTask bool
 	if namespaceEntry != nil {
 	FilterLoop:
 		for _, targetCluster := range namespaceEntry.ClusterNames(item.GetWorkflowID()) {
 			if s.clientClusterName == targetCluster {
-				shouldProcessTask = true
+				shouldProcessTask = s.admittedByGradualConnect(item, namespaceEntry)
 				break FilterLoop
 			}
 		}
 	}
-
 	return shouldProcessTask
+}
+
+func (s *StreamSenderImpl) admittedByGradualConnect(item tasks.Task, namespaceEntry *namespace.Namespace) bool {
+	if !s.config.EnableReplicationGradualConnect() {
+		return true
+	}
+
+	// A shed delete can permanently resurrect history after force replication.
+	if item.GetType() == enumsspb.TASK_TYPE_REPLICATION_DELETE_EXECUTION {
+		return true
+	}
+
+	// Force-replication tasks follow the ramp; operators should clear the ramp before running force-replication.
+	ramp := namespaceEntry.ReplicationConfig().GetClusterReplicationRamps()[s.clientClusterName]
+	if ramp == nil {
+		return true
+	}
+	percent := gradualConnectPercent(ramp, s.shardContext.GetTimeSource().Now())
+	if percent >= 100 {
+		return true
+	}
+	metricTags := []metrics.Tag{
+		metrics.NamespaceTag(namespaceEntry.Name().String()),
+		metrics.TargetClusterTag(s.clientClusterName),
+	}
+	metrics.ReplicationGradualConnectPercent.With(s.metrics).Record(float64(percent), metricTags...)
+	if dynamicconfig.RolloutAccepts([]byte(item.GetWorkflowID()), percent) {
+		return true
+	}
+	metrics.ReplicationTasksShedByGradualConnect.With(s.metrics).Record(
+		1,
+		append(metricTags, metrics.OperationTag(TaskOperationTagFromTask(item.GetType())))...,
+	)
+	return false
+}
+
+func gradualConnectPercent(ramp *persistencespb.NamespaceReplicationRamp, now time.Time) int {
+	if ramp == nil || ramp.GetStartTime() == nil || ramp.GetDuration() == nil ||
+		ramp.GetStartTime().CheckValid() != nil || ramp.GetDuration().CheckValid() != nil {
+		return 100
+	}
+	duration := ramp.GetDuration().AsDuration()
+	if duration <= 0 {
+		return 100
+	}
+	elapsed := now.Sub(ramp.GetStartTime().AsTime())
+	if elapsed <= 0 {
+		return 0
+	}
+	if elapsed >= duration {
+		return 100
+	}
+	return int(float64(elapsed) / float64(duration) * 100)
 }
 
 func (s *StreamSenderImpl) getTaskPriority(task tasks.Task) enumsspb.TaskPriority {
@@ -768,9 +828,24 @@ func (s *StreamSenderImpl) getTaskPriority(task tasks.Task) enumsspb.TaskPriorit
 			return enumsspb.TASK_PRIORITY_LOW
 		}
 		return t.Priority
+	case *tasks.SyncVersionedTransitionTask:
+		return defaultHighTaskPriority(t.Priority)
+	case *tasks.HistoryReplicationTask:
+		return defaultHighTaskPriority(t.Priority)
+	case *tasks.SyncActivityTask:
+		return defaultHighTaskPriority(t.Priority)
+	case *tasks.SyncHSMTask:
+		return defaultHighTaskPriority(t.Priority)
 	default:
 		return enumsspb.TASK_PRIORITY_HIGH
 	}
+}
+
+func defaultHighTaskPriority(priority enumsspb.TaskPriority) enumsspb.TaskPriority {
+	if priority == enumsspb.TASK_PRIORITY_UNSPECIFIED {
+		return enumsspb.TASK_PRIORITY_HIGH
+	}
+	return priority
 }
 
 func (s *StreamSenderImpl) getTaskTargetCluster(task tasks.Task) []string {
@@ -792,7 +867,10 @@ func (s *StreamSenderImpl) getTaskTargetCluster(task tasks.Task) []string {
 
 func (s *StreamSenderImpl) recordRetry(
 	item tasks.Task,
+	replicationTaskType enumsspb.ReplicationTaskType,
+	priority enumsspb.TaskPriority,
 	attempt int64,
+	operation string,
 	err error,
 ) error {
 	s.shardContext.GetThrottledLogger().Warn("Replication task send retry",
@@ -802,6 +880,9 @@ func (s *StreamSenderImpl) recordRetry(
 		tag.Counter(int(attempt)),
 		tag.Error(err),
 	)
+	if s.config.EmitReplicationLifecycleEvents() {
+		s.emitReplicationSenderError(item, replicationTaskType, priority, attempt, operation, "Replication task send retry", err)
+	}
 	return err
 }
 

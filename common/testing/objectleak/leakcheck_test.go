@@ -1,8 +1,11 @@
 package objectleak
 
 import (
+	"fmt"
 	"reflect"
+	"regexp"
 	"runtime"
+	"slices"
 	"testing"
 	"time"
 
@@ -36,6 +39,8 @@ type tinyZeroLengthPointerArrayValue struct {
 	Value    byte
 }
 
+var diagnosticAddressesPattern = regexp.MustCompile(`(?m)^(    addresses: )\[[^\n]*\]$`)
+
 type aliasOuter struct {
 	aliasInner
 	_ [8]byte
@@ -68,8 +73,11 @@ retained objects: 4 total, 0 baseline, 0 expected, 4 unexpected
 
 unexpected retained objects:
   2 objects: *objectleak.graphRoot
+    addresses: [...]
   2 paths, 1 object: Node (*objectleak.graphNode)
+    addresses: [...]
   2 paths, 1 object: Node.Leaf (*objectleak.graphLeaf)
+    addresses: [...]
 
 expected retained objects:
   none
@@ -209,6 +217,7 @@ retained objects: 4 total, 3 baseline, 0 expected, 1 unexpected
 
 unexpected retained objects:
   1 object: *objectleak.graphRoot
+    addresses: [...]
 
 expected retained objects:
   none
@@ -237,8 +246,11 @@ retained objects: 4 total, 0 baseline, 0 expected, 4 unexpected
 
 unexpected retained objects:
   2 objects: *objectleak.graphRoot
+    addresses: [...]
   2 paths, 1 object: Node (*objectleak.graphNode)
+    addresses: [...]
   2 paths, 1 object: Node.Leaf (*objectleak.graphLeaf)
+    addresses: [...]
 
 expected retained objects:
   none
@@ -269,6 +281,7 @@ retained objects: 4 total, 3 baseline, 0 expected, 1 unexpected
 
 unexpected retained objects:
   1 object: *objectleak.graphRoot
+    addresses: [...]
 
 expected retained objects:
   none
@@ -349,6 +362,7 @@ retained objects: 3 total, 2 baseline, 0 expected, 1 unexpected
 
 unexpected retained objects:
   1 object: *objectleak.graphRoot
+    addresses: [...]
 
 expected retained objects:
   none
@@ -402,9 +416,48 @@ baseline retained objects:
 			for _, expected := range tc.wantErrContains {
 				require.Contains(t, err.Error(), expected)
 			}
-			require.Equal(t, tc.wantReport, report)
+			require.Equal(t, tc.wantReport, diagnosticAddressesPattern.ReplaceAllString(report, "${1}[...]"))
 		})
 	}
+}
+
+func TestReportStringIncludesSortedUnexpectedAddresses(t *testing.T) {
+	roots := []*graphRoot{{}, {}}
+	addresses := []uintptr{
+		reflect.ValueOf(roots[0]).Pointer(),
+		reflect.ValueOf(roots[1]).Pointer(),
+	}
+	slices.Sort(addresses)
+	check, err := NewObjectLeakCheck(WithGCSettleTimeout(testGCSettleTimeout))
+	require.NoError(t, err)
+	check.gcSettleMinWait = testGCSettleMinWait
+	check.gcSettleQuiet = testGCSettleQuiet
+	for _, root := range roots {
+		check.Track(root)
+	}
+
+	report, err := check.Check(Baseline{})
+	runtime.KeepAlive(roots)
+	require.Error(t, err)
+	require.Contains(t, report, fmt.Sprintf("    addresses: %#x", addresses))
+}
+
+func TestReportStringLimitsUnexpectedAddresses(t *testing.T) {
+	addresses := make(map[uintptr]struct{}, 34)
+	for address := uintptr(1); address <= 34; address++ {
+		addresses[address] = struct{}{}
+	}
+	r := report{}
+	r.retained[retentionUnexpected].groups = []objectGroup{{
+		typeName:  "*objectleak.graphRoot",
+		addresses: addresses,
+	}}
+
+	require.Contains(
+		t,
+		r.string(),
+		"    addresses: [0x1 0x2 0x3 0x4 0x5 0x6 0x7 0x8 0x9 0xa 0xb 0xc 0xd 0xe 0xf 0x10 0x11 0x12 0x13 0x14 0x15 0x16 0x17 0x18 0x19 0x1a 0x1b 0x1c 0x1d 0x1e 0x1f 0x20] ... and 2 more",
+	)
 }
 
 func TestObjectLeak_CheckSkipsTinyPointerFreeObjects(t *testing.T) {

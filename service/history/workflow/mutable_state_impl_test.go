@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -54,13 +55,13 @@ import (
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
-	"go.temporal.io/server/components/callbacks"
-	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/callbacks"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -1937,6 +1938,27 @@ func (s *mutableStateSuite) TestUpdateWorkflowStateStatus_Table() {
 	}
 }
 
+func (s *mutableStateSuite) TestUpdateWorkflowStateStatus_VisibilityTracking() {
+	s.SetupSubTest()
+	s.mutableState.executionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
+	s.mutableState.executionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+
+	_, err := s.mutableState.UpdateWorkflowStateStatus(
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	)
+	s.NoError(err)
+	s.True(s.mutableState.executionStateUpdated)
+	s.False(s.mutableState.visibilityUpdated)
+
+	_, err = s.mutableState.UpdateWorkflowStateStatus(
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
+	)
+	s.NoError(err)
+	s.True(s.mutableState.visibilityUpdated)
+}
+
 func (s *mutableStateSuite) TestAddWorkflowExecutionPausedEvent() {
 	s.SetupSubTest()
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
@@ -2213,6 +2235,36 @@ func (s *mutableStateSuite) TestContinueAsNewMinBackoff() {
 	backoff = time.Second * 2
 	minBackoff = s.mutableState.ContinueAsNewMinBackoff(durationpb.New(backoff)).AsDuration()
 	s.True(minBackoff == backoff)
+}
+
+func (s *mutableStateSuite) TestContinueAsNewMinBackoffExecutionCompletesBeforeExecutionTime() {
+	s.mockConfig.WorkflowIdReuseMinimalInterval = func(namespace string) time.Duration {
+		return time.Second
+	}
+
+	now := time.Now()
+	s.mutableState.timeSource = clock.NewEventTimeSource().Update(now)
+
+	// Guard against clock skew or malformed state making StartTime later than now.
+	// The lifetime should be clamped at zero, so the full minimal interval is still applied.
+	s.mutableState.executionState.StartTime = timestamppb.New(now.Add(time.Second))
+	s.mutableState.executionInfo.ExecutionTime = nil
+
+	minBackoff := s.mutableState.ContinueAsNewMinBackoff(nil).AsDuration()
+	s.Equal(time.Second, minBackoff)
+
+	// Simulate a delayed-start run that actually executed and closed before its ExecutionTime.
+	// In that case lifetime should fall back to close - StartTime, not become negative.
+	s.mutableState.executionState.StartTime = timestamppb.New(now.Add(-100 * time.Millisecond))
+	s.mutableState.executionInfo.ExecutionTime = timestamppb.New(now.Add(time.Second))
+
+	minBackoff = s.mutableState.ContinueAsNewMinBackoff(nil).AsDuration()
+	s.Equal(900*time.Millisecond, minBackoff)
+
+	// Existing backoff already satisfies the minimal interval when combined with the fallback lifetime.
+	backoff := time.Second
+	minBackoff = s.mutableState.ContinueAsNewMinBackoff(durationpb.New(backoff)).AsDuration()
+	s.Equal(backoff, minBackoff)
 }
 
 func (s *mutableStateSuite) TestEventReapplied() {
@@ -2864,6 +2916,72 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 	_, err = s.mutableState.GetUpdateOutcome(ctx, "not_an_update_id")
 	s.Error(err)
 	s.IsType((*serviceerror.NotFound)(nil), err)
+}
+
+// TestGetNexusUpdateCompletion_TransientReadErrorPropagated verifies that we correctly propagate
+// an update completion event read error if the event was actually recorded in-memory.
+func (s *mutableStateSuite) TestGetNexusUpdateCompletion_TransientReadErrorPropagated() {
+	ctx := context.Background()
+
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+		&historyservice.StartWorkflowExecutionRequest{StartRequest: &workflowservice.StartWorkflowExecutionRequest{}},
+	)
+	s.NoError(err)
+	_, err = s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+
+	updateID := s.T().Name() + "-update-id"
+	acptEvent, err := s.mutableState.AddWorkflowExecutionUpdateAcceptedEvent(
+		updateID, s.T().Name()+"-msg-id", 1,
+		&updatepb.Request{Meta: &updatepb.Meta{UpdateId: updateID}},
+	)
+	s.NoError(err)
+
+	completedEvent, err := s.mutableState.AddWorkflowExecutionUpdateCompletedEvent(
+		acptEvent.EventId,
+		&updatepb.Response{
+			Meta:    &updatepb.Meta{UpdateId: updateID},
+			Outcome: &updatepb.Outcome{Value: &updatepb.Outcome_Success{Success: testPayloads}},
+		},
+	)
+	s.NoError(err)
+
+	_, err = s.mutableState.AddCompletedWorkflowEvent(
+		completedEvent.GetEventId(),
+		&commandpb.CompleteWorkflowExecutionCommandAttributes{},
+		"",
+	)
+	s.NoError(err)
+
+	// Close the transaction to create the event version history used by the read.
+	_, _, err = s.mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+	s.NoError(err)
+
+	transientErr := serviceerror.NewUnavailablef("simulated transient read failure")
+	s.mockEventsCache.EXPECT().GetEvent(
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Cond(func(key events.EventKey) bool { return key.EventID == completedEvent.GetEventId() }),
+		gomock.Any(),
+		gomock.Any(),
+	).Return(nil, transientErr)
+	s.mockEventsCache.EXPECT().GetEvent(
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Cond(func(key events.EventKey) bool { return key.EventID != completedEvent.GetEventId() }),
+		gomock.Any(),
+		gomock.Any(),
+	).Return(&historypb.HistoryEvent{}, nil).AnyTimes()
+
+	// If the cache + persistence read returns a transient error but the completion is recorded, it must
+	// not be misclassified as another error.
+	opts, err := s.mutableState.GetNexusUpdateCompletion(ctx, updateID, "some-request-id")
+	var unavailableErr *serviceerror.Unavailable
+	s.Equal(nexusrpc.CompleteOperationOptions{}, opts)
+	s.ErrorAs(err, &unavailableErr, "expect transientErr to be propagated back to caller")
 }
 
 func (s *mutableStateSuite) TestApplyActivityTaskStartedEvent() {
@@ -4449,12 +4567,12 @@ func (s *mutableStateSuite) TestAddStartChildWorkflowExecutionInitiatedEvent_Tim
 			expectInitialSkip: durationpb.New(time.Hour),
 		},
 		{
-			name: "accumulated skip only",
+			name: "disabled parent config still propagates a disabled child config",
 			parentTSI: &persistencespb.TimeSkippingInfo{
 				Config:                     &commonpb.TimeSkippingConfig{Enabled: false},
 				AccumulatedSkippedDuration: durationpb.New(15 * time.Minute),
 			},
-			expectNilCfg:      true,
+			expectCfg:         &commonpb.TimeSkippingConfig{Enabled: false},
 			expectInitialSkip: durationpb.New(15 * time.Minute),
 		},
 		{
@@ -4510,8 +4628,9 @@ func (s *mutableStateSuite) TestAddStartChildWorkflowExecutionInitiatedEvent_Tim
 
 			// The snapshot must be a clone — mutating it must not leak back into parent state.
 			if tc.parentTSI.GetConfig() != nil {
+				origEnabled := tc.parentTSI.GetConfig().GetEnabled()
 				gotTSC.Enabled = !gotTSC.GetEnabled()
-				s.True(tc.parentTSI.GetConfig().GetEnabled(),
+				s.Equal(origEnabled, tc.parentTSI.GetConfig().GetEnabled(),
 					"mutation of snapshot leaked into parent's Config")
 			}
 		})
@@ -5291,87 +5410,6 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones_OnlyTrackFirstEm
 	s.Equal(int64(1), tombstoneBatches[0].VersionedTransition.TransitionCount)
 }
 
-func (s *mutableStateSuite) TestCloseTransactionAsMutation_ChasmNoopSkipsPersistence() {
-	dbState := s.buildWorkflowMutableState()
-
-	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
-	s.NoError(err)
-
-	// First close transaction once to get rid of unrelated tasks like UserTimer and ActivityTimeout.
-	_, err = mutableState.StartTransaction(s.namespaceEntry)
-	s.NoError(err)
-	_, _, err = mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
-	s.NoError(err)
-
-	_, err = mutableState.StartTransaction(s.namespaceEntry)
-	s.NoError(err)
-
-	mockChasmTree := historyi.NewMockChasmTree(s.controller)
-	mutableState.chasmTree = mockChasmTree
-	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).AnyTimes()
-	mockChasmTree.EXPECT().IsStateDirty().Return(false).AnyTimes()
-	mockChasmTree.EXPECT().IsDirty().Return(false).AnyTimes()
-	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).Times(1)
-
-	stateTransitionCount := mutableState.executionInfo.StateTransitionCount
-	var lastUpdateTime *timestamppb.Timestamp
-	if mutableState.executionInfo.LastUpdateTime != nil {
-		lastUpdateTime = proto.Clone(mutableState.executionInfo.LastUpdateTime).(*timestamppb.Timestamp)
-	}
-	var checksum *persistencespb.Checksum
-	if mutableState.checksum != nil {
-		checksum = proto.Clone(mutableState.checksum).(*persistencespb.Checksum)
-	}
-	dbRecordVersion := mutableState.dbRecordVersion
-
-	mutation, eventsSeq, err := mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
-	s.NoError(err)
-	s.Nil(mutation)
-	s.Empty(eventsSeq)
-	s.False(mutableState.IsDirty())
-	s.Equal(stateTransitionCount, mutableState.executionInfo.StateTransitionCount)
-	if lastUpdateTime == nil {
-		s.Nil(mutableState.executionInfo.LastUpdateTime)
-	} else {
-		protorequire.ProtoEqual(s.T(), lastUpdateTime, mutableState.executionInfo.LastUpdateTime)
-	}
-	if checksum == nil {
-		s.Nil(mutableState.checksum)
-	} else {
-		protorequire.ProtoEqual(s.T(), checksum, mutableState.checksum)
-	}
-	s.Equal(dbRecordVersion, mutableState.dbRecordVersion)
-}
-
-func (s *mutableStateSuite) TestCloseTransactionAsMutation_WorkflowChasmNoopDoesNotSkipPersistence() {
-	dbState := s.buildWorkflowMutableState()
-
-	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
-	s.NoError(err)
-
-	// First close transaction once to get rid of unrelated tasks like UserTimer and ActivityTimeout.
-	_, err = mutableState.StartTransaction(s.namespaceEntry)
-	s.NoError(err)
-	_, _, err = mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
-	s.NoError(err)
-
-	_, err = mutableState.StartTransaction(s.namespaceEntry)
-	s.NoError(err)
-
-	mockChasmTree := historyi.NewMockChasmTree(s.controller)
-	mutableState.chasmTree = mockChasmTree
-	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
-	mockChasmTree.EXPECT().IsStateDirty().Return(false).AnyTimes()
-	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).Times(1)
-
-	stateTransitionCount := mutableState.executionInfo.StateTransitionCount
-
-	mutation, _, err := mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
-	s.NoError(err)
-	s.NotNil(mutation)
-	s.Equal(stateTransitionCount+1, mutableState.executionInfo.StateTransitionCount)
-}
-
 func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_Workflow() {
 	dbState := s.buildWorkflowMutableState()
 
@@ -5415,8 +5453,7 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_NonWo
 
 	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
 	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).AnyTimes()
-	nonEmptyMutation := chasm.NodesMutation{UpdatedNodes: map[string]*persistencespb.ChasmNode{"": {}}}
-	mockChasmTree.EXPECT().CloseTransaction().Return(nonEmptyMutation, nil).AnyTimes()
+	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).AnyTimes()
 	_, err = mutableState.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
@@ -5454,8 +5491,7 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_NonWo
 
 	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
 	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).AnyTimes()
-	nonEmptyMutation := chasm.NodesMutation{UpdatedNodes: map[string]*persistencespb.ChasmNode{"": {}}}
-	mockChasmTree.EXPECT().CloseTransaction().Return(nonEmptyMutation, nil).AnyTimes()
+	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).AnyTimes()
 	mockChasmTree.EXPECT().ApplyMutation(gomock.Any()).Return(nil).AnyTimes()
 
 	// On standby side, multiple transactions can be applied at the same time,
@@ -5573,7 +5609,7 @@ func (s *mutableStateSuite) verifyChildExecutionInfos(expectedMap, actualMap, or
 	}
 }
 
-func (s *mutableStateSuite) verifyActivityInfos(expectedMap, actualMap map[int64]*persistencespb.ActivityInfo) {
+func (s *mutableStateSuite) verifyActivityInfos(expectedMap, actualMap, originMap map[int64]*persistencespb.ActivityInfo) {
 	s.Equal(len(expectedMap), len(actualMap))
 	for k, expected := range expectedMap {
 		actual, ok := actualMap[k]
@@ -5614,7 +5650,15 @@ func (s *mutableStateSuite) verifyActivityInfos(expectedMap, actualMap map[int64
 		s.True(proto.Equal(expected.LastUpdateVersionedTransition, actual.LastUpdateVersionedTransition), "LastUpdateVersionedTransition mismatch")
 
 		// special handled fields
-		s.Equal(int32(TimerTaskStatusNone), actual.TimerTaskStatus, "TimerTaskStatus mismatch")
+		// TimerTaskStatus is not replicated state: it records which timer tasks this
+		// cluster created locally. Applying an update may carry over or drop those local
+		// bits (see getActivityTimerTaskStatus), but must never introduce a bit that was
+		// not already set locally, which would claim a task exists when none does.
+		originStatus := int32(TimerTaskStatusNone)
+		if origin, ok := originMap[k]; ok {
+			originStatus = origin.TimerTaskStatus
+		}
+		s.Zero(actual.TimerTaskStatus&^originStatus, "TimerTaskStatus gained a bit that was not set locally")
 	}
 }
 
@@ -5718,7 +5762,7 @@ func (s *mutableStateSuite) verifyMutableState(current, target, origin *MutableS
 	s.True(proto.Equal(target.executionState, current.executionState), "executionState mismatch")
 
 	s.Equal(target.pendingActivityTimerHeartbeats, current.pendingActivityTimerHeartbeats, "pendingActivityTimerHeartbeats mismatch")
-	s.verifyActivityInfos(target.pendingActivityInfoIDs, current.pendingActivityInfoIDs)
+	s.verifyActivityInfos(target.pendingActivityInfoIDs, current.pendingActivityInfoIDs, origin.pendingActivityInfoIDs)
 	s.Equal(target.pendingActivityIDToEventID, current.pendingActivityIDToEventID, "pendingActivityIDToEventID mismatch")
 	compareMapOfProto(s, current.pendingActivityInfoIDs, current.updateActivityInfos)
 	s.Equal(map[int64]struct{}{89: {}}, current.deleteActivityInfos, "deleteActivityInfos mismatch")
@@ -5859,6 +5903,9 @@ func (s *mutableStateSuite) buildSnapshot(state *MutableStateImpl) *persistences
 			},
 			SignalRequestIdsLastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
 			WorkflowTaskLastUpdateVersionedTransition:     state.executionInfo.WorkflowTaskLastUpdateVersionedTransition,
+			TimeSkippingInfo: state.executionInfo.TimeSkippingInfo,
+			UpdateInfos:      state.executionInfo.UpdateInfos,
+			UpdateCount:      state.executionInfo.UpdateCount,
 		},
 		ExecutionState: &persistencespb.WorkflowExecutionState{
 			RunId:               state.executionState.RunId,
@@ -5923,6 +5970,17 @@ func (s *mutableStateSuite) TestApplySnapshot() {
 			currentMS.chasmTree = currentMockChasmTree
 
 			state = s.buildWorkflowMutableState()
+			state.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+				AccumulatedSkippedDuration: durationpb.New(2 * time.Hour),
+			}
+			state.ExecutionInfo.UpdateCount = 1
+			state.ExecutionInfo.UpdateInfos = map[string]*persistencespb.UpdateInfo{
+				"replicated-update": {
+					Value: &persistencespb.UpdateInfo_Acceptance{
+						Acceptance: &persistencespb.UpdateAcceptanceInfo{EventId: 100},
+					},
+				},
+			}
 			state.ActivityInfos[91] = &persistencespb.ActivityInfo{
 				ActivityId: "activity_id_91",
 			}
@@ -5978,9 +6036,15 @@ func (s *mutableStateSuite) TestApplySnapshot() {
 
 			snapshot := s.buildSnapshot(targetMS)
 			s.Nil(snapshot.ExecutionInfo.SubStateMachinesByType)
+			// Applying an activity update consults the cluster of the local activity info.
+			s.mockShard.Resource.ClusterMetadata.EXPECT().
+				IsVersionFromSameCluster(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+
 			err = currentMS.ApplySnapshot(snapshot)
 			s.NoError(err)
 			s.NotNil(currentMS.GetExecutionInfo().SubStateMachinesByType)
+			_, isTimeSkippingTimeSource := currentMS.timeSource.(*clock.TimeSkippingTimeSourceWrapper)
+			s.True(isTimeSkippingTimeSource)
 
 			s.verifyMutableState(currentMS, targetMS, originMS)
 			s.Equal(tc.expectedWorkflowTaskUpdated, currentMS.workflowTaskUpdated)
@@ -5994,12 +6058,14 @@ func (s *mutableStateSuite) buildMutation(
 ) *persistencespb.WorkflowMutableStateMutation {
 	executionInfoClone := common.CloneProto(state.executionInfo)
 	executionInfoClone.SubStateMachineTombstoneBatches = nil
+	executionInfoClone.UpdateInfos = nil
 	mutation := &persistencespb.WorkflowMutableStateMutation{
 		UpdatedActivityInfos:            state.pendingActivityInfoIDs,
 		UpdatedTimerInfos:               state.pendingTimerInfoIDs,
 		UpdatedChildExecutionInfos:      state.pendingChildExecutionInfoIDs,
 		UpdatedRequestCancelInfos:       state.pendingRequestCancelInfoIDs,
 		UpdatedSignalInfos:              state.pendingSignalInfoIDs,
+		UpdatedUpdateInfos:              state.executionInfo.UpdateInfos,
 		UpdatedChasmNodes:               state.chasmTree.Snapshot(nil).Nodes,
 		SignalRequestedIds:              state.GetPendingSignalRequestedIds(),
 		SubStateMachineTombstoneBatches: tombstones,
@@ -6070,6 +6136,17 @@ func (s *mutableStateSuite) TestApplyMutation() {
 			currentMS.GetExecutionInfo().SubStateMachineTombstoneBatches = tombstones
 
 			state = s.buildWorkflowMutableState()
+			state.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+				AccumulatedSkippedDuration: durationpb.New(2 * time.Hour),
+			}
+			state.ExecutionInfo.UpdateCount = 1
+			state.ExecutionInfo.UpdateInfos = map[string]*persistencespb.UpdateInfo{
+				"replicated-update": {
+					Value: &persistencespb.UpdateInfo_Acceptance{
+						Acceptance: &persistencespb.UpdateAcceptanceInfo{EventId: 100},
+					},
+				},
+			}
 
 			targetMS, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, state, 123)
 			s.NoError(err)
@@ -6203,8 +6280,14 @@ func (s *mutableStateSuite) TestApplyMutation() {
 				UpdatedNodes: updateChasmNodes,
 			}).Return(nil).Times(1)
 
+			// Applying an activity update consults the cluster of the local activity info.
+			s.mockShard.Resource.ClusterMetadata.EXPECT().
+				IsVersionFromSameCluster(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+
 			err = currentMS.ApplyMutation(mutation)
 			s.NoError(err)
+			_, isTimeSkippingTimeSource := currentMS.timeSource.(*clock.TimeSkippingTimeSourceWrapper)
+			s.True(isTimeSkippingTimeSource)
 			s.verifyMutableState(currentMS, targetMS, originMS)
 			s.Equal(tc.expectedWorkflowTaskUpdated, currentMS.workflowTaskUpdated)
 		})
@@ -6272,6 +6355,280 @@ func (s *mutableStateSuite) TestRefreshTask_SameCluster_SameAttempt() {
 		incomingActivityInfo,
 	)
 	s.False(shouldReset)
+}
+
+// startedActivityInfoForMask builds a started activity that has all four timer bits
+// set, so a test can assert precisely which ones survive an update.
+func startedActivityInfoForMask(version int64, attempt, stamp int32) *persistencespb.ActivityInfo {
+	scheduledTime := time.Date(2026, 8, 11, 0, 0, 0, 0, time.UTC)
+	return &persistencespb.ActivityInfo{
+		Version:                version,
+		Attempt:                attempt,
+		Stamp:                  stamp,
+		ScheduledEventId:       int64(7),
+		StartedEventId:         int64(8),
+		ScheduledTime:          timestamppb.New(scheduledTime),
+		FirstScheduledTime:     timestamppb.New(scheduledTime),
+		StartedTime:            timestamppb.New(scheduledTime.Add(time.Second)),
+		ScheduleToCloseTimeout: durationpb.New(time.Hour),
+		StartToCloseTimeout:    durationpb.New(10 * time.Minute),
+		HeartbeatTimeout:       durationpb.New(time.Minute),
+		// Schedule-to-start no longer applies once the activity has started, so only the
+		// other three timers can have a task outstanding.
+		TimerTaskStatus: TimerTaskStatusCreatedScheduleToClose |
+			TimerTaskStatusCreatedStartToClose |
+			TimerTaskStatusCreatedHeartbeat,
+	}
+}
+
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_DiffCluster_ResetsEverything() {
+	current := startedActivityInfoForMask(int64(100), 1, 1)
+	incoming := startedActivityInfoForMask(int64(99), 1, 1)
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(current.Version, incoming.Version).Return(false)
+
+	// Tasks from the previous owning cluster are stale, so everything is recreated.
+	s.Equal(int32(TimerTaskStatusNone), s.mutableState.getActivityTimerTaskStatus(current, incoming))
+}
+
+// retryActivityInfoForMask applies to `ai` the same field changes the active side makes
+// on a retry (UpdateActivityInfoForRetries): next attempt, started state cleared, and
+// the schedule time advanced by the retry backoff. FirstScheduledTime is untouched.
+func retryActivityInfoForMask(ai *persistencespb.ActivityInfo, backoff time.Duration) *persistencespb.ActivityInfo {
+	ai.Attempt++
+	ai.StartedEventId = common.EmptyEventID
+	ai.StartedTime = nil
+	ai.ScheduledTime = timestamppb.New(ai.ScheduledTime.AsTime().Add(backoff))
+	return ai
+}
+
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_Retry_KeepsOnlyScheduleToClose() {
+	version := int64(99)
+	current := startedActivityInfoForMask(version, 1, 1)
+	incoming := retryActivityInfoForMask(startedActivityInfoForMask(version, 1, 1), 10*time.Second)
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
+
+	// Clearing the started state removes the start-to-close and heartbeat timers, so
+	// their tasks are useless and the bits go. Schedule-to-close is anchored to the
+	// untouched FirstScheduledTime, so its pending task is still correct and survives.
+	// Note the attempt itself is never consulted: the deadlines carry the decision.
+	s.Equal(
+		int32(TimerTaskStatusCreatedScheduleToClose),
+		s.mutableState.getActivityTimerTaskStatus(current, incoming),
+	)
+}
+
+// Pre-FirstScheduledTime mutable state falls back to anchoring schedule-to-close on
+// ScheduledTime, which a retry does move. The deadline comparison notices and clears the
+// bit, where keying off the attempt alone would have preserved a task pointing at the
+// old, earlier instant.
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_Retry_LegacyAnchor_ClearsScheduleToClose() {
+	version := int64(99)
+	current := startedActivityInfoForMask(version, 1, 1)
+	current.FirstScheduledTime = nil
+	incoming := retryActivityInfoForMask(startedActivityInfoForMask(version, 1, 1), 10*time.Second)
+	incoming.FirstScheduledTime = nil
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
+
+	s.Equal(int32(TimerTaskStatusNone), s.mutableState.getActivityTimerTaskStatus(current, incoming))
+}
+
+// Attempt moving on its own decides nothing; an unchanged deadline keeps its task.
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_AttemptChangedWithoutDeadlineMove_KeepsMask() {
+	version := int64(99)
+	current := startedActivityInfoForMask(version, 1, 1)
+	incoming := startedActivityInfoForMask(version, 2, 1)
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
+
+	s.Equal(current.TimerTaskStatus, s.mutableState.getActivityTimerTaskStatus(current, incoming))
+}
+
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_ClearsOnlyMovedDeadlines() {
+	version := int64(99)
+	current := startedActivityInfoForMask(version, 1, 1)
+	// Activity options were updated, bumping the stamp; only the heartbeat timeout was
+	// shortened, so only that deadline moves.
+	incoming := startedActivityInfoForMask(version, 1, 2)
+	incoming.HeartbeatTimeout = durationpb.New(30 * time.Second)
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
+
+	s.Equal(
+		int32(TimerTaskStatusCreatedScheduleToClose|TimerTaskStatusCreatedStartToClose),
+		s.mutableState.getActivityTimerTaskStatus(current, incoming),
+	)
+}
+
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_HeartbeatProgressKeepsPendingWakeup() {
+	version := int64(99)
+	current := startedActivityInfoForMask(version, 1, 1)
+	incoming := startedActivityInfoForMask(version, 1, 1)
+	incoming.LastHeartbeatUpdateTime = timestamppb.New(
+		incoming.StartedTime.AsTime().Add(30 * time.Second),
+	)
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
+
+	// Recording heartbeat progress moves its timeout deadline, but the active path
+	// deliberately relies on the already-pending earlier task as the next wake-up.
+	s.Equal(current.TimerTaskStatus, s.mutableState.getActivityTimerTaskStatus(current, incoming))
+}
+
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_UnrelatedOptionChanged_KeepsMask() {
+	version := int64(99)
+	current := startedActivityInfoForMask(version, 1, 1)
+	// Stamp moved because some unrelated option changed; no deadline is affected, so
+	// every pending task is still correct.
+	incoming := startedActivityInfoForMask(version, 1, 2)
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
+
+	s.Equal(current.TimerTaskStatus, s.mutableState.getActivityTimerTaskStatus(current, incoming))
+}
+
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_TimerDisappears() {
+	version := int64(99)
+	current := startedActivityInfoForMask(version, 1, 1)
+	incoming := startedActivityInfoForMask(version, 1, 2)
+	// Heartbeat timeout removed entirely: the timer no longer applies, so its bit goes.
+	incoming.HeartbeatTimeout = nil
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
+
+	s.Equal(
+		int32(TimerTaskStatusCreatedScheduleToClose|TimerTaskStatusCreatedStartToClose),
+		s.mutableState.getActivityTimerTaskStatus(current, incoming),
+	)
+}
+
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_Unchanged_KeepsMask() {
+	version := int64(99)
+	current := startedActivityInfoForMask(version, 1, 1)
+	incoming := startedActivityInfoForMask(version, 1, 1)
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
+
+	s.Equal(current.TimerTaskStatus, s.mutableState.getActivityTimerTaskStatus(current, incoming))
+}
+
+func (s *mutableStateSuite) TestNextActivityTimerTaskMask_NewActivity_NoMask() {
+	s.Equal(
+		int32(TimerTaskStatusNone),
+		s.mutableState.getActivityTimerTaskStatus(nil, startedActivityInfoForMask(int64(99), 1, 1)),
+	)
+}
+
+// TestApplyUpdatesToSubStateMachines_ActivityTimerTaskStatusCarriedOver covers the wiring
+// between applyUpdatesToSubStateMachines and getActivityTimerTaskStatus, rather than the
+// decision function on its own.
+//
+// The getActivityTimerTaskStatus tests above call it directly with a non-nil `current`, so
+// they cannot catch a caller that fails to hand over the local activity info. If `current`
+// arrives nil the function short-circuits to TimerTaskStatusNone and the entire deadline
+// comparison silently degrades to "always reset every bit", which is invisible at the unit
+// level but is the whole behavior in production.
+func (s *mutableStateSuite) TestApplyUpdatesToSubStateMachines_ActivityTimerTaskStatusCarriedOver() {
+	scheduledEventID := int64(90)
+	failoverVersion := s.namespaceEntry.FailoverVersion(tests.WorkflowID)
+	scheduledTime := time.Date(2026, 8, 11, 0, 0, 0, 0, time.UTC)
+
+	// A started activity with a task outstanding for each timer that applies to it.
+	expectedStatus := int32(TimerTaskStatusCreatedScheduleToClose |
+		TimerTaskStatusCreatedStartToClose |
+		TimerTaskStatusCreatedHeartbeat)
+	local := &persistencespb.ActivityInfo{
+		Version:                       failoverVersion,
+		ScheduledEventId:              scheduledEventID,
+		ActivityId:                    "activityID_timer_task_status",
+		ScheduledTime:                 timestamppb.New(scheduledTime),
+		FirstScheduledTime:            timestamppb.New(scheduledTime),
+		StartedEventId:                int64(91),
+		StartedTime:                   timestamppb.New(scheduledTime.Add(time.Second)),
+		ScheduleToCloseTimeout:        durationpb.New(time.Hour),
+		StartToCloseTimeout:           durationpb.New(10 * time.Minute),
+		HeartbeatTimeout:              durationpb.New(time.Minute),
+		TimerTaskStatus:               expectedStatus,
+		LastUpdateVersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: failoverVersion, TransitionCount: 1},
+	}
+
+	dbState := s.buildWorkflowMutableState()
+	dbState.ActivityInfos[scheduledEventID] = local
+	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	// The replicated copy advances the versioned transition (otherwise the update is
+	// skipped as already applied) but leaves every deadline input untouched.
+	incoming := common.CloneProto(local)
+	incoming.LastUpdateVersionedTransition = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: failoverVersion,
+		TransitionCount:          2,
+	}
+	incoming.TimerTaskStatus = TimerTaskStatusNone // replicated state carries the peer's bits
+
+	s.mockShard.Resource.ClusterMetadata.EXPECT().
+		IsVersionFromSameCluster(failoverVersion, failoverVersion).Return(true).AnyTimes()
+
+	err = mutableState.applyUpdatesToSubStateMachines(
+		map[int64]*persistencespb.ActivityInfo{scheduledEventID: incoming},
+		nil, nil, nil, nil,
+		false,
+	)
+	s.NoError(err)
+
+	// No deadline moved, so every pending timer task is still valid and its bit must be
+	// carried over from the local activity info.
+	applied, ok := mutableState.pendingActivityInfoIDs[scheduledEventID]
+	s.True(ok)
+	s.Equal(expectedStatus, applied.TimerTaskStatus)
+}
+
+// TestApplyUpdatesToSubStateMachines_ChildExecutionClockCarriedOver covers the other
+// sanitizeFn that depends on the local sub state machine, alongside the activity one.
+//
+// ChildExecutionInfo.Clock is a local shard vector clock, and sanitizeChildExecutionInfo
+// strips it before replicating, so the incoming copy always arrives nil. The local value
+// therefore has to be restored on apply, otherwise every replicated update to an existing
+// child execution erases it.
+func (s *mutableStateSuite) TestApplyUpdatesToSubStateMachines_ChildExecutionClockCarriedOver() {
+	initiatedEventID := int64(80)
+	localClock := &clockspb.VectorClock{ClusterId: 1, ShardId: 2, Clock: 3}
+
+	dbState := s.buildWorkflowMutableState()
+	local := dbState.ChildExecutionInfos[initiatedEventID]
+	s.NotNil(local, "expected the fixture to have a pending child execution")
+	local.Clock = localClock
+	local.LastUpdateVersionedTransition = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: local.Version,
+		TransitionCount:          1,
+	}
+
+	mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 123)
+	s.NoError(err)
+
+	// The replicated copy advances the versioned transition and, as the sender sanitized
+	// it, carries no clock.
+	incoming := common.CloneProto(local)
+	incoming.Clock = nil
+	incoming.LastUpdateVersionedTransition = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: local.Version,
+		TransitionCount:          2,
+	}
+
+	err = mutableState.applyUpdatesToSubStateMachines(
+		nil,
+		nil,
+		map[int64]*persistencespb.ChildExecutionInfo{initiatedEventID: incoming},
+		nil, nil,
+		false,
+	)
+	s.NoError(err)
+
+	applied, ok := mutableState.pendingChildExecutionInfoIDs[initiatedEventID]
+	s.True(ok)
+	s.True(proto.Equal(localClock, applied.Clock), "local child execution clock was not carried over")
 }
 
 func (s *mutableStateSuite) TestUpdateActivityTaskStatusWithTimerHeartbeat() {
@@ -7004,7 +7361,7 @@ func (s *mutableStateSuite) TestSetContextMetadata_ActivityNotFound() {
 	s.False(ok)
 }
 
-func (s *mutableStateSuite) TestAddActivityTaskStartedEventStoresWorkerControlTaskQueue() {
+func (s *mutableStateSuite) TestAddActivityTaskStartedEventStoresWorkerControlTaskQueueAndClearsUnversionedDeployment() {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 
 	// Setup workflow execution
@@ -7057,6 +7414,11 @@ func (s *mutableStateSuite) TestAddActivityTaskStartedEventStoresWorkerControlTa
 	)
 	s.NoError(err)
 	s.Empty(activityInfo.WorkerControlTaskQueue, "WorkerControlTaskQueue should be empty before activity starts")
+	activityInfo.LastWorkerDeploymentVersion = "previous-deployment:previous-build"
+	activityInfo.LastDeploymentVersion = &deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: "previous-deployment",
+		BuildId:        "previous-build",
+	}
 
 	// Start activity with workerControlTaskQueue
 	expectedWorkerControlTaskQueue := "test-control-queue"
@@ -7077,6 +7439,165 @@ func (s *mutableStateSuite) TestAddActivityTaskStartedEventStoresWorkerControlTa
 	updatedActivityInfo, ok := s.mutableState.GetActivityInfo(activityInfo.ScheduledEventId)
 	s.True(ok)
 	s.Equal(expectedWorkerControlTaskQueue, updatedActivityInfo.WorkerControlTaskQueue)
+	s.Empty(updatedActivityInfo.LastWorkerDeploymentVersion)
+	s.Nil(updatedActivityInfo.LastDeploymentVersion)
+}
+
+func (s *mutableStateSuite) TestAddActivityTaskStartedEventApproximateSize() {
+	for _, tc := range []struct {
+		name        string
+		retryPolicy *commonpb.RetryPolicy
+	}{
+		{
+			// Transient start: routes through UpdateActivity.
+			name:        "WithRetryPolicy",
+			retryPolicy: &commonpb.RetryPolicy{MaximumAttempts: 5},
+		},
+		{
+			// Routes through ApplyActivityTaskStartedEvent instead; no UpdateActivity callback.
+			name:        "WithoutRetryPolicy",
+			retryPolicy: nil,
+		},
+	} {
+		s.Run(tc.name, func() {
+			s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+			_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+				&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+				&historyservice.StartWorkflowExecutionRequest{
+					NamespaceId: tests.NamespaceID.String(),
+					StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+						WorkflowType:        &commonpb.WorkflowType{Name: "workflow-type"},
+						TaskQueue:           &taskqueuepb.TaskQueue{Name: "task-queue"},
+						WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+						WorkflowTaskTimeout: durationpb.New(1 * time.Second),
+					},
+				},
+			)
+			s.NoError(err)
+
+			di, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+			s.NoError(err)
+			_, _, err = s.mutableState.AddWorkflowTaskStartedEvent(
+				di.ScheduledEventID,
+				di.RequestID,
+				di.TaskQueue,
+				"identity",
+				nil,
+				nil,
+				nil,
+				false,
+				nil,
+				0,
+			)
+			s.NoError(err)
+			completedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(
+				di,
+				&workflowservice.RespondWorkflowTaskCompletedRequest{Identity: "identity"},
+				workflowTaskCompletionLimits,
+			)
+			s.NoError(err)
+
+			_, ai, err := s.mutableState.AddActivityTaskScheduledEvent(
+				completedEvent.GetEventId(),
+				&commandpb.ScheduleActivityTaskCommandAttributes{
+					ActivityId:   "test-activity-1",
+					ActivityType: &commonpb.ActivityType{Name: "test-activity-type"},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+					RetryPolicy:  tc.retryPolicy,
+				},
+				false,
+			)
+			s.NoError(err)
+			s.Equal(tc.retryPolicy != nil, ai.HasRetryPolicy)
+
+			sizeBeforeWithoutActivityInfo := s.mutableState.approximateSize - ai.Size()
+
+			_, err = s.mutableState.AddActivityTaskStartedEvent(
+				ai,
+				ai.ScheduledEventId,
+				uuid.NewString(),
+				"worker-identity",
+				nil,
+				deployment1,
+				nil,
+				"worker-control-task-queue",
+				&clockspb.VectorClock{},
+			)
+			s.NoError(err)
+
+			s.Equal(
+				sizeBeforeWithoutActivityInfo+ai.Size(),
+				s.mutableState.approximateSize,
+			)
+		})
+	}
+}
+
+func (s *mutableStateSuite) TestUpdateActivityProgressApproximateSize() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+		&historyservice.StartWorkflowExecutionRequest{
+			NamespaceId: tests.NamespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:        &commonpb.WorkflowType{Name: "workflow-type"},
+				TaskQueue:           &taskqueuepb.TaskQueue{Name: "task-queue"},
+				WorkflowRunTimeout:  durationpb.New(200 * time.Second),
+				WorkflowTaskTimeout: durationpb.New(1 * time.Second),
+			},
+		},
+	)
+	s.NoError(err)
+
+	di, err := s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	_, _, err = s.mutableState.AddWorkflowTaskStartedEvent(
+		di.ScheduledEventID,
+		di.RequestID,
+		di.TaskQueue,
+		"identity",
+		nil,
+		nil,
+		nil,
+		false,
+		nil,
+		0,
+	)
+	s.NoError(err)
+	completedEvent, err := s.mutableState.AddWorkflowTaskCompletedEvent(
+		di,
+		&workflowservice.RespondWorkflowTaskCompletedRequest{Identity: "identity"},
+		workflowTaskCompletionLimits,
+	)
+	s.NoError(err)
+
+	_, ai, err := s.mutableState.AddActivityTaskScheduledEvent(
+		completedEvent.GetEventId(),
+		&commandpb.ScheduleActivityTaskCommandAttributes{
+			ActivityId:   "test-activity-1",
+			ActivityType: &commonpb.ActivityType{Name: "test-activity-type"},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+			RetryPolicy:  &commonpb.RetryPolicy{MaximumAttempts: 5},
+		},
+		false,
+	)
+	s.NoError(err)
+	s.Empty(ai.RetryLastWorkerIdentity)
+
+	sizeBeforeWithoutActivityInfo := s.mutableState.approximateSize - ai.Size()
+
+	s.mutableState.UpdateActivityProgress(ai, &workflowservice.RecordActivityTaskHeartbeatRequest{
+		Identity: "worker-identity",
+		Details:  payloads.EncodeString("heartbeat-details"),
+	})
+
+	s.Equal("worker-identity", ai.RetryLastWorkerIdentity)
+	s.Equal(
+		sizeBeforeWithoutActivityInfo+ai.Size(),
+		s.mutableState.approximateSize,
+	)
 }
 
 func (s *mutableStateSuite) TestCloseTransaction_PrincipalStamped() {
@@ -7557,6 +8078,11 @@ func (s *mutableStateSuite) TestCloseTransactionTimeSkipping() {
 		accumulated := ms.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration
 		s.Require().NotNil(accumulated)
 		s.Greater(accumulated.AsDuration(), time.Duration(0))
+		protorequire.ProtoEqual(
+			s.T(),
+			ms.CurrentVersionedTransition(),
+			ms.GetExecutionInfo().TimeSkippingInfo.GetLastUpdateVersionedTransition(),
+		)
 
 		// A WorkflowExecutionTimeSkippingTransitioned event must appear in the written batches.
 		var tsEvent *historypb.HistoryEvent

@@ -90,9 +90,10 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() (retErr error) {
 	// inspectedMS is the mutable-state snapshot examined during verification, captured for the
 	// best-effort "applied" lifecycle event emitted below.
 	var inspectedMS *persistencespb.WorkflowMutableState
+	var backfillDetails map[string]any
 	defer func() {
 		if emitLifecycle {
-			e.emitReplicationVerifyApplied(inspectedMS, retErr)
+			e.emitReplicationVerifyApplied(inspectedMS, retErr, backfillDetails)
 		}
 	}()
 
@@ -207,6 +208,13 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() (retErr error) {
 	if err != nil {
 		return err
 	}
+	backfillDetails = map[string]any{
+		"recovery_action":     wideevents.ReplRecoveryActionResendHistory,
+		"first_event_id":      lcaItem.EventId + 1,
+		"first_event_version": startEventVersion,
+		"last_event_id":       lastItem.EventId,
+		"last_event_version":  lastItem.Version,
+	}
 	return e.BackFillEvents(
 		ctx,
 		e.SourceClusterName(),
@@ -308,6 +316,11 @@ func (e *ExecutableVerifyVersionedTransitionTask) HandleErr(err error) error {
 		tag.TaskID(e.TaskID()),
 		tag.Error(err),
 	)
+	details := map[string]any{}
+	if _, ok := err.(*serviceerrors.SyncState); ok {
+		details["recovery_action"] = wideevents.ReplRecoveryActionSyncState
+	}
+	emitExecutableTaskError(e.ExecutableTask, wideevents.ReplOperationStandbyVerification, "Standby versioned transition verification failed", err, details)
 	switch taskErr := err.(type) {
 	case *serviceerrors.SyncState:
 		callerInfo := getReplicaitonCallerInfo(e.GetPriority())
@@ -334,6 +347,7 @@ func (e *ExecutableVerifyVersionedTransitionTask) HandleErr(err error) error {
 					tag.TaskID(e.TaskID()),
 					tag.Error(syncStateErr),
 				)
+				emitExecutableTaskError(e.ExecutableTask, wideevents.ReplOperationStandbyVerificationSyncState, "Standby verification recovery failed during sync state", syncStateErr, nil)
 				return err
 			}
 			return nil

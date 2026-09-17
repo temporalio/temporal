@@ -157,6 +157,10 @@ type (
 		parentWorkflowKey *definition.WorkflowKey
 	}
 
+	startChildExecutionPostActionInfo struct {
+		childWorkflowKey *definition.WorkflowKey
+	}
+
 	workflowTaskPostActionInfo struct {
 		workflowTaskScheduleToStartTimeout time.Duration
 		taskqueue                          *taskqueuepb.TaskQueue
