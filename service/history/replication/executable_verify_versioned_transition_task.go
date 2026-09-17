@@ -157,10 +157,34 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() (retErr error) {
 
 	// case 1: VersionedTransition is up-to-date on current mutable state
 	if err == nil {
-		if ms.GetNextEventId() < e.taskAttr.NextEventId {
+		if len(e.taskAttr.EventVersionHistory) == 0 {
+			if ms.GetNextEventId() < e.taskAttr.NextEventId {
+				return softassert.UnexpectedDataLoss(e.Logger, "Workflow event missed",
+					fmt.Errorf("NamespaceId: %v, workflowId: %v, runId: %v, expected last eventId: %v, versionedTransition: %v",
+						e.NamespaceID, e.WorkflowID, e.RunID, e.taskAttr.NextEventId-1, e.ReplicationTask().VersionedTransition))
+			}
+			return e.verifyNewRunExist(ctx, true)
+		}
+
+		targetHistory := &historyspb.VersionHistory{
+			Items: e.taskAttr.EventVersionHistory,
+		}
+		currentHistory, err := versionhistory.GetCurrentVersionHistory(ms.GetExecutionInfo().VersionHistories)
+		if err != nil {
+			return softassert.UnexpectedDataLoss(e.Logger, "Workflow event version history is missing", err)
+		}
+		lcaItem, err := versionhistory.FindLCAVersionHistoryItem(currentHistory, targetHistory)
+		if err != nil {
+			return softassert.UnexpectedDataLoss(e.Logger, "Workflow event version history is missing", err)
+		}
+		lastItem, err := versionhistory.GetLastVersionHistoryItem(targetHistory)
+		if err != nil {
+			return err
+		}
+		if !versionhistory.IsEqualVersionHistoryItem(lcaItem, lastItem) {
 			return softassert.UnexpectedDataLoss(e.Logger, "Workflow event missed",
-				fmt.Errorf("NamespaceId: %v, workflowId: %v, runId: %v, expected last eventId: %v, versionedTransition: %v",
-					e.NamespaceID, e.WorkflowID, e.RunID, e.taskAttr.NextEventId-1, e.ReplicationTask().VersionedTransition))
+				fmt.Errorf("NamespaceId: %v, workflowId: %v, runId: %v, expected last eventId: %v, expected last event version: %v, versionedTransition: %v",
+					e.NamespaceID, e.WorkflowID, e.RunID, lastItem.EventId, lastItem.Version, e.ReplicationTask().VersionedTransition))
 		}
 		return e.verifyNewRunExist(ctx, true)
 	}
