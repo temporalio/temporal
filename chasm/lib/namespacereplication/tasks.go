@@ -75,8 +75,8 @@ func (h *applyLocalTaskHandler) Validate(
 }
 
 // Execute writes authoritative mutations to the local metadata store with
-// strict version-CAS. Shadow mutations skip the write and transition directly
-// to COMMITTED so the same peer transport is exercised without double-writing.
+// strict version-CAS. Shadow and replicate-only mutations skip the local write;
+// only shadow also suppresses destination writes.
 func (h *applyLocalTaskHandler) Execute(
 	ctx context.Context,
 	ref chasm.ComponentRef,
@@ -85,11 +85,12 @@ func (h *applyLocalTaskHandler) Execute(
 ) error {
 	// Read the mutation payload from component state.
 	type loadResult struct {
-		Operation   namespacereplicationpb.NamespaceOperation
-		Detail      *persistencespb.NamespaceDetail
-		ExpectedVer int64
-		IsGlobal    bool
-		Shadow      bool
+		Operation     namespacereplicationpb.NamespaceOperation
+		Detail        *persistencespb.NamespaceDetail
+		ExpectedVer   int64
+		IsGlobal      bool
+		Shadow        bool
+		ReplicateOnly bool
 	}
 	loaded, err := chasm.ReadComponent(
 		ctx,
@@ -97,10 +98,11 @@ func (h *applyLocalTaskHandler) Execute(
 		func(c *NamespaceMutationComponent, _ chasm.Context, _ chasm.NoValue) (loadResult, error) {
 			m := c.GetMutation()
 			return loadResult{
-				Operation:   m.GetOperation(),
-				Detail:      m.GetNamespaceDetail(),
-				ExpectedVer: m.GetExpectedVersion(),
-				Shadow:      m.GetShadow(),
+				Operation:     m.GetOperation(),
+				Detail:        m.GetNamespaceDetail(),
+				ExpectedVer:   m.GetExpectedVersion(),
+				Shadow:        m.GetShadow(),
+				ReplicateOnly: m.GetReplicateOnly(),
 				// Anything that reaches the CHASM transport is a global namespace —
 				// the frontend's shouldUseCHASMReplication gate ensures local-only
 				// namespaces never get here. Hardcoded rather than read from the
@@ -113,7 +115,11 @@ func (h *applyLocalTaskHandler) Execute(
 	if err != nil {
 		return fmt.Errorf("failed to read chasm component details: %w", err)
 	}
-	if loaded.Shadow {
+	if loaded.Shadow || loaded.ReplicateOnly {
+		// Shadow is compare-only end to end. Replicate-only instead represents a
+		// legacy no-op UpdateNamespace: the source row is already the desired
+		// snapshot, but peer fan-out must still run authoritatively. Keeping Shadow
+		// false is what allows ApplyPeerTask to write that snapshot at destinations.
 		return h.commitLocal(ctx, ref)
 	}
 

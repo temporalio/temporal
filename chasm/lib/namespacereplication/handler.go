@@ -40,6 +40,12 @@ func (h *handler) TriggerNamespaceMutation(
 	if req.GetMutation().GetNamespaceDetail() == nil {
 		return nil, serviceerror.NewInvalidArgument("mutation.namespace_detail is required")
 	}
+	if req.GetMutation().GetReplicateOnly() && req.GetMutation().GetShadow() {
+		return nil, serviceerror.NewInvalidArgument("mutation.replicate_only and mutation.shadow are mutually exclusive")
+	}
+	if req.GetMutation().GetReplicateOnly() && req.GetMutation().GetOperation() != namespacereplicationpb.NAMESPACE_OPERATION_UPDATE {
+		return nil, serviceerror.NewInvalidArgument("mutation.replicate_only requires an update operation")
+	}
 
 	key := executionKey(req)
 	if _, err := chasm.StartExecution[*NamespaceMutationComponent, *namespacereplicationpb.NamespaceMutation](

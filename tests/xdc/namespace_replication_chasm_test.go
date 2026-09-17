@@ -201,6 +201,68 @@ func (s *namespaceReplicationCHASMTestSuite) TestAuthoritativeTransportRecoversL
 	}, time.Second, 20*time.Millisecond, "commit-boundary recovery published a legacy namespace replication task")
 }
 
+func (s *namespaceReplicationCHASMTestSuite) TestAuthoritativeTransportRepublishesNoOpWithoutLocalWrite() {
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	defer cancel()
+
+	active := s.clusters[0]
+	standby := s.clusters[1]
+	activeCleanup := active.OverrideDynamicConfig(
+		s.T(),
+		dynamicconfig.NamespaceReplicationTransportMode,
+		dynamicconfig.NamespaceReplicationTransportModeCHASM,
+	)
+	defer activeCleanup()
+	standbyCleanup := standby.OverrideDynamicConfig(
+		s.T(),
+		dynamicconfig.NamespaceReplicationTransportMode,
+		dynamicconfig.NamespaceReplicationTransportModeCHASM,
+	)
+	defer standbyCleanup()
+
+	namespaceName := "test-namespace-" + uuid.NewString()
+	_, err := active.FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+		Namespace: namespaceName,
+		Clusters: []*replicationpb.ClusterReplicationConfig{
+			{ClusterName: active.ClusterName()},
+			{ClusterName: standby.ClusterName()},
+		},
+		ActiveClusterName:                active.ClusterName(),
+		IsGlobalNamespace:                true,
+		WorkflowExecutionRetentionPeriod: durationpb.New(24 * time.Hour),
+	})
+	s.Require().NoError(err)
+	s.requireSuccessfulApply(
+		s.receiveObservedApply(ctx),
+		namespaceName,
+		enumsspb.NAMESPACE_OPERATION_CREATE,
+		false,
+		adminservice.ApplyNamespaceMutationResponse_OUTCOME_CREATED,
+	)
+
+	sourceBefore := s.requirePersistedNamespace(ctx, active, namespaceName)
+	_, err = active.FrontendClient().UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+		Namespace: namespaceName,
+	})
+	s.Require().NoError(err)
+	// A no-op update still republishes the authoritative snapshot. Because the
+	// standby is already current, its apply-if-higher contract reports stale.
+	s.requireSuccessfulApply(
+		s.receiveObservedApply(ctx),
+		namespaceName,
+		enumsspb.NAMESPACE_OPERATION_UPDATE,
+		false,
+		adminservice.ApplyNamespaceMutationResponse_OUTCOME_NO_OP_STALE,
+	)
+
+	sourceAfter := s.requirePersistedNamespace(ctx, active, namespaceName)
+	standbyAfter := s.requirePersistedNamespace(ctx, standby, namespaceName)
+	s.Require().True(proto.Equal(sourceBefore.Namespace, sourceAfter.Namespace))
+	s.Require().Equal(sourceBefore.NotificationVersion, sourceAfter.NotificationVersion,
+		"replicate-only update must not consume a source notification-version CAS slot")
+	s.Require().True(proto.Equal(sourceAfter.Namespace, standbyAfter.Namespace))
+}
+
 func (s *namespaceReplicationCHASMTestSuite) TestAuthoritativeTransportConcurrentCASAndOutage() {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*testTimeout)
 	defer cancel()

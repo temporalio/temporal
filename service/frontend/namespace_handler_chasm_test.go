@@ -87,13 +87,41 @@ func TestTriggerAuthoritativeNamespaceMutation(t *testing.T) {
 		detail,
 		7,
 		nil,
-		false,
+		namespaceMutationModeAuthoritative,
 	)
 	require.NoError(t, err)
 	require.NotNil(t, response)
 	require.False(t, client.request.GetMutation().GetShadow())
+	require.False(t, client.request.GetMutation().GetReplicateOnly())
 	require.Equal(t, int64(7), client.request.GetMutation().GetExpectedVersion())
 	require.Equal(t, []string{"cell-b"}, client.request.GetMutation().GetPeerCells())
+}
+
+func TestTriggerReplicateOnlyNamespaceMutation(t *testing.T) {
+	controller := gomock.NewController(t)
+	clusterMetadata := cluster.NewMockMetadata(controller)
+	clusterMetadata.EXPECT().GetCurrentClusterName().Return("cell-a")
+	client := &captureNamespaceReplicationClient{}
+	handler := &namespaceHandler{
+		clusterMetadata:   clusterMetadata,
+		chasmNsReplClient: client,
+	}
+	detail := &persistencespb.NamespaceDetail{
+		Info:              &persistencespb.NamespaceInfo{Id: "namespace-id"},
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{Clusters: []string{"cell-a", "cell-b"}},
+	}
+
+	_, err := handler.triggerNamespaceMutation(
+		context.Background(),
+		enumsspb.NAMESPACE_OPERATION_UPDATE,
+		detail,
+		7,
+		nil,
+		namespaceMutationModeReplicateOnly,
+	)
+	require.NoError(t, err)
+	require.True(t, client.request.GetMutation().GetReplicateOnly())
+	require.False(t, client.request.GetMutation().GetShadow())
 }
 
 func TestShouldUseCHASMNamespaceReplication(t *testing.T) {

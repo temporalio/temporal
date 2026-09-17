@@ -29,6 +29,13 @@ message NamespaceMutation {
   // Shadow mutations exercise the full component and peer transport without
   // writing namespace state in either the source or destination cell.
   bool shadow = 5;
+
+  // Replicate-only preserves the legacy no-op UpdateNamespace behavior: the
+  // source snapshot is already authoritative, so do not rewrite it, consume a
+  // notification-version CAS slot, or emit a namespace-updated lifecycle event.
+  // Peer applies remain authoritative. This is deliberately distinct from
+  // shadow, which suppresses writes in both the source and destination cells.
+  bool replicate_only = 6;
 }
 
 enum NamespaceOperation {

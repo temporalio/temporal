@@ -270,7 +270,7 @@ func (d *namespaceHandler) RegisterNamespace(
 			namespaceRequest.Namespace,
 			0,
 			nil,
-			false,
+			namespaceMutationModeAuthoritative,
 		); err != nil {
 			return nil, err
 		}
@@ -658,9 +658,10 @@ func (d *namespaceHandler) UpdateNamespace(
 		info.GetState(),
 		replicationConfig.GetClusters(),
 	)
+	hasLocalMutation := configurationChanged || activeClusterChanged || needsNamespacePromotion
 	if configurationChanged && activeClusterChanged && isGlobalNamespace {
 		return nil, errCannotDoNamespaceFailoverAndUpdate
-	} else if configurationChanged || activeClusterChanged || needsNamespacePromotion {
+	} else if hasLocalMutation {
 		if (needsNamespacePromotion || activeClusterChanged) && isGlobalNamespace {
 			failoverVersion = d.clusterMetadata.GetNextFailoverVersion(
 				replicationConfig.ActiveClusterName,
@@ -704,7 +705,7 @@ func (d *namespaceHandler) UpdateNamespace(
 				updateReq.Namespace,
 				notificationVersion,
 				oldReplicationClusters,
-				false,
+				namespaceMutationModeAuthoritative,
 			); err != nil {
 				return nil, err
 			}
@@ -723,6 +724,31 @@ func (d *namespaceHandler) UpdateNamespace(
 			needsNamespacePromotion,
 			updateRequest,
 		))
+	}
+
+	if useCHASMNamespaceReplication && !hasLocalMutation {
+		// Legacy UpdateNamespace republishes even when the request changes no local
+		// fields. Preserve that repair mechanism without rewriting the already-
+		// authoritative source row or advancing its notification-version CAS slot.
+		// The replicate-only mutation still schedules normal authoritative peer
+		// applies; unlike shadow mode, destination writes are not suppressed.
+		if _, err := d.triggerNamespaceMutation(
+			ctx,
+			enumsspb.NAMESPACE_OPERATION_UPDATE,
+			&persistencespb.NamespaceDetail{
+				Info:                        info,
+				Config:                      config,
+				ReplicationConfig:           replicationConfig,
+				ConfigVersion:               configVersion,
+				FailoverVersion:             failoverVersion,
+				FailoverNotificationVersion: failoverNotificationVersion,
+			},
+			notificationVersion,
+			oldReplicationClusters,
+			namespaceMutationModeReplicateOnly,
+		); err != nil {
+			return nil, err
+		}
 	}
 
 	if !useCHASMNamespaceReplication {
@@ -1518,7 +1544,7 @@ func (d *namespaceHandler) invokeShadowNamespaceMutation(
 		chasmDetail,
 		expectedVersion,
 		previousClusters,
-		true,
+		namespaceMutationModeShadow,
 	)
 	if err != nil {
 		d.logger.Warn(
@@ -1529,13 +1555,24 @@ func (d *namespaceHandler) invokeShadowNamespaceMutation(
 	}
 }
 
+type namespaceMutationMode int
+
+const (
+	// Authoritative mutations write both the source namespace and its peers.
+	namespaceMutationModeAuthoritative namespaceMutationMode = iota
+	// Shadow mutations compare at peers but never write namespace state.
+	namespaceMutationModeShadow
+	// Replicate-only mutations skip the already-authoritative source and write peers.
+	namespaceMutationModeReplicateOnly
+)
+
 func (d *namespaceHandler) triggerNamespaceMutation(
 	ctx context.Context,
 	operation enumsspb.NamespaceOperation,
 	detail *persistencespb.NamespaceDetail,
 	expectedVersion int64,
 	previousClusters []string,
-	shadow bool,
+	mode namespaceMutationMode,
 ) (*namespacereplicationpb.TriggerNamespaceMutationResponse, error) {
 	namespaceID := detail.GetInfo().GetId()
 	return d.chasmNsReplClient.TriggerNamespaceMutation(ctx, &namespacereplicationpb.TriggerNamespaceMutationRequest{
@@ -1551,7 +1588,8 @@ func (d *namespaceHandler) triggerNamespaceMutation(
 				detail.GetReplicationConfig().GetClusters(),
 				previousClusters,
 			),
-			Shadow: shadow,
+			Shadow:        mode == namespaceMutationModeShadow,
+			ReplicateOnly: mode == namespaceMutationModeReplicateOnly,
 		},
 	})
 }
