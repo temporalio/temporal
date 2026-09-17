@@ -1,6 +1,8 @@
 package namespacereplication
 
 import (
+	"errors"
+
 	"go.temporal.io/server/chasm"
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
 )
@@ -84,15 +86,28 @@ func (c *NamespaceMutationComponent) ContextMetadata(_ chasm.Context) map[string
 
 // Terminate implements chasm.RootComponent. Allows the framework to force-close
 // the component (e.g., on execution state size limits). For the namespace
-// replication transport, terminate just marks the component as failed; any
-// in-flight tasks will see the closed lifecycle on next validate and skip.
+// replication transport, terminate marks the component as failed; any in-flight
+// tasks will see the closed lifecycle on next validate and skip. If termination
+// happens before the local apply resolves, record a local failure as well so a
+// caller polling that outcome can observe a terminal result.
 //
 // Apply-if-higher on receivers makes future mutations safe even when a
 // component was terminated mid-flight.
 func (c *NamespaceMutationComponent) Terminate(
-	_ chasm.MutableContext,
-	_ chasm.TerminateComponentRequest,
+	ctx chasm.MutableContext,
+	request chasm.TerminateComponentRequest,
 ) (chasm.TerminateComponentResponse, error) {
+	if c.GetLocalApply().GetOutcome() == namespacereplicationpb.LOCAL_APPLY_OUTCOME_PENDING {
+		reason := request.Reason
+		if reason == "" {
+			reason = "namespace mutation terminated before local apply committed"
+		}
+		return chasm.TerminateComponentResponse{}, TransitionLocalFailed.Apply(c, ctx, EventLocalFailed{
+			Time:    ctx.Now(c),
+			Err:     errors.New(reason),
+			ErrType: localFailureInternal,
+		})
+	}
 	c.SetStateMachineState(namespacereplicationpb.COMPONENT_STATUS_FAILED)
 	return chasm.TerminateComponentResponse{}, nil
 }

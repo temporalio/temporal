@@ -88,8 +88,6 @@ enum PeerApplyOutcome {
 
 message LocalApplyStatus {
   LocalApplyOutcome outcome = 1;
-  // The new notification_version after a successful CAS write.
-  int64 new_version = 2;
   google.protobuf.Timestamp applied_at = 3;
   // Failure detail when outcome is FAILED (e.g. CAS conflict, store unavailable).
   temporal.api.failure.v1.Failure failure = 4;
@@ -97,7 +95,6 @@ message LocalApplyStatus {
 
 message PeerApplyStatus {
   PeerApplyOutcome outcome = 1;
-  int64 new_version = 2;
   int32 attempt_count = 3;
   google.protobuf.Timestamp first_attempt_at = 4;
   google.protobuf.Timestamp last_attempt_at = 5;

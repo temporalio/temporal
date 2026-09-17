@@ -133,19 +133,6 @@ func (h *applyLocalTaskHandler) Execute(
 		return h.recordLocalFailure(ctx, ref, fmt.Errorf("unsupported namespace operation: %v", loaded.Operation))
 	}
 
-	// Read back the post-write notification_version. The CAS write doesn't return
-	// the new version (Create returns ID; Update returns only error), so we query
-	// after to get the truth. Used as the component's NewVersion in the gRPC
-	// response.
-	meta, metaErr := h.metadataManager.GetMetadata(ctx)
-	if metaErr != nil {
-		// Rare degenerate case: we committed locally but can't read back the new
-		// version. Treat as terminal so the caller sees the error rather than a
-		// misleading zero version.
-		return h.recordLocalFailure(ctx, ref, fmt.Errorf("read post-write notification_version: %w", metaErr))
-	}
-	newVersion := meta.NotificationVersion
-
 	// Commit transition: record success and schedule peer fan-out. When there are
 	// no peers (single-cluster global namespace) allPeersTerminal() is already true,
 	// so complete the component in the same update. This is a separate transition
@@ -158,8 +145,7 @@ func (h *applyLocalTaskHandler) Execute(
 		ref,
 		func(c *NamespaceMutationComponent, mctx chasm.MutableContext, _ chasm.NoValue) (chasm.NoValue, error) {
 			if err := TransitionLocalCommitted.Apply(c, mctx, EventLocalCommitted{
-				Time:       mctx.Now(c),
-				NewVersion: newVersion,
+				Time: mctx.Now(c),
 			}); err != nil {
 				return nil, err
 			}
@@ -217,8 +203,8 @@ const (
 	// to serviceerror.NamespaceAlreadyExists so the caller sees the same error
 	// class legacy RegisterNamespace returned from metadataMgr.CreateNamespace.
 	localFailureAlreadyExists = "AlreadyExists"
-	// localFailureInternal: degenerate cases (unsupported operation, post-write
-	// read-back failure, etc.). Terminal.
+	// localFailureInternal: degenerate cases such as an unsupported operation.
+	// Terminal.
 	localFailureInternal = "Internal"
 )
 
@@ -230,9 +216,8 @@ const (
 // Symmetric with classifyPeerErr on the peer path.
 //
 // Uses errors.As rather than a bare type switch so the classification survives
-// error wrapping: some callers (e.g. the post-write read-back path) hand this a
-// fmt.Errorf("...: %w", storeErr), and a wrapped *serviceerror.Unavailable must
-// still be recognized as retriable rather than falling through to Internal.
+// error wrapping and a wrapped *serviceerror.Unavailable is still recognized as
+// retriable rather than falling through to Internal.
 func classifyLocalErr(err error) string {
 	var (
 		unavailable       *serviceerror.Unavailable
@@ -368,21 +353,28 @@ func (h *applyPeerTaskHandler) Execute(
 		return saveErr
 	}
 
-	return h.recordPeerOutcome(ctx, ref, task, peerOutcomeFromResult(result), nil)
+	outcome, resultErr := peerOutcomeFromResult(result)
+	if resultErr != nil {
+		return h.recordPeerOutcome(ctx, ref, task, classifyPeerErr(resultErr), resultErr)
+	}
+	return h.recordPeerOutcome(ctx, ref, task, outcome, nil)
 }
 
 // peerOutcomeFromResult maps a transport-neutral PeerApplyResult onto the
 // persisted per-peer outcome. All three are terminal (see allPeersTerminal):
 // NotAdmitted is a terminal non-failure, kept distinct from Applied so the
 // component never records a peer write that didn't happen.
-func peerOutcomeFromResult(result PeerApplyResult) namespacereplicationpb.PeerApplyOutcome {
+func peerOutcomeFromResult(result PeerApplyResult) (namespacereplicationpb.PeerApplyOutcome, error) {
 	switch result {
+	case PeerApplyResultApplied:
+		return namespacereplicationpb.PEER_APPLY_OUTCOME_APPLIED, nil
 	case PeerApplyResultNoOpStale:
-		return namespacereplicationpb.PEER_APPLY_OUTCOME_NO_OP_STALE
+		return namespacereplicationpb.PEER_APPLY_OUTCOME_NO_OP_STALE, nil
 	case PeerApplyResultNotAdmitted:
-		return namespacereplicationpb.PEER_APPLY_OUTCOME_NOT_ADMITTED
+		return namespacereplicationpb.PEER_APPLY_OUTCOME_NOT_ADMITTED, nil
 	default:
-		return namespacereplicationpb.PEER_APPLY_OUTCOME_APPLIED
+		return namespacereplicationpb.PEER_APPLY_OUTCOME_UNSPECIFIED,
+			serviceerror.NewInternal(fmt.Sprintf("unknown peer apply result: %d", result))
 	}
 }
 

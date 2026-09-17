@@ -52,7 +52,4 @@ message TriggerNamespaceMutationRequest {
   string business_id = 4;
 }
 
-message TriggerNamespaceMutationResponse {
-  // The new notification_version after a successful local CAS write.
-  int64 new_version = 1;
-}
+message TriggerNamespaceMutationResponse {}

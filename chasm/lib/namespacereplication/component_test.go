@@ -2,6 +2,7 @@ package namespacereplication
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/chasm"
@@ -40,6 +41,36 @@ func TestLifecycleState(t *testing.T) {
 		c := &NamespaceMutationComponent{NamespaceMutationState: &namespacereplicationpb.NamespaceMutationState{Status: tc.status}}
 		require.Equal(t, tc.want, c.LifecycleState(nil))
 	}
+}
+
+func TestTerminateBeforeLocalCommitRecordsFailure(t *testing.T) {
+	c := NewNamespaceMutationComponent(&namespacereplicationpb.NamespaceMutation{})
+	now := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(chasm.Component) time.Time { return now },
+		},
+	}
+
+	_, err := c.Terminate(ctx, chasm.TerminateComponentRequest{Reason: "execution state too large"})
+	require.NoError(t, err)
+	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_FAILED, c.GetStatus())
+	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_FAILED, c.GetLocalApply().GetOutcome())
+	require.Equal(t, now, c.GetLocalApply().GetAppliedAt().AsTime())
+	require.Equal(t, "execution state too large", c.GetLocalApply().GetFailure().GetMessage())
+	appInfo := c.GetLocalApply().GetFailure().GetApplicationFailureInfo()
+	require.Equal(t, localFailureInternal, appInfo.GetType())
+	require.True(t, appInfo.GetNonRetryable())
+}
+
+func TestTerminateAfterLocalCommitPreservesCommitOutcome(t *testing.T) {
+	c := NewNamespaceMutationComponent(&namespacereplicationpb.NamespaceMutation{})
+	c.LocalApply.Outcome = namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED
+
+	_, err := c.Terminate(&chasm.MockMutableContext{}, chasm.TerminateComponentRequest{})
+	require.NoError(t, err)
+	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_FAILED, c.GetStatus())
+	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED, c.GetLocalApply().GetOutcome())
 }
 
 // TestAllPeersTerminal verifies the completion predicate: true only when every

@@ -258,8 +258,7 @@ func testDetail() *persistencespb.NamespaceDetail {
 	}
 }
 
-// A successful local UPDATE commits with the post-write notification_version and
-// schedules one peer task per peer cell.
+// A successful local UPDATE commits and schedules one peer task per peer cell.
 func (env *nsreplTestEnv) mutationUpdate(peers ...string) *namespacereplicationpb.NamespaceMutation {
 	return &namespacereplicationpb.NamespaceMutation{
 		Operation:       namespacereplicationpb.NAMESPACE_OPERATION_UPDATE,
@@ -279,13 +278,10 @@ func TestApplyLocalTask_Execute_UpdateCommitSchedulesPeers(t *testing.T) {
 			require.True(t, req.IsGlobalNamespace)
 			return nil
 		})
-	env.metadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{NotificationVersion: 42}, nil)
-
 	require.NoError(t, env.localHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{}))
 
 	c := env.read(ref)
 	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED, c.GetLocalApply().GetOutcome())
-	require.Equal(t, int64(42), c.GetLocalApply().GetNewVersion())
 	// Peers remain and are pending, so the component stays RUNNING for fan-out.
 	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_RUNNING, c.GetStatus())
 	require.Len(t, c.GetPeerApply(), 2)
@@ -301,8 +297,6 @@ func TestApplyLocalTask_Execute_NoPeersCompletes(t *testing.T) {
 	ref := env.start(env.mutationUpdate(), nil) // no peer cells
 
 	env.metadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(nil)
-	env.metadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{NotificationVersion: 3}, nil)
-
 	require.NoError(t, env.localHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{}))
 
 	c := env.read(ref)
@@ -322,13 +316,10 @@ func TestApplyLocalTask_Execute_CreateCommit(t *testing.T) {
 			require.True(t, req.IsGlobalNamespace)
 			return &persistence.CreateNamespaceResponse{ID: "ns-id"}, nil
 		})
-	env.metadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{NotificationVersion: 9}, nil)
-
 	require.NoError(t, env.localHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{}))
 
 	c := env.read(ref)
 	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED, c.GetLocalApply().GetOutcome())
-	require.Equal(t, int64(9), c.GetLocalApply().GetNewVersion())
 }
 
 // A CAS conflict from the store surfaces as a terminal local failure carrying the
@@ -340,9 +331,6 @@ func TestApplyLocalTask_Execute_CASConflictFailsUnavailable(t *testing.T) {
 
 	env.metadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(
 		serviceerror.NewUnavailable("UpdateNamespace operation failed because of conditional failure."))
-	// GetMetadata must NOT be read once the CAS write fails.
-	env.metadataMgr.EXPECT().GetMetadata(gomock.Any()).Times(0)
-
 	require.NoError(t, env.localHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{}))
 
 	c := env.read(ref)
@@ -360,7 +348,7 @@ func TestApplyLocalTask_Execute_CASConflictFailsUnavailable(t *testing.T) {
 // startCommitted seeds a component already past local commit, ready for peer fan-out.
 func (env *nsreplTestEnv) startCommitted(peer string) chasm.ComponentRef {
 	return env.start(env.mutationUpdate(peer), func(c *NamespaceMutationComponent) {
-		c.LocalApply = &namespacereplicationpb.LocalApplyStatus{Outcome: namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED, NewVersion: 1}
+		c.LocalApply = &namespacereplicationpb.LocalApplyStatus{Outcome: namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED}
 	})
 }
 
@@ -549,4 +537,26 @@ func TestApplyPeerTask_Execute_UsesInjectedApplier(t *testing.T) {
 	c := env.read(ref)
 	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_NO_OP_STALE, c.GetPeerApply()["cellB"].GetOutcome())
 	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_COMPLETED, c.GetStatus())
+}
+
+func TestApplyPeerTask_Execute_UnknownInjectedResultRetries(t *testing.T) {
+	env := newNsreplTestEnv(t)
+	ref := env.startCommitted("cellB")
+
+	applier := &mockPeerApplier{result: PeerApplyResult(999)}
+	handler := &applyPeerTaskHandler{
+		peerApplier:    applier,
+		metricsHandler: metrics.NoopMetricsHandler,
+		logger:         log.NewTestLogger(),
+	}
+
+	require.NoError(t, handler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyPeerTask{TargetCell: "cellB", Attempt: 0}))
+
+	require.Equal(t, []string{"cellB"}, applier.cells)
+	c := env.read(ref)
+	peer := c.GetPeerApply()["cellB"]
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, peer.GetOutcome(), "an unknown result must not be recorded as applied")
+	require.Equal(t, int32(1), peer.GetAttemptCount())
+	require.Contains(t, peer.GetLastFailure().GetMessage(), "unknown peer apply result: 999")
+	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_RUNNING, c.GetStatus())
 }
