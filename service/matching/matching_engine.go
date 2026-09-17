@@ -2504,11 +2504,11 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 			// We have wrongly discarded incoming per-type data and should investigate what information was lost.
 			// This is harmful since we might have lost information pertaining to worker-versioning, task queue config
 			// and fairness state.
-			if incomingClock == nil && len(req.GetUserData().GetPerType()) > 0 {
+			if len(req.GetUserData().GetPerType()) > 0 {
 				metrics.TaskQueueUserDataReplicationIncomingPerTypeDataDropped.With(e.metricsHandler).Record(1,
 					metrics.NamespaceTag(ns.Name().String()),
 				)
-				e.logger.Warn("task queue user data replication discarded clockless non-empty per-type data",
+				e.logger.Warn("task queue user data replication discarded non-empty per-type data",
 					tag.WorkflowNamespace(ns.Name().String()),
 					tag.WorkflowNamespaceID(req.GetNamespaceId()),
 					tag.WorkflowTaskQueueName(req.GetTaskQueue()),
