@@ -27,6 +27,93 @@ import (
 // identical decision. forceReplicate lives inside the gate (ahead of every other
 // rule except DELETED) so no caller can bypass the DELETED short-circuit.
 func TestShouldReplicateNamespace(t *testing.T) {
+	testCases := []struct {
+		name               string
+		forceReplicate     bool
+		isGlobal           bool
+		clusters           []string
+		clusterListChanged bool
+		state              enumspb.NamespaceState
+		want               bool
+	}{
+		{
+			name:     "local namespace never replicates",
+			isGlobal: false,
+			clusters: []string{"a", "b"},
+			state:    enumspb.NAMESPACE_STATE_REGISTERED,
+			want:     false,
+		},
+		{
+			name:           "forceReplicate replicates non-global single cluster",
+			forceReplicate: true,
+			isGlobal:       false,
+			clusters:       []string{"a"},
+			state:          enumspb.NAMESPACE_STATE_REGISTERED,
+			want:           true,
+		},
+		{
+			name:           "forceReplicate never replicates DELETED",
+			forceReplicate: true,
+			isGlobal:       true,
+			clusters:       []string{"a", "b"},
+			state:          enumspb.NAMESPACE_STATE_DELETED,
+			want:           false,
+		},
+		{
+			name:     "global single cluster, no list change",
+			isGlobal: true,
+			clusters: []string{"a"},
+			state:    enumspb.NAMESPACE_STATE_REGISTERED,
+			want:     false,
+		},
+		{
+			name:               "global single cluster, list changed",
+			isGlobal:           true,
+			clusters:           []string{"a"},
+			clusterListChanged: true,
+			state:              enumspb.NAMESPACE_STATE_REGISTERED,
+			want:               true,
+		},
+		{
+			name:     "global multi cluster, registered",
+			isGlobal: true,
+			clusters: []string{"a", "b"},
+			state:    enumspb.NAMESPACE_STATE_REGISTERED,
+			want:     true,
+		},
+		{
+			name:     "global multi cluster, deprecated",
+			isGlobal: true,
+			clusters: []string{"a", "b"},
+			state:    enumspb.NAMESPACE_STATE_DEPRECATED,
+			want:     true,
+		},
+		{
+			name:     "global multi cluster, DELETED is never replicated",
+			isGlobal: true,
+			clusters: []string{"a", "b"},
+			state:    enumspb.NAMESPACE_STATE_DELETED,
+			want:     false,
+		},
+		{
+			name:               "DELETED not replicated even when list changed",
+			isGlobal:           true,
+			clusters:           []string{"a", "b"},
+			clusterListChanged: true,
+			state:              enumspb.NAMESPACE_STATE_DELETED,
+			want:               false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ShouldReplicateNamespace(tc.forceReplicate, tc.isGlobal, tc.clusters, tc.clusterListChanged, tc.state)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestShouldReplicateNamespace_AllCombinations(t *testing.T) {
 	states := enumspb.NamespaceState(0).Descriptor().Values()
 	for _, forceReplicate := range []bool{false, true} {
 		for _, isGlobal := range []bool{false, true} {
