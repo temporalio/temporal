@@ -1568,6 +1568,10 @@ var (
 		"task_queue_user_data_replication_apply_end_to_end_latency",
 		WithDescription("Latency from source publication to a terminal task queue user data replication apply outcome."),
 	)
+	TaskQueueUserDataReplicationPerTypeDataDropped = NewCounterDef(
+		"task_queue_user_data_replication_per_type_data_dropped",
+		WithDescription("The number of task queue user data replication merges that discarded non-empty per-type data."),
+	)
 	ParentClosePolicyProcessorSuccess       = NewCounterDef("parent_close_policy_processor_requests")
 	ParentClosePolicyProcessorFailures      = NewCounterDef("parent_close_policy_processor_errors")
 	SignalExternalWorkflowExecutionFailures = NewCounterDef(
