@@ -2490,12 +2490,10 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 		// take last writer for V2 rules and V3 data
 		currentClock := current.GetClock()
 		incomingClock := req.GetUserData().GetClock()
-		discardedUserData := &persistencespb.TaskQueueUserData{}
 		// Replication can persist user data without its clock, since we are wrongly setting the clock to nil while merging (to be fixed).
 		// Let incoming data win while the current data is clockless so it is not discarded during another replication. Future merge logic will resolve
 		// conflicts between all combinations of incoming and current data instead of relying on this compatibility fallback.
 		if currentClock != nil && (incomingClock == nil || hlc.Greater(currentClock, incomingClock)) {
-			discardedUserData = req.GetUserData()
 			if mergedData != nil {
 				// v2 rules
 				mergedData.AssignmentRules = currentVersioningData.GetAssignmentRules()
@@ -2506,19 +2504,16 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 			// We have wrongly discarded incoming per-type data and should investigate what information was lost.
 			// This is harmful since we might have lost information pertaining to worker-versioning, task queue config
 			// and fairness state.
-			if len(discardedUserData.GetPerType()) > 0 {
+			if len(req.GetUserData().GetPerType()) > 0 {
 				metrics.TaskQueueUserDataReplicationIncomingPerTypeDataDropped.With(e.metricsHandler).Record(1,
 					metrics.NamespaceTag(ns.Name().String()),
-					metrics.StringTag("discarded_side", "incoming"),
 				)
 				e.logger.Warn("task queue user data replication discarded clockless non-empty per-type data",
 					tag.WorkflowNamespace(ns.Name().String()),
 					tag.WorkflowNamespaceID(req.GetNamespaceId()),
 					tag.WorkflowTaskQueueName(req.GetTaskQueue()),
-					tag.String("discarded-side", "incoming"),
 					tag.NewAnyTag("current-clock", currentClock),
 					tag.NewAnyTag("incoming-clock", incomingClock),
-					tag.NewAnyTag("discarded-per-type-data", discardedUserData.GetPerType()),
 				)
 			}
 		} else {
