@@ -553,14 +553,14 @@ func (a *activities) adjustQueryAdminBatchType(adminReq *adminservice.StartAdmin
 	return adminReq.GetVisibilityQuery()
 }
 
-// getOperationRPS returns the desired rate of batch operation.
-// min(requestedRPS if present, configured RPS)
+// getOperationRPS returns the rate for a batch operation.
+// It is the requested RPS (if set), capped by the configured RPS.
 func (a *activities) getOperationRPS(requestedRPS float64) float64 {
 	maxRPS := float64(a.rps(a.namespace.String()))
-	if requestedRPS <= 0 || requestedRPS > maxRPS {
+	if requestedRPS <= 0 {
 		return maxRPS
 	}
-	return requestedRPS
+	return min(requestedRPS, maxRPS)
 }
 
 func (a *activities) getOperationConcurrency(concurrency int) int {

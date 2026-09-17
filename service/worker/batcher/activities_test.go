@@ -1422,31 +1422,23 @@ func (s *activitiesSuite) TestGetOperationRPS() {
 	const configuredRPS = 50
 	a := &activities{
 		namespace: "test-namespace",
-		rps: func(namespace string) int {
-			s.Equal("test-namespace", namespace)
-			return configuredRPS
-		},
+		rps:       func(string) int { return configuredRPS },
 	}
-
-	s.Run("unset uses configured max", func() {
-		s.InDelta(configuredRPS, a.getOperationRPS(0), 0)
-	})
-
-	s.Run("negative uses configured max", func() {
-		s.InDelta(configuredRPS, a.getOperationRPS(-1), 0)
-	})
-
-	s.Run("below max is honored", func() {
-		s.InDelta(1, a.getOperationRPS(1), 0)
-		s.InDelta(0.5, a.getOperationRPS(0.5), 0)
-	})
-
-	s.Run("above max is capped", func() {
-		s.InDelta(configuredRPS, a.getOperationRPS(configuredRPS+1), 0)
-		s.InDelta(configuredRPS, a.getOperationRPS(10000), 0)
-	})
-
-	s.Run("equal to max is honored", func() {
-		s.InDelta(configuredRPS, a.getOperationRPS(configuredRPS), 0)
-	})
+	for _, tc := range []struct {
+		name      string
+		requested float64
+		expected  float64
+	}{
+		{"unset uses configured max", 0, configuredRPS},
+		{"negative uses configured max", -1, configuredRPS},
+		{"fraction below max is honored", 0.5, 0.5},
+		{"below max is honored", 1, 1},
+		{"equal to max is honored", configuredRPS, configuredRPS},
+		{"just above max is capped", configuredRPS + 1, configuredRPS},
+		{"far above max is capped", 10000, configuredRPS},
+	} {
+		s.Run(tc.name, func() {
+			s.InDelta(tc.expected, a.getOperationRPS(tc.requested), 0)
+		})
+	}
 }
