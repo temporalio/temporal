@@ -47,6 +47,7 @@ func (l *TestLibrary) Components() []*RegistrableComponent {
 			testComponentName,
 			WithBusinessIDAlias("TestBusinessId"),
 			WithSearchAttributes(TestComponentStartTimeSearchAttribute),
+			WithTaskCountMetric(),
 		),
 		NewRegistrableComponent[*TestSubComponent1](testSubComponent1Name),
 		NewRegistrableComponent[*TestSubComponent11](testSubComponent11Name),
