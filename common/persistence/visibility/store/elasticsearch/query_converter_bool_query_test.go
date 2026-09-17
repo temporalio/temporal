@@ -164,7 +164,7 @@ func TestBoolQuery_Source(t *testing.T) {
 		},
 		{
 			name: "single range query in filter clauses",
-			in:   newBoolQuery().Filter(&rangeQuery{Field: "Int01", Gte: int64(1)}),
+			in:   newBoolQuery().Filter(&rangeQuery{field: "Int01", lower: incl(int64(1))}),
 			out: `{"bool":{"filter":{
 				"range":{"Int01":{"gte":1}}
 			}}}`,
@@ -172,8 +172,8 @@ func TestBoolQuery_Source(t *testing.T) {
 		{
 			name: "range queries on same field are merged",
 			in: newBoolQuery().Filter(
-				&rangeQuery{Field: "Int01", Gte: int64(1)},
-				&rangeQuery{Field: "Int01", Lte: int64(10)},
+				&rangeQuery{field: "Int01", lower: incl(int64(1))},
+				&rangeQuery{field: "Int01", upper: incl(int64(10))},
 			),
 			out: `{"bool":{"filter":{
 				"range":{"Int01":{"gte":1,"lte":10}}
@@ -182,33 +182,46 @@ func TestBoolQuery_Source(t *testing.T) {
 		{
 			name: "range queries on same field are merged keeping the most restrictive bounds",
 			in: newBoolQuery().Filter(
-				&rangeQuery{Field: "Int01", Gte: int64(1), Lte: int64(10)},
-				&rangeQuery{Field: "Int01", Gte: int64(2), Lte: int64(20)},
-				&rangeQuery{Field: "Int01", Gte: int64(0), Lte: int64(5)},
+				&rangeQuery{field: "Int01", lower: incl(int64(1)), upper: incl(int64(10))},
+				&rangeQuery{field: "Int01", lower: incl(int64(2)), upper: incl(int64(20))},
+				&rangeQuery{field: "Int01", lower: incl(int64(0)), upper: incl(int64(5))},
 			),
 			out: `{"bool":{"filter":{
 				"range":{"Int01":{"gte":2,"lte":5}}
 			}}}`,
 		},
 		{
-			name: "non range queries keep their relative order and come first",
+			name: "range queries on distinct fields are merged independently",
+			in: newBoolQuery().Filter(
+				&rangeQuery{field: "Int01", lower: incl(int64(1))},
+				&rangeQuery{field: "Int02", lower: incl(int64(2))},
+				&rangeQuery{field: "Int01", upper: incl(int64(10))},
+				&rangeQuery{field: "Int02", upper: incl(int64(20))},
+			),
+			out: `{"bool":{"filter":[
+				{"range":{"Int01":{"gte":1,"lte":10}}},
+				{"range":{"Int02":{"gte":2,"lte":20}}}
+			]}}`,
+		},
+		{
+			name: "clauses keep their relative order and merged range queries stay in place",
 			in: newBoolQuery().Filter(
 				termFoo,
-				&rangeQuery{Field: "Int01", Gte: int64(1)},
+				&rangeQuery{field: "Int01", lower: incl(int64(1))},
 				termBar,
-				&rangeQuery{Field: "Int01", Lte: int64(10)},
+				&rangeQuery{field: "Int01", upper: incl(int64(10))},
 			),
 			out: `{"bool":{"filter":[
 				{"term":{"Keyword01":"foo"}},
-				{"term":{"Keyword01":"bar"}},
-				{"range":{"Int01":{"gte":1,"lte":10}}}
+				{"range":{"Int01":{"gte":1,"lte":10}}},
+				{"term":{"Keyword01":"bar"}}
 			]}}`,
 		},
 		{
 			name: "unmergeable range queries are left as is",
 			in: newBoolQuery().Filter(
-				&rangeQuery{Field: "Int01", Gte: int64(1)},
-				&rangeQuery{Field: "Int01", Gte: "foo"},
+				&rangeQuery{field: "Int01", lower: incl(int64(1))},
+				&rangeQuery{field: "Int01", lower: incl("foo")},
 			),
 			out: `{"bool":{"filter":[
 				{"range":{"Int01":{"gte":1}}},
@@ -219,12 +232,12 @@ func TestBoolQuery_Source(t *testing.T) {
 			name: "range queries in must not and should clauses are not merged",
 			in: newBoolQuery().
 				MustNot(
-					&rangeQuery{Field: "Int01", Gte: int64(1)},
-					&rangeQuery{Field: "Int01", Lte: int64(10)},
+					&rangeQuery{field: "Int01", lower: incl(int64(1))},
+					&rangeQuery{field: "Int01", upper: incl(int64(10))},
 				).
 				Should(
-					&rangeQuery{Field: "Int02", Gte: int64(1)},
-					&rangeQuery{Field: "Int02", Lte: int64(10)},
+					&rangeQuery{field: "Int02", lower: incl(int64(1))},
+					&rangeQuery{field: "Int02", upper: incl(int64(10))},
 				),
 			out: `{"bool":{
 				"must_not":[
@@ -251,41 +264,23 @@ func TestBoolQuery_Source(t *testing.T) {
 	}
 }
 
-func TestBoolQuery_SourceMergesRangeQueriesOnDistinctFields(t *testing.T) {
-	// Merged range queries are collected from a map, so their relative order in the filter
-	// clauses is not deterministic when there's more than one field.
+func TestBoolQuery_SourceDoesNotModifyQuery(t *testing.T) {
+	// Source merges the range queries into a new slice, so the query itself is left untouched
+	// and calling Source twice returns the same result.
 	r := require.New(t)
-	q := newBoolQuery().Filter(
-		&rangeQuery{Field: "Int01", Gte: int64(1)},
-		&rangeQuery{Field: "Int02", Gte: int64(2)},
-		&rangeQuery{Field: "Int01", Lte: int64(10)},
-		&rangeQuery{Field: "Int02", Lte: int64(20)},
-	)
-	src, err := q.Source()
-	r.NoError(err)
-
-	//nolint:forcetypeassert // fail loudly if the source isn't the expected shape
-	clauses := src.(map[string]any)["bool"].(map[string]any)["filter"].([]any)
-	expectedInt01, err := (&rangeQuery{Field: "Int01", Gte: int64(1), Lte: int64(10)}).Source()
-	r.NoError(err)
-	expectedInt02, err := (&rangeQuery{Field: "Int02", Gte: int64(2), Lte: int64(20)}).Source()
-	r.NoError(err)
-	r.ElementsMatch([]any{expectedInt01, expectedInt02}, clauses)
-}
-
-func TestBoolQuery_SourceIsIdempotent(t *testing.T) {
-	// Source merges the range queries in place, so calling it twice must not change the result.
-	r := require.New(t)
-	q := newBoolQuery().Filter(
-		elastic.NewTermQuery("Keyword01", "foo"),
-		&rangeQuery{Field: "Int01", Gte: int64(1)},
-		&rangeQuery{Field: "Int01", Lte: int64(10)},
-	)
+	termFoo := elastic.NewTermQuery("Keyword01", "foo")
+	rq1 := &rangeQuery{field: "Int01", lower: incl(int64(1))}
+	rq2 := &rangeQuery{field: "Int01", upper: incl(int64(10))}
+	q := newBoolQuery().Filter(termFoo, rq1, rq2)
 
 	src1, err := q.Source()
 	r.NoError(err)
 	b1, err := json.Marshal(src1)
 	r.NoError(err)
+
+	r.Equal([]elastic.Query{termFoo, rq1, rq2}, q.filterClauses)
+	r.Equal(&rangeQuery{field: "Int01", lower: incl(int64(1))}, rq1)
+	r.Equal(&rangeQuery{field: "Int01", upper: incl(int64(10))}, rq2)
 
 	src2, err := q.Source()
 	r.NoError(err)
@@ -328,7 +323,7 @@ func TestBoolQuery_SourceError(t *testing.T) {
 	}
 }
 
-func TestBoolQuery_MergeRangeQueries(t *testing.T) {
+func TestBoolQuery_MergeFilterClauses(t *testing.T) {
 	termFoo := elastic.NewTermQuery("Keyword01", "foo")
 	termBar := elastic.NewTermQuery("Keyword01", "bar")
 
@@ -349,64 +344,81 @@ func TestBoolQuery_MergeRangeQueries(t *testing.T) {
 		},
 		{
 			name: "single range query",
-			in:   []elastic.Query{&rangeQuery{Field: "Int01", Gte: int64(1)}},
-			out:  []elastic.Query{&rangeQuery{Field: "Int01", Gte: int64(1)}},
+			in:   []elastic.Query{&rangeQuery{field: "Int01", lower: incl(int64(1))}},
+			out:  []elastic.Query{&rangeQuery{field: "Int01", lower: incl(int64(1))}},
 		},
 		{
 			name: "range queries on same field",
 			in: []elastic.Query{
-				&rangeQuery{Field: "Int01", Gt: int64(1)},
-				&rangeQuery{Field: "Int01", Lt: int64(10)},
+				&rangeQuery{field: "Int01", lower: excl(int64(1))},
+				&rangeQuery{field: "Int01", upper: excl(int64(10))},
 			},
-			out: []elastic.Query{&rangeQuery{Field: "Int01", Gt: int64(1), Lt: int64(10)}},
+			out: []elastic.Query{
+				&rangeQuery{field: "Int01", lower: excl(int64(1)), upper: excl(int64(10))},
+			},
 		},
 		{
 			name: "range queries on distinct fields",
 			in: []elastic.Query{
-				&rangeQuery{Field: "Int01", Gte: int64(1)},
-				&rangeQuery{Field: "Int02", Gte: int64(2)},
+				&rangeQuery{field: "Int01", lower: incl(int64(1))},
+				&rangeQuery{field: "Int02", lower: incl(int64(2))},
 			},
 			out: []elastic.Query{
-				&rangeQuery{Field: "Int01", Gte: int64(1)},
-				&rangeQuery{Field: "Int02", Gte: int64(2)},
+				&rangeQuery{field: "Int01", lower: incl(int64(1))},
+				&rangeQuery{field: "Int02", lower: incl(int64(2))},
 			},
 		},
 		{
-			name: "mixed range and non range queries",
+			name: "range queries on distinct fields interleaved with each other",
 			in: []elastic.Query{
-				&rangeQuery{Field: "Int01", Gte: int64(1)},
-				termFoo,
-				&rangeQuery{Field: "Int01", Lte: int64(10)},
+				&rangeQuery{field: "Int01", lower: incl(int64(1))},
+				&rangeQuery{field: "Int02", lower: incl(int64(2))},
+				&rangeQuery{field: "Int01", upper: incl(int64(10))},
+				&rangeQuery{field: "Int02", upper: incl(int64(20))},
 			},
 			out: []elastic.Query{
+				&rangeQuery{field: "Int01", lower: incl(int64(1)), upper: incl(int64(10))},
+				&rangeQuery{field: "Int02", lower: incl(int64(2)), upper: incl(int64(20))},
+			},
+		},
+		{
+			name: "mixed range and non range queries keep their relative order",
+			in: []elastic.Query{
+				&rangeQuery{field: "Int01", lower: incl(int64(1))},
 				termFoo,
-				&rangeQuery{Field: "Int01", Gte: int64(1), Lte: int64(10)},
+				&rangeQuery{field: "Int01", upper: incl(int64(10))},
+				termBar,
+			},
+			out: []elastic.Query{
+				&rangeQuery{field: "Int01", lower: incl(int64(1)), upper: incl(int64(10))},
+				termFoo,
+				termBar,
 			},
 		},
 		{
 			name: "unmergeable range queries abort the merge",
 			in: []elastic.Query{
-				&rangeQuery{Field: "Int01", Gte: int64(1)},
-				&rangeQuery{Field: "Int01", Gte: "foo"},
+				&rangeQuery{field: "Int01", lower: incl(int64(1))},
+				&rangeQuery{field: "Int01", lower: incl("foo")},
 			},
 			out: []elastic.Query{
-				&rangeQuery{Field: "Int01", Gte: int64(1)},
-				&rangeQuery{Field: "Int01", Gte: "foo"},
+				&rangeQuery{field: "Int01", lower: incl(int64(1))},
+				&rangeQuery{field: "Int01", lower: incl("foo")},
 			},
 		},
 		{
 			name: "unmergeable range queries abort the merge on other fields too",
 			in: []elastic.Query{
-				&rangeQuery{Field: "Int02", Gte: int64(1)},
-				&rangeQuery{Field: "Int02", Lte: int64(10)},
-				&rangeQuery{Field: "Int01", Gte: int64(1)},
-				&rangeQuery{Field: "Int01", Gte: "foo"},
+				&rangeQuery{field: "Int02", lower: incl(int64(1))},
+				&rangeQuery{field: "Int02", upper: incl(int64(10))},
+				&rangeQuery{field: "Int01", lower: incl(int64(1))},
+				&rangeQuery{field: "Int01", lower: incl("foo")},
 			},
 			out: []elastic.Query{
-				&rangeQuery{Field: "Int02", Gte: int64(1)},
-				&rangeQuery{Field: "Int02", Lte: int64(10)},
-				&rangeQuery{Field: "Int01", Gte: int64(1)},
-				&rangeQuery{Field: "Int01", Gte: "foo"},
+				&rangeQuery{field: "Int02", lower: incl(int64(1))},
+				&rangeQuery{field: "Int02", upper: incl(int64(10))},
+				&rangeQuery{field: "Int01", lower: incl(int64(1))},
+				&rangeQuery{field: "Int01", lower: incl("foo")},
 			},
 		},
 	}
@@ -415,20 +427,19 @@ func TestBoolQuery_MergeRangeQueries(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 			q := newBoolQuery().Filter(tc.in...)
-			q.mergeRangeQueries()
-			// Merged range queries are collected from a map, thus the order of the resulting
-			// clauses is not deterministic when there's more than one field.
-			r.ElementsMatch(tc.out, q.filterClauses)
+			r.Equal(tc.out, q.mergeFilterClauses())
+			// Clauses are merged into a new slice, leaving the query untouched.
+			r.Equal(tc.in, q.filterClauses)
 		})
 	}
 }
 
-func TestBoolQuery_MergeRangeQueriesOnlyTouchesFilterClauses(t *testing.T) {
+func TestBoolQuery_MergeFilterClausesOnlyReadsFilterClauses(t *testing.T) {
 	r := require.New(t)
-	rq1 := &rangeQuery{Field: "Int01", Gte: int64(1)}
-	rq2 := &rangeQuery{Field: "Int01", Lte: int64(10)}
+	rq1 := &rangeQuery{field: "Int01", lower: incl(int64(1))}
+	rq2 := &rangeQuery{field: "Int01", upper: incl(int64(10))}
 	q := newBoolQuery().MustNot(rq1, rq2).Should(rq1, rq2)
-	q.mergeRangeQueries()
+	r.Empty(q.mergeFilterClauses())
 	r.Equal([]elastic.Query{rq1, rq2}, q.mustNotClauses)
 	r.Equal([]elastic.Query{rq1, rq2}, q.shouldClauses)
 	r.Empty(q.filterClauses)

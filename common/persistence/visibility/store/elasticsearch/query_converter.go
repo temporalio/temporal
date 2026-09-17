@@ -106,14 +106,22 @@ func (c *esQueryConverter) ConvertComparisonExpr(
 	negate := false
 	colName := col.FieldName
 	switch operator {
-	case sqlparser.GreaterEqualStr:
-		res = &rangeQuery{Field: colName, Gte: value}
-	case sqlparser.LessEqualStr:
-		res = &rangeQuery{Field: colName, Lte: value}
-	case sqlparser.GreaterThanStr:
-		res = &rangeQuery{Field: colName, Gt: value}
-	case sqlparser.LessThanStr:
-		res = &rangeQuery{Field: colName, Lt: value}
+	case sqlparser.GreaterEqualStr, sqlparser.GreaterThanStr:
+		res = &rangeQuery{
+			field: colName,
+			lower: &rangeQueryBound{
+				value:     value,
+				inclusive: operator == sqlparser.GreaterEqualStr,
+			},
+		}
+	case sqlparser.LessEqualStr, sqlparser.LessThanStr:
+		res = &rangeQuery{
+			field: colName,
+			upper: &rangeQueryBound{
+				value:     value,
+				inclusive: operator == sqlparser.LessEqualStr,
+			},
+		}
 	case sqlparser.EqualStr, sqlparser.NotEqualStr:
 		res = elastic.NewTermQuery(colName, value)
 		negate = operator == sqlparser.NotEqualStr
@@ -186,11 +194,16 @@ func (c *esQueryConverter) ConvertRangeExpr(
 	from, to any,
 ) (elastic.Query, error) {
 	colName := col.FieldName
+	rq := &rangeQuery{
+		field: colName,
+		lower: &rangeQueryBound{value: from, inclusive: true},
+		upper: &rangeQueryBound{value: to, inclusive: true},
+	}
 	switch operator {
 	case sqlparser.BetweenStr:
-		return &rangeQuery{Field: colName, Gte: from, Lte: to}, nil
+		return rq, nil
 	case sqlparser.NotBetweenStr:
-		return newBoolQuery().MustNot(&rangeQuery{Field: colName, Gte: from, Lte: to}), nil
+		return newBoolQuery().MustNot(rq), nil
 	default:
 		// This should be impossible since the query parser only calls this function with one of those
 		// operators strings.

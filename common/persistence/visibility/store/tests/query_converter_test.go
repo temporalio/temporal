@@ -1078,19 +1078,41 @@ var queryConverterTestCases = []queryConverterTestCase{
 		es: `{"bool":{"filter":{"range":{"StartTime":{"gt":"2020-01-01T00:00:00Z","lt":"2020-02-01T00:00:00Z"}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
+		// Datetime bounds reach the merge as RFC3339Nano strings, and RFC3339Nano is variable
+		// width: it drops trailing zeros from the fractional seconds, and the whole fractional
+		// part when it is zero. So these two bounds first differ at 'Z' (0x5A) against '.'
+		// (0x2E), which puts the earlier instant later in byte order. The merge has to keep
+		// the later instant anyway, otherwise it would match workflows the query excludes.
+		name: "merge datetime range conditions differing only in sub-second precision",
+		in: "StartTime >= '2026-01-01T00:00:00Z' " +
+			"AND StartTime >= '2026-01-01T00:00:00.000000001Z'",
+		// The SQL converters don't merge range conditions, and they format datetime values
+		// with microsecond precision, so the 1ns difference between the bounds is truncated
+		// away and both come out identical.
+		sql: "TemporalNamespaceDivision is null and " +
+			"(start_time >= '2026-01-01 00:00:00' and start_time >= '2026-01-01 00:00:00')",
+		sqlite: "TemporalNamespaceDivision is null and " +
+			"(start_time >= '2026-01-01 00:00:00+00:00' and " +
+			"start_time >= '2026-01-01 00:00:00+00:00')",
+		es: `{"bool":{"filter":{"range":{"StartTime":{"gte":"2026-01-01T00:00:00.000000001Z"}}},` +
+			`"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
 		name: "merge execution duration range conditions",
 		in:   "ExecutionDuration > '1s' AND ExecutionDuration < '1m'",
 		sql:  "TemporalNamespaceDivision is null and (execution_duration > 1000000000 and execution_duration < 60000000000)",
 		es:   `{"bool":{"filter":{"range":{"ExecutionDuration":{"gt":1000000000,"lt":60000000000}}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
-		// Non-range conditions keep their relative order, and the merged range conditions
-		// are appended after them.
-		name: "merged range condition comes after non range conditions",
-		in:   "HistoryLength > 1 AND WorkflowId = 'wid'",
-		sql:  "TemporalNamespaceDivision is null and (history_length > 1 and workflow_id = 'wid')",
+		// Conditions keep their relative order, and the merged range condition takes the
+		// position of the first range condition on that field.
+		name: "merged range condition keeps its position among non range conditions",
+		in:   "WorkflowId = 'wid' AND HistoryLength > 1 AND RunId = 'rid'",
+		sql: "TemporalNamespaceDivision is null and " +
+			"((workflow_id = 'wid' and history_length > 1) and run_id = 'rid')",
 		es: `{"bool":{"filter":[{"term":{"WorkflowId":"wid"}},` +
-			`{"range":{"HistoryLength":{"gt":1}}}],` +
+			`{"range":{"HistoryLength":{"gt":1}}},` +
+			`{"term":{"RunId":"rid"}}],` +
 			`"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
@@ -1100,8 +1122,21 @@ var queryConverterTestCases = []queryConverterTestCase{
 		in:   "HistoryLength > 1 AND (HistoryLength < 10 AND WorkflowId = 'wid')",
 		sql: "TemporalNamespaceDivision is null and " +
 			"(history_length > 1 and (history_length < 10 and workflow_id = 'wid'))",
-		es: `{"bool":{"filter":[{"term":{"WorkflowId":"wid"}},` +
-			`{"range":{"HistoryLength":{"gt":1,"lt":10}}}],` +
+		es: `{"bool":{"filter":[{"range":{"HistoryLength":{"gt":1,"lt":10}}},` +
+			`{"term":{"WorkflowId":"wid"}}],` +
+			`"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		// Range conditions on distinct fields are merged independently, each one keeping
+		// the position of the first range condition on its field.
+		name: "merge range conditions on distinct fields",
+		in: "HistoryLength > 1 AND StateTransitionCount < 10 " +
+			"AND HistoryLength < 20 AND StateTransitionCount > 2",
+		sql: "TemporalNamespaceDivision is null and " +
+			"(((history_length > 1 and state_transition_count < 10) and " +
+			"history_length < 20) and state_transition_count > 2)",
+		es: `{"bool":{"filter":[{"range":{"HistoryLength":{"gt":1,"lt":20}}},` +
+			`{"range":{"StateTransitionCount":{"gt":2,"lt":10}}}],` +
 			`"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
@@ -1408,67 +1443,6 @@ func TestElasticsearchQueryConverter(t *testing.T) {
 		esStore,
 		newESQueryConverter,
 		serializeESQuery,
-	)
-}
-
-// Range conditions on distinct fields can't be part of the table driven test
-// above because the merged range queries are collected from a map, thus the
-// order they appear in the filter clause is not deterministic.
-func TestElasticsearchQueryConverter_MergeRangeQueriesOnDistinctFields(t *testing.T) {
-	t.Parallel()
-	r := require.New(t)
-
-	queryParams, err := newESQueryConverter().Convert(
-		"HistoryLength > 1 AND StateTransitionCount < 10 " +
-			"AND HistoryLength < 20 AND StateTransitionCount > 2",
-	)
-	r.NoError(err)
-	out, err := serializeESQuery(queryParams.QueryExpr)
-	r.NoError(err)
-
-	var got map[string]any
-	r.NoError(json.Unmarshal([]byte(out), &got))
-	boolClause := got["bool"].(map[string]any)
-
-	expectedFilter := make([]any, 0, 2)
-	for _, q := range []string{
-		`{"range":{"HistoryLength":{"gt":1,"lt":20}}}`,
-		`{"range":{"StateTransitionCount":{"gt":2,"lt":10}}}`,
-	} {
-		var expected any
-		r.NoError(json.Unmarshal([]byte(q), &expected))
-		expectedFilter = append(expectedFilter, expected)
-	}
-	r.ElementsMatch(expectedFilter, boolClause["filter"])
-
-	var expectedMustNot any
-	r.NoError(json.Unmarshal(
-		[]byte(`{"exists":{"field":"TemporalNamespaceDivision"}}`),
-		&expectedMustNot,
-	))
-	r.Equal(expectedMustNot, boolClause["must_not"])
-}
-
-// Two lower bounds on the same datetime field, differing only in sub-second precision, have to
-// merge to the later instant. The bounds are RFC3339Nano strings of different widths, so ordering
-// them as byte strings picks the earlier one and silently widens the query: this generates
-// gte '2026-01-01T00:00:00Z', which matches workflows the input query excludes.
-func TestElasticsearchQueryConverter_MergeDatetimeRangeConditions(t *testing.T) {
-	t.Parallel()
-	r := require.New(t)
-
-	queryParams, err := newESQueryConverter().Convert(
-		"StartTime >= '2026-01-01T00:00:00Z' AND StartTime >= '2026-01-01T00:00:00.000000001Z'",
-	)
-	r.NoError(err)
-	out, err := serializeESQuery(queryParams.QueryExpr)
-	r.NoError(err)
-
-	r.JSONEq(
-		`{"bool":{`+
-			`"filter":{"range":{"StartTime":{"gte":"2026-01-01T00:00:00.000000001Z"}}},`+
-			`"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
-		out,
 	)
 }
 

@@ -2,119 +2,108 @@ package elasticsearch
 
 import (
 	"cmp"
+	"time"
 
 	"github.com/olivere/elastic/v7"
 )
 
+type rangeQueryBound struct {
+	value     any
+	inclusive bool
+}
+
 // This is a wrapper for elastic.RangeQuery so we can access the clauses and be able to combine
 // queries and avoid nesting queries when possible.
 type rangeQuery struct {
-	Field string `json:"-"`
-	Gt    any    `json:"gt,omitempty"`
-	Gte   any    `json:"gte,omitempty"`
-	Lt    any    `json:"lt,omitempty"`
-	Lte   any    `json:"lte,omitempty"`
+	field string
+	lower *rangeQueryBound
+	upper *rangeQueryBound
 }
 
 var _ elastic.Query = (*rangeQuery)(nil)
 
 func (q *rangeQuery) Source() (any, error) {
+	rangeMap := make(map[string]any)
+	if q.lower != nil && q.lower.value != nil {
+		if q.lower.inclusive {
+			rangeMap["gte"] = q.lower.value
+		} else {
+			rangeMap["gt"] = q.lower.value
+		}
+	}
+	if q.upper != nil && q.upper.value != nil {
+		if q.upper.inclusive {
+			rangeMap["lte"] = q.upper.value
+		} else {
+			rangeMap["lt"] = q.upper.value
+		}
+	}
 	return map[string]any{
 		"range": map[string]any{
-			q.Field: q,
+			q.field: rangeMap,
 		},
 	}, nil
 }
 
 func mergeRangeQueries(a, b *rangeQuery) (*rangeQuery, bool) {
-	if a.Field != b.Field {
+	if a.field != b.field {
 		return nil, false
-	}
-
-	getGreater := func(s, t any) (any, bool) {
-		return compareAnyAndGet(s, t, func(c int) bool { return c > 0 })
-	}
-	getLesser := func(s, t any) (any, bool) {
-		return compareAnyAndGet(s, t, func(c int) bool { return c < 0 })
 	}
 
 	ret := &rangeQuery{
-		Field: a.Field,
+		field: a.field,
 	}
 
 	var ok bool
-	ret.Gt, ok = getGreater(a.Gt, b.Gt)
+	ret.lower, ok = compareBoundAndGet(a.lower, b.lower, func(c int) bool { return c > 0 })
 	if !ok {
 		return nil, false
 	}
-	ret.Gte, ok = getGreater(a.Gte, b.Gte)
+	ret.upper, ok = compareBoundAndGet(a.upper, b.upper, func(c int) bool { return c < 0 })
 	if !ok {
 		return nil, false
-	}
-	ret.Lt, ok = getLesser(a.Lt, b.Lt)
-	if !ok {
-		return nil, false
-	}
-	ret.Lte, ok = getLesser(a.Lte, b.Lte)
-	if !ok {
-		return nil, false
-	}
-
-	if ret.Gt != nil && ret.Gte != nil {
-		c, ok := compareAny(ret.Gt, ret.Gte)
-		if !ok {
-			return nil, false
-		}
-		if c >= 0 {
-			ret.Gte = nil
-		} else {
-			ret.Gt = nil
-		}
-	}
-
-	if ret.Lt != nil && ret.Lte != nil {
-		c, ok := compareAny(ret.Lt, ret.Lte)
-		if !ok {
-			return nil, false
-		}
-		if c <= 0 {
-			ret.Lte = nil
-		} else {
-			ret.Lt = nil
-		}
 	}
 
 	return ret, true
 }
 
-// compareAnyAndGet compares two any type values.
-// Accepted types are string, int64 and float64.
-// If one of the values is nil, then it returns the other without calling fn.
+// compareBoundAndGet compares two bounds and returns the more restrictive one
+// according to fn.
+// If one of the bounds is nil, then it returns the other without calling fn.
 // Particularly, if both values are nil, then it returns nil, true.
-// Otherwise, it calls compareAny to compare the two values. The int output is
-// used to call fn.
-// If fn returns true, then the function return a. Otherwise, it returns b.
-// The function return nil, false if the values are not comparable.
-func compareAnyAndGet(a, b any, fn func(c int) bool) (any, bool) {
-	if a == nil {
-		return b, true
+// Otherwise, it calls compareAny to compare the values in the bounds.
+// The int output c is the output of cmp.Compare if they are comparable.
+// If c != 0, then call fn. If fn returns true, then the function return s.
+// Otherwise, it returns t.
+// The function returns nil, false if the values are not comparable.
+func compareBoundAndGet(s, t *rangeQueryBound, fn func(c int) bool) (*rangeQueryBound, bool) {
+	if s == nil || s.value == nil {
+		return t, true
 	}
-	if b == nil {
-		return a, true
+	if t == nil || t.value == nil {
+		return s, true
 	}
-	c, ok := compareAny(a, b)
+	c, ok := compareAny(s.value, t.value)
 	if !ok {
 		return nil, false
 	}
-	if fn(c) {
-		return a, true
+	if c == 0 {
+		if s.inclusive {
+			return t, true
+		}
+		return s, true
 	}
-	return b, true
+	if fn(c) {
+		return s, true
+	}
+	return t, true
 }
 
 // compareAny compares two any type values.
 // Accepted types are string, int64 and float64.
 // string type value is only comparable with another string type value.
+// If the string values are datetimes in time.RFC3339Nano format, compare them
+// as time.Time instead of lexicografically.
 // int64 and float64 are comparable between between them and casted as float64
 // when necessary.
 // If the values are not comparable, the function returns 0 and false.
@@ -123,6 +112,9 @@ func compareAny(a, b any) (int, bool) {
 	switch typedA := a.(type) {
 	case string:
 		if typedB, ok := b.(string); ok {
+			if c, ok := compareTime(typedA, typedB); ok {
+				return c, true
+			}
 			return cmp.Compare(typedA, typedB), true
 		}
 	case int64:
@@ -142,4 +134,19 @@ func compareAny(a, b any) (int, bool) {
 	default:
 	}
 	return 0, false
+}
+
+// compareTime compares two times in RFC3339Nano format.
+// If any of the input fails to parse, return 0, false.
+// Otherwise, return the value of time.Time.Compare, true.
+func compareTime(a, b string) (int, bool) {
+	timeA, err := time.Parse(time.RFC3339Nano, a)
+	if err != nil {
+		return 0, false
+	}
+	timeB, err := time.Parse(time.RFC3339Nano, b)
+	if err != nil {
+		return 0, false
+	}
+	return timeA.Compare(timeB), true
 }

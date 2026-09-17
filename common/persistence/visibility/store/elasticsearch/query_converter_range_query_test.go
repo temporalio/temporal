@@ -7,6 +7,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// incl and excl build inclusive and exclusive bounds, keeping the test tables readable.
+func incl(value any) *rangeQueryBound {
+	return &rangeQueryBound{value: value, inclusive: true}
+}
+
+func excl(value any) *rangeQueryBound {
+	return &rangeQueryBound{value: value, inclusive: false}
+}
+
 func TestRangeQuery_Source(t *testing.T) {
 	testCases := []struct {
 		name string
@@ -15,42 +24,60 @@ func TestRangeQuery_Source(t *testing.T) {
 	}{
 		{
 			name: "no bounds",
-			in:   &rangeQuery{Field: "Keyword01"},
+			in:   &rangeQuery{field: "Keyword01"},
 			out:  `{"range":{"Keyword01":{}}}`,
 		},
 		{
-			name: "gte only",
-			in:   &rangeQuery{Field: "Keyword01", Gte: "foo"},
+			name: "inclusive lower bound only",
+			in:   &rangeQuery{field: "Keyword01", lower: incl("foo")},
 			out:  `{"range":{"Keyword01":{"gte":"foo"}}}`,
 		},
 		{
-			name: "gt and lt",
-			in:   &rangeQuery{Field: "Int01", Gt: int64(1), Lt: int64(10)},
+			name: "exclusive lower bound only",
+			in:   &rangeQuery{field: "Keyword01", lower: excl("foo")},
+			out:  `{"range":{"Keyword01":{"gt":"foo"}}}`,
+		},
+		{
+			name: "inclusive upper bound only",
+			in:   &rangeQuery{field: "Keyword01", upper: incl("foo")},
+			out:  `{"range":{"Keyword01":{"lte":"foo"}}}`,
+		},
+		{
+			name: "exclusive upper bound only",
+			in:   &rangeQuery{field: "Keyword01", upper: excl("foo")},
+			out:  `{"range":{"Keyword01":{"lt":"foo"}}}`,
+		},
+		{
+			name: "inclusive bounds",
+			in:   &rangeQuery{field: "Int01", lower: incl(int64(1)), upper: incl(int64(10))},
+			out:  `{"range":{"Int01":{"gte":1,"lte":10}}}`,
+		},
+		{
+			name: "exclusive bounds",
+			in:   &rangeQuery{field: "Int01", lower: excl(int64(1)), upper: excl(int64(10))},
 			out:  `{"range":{"Int01":{"gt":1,"lt":10}}}`,
 		},
 		{
-			name: "all bounds",
-			in: &rangeQuery{
-				Field: "Double01",
-				Gt:    1.5,
-				Gte:   2.5,
-				Lt:    10.5,
-				Lte:   20.5,
-			},
-			out: `{"range":{"Double01":{"gt":1.5,"gte":2.5,"lt":10.5,"lte":20.5}}}`,
+			name: "mixed inclusive and exclusive bounds",
+			in:   &rangeQuery{field: "Double01", lower: excl(1.5), upper: incl(20.5)},
+			out:  `{"range":{"Double01":{"gt":1.5,"lte":20.5}}}`,
 		},
 		{
-			// The `omitempty` tags only omit nil bounds: zero values are still valid bounds
-			// and must be part of the query.
+			// Zero values are still valid bounds and must be part of the query.
 			name: "zero valued bounds are not omitted",
-			in: &rangeQuery{
-				Field: "Int01",
-				Gt:    int64(0),
-				Gte:   0.0,
-				Lt:    "",
-				Lte:   false,
-			},
-			out: `{"range":{"Int01":{"gt":0,"gte":0,"lt":"","lte":false}}}`,
+			in:   &rangeQuery{field: "Int01", lower: excl(int64(0)), upper: incl("")},
+			out:  `{"range":{"Int01":{"gt":0,"lte":""}}}`,
+		},
+		{
+			// A bound holding a nil value is an absent bound, same as a nil bound.
+			name: "bounds with nil value are omitted",
+			in:   &rangeQuery{field: "Int01", lower: incl(nil), upper: excl(nil)},
+			out:  `{"range":{"Int01":{}}}`,
+		},
+		{
+			name: "bound with nil value is omitted next to a bound with a value",
+			in:   &rangeQuery{field: "Int01", lower: incl(int64(1)), upper: incl(nil)},
+			out:  `{"range":{"Int01":{"gte":1}}}`,
 		},
 	}
 
@@ -78,165 +105,197 @@ func TestRangeQuery_MergeRangeQueries(t *testing.T) {
 	}{
 		{
 			name: "different fields",
-			a:    &rangeQuery{Field: "Keyword01", Gt: "foo"},
-			b:    &rangeQuery{Field: "Keyword02", Gt: "foo"},
+			a:    &rangeQuery{field: "Keyword01", lower: excl("foo")},
+			b:    &rangeQuery{field: "Keyword02", lower: excl("foo")},
 			ok:   false,
 		},
 		{
 			name: "both empty",
-			a:    &rangeQuery{Field: "Keyword01"},
-			b:    &rangeQuery{Field: "Keyword01"},
-			out:  &rangeQuery{Field: "Keyword01"},
+			a:    &rangeQuery{field: "Keyword01"},
+			b:    &rangeQuery{field: "Keyword01"},
+			out:  &rangeQuery{field: "Keyword01"},
 			ok:   true,
 		},
 		{
-			name: "disjoint bounds are combined",
-			a:    &rangeQuery{Field: "Int01", Gt: int64(1)},
-			b:    &rangeQuery{Field: "Int01", Lt: int64(10)},
-			out:  &rangeQuery{Field: "Int01", Gt: int64(1), Lt: int64(10)},
+			name: "bounds on opposite sides are combined",
+			a:    &rangeQuery{field: "Int01", lower: excl(int64(1))},
+			b:    &rangeQuery{field: "Int01", upper: excl(int64(10))},
+			out:  &rangeQuery{field: "Int01", lower: excl(int64(1)), upper: excl(int64(10))},
 			ok:   true,
 		},
 		{
-			// Gt and Gte are merged separately (Gt: 5, Gte: 20) and then collapsed into the
-			// most restrictive of the two.
-			name: "lower bounds keep the most restrictive",
-			a:    &rangeQuery{Field: "Int01", Gt: int64(1), Gte: int64(20)},
-			b:    &rangeQuery{Field: "Int01", Gt: int64(5), Gte: int64(10)},
-			out:  &rangeQuery{Field: "Int01", Gte: int64(20)},
+			name: "lower bounds keep the greater value",
+			a:    &rangeQuery{field: "Int01", lower: incl(int64(1))},
+			b:    &rangeQuery{field: "Int01", lower: incl(int64(5))},
+			out:  &rangeQuery{field: "Int01", lower: incl(int64(5))},
 			ok:   true,
 		},
 		{
-			// Lt and Lte are merged separately (Lt: 1, Lte: 10) and then collapsed into the
-			// most restrictive of the two.
-			name: "upper bounds keep the most restrictive",
-			a:    &rangeQuery{Field: "Int01", Lt: int64(1), Lte: int64(20)},
-			b:    &rangeQuery{Field: "Int01", Lt: int64(5), Lte: int64(10)},
-			out:  &rangeQuery{Field: "Int01", Lt: int64(1)},
+			name: "upper bounds keep the lesser value",
+			a:    &rangeQuery{field: "Int01", upper: incl(int64(20))},
+			b:    &rangeQuery{field: "Int01", upper: incl(int64(10))},
+			out:  &rangeQuery{field: "Int01", upper: incl(int64(10))},
 			ok:   true,
 		},
 		{
-			name: "gt is kept over a lower gte",
-			a:    &rangeQuery{Field: "Int01", Gt: int64(10)},
-			b:    &rangeQuery{Field: "Int01", Gte: int64(5)},
-			out:  &rangeQuery{Field: "Int01", Gt: int64(10)},
+			// The value decides first: the greater lower bound wins even when it is the
+			// inclusive one.
+			name: "greater lower bound wins over a lesser exclusive one",
+			a:    &rangeQuery{field: "Int01", lower: excl(int64(1))},
+			b:    &rangeQuery{field: "Int01", lower: incl(int64(5))},
+			out:  &rangeQuery{field: "Int01", lower: incl(int64(5))},
 			ok:   true,
 		},
 		{
-			// Gt is more restrictive than Gte for the same value.
-			name: "gt is kept over an equal gte",
-			a:    &rangeQuery{Field: "Int01", Gt: int64(5)},
-			b:    &rangeQuery{Field: "Int01", Gte: int64(5)},
-			out:  &rangeQuery{Field: "Int01", Gt: int64(5)},
+			name: "lesser upper bound wins over a greater exclusive one",
+			a:    &rangeQuery{field: "Int01", upper: excl(int64(10))},
+			b:    &rangeQuery{field: "Int01", upper: incl(int64(5))},
+			out:  &rangeQuery{field: "Int01", upper: incl(int64(5))},
 			ok:   true,
 		},
 		{
-			name: "gte is kept over a lower gt",
-			a:    &rangeQuery{Field: "Int01", Gt: int64(1)},
-			b:    &rangeQuery{Field: "Int01", Gte: int64(5)},
-			out:  &rangeQuery{Field: "Int01", Gte: int64(5)},
+			// On equal values, the exclusive bound is the more restrictive one.
+			name: "equal lower bounds keep the exclusive one",
+			a:    &rangeQuery{field: "Int01", lower: excl(int64(5))},
+			b:    &rangeQuery{field: "Int01", lower: incl(int64(5))},
+			out:  &rangeQuery{field: "Int01", lower: excl(int64(5))},
 			ok:   true,
 		},
 		{
-			name: "lt is kept over a greater lte",
-			a:    &rangeQuery{Field: "Int01", Lt: int64(1)},
-			b:    &rangeQuery{Field: "Int01", Lte: int64(5)},
-			out:  &rangeQuery{Field: "Int01", Lt: int64(1)},
+			name: "equal lower bounds keep the exclusive one regardless of the argument order",
+			a:    &rangeQuery{field: "Int01", lower: incl(int64(5))},
+			b:    &rangeQuery{field: "Int01", lower: excl(int64(5))},
+			out:  &rangeQuery{field: "Int01", lower: excl(int64(5))},
 			ok:   true,
 		},
 		{
-			// Lt is more restrictive than Lte for the same value.
-			name: "lt is kept over an equal lte",
-			a:    &rangeQuery{Field: "Int01", Lt: int64(5)},
-			b:    &rangeQuery{Field: "Int01", Lte: int64(5)},
-			out:  &rangeQuery{Field: "Int01", Lt: int64(5)},
+			name: "equal upper bounds keep the exclusive one",
+			a:    &rangeQuery{field: "Int01", upper: incl(int64(5))},
+			b:    &rangeQuery{field: "Int01", upper: excl(int64(5))},
+			out:  &rangeQuery{field: "Int01", upper: excl(int64(5))},
 			ok:   true,
-		},
-		{
-			name: "lte is kept over a greater lt",
-			a:    &rangeQuery{Field: "Int01", Lt: int64(10)},
-			b:    &rangeQuery{Field: "Int01", Lte: int64(5)},
-			out:  &rangeQuery{Field: "Int01", Lte: int64(5)},
-			ok:   true,
-		},
-		{
-			name: "lower bounds with mixed int64 and float64 are collapsed",
-			a:    &rangeQuery{Field: "Double01", Gt: int64(5)},
-			b:    &rangeQuery{Field: "Double01", Gte: 5.0},
-			out:  &rangeQuery{Field: "Double01", Gt: int64(5)},
-			ok:   true,
-		},
-		{
-			name: "incompatible gt and gte types",
-			a:    &rangeQuery{Field: "Int01", Gt: int64(1)},
-			b:    &rangeQuery{Field: "Int01", Gte: "foo"},
-			ok:   false,
-		},
-		{
-			name: "incompatible lt and lte types",
-			a:    &rangeQuery{Field: "Int01", Lt: int64(1)},
-			b:    &rangeQuery{Field: "Int01", Lte: "foo"},
-			ok:   false,
 		},
 		{
 			name: "equal bounds",
-			a:    &rangeQuery{Field: "Keyword01", Gte: "foo", Lte: "bar"},
-			b:    &rangeQuery{Field: "Keyword01", Gte: "foo", Lte: "bar"},
-			out:  &rangeQuery{Field: "Keyword01", Gte: "foo", Lte: "bar"},
+			a:    &rangeQuery{field: "Keyword01", lower: incl("bar"), upper: incl("foo")},
+			b:    &rangeQuery{field: "Keyword01", lower: incl("bar"), upper: incl("foo")},
+			out:  &rangeQuery{field: "Keyword01", lower: incl("bar"), upper: incl("foo")},
 			ok:   true,
 		},
 		{
 			name: "string bounds",
-			a:    &rangeQuery{Field: "Keyword01", Gte: "bar", Lte: "foo"},
-			b:    &rangeQuery{Field: "Keyword01", Gte: "baz", Lte: "qux"},
-			out:  &rangeQuery{Field: "Keyword01", Gte: "baz", Lte: "foo"},
+			a:    &rangeQuery{field: "Keyword01", lower: incl("bar"), upper: incl("foo")},
+			b:    &rangeQuery{field: "Keyword01", lower: incl("baz"), upper: incl("qux")},
+			out:  &rangeQuery{field: "Keyword01", lower: incl("baz"), upper: incl("foo")},
 			ok:   true,
 		},
 		{
 			name: "mixed int64 and float64 bounds",
-			a:    &rangeQuery{Field: "Double01", Gte: int64(3), Lte: 10.5},
-			b:    &rangeQuery{Field: "Double01", Gte: 2.5, Lte: int64(20)},
-			out:  &rangeQuery{Field: "Double01", Gte: int64(3), Lte: 10.5},
+			a:    &rangeQuery{field: "Double01", lower: incl(int64(3)), upper: incl(10.5)},
+			b:    &rangeQuery{field: "Double01", lower: incl(2.5), upper: incl(int64(20))},
+			out:  &rangeQuery{field: "Double01", lower: incl(int64(3)), upper: incl(10.5)},
 			ok:   true,
 		},
 		{
-			// Merging with an empty query is still a merge: the redundant bounds of the
-			// non-empty side are collapsed.
+			// int64 and float64 bounds with the same value still fall into the equal values
+			// case, so the exclusive one wins.
+			name: "equal lower bounds with mixed int64 and float64",
+			a:    &rangeQuery{field: "Double01", lower: excl(int64(5))},
+			b:    &rangeQuery{field: "Double01", lower: incl(5.0)},
+			out:  &rangeQuery{field: "Double01", lower: excl(int64(5))},
+			ok:   true,
+		},
+		{
 			name: "empty merged with bounds",
-			a:    &rangeQuery{Field: "Int01"},
-			b:    &rangeQuery{Field: "Int01", Gt: int64(1), Gte: int64(2), Lt: int64(9), Lte: int64(10)},
-			out:  &rangeQuery{Field: "Int01", Gte: int64(2), Lt: int64(9)},
+			a:    &rangeQuery{field: "Int01"},
+			b:    &rangeQuery{field: "Int01", lower: incl(int64(1)), upper: excl(int64(10))},
+			out:  &rangeQuery{field: "Int01", lower: incl(int64(1)), upper: excl(int64(10))},
 			ok:   true,
 		},
 		{
 			name: "bounds merged with empty",
-			a:    &rangeQuery{Field: "Int01", Gt: int64(1), Gte: int64(2), Lt: int64(9), Lte: int64(10)},
-			b:    &rangeQuery{Field: "Int01"},
-			out:  &rangeQuery{Field: "Int01", Gte: int64(2), Lt: int64(9)},
+			a:    &rangeQuery{field: "Int01", lower: incl(int64(1)), upper: excl(int64(10))},
+			b:    &rangeQuery{field: "Int01"},
+			out:  &rangeQuery{field: "Int01", lower: incl(int64(1)), upper: excl(int64(10))},
+			ok:   true,
+		},
+		{
+			// A bound holding a nil value is an absent bound, so the other side survives and
+			// the values are never compared.
+			name: "bounds with nil value are treated as absent",
+			a:    &rangeQuery{field: "Int01", lower: incl(nil), upper: incl(int64(10))},
+			b:    &rangeQuery{field: "Int01", lower: incl(int64(1)), upper: incl(nil)},
+			out:  &rangeQuery{field: "Int01", lower: incl(int64(1)), upper: incl(int64(10))},
 			ok:   true,
 		},
 		{
 			name: "incompatible bound types",
-			a:    &rangeQuery{Field: "Keyword01", Gte: "foo"},
-			b:    &rangeQuery{Field: "Keyword01", Gte: int64(1)},
+			a:    &rangeQuery{field: "Keyword01", lower: incl("foo")},
+			b:    &rangeQuery{field: "Keyword01", lower: incl(int64(1))},
 			ok:   false,
 		},
 		{
 			name: "unsupported bound type",
-			a:    &rangeQuery{Field: "Bool01", Gte: true},
-			b:    &rangeQuery{Field: "Bool01", Gte: false},
+			a:    &rangeQuery{field: "Bool01", lower: incl(true)},
+			b:    &rangeQuery{field: "Bool01", lower: incl(false)},
 			ok:   false,
 		},
 		{
 			name: "int is not a supported bound type",
-			a:    &rangeQuery{Field: "Int01", Gte: 1},
-			b:    &rangeQuery{Field: "Int01", Gte: 2},
+			a:    &rangeQuery{field: "Int01", lower: incl(1)},
+			b:    &rangeQuery{field: "Int01", lower: incl(2)},
 			ok:   false,
 		},
 		{
-			name: "failure on any bound fails the merge",
-			a:    &rangeQuery{Field: "Int01", Gte: int64(1), Lte: int64(10)},
-			b:    &rangeQuery{Field: "Int01", Gte: int64(2), Lte: "foo"},
+			name: "failure on the lower bound fails the merge",
+			a:    &rangeQuery{field: "Int01", lower: incl(int64(1)), upper: incl(int64(10))},
+			b:    &rangeQuery{field: "Int01", lower: incl("foo"), upper: incl(int64(20))},
 			ok:   false,
+		},
+		{
+			name: "failure on the upper bound fails the merge",
+			a:    &rangeQuery{field: "Int01", lower: incl(int64(1)), upper: incl(int64(10))},
+			b:    &rangeQuery{field: "Int01", lower: incl(int64(2)), upper: incl("foo")},
+			ok:   false,
+		},
+		// Datetime bounds reach the merge as RFC3339Nano strings, and RFC3339Nano is variable
+		// width: it drops trailing zeros from the fractional seconds, and the whole fractional
+		// part when it is zero. So "...:00Z" and "...:00.000000001Z" first differ at 'Z' (0x5A)
+		// against '.' (0x2E), which puts the earlier instant later in byte order. Elasticsearch
+		// compares these fields as dates, so the merge has to keep the bound Elasticsearch would
+		// find more restrictive: the later instant for a lower bound, the earlier one for an
+		// upper bound.
+		{
+			// Byte order agrees with time order when the seconds differ, so this case holds
+			// either way. It guards the common path against a fix that only inspects fractions.
+			name: "datetime lower bounds at different seconds keep the later instant",
+			a:    &rangeQuery{field: "StartTime", lower: incl("2026-01-01T00:00:00Z")},
+			b:    &rangeQuery{field: "StartTime", lower: incl("2026-02-01T00:00:00Z")},
+			out:  &rangeQuery{field: "StartTime", lower: incl("2026-02-01T00:00:00Z")},
+			ok:   true,
+		},
+		{
+			name: "datetime lower bounds differing only in sub-second precision keep the later instant",
+			a:    &rangeQuery{field: "StartTime", lower: incl("2026-01-01T00:00:00Z")},
+			b:    &rangeQuery{field: "StartTime", lower: incl("2026-01-01T00:00:00.000000001Z")},
+			out:  &rangeQuery{field: "StartTime", lower: incl("2026-01-01T00:00:00.000000001Z")},
+			ok:   true,
+		},
+		{
+			name: "datetime upper bounds differing only in sub-second precision keep the earlier instant",
+			a:    &rangeQuery{field: "CloseTime", upper: incl("2026-01-01T00:00:00Z")},
+			b:    &rangeQuery{field: "CloseTime", upper: incl("2026-01-01T00:00:00.5Z")},
+			out:  &rangeQuery{field: "CloseTime", upper: incl("2026-01-01T00:00:00Z")},
+			ok:   true,
+		},
+		{
+			// The exclusive bound is the earlier instant here, so the later inclusive bound is
+			// the more restrictive one and has to win despite the byte order.
+			name: "exclusive datetime lower bound loses against a later inclusive bound",
+			a:    &rangeQuery{field: "StartTime", lower: excl("2026-01-01T00:00:00Z")},
+			b:    &rangeQuery{field: "StartTime", lower: incl("2026-01-01T00:00:00.000000001Z")},
+			out:  &rangeQuery{field: "StartTime", lower: incl("2026-01-01T00:00:00.000000001Z")},
+			ok:   true,
 		},
 	}
 
@@ -257,78 +316,25 @@ func TestRangeQuery_MergeRangeQueries(t *testing.T) {
 
 func TestRangeQuery_MergeRangeQueriesDoesNotMutateInputs(t *testing.T) {
 	r := require.New(t)
-	a := &rangeQuery{Field: "Int01", Gte: int64(1), Lte: int64(10)}
-	b := &rangeQuery{Field: "Int01", Gte: int64(2), Lte: int64(20)}
+	a := &rangeQuery{field: "Int01", lower: incl(int64(1)), upper: incl(int64(10))}
+	b := &rangeQuery{field: "Int01", lower: incl(int64(2)), upper: incl(int64(20))}
 	out, ok := mergeRangeQueries(a, b)
 	r.True(ok)
-	r.Equal(&rangeQuery{Field: "Int01", Gte: int64(2), Lte: int64(10)}, out)
-	r.Equal(&rangeQuery{Field: "Int01", Gte: int64(1), Lte: int64(10)}, a)
-	r.Equal(&rangeQuery{Field: "Int01", Gte: int64(2), Lte: int64(20)}, b)
+	r.Equal(&rangeQuery{field: "Int01", lower: incl(int64(2)), upper: incl(int64(10))}, out)
+	r.Equal(&rangeQuery{field: "Int01", lower: incl(int64(1)), upper: incl(int64(10))}, a)
+	r.Equal(&rangeQuery{field: "Int01", lower: incl(int64(2)), upper: incl(int64(20))}, b)
 }
 
-// Datetime bounds reach the merge as RFC3339Nano strings, and RFC3339Nano is variable width: it
-// drops trailing zeros from the fractional seconds, and the whole fractional part when it is zero.
-// So "...:00Z" and "...:00.000000001Z" first differ at 'Z' (0x5A) against '.' (0x2E), which puts
-// the earlier instant later in byte order. Elasticsearch compares these fields as dates, so the
-// merge has to keep the bound Elasticsearch would find more restrictive: the later instant for a
-// lower bound, the earlier one for an upper bound.
-func TestRangeQuery_MergeRangeQueriesDatetimeBounds(t *testing.T) {
-	testCases := []struct {
-		name string
-		a    *rangeQuery
-		b    *rangeQuery
-		out  *rangeQuery
-	}{
-		{
-			// Byte order agrees with time order when the seconds differ, so this case already
-			// holds. It guards the common path against a fix that only inspects fractions.
-			name: "lower bounds at different seconds keep the later instant",
-			a:    &rangeQuery{Field: "StartTime", Gte: "2026-01-01T00:00:00Z"},
-			b:    &rangeQuery{Field: "StartTime", Gte: "2026-02-01T00:00:00Z"},
-			out:  &rangeQuery{Field: "StartTime", Gte: "2026-02-01T00:00:00Z"},
-		},
-		{
-			name: "lower bounds differing only in sub-second precision keep the later instant",
-			a:    &rangeQuery{Field: "StartTime", Gte: "2026-01-01T00:00:00Z"},
-			b:    &rangeQuery{Field: "StartTime", Gte: "2026-01-01T00:00:00.000000001Z"},
-			out:  &rangeQuery{Field: "StartTime", Gte: "2026-01-01T00:00:00.000000001Z"},
-		},
-		{
-			name: "upper bounds differing only in sub-second precision keep the earlier instant",
-			a:    &rangeQuery{Field: "CloseTime", Lte: "2026-01-01T00:00:00Z"},
-			b:    &rangeQuery{Field: "CloseTime", Lte: "2026-01-01T00:00:00.5Z"},
-			out:  &rangeQuery{Field: "CloseTime", Lte: "2026-01-01T00:00:00Z"},
-		},
-		{
-			// The strict bound is the earlier instant here, so it is the redundant one and the
-			// non-strict bound has to survive the collapse.
-			name: "strict lower bound collapses against a later non-strict bound",
-			a:    &rangeQuery{Field: "StartTime", Gt: "2026-01-01T00:00:00Z"},
-			b:    &rangeQuery{Field: "StartTime", Gte: "2026-01-01T00:00:00.000000001Z"},
-			out:  &rangeQuery{Field: "StartTime", Gte: "2026-01-01T00:00:00.000000001Z"},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			r := require.New(t)
-			out, ok := mergeRangeQueries(tc.a, tc.b)
-			r.True(ok)
-			r.Equal(tc.out, out)
-		})
-	}
-}
-
-func TestRangeQuery_CompareAnyAndGet(t *testing.T) {
+func TestRangeQuery_CompareBoundAndGet(t *testing.T) {
 	maxFn := func(c int) bool { return c > 0 }
 	minFn := func(c int) bool { return c < 0 }
 
 	testCases := []struct {
 		name string
-		s    any
-		t    any
+		s    *rangeQueryBound
+		t    *rangeQueryBound
 		fn   func(c int) bool
-		out  any
+		out  *rangeQueryBound
 		ok   bool
 	}{
 		{
@@ -342,133 +348,191 @@ func TestRangeQuery_CompareAnyAndGet(t *testing.T) {
 		{
 			name: "s nil",
 			s:    nil,
-			t:    int64(1),
+			t:    incl(int64(1)),
 			fn:   maxFn,
-			out:  int64(1),
+			out:  incl(int64(1)),
 			ok:   true,
 		},
 		{
 			name: "t nil",
-			s:    int64(1),
+			s:    incl(int64(1)),
 			t:    nil,
 			fn:   maxFn,
-			out:  int64(1),
+			out:  incl(int64(1)),
 			ok:   true,
 		},
 		{
 			name: "max picks s",
-			s:    int64(2),
-			t:    int64(1),
+			s:    incl(int64(2)),
+			t:    incl(int64(1)),
 			fn:   maxFn,
-			out:  int64(2),
+			out:  incl(int64(2)),
 			ok:   true,
 		},
 		{
 			name: "max picks t",
-			s:    int64(1),
-			t:    int64(2),
+			s:    incl(int64(1)),
+			t:    incl(int64(2)),
 			fn:   maxFn,
-			out:  int64(2),
+			out:  incl(int64(2)),
 			ok:   true,
 		},
 		{
 			name: "min picks s",
-			s:    int64(1),
-			t:    int64(2),
+			s:    incl(int64(1)),
+			t:    incl(int64(2)),
 			fn:   minFn,
-			out:  int64(1),
+			out:  incl(int64(1)),
 			ok:   true,
 		},
 		{
 			name: "min picks t",
-			s:    int64(2),
-			t:    int64(1),
+			s:    incl(int64(2)),
+			t:    incl(int64(1)),
 			fn:   minFn,
-			out:  int64(1),
+			out:  incl(int64(1)),
 			ok:   true,
 		},
 		{
-			// When the values are equal, fn returns false and t is returned.
-			name: "equal values",
-			s:    int64(1),
-			t:    int64(1),
+			// On equal values fn is not called: the exclusive bound is the more restrictive
+			// one on either side of the range.
+			name: "equal values pick the exclusive s",
+			s:    excl(int64(1)),
+			t:    incl(int64(1)),
 			fn:   maxFn,
-			out:  int64(1),
+			out:  excl(int64(1)),
+			ok:   true,
+		},
+		{
+			name: "equal values pick the exclusive t",
+			s:    incl(int64(1)),
+			t:    excl(int64(1)),
+			fn:   maxFn,
+			out:  excl(int64(1)),
+			ok:   true,
+		},
+		{
+			name: "equal values with both bounds inclusive",
+			s:    incl(int64(1)),
+			t:    incl(int64(1)),
+			fn:   minFn,
+			out:  incl(int64(1)),
+			ok:   true,
+		},
+		{
+			name: "equal values with both bounds exclusive",
+			s:    excl(int64(1)),
+			t:    excl(int64(1)),
+			fn:   minFn,
+			out:  excl(int64(1)),
 			ok:   true,
 		},
 		{
 			name: "strings",
-			s:    "foo",
-			t:    "bar",
+			s:    incl("foo"),
+			t:    incl("bar"),
 			fn:   maxFn,
-			out:  "foo",
+			out:  incl("foo"),
 			ok:   true,
 		},
 		{
 			name: "floats",
-			s:    1.5,
-			t:    2.5,
+			s:    incl(1.5),
+			t:    incl(2.5),
 			fn:   maxFn,
-			out:  2.5,
+			out:  incl(2.5),
 			ok:   true,
 		},
 		{
 			name: "int64 and float64",
-			s:    int64(3),
-			t:    2.5,
+			s:    incl(int64(3)),
+			t:    incl(2.5),
 			fn:   maxFn,
-			out:  int64(3),
+			out:  incl(int64(3)),
 			ok:   true,
 		},
 		{
 			name: "float64 and int64",
-			s:    2.5,
-			t:    int64(3),
+			s:    incl(2.5),
+			t:    incl(int64(3)),
 			fn:   maxFn,
-			out:  int64(3),
+			out:  incl(int64(3)),
+			ok:   true,
+		},
+		{
+			name: "int64 and float64 with the same value",
+			s:    excl(int64(2)),
+			t:    incl(2.0),
+			fn:   maxFn,
+			out:  excl(int64(2)),
 			ok:   true,
 		},
 		{
 			name: "string and int64",
-			s:    "foo",
-			t:    int64(1),
+			s:    incl("foo"),
+			t:    incl(int64(1)),
 			fn:   maxFn,
 			ok:   false,
 		},
 		{
 			name: "int64 and string",
-			s:    int64(1),
-			t:    "foo",
+			s:    incl(int64(1)),
+			t:    incl("foo"),
 			fn:   maxFn,
 			ok:   false,
 		},
 		{
 			name: "float64 and string",
-			s:    1.5,
-			t:    "foo",
+			s:    incl(1.5),
+			t:    incl("foo"),
 			fn:   maxFn,
 			ok:   false,
 		},
 		{
 			name: "unsupported types",
-			s:    true,
-			t:    false,
+			s:    incl(true),
+			t:    incl(false),
 			fn:   maxFn,
 			ok:   false,
 		},
 		{
 			name: "int is not supported",
-			s:    1,
-			t:    2,
+			s:    incl(1),
+			t:    incl(2),
 			fn:   maxFn,
 			ok:   false,
+		},
+		{
+			// A bound holding a nil value is an absent bound, same as a nil bound.
+			name: "s value nil",
+			s:    incl(nil),
+			t:    incl(int64(1)),
+			fn:   maxFn,
+			out:  incl(int64(1)),
+			ok:   true,
+		},
+		{
+			name: "t value nil",
+			s:    incl(int64(1)),
+			t:    excl(nil),
+			fn:   maxFn,
+			out:  incl(int64(1)),
+			ok:   true,
+		},
+		{
+			name: "both values nil",
+			s:    incl(nil),
+			t:    excl(nil),
+			fn:   maxFn,
+			out:  excl(nil),
+			ok:   true,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			out, ok := compareAnyAndGet(tc.s, tc.t, tc.fn)
+			out, ok := compareBoundAndGet(tc.s, tc.t, tc.fn)
 			r.Equal(tc.ok, ok)
 			r.Equal(tc.out, out)
 		})
@@ -547,6 +611,37 @@ func TestRangeQuery_CompareAny(t *testing.T) {
 			ok:   true,
 		},
 		{
+			// RFC3339Nano is variable width, so these two would compare the other way around
+			// as byte strings: they first differ at 'Z' (0x5A) against '.' (0x2E).
+			name: "datetimes differing only in sub-second precision are compared as time",
+			a:    "2026-01-01T00:00:00Z",
+			b:    "2026-01-01T00:00:00.000000001Z",
+			out:  -1,
+			ok:   true,
+		},
+		{
+			name: "datetimes are compared as time across offsets",
+			a:    "2026-01-01T00:00:00Z",
+			b:    "2025-12-31T19:00:00-05:00",
+			out:  0,
+			ok:   true,
+		},
+		{
+			name: "equal datetimes written with different precision",
+			a:    "2026-01-01T00:00:00Z",
+			b:    "2026-01-01T00:00:00.000Z",
+			out:  0,
+			ok:   true,
+		},
+		{
+			// Only one side is a datetime, so the comparison falls back to byte order.
+			name: "datetime and non datetime string are compared lexicographically",
+			a:    "2026-01-01T00:00:00Z",
+			b:    "foo",
+			out:  -1,
+			ok:   true,
+		},
+		{
 			name: "string and int64 are not comparable",
 			a:    "foo",
 			b:    int64(1),
@@ -588,6 +683,132 @@ func TestRangeQuery_CompareAny(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
 			out, ok := compareAny(tc.a, tc.b)
+			r.Equal(tc.ok, ok)
+			r.Equal(tc.out, out)
+		})
+	}
+}
+
+func TestRangeQuery_CompareTime(t *testing.T) {
+	testCases := []struct {
+		name string
+		a    string
+		b    string
+		out  int
+		ok   bool
+	}{
+		{
+			name: "equal",
+			a:    "2026-01-01T00:00:00Z",
+			b:    "2026-01-01T00:00:00Z",
+			out:  0,
+			ok:   true,
+		},
+		{
+			name: "before",
+			a:    "2026-01-01T00:00:00Z",
+			b:    "2026-02-01T00:00:00Z",
+			out:  -1,
+			ok:   true,
+		},
+		{
+			name: "after",
+			a:    "2026-02-01T00:00:00Z",
+			b:    "2026-01-01T00:00:00Z",
+			out:  1,
+			ok:   true,
+		},
+		{
+			// RFC3339Nano drops the fractional part when it is zero, so the fractions have
+			// different widths and byte order would compare these the other way around.
+			name: "differing only in sub-second precision",
+			a:    "2026-01-01T00:00:00Z",
+			b:    "2026-01-01T00:00:00.000000001Z",
+			out:  -1,
+			ok:   true,
+		},
+		{
+			name: "fractions of different widths",
+			a:    "2026-01-01T00:00:00.5Z",
+			b:    "2026-01-01T00:00:00.25Z",
+			out:  1,
+			ok:   true,
+		},
+		{
+			// RFC3339Nano drops trailing zeros from the fraction, so the same instant can be
+			// written with different widths.
+			name: "same instant written with different precision",
+			a:    "2026-01-01T00:00:00Z",
+			b:    "2026-01-01T00:00:00.000Z",
+			out:  0,
+			ok:   true,
+		},
+		{
+			name: "same instant in different offsets",
+			a:    "2026-01-01T00:00:00Z",
+			b:    "2025-12-31T19:00:00-05:00",
+			out:  0,
+			ok:   true,
+		},
+		{
+			name: "offsets are taken into account",
+			a:    "2026-01-01T00:00:00-05:00",
+			b:    "2026-01-01T00:00:00Z",
+			out:  1,
+			ok:   true,
+		},
+		{
+			name: "nanosecond precision",
+			a:    "2026-01-01T00:00:00.000000001Z",
+			b:    "2026-01-01T00:00:00.000000002Z",
+			out:  -1,
+			ok:   true,
+		},
+		{
+			name: "a is not a datetime",
+			a:    "foo",
+			b:    "2026-01-01T00:00:00Z",
+			ok:   false,
+		},
+		{
+			name: "b is not a datetime",
+			a:    "2026-01-01T00:00:00Z",
+			b:    "foo",
+			ok:   false,
+		},
+		{
+			name: "neither is a datetime",
+			a:    "foo",
+			b:    "bar",
+			ok:   false,
+		},
+		{
+			name: "empty strings",
+			a:    "",
+			b:    "",
+			ok:   false,
+		},
+		{
+			// Only RFC3339Nano is accepted: a date without a time of day doesn't parse.
+			name: "date only is not a datetime",
+			a:    "2026-01-01",
+			b:    "2026-02-01",
+			ok:   false,
+		},
+		{
+			// The format Elasticsearch uses for these fields, but not the one the query
+			// converter emits.
+			name: "datetime without offset is not a datetime",
+			a:    "2026-01-01T00:00:00",
+			b:    "2026-02-01T00:00:00",
+			ok:   false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			out, ok := compareTime(tc.a, tc.b)
 			r.Equal(tc.ok, ok)
 			r.Equal(tc.out, out)
 		})
