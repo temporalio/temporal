@@ -3,6 +3,7 @@ package dynamicconfig
 import (
 	"time"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/primitives"
 )
 
@@ -169,7 +170,21 @@ type PartitionScaleAllowedDrift struct {
 	Ratio float32
 }
 
+// DefaultShadowModeLogInterval is used when PartitionScaleManagerSettings.ShadowModeLogInterval
+// is unset (or non-positive). Logging every shadow decision is too noisy to be useful.
+const DefaultShadowModeLogInterval = 30 * time.Second
+
 type PartitionScaleManagerSettings struct {
+	// Mode controls whether the scaler is called at all, and whether its decisions are
+	// applied. Disabling the manager acts like a disabled scaler: managed scaling breaks
+	// cleanly back to the dynamic config baseline rather than leaving a target behind
+	// that nothing maintains. See PartitionScaleMode for the individual modes.
+	//
+	// In dynamic config this is written as one of the (case-insensitive) enum value
+	// names, e.g. "partition_scale_mode_shadow". Note that an unparseable value means the
+	// _whole_ PartitionScaleManagerSettings value is ignored and the default is used, not
+	// just this field.
+	Mode enumsspb.PartitionScaleMode
 	// MaxRate limits target change frequency.
 	MaxRate float32
 	// ShrinkRatio is how much smaller write partitions is allowed to be than read partitions
@@ -193,10 +208,9 @@ type PartitionScaleManagerSettings struct {
 	// should be set to the maximum time of an AddTask call that may write to a backlog. Note
 	// that query/nexus tasks will be processed without interruption even after scale down.
 	DrainBufferTime time.Duration
-	// ShadowModeLogInterval controls how often shadow decisions are logged. If <= 0, shadow mode
-	// is disabled and enabled scaler decisions are applied normally. If > 0, the configured scaler
-	// is evaluated and logged at that cadence but decisions are not applied. If the partition
-	// scaler is disabled, shadow mode does not log.
+	// ShadowModeLogInterval controls how often shadow decisions are logged (in shadow mode
+	// only). If <= 0, DefaultShadowModeLogInterval is used. If the partition scaler is
+	// disabled, shadow mode does not log.
 	ShadowModeLogInterval time.Duration
 }
 

@@ -9,6 +9,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -180,7 +181,11 @@ func (sm *scaleManager) callScaler() {
 	}
 
 	settings := sm.settings()
-	shadowMode := settings.ShadowModeLogInterval > 0
+	shadowMode := settings.Mode == enumsspb.PARTITION_SCALE_MODE_SHADOW
+	// Disabled (or unspecified) means we never call the scaler, and act as if it had
+	// returned a disabled decision, so that managed scaling breaks cleanly back to the
+	// dynamic config baseline instead of leaving a target behind that nothing maintains.
+	disabled := !shadowMode && settings.Mode != enumsspb.PARTITION_SCALE_MODE_ENABLED
 
 	// Entering shadow mode on top of a previously-applied managed target releases
 	// control back to the dynamic-config baseline: zero the managed target once so
@@ -196,12 +201,18 @@ func (sm *scaleManager) callScaler() {
 	// grab current batch (may be zero)
 	tasks := int(sm.batch.Swap(0))
 
-	decision := sm.partitionScaler.OnTasks(PartitionScalerInput{
-		NumTasks:      tasks,
-		CurrentTarget: int(sm.scaleState.GetTarget()),
-		BacklogCounts: sm.scaleState.GetBacklogCounts(),
-		PrivateState:  sm.scaleState.GetPrivateScalerState(),
-	})
+	// A disabled decision is idempotent: once the state is fully cleaned up, the
+	// no-change check below returns before writing anything, so disabled mode settles
+	// into doing nothing at all.
+	decision := PartitionScalerDecision{NewTarget: 0}
+	if !disabled {
+		decision = sm.partitionScaler.OnTasks(PartitionScalerInput{
+			NumTasks:      tasks,
+			CurrentTarget: int(sm.scaleState.GetTarget()),
+			BacklogCounts: sm.scaleState.GetBacklogCounts(),
+			PrivateState:  sm.scaleState.GetPrivateScalerState(),
+		})
+	}
 	backlogCapC8 := number.EncodeCompact8(int64(decision.BacklogCap))
 	disabledStateNeedsCleanup := decision.NewTarget == 0 &&
 		(len(sm.scaleState.GetBacklogState()) > 0 ||
@@ -260,7 +271,7 @@ func (sm *scaleManager) callScaler() {
 		// Untagged: read == write == 0 marks this as a shadow target rather than an applied one.
 		// Emit only when the target decision changed (like in real mode).
 		sm.emitGaugeMetricsIfEnabled(0, 0, float64(target))
-		sm.nextShadowLog = sm.timeSource.Now().Add(settings.ShadowModeLogInterval)
+		sm.nextShadowLog = sm.timeSource.Now().Add(shadowModeLogInterval(settings))
 		sm.prevShadowTarget = target
 	} else {
 		// we must successfully write to the db before making new state active
@@ -287,6 +298,15 @@ func (sm *scaleManager) callScaler() {
 			tag.Bool(metrics.ScalerShadowModeTagName, shadowMode))
 	}
 	metrics.PartitionScaleEvents.With(sm.metricsHandler.WithTags(metrics.ScalerShadowModeTag(shadowMode))).Record(1)
+}
+
+// shadowModeLogInterval is how often shadow decisions may be logged, falling back to a
+// reasonable default if unset: logging every decision is too noisy to be useful.
+func shadowModeLogInterval(settings dynamicconfig.PartitionScaleManagerSettings) time.Duration {
+	if settings.ShadowModeLogInterval <= 0 {
+		return dynamicconfig.DefaultShadowModeLogInterval
+	}
+	return settings.ShadowModeLogInterval
 }
 
 func (sm *scaleManager) emitGaugeMetricsIfEnabled(read, write, target float64) {
@@ -412,6 +432,14 @@ func (sm *scaleManager) describeRequest(id int32, versions []string) *matchingse
 }
 
 func (sm *scaleManager) updateBacklogAndDrainState(ctx context.Context) {
+	// Only enabled mode may persist drain completion or mutate read partitions, so skip
+	// the Describe calls entirely otherwise: in shadow mode the results would all be
+	// discarded below, and in disabled mode callScaler is breaking cleanly back to the
+	// dynamic config baseline, which drops backlog state anyway.
+	if sm.settings().Mode != enumsspb.PARTITION_SCALE_MODE_ENABLED {
+		return
+	}
+
 	scaleState := sm.scaleState
 	read := scaleStateToReadCount(scaleState)
 	if read == 0 {
@@ -464,14 +492,6 @@ func (sm *scaleManager) updateBacklogAndDrainState(ctx context.Context) {
 	}
 
 	if !backlogChanged && len(toClear) == 0 {
-		return
-	}
-
-	// Reachable only in the brief window after shadow mode is enabled but before
-	// releaseManagedState has zeroed a leftover target>0 (callScaler is still in
-	// cooldown). Shadow mode must not persist drain completion or mutate read
-	// partitions, so bail before applying toClear.
-	if settings.ShadowModeLogInterval > 0 {
 		return
 	}
 
