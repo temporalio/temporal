@@ -1515,9 +1515,15 @@ var (
 	ReplicatorLatency                                 = NewTimerDef("replicator_latency")
 	ReplicatorDLQFailures                             = NewCounterDef("replicator_dlq_enqueue_fails")
 	NamespaceReplicationEnqueueDLQCount               = NewCounterDef("namespace_replication_dlq_enqueue_requests")
-	ParentClosePolicyProcessorSuccess                 = NewCounterDef("parent_close_policy_processor_requests")
-	ParentClosePolicyProcessorFailures                = NewCounterDef("parent_close_policy_processor_errors")
-	SignalExternalWorkflowExecutionFailures           = NewCounterDef(
+
+	TaskQueueUserDataReplicationIncomingPerTypeDataDropped = NewCounterDef(
+		"task_queue_user_data_replication_incoming_per_type_data_dropped",
+		WithDescription("The number of task queue user data replication merges that discarded incoming, clockless non-empty per-type data."),
+	)
+
+	ParentClosePolicyProcessorSuccess       = NewCounterDef("parent_close_policy_processor_requests")
+	ParentClosePolicyProcessorFailures      = NewCounterDef("parent_close_policy_processor_errors")
+	SignalExternalWorkflowExecutionFailures = NewCounterDef(
 		"signal_external_workflow_execution_failures",
 		WithDescription("The number of signal external workflow execution failures by cause."),
 	)
