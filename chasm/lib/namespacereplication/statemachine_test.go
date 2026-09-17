@@ -45,7 +45,7 @@ func TestTransitionLocalCommittedSchedulesOutboundTasks(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 
 	now := time.Date(2026, 8, 22, 0, 0, 0, 0, time.UTC)
-	require.NoError(t, TransitionLocalCommitted.Apply(c, ctx, EventLocalCommitted{Time: now, NewVersion: 4}))
+	require.NoError(t, TransitionLocalCommitted.Apply(c, ctx, EventLocalCommitted{Time: now}))
 	require.Len(t, ctx.Tasks, 2)
 	for i, cell := range []string{"cellB", "cellC"} {
 		task, ok := ctx.Tasks[i].Payload.(*namespacereplicationpb.ApplyPeerTask)

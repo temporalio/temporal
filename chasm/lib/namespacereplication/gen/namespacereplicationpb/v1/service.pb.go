@@ -106,9 +106,7 @@ func (x *TriggerNamespaceMutationRequest) GetBusinessId() string {
 }
 
 type TriggerNamespaceMutationResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The new notification_version after a successful local CAS write.
-	NewVersion    int64 `protobuf:"varint,1,opt,name=new_version,json=newVersion,proto3" json:"new_version,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -143,13 +141,6 @@ func (*TriggerNamespaceMutationResponse) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_service_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *TriggerNamespaceMutationResponse) GetNewVersion() int64 {
-	if x != nil {
-		return x.NewVersion
-	}
-	return 0
-}
-
 var File_temporal_server_chasm_lib_namespacereplication_proto_v1_service_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_namespacereplication_proto_v1_service_proto_rawDesc = "" +
@@ -160,10 +151,8 @@ const file_temporal_server_chasm_lib_namespacereplication_proto_v1_service_proto
 	"\bmutation\x18\x02 \x01(\v2J.temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationR\bmutation\x12.\n" +
 	"\x13system_namespace_id\x18\x03 \x01(\tR\x11systemNamespaceId\x12\x1f\n" +
 	"\vbusiness_id\x18\x04 \x01(\tR\n" +
-	"businessId\"C\n" +
-	" TriggerNamespaceMutationResponse\x12\x1f\n" +
-	"\vnew_version\x18\x01 \x01(\x03R\n" +
-	"newVersion2\x9d\x02\n" +
+	"businessId\"\"\n" +
+	" TriggerNamespaceMutationResponse2\x9d\x02\n" +
 	"\x1bNamespaceReplicationService\x12\xfd\x01\n" +
 	"\x18TriggerNamespaceMutation\x12X.temporal.server.chasm.lib.namespacereplication.proto.v1.TriggerNamespaceMutationRequest\x1aY.temporal.server.chasm.lib.namespacereplication.proto.v1.TriggerNamespaceMutationResponse\",\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\"\x12\x13system_namespace_id\x1a\vbusiness_idBhZfgo.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb;namespacereplicationpbb\x06proto3"
 

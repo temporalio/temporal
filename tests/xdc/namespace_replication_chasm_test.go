@@ -439,6 +439,8 @@ func (s *namespaceReplicationCHASMTestSuite) TestShadowTransportDoesNotWrite() {
 	s.requireSuccessfulShadowApply(createApply, namespaceName, enumsspb.NAMESPACE_OPERATION_CREATE)
 	createLegacyTask := s.receiveLegacyTask(ctx, legacyTasks)
 	s.Require().Equal(enumsspb.NAMESPACE_OPERATION_CREATE, createLegacyTask.task.GetNamespaceOperation())
+	s.Require().True(proto.Equal(createLegacyTask.task, createApply.request.GetNamespaceTask()),
+		"CHASM create payload differs from the legacy replication task")
 
 	_, err = standby.TestBase().MetadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: namespaceName})
 	s.Require().ErrorAs(err, new(*serviceerror.NamespaceNotFound))
@@ -463,6 +465,8 @@ func (s *namespaceReplicationCHASMTestSuite) TestShadowTransportDoesNotWrite() {
 	s.requireSuccessfulShadowApply(updateApply, namespaceName, enumsspb.NAMESPACE_OPERATION_UPDATE)
 	updateLegacyTask := s.receiveLegacyTask(ctx, legacyTasks)
 	s.Require().Equal(enumsspb.NAMESPACE_OPERATION_UPDATE, updateLegacyTask.task.GetNamespaceOperation())
+	s.Require().True(proto.Equal(updateLegacyTask.task, updateApply.request.GetNamespaceTask()),
+		"CHASM update payload differs from the legacy replication task")
 
 	standbyBeforeLegacyUpdate := s.requirePersistedNamespace(ctx, standby, namespaceName)
 	s.Require().Equal(initialConfigVersion, standbyBeforeLegacyUpdate.Namespace.GetConfigVersion())
@@ -506,6 +510,10 @@ func (s *namespaceReplicationCHASMTestSuite) TestShadowTransportDoesNotWrite() {
 	s.requireSuccessfulShadowApply(recoveredApply, namespaceName, enumsspb.NAMESPACE_OPERATION_UPDATE)
 	failedUpdateLegacyTask := s.receiveLegacyTask(ctx, legacyTasks)
 	s.Require().Equal(enumsspb.NAMESPACE_OPERATION_UPDATE, failedUpdateLegacyTask.task.GetNamespaceOperation())
+	s.Require().True(proto.Equal(failedApply.request.GetNamespaceTask(), recoveredApply.request.GetNamespaceTask()),
+		"CHASM retry changed the namespace mutation payload")
+	s.Require().True(proto.Equal(failedUpdateLegacyTask.task, recoveredApply.request.GetNamespaceTask()),
+		"retried CHASM update payload differs from the legacy replication task")
 
 	standbyBeforeFailedUpdateLegacy := s.requirePersistedNamespace(ctx, standby, namespaceName)
 	s.Require().Equal(initialConfigVersion+1, standbyBeforeFailedUpdateLegacy.Namespace.GetConfigVersion())

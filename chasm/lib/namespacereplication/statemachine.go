@@ -24,10 +24,9 @@ var TransitionScheduleLocal = chasm.NewTransition(
 )
 
 // EventLocalCommitted is emitted by ApplyLocalTask on successful CAS commit.
-// Records the new version and schedules ApplyPeerTask{cell} for each peer.
+// Records the commit and schedules ApplyPeerTask{cell} for each peer.
 type EventLocalCommitted struct {
-	Time       time.Time
-	NewVersion int64
+	Time time.Time
 }
 
 var TransitionLocalCommitted = chasm.NewTransition(
@@ -35,9 +34,8 @@ var TransitionLocalCommitted = chasm.NewTransition(
 	namespacereplicationpb.COMPONENT_STATUS_RUNNING,
 	func(c *NamespaceMutationComponent, ctx chasm.MutableContext, event EventLocalCommitted) error {
 		c.LocalApply = &namespacereplicationpb.LocalApplyStatus{
-			Outcome:    namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED,
-			NewVersion: event.NewVersion,
-			AppliedAt:  timestamppb.New(event.Time),
+			Outcome:   namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED,
+			AppliedAt: timestamppb.New(event.Time),
 		}
 		// Fan out: one ApplyPeerTask per peer cell.
 		for _, cell := range c.GetMutation().GetPeerCells() {
@@ -101,7 +99,6 @@ type EventPeerCompleted struct {
 	Time       time.Time
 	TargetCell string
 	Outcome    namespacereplicationpb.PeerApplyOutcome
-	NewVersion int64
 	Attempts   int32
 	Err        error // may be nil for non-failure outcomes
 }
@@ -123,7 +120,6 @@ var TransitionPeerCompleted = chasm.NewTransition(
 			status.FirstAttemptAt = timestamppb.New(event.Time)
 		}
 		status.Outcome = event.Outcome
-		status.NewVersion = event.NewVersion
 		status.AttemptCount = event.Attempts
 		status.LastAttemptAt = timestamppb.New(event.Time)
 		if event.Err != nil {
