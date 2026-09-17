@@ -23,6 +23,7 @@ type (
 		ephemeral     bool
 		singleCluster bool
 		detached      bool
+		executionType enumspb.ExecutionType // May be unset, defaulting to UNSPECIFIED.
 
 		searchAttributesMapper *VisibilitySearchAttributesMapper
 
@@ -73,6 +74,26 @@ func WithDetached() RegistrableComponentOption {
 // IsDetached returns true if the component type is registered as detached.
 func (rc *RegistrableComponent) IsDetached() bool {
 	return rc.detached
+}
+
+// WithExecutionType declares how executions of this archetype are named outside of CHASM, e.g. in
+// the links that address them. It only has an effect on a component registered as the root of an
+// execution; components nested inside an execution are named by their path within it.
+//
+// An archetype registered without this option has no external representation, and reports
+// [enumspb.EXECUTION_TYPE_UNSPECIFIED].
+func WithExecutionType(
+	executionType enumspb.ExecutionType,
+) RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		rc.executionType = executionType
+	}
+}
+
+// ExecutionType returns the execution type registered for this component via WithExecutionType,
+// or [enumspb.EXECUTION_TYPE_UNSPECIFIED] if none was registered.
+func (rc *RegistrableComponent) ExecutionType() enumspb.ExecutionType {
+	return rc.executionType
 }
 
 // WithBusinessIDAlias allows specifying the business ID alias of the component.

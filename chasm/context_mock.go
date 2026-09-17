@@ -23,6 +23,7 @@ var _ MutableContext = (*MockMutableContext)(nil)
 
 // MockContext is a mock implementation of [Context].
 type MockContext struct {
+	HandleExecution            func() *commonpb.Execution
 	HandleExecutionKey         func() ExecutionKey
 	HandleNow                  func(component Component) time.Time
 	HandleRef                  func(component Component) ([]byte, error)
@@ -100,6 +101,13 @@ func (c *MockContext) structuredRef(cmp Component) (ComponentRef, error) {
 	return ComponentRef{}, nil
 }
 
+func (c *MockContext) Execution() *commonpb.Execution {
+	if c.HandleExecution != nil {
+		return c.HandleExecution()
+	}
+	return nil
+}
+
 func (c *MockContext) ExecutionKey() ExecutionKey {
 	if c.HandleExecutionKey != nil {
 		return c.HandleExecutionKey()
@@ -164,6 +172,7 @@ func (c *MockContext) UserMetadata(component Component) *sdkpb.UserMetadata {
 
 func (c *MockContext) withValue(key any, value any) Context {
 	return &MockContext{
+		HandleExecution:      c.HandleExecution,
 		HandleExecutionKey:   c.HandleExecutionKey,
 		HandleNow:            c.HandleNow,
 		HandleRef:            c.HandleRef,

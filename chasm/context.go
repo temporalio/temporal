@@ -24,6 +24,9 @@ type Context interface {
 	// Now returns the current time in the context of the given component.
 	// In a context of a transaction, this time must be used to allow for framework support of pause and time skipping.
 	Now(Component) time.Time
+	// Execution returns the identity of the execution the context is operating on, as it is named
+	// outside of CHASM, e.g. in the links that address it. See [Node.Execution].
+	Execution() *commonpb.Execution
 	// ExecutionKey returns the execution key for the execution the context is operating on.
 	ExecutionKey() ExecutionKey
 	// ExecutionInfo returns metadata information about the execution.
@@ -178,6 +181,10 @@ func (c *immutableCtx) Now(_ Component) time.Time {
 
 func (c *immutableCtx) ExecutionKey() ExecutionKey {
 	return c.executionKey
+}
+
+func (c *immutableCtx) Execution() *commonpb.Execution {
+	return c.root.Execution()
 }
 
 func (c *immutableCtx) ExecutionInfo() ExecutionInfo {

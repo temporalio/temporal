@@ -673,16 +673,63 @@ func (s *nodeSuite) assertParentPointer(testComponentNode *Node) {
 
 	_, found := testComponent.ParentPtr.TryGet(chasmContext)
 	s.False(found)
+	s.Nil(testComponent.ParentPtr.Path(), "an uninitialized ParentPtr has no path")
 
 	subComponent1 := testComponent.SubComponent1.Get(chasmContext)
 	testComponentFromPtr := subComponent1.ParentPtr.Get(chasmContext)
 	// Asserting they actually point to the same testComponent object.
 	s.Same(testComponent, testComponentFromPtr)
+	s.Equal([]string{}, subComponent1.ParentPtr.Path(), "the root component's path is empty")
 
 	subComponent11 := subComponent1.SubComponent11.Get(chasmContext)
 	testSubComponent1FromPtr := subComponent11.ParentPtr.Get(chasmContext)
 	// Asserting they actually point to the same testSubComponent1 object.
 	s.Same(subComponent1, testSubComponent1FromPtr)
+	s.Equal([]string{"SubComponent1"}, subComponent11.ParentPtr.Path())
+}
+
+func (s *nodeSuite) TestExecution() {
+	testCases := map[string]struct {
+		rootArchetypeID uint32
+		expectedType    enumspb.ExecutionType
+	}{
+		// TestComponent is registered with EXECUTION_TYPE_WORKFLOW.
+		"registered execution type": {
+			rootArchetypeID: testComponentTypeID,
+			expectedType:    enumspb.EXECUTION_TYPE_WORKFLOW,
+		},
+		// TestSubComponent1 is registered without a WithExecutionType option.
+		"no registered execution type": {
+			rootArchetypeID: testSubComponent1TypeID,
+			expectedType:    enumspb.EXECUTION_TYPE_UNSPECIFIED,
+		},
+	}
+
+	for name, tc := range testCases {
+		s.Run(name, func() {
+			workflowKey := definition.NewWorkflowKey("namespace-id", "business-id", "run-id")
+			s.nodeBackend = &MockNodeBackend{
+				HandleGetWorkflowKey: func() definition.WorkflowKey {
+					return workflowKey
+				},
+			}
+
+			serializedNodes := testComponentSerializedNodes()
+			serializedNodes[""].Metadata.GetComponentAttributes().TypeId = tc.rootArchetypeID
+			root, err := s.newTestTree(serializedNodes)
+			s.NoError(err)
+
+			expected := &commonpb.Execution{
+				Type:       tc.expectedType,
+				BusinessId: "business-id",
+				RunId:      "run-id",
+			}
+			s.ProtoEqual(expected, root.Execution())
+			// Every node reports the execution it belongs to, not one per component.
+			s.ProtoEqual(expected, root.children["SubComponent1"].Execution())
+			s.ProtoEqual(expected, NewContext(context.Background(), root).Execution())
+		})
+	}
 }
 
 func (s *nodeSuite) TestSyncSubComponents_DeleteLeafNode() {
