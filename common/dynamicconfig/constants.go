@@ -3553,6 +3553,14 @@ Should be at least WorkerESProcessorFlushInterval+<time to process request>.`,
 		true,
 		`HistoryScannerEnabled indicates if history scanner should be started as part of worker.Scanner`,
 	)
+	HistoryScannerCronSchedule = NewGlobalStringSetting(
+		"worker.historyScannerCronSchedule",
+		"0 */12 * * *",
+		`HistoryScannerCronSchedule is the cron schedule on which the history scanner workflow runs.
+An empty or invalid cron specification falls back to the default of running every 12 hours.
+A changed value takes effect the next time the worker role starts up: if the history scanner
+workflow is already running on a different schedule, it is restarted on the configured one.`,
+	)
 	ExecutionsScannerEnabled = NewGlobalBoolSetting(
 		"worker.executionsScannerEnabled",
 		false,
