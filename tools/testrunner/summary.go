@@ -113,15 +113,19 @@ func (row summaryRow) Markdown() string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "<tr><td>%s</td><td>", html.EscapeString(kind))
 	if row.Details != "" {
-		escaped := html.EscapeString(row.Details)
-		if strings.Contains(row.Details, summaryTruncatedMarker) {
-			escaped += "\n… (truncated — see full output in job logs)"
-		}
-		fmt.Fprintf(&sb, "<details><summary>%s</summary><pre>%s</pre></details>",
-			html.EscapeString(row.Name), escaped)
+		fmt.Fprintf(&sb, "<details><summary>%s</summary>\n\n%s\n\n</details>",
+			html.EscapeString(row.Name), markdownCodeBlock(row.Details))
 	} else {
 		sb.WriteString(html.EscapeString(row.Name))
 	}
 	sb.WriteString("</td></tr>\n")
 	return sb.String()
+}
+
+func markdownCodeBlock(content string) string {
+	fence := "```"
+	for strings.Contains(content, fence) {
+		fence += "`"
+	}
+	return fence + "\n" + strings.TrimSuffix(content, "\n") + "\n" + fence
 }

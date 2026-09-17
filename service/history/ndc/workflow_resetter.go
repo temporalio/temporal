@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/api/updateworkflowoptions"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
@@ -135,6 +136,10 @@ func (r *workflowResetterImpl) ResetWorkflow(
 
 	var currentWorkflowMutation *persistence.WorkflowMutation
 	var currentWorkflowEventsSeq []*persistence.WorkflowEvents
+	// Every reapply path below deliberately uses the pre-fork baseBranchToken, not the rewritten
+	// token that forkAndGenerateBranchToken returns. A storage layer that rewrites the base token
+	// only guarantees the range below the fork point is readable through it; these reads start at
+	// the fork point and go up, so they must keep the caller's original token.
 	var reapplyEventsFn workflowResetReapplyEventsFn
 	// currentWorkflow is nil only for a reset by explicit runId whose workflow has no current
 	// execution (the current run was deleted while older runs survive). This is exclusive to the
@@ -510,7 +515,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 	resetRequestID string,
 ) (Workflow, error) {
 
-	resetBranchToken, err := r.forkAndGenerateBranchToken(
+	resetBranchToken, newBaseBranchToken, err := r.forkAndGenerateBranchToken(
 		ctx,
 		namespaceID,
 		workflowID,
@@ -534,6 +539,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		r.shardContext.GetLogger(),
 		r.shardContext.GetMetricsHandler(),
 		nil, // no pagination buffer limiter as it is a transient context
+		testhooks.TestHooks{},
 	)
 
 	resetMutableState, resetStats, err := r.stateRebuilder.Rebuild(
@@ -544,7 +550,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 			workflowID,
 			baseRunID,
 		),
-		baseBranchToken,
+		newBaseBranchToken,
 		baseRebuildLastEventID,
 		new(baseRebuildLastEventVersion),
 		definition.NewWorkflowKey(
@@ -677,7 +683,7 @@ func (r *workflowResetterImpl) forkAndGenerateBranchToken(
 	forkBranchToken []byte,
 	forkNodeID int64,
 	resetRunID string,
-) ([]byte, error) {
+) (newBranchToken []byte, forkedBaseBranchToken []byte, err error) {
 	// fork a new history branch
 	shardID := r.shardContext.GetShardID()
 	resp, err := r.executionMgr.ForkHistoryBranch(ctx, &persistence.ForkHistoryBranchRequest{
@@ -689,10 +695,13 @@ func (r *workflowResetterImpl) forkAndGenerateBranchToken(
 		NewRunID:        resetRunID,
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return resp.NewBranchToken, nil
+	if len(resp.BaseBranchToken) == 0 {
+		return resp.NewBranchToken, forkBranchToken, nil
+	}
+	return resp.NewBranchToken, resp.BaseBranchToken, nil
 }
 
 func (r *workflowResetterImpl) terminateWorkflow(
@@ -804,8 +813,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 		if err != nil {
 			// A deleted run truncates the chain; other errors must fail the reset so a retry
 			// can reapply the full surviving chain, since reset is one-shot.
-			var notFound *serviceerror.NotFound
-			if errors.As(err, &notFound) {
+			if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 				break
 			}
 			return "", err

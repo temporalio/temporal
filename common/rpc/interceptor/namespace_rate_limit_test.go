@@ -46,7 +46,6 @@ func (s *namespaceRateLimitInterceptorSuite) newImpl(pollWaitForToken bool) *Nam
 	return &NamespaceRateLimitInterceptorImpl{
 		namespaceRegistry: s.mockRegistry,
 		rateLimiter:       s.mockRateLimiter,
-		tokens:            map[string]int{},
 		pollMethods: map[string]struct{}{
 			pollWorkflowTaskQueueMethod: {},
 		},

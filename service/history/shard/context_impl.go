@@ -911,6 +911,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	ctx context.Context,
 	key definition.WorkflowKey,
 	archetypeID chasm.ArchetypeID,
+	lastWriteVersion int64,
 	branchToken []byte,
 	closeVisibilityTaskId int64,
 	workflowCloseTime time.Time,
@@ -1010,6 +1011,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 							&tasks.DeleteExecutionReplicationTask{
 								WorkflowKey: key,
 								ArchetypeID: archetypeID,
+								Version:     lastWriteVersion,
 							},
 						}
 					}
@@ -1257,6 +1259,21 @@ func (s *ContextImpl) updateShardInfo(
 	s.tasksCompletedSinceLastUpdate = 0
 
 	updatedShardInfo := trimShardInfo(s.config, s.clusterMetadata.GetAllClusterInfo(), s.copyShardInfo(s.shardInfo))
+
+	metrics.ShardInfoSize.With(s.metricsHandler).Record(int64(updatedShardInfo.Size()))
+	for categoryID, queueState := range updatedShardInfo.QueueStates {
+		category, ok := s.taskCategoryRegistry.GetCategoryByID(int(categoryID))
+		if !ok {
+			continue
+		}
+		sizeBytes := int64(queueState.Size())
+		categoryTag := metrics.TaskCategoryTag(category.Name())
+		// The counter is a true accumulator; the histogram's _sum is not, since tally's Prometheus
+		// reporter replays each sample as its bucket's upper bound, not the recorded value.
+		metrics.QueueStateSize.With(s.metricsHandler).Record(sizeBytes, categoryTag)
+		metrics.QueueStateSizeTotal.With(s.metricsHandler).Record(sizeBytes, categoryTag)
+	}
+
 	request := &persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo,
 		PreviousRangeID: s.shardInfo.GetRangeId(),
@@ -2228,12 +2245,15 @@ func newContext(
 		},
 	)
 	shardContext.handoverTracker = handoverTrackerFactory(HandoverTrackerParams{
-		ClusterMetadata:         clusterMetadata,
-		GetMaxReplicationTaskID: shardContext.getMaxReplicationTaskID,
-		ErrorByStateFn:          shardContext.errorByState,
-		NotifyReplicationFn:     shardContext.notifyReplicationQueueProcessor,
-		NamespaceRegistry:       namespaceRegistry,
-		Logger:                  taggedLogger,
+		ShardID:                      shardID,
+		ClusterMetadata:              clusterMetadata,
+		GetMaxReplicationTaskID:      shardContext.getMaxReplicationTaskID,
+		ErrorByStateFn:               shardContext.errorByState,
+		NotifyReplicationFn:          shardContext.notifyReplicationQueueProcessor,
+		NamespaceRegistry:            namespaceRegistry,
+		Logger:                       taggedLogger,
+		EventLogger:                  eventLogger,
+		EmitNamespaceLifecycleEvents: historyConfig.EmitNamespaceLifecycleEvents,
 	})
 	if shardContext.GetConfig().EnableHostLevelEventsCache() {
 		shardContext.eventsCache = eventsCache

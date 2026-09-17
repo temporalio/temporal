@@ -122,9 +122,7 @@ func (a *archiver) Archive(ctx context.Context, request *Request) (res *Response
 		if err != nil {
 			status = "err"
 
-			var rateLimitExceededErr *serviceerror.ResourceExhausted
-
-			if errors.As(err, &rateLimitExceededErr) {
+			if _, ok := errors.AsType[*serviceerror.ResourceExhausted](err); ok {
 				status = "rate_limit_exceeded"
 			}
 

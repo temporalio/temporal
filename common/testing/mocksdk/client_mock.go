@@ -59,6 +59,20 @@ func (mr *MockClientMockRecorder) CancelWorkflow(ctx, workflowID, runID any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelWorkflow", reflect.TypeOf((*MockClient)(nil).CancelWorkflow), ctx, workflowID, runID)
 }
 
+// CancelWorkflowWithOptions mocks base method.
+func (m *MockClient) CancelWorkflowWithOptions(ctx context.Context, options client.CancelWorkflowOptions) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CancelWorkflowWithOptions", ctx, options)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CancelWorkflowWithOptions indicates an expected call of CancelWorkflowWithOptions.
+func (mr *MockClientMockRecorder) CancelWorkflowWithOptions(ctx, options any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CancelWorkflowWithOptions", reflect.TypeOf((*MockClient)(nil).CancelWorkflowWithOptions), ctx, options)
+}
+
 // CheckHealth mocks base method.
 func (m *MockClient) CheckHealth(ctx context.Context, request *client.CheckHealthRequest) (*client.CheckHealthResponse, error) {
 	m.ctrl.T.Helper()
@@ -793,6 +807,20 @@ func (mr *MockClientMockRecorder) TerminateWorkflow(ctx, workflowID, runID, reas
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, workflowID, runID, reason}, details...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TerminateWorkflow", reflect.TypeOf((*MockClient)(nil).TerminateWorkflow), varargs...)
+}
+
+// TerminateWorkflowWithOptions mocks base method.
+func (m *MockClient) TerminateWorkflowWithOptions(ctx context.Context, options client.TerminateWorkflowOptions) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TerminateWorkflowWithOptions", ctx, options)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// TerminateWorkflowWithOptions indicates an expected call of TerminateWorkflowWithOptions.
+func (mr *MockClientMockRecorder) TerminateWorkflowWithOptions(ctx, options any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TerminateWorkflowWithOptions", reflect.TypeOf((*MockClient)(nil).TerminateWorkflowWithOptions), ctx, options)
 }
 
 // UpdateWithStartWorkflow mocks base method.

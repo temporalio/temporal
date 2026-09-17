@@ -12,7 +12,9 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
@@ -33,6 +35,8 @@ type rateLimitInterceptorTestCase struct {
 	name string
 	// t is the test object
 	t *testing.T
+	// ctrl is the mock controller
+	ctrl *gomock.Controller
 	// globalRPSLimit is the global RPS limit for all frontend hosts
 	globalRPSLimit int
 	// perInstanceRPSLimit is the RPS limit for each frontend host
@@ -43,6 +47,10 @@ type rateLimitInterceptorTestCase struct {
 	expectRateLimit bool
 	// numRequests is the number of requests to send to the interceptor
 	numRequests int
+	// namespaceReplicationInducingAPIsRPS is the RPS limit for namespace-replication-inducing APIs, pod-wide
+	namespaceReplicationInducingAPIsRPS int
+	// numReplicationInducingRequests is the number of namespace-replication-inducing requests to send to the interceptor
+	numReplicationInducingRequests int
 	// serviceResolver is used to determine the number of frontend hosts for the global rate limiter
 	serviceResolver membership.ServiceResolver
 	// configure is a function that can be used to override the default test case values
@@ -183,9 +191,31 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 				tc.perInstanceRPSLimit = highPerInstanceRPSLimit
 				tc.operatorRPSRatio = operatorRPSRatio
 				tc.expectRateLimit = false
-				serviceResolver := membership.NewMockServiceResolver(gomock.NewController(tc.t))
+				serviceResolver := membership.NewMockServiceResolver(tc.ctrl)
 				serviceResolver.EXPECT().AvailableMemberCount().Return(0).AnyTimes()
 				tc.serviceResolver = serviceResolver
+			},
+		},
+		{
+			name: "replication inducing rate limit hit",
+			configure: func(tc *rateLimitInterceptorTestCase) {
+				tc.globalRPSLimit = highGlobalRPSLimit
+				tc.perInstanceRPSLimit = highPerInstanceRPSLimit
+				tc.operatorRPSRatio = operatorRPSRatio
+				tc.namespaceReplicationInducingAPIsRPS = lowPerInstanceRPSLimit
+				tc.numReplicationInducingRequests = 10
+				tc.expectRateLimit = true
+			},
+		},
+		{
+			name: "replication inducing rate limit not hit",
+			configure: func(tc *rateLimitInterceptorTestCase) {
+				tc.globalRPSLimit = highGlobalRPSLimit
+				tc.perInstanceRPSLimit = highPerInstanceRPSLimit
+				tc.operatorRPSRatio = operatorRPSRatio
+				tc.namespaceReplicationInducingAPIsRPS = highPerInstanceRPSLimit
+				tc.numReplicationInducingRequests = 10
+				tc.expectRateLimit = false
 			},
 		},
 	}
@@ -196,11 +226,11 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 
 			tc.numRequests = 10
 			tc.t = t
+			tc.ctrl = gomock.NewController(t)
 			{
 				// Create a mock service resolver which returns the number of frontend hosts.
 				// This may be overridden by the test case.
-				ctrl := gomock.NewController(t)
-				serviceResolver := membership.NewMockServiceResolver(ctrl)
+				serviceResolver := membership.NewMockServiceResolver(tc.ctrl)
 				serviceResolver.EXPECT().AvailableMemberCount().Return(numHosts).AnyTimes()
 				tc.serviceResolver = serviceResolver
 			}
@@ -208,10 +238,12 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 
 			serviceErrorInterceptor := interceptor.NewServiceErrorInterceptor(
 				dynamicconfig.GetIntPropertyFn(4000),
+				metrics.NewMockHandler(tc.ctrl),
+				log.NewTestLogger(),
 			)
 
 			// Create a rate limit interceptor which uses the per-instance and global RPS limits from the test case.
-			rateLimitInterceptor := RateLimitInterceptorProvider(&Config{
+			config := &Config{
 				RPS: func() int {
 					return tc.perInstanceRPSLimit
 				},
@@ -219,13 +251,17 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 					return tc.globalRPSLimit
 				},
 				NamespaceReplicationInducingAPIsRPS: func() int {
-					// this is not used in this test
-					return 0
+					return tc.namespaceReplicationInducingAPIsRPS
 				},
 				OperatorRPSRatio: func() float64 {
 					return tc.operatorRPSRatio
 				},
-			}, tc.serviceResolver, metrics.NoopMetricsHandler, log.NewTestLogger())
+				EnableDescribeMutableStateRateLimit: func() bool {
+					return false
+				},
+			}
+			rateLimiters := RateLimitersProvider(config, tc.serviceResolver, metrics.NoopMetricsHandler, log.NewTestLogger())
+			rateLimitInterceptor := RateLimitInterceptorProvider(config, rateLimiters)
 
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}
@@ -262,6 +298,25 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 			client := workflowservice.NewWorkflowServiceClient(conn)
 			var header metadata.MD
 
+			defer func() {
+				// Check if the rate limit is hit.
+				if tc.expectRateLimit {
+					require.ErrorContains(t, err, "rate limit exceeded")
+					s := status.Convert(err)
+					var resourceExhausted *serviceerror.ResourceExhausted
+					errors.As(serviceerror.FromStatus(s), &resourceExhausted)
+					require.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, resourceExhausted.Cause)
+					require.Equal(t, enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM, resourceExhausted.Scope)
+
+					require.Len(t, header.Get(interceptor.ResourceExhaustedCauseHeader), 1)
+					require.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT.String(), header.Get(interceptor.ResourceExhaustedCauseHeader)[0])
+					require.Len(t, header.Get(interceptor.ResourceExhaustedScopeHeader), 1)
+					require.Equal(t, enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM.String(), header.Get(interceptor.ResourceExhaustedScopeHeader)[0])
+				} else {
+					require.NoError(t, err)
+				}
+			}()
+
 			// Generate load by sending a number of requests to the server.
 			for i := 0; i < tc.numRequests; i++ {
 				_, err = client.StartWorkflowExecution(
@@ -270,23 +325,74 @@ func TestRateLimitInterceptorProvider(t *testing.T) {
 					grpc.Header(&header),
 				)
 				if err != nil {
-					break
+					return
 				}
 			}
 
-			// Check if the rate limit is hit.
-			if tc.expectRateLimit {
-				assert.ErrorContains(t, err, "rate limit exceeded")
-				s := status.Convert(err)
-				var resourceExhausted *serviceerror.ResourceExhausted
-				errors.As(serviceerror.FromStatus(s), &resourceExhausted)
-				assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, resourceExhausted.Cause)
-				assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM, resourceExhausted.Scope)
+			for i := 0; i < tc.numReplicationInducingRequests; i++ {
+				_, err = client.RegisterNamespace(
+					context.Background(),
+					&workflowservice.RegisterNamespaceRequest{},
+					grpc.Header(&header),
+				)
+				if err != nil {
+					return
+				}
+			}
+		})
+	}
+}
 
-				assert.Len(t, header.Get(interceptor.ResourceExhaustedCauseHeader), 1)
-				assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT.String(), header.Get(interceptor.ResourceExhaustedCauseHeader)[0])
-				assert.Len(t, header.Get(interceptor.ResourceExhaustedScopeHeader), 1)
-				assert.Equal(t, enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM.String(), header.Get(interceptor.ResourceExhaustedScopeHeader)[0])
+// TestRateLimitInterceptorProviderPodOnlyAPIs verifies that PodOnlyAPIToPriority entries (e.g.
+// DescribeMutableState) are routed to the pod-level Execution rate limiter, the same way
+// APIToPriority entries are, but only while EnableDescribeMutableStateRateLimit is enabled.
+func TestRateLimitInterceptorProviderPodOnlyAPIs(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name              string
+		executionRPSLimit int
+		rateLimitEnabled  bool
+		expectRateLimit   bool
+	}{
+		{name: "admin API rate limit hit", executionRPSLimit: 0, rateLimitEnabled: true, expectRateLimit: true},
+		{name: "admin API rate limit not hit", executionRPSLimit: 100, rateLimitEnabled: true, expectRateLimit: false},
+		{name: "admin API rate limit disabled by flag", executionRPSLimit: 0, rateLimitEnabled: false, expectRateLimit: false},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctrl := gomock.NewController(t)
+			serviceResolver := membership.NewMockServiceResolver(ctrl)
+			serviceResolver.EXPECT().AvailableMemberCount().Return(1).AnyTimes()
+
+			config := &Config{
+				RPS: func() int {
+					return tc.executionRPSLimit
+				},
+				GlobalRPS: func() int {
+					return tc.executionRPSLimit
+				},
+				NamespaceReplicationInducingAPIsRPS: func() int {
+					return 100
+				},
+				OperatorRPSRatio: func() float64 {
+					return 0.2
+				},
+				EnableDescribeMutableStateRateLimit: func() bool {
+					return tc.rateLimitEnabled
+				},
+			}
+			rateLimiters := RateLimitersProvider(config, serviceResolver, metrics.NoopMetricsHandler, log.NewTestLogger())
+			rateLimitInterceptor := RateLimitInterceptorProvider(config, rateLimiters)
+
+			err := rateLimitInterceptor.Allow(
+				adminservice.AdminService_DescribeMutableState_FullMethodName,
+				headers.NewGRPCHeaderGetter(context.Background()),
+			)
+			if tc.expectRateLimit {
+				require.Error(t, err)
 			} else {
 				assert.NoError(t, err)
 			}
@@ -565,17 +671,20 @@ func TestNamespaceRateLimitInterceptorProvider(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			ctrl := gomock.NewController(t)
 
 			namespaceName := "test-namespace"
-			mockRegistry := namespace.NewMockRegistry(gomock.NewController(t))
+			mockRegistry := namespace.NewMockRegistry(ctrl)
 			mockRegistry.EXPECT().GetNamespace(namespace.Name(namespaceName)).Return(&namespace.Namespace{}, nil).AnyTimes()
-			serviceResolver := membership.NewMockServiceResolver(gomock.NewController(t))
+			serviceResolver := membership.NewMockServiceResolver(ctrl)
 			serviceResolver.EXPECT().AvailableMemberCount().Return(tc.frontendServiceCount).AnyTimes()
 
 			config := getTestConfig(tc)
 
 			serviceErrorInterceptor := interceptor.NewServiceErrorInterceptor(
 				dynamicconfig.GetIntPropertyFn(4000),
+				metrics.NewMockHandler(ctrl),
+				log.NewTestLogger(),
 			)
 
 			// Create a rate limit interceptor.
@@ -752,11 +861,12 @@ func TestNamespaceRateLimitMetrics(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
+			ctrl := gomock.NewController(t)
 
 			testNS := "test_namespace"
-			mockRegistry := namespace.NewMockRegistry(gomock.NewController(t))
+			mockRegistry := namespace.NewMockRegistry(ctrl)
 			mockRegistry.EXPECT().GetNamespace(namespace.Name(testNS)).Return(&namespace.Namespace{}, nil).AnyTimes()
-			serviceResolver := membership.NewMockServiceResolver(gomock.NewController(t))
+			serviceResolver := membership.NewMockServiceResolver(ctrl)
 			serviceResolver.EXPECT().AvailableMemberCount().Return(tc.frontendServiceCount).AnyTimes()
 			metricsHandler := metricstest.NewCaptureHandler()
 			capture := metricsHandler.StartCapture()
@@ -775,14 +885,20 @@ func TestNamespaceRateLimitMetrics(t *testing.T) {
 				NamespaceReplicationInducingAPIsRPS: func() int {
 					return 1
 				},
+				EnableDescribeMutableStateRateLimit: func() bool {
+					return false
+				},
 			}
 
 			serviceErrorInterceptor := interceptor.NewServiceErrorInterceptor(
 				dynamicconfig.GetIntPropertyFn(4000),
+				metrics.NewMockHandler(ctrl),
+				log.NewTestLogger(),
 			)
 
 			// Create a rate limit interceptor which uses the per-instance and global RPS limits from the test case.
-			rateLimitInterceptor := RateLimitInterceptorProvider(config, serviceResolver, metricsHandler, log.NewTestLogger())
+			rateLimiters := RateLimitersProvider(config, serviceResolver, metricsHandler, log.NewTestLogger())
+			rateLimitInterceptor := RateLimitInterceptorProvider(config, rateLimiters)
 
 			// Create a gRPC server for the fake workflow service.
 			svc := &testSvc{}

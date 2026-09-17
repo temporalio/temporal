@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/tests/testcore"
@@ -247,7 +248,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseUnpauseWorkflowExecution() {
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// Unblock the activity to complete the workflow.
-	env.SendToChannel(env.activityCompletedCh)
+	await.Snd(s.T(), env.activityCompletedCh, struct{}{})
 
 	// assert that the workflow completes now.
 	s.EventuallyWithT(func(t *assert.CollectT) {
@@ -1054,7 +1055,7 @@ func (s *PauseWorkflowExecutionSuite) TestQueryWorkflowWhenPaused() {
 	s.NotNil(unpauseResp)
 
 	// Unblock the activity and send the signal to complete the workflow.
-	env.SendToChannel(env.activityCompletedCh)
+	await.Snd(s.T(), env.activityCompletedCh, struct{}{})
 	err = env.SdkClient().SignalWorkflow(s.Context(), workflowID, runID, env.testEndSignal, "test end signal")
 	s.NoError(err)
 
@@ -1278,7 +1279,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseWorkflowExecutionAlreadyPaused() 
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// Unblock the activity and send the signal to complete the workflow.
-	env.SendToChannel(env.activityCompletedCh)
+	await.Snd(s.T(), env.activityCompletedCh, struct{}{})
 	err = env.SdkClient().SignalWorkflow(s.Context(), workflowID, runID, env.testEndSignal, "test end signal")
 	s.NoError(err)
 
@@ -1597,7 +1598,7 @@ func (s *PauseWorkflowExecutionSuite) TestSignalWithStartWhilePaused() {
 		RequestId:  uuid.NewString(),
 	})
 	s.NoError(err)
-	env.SendToChannel(env.activityCompletedCh)
+	await.Snd(s.T(), env.activityCompletedCh, struct{}{})
 
 	// The buffered signal is delivered: the workflow completes and its result
 	// includes the signal payload.
@@ -1785,7 +1786,7 @@ func (s *PauseWorkflowExecutionSuite) TestPauseIdempotentSameRequestId() {
 		RequestId:  uuid.NewString(),
 	})
 	s.NoError(err)
-	env.SendToChannel(env.activityCompletedCh)
+	await.Snd(s.T(), env.activityCompletedCh, struct{}{})
 	err = env.SdkClient().SignalWorkflow(s.Context(), workflowID, runID, env.testEndSignal, "done")
 	s.NoError(err)
 	s.Await(func(s *PauseWorkflowExecutionSuite) {

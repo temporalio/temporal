@@ -14,12 +14,14 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
+	test "go.temporal.io/server/common/testing"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
@@ -526,6 +528,66 @@ func TestRequestIDGeneratedWhenMissing(t *testing.T) {
 		require.NotEmpty(t, req.GetRequestId(), "server must generate a request ID when client omits it")
 		require.NoError(t, validateUUID(req.GetRequestId()), "generated request ID must be a valid UUID")
 	})
+}
+
+// TestValidateAndPopulateStartRequest_CombinesRequestAndCallbackLinks verifies that both
+// the request's own links and those embedded in its completion callbacks reach the link
+// validator. Link shape and limit semantics are covered in common/links.
+func TestValidateAndPopulateStartRequest_CombinesRequestAndCallbackLinks(t *testing.T) {
+	callbackValidator, err := callbacks.NewValidator(test.NewCallbacksValidatorConfig())
+	require.NoError(t, err)
+
+	h := &frontendHandler{
+		config: &Config{
+			BlobSizeLimitError:         defaultBlobSizeLimitError,
+			BlobSizeLimitWarn:          defaultBlobSizeLimitWarn,
+			DefaultActivityRetryPolicy: getDefaultRetrySettings,
+			EnableCallbacks:            func(string) bool { return true },
+			EnabledCallbackKinds: func(string) []callbacks.Kind {
+				return []callbacks.Kind{callbacks.KindNexus}
+			},
+			MaxIDLengthLimit:           func() int { return defaultMaxIDLengthLimit },
+			MaxUserMetadataDetailsSize: defaultMaxUserMetadataDetailsSize,
+			MaxUserMetadataSummarySize: defaultMaxUserMetadataSummarySize,
+		},
+		callbackValidator: callbackValidator,
+		linkValidator: newLinkValidator(
+			func(string) int { return 1 },
+			func(string) int { return 2000 },
+			defaultLinkMaxSize,
+		),
+		logger: log.NewNoopLogger(),
+	}
+	// The per-request limit is 1, so a single link from each source only trips the
+	// validator if both sources are forwarded.
+	req := &workflowservice.StartActivityExecutionRequest{
+		Namespace:           defaultNamespaceID,
+		ActivityId:          defaultActivityID,
+		ActivityType:        &commonpb.ActivityType{Name: defaultActivityType},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+		StartToCloseTimeout: durationpb.New(10 * time.Second),
+		Links: []*commonpb.Link{{
+			Variant: &commonpb.Link_BatchJob_{
+				BatchJob: &commonpb.Link_BatchJob{JobId: "request-job"},
+			},
+		}},
+		CompletionCallbacks: []*commonpb.Callback{{
+			Variant: &commonpb.Callback_Nexus_{
+				Nexus: &commonpb.Callback_Nexus{
+					Url: "http://localhost/cb",
+				},
+			},
+			Links: []*commonpb.Link{{
+				Variant: &commonpb.Link_BatchJob_{
+					BatchJob: &commonpb.Link_BatchJob{JobId: "callback-job"},
+				},
+			}},
+		}},
+	}
+
+	_, err = h.validateAndPopulateStartRequest(t.Context(), req, namespace.ID(defaultNamespaceID))
+	require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
+	require.ErrorContains(t, err, "cannot attach more than 1 links per request, got 2")
 }
 
 func validateUUID(s string) error {

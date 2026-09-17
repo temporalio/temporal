@@ -123,6 +123,40 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TearDownTest() {
 	s.controller.Finish()
 }
 
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TestSelectedAPIs() {
+	s.Equal(map[string]struct{}{
+		// Workflow APIs
+		"StartWorkflowExecution":           {},
+		"SignalWithStartWorkflowExecution": {},
+		"SignalWorkflowExecution":          {},
+		"UpdateWorkflowExecution":          {},
+		"RequestCancelWorkflowExecution":   {},
+		"TerminateWorkflowExecution":       {},
+		"PauseWorkflowExecution":           {},
+		"UnpauseWorkflowExecution":         {},
+		"ResetWorkflowExecution":           {},
+		"DeleteWorkflowExecution":          {},
+		"QueryWorkflow":                    {},
+		"ExecuteMultiOperation":            {},
+
+		// Standalone Activity APIs
+		"StartActivityExecution":         {},
+		"RequestCancelActivityExecution": {},
+		"TerminateActivityExecution":     {},
+		"DeleteActivityExecution":        {},
+		"PauseActivityExecution":         {},
+		"UnpauseActivityExecution":       {},
+		"ResetActivityExecution":         {},
+		"UpdateActivityExecutionOptions": {},
+
+		// Standalone Nexus Operation APIs
+		"StartNexusOperationExecution":         {},
+		"RequestCancelNexusOperationExecution": {},
+		"TerminateNexusOperationExecution":     {},
+		"DeleteNexusOperationExecution":        {},
+	}, selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs)
+}
+
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect_LocalNamespace() {
 	s.setupLocalNamespace()
 
@@ -183,8 +217,9 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect
 	s.Equal(2, callCount)
 }
 
-func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect_GlobalNamespace_NoForwarding_APINotWhiltelisted() {
-	s.setupGlobalNamespaceWithTwoReplicationCluster(true, true)
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect_GlobalNamespace_NoForwarding_APINotWhitelisted() {
+	// Active cluster is alternative, but non-whitelisted APIs must stay local.
+	s.setupGlobalNamespaceWithTwoReplicationCluster(true, false)
 
 	callCount := 0
 	callFn := func(targetCluster string) error {
@@ -194,6 +229,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect
 	}
 
 	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
+		apiName = apiName + "_notwhitelisted"
 		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
 		s.NoError(err)
 

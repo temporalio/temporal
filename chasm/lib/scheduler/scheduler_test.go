@@ -15,7 +15,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/chasmtest"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/payload"
@@ -77,13 +76,8 @@ func TestCreateScheduler_InitialPauseState(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
 			logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
-			registry := chasm.NewRegistry(logger)
-			require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
-			require.NoError(t, registry.Register(newTestLibrary(logger, newRealSpecProcessor(ctrl, logger))))
-			testEngine := chasmtest.NewEngine(t, registry)
-			engineCtx := chasm.NewEngineContext(context.Background(), testEngine)
+			_, engineCtx := newTestEngineContext(t, logger)
 			input := defaultSchedule()
 			input.State.Paused = tc.initialPaused
 
@@ -160,6 +154,70 @@ func TestListInfo_RecentActionsCapped(t *testing.T) {
 		wantIdx := 7 + idx // most recent five: wf-7 .. wf-11
 		require.Equal(t, fmt.Sprintf("wf-%d", wantIdx), action.GetStartWorkflowResult().GetWorkflowId())
 	}
+}
+
+func TestDescribe_RecentActionsCappedAcrossSources(t *testing.T) {
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+	_, engineCtx := newTestEngineContext(t, logger)
+	result, err := chasm.StartExecution(
+		engineCtx,
+		chasm.ExecutionKey{NamespaceID: namespaceID, BusinessID: scheduleID},
+		scheduler.CreateScheduler,
+		&schedulerpb.CreateScheduleRequest{
+			NamespaceId: namespaceID,
+			FrontendRequest: &workflowservice.CreateScheduleRequest{
+				Namespace:  namespace,
+				ScheduleId: scheduleID,
+				Schedule:   defaultSchedule(),
+			},
+		},
+	)
+	require.NoError(t, err)
+
+	rootRef := chasm.NewComponentRef[*scheduler.Scheduler](result.ExecutionKey)
+	base := time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC)
+	_, _, err = chasm.UpdateComponent(engineCtx, rootRef,
+		func(sched *scheduler.Scheduler, ctx chasm.MutableContext, _ struct{}) (struct{}, error) {
+			invoker := sched.Invoker.Get(ctx)
+			for i := range scheduler.RecentActionCount {
+				storedTime := timestamppb.New(base.Add(time.Duration(2*i) * time.Minute))
+				sched.Info.RecentActions = append(sched.Info.RecentActions, &schedulepb.ScheduleActionResult{
+					ScheduleTime: storedTime,
+					ActualTime:   storedTime,
+					StartWorkflowResult: &commonpb.WorkflowExecution{
+						WorkflowId: fmt.Sprintf("stored-workflow-%d", i),
+						RunId:      fmt.Sprintf("stored-run-%d", i),
+					},
+				})
+
+				trackedTime := timestamppb.New(base.Add(time.Duration(2*i+1) * time.Minute))
+				invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{
+					WorkflowId: fmt.Sprintf("tracked-workflow-%d", i),
+					RunId:      fmt.Sprintf("tracked-run-%d", i),
+					StartTime:  trackedTime,
+				})
+			}
+			return struct{}{}, nil
+		}, struct{}{})
+	require.NoError(t, err)
+
+	_, err = chasm.ReadComponent(engineCtx, rootRef,
+		func(sched *scheduler.Scheduler, ctx chasm.Context, _ struct{}) (struct{}, error) {
+			response, err := sched.Describe(ctx, &schedulerpb.DescribeScheduleRequest{}, newLegacySpecBuilder(0, 0))
+			require.NoError(t, err)
+			actions := response.GetFrontendResponse().GetInfo().GetRecentActions()
+			require.Len(t, actions, scheduler.RecentActionCount)
+			for i, action := range actions {
+				wantIndex := i/2 + scheduler.RecentActionCount/2
+				if i%2 == 0 {
+					require.Equal(t, fmt.Sprintf("stored-run-%d", wantIndex), action.GetStartWorkflowResult().GetRunId())
+				} else {
+					require.Equal(t, fmt.Sprintf("tracked-run-%d", wantIndex), action.GetStartWorkflowResult().GetRunId())
+				}
+			}
+			return struct{}{}, nil
+		}, struct{}{})
+	require.NoError(t, err)
 }
 
 func TestCreateSchedulerFromMigration(t *testing.T) {
