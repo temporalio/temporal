@@ -54,6 +54,7 @@ func standbyTransferTaskPostActionTaskDiscarded(
 	taskInfo tasks.Task,
 	postActionInfo any,
 	logger log.Logger,
+	eventDetails map[string]any,
 ) error {
 
 	if postActionInfo == nil {
@@ -69,6 +70,11 @@ func standbyTransferTaskPostActionTaskDiscarded(
 				tag.NewStringTag("parent-workflow-id", info.parentWorkflowKey.WorkflowID),
 				tag.NewStringTag("parent-run-id", info.parentWorkflowKey.RunID),
 			)
+			if eventDetails != nil {
+				eventDetails["parent_namespace_id"] = info.parentWorkflowKey.NamespaceID
+				eventDetails["parent_workflow_id"] = info.parentWorkflowKey.WorkflowID
+				eventDetails["parent_run_id"] = info.parentWorkflowKey.RunID
+			}
 		}
 	case *tasks.StartChildExecutionTask:
 		if info, ok := postActionInfo.(*startChildExecutionPostActionInfo); ok && info.childWorkflowKey != nil {
@@ -77,6 +83,11 @@ func standbyTransferTaskPostActionTaskDiscarded(
 				tag.NewStringTag("child-workflow-id", info.childWorkflowKey.WorkflowID),
 				tag.NewStringTag("child-run-id", info.childWorkflowKey.RunID),
 			)
+			if eventDetails != nil {
+				eventDetails["child_namespace_id"] = info.childWorkflowKey.NamespaceID
+				eventDetails["child_workflow_id"] = info.childWorkflowKey.WorkflowID
+				eventDetails["child_run_id"] = info.childWorkflowKey.RunID
+			}
 		}
 	default:
 	}

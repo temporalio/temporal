@@ -16,6 +16,7 @@ import (
 func TestStandbyTransferTaskPostActionTaskDiscarded_CloseExecutionLogsParentWorkflow(t *testing.T) {
 	workflowKey := definition.NewWorkflowKey("parent-namespace-id", "parent-workflow-id", "parent-run-id")
 	logger := log.NewMockLogger(gomock.NewController(t))
+	eventDetails := make(map[string]any)
 	logger.EXPECT().Warn(
 		"Discarding standby transfer task due to task being pending for too long.",
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
@@ -32,13 +33,20 @@ func TestStandbyTransferTaskPostActionTaskDiscarded_CloseExecutionLogsParentWork
 		&tasks.CloseExecutionTask{},
 		&verifyCompletionRecordedPostActionInfo{parentWorkflowKey: &workflowKey},
 		logger,
+		eventDetails,
 	)
 	require.ErrorIs(t, err, consts.ErrTaskDiscarded)
+	require.Equal(t, map[string]any{
+		"parent_namespace_id": workflowKey.NamespaceID,
+		"parent_workflow_id":  workflowKey.WorkflowID,
+		"parent_run_id":       workflowKey.RunID,
+	}, eventDetails)
 }
 
 func TestStandbyTransferTaskPostActionTaskDiscarded_StartChildExecutionLogsChildWorkflow(t *testing.T) {
 	workflowKey := definition.NewWorkflowKey("child-namespace-id", "child-workflow-id", "child-run-id")
 	logger := log.NewMockLogger(gomock.NewController(t))
+	eventDetails := make(map[string]any)
 	logger.EXPECT().Warn(
 		"Discarding standby transfer task due to task being pending for too long.",
 		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
@@ -55,8 +63,14 @@ func TestStandbyTransferTaskPostActionTaskDiscarded_StartChildExecutionLogsChild
 		&tasks.StartChildExecutionTask{},
 		&startChildExecutionPostActionInfo{childWorkflowKey: &workflowKey},
 		logger,
+		eventDetails,
 	)
 	require.ErrorIs(t, err, consts.ErrTaskDiscarded)
+	require.Equal(t, map[string]any{
+		"child_namespace_id": workflowKey.NamespaceID,
+		"child_workflow_id":  workflowKey.WorkflowID,
+		"child_run_id":       workflowKey.RunID,
+	}, eventDetails)
 }
 
 func logTagValues(logTags []tag.Tag) map[string]any {
