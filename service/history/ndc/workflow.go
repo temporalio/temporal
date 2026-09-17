@@ -287,13 +287,6 @@ func (r *WorkflowImpl) terminateMutableState(
 		)
 	}
 
-	metrics.ExecutionForceTerminations.With(metricsHandler).Record(
-		1,
-		metrics.NamespaceTag(r.mutableState.GetNamespaceEntry().Name().String()),
-		metrics.ArchetypeTag(chasm.WorkflowArchetype),
-		metrics.ReasonTag(chasm.ExecutionForceTerminationReasonVersionConflict),
-	)
-
 	if _, err := r.failWorkflowTask(); err != nil {
 		return err
 	}
@@ -306,6 +299,16 @@ func (r *WorkflowImpl) terminateMutableState(
 		false,
 		nil, // No links necessary.
 	)
+	if err != nil {
+		return err
+	}
+
+	metrics.ExecutionForceTerminations.With(metricsHandler).Record(
+		1,
+		metrics.NamespaceTag(r.mutableState.GetNamespaceEntry().Name().String()),
+		metrics.ArchetypeTag(chasm.WorkflowArchetype),
+		metrics.ReasonTag(chasm.ExecutionForceTerminationReasonVersionConflict),
+	)
 
 	// Don't abort updates here for a few reasons:
 	//   1. There probably no update waiters for Wf which is about to be terminated,
@@ -313,7 +316,7 @@ func (r *WorkflowImpl) terminateMutableState(
 	//   3. New replication version will force update registry reload and waiters will get errors.
 	// r.GetContext().UpdateRegistry(context.Background(), nil).Abort(update.AbortReasonWorkflowTerminated)
 
-	return err
+	return nil
 }
 
 func WorkflowHappensAfter(
