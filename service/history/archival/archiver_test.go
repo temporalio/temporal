@@ -165,6 +165,8 @@ func TestArchiver(t *testing.T) {
 
 			ctx := context.Background()
 			controller := gomock.NewController(t)
+			var deduplicationNamespace string
+			var deduplicationOptionEnabled bool
 			archiverProvider := provider.NewMockArchiverProvider(controller)
 			historyArchiver := carchiver.NewMockHistoryArchiver(controller)
 			visibilityArchiver := carchiver.NewMockVisibilityArchiver(controller)
@@ -199,7 +201,7 @@ func TestArchiver(t *testing.T) {
 							_ *archiverspb.VisibilityRecord,
 							opts ...carchiver.ArchiveOption,
 						) error {
-							require.True(t, carchiver.GetFeatureCatalog(opts...).VisibilityArchivalRecordDeduplication)
+							deduplicationOptionEnabled = carchiver.GetFeatureCatalog(opts...).VisibilityArchivalRecordDeduplication
 							return c.ArchiveVisibilityErr
 						})
 				} else {
@@ -233,7 +235,7 @@ func TestArchiver(t *testing.T) {
 						return 42.0
 					},
 					EnableVisibilityArchivalRecordDeduplication: func(namespace string) bool {
-						assert.Equal(t, "test-namespace", namespace)
+						deduplicationNamespace = namespace
 						return c.EnableVisibilityArchivalRecordDeduplication
 					},
 				}),
@@ -267,6 +269,10 @@ func TestArchiver(t *testing.T) {
 				Targets:          c.Targets,
 				SearchAttributes: searchAttributes,
 			})
+			if c.ExpectArchiveVisibility {
+				require.Equal(t, "test-namespace", deduplicationNamespace)
+				require.Equal(t, c.EnableVisibilityArchivalRecordDeduplication, deduplicationOptionEnabled)
+			}
 
 			if len(c.ExpectedReturnErrors) > 0 {
 				require.Error(t, err)
