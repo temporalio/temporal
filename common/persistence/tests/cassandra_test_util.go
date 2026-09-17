@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path"
@@ -10,8 +11,8 @@ import (
 	"testing"
 	"time"
 
+	gocql "github.com/apache/cassandra-gocql-driver/v2"
 	"github.com/blang/semver/v4"
-	"github.com/gocql/gocql"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -129,7 +130,7 @@ func ApplySchemaUpdate(t *testing.T, cfg *config.Cassandra, schemaFile string, l
 	}
 
 	for _, stmt := range statements {
-		if err = session.Query(stmt).Exec(); err != nil {
+		if err = session.Query(stmt).Exec(context.Background()); err != nil {
 			logger.Error(fmt.Sprintf("Unable to execute statement from file: %s\n  %s", schemaFile, stmt))
 			t.Fatal(err)
 		}
