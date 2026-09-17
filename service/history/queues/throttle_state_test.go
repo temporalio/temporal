@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	ctasks "go.temporal.io/server/common/tasks"
 )
 
 const testThrottleWindow = time.Second
@@ -103,20 +104,20 @@ func TestIsControllerInput(t *testing.T) {
 }
 
 func TestNewThrottleKey_OneClassPerNamespaceAndCause(t *testing.T) {
-	aps := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
+	aps := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1", ctasks.PriorityHigh)
 
 	require.Equal(t, "ns-1", aps.NamespaceID)
 	require.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, aps.Cause)
 
-	require.Equal(t, aps, NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1"))
-	require.NotEqual(t, aps, NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-2"),
+	require.Equal(t, aps, NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1", ctasks.PriorityHigh))
+	require.NotEqual(t, aps, NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-2", ctasks.PriorityHigh),
 		"one namespace's budget must not gate another's")
-	require.NotEqual(t, aps, NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, "ns-1"),
+	require.NotEqual(t, aps, NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, "ns-1", ctasks.PriorityHigh),
 		"two budgets a namespace holds independently must not share a class")
 }
 
 func testKey() ThrottleKey {
-	return NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
+	return NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1", ctasks.PriorityHigh)
 }
 
 func admitOK(c *ThrottleState, key ThrottleKey) bool {
@@ -125,22 +126,56 @@ func admitOK(c *ThrottleState, key ThrottleKey) bool {
 	return allowed
 }
 
+// reportThrottle feeds rejections in for one control decision. A decision needs a sample the
+// loss ratio can resolve, so the admitted form supplies the releases the rejections are
+// measured against: one call is one window of total loss.
 func reportThrottle(c *ThrottleState, key ThrottleKey, admitted bool) {
-	if !c.Enabled() {
+	if !c.Enabled() || !admitted {
 		c.ReportThrottled(key, nil)
 		return
 	}
-	var permit *throttleEntry
-	if admitted {
-		entry := c.getOrCreate(key)
-		if entry != nil {
-			entry.Lock()
-			entry.releases++
-			entry.Unlock()
-			permit = entry
-		}
+	entry := c.getOrCreate(key)
+	if entry == nil {
+		c.ReportThrottled(key, nil)
+		return
 	}
+	_, _, lossThreshold := c.controlLaw()
+	samples := minDecisionReleases(lossThreshold)
+	entry.Lock()
+	entry.releases += samples
+	entry.rejections += samples - 1
+	entry.Unlock()
+	c.ReportThrottled(key, entry)
+}
+
+// admitAndReject issues one release and reports it rejected, which is the metered pair the
+// control law measures. It reports false when the gate refused the release.
+func admitAndReject(c *ThrottleState, key ThrottleKey) bool {
+	allowed, permit, _ := c.Admit(key)
+	if !allowed {
+		return false
+	}
+	c.Finish(permit, true)
 	c.ReportThrottled(key, permit)
+	return true
+}
+
+// throttleCounters reports the open window's release and rejection counts.
+func throttleCounters(state *ThrottleState, key ThrottleKey) (releases, rejections int64) {
+	entry := state.peek(key)
+	if entry == nil {
+		return 0, 0
+	}
+	entry.Lock()
+	defer entry.Unlock()
+	return entry.releases, entry.rejections
+}
+
+// cleanWindow gives the class a window it wants a higher rate in: the bucket is drained until
+// the gate refuses, which is the demand signal, and nothing is reported rejected.
+func cleanWindow(c *ThrottleState, key ThrottleKey) {
+	for admitOK(c, key) { //nolint:revive // draining, body intentionally empty
+	}
 }
 
 func closeWindow(state *ThrottleState, ts *clock.EventTimeSource, key ThrottleKey) {
@@ -220,7 +255,7 @@ func TestThrottleState_IncreaseAfterCleanWindow(t *testing.T) {
 	closeWindow(state, timeSource, key)
 	require.InEpsilon(t, 85.0, throttleRate(state, key), 1e-9)
 
-	require.True(t, admitOK(state, key))
+	cleanWindow(state, key)
 	closeWindow(state, timeSource, key)
 
 	require.InEpsilon(t, 85.0*1.1, throttleRate(state, key), 1e-9)
@@ -240,7 +275,7 @@ func TestThrottleState_ClampsRate(t *testing.T) {
 	require.InEpsilon(t, 20.0, throttleRate(state, key), 1e-9, "floor keeps the class making forward progress")
 
 	for i := 0; i < 200; i++ {
-		admitOK(state, key)
+		cleanWindow(state, key)
 		closeWindow(state, timeSource, key)
 	}
 	require.InEpsilon(t, 120.0, throttleRate(state, key), 1e-9, "ceiling bounds what a recovering class can climb to")
@@ -353,7 +388,7 @@ func TestThrottleState_ClassesAreIndependent(t *testing.T) {
 	state, timeSource := newTestThrottleState(defaultThrottleOverrides())
 
 	namespaceKey := testKey()
-	otherCause := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, "ns-1")
+	otherCause := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, "ns-1", ctasks.PriorityHigh)
 
 	reportThrottle(state, namespaceKey, true)
 	closeWindow(state, timeSource, namespaceKey)
@@ -408,12 +443,18 @@ func TestThrottleState_UnadmittedRejectionsDoNotBlockIncrease(t *testing.T) {
 	closeWindow(state, timeSource, key)
 	require.InEpsilon(t, 85.0, throttleRate(state, key), 1e-9)
 
+	// Rejections the gate did not issue are loss on traffic it never sent, so they must not
+	// hold the rate down: each of these windows has to climb as though it saw none of them.
+	want := 85.0
 	for i := 0; i < 4; i++ {
-		require.True(t, admitOK(state, key))
+		cleanWindow(state, key)
 		reportThrottle(state, key, false)
 		closeWindow(state, timeSource, key)
-	}
 
+		want *= 1.1
+		require.InEpsilon(t, want, throttleRate(state, key), 1e-9,
+			"unadmitted rejections blocked the increase in window %d", i)
+	}
 }
 
 func TestThrottleState_IdleWindowsDoNotMoveTheRate(t *testing.T) {
@@ -440,13 +481,14 @@ func TestThrottleState_BusyClassIsNotPunishedForItsSize(t *testing.T) {
 		admitted := 0
 		for w := 0; w < 20; w++ {
 			for i := 0; i < demandPerWindow; i++ {
-				if !admitOK(state, key) {
+				admit := admitOK
+				if (admitted+1)%rejectEveryNth == 0 {
+					admit = admitAndReject
+				}
+				if !admit(state, key) {
 					continue
 				}
 				admitted++
-				if admitted%rejectEveryNth == 0 {
-					reportThrottle(state, key, true)
-				}
 			}
 			closeWindow(state, timeSource, key)
 		}
@@ -458,11 +500,11 @@ func TestThrottleState_BusyClassIsNotPunishedForItsSize(t *testing.T) {
 	require.Less(t, want, o.maxRate, "the run must stay below the ceiling to mean anything")
 
 	rates := make([]float64, 0, 2)
-	for _, demand := range []int{100, 1000} {
+	for _, demand := range []int{700, 7000} {
 		rate := rateFor(demand)
 		require.InEpsilon(t, want, rate, 1e-9,
 			"a class seeing 2%% loss against a 5%% threshold must be allowed to speed up every "+
-				"window, whether it releases 100 or 1000; demand=%d", demand)
+				"window, whatever its size; demand=%d", demand)
 		rates = append(rates, rate)
 	}
 	require.InEpsilon(t, rates[0], rates[1], 1e-9,

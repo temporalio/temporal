@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/clock"
+	ctasks "go.temporal.io/server/common/tasks"
 )
 
 func TestThrottleState_FailedSubmitAfterWindowDoesNotIncreaseRate(t *testing.T) {
@@ -20,7 +22,7 @@ func TestThrottleState_FailedSubmitAfterWindowDoesNotIncreaseRate(t *testing.T) 
 	timeSource.Update(timeSource.Now().Add(testThrottleWindow))
 	state.Finish(permit, false)
 
-	require.Equal(t, 1.0, throttleRate(state, key))
+	require.InEpsilon(t, 1.0, throttleRate(state, key), 1e-9)
 	require.True(t, admitOK(state, key), "the unused token must be returned")
 }
 
@@ -48,7 +50,7 @@ func TestThrottleState_FailedSubmitRefundsWithoutRelease(t *testing.T) {
 	state.Finish(permit, false)
 	permit.Lock()
 	defer permit.Unlock()
-	require.Equal(t, 1.0, permit.tokens)
+	require.InEpsilon(t, 1.0, permit.tokens, 1e-9)
 	require.Zero(t, permit.releases)
 	require.Zero(t, permit.pending)
 }
@@ -284,10 +286,13 @@ func TestThrottleState_LossThresholdOfOneStillDecreases(t *testing.T) {
 func TestThrottleState_ThrottledWindowDoesNotIncrease(t *testing.T) {
 	state, timeSource := newTestThrottleState(defaultThrottleOverrides())
 	key := testKey()
-	allowed, permit, _ := state.Admit(key)
-	require.True(t, allowed)
-	state.Finish(permit, true)
-	state.ReportThrottled(key, permit)
+	_, _, lossThreshold := state.controlLaw()
+	for i := int64(0); i < minDecisionReleases(lossThreshold); i++ {
+		allowed, permit, _ := state.Admit(key)
+		require.True(t, allowed)
+		state.Finish(permit, true)
+		state.ReportThrottled(key, permit)
+	}
 	closeWindow(state, timeSource, key)
 
 	require.InEpsilon(t, 85.0, throttleRate(state, key), 1e-9)
@@ -303,9 +308,137 @@ func TestThrottleEntry_NonPositiveRateHasNoTokenETA(t *testing.T) {
 func TestThrottleState_ReportSuccessClosesCleanWindow(t *testing.T) {
 	state, timeSource := newTestThrottleState(defaultThrottleOverrides())
 	key := testKey()
-	require.True(t, admitOK(state, key))
+	cleanWindow(state, key)
 	timeSource.Update(timeSource.Now().Add(testThrottleWindow))
 
 	state.ReportSuccess(key)
 	require.InEpsilon(t, 110.0, throttleRate(state, key), 1e-9)
+}
+
+// A class is only asking for a higher rate when the gate refuses it. Raising the rate of a
+// class that never ran out of tokens would climb to the ceiling on clean windows alone, and the
+// burst that buys is what the class dumps the moment its demand returns.
+func TestThrottleState_DemandBelowTheRateDoesNotRaiseIt(t *testing.T) {
+	state, timeSource := newTestThrottleState(defaultThrottleOverrides())
+	key := testKey()
+
+	for w := 0; w < 40; w++ {
+		for i := 0; i < 5; i++ {
+			require.True(t, admitOK(state, key))
+		}
+		closeWindow(state, timeSource, key)
+	}
+	require.InEpsilon(t, defaultThrottleOverrides().initialRate, throttleRate(state, key), 1e-9,
+		"a class well under its rate has shown no demand for more")
+}
+
+// A loss ratio cannot resolve a 5% threshold from ten releases: the smallest non-zero ratio it
+// can express is already 10%, so a class whose true loss is under the threshold would be cut
+// every window that happened to contain a rejection, and would drift below a rate it could
+// sustain. Evidence carries across windows until the ratio means something.
+func TestThrottleState_LowRateClassIsNotCutByAnUnresolvableRatio(t *testing.T) {
+	// 4% loss, under the 5% threshold. At a rate of 15 a window holds too few releases for the
+	// ratio to say so: one rejection reads as 6.7%, and most windows contain one, so deciding
+	// per window drives the class below a rate it was sustaining.
+	const rejectEveryNth = 25
+
+	o := defaultThrottleOverrides()
+	o.initialRate = 15
+	state, timeSource := newTestThrottleState(o)
+	key := testKey()
+
+	admitted := 0
+	for w := 0; w < 40; w++ {
+		for i := 0; i < 200; i++ { // demand above the rate, so the class is asking for more
+			admit := admitOK
+			if (admitted+1)%rejectEveryNth == 0 {
+				admit = admitAndReject
+			}
+			if !admit(state, key) {
+				continue
+			}
+			admitted++
+		}
+		closeWindow(state, timeSource, key)
+	}
+	require.Greater(t, throttleRate(state, key), o.initialRate,
+		"a class losing 4% against a 5% threshold must not be cut at any rate")
+}
+
+// The control loop asks whether the releases this class issued are getting through. One that
+// failed under a different budget did not get through, so it belongs to the class that issued
+// it; charging the cause the error reported would leave the issuing class reading perfectly
+// clean while every one of its releases was refused.
+func TestThrottleState_RejectionUnderAnotherCauseChargesTheIssuingClass(t *testing.T) {
+	state, _ := newTestThrottleState(defaultThrottleOverrides())
+	issuing := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1", ctasks.PriorityHigh)
+	other := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, "ns-1", ctasks.PriorityHigh)
+
+	allowed, permit, _ := state.Admit(issuing)
+	require.True(t, allowed)
+	state.Finish(permit, true)
+	state.ReportThrottled(other, permit)
+
+	releases, rejections := throttleCounters(state, issuing)
+	require.Equal(t, int64(1), releases)
+	require.Equal(t, int64(1), rejections, "the class that issued the release must see the loss")
+
+	_, otherRejections := throttleCounters(state, other)
+	require.Zero(t, otherRejections, "the reported cause issued nothing, so it learns nothing")
+}
+
+// Priority is part of the key so that each priority paces itself. Sharing one bucket across
+// priorities let a high priority backlog hold every token while the rescheduler, which offers
+// the budget in strict priority order, never reached the lower priority class at all.
+func TestThrottleKey_PriorityIsItsOwnClass(t *testing.T) {
+	state, _ := newTestThrottleState(defaultThrottleOverrides())
+	high := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1", ctasks.PriorityHigh)
+	preemptable := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1", ctasks.PriorityPreemptable)
+
+	cleanWindow(state, high)
+	require.False(t, admitOK(state, high), "high priority has spent its whole bucket")
+	require.True(t, admitOK(state, preemptable), "a lower priority class holds its own tokens")
+}
+
+// A namespace token bucket refuses what exceeds the budget, so the loss this class sees rises
+// with its own rate. That feedback is what the control law needs: it settles just above the
+// share other traffic leaves it, rather than at the floor or the ceiling.
+func TestThrottleState_ConvergesOnTheShareLeftByOtherTraffic(t *testing.T) {
+	const budget = 200.0
+
+	for _, other := range []float64{0, 100, 150, 190} {
+		sustainable := budget - other
+		o := defaultThrottleOverrides()
+		o.initialRate = 1000
+		state, timeSource := newTestThrottleState(o)
+		key := testKey()
+
+		for w := 0; w < 400; w++ {
+			permits := make([]*throttleEntry, 0, 512)
+			for {
+				allowed, permit, _ := state.Admit(key)
+				if !allowed {
+					break
+				}
+				state.Finish(permit, true)
+				permits = append(permits, permit)
+			}
+			if aggregate := other + float64(len(permits)); aggregate > budget && len(permits) > 0 {
+				// The enforcer refuses the overflow; this class owns its share of it.
+				rejected := int((aggregate - budget) * float64(len(permits)) / aggregate)
+				for i := 0; i < rejected && i < len(permits); i++ {
+					state.ReportThrottled(key, permits[i])
+				}
+			}
+			timeSource.Update(timeSource.Now().Add(testThrottleWindow))
+		}
+
+		settled := throttleRate(state, key)
+		require.GreaterOrEqual(t, settled, sustainable,
+			"the class must claim the share left to it; other=%v", other)
+		require.Less(t, settled, budget*1.5,
+			"the class must not run away above the budget; other=%v", other)
+		require.Less(t, settled, o.maxRate,
+			"a class under real back pressure must not reach the ceiling; other=%v", other)
+	}
 }

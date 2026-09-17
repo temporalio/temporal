@@ -852,25 +852,42 @@ func (e *executableImpl) reportThrottle(
 		return
 	}
 
+	metrics.TaskThrottleWastedAttempts.With(e.chasmMetricsHandler).Record(
+		1,
+		metrics.ResourceExhaustedCauseTag(cause),
+		metrics.ResourceExhaustedScopeTag(scope),
+	)
+
 	if !IsControllerInput(cause, scope) {
+		// The cause is not one the controller governs, but a release it issued still failed,
+		// so the class that issued it has to see the loss before the key is dropped.
+		if permit := e.takeThrottlePermit(); permit != nil {
+			e.throttleState.ReportThrottled(permit.key, permit)
+		}
 		e.clearThrottle()
 		return
 	}
 
-	key := NewThrottleKey(cause, e.GetNamespaceID())
+	key := NewThrottleKey(cause, e.GetNamespaceID(), e.GetPriority())
 
 	e.throttleMu.Lock()
 	e.throttleKey = key
 	e.hasThrottleKey = true
 	e.wasThrottled = true
 	permit := e.throttlePermit
-	if permit != nil && permit.key != key {
-		permit = nil
-	}
 	e.throttlePermit = nil
 	e.throttleMu.Unlock()
 
 	e.throttleState.ReportThrottled(key, permit)
+}
+
+func (e *executableImpl) takeThrottlePermit() *throttleEntry {
+	e.throttleMu.Lock()
+	defer e.throttleMu.Unlock()
+
+	permit := e.throttlePermit
+	e.throttlePermit = nil
+	return permit
 }
 
 func (e *executableImpl) clearThrottle() {

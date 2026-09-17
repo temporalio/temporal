@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	ctasks "go.temporal.io/server/common/tasks"
 )
 
 const (
@@ -28,9 +29,14 @@ const (
 )
 
 type (
+	// ThrottleKey identifies one controlled class. Priority is part of it because the
+	// rescheduler offers the budget to classes in strict priority order: sharing one bucket
+	// across priorities would let a high priority backlog spend every token indefinitely,
+	// and would charge a preemptable rejection to the class high priority work draws on.
 	ThrottleKey struct {
 		Cause       enumspb.ResourceExhaustedCause
 		NamespaceID string
+		Priority    ctasks.Priority
 	}
 
 	ThrottleStateOptions struct {
@@ -63,14 +69,15 @@ type (
 		key ThrottleKey
 
 		sync.Mutex
-		rate        float64
-		tokens      float64
-		lastRefill  time.Time
-		windowStart time.Time
-		lastAccess  time.Time
-		releases    int64
-		rejections  int64
-		pending     int64 // unresolved admits
+		rate         float64
+		tokens       float64
+		lastRefill   time.Time
+		windowStart  time.Time
+		lastAccess   time.Time
+		releases     int64
+		rejections   int64
+		suppressions int64
+		pending      int64 // unresolved admits
 	}
 )
 
@@ -106,14 +113,19 @@ func IsControllerInput(
 		cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT
 }
 
-func NewThrottleKey(cause enumspb.ResourceExhaustedCause, namespaceID string) ThrottleKey {
-	return ThrottleKey{Cause: cause, NamespaceID: namespaceID}
+func NewThrottleKey(
+	cause enumspb.ResourceExhaustedCause,
+	namespaceID string,
+	priority ctasks.Priority,
+) ThrottleKey {
+	return ThrottleKey{Cause: cause, NamespaceID: namespaceID, Priority: priority}
 }
 
 func (k ThrottleKey) metricsTags() []metrics.Tag {
 	return []metrics.Tag{
 		metrics.ResourceExhaustedCauseTag(k.Cause),
 		metrics.NamespaceIDTag(k.NamespaceID),
+		metrics.TaskPriorityTag(k.Priority.String()),
 	}
 }
 
@@ -154,6 +166,7 @@ func (s *ThrottleState) Admit(key ThrottleKey) (allowed bool, permit *throttleEn
 	s.advanceWindowLocked(entry, now, window)
 	entry.refillLocked(now, window)
 	if entry.tokens < 1 {
+		entry.suppressions++
 		metrics.TaskThrottleGateSuppressed.With(s.metricsHandler).Record(1, key.metricsTags()...)
 		return false, nil, entry.tokenETALocked()
 	}
@@ -186,8 +199,14 @@ func (s *ThrottleState) ReportThrottled(key ThrottleKey, permit *throttleEntry) 
 	if !s.Enabled() {
 		return
 	}
-	admitted := permit != nil && permit.key == key
-	entry := s.getOrCreate(key)
+	// The release was issued by the permit's class, so that is the class whose rate the
+	// rejection is evidence about, even when a different budget is the one that refused it.
+	// Charging the reported cause instead would leave the issuing class reading clean.
+	charged := key
+	if permit != nil {
+		charged = permit.key
+	}
+	entry := s.getOrCreate(charged)
 	if entry == nil {
 		metrics.TaskThrottleRejections.With(s.metricsHandler).Record(1, key.cappedTags()...)
 		return
@@ -200,37 +219,63 @@ func (s *ThrottleState) ReportThrottled(key ThrottleKey, permit *throttleEntry) 
 	defer entry.Unlock()
 
 	s.touchLocked(entry, now, window)
-	if admitted {
+	if permit != nil {
 		entry.rejections++
 		s.advanceWindowLocked(entry, now, window)
 	}
 }
 
+// minDecisionReleases is how many releases a loss ratio needs before it can resolve the
+// threshold. Below 1/threshold the smallest non-zero ratio is already above it, so a single
+// rejection would decide "total loss" for a class that is merely slow.
+func minDecisionReleases(lossThreshold float64) int64 {
+	if !(lossThreshold > 0) {
+		return 1
+	}
+	return int64(math.Ceil(1 / lossThreshold))
+}
+
+// advanceWindowLocked closes an elapsed window and applies at most one rate change for it.
+//
+// A window that carries too little evidence to resolve the threshold is closed without a
+// decision and its counters are carried forward, so a low rate class accumulates a measurable
+// sample instead of reacting to the first rejection it sees.
 func (s *ThrottleState) advanceWindowLocked(entry *throttleEntry, now time.Time, window time.Duration) {
 	if now.Sub(entry.windowStart) < window {
 		return
 	}
+	// Credit the elapsed window at the rate that governed it, before a decision changes it.
 	entry.refillLocked(now, window)
-	defer func() {
-		entry.windowStart = now
-		entry.releases, entry.rejections = 0, 0
-	}()
-	if entry.releases == 0 && entry.rejections == 0 {
+	entry.windowStart = now
+
+	beta, increaseRatio, lossThreshold := s.controlLaw()
+	minSamples := minDecisionReleases(lossThreshold)
+	if entry.releases < minSamples && entry.rejections < minSamples {
 		return
 	}
+	defer func() {
+		entry.releases, entry.rejections, entry.suppressions = 0, 0, 0
+	}()
 
+	// A rejection can land in the window after the one that released it, so bound the ratio at
+	// 1 rather than letting the skew read as loss above 100%.
 	loss := 1.0
-	if entry.rejections < entry.releases {
-		loss = float64(entry.rejections) / float64(entry.releases)
+	if entry.releases > 0 {
+		loss = min(1, float64(entry.rejections)/float64(entry.releases))
 	}
-	beta, increaseRatio, lossThreshold := s.controlLaw()
-	if loss > lossThreshold {
+	switch {
+	case loss > lossThreshold:
 		entry.rate = s.clamp(entry.rate * beta)
+		// Tokens banked at the old rate would let the class overshoot the new one.
 		entry.tokens = min(entry.tokens, entry.burstLocked(window))
 		metrics.TaskThrottleRateDecreases.With(s.metricsHandler).Record(1, entry.key.metricsTags()...)
-	} else {
+	case entry.suppressions > 0:
 		entry.rate = s.clamp(entry.rate * (1 + increaseRatio))
 		metrics.TaskThrottleRateIncreases.With(s.metricsHandler).Record(1, entry.key.metricsTags()...)
+	default:
+		// The gate never refused this class, so it has not asked for a higher rate. Raising it
+		// anyway would grow the burst it can spend the moment demand returns.
+		return
 	}
 	metrics.TaskThrottleAdmittedRate.With(s.metricsHandler).Record(entry.rate, entry.key.metricsTags()...)
 }

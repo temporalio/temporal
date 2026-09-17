@@ -79,7 +79,7 @@ func newTestRescheduler(
 }
 
 func apsKey(namespaceID string) ThrottleKey {
-	return NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, namespaceID)
+	return NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, namespaceID, ctasks.PriorityHigh)
 }
 
 func TestReschedule_ThrottledClassDoesNotBlockHealthyClass(t *testing.T) {
@@ -368,6 +368,7 @@ func TestReschedule_FailedSubmitRefundsTheToken(t *testing.T) {
 	require.Zero(t, r.Len())
 	require.True(t, e.admitted, "a gated release must tell the task the controller metered it")
 
-	closeWindow(state, stateClock, key)
-	require.Equal(t, 1.1, throttleRate(state, key))
+	releases, rejections := throttleCounters(state, key)
+	require.Equal(t, int64(1), releases, "only the submit that happened may be counted")
+	require.Zero(t, rejections)
 }

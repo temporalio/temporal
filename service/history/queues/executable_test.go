@@ -1572,7 +1572,7 @@ func (s *executableSuite) TestHandleErr_ThrottleErrorsDriveController() {
 	s.Error(executable.HandleErr(throttleErr))
 	key, known := provider.ThrottleKey()
 	s.True(known)
-	s.Equal(queues.NewThrottleKey(throttleErr.Cause, tests.NamespaceID.String()), key)
+	s.Equal(queues.NewThrottleKey(throttleErr.Cause, tests.NamespaceID.String(), executable.GetPriority()), key)
 
 	s.Error(executable.HandleErr(serviceerror.NewUnavailable("unrelated")))
 	_, known = provider.ThrottleKey()

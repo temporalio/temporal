@@ -956,6 +956,10 @@ var (
 		"task_throttle_attempts_per_completion",
 		WithDescription("The number of attempts needed by a task that was throttled before completing."),
 	)
+	TaskThrottleWastedAttempts = NewCounterDef(
+		"task_throttle_wasted_attempts",
+		WithDescription("The number of history task attempts that reached the enforcement point only to be rejected by a throttle."),
+	)
 	TaskThrottleCompletions = NewCounterDef(
 		"task_throttle_completions",
 		WithDescription("The number of tasks that completed after being throttled."),
