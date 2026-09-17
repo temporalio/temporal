@@ -820,16 +820,17 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 
 			transitionHistory := executionInfo.TransitionHistory
 			return []tasks.Task{&tasks.SyncVersionedTransitionTask{
-				WorkflowKey:         workflowKey,
-				ArchetypeID:         archetypeID,
-				Priority:            enumsspb.TASK_PRIORITY_LOW,
-				VersionedTransition: transitionhistory.LastVersionedTransition(transitionHistory),
-				FirstEventID:        executionInfo.LastFirstEventId,
-				FirstEventVersion:   lastItem.Version,
-				NextEventID:         nextEventID,
-				TaskEquivalents:     taskEquivalents,
-				TargetClusters:      targetClusters,
-				IsForceReplication:  true,
+				WorkflowKey:           workflowKey,
+				ArchetypeID:           archetypeID,
+				Priority:              enumsspb.TASK_PRIORITY_LOW,
+				VersionedTransition:   transitionhistory.LastVersionedTransition(transitionHistory),
+				FirstEventID:          executionInfo.LastFirstEventId,
+				FirstEventVersion:     lastItem.Version,
+				NextEventID:           nextEventID,
+				CurrentVersionHistory: versionhistory.CopyVersionHistory(versionHistory),
+				TaskEquivalents:       taskEquivalents,
+				TargetClusters:        targetClusters,
+				IsForceReplication:    true,
 			}}, 1, nil
 		}
 		if !isWorkflow {
@@ -882,16 +883,17 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 
 		transitionHistory := executionInfo.TransitionHistory
 		return []tasks.Task{&tasks.SyncVersionedTransitionTask{
-			WorkflowKey:         workflowKey,
-			ArchetypeID:         archetypeID,
-			Priority:            enumsspb.TASK_PRIORITY_LOW,
-			VersionedTransition: transitionhistory.LastVersionedTransition(transitionHistory),
-			FirstEventID:        executionInfo.LastFirstEventId,
-			FirstEventVersion:   lastItem.GetVersion(),
-			NextEventID:         nextEventID,
-			TaskEquivalents:     taskEquivalents,
-			TargetClusters:      targetClusters,
-			IsForceReplication:  true,
+			WorkflowKey:           workflowKey,
+			ArchetypeID:           archetypeID,
+			Priority:              enumsspb.TASK_PRIORITY_LOW,
+			VersionedTransition:   transitionhistory.LastVersionedTransition(transitionHistory),
+			FirstEventID:          executionInfo.LastFirstEventId,
+			FirstEventVersion:     lastItem.GetVersion(),
+			NextEventID:           nextEventID,
+			CurrentVersionHistory: versionhistory.CopyVersionHistory(versionHistory),
+			TaskEquivalents:       taskEquivalents,
+			TargetClusters:        targetClusters,
+			IsForceReplication:    true,
 		}}, 1, nil
 	}
 	if !isWorkflow {

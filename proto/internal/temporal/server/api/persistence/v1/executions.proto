@@ -479,6 +479,7 @@ message ReplicationTaskInfo {
   bool is_force_replication = 24;
   // (-- api-linter: core::0141::forbidden-types=disabled --)
   uint32 archetype_id = 25;
+  history.v1.VersionHistory current_version_history = 26;
 }
 
 // visibility_task_data column

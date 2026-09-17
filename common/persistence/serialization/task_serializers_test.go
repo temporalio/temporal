@@ -15,6 +15,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	workerpb "go.temporal.io/api/worker/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/shuffle"
@@ -418,6 +419,12 @@ func (s *taskSerializerSuite) TestSyncVersionedTransitionTask() {
 			NamespaceFailoverVersion: rand.Int63(),
 			TransitionCount:          rand.Int63(),
 		},
+		CurrentVersionHistory: &historyspb.VersionHistory{
+			BranchToken: []byte("branch-token"),
+			Items: []*historyspb.VersionHistoryItem{
+				{EventId: 123, Version: 456},
+			},
+		},
 		TaskEquivalents: []tasks.Task{
 			&tasks.HistoryReplicationTask{
 				WorkflowKey:         s.workflowKey,
@@ -434,8 +441,9 @@ func (s *taskSerializerSuite) TestSyncVersionedTransitionTask() {
 	s.assertEqualTasksWithOpts(syncVersionedTransitionTask,
 		func(task, deserializedTask tasks.Task) {
 			s.True(proto.Equal(task.(*tasks.SyncVersionedTransitionTask).VersionedTransition, deserializedTask.(*tasks.SyncVersionedTransitionTask).VersionedTransition))
+			s.True(proto.Equal(task.(*tasks.SyncVersionedTransitionTask).CurrentVersionHistory, deserializedTask.(*tasks.SyncVersionedTransitionTask).CurrentVersionHistory))
 		},
-		cmpopts.IgnoreFields(tasks.SyncVersionedTransitionTask{}, "VersionedTransition"),
+		cmpopts.IgnoreFields(tasks.SyncVersionedTransitionTask{}, "VersionedTransition", "CurrentVersionHistory"),
 	)
 }
 

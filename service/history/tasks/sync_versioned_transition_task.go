@@ -27,6 +27,7 @@ type (
 		FirstEventID           int64                          // First event ID of version transition
 		NextEventID            int64                          // Next event ID after version transition
 		LastVersionHistoryItem *historyspb.VersionHistoryItem // Last version history item of version transition when version transition does not have associated events
+		CurrentVersionHistory  *historyspb.VersionHistory     // nil indicates a task created before current version history was captured
 		NewRunID               string
 		IsFirstTask            bool
 		IsForceReplication     bool

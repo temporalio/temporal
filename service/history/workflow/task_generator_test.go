@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -837,6 +838,7 @@ func TestTaskGeneratorImpl_GenerateMigrationTasks(t *testing.T) {
 				require.True(t, ok)
 				require.Equal(t, chasm.WorkflowArchetypeID, syncVersionTask.GetArchetypeID())
 				require.Equal(t, enumsspb.TASK_PRIORITY_LOW, syncVersionTask.Priority)
+				require.True(t, proto.Equal(executionInfo.VersionHistories.Histories[0], syncVersionTask.CurrentVersionHistory))
 				taskEquivalent := syncVersionTask.TaskEquivalents
 				require.Len(t, taskEquivalent, len(tc.expectedTaskEquivalentTypes))
 				for i, equivalent := range taskEquivalent {
