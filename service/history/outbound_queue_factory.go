@@ -225,7 +225,6 @@ func (f *outboundQueueFactory) CreateQueue(
 		logger,
 		metricsHandler,
 		f.ThrottleState,
-		f.Config.TaskReschedulerMaxThrottledReleasesPerPass,
 	)
 
 	activeExecutor := newOutboundQueueActiveTaskExecutor(

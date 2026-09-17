@@ -115,7 +115,6 @@ func (f *timerQueueFactory) CreateQueue(
 		logger,
 		metricsHandler,
 		f.ThrottleState,
-		f.Config.TaskReschedulerMaxThrottledReleasesPerPass,
 	)
 
 	activeExecutor := newTimerQueueActiveTaskExecutor(

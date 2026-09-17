@@ -116,7 +116,6 @@ func (s *scheduledQueueSuite) SetupTest() {
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
 		nil,
-		nil,
 	)
 
 	factory := NewExecutableFactory(nil,

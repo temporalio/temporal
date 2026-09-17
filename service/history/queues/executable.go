@@ -76,12 +76,12 @@ type (
 		IsTerminalTaskError() bool
 	}
 
-	// ThrottleKeyProvider is implemented by executables that participate in the throttle
-	// controller: they report which class their last failure belongs to, and they can be told
-	// that a dispatch was metered by the controller's gate.
 	ThrottleKeyProvider interface {
 		ThrottleKey() (ThrottleKey, bool)
-		SetThrottleAdmitted(key ThrottleKey)
+	}
+
+	throttlePermitReceiver interface {
+		SetThrottlePermit(permit *throttleEntry)
 	}
 )
 
@@ -144,14 +144,13 @@ type (
 		inMemoryNoUserLatency      time.Duration
 		lastActiveness             bool
 		invalidTask                bool
-		invalidTaskReason          string
 		resourceExhaustedCount     int // does NOT include consts.ErrResourceExhaustedBusyWorkflow
-		throttleState              ThrottleController
+		throttleState              *ThrottleState
 		throttleMu                 sync.Mutex
 		throttleKey                ThrottleKey
 		hasThrottleKey             bool
-		throttleAdmittedKey        ThrottleKey
-		throttleAttempts           int
+		throttlePermit             *throttleEntry
+		wasThrottled               bool
 		dlqEnabled                 dynamicconfig.BoolPropertyFn
 		terminalFailureCause       error
 		unexpectedErrorAttempts    int
@@ -160,7 +159,7 @@ type (
 		dlqErrorPattern            dynamicconfig.StringPropertyFn
 	}
 	ExecutableParams struct {
-		ThrottleState              ThrottleController
+		ThrottleState              *ThrottleState
 		DLQEnabled                 dynamicconfig.BoolPropertyFn
 		DLQWriter                  *DLQWriter
 		MaxUnexpectedErrorAttempts dynamicconfig.IntPropertyFn
@@ -454,26 +453,20 @@ func (e *executableImpl) isInvalidTaskError(err error) bool {
 		// because we're interested in the metric.
 		metrics.TaskSkipped.With(e.chasmMetricsHandler).Record(1)
 		e.logger.Info("Skipped task due to stale reference", tag.Error(err))
-		e.invalidTaskReason = "stale_reference"
 		return true
 	}
 
 	if errors.As(err, new(*serviceerror.NotFound)) {
-		// Includes ErrWorkflowCompleted, which is the common case for a task held long enough
-		// that its workflow has since closed.
-		e.invalidTaskReason = "not_found"
 		return true
 	}
 
 	// This means that namespace is deleted, and it is safe to drop the task (=ignore the error).
 	if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
-		e.invalidTaskReason = "namespace_not_found"
 		return true
 	}
 
 	if err == consts.ErrTaskVersionMismatch {
 		metrics.TaskVersionMisMatch.With(e.chasmMetricsHandler).Record(1)
-		e.invalidTaskReason = "version_mismatch"
 		return true
 	}
 
@@ -513,7 +506,7 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 
 		metrics.TaskThrottledCounter.With(e.chasmMetricsHandler).Record(
 			1, metrics.ResourceExhaustedCauseTag(resourceExhaustedErr.Cause))
-		e.reportThrottle(err, resourceExhaustedErr.Cause, resourceExhaustedErr.Scope)
+		e.reportThrottle(resourceExhaustedErr.Cause, resourceExhaustedErr.Scope)
 		return true, err
 	}
 	e.resourceExhaustedCount = 0
@@ -581,8 +574,6 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	}()
 
 	if matchedErr := e.matchDLQErrorPattern(err); matchedErr != nil {
-		// This return skips the classification below, the only other place a stale key is
-		// dropped, so a Nack here would park the task on a budget it no longer needs.
 		e.clearThrottle()
 		e.incAttempt()
 		return matchedErr
@@ -717,21 +708,14 @@ func (e *executableImpl) Ack() {
 
 	e.state = ctasks.TaskStateAcked
 
-	// Counted for every acked task, invalid drops included, so that the true rate at which the
-	// queue is cleared can be told apart from the metered rate below.
-	metrics.TaskAckedCounter.With(e.chasmMetricsHandler).Record(1)
-
 	if e.invalidTask {
 		// do not emit metrics for invalid tasks
 		// as they are expected to have to high latency due to reprocessing upon shard movement.
-		metrics.TaskInvalidDropped.With(e.chasmMetricsHandler).Record(
-			1, metrics.StringTag("invalid_reason", e.invalidTaskReason))
 		return
 	}
 
 	metrics.TaskAttempt.With(e.chasmMetricsHandler).Record(e.attempt.Load())
 	e.reportCompletion()
-
 	priorityTaggedProvider := e.chasmMetricsHandler.WithTags(metrics.TaskPriorityTag(e.priority.String()))
 	metrics.TaskLatency.With(priorityTaggedProvider).Record(e.inMemoryNoUserLatency)
 	metrics.TaskQueueLatency.With(priorityTaggedProvider.WithTags(metrics.QueueReaderIDTag(e.readerID))).
@@ -859,31 +843,16 @@ func (e *executableImpl) shouldResubmitOnNack(err error) bool {
 		err != consts.ErrNamespaceHandover
 }
 
-// reportThrottle feeds a resource exhausted rejection into the host throttle controller and
-// remembers the class so that Nack, the rescheduler and Ack all agree on which budget governs
-// this task. Errors that merely mean "not ready yet" are deliberately not routed here: standby
-// tasks retrying on replication lag consume almost nothing, and feeding them in would throttle
-// namespaces that are using no resources at all.
 func (e *executableImpl) reportThrottle(
-	err error,
 	cause enumspb.ResourceExhaustedCause,
 	scope enumspb.ResourceExhaustedScope,
 ) {
 	if e.throttleState == nil || !e.throttleState.Enabled() {
-		// Clear even when disabled: a mark left over from before the flag flipped would be
-		// consumed by the first rejection after it flips back, moving a rate on stale evidence.
 		e.clearThrottle()
 		return
 	}
-	metrics.TaskThrottleWastedAttempts.With(e.chasmMetricsHandler).Record(
-		1,
-		metrics.ResourceExhaustedCauseTag(cause),
-		metrics.ResourceExhaustedScopeTag(scope),
-	)
 
-	if !IsControllerInput(err, cause, scope) {
-		// The task's last constraint is no longer a shared budget, so it must not stay in a
-		// throttled rescheduler class governed by a budget it is not waiting on.
+	if !IsControllerInput(cause, scope) {
 		e.clearThrottle()
 		return
 	}
@@ -893,12 +862,15 @@ func (e *executableImpl) reportThrottle(
 	e.throttleMu.Lock()
 	e.throttleKey = key
 	e.hasThrottleKey = true
-	e.throttleAttempts++
-	admitted := e.throttleAdmittedKey == key
-	e.throttleAdmittedKey = ThrottleKey{}
+	e.wasThrottled = true
+	permit := e.throttlePermit
+	if permit != nil && permit.key != key {
+		permit = nil
+	}
+	e.throttlePermit = nil
 	e.throttleMu.Unlock()
 
-	e.throttleState.ReportThrottled(key, admitted)
+	e.throttleState.ReportThrottled(key, permit)
 }
 
 func (e *executableImpl) clearThrottle() {
@@ -907,36 +879,14 @@ func (e *executableImpl) clearThrottle() {
 
 	e.hasThrottleKey = false
 	e.throttleKey = ThrottleKey{}
-	e.throttleAdmittedKey = ThrottleKey{}
+	e.throttlePermit = nil
 }
 
-func (e *executableImpl) reportCompletion() {
-	if e.throttleState == nil || !e.throttleState.Enabled() {
-		return
-	}
-	e.throttleMu.Lock()
-	everThrottled, key, known := e.throttleAttempts > 0, e.throttleKey, e.hasThrottleKey
-	e.throttleMu.Unlock()
-
-	if !everThrottled {
-		return
-	}
-	metrics.TaskThrottleAttemptsPerCompletion.With(e.chasmMetricsHandler).Record(e.attempt.Load())
-	metrics.TaskThrottleCompletions.With(e.chasmMetricsHandler).Record(1)
-	if known {
-		e.throttleState.ReportSuccess(key)
-	}
-}
-
-// SetThrottleAdmitted records which class granted the token for the dispatch about to happen.
-// The key matters as well as the fact: a task admitted under one budget can fail under a
-// different one, and crediting that rejection to the class that never granted it would move a
-// rate on evidence it did not produce. The zero key clears the mark.
-func (e *executableImpl) SetThrottleAdmitted(key ThrottleKey) {
+func (e *executableImpl) SetThrottlePermit(permit *throttleEntry) {
 	e.throttleMu.Lock()
 	defer e.throttleMu.Unlock()
 
-	e.throttleAdmittedKey = key
+	e.throttlePermit = permit
 }
 
 func (e *executableImpl) ThrottleKey() (ThrottleKey, bool) {
@@ -946,8 +896,25 @@ func (e *executableImpl) ThrottleKey() (ThrottleKey, bool) {
 	return e.throttleKey, e.hasThrottleKey
 }
 
-// isGovernedByController reports whether this task is parked on a budget the controller paces.
-// Every governed cause is namespace scoped, so holding a key is the whole condition.
+func (e *executableImpl) reportCompletion() {
+	if e.throttleState == nil || !e.throttleState.Enabled() {
+		return
+	}
+	e.throttleMu.Lock()
+	wasThrottled := e.wasThrottled
+	key, hasKey := e.throttleKey, e.hasThrottleKey
+	e.throttleMu.Unlock()
+
+	if !wasThrottled {
+		return
+	}
+	metrics.TaskThrottleAttemptsPerCompletion.With(e.chasmMetricsHandler).Record(e.attempt.Load())
+	metrics.TaskThrottleCompletions.With(e.chasmMetricsHandler).Record(1)
+	if hasKey {
+		e.throttleState.ReportSuccess(key)
+	}
+}
+
 func (e *executableImpl) isGovernedByController() bool {
 	e.throttleMu.Lock()
 	defer e.throttleMu.Unlock()

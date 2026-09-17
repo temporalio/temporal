@@ -115,7 +115,6 @@ func (f *transferQueueFactory) CreateQueue(
 		logger,
 		metricsHandler,
 		f.ThrottleState,
-		f.Config.TaskReschedulerMaxThrottledReleasesPerPass,
 	)
 
 	activeExecutor := newTransferQueueActiveTaskExecutor(

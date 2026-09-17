@@ -158,7 +158,6 @@ func (f *archivalQueueFactory) newScheduledQueue(shard historyi.ShardContext, ex
 		logger,
 		metricsHandler,
 		f.ThrottleState,
-		f.Config.TaskReschedulerMaxThrottledReleasesPerPass,
 	)
 
 	factory := queues.NewExecutableFactory(

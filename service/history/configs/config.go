@@ -130,13 +130,12 @@ type Config struct {
 	TaskDLQInternalErrors          dynamicconfig.BoolPropertyFn
 	TaskDLQErrorPattern            dynamicconfig.StringPropertyFn
 
-	TaskThrottleControllerEnabled              dynamicconfig.BoolPropertyFn
-	TaskThrottleControllerBeta                 dynamicconfig.FloatPropertyFn
-	TaskThrottleControllerIncreaseRatio        dynamicconfig.FloatPropertyFn
-	TaskThrottleControllerLossThreshold        dynamicconfig.FloatPropertyFn
-	TaskThrottleControllerWindow               dynamicconfig.DurationPropertyFn
-	TaskThrottleControllerMaxKeys              dynamicconfig.IntPropertyFn
-	TaskReschedulerMaxThrottledReleasesPerPass dynamicconfig.IntPropertyFn
+	TaskThrottleControllerEnabled       dynamicconfig.BoolPropertyFn
+	TaskThrottleControllerBeta          dynamicconfig.FloatPropertyFn
+	TaskThrottleControllerIncreaseRatio dynamicconfig.FloatPropertyFn
+	TaskThrottleControllerLossThreshold dynamicconfig.FloatPropertyFn
+	TaskThrottleControllerWindow        dynamicconfig.DurationPropertyFn
+	TaskThrottleControllerMaxKeys       dynamicconfig.IntPropertyFn
 
 	TaskSchedulerEnableRateLimiter            dynamicconfig.BoolPropertyFn
 	TaskSchedulerEnableRateLimiterShadowMode  dynamicconfig.BoolPropertyFn
@@ -589,7 +588,6 @@ func NewConfig(
 		TaskThrottleControllerLossThreshold:                  dynamicconfig.TaskThrottleControllerLossThreshold.Get(dc),
 		TaskThrottleControllerWindow:                         dynamicconfig.TaskThrottleControllerWindow.Get(dc),
 		TaskThrottleControllerMaxKeys:                        dynamicconfig.TaskThrottleControllerMaxKeys.Get(dc),
-		TaskReschedulerMaxThrottledReleasesPerPass:           dynamicconfig.TaskReschedulerMaxThrottledReleasesPerPass.Get(dc),
 		TaskSchedulerEnableRateLimiter:                       dynamicconfig.TaskSchedulerEnableRateLimiter.Get(dc),
 		TaskSchedulerEnableRateLimiterShadowMode:             dynamicconfig.TaskSchedulerEnableRateLimiterShadowMode.Get(dc),
 		TaskSchedulerRateLimiterStartupDelay:                 dynamicconfig.TaskSchedulerRateLimiterStartupDelay.Get(dc),

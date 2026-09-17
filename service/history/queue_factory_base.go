@@ -57,7 +57,7 @@ type (
 		RemoteHistoryFetcher eventhandler.HistoryPaginatedFetcher
 		ChasmEngine          chasm.Engine
 		ChasmRegistry        *chasm.Registry
-		ThrottleState        queues.ThrottleController
+		ThrottleState        *queues.ThrottleState
 	}
 
 	QueueFactoryBase struct {
@@ -105,14 +105,12 @@ var QueueModule = fx.Options(
 	fx.Invoke(QueueFactoryLifetimeHooks),
 )
 
-// ThrottleStateProvider builds the host level throttle controller shared by every queue
-// category and every shard on this host.
 func ThrottleStateProvider(
 	config *configs.Config,
 	timeSource clock.TimeSource,
 	logger log.SnTaggedLogger,
 	metricsHandler metrics.Handler,
-) queues.ThrottleController {
+) *queues.ThrottleState {
 	return queues.NewThrottleState(
 		queues.ThrottleStateOptions{
 			Enabled:       config.TaskThrottleControllerEnabled,

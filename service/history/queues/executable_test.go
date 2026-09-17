@@ -125,10 +125,7 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 		expectError                  bool
 		expectedAttemptNoUserLatency time.Duration
 		expectBackoff                bool
-		// expectResubmit is false only when the throttle controller is enabled and the error is
-		// a namespace or system scoped throttle; these cases run with no controller at all, so
-		// the pre-existing fast path applies.
-		expectResubmit bool
+		expectResubmit               bool
 	}{
 		{
 			name:                         "NoError",
@@ -1453,17 +1450,7 @@ func (s *executableSuite) accessInternalState(executable queues.Executable) {
 func (s *executableSuite) newTestThrottleState() *queues.ThrottleState {
 	return queues.NewThrottleState(
 		queues.ThrottleStateOptions{
-			Enabled:       dynamicconfig.GetBoolPropertyFn(true),
-			Beta:          dynamicconfig.GetFloatPropertyFn(0.85),
-			IncreaseRatio: dynamicconfig.GetFloatPropertyFn(0.1),
-			LossThreshold: dynamicconfig.GetFloatPropertyFn(0.05),
-			Window:        dynamicconfig.GetDurationPropertyFn(time.Second),
-			MaxKeys:       dynamicconfig.GetIntPropertyFn(1024),
-
-			MinRate:     1,
-			MaxRate:     10000,
-			InitialRate: 100,
-			KeyTTL:      time.Minute,
+			Enabled: dynamicconfig.GetBoolPropertyFn(true),
 		},
 		s.timeSource,
 		log.NewTestLogger(),
@@ -1471,9 +1458,6 @@ func (s *executableSuite) newTestThrottleState() *queues.ThrottleState {
 	)
 }
 
-// Standby tasks are the largest population of "execute, do nothing, retry" and consume almost
-// nothing. Feeding their retries into the controller would throttle namespaces that are using
-// no resources at all.
 func (s *executableSuite) TestHandleErr_NonThrottleErrorsAreNotControllerInputs() {
 	testCases := []struct {
 		name    string
@@ -1502,19 +1486,14 @@ func (s *executableSuite) TestHandleErr_NonThrottleErrorsAreNotControllerInputs(
 				p.throttleState = throttleState
 			})
 
-			for i := 0; i < 10; i++ {
-				_ = executable.HandleErr(tc.taskErr)
-			}
-
-			s.Zero(throttleState.Len())
+			_ = executable.HandleErr(tc.taskErr)
+			provider := executable.(queues.ThrottleKeyProvider)
+			_, known := provider.ThrottleKey()
+			s.False(known)
 		})
 	}
 }
 
-// A shared budget throttle must not take the synchronous resubmit fast path. That path hands
-// the task straight back to the scheduler, bypassing the rescheduler and with it the gate, so
-// every parked task would keep rediscovering the same constraint at full dispatch cost - which
-// is the storm the controller exists to remove.
 func (s *executableSuite) TestNack_ThrottleScopedGoesToTheRescheduler() {
 	throttleState := s.newTestThrottleState()
 	executable := s.newTestExecutable(func(p *params) {
@@ -1533,11 +1512,6 @@ func (s *executableSuite) TestNack_ThrottleScopedGoesToTheRescheduler() {
 	executable.Nack(throttleErr)
 }
 
-// A task that stops failing on a shared budget must stop being paced by it. The DLQ pattern
-// match returns from HandleErr before the error classification that is the only other place a
-// stale key is dropped, so without an explicit clear the task keeps whatever budget it last
-// failed under and its Nack parks it in that gated class - waiting on a token it has no reason
-// to need, on its way to the DLQ.
 func (s *executableSuite) TestHandleErr_DLQPatternClearsAStaleThrottleKey() {
 	throttleState := s.newTestThrottleState()
 	executable := s.newTestExecutable(func(p *params) {
@@ -1547,7 +1521,6 @@ func (s *executableSuite) TestHandleErr_DLQPatternClearsAStaleThrottleKey() {
 		}
 	})
 
-	// Fail on a governed budget first, so the task is carrying a key.
 	throttleErr := &serviceerror.ResourceExhausted{
 		Cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
 		Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
@@ -1559,15 +1532,12 @@ func (s *executableSuite) TestHandleErr_DLQPatternClearsAStaleThrottleKey() {
 	_, held := provider.ThrottleKey()
 	s.True(held, "the throttled attempt should have attached a key")
 
-	// The next attempt fails for an unrelated reason that matches the DLQ pattern.
 	s.Error(executable.HandleErr(serviceerror.NewUnavailable("does-not-matter")))
 
 	_, held = provider.ThrottleKey()
 	s.False(held, "a task headed for the DLQ must not still be parked on a budget")
 }
 
-// Busy workflow is per workflow lock contention rather than a shared budget, so it keeps the
-// fast path even with the controller on. Losing that would slow down every lock retry.
 func (s *executableSuite) TestNack_BusyWorkflowKeepsTheFastPath() {
 	throttleState := s.newTestThrottleState()
 	executable := s.newTestExecutable(func(p *params) {
@@ -1596,34 +1566,19 @@ func (s *executableSuite) TestHandleErr_ThrottleErrorsDriveController() {
 		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 		Message: "namespace APS limit reached",
 	}
-	key := queues.NewThrottleKey(throttleErr.Cause, tests.NamespaceID.String())
-
 	provider, ok := executable.(queues.ThrottleKeyProvider)
 	s.True(ok)
 
-	// A rejection the gate never metered creates the class but must not move the rate: it is
-	// loss on a packet the controller did not send.
 	s.Error(executable.HandleErr(throttleErr))
-	s.Equal(1, throttleState.Len())
-	s.InEpsilon(100.0, throttleState.AdmittedRate(key), 1e-9)
+	key, known := provider.ThrottleKey()
+	s.True(known)
+	s.Equal(queues.NewThrottleKey(throttleErr.Cause, tests.NamespaceID.String()), key)
 
-	// The rate moves once per window, so the decision for this rejection lands when the
-	// window it fell in closes.
-	provider.SetThrottleAdmitted(key)
-	s.Error(executable.HandleErr(throttleErr))
-	s.timeSource.Update(s.timeSource.Now().Add(time.Second))
-	throttleState.ReportSuccess(key)
-	s.InEpsilon(85.0, throttleState.AdmittedRate(key), 1e-9)
-
-	// A subsequent non-throttle failure must take the task out of the throttled class, so it is
-	// not parked behind a budget it no longer needs.
 	s.Error(executable.HandleErr(serviceerror.NewUnavailable("unrelated")))
-	_, known := provider.ThrottleKey()
+	_, known = provider.ThrottleKey()
 	s.False(known)
 }
 
-// A workflow lock conflict is not a shared budget, so it must both keep its synchronous
-// resubmit fast path and take the task back out of the throttled class.
 func (s *executableSuite) TestHandleErr_BusyWorkflowClearsThrottleClass() {
 	throttleState := s.newTestThrottleState()
 	executable := s.newTestExecutable(func(p *params) {

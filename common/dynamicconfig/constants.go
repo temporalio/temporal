@@ -2089,49 +2089,32 @@ The actual count is calculated as base * (multiplier ^ level)`,
 	TaskThrottleControllerEnabled = NewGlobalBoolSetting(
 		"history.taskThrottleControllerEnabled",
 		false,
-		`TaskThrottleControllerEnabled turns on the host level throttle aware task retry controller.
-When enabled, the rescheduler releases parked tasks for a throttled class at the class's learned
-admitted rate instead of letting every parked task rediscover the throttle on its own backoff.`,
+		`Enables host-level pacing of history task retries after namespace APS or persistence throttling.`,
 	)
 	TaskThrottleControllerBeta = NewGlobalFloatSetting(
 		"history.taskThrottleControllerBeta",
 		0.85,
-		`TaskThrottleControllerBeta is the multiplicative decrease factor applied to a class's
-admitted rate when a throttle is observed. At most one decrease is applied per control window.`,
+		`Multiplicative rate decrease applied after a control window exceeds the loss threshold.`,
 	)
 	TaskThrottleControllerIncreaseRatio = NewGlobalFloatSetting(
 		"history.taskThrottleControllerIncreaseRatio",
 		0.10,
-		`TaskThrottleControllerIncreaseRatio is the fraction of the current admitted rate added
-after a control window whose loss stayed at or below the threshold. Expressed as a ratio so the
-increase is scale free, which makes it multiplicative rather than additive.`,
+		`Fraction by which the admitted rate increases after a control window stays within the loss threshold.`,
 	)
 	TaskThrottleControllerLossThreshold = NewGlobalFloatSetting(
 		"history.taskThrottleControllerLossThreshold",
 		0.05,
-		`TaskThrottleControllerLossThreshold is the fraction of a class's metered releases that
-may be rejected in a control window before the admitted rate is decreased. Below it the rate
-increases. Zero would decrease on any rejection at all, which makes the rate a class settles at
-depend on the enforcer's background rejection probability rather than on its own demand.`,
+		`Fraction of admitted releases that may be throttled before the admitted rate decreases.`,
 	)
-
 	TaskThrottleControllerWindow = NewGlobalDurationSetting(
 		"history.taskThrottleControllerWindow",
 		time.Second,
-		`TaskThrottleControllerWindow is the control window. At most one multiplicative decrease
-and one increase are applied per window per key.`,
+		`Control window used to evaluate throttling loss and update the admitted rate.`,
 	)
 	TaskThrottleControllerMaxKeys = NewGlobalIntSetting(
 		"history.taskThrottleControllerMaxKeys",
 		1024,
-		`TaskThrottleControllerMaxKeys caps the number of tracked throttle classes on a host.
-Past the cap the controller fails open and lets the real limiter reject.`,
-	)
-	TaskReschedulerMaxThrottledReleasesPerPass = NewGlobalIntSetting(
-		"history.taskReschedulerMaxThrottledReleasesPerPass",
-		1000,
-		`TaskReschedulerMaxThrottledReleasesPerPass caps how many tasks belonging to throttled
-classes a single rescheduler pass may release, so one pass cannot monopolize the scheduler.`,
+		`Maximum number of throttle classes tracked by a history host.`,
 	)
 
 	TaskSchedulerEnableRateLimiter = NewGlobalBoolSetting(

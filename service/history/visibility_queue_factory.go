@@ -102,7 +102,6 @@ func (f *visibilityQueueFactory) CreateQueue(
 		logger,
 		metricsHandler,
 		f.ThrottleState,
-		f.Config.TaskReschedulerMaxThrottledReleasesPerPass,
 	)
 
 	executor := newVisibilityQueueTaskExecutor(

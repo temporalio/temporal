@@ -127,7 +127,6 @@ func getModuleDependencies(controller *gomock.Controller, c *moduleTestCase) fx.
 	serializer := serialization.NewSerializer()
 	historyFetcher := eventhandler.NewMockHistoryPaginatedFetcher(controller)
 	return fx.Supply(
-		// The throttle controller takes the host clock, so this one is no longer unused.
 		unusedDependencies{TimeSource: clock.NewRealTimeSource()},
 		cfg,
 		fx.Annotate(registry, fx.As(new(tasks.TaskCategoryRegistry))),

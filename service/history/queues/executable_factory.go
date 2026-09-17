@@ -38,7 +38,7 @@ type (
 		attemptsBeforeSendingToDlq dynamicconfig.IntPropertyFn
 		dlqInternalErrors          dynamicconfig.BoolPropertyFn
 		dlqErrorPattern            dynamicconfig.StringPropertyFn
-		throttleState              ThrottleController
+		throttleState              *ThrottleState
 	}
 )
 
@@ -64,7 +64,7 @@ func NewExecutableFactory(
 	attemptsBeforeSendingToDlq dynamicconfig.IntPropertyFn,
 	dlqInternalErrors dynamicconfig.BoolPropertyFn,
 	dlqErrorPattern dynamicconfig.StringPropertyFn,
-	throttleState ThrottleController,
+	throttleState *ThrottleState,
 ) *executableFactoryImpl {
 	return &executableFactoryImpl{
 		executor:                   executor,
