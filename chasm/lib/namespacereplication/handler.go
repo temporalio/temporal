@@ -66,7 +66,7 @@ func (h *handler) TriggerNamespaceMutation(
 			local := component.GetLocalApply()
 			switch local.GetOutcome() {
 			case namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED:
-				return &namespacereplicationpb.TriggerNamespaceMutationResponse{NewVersion: local.GetNewVersion()}, true, nil
+				return &namespacereplicationpb.TriggerNamespaceMutationResponse{}, true, nil
 			case namespacereplicationpb.LOCAL_APPLY_OUTCOME_FAILED:
 				failure := local.GetFailure()
 				return nil, true, localApplyError(failure.GetApplicationFailureInfo().GetType(), failure.GetMessage())
