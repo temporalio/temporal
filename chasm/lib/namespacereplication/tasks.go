@@ -159,6 +159,23 @@ func (h *applyLocalTaskHandler) Execute(
 				)
 				return h.commitLocal(ctx, ref)
 			}
+
+			definitelyNotApplied, resolutionErr := h.localMutationDefinitelyNotApplied(
+				ctx,
+				loaded.Operation,
+				loaded.ExpectedVer,
+				applyErr,
+			)
+			if resolutionErr != nil {
+				return fmt.Errorf("resolve local namespace mutation after %v: %w", applyErr, resolutionErr)
+			}
+			if !definitelyNotApplied {
+				// A read performed immediately after a timed-out write may still see the
+				// old value even though that write later commits. Keep the durable task
+				// pending and retry instead of turning one stale read into a terminal
+				// failure and permanently suppressing peer fan-out.
+				return fmt.Errorf("local namespace mutation outcome remains unresolved: %w", applyErr)
+			}
 		}
 		return h.recordLocalFailure(ctx, ref, applyErr)
 	}
@@ -171,6 +188,35 @@ func (h *applyLocalTaskHandler) Execute(
 	// COMPLETED set inside it would be clobbered — the same reason peer completion
 	// needs its own transition.
 	return h.commitAfterMetadataWrite(ctx, ref, namespace.Name(loaded.Detail.GetInfo().GetName()))
+}
+
+func (h *applyLocalTaskHandler) localMutationDefinitelyNotApplied(
+	ctx context.Context,
+	operation namespacereplicationpb.NamespaceOperation,
+	expectedVersion int64,
+	applyErr error,
+) (bool, error) {
+	var alreadyExists *serviceerror.NamespaceAlreadyExists
+	if operation == namespacereplicationpb.NAMESPACE_OPERATION_CREATE && errors.As(applyErr, &alreadyExists) {
+		// The exact-state check already ruled out a retry of our own successful
+		// create, so the existing row belongs to a conflicting create.
+		return true, nil
+	}
+	if !persistence.OperationPossiblySucceeded(applyErr) {
+		return true, nil
+	}
+	if operation != namespacereplicationpb.NAMESPACE_OPERATION_UPDATE {
+		return false, nil
+	}
+
+	metadata, err := h.metadataManager.GetMetadata(ctx)
+	if err != nil {
+		return false, err
+	}
+	// UPDATE consumes expectedVersion from the cell-global metadata counter. A
+	// later counter proves that CAS slot can no longer be won; until then, an
+	// ambiguous write can still commit after our namespace read and must retry.
+	return metadata.NotificationVersion > expectedVersion, nil
 }
 
 func (h *applyLocalTaskHandler) commitAfterMetadataWrite(
