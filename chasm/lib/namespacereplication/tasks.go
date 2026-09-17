@@ -13,9 +13,12 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/testhooks"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
+	"google.golang.org/protobuf/proto"
 )
 
 // -----------------------------------------------------------------------------
@@ -28,6 +31,7 @@ type applyLocalTaskHandlerOptions struct {
 	MetadataManager persistence.MetadataManager
 	MetricsHandler  metrics.Handler
 	Logger          log.Logger
+	TestHooks       testhooks.TestHooks
 }
 
 type applyLocalTaskHandler struct {
@@ -41,6 +45,7 @@ type applyLocalTaskHandler struct {
 	// metricsHandler is wired through fx but not yet used.
 	metricsHandler metrics.Handler
 	logger         log.Logger
+	testHooks      testhooks.TestHooks
 }
 
 func newApplyLocalTaskHandler(opts applyLocalTaskHandlerOptions) *applyLocalTaskHandler {
@@ -48,6 +53,7 @@ func newApplyLocalTaskHandler(opts applyLocalTaskHandlerOptions) *applyLocalTask
 		metadataManager: opts.MetadataManager,
 		metricsHandler:  opts.MetricsHandler,
 		logger:          opts.Logger,
+		testHooks:       opts.TestHooks,
 	}
 }
 
@@ -111,27 +117,50 @@ func (h *applyLocalTaskHandler) Execute(
 		return h.commitLocal(ctx, ref)
 	}
 
-	// Apply to the local metadata store. Any error (CAS conflict, validation,
-	// store unavailable) is surfaced as a terminal component failure; the caller
-	// retries by re-issuing UpdateNamespace with fresh state.
+	// Apply to the local metadata store. The metadata write and the component
+	// transition cannot share a transaction, so an ambiguous write result is
+	// reconciled against the persisted namespace before deciding whether to fail
+	// or commit the component.
+	var applyErr error
 	switch loaded.Operation {
 	case namespacereplicationpb.NAMESPACE_OPERATION_CREATE:
-		if _, applyErr := h.metadataManager.CreateNamespace(ctx, &persistence.CreateNamespaceRequest{
+		_, applyErr = h.metadataManager.CreateNamespace(ctx, &persistence.CreateNamespaceRequest{
 			Namespace:         loaded.Detail,
 			IsGlobalNamespace: loaded.IsGlobal,
-		}); applyErr != nil {
-			return h.recordLocalFailure(ctx, ref, applyErr)
-		}
+		})
 	case namespacereplicationpb.NAMESPACE_OPERATION_UPDATE:
-		if applyErr := h.metadataManager.UpdateNamespace(ctx, &persistence.UpdateNamespaceRequest{
+		applyErr = h.metadataManager.UpdateNamespace(ctx, &persistence.UpdateNamespaceRequest{
 			Namespace:           loaded.Detail,
 			IsGlobalNamespace:   loaded.IsGlobal,
 			NotificationVersion: loaded.ExpectedVer,
-		}); applyErr != nil {
-			return h.recordLocalFailure(ctx, ref, applyErr)
-		}
+		})
 	default:
 		return h.recordLocalFailure(ctx, ref, fmt.Errorf("unsupported namespace operation: %v", loaded.Operation))
+	}
+	if applyErr != nil {
+		if shouldReconcileLocalApply(loaded.Operation, applyErr) {
+			alreadyApplied, reconcileErr := h.localMutationAlreadyApplied(
+				ctx,
+				loaded.Operation,
+				loaded.Detail,
+				loaded.ExpectedVer,
+				loaded.IsGlobal,
+			)
+			if reconcileErr != nil {
+				// Keep the component pending. Returning an error leaves the durable
+				// side-effect task eligible for retry, which closes the crash window
+				// without guessing whether the metadata write committed.
+				return fmt.Errorf("reconcile local namespace mutation after %v: %w", applyErr, reconcileErr)
+			}
+			if alreadyApplied {
+				h.logger.Info(
+					"namespacereplication recovered committed local apply",
+					tag.WorkflowNamespaceID(loaded.Detail.GetInfo().GetId()),
+				)
+				return h.commitLocal(ctx, ref)
+			}
+		}
+		return h.recordLocalFailure(ctx, ref, applyErr)
 	}
 
 	// Commit transition: record success and schedule peer fan-out. When there are
@@ -141,7 +170,63 @@ func (h *applyLocalTaskHandler) Execute(
 	// destination after Apply returns (TransitionLocalCommitted's is RUNNING), so a
 	// COMPLETED set inside it would be clobbered — the same reason peer completion
 	// needs its own transition.
+	return h.commitAfterMetadataWrite(ctx, ref, namespace.Name(loaded.Detail.GetInfo().GetName()))
+}
+
+func (h *applyLocalTaskHandler) commitAfterMetadataWrite(
+	ctx context.Context,
+	ref chasm.ComponentRef,
+	namespaceName namespace.Name,
+) error {
+	if interceptor, ok := testhooks.Get(
+		h.testHooks,
+		testhooks.NamespaceReplicationLocalCommitInterceptor,
+		namespaceName,
+	); ok {
+		return interceptor(ctx, func() error { return h.commitLocal(ctx, ref) })
+	}
 	return h.commitLocal(ctx, ref)
+}
+
+func shouldReconcileLocalApply(
+	operation namespacereplicationpb.NamespaceOperation,
+	applyErr error,
+) bool {
+	errType := classifyLocalErr(applyErr)
+	return errType == localFailureUnavailable ||
+		(operation == namespacereplicationpb.NAMESPACE_OPERATION_CREATE && errType == localFailureAlreadyExists)
+}
+
+func (h *applyLocalTaskHandler) localMutationAlreadyApplied(
+	ctx context.Context,
+	operation namespacereplicationpb.NamespaceOperation,
+	detail *persistencespb.NamespaceDetail,
+	expectedVersion int64,
+	isGlobal bool,
+) (bool, error) {
+	namespaceID := detail.GetInfo().GetId()
+	if namespaceID == "" {
+		return false, nil
+	}
+
+	response, err := h.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{ID: namespaceID})
+	var notFound *serviceerror.NamespaceNotFound
+	switch {
+	case err == nil:
+	case errors.As(err, &notFound):
+		return false, nil
+	default:
+		return false, err
+	}
+
+	if response.IsGlobalNamespace != isGlobal || !proto.Equal(response.Namespace, detail) {
+		return false, nil
+	}
+	if operation == namespacereplicationpb.NAMESPACE_OPERATION_UPDATE &&
+		response.NotificationVersion != expectedVersion {
+		return false, nil
+	}
+	return true, nil
 }
 
 func (h *applyLocalTaskHandler) commitLocal(
@@ -234,12 +319,16 @@ func classifyLocalErr(err error) string {
 		invalidArgument   *serviceerror.InvalidArgument
 		alreadyExists     *serviceerror.NamespaceAlreadyExists
 		conditionFailed   *persistence.ConditionFailedError
+		timeout           *persistence.TimeoutError
 	)
 	switch {
 	case errors.As(err, &unavailable),
 		errors.As(err, &resourceExhausted),
 		errors.As(err, &deadlineExceeded),
-		errors.As(err, &conditionFailed):
+		errors.As(err, &conditionFailed),
+		errors.As(err, &timeout),
+		errors.Is(err, context.Canceled),
+		errors.Is(err, context.DeadlineExceeded):
 		return localFailureUnavailable
 	case errors.As(err, &invalidArgument):
 		return localFailureInvalidArgument

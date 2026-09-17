@@ -95,6 +95,113 @@ func (s *namespaceReplicationCHASMTestSuite) TearDownSuite() {
 	s.tearDownSuite()
 }
 
+func (s *namespaceReplicationCHASMTestSuite) TestAuthoritativeTransportRecoversLocalCommitBoundary() {
+	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
+	defer cancel()
+
+	active := s.clusters[0]
+	standby := s.clusters[1]
+	activeCleanup := active.OverrideDynamicConfig(
+		s.T(),
+		dynamicconfig.NamespaceReplicationTransportMode,
+		dynamicconfig.NamespaceReplicationTransportModeCHASM,
+	)
+	defer activeCleanup()
+	standbyCleanup := standby.OverrideDynamicConfig(
+		s.T(),
+		dynamicconfig.NamespaceReplicationTransportMode,
+		dynamicconfig.NamespaceReplicationTransportModeCHASM,
+	)
+	defer standbyCleanup()
+
+	namespaceName := "test-namespace-" + uuid.NewString()
+	var failNextCommit atomic.Bool
+	var boundaryFailuresInjected atomic.Int32
+	failNextCommit.Store(true)
+	active.InjectHook(
+		s.T(),
+		testhooks.NewHook(testhooks.NamespaceReplicationLocalCommitInterceptor, func(
+			_ context.Context,
+			commit func() error,
+		) error {
+			if failNextCommit.CompareAndSwap(true, false) {
+				boundaryFailuresInjected.Add(1)
+				return serviceerror.NewUnavailable("injected failure after metadata write")
+			}
+			return commit()
+		}),
+		namespace.Name(namespaceName),
+	)
+	legacyTasks := make(chan bufferedNamespaceReplicationTask, 1)
+	standby.InjectHook(
+		s.T(),
+		testhooks.NewHook(testhooks.NamespaceReplicationTaskInterceptor, func(
+			_ context.Context,
+			task *replicationspb.NamespaceTaskAttributes,
+			execute func() error,
+		) error {
+			legacyTasks <- bufferedNamespaceReplicationTask{
+				task:    proto.Clone(task).(*replicationspb.NamespaceTaskAttributes),
+				execute: execute,
+			}
+			return nil
+		}),
+		namespace.Name(namespaceName),
+	)
+
+	_, err := active.FrontendClient().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+		Namespace: namespaceName,
+		Clusters: []*replicationpb.ClusterReplicationConfig{
+			{ClusterName: active.ClusterName()},
+			{ClusterName: standby.ClusterName()},
+		},
+		ActiveClusterName:                active.ClusterName(),
+		IsGlobalNamespace:                true,
+		WorkflowExecutionRetentionPeriod: durationpb.New(24 * time.Hour),
+	})
+	s.Require().NoError(err)
+	s.Require().Equal(int32(1), boundaryFailuresInjected.Load())
+	s.requireSuccessfulApply(
+		s.receiveObservedApply(ctx),
+		namespaceName,
+		enumsspb.NAMESPACE_OPERATION_CREATE,
+		false,
+		adminservice.ApplyNamespaceMutationResponse_OUTCOME_CREATED,
+	)
+
+	failNextCommit.Store(true)
+	const updatedDescription = "update recovered across metadata/CHASM commit boundary"
+	_, err = active.FrontendClient().UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
+		Namespace: namespaceName,
+		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
+			Description: updatedDescription,
+		},
+	})
+	s.Require().NoError(err)
+	s.Require().Equal(int32(2), boundaryFailuresInjected.Load())
+	s.requireSuccessfulApply(
+		s.receiveObservedApply(ctx),
+		namespaceName,
+		enumsspb.NAMESPACE_OPERATION_UPDATE,
+		false,
+		adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED,
+	)
+
+	sourceNamespace := s.requirePersistedNamespace(ctx, active, namespaceName)
+	standbyNamespace := s.requirePersistedNamespace(ctx, standby, namespaceName)
+	s.Require().Equal(updatedDescription, sourceNamespace.Namespace.GetInfo().GetDescription())
+	s.Require().Equal(updatedDescription, standbyNamespace.Namespace.GetInfo().GetDescription())
+	s.Require().True(proto.Equal(sourceNamespace.Namespace, standbyNamespace.Namespace))
+	s.Require().Never(func() bool {
+		select {
+		case <-legacyTasks:
+			return true
+		default:
+			return false
+		}
+	}, time.Second, 20*time.Millisecond, "commit-boundary recovery published a legacy namespace replication task")
+}
+
 func (s *namespaceReplicationCHASMTestSuite) TestAuthoritativeTransportConcurrentCASAndOutage() {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*testTimeout)
 	defer cancel()

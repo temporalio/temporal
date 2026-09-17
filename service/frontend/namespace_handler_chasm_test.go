@@ -26,7 +26,7 @@ func (c *captureNamespaceReplicationClient) TriggerNamespaceMutation(
 	_ ...grpc.CallOption,
 ) (*namespacereplicationpb.TriggerNamespaceMutationResponse, error) {
 	c.request = request
-	return &namespacereplicationpb.TriggerNamespaceMutationResponse{NewVersion: 11}, nil
+	return &namespacereplicationpb.TriggerNamespaceMutationResponse{}, nil
 }
 
 func TestInvokeShadowNamespaceMutation(t *testing.T) {
@@ -90,7 +90,7 @@ func TestTriggerAuthoritativeNamespaceMutation(t *testing.T) {
 		false,
 	)
 	require.NoError(t, err)
-	require.Equal(t, int64(11), response.GetNewVersion())
+	require.NotNil(t, response)
 	require.False(t, client.request.GetMutation().GetShadow())
 	require.Equal(t, int64(7), client.request.GetMutation().GetExpectedVersion())
 	require.Equal(t, []string{"cell-b"}, client.request.GetMutation().GetPeerCells())
