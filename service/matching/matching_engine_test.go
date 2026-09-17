@@ -3180,6 +3180,7 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventReportsD
 				},
 			},
 			discardedSide: "incoming",
+			wantSignal:    true,
 		},
 		{
 			name: "clockless current data discarded",
@@ -3195,7 +3196,6 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventReportsD
 				},
 			},
 			discardedSide: "current",
-			wantSignal:    true,
 		},
 		{
 			name: "clocked current data discarded",
@@ -3239,7 +3239,7 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventReportsD
 
 			metricsHandler.StopCapture(metricsCapture)
 			s.logger.StopCapture(logCapture)
-			recordings := metricsCapture.Snapshot()[metrics.TaskQueueUserDataReplicationPerTypeDataDropped.Name()]
+			recordings := metricsCapture.Snapshot()[metrics.TaskQueueUserDataReplicationIncomingPerTypeDataDropped.Name()]
 			if !test.wantSignal {
 				s.Empty(recordings)
 				s.Empty(logCapture.Snapshot())
