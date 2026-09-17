@@ -574,9 +574,9 @@ func (s *ScaleManagerSuite) TestShadowModeEmitsExpectedGauges() {
 	s.Equal([]float64{0, 0, 0}, metricValues(snap["partition_scale_write"]), "read gauge per changed decision")
 }
 
-// TestShadowLogIntervalDoesNotAffectApply verifies that ShadowModeLogInterval is no
-// longer load-bearing for whether decisions are applied: only Mode decides that, so an
-// enabled manager applies decisions even with a non-positive interval.
+// TestShadowLogIntervalDoesNotAffectApply verifies that ShadowModeLogInterval no longer
+// affects whether decisions are applied: only Mode decides that, so an enabled manager applies
+// decisions even with a non-positive interval.
 func (s *ScaleManagerSuite) TestShadowLogIntervalDoesNotAffectApply() {
 	s.settings.ShadowModeLogInterval = -time.Second
 
@@ -604,28 +604,10 @@ func (s *ScaleManagerSuite) TestShadowLogIntervalDoesNotAffectApply() {
 	s.Equal(int32(2), info.Write)
 }
 
-func TestShadowModeLogInterval(t *testing.T) {
-	for _, tc := range []struct {
-		configured time.Duration
-		expected   time.Duration
-	}{
-		{configured: time.Minute, expected: time.Minute},
-		{configured: 0, expected: dynamicconfig.DefaultShadowModeLogInterval},
-		{configured: -time.Second, expected: dynamicconfig.DefaultShadowModeLogInterval},
-	} {
-		t.Run(tc.configured.String(), func(t *testing.T) {
-			require.Equal(t, tc.expected, shadowModeLogInterval(
-				dynamicconfig.PartitionScaleManagerSettings{ShadowModeLogInterval: tc.configured}))
-		})
-	}
-}
-
-// TestDisabledModeBreaksToBaseline verifies that disabling the manager acts like a
-// disabled scaler rather than freezing the current state: the leftover managed target is
-// zeroed and pushed once, without ever consulting the scaler (which has no EXPECT here,
-// so any call fails the test). Once there's nothing left to clean up, disabled mode
-// settles into writing nothing at all.
-func (s *ScaleManagerSuite) TestDisabledModeBreaksToBaseline() {
+// TestDisabledModeDisables verifies that disabling the manager acts like a disabled scaler:
+// the leftover managed target is zeroed and pushed once, without ever consulting the scaler.
+// Once there's nothing left to clean up, disabled mode does nothing at all.
+func (s *ScaleManagerSuite) TestDisabledModeDisables() {
 	s.settings.Mode = enumsspb.PARTITION_SCALE_MODE_DISABLED
 
 	dbWrites := make(chan *persistencespb.PartitionScaleState, 2)
@@ -644,7 +626,7 @@ func (s *ScaleManagerSuite) TestDisabledModeBreaksToBaseline() {
 	// Start with a leftover managed target, as if the manager had been enabled before.
 	s.startManager(4, &persistencespb.PartitionScaleState{Target: 5})
 	// Start itself pushes the leftover state; drain that push so the assertions below
-	// only see the break to baseline.
+	// only see the fallback.
 	s.Equal(int32(5), waitRecv(s, scaleInfos, "no ephemeral data update at start").Read)
 
 	s.sm.AddedTasks(5)
@@ -859,30 +841,11 @@ func (s *ScaleManagerSuite) TestShadowModeSkipsDrain() {
 		TargetVersion: 0,
 		BacklogState:  bitSet(nil).set(0).set(1).set(2).set(3),
 	}
-	drainedResp := &matchingservice.DescribeTaskQueuePartitionResponse{
-		ScaleInfo: &taskqueuespb.PartitionScaleInfo{Read: 4, Write: 2, Version: 0},
-		VersionsInfoInternal: map[string]*taskqueuespb.TaskQueueVersionInfoInternal{
-			"v1": {
-				PhysicalTaskQueueInfo: &taskqueuespb.PhysicalTaskQueueInfo{
-					InternalTaskQueueStatus: []*taskqueuespb.InternalTaskQueueStatus{
-						{BacklogDrained: true},
-					},
-				},
-			},
-		},
-	}
-	describeCalls := make(chan struct{}, 4)
-	s.matching.EXPECT().DescribeTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Do(func(context.Context, *matchingservice.DescribeTaskQueuePartitionRequest, ...grpc.CallOption) {
-			describeCalls <- struct{}{}
-		}).
-		Return(drainedResp, nil).
-		AnyTimes()
+	// note: no expected DescribeTaskQueuePartition calls
 
 	s.startManager(4, initial)
 	s.fireBackgroundTimer()
 	waitRecv(s, inputs, "timer did not call scaler")
-	assertNoRecv(s, describeCalls, 100*time.Millisecond, "shadow mode must not describe partitions")
 
 	s.Equal(int32(4), bitSet(s.sm.scaleState.BacklogState).len())
 }

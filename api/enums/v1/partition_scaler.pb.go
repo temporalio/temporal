@@ -24,19 +24,16 @@ const (
 )
 
 // PartitionScaleMode controls what the partition scale manager does with the pluggable
-// partition scaler. Note that the scaler has its own enabled setting: if the scaler is
-// disabled, the manager has nothing to apply or shadow, whatever the mode.
+// partition scaler. Note that the scaler has its own enabled setting and must also be enabled
+// for any action to be taken.
 type PartitionScaleMode int32
 
 const (
 	// Treated the same as PARTITION_SCALE_MODE_DISABLED.
 	PARTITION_SCALE_MODE_UNSPECIFIED PartitionScaleMode = 0
-	// Don't call the scaler, and act as if it had returned a disabled decision: any
-	// previously-applied managed target breaks cleanly back to the dynamic config
-	// baseline, once, and then nothing happens at all. Note that as with a disabled
-	// scaler, backlog outside the dynamic config read range is left unpolled until it
-	// times out, so operators should keep the scaler's Max at or below the dynamic config
-	// partition count if that matters.
+	// Don't call the scaler, and act as if it had returned a disabled decision: fall back to
+	// dynamic config. Note that as with a disabled scaler, this could leave tasks stranded if
+	// the scaler had scaled above the dynamic config setting.
 	PARTITION_SCALE_MODE_DISABLED PartitionScaleMode = 1
 	// Call the scaler and log/emit metrics for its decisions, but don't apply them.
 	PARTITION_SCALE_MODE_SHADOW PartitionScaleMode = 2

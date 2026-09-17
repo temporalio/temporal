@@ -170,20 +170,13 @@ type PartitionScaleAllowedDrift struct {
 	Ratio float32
 }
 
-// DefaultShadowModeLogInterval is used when PartitionScaleManagerSettings.ShadowModeLogInterval
-// is unset (or non-positive). Logging every shadow decision is too noisy to be useful.
-const DefaultShadowModeLogInterval = 30 * time.Second
-
 type PartitionScaleManagerSettings struct {
 	// Mode controls whether the scaler is called at all, and whether its decisions are
-	// applied. Disabling the manager acts like a disabled scaler: managed scaling breaks
-	// cleanly back to the dynamic config baseline rather than leaving a target behind
-	// that nothing maintains. See PartitionScaleMode for the individual modes.
+	// applied. Disabling the manager acts like a disabled scaler: managed scaling falls
+	// back to dynamic config.
 	//
-	// In dynamic config this is written as one of the enum value names, with or without
-	// the PARTITION_SCALE_MODE_ prefix and in any case, e.g. just "shadow". Note that an
-	// unparseable value means the _whole_ PartitionScaleManagerSettings value is ignored
-	// and the default is used, not just this field.
+	// In dynamic config this is written as "PARTITION_SCALE_MODE_SHADOW" or simply
+	// "shadow"/"enabled"/"disabled" (case insensitive).
 	Mode enumsspb.PartitionScaleMode
 	// MaxRate limits target change frequency.
 	MaxRate float32
@@ -209,8 +202,8 @@ type PartitionScaleManagerSettings struct {
 	// that query/nexus tasks will be processed without interruption even after scale down.
 	DrainBufferTime time.Duration
 	// ShadowModeLogInterval controls how often shadow decisions are logged (in shadow mode
-	// only). If <= 0, DefaultShadowModeLogInterval is used. If the partition scaler is
-	// disabled, shadow mode does not log.
+	// only). If this is <= 0, shadow mode falls back to disabled mode. If the the partition
+	// scaler returns target: 0 (disabled), shadow mode doesn't log anything.
 	ShadowModeLogInterval time.Duration
 }
 

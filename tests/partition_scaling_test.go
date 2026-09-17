@@ -29,8 +29,6 @@ func scalerEnvOptions(dcPartitions int) []testcore.TestOption {
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, dcPartitions),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, dcPartitions),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingPartitionScaleManager, dynamicconfig.PartitionScaleManagerSettings{
-			// Note that a typed value like this replaces the default outright instead of
-			// merging over it, so Mode has to be set explicitly here.
 			Mode:               enumsspb.PARTITION_SCALE_MODE_ENABLED,
 			MaxRate:            100,         // don't limit speed of changes
 			BatchSize:          1,           // always go directly to scaler

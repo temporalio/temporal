@@ -1686,12 +1686,9 @@ default as namespace cardinality can be high and this requires a metrics collect
 			BatchSize:             100,
 			BackgroundInterval:    23 * time.Second,
 			DrainBufferTime:       15 * time.Second,
-			ShadowModeLogInterval: DefaultShadowModeLogInterval,
+			ShadowModeLogInterval: 30 * time.Second,
 		},
-		`Settings for partition scale manager. Mode is the main knob: it selects whether the
-configured partition scaler is called at all, and whether its decisions are applied. Note that
-the scaler has its own enabled setting (see matching.partitionScaler), so shadow and enabled
-mode do nothing until the scaler is also enabled.`,
+		`Settings for partition scale manager.`,
 	)
 	MatchingPartitionScaler = NewTaskQueueTypedSettingWithConverter(
 		"matching.partitionScaler",

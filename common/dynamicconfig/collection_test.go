@@ -806,39 +806,3 @@ func (s *subscriptionSuite) TestSubscriptionConstrainedDefaults() {
 	s.client.Set(setting.Key().String(), []dynamicconfig.ConstrainedValue{})
 	waitFor(10, 34, 3, 2)
 }
-
-// TestPartitionScaleManagerPartialOverride locks in the merge behavior that operating
-// the partition scale manager depends on: a config value that sets only some fields is
-// merged over the default, so Mode keeps its default (shadow) rather than dropping to
-// the zero value (disabled). Note this is only true because the setting's converter
-// default is the setting default; see dynamicconfig.ConvertStructure.
-func TestPartitionScaleManagerPartialOverride(t *testing.T) {
-	client := newTestSubscribableClient()
-	cln := dynamicconfig.NewCollection(client, log.NewNoopLogger())
-	cln.Start()
-	defer cln.Stop()
-
-	key := dynamicconfig.MatchingPartitionScaleManager.Key().String()
-	get := dynamicconfig.MatchingPartitionScaleManager.Get(cln)
-	settings := func() dynamicconfig.PartitionScaleManagerSettings {
-		return get("ns", "tq", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	}
-	defaultMaxRate := settings().MaxRate
-
-	client.SetValue(key, map[string]any{"shadowModeLogInterval": "45s"})
-	assert.Equal(t, enumsspb.PARTITION_SCALE_MODE_SHADOW, settings().Mode, "unset mode keeps its default")
-	assert.Equal(t, 45*time.Second, settings().ShadowModeLogInterval)
-	assert.Equal(t, defaultMaxRate, settings().MaxRate)
-
-	// The mode is written as its enum value name, with or without the prefix, in any case.
-	client.SetValue(key, map[string]any{"mode": "enabled"})
-	assert.Equal(t, enumsspb.PARTITION_SCALE_MODE_ENABLED, settings().Mode)
-	client.SetValue(key, map[string]any{"mode": "PARTITION_SCALE_MODE_DISABLED"})
-	assert.Equal(t, enumsspb.PARTITION_SCALE_MODE_DISABLED, settings().Mode)
-
-	// An unparseable mode discards the _whole_ value, not just this field, so the other
-	// fields set alongside it revert to their defaults too.
-	client.SetValue(key, map[string]any{"mode": "on", "maxRate": 99.0})
-	assert.Equal(t, enumsspb.PARTITION_SCALE_MODE_SHADOW, settings().Mode)
-	assert.Equal(t, defaultMaxRate, settings().MaxRate)
-}

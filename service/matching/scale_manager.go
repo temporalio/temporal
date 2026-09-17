@@ -181,10 +181,10 @@ func (sm *scaleManager) callScaler() {
 	}
 
 	settings := sm.settings()
-	shadowMode := settings.Mode == enumsspb.PARTITION_SCALE_MODE_SHADOW
-	// Disabled (or unspecified) means we never call the scaler, and act as if it had
-	// returned a disabled decision, so that managed scaling breaks cleanly back to the
-	// dynamic config baseline instead of leaving a target behind that nothing maintains.
+	// note: the code below assumes ShadowModeLogInterval > 0 when Mode == SHADOW
+	shadowMode := settings.Mode == enumsspb.PARTITION_SCALE_MODE_SHADOW && settings.ShadowModeLogInterval > 0
+	// Disabled (or unspecified) means we never call the scaler, and act as if it had returned
+	// a disabled decision.
 	disabled := !shadowMode && settings.Mode != enumsspb.PARTITION_SCALE_MODE_ENABLED
 
 	// Entering shadow mode on top of a previously-applied managed target releases
@@ -201,9 +201,7 @@ func (sm *scaleManager) callScaler() {
 	// grab current batch (may be zero)
 	tasks := int(sm.batch.Swap(0))
 
-	// A disabled decision is idempotent: once the state is fully cleaned up, the
-	// no-change check below returns before writing anything, so disabled mode settles
-	// into doing nothing at all.
+	// if disabled, leave NewTarget as 0 to mean disabled
 	decision := PartitionScalerDecision{NewTarget: 0}
 	if !disabled {
 		decision = sm.partitionScaler.OnTasks(PartitionScalerInput{
@@ -271,7 +269,8 @@ func (sm *scaleManager) callScaler() {
 		// Untagged: read == write == 0 marks this as a shadow target rather than an applied one.
 		// Emit only when the target decision changed (like in real mode).
 		sm.emitGaugeMetricsIfEnabled(0, 0, float64(target))
-		sm.nextShadowLog = sm.timeSource.Now().Add(shadowModeLogInterval(settings))
+		// note: we checked ShadowModeLogInterval > 0 when we set shadowMode above
+		sm.nextShadowLog = sm.timeSource.Now().Add(settings.ShadowModeLogInterval)
 		sm.prevShadowTarget = target
 	} else {
 		// we must successfully write to the db before making new state active
@@ -298,15 +297,6 @@ func (sm *scaleManager) callScaler() {
 			tag.Bool(metrics.ScalerShadowModeTagName, shadowMode))
 	}
 	metrics.PartitionScaleEvents.With(sm.metricsHandler.WithTags(metrics.ScalerShadowModeTag(shadowMode))).Record(1)
-}
-
-// shadowModeLogInterval is how often shadow decisions may be logged, falling back to a
-// reasonable default if unset: logging every decision is too noisy to be useful.
-func shadowModeLogInterval(settings dynamicconfig.PartitionScaleManagerSettings) time.Duration {
-	if settings.ShadowModeLogInterval <= 0 {
-		return dynamicconfig.DefaultShadowModeLogInterval
-	}
-	return settings.ShadowModeLogInterval
 }
 
 func (sm *scaleManager) emitGaugeMetricsIfEnabled(read, write, target float64) {
@@ -432,11 +422,8 @@ func (sm *scaleManager) describeRequest(id int32, versions []string) *matchingse
 }
 
 func (sm *scaleManager) updateBacklogAndDrainState(ctx context.Context) {
-	// Only enabled mode may persist drain completion or mutate read partitions, so skip
-	// the Describe calls entirely otherwise: in shadow mode the results would all be
-	// discarded below, and in disabled mode callScaler is breaking cleanly back to the
-	// dynamic config baseline, which drops backlog state anyway.
 	if sm.settings().Mode != enumsspb.PARTITION_SCALE_MODE_ENABLED {
+		// if we're not enabled, we don't have to do any of this
 		return
 	}
 
