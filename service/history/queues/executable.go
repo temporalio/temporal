@@ -848,7 +848,10 @@ func (e *executableImpl) reportThrottle(
 	scope enumspb.ResourceExhaustedScope,
 ) {
 	if e.throttleState == nil || !e.throttleState.Enabled() {
-		e.clearThrottle()
+		// The key is inert while the controller is off, since every reader checks Enabled
+		// first. Recording it anyway is what lets a task parked before the flag was turned
+		// on be paced, instead of draining in one wave the moment it is.
+		e.classifyThrottle(cause, scope)
 		return
 	}
 
@@ -860,8 +863,10 @@ func (e *executableImpl) reportThrottle(
 
 	if !IsControllerInput(cause, scope) {
 		// The cause is not one the controller governs, but a release it issued still failed,
-		// so the class that issued it has to see the loss before the key is dropped.
-		if permit := e.takeThrottlePermit(); permit != nil {
+		// so the class that issued it has to see the loss before the key is dropped. Workflow
+		// lock contention is the exception: it is not a shared budget, so releasing slower
+		// does not clear it and there is no feedback to lift the rate again.
+		if permit := e.takeThrottlePermit(); permit != nil && cause != enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
 			e.throttleState.ReportThrottled(permit.key, permit)
 		}
 		e.clearThrottle()
@@ -879,6 +884,25 @@ func (e *executableImpl) reportThrottle(
 	e.throttleMu.Unlock()
 
 	e.throttleState.ReportThrottled(key, permit)
+}
+
+// classifyThrottle records which class this failure belongs to without reporting it.
+func (e *executableImpl) classifyThrottle(
+	cause enumspb.ResourceExhaustedCause,
+	scope enumspb.ResourceExhaustedScope,
+) {
+	if !IsControllerInput(cause, scope) {
+		e.clearThrottle()
+		return
+	}
+	key := NewThrottleKey(cause, e.GetNamespaceID(), e.GetPriority())
+
+	e.throttleMu.Lock()
+	defer e.throttleMu.Unlock()
+
+	e.throttleKey = key
+	e.hasThrottleKey = true
+	e.throttlePermit = nil
 }
 
 func (e *executableImpl) takeThrottlePermit() *throttleEntry {

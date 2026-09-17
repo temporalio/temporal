@@ -1,6 +1,7 @@
 package queues
 
 import (
+	"fmt"
 	"math"
 	"testing"
 	"time"
@@ -426,6 +427,11 @@ func TestThrottleState_UnadmittedRejectionsDoNotMoveTheRate(t *testing.T) {
 	state, timeSource := newTestThrottleState(defaultThrottleOverrides())
 	key := testKey()
 
+	// The class has to exist before this means anything: an unmetered rejection does not
+	// create one, since a class the gate never issued for would only hold a key slot.
+	require.True(t, admitOK(state, key))
+	require.Equal(t, 1, throttleLen(state))
+
 	for i := 0; i < 100; i++ {
 		reportThrottle(state, key, false)
 		timeSource.Update(timeSource.Now().Add(testThrottleWindow))
@@ -433,6 +439,18 @@ func TestThrottleState_UnadmittedRejectionsDoNotMoveTheRate(t *testing.T) {
 
 	require.InEpsilon(t, 100.0, throttleRate(state, key), 1e-9)
 	require.Equal(t, 1, throttleLen(state), "the class is still tracked, it is just not being driven")
+}
+
+// Past the key cap every new class fails open, so a slot spent on a class the gate never
+// issued for is taken from one it would have paced. A rejection with no permit behind it
+// is a first dispatch off the reader, which the controller does not govern.
+func TestThrottleState_UnadmittedRejectionsDoNotAllocateKeys(t *testing.T) {
+	state, _ := newTestThrottleState(defaultThrottleOverrides())
+
+	for i := 0; i < 8; i++ {
+		reportThrottle(state, apsKey(fmt.Sprintf("ns-%d", i)), false)
+	}
+	require.Zero(t, throttleLen(state), "unmetered rejections must not cost key slots")
 }
 
 func TestThrottleState_UnadmittedRejectionsDoNotBlockIncrease(t *testing.T) {

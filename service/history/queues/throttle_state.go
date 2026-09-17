@@ -41,6 +41,8 @@ type (
 
 	ThrottleStateOptions struct {
 		Enabled       dynamicconfig.BoolPropertyFn
+		MinRate       dynamicconfig.FloatPropertyFn
+		InitialRate   dynamicconfig.FloatPropertyFn
 		Beta          dynamicconfig.FloatPropertyFn
 		IncreaseRatio dynamicconfig.FloatPropertyFn
 		LossThreshold dynamicconfig.FloatPropertyFn
@@ -77,7 +79,9 @@ type (
 		releases     int64
 		rejections   int64
 		suppressions int64
-		pending      int64 // unresolved admits
+		// Spans Admit to Finish only, which is the reservation, not the task's execution.
+		// It keeps a reserved entry from being swept out from under its own refund.
+		pending int64
 	}
 )
 
@@ -206,7 +210,10 @@ func (s *ThrottleState) ReportThrottled(key ThrottleKey, permit *throttleEntry) 
 	if permit != nil {
 		charged = permit.key
 	}
-	entry := s.getOrCreate(charged)
+	entry := s.peek(charged)
+	if permit != nil && entry == nil {
+		entry = s.getOrCreate(charged)
+	}
 	if entry == nil {
 		metrics.TaskThrottleRejections.With(s.metricsHandler).Record(1, key.cappedTags()...)
 		return
@@ -250,19 +257,16 @@ func (s *ThrottleState) advanceWindowLocked(entry *throttleEntry, now time.Time,
 
 	beta, increaseRatio, lossThreshold := s.controlLaw()
 	minSamples := minDecisionReleases(lossThreshold)
-	if entry.releases < minSamples && entry.rejections < minSamples {
+	if entry.releases < minSamples {
 		return
 	}
 	defer func() {
 		entry.releases, entry.rejections, entry.suppressions = 0, 0, 0
 	}()
 
-	// A rejection can land in the window after the one that released it, so bound the ratio at
-	// 1 rather than letting the skew read as loss above 100%.
-	loss := 1.0
-	if entry.releases > 0 {
-		loss = min(1, float64(entry.rejections)/float64(entry.releases))
-	}
+	// A rejection can land in the window after the one that released it, so this can exceed
+	// 1. It is only ever compared to the threshold, which it is above either way.
+	loss := float64(entry.rejections) / float64(entry.releases)
 	switch {
 	case loss > lossThreshold:
 		entry.rate = s.clamp(entry.rate * beta)
@@ -301,13 +305,13 @@ func (e *throttleEntry) resetLocked(rate float64, now time.Time, window time.Dur
 	e.rate = rate
 	e.lastRefill = now
 	e.windowStart = now
-	e.releases, e.rejections = 0, 0
+	e.releases, e.rejections, e.suppressions = 0, 0, 0
 	e.tokens = e.burstLocked(window)
 }
 
 func (s *ThrottleState) touchLocked(entry *throttleEntry, now time.Time, window time.Duration) {
 	if !entry.lastAccess.IsZero() && now.Sub(entry.lastAccess) > s.keyTTL {
-		entry.resetLocked(s.initialRate, now, window)
+		entry.resetLocked(s.startRate(), now, window)
 	}
 	// A backwards clock step must not make an active entry look idle.
 	if now.After(entry.lastAccess) {
@@ -342,9 +346,9 @@ func (e *throttleEntry) tokenETALocked() time.Duration {
 
 func (s *ThrottleState) clamp(rate float64) float64 {
 	if math.IsNaN(rate) {
-		return s.minRate
+		return s.floor()
 	}
-	return min(max(rate, s.minRate), s.maxRate)
+	return min(max(rate, s.floor()), s.maxRate)
 }
 
 func (s *ThrottleState) controlLaw() (beta, increaseRatio, lossThreshold float64) {
@@ -357,7 +361,9 @@ func (s *ThrottleState) controlLaw() (beta, increaseRatio, lossThreshold float64
 
 	increaseRatio = defaultThrottleIncreaseRatio
 	if s.options.IncreaseRatio != nil {
-		if configured := s.options.IncreaseRatio(); configured > 0 {
+		// Bounded above as well: doubling on every clean window is a config mistake, and
+		// an infinite ratio would take the rate to the ceiling in one step.
+		if configured := s.options.IncreaseRatio(); configured > 0 && configured <= 1 {
 			increaseRatio = configured
 		}
 	}
@@ -378,6 +384,28 @@ func (s *ThrottleState) maxKeys() int {
 		}
 	}
 	return defaultThrottleMaxKeys
+}
+
+// floor and startRate are live, unlike the ceiling and the TTL: a class driven to the floor
+// by a long incident climbs back multiplicatively and the idle reset cannot rescue it, so
+// these are the two an operator reaches for while one is still running. Both are read only
+// when a rate is clamped or a class is created or reset, never per admit.
+func (s *ThrottleState) floor() float64 {
+	if s.options.MinRate != nil {
+		if configured := s.options.MinRate(); configured > 0 {
+			return configured
+		}
+	}
+	return s.minRate
+}
+
+func (s *ThrottleState) startRate() float64 {
+	if s.options.InitialRate != nil {
+		if configured := s.options.InitialRate(); configured > 0 {
+			return configured
+		}
+	}
+	return s.initialRate
 }
 
 func (s *ThrottleState) peek(key ThrottleKey) *throttleEntry {
@@ -412,7 +440,7 @@ func (s *ThrottleState) getOrCreate(key ThrottleKey) *throttleEntry {
 
 	entry := &throttleEntry{
 		key:         key,
-		rate:        s.initialRate,
+		rate:        s.startRate(),
 		lastRefill:  now,
 		windowStart: now,
 		lastAccess:  now,

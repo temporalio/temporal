@@ -322,7 +322,7 @@ func (r *reschedulerImpl) drainClassLocked(
 	pq collection.Queue[rescheduledExecuable],
 	pass *reschedulePass,
 ) {
-	gated := key.Throttle != (ThrottleKey{})
+	classThrottle := key.Throttle
 	metrics.TaskReschedulerClassQueueDepth.With(r.metricsHandler).Record(int64(pq.Len()), r.classTags(key)...)
 
 	for !pq.IsEmpty() {
@@ -339,11 +339,18 @@ func (r *reschedulerImpl) drainClassLocked(
 			continue
 		}
 
+		throttle := classThrottle
+		if throttle == (ThrottleKey{}) {
+			// The class predates the controller being turned on, so its key was never
+			// stamped. The task still knows which budget refused it.
+			throttle, _ = executableThrottleKey(executable)
+		}
+
 		var permit *throttleEntry
-		if gated {
+		if throttle != (ThrottleKey{}) {
 			var allowed bool
 			var retryAfter time.Duration
-			allowed, permit, retryAfter = r.throttleState.Admit(key.Throttle)
+			allowed, permit, retryAfter = r.throttleState.Admit(throttle)
 			if !allowed {
 				pass.wakeAt(pass.now.Add(r.budgetRetryInterval(retryAfter)))
 				return

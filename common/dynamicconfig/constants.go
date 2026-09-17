@@ -2091,6 +2091,18 @@ The actual count is calculated as base * (multiplier ^ level)`,
 		false,
 		`Enables host-level pacing of history task retries after namespace APS or persistence throttling.`,
 	)
+	TaskThrottleControllerMinRate = NewGlobalFloatSetting(
+		"history.taskThrottleControllerMinRate",
+		1.0,
+		`Floor on a class's admitted rate, in task releases per second. A class driven here by a
+long incident climbs back multiplicatively, so raising the floor is the lever for shortening
+that recovery.`,
+	)
+	TaskThrottleControllerInitialRate = NewGlobalFloatSetting(
+		"history.taskThrottleControllerInitialRate",
+		1000.0,
+		`Admitted rate a class starts at, and returns to when it is reset after going idle.`,
+	)
 	TaskThrottleControllerBeta = NewGlobalFloatSetting(
 		"history.taskThrottleControllerBeta",
 		0.85,

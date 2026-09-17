@@ -1,12 +1,14 @@
 package queues
 
 import (
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	ctasks "go.temporal.io/server/common/tasks"
@@ -371,4 +373,122 @@ func TestReschedule_FailedSubmitRefundsTheToken(t *testing.T) {
 	releases, rejections := throttleCounters(state, key)
 	require.Equal(t, int64(1), releases, "only the submit that happened may be counted")
 	require.Zero(t, rejections)
+}
+
+// An operator turns this on during an incident, with the rescheduler already full. Those
+// tasks were parked before the controller was gating, so their class carries no key — and if
+// the release path trusted the class key alone it would drain the whole backlog in one pass,
+// unpaced. That is the largest wave in the system and the one the design exists to remove.
+func TestReschedule_EnablingTheControllerPacesWorkAlreadyParked(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	var enabled atomic.Bool
+
+	timeSource := clock.NewEventTimeSource()
+	timeSource.Update(time.Unix(0, 0))
+	state := NewThrottleState(
+		ThrottleStateOptions{
+			Enabled:       enabled.Load,
+			Beta:          dynamicconfig.GetFloatPropertyFn(0.85),
+			IncreaseRatio: dynamicconfig.GetFloatPropertyFn(0.10),
+			LossThreshold: dynamicconfig.GetFloatPropertyFn(0.05),
+			Window:        dynamicconfig.GetDurationPropertyFn(testThrottleWindow),
+			MaxKeys:       dynamicconfig.GetIntPropertyFn(1024),
+		},
+		timeSource,
+		log.NewTestLogger(),
+		metrics.NoopMetricsHandler,
+	)
+	state.minRate, state.maxRate = 1, 10000
+	state.initialRate, state.keyTTL = 1, 5*time.Minute
+
+	r, scheduler, _ := newTestRescheduler(t, ctrl, timeSource, state)
+	key := apsKey("ns-1")
+	now := timeSource.Now()
+
+	// Parked while the controller was off: the class is created without a throttle key.
+	for i := 0; i < 50; i++ {
+		e := newThrottledExecutable(ctrl, key, true)
+		e.EXPECT().GetNamespaceID().Return("ns-1").AnyTimes()
+		r.Add(e, now)
+	}
+	require.Equal(t, 50, r.Len())
+
+	enabled.Store(true)
+	scheduler.EXPECT().TrySubmit(gomock.Any()).Return(true).AnyTimes()
+	r.reschedule()
+
+	require.Equal(t, 49, r.Len(),
+		"a rate of 1/s must release one task, not the whole backlog")
+	require.Equal(t, 1, throttleLen(state),
+		"the class must be tracked, not bypassed")
+}
+
+// A class driven to the floor climbs back multiplicatively and the idle reset cannot rescue
+// it, because a class with a backlog is never idle. Raising the floor is the lever that
+// exists for that, so it has to take effect on a class already sitting there.
+func TestThrottleState_RaisingTheFloorLiftsAClassAlreadyAtIt(t *testing.T) {
+	floor := 1.0
+	timeSource := clock.NewEventTimeSource()
+	timeSource.Update(time.Unix(0, 0))
+	state := NewThrottleState(
+		ThrottleStateOptions{
+			Enabled:       dynamicconfig.GetBoolPropertyFn(true),
+			MinRate:       func() float64 { return floor },
+			Beta:          dynamicconfig.GetFloatPropertyFn(0.85),
+			IncreaseRatio: dynamicconfig.GetFloatPropertyFn(0.10),
+			LossThreshold: dynamicconfig.GetFloatPropertyFn(0.05),
+			Window:        dynamicconfig.GetDurationPropertyFn(testThrottleWindow),
+			MaxKeys:       dynamicconfig.GetIntPropertyFn(1024),
+		},
+		timeSource,
+		log.NewTestLogger(),
+		metrics.NoopMetricsHandler,
+	)
+	state.minRate, state.maxRate, state.initialRate = 1, 10000, 100
+	state.keyTTL = 5 * time.Minute
+	key := testKey()
+
+	for i := 0; i < 60; i++ {
+		reportThrottle(state, key, true)
+		closeWindow(state, timeSource, key)
+	}
+	require.InEpsilon(t, 1.0, throttleRate(state, key), 1e-9, "the class must be at the floor")
+
+	floor = 50
+	reportThrottle(state, key, true)
+	closeWindow(state, timeSource, key)
+
+	require.InEpsilon(t, 50.0, throttleRate(state, key), 1e-9,
+		"raising the floor must lift a class already pinned to it")
+}
+
+// The cursor rotates so that classes of equal priority take turns leading the pass. Without
+// it whichever class the sort left first would be offered the scheduler's capacity every
+// time, and a class behind it would only ever get what the first one did not take.
+func TestReschedule_CursorRotatesBetweenEqualClasses(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	overrides := defaultThrottleOverrides()
+	state, stateClock := newTestThrottleState(overrides)
+	timeSource := clock.NewEventTimeSource()
+	timeSource.Update(stateClock.Now())
+
+	r, scheduler, _ := newTestRescheduler(t, ctrl, timeSource, state)
+	now := timeSource.Now()
+
+	for _, ns := range []string{"ns-1", "ns-2", "ns-3"} {
+		e := newThrottledExecutable(ctrl, apsKey(ns), true)
+		e.EXPECT().GetNamespaceID().Return(ns).AnyTimes()
+		r.Add(e, now)
+	}
+	require.Len(t, r.keyOrder, 3)
+
+	scheduler.EXPECT().TrySubmit(gomock.Any()).Return(true).AnyTimes()
+	leaders := make(map[reschedulerKey]bool)
+	for i := 0; i < 3; i++ {
+		r.Lock()
+		leaders[r.visitOrderLocked()[0].key] = true
+		r.Unlock()
+		r.reschedule()
+	}
+	require.Len(t, leaders, 3, "every class must get a turn at the head of the pass")
 }

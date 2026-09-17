@@ -131,6 +131,8 @@ type Config struct {
 	TaskDLQErrorPattern            dynamicconfig.StringPropertyFn
 
 	TaskThrottleControllerEnabled       dynamicconfig.BoolPropertyFn
+	TaskThrottleControllerMinRate       dynamicconfig.FloatPropertyFn
+	TaskThrottleControllerInitialRate   dynamicconfig.FloatPropertyFn
 	TaskThrottleControllerBeta          dynamicconfig.FloatPropertyFn
 	TaskThrottleControllerIncreaseRatio dynamicconfig.FloatPropertyFn
 	TaskThrottleControllerLossThreshold dynamicconfig.FloatPropertyFn
@@ -583,6 +585,8 @@ func NewConfig(
 		TaskDLQErrorPattern:            dynamicconfig.HistoryTaskDLQErrorPattern.Get(dc),
 
 		TaskThrottleControllerEnabled:                        dynamicconfig.TaskThrottleControllerEnabled.Get(dc),
+		TaskThrottleControllerMinRate:                        dynamicconfig.TaskThrottleControllerMinRate.Get(dc),
+		TaskThrottleControllerInitialRate:                    dynamicconfig.TaskThrottleControllerInitialRate.Get(dc),
 		TaskThrottleControllerBeta:                           dynamicconfig.TaskThrottleControllerBeta.Get(dc),
 		TaskThrottleControllerIncreaseRatio:                  dynamicconfig.TaskThrottleControllerIncreaseRatio.Get(dc),
 		TaskThrottleControllerLossThreshold:                  dynamicconfig.TaskThrottleControllerLossThreshold.Get(dc),

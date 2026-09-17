@@ -443,10 +443,52 @@ func TestThrottleState_ConvergesOnTheShareLeftByOtherTraffic(t *testing.T) {
 	}
 }
 
-// A rejection that arrives after its class was evicted lands on a recreated entry that has
-// issued nothing. "No releases at all" must not be read as "every release lost": a single
-// in-flight task outliving its class's TTL would otherwise cut a class that never ran.
-func TestThrottleState_UnmatchedRejectionDoesNotCutAFreshClass(t *testing.T) {
+// A rejection that arrives after its class was swept lands on a recreated entry that has
+// issued nothing. With no releases to measure them against there is no ratio, so any number
+// of them must leave the rate alone rather than score as total loss.
+func TestThrottleState_UnmatchedRejectionsDoNotCutAClassThatIssuedNothing(t *testing.T) {
+	o := defaultThrottleOverrides()
+	state, timeSource := newTestThrottleState(o)
+	key := testKey()
+
+	entry := state.getOrCreate(key)
+	_, _, lossThreshold := state.controlLaw()
+	entry.Lock()
+	entry.rejections = minDecisionReleases(lossThreshold) * 5
+	entry.Unlock()
+
+	closeWindow(state, timeSource, key)
+
+	require.InEpsilon(t, o.initialRate, throttleRate(state, key), 1e-9,
+		"rejections with no releases behind them are not evidence of loss")
+}
+
+// The demand signal is per decision, like the counters beside it. Carrying it through an idle
+// reset buys the revived class an increase on demand it showed before it went quiet.
+func TestThrottleState_IdleResetClearsTheDemandSignal(t *testing.T) {
+	o := defaultThrottleOverrides()
+	o.keyTTL = time.Minute
+	state, timeSource := newTestThrottleState(o)
+	key := testKey()
+
+	cleanWindow(state, key) // drains the bucket, so the gate refuses and demand is recorded
+	entry := state.peek(key)
+	entry.Lock()
+	require.Positive(t, entry.suppressions, "the drain must have recorded demand")
+	entry.Unlock()
+
+	timeSource.Update(timeSource.Now().Add(2 * o.keyTTL))
+	require.True(t, admitOK(state, key), "the idle class is reset on its next touch")
+
+	entry.Lock()
+	suppressions := entry.suppressions
+	entry.Unlock()
+	require.Zero(t, suppressions, "demand from before the reset must not survive it")
+}
+
+// A reserved token has to survive until its Finish, or the refund lands on an entry nothing
+// else can see. The window is short, but the sweep runs off an unrelated caller's insert.
+func TestThrottleState_SweepKeepsAClassWithAnOutstandingReservation(t *testing.T) {
 	o := defaultThrottleOverrides()
 	o.keyTTL = time.Second
 	state, timeSource := newTestThrottleState(o)
@@ -454,15 +496,24 @@ func TestThrottleState_UnmatchedRejectionDoesNotCutAFreshClass(t *testing.T) {
 
 	allowed, permit, _ := state.Admit(key)
 	require.True(t, allowed)
-	state.Finish(permit, true)
 
 	timeSource.Update(timeSource.Now().Add(2 * o.keyTTL))
-	state.getOrCreate(apsKey("other"))
-	require.Nil(t, state.peek(key), "the class must have been swept")
+	state.getOrCreate(apsKey("unrelated")) // drives the sweep
 
-	state.ReportThrottled(key, permit)
+	require.NotNil(t, state.peek(key), "a class holding a reservation must not be swept")
+	state.Finish(permit, true)
+}
+
+// The increase ratio is a fraction of the current rate. An unbounded one would reach the
+// ceiling in a single window, which is a config mistake rather than an instruction.
+func TestThrottleState_AbsurdIncreaseRatioFallsBackToTheDefault(t *testing.T) {
+	o := defaultThrottleOverrides()
+	o.increase = 1e6
+	state, timeSource := newTestThrottleState(o)
+	key := testKey()
+
+	cleanWindow(state, key)
 	closeWindow(state, timeSource, key)
 
-	require.InEpsilon(t, o.initialRate, throttleRate(state, key), 1e-9,
-		"one rejection against no releases is not evidence of loss")
+	require.InEpsilon(t, o.initialRate*(1+defaultThrottleIncreaseRatio), throttleRate(state, key), 1e-9)
 }
