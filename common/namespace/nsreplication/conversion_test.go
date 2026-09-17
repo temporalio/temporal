@@ -62,6 +62,42 @@ func TestShouldReplicateNamespace(t *testing.T) {
 	}
 }
 
+func TestShouldReplicateNamespace_AllCombinations(t *testing.T) {
+	states := enumspb.NamespaceState(0).Descriptor().Values()
+	for _, forceReplicate := range []bool{false, true} {
+		for _, isGlobal := range []bool{false, true} {
+			for _, clusterCount := range []int{0, 1, 2} {
+				for _, clusterListChanged := range []bool{false, true} {
+					for i := 0; i < states.Len(); i++ {
+						state := enumspb.NamespaceState(states.Get(i).Number())
+						name := fmt.Sprintf(
+							"force=%t/global=%t/clusters=%d/list-changed=%t/state=%s",
+							forceReplicate,
+							isGlobal,
+							clusterCount,
+							clusterListChanged,
+							state,
+						)
+						t.Run(name, func(t *testing.T) {
+							clusters := make([]string, clusterCount)
+							want := state != enumspb.NAMESPACE_STATE_DELETED &&
+								(forceReplicate || (isGlobal && (clusterCount > 1 || clusterListChanged)))
+							got := ShouldReplicateNamespace(
+								forceReplicate,
+								isGlobal,
+								clusters,
+								clusterListChanged,
+								state,
+							)
+							require.Equal(t, want, got)
+						})
+					}
+				}
+			}
+		}
+	}
+}
+
 // TestNamespaceDetailToTaskAttributes pins the detail->wire converter that an
 // eventual CHASM-based transport will also build its requests through. Pinning
 // the full field set here guards against the "field replicated by one transport
