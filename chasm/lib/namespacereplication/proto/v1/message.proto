@@ -92,16 +92,16 @@ enum PeerApplyOutcome {
 
 message LocalApplyStatus {
   LocalApplyOutcome outcome = 1;
-  google.protobuf.Timestamp applied_at = 3;
+  google.protobuf.Timestamp applied_at = 2;
   // Failure detail when outcome is FAILED (e.g. CAS conflict, store unavailable).
-  temporal.api.failure.v1.Failure failure = 4;
+  temporal.api.failure.v1.Failure failure = 3;
 }
 
 message PeerApplyStatus {
   PeerApplyOutcome outcome = 1;
-  int32 attempt_count = 3;
-  google.protobuf.Timestamp first_attempt_at = 4;
-  google.protobuf.Timestamp last_attempt_at = 5;
+  int32 attempt_count = 2;
+  google.protobuf.Timestamp first_attempt_at = 3;
+  google.protobuf.Timestamp last_attempt_at = 4;
   // Failure detail when outcome is FAILED_*.
-  temporal.api.failure.v1.Failure last_failure = 6;
+  temporal.api.failure.v1.Failure last_failure = 5;
 }
