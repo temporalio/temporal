@@ -55,10 +55,6 @@ func (m *mockNexusCompletionGetterComponent) GetNexusCompletion(_ chasm.Context,
 	return m.completion, m.err
 }
 
-func (m *mockNexusCompletionGetterComponent) GetComponentExecutionPath() (enumspb.ExecutionType, []string) {
-	return enumspb.EXECUTION_TYPE_WORKFLOW, nil
-}
-
 func (m *mockNexusCompletionGetterComponent) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
 }
@@ -86,7 +82,10 @@ func (l *mockNexusCompletionGetterLibrary) Name() string {
 
 func (l *mockNexusCompletionGetterLibrary) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*mockNexusCompletionGetterComponent]("nexusCompletionGetter"),
+		chasm.NewRegistrableComponent[*mockNexusCompletionGetterComponent](
+			"nexusCompletionGetter",
+			chasm.WithExecutionType(enumspb.EXECUTION_TYPE_WORKFLOW),
+		),
 	}
 }
 

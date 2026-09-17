@@ -273,12 +273,6 @@ func (w *Workflow) GetNexusCompletion(
 	return w.MSPointer.GetNexusCompletion(ctx, requestID)
 }
 
-// GetComponentExecutionPath implements callback.CompletionSource. A Workflow is the root component of
-// its own execution, so it has no component path.
-func (w *Workflow) GetComponentExecutionPath() (enumspb.ExecutionType, []string) {
-	return enumspb.EXECUTION_TYPE_WORKFLOW, nil
-}
-
 // BuildPendingNexusOperationInfos reads nexus operations from the workflow and converts them to API format.
 func (w *Workflow) BuildPendingNexusOperationInfos(
 	ctx chasm.Context,

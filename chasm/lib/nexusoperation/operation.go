@@ -560,12 +560,6 @@ func (o *Operation) scheduleCompletionCallbacks(ctx chasm.MutableContext) error 
 	return callback.ScheduleStandbyCallbacks(ctx, o.Callbacks)
 }
 
-// GetComponentExecutionPath implements callback.CompletionSource. A standalone Nexus operation is the
-// root component of its own execution, so it has no component path.
-func (o *Operation) GetComponentExecutionPath() (enumspb.ExecutionType, []string) {
-	return enumspb.EXECUTION_TYPE_NEXUS_OPERATION, nil
-}
-
 // GetNexusCompletion implements callback.CompletionSource, providing the result of the Nexus operation.
 func (o *Operation) GetNexusCompletion(ctx chasm.Context, _ string) (nexusrpc.CompleteOperationOptions, error) {
 	if !o.isClosed() {

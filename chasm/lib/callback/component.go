@@ -29,11 +29,6 @@ type CompletionSource interface {
 	// GetNexusCompletion returns the execution's result. Links on the returned CompleteOperationOptions
 	// are the "backlinks", so a Nexus handler receiving the completion can link to its source.
 	GetNexusCompletion(ctx chasm.Context, requestID string) (nexusrpc.CompleteOperationOptions, error)
-
-	// GetComponentExecutionPath returns the type of execution the source belongs to, along with the
-	// component path addressing the source within it. A source that is itself the root component of
-	// its execution has no path. A Workflow Update returns [ "Updates", updateID ].
-	GetComponentExecutionPath() (enumspb.ExecutionType, []string)
 }
 
 var _ chasm.Component = (*Callback)(nil)
@@ -121,7 +116,7 @@ func (c *Callback) loadInvocationArgs(
 		// Links are supplementary, so a source reporting an execution type with no link representation still has
 		// its completion delivered.
 		var selfLinks []*nexuspb.Link
-		selfLink, err := c.buildSelfLink(ctx, target)
+		selfLink, err := c.buildSelfLink(ctx, c.CompletionSource)
 		if err != nil {
 			softassert.Fail(
 				ctx.Logger(),
@@ -376,17 +371,12 @@ func ScheduleStandbyCallbacks(ctx chasm.MutableContext, callbacks chasm.Map[stri
 
 // buildSelfLink returns a commonpb.Link_Callback encoded as a nexus.Link, addressing this
 // callback within the execution of its completion source.
-func (c *Callback) buildSelfLink(ctx chasm.Context, compSrc CompletionSource) (nexus.Link, error) {
-	exKey := ctx.ExecutionKey()
-	exType, componentPath := compSrc.GetComponentExecutionPath()
+func (c *Callback) buildSelfLink(ctx chasm.Context, compSrc chasm.ParentPtr[CompletionSource]) (nexus.Link, error) {
 	link, err := commonnexus.ConvertLinkCallbackToNexusLink(&commonpb.Link_Callback{
 		Namespace: ctx.NamespaceEntry().Name().String(),
-		Execution: &commonpb.Execution{
-			Type:       exType,
-			BusinessId: exKey.BusinessID,
-			RunId:      exKey.RunID,
-		},
-		ComponentPath: componentPath,
+		Execution: compSrc.Execution(),
+		// A source that is the root component of its execution has an empty path.
+		ComponentPath: compSrc.Path(),
 		RequestId:     c.GetRequestId(),
 	})
 	if err != nil {
