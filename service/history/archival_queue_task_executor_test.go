@@ -124,6 +124,44 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			},
 		},
 		{
+			// INV-1: a standby cluster must retry, not drop, an archival task.
+			// Archival tasks are local (not replicated), so dropping loses the
+			// archive permanently. The executor returns NamespaceNotActive, which
+			// the queue treats as retryable (queues.executable
+			// isExpectedRetryableError -> Nack -> rescheduler.Add) and re-queues.
+			// Together with the "success" case (active -> archives), this also
+			// covers failover: the same task archives once the cluster is active.
+			Name: "namespace standby in cluster",
+			Configure: func(p *params) {
+				p.NamespaceActiveClusterName = cluster.TestAlternativeClusterName
+				p.ExpectArchive = false
+				p.ExpectAddTask = false
+				p.ExpectedNamespaceNotActive = true
+			},
+		},
+		{
+			// A local (non-global) namespace is always active in every cluster
+			// (replication_resolver ActiveInCluster returns true for non-global),
+			// so the activeness gate must be a no-op and archival proceeds.
+			Name: "local namespace archives regardless of cluster",
+			Configure: func(p *params) {
+				p.NamespaceEntryOverride = namespace.NewLocalNamespaceForTest(
+					&persistencespb.NamespaceInfo{
+						Id:   tests.NamespaceID.String(),
+						Name: tests.Namespace.String(),
+					},
+					&persistencespb.NamespaceConfig{
+						Retention:               p.Retention,
+						HistoryArchivalState:    enumspb.ArchivalState(carchiver.ArchivalEnabled),
+						HistoryArchivalUri:      p.HistoryURI,
+						VisibilityArchivalState: enumspb.ArchivalState(carchiver.ArchivalEnabled),
+						VisibilityArchivalUri:   p.VisibilityURI,
+					},
+					cluster.TestCurrentClusterName,
+				)
+			},
+		},
+		{
 			Name: "get namespace internal error",
 			Configure: func(p *params) {
 				p.GetNamespaceByIDError = serviceerror.NewInternal("get namespace error")
@@ -320,6 +358,7 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			p.ExpectAddTask = true
 			p.MetricsHandler = metrics.NewMockHandler(p.Controller)
 			p.MutableStateExists = true
+			p.NamespaceActiveClusterName = cluster.TestCurrentClusterName
 
 			c.Configure(&p)
 			namespaceRegistry := namespace.NewMockRegistry(p.Controller)
@@ -361,13 +400,17 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 					VisibilityArchivalUri:   p.VisibilityURI,
 				},
 				&persistencespb.NamespaceReplicationConfig{
-					ActiveClusterName: cluster.TestCurrentClusterName,
+					ActiveClusterName: p.NamespaceActiveClusterName,
 					Clusters: []string{
 						cluster.TestCurrentClusterName,
+						cluster.TestAlternativeClusterName,
 					},
 				},
 				123,
 			)
+			if p.NamespaceEntryOverride != nil {
+				namespaceEntry = p.NamespaceEntryOverride
+			}
 			namespaceRegistry.EXPECT().GetNamespaceName(namespaceEntry.ID()).
 				Return(namespaceEntry.Name(), nil).AnyTimes()
 			namespaceRegistry.EXPECT().GetNamespaceByID(namespaceEntry.ID()).
@@ -523,7 +566,15 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 				telemetry.NoopTracer,
 			)
 			err := executable.Execute()
-			if len(p.ExpectedErrorSubstrings) > 0 {
+			if p.ExpectedNamespaceNotActive {
+				// A non-nil NamespaceNotActive error is the retry-not-drop signal:
+				// the queue treats it as retryable (queues.executable
+				// isExpectedRetryableError) and re-queues the task, so the archive
+				// is not lost while the cluster is standby.
+				require.Error(t, err)
+				var nsNotActive *serviceerror.NamespaceNotActive
+				require.ErrorAs(t, err, &nsNotActive)
+			} else if len(p.ExpectedErrorSubstrings) > 0 {
 				require.Error(t, err)
 				for _, s := range p.ExpectedErrorSubstrings {
 					assert.ErrorContains(t, err, s)
@@ -579,6 +630,17 @@ type params struct {
 	GetCloseVersionBeforeArchivalError error
 	CloseVersionAfterArchival          int64
 	GetCloseVersionAfterArchivalError  error
+	// NamespaceActiveClusterName is the active cluster for the (global) namespace
+	// under test. Defaults to the current (test) cluster so existing cases are
+	// unaffected; set to cluster.TestAlternativeClusterName to make the namespace
+	// standby in the current cluster.
+	NamespaceActiveClusterName string
+	// NamespaceEntryOverride, when non-nil, replaces the default global namespace
+	// entry built from params (used to exercise local/non-global namespaces).
+	NamespaceEntryOverride *namespace.Namespace
+	// ExpectedNamespaceNotActive, when true, asserts the executor returns a
+	// *serviceerror.NamespaceNotActive (the standby-skip, retry-not-drop signal).
+	ExpectedNamespaceNotActive bool
 }
 
 // archivalConfig represents the user configuration of archival for the cluster and namespace
