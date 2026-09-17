@@ -2458,7 +2458,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 	s.NotEqual(runID, resp.GetRunId())
 }
 
-func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_RequestIDCollision() {
+func (s *engine2Suite) TestSignalWithStartWorkflowExecution_ConcurrentCreate_SurfacesError() {
 	s.config.EnableWorkflowIdReuseStartTimeValidation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
 
 	namespaceID := tests.NamespaceID
@@ -2575,6 +2575,7 @@ func (s *engine2Suite) currentRunCarryingRequestID(
 	wfMs.ExecutionState.State = state
 	wfMs.ExecutionState.Status = status
 	wfMs.ExecutionState.FirstExecutionRunId = runID
+	wfMs.ExecutionState.CreateRequestId = requestID
 	wfMs.ExecutionState.RequestIds = map[string]*persistencespb.RequestIDInfo{
 		requestID: {EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, EventId: common.FirstEventID},
 	}
@@ -2605,7 +2606,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_DedupedRetry_Returns
 	s.NoError(err)
 	s.Equal(runID, resp.GetRunId())
 	s.Equal(runID, resp.GetFirstExecutionRunId())
-	s.False(resp.GetStarted(), "started reports a run created by this call")
+	s.True(resp.GetStarted(), "started is true: this request id created the run")
 }
 
 // Deduplication precedes conflict-policy resolution, so a duplicate request ID does not terminate a
@@ -2630,7 +2631,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_DedupedRetry_Termina
 	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
 	s.NoError(err)
 	s.Equal(runID, resp.GetRunId(), "the running run is returned, not terminated and replaced")
-	s.False(resp.GetStarted())
+	s.True(resp.GetStarted(), "started is true: this request id created the run")
 }
 
 func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlreadyStarted() {

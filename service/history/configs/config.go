@@ -443,6 +443,8 @@ type Config struct {
 	BusinessIDReuseLimiterCacheSize          dynamicconfig.IntPropertyFn
 	BusinessIDReuseLimiterCacheTTL           dynamicconfig.DurationPropertyFn
 
+	EnableSignalWithStartRequestIDDeduplication dynamicconfig.BoolPropertyFnWithNamespaceFilter
+
 	HealthCheckHistoryGRPCSettings      dynamicconfig.TypedPropertyFn[health.Settings]
 	HealthPersistenceLatencyFailure     dynamicconfig.FloatPropertyFn
 	HealthPersistenceLatencyPercentiles dynamicconfig.TypedPropertyFn[dynamicconfig.LatencyHealthChecksPerPercentile]
@@ -861,6 +863,8 @@ func NewConfig(
 		BusinessIDReuseBurstRatio:                dynamicconfig.BusinessIDReuseBurstRatio.Get(dc),
 		BusinessIDReuseLimiterCacheSize:          dynamicconfig.BusinessIDReuseLimiterCacheSize.Get(dc),
 		BusinessIDReuseLimiterCacheTTL:           dynamicconfig.BusinessIDReuseLimiterCacheTTL.Get(dc),
+
+		EnableSignalWithStartRequestIDDeduplication: dynamicconfig.EnableSignalWithStartRequestIDDeduplication.Get(dc),
 
 		HealthCheckHistoryGRPCSettings:      dynamicconfig.HealthCheckHistoryGRPCSettings.Get(dc),
 		HealthPersistenceLatencyFailure:     dynamicconfig.HealthPersistenceLatencyFailure.Get(dc),

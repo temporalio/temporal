@@ -26,8 +26,11 @@ type startOutcome struct {
 	// firstExecutionRunID is the head-of-chain run id. May be empty when reading from a pre-existing
 	// record whose ExecutionState has not been backfilled yet.
 	firstExecutionRunID string
-	// started is true when a new run was created rather than signaling an existing one.
+	// The started response is true when this call creates a run. With deduplication enabled, it also
+	// remains true when the request ID created the returned run.
 	started bool
+	// createdRun reports whether this call created the run and gates once-per-run side effects.
+	createdRun bool
 }
 
 func SignalWithStartWorkflow(
@@ -61,7 +64,7 @@ func SignalWithStartWorkflow(
 		return startOutcome{
 			runID:               currentWorkflowLease.GetContext().GetWorkflowKey().RunID,
 			firstExecutionRunID: firstExecutionRunID,
-			started:             false,
+			started:             signalWithStartCreatedRun(shard, namespaceEntry, currentWorkflowLease.GetMutableState(), signalWithStartRequest.GetRequestId()),
 		}, nil
 	}
 	// else, either workflow is not running or restart requested
@@ -148,7 +151,7 @@ func startAndSignalWorkflow(
 			return startOutcome{}, err
 		}
 		// Started a fresh run after terminating the existing one: this run is the head of the chain.
-		return startOutcome{runID: runID, firstExecutionRunID: runID, started: true}, nil
+		return startOutcome{runID: runID, firstExecutionRunID: runID, started: true, createdRun: true}, nil
 	}
 	vrid, err := createVersionedRunID(currentWorkflowLease)
 	if err != nil {
@@ -160,6 +163,18 @@ func startAndSignalWorkflow(
 		vrid,
 		newWorkflowLease,
 	)
+}
+
+func signalWithStartCreatedRun(
+	shard historyi.ShardContext,
+	namespaceEntry *namespace.Namespace,
+	mutableState historyi.MutableState,
+	requestID string,
+) bool {
+	if !shard.GetConfig().EnableSignalWithStartRequestIDDeduplication(namespaceEntry.Name().String()) {
+		return false
+	}
+	return mutableState.GetExecutionState().GetCreateRequestId() == requestID
 }
 
 // dedupSignalWithStartRequest returns the result for a request already handled by the current run,
@@ -179,6 +194,9 @@ func dedupSignalWithStartRequest(
 	if currentWorkflowLease == nil || requestID == "" {
 		return nil, nil
 	}
+	if !shard.GetConfig().EnableSignalWithStartRequestIDDeduplication(namespaceEntry.Name().String()) {
+		return nil, nil
+	}
 
 	mutableState := currentWorkflowLease.GetMutableState()
 	if !mutableState.IsSignalRequested(requestID) {
@@ -193,11 +211,10 @@ func dedupSignalWithStartRequest(
 		1,
 		metrics.NamespaceTag(namespaceEntry.Name().String()),
 	)
-	// started remains false because this call did not create the run, matching the running-workflow
-	// deduplication path.
 	return &startOutcome{
 		runID:               currentWorkflowLease.GetContext().GetWorkflowKey().RunID,
 		firstExecutionRunID: firstExecutionRunID,
+		started:             signalWithStartCreatedRun(shard, namespaceEntry, mutableState, requestID),
 	}, nil
 }
 
@@ -330,14 +347,17 @@ func startAndSignalWithoutCurrentWorkflow(
 		newWorkflowEventsSeq,
 		historyi.TransactionPolicyActive,
 	)
+	// CurrentWorkflowConditionFailedError.RequestIDs does not record signal delivery.
+	// Return the error so a retry can check IsSignalRequested.
 	if err != nil {
 		return startOutcome{}, err
 	}
 	// Brand-new run: head of the chain == this run id.
 	runID := newWorkflowLease.GetContext().GetWorkflowKey().RunID
-	return startOutcome{runID: runID, firstExecutionRunID: runID, started: true}, nil
+	return startOutcome{runID: runID, firstExecutionRunID: runID, started: true, createdRun: true}, nil
 }
 
+// Successful calls leave the lease held for outcome reads. Invoke releases it.
 func signalWorkflow(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
@@ -353,17 +373,12 @@ func signalWorkflow(
 		request.GetHeader().Size(),
 		"SignalWithStartWorkflowExecution",
 	); err != nil {
-		// in-memory mutable state is still clean, release the lock with nil error to prevent
-		// clearing and reloading mutable state
+		// Release clean state with nil so Invoke's deferred release does not clear and reload it.
 		workflowLease.GetReleaseFn()(nil)
 		return err
 	}
 
 	if request.GetRequestId() != "" && mutableState.IsSignalRequested(request.GetRequestId()) {
-		// duplicate signal
-		// in-memory mutable state is still clean, release the lock with nil error to prevent
-		// clearing and reloading mutable state
-		workflowLease.GetReleaseFn()(nil)
 		return nil
 	}
 	if request.GetRequestId() != "" {

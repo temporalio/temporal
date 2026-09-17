@@ -3197,6 +3197,13 @@ time (mirrors gRPC MaxConnectionAge's +/-10% jitter). Values outside [0, 1] are 
 		false,
 		`If true, validate the start time of the old workflow is older than WorkflowIdReuseMinimalInterval when reusing workflow ID.`,
 	)
+	EnableSignalWithStartRequestIDDeduplication = NewNamespaceBoolSetting(
+		"history.enableSignalWithStartRequestIdDeduplication",
+		true,
+		`If true, a SignalWithStartWorkflowExecution retry whose request ID was already handled by the
+current run returns that run instead of starting a second one, and reports Started=true when that
+request ID created the run (matching StartWorkflowExecution).`,
+	)
 	BusinessIDReuseRate = NewNamespaceIntSetting(
 		"history.businessIDReuseRate",
 		0,
