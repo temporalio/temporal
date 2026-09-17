@@ -355,6 +355,9 @@ func (r *Registry) validateVisibilityBusinessIDAlias(rc *RegistrableComponent) e
 func (r *Registry) warnUnmanagedFields(fqn string, rc *RegistrableComponent) {
 	var unmanagedFields []string
 	for f := range unmanagedFieldsOf(rc.goType) {
+		if _, ok := rc.unmanagedFields[f.name]; ok {
+			continue
+		}
 		unmanagedFields = append(unmanagedFields, fmt.Sprintf("%s %s", f.name, f.typ))
 	}
 	if len(unmanagedFields) > 0 {
