@@ -442,3 +442,27 @@ func TestThrottleState_ConvergesOnTheShareLeftByOtherTraffic(t *testing.T) {
 			"a class under real back pressure must not reach the ceiling; other=%v", other)
 	}
 }
+
+// A rejection that arrives after its class was evicted lands on a recreated entry that has
+// issued nothing. "No releases at all" must not be read as "every release lost": a single
+// in-flight task outliving its class's TTL would otherwise cut a class that never ran.
+func TestThrottleState_UnmatchedRejectionDoesNotCutAFreshClass(t *testing.T) {
+	o := defaultThrottleOverrides()
+	o.keyTTL = time.Second
+	state, timeSource := newTestThrottleState(o)
+	key := testKey()
+
+	allowed, permit, _ := state.Admit(key)
+	require.True(t, allowed)
+	state.Finish(permit, true)
+
+	timeSource.Update(timeSource.Now().Add(2 * o.keyTTL))
+	state.getOrCreate(apsKey("other"))
+	require.Nil(t, state.peek(key), "the class must have been swept")
+
+	state.ReportThrottled(key, permit)
+	closeWindow(state, timeSource, key)
+
+	require.InEpsilon(t, o.initialRate, throttleRate(state, key), 1e-9,
+		"one rejection against no releases is not evidence of loss")
+}
