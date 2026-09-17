@@ -178,12 +178,14 @@ func (h *applyLocalTaskHandler) commitAfterMetadataWrite(
 	ref chasm.ComponentRef,
 	namespaceName namespace.Name,
 ) error {
-	if interceptor, ok := testhooks.Get(
+	if fault, ok := testhooks.Get(
 		h.testHooks,
-		testhooks.NamespaceReplicationLocalCommitInterceptor,
+		testhooks.NamespaceReplicationBeforeLocalCommit,
 		namespaceName,
 	); ok {
-		return interceptor(ctx, func() error { return h.commitLocal(ctx, ref) })
+		if err := fault(ctx); err != nil {
+			return err
+		}
 	}
 	return h.commitLocal(ctx, ref)
 }

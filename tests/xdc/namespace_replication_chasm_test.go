@@ -115,20 +115,19 @@ func (s *namespaceReplicationCHASMTestSuite) TestAuthoritativeTransportRecoversL
 	defer standbyCleanup()
 
 	namespaceName := "test-namespace-" + uuid.NewString()
-	var failNextCommit atomic.Bool
+	var failBeforeNextCommit atomic.Bool
 	var boundaryFailuresInjected atomic.Int32
-	failNextCommit.Store(true)
+	failBeforeNextCommit.Store(true)
 	active.InjectHook(
 		s.T(),
-		testhooks.NewHook(testhooks.NamespaceReplicationLocalCommitInterceptor, func(
+		testhooks.NewHook(testhooks.NamespaceReplicationBeforeLocalCommit, func(
 			_ context.Context,
-			commit func() error,
 		) error {
-			if failNextCommit.CompareAndSwap(true, false) {
+			if failBeforeNextCommit.CompareAndSwap(true, false) {
 				boundaryFailuresInjected.Add(1)
 				return serviceerror.NewUnavailable("injected failure after metadata write")
 			}
-			return commit()
+			return nil
 		}),
 		namespace.Name(namespaceName),
 	)
@@ -169,7 +168,7 @@ func (s *namespaceReplicationCHASMTestSuite) TestAuthoritativeTransportRecoversL
 		adminservice.ApplyNamespaceMutationResponse_OUTCOME_CREATED,
 	)
 
-	failNextCommit.Store(true)
+	failBeforeNextCommit.Store(true)
 	const updatedDescription = "update recovered across metadata/CHASM commit boundary"
 	_, err = active.FrontendClient().UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
 		Namespace: namespaceName,
