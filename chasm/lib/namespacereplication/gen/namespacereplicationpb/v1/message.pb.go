@@ -459,9 +459,9 @@ func (x *NamespaceMutationState) GetPeerApply() map[string]*PeerApplyStatus {
 type LocalApplyStatus struct {
 	state     protoimpl.MessageState `protogen:"open.v1"`
 	Outcome   LocalApplyOutcome      `protobuf:"varint,1,opt,name=outcome,proto3,enum=temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyOutcome" json:"outcome,omitempty"`
-	AppliedAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=applied_at,json=appliedAt,proto3" json:"applied_at,omitempty"`
+	AppliedAt *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=applied_at,json=appliedAt,proto3" json:"applied_at,omitempty"`
 	// Failure detail when outcome is FAILED (e.g. CAS conflict, store unavailable).
-	Failure       *v11.Failure `protobuf:"bytes,4,opt,name=failure,proto3" json:"failure,omitempty"`
+	Failure       *v11.Failure `protobuf:"bytes,3,opt,name=failure,proto3" json:"failure,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -520,11 +520,11 @@ func (x *LocalApplyStatus) GetFailure() *v11.Failure {
 type PeerApplyStatus struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Outcome        PeerApplyOutcome       `protobuf:"varint,1,opt,name=outcome,proto3,enum=temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyOutcome" json:"outcome,omitempty"`
-	AttemptCount   int32                  `protobuf:"varint,3,opt,name=attempt_count,json=attemptCount,proto3" json:"attempt_count,omitempty"`
-	FirstAttemptAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=first_attempt_at,json=firstAttemptAt,proto3" json:"first_attempt_at,omitempty"`
-	LastAttemptAt  *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=last_attempt_at,json=lastAttemptAt,proto3" json:"last_attempt_at,omitempty"`
+	AttemptCount   int32                  `protobuf:"varint,2,opt,name=attempt_count,json=attemptCount,proto3" json:"attempt_count,omitempty"`
+	FirstAttemptAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=first_attempt_at,json=firstAttemptAt,proto3" json:"first_attempt_at,omitempty"`
+	LastAttemptAt  *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=last_attempt_at,json=lastAttemptAt,proto3" json:"last_attempt_at,omitempty"`
 	// Failure detail when outcome is FAILED_*.
-	LastFailure   *v11.Failure `protobuf:"bytes,6,opt,name=last_failure,json=lastFailure,proto3" json:"last_failure,omitempty"`
+	LastFailure   *v11.Failure `protobuf:"bytes,5,opt,name=last_failure,json=lastFailure,proto3" json:"last_failure,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -618,14 +618,14 @@ const file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto
 	"\x10LocalApplyStatus\x12d\n" +
 	"\aoutcome\x18\x01 \x01(\x0e2J.temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyOutcomeR\aoutcome\x129\n" +
 	"\n" +
-	"applied_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tappliedAt\x12:\n" +
-	"\afailure\x18\x04 \x01(\v2 .temporal.api.failure.v1.FailureR\afailure\"\xea\x02\n" +
+	"applied_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\tappliedAt\x12:\n" +
+	"\afailure\x18\x03 \x01(\v2 .temporal.api.failure.v1.FailureR\afailure\"\xea\x02\n" +
 	"\x0fPeerApplyStatus\x12c\n" +
 	"\aoutcome\x18\x01 \x01(\x0e2I.temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyOutcomeR\aoutcome\x12#\n" +
-	"\rattempt_count\x18\x03 \x01(\x05R\fattemptCount\x12D\n" +
-	"\x10first_attempt_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x0efirstAttemptAt\x12B\n" +
-	"\x0flast_attempt_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\rlastAttemptAt\x12C\n" +
-	"\flast_failure\x18\x06 \x01(\v2 .temporal.api.failure.v1.FailureR\vlastFailure*y\n" +
+	"\rattempt_count\x18\x02 \x01(\x05R\fattemptCount\x12D\n" +
+	"\x10first_attempt_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x0efirstAttemptAt\x12B\n" +
+	"\x0flast_attempt_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\rlastAttemptAt\x12C\n" +
+	"\flast_failure\x18\x05 \x01(\v2 .temporal.api.failure.v1.FailureR\vlastFailure*y\n" +
 	"\x12NamespaceOperation\x12#\n" +
 	"\x1fNAMESPACE_OPERATION_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aNAMESPACE_OPERATION_CREATE\x10\x01\x12\x1e\n" +
