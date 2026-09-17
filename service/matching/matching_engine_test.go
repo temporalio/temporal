@@ -3122,7 +3122,8 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventKeepsClo
 			},
 		},
 		{
-			name: "older clocked incoming",
+			name:        "older clocked incoming",
+			wantDropped: true,
 			incoming: &persistencespb.TaskQueueUserData{
 				Clock: &clockspb.HybridLogicalClock{WallClock: 5, ClusterId: 1},
 				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
