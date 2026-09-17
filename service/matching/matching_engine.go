@@ -2513,7 +2513,6 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 					tag.WorkflowNamespaceID(req.GetNamespaceId()),
 					tag.WorkflowTaskQueueName(req.GetTaskQueue()),
 					tag.NewAnyTag("current-clock", currentClock),
-					tag.NewAnyTag("incoming-clock", incomingClock),
 				)
 			}
 		} else {
