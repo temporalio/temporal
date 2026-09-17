@@ -422,8 +422,20 @@ func (s *collectionSuite) TestGetTypedProtoEnum() {
 		s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, get())
 	})
 
+	s.Run("Shorthand", func() {
+		s.client.SetValue(testGetTypedPropertyKey, "Disabled")
+		s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, get())
+		s.client.SetValue(testGetTypedPropertyKey, "disabled")
+		s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, get())
+		s.client.SetValue(testGetTypedPropertyKey, "state_disabled")
+		s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, get())
+	})
+
 	s.Run("NotFound", func() {
 		s.client.SetValue(testGetTypedPropertyKey, "some_other_string")
+		s.Equal(def, get())
+		// a shorthand has to land on an underscore boundary
+		s.client.SetValue(testGetTypedPropertyKey, "abled")
 		s.Equal(def, get())
 	})
 
@@ -818,15 +830,15 @@ func TestPartitionScaleManagerPartialOverride(t *testing.T) {
 	assert.Equal(t, 45*time.Second, settings().ShadowModeLogInterval)
 	assert.Equal(t, defaultMaxRate, settings().MaxRate)
 
-	// The mode is written as its enum value name, case-insensitively.
-	client.SetValue(key, map[string]any{"mode": "partition_scale_mode_enabled"})
+	// The mode is written as its enum value name, with or without the prefix, in any case.
+	client.SetValue(key, map[string]any{"mode": "enabled"})
 	assert.Equal(t, enumsspb.PARTITION_SCALE_MODE_ENABLED, settings().Mode)
 	client.SetValue(key, map[string]any{"mode": "PARTITION_SCALE_MODE_DISABLED"})
 	assert.Equal(t, enumsspb.PARTITION_SCALE_MODE_DISABLED, settings().Mode)
 
 	// An unparseable mode discards the _whole_ value, not just this field, so the other
 	// fields set alongside it revert to their defaults too.
-	client.SetValue(key, map[string]any{"mode": "enabled", "maxRate": 99.0})
+	client.SetValue(key, map[string]any{"mode": "on", "maxRate": 99.0})
 	assert.Equal(t, enumsspb.PARTITION_SCALE_MODE_SHADOW, settings().Mode)
 	assert.Equal(t, defaultMaxRate, settings().MaxRate)
 }

@@ -180,10 +180,10 @@ type PartitionScaleManagerSettings struct {
 	// cleanly back to the dynamic config baseline rather than leaving a target behind
 	// that nothing maintains. See PartitionScaleMode for the individual modes.
 	//
-	// In dynamic config this is written as one of the (case-insensitive) enum value
-	// names, e.g. "partition_scale_mode_shadow". Note that an unparseable value means the
-	// _whole_ PartitionScaleManagerSettings value is ignored and the default is used, not
-	// just this field.
+	// In dynamic config this is written as one of the enum value names, with or without
+	// the PARTITION_SCALE_MODE_ prefix and in any case, e.g. just "shadow". Note that an
+	// unparseable value means the _whole_ PartitionScaleManagerSettings value is ignored
+	// and the default is used, not just this field.
 	Mode enumsspb.PartitionScaleMode
 	// MaxRate limits target change frequency.
 	MaxRate float32
