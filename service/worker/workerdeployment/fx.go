@@ -125,6 +125,7 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 		val := DeploymentWorkflowVersion(dynamicconfig.MatchingDeploymentWorkflowVersion.Get(s.dynamicConfig)(ns.Name().String()))
 		return val
 	}
+	versionDemotionSignalEnabledGetter := dynamicconfig.MatchingEnableWorkerDeploymentVersionDemotionSignal.Get(s.dynamicConfig)
 
 	versionWorkflow := func(ctx workflow.Context, args *deploymentspb.WorkerDeploymentVersionWorkflowArgs) error {
 		refreshIntervalGetter := func() time.Duration {
@@ -141,7 +142,7 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 		maxVersionsGetter := func() int {
 			return dynamicconfig.MatchingMaxVersionsInDeployment.Get(s.dynamicConfig)(ns.Name().String())
 		}
-		return Workflow(ctx, workflowVersionGetter, maxVersionsGetter, args)
+		return Workflow(ctx, workflowVersionGetter, maxVersionsGetter, versionDemotionSignalEnabledGetter, args)
 	}
 	registry.RegisterWorkflowWithOptions(deploymentWorkflow, workflow.RegisterOptions{Name: WorkerDeploymentWorkflowType})
 

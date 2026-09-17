@@ -14,8 +14,9 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 )
@@ -183,6 +184,27 @@ func TemporalFailureToNexusFailureInPlace(failure *failurepb.Failure) (nexus.Fai
 	}, nil
 }
 
+// CoerceToCanceledFailure replaces failure's FailureInfo with CanceledFailureInfo so it
+// surfaces as a Temporal CanceledError. Every other field is left unchanged. A nil failure yields an empty
+// CanceledFailure rather than nil. A canceled operation must always carry a cause bearing CanceledFailureInfo.
+//
+// Call it only for canceled operations: old SDKs and non-Temporal handlers may send a canceled
+// completion whose converted cause is a plain ApplicationFailure, which would otherwise surface as
+// an ApplicationError to the caller.
+func CoerceToCanceledFailure(failure *failurepb.Failure) *failurepb.Failure {
+	if failure.GetCanceledFailureInfo() != nil {
+		return failure
+	}
+	canceled := &failurepb.Failure{}
+	if failure != nil {
+		canceled = common.CloneProto(failure)
+	}
+	canceled.FailureInfo = &failurepb.Failure_CanceledFailureInfo{
+		CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
+	}
+	return canceled
+}
+
 // NexusFailureToTemporalFailure converts a Nexus Failure to an API proto Failure.
 // If the failure metadata "type" field is set to the fullname of the temporal API Failure message, the failure is
 // reconstructed using protojson.Unmarshal on the failure details field. Otherwise, the failure is reconstructed
@@ -323,16 +345,10 @@ func nexusFailureMetadataToApplicationFailureInfo(failure nexus.Failure) (*failu
 // and
 // https://github.com/grpc-ecosystem/grpc-gateway/blob/a7cf811e6ffabeaddcfb4ff65602c12671ff326e/runtime/errors.go#L56.
 func ConvertGRPCError(err error, exposeDetails bool) error {
-	var st *status.Status
-	stGetter, ok := err.(interface{ Status() *status.Status })
-	if ok {
-		st = stGetter.Status()
-	} else {
-		st, ok = status.FromError(err)
-		if !ok {
-			// The Nexus SDK will translate this into an internal server error and will not expose the error details.
-			return err
-		}
+	st, ok := common.GetRPCStatus(err)
+	if !ok {
+		// The Nexus SDK will translate this into an internal server error and will not expose the error details.
+		return err
 	}
 
 	errMessage := err.Error()
@@ -438,4 +454,22 @@ func AdaptAuthorizeError(permissionDeniedError *serviceerror.PermissionDenied) e
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnauthorized, "permission denied: %s", permissionDeniedError.Reason)
 	}
 	return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnauthorized, "permission denied")
+}
+
+func OperationErrorToTemporalFailure(opErr *nexus.OperationError) (*failurepb.Failure, error) {
+	var nf nexus.Failure
+	if opErr.OriginalFailure != nil {
+		nf = *opErr.OriginalFailure
+	} else {
+		var err error
+		nf, err = nexusrpc.DefaultFailureConverter().ErrorToFailure(opErr)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// The Nexus failure may contain a metadata key requesting that the unwrapped
+	// [Cause] of the failure is sent, to avoid an unnecessary layer of indirection.
+	unwrappedFailure := nexusrpc.UnwrapFailure(&nf)
+	return NexusFailureToTemporalFailure(*unwrappedFailure)
 }

@@ -40,6 +40,20 @@
 #matching.wv.VersionDrainageStatusRefreshInterval:
 # - value: 5s
 #
+### Compute config (Worker Controller Instance) coverage for the replay tester.
+### Required for the compute-config section of replaytester/worker/worker.go; without
+### `workercontroller.enabled` the CreateWorkerDeploymentVersion call with a compute
+### config is rejected and the version workflow never gets a non-nil ComputeConfig.
+#
+#workercontroller.enabled:
+# - value: true
+#workercontroller.compute_providers.enabled:
+# - value: ["test-invoke", "subprocess"] # leave unset to allow every registered provider
+#
+### Leave workercontroller.periodic_validation_interval_s at its 6h default. The driver populates
+### ComputeStatus by asking the WCI to re-validate its stored spec on demand, so it does not need
+### the periodic timer.
+#
 ### END of Worker Versioning Replay Test configs
 
 limit.maxIDLength:

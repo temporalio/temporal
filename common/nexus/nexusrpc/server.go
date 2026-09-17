@@ -94,13 +94,11 @@ func (h *httpHandler) writeResult(writer http.ResponseWriter, request *http.Requ
 // nolint:revive // Keeping all of the logic together for readability, even if it means the function is long.
 func (h *BaseHTTPHandler) WriteFailure(writer http.ResponseWriter, r *http.Request, err error) {
 	var failure nexus.Failure
-	var failureError *nexus.FailureError
-	var opError *nexus.OperationError
 	var handlerError *nexus.HandlerError
 	var operationState nexus.OperationState
 	statusCode := http.StatusInternalServerError
 
-	if errors.As(err, &opError) {
+	if opError, ok := errors.AsType[*nexus.OperationError](err); ok {
 		operationState = opError.State
 		var convErr error
 		failure, convErr = h.FailureConverter.ErrorToFailure(opError)
@@ -160,7 +158,7 @@ func (h *BaseHTTPHandler) WriteFailure(writer http.ResponseWriter, r *http.Reque
 		default:
 			h.Logger.Error("unexpected handler error type", "type", handlerError.Type)
 		}
-	} else if errors.As(err, &failureError) {
+	} else if failureError, ok := errors.AsType[*nexus.FailureError](err); ok {
 		failure = failureError.Failure
 	} else {
 		failure = nexus.Failure{

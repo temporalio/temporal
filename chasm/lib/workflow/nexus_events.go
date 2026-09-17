@@ -95,7 +95,8 @@ func (d CancelRequestedEventDefinition) Apply(ctx chasm.MutableContext, wf *Work
 	}
 
 	return op.RequestCancel(ctx, &nexusoperationpb.CancellationState{
-		ParentData: cancelParentData,
+		RequestedTime: event.GetEventTime(),
+		ParentData:    cancelParentData,
 	})
 }
 

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"go.temporal.io/server/tools/common/junit"
 )
 
 const (
@@ -44,6 +45,7 @@ type attempt struct {
 	runner           *runner
 	number           int
 	exitErr          *exec.ExitError
+	junitPath        string
 	junitReport      *junitReport
 	coverProfilePath string
 }
@@ -53,7 +55,7 @@ func (a *attempt) run(ctx context.Context, args []string) (string, error) {
 		if strings.HasPrefix(arg, coverProfileFlag) {
 			args[i] = coverProfileFlag + a.coverProfilePath
 		} else if strings.HasPrefix(arg, junitReportFlag) {
-			args[i] = junitReportFlag + a.junitReport.path
+			args[i] = junitReportFlag + a.junitPath
 		}
 	}
 	log.Printf("starting test attempt #%d: %v %v",
@@ -193,9 +195,8 @@ func (r *runner) newAttempt() *attempt {
 			strings.TrimSuffix(r.coverProfilePath, codeCoverageExtension),
 			len(r.attempts),
 			codeCoverageExtension),
-		junitReport: &junitReport{
-			path: filepath.Join(os.TempDir(), fmt.Sprintf("temporalio-temporal-%s-junit.xml", uuid.NewString())),
-		},
+		junitPath:   filepath.Join(os.TempDir(), fmt.Sprintf("temporalio-temporal-%s-junit.xml", uuid.NewString())),
+		junitReport: &junitReport{},
 	}
 	r.attempts = append(r.attempts, a)
 	return a
@@ -249,8 +250,7 @@ func Main() {
 // nolint:revive,deep-exit
 func (r *runner) reportCrash() {
 	jr := generateReport([]string{r.crashName}, "crash", failureTypeCrash)
-	jr.path = r.junitOutputPath
-	if err := jr.write(); err != nil {
+	if err := r.writeReport(jr); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -264,8 +264,8 @@ func (r *runner) generateSummary() error {
 
 	reports := make([]*junitReport, 0, len(paths))
 	for _, path := range paths {
-		report := &junitReport{path: path}
-		if err := report.read(); err != nil {
+		report, err := readReport(path)
+		if err != nil {
 			return fmt.Errorf("failed to read junit report %q: %w", path, err)
 		}
 		reports = append(reports, report)
@@ -295,6 +295,14 @@ func (r *runner) generateSummary() error {
 	return nil
 }
 
+func (r *runner) writeReport(report *junitReport) error {
+	if err := junit.Write(r.junitOutputPath, &report.Testsuites); err != nil {
+		return err
+	}
+	log.Printf("wrote junit report to %s", r.junitOutputPath)
+	return nil
+}
+
 // writeCurrentReport writes the merged report from all completed attempts to the
 // final output path. It is called after each attempt so that partial results
 // survive if the process is killed externally between attempts.
@@ -313,8 +321,7 @@ func (r *runner) writeCurrentReport() {
 	if len(r.alerts) > 0 {
 		merged.appendAlertsSuite(r.alerts)
 	}
-	merged.path = r.junitOutputPath
-	if err := merged.write(); err != nil {
+	if err := r.writeReport(merged); err != nil {
 		log.Printf("warning: failed to write intermediate report: %v", err)
 	}
 }
@@ -340,7 +347,8 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 			log.Printf("total timeout reached, collecting partial results from %d completed attempt(s)", a-1)
 			totalTimeoutFired = true
 			// Try to read whatever gotestsum managed to write before it was killed.
-			if readErr := currentAttempt.junitReport.read(); readErr != nil {
+			report, readErr := readReport(currentAttempt.junitPath)
+			if readErr != nil {
 				// gotestsum didn't finish writing a JUnit XML. Fall back to parsing
 				// stdout for any "--- FAIL:" lines that completed before the kill.
 				if failedTests := parseFailedTestsFromOutput(stdout); len(failedTests) > 0 {
@@ -348,6 +356,8 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 				}
 				// If no failed tests are found either, the current attempt's report
 				// remains empty and mergeReports will include only prior attempts.
+			} else {
+				currentAttempt.junitReport = report
 			}
 			// Without this, a mid-run timeout leaves an empty JUnit and CI shows green.
 			currentAttempt.junitReport.appendSyntheticFailure(
@@ -374,9 +384,11 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 		}
 
 		// All tests were run, parse JUnit XML output.
-		if err = currentAttempt.junitReport.read(); err != nil {
+		report, err := readReport(currentAttempt.junitPath)
+		if err != nil {
 			log.Fatal(err)
 		}
+		currentAttempt.junitReport = report
 
 		// Write intermediate results so they survive if we are killed externally
 		// between attempts (e.g. a GitHub Actions job timeout fires after this
@@ -424,8 +436,7 @@ func (r *runner) runTests(ctx context.Context, args []string) {
 	if len(r.alerts) > 0 {
 		mergedReport.appendAlertsSuite(r.alerts)
 	}
-	mergedReport.path = r.junitOutputPath
-	if err = mergedReport.write(); err != nil {
+	if err = r.writeReport(mergedReport); err != nil {
 		log.Fatal(err)
 	}
 

@@ -24,6 +24,9 @@ import (
 const (
 	// The actual limit is set in dynamic configs, this is only used in case we cannot read the DC.
 	defaultMaxVersions = 100
+
+	versionDemotionSignalChangeID          = "version-demotion-signal-dynamic-config"
+	versionDemotionSignalMutableSideEffect = "version-demotion-signal-enabled"
 )
 
 type (
@@ -36,12 +39,13 @@ type (
 	// WorkflowRunner holds the local state while running a deployment-series workflow
 	WorkflowRunner struct {
 		*deploymentspb.WorkerDeploymentWorkflowArgs
-		a                *Activities
-		logger           sdklog.Logger
-		metrics          sdkclient.MetricsHandler
-		lock             workflow.Mutex
-		deleteDeployment bool
-		unsafeMaxVersion func() int
+		a                                  *Activities
+		logger                             sdklog.Logger
+		metrics                            sdkclient.MetricsHandler
+		lock                               workflow.Mutex
+		deleteDeployment                   bool
+		unsafeMaxVersion                   func() int
+		versionDemotionSignalEnabledGetter func() bool
 		// stateChanged is used to track if the state of the workflow has undergone a local state change since the last signal/update.
 		// This prevents a workflow from continuing-as-new if the state has not changed.
 		stateChanged  bool
@@ -61,15 +65,22 @@ type (
 // history clean so that we have less concern about backwards and forwards compatibility.
 // In steady state (i.e. absence of ongoing updates or signals) the wf should only have
 // a single wft in the history.
-func Workflow(ctx workflow.Context, unsafeWorkflowVersionGetter func() DeploymentWorkflowVersion, unsafeMaxVersion func() int, args *deploymentspb.WorkerDeploymentWorkflowArgs) error {
+func Workflow(
+	ctx workflow.Context,
+	unsafeWorkflowVersionGetter func() DeploymentWorkflowVersion,
+	unsafeMaxVersion func() int,
+	versionDemotionSignalEnabledGetter func() bool,
+	args *deploymentspb.WorkerDeploymentWorkflowArgs,
+) error {
 	workflowRunner := &WorkflowRunner{
-		WorkerDeploymentWorkflowArgs: args,
-		workflowVersion:              getWorkflowVersion(ctx, unsafeWorkflowVersionGetter),
-		a:                            nil,
-		logger:                       sdklog.With(workflow.GetLogger(ctx), "wf-namespace", args.NamespaceName),
-		metrics:                      workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": args.NamespaceName}),
-		lock:                         workflow.NewMutex(ctx),
-		unsafeMaxVersion:             unsafeMaxVersion,
+		WorkerDeploymentWorkflowArgs:       args,
+		workflowVersion:                    getWorkflowVersion(ctx, unsafeWorkflowVersionGetter),
+		a:                                  nil,
+		logger:                             sdklog.With(workflow.GetLogger(ctx), "wf-namespace", args.NamespaceName),
+		metrics:                            workflow.GetMetricsHandler(ctx).WithTags(map[string]string{"namespace": args.NamespaceName}),
+		lock:                               workflow.NewMutex(ctx),
+		unsafeMaxVersion:                   unsafeMaxVersion,
+		versionDemotionSignalEnabledGetter: versionDemotionSignalEnabledGetter,
 		signalHandler: &SignalHandler{
 			signalSelector: workflow.NewSelector(ctx),
 		},
@@ -94,6 +105,41 @@ func getWorkflowVersion(ctx workflow.Context, unsafeWorkflowVersionGetter func()
 
 func (d *WorkflowRunner) hasMinVersion(version DeploymentWorkflowVersion) bool {
 	return d.workflowVersion >= version
+}
+
+func shouldUseVersionDemotionSignal(
+	ctx workflow.Context,
+	asyncMode bool,
+	versionDemotionSignalEnabledGetter func() bool,
+) (bool, error) {
+	// Call GetVersion unconditionally, even when asyncMode is false. This is because existing
+	// histories recorded this marker regardless of asyncMode. Skipping it during replay
+	// would cause a non-determinism error.
+	commitRoutingFirst := workflow.GetVersion(ctx, "commit-routing-first", workflow.DefaultVersion, 0) >= 0
+	if !asyncMode || !commitRoutingFirst {
+		return false, nil
+	}
+
+	if workflow.GetVersion(ctx, versionDemotionSignalChangeID, workflow.DefaultVersion, 0) == workflow.DefaultVersion {
+		// Histories that have commit-routing-first (previous check), but predate this checkpoint are
+		// workflows that already used signal-based demotion. They must continue
+		// on the signal path to avoid a non-determinism error, regardless of the
+		// current dynamic config value.
+		// OSS 1.31 histories never reach here because they didn't have commit-routing-first.
+		return true, nil
+	}
+
+	var enabled bool
+	err := workflow.MutableSideEffect(
+		ctx,
+		versionDemotionSignalMutableSideEffect,
+		func(workflow.Context) any { return versionDemotionSignalEnabledGetter() },
+		func(a, b any) bool { return a == b },
+	).Get(&enabled)
+	if err != nil {
+		return false, fmt.Errorf("failed to read version demotion signal configuration: %w", err)
+	}
+	return enabled, nil
 }
 
 func (d *WorkflowRunner) listenToSignals(ctx workflow.Context) {
@@ -694,8 +740,7 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		RoutingConfig: routingConfigToSync,
 	}).Get(ctx, nil)
 	if err != nil {
-		var appError *temporal.ApplicationError
-		if errors.As(err, &appError) {
+		if appError, ok := errors.AsType[*temporal.ApplicationError](err); ok {
 			if appError.Type() == errMaxTaskQueuesInVersionType {
 				return temporal.NewApplicationError(
 					fmt.Sprintf("cannot add task queue %v since maximum number of task queues (%d) have been registered in deployment", args.TaskQueueName, args.MaxTaskQueues),
@@ -1033,8 +1078,12 @@ func (d *WorkflowRunner) setRamp(
 
 	// tell previous ramping version, if present, that it's no longer ramping
 	if prevRampingVersion != "" && prevRampingVersion != newRampingVersion {
-		commitRoutingFirst := workflow.GetVersion(ctx, "commit-routing-first", workflow.DefaultVersion, 0) >= 0
-		if asyncMode && commitRoutingFirst {
+		useVersionDemotionSignal, err := shouldUseVersionDemotionSignal(ctx, asyncMode, d.versionDemotionSignalEnabledGetter)
+		if err != nil {
+			d.logger.Error("Failed to determine whether version demotion signal is enabled", "error", err)
+			return err
+		}
+		if useVersionDemotionSignal {
 			// Commit routing config before demoting prev ramp to avoid partial state on failure.
 			d.State.RoutingConfig = pendingRoutingConfig
 			// Signal the prev ramp version workflow to demote. Unversioned ramp has no version
@@ -1416,8 +1465,12 @@ func (d *WorkflowRunner) handleSetCurrent(ctx workflow.Context, args *deployment
 		// do is tell the previous current version that it is not current. Then, the task queues in the
 		// previous current version will have no current version and will become unversioned implicitly.
 
-		commitRoutingFirst := workflow.GetVersion(ctx, "commit-routing-first", workflow.DefaultVersion, 0) >= 0
-		if asyncMode && commitRoutingFirst {
+		useVersionDemotionSignal, err := shouldUseVersionDemotionSignal(ctx, asyncMode, d.versionDemotionSignalEnabledGetter)
+		if err != nil {
+			d.logger.Error("Failed to determine whether version demotion signal is enabled", "error", err)
+			return nil, err
+		}
+		if useVersionDemotionSignal {
 			// Commit routing config before demoting old version to avoid partial state on step 2 failure.
 			d.State.RoutingConfig = pendingRoutingConfig
 

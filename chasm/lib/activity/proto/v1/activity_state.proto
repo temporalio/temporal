@@ -128,6 +128,12 @@ message ActivityState {
   // since been unpaused), hence the "last" prefix. Its request_id is used to de-dupe pause requests.
   ActivityPauseState last_pause_state = 16;
 
+  // Set when a reset with reset_heartbeat=true is requested while a worker is running an attempt.
+  // Consumed when the worker yields and the activity transitions out of RESET_REQUESTED. For an
+  // activity with no attempt in progress the checkpoint is discarded immediately and this flag is
+  // not set.
+  bool reset_should_clear_heartbeat = 17;
+
   // Set when a reset is requested with keep_paused=true on a paused (PAUSE_REQUESTED) activity, so
   // that when the worker yields the activity lands back in PAUSED rather than SCHEDULED. Consumed
   // when the activity transitions out of RESET_REQUESTED.

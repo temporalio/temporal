@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"context"
-	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -41,7 +40,7 @@ func getBackoffInterval(
 	nonRetryableTypes []string,
 ) (time.Duration, enumspb.RetryState) {
 
-	if !isRetryable(failure, nonRetryableTypes) {
+	if !retrypolicy.IsRetryableFailure(failure, nonRetryableTypes) {
 		return backoff.NoBackoff, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE
 	}
 
@@ -110,45 +109,6 @@ func nextBackoffInterval(
 		return backoff.NoBackoff, enumspb.RETRY_STATE_TIMEOUT
 	}
 	return interval, enumspb.RETRY_STATE_IN_PROGRESS
-}
-
-func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
-	if failure == nil {
-		return true
-	}
-
-	if failure.GetTerminatedFailureInfo() != nil || failure.GetCanceledFailureInfo() != nil {
-		return false
-	}
-
-	if failure.GetTimeoutFailureInfo() != nil {
-		timeoutType := failure.GetTimeoutFailureInfo().GetTimeoutType()
-		if timeoutType == enumspb.TIMEOUT_TYPE_START_TO_CLOSE ||
-			timeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
-			return !slices.Contains(
-				nonRetryableTypes,
-				retrypolicy.TimeoutFailureTypePrefix+timeoutType.String(),
-			)
-		}
-
-		return false
-	}
-
-	if failure.GetServerFailureInfo() != nil {
-		return !failure.GetServerFailureInfo().GetNonRetryable()
-	}
-
-	if failure.GetApplicationFailureInfo() != nil {
-		if failure.GetApplicationFailureInfo().GetNonRetryable() {
-			return false
-		}
-
-		return !slices.Contains(
-			nonRetryableTypes,
-			failure.GetApplicationFailureInfo().GetType(),
-		)
-	}
-	return true
 }
 
 // Helpers for creating new retry/cron workflows:
@@ -303,7 +263,7 @@ func SetupNewWorkflowForRetryOrCron(
 		VersioningOverride:       pinnedOverride,
 	}
 
-	tsc, stateProp := propagateTimeSkippingToNextRun(previousExecutionInfo)
+	tsc, stateProp := propagateTimeSkippingToNextRun(previousExecutionInfo.GetTimeSkippingInfo())
 	createRequest.TimeSkippingConfig = tsc
 
 	attempt := int32(1)

@@ -39,6 +39,7 @@ func newWorkflowBatchEnv(t *testing.T) *testcore.TestEnv {
 		t,
 		testcore.WithWorkerService("batch operations"),
 		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, testcore.ClientSuiteLimit),
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowPauseEnabled, true),
 	)
 }
 

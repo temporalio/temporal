@@ -105,6 +105,7 @@ type (
 			ctx context.Context,
 			workflowKey definition.WorkflowKey,
 			archetypeID chasm.ArchetypeID,
+			lastWriteVersion int64,
 			branchToken []byte,
 			closeExecutionVisibilityTaskID int64,
 			workflowCloseTime time.Time,

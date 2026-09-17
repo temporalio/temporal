@@ -3,6 +3,7 @@ package migration
 import (
 	"context"
 
+	otellog "go.opentelemetry.io/otel/log"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
@@ -35,6 +36,7 @@ type (
 		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
 		TaskManager               persistence.TaskManager
 		Logger                    log.Logger
+		EventLogger               otellog.Logger
 		MetricsHandler            metrics.Handler
 		DynamicCollection         *dynamicconfig.Collection
 		WorkflowVerifier          WorkflowVerifier
@@ -120,10 +122,12 @@ func (wc *replicationWorkerComponent) activities() *activities {
 		namespaceReplicationQueue:        wc.NamespaceReplicationQueue,
 		taskManager:                      wc.TaskManager,
 		Logger:                           wc.Logger,
+		EventLogger:                      wc.EventLogger,
 		MetricsHandler:                   wc.MetricsHandler,
 		forceReplicationMetricsHandler:   wc.MetricsHandler.WithTags(metrics.WorkflowTypeTag(forceReplicationWorkflowName)),
 		generateMigrationTaskViaFrontend: dynamicconfig.WorkerGenerateMigrationTaskViaFrontend.Get(wc.DynamicCollection),
 		enableHistoryRateLimiter:         dynamicconfig.WorkerEnableHistoryRateLimiter.Get(wc.DynamicCollection),
+		emitNamespaceLifecycleEvents:     dynamicconfig.EmitNamespaceLifecycleEvents.Get(wc.DynamicCollection),
 		workflowVerifier:                 wc.WorkflowVerifier,
 		chasmRegistry:                    wc.ChasmRegistry,
 	}

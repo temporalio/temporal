@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
 )
 
 const evictionCheckInterval = 30 * time.Second
@@ -148,7 +149,11 @@ func (c *connectionPoolImpl[C]) reapClosableConns(evictAt map[rpcAddress]time.Ti
 
 func (c *connectionPoolImpl[C]) getOrCreateClientConn(addr rpcAddress) clientConnection[C] {
 	if v, ok := c.conns.Load(addr); ok {
-		return v.(clientConnection[C]) // nolint:revive // unchecked-type-assertion
+		cc := v.(clientConnection[C]) // nolint:revive // unchecked-type-assertion
+		if cc.grpcConn.GetState() != connectivity.Shutdown {
+			return cc
+		}
+		c.conns.CompareAndDelete(addr, v)
 	}
 
 	grpcConn := c.rpcFactory.CreateHistoryGRPCConnection(string(addr))
@@ -158,7 +163,6 @@ func (c *connectionPoolImpl[C]) getOrCreateClientConn(addr rpcAddress) clientCon
 	}
 
 	if actual, loaded := c.conns.LoadOrStore(addr, cc); loaded {
-		_ = grpcConn.Close()
 		return actual.(clientConnection[C]) // nolint:revive // unchecked-type-assertion
 	}
 	// Lost the race with Close; drop the conn we just cached.

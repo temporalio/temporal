@@ -411,6 +411,82 @@ func (s *ESVisibilitySuite) Test_convertQueryLegacy() {
 	s.Equal(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"should":[{"range":{"ExecutionTime":{"from":null,"include_lower":true,"include_upper":false,"to":"1970-01-01T00:00:00.001Z"}}},{"range":{"ExecutionTime":{"from":"1970-01-01T00:00:00.002Z","include_lower":false,"include_upper":true,"to":null}}}]}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
 	s.Nil(queryParams.Sorter)
 
+	// The SQL parser folds the sign into integer values, but represents signed floats as an
+	// unary expression.
+	query = `CustomIntField = -10`
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
+	s.NoError(err)
+	s.JSONEq(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"CustomIntField":{"query":-10}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Nil(queryParams.Sorter)
+
+	query = `CustomDoubleField = -1.5`
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
+	s.NoError(err)
+	s.JSONEq(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"CustomDoubleField":{"query":-1.5}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Nil(queryParams.Sorter)
+
+	query = `CustomDoubleField = +1.5`
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
+	s.NoError(err)
+	s.JSONEq(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"match":{"CustomDoubleField":{"query":1.5}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Nil(queryParams.Sorter)
+
+	query = `CustomDoubleField > -1.5`
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
+	s.NoError(err)
+	s.JSONEq(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"range":{"CustomDoubleField":{"from":-1.5,"include_lower":false,"include_upper":true,"to":null}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Nil(queryParams.Sorter)
+
+	query = `CustomDoubleField between -2.5 and -1.5`
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
+	s.NoError(err)
+	s.JSONEq(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"range":{"CustomDoubleField":{"from":-2.5,"include_lower":true,"include_upper":true,"to":-1.5}}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Nil(queryParams.Sorter)
+
+	query = `CustomDoubleField in (-1.5, 2.5)`
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
+	s.NoError(err)
+	s.JSONEq(`{"bool":{"filter":[{"term":{"NamespaceId":"bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}},{"bool":{"filter":{"terms":{"CustomDoubleField":[-1.5,2.5]}}}}],"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`, s.queryToJSON(queryParams.Query))
+	s.Nil(queryParams.Sorter)
+
+	// Only a literal value can be signed, not another unary expression.
+	query = `CustomDoubleField = - -1.5`
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
+	s.Error(err)
+	var invalidArgumentErr *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgumentErr)
+	s.Equal(
+		`invalid query: unable to convert filter expression: `+
+			`unable to convert right side of "CustomDoubleField = - -1.5": `+
+			`invalid expression: unary operator not supported in "- -1.5"`,
+		err.Error(),
+	)
+	s.Nil(queryParams)
+
+	query = `CustomKeywordField = -'foo'`
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
+	s.Error(err)
+	s.ErrorAs(err, &invalidArgumentErr)
+	s.Equal(
+		`invalid query: unable to convert filter expression: `+
+			`unable to convert right side of "CustomKeywordField = -'foo'": `+
+			`invalid expression: unary operator not supported in "-'foo'"`,
+		err.Error(),
+	)
+	s.Nil(queryParams)
+
+	query = `CustomIntField = ~1`
+	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
+	s.Error(err)
+	s.ErrorAs(err, &invalidArgumentErr)
+	s.Equal(
+		`invalid query: unable to convert filter expression: `+
+			`unable to convert right side of "CustomIntField = ~1": `+
+			`operation is not supported: unary operator "~"`,
+		err.Error(),
+	)
+	s.Nil(queryParams)
+
 	query = `order by ExecutionTime`
 	queryParams, err = s.visibilityStore.convertQueryLegacy(testNamespace, testNamespaceID, query, nil, chasm.UnspecifiedArchetypeID)
 	s.NoError(err)
@@ -625,7 +701,7 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 		{
 			name:  "invalid custom search attributes",
 			query: "WorkflowId = 'wid' AND InvalidField = 'foo'",
-			err:   query.InvalidExpressionErrMessage,
+			err:   query.InvalidSearchAttribute,
 		},
 	}
 
@@ -683,7 +759,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	// test page size > number of results
 	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, 2, nil)
 	s.NoError(err)
-	s.Equal(serializedToken, resp.NextPageToken)
+	s.Empty(resp.NextPageToken)
 	s.Equal(1, len(resp.Executions))
 
 	// test for search after
@@ -704,7 +780,7 @@ func (s *ESVisibilitySuite) TestGetListWorkflowExecutionsResponse() {
 	// test page size > number of results
 	resp, err = s.visibilityStore.GetListWorkflowExecutionsResponse(searchResult, testNamespace, numOfHits+1, nil)
 	s.NoError(err)
-	s.Equal(serializedToken, resp.NextPageToken)
+	s.Empty(resp.NextPageToken)
 	s.Equal(numOfHits, len(resp.Executions))
 }
 
@@ -1095,16 +1171,70 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions_GroupBy() {
 	}
 	s.True(temporalproto.DeepEqual(expectedResp, resp))
 
+	// Grouping by TemporalNamespaceDivision suppresses the default namespace
+	// division filter (no "must not exist" clause) so results span all divisions.
+	request.Query = "GROUP BY TemporalNamespaceDivision"
+	s.mockESClient.EXPECT().
+		CountGroupBy(
+			gomock.Any(),
+			testIndex,
+			elastic.NewBoolQuery().
+				Filter(
+					elastic.NewTermQuery(sadefs.NamespaceID, testNamespaceID.String()),
+				),
+			sadefs.TemporalNamespaceDivision,
+			elastic.NewTermsAggregation().Field(sadefs.TemporalNamespaceDivision).Missing(""),
+		).
+		Return(
+			&elastic.SearchResult{
+				Aggregations: map[string]json.RawMessage{
+					// The empty-string bucket comes from Missing("") and
+					// represents default-division (NULL) workflows.
+					sadefs.TemporalNamespaceDivision: json.RawMessage(
+						`{"buckets":[{"key":"","doc_count":50},{"key":"divisionA","doc_count":100},{"key":"divisionB","doc_count":10}]}`,
+					),
+				},
+			},
+			nil,
+		)
+	resp, err = s.visibilityStore.CountWorkflowExecutions(context.Background(), request)
+	s.NoError(err)
+	expectedResp = &store.InternalCountExecutionsResponse{
+		Count: 160,
+		Groups: []store.InternalAggregationGroup{
+			{
+				GroupValues: []*commonpb.Payload{
+					mustEncodeValue("", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+				},
+				Count: 50,
+			},
+			{
+				GroupValues: []*commonpb.Payload{
+					mustEncodeValue("divisionA", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+				},
+				Count: 100,
+			},
+			{
+				GroupValues: []*commonpb.Payload{
+					mustEncodeValue("divisionB", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+				},
+				Count: 10,
+			},
+		},
+	}
+	s.True(temporalproto.DeepEqual(expectedResp, resp))
+
 	// test only allowed to group by a single field
 	request.Query = "GROUP BY ExecutionStatus, WorkflowType"
 	resp, err = s.visibilityStore.CountWorkflowExecutions(context.Background(), request)
 	s.ErrorContains(err, "'GROUP BY' clause supports only a single field")
 	s.Nil(resp)
 
-	// test only allowed to group by ExecutionStatus and LowCardinalityKeyword fields
+	// test only allowed to group by ExecutionStatus, TemporalNamespaceDivision,
+	// and LowCardinalityKeyword fields
 	request.Query = "GROUP BY WorkflowType"
 	resp, err = s.visibilityStore.CountWorkflowExecutions(context.Background(), request)
-	s.ErrorContains(err, "'GROUP BY' clause is only supported for ExecutionStatus")
+	s.ErrorContains(err, "'GROUP BY' clause is not supported for search attribute WorkflowType")
 	s.Nil(resp)
 }
 
@@ -1596,7 +1726,7 @@ func (s *ESVisibilitySuite) Test_buildPaginationQuery() {
 			searchAfter:  []any{json.Number(fmt.Sprintf("%d", startTime.UnixNano()))},
 			res: []elastic.Query{
 				elastic.NewBoolQuery().Filter(
-					elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(time.RFC3339Nano)),
+					elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(paginationDatetimeFormat)),
 				),
 			},
 			err: nil,
@@ -1616,7 +1746,7 @@ func (s *ESVisibilitySuite) Test_buildPaginationQuery() {
 				elastic.NewBoolQuery().
 					MustNot(elastic.NewExistsQuery(sadefs.CloseTime)).
 					Filter(
-						elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(time.RFC3339Nano)),
+						elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(paginationDatetimeFormat)),
 					),
 			},
 			err: nil,
@@ -1633,12 +1763,12 @@ func (s *ESVisibilitySuite) Test_buildPaginationQuery() {
 			},
 			res: []elastic.Query{
 				elastic.NewBoolQuery().Filter(
-					elastic.NewRangeQuery(sadefs.CloseTime).Lt(closeTime.Format(time.RFC3339Nano)),
+					elastic.NewRangeQuery(sadefs.CloseTime).Lt(closeTime.Format(paginationDatetimeFormat)),
 				),
 				elastic.NewBoolQuery().
 					Filter(
-						elastic.NewTermQuery(sadefs.CloseTime, closeTime.Format(time.RFC3339Nano)),
-						elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(time.RFC3339Nano)),
+						elastic.NewTermQuery(sadefs.CloseTime, closeTime.Format(paginationDatetimeFormat)),
+						elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(paginationDatetimeFormat)),
 					),
 			},
 			err: nil,
@@ -1657,17 +1787,17 @@ func (s *ESVisibilitySuite) Test_buildPaginationQuery() {
 			},
 			res: []elastic.Query{
 				elastic.NewBoolQuery().Filter(
-					elastic.NewRangeQuery(sadefs.CloseTime).Lt(closeTime.Format(time.RFC3339Nano)),
+					elastic.NewRangeQuery(sadefs.CloseTime).Lt(closeTime.Format(paginationDatetimeFormat)),
 				),
 				elastic.NewBoolQuery().
 					Filter(
-						elastic.NewTermQuery(sadefs.CloseTime, closeTime.Format(time.RFC3339Nano)),
-						elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(time.RFC3339Nano)),
+						elastic.NewTermQuery(sadefs.CloseTime, closeTime.Format(paginationDatetimeFormat)),
+						elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(paginationDatetimeFormat)),
 					),
 				elastic.NewBoolQuery().
 					Filter(
-						elastic.NewTermQuery(sadefs.CloseTime, closeTime.Format(time.RFC3339Nano)),
-						elastic.NewTermQuery(sadefs.StartTime, startTime.Format(time.RFC3339Nano)),
+						elastic.NewTermQuery(sadefs.CloseTime, closeTime.Format(paginationDatetimeFormat)),
+						elastic.NewTermQuery(sadefs.StartTime, startTime.Format(paginationDatetimeFormat)),
 						elastic.NewRangeQuery(sadefs.RunID).Gt("random-run-id"),
 					),
 			},
@@ -2034,7 +2164,7 @@ func (s *ESVisibilitySuite) Test_convertQuery_ChasmMapper() {
 		{
 			name:  "invalid chasm attribute",
 			query: "UnknownChasmField = 'value'",
-			err:   query.InvalidExpressionErrMessage,
+			err:   query.InvalidSearchAttribute,
 		},
 	}
 
@@ -2300,4 +2430,61 @@ func (s *ESVisibilitySuite) TestValuesInterceptor_ChasmMapper() {
 	s.Error(err)
 	var converterErr *query.ConverterError
 	s.ErrorAs(err, &converterErr)
+}
+
+func TestPaginationDatetimeFormat(t *testing.T) {
+	testCases := []struct {
+		name string
+		in   time.Time
+		out  string
+	}{
+		{
+			name: "zero nanos",
+			in:   time.Date(2023, 4, 5, 6, 7, 8, 0, time.UTC),
+			out:  "2023-04-05T06:07:08.000000000Z",
+		},
+		{
+			name: "full nanos",
+			in:   time.Date(2023, 4, 5, 6, 7, 8, 123456789, time.UTC),
+			out:  "2023-04-05T06:07:08.123456789Z",
+		},
+		{
+			name: "trailing zeros in nanos",
+			in:   time.Date(2023, 4, 5, 6, 7, 8, 123000000, time.UTC),
+			out:  "2023-04-05T06:07:08.123000000Z",
+		},
+		{
+			name: "leading zeros in nanos",
+			in:   time.Date(2023, 4, 5, 6, 7, 8, 42, time.UTC),
+			out:  "2023-04-05T06:07:08.000000042Z",
+		},
+		{
+			name: "unix epoch",
+			in:   time.Unix(0, 0).UTC(),
+			out:  "1970-01-01T00:00:00.000000000Z",
+		},
+		{
+			name: "positive timezone offset",
+			in:   time.Date(2023, 4, 5, 6, 7, 8, 0, time.FixedZone("", 2*60*60+30*60)),
+			out:  "2023-04-05T06:07:08.000000000+02:30",
+		},
+		{
+			name: "negative timezone offset",
+			in:   time.Date(2023, 4, 5, 6, 7, 8, 123456789, time.FixedZone("", -5*60*60)),
+			out:  "2023-04-05T06:07:08.123456789-05:00",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			out := tc.in.Format(paginationDatetimeFormat)
+			r.Equal(tc.out, out)
+			// The formatted value must remain a valid RFC3339 datetime, and parsing it back must
+			// return the original instant.
+			parsed, err := time.Parse(time.RFC3339Nano, out)
+			r.NoError(err)
+			r.True(tc.in.Equal(parsed), "expected %v, got %v", tc.in, parsed)
+		})
+	}
 }

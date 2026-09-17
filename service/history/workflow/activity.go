@@ -70,7 +70,7 @@ func UpdateActivityInfoForRetries(
 	ai.ScheduledTime = nextScheduledTime
 	ClearActivityStartedState(ai)
 	// Mark per-attempt timers for recreation.
-	ai.TimerTaskStatus &^= TimerTaskStatusCreatedHeartbeat | TimerTaskStatusCreatedStartToClose | TimerTaskStatusCreatedScheduleToStart
+	ai.TimerTaskStatus &^= TimerTaskStatusCreatedPerAttempt
 	ai.RetryLastWorkerIdentity = ai.StartedIdentity
 	ai.RetryLastFailure = failure
 	// this flag means the user resets the activity with "--reset-heartbeat" flag
@@ -313,6 +313,8 @@ func ResetActivity(
 	}
 
 	return mutableState.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, ms historyi.MutableState) error {
+		wasPaused := activityInfo.Paused
+
 		// reset the number of attempts
 		activityInfo.Attempt = 1
 		activityInfo.ActivityReset = true
@@ -339,14 +341,18 @@ func ResetActivity(
 			activityInfo.TimerTaskStatus = TimerTaskStatusNone
 		}
 
-		// if activity is running, or it is paused and we don't want to unpause - we don't need to do anything
-		if GetActivityState(ai) == enumspb.PENDING_ACTIVITY_STATE_STARTED || (ai.Paused && keepPaused) {
+		if wasPaused && !keepPaused {
+			unpauseActivityInfo(activityInfo)
+		}
+
+		// if activity is running, or it remains paused, we don't need to schedule a new run
+		if GetActivityState(activityInfo) == enumspb.PENDING_ACTIVITY_STATE_STARTED || activityInfo.Paused {
 			return nil
 		}
 
-		activityInfo.Stamp++
-		if activityInfo.Paused && !keepPaused {
-			activityInfo.Paused = false
+		// unpauseActivityInfo already incremented the activity stamp.
+		if !wasPaused {
+			activityInfo.Stamp++
 		}
 
 		// if activity is not running - we need to regenerate the retry task as schedule activity immediately
@@ -376,6 +382,10 @@ func unpauseActivityInfo(ai *persistencespb.ActivityInfo) {
 	ai.PauseInfo = nil
 	ai.Stamp++
 
+	// Timer tasks can be dropped while paused without clearing this mask. Clear all
+	// bits so transaction close recreates the earliest timer. This can create duplicate
+	// timer tasks, but after one processes the timeout, the others become no-ops.
+	ai.TimerTaskStatus = TimerTaskStatusNone
 }
 
 func UnpauseActivity(

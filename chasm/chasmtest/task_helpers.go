@@ -3,6 +3,7 @@ package chasmtest
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"go.temporal.io/server/chasm"
 )
@@ -10,6 +11,10 @@ import (
 // ExecutePureTask validates and executes a pure task atomically via [Engine.UpdateComponent].
 // It returns taskDropped set to true if [chasm.PureTaskHandler.Validate] returns (false, nil),
 // indicating the task is no longer relevant and was not executed.
+// After a successful execution of a scheduled task, Validate must return (false, nil),
+// otherwise the helper returns an error because the task would remain runnable.
+// Immediate tasks are exempt from this post-execution check, since they are always
+// reported valid by design (matching Node.ExecutePureTask's !IsImmediate() guard).
 //
 // The component ref is resolved automatically — no separate [Engine.ReadComponent] call to
 // obtain a ref is needed. Pass the component pointer directly.
@@ -48,10 +53,56 @@ func ExecutePureTask[C chasm.Component, T any](
 				taskDropped = true
 				return nil
 			}
-			return handler.Execute(mutableCtx, typedC, attrs, task)
+			if err = handler.Execute(mutableCtx, typedC, attrs, task); err != nil {
+				return err
+			}
+
+			// Immediate tasks execute inline and are reported valid by design, so
+			// only scheduled tasks are re-validated after execution. This mirrors
+			// Node.ExecutePureTask, which guards the same check with !IsImmediate().
+			if !attrs.IsImmediate() {
+				valid, err = handler.Validate(mutableCtx, typedC, chasm.TaskInvocation{TaskAttributes: attrs}, task)
+				if err != nil {
+					return err
+				}
+				if valid {
+					return chasm.NewTaskNotInvalidatedErrorWithDetails("pure", chasm.TaskNotInvalidatedDetails{
+						TaskType:       fmt.Sprintf("%T", task),
+						TaskAttributes: attrs,
+					})
+				}
+			}
+			return nil
 		},
 	)
 	return taskDropped, err
+}
+
+// FirePureTasks executes persisted pure tasks due by referenceTime and commits.
+func (e *Engine) FirePureTasks(ref chasm.ComponentRef, referenceTime time.Time) (executed int, err error) {
+	exec, err := e.executionForRef(ref)
+	if err != nil {
+		return 0, err
+	}
+
+	engineCtx := chasm.NewEngineContext(context.Background(), e)
+	if err := exec.node.EachPureTask(
+		referenceTime,
+		func(handler chasm.NodePureTask, taskAttributes chasm.TaskAttributes, taskInstance any) (bool, error) {
+			ran, err := handler.ExecutePureTask(engineCtx, taskAttributes, taskInstance)
+			if err == nil && ran {
+				executed++
+			}
+			return ran, err
+		},
+	); err != nil {
+		return executed, err
+	}
+
+	if err := e.closeTransaction(exec); err != nil {
+		return executed, err
+	}
+	return executed, nil
 }
 
 // ExecuteSideEffectTask validates and executes a side effect task.

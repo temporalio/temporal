@@ -2,21 +2,25 @@ package tests
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/testing/parallelsuite"
@@ -746,4 +750,131 @@ func (s *GetHistorySuite) getHistory(
 	s.NoError(err)
 
 	return responseInner.History.Events, responseInner.NextPageToken
+}
+
+// startMultiBatchWorkflow starts a workflow and signals it repeatedly. Each signal is its own
+// transaction and therefore its own history node, so a page size of 1 yields many pages and a
+// continuation taken from an early page is far from the last page.
+func startMultiBatchWorkflow(
+	ctx context.Context,
+	assertions *require.Assertions,
+	env *testcore.TestEnv,
+) {
+	_, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          env.Tv().WorkflowID(),
+		WorkflowType:        env.Tv().WorkflowType(),
+		TaskQueue:           env.Tv().TaskQueue(),
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
+		Identity:            env.Tv().WorkerIdentity(),
+	})
+	assertions.NoError(err)
+
+	for range 6 {
+		_, err = env.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+			RequestId: uuid.NewString(),
+			Namespace: env.Namespace().String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: env.Tv().WorkflowID(),
+			},
+			SignalName: "signal",
+			Identity:   env.Tv().WorkerIdentity(),
+		})
+		assertions.NoError(err)
+	}
+}
+
+func (s *GetHistorySuite) TestGetWorkflowExecutionHistory_ContinuationFromAnotherNamespace(
+	enableTransitionHistory bool,
+) {
+	ctx := s.Context()
+	// A single-shard cluster so both namespaces map to the same history shard. On SQL backends
+	// shard_id is part of the history_node primary key, so without this the replay would be
+	// rejected for the wrong reason; on Cassandra it is not part of the key at all.
+	env := s.newTestEnv(
+		enableTransitionHistory,
+		testcore.WithHistoryShardCount(1),
+		// Shadow mode reports the mismatch but still serves the page.
+		testcore.WithDynamicConfig(dynamicconfig.EnablePaginationTokenBranchValidationShadowMode, false),
+	)
+
+	otherNamespace := namespace.Name(testcore.RandomizeStr("other-namespace"))
+	_, err := env.RegisterNamespace(ctx, otherNamespace, 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
+	s.Require().NoError(err)
+
+	startMultiBatchWorkflow(s.Context(), s.Require(), env)
+
+	// A genuine, non-final continuation obtained with legitimate access to the first namespace.
+	firstPage, err := env.FrontendClient().GetWorkflowExecutionHistory(
+		s.Context(),
+		&workflowservice.GetWorkflowExecutionHistoryRequest{
+			Namespace:              env.Namespace().String(),
+			Execution:              &commonpb.WorkflowExecution{WorkflowId: env.Tv().WorkflowID()},
+			MaximumPageSize:        1,
+			HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT,
+		},
+	)
+	s.Require().NoError(err)
+	s.Require().NotEmpty(firstPage.NextPageToken, "need a non-final continuation for this test")
+
+	// Replayed against the other namespace. No run ID is sent, so nothing in the request itself
+	// refers to the workflow whose history the token points at.
+	resp, err := env.FrontendClient().GetWorkflowExecutionHistory(
+		s.Context(),
+		&workflowservice.GetWorkflowExecutionHistoryRequest{
+			Namespace:              otherNamespace.String(),
+			Execution:              &commonpb.WorkflowExecution{WorkflowId: env.Tv().WorkflowID()},
+			MaximumPageSize:        1,
+			NextPageToken:          firstPage.NextPageToken,
+			HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT,
+		},
+	)
+	s.Error(err)
+	s.Empty(resp.GetHistory().GetEvents())
+	var invalidArgument *serviceerror.InvalidArgument
+	var notFound *serviceerror.NotFound
+	s.True(
+		errors.As(err, &invalidArgument) || errors.As(err, &notFound),
+		"expected InvalidArgument or NotFound, got %T: %v", err, err,
+	)
+}
+
+func (s *RawHistorySuite) TestGetWorkflowExecutionHistoryReverse_ContinuationFromAnotherNamespace() {
+	ctx := s.Context()
+	env := s.newTestEnv(
+		testcore.WithHistoryShardCount(1),
+		// Shadow mode reports the mismatch but still serves the page.
+		testcore.WithDynamicConfig(dynamicconfig.EnablePaginationTokenBranchValidationShadowMode, false),
+	)
+
+	otherNamespace := namespace.Name(testcore.RandomizeStr("other-namespace"))
+	_, err := env.RegisterNamespace(ctx, otherNamespace, 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
+	s.Require().NoError(err)
+
+	startMultiBatchWorkflow(s.Context(), s.Require(), env)
+
+	firstPage, err := env.FrontendClient().GetWorkflowExecutionHistoryReverse(
+		s.Context(),
+		&workflowservice.GetWorkflowExecutionHistoryReverseRequest{
+			Namespace:       env.Namespace().String(),
+			Execution:       &commonpb.WorkflowExecution{WorkflowId: env.Tv().WorkflowID()},
+			MaximumPageSize: 1,
+		},
+	)
+	s.Require().NoError(err)
+	s.Require().NotEmpty(firstPage.NextPageToken, "need a non-final continuation for this test")
+
+	resp, err := env.FrontendClient().GetWorkflowExecutionHistoryReverse(
+		s.Context(),
+		&workflowservice.GetWorkflowExecutionHistoryReverseRequest{
+			Namespace:       otherNamespace.String(),
+			Execution:       &commonpb.WorkflowExecution{WorkflowId: env.Tv().WorkflowID()},
+			MaximumPageSize: 1,
+			NextPageToken:   firstPage.NextPageToken,
+		},
+	)
+	s.Error(err)
+	s.Empty(resp.GetHistory().GetEvents())
 }

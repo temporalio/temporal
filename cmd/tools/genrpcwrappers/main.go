@@ -79,6 +79,12 @@ var (
 	largeTimeoutContext = map[string]bool{
 		"client.admin.GetReplicationMessages": true,
 	}
+	// stateSyncTimeoutContext are the cross-cluster workflow state sync hops, whose callers set a
+	// deadline that can exceed even the large timeout. DefaultStateSyncTimeout is only a backstop.
+	stateSyncTimeoutContext = map[string]bool{
+		"client.admin.SyncWorkflowState":   true,
+		"client.history.SyncWorkflowState": true,
+	}
 	longPollRetryPolicy = map[string]string{
 		"retryableClient.matching.PollWorkflowTaskQueue": "pollPolicy",
 		"retryableClient.matching.PollActivityTaskQueue": "pollPolicy",
@@ -247,7 +253,25 @@ func toGetter(snake string) string {
 func makeGetHistoryClient(reqType reflect.Type, routingOptions *historyservice.RoutingOptions) string {
 	t := reqType.Elem() // we know it's a pointer
 
-	if routingOptions.AnyHost && routingOptions.ShardId != "" && routingOptions.WorkflowId != "" && routingOptions.TaskToken != "" && routingOptions.TaskInfos != "" && routingOptions.ChasmComponentRef != "" {
+	hasWorkflowIDRouting := routingOptions.WorkflowId != "" && routingOptions.ChasmComponentRef == ""
+	hasComponentRefRouting := routingOptions.ChasmComponentRef != "" && routingOptions.WorkflowId == ""
+	hasComponentRefFallbackRouting := routingOptions.WorkflowId != "" && routingOptions.ChasmComponentRef != ""
+
+	routingDirectiveCount := 0
+	for _, configured := range []bool{
+		routingOptions.AnyHost,
+		routingOptions.ShardId != "",
+		hasWorkflowIDRouting,
+		routingOptions.TaskToken != "",
+		routingOptions.TaskInfos != "",
+		hasComponentRefRouting,
+		hasComponentRefFallbackRouting,
+	} {
+		if configured {
+			routingDirectiveCount++
+		}
+	}
+	if routingDirectiveCount > 1 {
 		log.Fatalf("Found more than one routing directive in %s", t)
 	}
 	if routingOptions.AnyHost {
@@ -257,7 +281,36 @@ func makeGetHistoryClient(reqType reflect.Type, routingOptions *historyservice.R
 		verifyFieldExists(t, routingOptions.ShardId)
 		return "shardID := " + toGetter(routingOptions.ShardId)
 	}
-	if routingOptions.WorkflowId != "" {
+	if hasComponentRefFallbackRouting {
+		namespaceIDField := routingOptions.NamespaceId
+		if namespaceIDField == "" {
+			namespaceIDField = "namespace_id"
+		}
+
+		verifyFieldExists(t, namespaceIDField)
+		verifyFieldExists(t, routingOptions.WorkflowId)
+		verifyFieldExists(t, routingOptions.ChasmComponentRef)
+		return fmt.Sprintf(`var shardID int32
+	if len(%s) == 0 {
+		shardID = c.shardIDFromWorkflowID(%s, %s)
+	} else {
+		componentRef, err := c.tokenSerializer.DeserializeChasmComponentRef(%s)
+		if err != nil {
+			return nil, serviceerror.NewInvalidArgument("error deserializing component ref")
+		}
+		if componentRef.GetNamespaceId() == "" || componentRef.GetBusinessId() == "" {
+			return nil, serviceerror.NewInvalidArgument("component ref missing namespace ID or business ID")
+		}
+
+		shardID = c.shardIDFromWorkflowID(componentRef.GetNamespaceId(), componentRef.GetBusinessId())
+	}`,
+			toGetter(routingOptions.ChasmComponentRef),
+			toGetter(namespaceIDField),
+			toGetter(routingOptions.WorkflowId),
+			toGetter(routingOptions.ChasmComponentRef),
+		) + "\n"
+	}
+	if hasWorkflowIDRouting {
 		namespaceIdField := routingOptions.NamespaceId
 		if namespaceIdField == "" {
 			namespaceIdField = "namespace_id"
@@ -291,17 +344,20 @@ func makeGetHistoryClient(reqType reflect.Type, routingOptions *historyservice.R
 		namespaceID = %s
 		businessID = taskToken.GetWorkflowId()
 	}
-	shardID := c.shardIDFromWorkflowID(namespaceID, businessID)
-	`, toGetter(routingOptions.TaskToken), toGetter(namespaceIdField))
+	shardID := c.shardIDFromWorkflowID(namespaceID, businessID)`,
+			toGetter(routingOptions.TaskToken),
+			toGetter(namespaceIdField),
+		) + "\n"
 	}
-	if routingOptions.ChasmComponentRef != "" {
+	if hasComponentRefRouting {
 		verifyFieldExists(t, routingOptions.ChasmComponentRef)
 		return fmt.Sprintf(`ref, err := c.tokenSerializer.DeserializeChasmComponentRef(%s)
 	if err != nil {
 		return nil, serviceerror.NewInvalidArgument("error deserializing component ref")
 	}
-	shardID := c.shardIDFromWorkflowID(ref.GetNamespaceId(), ref.GetBusinessId())
-	`, toGetter(routingOptions.ChasmComponentRef))
+	shardID := c.shardIDFromWorkflowID(ref.GetNamespaceId(), ref.GetBusinessId())`,
+			toGetter(routingOptions.ChasmComponentRef),
+		) + "\n"
 	}
 	if routingOptions.TaskInfos != "" {
 		verifyFieldExists(t, routingOptions.TaskInfos)
@@ -439,6 +495,9 @@ func writeTemplatedMethod(w io.Writer, service service, impl string, m reflect.M
 	if largeTimeoutContext[key] {
 		fields["WithLargeTimeout"] = "WithLargeTimeout"
 	}
+	if stateSyncTimeoutContext[key] {
+		fields["WithLargeTimeout"] = "WithStateSyncTimeout"
+	}
 	if impl == "client" {
 		if service.name == "history" {
 			routingOptions := historyRoutingOptions(reqType)
@@ -512,7 +571,7 @@ func (c *clientImpl) {{.Method}}(
 	var response {{.ResponseType}}
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
-		ctx, cancel := c.createContext(ctx)
+		ctx, cancel := c.createContext{{or .WithLargeTimeout ""}}(ctx)
 		defer cancel()
 		response, err = client.{{.Method}}(ctx, request, opts...)
 		return err

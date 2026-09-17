@@ -50,7 +50,7 @@ type (
 		contextTaggedLogger  log.Logger
 		hostInfoProvider     membership.HostInfoProvider
 		ownership            *ownership
-		status               int32
+		status               atomic.Int32
 		taggedMetricsHandler metrics.Handler
 		// shardCountSubscriptions is a set of subscriptions that receive shard count updates whenever the set of
 		// shards that this controller owns changes.
@@ -103,11 +103,7 @@ func ControllerProvider(
 }
 
 func (c *ControllerImpl) Start() {
-	if !atomic.CompareAndSwapInt32(
-		&c.status,
-		common.DaemonStatusInitialized,
-		common.DaemonStatusStarted,
-	) {
+	if !c.status.CompareAndSwap(common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
 
@@ -117,11 +113,7 @@ func (c *ControllerImpl) Start() {
 }
 
 func (c *ControllerImpl) Stop() {
-	if !atomic.CompareAndSwapInt32(
-		&c.status,
-		common.DaemonStatusStarted,
-		common.DaemonStatusStopped,
-	) {
+	if !c.status.CompareAndSwap(common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
 
@@ -153,7 +145,7 @@ func (c *ControllerImpl) GetPingChecks() []pingable.Check {
 }
 
 func (c *ControllerImpl) Status() int32 {
-	return atomic.LoadInt32(&c.status)
+	return c.status.Load()
 }
 
 func (c *ControllerImpl) InitialShardsAcquired(ctx context.Context) error {
@@ -259,7 +251,7 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (historyi.Contro
 		return nil, err
 	}
 
-	if atomic.LoadInt32(&c.status) == common.DaemonStatusStopped {
+	if c.status.Load() == common.DaemonStatusStopped {
 		hostInfo := c.hostInfoProvider.HostInfo()
 		return nil, fmt.Errorf("ControllerImpl for host '%v' shutting down", hostInfo.Identity())
 	}

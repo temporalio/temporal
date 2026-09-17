@@ -5,35 +5,35 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSimple(t *testing.T) {
 	cache := NewSimple(nil)
 
 	cache.Put("A", "Foo")
-	assert.Equal(t, "Foo", cache.Get("A"))
-	assert.Nil(t, cache.Get("B"))
-	assert.Equal(t, 1, cache.Size())
+	require.Equal(t, "Foo", cache.Get("A"))
+	require.Nil(t, cache.Get("B"))
+	require.Equal(t, 1, cache.Size())
 
 	cache.Put("B", "Bar")
 	cache.Put("C", "Cid")
 	cache.Put("D", "Delt")
-	assert.Equal(t, 4, cache.Size())
+	require.Equal(t, 4, cache.Size())
 
-	assert.Equal(t, "Bar", cache.Get("B"))
-	assert.Equal(t, "Cid", cache.Get("C"))
-	assert.Equal(t, "Delt", cache.Get("D"))
+	require.Equal(t, "Bar", cache.Get("B"))
+	require.Equal(t, "Cid", cache.Get("C"))
+	require.Equal(t, "Delt", cache.Get("D"))
 
 	cache.Put("A", "Foo2")
-	assert.Equal(t, "Foo2", cache.Get("A"))
+	require.Equal(t, "Foo2", cache.Get("A"))
 
 	cache.Put("E", "Epsi")
-	assert.Equal(t, "Epsi", cache.Get("E"))
-	assert.Equal(t, "Foo2", cache.Get("A"))
+	require.Equal(t, "Epsi", cache.Get("E"))
+	require.Equal(t, "Foo2", cache.Get("A"))
 
 	cache.Delete("A")
-	assert.Nil(t, cache.Get("A"))
+	require.Nil(t, cache.Get("A"))
 }
 
 func TestSimpleGenerics(t *testing.T) {
@@ -46,12 +46,12 @@ func TestSimpleGenerics(t *testing.T) {
 	cache := NewSimple(nil)
 	cache.Put(key, value)
 
-	assert.Equal(t, value, cache.Get(key))
-	assert.Equal(t, value, cache.Get(keyType{
+	require.Equal(t, value, cache.Get(key))
+	require.Equal(t, value, cache.Get(keyType{
 		dummyString: "some random key",
 		dummyInt:    59,
 	}))
-	assert.Nil(t, cache.Get(keyType{
+	require.Nil(t, cache.Get(keyType{
 		dummyString: "some other random key",
 		dummyInt:    56,
 	}))
@@ -74,24 +74,18 @@ func TestSimpleCacheConcurrentAccess(t *testing.T) {
 	start := make(chan struct{})
 	var wg sync.WaitGroup
 	for range 20 {
-		wg.Add(2)
-
 		// concurrent get and put
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			<-start
 
 			for range 1000 {
 				cache.Get("A")
 				cache.Put("A", "fooo")
 			}
-		}()
+		})
 
 		// concurrent iteration
-		go func() {
-			defer wg.Done()
-
+		wg.Go(func() {
 			<-start
 
 			for range 50 {
@@ -101,7 +95,7 @@ func TestSimpleCacheConcurrentAccess(t *testing.T) {
 				}
 				it.Close()
 			}
-		}()
+		})
 	}
 
 	close(start)
@@ -113,19 +107,18 @@ func TestSimpleRemoveFunc(t *testing.T) {
 	cache := NewSimple(&SimpleOptions{
 		RemovedFunc: func(i any) {
 			_, ok := i.(*testing.T)
-			assert.True(t, ok)
-			ch <- true
+			ch <- ok
 		},
 	})
 
 	cache.Put("testing", t)
 	cache.Delete("testing")
-	assert.Nil(t, cache.Get("testing"))
+	require.Nil(t, cache.Get("testing"))
 
 	timeout := time.NewTimer(time.Millisecond * 300)
 	select {
 	case b := <-ch:
-		assert.True(t, b)
+		require.True(t, b)
 	case <-timeout.C:
 		t.Error("RemovedFunc did not send true on channel ch")
 	}
@@ -154,7 +147,7 @@ func TestSimpleIterator(t *testing.T) {
 		actual[entry.Key().(string)] = entry.Value().(string)
 	}
 	it.Close()
-	assert.Equal(t, expected, actual)
+	require.Equal(t, expected, actual)
 
 	it = cache.Iterator()
 	for i := 0; i < len(expected); i++ {
@@ -163,5 +156,5 @@ func TestSimpleIterator(t *testing.T) {
 		actual[entry.Key().(string)] = entry.Value().(string)
 	}
 	it.Close()
-	assert.Equal(t, expected, actual)
+	require.Equal(t, expected, actual)
 }

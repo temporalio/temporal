@@ -3,6 +3,7 @@ package frontend
 import (
 	"net"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -10,8 +11,10 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm/lib/activity"
-	"go.temporal.io/server/chasm/lib/callback"
+	chasmcallback "go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -19,16 +22,25 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/retrypolicy"
-	"go.temporal.io/server/components/nexusoperations"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 )
 
+const (
+	scheduleValidationVersioningOverride = "versioning-override"
+	scheduleValidationScheduleDuration   = "scheduler-duration"
+	scheduleValidationOverlapPolicy      = "scheduler-overlap-policy"
+	scheduleValidationRemainingActions   = "scheduler-remaining-actions"
+	scheduleValidationTimestamp          = "scheduler-timestamp"
+)
+
 // Config represents configuration for frontend service
 type Config struct {
 	NumHistoryShards                     int32
+	EmitNamespaceLifecycleEvents         dynamicconfig.BoolPropertyFn
 	PersistenceMaxQPS                    dynamicconfig.IntPropertyFn
 	PersistenceGlobalMaxQPS              dynamicconfig.IntPropertyFn
 	PersistenceNamespaceMaxQPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -54,6 +66,7 @@ type Config struct {
 	GlobalRPS          dynamicconfig.IntPropertyFn
 	OperatorRPSRatio   dynamicconfig.FloatPropertyFn
 
+	EnableDescribeMutableStateRateLimit                               dynamicconfig.BoolPropertyFn
 	NamespaceReplicationInducingAPIsRPS                               dynamicconfig.IntPropertyFn
 	MaxNamespaceRPSPerInstance                                        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceBurstRatioPerInstance                                 dynamicconfig.FloatPropertyFnWithNamespaceFilter
@@ -165,6 +178,10 @@ type Config struct {
 
 	// Enable schedule-related RPCs
 	EnableSchedules dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	// Ceiling on the V1 scheduler workflow's recorded version.
+	SchedulerV1VersionCeiling dynamicconfig.IntPropertyFnWithNamespaceFilter
+	// Requested V1 scheduler workflow version.
+	SchedulerV1VersionOverride dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	// Enable CHASM tree infrastructure
 	EnableChasm dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -178,6 +195,7 @@ type Config struct {
 	// Enables ID-space collision sentinels, and must be enabled and propagated in
 	// advance of EnableCHASMSchedulerCreation.
 	EnableCHASMSchedulerSentinels dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	DisabledScheduleValidations   dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
 
 	// Enable deployment RPCs
 	EnableDeployments dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -206,7 +224,10 @@ type Config struct {
 	CallbackURLMaxLength    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackHeaderMaxSize   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxCallbacksPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
-	CallbackEndpointConfigs dynamicconfig.TypedPropertyFnWithNamespaceFilter[callback.AddressMatchRules]
+	CallbackEndpointConfigs dynamicconfig.TypedPropertyFnWithNamespaceFilter[callbacks.AddressMatchRules]
+
+	// The callback kinds a client may attach to a workflow execution.
+	WorkflowEnabledCallbackKinds dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.Kind]
 
 	MaxNexusOperationTokenLength   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	NexusRequestHeadersBlacklist   dynamicconfig.TypedPropertyFn[*regexp.Regexp]
@@ -221,8 +242,7 @@ type Config struct {
 	MaskInternalErrorDetails dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// Health check
-	HistoryHostErrorPercentage     dynamicconfig.FloatPropertyFn
-	HistoryHostSelfErrorProportion dynamicconfig.FloatPropertyFn
+	HistoryHostErrorPercentage dynamicconfig.FloatPropertyFn
 
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -264,6 +284,15 @@ func (c *Config) IsExperimentAllowed(experiment string, namespace string) bool {
 	return false
 }
 
+func (c *Config) IsScheduleValidationDisabled(validation string, namespace string) bool {
+	for _, disabled := range c.DisabledScheduleValidations(namespace) {
+		if strings.EqualFold(disabled, validation) {
+			return true
+		}
+	}
+	return false
+}
+
 // NewConfig returns new service config with default values
 func NewConfig(
 	dc *dynamicconfig.Collection,
@@ -271,6 +300,7 @@ func NewConfig(
 ) *Config {
 	return &Config{
 		NumHistoryShards:                     numHistoryShards,
+		EmitNamespaceLifecycleEvents:         dynamicconfig.EmitNamespaceLifecycleEvents.Get(dc),
 		PersistenceMaxQPS:                    dynamicconfig.FrontendPersistenceMaxQPS.Get(dc),
 		PersistenceGlobalMaxQPS:              dynamicconfig.FrontendPersistenceGlobalMaxQPS.Get(dc),
 		PersistenceNamespaceMaxQPS:           dynamicconfig.FrontendPersistenceNamespaceMaxQPS.Get(dc),
@@ -295,6 +325,7 @@ func NewConfig(
 		RPS:                                 dynamicconfig.FrontendRPS.Get(dc),
 		GlobalRPS:                           dynamicconfig.FrontendGlobalRPS.Get(dc),
 		OperatorRPSRatio:                    dynamicconfig.OperatorRPSRatio.Get(dc),
+		EnableDescribeMutableStateRateLimit: dynamicconfig.AdminEnableDescribeMutableStateRateLimit.Get(dc),
 		NamespaceReplicationInducingAPIsRPS: dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS.Get(dc),
 
 		MaxNamespaceRPSPerInstance:                                        dynamicconfig.FrontendMaxNamespaceRPSPerInstance.Get(dc),
@@ -363,11 +394,14 @@ func NewConfig(
 		MaxFairnessWeightOverrideConfigLimit: dynamicconfig.MatchingMaxFairnessKeyWeightOverrides.Get(dc),
 
 		EnableSchedules:                      dynamicconfig.FrontendEnableSchedules.Get(dc),
+		SchedulerV1VersionCeiling:            dynamicconfig.SchedulerV1VersionCeiling.Get(dc),
+		SchedulerV1VersionOverride:           dynamicconfig.SchedulerV1VersionOverride.Get(dc),
 		EnableChasm:                          dynamicconfig.EnableChasm.Get(dc),
 		EnableCHASMSchedulerCreation:         dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
 		CHASMSchedulerCreationRolloutPercent: dynamicconfig.CHASMSchedulerCreationRolloutPercent.Get(dc),
 		EnableCHASMSchedulerRouting:          dynamicconfig.EnableCHASMSchedulerRouting.Get(dc),
 		EnableCHASMSchedulerSentinels:        dynamicconfig.EnableCHASMSchedulerSentinels.Get(dc),
+		DisabledScheduleValidations:          dynamicconfig.FrontendDisabledScheduleValidations.Get(dc),
 
 		// [cleanup-wv-pre-release]
 		EnableDeployments:        dynamicconfig.EnableDeployments.Get(dc),
@@ -399,13 +433,14 @@ func NewConfig(
 		LinkMaxSize:        dynamicconfig.FrontendLinkMaxSize.Get(dc),
 		MaxLinksPerRequest: dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
 
-		CallbackEndpointConfigs:     callback.AllowedAddresses.Get(dc),
+		CallbackEndpointConfigs:      chasmcallback.AllowedAddresses.Get(dc),
+		WorkflowEnabledCallbackKinds: chasmworkflow.EnabledCallbackKinds.Get(dc),
+
 		AdminEnableListHistoryTasks: dynamicconfig.AdminEnableListHistoryTasks.Get(dc),
 
 		MaskInternalErrorDetails: dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc),
 
 		HistoryHostErrorPercentage:              dynamicconfig.HistoryHostErrorPercentage.Get(dc),
-		HistoryHostSelfErrorProportion:          dynamicconfig.HistoryHostSelfErrorProportion.Get(dc),
 		LogAllReqErrors:                         dynamicconfig.LogAllReqErrors.Get(dc),
 		EnableEagerWorkflowStart:                dynamicconfig.EnableEagerWorkflowStart.Get(dc),
 		WorkflowRulesAPIsEnabled:                dynamicconfig.WorkflowRulesAPIsEnabled.Get(dc),

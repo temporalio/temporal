@@ -9,6 +9,10 @@
 # matching.PollerHistoryTTL=1s
 # matching.wv.VersionDrainageStatusVisibilityGracePeriod=5s
 # matching.wv.VersionDrainageStatusRefreshInterval=5s
+# workercontroller.enabled=true
+#
+# workercontroller.enabled is required by the compute-config section of worker/worker.go
+# (exerciseComputeConfig)
 #
 # Make sure you set deploymentWorkflowVersion correctly. It should be an integer instead of {WORKFLOW_VERSION} above.
 # If deploymentWorkflowVersion is set to i, run this script with v{i} as the argument. The argument instructs the script
@@ -25,6 +29,8 @@
 
 deploymentName="foo"
 version="1.0"
+# The compute-config-only version (created by exerciseComputeConfig in worker/worker.go)
+computeConfigVersion="2.0"
 
 # Expected workflow counts - users can override these if their changes are expected to generate more workflows which will be true when a breaking change to 
 # these workflows is introduced.
@@ -62,14 +68,14 @@ download_workflow_chain() {
     local run_dir=$4
     
     echo "📥 Downloading all executions for: $workflow_id"
-    
+
     # Use the working query method with TemporalNamespaceDivision
     echo "   Getting the chain of CAN runs for this workflow using the TemporalNamespaceDivision query..."
     run_ids=$(temporal workflow list \
-        --query "TemporalNamespaceDivision = \"TemporalWorkerDeployment\" AND WorkflowType = \"$workflow_type\"" \
+        --query "TemporalNamespaceDivision = \"TemporalWorkerDeployment\" AND WorkflowType = \"$workflow_type\" AND WorkflowId = \"$workflow_id\"" \
         --output json | \
         jq -r '.[] | .execution.runId')
-    
+
     # Count how many we found
     if [ -z "$run_ids" ]; then
         run_count=0
@@ -89,12 +95,20 @@ download_workflow_chain() {
         if [ -n "$run_id" ]; then
             echo "   Downloading run $((run_index + 1))/$run_count: $run_id"
             
-            temporal workflow show \
-                -w "$workflow_id" \
-                -r "$run_id" \
-                --output json | \
-                gzip -9c > "$run_dir/replay_${workflow_name}_run_${run_id}.json.gz"
-            
+            # Write to a plain file first so the exit status is `workflow show`'s rather than
+            # gzip's, then check it is non-empty.
+            json_file="$run_dir/replay_${workflow_name}_run_${run_id}.json"
+            if ! temporal workflow show -w "$workflow_id" -r "$run_id" --output json > "$json_file"; then
+                echo "   Failed to download history for $workflow_id run $run_id" >&2
+                exit 1
+            fi
+            if [ ! -s "$json_file" ]; then
+                echo "   Empty history downloaded for $workflow_id run $run_id" >&2
+                exit 1
+            fi
+            gzip -9c < "$json_file" > "$json_file.gz"
+            rm -f "$json_file"
+
             ((run_index++))
         fi
     done
@@ -115,6 +129,7 @@ echo "📁 Creating run directory: $run_dir"
 # Download all executions for both workflow types
 download_workflow_chain "temporal-sys-worker-deployment:$deploymentName" "worker_deployment_wf" "temporal-sys-worker-deployment-workflow" "$run_dir"
 download_workflow_chain "temporal-sys-worker-deployment-version:$deploymentName:$version" "worker_deployment_version_wf" "temporal-sys-worker-deployment-version-workflow" "$run_dir"
+download_workflow_chain "temporal-sys-worker-deployment-version:$deploymentName:$computeConfigVersion" "worker_deployment_version_wf" "temporal-sys-worker-deployment-version-workflow" "$run_dir"
 
 echo ""
 echo "🎉 Complete! All workflow execution histories downloaded to $run_dir"
@@ -140,3 +155,17 @@ ACTUAL_VERSION_WORKFLOWS=$version_files
 EOF
 
 echo "   📝 Expected counts saved to: $run_dir/expected_counts.txt"
+
+# A run whose actual counts don't match the expected ones would be checked in with an
+# expected_counts.txt that fails TestReplays immediately, so fail here instead.
+if [ "$deployment_files" -ne "$EXPECTED_DEPLOYMENT_WORKFLOWS" ] || [ "$version_files" -ne "$EXPECTED_VERSION_WORKFLOWS" ]; then
+  echo "" >&2
+  echo "❌ Workflow counts do not match the expected values." >&2
+  echo "   Expected: Deployment=$EXPECTED_DEPLOYMENT_WORKFLOWS, Version=$EXPECTED_VERSION_WORKFLOWS" >&2
+  echo "   Actual:   Deployment=$deployment_files, Version=$version_files" >&2
+  echo "" >&2
+  echo "   If the new counts are correct for your change, re-run with:" >&2
+  echo "     EXPECTED_DEPLOYMENT_WORKFLOWS=$deployment_files EXPECTED_VERSION_WORKFLOWS=$version_files $0 $1" >&2
+  echo "   Otherwise your change created extra workflow executions; investigate before checking in." >&2
+  exit 1
+fi

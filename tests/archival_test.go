@@ -174,6 +174,7 @@ func (s *ArchivalSuite) newTestEnv() *archivalTestEnv {
 	// Register namespace using built-in filestore archiver
 	ae.archivalNamespace = namespace.Name(testcore.RandomizeStr("archival-enabled-namespace"))
 	ae.archivalNamespaceID, err = ae.RegisterNamespace(
+		s.Context(),
 		ae.archivalNamespace,
 		0, // Archive right away.
 		enumspb.ARCHIVAL_STATE_ENABLED,
@@ -187,6 +188,7 @@ func (s *ArchivalSuite) newTestEnv() *archivalTestEnv {
 	customHistoryURI := customArchiverScheme + "://custom-history-archiver"
 	customVisibilityURI := customArchiverScheme + "://custom-visibility-archiver"
 	ae.customArchiverNamespaceID, err = ae.RegisterNamespace(
+		s.Context(),
 		ae.customArchiverNamespace,
 		0, // Archive right away.
 		enumspb.ARCHIVAL_STATE_ENABLED,

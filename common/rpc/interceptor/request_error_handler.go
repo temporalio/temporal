@@ -99,8 +99,7 @@ func (eh *RequestErrorHandler) logError(
 func recordErrorMetrics(metricsHandler metrics.Handler, err error, isExpectedError bool) {
 	metrics.ServiceErrorWithType.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
 
-	var resourceExhaustedErr *serviceerror.ResourceExhausted
-	if errors.As(err, &resourceExhaustedErr) {
+	if resourceExhaustedErr, ok := errors.AsType[*serviceerror.ResourceExhausted](err); ok {
 		metrics.ServiceErrResourceExhaustedCounter.With(metricsHandler).Record(
 			1,
 			metrics.ResourceExhaustedCauseTag(resourceExhaustedErr.Cause),

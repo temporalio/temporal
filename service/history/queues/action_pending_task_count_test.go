@@ -31,9 +31,10 @@ func TestQueuePendingTaskActionRunSplitsAndClearsSelectedTaskGroup(t *testing.T)
 		),
 		predicates.Universal[tasks.Task](),
 	)
-	monitor := newMonitor(tasks.CategoryTypeScheduled, clock.NewRealTimeSource(), &MonitorOptions{
+	monitor := newMonitor(tasks.CategoryTypeScheduled, clock.NewRealTimeSource(), log.NewTestLogger(), metrics.NoopMetricsHandler, &MonitorOptions{
 		PendingTasksCriticalCount:   dynamicconfig.GetIntPropertyFn(1000),
 		ReaderStuckCriticalAttempts: dynamicconfig.GetIntPropertyFn(5),
+		ReaderStuckShadowMode:       dynamicconfig.GetBoolPropertyFn(false),
 		SliceCountCriticalThreshold: dynamicconfig.GetIntPropertyFn(50),
 	})
 	sliceToSplit := NewSlice(
