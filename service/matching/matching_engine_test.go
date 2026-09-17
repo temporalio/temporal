@@ -3141,6 +3141,74 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventKeepsClo
 	}
 }
 
+func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventPreservesSelectedClock() {
+	s.Run("incoming wins", func() {
+		incomingClock := &clockspb.HybridLogicalClock{WallClock: 20, Version: 2, ClusterId: 3}
+		incoming := &persistencespb.TaskQueueUserData{
+			Clock: incomingClock,
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {FairnessState: enumsspb.FAIRNESS_STATE_V2},
+			},
+		}
+		wantClock := common.CloneProto(incomingClock)
+
+		got := s.applyTaskQueueUserDataReplicationEvent(uuid.NewString(), incoming)
+
+		protorequire.ProtoEqual(s.T(), wantClock, got.GetClock())
+		s.NotSame(incomingClock, got.GetClock())
+		incomingClock.WallClock++
+		protorequire.ProtoEqual(s.T(), wantClock, got.GetClock())
+	})
+
+	s.Run("current is newer", func() {
+		taskQueue := uuid.NewString()
+		currentClock := &clockspb.HybridLogicalClock{WallClock: 20, Version: 2, ClusterId: 3}
+		current := &persistencespb.TaskQueueUserData{
+			Clock: currentClock,
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {FairnessState: enumsspb.FAIRNESS_STATE_V1},
+			},
+		}
+		incoming := &persistencespb.TaskQueueUserData{
+			Clock: &clockspb.HybridLogicalClock{WallClock: 10, Version: 2, ClusterId: 3},
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {FairnessState: enumsspb.FAIRNESS_STATE_V2},
+			},
+		}
+		s.seedTaskQueueUserData(taskQueue, current)
+
+		got := s.applyTaskQueueUserDataReplicationEvent(taskQueue, incoming)
+
+		protorequire.ProtoEqual(s.T(), currentClock, got.GetClock())
+		s.Equal(enumsspb.FAIRNESS_STATE_V1, got.GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetFairnessState())
+	})
+}
+
+func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventRevivalUsesMaxClock() {
+	taskQueue := uuid.NewString()
+	activeClock := &clockspb.HybridLogicalClock{WallClock: 1, ClusterId: 2}
+	deletedClock := &clockspb.HybridLogicalClock{WallClock: 2, ClusterId: 2}
+	current := &persistencespb.TaskQueueUserData{
+		Clock: activeClock,
+		VersioningData: &persistencespb.VersioningData{
+			VersionSets: []*persistencespb.CompatibleVersionSet{mkNewSet("build-id", activeClock)},
+		},
+	}
+	incoming := common.CloneProto(current)
+	incoming.Clock = deletedClock
+	incoming.VersioningData.VersionSets[0].BuildIds[0].State = persistencespb.STATE_DELETED
+	incoming.VersioningData.VersionSets[0].BuildIds[0].StateUpdateTimestamp = deletedClock
+	s.seedTaskQueueUserData(taskQueue, current)
+	s.mockVisibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 1}, nil)
+
+	got := s.applyTaskQueueUserDataReplicationEvent(taskQueue, incoming)
+
+	gotBuildID := got.GetVersioningData().GetVersionSets()[0].GetBuildIds()[0]
+	s.Equal(persistencespb.STATE_ACTIVE, gotBuildID.GetState())
+	s.True(hlc.Greater(got.GetClock(), deletedClock))
+	protorequire.ProtoEqual(s.T(), gotBuildID.GetStateUpdateTimestamp(), got.GetClock())
+}
+
 func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsData() {
 	namespaceID := namespace.ID(uuid.NewString())
 	tq := "tupac"

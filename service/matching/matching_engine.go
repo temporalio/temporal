@@ -2507,6 +2507,7 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 				mergedData.RedirectRules = newVersioningData.GetRedirectRules()
 			}
 			mergedUserData.PerType = req.GetUserData().GetPerType()
+			mergedUserData.Clock = common.CloneProto(req.GetUserData().GetClock())
 		}
 
 		for _, buildId := range buildIdsToRevive {
