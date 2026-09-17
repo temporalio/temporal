@@ -586,3 +586,112 @@ func TestNexusEventDefinitionsReportInvalidTransition(t *testing.T) {
 	require.NotErrorAs(t, err, new(*serviceerror.NotFound), "the operation is present; this is not a lookup miss")
 	require.NotErrorIs(t, err, ErrEventNotCherryPickable)
 }
+
+// TestNexusEventDefinitionsRejectMismatchedRequestID verifies that every event definition carrying a request ID
+// rejects an event naming a scheduled event ID held by a different operation.
+func TestNexusEventDefinitionsRejectMismatchedRequestID(t *testing.T) {
+	testCases := []struct {
+		name  string
+		def   EventDefinition
+		event func(scheduledEventID int64, requestID string) *historypb.HistoryEvent
+	}{
+		{
+			name: "started",
+			def:  StartedEventDefinition{},
+			event: func(scheduledEventID int64, requestID string) *historypb.HistoryEvent {
+				return &historypb.HistoryEvent{
+					EventTime: timestamppb.New(time.Now().UTC()),
+					Attributes: &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
+						NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
+							ScheduledEventId: scheduledEventID,
+							RequestId:        requestID,
+							OperationToken:   "token",
+						},
+					},
+				}
+			},
+		},
+		{
+			name: "completed",
+			def:  CompletedEventDefinition{},
+			event: func(scheduledEventID int64, requestID string) *historypb.HistoryEvent {
+				return &historypb.HistoryEvent{
+					EventTime: timestamppb.New(time.Now().UTC()),
+					Attributes: &historypb.HistoryEvent_NexusOperationCompletedEventAttributes{
+						NexusOperationCompletedEventAttributes: &historypb.NexusOperationCompletedEventAttributes{
+							ScheduledEventId: scheduledEventID,
+							RequestId:        requestID,
+						},
+					},
+				}
+			},
+		},
+		{
+			name: "failed",
+			def:  FailedEventDefinition{},
+			event: func(scheduledEventID int64, requestID string) *historypb.HistoryEvent {
+				return &historypb.HistoryEvent{
+					EventTime: timestamppb.New(time.Now().UTC()),
+					Attributes: &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
+						NexusOperationFailedEventAttributes: &historypb.NexusOperationFailedEventAttributes{
+							ScheduledEventId: scheduledEventID,
+							RequestId:        requestID,
+							Failure:          &failurepb.Failure{Message: "failed"},
+						},
+					},
+				}
+			},
+		},
+		{
+			name: "canceled",
+			def:  CanceledEventDefinition{},
+			event: func(scheduledEventID int64, requestID string) *historypb.HistoryEvent {
+				return &historypb.HistoryEvent{
+					EventTime: timestamppb.New(time.Now().UTC()),
+					Attributes: &historypb.HistoryEvent_NexusOperationCanceledEventAttributes{
+						NexusOperationCanceledEventAttributes: &historypb.NexusOperationCanceledEventAttributes{
+							ScheduledEventId: scheduledEventID,
+							RequestId:        requestID,
+							Failure:          &failurepb.Failure{Message: "canceled"},
+						},
+					},
+				}
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Run("a foreign request ID is rejected and the operation is untouched", func(t *testing.T) {
+				tcx := newTestContext(t, defaultConfig)
+				scheduled, key := scheduleOperation(t, tcx)
+				field, ok := tcx.wf.Operations[key]
+				require.True(t, ok)
+
+				err := tc.def.Apply(tcx.chasmCtx, tcx.wf, tc.event(scheduled.EventId, "another-operations-request-id"))
+
+				require.ErrorIs(t, err, chasm.ErrInvalidTransition)
+				require.ErrorContains(t, err, "does not match operation request ID",
+					"must be rejected for identity, not because the transition was impossible from this state")
+				require.Equal(t, nexusoperationpb.OPERATION_STATUS_SCHEDULED, field.Get(tcx.chasmCtx).GetStatus(),
+					"the operation holding this ID must not be resolved by another operation's event")
+			})
+
+			t.Run("the operation's own request ID is applied", func(t *testing.T) {
+				tcx := newTestContext(t, defaultConfig)
+				scheduled, key := scheduleOperation(t, tcx)
+				own := tcx.wf.Operations[key].Get(tcx.chasmCtx).GetRequestId()
+				require.NotEmpty(t, own)
+
+				require.NoError(t, tc.def.Apply(tcx.chasmCtx, tcx.wf, tc.event(scheduled.EventId, own)))
+			})
+
+			t.Run("an absent request ID skips the check", func(t *testing.T) {
+				tcx := newTestContext(t, defaultConfig)
+				scheduled, _ := scheduleOperation(t, tcx)
+
+				require.NoError(t, tc.def.Apply(tcx.chasmCtx, tcx.wf, tc.event(scheduled.EventId, "")))
+			})
+		})
+	}
+}

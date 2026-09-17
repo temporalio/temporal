@@ -18,7 +18,8 @@ type EventDefinition interface {
 	IsWorkflowTaskTrigger() bool
 	// Apply a history event to the state machine. Triggered during replication and workflow reset.
 	// An event addressing an operation this workflow's CHASM tree does not contain must report a
-	// serviceerror.NotFound.
+	// serviceerror.NotFound. An event the tree does contain but cannot apply must report
+	// [chasm.ErrInvalidTransition].
 	Apply(ctx chasm.MutableContext, wf *Workflow, event *historypb.HistoryEvent) error
 	// CherryPick (a.k.a "reapply") an event from a different history branch.
 	// Implementations should apply the event to the machine state and return nil in case the event is cherry-pickable.

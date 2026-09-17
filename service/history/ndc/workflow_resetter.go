@@ -1251,14 +1251,10 @@ func cherryPickChasmEvent(
 	if err := def.CherryPick(chasmCtx, wf, event, resetReapplyExcludeTypes); err != nil {
 		_, isNotFound := errors.AsType[*serviceerror.NotFound](err)
 		switch {
-		case errors.Is(err, chasmworkflow.ErrEventNotCherryPickable):
-			// Recognized, but intentionally not cherry-pickable (a command event, or excluded by
-			// resetReapplyExcludeTypes). Not a missing component, so it isn't logged as one.
-			return cherryPickSkipped, nil
-		case errors.Is(err, chasm.ErrInvalidTransition):
-			// The CHASM tree owns the operation, but the event cannot apply from its current state (a duplicate
-			// NexusOperationStarted on an already-started operation, for example). Mirrors cherryPickHSMEvent's
-			// handling of hsm.ErrInvalidTransition.
+		case errors.Is(err, chasmworkflow.ErrEventNotCherryPickable), errors.Is(err, chasm.ErrInvalidTransition):
+			// Recognized by CHASM but intentionally not applied here: a command event, one excluded by
+			// resetReapplyExcludeTypes, or one the addressed operation cannot accept due to its current
+			// state or a request ID mismatch.
 			return cherryPickSkipped, nil
 		case isNotFound:
 			// The CHASM tree doesn't contain this operation either. HSM was tried first, so the operation is in
