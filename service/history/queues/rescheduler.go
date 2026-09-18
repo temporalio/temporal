@@ -144,9 +144,7 @@ func (r *reschedulerImpl) Add(
 	rescheduleTime time.Time,
 ) {
 	key := reschedulerKey{TaskChannelKey: r.taskChannelKeyFn(executable)}
-	if r.gating() {
-		key.Throttle, _ = executableThrottleKey(executable)
-	}
+	key.Throttle, _ = executableThrottleKey(executable)
 
 	r.Lock()
 	pq := r.getOrCreateClassLocked(key)
@@ -339,18 +337,11 @@ func (r *reschedulerImpl) drainClassLocked(
 			continue
 		}
 
-		throttle := classThrottle
-		if throttle == (ThrottleKey{}) {
-			// The class predates the controller being turned on, so its key was never
-			// stamped. The task still knows which budget refused it.
-			throttle, _ = executableThrottleKey(executable)
-		}
-
 		var permit *throttleEntry
-		if throttle != (ThrottleKey{}) {
+		if classThrottle != (ThrottleKey{}) {
 			var allowed bool
 			var retryAfter time.Duration
-			allowed, permit, retryAfter = r.throttleState.Admit(throttle)
+			allowed, permit, retryAfter = r.throttleState.Admit(classThrottle)
 			if !allowed {
 				pass.wakeAt(pass.now.Add(r.budgetRetryInterval(retryAfter)))
 				return

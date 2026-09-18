@@ -492,3 +492,60 @@ func TestReschedule_CursorRotatesBetweenEqualClasses(t *testing.T) {
 	}
 	require.Len(t, leaders, 3, "every class must get a turn at the head of the pass")
 }
+
+// A task the controller does not govern must not wait on another task's budget. Deciding
+// gating per task inside one shared queue meant a governed task at the head, denied by its
+// bucket, stopped the pass and stranded every ungoverned task behind it.
+func TestReschedule_UngovernedTasksDoNotWaitOnAnotherClassBudget(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	var enabled atomic.Bool
+
+	timeSource := clock.NewEventTimeSource()
+	timeSource.Update(time.Unix(0, 0))
+	state := NewThrottleState(
+		ThrottleStateOptions{
+			Enabled:       enabled.Load,
+			Beta:          dynamicconfig.GetFloatPropertyFn(0.85),
+			IncreaseRatio: dynamicconfig.GetFloatPropertyFn(0.10),
+			LossThreshold: dynamicconfig.GetFloatPropertyFn(0.05),
+			Window:        dynamicconfig.GetDurationPropertyFn(testThrottleWindow),
+			MaxKeys:       dynamicconfig.GetIntPropertyFn(1024),
+		},
+		timeSource,
+		log.NewTestLogger(),
+		metrics.NoopMetricsHandler,
+	)
+	state.minRate, state.maxRate, state.initialRate = 1, 10000, 1
+	state.keyTTL = 5 * time.Minute
+
+	r, scheduler, _ := newTestRescheduler(t, ctrl, timeSource, state)
+	now := timeSource.Now()
+
+	key := apsKey("ns-1")
+	governed := newThrottledExecutable(ctrl, key, true)
+	governed.EXPECT().GetNamespaceID().Return("ns-1").AnyTimes()
+	r.Add(governed, now)
+
+	ungoverned := newThrottledExecutable(ctrl, ThrottleKey{}, false)
+	ungoverned.EXPECT().GetNamespaceID().Return("ns-1").AnyTimes()
+	r.Add(ungoverned, now)
+
+	// Both were parked before the controller was gating, which is when the classes are formed.
+	enabled.Store(true)
+
+	// The governed class has nothing left to give, so its task cannot be released this pass.
+	for admitOK(state, key) { //nolint:revive // draining, body intentionally empty
+	}
+
+	submitted := make([]Executable, 0, 2)
+	scheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(e Executable) bool {
+		submitted = append(submitted, e)
+		return true
+	}).AnyTimes()
+	r.reschedule()
+
+	require.Contains(t, submitted, Executable(ungoverned),
+		"an ungoverned task is not blocked by a budget it is not waiting on")
+	require.NotContains(t, submitted, Executable(governed),
+		"and the governed one is still held by its own budget")
+}

@@ -1027,10 +1027,8 @@ func (s NamespaceTypedSetting[T]) Validate(v any) error {
 	return err
 }
 
-func (s NamespaceTypedConstrainedDefaultSetting[T]) Key() Key { return s.key }
-func (s NamespaceTypedConstrainedDefaultSetting[T]) Precedence() Precedence {
-	return PrecedenceNamespace
-}
+func (s NamespaceTypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
+func (s NamespaceTypedConstrainedDefaultSetting[T]) Precedence() Precedence { return PrecedenceNamespace }
 func (s NamespaceTypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
@@ -1165,10 +1163,8 @@ func (s NamespaceIDTypedSetting[T]) Validate(v any) error {
 	return err
 }
 
-func (s NamespaceIDTypedConstrainedDefaultSetting[T]) Key() Key { return s.key }
-func (s NamespaceIDTypedConstrainedDefaultSetting[T]) Precedence() Precedence {
-	return PrecedenceNamespaceID
-}
+func (s NamespaceIDTypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
+func (s NamespaceIDTypedConstrainedDefaultSetting[T]) Precedence() Precedence { return PrecedenceNamespaceID }
 func (s NamespaceIDTypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
@@ -1303,10 +1299,8 @@ func (s TaskQueueTypedSetting[T]) Validate(v any) error {
 	return err
 }
 
-func (s TaskQueueTypedConstrainedDefaultSetting[T]) Key() Key { return s.key }
-func (s TaskQueueTypedConstrainedDefaultSetting[T]) Precedence() Precedence {
-	return PrecedenceTaskQueue
-}
+func (s TaskQueueTypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
+func (s TaskQueueTypedConstrainedDefaultSetting[T]) Precedence() Precedence { return PrecedenceTaskQueue }
 func (s TaskQueueTypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
@@ -1737,10 +1731,8 @@ func (s DestinationTypedSetting[T]) Validate(v any) error {
 	return err
 }
 
-func (s DestinationTypedConstrainedDefaultSetting[T]) Key() Key { return s.key }
-func (s DestinationTypedConstrainedDefaultSetting[T]) Precedence() Precedence {
-	return PrecedenceDestination
-}
+func (s DestinationTypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
+func (s DestinationTypedConstrainedDefaultSetting[T]) Precedence() Precedence { return PrecedenceDestination }
 func (s DestinationTypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
@@ -1895,10 +1887,8 @@ func (s ChasmTaskTypeTypedSetting[T]) Validate(v any) error {
 	return err
 }
 
-func (s ChasmTaskTypeTypedConstrainedDefaultSetting[T]) Key() Key { return s.key }
-func (s ChasmTaskTypeTypedConstrainedDefaultSetting[T]) Precedence() Precedence {
-	return PrecedenceChasmTaskType
-}
+func (s ChasmTaskTypeTypedConstrainedDefaultSetting[T]) Key() Key               { return s.key }
+func (s ChasmTaskTypeTypedConstrainedDefaultSetting[T]) Precedence() Precedence { return PrecedenceChasmTaskType }
 func (s ChasmTaskTypeTypedConstrainedDefaultSetting[T]) Validate(v any) error {
 	_, err := s.convert(v)
 	return err
@@ -1979,3 +1969,4 @@ func GetTypedPropertyFnFilteredByChasmTaskType[T any](value T) TypedPropertyFnWi
 		return value
 	}
 }
+

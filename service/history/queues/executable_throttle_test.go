@@ -141,3 +141,35 @@ func TestExecutable_CompletionIsReportedForWorkClassifiedWhileOff(t *testing.T) 
 	require.NotEmpty(t, snapshot.Snapshot()[metrics.TaskThrottleCompletions.Name()],
 		"a task throttled before the flag was turned on still completes under the controller")
 }
+
+// Two branches of reportThrottle were settling the reservation independently and had already
+// diverged: with the controller off, a lock-contended release was charged as budget loss,
+// which is the one cause the design says must never be charged.
+func TestExecutable_BusyWorkflowIsNeverChargedWhateverTheFlagSays(t *testing.T) {
+	for _, enabled := range []bool{true, false} {
+		ctrl := gomock.NewController(t)
+		state, _ := newTestThrottleState(defaultThrottleOverrides())
+		e := newThrottleTestExecutable(ctrl, state)
+
+		issuing := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1", ctasks.PriorityHigh)
+		allowed, permit, _ := state.Admit(issuing)
+		require.True(t, allowed)
+		state.Finish(permit, true)
+		e.SetThrottlePermit(permit)
+
+		// The flag moves after the release was committed, which is what an operator toggling
+		// it mid-incident does.
+		o := defaultThrottleOverrides()
+		o.enabled = enabled
+		flagged, _ := newTestThrottleStateWithEntries(o, state)
+		e.throttleState = flagged
+
+		e.reportThrottle(
+			enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
+			enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+		)
+
+		_, rejections := throttleCounters(flagged, issuing)
+		require.Zero(t, rejections, "enabled=%v: lock contention is not budget evidence", enabled)
+	}
+}

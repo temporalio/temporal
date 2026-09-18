@@ -115,7 +115,9 @@ func ThrottleStateProvider(
 		queues.ThrottleStateOptions{
 			Enabled:       config.TaskThrottleControllerEnabled,
 			MinRate:       config.TaskThrottleControllerMinRate,
+			MaxRate:       config.TaskThrottleControllerMaxRate,
 			InitialRate:   config.TaskThrottleControllerInitialRate,
+			KeyTTL:        config.TaskThrottleControllerKeyTTL,
 			Beta:          config.TaskThrottleControllerBeta,
 			IncreaseRatio: config.TaskThrottleControllerIncreaseRatio,
 			LossThreshold: config.TaskThrottleControllerLossThreshold,

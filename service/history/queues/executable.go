@@ -852,9 +852,7 @@ func (e *executableImpl) reportThrottle(
 		// window it belongs to reads clean. The key itself is inert while the controller is
 		// off, since every reader checks Enabled first, but recording it is what lets a task
 		// parked before the flag was turned on be paced instead of draining in one wave.
-		if permit := e.takeThrottlePermit(); permit != nil {
-			e.throttleState.ReportThrottled(permit.key, permit)
-		}
+		e.closeOutPermit(cause)
 		e.classifyThrottle(cause, scope)
 		return
 	}
@@ -870,15 +868,7 @@ func (e *executableImpl) reportThrottle(
 		// so the class that issued it has to see the loss before the key is dropped. Workflow
 		// lock contention is the exception: it is not a shared budget, so releasing slower
 		// does not clear it and there is no feedback to lift the rate again.
-		if permit := e.takeThrottlePermit(); permit != nil {
-			if cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
-				// Not evidence about the budget in either direction, so take it back out of
-				// the sample rather than leave it there reading as a success.
-				e.throttleState.WithdrawRelease(permit)
-			} else {
-				e.throttleState.ReportThrottled(permit.key, permit)
-			}
-		}
+		e.closeOutPermit(cause)
 		e.clearThrottle()
 		return
 	}
@@ -914,6 +904,22 @@ func (e *executableImpl) classifyThrottle(
 	e.hasThrottleKey = true
 	e.wasThrottled = true
 	e.throttlePermit = nil
+}
+
+// closeOutPermit settles the reservation this dispatch was issued under, for the paths that
+// drop the class rather than report against it. A workflow lock is not a shared budget, so a
+// release refused by one is withdrawn from the sample instead of charged: releasing more
+// slowly cannot clear a lock, and leaving it counted would read as the budget being free.
+func (e *executableImpl) closeOutPermit(cause enumspb.ResourceExhaustedCause) {
+	permit := e.takeThrottlePermit()
+	if permit == nil {
+		return
+	}
+	if cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
+		e.throttleState.WithdrawRelease(permit)
+		return
+	}
+	e.throttleState.ReportThrottled(permit.key, permit)
 }
 
 func (e *executableImpl) takeThrottlePermit() *throttleEntry {

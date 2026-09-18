@@ -117,6 +117,17 @@ func TestNewThrottleKey_OneClassPerNamespaceAndCause(t *testing.T) {
 		"two budgets a namespace holds independently must not share a class")
 }
 
+// newTestThrottleStateWithEntries builds a controller that shares another one's class map, so
+// a test can change the enabled flag without losing the classes already established.
+func newTestThrottleStateWithEntries(
+	o throttleTestOverrides,
+	from *ThrottleState,
+) (*ThrottleState, *clock.EventTimeSource) {
+	state, timeSource := newTestThrottleState(o)
+	state.entries = from.entries
+	return state, timeSource
+}
+
 func testKey() ThrottleKey {
 	return NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1", ctasks.PriorityHigh)
 }

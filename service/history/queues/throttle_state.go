@@ -42,7 +42,9 @@ type (
 	ThrottleStateOptions struct {
 		Enabled       dynamicconfig.BoolPropertyFn
 		MinRate       dynamicconfig.FloatPropertyFn
+		MaxRate       dynamicconfig.FloatPropertyFn
 		InitialRate   dynamicconfig.FloatPropertyFn
+		KeyTTL        dynamicconfig.DurationPropertyFn
 		Beta          dynamicconfig.FloatPropertyFn
 		IncreaseRatio dynamicconfig.FloatPropertyFn
 		LossThreshold dynamicconfig.FloatPropertyFn
@@ -77,6 +79,7 @@ type (
 		windowStart  time.Time
 		lastAccess   time.Time
 		releases     int64
+		withdrawn    int64 // releases whose outcome says nothing about the budget
 		rejections   int64
 		suppressions int64
 		// Spans Admit to Finish only, which is the reservation, not the task's execution.
@@ -245,9 +248,9 @@ func minDecisionReleases(lossThreshold float64) int64 {
 	return int64(math.Ceil(1 / lossThreshold))
 }
 
-// WithdrawRelease takes a release back out of the window's sample. The dispatch happened, but
-// its outcome says nothing about the budget, so leaving it in would read as a success and help
-// raise the rate on evidence the class never produced.
+// WithdrawRelease marks a release as saying nothing about the budget. It still counts toward
+// the evidence a decision needs, because the class did release it; it is only taken out of the
+// ratio, so it neither reads as a success nor as loss.
 func (s *ThrottleState) WithdrawRelease(permit *throttleEntry) {
 	if permit == nil {
 		return
@@ -255,9 +258,7 @@ func (s *ThrottleState) WithdrawRelease(permit *throttleEntry) {
 	permit.Lock()
 	defer permit.Unlock()
 
-	if permit.releases > 0 {
-		permit.releases--
-	}
+	permit.withdrawn++
 }
 
 // advanceWindowLocked closes an elapsed window and applies at most one rate change for it.
@@ -279,12 +280,21 @@ func (s *ThrottleState) advanceWindowLocked(entry *throttleEntry, now time.Time,
 		return
 	}
 	defer func() {
-		entry.releases, entry.rejections, entry.suppressions = 0, 0, 0
+		entry.releases, entry.withdrawn = 0, 0
+		entry.rejections, entry.suppressions = 0, 0
 	}()
+
+	// Withdrawn releases leave the ratio, so a window can carry evidence and still say nothing
+	// about the budget. A withdrawal reported after the window that released it can also push
+	// this negative, which reads the same way.
+	budgetReleases := entry.releases - entry.withdrawn
+	if budgetReleases <= 0 {
+		return
+	}
 
 	// A rejection can land in the window after the one that released it, so this can exceed
 	// 1. It is only ever compared to the threshold, which it is above either way.
-	loss := float64(entry.rejections) / float64(entry.releases)
+	loss := float64(entry.rejections) / float64(budgetReleases)
 	switch {
 	case loss > lossThreshold:
 		entry.rate = s.clamp(entry.rate * beta)
@@ -323,13 +333,14 @@ func (e *throttleEntry) resetLocked(rate float64, now time.Time, window time.Dur
 	e.rate = rate
 	e.lastRefill = now
 	e.windowStart = now
-	e.releases, e.rejections, e.suppressions = 0, 0, 0
+	e.releases, e.withdrawn = 0, 0
+	e.rejections, e.suppressions = 0, 0
 	e.tokens = e.burstLocked(window)
 }
 
 func (s *ThrottleState) touchLocked(entry *throttleEntry, now time.Time, window time.Duration) {
-	if !entry.lastAccess.IsZero() && now.Sub(entry.lastAccess) > s.keyTTL {
-		entry.resetLocked(s.startRate(), now, window)
+	if !entry.lastAccess.IsZero() && now.Sub(entry.lastAccess) > s.ttl() {
+		entry.resetLocked(s.clamp(s.startRate()), now, window)
 	}
 	// A backwards clock step must not make an active entry look idle.
 	if now.After(entry.lastAccess) {
@@ -366,7 +377,7 @@ func (s *ThrottleState) clamp(rate float64) float64 {
 	if math.IsNaN(rate) {
 		return s.floor()
 	}
-	return min(max(rate, s.floor()), s.maxRate)
+	return min(max(rate, s.floor()), s.ceiling())
 }
 
 func (s *ThrottleState) controlLaw() (beta, increaseRatio, lossThreshold float64) {
@@ -417,6 +428,24 @@ func (s *ThrottleState) floor() float64 {
 	return s.minRate
 }
 
+func (s *ThrottleState) ceiling() float64 {
+	if s.options.MaxRate != nil {
+		if configured := s.options.MaxRate(); configured > 0 {
+			return configured
+		}
+	}
+	return s.maxRate
+}
+
+func (s *ThrottleState) ttl() time.Duration {
+	if s.options.KeyTTL != nil {
+		if configured := s.options.KeyTTL(); configured > 0 {
+			return configured
+		}
+	}
+	return s.keyTTL
+}
+
 func (s *ThrottleState) startRate() float64 {
 	if s.options.InitialRate != nil {
 		if configured := s.options.InitialRate(); configured > 0 {
@@ -447,7 +476,7 @@ func (s *ThrottleState) getOrCreate(key ThrottleKey) *throttleEntry {
 	s.maybeSweepLocked(now)
 	if len(s.entries) >= s.maxKeys() {
 		metrics.TaskThrottleKeysDropped.With(s.metricsHandler).Record(1, key.cappedTags()...)
-		if now.Sub(s.lastCapLog) >= s.keyTTL {
+		if now.Sub(s.lastCapLog) >= s.ttl() {
 			s.lastCapLog = now
 			s.logger.Warn("Throttle controller key cap reached, failing open.",
 				tag.NewStringTag("throttle-cause", key.Cause.String()),
@@ -458,7 +487,7 @@ func (s *ThrottleState) getOrCreate(key ThrottleKey) *throttleEntry {
 
 	entry := &throttleEntry{
 		key:         key,
-		rate:        s.startRate(),
+		rate:        s.clamp(s.startRate()),
 		lastRefill:  now,
 		windowStart: now,
 		lastAccess:  now,
@@ -470,14 +499,14 @@ func (s *ThrottleState) getOrCreate(key ThrottleKey) *throttleEntry {
 }
 
 func (s *ThrottleState) maybeSweepLocked(now time.Time) {
-	if now.Sub(s.lastSweep) < s.keyTTL/throttleSweepDivisor {
+	if now.Sub(s.lastSweep) < s.ttl()/throttleSweepDivisor {
 		return
 	}
 	s.lastSweep = now
 	evicted := false
 	for key, entry := range s.entries {
 		entry.Lock()
-		idle := entry.pending == 0 && now.Sub(entry.lastAccess) > s.keyTTL
+		idle := entry.pending == 0 && now.Sub(entry.lastAccess) > s.ttl()
 		entry.Unlock()
 		if idle {
 			delete(s.entries, key)
