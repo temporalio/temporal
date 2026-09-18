@@ -1272,8 +1272,11 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 		return &matchingservice.CancelOutstandingWorkerPollsResponse{}, nil
 	}
 	cfg := rootPM.GetConfig()
-	// TODO(dynamic partitioning): get real num read partitions from the partition manager.
-	numPartitions := cfg.NumReadPartitions()
+	scaleInfo := rootPM.GetUserDataManager().PartitionScale()
+	numPartitions := int(scaleInfo.GetRead())
+	if numPartitions <= 0 {
+		numPartitions = cfg.NumReadPartitions()
+	}
 
 	e.logger.Debug("Initiating fan-out for worker poll cancellation",
 		tag.WorkflowNamespaceID(request.GetNamespaceId()),
