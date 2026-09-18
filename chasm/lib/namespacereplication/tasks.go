@@ -13,7 +13,9 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/testhooks"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/proto"
@@ -29,6 +31,7 @@ type applyLocalTaskHandlerOptions struct {
 	MetadataManager persistence.MetadataManager
 	MetricsHandler  metrics.Handler
 	Logger          log.Logger
+	TestHooks       testhooks.TestHooks
 }
 
 type applyLocalTaskHandler struct {
@@ -42,6 +45,7 @@ type applyLocalTaskHandler struct {
 	// metricsHandler is wired through fx but not yet used.
 	metricsHandler metrics.Handler
 	logger         log.Logger
+	testHooks      testhooks.TestHooks
 }
 
 func newApplyLocalTaskHandler(opts applyLocalTaskHandlerOptions) *applyLocalTaskHandler {
@@ -49,6 +53,7 @@ func newApplyLocalTaskHandler(opts applyLocalTaskHandlerOptions) *applyLocalTask
 		metadataManager: opts.MetadataManager,
 		metricsHandler:  opts.MetricsHandler,
 		logger:          opts.Logger,
+		testHooks:       opts.TestHooks,
 	}
 }
 
@@ -70,7 +75,8 @@ func (h *applyLocalTaskHandler) Validate(
 }
 
 // Execute writes authoritative mutations to the local metadata store with
-// strict version-CAS. Shadow mutations skip the write; authoritative ambiguous
+// strict version-CAS. Shadow and replicate-only mutations skip the local write;
+// only shadow also suppresses destination writes. Authoritative ambiguous
 // results are reconciled so a retry cannot turn a committed source mutation
 // into a terminal failure.
 func (h *applyLocalTaskHandler) Execute(
@@ -81,11 +87,12 @@ func (h *applyLocalTaskHandler) Execute(
 ) error {
 	// Read the mutation payload from component state.
 	type loadResult struct {
-		Operation   namespacereplicationpb.NamespaceOperation
-		Detail      *persistencespb.NamespaceDetail
-		ExpectedVer int64
-		IsGlobal    bool
-		Shadow      bool
+		Operation     namespacereplicationpb.NamespaceOperation
+		Detail        *persistencespb.NamespaceDetail
+		ExpectedVer   int64
+		IsGlobal      bool
+		Shadow        bool
+		ReplicateOnly bool
 	}
 	loaded, err := chasm.ReadComponent(
 		ctx,
@@ -93,10 +100,11 @@ func (h *applyLocalTaskHandler) Execute(
 		func(c *NamespaceMutationComponent, _ chasm.Context, _ chasm.NoValue) (loadResult, error) {
 			m := c.GetMutation()
 			return loadResult{
-				Operation:   m.GetOperation(),
-				Detail:      m.GetNamespaceDetail(),
-				ExpectedVer: m.GetExpectedVersion(),
-				Shadow:      m.GetShadow(),
+				Operation:     m.GetOperation(),
+				Detail:        m.GetNamespaceDetail(),
+				ExpectedVer:   m.GetExpectedVersion(),
+				Shadow:        m.GetShadow(),
+				ReplicateOnly: m.GetReplicateOnly(),
 				// Anything that reaches the CHASM transport is a global namespace —
 				// the frontend's replication gate ensures local-only
 				// namespaces never get here. Hardcoded rather than read from the
@@ -112,10 +120,18 @@ func (h *applyLocalTaskHandler) Execute(
 	if loaded.Shadow {
 		return h.resolveLocal(ctx, ref, true)
 	}
+	if loaded.ReplicateOnly {
+		// A replicate-only mutation represents a legacy no-op UpdateNamespace: the
+		// source row is already the desired snapshot, but peer fan-out must still
+		// run authoritatively. Resolve the local phase as committed while keeping
+		// Shadow false so ApplyPeerTask writes the snapshot at destinations.
+		return h.resolveLocal(ctx, ref, false)
+	}
 
-	// The metadata write and component transition cannot share a transaction, so
-	// reconcile ambiguous write results before deciding whether to fail or commit
-	// the component.
+	// Apply to the local metadata store. The metadata write and the component
+	// transition cannot share a transaction, so an ambiguous write result is
+	// reconciled against the persisted namespace before deciding whether to fail
+	// or commit the component.
 	var applyErr error
 	switch loaded.Operation {
 	case namespacereplicationpb.NAMESPACE_OPERATION_CREATE:
@@ -177,7 +193,6 @@ func (h *applyLocalTaskHandler) Execute(
 		}
 		return h.recordLocalFailure(ctx, ref, loaded.Detail.GetInfo().GetId(), applyErr)
 	}
-
 	// Commit transition: record success and schedule peer fan-out. When there are
 	// no peers (single-cluster global namespace) allPeersTerminal() is already true,
 	// so complete the component in the same update. This is a separate transition
@@ -185,7 +200,7 @@ func (h *applyLocalTaskHandler) Execute(
 	// destination after Apply returns (TransitionLocalCommitted's is RUNNING), so a
 	// COMPLETED set inside it would be clobbered — the same reason peer completion
 	// needs its own transition.
-	return h.resolveLocal(ctx, ref, false)
+	return h.commitAfterMetadataWrite(ctx, ref, namespace.Name(loaded.Detail.GetInfo().GetName()))
 }
 
 func (h *applyLocalTaskHandler) localMutationDefinitelyNotApplied(
@@ -196,7 +211,8 @@ func (h *applyLocalTaskHandler) localMutationDefinitelyNotApplied(
 ) (bool, error) {
 	if _, ok := errors.AsType[*serviceerror.NamespaceAlreadyExists](applyErr); ok &&
 		operation == namespacereplicationpb.NAMESPACE_OPERATION_CREATE {
-		// Exact-state reconciliation already ruled out a retry of our own create.
+		// The exact-state check already ruled out a retry of our own successful
+		// create, so the existing row belongs to a conflicting create.
 		return true, nil
 	}
 	if !persistence.OperationPossiblySucceeded(applyErr) {
@@ -211,8 +227,26 @@ func (h *applyLocalTaskHandler) localMutationDefinitelyNotApplied(
 		return false, err
 	}
 	// UPDATE consumes expectedVersion from the cell-global metadata counter. A
-	// later counter proves that CAS slot can no longer be won.
+	// later counter proves that CAS slot can no longer be won; until then, an
+	// ambiguous write can still commit after our namespace read and must retry.
 	return metadata.NotificationVersion > expectedVersion, nil
+}
+
+func (h *applyLocalTaskHandler) commitAfterMetadataWrite(
+	ctx context.Context,
+	ref chasm.ComponentRef,
+	namespaceName namespace.Name,
+) error {
+	if fault, ok := testhooks.Get(
+		h.testHooks,
+		testhooks.NamespaceReplicationBeforeLocalCommit,
+		namespaceName,
+	); ok {
+		if err := fault(ctx); err != nil {
+			return err
+		}
+	}
+	return h.resolveLocal(ctx, ref, false)
 }
 
 func shouldReconcileLocalApply(

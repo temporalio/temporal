@@ -316,6 +316,21 @@ func TestApplyLocalTask_Execute_ShadowSkipsMetadataWrite(t *testing.T) {
 	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, component.GetPeerApply()["cellB"].GetOutcome())
 }
 
+func TestApplyLocalTask_Execute_ReplicateOnlySkipsLocalWriteAndSchedulesPeers(t *testing.T) {
+	env := newNsreplTestEnv(t)
+	mutation := env.mutationUpdate("cellB")
+	mutation.ReplicateOnly = true
+	ref := env.start(mutation, nil)
+
+	// No metadata-manager expectation: replicate-only must not touch the source.
+	require.NoError(t, env.localHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{}))
+
+	component := env.read(ref)
+	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED, component.GetLocalApply().GetOutcome())
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, component.GetPeerApply()["cellB"].GetOutcome())
+	require.False(t, component.GetMutation().GetShadow(), "peer apply must remain authoritative")
+}
+
 // A local commit with no peers (single-cluster global namespace) has nothing to
 // fan out to and must complete immediately.
 func TestApplyLocalTask_Execute_NoPeersCompletes(t *testing.T) {

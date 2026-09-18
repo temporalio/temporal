@@ -421,8 +421,9 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 		},
 		IsGlobalNamespace: true,
 	})
-	err := s.namespaceReplicator.Execute(s.replicationEventContext(task), task)
+	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(task), task)
 	s.Nil(err)
+	s.Equal(ApplyOutcomeCreated, outcome)
 	s.requireMetricOutcome(metricsOutcomeApplied, metricsOperationCreate)
 	request := s.processedPersistenceRequest(wideevents.NamespaceReplicationOutcomeCreated)
 	s.Equal("CreateNamespaceRequest", request["request_type"])
@@ -471,8 +472,9 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 		},
 	}}, nil).Times(1)
 	s.mockMetadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(nil, errors.New("test"))
-	err := s.namespaceReplicator.Execute(s.replicationEventContext(task), task)
+	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(task), task)
 	s.Nil(err)
+	s.Equal(ApplyOutcomeDuplicate, outcome)
 	s.requireMetricOutcome(metricsOutcomeNoChange, metricsOperationCreate)
 	s.Nil(s.processedPersistenceRequest(wideevents.NamespaceReplicationOutcomeDuplicate))
 }
@@ -496,8 +498,9 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 		Name: task.GetInfo().GetName(),
 	}).Return(nil, &serviceerror.NamespaceNotFound{})
 
-	err := s.namespaceReplicator.Execute(s.replicationEventContext(task), task)
+	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(task), task)
 	s.Require().NoError(err)
+	s.Equal(ApplyOutcomeNotAdmitted, outcome)
 	s.requireMetricOutcome(metricsOutcomeNotAdmitted, metricsOperationCreate)
 	s.Nil(s.processedPersistenceRequest(wideevents.NamespaceReplicationOutcomeNotAdmitted))
 }
@@ -583,8 +586,9 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		},
 		IsGlobalNamespace: true,
 	})
-	err := s.namespaceReplicator.Execute(s.replicationEventContext(updateTask), updateTask)
+	outcome, err := s.namespaceReplicator.ExecuteWithOutcome(s.replicationEventContext(updateTask), updateTask)
 	s.Nil(err)
+	s.Equal(ApplyOutcomeCreated, outcome)
 	request := s.processedPersistenceRequest(wideevents.NamespaceReplicationOutcomeCreated)
 	s.Equal("CreateNamespaceRequest", request["request_type"])
 	s.Equal("12", request["namespace"].(map[string]any)["config_version"])

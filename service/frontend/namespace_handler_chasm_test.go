@@ -18,6 +18,7 @@ import (
 )
 
 type captureNamespaceReplicationClient struct {
+	request  *namespacereplicationpb.TriggerNamespaceMutationRequest
 	requests chan *namespacereplicationpb.TriggerNamespaceMutationRequest
 }
 
@@ -26,7 +27,10 @@ func (c *captureNamespaceReplicationClient) TriggerNamespaceMutation(
 	request *namespacereplicationpb.TriggerNamespaceMutationRequest,
 	_ ...grpc.CallOption,
 ) (*namespacereplicationpb.TriggerNamespaceMutationResponse, error) {
-	c.requests <- request
+	c.request = request
+	if c.requests != nil {
+		c.requests <- request
+	}
 	return &namespacereplicationpb.TriggerNamespaceMutationResponse{}, nil
 }
 
@@ -152,7 +156,7 @@ func TestEffectiveNamespaceReplicationTransportMode(t *testing.T) {
 	}{
 		{name: "legacy", configured: dynamicconfig.NamespaceReplicationTransportModeLegacy, want: namespaceReplicationTransportLegacy},
 		{name: "shadow", configured: dynamicconfig.NamespaceReplicationTransportModeShadow, want: namespaceReplicationTransportShadow},
-		{name: "chasm falls back to legacy", configured: dynamicconfig.NamespaceReplicationTransportModeCHASM, want: namespaceReplicationTransportLegacy},
+		{name: "chasm", configured: dynamicconfig.NamespaceReplicationTransportModeCHASM, want: namespaceReplicationTransportCHASM},
 		{name: "unknown falls back to legacy", configured: "unknown", want: namespaceReplicationTransportLegacy},
 	}
 
@@ -172,8 +176,8 @@ func TestEffectiveNamespaceReplicationTransportMode(t *testing.T) {
 func TestTriggerNamespaceMutationModes(t *testing.T) {
 	controller := gomock.NewController(t)
 	clusterMetadata := cluster.NewMockMetadata(controller)
-	clusterMetadata.EXPECT().GetCurrentClusterName().Return("cell-a").Times(2)
-	client := &captureNamespaceReplicationClient{requests: make(chan *namespacereplicationpb.TriggerNamespaceMutationRequest, 2)}
+	clusterMetadata.EXPECT().GetCurrentClusterName().Return("cell-a").Times(3)
+	client := &captureNamespaceReplicationClient{requests: make(chan *namespacereplicationpb.TriggerNamespaceMutationRequest, 3)}
 	handler := &namespaceHandler{
 		clusterMetadata:   clusterMetadata,
 		chasmNsReplClient: client,
@@ -185,12 +189,14 @@ func TestTriggerNamespaceMutationModes(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		name       string
-		mode       namespaceMutationMode
-		wantShadow bool
+		name              string
+		mode              namespaceMutationMode
+		wantShadow        bool
+		wantReplicateOnly bool
 	}{
 		{name: "authoritative", mode: namespaceMutationModeAuthoritative},
 		{name: "shadow", mode: namespaceMutationModeShadow, wantShadow: true},
+		{name: "replicate only", mode: namespaceMutationModeReplicateOnly, wantReplicateOnly: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := handler.triggerNamespaceMutation(
@@ -204,8 +210,101 @@ func TestTriggerNamespaceMutationModes(t *testing.T) {
 			require.NoError(t, err)
 			request := <-client.requests
 			require.Equal(t, tc.wantShadow, request.GetMutation().GetShadow())
+			require.Equal(t, tc.wantReplicateOnly, request.GetMutation().GetReplicateOnly())
 		})
 	}
+}
+
+func TestTriggerAuthoritativeNamespaceMutation(t *testing.T) {
+	controller := gomock.NewController(t)
+	clusterMetadata := cluster.NewMockMetadata(controller)
+	clusterMetadata.EXPECT().GetCurrentClusterName().Return("cell-a")
+	client := &captureNamespaceReplicationClient{}
+	handler := &namespaceHandler{
+		clusterMetadata:   clusterMetadata,
+		chasmNsReplClient: client,
+	}
+	detail := &persistencespb.NamespaceDetail{
+		Info:              &persistencespb.NamespaceInfo{Id: "namespace-id"},
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{Clusters: []string{"cell-a", "cell-b"}},
+	}
+
+	response, err := handler.triggerNamespaceMutation(
+		context.Background(),
+		enumsspb.NAMESPACE_OPERATION_UPDATE,
+		detail,
+		7,
+		nil,
+		namespaceMutationModeAuthoritative,
+	)
+	require.NoError(t, err)
+	require.NotNil(t, response)
+	require.False(t, client.request.GetMutation().GetShadow())
+	require.False(t, client.request.GetMutation().GetReplicateOnly())
+	require.Equal(t, int64(7), client.request.GetMutation().GetExpectedVersion())
+	require.Equal(t, []string{"cell-b"}, client.request.GetMutation().GetPeerCells())
+}
+
+func TestTriggerReplicateOnlyNamespaceMutation(t *testing.T) {
+	controller := gomock.NewController(t)
+	clusterMetadata := cluster.NewMockMetadata(controller)
+	clusterMetadata.EXPECT().GetCurrentClusterName().Return("cell-a")
+	client := &captureNamespaceReplicationClient{}
+	handler := &namespaceHandler{
+		clusterMetadata:   clusterMetadata,
+		chasmNsReplClient: client,
+	}
+	detail := &persistencespb.NamespaceDetail{
+		Info:              &persistencespb.NamespaceInfo{Id: "namespace-id"},
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{Clusters: []string{"cell-a", "cell-b"}},
+	}
+
+	_, err := handler.triggerNamespaceMutation(
+		context.Background(),
+		enumsspb.NAMESPACE_OPERATION_UPDATE,
+		detail,
+		7,
+		nil,
+		namespaceMutationModeReplicateOnly,
+	)
+	require.NoError(t, err)
+	require.True(t, client.request.GetMutation().GetReplicateOnly())
+	require.False(t, client.request.GetMutation().GetShadow())
+}
+
+func TestShouldUseCHASMNamespaceReplication(t *testing.T) {
+	handler := &namespaceHandler{config: &Config{
+		NamespaceReplicationTransportMode: dynamicconfig.GetStringPropertyFn(dynamicconfig.NamespaceReplicationTransportModeCHASM),
+	}}
+
+	require.True(t, handler.shouldUseCHASMNamespaceReplication(
+		namespaceReplicationTransportCHASM,
+		true,
+		false,
+		enumspb.NAMESPACE_STATE_REGISTERED,
+		[]string{"cell-a", "cell-b"},
+	))
+	require.False(t, handler.shouldUseCHASMNamespaceReplication(
+		namespaceReplicationTransportCHASM,
+		false,
+		false,
+		enumspb.NAMESPACE_STATE_REGISTERED,
+		[]string{"cell-a", "cell-b"},
+	))
+	require.False(t, handler.shouldUseCHASMNamespaceReplication(
+		namespaceReplicationTransportCHASM,
+		true,
+		false,
+		enumspb.NAMESPACE_STATE_REGISTERED,
+		[]string{"cell-a"},
+	))
+	require.False(t, handler.shouldUseCHASMNamespaceReplication(
+		namespaceReplicationTransportShadow,
+		true,
+		false,
+		enumspb.NAMESPACE_STATE_REGISTERED,
+		[]string{"cell-a", "cell-b"},
+	))
 }
 
 func TestPeerCellsFromClusters(t *testing.T) {
