@@ -169,9 +169,9 @@ func executableThrottleKey(executable Executable) ThrottleKey {
 	return reporter.ThrottleKey()
 }
 
-func setThrottleAdmitted(executable Executable, key ThrottleKey) {
+func setThrottleAdmitted(executable Executable, admitted bool) {
 	if reporter, ok := executable.(ThrottleKeyProvider); ok {
-		reporter.SetThrottleAdmitted(key)
+		reporter.SetThrottleAdmitted(admitted)
 	}
 }
 
@@ -345,11 +345,11 @@ func (r *reschedulerImpl) drainClassLocked(
 		executable.SetScheduledTime(pass.now)
 		if metered {
 			// Mark before submitting: a worker can reach HandleErr before TrySubmit returns.
-			setThrottleAdmitted(executable, classThrottle)
+			setThrottleAdmitted(executable, true)
 		}
 		if !r.scheduler.TrySubmit(executable) {
 			if metered {
-				setThrottleAdmitted(executable, ThrottleKey{})
+				setThrottleAdmitted(executable, false)
 				r.throttleState.Return(classThrottle)
 			}
 			pass.wakeAt(pass.now.Add(

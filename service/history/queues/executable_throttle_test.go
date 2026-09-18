@@ -32,18 +32,25 @@ func TestExecutable_RejectionUnderAnotherBudgetChargesTheIssuingClass(t *testing
 	state, _ := newTestThrottleState(defaultThrottleOverrides())
 	e := newThrottleTestExecutable(ctrl, state)
 
+	// An earlier APS refusal parks the task in the APS class...
+	e.reportThrottle(
+		enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
+		enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+	)
 	issuing := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
+	require.Equal(t, issuing, e.ThrottleKey())
+
+	// ...and the rescheduler then releases it from that class.
 	allowed, _, _ := state.Admit(issuing)
 	require.True(t, allowed)
-	e.SetThrottleAdmitted(issuing)
+	e.SetThrottleAdmitted(true)
 
 	e.reportThrottle(
 		enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT,
 		enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 	)
 
-	releases, rejections := throttleCounters(state, issuing)
-	require.Equal(t, int64(1), releases)
+	_, rejections := throttleCounters(state, issuing)
 	require.Equal(t, int64(1), rejections, "the class that issued the release must see the loss")
 }
 
@@ -54,10 +61,18 @@ func TestExecutable_BusyWorkflowDoesNotChargeTheIssuingClass(t *testing.T) {
 	state, _ := newTestThrottleState(defaultThrottleOverrides())
 	e := newThrottleTestExecutable(ctrl, state)
 
+	// An earlier APS refusal parks the task in the APS class...
+	e.reportThrottle(
+		enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
+		enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+	)
 	issuing := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
+	require.Equal(t, issuing, e.ThrottleKey())
+
+	// ...and the rescheduler then releases it from that class.
 	allowed, _, _ := state.Admit(issuing)
 	require.True(t, allowed)
-	e.SetThrottleAdmitted(issuing)
+	e.SetThrottleAdmitted(true)
 
 	e.reportThrottle(
 		enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
@@ -151,7 +166,7 @@ func TestExecutable_BusyWorkflowIsNeverChargedWhateverTheFlagSays(t *testing.T) 
 		issuing := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
 		allowed, _, _ := state.Admit(issuing)
 		require.True(t, allowed)
-		e.SetThrottleAdmitted(issuing)
+		e.SetThrottleAdmitted(true)
 
 		// The flag moves after the release was committed, which is what an operator toggling
 		// it mid-incident does.

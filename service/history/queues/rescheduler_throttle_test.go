@@ -18,10 +18,9 @@ import (
 type (
 	throttledExecutable struct {
 		*MockExecutable
-		key         ThrottleKey
-		known       bool
-		admitted    bool
-		admittedKey ThrottleKey
+		key      ThrottleKey
+		known    bool
+		admitted bool
 	}
 
 	recordingGate struct {
@@ -37,9 +36,8 @@ func (e *throttledExecutable) ThrottleKey() ThrottleKey {
 	return e.key
 }
 
-func (e *throttledExecutable) SetThrottleAdmitted(key ThrottleKey) {
-	e.admittedKey = key
-	e.admitted = key != ThrottleKey{}
+func (e *throttledExecutable) SetThrottleAdmitted(admitted bool) {
+	e.admitted = admitted
 }
 
 func (g *recordingGate) FireCh() <-chan struct{}    { return g.fireCh }
@@ -296,7 +294,7 @@ func TestReschedule_PermitIsVisibleBeforeSubmit(t *testing.T) {
 	r.Add(e, now)
 
 	scheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(Executable) bool {
-		require.NotEqual(t, ThrottleKey{}, e.admittedKey)
+		require.True(t, e.admitted)
 		return true
 	})
 	r.reschedule()

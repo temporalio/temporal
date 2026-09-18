@@ -81,7 +81,7 @@ type (
 	// dispatch, under which class. The zero key means neither.
 	ThrottleKeyProvider interface {
 		ThrottleKey() ThrottleKey
-		SetThrottleAdmitted(key ThrottleKey)
+		SetThrottleAdmitted(admitted bool)
 	}
 )
 
@@ -148,7 +148,7 @@ type (
 		throttleState              *ThrottleState
 		throttleMu                 sync.Mutex
 		throttleKey                ThrottleKey
-		throttleAdmittedKey        ThrottleKey
+		throttleAdmitted           bool
 		wasThrottled               bool
 		dlqEnabled                 dynamicconfig.BoolPropertyFn
 		terminalFailureCause       error
@@ -860,8 +860,10 @@ func (e *executableImpl) reportThrottle(
 	governed := IsControllerInput(cause, scope)
 
 	e.throttleMu.Lock()
-	admitted := e.throttleAdmittedKey
-	e.throttleAdmittedKey = ThrottleKey{}
+	// The class that issued this dispatch is the one the task was parked under, which is the
+	// key it still holds until the line below replaces it.
+	issuer, metered := e.throttleKey, e.throttleAdmitted
+	e.throttleAdmitted = false
 	e.throttleKey = ThrottleKey{}
 	if governed {
 		e.throttleKey = NewThrottleKey(cause, e.GetNamespaceID())
@@ -883,10 +885,10 @@ func (e *executableImpl) reportThrottle(
 	if !governed {
 		return
 	}
-	if admitted != (ThrottleKey{}) {
+	if metered {
 		// The class that issued the release is the one this is evidence about, whichever
 		// budget refused it.
-		e.throttleState.ReportThrottled(admitted, true)
+		e.throttleState.ReportThrottled(issuer, true)
 		return
 	}
 	e.throttleState.ReportThrottled(key, false)
@@ -912,14 +914,14 @@ func (e *executableImpl) clearThrottle() {
 	defer e.throttleMu.Unlock()
 
 	e.throttleKey = ThrottleKey{}
-	e.throttleAdmittedKey = ThrottleKey{}
+	e.throttleAdmitted = false
 }
 
-func (e *executableImpl) SetThrottleAdmitted(key ThrottleKey) {
+func (e *executableImpl) SetThrottleAdmitted(admitted bool) {
 	e.throttleMu.Lock()
 	defer e.throttleMu.Unlock()
 
-	e.throttleAdmittedKey = key
+	e.throttleAdmitted = admitted
 }
 
 func (e *executableImpl) ThrottleKey() ThrottleKey {
