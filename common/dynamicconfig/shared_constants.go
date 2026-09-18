@@ -234,6 +234,21 @@ type SimplePartitionScalerSettings struct {
 	// Overall bounds (0 means don't enforce).
 	Min int32
 	Max int32
+
+	// These settings derive Fixed/Min/Max from the MatchingNumTaskqueueWritePartitions config
+	// (unmanaged scaling), to aid in the transition to managed scaling. If non-zero, the
+	// corresponding bound is set to the multiple (rounded to the nearest integer, but at least
+	// one) of the old write partition count.
+	//
+	// FixedAsMultipleOfOldCount is only used if Fixed is zero (an explicit Fixed wins).
+	//
+	// MinAsMultipleOfOldCount/MaxAsMultipleOfOldCount apply _in addition_ to a non-zero
+	// Min/Max, i.e. the more restrictive of the two is used. E.g. setting
+	// MaxAsMultipleOfOldCount to 1.0 ensures the scaler never exceeds the current static
+	// partition count, which makes disabling/rollback safe.
+	FixedAsMultipleOfOldCount float32
+	MinAsMultipleOfOldCount   float32
+	MaxAsMultipleOfOldCount   float32
 }
 
 type SimplePartitionScalerThreshold struct {

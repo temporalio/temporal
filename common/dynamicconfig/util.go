@@ -40,6 +40,9 @@ func ConvertSimplePartitionScalerSettings(in any) (SimplePartitionScalerSettings
 	if cfg.Fixed < 0 || cfg.Min < 0 || cfg.Max < 0 {
 		return SimplePartitionScalerSettings{}, errors.New("negative value for Fixed/Min/Max")
 	}
+	if cfg.FixedAsMultipleOfOldCount < 0 || cfg.MinAsMultipleOfOldCount < 0 || cfg.MaxAsMultipleOfOldCount < 0 {
+		return SimplePartitionScalerSettings{}, errors.New("negative value for Fixed/Min/MaxAsMultipleOfOldCount")
+	}
 	for _, t := range cfg.Ups {
 		if err := validateThreshold(t); err != nil {
 			return SimplePartitionScalerSettings{}, err

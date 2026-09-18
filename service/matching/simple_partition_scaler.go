@@ -20,30 +20,39 @@ type scalerCfg = dynamicconfig.TypedPropertyFn[dynamicconfig.SimplePartitionScal
 
 // simplePartitionScalerFactory creates simplePartitionScalers.
 type simplePartitionScalerFactory struct {
-	cfg scalerFactoryCfg
+	cfg      scalerFactoryCfg
+	oldCount dynamicconfig.IntPropertyFnWithTaskQueueFilter
 }
 
-func newSimplePartitionScalerFactory(cfg scalerFactoryCfg) *simplePartitionScalerFactory {
-	return &simplePartitionScalerFactory{cfg: cfg}
+func newSimplePartitionScalerFactory(
+	cfg scalerFactoryCfg,
+	oldCount dynamicconfig.IntPropertyFnWithTaskQueueFilter,
+) *simplePartitionScalerFactory {
+	return &simplePartitionScalerFactory{cfg: cfg, oldCount: oldCount}
 }
 
 func (s *simplePartitionScalerFactory) New(
 	nsName namespace.Name, tqName string, tqType enumspb.TaskQueueType,
 ) PartitionScaler {
 	cfg := func() dynamicconfig.SimplePartitionScalerSettings { return s.cfg(nsName.String(), tqName, tqType) }
-	return newSimplePartitionScaler(cfg, clock.NewRealTimeSource())
+	oldCount := func() int { return s.oldCount(nsName.String(), tqName, tqType) }
+	return newSimplePartitionScaler(cfg, oldCount, clock.NewRealTimeSource())
 }
 
 // simplePartitionScaler uses task add rates to scale partitions.
 type simplePartitionScaler struct {
-	cfg      scalerCfg
+	cfg scalerCfg
+	// oldCount returns the "old" static partition count that the *AsMultipleOfOldCount
+	// settings are relative to. May be nil, which disables those settings.
+	oldCount dynamicconfig.IntPropertyFn
 	ts       clock.TimeSource
 	trackers map[time.Duration]*taskTracker
 }
 
-func newSimplePartitionScaler(cfg scalerCfg, ts clock.TimeSource) *simplePartitionScaler {
+func newSimplePartitionScaler(cfg scalerCfg, oldCount dynamicconfig.IntPropertyFn, ts clock.TimeSource) *simplePartitionScaler {
 	return &simplePartitionScaler{
 		cfg:      cfg,
+		oldCount: oldCount,
 		ts:       ts,
 		trackers: make(map[time.Duration]*taskTracker),
 	}
@@ -63,8 +72,12 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 
 	if !cfg.Enabled {
 		return PartitionScalerDecision{NewTarget: 0}
-	} else if cfg.Fixed > 0 {
-		return PartitionScalerDecision{NewTarget: int(cfg.Fixed), BacklogCap: int(cfg.BacklogCap)}
+	}
+
+	fixed, minTarget, maxTarget := s.bounds(cfg)
+
+	if fixed > 0 {
+		return PartitionScalerDecision{NewTarget: fixed, BacklogCap: int(cfg.BacklogCap)}
 	}
 
 	// init trackers in use
@@ -100,11 +113,11 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 
 	// add them and clamp
 	totalTarget := addTarget + backlogTarget
-	if cfg.Min > 0 {
-		totalTarget = max(totalTarget, int(cfg.Min))
+	if minTarget > 0 {
+		totalTarget = max(totalTarget, minTarget)
 	}
-	if cfg.Max > 0 {
-		totalTarget = min(totalTarget, int(cfg.Max))
+	if maxTarget > 0 {
+		totalTarget = min(totalTarget, maxTarget)
 	}
 
 	privateState, _ := anypb.New(&state) // ignore error, just use nil
@@ -116,6 +129,52 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 }
 
 func (*simplePartitionScaler) Stop() {
+}
+
+// bounds resolves the effective Fixed, Min, and Max values, combining the explicit settings
+// with the ones derived from the old static partition count. Zero means "not set" for all
+// three, as in the settings themselves.
+func (s *simplePartitionScaler) bounds(cfg dynamicconfig.SimplePartitionScalerSettings) (fixed, minTarget, maxTarget int) {
+	fixed, minTarget, maxTarget = int(cfg.Fixed), int(cfg.Min), int(cfg.Max)
+
+	if cfg.FixedAsMultipleOfOldCount <= 0 && cfg.MinAsMultipleOfOldCount <= 0 && cfg.MaxAsMultipleOfOldCount <= 0 {
+		return fixed, minTarget, maxTarget
+	}
+	oldCount := 0
+	if s.oldCount != nil {
+		oldCount = s.oldCount()
+	}
+	if oldCount <= 0 {
+		return fixed, minTarget, maxTarget
+	}
+
+	// An explicit Fixed wins over the derived one.
+	if fixed == 0 {
+		fixed = multipleOfOldCount(cfg.FixedAsMultipleOfOldCount, oldCount)
+	}
+	// For Min and Max, a derived bound applies in addition to an explicit one, i.e. we use
+	// whichever is more restrictive.
+	if derived := multipleOfOldCount(cfg.MinAsMultipleOfOldCount, oldCount); derived > 0 {
+		minTarget = max(minTarget, derived)
+	}
+	if derived := multipleOfOldCount(cfg.MaxAsMultipleOfOldCount, oldCount); derived > 0 {
+		if maxTarget > 0 {
+			maxTarget = min(maxTarget, derived)
+		} else {
+			maxTarget = derived
+		}
+	}
+
+	return fixed, minTarget, maxTarget
+}
+
+// multipleOfOldCount returns multiple * oldCount rounded to the nearest integer, but at least
+// one if multiple is non-zero. Returns 0 if multiple is not set.
+func multipleOfOldCount(multiple float32, oldCount int) int {
+	if multiple <= 0 {
+		return 0
+	}
+	return max(1, int(multiple*float32(oldCount)+0.5))
 }
 
 func (s *simplePartitionScaler) updateAddTarget(
