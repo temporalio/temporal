@@ -39,6 +39,7 @@ import (
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	commoncallbacks "go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/contextutil"
@@ -170,6 +171,10 @@ type (
 		// Buffered events are added to this value when calling GetApproximatePersistedSize.
 		approximateSize int
 		chasmNodeSizes  map[string]int // chasm node path -> key + node size in bytes
+		// Set by paths that re-materialize already-accepted callbacks (continue-as-new,
+		// retry, reset reapply), where enforcing the aggregate limits would wedge an
+		// execution that was within them when they were first accepted.
+		suppressCallbackLimitChecks bool
 		// Total number of tomestones tracked in mutable state
 		totalTombstones int
 		// Buffer events from DB
@@ -2931,6 +2936,10 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		}
 	}
 
+	// The callbacks below were carried over from the previous run, which already accepted them
+	// within the limits in force at the time. Re-validating could permanently wedge an
+	// execution if a limit were lowered: it would be unable to continue as new at all.
+	ms.SuppressCallbackLimitChecks()
 	event, err := ms.AddWorkflowExecutionStartedEventWithOptions(
 		execution,
 		req,
@@ -3037,6 +3046,12 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 			tag.WorkflowEventID(eventID),
 			tag.ErrorTypeInvalidHistoryAction)
 		return nil, ms.createInternalServerError(opTag)
+	}
+
+	if err := ms.validateChasmCallbackAttachments(ChasmCallbackAttachment{
+		Callbacks: startRequest.GetStartRequest().GetCompletionCallbacks(),
+	}); err != nil {
+		return nil, err
 	}
 
 	event := ms.hBuilder.AddWorkflowExecutionStartedEvent(
@@ -3494,11 +3509,116 @@ func (ms *MutableStateImpl) addUpdateCallbacksChasm(
 	if err != nil {
 		return err
 	}
+	return wf.AddUpdateCompletionCallbacks(ctx, event.EventTime, updateID, requestID, updateCallbacks)
+}
 
+// ChasmCallbackAttachment is the set of completion callbacks a single history event would
+// attach to one place: the workflow itself when UpdateID is empty, otherwise that update.
+type ChasmCallbackAttachment struct {
+	UpdateID  string
+	Callbacks []*commonpb.Callback
+}
+
+// SuppressCallbackLimitChecks disables aggregate callback limit enforcement for the remainder
+// of this mutable state's life.
+//
+// Paths that re-materialize already-accepted state -- continue-as-new, workflow retry, and
+// reset/conflict-resolution reapply -- carry callbacks forward that were within the limits when
+// they were first accepted. Enforcing against them would mean that lowering a limit
+// permanently wedges a live execution: it could never continue as new, retry, or be reset.
+func (ms *MutableStateImpl) SuppressCallbackLimitChecks() {
+	ms.suppressCallbackLimitChecks = true
+}
+
+// chasmCallbackTotals reports the execution's current aggregate callback accounting. Returns
+// zeros for a workflow whose CHASM root component does not exist yet, which is the case on the
+// start path before EnsureChasmWorkflowComponent runs.
+//
+// Reads through a read-only context: under a MutableContext, resolving a component marks its
+// node dirty, and for a workflow predating the denormalized counters this walks every update.
+func (ms *MutableStateImpl) chasmCallbackTotals() (count int, size int64, err error) {
+	root, ok := ms.chasmTree.(*chasm.Node)
+	if !ok || root.ArchetypeID() == chasm.UnspecifiedArchetypeID {
+		return 0, 0, nil
+	}
+	wf, ctx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+	if err != nil {
+		return 0, 0, err
+	}
+	count, size = wf.CallbackTotals(ctx)
+	return count, size, nil
+}
+
+// validateChasmCallbackAttachments enforces the cumulative CHASM callback limits for everything
+// a single history event would attach.
+//
+// This runs on the write path, before the event reaches the history builder, because the Apply
+// functions that actually attach the callbacks are also driven by MutableStateRebuilder during
+// NDC replication, history import, and reset. There the event has already been committed
+// elsewhere, so rejecting it stalls the replication task rather than protecting anything.
+func (ms *MutableStateImpl) validateChasmCallbackAttachments(attachments ...ChasmCallbackAttachment) error {
+	if ms.suppressCallbackLimitChecks || !ms.chasmCallbacksEnabled() {
+		return nil
+	}
+	if ms.config.CallbackValidator == nil {
+		// Only reachable if the history service's ConfigProvider was bypassed, which is to say
+		// in a test that enables CHASM callbacks without wiring the validator. Fail the request
+		// rather than let an execution grow unbounded because enforcement was silently absent.
+		return serviceerror.NewInternal("callback validator is not configured")
+	}
+	all := make([]*commonpb.Callback, 0, len(attachments))
+	for _, a := range attachments {
+		all = append(all, a.Callbacks...)
+	}
+	if len(all) == 0 {
+		return nil
+	}
+
+	currentCount, currentSize, err := ms.chasmCallbackTotals()
+	if err != nil {
+		return err
+	}
 	nsName := ms.GetNamespaceEntry().Name().String()
-	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerWorkflow(nsName)
-	maxCallbacksPerUpdateID := ms.config.MaxCallbacksPerUpdateID(nsName)
-	return wf.AddUpdateCompletionCallbacks(ctx, event.EventTime, updateID, requestID, updateCallbacks, maxCallbacksPerWorkflow, maxCallbacksPerUpdateID)
+	if err := ms.config.CallbackValidator.ValidateAdditions(nsName, all, commoncallbacks.ValidateAdditionsOptions{
+		CurrentCount:         currentCount,
+		CurrentCallbacksSize: int(currentSize),
+	}); err != nil {
+		return err
+	}
+
+	// The per-update cap is deliberately not part of callbacks.Validator: it is specific to
+	// workflow updates, and the shared validator is used by execution types that have none.
+	maxPerUpdateID := ms.config.MaxCallbacksPerUpdateID(nsName)
+	for _, a := range attachments {
+		if a.UpdateID == "" || len(a.Callbacks) == 0 {
+			continue
+		}
+		existing, err := ms.chasmUpdateCallbackCount(a.UpdateID)
+		if err != nil {
+			return err
+		}
+		if existing+len(a.Callbacks) > maxPerUpdateID {
+			return serviceerror.NewFailedPreconditionf(
+				"cannot attach more than %d callbacks to update %q (%d callbacks already attached)",
+				maxPerUpdateID,
+				a.UpdateID,
+				existing,
+			)
+		}
+	}
+	return nil
+}
+
+func (ms *MutableStateImpl) chasmUpdateCallbackCount(updateID string) (int, error) {
+	root, ok := ms.chasmTree.(*chasm.Node)
+	if !ok || root.ArchetypeID() == chasm.UnspecifiedArchetypeID {
+		return 0, nil
+	}
+	wf, ctx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+	if err != nil {
+		return 0, err
+	}
+	return wf.UpdateCallbackCount(ctx, updateID), nil
 }
 
 func (ms *MutableStateImpl) addCompletionCallbacks(
@@ -3528,6 +3648,13 @@ func (ms *MutableStateImpl) addCompletionCallbacksHsm(
 ) error {
 	coll := callbacks.MachineCollection(ms.HSM())
 	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerWorkflow(ms.GetNamespaceEntry().Name().String())
+	// BUG: this limit check runs inside an Apply function, which is also driven by
+	// MutableStateRebuilder (mutable_state_rebuilder.go) during NDC replication, history
+	// import, and reset/state-rebuild. It can therefore reject a history event that was
+	// already committed on another cluster, stalling the replication task rather than
+	// protecting anything -- and lowering the limit can wedge a live execution. The CHASM
+	// equivalent was moved to the write path (see validateChasmCallbackAttachments); this HSM
+	// path is knowingly left as-is given the HSM-to-CHASM migration. Do not copy this pattern.
 	if len(completionCallbacks)+coll.Size() > maxCallbacksPerWorkflow {
 		return serviceerror.NewFailedPreconditionf(
 			"cannot attach more than %d callbacks to a workflow (%d callbacks already attached)",
@@ -3579,8 +3706,7 @@ func (ms *MutableStateImpl) addCompletionCallbacksChasm(
 		return err
 	}
 
-	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerExecution(ms.GetNamespaceEntry().Name().String())
-	return wf.AddCompletionCallbacks(ctx, event.EventTime, requestID, completionCallbacks, maxCallbacksPerWorkflow)
+	return wf.AddCompletionCallbacks(ctx, event.EventTime, requestID, completionCallbacks)
 }
 
 // AddFirstWorkflowTaskScheduled adds the first workflow task scheduled event unless it should be delayed as indicated
@@ -5689,6 +5815,12 @@ func (ms *MutableStateImpl) AddWorkflowExecutionUpdateAdmittedEvent(request *upd
 	if err := ms.checkMutability(tag.WorkflowActionUpdateAdmitted); err != nil {
 		return nil, err
 	}
+	if err := ms.validateChasmCallbackAttachments(ChasmCallbackAttachment{
+		UpdateID:  request.GetMeta().GetUpdateId(),
+		Callbacks: request.GetCompletionCallbacks(),
+	}); err != nil {
+		return nil, err
+	}
 	event, batchId := ms.hBuilder.AddWorkflowExecutionUpdateAdmittedEvent(request, origin)
 	if err := ms.ApplyWorkflowExecutionUpdateAdmittedEvent(event, batchId); err != nil {
 		return nil, err
@@ -5773,6 +5905,12 @@ func (ms *MutableStateImpl) AddWorkflowExecutionUpdateAcceptedEvent(
 	acceptedRequest *updatepb.Request,
 ) (*historypb.HistoryEvent, error) {
 	if err := ms.checkMutability(tag.WorkflowActionUpdateAccepted); err != nil {
+		return nil, err
+	}
+	if err := ms.validateChasmCallbackAttachments(ChasmCallbackAttachment{
+		UpdateID:  updateID,
+		Callbacks: acceptedRequest.GetCompletionCallbacks(),
+	}); err != nil {
 		return nil, err
 	}
 	event := ms.hBuilder.AddWorkflowExecutionUpdateAcceptedEvent(updateID, acceptedRequestMessageID, acceptedRequestSequencingEventID, acceptedRequest)
@@ -5962,6 +6100,18 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 	if err := ms.checkMutability(tag.WorkflowActionWorkflowOptionsUpdated); err != nil {
 		return nil, err
 	}
+	attachments := make([]ChasmCallbackAttachment, 0, 1+len(workflowUpdateOptions))
+	attachments = append(attachments, ChasmCallbackAttachment{Callbacks: attachCompletionCallbacks})
+	for _, updateOptions := range workflowUpdateOptions {
+		attachments = append(attachments, ChasmCallbackAttachment{
+			UpdateID:  updateOptions.GetUpdateId(),
+			Callbacks: updateOptions.GetAttachedCompletionCallbacks(),
+		})
+	}
+	if err := ms.validateChasmCallbackAttachments(attachments...); err != nil {
+		return nil, err
+	}
+
 	event := ms.hBuilder.AddWorkflowExecutionOptionsUpdatedEvent(
 		versioningOverride,
 		unsetVersioningOverride,

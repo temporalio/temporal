@@ -307,6 +307,9 @@ func SetupNewWorkflowForRetryOrCron(
 		req.WorkflowExecutionExpirationTime = timestamppb.New(workflowTimeoutTime)
 	}
 
+	// As with continue-as-new, the carried-over callbacks were already accepted on the previous
+	// run; re-validating them could make a retry impossible if a limit were lowered.
+	newMutableState.SuppressCallbackLimitChecks()
 	event, err := newMutableState.AddWorkflowExecutionStartedEventWithOptions(
 		&newExecution,
 		req,

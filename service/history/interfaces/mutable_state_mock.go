@@ -3714,6 +3714,18 @@ func (mr *MockMutableStateMockRecorder) StartTransaction(entry any) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartTransaction", reflect.TypeOf((*MockMutableState)(nil).StartTransaction), entry)
 }
 
+// SuppressCallbackLimitChecks mocks base method.
+func (m *MockMutableState) SuppressCallbackLimitChecks() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SuppressCallbackLimitChecks")
+}
+
+// SuppressCallbackLimitChecks indicates an expected call of SuppressCallbackLimitChecks.
+func (mr *MockMutableStateMockRecorder) SuppressCallbackLimitChecks() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SuppressCallbackLimitChecks", reflect.TypeOf((*MockMutableState)(nil).SuppressCallbackLimitChecks))
+}
+
 // TaskQueueScheduleToStartTimeout mocks base method.
 func (m *MockMutableState) TaskQueueScheduleToStartTimeout(name string) (*taskqueue.TaskQueue, *durationpb.Duration) {
 	m.ctrl.T.Helper()

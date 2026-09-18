@@ -284,11 +284,20 @@ func HistoryEngineFactoryProvider(
 func ConfigProvider(
 	dc *dynamicconfig.Collection,
 	persistenceConfig config.Persistence,
-) *configs.Config {
-	return configs.NewConfig(
+) (*configs.Config, error) {
+	cfg := configs.NewConfig(
 		dc,
 		persistenceConfig.NumHistoryShards,
 	)
+	// Assigned here rather than inside NewConfig, which cannot reach the settings this needs:
+	// they are owned by chasm/lib/nexusoperation, whose tests import service/history/tests and
+	// so cycle back through configs.
+	callbackValidator, err := callbackValidatorProvider(dc)
+	if err != nil {
+		return nil, err
+	}
+	cfg.CallbackValidator = callbackValidator
+	return cfg, nil
 }
 
 func ServiceErrorInterceptorProvider(
