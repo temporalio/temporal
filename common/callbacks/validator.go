@@ -19,17 +19,37 @@ type ValidatorOptions struct {
 	EnabledKinds []Kind
 }
 
+// ValidateAdditionsOptions describes the callbacks already attached to the execution being
+// added to. Callers supply these totals from their own denormalized accounting rather than
+// walking the execution's callbacks, so that validating an addition stays O(1).
+type ValidateAdditionsOptions struct {
+	CurrentCount         int
+	CurrentCallbacksSize int // Size of all callbacks in bytes.
+}
+
 // Validator validates completion callbacks attached to executions (e.g. workflows and standalone activities).
 type Validator interface {
 	// Validate rejects callbacks that are not enabled for the execution, or are malformed.
 	// Will mutate the supplied Callbacks to normalize. e.g. converting Nexus headers to lower-case.
 	Validate(ctx context.Context, namespaceName string, cbs []*commonpb.Callback, opts ValidatorOptions) error
+
+	// ValidateAdditions rejects an attempt to attach newCBs to an execution that already holds
+	// the callbacks described by existing, when doing so would exceed the per-execution count or
+	// total size limits.
+	//
+	// This is the cumulative counterpart to Validate, which only bounds a single request. It is
+	// enforced on write paths in the history service, where the execution's current totals are
+	// known; Validate runs earlier, at the frontend.
+	ValidateAdditions(namespaceName string, newCBs []*commonpb.Callback, existing ValidateAdditionsOptions) error
 }
 
 // ValidatorConfig holds the limits a [Validator] enforces.
 type ValidatorConfig struct {
 	MaxCallbacksPerExecution dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxIDLengthLimit         dynamicconfig.IntPropertyFn // All ID types use the same global setting.
+	// TotalCallbacksMaxSize bounds the summed size of every callback on an execution.
+	// A value of 0 disables the check.
+	TotalCallbacksMaxSize dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxIDLengthLimit      dynamicconfig.IntPropertyFn // All ID types use the same global setting.
 
 	// Nexus-variant limits.
 	URLMaxLength  dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -51,6 +71,7 @@ func (vc *ValidatorConfig) Validate() error {
 	}
 
 	assertGetterIsSet("MaxCallbacksPerExecution", vc.MaxCallbacksPerExecution)
+	assertGetterIsSet("TotalCallbacksMaxSize", vc.TotalCallbacksMaxSize)
 	if vc.MaxIDLengthLimit == nil {
 		missingFields = append(missingFields, "MaxIDLengthLimit")
 	}
@@ -91,6 +112,8 @@ func (v *validator) Validate(
 	cbs []*commonpb.Callback,
 	opts ValidatorOptions,
 ) error {
+	// Bounds this request alone. The cumulative bound, which accounts for callbacks already
+	// attached to the execution, is ValidateAdditions.
 	if len(cbs) > v.config.MaxCallbacksPerExecution(namespaceName) {
 		return serviceerror.NewInvalidArgumentf(
 			"cannot attach more than %d callbacks to an execution", v.config.MaxCallbacksPerExecution(namespaceName),
@@ -101,6 +124,43 @@ func (v *validator) Validate(
 		if err := v.validateCallback(cb, namespaceName, opts); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// ValidateAdditions checks the count and total size the execution would reach once newCBs are
+// attached. Errors are FailedPrecondition rather than InvalidArgument: the request may be
+// perfectly well-formed and only fail because of what the execution already holds.
+func (v *validator) ValidateAdditions(
+	namespaceName string,
+	newCBs []*commonpb.Callback,
+	existing ValidateAdditionsOptions,
+) error {
+	maxCount := v.config.MaxCallbacksPerExecution(namespaceName)
+	if existing.CurrentCount+len(newCBs) > maxCount {
+		return serviceerror.NewFailedPreconditionf(
+			"cannot attach more than %d callbacks to an execution (%d callbacks already attached)",
+			maxCount,
+			existing.CurrentCount,
+		)
+	}
+
+	maxSize := v.config.TotalCallbacksMaxSize(namespaceName)
+	if maxSize <= 0 {
+		return nil
+	}
+	addingSize := 0
+	for _, cb := range newCBs {
+		addingSize += cb.Size()
+	}
+	if existing.CurrentCallbacksSize+addingSize > maxSize {
+		return serviceerror.NewFailedPreconditionf(
+			"cannot attach more than %d bytes of callbacks to an execution "+
+				"(%d bytes already attached, %d more requested)",
+			maxSize,
+			existing.CurrentCallbacksSize,
+			addingSize,
+		)
 	}
 	return nil
 }
