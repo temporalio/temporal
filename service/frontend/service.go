@@ -41,6 +41,7 @@ const (
 type Config struct {
 	NumHistoryShards                     int32
 	EmitNamespaceLifecycleEvents         dynamicconfig.BoolPropertyFn
+	NamespaceReplicationTransportMode    dynamicconfig.StringPropertyFn
 	PersistenceMaxQPS                    dynamicconfig.IntPropertyFn
 	PersistenceGlobalMaxQPS              dynamicconfig.IntPropertyFn
 	PersistenceNamespaceMaxQPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -300,6 +301,7 @@ func NewConfig(
 	return &Config{
 		NumHistoryShards:                     numHistoryShards,
 		EmitNamespaceLifecycleEvents:         dynamicconfig.EmitNamespaceLifecycleEvents.Get(dc),
+		NamespaceReplicationTransportMode:    dynamicconfig.NamespaceReplicationTransportMode.Get(dc),
 		PersistenceMaxQPS:                    dynamicconfig.FrontendPersistenceMaxQPS.Get(dc),
 		PersistenceGlobalMaxQPS:              dynamicconfig.FrontendPersistenceGlobalMaxQPS.Get(dc),
 		PersistenceNamespaceMaxQPS:           dynamicconfig.FrontendPersistenceNamespaceMaxQPS.Get(dc),

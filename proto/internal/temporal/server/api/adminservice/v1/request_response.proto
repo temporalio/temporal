@@ -206,6 +206,13 @@ message ApplyNamespaceMutationRequest {
   // receiver-side apply-if-higher logic (replication_task_executor.go) can be reused
   // unchanged.
   temporal.server.api.replication.v1.NamespaceTaskAttributes namespace_task = 1;
+
+  // Shadow requests validate transport equivalence but never mutate receiver state.
+  bool shadow = 2;
+
+  // SHA-256 of the deterministic namespace_task protobuf encoding computed by
+  // the sender. The receiver recomputes it to detect transport drift.
+  bytes fingerprint = 3;
 }
 
 message ApplyNamespaceMutationResponse {
@@ -226,8 +233,14 @@ message ApplyNamespaceMutationResponse {
     // The admitter rejected the namespace (cluster's admission policy says
     // not to accept this namespace). No write was performed.
     OUTCOME_NOT_ADMITTED = 5;
+    // The shadow request's carried fingerprint matched the fingerprint computed
+    // from the payload received by this peer. No write was performed.
+    OUTCOME_SHADOW_MATCH = 6;
+    // The shadow request's carried fingerprint did not match the fingerprint
+    // computed from the payload received by this peer. No write was performed.
+    OUTCOME_SHADOW_MISMATCH = 7;
   }
-  // Result of applying the mutation on the receiving cluster.
+  // Result of applying or shadow-validating the mutation on the receiving cluster.
   Outcome outcome = 1;
 }
 

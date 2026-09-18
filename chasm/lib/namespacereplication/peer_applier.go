@@ -12,9 +12,10 @@ import (
 	"go.temporal.io/server/common/namespace/nsreplication"
 )
 
-// PeerApplyResult is the transport-neutral success outcome of applying a namespace
-// mutation to a peer cell. Failures are returned as errors and classified by the
-// task handler (see classifyPeerErr), not modeled here.
+// PeerApplyResult is the transport-neutral terminal, non-error outcome of
+// processing a namespace mutation at a peer cell. Failures are returned as
+// errors and classified by the task handler (see classifyPeerErr), not modeled
+// here.
 type PeerApplyResult int
 
 const (
@@ -24,6 +25,13 @@ const (
 	// PeerApplyResultApplied means the peer accepted the mutation as new state
 	// (created or updated). Collapses the admin RPC's Applied / Created / Duplicate.
 	PeerApplyResultApplied
+	// PeerApplyResultShadowMatch means the peer processed a shadow request without
+	// writing receiver state and the received payload matched its fingerprint.
+	PeerApplyResultShadowMatch
+	// PeerApplyResultShadowMismatch means the peer processed a shadow request
+	// without writing receiver state and the received payload did not match its
+	// fingerprint.
+	PeerApplyResultShadowMismatch
 	// PeerApplyResultNoOpStale means the peer already held equal-or-newer state
 	// (apply-if-higher no-op). A success, not a failure.
 	PeerApplyResultNoOpStale
@@ -50,6 +58,7 @@ type PeerApplier interface {
 		targetCell string,
 		operation enumsspb.NamespaceOperation,
 		detail *persistencespb.NamespaceDetail,
+		shadow bool,
 	) (PeerApplyResult, error)
 }
 
@@ -70,13 +79,21 @@ func (a *adminClientPeerApplier) Apply(
 	targetCell string,
 	operation enumsspb.NamespaceOperation,
 	detail *persistencespb.NamespaceDetail,
+	shadow bool,
 ) (PeerApplyResult, error) {
 	adminClient, err := a.clientBean.GetRemoteAdminClient(targetCell)
 	if err != nil {
 		return PeerApplyResultUnspecified, err
 	}
+	namespaceTask := nsreplication.NamespaceDetailToTaskAttributes(operation, detail)
+	fingerprint, err := nsreplication.NamespaceTaskFingerprint(namespaceTask)
+	if err != nil {
+		return 0, fmt.Errorf("fingerprint namespace mutation: %w", err)
+	}
 	resp, err := adminClient.ApplyNamespaceMutation(ctx, &adminservice.ApplyNamespaceMutationRequest{
-		NamespaceTask: nsreplication.NamespaceDetailToTaskAttributes(operation, detail),
+		NamespaceTask: namespaceTask,
+		Shadow:        shadow,
+		Fingerprint:   fingerprint,
 	})
 	if err != nil {
 		return PeerApplyResultUnspecified, err
@@ -91,13 +108,40 @@ func (a *adminClientPeerApplier) Apply(
 	case adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED,
 		adminservice.ApplyNamespaceMutationResponse_OUTCOME_CREATED,
 		adminservice.ApplyNamespaceMutationResponse_OUTCOME_DUPLICATE:
+		if shadow {
+			return PeerApplyResultUnspecified, unexpectedPeerOutcome(targetCell, shadow, resp.GetOutcome())
+		}
 		return PeerApplyResultApplied, nil
+	case adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH:
+		if !shadow {
+			return PeerApplyResultUnspecified, unexpectedPeerOutcome(targetCell, shadow, resp.GetOutcome())
+		}
+		return PeerApplyResultShadowMatch, nil
+	case adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH:
+		if !shadow {
+			return PeerApplyResultUnspecified, unexpectedPeerOutcome(targetCell, shadow, resp.GetOutcome())
+		}
+		return PeerApplyResultShadowMismatch, nil
 	case adminservice.ApplyNamespaceMutationResponse_OUTCOME_NO_OP_STALE:
+		if shadow {
+			return PeerApplyResultUnspecified, unexpectedPeerOutcome(targetCell, shadow, resp.GetOutcome())
+		}
 		return PeerApplyResultNoOpStale, nil
 	case adminservice.ApplyNamespaceMutationResponse_OUTCOME_NOT_ADMITTED:
+		if shadow {
+			return PeerApplyResultUnspecified, unexpectedPeerOutcome(targetCell, shadow, resp.GetOutcome())
+		}
 		return PeerApplyResultNotAdmitted, nil
 	default:
-		return PeerApplyResultUnspecified, serviceerror.NewInternal(
-			fmt.Sprintf("peer %s returned unexpected apply outcome %v", targetCell, resp.GetOutcome()))
+		return PeerApplyResultUnspecified, unexpectedPeerOutcome(targetCell, shadow, resp.GetOutcome())
 	}
+}
+
+func unexpectedPeerOutcome(
+	targetCell string,
+	shadow bool,
+	outcome adminservice.ApplyNamespaceMutationResponse_Outcome,
+) error {
+	return serviceerror.NewInternal(
+		fmt.Sprintf("peer %s returned unexpected outcome %v for shadow=%t", targetCell, outcome, shadow))
 }

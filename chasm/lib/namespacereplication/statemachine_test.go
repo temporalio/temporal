@@ -56,6 +56,16 @@ func TestTransitionLocalCommittedSchedulesOutboundTasks(t *testing.T) {
 	}
 }
 
+func TestTransitionLocalShadowSkippedSchedulesOutboundTasks(t *testing.T) {
+	c := NewNamespaceMutationComponent(&chasm.MockMutableContext{}, &namespacereplicationpb.NamespaceMutation{PeerCells: []string{"cellB"}})
+	ctx := &chasm.MockMutableContext{}
+
+	now := time.Date(2026, 8, 22, 0, 0, 0, 0, time.UTC)
+	require.NoError(t, TransitionLocalShadowSkipped.Apply(c, ctx, EventLocalShadowSkipped{Time: now}))
+	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_SKIPPED_SHADOW, c.GetLocalApply().GetOutcome())
+	require.Len(t, ctx.Tasks, 1)
+}
+
 func TestTransitionPeerRetryUsesPureTimerTask(t *testing.T) {
 	c := NewNamespaceMutationComponent(&chasm.MockMutableContext{}, &namespacereplicationpb.NamespaceMutation{PeerCells: []string{"cellB"}})
 	c.LocalApply.Outcome = namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED

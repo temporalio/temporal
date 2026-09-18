@@ -33,27 +33,45 @@ var TransitionLocalCommitted = chasm.NewTransition(
 	[]namespacereplicationpb.ComponentStatus{namespacereplicationpb.COMPONENT_STATUS_RUNNING},
 	namespacereplicationpb.COMPONENT_STATUS_RUNNING,
 	func(c *NamespaceMutationComponent, ctx chasm.MutableContext, event EventLocalCommitted) error {
-		c.LocalApply = &namespacereplicationpb.LocalApplyStatus{
-			Outcome:    namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED,
-			ResolvedAt: timestamppb.New(event.Time),
-		}
-		// Fan out: one ApplyPeerTask per peer cell.
-		for _, cell := range c.GetMutation().GetPeerCells() {
-			ctx.AddTask(c, chasm.TaskAttributes{Destination: cell}, &namespacereplicationpb.ApplyPeerTask{
-				TargetCell: cell,
-				Attempt:    0,
-			})
-		}
-		// NOTE: completion — including the zero-peer case (single-cluster global
-		// namespace, nothing to fan out to) — is applied by the caller via
-		// TransitionAllPeersTerminal, not here. Setting COMPLETED inside this
-		// transition would be overwritten: the framework rewrites the component
-		// status to this transition's destination (RUNNING) after Apply returns
-		// (see Transition.Apply in statemachine.go), the same reason peer
-		// completion needs its own transition.
-		return nil
+		return recordLocalSuccess(c, ctx, event.Time, namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED)
 	},
 )
+
+// EventLocalShadowSkipped is emitted after shadow mode deliberately skips the
+// source metadata-store write. Peer validation is still scheduled.
+type EventLocalShadowSkipped struct {
+	Time time.Time
+}
+
+var TransitionLocalShadowSkipped = chasm.NewTransition(
+	[]namespacereplicationpb.ComponentStatus{namespacereplicationpb.COMPONENT_STATUS_RUNNING},
+	namespacereplicationpb.COMPONENT_STATUS_RUNNING,
+	func(c *NamespaceMutationComponent, ctx chasm.MutableContext, event EventLocalShadowSkipped) error {
+		return recordLocalSuccess(c, ctx, event.Time, namespacereplicationpb.LOCAL_APPLY_OUTCOME_SKIPPED_SHADOW)
+	},
+)
+
+func recordLocalSuccess(
+	c *NamespaceMutationComponent,
+	ctx chasm.MutableContext,
+	resolvedAt time.Time,
+	outcome namespacereplicationpb.LocalApplyOutcome,
+) error {
+	c.LocalApply = &namespacereplicationpb.LocalApplyStatus{
+		Outcome:    outcome,
+		ResolvedAt: timestamppb.New(resolvedAt),
+	}
+	for _, cell := range c.GetMutation().GetPeerCells() {
+		ctx.AddTask(c, chasm.TaskAttributes{Destination: cell}, &namespacereplicationpb.ApplyPeerTask{
+			TargetCell: cell,
+			Attempt:    0,
+		})
+	}
+	// Completion — including the zero-peer case — is applied by the caller.
+	// Setting COMPLETED here would be overwritten by this transition's RUNNING
+	// destination after the apply function returns.
+	return nil
+}
 
 // EventLocalFailed is emitted by ApplyLocalTask on a terminal failure (validation
 // error, or a CAS/write error whose readback proves this mutation did not commit).
@@ -89,9 +107,9 @@ var TransitionLocalFailed = chasm.NewTransition(
 	},
 )
 
-// EventPeerCompleted is emitted by ApplyPeerTask after a peer reaches a terminal outcome
-// (Applied, NoOpStale, or FailedTerminal). Updates the peer's status; if all peers are
-// now terminal, the component transitions to COMPLETED.
+// EventPeerCompleted is emitted by ApplyPeerTask after a peer reaches a terminal
+// outcome. Updates the peer's status; if all peers are now terminal, the
+// component transitions to COMPLETED.
 //
 // For per-peer success/no-op cases, see Outcome on PeerApplyStatus. Failure detail is
 // in LastFailure when Outcome is FAILED_*.
