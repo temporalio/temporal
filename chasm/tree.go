@@ -1471,6 +1471,16 @@ func (n *Node) structuredRef(
 
 }
 
+// componentPath returns the path of the given component relative to the root of the tree, or nil if
+// the component is not (yet) registered as a node.
+func (n *Node) componentPath(component Component) []string {
+	refNode, ok := n.valueToNode[component]
+	if !ok || !refNode.isComponent() {
+		return nil
+	}
+	return refNode.path()
+}
+
 // componentLinks returns the union of links across all requests stored on the
 // given component's metadata. Pending writes staged in the current transaction
 // replace persisted entries for the same request ID (matching the read
@@ -3076,6 +3086,7 @@ func (n *Node) IsStale(
 
 func (n *Node) Terminate(
 	request TerminateComponentRequest,
+	forceTerminationReason metrics.ReasonString,
 ) error {
 	if n.parent != nil {
 		return softassert.UnexpectedInternalErr(
@@ -3105,6 +3116,24 @@ func (n *Node) Terminate(
 	}
 
 	n.terminated = true
+	namespaceName := ""
+	namespaceEntry := n.backend.GetNamespaceEntry()
+	if namespaceEntry != nil {
+		namespaceName = namespaceEntry.Name().String()
+	}
+
+	archetypeID := n.ArchetypeID()
+	archetypeName, ok := n.registry.ComponentFqnByID(archetypeID)
+	if !ok {
+		archetypeName = strconv.FormatUint(uint64(archetypeID), 10)
+	}
+
+	metrics.ExecutionForceTerminations.With(n.metricsHandler).Record(
+		1,
+		metrics.NamespaceTag(namespaceName),
+		metrics.ArchetypeTag(archetypeName),
+		metrics.ReasonTag(forceTerminationReason),
+	)
 	return nil
 }
 
@@ -3118,6 +3147,27 @@ func (n *Node) SetDeleteAfterClose(deleteAfterClose bool) {
 func (n *Node) ArchetypeID() ArchetypeID {
 	// Root must be a component.
 	return n.root().serializedNode.Metadata.GetComponentAttributes().GetTypeId()
+}
+
+// executionType returns the execution type registered for the root component's archetype.
+//
+// The execution type comes from the *root* component of the tree, not from the current node, so
+// every node of an execution reports the same value. May be [enumspb.EXECUTION_TYPE_UNSPECIFIED]
+// if the root component was registered without a WithExecutionType option.
+func (n *Node) executionType() enumspb.ExecutionType {
+	// ArchetypeID() resolves the root of the tree, regardless of which node it is called on.
+	archetypeID := n.ArchetypeID()
+	if archetypeID == UnspecifiedArchetypeID {
+		// The root component is not set yet, so the execution has no external representation.
+		return enumspb.EXECUTION_TYPE_UNSPECIFIED
+	}
+
+	rc, ok := n.registry.ComponentByID(archetypeID)
+	if !ok {
+		softassert.Fail(n.logger, "unknown archetype id", tag.ArchetypeID(archetypeID))
+		return enumspb.EXECUTION_TYPE_UNSPECIFIED
+	}
+	return rc.executionType
 }
 
 // Archetype returns the root component's fully qualified name.

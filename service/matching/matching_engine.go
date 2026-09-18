@@ -1303,9 +1303,11 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 		)
 		return &matchingservice.CancelOutstandingWorkerPollsResponse{}, nil
 	}
-	cfg := rootPM.GetConfig()
-	// TODO(dynamic partitioning): get real num read partitions from the partition manager.
-	numPartitions := cfg.NumReadPartitions()
+	// Ephemeral data carries the real read partition count once dynamic partitioning is active.
+	numPartitions := int(rootPM.GetUserDataManager().PartitionScale().GetRead())
+	if numPartitions <= 0 {
+		numPartitions = rootPM.GetConfig().NumReadPartitions()
+	}
 
 	e.logger.Debug("Initiating fan-out for worker poll cancellation",
 		tag.WorkflowNamespaceID(request.GetNamespaceId()),
@@ -2500,6 +2502,21 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 				mergedData.RedirectRules = currentVersioningData.GetRedirectRules()
 			}
 			mergedUserData.PerType = current.GetPerType()
+
+			// We have wrongly discarded incoming per-type data and should investigate what information was lost.
+			// This is harmful since we might have lost information pertaining to worker-versioning, task queue config
+			// and fairness state.
+			if len(req.GetUserData().GetPerType()) > 0 {
+				metrics.TaskQueueUserDataReplicationIncomingPerTypeDataDropped.With(e.metricsHandler).Record(1,
+					metrics.NamespaceTag(ns.Name().String()),
+				)
+				e.logger.Warn("task queue user data replication discarded non-empty per-type data",
+					tag.WorkflowNamespace(ns.Name().String()),
+					tag.WorkflowNamespaceID(req.GetNamespaceId()),
+					tag.WorkflowTaskQueueName(req.GetTaskQueue()),
+					tag.NewAnyTag("current-clock", currentClock),
+				)
+			}
 		} else {
 			if mergedData != nil {
 				// v2 rules

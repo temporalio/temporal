@@ -26,6 +26,8 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -683,6 +685,65 @@ func (s *nodeSuite) assertParentPointer(testComponentNode *Node) {
 	testSubComponent1FromPtr := subComponent11.ParentPtr.Get(chasmContext)
 	// Asserting they actually point to the same testSubComponent1 object.
 	s.Same(subComponent1, testSubComponent1FromPtr)
+}
+
+func (s *nodeSuite) TestComponentPath() {
+	node := s.testComponentTree()
+
+	mutableContext := NewMutableContext(context.Background(), node)
+	component, err := node.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := component.(*TestComponent)
+
+	mapSubComponent1 := &TestSubComponent1{}
+	testComponent.SubComponents = Map[string, *TestSubComponent1]{
+		"mapSubComponent1": NewComponentField(mutableContext, mapSubComponent1),
+	}
+	s.Nil(mutableContext.Path(mapSubComponent1), "a component not yet synced into the tree has no path")
+	s.NoError(node.syncSubComponents())
+
+	subComponent1 := testComponent.SubComponent1.Get(mutableContext)
+	subComponent11 := subComponent1.SubComponent11.Get(mutableContext)
+
+	s.Equal([]string{}, mutableContext.Path(testComponent), "the root component's path is empty")
+	s.Equal([]string{"SubComponent1"}, mutableContext.Path(subComponent1))
+	s.Equal([]string{"SubComponent1", "SubComponent11"}, mutableContext.Path(subComponent11))
+	// A component inside a CHASM map is addressed by its key in that map.
+	s.Equal([]string{"SubComponents", "mapSubComponent1"}, mutableContext.Path(mapSubComponent1))
+
+	s.Nil(mutableContext.Path(&TestComponent{}), "a component that is not in the tree has no path")
+}
+
+func (s *nodeSuite) TestExecutionType() {
+	testCases := map[string]struct {
+		rootArchetypeID uint32
+		expectedType    enumspb.ExecutionType
+	}{
+		// TestComponent is registered with EXECUTION_TYPE_WORKFLOW.
+		"registered execution type": {
+			rootArchetypeID: testComponentTypeID,
+			expectedType:    enumspb.EXECUTION_TYPE_WORKFLOW,
+		},
+		// TestSubComponent1 is registered without a WithExecutionType option.
+		"no registered execution type": {
+			rootArchetypeID: testSubComponent1TypeID,
+			expectedType:    enumspb.EXECUTION_TYPE_UNSPECIFIED,
+		},
+	}
+
+	for name, tc := range testCases {
+		s.Run(name, func() {
+			serializedNodes := testComponentSerializedNodes()
+			serializedNodes[""].Metadata.GetComponentAttributes().TypeId = tc.rootArchetypeID
+			root, err := s.newTestTree(serializedNodes)
+			s.NoError(err)
+
+			s.Equal(tc.expectedType, root.executionType())
+			// Every node reports the type of the execution it belongs to, not one per component.
+			s.Equal(tc.expectedType, root.children["SubComponent1"].executionType())
+			s.Equal(tc.expectedType, NewContext(context.Background(), root).ExecutionInfo().ExecutionType)
+		})
+	}
 }
 
 func (s *nodeSuite) TestSyncSubComponents_DeleteLeafNode() {
@@ -3635,6 +3696,11 @@ func (s *nodeSuite) TestCloseTransaction_ApplyMutation_PureTasks() {
 }
 
 func (s *nodeSuite) TestTerminate() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	s.metricsHandler = metricsHandler
+	s.nodeBackend.HandleGetNamespaceEntry = func() *namespace.Namespace {
+		return namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "test-namespace"}, nil, false, nil, 0)
+	}
 	node := s.testComponentTree()
 
 	// First closeTransaction once to make the tree clean.
@@ -3644,10 +3710,22 @@ func (s *nodeSuite) TestTerminate() {
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, s.nodeBackend.LastUpdateWorkflowState())
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, s.nodeBackend.LastUpdateWorkflowStatus())
 
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
 	// Then terminate the node and verify only that node will be in the mutation.
-	err = node.Terminate(TerminateComponentRequest{})
+	err = node.Terminate(
+		TerminateComponentRequest{Reason: "test-force-reason"},
+		ExecutionForceTerminationReasonMutableStateSizeExceedsLimit,
+	)
 	s.NoError(err)
 	s.True(node.terminated)
+	recordings := capture.Snapshot()[metrics.ExecutionForceTerminations.Name()]
+	s.Len(recordings, 1)
+	s.Equal(int64(1), recordings[0].Value)
+	s.Equal("test-namespace", recordings[0].Tags["namespace"])
+	s.Equal(testComponentFQN, recordings[0].Tags["archetype"])
+	s.Equal(string(ExecutionForceTerminationReasonMutableStateSizeExceedsLimit), recordings[0].Tags["reason"])
 
 	mutations, err := node.CloseTransaction()
 	s.NoError(err)
