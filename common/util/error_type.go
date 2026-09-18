@@ -11,6 +11,7 @@ import (
 // It is useful for attaching low-cardinality type names to errors that are suitable for telemetry tags.
 // See ErrorType for more details.
 type typedError interface {
+	error
 	ErrorTypeName() string
 }
 
@@ -28,8 +29,7 @@ var wrapperErrorTypes = map[string]bool{
 // We consider errors wrapped via [fmt.Errorf], [errors.Join] and some pkg/errors functions to be wrapper errors.
 func ErrorType(err error) string {
 	// If any error in the tree has an explicit type name, use it, preferring the first one in the DFS traversal.
-	var typedErr typedError
-	if errors.As(err, &typedErr) {
+	if typedErr, ok := errors.AsType[typedError](err); ok {
 		return typedErr.ErrorTypeName()
 	}
 

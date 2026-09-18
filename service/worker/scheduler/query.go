@@ -7,6 +7,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
@@ -33,9 +35,17 @@ func newFieldNameAggInterceptor(
 	namespaceName namespace.Name,
 	saNameType searchattribute.NameTypeMap,
 	saMapperProvider searchattribute.MapperProvider,
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
 ) *fieldNameAggInterceptor {
+	// When a CHASM mapper is supplied the query is being validated against the
+	// Scheduler archetype, so resolve names through it (e.g. ScheduleNextActionTime)
+	// and surface the archetype for archetype-specific aliases.
+	archetypeID := chasm.UnspecifiedArchetypeID
+	if chasmMapper != nil {
+		archetypeID = chasm.SchedulerArchetypeID
+	}
 	return &fieldNameAggInterceptor{
-		baseInterceptor: elasticsearch.NewNameInterceptor(namespaceName, saNameType, saMapperProvider, nil, chasm.UnspecifiedArchetypeID),
+		baseInterceptor: elasticsearch.NewNameInterceptor(namespaceName, saNameType, saMapperProvider, chasmMapper, archetypeID),
 		names:           make(map[string]bool),
 	}
 }
@@ -61,8 +71,11 @@ func ValidateVisibilityQuery(
 	namespaceName namespace.Name,
 	saNameType searchattribute.NameTypeMap,
 	saMapperProvider searchattribute.MapperProvider,
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
 	enableUnifiedQueryConverter dynamicconfig.BoolPropertyFn,
 	queryString string,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
 ) error {
 	var fields []string
 	var err error
@@ -71,10 +84,13 @@ func ValidateVisibilityQuery(
 			namespaceName,
 			saNameType,
 			saMapperProvider,
+			chasmMapper,
 			queryString,
+			metricsHandler,
+			logger,
 		)
 	} else {
-		fields, err = getQueryFieldsLegacy(namespaceName, saNameType, saMapperProvider, queryString)
+		fields, err = getQueryFieldsLegacy(namespaceName, saNameType, saMapperProvider, chasmMapper, queryString)
 	}
 	if err != nil {
 		return err
@@ -93,7 +109,10 @@ func getQueryFields(
 	namespaceName namespace.Name,
 	saNameType searchattribute.NameTypeMap,
 	saMapperProvider searchattribute.MapperProvider,
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
 	queryString string,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
 ) ([]string, error) {
 	saMapper, err := saMapperProvider.GetMapper(namespaceName)
 	if err != nil {
@@ -104,11 +123,12 @@ func getQueryFields(
 		namespaceName,
 		saNameType,
 		saMapper,
-	).WithSearchAttributeInterceptor(saInterceptor)
+		metricsHandler,
+		logger,
+	).WithChasmMapper(chasmMapper).WithSearchAttributeInterceptor(saInterceptor)
 	_, err = queryConverter.Convert(queryString)
 	if err != nil {
-		var converterErr *query.ConverterError
-		if errors.As(err, &converterErr) {
+		if converterErr, ok := errors.AsType[*query.ConverterError](err); ok {
 			return nil, converterErr.ToInvalidArgument()
 		}
 		return nil, err
@@ -123,14 +143,14 @@ func getQueryFieldsLegacy(
 	namespaceName namespace.Name,
 	saNameType searchattribute.NameTypeMap,
 	saMapperProvider searchattribute.MapperProvider,
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
 	queryString string,
 ) ([]string, error) {
-	fnInterceptor := newFieldNameAggInterceptor(namespaceName, saNameType, saMapperProvider)
-	queryConverter := elasticsearch.NewQueryConverterLegacy(fnInterceptor, nil, saNameType, nil)
+	fnInterceptor := newFieldNameAggInterceptor(namespaceName, saNameType, saMapperProvider, chasmMapper)
+	queryConverter := elasticsearch.NewQueryConverterLegacy(fnInterceptor, nil, saNameType, chasmMapper)
 	_, err := queryConverter.ConvertWhereOrderBy(queryString)
 	if err != nil {
-		var converterErr *query.ConverterError
-		if errors.As(err, &converterErr) {
+		if converterErr, ok := errors.AsType[*query.ConverterError](err); ok {
 			return nil, converterErr.ToInvalidArgument()
 		}
 		return nil, err

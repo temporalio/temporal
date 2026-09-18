@@ -19,6 +19,7 @@ func TestRunEntry_JSONRoundTrip(t *testing.T) {
 		{"zero archetype is omitted", RunEntry{RunID: "r1"}, `["r1"]`},
 		{"non-zero archetype is included", RunEntry{RunID: "r1", ArchetypeID: 42}, `["r1",42]`},
 		{"escaped runID", RunEntry{RunID: `r"1`}, `["r\"1"]`},
+		{"control character uses JSON escaping", RunEntry{RunID: "r\x01"}, `["r\u0001"]`},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

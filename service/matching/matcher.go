@@ -359,7 +359,7 @@ forLoop:
 			// at this point, we forwarded the task to a parent partition which
 			// in turn dispatched the task to a poller, because there was no error.
 			// Make sure we delete the task from the database.
-			task.finish(nil, true)
+			task.finish(taskFinishResult{consumedToken: true})
 			tm.emitDispatchLatency(task, true)
 			return nil
 		case <-ctx.Done():

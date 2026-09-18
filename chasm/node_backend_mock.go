@@ -27,6 +27,7 @@ type MockNodeBackend struct {
 	HandleGetCurrentVersion           func() int64
 	HandleNextTransitionCount         func() int64
 	HandleGetApproximatePersistedSize func() int
+	HandleChasmSkipPersistenceEnabled func() bool
 	HandleCurrentVersionedTransition  func() *persistencespb.VersionedTransition
 	HandleGetWorkflowKey              func() definition.WorkflowKey
 	HandleUpdateWorkflowStateStatus   func(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) (bool, error)
@@ -39,6 +40,8 @@ type MockNodeBackend struct {
 	HandleHasAnyBufferedEvent         func(filter func(*historypb.HistoryEvent) bool) bool
 	HandleGetNamespaceEntry           func() *namespace.Namespace
 	HandleEndpointRegistry            func() EndpointRegistry
+
+	HandleChasmDLQScheduledPureTaskOnValidationEnabled func() bool
 
 	// Recorded calls (protected by mu).
 	mu                  sync.Mutex
@@ -69,6 +72,20 @@ func (m *MockNodeBackend) GetApproximatePersistedSize() int {
 		return m.HandleGetApproximatePersistedSize()
 	}
 	return 0
+}
+
+func (m *MockNodeBackend) ChasmSkipPersistenceEnabled() bool {
+	if m.HandleChasmSkipPersistenceEnabled != nil {
+		return m.HandleChasmSkipPersistenceEnabled()
+	}
+	return false
+}
+
+func (m *MockNodeBackend) ChasmDLQScheduledPureTaskOnValidationEnabled() bool {
+	if m.HandleChasmDLQScheduledPureTaskOnValidationEnabled != nil {
+		return m.HandleChasmDLQScheduledPureTaskOnValidationEnabled()
+	}
+	return false
 }
 
 func (m *MockNodeBackend) GetCurrentVersion() int64 {

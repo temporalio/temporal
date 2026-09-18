@@ -10,6 +10,8 @@ import (
 	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
+var textField01 = newSearchAttributeFieldText(1)
+
 func TestSearchAttributesMap_Get(t *testing.T) {
 	// Define test search attributes
 	boolAttr := NewSearchAttributeBool("completed", SearchAttributeFieldBool01)
@@ -18,6 +20,7 @@ func TestSearchAttributesMap_Get(t *testing.T) {
 	keywordAttr := NewSearchAttributeKeyword("status", SearchAttributeFieldKeyword01)
 	datetimeAttr := NewSearchAttributeDateTime("timestamp", SearchAttributeFieldDateTime01)
 	keywordListAttr := NewSearchAttributeKeywordList("tags", SearchAttributeFieldKeywordList01)
+	textAttr := NewSearchAttributeText("summary", textField01)
 
 	now := time.Now()
 
@@ -29,6 +32,7 @@ func TestSearchAttributesMap_Get(t *testing.T) {
 		"status":    VisibilityValueKeyword("active"),
 		"timestamp": VisibilityValueTime(now),
 		"tags":      VisibilityValueStringSlice([]string{"tag1", "tag2"}),
+		"summary":   VisibilityValueText("foo bar"),
 	}
 	m := NewSearchAttributesMap(values)
 
@@ -66,6 +70,12 @@ func TestSearchAttributesMap_Get(t *testing.T) {
 		val, ok := SearchAttributeValue(m, keywordListAttr)
 		require.True(t, ok)
 		require.Equal(t, []string{"tag1", "tag2"}, val)
+	})
+
+	t.Run("GetText", func(t *testing.T) {
+		val, ok := SearchAttributeValue(m, textAttr)
+		require.True(t, ok)
+		require.Equal(t, "foo bar", val)
 	})
 
 	t.Run("NotFound", func(t *testing.T) {
@@ -123,6 +133,7 @@ func TestNewSearchAttributesMapFromProto(t *testing.T) {
 				"status":    sadefs.MustEncodeValue("active", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 				"timestamp": sadefs.MustEncodeValue(now, enumspb.INDEXED_VALUE_TYPE_DATETIME),
 				"tags":      sadefs.MustEncodeValue([]string{"tag1", "tag2"}, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST),
+				"summary":   sadefs.MustEncodeValue("foo bar", enumspb.INDEXED_VALUE_TYPE_TEXT),
 			},
 		}
 		m, err := newSearchAttributesMapFromProto(sa)
@@ -157,6 +168,12 @@ func TestNewSearchAttributesMapFromProto(t *testing.T) {
 		listVal, ok := SearchAttributeValue(m, keywordListAttr)
 		require.True(t, ok)
 		require.Equal(t, []string{"tag1", "tag2"}, listVal)
+
+		textAttr := NewSearchAttributeText("summary", textField01)
+		textVal, ok := SearchAttributeValue(m, textAttr)
+		require.True(t, ok)
+		require.Equal(t, "foo bar", textVal)
+
 	})
 
 	t.Run("InvalidPayload", func(t *testing.T) {
@@ -165,9 +182,7 @@ func TestNewSearchAttributesMapFromProto(t *testing.T) {
 				"bad": {Data: []byte("not valid")},
 			},
 		}
-		m, err := newSearchAttributesMapFromProto(sa)
-		// Current implementation returns nil error on decode failure
-		require.NoError(t, err)
-		require.Empty(t, m.values)
+		_, err := newSearchAttributesMapFromProto(sa)
+		require.Error(t, err)
 	})
 }

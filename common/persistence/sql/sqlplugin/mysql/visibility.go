@@ -67,7 +67,7 @@ var (
 
 	templateGetWorkflowExecution_v8 = fmt.Sprintf(
 		`SELECT %s FROM executions_visibility
-		WHERE namespace_id = :namespace_id AND run_id = :run_id`,
+		WHERE namespace_id = ? AND run_id = ?`,
 		strings.Join(sqlplugin.DbFields, ", "),
 	)
 )
@@ -249,16 +249,16 @@ func (mdb *db) GetFromVisibility(
 	filter sqlplugin.VisibilityGetFilter,
 ) (*sqlplugin.VisibilityRow, error) {
 	var row sqlplugin.VisibilityRow
-	stmt, err := mdb.PrepareNamedContext(ctx, templateGetWorkflowExecution_v8)
-	if err != nil {
+	if err := mdb.GetContext(
+		ctx,
+		&row,
+		templateGetWorkflowExecution_v8,
+		filter.NamespaceID,
+		filter.RunID,
+	); err != nil {
 		return nil, err
 	}
-	err = stmt.GetContext(ctx, &row, filter)
-	if err != nil {
-		return nil, err
-	}
-	err = mdb.processRowFromDB(&row)
-	if err != nil {
+	if err := mdb.processRowFromDB(&row); err != nil {
 		return nil, err
 	}
 	return &row, nil

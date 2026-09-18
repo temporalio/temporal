@@ -24,7 +24,6 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -33,7 +32,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
-	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
@@ -41,14 +40,13 @@ import (
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/taskpoller"
+	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/common/testing/updateutils"
-	"go.temporal.io/server/components/nexusoperations"
-	"go.uber.org/fx"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
+	"go.temporal.io/server/temporal"
 )
 
 type (
@@ -92,22 +90,23 @@ type (
 		// and will panic if called.
 		isShared bool
 	}
-	// TestClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
-	TestClusterParams struct {
-		ServiceOptions                  map[primitives.ServiceName][]fx.Option
-		DCRedirectionPolicy             config.DCRedirectionPolicy
-		DynamicConfigOverrides          map[dynamicconfig.Key]any
-		ArchivalEnabled                 bool
-		EnableMTLS                      bool
-		EnableWorkerService             bool
-		FaultInjectionConfig            *config.FaultInjection
-		NumHistoryShards                int32
-		Logger                          log.Logger
-		SharedCluster                   bool
-		CustomHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
-		CustomVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
+	// testClusterParams contains the variables which are used to configure test cluster via the TestClusterOption type.
+	testClusterParams struct {
+		DCRedirectionPolicy       config.DCRedirectionPolicy
+		DynamicConfigOverrides    map[dynamicconfig.Key]any
+		EnableMTLS                bool
+		EnableWorkerService       bool
+		FaultInjectionConfig      *config.FaultInjection
+		NumHistoryShards          int32
+		Logger                    log.Logger
+		SharedCluster             bool
+		EnableHistoryTaskRecorder bool
+		EnableReplicationRecorder bool
+		EnableArchival            bool
+		SpanExporter              sdktrace.SpanExporter
+		AdditionalServerOptions   []temporal.ServerOption
 	}
-	TestClusterOption func(params *TestClusterParams)
+	TestClusterOption func(params *testClusterParams)
 )
 
 func init() {
@@ -117,33 +116,14 @@ func init() {
 	sdkworker.SetBinaryChecksum("oss-server-test")
 }
 
-// WithFxOptionsForService returns an Option which, when passed as an argument to setupSuite, will append the given list
-// of fx options to the end of the arguments to the fx.New call for the given service. For example, if you want to
-// obtain the shard controller for the history service, you can do this:
-//
-//	var shardController shard.Controller
-//	s.setupSuite(t, tests.WithFxOptionsForService(primitives.HistoryService, fx.Populate(&shardController)))
-//	// now you can use shardController during your test
-//
-// This is similar to the pattern of plumbing dependencies through the TestClusterConfig, but it's much more convenient,
-// scalable and flexible. The reason we need to do this on a per-service basis is that there are separate fx apps for
-// each one.
-//
-// Deprecated: prefer dedicated TestClusterOption helpers or testhooks over injecting arbitrary Fx options.
-func WithFxOptionsForService(serviceName primitives.ServiceName, options ...fx.Option) TestClusterOption {
-	return func(params *TestClusterParams) {
-		params.ServiceOptions[serviceName] = append(params.ServiceOptions[serviceName], options...)
-	}
-}
-
 func WithDCRedirectionPolicy(policy config.DCRedirectionPolicy) TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		params.DCRedirectionPolicy = policy
 	}
 }
 
 func WithDynamicConfigOverrides(overrides map[dynamicconfig.Key]any) TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		if params.DynamicConfigOverrides == nil {
 			params.DynamicConfigOverrides = overrides
 		} else {
@@ -152,32 +132,32 @@ func WithDynamicConfigOverrides(overrides map[dynamicconfig.Key]any) TestCluster
 	}
 }
 
-func WithArchivalEnabled() TestClusterOption {
-	return func(params *TestClusterParams) {
-		params.ArchivalEnabled = true
+func withArchivalConfig() TestClusterOption {
+	return func(params *testClusterParams) {
+		params.EnableArchival = true
 	}
 }
 
-func WithMTLS() TestClusterOption {
-	return func(params *TestClusterParams) {
+func withMTLS() TestClusterOption {
+	return func(params *testClusterParams) {
 		params.EnableMTLS = true
 	}
 }
 
 func withWorkerService(enabled bool) TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		params.EnableWorkerService = enabled
 	}
 }
 
 func WithFaultInjectionConfig(cfg *config.FaultInjection) TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		params.FaultInjectionConfig = cfg
 	}
 }
 
 func WithNumHistoryShards(n int32) TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		params.NumHistoryShards = n
 	}
 }
@@ -185,26 +165,32 @@ func WithNumHistoryShards(n int32) TestClusterOption {
 // WithClusterLogger sets a custom logger for the test cluster, used instead of
 // the default test logger. Useful for intercepting server log output.
 func WithClusterLogger(logger log.Logger) TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		params.Logger = logger
 	}
 }
 
+func WithClusterHistoryTaskRecorder() TestClusterOption {
+	return func(params *testClusterParams) {
+		params.EnableHistoryTaskRecorder = true
+	}
+}
+
+func WithReplicationStreamRecorder() TestClusterOption {
+	return func(params *testClusterParams) {
+		params.EnableReplicationRecorder = true
+	}
+}
+
+func withSpanExporter(exporter sdktrace.SpanExporter) TestClusterOption {
+	return func(params *testClusterParams) {
+		params.SpanExporter = exporter
+	}
+}
+
 func WithSharedCluster() TestClusterOption {
-	return func(params *TestClusterParams) {
+	return func(params *testClusterParams) {
 		params.SharedCluster = true
-	}
-}
-
-func WithCustomHistoryArchiverFactory(factory provider.CustomHistoryArchiverFactory) TestClusterOption {
-	return func(params *TestClusterParams) {
-		params.CustomHistoryArchiverFactory = factory
-	}
-}
-
-func WithCustomVisibilityArchiverFactory(factory provider.CustomVisibilityArchiverFactory) TestClusterOption {
-	return func(params *TestClusterParams) {
-		params.CustomVisibilityArchiverFactory = factory
 	}
 }
 
@@ -284,9 +270,14 @@ func (s *FunctionalTestBase) TearDownSuite() {
 }
 
 func (s *FunctionalTestBase) SetupSuiteWithCluster(options ...TestClusterOption) {
-	// Acquire a slot from the dedicated test cluster pool.
-	testClusterPool.dedicated.acquireSlot(s.T())
+	// Reserve a slot from the dedicated test cluster pool.
+	testClusterRouter.dedicated.reserveSlot(s.T())
 	s.setupCluster(options...)
+	clusterRequest{
+		kind:              clusterKindDedicated,
+		dedicatedReason:   "legacy-suite",
+		needWorkerService: ApplyTestClusterOptions(options).EnableWorkerService,
+	}.recordCreation(s.T())
 }
 
 func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
@@ -316,21 +307,23 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		HistoryConfig: HistoryConfig{
 			NumHistoryShards: cmp.Or(params.NumHistoryShards, 4),
 		},
-		DCRedirectionPolicy:             params.DCRedirectionPolicy,
-		DynamicConfigOverrides:          params.DynamicConfigOverrides,
-		ServiceFxOptions:                params.ServiceOptions,
-		EnableMetricsCapture:            true,
-		EnableArchival:                  params.ArchivalEnabled,
-		EnableMTLS:                      params.EnableMTLS,
-		CustomHistoryArchiverFactory:    params.CustomHistoryArchiverFactory,
-		CustomVisibilityArchiverFactory: params.CustomVisibilityArchiverFactory,
-		WorkerConfig:                    WorkerConfig{DisableWorker: !params.EnableWorkerService},
+		DCRedirectionPolicy:       params.DCRedirectionPolicy,
+		DynamicConfigOverrides:    params.DynamicConfigOverrides,
+		EnableMetricsCapture:      true,
+		EnableMTLS:                params.EnableMTLS,
+		EnableHistoryTaskRecorder: params.EnableHistoryTaskRecorder,
+		EnableReplicationRecorder: params.EnableReplicationRecorder,
+		EnableArchival:            params.EnableArchival,
+		AdditionalServerOptions:   params.AdditionalServerOptions,
+		WorkerConfig:              WorkerConfig{DisableWorker: !params.EnableWorkerService},
+	}
+	if params.SpanExporter != nil {
+		setSpanExporter(s.testClusterConfig, "test", params.SpanExporter)
 	}
 
 	// Apply configuration for shared clusters.
 	if params.SharedCluster {
-		// Use file-based SQLite for shared clusters to support parallel test access.
-		s.testClusterConfig.Persistence = *persistencetests.GetSQLiteFileTestClusterOption()
+		s.testClusterConfig.Persistence = sharedClusterPersistence(GetPersistenceTestDefaults())
 		s.isShared = true
 	}
 
@@ -341,9 +334,7 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 		s.otelExporter = testtelemetry.NewFileExporter(otelOutputDir)
 
 		// Direct the OTEL exporter to the collector.
-		s.testClusterConfig.SpanExporters = map[telemetry.SpanExporterType]sdktrace.SpanExporter{
-			telemetry.OtelTracesOtlpExporterType: s.otelExporter,
-		}
+		setSpanExporter(s.testClusterConfig, telemetry.OtelTracesOtlpExporterType, s.otelExporter)
 	}
 
 	var err error
@@ -352,13 +343,29 @@ func (s *FunctionalTestBase) setupCluster(options ...TestClusterOption) {
 	s.Require().NoError(err)
 
 	// Setup test cluster namespaces.
+	ctx := testcontext.For(s.T())
 	s.namespace = namespace.Name(RandomizeStr("namespace"))
-	s.namespaceID, err = s.RegisterNamespace(s.Namespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
+	s.namespaceID, err = s.RegisterNamespace(ctx, s.Namespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
 
 	s.externalNamespace = namespace.Name(RandomizeStr("external-namespace"))
-	_, err = s.RegisterNamespace(s.ExternalNamespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
+	_, err = s.RegisterNamespace(ctx, s.ExternalNamespace(), 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
 	s.Require().NoError(err)
+}
+
+func setSpanExporter(clusterConfig *TestClusterConfig, exporterType telemetry.SpanExporterType, exporter sdktrace.SpanExporter) {
+	if clusterConfig.SpanExporters == nil {
+		clusterConfig.SpanExporters = make(map[telemetry.SpanExporterType]sdktrace.SpanExporter)
+	}
+	clusterConfig.SpanExporters[exporterType] = exporter
+}
+
+func sharedClusterPersistence(defaults persistencetests.TestBaseOptions) persistencetests.TestBaseOptions {
+	if defaults.StoreType == config.StoreTypeSQL && defaults.SQLDBPluginName == sqlite.PluginName {
+		// Use file-based SQLite for shared clusters to support parallel test access.
+		return *persistencetests.GetSQLiteFileTestClusterOption()
+	}
+	return defaults
 }
 
 // All test suites that inherit FunctionalTestBase and overwrite SetupTest must
@@ -370,11 +377,6 @@ func (s *FunctionalTestBase) SetupTest() {
 	s.initAssertions()
 	s.setupSdk()
 	s.taskPoller = taskpoller.New(s.T(), s.FrontendClient(), s.Namespace().String())
-
-	// Annotate gRPC requests with the test name for OTEL tracing.
-	s.testCluster.host.grpcClientInterceptor.Set(func(ctx context.Context) context.Context {
-		return metadata.AppendToOutgoingContext(ctx, "temporal-test-name", s.T().Name())
-	})
 }
 
 func (s *FunctionalTestBase) SetupSubTest() {
@@ -400,9 +402,8 @@ func (s *FunctionalTestBase) checkTestShard() {
 	checkTestShard(s.T())
 }
 
-func ApplyTestClusterOptions(options []TestClusterOption) TestClusterParams {
-	params := TestClusterParams{
-		ServiceOptions:      make(map[primitives.ServiceName][]fx.Option),
+func ApplyTestClusterOptions(options []TestClusterOption) testClusterParams {
+	params := testClusterParams{
 		EnableWorkerService: true,
 	}
 	for _, opt := range options {
@@ -425,13 +426,6 @@ func (s *FunctionalTestBase) setupSdk() {
 
 	if provider := s.testCluster.host.tlsConfigProvider; provider != nil {
 		clientOptions.ConnectionOptions.TLS = provider.FrontendClientConfig
-	}
-
-	if interceptor := s.testCluster.host.grpcClientInterceptor; interceptor != nil {
-		clientOptions.ConnectionOptions.DialOptions = []grpc.DialOption{
-			grpc.WithUnaryInterceptor(interceptor.Unary()),
-			grpc.WithStreamInterceptor(interceptor.Stream()),
-		}
 	}
 
 	var err error
@@ -491,7 +485,6 @@ func (s *FunctionalTestBase) tearDownTestCluster() error {
 func (s *FunctionalTestBase) TearDownTest() {
 	s.exportOTELTraces()
 	s.tearDownSdk()
-	s.testCluster.host.grpcClientInterceptor.Set(nil)
 }
 
 // **IMPORTANT**: When overridding this, make sure to invoke `s.FunctionalTestBase.TearDownSubTest()`.
@@ -513,6 +506,7 @@ func (s *FunctionalTestBase) tearDownSdk() {
 //  2. Update search attributes would require an extra API call,
 //  3. One more extra API call would be necessary to get namespace.ID.
 func (s *FunctionalTestBase) RegisterNamespace(
+	ctx context.Context,
 	nsName namespace.Name,
 	retentionDays int32,
 	archivalState enumspb.ArchivalState,
@@ -549,7 +543,7 @@ func (s *FunctionalTestBase) RegisterNamespace(
 		},
 		IsGlobalNamespace: false,
 	}
-	_, err := s.testCluster.testBase.MetadataManager.CreateNamespace(context.Background(), namespaceRequest)
+	_, err := s.testCluster.testBase.MetadataManager.CreateNamespace(ctx, namespaceRequest)
 
 	if err != nil {
 		return namespace.EmptyID, err
@@ -559,7 +553,7 @@ func (s *FunctionalTestBase) RegisterNamespace(
 	ticker := time.NewTicker(NamespaceCacheRefreshInterval / 2)
 	defer ticker.Stop()
 	for {
-		_, describeErr := s.FrontendClient().DescribeNamespace(NewContext(), &workflowservice.DescribeNamespaceRequest{
+		_, describeErr := s.FrontendClient().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
 			Namespace: nsName.String(),
 		})
 		if describeErr == nil {
@@ -571,7 +565,7 @@ func (s *FunctionalTestBase) RegisterNamespace(
 		<-ticker.C
 	}
 
-	_, err = s.OperatorClient().AddSearchAttributes(NewContext(), &operatorservice.AddSearchAttributesRequest{
+	_, err = s.OperatorClient().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
 		Namespace:        nsName.String(),
 		SearchAttributes: expectedSearchAttributes,
 	})
@@ -581,7 +575,7 @@ func (s *FunctionalTestBase) RegisterNamespace(
 
 	namespaceCacheDeadline = time.Now().Add(5 * NamespaceCacheRefreshInterval)
 	for {
-		listResp, listErr := s.OperatorClient().ListSearchAttributes(NewContext(), &operatorservice.ListSearchAttributesRequest{
+		listResp, listErr := s.OperatorClient().ListSearchAttributes(ctx, &operatorservice.ListSearchAttributesRequest{
 			Namespace: nsName.String(),
 		})
 		if listErr == nil {
@@ -660,12 +654,6 @@ func (s *FunctionalTestBase) DecodePayloadsInt(ps *commonpb.Payloads) int {
 	return r
 }
 
-func (s *FunctionalTestBase) DurationNear(value, target, tolerance time.Duration) {
-	s.T().Helper()
-	s.Greater(value, target-tolerance)
-	s.Less(value, target+tolerance)
-}
-
 func (s *FunctionalTestBase) OverrideDynamicConfig(setting dynamicconfig.GenericSetting, value any) (cleanup func()) {
 	return s.testCluster.host.overrideDynamicConfigForTest(s.T(), setting.Key(), value)
 }
@@ -682,11 +670,6 @@ func (s *FunctionalTestBase) InjectHook(hook testhooks.Hook) (cleanup func()) {
 		s.T().Fatalf("InjectHook: unknown scope %v", hook.Scope())
 	}
 	return s.testCluster.host.injectHook(s.T(), hook, scope)
-}
-
-// Context returns a context with RPC headers for use in this test.
-func (s *FunctionalTestBase) Context() context.Context {
-	return NewContext()
 }
 
 // CloseShard closes the shard that contains the given workflow.
@@ -727,26 +710,6 @@ func (s *FunctionalTestBase) RunTestWithMatchingBehavior(subtest func()) {
 	}
 }
 
-// Deprecated: use (*TestEnv).WaitForChannel instead.
-func (s *FunctionalTestBase) WaitForChannel(ctx context.Context, ch chan struct{}) {
-	s.T().Helper()
-	select {
-	case <-ch:
-	case <-ctx.Done():
-		s.FailNow("context timeout while waiting for channel")
-	}
-}
-
-// Deprecated: use (*TestEnv).SendToChannel instead.
-func (s *FunctionalTestBase) SendToChannel(ctx context.Context, ch chan struct{}) {
-	s.T().Helper()
-	select {
-	case ch <- struct{}{}:
-	case <-ctx.Done():
-		s.FailNow("context timeout while sending to channel")
-	}
-}
-
 // TODO (alex): change to nsName namespace.Name
 func (s *FunctionalTestBase) SendSignal(nsName string, execution *commonpb.WorkflowExecution, signalName string,
 	input *commonpb.Payloads, identity string) error {
@@ -764,7 +727,7 @@ func (s *FunctionalTestBase) SendSignal(nsName string, execution *commonpb.Workf
 // RegisterTest records t as currently using this cluster. At t's Cleanup it
 // fails t if the cluster was poisoned during t's window. This fails all active tests
 // currently running. The cluster will be torn down if t was the last active test on a poisoned cluster.
-// The pool's slot reference is replaced as soon as poison is observed.
+// The cluster pool's slot reference is replaced as soon as poison is observed.
 func (s *FunctionalTestBase) RegisterTest(t testlogger.CleanupCapableT) {
 	if s.t != nil {
 		s.t.addTest(t)

@@ -63,19 +63,28 @@ type CleanupCapableT interface {
 	Cleanup(func())
 }
 
-// Expectations represent errors we expect to happen in tests.
-// Their only purpose is to allow un-expecting (hah!) an error we've
-// marked as expected
+// Expectation represents a log call we expect to happen in tests.
+// For error-level logs, expectations also influence whether the log fails the
+// test based on the logger mode.
 type Expectation struct {
 	e          *list.Element
 	testLogger *TestLogger
 	lvl        Level
+	matches    atomic.Int64
 }
 
 // Forget removes a previously registered expectation.
-// A forgotten expectation will no longer be evaluated when errors are encountered.
+// A forgotten expectation will no longer be evaluated when logs are encountered.
 func (e *Expectation) Forget() {
 	e.testLogger.Forget(e)
+}
+
+func (e *Expectation) Matched() bool {
+	return e.MatchCount() > 0
+}
+
+func (e *Expectation) MatchCount() int64 {
+	return e.matches.Load()
 }
 
 type matcher struct {
@@ -133,6 +142,7 @@ type sharedTestLoggerState struct {
 	mu           struct {
 		sync.RWMutex
 		expectations map[Level]*list.List // Map[Level]List[matcher]
+		captures     map[*Capture]struct{}
 		closed       bool
 	}
 	mode            Mode
@@ -271,6 +281,7 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 		},
 	}
 	tl.state.mu.expectations = make(map[Level]*list.List)
+	tl.state.mu.captures = make(map[*Capture]struct{})
 	tl.state.failOnError.Store(true)
 	tl.state.failOnDPanic.Store(true)
 	tl.state.failOnFatal.Store(true)
@@ -319,9 +330,10 @@ func NewTestLogger(t TestingT, mode Mode, opts ...LoggerOption) *TestLogger {
 	return tl
 }
 
-// Expect instructs the logger to expect certain errors, as specified by the msg and tag arguments.
-// Depending on the Mode of the test logger, the expectation either acts as an entry in a
-// blocklist (FailOnExpectedErrorOnly) or an allowlist (FailOnAnyUnexpectedError).
+// Expect instructs the logger to track matching log calls, as specified by the
+// level, msg, and tag arguments. For error-level logs, depending on the Mode of
+// the test logger, the expectation either acts as an entry in a blocklist
+// (FailOnExpectedErrorOnly) or an allowlist (FailOnAnyUnexpectedError).
 func (tl *TestLogger) Expect(level Level, msg string, tags ...tag.Tag) *Expectation {
 	tl.state.mu.Lock()
 	defer tl.state.mu.Unlock()
@@ -343,11 +355,28 @@ func (tl *TestLogger) Expect(level Level, msg string, tags ...tag.Tag) *Expectat
 }
 
 // Forget removes a previously registered expectation.
-// A forgotten expectation will no longer be evaluated when errors are encountered.
+// A forgotten expectation will no longer be evaluated when logs are encountered.
 func (tl *TestLogger) Forget(e *Expectation) {
 	tl.state.mu.Lock()
 	defer tl.state.mu.Unlock()
 	tl.state.mu.expectations[e.lvl].Remove(e.e)
+}
+
+// StartCapture starts recording log calls that contain any of the provided exact tags.
+// It records all calls when no tags are provided.
+func (tl *TestLogger) StartCapture(anyTags ...tag.Tag) *Capture {
+	capture := newCapture(anyTags)
+	tl.state.mu.Lock()
+	tl.state.mu.captures[capture] = struct{}{}
+	tl.state.mu.Unlock()
+	return capture
+}
+
+// StopCapture stops recording log calls for capture.
+func (tl *TestLogger) StopCapture(capture *Capture) {
+	tl.state.mu.Lock()
+	delete(tl.state.mu.captures, capture)
+	tl.state.mu.Unlock()
 }
 
 func (tl *TestLogger) shouldFailTest(level Level, msg string, tags []tag.Tag) bool {
@@ -368,6 +397,40 @@ func (tl *TestLogger) shouldFailTest(level Level, msg string, tags []tag.Tag) bo
 		return false
 	}
 	return tl.state.mode == FailOnAnyUnexpectedError
+}
+
+// recordExpectationMatches increments the match counter of every expectation
+// registered at the given level whose matcher matches this log call. It is purely
+// observational: it never affects whether the test fails (that remains the sole
+// job of shouldFailTest), so it is safe to call for any log at any level.
+func (tl *TestLogger) recordExpectationMatches(level Level, msg string, tags []tag.Tag) {
+	expectations, found := tl.state.mu.expectations[level]
+	if !found {
+		return
+	}
+	for e := expectations.Front(); e != nil; e = e.Next() {
+		m, ok := e.Value.(matcher)
+		if !ok {
+			tl.state.t.Fatalf("Bug in TestLogger: invalid %T value in matcher list", e.Value)
+		}
+		if m.Matches(msg, tags) {
+			m.expectation.matches.Add(1)
+		}
+	}
+}
+
+func (tl *TestLogger) recordCaptures(level Level, msg string, tags []tag.Tag) {
+	if len(tl.state.mu.captures) == 0 {
+		return
+	}
+	record := CapturedLog{
+		Level:   level,
+		Message: msg,
+		Tags:    slices.Clone(tags),
+	}
+	for capture := range tl.state.mu.captures {
+		capture.record(record)
+	}
 }
 
 // FailOnDPanic overrides the behavior of this logger. It returns the previous value
@@ -443,6 +506,8 @@ func (tl *TestLogger) DPanic(msg string, tags ...tag.Tag) {
 		return
 	}
 	tags = tl.mergeWithLoggerTags(tags)
+	tl.recordExpectationMatches(DPanic, msg, tags)
+	tl.recordCaptures(DPanic, msg, tags)
 	// note, actual panic'ing in wrapped is turned off so we can control.
 	tl.wrapped.DPanic(msg, tags...)
 	if tl.state.failOnDPanic.Load() && tl.shouldFailTest(DPanic, msg, tags) {
@@ -458,7 +523,10 @@ func (tl *TestLogger) Debug(msg string, tags ...tag.Tag) {
 	if tl.state.mu.closed {
 		return
 	}
-	tl.wrapped.Debug(msg, tl.mergeWithLoggerTags(tags)...)
+	tags = tl.mergeWithLoggerTags(tags)
+	tl.recordExpectationMatches(Debug, msg, tags)
+	tl.recordCaptures(Debug, msg, tags)
+	tl.wrapped.Debug(msg, tags...)
 }
 
 // Error implements log.Logger.
@@ -469,6 +537,8 @@ func (tl *TestLogger) Error(msg string, tags ...tag.Tag) {
 		return
 	}
 	tags = tl.mergeWithLoggerTags(tags)
+	tl.recordExpectationMatches(Error, msg, tags)
+	tl.recordCaptures(Error, msg, tags)
 	if !tl.shouldFailTest(Error, msg, tags) {
 		tl.wrapped.Error(msg, tags...)
 		tl.state.mu.RUnlock()
@@ -494,6 +564,8 @@ func (tl *TestLogger) Fatal(msg string, tags ...tag.Tag) {
 		return
 	}
 	tags = tl.mergeWithLoggerTags(tags)
+	tl.recordExpectationMatches(Fatal, msg, tags)
+	tl.recordCaptures(Fatal, msg, tags)
 	tl.state.t.Helper()
 	if tl.state.failOnFatal.Load() && tl.shouldFailTest(Fatal, msg, tags) {
 		tl.failTest(Fatal, msg, tags...)
@@ -515,7 +587,10 @@ func (tl *TestLogger) Info(msg string, tags ...tag.Tag) {
 	if tl.state.mu.closed {
 		return
 	}
-	tl.wrapped.Info(msg, tl.mergeWithLoggerTags(tags)...)
+	tags = tl.mergeWithLoggerTags(tags)
+	tl.recordExpectationMatches(Info, msg, tags)
+	tl.recordCaptures(Info, msg, tags)
+	tl.wrapped.Info(msg, tags...)
 }
 
 // Panic implements log.Logger.
@@ -526,6 +601,8 @@ func (tl *TestLogger) Panic(msg string, tags ...tag.Tag) {
 		return
 	}
 	tags = tl.mergeWithLoggerTags(tags)
+	tl.recordExpectationMatches(Panic, msg, tags)
+	tl.recordCaptures(Panic, msg, tags)
 	tl.state.t.Helper()
 	// Forcibly fail the test when required as otherwise panics can be caught.
 	if tl.shouldFailTest(Panic, msg, tags) {
@@ -542,7 +619,10 @@ func (tl *TestLogger) Warn(msg string, tags ...tag.Tag) {
 	if tl.state.mu.closed {
 		return
 	}
-	tl.wrapped.Warn(msg, tl.mergeWithLoggerTags(tags)...)
+	tags = tl.mergeWithLoggerTags(tags)
+	tl.recordExpectationMatches(Warn, msg, tags)
+	tl.recordCaptures(Warn, msg, tags)
+	tl.wrapped.Warn(msg, tags...)
 }
 
 // failTest fails the test while dumping the stack, allowing us to know where in the code

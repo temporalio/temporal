@@ -45,7 +45,7 @@ runs:
     - name: Restore Docker image cache
       id: restore-cache
       if: ${{ inputs.cache == 'true' }}
-      uses: actions/cache/restore@v5
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: ${{ inputs.cache_path }}
         key: ${{ steps.cache.outputs.key }}
@@ -64,7 +64,7 @@ runs:
 
     - name: Pull services
       if: ${{ steps.restore-cache.outputs.cache-hit != 'true' }}
-      uses: nick-fields/retry@v4
+      uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
       env:
         COMPOSE_FILE: ${{ inputs.compose_file }}
         SERVICES: ${{ inputs.services }}
@@ -125,7 +125,7 @@ runs:
 
     - name: Save Docker image cache
       if: ${{ inputs.cache == 'true' && steps.archive.outputs.cacheable == 'true' }}
-      uses: actions/cache/save@v5
+      uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: ${{ inputs.cache_path }}
         key: ${{ steps.cache.outputs.key }}

@@ -405,7 +405,7 @@ func (s *StringifySuite) Test_parseJSONArray() {
 	}
 	for _, testCase := range testCases2 {
 		res, err := parseJSONArray(testCase.input, testCase.indexedValueType)
-		s.NotNil(err)
+		s.Error(err)
 		s.Nil(res)
 	}
 }

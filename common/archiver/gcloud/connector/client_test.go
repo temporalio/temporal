@@ -98,6 +98,104 @@ func (s *clientSuite) TestUploadWriterCloseError() {
 	s.Require().EqualError(err, "Not Found")
 }
 
+func (s *clientSuite) TestUploadIfHashChangedSkipsMatchingObject() {
+	ctx := context.Background()
+	mockStorageClient := connector.NewMockGcloudStorageClient(s.controller)
+	mockBucketHandleClient := connector.NewMockBucketHandleWrapper(s.controller)
+	mockObjectHandler := connector.NewMockObjectHandleWrapper(s.controller)
+	storageWrapper, err := connector.NewClientWithParams(mockStorageClient)
+	s.Require().NoError(err)
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
+	s.Require().NoError(err)
+	recordHash := "matching-hash"
+
+	mockStorageClient.EXPECT().Bucket("my-bucket-cad").Return(mockBucketHandleClient)
+	mockBucketHandleClient.EXPECT().Object("temporal_archival/development/myfile.visibility").Return(mockObjectHandler)
+	mockObjectHandler.EXPECT().Attrs(ctx).Return(&storage.ObjectAttrs{Metadata: map[string]string{
+		archiver.VisibilityArchivalRecordHashMetadataKey: recordHash,
+	}}, nil)
+
+	uploaded, err := storageWrapper.UploadIfHashChanged(ctx, URI, "myfile.visibility", []byte("{}"), recordHash)
+	s.Require().NoError(err)
+	s.Require().False(uploaded)
+}
+
+func (s *clientSuite) TestUploadIfHashChangedOverwritesDifferentObject() {
+	ctx := context.Background()
+	mockStorageClient := connector.NewMockGcloudStorageClient(s.controller)
+	mockBucketHandleClient := connector.NewMockBucketHandleWrapper(s.controller)
+	mockObjectHandler := connector.NewMockObjectHandleWrapper(s.controller)
+	mockWriter := connector.NewMockWriterWrapper(s.controller)
+	storageWrapper, err := connector.NewClientWithParams(mockStorageClient)
+	s.Require().NoError(err)
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
+	s.Require().NoError(err)
+	recordHash := "new-hash"
+
+	mockStorageClient.EXPECT().Bucket("my-bucket-cad").Return(mockBucketHandleClient)
+	mockBucketHandleClient.EXPECT().Object("temporal_archival/development/myfile.visibility").Return(mockObjectHandler)
+	mockObjectHandler.EXPECT().Attrs(ctx).Return(&storage.ObjectAttrs{Metadata: map[string]string{
+		archiver.VisibilityArchivalRecordHashMetadataKey: "old-hash",
+	}}, nil)
+	mockObjectHandler.EXPECT().NewWriter(ctx).Return(mockWriter)
+	mockWriter.EXPECT().SetMetadata(map[string]string{
+		archiver.VisibilityArchivalRecordHashMetadataKey: recordHash,
+	})
+	mockWriter.EXPECT().Write([]byte("{}")).Return(2, nil)
+	mockWriter.EXPECT().Close().Return(nil)
+
+	uploaded, err := storageWrapper.UploadIfHashChanged(ctx, URI, "myfile.visibility", []byte("{}"), recordHash)
+	s.Require().NoError(err)
+	s.Require().True(uploaded)
+}
+
+func (s *clientSuite) TestUploadIfHashChangedWritesMissingObject() {
+	ctx := context.Background()
+	mockStorageClient := connector.NewMockGcloudStorageClient(s.controller)
+	mockBucketHandleClient := connector.NewMockBucketHandleWrapper(s.controller)
+	mockObjectHandler := connector.NewMockObjectHandleWrapper(s.controller)
+	mockWriter := connector.NewMockWriterWrapper(s.controller)
+	storageWrapper, err := connector.NewClientWithParams(mockStorageClient)
+	s.Require().NoError(err)
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
+	s.Require().NoError(err)
+	recordHash := "new-hash"
+
+	mockStorageClient.EXPECT().Bucket("my-bucket-cad").Return(mockBucketHandleClient)
+	mockBucketHandleClient.EXPECT().Object("temporal_archival/development/myfile.visibility").Return(mockObjectHandler)
+	mockObjectHandler.EXPECT().Attrs(ctx).Return(nil, storage.ErrObjectNotExist)
+	mockObjectHandler.EXPECT().NewWriter(ctx).Return(mockWriter)
+	mockWriter.EXPECT().SetMetadata(map[string]string{
+		archiver.VisibilityArchivalRecordHashMetadataKey: recordHash,
+	})
+	mockWriter.EXPECT().Write([]byte("{}")).Return(2, nil)
+	mockWriter.EXPECT().Close().Return(nil)
+
+	uploaded, err := storageWrapper.UploadIfHashChanged(ctx, URI, "myfile.visibility", []byte("{}"), recordHash)
+	s.Require().NoError(err)
+	s.Require().True(uploaded)
+}
+
+func (s *clientSuite) TestUploadIfHashChangedFailsWhenMetadataCannotBeRead() {
+	ctx := context.Background()
+	mockStorageClient := connector.NewMockGcloudStorageClient(s.controller)
+	mockBucketHandleClient := connector.NewMockBucketHandleWrapper(s.controller)
+	mockObjectHandler := connector.NewMockObjectHandleWrapper(s.controller)
+	storageWrapper, err := connector.NewClientWithParams(mockStorageClient)
+	s.Require().NoError(err)
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
+	s.Require().NoError(err)
+	accessErr := errors.New("access denied")
+
+	mockStorageClient.EXPECT().Bucket("my-bucket-cad").Return(mockBucketHandleClient)
+	mockBucketHandleClient.EXPECT().Object("temporal_archival/development/myfile.visibility").Return(mockObjectHandler)
+	mockObjectHandler.EXPECT().Attrs(ctx).Return(nil, accessErr)
+
+	uploaded, err := storageWrapper.UploadIfHashChanged(ctx, URI, "myfile.visibility", []byte("{}"), "test-hash")
+	s.Require().ErrorIs(err, accessErr)
+	s.Require().False(uploaded)
+}
+
 func (s *clientSuite) TestExist() {
 	ctx := context.Background()
 	testCases := []struct {
@@ -240,7 +338,7 @@ func (s *clientSuite) TestQuery() {
 	s.Require().NoError(err)
 	fileNames, err = storageWrapper.Query(ctx, URI, "7478875943689868082123907395549832634615673687049942026838")
 	s.Require().NoError(err)
-	s.Equal(strings.Join(fileNames, ", "), "fileName_01")
+	s.Equal("fileName_01", strings.Join(fileNames, ", "))
 }
 
 func (s *clientSuite) TestQueryWithFilter() {
@@ -277,7 +375,7 @@ func (s *clientSuite) TestQueryWithFilter() {
 	fileNames, _, _, err = storageWrapper.QueryWithFilters(ctx, URI, "closeTimeout_2020-02-27T09:42:28Z", 0, 0, []connector.Precondition{newWorkflowIDPrecondition("4418294404690464320")})
 
 	s.Require().NoError(err)
-	s.Equal(strings.Join(fileNames, ", "), "closeTimeout_2020-02-27T09:42:28Z_12851121011173788097_4418294404690464320_15619178330501475177.visibility")
+	s.Equal("closeTimeout_2020-02-27T09:42:28Z_12851121011173788097_4418294404690464320_15619178330501475177.visibility", strings.Join(fileNames, ", "))
 }
 
 func newWorkflowIDPrecondition(workflowID string) connector.Precondition {

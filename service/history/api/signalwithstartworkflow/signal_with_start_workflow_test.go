@@ -99,7 +99,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_WorkflowCloseAttempted
 		currentWorkflowLease,
 		request,
 	)
-	s.Error(consts.ErrWorkflowClosing, err)
+	s.ErrorIs(consts.ErrWorkflowClosing, err)
 }
 
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_Dedup() {

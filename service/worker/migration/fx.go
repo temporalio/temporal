@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	otellog "go.opentelemetry.io/otel/log"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	sdkworker "go.temporal.io/sdk/worker"
@@ -40,6 +41,7 @@ type (
 		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
 		TaskManager               persistence.TaskManager
 		Logger                    log.Logger
+		EventLogger               otellog.Logger
 		MetricsHandler            metrics.Handler
 		DynamicCollection         *dynamicconfig.Collection
 		WorkflowVerifier          WorkflowVerifier
@@ -54,7 +56,6 @@ type (
 
 	replicationWorkerComponent struct {
 		initParams
-		activities *activities
 	}
 
 	// shardedWorkerComponent registers the sharded force-replication
@@ -62,7 +63,7 @@ type (
 	// It holds its own *activities so its activity registration targets
 	// the sharded TQ rather than the legacy MigrationActivityTQ.
 	shardedWorkerComponent struct {
-		activities *activities
+		activities *shardedActivities
 	}
 )
 
@@ -72,22 +73,15 @@ var Module = fx.Options(
 	fx.Provide(workflowVerifierProvider),
 )
 
-func NewResult(params initParams) (fxResult, error) {
-	a, err := newActivitiesFromParams(params, forceReplicationWorkflowName)
-	if err != nil {
-		return fxResult{}, err
-	}
+func NewResult(params initParams) fxResult {
 	return fxResult{
-		Component: &replicationWorkerComponent{
-			initParams: params,
-			activities: a,
-		},
-	}, nil
+		Component: &replicationWorkerComponent{initParams: params},
+	}
 }
 
 // NewShardedResult constructs the sharded WorkerComponent.
 func NewShardedResult(params initParams) (fxResult, error) {
-	a, err := newActivitiesFromParams(params, shardedForceReplicationWorkflowName)
+	a, err := newShardedActivities(params)
 	if err != nil {
 		return fxResult{}, err
 	}
@@ -111,16 +105,7 @@ func (wc *replicationWorkerComponent) DedicatedWorkflowWorkerOptions() *workerco
 }
 
 func (wc *replicationWorkerComponent) RegisterActivities(registry sdkworker.Registry) {
-	// DisableAlreadyRegisteredCheck because the sharded WorkerComponent
-	// shares the *activities method set; whichever component registers
-	// first on the default worker wins (per the worker.go upgrade-hack
-	// pass), and the second component's reflection-based registration
-	// would otherwise panic on every method name. The default worker
-	// isn't dispatched to by either workflow — both have dedicated
-	// activity workers — so winner-takes-all is fine.
-	registry.RegisterActivityWithOptions(wc.activities, activity.RegisterOptions{
-		DisableAlreadyRegisteredCheck: true,
-	})
+	registry.RegisterActivity(wc.activities())
 }
 
 func (wc *replicationWorkerComponent) DedicatedActivityWorkerOptions() *workercommon.DedicatedWorkerOptions {
@@ -139,17 +124,11 @@ func (sc *shardedWorkerComponent) RegisterWorkflow(registry sdkworker.Registry) 
 	registry.RegisterWorkflowWithOptions(shardedForceReplicationWorker, workflow.RegisterOptions{
 		Name: shardedForceReplicationWorkerName,
 	})
-	registry.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{
-		Name: forceTaskQueueUserDataReplicationWorkflow,
+	registry.RegisterWorkflowWithOptions(shardedTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{
+		Name: shardedTaskQueueUserDataReplicationWorkflowName,
 	})
-	// Local activities dispatch from the workflow worker's own registry, so
-	// the ones invoked via ExecuteLocalActivity (GetMetadata,
-	// DescribeTargetCluster) need to be visible here too. Registering the
-	// whole *activities set mirrors the activity-worker registration; the
-	// workflow worker has LocalActivityWorkerOnly=true so this doesn't
-	// race the activity worker for regular activity tasks.
 	registry.RegisterActivityWithOptions(sc.activities, activity.RegisterOptions{
-		DisableAlreadyRegisteredCheck: true,
+		Name: shardedActivityPrefix,
 	})
 }
 
@@ -177,11 +156,8 @@ func (sc *shardedWorkerComponent) DedicatedWorkflowWorkerOptions() *workercommon
 }
 
 func (sc *shardedWorkerComponent) RegisterActivities(registry sdkworker.Registry) {
-	// See replicationWorkerComponent.RegisterActivities — both components
-	// share the *activities method set, so the second registration on the
-	// default worker would otherwise panic.
 	registry.RegisterActivityWithOptions(sc.activities, activity.RegisterOptions{
-		DisableAlreadyRegisteredCheck: true,
+		Name: shardedActivityPrefix,
 	})
 }
 
@@ -210,25 +186,41 @@ func workflowVerifierProvider() WorkflowVerifier {
 	}
 }
 
-// newActivitiesFromParams builds the shared *activities struct from the
-// fx params. workflowTypeName tags the forceReplicationMetricsHandler so
-// the legacy and sharded variants emit force-replication metrics under
-// distinct workflow_type tags.
-//
-// adminClient is the local admin client cached by ClientBean at startup.
+func (wc *replicationWorkerComponent) activities() *activities {
+	return &activities{
+		HistoryShardCount:                wc.PersistenceConfig.NumHistoryShards,
+		executionManager:                 wc.ExecutionManager,
+		NamespaceRegistry:                wc.NamespaceRegistry,
+		HistoryClient:                    wc.HistoryClient,
+		frontendClient:                   wc.FrontendClient,
+		clientFactory:                    wc.ClientFactory,
+		clientBean:                       wc.ClientBean,
+		namespaceReplicationQueue:        wc.NamespaceReplicationQueue,
+		taskManager:                      wc.TaskManager,
+		Logger:                           wc.Logger,
+		EventLogger:                      wc.EventLogger,
+		MetricsHandler:                   wc.MetricsHandler,
+		forceReplicationMetricsHandler:   wc.MetricsHandler.WithTags(metrics.WorkflowTypeTag(forceReplicationWorkflowName)),
+		generateMigrationTaskViaFrontend: dynamicconfig.WorkerGenerateMigrationTaskViaFrontend.Get(wc.DynamicCollection),
+		enableHistoryRateLimiter:         dynamicconfig.WorkerEnableHistoryRateLimiter.Get(wc.DynamicCollection),
+		emitNamespaceLifecycleEvents:     dynamicconfig.EmitNamespaceLifecycleEvents.Get(wc.DynamicCollection),
+		workflowVerifier:                 wc.WorkflowVerifier,
+		chasmRegistry:                    wc.ChasmRegistry,
+	}
+}
+
+// newShardedActivities builds the activity set used only by the sharded
+// workflow workers. The local admin client is cached by ClientBean at startup.
 // Routing through the bean (rather than constructing a fresh wrapper via
 // NewLocalAdminClientWithTimeout) reuses the same retry+metric wrapper
-// every other consumer in the process sees, and guarantees adminClient
-// is non-nil so the inject and verify paths can use it without nil
-// guarding. A lookup failure indicates ClusterMetadata is misconfigured;
-// surfacing it as an fx error fails app start cleanly rather than mid-run.
-func newActivitiesFromParams(params initParams, workflowTypeName string) (*activities, error) {
+// every other consumer in the process sees.
+func newShardedActivities(params initParams) (*shardedActivities, error) {
 	localCluster := params.ClusterMetadata.GetCurrentClusterName()
 	localAdmin, err := params.ClientBean.GetRemoteAdminClient(localCluster)
 	if err != nil {
 		return nil, fmt.Errorf("migration: local admin client missing from ClientBean for cluster %q: %w", localCluster, err)
 	}
-	return &activities{
+	return &shardedActivities{activities: &activities{
 		HistoryShardCount:                params.PersistenceConfig.NumHistoryShards,
 		executionManager:                 params.ExecutionManager,
 		NamespaceRegistry:                params.NamespaceRegistry,
@@ -241,12 +233,14 @@ func newActivitiesFromParams(params initParams, workflowTypeName string) (*activ
 		namespaceReplicationQueue:        params.NamespaceReplicationQueue,
 		taskManager:                      params.TaskManager,
 		Logger:                           params.Logger,
+		EventLogger:                      params.EventLogger,
 		MetricsHandler:                   params.MetricsHandler,
-		forceReplicationMetricsHandler:   params.MetricsHandler.WithTags(metrics.WorkflowTypeTag(workflowTypeName)),
+		forceReplicationMetricsHandler:   params.MetricsHandler.WithTags(metrics.WorkflowTypeTag(shardedForceReplicationWorkflowName)),
 		generateMigrationTaskViaFrontend: dynamicconfig.WorkerGenerateMigrationTaskViaFrontend.Get(params.DynamicCollection),
 		enableHistoryRateLimiter:         dynamicconfig.WorkerEnableHistoryRateLimiter.Get(params.DynamicCollection),
+		emitNamespaceLifecycleEvents:     dynamicconfig.EmitNamespaceLifecycleEvents.Get(params.DynamicCollection),
 		workflowVerifier:                 params.WorkflowVerifier,
 		chasmRegistry:                    params.ChasmRegistry,
 		sdkClientFactory:                 params.SDKClientFactory,
-	}, nil
+	}}, nil
 }

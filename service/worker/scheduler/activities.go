@@ -38,6 +38,7 @@ type (
 		startWorkflowRateLimiter quotas.RateLimiter
 		maxBlobSize              dynamicconfig.IntPropertyFn
 		localActivitySleepLimit  dynamicconfig.DurationPropertyFn
+		migrationEnabled         dynamicconfig.BoolPropertyFn
 	}
 
 	errFollow string
@@ -151,13 +152,25 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedulespb.Watc
 		return nil, errWrongChain
 	}
 
+	// A paused workflow is still open and still occupies the schedule's overlap
+	// slot, so treat it as running for watch purposes (mirroring the CHASM
+	// scheduler, which considers PAUSED "still progressing"). Otherwise we would
+	// fall through and look for a close event that never arrives, stalling the
+	// schedule. Treating it as running lets the scheduler apply the overlap
+	// policy against it - e.g. TERMINATE_OTHER terminates it and starts the next
+	// run.
+	workflowStatus := pollRes.WorkflowStatus
+	if workflowStatus == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
+		workflowStatus = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	}
+
 	rb := newResponseBuilder(
 		req,
-		pollRes.WorkflowStatus,
+		workflowStatus,
 		a.Logger,
 		a.maxBlobSize()-recordOverheadSize,
 	)
-	if pollRes.WorkflowStatus == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+	if workflowStatus == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		return rb.Build(nil)
 	}
 
@@ -382,16 +395,23 @@ func (a *activities) MigrateScheduleToChasm(ctx context.Context, req *schedulerp
 			nil,
 		)
 	}
+	if a.migrationEnabled != nil && !a.migrationEnabled() {
+		// A live (uncached) check, deliberately re-read here rather than
+		// trusting the caller's possibly-stale view: this is what stops a
+		// pending migration from completing after EnableCHASMSchedulerMigration
+		// has been rolled back, even if the workflow retrying it has been
+		// asleep since well before the rollback. The caller just logs this
+		// like any other failure and keeps retrying at its normal cadence.
+		return errors.New("MigrateScheduleToChasm: migration is currently disabled")
+	}
 	_, err := a.SchedulerClient.CreateFromMigrationState(ctx, req)
 	if err != nil {
 		// Treat "already exists" as success (idempotency).
-		var alreadyExists *serviceerror.AlreadyExists
-		if errors.As(err, &alreadyExists) {
+		if _, ok := errors.AsType[*serviceerror.AlreadyExists](err); ok {
 			return nil
 		}
 		// Sentinel blocking migration is transient; will retry on next workflow wake-up.
-		var unavailableErr *serviceerror.Unavailable
-		if errors.As(err, &unavailableErr) {
+		if _, ok := errors.AsType[*serviceerror.Unavailable](err); ok {
 			return translateError(err, "MigrateScheduleToChasm: blocked by sentinel, will retry")
 		}
 		return translateError(err, "MigrateScheduleToChasm")

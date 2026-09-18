@@ -25,7 +25,7 @@ env:
   TEMPORAL_VERSION_CHECK_DISABLED: 1
   TEMPORAL_AWAIT_ATTEMPT_TIMEOUT: 15s
   MAX_TEST_ATTEMPTS: 3
-  SHARD_COUNT: 3 # NOTE: must match shard count in optimize-test-sharding.yml
+  SHARD_COUNT: 5 # NOTE: must match shard count in optimize-test-sharding.yml
 
 jobs:
   test-setup:
@@ -34,10 +34,9 @@ jobs:
     outputs:
       job_matrix: ${{ steps.build_matrix.outputs.job_matrix }}
       full_test_reason: ${{ steps.determine_scope.outputs.full_test_reason }}
-      runner_arm: ${{ steps.configure_runners.outputs.runner_arm }}
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
@@ -97,17 +96,6 @@ jobs:
 
       - name: ${{ steps.determine_scope.outputs.full_test_reason && 'ℹ️ Full tests' || 'ℹ️ Smoke tests' }}
         run: echo "::notice::${{ steps.determine_scope.outputs.full_test_reason || 'Running smoke tests on extended DBs. Add the test-all-dbs label to run all tests on all DBs.' }}"
-
-      - name: Configure runners
-        id: configure_runners
-        run: |
-          # Use 8-core runners for temporalio org, standard runners for forks
-          if [[ "${{ github.repository_owner }}" == "temporalio" ]]; then
-            runner_arm="ubuntu-24.04-arm64-8-cores"
-          else
-            runner_arm="ubuntu-24.04-arm"
-          fi
-          echo "runner_arm=$runner_arm" >> "$GITHUB_OUTPUT"
 
       # Primary DBs always get full tests, extended DBs get smoke tests (1 job) in abridged PRs.
       - name: Build job matrix
@@ -214,71 +202,56 @@ jobs:
 
   pre-build:
     name: Pre-build for cache
-    needs: test-setup
-    runs-on: ${{ needs.test-setup.outputs.runner_arm }}
+    runs-on: ubuntu-24.04-arm # NOTE: avoid using larger runners as they have high provisioning time (up to several minutes)
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: "go.mod"
-          cache: false # do our own caching
-
-      - name: Restore dependencies
-        id: restore-deps
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/go/pkg/mod
-          key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
+      - name: Prepare Go
+        id: prepare-go
+        uses: ./.github/actions/prepare-go
 
       - run: make pre-build-functional-test-coverage
 
-      - name: Save dependencies
-        uses: actions/cache/save@v5
-        if: ${{ steps.restore-deps.outputs.cache-hit != 'true' }}
+      - name: Save Go dependencies
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        if: ${{ steps.prepare-go.outputs.dependency_cache_hit != 'true' }}
         with:
-          path: ~/go/pkg/mod
-          key: ${{ steps.restore-deps.outputs.cache-primary-key }}
+          path: ${{ steps.prepare-go.outputs.dependency_cache_path }}
+          key: ${{ steps.prepare-go.outputs.dependency_cache_primary_key }}
 
-      - name: Save build outputs
-        uses: actions/cache/save@v5
+      - name: Save Go tools
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        if: ${{ steps.prepare-go.outputs.tools_cache_hit != 'true' }}
         with:
-          path: ~/.cache/go-build
-          key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
+          path: ${{ steps.prepare-go.outputs.tools_cache_path }}
+          key: ${{ steps.prepare-go.outputs.tools_cache_primary_key }}
+
+      - name: Save Go build outputs
+        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        if: ${{ steps.prepare-go.outputs.build_cache_hit != 'true' }}
+        with:
+          path: ${{ steps.prepare-go.outputs.build_cache_path }}
+          key: ${{ steps.prepare-go.outputs.build_cache_primary_key }}
 
   misc-checks:
     name: Misc checks
-    needs: [pre-build, test-setup]
-    runs-on: ${{ needs.test-setup.outputs.runner_arm }}
+    needs: [pre-build]
+    runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
           # buf-breaking tries to compare HEAD against merge base so we need to be able to find it
           fetch-depth: 100
 
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: "go.mod"
-          cache: false # do our own caching
+      - name: Prepare Go
+        uses: ./.github/actions/prepare-go
 
-      - name: Restore dependencies
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/go/pkg/mod
-          key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
-
-      - name: Restore build outputs
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/.cache/go-build
-          key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
-
-      - uses: jdx/mise-action@v4
+      - uses: jdx/mise-action@dba19683ed58901619b14f395a24841710cb4925 # v4.1.0
         with:
           working_directory: .github
           install_args: protoc
@@ -291,34 +264,25 @@ jobs:
 
   unit-test:
     name: Unit test
-    needs: [pre-build, test-setup]
-    runs-on: ${{ needs.test-setup.outputs.runner_arm }}
+    needs: [pre-build]
+    runs-on: ubuntu-24.04-arm
+    env:
+      TEST_TIMEOUT: 15m
+      GITHUB_TIMEOUT: 20
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: "go.mod"
-          cache: false # do our own caching
-
-      - name: Restore dependencies
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/go/pkg/mod
-          key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
-
-      - name: Restore build outputs
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/.cache/go-build
-          key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
+      - name: Prepare Go
+        uses: ./.github/actions/prepare-go
 
       - name: Run unit tests
-        timeout-minutes: 20
-        run: TEST_TIMEOUT=15m ./develop/github/monitor_test.sh make unit-test-coverage
+        timeout-minutes: ${{ fromJSON(env.GITHUB_TIMEOUT) }}
+        run: |
+          export TEST_RUNNER_TIMEOUT="$(("$GITHUB_TIMEOUT" - 1))m"
+          ./develop/github/monitor_test.sh make unit-test-coverage
 
       - name: Post-test reporting
         if: always()
@@ -329,14 +293,45 @@ jobs:
           job_name: Unit test
           artifact_name_suffix: unit-test
 
+  leak-test:
+    name: Resource leak test
+    needs: [pre-build]
+    runs-on: ubuntu-24.04-arm
+    env:
+      GITHUB_TIMEOUT: 10
+      LEAK_OUTPUT_DIR: ${{ github.workspace }}/.testoutput/leakcheck
+      LEAK_GC_SETTLE_TIMEOUT: 30s
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ env.COMMIT }}
+
+      - name: Prepare Go
+        uses: ./.github/actions/prepare-go
+
+      - name: Run resource leak test
+        timeout-minutes: ${{ fromJSON(env.GITHUB_TIMEOUT) }}
+        run: make LEAK_TIMEOUT="$(("$GITHUB_TIMEOUT" - 1))m" leak-test
+
+      - name: Upload diagnostics
+        if: failure()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: leak-diagnostics
+          path: ${{ env.LEAK_OUTPUT_DIR }}
+          if-no-files-found: ignore
+
   integration-test:
     name: Integration test
-    needs: [pre-build, test-setup]
-    runs-on: ${{ needs.test-setup.outputs.runner_arm }}
+    needs: [pre-build]
+    runs-on: ubuntu-24.04-arm
     env:
-      CONTAINERS: cassandra mysql postgresql
+      CONTAINERS: cassandra mysql postgresql elasticsearch
+      TEST_TIMEOUT: 10m
+      GITHUB_TIMEOUT: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
@@ -347,22 +342,8 @@ jobs:
           compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: ${{ env.CONTAINERS }}
 
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: "go.mod"
-          cache: false # do our own caching
-
-      - name: Restore dependencies
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/go/pkg/mod
-          key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
-
-      - name: Restore build outputs
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/.cache/go-build
-          key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
+      - name: Prepare Go
+        uses: ./.github/actions/prepare-go
 
       - name: Wait for containerized dependencies to be healthy
         uses: ./.github/actions/docker-compose-healthy
@@ -371,8 +352,10 @@ jobs:
           services: ${{ env.CONTAINERS }}
 
       - name: Run integration test
-        timeout-minutes: 15
-        run: ./develop/github/monitor_test.sh make integration-test-coverage
+        timeout-minutes: ${{ fromJSON(env.GITHUB_TIMEOUT) }}
+        run: |
+          export TEST_RUNNER_TIMEOUT="$(("$GITHUB_TIMEOUT" - 1))m"
+          ./develop/github/monitor_test.sh make integration-test-coverage
 
       - name: Post-test reporting
         if: always()
@@ -400,14 +383,15 @@ jobs:
       fail-fast: false
       matrix:
         include: ${{ fromJson(needs.test-setup.outputs.job_matrix) }}
-    runs-on: ${{ needs.test-setup.outputs.runner_arm }}
+    runs-on: ubuntu-24.04-arm
     env:
       PERSISTENCE_TYPE: ${{ matrix.persistence_type }}
       PERSISTENCE_DRIVER: ${{ matrix.persistence_driver }}
       TEST_TIMEOUT: ${{ matrix.test_timeout }}
+      GITHUB_TIMEOUT: ${{ matrix.github_timeout }}
       CONTAINERS: ${{ join(matrix.containers, ' ') }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
@@ -419,22 +403,8 @@ jobs:
           services: ${{ env.CONTAINERS }}
           cache: true
 
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: "go.mod"
-          cache: false # do our own caching
-
-      - name: Restore dependencies
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/go/pkg/mod
-          key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
-
-      - name: Restore build outputs
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/.cache/go-build
-          key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
+      - name: Prepare Go
+        uses: ./.github/actions/prepare-go
 
       - name: ${{ matrix.display_name == 'smoke' && 'ℹ️ Smoke test' || 'ℹ️ Full test' }}
         run: echo "::notice::${{ matrix.display_name == 'smoke' && 'This is a smoke test. Add the test-all-dbs label to run all tests on all DBs.' || needs.test-setup.outputs.full_test_reason }}"
@@ -446,14 +416,17 @@ jobs:
           services: ${{ env.CONTAINERS }}
 
       - name: Run functional test
-        timeout-minutes: ${{ matrix.github_timeout }}
-        run: ./develop/github/monitor_test.sh ${{ matrix.cmd }}
+        timeout-minutes: ${{ fromJSON(env.GITHUB_TIMEOUT) }}
+        run: |
+          export TEST_RUNNER_TIMEOUT="$(("$GITHUB_TIMEOUT" - 1))m"
+          ./develop/github/monitor_test.sh ${{ matrix.cmd }}
         env:
           TEST_TOTAL_SHARDS: ${{ matrix.total_shards }}
           TEST_SHARD_INDEX: ${{ matrix.total_shards && matrix.shard_index }} # guard with total_shards to avoid falsy eval of shard_index=0
           TEST_ARGS: "${{ matrix.test_args }}"
           TEMPORAL_TEST_LOG_FILE: ${{ github.workspace }}/.testoutput/debug.log
-          TEMPORAL_TEST_LOG_LEVEL: info
+          TEMPORAL_TEST_LOG_LEVEL: warn
+          TEMPORAL_TEST_CLUSTER_EVENTS_FILE: ${{ github.workspace }}/.testoutput/test-cluster-events.jsonl
 
       - name: Dump container logs
         if: ${{ failure() && toJson(matrix.containers) != '[]' }}
@@ -479,10 +452,10 @@ jobs:
 
   mixed-brain-test:
     name: Mixed brain test
-    needs: [pre-build, test-setup]
-    runs-on: ${{ needs.test-setup.outputs.runner_arm }}
+    needs: [pre-build]
+    runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
@@ -493,22 +466,8 @@ jobs:
           compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: postgresql
 
-      - uses: actions/setup-go@v6
-        with:
-          go-version-file: "go.mod"
-          cache: false
-
-      - name: Restore dependencies
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/go/pkg/mod
-          key: go-${{ runner.os }}${{ runner.arch }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
-
-      - name: Restore build outputs
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/.cache/go-build
-          key: go-${{ runner.os }}${{ runner.arch }}-build-${{ env.COMMIT }}
+      - name: Prepare Go
+        uses: ./.github/actions/prepare-go
 
       - name: Install PostgreSQL schema
         run: make install-schema-postgresql12
@@ -523,7 +482,7 @@ jobs:
 
       - name: Print memory snapshot
         if: always()
-        run: cat /tmp/memory_snapshot.txt || true
+        run: cat .testoutput/memory/memory-snapshot.txt || true
 
       - name: Print current server logs
         if: always()
@@ -535,7 +494,7 @@ jobs:
 
       - name: Print Omes logs
         if: always()
-        run: cat .testoutput/mixedbrain_omes.log || true
+        run: cat .testoutput/mixedbrain_omes_*.log || true
 
       - name: Stop containerized dependencies
         if: always()
@@ -576,10 +535,10 @@ jobs:
       actions: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
           go-version-file: "go.mod"
           cache: true
@@ -590,5 +549,38 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           go run ./cmd/tools/ci-notify alert \
+            --run-id "${{ github.run_id }}" \
+            --slack-webhook "$SLACK_WEBHOOK"
+
+  notify-data-race:
+    name: Notify Slack on Data Race
+    # Runs on both passing and failing main runs: the race detector can trip on
+    # one attempt and pass on a retry, leaving the run green while a data race
+    # was still recorded in the test-summary artifacts.
+    if: |
+      always() &&
+      github.ref == 'refs/heads/main' &&
+      (needs.test-status.result == 'success' || needs.test-status.result == 'failure')
+    needs: test-status
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: "go.mod"
+          cache: true
+
+      - name: Send Slack notification
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          go run ./cmd/tools/ci-notify data-race \
             --run-id "${{ github.run_id }}" \
             --slack-webhook "$SLACK_WEBHOOK"

@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 
+	otellog "go.opentelemetry.io/otel/log"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
@@ -20,6 +21,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 	chasmactivity "go.temporal.io/server/chasm/lib/activity"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	serverClient "go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
@@ -33,6 +35,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/wideevents"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"google.golang.org/grpc/metadata"
 )
@@ -73,11 +76,12 @@ type (
 	}
 
 	verifyReplicationTasksRequest struct {
-		Namespace         string
-		NamespaceID       string
-		TargetClusterName string
-		VerifyInterval    time.Duration `validate:"gte=0"`
-		Executions        []*ExecutionInfo
+		Namespace             string
+		NamespaceID           string
+		TargetClusterEndpoint string
+		TargetClusterName     string
+		VerifyInterval        time.Duration `validate:"gte=0"`
+		Executions            []*ExecutionInfo
 	}
 
 	verifyReplicationTasksResponse struct {
@@ -124,11 +128,13 @@ type (
 		clientBean                       serverClient.Bean
 		clusterMetadata                  cluster.Metadata
 		Logger                           log.Logger
+		EventLogger                      otellog.Logger
 		MetricsHandler                   metrics.Handler
 		forceReplicationMetricsHandler   metrics.Handler
 		namespaceReplicationQueue        persistence.NamespaceReplicationQueue
 		generateMigrationTaskViaFrontend dynamicconfig.BoolPropertyFn
 		enableHistoryRateLimiter         dynamicconfig.BoolPropertyFn
+		emitNamespaceLifecycleEvents     dynamicconfig.BoolPropertyFn
 		workflowVerifier                 WorkflowVerifier
 		chasmRegistry                    *chasm.Registry
 		// sdkClientFactory resolves the system SDK client lazily for the
@@ -175,13 +181,6 @@ func (r verifyResult) isVerified() bool {
 	return r.status == verified || r.status == skipped
 }
 
-// TODO: CallerTypePreemptablee should be set in activity background context for all migration activities.
-// However, activity background context is per-worker, which means once set, all activities processed by the
-// worker will use CallerType Preemptable, including those not related to migration. This is not ideal.
-// Using a different task queue and a dedicated worker for migration can solve the issue but requires
-// changing all existing tooling around namespace migration to start workflows & activities on the new task queue.
-// Another approach is to use separate workers for workflow tasks and activities and keep existing tooling unchanged.
-
 // GetMetadata returns history shard count and namespaceID for requested namespace.
 func (a *activities) GetMetadata(_ context.Context, request MetadataRequest) (*MetadataResponse, error) {
 	nsEntry, err := a.NamespaceRegistry.GetNamespace(namespace.Name(request.Namespace))
@@ -227,7 +226,42 @@ func (a *activities) WaitReplication(ctx context.Context, waitRequest WaitReplic
 	}
 }
 
-// Check if remote cluster has caught up on all shards on replication tasks
+// classifyShardReplicationStatus determines a shard's catchup readiness, guarding an
+// uninitialized ack watermark (returned as not-ready with zero lag) from reading as infinite lag.
+func classifyShardReplicationStatus(
+	localShard *historyservice.ShardReplicationStatus,
+	remoteProgress *historyservice.ShardReplicationStatusPerCluster,
+	requiredMinTaskID int64,
+	allowedLaggingTasks int64,
+	allowedLagging time.Duration,
+) shardStatus {
+	// AsTime is nil-safe: a nil timestamp reports as epoch.
+	ackVisUnset := remoteProgress.AckedTaskVisibilityTime.AsTime().Equal(time.Unix(0, 0))
+	if localShard.MaxReplicationTaskId > 0 && remoteProgress.AckedTaskId == 0 && ackVisUnset {
+		// Not ready, but leave laggingTasks/timeLag at zero so this shard can't win the
+		// Max* comparisons in the caller (i.e. can't surface the bogus now-since-1970 lag).
+		return shardStatus{
+			shardID: localShard.GetShardId(),
+			isReady: false,
+		}
+	}
+
+	laggingTasks := localShard.MaxReplicationTaskId - remoteProgress.AckedTaskId
+	timeLag := localShard.MaxReplicationTaskVisibilityTime.AsTime().Sub(remoteProgress.AckedTaskVisibilityTime.AsTime())
+
+	fullyCaughtUp := localShard.MaxReplicationTaskId == remoteProgress.AckedTaskId
+	passedRequiredMinimum := remoteProgress.AckedTaskId >= requiredMinTaskID
+	withinLagTolerance := laggingTasks <= allowedLaggingTasks || timeLag <= allowedLagging
+
+	return shardStatus{
+		shardID:      localShard.GetShardId(),
+		laggingTasks: laggingTasks,
+		timeLag:      timeLag,
+		isReady:      fullyCaughtUp || (passedRequiredMinimum && withinLagTolerance),
+	}
+}
+
+// checkReplicationOnce checks whether the remote cluster has caught up on all shards.
 func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitReplicationRequest) (bool, error) {
 	resp, err := a.HistoryClient.GetReplicationStatus(ctx, &historyservice.GetReplicationStatusRequest{
 		RemoteClusters: []string{waitRequest.RemoteCluster}, // only the specified remote cluster
@@ -264,39 +298,39 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitR
 			return false, fmt.Errorf("GetReplicationStatus response for shard %d does not contains remote cluster %s", localShard.ShardId, waitRequest.RemoteCluster)
 		}
 
-		laggingTasks := localShard.MaxReplicationTaskId - remoteShardProgress.AckedTaskId
-		timeLag := localShard.MaxReplicationTaskVisibilityTime.AsTime().Sub(remoteShardProgress.AckedTaskVisibilityTime.AsTime())
-
-		fullyCaughtUp := localShard.MaxReplicationTaskId == remoteShardProgress.AckedTaskId
-		passedRequiredMinimum := remoteShardProgress.AckedTaskId >= requiredMinTaskIDPerShard[localShard.ShardId]
-		withinLagTolerance := laggingTasks <= waitRequest.AllowedLaggingTasks || timeLag <= waitRequest.AllowedLagging
-
-		status := shardStatus{
-			shardID:      localShard.GetShardId(),
-			laggingTasks: laggingTasks,
-			timeLag:      timeLag,
-			isReady:      fullyCaughtUp || (passedRequiredMinimum && withinLagTolerance),
-		}
-
-		shardStatuses = append(shardStatuses, status)
+		shardStatuses = append(shardStatuses, classifyShardReplicationStatus(
+			localShard,
+			remoteShardProgress,
+			requiredMinTaskIDPerShard[localShard.ShardId],
+			waitRequest.AllowedLaggingTasks,
+			waitRequest.AllowedLagging,
+		))
 	}
 
 	var (
-		readyShardCount    int
-		notReadyShardCount int
+		readyShardCount       int
+		notReadyShardCount    int
+		noWatermarkShardCount int
 
-		maxLaggingTasksShardID int32
-		maxLaggingTasks        int64
-
-		maxTimeLagShardID int32
-		maxTimeLag        time.Duration
+		maxLaggingTasks int64
+		maxTimeLag      time.Duration
 	)
+	// -1 (not a valid shard id) means no shard had genuine lag, e.g. when the not-ready
+	// shards are all no-watermark and thus carry zero lag.
+	maxLaggingTasksShardID := int32(-1)
+	maxTimeLagShardID := int32(-1)
 
 	for _, status := range shardStatuses {
 		if status.isReady {
 			readyShardCount++
-		} else {
-			notReadyShardCount++
+			continue
+		}
+
+		notReadyShardCount++
+
+		// No-ack-watermark shards carry zero lag values
+		if status.laggingTasks == 0 {
+			noWatermarkShardCount++
 		}
 
 		if status.laggingTasks > maxLaggingTasks {
@@ -314,6 +348,15 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitR
 	a.MetricsHandler.Gauge(metrics.CatchUpReadyShardCountGauge.Name()).Record(
 		float64(readyShardCount),
 		metrics.OperationTag(metrics.MigrationWorkflowScope),
+		metrics.NamespaceTag(waitRequest.Namespace),
+		metrics.TargetClusterTag(waitRequest.RemoteCluster))
+
+	// emit the not-ready shard count (namespace-tagged) so the catchup failure mode is
+	// observable per namespace during a failover.
+	a.MetricsHandler.Gauge(metrics.CatchUpNotReadyShardCountGauge.Name()).Record(
+		float64(notReadyShardCount),
+		metrics.OperationTag(metrics.MigrationWorkflowScope),
+		metrics.NamespaceTag(waitRequest.Namespace),
 		metrics.TargetClusterTag(waitRequest.RemoteCluster))
 
 	isReady := notReadyShardCount == 0
@@ -325,6 +368,7 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitR
 			tag.Int("TotalShards", len(localShards)),
 			tag.Int("ReadyShards", readyShardCount),
 			tag.Int("NotReadyShards", len(localShards)-readyShardCount),
+			tag.Int("NoWatermarkShards", noWatermarkShardCount),
 			tag.Duration("AllowedLagging", waitRequest.AllowedLagging),
 			tag.Int64("AllowedLaggingTasks", waitRequest.AllowedLaggingTasks),
 			tag.Int32("MaxLaggingTasksShardID", maxLaggingTasksShardID),
@@ -337,13 +381,22 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitR
 	return isReady, nil
 }
 
-func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverRequest) error {
+func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverRequest) (retErr error) {
 	// Use the highest priority caller type for checking handover state
 	// since during handover state namespace has no availability
 	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo(waitRequest.Namespace, headers.CallerTypeAPI, ""))
 
+	// The wait never returns on its own while shards lag: it is killed from the outside, the SDK
+	// cancels the context off the heartbeat, the next status call fails, and this defer runs.
+	// The snapshot is empty on a successful handover, which emits nothing.
+	var snapshot wideevents.HandoverLagSnapshot
+	start := time.Now()
+	defer func() {
+		a.emitHandoverIncomplete(waitRequest, &snapshot, time.Since(start), retErr)
+	}()
+
 	for {
-		done, err := a.checkHandoverOnce(ctx, waitRequest)
+		done, err := a.checkHandoverOnce(ctx, waitRequest, &snapshot)
 		if err != nil {
 			return err
 		}
@@ -356,8 +409,28 @@ func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverR
 	}
 }
 
+func (a *activities) emitHandoverIncomplete(
+	waitRequest waitHandoverRequest,
+	snapshot *wideevents.HandoverLagSnapshot,
+	elapsed time.Duration,
+	exitErr error,
+) {
+	if a.emitNamespaceLifecycleEvents == nil || !a.emitNamespaceLifecycleEvents() {
+		return
+	}
+	wideevents.EmitHandoverIncomplete(
+		a.EventLogger,
+		waitRequest.Namespace,
+		a.namespaceIDForEvent(waitRequest.Namespace),
+		waitRequest.RemoteCluster,
+		snapshot,
+		elapsed,
+		exitErr,
+	)
+}
+
 // Check if remote cluster has caught up on all shards on replication tasks
-func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHandoverRequest) (bool, error) {
+func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHandoverRequest, snapshot *wideevents.HandoverLagSnapshot) (bool, error) {
 	resp, err := a.HistoryClient.GetReplicationStatus(ctx, &historyservice.GetReplicationStatusRequest{
 		RemoteClusters: []string{waitRequest.RemoteCluster}, // only the specified remote cluster
 	})
@@ -424,11 +497,15 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 		maxHandoverLag        int64
 	)
 
+	// Reset each poll so the summary sees the final state, not an accumulation.
+	*snapshot = wideevents.NewHandoverLagSnapshot(len(localShards), handoverInfosMissingCount)
+
 	for _, status := range shardStatuses {
 		if status.isReady {
 			readyShardCount++
 		} else {
 			notReadyShardCount++
+			snapshot.AddLaggingShard(status.shardID, status.laggingTasks)
 		}
 
 		if status.laggingTasks > maxHandoverLag {
@@ -436,6 +513,11 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 			maxHandoverLagShardID = status.shardID
 		}
 	}
+
+	snapshot.ReadyCount = readyShardCount
+	snapshot.NotReadyCount = notReadyShardCount
+	snapshot.MaxLaggingTasks = maxHandoverLag
+	snapshot.MaxLaggingTasksShardID = maxHandoverLagShardID
 
 	// emit metrics about how many shards are ready
 	a.MetricsHandler.Gauge(metrics.HandoverReadyShardCountGauge.Name()).Record(
@@ -460,6 +542,15 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 	}
 
 	return isReady, nil
+}
+
+// namespaceIDForEvent lets events join on ID rather than name. Called once per activity.
+func (a *activities) namespaceIDForEvent(name string) string {
+	ns, err := a.NamespaceRegistry.GetNamespace(namespace.Name(name))
+	if err != nil {
+		return ""
+	}
+	return ns.ID().String()
 }
 
 func (a *activities) generateWorkflowReplicationTask(
@@ -1211,11 +1302,15 @@ func (a *activities) archetypeIDToName(ctx context.Context, archetypeID chasm.Ar
 		return chasm.WorkflowArchetype, nil
 	}
 
-	// chasm activity library is not registered on worker service, so hardcoding the mapping here for now.
+	// chasm activity and nexus operation libraries are not registered on worker service, so hardcoding
+	// the mapping here for now.
 	// TODO: Accept archetypeID in admin apis directly and remove this translation logic which relies on
 	// chasm registry.
 	if archetypeID == chasmactivity.ArchetypeID {
 		return chasmactivity.Archetype, nil
+	}
+	if archetypeID == chasmnexus.ArchetypeID {
+		return chasmnexus.Archetype, nil
 	}
 
 	archetype, ok := a.chasmRegistry.ComponentFqnByID(archetypeID)

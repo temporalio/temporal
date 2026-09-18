@@ -18,14 +18,8 @@ const (
 	DCRedirectionPolicyDefault = ""
 	// DCRedirectionPolicyNoop means no redirection
 	DCRedirectionPolicyNoop = "noop"
-	// DCRedirectionPolicySelectedAPIsForwarding means forwarding the following APIs based namespace
-	// 1. StartWorkflowExecution
-	// 2. SignalWithStartWorkflowExecution
-	// 3. SignalWorkflowExecution
-	// 4. RequestCancelWorkflowExecution
-	// 5. TerminateWorkflowExecution
-	// 6. QueryWorkflow
-	// please also reference selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs
+	// DCRedirectionPolicySelectedAPIsForwarding means forwarding state-effecting APIs based on namespace
+	// See selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs for the list of APIs
 	DCRedirectionPolicySelectedAPIsForwarding = "selected-apis-forwarding"
 
 	// DCRedirectionPolicyAllAPIsForwarding means forwarding all APIs based on namespace active cluster
@@ -57,17 +51,35 @@ type (
 
 // selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs contains a list of APIs which can be redirected
 var selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs = map[string]struct{}{
+	// Workflow APIs
 	"StartWorkflowExecution":           {},
 	"SignalWithStartWorkflowExecution": {},
 	"SignalWorkflowExecution":          {},
+	"UpdateWorkflowExecution":          {},
 	"RequestCancelWorkflowExecution":   {},
 	"TerminateWorkflowExecution":       {},
+	"PauseWorkflowExecution":           {},
+	"UnpauseWorkflowExecution":         {},
+	"ResetWorkflowExecution":           {},
 	"DeleteWorkflowExecution":          {},
 	"QueryWorkflow":                    {},
-	"StartActivityExecution":           {},
-	"RequestCancelActivityExecution":   {},
-	"TerminateActivityExecution":       {},
-	"DeleteActivityExecution":          {},
+	"ExecuteMultiOperation":            {},
+
+	// Standalone Activity APIs
+	"StartActivityExecution":         {},
+	"RequestCancelActivityExecution": {},
+	"TerminateActivityExecution":     {},
+	"DeleteActivityExecution":        {},
+	"PauseActivityExecution":         {},
+	"UnpauseActivityExecution":       {},
+	"ResetActivityExecution":         {},
+	"UpdateActivityExecutionOptions": {},
+
+	// Standalone Nexus Operation APIs
+	"StartNexusOperationExecution":         {},
+	"RequestCancelNexusOperationExecution": {},
+	"TerminateNexusOperationExecution":     {},
+	"DeleteNexusOperationExecution":        {},
 }
 
 // RedirectionPolicyGenerator generate corresponding redirection policy

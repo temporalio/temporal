@@ -1,6 +1,7 @@
 package nexusoperation
 
 import (
+	"maps"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -122,7 +123,7 @@ func (c *Cancellation) loadArgs(
 		startedTime:            op.GetStartedTime().AsTime(),
 		scheduleToCloseTimeout: op.GetScheduleToCloseTimeout().AsDuration(),
 		startToCloseTimeout:    op.GetStartToCloseTimeout().AsDuration(),
-		headers:                invocationData.Header,
+		headers:                maps.Clone(invocationData.Header),
 		payload:                invocationData.Input,
 	}, nil
 }

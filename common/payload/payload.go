@@ -12,8 +12,9 @@ import (
 var (
 	defaultDataConverter = converter.GetDefaultDataConverter()
 
-	nilPayload, _        = Encode(nil)
-	emptySlicePayload, _ = Encode([]string{})
+	nilPayload, _        = Encode(nil)           // Data: nil
+	nilSlicePayload, _   = Encode([]string(nil)) // Data: "null" (nil value is json encoded as null)
+	emptySlicePayload, _ = Encode([]string{})    // Data: "[]"
 )
 
 func EncodeString(str string) *commonpb.Payload {
@@ -71,7 +72,7 @@ func MergeMapOfPayload(
 	}
 	res := util.CloneMapNonNil(dst)
 	for k, v := range src {
-		if isEqual(v, nilPayload) || isEqual(v, emptySlicePayload) {
+		if isNilPayload(v) {
 			delete(res, k)
 		} else {
 			res[k] = v
@@ -80,15 +81,17 @@ func MergeMapOfPayload(
 	return res
 }
 
-// isEqual returns true if both have the same encoding and data.
-// It does not take additional metadata into consideration.
-// Note that data equality it's not the same as semantic equality, ie.,
-// `[]` and `[ ]` are semantically the same, but different not data-wise.
-// Only use if you know that the data is encoded the same way.
-func isEqual(a, b *commonpb.Payload) bool {
-	aEnc := a.GetMetadata()[converter.MetadataEncoding]
-	bEnc := a.GetMetadata()[converter.MetadataEncoding]
-	return bytes.Equal(aEnc, bEnc) && bytes.Equal(a.GetData(), b.GetData())
+// isNilPayload checks if the payload is equivalent to nil.
+// There are four cases:
+// - payload object is nil
+// - payload's data is nil
+// - payload's data is "null" (json encoded value for nil objects)
+// - payload's data is "[]" (empty slice for backwards compatibility)
+func isNilPayload(p *commonpb.Payload) bool {
+	return p == nil ||
+		bytes.Equal(p.Data, nilPayload.Data) ||
+		bytes.Equal(p.Data, nilSlicePayload.Data) ||
+		bytes.Equal(p.Data, emptySlicePayload.Data)
 }
 
 // FilterNilSearchAttributes returns a new SearchAttributes with nil/empty payload values filtered out.

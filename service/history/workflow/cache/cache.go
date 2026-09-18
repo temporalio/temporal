@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/finalizer"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/limiter"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -22,6 +23,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -63,7 +65,11 @@ type (
 		onPut                     func(wfContext *historyi.WorkflowContext)
 		onEvict                   func(wfContext *historyi.WorkflowContext)
 		nonUserContextLockTimeout time.Duration
+		// paginationLimiter limits pagination buffer size across all workflow cache contexts
+		paginationLimiter *limiter.KeyedBytesLimiter
+		testHooks         testhooks.TestHooks
 	}
+
 	cacheItem struct {
 		shardId   int32
 		wfContext historyi.WorkflowContext
@@ -94,6 +100,7 @@ func NewHostLevelCache(
 	config *configs.Config,
 	logger log.Logger,
 	handler metrics.Handler,
+	testHooks testhooks.TestHooks,
 ) Cache {
 	maxSize := config.HistoryHostLevelCacheMaxSize()
 	if config.HistoryCacheLimitSizeBased {
@@ -126,26 +133,33 @@ func NewHostLevelCache(
 		OnEvict: func(val any) {
 			//revive:disable-next-line:unchecked-type-assertion
 			item := val.(*cacheItem)
-			if item.finalizer == nil {
-				return // should only happen in unit tests
+			if item.finalizer != nil {
+				wfKey := item.wfContext.GetWorkflowKey()
+				err := item.finalizer.Deregister(wfKey.String())
+				if err != nil {
+					// debug level since this is very common: the cache item was registered with a finalizer
+					// that has been finalized since then and is therefore no longer accepting any calls
+					logger.Debug("cache failed to de-register callback in finalizer",
+						tag.Error(err), tag.ShardID(item.shardId))
+					return
+				}
 			}
-			wfKey := item.wfContext.GetWorkflowKey()
-			err := item.finalizer.Deregister(wfKey.String())
-			if err != nil {
-				// debug level since this is very common: the cache item was registered with a finalizer
-				// that has been finalized since then and is therefore no longer accepting any calls
-				logger.Debug("cache failed to de-register callback in finalizer",
-					tag.Error(err), tag.ShardID(item.shardId))
-			}
+			// We removed the finalizer callback before it ran, so this eviction now owns clearing
+			// the context. Without this, resources it holds, for example the bytes it reserved on the
+			// shared pagination buffer limiter would leak until process restart.
+			item.wfContext.Clear()
 		},
 	}
 
 	taggedHandler := handler.WithTags(metrics.CacheTypeTag(metrics.MutableStateCacheTypeTagValue))
 	c := cache.NewWithMetrics(maxSize, opts, taggedHandler)
-	return &cacheImpl{
+	impl := &cacheImpl{
 		Cache:                     c,
 		nonUserContextLockTimeout: config.HistoryCacheNonUserContextLockTimeout(),
+		paginationLimiter:         limiter.NewKeyedBytesLimiter(),
+		testHooks:                 testHooks,
 	}
+	return impl
 }
 
 func (c *cacheImpl) stop() {
@@ -289,9 +303,10 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 			shardContext.GetLogger(),
 			shardContext.GetThrottledLogger(),
 			shardContext.GetMetricsHandler(),
+			c.paginationLimiter,
+			c.testHooks,
 		)
 
-		var err error
 		value := &cacheItem{shardId: shardContext.GetShardID(), wfContext: workflowCtx, finalizer: shardContext.GetFinalizer()}
 		existing, err := c.PutIfNotExist(cacheKey, value)
 		if err != nil {
@@ -311,7 +326,6 @@ func (c *cacheImpl) getOrCreateWorkflowExecutionInternal(
 	// TODO This will create a closure on every request.
 	//  Consider revisiting this if it causes too much GC activity
 	releaseFunc := c.makeReleaseFunc(cacheKey, shardContext, workflowCtx, forceClearContext, handler, time.Now())
-
 	return workflowCtx, releaseFunc, nil
 }
 

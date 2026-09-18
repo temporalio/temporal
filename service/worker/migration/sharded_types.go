@@ -17,7 +17,16 @@ const (
 	// shardedForceReplicationWorkerName is the registered workflow name for
 	// the child worker workflows spawned by the parent. Registered on the
 	// same sharded worker component and task queue as the parent.
-	shardedForceReplicationWorkerName = "force-replication-sharded-worker"
+	shardedForceReplicationWorkerName               = "force-replication-sharded-worker"
+	shardedTaskQueueUserDataReplicationWorkflowName = "force-task-queue-user-data-replication-sharded"
+
+	shardedActivityPrefix                          = "Sharded"
+	shardedCountWorkflowActivityName               = shardedActivityPrefix + "CountWorkflow"
+	shardedDescribeTargetClusterActivityName       = shardedActivityPrefix + "DescribeTargetCluster"
+	shardedGetMetadataActivityName                 = shardedActivityPrefix + "GetMetadata"
+	shardedListWorkflowsActivityName               = shardedActivityPrefix + "ListWorkflows"
+	shardedReplicateBatchActivityName              = shardedActivityPrefix + "ReplicateBatch"
+	shardedSeedReplicationQueueWithUserDataEntries = shardedActivityPrefix + "SeedReplicationQueueWithUserDataEntries"
 
 	// releaseShardsSignalName carries mid-flight ReleaseShards signals
 	// from active replicate-batch activities back to their parent
@@ -108,10 +117,14 @@ type RunEntry struct {
 // rather than emitting an explicit zero. UnmarshalJSON below is the
 // inverse.
 func (r RunEntry) MarshalJSON() ([]byte, error) {
-	if r.ArchetypeID == 0 {
-		return fmt.Appendf(nil, `[%q]`, r.RunID), nil
+	runID, err := json.Marshal(r.RunID)
+	if err != nil {
+		return nil, fmt.Errorf("RunEntry runID: %w", err)
 	}
-	return fmt.Appendf(nil, `[%q,%d]`, r.RunID, r.ArchetypeID), nil
+	if r.ArchetypeID == 0 {
+		return fmt.Appendf(nil, `[%s]`, runID), nil
+	}
+	return fmt.Appendf(nil, `[%s,%d]`, runID, r.ArchetypeID), nil
 }
 
 func (r *RunEntry) UnmarshalJSON(data []byte) error {

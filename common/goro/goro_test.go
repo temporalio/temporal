@@ -43,7 +43,7 @@ func TestGoroCancel(t *testing.T) {
 	g.Cancel()
 	<-g.Done()
 	require.ErrorIs(t, context.Canceled, g.Err())
-	require.Nil(t, pctx.Err())
+	require.NoError(t, pctx.Err())
 }
 
 func TestGoroMultiCancel(t *testing.T) {

@@ -1,6 +1,9 @@
 package nexusoperation
 
 import (
+	"context"
+	"fmt"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -8,18 +11,85 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	nexusoperationpb "go.temporal.io/api/nexusoperation/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
+
+func newTestValidator(config *Config) *validator {
+	return newValidator(
+		config,
+		log.NewNoopLogger(),
+		nil,
+		nil,
+		mustNewCallbackValidator(),
+		newTestLinkValidator(10, 10),
+	)
+}
+
+func mustNewCallbackValidator() callbacks.Validator {
+	allowAllAddresses := callbacks.AddressMatchRules{
+		Rules: []callbacks.AddressMatchRule{
+			{Regexp: regexp.MustCompile(`.*`), AllowInsecure: true},
+		},
+	}
+	cfg := callbacks.ValidatorConfig{
+		MaxCallbacksPerExecution:         func(string) int { return 10 },
+		MaxIDLengthLimit:                 func() int { return 10 },
+		URLMaxLength:                     func(string) int { return 1000 },
+		HeaderMaxSize:                    func(string) int { return 4096 },
+		EndpointRules:                    func(string) callbacks.AddressMatchRules { return allowAllAddresses },
+		MaxServiceNameLength:             func(string) int { return 10 },
+		MaxOperationNameLength:           func(string) int { return 10 },
+		NexusHandlerSourceContextMaxSize: func(string) int { return 1000 },
+	}
+
+	v, err := callbacks.NewValidator(cfg)
+	if err != nil {
+		panic("creating callback validator: " + err.Error())
+	}
+	return v
+}
+
+func newNexusCallback() *commonpb.Callback {
+	return &commonpb.Callback{
+		Variant: &commonpb.Callback_Nexus_{
+			Nexus: &commonpb.Callback_Nexus{
+				Url: "https://nexus.ex.xxxxx.cluster.tmprl.cloud:7243/Namespaces/ex.xxxxx/nexus/callback",
+				Header: map[string]string{
+					"Nexus-Operation-State": "succeeded",
+					"Content-Type":          "application/json",
+				},
+			},
+		},
+	}
+}
+
+// newNexusHandlerCallback returns a NexusHandler-variant callback.
+func newNexusHandlerCallback() *commonpb.Callback {
+	sourceContext := &commonpb.Payload{Data: make([]byte, 1024)}
+	return &commonpb.Callback{
+		Variant: &commonpb.Callback_NexusHandler_{
+			NexusHandler: &commonpb.Callback_NexusHandler{
+				TaskQueueName: "wc-queue",
+				Service:       "Adapter",
+				Operation:     "Deliver",
+				SourceContext: sourceContext,
+			},
+		},
+	}
+}
 
 func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -36,6 +106,8 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 		mockVisibilityManager,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		metrics.NoopMetricsHandler,
+		log.NewNoopLogger(),
 	)
 
 	config := &Config{
@@ -49,13 +121,18 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 		MaxOperationHeaderSize:             func(string) int { return 10 },
 		DisallowedOperationHeaders:         func() []string { return []string{"disallowed-header"} },
 		MaxOperationScheduleToCloseTimeout: func(string) time.Duration { return time.Hour },
+		EnabledCallbackKinds: func(string) []callbacks.Kind {
+			return []callbacks.Kind{callbacks.KindNexus}
+		},
 	}
 
 	for _, tc := range []struct {
-		name   string
-		mutate func(*workflowservice.StartNexusOperationExecutionRequest)
-		errMsg string
-		check  func(*testing.T, *workflowservice.StartNexusOperationExecutionRequest)
+		name         string
+		mutate       func(*workflowservice.StartNexusOperationExecutionRequest)
+		mutateConfig func(*Config)
+		wantErr      string
+		// Check the request after validation, to verify situations where it normalizes values.
+		postValidateCheck func(*testing.T, *workflowservice.StartNexusOperationExecutionRequest)
 	}{
 		{
 			name: "valid request",
@@ -65,21 +142,21 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.OperationId = ""
 			},
-			errMsg: "operation_id is required",
+			wantErr: "operation_id is required",
 		},
 		{
 			name: "operation_id - exceeds length limit",
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.OperationId = strings.Repeat("x", 51)
 			},
-			errMsg: "operation_id exceeds length limit",
+			wantErr: "operation_id exceeds length limit",
 		},
 		{
 			name: "request_id - defaults empty to UUID",
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.RequestId = ""
 			},
-			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
+			postValidateCheck: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
 				require.Len(t, r.RequestId, 36) // UUID length
 			},
 		},
@@ -88,63 +165,63 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.RequestId = strings.Repeat("x", 51)
 			},
-			errMsg: "request_id exceeds length limit",
+			wantErr: "request_id exceeds length limit",
 		},
 		{
 			name: "identity - exceeds length limit",
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.Identity = strings.Repeat("x", 51)
 			},
-			errMsg: "identity exceeds length limit",
+			wantErr: "identity exceeds length limit",
 		},
 		{
-			name:   "endpoint - required",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) { r.Endpoint = "" },
-			errMsg: "endpoint is required",
+			name:    "endpoint - required",
+			mutate:  func(r *workflowservice.StartNexusOperationExecutionRequest) { r.Endpoint = "" },
+			wantErr: "endpoint is required",
 		},
 		{
-			name:   "service - required",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) { r.Service = "" },
-			errMsg: "service is required",
+			name:    "service - required",
+			mutate:  func(r *workflowservice.StartNexusOperationExecutionRequest) { r.Service = "" },
+			wantErr: "service is required",
 		},
 		{
 			name: "service - exceeds length limit",
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.Service = "too-long-svc"
 			},
-			errMsg: "service exceeds length limit",
+			wantErr: "service exceeds length limit",
 		},
 		{
-			name:   "operation - required",
-			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) { r.Operation = "" },
-			errMsg: "operation is required",
+			name:    "operation - required",
+			mutate:  func(r *workflowservice.StartNexusOperationExecutionRequest) { r.Operation = "" },
+			wantErr: "operation is required",
 		},
 		{
 			name: "operation - exceeds length limit",
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.Operation = "too-long-op!"
 			},
-			errMsg: "operation exceeds length limit",
+			wantErr: "operation exceeds length limit",
 		},
 		{
 			name: "schedule_to_close_timeout - invalid",
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.ScheduleToCloseTimeout = &durationpb.Duration{Seconds: -1}
 			},
-			errMsg: "schedule_to_close_timeout is invalid",
+			wantErr: "schedule_to_close_timeout is invalid",
 		},
 		{
 			name: "schedule_to_close_timeout - caps exceeding max",
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.ScheduleToCloseTimeout = durationpb.New(2 * time.Hour)
 			},
-			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
+			postValidateCheck: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
 				require.Equal(t, time.Hour, r.ScheduleToCloseTimeout.AsDuration())
 			},
 		},
 		{
 			name: "schedule_to_close_timeout - caps unset to max",
-			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
+			postValidateCheck: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
 				require.Equal(t, time.Hour, r.ScheduleToCloseTimeout.AsDuration())
 			},
 		},
@@ -153,7 +230,7 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.ScheduleToCloseTimeout = durationpb.New(30 * time.Minute)
 			},
-			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
+			postValidateCheck: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
 				require.Equal(t, 30*time.Minute, r.ScheduleToCloseTimeout.AsDuration())
 			},
 		},
@@ -162,14 +239,14 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.ScheduleToStartTimeout = &durationpb.Duration{Seconds: -1}
 			},
-			errMsg: "schedule_to_start_timeout is invalid",
+			wantErr: "schedule_to_start_timeout is invalid",
 		},
 		{
 			name: "schedule_to_start_timeout - caps to defaulted schedule_to_close_timeout",
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.ScheduleToStartTimeout = durationpb.New(2 * time.Hour)
 			},
-			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
+			postValidateCheck: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
 				require.Equal(t, time.Hour, r.ScheduleToCloseTimeout.AsDuration())
 				require.Equal(t, time.Hour, r.ScheduleToStartTimeout.AsDuration())
 			},
@@ -180,7 +257,7 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 				r.ScheduleToCloseTimeout = durationpb.New(30 * time.Minute)
 				r.ScheduleToStartTimeout = durationpb.New(time.Hour)
 			},
-			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
+			postValidateCheck: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
 				require.Equal(t, 30*time.Minute, r.ScheduleToStartTimeout.AsDuration())
 			},
 		},
@@ -190,7 +267,7 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 				r.ScheduleToCloseTimeout = durationpb.New(30 * time.Minute)
 				r.ScheduleToStartTimeout = durationpb.New(20 * time.Minute)
 			},
-			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
+			postValidateCheck: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
 				require.Equal(t, 20*time.Minute, r.ScheduleToStartTimeout.AsDuration())
 			},
 		},
@@ -199,14 +276,14 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.StartToCloseTimeout = &durationpb.Duration{Seconds: -1}
 			},
-			errMsg: "start_to_close_timeout is invalid",
+			wantErr: "start_to_close_timeout is invalid",
 		},
 		{
 			name: "start_to_close_timeout - caps to defaulted schedule_to_close_timeout",
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.StartToCloseTimeout = durationpb.New(2 * time.Hour)
 			},
-			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
+			postValidateCheck: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
 				require.Equal(t, time.Hour, r.ScheduleToCloseTimeout.AsDuration())
 				require.Equal(t, time.Hour, r.StartToCloseTimeout.AsDuration())
 			},
@@ -217,7 +294,7 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 				r.ScheduleToCloseTimeout = durationpb.New(30 * time.Minute)
 				r.StartToCloseTimeout = durationpb.New(time.Hour)
 			},
-			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
+			postValidateCheck: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
 				require.Equal(t, 30*time.Minute, r.StartToCloseTimeout.AsDuration())
 			},
 		},
@@ -227,7 +304,7 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 				r.ScheduleToCloseTimeout = durationpb.New(30 * time.Minute)
 				r.StartToCloseTimeout = durationpb.New(10 * time.Minute)
 			},
-			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
+			postValidateCheck: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
 				require.Equal(t, 10*time.Minute, r.StartToCloseTimeout.AsDuration())
 			},
 		},
@@ -242,7 +319,7 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.Input = &commonpb.Payload{Data: []byte("this-input-is-longer-than-twenty-characters")}
 			},
-			errMsg: "input exceeds size limit",
+			wantErr: "input exceeds size limit",
 		},
 		{
 			name: "user_metadata.summary - exceeds size limit",
@@ -251,7 +328,7 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 					Summary: &commonpb.Payload{Data: []byte("too-long-summary")},
 				}
 			},
-			errMsg: "user_metadata.summary exceeds size limit",
+			wantErr: "user_metadata.summary exceeds size limit",
 		},
 		{
 			name: "user_metadata.details - exceeds size limit",
@@ -260,25 +337,25 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 					Details: &commonpb.Payload{Data: []byte("this-details-payload-is-too-long")},
 				}
 			},
-			errMsg: "user_metadata.details exceeds size limit",
+			wantErr: "user_metadata.details exceeds size limit",
 		},
 		{
 			name: "nexus_header - disallowed key",
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.NexusHeader = map[string]string{"Disallowed-Header": "value"}
 			},
-			errMsg: "nexus_header contains a disallowed key",
+			wantErr: "nexus_header contains a disallowed key",
 		},
 		{
 			name: "nexus_header - exceeds size limit",
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.NexusHeader = map[string]string{"key": "too-long-val"}
 			},
-			errMsg: "nexus_header exceeds size limit",
+			wantErr: "nexus_header exceeds size limit",
 		},
 		{
 			name: "id_policies - defaults unspecified",
-			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
+			postValidateCheck: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_ID_REUSE_POLICY_ALLOW_DUPLICATE, r.IdReusePolicy)
 				require.Equal(t, enumspb.NEXUS_OPERATION_ID_CONFLICT_POLICY_FAIL, r.IdConflictPolicy)
 			},
@@ -289,7 +366,7 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 				r.IdReusePolicy = enumspb.NEXUS_OPERATION_ID_REUSE_POLICY_REJECT_DUPLICATE
 				r.IdConflictPolicy = enumspb.NEXUS_OPERATION_ID_CONFLICT_POLICY_USE_EXISTING
 			},
-			check: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
+			postValidateCheck: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
 				require.Equal(t, enumspb.NEXUS_OPERATION_ID_REUSE_POLICY_REJECT_DUPLICATE, r.IdReusePolicy)
 				require.Equal(t, enumspb.NEXUS_OPERATION_ID_CONFLICT_POLICY_USE_EXISTING, r.IdConflictPolicy)
 			},
@@ -299,24 +376,163 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.SearchAttributes = &commonpb.SearchAttributes{
 					IndexedFields: map[string]*commonpb.Payload{
-						"CustomKeywordField": payload.EncodeString("v1"),
-						"CustomTextField":    payload.EncodeString("v2"),
-						"CustomIntField":     payload.EncodeString("3"),
+						"CustomKeywordField": sadefs.MustEncodeValue("v1", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+						"CustomTextField":    sadefs.MustEncodeValue("v2", enumspb.INDEXED_VALUE_TYPE_TEXT),
+						"CustomIntField":     sadefs.MustEncodeValue(3, enumspb.INDEXED_VALUE_TYPE_INT),
 					},
 				}
 			},
-			errMsg: "number of search attributes",
+			wantErr: "number of search attributes",
 		},
 		{
 			name: "search_attributes - value exceeds size limit",
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.SearchAttributes = &commonpb.SearchAttributes{
 					IndexedFields: map[string]*commonpb.Payload{
-						"CustomKeywordField": payload.EncodeString(strings.Repeat("x", 100)),
+						"CustomKeywordField": sadefs.MustEncodeValue(
+							strings.Repeat("x", 100),
+							enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+						),
 					},
 				}
 			},
-			errMsg: "exceeds size limit",
+			wantErr: "exceeds size limit",
+		},
+		{
+			name: "completion_callbacks - accepts the nexus variant",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.CompletionCallbacks = []*commonpb.Callback{newNexusCallback()}
+			},
+		},
+		{
+			// The default for enabledCallbackKinds is empty, i.e. the feature is off.
+			name: "completion_callbacks - rejected when no kinds are enabled",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.CompletionCallbacks = []*commonpb.Callback{newNexusCallback()}
+			},
+			mutateConfig: func(c *Config) {
+				c.EnabledCallbackKinds = func(string) []callbacks.Kind { return nil }
+			},
+			wantErr: "nexus callbacks are not enabled for this execution type",
+		},
+		{
+			name: "completion_callbacks - rejects a kind that is not enabled",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.CompletionCallbacks = []*commonpb.Callback{newNexusHandlerCallback()}
+			},
+			wantErr: "nexusHandler callbacks are not enabled for this execution type",
+		},
+		{
+			name: "source_context - rejects a single callback over the per-callback limit",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.CompletionCallbacks = []*commonpb.Callback{newNexusHandlerCallback()}
+			},
+			mutateConfig: func(c *Config) {
+				c.EnabledCallbackKinds = func(string) []callbacks.Kind {
+					return []callbacks.Kind{callbacks.KindNexus, callbacks.KindNexusHandler}
+				}
+			},
+			wantErr: "source_context exceeds size limit",
+		},
+		{
+			name: "links - accepts a valid link",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.Links = []*commonpb.Link{testLink("wf-id")}
+			},
+		},
+		{
+			name: "links - rejects an incomplete variant",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.Links = []*commonpb.Link{{Variant: &commonpb.Link_WorkflowEvent_{
+					WorkflowEvent: &commonpb.Link_WorkflowEvent{WorkflowId: "wf-id", RunId: "wf-run-id"},
+				}}}
+			},
+			wantErr: "must not have an empty namespace",
+		},
+		{
+			name: "links - rejects more than the per-request limit",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				// newTestLinkValidator below allows 10 links per request.
+				for i := range 11 {
+					r.Links = append(r.Links, testLink(fmt.Sprintf("wf-%d", i)))
+				}
+			},
+			wantErr: "cannot attach more than 10 links per request",
+		},
+		{
+			// Links ride along on callbacks as well as on the request, and are validated whether or
+			// not the request brought any of its own.
+			name: "links - rejects an incomplete variant carried by a callback",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				cb := newNexusCallback()
+				cb.Links = []*commonpb.Link{{Variant: &commonpb.Link_WorkflowEvent_{
+					WorkflowEvent: &commonpb.Link_WorkflowEvent{WorkflowId: "wf-id", RunId: "wf-run-id"},
+				}}}
+				r.CompletionCallbacks = []*commonpb.Callback{cb}
+			},
+			wantErr: "must not have an empty namespace",
+		},
+		{
+			name: "links - rejects an oversized link carried by a callback",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				// newTestLinkValidator sets a default 4000 bytes per link limit.
+				cb := newNexusCallback()
+				cb.Links = []*commonpb.Link{testLink(strings.Repeat("x", 4001))}
+				r.CompletionCallbacks = []*commonpb.Callback{cb}
+			},
+			wantErr: "link exceeds allowed size of 4000",
+		},
+		{
+			// A callback's links count toward the same per-request limit as the request's own, so
+			// neither side can smuggle links past it by splitting them across the two.
+			name: "links - counts callback links toward the per-request limit",
+			mutate: func(req *workflowservice.StartNexusOperationExecutionRequest) {
+				cb := newNexusCallback()
+				for i := range 6 {
+					req.Links = append(req.Links, testLink(fmt.Sprintf("req-wf-%d", i)))
+					cb.Links = append(cb.Links, testLink(fmt.Sprintf("cb-wf-%d", i)))
+				}
+				req.CompletionCallbacks = []*commonpb.Callback{cb}
+			},
+			wantErr: "cannot attach more than 10 links per request",
+		},
+		{
+			name: "on_conflict_options - attach_completion_callbacks requires attach_request_id",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.CompletionCallbacks = []*commonpb.Callback{newNexusCallback()}
+				r.OnConflictOptions = &nexusoperationpb.OnConflictOptions{
+					AttachCompletionCallbacks: true,
+				}
+			},
+			wantErr: "attach_completion_callbacks requires attach_request_id",
+		},
+		{
+			name: "on_conflict_options - attach_request_id requires a completion callback or a link",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.OnConflictOptions = &nexusoperationpb.OnConflictOptions{
+					AttachRequestId: true,
+				}
+			},
+			wantErr: "attach_request_id requires at least one completion callback or link",
+		},
+		{
+			name: "on_conflict_options - attach_request_id is satisfied by links alone",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.Links = []*commonpb.Link{testLink("wf-id")}
+				r.OnConflictOptions = &nexusoperationpb.OnConflictOptions{
+					AttachRequestId: true,
+					AttachLinks:     true,
+				}
+			},
+		},
+		{
+			name: "on_conflict_options - attach_links may be set on its own",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.Links = []*commonpb.Link{testLink("wf-id")}
+				r.OnConflictOptions = &nexusoperationpb.OnConflictOptions{
+					AttachLinks: true,
+				}
+			},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -329,23 +545,32 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 				Operation:   "operation",
 				SearchAttributes: &commonpb.SearchAttributes{
 					IndexedFields: map[string]*commonpb.Payload{
-						"CustomKeywordField": payload.EncodeString("val"),
+						"CustomKeywordField": sadefs.MustEncodeValue("val", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 					},
 				},
 			}
 			if tc.mutate != nil {
 				tc.mutate(req)
 			}
-			err := validateAndNormalizeStartRequest(req, config, log.NewNoopLogger(), nil, saValidator)
-			if tc.errMsg != "" {
+			caseConfig := *config
+			if tc.mutateConfig != nil {
+				tc.mutateConfig(&caseConfig)
+			}
+
+			cbValidator := mustNewCallbackValidator()
+			logger := log.NewNoopLogger()
+			v := newValidator(&caseConfig, logger, nil, saValidator, cbValidator, newTestLinkValidator(10, 10))
+
+			err := v.validateAndNormalizeStartRequest(context.Background(), req)
+			if tc.wantErr != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
-				require.Contains(t, err.Error(), tc.errMsg)
+				require.Contains(t, err.Error(), tc.wantErr)
 			} else {
 				require.NoError(t, err)
 			}
-			if tc.check != nil {
-				tc.check(t, req)
+			if tc.postValidateCheck != nil {
+				tc.postValidateCheck(t, req)
 			}
 		})
 	}
@@ -398,7 +623,7 @@ func TestValidateDescribeNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.DescribeNexusOperationExecutionRequest) {
 				r.RunId = "not-a-uuid"
 			},
-			errMsg: "run_id is not a valid UUID",
+			errMsg: errInvalidRunID,
 		},
 		{
 			name: "long_poll_token - requires run_id",
@@ -432,7 +657,7 @@ func TestValidateDescribeNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := validateAndNormalizeDescribeRequest(validReq, "test-namespace-id", config)
+			err := newTestValidator(config).validateAndNormalizeDescribeRequest(validReq, "test-namespace-id")
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -494,7 +719,7 @@ func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.RequestCancelNexusOperationExecutionRequest) {
 				r.RunId = "not-a-uuid"
 			},
-			errMsg: "run_id is not a valid UUID",
+			errMsg: errInvalidRunID,
 		},
 		{
 			name: "identity - exceeds length limit",
@@ -519,7 +744,7 @@ func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := validateAndNormalizeCancelRequest(validReq, config)
+			err := newTestValidator(config).validateAndNormalizeCancelRequest(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -572,7 +797,7 @@ func TestValidateDeleteNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.DeleteNexusOperationExecutionRequest) {
 				r.RunId = "not-a-valid-uuid"
 			},
-			errMsg: "invalid run id: must be a valid UUID",
+			errMsg: errInvalidRunID,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -583,7 +808,7 @@ func TestValidateDeleteNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := validateAndNormalizeDeleteRequest(validReq, config)
+			err := newTestValidator(config).validateAndNormalizeDeleteRequest(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -645,7 +870,7 @@ func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.TerminateNexusOperationExecutionRequest) {
 				r.RunId = "not-a-uuid"
 			},
-			errMsg: "run_id is not a valid UUID",
+			errMsg: errInvalidRunID,
 		},
 		{
 			name: "identity - exceeds length limit",
@@ -670,7 +895,7 @@ func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := validateAndNormalizeTerminateRequest(validReq, config)
+			err := newTestValidator(config).validateAndNormalizeTerminateRequest(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -718,7 +943,7 @@ func TestValidatePollNexusOperationExecutionRequest(t *testing.T) {
 			mutate: func(r *workflowservice.PollNexusOperationExecutionRequest) {
 				r.RunId = "not-a-uuid"
 			},
-			errMsg: "run_id is not a valid UUID",
+			errMsg: errInvalidRunID,
 		},
 		{
 			name: "wait_stage - normalizes UNSPECIFIED to CLOSED",
@@ -763,7 +988,7 @@ func TestValidatePollNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := validateAndNormalizePollRequest(validReq, config)
+			err := newTestValidator(config).validateAndNormalizePollRequest(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -776,4 +1001,100 @@ func TestValidatePollNexusOperationExecutionRequest(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidateOnConflictOptions(t *testing.T) {
+	t.Parallel()
+
+	// on_conflict_options validation is config-independent.
+	v := newTestValidator(&Config{})
+	cb := newNexusCallback()
+
+	t.Run("Unset", func(t *testing.T) {
+		require.NoError(t, v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{}))
+	})
+
+	t.Run("Empty", func(t *testing.T) {
+		require.NoError(t, v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
+			OnConflictOptions: &nexusoperationpb.OnConflictOptions{},
+		}))
+	})
+
+	t.Run("AttachRequestIdAndCallbacksWithCallback", func(t *testing.T) {
+		require.NoError(t, v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
+			CompletionCallbacks: []*commonpb.Callback{cb},
+			OnConflictOptions: &nexusoperationpb.OnConflictOptions{
+				AttachRequestId:           true,
+				AttachCompletionCallbacks: true,
+			},
+		}))
+	})
+
+	t.Run("AttachRequestIdOnlyWithCallback", func(t *testing.T) {
+		require.NoError(t, v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
+			CompletionCallbacks: []*commonpb.Callback{cb},
+			OnConflictOptions:   &nexusoperationpb.OnConflictOptions{AttachRequestId: true},
+		}))
+	})
+
+	t.Run("AttachCallbacksWithoutAttachRequestId", func(t *testing.T) {
+		err := v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
+			CompletionCallbacks: []*commonpb.Callback{cb},
+			OnConflictOptions: &nexusoperationpb.OnConflictOptions{
+				AttachCompletionCallbacks: true,
+			},
+		})
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Contains(t, err.Error(), "attach_completion_callbacks requires attach_request_id")
+	})
+
+	t.Run("AttachRequestIdOnlyWithLink", func(t *testing.T) {
+		require.NoError(t, v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
+			Links:             []*commonpb.Link{testLink("wf-id")},
+			OnConflictOptions: &nexusoperationpb.OnConflictOptions{AttachRequestId: true},
+		}))
+	})
+
+	t.Run("AttachLinksOnly", func(t *testing.T) {
+		// attach_links stands on its own: links are keyed by the request ID the caller always supplies.
+		require.NoError(t, v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
+			Links:             []*commonpb.Link{testLink("wf-id")},
+			OnConflictOptions: &nexusoperationpb.OnConflictOptions{AttachLinks: true},
+		}))
+	})
+
+	t.Run("AttachLinksAndCallbacks", func(t *testing.T) {
+		require.NoError(t, v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
+			CompletionCallbacks: []*commonpb.Callback{cb},
+			Links:               []*commonpb.Link{testLink("wf-id")},
+			OnConflictOptions: &nexusoperationpb.OnConflictOptions{
+				AttachRequestId:           true,
+				AttachCompletionCallbacks: true,
+				AttachLinks:               true,
+			},
+		}))
+	})
+
+	t.Run("AttachRequestIdWithoutCallbackOrLink", func(t *testing.T) {
+		err := v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
+			OnConflictOptions: &nexusoperationpb.OnConflictOptions{AttachRequestId: true},
+		})
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Contains(t, err.Error(), "attach_request_id requires at least one completion callback or link")
+	})
+
+	t.Run("AttachRequestIdAndCallbacksWithoutCallbackProvided", func(t *testing.T) {
+		err := v.validateOnConflictOptions(&workflowservice.StartNexusOperationExecutionRequest{
+			OnConflictOptions: &nexusoperationpb.OnConflictOptions{
+				AttachRequestId:           true,
+				AttachCompletionCallbacks: true,
+			},
+		})
+		var invalidArgErr *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgErr)
+		require.Contains(t, err.Error(), "attach_request_id requires at least one completion callback")
+	})
+
 }

@@ -9,11 +9,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/metrics"
-)
-
-const (
-	countWorkflowsForReplicationTimeout        = 2 * time.Minute
-	shardedCountWorkflowsForReplicationTimeout = 30 * time.Second
+	"go.temporal.io/server/common/wideevents"
 )
 
 type (
@@ -43,6 +39,7 @@ type (
 
 		// Used for verifying workflow executions were replicated successfully on target cluster.
 		EnableVerification      bool
+		TargetClusterEndpoint   string
 		TargetClusterName       string
 		VerifyIntervalInSeconds int `validate:"gte=0"`
 
@@ -90,17 +87,7 @@ type (
 		TotalWorkflowCount                 int64
 		ReplicatedWorkflowCount            int64
 		ReplicatedWorkflowCountPerSecond   float64
-
-		// PageTokenForRestart is the ListWorkflows page token to restart
-		// from if the operation is interrupted; feed it back into the
-		// workflow's NextPageToken to resume near current progress. The
-		// legacy variants return the current continue-as-new run's start
-		// token, which advances as the parent frequently CANs. The sharded
-		// parent rarely CANs, so it instead returns the latest child
-		// checkpoint token (falling back to the run's start token before
-		// any child has checkpointed) so the value tracks progress the
-		// same way.
-		PageTokenForRestart []byte
+		PageTokenForRestart                []byte
 	}
 )
 
@@ -130,7 +117,7 @@ const (
 	defaultVerifyIntervalInSeconds                 = 5
 )
 
-func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParams) error {
+func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParams) (retErr error) {
 	// For now, we'll return the initial page token for simplicity.
 	// If we want this to be more precise, we could track processed pages.
 	startPageToken := params.NextPageToken
@@ -151,9 +138,11 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 	if err := validateAndSetForceReplicationParams(ctx, &params); err != nil {
 		return err
 	}
+	finishLifecycle := startForceReplicationWorkflowLifecycle(ctx, params)
+	defer func() { finishLifecycle(retErr, verifiedWorkflowCountForEvent(params)) }()
 
 	if params.TotalForceReplicateWorkflowCount == 0 {
-		wfCount, err := countWorkflowsForReplication(ctx, params.Namespace, params.Query, countWorkflowsForReplicationTimeout)
+		wfCount, err := countWorkflowForReplication(ctx, params)
 		if err != nil {
 			return err
 		}
@@ -213,7 +202,7 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 	return workflow.NewContinueAsNewError(ctx, ForceReplicationWorkflow, params)
 }
 
-func ForceReplicationWorkflowV2(ctx workflow.Context, params ForceReplicationParams) error {
+func ForceReplicationWorkflowV2(ctx workflow.Context, params ForceReplicationParams) (retErr error) {
 	// For now, we'll return the initial page token for simplicity.
 	// If we want this to be more precise, we could track processed pages.
 	startPageToken := params.NextPageToken
@@ -234,9 +223,11 @@ func ForceReplicationWorkflowV2(ctx workflow.Context, params ForceReplicationPar
 	if err := validateAndSetForceReplicationParams(ctx, &params); err != nil {
 		return err
 	}
+	finishLifecycle := startForceReplicationWorkflowLifecycle(ctx, params)
+	defer func() { finishLifecycle(retErr, verifiedWorkflowCountForEvent(params)) }()
 
 	if params.TotalForceReplicateWorkflowCount == 0 {
-		wfCount, err := countWorkflowsForReplication(ctx, params.Namespace, params.Query, countWorkflowsForReplicationTimeout)
+		wfCount, err := countWorkflowForReplication(ctx, params)
 		if err != nil {
 			return err
 		}
@@ -289,6 +280,48 @@ func ForceReplicationWorkflowV2(ctx workflow.Context, params ForceReplicationPar
 
 	params.ContinuedAsNewCount++
 	return workflow.NewContinueAsNewError(ctx, ForceReplicationWorkflowV2, params)
+}
+
+func newForceReplicationWorkflowLifecycle(
+	ctx workflow.Context,
+	params ForceReplicationParams,
+) migrationWorkflowLifecycle {
+	return newMigrationWorkflowLifecycle(
+		ctx,
+		params.Namespace,
+		wideevents.PhaseNamespaceForceReplicationStarted,
+		wideevents.PhaseNamespaceForceReplicationFinished,
+		map[string]any{
+			"query":                     params.Query,
+			"target_cluster":            params.TargetClusterName,
+			"verification_enabled":      params.EnableVerification,
+			"concurrent_activity_count": params.ConcurrentActivityCount,
+			"overall_rps":               params.OverallRps,
+		},
+	)
+}
+
+func startForceReplicationWorkflowLifecycle(
+	ctx workflow.Context,
+	params ForceReplicationParams,
+) func(error, *int64) {
+	if workflow.GetVersion(ctx, migrationWorkflowLifecycleVersion, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		return func(error, *int64) {}
+	}
+	lifecycle := newForceReplicationWorkflowLifecycle(ctx, params)
+	if lifecycle.isFirstRun() {
+		lifecycle.emitStarted(ctx)
+	}
+	return func(err error, verifiedWorkflowCount *int64) {
+		lifecycle.emitFinished(ctx, err, verifiedWorkflowCount)
+	}
+}
+
+func verifiedWorkflowCountForEvent(params ForceReplicationParams) *int64 {
+	if !params.EnableVerification {
+		return nil
+	}
+	return &params.ReplicatedWorkflowCount
 }
 
 func maybeKickoffTaskQueueUserDataReplication(ctx workflow.Context, params ForceReplicationParams, onDone func(failureReason string)) error {
@@ -356,8 +389,8 @@ func validateAndSetForceReplicationParams(ctx workflow.Context, params *ForceRep
 		return temporal.NewNonRetryableApplicationError("InvalidArgument: Namespace is required", "InvalidArgument", nil)
 	}
 
-	if params.EnableVerification && len(params.TargetClusterName) == 0 {
-		return temporal.NewNonRetryableApplicationError("InvalidArgument: TargetClusterName is required with verification enabled", "InvalidArgument", nil)
+	if params.EnableVerification && len(params.TargetClusterEndpoint) == 0 && len(params.TargetClusterName) == 0 {
+		return temporal.NewNonRetryableApplicationError("InvalidArgument: TargetClusterEndpoint or TargetClusterName is required with verification enabled", "InvalidArgument", nil)
 	}
 
 	if params.ConcurrentActivityCount <= 0 {
@@ -458,9 +491,9 @@ func listExecutionsForReplication(ctx workflow.Context, executionsCh workflow.Ch
 	return nil
 }
 
-func countWorkflowsForReplication(ctx workflow.Context, namespace, query string, startToCloseTimeout time.Duration) (int64, error) {
+func countWorkflowForReplication(ctx workflow.Context, params ForceReplicationParams) (int64, error) {
 	ao := workflow.ActivityOptions{
-		StartToCloseTimeout: startToCloseTimeout,
+		StartToCloseTimeout: 2 * time.Minute,
 		RetryPolicy:         forceReplicationActivityRetryPolicy,
 	}
 
@@ -470,8 +503,8 @@ func countWorkflowsForReplication(ctx workflow.Context, namespace, query string,
 		workflow.WithActivityOptions(ctx, ao),
 		a.CountWorkflow,
 		&workflowservice.CountWorkflowExecutionsRequest{
-			Namespace: namespace,
-			Query:     query,
+			Namespace: params.Namespace,
+			Query:     params.Query,
 		}).Get(ctx, &output); err != nil {
 		return 0, err
 	}
@@ -526,11 +559,12 @@ func enqueueReplicationTasks(ctx workflow.Context, executionsCh workflow.Channel
 				actx,
 				a.VerifyReplicationTasks,
 				&verifyReplicationTasksRequest{
-					TargetClusterName: params.TargetClusterName,
-					Namespace:         params.Namespace,
-					NamespaceID:       namespaceID,
-					Executions:        migrationExecutions,
-					VerifyInterval:    time.Duration(params.VerifyIntervalInSeconds) * time.Second,
+					TargetClusterEndpoint: params.TargetClusterEndpoint,
+					TargetClusterName:     params.TargetClusterName,
+					Namespace:             params.Namespace,
+					NamespaceID:           namespaceID,
+					Executions:            migrationExecutions,
+					VerifyInterval:        time.Duration(params.VerifyIntervalInSeconds) * time.Second,
 				})
 
 			pendingVerifyTasks++
@@ -628,11 +662,12 @@ func enqueueReplicationTasksLocal(
 				lactx,
 				a.VerifyReplicationTasks,
 				&verifyReplicationTasksRequest{
-					TargetClusterName: params.TargetClusterName,
-					Namespace:         params.Namespace,
-					NamespaceID:       namespaceID,
-					Executions:        executions,
-					VerifyInterval:    time.Duration(params.VerifyIntervalInSeconds) * time.Second,
+					TargetClusterEndpoint: params.TargetClusterEndpoint,
+					TargetClusterName:     params.TargetClusterName,
+					Namespace:             params.Namespace,
+					NamespaceID:           namespaceID,
+					Executions:            executions,
+					VerifyInterval:        time.Duration(params.VerifyIntervalInSeconds) * time.Second,
 				})
 
 			pendingVerifyTasks++

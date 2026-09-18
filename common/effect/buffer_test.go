@@ -47,8 +47,8 @@ func TestBufferCancelAfterApply(t *testing.T) {
 	buf.Apply(context.TODO())
 	buf.Cancel(context.TODO())
 
-	require.Equal(t, commit, 1)
-	require.Equal(t, rollback, 0)
+	require.Equal(t, 1, commit)
+	require.Equal(t, 0, rollback)
 }
 
 func TestBufferApplyAfterCancel(t *testing.T) {
@@ -64,6 +64,6 @@ func TestBufferApplyAfterCancel(t *testing.T) {
 	buf.Apply(context.TODO())
 	buf.Cancel(context.TODO())
 
-	require.Equal(t, commit, 0)
-	require.Equal(t, rollback, 1)
+	require.Equal(t, 0, commit)
+	require.Equal(t, 1, rollback)
 }

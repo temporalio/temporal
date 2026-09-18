@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	otellog "go.opentelemetry.io/otel/log"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -41,6 +43,8 @@ import (
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/historybuilder"
@@ -74,7 +78,9 @@ type (
 		persistenceRateLimiter       quotas.RequestRateLimiter
 		enablePersistenceRateLimiter dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		logger                       log.Logger
+		eventLogger                  otellog.Logger
 		taskRefresher                workflow.TaskRefresher
+		testHooks                    testhooks.TestHooks
 	}
 )
 
@@ -85,6 +91,8 @@ func NewWorkflowStateReplicator(
 	eventSerializer serialization.Serializer,
 	persistenceRateLimiter quotas.RequestRateLimiter,
 	logger log.Logger,
+	eventLogger otellog.Logger,
+	testHooks testhooks.TestHooks,
 ) *WorkflowStateReplicatorImpl {
 
 	logger = log.With(logger, tag.ComponentWorkflowStateReplicator)
@@ -99,7 +107,9 @@ func NewWorkflowStateReplicator(
 		persistenceRateLimiter:       persistenceRateLimiter,
 		enablePersistenceRateLimiter: shardContext.GetConfig().EnableHistoryReplicationRateLimiter,
 		logger:                       logger,
+		eventLogger:                  eventLogger,
 		taskRefresher:                workflow.NewTaskRefresher(shardContext),
+		testHooks:                    testHooks,
 	}
 }
 
@@ -112,6 +122,13 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 	namespaceID := namespace.ID(executionInfo.GetNamespaceId())
 	wid := executionInfo.GetWorkflowId()
 	rid := executionState.GetRunId()
+	defer func() {
+		if retError != nil {
+			r.emitReplicationApplyError(
+				ctx, wideevents.ReplTaskSyncWorkflowState, request.GetRemoteCluster(), executionInfo, executionState,
+				"snapshot", "Failed to apply replicated workflow state", retError)
+		}
+	}()
 	if executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		return serviceerror.NewInternal("Replicate non completed workflow state is not supported.")
 	}
@@ -212,6 +229,54 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 		nil,
 		false,
 		skipCloseTransferTask,
+		nil,
+	)
+}
+
+func (r *WorkflowStateReplicatorImpl) getWorkflowContext(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	execution *commonpb.WorkflowExecution,
+	archetypeID chasm.ArchetypeID,
+) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error) {
+	hook, ok := testhooks.Get(
+		r.testHooks,
+		testhooks.HistoryPassiveReplicationTest,
+		namespaceID,
+	)
+	if ok && hook.UseTransientWorkflowContextForReplication(ctx) {
+		metrics.HistoryPassiveReplicationTestHookCounter.With(r.shardContext.GetMetricsHandler()).Record(
+			1,
+			metrics.OperationTag("ReplicateVersionedTransition"),
+		)
+		wfCtx := workflow.NewContext(
+			r.shardContext.GetConfig(),
+			definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
+			archetypeID,
+			r.logger,
+			r.shardContext.GetThrottledLogger(),
+			r.shardContext.GetMetricsHandler(),
+			nil,
+			r.testHooks,
+		)
+		if err := wfCtx.Lock(ctx, locks.PriorityHigh); err != nil {
+			return nil, nil, err
+		}
+		var releaseOnce sync.Once
+		return wfCtx, func(error) {
+			releaseOnce.Do(func() {
+				wfCtx.Clear()
+				wfCtx.Unlock()
+			})
+		}, nil
+	}
+	return r.workflowCache.GetOrCreateChasmExecution(
+		ctx,
+		r.shardContext,
+		namespaceID,
+		execution,
+		archetypeID,
+		locks.PriorityHigh,
 	)
 }
 
@@ -235,19 +300,46 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	wid := executionInfo.GetWorkflowId()
 	rid := executionState.GetRunId()
 
-	wfCtx, releaseFn, err := r.workflowCache.GetOrCreateChasmExecution(
+	// emitLifecycle gates the best-effort applied/error lifecycle event; computed once here so the
+	// gate lives at the call site, like the other replication lifecycle emitters.
+	emitLifecycle := r.eventLogger != nil && r.shardContext.GetConfig().EmitReplicationLifecycleEvents()
+	// ms is the mutable state being applied; appliedMS is a snapshot of its post-apply state taken
+	// under the workflow lock (see the releaseFn wrapper below) for the deferred emit. Reading the
+	// live ms after the lock is released would race with the next writer.
+	var ms historyi.MutableState
+	var appliedMS *persistencespb.WorkflowMutableState
+	captureMutableState := func(createdMS historyi.MutableState) { ms = createdMS }
+	origin := wideevents.ReplicationTaskOriginFromContext(ctx)
+	defer func() {
+		if emitLifecycle && retError == nil {
+			r.emitReplicationVersionedTransitionApplied(namespaceID, wid, rid, appliedMS, sourceClusterName, origin)
+		} else if emitLifecycle {
+			r.emitReplicationVersionedTransitionApplyError(
+				ctx, wideevents.ReplTaskSyncVersionedTransition, sourceClusterName, executionInfo, executionState,
+				versionedTransitionArtifact, "Failed to apply replicated versioned transition", retError)
+		}
+	}()
+
+	wfCtx, releaseFn, err := r.getWorkflowContext(
 		ctx,
-		r.shardContext,
 		namespaceID,
-		&commonpb.WorkflowExecution{
-			WorkflowId: wid,
-			RunId:      rid,
-		},
+		&commonpb.WorkflowExecution{WorkflowId: wid, RunId: rid},
 		archetypeID,
-		locks.PriorityHigh,
 	)
 	if err != nil {
 		return err
+	}
+	if emitLifecycle {
+		// Snapshot the post-apply mutable state at release time: the only point that is both after
+		// the apply (which mutates ms in place) and still under the workflow lock, since the apply
+		// releases via the transaction manager.
+		innerReleaseFn := releaseFn
+		releaseFn = func(err error) {
+			if err == nil && appliedMS == nil && ms != nil {
+				appliedMS = ms.CloneToProto()
+			}
+			innerReleaseFn(err)
+		}
 	}
 	defer func() {
 		if rec := recover(); rec != nil {
@@ -259,16 +351,16 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	if versionedTransitionArtifact.IsFirstSync {
 		// this is the first replication task for this workflow
 		// TODO: Handle reset case to reduce the amount of history events write
-		continueProcess, err := r.handleFirstReplicationTask(ctx, archetypeID, wfCtx, versionedTransitionArtifact, sourceClusterName)
+		continueProcess, err := r.handleFirstReplicationTask(ctx, archetypeID, wfCtx, versionedTransitionArtifact, sourceClusterName, captureMutableState)
 		if err != nil || !continueProcess {
 			return err
 		}
 	}
 
-	ms, err := wfCtx.LoadMutableState(ctx, r.shardContext)
+	ms, err = wfCtx.LoadMutableState(ctx, r.shardContext)
 	switch err.(type) {
 	case *serviceerror.NotFound:
-		return r.applySnapshot(ctx, namespaceID, wid, rid, archetypeID, wfCtx, releaseFn, nil, versionedTransitionArtifact, sourceClusterName)
+		return r.applySnapshot(ctx, namespaceID, wid, rid, archetypeID, wfCtx, releaseFn, nil, versionedTransitionArtifact, sourceClusterName, captureMutableState)
 	case nil:
 		localTransitionHistory := ms.GetExecutionInfo().TransitionHistory
 		if len(localTransitionHistory) == 0 {
@@ -315,7 +407,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 			}
 			if localLastWriteVersion < sourceLastWriteVersion ||
 				localLastHistoryItem.GetEventId() <= sourceLastHistoryItem.EventId {
-				return r.applySnapshot(ctx, namespaceID, wid, rid, archetypeID, wfCtx, releaseFn, ms, versionedTransitionArtifact, sourceClusterName)
+				return r.applySnapshot(ctx, namespaceID, wid, rid, archetypeID, wfCtx, releaseFn, ms, versionedTransitionArtifact, sourceClusterName, nil)
 			}
 			return consts.ErrDuplicate
 		}
@@ -328,7 +420,7 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 		case errors.Is(err, consts.ErrStaleState):
 			// local is stale, try to apply mutable state update
 			if snapshot != nil {
-				return r.applySnapshot(ctx, namespaceID, wid, rid, archetypeID, wfCtx, releaseFn, ms, versionedTransitionArtifact, sourceClusterName)
+				return r.applySnapshot(ctx, namespaceID, wid, rid, archetypeID, wfCtx, releaseFn, ms, versionedTransitionArtifact, sourceClusterName, nil)
 			}
 			return r.applyMutation(ctx, namespaceID, wid, rid, archetypeID, wfCtx, ms, releaseFn, versionedTransitionArtifact, sourceClusterName)
 		case errors.Is(err, consts.ErrStaleReference):
@@ -340,6 +432,175 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	default:
 		return err
 	}
+}
+
+// emitReplicationVersionedTransitionApplied emits a best-effort "applied" ReplicationLifecycle
+// event summarizing post-apply mutable state. ms may be nil (e.g. a fresh apply via the NotFound
+// path) in which case only identity fields are populated. It never affects control flow.
+func (r *WorkflowStateReplicatorImpl) emitReplicationVersionedTransitionApplied(
+	namespaceID namespace.ID,
+	workflowID string,
+	runID string,
+	ms *persistencespb.WorkflowMutableState,
+	sourceClusterName string,
+	origin wideevents.ReplicationTaskOrigin,
+) {
+	var nsName string
+	if name, err := r.namespaceRegistry.GetNamespaceName(namespaceID); err == nil {
+		nsName = name.String()
+	}
+
+	payload := wideevents.ReplicationLifecyclePayload{
+		Phase:         wideevents.ReplicationApplied,
+		TaskType:      wideevents.ReplTaskSyncVersionedTransition,
+		Shard:         r.shardContext.GetShardID(),
+		Namespace:     nsName,
+		NamespaceID:   namespaceID.String(),
+		WorkflowID:    workflowID,
+		RunID:         runID,
+		Outcome:       "applied",
+		SourceCluster: sourceClusterName,
+		SourceShard:   origin.ShardID,
+		SourceTaskID:  origin.TaskID,
+	}
+	if origin.ApplyArtifactSource != "" {
+		payload.Details = map[string]any{"apply_artifact_source": origin.ApplyArtifactSource}
+	}
+	if ms != nil {
+		info := ms.GetExecutionInfo()
+		state := ms.GetExecutionState()
+		payload.State = state.GetState().String()
+		payload.Status = state.GetStatus().String()
+		payload.AppliedNextEventID = ms.GetNextEventId()
+		if th := info.GetTransitionHistory(); len(th) > 0 {
+			entries := make([]wideevents.VersionedTransitionEntry, 0, len(th))
+			for _, vt := range th {
+				entries = append(entries, wideevents.VersionedTransitionEntry{
+					FailoverVersion: vt.GetNamespaceFailoverVersion(),
+					TransitionCount: vt.GetTransitionCount(),
+				})
+			}
+			payload.TransitionHistory = entries
+			last := th[len(th)-1]
+			payload.FailoverVersion = last.GetNamespaceFailoverVersion()
+			payload.TransitionCount = last.GetTransitionCount()
+		}
+		if currentHistory, err := versionhistory.GetCurrentVersionHistory(info.GetVersionHistories()); err == nil {
+			if lastItem, itemErr := versionhistory.GetLastVersionHistoryItem(currentHistory); itemErr == nil {
+				payload.LastEventID = lastItem.GetEventId()
+				payload.LastEventVersion = lastItem.GetVersion()
+			}
+			items := currentHistory.GetItems()
+			history := make([]wideevents.VersionHistoryEntry, 0, len(items))
+			for _, item := range items {
+				history = append(history, wideevents.VersionHistoryEntry{
+					EventID: item.GetEventId(),
+					Version: item.GetVersion(),
+				})
+			}
+			payload.EventVersionHistory = history
+		}
+		populateAppliedExecutionSummary(&payload, info)
+		payload.PopulateParentInfo(info)
+	}
+
+	wideevents.Emit(r.eventLogger, payload)
+}
+
+func (r *WorkflowStateReplicatorImpl) emitReplicationVersionedTransitionApplyError(
+	ctx context.Context,
+	taskType string,
+	sourceClusterName string,
+	info *persistencespb.WorkflowExecutionInfo,
+	state *persistencespb.WorkflowExecutionState,
+	artifact *replicationspb.VersionedTransitionArtifact,
+	message string,
+	err error,
+) {
+	artifactKind := wideevents.ArtifactKindMutation
+	if artifact.GetSyncWorkflowStateSnapshotAttributes() != nil {
+		artifactKind = wideevents.ArtifactKindSnapshot
+	}
+	r.emitReplicationApplyError(ctx, taskType, sourceClusterName, info, state, artifactKind, message, err)
+}
+
+// emitReplicationApplyError extracts artifact identity before delegating to the apply-side adapter.
+func (r *WorkflowStateReplicatorImpl) emitReplicationApplyError(
+	ctx context.Context,
+	taskType string,
+	sourceClusterName string,
+	info *persistencespb.WorkflowExecutionInfo,
+	state *persistencespb.WorkflowExecutionState,
+	artifactKind string,
+	message string,
+	err error,
+) {
+	payload := wideevents.ReplicationLifecyclePayload{
+		TaskType:    taskType,
+		NamespaceID: info.GetNamespaceId(),
+		WorkflowID:  info.GetWorkflowId(),
+		RunID:       state.GetRunId(),
+	}
+	if vt := transitionhistory.LastVersionedTransition(info.GetTransitionHistory()); vt != nil {
+		payload.FailoverVersion = vt.GetNamespaceFailoverVersion()
+		payload.TransitionCount = vt.GetTransitionCount()
+	}
+	details := map[string]any{
+		"artifact_kind": artifactKind,
+	}
+	if errors.Is(err, consts.ErrDuplicate) {
+		details["classification"] = wideevents.ReplErrorClassificationDuplicate
+	}
+	r.emitReplicationError(ctx, payload, sourceClusterName, wideevents.ReplOperationPassiveApply, message, err, details)
+}
+
+// emitReplicationError supplies fields authoritative on the applying cluster.
+func (r *WorkflowStateReplicatorImpl) emitReplicationError(
+	ctx context.Context,
+	payload wideevents.ReplicationLifecyclePayload,
+	sourceClusterName string,
+	operation string,
+	message string,
+	err error,
+	details map[string]any,
+) {
+	if r.eventLogger == nil || !r.shardContext.GetConfig().EmitReplicationLifecycleEvents() {
+		return
+	}
+
+	origin := wideevents.ReplicationTaskOriginFromContext(ctx)
+	if name, nsErr := r.namespaceRegistry.GetNamespaceName(namespace.ID(payload.NamespaceID)); nsErr == nil {
+		payload.Namespace = name.String()
+	}
+	payload.Shard = r.shardContext.GetShardID()
+	if sourceClusterName == "" {
+		sourceClusterName = origin.ClusterName
+	}
+	payload.SourceCluster = sourceClusterName
+	payload.SourceShard = origin.ShardID
+	payload.SourceTaskID = origin.TaskID
+	payload.Details = map[string]any{
+		"target_cluster": r.clusterMetadata.GetCurrentClusterName(),
+	}
+	if origin.ApplyArtifactSource != "" {
+		payload.Details["apply_artifact_source"] = origin.ApplyArtifactSource
+	}
+	wideevents.EmitReplicationError(r.eventLogger, payload, operation, message, err, details)
+}
+
+// populateAppliedExecutionSummary fills the post-apply mutable-state summary fields shared across
+// applied lifecycle hooks. It is best-effort and nil-safe.
+func populateAppliedExecutionSummary(
+	payload *wideevents.ReplicationLifecyclePayload,
+	info *persistencespb.WorkflowExecutionInfo,
+) {
+	payload.NewExecutionRunID = info.GetNewExecutionRunId()
+	payload.ResetRunID = info.GetResetRunId()
+	payload.SignalCount = info.GetSignalCount()
+	payload.ActivityCount = info.GetActivityCount()
+	payload.UserTimerCount = info.GetUserTimerCount()
+	payload.ChildExecutionCount = info.GetChildExecutionCount()
+	payload.UpdateCount = info.GetUpdateCount()
 }
 
 func parseVersionedTransitionAttributes(
@@ -372,6 +633,7 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 	wfCtx historyi.WorkflowContext,
 	versionedTransition *replicationspb.VersionedTransitionArtifact,
 	sourceClusterName string,
+	captureMutableState func(historyi.MutableState),
 ) (continueProcess bool, retErr error) {
 	mutation, snapshot, executionState, executionInfo, err := parseVersionedTransitionAttributes(versionedTransition)
 	if err != nil {
@@ -390,6 +652,7 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTask(
 			snapshot,
 			versionedTransition,
 			sourceClusterName,
+			captureMutableState,
 		)
 	}
 
@@ -414,6 +677,7 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTaskWithoutNewRun(
 	snapshot *replicationspb.SyncWorkflowStateSnapshotAttributes,
 	versionedTransition *replicationspb.VersionedTransitionArtifact,
 	sourceClusterName string,
+	captureMutableState func(historyi.MutableState),
 ) (continueProcess bool, retErr error) {
 	nsEntry, err := r.namespaceRegistry.GetNamespaceByID(namespace.ID(executionInfo.NamespaceId))
 	if err != nil {
@@ -482,6 +746,9 @@ func (r *WorkflowStateReplicatorImpl) handleFirstReplicationTaskWithoutNewRun(
 	)
 	if errors.Is(err, consts.ErrDuplicate) {
 		return true, nil
+	}
+	if err == nil && captureMutableState != nil {
+		captureMutableState(localMutableState)
 	}
 
 	return false, err
@@ -659,6 +926,14 @@ func (r *WorkflowStateReplicatorImpl) deleteNewBranchWhenError(
 			tag.WorkflowID(workflowID),
 			tag.WorkflowRunID(runID),
 			tag.ShardID(r.shardContext.GetShardID()))
+		r.emitReplicationError(ctx, wideevents.ReplicationLifecyclePayload{
+			TaskType:    wideevents.ReplTaskSyncVersionedTransition,
+			NamespaceID: namespaceID.String(),
+			WorkflowID:  workflowID,
+			RunID:       runID,
+		}, "", wideevents.ReplOperationHistoryBranchCleanup, "History branch cleanup skipped after apply error; branch may be orphaned", err, map[string]any{
+			"archetype_id": archetypeID,
+		})
 	}
 }
 
@@ -774,6 +1049,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 	localMutableState historyi.MutableState,
 	versionedTransition *replicationspb.VersionedTransitionArtifact,
 	sourceClusterName string,
+	captureMutableState func(historyi.MutableState),
 ) error {
 	attribute := versionedTransition.GetSyncWorkflowStateSnapshotAttributes()
 	if attribute == nil || attribute.State == nil {
@@ -806,6 +1082,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshot(
 			versionedTransition.NewRunInfo,
 			true,
 			versionedTransition.IsCloseTransferTaskAcked && versionedTransition.IsForceReplication,
+			captureMutableState,
 		)
 	}
 	return r.applySnapshotWhenWorkflowExist(
@@ -1022,6 +1299,8 @@ func (r *WorkflowStateReplicatorImpl) getNewRunWorkflow(
 		r.logger,
 		r.shardContext.GetThrottledLogger(),
 		r.shardContext.GetMetricsHandler(),
+		nil, // no pagination buffer limiter as it is a transient context
+		testhooks.TestHooks{},
 	)
 
 	return NewWorkflow(
@@ -1122,6 +1401,13 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 	eventBlobs []*commonpb.DataBlob,
 	isNewMutableState bool,
 ) ([]byte, error) {
+	startTime := time.Now().UTC()
+	nsName := namespace.EmptyName.String()
+	defer func() {
+		metrics.ReplicationBackfillEventsLatency.With(r.shardContext.GetMetricsHandler()).
+			Record(time.Since(startTime), metrics.NamespaceTag(nsName))
+	}()
+
 	sourceVersionHistory, err := versionhistory.GetCurrentVersionHistory(sourceVersionHistories)
 	if err != nil {
 		return nil, err
@@ -1211,14 +1497,14 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		historyEvents = append(historyEvents, events)
 	}
 
-	nsName := namespace.EmptyName.String()
 	ns, err := r.namespaceRegistry.GetNamespaceByID(namespaceID)
-	if err == nil && ns != nil {
-		nsName = ns.Name().String()
+	if err != nil {
+		return newBranchToken, err
 	}
+	nsName = ns.Name().String()
 	// In standby cluster, use a background low priority which is higher than the standby task processing
 	callerType := headers.CallerTypeBackgroundLow
-	if ns.ActiveInCluster(r.clusterMetadata.GetCurrentClusterName()) {
+	if ns.ActiveClusterName(namespace.RoutingKey{ID: workflowID}) == r.clusterMetadata.GetCurrentClusterName() {
 		// In active cluster, use lowest priority to minimize the impact to live traffic
 		callerType = headers.CallerTypePreemptable
 	}
@@ -1450,6 +1736,7 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
 	newRunInfo *replicationspb.NewRunInfo,
 	isStateBased bool,
 	skipGenerateCloseTransferTask bool,
+	captureMutableState func(historyi.MutableState),
 ) error {
 	var lastWriteVersion int64
 	executionInfo := sourceMutableState.ExecutionInfo
@@ -1516,6 +1803,9 @@ func (r *WorkflowStateReplicatorImpl) applySnapshotWhenWorkflowNotExist(
 	err = taskRefresher.Refresh(ctx, mutableState, skipGenerateCloseTransferTask)
 	if err != nil {
 		return err
+	}
+	if captureMutableState != nil {
+		captureMutableState(mutableState)
 	}
 	return r.transactionMgr.CreateWorkflow(
 		ctx,
@@ -1727,7 +2017,7 @@ func (r *WorkflowStateReplicatorImpl) backfillHistory(
 	}
 	// In standby cluster, use a background low priority which is higher than the standby task processing
 	callerType := headers.CallerTypeBackgroundLow
-	if ns.ActiveInCluster(r.clusterMetadata.GetCurrentClusterName()) {
+	if ns.ActiveClusterName(namespace.RoutingKey{ID: workflowID}) == r.clusterMetadata.GetCurrentClusterName() {
 		// In active cluster, use lowest priority to minimize the impact to live traffic
 		callerType = headers.CallerTypePreemptable
 	}

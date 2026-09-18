@@ -9,6 +9,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	otellog "go.opentelemetry.io/otel/log"
+	"go.opentelemetry.io/otel/log/embedded"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -33,6 +35,8 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -45,6 +49,11 @@ import (
 )
 
 type (
+	replicationEventCapture struct {
+		embedded.Logger
+		records []otellog.Record
+	}
+
 	workflowReplicatorSuite struct {
 		suite.Suite
 		*require.Assertions
@@ -66,6 +75,14 @@ type (
 		workflowStateReplicator *WorkflowStateReplicatorImpl
 	}
 )
+
+func (c *replicationEventCapture) Emit(_ context.Context, record otellog.Record) {
+	c.records = append(c.records, record)
+}
+
+func (*replicationEventCapture) Enabled(context.Context, otellog.EnabledParameters) bool {
+	return true
+}
 
 func TestWorkflowReplicatorSuite(t *testing.T) {
 	s := new(workflowReplicatorSuite)
@@ -115,6 +132,8 @@ func (s *workflowReplicatorSuite) SetupTest() {
 		s.serializer,
 		quotas.NoopRequestRateLimiter,
 		s.logger,
+		nil,
+		testhooks.NewTestHooks(),
 	)
 }
 
@@ -492,9 +511,9 @@ func (s *workflowReplicatorSuite) Test_ApplyWorkflowState_ExistWorkflow_Resend()
 	err = s.workflowStateReplicator.SyncWorkflowState(context.Background(), request)
 	var expectedErr *serviceerrors.RetryReplication
 	s.ErrorAs(err, &expectedErr)
-	s.Equal(namespaceID, expectedErr.NamespaceId)
-	s.Equal(s.workflowID, expectedErr.WorkflowId)
-	s.Equal(s.runID, expectedErr.RunId)
+	s.Equal(expectedErr.NamespaceId, namespaceID)
+	s.Equal(expectedErr.WorkflowId, s.workflowID)
+	s.Equal(expectedErr.RunId, s.runID)
 	s.Equal(int64(1), expectedErr.StartEventId)
 	s.Equal(int64(1), expectedErr.StartEventVersion)
 }
@@ -603,6 +622,100 @@ func EqVersionedTransition(expected *persistencespb.VersionedTransition) gomock.
 	return &VersionedTransitionMatcher{expected: expected}
 }
 
+func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_NotFound_CapturesCreatedState() {
+	s.mockShard.GetConfig().EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	eventCapture := &replicationEventCapture{}
+	workflowStateReplicator := s.workflowStateReplicator
+	workflowStateReplicator.eventLogger = eventCapture
+	mockTransactionManager := NewMockTransactionManager(s.controller)
+	workflowStateReplicator.transactionMgr = mockTransactionManager
+
+	namespaceID := uuid.NewString()
+	versionedTransitionArtifact := &replicationspb.VersionedTransitionArtifact{
+		StateAttributes: &replicationspb.VersionedTransitionArtifact_SyncWorkflowStateSnapshotAttributes{
+			SyncWorkflowStateSnapshotAttributes: &replicationspb.SyncWorkflowStateSnapshotAttributes{
+				State: &persistencespb.WorkflowMutableState{
+					ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+						WorkflowId:  s.workflowID,
+						NamespaceId: namespaceID,
+						TransitionHistory: []*persistencespb.VersionedTransition{
+							{NamespaceFailoverVersion: 2, TransitionCount: 10},
+						},
+						VersionHistories:         versionhistory.NewVersionHistories(&historyspb.VersionHistory{}),
+						WorkflowExecutionTimeout: timestamp.DurationPtr(time.Hour),
+						WorkflowRunTimeout:       timestamp.DurationPtr(time.Hour),
+					},
+					ExecutionState: &persistencespb.WorkflowExecutionState{
+						RunId:  s.runID,
+						State:  enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+						Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+					},
+					NextEventId: 42,
+				},
+			},
+		},
+	}
+
+	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
+	s.mockWorkflowCache.EXPECT().GetOrCreateChasmExecution(
+		gomock.Any(),
+		s.mockShard,
+		namespace.ID(namespaceID),
+		&commonpb.WorkflowExecution{WorkflowId: s.workflowID, RunId: s.runID},
+		chasm.WorkflowArchetypeID,
+		locks.PriorityHigh,
+	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
+	mockWeCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).
+		Return(nil, serviceerror.NewNotFound("mutable state not found"))
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(
+		namespace.NewNamespaceForTest(
+			&persistencespb.NamespaceInfo{Name: "test-namespace"},
+			nil,
+			false,
+			nil,
+			int64(100),
+		),
+		nil,
+	)
+	s.mockNamespaceCache.EXPECT().GetNamespaceName(namespace.ID(namespaceID)).
+		Return(namespace.Name("test-namespace"), nil)
+	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), common.FirstEventID, gomock.Any()).
+		Return(&historypb.HistoryEvent{
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+				WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{},
+			},
+		}, nil).AnyTimes()
+	mockTransactionManager.EXPECT().CreateWorkflow(
+		gomock.Any(),
+		chasm.WorkflowArchetypeID,
+		gomock.AssignableToTypeOf(&WorkflowImpl{}),
+	).DoAndReturn(func(_ context.Context, _ chasm.ArchetypeID, wf Workflow) error {
+		wf.GetMutableState().GetExecutionState().State = enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
+		wf.GetReleaseFn()(nil)
+		return nil
+	})
+
+	err := workflowStateReplicator.ReplicateVersionedTransition(
+		context.Background(),
+		chasm.WorkflowArchetypeID,
+		versionedTransitionArtifact,
+		"source-cluster",
+	)
+	s.NoError(err)
+	s.Require().Len(eventCapture.records, 1)
+	record := eventCapture.records[0]
+	s.Equal(wideevents.ReplicationLifecycleEventName, record.EventName())
+	fields := make(map[string]otellog.Value)
+	record.WalkAttributes(func(kv otellog.KeyValue) bool {
+		fields[kv.Key] = kv.Value
+		return true
+	})
+	s.Equal(string(wideevents.ReplicationApplied), fields["phase"].AsString())
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE.String(), fields["state"].AsString())
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(), fields["status"].AsString())
+	s.Equal(int64(42), fields["applied_next_event_id"].AsInt64())
+}
+
 func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_SyncSnapshot() {
 	workflowStateReplicator := NewWorkflowStateReplicator(
 		s.mockShard,
@@ -611,6 +724,8 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 		s.serializer,
 		quotas.NoopRequestRateLimiter,
 		s.logger,
+		nil,
+		testhooks.NewTestHooks(),
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -703,6 +818,8 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_DifferentBra
 		s.serializer,
 		quotas.NoopRequestRateLimiter,
 		s.logger,
+		nil,
+		testhooks.NewTestHooks(),
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -789,6 +906,8 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 		s.serializer,
 		quotas.NoopRequestRateLimiter,
 		s.logger,
+		nil,
+		testhooks.NewTestHooks(),
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -876,7 +995,9 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 	s.NoError(err)
 }
 
-func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_FirstTask_SyncMutation() {
+func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_FirstTask_CapturesCreatedState() {
+	s.mockShard.GetConfig().EmitReplicationLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	eventCapture := &replicationEventCapture{}
 	workflowStateReplicator := NewWorkflowStateReplicator(
 		s.mockShard,
 		s.mockWorkflowCache,
@@ -884,6 +1005,8 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_FirstTask_Sy
 		s.serializer,
 		quotas.NoopRequestRateLimiter,
 		s.logger,
+		eventCapture,
+		testhooks.NewTestHooks(),
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -931,30 +1054,35 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_FirstTask_Sy
 		locks.PriorityHigh,
 	).Return(mockWeCtx, wcache.NoopReleaseFn, nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
-		&persistencespb.NamespaceInfo{},
+		&persistencespb.NamespaceInfo{Name: "test-namespace"},
 		nil,
 		false,
 		nil,
 		int64(100),
 	), nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceName(namespace.ID(namespaceID)).
+		Return(namespace.Name("test-namespace"), nil)
 	mockTaskRefresher.EXPECT().Refresh(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).Times(1)
 
 	mockTransactionManager.EXPECT().CreateWorkflow(
 		gomock.Any(),
 		chasm.WorkflowArchetypeID,
 		gomock.AssignableToTypeOf(&WorkflowImpl{}),
-	).DoAndReturn(func(ctx context.Context, _ chasm.ArchetypeID, wf Workflow) error {
-		// Capture localMutableState from the workflow
+	).DoAndReturn(func(_ context.Context, _ chasm.ArchetypeID, wf Workflow) error {
 		localMutableState := wf.GetMutableState()
-
-		// Perform your comparisons here
 		s.Equal(localMutableState.GetExecutionInfo().TransitionHistory, transitionHistory)
-
+		localMutableState.GetExecutionState().State = enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE
 		return nil
 	}).Times(1)
 	err := workflowStateReplicator.ReplicateVersionedTransition(context.Background(), chasm.WorkflowArchetypeID, versionedTransitionArtifact, "test")
 	s.NoError(err)
-
+	s.Require().Len(eventCapture.records, 1)
+	fields := make(map[string]otellog.Value)
+	eventCapture.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+		fields[kv.Key] = kv.Value
+		return true
+	})
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE.String(), fields["state"].AsString())
 }
 
 func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_MutationProvidedWithGap_ReturnSyncStateError() {
@@ -965,6 +1093,8 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_MutationProv
 		s.serializer,
 		quotas.NoopRequestRateLimiter,
 		s.logger,
+		nil,
+		testhooks.NewTestHooks(),
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -1039,7 +1169,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_MutationProv
 	}).AnyTimes()
 
 	err := workflowStateReplicator.ReplicateVersionedTransition(context.Background(), chasm.WorkflowArchetypeID, versionedTransitionArtifact, "test")
-	s.IsType(&serviceerrors.SyncState{}, err)
+	s.ErrorAs(err, new(*serviceerrors.SyncState))
 }
 
 type historyEventMatcher struct {
@@ -1155,6 +1285,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 	mockShard.EXPECT().GenerateTaskID().Return(taskId3, nil).Times(1)
 	mockShard.EXPECT().GetRemoteAdminClient(sourceClusterName).Return(s.mockRemoteAdminClient, nil).AnyTimes()
 	mockShard.EXPECT().GetShardID().Return(int32(0)).AnyTimes()
+	mockShard.EXPECT().GetMetricsHandler().Return(s.mockShard.GetMetricsHandler()).AnyTimes()
 	mockShard.EXPECT().GetConfig().Return(s.mockShard.GetConfig()).AnyTimes()
 	s.workflowStateReplicator.shardContext = mockShard
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
@@ -1318,6 +1449,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 	mockShard.EXPECT().GenerateTaskID().Return(taskId3, nil).Times(1)
 	mockShard.EXPECT().GetRemoteAdminClient(sourceClusterName).Return(s.mockRemoteAdminClient, nil).AnyTimes()
 	mockShard.EXPECT().GetShardID().Return(int32(0)).AnyTimes()
+	mockShard.EXPECT().GetMetricsHandler().Return(s.mockShard.GetMetricsHandler()).AnyTimes()
 	mockShard.EXPECT().GetConfig().Return(s.mockShard.GetConfig()).AnyTimes()
 	s.workflowStateReplicator.shardContext = mockShard
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
@@ -1506,6 +1638,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_W
 	mockShard.EXPECT().GenerateTaskID().Return(taskId3, nil).Times(1)
 	mockShard.EXPECT().GetRemoteAdminClient(sourceClusterName).Return(s.mockRemoteAdminClient, nil).AnyTimes()
 	mockShard.EXPECT().GetShardID().Return(int32(0)).AnyTimes()
+	mockShard.EXPECT().GetMetricsHandler().Return(s.mockShard.GetMetricsHandler()).AnyTimes()
 	mockShard.EXPECT().GetConfig().Return(s.mockShard.GetConfig()).AnyTimes()
 	s.workflowStateReplicator.shardContext = mockShard
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
@@ -1593,6 +1726,8 @@ func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_WithSnapshot_S
 		serialization.NewSerializer(),
 		quotas.NoopRequestRateLimiter,
 		s.logger,
+		nil,
+		testhooks.NewTestHooks(),
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -1658,6 +1793,7 @@ func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_WithSnapshot_S
 		mockWeCtx,
 		versionedTransitionArtifact,
 		"test-cluster",
+		nil,
 	)
 	s.NoError(err)
 	s.False(continueProcess)
@@ -1671,6 +1807,8 @@ func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_WithMutation_S
 		serialization.NewSerializer(),
 		quotas.NoopRequestRateLimiter,
 		s.logger,
+		nil,
+		testhooks.NewTestHooks(),
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -1731,6 +1869,7 @@ func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_WithMutation_S
 		mockWeCtx,
 		versionedTransitionArtifact,
 		"test-cluster",
+		nil,
 	)
 	s.NoError(err)
 	s.False(continueProcess)
@@ -1744,6 +1883,8 @@ func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_InvalidArtifac
 		serialization.NewSerializer(),
 		quotas.NoopRequestRateLimiter,
 		s.logger,
+		nil,
+		testhooks.NewTestHooks(),
 	)
 
 	versionedTransitionArtifact := &replicationspb.VersionedTransitionArtifact{}
@@ -1755,6 +1896,7 @@ func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_InvalidArtifac
 		mockWeCtx,
 		versionedTransitionArtifact,
 		"test-cluster",
+		nil,
 	)
 	s.Error(err)
 	s.Contains(err.Error(), "unknown artifact type")
@@ -1769,6 +1911,8 @@ func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_CreateWorkflow
 		serialization.NewSerializer(),
 		quotas.NoopRequestRateLimiter,
 		s.logger,
+		nil,
+		testhooks.NewTestHooks(),
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -1830,6 +1974,7 @@ func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_CreateWorkflow
 		mockWeCtx,
 		versionedTransitionArtifact,
 		"test-cluster",
+		nil,
 	)
 	s.Error(err)
 	s.Equal(expectedErr, err)
@@ -2030,6 +2175,7 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_E
 	mockShard.EXPECT().GenerateTaskID().Return(taskID, nil).Times(1)
 	mockShard.EXPECT().GetRemoteAdminClient(sourceClusterName).Return(s.mockRemoteAdminClient, nil).AnyTimes()
 	mockShard.EXPECT().GetShardID().Return(int32(0)).AnyTimes()
+	mockShard.EXPECT().GetMetricsHandler().Return(s.mockShard.GetMetricsHandler()).AnyTimes()
 	mockShard.EXPECT().GetConfig().Return(s.mockShard.GetConfig()).AnyTimes()
 	mockEventsCache := events.NewMockCache(s.controller)
 	mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()

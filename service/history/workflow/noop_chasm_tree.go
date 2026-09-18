@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/metrics"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -23,6 +24,10 @@ func (*noopChasmTree) CloseTransaction() (chasm.NodesMutation, error) {
 
 func (*noopChasmTree) Snapshot(*persistencespb.VersionedTransition) chasm.NodesSnapshot {
 	return chasm.NodesSnapshot{}
+}
+
+func (*noopChasmTree) PartitionedSnapshot(*persistencespb.VersionedTransition) (chasm.NodesSnapshot, *persistencespb.ChasmLocalState) {
+	return chasm.NodesSnapshot{}, nil
 }
 
 func (*noopChasmTree) ApplySystemMutation(chasm.NodesMutation) error {
@@ -49,7 +54,7 @@ func (*noopChasmTree) IsDirty() bool {
 	return false
 }
 
-func (*noopChasmTree) Terminate(chasm.TerminateComponentRequest) error {
+func (*noopChasmTree) Terminate(chasm.TerminateComponentRequest, metrics.ReasonString) error {
 	return nil
 }
 
@@ -101,6 +106,6 @@ func (*noopChasmTree) ExecuteSideEffectDiscardTask(
 func (*noopChasmTree) ValidateSideEffectTask(
 	ctx context.Context,
 	task *tasks.ChasmTask,
-) (bool, error) {
-	return false, nil
+) (isTaskInTree bool, isValidByComponent bool, err error) {
+	return false, false, nil
 }

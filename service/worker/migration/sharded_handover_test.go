@@ -376,13 +376,13 @@ func TestChild_CheckpointAtHint_StopsListing(t *testing.T) {
 	// 20 execs paginated 5-at-a-time so page 1 returns a non-empty next-page token:
 	// the hint becomes a "checkpoint" (work remains) rather than a terminal end.
 	execs := makeExecs(2, 10)
-	env.RegisterActivityWithOptions(pageThrough(execs, 5), activity.RegisterOptions{Name: "ListWorkflows"})
+	env.RegisterActivityWithOptions(pageThrough(execs, 5), activity.RegisterOptions{Name: shardedListWorkflowsActivityName})
 	env.RegisterActivityWithOptions(func(_ context.Context, req *shardedBatchReq) (replicateBatchResult, error) {
 		return replicateBatchResult{
 			CompletedShards: req.Executions.sortedShards(),
 			VerifiedCount:   int64(req.Executions.totalRuns()),
 		}, nil
-	}, activity.RegisterOptions{Name: "ReplicateBatch"})
+	}, activity.RegisterOptions{Name: shardedReplicateBatchActivityName})
 
 	// Hint is true from the start: the child checkpoints after the first fully-consumed page.
 	env.SetContinueAsNewSuggested(true)
@@ -412,13 +412,13 @@ func TestChild_ThrottledHitsHint_PausesUntilPromoted(t *testing.T) {
 		env := suite.NewTestWorkflowEnvironment()
 		env.RegisterWorkflow(shardedForceReplicationWorker)
 		execs := makeExecs(2, 10)
-		env.RegisterActivityWithOptions(pageThrough(execs, 5), activity.RegisterOptions{Name: "ListWorkflows"})
+		env.RegisterActivityWithOptions(pageThrough(execs, 5), activity.RegisterOptions{Name: shardedListWorkflowsActivityName})
 		env.RegisterActivityWithOptions(func(_ context.Context, req *shardedBatchReq) (replicateBatchResult, error) {
 			return replicateBatchResult{
 				CompletedShards: req.Executions.sortedShards(),
 				VerifiedCount:   int64(req.Executions.totalRuns()),
 			}, nil
-		}, activity.RegisterOptions{Name: "ReplicateBatch"})
+		}, activity.RegisterOptions{Name: shardedReplicateBatchActivityName})
 		env.SetContinueAsNewSuggested(true)
 		return env
 	}
@@ -465,7 +465,7 @@ func TestChild_PromotedAndCheckpoints_VerifiedCountAccumulated(t *testing.T) {
 	env.RegisterWorkflow(shardedForceReplicationWorker)
 
 	execs := makeExecs(2, 5) // 10 execs, single terminal page
-	env.RegisterActivityWithOptions(pageThrough(execs, 1000), activity.RegisterOptions{Name: "ListWorkflows"})
+	env.RegisterActivityWithOptions(pageThrough(execs, 1000), activity.RegisterOptions{Name: shardedListWorkflowsActivityName})
 
 	var (
 		mu        sync.Mutex
@@ -485,7 +485,7 @@ func TestChild_PromotedAndCheckpoints_VerifiedCountAccumulated(t *testing.T) {
 			CompletedShards: req.Executions.sortedShards(),
 			VerifiedCount:   int64(req.Executions.totalRuns()),
 		}, nil
-	}, activity.RegisterOptions{Name: "ReplicateBatch"})
+	}, activity.RegisterOptions{Name: shardedReplicateBatchActivityName})
 
 	params := makeChildParams(2)
 	// promoted=true (not throttled), terminal namespace → ReachedEnd=true

@@ -209,8 +209,7 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 	if err != nil {
 		const logFirstNRequests = 5
 		var httpStatus int
-		var esErr *elastic.Error
-		if errors.As(err, &esErr) {
+		if esErr, ok := errors.AsType[*elastic.Error](err); ok {
 			httpStatus = esErr.Status
 		}
 

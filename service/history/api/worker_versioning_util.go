@@ -21,7 +21,8 @@ type VersionReactivationSignalerFn func(
 ) error
 
 // ReactivateVersionWorkflowIfPinned sends a reactivation signal to the version workflow
-// when workflows are pinned to a potentially DRAINED/INACTIVE version.
+// when workflow execution options target a potentially DRAINED/INACTIVE version
+// (for example, by specifying a Pinned or OneTime override via update options).
 // This is a fire-and-forget operation - the signal is sent asynchronously and errors are
 // logged by the signaler implementation. The signaler itself is responsible for per-pod
 // dedup by revision number; cross-pod duplicates fold at the receiver via a deterministic
@@ -47,13 +48,8 @@ func ReactivateVersionWorkflowIfPinned(
 		return
 	}
 
-	// Only process if we're pinning to a specific version
-	if !worker_versioning.OverrideIsPinned(override) {
-		return
-	}
-
-	pinnedVersion := worker_versioning.GetOverridePinnedVersion(override)
-	if pinnedVersion == nil {
+	targetVersion := worker_versioning.GetOverrideTargetDeploymentVersion(override)
+	if targetVersion == nil {
 		return
 	}
 
@@ -61,6 +57,6 @@ func ReactivateVersionWorkflowIfPinned(
 	// Errors are logged by the signaler implementation (e.g. via convertAndRecordError). However,
 	// errors are not propagated to the caller as this is a fire-and-forget operation.
 	go func() {
-		signaler(context.Background(), namespaceEntry, pinnedVersion.GetDeploymentName(), pinnedVersion.GetBuildId(), revisionNumber) //nolint:errcheck
+		signaler(context.Background(), namespaceEntry, targetVersion.GetDeploymentName(), targetVersion.GetBuildId(), revisionNumber) //nolint:errcheck
 	}()
 }

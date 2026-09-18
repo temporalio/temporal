@@ -126,6 +126,7 @@ func (f *transferQueueFactory) CreateQueue(
 		f.VisibilityManager,
 		f.ChasmEngine,
 		f.VersionMembershipCache,
+		f.TestHooks,
 	)
 
 	standbyExecutor := newTransferQueueStandbyTaskExecutor(
@@ -147,6 +148,8 @@ func (f *transferQueueFactory) CreateQueue(
 		activeExecutor,
 		standbyExecutor,
 		logger,
+		metricsHandler,
+		f.TestHooks,
 	)
 	if f.ExecutorWrapper != nil {
 		executor = f.ExecutorWrapper.Wrap(executor)
@@ -186,6 +189,7 @@ func (f *transferQueueFactory) CreateQueue(
 			MonitorOptions: queues.MonitorOptions{
 				PendingTasksCriticalCount:   f.Config.QueuePendingTaskCriticalCount,
 				ReaderStuckCriticalAttempts: f.Config.QueueReaderStuckCriticalAttempts,
+				ReaderStuckShadowMode:       f.Config.QueueReaderStuckShadowMode,
 				SliceCountCriticalThreshold: f.Config.QueueCriticalSlicesCount,
 			},
 			MaxPollRPS:                          f.Config.TransferProcessorMaxPollRPS,
@@ -196,6 +200,7 @@ func (f *transferQueueFactory) CreateQueue(
 			MaxReaderCount:                      f.Config.TransferQueueMaxReaderCount,
 			MoveGroupTaskCountBase:              f.Config.QueueMoveGroupTaskCountBase,
 			MoveGroupTaskCountMultiplier:        f.Config.QueueMoveGroupTaskCountMultiplier,
+			ShrinkPredicateMaxPendingKeys:       f.Config.QueueShrinkPredicateMaxPendingKeys,
 		},
 		f.HostReaderRateLimiter,
 		queues.GrouperNamespaceID{},

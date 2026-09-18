@@ -38,7 +38,7 @@ func TestHistoryNodeCleanupSuite(t *testing.T) {
 func (s *HistoryNodeCleanupSuite) TestDeletionOfSingleWorkflow() {
 	env := testcore.NewEnv(s.T())
 	tv := testvars.New(s.T())
-	ctx := env.Context()
+	ctx := s.Context()
 
 	shardID := common.WorkflowIDToHistoryShard(
 		env.NamespaceID().String(),
@@ -92,7 +92,7 @@ func (s *HistoryNodeCleanupSuite) TestDeletionOfSingleWorkflow() {
 func (s *HistoryNodeCleanupSuite) TestDeletionOfWorkflowAfterReset() {
 	env := testcore.NewEnv(s.T())
 	tv := testvars.New(s.T())
-	ctx := env.Context()
+	ctx := s.Context()
 
 	shardID := common.WorkflowIDToHistoryShard(
 		env.NamespaceID().String(),

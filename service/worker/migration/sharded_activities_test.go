@@ -1,12 +1,18 @@
 package migration
 
 import (
+	"context"
+	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/worker"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -19,11 +25,47 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// Sharded-activity tests reuse activitiesSuite's SetupTest so they get the
-// same mock graph (HistoryClient, AdminClient, ChasmRegistry, etc.) as the
-// legacy force-replication activity tests. ReplicateBatch resolves the
-// remote admin client via clientBean.GetRemoteAdminClient, which the suite
-// already arms with mockRemoteAdminClient — no per-test setup needed.
+type shardedHeartbeatRecordingInterceptor struct {
+	interceptor.WorkerInterceptorBase
+	interceptor.ActivityInboundInterceptorBase
+	interceptor.ActivityOutboundInterceptorBase
+	heartbeats []replicateBatchHeartbeat
+	T          *testing.T
+}
+
+func (i *shardedHeartbeatRecordingInterceptor) InterceptActivity(
+	ctx context.Context,
+	next interceptor.ActivityInboundInterceptor,
+) interceptor.ActivityInboundInterceptor {
+	i.ActivityInboundInterceptorBase.Next = next
+	return i
+}
+
+func (i *shardedHeartbeatRecordingInterceptor) Init(outbound interceptor.ActivityOutboundInterceptor) error {
+	i.ActivityOutboundInterceptorBase.Next = outbound
+	return i.ActivityInboundInterceptorBase.Init(i)
+}
+
+func (i *shardedHeartbeatRecordingInterceptor) RecordHeartbeat(ctx context.Context, details ...any) {
+	require.Len(i.T, details, 1)
+	heartbeat, ok := details[0].(replicateBatchHeartbeat)
+	require.True(i.T, ok, "unexpected sharded heartbeat type %T", details[0])
+	i.heartbeats = append(i.heartbeats, heartbeat)
+	i.ActivityOutboundInterceptorBase.Next.RecordHeartbeat(ctx, details...)
+}
+
+func (s *activitiesSuite) initShardedEnv() *testsuite.TestActivityEnvironment {
+	env := s.NewTestActivityEnvironment()
+	env.RegisterActivity(s.shardedActivities())
+	env.SetWorkerOptions(worker.Options{Interceptors: []interceptor.WorkerInterceptor{
+		&shardedHeartbeatRecordingInterceptor{T: s.T()},
+	}})
+	return env
+}
+
+func (s *activitiesSuite) shardedActivities() *shardedActivities {
+	return &shardedActivities{activities: s.a}
+}
 
 // payloadFor wraps a single ExecutionInfo into a BatchPayload on the named
 // shard. Tests that need multiple execs across shards build the BatchPayload
@@ -87,7 +129,7 @@ func (s *activitiesSuite) expectSourceDMS(ex *ExecutionInfo, resp *historyservic
 // verified. Mirrors the legacy TestVerifyReplicationTasks_Success and
 // TestGenerateReplicationTasks_Success.
 func (s *activitiesSuite) TestReplicateBatch_Success() {
-	env, _ := s.initEnv()
+	env := s.initShardedEnv()
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID(mockedNamespaceID)).
 		Return(&testNamespace, nil).Times(1)
 
@@ -117,7 +159,7 @@ func (s *activitiesSuite) TestReplicateBatch_Success() {
 	})).Return(&adminservice.DescribeMutableStateResponse{}, nil).Times(1)
 
 	req := newShardedReq(payloadFor(0, execution1))
-	f, err := env.ExecuteActivity(s.a.ReplicateBatch, req)
+	f, err := env.ExecuteActivity(s.shardedActivities().ReplicateBatch, req)
 	s.NoError(err)
 	var out replicateBatchResult
 	s.NoError(f.Get(&out))
@@ -131,7 +173,7 @@ func (s *activitiesSuite) TestReplicateBatch_Success() {
 // shard's verify accounting completes. Mirrors the existing
 // TestVerifyReplicationTasks_SkipWorkflowExecution.
 func (s *activitiesSuite) TestReplicateBatch_SkipZombie() {
-	env, _ := s.initEnv()
+	env := s.initShardedEnv()
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID(mockedNamespaceID)).
 		Return(&testNamespace, nil).Times(1)
 
@@ -143,7 +185,7 @@ func (s *activitiesSuite) TestReplicateBatch_SkipZombie() {
 	s.expectRemoteNotFound(execution1)
 	s.expectSourceDMS(execution1, zombieState, nil)
 
-	f, err := env.ExecuteActivity(s.a.ReplicateBatch, req)
+	f, err := env.ExecuteActivity(s.shardedActivities().ReplicateBatch, req)
 	s.NoError(err)
 	var out replicateBatchResult
 	s.NoError(f.Get(&out))
@@ -156,7 +198,7 @@ func (s *activitiesSuite) TestReplicateBatch_SkipZombie() {
 // checkSkipWorkflowExecution marks it skipped (counted as verified).
 // Mirrors the existing Test_verifyReplicationTasksSkipRetention.
 func (s *activitiesSuite) TestReplicateBatch_SkipRetention() {
-	env, _ := s.initEnv()
+	env := s.initShardedEnv()
 
 	retention := time.Hour
 	closeTime := time.Now().Add(-2 * retention) // deleteTime is in the past
@@ -194,7 +236,7 @@ func (s *activitiesSuite) TestReplicateBatch_SkipRetention() {
 	}, nil)
 
 	req := newShardedReq(payloadFor(0, execution1))
-	f, err := env.ExecuteActivity(s.a.ReplicateBatch, req)
+	f, err := env.ExecuteActivity(s.shardedActivities().ReplicateBatch, req)
 	s.NoError(err)
 	var out replicateBatchResult
 	s.NoError(f.Get(&out))
@@ -208,7 +250,7 @@ func (s *activitiesSuite) TestReplicateBatch_SkipRetention() {
 // nothing verifies. With ShardNoProgress=time.Nanosecond the check fires
 // on the first pass. Mirrors TestVerifyReplicationTasks_FailedNotFound.
 func (s *activitiesSuite) TestReplicateBatch_ShardNoProgress() {
-	env, _ := s.initEnv()
+	env := s.initShardedEnv()
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID(mockedNamespaceID)).
 		Return(&testNamespace, nil).Times(1)
 
@@ -226,7 +268,7 @@ func (s *activitiesSuite) TestReplicateBatch_ShardNoProgress() {
 	req := newShardedReq(payloadFor(0, execution1))
 	req.ShardNoProgress = time.Nanosecond // trip almost immediately
 
-	_, err := env.ExecuteActivity(s.a.ReplicateBatch, req)
+	_, err := env.ExecuteActivity(s.shardedActivities().ReplicateBatch, req)
 	s.Error(err)
 	var appErr *temporal.ApplicationError
 	s.ErrorAs(err, &appErr)
@@ -240,13 +282,13 @@ func (s *activitiesSuite) TestReplicateBatch_ShardNoProgress() {
 // workflow-level TestSharded_DisableVerification_NoVerifiedCount but
 // from the activity side.
 func (s *activitiesSuite) TestReplicateBatch_DisableVerification() {
-	env, _ := s.initEnv()
+	env := s.initShardedEnv()
 	s.mockHistoryClient.EXPECT().GenerateLastHistoryReplicationTasks(gomock.Any(), gomock.Any()).
 		Return(&historyservice.GenerateLastHistoryReplicationTasksResponse{}, nil).Times(1)
 
 	req := newShardedReq(payloadFor(0, execution1))
 	req.DisableVerification = true
-	f, err := env.ExecuteActivity(s.a.ReplicateBatch, req)
+	f, err := env.ExecuteActivity(s.shardedActivities().ReplicateBatch, req)
 	s.NoError(err)
 	var out replicateBatchResult
 	s.NoError(f.Get(&out))
@@ -262,7 +304,7 @@ func (s *activitiesSuite) TestReplicateBatch_DisableVerification() {
 // TestGenerateReplicationTasks_Success_ViaFrontend's heartbeat-resume
 // assertion.
 func (s *activitiesSuite) TestReplicateBatch_HeartbeatResumesInject() {
-	env, _ := s.initEnv()
+	env := s.initShardedEnv()
 	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID(mockedNamespaceID)).
 		Return(&testNamespace, nil).Times(1)
 
@@ -306,7 +348,7 @@ func (s *activitiesSuite) TestReplicateBatch_HeartbeatResumesInject() {
 	}
 
 	req := newShardedReq(payload)
-	f, err := env.ExecuteActivity(s.a.ReplicateBatch, req)
+	f, err := env.ExecuteActivity(s.shardedActivities().ReplicateBatch, req)
 	s.NoError(err)
 	var out replicateBatchResult
 	s.NoError(f.Get(&out))
@@ -316,13 +358,22 @@ func (s *activitiesSuite) TestReplicateBatch_HeartbeatResumesInject() {
 // TestReplicateBatch_EmptyBatch: an empty BatchPayload returns early with
 // zero result and no errors or mock calls.
 func (s *activitiesSuite) TestReplicateBatch_EmptyBatch() {
-	env, _ := s.initEnv()
+	env := s.initShardedEnv()
 
 	req := newShardedReq(BatchPayload{})
-	f, err := env.ExecuteActivity(s.a.ReplicateBatch, req)
+	f, err := env.ExecuteActivity(s.shardedActivities().ReplicateBatch, req)
 	s.NoError(err)
 	var out replicateBatchResult
 	s.NoError(f.Get(&out))
 	s.Equal(int64(0), out.VerifiedCount)
 	s.Empty(out.CompletedShards)
+}
+
+func (s *activitiesSuite) TestReplicateBatch_InvalidHeartbeat() {
+	env := s.initShardedEnv()
+	env.SetHeartbeatDetails("invalid")
+
+	_, err := env.ExecuteActivity(s.shardedActivities().ReplicateBatch, newShardedReq(payloadFor(0, execution1)))
+	s.Error(err)
+	s.ErrorContains(err, "decode heartbeat details")
 }

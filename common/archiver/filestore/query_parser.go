@@ -122,7 +122,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 			parsedQuery.emptyResult = true
 			return nil
 		}
-		parsedQuery.workflowID = util.Ptr(val)
+		parsedQuery.workflowID = new(val)
 	case RunID:
 		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
@@ -135,7 +135,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 			parsedQuery.emptyResult = true
 			return nil
 		}
-		parsedQuery.runID = util.Ptr(val)
+		parsedQuery.runID = new(val)
 	case WorkflowType:
 		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {
@@ -148,7 +148,7 @@ func (p *queryParser) convertComparisonExpr(compExpr *sqlparser.ComparisonExpr, 
 			parsedQuery.emptyResult = true
 			return nil
 		}
-		parsedQuery.workflowTypeName = util.Ptr(val)
+		parsedQuery.workflowTypeName = new(val)
 	case ExecutionStatus:
 		val, err := sqlquery.ExtractStringValue(valStr)
 		if err != nil {

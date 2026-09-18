@@ -8,9 +8,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
@@ -29,6 +31,14 @@ func (b *backend) GetCurrentVersion() int64 {
 
 func (b *backend) NextTransitionCount() int64 {
 	return 3
+}
+
+func (b *backend) GetWorkflowType() *commonpb.WorkflowType {
+	return &commonpb.WorkflowType{Name: "workflow-type"}
+}
+
+func (b *backend) GetNamespaceEntry() *namespace.Namespace {
+	return namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "namespace-name"}, nil, false, nil, 0)
 }
 
 func (b *backend) AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent {
@@ -61,7 +71,7 @@ func TestNode_MaintainsCachedData(t *testing.T) {
 	require.False(t, root.Dirty())
 	opLog, err := root.OpLog()
 	require.NoError(t, err)
-	require.Equal(t, 0, len(opLog))
+	require.Empty(t, opLog)
 
 	err = hsm.MachineTransition(root, func(d *hsmtest.Data) (hsm.TransitionOutput, error) {
 		d.SetState(hsmtest.State2)
@@ -75,7 +85,7 @@ func TestNode_MaintainsCachedData(t *testing.T) {
 	require.True(t, root.Dirty())
 	opLog, err = root.OpLog()
 	require.NoError(t, err)
-	require.Equal(t, 1, len(opLog))
+	require.Len(t, opLog, 1)
 
 	transOp, ok := opLog[0].(hsm.TransitionOperation)
 	require.True(t, ok)
@@ -131,7 +141,7 @@ func TestNode_MaintainsChildCache(t *testing.T) {
 
 	opLog, err := root.OpLog()
 	require.NoError(t, err)
-	require.Equal(t, 1, len(opLog))
+	require.Len(t, opLog, 1)
 	transOp, ok := opLog[0].(hsm.TransitionOperation)
 	require.True(t, ok)
 	require.Equal(t, int64(1), transOp.Output.TransitionCount)
@@ -171,6 +181,23 @@ func TestNode_Path(t *testing.T) {
 	require.Equal(t, []hsm.Key{}, root.Path())
 	require.Equal(t, []hsm.Key{l1.Key}, l1.Path())
 	require.Equal(t, []hsm.Key{l1.Key, l2.Key}, l2.Path())
+}
+
+func TestNode_WorkflowTypeName(t *testing.T) {
+	root, err := hsm.NewRoot(reg, def1.Type(), hsmtest.NewData(hsmtest.State1), make(map[string]*persistencespb.StateMachineMap), &backend{})
+	require.NoError(t, err)
+	l1, err := root.AddChild(hsm.Key{Type: def1.Type(), ID: "l1"}, hsmtest.NewData(hsmtest.State1))
+	require.NoError(t, err)
+	l2, err := l1.AddChild(hsm.Key{Type: def1.Type(), ID: "l2"}, hsmtest.NewData(hsmtest.State1))
+	require.NoError(t, err)
+
+	// All nodes resolve the workflow type and namespace via the root backend.
+	require.Equal(t, "workflow-type", root.WorkflowTypeName())
+	require.Equal(t, "workflow-type", l1.WorkflowTypeName())
+	require.Equal(t, "workflow-type", l2.WorkflowTypeName())
+	require.Equal(t, "namespace-name", root.NamespaceName())
+	require.Equal(t, "namespace-name", l1.NamespaceName())
+	require.Equal(t, "namespace-name", l2.NamespaceName())
 }
 
 func TestNode_AddChild(t *testing.T) {
@@ -675,7 +702,7 @@ func TestNode_DeleteDeepHierarchy(t *testing.T) {
 		case hsm.TransitionOperation:
 			transitionCount++
 			pathLen := len(o.Path())
-			require.True(t, pathLen <= 3, "should not see transitions for deleted nodes")
+			require.LessOrEqual(t, pathLen, 3, "should not see transitions for deleted nodes")
 		case hsm.DeleteOperation:
 			deletionCount++
 		}

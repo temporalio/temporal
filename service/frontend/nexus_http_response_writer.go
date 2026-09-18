@@ -1,6 +1,7 @@
 package frontend
 
 import (
+	"maps"
 	"net/http"
 )
 
@@ -29,9 +30,7 @@ func (w *nexusHTTPResponseWriter) Write(data []byte) (int, error) {
 func (w *nexusHTTPResponseWriter) WriteHeader(statusCode int) {
 	w.nc.responseHeadersMutex.Lock()
 	headersCopy := make(map[string]string, len(w.nc.responseHeaders))
-	for k, v := range w.nc.responseHeaders {
-		headersCopy[k] = v
-	}
+	maps.Copy(headersCopy, w.nc.responseHeaders)
 	w.nc.responseHeadersMutex.Unlock()
 
 	h := w.writer.Header()

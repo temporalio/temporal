@@ -146,7 +146,9 @@ func (s *shardedWorkflowState) run(ctx workflow.Context) (shardedChildResult, er
 
 	// Await all in-flight batches. No cancellation — children always run
 	// to natural completion so their verified counts are exact.
-	_ = workflow.Await(ctx, func() bool { return s.batches.count() == 0 })
+	if err := workflow.Await(ctx, func() bool { return s.batches.count() == 0 }); err != nil {
+		return shardedChildResult{}, err
+	}
 	if s.lastErr != nil {
 		return shardedChildResult{}, s.lastErr
 	}
@@ -275,7 +277,10 @@ func (s *shardedWorkflowState) checkpointAtBoundary(ctx workflow.Context, parent
 		// at most one handover is in flight at a time. Await promotion
 		// (predecessor completion, which clears handover), then checkpoint
 		// immediately.
-		_ = workflow.Await(ctx, func() bool { return !s.handover || s.lastErr != nil })
+		if err := workflow.Await(ctx, func() bool { return !s.handover || s.lastErr != nil }); err != nil {
+			s.setLastErr(err)
+			return
+		}
 		if s.lastErr != nil {
 			return
 		}
@@ -340,9 +345,8 @@ func (s *shardedWorkflowState) listWorkflowPageWithToken(ctx workflow.Context, p
 		PageSize:      int32(s.params.ListWorkflowsPageSize),
 		NextPageToken: pageToken,
 	}
-	var a *activities
 	var listResp listWorkflowsResponse
-	if err := workflow.ExecuteActivity(listCtx, a.ListWorkflows, listReq).Get(ctx, &listResp); err != nil {
+	if err := workflow.ExecuteActivity(listCtx, shardedListWorkflowsActivityName, listReq).Get(ctx, &listResp); err != nil {
 		return nil, nil, err
 	}
 	return listResp.Executions, listResp.NextPageToken, nil
@@ -350,9 +354,8 @@ func (s *shardedWorkflowState) listWorkflowPageWithToken(ctx workflow.Context, p
 
 func (s *shardedWorkflowState) replicateBatch(ctx workflow.Context, req *shardedBatchReq) (replicateBatchResult, error) {
 	actx := workflow.WithActivityOptions(ctx, shardedReplicateBatchActivityOptions)
-	var a *activities
 	var result replicateBatchResult
-	if err := workflow.ExecuteActivity(actx, a.ReplicateBatch, req).Get(ctx, &result); err != nil {
+	if err := workflow.ExecuteActivity(actx, shardedReplicateBatchActivityName, req).Get(ctx, &result); err != nil {
 		return replicateBatchResult{}, err
 	}
 	return result, nil
@@ -398,9 +401,11 @@ func (s *shardedWorkflowState) dispatchSlotAvailable() bool {
 
 // waitForDispatchSlot blocks until a dispatch slot frees up or lastErr trips.
 func (s *shardedWorkflowState) waitForDispatchSlot(ctx workflow.Context) {
-	_ = workflow.Await(ctx, func() bool {
+	if err := workflow.Await(ctx, func() bool {
 		return s.lastErr != nil || s.batches.count() < s.params.ConcurrentBatchCount
-	})
+	}); err != nil {
+		s.setLastErr(err)
+	}
 }
 
 // recordVerified accumulates one batch's verified-exec delta into the
@@ -567,7 +572,10 @@ func (s *shardedWorkflowState) drainBuckets(ctx workflow.Context) {
 			s.failDrainBucketsStuck()
 			return
 		}
-		_ = workflow.Await(ctx, s.drainBucketsAwaitPredicate(currentPending))
+		if err := workflow.Await(ctx, s.drainBucketsAwaitPredicate(currentPending)); err != nil {
+			s.setLastErr(err)
+			return
+		}
 	}
 }
 

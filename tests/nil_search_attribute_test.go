@@ -7,23 +7,32 @@ import (
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/searchattribute/sadefs"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func TestWorkflowStart_NilSearchAttributesFiltered(t *testing.T) {
-	s := testcore.NewEnv(t)
+type NilSearchAttributeSuite struct {
+	parallelsuite.Suite[*NilSearchAttributeSuite]
+}
+
+func TestNilSearchAttributeSuite(t *testing.T) {
+	parallelsuite.Run(t, &NilSearchAttributeSuite{})
+}
+
+func (s *NilSearchAttributeSuite) TestWorkflowStart_NilSearchAttributesFiltered() {
+	env := testcore.NewEnv(s.T())
 	workflowID := "nil-sa-filter-" + uuid.NewString()
 	workflowType := &commonpb.WorkflowType{Name: "nil-sa-filter-workflow-type"}
-	taskQueue := &taskqueuepb.TaskQueue{Name: s.Tv().TaskQueue().Name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := &taskqueuepb.TaskQueue{Name: env.Tv().TaskQueue().Name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	nilPayload, err := payload.Encode(nil)
-	s.Require().NoError(err)
-	validPayload := payload.EncodeString("valid-value")
+	s.NoError(err)
+	validPayload := sadefs.MustEncodeValue("valid-value", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 
 	searchAttributes := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
@@ -34,7 +43,7 @@ func TestWorkflowStart_NilSearchAttributesFiltered(t *testing.T) {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          workflowID,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -44,30 +53,22 @@ func TestWorkflowStart_NilSearchAttributesFiltered(t *testing.T) {
 		SearchAttributes:    searchAttributes,
 	}
 
-	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
-	s.Require().NoError(err)
-	s.Require().NotNil(we.GetRunId())
+	we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
+	s.NoError(err)
+	s.NotNil(we.GetRunId())
 
-	historyResp, err := s.FrontendClient().GetWorkflowExecutionHistory(testcore.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace: s.Namespace().String(),
+	historyResp, err := env.FrontendClient().GetWorkflowExecutionHistory(s.Context(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      we.GetRunId(),
 		},
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 
-	var startedEvent *historypb.HistoryEvent
-	for _, event := range historyResp.History.Events {
-		if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
-			startedEvent = event
-			break
-		}
-	}
-
-	s.Require().NotNil(startedEvent)
+	startedEvent := s.RequireHistoryEvent(historyResp.History.Events, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
 	attrs := startedEvent.GetWorkflowExecutionStartedEventAttributes()
-	s.Require().NotNil(attrs)
+	s.NotNil(attrs)
 
 	if attrs.SearchAttributes != nil {
 		s.NotNil(attrs.SearchAttributes.IndexedFields["CustomKeywordField"])
@@ -75,22 +76,22 @@ func TestWorkflowStart_NilSearchAttributesFiltered(t *testing.T) {
 		s.False(hasNilKey, "nil search attribute key should be filtered out from history event")
 	}
 
-	_, err = s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace:         s.Namespace().String(),
+	_, err = env.FrontendClient().TerminateWorkflowExecution(s.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
 		Reason:            "test cleanup",
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 }
 
-func TestWorkflowStart_AllNilSearchAttributesFiltered(t *testing.T) {
-	s := testcore.NewEnv(t)
+func (s *NilSearchAttributeSuite) TestWorkflowStart_AllNilSearchAttributesFiltered() {
+	env := testcore.NewEnv(s.T())
 	workflowID := "nil-sa-filter-all-" + uuid.NewString()
 	workflowType := &commonpb.WorkflowType{Name: "nil-sa-filter-workflow-type"}
-	taskQueue := &taskqueuepb.TaskQueue{Name: s.Tv().TaskQueue().Name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := &taskqueuepb.TaskQueue{Name: env.Tv().TaskQueue().Name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	nilPayload, err := payload.Encode(nil)
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	searchAttributes := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
@@ -101,7 +102,7 @@ func TestWorkflowStart_AllNilSearchAttributesFiltered(t *testing.T) {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          workflowID,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -111,49 +112,41 @@ func TestWorkflowStart_AllNilSearchAttributesFiltered(t *testing.T) {
 		SearchAttributes:    searchAttributes,
 	}
 
-	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
-	s.Require().NoError(err)
-	s.Require().NotNil(we.GetRunId())
+	we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
+	s.NoError(err)
+	s.NotNil(we.GetRunId())
 
-	historyResp, err := s.FrontendClient().GetWorkflowExecutionHistory(testcore.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace: s.Namespace().String(),
+	historyResp, err := env.FrontendClient().GetWorkflowExecutionHistory(s.Context(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      we.GetRunId(),
 		},
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 
-	var startedEvent *historypb.HistoryEvent
-	for _, event := range historyResp.History.Events {
-		if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
-			startedEvent = event
-			break
-		}
-	}
-
-	s.Require().NotNil(startedEvent)
+	startedEvent := s.RequireHistoryEvent(historyResp.History.Events, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
 	attrs := startedEvent.GetWorkflowExecutionStartedEventAttributes()
-	s.Require().NotNil(attrs)
+	s.NotNil(attrs)
 	s.Nil(attrs.SearchAttributes, "SearchAttributes should be nil when all values are nil")
 
-	_, err = s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace:         s.Namespace().String(),
+	_, err = env.FrontendClient().TerminateWorkflowExecution(s.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
 		Reason:            "test cleanup",
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 }
 
-func TestDescribeWorkflow_NilSearchAttributesNotVisible(t *testing.T) {
-	s := testcore.NewEnv(t)
+func (s *NilSearchAttributeSuite) TestDescribeWorkflow_NilSearchAttributesNotVisible() {
+	env := testcore.NewEnv(s.T())
 	workflowID := "nil-sa-filter-describe-" + uuid.NewString()
 	workflowType := &commonpb.WorkflowType{Name: "nil-sa-filter-workflow-type"}
-	taskQueue := &taskqueuepb.TaskQueue{Name: s.Tv().TaskQueue().Name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := &taskqueuepb.TaskQueue{Name: env.Tv().TaskQueue().Name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	nilPayload, err := payload.Encode(nil)
-	s.Require().NoError(err)
-	validPayload := payload.EncodeString("valid-value")
+	s.NoError(err)
+	validPayload := sadefs.MustEncodeValue("valid-value", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 
 	searchAttributes := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
@@ -164,7 +157,7 @@ func TestDescribeWorkflow_NilSearchAttributesNotVisible(t *testing.T) {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          workflowID,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -174,19 +167,19 @@ func TestDescribeWorkflow_NilSearchAttributesNotVisible(t *testing.T) {
 		SearchAttributes:    searchAttributes,
 	}
 
-	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
-	s.Require().NoError(err)
-	s.Require().NotNil(we.GetRunId())
+	we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
+	s.NoError(err)
+	s.NotNil(we.GetRunId())
 
-	descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(),
+	descResp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      we.GetRunId(),
 		},
 	})
-	s.Require().NoError(err)
-	s.Require().NotNil(descResp)
+	s.NoError(err)
+	s.NotNil(descResp)
 
 	if descResp.WorkflowExecutionInfo.SearchAttributes != nil {
 		s.NotNil(descResp.WorkflowExecutionInfo.SearchAttributes.IndexedFields["CustomKeywordField"])
@@ -194,23 +187,23 @@ func TestDescribeWorkflow_NilSearchAttributesNotVisible(t *testing.T) {
 		s.False(hasNilKey, "nil search attribute key should not be visible in mutable state")
 	}
 
-	_, err = s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace:         s.Namespace().String(),
+	_, err = env.FrontendClient().TerminateWorkflowExecution(s.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace:         env.Namespace().String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
 		Reason:            "test cleanup",
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 }
 
-func TestWorkflowStart_NilMemoFiltered(t *testing.T) {
-	s := testcore.NewEnv(t)
+func (s *NilSearchAttributeSuite) TestWorkflowStart_NilMemoFiltered() {
+	env := testcore.NewEnv(s.T())
 	workflowID := "nil-memo-filter-" + uuid.NewString()
 	workflowType := &commonpb.WorkflowType{Name: "nil-memo-filter-workflow-type"}
-	taskQueue := &taskqueuepb.TaskQueue{Name: s.Tv().TaskQueue().Name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := &taskqueuepb.TaskQueue{Name: env.Tv().TaskQueue().Name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	nilPayload, err := payload.Encode(nil)
-	s.Require().NoError(err)
-	validPayload := payload.EncodeString("valid-value")
+	s.NoError(err)
+	validPayload := sadefs.MustEncodeValue("valid-value", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 
 	memo := &commonpb.Memo{
 		Fields: map[string]*commonpb.Payload{
@@ -221,7 +214,7 @@ func TestWorkflowStart_NilMemoFiltered(t *testing.T) {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          workflowID,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -231,30 +224,22 @@ func TestWorkflowStart_NilMemoFiltered(t *testing.T) {
 		Memo:                memo,
 	}
 
-	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
-	s.Require().NoError(err)
-	s.Require().NotNil(we.GetRunId())
+	we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
+	s.NoError(err)
+	s.NotNil(we.GetRunId())
 
-	historyResp, err := s.FrontendClient().GetWorkflowExecutionHistory(testcore.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace: s.Namespace().String(),
+	historyResp, err := env.FrontendClient().GetWorkflowExecutionHistory(s.Context(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      we.GetRunId(),
 		},
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 
-	var startedEvent *historypb.HistoryEvent
-	for _, event := range historyResp.History.Events {
-		if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
-			startedEvent = event
-			break
-		}
-	}
-
-	s.Require().NotNil(startedEvent)
+	startedEvent := s.RequireHistoryEvent(historyResp.History.Events, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
 	attrs := startedEvent.GetWorkflowExecutionStartedEventAttributes()
-	s.Require().NotNil(attrs)
+	s.NotNil(attrs)
 
 	if attrs.Memo != nil {
 		s.NotNil(attrs.Memo.Fields["ValidKey"])
@@ -262,19 +247,19 @@ func TestWorkflowStart_NilMemoFiltered(t *testing.T) {
 		s.False(hasNilKey, "nil memo key should be filtered out from history event")
 	}
 
-	_, _ = s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(), WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID}, Reason: "test cleanup",
+	_, _ = env.FrontendClient().TerminateWorkflowExecution(s.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(), WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID}, Reason: "test cleanup",
 	})
 }
 
-func TestWorkflowStart_AllNilMemoFiltered(t *testing.T) {
-	s := testcore.NewEnv(t)
+func (s *NilSearchAttributeSuite) TestWorkflowStart_AllNilMemoFiltered() {
+	env := testcore.NewEnv(s.T())
 	workflowID := "nil-memo-filter-all-" + uuid.NewString()
 	workflowType := &commonpb.WorkflowType{Name: "nil-memo-filter-workflow-type"}
-	taskQueue := &taskqueuepb.TaskQueue{Name: s.Tv().TaskQueue().Name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := &taskqueuepb.TaskQueue{Name: env.Tv().TaskQueue().Name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	nilPayload, err := payload.Encode(nil)
-	s.Require().NoError(err)
+	s.NoError(err)
 
 	memo := &commonpb.Memo{
 		Fields: map[string]*commonpb.Payload{
@@ -285,7 +270,7 @@ func TestWorkflowStart_AllNilMemoFiltered(t *testing.T) {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          workflowID,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -295,43 +280,35 @@ func TestWorkflowStart_AllNilMemoFiltered(t *testing.T) {
 		Memo:                memo,
 	}
 
-	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
-	s.Require().NoError(err)
-	s.Require().NotNil(we.GetRunId())
+	we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
+	s.NoError(err)
+	s.NotNil(we.GetRunId())
 
-	historyResp, err := s.FrontendClient().GetWorkflowExecutionHistory(testcore.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace: s.Namespace().String(),
+	historyResp, err := env.FrontendClient().GetWorkflowExecutionHistory(s.Context(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: we.GetRunId()},
 	})
-	s.Require().NoError(err)
+	s.NoError(err)
 
-	var startedEvent *historypb.HistoryEvent
-	for _, event := range historyResp.History.Events {
-		if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
-			startedEvent = event
-			break
-		}
-	}
-
-	s.Require().NotNil(startedEvent)
+	startedEvent := s.RequireHistoryEvent(historyResp.History.Events, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED)
 	attrs := startedEvent.GetWorkflowExecutionStartedEventAttributes()
-	s.Require().NotNil(attrs)
+	s.NotNil(attrs)
 	s.Nil(attrs.Memo, "Memo should be nil when all values are nil")
 
-	_, _ = s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(), WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID}, Reason: "test cleanup",
+	_, _ = env.FrontendClient().TerminateWorkflowExecution(s.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(), WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID}, Reason: "test cleanup",
 	})
 }
 
-func TestDescribeWorkflow_NilMemoNotVisible(t *testing.T) {
-	s := testcore.NewEnv(t)
+func (s *NilSearchAttributeSuite) TestDescribeWorkflow_NilMemoNotVisible() {
+	env := testcore.NewEnv(s.T())
 	workflowID := "nil-memo-filter-describe-" + uuid.NewString()
 	workflowType := &commonpb.WorkflowType{Name: "nil-memo-filter-workflow-type"}
-	taskQueue := &taskqueuepb.TaskQueue{Name: s.Tv().TaskQueue().Name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+	taskQueue := &taskqueuepb.TaskQueue{Name: env.Tv().TaskQueue().Name, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
 	nilPayload, err := payload.Encode(nil)
-	s.Require().NoError(err)
-	validPayload := payload.EncodeString("valid-value")
+	s.NoError(err)
+	validPayload := sadefs.MustEncodeValue("valid-value", enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 
 	memo := &commonpb.Memo{
 		Fields: map[string]*commonpb.Payload{
@@ -342,7 +319,7 @@ func TestDescribeWorkflow_NilMemoNotVisible(t *testing.T) {
 
 	request := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
-		Namespace:           s.Namespace().String(),
+		Namespace:           env.Namespace().String(),
 		WorkflowId:          workflowID,
 		WorkflowType:        workflowType,
 		TaskQueue:           taskQueue,
@@ -352,16 +329,16 @@ func TestDescribeWorkflow_NilMemoNotVisible(t *testing.T) {
 		Memo:                memo,
 	}
 
-	we, err := s.FrontendClient().StartWorkflowExecution(testcore.NewContext(), request)
-	s.Require().NoError(err)
-	s.Require().NotNil(we.GetRunId())
+	we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
+	s.NoError(err)
+	s.NotNil(we.GetRunId())
 
-	descResp, err := s.FrontendClient().DescribeWorkflowExecution(testcore.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(),
+	descResp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: we.GetRunId()},
 	})
-	s.Require().NoError(err)
-	s.Require().NotNil(descResp)
+	s.NoError(err)
+	s.NotNil(descResp)
 
 	if descResp.WorkflowExecutionInfo.Memo != nil {
 		s.NotNil(descResp.WorkflowExecutionInfo.Memo.Fields["ValidKey"])
@@ -369,7 +346,7 @@ func TestDescribeWorkflow_NilMemoNotVisible(t *testing.T) {
 		s.False(hasNilKey, "nil memo key should not be visible in mutable state / describe")
 	}
 
-	_, _ = s.FrontendClient().TerminateWorkflowExecution(testcore.NewContext(), &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace: s.Namespace().String(), WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID}, Reason: "test cleanup",
+	_, _ = env.FrontendClient().TerminateWorkflowExecution(s.Context(), &workflowservice.TerminateWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(), WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID}, Reason: "test cleanup",
 	})
 }

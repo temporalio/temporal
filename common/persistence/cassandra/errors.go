@@ -16,10 +16,10 @@ import (
 
 var (
 	errorPriority = map[reflect.Type]int{
-		reflect.TypeOf(&p.ShardOwnershipLostError{}):             0,
-		reflect.TypeOf(&p.CurrentWorkflowConditionFailedError{}): 1,
-		reflect.TypeOf(&p.WorkflowConditionFailedError{}):        2,
-		reflect.TypeOf(&p.ConditionFailedError{}):                3,
+		reflect.TypeFor[*p.ShardOwnershipLostError]():             0,
+		reflect.TypeFor[*p.CurrentWorkflowConditionFailedError](): 1,
+		reflect.TypeFor[*p.WorkflowConditionFailedError]():        2,
+		reflect.TypeFor[*p.ConditionFailedError]():                3,
 	}
 
 	errorDefaultPriority = math.MaxInt64
@@ -223,12 +223,13 @@ func extractCurrentWorkflowConflictError(
 				requestCurrentRunID,
 				actualCurrentRunID,
 			),
-			RequestIDs:       executionState.RequestIds,
-			RunID:            executionState.RunId,
-			State:            executionState.State,
-			Status:           executionState.Status,
-			LastWriteVersion: lastWriteVersion,
-			StartTime:        timestamp.TimeValuePtr(executionState.StartTime),
+			RequestIDs:          executionState.RequestIds,
+			RunID:               executionState.RunId,
+			FirstExecutionRunID: executionState.FirstExecutionRunId,
+			State:               executionState.State,
+			Status:              executionState.Status,
+			LastWriteVersion:    lastWriteVersion,
+			StartTime:           timestamp.TimeValuePtr(executionState.StartTime),
 		}
 	}
 	return nil

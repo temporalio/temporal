@@ -56,7 +56,6 @@ func (s *deleteExecutionReplicationTestSuite) SetupSuite() {
 	s.dynamicConfigOverrides = map[dynamicconfig.Key]any{
 		dynamicconfig.EnableReplicationStream.Key():                   true,
 		dynamicconfig.EnableReplicationTaskBatching.Key():             true,
-		dynamicconfig.EnableDeleteWorkflowExecutionReplication.Key():  true,
 		dynamicconfig.EnableSeparateReplicationEnableFlag.Key():       true,
 		dynamicconfig.EnableWorkflowTaskStampIncrementOnFailure.Key(): true,
 	}
@@ -265,101 +264,6 @@ func (s *deleteExecutionReplicationTestSuite) TestDeleteRunningWorkflow_Replicat
 		var notFound *serviceerror.NotFound
 		return errors.As(err, &notFound)
 	}, time.Second*30, replicationCheckInterval, "Workflow mutable state should be deleted on passive cluster via replication")
-}
-
-func (s *deleteExecutionReplicationTestSuite) TestDeleteWorkflow_NotReplicatedWhenFeatureFlagDisabled() {
-	ctx, cancel := context.WithTimeout(context.Background(), testTimeout)
-	defer cancel()
-
-	// Disable the feature flag on both clusters.
-	cleanup0 := s.clusters[0].OverrideDynamicConfig(s.T(), dynamicconfig.EnableDeleteWorkflowExecutionReplication, false)
-	defer cleanup0()
-	cleanup1 := s.clusters[1].OverrideDynamicConfig(s.T(), dynamicconfig.EnableDeleteWorkflowExecutionReplication, false)
-	defer cleanup1()
-
-	ns := s.createGlobalNamespace()
-
-	workflowID := "test-delete-no-repl-" + uuid.NewString()
-	taskQueue := "test-delete-no-repl-tq-" + uuid.NewString()
-	sourceClient := s.clusters[0].FrontendClient()
-
-	// Start and complete a workflow.
-	startResp, err := sourceClient.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.NewString(),
-		Namespace:           ns,
-		WorkflowId:          workflowID,
-		WorkflowType:        &commonpb.WorkflowType{Name: "test-wf-type"},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		WorkflowRunTimeout:  durationpb.New(time.Minute),
-		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-	})
-	s.Require().NoError(err)
-	runID := startResp.GetRunId()
-
-	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		return []*commandpb.Command{{
-			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
-				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-					Result: payloads.EncodeString("done"),
-				},
-			},
-		}}, nil
-	}
-	//nolint:staticcheck // TODO: replace with taskpoller.TaskPoller
-	poller := &testcore.TaskPoller{
-		Client:              sourceClient,
-		Namespace:           ns,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
-		Identity:            "worker",
-		WorkflowTaskHandler: wtHandler,
-		Logger:              s.logger,
-		T:                   s.T(),
-	}
-	_, err = poller.PollAndProcessWorkflowTask()
-	s.Require().NoError(err)
-
-	// Wait for replication to passive.
-	targetClient := s.clusters[1].FrontendClient()
-	s.Eventually(func() bool {
-		resp, err := targetClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: ns,
-			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
-		})
-		if err != nil {
-			return false
-		}
-		return resp.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
-	}, replicationWaitTime, replicationCheckInterval)
-
-	// Delete on active cluster.
-	_, err = sourceClient.DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
-		Namespace: ns,
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      runID,
-		},
-	})
-	s.Require().NoError(err)
-
-	// Wait for deletion on active.
-	s.Eventually(func() bool {
-		_, err := sourceClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: ns,
-			Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
-		})
-		var notFound *serviceerror.NotFound
-		return errors.As(err, &notFound)
-	}, time.Second*10, time.Second)
-
-	// Workflow should still exist on the passive cluster (no replication of deletion).
-	//nolint:forbidigo // need to wait to confirm deletion did NOT replicate
-	time.Sleep(5 * time.Second)
-	_, err = targetClient.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: ns,
-		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
-	})
-	s.NoError(err, "Workflow should still exist on passive cluster when feature flag is disabled")
 }
 
 func (s *deleteExecutionReplicationTestSuite) createGlobalNamespace() string {

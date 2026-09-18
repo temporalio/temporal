@@ -3,6 +3,7 @@ package namespace
 import (
 	"fmt"
 	"maps"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -201,12 +202,7 @@ func (ns *Namespace) ClusterNames(businessID string) []string {
 
 // IsOnCluster returns true is namespace is registered on cluster otherwise false.
 func (ns *Namespace) IsOnCluster(clusterName string) bool {
-	for _, cluster := range ns.ClusterNames(EmptyBusinessID) {
-		if cluster == clusterName {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(ns.ClusterNames(EmptyBusinessID), clusterName)
 }
 
 // ConfigVersion return the namespace config version

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -77,13 +78,12 @@ func ShardedForceReplicationWorkflow(ctx workflow.Context, params ShardedForceRe
 		RetryPolicy:         forceReplicationActivityRetryPolicy,
 	}
 	localCtx := workflow.WithLocalActivityOptions(ctx, lao)
-	var a *activities
 	var md MetadataResponse
-	if err := workflow.ExecuteLocalActivity(localCtx, a.GetMetadata, MetadataRequest{Namespace: params.Namespace}).Get(ctx, &md); err != nil {
+	if err := workflow.ExecuteLocalActivity(localCtx, shardedGetMetadataActivityName, MetadataRequest{Namespace: params.Namespace}).Get(ctx, &md); err != nil {
 		return err
 	}
 	var targetMd DescribeTargetClusterResponse
-	if err := workflow.ExecuteLocalActivity(localCtx, a.DescribeTargetCluster, DescribeTargetClusterRequest{
+	if err := workflow.ExecuteLocalActivity(localCtx, shardedDescribeTargetClusterActivityName, DescribeTargetClusterRequest{
 		TargetClusterName: params.TargetClusterName,
 	}).Get(ctx, &targetMd); err != nil {
 		return err
@@ -106,7 +106,7 @@ func ShardedForceReplicationWorkflow(ctx workflow.Context, params ShardedForceRe
 
 	// First run: count total workflows for the status query denominator.
 	if params.TotalForceReplicateWorkflowCount == 0 {
-		wfCount, err := countWorkflowsForReplication(ctx, params.Namespace, params.Query, shardedCountWorkflowsForReplicationTimeout)
+		wfCount, err := countShardedWorkflowsForReplication(ctx, params.Namespace, params.Query)
 		if err != nil {
 			return err
 		}
@@ -188,6 +188,25 @@ func defaultConcurrentBatchCount(shards int32) int {
 	return max(min(int(shards)/4, defaultConcurrentBatchCap), 1)
 }
 
+func countShardedWorkflowsForReplication(ctx workflow.Context, namespace, query string) (int64, error) {
+	ao := workflow.ActivityOptions{
+		StartToCloseTimeout: 30 * time.Second,
+		RetryPolicy:         forceReplicationActivityRetryPolicy,
+	}
+	var output countWorkflowResponse
+	if err := workflow.ExecuteActivity(
+		workflow.WithActivityOptions(ctx, ao),
+		shardedCountWorkflowActivityName,
+		&workflowservice.CountWorkflowExecutionsRequest{
+			Namespace: namespace,
+			Query:     query,
+		},
+	).Get(ctx, &output); err != nil {
+		return 0, err
+	}
+	return output.WorkflowCount, nil
+}
+
 // maybeKickoffShardedTaskQueueUserDataReplication starts the task-queue
 // user data replication child workflow on the first run (ContinuedAsNewCount
 // == 0). The child is started with ABANDON policy so a parent failure or CAN
@@ -197,7 +216,9 @@ func maybeKickoffShardedTaskQueueUserDataReplication(ctx workflow.Context, param
 	workflow.Go(ctx, func(ctx workflow.Context) {
 		ch := workflow.GetSignalChannel(ctx, taskQueueUserDataReplicationDoneSignalType)
 		var errStr string
-		_ = ch.Receive(ctx, &errStr)
+		if !ch.Receive(ctx, &errStr) {
+			return
+		}
 		onDone(errStr)
 	})
 
@@ -214,9 +235,39 @@ func maybeKickoffShardedTaskQueueUserDataReplication(ctx workflow.Context, param
 		TaskQueueUserDataReplicationParams: params.TaskQueueUserDataReplicationParams,
 		Namespace:                          params.Namespace,
 	}
-	child := workflow.ExecuteChildWorkflow(childCtx, ForceTaskQueueUserDataReplicationWorkflow, input)
+	child := workflow.ExecuteChildWorkflow(childCtx, shardedTaskQueueUserDataReplicationWorkflow, input)
 	var childExecution workflow.Execution
 	return child.GetChildWorkflowExecution().Get(ctx, &childExecution)
+}
+
+func shardedTaskQueueUserDataReplicationWorkflow(
+	ctx workflow.Context,
+	params TaskQueueUserDataReplicationParamsWithNamespace,
+) error {
+	ao := workflow.ActivityOptions{
+		StartToCloseTimeout: 7 * 24 * time.Hour,
+		HeartbeatTimeout:    30 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval: 10 * time.Second,
+			MaximumInterval: 5 * time.Minute,
+		},
+	}
+	err := workflow.ExecuteActivity(
+		workflow.WithActivityOptions(ctx, ao),
+		shardedSeedReplicationQueueWithUserDataEntries,
+		params,
+	).Get(ctx, nil)
+	errStr := ""
+	if err != nil {
+		errStr = err.Error()
+	}
+	return workflow.SignalExternalWorkflow(
+		ctx,
+		workflow.GetInfo(ctx).ParentWorkflowExecution.ID,
+		"",
+		taskQueueUserDataReplicationDoneSignalType,
+		errStr,
+	).Get(ctx, nil)
 }
 
 // shardedParentState holds the parent workflow's per-run orchestration

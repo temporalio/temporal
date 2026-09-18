@@ -20,9 +20,9 @@ import (
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
@@ -40,7 +40,8 @@ const (
 	WorkerDeploymentWorkflowType        = "temporal-sys-worker-deployment-workflow"
 
 	// Namespace division
-	WorkerDeploymentNamespaceDivision = "TemporalWorkerDeployment"
+	WorkerDeploymentNamespaceDivision   = "TemporalWorkerDeployment"
+	workerDeploymentWorkflowPriorityKey = 1
 
 	// Updates
 	RegisterWorkerInDeploymentVersion = "register-task-queue-worker"    // for Worker Deployment Version wf
@@ -65,6 +66,7 @@ const (
 	SyncVersionSummarySignal    = "sync-version-summary"
 	PropagationCompleteSignal   = "propagation-complete"
 	ReactivateVersionSignalName = "reactivate-version" // for Worker Deployment Version wfs
+	DemoteVersionSignalName     = "demote-version"     // for Worker Deployment Version wfs
 
 	// Queries
 	QueryDescribeVersion    = "describe-version"    // for Worker Deployment Version wf
@@ -385,16 +387,14 @@ func isRetryableUpdateError(err error) bool {
 		return true
 	}
 
-	var errWfNotReady *serviceerror.WorkflowNotReady
-	if errors.As(err, &errWfNotReady) {
+	if _, ok := errors.AsType[*serviceerror.WorkflowNotReady](err); ok {
 		// Update edge cases, can retry.
 		return true
 	}
 
 	// All updates that are admitted as the workflow is closing due to CaN are considered retryable.
 	// The ErrWorkflowClosing and ResourceExhausted could be nested.
-	var errMultiOps *serviceerror.MultiOperationExecution
-	if errors.As(err, &errMultiOps) {
+	if errMultiOps, ok := errors.AsType[*serviceerror.MultiOperationExecution](err); ok {
 		for _, e := range errMultiOps.OperationErrors() {
 			if e == nil {
 				continue
@@ -431,12 +431,16 @@ func makeStartRequest(
 		SearchAttributes:         buildSearchAttributes(),
 		Memo:                     memo,
 		Identity:                 identity,
+		Priority:                 &commonpb.Priority{PriorityKey: workerDeploymentWorkflowPriorityKey},
 	}
 }
 
 func buildSearchAttributes() *commonpb.SearchAttributes {
 	sa := &commonpb.SearchAttributes{}
-	searchattribute.AddSearchAttribute(&sa, sadefs.TemporalNamespaceDivision, payload.EncodeString(WorkerDeploymentNamespaceDivision))
+	searchattribute.AddSearchAttributes(
+		&sa,
+		chasm.SearchAttributeTemporalNamespaceDivision.Value(WorkerDeploymentNamespaceDivision),
+	)
 	return sa
 }
 

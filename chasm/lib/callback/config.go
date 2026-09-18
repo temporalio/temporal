@@ -1,23 +1,29 @@
 package callback
 
 import (
-	"net/url"
-	"regexp"
-	"strings"
 	"time"
 
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/backoff"
+	commoncallbacks "go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/nexus"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 var MaxPerExecution = dynamicconfig.NewNamespaceIntSetting(
 	"callback.maxPerExecution",
 	2000,
 	`MaxPerExecution is the maximum number of callbacks that can be attached to an execution (workflow or standalone activity).`,
+)
+
+// TODO(chrsmith): This just caps the size of an individual source context payload.
+// We also need to wire through an aggregate max size, for all callbacks in an execution.
+// (We expect that users will want fewer NexusHandler callbacks with larger payloads than the
+// full 2k execution callbacks, with a much smaller per-callback payload size.)
+
+var NexusHandlerSourceContextMaxSize = dynamicconfig.NewNamespaceIntSetting(
+	"callback.nexusHandler.sourceContext.maxSize",
+	1024*1024,
+	`The maximum allowed size, in bytes, of the opaque source context attached to a single NexusHandler
+completion callback. The server carries this payload to the callback's handler untouched.`,
 )
 
 var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
@@ -38,9 +44,19 @@ var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
 	`The maximum backoff interval between every callback request attempt for a given callback.`,
 )
 
+var InspectSourceHeader = dynamicconfig.NewGlobalBoolSetting(
+	"callback.inspectSourceHeader",
+	false,
+	`Controls whether the legacy "source" header should be inspected to determine if a Nexus callback request is internal
+or external. This header was used before worker callbacks used the temporal://system URL. Leave this disabled unless it
+is required for mixed-version compatibility because trusting a caller-controlled header can route external requests
+internally.`,
+)
+
 type Config struct {
-	RequestTimeout dynamicconfig.DurationPropertyFnWithDestinationFilter
-	RetryPolicy    func() backoff.RetryPolicy
+	RequestTimeout      dynamicconfig.DurationPropertyFnWithDestinationFilter
+	RetryPolicy         dynamicconfig.TypedPropertyFn[backoff.RetryPolicy]
+	InspectSourceHeader dynamicconfig.BoolPropertyFn
 }
 
 func configProvider(dc *dynamicconfig.Collection) *Config {
@@ -55,13 +71,24 @@ func configProvider(dc *dynamicconfig.Collection) *Config {
 				backoff.NoInterval,
 			)
 		},
+		InspectSourceHeader: InspectSourceHeader.Get(dc),
 	}
 }
 
+var EncodeInternalTokenWithEnvelope = dynamicconfig.NewNamespaceBoolSetting(
+	"callback.encodeInternalTokenWithEnvelope",
+	false,
+	`Controls how the internal CHASM Nexus completion callback token is encoded. When true the token is
+encoded as a NexusOperationCompletion envelope; when false (default) it is the legacy bare base64-encoded
+ChasmComponentRef. Gates a safe fleet-wide rollout of the envelope encoding: keep disabled until every
+server can read it (any server able to read the envelope also accepts the legacy form), then enable
+per-namespace.`,
+)
+
 var AllowedAddresses = dynamicconfig.NewNamespaceTypedSettingWithConverter(
 	"callback.allowedAddresses",
-	allowedAddressConverter,
-	AddressMatchRules{},
+	commoncallbacks.AllowedAddressConverter,
+	commoncallbacks.AddressMatchRules{},
 	`The per-namespace list of addresses that are allowed for callbacks and whether secure connections (https) are required.
 URLs: "temporal://system" and "temporal://internal" are always allowed. The default is no address rules.
 URLs are checked against each in order when starting a workflow or activitiy with attached callbacks or a standalone
@@ -71,104 +98,3 @@ any invalid entries are ignored. Each entry is a map with possible values:
         Wildcards, '*', are supported and can match any number of characters (e.g. '*' matches everything,
         'prefix.*.domain' matches 'prefix.a.domain' as well as 'prefix.a.b.domain').
      - "AllowInsecure":bool (optional, default=false) indicates whether https is required`)
-
-type AddressMatchRules struct {
-	Rules []AddressMatchRule
-}
-
-func (a AddressMatchRules) Validate(rawURL string) error {
-	// Exact match only; no path, query, or fragment allowed for system URL
-	if rawURL == nexus.SystemCallbackURL || rawURL == chasm.NexusCompletionHandlerURL {
-		return nil
-	}
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return status.Errorf(codes.InvalidArgument, "invalid callback url: %v", err)
-	}
-	if u.Scheme != "http" && u.Scheme != "https" {
-		return status.Errorf(codes.InvalidArgument, "invalid url: unknown scheme: %v", u)
-	}
-	if u.Host == "" {
-		return status.Errorf(codes.InvalidArgument, "invalid url: missing host")
-	}
-	for _, rule := range a.Rules {
-		allow, err := rule.Allow(u)
-		if err != nil {
-			return err
-		}
-		if allow {
-			return nil
-		}
-	}
-	return status.Errorf(codes.InvalidArgument, "invalid url: url does not match any configured callback address: %v", u)
-}
-
-type AddressMatchRule struct {
-	Regexp        *regexp.Regexp
-	AllowInsecure bool
-}
-
-// Allow validates the URL by:
-// 1. true, nil if the provided url matches the rule and passed validation
-// for the given rule.
-// 2. false, nil if the URL does not match the rule.
-// 3. It false, error if there is a match and the URL fails validation
-func (a AddressMatchRule) Allow(u *url.URL) (bool, error) {
-	if !a.Regexp.MatchString(u.Host) {
-		return false, nil
-	}
-	if a.AllowInsecure {
-		return true, nil
-	}
-	if u.Scheme != "https" {
-		return false,
-			status.Errorf(codes.InvalidArgument,
-				"invalid url: callback address does not allow insecure connections: %v", u)
-	}
-	return true, nil
-}
-
-func allowedAddressConverter(val any) (AddressMatchRules, error) {
-	type entry struct {
-		Pattern       string
-		AllowInsecure bool
-	}
-	intermediate, err := dynamicconfig.ConvertStructure[[]entry](nil)(val)
-	if err != nil {
-		return AddressMatchRules{}, err
-	}
-
-	configs := []AddressMatchRule{}
-	for _, e := range intermediate {
-		if e.Pattern == "" {
-			// Skip configs with missing / unparsable Pattern
-			continue
-		}
-		re, err := regexp.Compile(addressPatternToRegexp(e.Pattern))
-		if err != nil {
-			// Skip configs with malformed Pattern
-			continue
-		}
-		configs = append(configs, AddressMatchRule{
-			Regexp:        re,
-			AllowInsecure: e.AllowInsecure,
-		})
-	}
-	return AddressMatchRules{Rules: configs}, nil
-}
-
-func addressPatternToRegexp(pattern string) string {
-	var result strings.Builder
-	result.WriteString("^")
-	first := true
-	for literal := range strings.SplitSeq(pattern, "*") {
-		if !first {
-			// Replace * with .*
-			result.WriteString(".*")
-		}
-		result.WriteString(regexp.QuoteMeta(literal))
-		first = false
-	}
-	result.WriteString("$")
-	return result.String()
-}

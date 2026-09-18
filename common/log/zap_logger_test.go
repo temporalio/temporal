@@ -76,6 +76,30 @@ func (s *LogSuite) TestNewLogger() {
 
 }
 
+type panickingMarshaler struct{}
+
+func (panickingMarshaler) MarshalJSON() ([]byte, error) {
+	panic("boom")
+}
+
+func (s *LogSuite) TestReflectedEncoderRecoversFromPanic() {
+	dir := testutils.MkdirTemp(s.T(), "", "config.testReflectedEncoder")
+	logFile := dir + "/test.log"
+
+	zl := BuildZapLogger(Config{Level: "info", OutputFile: logFile})
+	logger := NewZapLogger(zl)
+
+	// A panicking MarshalJSON on a reflected (tag.Any) field must not take down the process.
+	s.NotPanics(func() {
+		logger.Info("reflected field", tag.Any("key", panickingMarshaler{}))
+	})
+	s.NoError(zl.Sync())
+
+	out, err := os.ReadFile(logFile)
+	s.NoError(err)
+	s.Contains(string(out), "panic serializing log field")
+}
+
 func TestDefaultLogger(t *testing.T) {
 	old := os.Stdout // keep backup of the real stdout
 	r, w, _ := os.Pipe()

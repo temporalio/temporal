@@ -106,6 +106,7 @@ var (
 	ComponentShardContext              = component("shard-context")
 	ComponentShardEngine               = component("shard-engine")
 	ComponentMatchingEngine            = component("matching-engine")
+	ComponentPartitionScaler           = component("partition-scaler")
 	ComponentReplicator                = component("replicator")
 	ComponentReplicationTaskProcessor  = component("replication-task-processor")
 	ComponentHSMStateReplicator        = component("hsm-state-replicator")
@@ -120,6 +121,7 @@ var (
 	ComponentESVisibilityManager       = component("es-visibility-manager")
 	ComponentArchiver                  = component("archiver")
 	ComponentBatcher                   = component("batcher")
+	ComponentAdminBatcher              = component("admin-batcher")
 	ComponentWorker                    = component("worker")
 	ComponentWorkerManager             = component("worker-manager")
 	ComponentPerNSWorkerManager        = component("perns-worker-manager")
@@ -134,6 +136,14 @@ var (
 	ComponentWorkflowUpdate            = component("workflow-update")
 	ComponentTaskScheduler             = component("task-scheduler")
 	VersionChecker                     = component("version-checker")
+)
+
+// Pre-defined values for Nexus stage tag. Nexus stage identifies the request lifecycle position.
+var (
+	NexusStageCallerOutbound  = nexusStage("caller-outbound")
+	NexusStageCallerInbound   = nexusStage("caller-inbound")
+	NexusStageHandlerInbound  = nexusStage("handler-inbound")
+	NexusStageHandlerOutbound = nexusStage("handler-outbound")
 )
 
 // Pre-defined values for scope tag

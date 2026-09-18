@@ -18,7 +18,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/util"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -489,7 +488,7 @@ func (h *historyArchiverSuite) TestGet_Success_UseProvidedVersion() {
 		WorkflowID:           testWorkflowID,
 		RunID:                testRunID,
 		PageSize:             testPageSize,
-		CloseFailoverVersion: util.Ptr(int64(-25)),
+		CloseFailoverVersion: new(int64(-25)),
 	}
 
 	response, err := historyArchiver.Get(ctx, h.testArchivalURI, request)

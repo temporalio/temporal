@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -30,6 +31,7 @@ func (s *NamespaceInterceptorTestSuite) TestNamespaceInterceptorServerRejectsInv
 	id := uuid.NewString()
 	sut := &sutConnector{
 		env:             env,
+		ctx:             s.Context(),
 		identity:        "worker-1",
 		taskQueue:       &taskqueuepb.TaskQueue{Name: id, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		stickyTaskQueue: &taskqueuepb.TaskQueue{Name: "test-sticky-taskqueue", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: id},
@@ -53,6 +55,7 @@ func (s *NamespaceInterceptorTestSuite) TestNamespaceInterceptorServerRejectsInv
 
 type sutConnector struct {
 	env             *testcore.TestEnv
+	ctx             context.Context
 	identity        string
 	taskQueue       *taskqueuepb.TaskQueue
 	stickyTaskQueue *taskqueuepb.TaskQueue
@@ -61,7 +64,7 @@ type sutConnector struct {
 }
 
 func (b *sutConnector) startWorkflowExecution(ns namespace.Name) error {
-	_, err := b.env.FrontendClient().StartWorkflowExecution(b.env.Context(), &workflowservice.StartWorkflowExecutionRequest{
+	_, err := b.env.FrontendClient().StartWorkflowExecution(b.ctx, &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           ns.String(),
 		WorkflowId:          b.id,
@@ -76,7 +79,7 @@ func (b *sutConnector) startWorkflowExecution(ns namespace.Name) error {
 }
 
 func (b *sutConnector) pollWorkflowTaskQueue(ns namespace.Name) ([]byte, error) {
-	resp, err := b.env.FrontendClient().PollWorkflowTaskQueue(b.env.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+	resp, err := b.env.FrontendClient().PollWorkflowTaskQueue(b.ctx, &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: ns.String(),
 		TaskQueue: b.taskQueue,
 		Identity:  b.identity,
@@ -89,7 +92,7 @@ func (b *sutConnector) pollWorkflowTaskQueue(ns namespace.Name) ([]byte, error) 
 }
 
 func (b *sutConnector) respondWorkflowTaskCompleted(token []byte, ns namespace.Name) error {
-	_, err := b.env.FrontendClient().RespondWorkflowTaskCompleted(b.env.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err := b.env.FrontendClient().RespondWorkflowTaskCompleted(b.ctx, &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace: ns.String(),
 		TaskToken: token,
 		Commands: []*commandpb.Command{

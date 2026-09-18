@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/tqid"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
@@ -115,7 +116,7 @@ func (t *MatcherTestSuite) TestLocalSyncMatch() {
 		task, err := t.childMatcher.Poll(ctx, &pollMetadata{})
 		cancel()
 		if err == nil {
-			task.finish(nil, true)
+			task.finish(taskFinishResult{consumedToken: true})
 		}
 	}()
 
@@ -151,7 +152,7 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 		task, err := t.childMatcher.Poll(ctx, &pollMetadata{})
 		cancel()
 		if err == nil && !task.isStarted() {
-			task.finish(nil, true)
+			task.finish(taskFinishResult{consumedToken: true})
 		}
 	}()
 
@@ -163,7 +164,7 @@ func (t *MatcherTestSuite) testRemoteSyncMatch(taskSource enumsspb.TaskSource) {
 			if err != nil {
 				remotePollErr = err
 			} else {
-				task.finish(nil, true)
+				task.finish(taskFinishResult{consumedToken: true})
 				remotePollResp = matchingservice.PollWorkflowTaskQueueResponse{
 					TaskToken:         []byte("token1"),
 					WorkflowExecution: task.workflowExecution(),
@@ -353,10 +354,9 @@ func (t *MatcherTestSuite) TestAvoidForwardingWhenBacklogIsOld() {
 	oldBacklogTask := newInternalTaskFromBacklog(randomTaskInfoWithAge(time.Minute), nil)
 	ctx, cancel = context.WithTimeout(context.Background(), time.Second)
 	go t.childMatcher.MustOffer(ctx, oldBacklogTask, interruptC) //nolint:errcheck
-	t.Require().Eventually(
-		func() bool {
-			return t.childMatcher.getBacklogAge() > 0
-		}, maxWait, time.Millisecond/2)
+	await.RequireTrue(t.T(), func() bool {
+		return t.childMatcher.getBacklogAge() > 0
+	}, maxWait, time.Millisecond/2)
 
 	// poll the task
 	task, _ := t.childMatcher.Poll(ctx, &pollMetadata{})
@@ -364,10 +364,9 @@ func (t *MatcherTestSuite) TestAvoidForwardingWhenBacklogIsOld() {
 	cancel()
 
 	// should be back to no backlog
-	t.Require().Eventually(
-		func() bool {
-			return t.childMatcher.getBacklogAge() == emptyBacklogAge
-		}, maxWait, time.Millisecond/2)
+	await.RequireTrue(t.T(), func() bool {
+		return t.childMatcher.getBacklogAge() == emptyBacklogAge
+	}, maxWait, time.Millisecond/2)
 
 	// even old task is forwarded if last poll is not recent enough
 	time.Sleep(t.childConfig.MaxWaitForPollerBeforeFwd() + time.Millisecond) //nolint:forbidigo
@@ -574,7 +573,7 @@ func (t *MatcherTestSuite) TestQueryLocalSyncMatch() {
 		task, err := t.childMatcher.PollForQuery(ctx, &pollMetadata{})
 		cancel()
 		if err == nil && task.isQuery() {
-			task.finish(nil, true)
+			task.finish(taskFinishResult{consumedToken: true})
 		}
 	}()
 
@@ -597,7 +596,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 		task, err := t.childMatcher.PollForQuery(ctx, &pollMetadata{})
 		cancel()
 		if err == nil && task.isQuery() {
-			task.finish(nil, true)
+			task.finish(taskFinishResult{consumedToken: true})
 		}
 	}()
 
@@ -608,7 +607,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatch() {
 			if err != nil {
 				return nil, err
 			} else if task.isQuery() {
-				task.finish(nil, true)
+				task.finish(taskFinishResult{consumedToken: true})
 				querySet.Store(true)
 				return &matchingservice.PollWorkflowTaskQueueResponse{
 					TaskToken: []byte("token1"),
@@ -661,7 +660,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatchError() {
 		cancel()
 		if err == nil && task.isQuery() {
 			matched = true
-			task.finish(nil, true)
+			task.finish(taskFinishResult{consumedToken: true})
 		}
 	}()
 
@@ -699,7 +698,7 @@ func (t *MatcherTestSuite) TestMustOfferLocalMatch() {
 		task, err := t.childMatcher.Poll(ctx, &pollMetadata{})
 		cancel()
 		if err == nil {
-			task.finish(nil, true)
+			task.finish(taskFinishResult{consumedToken: true})
 		}
 	}()
 
@@ -727,7 +726,7 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 			if err != nil {
 				return nil, err
 			} else {
-				task.finish(nil, true)
+				task.finish(taskFinishResult{consumedToken: true})
 				return &matchingservice.PollWorkflowTaskQueueResponse{
 					TaskToken:         []byte("token1"),
 					WorkflowExecution: task.workflowExecution(),

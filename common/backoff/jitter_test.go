@@ -30,12 +30,12 @@ func (s *jitterSuite) TestJitter_Int64() {
 
 	for range 1048576 {
 		result := Jitter(input, coefficient)
-		s.True(result >= lowerBound)
-		s.True(result < upperBound)
+		s.GreaterOrEqual(result, lowerBound)
+		s.Less(result, upperBound)
 
 		result = FullJitter(input)
-		s.True(result >= 0)
-		s.True(result < input)
+		s.GreaterOrEqual(result, int64(0))
+		s.Less(result, input)
 	}
 }
 
@@ -47,12 +47,12 @@ func (s *jitterSuite) TestJitter_Float64() {
 
 	for range 1048576 {
 		result := Jitter(input, coefficient)
-		s.True(result >= lowerBound)
-		s.True(result < upperBound)
+		s.GreaterOrEqual(result, lowerBound)
+		s.Less(result, upperBound)
 
 		result = FullJitter(input)
-		s.True(result >= 0)
-		s.True(result < input)
+		s.GreaterOrEqual(result, float64(0))
+		s.Less(result, input)
 	}
 }
 
@@ -64,12 +64,12 @@ func (s *jitterSuite) TestJitter_Duration() {
 
 	for range 1048576 {
 		result := Jitter(input, coefficient)
-		s.True(result >= lowerBound)
-		s.True(result < upperBound)
+		s.GreaterOrEqual(result, lowerBound)
+		s.Less(result, upperBound)
 
 		result = FullJitter(input)
-		s.True(result >= 0)
-		s.True(result < input)
+		s.GreaterOrEqual(result, time.Duration(0))
+		s.Less(result, input)
 	}
 }
 
@@ -83,4 +83,25 @@ func (s *jitterSuite) TestJitter_CoeffientZeroValue() {
 	s.Equal(time.Duration(1), Jitter(time.Duration(1), 0))
 	s.Equal(int64(1), Jitter(int64(1), 0))
 	s.Equal(float64(1), Jitter(float64(1), 0))
+}
+
+func (s *jitterSuite) TestJitter_CoefficientNegative() {
+	// coefficient < 0 clamps to 0, so Jitter returns the input unchanged (and does not panic).
+	s.Equal(time.Duration(1), Jitter(time.Duration(1), -0.5))
+	s.Equal(int64(1), Jitter(int64(1), -0.5))
+	s.InDelta(float64(1), Jitter(float64(1), -0.5), 0) // exact: clamped to 0 returns input unchanged
+	s.Equal(int64(1), Jitter(int64(1), -100.0))
+}
+
+func (s *jitterSuite) TestJitter_CoefficientAboveOne() {
+	// coefficient > 1 clamps to 1, so result lies in [0, 2*input).
+	input := int64(1048576)
+	lowerBound := int64(0)
+	upperBound := int64(float64(input) * 2)
+
+	for range 1048576 {
+		result := Jitter(input, 5.0) // clamped to 1.0
+		s.GreaterOrEqual(result, lowerBound)
+		s.Less(result, upperBound)
+	}
 }

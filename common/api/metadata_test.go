@@ -15,12 +15,12 @@ import (
 var publicMethodRgx = regexp.MustCompile("^[A-Z]")
 
 func TestWorkflowServiceMetadata(t *testing.T) {
-	tp := reflect.TypeOf((*workflowservice.WorkflowServiceServer)(nil)).Elem()
+	tp := reflect.TypeFor[workflowservice.WorkflowServiceServer]()
 	checkService(t, tp, workflowServiceMetadata)
 }
 
 func TestOperatorServiceMetadata(t *testing.T) {
-	tp := reflect.TypeOf((*operatorservice.OperatorServiceServer)(nil)).Elem()
+	tp := reflect.TypeFor[operatorservice.OperatorServiceServer]()
 	checkService(t, tp, operatorServiceMetadata)
 }
 
@@ -44,7 +44,7 @@ func checkService(t *testing.T, tp reflect.Type, m map[string]MethodMetadata) {
 			var nsField reflect.StructField
 			nsField, hasNamespace = requestType.FieldByName("Namespace")
 			if hasNamespace {
-				namespaceIsString = nsField.Type == reflect.TypeOf("string")
+				namespaceIsString = nsField.Type == reflect.TypeFor[string]()
 			}
 		}
 
@@ -91,8 +91,8 @@ func TestGetMethodMetadata(t *testing.T) {
 
 func getMethodNames(tp reflect.Type) []string {
 	var out []string
-	for i := 0; i < tp.NumMethod(); i++ {
-		name := tp.Method(i).Name
+	for method := range tp.Methods() {
+		name := method.Name
 		// Don't collect unimplemented methods. This weeds out the
 		// `mustEmbedUnimplementedFooBarBaz` required by the GRPC v2 gateway
 		if publicMethodRgx.MatchString(name) {

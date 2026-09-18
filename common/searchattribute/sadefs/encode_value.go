@@ -7,6 +7,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/sdk/converter"
 	"go.temporal.io/server/common/payload"
 )
 
@@ -107,24 +108,61 @@ func decodeValueTyped[T any](value *commonpb.Payload, allowList bool) (any, erro
 	// only one element, then return it. Otherwise, return an error.
 	// If search attribute value is `nil`, it means that search attribute needs to be removed from the document.
 	var val *T
-	if err := payload.Decode(value, &val); err != nil {
-		var listVal []T
-		if err := payload.Decode(value, &listVal); err != nil {
-			return nil, err
-		}
-		if len(listVal) == 0 {
+	if err := payload.Decode(value, &val); err == nil {
+		if val == nil {
 			return nil, nil
 		}
-		if allowList {
-			return listVal, nil
-		}
-		if len(listVal) == 1 {
-			return listVal[0], nil
-		}
-		return nil, fmt.Errorf("list of values not allowed for type %T", listVal[0])
+		return *val, nil
 	}
-	if val == nil {
+	var listVal []T
+	if err := payload.Decode(value, &listVal); err != nil {
+		return nil, err
+	}
+	if len(listVal) == 0 {
 		return nil, nil
 	}
-	return *val, nil
+	if allowList {
+		return listVal, nil
+	}
+	if len(listVal) == 1 {
+		return listVal[0], nil
+	}
+	return nil, fmt.Errorf(
+		"%w: list of values not allowed for type %T",
+		converter.ErrUnableToDecode,
+		listVal[0],
+	)
+}
+
+func DecodeKeywordList(value *commonpb.Payload) ([]string, error) {
+	// Decode to []any because json.Unmarshal decodes null values to zero value,
+	// i.e., if we decoded to []string, null values would become empty string,
+	// which is invalid.
+	dv, err := decodeValueTyped[[]any](value, false)
+	if err != nil {
+		return nil, err
+	}
+	if dv == nil {
+		return nil, nil
+	}
+	// Validate that every value is a string.
+	tdv, ok := dv.([]any)
+	if !ok {
+		//nolint:forbidigo // this should never happen
+		panic(fmt.Sprintf("unexpected return type of decodeValueTyped (got: %T, expected: []any)", dv))
+	}
+	res := make([]string, len(tdv))
+	for i, v := range tdv {
+		switch vt := v.(type) {
+		case string:
+			res[i] = vt
+		default:
+			return nil, fmt.Errorf(
+				"%w: invalid item value type in KeywordList value (got: %T, expected: string)",
+				converter.ErrUnableToDecode,
+				dv,
+			)
+		}
+	}
+	return res, nil
 }

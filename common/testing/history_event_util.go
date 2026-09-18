@@ -1,6 +1,7 @@
 package testing
 
 import (
+	"maps"
 	"time"
 
 	"github.com/google/uuid"
@@ -958,9 +959,7 @@ func copyExitVertices(
 ) map[string]bool {
 
 	newMap := make(map[string]bool)
-	for key, value := range originalMap {
-		newMap[key] = value
-	}
+	maps.Copy(newMap, originalMap)
 	return newMap
 }
 

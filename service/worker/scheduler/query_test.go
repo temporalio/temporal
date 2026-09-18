@@ -7,10 +7,13 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	"go.uber.org/mock/gomock"
 )
 
 const (
@@ -23,6 +26,7 @@ func TestFieldNameAggInterceptor(t *testing.T) {
 		testNamespace,
 		searchattribute.TestEsNameTypeMap(),
 		searchattribute.NewTestMapperProvider(nil),
+		nil,
 	)
 
 	_, err := fnInterceptor.Name("CustomIntField", query.FieldNameFilter)
@@ -168,6 +172,7 @@ func TestGetQueryFieldsLegacy(t *testing.T) {
 					testNamespace,
 					searchattribute.TestEsNameTypeMap(),
 					searchattribute.NewTestMapperProvider(nil),
+					nil,
 					tc.input,
 				)
 				if tc.expectedErrMsg == "" {
@@ -245,7 +250,7 @@ func TestGetQueryFields(t *testing.T) {
 			name:           "invalid custom search attribute",
 			input:          "Foo = 'bar'",
 			expectedFields: nil,
-			expectedErrMsg: "'Foo' is not a valid search attribute",
+			expectedErrMsg: "invalid search attribute: Foo",
 		},
 	}
 
@@ -254,15 +259,19 @@ func TestGetQueryFields(t *testing.T) {
 			tc.name,
 			func(t *testing.T) {
 				s := require.New(t)
+				ctrl := gomock.NewController(t)
 				fields, err := getQueryFields(
 					testNamespace,
 					searchattribute.TestNameTypeMap(),
 					searchattribute.NewTestMapperProvider(&searchattribute.TestMapper{}),
+					nil, // chasmMapper
 					tc.input,
+					metrics.NewMockHandler(ctrl),
+					log.NewNoopLogger(),
 				)
 				if tc.expectedErrMsg == "" {
 					s.NoError(err)
-					s.Equal(len(tc.expectedFields), len(fields))
+					s.Len(fields, len(tc.expectedFields))
 					for _, f := range fields {
 						s.Contains(tc.expectedFields, f)
 					}
@@ -325,7 +334,7 @@ func TestValidateVisibilityQuery(t *testing.T) {
 		{
 			name:           "invalid custom search attribute",
 			input:          "Foo = foo",
-			expectedErrMsg: "'Foo' is not a valid search attribute",
+			expectedErrMsg: "invalid search attribute: Foo",
 		},
 	}
 
@@ -334,12 +343,16 @@ func TestValidateVisibilityQuery(t *testing.T) {
 			tc.name,
 			func(t *testing.T) {
 				s := require.New(t)
+				ctrl := gomock.NewController(t)
 				err := ValidateVisibilityQuery(
 					testNamespace,
 					searchattribute.TestNameTypeMap(),
 					searchattribute.NewTestMapperProvider(&searchattribute.TestMapper{}),
+					nil,
 					dynamicconfig.GetBoolPropertyFn(true),
 					tc.input,
+					metrics.NewMockHandler(ctrl),
+					log.NewNoopLogger(),
 				)
 				if tc.expectedErrMsg == "" {
 					s.NoError(err)

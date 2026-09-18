@@ -6,6 +6,7 @@ import (
 	"maps"
 	"math"
 	"math/rand"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -47,6 +48,11 @@ type (
 		ExecutionManager  p.ExecutionManager
 		HistoryBranchUtil p.HistoryBranchUtil
 		Logger            log.Logger
+
+		// MutableStateTableCounts reports per-table surviving row counts for a run's
+		// mutable-state sub-collections. Wired from the raw DB by SQL entrypoints;
+		// nil on Cassandra, where these live as columns on the executions row.
+		MutableStateTableCounts func(ctx context.Context, shardID int32, namespaceID, workflowID, runID string) (map[string]int, error)
 
 		Ctx    context.Context
 		Cancel context.CancelFunc
@@ -152,10 +158,6 @@ func (s *ExecutionMutableStateSuite) TestCreate_BrandNew_CurrentConflict() {
 		rand.Int63(),
 	)
 
-	// Remember original execution stats because the CreateWorkflowExecution mutates the stats before failing to persist
-	executionStats, ok := proto.Clone(newSnapshot.ExecutionInfo.ExecutionStats).(*persistencespb.ExecutionStats)
-	s.True(ok)
-
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
@@ -182,8 +184,9 @@ func (s *ExecutionMutableStateSuite) TestCreate_BrandNew_CurrentConflict() {
 		StartTime:        timestamp.TimeValuePtr(newSnapshot.ExecutionState.StartTime),
 	}, err)
 
-	// Restore origin execution stats so GetWorkflowExecution matches with the pre-failed snapshot stats above
-	newSnapshot.ExecutionInfo.ExecutionStats = executionStats
+	// A failed CreateWorkflowExecution must not mutate the caller's snapshot. It previously leaked
+	// its HistorySize increment into newSnapshot, which double-counted on a retry that reused it;
+	// AssertMSEqualWithDB fails if the snapshot diverges from the persisted state, guarding that.
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, newSnapshot)
 	s.AssertHEEqualWithDB(branchToken, newEvents)
 }
@@ -285,10 +288,6 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse_CurrentConflict() {
 		rand.Int63(),
 	)
 
-	// Remember original execution stats because the CreateWorkflowExecution mutates the stats before failing to persist
-	executionStats, ok := proto.Clone(prevSnapshot.ExecutionInfo.ExecutionStats).(*persistencespb.ExecutionStats)
-	s.True(ok)
-
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
@@ -315,8 +314,9 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse_CurrentConflict() {
 		StartTime:        timestamp.TimeValuePtr(prevSnapshot.ExecutionState.StartTime),
 	}, err)
 
-	// Restore origin execution stats so GetWorkflowExecution matches with the pre-failed snapshot stats above
-	prevSnapshot.ExecutionInfo.ExecutionStats = executionStats
+	// A failed CreateWorkflowExecution must not mutate the caller's snapshot. It previously leaked
+	// its HistorySize increment into prevSnapshot, which double-counted on a retry that reused it;
+	// AssertMSEqualWithDB fails if the snapshot diverges from the persisted state, guarding that.
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, prevSnapshot)
 	s.AssertHEEqualWithDB(branchToken, prevEvents)
 }
@@ -2697,6 +2697,23 @@ func (s *ExecutionMutableStateSuite) AssertMissingFromDB(
 	})
 	s.IsType(&serviceerror.NotFound{}, err)
 	s.EqualError(err, fmt.Sprintf("workflow execution not found for workflow ID %q and run ID %q", workflowID, runID))
+
+	// GetWorkflowExecution short-circuits on the missing executions row, so it
+	// can't see orphaned child-table rows; check them directly where possible.
+	if s.MutableStateTableCounts != nil {
+		counts, err := s.MutableStateTableCounts(s.Ctx, s.ShardID, namespaceID, workflowID, runID)
+		s.NoError(err)
+		// Collect all offending tables into one assertion so every leak is
+		// reported, not just the first (a per-table require would stop at one).
+		var orphaned []string
+		for table, n := range counts {
+			if n != 0 {
+				orphaned = append(orphaned, fmt.Sprintf("%s=%d", table, n))
+			}
+		}
+		sort.Strings(orphaned)
+		s.Emptyf(orphaned, "orphaned rows after delete: %v", orphaned)
+	}
 }
 
 func (s *ExecutionMutableStateSuite) AssertHEEqualWithDB(branchToken []byte, events ...[]*p.WorkflowEvents) {
@@ -2734,7 +2751,7 @@ func (s *ExecutionMutableStateSuite) assertHEWithDB(
 	if !assertPrefix {
 		s.Nil(resp.NextPageToken)
 	}
-	s.Equal(len(historyEvents), len(resp.HistoryEvents))
+	s.Len(resp.HistoryEvents, len(historyEvents))
 	for i, event := range historyEvents {
 		s.ProtoEqual(event, resp.HistoryEvents[i])
 	}

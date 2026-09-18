@@ -39,10 +39,7 @@ func TestFaultInjection_Inject(t *testing.T) {
 		if expectErr {
 			assert.Error(t, err)
 			assert.Contains(t, err.Error(), "fault injection error")
-			var reErr *serviceerror.ResourceExhausted
-			if errors.As(err, &reErr) {
-				assert.ErrorAs(t, err, &reErr)
-			} else {
+			if _, ok := errors.AsType[*serviceerror.ResourceExhausted](err); !ok {
 				var timeoutErr *persistence.TimeoutError
 				assert.ErrorAs(t, err, &timeoutErr)
 			}

@@ -28,6 +28,11 @@ type (
 		GetFrontendClient() workflowservice.WorkflowServiceClient
 		GetRemoteAdminClient(string) (adminservice.AdminServiceClient, error)
 		GetRemoteFrontendClient(string) (grpc.ClientConnInterface, workflowservice.WorkflowServiceClient, error)
+		// Close deterministically releases bean-held resources on shutdown: it
+		// stops the history and matching clients (their daemon goroutines and
+		// cached gRPC connections) and unregisters the cluster metadata change
+		// callback.
+		Close()
 	}
 
 	frontendClient struct {
@@ -110,6 +115,24 @@ func (h *clientBeanImpl) registerClientEviction() {
 				h.frontendClientsLock.Unlock()
 			}
 		})
+}
+
+// Close releases the resources held by the bean's clients. See the Bean
+// interface for details. It is safe to call more than once.
+func (h *clientBeanImpl) Close() {
+	h.clusterMetadata.UnRegisterMetadataChangeCallback(h)
+
+	// The history and matching client wrapper chains implement Stop();
+	// stopping them releases their daemon goroutines and cached gRPC
+	// connections.
+	if s, ok := h.historyClient.(interface{ Stop() }); ok {
+		s.Stop()
+	}
+	if mc := h.matchingClient.Load(); mc != nil {
+		if s, ok := mc.(interface{ Stop() }); ok {
+			s.Stop()
+		}
+	}
 }
 
 func (h *clientBeanImpl) GetHistoryClient() historyservice.HistoryServiceClient {

@@ -44,6 +44,7 @@ type (
 	MutableState interface {
 		AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent
 		GenerateEventLoadToken(event *historypb.HistoryEvent) ([]byte, error)
+		SetReplayEventBatchID(batchID int64)
 		LoadHistoryEvent(ctx context.Context, token []byte) (*historypb.HistoryEvent, error)
 
 		AddActivityTaskCancelRequestedEvent(int64, int64, string) (*historypb.HistoryEvent, *persistencespb.ActivityInfo, error)
@@ -62,6 +63,7 @@ type (
 			*deploymentpb.Deployment,
 			*taskqueuespb.BuildIdRedirectInfo,
 			string, // workerControlTaskQueue
+			*clockspb.VectorClock, // startedClock
 		) (*historypb.HistoryEvent, error)
 		AddActivityTaskTimedOutEvent(int64, int64, *failurepb.Failure, enumspb.RetryState) (*historypb.HistoryEvent, error)
 		AddChildWorkflowExecutionCanceledEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionCanceledEventAttributes) (*historypb.HistoryEvent, error)
@@ -71,7 +73,7 @@ type (
 		AddChildWorkflowExecutionTerminatedEvent(int64, *commonpb.WorkflowExecution) (*historypb.HistoryEvent, error)
 		AddChildWorkflowExecutionTimedOutEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionTimedOutEventAttributes) (*historypb.HistoryEvent, error)
 		AddCompletedWorkflowEvent(int64, *commandpb.CompleteWorkflowExecutionCommandAttributes, string) (*historypb.HistoryEvent, error)
-		AddContinueAsNewEvent(context.Context, int64, int64, namespace.Name, *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes, worker_versioning.IsWFTaskQueueInVersionDetector) (*historypb.HistoryEvent, MutableState, error)
+		AddContinueAsNewEvent(context.Context, int64, namespace.Name, *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes, worker_versioning.IsWFTaskQueueInVersionDetector) (*historypb.HistoryEvent, MutableState, error)
 		AddWorkflowTaskCompletedEvent(*WorkflowTaskInfo, *workflowservice.RespondWorkflowTaskCompletedRequest, WorkflowTaskCompletionLimits) (*historypb.HistoryEvent, error)
 		AddWorkflowTaskFailedEvent(workflowTask *WorkflowTaskInfo, cause enumspb.WorkflowTaskFailedCause, failure *failurepb.Failure, identity string, versioningStamp *commonpb.WorkerVersionStamp, binChecksum, baseRunID, newRunID string, forkEventVersion int64) (*historypb.HistoryEvent, error)
 		AddWorkflowTaskScheduleToStartTimeoutEvent(workflowTask *WorkflowTaskInfo) (*historypb.HistoryEvent, error)
@@ -91,7 +93,7 @@ type (
 		AddSignalRequested(requestID string)
 		AddStartChildWorkflowExecutionFailedEvent(int64, enumspb.StartChildWorkflowExecutionFailedCause, *historypb.StartChildWorkflowExecutionInitiatedEventAttributes) (*historypb.HistoryEvent, error)
 		AddStartChildWorkflowExecutionInitiatedEvent(int64, *commandpb.StartChildWorkflowExecutionCommandAttributes, namespace.ID) (*historypb.HistoryEvent, *persistencespb.ChildExecutionInfo, error)
-		AddTimeoutWorkflowEvent(int64, enumspb.RetryState, string) (*historypb.HistoryEvent, error)
+		AddTimeoutWorkflowEvent(enumspb.RetryState, string) (*historypb.HistoryEvent, error)
 		AddTimerCanceledEvent(int64, *commandpb.CancelTimerCommandAttributes, string) (*historypb.HistoryEvent, error)
 		AddTimerFiredEvent(string) (*historypb.HistoryEvent, error)
 		AddTimerStartedEvent(int64, *commandpb.StartTimerCommandAttributes) (*historypb.HistoryEvent, *persistencespb.TimerInfo, error)
@@ -118,7 +120,7 @@ type (
 		) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionStartedEvent(*commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionStartedEventWithOptions(*commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest, *workflowpb.ResetPoints, string, string) (*historypb.HistoryEvent, error)
-		AddWorkflowExecutionTerminatedEvent(firstEventID int64, reason string, details *commonpb.Payloads, identity string, deleteAfterTerminate bool, links []*commonpb.Link) (*historypb.HistoryEvent, error)
+		AddWorkflowExecutionTerminatedEvent(reason string, details *commonpb.Payloads, identity string, deleteAfterTerminate bool, links []*commonpb.Link) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionOptionsUpdatedEvent(
 			versioningOverride *workflowpb.VersioningOverride,
 			unsetVersioningOverride bool,
@@ -127,7 +129,8 @@ type (
 			links []*commonpb.Link,
 			identity string,
 			priority *commonpb.Priority,
-			timeSkippingConfig *workflowpb.TimeSkippingConfig,
+			timeSkippingConfig *commonpb.TimeSkippingConfig,
+			timeSkippingConfigUpdated bool,
 			workflowUpdateOptions []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
 		) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionUpdateAcceptedEvent(updateID string, acceptedRequestMessageID string, acceptedRequestSequencingEventID int64, acceptedRequest *updatepb.Request) (*historypb.HistoryEvent, error)
@@ -145,6 +148,9 @@ type (
 		SetChildrenInitializedPostResetPoint(children map[string]*persistencespb.ResetChildInfo)
 		GetChildrenInitializedPostResetPoint() map[string]*persistencespb.ResetChildInfo
 		AttachRequestID(requestID string, eventType enumspb.EventType, eventID int64)
+		// AttachChasmRequestID records a request ID attached by the CHASM framework for
+		// UpdateComponent idempotency. Such entries are sweepable (oldest-first) at transaction close.
+		AttachChasmRequestID(requestID string)
 
 		CloneToProto() *persistencespb.WorkflowMutableState
 		RetryActivity(ai *persistencespb.ActivityInfo, failure *failurepb.Failure) (enumspb.RetryState, error)
@@ -343,6 +349,7 @@ type (
 		// CloseTransactionAsSnapshot closes the mutable state transaction (different from DB transaction) and prepares the current snapshot of the state to be persisted and bumps the DBRecordVersion.
 		// You should ideally not make any changes to the mutable state after this call.
 		CloseTransactionAsSnapshot(ctx context.Context, transactionPolicy TransactionPolicy) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error)
+		UpdateLastRunningClock([]*persistence.WorkflowEvents) (*persistencespb.WorkflowExecutionInfo, []*persistence.WorkflowEvents, error)
 		GenerateMigrationTasks(targetClusters []string) ([]tasks.Task, int64, error)
 
 		// ContinueAsNewMinBackoff calculate minimal backoff for next ContinueAsNew run.
@@ -374,8 +381,8 @@ type (
 		// GetEffectiveDeployment returns the effective deployment in the following order:
 		//  1. DeploymentVersionTransition.Deployment: this is returned when the wf is transitioning to a
 		//     new deployment
-		//  2. VersioningOverride.Deployment: this is returned when user has set a PINNED override
-		//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+		//  2. VersioningOverride target: this is returned when user has set a PINNED override or
+		//     pending one-time move, either at wf start time or later via UpdateWorkflowExecutionOptions.
 		//  3. Deployment: this is returned when there is no transition and no override (the most
 		//     common case). Deployment is set based on the worker-sent deployment in the latest WFT
 		//     completion. Exception: if Deployment is set but the workflow's effective behavior is
@@ -385,8 +392,8 @@ type (
 		// GetEffectiveVersioningBehavior returns the effective versioning behavior in the following
 		// order:
 		//  1. DeploymentVersionTransition: if there is a transition, then effective behavior is AUTO_UPGRADE.
-		//  2. VersioningOverride.Behavior: this is returned when user has set a behavior override
-		//     at wf start time, or later via UpdateWorkflowExecutionOptions.
+		//  2. VersioningOverride behavior: this is returned when user has set a behavior override
+		//     or pending one-time move at wf start time, or later via UpdateWorkflowExecutionOptions.
 		//  3. Behavior: this is returned when there is no override (most common case). Behavior is
 		//     set based on the worker-sent deployment in the latest WFT completion.
 		GetEffectiveVersioningBehavior() enumspb.VersioningBehavior
@@ -420,7 +427,7 @@ type (
 		// adjusting for accumulated skipped duration which may have happened.
 		ToRealTime(virtualTime time.Time) time.Time
 		AddWorkflowExecutionTimeSkippingTransitionedEvent(
-			ctx context.Context, targetTime time.Time, disabledAfterBound bool) (*historypb.HistoryEvent, error)
+			ctx context.Context, targetTime time.Time, disabledAfterFastForward bool) (*historypb.HistoryEvent, error)
 		ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context, event *historypb.HistoryEvent) error
 	}
 )

@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/nettest"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
@@ -77,7 +78,7 @@ func TestGRPCBuilder(t *testing.T) {
 	)
 	require.NoError(t, err)
 	conn.Connect()
-	require.NoError(t, <-serverErrs)
+	require.NoError(t, await.Rcv(t, serverErrs))
 
 	// The gRPC library calls [resolver.Resolver.Close] when the connection is closed in a background goroutine, so we
 	// can't synchronously assert that [ServiceResolver.RemoveListener] was called right after the connection is closed.

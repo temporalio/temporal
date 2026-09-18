@@ -18,6 +18,10 @@ import (
 )
 
 type (
+	shardedActivities struct {
+		*activities
+	}
+
 	DescribeTargetClusterRequest struct {
 		TargetClusterName string
 	}
@@ -35,7 +39,7 @@ type (
 // it. ClusterMetadata refreshes the cache roughly every minute by default,
 // so the value can be slightly stale; shard count never changes for a live
 // cluster so this is fine.
-func (a *activities) DescribeTargetCluster(_ context.Context, req DescribeTargetClusterRequest) (*DescribeTargetClusterResponse, error) {
+func (a *shardedActivities) DescribeTargetCluster(_ context.Context, req DescribeTargetClusterRequest) (*DescribeTargetClusterResponse, error) {
 	info, ok := a.clusterMetadata.GetAllClusterInfo()[req.TargetClusterName]
 	if !ok {
 		return nil, temporal.NewNonRetryableApplicationError(
@@ -58,7 +62,7 @@ func (a *activities) DescribeTargetCluster(_ context.Context, req DescribeTarget
 // ReleasedShards/VerifiedExecs progress snapshot — so a retry (e.g. a worker
 // lost to a deploy and detected via the heartbeat timeout) resumes in place
 // rather than re-injecting or re-verifying completed work.
-func (a *activities) ReplicateBatch(ctx context.Context, req *shardedBatchReq) (replicateBatchResult, error) {
+func (a *shardedActivities) ReplicateBatch(ctx context.Context, req *shardedBatchReq) (replicateBatchResult, error) {
 	// Flatten once so per-exec bookkeeping (verified[], attempts[],
 	// nextRetryAt[]) can stay index-based.
 	execs := req.Executions.flatten()
@@ -69,7 +73,9 @@ func (a *activities) ReplicateBatch(ctx context.Context, req *shardedBatchReq) (
 
 	var hb replicateBatchHeartbeat
 	if activity.HasHeartbeatDetails(ctx) {
-		_ = activity.GetHeartbeatDetails(ctx, &hb)
+		if err := activity.GetHeartbeatDetails(ctx, &hb); err != nil {
+			return replicateBatchResult{}, fmt.Errorf("decode heartbeat details: %w", err)
+		}
 	}
 
 	// ---- Inject phase ----
@@ -110,7 +116,7 @@ func (a *activities) ReplicateBatch(ctx context.Context, req *shardedBatchReq) (
 // owns per-exec bookkeeping, the per-iteration completion / stuck-shard /
 // signal-release decisions — extracted from ReplicateBatch to keep its
 // cognitive complexity under the linter cap.
-func (a *activities) runVerifyPhase(
+func (a *shardedActivities) runVerifyPhase(
 	ctx context.Context,
 	req *shardedBatchReq,
 	execs []*shardedExecutionInfo,
@@ -144,7 +150,9 @@ func (a *activities) runVerifyPhase(
 			return result, nil
 		}
 
-		waitNextTick(ctx, minNextRetry)
+		if err := waitNextTick(ctx, minNextRetry); err != nil {
+			return replicateBatchResult{}, err
+		}
 	}
 }
 
@@ -214,7 +222,7 @@ func verifyHeartbeat(execs []*shardedExecutionInfo, verified []bool, shards shar
 // stuck-shard backstop, mid-flight signal release) for a single
 // verify-loop iteration. Returns done=true with the result when the loop
 // should exit; otherwise (false, _, nil) means continue.
-func (a *activities) evaluateVerifyIteration(
+func (a *shardedActivities) evaluateVerifyIteration(
 	ctx context.Context,
 	req *shardedBatchReq,
 	execs []*shardedExecutionInfo,
@@ -244,7 +252,7 @@ func (a *activities) evaluateVerifyIteration(
 // mid-loop returns a CanceledError so the caller can propagate it.
 // Already-injected execs are re-injected harmlessly — replication dedupes
 // per (namespace, wf, run).
-func (a *activities) runInjectPhase(ctx context.Context, req *shardedBatchReq, execs []*shardedExecutionInfo, startIdx int) error {
+func (a *shardedActivities) runInjectPhase(ctx context.Context, req *shardedBatchReq, execs []*shardedExecutionInfo, startIdx int) error {
 	rateLimiter := quotas.NewRateLimiter(req.PerBatchGenerateRPS, int(math.Ceil(req.PerBatchGenerateRPS)))
 	for i := startIdx; i < len(execs); i++ {
 		ex := execs[i]
@@ -275,7 +283,7 @@ func (a *activities) runInjectPhase(ctx context.Context, req *shardedBatchReq, e
 // ctx is the activity ctx, used for both the DMS call and heartbeating —
 // a single pass over a large batch can outlast HeartbeatTimeout if we
 // only heartbeat once at the end, so we tick per attempted exec.
-func (a *activities) runVerifyPass(
+func (a *shardedActivities) runVerifyPass(
 	ctx context.Context,
 	remoteAdminClient adminservice.AdminServiceClient,
 	ns *namespace.Namespace,
@@ -332,7 +340,7 @@ func earliest(cur, candidate time.Time) time.Time {
 // still awaiting its first verification — see pickStuck). Duration is
 // cumulative from activity start (seeded at time.Now() on first activity
 // attempt).
-func (a *activities) checkStuckShard(
+func (a *shardedActivities) checkStuckShard(
 	req *shardedBatchReq,
 	shards shardVerifyTracker,
 	execs []*shardedExecutionInfo,
@@ -362,7 +370,7 @@ func (a *activities) checkStuckShard(
 // that the workflow side wouldn't recognise via IsCanceledError.
 // Suppressing here lets the outer loop exit cleanly when the activity's
 // context is cancelled.
-func (a *activities) maybeSignalRelease(ctx context.Context, req *shardedBatchReq, shards shardVerifyTracker) error {
+func (a *shardedActivities) maybeSignalRelease(ctx context.Context, req *shardedBatchReq, shards shardVerifyTracker) error {
 	if shards.totalIdleCost(time.Now()) < req.IdleShardCost {
 		return nil
 	}
@@ -381,7 +389,7 @@ func (a *activities) maybeSignalRelease(ctx context.Context, req *shardedBatchRe
 }
 
 // waitNextTick sleeps until the next exec is due for retry or ctx is done.
-func waitNextTick(ctx context.Context, minNextRetry time.Time) {
+func waitNextTick(ctx context.Context, minNextRetry time.Time) error {
 	sleepDur := 50 * time.Millisecond
 	if !minNextRetry.IsZero() {
 		if delta := time.Until(minNextRetry); delta > sleepDur {
@@ -390,14 +398,16 @@ func waitNextTick(ctx context.Context, minNextRetry time.Time) {
 	}
 	select {
 	case <-time.After(sleepDur):
+		return nil
 	case <-ctx.Done():
+		return temporal.NewCanceledError("verify phase cancelled")
 	}
 }
 
 // generateReplicationTaskForExec is the per-exec inject wrapper around
 // generateWorkflowReplicationTask; supplies the sharded-only
 // single-target-clusters slice and the generateViaFrontend flag.
-func (a *activities) generateReplicationTaskForExec(
+func (a *shardedActivities) generateReplicationTaskForExec(
 	ctx context.Context,
 	rateLimiter quotas.RateLimiter,
 	req *shardedBatchReq,
@@ -421,7 +431,7 @@ func (a *activities) generateReplicationTaskForExec(
 
 // attemptVerifyExec runs the source-describe + target-applied check for
 // a single execution and returns whether it's now verified.
-func (a *activities) attemptVerifyExec(
+func (a *shardedActivities) attemptVerifyExec(
 	ctx context.Context,
 	remoteAdminClient adminservice.AdminServiceClient,
 	ns *namespace.Namespace,
@@ -454,7 +464,7 @@ func (a *activities) attemptVerifyExec(
 //
 // No retry wrapping: a transient failure propagates up so the activity
 // fails; the child workflow records the error via lastErr.
-func (a *activities) signalReleaseShards(ctx context.Context, req *shardedBatchReq, shards []int32) error {
+func (a *shardedActivities) signalReleaseShards(ctx context.Context, req *shardedBatchReq, shards []int32) error {
 	info := activity.GetInfo(ctx)
 	return a.sdkClientFactory.GetSystemClient().SignalWorkflow(ctx, info.WorkflowExecution.ID, info.WorkflowExecution.RunID, releaseShardsSignalName, releaseShardsPayload{
 		BatchID: req.BatchID,

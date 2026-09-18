@@ -8,18 +8,22 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
@@ -80,7 +84,6 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 	ns, registry := createMockNamespaceCache(s.controller, namespace.Name(namespaceName))
 	s.ns = ns
 	config := defaultTestConfig()
-	config.EnableMigration = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false)
 	if s.fairness {
 		useFairness(config)
 	} else if !s.newMatcher {
@@ -150,7 +153,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 	buildIds[bld2] = true
 
 	// validating TQ Stats
-	resp, err := s.partitionMgr.Describe(ctx, buildIds, false, true, true, false)
+	resp, err := s.partitionMgr.Describe(ctx, buildIds, false, true, true, false, false)
 	s.NoError(err)
 	s.Equal(2, len(resp.VersionsInfoInternal))
 
@@ -189,7 +192,7 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 	s.validatePollTask(bld2, true)
 
 	// fresher call of the describe API
-	resp, err = s.partitionMgr.Describe(ctx, buildIds, false, true, true, true)
+	resp, err = s.partitionMgr.Describe(ctx, buildIds, false, true, true, true, false)
 	s.NoError(err)
 
 	// validate TQ internal statistics (not exposed via public API)
@@ -214,12 +217,54 @@ func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_MultipleBuild
 		}
 	}
 
-	status1 := resp.VersionsInfoInternal[bld1].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus()
+	// Fresh migrating queues briefly expose a draining backlog in their internal
+	// status; only the active (non-draining) backlog is relevant here.
+	status1 := activeInternalStatus(resp.VersionsInfoInternal[bld1].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus())
 	s.Equal(1, len(status1))
 	s.ProtoEqual(status0, status1[0])
-	status2 := resp.VersionsInfoInternal[bld2].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus()
+	status2 := activeInternalStatus(resp.VersionsInfoInternal[bld2].PhysicalTaskQueueInfo.GetInternalTaskQueueStatus())
 	s.Equal(1, len(status2))
 	s.ProtoEqual(status0, status2[0])
+}
+
+func TestDescribeSkipMarkAlive(t *testing.T) {
+	controller := gomock.NewController(t)
+	physicalQueue := NewMockphysicalTaskQueueManager(controller)
+	physicalQueue.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).Times(2)
+	physicalQueue.EXPECT().GetInternalTaskQueueStatus().Return(nil).Times(2)
+	physicalQueue.EXPECT().MarkAlive().Times(1)
+
+	const buildID = "build-id"
+	pm := &taskQueuePartitionManagerImpl{
+		partition: tqid.MustNormalPartitionFromRpcName(
+			taskQueueName,
+			namespaceID,
+			enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		),
+		versionedQueues: map[PhysicalTaskQueueVersion]physicalTaskQueueManager{
+			{buildId: buildID}: physicalQueue,
+		},
+		userDataManager: &mockUserDataManager{},
+	}
+	buildIDs := map[string]bool{buildID: true}
+
+	_, err := pm.Describe(context.Background(), buildIDs, false, false, false, true, true)
+	require.NoError(t, err)
+	_, err = pm.Describe(context.Background(), buildIDs, false, false, false, true, false)
+	require.NoError(t, err)
+}
+
+// activeInternalStatus filters out any draining backlog entries, leaving only
+// the active backlog(s). Migrating queues transiently report a draining backlog
+// alongside the active one.
+func activeInternalStatus(status []*taskqueuespb.InternalTaskQueueStatus) []*taskqueuespb.InternalTaskQueueStatus {
+	active := make([]*taskqueuespb.InternalTaskQueueStatus, 0, len(status))
+	for _, st := range status {
+		if !st.Draining {
+			active = append(active, st)
+		}
+	}
+	return active
 }
 
 func (s *PartitionManagerTestSuite) TestDescribeTaskQueuePartition_UnloadedVersionedQueues() {
@@ -631,6 +676,20 @@ func latestLogicalBacklogCount(snap map[string][]*metricstest.CapturedRecording,
 	return latest, found
 }
 
+// latestLogicalBacklogAge returns the most recent approximate_backlog_age_seconds
+// recording for the given worker_version and task_priority tag values.
+func latestLogicalBacklogAge(snap map[string][]*metricstest.CapturedRecording, workerVersion, priorityTag string) (float64, bool) {
+	var latest float64
+	found := false
+	for _, rec := range snap[metrics.ApproximateBacklogAgeSeconds.Name()] {
+		if rec.Tags["worker_version"] == workerVersion && rec.Tags[metrics.TaskPriorityTagName] == priorityTag {
+			latest = rec.Value.(float64)
+			found = true
+		}
+	}
+	return latest, found
+}
+
 // addRoutingConfigUserData sets up deployment user data with a current version and an optional
 // ramping version. Pass "" for rampingBuildID to omit ramping. Note, this only adds the routing config
 // for the Workflow Task Queue Type.
@@ -694,7 +753,8 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_NoVersioning() {
 
 	s.spoolDefaultTasks(pm, 5)
 
-	// Wait for backlog stats to stabilize, then emit logical metrics.
+	// Wait for backlog stats to stabilize, then emit logical metrics. Both the count and
+	// the age gauge are emitted per priority under the default task_priority tag.
 	s.Require().Eventually(func() bool {
 		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 		defer cancel()
@@ -702,7 +762,11 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_NoVersioning() {
 
 		snap := capture.Snapshot()
 		count, ok := latestLogicalBacklogCount(snap, "__unversioned__", defaultPriorityTag)
-		return ok && count == float64(5)
+		if !ok || count != float64(5) {
+			return false
+		}
+		_, ageOk := latestLogicalBacklogAge(snap, "__unversioned__", defaultPriorityTag)
+		return ageOk
 	}, 2*time.Second, 50*time.Millisecond)
 }
 
@@ -812,9 +876,13 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_CurrentAndRamping(
 		unvCount, unvOk := latestLogicalBacklogCount(snap, "__unversioned__", defaultPriorityTag)
 		curCount, curOk := latestLogicalBacklogCount(snap, currentVersionTag, defaultPriorityTag)
 		rmpCount, rmpOk := latestLogicalBacklogCount(snap, rampingVersionTag, defaultPriorityTag)
+		// Age is emitted per version under the same task_priority tag as the count.
+		_, curAgeOk := latestLogicalBacklogAge(snap, currentVersionTag, defaultPriorityTag)
+		_, rmpAgeOk := latestLogicalBacklogAge(snap, rampingVersionTag, defaultPriorityTag)
 		return unvOk && unvCount == float64(0) &&
 			curOk && curCount == float64(7) &&
-			rmpOk && rmpCount == float64(3)
+			rmpOk && rmpCount == float64(3) &&
+			curAgeOk && rmpAgeOk
 	}, 2*time.Second, 50*time.Millisecond)
 }
 
@@ -1330,7 +1398,7 @@ func (s *PartitionManagerTestSuite) describeStatsEventually(
 	s.Require().Eventually(func() bool {
 		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 		defer cancel()
-		resp, err := s.partitionMgr.Describe(ctx, buildIds, includeAllActive, true /* reportStats */, reportPollers, internalTaskQueueStatus)
+		resp, err := s.partitionMgr.Describe(ctx, buildIds, includeAllActive, true /* reportStats */, reportPollers, internalTaskQueueStatus, false)
 		if err != nil {
 			return false
 		}
@@ -1392,6 +1460,27 @@ func (h *capturingTaskMatchHook) getCalls() []capturedTaskMatchDetails {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	return append([]capturedTaskMatchDetails(nil), h.calls...)
+}
+
+// The matching engine drops an unstarted manager on the loser side of a concurrent
+// load of the same partition. Construction must therefore not register any dynamic
+// config subscriptions — otherwise the abandoned manager would stay reachable from
+// the dynamic config collection forever. Subscriptions are only registered in Start.
+func (s *PartitionManagerTestSuite) TestConstructionDoesNotRegisterDynamicConfigSubscriptions() {
+	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
+	s.Require().NoError(err)
+	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), s.partitionMgr.engine.config, s.partitionMgr.ns.Name())
+
+	pm, err := newTaskQueuePartitionManager(s.partitionMgr.engine, s.partitionMgr.ns, partition, tqConfig, s.partitionMgr.logger, s.partitionMgr.throttledLogger, metrics.NoopMetricsHandler, &mockUserDataManager{})
+	s.Require().NoError(err)
+	s.Empty(pm.rateLimitManager.cancels)
+
+	pm.rateLimitManager.Start()
+	s.NotEmpty(pm.rateLimitManager.cancels)
+
+	pm.rateLimitManager.Stop()
+	s.Empty(pm.rateLimitManager.cancels)
 }
 
 // setupPartitionManagerWithTaskHookFactories creates a partition manager with the given task match hooks.
@@ -1817,6 +1906,205 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_MultipleHooksInvoked() {
 	s.Equal(hooks.SyncMatchOutcomeNotMatched, hook2.getCalls()[0].SyncMatchOutcome)
 }
 
+func newTestQueryWorkflowRequest(forwardInfo *taskqueuespb.TaskForwardInfo) *matchingservice.QueryWorkflowRequest {
+	return &matchingservice.QueryWorkflowRequest{
+		NamespaceId: namespaceID,
+		TaskQueue:   &taskqueuepb.TaskQueue{Name: taskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		QueryRequest: &workflowservice.QueryWorkflowRequest{
+			Execution: &commonpb.WorkflowExecution{WorkflowId: "wf1", RunId: "run1"},
+		},
+		ForwardInfo: forwardInfo,
+	}
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_QueryDispatch_FiresWhenNoPollers() {
+	hook := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = pm.DispatchQueryTask(ctx, "task-id-1", newTestQueryWorkflowRequest(nil))
+	}()
+
+	await.RequireTrue(s.T(), func() bool { return len(hook.getCalls()) >= 1 }, 2*time.Second, 5*time.Millisecond)
+	calls := hook.getCalls()
+	s.Require().Len(calls, 1)
+	s.Equal(taskQueueName, calls[0].TaskQueueName)
+	s.Equal(hooks.SyncMatchOutcomeNotMatched, calls[0].SyncMatchOutcome)
+
+	cancel()
+	await.RequireTrue(s.T(), func() bool {
+		select {
+		case <-done:
+			return true
+		default:
+			return false
+		}
+	}, time.Second, 5*time.Millisecond)
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_QueryDispatch_UsesSelectedQueueVersion() {
+	const (
+		deploymentName = "deployment"
+		currentBuildID = "current"
+		pinnedBuildID  = "pinned"
+	)
+	s.userDataMgr.data = &persistencespb.VersionedTaskQueueUserData{
+		Data: &persistencespb.TaskQueueUserData{
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+					DeploymentData: &persistencespb.DeploymentData{
+						DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+							deploymentName: {
+								RoutingConfig: &deploymentpb.RoutingConfig{
+									CurrentDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+										DeploymentName: deploymentName,
+										BuildId:        currentBuildID,
+									},
+									CurrentVersionChangedTime: timestamppb.New(time.Now().Add(-1 * time.Hour)),
+								},
+								Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+									currentBuildID: {RevisionNumber: 1, UpdateTime: timestamppb.Now()},
+									pinnedBuildID:  {RevisionNumber: 1, UpdateTime: timestamppb.Now()},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	hook := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	req := newTestQueryWorkflowRequest(nil)
+	req.VersionDirective = &taskqueuespb.TaskVersionDirective{
+		Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+		DeploymentVersion: &deploymentspb.WorkerDeploymentVersion{
+			DeploymentName: deploymentName,
+			BuildId:        pinnedBuildID,
+		},
+		RevisionNumber: 1,
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = pm.DispatchQueryTask(ctx, "task-id-1", req)
+	}()
+
+	await.RequireTrue(s.T(), func() bool { return len(hook.getCalls()) >= 1 }, 2*time.Second, 5*time.Millisecond)
+	calls := hook.getCalls()
+	s.Require().Len(calls, 1)
+	s.ProtoEqual(&deploymentpb.WorkerDeploymentVersion{
+		DeploymentName: deploymentName,
+		BuildId:        pinnedBuildID,
+	}, calls[0].DeploymentVersion)
+
+	cancel()
+	await.RequireTrue(s.T(), func() bool {
+		select {
+		case <-done:
+			return true
+		default:
+			return false
+		}
+	}, time.Second, 5*time.Millisecond)
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_QueryDispatch_DoesNotFireWithRecentPoller() {
+	hook := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
+	defer cleanup()
+
+	pm.defaultQueue().UpdatePollerInfo("poller-1", &pollMetadata{})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	_, _ = pm.DispatchQueryTask(ctx, "task-id-1", newTestQueryWorkflowRequest(nil))
+	s.Require().Empty(hook.getCalls())
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_QueryDispatch_DoesNotFireForForwardedQuery() {
+	hook := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	// Forwarded queries must not fire the hook — the originating partition already did.
+	// Firing on every hop causes duplicate Lambda invocations since each Matching node
+	// has independent per-node batching state.
+	forwardInfo := &taskqueuespb.TaskForwardInfo{SourcePartition: "child-partition"}
+	_, _ = pm.DispatchQueryTask(ctx, "task-id-1", newTestQueryWorkflowRequest(forwardInfo))
+	s.Require().Empty(hook.getCalls())
+}
+
+func newTestDispatchNexusTaskRequest(forwardInfo *taskqueuespb.TaskForwardInfo) *matchingservice.DispatchNexusTaskRequest {
+	return &matchingservice.DispatchNexusTaskRequest{
+		NamespaceId: namespaceID,
+		TaskQueue:   &taskqueuepb.TaskQueue{Name: taskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Request:     &nexuspb.Request{},
+		ForwardInfo: forwardInfo,
+	}
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_NexusDispatch_FiresWhenNoPollers() {
+	hook := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = pm.DispatchNexusTask(ctx, "task-id-1", newTestDispatchNexusTaskRequest(nil))
+	}()
+
+	await.RequireTrue(s.T(), func() bool { return len(hook.getCalls()) >= 1 }, 2*time.Second, 5*time.Millisecond)
+	calls := hook.getCalls()
+	s.Require().Len(calls, 1)
+	s.Equal(taskQueueName, calls[0].TaskQueueName)
+	s.Equal(hooks.SyncMatchOutcomeNotMatched, calls[0].SyncMatchOutcome)
+
+	cancel()
+	await.RequireTrue(s.T(), func() bool {
+		select {
+		case <-done:
+			return true
+		default:
+			return false
+		}
+	}, time.Second, 5*time.Millisecond)
+}
+
+func (s *PartitionManagerTestSuite) TestTaskAddHooks_NexusDispatch_DoesNotFireForForwardedTask() {
+	hook := &capturingTaskMatchHook{}
+	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	forwardInfo := &taskqueuespb.TaskForwardInfo{SourcePartition: "child-partition"}
+	_, _ = pm.DispatchNexusTask(ctx, "task-id-1", newTestDispatchNexusTaskRequest(forwardInfo))
+	s.Require().Empty(hook.getCalls())
+}
+
 type mockUserDataManager struct {
 	sync.Mutex
 	data      *persistencespb.VersionedTaskQueueUserData
@@ -1888,3 +2176,224 @@ func (m *mockUserDataManager) updateVersioningData(data *persistencespb.Versioni
 }
 
 var _ userDataManager = (*mockUserDataManager)(nil)
+
+// TestWorkerCommandsPollTask_VersioningFieldsIgnored verifies that PollTask on a
+// WorkerCommandsPartition does not reject polls that include versioning fields.
+func TestWorkerCommandsPollTask_VersioningFieldsIgnored(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		pollMetadata *pollMetadata
+	}{
+		{
+			name: "DeploymentOptions with versioned mode",
+			pollMetadata: &pollMetadata{
+				deploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+					DeploymentName:       "my-deployment",
+					BuildId:              "v1",
+					WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+				},
+			},
+		},
+		{
+			name: "WorkerVersionCapabilities with UseVersioning",
+			pollMetadata: &pollMetadata{
+				workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{
+					BuildId:       "v1",
+					UseVersioning: true,
+				},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			controller := gomock.NewController(t)
+			logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+
+			ns, registry := createMockNamespaceCache(controller, namespace.Name(namespaceName))
+			config := defaultTestConfig()
+			config.EnableDeploymentVersions = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+
+			matchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
+			matchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any(), gomock.Any()).
+				Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{}, nil).AnyTimes()
+			engine := createTestMatchingEngine(logger, controller, config, matchingClient, registry)
+
+			f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
+			require.NoError(t, err)
+			partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_NEXUS).WorkerCommandsPartition()
+			tqConfig := newTaskQueueConfig(partition.TaskQueue(), engine.config, ns.Name())
+			userDataMgr := &mockUserDataManager{}
+
+			pm, err := newTaskQueuePartitionManager(engine, ns, partition, tqConfig, logger, logger, metrics.NoopMetricsHandler, userDataMgr)
+			require.NoError(t, err)
+			engine.Start()
+			pm.Start()
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+			defer cancel()
+			err = pm.WaitUntilInitialized(ctx)
+			require.NoError(t, err)
+
+			// Poll with a short timeout — we expect no task (nothing dispatched),
+			// but the poll must not fail with a versioning rejection error.
+			pollCtx, pollCancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+			defer pollCancel()
+			_, _, err = pm.PollTask(pollCtx, tc.pollMetadata)
+			// errNoTasks is expected (no tasks dispatched). Any other error indicates
+			// the versioning path incorrectly rejected the poll.
+			require.ErrorIs(t, err, errNoTasks, "PollTask on WorkerCommandsPartition must not reject versioning fields")
+		})
+	}
+}
+
+func TestCloneTaskQueueStats_PreservesAllFields(t *testing.T) {
+	original := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 42,
+		ApproximateBacklogAge:   durationpb.New(5 * time.Minute),
+		TasksAddRate:            10.5,
+		TasksDispatchRate:       8.3,
+		RateLimitingActive:      true,
+	}
+	cloned := cloneTaskQueueStats(original)
+
+	require.Equal(t, original.ApproximateBacklogCount, cloned.ApproximateBacklogCount)
+	require.Equal(t, original.ApproximateBacklogAge.AsDuration(), cloned.ApproximateBacklogAge.AsDuration())
+	require.InDelta(t, original.TasksAddRate, cloned.TasksAddRate, 1e-9)
+	require.InDelta(t, original.TasksDispatchRate, cloned.TasksDispatchRate, 1e-9)
+	require.True(t, cloned.RateLimitingActive)
+}
+
+func TestCloneTaskQueueStats_Nil(t *testing.T) {
+	cloned := cloneTaskQueueStats(nil)
+	require.NotNil(t, cloned)
+	require.False(t, cloned.RateLimitingActive)
+}
+
+func TestSplitTaskQueueStatsByRampPercentage_PreservesRateLimitingActive(t *testing.T) {
+	original := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 10,
+		ApproximateBacklogAge:   durationpb.New(2 * time.Minute),
+		TasksAddRate:            20,
+		TasksDispatchRate:       15,
+		RateLimitingActive:      true,
+	}
+	currentShare, rampShare := splitTaskQueueStatsByRampPercentage(original, 30)
+
+	require.True(t, currentShare.RateLimitingActive, "currentShare should preserve RateLimitingActive")
+	require.True(t, rampShare.RateLimitingActive, "rampShare should preserve RateLimitingActive")
+}
+
+func TestSplitTaskQueueStatsByRampPercentage_RateLimitingFalse(t *testing.T) {
+	original := &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogCount: 10,
+		ApproximateBacklogAge:   durationpb.New(2 * time.Minute),
+		TasksAddRate:            20,
+		TasksDispatchRate:       15,
+		RateLimitingActive:      false,
+	}
+	currentShare, rampShare := splitTaskQueueStatsByRampPercentage(original, 30)
+
+	require.False(t, currentShare.RateLimitingActive)
+	require.False(t, rampShare.RateLimitingActive)
+}
+
+// TestStickyQueueAdjustedStats_VersioningAttributionSkipped verifies that the versioning
+// attribution logic in Describe is skipped for sticky queues. Sticky queues don't route
+// by version, so their stats should not be reduced by the current/ramping version shares.
+func TestStickyQueueAdjustedStats_VersioningAttributionSkipped(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+
+	ns, registry := createMockNamespaceCache(ctrl, namespace.Name(namespaceName))
+	config := defaultTestConfig()
+
+	matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+	matchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{}, nil).AnyTimes()
+	engine := createTestMatchingEngine(logger, ctrl, config, matchingClient, registry)
+
+	// Use a fixed time source so rate calculations are deterministic across reads.
+	ts := clock.NewEventTimeSource()
+	ts.Update(time.Now())
+	engine.timeSource = ts
+
+	// Create a sticky partition (like a real worker's sticky queue)
+	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
+	require.NoError(t, err)
+	stickyPartition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition("my-sticky-queue")
+
+	tqConfig := newTaskQueueConfig(stickyPartition.TaskQueue(), engine.config, ns.Name())
+
+	// Seed user data with a current deployment version (no ramping).
+	// This simulates a sticky queue that fetches user data from its normal queue,
+	// which has a current deployment configured.
+	const (
+		deploymentName = "my-deployment"
+		currentBuildID = "build-abc"
+	)
+	userDataMgr := &mockUserDataManager{
+		data: &persistencespb.VersionedTaskQueueUserData{
+			Data: &persistencespb.TaskQueueUserData{
+				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+					int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+						DeploymentData: &persistencespb.DeploymentData{
+							DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+								deploymentName: {
+									RoutingConfig: &deploymentpb.RoutingConfig{
+										CurrentDeploymentVersion: &deploymentpb.WorkerDeploymentVersion{
+											DeploymentName: deploymentName,
+											BuildId:        currentBuildID,
+										},
+										CurrentVersionChangedTime: timestamppb.New(time.Now().Add(-1 * time.Hour)),
+									},
+									Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+										currentBuildID: {RevisionNumber: 1, UpdateTime: timestamppb.Now()},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	pm, err := newTaskQueuePartitionManager(engine, ns, stickyPartition, tqConfig, logger, logger, metrics.NoopMetricsHandler, userDataMgr)
+	require.NoError(t, err)
+	engine.partitions[stickyPartition.Key()] = pm
+	engine.Start()
+	pm.Start()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	err = pm.WaitUntilInitialized(ctx)
+	require.NoError(t, err)
+
+	dbq := pm.defaultQueue()
+	require.NotNil(t, dbq)
+
+	// Simulate a task being added and dispatched on the sticky queue.
+	dbqImpl := dbq.(*physicalTaskQueueManagerImpl)
+	dbqImpl.incTaskTracker(dbqImpl.tasksAdded, 3, 1)
+	dbqImpl.incTaskTracker(dbqImpl.tasksDispatched, 3, 1)
+
+	// Advance time so the task tracker has positive elapsed time for rate calculation.
+	ts.Advance(time.Second)
+
+	// Verify the raw stats have non-zero rates (precondition for the test to be meaningful).
+	rawStats := dbq.GetStatsByPriority(true)
+	require.Greater(t, rawStats[3].TasksAddRate, float32(0))
+	require.Greater(t, rawStats[3].TasksDispatchRate, float32(0))
+
+	// GetPhysicalQueueAdjustedStats goes through Describe which applies versioning
+	// attribution. For sticky queues, attribution should be skipped, so adjusted rates
+	// should exactly match the raw rates.
+	adjustedStats := pm.GetPhysicalQueueAdjustedStats(context.Background(), dbq)
+	require.NotNil(t, adjustedStats)
+	require.InDelta(t, rawStats[3].TasksAddRate, adjustedStats.TasksAddRate, 0)
+	require.InDelta(t, rawStats[3].TasksDispatchRate, adjustedStats.TasksDispatchRate, 0)
+}

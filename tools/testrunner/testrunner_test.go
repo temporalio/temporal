@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/tools/common/junit"
 )
 
 func TestRunnerSanitizeAndParseArgs(t *testing.T) {
@@ -38,20 +39,19 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		require.Equal(t, "test.cover.out", r.coverProfilePath)
 	})
 
-	t.Run("TotalTimeoutDerivedFromGoTestTimeout", func(t *testing.T) {
+	t.Run("TotalTimeout", func(t *testing.T) {
 		r := newRunner()
 		args, err := r.sanitizeAndParseArgs(testCommand, []string{
 			"--gotestsum-path=/bin/gotestsum",
 			"--junitfile=test.xml",
+			"--total-timeout=39m",
 			"--",
 			"-timeout=35m",
 			"-coverprofile=test.cover.out",
 		})
 		require.NoError(t, err)
-		// The testrunner should derive its total deadline from the go test -timeout flag.
-		require.Equal(t, 35*time.Minute, r.totalTimeout)
-		// The flag must still be present in the passthrough args so gotestsum/go test
-		// also honour it.
+		require.Equal(t, 39*time.Minute, r.totalTimeout)
+		require.NotContains(t, args, "--total-timeout=39m")
 		require.Contains(t, args, "-timeout=35m")
 	})
 
@@ -65,6 +65,18 @@ func TestRunnerSanitizeAndParseArgs(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Zero(t, r.totalTimeout)
+	})
+
+	t.Run("TotalTimeoutInvalid", func(t *testing.T) {
+		r := newRunner()
+		_, err := r.sanitizeAndParseArgs(testCommand, []string{
+			"--gotestsum-path=/bin/gotestsum",
+			"--junitfile=test.xml",
+			"--total-timeout=invalid",
+			"--",
+			"-coverprofile=test.cover.out",
+		})
+		require.ErrorContains(t, err, `invalid argument "--total-timeout="`)
 	})
 
 	t.Run("GoTestSumPathMissing", func(t *testing.T) {
@@ -185,8 +197,8 @@ func TestWriteCurrentReport(t *testing.T) {
 
 	r.writeCurrentReport()
 
-	result := &junitReport{path: out.Name()}
-	require.NoError(t, result.read())
+	result, err := readReport(out.Name())
+	require.NoError(t, err)
 	require.Equal(t, 2, result.Failures)
 	require.Len(t, result.Suites, 1)
 
@@ -199,8 +211,8 @@ func TestWriteCurrentReport(t *testing.T) {
 
 	r.writeCurrentReport()
 
-	result2 := &junitReport{path: out.Name()}
-	require.NoError(t, result2.read())
+	result2, err := readReport(out.Name())
+	require.NoError(t, err)
 	require.Equal(t, 4, result2.Failures) // 2 from attempt 1 + 2 from attempt 2
 	require.Len(t, result2.Suites, 2)
 }
@@ -227,15 +239,13 @@ func TestRunnerPrintSummary(t *testing.T) {
 	report1.Suites[0].Testcases[0].Name = "TestAlpha"
 	report1.Suites[0].Testcases[0].Failure.Type = string(failureTypeFailed)
 	report1.Suites[0].Testcases[0].Failure.Data = "alpha failure"
-	report1.path = filepath.Join(dir, "junit.alpha.xml")
-	require.NoError(t, report1.write())
+	require.NoError(t, junit.Write(filepath.Join(dir, "junit.alpha.xml"), &report1.Testsuites))
 	report2 := mustReadReportFixture(t, "testdata/junit-single-failure.xml")
 	report2.Suites[0].Name = "SuiteB"
 	report2.Suites[0].Testcases[0].Name = "TestBeta"
 	report2.Suites[0].Testcases[0].Failure.Type = string(failureTypeFailed)
 	report2.Suites[0].Testcases[0].Failure.Data = "beta failure"
-	report2.path = filepath.Join(dir, "junit.beta.xml")
-	require.NoError(t, report2.write())
+	require.NoError(t, junit.Write(filepath.Join(dir, "junit.beta.xml"), &report2.Testsuites))
 
 	r := newRunner()
 	summaryMarkdownPath := filepath.Join(dir, "test-summary.md")
@@ -262,8 +272,7 @@ func TestRunnerPrintSummary(t *testing.T) {
 func TestRunnerPrintSummarySkipsEmptySummary(t *testing.T) {
 	dir := t.TempDir()
 	report := mustReadReportFixture(t, "testdata/junit-empty.xml")
-	report.path = filepath.Join(dir, "junit.empty.xml")
-	require.NoError(t, report.write())
+	require.NoError(t, junit.Write(filepath.Join(dir, "junit.empty.xml"), &report.Testsuites))
 
 	r := newRunner()
 	_, err := r.sanitizeAndParseArgs(summaryCommand, []string{

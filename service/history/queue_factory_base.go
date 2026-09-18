@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/quotas/calculator"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/circuitbreakerpool"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -57,6 +58,7 @@ type (
 		RemoteHistoryFetcher eventhandler.HistoryPaginatedFetcher
 		ChasmEngine          chasm.Engine
 		ChasmRegistry        *chasm.Registry
+		TestHooks            testhooks.TestHooks
 	}
 
 	QueueFactoryBase struct {

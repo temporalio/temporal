@@ -123,21 +123,22 @@ func (t *TestMapper) GetFieldName(alias string, namespace string) (string, error
 		// This error must be always ignored.
 		return "", serviceerror.NewInvalidArgument("unmapped alias")
 	}
-	if namespace == "error-namespace" {
+	switch namespace {
+	case "error-namespace":
 		return "", serviceerror.NewInvalidArgument(
 			fmt.Sprintf("Namespace %s has no mapping defined for search attribute %s", namespace, alias),
 		)
-	} else if namespace == "test-namespace" || namespace == t.Namespace {
+	case "test-namespace", t.Namespace:
 		if alias == "pass-through" {
 			return alias, nil
 		}
 		if t.WithCustomScheduleID && alias == sadefs.ScheduleID {
 			return TestScheduleIDFieldName, nil
 		}
-		if strings.HasPrefix(alias, "AliasFor") {
-			return strings.TrimPrefix(alias, "AliasFor"), nil
-		} else if strings.HasPrefix(alias, "AliasWithHyphenFor-") {
-			return strings.TrimPrefix(alias, "AliasWithHyphenFor-"), nil
+		if after, ok := strings.CutPrefix(alias, "AliasFor"); ok {
+			return after, nil
+		} else if after, ok := strings.CutPrefix(alias, "AliasWithHyphenFor-"); ok {
+			return after, nil
 		}
 		return "", serviceerror.NewInvalidArgument("mapper error")
 	}

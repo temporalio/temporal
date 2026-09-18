@@ -485,7 +485,7 @@ func (u *Update) persistCallback(
 		return true, nil
 	}
 	_, err = eventStore.AddWorkflowExecutionOptionsUpdatedEvent(
-		nil, false, "", nil, nil, "", nil, nil,
+		nil, false, "", nil, nil, "", nil, nil, false,
 		[]*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate{{
 			UpdateId:                    u.id,
 			AttachedRequestId:           requestID,
@@ -528,7 +528,7 @@ func (u *Update) OnProtocolMessage(
 	// then only Rejection messages can be processed, because they don't create new events in the history.
 	// All other message types abort Update.
 	_, isRejection := body.(*updatepb.Rejection)
-	shouldAbort := !(eventStore.CanAddEvent() || isRejection)
+	shouldAbort := !eventStore.CanAddEvent() && !isRejection
 	if shouldAbort {
 		u.abort(AbortReasonWorkflowCompleted, eventStore)
 		return nil

@@ -634,6 +634,80 @@ func (this *CancelOutstandingWorkerPollsResponse) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type CancelOutstandingWorkerPollsPartitionRequest to the protobuf v3 wire format
+func (val *CancelOutstandingWorkerPollsPartitionRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type CancelOutstandingWorkerPollsPartitionRequest from the protobuf v3 wire format
+func (val *CancelOutstandingWorkerPollsPartitionRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *CancelOutstandingWorkerPollsPartitionRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two CancelOutstandingWorkerPollsPartitionRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *CancelOutstandingWorkerPollsPartitionRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *CancelOutstandingWorkerPollsPartitionRequest
+	switch t := that.(type) {
+	case *CancelOutstandingWorkerPollsPartitionRequest:
+		that1 = t
+	case CancelOutstandingWorkerPollsPartitionRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type CancelOutstandingWorkerPollsPartitionResponse to the protobuf v3 wire format
+func (val *CancelOutstandingWorkerPollsPartitionResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type CancelOutstandingWorkerPollsPartitionResponse from the protobuf v3 wire format
+func (val *CancelOutstandingWorkerPollsPartitionResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *CancelOutstandingWorkerPollsPartitionResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two CancelOutstandingWorkerPollsPartitionResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *CancelOutstandingWorkerPollsPartitionResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *CancelOutstandingWorkerPollsPartitionResponse
+	switch t := that.(type) {
+	case *CancelOutstandingWorkerPollsPartitionResponse:
+		that1 = t
+	case CancelOutstandingWorkerPollsPartitionResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type DescribeTaskQueueRequest to the protobuf v3 wire format
 func (val *DescribeTaskQueueRequest) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
@@ -2698,6 +2772,80 @@ func (this *ListWorkersResponse) Equal(that interface{}) bool {
 	case *ListWorkersResponse:
 		that1 = t
 	case ListWorkersResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type CountWorkersRequest to the protobuf v3 wire format
+func (val *CountWorkersRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type CountWorkersRequest from the protobuf v3 wire format
+func (val *CountWorkersRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *CountWorkersRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two CountWorkersRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *CountWorkersRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *CountWorkersRequest
+	switch t := that.(type) {
+	case *CountWorkersRequest:
+		that1 = t
+	case CountWorkersRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type CountWorkersResponse to the protobuf v3 wire format
+func (val *CountWorkersResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type CountWorkersResponse from the protobuf v3 wire format
+func (val *CountWorkersResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *CountWorkersResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two CountWorkersResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *CountWorkersResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *CountWorkersResponse
+	switch t := that.(type) {
+	case *CountWorkersResponse:
+		that1 = t
+	case CountWorkersResponse:
 		that1 = &t
 	default:
 		return false

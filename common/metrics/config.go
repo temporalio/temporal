@@ -482,7 +482,7 @@ func MetricsHandlerFromConfig(logger log.Logger, c *Config) (Handler, error) {
 		if err != nil {
 			logger.Fatal(err.Error())
 		}
-		return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig, c.ClientConfig.RecordTimerInSeconds)
+		return NewOtelMetricsHandler(logger, otelProvider, c.ClientConfig, c.RecordTimerInSeconds)
 	}
 
 	// fallback to tally if no framework is specified

@@ -16,10 +16,10 @@ import (
 	"go.temporal.io/server/common/archiver/gcloud/connector"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/protorequire"
-	"go.temporal.io/server/common/util"
 	"go.uber.org/mock/gomock"
 )
 
@@ -176,6 +176,42 @@ func (s *visibilityArchiverSuite) TestVisibilityArchive() {
 	s.NoError(err)
 }
 
+func (s *visibilityArchiverSuite) TestVisibilityArchive_ContentAwareDeduplication() {
+	ctx := context.Background()
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/visibility")
+	s.Require().NoError(err)
+	storageWrapper := connector.NewMockClient(s.controller)
+	storageWrapper.EXPECT().Exist(gomock.Any(), URI, gomock.Any()).Return(false, nil)
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	visibilityArchiver := newVisibilityArchiver(s.logger, metricsHandler, storageWrapper)
+
+	request := &archiverspb.VisibilityRecord{
+		Namespace:        testNamespace,
+		NamespaceId:      testNamespaceID,
+		WorkflowId:       testWorkflowID,
+		RunId:            testRunID,
+		WorkflowTypeName: testWorkflowTypeName,
+		StartTime:        timestamp.TimeNowPtrUtc(),
+		CloseTime:        timestamp.TimeNowPtrUtc(),
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		HistoryLength:    101,
+	}
+	encodedRecord, err := encode(request)
+	s.Require().NoError(err)
+	expectedHash, err := archiver.VisibilityArchivalRecordHash(request)
+	s.Require().NoError(err)
+	storageWrapper.EXPECT().UploadIfHashChanged(gomock.Any(), URI, gomock.Any(), encodedRecord, expectedHash).Return(false, nil).Times(2)
+
+	err = visibilityArchiver.Archive(ctx, URI, request, archiver.GetVisibilityArchivalRecordDeduplicationOption())
+	s.Require().NoError(err)
+	blobExistsRecordings := capture.Snapshot()[metrics.VisibilityArchiverBlobExistsCount.Name()]
+	s.Require().Len(blobExistsRecordings, 2)
+	// Guard against mislabeling visibility archival metrics with the history archiver's operation scope.
+	s.Require().Equal(metrics.VisibilityArchiverScope, blobExistsRecordings[0].Tags[metrics.OperationTagName])
+}
+
 func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidQuery() {
 	ctx := context.Background()
 	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/visibility")
@@ -244,9 +280,9 @@ func (s *visibilityArchiverSuite) TestQuery_Success_NoNextPageToken() {
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
 		closeTime:       closeTime,
 		searchPrecision: &dayPrecision,
-		workflowType:    util.Ptr("MobileOnlyWorkflow::processMobileOnly"),
-		workflowID:      util.Ptr(testWorkflowID),
-		runID:           util.Ptr(testRunID),
+		workflowType:    new("MobileOnlyWorkflow::processMobileOnly"),
+		workflowID:      new(testWorkflowID),
+		runID:           new(testRunID),
 	}, nil)
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{
@@ -287,9 +323,9 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
 		closeTime:       closeTime,
 		searchPrecision: &dayPrecision,
-		workflowType:    util.Ptr("MobileOnlyWorkflow::processMobileOnly"),
-		workflowID:      util.Ptr(testWorkflowID),
-		runID:           util.Ptr(testRunID),
+		workflowType:    new("MobileOnlyWorkflow::processMobileOnly"),
+		workflowID:      new(testWorkflowID),
+		runID:           new(testRunID),
 	}, nil).AnyTimes()
 	visibilityArchiver.queryParser = mockParser
 	request := &archiver.QueryVisibilityRequest{

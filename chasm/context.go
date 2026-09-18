@@ -112,6 +112,8 @@ type immutableCtx struct {
 	// But it will be when we support partial loading later,
 	// and the framework potentially needs to go to persistence to load some fields.
 	ctx context.Context
+	// now is constant for this context; child contexts inherit the same value.
+	now time.Time
 
 	executionKey ExecutionKey
 
@@ -140,10 +142,12 @@ func newContext(
 	ctx context.Context,
 	node *Node,
 ) *immutableCtx {
+	root := node.root()
 	workflowKey := node.backend.GetWorkflowKey()
 	return &immutableCtx{
 		ctx:  ctx,
-		root: node.root(),
+		now:  root.Now(nil),
+		root: root,
 		executionKey: ExecutionKey{
 			NamespaceID: workflowKey.NamespaceID,
 			BusinessID:  workflowKey.WorkflowID,
@@ -168,8 +172,8 @@ func (c *immutableCtx) UserMetadata(component Component) *sdkpb.UserMetadata {
 	return c.root.componentUserMetadata(component)
 }
 
-func (c *immutableCtx) Now(component Component) time.Time {
-	return c.root.Now(component)
+func (c *immutableCtx) Now(_ Component) time.Time {
+	return c.now
 }
 
 func (c *immutableCtx) ExecutionKey() ExecutionKey {
@@ -211,6 +215,7 @@ func (c *immutableCtx) Value(key any) any {
 func (c *immutableCtx) withValue(key any, value any) Context {
 	return &immutableCtx{
 		ctx:          context.WithValue(c.goContext(), key, value),
+		now:          c.now,
 		root:         c.root,
 		executionKey: c.executionKey,
 	}

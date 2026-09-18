@@ -525,8 +525,7 @@ func getQueryResults(queries map[string]*querypb.WorkflowQuery, queryResult *que
 }
 
 func newApplicationFailure(err error, nonRetryable bool, details *commonpb.Payloads) *failurepb.Failure {
-	var applicationErr *temporal.ApplicationError
-	if errors.As(err, &applicationErr) {
+	if applicationErr, ok := errors.AsType[*temporal.ApplicationError](err); ok {
 		nonRetryable = applicationErr.NonRetryable()
 	}
 
@@ -545,7 +544,7 @@ func newApplicationFailure(err error, nonRetryable bool, details *commonpb.Paylo
 
 func getErrorType(err error) string {
 	var t reflect.Type
-	for t = reflect.TypeOf(err); t.Kind() == reflect.Ptr; t = t.Elem() {
+	for t = reflect.TypeOf(err); t.Kind() == reflect.Pointer; t = t.Elem() {
 	}
 
 	return t.Name()

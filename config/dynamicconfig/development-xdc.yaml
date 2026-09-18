@@ -41,11 +41,5 @@ matching.queryWorkflowTaskTimeoutLogRate:
   - value: 1.0
 history.ReplicationEnableUpdateWithNewTaskMerge:
   - value: true
-history.enableTransitionHistory:
-  - value: true
 history.EnableReplicationTaskTieredProcessing:
-  - value: true
-history.enableChasm:
-  - value: true
-activity.enableStandalone:
   - value: true

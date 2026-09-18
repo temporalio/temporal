@@ -173,6 +173,56 @@ func (s *cachingRedirectorSuite) TestUnavailableError() {
 		})
 }
 
+func (s *cachingRedirectorSuite) TestClosedConn() {
+	testAddr := rpcAddress("testaddr")
+	shardID := int32(1)
+
+	// Resolver should see two lookups: One before connection pool eviction, one after.
+	s.resolver.EXPECT().
+		Lookup(convert.Int32ToString(shardID)).
+		Return(membership.NewHostInfoFromAddress(string(testAddr)), nil).
+		Times(2)
+
+	mockClient := historyservicemock.NewMockHistoryServiceClient(s.controller)
+	s.connections.client = mockClient
+
+	r := s.newCachingDirector(0)
+	defer r.stop()
+
+	// Populate the redirector cache
+	err := r.Execute(context.Background(), shardID,
+		func(_ context.Context, _ historyservice.HistoryServiceClient) error {
+			return nil
+		})
+	s.NoError(err)
+
+	// Emulate Close then evict on underlying connection pool.
+	conn := s.connections.getOrCreateClientConn(testAddr)
+	reaped := conn.grpcConn
+	s.NoError(reaped.Close())
+	s.connections.conn = nil
+
+	// Redirector should evict its reference to the closed connection and return an error.
+	err = r.Execute(context.Background(), shardID,
+		func(_ context.Context, _ historyservice.HistoryServiceClient) error {
+			// Emulate closed connection error behavior
+			return serviceerror.NewCanceled("grpc: the client connection is closing")
+		})
+	s.Error(err)
+
+	// Repopulate the cache
+	err = r.Execute(context.Background(), shardID,
+		func(_ context.Context, _ historyservice.HistoryServiceClient) error {
+			return nil
+		})
+	s.NoError(err)
+
+	// Inspect the redirector cache directly to confirm a new connection.
+	entry, err := r.getOrCreateEntry(shardID)
+	s.NoError(err)
+	s.NotSame(reaped, entry.connection.grpcConn)
+}
+
 func (s *cachingRedirectorSuite) TestShardOwnershipLostErrors() {
 	testAddr1 := rpcAddress("testaddr1")
 	testAddr2 := rpcAddress("testaddr2")

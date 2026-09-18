@@ -1,6 +1,7 @@
 package matching
 
 import (
+	"slices"
 	"sort"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -27,10 +28,8 @@ func mergeSetIDs(a []string, b []string) []string {
 // Check if a set contains any of the given set IDs.
 func setContainsSetIDs(set *persistencespb.CompatibleVersionSet, ids []string) bool {
 	for _, needle := range ids {
-		for _, id := range set.SetIds {
-			if needle == id {
-				return true
-			}
+		if slices.Contains(set.SetIds, needle) {
+			return true
 		}
 	}
 	return false
@@ -89,7 +88,6 @@ func collectBuildIdInfo(sets []*persistencespb.CompatibleVersionSet) map[string]
 func intoVersionSets(buildIDToInfo map[string]buildIDInfo) []*persistencespb.CompatibleVersionSet {
 	sets := make([]*persistencespb.CompatibleVersionSet, 0)
 	for id, info := range buildIDToInfo {
-		info := info
 		set := findSetWithSetIDs(sets, info.setIDs)
 		if set == nil {
 			set = &persistencespb.CompatibleVersionSet{

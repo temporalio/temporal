@@ -2,12 +2,15 @@ package backoff
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
@@ -212,8 +215,85 @@ func (s *RetrySuite) TestThrottleRetryContext() {
 	throttleRetryPolicy = originalThrottleRetryPolicy
 }
 
+// TestThrottleRetryContextWithReturnTimeout guards against a shadowing bug where a
+// retryable failure plus a deadline-triggered break returned (zero, nil): a false
+// success instead of the last error. Backoff far exceeds the deadline so the break
+// fires after the first failure.
+func (s *RetrySuite) TestThrottleRetryContextWithReturnTimeout() {
+	timeout := 200 * time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	start := time.Now()
+	result, err := ThrottleRetryContextWithReturn(ctx,
+		func(_ context.Context) (string, error) { return "", &someError{} },
+		NewExponentialRetryPolicy(10*time.Second), retryEverything)
+	elapsed := time.Since(start)
+	s.ErrorAs(err, new(*someError), "must return the real error, not nil, on deadline break")
+	s.Empty(result)
+	s.Less(elapsed, timeout, "should break instead of sleeping past the deadline")
+}
+
+func (s *RetrySuite) TestThrottleRetryContextWithReturnSuccess() {
+	attempt := 0
+	result, err := ThrottleRetryContextWithReturn(context.Background(),
+		func(_ context.Context) (string, error) {
+			attempt++
+			if attempt == 3 {
+				return "ok", nil
+			}
+			return "", &someError{}
+		},
+		NewExponentialRetryPolicy(1*time.Millisecond).WithMaximumAttempts(10),
+		retryEverything)
+	s.NoError(err)
+	s.Equal("ok", result)
+	s.Equal(3, attempt)
+}
+
+func (s *RetrySuite) TestThrottleRetryContextWithReturnMaxAttempts() {
+	attempt := 0
+	result, err := ThrottleRetryContextWithReturn(context.Background(),
+		func(_ context.Context) (string, error) {
+			attempt++
+			return "", &someError{}
+		},
+		NewExponentialRetryPolicy(1*time.Millisecond).WithMaximumAttempts(2),
+		retryEverything)
+	s.ErrorAs(err, new(*someError))
+	s.Empty(result)
+	s.Equal(2, attempt)
+}
+
+func (s *RetrySuite) TestThrottleRetryContextWithReturnContextCancel() {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	result, err := ThrottleRetryContextWithReturn(ctx,
+		func(ctx context.Context) (string, error) { return "", ctx.Err() },
+		NewExponentialRetryPolicy(1*time.Millisecond), retryEverything)
+	s.ErrorIs(err, context.Canceled)
+	s.Empty(result)
+}
+
 var retryEverything IsRetryable = nil
 
 func (e *someError) Error() string {
 	return "Some Error"
+}
+
+// TestExponentialBackoffOverflow verifies overflow handling when
+// initInterval * coefficient^(attempt-1) exceeds MaxInt64.
+func TestExponentialBackoffOverflow(t *testing.T) {
+	t.Run("Calculation clamps to MaxInt64", func(t *testing.T) {
+		interval := ExponentialBackoffAlgorithm(durationpb.New(time.Nanosecond), 2.0, 65)
+		require.Equal(t, time.Duration(math.MaxInt64), interval)
+	})
+
+	t.Run("Interval still capped to MaximumInterval", func(t *testing.T) {
+		interval := CalculateExponentialRetryInterval(&commonpb.RetryPolicy{
+			InitialInterval:    durationpb.New(time.Second),
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    durationpb.New(100 * time.Second),
+		}, 100)
+		require.Equal(t, 100*time.Second, interval)
+	})
 }

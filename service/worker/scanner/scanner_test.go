@@ -191,6 +191,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 					BuildIdScavengerEnabled:                dynamicconfig.GetBoolPropertyFn(c.BuildIdScavengerEnabled),
 					ExecutionsScannerEnabled:               dynamicconfig.GetBoolPropertyFn(c.ExecutionsScannerEnabled),
 					TaskQueueScannerEnabled:                dynamicconfig.GetBoolPropertyFn(c.TaskQueueScannerEnabled),
+					ScheduleInvariantsScannerOptions:       dynamicconfig.GetTypedPropertyFn(dynamicconfig.DefaultScheduleInvariantsScannerParams),
 					Persistence: &config.Persistence{
 						DefaultStore: c.DefaultStore,
 						DataStores: map[string]config.DataStore{
@@ -223,6 +224,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 				worker.EXPECT().RegisterActivityWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
 				worker.EXPECT().RegisterWorkflowWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
 				worker.EXPECT().Start()
+				worker.EXPECT().Stop()
 				mockSdkClientFactory.EXPECT().NewWorker(gomock.Any(), sc.TaskQueueName, gomock.Any()).Return(worker)
 				mockSdkClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
 				mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), sc.WFTypeName,
@@ -271,6 +273,7 @@ func (s *scannerTestSuite) TestScannerShutdown() {
 			ExecutionsScannerEnabled:               dynamicconfig.GetBoolPropertyFn(false),
 			TaskQueueScannerEnabled:                dynamicconfig.GetBoolPropertyFn(false),
 			BuildIdScavengerEnabled:                dynamicconfig.GetBoolPropertyFn(false),
+			ScheduleInvariantsScannerOptions:       dynamicconfig.GetTypedPropertyFn(dynamicconfig.DefaultScheduleInvariantsScannerParams),
 			Persistence: &config.Persistence{
 				DefaultStore: config.StoreTypeNoSQL,
 				DataStores: map[string]config.DataStore{
@@ -297,6 +300,7 @@ func (s *scannerTestSuite) TestScannerShutdown() {
 	worker.EXPECT().RegisterActivityWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
 	worker.EXPECT().RegisterWorkflowWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
 	worker.EXPECT().Start()
+	worker.EXPECT().Stop()
 	mockSdkClientFactory.EXPECT().NewWorker(gomock.Any(), gomock.Any(), gomock.Any()).Return(worker)
 	var wg sync.WaitGroup
 	wg.Add(1)

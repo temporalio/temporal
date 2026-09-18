@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -96,6 +97,14 @@ func (f failingIter) Close() error {
 
 func (q failingQuery) Iter() gocql.Iter {
 	return failingIter{}
+}
+
+func (q failingQuery) PageSize(int) gocql.Query {
+	return q
+}
+
+func (q failingQuery) PageState([]byte) gocql.Query {
+	return q
 }
 
 func (q failingQuery) Scan(...any) error {
@@ -428,6 +437,10 @@ func testCassandraQueueV2QueryErrors(t *testing.T, cluster *cassandra.TestCluste
 		t.Parallel()
 		testCassandraQueueV2ErrListQueuesGetMaxMessageIDQuery(t, cluster)
 	})
+	t.Run("ListQueuesGetQueueNamesQuery", func(t *testing.T) {
+		t.Parallel()
+		testCassandraQueueV2ErrListQueuesGetQueueNamesQuery(t, cluster)
+	})
 	t.Run("RangeDeleteMessagesGetMaxMessageIDQuery", func(t *testing.T) {
 		t.Parallel()
 		testCassandraQueueV2ErrRangeDeleteMessagesGetMaxMessageIDQuery(t, cluster)
@@ -523,6 +536,23 @@ func testCassandraQueueV2ErrListQueuesGetMaxMessageIDQuery(t *testing.T, cluster
 	assert.ErrorAs(t, err, new(*serviceerror.Unavailable))
 	assert.ErrorContains(t, err, assert.AnError.Error())
 	assert.ErrorContains(t, err, "QueueV2GetMaxMessageID")
+}
+
+func testCassandraQueueV2ErrListQueuesGetQueueNamesQuery(t *testing.T, cluster *cassandra.TestCluster) {
+	q := newQueueV2Store(failingSession{
+		Session:        cluster.GetSession(),
+		failingQueries: []string{cassandra.TemplateGetQueueNamesQuery},
+	})
+	ctx := context.Background()
+	queueType := persistence.QueueTypeHistoryDLQ
+	_, err := q.ListQueues(ctx, &persistence.InternalListQueuesRequest{
+		QueueType: queueType,
+		PageSize:  100,
+	})
+	require.Error(t, err)
+	require.ErrorAs(t, err, new(*serviceerror.Unavailable))
+	require.ErrorContains(t, err, "assert.AnError")
+	require.ErrorContains(t, err, "QueueV2ListQueues")
 }
 
 func testCassandraQueueV2MultiplePartitions(t *testing.T, cluster *cassandra.TestCluster) {
@@ -696,10 +726,8 @@ func (q failingQuery) WithContext(context.Context) gocql.Query {
 }
 
 func (f failingSession) Query(query string, args ...any) gocql.Query {
-	for _, q := range f.failingQueries {
-		if q == query {
-			return failingQuery{}
-		}
+	if slices.Contains(f.failingQueries, query) {
+		return failingQuery{}
 	}
 	return f.Session.Query(query, args...)
 }
@@ -990,7 +1018,6 @@ func testCassandraQueueV2ConcurrentRangeDeleteMessages(t *testing.T, cluster *ca
 
 			// Start both RangeDeleteMessages call
 			for _, q := range qs {
-				q := q
 				go func() {
 					err := deleteMessages(ctx, q.QueueV2, queueType, queueName, q.maxIDToDelete)
 					q.deleteErrs <- err

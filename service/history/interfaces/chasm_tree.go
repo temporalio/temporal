@@ -8,6 +8,7 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -18,13 +19,14 @@ var _ ChasmTree = (*chasm.Node)(nil)
 type ChasmTree interface {
 	CloseTransaction() (chasm.NodesMutation, error)
 	Snapshot(*persistencespb.VersionedTransition) chasm.NodesSnapshot
+	PartitionedSnapshot(*persistencespb.VersionedTransition) (chasm.NodesSnapshot, *persistencespb.ChasmLocalState)
 	ApplySystemMutation(chasm.NodesMutation) error
 	ApplyMutation(chasm.NodesMutation) error
 	ApplySnapshot(chasm.NodesSnapshot) error
 	RefreshTasks() error
 	IsStateDirty() bool
 	IsDirty() bool
-	Terminate(chasm.TerminateComponentRequest) error
+	Terminate(chasm.TerminateComponentRequest, metrics.ReasonString) error
 	Archetype() (chasm.Archetype, error)
 	ArchetypeID() chasm.ArchetypeID
 	EachPureTask(
@@ -46,7 +48,7 @@ type ChasmTree interface {
 	ValidateSideEffectTask(
 		ctx context.Context,
 		task *tasks.ChasmTask,
-	) (bool, error)
+	) (isTaskInTree bool, isValidByComponent bool, err error)
 	IsStale(chasm.ComponentRef) error
 	Component(chasm.Context, chasm.ComponentRef) (chasm.Component, error)
 	ComponentByPath(chasm.Context, []string) (chasm.Component, error)

@@ -124,15 +124,15 @@ func registerShardedScaffoldingWithSeed(
 	shardCount int32,
 	seed func(context.Context, TaskQueueUserDataReplicationParamsWithNamespace) error,
 ) {
-	env.RegisterActivityWithOptions(metadataResponseFor(shardCount), activity.RegisterOptions{Name: "GetMetadata"})
+	env.RegisterActivityWithOptions(metadataResponseFor(shardCount), activity.RegisterOptions{Name: shardedGetMetadataActivityName})
 	env.RegisterActivityWithOptions(func(_ context.Context, _ DescribeTargetClusterRequest) (*DescribeTargetClusterResponse, error) {
 		return &DescribeTargetClusterResponse{ShardCount: shardCount}, nil
-	}, activity.RegisterOptions{Name: "DescribeTargetCluster"})
+	}, activity.RegisterOptions{Name: shardedDescribeTargetClusterActivityName})
 	env.RegisterActivityWithOptions(func(_ context.Context, _ *workflowservice.CountWorkflowExecutionsRequest) (*countWorkflowResponse, error) {
 		return &countWorkflowResponse{WorkflowCount: 0}, nil
-	}, activity.RegisterOptions{Name: "CountWorkflow"})
-	env.RegisterWorkflowWithOptions(ForceTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: forceTaskQueueUserDataReplicationWorkflow})
-	env.RegisterActivityWithOptions(seed, activity.RegisterOptions{Name: "SeedReplicationQueueWithUserDataEntries"})
+	}, activity.RegisterOptions{Name: shardedCountWorkflowActivityName})
+	env.RegisterWorkflowWithOptions(shardedTaskQueueUserDataReplicationWorkflow, workflow.RegisterOptions{Name: shardedTaskQueueUserDataReplicationWorkflowName})
+	env.RegisterActivityWithOptions(seed, activity.RegisterOptions{Name: shardedSeedReplicationQueueWithUserDataEntries})
 	// Register child worker so parent tests can spawn it inline.
 	env.RegisterWorkflow(shardedForceReplicationWorker)
 }
@@ -184,7 +184,7 @@ func TestSharded_HappyPath_SingleCycle(t *testing.T) {
 
 	execs := makeExecs(4, 5) // 20 execs across 4 shards
 	registerShardedScaffolding(env, 4)
-	env.RegisterActivityWithOptions(pageThrough(execs, 1000), activity.RegisterOptions{Name: "ListWorkflows"})
+	env.RegisterActivityWithOptions(pageThrough(execs, 1000), activity.RegisterOptions{Name: shardedListWorkflowsActivityName})
 
 	var (
 		mu          sync.Mutex
@@ -201,7 +201,7 @@ func TestSharded_HappyPath_SingleCycle(t *testing.T) {
 		}
 		mu.Unlock()
 		return replicateBatchResult{}, nil
-	}, activity.RegisterOptions{Name: "ReplicateBatch"})
+	}, activity.RegisterOptions{Name: shardedReplicateBatchActivityName})
 
 	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
 		Namespace:         "test-ns",
@@ -225,13 +225,13 @@ func TestSharded_ShardNoProgress_FailsWorkflow(t *testing.T) {
 	env := suite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflow(ShardedForceReplicationWorkflow)
 	registerShardedScaffolding(env, 2)
-	env.RegisterActivityWithOptions(pageThrough(makeExecs(2, 5), 1000), activity.RegisterOptions{Name: "ListWorkflows"})
+	env.RegisterActivityWithOptions(pageThrough(makeExecs(2, 5), 1000), activity.RegisterOptions{Name: shardedListWorkflowsActivityName})
 
 	env.RegisterActivityWithOptions(func(_ context.Context, req *shardedBatchReq) (replicateBatchResult, error) {
 		shards := req.Executions.sortedShards()
 		return replicateBatchResult{}, temporal.NewNonRetryableApplicationError(
 			"shard "+strconv.Itoa(int(shards[0]))+" stuck", "ShardNoProgress", nil)
-	}, activity.RegisterOptions{Name: "ReplicateBatch"})
+	}, activity.RegisterOptions{Name: shardedReplicateBatchActivityName})
 
 	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
 		Namespace:         "test-ns",
@@ -257,7 +257,7 @@ func TestSharded_DisableVerification_NoVerifiedCount(t *testing.T) {
 
 	execs := makeExecs(4, 5)
 	registerShardedScaffolding(env, 4)
-	env.RegisterActivityWithOptions(pageThrough(execs, 1000), activity.RegisterOptions{Name: "ListWorkflows"})
+	env.RegisterActivityWithOptions(pageThrough(execs, 1000), activity.RegisterOptions{Name: shardedListWorkflowsActivityName})
 
 	var sawDisable atomic.Bool
 	env.RegisterActivityWithOptions(func(_ context.Context, req *shardedBatchReq) (replicateBatchResult, error) {
@@ -268,7 +268,7 @@ func TestSharded_DisableVerification_NoVerifiedCount(t *testing.T) {
 			CompletedShards: req.Executions.sortedShards(),
 			VerifiedCount:   0,
 		}, nil
-	}, activity.RegisterOptions{Name: "ReplicateBatch"})
+	}, activity.RegisterOptions{Name: shardedReplicateBatchActivityName})
 
 	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
 		Namespace:           "test-ns",
@@ -331,7 +331,7 @@ func TestSharded_ListWorkflowsError(t *testing.T) {
 
 	env.RegisterActivityWithOptions(func(_ context.Context, _ *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
 		return nil, temporal.NewNonRetryableApplicationError("mock listWorkflows error", "ListFailed", nil)
-	}, activity.RegisterOptions{Name: "ListWorkflows"})
+	}, activity.RegisterOptions{Name: shardedListWorkflowsActivityName})
 
 	// ReplicateBatch should never be invoked because listing fails up
 	// front. Register a fail-loud stub so we notice if the workflow
@@ -339,7 +339,7 @@ func TestSharded_ListWorkflowsError(t *testing.T) {
 	env.RegisterActivityWithOptions(func(_ context.Context, _ *shardedBatchReq) (replicateBatchResult, error) {
 		t.Fatal("ReplicateBatch must not be called when listing fails")
 		return replicateBatchResult{}, nil
-	}, activity.RegisterOptions{Name: "ReplicateBatch"})
+	}, activity.RegisterOptions{Name: shardedReplicateBatchActivityName})
 
 	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
 		Namespace:         "test-ns",
@@ -361,13 +361,13 @@ func TestSharded_ReplicateBatchRetryableError(t *testing.T) {
 	env := suite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflow(ShardedForceReplicationWorkflow)
 	registerShardedScaffolding(env, 2)
-	env.RegisterActivityWithOptions(pageThrough(makeExecs(2, 5), 1000), activity.RegisterOptions{Name: "ListWorkflows"})
+	env.RegisterActivityWithOptions(pageThrough(makeExecs(2, 5), 1000), activity.RegisterOptions{Name: shardedListWorkflowsActivityName})
 
 	var attempts atomic.Int32
 	env.RegisterActivityWithOptions(func(_ context.Context, _ *shardedBatchReq) (replicateBatchResult, error) {
 		attempts.Add(1)
 		return replicateBatchResult{}, temporal.NewApplicationError("transient backend error", "Transient")
-	}, activity.RegisterOptions{Name: "ReplicateBatch"})
+	}, activity.RegisterOptions{Name: shardedReplicateBatchActivityName})
 
 	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
 		Namespace:         "test-ns",
@@ -396,10 +396,10 @@ func TestSharded_TaskQueueReplicationFailure(t *testing.T) {
 		func(_ context.Context, _ TaskQueueUserDataReplicationParamsWithNamespace) error {
 			return temporal.NewNonRetryableApplicationError("namespace is required", "InvalidArgument", nil)
 		})
-	env.RegisterActivityWithOptions(pageThrough(nil, 1000), activity.RegisterOptions{Name: "ListWorkflows"})
+	env.RegisterActivityWithOptions(pageThrough(nil, 1000), activity.RegisterOptions{Name: shardedListWorkflowsActivityName})
 	env.RegisterActivityWithOptions(func(_ context.Context, _ *shardedBatchReq) (replicateBatchResult, error) {
 		return replicateBatchResult{}, nil
-	}, activity.RegisterOptions{Name: "ReplicateBatch"})
+	}, activity.RegisterOptions{Name: shardedReplicateBatchActivityName})
 
 	env.ExecuteWorkflow(ShardedForceReplicationWorkflow, ShardedForceReplicationParams{
 		Namespace:         "test-ns",
@@ -471,13 +471,13 @@ func TestChild_HappyPath_TerminalChild(t *testing.T) {
 	env.RegisterWorkflow(shardedForceReplicationWorker)
 
 	execs := makeExecs(4, 5) // 20 execs across 4 shards, single page
-	env.RegisterActivityWithOptions(pageThrough(execs, 1000), activity.RegisterOptions{Name: "ListWorkflows"})
+	env.RegisterActivityWithOptions(pageThrough(execs, 1000), activity.RegisterOptions{Name: shardedListWorkflowsActivityName})
 	env.RegisterActivityWithOptions(func(_ context.Context, req *shardedBatchReq) (replicateBatchResult, error) {
 		return replicateBatchResult{
 			VerifiedCount:   5,
 			CompletedShards: req.Executions.sortedShards(),
 		}, nil
-	}, activity.RegisterOptions{Name: "ReplicateBatch"})
+	}, activity.RegisterOptions{Name: shardedReplicateBatchActivityName})
 
 	env.ExecuteWorkflow(childDirectRunner, makeChildParams(4))
 
@@ -501,10 +501,10 @@ func TestChild_VerifiedCountAccumulates(t *testing.T) {
 	// Two pages of 10 execs each across 2 shards: makeExecs(2,5) produces
 	// 10 execs (5 per shard). With pageSize=5, the pager yields two fetches.
 	all := makeExecs(2, 5) // 10 execs; pageSize=5 → 2 pages of 5
-	env.RegisterActivityWithOptions(pageThrough(all, 5), activity.RegisterOptions{Name: "ListWorkflows"})
+	env.RegisterActivityWithOptions(pageThrough(all, 5), activity.RegisterOptions{Name: shardedListWorkflowsActivityName})
 	env.RegisterActivityWithOptions(func(_ context.Context, _ *shardedBatchReq) (replicateBatchResult, error) {
 		return replicateBatchResult{VerifiedCount: 3}, nil
-	}, activity.RegisterOptions{Name: "ReplicateBatch"})
+	}, activity.RegisterOptions{Name: shardedReplicateBatchActivityName})
 
 	params := makeChildParams(2)
 	params.ConcurrentBatchCount = 1
@@ -528,13 +528,13 @@ func TestChild_DisableVerification_ReachesEnd(t *testing.T) {
 	env.RegisterWorkflow(shardedForceReplicationWorker)
 
 	execs := makeExecs(2, 5)
-	env.RegisterActivityWithOptions(pageThrough(execs, 1000), activity.RegisterOptions{Name: "ListWorkflows"})
+	env.RegisterActivityWithOptions(pageThrough(execs, 1000), activity.RegisterOptions{Name: shardedListWorkflowsActivityName})
 	env.RegisterActivityWithOptions(func(_ context.Context, req *shardedBatchReq) (replicateBatchResult, error) {
 		return replicateBatchResult{
 			CompletedShards: req.Executions.sortedShards(),
 			VerifiedCount:   0,
 		}, nil
-	}, activity.RegisterOptions{Name: "ReplicateBatch"})
+	}, activity.RegisterOptions{Name: shardedReplicateBatchActivityName})
 
 	params := makeChildParams(2)
 	params.DisableVerification = true
@@ -582,14 +582,14 @@ func TestChild_ThrottledPromotion_ReceivesSignal(t *testing.T) {
 			Executions:    execs,
 			NextPageToken: nil, // terminal — child reaches end naturally
 		}, nil
-	}, activity.RegisterOptions{Name: "ListWorkflows"})
+	}, activity.RegisterOptions{Name: shardedListWorkflowsActivityName})
 
 	env.RegisterActivityWithOptions(func(_ context.Context, req *shardedBatchReq) (replicateBatchResult, error) {
 		return replicateBatchResult{
 			CompletedShards: req.Executions.sortedShards(),
 			VerifiedCount:   5,
 		}, nil
-	}, activity.RegisterOptions{Name: "ReplicateBatch"})
+	}, activity.RegisterOptions{Name: shardedReplicateBatchActivityName})
 
 	params := makeChildParams(2)
 	params.Handover = true // child begins at half rate
@@ -634,7 +634,7 @@ func TestChild_ListingBackpressure_BlocksUntilSlotFree(t *testing.T) {
 		events = append(events, "L")
 		mu.Unlock()
 		return pager(ctx, req)
-	}, activity.RegisterOptions{Name: "ListWorkflows"})
+	}, activity.RegisterOptions{Name: shardedListWorkflowsActivityName})
 	env.RegisterActivityWithOptions(func(_ context.Context, req *shardedBatchReq) (replicateBatchResult, error) {
 		mu.Lock()
 		events = append(events, "R")
@@ -643,7 +643,7 @@ func TestChild_ListingBackpressure_BlocksUntilSlotFree(t *testing.T) {
 			VerifiedCount:   1,
 			CompletedShards: req.Executions.sortedShards(),
 		}, nil
-	}, activity.RegisterOptions{Name: "ReplicateBatch"})
+	}, activity.RegisterOptions{Name: shardedReplicateBatchActivityName})
 
 	params := makeChildParams(4)
 	params.ConcurrentBatchCount = 1
