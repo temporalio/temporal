@@ -66,15 +66,14 @@ const (
 // identical.
 const reasonNone metrics.ReasonString = "none"
 
-// Outcomes and reasons for ScheduleCallbackReattach. not_found and attach_race synthesize a
-// completion rather than observing one, so they are recorded distinctly from already_closed.
+// Outcomes and reasons for ScheduleCallbackReattach. not_found synthesizes a
+// completion, so it is recorded distinctly from already_closed.
 const (
 	outcomeReattachAttached  = "attached"
 	outcomeReattachCompleted = "completed"
 
 	reasonReattachNotFound      metrics.ReasonString = "not_found"
 	reasonReattachAlreadyClosed metrics.ReasonString = "already_closed"
-	reasonReattachRace          metrics.ReasonString = "attach_race"
 )
 
 // validateTaskHighWaterMark validates a component's lastProcessedTime against a

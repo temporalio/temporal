@@ -65,8 +65,6 @@ var (
 
 func scheduleCommonOpts(t *testing.T) []testcore.TestOption {
 	opts := []testcore.TestOption{
-		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
-		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerSentinels, true),
 		testcore.WithDynamicConfig(dynamicconfig.FrontendAllowedExperiments, []string{"*"}),
 	}
 	if strings.HasPrefix(t.Name(), "TestScheduleV1") {
