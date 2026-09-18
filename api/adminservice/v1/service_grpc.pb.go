@@ -102,7 +102,8 @@ type AdminServiceClient interface {
 	// ApplyNamespaceMutation is the receiver-side entry point for the CHASM-based
 	// namespace replication transport. The originating cell's NamespaceMutationComponent
 	// calls this RPC against each peer cell after its local phase resolves.
-	// Apply semantics are apply-if-higher (config_version / failover_version).
+	// This implementation currently accepts only shadow requests, validates the
+	// transported payload, and never writes receiver namespace state.
 	ApplyNamespaceMutation(ctx context.Context, in *ApplyNamespaceMutationRequest, opts ...grpc.CallOption) (*ApplyNamespaceMutationResponse, error)
 	// GetDLQReplicationMessages return replication messages based on DLQ info.
 	GetDLQReplicationMessages(ctx context.Context, in *GetDLQReplicationMessagesRequest, opts ...grpc.CallOption) (*GetDLQReplicationMessagesResponse, error)
@@ -652,7 +653,8 @@ type AdminServiceServer interface {
 	// ApplyNamespaceMutation is the receiver-side entry point for the CHASM-based
 	// namespace replication transport. The originating cell's NamespaceMutationComponent
 	// calls this RPC against each peer cell after its local phase resolves.
-	// Apply semantics are apply-if-higher (config_version / failover_version).
+	// This implementation currently accepts only shadow requests, validates the
+	// transported payload, and never writes receiver namespace state.
 	ApplyNamespaceMutation(context.Context, *ApplyNamespaceMutationRequest) (*ApplyNamespaceMutationResponse, error)
 	// GetDLQReplicationMessages return replication messages based on DLQ info.
 	GetDLQReplicationMessages(context.Context, *GetDLQReplicationMessagesRequest) (*GetDLQReplicationMessagesResponse, error)

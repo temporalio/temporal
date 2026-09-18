@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/server/chasm"
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/primitives"
 )
 
 type handler struct {
@@ -84,6 +85,9 @@ func validateTriggerNamespaceMutationRequest(req *namespacereplicationpb.Trigger
 	}
 	if req.GetSystemNamespaceId() == "" {
 		return serviceerror.NewInvalidArgument("system_namespace_id is required")
+	}
+	if req.GetSystemNamespaceId() != primitives.SystemNamespaceID {
+		return serviceerror.NewInvalidArgument("system_namespace_id must be the Temporal system namespace ID")
 	}
 	if req.GetBusinessId() == "" {
 		return serviceerror.NewInvalidArgument("business_id is required")

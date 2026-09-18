@@ -83,6 +83,12 @@ func TestValidateTriggerNamespaceMutationRequest(t *testing.T) {
 			},
 		},
 		{
+			name: "incorrect system namespace id",
+			mutate: func(req *namespacereplicationpb.TriggerNamespaceMutationRequest) {
+				req.SystemNamespaceId = "other-namespace-id"
+			},
+		},
+		{
 			name: "missing business id",
 			mutate: func(req *namespacereplicationpb.TriggerNamespaceMutationRequest) {
 				req.BusinessId = ""
