@@ -8459,7 +8459,9 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 						NextEventID:            nextEventID,
 						TaskEquivalents:        replicationTasks,
 						LastVersionHistoryItem: lastVersionHistoryItem,
-						CurrentVersionHistory:  versionhistory.CopyVersionHistory(currentVersionHistory),
+						CurrentVersionHistory: &historyspb.VersionHistory{
+							Items: versionhistory.CopyVersionHistoryItems(currentVersionHistory.Items),
+						},
 					}
 
 					if ms.dbRecordVersion == 1 {

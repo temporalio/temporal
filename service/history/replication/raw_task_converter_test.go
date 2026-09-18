@@ -1270,7 +1270,6 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_VerifyWit
 		TransitionCount:          6,
 	}
 	currentVersionHistory := &historyspb.VersionHistory{
-		BranchToken: []byte("branch token"),
 		Items: []*historyspb.VersionHistoryItem{
 			{EventId: 5, Version: 1},
 			{EventId: 10, Version: 3},

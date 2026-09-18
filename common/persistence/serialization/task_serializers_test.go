@@ -420,7 +420,6 @@ func (s *taskSerializerSuite) TestSyncVersionedTransitionTask() {
 			TransitionCount:          rand.Int63(),
 		},
 		CurrentVersionHistory: &historyspb.VersionHistory{
-			BranchToken: []byte("branch-token"),
 			Items: []*historyspb.VersionHistoryItem{
 				{EventId: 123, Version: 456},
 			},
