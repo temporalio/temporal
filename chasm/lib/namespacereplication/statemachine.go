@@ -34,8 +34,8 @@ var TransitionLocalCommitted = chasm.NewTransition(
 	namespacereplicationpb.COMPONENT_STATUS_RUNNING,
 	func(c *NamespaceMutationComponent, ctx chasm.MutableContext, event EventLocalCommitted) error {
 		c.LocalApply = &namespacereplicationpb.LocalApplyStatus{
-			Outcome:   namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED,
-			AppliedAt: timestamppb.New(event.Time),
+			Outcome:    namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED,
+			ResolvedAt: timestamppb.New(event.Time),
 		}
 		// Fan out: one ApplyPeerTask per peer cell.
 		for _, cell := range c.GetMutation().GetPeerCells() {
@@ -70,8 +70,8 @@ var TransitionLocalFailed = chasm.NewTransition(
 	namespacereplicationpb.COMPONENT_STATUS_FAILED,
 	func(c *NamespaceMutationComponent, ctx chasm.MutableContext, event EventLocalFailed) error {
 		c.LocalApply = &namespacereplicationpb.LocalApplyStatus{
-			Outcome:   namespacereplicationpb.LOCAL_APPLY_OUTCOME_FAILED,
-			AppliedAt: timestamppb.New(event.Time),
+			Outcome:    namespacereplicationpb.LOCAL_APPLY_OUTCOME_FAILED,
+			ResolvedAt: timestamppb.New(event.Time),
 			Failure: &failurepb.Failure{
 				Message: event.Err.Error(),
 				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
