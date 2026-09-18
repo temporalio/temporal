@@ -598,9 +598,7 @@ func (s *activityParityTestSuite) TestActivityCore() {
 			[]model.Event{model.Poll, model.Complete},
 			func(t *testing.T, a parityActivity) {
 				for _, e := range []model.Event{model.Pause, model.Unpause, model.Reset, model.UpdateOptions} {
-					var notFound *serviceerror.NotFound
-					require.ErrorAsf(t, a.rpc(t, e), &notFound,
-						"%s naming a closed activity must answer NotFound, as every workflow command does", e)
+					a.driveEvent(t, e)
 				}
 			})
 
@@ -611,9 +609,7 @@ func (s *activityParityTestSuite) TestActivityCore() {
 			a := newSAADriver(t, env, activityConfig{MaxAttempts: 1}).
 				driveTrace(t, []model.Event{model.Poll, model.Complete})
 			for _, e := range []model.Event{model.Terminate, model.RequestCancel} {
-				var notFound *serviceerror.NotFound
-				require.ErrorAsf(t, a.rpc(t, e), &notFound,
-					"%s naming a closed activity must answer NotFound, as every workflow command does", e)
+				a.driveEvent(t, e)
 			}
 		})
 	})
@@ -622,7 +618,7 @@ func (s *activityParityTestSuite) TestActivityCore() {
 // parityActivity is what a parity test reads from a driven activity. Both drivers' handles satisfy
 // it, so a test states its claim once instead of once per implementation.
 type parityActivity interface {
-	rpc(testing.TB, model.Event) error
+	driveEvent(testing.TB, model.Event)
 }
 
 // parityDriveOutlivingActivity drives trace through both implementations and hands each resulting
