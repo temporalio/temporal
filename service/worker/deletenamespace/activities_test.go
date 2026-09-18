@@ -9,11 +9,54 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/temporal"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.uber.org/mock/gomock"
 )
+
+func Test_GetNamespaceInfoActivityUsesReplicationResolver(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	metadataManager := persistence.NewMockMetadataManager(ctrl)
+	clusterMetadata := cluster.NewMockMetadata(ctrl)
+	detail := &persistencespb.NamespaceDetail{
+		Info: &persistencespb.NamespaceInfo{Id: "namespace-id", Name: "namespace"},
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: "other-cluster",
+			Clusters:          []string{"current-cluster", "other-cluster"},
+		},
+	}
+
+	metadataManager.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
+		Name: "namespace",
+	}).Return(&persistence.GetNamespaceResponse{Namespace: detail}, nil)
+	clusterMetadata.EXPECT().GetCurrentClusterName().Return("current-cluster")
+
+	a := &localActivities{
+		metadataManager: metadataManager,
+		clusterMetadata: clusterMetadata,
+		replicationResolverFactory: func(input *persistencespb.NamespaceDetail) namespace.ReplicationResolver {
+			require.Same(t, detail, input)
+			return namespace.NewDefaultReplicationResolverFactory()(&persistencespb.NamespaceDetail{
+				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+					ActiveClusterName: "other-cluster",
+					Clusters:          []string{"other-cluster"},
+				},
+			})
+		},
+	}
+
+	result, err := a.GetNamespaceInfoActivity(context.Background(), namespace.EmptyID, "namespace")
+	require.NoError(t, err)
+	require.Equal(t, getNamespaceInfoResult{
+		NamespaceID:    "namespace-id",
+		Namespace:      "namespace",
+		Clusters:       []string{"other-cluster"},
+		ActiveCluster:  "other-cluster",
+		CurrentCluster: "current-cluster",
+	}, result)
+}
 
 func Test_GenerateDeletedNamespaceNameActivity(t *testing.T) {
 	ctrl := gomock.NewController(t)
