@@ -35,9 +35,10 @@ import (
 )
 
 type wfaDriver struct {
-	env *testcore.TestEnv
-	t   *testing.T
-	cfg activityConfig
+	env      *testcore.TestEnv
+	t        *testing.T
+	cfg      activityConfig
+	holdOpen bool
 }
 
 // newWFADriver builds a driver. cfg.StartDelay is ignored: a workflow activity has no per-activity
@@ -136,7 +137,8 @@ func (d *wfaDriver) start(t *testing.T, cfg activityConfig) *wfaHandle {
 	wfID := testcore.RandomizeStr("wfa-run")
 	run, err := d.env.SdkClient().ExecuteWorkflow(d.testContext(),
 		sdkclient.StartWorkflowOptions{ID: wfID, TaskQueue: wfTQ},
-		wfaSingleActivityWorkflow, wfaActivityParams{Cfg: cfg, ActivityTQ: actTQ, ActivityID: actID})
+		wfaSingleActivityWorkflow,
+		wfaActivityParams{Cfg: cfg, ActivityTQ: actTQ, ActivityID: actID, HoldOpen: d.holdOpen})
 	require.NoError(t, err)
 	a := &wfaHandle{
 		activityDriverState: activityDriverState{cfg: cfg},
@@ -162,6 +164,7 @@ type wfaActivityParams struct {
 	Cfg        activityConfig
 	ActivityTQ string
 	ActivityID string
+	HoldOpen   bool
 }
 
 // wfaCancelSignal makes the helper workflow cancel the activity, which is how a workflow activity is
@@ -196,7 +199,11 @@ func wfaSingleActivityWorkflow(ctx workflow.Context, params wfaActivityParams) e
 		workflow.GetSignalChannel(gctx, wfaCancelSignal).Receive(gctx, nil)
 		cancelActivity()
 	})
-	return fut.Get(ctx, nil)
+	err := fut.Get(ctx, nil)
+	if params.HoldOpen {
+		_ = workflow.Await(ctx, func() bool { return false })
+	}
+	return err
 }
 
 // pendingActivityInfo is the activity's entry in the workflow's pending set, nil once it is no longer
