@@ -13,7 +13,7 @@ import (
 // The processing function will be called on batches of items in a single-threaded manner, and
 // Add will block while fn is running.
 type Batcher[T, R any] struct {
-	fn         func([]T) R          // batch executor function
+	fn         batchFn[T, R]        // batch executor function
 	opts       BatcherOptions       // timing/size options
 	timeSource clock.TimeSource     // clock for testing
 	submitC    chan batchPair[T, R] // channel for submitting items
@@ -28,6 +28,13 @@ type batchPair[T, R any] struct {
 	item T      // item to add
 }
 
+type batchFn[T, R any] func([]T) batchResult[R]
+
+type batchResult[R any] struct {
+	shared  R
+	perItem []R
+}
+
 type BatcherOptions struct {
 	// MaxItems is the maximum number of items in a batch.
 	MaxItems int
@@ -40,11 +47,33 @@ type BatcherOptions struct {
 	// IdleTime is the time after which the internal goroutine will exit, to avoid wasting
 	// resources on idle streams.
 	IdleTime time.Duration
+	// ClearInterval controls how often a KeyedBatcher clears its cached batchers.
+	// Zero disables clearing. This option is ignored by Batcher.
+	ClearInterval time.Duration
 }
 
 // NewBatcher creates a Batcher. `fn` is the processing function, `opts` are the timing options.
 // `clock` is usually clock.NewRealTimeSource but can be a fake time source for testing.
 func NewBatcher[T, R any](fn func([]T) R, opts BatcherOptions, timeSource clock.TimeSource) *Batcher[T, R] {
+	return newBatcher(func(items []T) batchResult[R] {
+		return batchResult[R]{shared: fn(items)}
+	}, opts, timeSource)
+}
+
+// NewBatcherWithPerItemResults creates a Batcher whose processing function returns one result
+// for each input item, in the same order. If the processing function returns a different number
+// of results, each caller receives the zero value of R.
+func NewBatcherWithPerItemResults[T, R any](
+	fn func([]T) []R,
+	opts BatcherOptions,
+	timeSource clock.TimeSource,
+) *Batcher[T, R] {
+	return newBatcher(func(items []T) batchResult[R] {
+		return batchResult[R]{perItem: fn(items)}
+	}, opts, timeSource)
+}
+
+func newBatcher[T, R any](fn batchFn[T, R], opts BatcherOptions, timeSource clock.TimeSource) *Batcher[T, R] {
 	return &Batcher[T, R]{
 		fn:         fn,
 		opts:       opts,
@@ -54,9 +83,9 @@ func NewBatcher[T, R any](fn func([]T) R, opts BatcherOptions, timeSource clock.
 }
 
 // Add adds an item to the stream and returns when it has been processed, or if the context is
-// canceled or times out. It returns two values: the value that the batch processor returned
-// for the whole batch that the item ended up in, and a context error. Even if Add returns a
-// context error, the item may still be processed in the future!
+// canceled or times out. It returns the shared batch result or the result corresponding to this
+// item, depending on which constructor was used. Even if Add returns a context error, the item
+// may still be processed in the future.
 func (b *Batcher[T, R]) Add(ctx context.Context, t T) (R, error) {
 	resp := make(chan R, 1)
 	pair := batchPair[T, R]{resp: resp, item: t}
@@ -144,11 +173,18 @@ func (b *Batcher[T, R]) loop(runningC *chan struct{}) {
 		maxWaitT.Stop()
 
 		// process batch
-		r := b.fn(items)
+		results := b.fn(items)
+		validPerItemResults := len(results.perItem) == len(items)
 
-		// send the single response to all items in the batch
-		for _, resp := range resps {
-			resp <- r
+		for i, resp := range resps {
+			if results.perItem != nil && validPerItemResults {
+				resp <- results.perItem[i]
+			} else if results.perItem != nil {
+				var zeroR R
+				resp <- zeroR
+			} else {
+				resp <- results.shared
+			}
 		}
 	}
 }
