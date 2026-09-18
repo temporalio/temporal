@@ -3,6 +3,7 @@ package interceptor
 import (
 	"context"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -162,6 +163,7 @@ func (i *NamespaceHandoverInterceptor) waitNamespaceHandoverUpdate(
 	if namespaceData.ReplicationState(businessID) == enumspb.REPLICATION_STATE_HANDOVER {
 		cbID := uuid.New()
 		waitReplicationStateUpdate := make(chan struct{})
+		var notifyOnce sync.Once
 		i.namespaceRegistry.RegisterStateChangeCallback(cbID, func(ns *namespace.Namespace, deletedFromDb bool) {
 			if ns.ID().String() != namespaceData.ID().String() {
 				return
@@ -174,11 +176,10 @@ func (i *NamespaceHandoverInterceptor) waitNamespaceHandoverUpdate(
 				// 1. namespace is deleting/deleted
 				// 2. namespace is not in handover
 				// 3. namespace is not global
-				select {
-				case <-waitReplicationStateUpdate:
-				default:
+				// Registration catch-up and registry updates may invoke this callback concurrently.
+				notifyOnce.Do(func() {
 					close(waitReplicationStateUpdate)
-				}
+				})
 			}
 		})
 
