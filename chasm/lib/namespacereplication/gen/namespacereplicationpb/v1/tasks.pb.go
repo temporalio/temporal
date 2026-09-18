@@ -120,9 +120,11 @@ func (x *ApplyPeerTask) GetAttempt() int32 {
 // ApplyPeerBackoffTask fires after a retriable peer apply failure. It is a pure
 // timer task that re-enqueues ApplyPeerTask as an immediate outbound task.
 type ApplyPeerBackoffTask struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	TargetCell    string                 `protobuf:"bytes,1,opt,name=target_cell,json=targetCell,proto3" json:"target_cell,omitempty"`
-	Attempt       int32                  `protobuf:"varint,2,opt,name=attempt,proto3" json:"attempt,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Peer cell whose retry is released when this timer fires.
+	TargetCell string `protobuf:"bytes,1,opt,name=target_cell,json=targetCell,proto3" json:"target_cell,omitempty"`
+	// Attempt number used to reject stale or duplicate retry timers.
+	Attempt       int32 `protobuf:"varint,2,opt,name=attempt,proto3" json:"attempt,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

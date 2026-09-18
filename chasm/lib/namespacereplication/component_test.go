@@ -56,7 +56,7 @@ func TestTerminateBeforeLocalCommitRecordsFailure(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_FAILED, c.GetStatus())
 	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_FAILED, c.GetLocalApply().GetOutcome())
-	require.Equal(t, now, c.GetLocalApply().GetAppliedAt().AsTime())
+	require.Equal(t, now, c.GetLocalApply().GetResolvedAt().AsTime())
 	require.Equal(t, "execution state too large", c.GetLocalApply().GetFailure().GetMessage())
 	appInfo := c.GetLocalApply().GetFailure().GetApplicationFailureInfo()
 	require.Equal(t, localFailureInternal, appInfo.GetType())

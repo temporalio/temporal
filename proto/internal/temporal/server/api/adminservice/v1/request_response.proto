@@ -234,6 +234,7 @@ message ApplyNamespaceMutationResponse {
     // not to accept this namespace). No write was performed.
     OUTCOME_NOT_ADMITTED = 5;
   }
+  // Result of applying the mutation on the receiving cluster.
   Outcome outcome = 1;
 }
 
