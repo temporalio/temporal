@@ -184,7 +184,7 @@ func (s *mutableStateSuite) TestPropagateTimeSkippingToNextRun() {
 
 	s.Run("DisablePropagationFlag_PreservedInChainOfRuns", func() {
 		// Chain-of-runs clones the full config, so DisablePropagation is preserved. Contrast with
-		// propagateTimeSkippingToOtherExecution, which never carries the flag onto a child config.
+		// chasm.PropagateTimeSkippingToOtherExecution, which never carries the flag onto a child config.
 		tsi := &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{
 				Enabled:             true,
@@ -221,7 +221,7 @@ func (s *mutableStateSuite) TestPropagateTimeSkippingToOtherExecution() {
 	}
 
 	s.Run("NilTimeSkippingInfo_PropagatesNothing", func() {
-		tsc, propagatedState := propagateTimeSkippingToOtherExecution(nil)
+		tsc, propagatedState := chasm.PropagateTimeSkippingToOtherExecution(nil)
 		s.Nil(tsc)
 		s.Nil(propagatedState)
 		s.requireInitNoPanic(tsc, propagatedState)
@@ -229,7 +229,7 @@ func (s *mutableStateSuite) TestPropagateTimeSkippingToOtherExecution() {
 
 	s.Run("FullState_PropagatesConfigAndVirtualTime", func() {
 		tsi := newTSI()
-		tsc, propagatedState := propagateTimeSkippingToOtherExecution(tsi)
+		tsc, propagatedState := chasm.PropagateTimeSkippingToOtherExecution(tsi)
 		s.Require().NotNil(tsc)
 		s.True(tsc.GetEnabled())
 		// no fast-forward
@@ -245,7 +245,7 @@ func (s *mutableStateSuite) TestPropagateTimeSkippingToOtherExecution() {
 
 	s.Run("FastForward_NeverPropagatedToChild", func() {
 		tsi := newTSI() // enabled parent carrying an active, unreached fast-forward
-		tsc, propagatedState := propagateTimeSkippingToOtherExecution(tsi)
+		tsc, propagatedState := chasm.PropagateTimeSkippingToOtherExecution(tsi)
 		s.Require().NotNil(tsc)
 		s.Nil(tsc.GetFastForwardConfig(), "child never inherits the fast-forward config")
 		s.Require().NotNil(propagatedState)
@@ -258,7 +258,7 @@ func (s *mutableStateSuite) TestPropagateTimeSkippingToOtherExecution() {
 		// Config only propagates when !DisablePropagation, so the flag is structurally always
 		// false on a propagated child config -- there is nothing to carry down the tree.
 		tsi := newTSI()
-		tsc, propagatedState := propagateTimeSkippingToOtherExecution(tsi)
+		tsc, propagatedState := chasm.PropagateTimeSkippingToOtherExecution(tsi)
 		s.Require().NotNil(tsc)
 		s.False(tsc.GetDisablePropagation())
 		s.requireInitNoPanic(tsc, propagatedState)
@@ -267,7 +267,7 @@ func (s *mutableStateSuite) TestPropagateTimeSkippingToOtherExecution() {
 	s.Run("DisablePropagationSet_NoConfigPropagated", func() {
 		tsi := newTSI()
 		tsi.Config.DisablePropagation = true
-		tsc, propagatedState := propagateTimeSkippingToOtherExecution(tsi)
+		tsc, propagatedState := chasm.PropagateTimeSkippingToOtherExecution(tsi)
 		s.Nil(tsc)
 		s.Require().NotNil(propagatedState)
 		s.Equal(accumSkip, propagatedState.GetInitialSkippedDuration().AsDuration())
@@ -279,7 +279,7 @@ func (s *mutableStateSuite) TestPropagateTimeSkippingToOtherExecution() {
 	s.Run("NilConfig_PropagatesVirtualTime", func() {
 		tsi := newTSI()
 		tsi.Config = nil
-		tsc, propagatedState := propagateTimeSkippingToOtherExecution(tsi)
+		tsc, propagatedState := chasm.PropagateTimeSkippingToOtherExecution(tsi)
 		s.Nil(tsc)
 		s.Require().NotNil(propagatedState)
 		s.Equal(int32(0), propagatedState.GetInitialSkipCount())
@@ -292,7 +292,7 @@ func (s *mutableStateSuite) TestPropagateTimeSkippingToOtherExecution() {
 	s.Run("DisabledParentConfig_PropagatesDisabledConfig", func() {
 		tsi := newTSI()
 		tsi.Config.Enabled = false
-		tsc, propagatedState := propagateTimeSkippingToOtherExecution(tsi)
+		tsc, propagatedState := chasm.PropagateTimeSkippingToOtherExecution(tsi)
 		// enabled is copied through: a disabled-but-propagating parent hands the child a disabled config.
 		s.Require().NotNil(tsc)
 		s.False(tsc.GetEnabled())
@@ -309,7 +309,7 @@ func (s *mutableStateSuite) TestPropagateTimeSkippingToOtherExecution() {
 	s.Run("ZeroAccumulatedSkip_ConfigButNilState", func() {
 		tsi := newTSI()
 		tsi.AccumulatedSkippedDuration = nil
-		tsc, propagatedState := propagateTimeSkippingToOtherExecution(tsi)
+		tsc, propagatedState := chasm.PropagateTimeSkippingToOtherExecution(tsi)
 		s.Require().NotNil(tsc, "an enabled config still propagates with no accumulated skip")
 		s.True(tsc.GetEnabled())
 		s.Nil(propagatedState, "no accumulated skip -> no state to propagate")
