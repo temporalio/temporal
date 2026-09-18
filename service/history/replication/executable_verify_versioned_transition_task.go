@@ -157,7 +157,10 @@ func (e *ExecutableVerifyVersionedTransitionTask) Execute() (retErr error) {
 
 	// case 1: VersionedTransition is up-to-date on current mutable state
 	if err == nil {
-		if len(e.taskAttr.EventVersionHistory) == 0 {
+		rawTaskInfo := e.ReplicationTask().GetRawTaskInfo()
+		historyCapturedAtCreation := rawTaskInfo != nil && rawTaskInfo.GetCurrentVersionHistory() != nil
+
+		if !historyCapturedAtCreation || len(e.taskAttr.EventVersionHistory) == 0 {
 			if ms.GetNextEventId() < e.taskAttr.NextEventId {
 				return softassert.UnexpectedDataLoss(e.Logger, "Workflow event missed",
 					fmt.Errorf("NamespaceId: %v, workflowId: %v, runId: %v, expected last eventId: %v, versionedTransition: %v",
