@@ -2475,12 +2475,11 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 				metrics.TaskQueueUserDataReplicationIncomingPerTypeDataDropped.With(e.metricsHandler).Record(1,
 					metrics.NamespaceTag(ns.Name().String()),
 				)
-				e.logger.Warn("task queue user data replication discarded clockless non-empty per-type data",
+				e.logger.Warn("task queue user data replication discarded non-empty per-type data",
 					tag.WorkflowNamespace(ns.Name().String()),
 					tag.WorkflowNamespaceID(req.GetNamespaceId()),
 					tag.WorkflowTaskQueueName(req.GetTaskQueue()),
 					tag.NewAnyTag("current-clock", currentClock),
-					tag.NewAnyTag("incoming-clock", incomingClock),
 				)
 			}
 		} else {
